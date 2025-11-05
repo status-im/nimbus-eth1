@@ -40,6 +40,7 @@ ETH_RESULT_USE_CHECK Context *createAsyncTaskContext();
 
 typedef void (*CallBackProc) (Context *ctx, int status, char *res);
 
+void eth_getBalance(Context *ctx, char *address, char *blockTag, CallBackProc onBalance);
 void eth_blockNumber(Context *ctx, CallBackProc cb);
 void freeResponse(char *res);
 void freeContext(Context *ctx);
