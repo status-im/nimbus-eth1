@@ -76,8 +76,8 @@ proc status68UserHandler(peer: Peer; packet: Status68Packet) {.
     totalDifficulty = packet.totalDifficulty,
     bestHash = packet.bestHash.short,
     genesisHash = packet.genesisHash.short,
-    forkHash = packet.forkId.forkHash.toHex,
-    forkNext = packet.forkId.forkNext
+    forkHash = packet.forkId.hash.toHex,
+    forkNext = packet.forkId.next
 
 proc status68Thunk(peer: Peer; data: Rlp) {.
     async: (raises: [CancelledError, EthP2PError]).} =
@@ -92,8 +92,8 @@ proc status69UserHandler(peer: Peer; packet: Status69Packet) {.
   trace trEthRecvReceived & "Status (0x00)", peer,
     networkId = packet.networkId,
     genesisHash = packet.genesisHash.short,
-    forkHash = packet.forkId.forkHash.toHex,
-    forkNext = packet.forkId.forkNext,
+    forkHash = packet.forkId.hash.toHex,
+    forkNext = packet.forkId.next,
     earliest = packet.earliest,
     latest = packet.latest,
     latestHash = packet.latestHash.short
@@ -327,8 +327,8 @@ proc eth68PeerConnected(peer: Peer) {.async: (
      bestHash = short(status.bestBlockHash),
      networkId = network.networkId,
      genesis = short(status.genesisHash),
-     forkHash = status.forkId.forkHash.toHex,
-     forkNext = status.forkId.forkNext
+     forkHash = status.forkId.hash.toHex,
+     forkNext = status.forkId.next
 
   let m = await peer.status68(packet, timeout = chronos.seconds(10))
   when trEthTraceHandshakesOk:
@@ -337,8 +337,8 @@ proc eth68PeerConnected(peer: Peer) {.async: (
     trace "Handshake: Local and remote genesisHash",
           local = short(status.genesisHash), remote = short(m.genesisHash)
     trace "Handshake: Local and remote forkId", local = (
-        status.forkId.forkHash.toHex & "/" & $status.forkId.forkNext),
-          remote = (m.forkId.forkHash.toHex & "/" & $m.forkId.forkNext)
+        status.forkId.hash.toHex & "/" & $status.forkId.next),
+          remote = (m.forkId.hash.toHex & "/" & $m.forkId.next)
   if m.networkId != network.networkId:
     trace "Peer for a different network (networkId)", peer,
           expectNetworkId = network.networkId, gotNetworkId = m.networkId
@@ -374,8 +374,8 @@ proc eth69PeerConnected(peer: Peer) {.async: (
      latestHash = status.latestHash.short,
      networkId = network.networkId,
      genesis = short(status.genesisHash),
-     forkHash = status.forkId.forkHash.toHex,
-     forkNext = status.forkId.forkNext
+     forkHash = status.forkId.hash.toHex,
+     forkNext = status.forkId.next
 
   let m = await peer.status69(packet, timeout = chronos.seconds(10))
   when trEthTraceHandshakesOk:
@@ -384,8 +384,8 @@ proc eth69PeerConnected(peer: Peer) {.async: (
     trace "Handshake: Local and remote genesisHash",
           local = short(status.genesisHash), remote = short(m.genesisHash)
     trace "Handshake: Local and remote forkId", local = (
-        status.forkId.forkHash.toHex & "/" & $status.forkId.forkNext),
-          remote = (m.forkId.forkHash.toHex & "/" & $m.forkId.forkNext)
+       status.forkId.hash.toHex & "/" & $status.forkId.next),
+          remote = (m.forkId.hash.toHex & "/" & $m.forkId.next)
   if m.networkId != network.networkId:
     trace "Peer for a different network (networkId)", peer,
           expectNetworkId = network.networkId, gotNetworkId = m.networkId
