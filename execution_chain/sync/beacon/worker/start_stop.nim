@@ -29,14 +29,19 @@ declareGauge nec_sync_peers, "" &
 
 proc querySyncProgress(ctx: BeaconCtxRef): SyncStateData =
   ## Syncer status query function (for call back closure)
-  if SyncState.blocks <= ctx.pool.lastState:
+  if SyncState.blocks <= ctx.pool.syncState:
     return (ctx.hdrCache.antecedent.number, ctx.subState.top, ctx.subState.head)
 
-  if SyncState.headers <= ctx.pool.lastState:
+  if SyncState.headers <= ctx.pool.syncState:
     let b = ctx.chain.baseNumber
     return (b, b, ctx.subState.head)
 
   # (0,0,0)
+
+template setLastPeerSeen(ctx: BeaconCtxRef) =
+  ## Set logger control
+  ctx.pool.lastPeerSeen = Moment.now()
+  ctx.pool.lastNoPeersLog = ctx.pool.lastPeerSeen
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -50,6 +55,8 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
   ctx.blocksStagedQueueInit()
   ctx.headersUnprocInit()
   ctx.blocksUnprocInit()
+  ctx.updateEtaInit()
+  ctx.setLastPeerSeen()
 
   # Start in suspended mode
   ctx.hibernate = true
@@ -103,8 +110,7 @@ proc stopBuddy*(buddy: BeaconBuddyRef) =
   else:
     ctx.pool.nBuddies = 0
     ctx.pool.lastSlowPeer = Opt.none(Hash)
-    ctx.pool.lastPeerSeen = Moment.now()
-    ctx.pool.lastNoPeersLog = ctx.pool.lastPeerSeen
+    ctx.setLastPeerSeen()
   metrics.set(nec_sync_peers, ctx.pool.nBuddies)
 
 # ------------------------------------------------------------------------------

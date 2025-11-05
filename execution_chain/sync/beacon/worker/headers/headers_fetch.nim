@@ -102,14 +102,14 @@ template fetchHeadersReversed*(
       elapsed = rc.error.elapsed
       block evalError:
         case rc.error.excp:
-        of ENoException:
+        of ENoException, ESyncerTermination:
           break evalError
         of EPeerDisconnected, ECancelledError:
           buddy.nErrors.fetch.hdr.inc
           buddy.ctrl.zombie = true
         of ECatchableError:
           buddy.hdrFetchRegisterError()
-          discard buddy.only.thPutStats.hdr.bpsSample(elapsed, 0)
+          buddy.hdrNoSampleSize(elapsed)
         of EAlreadyTriedAndFailed:
           # Just return `failed` (no error count or throughput stats)
           discard
@@ -138,7 +138,7 @@ template fetchHeadersReversed*(
       else:
         # No data available. For a fast enough rejection response, the
         # througput stats are degraded, only.
-        discard buddy.only.thPutStats.hdr.bpsSample(elapsed, 0)
+        buddy.hdrNoSampleSize(elapsed)
 
         # Slow response, definitely not fast enough
         if fetchHeadersErrTimeout <= elapsed:
@@ -164,7 +164,7 @@ template fetchHeadersReversed*(
       break body
 
     # Update download statistics
-    let bps = buddy.only.thPutStats.hdr.bpsSample(elapsed, h.getEncodedLength)
+    let bps = buddy.hdrSampleSize(elapsed, h.getEncodedLength)
 
     # Request did not fail
     buddy.only.failedReq.reset

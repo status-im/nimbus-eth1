@@ -11,6 +11,8 @@
 {.push raises:[].}
 
 import
+  pkg/chronos,
+  ../update/update_eta,
   ../worker_desc
 
 # ------------------------------------------------------------------------------
@@ -41,11 +43,27 @@ func blkSessionStopped*(ctx: BeaconCtxRef): bool =
   ## Helper, checks whether there is a general stop conditions based on
   ## state settings (not on sync peer ctrl as `buddy.ctrl.running`.)
   ctx.poolMode or
-  ctx.pool.lastState != SyncState.blocks
+  ctx.pool.syncState != SyncState.blocks
 
 func blkThroughput*(buddy: BeaconBuddyRef): string =
   ## Print throuhput sratistics
   buddy.only.thPutStats.blk.toMeanVar.psStr
+
+# -------------
+
+proc blkNoSampleSize*(
+    buddy: BeaconBuddyRef;
+    elapsed: chronos.Duration;
+      ) =
+  discard buddy.only.thPutStats.blk.bpsSample(elapsed, 0)
+
+proc blkSampleSize*(
+    buddy: BeaconBuddyRef;
+    elapsed: chronos.Duration;
+    size: int;
+      ): uint =
+  result = buddy.only.thPutStats.blk.bpsSample(elapsed, size)
+  buddy.ctx.updateEtaBlocks()
 
 # ------------------------------------------------------------------------------
 # End

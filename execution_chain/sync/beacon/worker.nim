@@ -17,7 +17,6 @@ import
   ../../common,
   ../../networking/p2p,
   ./worker/headers/headers_target,
-  ./worker/update/metrics,
   ./worker/[blocks, classify, headers, start_stop, update, worker_desc]
 
 # ------------------------------------------------------------------------------
@@ -67,6 +66,7 @@ proc runTicker*(ctx: BeaconCtxRef; info: static[string]) =
   ## Global background job that is started every few seconds. It is to be
   ## intended for updating metrics, debug logging etc.
   ##
+  ctx.updateEtaIdle()
   ctx.updateMetrics()
   ctx.pool.ticker(ctx)
 
@@ -98,7 +98,7 @@ template runDaemon*(ctx: BeaconCtxRef; info: static[string]): Duration =
     ctx.updateSyncState info
 
     # Extra waiting time unless immediate change expected.
-    if ctx.pool.lastState in {headers,blocks}:
+    if ctx.pool.syncState in {headers,blocks}:
       bodyRc = daemonWaitInterval
 
   bodyRc
@@ -197,7 +197,7 @@ template runPeer*(
 
       # End block: `actionLoop`
 
-    elif buddy.ctx.pool.lastState == SyncState.idle:
+    elif buddy.ctx.pool.syncState == SyncState.idle:
       # Potentially a manual sync target set up
       if not buddy.headersTargetActivate info:
         bodyRc = workerIdleLongWaitInterval

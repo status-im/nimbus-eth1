@@ -11,6 +11,8 @@
 {.push raises:[].}
 
 import
+  pkg/chronos,
+  ../update/update_eta,
   ../worker_desc
 
 # ------------------------------------------------------------------------------
@@ -60,12 +62,28 @@ func hdrSessionStopped*(ctx: BeaconCtxRef): bool =
   ## Helper, checks whether there is a general stop conditions based on
   ## state settings (not on sync peer ctrl as `buddy.ctrl.running`.)
   ctx.poolMode or
-  ctx.pool.lastState != SyncState.headers or
+  ctx.pool.syncState != SyncState.headers or
   ctx.hdrCache.state != collecting
 
 func hdrThroughput*(buddy: BeaconBuddyRef): string =
   ## Print throuhput sratistics
   buddy.only.thPutStats.hdr.toMeanVar.psStr
+
+# -------------
+
+proc hdrNoSampleSize*(
+    buddy: BeaconBuddyRef;
+    elapsed: chronos.Duration;
+      ) =
+  discard buddy.only.thPutStats.hdr.bpsSample(elapsed, 0)
+
+proc hdrSampleSize*(
+    buddy: BeaconBuddyRef;
+    elapsed: chronos.Duration;
+    size: int;
+      ): uint =
+  result = buddy.only.thPutStats.hdr.bpsSample(elapsed, size)
+  buddy.ctx.updateEtaHeaders()
 
 # ------------------------------------------------------------------------------
 # End

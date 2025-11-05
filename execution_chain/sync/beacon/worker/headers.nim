@@ -135,6 +135,7 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
             chronicles.info "Headers stashed", nStashed,
               nUnpoc=ctx.nUnprocStr(),
               nStagedQ=ctx.hdr.staged.len,
+              eta=ctx.pool.syncEta.avg.toStr,
               base=ctx.chain.baseNumber.bnStr,
               head=ctx.chain.latestNumber.bnStr,
               target=ctx.hdrCache.head.bnStr,
@@ -180,6 +181,7 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
         chronicles.info "Headers stashed", nStashed,
           nUnpoc=ctx.nUnprocStr(),
           nStagedQ=ctx.hdr.staged.len,
+          eta=ctx.pool.syncEta.avg.toStr,
           base=ctx.chain.baseNumber.bnStr,
           head=ctx.chain.latestNumber.bnStr,
           target=ctx.hdrCache.head.bnStr,
@@ -234,6 +236,7 @@ proc headersUnstage*(buddy: BeaconBuddyRef; info: static[string]): bool =
 
   var
     nStashed = 0u64                                          # statistics
+    nUnstaged = 0                                            # ditto
     switchPeer = false                                       # for return code
 
   while ctx.hdrCache.state == collecting:
@@ -268,19 +271,24 @@ proc headersUnstage*(buddy: BeaconBuddyRef; info: static[string]): bool =
       break
 
     nStashed += nHdrs
+    nUnstaged.inc
     # End while loop
 
   if 0 < nStashed:
-    chronicles.info "Headers stashed (from queue)", nStashed,
-     nUnpoc=ctx.nUnprocStr(), nStagedQ=ctx.hdr.staged.len,
-      base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-      target=ctx.hdrCache.head.bnStr, nSyncPeers=ctx.pool.nBuddies
+    chronicles.info "Headers stashed", nStashed,
+      nUnpoc=ctx.nUnprocStr(),
+      nStagedQ=ctx.hdr.staged.len,
+      nUnstaged,
+      eta=ctx.pool.syncEta.avg.toStr,
+      base=ctx.chain.baseNumber.bnStr,
+      head=ctx.chain.latestNumber.bnStr,
+      target=ctx.hdrCache.head.bnStr,
+      nSyncPeers=ctx.pool.nBuddies
 
   elif switchPeer or 0 < ctx.hdr.staged.len:
-    trace info & ": no headers processed", peer,
-      D=ctx.hdrCache.antecedent.bnStr,
-      nStashed, nStagedQ=ctx.hdr.staged.len, nSyncPeers=ctx.pool.nBuddies,
-      switchPeer
+    trace info & ": no headers processed", peer, nStashed,
+      nStagedQ=ctx.hdr.staged.len, D=ctx.hdrCache.antecedent.bnStr,
+      nSyncPeers=ctx.pool.nBuddies, switchPeer
 
   not switchPeer
 
@@ -289,7 +297,7 @@ proc headersUnstage*(buddy: BeaconBuddyRef; info: static[string]): bool =
 proc headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
   ## Some pool mode intervention.
   ##
-  if ctx.pool.lastState in {headersCancel,headersFinish}:
+  if ctx.pool.syncState in {headersCancel,headersFinish}:
     trace info & ": Flushing header queues",
       nUnproc=ctx.headersUnprocTotal(), nStagedQ=ctx.hdr.staged.len
 

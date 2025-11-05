@@ -15,6 +15,7 @@ import
   pkg/eth/common,
   pkg/stew/interval_set,
   ../../../../networking/p2p,
+  ../update/update_eta,
   ../worker_desc,
   ./[headers_fetch, headers_helpers, headers_unproc]
 
@@ -74,7 +75,7 @@ template headersFetch*(
       debug info & ": Garbled header list", peer, iv, headers=rc.value.bnStr,
         expected=(ivBottom,iv.maxPt).bnStr, state=($buddy.syncState),
         nErrors=buddy.nErrors.fetch.hdr
-      break body                                   # stop, exit function
+      break body                                    # stop, exit function
 
     # Commit blocks received (and revert lower unused block numbers)
     ctx.headersUnprocCommit(iv, iv.minPt, iv.maxPt - nHeaders)
@@ -142,6 +143,7 @@ proc headersStashOnDisk*(
   if not srcPeer.isNil:
     srcPeer.only.nErrors.apply.hdr = 0           # reset error count
 
+  ctx.updateEtaHeaders()                         # metrics update
   ok(dTop - dBottom)
 
 # ------------------------------------------------------------------------------
