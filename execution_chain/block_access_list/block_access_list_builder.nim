@@ -23,15 +23,15 @@ type
   # organized by the type of change and the block access list index where it
   # occurred.
   AccountData = object
-    storageChanges: Table[UInt256, Table[int, UInt256]]
+    storageChanges*: Table[UInt256, Table[int, UInt256]]
       ## Maps storage key -> block access index -> storage value
-    storageReads: HashSet[UInt256]
+    storageReads*: HashSet[UInt256]
       ## Set of storage keys
-    balanceChanges: Table[int, UInt256]
+    balanceChanges*: Table[int, UInt256]
       ## Maps block access index -> balance
-    nonceChanges: Table[int, AccountNonce]
+    nonceChanges*: Table[int, AccountNonce]
       ## Maps block access index -> nonce
-    codeChanges: Table[int, seq[byte]]
+    codeChanges*: Table[int, seq[byte]]
       ## Maps block access index -> code
 
   # Builder for constructing a BlockAccessList efficiently during transaction
@@ -40,7 +40,7 @@ type
   # tracked by address, field type, and block access list index to enable
   # efficient reconstruction of state changes.
   BlockAccessListBuilderRef* = ref object
-    accounts: Table[Address, AccountData]
+    accounts*: Table[Address, AccountData]
       ## Maps address -> account data
 
 proc init*(T: type AccountData): T =

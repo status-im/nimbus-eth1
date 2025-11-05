@@ -10,20 +10,19 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[tables, sets], #sequtils, algorithm],
-  # eth/common/[block_access_lists, block_access_lists_rlp, hashes],
-  # stint,
-  # stew/byteutils,
-  # results
+  std/[tables, sets],
+  eth/common/addresses,
+  stint,
+  ../db/ledger,
   ./block_access_list_builder
 
-# export block_access_lists, hashes, results
+export addresses, block_access_list_builder, ledger, stint
 
 type
   # Snapshot of block access list state for a single call frame.
   # Used to track changes within a call frame to enable proper handling
   # of reverts as specified in EIP-7928.
-  CallFrameSnapshot = object
+  CallFrameSnapshot = object # should this be a ref object?
     touchedAddresses: HashSet[Address]
       ## Set of addresses touched during this call frame.
     storageWrites: Table[(Address, UInt256), UInt256]
@@ -39,343 +38,155 @@ type
       ## Code changes made during this call frame.
       ## Set of (address, block access index, bytecode)
 
+  # Tracks state changes during transaction execution for block access list
+  # construction. This tracker maintains a cache of pre-state values and
+  # coordinates with the BlockAccessListBuilder to record all state changes
+  # made during block execution. It ensures that only actual changes (not no-op
+  # writes) are recorded in the access list.
+  StateChangeTrackerRef* = ref object
+    ledger: ReadOnlyLedger
+      ## Used to fetch the pre-transaction values from the state.
+    builder: BlockAccessListBuilderRef
+      ## The builder instance that accumulates all tracked changes.
+    preStorageCache: Table[(Address, UInt256), UInt256]
+      ## Cache of pre-transaction storage values, keyed by (address, slot) tuples.
+      ## This cache is cleared at the start of each transaction to track values
+      ## from the beginning of the current transaction.
+    preBalanceCache: Table[Address, UInt256]
+      ## Cache of pre-transaction balance values, keyed by address.
+      ## This cache is cleared at the start of each transaction and used by
+      ## normalize_balance_changes to filter out balance changes where
+      ## the final balance equals the initial balance.
+    currentBlockAccessIndex: int
+      ## The current block access index (0 for pre-execution,
+      ## 1..n for transactions, n+1 for post-execution).
+    callFrameSnapshots: seq[CallFrameSnapshot]
+      ## Stack of snapshots for nested call frames to handle reverts properly.
 
-# @dataclass
-# class StateChangeTracker:
-#     """
-#     Tracks state changes during transaction execution for Block Access List
-#     construction.
-#     This tracker maintains a cache of pre-state values and coordinates with
-#     the [`BlockAccessListBuilder`] to record all state changes made during
-#     block execution. It ensures that only actual changes (not no-op writes)
-#     are recorded in the access list.
-#     [`BlockAccessListBuilder`]:
-#     ref:ethereum.forks.amsterdam.block_access_lists.builder.BlockAccessListBuilder
-#     """
+proc init*(T: type CallFrameSnapshot): T =
+  CallFrameSnapshot()
 
-#     block_access_list_builder: BlockAccessListBuilder
-#     """
-#     The builder instance that accumulates all tracked changes.
-#     """
+# Disallow copying of CallFrameSnapshot
+proc `=copy`(dest: var CallFrameSnapshot; src: CallFrameSnapshot) {.error: "Copying CallFrameSnapshot is forbidden".} =
+  discard
 
-#     pre_storage_cache: Dict[tuple, U256] = field(default_factory=dict)
-#     """
-#     Cache of pre-transaction storage values, keyed by (address, slot) tuples.
-#     This cache is cleared at the start of each transaction to track values
-#     from the beginning of the current transaction.
-#     """
+proc init*(
+    T: type StateChangeTrackerRef,
+    ledger: ReadOnlyLedger,
+    builder = BlockAccessListBuilderRef.init()): T =
+  StateChangeTrackerRef(ledger: ledger, builder: builder)
 
-#     pre_balance_cache: Dict[Address, U256] = field(default_factory=dict)
-#     """
-#     Cache of pre-transaction balance values, keyed by address.
-#     This cache is cleared at the start of each transaction and used by
-#     normalize_balance_changes to filter out balance changes where
-#     the final balance equals the initial balance.
-#     """
+proc setBlockAccessIndex*(tracker: StateChangeTrackerRef, blockAccessIndex: int) =
+  doAssert blockAccessIndex > 0
+  tracker.currentBlockAccessIndex = blockAccessIndex
+  tracker.preStorageCache.clear()
+  tracker.preBalanceCache.clear()
 
-#     current_block_access_index: Uint = Uint(0)
-#     """
-#     The current block access index (0 for pre-execution,
-#     1..n for transactions, n+1 for post-execution).
-#     """
+proc capturePreState*(tracker: StateChangeTrackerRef, address: Address, slot: UInt256): UInt256 =
+  let cacheKey = (address, slot)
 
-#     call_frame_snapshots: List[CallFrameSnapshot] = field(default_factory=list)
-#     """
-#     Stack of snapshots for nested call frames to handle reverts properly.
-#     """
+  if cacheKey notin tracker.preStorageCache:
+    tracker.preStorageCache[cacheKey] = tracker.ledger.getStorage(address, slot)
 
+  return tracker.preStorageCache.getOrDefault(cacheKey)
 
-# def set_block_access_index(
-#     tracker: StateChangeTracker, block_access_index: Uint
-# ) -> None:
-#     """
-#     Set the current block access index for tracking changes.
-#     Must be called before processing each transaction/system contract
-#     to ensure changes are associated with the correct block access index.
-#     Note: Block access indices differ from transaction indices:
-#     - 0: Pre-execution (system contracts like beacon roots, block hashes)
-#     - 1..n: Transactions (tx at index i gets block_access_index i+1)
-#     - n+1: Post-execution (withdrawals, requests)
-#     Parameters
-#     ----------
-#     tracker :
-#         The state change tracker instance.
-#     block_access_index :
-#         The block access index (0 for pre-execution,
-#         1..n for transactions, n+1 for post-execution).
-#     """
-#     tracker.current_block_access_index = block_access_index
-#     # Clear the pre-storage cache for each new transaction to ensure
-#     # no-op writes are detected relative to the transaction start
-#     tracker.pre_storage_cache.clear()
-#     # Clear the pre-balance cache for each new transaction
-#     tracker.pre_balance_cache.clear()
+template trackAddressAccess*(tracker: StateChangeTrackerRef, address: Address) =
+  tracker.builder.addTouchedAccount(address)
 
+proc trackStorageRead*(tracker: StateChangeTrackerRef, address: Address, slot: UInt256) =
+  tracker.trackAddressAccess(address)
+  discard tracker.capturePreState(address, slot)
+  tracker.builder.addStorageRead(address, slot)
 
-# def capture_pre_state(
-#     tracker: StateChangeTracker, address: Address, key: Bytes32, state: "State"
-# ) -> U256:
-#     """
-#     Capture and cache the pre-transaction value for a storage location.
-#     Retrieves the storage value from the beginning of the current transaction.
-#     The value is cached within the transaction to avoid repeated lookups and
-#     to maintain consistency across multiple accesses within the same
-#     transaction.
-#     Parameters
-#     ----------
-#     tracker :
-#         The state change tracker instance.
-#     address :
-#         The account address containing the storage.
-#     key :
-#         The storage slot to read.
-#     state :
-#         The current execution state.
-#     Returns
-#     -------
-#     value :
-#         The storage value at the beginning of the current transaction.
-#     """
-#     cache_key = (address, key)
-#     if cache_key not in tracker.pre_storage_cache:
-#         # Import locally to avoid circular import
-#         from ..state import get_storage
+proc trackStorageWrite*(tracker: StateChangeTrackerRef, address: Address, slot: UInt256, newValue: UInt256) =
+  tracker.trackAddressAccess(address)
 
-#         tracker.pre_storage_cache[cache_key] = get_storage(state, address, key)
-#     return tracker.pre_storage_cache[cache_key]
+  let preValue = tracker.capturePreState(address, slot)
+  if preValue != newValue:
+    tracker.builder.addStorageWrite(
+        address,
+        slot,
+        tracker.currentBlockAccessIndex,
+        newValue)
+    # Record in current call frame snapshot if exists
+    if tracker.callFrameSnapshots.len() > 0:
+      tracker.callFrameSnapshots[^1].storageWrites[(address, slot)] = newValue
+  else:
+    tracker.builder.addStorageRead(address, slot)
 
+proc capturePreBalance*(tracker: StateChangeTrackerRef, address: Address): UInt256 =
+  if address notin tracker.preBalanceCache:
+    tracker.preBalanceCache[address] = tracker.ledger.getBalance(address)
+  return tracker.preBalanceCache.getOrDefault(address)
 
-# def track_address_access(
-#     tracker: StateChangeTracker, address: Address
-# ) -> None:
-#     """
-#     Track that an address was accessed.
-#     Records account access even when no state changes occur. This is
-#     important for operations that read account data without modifying it.
-#     Parameters
-#     ----------
-#     tracker :
-#         The state change tracker instance.
-#     address :
-#         The account address that was accessed.
-#     """
-#     add_touched_account(tracker.block_access_list_builder, address)
+proc trackBalanceChange*(tracker: StateChangeTrackerRef, address: Address, newBalance: UInt256) =
+  tracker.trackAddressAccess(address)
 
+  let blockAccessIndex = tracker.currentBlockAccessIndex
+  tracker.builder.addBalanceChange(address, blockAccessIndex, newBalance)
 
-# def track_storage_read(
-#     tracker: StateChangeTracker, address: Address, key: Bytes32, state: "State"
-# ) -> None:
-#     """
-#     Track a storage read operation.
-#     Records that a storage slot was read and captures its pre-state value.
-#     The slot will only appear in the final access list if it wasn't also
-#     written to during block execution.
-#     Parameters
-#     ----------
-#     tracker :
-#         The state change tracker instance.
-#     address :
-#         The account address whose storage is being read.
-#     key :
-#         The storage slot being read.
-#     state :
-#         The current execution state.
-#     """
-#     track_address_access(tracker, address)
+  # Record in current call frame snapshot if exists
+  if tracker.callFrameSnapshots.len() > 0:
+    tracker.callFrameSnapshots[^1].balanceChanges.incl((address, blockAccessIndex, newBalance))
 
-#     capture_pre_state(tracker, address, key, state)
+proc trackNonceChange*(tracker: StateChangeTrackerRef, address: Address, newNonce: AccountNonce) =
+  tracker.trackAddressAccess(address)
 
-#     add_storage_read(tracker.block_access_list_builder, address, key)
+  let blockAccessIndex = tracker.currentBlockAccessIndex
+  tracker.builder.addNonceChange(address, blockAccessIndex, newNonce)
 
+  # Record in current call frame snapshot if exists
+  if tracker.callFrameSnapshots.len() > 0:
+    tracker.callFrameSnapshots[^1].nonceChanges.incl((address, blockAccessIndex, newNonce))
 
-# def track_storage_write(
-#     tracker: StateChangeTracker,
-#     address: Address,
-#     key: Bytes32,
-#     new_value: U256,
-#     state: "State",
-# ) -> None:
-#     """
-#     Track a storage write operation.
-#     Records storage modifications, but only if the new value differs from
-#     the pre-state value. No-op writes (where the value doesn't change) are
-#     tracked as reads instead, as specified in [EIP-7928].
-#     Parameters
-#     ----------
-#     tracker :
-#         The state change tracker instance.
-#     address :
-#         The account address whose storage is being modified.
-#     key :
-#         The storage slot being written to.
-#     new_value :
-#         The new value to write.
-#     state :
-#         The current execution state.
-#     [EIP-7928]: https://eips.ethereum.org/EIPS/eip-7928
-#     """
-#     track_address_access(tracker, address)
+proc trackCodeChange*(tracker: StateChangeTrackerRef, address: Address, newCode: seq[byte]) =
+  tracker.trackAddressAccess(address)
 
-#     pre_value = capture_pre_state(tracker, address, key, state)
+  let blockAccessIndex = tracker.currentBlockAccessIndex
+  tracker.builder.addCodeChange(address, blockAccessIndex, newCode)
 
-#     value_bytes = new_value.to_be_bytes32()
+  # Record in current call frame snapshot if exists
+  if tracker.callFrameSnapshots.len() > 0:
+    tracker.callFrameSnapshots[^1].codeChanges.incl((address, blockAccessIndex, newCode))
 
-#     if pre_value != new_value:
-#         add_storage_write(
-#             tracker.block_access_list_builder,
-#             address,
-#             key,
-#             BlockAccessIndex(tracker.current_block_access_index),
-#             value_bytes,
-#         )
-#         # Record in current call frame snapshot if exists
-#         if tracker.call_frame_snapshots:
-#             snapshot = tracker.call_frame_snapshots[-1]
-#             snapshot.storage_writes[(address, key)] = new_value
-#     else:
-#         add_storage_read(tracker.block_access_list_builder, address, key)
+proc handleInTransactionSelfDestruct*(tracker: StateChangeTrackerRef, address: Address) =
+  if address notin tracker.builder.accounts:
+    return
 
+  let currentIndex = tracker.currentBlockAccessIndex
 
-# def capture_pre_balance(
-#     tracker: StateChangeTracker, address: Address, state: "State"
-# ) -> U256:
-#     """
-#     Capture and cache the pre-transaction balance for an account.
-#     This function caches the balance on first access for each address during
-#     a transaction. It must be called before any balance modifications are made
-#     to ensure we capture the pre-transaction balance correctly. The cache is
-#     cleared at the beginning of each transaction.
-#     This is used by normalize_balance_changes to determine which balance
-#     changes should be filtered out.
-#     Parameters
-#     ----------
-#     tracker :
-#         The state change tracker instance.
-#     address :
-#         The account address.
-#     state :
-#         The current execution state.
-#     Returns
-#     -------
-#     value :
-#         The balance at the beginning of the current transaction.
-#     """
-#     if address not in tracker.pre_balance_cache:
-#         # Import locally to avoid circular import
-#         from ..state import get_account
+  tracker.builder.accounts.withValue(address, accData):
 
-#         # Cache the current balance on first access
-#         # This should be called before any balance modifications
-#         account = get_account(state, address)
-#         tracker.pre_balance_cache[address] = account.balance
-#     return tracker.pre_balance_cache[address]
+    # # Convert storage writes from current tx to reads
+    # for slot in accountData.storageChanges.keys():
+    #   account_data.storage_changes[slot] = [
+    #       c
+    #       for c in account_data.storage_changes[slot]
+    #       if c.block_access_index != current_index
+    #   ]
+    #   if not account_data.storage_changes[slot]:
+    #       del account_data.storage_changes[slot]
+    #       account_data.storage_reads.add(slot)
 
+    # Remove nonce and code changes from current transaction
+    accData[].nonceChanges.del(currentIndex)
+    accData[].codeChanges.del(currentIndex)
 
-# def track_balance_change(
-#     tracker: StateChangeTracker,
-#     address: Address,
-#     new_balance: U256,
-# ) -> None:
-#     """
-#     Track a balance change for an account.
-#     Records the new balance after any balance-affecting operation, including
-#     transfers, gas payments, block rewards, and withdrawals.
-#     Parameters
-#     ----------
-#     tracker :
-#         The state change tracker instance.
-#     address :
-#         The account address whose balance changed.
-#     new_balance :
-#         The new balance value.
-#     """
-#     track_address_access(tracker, address)
+proc normalizeBalanceChanges*(tracker: StateChangeTrackerRef) =
+  # TODO
+  discard
 
-#     block_access_index = BlockAccessIndex(tracker.current_block_access_index)
-#     add_balance_change(
-#         tracker.block_access_list_builder,
-#         address,
-#         block_access_index,
-#         new_balance,
-#     )
+proc beginCallFrame*(tracker: StateChangeTrackerRef) =
+  tracker.callFrameSnapshots.add(CallFrameSnapshot.init())
 
-#     # Record in current call frame snapshot if exists
-#     if tracker.call_frame_snapshots:
-#         snapshot = tracker.call_frame_snapshots[-1]
-#         snapshot.balance_changes.add(
-#             (address, block_access_index, new_balance)
-#         )
+proc rollbackCallFrame*(tracker: StateChangeTrackerRef) =
+  # TODO
+  discard
 
+proc commitCallFrame*(tracker: StateChangeTrackerRef) =
+  if tracker.callFrameSnapshots.len() > 0:
+    discard tracker.callFrameSnapshots.pop()
 
-# def track_nonce_change(
-#     tracker: StateChangeTracker, address: Address, new_nonce: Uint
-# ) -> None:
-#     """
-#     Track a nonce change for an account.
-#     Records nonce increments for both EOAs (when sending transactions) and
-#     contracts (when performing [`CREATE`] or [`CREATE2`] operations). Deployed
-#     contracts also have their initial nonce tracked.
-#     Parameters
-#     ----------
-#     tracker :
-#         The state change tracker instance.
-#     address :
-#         The account address whose nonce changed.
-#     new_nonce :
-#         The new nonce value.
-#     state :
-#         The current execution state.
-#     [`CREATE`]: ref:ethereum.forks.amsterdam.vm.instructions.system.create
-#     [`CREATE2`]: ref:ethereum.forks.amsterdam.vm.instructions.system.create2
-#     """
-#     track_address_access(tracker, address)
-#     block_access_index = BlockAccessIndex(tracker.current_block_access_index)
-#     nonce_u64 = U64(new_nonce)
-#     add_nonce_change(
-#         tracker.block_access_list_builder,
-#         address,
-#         block_access_index,
-#         nonce_u64,
-#     )
-
-#     # Record in current call frame snapshot if exists
-#     if tracker.call_frame_snapshots:
-#         snapshot = tracker.call_frame_snapshots[-1]
-#         snapshot.nonce_changes.add((address, block_access_index, nonce_u64))
-
-
-# def track_code_change(
-#     tracker: StateChangeTracker, address: Address, new_code: Bytes
-# ) -> None:
-#     """
-#     Track a code change for contract deployment.
-#     Records new contract code deployments via [`CREATE`], [`CREATE2`], or
-#     [`SETCODE`] operations. This function is called when contract bytecode
-#     is deployed to an address.
-#     Parameters
-#     ----------
-#     tracker :
-#         The state change tracker instance.
-#     address :
-#         The address receiving the contract code.
-#     new_code :
-#         The deployed contract bytecode.
-#     [`CREATE`]: ref:ethereum.forks.amsterdam.vm.instructions.system.create
-#     [`CREATE2`]: ref:ethereum.forks.amsterdam.vm.instructions.system.create2
-#     """
-#     track_address_access(tracker, address)
-#     block_access_index = BlockAccessIndex(tracker.current_block_access_index)
-#     add_code_change(
-#         tracker.block_access_list_builder,
-#         address,
-#         block_access_index,
-#         new_code,
-#     )
-
-#     # Record in current call frame snapshot if exists
-#     if tracker.call_frame_snapshots:
-#         snapshot = tracker.call_frame_snapshots[-1]
-#         snapshot.code_changes.add((address, block_access_index, new_code))
 
 
 # def handle_in_transaction_selfdestruct(
@@ -477,18 +288,6 @@ type
 #             ]
 
 
-# def begin_call_frame(tracker: StateChangeTracker) -> None:
-#     """
-#     Begin a new call frame for tracking reverts.
-#     Creates a new snapshot to track changes within this call frame.
-#     This allows proper handling of reverts as specified in EIP-7928.
-#     Parameters
-#     ----------
-#     tracker :
-#         The state change tracker instance.
-#     """
-#     tracker.call_frame_snapshots.append(CallFrameSnapshot())
-
 
 # def rollback_call_frame(tracker: StateChangeTracker) -> None:
 #     """
@@ -571,17 +370,3 @@ type
 #             ]
 
 #     # All touched addresses remain in the access list (already tracked)
-
-
-# def commit_call_frame(tracker: StateChangeTracker) -> None:
-#     """
-#     Commit changes from the current call frame.
-#     Removes the current call frame snapshot without rolling back changes.
-#     Called when a call completes successfully.
-#     Parameters
-#     ----------
-#     tracker :
-#         The state change tracker instance.
-#     """
-#     if tracker.call_frame_snapshots:
-#         tracker.call_frame_snapshots.pop()
