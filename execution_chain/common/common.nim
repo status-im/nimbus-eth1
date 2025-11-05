@@ -357,7 +357,11 @@ func forkId*(com: CommonRef, head, time: uint64): ForkId {.gcsafe.} =
 func forkId*(com: CommonRef, forkActivationTime: EthTime): ForkId {.gcsafe.} =
   ## Get ForkId for given timestamp (EIP-2124/2364/6122)
   ## Only works for timestamp based forks
-  com.forkIdCalculator.calculateForkId(0'u64, forkActivationTime.uint64)
+  # For `calculateForkId` with timestamp the block number needs to be set sufficiently
+  # high to include all block number based forks.
+  # It could be set to `blockNumberThresholds[GrayGlacier]` but then the code needs to
+  # deal with possible Opt.none(), so instead set to uint64.high()
+  com.forkIdCalculator.calculateForkId(uint64.high(), forkActivationTime.uint64)
 
 func forkId*(com: CommonRef, head: BlockNumber, time: EthTime): ForkId {.gcsafe.} =
   ## Get ForkId for given block number / timestamp (EIP-2124/2364/6122)
