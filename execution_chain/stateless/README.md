@@ -1,5 +1,5 @@
 
-# Nimbus EL - Stateless Features & Support for zkEVMs
+# Nimbus EL Stateless Features - Witness Generation & Stateless Execution
 
 The Nimbus EL supports generating execution witnesses (in hexary trie/MPT format)
 during block execution. These witnesses are stored in the database for each block
@@ -141,4 +141,4 @@ make eest_stateless_execution_test
 
 Each of the tests in this suite generate the witness using the regular stateful
 execution and then afterwards use the generated witness to execute and verify
-the block using the stateless execution function `statelessProcessBlock`.
+the block using the stateless execution function `statelessProcessBlock` above.
