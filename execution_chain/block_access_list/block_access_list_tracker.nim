@@ -150,223 +150,93 @@ proc trackCodeChange*(tracker: StateChangeTrackerRef, address: Address, newCode:
     tracker.callFrameSnapshots[^1].codeChanges.incl((address, blockAccessIndex, newCode))
 
 proc handleInTransactionSelfDestruct*(tracker: StateChangeTrackerRef, address: Address) =
-  if address notin tracker.builder.accounts:
-    return
-
-  let currentIndex = tracker.currentBlockAccessIndex
-
   tracker.builder.accounts.withValue(address, accData):
+    let currentIndex = tracker.currentBlockAccessIndex
 
-    # # Convert storage writes from current tx to reads
-    # for slot in accountData.storageChanges.keys():
-    #   account_data.storage_changes[slot] = [
-    #       c
-    #       for c in account_data.storage_changes[slot]
-    #       if c.block_access_index != current_index
-    #   ]
-    #   if not account_data.storage_changes[slot]:
-    #       del account_data.storage_changes[slot]
-    #       account_data.storage_reads.add(slot)
+    # Convert storage writes from current tx to reads
+    var slotsToConvert: seq[UInt256]
+    for slot, slotChanges in accData[].storageChanges.mpairs():
+      slotChanges.del(currentIndex)
+      if slotChanges.len() == 0:
+        slotsToConvert.add(slot)
+
+    for slot in slotsToConvert:
+      accData[].storageChanges.del(slot)
+      accData[].storageReads.incl(slot)
 
     # Remove nonce and code changes from current transaction
     accData[].nonceChanges.del(currentIndex)
     accData[].codeChanges.del(currentIndex)
 
 proc normalizeBalanceChanges*(tracker: StateChangeTrackerRef) =
-  # TODO
-  discard
+  let currentIndex = tracker.currentBlockAccessIndex
+
+  # Check each address that had balance changes in this transaction
+  for address, accData in tracker.builder.accounts.mpairs():
+    let
+      preBalance = tracker.capturePreBalance(address)
+      postBalance = tracker.ledger.getBalance(address)
+
+    # If pre-tx balance equals post-tx balance, remove all balance changes
+    # for this address in the current transaction
+    if preBalance == postBalance:
+      # Filter out balance changes from the current transaction
+      accData.balanceChanges.del(currentIndex)
 
 proc beginCallFrame*(tracker: StateChangeTrackerRef) =
   tracker.callFrameSnapshots.add(CallFrameSnapshot.init())
 
 proc rollbackCallFrame*(tracker: StateChangeTrackerRef) =
-  # TODO
-  discard
+  doAssert tracker.callFrameSnapshots.len() > 0
+
+  let
+    currentIndex = tracker.currentBlockAccessIndex
+    snapshot = tracker.callFrameSnapshots.pop()
+
+  # Convert storage writes to reads
+  for key in snapshot.storageWrites.keys():
+    let (address, slot) = key
+
+    tracker.builder.accounts.withValue(address, accData):
+      accData[].storageChanges.withValue(slot, slotChanges):
+        # Filter out changes from this call frame
+        slotChanges[].del(currentIndex)
+        if slotChanges[].len() == 0:
+          accData[].storageChanges.del(slot)
+          accData[].storageReads.incl(slot) # Add as a read instead
+
+  # Remove balance changes from this call frame
+  for change in snapshot.balanceChanges:
+    let (address, blockAccessIndex, newBalance) = change
+
+    tracker.builder.accounts.withValue(address, accData):
+      # Filter out balance changes from this call frame
+      accData[].balanceChanges.withValue(currentIndex, postBalance):
+        if postBalance[] == newBalance:
+          accData[].balanceChanges.del(currentIndex)
+
+  # Remove nonce changes from this call frame
+  for change in snapshot.nonceChanges:
+    let (address, blockAccessIndex, newNonce) = change
+
+    tracker.builder.accounts.withValue(address, accData):
+      # Filter out nonce changes from this call frame
+      accData[].nonceChanges.withValue(currentIndex, postNonce):
+        if postNonce[] == newNonce:
+          accData[].nonceChanges.del(currentIndex)
+
+  # Remove code changes from this call frame
+  for change in snapshot.codeChanges:
+    let (address, blockAccessIndex, newCode) = change
+
+    tracker.builder.accounts.withValue(address, accData):
+      # Filter out nonce changes from this call frame
+      accData[].codeChanges.withValue(currentIndex, postCode):
+        if postCode[] == newCode:
+          accData[].codeChanges.del(currentIndex)
+
+  # All touched addresses remain in the access list (already tracked)
 
 proc commitCallFrame*(tracker: StateChangeTrackerRef) =
   if tracker.callFrameSnapshots.len() > 0:
     discard tracker.callFrameSnapshots.pop()
-
-
-
-# def handle_in_transaction_selfdestruct(
-#     tracker: StateChangeTracker, address: Address
-# ) -> None:
-#     """
-#     Handle an account that self-destructed in the same transaction it was
-#     created.
-#     Per EIP-7928, accounts destroyed within their creation transaction must be
-#     included as read-only with storage writes converted to reads. Nonce and
-#     code changes from the current transaction are also removed.
-#     Note: Balance changes are handled separately by
-#           normalize_balance_changes.
-#     Parameters
-#     ----------
-#     tracker :
-#         The state change tracker instance.
-#     address :
-#         The address that self-destructed.
-#     """
-#     builder = tracker.block_access_list_builder
-#     if address not in builder.accounts:
-#         return
-
-#     account_data = builder.accounts[address]
-#     current_index = tracker.current_block_access_index
-
-#     # Convert storage writes from current tx to reads
-#     for slot in list(account_data.storage_changes.keys()):
-#         account_data.storage_changes[slot] = [
-#             c
-#             for c in account_data.storage_changes[slot]
-#             if c.block_access_index != current_index
-#         ]
-#         if not account_data.storage_changes[slot]:
-#             del account_data.storage_changes[slot]
-#             account_data.storage_reads.add(slot)
-
-#     # Remove nonce and code changes from current transaction
-#     account_data.nonce_changes = [
-#         c
-#         for c in account_data.nonce_changes
-#         if c.block_access_index != current_index
-#     ]
-#     account_data.code_changes = [
-#         c
-#         for c in account_data.code_changes
-#         if c.block_access_index != current_index
-#     ]
-
-
-# def normalize_balance_changes(
-#     tracker: StateChangeTracker, state: "State"
-# ) -> None:
-#     """
-#     Normalize balance changes for the current block access index.
-#     This method filters out spurious balance changes by removing all balance
-#     changes for addresses where the post-execution balance equals the
-#     pre-execution balance.
-#     This is crucial for handling cases like:
-#     - In-transaction self-destructs where an account with 0 balance is created
-#       and destroyed, resulting in no net balance change
-#     - Round-trip transfers where an account receives and sends equal amounts
-#     - Zero-amount withdrawals where the balance doesn't actually change
-#     This should be called at the end of any operation that tracks balance
-#     changes (transactions, withdrawals, etc.). Only actual state changes are
-#     recorded in the Block Access List.
-#     Parameters
-#     ----------
-#     tracker :
-#         The state change tracker instance.
-#     state :
-#         The current execution state.
-#     """
-#     # Import locally to avoid circular import
-#     from ..state import get_account
-
-#     builder = tracker.block_access_list_builder
-#     current_index = tracker.current_block_access_index
-
-#     # Check each address that had balance changes in this transaction
-#     for address in list(builder.accounts.keys()):
-#         account_data = builder.accounts[address]
-
-#         # Get the pre-transaction balance
-#         pre_balance = capture_pre_balance(tracker, address, state)
-
-#         # Get the current (post-transaction) balance
-#         post_balance = get_account(state, address).balance
-
-#         # If pre-tx balance equals post-tx balance, remove all balance changes
-#         # for this address in the current transaction
-#         if pre_balance == post_balance:
-#             # Filter out balance changes from the current transaction
-#             account_data.balance_changes = [
-#                 change
-#                 for change in account_data.balance_changes
-#                 if change.block_access_index != current_index
-#             ]
-
-
-
-# def rollback_call_frame(tracker: StateChangeTracker) -> None:
-#     """
-#     Rollback changes from the current call frame.
-#     When a call reverts, this function:
-#     - Converts storage writes to reads
-#     - Removes balance, nonce, and code changes
-#     - Preserves touched addresses
-#     This implements EIP-7928 revert handling where reverted writes
-#     become reads and addresses remain in the access list.
-#     Parameters
-#     ----------
-#     tracker :
-#         The state change tracker instance.
-#     """
-#     if not tracker.call_frame_snapshots:
-#         return
-
-#     snapshot = tracker.call_frame_snapshots.pop()
-#     builder = tracker.block_access_list_builder
-
-#     # Convert storage writes to reads
-#     for (address, slot), _ in snapshot.storage_writes.items():
-#         # Remove the write from storage_changes
-#         if address in builder.accounts:
-#             account_data = builder.accounts[address]
-#             if slot in account_data.storage_changes:
-#                 # Filter out changes from this call frame
-#                 account_data.storage_changes[slot] = [
-#                     change
-#                     for change in account_data.storage_changes[slot]
-#                     if change.block_access_index
-#                     != tracker.current_block_access_index
-#                 ]
-#                 if not account_data.storage_changes[slot]:
-#                     del account_data.storage_changes[slot]
-#             # Add as a read instead
-#             account_data.storage_reads.add(slot)
-
-#     # Remove balance changes from this call frame
-#     for address, block_access_index, new_balance in snapshot.balance_changes:
-#         if address in builder.accounts:
-#             account_data = builder.accounts[address]
-#             # Filter out balance changes from this call frame
-#             account_data.balance_changes = [
-#                 change
-#                 for change in account_data.balance_changes
-#                 if not (
-#                     change.block_access_index == block_access_index
-#                     and change.post_balance == new_balance
-#                 )
-#             ]
-
-#     # Remove nonce changes from this call frame
-#     for address, block_access_index, new_nonce in snapshot.nonce_changes:
-#         if address in builder.accounts:
-#             account_data = builder.accounts[address]
-#             # Filter out nonce changes from this call frame
-#             account_data.nonce_changes = [
-#                 change
-#                 for change in account_data.nonce_changes
-#                 if not (
-#                     change.block_access_index == block_access_index
-#                     and change.new_nonce == new_nonce
-#                 )
-#             ]
-
-#     # Remove code changes from this call frame
-#     for address, block_access_index, new_code in snapshot.code_changes:
-#         if address in builder.accounts:
-#             account_data = builder.accounts[address]
-#             # Filter out code changes from this call frame
-#             account_data.code_changes = [
-#                 change
-#                 for change in account_data.code_changes
-#                 if not (
-#                     change.block_access_index == block_access_index
-#                     and change.new_code == new_code
-#                 )
-#             ]
-
-#     # All touched addresses remain in the access list (already tracked)
