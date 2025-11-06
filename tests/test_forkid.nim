@@ -108,6 +108,11 @@ template runComputeForkIdTest(network: untyped, name: string) =
         # And also when set to current fork timestamp
         com.compatibleForkId(computedId, BlockNumber(0'u64), EthTime(1761921403'u64)) == true
 
+      if x.time != 0'u64:
+        # Only for time-based forks check also the time-only function
+        let computedIdTimeOnly = com.forkId(EthTime(x.time))
+        check computedIdTimeOnly == expectedId
+
 const
   ValidationTests = [
 
