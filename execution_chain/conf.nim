@@ -375,7 +375,6 @@ type
 
     statelessProviderEnabled* {.
       separator: "\pSTATELESS PROVIDER OPTIONS:"
-      hidden
       desc: "Enable the stateless provider. This turns on the features required" &
         " by stateless clients such as generation and storage of block witnesses" &
         " and serving these witnesses to peers over the p2p network."
