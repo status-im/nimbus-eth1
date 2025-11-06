@@ -15,7 +15,7 @@ import
   chronicles,
   eth/common/keys,
   eth/net/nat,
-  eth/p2p/discoveryv5/[enr, node, routing_table],
+  eth/p2p/discoveryv5/[node, routing_table],
   nimcrypto/hash,
   stew/byteutils,
   stew/io2,
@@ -55,9 +55,6 @@ type
     discovery
 
   TrustedDigest* = MDigest[32 * 8]
-
-  PortalCmd* = enum
-    noCommand
 
   PortalConf* = object
     logLevel* {.
@@ -198,7 +195,7 @@ type
     .}: IpAddress
 
     rpcPort* {.
-      desc: "Port for the HTTP JSON-RPC server", defaultValue: 8545, name: "rpc-port"
+      desc: "Port for the HTTP JSON-RPC server", defaultValue: 8565, name: "rpc-port"
     .}: Port
 
     rpcApi* {.
@@ -222,7 +219,7 @@ type
 
     wsPort* {.
       desc: "Port for the WebSocket JSON-RPC server",
-      defaultValue: 8546,
+      defaultValue: 8566,
       name: "ws-port"
     .}: Port
 
@@ -417,10 +414,6 @@ type
       defaultValue: 50,
       name: "debug-content-queue-size"
     .}: int
-
-    case cmd* {.command, defaultValue: noCommand.}: PortalCmd
-    of noCommand:
-      discard
 
 proc dataDir*(config: PortalConf): string =
   string config.dataDirFlag.get(OutDir defaultDataDir("", $config.network))

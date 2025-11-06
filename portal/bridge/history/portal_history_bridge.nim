@@ -18,22 +18,26 @@ import
   eth/common/[base, headers_rlp, blocks_rlp, receipts],
   eth/p2p/discoveryv5/random2,
   ../../../execution_chain/beacon/web3_eth_conv,
-  ../../../hive_integration/nodocker/engine/engine_client,
+  ../../../hive_integration/engine_client,
   ../../rpc/portal_rpc_client,
   ../../network/history/[history_content, history_validation],
   ../../eth_history/block_proofs/historical_hashes_accumulator,
-  ../../network/network_metadata,
   ../../eth_history/[era1, history_data_ssz_e2s],
   ../../database/era1_db,
+  ../../../execution_chain/common/[hardforks, chain_config],
   ../common/rpc_helpers,
-  ../nimbus_portal_bridge_conf
+  ../nimbus_portal_bridge_conf,
+  beacon_chain/process_state
+
+from ../../network/network_metadata import loadAccumulator
 
 const newHeadPollInterval = 6.seconds # Slot with potential block is every 12s
 
 type PortalHistoryBridge = ref object
-  portalClient: RpcClient
+  portalClient: PortalRpcClient
   web3Client: RpcClient
   gossipQueue: AsyncQueue[(seq[byte], seq[byte])]
+  cfg*: ChainConfig
 
 proc gossipBlockBody(
     bridge: PortalHistoryBridge, blockNumber: uint64, body: BlockBody
@@ -106,7 +110,7 @@ proc runLatestLoop(
 proc gossipBlockContent(
     bridge: PortalHistoryBridge, era1File: string, verifyEra = false
 ): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
-  let f = ?Era1File.open(era1File)
+  let f = ?Era1File.open(era1File, bridge.cfg.posBlock.get())
 
   if verifyEra:
     let _ = ?f.verify()
@@ -125,25 +129,94 @@ proc gossipBlockContent(
   ok()
 
 proc runBackfillLoop(
-    bridge: PortalHistoryBridge, era1Dir: string, startEra: uint64, endEra: uint64
+    bridge: PortalHistoryBridge,
+    era1Dir: string,
+    startEra: uint64,
+    endEra: uint64,
+    loop: bool,
 ) {.async: (raises: [CancelledError]).} =
   let accumulator = loadAccumulator()
 
-  for era in startEra .. endEra:
-    let
-      root = accumulator.historicalEpochs[era]
-      era1File = era1Dir / era1FileName("mainnet", Era1(era), Digest(data: root))
+  while true:
+    for era in startEra .. endEra:
+      let
+        root = accumulator.historicalEpochs[era]
+        era1File = era1Dir / era1FileName("mainnet", Era1(era), Digest(data: root))
 
-    (await bridge.gossipBlockContent(era1File)).isOkOr:
-      error "Failed to gossip block content from era1 file", error, era1File
-      continue
+      (await bridge.gossipBlockContent(era1File)).isOkOr:
+        error "Failed to gossip block content from era1 file", error, era1File
+        continue
+
+    if not loop:
+      ProcessState.scheduleStop("backfill_complete")
+      break
+
+    info "Completed backfill loop, starting over"
+
+proc runBackfillLoopSyncMode(
+    bridge: PortalHistoryBridge,
+    era1Dir: string,
+    startEra: uint64,
+    endEra: uint64,
+    loop: bool,
+) {.async: (raises: [CancelledError]).} =
+  let
+    rng = newRng()
+    db = Era1DB.new(era1Dir, "mainnet", loadAccumulator(), bridge.cfg.posBlock.get())
+    blockLowerBound = startEra * EPOCH_SIZE # inclusive
+    blockUpperBound = ((endEra + 1) * EPOCH_SIZE) - 1 # inclusive
+    blockNumberQueue = newAsyncQueue[uint64](50)
+
+  proc blockWorker() {.async: (raises: [CancelledError]).} =
+    while true:
+      let blockNumber = await blockNumberQueue.popFirst()
+
+      logScope:
+        blockNumber = blockNumber
+
+      var blockTuple: BlockTuple
+      db.getBlockTuple(blockNumber, blockTuple).isOkOr:
+        error "Failed to get block tuple", error
+        continue
+
+      block bodyBlock:
+        let _ = (await historyGetBlockBody(bridge.portalClient, blockTuple.header)).valueOr:
+          debug "Failed to find block body content, gossiping..", error = $error.message
+          await bridge.gossipBlockBody(blockNumber, blockTuple.body)
+          break bodyBlock
+
+      block receiptsBlock:
+        let _ = (await historyGetReceipts(bridge.portalClient, blockTuple.header)).valueOr:
+          debug "Failed to find block receipts content, gossiping..",
+            error = $error.message
+          await bridge.gossipReceipts(
+            blockNumber, blockTuple.receipts.to(StoredReceipts)
+          )
+          break receiptsBlock
+
+  var workers: seq[Future[void]] = @[]
+  for i in 0 ..< 50:
+    workers.add blockWorker()
+
+  while true:
+    for blockNumber in blockLowerBound .. blockUpperBound:
+      if blockNumber mod EPOCH_SIZE == 0:
+        info "Backfilling task at block", blockNumber, era = blockNumber div EPOCH_SIZE
+
+      await blockNumberQueue.addLast(blockNumber)
+
+    if not loop:
+      ProcessState.scheduleStop("backfill_complete")
+      break
+
+    info "Completed backfill loop, starting over"
 
 proc runBackfillLoopAuditMode(
     bridge: PortalHistoryBridge, era1Dir: string, startEra: uint64, endEra: uint64
 ) {.async: (raises: [CancelledError]).} =
   let
     rng = newRng()
-    db = Era1DB.new(era1Dir, "mainnet", loadAccumulator())
+    db = Era1DB.new(era1Dir, "mainnet", loadAccumulator(), bridge.cfg.posBlock.get())
     blockLowerBound = startEra * EPOCH_SIZE # inclusive
     blockUpperBound = ((endEra + 1) * EPOCH_SIZE) - 1 # inclusive
     blockRange = blockUpperBound - blockLowerBound
@@ -160,59 +233,26 @@ proc runBackfillLoopAuditMode(
       error "Failed to get block tuple", error
       continue
 
-    var bodySuccess, receiptsSuccess = false
-
-    # body
     block bodyBlock:
-      let
-        contentKey = blockBodyContentKey(blockNumber)
-        _ =
-          try:
-            (
-              await bridge.portalClient.portal_historyGetContent(
-                contentKey.encode.asSeq().toHex(),
-                rlp.encode(blockTuple.header).to0xHex(),
-              )
-            ).content
-          except CatchableError as e:
-            error "Failed to find block body content", error = e.msg
-            break bodyBlock
+      let _ = (await historyGetBlockBody(bridge.portalClient, blockTuple.header)).valueOr:
+        info "Failed to find block body content, gossiping..", error = $error
+        await bridge.gossipBlockBody(blockNumber, blockTuple.body)
+        break bodyBlock
 
-      info "Retrieved block body from Portal network"
-      bodySuccess = true
-
-    # receipts
     block receiptsBlock:
-      let
-        contentKey = receiptsContentKey(blockNumber)
-        _ =
-          try:
-            (
-              await bridge.portalClient.portal_historyGetContent(
-                contentKey.encode.asSeq().toHex(),
-                rlp.encode(blockTuple.header).to0xHex(),
-              )
-            ).content
-          except CatchableError as e:
-            error "Failed to find block receipts content", error = e.msg
-            break receiptsBlock
+      let _ = (await historyGetReceipts(bridge.portalClient, blockTuple.header)).valueOr:
+        info "Failed to find block receipts content, gossiping..", error = $error
+        await bridge.gossipReceipts(blockNumber, blockTuple.receipts.to(StoredReceipts))
+        break receiptsBlock
 
-      info "Retrieved block receipts from Portal network"
-      receiptsSuccess = true
-
-    # Gossip missing content
-    if not bodySuccess:
-      await bridge.gossipBlockBody(blockNumber, blockTuple.body)
-    if not receiptsSuccess:
-      await bridge.gossipReceipts(blockNumber, blockTuple.receipts.to(StoredReceipts))
-
-    await sleepAsync(2.seconds)
+    await sleepAsync(1.seconds)
 
 proc runHistory*(config: PortalBridgeConf) =
   let bridge = PortalHistoryBridge(
-    portalClient: newRpcClientConnect(config.portalRpcUrl),
+    portalClient: PortalRpcClient.init(newRpcClientConnect(config.portalRpcUrl)),
     web3Client: newRpcClientConnect(config.web3Url),
     gossipQueue: newAsyncQueue[(seq[byte], seq[byte])](config.gossipConcurrency),
+    cfg: chainConfigForNetwork(MainNet),
   )
 
   proc gossipWorker(bridge: PortalHistoryBridge) {.async: (raises: []).} =
@@ -223,18 +263,61 @@ proc runHistory*(config: PortalBridgeConf) =
           contentKeyHex = contentKey.toHex()
           contentValueHex = contentValue.toHex()
 
-        try:
-          let putContentResult = await bridge.portalClient.portal_historyPutContent(
-            contentKeyHex, contentValueHex
-          )
-          debug "Content gossiped",
-            peers = putContentResult.peerCount, contentKey = contentKeyHex
-        except CancelledError as e:
-          trace "Cancelled gossipWorker"
-          raise e
-        except CatchableError as e:
-          error "JSON-RPC portal_historyPutContent failed",
-            error = $e.msg, contentKey = contentKeyHex
+        while true:
+          try:
+            let putContentResult = await RpcClient(bridge.portalClient)
+            .portal_historyPutContent(contentKeyHex, contentValueHex)
+            let
+              peers = putContentResult.peerCount
+              accepted = putContentResult.acceptMetadata.acceptedCount
+              alreadyStored = putContentResult.acceptMetadata.alreadyStoredCount
+              notWithinRadius = putContentResult.acceptMetadata.notWithinRadiusCount
+              genericDecline = putContentResult.acceptMetadata.genericDeclineCount
+              rateLimited = putContentResult.acceptMetadata.rateLimitedCount
+              transferInProgress =
+                putContentResult.acceptMetadata.transferInProgressCount
+
+            logScope:
+              contentKey = contentKeyHex
+
+            debug "Content gossiped",
+              peers, accepted, genericDecline, alreadyStored, notWithinRadius,
+              rateLimited, transferInProgress
+
+            # Conditions below are assumed on correct and non malicious behavior of the peers.
+            if peers == genericDecline + rateLimited + transferInProgress:
+              # No peers accepted or already stored the content.
+              # Decline reasons are likely temporary, so retry.
+              debug "All peers declined, rate limited, or transfer in progress; retrying...",
+                contentKey = contentKeyHex
+              # Sleep 5 seconds to back off a bit before retrying
+              await sleepAsync(5.seconds)
+              # Note i: might want to introduce exponential backoff here
+              # Note ii: Due to the fact that consecutive block numbers have consecutive content
+              # ids until the hash function wraps around, it is likely that (some of) the same peers
+              # will be selected for the next content and thus remain busy. A potential improvement
+              # could be to stream content from multiple "content id ranges".
+              continue
+
+            if peers == notWithinRadius:
+              # No peers were found within radius. Retrying is unlikely to help,
+              # as new searches probably won't find peers in radius. This is a
+              # network-wide issue due to insufficient storage.
+              warn "No peers were found within radius for content",
+                contentKey = contentKeyHex
+              break
+
+            if accepted + alreadyStored >= 1:
+              # At least one peer either accepted or already has the content,
+              # data should be in the network.
+              debug "At least one peer accepted or already stored the content"
+              break
+          except CancelledError as e:
+            trace "Cancelled gossipWorker"
+            raise e
+          except CatchableError as e:
+            error "JSON-RPC portal_historyPutContent failed",
+              error = $e.msg, contentKey = contentKeyHex
     except CancelledError:
       trace "gossipWorker canceled"
 
@@ -245,12 +328,19 @@ proc runHistory*(config: PortalBridgeConf) =
   if config.latest:
     asyncSpawn bridge.runLatestLoop(config.blockVerify)
 
-  if config.backfill:
-    if config.audit:
-      asyncSpawn bridge.runBackfillLoopAuditMode(
-        config.era1Dir.string, config.startEra, config.endEra
-      )
-    else:
-      asyncSpawn bridge.runBackfillLoop(
-        config.era1Dir.string, config.startEra, config.endEra
-      )
+  case config.backfillMode
+  of BackfillMode.none:
+    if not config.latest:
+      ProcessState.scheduleStop("no_backfill_no_latest")
+  of BackfillMode.regular:
+    asyncSpawn bridge.runBackfillLoop(
+      config.era1Dir.string, config.startEra, config.endEra, config.backfillLoop
+    )
+  of BackfillMode.sync:
+    asyncSpawn bridge.runBackfillLoopSyncMode(
+      config.era1Dir.string, config.startEra, config.endEra, config.backfillLoop
+    )
+  of BackfillMode.audit:
+    asyncSpawn bridge.runBackfillLoopAuditMode(
+      config.era1Dir.string, config.startEra, config.endEra
+    )

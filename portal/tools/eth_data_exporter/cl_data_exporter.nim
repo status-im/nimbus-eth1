@@ -53,7 +53,7 @@ proc getBeaconData*(): (RuntimeConfig, ref ForkDigests, BeaconClock) =
     forkDigests = newClone ForkDigests.init(metadata.cfg, genesis_validators_root)
 
     genesisTime = getStateField(genesisState[], genesis_time)
-    beaconClock = BeaconClock.init(genesisTime).valueOr:
+    beaconClock = BeaconClock.init(metadata.cfg.timeParams, genesisTime).valueOr:
       error "Invalid genesis time in state", genesisTime
       quit QuitFailure
 

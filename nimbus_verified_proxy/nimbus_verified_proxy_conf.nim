@@ -57,16 +57,40 @@ type VerifiedProxyConf* = object
     defaultValueDesc: "mainnet"
     name: "network" .}: Option[string]
 
-  # In-Memory Cache Size
-  # In order to support the BLOCKHASH opcode for eth_call we need at least
-  # MAX_PREV_HEADER_DEPTH headers in the header cache.
-  cacheLen* {.
+  accountCacheLen* {.
     hidden,
-    desc: "Length of the header cache maintained in memory",
-    defaultValue: MAX_PREV_HEADER_DEPTH,
-    defaultValueDesc: "256",
-    name: "debug-cache-len"
+    desc: "Length of the accounts cache maintained in memory",
+    defaultValue: 128,
+    name: "debug-account-cache-len"
   .}: int
+
+  codeCacheLen* {.
+    hidden,
+    desc: "Length of the code cache maintained in memory",
+    defaultValue: 64,
+    name: "debug-code-cache-len"
+  .}: int
+
+  storageCacheLen* {.
+    hidden,
+    desc: "Length of the storage cache maintained in memory",
+    defaultValue: 256,
+    name: "debug-storage-cache-len"
+  .}: int
+
+  headerStoreLen* {.
+    hidden,
+    desc: "Length of the header store maintained in memory",
+    defaultValue: 256,
+    name: "debug-header-store-len"
+  .}: int
+
+  maxBlockWalk* {.
+    hidden,
+    desc: "Maximum number of blocks that will be traversed to serve a request",
+    defaultValue: 1000,
+    name: "debug-max-walk"
+  .}: uint64
 
   # Consensus light sync
   # No default - Needs to be provided by the user
@@ -76,19 +100,19 @@ type VerifiedProxyConf* = object
 
   # (Untrusted) web3 provider
   # No default - Needs to be provided by the user
-  web3url* {.desc: "URL of the web3 data provider", name: "web3-url".}: Web3Url
+  backendUrl* {.
+    desc: "URL of the web3 data provider",
+    name: "backend-url"
+  .}: Web3Url
 
-  # Local JSON-RPC server
-  rpcAddress* {.
-    desc: "Listening address of the JSON-RPC server",
-    defaultValue: defaultAdminListenAddress,
-    defaultValueDesc: $defaultAdminListenAddressDesc,
-    name: "rpc-address"
-  .}: IpAddress
-
-  rpcPort* {.
-    desc: "Listening port of the JSON-RPC server", defaultValue: 8545, name: "rpc-port"
-  .}: Port
+  # Listening endpoint of the proxy
+  # (verified) web3 end
+  frontendUrl* {.
+    desc: "URL for the listening end of the proxy - [http/ws]://[address]:[port]",
+    defaultValue: Web3Url(kind: HttpUrl, web3Url: "http://127.0.0.1:8545"),
+    defaultValueDesc: "http://127.0.0.1:8545",
+    name: "frontend-url"
+  .}: Web3Url
 
   # Libp2p
   bootstrapNodes* {.
@@ -123,14 +147,6 @@ type VerifiedProxyConf* = object
     defaultValue: 160, # 5 (fanout) * 64 (subnets) / 2 (subs) for a healthy mesh
     name: "max-peers"
   .}: int
-
-  maxBlockWalk* {.
-    hidden,
-    desc: "Maximum number of blocks that will be queried to serve a request",
-    defaultValue: 1000,
-    defaultValueDesc: "1000",
-    name: "debug-max-walk"
-  .}: uint64
 
   hardMaxPeers* {.
     desc: "The maximum number of peers to connect to. Defaults to maxPeers * 1.5"
@@ -203,7 +219,7 @@ func asLightClientConf*(pc: VerifiedProxyConf): LightClientConf =
     discv5Enabled: pc.discv5Enabled,
     directPeers: pc.directPeers,
     trustedBlockRoot: pc.trustedBlockRoot,
-    web3Urls: @[EngineApiUrlConfigValue(url: pc.web3url.web3Url)],
+    web3Urls: @[EngineApiUrlConfigValue(url: pc.backendUrl.web3Url)],
     jwtSecret: none(InputFile),
     stopAtEpoch: 0,
   )

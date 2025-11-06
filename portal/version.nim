@@ -7,7 +7,7 @@
 
 {.push raises: [].}
 
-import stew/byteutils, metrics, beacon_chain/buildinfo
+import std/[os, strutils], stew/byteutils, metrics, beacon_chain/buildinfo
 
 export buildinfo
 
@@ -18,6 +18,9 @@ const
 
   versionAsStr* = $versionMajor & "." & $versionMinor & "." & $versionBuild
 
+  sourcePath = currentSourcePath.rsplit({DirSep, AltSep}, 1)[0]
+  GitRevision = generateGitRevision(sourcePath)
+
   fullVersionStr* = "v" & versionAsStr & "-" & GitRevision
 
   clientName* = "nimbus_portal_client"
@@ -27,12 +30,13 @@ const
     clientName & "/" & fullVersionStr & "/" & hostOS & "-" & hostCPU & "/" & "Nim" &
     NimVersion
 
-  compileYear = CompileDate[0 ..< 4] # YYYY-MM-DD (UTC)
   copyrightBanner* =
     "Copyright (c) 2021-" & compileYear & " Status Research & Development GmbH"
 
   # Short debugging identifier to be placed in the ENR
-  enrClientInfoShort* = toBytes("f")
+  # Note: This got replaced by the ping extension containing the client_info.
+  # Once no longer used it can be deprecated.
+  enrClientInfoShort* = toBytes("n")
 
 declareGauge versionGauge,
   "nimbus_portal_client version info (as metric labels)",

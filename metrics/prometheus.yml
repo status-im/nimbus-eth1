@@ -1,0 +1,8 @@
+global:
+  scrape_interval: 12s
+
+scrape_configs:
+  - job_name: "nimbus_execution_client"
+    static_configs:
+      - targets: ['localhost:9093']
+

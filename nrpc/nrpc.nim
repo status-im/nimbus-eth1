@@ -13,9 +13,9 @@ import
   std/[sequtils, os, strformat],
   chronicles,
   chronos/timer,
+  kzg4844/kzg,
   ../execution_chain/constants,
   ../execution_chain/core/chain,
-  ../execution_chain/core/lazy_kzg,
   ./config,
   ../execution_chain/utils/era_helpers,
     web3,
@@ -90,8 +90,6 @@ template loadNetworkConfig(conf: NRpcConf): (RuntimeConfig, uint64, uint64) =
     (getMetadataForNetwork("mainnet").cfg, 15537393'u64, 4700013'u64)
   elif conf.networkId == SepoliaNet:
     (getMetadataForNetwork("sepolia").cfg, 1450408'u64, 115193'u64)
-  elif conf.networkId == HoleskyNet:
-    (getMetadataForNetwork("holesky").cfg, 0'u64, 0'u64)
   elif conf.networkId == HoodiNet:
     (getMetadataForNetwork("hoodi").cfg, 0'u64, 0'u64)
   else:

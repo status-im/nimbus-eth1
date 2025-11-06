@@ -10,18 +10,18 @@
 
 import
   unittest2,
-  json_rpc/[rpcclient, rpcserver, rpcproxy],
+  chronos,
   web3/[eth_api_types, eth_api],
-  ../header_store,
-  ../rpc/blocks,
-  ../types,
+  ../engine/header_store,
+  ../engine/blocks,
+  ../engine/types,
   ./test_utils,
   ./test_api_backend
 
 suite "test verified blocks":
   let
     ts = TestApiState.init(1.u256)
-    vp = startTestSetup(ts, 1, 9) # header store holds 1 and maxBlockWalk is 9
+    engine = initTestEngine(ts, 1, 9) # header store holds 1 and maxBlockWalk is 9
 
   test "check fetching blocks on every fork":
     let forkBlockNames = [
@@ -35,15 +35,14 @@ suite "test verified blocks":
         getBlockFromJson("nimbus_verified_proxy/tests/data/" & blockName & ".json")
 
       ts.loadBlock(blk)
-      check vp.headerStore.add(convHeader(blk), blk.hash).isOk()
+      check engine.headerStore.add(convHeader(blk), blk.hash).isOk()
 
-      # reuse verified proxy's internal client. Conveniently it is looped back to the proxy server
-      let verifiedBlk = waitFor vp.proxy.getClient().eth_getBlockByHash(blk.hash, true)
+      let verifiedBlk = waitFor engine.frontend.eth_getBlockByHash(blk.hash, true)
 
       check blk == verifiedBlk
 
       ts.clear()
-      vp.headerStore.clear()
+      engine.headerStore.clear()
 
   test "check fetching blocks by number and tags":
     let
@@ -55,28 +54,28 @@ suite "test verified blocks":
       hash = blk.hash
 
     ts.clear()
-    vp.headerStore.clear()
+    engine.headerStore.clear()
 
     ts.loadBlock(blk)
     check:
-      vp.headerStore.add(convHeader(blk), blk.hash).isOk()
-      vp.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
+      engine.headerStore.add(convHeader(blk), blk.hash).isOk()
+      engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
 
-    var verifiedBlk = waitFor vp.proxy.getClient().eth_getBlockByNumber(numberTag, true)
+    var verifiedBlk = waitFor engine.frontend.eth_getBlockByNumber(numberTag, true)
     check blk == verifiedBlk
 
-    verifiedBlk = waitFor vp.proxy.getClient().eth_getBlockByNumber(finalTag, true)
+    verifiedBlk = waitFor engine.frontend.eth_getBlockByNumber(finalTag, true)
     check blk == verifiedBlk
 
-    verifiedBlk = waitFor vp.proxy.getClient().eth_getBlockByNumber(earliestTag, true)
+    verifiedBlk = waitFor engine.frontend.eth_getBlockByNumber(earliestTag, true)
     check blk == verifiedBlk
 
-    verifiedBlk = waitFor vp.proxy.getClient().eth_getBlockByNumber(latestTag, true)
+    verifiedBlk = waitFor engine.frontend.eth_getBlockByNumber(latestTag, true)
     check blk == verifiedBlk
 
   test "check block walk":
     ts.clear()
-    vp.headerStore.clear()
+    engine.headerStore.clear()
 
     let
       targetBlockNum = 22431080
@@ -89,7 +88,7 @@ suite "test verified blocks":
 
       ts.loadBlock(blk)
       if i == sourceBlockNum:
-        check vp.headerStore.add(convHeader(blk), blk.hash).isOk()
+        check engine.headerStore.add(convHeader(blk), blk.hash).isOk()
 
     let
       unreachableTargetTag =
@@ -101,22 +100,22 @@ suite "test verified blocks":
     # TODO: catch the exact error 
     try:
       let verifiedBlk =
-        waitFor vp.proxy.getClient().eth_getBlockByNumber(unreachableTargetTag, true)
+        waitFor engine.frontend.eth_getBlockByNumber(unreachableTargetTag, true)
       check(false)
-    except CatchableError as e:
+    except CatchableError:
       check(true)
 
     # TODO: catch the exact error 
     try:
       let verifiedBlk =
-        waitFor vp.proxy.getClient().eth_getBlockByNumber(reachableTargetTag, true)
+        waitFor engine.frontend.eth_getBlockByNumber(reachableTargetTag, true)
       check(true)
-    except CatchableError as e:
+    except CatchableError:
       check(false)
 
   test "check block related API methods":
     ts.clear()
-    vp.headerStore.clear()
+    engine.headerStore.clear()
 
     let
       blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Paris.json")
@@ -124,20 +123,18 @@ suite "test verified blocks":
       hash = blk.hash
 
     ts.loadBlock(blk)
-    check vp.headerStore.add(convHeader(blk), blk.hash).isOk()
+    check engine.headerStore.add(convHeader(blk), blk.hash).isOk()
 
     let
-      uncleCountByHash = waitFor vp.proxy.getClient().eth_getUncleCountByBlockHash(hash)
+      uncleCountByHash = waitFor engine.frontend.eth_getUncleCountByBlockHash(hash)
       uncleCountByNum =
-        waitFor vp.proxy.getClient().eth_getUncleCountByBlockNumber(numberTag)
-      txCountByHash =
-        waitFor vp.proxy.getClient().eth_getBlockTransactionCountByHash(hash)
+        waitFor engine.frontend.eth_getUncleCountByBlockNumber(numberTag)
+      txCountByHash = waitFor engine.frontend.eth_getBlockTransactionCountByHash(hash)
       txCountByNum =
-        waitFor vp.proxy.getClient().eth_getBlockTransactionCountByNumber(numberTag)
-      txByHash = waitFor vp.proxy.getClient().eth_getTransactionByBlockHashAndIndex(
-        hash, Quantity(0)
-      )
-      txByNum = waitFor vp.proxy.getClient().eth_getTransactionByBlockNumberAndIndex(
+        waitFor engine.frontend.eth_getBlockTransactionCountByNumber(numberTag)
+      txByHash =
+        waitFor engine.frontend.eth_getTransactionByBlockHashAndIndex(hash, Quantity(0))
+      txByNum = waitFor engine.frontend.eth_getTransactionByBlockNumberAndIndex(
         numberTag, Quantity(0)
       )
 
@@ -150,5 +147,3 @@ suite "test verified blocks":
 
     check txByHash == blk.transactions[0].tx
     check txByHash == txByNum
-
-    vp.stopTestSetup()

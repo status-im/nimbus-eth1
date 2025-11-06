@@ -8,6 +8,8 @@
 name: Nimbus Portal CI
 on:
   push:
+    branches:
+      - master
     paths-ignore:
       - 'doc/**'
       - 'portal/docs/**'
@@ -16,6 +18,7 @@ on:
       - '.github/workflows/nimbus_verified_proxy.yml'
       - '.github/workflows/build_base_image.yml'
       - 'docker/**'
+      - 'metrics/**'
 
   pull_request:
     paths-ignore:
@@ -26,8 +29,13 @@ on:
       - '.github/workflows/nimbus_verified_proxy.yml'
       - '.github/workflows/build_base_image.yml'
       - 'docker/**'
+      - 'metrics/**'
 
   workflow_dispatch:
+
+concurrency: # Cancel stale PR builds (but not push builds)
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   # separate job so it can run concurrently with other tests
@@ -126,14 +134,14 @@ jobs:
         with:
           llvm-mingw: true
           nim-cache: true
-          rocksdb-cache: true
+          rocksdb-cache: false
           eest-cache: false
 
       - name: Run Nimbus Portal tests (Windows)
         if: runner.os == 'Windows'
         run: |
           gcc --version
-          DEFAULT_MAKE_FLAGS="-j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache"
+          DEFAULT_MAKE_FLAGS="-j${ncpu}"
           mingw32-make ${DEFAULT_MAKE_FLAGS} nimbus_portal_client
           build/nimbus_portal_client.exe --help
           # find . -type d -name ".git" -exec rm -rf {} +
@@ -150,7 +158,7 @@ jobs:
           ./env.sh nim -v
           ldd --version
           export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
-          DEFAULT_MAKE_FLAGS="-j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache"
+          DEFAULT_MAKE_FLAGS="-j${ncpu}"
           env CC=gcc make ${DEFAULT_MAKE_FLAGS} nimbus_portal_client
           build/nimbus_portal_client --help
           env CC=gcc make ${DEFAULT_MAKE_FLAGS} portal-tools
@@ -160,7 +168,7 @@ jobs:
       - name: Run Nimbus Portal tests (Macos)
         if: runner.os == 'Macos'
         run: |
-          DEFAULT_MAKE_FLAGS="-j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache"
+          DEFAULT_MAKE_FLAGS="-j${ncpu}"
           make ${DEFAULT_MAKE_FLAGS} nimbus_portal_client
           build/nimbus_portal_client --help
           make ${DEFAULT_MAKE_FLAGS} portal-tools
@@ -170,29 +178,3 @@ jobs:
       - name: Run Portal testnet
         run: |
           ./portal/scripts/launch_local_testnet.sh --nodes=64 --run-tests
-
-  lint:
-    name: "Lint Nimbus Portal"
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 2  # In PR, has extra merge commit: ^1 = PR, ^2 = base
-
-      - name: Check nph formatting
-        # Pin nph to a specific version to avoid sudden style differences.
-        # Updating nph version should be accompanied with running the new
-        # version on the portal directory.
-        run: |
-          VERSION="v0.6.1"
-          ARCHIVE="nph-linux_x64.tar.gz"
-          curl -L "https://github.com/arnetheduck/nph/releases/download/${VERSION}/${ARCHIVE}" -o ${ARCHIVE}
-          tar -xzf ${ARCHIVE}
-          ./nph portal/
-          git diff --exit-code
-
-      - name: Check copyright year
-        if: ${{ !cancelled() }} && github.event_name == 'pull_request'
-        run: |
-          bash scripts/check_copyright_year.sh

@@ -13,23 +13,23 @@
 ##
 ## Virtual method/interface functions to be provided as `mixin`:
 ##
-## *runSetup(ctx: CtxRef[S]): bool*
+## *runSetup(ctx: CtxRef[S,W]): bool*
 ##   Global set up. This function will be called before any worker peer is
 ##   started. If that function returns `false`, no worker peers will be run.
 ##
 ##   Also, this function should decide whether the `runDaemon()` job will be
 ##   started next by controlling the `ctx.daemon` flag (default is `false`.)
 ##
-## *runRelease(ctx: CtxRef[S])*
+## *runRelease(ctx: CtxRef[S,W])*
 ##   Global clean up, done with all the worker peers.
 ##
-## *runDaemon(ctx: CtxRef[S]) {.async: (raises: []).}*
+## *runDaemon(ctx: CtxRef[S,W]) {.async: (raises: []).}*
 ##   Global background job that will be re-started as long as the variable
 ##   `ctx.daemon` is set `true`.
 ##
 ##   The function returns a suggested idle time to wait for the next invocation.
 ##
-## *runTicker(ctx: CtxRef[S])*
+## *runTicker(ctx: CtxRef[S,W])*
 ##   Global background job that is started every few seconds. It is to be
 ##   intended for updating metrics, debug logging etc.
 ##
@@ -87,14 +87,15 @@
 {.push raises: [].}
 
 import
-  std/hashes,
-  pkg/[chronos, stew/keyed_queue],
+  std/[hashes, strutils],
+  pkg/[chronos, minilru],
   ../networking/[p2p, peer_pool],
+  ../utils/utils,
   ./[sync_desc, wire_protocol]
 
 type
-  ActiveBuddies[S,W] = KeyedQueue[ENode,RunnerBuddyRef[S,W]]
-    ## List of active workers, using `Hash(Peer)` rather than `Peer`
+  ActivePeers[S,W] = LruCache[Hash,RunnerBuddyRef[S,W]]
+    ## List of active workers, using `Hash(Peer)` rather than `Peer` as a key.
 
   RunCtrl = enum
     terminated = 0
@@ -103,15 +104,15 @@ type
 
   RunnerSyncRef*[S,W] = ref object of RootRef
     ## Module descriptor
-    ctx*: CtxRef[S]             ## Shared data
-    pool: PeerPool              ## For starting the system
-    buddiesMax: int             ## Max number of buddies
-    buddies: ActiveBuddies[S,W] ## LRU cache with worker descriptors
+    ctx*: CtxRef[S,W]           ## Shared data
+    peerPool: PeerPool          ## For starting the system
+    syncPeers: ActivePeers[S,W] ## LRU cache with worker descriptors
     daemonRunning: bool         ## Running background job (in async mode)
     tickerRunning: bool         ## Running background ticker
     monitorLock: bool           ## Monitor mode is activated (non-async mode)
     activeMulti: int            ## Number of async workers active/running
-    runCtrl: RunCtrl            ## Start/stop control
+    runCtrl: RunCtrl            ## Overall scheduler start/stop control
+    newPeer: RunnerBuddyRef[S,W] ## Free parking before table registry
 
   RunnerBuddyRef[S,W] = ref object
     ## Per worker peer descriptor
@@ -149,67 +150,49 @@ const
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc hash*(key: ENode): Hash =
-  ## Mixin, needed for `buddies` table key comparison. Needs to be a public
-  ## function technically although it should be seen logically as a private
-  ## one.
+template noisy[S,W](dsc: RunnerSyncRef[S,W]): bool =
+  ## Log a bit more (typically while syncer is activated)
+  dsc.ctx.noisyLog
+
+func short(w: Hash): string =
+  w.toHex(8).toLowerAscii # strips leading 8 bytes
+
+proc key(peer: Peer): Hash =
+  ## Map to table key.
   var h: Hash = 0
-  h = h !& hashes.hash(key.pubkey.toRaw)
-  h = h !& hashes.hash(key.address)
+  h = h !& hashes.hash(peer.remote.node.pubkey.toRaw)
+  h = h !& hashes.hash(peer.remote.node.address)
   !$h
 
-proc key(peer: Peer): ENode =
-  ## Map to key for below table methods.
-  peer.remote.node
+proc getPeerFn[S,W](dsc: RunnerSyncRef[S,W]): GetPeerFn[S,W] =
+  ## Get particular active syncer peer (aka buddy)
+  result = proc(peerID: Hash): BuddyRef[S,W] =
+    dsc.syncPeers.peek(peerID).isErrOr:
+      # `.worker` might be `nil` in case of a zombie (still `.isRunning`
+      # until finished by worker loop)
+      return (if value.isRunning: value.worker
+              else: BuddyRef[S,W](nil))
+    # Check temporary free parking hook
+    if not dsc.newPeer.isNil and
+       dsc.newPeer.worker.peerID == peerID:
+      return dsc.newPeer.worker
+    # BuddyRef[S,W](nil)
+
+proc getPeersFn[S,W](dsc: RunnerSyncRef[S,W]): GetPeersFn[S,W] =
+  ## Get a list of descriptor all active syncer peers (aka buddies)
+  result = proc(): seq[BuddyRef[S,W]] =
+    var list: seq[BuddyRef[S,W]]
+    for w in dsc.syncPeers.values:
+      if w.worker.isNil:
+        # only zombies following
+        break
+      if w.isRunning:
+        list.add w.worker
+    list
 
 # ------------------------------------------------------------------------------
-# Private functions
+# Private handlers, action loops
 # ------------------------------------------------------------------------------
-
-proc terminate[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
-  ## Request termination and wait for sub-tasks to finish
-  mixin runRelease
-
-  if dsc.runCtrl == running:
-    # Gracefully shut down async services
-    dsc.runCtrl = shutdown
-    dsc.ctx.daemon = false
-
-    # Wait for workers and daemon to have terminated
-    while 0 < dsc.buddies.len:
-      for w in dsc.buddies.nextPairs:
-        if w.data.isRunning:
-          w.data.worker.ctrl.stopped = true
-        else:
-          dsc.buddies.del w.key # this is OK to delete
-      # Activate async jobs so they can finish
-      try:
-        waitFor sleepAsync termWaitPollingTime
-      except CancelledError:
-        trace "Shutdown: peer timeout was cancelled",
-          nCachedWorkers=dsc.buddies.len
-
-    while dsc.daemonRunning or
-          dsc.tickerRunning:
-      # Activate async job so it can finish
-      try:
-        await sleepAsync termWaitPollingTime
-      except CancelledError:
-        trace "Shutdown: daemon timeout was cancelled",
-          nCachedWorkers=dsc.buddies.len
-
-    # Final shutdown
-    dsc.ctx.runRelease()
-
-    # Remove call back from pool manager. This comes last as it will
-    # potentially unlink references which are used in the worker instances
-    # (e.g. peer for logging.)
-    dsc.pool.delObserver(dsc)
-
-    # Clean up, free memory from sub-objects
-    dsc.ctx = CtxRef[S]()
-    dsc.runCtrl = terminated
-
 
 proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
   mixin runDaemon
@@ -240,11 +223,12 @@ proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
         # `dsc.ctx.daemon` remains `true`, the deamon will be re-started from
         # the worker loop in due time.
         trace "Deamon loop sleep was cancelled",
-          nCachedWorkers=dsc.buddies.len
+          nCachedWorkers=dsc.syncPeers.len
         break
       # End while
 
   dsc.daemonRunning = false
+
 
 proc tickerLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
   mixin runTicker
@@ -271,20 +255,21 @@ proc tickerLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
 
 proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async: (raises: []).} =
   mixin runPeer, runPool, runStop
+
   let
     dsc = buddy.dsc
     ctx = dsc.ctx
     worker = buddy.worker
-    peer = worker.peer
+    peerID = worker.peer.key
 
   # Continue until stopped
   block taskExecLoop:
     buddy.isRunning = true
 
-    proc isShutdown(): bool =
+    template isShutdown(): bool =
       dsc.runCtrl != running
 
-    proc isActive(): bool =
+    template isActive(): bool =
       worker.ctrl.running and not isShutdown()
 
     while isActive():
@@ -317,7 +302,7 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async: (raises: []).} =
           # Pool mode: stop this round if returned `true`,
           #            last invocation this round with `true` argument
           var delayed = BuddyRef[S,W](nil)
-          for w in dsc.buddies.nextValues:
+          for w in dsc.syncPeers.values:
             # Ignore non-running (e.g. zombified) entries. They might not be
             # updated yet. Aso, zombies need to be kept in table to prevent
             # from re-connect for while.
@@ -345,9 +330,10 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async: (raises: []).} =
         dsc.monitorLock = false
 
       else:
-        # Rotate connection table so the most used entry is at the top/right
-        # end. So zombies will end up leftish.
-        discard dsc.buddies.lruFetch peer.key
+        # Rotate LRU connection table so this `worker` becomes most used
+        # entry. As a consequence, zombies will end up as least used entries
+        # and evicted first on table overflow.
+        discard dsc.syncPeers.get peerID
 
         # Peer worker in async mode
         dsc.activeMulti.inc
@@ -377,14 +363,77 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async: (raises: []).} =
       try:
         await sleepAsync max(suspend, idleTime)
       except CancelledError:
-        trace "Peer loop sleep was cancelled", peer,
-          nCachedWorkers=dsc.buddies.len
+        trace "Peer loop sleep was cancelled", peer=worker.peer,
+          nSyncPeers=dsc.syncPeers.len, nPeers=dsc.peerPool.len,
+          nSyncPeersMax=dsc.syncPeers.capacity
         break # stop on error (must not end up in busy-loop)
       # End while
 
   # Note that `runStart()` was dispatched in `onPeerConnected()`
   worker.runStop()                # tell worker that this peer is done with
   buddy.isRunning = false         # mark it terminated for the scheduler
+
+  if worker.ctrl.zombie and
+     not buddy.worker.isNil:
+    buddy.worker = nil            # complete zombification
+    buddy.dsc = nil
+    buddy.zombified = Moment.now()
+
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
+proc terminate[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
+  ## Request termination and wait for sub-tasks to finish
+  mixin runRelease
+
+  if dsc.runCtrl == running:
+    # Gracefully shut down async services
+    dsc.runCtrl = shutdown
+    dsc.ctx.daemon = false
+
+    # Wait for workers and daemon to have terminated
+    while 0 < dsc.syncPeers.len:
+      var
+        toBeDeleted: seq[Hash]
+        waitForTermination = false
+      for (key, data) in dsc.syncPeers.pairs:
+        if not data.isRunning or data.worker.isNil:
+          # Dead peer, just delete (no `sleepAsync()`)
+          toBeDeleted.add key
+        else:
+          # Tell async worker that it should terminate
+          data.worker.ctrl.stopped = true
+          waitForTermination = true
+      # Clean up
+      for key in toBeDeleted:
+        dsc.syncPeers.del key
+      # Wait for async worker to terminate
+      if waitForTermination:
+        try:
+          waitFor sleepAsync termWaitPollingTime
+        except CancelledError:
+          trace "Shutdown: peer timeout was cancelled",
+            nCachedWorkers=dsc.syncPeers.len
+
+    while dsc.daemonRunning or
+          dsc.tickerRunning or
+          0 < dsc.activeMulti:
+      # Activate async job so it can finish
+      try:
+        await sleepAsync termWaitPollingTime
+      except CancelledError:
+        trace "Shutdown: daemon timeout was cancelled",
+          nCachedWorkers=dsc.syncPeers.len
+
+    # Final shutdown
+    dsc.ctx.runRelease()
+    dsc.runCtrl = terminated
+
+    # Remove call back from pool manager. This comes last as it will
+    # potentially unlink references which are used in the worker instances
+    # (e.g. peer for logging.)
+    dsc.peerPool.delObserver(dsc)
 
 
 proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
@@ -396,94 +445,89 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
 
   # Check for known entry (which should not exist.)
   let
-    maxCachedWorkers {.used.} = dsc.buddiesMax
-    nPeers {.used.} = dsc.pool.len
-    zombie = dsc.buddies.eq peer.key
+    peerID = peer.key
+    zombie = dsc.syncPeers.peek peerID
   if zombie.isOk:
-    let
-      now = Moment.now()
-      ttz = zombie.value.zombified + zombieTimeToLinger
-    if ttz < Moment.now():
-      if dsc.ctx.noisyLog: trace "Reconnecting zombie peer ignored", peer,
-        nPeers, nCachedWorkers=dsc.buddies.len, maxCachedWorkers,
-        canRequeue=(now-ttz)
+    if zombie.value.worker.isNil:
+      let elapsed = Moment.now() - zombie.value.zombified
+      if elapsed < zombieTimeToLinger:
+        if dsc.noisy: trace "Reconnecting zombie peer ignored", peer,
+          nSyncPeers=dsc.syncPeers.len, nPeers=dsc.peerPool.len,
+          nSyncPeersMax=dsc.syncPeers.capacity,
+          canReconnectIn=(zombieTimeToLinger-elapsed).toString(2)
+        return
+      # Otherwise this slot can be re-used
+    elif zombie.value.isRunning:
+      # Not really a zombie (potenially a hash collision): reject the new peer.
+      info "Same peer ID active, rejecting new peer",
+        peer=zombie.value.worker.peer, newPeer=peer,
+        nSyncPeers=dsc.syncPeers.len, nPeers=dsc.peerPool.len,
+        nSyncPeersMax=dsc.syncPeers.capacity
       return
-    # Zombie can be removed from the database
-    dsc.buddies.del peer.key
-    if dsc.ctx.noisyLog: trace "Zombie peer timeout, ready for requeing", peer,
-      nPeers, nCachedWorkers=dsc.buddies.len, maxCachedWorkers
+    # Peer can be removed from the database and re-allocated
+    dsc.syncPeers.del peerID
+    if dsc.noisy: trace "Zombie peer timeout, ready for requeing", peer,
+      nSyncPeers=dsc.syncPeers.len, nPeers=dsc.peerPool.len,
+      nSyncPeersMax=dsc.syncPeers.capacity
 
-  # Initialise worker for this peer
-  let buddy = RunnerBuddyRef[S,W](
+  # Initialise worker for this peer. Stash it in the `dsc` descriptor so
+  # that it is accessible by `getPeer()` before registered on the
+  # `dsc.syncPeers[]` LRU table (may be used by `runStart()`.)
+  dsc.newPeer = RunnerBuddyRef[S,W](
     dsc:      dsc,
     worker:   BuddyRef[S,W](
       ctx:    dsc.ctx,
       peer:   peer,
-      peerID: peer.key.hash))
-  if not buddy.worker.runStart():
-    if dsc.ctx.noisyLog: trace "Ignoring useless peer", peer, nPeers,
-      nCachedWorkers=dsc.buddies.len, maxCachedWorkers
-    buddy.worker.ctrl.zombie = true
+      peerID: peerID))
+  if not dsc.newPeer.worker.runStart():
+    if dsc.noisy: trace "Ignoring useless peer", peer,
+      nSyncPeers=dsc.syncPeers.len, nPeers=dsc.peerPool.len,
+      nSyncPeersMax=dsc.syncPeers.capacity
+    dsc.newPeer = nil
     return
 
-  # Check for table overflow which might happen any time, not only if there are
-  # to many zombies in the table (which are prevented from being re-accepted
-  # while keept in the local table.)
-  #
-  # In the past, one could not rely on the peer pool for having the number of
-  # connections limited.
-  if dsc.buddiesMax <= dsc.buddies.len:
-    let
-      leastVal = dsc.buddies.shift.value # unqueue first/least item
-      oldest = leastVal.data.worker
-    if oldest.isNil:
-      if dsc.ctx.noisyLog: trace "Dequeuing zombie peer",
-        # Fake `Peer` pretty print for `oldest`
-        oldest=("Node[" & $leastVal.key.address & "]"),
-        since=leastVal.data.zombified, nPeers, nCachedWorkers=dsc.buddies.len,
-        maxCachedWorkers
-      discard
-    else:
-      # This could happen if there are idle entries in the table, i.e.
-      # somehow hanging runners.
-      if dsc.ctx.noisyLog: trace "Peer table full! Dequeuing least used entry",
-        oldestPeer=oldest.peer, oldestOnly=oldest.only, nPeers=nPeers,
-        nCachedWorkers=dsc.buddies.len, maxCachedWorkers
-      # Setting to `zombie` will trigger the worker to terminate (if any.)
-      oldest.ctrl.zombie = true
+  # Add peer entry. This might evict the least used entry from the LRU table.
+  dsc.syncPeers.put(dsc.newPeer.worker.peerID, dsc.newPeer)
+  for (evictedOk, key, buddy) in dsc.syncPeers
+                                    .putWithEvicted(peerID, dsc.newPeer):
+    if evictedOk:
+      if buddy.worker.isNil:                 # zombified
+        if dsc.noisy: trace "Evicted zombie", peerID=key.short
+        discard
+      elif buddy.isRunning and
+           buddy.worker.ctrl.running:        # not deactivated yet
+        buddy.worker.ctrl.stopped = true     # signal worker loop to terminate
+        if dsc.noisy: trace "Evicted active peer", peer=buddy.worker.peer,
+          nSyncPeers=dsc.syncPeers.len, nPeers=dsc.peerPool.len,
+          nSyncPeersMax=dsc.syncPeers.capacity
+      else:
+        if dsc.noisy: trace "Evicted stopped peer", peer=buddy.worker.peer,
+          nSyncPeers=dsc.syncPeers.len, nPeers=dsc.peerPool.len,
+          nSyncPeersMax=dsc.syncPeers.capacity
 
-  # Add peer entry
-  discard dsc.buddies.lruAppend(peer.key, buddy, dsc.buddiesMax)
-
-  asyncSpawn buddy.workerLoop()
+  # Hand over to worker loop
+  asyncSpawn dsc.newPeer.workerLoop()
+  dsc.newPeer = nil
 
 
 proc onPeerDisconnected[S,W](dsc: RunnerSyncRef[S,W], peer: Peer) =
-  let
-    nPeers = dsc.pool.len
-    maxCachedWorkers = dsc.buddiesMax
-    nCachedWorkers = dsc.buddies.len
-    rc = dsc.buddies.eq peer.key
+  let rc = dsc.syncPeers.peek peer.key
   if rc.isErr:
-    if dsc.ctx.noisyLog: debug "Disconnected, unregistered peer", peer,
-      nPeers, nCachedWorkers, maxCachedWorkers
+    if dsc.noisy: debug "Disconnected, unregistered peer", peer,
+      nSyncPeers=dsc.syncPeers.len, nPeers=dsc.peerPool.len,
+      nSyncPeersMax=dsc.syncPeers.capacity
   elif rc.value.worker.isNil:
-    # Re-visiting zombie
-    if dsc.ctx.noisyLog: trace "Ignore zombie", peer,
-      nPeers, nCachedWorkers, maxCachedWorkers
+    # Has been zombified, already.
+    if dsc.noisy: trace "Zombie already disconnected", peer,
+      nSyncPeers=dsc.syncPeers.len, nPeers=dsc.peerPool.len,
+      nSyncPeersMax=dsc.syncPeers.capacity
   elif rc.value.worker.ctrl.zombie:
-    # Don't remove them from table. Rather let them fall off the LRU cache.
-    # The effect is, that reconnecting might be blocked, for a while. For few
-    # peers cases, the start of zombification is registered so that a zombie
-    # can eventually be let die and buried.
-    rc.value.worker = nil
-    rc.value.dsc = nil
-    rc.value.zombified = Moment.now()
-    if dsc.ctx.noisyLog: trace "Disconnected, zombie", peer,
-      nPeers, nCachedWorkers, maxCachedWorkers
+    # Zombie flag already, worker loop needs to terminate
+    if dsc.noisy: trace "Disconnected, zombie", peer,
+      nSyncPeers=dsc.syncPeers.len, nPeers=dsc.peerPool.len,
+      nSyncPeersMax=dsc.syncPeers.capacity
   else:
-    rc.value.worker.ctrl.stopped = true # in case it is hanging somewhere
-    dsc.buddies.del peer.key
+    rc.value.worker.ctrl.stopped = true # signals worker loop to terminate
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -495,13 +539,15 @@ proc initSync*[S,W](
     slots: int;
       ) =
   ## Constructor
-  # Leave one extra slot so that it can holds a *zombie* even if all slots
+  # Leave some extra slot so that it can holds a *zombie* even if all slots
   # are full. The effect is that a re-connect on the latest zombie will be
   # rejected as long as its worker descriptor is registered.
-  dsc.buddiesMax = max(1, slots + 1)
-  dsc.pool = node.peerPool
-  dsc.buddies.init(dsc.buddiesMax)
-  dsc.ctx = CtxRef[S](node: node)
+  dsc.peerPool = node.peerPool
+  dsc.syncPeers = ActivePeers[S,W].init max(1, slots + 1)
+  dsc.ctx = CtxRef[S,W](
+    node:     node,
+    getPeer:  dsc.getPeerFn(),
+    getPeers: dsc.getPeersFn())
 
 
 proc startSync*[S,W](dsc: RunnerSyncRef[S,W]): bool =
@@ -521,20 +567,14 @@ proc startSync*[S,W](dsc: RunnerSyncRef[S,W]): bool =
 
       po.addProtocol eth68
       po.addProtocol eth69
-      dsc.pool.addObserver(dsc, po)
+      dsc.peerPool.addObserver(dsc, po)
 
       asyncSpawn dsc.tickerLoop()
       return true
 
-
 proc stopSync*[S,W](dsc: RunnerSyncRef[S,W]) {.async.} =
   ## Stop syncing and free peer handlers .
   await dsc.terminate()
-
-
-proc isRunning*[S,W](dsc: RunnerSyncRef[S,W]): bool =
-  ## Check start/stop state
-  dsc.runCtrl == running
 
 # ------------------------------------------------------------------------------
 # End

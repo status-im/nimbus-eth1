@@ -36,6 +36,12 @@ proc defaultEra1DataDir*(): string =
 const defaultEndEra* = uint64(era(network_metadata.mergeBlockNumber - 1))
 
 type
+  BackfillMode* = enum
+    none
+    regular
+    sync
+    audit
+
   TrustedDigest* = MDigest[32 * 8]
 
   PortalBridgeCmd* = enum
@@ -57,7 +63,7 @@ type
 
     portalRpcUrl* {.
       desc: "Portal node JSON-RPC API URL",
-      defaultValue: JsonRpcUrl(kind: HttpUrl, value: "http://127.0.0.1:8545"),
+      defaultValue: JsonRpcUrl(kind: HttpUrl, value: "http://127.0.0.1:8565"),
       name: "portal-rpc-url"
     .}: JsonRpcUrl
 
@@ -84,27 +90,43 @@ type
         name: "trusted-block-root"
       .}: Option[TrustedDigest]
     of PortalBridgeCmd.history:
-      web3Url* {.desc: "Execution layer JSON-RPC API URL", name: "web3-url".}:
-        JsonRpcUrl
+      web3Url* {.
+        desc: "Execution layer JSON-RPC API URL",
+        defaultValue: JsonRpcUrl(kind: HttpUrl, value: "http://127.0.0.1:8545"),
+        name: "web3-url"
+      .}: JsonRpcUrl
 
       blockVerify* {.
-        desc: "Verify the block header, body and receipts",
+        desc:
+          "Verify the block body and receipts against the received header. Does not verify against the chain.",
         defaultValue: false,
         name: "block-verify"
       .}: bool
 
       latest* {.
         desc:
-          "Follow the head of the chain and gossip latest block header, body and receipts into the network",
+          "Follow the head of the chain and gossip latest block body and receipts into the network. Requires web3-url to be set.",
         defaultValue: false,
         name: "latest"
       .}: bool
 
-      backfill* {.
+      backfillMode* {.
         desc:
-          "Randomly backfill pre-merge block headers, bodies and receipts into the network from the era1 files",
-        defaultValue: false,
-        name: "backfill"
+          "Backfill mode to use for the history bridge. Requires access to era1 files.",
+        longDesc:
+          "Valid values:\n" & "  none    — backfill disabled\n" &
+          "  regular — Gossip all block bodies and receipts from era1\n" &
+          "  sync    — Download all block bodies and receipts and gossip missing content\n" &
+          "  audit   — Download randomly sampled block bodies and receipts and gossip missing content",
+        defaultValue: BackfillMode.regular,
+        name: "backfill-mode"
+      .}: BackfillMode
+
+      backfillLoop* {.
+        desc:
+          "Restart the backfill loop when it finishes (only applies to sync and regular modes)",
+        defaultValue: true,
+        name: "backfill-loop"
       .}: bool
 
       startEra* {.desc: "The era to start from", defaultValue: 0, name: "start-era".}:
@@ -113,13 +135,6 @@ type
       endEra* {.
         desc: "The era to stop at", defaultValue: defaultEndEra, name: "end-era"
       .}: uint64
-
-      audit* {.
-        desc:
-          "Run pre-merge backfill in audit mode, which will only gossip content that if failed to fetch from the network",
-        defaultValue: true,
-        name: "audit"
-      .}: bool
 
       era1Dir* {.
         desc: "The directory where all era1 files are stored",

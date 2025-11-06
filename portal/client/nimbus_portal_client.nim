@@ -22,10 +22,11 @@ import
   eth/common/keys,
   eth/net/nat,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
+  web3/[eth_api_types, conversions],
   ../common/common_utils,
   ../rpc/[
     rpc_discovery_api, rpc_portal_common_api, rpc_portal_history_api,
-    rpc_portal_beacon_api, rpc_portal_nimbus_beacon_api,
+    rpc_portal_beacon_api, rpc_portal_nimbus_beacon_api, rpc_web3_api,
   ],
   ../database/content_db,
   ../network/wire/portal_protocol_version,
@@ -33,7 +34,7 @@ import
   ../version,
   ../logging,
   ../bridge/common/rpc_helpers,
-  beacon_chain/process_state,
+  beacon_chain/[nimbus_binary_common, process_state],
   ./nimbus_portal_client_conf
 
 const
@@ -45,7 +46,7 @@ chronicles.formatIt(IoErrorCode):
 
 createRpcSigsFromNim(RpcClient):
   # EL debug call to get header for validation
-  proc debug_getBlockHeader(blockNumber: uint64): string
+  proc debug_getHeaderByNumber(blockNumber: BlockIdentifier): string
 
 func optionToOpt[T](o: Option[T]): Opt[T] =
   if o.isSome():
@@ -63,7 +64,7 @@ proc init(T: type PortalClient): T =
   PortalClient()
 
 proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableError].} =
-  setupLogging(config.logLevel, config.logStdout, none(OutFile))
+  setupLogging(config.logLevel, config.logStdout)
 
   notice "Launching Nimbus Portal client",
     version = fullVersionStr, cmdParams = commandLineParams()
@@ -105,15 +106,9 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
     bindIp = config.listenAddress
     udpPort = Port(config.udpPort)
     # TODO: allow for no TCP port mapping!
-    (extIp, _, extUdpPort) =
-      try:
-        setupAddress(
-          config.nat, config.listenAddress, udpPort, udpPort, "nimbus_portal_client"
-        )
-      except CatchableError as exc:
-        raise exc # TODO: Ideally we don't have the Exception here
-      except Exception as exc:
-        raiseAssert exc.msg
+    (extIp, _, extUdpPort) = setupAddress(
+      config.nat, config.listenAddress, udpPort, udpPort, "nimbus_portal_client"
+    )
     (netkey, newNetKey) =
       if config.networkKey.isSome():
         (config.networkKey.get(), true)
@@ -151,11 +146,12 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
       extIp,
       Opt.none(Port),
       extUdpPort,
-      # Note: The addition of default clientInfo to the ENR is a temporary
-      # measure to easily identify & debug the clients used in the testnet.
-      # Might make this into a, default off, cli option.
-      localEnrFields =
-        {"c": enrClientInfoShort, portalVersionKey: SSZ.encode(localSupportedVersions)},
+      # Note: usage of the client field "c" is replaced with ping extensions client_info.
+      # This can be removed in the future when no more tooling relies on it.
+      localEnrFields = [
+        toFieldPair("c", enrClientInfoShort),
+        toFieldPair(portalEnrKey, getPortalEnrField(config.network)),
+      ],
       bootstrapRecords = bootstrapRecords,
       previousRecord = previousEnr,
       bindIp = bindIp,
@@ -169,13 +165,14 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
   d.open()
 
   ## Force pruning - optional
+  ## Forced on history network database only currently
   if config.forcePrune:
     let db = ContentDB.new(
-      dataDir / config.network.getDbDirectory() / "contentdb_" &
-        d.localNode.id.toBytesBE().toOpenArray(0, 8).toHex(),
+      dataDir / dbDir,
       storageCapacity = config.storageCapacityMB * 1_000_000,
       radiusConfig = config.radiusConfig,
       localId = d.localNode.id,
+      subnetwork = PortalSubnetwork.history,
       manualCheckpoint = true,
     )
 
@@ -202,7 +199,7 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
           blockNumber: uint64
       ): Future[Result[Header, string]] {.async: (raises: [CancelledError]), gcsafe.} =
         try:
-          let header = await rpcClient.debug_getBlockHeader(blockNumber)
+          let header = await rpcClient.debug_getHeaderByNumber(blockId(blockNumber))
           decodeRlp(header.hexToSeqByte(), Header)
         except CatchableError as e:
           err(e.msg)
@@ -242,40 +239,22 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
   let enrFile = dataDir / enrFileName
   if io2.writeFile(enrFile, d.localNode.record.toURI()).isErr:
     fatal "Failed to write the enr file", file = enrFile
-    quit 1
+    quit QuitFailure
 
   ## Start metrics HTTP server
-  let metricsServer =
-    if config.metricsEnabled:
-      let
-        address = config.metricsAddress
-        port = config.metricsPort
-        url = "http://" & $address & ":" & $port & "/metrics"
-
-        server = MetricsHttpServerRef.new($address, port).valueOr:
-          error "Could not instantiate metrics HTTP server", url, error
-          quit QuitFailure
-
-      info "Starting metrics HTTP server", url
-      try:
-        waitFor server.start()
-      except MetricsError as exc:
-        fatal "Could not start metrics HTTP server",
-          url, error_msg = exc.msg, error_name = exc.name
-        quit QuitFailure
-
-      Opt.some(server)
-    else:
-      Opt.none(MetricsHttpServerRef)
+  let metricsServer = waitFor(initMetricsServer(config)).valueOr:
+    quit QuitFailure # Logged in initMetricsServer
 
   ## Start the Portal node.
   node.start()
 
   ## Start the JSON-RPC APIs
-
   proc setupRpcServer(
       rpcServer: RpcHttpServer | RpcWebSocketServer, flags: set[RpcFlag]
   ) {.raises: [CatchableError].} =
+    # Always install web3 handlers as it just provides web3_clientVersion
+    rpcServer.installWeb3ApiHandlers()
+
     for flag in flags:
       case flag
       of RpcFlag.portal:
@@ -283,9 +262,7 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
           rpcServer.installPortalCommonApiHandlers(
             node.historyNetwork.value.portalProtocol, PortalSubnetwork.history
           )
-          rpcServer.installPortalHistoryApiHandlers(
-            node.historyNetwork.value.portalProtocol
-          )
+          rpcServer.installPortalHistoryApiHandlers(node.historyNetwork.value)
         if node.beaconNetwork.isSome():
           rpcServer.installPortalCommonApiHandlers(
             node.beaconNetwork.value.portalProtocol, PortalSubnetwork.beacon
@@ -308,12 +285,12 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
       if config.rpcEnabled:
         let
           ta = initTAddress(config.rpcAddress, config.rpcPort)
-          rpcHttpServer = RpcHttpServer.new()
+          server = RpcHttpServer.new()
         # 16mb to comfortably fit 2-3mb blocks + blobs + json overhead
-        rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 16 * 1024 * 1024)
-        rpcHttpServer.setupRpcServer(rpcFlags)
+        server.addHttpServer(ta, maxRequestBodySize = 16 * 1024 * 1024)
+        server.setupRpcServer(rpcFlags)
 
-        Opt.some(rpcHttpServer)
+        Opt.some(server)
       else:
         Opt.none(RpcHttpServer)
 
@@ -352,14 +329,7 @@ proc stop(f: PortalClient) {.async: (raises: []).} =
     except CatchableError as e:
       warn "Failed to stop rpc HTTP server", exc = e.name, err = e.msg
 
-  if f.metricsServer.isSome():
-    let server = f.metricsServer.get()
-    try:
-      await server.stop()
-      await server.close()
-    except CatchableError as e:
-      warn "Failed to stop metrics HTTP server", exc = e.name, err = e.msg
-
+  await f.metricsServer.stopMetricsServer()
   await f.portalNode.stop()
 
 when isMainModule:
@@ -374,9 +344,7 @@ when isMainModule:
   # {.push raises: [].}
 
   let portalClient = PortalClient.init()
-  case config.cmd
-  of PortalCmd.noCommand:
-    portalClient.run(config)
+  portalClient.run(config)
 
   while not ProcessState.stopIt(notice("Shutting down", reason = it)):
     poll()

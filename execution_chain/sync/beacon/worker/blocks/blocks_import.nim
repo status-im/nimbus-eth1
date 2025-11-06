@@ -37,8 +37,8 @@ proc importBlock*(
       B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr
   else:
     try:
-      (await ctx.chain.queueImportBlock blk).isOkOr:
-        return err((ENoException,"",error,Moment.now()-start))
+      (await ctx.chain.queueImportBlock(blk)).isOkOr:
+        return err((ENoException, "", error, Moment.now() - start))
     except CancelledError as e:
       return err((ECancelledError,$e.name,e.msg,Moment.now()-start))
 
@@ -52,7 +52,7 @@ proc importBlock*(
       return err((ECancelledError,$e.name,e.msg,Moment.now()-start))
 
     if not ctx.daemon: # Daemon will be up unless shutdown
-      return err((ENoException,"","syncer shutdown",Moment.now()-start))
+      return err((ESyncerTermination,"","",Moment.now()-start))
 
     ctx.pool.nextAsyncNanoSleep = Moment.now() + asyncThreadSwitchGap
 
@@ -61,4 +61,3 @@ proc importBlock*(
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
-

@@ -12,6 +12,7 @@ import
   results,
   stew/io2,
   chronos/timer,
+  eth/common/headers,
   beacon_chain/spec/forks,
   ../eth_history/block_proofs/historical_hashes_accumulator
 
@@ -44,8 +45,6 @@ const
   # rlp.rawData() in the enr code.
   mainnetBootstrapNodes* =
     loadCompileTimeBootstrapNodes(portalConfigDir / "bootstrap_nodes.txt")
-  angelfoodBootstrapNodes* =
-    loadCompileTimeBootstrapNodes(portalConfigDir / "bootstrap_nodes_angelfood.txt")
 
   historicalHashesAccumulatorSSZ* =
     slurp(portalConfigDir / "historical_hashes_accumulator.ssz")
@@ -96,6 +95,9 @@ func isTimestampForked(forkTime: Opt[Moment], timestamp: Moment): bool =
 
 func isPoSBlock*(c: ChainConfig, blockNumber: uint64): bool =
   c.mergeNetsplitBlock <= blockNumber
+
+func isPoSBlock*(c: ChainConfig, header: Header): bool =
+  c.mergeNetsplitBlock <= header.number
 
 func isShanghai*(c: ChainConfig, timestamp: Moment): bool =
   isTimestampForked(c.shanghaiTime, timestamp)

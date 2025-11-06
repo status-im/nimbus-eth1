@@ -7,8 +7,9 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push raises: [].}
+
 import
-  std/sequtils,
   chronos,
   chronicles,
   ./networking/p2p,
@@ -20,8 +21,10 @@ import
   ./sync/beacon as beacon_sync,
   ./sync/wire_protocol,
   ./beacon/beacon_engine,
-  ./common,
-  ./config
+  ./common
+
+when enabledLogLevel == TRACE:
+  import std/sequtils
 
 export
   chronos,
@@ -33,24 +36,21 @@ export
   peers,
   beacon_sync,
   beacon_engine,
-  common,
-  config
-
-{.push raises: [].}
+  common
 
 type
   NimbusNode* = ref object
     httpServer*: NimbusHttpServerRef
     engineApiServer*: NimbusHttpServerRef
     ethNode*: EthereumNode
-    ctx*: EthContext
     fc*: ForkedChainRef
     txPool*: TxPoolRef
     peerManager*: PeerManagerRef
     beaconSyncRef*: BeaconSyncRef
     beaconEngine*: BeaconEngineRef
-    metricsServer*: MetricsHttpServerRef
     wire*: EthWireRef
+    accountsManager*: ref AccountsManager
+    rng*: ref HmacDrbgContext
 
 proc closeWait*(nimbus: NimbusNode) {.async.} =
   trace "Graceful shutdown"
@@ -65,8 +65,6 @@ proc closeWait*(nimbus: NimbusNode) {.async.} =
     waitedFutures.add nimbus.peerManager.stop()
   if nimbus.beaconSyncRef.isNil.not:
     waitedFutures.add nimbus.beaconSyncRef.stop()
-  if nimbus.metricsServer.isNil.not:
-    waitedFutures.add nimbus.metricsServer.stop()
   if nimbus.wire.isNil.not:
     waitedFutures.add nimbus.wire.stop()
 

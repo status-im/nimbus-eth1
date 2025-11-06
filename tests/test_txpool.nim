@@ -8,18 +8,20 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
   std/math,
   eth/common/keys,
   results,
   unittest2,
   chronos,
-  ../hive_integration/nodocker/engine/tx_sender,
-  ../hive_integration/nodocker/engine/cancun/blobs,
+  ../hive_integration/tx_sender,
+  ../hive_integration/blobs,
   ../execution_chain/db/ledger,
   ../execution_chain/core/chain,
   ../execution_chain/core/eip4844,
-  ../execution_chain/[config, transaction, constants],
+  ../execution_chain/[conf, transaction, constants],
   ../execution_chain/core/tx_pool,
   ../execution_chain/core/tx_pool/tx_desc,
   ../execution_chain/core/pooled_txs,
@@ -48,7 +50,7 @@ const
 
 type
   TestEnv = object
-    conf  : NimbusConf
+    config: ExecutionClientConf
     com   : CommonRef
     chain : ForkedChainRef
     xp    : TxPoolRef
@@ -56,14 +58,14 @@ type
 
   CustomTx = CustomTransactionData
 
-proc initConf(envFork: HardFork): NimbusConf =
-  var conf = makeConfig(
+proc initConf(envFork: HardFork): ExecutionClientConf =
+  var config = makeConfig(
     @["--network:" & genesisFile]
   )
 
   doAssert envFork >= MergeFork
 
-  let cc = conf.networkParams.config
+  let cc = config.networkParams.config
   if envFork >= MergeFork:
     cc.mergeNetsplitBlock = Opt.some(0'u64)
 
@@ -75,11 +77,11 @@ proc initConf(envFork: HardFork): NimbusConf =
 
   if envFork >= Prague:
     cc.pragueTime = Opt.some(0.EthTime)
-    conf.networkParams.genesis.alloc[withdrawalTriggerContract] = GenesisAccount(
+    config.networkParams.genesis.alloc[withdrawalTriggerContract] = GenesisAccount(
       balance: 0.u256,
       code: triggerCode
     )
-    conf.networkParams.genesis.alloc[consolidationWithdrawalTrigger] = GenesisAccount(
+    config.networkParams.genesis.alloc[consolidationWithdrawalTrigger] = GenesisAccount(
       balance: 0.u256,
       code: triggerCode
     )
@@ -87,19 +89,19 @@ proc initConf(envFork: HardFork): NimbusConf =
   if envFork >= Osaka:
     cc.osakaTime = Opt.some(0.EthTime)
 
-  conf.networkParams.genesis.alloc[recipient] = GenesisAccount(code: contractCode)
-  conf
+  config.networkParams.genesis.alloc[recipient] = GenesisAccount(code: contractCode)
+  config
 
-proc initEnv(conf: NimbusConf): TestEnv =
+proc initEnv(config: ExecutionClientConf): TestEnv =
   let
     # create the sender first, because it will modify networkParams
-    sender = TxSender.new(conf.networkParams, 30)
+    sender = TxSender.new(config.networkParams, 30)
     com    = CommonRef.new(newCoreDbRef DefaultDbMemory,
-               nil, conf.networkId, conf.networkParams)
+               nil, config.networkId, config.networkParams)
     chain  = ForkedChainRef.init(com)
 
   TestEnv(
-    conf  : conf,
+    config: config,
     com   : com,
     chain : chain,
     xp    : TxPoolRef.new(chain),
@@ -107,8 +109,8 @@ proc initEnv(conf: NimbusConf): TestEnv =
   )
 
 proc initEnv(envFork: HardFork): TestEnv =
-  let conf = initConf(envFork)
-  initEnv(conf)
+  let config = initConf(envFork)
+  initEnv(config)
 
 template checkAddTx(xp, tx, errorCode) =
   let prevCount = xp.len
@@ -253,9 +255,9 @@ suite "TxPool test suite":
       blobID: 0.BlobID
     )
     var ptx = mx.makeTx(tc, 0)
-    var z = ptx.blobsBundle.blobs[0].bytes
+    var z = ptx.blobsBundle.blobs[0].data
     z[0] = not z[0]
-    ptx.blobsBundle.blobs[0] = KzgBlob z
+    ptx.blobsBundle.blobs[0] = pooled_txs.KzgBlob z
     xp.checkAddTx(ptx, txErrorInvalidBlob)
 
   test "Bad chainId":
@@ -671,7 +673,7 @@ suite "TxPool test suite":
 
   test "Blobschedule":
     let
-      cc = env.conf.networkParams.config
+      cc = env.config.networkParams.config
       acc = mx.getAccount(26)
       tc = BlobTx(
         txType: Opt.some(TxEip4844),
@@ -828,15 +830,15 @@ suite "TxPool test suite":
 
   test "EIP-7594 BlobsBundle transition from Prague to Osaka":
     let
-      conf = initConf(Prague)
-      cc = conf.networkParams.config
+      config = initConf(Prague)
+      cc = config.networkParams.config
       timestamp = EthTime.now()
 
     # set osaka transition time
     cc.osakaTime = Opt.some(timestamp + 2)
 
     let
-      env = initEnv(conf)
+      env = initEnv(config)
       xp = env.xp
       mx = env.sender
       acc = mx.getAccount(0)

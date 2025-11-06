@@ -13,9 +13,9 @@ import
   std/[tables, algorithm, typetraits, strutils, net],
   chronos, chronos/timer, chronicles,
   eth/common/keys,
+  eth/enode/enode,
   results,
-  ./[peer_pool, rlpx, p2p_types],
-  ./discoveryv4/enode,
+  ./[peer_pool, rlpx, p2p_types, bootnodes],
   ./eth1_discovery
 
 export
@@ -31,11 +31,12 @@ type
 
 proc newEthereumNode*(
     keys: KeyPair,
-    address: Address,
+    enrIp: Opt[IpAddress],
+    enrTcpPort, enrUdpPort: Opt[Port],
     networkId: NetworkId,
     clientId = "nim-eth-p2p",
     minPeers = 10,
-    bootstrapNodes: seq[ENode] = @[],
+    bootstrapNodes = BootstrapNodes(),
     bindUdpPort: Port,
     bindTcpPort: Port,
     bindIp = IPv6_any(),
@@ -46,8 +47,13 @@ proc newEthereumNode*(
     raiseAssert "Cannot initialize RNG"
 
   let
+    address = enode.Address(
+      ip: enrIp.valueOr(bindIp),
+      tcpPort: enrTcpPort.valueOr(bindTcpPort),
+      udpPort: enrUdpPort.valueOr(bindUdpPort),
+    )
     discovery = Eth1Discovery.new(
-      keys.seckey, address, bootstrapNodes, bindUdpPort, bindIp, rng, forkIdProcs.compatibleForkId)
+      keys.seckey, enrIp, enrTcpPort, enrUdpPort, bootstrapNodes, bindUdpPort, bindIp, rng, forkIdProcs.compatibleForkId)
     node = EthereumNode(
       keys: keys,
       networkId: networkId,

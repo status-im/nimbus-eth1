@@ -114,7 +114,7 @@ proc `$`(acl: transactions.AccessList): string =
     result.add " * " & $ap.address & "\n"
     for i, k in ap.storageKeys:
       result.add "   - " & k.toHex
-      if i < ap.storageKeys.len-1:
+      if i < ap.storageKeys.len - 1:
         result.add "\n"
 
 proc debug*(tx: Transaction): string =

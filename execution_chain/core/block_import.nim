@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   chronicles,
@@ -15,7 +15,7 @@ import
   stew/io2,
   chronos,
   ./chain,
-  ../config,
+  ../conf,
   ../utils/utils,
   beacon_chain/process_state
 
@@ -54,14 +54,14 @@ proc importRlpBlocks*(blocksRlp:seq[byte],
 
     if not printBanner:
       info "Start importing block",
-        hash=blk.header.blockHash.short,
+        hash=blk.header.computeBlockHash.short,
         number=blk.header.number
       printBanner = true
 
-    let res = await chain.importBlock(blk, finalized = false)
+    let res = await chain.importBlock(blk)
     if res.isErr:
       error "Error occured when importing block",
-        hash=blk.header.blockHash.short,
+        hash=blk.header.computeBlockHash.short,
         number=blk.header.number,
         msg=res.error
       if finalize:
@@ -80,14 +80,14 @@ proc importRlpBlocks*(importFile: string,
     return err($error)
   await importRlpBlocks(bytes, chain, finalize)
 
-proc importRlpBlocks*(conf: NimbusConf, com: CommonRef): Future[void] {.async: (raises: [CancelledError]).} =
+proc importRlpBlocks*(config: ExecutionClientConf, com: CommonRef): Future[void] {.async: (raises: [CancelledError]).} =
   # Both baseDistance and persistBatchSize are 0,
   # we want changes persisted immediately
-  let chain = ForkedChainRef.init(com, baseDistance = 0, persistBatchSize = 0)
+  let chain = ForkedChainRef.init(com, baseDistance = 0, persistBatchSize = 1)
 
   # success or not, we quit after importing blocks
-  for i, blocksFile in conf.blocksFile:
-    (await importRlpBlocks(string blocksFile, chain, i == conf.blocksFile.len-1)).isOkOr:
+  for i, blocksFile in config.blocksFile:
+    (await importRlpBlocks(string blocksFile, chain, i == config.blocksFile.len-1)).isOkOr:
       warn "Error when importing blocks", msg=error
       # Finalize the existing chain in case of rlp read error
       (await chain.forkChoice(chain.latestHash, chain.latestHash)).isOkOr:

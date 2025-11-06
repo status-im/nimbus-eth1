@@ -27,6 +27,7 @@ import
   ../eth_history/[history_data_json_store, history_data_ssz_e2s, era1],
   ../eth_history/block_proofs/block_proof_historical_hashes_accumulator,
   ../bridge/common/rpc_helpers,
+  ../../execution_chain/common/chain_config,
   eth_data_exporter/[exporter_conf, exporter_common, cl_data_exporter, el_data_exporter]
 
 chronicles.formatIt(IoErrorCode):
@@ -74,6 +75,7 @@ proc cmdExportEra1(config: ExporterConf) =
     fatal "Failed connecting to JSON-RPC client", error = e.msg
     quit QuitFailure
 
+  let cfg = chainConfigForNetwork(MainNet)
   var era = Era1(config.era)
   while config.eraCount == 0 or era < Era1(config.era) + config.eraCount:
     defer:
@@ -81,9 +83,9 @@ proc cmdExportEra1(config: ExporterConf) =
 
     let
       startNumber = era.startNumber()
-      endNumber = era.endNumber()
+      endNumber = endNumber(era, cfg.posBlock.value())
 
-    if startNumber >= mergeBlockNumber:
+    if startNumber >= cfg.posBlock.value():
       info "Stopping era as it is after the merge"
       break
 
@@ -101,7 +103,7 @@ proc cmdExportEra1(config: ExporterConf) =
 
       # TODO: Not checking the result of init, update or finish here, as all
       # error cases are fatal. But maybe we could throw proper errors still.
-      var group = Era1Group.init(e2, startNumber).get()
+      var group = Era1Group.init(e2, startNumber, cfg.posBlock.value()).get()
 
       # Header records to build the HistoricalHashesAccumulator root
       var headerRecords: seq[historical_hashes_accumulator.HeaderRecord]
@@ -156,7 +158,10 @@ proc cmdExportEra1(config: ExporterConf) =
         warn "Failed to clean up incomplete era1 file", tmpName, error = e.error
 
 proc cmdVerifyEra1(config: ExporterConf) =
-  let f = Era1File.open(config.era1FileName).valueOr:
+  # TODO: Implement this for different networks, but perhaps we need first clean-up of
+  # ChainConfig mergeNetsplitBlock vs posBlock.
+  let cfg = chainConfigForNetwork(MainNet)
+  let f = Era1File.open(config.era1FileName, cfg.posBlock.value()).valueOr:
     warn "Failed to open era file", error = error
     quit QuitFailure
   defer:
@@ -292,6 +297,9 @@ when isMainModule:
           file = accumulatorFile
         quit QuitFailure
 
+      let cfg = chainConfigForNetwork(MainNet)
+      let preMergeEpochs =
+        (cfg.mergeNetsplitBlock.value() + EPOCH_SIZE - 1) div EPOCH_SIZE
       # Lets verify if the necessary files exists before starting to build the
       # accumulator.
       for i in 0 ..< preMergeEpochs:

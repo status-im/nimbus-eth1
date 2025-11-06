@@ -24,7 +24,7 @@ import
   faststreams,
   minilru,
   eth/rlp,
-  eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2, nodes_verification],
+  eth/p2p/discoveryv5/[protocol, node, routing_table, random2, nodes_verification],
   "."/[portal_stream, portal_protocol_config, ping_extensions, portal_protocol_version],
   ./messages
 
@@ -166,8 +166,6 @@ type
 
   DbRadiusHandler* = proc(): UInt256 {.raises: [], gcsafe.}
 
-  PortalProtocolId* = array[2, byte]
-
   RadiusCache* = LruCache[NodeId, UInt256]
 
   # Caches content fetched from the network during lookups.
@@ -207,6 +205,7 @@ type
 
   PortalProtocol* = ref object of TalkProtocol
     protocolId*: PortalProtocolId
+    portalEnrField*: PortalEnrField
     routingTable*: RoutingTable
     baseProtocol*: protocol.Protocol
     toContentId*: ToContentIdHandler
@@ -258,6 +257,10 @@ type
     enr*: Record
     distance*: UInt256
 
+  FailureInfo* = object
+    durationMs*: int64
+    failure*: string
+
   TraceObject* = object
     origin*: NodeId
     targetId*: UInt256
@@ -265,6 +268,7 @@ type
     responses*: Table[string, TraceResponse]
     metadata*: Table[string, NodeMetadata]
     cancelled*: seq[NodeId]
+    failures*: Table[string, FailureInfo]
     startedAtMs*: int64
 
   TraceContentLookupResult* = object
@@ -300,28 +304,12 @@ func init*(
     nodesInterestedInContent: nodesInterestedInContent,
   )
 
-func getProtocolId*(
-    network: PortalNetwork, subnetwork: PortalSubnetwork
-): PortalProtocolId =
-  const portalPrefix = byte(0x50)
-
-  case network
-  of PortalNetwork.none, PortalNetwork.mainnet:
-    case subnetwork
-    of PortalSubnetwork.history:
-      [portalPrefix, 0x00]
-    of PortalSubnetwork.beacon:
-      [portalPrefix, 0x0C]
-
 proc banNode*(p: PortalProtocol, nodeId: NodeId, period: chronos.Duration) =
   if not p.config.disableBanNodes:
     p.routingTable.banNode(nodeId, period)
 
 proc isBanned*(p: PortalProtocol, nodeId: NodeId): bool =
   p.config.disableBanNodes == false and p.routingTable.isBanned(nodeId)
-
-func `$`*(id: PortalProtocolId): string =
-  id.toHex()
 
 func fromNodeStatus(T: type NodeAddResult, status: NodeStatus): T =
   case status
@@ -335,7 +323,7 @@ func fromNodeStatus(T: type NodeAddResult, status: NodeStatus): T =
   of NodeStatus.Banned: T.Banned
 
 proc addNode*(p: PortalProtocol, node: Node): NodeAddResult =
-  if node.highestCommonPortalVersion(localSupportedVersions).isOk():
+  if node.highestCommonPortalVersionAndChain(p.portalEnrField).isOk():
     let status = p.routingTable.addNode(node)
     trace "Adding node to routing table", status, node
     NodeAddResult.fromNodeStatus(status)
@@ -672,8 +660,8 @@ proc messageHandler(
     warn "No ENR found for node", srcId, srcUdpAddress
     return @[]
 
-  let _ = enr.highestCommonPortalVersion(localSupportedVersions).valueOr:
-    debug "No compatible protocol version found", error, srcId, srcUdpAddress
+  let _ = enr.highestCommonPortalVersionAndChain(p.portalEnrField).valueOr:
+    debug "Incompatible protocols", error, srcId, srcUdpAddress
     return @[]
 
   let decoded = decodeMessage(request)
@@ -724,6 +712,7 @@ proc new*(
     T: type PortalProtocol,
     baseProtocol: protocol.Protocol,
     protocolId: PortalProtocolId,
+    portalEnrField: PortalEnrField,
     toContentId: ToContentIdHandler,
     dbGet: DbGetHandler,
     dbPut: DbStoreHandler,
@@ -738,6 +727,7 @@ proc new*(
   let proto = PortalProtocol(
     protocolHandler: messageHandler,
     protocolId: protocolId,
+    portalEnrField: portalEnrField,
     routingTable: RoutingTable.init(
       baseProtocol.localNode, config.bitsPerHop, config.tableIpLimits, baseProtocol.rng,
       distanceCalculator,
@@ -884,7 +874,7 @@ proc ping*(
     async: (raises: [CancelledError])
 .} =
   # Fail if no common portal version is found
-  let _ = ?dst.highestCommonPortalVersion(localSupportedVersions)
+  let _ = ?dst.highestCommonPortalVersionAndChain(p.portalEnrField)
 
   if p.isBanned(dst.id):
     return err("destination node is banned")
@@ -910,7 +900,7 @@ proc findNodes*(
     p: PortalProtocol, dst: Node, distances: seq[uint16]
 ): Future[PortalResult[seq[Node]]] {.async: (raises: [CancelledError]).} =
   # Fail if no common portal version is found
-  let _ = ?dst.highestCommonPortalVersion(localSupportedVersions)
+  let _ = ?dst.highestCommonPortalVersionAndChain(p.portalEnrField)
 
   if p.isBanned(dst.id):
     return err("destination node is banned")
@@ -928,7 +918,7 @@ proc findContent*(
     p: PortalProtocol, dst: Node, contentKey: ContentKeyByteList
 ): Future[PortalResult[FoundContent]] {.async: (raises: [CancelledError]).} =
   # Fail if no common portal version is found
-  let _ = ?dst.highestCommonPortalVersion(localSupportedVersions)
+  let _ = ?dst.highestCommonPortalVersionAndChain(p.portalEnrField)
 
   logScope:
     node = dst
@@ -1053,7 +1043,7 @@ proc offer(
   ## guarantee content transfer.
 
   # Fail if no common portal version is found
-  let _ = ?o.dst.highestCommonPortalVersion(localSupportedVersions)
+  let _ = ?o.dst.highestCommonPortalVersionAndChain(p.portalEnrField)
 
   let contentKeys = getContentKeys(o)
 
@@ -1493,14 +1483,14 @@ proc traceContentLookup*(
   var responses = Table[string, TraceResponse]()
   var metadata = Table[string, NodeMetadata]()
   # Local node should be part of the responses
-  responses["0x" & $p.localNode.id] =
+  responses["0x" & p.localNode.id.dumpHex()] =
     TraceResponse(durationMs: 0, respondedWith: seen.toSeq())
-  metadata["0x" & $p.localNode.id] = NodeMetadata(
+  metadata["0x" & p.localNode.id.dumpHex()] = NodeMetadata(
     enr: p.localNode.record, distance: p.distance(p.localNode.id, targetId)
   )
   # And metadata for all the nodes local node closestNodes
   for node in closestNodes:
-    metadata["0x" & $node.id] =
+    metadata["0x" & node.id.dumpHex()] =
       NodeMetadata(enr: node.record, distance: p.distance(node.id, targetId))
 
   var pendingQueries = newSeqOfCap[
@@ -1564,7 +1554,7 @@ proc traceContentLookup*(
         for n in content.nodes:
           let dist = p.distance(n.id, targetId)
 
-          metadata["0x" & $n.id] = NodeMetadata(enr: n.record, distance: dist)
+          metadata["0x" & n.id.dumpHex()] = NodeMetadata(enr: n.record, distance: dist)
           respondedWith.add(n.id)
 
           if not seen.containsOrIncl(n.id):
@@ -1584,10 +1574,10 @@ proc traceContentLookup*(
 
         let distance = p.distance(content.src.id, targetId)
 
-        responses["0x" & $content.src.id] =
+        responses["0x" & content.src.id.dumpHex()] =
           TraceResponse(durationMs: duration, respondedWith: respondedWith)
 
-        metadata["0x" & $content.src.id] =
+        metadata["0x" & content.src.id.dumpHex()] =
           NodeMetadata(enr: content.src.record, distance: distance)
       of Content:
         let duration = chronos.milliseconds(Moment.now() - startedAt)
@@ -1601,17 +1591,17 @@ proc traceContentLookup*(
 
         let distance = p.distance(content.src.id, targetId)
 
-        responses["0x" & $content.src.id] =
+        responses["0x" & content.src.id.dumpHex()] =
           TraceResponse(durationMs: duration, respondedWith: newSeq[NodeId]())
 
-        metadata["0x" & $content.src.id] =
+        metadata["0x" & content.src.id.dumpHex()] =
           NodeMetadata(enr: content.src.record, distance: distance)
 
         var pendingNodeIds = newSeq[NodeId]()
 
         for pn in pendingNodes:
           pendingNodeIds.add(pn.id)
-          metadata["0x" & $pn.id] =
+          metadata["0x" & pn.id.dumpHex()] =
             NodeMetadata(enr: pn.record, distance: p.distance(pn.id, targetId))
 
         return TraceContentLookupResult(

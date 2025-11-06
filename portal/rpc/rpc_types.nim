@@ -12,7 +12,7 @@ import
   json_rpc/[jsonmarshal, errors],
   stew/byteutils,
   results,
-  eth/p2p/discoveryv5/[routing_table, enr, node],
+  eth/p2p/discoveryv5/[routing_table, node],
   json_serialization/pkg/results
 
 export jsonmarshal, routing_table, enr, node, results
@@ -88,8 +88,13 @@ type
   CapabilitiesPayload* =
     tuple[clientInfo: string, dataRadius: UInt256, capabilities: seq[uint16]]
 
+  # Note:
+  # Need to add a distinct type here with its own readValue & writeValue to avoid
+  # using the default one of JrpcConv which uses hex strings. Needs to be a JSON number.
+  EnrSeqNumber* = distinct uint64
+
   PingResult* = object
-    enrSeq*: uint64
+    enrSeq*: EnrSeqNumber
     payloadType*: uint16
     payload*: CapabilitiesPayload
 
@@ -127,6 +132,7 @@ JrpcConv.automaticSerialization(uint16, true)
 JrpcConv.automaticSerialization(seq, true)
 JrpcConv.automaticSerialization(string, true)
 JrpcConv.automaticSerialization(bool, true)
+JrpcConv.automaticSerialization(JsonString, true)
 
 func getNodeInfo*(r: RoutingTable): NodeInfo =
   NodeInfo(enr: r.localNode.record, nodeId: r.localNode.id)
@@ -151,6 +157,16 @@ func toNodeWithAddress*(enr: Record): Node {.raises: [ValueError].} =
   else:
     node
 
+proc readValue*(
+    r: var JsonReader[JrpcConv], val: var EnrSeqNumber
+) {.gcsafe, raises: [IOError, JsonReaderError].} =
+  val = EnrSeqNumber(r.parseInt(uint64))
+
+proc writeValue*(
+    w: var JsonWriter[JrpcConv], v: EnrSeqNumber
+) {.gcsafe, raises: [IOError].} =
+  w.writeValue(uint64(v))
+
 proc writeValue*(w: var JsonWriter[JrpcConv], v: Record) {.gcsafe, raises: [IOError].} =
   w.writeValue(v.toURI())
 
@@ -169,7 +185,7 @@ proc writeValue*(
   if v.isSome():
     w.writeValue(v.get())
   else:
-    w.writeValue("0x")
+    w.writeValue(JsonString("null"))
 
 proc readValue*(
     r: var JsonReader[JrpcConv], val: var NodeId

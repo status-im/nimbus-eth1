@@ -13,7 +13,7 @@
 
 {.push raises: [].}
 
-import std/[exitprocs, strformat], results, ../../aristo_desc, ./rdb_desc, ../../../opts
+import std/strformat, results, ../../aristo_desc, ./rdb_desc, ../../../opts
 
 # ------------------------------------------------------------------------------
 # Private constructor
@@ -99,29 +99,20 @@ proc init*(rdb: var RdbInst, opts: DbOptions, baseDb: RocksDbInstanceRef) =
   rdb.rdKeyLru = typeof(rdb.rdKeyLru).init(rdb.rdKeySize)
   rdb.rdVtxLru = typeof(rdb.rdVtxLru).init(rdb.rdVtxSize)
   rdb.rdBranchLru = typeof(rdb.rdBranchLru).init(rdb.rdBranchSize)
-
-  if opts.rdbPrintStats:
-    let
-      ks = rdb.rdKeySize
-      vs = rdb.rdVtxSize
-      bs = rdb.rdBranchSize
-    # TODO instead of dumping at exit, these stats could be logged or written
-    #      to a file for better tracking over time - that said, this is mainly
-    #      a debug utility at this point
-    addExitProc(
-      proc() =
-        dumpCacheStats(ks, vs, bs)
-    )
-
-  # Initialise column handlers (this stores implicitely `baseDb`)
-  rdb.admCol = baseDb.db.getColFamily($AdmCF).valueOr(default(ColFamilyReadWrite))
+  rdb.rdbPrintStats =  opts.rdbPrintStats
 
   rdb.vtxCol = baseDb.db.getColFamily($VtxCF).valueOr:
     raiseAssert "Cannot initialise VtxCF descriptor: " & error
 
 proc destroy*(rdb: var RdbInst, eradicate: bool) =
   ## Destructor
+  let
+    ks = rdb.rdKeySize
+    vs = rdb.rdVtxSize
+    bs = rdb.rdBranchSize
   rdb.baseDb.close(eradicate)
+  if rdb.rdbPrintStats:
+    dumpCacheStats(ks, vs, bs)
 
 # ------------------------------------------------------------------------------
 # End

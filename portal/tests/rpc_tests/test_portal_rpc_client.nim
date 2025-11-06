@@ -13,7 +13,7 @@ import
   json_rpc/rpcserver,
   json_rpc/clients/httpclient,
   stint,
-  eth/p2p/discoveryv5/enr,
+  eth/enr/enr,
   eth/common/keys,
   eth/common/[headers_rlp, blocks_rlp, receipts_rlp],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
@@ -31,10 +31,15 @@ proc newHistoryNode(rng: ref HmacDrbgContext, port: int): HistoryNode =
   let
     node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(port))
     db = ContentDB.new(
-      "", uint32.high, RadiusConfig(kind: Dynamic), node.localNode.id, inMemory = true
+      "",
+      uint32.high,
+      RadiusConfig(kind: Dynamic),
+      node.localNode.id,
+      PortalSubnetwork.history,
+      inMemory = true,
     )
     streamManager = StreamManager.new(node)
-    historyNetwork = HistoryNetwork.new(PortalNetwork.none, node, db, streamManager)
+    historyNetwork = HistoryNetwork.new(PortalNetwork.mainnet, node, db, streamManager)
 
   return HistoryNode(discv5: node, historyNetwork: historyNetwork)
 
@@ -89,9 +94,7 @@ proc setupTest(rng: ref HmacDrbgContext): Future[TestCase] {.async.} =
 
   let rpcHttpServer = RpcHttpServer.new()
   rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 16 * 1024 * 1024)
-  rpcHttpServer.installPortalHistoryApiHandlers(
-    historyNode1.historyNetwork.portalProtocol
-  )
+  rpcHttpServer.installPortalHistoryApiHandlers(historyNode1.historyNetwork)
   rpcHttpServer.start()
 
   await client.connect(localSrvAddress, rpcHttpServer.localAddress[0].port, false)
@@ -121,25 +124,25 @@ procSuite "Portal RPC Client":
 
     # Test content not found
     block:
-      let blockBodyRes = await tc.client.historyGetBlockBody(blockNumber, blockHeader)
+      let blockBodyRes = await tc.client.historyGetBlockBody(blockHeader)
       check:
         blockBodyRes.isErr()
-        blockBodyRes.error() == ContentNotFound
+        blockBodyRes.error().code == ContentNotFoundError.code
 
     # Test content validation failed
     block:
       tc.historyNode2.store(blockNumber, blockBody)
 
-      let blockBodyRes = await tc.client.historyGetBlockBody(blockNumber, blockHeader)
+      let blockBodyRes = await tc.client.historyGetBlockBody(blockHeader)
       check:
         blockBodyRes.isErr()
-        blockBodyRes.error() == ContentValidationFailed
+        blockBodyRes.error().code == ContentNotFoundError.code
 
     # When local node has the content the validation is skipped
     block:
       tc.historyNode1.store(blockNumber, blockBody)
 
-      let blockBodyRes = await tc.client.historyGetBlockBody(blockNumber, blockHeader)
+      let blockBodyRes = await tc.client.historyGetBlockBody(blockHeader)
       check:
         blockBodyRes.isOk()
 
@@ -154,25 +157,25 @@ procSuite "Portal RPC Client":
 
     # Test content not found
     block:
-      let receiptsRes = await tc.client.historyGetReceipts(blockNumber, blockHeader)
+      let receiptsRes = await tc.client.historyGetReceipts(blockHeader)
       check:
         receiptsRes.isErr()
-        receiptsRes.error() == ContentNotFound
+        receiptsRes.error().code == ContentNotFoundError.code
 
     # Test content validation failed
     block:
       tc.historyNode2.store(blockNumber, receipts)
 
-      let receiptsRes = await tc.client.historyGetReceipts(blockNumber, blockHeader)
+      let receiptsRes = await tc.client.historyGetReceipts(blockHeader)
       check:
         receiptsRes.isErr()
-        receiptsRes.error() == ContentValidationFailed
+        receiptsRes.error().code == ContentNotFoundError.code
 
     # When local node has the content the validation is skipped
     block:
       tc.historyNode1.store(blockNumber, receipts)
 
-      let receiptsRes = await tc.client.historyGetReceipts(blockNumber, blockHeader)
+      let receiptsRes = await tc.client.historyGetReceipts(blockHeader)
       check:
         receiptsRes.isOk()
 

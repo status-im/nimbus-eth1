@@ -13,6 +13,7 @@
 ## Extracted helpers from `worker_desc` (avoids circular import)
 
 import
+  std/math,
   pkg/[chronos, eth/common, stew/interval_set],
   ../../../core/chain,
   ../../../networking/p2p,
@@ -23,8 +24,17 @@ import
 export
   prettify, short, `$`
 
+type
+  MeanVarStats* = tuple
+    ## Statistics helper structure, time parameters in nano-seconds
+    mean: float
+    variance: float
+    samples: uint
+    total: uint64
+
+
 func bnStr*(w: BlockNumber): string =
-  "#" & $w
+  $w
 
 func bnStr*(h: Header): string =
   h.number.bnStr
@@ -50,15 +60,30 @@ func bnStr*(w: Interval[BlockNumber,uint64]): string =
 
 
 func toStr*(a: chronos.Duration): string =
+  if twoHundredYears <= a:
+    return "n/a"
   var s = a.toString 2
   if s.len == 0: s="0"
   s
+
+func psStr*(w: MeanVarStats): string =
+  ## Throughput per second
+  if w.samples == 0:
+    result = "n/a"
+  else:
+    let mean = w.mean.uint64
+    result = mean.toIECb(1) & "ps"
+    if 0 < w.variance:
+      let stdDev = sqrt(w.variance).uint64
+      # Ignore if `stdDev` is less than 5% of `mean`
+      if mean <= 20 * stdDev:
+        result &= "~" & stdDev.toIECb(1) & "ps"
+    result &= "/" & w.total.toIEC(1) & ":" & $w.samples.toIEC(1)
 
 func toStr*(h: Hash32): string =
   if h == emptyRoot: "n/a"
   elif h == zeroHash32: "n/a"
   else: h.short
-
 
 func `$`*(w: Interval[BlockNumber,uint64]): string =
   w.bnStr

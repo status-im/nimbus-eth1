@@ -16,10 +16,10 @@ import
   results,
   metrics,
   eth/common/base_rlp,
+  eth/enode/enode_utils,
   ./discoveryv5,
   ./discoveryv4,
-  ./eth1_enr,
-  ./chain_forkid
+  ./bootnodes
 
 export
   discoveryv4.NodeId,
@@ -39,7 +39,7 @@ type
   AddressV4 = discoveryv4.Address
   AddressV5 = discoveryv5.Address
 
-  CompatibleForkIdProc* = proc(id: ForkID): bool {.noSideEffect, raises: [].}
+  CompatibleForkIdProc* = proc(id: ForkId): bool {.noSideEffect, raises: [].}
 
   Eth1Discovery* = ref object
     discv4: DiscV4
@@ -103,11 +103,14 @@ func eligibleNode(proto: Eth1Discovery, rec: Record): bool =
     return true
 
   let
-    chainForkIds = try: rlp.decode(bytes, array[1, ChainForkId])
-              except RlpError: return false
-    chainForkId  = chainForkIds[0]
+    ethValue =
+      try:
+        rlp.decode(bytes, array[1, ForkId])
+      except RlpError:
+        return false
+    forkId  = ethValue[0]
 
-  proto.compatibleForkId(chainForkId.to(ForkID))
+  proto.compatibleForkId(forkId)
 
 #------------------------------------------------------------------------------
 # Public functions
@@ -116,29 +119,34 @@ func eligibleNode(proto: Eth1Discovery, rec: Record): bool =
 proc new*(
     _: type Eth1Discovery,
     privKey: PrivateKey,
-    address: AddressV4,
-    bootstrapNodes: openArray[ENode],
+    enrIp: Opt[IpAddress],
+    enrTcpPort, enrUdpPort: Opt[Port],
+    bootstrapNodes: BootstrapNodes,
     bindPort: Port,
     bindIp = IPv6_any(),
     rng = newRng(),
     compatibleForkId = CompatibleForkIdProc(nil)
 ): Eth1Discovery =
-  let bootnodes = bootstrapNodes.to(enr.Record)
+  let address = enode.Address(
+      ip: enrIp.valueOr(bindIp),
+      tcpPort: enrTcpPort.valueOr(bindPort),
+      udpPort: enrUdpPort.valueOr(bindPort),
+    )
   Eth1Discovery(
     discv4: discoveryv4.newDiscoveryV4(
       privKey = privKey,
       address = address,
-      bootstrapNodes = bootstrapNodes,
+      bootstrapNodes = bootstrapNodes.enodes,
       bindPort = bindPort,
       bindIp = bindIp,
       rng = rng
     ),
     discv5: discoveryv5.newProtocol(
       privKey = privKey,
-      enrIp = Opt.some(address.ip),
-      enrTcpPort = Opt.some(address.tcpPort),
-      enrUdpPort = Opt.some(address.udpPort),
-      bootstrapRecords = bootnodes,
+      enrIp = enrIp,
+      enrTcpPort = enrTcpPort,
+      enrUdpPort = enrUdpPort,
+      bootstrapRecords = bootstrapNodes.enrs,
       bindPort = bindPort,
       bindIp = bindIp,
       enrAutoUpdate = true,
@@ -216,11 +224,11 @@ proc getRandomBootnode*(proto: Eth1Discovery): Opt[NodeV4] =
           return Opt.none(NodeV4)
       return Opt.some(newNode(enode))
 
-func updateForkID*(proto: Eth1Discovery, forkId: ForkID) =
+func updateForkId*(proto: Eth1Discovery, forkId: ForkId) =
   # https://github.com/ethereum/devp2p/blob/bc76b9809a30e6dc5c8dcda996273f0f9bcf7108/enr-entries/eth.md
   if proto.discv5.isNil.not:
     let
-      list = [forkId.to(ChainForkId)]
+      list = [forkId]
       bytes = rlp.encode(list)
       kv = ("eth", bytes)
     proto.discv5.updateRecord([kv]).isOkOr:

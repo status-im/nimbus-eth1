@@ -9,7 +9,7 @@
 
 import
   chronos,
-  eth/keys,
+  eth/common/keys,
   eth/p2p/discoveryv5/protocol,
   ../../database/content_db,
   ../../network/wire/[portal_protocol, portal_stream],
@@ -36,6 +36,7 @@ proc newHistoryNetwork*(
       uint32.high,
       RadiusConfig(kind: Static, logRadius: 256),
       node.localNode.id,
+      PortalSubnetwork.history,
       inMemory = true,
     )
     streamManager = StreamManager.new(node)

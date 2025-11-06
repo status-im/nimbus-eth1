@@ -25,7 +25,7 @@ import
   nimcrypto/[hmac, sha2, utils],
   stew/[byteutils, objects],
   results,
-  ../config,
+  ../conf,
   ./jwt_auth_helper,
   ./rpc_server
 
@@ -187,7 +187,7 @@ proc jwtGenSecret*(rng: ref rand.HmacDrbgContext): JwtGenSecret =
 
 proc jwtSharedSecret*(
     rndSecret: JwtGenSecret;
-    config: NimbusConf;
+    config: ExecutionClientConf;
       ): Result[JwtSharedKey, JwtError] =
   ## Return a key for jwt authentication preferable from the argument file
   ## `config.jwtSecret` (which contains at least 32 bytes hex encoded random
@@ -209,6 +209,13 @@ proc jwtSharedSecret*(
   # startup, or show error and continue without exposing the authenticated
   # port.
   #
+  if config.jwtSecretValue.isSome():
+    var key: JwtSharedKey
+    let rc = key.fromHex(config.jwtSecretValue.get())
+    if rc.isErr:
+      return err(rc.error)
+    return ok(key)
+
   var jwtSecretPath = config.dataDir / jwtSecretFile # default path
   let jwtDoesNotExist = not fileExists(jwtSecretPath)
   if config.jwtSecret.isNone and jwtDoesNotExist:
@@ -251,7 +258,7 @@ proc jwtSharedSecret*(
   except ValueError:
     return err(jwtKeyInvalidHexString)
 
-proc jwtSharedSecret*(rng: ref rand.HmacDrbgContext; config: NimbusConf):
+proc jwtSharedSecret*(rng: ref rand.HmacDrbgContext; config: ExecutionClientConf):
                     Result[JwtSharedKey, JwtError] =
   ## Variant of `jwtSharedSecret()` with explicit random generator argument.
   try:

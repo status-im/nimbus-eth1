@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -36,9 +36,6 @@ proc sha3Op(cpt: VmCpt): EvmResultVoid =
     pos = cpt.stack.lsPeekSafeInt(^1)
     len = cpt.stack.lsPeekSafeInt(^2)
   cpt.stack.lsShrink(1)
-
-  if pos < 0 or len < 0 or pos > 2147483648'i64:
-    return err(opErr(OutOfBounds))
 
   ? cpt.opcodeGasCost(Op.Sha3,
     cpt.gasCosts[Op.Sha3].m_handler(cpt.memory.len, pos, len),

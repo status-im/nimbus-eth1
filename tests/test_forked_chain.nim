@@ -12,9 +12,10 @@ import
   pkg/chronicles,
   pkg/chronos,
   pkg/unittest2,
+  testutils,
   std/[os, strutils],
   ../execution_chain/common,
-  ../execution_chain/config,
+  ../execution_chain/conf,
   ../execution_chain/utils/utils,
   ../execution_chain/core/chain/forked_chain,
   ../execution_chain/core/chain/forked_chain/chain_desc,
@@ -32,30 +33,30 @@ const
 
 type
   TestEnv = object
-    conf: NimbusConf
+    config: ExecutionClientConf
 
 proc setupEnv(): TestEnv =
   let
-    conf = makeConfig(@[
+    config = makeConfig(@[
       "--network:" & genesisFile
     ])
 
-  TestEnv(conf: conf)
+  TestEnv(config: config)
 
 proc newCom(env: TestEnv): CommonRef =
   CommonRef.new(
       newCoreDbRef DefaultDbMemory,
       nil,
-      env.conf.networkId,
-      env.conf.networkParams
+      env.config.networkId,
+      env.config.networkParams
     )
 
 proc newCom(env: TestEnv, db: CoreDbRef): CommonRef =
   CommonRef.new(
       db,
       nil,
-      env.conf.networkId,
-      env.conf.networkParams
+      env.config.networkId,
+      env.config.networkParams
     )
 
 proc makeBlk(txFrame: CoreDbTxRef, number: BlockNumber, parentBlk: Block): Block =
@@ -247,7 +248,7 @@ suite "ForkedChainRef tests":
   test "newBase on activeBranch":
     const info = "newBase on activeBranch"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 0)
+    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -280,7 +281,7 @@ suite "ForkedChainRef tests":
   test "newBase between oldBase and head":
     const info = "newBase between oldBase and head"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 0)
+    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -329,7 +330,7 @@ suite "ForkedChainRef tests":
   test "newBase move forward, fork and stay on that fork":
     const info = "newBase move forward, fork .."
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 0)
+    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -354,7 +355,7 @@ suite "ForkedChainRef tests":
   test "newBase on shorter canonical arc, remove oldBase branches":
     const info = "newBase on shorter canonical, remove oldBase branches"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 0)
+    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -378,7 +379,7 @@ suite "ForkedChainRef tests":
   test "newBase on curbed non-canonical arc":
     const info = "newBase on curbed non-canonical .."
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 5, persistBatchSize = 0)
+    var chain = ForkedChainRef.init(com, baseDistance = 5, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -453,7 +454,7 @@ suite "ForkedChainRef tests":
        " (ign dup block)":
     const info = "newBase on shorter canonical .."
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 0)
+    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -478,7 +479,7 @@ suite "ForkedChainRef tests":
   test "newBase on longer canonical arc, discard new branch":
     const info = "newBase on longer canonical .."
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 0)
+    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -565,14 +566,14 @@ suite "ForkedChainRef tests":
   test "importing blocks with new CommonRef and FC instance, 3 blocks":
     const info = "importing blocks with new CommonRef and FC instance, 3 blocks"
     let com = env.newCom()
-    let chain = ForkedChainRef.init(com, baseDistance = 0, persistBatchSize = 0)
+    let chain = ForkedChainRef.init(com, baseDistance = 0, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
     checkForkChoice(chain, blk3, blk3)
     check chain.validate info & " (1)"
     let cc = env.newCom(com.db)
-    let fc = ForkedChainRef.init(cc, baseDistance = 0, persistBatchSize = 0)
+    let fc = ForkedChainRef.init(cc, baseDistance = 0, persistBatchSize = 1)
     checkHeadHash fc, blk3.blockHash
     checkImportBlock(fc, blk4)
     checkForkChoice(fc, blk4, blk4)
@@ -581,12 +582,12 @@ suite "ForkedChainRef tests":
   test "importing blocks with new CommonRef and FC instance, 1 block":
     const info = "importing blocks with new CommonRef and FC instance, 1 block"
     let com = env.newCom()
-    let chain = ForkedChainRef.init(com, baseDistance = 0, persistBatchSize = 0)
+    let chain = ForkedChainRef.init(com, baseDistance = 0, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkForkChoice(chain, blk1, blk1)
     check chain.validate info & " (1)"
     let cc = env.newCom(com.db)
-    let fc = ForkedChainRef.init(cc, baseDistance = 0, persistBatchSize = 0)
+    let fc = ForkedChainRef.init(cc, baseDistance = 0, persistBatchSize = 1)
     checkHeadHash fc, blk1.blockHash
     checkImportBlock(fc, blk2)
     checkForkChoice(fc, blk2, blk2)
@@ -710,7 +711,10 @@ suite "ForkedChainRef tests":
   test "newBase move forward, auto mode, base finalized marker needed":
     const info = "newBase move forward, auto mode, base finalized marker needed"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 2, persistBatchSize = 1)
+    var chain = ForkedChainRef.init(com,
+      baseDistance = 2,
+      persistBatchSize = 1,
+      dynamicBatchSize = false)
     check (waitFor chain.forkChoice(blk8.blockHash, blk8.blockHash)).isErr
     check chain.tryUpdatePendingFCU(blk8.blockHash, blk8.header.number)
     checkImportBlock(chain, blk1)
@@ -763,7 +767,7 @@ suite "ForkedChainRef tests":
     if src.isErr:
       echo "FAILED TO SERIALIZE: ", src.error
     check src.isOk
-    com.db.persist(txFrame, Opt.none(Hash32))
+    com.db.persist(txFrame)
 
     var fc = ForkedChainRef.init(com, baseDistance = 3)
     let rc = fc.deserialize()
@@ -778,7 +782,7 @@ suite "ForkedChainRef tests":
     check fc.latestHash == chain.latestHash
     check fc.validate info & " (4)"
 
-suite "ForkedChain mainnet replay":
+procSuite "ForkedChain mainnet replay":
   # A short mainnet replay test to check that the first few hundred blocks can
   # be imported using a typical importBlock / fcu sequence - this does not
   # test any transactions since these blocks are practically empty, but thanks
@@ -786,22 +790,40 @@ suite "ForkedChain mainnet replay":
   # smoke test
   setup:
     let
-      era0 = Era1DbRef.init(sourcePath / "replay", "mainnet").expect("Era files present")
+      era0 = Era1DbRef.init(sourcePath / "replay", "mainnet", 15537394'u64).expect("Era files present")
       com = CommonRef.new(AristoDbMemory.newCoreDbRef(), nil)
-      fc = ForkedChainRef.init(com)
+      fc = ForkedChainRef.init(com, enableQueue = true)
 
-  test "Replay mainnet era, single FCU":
+  asyncTest "Replay mainnet era, single FCU":
     var blk: EthBlock
-    for i in 1..<fc.baseDistance * 2:
+    for i in 1..<fc.baseDistance * 10:
       era0.getEthBlock(i.BlockNumber, blk).expect("block in test database")
-      check:
-        (waitFor fc.importBlock(blk, finalized = true)) == Result[void, string].ok()
+      check (await fc.queueImportBlock(blk)).isOk()
 
-    check:
-      (waitFor fc.forkChoice(blk.blockHash, blk.blockHash)) == Result[void, string].ok()
+    check (await fc.queueForkChoice(blk.blockHash, blk.blockHash)).isOk()
 
-  test "Replay mainnet era, multiple FCU":
+  asyncTest "Replay mainnet era, multiple FCU":
     # Simulates the typical case where fcu comes after the block
+    var blk: EthBlock
+    era0.getEthBlock(0.BlockNumber, blk).expect("block in test database")
+
+    var blocks = [blk.blockHash, blk.blockHash]
+
+    for i in 1..<fc.baseDistance * 10:
+      era0.getEthBlock(i.BlockNumber, blk).expect("block in test database")
+      check (await fc.queueImportBlock(blk)).isOk()
+
+      let hash = blk.blockHash
+      check (await fc.queueForkChoice(hash, blocks[0])).isOk()
+      if i mod 32 == 0:
+        # in reality, finalized typically lags a bit more than this, but
+        # for the purpose of the test, this should be good enough
+        blocks[0] = blocks[1]
+        blocks[1] = hash
+
+  asyncTest "Replay mainnet era, multiple FCU - stateroot check enabled & custom persist batch size":
+    let fc = ForkedChainRef.init(com, enableQueue = true, eagerStateRoot = true, persistBatchSize = 10)
+
     var blk: EthBlock
     era0.getEthBlock(0.BlockNumber, blk).expect("block in test database")
 
@@ -809,14 +831,56 @@ suite "ForkedChain mainnet replay":
 
     for i in 1..<fc.baseDistance * 2:
       era0.getEthBlock(i.BlockNumber, blk).expect("block in test database")
-      check:
-        (waitFor fc.importBlock(blk)) == Result[void, string].ok()
+      check (await fc.queueImportBlock(blk)).isOk()
 
       let hash = blk.blockHash
-      check:
-        (waitFor fc.forkChoice(hash, blocks[0])) == Result[void, string].ok()
+      check (await fc.queueForkChoice(hash, blocks[0])).isOk()
       if i mod 32 == 0:
         # in reality, finalized typically lags a bit more than this, but
         # for the purpose of the test, this should be good enough
         blocks[0] = blocks[1]
         blocks[1] = hash
+
+  asyncTest "Replay mainnet era, invalid blocks":
+    var
+      blk1: EthBlock
+      invalidBlk: EthBlock
+      blk2: EthBlock
+      blk3: EthBlock
+
+    era0.getEthBlock(1.BlockNumber, blk1).expect("block in test database")
+    era0.getEthBlock(2.BlockNumber, invalidBlk).expect("block in test database")
+    invalidBlk.header.stateRoot = blk2.header.transactionsRoot
+    era0.getEthBlock(2.BlockNumber, blk2).expect("block in test database")
+    era0.getEthBlock(3.BlockNumber, blk3).expect("block in test database")
+
+    check (await fc.queueImportBlock(blk1)).isOk()
+    for i in 1..10:
+      check (await fc.queueImportBlock(invalidBlk)).isErr()
+    check (await fc.queueImportBlock(blk2)).isOk()
+    check (await fc.queueImportBlock(blk3)).isOk()
+
+  asyncTest "Concurrent block imports - stateroot check enabled":
+    let fc = ForkedChainRef.init(com, eagerStateRoot = true)
+
+    var
+      blk1: EthBlock
+      invalidBlk: EthBlock
+      blk2: EthBlock
+
+    era0.getEthBlock(1.BlockNumber, blk1).expect("block in test database")
+    era0.getEthBlock(2.BlockNumber, invalidBlk).expect("block in test database")
+    invalidBlk.header.coinbase = blk1.header.coinbase
+    era0.getEthBlock(2.BlockNumber, blk2).expect("block in test database")
+
+    check (await fc.importBlock(blk1)).isOk()
+
+    var futs: seq[Future[Result[void, string]]]
+    for i in 1..10:
+      futs.add fc.importBlock(invalidBlk)
+
+    let finishedFuts = await allFinished(futs)
+    for f in finishedFuts:
+      check (await f).isErr()
+
+    check (await fc.importBlock(blk2)).isOk()

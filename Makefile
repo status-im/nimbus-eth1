@@ -124,21 +124,20 @@ VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 	dist \
 	eest \
 	t8n \
-	t8n_test
+	t8n_test \
+	evmstate \
+	evmstate_test
 
 ifeq ($(NIM_PARAMS),)
 # "variables.mk" was not included, so we update the submodules.
 # selectively download nimbus-eth2 submodules because we don't need all of it's modules
-# also holesky already exceeds github LFS quota
+# also hoodi already exceeds github LFS quota
 
-# We don't need these `vendor/holesky` files but fetching them
-# may trigger 'This repository is over its data quota' from GitHub
 GIT_SUBMODULE_CONFIG := -c lfs.fetchexclude=/public-keys/all.txt,/metadata/genesis.ssz,/parsed/parsedConsensusGenesis.json
 
 GIT_SUBMODULE_UPDATE := git -c submodule."vendor/nimbus-eth2".update=none submodule update --init --recursive; \
   git $(GIT_SUBMODULE_CONFIG) submodule update vendor/nimbus-eth2; \
   cd vendor/nimbus-eth2; \
-  git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/holesky; \
   git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/sepolia; \
   git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/hoodi; \
   git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/gnosis-chain-configs; \
@@ -159,7 +158,7 @@ GIT_SUBMODULE_UPDATE := git -c submodule."vendor/nimbus-eth2".update=none submod
 else # "variables.mk" was included. Business as usual until the end of this file.
 
 # default target, because it's the first one that doesn't start with '.'
-all: | $(TOOLS) nimbus_execution_client
+all: | $(TOOLS) nimbus nimbus_execution_client
 
 # must be included after the default target
 -include $(BUILD_SYSTEM_DIR)/makefiles/targets.mk
@@ -213,8 +212,12 @@ nimbus_execution_client: | build deps rocksdb
 	echo -e $(BUILD_MSG) "build/nimbus_execution_client" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/nimbus_execution_client "execution_chain/nimbus_execution_client.nim"
 
-nimbus: nimbus_execution_client
-	echo "The nimbus target is deprecated and will soon change meaning, use 'nimbus_execution_client' instead"
+check_revision: nimbus_execution_client
+	scripts/check_revision.sh
+
+nimbus: | build deps rocksdb
+	echo -e $(BUILD_MSG) "build/nimbus" && \
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/nimbus "execution_chain/nimbus.nim"
 
 # symlink
 nimbus.nims:
@@ -285,20 +288,16 @@ portal-test-reproducibility:
 		[ "$$MD5SUM1" = "$$MD5SUM2" ] && echo -e "\e[92mSuccess: identical binaries.\e[39m" || \
 			{ echo -e "\e[91mFailure: the binary changed between builds.\e[39m"; exit 1; }
 
-# Portal tests
-all_eth_history_custom_chain_tests: | build deps
-	echo -e $(BUILD_MSG) "build/$@" && \
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -d:mergeBlockNumber:38130 -o:build/$@ "portal/tests/eth_history_tests/$@.nim"
-
+# builds and runs the Portal test suite
 all_portal_tests: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -o:build/$@ "portal/tests/$@.nim"
 
-# builds and runs the Portal test suite
-portal-test: | all_portal_tests all_eth_history_custom_chain_tests
+# alias for all_portal_tests
+portal-test: | all_portal_tests
 
 # builds the Portal tools, wherever they are
-$(PORTAL_TOOLS): | build deps rocksdb
+$(PORTAL_TOOLS): | build deps
 	for D in $(PORTAL_TOOLS_DIRS); do [ -e "$${D}/$@.nim" ] && TOOL_DIR="$${D}" && break; done && \
 		echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "$${TOOL_DIR}/$@.nim"
@@ -328,7 +327,7 @@ fluffy: | build deps
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "portal/client/nimbus_portal_client.nim"
 
 # Legacy target, same as nimbus_portal_bridge, deprecated
-portal_bridge: | build deps rocksdb
+portal_bridge: | build deps
 	echo -e "\033[0;31mWarning:\033[0m The portal_bridge target and binary is deprecated, use 'make nimbus_portal_bridge' instead"
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "portal/bridge/nimbus_portal_bridge.nim"
@@ -363,6 +362,9 @@ eest_blockchain: | build deps
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
 
 eest_blockchain_test: | build deps eest eest_blockchain
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+
+eest_stateless_execution_test: | build deps eest eest_blockchain
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
 
 eest_full_test: | build deps eest_blockchain eest_engine

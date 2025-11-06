@@ -14,13 +14,12 @@ import
   json_rpc/[rpcserver, rpcclient],
   eth/rlp,
   eth/common/[transaction_utils, addresses],
-  ../hive_integration/nodocker/engine/engine_client,
-  ../execution_chain/[constants, transaction, config, version_info],
+  ../hive_integration/engine_client,
+  ../execution_chain/[constants, transaction, conf, version_info],
   ../execution_chain/db/[ledger, storage_types],
   ../execution_chain/sync/wire_protocol,
   ../execution_chain/core/[tx_pool, chain, pow/difficulty],
   ../execution_chain/core/pooled_txs_rlp,
-  ../execution_chain/core/lazy_kzg as kzg,
   ../execution_chain/core/eip4844,
   ../execution_chain/utils/utils,
   ../execution_chain/[common, rpc],
@@ -35,13 +34,13 @@ import
 
 type
   TestEnv = object
-    conf     : NimbusConf
+    conf     : ExecutionClientConf
     com      : CommonRef
     txPool   : TxPoolRef
     server   : RpcHttpServer
     client   : RpcHttpClient
     chain    : ForkedChainRef
-    ctx      : EthContext
+    am       : ref AccountsManager
     node     : EthereumNode
     txHash   : Hash32
     blockHash: Hash32
@@ -79,17 +78,17 @@ proc persistFixtureBlock(chainDB: CoreDbTxRef) =
   chainDB.persistTransactions(header.number, header.txRoot, getBlockBody4514995().transactions)
   chainDB.persistReceipts(header.receiptsRoot, getReceipts4514995())
 
-proc setupConfig(): NimbusConf =
+proc setupConfig(): ExecutionClientConf =
   makeConfig(@[
     "--network:" & genesisFile
   ])
 
-proc setupCom(conf: NimbusConf): CommonRef =
+proc setupCom(config: ExecutionClientConf): CommonRef =
   CommonRef.new(
     newCoreDbRef DefaultDbMemory,
     nil,
-    conf.networkId,
-    conf.networkParams
+    config.networkId,
+    config.networkParams
   )
 
 proc setupClient(port: Port): RpcHttpClient =
@@ -135,8 +134,8 @@ proc makeBlobTx(env: var TestEnv, nonce: int): PooledTransaction =
     blobs     = @[pooled_txs.KzgBlob(blob.bytes)]
 
   let
-    ctx = env.ctx
-    acc = ctx.am.getAccount(signer).tryGet()
+    am = env.am
+    acc = am[].getAccount(signer).tryGet()
     commitment = blobToKzgCommitment(blob).expect("good blob")
     proof = computeBlobKzgProof(blob, commitment).expect("good commitment")
     digest = kzgToVersionedHash(commitment.bytes)
@@ -210,22 +209,23 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
       quit(QuitFailure)
     serverApi = newServerAPI(txPool)
     client = setupClient(server.localAddress[0].port)
-    ctx    = newEthContext()
-    node   = setupEthNode(conf, ctx, eth68, eth69)
+    rng    = newRng()
+    am     = new AccountsManager
+    node   = setupEthNode(conf, rng[], eth68, eth69)
     nimbus = NimbusNode(
       ethNode: node,
     )
 
-  ctx.am.loadKeystores(keyStore).isOkOr:
+  am[].loadKeystores(keyStore).isOkOr:
     debugEcho error
     quit(QuitFailure)
 
-  let acc1 = ctx.am.getAccount(signer).tryGet()
-  ctx.am.unlockAccount(signer, acc1.keystore["password"].getStr()).isOkOr:
+  let acc1 = am[].getAccount(signer).tryGet()
+  am[].unlockAccount(signer, acc1.keystore["password"].getStr()).isOkOr:
     debugEcho error
     quit(QuitFailure)
 
-  setupServerAPI(serverApi, server, ctx)
+  setupServerAPI(serverApi, server, am)
   setupCommonRpc(node, conf, server)
   setupAdminRpc(nimbus, conf, server)
   server.start()
@@ -237,7 +237,7 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     server : server,
     client : client,
     chain  : chain,
-    ctx    : ctx,
+    am     : am,
     node   : node,
     chainId: conf.networkParams.config.chainId,
   )
@@ -246,9 +246,9 @@ proc generateBlock(env: var TestEnv) =
   let
     com = env.com
     xp  = env.txPool
-    ctx = env.ctx
+    am =  env.am
     txFrame = com.db.baseTxFrame()
-    acc = ctx.am.getAccount(signer).tryGet()
+    acc = am[].getAccount(signer).tryGet()
     tx1 = env.makeTx(acc.privateKey, zeroAddress, 1.u256, 30_000_000_000'u64)
     tx2 = env.makeTx(acc.privateKey, zeroAddress, 2.u256, 30_000_000_100'u64)
     chain = env.chain

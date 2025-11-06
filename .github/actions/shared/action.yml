@@ -125,10 +125,7 @@ runs:
       id: versions
       shell: bash
       run: |
-        getHash() {
-          git ls-remote "https://github.com/$1" "${2:-HEAD}" | cut -f 1
-        }
-        nbsHash=$(getHash status-im/nimbus-build-system)
+        nbsHash=$(git rev-parse HEAD:vendor/nimbus-build-system)
         echo "nimbus_build_system=$nbsHash" >> $GITHUB_OUTPUT
 
     - name: Restore prebuilt Nim from cache
@@ -150,10 +147,7 @@ runs:
       id: rocksdb-versions
       shell: bash
       run: |
-        getHash() {
-          git ls-remote "https://github.com/$1" "${2:-HEAD}" | cut -f 1
-        }
-        rocksHash=$(getHash status-im/nim-rocksdb)
+        rocksHash=$(git rev-parse HEAD:vendor/nim-rocksdb)
         echo "nim_rocksdb=$rocksHash" >> $GITHUB_OUTPUT
 
     - name: Restore prebuilt rocksdb from cache

@@ -647,6 +647,12 @@ proc getCodeByHash*(db: CoreDbTxRef, codeHash: Hash32): Result[seq[byte], string
 
   ok(code)
 
+proc setCodeByHash*(db: CoreDbTxRef, codeHash: Hash32, code: openArray[byte]): Result[void, string] =
+  db.put(contractHashKey(codeHash).toOpenArray, code).isOkOr:
+    return err("setCodeByHash: " & $$error)
+
+  ok()
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

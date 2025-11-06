@@ -8,7 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   stew/assign2,
@@ -16,7 +16,7 @@ import
   ../../evm/[state, types],
   ../../common,
   ../../db/ledger,
-  ../../stateless/[witness_generation, witness_verification],
+  ../../stateless/[witness_generation, witness_verification, stateless_execution],
   ../../db/storage_types,
   ../[executor, validate],
   chronicles,
@@ -79,11 +79,11 @@ proc getVmState(
 
   ok(p.vmState)
 
-proc dispose*(p: var Persister) =
+func dispose*(p: var Persister) =
   p.vmState.ledger.txFrame.dispose()
   p.vmState = nil
 
-proc init*(T: type Persister, com: CommonRef, flags: PersistBlockFlags): T =
+func init*(T: type Persister, com: CommonRef, flags: PersistBlockFlags): T =
   T(com: com, flags: flags)
 
 proc checkpoint*(p: var Persister): Result[void, string] =
@@ -95,7 +95,7 @@ proc checkpoint*(p: var Persister): Result[void, string] =
       # TODO replace logging with better error
       debug "wrong state root in block",
         blockNumber = p.parent.number,
-        blockHash = p.parent.blockHash,
+        blockHash = p.parent.computeBlockHash,
         parentHash = p.parent.parentHash,
         expected = p.parent.stateRoot,
         actual = stateRoot
@@ -105,7 +105,7 @@ proc checkpoint*(p: var Persister): Result[void, string] =
 
   # Move in-memory state to disk
   p.vmState.ledger.txFrame.checkpoint(p.parent.number, skipSnapshot = true)
-  p.com.db.persist(p.vmState.ledger.txFrame, Opt.none(Hash32))
+  p.com.db.persist(p.vmState.ledger.txFrame)
 
   # Get a new frame since the DB assumes ownership
   p.vmState.ledger.txFrame = p.com.db.baseTxFrame().txFrameBegin()
@@ -187,7 +187,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     if vmState.com.statelessWitnessValidation:
       doAssert witness.validateKeys(vmState.ledger.getWitnessKeys()).isOk()
       let executionWitness = ExecutionWitness.build(witness, vmState.ledger)
-      ?executionWitness.verify(preStateLedger.getStateRoot())
+      ?executionWitness.statelessProcessBlock(com, blk)
 
     ?vmState.ledger.txFrame.persistWitness(header.computeBlockHash(), witness)
 

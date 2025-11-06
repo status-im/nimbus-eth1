@@ -9,10 +9,10 @@ import
   std/[os, macros, json, strformat, strutils, tables],
   stew/byteutils, net, eth/common/keys, unittest2,
   testutils/markdown_reports,
-  ../execution_chain/[constants, config, transaction, errors],
+  ../execution_chain/[constants, conf, transaction, errors],
   ../execution_chain/db/ledger,
-  ../execution_chain/common/[context, common],
-  ../execution_chain/networking/p2p
+  ../execution_chain/common,
+  ../execution_chain/networking/[netkeys, p2p]
 
 func revTable(list: array[FkFrontier..FkLatest, string]): Table[string, EVMFork] =
   for k, v in list:
@@ -148,24 +148,27 @@ proc verifyLedger*(wantedState: JsonNode, ledger: ReadOnlyLedger) =
       raise newException(ValidationError, &"{ac} nonceDiff {wantedNonce.toHex} != {actualNonce.toHex}")
 
 proc setupEthNode*(
-    conf: NimbusConf, ctx: EthContext,
+    config: ExecutionClientConf, rng: var HmacDrbgContext,
     capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode =
-  let keypair = ctx.getNetKeys(conf.netKey).tryGet()
+  let keypair = getNetKeys(rng, config.netKey).tryGet()
   let srvAddress = enode.Address(
-    ip: conf.listenAddress, tcpPort: conf.tcpPort, udpPort: conf.udpPort)
+    ip: config.listenAddress, tcpPort: config.tcpPort, udpPort: config.udpPort)
 
   var node = newEthereumNode(
-    keypair, srvAddress,
-    conf.networkId,
-    conf.agentString,
-    bindUdpPort = conf.udpPort,
-    bindTcpPort = conf.tcpPort)
+    keypair,
+    Opt.some(config.listenAddress),
+    Opt.some(config.tcpPort),
+    Opt.some(config.udpPort),
+    config.networkId,
+    config.agentString,
+    bindUdpPort = config.udpPort,
+    bindTcpPort = config.tcpPort)
 
   for capability in capabilities:
     node.addCapability capability
 
   node
 
-proc makeTestConfig*(): NimbusConf =
+proc makeTestConfig*(): ExecutionClientConf =
   # commandLineParams() will not works inside all_tests
   makeConfig(@[])

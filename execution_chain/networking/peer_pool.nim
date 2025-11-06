@@ -15,12 +15,11 @@
 import
   std/[os, tables, times, sets],
   chronos, chronicles,
+  eth/common/base,
   ./p2p_metrics,
   ./[eth1_discovery, p2p_peers]
 
-from eth/common/base import ForkID
-
-export sets, tables, CompatibleForkIdProc
+export sets, tables, CompatibleForkIdProc, base
 
 logScope:
   topics = "p2p peer_pool"
@@ -32,20 +31,19 @@ type
 
   WorkerFuture = Future[void].Raising([CancelledError])
 
-  ForkIdProc* = proc(): ForkID {.noSideEffect, raises: [].}
+  ForkIdProc* = proc(): ForkId {.noSideEffect, raises: [].}
 
   # Usually Network generic param is instantiated with EthereumNode
   PeerPoolRef*[Network] = ref object
     network: Network
     minPeers: int
-    lastLookupTime: float
     connQueue: AsyncQueue[Node]
     seenTable: Table[NodeId, SeenNode]
     running: bool
     discovery: Eth1Discovery
     workers: seq[WorkerFuture]
     forkId: ForkIdProc
-    lastForkId: ForkID
+    lastForkId: ForkId
     connectTimer: Future[void].Raising([CancelledError])
     updateTimer: Future[void].Raising([CancelledError])
     connectingNodes*: HashSet[Node]
@@ -58,7 +56,6 @@ type
     protocols*: seq[ProtocolInfoRef[PeerRef[Network], Network]]
 
 const
-  lookupInterval = 5
   connectLoopSleep = chronos.milliseconds(2000)
   updateLoopSleep = chronos.seconds(15)
   maxConcurrentConnectionRequests = 40
@@ -156,48 +153,15 @@ proc createConnectionWorker(p: PeerPoolRef, workerId: int): Future[void] {.async
     let n = await p.connQueue.popFirst()
     await connectToNode(p, n)
 
-proc maybeConnectToMorePeers(p: PeerPoolRef) {.async: (raises: [CancelledError]).} =
-  ## Connect to more peers if we're not yet connected to at least self.minPeers.
-  if p.connectedNodes.len >= p.minPeers:
-    # debug "pool already connected to enough peers (sleeping)", count = p.connectedNodes
-    return
-
-  if p.lastLookupTime + lookupInterval < epochTime():
+proc lookupPeers(p: PeerPoolRef) {.async: (raises: [CancelledError]).} =
+  ## Lookup more peers if the node is not yet connected to at least self.minPeers.
+  ## Adds the found nodes to the connection queue.
+  if p.connectedNodes.len < p.minPeers:
     # Add nodes to connQueue from discovery protocol,
     # to be later processed by connection worker
     await p.discovery.lookupRandomNode(p.connQueue)
-    p.lastLookupTime = epochTime()
 
-  let debugEnode = getEnv("ETH_DEBUG_ENODE")
-  if debugEnode.len != 0:
-    await p.connectToNode(newNode(debugEnode))
-
-  # The old version of the code (which did all the connection
-  # attempts in serial, not parallel) actually *awaited* all
-  # the connection attempts before reaching the code at the
-  # end of this proc that tries a random bootnode. Should
-  # that still be what happens? I don't think so; one of the
-  # reasons we're doing the connection attempts concurrently
-  # is because sometimes the attempt takes a long time. Still,
-  # it seems like we should give the many connection attempts
-  # a *chance* to complete before moving on to trying a random
-  # bootnode. So let's try just waiting a few seconds. (I am
-  # really not sure this makes sense.)
-  #
-  # --Adam, Dec. 2022
-  await sleepAsync(sleepBeforeTryingARandomBootnode)
-
-  # In some cases (e.g ROPSTEN or private testnets), the discovery table might
-  # be full of bad peers, so if we can't connect to any peers we try a random
-  # bootstrap node as well.
-  if p.connectedNodes.len > 0:
-    return
-
-  let n = p.discovery.getRandomBootnode().valueOr:
-    return
-  await p.connectToNode(n)
-
-func updateForkID(p: PeerPoolRef) =
+func updateForkId(p: PeerPoolRef) =
   if p.forkId.isNil:
     return
 
@@ -205,16 +169,16 @@ func updateForkID(p: PeerPoolRef) =
   if p.lastForkId == forkId:
     return
 
-  p.discovery.updateForkID(forkId)
+  p.discovery.updateForkId(forkId)
   p.lastForkId = forkId
 
 proc run(p: PeerPoolRef) {.async: (raises: [CancelledError]).} =
   trace "Running PeerPool..."
 
   # initial cycle
-  p.updateForkID()
+  p.updateForkId()
   await p.discovery.start()
-  await p.maybeConnectToMorePeers()
+  await p.lookupPeers()
 
   p.running = true
   while p.running:
@@ -231,10 +195,10 @@ proc run(p: PeerPoolRef) {.async: (raises: [CancelledError]).} =
       res = await one(p.connectTimer, p.updateTimer)
 
     if res == p.connectTimer:
-      await p.maybeConnectToMorePeers()
+      await p.lookupPeers()
 
     if res == p.updateTimer:
-      p.updateForkID()
+      p.updateForkId()
 
 #------------------------------------------------------------------------------
 # Private functions

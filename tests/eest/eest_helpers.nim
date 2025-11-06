@@ -27,7 +27,7 @@ import
   ../../execution_chain/core/tx_pool,
   ../../execution_chain/beacon/beacon_engine,
   ../../execution_chain/common/common,
-  ../../hive_integration/nodocker/engine/engine_client
+  ../../hive_integration/engine_client
 
 import ../../tools/common/helpers as chp except HardFork
 import ../../tools/evmstate/helpers except HardFork
@@ -213,7 +213,12 @@ proc setupClient*(port: Port): RpcHttpClient =
     debugEcho "CONNECT ERROR: ", exc.msg
     quit(QuitFailure)
 
-proc prepareEnv*(unit: UnitEnv, genesis: Header, rpcEnabled: bool = false): TestEnv =
+proc prepareEnv*(
+    unit: UnitEnv,
+    genesis: Header,
+    rpcEnabled = false,
+    statelessEnabled = false): TestEnv =
+
   try:
     let
       memDB = newCoreDbRef DefaultDbMemory
@@ -233,8 +238,10 @@ proc prepareEnv*(unit: UnitEnv, genesis: Header, rpcEnabled: bool = false): Test
     var testEnv = TestEnv()
 
     let
-      com = CommonRef.new(memDB, nil, config)
-      chain = ForkedChainRef.init(com, enableQueue = true, persistBatchSize = 0)
+      com = CommonRef.new(memDB, nil, config,
+        statelessProviderEnabled = statelessEnabled,
+        statelessWitnessValidation = statelessEnabled)
+      chain = ForkedChainRef.init(com, enableQueue = true, persistBatchSize = 1)
 
     testEnv.chain = chain
     testEnv.client = Opt.none(RpcHttpClient)
@@ -249,7 +256,7 @@ proc prepareEnv*(unit: UnitEnv, genesis: Header, rpcEnabled: bool = false): Test
         beaconEngine = BeaconEngineRef.new(txPool)
         serverApi = newServerAPI(txPool)
 
-      setupServerAPI(serverApi, server, newEthContext())
+      setupServerAPI(serverApi, server, new AccountsManager)
       setupEngineAPI(beaconEngine, server)
 
       server.start()
@@ -299,6 +306,7 @@ template runEESTSuite*(
     skipFiles: openArray[string],
     baseFolder: string,
     eestType: string,
+    statelessEnabled = false
 ) =
   for eest in eestReleases:
     suite eest & ": " & eestType:
@@ -307,7 +315,7 @@ template runEESTSuite*(
         if last in skipFiles:
           continue
         test last:
-          let res = processFile(fileName)
+          let res = processFile(fileName, statelessEnabled)
           if not res:
             debugEcho fileName.splitPath().tail
           check res

@@ -15,7 +15,11 @@ import
   pkg/[chronicles, chronos, metrics],
   pkg/eth/common,
   ./blocks/blocks_unproc,
+  ./update/[update_eta, update_metrics],
   ./[headers, worker_desc]
+
+export
+  update_eta, update_metrics
 
 logScope:
   topics = "beacon sync"
@@ -38,6 +42,7 @@ proc updateSuspendSyncer(ctx: BeaconCtxRef) =
 
   ctx.pool.failedPeers.clear()
   ctx.pool.seenData = false
+  ctx.pool.syncEta.lastUpdate = low(chronos.Moment)
 
   ctx.hibernate = true
 
@@ -179,7 +184,7 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
   #     blocksFinish --------------------'
   #
   let newState =
-    case ctx.pool.lastState:
+    case ctx.pool.syncState:
     of idle:
       ctx.idleNext info
 
@@ -201,11 +206,12 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
     of blocksFinish:
       ctx.blocksFinishNext info
 
-  if ctx.pool.lastState == newState:
+  if ctx.pool.syncState == newState:
     return
 
-  let prevState = ctx.pool.lastState
-  ctx.pool.lastState = newState
+  let prevState = ctx.pool.syncState
+  ctx.pool.syncState = newState
+  ctx.subState.stateSince = Moment.now()
 
   case newState:
   of idle:
@@ -235,7 +241,7 @@ proc updateLastBlockImported*(ctx: BeaconCtxRef; bn: BlockNumber) =
   metrics.set(nec_sync_last_block_imported, bn.int64)
 
 # ------------------------------------------------------------------------------
-# Public functions, call-back handler ready
+# Public functions, call-back handlers
 # ------------------------------------------------------------------------------
 
 proc updateActivateSyncer*(ctx: BeaconCtxRef) =
@@ -249,7 +255,9 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
     # Exclude the case of a single header chain which would be `T` only
     if b+1 < t:
       ctx.pool.minInitBuddies = 0               # reset
-      ctx.pool.lastState = SyncState.headers    # state transition
+      ctx.pool.syncState = SyncState.headers    # state transition
+      ctx.subState.stateSince = Moment.now()
+      ctx.pool.syncEta.lastUpdate = ctx.subState.stateSince
       ctx.hibernate = false                     # wake up
 
       # Update range
@@ -264,18 +272,19 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
         nSyncPeers=ctx.pool.nBuddies
       return
 
-  # Failed somewhere on the way
-  ctx.hdrCache.clear()
-
-  if ctx.pool.minInitBuddies <= ctx.pool.nBuddies and
-     ctx.pool.initTarget.isNone():
-    debug "Syncer activation rejected", base=ctx.chain.baseNumber.bnStr,
-      head=ctx.chain.latestNumber.bnStr, state=ctx.hdrCache.state,
-      initTarget=ctx.pool.initTarget.isSome(), nSyncPeers=ctx.pool.nBuddies
+  if 0 < ctx.pool.minInitBuddies:
+    trace "Syncer activation rejected", base=ctx.chain.baseNumber.bnStr,
+      head=ctx.chain.latestNumber.bnStr, target=ctx.hdrCache.head.bnStr,
+      initTarget=(if ctx.pool.initTarget.isNone(): "n/a"
+                  else: ctx.pool.initTarget.get.hash.short),
+      nSyncPeersMin=ctx.pool.minInitBuddies, nSyncPeers=ctx.pool.nBuddies
   else:
     trace "Syncer activation rejected", base=ctx.chain.baseNumber.bnStr,
-      head=ctx.chain.latestNumber.bnStr, state=ctx.hdrCache.state,
+      head=ctx.chain.latestNumber.bnStr, target=ctx.hdrCache.head.bnStr,
       initTarget=ctx.pool.initTarget.isSome(), nSyncPeers=ctx.pool.nBuddies
+
+  # Failed somewhere on the way
+  ctx.hdrCache.clear()
 
 # ------------------------------------------------------------------------------
 # End

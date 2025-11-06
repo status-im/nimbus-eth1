@@ -27,6 +27,14 @@ proc getNthHash(ctx: BeaconCtxRef; blocks: seq[EthBlock]; n: int): Hash32 =
   ctx.hdrCache.getHash(blocks[n].header.number).valueOr:
     return zeroHash32
 
+func toStr(e: BeaconError): string =
+  result = "(" & $e.excp & ","
+  if 0 < e.name.len:
+    result &= e.name & "(" & e.msg & "),"
+  elif 0 < e.msg.len:
+    result &= e.msg & ","
+  result &= e.elapsed.toStr
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -51,7 +59,7 @@ template blocksFetchCheckImpl(
       iv {.inject,used.} = iv
       peer {.inject,used.} = buddy.peer
 
-    # Preset/append headers to be completed with bodies. Also collect block
+    # Preset headers to be completed with bodies. Also collect block
     # hashes for fetching missing blocks.
     var
       request = BlockBodiesRequest(blockHashes: newSeqUninit[Hash32](iv.len))
@@ -98,7 +106,8 @@ template blocksFetchCheckImpl(
           blocks.setLen(n)                                 # curb off junk
           buddy.bdyFetchRegisterError()
           trace info & ": Cut off junk blocks", peer, iv, n=n,
-            nTxs=bodies[n].transactions.len, nBodies, bdyErrors=buddy.bdyErrors
+            nTxs=bodies[n].transactions.len, nBodies,
+            nErrors=buddy.nErrors.fetch.bdy
           break loop
 
         # In order to avoid extensive checking here and also within the `FC`
@@ -117,7 +126,7 @@ template blocksFetchCheckImpl(
     if 0 < blocks.len.uint64:
       bodyRc = Opt[seq[EthBlock]].ok(blocks)               # return ok()
 
-    buddy.incBlkProcErrors()
+    buddy.nErrors.apply.blk.inc
     break body                                             # return err()
 
   bodyRc # return
@@ -141,7 +150,7 @@ template blocksFetch*(
   block body:
     # Make sure that this sync peer is not banned from block processing,
     # already.
-    if nProcBlocksErrThreshold < buddy.nBlkProcErrors():
+    if nProcBlocksErrThreshold < buddy.nErrors.apply.blk:
       buddy.ctrl.zombie = true
       break body                                      # return err()
 
@@ -195,7 +204,7 @@ template blocksImport*(
 
     var isError = false
     block loop:
-      trace info & ": Start importing blocks", peer, iv,
+      trace info & ": start importing blocks", peer, iv,
         nBlocks=iv.len, base=ctx.chain.baseNumber.bnStr,
         head=ctx.chain.latestNumber.bnStr
 
@@ -206,7 +215,9 @@ template blocksImport*(
             isError = true
 
             # Mark peer that produced that unusable headers list as a zombie
-            ctx.setBlkProcFail peerID
+            let srcPeer = buddy.getPeer peerID
+            if not srcPeer.isNil:
+              srcPeer.only.nErrors.apply.blk = nProcBlocksErrThreshold + 1
 
             # Check whether it is enough to skip the current blocks list, only
             if ctx.subState.procFailNum != nBn:
@@ -227,24 +238,34 @@ template blocksImport*(
                 nthHash=ctx.getNthHash(blocks, n).short,
                 base=ctx.chain.baseNumber.bnStr,
                 head=ctx.chain.latestNumber.bnStr,
-                blkFailCount=ctx.subState.procFailCount, error=error
+                blkFailCount=ctx.subState.procFailCount, error=error.toStr
+            elif error.excp == ESyncerTermination:
+              chronicles.debug "Blocks import error (skip remaining)", n=n, iv,
+                nBlocks=iv.len, nthBn=nBn.bnStr,
+                nthHash=ctx.getNthHash(blocks, n).short,
+                base=ctx.chain.baseNumber.bnStr,
+                head=ctx.chain.latestNumber.bnStr,
+                blkFailCount=ctx.subState.procFailCount, error=error.toStr
             else:
               chronicles.info "Blocks import error (skip remaining)", n=n, iv,
                 nBlocks=iv.len, nthBn=nBn.bnStr,
                 nthHash=ctx.getNthHash(blocks, n).short,
                 base=ctx.chain.baseNumber.bnStr,
                 head=ctx.chain.latestNumber.bnStr,
-                blkFailCount=ctx.subState.procFailCount, error=error
+                blkFailCount=ctx.subState.procFailCount, error=error.toStr
 
           break loop                               # stop
           # End `importBlock(..).valueOr`
 
         # isOk => next instruction
         ctx.updateLastBlockImported nBn            # block imported OK
+        ctx.updateEtaBlocks()                      # metrics, eta estimate
         # End block: `loop`
 
     if not isError:
-      ctx.resetBlkProcErrors peerID
+      let srcPeer = buddy.getPeer peerID
+      if not srcPeer.isNil:
+        srcPeer.only.nErrors.apply.blk = 0
 
     nBlocks = ctx.subState.top - iv.minPt + 1      # number of blocks imported
 

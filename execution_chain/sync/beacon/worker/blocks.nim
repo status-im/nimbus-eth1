@@ -121,10 +121,12 @@ template blocksCollect*(
             chronicles.info "Imported blocks", nImported,
               nUnproc=ctx.nUnprocStr(),
               nStagedQ=ctx.blk.staged.len,
+              eta=ctx.pool.syncEta.avg.toStr,
               base=ctx.chain.baseNumber.bnStr,
               head=ctx.chain.latestNumber.bnStr,
               target=ctx.subState.head.bnStr,
               targetHash=ctx.subState.headHash.short,
+              thPut=buddy.blkThroughput,
               nSyncPeers=ctx.pool.nBuddies
             ctx.pool.lastSyncUpdLog = Moment.now()
             nImported = 0
@@ -172,10 +174,12 @@ template blocksCollect*(
         chronicles.info "Imported blocks", nImported,
           nUnproc=ctx.nUnprocStr(),
           nStagedQ=ctx.blk.staged.len,
+          eta=ctx.pool.syncEta.avg.toStr,
           base=ctx.chain.baseNumber.bnStr,
           head=ctx.chain.latestNumber.bnStr,
           target=ctx.subState.head.bnStr,
           targetHash=ctx.subState.headHash.short,
+          thPut=buddy.blkThroughput,
           nSyncPeers=ctx.pool.nBuddies
         ctx.pool.lastSyncUpdLog = Moment.now()
 
@@ -189,7 +193,7 @@ template blocksCollect*(
 
       debug info & ": no blocks yet (failed peer)", peer,
         failedPeers=ctx.pool.failedPeers.len,
-        syncState=($buddy.syncState), bdyErrors=buddy.bdyErrors
+        state=($buddy.syncState), nErrors=buddy.blkErrors()
       break body                                    # return
 
     # This message might run in addition to the `chronicles.info` part
@@ -203,9 +207,10 @@ template blocksCollect*(
 
 # --------------
 
-proc blocksUnstageOk*(ctx: BeaconCtxRef): bool =
+proc blocksUnstageOk*(buddy: BeaconBuddyRef): bool =
   ## Check whether import processing is possible
   ##
+  let ctx = buddy.ctx
   not ctx.poolMode and
   0 < ctx.blk.staged.len
 
@@ -231,10 +236,11 @@ template blocksUnstage*(
     var
       peer {.inject.} = buddy.peer
       nImported {.inject.} = 0u64                  # statistics
+      nUnstaged  {.inject.} = 0                    # ditto
       importedOK = false                           # imported some blocks
       switchPeer {.inject.} = false                # for return code
 
-    while ctx.pool.lastState == SyncState.blocks:
+    while ctx.pool.syncState == SyncState.blocks:
 
       # Fetch list with the least block numbers
       let qItem = ctx.blk.staged.ge(0).valueOr:
@@ -256,6 +262,7 @@ template blocksUnstage*(
 
       # Import blocks list, async/template
       nImported += buddy.blocksImport(qItem.data.blocks,qItem.data.peerID, info)
+      nUnstaged.inc
 
       # Sync status logging
       if 0 < nImported:
@@ -264,6 +271,8 @@ template blocksUnstage*(
           chronicles.info "Imported blocks", nImported,
             nUnproc=ctx.nUnprocStr(),
             nStagedQ=ctx.blk.staged.len,
+            nUnstaged,
+            eta=ctx.pool.syncEta.avg.toStr,
             base=ctx.chain.baseNumber.bnStr,
             head=ctx.chain.latestNumber.bnStr,
             target=ctx.subState.head.bnStr,
@@ -271,6 +280,7 @@ template blocksUnstage*(
             nSyncPeers=ctx.pool.nBuddies
           ctx.pool.lastSyncUpdLog = Moment.now()
           nImported = 0
+          nUnstaged = 0
 
       # Import probably incomplete, so a partial roll back may be needed
       let lastBn = qItem.data.blocks[^1].header.number
@@ -286,6 +296,8 @@ template blocksUnstage*(
         chronicles.info "Imported blocks", nImported,
           nUnproc=ctx.nUnprocStr(),
           nStagedQ=ctx.blk.staged.len,
+          nUnstaged,
+          eta=ctx.pool.syncEta.avg.toStr,
           base=ctx.chain.baseNumber.bnStr,
           head=ctx.chain.latestNumber.bnStr,
           target=ctx.subState.head.bnStr,
@@ -307,7 +319,7 @@ template blocksUnstage*(
 proc blocksStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
   ## Some pool mode intervention.
   ##
-  if ctx.pool.lastState in {blocksCancel,blocksFinish}:
+  if ctx.pool.syncState in {blocksCancel,blocksFinish}:
     trace info & ": Flushing block queues",
       nUnproc=ctx.blocksUnprocTotal(), nStagedQ=ctx.blk.staged.len
 

@@ -17,11 +17,12 @@ import
   results,
   nimcrypto/[hash, sha2],
   eth/[common/keys, net/nat],
-  eth/p2p/discoveryv5/[enr, node],
+  eth/p2p/discoveryv5/node,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../common/common_utils,
   ../database/content_db,
-  ../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
+  ../network/wire/
+    [portal_protocol, portal_stream, portal_protocol_config, portal_protocol_version],
   ../network/history/[history_content, history_network]
 
 const
@@ -118,7 +119,7 @@ type
     .}: Port
 
     protocolId* {.
-      defaultValue: getProtocolId(PortalNetwork.mainnet, PortalSubnetwork.history),
+      defaultValue: getProtocolId(PortalSubnetwork.history),
       desc: "Portal wire protocol id for the network to connect to",
       name: "protocol-id"
     .}: PortalProtocolId
@@ -227,11 +228,14 @@ proc run(config: PortalCliConf) =
   loadBootstrapFile(string config.bootstrapNodesFile, bootstrapRecords)
   bootstrapRecords.add(config.bootstrapNodes)
 
+  let localPortalEnrField = getPortalEnrField(PortalNetwork.mainnet)
+
   let d = newProtocol(
     config.networkKey,
     extIp,
     Opt.none(Port),
     extUdpPort,
+    localEnrFields = {portalEnrKey: rlp.encode(localPortalEnrField)},
     bootstrapRecords = bootstrapRecords,
     bindIp = bindIp,
     bindPort = udpPort,
@@ -244,7 +248,12 @@ proc run(config: PortalCliConf) =
 
   let
     db = ContentDB.new(
-      "", config.storageSize, defaultRadiusConfig, d.localNode.id, inMemory = true
+      "",
+      config.storageSize,
+      defaultRadiusConfig,
+      d.localNode.id,
+      PortalSubnetwork.history,
+      inMemory = true,
     )
     sm = StreamManager.new(d)
     cq = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
@@ -252,6 +261,7 @@ proc run(config: PortalCliConf) =
     portal = PortalProtocol.new(
       d,
       config.protocolId,
+      localPortalEnrField,
       testContentIdHandler,
       createGetHandler(db),
       createStoreHandler(db, defaultRadiusConfig),

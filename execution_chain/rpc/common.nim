@@ -12,8 +12,9 @@ import
   std/[json, sequtils],
   stint, json_rpc/errors,
   chronos,
-  ../networking/[p2p, discoveryv4/enode, peer_pool, p2p_types],
-  ../config,
+  eth/enode/enode,
+  ../networking/[p2p, peer_pool, p2p_types],
+  ../conf,
   ../beacon/web3_eth_conv,
   ../nimbus_desc,
   web3/conversions,
@@ -57,25 +58,25 @@ PeerInfo.useDefaultSerializationIn JrpcConv
 
 JrpcConv.automaticSerialization(int, true)
 
-proc setupCommonRpc*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
+proc setupCommonRpc*(node: EthereumNode, config: ExecutionClientConf, server: RpcServer) =
   server.rpc("web3_clientVersion") do() -> string:
-    result = conf.agentString
+    result = config.agentString
 
   server.rpc("web3_sha3") do(data: seq[byte]) -> Hash32:
     result = keccak256(data)
 
   server.rpc("net_version") do() -> string:
-    result = $conf.networkId
+    result = $config.networkId
 
   server.rpc("net_listening") do() -> bool:
     let numPeers = node.numPeers
-    result = numPeers < conf.maxPeers
+    result = numPeers < config.maxPeers
 
   server.rpc("net_peerCount") do() -> Quantity:
     let peerCount = uint node.numPeers
     result = w3Qty(peerCount)
 
-proc setupAdminRpc*(nimbus: NimbusNode, conf: NimbusConf, server: RpcServer) =
+proc setupAdminRpc*(nimbus: NimbusNode, config: ExecutionClientConf, server: RpcServer) =
   let node = nimbus.ethNode
 
   server.rpc("admin_nodeInfo") do() -> NodeInfo:
@@ -84,7 +85,7 @@ proc setupAdminRpc*(nimbus: NimbusNode, conf: NimbusConf, server: RpcServer) =
       nodeId = toNodeId(node.keys.pubkey)
       nodeInfo = NodeInfo(
         id: nodeId.toHex,
-        name: conf.agentString,
+        name: config.agentString,
         enode: $enode,
         ip: $enode.address.ip,
         ports: NodePorts(

@@ -77,6 +77,9 @@ declareGauge nec_sync_dangling, "" &
 declareGauge nec_sync_consensus_head, "" &
   "Block number of latest consensus head"
 
+declareGauge nec_sync_distance_to_sync, "" &
+  "Distance from execution head to consensus head"
+
 type
   HccDbInfo = object
     ## For database table storage and clean up
@@ -127,8 +130,8 @@ const
     ## Insert `persist()` statements in bulk action every `MaxDeleteBatch`
     ## `del()` directives.
 
-  RaisePfx = "Header Cache: "
-    ## Message prefix used when bailing out raising an exception
+  MsgPfx = "Header Cache: "
+    ## Message prefix used when logging or raising an exception
 
 const
   HccDbInfoKey = 0.beaconHeaderKey
@@ -138,7 +141,7 @@ const
 # ------------------------------------------------------------------------------
 
 func bnStr(w: BlockNumber): string =
-  "#" & $w
+  $w
 
 func bnStr(h: Header): string =
   h.number.bnStr
@@ -163,7 +166,7 @@ func decodePayload(data: seq[byte]; T: type): T =
   try:
     result = rlp.decode(data, T)
   except RlpError as e:
-    raiseAssert RaisePfx & "rlp.decode(" & $T & ") failed:" &
+    raiseAssert MsgPfx & "rlp.decode(" & $T & ") failed:" &
       " name=" & $e.name & " error=" & e.msg
 
 # ------------------------------------------------------------------------------
@@ -172,7 +175,7 @@ func decodePayload(data: seq[byte]; T: type): T =
 
 proc putInfo(db: KvtTxRef; state: HccDbInfo) =
   db.put(HccDbInfoKey.toOpenArray, encodePayload(state)).isOkOr:
-    raiseAssert RaisePfx & "put(info) failed: " & $error
+    raiseAssert MsgPfx & "put(info) failed: " & $error
 
 proc getInfo(db: KvtTxRef): Opt[HccDbInfo] =
   let data = db.get(HccDbInfoKey.toOpenArray).valueOr:
@@ -194,11 +197,11 @@ proc putHeader(db: KvtTxRef; h: Header) =
   ## of the parent header.
   let data = encodePayload(h)
   db.put(beaconHeaderKey(h.number).toOpenArray, data).isOkOr:
-    raiseAssert RaisePfx & "put(header) failed: " & $error
+    raiseAssert MsgPfx & "put(header) failed: " & $error
 
   let parNumData = (h.number-1).toBytesBE
   db.put(genericHashKey(h.parentHash).toOpenArray, parNumData).isOkOr:
-    raiseAssert RaisePfx & "put(number-1) failed: " & $error
+    raiseAssert MsgPfx & "put(number-1) failed: " & $error
 
 
 proc getNumber(db: KvtTxRef, hash: Hash32): Opt[BlockNumber] =
@@ -300,7 +303,7 @@ proc resolveFinHash(hc: HeaderChainRef, f: Hash32) =
     return
 
   if hc.chain.tryUpdatePendingFCU(f, number):
-    debug "PendingFCU resolved to block number",
+    debug MsgPfx & "pendingFCU resolved to block number",
       hash = f.short,
       number = number.bnStr
 
@@ -310,10 +313,10 @@ proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
   ## This function prepares a new session and notifies some registered
   ## client app.
   ##
-  if f != zeroHash32 and                            # finalised hash is set
-     hc.chain.baseNumber() + 1 < h.number:          # otherwise useless
+  if f != zeroHash32:                               # finalised hash is set
 
-    if hc.session.mode == closed:
+    if hc.chain.baseNumber() + 1 < h.number and     # otherwise useless
+       hc.session.mode == closed:
       # Set new session environment
       hc.session = HccSession(                      # start new session
         mode:     collecting,
@@ -335,6 +338,9 @@ proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
     # For logging and metrics
     hc.session.consHeadNum = h.number
     metrics.set(nec_sync_consensus_head, h.number.int64)
+    if hc.chain.latestNumber <= h.number:
+      metrics.set(nec_sync_distance_to_sync,
+        (h.number - hc.chain.latestNumber).int64)
 
 # ------------------------------------------------------------------------------
 # Public constructor/destructor et al.
@@ -361,7 +367,6 @@ proc clear*(hc: HeaderChainRef) =
   ##
   hc.session.reset                        # clear session state object
   hc.persistClear()                       # clear database
-  metrics.set(nec_sync_consensus_head, 0) # clear metrics register
   metrics.set(nec_sync_dangling, 0)       # ditto
 
 proc stop*(hc: HeaderChainRef) =
@@ -480,7 +485,7 @@ proc put*(
   if rev.len == 0:
     return ok()                                    # nothing to do
 
-  debug "HC updated",
+  debug MsgPfx & "updated",
     minNum=rev[^1].bnStr,
     maxNum=rev[0].bnStr,
     numHeaders=rev.len
@@ -598,8 +603,11 @@ proc commit*(hc: HeaderChainRef): Result[void,string] =
         return ok()
 
       # Impossible situation!
-      raiseAssert RaisePfx &
-        "Missing finalised " & fin.bnStr & " parent on FC module"
+      raiseAssert MsgPfx &
+        "Missing finalised " & fin.bnStr & " parent on FC module" &
+           ", base=" & hc.chain.baseNumber.bnStr &
+           ", head=" & hc.session.head.bnStr &
+           ", finalized=" & hc.chain.latestFinalizedBlockNumber.bnStr
 
   hc.session.mode = orphan
   err("Parent on FC module has been lost: obsolete branch segment")
@@ -638,6 +646,12 @@ func latestConsHeadNumber*(hc: HeaderChainRef): BlockNumber =
   ## remains constant (for the current session.)
   ##
   hc.session.consHeadNum
+
+proc updateMetrics*(hc: HeaderChainRef) =
+  ## Update/adjust some metrics, i.p. `nec_sync_distance_to_sync`
+  if hc.chain.latestNumber <= hc.session.consHeadNum:
+    metrics.set(nec_sync_distance_to_sync,
+      (hc.session.consHeadNum - hc.chain.latestNumber).int64)
 
 # ------------------------------------------------------------------------------
 # Public debugging helpers

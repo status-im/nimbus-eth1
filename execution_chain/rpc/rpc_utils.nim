@@ -10,7 +10,6 @@
 {.push raises: [].}
 
 import
-  stew/endians2,
   std/[sequtils, algorithm],
   ssz_serialization,
   ./rpc_types,
@@ -342,15 +341,15 @@ proc populateConfigObject*(com: CommonRef, fork: HardFork): ConfigObject =
 
   configObject.activationTime = Number com.activationTime(fork).get(EthTime(0))
   configObject.chainId = com.chainId
-  configObject.forkId = FixedBytes[4] com.forkId(
+  configObject.forkId = com.forkId(
     com.activationTime(fork).get(EthTime(0))
-  ).crc.toBytesBE
+  ).hash
   configObject.blobSchedule.max = Number com.maxBlobsPerBlock(fork)
   configObject.blobSchedule.target = Number com.targetBlobsPerBlock(fork)
   configObject.blobSchedule.baseFeeUpdateFraction = Number com.baseFeeUpdateFraction(fork)
 
   # Precompiles
-  let 
+  let
     evmFork = ToEVMFork[fork]
     lastPrecompile = getMaxPrecompile(evmFork)
 
@@ -370,7 +369,7 @@ proc populateConfigObject*(com: CommonRef, fork: HardFork): ConfigObject =
 
   return configObject
 
-proc getEthConfigObject*(com: CommonRef, 
+proc getEthConfigObject*(com: CommonRef,
                          chain: ForkedChainRef,
                          fork: HardFork,
                          nextFork: Opt[HardFork],

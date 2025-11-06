@@ -170,6 +170,11 @@ OK: 15/15 Fail: 0/15 Skip: 0/15
 + call_memory_expands_on_early_revert.json                        OK
 ```
 OK: 3/3 Fail: 0/3 Skip: 0/3
+## call_and_callcode_gas_calculation
+```diff
++ value_transfer_gas_calculation.json                             OK
+```
+OK: 1/1 Fail: 0/1 Skip: 0/1
 ## calldatacopy
 ```diff
 + calldatacopy.json                                               OK
@@ -557,4 +562,4 @@ OK: 2/2 Fail: 0/2 Skip: 0/2
 OK: 1/1 Fail: 0/1 Skip: 0/1
 
 ---TOTAL---
-OK: 267/267 Fail: 0/267 Skip: 0/267
+OK: 268/268 Fail: 0/268 Skip: 0/268

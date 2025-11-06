@@ -7,10 +7,10 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
-  std/[os, osproc],
+  std/os,
   unittest2,
   ./eest_helpers,
   ./eest_engine

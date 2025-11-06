@@ -15,6 +15,7 @@ import
   pkg/eth/common,
   pkg/stew/interval_set,
   ../../../../networking/p2p,
+  ../update/update_eta,
   ../worker_desc,
   ./[headers_fetch, headers_helpers, headers_unproc]
 
@@ -42,7 +43,7 @@ template headersFetch*(
   block body:
     # Make sure that this sync peer is not banned from header processing,
     # already
-    if nStashHeadersErrThreshold < buddy.nHdrProcErrors():
+    if nStashHeadersErrThreshold < buddy.nErrors.apply.hdr:
       buddy.ctrl.zombie = true
       break body
 
@@ -72,9 +73,9 @@ template headersFetch*(
       buddy.hdrProcRegisterError()
       ctx.headersUnprocCommit(iv, iv)               # clean up, revert `iv`
       debug info & ": Garbled header list", peer, iv, headers=rc.value.bnStr,
-        expected=(ivBottom,iv.maxPt).bnStr, syncState=($buddy.syncState),
-        hdrErrors=buddy.hdrErrors
-      break body                                   # stop, exit function
+        expected=(ivBottom,iv.maxPt).bnStr, state=($buddy.syncState),
+        nErrors=buddy.nErrors.fetch.hdr
+      break body                                    # stop, exit function
 
     # Commit blocks received (and revert lower unused block numbers)
     ctx.headersUnprocCommit(iv, iv.minPt, iv.maxPt - nHeaders)
@@ -100,7 +101,9 @@ proc headersStashOnDisk*(
 
   if rc.isErr:
     # Mark peer that produced that unusable headers list as a zombie
-    ctx.setHdrProcFail peerID
+    let srcPeer = buddy.getPeer peerID
+    if not srcPeer.isNil:
+      srcPeer.only.nErrors.apply.hdr = nProcHeadersErrThreshold + 1
 
     # Check whether it is enough to skip the current headers list, only
     if ctx.subState.procFailNum != dTop:
@@ -117,12 +120,11 @@ proc headersStashOnDisk*(
     # Proper logging ..
     if ctx.subState.cancelRequest:
       warn "Header stash error (cancel this session)", iv=revHdrs.bnStr,
-        syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors,
+        state=($buddy.syncState), nErrors=buddy.hdrErrors(),
         hdrFailCount=ctx.subState.procFailCount, error=rc.error
     else:
       debug info & ": Header stash error (skip remaining)", peer,
-        iv=revHdrs.bnStr,
-        syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors,
+        iv=revHdrs.bnStr, state=($buddy.syncState), nErrors=buddy.hdrErrors(),
         hdrFailCount=ctx.subState.procFailCount, error=rc.error
 
     return err()                                 # stop
@@ -137,7 +139,11 @@ proc headersStashOnDisk*(
     base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
     target=ctx.subState.head.bnStr, targetHash=ctx.subState.headHash.short
 
-  ctx.resetHdrProcErrors peerID                  # reset error count
+  let srcPeer = buddy.getPeer peerID
+  if not srcPeer.isNil:
+    srcPeer.only.nErrors.apply.hdr = 0           # reset error count
+
+  ctx.updateEtaHeaders()                         # metrics update
   ok(dTop - dBottom)
 
 # ------------------------------------------------------------------------------

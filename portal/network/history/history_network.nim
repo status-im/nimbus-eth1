@@ -13,10 +13,10 @@ import
   chronicles,
   metrics,
   eth/common/headers,
-  eth/p2p/discoveryv5/[protocol, enr],
+  eth/enr/enr,
+  eth/p2p/discoveryv5/protocol,
   ../../common/common_types,
   ../../database/content_db,
-  # ../network_metadata,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config, ping_extensions],
   "."/[history_content, history_validation]
 
@@ -25,7 +25,7 @@ from eth/common/accounts import EMPTY_ROOT_HASH
 export history_content, headers
 
 logScope:
-  topics = "portal_fin_hist"
+  topics = "portal_hist"
 
 const pingExtensionCapabilities = {CapabilitiesType, HistoryRadiusType}
 
@@ -39,7 +39,6 @@ type
     contentDB*: ContentDB
     contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
     getHeader*: GetHeaderCallback
-    # cfg*: RuntimeConfig
     processContentLoops: seq[Future[void]]
     statusLogLoop: Future[void]
     contentRequestRetries: int
@@ -63,7 +62,6 @@ proc new*(
     contentDB: ContentDB,
     streamManager: StreamManager,
     getHeaderCallback: GetHeaderCallback = defaultNoGetHeader,
-    # cfg: RuntimeConfig,
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig,
     contentRequestRetries = 1,
@@ -78,7 +76,8 @@ proc new*(
 
     portalProtocol = PortalProtocol.new(
       baseProtocol,
-      getProtocolId(portalNetwork, PortalSubnetwork.history),
+      getProtocolId(PortalSubnetwork.history),
+      getPortalEnrField(portalNetwork),
       toContentIdHandler,
       createGetHandler(contentDB),
       createStoreHandler(contentDB, portalConfig.radiusConfig),
@@ -105,7 +104,7 @@ func localNode*(n: HistoryNetwork): Node =
 
 proc getContent*(
     n: HistoryNetwork, contentKey: ContentKey, V: type ContentValueType, header: Header
-): Future[Opt[V]] {.async: (raises: [CancelledError]).} =
+): Future[Result[V, string]] {.async: (raises: [CancelledError]).} =
   ## Get the decoded content for the given content key.
   ##
   ## When the content is found locally, no validation is performed.
@@ -118,8 +117,7 @@ proc getContent*(
     contentKeyBytes
 
   let contentId = contentKeyBytes.toContentId().valueOr:
-    warn "Received invalid content key", contentKeyBytes
-    return Opt.none(V)
+    return err("Invalid content key")
 
   # Check first locally
   n.portalProtocol.getLocalContent(contentKeyBytes, contentId).isErrOr:
@@ -127,16 +125,15 @@ proc getContent*(
       raiseAssert("Unable to decode history local content value")
 
     debug "Fetched local content value"
-    return Opt.some(contentValue)
+    return ok(contentValue)
 
   for i in 0 ..< (1 + n.contentRequestRetries):
     let
       lookupRes = (await n.portalProtocol.contentLookup(contentKeyBytes, contentId)).valueOr:
-        warn "Failed fetching content from the network"
-        return Opt.none(V)
+        return err("Failed fetching content from the network")
 
       contentValue = decodeRlp(lookupRes.content, V).valueOr:
-        warn "Unable to decode content value from content lookup"
+        warn "Unable to decode content value from content lookup", error = error
         continue
 
     validateContent(contentValue, header).isOkOr:
@@ -155,10 +152,10 @@ proc getContent*(
       lookupRes.nodesInterestedInContent, contentKeyBytes, lookupRes.content
     )
 
-    return Opt.some(contentValue)
+    return ok(contentValue)
 
   # Content was requested `1 + requestRetries` times and all failed on validation
-  Opt.none(V)
+  err("Failed to fetch content after multiple attempts")
 
 proc validateContent(
     n: HistoryNetwork, content: seq[byte], contentKeyBytes: ContentKeyByteList
@@ -240,6 +237,7 @@ proc statusLogLoop(n: HistoryNetwork) {.async: (raises: []).} =
       await sleepAsync(60.seconds)
 
       info "History network status",
+        dbSize = $(n.contentDB.size() div 1_000_000) & "mb",
         routingTableNodes = n.portalProtocol.routingTable.len()
   except CancelledError:
     trace "statusLogLoop canceled"
@@ -265,6 +263,8 @@ proc stop*(n: HistoryNetwork) {.async: (raises: []).} =
   if not n.statusLogLoop.isNil:
     futures.add(n.statusLogLoop.cancelAndWait())
   await noCancel(allFutures(futures))
+
+  n.contentDB.close()
 
   n.processContentLoops.setLen(0)
   n.statusLogLoop = nil

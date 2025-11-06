@@ -13,8 +13,7 @@ import
   chronos,
   chronicles,
   results,
-  ../config,
-  ../common,
+  ../[common, conf],
   eth/common/[base, eth_types, keys],
   ../../portal/rpc/portal_rpc_client
 
@@ -38,28 +37,28 @@ proc init*(T: type PortalRpc, url: string): T =
     provider: PortalRpcClient.init(web3.provider)
   )
 
-func isPortalRpcEnabled(conf: NimbusConf): bool =
-  conf.portalUrl.len > 0
+func isPortalRpcEnabled(config: ExecutionClientConf): bool =
+  config.portalUrl.len > 0
 
-proc getPortalRpc(conf: NimbusConf): Opt[PortalRpc] =
-  if isPortalRpcEnabled(conf):
-    Opt.some(PortalRpc.init(conf.portalUrl))
+proc getPortalRpc(config: ExecutionClientConf): Opt[PortalRpc] =
+  if isPortalRpcEnabled(config):
+    Opt.some(PortalRpc.init(config.portalUrl))
   else:
     Opt.none(PortalRpc)
 
-proc init*(T: type HistoryExpiryRef, conf: NimbusConf, com: CommonRef): T =
-  if not conf.historyExpiry:
+proc init*(T: type HistoryExpiryRef, config: ExecutionClientConf, com: CommonRef): T =
+  if not config.historyExpiry:
     # history expiry haven't been activated yet
     return nil
 
   info "Initiating Portal with the following config",
-    portalUrl = conf.portalUrl,
-    historyExpiry = conf.historyExpiry,
+    portalUrl = config.portalUrl,
+    historyExpiry = config.historyExpiry,
     networkId = com.networkId,
-    portalLimit = conf.historyExpiryLimit
+    portalLimit = config.historyExpiryLimit
 
   let
-    rpc = conf.getPortalRpc()
+    rpc = config.getPortalRpc()
     portalEnabled =
       if com.networkId == MainNet and rpc.isSome:
         # Portal is only available for mainnet
@@ -68,8 +67,8 @@ proc init*(T: type HistoryExpiryRef, conf: NimbusConf, com: CommonRef): T =
         warn "Portal is only available for mainnet, skipping fetching data from Portal"
         false
     limit =
-      if conf.historyExpiryLimit.isSome:
-        conf.historyExpiryLimit.get()
+      if config.historyExpiryLimit.isSome:
+        config.historyExpiryLimit.get()
       else:
         com.posBlock().get()
 
@@ -90,7 +89,9 @@ proc getBlockBodyByHeader*(historyExpiry: HistoryExpiryRef, header: Header): Res
   let rpc = historyExpiry.rpcProvider.valueOr:
     return err("Portal RPC is not available")
 
-  (waitFor rpc.historyGetBlockBody(header.number, header)).mapErr(
-    proc(e: PortalRpcError): string =
-      "Portal request failed: " & $e
+  # TODO nested waitFor
+  (waitFor rpc.historyGetBlockBody(header)).mapErr(
+    proc(e: PortalErrorResponse): string =
+      debug "Portal request failed", error = $e.message
+      "Portal request failed: " & $e.message
   )

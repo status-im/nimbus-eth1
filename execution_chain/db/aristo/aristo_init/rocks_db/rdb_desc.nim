@@ -40,7 +40,6 @@ type
 
   RdbInst* = object
     baseDb*: RocksDbInstanceRef
-    admCol*: ColFamilyReadWrite        ## Legacy column family for administrative data
     vtxCol*: ColFamilyReadWrite        ## Vertex column family handler
 
     # Note that the key type `VertexID` for LRU caches requires that there is
@@ -64,9 +63,10 @@ type
     rdBranchLru*: LruCache[VertexID, (VertexID, uint16)]
     rdBranchSize*: int
 
+    rdbPrintStats*: bool               ## Print statistics on closure
+
   AristoCFs* = enum
     ## Column family symbols/handles and names used on the database
-    AdmCF = "AriAdm"                   ## Admin column family name (deprecated)
     VtxCF = "AriVtx"                   ## Vertex column family name
 
   RdbLruCounter* = array[bool, Atomic[uint64]]

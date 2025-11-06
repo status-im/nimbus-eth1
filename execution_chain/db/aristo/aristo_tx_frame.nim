@@ -13,20 +13,66 @@
 ##
 {.push raises: [].}
 
-import std/strformat, results, ./[aristo_desc, aristo_fetch, aristo_layers]
+import results, ./[aristo_desc, aristo_layers]
 
 # ------------------------------------------------------------------------------
-# Public functions
+# Private functions
 # ------------------------------------------------------------------------------
+
+template isDisposed(txFrame: AristoTxRef): bool =
+  txFrame.level == disposedLevel
 
 proc isKeyframe(txFrame: AristoTxRef): bool =
   txFrame == txFrame.db.txRef
+
+proc clearSnapshot*(txFrame: AristoTxRef) {.raises: [], gcsafe.}
+
+proc removeSnapshotFrame(db: AristoDbRef, txFrame: AristoTxRef) =
+  let index = db.snapshots.find(txFrame)
+  if index != -1:
+    db.snapshots.del(index)
+
+proc addSnapshotFrame(db: AristoDbRef, txFrame: AristoTxRef) =
+  doAssert txFrame.snapshot.level.isSome()
+  if db.snapshots.contains(txFrame):
+    # No-op if the queue already contains the snapshot
+    return
+
+  if db.snapshots.len() == db.maxSnapshots:
+    let frame = db.snapshots.pop()
+    frame.clearSnapshot()
+
+  db.snapshots.push(txFrame)
+
+proc cleanSnapshots(db: AristoDbRef) =
+  let minLevel = db.txRef.level
+
+  # Some of the snapshot content may have already been persisted to disk
+  # (since they were made based on the in-memory frames at the time of creation).
+  # Annoyingly, there's no way to remove items while iterating but even
+  # with the extra seq, move + remove turns out to be faster than
+  # creating a new table - specially when the ratio between old and
+  # and current items favors current items.
+  template delIfIt(tbl: var Table, body: untyped) =
+    var toRemove = newSeqOfCap[typeof(tbl).A](tbl.len div 2)
+    for k, it {.inject.} in tbl:
+      if body:
+        toRemove.add k
+    for k in toRemove:
+      tbl.del(k)
+
+  for frame in db.snapshots:
+    frame.snapshot.vtx.delIfIt(it[2] < minLevel)
+    frame.snapshot.acc.delIfIt(it[1] < minLevel)
+    frame.snapshot.sto.delIfIt(it[1] < minLevel)
 
 proc buildSnapshot(txFrame: AristoTxRef, minLevel: int) =
   # Starting from the previous snapshot, build a snapshot that includes all
   # ancestor changes as well as the changes in txFrame itself
   for frame in txFrame.stack(stopAtSnapshot = true):
     if frame != txFrame:
+      assert not frame.isDisposed()
+
       # Keyframes keep their snapshot insted of it being transferred to the new
       # frame - right now, only the base frame is a keyframe but this support
       # could be extended for example to epoch boundary frames which are likely
@@ -36,29 +82,10 @@ proc buildSnapshot(txFrame: AristoTxRef, minLevel: int) =
       if frame.snapshot.level.isSome() and not isKeyframe:
         # `frame` has a snapshot only in the first iteration of the for loop
         txFrame.snapshot = move(frame.snapshot)
+        txFrame.db.removeSnapshotFrame(frame)
 
         # Verify that https://github.com/nim-lang/Nim/issues/23759 is not present
         assert frame.snapshot.vtx.len == 0 and frame.snapshot.level.isNone()
-
-        if txFrame.snapshot.level != Opt.some(minLevel):
-          # When recycling an existing snapshot, some of its content may have
-          # already been persisted to disk (since it was made base on the
-          # in-memory frames at the time of its creation).
-          # Annoyingly, there's no way to remove items while iterating but even
-          # with the extra seq, move + remove turns out to be faster than
-          # creating a new table - specially when the ratio between old and
-          # and current items favors current items.
-          template delIfIt(tbl: var Table, body: untyped) =
-            var toRemove = newSeqOfCap[typeof(tbl).A](tbl.len div 2)
-            for k, it {.inject.} in tbl:
-              if body:
-                toRemove.add k
-            for k in toRemove:
-              tbl.del(k)
-
-          txFrame.snapshot.vtx.delIfIt(it[2] < minLevel)
-          txFrame.snapshot.acc.delIfIt(it[1] < minLevel)
-          txFrame.snapshot.sto.delIfIt(it[1] < minLevel)
 
       if frame.snapshot.level.isSome() and isKeyframe:
         txFrame.snapshot.vtx = initTable[RootedVertexID, VtxSnapshot](
@@ -91,28 +118,51 @@ proc buildSnapshot(txFrame: AristoTxRef, minLevel: int) =
 
   txFrame.snapshot.level = Opt.some(minLevel)
 
-proc txFrameBegin*(db: AristoDbRef, parent: AristoTxRef): AristoTxRef =
-  let parent = if parent == nil: db.txRef else: parent
-  AristoTxRef(db: db, parent: parent, vTop: parent.vTop, level: parent.level + 1)
+  if not txFrame.isKeyframe():
+    txFrame.db.addSnapshotFrame(txFrame)
 
-proc dispose*(tx: AristoTxRef) =
-  tx[].reset()
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
 
-proc checkpoint*(tx: AristoTxRef, blockNumber: uint64, skipSnapshot: bool) =
-  tx.blockNumber = Opt.some(blockNumber)
+proc txFrameBegin*(
+    db: AristoDbRef,
+    parentFrame: AristoTxRef,
+    moveParentHashKeys = false): AristoTxRef =
+  let parent = if parentFrame == nil: db.txRef else: parentFrame
+  doAssert not parent.isDisposed()
 
+  AristoTxRef(
+    db: db,
+    parent: parent,
+    kMap: if moveParentHashKeys: move(parent.kMap) else: default(parent.kMap.type),
+    vTop: parent.vTop,
+    level: parent.level + 1)
+
+proc dispose*(txFrame: AristoTxRef) =
+  if not txFrame.db.isNil():
+    txFrame.db.removeSnapshotFrame(txFrame)
+  txFrame[].reset()
+  txFrame.level = disposedLevel
+
+proc checkpoint*(txFrame: AristoTxRef, blockNumber: uint64, skipSnapshot: bool) =
+  doAssert not txFrame.isDisposed()
+
+  txFrame.blockNumber = Opt.some(blockNumber)
   if not skipSnapshot:
     # Snapshots are expensive, therefore we only do it at checkpoints (which
     # presumably have gone through enough validation)
-    tx.buildSnapshot(tx.db.txRef.level)
+    txFrame.buildSnapshot(txFrame.db.txRef.level)
 
 proc clearSnapshot*(txFrame: AristoTxRef) =
+  doAssert not txFrame.isDisposed()
+
   if not txFrame.isKeyframe():
     txFrame.snapshot.reset()
 
-proc persist*(
-    db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef, stateRoot: Opt[Hash32]
-) =
+proc persist*(db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
+  doAssert not txFrame.isDisposed()
+
   if txFrame == db.txRef and txFrame.isEmpty():
     # No changes in frame - no `checkpoint` requirement - nothing to do here
     return
@@ -132,6 +182,8 @@ proc persist*(
     var bottom: AristoTxRef
 
     for frame in txFrame.stack(stopAtSnapshot = true):
+      assert not frame.isDisposed()
+
       if bottom == nil:
         # db.txRef always is a snapshot, therefore we're guaranteed to end up
         # here
@@ -175,23 +227,6 @@ proc persist*(
   # Store structural single trie entries
   assert txFrame.snapshot.vtx.len == 0 or txFrame.sTab.len == 0,
     "Either snapshot or sTab should have been cleared as part of merging"
-
-  # Check / update the state root, now that we've flattened the state
-  if stateRoot.isSome():
-    # State root sanity check is performed to verify, before writing to disk,
-    # that optimistically checked blocks indeed end up being stored with a
-    # consistent state root.
-    # TODO State root checking cost is amortized by performing it only at the
-    #      end of a batch of blocks - is there something better the client can
-    #      do than shutting down? Either it's a bug or consensus finalized an
-    #      invalid block, both of which require attention.
-    let frameRoot = txFrame.fetchStateRoot().expect("State root to be readable")
-    if frameRoot != stateRoot[]:
-      raiseAssert &"""State root sanity check failed, bug?
-Expected: {stateRoot[]}, got: {frameRoot}
-Either the consensus client gave invalid information about finalized blocks or
-something else needs attention! Shutting down to preserve the database - restart
-with --debug-eager-state-root."""
 
   for rvid, item in txFrame.snapshot.vtx:
     if item[2] >= oldLevel:
@@ -237,6 +272,11 @@ with --debug-eager-state-root."""
       db.stoLeaves.del(mixPath)
     else:
       discard db.stoLeaves.update(mixPath, vtx)
+
+  # Remove snapshot data that has been persisted to disk to save memory.
+  # All snapshot records with a level lower than the current base level
+  # are deleted.
+  db.cleanSnapshots()
 
   txFrame.snapshot.vtx.clear()
   txFrame.snapshot.acc.clear()

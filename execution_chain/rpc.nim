@@ -7,18 +7,14 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push raises: [], gcsafe.}
+
 import
   chronicles,
   websock/websock,
   json_rpc/rpcserver,
-  ./rpc/common,
-  ./rpc/debug,
-  ./rpc/engine_api,
-  ./rpc/jwt_auth,
-  ./rpc/cors,
-  ./rpc/rpc_server,
-  ./rpc/server_api,
-  ./nimbus_desc
+  ./rpc/[common, cors, debug, engine_api, jwt_auth, rpc_server, server_api],
+  ./[conf, nimbus_desc]
 
 export
   common,
@@ -29,32 +25,30 @@ export
   rpc_server,
   server_api
 
-{.push gcsafe, raises: [].}
-
 const DefaultChunkSize = 1024*1024
 
-func serverEnabled(conf: NimbusConf): bool =
-  conf.httpServerEnabled or
-    conf.engineApiServerEnabled
+func serverEnabled(config: ExecutionClientConf): bool =
+  config.httpServerEnabled or
+    config.engineApiServerEnabled
 
-func combinedServer(conf: NimbusConf): bool =
-  conf.httpServerEnabled and
-    conf.shareServerWithEngineApi
+func combinedServer(config: ExecutionClientConf): bool =
+  config.httpServerEnabled and
+    config.shareServerWithEngineApi
 
 func installRPC(server: RpcServer,
                 nimbus: NimbusNode,
-                conf: NimbusConf,
+                config: ExecutionClientConf,
                 com: CommonRef,
                 serverApi: ServerAPIRef,
                 flags: set[RpcFlag]) =
 
-  setupCommonRpc(nimbus.ethNode, conf, server)
+  setupCommonRpc(nimbus.ethNode, config, server)
 
   if RpcFlag.Eth in flags:
-    setupServerAPI(serverApi, server, nimbus.ctx)
+    setupServerAPI(serverApi, server, nimbus.accountsManager)
 
   if RpcFlag.Admin in flags:
-    setupAdminRpc(nimbus, conf, server)
+    setupAdminRpc(nimbus, config, server)
 
   if RpcFlag.Debug in flags:
     setupDebugRpc(com, nimbus.txPool, server)
@@ -118,7 +112,7 @@ func addHandler(handlers: var seq[RpcHandlerProc],
   handlers.add handlerProc
 
 proc addHttpServices(handlers: var seq[RpcHandlerProc],
-                     nimbus: NimbusNode, conf: NimbusConf,
+                     nimbus: NimbusNode, config: ExecutionClientConf,
                      com: CommonRef, serverApi: ServerAPIRef,
                      address: TransportAddress) =
 
@@ -127,94 +121,94 @@ proc addHttpServices(handlers: var seq[RpcHandlerProc],
   # ws depends on Sec-WebSocket-Version header
   # json-rpc have no reliable identification
 
-  if conf.wsEnabled:
+  if config.wsEnabled:
     let server = newRpcWebsocketHandler()
-    let rpcFlags = conf.getWsFlags() + {RpcFlag.Eth}
-    installRPC(server, nimbus, conf, com, serverApi, rpcFlags)
+    let rpcFlags = config.getWsFlags() + {RpcFlag.Eth}
+    installRPC(server, nimbus, config, com, serverApi, rpcFlags)
     handlers.addHandler(server)
     info "JSON-RPC WebSocket API enabled", url = "ws://" & $address
 
-  if conf.rpcEnabled:
+  if config.rpcEnabled:
     let server = newRpcHttpHandler()
-    let rpcFlags = conf.getRpcFlags() + {RpcFlag.Eth}
-    installRPC(server, nimbus, conf, com, serverApi, rpcFlags)
+    let rpcFlags = config.getRpcFlags() + {RpcFlag.Eth}
+    installRPC(server, nimbus, config, com, serverApi, rpcFlags)
     handlers.addHandler(server)
     info "JSON-RPC API enabled", url = "http://" & $address
 
 proc addEngineApiServices(handlers: var seq[RpcHandlerProc],
-                          nimbus: NimbusNode, conf: NimbusConf,
+                          nimbus: NimbusNode, config: ExecutionClientConf,
                           com: CommonRef, serverApi: ServerAPIRef,
                           address: TransportAddress) =
 
   # The order is important: ws, rpc
 
-  if conf.engineApiWsEnabled:
+  if config.engineApiWsEnabled:
     let server = newRpcWebsocketHandler()
     setupEngineAPI(nimbus.beaconEngine, server)
-    installRPC(server, nimbus, conf, com, serverApi, {RpcFlag.Eth})
+    installRPC(server, nimbus, config, com, serverApi, {RpcFlag.Eth})
     handlers.addHandler(server)
     info "Engine WebSocket API enabled", url = "ws://" & $address
 
-  if conf.engineApiEnabled:
+  if config.engineApiEnabled:
     let server = newRpcHttpHandler()
     setupEngineAPI(nimbus.beaconEngine, server)
-    installRPC(server, nimbus, conf, com, serverApi, {RpcFlag.Eth})
+    installRPC(server, nimbus, config, com, serverApi, {RpcFlag.Eth})
     handlers.addHandler(server)
     info "Engine API enabled", url = "http://" & $address
 
 proc addServices(handlers: var seq[RpcHandlerProc],
-                 nimbus: NimbusNode, conf: NimbusConf,
+                 nimbus: NimbusNode, config: ExecutionClientConf,
                  com: CommonRef, serverApi: ServerAPIRef,
                  address: TransportAddress) =
 
   # The order is important: ws, rpc
 
-  if conf.wsEnabled or conf.engineApiWsEnabled:
+  if config.wsEnabled or config.engineApiWsEnabled:
     let server = newRpcWebsocketHandler()
-    if conf.engineApiWsEnabled:
+    if config.engineApiWsEnabled:
       setupEngineAPI(nimbus.beaconEngine, server)
 
-      if not conf.wsEnabled:
-        installRPC(server, nimbus, conf, com, serverApi, {RpcFlag.Eth})
+      if not config.wsEnabled:
+        installRPC(server, nimbus, config, com, serverApi, {RpcFlag.Eth})
 
       info "Engine WebSocket API enabled", url = "ws://" & $address
 
-    if conf.wsEnabled:
-      let rpcFlags = conf.getWsFlags() + {RpcFlag.Eth}
-      installRPC(server, nimbus, conf, com, serverApi, rpcFlags)
+    if config.wsEnabled:
+      let rpcFlags = config.getWsFlags() + {RpcFlag.Eth}
+      installRPC(server, nimbus, config, com, serverApi, rpcFlags)
       info "JSON-RPC WebSocket API enabled", url = "ws://" & $address
 
     handlers.addHandler(server)
 
-  if conf.rpcEnabled or conf.engineApiEnabled:
+  if config.rpcEnabled or config.engineApiEnabled:
     let server = newRpcHttpHandler()
-    if conf.engineApiEnabled:
+    if config.engineApiEnabled:
       setupEngineAPI(nimbus.beaconEngine, server)
-      if not conf.rpcEnabled:
-        installRPC(server, nimbus, conf, com, serverApi, {RpcFlag.Eth})
+      if not config.rpcEnabled:
+        installRPC(server, nimbus, config, com, serverApi, {RpcFlag.Eth})
 
       info "Engine API enabled", url = "http://" & $address
 
-    if conf.rpcEnabled:
-      let rpcFlags = conf.getRpcFlags() + {RpcFlag.Eth}
-      installRPC(server, nimbus, conf, com, serverApi, rpcFlags)
+    if config.rpcEnabled:
+      let rpcFlags = config.getRpcFlags() + {RpcFlag.Eth}
+      installRPC(server, nimbus, config, com, serverApi, rpcFlags)
 
       info "JSON-RPC API enabled", url = "http://" & $address
 
     handlers.addHandler(server)
 
-proc setupRpc*(nimbus: NimbusNode, conf: NimbusConf,
+proc setupRpc*(nimbus: NimbusNode, config: ExecutionClientConf,
                com: CommonRef) =
-  if not conf.engineApiEnabled:
+  if not config.engineApiEnabled:
     warn "Engine API disabled, the node will not respond to consensus client updates (enable with `--engine-api`)"
 
-  if not conf.serverEnabled:
+  if not config.serverEnabled:
     return
 
   # Provide JWT authentication handler for rpcHttpServer
   let jwtKey = block:
     # Create or load shared secret
-    let rc = nimbus.ctx.rng.jwtSharedSecret(conf)
+    let rc = nimbus.rng.jwtSharedSecret(config)
     if rc.isErr:
       fatal "Failed create or load shared secret",
         msg = $(rc.unsafeError) # avoid side effects
@@ -222,16 +216,16 @@ proc setupRpc*(nimbus: NimbusNode, conf: NimbusConf,
     rc.value
 
   let
-    allowedOrigins = conf.getAllowedOrigins()
+    allowedOrigins = config.getAllowedOrigins()
     jwtAuthHook = httpJwtAuth(jwtKey)
     corsHook = httpCors(allowedOrigins)
     serverApi = newServerAPI(nimbus.txPool)
 
-  if conf.combinedServer:
+  if config.combinedServer:
     let hooks: seq[RpcAuthHook] = @[jwtAuthHook, corsHook]
     var handlers: seq[RpcHandlerProc]
-    let address = initTAddress(conf.httpAddress, conf.httpPort)
-    handlers.addServices(nimbus, conf, com, serverApi, address)
+    let address = initTAddress(config.httpAddress, config.httpPort)
+    handlers.addServices(nimbus, config, com, serverApi, address)
     let res = newHttpServerWithParams(address, hooks, handlers)
     if res.isErr:
       fatal "Cannot create RPC server", msg=res.error
@@ -240,11 +234,11 @@ proc setupRpc*(nimbus: NimbusNode, conf: NimbusConf,
     nimbus.httpServer.start()
     return
 
-  if conf.httpServerEnabled:
+  if config.httpServerEnabled:
     let hooks = @[corsHook]
     var handlers: seq[RpcHandlerProc]
-    let address = initTAddress(conf.httpAddress, conf.httpPort)
-    handlers.addHttpServices(nimbus, conf, com, serverApi, address)
+    let address = initTAddress(config.httpAddress, config.httpPort)
+    handlers.addHttpServices(nimbus, config, com, serverApi, address)
     let res = newHttpServerWithParams(address, hooks, handlers)
     if res.isErr:
       fatal "Cannot create RPC server", msg=res.error
@@ -252,11 +246,11 @@ proc setupRpc*(nimbus: NimbusNode, conf: NimbusConf,
     nimbus.httpServer = res.get
     nimbus.httpServer.start()
 
-  if conf.engineApiServerEnabled:
+  if config.engineApiServerEnabled:
     let hooks = @[jwtAuthHook, corsHook]
     var handlers: seq[RpcHandlerProc]
-    let address = initTAddress(conf.engineApiAddress, conf.engineApiPort)
-    handlers.addEngineApiServices(nimbus, conf, com, serverApi, address)
+    let address = initTAddress(config.engineApiAddress, config.engineApiPort)
+    handlers.addEngineApiServices(nimbus, config, com, serverApi, address)
     let res = newHttpServerWithParams(address, hooks, handlers)
     if res.isErr:
       fatal "Cannot create RPC server", msg=res.error

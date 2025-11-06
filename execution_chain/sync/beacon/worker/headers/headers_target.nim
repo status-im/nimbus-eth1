@@ -16,7 +16,7 @@ import
   pkg/stew/interval_set,
   ../../../../networking/p2p,
   ../worker_desc,
-  ./[headers_fetch, headers_helpers]
+  ./headers_fetch
 
 logScope:
   topics = "beacon sync"
@@ -44,15 +44,21 @@ proc headersTargetReset*(ctx: BeaconCtxRef) =
 template headersTargetActivate*(
     buddy: BeaconBuddyRef;
     info: static[string];
-      ) =
+      ): bool =
   ## Async/template
   ##
   ## Load target header and trigger syncer activation if there is a request
-  ## for doing so (i.e. the `initTarget` variable is set.)
+  ## for doing so (i.e. the `initTarget` variable is set.) Returns `true`
+  ## if there ws something activated.
   ##
+  var bodyRc = false
   block body:
     # Check whether a target is available at all.
     let ctx = buddy.ctx
+
+    # Must be called before first syncer activation
+    doAssert ctx.pool.syncState == SyncState.idle
+
     if ctx.pool.initTarget.isNone():
       break body                                           # return
 
@@ -62,17 +68,10 @@ template headersTargetActivate*(
 
     # Require minimum of sync peers
     if ctx.pool.nBuddies < ctx.pool.minInitBuddies:
-      trace info & ": not enough buddies required to start sync", peer,
+      trace info & ": not enough peers to start manual sync", peer,
         targetHash=trg.hash.short, isFinal=trg.isFinal,
-        syncState=($buddy.syncState), nSyncPeers=ctx.pool.nBuddies
-      break body                                           # return
-
-    # Can be used only before first activation
-    if ctx.pool.lastState != SyncState.idle:
-      debug info & ": cannot setup target while syncer is activated", peer,
-        targetHash=trg.hash.short, isFinal=trg.isFinal,
-        syncState=($buddy.syncState), nSyncPeers=ctx.pool.nBuddies
-      ctx.pool.initTarget = Opt.none(InitTarget)
+        state=($buddy.syncState),
+        nSyncPeersMin=ctx.pool.minInitBuddies, nSyncPeers=ctx.pool.nBuddies
       break body                                           # return
 
     # Ignore failed peers
@@ -89,7 +88,7 @@ template headersTargetActivate*(
         trace info & ": peer failed on syncer target", peer,
           targetHash=trg.hash.short, isFinal=trg.isFinal,
           failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.pool.nBuddies,
-          hdrErrors=buddy.hdrErrors, syncState=($buddy.syncState)
+          nErrors=buddy.nErrors.fetch.hdr, state=($buddy.syncState)
         ctx.pool.initTarget = Opt.some(trg)                # restore target
 
       else:
@@ -101,7 +100,7 @@ template headersTargetActivate*(
           warn "No such syncer target, abandoning it", peer,
             targetHash=trg.hash.short, isFinal=trg.isFinal,
             failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.pool.nBuddies,
-            hdrErrors=buddy.hdrErrors
+            nErrors=buddy.nErrors.fetch.hdr
           ctx.pool.failedPeers.clear()
           # not restoring target
 
@@ -109,7 +108,7 @@ template headersTargetActivate*(
           trace info & ": peer repeatedly failed", peer,
             targetHash=trg.hash.short, isFinal=trg.isFinal,
             failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.pool.nBuddies,
-            hdrErrors=buddy.hdrErrors, syncState=($buddy.syncState)
+            nErrors=buddy.nErrors.fetch.hdr, state=($buddy.syncState)
           ctx.pool.initTarget = Opt.some(trg)              # restore target
 
       break body                                           # return
@@ -134,9 +133,11 @@ template headersTargetActivate*(
 
     let finalised = if trg.isFinal: trg.hash else: ctx.chain.baseHash
     ctx.hdrCache.headTargetUpdate(hdr, finalised)
+
+    bodyRc = true
     # End block: `body`
 
-  discard                                                  # visual alignment
+  bodyRc                                                   # return code
 
 # ------------------------------------------------------------------------------
 # End

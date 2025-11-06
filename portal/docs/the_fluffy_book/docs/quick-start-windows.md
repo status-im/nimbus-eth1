@@ -31,6 +31,16 @@ mingw32-make nimbus_portal_client
 
 ### Run a Nimbus Portal client on the Portal network
 
+To accept offered block bodies and receipts, the Portal node requires access to a web3 interface. Currently, it uses a non-standard method to retrieve headers from the execution layer (EL), which is only supported by Nimbus.
+
+```bash
+# Connect to the Portal bootstrap nodes and enable the JSON-RPC APIs
+# nimbus_execution_client running with rpc interface at http://127.0.0.1:8545
+./build/nimbus_portal_client --rpc --web3-url:http://127.0.0.1:8545
+```
+
+The node can also operate in standalone mode (without an execution layer). In this mode, data retrieval from the network is possible, but storing new data is not supported.
+
 ```bash
 # Connect to the Portal bootstrap nodes and enable the JSON-RPC APIs
 ./build/nimbus_portal_client --rpc
@@ -38,13 +48,12 @@ mingw32-make nimbus_portal_client
 
 ### Try requesting an execution layer block from the network
 
-Requesting history content on the Portal network can be easily tested by using the `eth_getBlockByHash` JSON-RPC from the [execution JSON-RPC API](https://ethereum.github.io/execution-apis/api-documentation/).
+Requesting history content on the Portal network can be easily tested by using the `portal_historyGetContent` JSON-RPC from the [Portal JSON-RPC API](https://github.com/ethereum/portal-network-specs/tree/master/jsonrpc).
 
 ```bash
-# Get the hash of a block from your favorite block explorer, e.g.:
-BLOCKHASH=0x55b11b918355b1ef9c5db810302ebad0bf2544255b530cdce90674d5887bb286 # Replace this to the block hash of your choice
-# Run this command to get the block:
-curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"eth_getBlockByHash","params":["'${BLOCKHASH}'", true]}' http://localhost:8545
+CONTENTKEY=0x004e61bc0000000000 # Serialized content key for block body of block 12345678
+# Run this command to get this block body (unverified):
+curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"portal_historyGetContent","params":["'${CONTENTKEY}'"]}' http://localhost:8545
 ```
 
 ### Update and rebuild the Nimbus Portal client

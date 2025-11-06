@@ -178,7 +178,7 @@ proc newPayload*(ben: BeaconEngineRef,
   # If we already have the block locally, ignore the entire execution and just
   # return a fake success.
   if chain.haveBlockAndState(blockHash):
-    notice "Ignoring already known beacon payload",
+    debug "Ignoring already known beacon payload",
       number = header.number, hash = blockHash.short
     return validStatus(blockHash)
 
@@ -233,7 +233,7 @@ proc newPayload*(ben: BeaconEngineRef,
   trace "Importing block without sethead",
     hash = blockHash, number = header.number
 
-  let vres = await chain.queueImportBlock(blk, finalized = false)
+  let vres = await chain.queueImportBlock(blk)
   if vres.isErr:
     warn "Error importing block",
       number = header.number,

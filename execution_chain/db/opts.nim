@@ -39,6 +39,8 @@ const
     ## Hashes of the above
   defaultRdbBranchCacheSize* = 1024 * 1024 * 1024
     ## Cache of branches and leaves in the state MPTs (world and account)
+  defaultMaxSnapshots* = 5
+    ## The max number of snapshots to store in the aristo database.
 
 
 type DbOptions* = object # Options that are transported to the database layer
@@ -50,6 +52,7 @@ type DbOptions* = object # Options that are transported to the database layer
   rdbKeyCacheSize*: int
   rdbBranchCacheSize*: int
   rdbPrintStats*: bool
+  maxSnapshots*: int
 
 func init*(
     T: type DbOptions,
@@ -61,6 +64,7 @@ func init*(
     rdbKeyCacheSize = defaultRdbKeyCacheSize,
     rdbBranchCacheSize = defaultRdbBranchCacheSize,
     rdbPrintStats = false,
+    maxSnapshots = defaultMaxSnapshots,
 ): T =
   T(
     maxOpenFiles: maxOpenFiles,
@@ -71,4 +75,5 @@ func init*(
     rdbKeyCacheSize: rdbKeyCacheSize,
     rdbBranchCacheSize: rdbBranchCacheSize,
     rdbPrintStats: rdbPrintStats,
+    maxSnapshots: maxSnapshots,
   )

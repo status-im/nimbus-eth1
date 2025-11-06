@@ -12,7 +12,6 @@
 
 import
   chronicles, chronos,
-  stew/endians2,
   ./types,
   ./requester,
   ./broadcast,
@@ -64,10 +63,8 @@ proc getStatus68*(ctx: EthWireRef): Eth68State =
     totalDifficulty: txFrame.headTotalDifficulty,
     genesisHash: com.genesisHash,
     bestBlockHash: ctx.chain.latestHash,
-    forkId: ChainForkId(
-      forkHash: forkId.crc.toBytesBE,
-      forkNext: forkId.nextFork
-  ))
+    forkId: forkId,
+  )
 
 proc getStatus69*(ctx: EthWireRef): Eth69State =
   let
@@ -77,7 +74,7 @@ proc getStatus69*(ctx: EthWireRef): Eth69State =
 
   Eth69State(
     genesisHash: com.genesisHash,
-    forkId: forkId.to(ChainForkId),
+    forkId: forkId,
     earliest: 0,
     latest: bestBlock.number,
     latestHash: ctx.chain.latestHash,
@@ -187,7 +184,7 @@ proc getBlockHeaders*(ctx: EthWireRef,
     chain = ctx.chain
 
   var
-    list = newSeqOfCap[Header](req.maxResults)
+    list = newSeqOfCap[Header](min(req.maxResults, MAX_HEADERS_SERVE))
     header = chain.blockHeader(req.startBlock).valueOr:
       return move(list)
     totalBytes = 0

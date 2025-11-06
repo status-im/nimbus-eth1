@@ -8,24 +8,29 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
-  std/[macros],
   results,
-  "."/[types, blake2b_f, blscurve],
+  ./[types, blake2b_f, blscurve],
   ./interpreter/[gas_meter, gas_costs, utils/utils_numeric],
   eth/common/keys,
   chronicles,
   nimcrypto/[ripemd, sha2, utils],
-  bncurve/[fields, groups],
-  stew/[assign2, endians2, byteutils],
-  libp2p/crypto/ecnist,
+  stew/assign2,
   ../common/evmforks,
   ../core/eip4844,
+  ../compile_info,
   ./modexp,
   ./evm_errors,
   ./computation,
   ./secp256r1verify,
   eth/common/[base, addresses]
+
+when enable_mcl_lib:
+  import ./bncurve_mcl
+else:
+  import ./bncurve_nim
 
 type
   Precompiles* = enum
@@ -132,7 +137,6 @@ const
     "P256VERIFY"
   ]
 
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -169,44 +173,6 @@ func getSignature(c: Computation): EvmResult[SigRes]  =
 
   # extract message hash, only need to copy when there is a valid signature
   assign(res.msgHash, data.toOpenArray(0, 31))
-  ok(res)
-
-func simpleDecode(dst: var FQ2, src: openArray[byte]): bool {.noinit.} =
-  # bypassing FQ2.fromBytes
-  # because we want to check `value > modulus`
-  result = false
-  if dst.c1.fromBytes(src.toOpenArray(0, 31)) and
-     dst.c0.fromBytes(src.toOpenArray(32, 63)):
-    result = true
-
-template simpleDecode(dst: var FQ, src: openArray[byte]): bool =
-  fromBytes(dst, src)
-
-func getPoint[T: G1|G2](_: typedesc[T], data: openArray[byte]): EvmResult[Point[T]] =
-  when T is G1:
-    const nextOffset = 32
-    var px, py: FQ
-  else:
-    const nextOffset = 64
-    var px, py: FQ2
-
-  if not px.simpleDecode(data.toOpenArray(0, nextOffset - 1)):
-    return err(prcErr(PrcInvalidPoint))
-  if not py.simpleDecode(data.toOpenArray(nextOffset, nextOffset * 2 - 1)):
-    return err(prcErr(PrcInvalidPoint))
-
-  if px.isZero() and py.isZero():
-    ok(T.zero())
-  else:
-    var ap: AffinePoint[T]
-    if not ap.init(px, py):
-      return err(prcErr(PrcInvalidPoint))
-    ok(ap.toJacobian())
-
-func getFR(data: openArray[byte]): EvmResult[FR] =
-  var res: FR
-  if not res.fromBytes2(data):
-    return err(prcErr(PrcInvalidPoint))
   ok(res)
 
 # ------------------------------------------------------------------------------
@@ -269,17 +235,8 @@ func modExpFee(c: Computation,
 
   func mulComplexityEIP2565(x: UInt256): UInt256 =
     # gas = ceil(x div 8) ^ 2
-    result = x + 7
-    result = result div 8
+    result = (x + 7) shr 3
     result = result * result
-
-  func mulComplexityEIP7883(maxLen: UInt256): UInt256 =
-    result = 16.u256
-    if maxLen > 32.u256:
-      result = maxLen + 7
-      result = result div 8
-      result = result * result
-      result = result * 2
 
   let adjExpLen = block:
     let
@@ -294,12 +251,11 @@ func modExpFee(c: Computation,
       if first32.isZero(): 0.u256
       else: first32.log2.u256    # highest-bit in exponent
     else:
-      let expMul = if fork >= FkOsaka: 16.u256
-                   else: 8.u256
+      # shl 3 means multiply by 8
       if not first32.isZero:
-        expMul * (expLen - 32.u256) + first32.log2.u256
+        (expLen - 32.u256) shl 3 + first32.log2.u256
       else:
-        expMul * (expLen - 32.u256)
+        (expLen - 32.u256) shl 3
 
   template gasCalc(comp, divisor: untyped): untyped =
     (
@@ -307,26 +263,55 @@ func modExpFee(c: Computation,
       max(adjExpLen, 1.u256)
     ) div divisor
 
-  template gasCalc7883(comp): untyped =
-    # multiplication_complexity * iteration_count
-    max(modLen, baseLen).comp * max(adjExpLen, 1.u256)
-
   # EIP2565: modExp gas cost
-  let gasFee = if fork >= FkOsaka: gasCalc7883(mulComplexityEIP7883)
-               elif fork >= FkBerlin: gasCalc(mulComplexityEIP2565, GasQuadDivisorEIP2565)
+  let gasFee = if fork >= FkBerlin: gasCalc(mulComplexityEIP2565, GasQuadDivisorEIP2565)
                else: gasCalc(mulComplexity, GasQuadDivisor)
 
   if gasFee > high(GasInt).u256:
     return err(gasErr(OutOfGas))
 
-  let minPrice = if fork >= FkOsaka: 500.GasInt
-                 else: 200.GasInt
-
+  const minPrice =  200.GasInt
   var res = gasFee.truncate(GasInt)
   # EIP2565: modExp gas cost
   if fork >= FkBerlin and res < minPrice:
     res = minPrice
   ok(res)
+
+func modExpFeeOsaka(c: Computation,
+               baseLen, expLen, modLen: int): GasInt =
+  template data: untyped {.dirty.} =
+    c.msg.data
+
+  func mulComplexityEIP7883(maxLen: int): int =
+    result = 16
+    if maxLen > 32:
+      # complexity = ceil(maxLen div 8) ^ 2 * 2
+      result = (maxLen + 7) shr 3
+      result = (result * result) shl 1
+
+  let adjExpLen = block:
+    let
+      first32 = if baseLen < data.len:
+                  data.rangeToPadded[:UInt256](96 + baseLen, 95 + baseLen + expLen, min(expLen, 32))
+                else:
+                  0.u256
+
+    if expLen <= 32:
+      if first32.isZero(): 0
+      else: first32.log2    # highest-bit in exponent
+    else:
+      # shl 4 means multiply by 16
+      if not first32.isZero:
+        (expLen - 32) shl 4 + first32.log2
+      else:
+        (expLen - 32) shl 4
+
+  template gasCalc7883(comp): untyped =
+    # multiplication_complexity * iteration_count
+    max(modLen, baseLen).comp * max(adjExpLen, 1)
+
+  const minPrice = 500
+  max(minPrice, gasCalc7883(mulComplexityEIP7883)).GasInt
 
 func modExp(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   ## Modular exponentiation precompiled contract
@@ -337,9 +322,9 @@ func modExp(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
     c.msg.data
 
   let # lengths Base, Exponent, Modulus
-    baseL = data.rangeToPadded[:UInt256](0, 31, 32)
-    expL  = data.rangeToPadded[:UInt256](32, 63, 32)
-    modL  = data.rangeToPadded[:UInt256](64, 95, 32)
+    baseL = data.rangeToPaddedU256(0, 31)
+    expL  = data.rangeToPaddedU256(32, 63)
+    modL  = data.rangeToPaddedU256(64, 95)
     baseLen = baseL.safeInt
     expLen  = expL.safeInt
     modLen  = modL.safeInt
@@ -348,9 +333,11 @@ func modExp(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
     # EIP-7823
     if baseLen > 1024 or expLen > 1024 or modLen > 1024:
       return err(prcErr(PrcInvalidParam))
-
-  let gasFee = ? modExpFee(c, baseL, expL, modL, fork)
-  ? c.gasMeter.consumeGas(gasFee, reason="ModExp Precompile")
+    let gasFee = modExpFeeOsaka(c, baseLen, expLen, modLen)
+    ? c.gasMeter.consumeGas(gasFee, reason="ModExp Precompile")
+  else:
+    let gasFee = ? modExpFee(c, baseL, expL, modL, fork)
+    ? c.gasMeter.consumeGas(gasFee, reason="ModExp Precompile")
 
   if baseLen == 0 and modLen == 0:
     # This is a special case where expLength can be very big.
@@ -384,43 +371,12 @@ func modExp(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
 func bn256ecAdd(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   let gasFee = if fork < FkIstanbul: GasECAdd else: GasECAddIstanbul
   ? c.gasMeter.consumeGas(gasFee, reason = "ecAdd Precompile")
-
-  var
-    input: array[128, byte]
-  # Padding data
-  let len = min(c.msg.data.len, 128) - 1
-  input[0..len] = c.msg.data[0..len]
-  var p1 = ? G1.getPoint(input.toOpenArray(0, 63))
-  var p2 = ? G1.getPoint(input.toOpenArray(64, 127))
-  var apo = (p1 + p2).toAffine()
-
-  c.output.setLen(64)
-  if isSome(apo):
-    # we can discard here because we supply proper buffer
-    discard apo.get().toBytes(c.output)
-
-  ok()
+  bn256ecAddImpl(c)
 
 func bn256ecMul(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   let gasFee = if fork < FkIstanbul: GasECMul else: GasECMulIstanbul
   ? c.gasMeter.consumeGas(gasFee, reason="ecMul Precompile")
-
-  var
-    input: array[96, byte]
-
-  # Padding data
-  let len = min(c.msg.data.len, 96) - 1
-  assign(input.toOpenArray(0, len), c.msg.data.toOpenArray(0, len))
-  var p1 = ? G1.getPoint(input.toOpenArray(0, 63))
-  var fr = ? getFR(input.toOpenArray(64, 95))
-  var apo = (p1 * fr).toAffine()
-
-  c.output.setLen(64)
-  if isSome(apo):
-    # we can discard here because we supply buffer of proper size
-    discard apo.get().toBytes(c.output)
-
-  ok()
+  bn256ecMulImpl(c)
 
 func bn256ecPairing(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   let msglen = c.msg.data.len
@@ -433,32 +389,7 @@ func bn256ecPairing(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid 
                else:
                  GasECPairingBaseIstanbul + numPoints * GasECPairingPerPointIstanbul
   ? c.gasMeter.consumeGas(gasFee, reason="ecPairing Precompile")
-
-  if msglen == 0:
-    # we can discard here because we supply buffer of proper size
-    c.output.setLen(32)
-    discard BNU256.one().toBytesBE(c.output)
-  else:
-    # Calculate number of pairing pairs
-    let count = msglen div 192
-    # Pairing accumulator
-    var acc = FQ12.one()
-
-    for i in 0..<count:
-      let s = i * 192
-      # Loading AffinePoint[G1], bytes from [0..63]
-      let p1 = ?G1.getPoint(c.msg.data.toOpenArray(s, s + 63))
-      # Loading AffinePoint[G2], bytes from [64..191]
-      let p2 = ?G2.getPoint(c.msg.data.toOpenArray(s + 64, s + 191))
-      # Accumulate pairing result
-      acc = acc * pairing(p1, p2)
-
-    c.output.setLen(32)
-    if acc == FQ12.one():
-      # we can discard here because we supply buffer of proper size
-      discard BNU256.one().toBytesBE(c.output)
-
-  ok()
+  bn256ecPairingImpl(c)
 
 func blake2bf(c: Computation): EvmResultVoid =
   template input: untyped =
@@ -768,6 +699,10 @@ proc pointEvaluation(c: Computation): EvmResultVoid =
   ok()
 
 proc p256verify(c: Computation): EvmResultVoid =
+  template data(): auto = c.msg.data
+
+  template `[]`(x: openArray[byte], a, b: int): auto =
+    x.toOpenArray(a, b)
 
   template failed() =
     c.output.setLen(0)
@@ -778,27 +713,14 @@ proc p256verify(c: Computation): EvmResultVoid =
   if c.msg.data.len != 160:
     failed()
 
-  var inputPubKey: array[65, byte]
-
-  # Validations
-  if isInfinityByte(c.msg.data.toOpenArray(96, 159)):
-    failed()
-
   # Check scalar and field bounds (r, s ∈ (0, n), qx, qy ∈ [0, p))
-  var sig: EcSignature
-  if not sig.initRaw(c.msg.data.toOpenArray(32, 95)):
+  var
+    pk: EcPublicKey
+
+  if not pk.initRaw(data[96, 159]):
     failed()
 
-  var pubkey: EcPublicKey
-  inputPubKey[0] = 4.byte
-  assign(inputPubKey.toOpenArray(1, 64), c.msg.data.toOpenArray(96, 159))
-
-  if not pubkey.initRaw(inputPubKey):
-    failed()
-
-  let isValid = sig.verifyRaw(c.msg.data.toOpenArray(0, 31), pubkey)
-
-  if isValid:
+  if verifyRaw(data[32, 95], data[0, 31], pk):
     c.output.setLen(32)
     c.output[^1] = 1.byte  # return 0x...01
   else:
@@ -865,4 +787,6 @@ proc execPrecompile*(c: Computation, precompile: Precompiles) =
         c.setError(StatusCode.PrecompileFailure, $res.error.code, true)
       else:
         # swallow any other precompiles errors
-        debug "execPrecompiles validation error", errCode = $res.error.code
+        debug "execPrecompiles validation error",
+          errCode = $res.error.code,
+          precompile = precompile
