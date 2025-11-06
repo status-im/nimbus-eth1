@@ -113,7 +113,7 @@ type
     #      to keep compatibility with `--tcp-port` that is used in both, use
     #      consecutive ports unless specific ports are set - to be evaluated
     executionTcpPort* {.
-      desc: "Listening TCP port for Ethereum DevP2P traffic"
+      desc: "Listening TCP port for Ethereum devp2p traffic"
       name: "execution-tcp-port" .}: Option[Port]
 
     executionUdpPort* {.
@@ -121,11 +121,11 @@ type
       name: "execution-udp-port" .}: Option[Port]
 
     beaconTcpPort* {.
-      desc: "Listening TCP port for Ethereum DevP2P traffic"
+      desc: "Listening TCP port for Ethereum libp2p traffic"
       name: "beacon-tcp-port" .}: Option[Port]
 
     beaconUdpPort* {.
-      desc: "Listening UDP port for execution node discovery"
+      desc: "Listening UDP port for beacon node discovery"
       name: "beacon-udp-port" .}: Option[Port]
 
     tcpPort* {.
