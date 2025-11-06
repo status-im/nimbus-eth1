@@ -335,7 +335,11 @@ proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
       # Inform client app about that a new session has started.
       hc.notify()
 
-    # For logging and metrics
+    # For logging and metrics. Note that the syncer becomes idle when it
+    # catches up with importing blocks and this handler is not called,
+    # any more. This happens if there is no need to catch up wholesale.
+    # So, the `nec_sync_consensus_head` will just stay with its latest
+    # value unless updated by `updateMetrics()`.
     hc.session.consHeadNum = h.number
     metrics.set(nec_sync_consensus_head, h.number.int64)
     if hc.chain.latestNumber <= h.number:
@@ -648,10 +652,17 @@ func latestConsHeadNumber*(hc: HeaderChainRef): BlockNumber =
   hc.session.consHeadNum
 
 proc updateMetrics*(hc: HeaderChainRef) =
-  ## Update/adjust some metrics, i.p. `nec_sync_distance_to_sync`
+  ## Update/adjust some metrics, i.p. `nec_sync_distance_to_sync`. If there
+  ## is no session and the latest execution head exceeds the `consHeadNum` from
+  ## the last active session, the `nec_sync_consensus_head` will be set to the
+  ## the latest execution head number.
+  ##
   if hc.chain.latestNumber <= hc.session.consHeadNum:
     metrics.set(nec_sync_distance_to_sync,
       (hc.session.consHeadNum - hc.chain.latestNumber).int64)
+  elif hc.session.mode == HeaderChainMode(0):
+    metrics.set(nec_sync_consensus_head, hc.chain.latestNumber.int64)
+    metrics.set(nec_sync_distance_to_sync, 0)
 
 # ------------------------------------------------------------------------------
 # Public debugging helpers
