@@ -269,7 +269,7 @@ be available if *nimbus* is compiled with the additional make flags
 | nec_sync_last_block_imported | block height | **I**, *0 when idle* |
 | nec_sync_head                | block height | **H**, *0 when idle* |
 | nec_sync_consensus_head      | block height | **T**, *increasing*  |
-| nec_sync_distance_to_sync    | block diff   | **T** - **L**        |
+| nec_sync_distance_to_sync    | block diff   | max(0, **T**-**L**)  |
 | nec_sync_eta_secs            | time seconds | estimated ETA        |
 |                              |              |                      |
 | nec_sync_header_lists_staged | size | # of staged header list records      |

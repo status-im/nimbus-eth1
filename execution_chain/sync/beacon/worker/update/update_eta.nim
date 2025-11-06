@@ -50,24 +50,17 @@ proc updateEtaIdle*(ctx: BeaconCtxRef) =
   ctx.hdrCache.updateMetrics()
 
   if ctx.pool.syncState == SyncState.idle and
-     ctx.chain.latestNumber <= ctx.hdrCache.latestConsHeadNumber and
+     low(Moment) < ctx.pool.syncEta.lastUpdate and
      ctx.pool.syncEta.lastUpdate + etaIdleMaxDensity <= Moment.now():
 
-    # Caclculate the duration to process all the headers and all blocks, i.e
-    # * headers and blocks to be stored for the rest until known target
-    let
-      restToDo = ctx.hdrCache.latestConsHeadNumber - ctx.chain.latestNumber
-      restTime = ctx.pool.syncEta.headerTime + ctx.pool.syncEta.blockTime
-
-    ctx.setEtaAndMetrics(restTime * restToDo.float)
+    # No sync request at the moment
+    ctx.pool.syncEta.inSync = true
+    metrics.set(nec_sync_eta_secs, 0)
 
 
 proc updateEtaBlocks*(ctx: BeaconCtxRef) =
   ## Update ETA while system is in `blocks` state.
   ##
-  # Update some metrics
-  ctx.hdrCache.updateMetrics()
-
   if low(Moment) < ctx.pool.syncEta.lastUpdate:
     # There is a minimum time span beween two samples to take.
     let
@@ -78,7 +71,9 @@ proc updateEtaBlocks*(ctx: BeaconCtxRef) =
 
       # Make certain to cover more than one successful fetch efforts unless
       # there are not many items to fetch.
-      let nProcessed = ctx.subState.top - ctx.hdrCache.antecedent.number
+      let nProcessed =
+        if ctx.subState.top < ctx.hdrCache.antecedent.number: 0u64
+        else: ctx.subState.top - ctx.hdrCache.antecedent.number
 
       if nFetchBodiesRequest < nProcessed or
          blocksToDo <= nFetchBodiesRequest:
@@ -104,9 +99,6 @@ proc updateEtaBlocks*(ctx: BeaconCtxRef) =
 proc updateEtaHeaders*(ctx: BeaconCtxRef) =
   ## Eta and metrics while system is in `headers` state
   ##
-  # Update some metrics
-  ctx.hdrCache.updateMetrics()
-
   if low(Moment) < ctx.pool.syncEta.lastUpdate:
     # There is a minimum time span beween two samples to take.
     let
@@ -115,7 +107,9 @@ proc updateEtaHeaders*(ctx: BeaconCtxRef) =
     if ctx.pool.syncEta.lastUpdate + etaHeaderMaxDensity <= now or
        headersToDo < 2:
 
-      let nProcessed = ctx.subState.head - ctx.subState.top
+      let nProcessed =
+        if ctx.subState.head < ctx.subState.top: 0u64
+        else: ctx.subState.head - ctx.subState.top
 
       if nFetchHeadersRequest < nProcessed or
          headersToDo <= nFetchHeadersRequest:
