@@ -43,7 +43,7 @@ func new*(
   LCRestClientPool(cfg: cfg, forkDigests: forkDigests, clients: @[])
 
 proc addEndpoints*(pool: LCRestClientPool, urlList: UrlList) {.raises: [ValueError].} =
-  for endpoint in urlList.urls:
+  for endpoint in urlList:
     if endpoint in pool.urls:
       continue
 

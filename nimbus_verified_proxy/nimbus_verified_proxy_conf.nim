@@ -26,8 +26,7 @@ type
     kind*: Web3UrlKind
     web3Url*: string
 
-  UrlList* = object
-    urls*: seq[string]
+  UrlList* = seq[string]
 
 #!fmt: off
 type VerifiedProxyConf* = object
@@ -127,8 +126,8 @@ type VerifiedProxyConf* = object
   # (Untrusted) web3 provider
   # No default - Needs to be provided by the user
   beaconApiUrls* {.
-    desc: "command separated URLs of the light client data provider",
-    name: "external-beacon-api-urls"
+    desc: "URL of the light client data provider. Multiple URLs can be specified by defining the option again on the command line",
+    name: "external-beacon-api-url"
   .}: UrlList
 
 #!fmt: on
@@ -158,7 +157,7 @@ proc parseCmdArg*(T: type UrlList, p: string): T {.raises: [ValueError].} =
     if not (normalizedScheme == "http" or normalizedScheme == "https"):
       raise newException(ValueError, "Light Client Endpoint should be a http(s) URL")
 
-  UrlList(urls: urls)
+  UrlList(urls)
 
 proc completeCmdArg*(T: type Web3Url, val: string): seq[string] =
   @[]
