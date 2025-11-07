@@ -212,6 +212,13 @@ proc persist*(db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
     swap(bottom[], txFrame[])
     db.txRef = txFrame
 
+    # At this point the bottom frame may exist in the snapshot cache but
+    # the above call to swap will have copied the fields from txFrame which
+    # was already disposed and so bottom.db will be nil. This means when
+    # bottom is disposed below the dispose call is unable to remove the snapshot
+    # without a db reference so we do it here instead.
+    txFrame.db.removeSnapshotFrame(bottom)
+
     if txFrame.parent != nil:
       # Can't use rstack here because dispose will break the parent chain
       for frame in txFrame.parent.stack():
