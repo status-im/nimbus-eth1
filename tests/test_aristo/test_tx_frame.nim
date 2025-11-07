@@ -367,7 +367,7 @@ suite "Aristo TxFrame":
       tx1.snapshot.level.isNone()
       tx1.snapshot.vtx.len() == 0
 
-  test "Reproduce bug - not txFrame.isDisposed() [AssertionDefect]":
+  test "Reproduce disposed snapshot stuck in cache bug - not txFrame.isDisposed() [AssertionDefect]":
     db.maxSnapshots = 1
 
     let
