@@ -19,6 +19,7 @@ import
   ./trace_config,
   ../../utils/utils,
   ../../core/pooled_txs_rlp,
+  ../../core/chain/forked_chain,
   ../../networking/p2p_types
 
 export
@@ -348,6 +349,14 @@ proc eth68PeerConnected(peer: Peer) {.async: (
           expectGenesis = short(status.genesisHash),
           gotGenesis = short(m.genesisHash)
     raise newException(UselessPeerError, "Eth handshake for different network")
+
+  let header = ctx.chain.latestHeader()
+  if not ctx.chain.com.compatibleForkId(m.forkId, header.number, header.timestamp):
+    trace "Peer with incompatible fork ID", peer,
+          localForkId = (status.forkId.hash.toHex & "/" & $status.forkId.next),
+          remoteForkId = (m.forkId.hash.toHex & "/" & $m.forkId.next)
+    raise newException(UselessPeerError, "Eth handshake with incompatible fork ID")
+
   trace "Peer matches our network", peer
 
   peer.state(eth68).initialized = true
@@ -395,6 +404,14 @@ proc eth69PeerConnected(peer: Peer) {.async: (
           expectGenesis = short(status.genesisHash),
           gotGenesis = short(m.genesisHash)
     raise newException(UselessPeerError, "Eth handshake for different network")
+
+  let header = ctx.chain.latestHeader()
+  if not ctx.chain.com.compatibleForkId(m.forkId, header.number, header.timestamp):
+    trace "Peer with incompatible fork ID", peer,
+          localForkId = (status.forkId.hash.toHex & "/" & $status.forkId.next),
+          remoteForkId = (m.forkId.hash.toHex & "/" & $m.forkId.next)
+    raise newException(UselessPeerError, "Eth handshake with incompatible fork ID")
+
   trace "Peer matches our network", peer
 
   peer.state(eth69).initialized = true
