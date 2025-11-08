@@ -247,14 +247,11 @@ proc procBlkEpilogue(
         receiptsCount = vmState.receipts.len,
         currentIndex = vmState.logIndex.next_index
       
-      # ALWAYS populate LogIndex from genesis
-      if vmState.logIndex.next_index == 0:
-        # Only populate if not already done
-        vmState.logIndex.add_block_logs(header, vmState.receipts)
-        debug "LogIndex populated in process_block"
-      else:
-        debug "LogIndex already populated, skipping",
-          existingEntries = vmState.logIndex.next_index
+      # EIP-7745: Add current block's logs to accumulated logIndex from parent
+      vmState.logIndex.add_block_logs(header, vmState.receipts)
+      debug "LogIndex updated in process_block",
+        blockNumber = header.number,
+        totalEntries = vmState.logIndex.next_index
       
       # Choose validation method based on activation timestamp
       # DEBUG: Log the activation check details
@@ -277,11 +274,11 @@ proc procBlkEpilogue(
           return err("LogIndexSummary encoding size mismatch: got " & 
                     $encoded.len & " bytes, expected 256")
         
-        # Convert encoded bytes to BloomFilter
+        # Convert encoded bytes to Bloom
         var bloomData: array[256, byte]
         for i in 0..<256:
           bloomData[i] = encoded[i]
-        let bloom = BloomFilter(bloomData)
+        let bloom = Bloom(bloomData)
         
         if header.logsBloom != bloom:
           debug "wrong logsBloom (LogIndexSummary) in block",

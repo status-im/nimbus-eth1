@@ -12,8 +12,7 @@ import
   std/[tables, sequtils, algorithm],
   eth/common/[blocks as ethblocks, receipts, hashes, addresses],
   nimcrypto/[hash, sha2],
-  ssz_serialization,
-  stew/bitops2
+  ssz_serialization
 
 export hashes, receipts
 

@@ -265,7 +265,7 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
     var bloomData: array[256, byte]
     for i in 0..<256:
       bloomData[i] = encoded[i]
-    pst.logsBloom = BloomFilter(bloomData)
+    pst.logsBloom = Bloom(bloomData)
     debug "LogIndexSummary created in tx_packer",
       blockNumber = vmState.blockNumber,
       receiptsCount = vmState.receipts.len,
