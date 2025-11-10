@@ -33,12 +33,16 @@ type
   BeaconErrorType* = enum
     ## For `FetchError` return code object/tuple
     ENoException = 0
+    ESyncerTermination             ## Syncer was stopped
     EAlreadyTriedAndFailed         ## The same action failed before
     EPeerDisconnected              ## Exception
     ECatchableError                ## Exception
     ECancelledError                ## Exception
 
 const
+  twoHundredYears* = chronos.days(365 * 200 + 48)
+    ## Large Duration constant considered sort of infinite.
+
   metricsUpdateInterval* = chronos.seconds(10)
     ## Wait at least this time before next update
 
@@ -145,6 +149,31 @@ const
     ## Similar to `headersStagedQueueLengthMax`.
 
   # ----------------------
+
+  etaHeaderTimeDefault* = 25_000_000f
+    ## Nanoseconds per header used for early ETA estimate. When available,
+    ## this value will be replaced by the real one derived from calulating
+    ## elapsed time over number of blocks.
+
+  etaBlockTimeDefault* = 2_000_000_000f
+    ## Similar to `etaHeaderTimeDefault`
+
+
+  etaIdleMaxDensity* = chronos.seconds(5)
+    ## Minimal time distance beween two ETA measurements while the syncer
+    ## is hibernating
+
+  etaHeaderMaxDensity* = chronos.seconds(3)
+    ## Minimal time distance beween two ETA measurements while the syncer
+    ## is downloading headers.
+
+  etaBlockMaxDensity* = chronos.seconds(10)
+    ## imilar to `etaHeaderMaxDensity`
+
+
+  etaAvgPoints* = 6
+    ## Number of sample points when calculating the ETA average. More ample
+    ## points tend to smoothen the resulting curve when plotting the average.
 
 static:
   doAssert 0 < nFetchHeadersRequest

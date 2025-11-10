@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 11,
+  "id": 26,
   "links": [],
   "liveNow": true,
   "panels": [
@@ -42,7 +42,7 @@
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
-            "fillOpacity": 28,
+            "fillOpacity": 20,
             "gradientMode": "opacity",
             "hideFrom": {
               "legend": false,
@@ -72,7 +72,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -111,12 +111,57 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "consensus_head"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "super-light-orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "execution_head"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "sync_consensus_head"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "super-light-orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
           }
         ]
       },
       "gridPos": {
-        "h": 7,
-        "w": 24,
+        "h": 6,
+        "w": 12,
         "x": 0,
         "y": 0
       },
@@ -134,7 +179,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.5.2",
+      "pluginVersion": "12.1.1",
       "targets": [
         {
           "datasource": {
@@ -143,14 +188,14 @@
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "nec_base{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+          "expr": "nec_sync_consensus_head{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
           "fullMetaSearch": false,
           "hide": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "nec_base",
+          "legendFormat": "sync_consensus_head",
           "range": true,
-          "refId": "B",
+          "refId": "C",
           "useBackend": false
         },
         {
@@ -165,13 +210,30 @@
           "hide": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "nec_execution_head",
+          "legendFormat": "execution_head",
           "range": true,
           "refId": "A",
           "useBackend": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bdvimuocv3fggc"
+          },
+          "disableTextWrap": false,
+          "editorMode": "builder",
+          "expr": "nec_base{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+          "fullMetaSearch": false,
+          "hide": false,
+          "includeNullMetadata": true,
+          "instant": false,
+          "legendFormat": "base",
+          "range": true,
+          "refId": "B",
+          "useBackend": false
         }
       ],
-      "title": "Base vs Latest",
+      "title": "Base vs EL head vs CL head",
       "transparent": true,
       "type": "timeseries"
     },
@@ -225,7 +287,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -283,10 +345,10 @@
         ]
       },
       "gridPos": {
-        "h": 5,
-        "w": 24,
-        "x": 0,
-        "y": 7
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 0
       },
       "id": 2,
       "options": {
@@ -302,7 +364,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.5.2",
+      "pluginVersion": "12.1.1",
       "targets": [
         {
           "datasource": {
@@ -317,7 +379,7 @@
           "hide": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "nec_sync_peers",
+          "legendFormat": "sync_peers",
           "range": true,
           "refId": "B",
           "useBackend": false
@@ -334,7 +396,7 @@
           "hide": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "nec_sync_header_lists_staged",
+          "legendFormat": "sync_header_lists_staged",
           "range": true,
           "refId": "C",
           "useBackend": false
@@ -353,7 +415,7 @@
           "includeNullMetadata": true,
           "instant": false,
           "interval": "",
-          "legendFormat": "nec_sync_block_lists_staged",
+          "legendFormat": "sync_block_lists_staged",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -412,7 +474,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -452,14 +514,74 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "target"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "super-light-yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "el_head"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "light-yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "target - el_head"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "super-light-green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "sync_distance_to_sync"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "light-purple",
+                  "mode": "fixed"
+                }
+              }
+            ]
           }
         ]
       },
       "gridPos": {
-        "h": 5,
-        "w": 24,
+        "h": 6,
+        "w": 12,
         "x": 0,
-        "y": 12
+        "y": 6
       },
       "id": 3,
       "options": {
@@ -475,8 +597,25 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.5.2",
+      "pluginVersion": "12.1.1",
       "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bdvimuocv3fggc"
+          },
+          "disableTextWrap": false,
+          "editorMode": "builder",
+          "expr": "nec_sync_distance_to_sync{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+          "fullMetaSearch": false,
+          "hide": false,
+          "includeNullMetadata": true,
+          "instant": false,
+          "legendFormat": "sync_distance_to_sync",
+          "range": true,
+          "refId": "C",
+          "useBackend": false
+        },
         {
           "datasource": {
             "type": "prometheus",
@@ -488,7 +627,7 @@
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "nec_sync_headers_unprocessed",
+          "legendFormat": "sync_headers_unprocessed",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -505,7 +644,7 @@
           "hide": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "nec_sync_blocks_unprocessed",
+          "legendFormat": "sync_blocks_unprocessed",
           "range": true,
           "refId": "B",
           "useBackend": false
@@ -565,7 +704,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -638,10 +777,10 @@
         ]
       },
       "gridPos": {
-        "h": 4,
-        "w": 24,
-        "x": 0,
-        "y": 17
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 6
       },
       "id": 4,
       "options": {
@@ -657,7 +796,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.5.2",
+      "pluginVersion": "12.1.1",
       "targets": [
         {
           "datasource": {
@@ -671,13 +810,225 @@
           "hide": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "nec_sync_non_peers_connected",
+          "legendFormat": "sync_non_peers_connected",
           "range": true,
           "refId": "A",
           "useBackend": false
         }
       ],
       "title": "Additional RLPX Connections (non-Buddies)",
+      "transparent": true,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bdvimuocv3fggc"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 30,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 5,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "min": -1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "nec_sync_eta_secs"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "light-purple",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.1.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bdvimuocv3fggc"
+          },
+          "disableTextWrap": false,
+          "editorMode": "builder",
+          "exemplar": false,
+          "expr": "nec_sync_eta_secs{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "instant": false,
+          "legendFormat": "sync_eta_secs",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        }
+      ],
+      "title": "ETA",
+      "transparent": true,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 30,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 5,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.1.1",
+      "targets": [
+        {
+          "refId": "A"
+        }
+      ],
+      "title": "",
       "transparent": true,
       "type": "timeseries"
     },
@@ -730,7 +1081,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -774,10 +1125,10 @@
         ]
       },
       "gridPos": {
-        "h": 6,
+        "h": 5,
         "w": 12,
         "x": 0,
-        "y": 21
+        "y": 17
       },
       "id": 5,
       "options": {
@@ -793,7 +1144,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.5.2",
+      "pluginVersion": "12.1.1",
       "targets": [
         {
           "datasource": {
@@ -882,7 +1233,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -926,10 +1277,10 @@
         ]
       },
       "gridPos": {
-        "h": 6,
+        "h": 5,
         "w": 12,
         "x": 12,
-        "y": 21
+        "y": 17
       },
       "id": 6,
       "options": {
@@ -945,7 +1296,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.5.2",
+      "pluginVersion": "12.1.1",
       "targets": [
         {
           "datasource": {
@@ -972,19 +1323,18 @@
   ],
   "preload": false,
   "refresh": "auto",
-  "schemaVersion": 40,
+  "schemaVersion": 41,
   "tags": [],
   "templating": {
     "list": []
   },
   "time": {
-    "from": "2025-03-04T15:46:00.000Z",
+    "from": "now-5m",
     "to": "now"
   },
   "timepicker": {},
-  "timezone": "browser",
+  "timezone": "Europe/London",
   "title": "Mainnet Sync",
-  "uid": "beavm2j26dvr4b",
-  "version": 54,
-  "weekStart": ""
+  "uid": "aejdv8m5igu40e",
+  "version": 12
 }

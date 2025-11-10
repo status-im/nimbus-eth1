@@ -38,7 +38,7 @@ func classifyForFetching*(buddy: BeaconBuddyRef): PeerRanking =
   ##
   var ranking = 0
 
-  case buddy.ctx.pool.lastState:
+  case buddy.ctx.pool.syncState:
   of SyncState.headers:
     # Classify this peer only if there are enough header slots available on
     # the queue for dowmloading simmultaneously. There is an additional slot

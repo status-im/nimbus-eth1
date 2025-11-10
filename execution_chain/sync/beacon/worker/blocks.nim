@@ -121,6 +121,7 @@ template blocksCollect*(
             chronicles.info "Imported blocks", nImported,
               nUnproc=ctx.nUnprocStr(),
               nStagedQ=ctx.blk.staged.len,
+              eta=ctx.pool.syncEta.avg.toStr,
               base=ctx.chain.baseNumber.bnStr,
               head=ctx.chain.latestNumber.bnStr,
               target=ctx.subState.head.bnStr,
@@ -173,6 +174,7 @@ template blocksCollect*(
         chronicles.info "Imported blocks", nImported,
           nUnproc=ctx.nUnprocStr(),
           nStagedQ=ctx.blk.staged.len,
+          eta=ctx.pool.syncEta.avg.toStr,
           base=ctx.chain.baseNumber.bnStr,
           head=ctx.chain.latestNumber.bnStr,
           target=ctx.subState.head.bnStr,
@@ -234,10 +236,11 @@ template blocksUnstage*(
     var
       peer {.inject.} = buddy.peer
       nImported {.inject.} = 0u64                  # statistics
+      nUnstaged  {.inject.} = 0                    # ditto
       importedOK = false                           # imported some blocks
       switchPeer {.inject.} = false                # for return code
 
-    while ctx.pool.lastState == SyncState.blocks:
+    while ctx.pool.syncState == SyncState.blocks:
 
       # Fetch list with the least block numbers
       let qItem = ctx.blk.staged.ge(0).valueOr:
@@ -259,14 +262,17 @@ template blocksUnstage*(
 
       # Import blocks list, async/template
       nImported += buddy.blocksImport(qItem.data.blocks,qItem.data.peerID, info)
+      nUnstaged.inc
 
       # Sync status logging
       if 0 < nImported:
         importedOK = true
         if ctx.pool.lastSyncUpdLog + syncUpdateLogWaitInterval < Moment.now():
-          chronicles.info "Imported blocks (from queue)", nImported,
+          chronicles.info "Imported blocks", nImported,
             nUnproc=ctx.nUnprocStr(),
             nStagedQ=ctx.blk.staged.len,
+            nUnstaged,
+            eta=ctx.pool.syncEta.avg.toStr,
             base=ctx.chain.baseNumber.bnStr,
             head=ctx.chain.latestNumber.bnStr,
             target=ctx.subState.head.bnStr,
@@ -274,6 +280,7 @@ template blocksUnstage*(
             nSyncPeers=ctx.pool.nBuddies
           ctx.pool.lastSyncUpdLog = Moment.now()
           nImported = 0
+          nUnstaged = 0
 
       # Import probably incomplete, so a partial roll back may be needed
       let lastBn = qItem.data.blocks[^1].header.number
@@ -286,9 +293,11 @@ template blocksUnstage*(
       # Sync status logging
       if 0 < nImported:
         # Note that `nImported` might have been reset above.
-        chronicles.info "Imported blocks (from queue)", nImported,
+        chronicles.info "Imported blocks", nImported,
           nUnproc=ctx.nUnprocStr(),
           nStagedQ=ctx.blk.staged.len,
+          nUnstaged,
+          eta=ctx.pool.syncEta.avg.toStr,
           base=ctx.chain.baseNumber.bnStr,
           head=ctx.chain.latestNumber.bnStr,
           target=ctx.subState.head.bnStr,
@@ -310,7 +319,7 @@ template blocksUnstage*(
 proc blocksStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
   ## Some pool mode intervention.
   ##
-  if ctx.pool.lastState in {blocksCancel,blocksFinish}:
+  if ctx.pool.syncState in {blocksCancel,blocksFinish}:
     trace info & ": Flushing block queues",
       nUnproc=ctx.blocksUnprocTotal(), nStagedQ=ctx.blk.staged.len
 

@@ -126,14 +126,6 @@ proc replayBlock(fc: ForkedChainRef;
     parentFrame = parent.txFrame
     txFrame = parentFrame.txFrameBegin()
 
-  # Checkpoint creates a snapshot of ancestor changes in txFrame - it is an
-  # expensive operation, specially when creating a new branch (ie when blk
-  # is being applied to a block that is currently not a head).
-  # Create the snapshot before processing the block so that any vertexes in snapshots
-  # from lower levels than the baseTxFrame are removed from the snapshot before running
-  # the stateroot computation.
-  parentFrame.checkpoint(parent.blk.header.number, skipSnapshot = false)
-
   # Set finalized to true in order to skip the stateroot check when replaying the
   # block because the blocks should have already been checked previously during
   # the initial block execution.
@@ -142,6 +134,11 @@ proc replayBlock(fc: ForkedChainRef;
     return err(error)
 
   fc.writeBaggage(blk.blk, blk.hash, txFrame, receipts)
+
+  # Checkpoint creates a snapshot of ancestor changes in txFrame - it is an
+  # expensive operation, specially when creating a new branch (ie when blk
+  # is being applied to a block that is currently not a head).
+  txFrame.checkpoint(blk.header.number, skipSnapshot = false)
 
   blk.txFrame = txFrame
   blk.receipts = move(receipts)

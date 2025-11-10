@@ -105,7 +105,7 @@ type
 func setForkId(com: CommonRef, genesis: Header) =
   com.genesisHash = genesis.computeBlockHash
   let genesisCRC = crc32(0, com.genesisHash.data)
-  com.forkIdCalculator = initForkIdCalculator(
+  com.forkIdCalculator = ForkIdCalculator.init(
     com.forkTransitionTable,
     genesisCRC,
     genesis.timestamp.uint64)
@@ -350,20 +350,26 @@ func isLondonOrLater*(com: CommonRef, number: BlockNumber): bool =
   # TODO: Fixme, use only London comparator
   com.toHardFork(number.forkDeterminationInfo) >= London
 
-func forkId*(com: CommonRef, head, time: uint64): ForkID {.gcsafe.} =
-  ## EIP 2364/2124
-  com.forkIdCalculator.newID(head, time)
+func forkId*(com: CommonRef, head, time: uint64): ForkId {.gcsafe.} =
+  ## Get ForkId for given block number / timestamp (EIP-2124/2364/6122)
+  com.forkIdCalculator.calculateForkId(head, time)
 
-func forkId*(com: CommonRef, forkActivationTime: EthTime): ForkID {.gcsafe.} =
-  # Only works for timestamp based forks
-  com.forkIdCalculator.newID(0'u64, forkActivationTime.uint64)
+func forkId*(com: CommonRef, forkActivationTime: EthTime): ForkId {.gcsafe.} =
+  ## Get ForkId for given timestamp (EIP-2124/2364/6122)
+  ## Only works for timestamp based forks
+  # For `calculateForkId` with timestamp the block number needs to be set sufficiently
+  # high to include all block number based forks.
+  # It could be set to `blockNumberThresholds[GrayGlacier]` but then the code needs to
+  # deal with possible Opt.none(), so instead set to uint64.high()
+  com.forkIdCalculator.calculateForkId(uint64.high(), forkActivationTime.uint64)
 
-func forkId*(com: CommonRef, head: BlockNumber, time: EthTime): ForkID {.gcsafe.} =
-  ## EIP 2364/2124
-  com.forkIdCalculator.newID(head, time.uint64)
+func forkId*(com: CommonRef, head: BlockNumber, time: EthTime): ForkId {.gcsafe.} =
+  ## Get ForkId for given block number / timestamp (EIP-2124/2364/6122)
+  com.forkIdCalculator.calculateForkId(head, time.uint64)
 
-func compatibleForkId*(com: CommonRef, id: ForkID): bool =
-  com.forkIdCalculator.compatible(id)
+func compatibleForkId*(com: CommonRef, forkId: ForkId, blockNumber: BlockNumber, time: EthTime): bool =
+  ## Check if a fork ID is compatible at a specific head position
+  com.forkIdCalculator.compatible(forkId, blockNumber, time.uint64)
 
 func isEIP155*(com: CommonRef, number: BlockNumber): bool =
   com.config.eip155Block.isSome and number >= com.config.eip155Block.value

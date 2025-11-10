@@ -19,7 +19,6 @@ import
   eth/enode/enode_utils,
   ./discoveryv5,
   ./discoveryv4,
-  ./chain_forkid,
   ./bootnodes
 
 export
@@ -40,7 +39,7 @@ type
   AddressV4 = discoveryv4.Address
   AddressV5 = discoveryv5.Address
 
-  CompatibleForkIdProc* = proc(id: ForkID): bool {.noSideEffect, raises: [].}
+  CompatibleForkIdProc* = proc(id: ForkId): bool {.noSideEffect, raises: [].}
 
   Eth1Discovery* = ref object
     discv4: DiscV4
@@ -106,12 +105,12 @@ func eligibleNode(proto: Eth1Discovery, rec: Record): bool =
   let
     ethValue =
       try:
-        rlp.decode(bytes, array[1, ChainForkId])
+        rlp.decode(bytes, array[1, ForkId])
       except RlpError:
         return false
-    chainForkId  = ethValue[0]
+    forkId  = ethValue[0]
 
-  proto.compatibleForkId(chainForkId.to(ForkID))
+  proto.compatibleForkId(forkId)
 
 #------------------------------------------------------------------------------
 # Public functions
@@ -225,11 +224,11 @@ proc getRandomBootnode*(proto: Eth1Discovery): Opt[NodeV4] =
           return Opt.none(NodeV4)
       return Opt.some(newNode(enode))
 
-func updateForkID*(proto: Eth1Discovery, forkId: ForkID) =
+func updateForkId*(proto: Eth1Discovery, forkId: ForkId) =
   # https://github.com/ethereum/devp2p/blob/bc76b9809a30e6dc5c8dcda996273f0f9bcf7108/enr-entries/eth.md
   if proto.discv5.isNil.not:
     let
-      list = [forkId.to(ChainForkId)]
+      list = [forkId]
       bytes = rlp.encode(list)
       kv = ("eth", bytes)
     proto.discv5.updateRecord([kv]).isOkOr:
