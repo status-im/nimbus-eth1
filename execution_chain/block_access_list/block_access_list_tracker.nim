@@ -63,7 +63,7 @@ type
     callFrameSnapshots: seq[CallFrameSnapshot]
       ## Stack of snapshots for nested call frames to handle reverts properly.
 
-proc init*(T: type CallFrameSnapshot): T =
+proc init(T: type CallFrameSnapshot): T =
   CallFrameSnapshot()
 
 # Disallow copying of CallFrameSnapshot
@@ -83,7 +83,7 @@ proc setBlockAccessIndex*(tracker: StateChangeTrackerRef, blockAccessIndex: int)
   ##   - 0: Pre-execution (system contracts like beacon roots, block hashes)
   ##   - 1..n: Transactions (tx at index i gets block_access_index i+1)
   ##   - n+1: Post-execution (withdrawals, requests)
-  doAssert blockAccessIndex >= 0
+  doAssert blockAccessIndex >= int(uint16.low) and blockAccessIndex <= int(uint16.high)
 
   tracker.currentBlockAccessIndex = blockAccessIndex
   tracker.preStorageCache.clear()
