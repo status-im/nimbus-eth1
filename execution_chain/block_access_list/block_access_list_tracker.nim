@@ -243,24 +243,24 @@ proc normalizeBalanceChanges*(tracker: StateChangeTrackerRef) =
       # Filter out balance changes from the current transaction
       accData.balanceChanges.del(currentIndex)
 
-template popSnapshot(tracker: StateChangeTrackerRef) =
-  tracker.callFrameSnapshots.setLen(tracker.callFrameSnapshots.high)
-
 proc beginCallFrame*(tracker: StateChangeTrackerRef) =
   ## Begin a new call frame for tracking reverts.
   ## Creates a new snapshot to track changes within this call frame.
   ## This allows proper handling of reverts as specified in EIP-7928.
   tracker.callFrameSnapshots.add(CallFrameSnapshot.init())
 
-template pendingSnapshot*(tracker: StateChangeTrackerRef): CallFrameSnapshot =
+template pendingCallFrame*(tracker: StateChangeTrackerRef): CallFrameSnapshot =
   tracker.callFrameSnapshots[tracker.callFrameSnapshots.high]
+
+template popCallFrame(tracker: StateChangeTrackerRef) =
+  tracker.callFrameSnapshots.setLen(tracker.callFrameSnapshots.high)
 
 proc commitCallFrame*(tracker: StateChangeTrackerRef) =
   # Commit changes from the current call frame.
   # Removes the current call frame snapshot without rolling back changes.
   # Called when a call completes successfully.
   doAssert tracker.callFrameSnapshots.len() > 0
-  tracker.popSnapshot()
+  tracker.popCallFrame()
 
 proc rollbackCallFrame*(tracker: StateChangeTrackerRef) =
   ## Rollback changes from the current call frame.
@@ -272,11 +272,11 @@ proc rollbackCallFrame*(tracker: StateChangeTrackerRef) =
   ## become reads and addresses remain in the access list.
   doAssert tracker.callFrameSnapshots.len() > 0
 
-  template snapshot(): auto = tracker.pendingSnapshot()
+  template pendingCallFrame(): auto = tracker.pendingCallFrame()
   let currentIndex = tracker.currentBlockAccessIndex
 
   # Convert storage writes to reads
-  for key in snapshot.storageWrites.keys():
+  for key in pendingCallFrame.storageWrites.keys():
     let (address, slot) = key
 
     tracker.builder.accounts.withValue(address, accData):
@@ -288,7 +288,7 @@ proc rollbackCallFrame*(tracker: StateChangeTrackerRef) =
           accData[].storageReads.incl(slot) # Add as a read instead
 
   # Remove balance changes from this call frame
-  for change in snapshot.balanceChanges:
+  for change in pendingCallFrame.balanceChanges:
     let (address, blockAccessIndex, newBalance) = change
 
     tracker.builder.accounts.withValue(address, accData):
@@ -298,7 +298,7 @@ proc rollbackCallFrame*(tracker: StateChangeTrackerRef) =
           accData[].balanceChanges.del(currentIndex)
 
   # Remove nonce changes from this call frame
-  for change in snapshot.nonceChanges:
+  for change in pendingCallFrame.nonceChanges:
     let (address, blockAccessIndex, newNonce) = change
 
     tracker.builder.accounts.withValue(address, accData):
@@ -308,7 +308,7 @@ proc rollbackCallFrame*(tracker: StateChangeTrackerRef) =
           accData[].nonceChanges.del(currentIndex)
 
   # Remove code changes from this call frame
-  for change in snapshot.codeChanges:
+  for change in pendingCallFrame.codeChanges:
     let (address, blockAccessIndex, newCode) = change
 
     tracker.builder.accounts.withValue(address, accData):
@@ -319,4 +319,4 @@ proc rollbackCallFrame*(tracker: StateChangeTrackerRef) =
 
   # All touched addresses remain in the access list (already tracked)
 
-  tracker.popSnapshot()
+  tracker.popCallFrame()
