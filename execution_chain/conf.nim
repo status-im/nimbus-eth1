@@ -370,7 +370,7 @@ type
 
     deserializeFcState* {.
       hidden
-      defaultValue: true
+      defaultValue: false
       name: "debug-deserialize-fc-state" .}: bool
 
     statelessProviderEnabled* {.
