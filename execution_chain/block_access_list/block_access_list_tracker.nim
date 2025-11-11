@@ -22,19 +22,19 @@ type
   # Snapshot of block access list state for a single call frame.
   # Used to track changes within a call frame to enable proper handling
   # of reverts as specified in EIP-7928.
-  CallFrameSnapshot = object # should this be a ref object?
-    touchedAddresses: HashSet[Address]
+  CallFrameSnapshot* = object # should this be a ref object?
+    touchedAddresses*: HashSet[Address]
       ## Set of addresses touched during this call frame.
-    storageWrites: Table[(Address, UInt256), UInt256]
+    storageWrites*: Table[(Address, UInt256), UInt256]
       ## Storage writes made during this call frame.
       ## Maps (address, storage key) -> storage value.
-    balanceChanges: HashSet[(Address, int, UInt256)]
+    balanceChanges*: HashSet[(Address, int, UInt256)]
       ## Balance changes made during this call frame.
       ## Set of (address, block access index, balance)
-    nonceChanges: HashSet[(Address, int, AccountNonce)]
+    nonceChanges*: HashSet[(Address, int, AccountNonce)]
       ## Nonce changes made during this call frame.
       ## Set of (address, block access index, nonce)
-    codeChanges: HashSet[(Address, int, seq[byte])]
+    codeChanges*: HashSet[(Address, int, seq[byte])]
       ## Code changes made during this call frame.
       ## Set of (address, block access index, bytecode)
 
@@ -44,23 +44,23 @@ type
   # made during block execution. It ensures that only actual changes (not no-op
   # writes) are recorded in the access list.
   StateChangeTrackerRef* = ref object
-    ledger: ReadOnlyLedger
+    ledger*: ReadOnlyLedger
       ## Used to fetch the pre-transaction values from the state.
-    builder: BlockAccessListBuilderRef
+    builder*: BlockAccessListBuilderRef
       ## The builder instance that accumulates all tracked changes.
-    preStorageCache: Table[(Address, UInt256), UInt256]
+    preStorageCache*: Table[(Address, UInt256), UInt256]
       ## Cache of pre-transaction storage values, keyed by (address, slot) tuples.
       ## This cache is cleared at the start of each transaction to track values
       ## from the beginning of the current transaction.
-    preBalanceCache: Table[Address, UInt256]
+    preBalanceCache*: Table[Address, UInt256]
       ## Cache of pre-transaction balance values, keyed by address.
       ## This cache is cleared at the start of each transaction and used by
       ## normalize_balance_changes to filter out balance changes where
       ## the final balance equals the initial balance.
-    currentBlockAccessIndex: int
+    currentBlockAccessIndex*: int
       ## The current block access index (0 for pre-execution,
       ## 1..n for transactions, n+1 for post-execution).
-    callFrameSnapshots: seq[CallFrameSnapshot]
+    callFrameSnapshots*: seq[CallFrameSnapshot]
       ## Stack of snapshots for nested call frames to handle reverts properly.
 
 proc init(T: type CallFrameSnapshot): T =
@@ -243,11 +243,24 @@ proc normalizeBalanceChanges*(tracker: StateChangeTrackerRef) =
       # Filter out balance changes from the current transaction
       accData.balanceChanges.del(currentIndex)
 
+template popSnapshot(tracker: StateChangeTrackerRef) =
+  tracker.callFrameSnapshots.setLen(tracker.callFrameSnapshots.high)
+
 proc beginCallFrame*(tracker: StateChangeTrackerRef) =
   ## Begin a new call frame for tracking reverts.
   ## Creates a new snapshot to track changes within this call frame.
   ## This allows proper handling of reverts as specified in EIP-7928.
   tracker.callFrameSnapshots.add(CallFrameSnapshot.init())
+
+template pendingSnapshot*(tracker: StateChangeTrackerRef): CallFrameSnapshot =
+  tracker.callFrameSnapshots[tracker.callFrameSnapshots.high]
+
+proc commitCallFrame*(tracker: StateChangeTrackerRef) =
+  # Commit changes from the current call frame.
+  # Removes the current call frame snapshot without rolling back changes.
+  # Called when a call completes successfully.
+  doAssert tracker.callFrameSnapshots.len() > 0
+  tracker.popSnapshot()
 
 proc rollbackCallFrame*(tracker: StateChangeTrackerRef) =
   ## Rollback changes from the current call frame.
@@ -259,9 +272,8 @@ proc rollbackCallFrame*(tracker: StateChangeTrackerRef) =
   ## become reads and addresses remain in the access list.
   doAssert tracker.callFrameSnapshots.len() > 0
 
-  let
-    currentIndex = tracker.currentBlockAccessIndex
-    snapshot = tracker.callFrameSnapshots.pop()
+  template snapshot(): auto = tracker.pendingSnapshot()
+  let currentIndex = tracker.currentBlockAccessIndex
 
   # Convert storage writes to reads
   for key in snapshot.storageWrites.keys():
@@ -307,9 +319,4 @@ proc rollbackCallFrame*(tracker: StateChangeTrackerRef) =
 
   # All touched addresses remain in the access list (already tracked)
 
-proc commitCallFrame*(tracker: StateChangeTrackerRef) =
-  # Commit changes from the current call frame.
-  # Removes the current call frame snapshot without rolling back changes.
-  # Called when a call completes successfully.
-  if tracker.callFrameSnapshots.len() > 0:
-    discard tracker.callFrameSnapshots.pop()
+  tracker.popSnapshot()
