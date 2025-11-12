@@ -78,6 +78,7 @@ suite "Block access list tracker":
       tracker.setBlockAccessIndex(balIndex)
       tracker.beginCallFrame()
       tracker.trackBalanceChange(address1, balance1 + 1.u256)
+      tracker.commitCallFrame()
 
       check builder.accounts.contains(address1)
       builder.accounts.withValue(address1, accData):
@@ -183,15 +184,18 @@ suite "Block access list tracker":
 
     check not builder.accounts.contains(address2)
     tracker.trackBalanceChange(address2, newBalance)
-    check builder.accounts.contains(address2)
 
+    check:
+      tracker.pendingCallFrame().balanceChanges.contains(address2)
+      tracker.pendingCallFrame().balanceChanges.getOrDefault(address2) == newBalance
+
+    tracker.commitCallFrame()
+
+    check builder.accounts.contains(address2)
     tracker.builder.accounts.withValue(address2, accData):
       check:
         accData[].balanceChanges.contains(balIndex)
         accData[].balanceChanges.getOrDefault(balIndex) == newBalance
-    check:
-      tracker.pendingCallFrame().balanceChanges.contains(address2)
-      tracker.pendingCallFrame().balanceChanges.getOrDefault(address2) == newBalance
 
   test "Track nonce change":
     let
@@ -204,15 +208,18 @@ suite "Block access list tracker":
 
     check not builder.accounts.contains(address2)
     tracker.trackNonceChange(address2, newNonce)
-    check builder.accounts.contains(address2)
 
+    check:
+      tracker.pendingCallFrame().nonceChanges.contains(address2)
+      tracker.pendingCallFrame().nonceChanges.getOrDefault(address2) == newNonce
+
+    tracker.commitCallFrame()
+
+    check builder.accounts.contains(address2)
     tracker.builder.accounts.withValue(address2, accData):
       check:
         accData[].nonceChanges.contains(balIndex)
         accData[].nonceChanges.getOrDefault(balIndex) == newNonce
-    check:
-      tracker.pendingCallFrame().nonceChanges.contains(address2)
-      tracker.pendingCallFrame().nonceChanges.getOrDefault(address2) == newNonce
 
   test "Track code change":
     let
@@ -225,15 +232,18 @@ suite "Block access list tracker":
 
     check not builder.accounts.contains(address2)
     tracker.trackCodeChange(address2, newCode)
-    check builder.accounts.contains(address2)
 
+    check:
+      tracker.pendingCallFrame().codeChanges.contains(address2)
+      tracker.pendingCallFrame().codeChanges.getOrDefault(address2) == newCode
+
+    tracker.commitCallFrame()
+
+    check builder.accounts.contains(address2)
     tracker.builder.accounts.withValue(address2, accData):
       check:
         accData[].codeChanges.contains(balIndex)
         accData[].codeChanges.getOrDefault(balIndex) == newCode
-    check:
-      tracker.pendingCallFrame().codeChanges.contains(address2)
-      tracker.pendingCallFrame().codeChanges.getOrDefault(address2) == newCode
 
   test "Track storage read":
     block:
@@ -269,7 +279,12 @@ suite "Block access list tracker":
     tracker.setBlockAccessIndex(balIndex)
     tracker.beginCallFrame()
     tracker.trackStorageWrite(address1, slot1, postStateValue)
-    check tracker.callFrameSnapshots.len() == 1
+
+    check:
+      tracker.pendingCallFrame().storageChanges.contains((address1, slot1))
+      tracker.pendingCallFrame().storageChanges.getOrDefault((address1, slot1)) == postStateValue
+
+    tracker.commitCallFrame()
 
     check:
       builder.accounts.contains(address1)
@@ -280,10 +295,6 @@ suite "Block access list tracker":
       check accData[].storageChanges.contains(slot1)
       accData[].storageChanges.getOrDefault(slot1).withValue(balIndex, slotValue):
         check slotValue == postStateValue
-
-    check:
-      tracker.pendingCallFrame().storageChanges.contains((address1, slot1))
-      tracker.pendingCallFrame().storageChanges.getOrDefault((address1, slot1)) == postStateValue
 
   test "Track storage write - pre-state value is equal to post state value":
     let
@@ -298,7 +309,10 @@ suite "Block access list tracker":
     tracker.setBlockAccessIndex(balIndex)
     tracker.beginCallFrame()
     tracker.trackStorageWrite(address2, slot2, postStateValue)
-    check tracker.callFrameSnapshots.len() == 1
+
+    check tracker.pendingCallFrame().storageChanges.contains((address2, slot2))
+
+    tracker.commitCallFrame()
 
     check:
       builder.accounts.contains(address2)
@@ -307,10 +321,8 @@ suite "Block access list tracker":
 
     tracker.builder.accounts.withValue(address2, accData):
       check:
-        accData[].storageChanges.contains(slot2)
-        not accData[].storageReads.contains(slot2)
-
-    check tracker.pendingCallFrame().storageChanges.contains((address2, slot2))
+        not accData[].storageChanges.contains(slot2)
+        accData[].storageReads.contains(slot2)
 
   test "Handle in transaction self destruct":
     let balIndex = 10
@@ -320,90 +332,31 @@ suite "Block access list tracker":
     tracker.setBlockAccessIndex(balIndex)
     tracker.beginCallFrame()
     tracker.trackStorageWrite(address1, slot1, 200_000.u256)
+    tracker.trackBalanceChange(address1, balance1 + 2.u256)
     tracker.trackNonceChange(address1, 200.AccountNonce)
     tracker.trackCodeChange(address1, @[0x123.byte])
 
-    check builder.accounts.contains(address1)
-    tracker.builder.accounts.withValue(address1, accData):
-      check:
-        slot1 in accData[].storageChanges
-        accData[].storageChanges.getOrDefault(slot1).getOrDefault(balIndex) == 200_000.u256
-        slot1 notin accData[].storageReads
-        balIndex in accData[].nonceChanges
-        balIndex in accData[].codeChanges
+    check:
+      tracker.pendingCallFrame().storageChanges.contains((address1, slot1))
+      tracker.pendingCallFrame().balanceChanges.contains(address1)
+      tracker.pendingCallFrame().nonceChanges.contains(address1)
+      tracker.pendingCallFrame().codeChanges.contains(address1)
 
     tracker.handleInTransactionSelfDestruct(address1)
+
+    check:
+      not tracker.pendingCallFrame().storageChanges.contains((address1, slot1))
+      not tracker.pendingCallFrame().balanceChanges.contains(address1)
+      not tracker.pendingCallFrame().nonceChanges.contains(address1)
+      not tracker.pendingCallFrame().codeChanges.contains(address1)
+
+    tracker.commitCallFrame()
 
     check builder.accounts.contains(address1)
     tracker.builder.accounts.withValue(address1, accData):
       check:
         slot1 notin accData[].storageChanges
         slot1 in accData[].storageReads
+        balIndex notin accData[].balanceChanges
         balIndex notin accData[].nonceChanges
         balIndex notin accData[].codeChanges
-
-  # test "Normalize balance changes":
-  #   let balIndex = 20
-
-  #   check not builder.accounts.contains(address1)
-  #   check not builder.accounts.contains(address2)
-  #   check not builder.accounts.contains(address3)
-
-  #   tracker.setBlockAccessIndex(balIndex)
-  #   # Set balance to different value
-  #   tracker.trackBalanceChange(address1, balance1 + 1.u256)
-  #   # Set balance to the existing value
-  #   tracker.trackBalanceChange(address2, balance2)
-  #   # Set balance to different value then back to original value
-  #   tracker.trackBalanceChange(address3, balance3 + 1.u256)
-  #   tracker.trackBalanceChange(address3, balance3)
-
-  #   check builder.accounts.contains(address1)
-  #   check builder.accounts.contains(address2)
-  #   check builder.accounts.contains(address3)
-  #   tracker.builder.accounts.withValue(address1, accData):
-  #     check:
-  #       accData[].balanceChanges.contains(balIndex)
-  #       accData[].balanceChanges.getOrDefault(balIndex) == balance1 + 1.u256
-  #   tracker.builder.accounts.withValue(address2, accData):
-  #     check not accData[].balanceChanges.contains(balIndex)
-  #   tracker.builder.accounts.withValue(address3, accData):
-  #     check:
-  #       accData[].balanceChanges.contains(balIndex)
-  #       accData[].balanceChanges.getOrDefault(balIndex) == balance3 + 1.u256
-
-  #   tracker.normalizeBalanceChanges()
-
-  #   check builder.accounts.contains(address1)
-  #   check builder.accounts.contains(address2)
-  #   check builder.accounts.contains(address3)
-  #   tracker.builder.accounts.withValue(address1, accData):
-  #     check:
-  #       accData[].balanceChanges.contains(balIndex)
-  #       accData[].balanceChanges.getOrDefault(balIndex) == balance1 + 1.u256
-  #   tracker.builder.accounts.withValue(address2, accData):
-  #     check not accData[].balanceChanges.contains(balIndex)
-  #   tracker.builder.accounts.withValue(address3, accData):
-  #     check not accData[].balanceChanges.contains(balIndex)
-
-    #     balance1 = 10.u256()
-    # balance2 = 20.u256()
-    # balance3 = 30.u256()
-
-# proc normalizeBalanceChanges*(tracker: StateChangeTrackerRef) =
-
-  # let currentIndex = tracker.currentBlockAccessIndex
-  # # Check each address that had balance changes in this transaction
-  # for address, accData in tracker.builder.accounts.mpairs():
-  #   let
-  #     preBalance = tracker.getPreBalance(address)
-  #     postBalance = tracker.ledger.getBalance(address)
-
-  #   # If pre-tx balance equals post-tx balance, remove all balance changes
-  #   # for this address in the current transaction
-  #   if preBalance == postBalance:
-  #     # Filter out balance changes from the current transaction
-  #     accData.balanceChanges.del(currentIndex)
-
-
-# proc rollbackCallFrame*(tracker: StateChangeTrackerRef) =
