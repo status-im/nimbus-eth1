@@ -421,7 +421,7 @@
           "useBackend": false
         }
       ],
-      "title": "Buddies vs Block Import and Staged Header Lists",
+      "title": "Sync Peers vs Block and Staged Header Lists",
       "transparent": true,
       "type": "timeseries"
     },
@@ -816,7 +816,7 @@
           "useBackend": false
         }
       ],
-      "title": "Additional RLPX Connections (non-Buddies)",
+      "title": "Additional RLPX Connections",
       "transparent": true,
       "type": "timeseries"
     },
