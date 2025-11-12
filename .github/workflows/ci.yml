@@ -78,6 +78,7 @@ jobs:
           DEFAULT_MAKE_FLAGS="-j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache"
           if [[ '${{ matrix.os }}' == 'linux' ] && [ '${{ matrix.cpu }}' == 'arm64' ]]; then
             make ${DEFAULT_MAKE_FLAGS} rocksdb
+          fi
           make ${DEFAULT_MAKE_FLAGS} all test_import build_fuzzers check_revision
           # clear some space
           find . -type d -name "nimcache" -exec rm -rf {} +
