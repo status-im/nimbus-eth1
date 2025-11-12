@@ -176,7 +176,7 @@ proc key(peer: Peer): Hash =
   h = h !& hashes.hash(peer.remote.node.address)
   !$h
 
-proc getPeerFn[S,W](dsc: RunnerSyncRef[S,W]): GetPeerFn[S,W] =
+proc getSyncPeerFn[S,W](dsc: RunnerSyncRef[S,W]): GetSyncPeerFn[S,W] =
   ## Get particular active syncer peer (aka buddy)
   result = proc(peerID: Hash): BuddyRef[S,W] =
     dsc.syncPeers.peek(peerID).isErrOr:
@@ -185,7 +185,7 @@ proc getPeerFn[S,W](dsc: RunnerSyncRef[S,W]): GetPeerFn[S,W] =
       return value.worker
     # BuddyRef[S,W](nil)
 
-proc getPeersFn[S,W](dsc: RunnerSyncRef[S,W]): GetPeersFn[S,W] =
+proc getSyncPeersFn[S,W](dsc: RunnerSyncRef[S,W]): GetSyncPeersFn[S,W] =
   ## Get a list of descriptor all active syncer peers (aka buddies)
   result = proc(): seq[BuddyRef[S,W]] =
     var list: seq[BuddyRef[S,W]]
@@ -593,9 +593,9 @@ proc initSync*[S,W](
   dsc.zombies = ZombiePeers.init dsc.orphans.capacity
 
   dsc.ctx = CtxRef[S,W](
-    node:     node,
-    getPeer:  dsc.getPeerFn(),
-    getPeers: dsc.getPeersFn())
+    node:         node,
+    getSyncPeer:  dsc.getSyncPeerFn(),
+    getSyncPeers: dsc.getSyncPeersFn())
 
 
 proc startSync*[S,W](dsc: RunnerSyncRef[S,W]): bool =

@@ -60,7 +60,7 @@ func classifyForFetching*(buddy: BeaconBuddyRef): PeerRanking =
     # Get number of peers with poorer header throughput. This results in a
     # ranking of the sync peers where a high rank is preferable.
     let (bSum, bSamples) = (buddy.hdr.sum, buddy.hdr.samples.float)
-    for w in buddy.ctx.getPeers():
+    for w in buddy.ctx.getSyncPeers():
       if buddy.peerID != w.peerID and
          # Mind fringe case when most higher throughputs are equal in which
          # case all ranks must be the topmost rank (i.e. `<=`, here.)
@@ -85,7 +85,7 @@ func classifyForFetching*(buddy: BeaconBuddyRef): PeerRanking =
       return (rankingTooLow, 0)
 
     let (bSum, bSamples) = (buddy.blk.sum, buddy.blk.samples.float)
-    for w in buddy.ctx.getPeers():
+    for w in buddy.ctx.getSyncPeers():
       if buddy.peerID != w.peerID and
          w.blk.sum * bSamples <= bSum * w.blk.samples.float:
         ranking.inc

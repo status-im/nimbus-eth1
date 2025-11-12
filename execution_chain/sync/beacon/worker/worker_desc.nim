@@ -220,9 +220,9 @@ func nErrors*(buddy: BeaconBuddyRef): var BuddyErrors =
   ## Shortcut
   buddy.only.nErrors
 
-proc getPeer*(buddy: BeaconBuddyRef; peerID: Hash): BeaconBuddyRef =
+proc getSyncPeer*(buddy: BeaconBuddyRef; peerID: Hash): BeaconBuddyRef =
   ## Getter, retrieve syncer peer (aka buddy) by `peerID` argument
-  if buddy.peerID == peerID: buddy else: buddy.ctx.getPeer peerID
+  if buddy.peerID == peerID: buddy else: buddy.ctx.getSyncPeer peerID
 
 # -----
 

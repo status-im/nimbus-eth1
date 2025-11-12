@@ -101,7 +101,7 @@ proc headersStashOnDisk*(
 
   if rc.isErr:
     # Mark peer that produced that unusable headers list as a zombie
-    let srcPeer = buddy.getPeer peerID
+    let srcPeer = buddy.getSyncPeer peerID
     if not srcPeer.isNil:
       srcPeer.only.nErrors.apply.hdr = nProcHeadersErrThreshold + 1
 
@@ -139,7 +139,7 @@ proc headersStashOnDisk*(
     base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
     target=ctx.subState.head.bnStr, targetHash=ctx.subState.headHash.short
 
-  let srcPeer = buddy.getPeer peerID
+  let srcPeer = buddy.getSyncPeer peerID
   if not srcPeer.isNil:
     srcPeer.only.nErrors.apply.hdr = 0           # reset error count
 

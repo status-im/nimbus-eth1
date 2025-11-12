@@ -215,7 +215,7 @@ template blocksImport*(
             isError = true
 
             # Mark peer that produced that unusable headers list as a zombie
-            let srcPeer = buddy.getPeer peerID
+            let srcPeer = buddy.getSyncPeer peerID
             if not srcPeer.isNil:
               srcPeer.only.nErrors.apply.blk = nProcBlocksErrThreshold + 1
 
@@ -263,7 +263,7 @@ template blocksImport*(
         # End block: `loop`
 
     if not isError:
-      let srcPeer = buddy.getPeer peerID
+      let srcPeer = buddy.getSyncPeer peerID
       if not srcPeer.isNil:
         srcPeer.only.nErrors.apply.blk = 0
 

@@ -20,12 +20,12 @@ import
   ../networking/p2p
 
 type
-  GetPeerFn*[S,W] = proc(peerID: Hash): BuddyRef[S,W] {.gcsafe, raises: [].}
+  GetSyncPeerFn*[S,W] = proc(peerID: Hash): BuddyRef[S,W] {.gcsafe, raises: [].}
     ## Get other active syncer peers (aka buddy) by its ID. This peer
     ## will not be returned unless the `runStart()` directive for this
     ## paricular peer (with `peerID` as ID) has returned `true`.
 
-  GetPeersFn*[S,W] = proc(): seq[BuddyRef[S,W]] {.gcsafe, raises: [].}
+  GetSyncPeersFn*[S,W] = proc(): seq[BuddyRef[S,W]] {.gcsafe, raises: [].}
     ## Get the list of descriptors for all active syncer peers (aka buddies).
     ## The peers returned are all the peers where the `runStart()` directive
     ## has returned `true` (see `GetPeerFn`.)
@@ -50,9 +50,9 @@ type
 
   CtxRef*[S,W] = ref object
     ## Shared state among all syncing peer workers (aka buddies.)
+    getSyncPeer*: GetSyncPeerFn[S,W]
+    getSyncPeers*: GetSyncPeersFn[S,W]
     node*: EthereumNode         ## Own network identity
-    getPeer*: GetPeerFn[S,W]    ## Get other buddy
-    getPeers*: GetPeersFn[S,W]  ## Get list of all buddy descriptors
     noisyLog*: bool             ## Hold back `trace` and `debug` msgs if `false`
     poolMode*: bool             ## Activate `runPool()` workers if set `true`
     daemon*: bool               ## Enable global background job
