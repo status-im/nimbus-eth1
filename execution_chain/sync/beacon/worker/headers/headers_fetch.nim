@@ -22,6 +22,24 @@ import
 # Private helpers
 # ------------------------------------------------------------------------------
 
+proc maybeSlowPeerError(
+    buddy: BeaconBuddyRef;
+    elapsed: Duration;
+    bn: BlockNumber;
+      ): bool =
+  ## Register slow response, definitely not fast enough
+  if fetchHeadersErrTimeout <= elapsed:
+    buddy.hdrFetchRegisterError(slowPeer=true)
+
+    # Do not repeat the same time-consuming failed request
+    buddy.only.failedReq = BuddyFirstFetchReq(
+      state:       SyncState.headers,
+      blockNumber: bn)
+
+    return true
+
+  # false
+
 proc getBlockHeaders(
     buddy: BeaconBuddyRef;
     req: BlockHeadersRequest;
@@ -117,16 +135,19 @@ template fetchHeadersReversed*(
         chronicles.info trEthRecvReceivedBlockHeaders & ": error", peer,
           req=ivReq, nReq=req.maxResults, hash=topHash.toStr,
           ela=rc.error.elapsed.toStr, state=($buddy.syncState),
-          error=rc.error.name, msg=rc.error.msg,
+          errorClass=rc.error.excp, error=rc.error.name, msg=rc.error.msg,
           nErrors=buddy.nErrors.fetch.hdr
         break body                                 # return err()
 
     # Evaluate result
     if rc.isErr or buddy.ctrl.stopped:
-      buddy.hdrFetchRegisterError()
+      if not buddy.maybeSlowPeerError(elapsed, BlockNumber ivReq.maxPt):
+        buddy.hdrFetchRegisterError()
       trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
         hash=topHash.toStr, nResp=0, ela=elapsed.toStr,
-        state=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
+        state=($buddy.syncState),
+        errorClass=(if rc.isErr: $rc.error.excp else: "n/a"),
+        nErrors=buddy.nErrors.fetch.hdr
       break body                                   # return err()
 
     # Verify the correct number of block headers received
@@ -141,13 +162,7 @@ template fetchHeadersReversed*(
         buddy.hdrNoSampleSize(elapsed)
 
         # Slow response, definitely not fast enough
-        if fetchHeadersErrTimeout <= elapsed:
-          buddy.hdrFetchRegisterError(slowPeer=true)
-
-          # Do not repeat the same time-consuming failed request
-          buddy.only.failedReq = BuddyFirstFetchReq(
-            state:       SyncState.headers,
-            blockNumber: BlockNumber ivReq.maxPt)
+        discard buddy.maybeSlowPeerError(elapsed, BlockNumber ivReq.maxPt)
 
       trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
         hash=topHash.toStr, nResp=h.len, ela=elapsed.toStr,

@@ -163,6 +163,7 @@ type
     headerTime: float                ## Nanosecs per header (inverse velocity)
     blockTime: float                 ## Nanosecs per block (inverse velocity)
     lastUpdate: chronos.Moment       ## Needed to keep samples apart, timewise
+    inSync: bool                     ## Change `avg` & `latest` display
     etaInx: int                      ## Round robin index for `eta[]`
     etaRr: array[etaAvgPoints,float] ## Estimated ETA sample points
 
@@ -307,6 +308,8 @@ func avg*(w: SyncEta): chronos.Duration =
   ## Get the avaerage of the round robin register
   if low(Moment) < w.lastUpdate:
     nanoseconds(w.etaRr.foldl(a + b / w.etaRr.len.float, 0f).int64)
+  elif w.inSync:
+    0.nanoseconds
   else:
     twoHundredYears
 
@@ -314,6 +317,8 @@ func latest*(w: SyncEta): chronos.Duration =
   ## Get the latest ETA entry
   if low(Moment) < w.lastUpdate:
     nanoseconds w.etaRr[w.etaInx].int64
+  elif w.inSync:
+    0.nanoseconds
   else:
     twoHundredYears
 
@@ -327,6 +332,7 @@ proc add*(w: var SyncEta; value: float) =
   elif low(Moment) < w.lastUpdate:
     w.lastUpdate = Moment.now()
   w.etaRr[w.etaInx] = value
+  w.inSync = false
 
 # ------------------------------------------------------------------------------
 # End

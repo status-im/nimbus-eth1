@@ -22,6 +22,25 @@ import
 # Private helpers
 # -----------------------------------------------------------------------------
 
+proc maybeSlowPeerError(
+    buddy: BeaconBuddyRef;
+    elapsed: Duration;
+    hash: Hash32;
+      ): bool =
+  ## Register slow response, definitely not fast enough
+  if fetchBodiesErrTimeout <= elapsed:
+    buddy.bdyFetchRegisterError(slowPeer=true)
+
+    # Do not repeat the same time-consuming failed request
+    buddy.only.failedReq = BuddyFirstFetchReq(
+      state:     SyncState.blocks,
+      blockHash: hash)
+
+    return true
+
+  # false
+
+
 proc getBlockBodies(
     buddy: BeaconBuddyRef;
     req: BlockBodiesRequest;
@@ -72,8 +91,9 @@ template fetchBodies*(
       peer {.inject,used.} = buddy.peer
       nReq {.inject,used.} = request.blockHashes.len
 
-    trace trEthSendSendingGetBlockBodies,
-      peer, nReq, nErrors=buddy.nErrors.fetch.bdy
+    trace trEthSendSendingGetBlockBodies, peer,
+      startHash=request.blockHashes[0].short, nReq,
+      nErrors=buddy.nErrors.fetch.bdy
 
     let rc = await buddy.getBlockBodies(request)
     var elapsed: Duration
@@ -95,16 +115,21 @@ template fetchBodies*(
           # Just return `failed` (no error count or throughput stats)
           discard
 
-        chronicles.info trEthRecvReceivedBlockBodies & " error", peer, nReq,
+        chronicles.info trEthRecvReceivedBlockBodies & " error", peer,
+          startHash=request.blockHashes[0].short, nReq,
           ela=rc.error.elapsed.toStr, state=($buddy.syncState),
-          error=rc.error.name, msg=rc.error.msg, nErrors=buddy.nErrors.fetch.bdy
+          errorClass=rc.error.excp, error=rc.error.name, msg=rc.error.msg,
+          nErrors=buddy.nErrors.fetch.bdy
         break body                                  # return err()
 
     # Evaluate result
     if rc.isErr or buddy.ctrl.stopped:
-      buddy.bdyFetchRegisterError()
-      trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=0,
+      if not buddy.maybeSlowPeerError(elapsed, request.blockHashes[0]):
+        buddy.bdyFetchRegisterError()
+      trace trEthRecvReceivedBlockBodies, peer,
+        startHash=request.blockHashes[0].short, nReq, nResp=0,
         ela=elapsed.toStr, state=($buddy.syncState),
+        errorClass=(if rc.isErr: $rc.error.excp else: "n/a"),
         nErrors=buddy.nErrors.fetch.bdy
       break body                                    # return err()
 
@@ -120,15 +145,10 @@ template fetchBodies*(
         buddy.blkNoSampleSize(elapsed)
 
         # Slow response, definitely not fast enough
-        if fetchBodiesErrTimeout <= elapsed:
-          buddy.bdyFetchRegisterError(slowPeer=true)
+        discard buddy.maybeSlowPeerError(elapsed, request.blockHashes[0])
 
-          # Do not repeat the same time-consuming failed request
-          buddy.only.failedReq = BuddyFirstFetchReq(
-            state:     SyncState.blocks,
-            blockHash: request.blockHashes[0])
-
-      trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.len,
+      trace trEthRecvReceivedBlockBodies, peer,
+        startHash=request.blockHashes[0].short, nReq, nResp=b.len,
         ela=elapsed.toStr, state=($buddy.syncState),
         nErrors=buddy.nErrors.fetch.bdy
       break body                                    # return err()
@@ -146,7 +166,8 @@ template fetchBodies*(
       buddy.nErrors.fetch.bdy = 0                   # reset error count
       buddy.ctx.pool.lastSlowPeer = Opt.none(Hash)  # not last one or not error
 
-    trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.len,
+    trace trEthRecvReceivedBlockBodies, peer,
+      startHash=request.blockHashes[0].short, nReq, nResp=b.len,
       ela=elapsed.toStr, thPut=(bps.toIECb(1) & "ps"),
       state=($buddy.syncState), nErrors=buddy.nErrors.fetch.bdy
 
