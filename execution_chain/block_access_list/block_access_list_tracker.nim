@@ -28,15 +28,16 @@ type
     storageWrites*: Table[(Address, UInt256), UInt256]
       ## Storage writes made during this call frame.
       ## Maps (address, storage key) -> storage value.
-    balanceChanges*: HashSet[(Address, int, UInt256)]
+    balanceChanges*: Table[Address, UInt256]
       ## Balance changes made during this call frame.
       ## Set of (address, block access index, balance)
-    nonceChanges*: HashSet[(Address, int, AccountNonce)]
+      ## Maps address -> balance.
+    nonceChanges*: Table[Address, AccountNonce]
       ## Nonce changes made during this call frame.
-      ## Set of (address, block access index, nonce)
-    codeChanges*: HashSet[(Address, int, seq[byte])]
+      ## Maps address -> nonce.
+    codeChanges*: Table[Address, seq[byte]]
       ## Code changes made during this call frame.
-      ## Set of (address, block access index, bytecode)
+      ## Maps address -> bytecode.
 
   # Tracks state changes during transaction execution for block access list
   # construction. This tracker maintains a cache of pre-state values and
@@ -89,7 +90,19 @@ proc setBlockAccessIndex*(tracker: StateChangeTrackerRef, blockAccessIndex: int)
   tracker.preStorageCache.clear()
   tracker.preBalanceCache.clear()
 
-proc capturePreState*(tracker: StateChangeTrackerRef, address: Address, slot: UInt256): UInt256 =
+proc capturePreBalance*(tracker: StateChangeTrackerRef, address: Address): UInt256 =
+  ## Capture and cache the pre-transaction balance for an account.
+  ## This function caches the balance on first access for each address during
+  ## a transaction. It must be called before any balance modifications are made
+  ## to ensure we capture the pre-transaction balance correctly. The cache is
+  ## cleared at the beginning of each transaction.
+  ## This is used by normalize_balance_changes to determine which balance
+  ## changes should be filtered out.
+  if address notin tracker.preBalanceCache:
+    tracker.preBalanceCache[address] = tracker.ledger.getBalance(address)
+  return tracker.preBalanceCache.getOrDefault(address)
+
+proc capturePreStorage*(tracker: StateChangeTrackerRef, address: Address, slot: UInt256): UInt256 =
   ## Capture and cache the pre-transaction value for a storage location.
   ## Retrieves the storage value from the beginning of the current transaction.
   ## The value is cached within the transaction to avoid repeated lookups and
@@ -114,8 +127,10 @@ proc trackStorageRead*(tracker: StateChangeTrackerRef, address: Address, slot: U
   ## The slot will only appear in the final access list if it wasn't also
   ## written to during block execution.
   tracker.trackAddressAccess(address)
-  discard tracker.capturePreState(address, slot)
   tracker.builder.addStorageRead(address, slot)
+
+template hasPendingCallFrame*(tracker: StateChangeTrackerRef): bool =
+  tracker.callFrameSnapshots.len() > 0
 
 proc trackStorageWrite*(tracker: StateChangeTrackerRef, address: Address, slot: UInt256, newValue: UInt256) =
   ## Track a storage write operation.
@@ -124,7 +139,8 @@ proc trackStorageWrite*(tracker: StateChangeTrackerRef, address: Address, slot: 
   ## tracked as reads instead, as specified in [EIP-7928].
   tracker.trackAddressAccess(address)
 
-  let preValue = tracker.capturePreState(address, slot)
+  let preValue = tracker.capturePreStorage(address, slot)
+
   if preValue != newValue:
     tracker.builder.addStorageWrite(
         address,
@@ -132,22 +148,10 @@ proc trackStorageWrite*(tracker: StateChangeTrackerRef, address: Address, slot: 
         tracker.currentBlockAccessIndex,
         newValue)
     # Record in current call frame snapshot if exists
-    if tracker.callFrameSnapshots.len() > 0:
+    if tracker.hasPendingCallFrame():
       tracker.callFrameSnapshots[^1].storageWrites[(address, slot)] = newValue
   else:
     tracker.builder.addStorageRead(address, slot)
-
-proc capturePreBalance*(tracker: StateChangeTrackerRef, address: Address): UInt256 =
-  ## Capture and cache the pre-transaction balance for an account.
-  ## This function caches the balance on first access for each address during
-  ## a transaction. It must be called before any balance modifications are made
-  ## to ensure we capture the pre-transaction balance correctly. The cache is
-  ## cleared at the beginning of each transaction.
-  ## This is used by normalize_balance_changes to determine which balance
-  ## changes should be filtered out.
-  if address notin tracker.preBalanceCache:
-    tracker.preBalanceCache[address] = tracker.ledger.getBalance(address)
-  return tracker.preBalanceCache.getOrDefault(address)
 
 proc trackBalanceChange*(tracker: StateChangeTrackerRef, address: Address, newBalance: UInt256) =
   ## Track a balance change for an account.
@@ -155,12 +159,14 @@ proc trackBalanceChange*(tracker: StateChangeTrackerRef, address: Address, newBa
   ## transfers, gas payments, block rewards, and withdrawals.
   tracker.trackAddressAccess(address)
 
-  let blockAccessIndex = tracker.currentBlockAccessIndex
-  tracker.builder.addBalanceChange(address, blockAccessIndex, newBalance)
+  let preBalance = tracker.capturePreBalance(address)
+  if preBalance != newBalance:
+    let blockAccessIndex = tracker.currentBlockAccessIndex
+    tracker.builder.addBalanceChange(address, blockAccessIndex, newBalance)
 
-  # Record in current call frame snapshot if exists
-  if tracker.callFrameSnapshots.len() > 0:
-    tracker.callFrameSnapshots[^1].balanceChanges.incl((address, blockAccessIndex, newBalance))
+    # Record in current call frame snapshot if exists
+    if tracker.hasPendingCallFrame():
+      tracker.callFrameSnapshots[^1].balanceChanges[address] = newBalance
 
 proc trackNonceChange*(tracker: StateChangeTrackerRef, address: Address, newNonce: AccountNonce) =
   ## Track a nonce change for an account.
@@ -173,8 +179,8 @@ proc trackNonceChange*(tracker: StateChangeTrackerRef, address: Address, newNonc
   tracker.builder.addNonceChange(address, blockAccessIndex, newNonce)
 
   # Record in current call frame snapshot if exists
-  if tracker.callFrameSnapshots.len() > 0:
-    tracker.callFrameSnapshots[^1].nonceChanges.incl((address, blockAccessIndex, newNonce))
+  if tracker.hasPendingCallFrame():
+    tracker.callFrameSnapshots[^1].nonceChanges[address] = newNonce
 
 proc trackCodeChange*(tracker: StateChangeTrackerRef, address: Address, newCode: seq[byte]) =
   ## Track a code change for contract deployment.
@@ -187,8 +193,8 @@ proc trackCodeChange*(tracker: StateChangeTrackerRef, address: Address, newCode:
   tracker.builder.addCodeChange(address, blockAccessIndex, newCode)
 
   # Record in current call frame snapshot if exists
-  if tracker.callFrameSnapshots.len() > 0:
-    tracker.callFrameSnapshots[^1].codeChanges.incl((address, blockAccessIndex, newCode))
+  if tracker.hasPendingCallFrame():
+    tracker.callFrameSnapshots[^1].codeChanges[address] = newCode
 
 proc handleInTransactionSelfDestruct*(tracker: StateChangeTrackerRef, address: Address) =
   ## Handle an account that self-destructed in the same transaction it was
@@ -233,15 +239,14 @@ proc normalizeBalanceChanges*(tracker: StateChangeTrackerRef) =
 
   # Check each address that had balance changes in this transaction
   for address, accData in tracker.builder.accounts.mpairs():
-    let
-      preBalance = tracker.capturePreBalance(address)
-      postBalance = tracker.ledger.getBalance(address)
+    accData.balanceChanges.withValue(currentIndex, postBalance):
+      let preBalance = tracker.capturePreBalance(address)
 
-    # If pre-tx balance equals post-tx balance, remove all balance changes
-    # for this address in the current transaction
-    if preBalance == postBalance:
-      # Filter out balance changes from the current transaction
-      accData.balanceChanges.del(currentIndex)
+      # If pre-tx balance equals post-tx balance, remove all balance changes
+      # for this address in the current transaction
+      if preBalance == postBalance[]:
+        # Filter out balance changes from the current transaction
+        accData.balanceChanges.del(currentIndex)
 
 proc beginCallFrame*(tracker: StateChangeTrackerRef) =
   ## Begin a new call frame for tracking reverts.
@@ -259,7 +264,7 @@ proc commitCallFrame*(tracker: StateChangeTrackerRef) =
   # Commit changes from the current call frame.
   # Removes the current call frame snapshot without rolling back changes.
   # Called when a call completes successfully.
-  doAssert tracker.callFrameSnapshots.len() > 0
+  doAssert tracker.hasPendingCallFrame()
   tracker.popCallFrame()
 
 proc rollbackCallFrame*(tracker: StateChangeTrackerRef) =
@@ -270,7 +275,7 @@ proc rollbackCallFrame*(tracker: StateChangeTrackerRef) =
   ## - Preserves touched addresses
   ## This implements EIP-7928 revert handling where reverted writes
   ## become reads and addresses remain in the access list.
-  doAssert tracker.callFrameSnapshots.len() > 0
+  doAssert tracker.hasPendingCallFrame()
 
   template pendingCallFrame(): auto = tracker.pendingCallFrame()
   let currentIndex = tracker.currentBlockAccessIndex
@@ -288,9 +293,7 @@ proc rollbackCallFrame*(tracker: StateChangeTrackerRef) =
           accData[].storageReads.incl(slot) # Add as a read instead
 
   # Remove balance changes from this call frame
-  for change in pendingCallFrame.balanceChanges:
-    let (address, blockAccessIndex, newBalance) = change
-
+  for address, newBalance in pendingCallFrame.balanceChanges:
     tracker.builder.accounts.withValue(address, accData):
       # Filter out balance changes from this call frame
       accData[].balanceChanges.withValue(currentIndex, postBalance):
@@ -298,9 +301,7 @@ proc rollbackCallFrame*(tracker: StateChangeTrackerRef) =
           accData[].balanceChanges.del(currentIndex)
 
   # Remove nonce changes from this call frame
-  for change in pendingCallFrame.nonceChanges:
-    let (address, blockAccessIndex, newNonce) = change
-
+  for address, newNonce in pendingCallFrame.nonceChanges:
     tracker.builder.accounts.withValue(address, accData):
       # Filter out nonce changes from this call frame
       accData[].nonceChanges.withValue(currentIndex, postNonce):
@@ -308,9 +309,7 @@ proc rollbackCallFrame*(tracker: StateChangeTrackerRef) =
           accData[].nonceChanges.del(currentIndex)
 
   # Remove code changes from this call frame
-  for change in pendingCallFrame.codeChanges:
-    let (address, blockAccessIndex, newCode) = change
-
+  for address, newCode in pendingCallFrame.codeChanges:
     tracker.builder.accounts.withValue(address, accData):
       # Filter out nonce changes from this call frame
       accData[].codeChanges.withValue(currentIndex, postCode):
