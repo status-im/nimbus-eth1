@@ -127,7 +127,7 @@ template blocksCollect*(
               target=ctx.subState.head.bnStr,
               targetHash=ctx.subState.headHash.short,
               thPut=buddy.blkThroughput,
-              nSyncPeers=ctx.pool.nBuddies
+              nSyncPeers=ctx.nSyncPeers()
             ctx.pool.lastSyncUpdLog = Moment.now()
             nImported = 0
 
@@ -180,7 +180,7 @@ template blocksCollect*(
           target=ctx.subState.head.bnStr,
           targetHash=ctx.subState.headHash.short,
           thPut=buddy.blkThroughput,
-          nSyncPeers=ctx.pool.nBuddies
+          nSyncPeers=ctx.nSyncPeers()
         ctx.pool.lastSyncUpdLog = Moment.now()
 
     elif nQueued == 0 and
@@ -201,7 +201,7 @@ template blocksCollect*(
       topImported=ctx.subState.top.bnStr,
       unprocBottom=ctx.blocksUnprocAvailBottom.bnStrIfAvail(ctx),
       nQueued, nImported, nStagedQ=ctx.blk.staged.len,
-      nSyncPeers=ctx.pool.nBuddies
+      nSyncPeers=ctx.nSyncPeers()
 
   discard
 
@@ -253,7 +253,7 @@ template blocksUnstage*(
       if ctx.subState.top + 1 < minNum:
         trace info & ": block queue not ready yet", peer,
           topImported=ctx.subState.top.bnStr, qItem=qItem.data.blocks.bnStr,
-          nStagedQ=ctx.blk.staged.len, nSyncPeers=ctx.pool.nBuddies
+          nStagedQ=ctx.blk.staged.len, nSyncPeers=ctx.nSyncPeers()
         switchPeer = true # there is a gap -- come back later
         break
 
@@ -277,7 +277,7 @@ template blocksUnstage*(
             head=ctx.chain.latestNumber.bnStr,
             target=ctx.subState.head.bnStr,
             targetHash=ctx.subState.headHash.short,
-            nSyncPeers=ctx.pool.nBuddies
+            nSyncPeers=ctx.nSyncPeers()
           ctx.pool.lastSyncUpdLog = Moment.now()
           nImported = 0
           nUnstaged = 0
@@ -302,13 +302,13 @@ template blocksUnstage*(
           head=ctx.chain.latestNumber.bnStr,
           target=ctx.subState.head.bnStr,
           targetHash=ctx.subState.headHash.short,
-          nSyncPeers=ctx.pool.nBuddies
+          nSyncPeers=ctx.nSyncPeers()
         ctx.pool.lastSyncUpdLog = Moment.now()
 
     elif switchPeer or 0 < ctx.blk.staged.len:
       trace info & ": no blocks unqueued", peer,
         topImported=ctx.subState.top.bnStr, nStagedQ=ctx.blk.staged.len,
-        nSyncPeers=ctx.pool.nBuddies, switchPeer
+        nSyncPeers=ctx.nSyncPeers(), switchPeer
 
     bodyRc = not switchPeer
 

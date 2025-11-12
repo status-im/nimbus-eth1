@@ -43,7 +43,7 @@ func classifyForFetching*(buddy: BeaconBuddyRef): PeerRanking =
     # Classify this peer only if there are enough header slots available on
     # the queue for dowmloading simmultaneously. There is an additional slot
     # for downlading directly to the header chain cache (rather than queuing.)
-    if buddy.ctx.pool.nBuddies <= headersStagedQueueLengthMax + 1:
+    if buddy.ctx.nSyncPeers() <= headersStagedQueueLengthMax + 1:
       return (qSlotsAvail, -1)
 
     template hdr(b: BeaconBuddyRef): StatsCollect =
@@ -68,12 +68,12 @@ func classifyForFetching*(buddy: BeaconBuddyRef): PeerRanking =
         ranking.inc
 
     # Test against better performing peers. Choose those if there are enough.
-    if ranking < buddy.ctx.pool.nBuddies - headersStagedQueueLengthMax:
+    if ranking < buddy.ctx.nSyncPeers() - headersStagedQueueLengthMax:
       return (rankingTooLow, ranking)
 
   of SyncState.blocks:
     # Ditto for block bodies
-    if buddy.ctx.pool.nBuddies <= blocksStagedQueueLengthMax + 1:
+    if buddy.ctx.nSyncPeers() <= blocksStagedQueueLengthMax + 1:
       return (qSlotsAvail, -1)
 
     template blk(b: BeaconBuddyRef): StatsCollect =
@@ -90,7 +90,7 @@ func classifyForFetching*(buddy: BeaconBuddyRef): PeerRanking =
          w.blk.sum * bSamples <= bSum * w.blk.samples.float:
         ranking.inc
 
-    if ranking < buddy.ctx.pool.nBuddies - blocksStagedQueueLengthMax:
+    if ranking < buddy.ctx.nSyncPeers() - blocksStagedQueueLengthMax:
       return (rankingTooLow, ranking)
 
   else:

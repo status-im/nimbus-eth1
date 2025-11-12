@@ -28,7 +28,7 @@ proc bdyFetchRegisterError*(
     forceZombie = false) =
   buddy.nErrors.fetch.bdy.inc
   if nFetchBodiesErrThreshold < buddy.nErrors.fetch.bdy:
-    if not forceZombie and buddy.ctx.pool.nBuddies == 1 and slowPeer:
+    if not forceZombie and buddy.ctx.nSyncPeers() == 1 and slowPeer:
       # Remember that the current peer is the last one and is lablelled slow.
       # It would have been zombified if it were not the last one. This can be
       # used in functions -- depending on context -- that will trigger if the

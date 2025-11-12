@@ -67,11 +67,11 @@ template headersTargetActivate*(
       trg = ctx.pool.initTarget.unsafeGet
 
     # Require minimum of sync peers
-    if ctx.pool.nBuddies < ctx.pool.minInitBuddies:
+    if ctx.nSyncPeers() < ctx.pool.minInitBuddies:
       trace info & ": not enough peers to start manual sync", peer,
         targetHash=trg.hash.short, isFinal=trg.isFinal,
         state=($buddy.syncState),
-        nSyncPeersMin=ctx.pool.minInitBuddies, nSyncPeers=ctx.pool.nBuddies
+        nSyncPeersMin=ctx.pool.minInitBuddies, nSyncPeers=ctx.nSyncPeers()
       break body                                           # return
 
     # Ignore failed peers
@@ -87,7 +87,7 @@ template headersTargetActivate*(
       if buddy.ctrl.running:
         trace info & ": peer failed on syncer target", peer,
           targetHash=trg.hash.short, isFinal=trg.isFinal,
-          failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.pool.nBuddies,
+          failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.nSyncPeers(),
           nErrors=buddy.nErrors.fetch.hdr, state=($buddy.syncState)
         ctx.pool.initTarget = Opt.some(trg)                # restore target
 
@@ -99,7 +99,7 @@ template headersTargetActivate*(
         if nFetchTargetFailedPeersThreshold < ctx.pool.failedPeers.len:
           warn "No such syncer target, abandoning it", peer,
             targetHash=trg.hash.short, isFinal=trg.isFinal,
-            failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.pool.nBuddies,
+            failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.nSyncPeers(),
             nErrors=buddy.nErrors.fetch.hdr
           ctx.pool.failedPeers.clear()
           # not restoring target
@@ -107,7 +107,7 @@ template headersTargetActivate*(
         else:
           trace info & ": peer repeatedly failed", peer,
             targetHash=trg.hash.short, isFinal=trg.isFinal,
-            failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.pool.nBuddies,
+            failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.nSyncPeers(),
             nErrors=buddy.nErrors.fetch.hdr, state=($buddy.syncState)
           ctx.pool.initTarget = Opt.some(trg)              # restore target
 
@@ -123,13 +123,13 @@ template headersTargetActivate*(
       warn "Unusable syncer target, abandoning it", peer, target=hdr.bnStr,
         targetHash=trg.hash.short, isFinal=trg.isFinal,
         base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-        nSyncPeers=ctx.pool.nBuddies
+        nSyncPeers=ctx.nSyncPeers()
       break body                                           # return
     
     # Start syncer
     debug info & ": activating manually", peer, target=hdr.bnStr,
       targetHash=trg.hash.short, isFinal=trg.isFinal,
-      nSyncPeers=ctx.pool.nBuddies
+      nSyncPeers=ctx.nSyncPeers()
 
     let finalised = if trg.isFinal: trg.hash else: ctx.chain.baseHash
     ctx.hdrCache.headTargetUpdate(hdr, finalised)

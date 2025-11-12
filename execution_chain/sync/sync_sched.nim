@@ -156,7 +156,7 @@ const
     ## Ticker loop interval
 
 # ------------------------------------------------------------------------------
-# Private helpers
+# Private debugging helpers
 # ------------------------------------------------------------------------------
 
 template noisy[S,W](dsc: RunnerSyncRef[S,W]): bool =
@@ -167,7 +167,9 @@ template noisy[S,W](dsc: RunnerSyncRef[S,W]): bool =
 func toStr(w: HashSet[Port]): string =
   "{" & w.toSeq.mapIt(it.uint).sorted.mapIt($it).join(",") & "}"
 
-# --------------
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
 
 proc key(peer: Peer): Hash =
   ## Map to table key.
@@ -175,6 +177,13 @@ proc key(peer: Peer): Hash =
   h = h !& hashes.hash(peer.remote.node.pubkey.toRaw)
   h = h !& hashes.hash(peer.remote.node.address)
   !$h
+
+proc nSyncPeers[S,W](dsc: RunnerSyncRef[S,W]): int =
+  dsc.syncPeers.len + dsc.orphans.len
+
+# ------------------------------------------------------------------------------
+# Private constructor helpers
+# ------------------------------------------------------------------------------
 
 proc getSyncPeerFn[S,W](dsc: RunnerSyncRef[S,W]): GetSyncPeerFn[S,W] =
   ## Get particular active syncer peer (aka buddy)
@@ -195,7 +204,14 @@ proc getSyncPeersFn[S,W](dsc: RunnerSyncRef[S,W]): GetSyncPeersFn[S,W] =
       list.add w.worker
     list
 
-# --------------
+proc nSyncPeersFn[S,W](dsc: RunnerSyncRef[S,W]): NSyncPeersFn[S,W] =
+  ## Efficient version of `dsc.getSyncPeersFn().len`
+  result = proc(): int =
+    dsc.nSyncPeers()
+
+# ------------------------------------------------------------------------------
+# Private by-IP registry helpers
+# ------------------------------------------------------------------------------
 
 proc unregisterByIP[S,W](dsc: RunnerSyncRef[S,W], peer: Peer) =
   ## Remove peer from IP address list
@@ -230,7 +246,7 @@ proc acceptByIP[S,W](dsc: RunnerSyncRef[S,W], peer: Peer): bool =
   # Check whether peer exists, already
   dsc.syncPeers.peek(peer.key).isErrOr:
     info "Same peer ID active, rejecting new peer",
-      peer=value.worker.peer, newPeer=peer, nSyncPeers=dsc.syncPeers.len,
+      peer=value.worker.peer, newPeer=peer, nSyncPeers=dsc.nSyncPeers(),
       nSyncPeersMax=dsc.syncPeers.capacity, nPoolPeers=dsc.peerPool.len
     return false
 
@@ -242,7 +258,7 @@ proc acceptByIP[S,W](dsc: RunnerSyncRef[S,W], peer: Peer): bool =
 
   # Port table full. Cannot add this peer.
   if dsc.noisy: trace "Too many peers with same IP, rejected", peer,
-    otherPorts=ports.toStr, nSyncPeers=dsc.syncPeers.len,
+    otherPorts=ports.toStr, nSyncPeers=dsc.nSyncPeers(),
     nSyncPeersMax=dsc.syncPeers.capacity, nPoolPeers=dsc.peerPool.len
   return false
 
@@ -279,7 +295,7 @@ proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
         # `dsc.ctx.daemon` remains `true`, the deamon will be re-started from
         # the worker loop in due time.
         trace "Deamon loop sleep was cancelled",
-          nCachedWorkers=dsc.syncPeers.len
+          nCachedWorkers=dsc.nSyncPeers()
         break
       # End while
 
@@ -411,7 +427,7 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async: (raises: []).} =
         await sleepAsync max(suspend, idleTime)
       except CancelledError:
         trace "Peer loop sleep was cancelled", peer,
-          nSyncPeers=dsc.syncPeers.len, nSyncPeersMax=dsc.syncPeers.capacity,
+          nSyncPeers=dsc.nSyncPeers(), nSyncPeersMax=dsc.syncPeers.capacity,
           nPoolPeers=dsc.peerPool.len
         break taskExecLoop # stop on error (must not end up in busy-loop)
 
@@ -446,8 +462,7 @@ proc terminate[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
     dsc.ctx.daemon = false
 
     # Wait for workers and daemon to have terminated
-    while 0 < dsc.syncPeers.len or
-          0 < dsc.orphans.len:
+    while 0 < dsc.nSyncPeers():
       for buddy in dsc.syncPeers.values:
         # Tell async worker that it should terminate. This might be
         # needed for the worker apps. The scheuler tasks trigger on
@@ -458,7 +473,7 @@ proc terminate[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
         waitFor sleepAsync termWaitPollingTime
       except CancelledError:
         trace "Shutdown: peer timeout was cancelled",
-          nCachedWorkers=dsc.syncPeers.len
+          nCachedWorkers=dsc.nSyncPeers()
 
     while dsc.daemonRunning or
           dsc.tickerRunning:
@@ -467,7 +482,7 @@ proc terminate[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
         await sleepAsync termWaitPollingTime
       except CancelledError:
         trace "Shutdown: daemon timeout was cancelled",
-          nCachedWorkers=dsc.syncPeers.len
+          nCachedWorkers=dsc.nSyncPeers()
 
     # Final shutdown
     dsc.ctx.runRelease()
@@ -489,7 +504,7 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
   # Make sure that the overflow list can absorb an eviced peer temporarily
   if dsc.orphans.capacity <= dsc.orphans.len and
      dsc.syncPeers.capacity <= dsc.syncPeers.len:
-    info "Igoring peer, all slots busy", peer, nSyncPeers=dsc.syncPeers.len,
+    info "Igoring peer, all slots busy", peer, nSyncPeers=dsc.nSyncPeers(),
       nSyncPeersMax=dsc.syncPeers.capacity, nPoolPeers=dsc.peerPool.len
     return
 
@@ -499,7 +514,7 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
     let elapsed = Moment.now() - value
     if elapsed < zombieTimeToLinger:
       if dsc.noisy: trace "Reconnecting zombie peer ignored", peer,
-        nSyncPeers=dsc.syncPeers.len, nSyncPeersMax=dsc.syncPeers.capacity,
+        nSyncPeers=dsc.nSyncPeers(), nSyncPeersMax=dsc.syncPeers.capacity,
         nPoolPeers=dsc.peerPool.len,
         canReconnectIn=(zombieTimeToLinger-elapsed).toString(2)
       return
@@ -519,7 +534,7 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
       peerID: peerID))
   if not buddy.worker.runStart():
     if dsc.noisy: trace "Ignoring useless peer", peer,
-      nSyncPeers=dsc.syncPeers.len, nSyncPeersMax=dsc.syncPeers.capacity,
+      nSyncPeers=dsc.nSyncPeers(), nSyncPeersMax=dsc.syncPeers.capacity,
       nPoolPeers=dsc.peerPool.len
     return
 
@@ -537,7 +552,7 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
         evBuddy.worker.ctrl.stopped = true
 
       if dsc.noisy: trace "Evicted peer", peer=evPeer,
-        state=evBuddy.worker.ctrl.state, nSyncPeers=dsc.syncPeers.len,
+        state=evBuddy.worker.ctrl.state, nSyncPeers=dsc.nSyncPeers(),
         nSyncPeersMax=dsc.syncPeers.capacity, nPoolPeers=dsc.peerPool.len
 
   # Hand over to worker loop
@@ -548,7 +563,7 @@ proc onPeerDisconnected[S,W](dsc: RunnerSyncRef[S,W], peer: Peer) =
   ## Disconnect running peer
   dsc.syncPeers.peek(peer.key).isErrOr:
     if dsc.noisy: trace "Disconnecting peer", peer,
-      nSyncPeers=dsc.syncPeers.len, nSyncPeersMax=dsc.syncPeers.capacity,
+      nSyncPeers=dsc.nSyncPeers(), nSyncPeersMax=dsc.syncPeers.capacity,
       nPoolPeers=dsc.peerPool.len
 
     # If it is set a zombie, it will be taken care of when the
@@ -595,8 +610,8 @@ proc initSync*[S,W](
   dsc.ctx = CtxRef[S,W](
     node:         node,
     getSyncPeer:  dsc.getSyncPeerFn(),
-    getSyncPeers: dsc.getSyncPeersFn())
-
+    getSyncPeers: dsc.getSyncPeersFn(),
+    nSyncPeers:   dsc.nSyncPeersFn())
 
 proc startSync*[S,W](dsc: RunnerSyncRef[S,W]): bool =
   ## Set up `PeerObserver` handlers and start syncing.

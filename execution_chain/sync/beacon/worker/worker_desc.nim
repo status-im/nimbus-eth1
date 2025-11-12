@@ -169,7 +169,6 @@ type
 
   BeaconCtxData* = object
     ## Globally shared data extension
-    nBuddies*: int                   ## Number of active workers
     hdrSync*: HeaderFetchSync        ## Syncing by linked header chains
     blkSync*: BlocksFetchSync        ## For importing/executing blocks
     syncState*: SyncState            ## Last known layout state

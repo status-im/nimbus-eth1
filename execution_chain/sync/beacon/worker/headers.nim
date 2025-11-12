@@ -140,7 +140,7 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
               head=ctx.chain.latestNumber.bnStr,
               target=ctx.hdrCache.head.bnStr,
               thPut=buddy.hdrThroughput,
-              nSyncPeers=ctx.pool.nBuddies
+              nSyncPeers=ctx.nSyncPeers()
             ctx.pool.lastSyncUpdLog = Moment.now()
             nStashed = 0
 
@@ -186,7 +186,7 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
           head=ctx.chain.latestNumber.bnStr,
           target=ctx.hdrCache.head.bnStr,
           thPut=buddy.hdrThroughput,
-          nSyncPeers=ctx.pool.nBuddies
+          nSyncPeers=ctx.nSyncPeers()
         ctx.pool.lastSyncUpdLog = Moment.now()
 
     elif nQueued == 0 and
@@ -198,7 +198,7 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
       ctx.pool.failedPeers.incl buddy.peerID
 
       debug info & ": no headers yet (failed peer)", peer,
-        failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.pool.nBuddies,
+        failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.nSyncPeers(),
         state=($buddy.syncState), nErrors=buddy.hdrErrors()
       break body
 
@@ -206,7 +206,7 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
     trace info & ": queued/staged or DB/stored headers", peer,
       unprocAvailTop=ctx.headersUnprocAvailTop.bnStrIfAvail(ctx),
       nQueued, nStashed, nStagedQ=ctx.hdr.staged.len,
-      nSyncPeers=ctx.pool.nBuddies
+      nSyncPeers=ctx.nSyncPeers()
     # End block: `body`
 
   discard
@@ -254,7 +254,7 @@ proc headersUnstage*(buddy: BeaconBuddyRef; info: static[string]): bool =
       trace info & ": gap, serialisation postponed", peer,
         qItem=qItem.data.revHdrs.bnStr, unprocTop=unprocTop.bnStr,
         D=dangling.bnStr, nStashed, nStagedQ=ctx.hdr.staged.len,
-        nSyncPeers=ctx.pool.nBuddies
+        nSyncPeers=ctx.nSyncPeers()
       switchPeer = true # there is a gap -- come back later
       # Impossible situation => deadlock
       doAssert dangling <= unprocTop + 1
@@ -283,12 +283,12 @@ proc headersUnstage*(buddy: BeaconBuddyRef; info: static[string]): bool =
       base=ctx.chain.baseNumber.bnStr,
       head=ctx.chain.latestNumber.bnStr,
       target=ctx.hdrCache.head.bnStr,
-      nSyncPeers=ctx.pool.nBuddies
+      nSyncPeers=ctx.nSyncPeers()
 
   elif switchPeer or 0 < ctx.hdr.staged.len:
     trace info & ": no headers processed", peer, nStashed,
       nStagedQ=ctx.hdr.staged.len, D=ctx.hdrCache.antecedent.bnStr,
-      nSyncPeers=ctx.pool.nBuddies, switchPeer
+      nSyncPeers=ctx.nSyncPeers(), switchPeer
 
   not switchPeer
 

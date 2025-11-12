@@ -30,6 +30,9 @@ type
     ## The peers returned are all the peers where the `runStart()` directive
     ## has returned `true` (see `GetPeerFn`.)
 
+  NSyncPeersFn*[S,W] = proc(): int {.gcsafe, raises: [].}
+    ## Efficient version of `getSyncPeersFn().len`
+
   BuddyRunState* = enum
     Running = 0             ## Running, default state
     Stopped                 ## Stopped or about stopping
@@ -52,6 +55,7 @@ type
     ## Shared state among all syncing peer workers (aka buddies.)
     getSyncPeer*: GetSyncPeerFn[S,W]
     getSyncPeers*: GetSyncPeersFn[S,W]
+    nSyncPeers*: NSyncPeersFn[S,W]
     node*: EthereumNode         ## Own network identity
     noisyLog*: bool             ## Hold back `trace` and `debug` msgs if `false`
     poolMode*: bool             ## Activate `runPool()` workers if set `true`
