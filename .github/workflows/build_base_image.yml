@@ -55,8 +55,6 @@ jobs:
             ncpu=${NUMBER_OF_PROCESSORS}
           elif [[ '${{ matrix.os }}' == 'macos' ]]; then
             ncpu=$(sysctl -n hw.ncpu)
-          elif [[ '${{ matrix.os }}' == 'linux' ] && [ '${{ matrix.cpu }}' == 'arm64' ]]; then
-            ncpu=1
           else
             ncpu=$(nproc)
           fi
