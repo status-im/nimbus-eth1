@@ -26,6 +26,7 @@ proc setEtaAndMetrics(ctx: BeaconCtxRef; w: float) =
   ctx.pool.syncEta.add w
   if low(Moment) < ctx.pool.syncEta.lastUpdate:
     metrics.set(nec_sync_eta_secs, seconds ctx.pool.syncEta.avg)
+  ctx.hdrCache.updateMetrics()
 
 # ------------------------------------------------------------------------------
 # Public functions, metrics management (includes ETA guess)
@@ -46,9 +47,6 @@ proc updateEtaIdle*(ctx: BeaconCtxRef) =
   ## Metrics update while system state is idle so it can be run on a ticker.
   ## Othewise, ETA updates are done with the syncer state handler.
   ##
-  # Update some metrics
-  ctx.hdrCache.updateMetrics()
-
   if ctx.pool.syncState == SyncState.idle and
      low(Moment) < ctx.pool.syncEta.lastUpdate and
      ctx.pool.syncEta.lastUpdate + etaIdleMaxDensity <= Moment.now():
@@ -56,6 +54,7 @@ proc updateEtaIdle*(ctx: BeaconCtxRef) =
     # No sync request at the moment
     ctx.pool.syncEta.inSync = true
     metrics.set(nec_sync_eta_secs, 0)
+    ctx.hdrCache.updateMetrics()
 
 
 proc updateEtaBlocks*(ctx: BeaconCtxRef) =
@@ -76,7 +75,7 @@ proc updateEtaBlocks*(ctx: BeaconCtxRef) =
         else: ctx.subState.top - ctx.hdrCache.antecedent.number
 
       if nFetchBodiesRequest < nProcessed or
-         blocksToDo <= nFetchBodiesRequest:
+         (0 < nProcessed and blocksToDo <= nFetchBodiesRequest):
 
         let elapsed = now - ctx.pool.subState.stateSince
         ctx.pool.syncEta.blockTime =
@@ -112,7 +111,7 @@ proc updateEtaHeaders*(ctx: BeaconCtxRef) =
         else: ctx.subState.head - ctx.subState.top
 
       if nFetchHeadersRequest < nProcessed or
-         headersToDo <= nFetchHeadersRequest:
+         (0 < nProcessed and headersToDo <= nFetchHeadersRequest):
 
         let elapsed = now - ctx.pool.subState.stateSince
 

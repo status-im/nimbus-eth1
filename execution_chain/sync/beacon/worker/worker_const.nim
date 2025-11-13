@@ -153,17 +153,17 @@ const
   etaHeaderTimeDefault* = 25_000_000f
     ## Nanoseconds per header used for early ETA estimate. When available,
     ## this value will be replaced by the real one derived from calulating
-    ## elapsed time over number of blocks.
+    ## elapsed time over the number of blocks.
 
   etaBlockTimeDefault* = 2_000_000_000f
     ## Similar to `etaHeaderTimeDefault`
 
 
-  etaIdleMaxDensity* = chronos.seconds(5)
+  etaIdleMaxDensity* = chronos.seconds(25)
     ## Minimal time distance beween two ETA measurements while the syncer
     ## is hibernating
 
-  etaHeaderMaxDensity* = chronos.seconds(3)
+  etaHeaderMaxDensity* = chronos.seconds(20)
     ## Minimal time distance beween two ETA measurements while the syncer
     ## is downloading headers.
 

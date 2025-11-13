@@ -42,15 +42,16 @@ proc updateSuspendSyncer(ctx: BeaconCtxRef) =
 
   ctx.pool.failedPeers.clear()
   ctx.pool.seenData = false
-  ctx.pool.syncEta.lastUpdate = low(chronos.Moment)
 
   ctx.hibernate = true
 
+  # Update metrics
+  ctx.pool.syncEta.lastUpdate = Moment.now()
   metrics.set(nec_sync_last_block_imported, 0)
   metrics.set(nec_sync_head, 0)
 
   info "Suspending syncer", base=ctx.chain.baseNumber.bnStr,
-    head=ctx.chain.latestNumber.bnStr, nSyncPeers=ctx.pool.nBuddies
+    head=ctx.chain.latestNumber.bnStr, nSyncPeers=ctx.nSyncPeers()
 
 proc commitCollectHeaders(ctx: BeaconCtxRef; info: static[string]): bool =
   ## Link header chain into `FC` module. Gets ready for block import.
@@ -217,7 +218,7 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
   of idle:
     info "State changed", prevState, newState,
       base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-      nSyncPeers=ctx.pool.nBuddies
+      nSyncPeers=ctx.nSyncPeers()
 
   of SyncState.headers, SyncState.blocks:
     ctx.pool.lastSyncUpdLog = Moment.now() # reset logging control
@@ -229,7 +230,7 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
     # Most states require synchronisation via `poolMode`
     ctx.poolMode = true
     info "State change, waiting for sync", prevState, newState,
-      nSyncPeers=ctx.pool.nBuddies
+      nSyncPeers=ctx.nSyncPeers()
 
   # Final sync scrum layout reached or inconsistent/impossible state
   if newState == idle:
@@ -248,7 +249,7 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
   ## If in hibernate mode, accept a cache session and activate syncer
   ##
   if ctx.hibernate and                          # only in idle mode
-     ctx.pool.minInitBuddies <= ctx.pool.nBuddies and
+     ctx.pool.minInitBuddies <= ctx.nSyncPeers() and
      ctx.pool.initTarget.isNone():              # otherwise manual setup
     let (b, t) = (ctx.chain.baseNumber, ctx.hdrCache.head.number)
 
@@ -257,7 +258,6 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
       ctx.pool.minInitBuddies = 0               # reset
       ctx.pool.syncState = SyncState.headers    # state transition
       ctx.subState.stateSince = Moment.now()
-      ctx.pool.syncEta.lastUpdate = ctx.subState.stateSince
       ctx.hibernate = false                     # wake up
 
       # Update range
@@ -265,11 +265,13 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
       ctx.subState.head = t
       ctx.subState.headHash = ctx.hdrCache.headHash
 
+      # Update metrics
+      ctx.pool.syncEta.lastUpdate = ctx.subState.stateSince
       metrics.set(nec_sync_head, ctx.subState.head.int64)
 
       info "Activating syncer", base=b.bnStr, head=ctx.chain.latestNumber.bnStr,
         target=t.bnStr, targetHash=ctx.subState.headHash.short,
-        nSyncPeers=ctx.pool.nBuddies
+        nSyncPeers=ctx.nSyncPeers()
       return
 
   if 0 < ctx.pool.minInitBuddies:
@@ -277,11 +279,11 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
       head=ctx.chain.latestNumber.bnStr, target=ctx.hdrCache.head.bnStr,
       initTarget=(if ctx.pool.initTarget.isNone(): "n/a"
                   else: ctx.pool.initTarget.get.hash.short),
-      nSyncPeersMin=ctx.pool.minInitBuddies, nSyncPeers=ctx.pool.nBuddies
+      nSyncPeersMin=ctx.pool.minInitBuddies, nSyncPeers=ctx.nSyncPeers()
   else:
     trace "Syncer activation rejected", base=ctx.chain.baseNumber.bnStr,
       head=ctx.chain.latestNumber.bnStr, target=ctx.hdrCache.head.bnStr,
-      initTarget=ctx.pool.initTarget.isSome(), nSyncPeers=ctx.pool.nBuddies
+      initTarget=ctx.pool.initTarget.isSome(), nSyncPeers=ctx.nSyncPeers()
 
   # Failed somewhere on the way
   ctx.hdrCache.clear()

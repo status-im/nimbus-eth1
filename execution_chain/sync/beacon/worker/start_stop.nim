@@ -90,6 +90,7 @@ proc startBuddy*(buddy: BeaconBuddyRef): bool =
   let
     ctx = buddy.ctx
     peer = buddy.peer
+    nSyncPeers = ctx.nSyncPeers() + 1      # current peer is not yet registered
 
   template acceptProto(PROTO: type): bool =
     peer.supports(PROTO) and
@@ -97,21 +98,21 @@ proc startBuddy*(buddy: BeaconBuddyRef): bool =
 
   if acceptProto(eth69) or
      acceptProto(eth68):
-    ctx.pool.nBuddies.inc
-    metrics.set(nec_sync_peers, buddy.ctx.pool.nBuddies)
+    metrics.set(nec_sync_peers, nSyncPeers)
     ctx.pool.lastSlowPeer = Opt.none(Hash)
     return true
 
 
 proc stopBuddy*(buddy: BeaconBuddyRef) =
-  let ctx = buddy.ctx
-  if 1 < ctx.pool.nBuddies:
-    ctx.pool.nBuddies.dec
-  else:
-    ctx.pool.nBuddies = 0
+  let
+    ctx = buddy.ctx
+    nSyncPeers = ctx.nSyncPeers() - 1      # current peer is still registered
+
+  if nSyncPeers < 1:
     ctx.pool.lastSlowPeer = Opt.none(Hash)
     ctx.setLastPeerSeen()
-  metrics.set(nec_sync_peers, ctx.pool.nBuddies)
+
+  metrics.set(nec_sync_peers, nSyncPeers)
 
 # ------------------------------------------------------------------------------
 # End
