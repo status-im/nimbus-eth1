@@ -42,10 +42,11 @@ proc updateSuspendSyncer(ctx: BeaconCtxRef) =
 
   ctx.pool.failedPeers.clear()
   ctx.pool.seenData = false
-  ctx.pool.syncEta.lastUpdate = low(chronos.Moment)
 
   ctx.hibernate = true
 
+  # Update metrics
+  ctx.pool.syncEta.lastUpdate = Moment.now()
   metrics.set(nec_sync_last_block_imported, 0)
   metrics.set(nec_sync_head, 0)
 
@@ -257,7 +258,6 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
       ctx.pool.minInitBuddies = 0               # reset
       ctx.pool.syncState = SyncState.headers    # state transition
       ctx.subState.stateSince = Moment.now()
-      ctx.pool.syncEta.lastUpdate = ctx.subState.stateSince
       ctx.hibernate = false                     # wake up
 
       # Update range
@@ -265,6 +265,8 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
       ctx.subState.head = t
       ctx.subState.headHash = ctx.hdrCache.headHash
 
+      # Update metrics
+      ctx.pool.syncEta.lastUpdate = ctx.subState.stateSince
       metrics.set(nec_sync_head, ctx.subState.head.int64)
 
       info "Activating syncer", base=b.bnStr, head=ctx.chain.latestNumber.bnStr,
