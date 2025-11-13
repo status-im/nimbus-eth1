@@ -308,7 +308,7 @@ proc loop(self: LightClientManager) {.async: (raises: [CancelledError]).} =
   let
     NUM_RETRIES = 2
     RETRY_TIMEOUT =
-      chronos.seconds(int64(self.timeParams.SECONDS_PER_SLOT) div (NUM_RETRIES + 1))
+      chronos.seconds(int64(self.timeParams.SLOT_DURATION) div (NUM_RETRIES + 1))
 
   while true:
     let
@@ -384,7 +384,7 @@ proc loop(self: LightClientManager) {.async: (raises: [CancelledError]).} =
         continue
 
     # check for updates every slot
-    await sleepAsync(chronos.seconds(int64(self.timeParams.SECONDS_PER_SLOT)))
+    await sleepAsync(chronos.seconds(int64(self.timeParams.SLOT_DURATION)))
 
 proc start*(self: var LightClientManager) =
   ## Start light client manager's loop.
