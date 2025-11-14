@@ -43,6 +43,7 @@ import
     test_stateless_witness_types,
     test_stateless_witness_generation,
     test_stateless_witness_verification,
+    test_stateless_execution,
     test_block_access_list_builder,
     test_block_access_list_validation,
     test_block_access_list_tracker,

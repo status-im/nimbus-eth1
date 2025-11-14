@@ -29,9 +29,8 @@ template toSlotKey(slot: UInt256): Hash32 =
   keccak256(slot.toBytesBE())
 
 func putAll(
-    keys: var Table[Address, HashSet[UInt256]],
-    keysToAdd: openArray[seq[byte]]): Result[void, string] =
-
+    keys: var Table[Address, HashSet[UInt256]], keysToAdd: openArray[seq[byte]]
+): Result[void, string] =
   var currentAddress: Address
   for key in keysToAdd:
     if key.isAddress():
@@ -52,9 +51,7 @@ func putAll(
 
   ok()
 
-func putAll(
-    state: var Table[Hash32, seq[byte]],
-    stateToAdd: openArray[seq[byte]]) =
+func putAll(state: var Table[Hash32, seq[byte]], stateToAdd: openArray[seq[byte]]) =
   for node in stateToAdd:
     state[keccak256(node)] = node
 
@@ -83,8 +80,9 @@ func validateKeys*(witness: Witness, expectedKeys: WitnessTable): Result[void, s
 
   ok()
 
-func verifyHeaders*(witness: ExecutionWitness, header: Header): Result[seq[Header], string] =
-
+func verifyHeaders*(
+    witness: ExecutionWitness, header: Header
+): Result[seq[Header], string] =
   if witness.headers.len() < 1:
     return err("At least one header (the parent) is required in the witness")
   if witness.headers.len() > 256:
@@ -120,8 +118,9 @@ func verifyHeaders*(witness: ExecutionWitness, header: Header): Result[seq[Heade
 
   ok(headers)
 
-func verifyState*(witness: ExecutionWitness, preStateRoot: Hash32): Result[void, string] =
-
+func verifyState*(
+    witness: ExecutionWitness, preStateRoot: Hash32
+): Result[void, string] =
   # Verify state against keys in witness
   var keysTable: Table[Address, HashSet[UInt256]]
   ?keysTable.putAll(witness.keys)
