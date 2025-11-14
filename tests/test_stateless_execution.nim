@@ -60,10 +60,25 @@ procSuite "Stateless Execution Tests":
         statelessProcessBlockRlp(witnessRlpBytes, com, blkRlpBytes).isOk()
         statelessProcessBlockRlp(witnessRlpBytes.to0xHex(), com, blkRlpBytes.to0xHex()).isOk()
 
-  asyncTest "Stateless process block - mainnet json files":
+  asyncTest "Stateless process block json files - mainnet block 100":
     let
       witnessJsonFile = sourcePath / "stateless" / "mainnet_100_witness.json"
       blkJsonFile = sourcePath / "stateless" / "mainnet_100_block.json"
+    check statelessProcessBlockJsonFiles(witnessJsonFile, com, blkJsonFile).isOk()
+
+    let com2 = CommonRef.new(
+      db = nil,
+      taskpool = nil,
+      config = chainConfigForNetwork(networkId),
+      networkId = networkId,
+      initializeDb = false
+    )
+    check statelessProcessBlockJsonFiles(witnessJsonFile, com2, blkJsonFile).isOk()
+
+  asyncTest "Stateless process block json files - mainnet block 73141":
+    let
+      witnessJsonFile = sourcePath / "stateless" / "mainnet_73141_witness.json"
+      blkJsonFile = sourcePath / "stateless" / "mainnet_73141_block.json"
     check statelessProcessBlockJsonFiles(witnessJsonFile, com, blkJsonFile).isOk()
 
     let com2 = CommonRef.new(
