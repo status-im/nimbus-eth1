@@ -72,7 +72,7 @@ proc statelessProcessBlockRlp*(
 ): Result[void, string] =
   let
     witness = ?ExecutionWitness.decodeRlp(witnessRlpBytes)
-    blk = ?Block.decodeRlp(witnessRlpBytes)
+    blk = ?Block.decodeRlp(blkRlpBytes)
   statelessProcessBlock(witness, com, blk)
 
 proc statelessProcessBlockRlp*(
