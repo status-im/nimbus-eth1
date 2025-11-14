@@ -9,9 +9,8 @@
 # according to those terms.
 
 import
-  pkg/chronicles,
-  pkg/chronos,
-  pkg/unittest2,
+  chronos,
+  unittest2,
   testutils,
   std/[os, strutils],
   stew/byteutils,
@@ -20,10 +19,8 @@ import
   ../execution_chain/utils/utils,
   ../execution_chain/core/chain/forked_chain,
   ../execution_chain/core/chain/forked_chain/chain_desc,
-  ../execution_chain/core/chain/forked_chain/chain_branch,
   ../execution_chain/db/ledger,
   ../execution_chain/db/era1_db,
-  ../execution_chain/db/fcu_db,
   ../execution_chain/rpc/debug,
   ../execution_chain/stateless/[stateless_execution, stateless_execution_helpers]
 
