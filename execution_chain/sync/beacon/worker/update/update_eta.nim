@@ -28,6 +28,10 @@ proc setEtaAndMetrics(ctx: BeaconCtxRef; w: float) =
     metrics.set(nec_sync_eta_secs, seconds ctx.pool.syncEta.avg)
   ctx.hdrCache.updateMetrics()
 
+proc dist(a, b: BlockNumber): uint64 =
+  ## Distrance from a to b, i.e. `max(0, b.int - a-int).uint`
+  if b < a: 0 else: b - a
+
 # ------------------------------------------------------------------------------
 # Public functions, metrics management (includes ETA guess)
 # ------------------------------------------------------------------------------
@@ -70,10 +74,7 @@ proc updateEtaBlocks*(ctx: BeaconCtxRef) =
 
       # Make certain to cover more than one successful fetch efforts unless
       # there are not many items to fetch.
-      let nProcessed =
-        if ctx.subState.top < ctx.hdrCache.antecedent.number: 0u64
-        else: ctx.subState.top - ctx.hdrCache.antecedent.number
-
+      let nProcessed = dist(ctx.hdrCache.antecedent.number, ctx.subState.top)
       if nFetchBodiesRequest < nProcessed or
          (0 < nProcessed and blocksToDo <= nFetchBodiesRequest):
 
@@ -86,7 +87,7 @@ proc updateEtaBlocks*(ctx: BeaconCtxRef) =
         # * blocks to be stored for this sprint
         # * headers and blocks to be stored for the rest until known target
         let
-          restToDo = ctx.hdrCache.latestConsHeadNumber - ctx.subState.head
+          restToDo = dist(ctx.subState.head, ctx.hdrCache.latestConsHeadNumber)
           restTime = ctx.pool.syncEta.headerTime + ctx.pool.syncEta.blockTime
 
           blksNs = ctx.pool.syncEta.blockTime * blocksToDo.float
@@ -106,15 +107,11 @@ proc updateEtaHeaders*(ctx: BeaconCtxRef) =
     if ctx.pool.syncEta.lastUpdate + etaHeaderMaxDensity <= now or
        headersToDo < 2:
 
-      let nProcessed =
-        if ctx.subState.head < ctx.subState.top: 0u64
-        else: ctx.subState.head - ctx.subState.top
-
+      let nProcessed = dist(ctx.hdrCache.antecedent.number, ctx.subState.head)
       if nFetchHeadersRequest < nProcessed or
          (0 < nProcessed and headersToDo <= nFetchHeadersRequest):
 
         let elapsed = now - ctx.pool.subState.stateSince
-
         ctx.pool.syncEta.headerTime =
           elapsed.nanoseconds.float / nProcessed.float
 
@@ -124,8 +121,8 @@ proc updateEtaHeaders*(ctx: BeaconCtxRef) =
         # * blocks to be stored for this sprint
         # * headers and blocks to be stored for the rest until known target
         let
-          blocksToDo = ctx.subState.head - ctx.chain.baseNumber
-          restToDo = ctx.hdrCache.latestConsHeadNumber - ctx.subState.head
+          blocksToDo = dist(ctx.chain.baseNumber, ctx.subState.head)
+          restToDo = dist(ctx.subState.head, ctx.hdrCache.latestConsHeadNumber)
           restTime = ctx.pool.syncEta.headerTime + ctx.pool.syncEta.blockTime
 
           hdrsNs = ctx.pool.syncEta.headerTime * headersToDo.float
