@@ -12,7 +12,7 @@
 import
   eth/common/blocks_rlp,
   web3/[eth_api_types, conversions],
-  stew/io2,
+  stew/[io2, byteutils],
   ./stateless_execution
 
 from ../../hive_integration/engine_client import toBlockHeader, toTransactions
@@ -21,19 +21,30 @@ export stateless_execution
 
 ExecutionWitness.useDefaultSerializationIn JrpcConv
 
-proc statelessProcessBlockRlp*(
-    witnessRlpBytes: openArray[byte], com: CommonRef, blkRlpBytes: openArray[byte]
-): Result[void, string] =
-  let
-    witness = ?ExecutionWitness.decode(witnessRlpBytes)
-    blk =
-      try:
-        rlp.decode(blkRlpBytes, Block)
-      except RlpError as e:
-        return err(e.msg)
-  statelessProcessBlock(witness, com, blk)
+proc readFileToStr*(filePath: string): Result[string, string] =
+  let fileStr = io2.readAllChars(filePath).valueOr:
+    return err("Error reading file: " & filePath)
+  ok(fileStr)
 
-func toBlock(blockObject: BlockObject): Block =
+func toBytes*(hexStr: string): Result[seq[byte], string] =
+  try:
+    ok(hexToSeqByte(hexStr))
+  except ValueError as e:
+    err("Error converting hex string to bytes: " & e.msg)
+
+func decodeJson*(T: type ExecutionWitness, jsonStr: string): Result[T, string] =
+  try:
+    ok(JrpcConv.decode(jsonStr, T))
+  except SerializationError as e:
+    err("Error decoding json string: " & e.msg)
+
+func decodeJson*(T: type BlockObject, jsonStr: string): Result[T, string] =
+  try:
+    ok(JrpcConv.decode(jsonStr, T))
+  except SerializationError as e:
+    err("Error decoding json string: " & e.msg)
+
+func toBlock*(blockObject: BlockObject): Block =
   Block.init(
     blockObject.toBlockHeader(),
     BlockBody(
@@ -42,23 +53,48 @@ func toBlock(blockObject: BlockObject): Block =
     ),
   )
 
+func decodeRlp*(
+    T: type ExecutionWitness, rlpBytes: openArray[byte]
+): Result[T, string] =
+  try:
+    ok(rlp.decode(rlpBytes, T))
+  except RlpError as e:
+    err("Error decoding rlp bytes: " & e.msg)
+
+func decodeRlp*(T: type Block, rlpBytes: openArray[byte]): Result[T, string] =
+  try:
+    ok(rlp.decode(rlpBytes, T))
+  except RlpError as e:
+    err("Error decoding rlp bytes: " & e.msg)
+
+proc statelessProcessBlockRlp*(
+    witnessRlpBytes: openArray[byte], com: CommonRef, blkRlpBytes: openArray[byte]
+): Result[void, string] =
+  let
+    witness = ?ExecutionWitness.decodeRlp(witnessRlpBytes)
+    blk = ?Block.decodeRlp(witnessRlpBytes)
+  statelessProcessBlock(witness, com, blk)
+
+proc statelessProcessBlockRlp*(
+    witnessRlpStr: string, com: CommonRef, blkRlpStr: string
+): Result[void, string] =
+  let
+    witnessRlpBytes = ?witnessRlpStr.toBytes()
+    blkRlpBytes = ?blkRlpStr.toBytes()
+  statelessProcessBlockRlp(witnessRlpBytes, com, blkRlpBytes)
+
 proc statelessProcessBlockJson*(
     witnessJson: string, com: CommonRef, blkJson: string
 ): Result[void, string] =
-  try:
-    let
-      witness = JrpcConv.decode(witnessJson, ExecutionWitness)
-      blk = JrpcConv.decode(blkJson, BlockObject).toBlock()
-    statelessProcessBlock(witness, com, blk)
-  except SerializationError as e:
-    return err(e.msg)
+  let
+    witness = ?ExecutionWitness.decodeJson(witnessJson)
+    blkObject = ?BlockObject.decodeJson(blkJson)
+  statelessProcessBlock(witness, com, blkObject.toBlock())
 
 proc statelessProcessBlockJsonFiles*(
     witnessJsonFilePath: string, com: CommonRef, blockJsonFilePath: string
 ): Result[void, string] =
   let
-    witnessFileStr = io2.readAllChars(witnessJsonFilePath).valueOr:
-      return err("Reading witness json file failed")
-    blkFileStr = io2.readAllChars(blockJsonFilePath).valueOr:
-      return err("Reading block json file failed")
-  statelessProcessBlockJson(witnessFileStr, com, blkFileStr)
+    witnessJson = ?readFileToStr(witnessJsonFilePath)
+    blkJson = ?readFileToStr(blockJsonFilePath)
+  statelessProcessBlockJson(witnessJson, com, blkJson)
