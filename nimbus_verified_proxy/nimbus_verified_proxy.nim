@@ -42,11 +42,11 @@ proc cleanup*(ctx: ptr Context) =
 
 proc verifyChaindId(
     engine: RpcVerificationEngine
-): Future[void] {.async: (raises: []).} =
+): Future[void] {.async: (raises: [CancelledError]).} =
   let providerId =
     try:
       await engine.backend.eth_chainId()
-    except CatchableError:
+    except EthBackendError:
       0.u256
 
   # This is a chain/network mismatch error between the Nimbus verified proxy and
@@ -105,13 +105,8 @@ proc run*(
   jsonRpcServer.injectEngineFrontend(engine.frontend)
 
   # start frontend and backend
-  var status = waitFor jsonRpcClient.start()
-  if status.isErr():
-    raise newException(ValueError, status.error)
-
-  status = jsonRpcServer.start()
-  if status.isErr():
-    raise newException(ValueError, status.error)
+  waitFor jsonRpcClient.start()
+  jsonRpcServer.start()
 
   # just for short hand convenience
   template cfg(): auto =
@@ -306,8 +301,9 @@ proc run*(
     if ctx != nil and ctx.stop:
       # Cleanup
       waitFor network.stop()
-      waitFor jsonRpcClient.stop()
       waitFor jsonRpcServer.stop()
+      waitFor jsonRpcClient.stop()
+
       ctx.cleanup()
       # Notify client that cleanup is finished
       ctx.onHeader(nil, 2)

@@ -9,7 +9,7 @@
 
 {.push raises: [], gcsafe.}
 
-import unittest2, stint, stew/byteutils, web3, ../engine/accounts
+import unittest2, stint, stew/byteutils, web3, ../engine/accounts, ./test_utils
 
 suite "Merkle proof of inclusion validation":
   test "Validate account proof":
@@ -66,11 +66,10 @@ suite "Merkle proof of inclusion validation":
           ),
         ]
 
-    check:
-      getAccountFromProof(
+    checkNoEngineError:
+      discard getAccountFromProof(
         stateRoot, address, balance, nonce, codeHash, storageRoot, rlpNodes
       )
-      .isOk()
 
   test "Validate storage proof":
     let slotValue = UInt256.fromHex("0x25a92a5853702f199bb2d805bba05d67025214a8")
@@ -148,5 +147,4 @@ suite "Merkle proof of inclusion validation":
     let validationResult = getStorageFromProof(stateRoot, u256(0), proof)
 
     check:
-      validationResult.isOk()
-      validationResult.get == slotValue
+      validationResult == slotValue

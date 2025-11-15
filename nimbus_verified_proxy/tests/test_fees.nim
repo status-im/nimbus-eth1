@@ -42,8 +42,7 @@ suite "test fees verification":
       let blobFee = waitFor engine.frontend.eth_blobBaseFee()
       # blobs weren't enables on paris
       check false
-    except CatchableError:
-      # TODO: change this to an appropriate error whenever refactoring is done
+    except EngineError:
       check true
 
     ts.clear()
