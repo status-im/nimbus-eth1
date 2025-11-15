@@ -7,7 +7,6 @@
 
 import
   std/[atomics, json, net],
-  eth/net/nat,
   beacon_chain/spec/[digest, network],
   beacon_chain/nimbus_binary_common,
   ../nimbus_verified_proxy,
@@ -36,22 +35,15 @@ proc runContext(ctx: ptr Context) {.thread.} =
   try:
     let jsonNode = parseJson(str)
 
-    let rpcAddr = jsonNode["RpcAddress"].getStr()
     let myConfig = VerifiedProxyConf(
-      listenAddress: some(defaultListenAddress),
-      eth2Network: some(jsonNode["Eth2Network"].getStr()),
-      trustedBlockRoot: Eth2Digest.fromHex(jsonNode["TrustedBlockRoot"].getStr()),
-      backendUrl: parseCmdArg(Web3Url, jsonNode["Web3Url"].getStr()),
-      frontendUrl: parseCmdArg(Web3Url, jsonNode["Web3Url"].getStr()),
-      logLevel: jsonNode["LogLevel"].getStr(),
-      maxPeers: 160,
-      nat: NatConfig(hasExtIp: false, nat: NatAny),
+      eth2Network: some(jsonNode["eth2Network"].getStr()),
+      trustedBlockRoot: Eth2Digest.fromHex(jsonNode["trustedBlockRoot"].getStr()),
+      backendUrl: parseCmdArg(Web3Url, jsonNode["backendUrl"].getStr()),
+      frontendUrl: parseCmdArg(Web3Url, jsonNode["frontendUrl"].getStr()),
+      beaconApiUrls: parseCmdArg(UrlList, jsonNode["beaconApiUrls"].getStr()),
+      logLevel: jsonNode["logLevel"].getStr(),
       logStdout: StdoutLogKind.Auto,
       dataDirFlag: none(OutDir),
-      tcpPort: Port(defaultEth2TcpPort),
-      udpPort: Port(defaultEth2TcpPort),
-      agentString: "nimbus",
-      discv5Enabled: true,
     )
 
     run(myConfig, ctx)

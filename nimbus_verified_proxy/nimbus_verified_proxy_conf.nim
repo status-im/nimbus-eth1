@@ -9,6 +9,7 @@
 
 import
   std/os,
+  std/strutils,
   json_rpc/rpcproxy, # must be early (compilation annoyance)
   json_serialization/std/net,
   beacon_chain/conf_light_client,
@@ -25,37 +26,44 @@ type
     kind*: Web3UrlKind
     web3Url*: string
 
+  UrlList* = seq[string]
+
 #!fmt: off
 type VerifiedProxyConf* = object
   # Config
   configFile* {.
-    desc: "Loads the configuration from a TOML file"
-    name: "config-file" .}: Option[InputFile]
+    desc: "Loads the configuration from a TOML file",
+    name: "config-file"
+  .}: Option[InputFile]
 
   # Logging
   logLevel* {.
-    desc: "Sets the log level"
-    defaultValue: "INFO"
-    name: "log-level" .}: string
+    desc: "Sets the log level",
+    defaultValue: "INFO",
+    name: "log-level"
+  .}: string
 
   logStdout* {.
-    hidden
-    desc: "Specifies what kind of logs should be written to stdout (auto, colors, nocolors, json)"
-    defaultValueDesc: "auto"
-    defaultValue: StdoutLogKind.Auto
-    name: "log-format" .}: StdoutLogKind
+    hidden,
+    desc: "Specifies what kind of logs should be written to stdout (auto, colors, nocolors, json)",
+    defaultValueDesc: "auto",
+    defaultValue: StdoutLogKind.Auto,
+    name: "log-format"
+  .}: StdoutLogKind
 
   # Storage
   dataDirFlag* {.
-    desc: "The directory where nimbus will store all blockchain data"
-    abbr: "d"
-    name: "data-dir" .}: Option[OutDir]
+    desc: "The directory where nimbus will store all blockchain data",
+    abbr: "d",
+    name: "data-dir"
+  .}: Option[OutDir]
 
   # Network
   eth2Network* {.
-    desc: "The Eth2 network to join"
-    defaultValueDesc: "mainnet"
-    name: "network" .}: Option[string]
+    desc: "The Eth2 network to join",
+    defaultValueDesc: "mainnet",
+    name: "network"
+  .}: Option[string]
 
   accountCacheLen* {.
     hidden,
@@ -95,8 +103,9 @@ type VerifiedProxyConf* = object
   # Consensus light sync
   # No default - Needs to be provided by the user
   trustedBlockRoot* {.
-    desc: "Recent trusted finalized block root to initialize light client from"
-    name: "trusted-block-root" .}: Eth2Digest
+    desc: "Recent trusted finalized block root to initialize light client from",
+    name: "trusted-block-root"
+  .}: Eth2Digest
 
   # (Untrusted) web3 provider
   # No default - Needs to be provided by the user
@@ -114,70 +123,12 @@ type VerifiedProxyConf* = object
     name: "frontend-url"
   .}: Web3Url
 
-  # Libp2p
-  bootstrapNodes* {.
-    desc: "Specifies one or more bootstrap nodes to use when connecting to the network"
-    abbr: "b"
-    name: "bootstrap-node" .}: seq[string]
-
-  bootstrapNodesFile* {.
-    desc: "Specifies a line-delimited file of bootstrap Ethereum network addresses"
-    defaultValue: ""
-    name: "bootstrap-file" .}: InputFile
-
-  listenAddress* {.
-    desc: "Listening address for the Ethereum LibP2P and Discovery v5 traffic"
-    name: "listen-address" .}: Option[IpAddress]
-
-  tcpPort* {.
-    desc: "Listening TCP port for Ethereum LibP2P traffic"
-    defaultValue: defaultEth2TcpPort
-    defaultValueDesc: $defaultEth2TcpPortDesc
-    name: "tcp-port" .}: Port
-
-  udpPort* {.
-    desc: "Listening UDP port for node discovery"
-    defaultValue: defaultEth2TcpPort
-    defaultValueDesc: $defaultEth2TcpPortDesc
-    name: "udp-port" .}: Port
-
-  # TODO: Select a lower amount of peers.
-  maxPeers* {.
-    desc: "The target number of peers to connect to",
-    defaultValue: 160, # 5 (fanout) * 64 (subnets) / 2 (subs) for a healthy mesh
-    name: "max-peers"
-  .}: int
-
-  hardMaxPeers* {.
-    desc: "The maximum number of peers to connect to. Defaults to maxPeers * 1.5"
-    name: "hard-max-peers" .}: Option[int]
-
-  nat* {.
-    desc: "Specify method to use for determining public address. " &
-          "Must be one of: any, none, upnp, pmp, extip:<IP>"
-    defaultValue: NatConfig(hasExtIp: false, nat: NatAny)
-    defaultValueDesc: "any"
-    name: "nat" .}: NatConfig
-
-  enrAutoUpdate* {.
-    desc: "Discovery can automatically update its ENR with the IP address " &
-          "and UDP port as seen by other nodes it communicates with. " &
-          "This option allows to enable/disable this functionality"
-    defaultValue: false
-    name: "enr-auto-update" .}: bool
-
-  agentString* {.
-    defaultValue: "nimbus",
-    desc: "Node agent string which is used as identifier in the LibP2P network",
-    name: "agent-string"
-  .}: string
-
-  discv5Enabled* {.desc: "Enable Discovery v5", defaultValue: true, name: "discv5".}:
-    bool
-
-  directPeers* {.
-    desc: "The list of priviledged, secure and known peers to connect and maintain the connection to, this requires a not random netkey-file. In the complete multiaddress format like: /ip4/<address>/tcp/<port>/p2p/<peerId-public-key>. Peering agreements are established out of band and must be reciprocal."
-    name: "direct-peer" .}: seq[string]
+  # (Untrusted) web3 provider
+  # No default - Needs to be provided by the user
+  beaconApiUrls* {.
+    desc: "URL of the light client data provider. Multiple URLs can be specified by defining the option again on the command line",
+    name: "external-beacon-api-url"
+  .}: UrlList
 
 #!fmt: on
 
@@ -195,34 +146,24 @@ proc parseCmdArg*(T: type Web3Url, p: string): T {.raises: [ValueError].} =
       ValueError, "Web3 url should have defined scheme (http/https/ws/wss)"
     )
 
-proc completeCmdArg*(T: type Web3Url, val: string): seq[string] =
-  return @[]
+proc parseCmdArg*(T: type UrlList, p: string): T {.raises: [ValueError].} =
+  let urls = p.split(',')
 
-func asLightClientConf*(pc: VerifiedProxyConf): LightClientConf =
-  return LightClientConf(
-    configFile: pc.configFile,
-    logLevel: pc.logLevel,
-    logStdout: pc.logStdout,
-    logFile: none(OutFile),
-    dataDirFlag: pc.dataDirFlag,
-    eth2Network: pc.eth2Network,
-    bootstrapNodes: pc.bootstrapNodes,
-    bootstrapNodesFile: pc.bootstrapNodesFile,
-    listenAddress: pc.listenAddress,
-    tcpPort: pc.tcpPort,
-    udpPort: pc.udpPort,
-    maxPeers: pc.maxPeers,
-    hardMaxPeers: pc.hardMaxPeers,
-    nat: pc.nat,
-    enrAutoUpdate: pc.enrAutoUpdate,
-    agentString: pc.agentString,
-    discv5Enabled: pc.discv5Enabled,
-    directPeers: pc.directPeers,
-    trustedBlockRoot: pc.trustedBlockRoot,
-    web3Urls: @[EngineApiUrlConfigValue(url: pc.backendUrl.web3Url)],
-    jwtSecret: none(InputFile),
-    stopAtEpoch: 0,
-  )
+  for u in urls:
+    let
+      parsed = parseUri(u)
+      normalizedScheme = parsed.scheme.toLowerAscii()
+
+    if not (normalizedScheme == "http" or normalizedScheme == "https"):
+      raise newException(ValueError, "Light Client Endpoint should be a http(s) URL")
+
+  UrlList(urls)
+
+proc completeCmdArg*(T: type Web3Url, val: string): seq[string] =
+  @[]
+
+proc completeCmdArg*(T: type UrlList, val: string): seq[string] =
+  @[]
 
 # TODO: Cannot use ClientConfig in VerifiedProxyConf due to the fact that
 # it contain `set[TLSFlags]` which does not have proper toml serialization
