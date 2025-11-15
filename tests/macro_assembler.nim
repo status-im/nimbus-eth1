@@ -10,11 +10,12 @@
 
 import
   std/[macrocache, strutils],
-  eth/common/[keys, transaction_utils],
+  eth/common/[keys, transaction_utils, receipts],
   unittest2,
   chronicles,
   stew/byteutils,
-  stew/shims/macros
+  stew/shims/macros,
+  ssz_serialization/types
 
 import
   ../execution_chain/db/ledger,
@@ -117,6 +118,10 @@ proc parseData(list: NimNode): seq[byte] =
 
 proc parseLog(node: NimNode): Log =
   node.expectKind({nnkPar, nnkTupleConstr})
+  # Initialize with empty List
+  result.topics = List[Topic, 4].init(@[])
+  var topicsSeq: seq[Topic] = @[]  # Build topics in a seq first
+  
   for item in node:
     item.expectKind(nnkExprColonExpr)
     let label = item[0].strVal
@@ -131,10 +136,18 @@ proc parseLog(node: NimNode): Log =
     of "topics":
       body.expectKind(nnkBracket)
       for x in body:
-        result.topics.add Topic validateVMWord(x.strVal, x)
+        if topicsSeq.len < 4:  # Respect max 4 topics
+          topicsSeq.add Topic(validateVMWord(x.strVal, x))
+        else:
+          error("Maximum 4 topics allowed per log", x)
+      # Convert seq to List after collecting all topics
+      result.topics = List[Topic, 4].init(topicsSeq)
     of "data":
-      result.data = hexToSeqByte(body.strVal)
-    else:error("unknown log section '" & label & "'", item[0])
+      # Convert to ByteList for SSZ compatibility
+      let dataBytes = hexToSeqByte(body.strVal)
+      result.data = ByteList[MAX_LOG_DATA_SIZE].init(dataBytes)
+    else:
+      error("unknown log section '" & label & "'", item[0])
 
 proc parseLogs(list: NimNode): seq[Log] =
   result = @[]
@@ -280,6 +293,12 @@ proc initVMEnv*(network: string): BaseVMState =
     )
 
   BaseVMState.new(parent, header, com, com.db.baseTxFrame())
+
+proc toHex[N: static[int]](data: ByteList[N]): string =
+  ## Helper to convert ByteList to hex string
+  result = ""
+  for b in data:
+    result.add(b.toHex(2))
 
 proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: DebugCallResult): bool =
   let com = vmState.com

@@ -13,7 +13,8 @@
 import
   eth/common/blocks,
   eth/common/receipts,
-  ../../../db/core_db
+  ../../../db/core_db,
+  ../../log_index
 
 type
   BlockRef* = ref object
@@ -22,6 +23,8 @@ type
     receipts*: seq[StoredReceipt]
     hash*    : Hash32
     parent*  : BlockRef
+    logIndex*: LogIndex
+      # EIP-7745: Accumulated log index state after this block
 
     index*   : uint
       # Alias to parent when serializing

@@ -20,13 +20,15 @@ import
   ../../evm/types,
   ../dao,
   ../eip6110,
+  ../log_index,
   ./calculate_reward,
   ./executor_helpers,
   ./process_transaction,
   eth/common/[keys, transaction_utils],
   chronicles,
   results,
-  taskpools
+  taskpools,
+  ssz_serialization
 
 template withSender(txs: openArray[Transaction], body: untyped) =
   # Execute transactions offloading the signature checking to the task pool if
@@ -81,6 +83,12 @@ proc processTransactions*(
   vmState.receipts.setLen(if skipReceipts: 0 else: transactions.len)
   vmState.cumulativeGasUsed = 0
   vmState.allLogs = @[]
+  
+  # NEW: Debug logging for EIP-7745
+  debug "Processing transactions for block",
+    blockNumber = header.number,
+    txCount = transactions.len,
+    currentIndex = vmState.logIndex.next_index
 
   withSender(transactions):
     if sender == default(Address):
@@ -229,13 +237,73 @@ proc procBlkEpilogue(
         err("stateRoot mismatch, expect: " & $header.stateRoot & ", got: " & $stateRoot)
 
     if not skipReceipts:
-      let bloom = createBloom(vmState.receipts)
+            # =========================================================================
+      # EIP-7745 INTEGRATION: Replace bloom filter with LogIndex
+      # =========================================================================
+      
+      # Debug logging before LogIndex update
+      debug "Updating LogIndex for block",
+        blockNumber = header.number,
+        receiptsCount = vmState.receipts.len,
+        currentIndex = vmState.logIndex.next_index
+      
+      # EIP-7745: Add current block's logs to accumulated logIndex from parent
+      vmState.logIndex.add_block_logs(header, vmState.receipts)
+      debug "LogIndex updated in process_block",
+        blockNumber = header.number,
+        totalEntries = vmState.logIndex.next_index
+      
+      # Choose validation method based on activation timestamp
+      # DEBUG: Log the activation check details
+      let eip7745Active = vmState.com.isEip7745OrLater(header.timestamp)
+      debug "EIP-7745 activation check in process_block",
+        blockNumber = header.number,
+        blockTimestamp = header.timestamp,
+        isActive = eip7745Active
 
-      if header.logsBloom != bloom:
-        debug "wrong logsBloom in block",
-          blockNumber = header.number, actual = bloom, expected = header.logsBloom
-        return err("bloom mismatch")
+      if eip7745Active:
+        # Validate using LogIndexSummary for EIP-7745 blocks
+        let summary = createLogIndexSummary(vmState.logIndex)
+        
+        # Encode to 256 bytes using manual encoding
+        # SSZ encoding causes stack overflow with complex LogIndexSummary
+        var encoded = encodeLogIndexSummary(summary)
+        
+        # Verify the encoded size
+        if encoded.len != 256:
+          return err("LogIndexSummary encoding size mismatch: got " & 
+                    $encoded.len & " bytes, expected 256")
+        
+        # Convert encoded bytes to Bloom
+        var bloomData: array[256, byte]
+        for i in 0..<256:
+          bloomData[i] = encoded[i]
+        let bloom = Bloom(bloomData)
+        
+        if header.logsBloom != bloom:
+          debug "wrong logsBloom (LogIndexSummary) in block",
+            expected = header.logsBloom,
+            calculated = bloom
+          return err("logsBloom (LogIndexSummary) mismatch")
 
+        debug "LogIndexSummary validated successfully",
+          blockNumber = header.number,
+          summarySize = encoded.len,
+          receiptsCount = vmState.receipts.len,
+          nextIndex = vmState.logIndex.next_index
+      else:
+        # Validate using traditional bloom filter for pre-EIP-7745 blocks
+        let bloom = vmState.receipts.createBloom()
+        if header.logsBloom != bloom:
+          debug "wrong logsBloom (traditional) in block",
+            expected = header.logsBloom,
+            calculated = bloom
+          return err("traditional bloom mismatch")
+        
+        debug "Traditional bloom validated successfully",
+          blockNumber = header.number,
+          receiptsCount = vmState.receipts.len
+      
       let receiptsRoot = calcReceiptsRoot(vmState.receipts)
       if header.receiptsRoot != receiptsRoot:
         # TODO replace logging with better error

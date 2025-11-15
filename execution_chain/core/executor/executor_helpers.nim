@@ -17,6 +17,7 @@ import
   ../../evm/state,
   ../../evm/types,
   ../../common/common,
+  ssz_serialization,
   ../../transaction/call_types
 
 type

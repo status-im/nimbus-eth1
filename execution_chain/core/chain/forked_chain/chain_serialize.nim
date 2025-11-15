@@ -129,9 +129,13 @@ proc replayBlock(fc: ForkedChainRef;
   # Set finalized to true in order to skip the stateroot check when replaying the
   # block because the blocks should have already been checked previously during
   # the initial block execution.
-  var receipts = fc.processBlock(parent, txFrame, blk.blk, blk.hash, finalized = true).valueOr:
+  # EIP-7745: processBlock returns (receipts, logIndex) tuple
+  var (receipts, logIndex) = fc.processBlock(parent, txFrame, blk.blk, blk.hash, finalized = true).valueOr:
     txFrame.dispose()
     return err(error)
+
+  # Update parent's logIndex for next iteration
+  parent.logIndex = logIndex
 
   fc.writeBaggage(blk.blk, blk.hash, txFrame, receipts)
 

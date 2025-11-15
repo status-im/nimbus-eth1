@@ -29,6 +29,7 @@ import
   ../eip7594,
   ../validate,
   ../pooled_txs,
+  ../log_index,
   ./tx_tabs,
   ./tx_item
 
@@ -86,7 +87,8 @@ proc setupVMState(com: CommonRef;
                   parent: Header,
                   parentHash: Hash32,
                   pos: PosPayloadAttr,
-                  parentFrame: CoreDbTxRef): BaseVMState =
+                  parentFrame: CoreDbTxRef,
+                  logIndex: LogIndex = default(LogIndex)): BaseVMState =
   let
     fork = com.toEVMFork(pos.timestamp)
 
@@ -103,7 +105,8 @@ proc setupVMState(com: CommonRef;
       parentHash   : parentHash,
     ),
     txFrame = parentFrame.txFrameBegin(),
-    com     = com)
+    com     = com,
+    logIndex = logIndex)
 
 template append(tab: var TxSenderTab, sn: TxSenderNonceRef) =
   tab[item.sender] = sn
@@ -259,9 +262,11 @@ proc validateBlobTransactionWrapper(tx: PooledTransaction, fork: EVMFork):
 proc init*(xp: TxPoolRef; chain: ForkedChainRef) =
   ## Constructor, returns new tx-pool descriptor.
   xp.pos.timestamp = chain.latestHeader.timestamp
+  # EIP-7745: Pass latest block's logIndex to accumulate from parent
   xp.vmState = setupVMState(chain.com,
     chain.latestHeader, chain.latestHash,
-    xp.pos, chain.txFrame(chain.latestHash))
+    xp.pos, chain.txFrame(chain.latestHash),
+    logIndex = chain.latest.logIndex)
   xp.chain = chain
   xp.rmHash = chain.latestHash
 
@@ -296,9 +301,11 @@ func `rmHash=`*(xp: TxPoolRef, val: Hash32) =
 
 proc updateVmState*(xp: TxPoolRef) =
   ## Reset transaction environment, e.g. before packing a new block
+  # EIP-7745: Pass latest block's logIndex to accumulate from parent
   xp.vmState = setupVMState(xp.chain.com,
     xp.chain.latestHeader, xp.chain.latestHash,
-    xp.pos, xp.chain.txFrame(xp.chain.latestHash))
+    xp.pos, xp.chain.txFrame(xp.chain.latestHash),
+    logIndex = xp.chain.latest.logIndex)
 
 # ------------------------------------------------------------------------------
 # Public functions

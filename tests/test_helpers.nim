@@ -42,6 +42,7 @@ const
     "Bpo4",                 # FkBpo4
     "Bpo5",                 # FkBpo5
     "Amsterdam",            # FkAmsterdam
+    "Eip7745",              # FkEip7745
   ]
 
   nameToFork* = ForkToName.revTable

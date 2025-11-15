@@ -17,8 +17,9 @@ import
   json_serialization,
   json_serialization/pkg/results,
   eth/common/eth_types_rlp,
-  eth/common/keys,
+  eth/common/[keys, receipts],
   eth/common/blocks,
+  ssz_serialization,
   ../../execution_chain/transaction,
   ../../execution_chain/common/chain_config,
   ../common/helpers,
@@ -404,10 +405,18 @@ func `@@`(x: Bloom): JsonNode =
   %("0x" & toHex(x))
 
 func `@@`(x: Log): JsonNode =
+  # Convert List[receipts.Topic, MAX_TOPICS_PER_LOG] to seq for serialization
+  var topicsSeq: seq[receipts.Topic]
+  for topic in x.topics:
+    topicsSeq.add(topic)
+  
+  # Convert ByteList to seq[byte] for serialization  
+  let dataSeq = seq[byte](x.data)
+  
   %{
     "address": @@(x.address),
-    "topics" : @@(x.topics),
-    "data"   : @@(x.data)
+    "topics" : @@(topicsSeq),
+    "data"   : @@(dataSeq)
   }
 
 func `@@`(x: TxReceipt): JsonNode =
@@ -441,6 +450,22 @@ func `@@`[N, T](x: array[N, T]): JsonNode =
   result = newJArray()
   for c in x:
     result.add @@(c)
+
+# Add a temporary debug function to check if List type is recognized
+func listToJson*[T; N: static int](x: List[T, N]): JsonNode =
+  result = newJArray()
+  for c in x:
+    result.add @@(c)
+
+# SSZ List serialization 
+func `@@`[T; N: static int](x: List[T, N]): JsonNode =
+  result = newJArray()
+  for c in x:
+    result.add @@(c)
+
+# SSZ ByteList serialization
+func `@@`[N: static int](x: ByteList[N]): JsonNode =
+  @@(seq[byte](x))
 
 func `@@`[T](x: Opt[T]): JsonNode =
   if x.isNone:

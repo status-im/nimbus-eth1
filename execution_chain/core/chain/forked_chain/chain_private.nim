@@ -13,6 +13,7 @@ import
   ./chain_desc,
   ../../validate,
   ../../executor/process_block,
+  ../../log_index,
   ../../../common,
   ../../../db/core_db,
   ../../../evm/types,
@@ -40,12 +41,13 @@ proc processBlock*(c: ForkedChainRef,
                   txFrame: CoreDbTxRef,
                   blk: Block,
                   blkHash: Hash32,
-                  finalized: bool): Result[seq[StoredReceipt], string] =
+                  finalized: bool): Result[(seq[StoredReceipt], LogIndex), string] =
   template header(): Header =
     blk.header
 
   let vmState = BaseVMState()
-  vmState.init(parentBlk.header, header, c.com, txFrame)
+  # EIP-7745: Pass parent's logIndex to accumulate across blocks
+  vmState.init(parentBlk.header, header, c.com, txFrame, logIndex = parentBlk.logIndex)
 
   ?c.com.validateHeaderAndKinship(blk, vmState.parent, txFrame)
 
@@ -89,4 +91,5 @@ proc processBlock*(c: ForkedChainRef,
   # because validateUncles still need it
   ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory)
 
-  ok(move(vmState.receipts))
+  # EIP-7745: Return both receipts and logIndex
+  ok((move(vmState.receipts), vmState.logIndex))

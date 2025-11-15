@@ -20,6 +20,7 @@ import
   ../../evm/types,
   ../../evm/state,
   ../validate,
+  ../log_index,
   ../../portal/portal,
   ./forked_chain/[
     chain_desc,
@@ -54,7 +55,8 @@ func appendBlock(c: ForkedChainRef,
          blk: Block,
          blkHash: Hash32,
          txFrame: CoreDbTxRef,
-         receipts: sink seq[StoredReceipt]): BlockRef =
+         receipts: sink seq[StoredReceipt],
+         logIndex: LogIndex): BlockRef =
 
   let newBlock = BlockRef(
     blk     : blk,
@@ -62,6 +64,7 @@ func appendBlock(c: ForkedChainRef,
     receipts: move(receipts),
     hash    : blkHash,
     parent  : parent,
+    logIndex: logIndex, # EIP-7745: Store accumulated log index
     index   : 0, # Only finalized segment have finalized marker
   )
 
@@ -509,7 +512,8 @@ proc validateBlock(c: ForkedChainRef,
     parentTxFrame=cast[uint](parentFrame),
     txFrame=cast[uint](txFrame)
 
-  var receipts = c.processBlock(parent, txFrame, blk, blkHash, finalized).valueOr:
+  # EIP-7745: processBlock returns (receipts, logIndex) tuple
+  var (receipts, logIndex) = c.processBlock(parent, txFrame, blk, blkHash, finalized).valueOr:
     txFrame.dispose()
     return err(error)
 
@@ -520,7 +524,7 @@ proc validateBlock(c: ForkedChainRef,
   # is being applied to a block that is currently not a head).
   txFrame.checkpoint(blk.header.number, skipSnapshot = false)
 
-  let newBlock = c.appendBlock(parent, blk, blkHash, txFrame, move(receipts))
+  let newBlock = c.appendBlock(parent, blk, blkHash, txFrame, move(receipts), logIndex)
 
   for i, tx in blk.transactions:
     c.txRecords[computeRlpHash(tx)] = (blkHash, uint64(i))

@@ -52,6 +52,8 @@ type
     BPO5
     BPO4ToBPO5AtTime15k
     Amsterdam
+    AmsterdamToEip7745AtTime15k
+    Eip7745
 
   LogLevel* = enum
     Silent
