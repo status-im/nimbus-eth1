@@ -34,6 +34,10 @@ proc writeBaggage*(c: ForkedChainRef,
     txFrame.persistWithdrawals(
       header.withdrawalsRoot.expect("WithdrawalsRoot should be verified before"),
       blk.withdrawals.get)
+  if blk.blockAccessList.isSome:
+    txFrame.persistBlockAccessList(
+      header.blockAccessListHash.expect("blockAccessListHash should be verified before"),
+      blk.blockAccessList.get)
 
 proc processBlock*(c: ForkedChainRef,
                   parentBlk: BlockRef,

@@ -83,6 +83,9 @@ proc toGenesisHeader*(
     const EmptyRequestsHash = calcRequestsHash()
     result.requestsHash = Opt.some(EmptyRequestsHash)
 
+  if fork >= Amsterdam:
+    result.blockAccessListHash = Opt.some(EMPTY_BLOCK_ACCESS_LIST_HASH)
+
 proc toGenesisHeader*(
     genesis: Genesis;
     fork: HardFork;
