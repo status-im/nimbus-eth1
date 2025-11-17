@@ -55,10 +55,19 @@ proc updateEtaIdle*(ctx: BeaconCtxRef) =
      low(Moment) < ctx.pool.syncEta.lastUpdate and
      ctx.pool.syncEta.lastUpdate + etaIdleMaxDensity <= Moment.now():
 
-    # No sync request at the moment
-    ctx.pool.syncEta.inSync = true
-    metrics.set(nec_sync_eta_secs, 0)
-    ctx.hdrCache.updateMetrics()
+    let toDo = dist(ctx.chain.latestNumber, ctx.hdrCache.latestConsHeadNumber)
+    if toDo == 0:
+      # No sync request at the moment
+      ctx.pool.syncEta.inSync = true
+      metrics.set(nec_sync_eta_secs, 0)
+      ctx.hdrCache.updateMetrics()
+    else:
+      # Caclculate the duration to process all the headers and all
+      # blocks, i.e
+      # * headers and blocks to be stored for the rest until known target
+      let bothTime = ctx.pool.syncEta.headerTime + ctx.pool.syncEta.blockTime
+      ctx.setEtaAndMetrics(bothTime * toDo.float)
+      ctx.pool.syncEta.inSync = false
 
 
 proc updateEtaBlocks*(ctx: BeaconCtxRef) =
