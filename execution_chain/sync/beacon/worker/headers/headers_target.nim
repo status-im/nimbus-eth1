@@ -120,14 +120,14 @@ template headersTargetActivate*(
     # Verify that the target header is usable
     let hdr = hdrs[0]
     if hdr.number <= ctx.chain.baseNumber:
-      warn "Unusable syncer target, abandoning it", peer, target=hdr.bnStr,
+      warn "Unusable syncer target, abandoning it", peer, target=hdr.number,
         targetHash=trg.hash.short, isFinal=trg.isFinal,
-        base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
+        base=ctx.chain.baseNumber, head=ctx.chain.latestNumber,
         nSyncPeers=ctx.nSyncPeers()
       break body                                           # return
     
     # Start syncer
-    debug info & ": activating manually", peer, target=hdr.bnStr,
+    debug info & ": activating manually", peer, target=hdr.number,
       targetHash=trg.hash.short, isFinal=trg.isFinal,
       nSyncPeers=ctx.nSyncPeers()
 
