@@ -86,6 +86,9 @@ proc processTransactions*(
     if sender == default(Address):
       return err("Could not get sender for tx with index " & $(txIndex))
 
+    if vmState.balTrackerEnabled:
+      vmState.balTracker.setBlockAccessIndex(txIndex + 1)
+
     let rc = vmState.processTransaction(tx, sender, header)
     if rc.isErr:
       return err("Error processing tx with index " & $(txIndex) & ":" & rc.error)
@@ -108,6 +111,9 @@ proc procBlkPreamble(
 ): Result[void, string] =
   template header(): Header =
     blk.header
+
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.setBlockAccessIndex(0)
 
   let com = vmState.com
   if com.daoForkSupport and com.daoForkBlock.get == header.number:
@@ -150,6 +156,9 @@ proc procBlkPreamble(
     )
   elif blk.transactions.len > 0:
     return err("Transactions in block with empty txRoot")
+
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.setBlockAccessIndex(blk.transactions.len() + 1)
 
   if com.isShanghaiOrLater(header.timestamp):
     if header.withdrawalsRoot.isNone:

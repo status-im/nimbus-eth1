@@ -18,7 +18,7 @@ import
   ../common/[common, evmforks],
   ../block_access_list/block_access_list_tracker
 
-export stack, memory, transient_storage
+export stack, memory, transient_storage, block_access_list_tracker
 
 type
   VMFlag* = enum
