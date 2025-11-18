@@ -137,7 +137,7 @@ proc headersStashOnDisk*(
               elif revHdrs[^1].number <= dBottom: (dBottom - revHdrs[^1].number)
               else: revHdrs.len.uint64),
     base=ctx.chain.baseNumber, head=ctx.chain.latestNumber,
-    target=ctx.subState.head, targetHash=ctx.subState.headHash.short
+    target=ctx.subState.headNum, targetHash=ctx.subState.headHash.short
 
   let srcPeer = buddy.getSyncPeer peerID
   if not srcPeer.isNil:

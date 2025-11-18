@@ -89,8 +89,8 @@ type
 
   SyncSubState* = object
     ## Bundelled state variables, easy to clear all with one `reset`.
-    top*: BlockNumber                ## For locally syncronising block import
-    head*: BlockNumber               ## Copy of `ctx.hdrCache.head()`
+    topNum*: BlockNumber             ## For locally syncronising block import
+    headNum*: BlockNumber            ## Copy of `ctx.hdrCache.head().number`
     headHash*: Hash32                ## Copy of `ctx.hdrCache.headHash()`
     stateSince*: chronos.Moment      ## Time of last sync state change
     cancelRequest*: bool             ## Cancel block sync via state machine

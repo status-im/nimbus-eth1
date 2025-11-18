@@ -74,15 +74,15 @@ proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
   ctx.pool.seenData = false
 
   # Re-initialise sub-state variables
-  ctx.subState.top = ctx.hdrCache.antecedent.number - 1
-  ctx.subState.head = ctx.hdrCache.head.number
+  ctx.subState.topNum = ctx.hdrCache.antecedent.number - 1
+  ctx.subState.headNum = ctx.hdrCache.head.number
   ctx.subState.headHash = ctx.hdrCache.headHash
 
-  metrics.set(nec_sync_last_block_imported, ctx.subState.top.int64)
-  metrics.set(nec_sync_head, ctx.subState.head.int64)
+  metrics.set(nec_sync_last_block_imported, ctx.subState.topNum.int64)
+  metrics.set(nec_sync_head, ctx.subState.headNum.int64)
 
   # Update list of block numbers to process
-  ctx.blocksUnprocSet(ctx.subState.top + 1, ctx.subState.head)
+  ctx.blocksUnprocSet(ctx.subState.topNum + 1, ctx.subState.headNum)
 
 # ------------------------------------------------------------------------------
 # Private state transition handlers
@@ -144,7 +144,7 @@ proc blocksNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
   if ctx.subState.cancelRequest:
     return blocksCancel
 
-  if ctx.subState.head <= ctx.subState.top:
+  if ctx.subState.headNum <= ctx.subState.topNum:
     return blocksFinish
 
   SyncState.blocks
@@ -224,7 +224,7 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
     ctx.pool.lastSyncUpdLog = Moment.now() # reset logging control
     info "State changed", prevState, newState,
       base=ctx.chain.baseNumber, head=ctx.chain.latestNumber,
-      target=ctx.subState.head, targetHash=ctx.subState.headHash.short
+      target=ctx.subState.headNum, targetHash=ctx.subState.headHash.short
 
   else:
     # Most states require synchronisation via `poolMode`
@@ -238,7 +238,7 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
 
 
 proc updateLastBlockImported*(ctx: BeaconCtxRef; bn: BlockNumber) =
-  ctx.subState.top = bn
+  ctx.subState.topNum = bn
   metrics.set(nec_sync_last_block_imported, bn.int64)
 
 # ------------------------------------------------------------------------------
@@ -262,12 +262,12 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
 
       # Update range
       ctx.headersUnprocSet(b+1, t-1)
-      ctx.subState.head = t
+      ctx.subState.headNum = t
       ctx.subState.headHash = ctx.hdrCache.headHash
 
       # Update metrics
       ctx.pool.syncEta.lastUpdate = ctx.subState.stateSince
-      metrics.set(nec_sync_head, ctx.subState.head.int64)
+      metrics.set(nec_sync_head, ctx.subState.headNum.int64)
 
       info "Activating syncer", base=b, head=ctx.chain.latestNumber,
         target=t, targetHash=ctx.subState.headHash.short,

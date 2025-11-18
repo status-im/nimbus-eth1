@@ -266,13 +266,13 @@ template blocksImport*(
       if not srcPeer.isNil:
         srcPeer.only.nErrors.apply.blk = 0
 
-    nBlocks = ctx.subState.top - iv.minPt + 1      # number of blocks imported
+    nBlocks = ctx.subState.topNum - iv.minPt + 1   # number of blocks imported
 
-    trace info & ": blocks imported", iv=(if iv.minPt <= ctx.subState.top:
-      (iv.minPt, ctx.subState.top).toStr else: "n/a"), nBlocks,
-      nFailed=(iv.maxPt - ctx.subState.top),
+    trace info & ": blocks imported", iv=(if iv.minPt <= ctx.subState.topNum:
+      (iv.minPt, ctx.subState.topNum).toStr else: "n/a"), nBlocks,
+      nFailed=(iv.maxPt - ctx.subState.topNum),
       base=ctx.chain.baseNumber, head=ctx.chain.latestNumber,
-      target=ctx.subState.head, targetHash=ctx.subState.headHash.short
+      target=ctx.subState.headNum, targetHash=ctx.subState.headHash.short
     # End block: `body`
 
   nBlocks                                          # return value
