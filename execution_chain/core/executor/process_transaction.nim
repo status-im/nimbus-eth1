@@ -53,11 +53,16 @@ proc commitOrRollbackDependingOnGasUsed(
   # an early stop. It would rather detect differing values for the  block
   # header `gasUsed` and the `vmState.cumulativeGasUsed` at a later stage.
   if header.gasLimit < vmState.cumulativeGasUsed + gasUsed:
+    if vmState.balTrackerEnabled:
+      vmState.balTracker.rollbackCallFrame()
     vmState.ledger.rollback(accTx)
     err(&"invalid tx: block header gasLimit reached. gasLimit={header.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasUsed}")
   else:
     # Accept transaction and collect mining fee.
+    if vmState.balTrackerEnabled:
+      vmState.balTracker.commitCallFrame()
     vmState.ledger.commit(accTx)
+
     vmState.ledger.addBalance(vmState.coinbase(), gasUsed.u256 * priorityFee.u256)
     vmState.cumulativeGasUsed += gasUsed
 
@@ -108,13 +113,15 @@ proc processTransactionImpl(
   let
     com = vmState.com
     txRes = roDB.validateTransaction(tx, sender, header.gasLimit, baseFee256, excessBlobGas, com, fork)
-    res = if txRes.isOk:      
+    res = if txRes.isOk:
       # Execute the transaction.
       vmState.captureTxStart(tx.gasLimit)
-      let
-        accTx = vmState.ledger.beginSavepoint
-      var
-        callResult = tx.txCallEvm(sender, vmState, baseFee)
+
+      if vmState.balTrackerEnabled:
+        vmState.balTracker.beginCallFrame()
+      let accTx = vmState.ledger.beginSavepoint()
+
+      var callResult = tx.txCallEvm(sender, vmState, baseFee)
       vmState.captureTxEnd(tx.gasLimit - callResult.gasUsed)
 
       let tmp = commitOrRollbackDependingOnGasUsed(

@@ -112,8 +112,10 @@ proc procBlkPreamble(
   template header(): Header =
     blk.header
 
+  # Setup block access list tracker for pre‑execution system calls
   if vmState.balTrackerEnabled:
     vmState.balTracker.setBlockAccessIndex(0)
+    vmState.balTracker.beginCallFrame()
 
   let com = vmState.com
   if com.daoForkSupport and com.daoForkBlock.get == header.number:
@@ -146,6 +148,10 @@ proc procBlkPreamble(
     if header.parentBeaconBlockRoot.isSome:
       return err("Pre-Cancun block header must not have parentBeaconBlockRoot")
 
+  # Commit block access list tracker changes for pre‑execution system calls
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.commitCallFrame()
+
   if header.txRoot != EMPTY_ROOT_HASH:
     if blk.transactions.len == 0:
       return err("Transactions missing from body")
@@ -157,8 +163,10 @@ proc procBlkPreamble(
   elif blk.transactions.len > 0:
     return err("Transactions in block with empty txRoot")
 
+  # Setup block access list tracker for post‑execution system calls
   if vmState.balTrackerEnabled:
     vmState.balTracker.setBlockAccessIndex(blk.transactions.len() + 1)
+    vmState.balTracker.beginCallFrame()
 
   if com.isShanghaiOrLater(header.timestamp):
     if header.withdrawalsRoot.isNone:
@@ -222,6 +230,10 @@ proc procBlkEpilogue(
     # because they will alter the state
     withdrawalReqs = ?processDequeueWithdrawalRequests(vmState)
     consolidationReqs = ?processDequeueConsolidationRequests(vmState)
+
+  # Commit block access list tracker changes for post‑execution system calls
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.commitCallFrame()
 
   if not skipStateRootCheck:
     let stateRoot = vmState.ledger.getStateRoot()

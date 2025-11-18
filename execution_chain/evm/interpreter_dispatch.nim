@@ -72,7 +72,7 @@ proc beforeExecCall(c: Computation) =
       db.subBalance(c.msg.sender, c.msg.value)
       db.addBalance(c.msg.contractAddress, c.msg.value)
 
-func afterExecCall(c: Computation) =
+proc afterExecCall(c: Computation) =
   ## Collect all of the accounts that *may* need to be deleted based on EIP161
   ## https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md
   ## also see: https://github.com/ethereum/EIPs/issues/716

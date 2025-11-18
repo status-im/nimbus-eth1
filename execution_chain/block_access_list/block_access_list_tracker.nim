@@ -91,8 +91,14 @@ proc setBlockAccessIndex*(tracker: BlockAccessListTrackerRef, blockAccessIndex: 
 template hasPendingCallFrame*(tracker: BlockAccessListTrackerRef): bool =
   tracker.callFrameSnapshots.len() > 0
 
+template hasParentCallFrame*(tracker: BlockAccessListTrackerRef): bool =
+  tracker.callFrameSnapshots.len() > 1
+
 template pendingCallFrame*(tracker: BlockAccessListTrackerRef): CallFrameSnapshot =
   tracker.callFrameSnapshots[tracker.callFrameSnapshots.high]
+
+template parentCallFrame*(tracker: BlockAccessListTrackerRef): CallFrameSnapshot =
+  tracker.callFrameSnapshots[tracker.callFrameSnapshots.high - 1]
 
 proc beginCallFrame*(tracker: BlockAccessListTrackerRef) =
   ## Begin a new call frame for tracking reverts.
@@ -111,22 +117,38 @@ proc commitCallFrame*(tracker: BlockAccessListTrackerRef) =
   # Called when a call completes successfully.
   doAssert tracker.hasPendingCallFrame()
 
-  tracker.normalizeBalanceAndStorageChanges()
+  if tracker.hasParentCallFrame():
+    # Merge the pending call frame writes into the parent
 
-  let currentIndex = tracker.currentBlockAccessIndex
+    for storageKey, newValue in tracker.pendingCallFrame.storageChanges:
+      tracker.parentCallFrame.storageChanges[storageKey] = newValue
 
-  for storageKey, newValue in tracker.pendingCallFrame.storageChanges:
-    let (address, slot) = storageKey
-    tracker.builder.addStorageWrite(address, slot, currentIndex, newValue)
+    for address, newBalance in tracker.pendingCallFrame.balanceChanges:
+      tracker.parentCallFrame.balanceChanges[address] = newBalance
 
-  for address, newBalance in tracker.pendingCallFrame.balanceChanges:
-    tracker.builder.addBalanceChange(address, currentIndex, newBalance)
+    for address, newNonce in tracker.pendingCallFrame.nonceChanges:
+      tracker.parentCallFrame.nonceChanges[address] = newNonce
 
-  for address, newNonce in tracker.pendingCallFrame.nonceChanges:
-    tracker.builder.addNonceChange(address, currentIndex, newNonce)
+    for address, newCode in tracker.pendingCallFrame.codeChanges:
+      tracker.parentCallFrame.codeChanges[address] = newCode
 
-  for address, newCode in tracker.pendingCallFrame.codeChanges:
-    tracker.builder.addCodeChange(address, currentIndex, newCode)
+  else:
+    tracker.normalizeBalanceAndStorageChanges()
+
+    let currentIndex = tracker.currentBlockAccessIndex
+
+    for storageKey, newValue in tracker.pendingCallFrame.storageChanges:
+      let (address, slot) = storageKey
+      tracker.builder.addStorageWrite(address, slot, currentIndex, newValue)
+
+    for address, newBalance in tracker.pendingCallFrame.balanceChanges:
+      tracker.builder.addBalanceChange(address, currentIndex, newBalance)
+
+    for address, newNonce in tracker.pendingCallFrame.nonceChanges:
+      tracker.builder.addNonceChange(address, currentIndex, newNonce)
+
+    for address, newCode in tracker.pendingCallFrame.codeChanges:
+      tracker.builder.addCodeChange(address, currentIndex, newCode)
 
   tracker.popCallFrame()
 

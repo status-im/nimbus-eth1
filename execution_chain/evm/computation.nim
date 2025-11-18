@@ -151,12 +151,19 @@ func shouldBurnGas*(c: Computation): bool =
   c.isError and c.error.burnsGas
 
 proc snapshot*(c: Computation) =
+  if c.vmState.balTrackerEnabled:
+    c.vmState.balTracker.beginCallFrame()
   c.savePoint = c.vmState.ledger.beginSavepoint()
 
 proc commit*(c: Computation) =
+  if c.vmState.balTrackerEnabled:
+    c.vmState.balTracker.commitCallFrame()
   c.vmState.ledger.commit(c.savePoint)
 
 proc dispose*(c: Computation) =
+  if c.vmState.balTrackerEnabled:
+    # TODO: Is this rollback required?
+    c.vmState.balTracker.rollbackCallFrame()
   c.vmState.ledger.safeDispose(c.savePoint)
   if c.stack != nil:
     if c.keepStack:
@@ -167,6 +174,8 @@ proc dispose*(c: Computation) =
   c.savePoint = nil
 
 proc rollback*(c: Computation) =
+  if c.vmState.balTrackerEnabled:
+    c.vmState.balTracker.rollbackCallFrame()
   c.vmState.ledger.rollback(c.savePoint)
 
 func setError*(c: Computation, msg: sink string, burnsGas = false) =
