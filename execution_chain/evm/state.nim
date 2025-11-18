@@ -261,7 +261,7 @@ proc `status=`*(vmState: BaseVMState, status: bool) =
 func tracingEnabled*(vmState: BaseVMState): bool =
   vmState.tracer.isNil.not
 
-func balTrackerEnabled*(vmState: BaseVMState): bool =
+template balTrackerEnabled*(vmState: BaseVMState): bool =
   vmState.balTracker.isNil.not
 
 proc captureTxStart*(vmState: BaseVMState, gasLimit: GasInt) =

@@ -25,7 +25,7 @@ import
   chronicles, chronos
 
 export
-  common
+  common, state
 
 logScope:
   topics = "vm computation"

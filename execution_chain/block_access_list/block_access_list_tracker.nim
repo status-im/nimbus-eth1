@@ -242,6 +242,20 @@ proc trackBalanceChange*(tracker: BlockAccessListTrackerRef, address: Address, n
   tracker.capturePreBalance(address)
   tracker.pendingCallFrame.balanceChanges[address] = newBalance
 
+proc trackAddBalanceChange*(tracker: BlockAccessListTrackerRef, address: Address, delta: UInt256) =
+  if delta.isZero:
+    tracker.trackAddressAccess(address)
+    return
+
+  tracker.trackBalanceChange(address, tracker.ledger.getBalance(address) + delta)
+
+proc trackSubBalanceChange*(tracker: BlockAccessListTrackerRef, address: Address, delta: UInt256) =
+  if delta.isZero:
+    tracker.trackAddressAccess(address)
+    return
+
+  tracker.trackBalanceChange(address, tracker.ledger.getBalance(address) - delta)
+
 proc trackNonceChange*(tracker: BlockAccessListTrackerRef, address: Address, newNonce: AccountNonce) =
   ## Track a nonce change for an account.
   ## Records nonce increments for both EOAs (when sending transactions) and
