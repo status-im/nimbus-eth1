@@ -111,6 +111,8 @@ proc beforeExecCreate(c: Computation): bool =
 
   c.snapshot()
 
+  if c.vmState.balTrackerEnabled:
+    c.vmState.balTracker.trackAddressAccess(c.msg.contractAddress)
   if c.vmState.readOnlyLedger().contractCollision(c.msg.contractAddress):
     let blurb = c.msg.contractAddress.toHex
     c.setError("Address collision when creating contract address=" & blurb, true)
