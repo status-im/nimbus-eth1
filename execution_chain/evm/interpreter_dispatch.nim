@@ -68,6 +68,9 @@ macro selectVM(v: VmCpt, fork: EVMFork, tracingEnabled: bool): EvmResultVoid =
 proc beforeExecCall(c: Computation) =
   c.snapshot()
   if c.msg.kind == CallKind.Call:
+    if c.vmState.balTrackerEnabled:
+      c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
+      c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
     c.vmState.mutateLedger:
       db.subBalance(c.msg.sender, c.msg.value)
       db.addBalance(c.msg.contractAddress, c.msg.value)
@@ -96,6 +99,8 @@ proc beforeExecCreate(c: Computation): bool =
         "Nonce overflow when sender=" & sender & " wants to create contract", false
       )
       return true
+    if c.vmState.balTrackerEnabled:
+      c.vmState.balTracker.trackNonceChange(c.msg.sender, nonce + 1)
     db.setNonce(c.msg.sender, nonce + 1)
 
     # We add this to the access list _before_ taking a snapshot.
@@ -111,6 +116,12 @@ proc beforeExecCreate(c: Computation): bool =
     c.setError("Address collision when creating contract address=" & blurb, true)
     c.rollback()
     return true
+
+  if c.vmState.balTrackerEnabled:
+    c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
+    c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
+    if c.fork >= FkSpurious:
+      c.vmState.balTracker.trackIncNonceChange(c.msg.contractAddress)
 
   c.vmState.mutateLedger:
     db.subBalance(c.msg.sender, c.msg.value)

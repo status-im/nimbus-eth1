@@ -270,6 +270,9 @@ proc trackNonceChange*(tracker: BlockAccessListTrackerRef, address: Address, new
   tracker.trackAddressAccess(address)
   tracker.pendingCallFrame.nonceChanges[address] = newNonce
 
+proc trackIncNonceChange*(tracker: BlockAccessListTrackerRef, address: Address) =
+  tracker.trackNonceChange(address, tracker.ledger.getNonce(address) + 1)
+
 proc trackCodeChange*(tracker: BlockAccessListTrackerRef, address: Address, newCode: seq[byte]) =
   ## Track a code change for contract deployment.
   ## Records new contract code deployments via [`CREATE`], [`CREATE2`], or

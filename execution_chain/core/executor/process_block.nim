@@ -174,6 +174,9 @@ proc procBlkPreamble(
     if blk.withdrawals.isNone:
       return err("Post-Shanghai block body must have withdrawals")
 
+    if vmState.balTrackerEnabled:
+      for withdrawal in blk.withdrawals.get:
+        vmState.balTracker.trackAddBalanceChange(withdrawal.address, withdrawal.weiAmount)
     for withdrawal in blk.withdrawals.get:
       vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
   else:
