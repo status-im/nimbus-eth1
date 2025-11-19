@@ -33,8 +33,8 @@ proc importBlock*(
     peer = buddy.peer
 
   if blk.header.number <= ctx.chain.baseNumber:
-    trace "Ignoring block less eq. base", peer, blk=blk.bnStr,
-      B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr
+    trace "Ignoring block less eq. base", peer, blk=blk.header.number,
+      B=ctx.chain.baseNumber, L=ctx.chain.latestNumber
   else:
     try:
       (await ctx.chain.queueImportBlock(blk)).isOkOr:

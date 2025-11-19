@@ -67,7 +67,7 @@ func hdrSessionStopped*(ctx: BeaconCtxRef): bool =
 
 func hdrThroughput*(buddy: BeaconBuddyRef): string =
   ## Print throuhput sratistics
-  buddy.only.thPutStats.hdr.toMeanVar.psStr
+  buddy.only.thPutStats.hdr.toMeanVar.toStr
 
 # -------------
 

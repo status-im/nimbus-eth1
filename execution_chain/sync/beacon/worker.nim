@@ -54,7 +54,7 @@ proc start*(buddy: BeaconBuddyRef; info: static[string]): bool =
 proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
   ## Clean up this peer
   if not buddy.ctx.hibernate: debug info & ": release peer", peer=buddy.peer,
-    thPut=buddy.only.thPutStats.toMeanVar.psStr,
+    thPut=buddy.only.thPutStats.toMeanVar.toStr,
     nSyncPeers=(buddy.ctx.nSyncPeers()-1), state=($buddy.syncState)
   buddy.stopBuddy()
 
@@ -146,7 +146,7 @@ template runPeer*(
     if buddy.somethingToCollectOrUnstage():
 
       trace info & ": start processing", peer=buddy.peer,
-        thPut=buddy.only.thPutStats.toMeanVar.psStr,
+        thPut=buddy.only.thPutStats.toMeanVar.toStr,
         rankInfo=($rank.assessed),
         rank=(if rank.ranking < 0: "n/a" else: $rank.ranking),
         nSyncPeers=buddy.ctx.nSyncPeers(), state=($buddy.syncState)

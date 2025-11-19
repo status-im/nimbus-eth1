@@ -140,19 +140,13 @@ const
 # Private debugging and print functions
 # ------------------------------------------------------------------------------
 
-func bnStr(w: BlockNumber): string =
-  $w
-
-func bnStr(h: Header): string =
-  h.number.bnStr
-
 func toStr(hc: HeaderChainRef): string =
   result = "("
   result &= $hc.session.mode
-  result &= ", " & hc.session.ante.bnStr
+  result &= ", " & $hc.session.ante.number
   if hc.session.ante != hc.session.head:
-    result &= ".." & hc.session.head.bnStr
-  result &= "," & hc.session.consHeadNum.bnStr
+    result &= ".." & $hc.session.head.number
+  result &= "," & $hc.session.consHeadNum
   result &= ")"
 
 # ------------------------------------------------------------------------------
@@ -305,7 +299,7 @@ proc resolveFinHash(hc: HeaderChainRef, f: Hash32) =
   if hc.chain.tryUpdatePendingFCU(f, number):
     debug MsgPfx & "pendingFCU resolved to block number",
       hash = f.short,
-      number = number.bnStr
+      number
 
 proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
   ## Call back function to register new/prevously-unknown FC updates.
@@ -490,20 +484,20 @@ proc put*(
     return ok()                                    # nothing to do
 
   debug MsgPfx & "updated",
-    minNum=rev[^1].bnStr,
-    maxNum=rev[0].bnStr,
+    minNum=rev[^1].number,
+    maxNum=rev[0].number,
     numHeaders=rev.len
 
   # Check whether argument list closes up to headers chain
   let lastNumber = rev[0].number
   if lastNumber + 1 < hc.session.ante.number:
     return err("Gap between rev[] and headers chain antecedent " &
-      hc.session.ante.bnStr)
+      $hc.session.ante.number)
 
   # Must not overwrite or exceed the top end of headers chain
   if hc.session.head.number <= lastNumber:
     return err("Argument rev[] exceeds chain head " &
-      hc.session.head.bnStr)
+      $hc.session.head.number)
 
   # Check whether the `FC` module has changed and the current antecedent
   # already is the end of it.
@@ -532,7 +526,7 @@ proc put*(
       if bn != hdr.number:
         # There is no need to clean up as nothing was store on the DB
         return err("Block number mismatch for rev[" & $n & "].number=" &
-                   hdr.bnStr & " expected=" & bn.bnStr)
+                   $hdr.number & " expected=" & $bn)
 
       # Verify that `hdr` is parent of `rev[n-1]` or `ante`
       let
@@ -541,14 +535,13 @@ proc put*(
                   else: hc.session.ante.parentHash
       if expHash != hash:
         # There is no need to clean up as nothing was store on the DB
-        return err("Parent hash mismatch for rev[" & $n & "].number=" &
-          bn.bnStr)
+        return err("Parent hash mismatch for rev[" & $n & "].number=" & $bn)
 
       if hash == hc.chain.pendingFCU:
         if hc.chain.tryUpdatePendingFCU(hash, hdr.number):
           debug "PendingFCU resolved to block number",
             hash=hash.short,
-            number=hdr.bnStr
+            number=hdr.number
 
       # Check whether `hdr` has a parent on the `FC` module.
       let newMode = hc.tryFcParent(hdr)
@@ -608,10 +601,10 @@ proc commit*(hc: HeaderChainRef): Result[void,string] =
 
       # Impossible situation!
       raiseAssert MsgPfx &
-        "Missing finalised " & fin.bnStr & " parent on FC module" &
-           ", base=" & hc.chain.baseNumber.bnStr &
-           ", head=" & hc.session.head.bnStr &
-           ", finalized=" & hc.chain.latestFinalizedBlockNumber.bnStr
+        "Missing finalised " & $fin.number & " parent on FC module" &
+           ", base=" & $hc.chain.baseNumber &
+           ", head=" & $hc.session.head.number &
+           ", finalized=" & $hc.chain.latestFinalizedBlockNumber
 
   hc.session.mode = orphan
   err("Parent on FC module has been lost: obsolete branch segment")
@@ -678,7 +671,7 @@ proc verify*(hc: HeaderChainRef): Result[void,string] =
   if 0 < hc.session.head.number:
     for bn in hc.session.ante.number .. hc.session.head.number:
       discard hc.get(bn).valueOr:
-        return err("Missing db entry " & bn.bnStr & " for hc=" & hc.toStr)
+        return err("Missing db entry " & $bn & " for hc=" & hc.toStr)
   ok()
 
 # ------------------------------------------------------------------------------
