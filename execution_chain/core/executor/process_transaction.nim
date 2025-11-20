@@ -60,8 +60,8 @@ proc commitOrRollbackDependingOnGasUsed(
   else:
     # Accept transaction and collect mining fee.
     if vmState.balTrackerEnabled:
-      vmState.balTracker.commitCallFrame()
       vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), gasUsed.u256 * priorityFee.u256)
+      vmState.balTracker.commitCallFrame()
     vmState.ledger.commit(accTx)
     vmState.ledger.addBalance(vmState.coinbase(), gasUsed.u256 * priorityFee.u256)
     vmState.cumulativeGasUsed += gasUsed

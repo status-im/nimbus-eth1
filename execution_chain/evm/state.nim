@@ -123,6 +123,10 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
   ## queries about its `getStateRoot()`, i.e. `isTopLevelClean` evaluated `true`. If
   ## this function returns `false`, the function argument `self` is left
   ## untouched.
+
+  if not self.balTracker.isNil():
+    self.balTracker = BlockAccessListTrackerRef.init(self.ledger.ReadOnlyLedger)
+
   if not self.ledger.isTopLevelClean:
     return false
 

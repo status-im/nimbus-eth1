@@ -174,9 +174,6 @@ proc commit*(c: Computation) =
   c.vmState.ledger.commit(c.savePoint)
 
 proc dispose*(c: Computation) =
-  if c.vmState.balTrackerEnabled:
-    # TODO: Is this rollback required?
-    c.vmState.balTracker.rollbackCallFrame()
   c.vmState.ledger.safeDispose(c.savePoint)
   if c.stack != nil:
     if c.keepStack:
