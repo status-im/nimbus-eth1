@@ -401,7 +401,8 @@ proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async:
           base = c.base.number,
           baseHash = c.base.hash.short,
           pendingFCU = c.pendingFCU.short,
-          resolvedFin = c.latestFinalized.number,
+          resolvedFinNum = c.latestFinalized.number,
+          resolvedFinHash = c.latestFinalized.hash.short,
           dbSnapshotsCount = c.baseTxFrame.aTx.db.snapshots.len()
       else:
         debug "Finalized blocks persisted",
@@ -410,7 +411,8 @@ proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async:
           base = c.base.number,
           baseHash = c.base.hash.short,
           pendingFCU = c.pendingFCU.short,
-          resolvedFin = c.latestFinalized.number,
+          resolvedFinNum = c.latestFinalized.number,
+          resolvedFinHash = c.latestFinalized.hash.short,
           dbSnapshotsCount = c.baseTxFrame.aTx.db.snapshots.len()
       c.lastBaseLogTime = time
       c.persistedCount = 0
@@ -489,7 +491,7 @@ proc validateBlock(c: ForkedChainRef,
   # TODO shortLog-equivalent for eth types
   debug "Validating block",
     blkHash, blk = (
-      parentHash: blk.header.parentHash,
+      parentHash: blk.header.parentHash.short,
       coinbase: blk.header.coinbase,
       stateRoot: blk.header.stateRoot,
       transactionsRoot: blk.header.transactionsRoot,
@@ -796,7 +798,7 @@ template queueForkChoice*(c: ForkedChainRef,
   await c.queue.addLast(item)
   item.responseFut
 
-func finHash*(c: ForkedChainRef): Hash32 =
+func resolvedFinHash*(c: ForkedChainRef): Hash32 =
   c.latestFinalized.hash
 
 func resolvedFinNumber*(c: ForkedChainRef): uint64 =

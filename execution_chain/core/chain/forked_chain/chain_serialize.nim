@@ -224,7 +224,7 @@ proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbEr
     latestHash=fc.latest.hash.short,
     head=fc.fcuHead.number,
     headHash=fc.fcuHead.hash.short,
-    finalized=fc.latestFinalized.number,
+    finalizedNum=fc.latestFinalized.number,
     finalizedHash=fc.latestFinalized.hash.short,
     blocksSerialized=fc.hashToBlock.len,
     heads=fc.heads.toString
@@ -277,7 +277,8 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
   info "Loading block DAG from database",
     base=fc.base.number,
     pendingFCU=fc.pendingFCU.short,
-    resolvedFin=fc.latestFinalized.number,
+    resolvedFinNum=fc.latestFinalized.number,
+    resolvedFinHash=fc.latestFinalized.hash.short,
     canonicalHead=fc.fcuHead.number,
     safe=fc.fcuSafe.number,
     numBlocks=state.numBlocks,

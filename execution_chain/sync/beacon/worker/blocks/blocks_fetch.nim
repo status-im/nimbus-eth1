@@ -115,11 +115,12 @@ template fetchBodies*(
           # Just return `failed` (no error count or throughput stats)
           discard
 
-        chronicles.info trEthRecvReceivedBlockBodies & " error", peer,
+        debug trEthRecvReceivedBlockBodies & " error", peer,
           startHash=request.blockHashes[0].short, nReq,
           ela=rc.error.elapsed.toStr, state=($buddy.syncState),
-          errorClass=rc.error.excp, error=rc.error.name, msg=rc.error.msg,
-          nErrors=buddy.nErrors.fetch.bdy
+          error=($rc.error.excp & (if rc.error.name.len == 0: ""
+                                   else: "(" & rc.error.name & ")")),
+          msg=rc.error.msg, nErrors=buddy.nErrors.fetch.bdy
         break body                                  # return err()
 
     # Evaluate result
@@ -129,7 +130,7 @@ template fetchBodies*(
       trace trEthRecvReceivedBlockBodies, peer,
         startHash=request.blockHashes[0].short, nReq, nResp=0,
         ela=elapsed.toStr, state=($buddy.syncState),
-        errorClass=(if rc.isErr: $rc.error.excp else: "n/a"),
+        error=(if rc.isErr: $rc.error.excp else: "n/a"),
         nErrors=buddy.nErrors.fetch.bdy
       break body                                    # return err()
 

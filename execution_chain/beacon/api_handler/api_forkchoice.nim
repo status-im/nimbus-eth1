@@ -86,7 +86,9 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     warn "Forkchoice requested update to zero hash"
     return simpleFCU(PayloadExecutionStatus.invalid)
 
-  chain.pendingFCU = update.finalizedBlockHash
+  # Try updateing the finalised header argument by hash. If unsuccessful,
+  # the hash will be stored in `pendingFCU`. Otherwise, hash and block
+  # number will have been stored in `latestFinalized`.
   com.resolveFinHash(update.finalizedBlockHash)
 
   # Check whether we have the block yet in our database or not. If not, we'll
@@ -114,8 +116,9 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       base   = chain.baseNumber,
       finHash= update.finalizedBlockHash.short,
       safe   = update.safeBlockHash.short,
-      pendingFCU = chain.finHash.short,
-      resolvedFin= chain.resolvedFinNumber
+      pendingFCU = chain.pendingFCU.short,
+      resolvedFinNum = chain.resolvedFinNumber,
+      resolvedFinHash = chain.resolvedFinHash.short
 
     # Inform the header chain cache (used by the syncer)
     com.headerChainUpdate(header, update.finalizedBlockHash)
@@ -166,8 +169,9 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       headHash   = headHash.short,
       headNumber = header.number,
       base       = chain.baseNumber,
-      pendingFCU = chain.finHash.short,
-      resolvedFin= chain.resolvedFinNumber
+      pendingFCU = chain.pendingFCU.short,
+      resolvedFinNum = chain.resolvedFinNumber,
+      resolvedFinHash = chain.resolvedFinHash.short
     return validFCU(Opt.none(Bytes8), headHash)
 
   # If the beacon client also advertised a finalized block, mark the local
@@ -224,6 +228,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     base = chain.baseNumber,
     baseHash = chain.baseHash.short,
     finalizedHash = finalizedBlockHash.short,
-    resolvedFin = chain.resolvedFinNumber
+    resolvedFinNum = chain.resolvedFinNumber,
+    resolvedFinHash = chain.resolvedFinHash.short
 
   return validFCU(Opt.none(Bytes8), headHash)
