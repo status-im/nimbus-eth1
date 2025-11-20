@@ -294,6 +294,7 @@ proc resolveFinHash(hc: HeaderChainRef, f: Hash32) =
     hc.chain.quarantine.getHeader(f).map(toNumber) or hc.kvt.getNumber(f) or
     hc.chain.headerByHash(f).map(toNumber)
   ).valueOr:
+    hc.chain.pendingFCU = f
     return
 
   if hc.chain.tryUpdatePendingFCU(f, number):
@@ -324,6 +325,7 @@ proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
       # Update `FC` module
       hc.chain.pendingFCU = f
       if f == hc.session.headHash:
+        # Note that `tryUpdatePendingFCU()` wil reset `pendingFCU`.
         discard hc.chain.tryUpdatePendingFCU(f, h.number)
 
       # Inform client app about that a new session has started.
@@ -581,30 +583,19 @@ proc commit*(hc: HeaderChainRef): Result[void,string] =
     hc.session.mode = locked                          # update internal state
     return ok()
 
-  block assignFinalisedChild:
-    # Use `finalised` only if it is on the header chain as well
-    let fin = hc.kvt.getHeader(hc.chain.pendingFCU).valueOr:
-      break assignFinalisedChild
+  if hc.chain.pendingFCU != zeroHash32:
+    hc.resolveFinHash(hc.chain.pendingFCU)
+  let finNum = hc.chain.latestFinalized.number
 
-    if hc.chain.baseNumber() < fin.number:
-      # Now, there are two segments of the canonical chain, `base..finalised`
-      # on# the `FC` module and `ante..finalised` (maybe degraded) on the
-      # header chain cache.
-      #
-      # So `finalised` is on the header chain cache and has a parent on the
-      # `FC` module.
-      if hc.chain.hashToBlock.hasKey(hc.chain.pendingFCU):
-        hc.session.ante = fin
-        hc.session.mode = locked                      # update internal state
-        metrics.set(nec_sync_dangling, fin.number.int64)
-        return ok()
-
-      # Impossible situation!
-      raiseAssert MsgPfx &
-        "Missing finalised " & $fin.number & " parent on FC module" &
-           ", base=" & $hc.chain.baseNumber &
-           ", head=" & $hc.session.head.number &
-           ", finalized=" & $hc.chain.latestFinalizedBlockNumber
+  # Use `finalised` only if it is on the header chain as well
+  if hc.chain.baseNumber() < finNum:
+    let finHash = hc.chain.latestFinalized.hash
+    hc.session.ante =
+      if hc.session.head.number <= finNum: hc.session.head
+      else: hc.kvt.getHeader(finHash).expect "valid header"
+    hc.session.mode = locked                          # update internal state
+    metrics.set(nec_sync_dangling, hc.session.ante.number.int64)
+    return ok()
 
   hc.session.mode = orphan
   err("Parent on FC module has been lost: obsolete branch segment")
