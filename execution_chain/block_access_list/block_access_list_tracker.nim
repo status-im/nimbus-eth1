@@ -62,7 +62,7 @@ type
     callFrameSnapshots*: seq[CallFrameSnapshot]
       ## Stack of snapshots for nested call frames to handle reverts properly.
 
-proc init(T: type CallFrameSnapshot): T =
+template init(T: type CallFrameSnapshot): T =
   CallFrameSnapshot()
 
 # Disallow copying of CallFrameSnapshot
@@ -100,7 +100,7 @@ template pendingCallFrame*(tracker: BlockAccessListTrackerRef): CallFrameSnapsho
 template parentCallFrame*(tracker: BlockAccessListTrackerRef): CallFrameSnapshot =
   tracker.callFrameSnapshots[tracker.callFrameSnapshots.high - 1]
 
-proc beginCallFrame*(tracker: BlockAccessListTrackerRef) =
+template beginCallFrame*(tracker: BlockAccessListTrackerRef) =
   ## Begin a new call frame for tracking reverts.
   ## Creates a new snapshot to track changes within this call frame.
   ## This allows proper handling of reverts as specified in EIP-7928.
@@ -181,8 +181,8 @@ proc capturePreBalance*(tracker: BlockAccessListTrackerRef, address: Address) =
   if address notin tracker.preBalanceCache:
     tracker.preBalanceCache[address] = tracker.ledger.getBalance(address)
 
-proc getPreBalance*(tracker: BlockAccessListTrackerRef, address: Address): UInt256 =
-  return tracker.preBalanceCache.getOrDefault(address)
+template getPreBalance*(tracker: BlockAccessListTrackerRef, address: Address): UInt256 =
+  tracker.preBalanceCache.getOrDefault(address)
 
 proc capturePreStorage*(tracker: BlockAccessListTrackerRef, address: Address, slot: UInt256) =
   ## Capture and cache the pre-transaction value for a storage location.
@@ -195,8 +195,8 @@ proc capturePreStorage*(tracker: BlockAccessListTrackerRef, address: Address, sl
   if storageKey notin tracker.preStorageCache:
     tracker.preStorageCache[storageKey] = tracker.ledger.getStorage(address, slot)
 
-proc getPreStorage*(tracker: BlockAccessListTrackerRef, address: Address, slot: UInt256): UInt256 =
-  return tracker.preStorageCache.getOrDefault((address, slot))
+template getPreStorage*(tracker: BlockAccessListTrackerRef, address: Address, slot: UInt256): UInt256 =
+  tracker.preStorageCache.getOrDefault((address, slot))
 
 template trackAddressAccess*(tracker: BlockAccessListTrackerRef, address: Address) =
   ## Track that an address was accessed.
@@ -270,7 +270,7 @@ proc trackNonceChange*(tracker: BlockAccessListTrackerRef, address: Address, new
   tracker.trackAddressAccess(address)
   tracker.pendingCallFrame.nonceChanges[address] = newNonce
 
-proc trackIncNonceChange*(tracker: BlockAccessListTrackerRef, address: Address) =
+template trackIncNonceChange*(tracker: BlockAccessListTrackerRef, address: Address) =
   tracker.trackNonceChange(address, tracker.ledger.getNonce(address) + 1)
 
 proc trackCodeChange*(tracker: BlockAccessListTrackerRef, address: Address, newCode: seq[byte]) =
