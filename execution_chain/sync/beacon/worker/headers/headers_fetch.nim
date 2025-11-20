@@ -173,8 +173,8 @@ template fetchHeadersReversed*(
     if h[^1].number != ivReq.minPt and ivReq.minPt != 0:
       buddy.hdrFetchRegisterError(forceZombie=true)
       trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
-        hash=topHash.toStr, reqMinPt=ivReq.minPt.bnStr,
-        respMinPt=h[^1].bnStr, nResp=h.len, ela=elapsed.toStr,
+        hash=topHash.toStr, reqMinPt=ivReq.minPt,
+        respMinPt=h[^1].number, nResp=h.len, ela=elapsed.toStr,
         state=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
       break body
 
