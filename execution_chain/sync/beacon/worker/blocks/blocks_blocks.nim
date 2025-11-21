@@ -120,8 +120,8 @@ template blocksFetchCheckImpl(
         # erroneously empty `transactions[]`.)
         #
         blocks[n].transactions = bodies[n].transactions
-        blocks[n].uncles       = bodies[n].uncles
-        blocks[n].withdrawals  = bodies[n].withdrawals
+        blocks[n].uncles = bodies[n].uncles
+        blocks[n].withdrawals = bodies[n].withdrawals
 
     if 0 < blocks.len.uint64:
       bodyRc = Opt[seq[EthBlock]].ok(blocks)               # return ok()

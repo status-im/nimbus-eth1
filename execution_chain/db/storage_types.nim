@@ -29,6 +29,7 @@ type
     beaconHeader = 10
     wdKey = 11
     witness = 12
+    blockAccessList = 13
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -107,6 +108,11 @@ func withdrawalsKey*(h: Hash32): DbKey {.inline.} =
 
 func blockHashToWitnessKey*(h: Hash32): DbKey {.inline.} =
   result.data[0] = byte ord(witness)
+  result.data[1 .. 32] = h.data
+  result.dataEndPos = uint8 32
+
+func blockAccessListHashKey*(h: Hash32): DbKey {.inline.} =
+  result.data[0] = byte ord(blockAccessList)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 
