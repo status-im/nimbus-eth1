@@ -13,8 +13,7 @@ import
   unittest2,
   beacon_chain/spec/forks,
   # Test helpers
-  beacon_chain /../ tests/testblockutil,
-  beacon_chain /../ tests/mocking/mock_genesis,
+  beacon_chain /../ tests/[testblockutil, teststateutil],
   beacon_chain /../ tests/consensus_spec/fixtures_utils,
   ../../network/beacon/beacon_chain_historical_roots
 
