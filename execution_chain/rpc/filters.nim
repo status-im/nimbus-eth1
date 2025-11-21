@@ -7,6 +7,7 @@
 
 import
   std/sequtils,
+  ssz_serialization,
   eth/common/eth_types_rlp,
   web3/eth_api_types,
   eth/bloom as bFilter,
@@ -14,6 +15,14 @@ import
   ./rpc_types
 
 export rpc_types
+
+template topicsSeq(topics: untyped): untyped =
+  ## Helper that returns the topics unchanged when they are already ``seq``
+  ## and calls ``asSeq`` when they are bounded ``List``.
+  when topics is seq:
+    topics
+  else:
+    topics.asSeq()
 
 {.push raises: [].}
 
@@ -53,10 +62,10 @@ proc match*(
       (not addresses.list.contains(log.address)):
     return false
 
-  if len(topics) > len(log.topics):
+  if len(topics) > len(topicsSeq(log.topics)):
     return false
 
-  if not matchTopics(log.topics, topics):
+  if not matchTopics(topicsSeq(log.topics), topics):
     return false
 
   true
@@ -104,9 +113,9 @@ proc deriveLogs*(
           blockHash: Opt.some(blkHash),
           blockNumber: Opt.some(Quantity(header.number)),
           address: log.address,
-          data: log.data,
+          data: log.data.asSeq(),
           #  TODO topics should probably be kept as Hash32 in receipts
-          topics: log.topics,
+          topics: log.topics.asSeq(),
         )
 
         inc logIndex

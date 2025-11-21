@@ -15,9 +15,11 @@ import
   stew/assign2,
   ../db/ledger,
   ../common/[common, evmforks],
+  ../core/log_index,
   ./interpreter/[op_codes, gas_costs],
   ./types,
   ./evm_errors
+
 
 func forkDeterminationInfoForVMState(vmState: BaseVMState): ForkDeterminationInfo =
   forkDeterminationInfo(vmState.parent.number + 1, vmState.blockCtx.timestamp)
@@ -32,7 +34,8 @@ proc init(
       blockCtx:     BlockContext;
       com:          CommonRef;
       tracer:       TracerRef,
-      flags:        set[VMFlag] = self.flags) =
+      flags:        set[VMFlag] = self.flags,
+      logIndex:     LogIndex = default(LogIndex)) =
   ## Initialisation helper
   # Take care to (re)set all fields since the VMState might be recycled
   self.com = com
@@ -48,9 +51,9 @@ proc init(
   self.receipts.setLen(0)
   self.cumulativeGasUsed = 0
   self.gasCosts = self.fork.forkToSchedule
-  self.blobGasUsed = 0'u64
   self.allLogs.setLen(0)
   self.gasRefunded = 0
+  self.logIndex = logIndex
 
 func blockCtx(header: Header): BlockContext =
   BlockContext(
@@ -80,7 +83,8 @@ proc new*(
       com:      CommonRef;       ## block chain config
       txFrame:  CoreDbTxRef;
       tracer:   TracerRef = nil,
-      storeSlotHash = false): T =
+      storeSlotHash = false,
+      logIndex: LogIndex = default(LogIndex)): T =
   ## Create a new `BaseVMState` descriptor from a parent block header. This
   ## function internally constructs a new account state cache rooted at
   ## `parent.stateRoot`
@@ -94,7 +98,8 @@ proc new*(
     parent   = parent,
     blockCtx = blockCtx,
     com      = com,
-    tracer   = tracer)
+    tracer   = tracer,
+    logIndex = logIndex)
 
 proc reinit*(self:     BaseVMState;     ## Object descriptor
              parent:   Header;     ## parent header, account sync pos.
@@ -117,13 +122,15 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
     com    = self.com
     ac     = self.ledger
     flags  = self.flags
+    logIdx = self.logIndex  # Preserve LogIndex across reinit
   self.init(
     ac       = ac,
     parent   = parent,
     blockCtx = blockCtx,
     com      = com,
     tracer   = tracer,
-    flags    = flags)
+    flags    = flags,
+    logIndex = logIdx)  # Pass logIndex to init
   true
 
 proc reinit*(self:   BaseVMState; ## Object descriptor
@@ -148,7 +155,8 @@ proc init*(
       com:    CommonRef;       ## block chain config
       txFrame: CoreDbTxRef;
       tracer: TracerRef = nil,
-      storeSlotHash = false) =
+      storeSlotHash = false,
+      logIndex: LogIndex = default(LogIndex)) =
   ## Variant of `new()` constructor above for in-place initalisation. The
   ## `parent` argument is used to sync the accounts cache and the `header`
   ## is used as a container to pass the `timestamp`, `gasLimit`, and `fee`
@@ -161,7 +169,8 @@ proc init*(
     parent   = parent,
     blockCtx = blockCtx(header),
     com      = com,
-    tracer   = tracer)
+    tracer   = tracer,
+    logIndex = logIndex)
 
 proc new*(
       T:      type BaseVMState;
@@ -170,7 +179,8 @@ proc new*(
       com:    CommonRef;       ## block chain config
       txFrame: CoreDbTxRef;
       tracer: TracerRef = nil,
-      storeSlotHash = false): T =
+      storeSlotHash = false,
+      logIndex: LogIndex = default(LogIndex)): T =
   ## This is a variant of the `new()` constructor above where the `parent`
   ## argument is used to sync the accounts cache and the `header` is used
   ## as a container to pass the `timestamp`, `gasLimit`, and `fee` values.
@@ -184,7 +194,8 @@ proc new*(
     com    = com,
     txFrame = txFrame,
     tracer = tracer,
-    storeSlotHash = storeSlotHash)
+    storeSlotHash = storeSlotHash,
+    logIndex = logIndex)
 
 func coinbase*(vmState: BaseVMState): Address =
   vmState.blockCtx.coinbase

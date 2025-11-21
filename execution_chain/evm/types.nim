@@ -15,7 +15,9 @@ import
   ./interpreter/[gas_costs, op_codes],
   ./transient_storage,
   ../db/ledger,
-  ../common/[common, evmforks]
+  ../common/[common, evmforks],
+  ../core/log_index
+
 
 export stack, memory, transient_storage
 
@@ -55,6 +57,8 @@ type
     blobGasUsed*      : uint64
     allLogs*          : seq[Log] # EIP-6110
     gasRefunded*      : int64    # Global gasRefunded counter
+    logIndex*         : LogIndex # EIP-7745
+    eip7745Enabled*   : bool
 
   Computation* = ref object
     # The execution computation

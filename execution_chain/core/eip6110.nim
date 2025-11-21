@@ -12,6 +12,7 @@
 
 import
   eth/common/receipts,
+  ssz_serialization,
   stew/assign2,
   stew/arrayops,
   results
@@ -74,12 +75,12 @@ func depositLogToRequest(data: openArray[byte]): DepositRequest =
 func parseDepositLogs*(logs: openArray[Log], depositContractAddress: Address): Result[seq[byte], string] =
   var res = newSeqOfCap[byte](logs.len*depositRequestSize)
   for i, log in logs:
-    let isDepositEvent = log.topics.len > 0 and
+    let isDepositEvent = len(log.topics) > 0 and
                          log.topics[0] == DEPOSIT_EVENT_SIGNATURE_HASH
     if not(log.address == depositContractAddress and isDepositEvent):
       continue
-    if log.data.len != 576:
-      return err("deposit wrong length: want 576, have " & $log.data.len)
-    res.add depositLogToRequest(log.data)
+    if len(log.topics) != 576:
+      return err("deposit wrong length: want 576, have " & $len(log.topics))
+    res.add depositLogToRequest(log.data.asSeq())
 
   ok(move(res))
