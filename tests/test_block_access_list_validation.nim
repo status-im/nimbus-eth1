@@ -15,6 +15,8 @@ import
   eth/common/block_access_lists_rlp,
   ../execution_chain/block_access_list/[block_access_list_builder, block_access_list_validation]
 
+template toBytes32(slot: UInt256): Bytes32 =
+  Bytes32(slot.toBytesBE())
 
 suite "Block access list validation":
   const
@@ -79,7 +81,7 @@ suite "Block access list validation":
     builder.addStorageWrite(address1, slot3, 3, 3.u256)
 
     var bal = builder.buildBlockAccessList()
-    bal[0].storageReads = @[slot1]
+    bal[0].storageReads = @[slot1.toBytes32()]
     check bal.validate(bal.computeBlockAccessListHash()).isErr()
 
   test "Account changes out of order should fail validation":
