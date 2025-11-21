@@ -72,8 +72,8 @@ template headersFetch*(
     if rc.value[0].number != iv.maxPt or rc.value[^1].number != ivBottom:
       buddy.hdrProcRegisterError()
       ctx.headersUnprocCommit(iv, iv)               # clean up, revert `iv`
-      debug info & ": Garbled header list", peer, iv, headers=rc.value.bnStr,
-        expected=(ivBottom,iv.maxPt).bnStr, state=($buddy.syncState),
+      debug info & ": Garbled header list", peer, iv, headers=rc.value.toStr,
+        expected=(ivBottom,iv.maxPt).toStr, state=($buddy.syncState),
         nErrors=buddy.nErrors.fetch.hdr
       break body                                    # stop, exit function
 
@@ -101,7 +101,7 @@ proc headersStashOnDisk*(
 
   if rc.isErr:
     # Mark peer that produced that unusable headers list as a zombie
-    let srcPeer = buddy.getPeer peerID
+    let srcPeer = buddy.getSyncPeer peerID
     if not srcPeer.isNil:
       srcPeer.only.nErrors.apply.hdr = nProcHeadersErrThreshold + 1
 
@@ -119,27 +119,27 @@ proc headersStashOnDisk*(
 
     # Proper logging ..
     if ctx.subState.cancelRequest:
-      warn "Header stash error (cancel this session)", iv=revHdrs.bnStr,
+      warn "Header stash error (cancel this session)", iv=revHdrs.toStr,
         state=($buddy.syncState), nErrors=buddy.hdrErrors(),
         hdrFailCount=ctx.subState.procFailCount, error=rc.error
     else:
       debug info & ": Header stash error (skip remaining)", peer,
-        iv=revHdrs.bnStr, state=($buddy.syncState), nErrors=buddy.hdrErrors(),
+        iv=revHdrs.toStr, state=($buddy.syncState), nErrors=buddy.hdrErrors(),
         hdrFailCount=ctx.subState.procFailCount, error=rc.error
 
     return err()                                 # stop
 
   let dBottom = ctx.hdrCache.antecedent.number   # new antecedent
   trace info & ": Serialised headers stashed", peer,
-    iv=(if dBottom < dTop: (dBottom,dTop-1).bnStr else: "n/a"),
+    iv=(if dBottom < dTop: (dBottom,dTop-1).toStr else: "n/a"),
     nHeaders=(dTop - dBottom),
     nSkipped=(if rc.isErr: 0u64
               elif revHdrs[^1].number <= dBottom: (dBottom - revHdrs[^1].number)
               else: revHdrs.len.uint64),
-    base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-    target=ctx.subState.head.bnStr, targetHash=ctx.subState.headHash.short
+    base=ctx.chain.baseNumber, head=ctx.chain.latestNumber,
+    target=ctx.subState.headNum, targetHash=ctx.subState.headHash.short
 
-  let srcPeer = buddy.getPeer peerID
+  let srcPeer = buddy.getSyncPeer peerID
   if not srcPeer.isNil:
     srcPeer.only.nErrors.apply.hdr = 0           # reset error count
 

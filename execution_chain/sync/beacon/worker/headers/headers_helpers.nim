@@ -42,7 +42,7 @@ proc hdrFetchRegisterError*(buddy: BeaconBuddyRef;
        ) =
   buddy.nErrors.fetch.hdr.inc
   if nFetchHeadersErrThreshold < buddy.nErrors.fetch.hdr:
-    if not forceZombie and buddy.ctx.pool.nBuddies == 1 and slowPeer:
+    if not forceZombie and buddy.ctx.nSyncPeers() == 1 and slowPeer:
       # The current peer is the last one and is lablelled `slow`. It would
       # have been zombified if it were not the last one. So it can still
       # keep download going untill the peer pool is replenished with
@@ -67,7 +67,7 @@ func hdrSessionStopped*(ctx: BeaconCtxRef): bool =
 
 func hdrThroughput*(buddy: BeaconBuddyRef): string =
   ## Print throuhput sratistics
-  buddy.only.thPutStats.hdr.toMeanVar.psStr
+  buddy.only.thPutStats.hdr.toMeanVar.toStr
 
 # -------------
 

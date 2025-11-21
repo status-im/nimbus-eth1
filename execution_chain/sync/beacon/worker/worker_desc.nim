@@ -89,8 +89,8 @@ type
 
   SyncSubState* = object
     ## Bundelled state variables, easy to clear all with one `reset`.
-    top*: BlockNumber                ## For locally syncronising block import
-    head*: BlockNumber               ## Copy of `ctx.hdrCache.head()`
+    topNum*: BlockNumber             ## For locally syncronising block import
+    headNum*: BlockNumber            ## Copy of `ctx.hdrCache.head().number`
     headHash*: Hash32                ## Copy of `ctx.hdrCache.headHash()`
     stateSince*: chronos.Moment      ## Time of last sync state change
     cancelRequest*: bool             ## Cancel block sync via state machine
@@ -169,7 +169,6 @@ type
 
   BeaconCtxData* = object
     ## Globally shared data extension
-    nBuddies*: int                   ## Number of active workers
     hdrSync*: HeaderFetchSync        ## Syncing by linked header chains
     blkSync*: BlocksFetchSync        ## For importing/executing blocks
     syncState*: SyncState            ## Last known layout state
@@ -220,9 +219,9 @@ func nErrors*(buddy: BeaconBuddyRef): var BuddyErrors =
   ## Shortcut
   buddy.only.nErrors
 
-proc getPeer*(buddy: BeaconBuddyRef; peerID: Hash): BeaconBuddyRef =
+proc getSyncPeer*(buddy: BeaconBuddyRef; peerID: Hash): BeaconBuddyRef =
   ## Getter, retrieve syncer peer (aka buddy) by `peerID` argument
-  if buddy.peerID == peerID: buddy else: buddy.ctx.getPeer peerID
+  if buddy.peerID == peerID: buddy else: buddy.ctx.getSyncPeer peerID
 
 # -----
 

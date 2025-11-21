@@ -48,14 +48,14 @@ proc start*(buddy: BeaconBuddyRef; info: static[string]): bool =
     return false
 
   if not ctx.hibernate: debug info & ": new peer",
-    peer, nSyncPeers=ctx.pool.nBuddies
+    peer, nSyncPeers=ctx.nSyncPeers()
   true
 
 proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
   ## Clean up this peer
   if not buddy.ctx.hibernate: debug info & ": release peer", peer=buddy.peer,
-    thPut=buddy.only.thPutStats.toMeanVar.psStr,
-    nSyncPeers=(buddy.ctx.pool.nBuddies-1), state=($buddy.syncState)
+    thPut=buddy.only.thPutStats.toMeanVar.toStr,
+    nSyncPeers=(buddy.ctx.nSyncPeers()-1), state=($buddy.syncState)
   buddy.stopBuddy()
 
 # ------------------------------------------------------------------------------
@@ -71,7 +71,7 @@ proc runTicker*(ctx: BeaconCtxRef; info: static[string]) =
   ctx.pool.ticker(ctx)
 
   # Inform if there are no peers active while syncing
-  if not ctx.hibernate and ctx.pool.nBuddies < 1:
+  if not ctx.hibernate and ctx.nSyncPeers() < 1:
     let now = Moment.now()
     if ctx.pool.lastNoPeersLog + noPeersLogWaitInterval < now:
       ctx.pool.lastNoPeersLog = now
@@ -146,10 +146,10 @@ template runPeer*(
     if buddy.somethingToCollectOrUnstage():
 
       trace info & ": start processing", peer=buddy.peer,
-        thPut=buddy.only.thPutStats.toMeanVar.psStr,
+        thPut=buddy.only.thPutStats.toMeanVar.toStr,
         rankInfo=($rank.assessed),
         rank=(if rank.ranking < 0: "n/a" else: $rank.ranking),
-        nSyncPeers=buddy.ctx.pool.nBuddies, state=($buddy.syncState)
+        nSyncPeers=buddy.ctx.nSyncPeers(), state=($buddy.syncState)
 
       if rank.assessed == rankingTooLow:
         # Tell the scheduler to wait a bit longer before next invocation.

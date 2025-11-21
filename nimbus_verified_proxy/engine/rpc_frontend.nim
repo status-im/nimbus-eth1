@@ -411,3 +411,14 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
       raise newException(ValueError, error)
 
     Quantity(suggestedPrice.uint64)
+
+  # pass-forward
+  engine.frontend.eth_feeHistory = proc(
+      blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: Opt[seq[float64]]
+  ): Future[FeeHistoryResult] {.async: (raises: [CancelledError]).} =
+    await engine.backend.eth_feeHistory(blockCount, newestBlock, rewardPercentiles)
+
+  engine.frontend.eth_sendRawTransaction = proc(
+      txBytes: seq[byte]
+  ): Future[Hash32] {.async: (raises: [CancelledError]).} =
+    await engine.backend.eth_sendRawTransaction(txBytes)

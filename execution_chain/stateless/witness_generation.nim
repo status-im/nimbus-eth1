@@ -9,23 +9,11 @@
 
 {.push raises: [], gcsafe.}
 
-import
-  std/[tables, sets],
-  minilru,
-  eth/common,
-  ../db/[ledger, core_db],
-  ./witness_types
+import std/[tables, sets], minilru, eth/common, ../db/[ledger, core_db], ./witness_types
 
-export
-  common,
-  ledger,
-  witness_types
+export common, ledger, witness_types
 
-proc build*(
-    T: type Witness,
-    witnessKeys: WitnessTable,
-    preStateLedger: LedgerRef): T =
-
+proc build*(T: type Witness, witnessKeys: WitnessTable, preStateLedger: LedgerRef): T =
   var
     proofPaths: Table[Hash32, seq[Hash32]]
     addedCodeHashes: HashSet[Hash32]
@@ -51,7 +39,6 @@ proc build*(
         if codeHash != EMPTY_CODE_HASH and codeHash notin addedCodeHashes:
           witness.addCodeHash(codeHash)
           addedCodeHashes.incl(codeHash)
-
     else: # Is a slot key
       let
         slotBytes = key.slot.get().toBytesBE()
@@ -94,8 +81,8 @@ proc build*(
     ledger: LedgerRef,
     parent: Header,
     header: Header,
-    validateStateRoot = false): T =
-
+    validateStateRoot = false,
+): T =
   if validateStateRoot and parent.number > 0:
     doAssert preStateLedger.getStateRoot() == parent.stateRoot
 
@@ -116,8 +103,9 @@ proc build*(
 
   witness
 
-
-proc build*(T: type ExecutionWitness, witness: Witness, ledger: LedgerRef): ExecutionWitness =
+proc build*(
+    T: type ExecutionWitness, witness: Witness, ledger: LedgerRef
+): ExecutionWitness =
   var codes: seq[seq[byte]]
   for codeHash in witness.codeHashes:
     let code = ledger.txFrame.getCodeByHash(codeHash).valueOr:
@@ -134,4 +122,5 @@ proc build*(T: type ExecutionWitness, witness: Witness, ledger: LedgerRef): Exec
     state = witness.state,
     codes = move(codes),
     keys = witness.keys,
-    headers = move(headers))
+    headers = move(headers),
+  )

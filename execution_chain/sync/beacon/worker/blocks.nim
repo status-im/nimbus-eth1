@@ -27,10 +27,10 @@ export
 
 proc nUnprocStr(ctx: BeaconCtxRef): string =
   if ctx.blkSessionStopped() or ctx.blocksUnprocIsEmpty(): "n/a"
-  else: $(ctx.hdrCache.head.number.uint64 - ctx.subState.top)
+  else: $(ctx.hdrCache.head.number.uint64 - ctx.subState.topNum)
 
-proc bnStrIfAvail(bn: BlockNumber; ctx: BeaconCtxRef): string =
-  if ctx.blkSessionStopped(): "n/a" else: bn.bnStr
+proc toStrIfAvail(bn: BlockNumber; ctx: BeaconCtxRef): string =
+  if ctx.blkSessionStopped(): "n/a" else: $bn
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -97,12 +97,12 @@ template blocksCollect*(
         #    ----------|                       already imported into `FC` module
         #         topImported bottom
         #
-        if ctx.subState.top < bottom:
+        if ctx.subState.topNum < bottom:
           break
 
         # Throw away overlap (should not happen anyway)
-        if bottom < ctx.subState.top:
-          discard ctx.blocksUnprocFetch(ctx.subState.top - bottom).expect("iv")
+        if bottom < ctx.subState.topNum:
+          discard ctx.blocksUnprocFetch(ctx.subState.topNum-bottom).expect("iv")
 
         # Fetch blocks and verify result
         let blocks = buddy.blocksFetch(nFetchBodiesRequest, info).valueOr:
@@ -122,19 +122,19 @@ template blocksCollect*(
               nUnproc=ctx.nUnprocStr(),
               nStagedQ=ctx.blk.staged.len,
               eta=ctx.pool.syncEta.avg.toStr,
-              base=ctx.chain.baseNumber.bnStr,
-              head=ctx.chain.latestNumber.bnStr,
-              target=ctx.subState.head.bnStr,
+              base=ctx.chain.baseNumber,
+              head=ctx.chain.latestNumber,
+              target=ctx.subState.headNum,
               targetHash=ctx.subState.headHash.short,
               thPut=buddy.blkThroughput,
-              nSyncPeers=ctx.pool.nBuddies
+              nSyncPeers=ctx.nSyncPeers()
             ctx.pool.lastSyncUpdLog = Moment.now()
             nImported = 0
 
         # Import may be incomplete, so a partial roll back may be needed
         let lastBn = blocks[^1].header.number
-        if ctx.subState.top < lastBn:
-          ctx.blocksUnprocAppend(ctx.subState.top + 1, lastBn)
+        if ctx.subState.topNum < lastBn:
+          ctx.blocksUnprocAppend(ctx.subState.topNum + 1, lastBn)
 
         # Buddy might have been cancelled while importing blocks.
         if buddy.ctrl.stopped or ctx.poolMode:
@@ -158,7 +158,7 @@ template blocksCollect*(
           key = rc.value[0].header.number
           qItem = ctx.blocksStagedQueueInsert(key).valueOr:
             raiseAssert info & ": duplicate key on staged queue iv=" &
-              (key, rc.value[^1].header.number).bnStr
+              (key, rc.value[^1].header.number).toStr
 
         qItem.data.blocks = rc.value                # store `blocks[]` list
         qItem.data.peerID = buddy.peerID
@@ -175,12 +175,12 @@ template blocksCollect*(
           nUnproc=ctx.nUnprocStr(),
           nStagedQ=ctx.blk.staged.len,
           eta=ctx.pool.syncEta.avg.toStr,
-          base=ctx.chain.baseNumber.bnStr,
-          head=ctx.chain.latestNumber.bnStr,
-          target=ctx.subState.head.bnStr,
+          base=ctx.chain.baseNumber,
+          head=ctx.chain.latestNumber,
+          target=ctx.subState.headNum,
           targetHash=ctx.subState.headHash.short,
           thPut=buddy.blkThroughput,
-          nSyncPeers=ctx.pool.nBuddies
+          nSyncPeers=ctx.nSyncPeers()
         ctx.pool.lastSyncUpdLog = Moment.now()
 
     elif nQueued == 0 and
@@ -198,10 +198,10 @@ template blocksCollect*(
 
     # This message might run in addition to the `chronicles.info` part
     trace info & ": queued/staged or imported blocks",
-      topImported=ctx.subState.top.bnStr,
-      unprocBottom=ctx.blocksUnprocAvailBottom.bnStrIfAvail(ctx),
+      topImported=ctx.subState.topNum,
+      unprocBottom=ctx.blocksUnprocAvailBottom.toStrIfAvail(ctx),
       nQueued, nImported, nStagedQ=ctx.blk.staged.len,
-      nSyncPeers=ctx.pool.nBuddies
+      nSyncPeers=ctx.nSyncPeers()
 
   discard
 
@@ -250,10 +250,10 @@ template blocksUnstage*(
       # way round: no unprocessed block number range precedes the least staged
       # block.
       let minNum = qItem.data.blocks[0].header.number
-      if ctx.subState.top + 1 < minNum:
+      if ctx.subState.topNum + 1 < minNum:
         trace info & ": block queue not ready yet", peer,
-          topImported=ctx.subState.top.bnStr, qItem=qItem.data.blocks.bnStr,
-          nStagedQ=ctx.blk.staged.len, nSyncPeers=ctx.pool.nBuddies
+          topImported=ctx.subState.topNum, qItem=qItem.data.blocks.toStr,
+          nStagedQ=ctx.blk.staged.len, nSyncPeers=ctx.nSyncPeers()
         switchPeer = true # there is a gap -- come back later
         break
 
@@ -273,19 +273,19 @@ template blocksUnstage*(
             nStagedQ=ctx.blk.staged.len,
             nUnstaged,
             eta=ctx.pool.syncEta.avg.toStr,
-            base=ctx.chain.baseNumber.bnStr,
-            head=ctx.chain.latestNumber.bnStr,
-            target=ctx.subState.head.bnStr,
+            base=ctx.chain.baseNumber,
+            head=ctx.chain.latestNumber,
+            target=ctx.subState.headNum,
             targetHash=ctx.subState.headHash.short,
-            nSyncPeers=ctx.pool.nBuddies
+            nSyncPeers=ctx.nSyncPeers()
           ctx.pool.lastSyncUpdLog = Moment.now()
           nImported = 0
           nUnstaged = 0
 
       # Import probably incomplete, so a partial roll back may be needed
       let lastBn = qItem.data.blocks[^1].header.number
-      if ctx.subState.top < lastBn:
-        ctx.blocksUnprocAppend(ctx.subState.top + 1, lastBn)
+      if ctx.subState.topNum < lastBn:
+        ctx.blocksUnprocAppend(ctx.subState.topNum + 1, lastBn)
 
       # End while loop
 
@@ -298,17 +298,17 @@ template blocksUnstage*(
           nStagedQ=ctx.blk.staged.len,
           nUnstaged,
           eta=ctx.pool.syncEta.avg.toStr,
-          base=ctx.chain.baseNumber.bnStr,
-          head=ctx.chain.latestNumber.bnStr,
-          target=ctx.subState.head.bnStr,
+          base=ctx.chain.baseNumber,
+          head=ctx.chain.latestNumber,
+          target=ctx.subState.headNum,
           targetHash=ctx.subState.headHash.short,
-          nSyncPeers=ctx.pool.nBuddies
+          nSyncPeers=ctx.nSyncPeers()
         ctx.pool.lastSyncUpdLog = Moment.now()
 
     elif switchPeer or 0 < ctx.blk.staged.len:
       trace info & ": no blocks unqueued", peer,
-        topImported=ctx.subState.top.bnStr, nStagedQ=ctx.blk.staged.len,
-        nSyncPeers=ctx.pool.nBuddies, switchPeer
+        topImported=ctx.subState.topNum, nStagedQ=ctx.blk.staged.len,
+        nSyncPeers=ctx.nSyncPeers(), switchPeer
 
     bodyRc = not switchPeer
 
