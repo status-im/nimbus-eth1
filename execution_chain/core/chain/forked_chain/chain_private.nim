@@ -49,7 +49,12 @@ proc processBlock*(c: ForkedChainRef,
     blk.header
 
   let vmState = BaseVMState()
-  vmState.init(parentBlk.header, header, c.com, txFrame)
+  vmState.init(
+    parentBlk.header,
+    header,
+    c.com,
+    txFrame,
+    enableBalTracker = c.com.isAmsterdamOrLater(header.timestamp))
 
   ?c.com.validateHeaderAndKinship(blk, vmState.parent, txFrame)
 
