@@ -61,6 +61,9 @@ type
       ## 1..n for transactions, n+1 for post-execution).
     callFrameSnapshots*: seq[CallFrameSnapshot]
       ## Stack of snapshots for nested call frames to handle reverts properly.
+    blockAccessList: Opt[BlockAccessList]
+      ## Created by the builder and cached for reuse
+
 
 template init(T: type CallFrameSnapshot): T =
   CallFrameSnapshot()
@@ -348,3 +351,11 @@ proc normalizeBalanceAndStorageChanges*(tracker: BlockAccessListTrackerRef) =
 
   for address in addressesToRemove:
     tracker.pendingCallFrame.balanceChanges.del(address)
+
+proc getBlockAccessList*(tracker: BlockAccessListTrackerRef, rebuild = false): lent Opt[BlockAccessList] =
+  doAssert not tracker.hasPendingCallFrame()
+
+  if rebuild or tracker.blockAccessList.isNone():
+    tracker.blockAccessList = Opt.some(tracker.builder.buildBlockAccessList())
+
+  tracker.blockAccessList

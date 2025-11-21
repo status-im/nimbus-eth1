@@ -23,7 +23,8 @@ import
 proc writeBaggage*(c: ForkedChainRef,
         blk: Block, blkHash: Hash32,
         txFrame: CoreDbTxRef,
-        receipts: openArray[StoredReceipt]) =
+        receipts: openArray[StoredReceipt],
+        blockAccessList: Opt[BlockAccessList]) =
   template header(): Header =
     blk.header
 
@@ -34,7 +35,7 @@ proc writeBaggage*(c: ForkedChainRef,
     txFrame.persistWithdrawals(
       header.withdrawalsRoot.expect("WithdrawalsRoot should be verified before"),
       blk.withdrawals.get)
-  if blk.blockAccessList.isSome:
+  if blockAccessList.isSome:
     txFrame.persistBlockAccessList(
       header.blockAccessListHash.expect("blockAccessListHash should be verified before"),
       blk.blockAccessList.get)
@@ -97,5 +98,7 @@ proc processBlock*(c: ForkedChainRef,
   # We still need to write header to database
   # because validateUncles still need it
   ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory)
+
+  c.writeBaggage(blk, blkHash, txFrame, vmState.receipts, vmState.blockAccessList)
 
   ok(move(vmState.receipts))

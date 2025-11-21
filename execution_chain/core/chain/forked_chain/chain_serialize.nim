@@ -133,8 +133,6 @@ proc replayBlock(fc: ForkedChainRef;
     txFrame.dispose()
     return err(error)
 
-  fc.writeBaggage(blk.blk, blk.hash, txFrame, receipts)
-
   # Checkpoint creates a snapshot of ancestor changes in txFrame - it is an
   # expensive operation, specially when creating a new branch (ie when blk
   # is being applied to a block that is currently not a head).
