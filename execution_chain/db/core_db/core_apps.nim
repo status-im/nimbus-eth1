@@ -416,14 +416,20 @@ proc persistBlockAccessList*(
 
 proc getBlockAccessList*(
     db: CoreDbTxRef,
-    blockAccessListHash: Hash32): Result[BlockAccessList, string] =
-  let balBytes = db.get(blockAccessListHashKey(blockAccessListHash).toOpenArray).valueOr:
+    blockAccessListHash: Hash32): Result[Opt[BlockAccessList], string] =
+  if blockAccessListHash == EMPTY_BLOCK_ACCESS_LIST_HASH:
+    return ok(Opt.some(default(BlockAccessList)))
+
+  let balBytes = db.getOrEmpty(blockAccessListHashKey(blockAccessListHash).toOpenArray).valueOr:
     return err("getBlockAccessList: " & $$error)
+
+  if balBytes == EmptyBlob:
+    return ok(Opt.none(BlockAccessList))
 
   let bal = BlockAccessList.decode(balBytes).valueOr:
     return err("getBlockAccessList: " & $error)
 
-  ok(bal)
+  ok(Opt.some(bal))
 
 proc getBlockBody*(
     db: CoreDbTxRef;
@@ -439,8 +445,7 @@ proc getBlockBody*(
       body.withdrawals = Opt.some(wds)
 
     if header.blockAccessListHash.isSome:
-      let bal = ?db.getBlockAccessList(header.blockAccessListHash.get)
-      body.blockAccessList = Opt.some(bal)
+      body.blockAccessList = ?db.getBlockAccessList(header.blockAccessListHash.get)
 
     return ok(move(body))
 

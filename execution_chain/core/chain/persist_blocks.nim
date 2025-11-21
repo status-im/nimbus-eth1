@@ -39,7 +39,6 @@ type
     NoPersistWithdrawals
     NoPersistReceipts
     NoPersistSlotHashes
-    NoPersistBlockAccessList
 
   PersistBlockFlags* = set[PersistBlockFlag]
 
@@ -52,7 +51,7 @@ type
 
   PersistStats* = tuple[blocks: int, txs: int, gas: GasInt]
 
-const NoPersistBodies* = {NoPersistTransactions, NoPersistUncles, NoPersistWithdrawals, NoPersistBlockAccessList}
+const NoPersistBodies* = {NoPersistTransactions, NoPersistUncles, NoPersistWithdrawals}
 
 # ------------------------------------------------------------------------------
 # Private
@@ -208,11 +207,6 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
       header.withdrawalsRoot.expect("WithdrawalsRoot should be verified before"),
       blk.withdrawals.get,
     )
-
-  if NoPersistBlockAccessList notin p.flags and blk.blockAccessList.isSome:
-    txFrame.persistBlockAccessList(
-      header.blockAccessListHash.expect("blockAccessListHash should be verified before"),
-      blk.blockAccessList.get)
 
   p.stats.blocks += 1
   p.stats.txs += blk.transactions.len

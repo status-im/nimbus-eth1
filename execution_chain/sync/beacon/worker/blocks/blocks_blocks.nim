@@ -102,11 +102,6 @@ template blocksFetchCheckImpl(
           else:
             if bodies[n].transactions.len == 0:
               break checkTxLenOk
-          if blocks[n].header.blockAccessListHash.isSome():
-            if bodies[n].blockAccessList.isSome():
-              break checkTxLenOk
-          elif bodies[n].blockAccessList.isNone():
-            break checkTxLenOk
           # Oops, cut off the rest
           blocks.setLen(n)                                 # curb off junk
           buddy.bdyFetchRegisterError()
@@ -127,7 +122,6 @@ template blocksFetchCheckImpl(
         blocks[n].transactions = bodies[n].transactions
         blocks[n].uncles = bodies[n].uncles
         blocks[n].withdrawals = bodies[n].withdrawals
-        blocks[n].blockAccessList = bodies[n].blockAccessList
 
     if 0 < blocks.len.uint64:
       bodyRc = Opt[seq[EthBlock]].ok(blocks)               # return ok()

@@ -51,7 +51,7 @@ func validateBlockAccessList*(
       return err("Post-Amsterdam block body must have blockAccessList")
     else:
       if blockAccessList.get.validate(header.blockAccessListHash.get).isErr():
-        return err("Mismatched blockAccessListHash blockNumber =" & $header.number)
+        return err("Mismatched blockAccessListHash blockNumber = " & $header.number)
   else:
     if header.blockAccessListHash.isSome:
       return err("Pre-Amsterdam block header must not have blockAccessListHash")

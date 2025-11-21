@@ -23,7 +23,7 @@ proc validateWithdrawals*(
       return err("Post-Shanghai block body must have withdrawals")
     else:
       if withdrawals.get.calcWithdrawalsRoot != header.withdrawalsRoot.get:
-        return err("Mismatched withdrawalsRoot blockNumber =" & $header.number)
+        return err("Mismatched withdrawalsRoot blockNumber = " & $header.number)
   else:
     if header.withdrawalsRoot.isSome:
       return err("Pre-Shanghai block header must not have withdrawalsRoot")
