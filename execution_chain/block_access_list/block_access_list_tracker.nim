@@ -251,7 +251,8 @@ proc trackAddBalanceChange*(tracker: BlockAccessListTrackerRef, address: Address
 
 proc trackSubBalanceChange*(tracker: BlockAccessListTrackerRef, address: Address, delta: UInt256) =
   if delta.isZero:
-    tracker.trackAddressAccess(address)
+    # In this case we don't call trackAddressAccess because the account isn't read
+    # due to early return as defined in EIP-4788
     return
 
   tracker.trackBalanceChange(address, tracker.ledger.getBalance(address) - delta)
