@@ -15,12 +15,11 @@
 import
   std/[os, tables, times, sets],
   chronos, chronicles,
+  eth/common/base,
   ./p2p_metrics,
   ./[eth1_discovery, p2p_peers]
 
-from eth/common/base import ForkID
-
-export sets, tables, CompatibleForkIdProc
+export sets, tables, CompatibleForkIdProc, base
 
 logScope:
   topics = "p2p peer_pool"
@@ -32,7 +31,7 @@ type
 
   WorkerFuture = Future[void].Raising([CancelledError])
 
-  ForkIdProc* = proc(): ForkID {.noSideEffect, raises: [].}
+  ForkIdProc* = proc(): ForkId {.noSideEffect, raises: [].}
 
   # Usually Network generic param is instantiated with EthereumNode
   PeerPoolRef*[Network] = ref object
@@ -44,7 +43,7 @@ type
     discovery: Eth1Discovery
     workers: seq[WorkerFuture]
     forkId: ForkIdProc
-    lastForkId: ForkID
+    lastForkId: ForkId
     connectTimer: Future[void].Raising([CancelledError])
     updateTimer: Future[void].Raising([CancelledError])
     connectingNodes*: HashSet[Node]
@@ -162,7 +161,7 @@ proc lookupPeers(p: PeerPoolRef) {.async: (raises: [CancelledError]).} =
     # to be later processed by connection worker
     await p.discovery.lookupRandomNode(p.connQueue)
 
-func updateForkID(p: PeerPoolRef) =
+func updateForkId(p: PeerPoolRef) =
   if p.forkId.isNil:
     return
 
@@ -170,14 +169,14 @@ func updateForkID(p: PeerPoolRef) =
   if p.lastForkId == forkId:
     return
 
-  p.discovery.updateForkID(forkId)
+  p.discovery.updateForkId(forkId)
   p.lastForkId = forkId
 
 proc run(p: PeerPoolRef) {.async: (raises: [CancelledError]).} =
   trace "Running PeerPool..."
 
   # initial cycle
-  p.updateForkID()
+  p.updateForkId()
   await p.discovery.start()
   await p.lookupPeers()
 
@@ -199,7 +198,7 @@ proc run(p: PeerPoolRef) {.async: (raises: [CancelledError]).} =
       await p.lookupPeers()
 
     if res == p.updateTimer:
-      p.updateForkID()
+      p.updateForkId()
 
 #------------------------------------------------------------------------------
 # Private functions

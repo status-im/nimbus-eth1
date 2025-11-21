@@ -56,6 +56,7 @@ type
     excessBlobGas: Opt[Quantity]
     parentBeaconBlockRoot: Opt[Hash32]
     requestsHash: Opt[Hash32]
+    blockAccessListHash: Opt[Hash32]
     hash*: Hash32
 
   BlockDesc* = object
@@ -202,6 +203,7 @@ func to*(g: GenesisHeader, _: type Header): Header =
     excessBlobGas: g.excessBlobGas.to(Opt[uint64]),
     parentBeaconBlockRoot: g.parentBeaconBlockRoot,
     requestsHash: g.requestsHash,
+    blockAccessListHash: g.blockAccessListHash,
   )
 
 proc setupClient*(port: Port): RpcHttpClient =

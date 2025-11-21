@@ -27,6 +27,14 @@ EEST_DEVNET_DIR="${FIXTURES_DIR}/eest_devnet"
 EEST_DEVNET_ARCHIVE="fixtures_fusaka-devnet-5.tar.gz"
 EEST_DEVNET_URL="https://github.com/ethereum/execution-spec-tests/releases/download/${EEST_DEVNET_NAME}%40${EEST_DEVNET_VERSION}/${EEST_DEVNET_ARCHIVE}"
 
+# --- BAL Release ---
+EEST_BAL_NAME="bal"
+EEST_BAL_VERSION="v1.6.0"
+EEST_BAL_DIR="${FIXTURES_DIR}/eest_bal"
+EEST_BAL_ARCHIVE="fixtures_bal.tar.gz"
+EEST_BAL_URL="https://github.com/ethereum/execution-spec-tests/releases/download/${EEST_BAL_NAME}%40${EEST_BAL_VERSION}/${EEST_BAL_ARCHIVE}"
+
+
 download_and_extract() {
   local url="$1"
   local dest_dir="$2"
@@ -75,3 +83,4 @@ download_and_extract() {
 # Download stable and develop versions
 download_and_extract "${EEST_DEVELOP_URL}" "${EEST_DEVELOP_DIR}" "${EEST_DEVELOP_NAME}" "${EEST_DEVELOP_VERSION}" "${EEST_DEVELOP_ARCHIVE}"
 download_and_extract "${EEST_DEVNET_URL}" "${EEST_DEVNET_DIR}" "${EEST_DEVNET_NAME}" "${EEST_DEVNET_VERSION}" "${EEST_DEVNET_ARCHIVE}"
+download_and_extract "${EEST_BAL_URL}" "${EEST_BAL_DIR}" "${EEST_BAL_NAME}" "${EEST_BAL_VERSION}" "${EEST_BAL_ARCHIVE}"

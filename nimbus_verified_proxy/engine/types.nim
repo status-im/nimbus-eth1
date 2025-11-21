@@ -63,6 +63,11 @@ type
     eth_getLogs*: proc(filterOptions: FilterOptions): Future[seq[LogObject]] {.
       async: (raises: [CancelledError])
     .}
+    eth_feeHistory*: proc(
+      blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: Opt[seq[float64]]
+    ): Future[FeeHistoryResult] {.async: (raises: [CancelledError]).}
+    eth_sendRawTransaction*:
+      proc(txBytes: seq[byte]): Future[Hash32] {.async: (raises: [CancelledError]).}
 
   # Frontend API
   EthApiFrontend* = object # Chain
@@ -147,6 +152,11 @@ type
     eth_gasPrice*: proc(): Future[Quantity] {.async: (raises: [ValueError]).}
     eth_maxPriorityFeePerGas*:
       proc(): Future[Quantity] {.async: (raises: [ValueError]).}
+    eth_feeHistory*: proc(
+      blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: Opt[seq[float64]]
+    ): Future[FeeHistoryResult] {.async: (raises: [CancelledError]).}
+    eth_sendRawTransaction*:
+      proc(txBytes: seq[byte]): Future[Hash32] {.async: (raises: [CancelledError]).}
 
   FilterStoreItem* = object
     filter*: FilterOptions

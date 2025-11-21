@@ -22,6 +22,24 @@ import
 # Private helpers
 # ------------------------------------------------------------------------------
 
+proc maybeSlowPeerError(
+    buddy: BeaconBuddyRef;
+    elapsed: Duration;
+    bn: BlockNumber;
+      ): bool =
+  ## Register slow response, definitely not fast enough
+  if fetchHeadersErrTimeout <= elapsed:
+    buddy.hdrFetchRegisterError(slowPeer=true)
+
+    # Do not repeat the same time-consuming failed request
+    buddy.only.failedReq = BuddyFirstFetchReq(
+      state:       SyncState.headers,
+      blockNumber: bn)
+
+    return true
+
+  # false
+
 proc getBlockHeaders(
     buddy: BeaconBuddyRef;
     req: BlockHeadersRequest;
@@ -102,14 +120,14 @@ template fetchHeadersReversed*(
       elapsed = rc.error.elapsed
       block evalError:
         case rc.error.excp:
-        of ENoException:
+        of ENoException, ESyncerTermination:
           break evalError
         of EPeerDisconnected, ECancelledError:
           buddy.nErrors.fetch.hdr.inc
           buddy.ctrl.zombie = true
         of ECatchableError:
           buddy.hdrFetchRegisterError()
-          discard buddy.only.thPutStats.hdr.bpsSample(elapsed, 0)
+          buddy.hdrNoSampleSize(elapsed)
         of EAlreadyTriedAndFailed:
           # Just return `failed` (no error count or throughput stats)
           discard
@@ -117,16 +135,19 @@ template fetchHeadersReversed*(
         chronicles.info trEthRecvReceivedBlockHeaders & ": error", peer,
           req=ivReq, nReq=req.maxResults, hash=topHash.toStr,
           ela=rc.error.elapsed.toStr, state=($buddy.syncState),
-          error=rc.error.name, msg=rc.error.msg,
+          errorClass=rc.error.excp, error=rc.error.name, msg=rc.error.msg,
           nErrors=buddy.nErrors.fetch.hdr
         break body                                 # return err()
 
     # Evaluate result
     if rc.isErr or buddy.ctrl.stopped:
-      buddy.hdrFetchRegisterError()
+      if not buddy.maybeSlowPeerError(elapsed, BlockNumber ivReq.maxPt):
+        buddy.hdrFetchRegisterError()
       trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
         hash=topHash.toStr, nResp=0, ela=elapsed.toStr,
-        state=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
+        state=($buddy.syncState),
+        errorClass=(if rc.isErr: $rc.error.excp else: "n/a"),
+        nErrors=buddy.nErrors.fetch.hdr
       break body                                   # return err()
 
     # Verify the correct number of block headers received
@@ -138,16 +159,10 @@ template fetchHeadersReversed*(
       else:
         # No data available. For a fast enough rejection response, the
         # througput stats are degraded, only.
-        discard buddy.only.thPutStats.hdr.bpsSample(elapsed, 0)
+        buddy.hdrNoSampleSize(elapsed)
 
         # Slow response, definitely not fast enough
-        if fetchHeadersErrTimeout <= elapsed:
-          buddy.hdrFetchRegisterError(slowPeer=true)
-
-          # Do not repeat the same time-consuming failed request
-          buddy.only.failedReq = BuddyFirstFetchReq(
-            state:       SyncState.headers,
-            blockNumber: BlockNumber ivReq.maxPt)
+        discard buddy.maybeSlowPeerError(elapsed, BlockNumber ivReq.maxPt)
 
       trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
         hash=topHash.toStr, nResp=h.len, ela=elapsed.toStr,
@@ -158,13 +173,13 @@ template fetchHeadersReversed*(
     if h[^1].number != ivReq.minPt and ivReq.minPt != 0:
       buddy.hdrFetchRegisterError(forceZombie=true)
       trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
-        hash=topHash.toStr, reqMinPt=ivReq.minPt.bnStr,
-        respMinPt=h[^1].bnStr, nResp=h.len, ela=elapsed.toStr,
+        hash=topHash.toStr, reqMinPt=ivReq.minPt,
+        respMinPt=h[^1].number, nResp=h.len, ela=elapsed.toStr,
         state=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
       break body
 
     # Update download statistics
-    let bps = buddy.only.thPutStats.hdr.bpsSample(elapsed, h.getEncodedLength)
+    let bps = buddy.hdrSampleSize(elapsed, h.getEncodedLength)
 
     # Request did not fail
     buddy.only.failedReq.reset

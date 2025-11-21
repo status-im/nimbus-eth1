@@ -9,27 +9,26 @@
 
 {.push raises: [], gcsafe.}
 
-import
-  eth/common,
-  eth/rlp,
-  results
+import eth/common, eth/rlp, results
 
-export
-  common,
-  results
+export common, results
 
 type
   Witness* = object
     state*: seq[seq[byte]] # MPT trie nodes accessed while executing the block.
     codeHashes*: seq[Hash32] # Code hashes of the bytecode required by the witness.
-    keys*: seq[seq[byte]] # Ordered list of access keys (address bytes or storage slots bytes).
-    headerHashes*: seq[Hash32] # Hashes of block headers which are required by the witness.
+    keys*: seq[seq[byte]]
+      # Ordered list of access keys (address bytes or storage slots bytes).
+    headerHashes*: seq[Hash32]
+      # Hashes of block headers which are required by the witness.
 
   ExecutionWitness* = object
     state*: seq[seq[byte]] # MPT trie nodes accessed while executing the block.
     codes*: seq[seq[byte]] # Contract bytecodes read while executing the block.
-    keys*: seq[seq[byte]] # Ordered list of access keys (address bytes or storage slots bytes).
-    headers*: seq[seq[byte]] # Block headers required for proving correctness of stateless execution.
+    keys*: seq[seq[byte]]
+      # Ordered list of access keys (address bytes or storage slots bytes).
+    headers*: seq[seq[byte]]
+      # Block headers required for proving correctness of stateless execution.
       # Stores the parent block headers needed to verify that the state reads are correct with respect
       # to the pre-state root.
 
@@ -38,7 +37,8 @@ func init*(
     state = newSeq[seq[byte]](),
     codeHashes = newSeq[Hash32](),
     keys = newSeq[seq[byte]](),
-    headerHashes = newSeq[Hash32]()): T =
+    headerHashes = newSeq[Hash32](),
+): T =
   Witness(state: state, codeHashes: codeHashes, keys: keys, headerHashes: headerHashes)
 
 template addState*(witness: var Witness, trieNode: seq[byte]) =
@@ -67,7 +67,8 @@ func init*(
     state = newSeq[seq[byte]](),
     codes = newSeq[seq[byte]](),
     keys = newSeq[seq[byte]](),
-    headers = newSeq[seq[byte]]()): T =
+    headers = newSeq[seq[byte]](),
+): T =
   ExecutionWitness(state: state, codes: codes, keys: keys, headers: headers)
 
 template addState*(witness: var ExecutionWitness, trieNode: seq[byte]) =
@@ -85,7 +86,9 @@ template addHeader*(witness: var ExecutionWitness, header: seq[byte]) =
 func encode*(witness: ExecutionWitness): seq[byte] =
   rlp.encode(witness)
 
-func decode*(T: type ExecutionWitness, witnessBytes: openArray[byte]): Result[T, string] =
+func decode*(
+    T: type ExecutionWitness, witnessBytes: openArray[byte]
+): Result[T, string] =
   try:
     ok(rlp.decode(witnessBytes, T))
   except RlpError as e:

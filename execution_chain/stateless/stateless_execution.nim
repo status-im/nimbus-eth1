@@ -23,15 +23,11 @@ import
 export witness_types, common, headers, blocks, results
 
 proc statelessProcessBlock*(
-    witness: ExecutionWitness,
-    com: CommonRef,
-    blk: Block): Result[void, string] =
-
-  template header(): Header =
-    blk.header
-
+    witness: ExecutionWitness, com: CommonRef, blk: Block
+): Result[void, string] =
   let
-    verifiedHeaders = ?witness.verifyHeaders(header) # Returns headers sorted by block number
+    verifiedHeaders = ?witness.verifyHeaders(blk.header)
+      # Returns headers sorted by block number
     parent = verifiedHeaders[^1] # The last header is the parent
     preStateRoot = parent.stateRoot
 
@@ -57,7 +53,7 @@ proc statelessProcessBlock*(
 
   # Load the contract code into the database indexed by code hash.
   for c in witness.codes:
-    doAssert memoryTxFrame.setCodeByHash(keccak256(c), c).isOk()
+    doAssert memoryTxFrame.persistCodeByHash(keccak256(c), c).isOk()
 
   # Load the block hashes into the database indexed by block number.
   for h in verifiedHeaders:
@@ -68,7 +64,7 @@ proc statelessProcessBlock*(
 
   # Create evm instance using the in memory database.
   let memoryVmState = BaseVMState()
-  memoryVmState.init(parent, header, com, memoryTxFrame, storeSlotHash = false)
+  memoryVmState.init(parent, blk.header, com, memoryTxFrame, storeSlotHash = false)
 
   # Execute the block with all validations enabled
   ?memoryVmState.processBlock(
@@ -77,8 +73,21 @@ proc statelessProcessBlock*(
     skipReceipts = false,
     skipUncles = true,
     skipStateRootCheck = false,
-    taskpool = com.taskpool
+    taskpool = com.taskpool,
   )
-  doAssert memoryVmState.ledger.getStateRoot() == header.stateRoot
+  doAssert memoryVmState.ledger.getStateRoot() == blk.header.stateRoot
 
   ok()
+
+proc statelessProcessBlock*(
+    witness: ExecutionWitness, id: NetworkId, config: ChainConfig, blk: Block
+): Result[void, string] =
+  let com = CommonRef.new(
+    db = nil, taskpool = nil, config = config, networkId = id, initializeDb = false
+  )
+  statelessProcessBlock(witness, com, blk)
+
+template statelessProcessBlock*(
+    witness: ExecutionWitness, id: NetworkId, blk: Block
+): Result[void, string] =
+  statelessProcessBlock(witness, id, chainConfigForNetwork(id), blk)

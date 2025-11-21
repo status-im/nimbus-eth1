@@ -104,12 +104,13 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
     bootstrapNodes = config.getBootstrapNodes()
     fc = nimbus.fc
 
-  func forkIdProc(): ForkID =
+  func forkIdProc(): ForkId =
     let header = fc.latestHeader()
     com.forkId(header.number, header.timestamp)
 
-  func compatibleForkIdProc(id: ForkID): bool =
-    com.compatibleForkId(id)
+  func compatibleForkIdProc(id: ForkId): bool =
+    let header = fc.latestHeader()
+    com.compatibleForkId(id, header.number, header.timestamp)
 
   let forkIdProcs = ForkIdProcs(
     forkId: forkIdProc,
@@ -222,16 +223,6 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionCli
     quit(QuitFailure)
 
 proc setupCommonRef*(config: ExecutionClientConf, taskpool: Taskpool): CommonRef =
-  # Trusted setup is needed for processing Cancun+ blocks
-  # If user not specify the trusted setup, baked in
-  # trusted setup will be loaded, lazily.
-  if config.trustedSetupFile.isSome:
-    let fileName = config.trustedSetupFile.get()
-    let res = kzg.loadTrustedSetup(fileName, 0)
-    if res.isErr:
-      fatal "Cannot load Kzg trusted setup from file", msg=res.error
-      quit(QuitFailure)
-
   let coreDB = AristoDbRocks.newCoreDbRef(
       config.dataDir,
       config.dbOptions(noKeyCache = config.cmd == NimbusCmd.`import`))
@@ -262,9 +253,6 @@ proc setupCommonRef*(config: ExecutionClientConf, taskpool: Taskpool): CommonRef
   com.gasLimit = config.gasLimit
 
   com
-
-template displayLaunchingInfo(config: ExecutionClientConf) =
-  info "Launching execution client", version = FullVersionStr, config
 
 # ------------------------------------------------------------------------------
 # Public functions, `main()` API
@@ -319,10 +307,9 @@ proc runExeClient*(
 proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   # Set up logging before everything else
   setupLogging(config.logLevel, config.logStdout)
+  setupFileLimits()
 
   info "Launching execution client", version = FullVersionStr, config
-
-  setupFileLimits()
 
   ProcessState.setupStopHandlers()
 
@@ -331,6 +318,14 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
     # We are unable to access/create data folder or data folder's
     # permissions are insecure.
     quit QuitFailure
+
+  # Trusted setup is needed for Cancun+ blocks and is shared between threads,
+  # so it needs to be initalized from the main thread before anything else tries
+  # to use it
+  if config.trustedSetupFile.isSome:
+    kzg.loadTrustedSetup(config.trustedSetupFile.get(), 0).isOkOr:
+      fatal "Cannot load KZG trusted setup from file", msg = error
+      quit(QuitFailure)
 
   # Metrics are useful not just when running node but also during import
   let metricsServer =

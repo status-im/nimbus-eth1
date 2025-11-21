@@ -16,11 +16,7 @@ import
   chronos,
   chronos/ratelimit,
   ../../core/[chain, tx_pool, pooled_txs],
-  ../../networking/p2p_types,
-  ../../networking/chain_forkid
-
-export
-  chain_forkid
+  ../../networking/p2p_types
 
 type
   Status68Packet* = object
@@ -29,14 +25,14 @@ type
     totalDifficulty*: DifficultyInt
     bestHash*: Hash32
     genesisHash*: Hash32
-    forkId*: ChainForkId
+    forkId*: ForkId
 
   # https://github.com/ethereum/devp2p/blob/b0c213de97978053a0f62c3ea4d23c0a3d8784bc/caps/eth.md#status-0x00
   Status69Packet* = object
     version*: uint64
     networkId*: NetworkId
     genesisHash*: Hash32
-    forkId*: ChainForkId
+    forkId*: ForkId
     earliest*: uint64 # earliest available full block
     latest*: uint64 # latest available full block
     latestHash*: Hash32 # hash of latest available full block
@@ -76,11 +72,11 @@ type
     totalDifficulty*: DifficultyInt
     genesisHash*: Hash32
     bestBlockHash*: Hash32
-    forkId*: ChainForkId
+    forkId*: ForkId
 
   Eth69State* = object
     genesisHash*: Hash32
-    forkId*: ChainForkId
+    forkId*: ForkId
     earliest*: uint64
     latest*: uint64
     latestHash*: Hash32

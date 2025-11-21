@@ -42,18 +42,18 @@ func baseChains(c: ForkedChainRef): seq[seq[Hash32]] =
 
 func cnStr(q: openArray[Hash32]; c: ForkedChainRef): string =
   let (a,b) = (q[0].header(c).number, q[^1].header(c).number)
-  result = a.bnStr
+  result = $a
   if a != b:
-    result &= "<<" & b.bnStr
+    result &= "<<" & $b
 
 # ------------------------------------------------------------------------------
 # Public pretty printers
 # ------------------------------------------------------------------------------
 
 # Pretty printers
-func pp*(n: BlockNumber): string = n.bnStr
-func pp*(h: Header): string = h.bnStr
-func pp*(b: Block): string = b.bnStr
+func pp*(n: BlockNumber): string = $n
+func pp*(h: Header): string = $h.number
+func pp*(b: Block): string = $b.header.number
 func pp*(h: Hash32): string = h.short
 func pp*(d: BlockRef): string = d.blk.header.pp
 func pp*(d: ptr BlockRef): string = d[].pp

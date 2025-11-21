@@ -5,7 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   json_serialization,
@@ -40,7 +40,7 @@ proc init*(T: type PortalRpcClient, rpcClient: RpcClient): T =
 func toPortalRpcError*(error: string): PortalErrorResponse =
   try:
     Json.decode(error, PortalErrorResponse)
-  except SerializationError as e:
+  except SerializationError:
     PortalErrorResponse(code: InvalidJsonRpcError, message: error)
 
 template toBytes(content: string): seq[byte] =

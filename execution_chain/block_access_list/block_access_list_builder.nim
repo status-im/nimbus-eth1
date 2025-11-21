@@ -23,16 +23,16 @@ type
   # organized by the type of change and the block access list index where it
   # occurred.
   AccountData = object
-    storageChanges: Table[UInt256, Table[int, UInt256]]
-      ## Maps storage key -> block access list index -> storage value
-    storageReads: HashSet[UInt256]
+    storageChanges*: Table[UInt256, Table[int, UInt256]]
+      ## Maps storage key -> block access index -> storage value
+    storageReads*: HashSet[UInt256]
       ## Set of storage keys
-    balanceChanges: Table[int, UInt256]
-      ## Maps block access list index -> balance
-    nonceChanges: Table[int, AccountNonce]
-      ## Maps block access list index -> nonce
-    codeChanges: Table[int, seq[byte]]
-      ## Maps block access list index -> code
+    balanceChanges*: Table[int, UInt256]
+      ## Maps block access index -> balance
+    nonceChanges*: Table[int, AccountNonce]
+      ## Maps block access index -> nonce
+    codeChanges*: Table[int, seq[byte]]
+      ## Maps block access index -> code
 
   # Builder for constructing a BlockAccessList efficiently during transaction
   # execution. The builder accumulates all account and storage accesses during
@@ -40,20 +40,20 @@ type
   # tracked by address, field type, and block access list index to enable
   # efficient reconstruction of state changes.
   BlockAccessListBuilderRef* = ref object
-    accounts: Table[Address, AccountData]
+    accounts*: Table[Address, AccountData]
       ## Maps address -> account data
 
-proc init*(T: type AccountData): T =
+template init*(T: type AccountData): T =
   AccountData()
 
 # Disallow copying of AccountData
 proc `=copy`(dest: var AccountData; src: AccountData) {.error: "Copying AccountData is forbidden".} =
   discard
 
-proc init*(T: type BlockAccessListBuilderRef): T =
+template init*(T: type BlockAccessListBuilderRef): T =
   BlockAccessListBuilderRef()
 
-proc ensureAccount(builder: BlockAccessListBuilderRef, address: Address) =
+func ensureAccount(builder: BlockAccessListBuilderRef, address: Address) =
   if address notin builder.accounts:
     builder.accounts[address] = AccountData.init()
 
@@ -66,7 +66,6 @@ proc addStorageWrite*(
     slot: UInt256,
     blockAccessIndex: int,
     newValue: UInt256) =
-
   builder.ensureAccount(address)
 
   builder.accounts.withValue(address, accData):
@@ -111,16 +110,19 @@ proc addCodeChange*(
   builder.accounts.withValue(address, accData):
     accData[].codeChanges[blockAccessIndex] = newCode
 
-proc balIndexCmp(x, y: StorageChange | BalanceChange | NonceChange | CodeChange): int =
+func balIndexCmp(x, y: StorageChange | BalanceChange | NonceChange | CodeChange): int =
   cmp(x.blockAccessIndex, y.blockAccessIndex)
 
-proc slotCmp(x, y: SlotChanges): int =
-  cmp(x.slot, y.slot)
+func slotCmp(x, y: StorageKey | StorageValue): int =
+  cmp(x.data.toHex(), y.data.toHex())
 
-proc addressCmp(x, y: AccountChanges): int =
+func slotChangesCmp(x, y: SlotChanges): int =
+  cmp(x.slot.data.toHex(), y.slot.data.toHex())
+
+func addressCmp(x, y: AccountChanges): int =
   cmp(x.address.data.toHex(), y.address.data.toHex())
 
-proc buildBlockAccessList*(builder: BlockAccessListBuilderRef): BlockAccessList =
+func buildBlockAccessList*(builder: BlockAccessListBuilderRef): BlockAccessList =
   var blockAccessList: BlockAccessList
 
   for address, accData in builder.accounts.mpairs():
@@ -130,18 +132,18 @@ proc buildBlockAccessList*(builder: BlockAccessListBuilderRef): BlockAccessList 
       var slotChanges: seq[StorageChange]
 
       for balIndex, value in changes:
-        slotChanges.add((BlockAccessIndex(balIndex), StorageValue(value)))
+        slotChanges.add((BlockAccessIndex(balIndex), StorageValue(value.toBytesBE())))
       slotChanges.sort(balIndexCmp)
 
-      storageChanges.add((StorageKey(slot), slotChanges))
-    storageChanges.sort(slotCmp)
+      storageChanges.add((StorageKey(slot.toBytesBE()), slotChanges))
+    storageChanges.sort(slotChangesCmp)
 
     # Collect and sort storageReads
     var storageReads: seq[StorageKey]
     for slot in accData.storageReads:
       if slot notin accData.storageChanges:
-        storageReads.add(slot)
-    storageReads.sort()
+        storageReads.add(StorageKey(slot.toBytesBE()))
+    storageReads.sort(slotCmp)
 
     # Collect and sort balanceChanges
     var balanceChanges: seq[BalanceChange]

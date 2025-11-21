@@ -28,6 +28,7 @@ import
     block_quarantine]
 
 from std/sequtils import mapIt
+from std/heapqueue import len
 from web3/engine_api_types import ExecutionPayloadBodyV1
 
 logScope:
@@ -400,7 +401,8 @@ proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async:
           base = c.base.number,
           baseHash = c.base.hash.short,
           pendingFCU = c.pendingFCU.short,
-          resolvedFin= c.latestFinalizedBlockNumber
+          resolvedFin = c.latestFinalizedBlockNumber,
+          dbSnapshotsCount = c.baseTxFrame.aTx.db.snapshots.len()
       else:
         debug "Finalized blocks persisted",
           nBlocks = c.persistedCount,
@@ -408,7 +410,8 @@ proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async:
           base = c.base.number,
           baseHash = c.base.hash.short,
           pendingFCU = c.pendingFCU.short,
-          resolvedFin= c.latestFinalizedBlockNumber
+          resolvedFin = c.latestFinalizedBlockNumber,
+          dbSnapshotsCount = c.baseTxFrame.aTx.db.snapshots.len()
       c.lastBaseLogTime = time
       c.persistedCount = 0
     return ok()
@@ -502,23 +505,21 @@ proc validateBlock(c: ForkedChainRef,
       excessBlobGas: blk.header.excessBlobGas,
       parentBeaconBlockRoot: blk.header.parentBeaconBlockRoot,
       requestsHash: blk.header.requestsHash,
+      blockAccessListHash: blk.header.blockAccessListHash
     ),
     parentTxFrame=cast[uint](parentFrame),
     txFrame=cast[uint](txFrame)
-
-  # Checkpoint creates a snapshot of ancestor changes in txFrame - it is an
-  # expensive operation, specially when creating a new branch (ie when blk
-  # is being applied to a block that is currently not a head).
-  # Create the snapshot before processing the block so that any vertexes in snapshots
-  # from lower levels than the baseTxFrame are removed from the snapshot before running
-  # the stateroot computation.
-  parentFrame.checkpoint(parent.blk.header.number, skipSnapshot = false)
 
   var receipts = c.processBlock(parent, txFrame, blk, blkHash, finalized).valueOr:
     txFrame.dispose()
     return err(error)
 
   c.writeBaggage(blk, blkHash, txFrame, receipts)
+
+  # Checkpoint creates a snapshot of ancestor changes in txFrame - it is an
+  # expensive operation, specially when creating a new branch (ie when blk
+  # is being applied to a block that is currently not a head).
+  txFrame.checkpoint(blk.header.number, skipSnapshot = false)
 
   let newBlock = c.appendBlock(parent, blk, blkHash, txFrame, move(receipts))
 
@@ -947,6 +948,7 @@ proc blockBodyByHash*(c: ForkedChainRef, blockHash: Hash32): Result[BlockBody, s
       transactions: blk.transactions,
       uncles: blk.uncles,
       withdrawals: blk.withdrawals,
+      blockAccessList: blk.blockAccessList,
     ))
   c.baseTxFrame.getBlockBody(blockHash)
 

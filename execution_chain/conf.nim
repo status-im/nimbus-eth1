@@ -116,10 +116,11 @@ type
       name: "import-key" .}: InputFile
 
     trustedSetupFile* {.
-      desc: "Load EIP-4844 trusted setup file"
+      hidden
+      desc: "Alternative EIP-4844 trusted setup file"
       defaultValue: none(string)
       defaultValueDesc: "Baked in trusted setup"
-      name: "trusted-setup-file" .}: Option[string]
+      name: "debug-trusted-setup-file" .}: Option[string]
 
     extraData* {.
       separator: "\pPAYLOAD BUILDING OPTIONS:"
@@ -356,6 +357,12 @@ type
       desc: "Rewrite selected network config hash to database"
       name: "debug-rewrite-datadir-id".}: bool
 
+    aristoDbMaxSnapshots* {.
+      hidden
+      defaultValue: defaultMaxSnapshots
+      defaultValueDesc: $defaultMaxSnapshots
+      name: "debug-aristo-db-max-snapshots" .}: int
+
     eagerStateRootCheck* {.
       hidden
       desc: "Eagerly check state roots when syncing finalized blocks"
@@ -368,7 +375,6 @@ type
 
     statelessProviderEnabled* {.
       separator: "\pSTATELESS PROVIDER OPTIONS:"
-      hidden
       desc: "Enable the stateless provider. This turns on the features required" &
         " by stateless clients such as generation and storage of block witnesses" &
         " and serving these witnesses to peers over the p2p network."
@@ -780,8 +786,8 @@ func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
       # The import command does not use the key cache - better give it to branch
       if noKeyCache: config.rdbKeyCacheSize + config.rdbBranchCacheSize
       else: config.rdbBranchCacheSize,
-
     rdbPrintStats = config.rdbPrintStats,
+    maxSnapshots = config.aristoDbMaxSnapshots,
   )
 
 {.pop.}

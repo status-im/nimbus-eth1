@@ -25,6 +25,47 @@ template isDisposed(txFrame: AristoTxRef): bool =
 proc isKeyframe(txFrame: AristoTxRef): bool =
   txFrame == txFrame.db.txRef
 
+proc clearSnapshot*(txFrame: AristoTxRef) {.raises: [], gcsafe.}
+
+proc removeSnapshotFrame(db: AristoDbRef, txFrame: AristoTxRef) =
+  let index = db.snapshots.find(txFrame)
+  if index != -1:
+    db.snapshots.del(index)
+
+proc addSnapshotFrame(db: AristoDbRef, txFrame: AristoTxRef) =
+  doAssert txFrame.snapshot.level.isSome()
+  if db.snapshots.contains(txFrame):
+    # No-op if the queue already contains the snapshot
+    return
+
+  if db.snapshots.len() == db.maxSnapshots:
+    let frame = db.snapshots.pop()
+    frame.clearSnapshot()
+
+  db.snapshots.push(txFrame)
+
+proc cleanSnapshots(db: AristoDbRef) =
+  let minLevel = db.txRef.level
+
+  # Some of the snapshot content may have already been persisted to disk
+  # (since they were made based on the in-memory frames at the time of creation).
+  # Annoyingly, there's no way to remove items while iterating but even
+  # with the extra seq, move + remove turns out to be faster than
+  # creating a new table - specially when the ratio between old and
+  # and current items favors current items.
+  template delIfIt(tbl: var Table, body: untyped) =
+    var toRemove = newSeqOfCap[typeof(tbl).A](tbl.len div 2)
+    for k, it {.inject.} in tbl:
+      if body:
+        toRemove.add k
+    for k in toRemove:
+      tbl.del(k)
+
+  for frame in db.snapshots:
+    frame.snapshot.vtx.delIfIt(it[2] < minLevel)
+    frame.snapshot.acc.delIfIt(it[1] < minLevel)
+    frame.snapshot.sto.delIfIt(it[1] < minLevel)
+
 proc buildSnapshot(txFrame: AristoTxRef, minLevel: int) =
   # Starting from the previous snapshot, build a snapshot that includes all
   # ancestor changes as well as the changes in txFrame itself
@@ -41,29 +82,10 @@ proc buildSnapshot(txFrame: AristoTxRef, minLevel: int) =
       if frame.snapshot.level.isSome() and not isKeyframe:
         # `frame` has a snapshot only in the first iteration of the for loop
         txFrame.snapshot = move(frame.snapshot)
+        txFrame.db.removeSnapshotFrame(frame)
 
         # Verify that https://github.com/nim-lang/Nim/issues/23759 is not present
         assert frame.snapshot.vtx.len == 0 and frame.snapshot.level.isNone()
-
-        if txFrame.snapshot.level != Opt.some(minLevel):
-          # When recycling an existing snapshot, some of its content may have
-          # already been persisted to disk (since it was made base on the
-          # in-memory frames at the time of its creation).
-          # Annoyingly, there's no way to remove items while iterating but even
-          # with the extra seq, move + remove turns out to be faster than
-          # creating a new table - specially when the ratio between old and
-          # and current items favors current items.
-          template delIfIt(tbl: var Table, body: untyped) =
-            var toRemove = newSeqOfCap[typeof(tbl).A](tbl.len div 2)
-            for k, it {.inject.} in tbl:
-              if body:
-                toRemove.add k
-            for k in toRemove:
-              tbl.del(k)
-
-          txFrame.snapshot.vtx.delIfIt(it[2] < minLevel)
-          txFrame.snapshot.acc.delIfIt(it[1] < minLevel)
-          txFrame.snapshot.sto.delIfIt(it[1] < minLevel)
 
       if frame.snapshot.level.isSome() and isKeyframe:
         txFrame.snapshot.vtx = initTable[RootedVertexID, VtxSnapshot](
@@ -96,6 +118,9 @@ proc buildSnapshot(txFrame: AristoTxRef, minLevel: int) =
 
   txFrame.snapshot.level = Opt.some(minLevel)
 
+  if not txFrame.isKeyframe():
+    txFrame.db.addSnapshotFrame(txFrame)
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -115,6 +140,8 @@ proc txFrameBegin*(
     level: parent.level + 1)
 
 proc dispose*(txFrame: AristoTxRef) =
+  if not txFrame.db.isNil():
+    txFrame.db.removeSnapshotFrame(txFrame)
   txFrame[].reset()
   txFrame.level = disposedLevel
 
@@ -185,6 +212,13 @@ proc persist*(db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
     swap(bottom[], txFrame[])
     db.txRef = txFrame
 
+    # At this point the bottom frame may exist in the snapshot cache but
+    # the above call to swap will have copied the fields from txFrame which
+    # was already disposed and so bottom.db will be nil. This means when
+    # bottom is disposed below the dispose call is unable to remove the snapshot
+    # without a db reference so we do it here instead.
+    txFrame.db.removeSnapshotFrame(bottom)
+
     if txFrame.parent != nil:
       # Can't use rstack here because dispose will break the parent chain
       for frame in txFrame.parent.stack():
@@ -245,6 +279,11 @@ proc persist*(db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
       db.stoLeaves.del(mixPath)
     else:
       discard db.stoLeaves.update(mixPath, vtx)
+
+  # Remove snapshot data that has been persisted to disk to save memory.
+  # All snapshot records with a level lower than the current base level
+  # are deleted.
+  db.cleanSnapshots()
 
   txFrame.snapshot.vtx.clear()
   txFrame.snapshot.acc.clear()

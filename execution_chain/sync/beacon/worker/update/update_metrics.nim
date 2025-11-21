@@ -34,7 +34,7 @@ template updateMetricsImpl(ctx: BeaconCtxRef) =
   # Convenience entry, no need to be exact here.
   metrics.set(nec_sync_non_peers_connected,
               # nBuddies might not be commited/updated yet
-              max(0,ctx.node.peerPool.connectedNodes.len - ctx.pool.nBuddies))
+              max(0,ctx.node.peerPool.connectedNodes.len - ctx.nSyncPeers()))
 
 # ---------------
 
