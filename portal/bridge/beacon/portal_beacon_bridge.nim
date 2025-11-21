@@ -395,7 +395,7 @@ proc runBeacon*(config: PortalBridgeConf) {.raises: [CatchableError].} =
       # is something that works.
 
       # Or basically `lightClientOptimisticUpdateSlotOffset`
-      await sleepAsync((SECONDS_PER_SLOT div INTERVALS_PER_SLOT).int.seconds)
+      await sleepAsync(cfg.timeParams.SLOT_DURATION div INTERVALS_PER_SLOT)
 
       lastOptimisticUpdateSlot = (
         await gossipLCOptimisticUpdate(restClient, portalRpcClient, cfg, forkDigests)

@@ -25,8 +25,8 @@ export
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc bnStrIfAvail(bn: BlockNumber; ctx: BeaconCtxRef): string =
-   if ctx.hdrSessionStopped(): "n/a" else: bn.bnStr
+proc toStrIfAvail(bn: BlockNumber; ctx: BeaconCtxRef): string =
+   if ctx.hdrSessionStopped(): "n/a" else: $bn
 
 proc nUnprocStr(ctx: BeaconCtxRef): string =
   if ctx.hdrSessionStopped() or ctx.headersUnprocTotalBottom() == 0: "n/a"
@@ -135,11 +135,12 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
             chronicles.info "Headers stashed", nStashed,
               nUnpoc=ctx.nUnprocStr(),
               nStagedQ=ctx.hdr.staged.len,
-              base=ctx.chain.baseNumber.bnStr,
-              head=ctx.chain.latestNumber.bnStr,
-              target=ctx.hdrCache.head.bnStr,
+              eta=ctx.pool.syncEta.avg.toStr,
+              base=ctx.chain.baseNumber,
+              head=ctx.chain.latestNumber,
+              target=ctx.hdrCache.head.number,
               thPut=buddy.hdrThroughput,
-              nSyncPeers=ctx.pool.nBuddies
+              nSyncPeers=ctx.nSyncPeers()
             ctx.pool.lastSyncUpdLog = Moment.now()
             nStashed = 0
 
@@ -165,7 +166,7 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
           key = rc.value[0].number
           qItem = ctx.headersStagedQueueInsert(key).valueOr:
             raiseAssert info & ": duplicate key on staged queue" &
-              " iv=" & (rc.value[^1].number,key).bnStr
+              " iv=" & (rc.value[^1].number,key).toStr
         qItem.data.revHdrs = rc.value
         qItem.data.peerID = buddy.peerID
         nQueued = rc.value.len                       # statistics
@@ -180,11 +181,12 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
         chronicles.info "Headers stashed", nStashed,
           nUnpoc=ctx.nUnprocStr(),
           nStagedQ=ctx.hdr.staged.len,
-          base=ctx.chain.baseNumber.bnStr,
-          head=ctx.chain.latestNumber.bnStr,
-          target=ctx.hdrCache.head.bnStr,
+          eta=ctx.pool.syncEta.avg.toStr,
+          base=ctx.chain.baseNumber,
+          head=ctx.chain.latestNumber,
+          target=ctx.hdrCache.head.number,
           thPut=buddy.hdrThroughput,
-          nSyncPeers=ctx.pool.nBuddies
+          nSyncPeers=ctx.nSyncPeers()
         ctx.pool.lastSyncUpdLog = Moment.now()
 
     elif nQueued == 0 and
@@ -196,15 +198,15 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
       ctx.pool.failedPeers.incl buddy.peerID
 
       debug info & ": no headers yet (failed peer)", peer,
-        failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.pool.nBuddies,
+        failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.nSyncPeers(),
         state=($buddy.syncState), nErrors=buddy.hdrErrors()
       break body
 
     # This message might run in addition to the `chronicles.info` part
     trace info & ": queued/staged or DB/stored headers", peer,
-      unprocAvailTop=ctx.headersUnprocAvailTop.bnStrIfAvail(ctx),
+      unprocAvailTop=ctx.headersUnprocAvailTop.toStrIfAvail(ctx),
       nQueued, nStashed, nStagedQ=ctx.hdr.staged.len,
-      nSyncPeers=ctx.pool.nBuddies
+      nSyncPeers=ctx.nSyncPeers()
     # End block: `body`
 
   discard
@@ -234,6 +236,7 @@ proc headersUnstage*(buddy: BeaconBuddyRef; info: static[string]): bool =
 
   var
     nStashed = 0u64                                          # statistics
+    nUnstaged = 0                                            # ditto
     switchPeer = false                                       # for return code
 
   while ctx.hdrCache.state == collecting:
@@ -249,9 +252,9 @@ proc headersUnstage*(buddy: BeaconBuddyRef; info: static[string]): bool =
     if maxNum + 1 < dangling:
       let unprocTop = ctx.headersUnprocTotalTop()
       trace info & ": gap, serialisation postponed", peer,
-        qItem=qItem.data.revHdrs.bnStr, unprocTop=unprocTop.bnStr,
-        D=dangling.bnStr, nStashed, nStagedQ=ctx.hdr.staged.len,
-        nSyncPeers=ctx.pool.nBuddies
+        qItem=qItem.data.revHdrs.toStr, unprocTop,
+        D=dangling, nStashed, nStagedQ=ctx.hdr.staged.len,
+        nSyncPeers=ctx.nSyncPeers()
       switchPeer = true # there is a gap -- come back later
       # Impossible situation => deadlock
       doAssert dangling <= unprocTop + 1
@@ -268,19 +271,24 @@ proc headersUnstage*(buddy: BeaconBuddyRef; info: static[string]): bool =
       break
 
     nStashed += nHdrs
+    nUnstaged.inc
     # End while loop
 
   if 0 < nStashed:
-    chronicles.info "Headers stashed (from queue)", nStashed,
-     nUnpoc=ctx.nUnprocStr(), nStagedQ=ctx.hdr.staged.len,
-      base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-      target=ctx.hdrCache.head.bnStr, nSyncPeers=ctx.pool.nBuddies
+    chronicles.info "Headers stashed", nStashed,
+      nUnpoc=ctx.nUnprocStr(),
+      nStagedQ=ctx.hdr.staged.len,
+      nUnstaged,
+      eta=ctx.pool.syncEta.avg.toStr,
+      base=ctx.chain.baseNumber,
+      head=ctx.chain.latestNumber,
+      target=ctx.hdrCache.head.number,
+      nSyncPeers=ctx.nSyncPeers()
 
   elif switchPeer or 0 < ctx.hdr.staged.len:
-    trace info & ": no headers processed", peer,
-      D=ctx.hdrCache.antecedent.bnStr,
-      nStashed, nStagedQ=ctx.hdr.staged.len, nSyncPeers=ctx.pool.nBuddies,
-      switchPeer
+    trace info & ": no headers processed", peer, nStashed,
+      nStagedQ=ctx.hdr.staged.len, D=ctx.hdrCache.antecedent.number,
+      nSyncPeers=ctx.nSyncPeers(), switchPeer
 
   not switchPeer
 
@@ -289,7 +297,7 @@ proc headersUnstage*(buddy: BeaconBuddyRef; info: static[string]): bool =
 proc headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
   ## Some pool mode intervention.
   ##
-  if ctx.pool.lastState in {headersCancel,headersFinish}:
+  if ctx.pool.syncState in {headersCancel,headersFinish}:
     trace info & ": Flushing header queues",
       nUnproc=ctx.headersUnprocTotal(), nStagedQ=ctx.hdr.staged.len
 

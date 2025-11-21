@@ -76,6 +76,10 @@ jobs:
           gcc --version
           #export ZERO_AR_DATE=1 # avoid timestamps in binaries
           DEFAULT_MAKE_FLAGS="-j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache"
+          if [ '${{ matrix.os }}' == 'linux' ] && [ '${{ matrix.cpu }}' == 'arm64' ]; then
+            # To reduce memory usage on arm linux we build rocksdb separately
+            make ${DEFAULT_MAKE_FLAGS} rocksdb
+          fi
           make ${DEFAULT_MAKE_FLAGS} all test_import build_fuzzers check_revision
           # clear some space
           find . -type d -name "nimcache" -exec rm -rf {} +

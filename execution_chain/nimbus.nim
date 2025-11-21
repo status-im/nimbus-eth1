@@ -42,7 +42,6 @@ import
     conf as ecconf,
     el_sync,
     nimbus_desc,
-    el_sync,
     nimbus_execution_client,
     version_info,
   ]
@@ -114,7 +113,7 @@ type
     #      to keep compatibility with `--tcp-port` that is used in both, use
     #      consecutive ports unless specific ports are set - to be evaluated
     executionTcpPort* {.
-      desc: "Listening TCP port for Ethereum DevP2P traffic"
+      desc: "Listening TCP port for Ethereum devp2p traffic"
       name: "execution-tcp-port" .}: Option[Port]
 
     executionUdpPort* {.
@@ -122,11 +121,11 @@ type
       name: "execution-udp-port" .}: Option[Port]
 
     beaconTcpPort* {.
-      desc: "Listening TCP port for Ethereum DevP2P traffic"
+      desc: "Listening TCP port for Ethereum libp2p traffic"
       name: "beacon-tcp-port" .}: Option[Port]
 
     beaconUdpPort* {.
-      desc: "Listening UDP port for execution node discovery"
+      desc: "Listening UDP port for beacon node discovery"
       name: "beacon-udp-port" .}: Option[Port]
 
     tcpPort* {.
@@ -147,6 +146,13 @@ type
       desc: "Enable the Engine API"
       defaultValue: false
       name: "engine-api" .}: bool
+
+    trustedSetupFile* {.
+      hidden
+      desc: "Alternative EIP-4844 trusted setup file"
+      defaultValue: none(string)
+      defaultValueDesc: "Baked in trusted setup"
+      name: "debug-trusted-setup-file" .}: Option[string]
 
     case cmd* {.command, defaultValue: NStartUpCmd.nimbus.}: NStartUpCmd
     of nimbus:
@@ -202,8 +208,6 @@ proc runBeaconNode(p: BeaconThreadConfig) {.thread.} =
     stderr.writeLine error # Logging not yet set up
     quit QuitFailure
 
-  let rng = HmacDrbgContext.new()
-
   let engineUrl = EngineApiUrl.init(
     &"http://127.0.0.1:{defaultEngineApiPort}/", Opt.some(@(distinctBase(jwtKey)))
   )
@@ -219,45 +223,22 @@ proc runBeaconNode(p: BeaconThreadConfig) {.thread.} =
   config.tcpPort = p.tcpPort
   config.udpPort = p.udpPort
 
-  # TODO https://github.com/status-im/nim-taskpools/issues/6
-  #      share taskpool between bn and ec
-  let taskpool = setupTaskpool(config.numThreads)
-
   info "Launching beacon node",
     version = fullVersionStr,
     bls_backend = $BLS_BACKEND,
     const_preset,
     cmdParams = commandLineParams(),
-    config,
-    numThreads = taskpool.numThreads
+    config
 
-  config.createDumpDirs()
-
-  let metadata = config.loadEth2Network()
-
-  # Updating the config based on the metadata certainly is not beautiful but it
-  # works
-  for node in metadata.bootstrapNodes:
-    config.bootstrapNodes.add node
-
-  if config.syncHorizon.isNone:
-    config.syncHorizon = some(metadata.cfg.timeParams.defaultSyncHorizon)
-
-  block:
-    let res =
-      if config.trustedSetupFile.isNone:
-        bnconf.loadKzgTrustedSetup()
-      else:
-        bnconf.loadKzgTrustedSetup(config.trustedSetupFile.get)
-    if res.isErr():
-      raiseAssert res.error()
-
-  let stopper = p.tsp.justWait()
-
-  if stopper.finished():
-    return
-
-  let node = waitFor BeaconNode.init(rng, config, metadata, taskpool)
+  let
+    # TODO https://github.com/status-im/nim-taskpools/issues/6
+    #      share taskpool between bn and ec
+    taskpool = setupTaskpool(config.numThreads)
+    stopper = p.tsp.justWait()
+    rng = HmacDrbgContext.new()
+    node = (waitFor BeaconNode.init(rng, config, taskpool)).valueOr:
+      waitFor p.tsp.fire() # Stop the other thread as well..
+      return
 
   if stopper.finished():
     return
@@ -271,6 +252,9 @@ proc runBeaconNode(p: BeaconThreadConfig) {.thread.} =
         node.run(stopper)
     else:
       node.run(stopper)
+
+  # Stop the other thread as well, in case we're stopping early
+  waitFor p.tsp.fire()
 
 proc runExecutionClient(p: ExecutionThreadConfig) {.thread.} =
   var config = makeConfig(ignoreUnknown = true)
@@ -286,15 +270,106 @@ proc runExecutionClient(p: ExecutionThreadConfig) {.thread.} =
 
   info "Launching execution client", version = FullVersionStr, config
 
-  # TODO https://github.com/status-im/nim-taskpools/issues/6
-  #      share taskpool between bn and ec
   let
+    # TODO https://github.com/status-im/nim-taskpools/issues/6
+    #      share taskpool between bn and ec
     taskpool = setupTaskpool(int config.numThreads)
     com = setupCommonRef(config, taskpool)
 
-  {.gcsafe.}:
-    dynamicLogScope(comp = "ec"):
-      nimbus_execution_client.runExeClient(config, com, p.tsp.justWait())
+  dynamicLogScope(comp = "ec"):
+    nimbus_execution_client.runExeClient(config, com, p.tsp.justWait())
+
+  # Stop the other thread as well, in case `runExeClient` stopped early
+  waitFor p.tsp.fire()
+
+proc runCombinedClient() =
+  # Make it harder to connect to the (internal) engine - this will of course
+  # go away
+  discard randomBytes(distinctBase(jwtKey))
+
+  const banner = "Nimbus v0.0.1"
+
+  var config = NimbusConf.loadWithBanners(banner, copyright, [specBanner], true).valueOr:
+    writePanicLine error # Logging not yet set up
+    quit QuitFailure
+
+  setupLogging(config.logLevel, config.logStdout, none OutFile)
+  setupFileLimits()
+
+  ProcessState.setupStopHandlers()
+
+  if not checkAndCreateDataDir(config.dataDir):
+    # We are unable to access/create data folder or data folder's
+    # permissions are insecure.
+    quit QuitFailure
+
+  let metricsServer = (waitFor config.initMetricsServer()).valueOr:
+    quit 1
+
+  # Nim GC metrics (for the main thread) will be collected in onSecond(), but
+  # we disable piggy-backing on other metrics here.
+  setSystemMetricsAutomaticUpdate(false)
+
+  if config.engineApiEnabled:
+    warn "Engine API is not available when running internal beacon node"
+
+  # Trusted setup is shared between threads, so it needs to be initalized
+  # from the main thread before anything else runs
+  if config.trustedSetupFile.isSome:
+    kzg.loadTrustedSetup(config.trustedSetupFile.get(), 0).isOkOr:
+      fatal "Cannot load Kzg trusted setup from file", msg = error
+      quit(QuitFailure)
+  else:
+    # Load eagerly to avoid race conditions - lazy kzg loading is not thread safe
+    loadTrustedSetupFromString(kzg.trustedSetup, 0).expect(
+      "Baked-in KZG setup is correct"
+    )
+
+  var bnThread: Thread[BeaconThreadConfig]
+  let bnStop = ThreadSignalPtr.new().expect("working ThreadSignalPtr")
+  createThread(
+    bnThread,
+    runBeaconNode,
+    BeaconThreadConfig(
+      tsp: bnStop,
+      tcpPort: config.beaconTcpPort.get(config.tcpPort.get(Port defaultEth2TcpPort)),
+      udpPort: config.beaconUdpPort.get(config.udpPort.get(Port defaultEth2TcpPort)),
+      elSync: config.elSync,
+    ),
+  )
+
+  var ecThread: Thread[ExecutionThreadConfig]
+  let ecStop = ThreadSignalPtr.new().expect("working ThreadSignalPtr")
+  createThread(
+    ecThread,
+    runExecutionClient,
+    ExecutionThreadConfig(
+      tsp: ecStop,
+      tcpPort:
+        # -1/+1 to make sure global default is respected but +1 is applied to --tcp-port
+        config.executionTcpPort.get(
+          Port(uint16(config.tcpPort.get(Port(defaultExecutionPort - 1))) + 1)
+        ),
+      udpPort:
+        if config.executionUdpPort.isSome:
+          config.executionUdpPort
+        elif config.udpPort.isSome:
+          some(Port(uint16(config.udpPort.get()) + 1))
+        else:
+          none(Port),
+    ),
+  )
+
+  while not ProcessState.stopIt(notice("Shutting down", reason = it)):
+    os.sleep(100)
+
+  waitFor bnStop.fire()
+  waitFor ecStop.fire()
+
+  joinThread(bnThread)
+  joinThread(ecThread)
+
+  waitFor metricsServer.stopMetricsServer()
 
 # noinline to keep it in stack traces
 proc main() {.noinline, raises: [CatchableError].} =
@@ -338,82 +413,7 @@ proc main() {.noinline, raises: [CatchableError].} =
   elif isEC:
     nimbus_execution_client.main()
   else:
-    # Make sure the default nim handlers don't run in any thread
-    ProcessState.setupStopHandlers()
-
-    # Make it harder to connect to the (internal) engine - this will of course
-    # go away
-    discard randomBytes(distinctBase(jwtKey))
-
-    const banner = "Nimbus v0.0.1"
-
-    var config = NimbusConf.loadWithBanners(banner, copyright, [specBanner], true).valueOr:
-      writePanicLine error # Logging not yet set up
-      quit QuitFailure
-
-    setupLogging(config.logLevel, config.logStdout, none OutFile)
-    setupFileLimits()
-
-    if not (checkAndCreateDataDir(string(config.dataDir))):
-      # We are unable to access/create data folder or data folder's
-      # permissions are insecure.
-      quit QuitFailure
-
-    let metricsServer = (waitFor config.initMetricsServer()).valueOr:
-      quit 1
-
-    # Nim GC metrics (for the main thread) will be collected in onSecond(), but
-    # we disable piggy-backing on other metrics here.
-    setSystemMetricsAutomaticUpdate(false)
-
-    if config.engineApiEnabled:
-      warn "Engine API is not available when running internal beacon node"
-
-    var bnThread: Thread[BeaconThreadConfig]
-    let bnStop = ThreadSignalPtr.new().expect("working ThreadSignalPtr")
-    createThread(
-      bnThread,
-      runBeaconNode,
-      BeaconThreadConfig(
-        tsp: bnStop,
-        tcpPort: config.beaconTcpPort.get(config.tcpPort.get(Port defaultEth2TcpPort)),
-        udpPort: config.beaconUdpPort.get(config.udpPort.get(Port defaultEth2TcpPort)),
-        elSync: config.elSync,
-      ),
-    )
-
-    var ecThread: Thread[ExecutionThreadConfig]
-    let ecStop = ThreadSignalPtr.new().expect("working ThreadSignalPtr")
-    createThread(
-      ecThread,
-      runExecutionClient,
-      ExecutionThreadConfig(
-        tsp: ecStop,
-        tcpPort:
-          # -1/+1 to make sure global default is respected but +1 is applied to --tcp-port
-          config.executionTcpPort.get(
-            Port(uint16(config.tcpPort.get(Port(defaultExecutionPort - 1))) + 1)
-          ),
-        udpPort:
-          if config.executionUdpPort.isSome:
-            config.executionUdpPort
-          elif config.udpPort.isSome:
-            some(Port(uint16(config.udpPort.get()) + 1))
-          else:
-            none(Port),
-      ),
-    )
-
-    while not ProcessState.stopIt(notice("Shutting down", reason = it)):
-      os.sleep(100)
-
-    waitFor bnStop.fire()
-    waitFor ecStop.fire()
-
-    joinThread(bnThread)
-    joinThread(ecThread)
-
-    waitFor metricsServer.stopMetricsServer()
+    runCombinedClient()
 
 when isMainModule:
   main()

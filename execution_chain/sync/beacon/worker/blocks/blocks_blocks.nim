@@ -27,6 +27,14 @@ proc getNthHash(ctx: BeaconCtxRef; blocks: seq[EthBlock]; n: int): Hash32 =
   ctx.hdrCache.getHash(blocks[n].header.number).valueOr:
     return zeroHash32
 
+func toStr(e: BeaconError): string =
+  result = "(" & $e.excp & ","
+  if 0 < e.name.len:
+    result &= e.name & "(" & e.msg & "),"
+  elif 0 < e.msg.len:
+    result &= e.msg & ","
+  result &= e.elapsed.toStr
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -61,7 +69,7 @@ template blocksFetchCheckImpl(
       let header = ctx.hdrCache.get(iv.minPt + n).valueOr:
         # There is nothing one can do here
         chronicles.info "Block header missing (reorg triggered)", peer, iv, n,
-          nth=(iv.minPt + n).bnStr
+          nth=(iv.minPt + n)
         ctx.subState.cancelRequest = true                  # So require reorg
         break body                                         # return err()
       request.blockHashes[n - 1] = header.parentHash
@@ -69,7 +77,7 @@ template blocksFetchCheckImpl(
     blocks[0].header = ctx.hdrCache.get(iv.minPt).valueOr:
       # There is nothing one can do here
       chronicles.info "Block header missing (reorg triggered)", peer, iv, n=0,
-        nth=iv.minPt.bnStr
+        nth=iv.minPt
       ctx.subState.cancelRequest = true                    # So require reorg
       break body                                           # return err()
     request.blockHashes[^1] = blocks[^1].header.computeBlockHash
@@ -202,24 +210,23 @@ template blocksImport*(
 
     var isError = false
     block loop:
-      trace info & ": start importing blocks", peer, iv,
-        nBlocks=iv.len, base=ctx.chain.baseNumber.bnStr,
-        head=ctx.chain.latestNumber.bnStr
+      trace info & ": start importing blocks", peer, iv, nBlocks=iv.len,
+        base=ctx.chain.baseNumber, head=ctx.chain.latestNumber
 
       for n in 0 ..< blocks.len:
-        let nBn = blocks[n].header.number
+        let nthBn = blocks[n].header.number
         discard (await buddy.importBlock(blocks[n], peerID)).valueOr:
           if error.excp != ECancelledError:
             isError = true
 
             # Mark peer that produced that unusable headers list as a zombie
-            let srcPeer = buddy.getPeer peerID
+            let srcPeer = buddy.getSyncPeer peerID
             if not srcPeer.isNil:
               srcPeer.only.nErrors.apply.blk = nProcBlocksErrThreshold + 1
 
             # Check whether it is enough to skip the current blocks list, only
-            if ctx.subState.procFailNum != nBn:
-              ctx.subState.procFailNum = nBn       # OK, this is a new block
+            if ctx.subState.procFailNum != nthBn:
+              ctx.subState.procFailNum = nthBn     # OK, this is a new block
               ctx.subState.procFailCount = 1
 
             else:
@@ -232,38 +239,46 @@ template blocksImport*(
             # Proper logging ..
             if ctx.subState.cancelRequest:
               warn "Blocks import error (cancel this session)", n=n, iv,
-                nBlocks=iv.len, nthBn=nBn.bnStr,
+                nBlocks=iv.len, nthBn,
                 nthHash=ctx.getNthHash(blocks, n).short,
-                base=ctx.chain.baseNumber.bnStr,
-                head=ctx.chain.latestNumber.bnStr,
-                blkFailCount=ctx.subState.procFailCount, error=error
+                base=ctx.chain.baseNumber,
+                head=ctx.chain.latestNumber,
+                blkFailCount=ctx.subState.procFailCount, error=error.toStr
+            elif error.excp == ESyncerTermination:
+              chronicles.debug "Blocks import error (skip remaining)", n=n, iv,
+                nBlocks=iv.len, nthBn,
+                nthHash=ctx.getNthHash(blocks, n).short,
+                base=ctx.chain.baseNumber,
+                head=ctx.chain.latestNumber,
+                blkFailCount=ctx.subState.procFailCount, error=error.toStr
             else:
               chronicles.info "Blocks import error (skip remaining)", n=n, iv,
-                nBlocks=iv.len, nthBn=nBn.bnStr,
+                nBlocks=iv.len, nthBn,
                 nthHash=ctx.getNthHash(blocks, n).short,
-                base=ctx.chain.baseNumber.bnStr,
-                head=ctx.chain.latestNumber.bnStr,
-                blkFailCount=ctx.subState.procFailCount, error=error
+                base=ctx.chain.baseNumber,
+                head=ctx.chain.latestNumber,
+                blkFailCount=ctx.subState.procFailCount, error=error.toStr
 
           break loop                               # stop
           # End `importBlock(..).valueOr`
 
         # isOk => next instruction
-        ctx.updateLastBlockImported nBn            # block imported OK
+        ctx.updateLastBlockImported nthBn          # block imported OK
+        ctx.updateEtaBlocks()                      # metrics, eta estimate
         # End block: `loop`
 
     if not isError:
-      let srcPeer = buddy.getPeer peerID
+      let srcPeer = buddy.getSyncPeer peerID
       if not srcPeer.isNil:
         srcPeer.only.nErrors.apply.blk = 0
 
-    nBlocks = ctx.subState.top - iv.minPt + 1      # number of blocks imported
+    nBlocks = ctx.subState.topNum - iv.minPt + 1   # number of blocks imported
 
-    trace info & ": blocks imported", iv=(if iv.minPt <= ctx.subState.top:
-      (iv.minPt, ctx.subState.top).bnStr else: "n/a"), nBlocks=nBlocks,
-      nFailed=(iv.maxPt - ctx.subState.top),
-      base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-      target=ctx.subState.head.bnStr, targetHash=ctx.subState.headHash.short
+    trace info & ": blocks imported", iv=(if iv.minPt <= ctx.subState.topNum:
+      (iv.minPt, ctx.subState.topNum).toStr else: "n/a"), nBlocks,
+      nFailed=(iv.maxPt - ctx.subState.topNum),
+      base=ctx.chain.baseNumber, head=ctx.chain.latestNumber,
+      target=ctx.subState.headNum, targetHash=ctx.subState.headHash.short
     # End block: `body`
 
   nBlocks                                          # return value

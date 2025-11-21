@@ -686,15 +686,18 @@ proc rlpxAccept*(
   try:
     await postHelloSteps(peer, response)
   except PeerDisconnected as exc:
+    node.peerPool.connectingNodes.excl(peer.remote)
     debug "Disconnect while accepting", reason = exc.reason, err = exc.msg
     rlpx_accept_failure.inc(labelValues = [$exc.reason])
     return nil
   except UselessPeerError as exc:
+    node.peerPool.connectingNodes.excl(peer.remote)
     debug "Useless peer while accepting", err = exc.msg
 
     rlpx_accept_failure.inc(labelValues = [$UselessPeer])
     return nil
   except EthP2PError as exc:
+    node.peerPool.connectingNodes.excl(peer.remote)
     trace "P2P error during accept", err = exc.msg
     rlpx_accept_failure.inc(labelValues = [$exc.name])
     return nil

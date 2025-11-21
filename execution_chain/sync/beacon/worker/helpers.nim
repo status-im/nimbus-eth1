@@ -33,38 +33,31 @@ type
     total: uint64
 
 
-func bnStr*(w: BlockNumber): string =
-  "#" & $w
-
-func bnStr*(h: Header): string =
-  h.number.bnStr
-
-func bnStr*(b: EthBlock): string =
-  b.header.bnStr
-
-func bnStr*(w: (BlockNumber,BlockNumber)): string =
-  if w[0] < w[1]: w[0].bnStr & ".." & w[1].bnStr
-  elif w[0] == w[1]: w[0].bnStr
+func toStr*(w: (BlockNumber,BlockNumber)): string =
+  if w[0] < w[1]: $w[0] & ".." & $w[1]
+  elif w[0] == w[1]: $w[0]
   else: "n/a"
 
-func bnStr*(w: seq[EthBlock]): string =
+func toStr*(w: seq[EthBlock]): string =
   if w.len == 0: "n/a"
-  else: (w[0].header.number, w[^1].header.number).bnStr
+  else: (w[0].header.number, w[^1].header.number).toStr
 
-func bnStr*(rev: seq[Header]): string =
+func toStr*(rev: seq[Header]): string =
   ## Pretty print *reverse* sequence of headers as interval
-  if rev.len == 0: "n/a" else: (rev[^1].number,rev[0].number).bnStr
+  if rev.len == 0: "n/a" else: (rev[^1].number,rev[0].number).toStr
 
-func bnStr*(w: Interval[BlockNumber,uint64]): string =
-  (w.minPt,w.maxPt).bnStr
+func toStr*(w: Interval[BlockNumber,uint64]): string =
+  (w.minPt,w.maxPt).toStr
 
 
 func toStr*(a: chronos.Duration): string =
+  if twoHundredYears <= a:
+    return "n/a"
   var s = a.toString 2
   if s.len == 0: s="0"
   s
 
-func psStr*(w: MeanVarStats): string =
+func toStr*(w: MeanVarStats): string =
   ## Throughput per second
   if w.samples == 0:
     result = "n/a"
@@ -84,7 +77,7 @@ func toStr*(h: Hash32): string =
   else: h.short
 
 func `$`*(w: Interval[BlockNumber,uint64]): string =
-  w.bnStr
+  w.toStr
 
 func `$`*(w: (SyncState,HeaderChainMode,bool)): string =
   $w[0] & "." & $w[1] & (if w[2]: ":" & "poolMode" else: "")

@@ -186,6 +186,14 @@ proc injectEngineFrontend*(server: JsonRpcServer, frontend: EthApiFrontend) =
   server.getServer().rpc("eth_maxPriorityFeePerGas") do() -> Quantity:
     await frontend.eth_maxPriorityFeePerGas()
 
+  server.getServer().rpc("eth_feeHistory") do(
+    blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: Opt[seq[float64]]
+  ) -> FeeHistoryResult:
+    await frontend.eth_feeHistory(blockCount, newestBlock, rewardPercentiles)
+
+  server.getServer().rpc("eth_sendRawTransaction") do(txBytes: seq[byte]) -> Hash32:
+    await frontend.eth_sendRawTransaction(txBytes)
+
 proc stop*(server: JsonRpcServer) {.async: (raises: [CancelledError]).} =
   try:
     case server.kind

@@ -38,12 +38,12 @@ func classifyForFetching*(buddy: BeaconBuddyRef): PeerRanking =
   ##
   var ranking = 0
 
-  case buddy.ctx.pool.lastState:
+  case buddy.ctx.pool.syncState:
   of SyncState.headers:
     # Classify this peer only if there are enough header slots available on
     # the queue for dowmloading simmultaneously. There is an additional slot
     # for downlading directly to the header chain cache (rather than queuing.)
-    if buddy.ctx.pool.nBuddies <= headersStagedQueueLengthMax + 1:
+    if buddy.ctx.nSyncPeers() <= headersStagedQueueLengthMax + 1:
       return (qSlotsAvail, -1)
 
     template hdr(b: BeaconBuddyRef): StatsCollect =
@@ -60,7 +60,7 @@ func classifyForFetching*(buddy: BeaconBuddyRef): PeerRanking =
     # Get number of peers with poorer header throughput. This results in a
     # ranking of the sync peers where a high rank is preferable.
     let (bSum, bSamples) = (buddy.hdr.sum, buddy.hdr.samples.float)
-    for w in buddy.ctx.getPeers():
+    for w in buddy.ctx.getSyncPeers():
       if buddy.peerID != w.peerID and
          # Mind fringe case when most higher throughputs are equal in which
          # case all ranks must be the topmost rank (i.e. `<=`, here.)
@@ -68,12 +68,12 @@ func classifyForFetching*(buddy: BeaconBuddyRef): PeerRanking =
         ranking.inc
 
     # Test against better performing peers. Choose those if there are enough.
-    if ranking < buddy.ctx.pool.nBuddies - headersStagedQueueLengthMax:
+    if ranking < buddy.ctx.nSyncPeers() - headersStagedQueueLengthMax:
       return (rankingTooLow, ranking)
 
   of SyncState.blocks:
     # Ditto for block bodies
-    if buddy.ctx.pool.nBuddies <= blocksStagedQueueLengthMax + 1:
+    if buddy.ctx.nSyncPeers() <= blocksStagedQueueLengthMax + 1:
       return (qSlotsAvail, -1)
 
     template blk(b: BeaconBuddyRef): StatsCollect =
@@ -85,12 +85,12 @@ func classifyForFetching*(buddy: BeaconBuddyRef): PeerRanking =
       return (rankingTooLow, 0)
 
     let (bSum, bSamples) = (buddy.blk.sum, buddy.blk.samples.float)
-    for w in buddy.ctx.getPeers():
+    for w in buddy.ctx.getSyncPeers():
       if buddy.peerID != w.peerID and
          w.blk.sum * bSamples <= bSum * w.blk.samples.float:
         ranking.inc
 
-    if ranking < buddy.ctx.pool.nBuddies - blocksStagedQueueLengthMax:
+    if ranking < buddy.ctx.nSyncPeers() - blocksStagedQueueLengthMax:
       return (rankingTooLow, ranking)
 
   else:

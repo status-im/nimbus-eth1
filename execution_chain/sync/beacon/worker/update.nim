@@ -15,7 +15,11 @@ import
   pkg/[chronicles, chronos, metrics],
   pkg/eth/common,
   ./blocks/blocks_unproc,
+  ./update/[update_eta, update_metrics],
   ./[headers, worker_desc]
+
+export
+  update_eta, update_metrics
 
 logScope:
   topics = "beacon sync"
@@ -41,11 +45,13 @@ proc updateSuspendSyncer(ctx: BeaconCtxRef) =
 
   ctx.hibernate = true
 
+  # Update metrics
+  ctx.pool.syncEta.lastUpdate = Moment.now()
   metrics.set(nec_sync_last_block_imported, 0)
   metrics.set(nec_sync_head, 0)
 
-  info "Suspending syncer", base=ctx.chain.baseNumber.bnStr,
-    head=ctx.chain.latestNumber.bnStr, nSyncPeers=ctx.pool.nBuddies
+  info "Suspending syncer", base=ctx.chain.baseNumber,
+    head=ctx.chain.latestNumber, nSyncPeers=ctx.nSyncPeers()
 
 proc commitCollectHeaders(ctx: BeaconCtxRef; info: static[string]): bool =
   ## Link header chain into `FC` module. Gets ready for block import.
@@ -53,8 +59,8 @@ proc commitCollectHeaders(ctx: BeaconCtxRef; info: static[string]): bool =
   # This function does the job linking into `FC` module proper
   ctx.hdrCache.commit().isOkOr:
     trace info & ": cannot finalise header chain",
-      B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
-      D=ctx.hdrCache.antecedent.bnStr, H=ctx.hdrCache.head.bnStr,
+      B=ctx.chain.baseNumber, L=ctx.chain.latestNumber,
+      D=ctx.hdrCache.antecedent.number, H=ctx.hdrCache.head.number,
       `error`=error
     return false
 
@@ -68,15 +74,15 @@ proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
   ctx.pool.seenData = false
 
   # Re-initialise sub-state variables
-  ctx.subState.top = ctx.hdrCache.antecedent.number - 1
-  ctx.subState.head = ctx.hdrCache.head.number
+  ctx.subState.topNum = ctx.hdrCache.antecedent.number - 1
+  ctx.subState.headNum = ctx.hdrCache.head.number
   ctx.subState.headHash = ctx.hdrCache.headHash
 
-  metrics.set(nec_sync_last_block_imported, ctx.subState.top.int64)
-  metrics.set(nec_sync_head, ctx.subState.head.int64)
+  metrics.set(nec_sync_last_block_imported, ctx.subState.topNum.int64)
+  metrics.set(nec_sync_head, ctx.subState.headNum.int64)
 
   # Update list of block numbers to process
-  ctx.blocksUnprocSet(ctx.subState.top + 1, ctx.subState.head)
+  ctx.blocksUnprocSet(ctx.subState.topNum + 1, ctx.subState.headNum)
 
 # ------------------------------------------------------------------------------
 # Private state transition handlers
@@ -138,7 +144,7 @@ proc blocksNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
   if ctx.subState.cancelRequest:
     return blocksCancel
 
-  if ctx.subState.head <= ctx.subState.top:
+  if ctx.subState.headNum <= ctx.subState.topNum:
     return blocksFinish
 
   SyncState.blocks
@@ -179,7 +185,7 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
   #     blocksFinish --------------------'
   #
   let newState =
-    case ctx.pool.lastState:
+    case ctx.pool.syncState:
     of idle:
       ctx.idleNext info
 
@@ -201,29 +207,30 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
     of blocksFinish:
       ctx.blocksFinishNext info
 
-  if ctx.pool.lastState == newState:
+  if ctx.pool.syncState == newState:
     return
 
-  let prevState = ctx.pool.lastState
-  ctx.pool.lastState = newState
+  let prevState = ctx.pool.syncState
+  ctx.pool.syncState = newState
+  ctx.subState.stateSince = Moment.now()
 
   case newState:
   of idle:
     info "State changed", prevState, newState,
-      base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-      nSyncPeers=ctx.pool.nBuddies
+      base=ctx.chain.baseNumber, head=ctx.chain.latestNumber,
+      nSyncPeers=ctx.nSyncPeers()
 
   of SyncState.headers, SyncState.blocks:
     ctx.pool.lastSyncUpdLog = Moment.now() # reset logging control
     info "State changed", prevState, newState,
-      base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-      target=ctx.subState.head.bnStr, targetHash=ctx.subState.headHash.short
+      base=ctx.chain.baseNumber, head=ctx.chain.latestNumber,
+      target=ctx.subState.headNum, targetHash=ctx.subState.headHash.short
 
   else:
     # Most states require synchronisation via `poolMode`
     ctx.poolMode = true
     info "State change, waiting for sync", prevState, newState,
-      nSyncPeers=ctx.pool.nBuddies
+      nSyncPeers=ctx.nSyncPeers()
 
   # Final sync scrum layout reached or inconsistent/impossible state
   if newState == idle:
@@ -231,49 +238,52 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
 
 
 proc updateLastBlockImported*(ctx: BeaconCtxRef; bn: BlockNumber) =
-  ctx.subState.top = bn
+  ctx.subState.topNum = bn
   metrics.set(nec_sync_last_block_imported, bn.int64)
 
 # ------------------------------------------------------------------------------
-# Public functions, call-back handler ready
+# Public functions, call-back handlers
 # ------------------------------------------------------------------------------
 
 proc updateActivateSyncer*(ctx: BeaconCtxRef) =
   ## If in hibernate mode, accept a cache session and activate syncer
   ##
   if ctx.hibernate and                          # only in idle mode
-     ctx.pool.minInitBuddies <= ctx.pool.nBuddies and
+     ctx.pool.minInitBuddies <= ctx.nSyncPeers() and
      ctx.pool.initTarget.isNone():              # otherwise manual setup
     let (b, t) = (ctx.chain.baseNumber, ctx.hdrCache.head.number)
 
     # Exclude the case of a single header chain which would be `T` only
     if b+1 < t:
       ctx.pool.minInitBuddies = 0               # reset
-      ctx.pool.lastState = SyncState.headers    # state transition
+      ctx.pool.syncState = SyncState.headers    # state transition
+      ctx.subState.stateSince = Moment.now()
       ctx.hibernate = false                     # wake up
 
       # Update range
       ctx.headersUnprocSet(b+1, t-1)
-      ctx.subState.head = t
+      ctx.subState.headNum = t
       ctx.subState.headHash = ctx.hdrCache.headHash
 
-      metrics.set(nec_sync_head, ctx.subState.head.int64)
+      # Update metrics
+      ctx.pool.syncEta.lastUpdate = ctx.subState.stateSince
+      metrics.set(nec_sync_head, ctx.subState.headNum.int64)
 
-      info "Activating syncer", base=b.bnStr, head=ctx.chain.latestNumber.bnStr,
-        target=t.bnStr, targetHash=ctx.subState.headHash.short,
-        nSyncPeers=ctx.pool.nBuddies
+      info "Activating syncer", base=b, head=ctx.chain.latestNumber,
+        target=t, targetHash=ctx.subState.headHash.short,
+        nSyncPeers=ctx.nSyncPeers()
       return
 
   if 0 < ctx.pool.minInitBuddies:
-    trace "Syncer activation rejected", base=ctx.chain.baseNumber.bnStr,
-      head=ctx.chain.latestNumber.bnStr, target=ctx.hdrCache.head.bnStr,
+    trace "Syncer activation rejected", base=ctx.chain.baseNumber,
+      head=ctx.chain.latestNumber, target=ctx.hdrCache.head.number,
       initTarget=(if ctx.pool.initTarget.isNone(): "n/a"
                   else: ctx.pool.initTarget.get.hash.short),
-      nSyncPeersMin=ctx.pool.minInitBuddies, nSyncPeers=ctx.pool.nBuddies
+      nSyncPeersMin=ctx.pool.minInitBuddies, nSyncPeers=ctx.nSyncPeers()
   else:
-    trace "Syncer activation rejected", base=ctx.chain.baseNumber.bnStr,
-      head=ctx.chain.latestNumber.bnStr, target=ctx.hdrCache.head.bnStr,
-      initTarget=ctx.pool.initTarget.isSome(), nSyncPeers=ctx.pool.nBuddies
+    trace "Syncer activation rejected", base=ctx.chain.baseNumber,
+      head=ctx.chain.latestNumber, target=ctx.hdrCache.head.number,
+      initTarget=ctx.pool.initTarget.isSome(), nSyncPeers=ctx.nSyncPeers()
 
   # Failed somewhere on the way
   ctx.hdrCache.clear()
