@@ -152,15 +152,13 @@ proc procBlkPreamble(
   if com.isAmsterdamOrLater(header.timestamp):
     if header.blockAccessListHash.isNone:
       return err("Post-Amsterdam block header must have blockAccessListHash")
-    elif blk.blockAccessList.isNone:
-      return err("Post-Amsterdam block body must have blockAccessList")
-    elif not skipValidation:
+    if not skipValidation and blk.blockAccessList.isSome:
       if blk.blockAccessList.get.validate(header.blockAccessListHash.get).isErr():
         return err("Mismatched blockAccessListHash")
   else:
     if header.blockAccessListHash.isSome:
       return err("Pre-Amsterdam block header must not have blockAccessListHash")
-    elif blk.blockAccessList.isSome:
+    if blk.blockAccessList.isSome:
       return err("Pre-Amsterdam block body must not have blockAccessList")
 
   # Commit block access list tracker changes for pre‑execution system calls
