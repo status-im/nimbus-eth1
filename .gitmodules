@@ -230,3 +230,11 @@
 	path = vendor/nim-mcl
 	url = https://github.com/status-im/nim-mcl
   branch = main
+[submodule "vendor/nim-ngtcp2"]
+	path = vendor/nim-ngtcp2
+	url = https://github.com/vacp2p/nim-ngtcp2
+	branch = main
+[submodule "vendor/nim-quic"]
+	path = vendor/nim-quic
+	url = https://github.com/vacp2p/nim-quic
+	branch = main

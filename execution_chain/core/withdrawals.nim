@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -23,7 +23,7 @@ proc validateWithdrawals*(
       return err("Post-Shanghai block body must have withdrawals")
     else:
       if withdrawals.get.calcWithdrawalsRoot != header.withdrawalsRoot.get:
-        return err("Mismatched withdrawalsRoot blockNumber =" & $header.number)
+        return err("Mismatched withdrawalsRoot blockNumber = " & $header.number)
   else:
     if header.withdrawalsRoot.isSome:
       return err("Pre-Shanghai block header must not have withdrawalsRoot")
