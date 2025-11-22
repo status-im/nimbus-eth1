@@ -15,9 +15,10 @@ import
   ./interpreter/[gas_costs, op_codes],
   ./transient_storage,
   ../db/ledger,
-  ../common/[common, evmforks]
+  ../common/[common, evmforks],
+  ../block_access_list/block_access_list_tracker
 
-export stack, memory, transient_storage
+export stack, memory, transient_storage, block_access_list_tracker
 
 type
   VMFlag* = enum
@@ -55,6 +56,7 @@ type
     blobGasUsed*      : uint64
     allLogs*          : seq[Log] # EIP-6110
     gasRefunded*      : int64    # Global gasRefunded counter
+    balTracker*       : BlockAccessListTrackerRef
 
   Computation* = ref object
     # The execution computation

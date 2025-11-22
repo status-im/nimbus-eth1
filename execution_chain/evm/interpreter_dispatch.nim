@@ -68,11 +68,14 @@ macro selectVM(v: VmCpt, fork: EVMFork, tracingEnabled: bool): EvmResultVoid =
 proc beforeExecCall(c: Computation) =
   c.snapshot()
   if c.msg.kind == CallKind.Call:
+    if c.vmState.balTrackerEnabled:
+      c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
+      c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
     c.vmState.mutateLedger:
       db.subBalance(c.msg.sender, c.msg.value)
       db.addBalance(c.msg.contractAddress, c.msg.value)
 
-func afterExecCall(c: Computation) =
+proc afterExecCall(c: Computation) =
   ## Collect all of the accounts that *may* need to be deleted based on EIP161
   ## https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md
   ## also see: https://github.com/ethereum/EIPs/issues/716
@@ -96,6 +99,8 @@ proc beforeExecCreate(c: Computation): bool =
         "Nonce overflow when sender=" & sender & " wants to create contract", false
       )
       return true
+    if c.vmState.balTrackerEnabled:
+      c.vmState.balTracker.trackNonceChange(c.msg.sender, nonce + 1)
     db.setNonce(c.msg.sender, nonce + 1)
 
     # We add this to the access list _before_ taking a snapshot.
@@ -106,11 +111,19 @@ proc beforeExecCreate(c: Computation): bool =
 
   c.snapshot()
 
+  if c.vmState.balTrackerEnabled:
+    c.vmState.balTracker.trackAddressAccess(c.msg.contractAddress)
   if c.vmState.readOnlyLedger().contractCollision(c.msg.contractAddress):
     let blurb = c.msg.contractAddress.toHex
     c.setError("Address collision when creating contract address=" & blurb, true)
     c.rollback()
     return true
+
+  if c.vmState.balTrackerEnabled:
+    c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
+    c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
+    if c.fork >= FkSpurious:
+      c.vmState.balTracker.trackIncNonceChange(c.msg.contractAddress)
 
   c.vmState.mutateLedger:
     db.subBalance(c.msg.sender, c.msg.value)

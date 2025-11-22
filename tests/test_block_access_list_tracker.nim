@@ -44,7 +44,7 @@ suite "Block access list tracker":
       coreDb = newCoreDbRef(DefaultDbMemory)
       ledger = LedgerRef.init(coreDb.baseTxFrame())
       builder = BlockAccessListBuilderRef.init()
-      tracker = StateChangeTrackerRef.init(ledger.ReadOnlyLedger, builder)
+      tracker = BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger, builder)
 
     # Setup in test data in db
 
