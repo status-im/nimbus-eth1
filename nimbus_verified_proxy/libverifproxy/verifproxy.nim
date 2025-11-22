@@ -6,39 +6,22 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  algorithm,
   json_serialization,
   chronos,
   eth/net/nat,
-  std/[atomics, locks, json, net, strutils],
+  std/[atomics, json, net, strutils, lists],
   beacon_chain/spec/[digest, network],
   beacon_chain/nimbus_binary_common,
+  json_rpc/[jsonmarshal],
   web3/[eth_api_types, conversions],
   ../engine/types,
-  ../engine/engine,
-  ../lc/lc,
-  ../lc_backend,
-  ../nimbus_verified_proxy,
   ../nimbus_verified_proxy_conf,
-  ../json_rpc_backend
+  ./types,
+  ./setup
 
+# for short hand convenience
 {.pragma: exported, cdecl, exportc, dynlib, raises: [].}
 {.pragma: exportedConst, exportc, dynlib.}
-
-type
-  Task = ref object
-    status: int
-    response: string
-    finished: bool
-    cb: CallBackProc
-
-  Context = object
-    tasks: seq[Task]
-    stop: bool
-    frontend: EthApiFrontend
-
-  CallBackProc =
-    proc(ctx: ptr Context, status: int, res: cstring) {.cdecl, gcsafe, raises: [].}
 
 proc NimMain() {.importc, exportc, dynlib.}
 
@@ -54,6 +37,9 @@ proc initLib() =
     locals = addr(locals)
     nimGC_setStackBottom(locals)
 
+proc freeResponse(res: cstring) {.exported.} =
+  deallocShared(res)
+
 proc toUnmanagedPtr[T](x: ref T): ptr T =
   GC_ref(x)
   addr x[]
@@ -64,19 +50,6 @@ func asRef[T](x: ptr T): ref T =
 proc destroy[T](x: ptr T) =
   x[].reset()
   GC_unref(asRef(x))
-
-proc createAsyncTaskContext(): ptr Context {.exported.} =
-  let ctx = Context.new()
-  ctx.toUnmanagedPtr()
-
-proc createTask(cb: CallBackProc): Task =
-  let task = Task()
-  task.finished = false
-  task.cb = cb
-  task
-
-proc freeResponse(res: cstring) {.exported.} =
-  deallocShared(res)
 
 proc freeContext(ctx: ptr Context) {.exported.} =
   ctx.destroy()
@@ -89,10 +62,74 @@ proc alloc(str: string): cstring =
   ret[str.len] = '\0'
   return ret
 
+proc processVerifProxyTasks(ctx: ptr Context) {.exported.} =
+  var delList: seq[int] = @[]
+
+  # cancel all tasks if stopped
+  if ctx.stop:
+    for task in ctx.tasks:
+      task.fut.cancelSoon()
+
+    return
+
+  for taskNode in ctx.tasks.nodes:
+    let task = taskNode.value
+    if task.finished:
+      task.cb(ctx, task.status, alloc(task.response))
+      ctx.tasks.remove(taskNode)
+      ctx.taskLen -= 1
+
+  # don't poll the endless loop of light client
+  if ctx.taskLen > 1:
+    poll()
+
+proc createTask(cb: CallBackProc): Task =
+  let task = Task()
+  task.finished = false
+  task.cb = cb
+  task
+
+proc startVerifProxy(configJson: cstring, cb: CallBackProc): ptr Context {.exported.} =
+  let ctx = Context.new().toUnmanagedPtr()
+  ctx.stop = false
+
+  try:
+    initLib()
+  except Exception as e:
+    cb(ctx, -3, alloc(e.msg))
+
+  let 
+    task = createTask(cb)
+    fut = run(ctx, $configJson)
+
+  fut.addCallback proc(_: pointer) {.gcsafe.} =
+    if fut.cancelled():
+      task.response = Json.encode(fut.error())
+      task.finished = true
+      task.status = -2
+    elif fut.failed():
+      task.response = Json.encode(fut.error())
+      task.finished = true
+      task.status = -1
+    else:
+      task.response = "success" # since return type is void
+      task.status = 0
+      task.finished = true
+
+  task.fut = fut
+  ctx.tasks.add(task)
+  ctx.taskLen += 1
+
+  return ctx
+
+proc stopVerifProxy(ctx: ptr Context) {.exported.} =
+  ctx.stop = true
+
 # NOTE: this is not the C callback. This is just a callback for the future
 template callbackToC(ctx: ptr Context, cb: CallBackProc, asyncCall: untyped) =
   let task = createTask(cb)
   ctx.tasks.add(task)
+  ctx.taskLen += 1
 
   let fut = asyncCall
 
@@ -110,6 +147,41 @@ template callbackToC(ctx: ptr Context, cb: CallBackProc, asyncCall: untyped) =
       task.status = 0
       task.finished = true
 
+  task.fut = fut
+
+# taken from nim-json-rpc and adapted
+func unpackArg(arg: string, argType: type Address): Result[Address, string] {.raises: [].} =
+  try:
+    ok(Address.fromHex(arg))
+  except ValueError as e:
+    err("Parameter of type " & $argType & " coudln't be decoded: " & e.msg)
+
+func unpackArg(arg: string, argType: type BlockTag): Result[BlockTag, string] {.raises: [].} =
+  try:
+    ok(BlockTag(kind: bidNumber, number: Quantity(fromHex[uint64](arg))))
+  except ValueError:
+    # if it is an invalid alias it verification engine will throw an error
+    ok(BlockTag(kind: bidAlias, alias: arg))
+
+func unpackArg(arg: string, argType: type UInt256): Result[UInt256, string] {.raises: [].} =
+  try:
+    ok(UInt256.fromHex(arg))
+  except ValueError as e:
+    err("Parameter of type " & $argType & " coudldn't be decoded: " & e.msg)
+
+func unpackArg(arg: string, argType: type Hash32): Result[Hash32, string] {.raises: [].} =
+  try:
+    ok(Hash32.fromHex(arg))
+  except ValueError as e:
+    err("Parameter of type " & $argType & " coudldn't be decoded: " & e.msg)
+
+# generalized overloading
+func unpackArg(arg: string, argType: type): Result[argType, string] {.raises: [].} =
+  try:
+    ok(JrpcConv.decode(arg, argType))
+  except CatchableError as e:
+    err("Parameter of type " & $argType & " coudln't be decoded: " & e.msg)
+
 proc eth_blockNumber(ctx: ptr Context, cb: CallBackProc) {.exported.} =
   callbackToC(ctx, cb):
     ctx.frontend.eth_blockNumber()
@@ -118,197 +190,290 @@ proc eth_getBalance(
     ctx: ptr Context, address: cstring, blockTag: cstring, cb: CallBackProc
 ) {.exported.} =
   let
-    addressTyped =
-      try:
-        Address.fromHex($address)
-      except ValueError as e:
-        cb(ctx, -3, alloc(e.msg))
-        return
+    addressTyped = unpackArg($address, Address).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
 
-    blockTagTyped =
-      try:
-        BlockTag(kind: bidNumber, number: Quantity(parseBiggestUInt($blockTag)))
-      except ValueError:
-        BlockTag(kind: bidAlias, alias: $blockTag)
+    blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
 
   callbackToC(ctx, cb):
     ctx.frontend.eth_getBalance(addressTyped, blockTagTyped)
 
-proc pollAsyncTaskEngine(ctx: ptr Context) {.exported.} =
-  var delList: seq[int] = @[]
-
-  let taskLen = ctx.tasks.len
-  for idx in 0 ..< taskLen:
-    let task = ctx.tasks[idx]
-    if task.finished:
-      task.cb(ctx, task.status, alloc(task.response))
-      delList.add(idx)
-
-  # sequence changes as we delete so delting in descending order
-  for i in delList.sorted(SortOrder.Descending):
-    ctx.tasks.delete(i)
-
-  if ctx.tasks.len > 0:
-    poll()
-
-proc load(
-    T: type VerifiedProxyConf, configJson: string
-): T {.raises: [CatchableError, ValueError].} =
-  let jsonNode = parseJson($configJson)
-
-  let
-    eth2Network = some(jsonNode.getOrDefault("eth2Network").getStr("mainnet"))
-    trustedBlockRoot =
-      if jsonNode.contains("trustedBlockRoot"):
-        Eth2Digest.fromHex(jsonNode["trustedBlockRoot"].getStr())
-      else:
-        raise
-          newException(ValueError, "`trustedBlockRoot` not specified in JSON config")
-    backendUrl =
-      if jsonNode.contains("backendUrl"):
-        parseCmdArg(Web3Url, jsonNode["backendUrl"].getStr())
-      else:
-        raise newException(ValueError, "`backendUrl` not specified in JSON config")
-    beaconApiUrls =
-      if jsonNode.contains("beaconApiUrls"):
-        parseCmdArg(UrlList, jsonNode["beaconApiUrls"].getStr())
-      else:
-        raise newException(ValueError, "`beaconApiUrls` not specified in JSON config")
-    logLevel = jsonNode.getOrDefault("logLevel").getStr("INFO")
-    logStdout =
-      case jsonNode.getOrDefault("logStdout").getStr("None")
-      of "Colors": StdoutLogKind.Colors
-      of "NoColors": StdoutLogKind.NoColors
-      of "Json": StdoutLogKind.Json
-      of "Auto": StdoutLogKind.Auto
-      else: StdoutLogKind.None
-    maxBlockWalk = jsonNode.getOrDefault("maxBlockWalk").getInt(1000)
-    headerStoreLen = jsonNode.getOrDefault("headerStoreLen").getInt(256)
-    storageCacheLen = jsonNode.getOrDefault("storageCacheLen").getInt(256)
-    codeCacheLen = jsonNode.getOrDefault("codeCacheLen").getInt(64)
-    accountCacheLen = jsonNode.getOrDefault("accountCacheLen").getInt(128)
-
-  return VerifiedProxyConf(
-    eth2Network: eth2Network,
-    trustedBlockRoot: trustedBlockRoot,
-    backendUrl: backendUrl,
-    beaconApiUrls: beaconApiUrls,
-    logLevel: logLevel,
-    logStdout: logStdout,
-    dataDirFlag: none(OutDir),
-    maxBlockWalk: uint64(maxBlockWalk),
-    headerStoreLen: headerStoreLen,
-    storageCacheLen: storageCacheLen,
-    codeCacheLen: codeCacheLen,
-    accountCacheLen: accountCacheLen,
-  )
-
-proc run(
-    ctx: ptr Context, configJson: string
-) {.async: (raises: [ValueError, CancelledError, CatchableError]).} =
-  try:
-    initLib()
-  except Exception as err:
-    raise newException(CancelledError, err.msg)
-
-  let config = VerifiedProxyConf.load($configJson)
-
-  setupLogging(config.logLevel, config.logStdout)
-
-  let
-    engineConf = RpcVerificationEngineConf(
-      chainId: getConfiguredChainId(config.eth2Network),
-      maxBlockWalk: config.maxBlockWalk,
-      headerStoreLen: config.headerStoreLen,
-      accountCacheLen: config.accountCacheLen,
-      codeCacheLen: config.codeCacheLen,
-      storageCacheLen: config.storageCacheLen,
-    )
-    engine = RpcVerificationEngine.init(engineConf)
-    lc = LightClient.new(config.eth2Network, some config.trustedBlockRoot)
-
-    # initialize backend for JSON-RPC
-    jsonRpcClient = JsonRpcClient.init(config.backendUrl)
-
-    # initialize backend for light client updates
-    lcRestClientPool = LCRestClientPool.new(lc.cfg, lc.forkDigests)
-
-  # connect light client to LC by registering on header methods 
-  # to use engine header store
-  connectLCToEngine(lc, engine)
-
-  # add light client backend
-  lc.setBackend(lcRestClientPool.getEthLCBackend())
-
-  # the backend only needs the url to connect to
-  engine.backend = jsonRpcClient.getEthApiBackend()
-
-  # inject the frontend into c context
-  ctx.frontend = engine.frontend
-
-  # start backend
-  var status = await jsonRpcClient.start()
-  if status.isErr():
-    raise newException(ValueError, status.error)
-
-  # adding endpoints will also start the backend
-  lcRestClientPool.addEndpoints(config.beaconApiUrls)
-
-  # this starts the light client manager which is
-  # an endless loop
-  await lc.start()
-
-# TODO: if frontend is accessed if this fails then it throws a sefault
-# TODO: there is log leakage(at WARN level) even when logging is set to FATAL and stdout is set to None
-proc startVerifProxy(
-    ctx: ptr Context, configJson: cstring, cb: CallBackProc
+proc eth_getStorageAt(
+    ctx: ptr Context, address: cstring, slot: cstring, blockTag: cstring, cb: CallBackProc
 ) {.exported.} =
-  let task = createTask(cb)
+  let
+    addressTyped = unpackArg($address, Address).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
 
-  ctx.tasks.add(task)
+    slotTyped = unpackArg($slot, UInt256).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
 
-  let fut = run(ctx, $configJson)
+    blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
 
-  fut.addCallback proc(udata: pointer) {.gcsafe.} =
-    if fut.cancelled():
-      task.response = Json.encode(fut.error())
-      task.finished = true
-      task.status = -2
-    elif fut.failed():
-      task.response = Json.encode(fut.error())
-      task.finished = true
-      task.status = -1
-    else:
-      task.response = "success" #result is void hence we just provide a string
-      task.status = 0
-      task.finished = true
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_getStorageAt(addressTyped, slotTyped, blockTagTyped)
 
-proc stopVerifProxy(ctx: ptr Context) {.exported.} =
-  ctx.stop = true
+proc eth_getTransactionCount(
+    ctx: ptr Context, address: cstring, blockTag: cstring, cb: CallBackProc
+) {.exported.} =
+  let
+    addressTyped = unpackArg($address, Address).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
 
-# C-callable: downloads a page and returns a heap-allocated C string.
-proc nonBusySleep(ctx: ptr Context, secs: cint, cb: CallBackProc) {.exported.} =
-  let task = createTask(cb)
+    blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
 
-  ctx.tasks.add(task)
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_getTransactionCount(addressTyped, blockTagTyped)
 
-  let fut = sleepAsync((secs).seconds)
+proc eth_getCode(
+    ctx: ptr Context, address: cstring, blockTag: cstring, cb: CallBackProc
+) {.exported.} =
+  let
+    addressTyped = unpackArg($address, Address).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
 
-  fut.addCallback proc(_: pointer) {.gcsafe.} =
-    if fut.cancelled:
-      task.response = "cancelled"
-      task.finished = true
-      task.status = -2
-    elif fut.failed():
-      task.response = "failed"
-      task.finished = true
-      task.status = -1
-    else:
-      try:
-        task.response = "slept"
-        task.status = 0
-      except CatchableError as e:
-        task.response = e.msg
-        task.status = -1
-      finally:
-        task.finished = true
+    blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
+
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_getCode(addressTyped, blockTagTyped)
+
+proc eth_getBlockByHash(
+    ctx: ptr Context, blockHash: cstring, fullTransactions: bool, cb: CallBackProc
+) {.exported.} =
+  let
+    blockHashTyped = unpackArg($blockHash, Hash32).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
+
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_getBlockByHash(blockHashTyped, fullTransactions)
+
+proc eth_getBlockByNumber(
+    ctx: ptr Context, blockTag: cstring, fullTransactions: bool, cb: CallBackProc
+) {.exported.} =
+  let
+    blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
+
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_getBlockByNumber(blockTagTyped, fullTransactions)
+
+proc eth_getUncleCountByBlockNumber(
+    ctx: ptr Context, blockTag: cstring, cb: CallBackProc
+) {.exported.} =
+  let
+    blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
+
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_getUncleCountByBlockNumber(blockTagTyped)
+
+proc eth_getUncleCountByBlockHash(
+    ctx: ptr Context, blockHash: cstring, cb: CallBackProc
+) {.exported.} =
+  let
+    blockHashTyped = unpackArg($blockHash, Hash32).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
+
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_getUncleCountByBlockHash(blockHashTyped)
+
+proc eth_getBlockTransactionCountByNumber(
+    ctx: ptr Context, blockTag: cstring, cb: CallBackProc
+) {.exported.} =
+  let
+    blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
+
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_getBlockTransactionCountByNumber(blockTagTyped)
+
+proc eth_getBlockTransactionCountByHash(
+    ctx: ptr Context, blockHash: cstring, cb: CallBackProc
+) {.exported.} =
+  let
+    blockHashTyped = unpackArg($blockHash, Hash32).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
+
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_getBlockTransactionCountByHash(blockHashTyped)
+
+proc eth_getTransactionByBlockNumberAndIndex(
+    ctx: ptr Context, blockTag: cstring, index: culonglong, cb: CallBackProc
+) {.exported.} =
+  let
+    blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
+
+    indexTyped = Quantity(uint64(index))
+
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_getTransactionByBlockNumberAndIndex(blockTagTyped, indexTyped)
+
+proc eth_getTransactionByBlockHashAndIndex(
+    ctx: ptr Context, blockHash: cstring, index: culonglong, cb: CallBackProc
+) {.exported.} =
+  let
+    blockHashTyped = unpackArg($blockHash, Hash32).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
+
+    indexTyped = Quantity(uint64(index))
+
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_getTransactionByBlockHashAndIndex(blockHashTyped, indexTyped)
+
+proc eth_call(
+    ctx: ptr Context, txArgs: cstring, blockTag: cstring, optimisticStateFetch: bool, cb: CallBackProc
+) {.exported.} =
+  let
+    txArgsTyped = unpackArg($txArgs, TransactionArgs).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
+
+    blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
+
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_call(txArgsTyped, blockTagTyped, optimisticStateFetch)
+
+proc eth_createAccessList(
+    ctx: ptr Context, txArgs: cstring, blockTag: cstring, optimisticStateFetch: bool, cb: CallBackProc
+) {.exported.} =
+  let
+    txArgsTyped = unpackArg($txArgs, TransactionArgs).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
+
+    blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
+
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_createAccessList(txArgsTyped, blockTagTyped, optimisticStateFetch)
+
+proc eth_estimateGas(
+    ctx: ptr Context, txArgs: cstring, blockTag: cstring, optimisticStateFetch: bool, cb: CallBackProc
+) {.exported.} =
+  let
+    txArgsTyped = unpackArg($txArgs, TransactionArgs).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
+
+    blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
+
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_estimateGas(txArgsTyped, blockTagTyped, optimisticStateFetch)
+
+proc eth_getTransactionByHash(
+    ctx: ptr Context, txHash: cstring, cb: CallBackProc
+) {.exported.} =
+  let
+    txHashTyped = unpackArg($txHash, Hash32).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
+
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_getTransactionByHash(txHashTyped)
+
+proc eth_getBlockReceipts(
+    ctx: ptr Context, blockTag: cstring, cb: CallBackProc
+) {.exported.} =
+  let
+    blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
+
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_getBlockReceipts(blockTagTyped)
+
+proc eth_getTransactionReceipt(
+    ctx: ptr Context, txHash: cstring, cb: CallBackProc
+) {.exported.} =
+  let
+    txHashTyped = unpackArg($txHash, Hash32).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
+
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_getTransactionReceipt(txHashTyped)
+
+proc eth_getLogs(
+    ctx: ptr Context, filterOptions: cstring, cb: CallBackProc
+) {.exported.} =
+  let
+    filterOptionsTyped = unpackArg($filterOptions, FilterOptions).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
+
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_getLogs(filterOptionsTyped)
+
+proc eth_newFilter(
+    ctx: ptr Context, filterOptions: cstring, cb: CallBackProc
+) {.exported.} =
+  let
+    filterOptionsTyped = unpackArg($filterOptions, FilterOptions).valueOr:
+      cb(ctx, -3, alloc(error))
+      return
+
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_newFilter(filterOptionsTyped)
+
+proc eth_uninstallFilter(
+    ctx: ptr Context, filterId: cstring, cb: CallBackProc
+) {.exported.} =
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_uninstallFilter($filterId)
+
+proc eth_getFilterLogs(
+    ctx: ptr Context, filterId: cstring, cb: CallBackProc
+) {.exported.} =
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_getFilterLogs($filterId)
+
+proc eth_getFilterChanges(
+    ctx: ptr Context, filterId: cstring, cb: CallBackProc
+) {.exported.} =
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_getFilterChanges($filterId)
+
+proc eth_blobBaseFee(
+    ctx: ptr Context, cb: CallBackProc
+) {.exported.} =
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_blobBaseFee()
+
+proc eth_gasPrice(
+    ctx: ptr Context, cb: CallBackProc
+) {.exported.} =
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_gasPrice()
+
+proc eth_maxPriorityFeePerGas(
+    ctx: ptr Context, cb: CallBackProc
+) {.exported.} =
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_maxPriorityFeePerGas()
