@@ -217,7 +217,8 @@ proc newPayload*(client: RpcClient,
       payload.versionedHashes,
       payload.beaconRoot,
       payload.executionRequests)
-  of Version.V6: discard
+  of Version.V6:
+    discard # TODO: Hive testing for Amsterdam
 
 proc exchangeCapabilities*(client: RpcClient,
       methods: seq[string]):

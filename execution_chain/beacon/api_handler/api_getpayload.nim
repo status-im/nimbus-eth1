@@ -26,7 +26,7 @@ proc getPayload*(ben: BeaconEngineRef,
   let bundle = ben.getPayloadBundle(id).valueOr:
     raise unknownPayload("Unknown bundle")
 
-  let 
+  let
     version = bundle.payload.version
     com = ben.com
 
@@ -112,7 +112,7 @@ proc getPayloadV5*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV5Response =
 
   let version = bundle.payload.version
   if version != Version.V3:
-    raise unsupportedFork("getPayloadV5 expect payloadV3 but get payload" & $version)
+    raise unsupportedFork("getPayloadV5 expect ExecutionPayloadV3 but got ExecutionPayload" & $version)
   if bundle.blobsBundle.isNil:
     raise unsupportedFork("getPayloadV5 is missing BlobsBundleV2")
   if bundle.executionRequests.isNone:
@@ -122,8 +122,38 @@ proc getPayloadV5*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV5Response =
   if not com.isOsakaOrLater(ethTime bundle.payload.timestamp):
     raise unsupportedFork("bundle timestamp is less than Osaka activation")
 
+  if com.isAmsterdamOrLater(ethTime bundle.payload.timestamp):
+    raise unsupportedFork("bundle timestamp greater than Amsterdam must use getPayloadV6")
+
   GetPayloadV5Response(
     executionPayload: bundle.payload.V3,
+    blockValue: bundle.blockValue,
+    blobsBundle: bundle.blobsBundle.V2,
+    shouldOverrideBuilder: false,
+    executionRequests: bundle.executionRequests.get,
+  )
+
+proc getPayloadV6*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV6Response =
+  trace "Engine API request received",
+    meth = "GetPayload", id
+
+  let bundle = ben.getPayloadBundle(id).valueOr:
+    raise unknownPayload("Unknown bundle")
+
+  let version = bundle.payload.version
+  if version != Version.V4:
+    raise unsupportedFork("getPayloadV6 expect ExecutionPayloadV4 but got ExecutionPayload" & $version)
+  if bundle.blobsBundle.isNil:
+    raise unsupportedFork("getPayloadV6 is missing BlobsBundleV2")
+  if bundle.executionRequests.isNone:
+    raise unsupportedFork("getPayloadV6 is missing executionRequests")
+
+  let com = ben.com
+  if not com.isAmsterdamOrLater(ethTime bundle.payload.timestamp):
+    raise unsupportedFork("bundle timestamp is less than Amsterdam activation")
+
+  GetPayloadV6Response(
+    executionPayload: bundle.payload.V4,
     blockValue: bundle.blockValue,
     blobsBundle: bundle.blobsBundle.V2,
     shouldOverrideBuilder: false,
