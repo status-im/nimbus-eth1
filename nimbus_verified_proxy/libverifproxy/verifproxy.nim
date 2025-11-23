@@ -6,9 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  json_serialization,
   chronos,
-  eth/net/nat,
+  stew/byteutils,
   std/[atomics, json, net, strutils, lists],
   beacon_chain/spec/[digest, network],
   beacon_chain/nimbus_binary_common,
@@ -96,7 +95,7 @@ proc startVerifProxy(configJson: cstring, cb: CallBackProc): ptr Context {.expor
   try:
     initLib()
   except Exception as e:
-    cb(ctx, -3, alloc(e.msg))
+    cb(ctx, RET_DESER_ERROR, alloc(e.msg))
 
   let 
     task = createTask(cb)
@@ -106,15 +105,15 @@ proc startVerifProxy(configJson: cstring, cb: CallBackProc): ptr Context {.expor
     if fut.cancelled():
       task.response = Json.encode(fut.error())
       task.finished = true
-      task.status = -2
+      task.status = RET_CANCELLED
     elif fut.failed():
       task.response = Json.encode(fut.error())
       task.finished = true
-      task.status = -1
+      task.status = RET_ERROR
     else:
       task.response = "success" # since return type is void
-      task.status = 0
       task.finished = true
+      task.status = RET_SUCCESS
 
   task.fut = fut
   ctx.tasks.add(task)
@@ -137,15 +136,15 @@ template callbackToC(ctx: ptr Context, cb: CallBackProc, asyncCall: untyped) =
     if fut.cancelled():
       task.response = Json.encode(fut.error())
       task.finished = true
-      task.status = -2
+      task.status = RET_CANCELLED
     elif fut.failed():
       task.response = Json.encode(fut.error())
       task.finished = true
-      task.status = -1
+      task.status = RET_ERROR
     else:
       task.response = Json.encode(fut.value())
-      task.status = 0
       task.finished = true
+      task.status = RET_SUCCESS
 
   task.fut = fut
 
@@ -191,11 +190,11 @@ proc eth_getBalance(
 ) {.exported.} =
   let
     addressTyped = unpackArg($address, Address).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
     blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
   callbackToC(ctx, cb):
@@ -206,15 +205,15 @@ proc eth_getStorageAt(
 ) {.exported.} =
   let
     addressTyped = unpackArg($address, Address).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
     slotTyped = unpackArg($slot, UInt256).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
     blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
   callbackToC(ctx, cb):
@@ -225,11 +224,11 @@ proc eth_getTransactionCount(
 ) {.exported.} =
   let
     addressTyped = unpackArg($address, Address).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
     blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
   callbackToC(ctx, cb):
@@ -240,11 +239,11 @@ proc eth_getCode(
 ) {.exported.} =
   let
     addressTyped = unpackArg($address, Address).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
     blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
   callbackToC(ctx, cb):
@@ -255,7 +254,7 @@ proc eth_getBlockByHash(
 ) {.exported.} =
   let
     blockHashTyped = unpackArg($blockHash, Hash32).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
   callbackToC(ctx, cb):
@@ -266,7 +265,7 @@ proc eth_getBlockByNumber(
 ) {.exported.} =
   let
     blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
   callbackToC(ctx, cb):
@@ -277,7 +276,7 @@ proc eth_getUncleCountByBlockNumber(
 ) {.exported.} =
   let
     blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
   callbackToC(ctx, cb):
@@ -288,7 +287,7 @@ proc eth_getUncleCountByBlockHash(
 ) {.exported.} =
   let
     blockHashTyped = unpackArg($blockHash, Hash32).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
   callbackToC(ctx, cb):
@@ -299,7 +298,7 @@ proc eth_getBlockTransactionCountByNumber(
 ) {.exported.} =
   let
     blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
   callbackToC(ctx, cb):
@@ -310,7 +309,7 @@ proc eth_getBlockTransactionCountByHash(
 ) {.exported.} =
   let
     blockHashTyped = unpackArg($blockHash, Hash32).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
   callbackToC(ctx, cb):
@@ -321,7 +320,7 @@ proc eth_getTransactionByBlockNumberAndIndex(
 ) {.exported.} =
   let
     blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
     indexTyped = Quantity(uint64(index))
@@ -334,7 +333,7 @@ proc eth_getTransactionByBlockHashAndIndex(
 ) {.exported.} =
   let
     blockHashTyped = unpackArg($blockHash, Hash32).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
     indexTyped = Quantity(uint64(index))
@@ -347,11 +346,11 @@ proc eth_call(
 ) {.exported.} =
   let
     txArgsTyped = unpackArg($txArgs, TransactionArgs).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
     blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
   callbackToC(ctx, cb):
@@ -362,11 +361,11 @@ proc eth_createAccessList(
 ) {.exported.} =
   let
     txArgsTyped = unpackArg($txArgs, TransactionArgs).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
     blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
   callbackToC(ctx, cb):
@@ -377,11 +376,11 @@ proc eth_estimateGas(
 ) {.exported.} =
   let
     txArgsTyped = unpackArg($txArgs, TransactionArgs).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
     blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
   callbackToC(ctx, cb):
@@ -392,7 +391,7 @@ proc eth_getTransactionByHash(
 ) {.exported.} =
   let
     txHashTyped = unpackArg($txHash, Hash32).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
   callbackToC(ctx, cb):
@@ -403,7 +402,7 @@ proc eth_getBlockReceipts(
 ) {.exported.} =
   let
     blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
   callbackToC(ctx, cb):
@@ -414,7 +413,7 @@ proc eth_getTransactionReceipt(
 ) {.exported.} =
   let
     txHashTyped = unpackArg($txHash, Hash32).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
   callbackToC(ctx, cb):
@@ -425,7 +424,7 @@ proc eth_getLogs(
 ) {.exported.} =
   let
     filterOptionsTyped = unpackArg($filterOptions, FilterOptions).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
   callbackToC(ctx, cb):
@@ -436,7 +435,7 @@ proc eth_newFilter(
 ) {.exported.} =
   let
     filterOptionsTyped = unpackArg($filterOptions, FilterOptions).valueOr:
-      cb(ctx, -3, alloc(error))
+      cb(ctx, RET_DESER_ERROR, alloc(error))
       return
 
   callbackToC(ctx, cb):
@@ -477,3 +476,17 @@ proc eth_maxPriorityFeePerGas(
 ) {.exported.} =
   callbackToC(ctx, cb):
     ctx.frontend.eth_maxPriorityFeePerGas()
+
+proc eth_sendRawTransaction(
+    ctx: ptr Context, txHexBytes: cstring, cb: CallBackProc
+) {.exported.} =
+  let txBytes = 
+    try:
+      let temp = hexToSeqByte($txHexBytes)
+      temp
+    except ValueError as e:
+      cb(ctx, RET_DESER_ERROR, alloc(e.msg))
+      return
+
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_sendRawTransaction(txBytes)
