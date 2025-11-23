@@ -7,7 +7,6 @@
 
 import std/lists, ../engine/types, chronos
 
-
 type
   Task* = ref object
     status*: int
@@ -30,4 +29,5 @@ type
 const RET_SUCCESS*: cint = 0 # when the call to eth api frontend is successful
 const RET_ERROR*: cint = -1 # when the call to eth api frontend failed with an error
 const RET_CANCELLED*: cint = -2 # when the call to the eth api frontend was cancelled
-const RET_DESER_ERROR*: cint = -3 # when an error occured while deserializing arguments from C to Nim
+const RET_DESER_ERROR*: cint = -3
+  # when an error occured while deserializing arguments from C to Nim

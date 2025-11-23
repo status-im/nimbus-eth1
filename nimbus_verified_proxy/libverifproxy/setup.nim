@@ -71,8 +71,9 @@ proc load(
     accountCacheLen: accountCacheLen,
   )
 
-proc run*(ctx: ptr Context, configJson: string) {.async: (raises: [ValueError, CancelledError, CatchableError]).} =
-
+proc run*(
+    ctx: ptr Context, configJson: string
+) {.async: (raises: [ValueError, CancelledError, CatchableError]).} =
   let config = VerifiedProxyConf.load(configJson)
 
   setupLogging(config.logLevel, config.logStdout)
