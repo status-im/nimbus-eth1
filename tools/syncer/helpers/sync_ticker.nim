@@ -26,6 +26,7 @@ type
     dangling: BlockNumber
     top: BlockNumber
     head: BlockNumber
+    fin: BlockNumber
     target: BlockNumber
     activeOk: bool
 
@@ -68,6 +69,7 @@ proc updater(ctx: BeaconCtxRef): TickerStats =
     dangling:        ctx.hdrCache.antecedent.number,
     top:             ctx.subState.topNum,
     head:            ctx.subState.headNum,
+    fin:             ctx.chain.resolvedFinNumber,
     target:          ctx.hdrCache.latestConsHeadNumber,
     activeOk:        ctx.pool.syncState != idle,
 
@@ -109,6 +111,13 @@ proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
           elif data.activeOk: $data.head
           else: "?" & $data.head
       T = if data.activeOk: $data.target else: "?" & $data.target
+      F = if data.fin == 0: "n/a"
+          elif data.fin == data.target and data.activeOk: "T"
+          elif data.fin == data.head: "H"
+          elif data.fin == data.dangling: "D"
+          elif data.fin == data.latest: "L"
+          elif data.fin == data.base: "B"
+          else: $data.fin
 
       hS = if data.nHdrStaged == 0: "n/a"
           else: $data.hdrStagedTop & "[" & $data.nHdrStaged & "]"
@@ -153,15 +162,15 @@ proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
     case data.state
     of idle:
       debug "Sync state idle", up, eta, nP, B, L,
-        D, H, T
+        D, H, T, F
 
     of headers, headersCancel, headersFinish:
       debug "Sync state headers", up, eta, nP, st, B, L,
-        C, D, H, T, hQ
+        C, D, H, T, F, hQ
 
     of blocks, blocksCancel, blocksFinish:
       debug "Sync state blocks", up, eta, nP, st, B, L,
-        D, I, H, T, bQ
+        D, I, H, T, F, bQ
 
 # ------------------------------------------------------------------------------
 # Public function

@@ -35,7 +35,7 @@ proc activateTrace*(ctx: BeaconCtxRef) =
     var tRec: TraceSyncActivated
     tRec.init ctx
     tRec.head = ctx.hdrCache.head
-    tRec.finHash = ctx.chain.finHash
+    tRec.finHash = ctx.chain.resolvedFinHash
     ctx.traceWrite tRec
 
     trace TraceTypeLabel[SyncActivated], serial=tRec.serial
