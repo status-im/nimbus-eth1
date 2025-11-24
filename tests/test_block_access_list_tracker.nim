@@ -346,7 +346,7 @@ suite "Block access list tracker":
 
     check:
       not tracker.pendingCallFrame().storageChanges.contains((address1, slot1))
-      not tracker.pendingCallFrame().balanceChanges.contains(address1)
+      tracker.pendingCallFrame().balanceChanges.contains(address1)
       not tracker.pendingCallFrame().nonceChanges.contains(address1)
       not tracker.pendingCallFrame().codeChanges.contains(address1)
 
@@ -357,6 +357,6 @@ suite "Block access list tracker":
       check:
         slot1 notin accData[].storageChanges
         slot1 in accData[].storageReads
-        balIndex notin accData[].balanceChanges
+        balIndex in accData[].balanceChanges
         balIndex notin accData[].nonceChanges
         balIndex notin accData[].codeChanges

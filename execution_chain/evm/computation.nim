@@ -287,8 +287,7 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
         c.vmState.balTracker.trackAddBalanceChange(beneficiary, localBalance)
         db.addBalance(beneficiary, localBalance)
         if db.shouldSelfDestruct6780(c.msg.contractAddress):
-          c.vmState.balTracker.handleInTransactionSelfDestruct(c.msg.contractAddress)
-          c.vmState.balTracker.trackBalanceChange(c.msg.contractAddress, 0.u256)
+          c.vmState.balTracker.trackInTransactionSelfDestruct(c.msg.contractAddress)
         db.selfDestruct6780(c.msg.contractAddress)
       else:
         # Zeroing contract balance except beneficiary is the same address
@@ -301,7 +300,7 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
         # Transfer to beneficiary
         c.vmState.balTracker.trackAddBalanceChange(beneficiary, localBalance)
         db.addBalance(beneficiary, localBalance)
-        c.vmState.balTracker.trackBalanceChange(c.msg.contractAddress, 0.u256)
+        c.vmState.balTracker.trackSelfDestruct(c.msg.contractAddress)
         db.selfDestruct(c.msg.contractAddress)
       else:
         # Transfer to beneficiary

@@ -37,6 +37,11 @@ type
       ## Code changes made during this call frame.
       ## Maps address -> bytecode.
 
+    inTransactionSelfDestructs*: HashSet[Address]
+      ## Set of addresses which need to have writes removed (and in some cases
+      ## also converted to reads) when commiting a call frame.
+
+
   # Tracks state changes during transaction execution for block access list
   # construction. This tracker maintains a cache of pre-state values and
   # coordinates with the BlockAccessListBuilder to record all state changes
@@ -104,6 +109,7 @@ template parentCallFrame*(tracker: BlockAccessListTrackerRef): CallFrameSnapshot
   tracker.callFrameSnapshots[tracker.callFrameSnapshots.high - 1]
 
 template beginCallFrame*(tracker: BlockAccessListTrackerRef) =
+
   ## Begin a new call frame for tracking reverts.
   ## Creates a new snapshot to track changes within this call frame.
   ## This allows proper handling of reverts as specified in EIP-7928.
@@ -112,6 +118,7 @@ template beginCallFrame*(tracker: BlockAccessListTrackerRef) =
 template popCallFrame(tracker: BlockAccessListTrackerRef) =
   tracker.callFrameSnapshots.setLen(tracker.callFrameSnapshots.len() - 1)
 
+proc handleInTransactionSelfDestruct*(tracker: BlockAccessListTrackerRef, address: Address)
 proc normalizeBalanceAndStorageChanges*(tracker: BlockAccessListTrackerRef)
 
 proc commitCallFrame*(tracker: BlockAccessListTrackerRef) =
@@ -122,6 +129,10 @@ proc commitCallFrame*(tracker: BlockAccessListTrackerRef) =
 
   if tracker.hasParentCallFrame():
     # Merge the pending call frame writes into the parent
+
+    for address in tracker.pendingCallFrame.inTransactionSelfDestructs:
+      tracker.handleInTransactionSelfDestruct(address)
+      tracker.parentCallFrame.inTransactionSelfDestructs.incl(address)
 
     for storageKey, newValue in tracker.pendingCallFrame.storageChanges:
       tracker.parentCallFrame.storageChanges[storageKey] = newValue
@@ -136,6 +147,9 @@ proc commitCallFrame*(tracker: BlockAccessListTrackerRef) =
       tracker.parentCallFrame.codeChanges[address] = newCode
 
   else:
+    for address in tracker.pendingCallFrame.inTransactionSelfDestructs:
+      tracker.handleInTransactionSelfDestruct(address)
+
     tracker.normalizeBalanceAndStorageChanges()
 
     let currentIndex = tracker.currentBlockAccessIndex
@@ -291,6 +305,13 @@ proc trackCodeChange*(tracker: BlockAccessListTrackerRef, address: Address, newC
   tracker.trackAddressAccess(address)
   tracker.pendingCallFrame.codeChanges[address] = newCode
 
+proc trackSelfDestruct*(tracker: BlockAccessListTrackerRef, address: Address) =
+  tracker.trackBalanceChange(address, 0.u256)
+
+proc trackInTransactionSelfDestruct*(tracker: BlockAccessListTrackerRef, address: Address) =
+  assert tracker.hasPendingCallFrame()
+  tracker.pendingCallFrame.inTransactionSelfDestructs.incl(address)
+
 proc handleInTransactionSelfDestruct*(tracker: BlockAccessListTrackerRef, address: Address) =
   ## Handle an account that self-destructed in the same transaction it was
   ## created.
@@ -299,21 +320,22 @@ proc handleInTransactionSelfDestruct*(tracker: BlockAccessListTrackerRef, addres
   ## code changes from the current transaction are also removed.
   assert tracker.hasPendingCallFrame()
 
-  for callFrame in tracker.callFrameSnapshots.mitems():
-    var slotsToConvert: seq[UInt256]
-    for storageKey in callFrame.storageChanges.keys():
-      let (adr, slot) = storageKey
-      if adr == address:
-        slotsToConvert.add(slot)
+  var slotsToConvert: seq[UInt256]
+  for storageKey in tracker.pendingCallFrame.storageChanges.keys():
+    let (adr, slot) = storageKey
+    if adr == address:
+      slotsToConvert.add(slot)
 
-    for slot in slotsToConvert:
-      let storageKey = (address, slot)
-      tracker.builder.addStorageRead(address, slot)
-      callFrame.storageChanges.del(storageKey)
+  for slot in slotsToConvert:
+    let storageKey = (address, slot)
+    tracker.builder.addStorageRead(address, slot)
+    tracker.pendingCallFrame.storageChanges.del(storageKey)
 
-    callFrame.balanceChanges.del(address)
-    callFrame.nonceChanges.del(address)
-    callFrame.codeChanges.del(address)
+  tracker.pendingCallFrame.balanceChanges.del(address)
+  tracker.pendingCallFrame.nonceChanges.del(address)
+  tracker.pendingCallFrame.codeChanges.del(address)
+
+  tracker.trackBalanceChange(address, 0.u256)
 
 proc normalizeBalanceAndStorageChanges*(tracker: BlockAccessListTrackerRef) =
   ## Normalize balance and storage changes for the current block access index.
