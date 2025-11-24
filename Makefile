@@ -172,7 +172,7 @@ all: | $(TOOLS) nimbus nimbus_execution_client
 
 # "-d:release" cannot be added to config.nims
 
-NIM_PARAMS += -d:debug
+NIM_PARAMS += -d:release
 ifneq ($(if $(ENABLE_LINE_NUMBERS),$(ENABLE_LINE_NUMBERS),0),0)
 NIM_PARAMS += -d:chronicles_line_numbers:1
 endif
