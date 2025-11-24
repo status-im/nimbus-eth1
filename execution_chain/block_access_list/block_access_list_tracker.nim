@@ -61,6 +61,14 @@ type
       ## This cache is cleared at the start of each transaction and used by
       ## normalize_balance_changes to filter out balance changes where
       ## the final balance equals the initial balance.
+    preNonceCache*: Table[Address, AccountNonce]
+      ## Cache of pre-transaction nonce values, keyed by address.
+      ## This cache is cleared at the start of each transaction to track values
+      ## from the beginning of the current transaction.
+    preCodeCache*: Table[Address, seq[byte]]
+      ## Cache of pre-transaction code, keyed by address.
+      ## This cache is cleared at the start of each transaction to track values
+      ## from the beginning of the current transaction.
     currentBlockAccessIndex*: int
       ## The current block access index (0 for pre-execution,
       ## 1..n for transactions, n+1 for post-execution).
@@ -94,6 +102,8 @@ proc setBlockAccessIndex*(tracker: BlockAccessListTrackerRef, blockAccessIndex: 
 
   tracker.preStorageCache.clear()
   tracker.preBalanceCache.clear()
+  tracker.preNonceCache.clear()
+  tracker.preCodeCache.clear()
   tracker.currentBlockAccessIndex = blockAccessIndex
 
 template hasPendingCallFrame*(tracker: BlockAccessListTrackerRef): bool =
@@ -201,6 +211,20 @@ proc capturePreBalance*(tracker: BlockAccessListTrackerRef, address: Address) =
 template getPreBalance*(tracker: BlockAccessListTrackerRef, address: Address): UInt256 =
   tracker.preBalanceCache.getOrDefault(address)
 
+proc capturePreNonce*(tracker: BlockAccessListTrackerRef, address: Address) =
+  if address notin tracker.preNonceCache:
+    tracker.preNonceCache[address] = tracker.ledger.getNonce(address)
+
+template getPreNonce*(tracker: BlockAccessListTrackerRef, address: Address): AccountNonce =
+  tracker.preNonceCache.getOrDefault(address)
+
+proc capturePreCode*(tracker: BlockAccessListTrackerRef, address: Address) =
+  if address notin tracker.preCodeCache:
+    tracker.preCodeCache[address] = tracker.ledger.getCode(address).bytes
+
+template getPreCode*(tracker: BlockAccessListTrackerRef, address: Address): seq[byte] =
+  tracker.preCodeCache.getOrDefault(address)
+
 proc capturePreStorage*(tracker: BlockAccessListTrackerRef, address: Address, slot: UInt256) =
   ## Capture and cache the pre-transaction value for a storage location.
   ## Retrieves the storage value from the beginning of the current transaction.
@@ -286,6 +310,7 @@ proc trackNonceChange*(tracker: BlockAccessListTrackerRef, address: Address, new
       return # nothing to do because we have already tracked this value
 
   tracker.trackAddressAccess(address)
+  tracker.capturePreNonce(address)
   tracker.pendingCallFrame.nonceChanges[address] = newNonce
 
 template trackIncNonceChange*(tracker: BlockAccessListTrackerRef, address: Address) =
@@ -303,6 +328,7 @@ proc trackCodeChange*(tracker: BlockAccessListTrackerRef, address: Address, newC
       return # nothing to do because we have already tracked this value
 
   tracker.trackAddressAccess(address)
+  tracker.capturePreCode(address)
   tracker.pendingCallFrame.codeChanges[address] = newCode
 
 proc trackSelfDestruct*(tracker: BlockAccessListTrackerRef, address: Address) =
@@ -366,14 +392,35 @@ proc normalizeBalanceAndStorageChanges*(tracker: BlockAccessListTrackerRef) =
     tracker.builder.addStorageRead(address, slot)
     tracker.pendingCallFrame.storageChanges.del(storageKey)
 
-  var addressesToRemove: seq[Address]
-  for address, postBalance in tracker.pendingCallFrame.balanceChanges:
-    let preBalance = tracker.getPreBalance(address)
-    if preBalance == postBalance:
-      addressesToRemove.add(address)
+  block:
+    var addressesToRemove: seq[Address]
+    for address, postBalance in tracker.pendingCallFrame.balanceChanges:
+      let preBalance = tracker.getPreBalance(address)
+      if preBalance == postBalance:
+        addressesToRemove.add(address)
 
-  for address in addressesToRemove:
-    tracker.pendingCallFrame.balanceChanges.del(address)
+    for address in addressesToRemove:
+      tracker.pendingCallFrame.balanceChanges.del(address)
+
+  block:
+    var addressesToRemove: seq[Address]
+    for address, newNonce in tracker.pendingCallFrame.nonceChanges:
+      let preNonce = tracker.getPreNonce(address)
+      if preNonce == newNonce:
+        addressesToRemove.add(address)
+
+    for address in addressesToRemove:
+      tracker.pendingCallFrame.nonceChanges.del(address)
+
+  block:
+    var addressesToRemove: seq[Address]
+    for address, newCode in tracker.pendingCallFrame.codeChanges:
+      let preCode = tracker.getPreCode(address)
+      if preCode == newCode:
+        addressesToRemove.add(address)
+
+    for address in addressesToRemove:
+      tracker.pendingCallFrame.codeChanges.del(address)
 
 proc getBlockAccessList*(tracker: BlockAccessListTrackerRef, rebuild = false): lent Opt[BlockAccessList] =
   if rebuild or tracker.blockAccessList.isNone():
