@@ -299,20 +299,21 @@ proc handleInTransactionSelfDestruct*(tracker: BlockAccessListTrackerRef, addres
   ## code changes from the current transaction are also removed.
   assert tracker.hasPendingCallFrame()
 
-  var slotsToConvert: seq[UInt256]
-  for storageKey in tracker.pendingCallFrame.storageChanges.keys():
-    let (adr, slot) = storageKey
-    if adr == address:
-      slotsToConvert.add(slot)
+  for callFrame in tracker.callFrameSnapshots.mitems():
+    var slotsToConvert: seq[UInt256]
+    for storageKey in callFrame.storageChanges.keys():
+      let (adr, slot) = storageKey
+      if adr == address:
+        slotsToConvert.add(slot)
 
-  for slot in slotsToConvert:
-    let storageKey = (address, slot)
-    tracker.builder.addStorageRead(address, slot)
-    tracker.pendingCallFrame.storageChanges.del(storageKey)
+    for slot in slotsToConvert:
+      let storageKey = (address, slot)
+      tracker.builder.addStorageRead(address, slot)
+      callFrame.storageChanges.del(storageKey)
 
-  tracker.pendingCallFrame.balanceChanges.del(address)
-  tracker.pendingCallFrame.nonceChanges.del(address)
-  tracker.pendingCallFrame.codeChanges.del(address)
+    callFrame.balanceChanges.del(address)
+    callFrame.nonceChanges.del(address)
+    callFrame.codeChanges.del(address)
 
 proc normalizeBalanceAndStorageChanges*(tracker: BlockAccessListTrackerRef) =
   ## Normalize balance and storage changes for the current block access index.
@@ -353,8 +354,6 @@ proc normalizeBalanceAndStorageChanges*(tracker: BlockAccessListTrackerRef) =
     tracker.pendingCallFrame.balanceChanges.del(address)
 
 proc getBlockAccessList*(tracker: BlockAccessListTrackerRef, rebuild = false): lent Opt[BlockAccessList] =
-  doAssert not tracker.hasPendingCallFrame()
-
   if rebuild or tracker.blockAccessList.isNone():
     tracker.blockAccessList = Opt.some(tracker.builder.buildBlockAccessList())
 

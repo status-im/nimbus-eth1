@@ -68,12 +68,15 @@ macro selectVM(v: VmCpt, fork: EVMFork, tracingEnabled: bool): EvmResultVoid =
 proc beforeExecCall(c: Computation) =
   c.snapshot()
   if c.msg.kind == CallKind.Call:
-    if c.vmState.balTrackerEnabled:
-      c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
-      c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
     c.vmState.mutateLedger:
-      db.subBalance(c.msg.sender, c.msg.value)
-      db.addBalance(c.msg.contractAddress, c.msg.value)
+      if c.vmState.balTrackerEnabled:
+        c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
+        db.subBalance(c.msg.sender, c.msg.value)
+        c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
+        db.addBalance(c.msg.contractAddress, c.msg.value)
+      else:
+        db.subBalance(c.msg.sender, c.msg.value)
+        db.addBalance(c.msg.contractAddress, c.msg.value)
 
 proc afterExecCall(c: Computation) =
   ## Collect all of the accounts that *may* need to be deleted based on EIP161
@@ -119,19 +122,26 @@ proc beforeExecCreate(c: Computation): bool =
     c.rollback()
     return true
 
-  if c.vmState.balTrackerEnabled:
-    c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
-    c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
-    if c.fork >= FkSpurious:
-      c.vmState.balTracker.trackIncNonceChange(c.msg.contractAddress)
+
 
   c.vmState.mutateLedger:
-    db.subBalance(c.msg.sender, c.msg.value)
-    db.addBalance(c.msg.contractAddress, c.msg.value)
-    db.clearStorage(c.msg.contractAddress)
-    if c.fork >= FkSpurious:
-      # EIP161 nonce incrementation
-      db.incNonce(c.msg.contractAddress)
+    if c.vmState.balTrackerEnabled:
+      c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
+      db.subBalance(c.msg.sender, c.msg.value)
+      c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
+      db.addBalance(c.msg.contractAddress, c.msg.value)
+      db.clearStorage(c.msg.contractAddress)
+      if c.fork >= FkSpurious:
+        # EIP161 nonce incrementation
+        c.vmState.balTracker.trackIncNonceChange(c.msg.contractAddress)
+        db.incNonce(c.msg.contractAddress)
+    else:
+      db.subBalance(c.msg.sender, c.msg.value)
+      db.addBalance(c.msg.contractAddress, c.msg.value)
+      db.clearStorage(c.msg.contractAddress)
+      if c.fork >= FkSpurious:
+        # EIP161 nonce incrementation
+        db.incNonce(c.msg.contractAddress)
 
   return false
 

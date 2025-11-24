@@ -680,6 +680,13 @@ proc selfDestruct6780*(ac: LedgerRef, address: Address) =
   if NewlyCreated in acc.flags:
     ac.selfDestruct(address)
 
+proc shouldSelfDestruct6780*(ac: LedgerRef, address: Address): bool =
+  let acc = ac.getAccount(address, false)
+  if acc.isNil:
+    return false
+
+  NewlyCreated in acc.flags
+
 proc selfDestructLen*(ac: LedgerRef): int =
   ac.savePoint.selfDestruct.len
 

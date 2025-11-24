@@ -280,25 +280,33 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
     # Register the account to be deleted
     if c.fork >= FkCancun:
       if c.vmState.balTrackerEnabled:
+        # Zeroing contract balance except beneficiary is the same address
         c.vmState.balTracker.trackSubBalanceChange(c.msg.contractAddress, localBalance)
+        db.subBalance(c.msg.contractAddress, localBalance)
+        # Transfer to beneficiary
         c.vmState.balTracker.trackAddBalanceChange(beneficiary, localBalance)
-        c.vmState.balTracker.trackBalanceChange(c.msg.contractAddress, 0.u256)
-
-      # Zeroing contract balance except beneficiary is the same address
-      db.subBalance(c.msg.contractAddress, localBalance)
-
-      # Transfer to beneficiary
-      db.addBalance(beneficiary, localBalance)
-
-      db.selfDestruct6780(c.msg.contractAddress)
+        db.addBalance(beneficiary, localBalance)
+        if db.shouldSelfDestruct6780(c.msg.contractAddress):
+          c.vmState.balTracker.handleInTransactionSelfDestruct(c.msg.contractAddress)
+          c.vmState.balTracker.trackBalanceChange(c.msg.contractAddress, 0.u256)
+        db.selfDestruct6780(c.msg.contractAddress)
+      else:
+        # Zeroing contract balance except beneficiary is the same address
+        db.subBalance(c.msg.contractAddress, localBalance)
+        # Transfer to beneficiary
+        db.addBalance(beneficiary, localBalance)
+        db.selfDestruct6780(c.msg.contractAddress)
     else:
       if c.vmState.balTrackerEnabled:
+        # Transfer to beneficiary
         c.vmState.balTracker.trackAddBalanceChange(beneficiary, localBalance)
+        db.addBalance(beneficiary, localBalance)
         c.vmState.balTracker.trackBalanceChange(c.msg.contractAddress, 0.u256)
-
-      # Transfer to beneficiary
-      db.addBalance(beneficiary, localBalance)
-      db.selfDestruct(c.msg.contractAddress)
+        db.selfDestruct(c.msg.contractAddress)
+      else:
+        # Transfer to beneficiary
+        db.addBalance(beneficiary, localBalance)
+        db.selfDestruct(c.msg.contractAddress)
 
     trace "SELFDESTRUCT",
       contractAddress = c.msg.contractAddress.toHex,
