@@ -10,15 +10,16 @@
 #include "./verifproxy.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <time.h>
 #include <stdbool.h>
 
-static int i = 0;
+char filterId[67];
+bool filterCreated = false;
 
 void onBlockNumber(Context *ctx, int status, char *res) {
   printf("Blocknumber: %s\n", res);
-  i++;
   freeResponse(res);
 }
 
@@ -33,40 +34,62 @@ void onStart(Context *ctx, int status, char *res) {
 
 void onStorage(Context *ctx, int status, char *res) {
   printf("Storage: %s\n", res);
-  i++;
   freeResponse(res);
 }
 
 void onBalance(Context *ctx, int status, char *res) {
   printf("Balance: %s\n", res);
-  i++;
   freeResponse(res);
 }
 
 void onNonce(Context *ctx, int status, char *res) {
   printf("Nonce: %s\n", res);
-  i++;
   freeResponse(res);
 }
 
 void onCode(Context *ctx, int status, char *res) {
   printf("Code: %s\n", res);
-  i++;
   freeResponse(res);
 }
 
 void genericCallback(Context *ctx, int status, char *res) {
   printf("Status: %d\n", status);
   if (status < 0) printf("Error: %s\n", res);
-  i++;
+  freeResponse(res);
+}
+
+void onFilterCreate(Context *ctx, int status, char *res) {
+  if (status == RET_SUCCESS) {
+    strncpy(filterId, &res[1], strlen(res) - 2); // remove quotes
+    filterId[strlen(res) - 2] = '\0';
+    filterCreated = true;
+  }
+  freeResponse(res);
+}
+
+void onCallComplete(Context *ctx, int status, char *res) {
+  if (status == RET_SUCCESS) {
+    printf("Call Complete: %s\n", res);
+  } else {
+    printf("Call Error: %s\n", res);
+  }
+  freeResponse(res);
+}
+
+void onLogs(Context *ctx, int status, char *res) {
+  if (status == RET_SUCCESS) {
+    printf("Logs fetch successful\n");
+  } else {
+    printf("Logs Fetch Error: %s\n", res);
+  }
   freeResponse(res);
 }
 
 void makeCalls(Context *ctx) {
-  char *BLOCK_HASH = "0xc3e9e54b01443bb4bd898e41c6d5c67616027ef8d673cb66240c66cb7dd2f3c9";
-  char *TX_HASH = "0x65efb38ec10df765f11f54a415fbc4045f266e3ed4fd39c2066fccf0b54a11ac";
+  char *BLOCK_HASH = "0xc62fa4cbdd48175b1171d8b7cede250ac1bea47ace4d19db344b922cd1e63111";
+  char *TX_HASH = "0xbbcd3d9bc70874c03453caa19fd91239abb0eef84dc61ca33e2110df81df330c";
   char *CALL_ARGS = "{\"to\": \"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2\",\"data\": \"0x70a08231000000000000000000000000De5ae63A348C4d63343C8E20Fb6286909418c8A4\"}";
-  char *FILTER_OPTIONS = "{\"fromBlock\": \"0xed14f2\", \"toBlock\": \"0xed14f2\", \"topics\":[\"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef\"]}";
+  char *FILTER_OPTIONS = "{\"fromBlock\": \"latest\", \"toBlock\": \"latest\", \"topics\":[\"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef\"]}";
 
   eth_blockNumber(ctx, onBlockNumber);
   eth_getBalance(ctx, "0x954a86C613fd1fBaC9C7A43a071A68254C75E4AC", "latest", onBalance);
@@ -76,8 +99,8 @@ void makeCalls(Context *ctx) {
 
   /* -------- Blocks & Uncles -------- */
 
-  eth_getBlockByHash(ctx, BLOCK_HASH, true, genericCallback);
-  eth_getBlockByNumber(ctx, "finalized", true, genericCallback);
+  eth_getBlockByHash(ctx, BLOCK_HASH, false, genericCallback);
+  eth_getBlockByNumber(ctx, "latest", false, genericCallback);
   eth_getUncleCountByBlockNumber(ctx, "latest", genericCallback);
   eth_getUncleCountByBlockHash(ctx, BLOCK_HASH, genericCallback);
 
@@ -94,16 +117,18 @@ void makeCalls(Context *ctx) {
   eth_getBlockReceipts(ctx, "latest", genericCallback);
 
   /* -------- Calls, Access Lists, Gas Estimation -------- */
-  eth_call(ctx, CALL_ARGS, "latest", false, genericCallback);
-  eth_createAccessList(ctx, CALL_ARGS, "latest", false, genericCallback);
-  eth_estimateGas(ctx, CALL_ARGS, "latest", false, genericCallback);
+  eth_call(ctx, CALL_ARGS, "latest", true, onCallComplete);
+  eth_createAccessList(ctx, CALL_ARGS, "latest", false, onCallComplete);
+  eth_estimateGas(ctx, CALL_ARGS, "latest", false, onCallComplete);
 
   /* -------- Logs & Filters -------- */
-  eth_getLogs(ctx, FILTER_OPTIONS, genericCallback);
-  eth_newFilter(ctx, FILTER_OPTIONS, genericCallback);
-  eth_uninstallFilter(ctx, "0x1", genericCallback);
-  eth_getFilterLogs(ctx, "0x1", genericCallback);
-  eth_getFilterChanges(ctx, "0x1", genericCallback);
+  eth_getLogs(ctx, FILTER_OPTIONS, onLogs);
+  if (filterCreated) {
+    eth_getFilterLogs(ctx, filterId, onLogs);
+    eth_getFilterChanges(ctx, filterId, onLogs);
+  } else {
+    eth_newFilter(ctx, FILTER_OPTIONS, onFilterCreate);
+  }
 }
 
 int main() {
@@ -121,16 +146,15 @@ int main() {
 
   Context *ctx = startVerifProxy(jsonConfig, onStart);
 
-  clock_t start = clock();
+  time_t start = time(NULL);
 
   makeCalls(ctx);
 
   while(true) {
-    if (clock() - start > (CLOCKS_PER_SEC) && i > 23) { //all 24 methods should return
+    if ((time(NULL) - start) > 12) { //all 24 methods should return
       printf("\n\n Executing all eth api methods\n\n");
-      i = 0;
       makeCalls(ctx);
-      start = clock();
+      start = time(NULL);
     }
     processVerifProxyTasks(ctx);
   }

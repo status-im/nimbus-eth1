@@ -292,6 +292,7 @@ proc query[E](
 
   # cancel all workers
   for i in 0 ..< NUM_WORKERS:
+    assert workers[i] != nil
     workers[i].cancelSoon()
 
   return success
