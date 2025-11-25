@@ -35,15 +35,13 @@ proc generateContractAddress*(vmState: BaseVMState,
     generateSafeAddress(sender, salt, code.bytes)
 
 proc getCallCode*(vmState: BaseVMState, codeAddress: Address): CodeBytesRef =
-  if vmState.balTrackerEnabled:
-    vmState.balTracker.trackAddressAccess(codeAddress)
-
   let isPrecompile = getPrecompile(vmState.fork, codeAddress).isSome()
   if isPrecompile:
     return CodeBytesRef(nil)
 
   if vmState.fork >= FkPrague:
     if vmState.balTrackerEnabled:
+      vmState.balTracker.trackAddressAccess(codeAddress)
       let
         code = vmState.readOnlyLedger.getCode(codeAddress)
         delegateTo = parseDelegationAddress(code)
@@ -51,4 +49,6 @@ proc getCallCode*(vmState: BaseVMState, codeAddress: Address): CodeBytesRef =
         vmState.balTracker.trackAddressAccess(delegateTo.get())
     vmState.readOnlyLedger.resolveCode(codeAddress)
   else:
+    if vmState.balTrackerEnabled:
+      vmState.balTracker.trackAddressAccess(codeAddress)
     vmState.readOnlyLedger.getCode(codeAddress)
