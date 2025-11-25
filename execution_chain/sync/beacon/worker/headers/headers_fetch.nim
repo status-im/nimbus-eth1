@@ -132,11 +132,12 @@ template fetchHeadersReversed*(
           # Just return `failed` (no error count or throughput stats)
           discard
 
-        chronicles.info trEthRecvReceivedBlockHeaders & ": error", peer,
+        debug trEthRecvReceivedBlockHeaders & ": error", peer,
           req=ivReq, nReq=req.maxResults, hash=topHash.toStr,
           ela=rc.error.elapsed.toStr, state=($buddy.syncState),
-          errorClass=rc.error.excp, error=rc.error.name, msg=rc.error.msg,
-          nErrors=buddy.nErrors.fetch.hdr
+          error=($rc.error.excp & (if rc.error.name.len == 0: ""
+                                   else: "(" & rc.error.name & ")")),
+          msg=rc.error.msg, nErrors=buddy.nErrors.fetch.hdr
         break body                                 # return err()
 
     # Evaluate result
@@ -146,7 +147,7 @@ template fetchHeadersReversed*(
       trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
         hash=topHash.toStr, nResp=0, ela=elapsed.toStr,
         state=($buddy.syncState),
-        errorClass=(if rc.isErr: $rc.error.excp else: "n/a"),
+        error=(if rc.isErr: $rc.error.excp else: "n/a"),
         nErrors=buddy.nErrors.fetch.hdr
       break body                                   # return err()
 

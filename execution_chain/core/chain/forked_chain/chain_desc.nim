@@ -71,9 +71,9 @@ type
 
     pendingFCU*  : Hash32
       # When we know finalizedHash from CL but has yet to resolve
-      # the hash into a latestFinalizedBlockNumber
+      # the hash into a `latestFinalized` hash/number pair
 
-    latestFinalizedBlockNumber*: uint64
+    latestFinalized*: FcuHashAndNumber
       # When our latest imported block is far away from
       # latestFinalizedBlockNumber, we can move the base
       # forward when importing block
@@ -108,10 +108,10 @@ func txRecords*(c: ForkedChainRef): var Table[Hash32, (Hash32, uint64)] =
   c.txRecords
 
 func tryUpdatePendingFCU*(c: ForkedChainRef, finHash: Hash32, number: uint64): bool =
-  if number > c.latestFinalizedBlockNumber:
-    c.latestFinalizedBlockNumber = number
-    c.pendingFCU = finHash
+  c.pendingFCU = zeroHash32
+  if number > c.latestFinalized.number:
+    c.latestFinalized = FcuHashAndNumber(number: number, hash: finHash)
     return true
-  false
+  # false
 
 # End
