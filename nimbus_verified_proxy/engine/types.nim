@@ -87,9 +87,10 @@ type
     .}
     eth_feeHistory*: proc(
       blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: Opt[seq[float64]]
-    ): Future[FeeHistoryResult] {.async: (raises: [CancelledError]).}
-    eth_sendRawTransaction*:
-      proc(txBytes: seq[byte]): Future[Hash32] {.async: (raises: [CancelledError]).}
+    ): Future[FeeHistoryResult] {.async: (raises: [CancelledError, EthBackendError]).}
+    eth_sendRawTransaction*: proc(txBytes: seq[byte]): Future[Hash32] {.
+      async: (raises: [CancelledError, EthBackendError])
+    .}
 
   # Frontend API
   EthApiFrontend* = object # Chain
@@ -190,8 +191,9 @@ type
     eth_feeHistory*: proc(
       blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: Opt[seq[float64]]
     ): Future[FeeHistoryResult] {.async: (raises: [CancelledError, EngineError]).}
-    eth_sendRawTransaction*:
-      proc(txBytes: seq[byte]): Future[Hash32] {.async: (raises: [CancelledError, EngineError]).}
+    eth_sendRawTransaction*: proc(txBytes: seq[byte]): Future[Hash32] {.
+      async: (raises: [CancelledError, EngineError])
+    .}
 
   FilterStoreItem* = object
     filter*: FilterOptions

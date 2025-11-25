@@ -207,7 +207,7 @@ proc run*(
   # start the light client
   lightClient.start()
 
-  proc stopProxy() {.async: (raises: [CancelledError]).} =
+  proc stopProxy() {.async: (raises: [CancelledError, EngineError]).} =
     await lcRestClientPool.closeAll()
     await jsonRpcClient.stop()
     await jsonRpcServer.stop()

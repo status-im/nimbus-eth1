@@ -126,13 +126,15 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
         blockCount: Quantity,
         newestBlock: BlockTag,
         rewardPercentiles: Opt[seq[float64]],
-    ): Future[FeeHistoryResult] {.async: (raises: [CancelledError]).} =
-      handleBackendCall await client.getClient().eth_feeHistory(blockCount, newestBlock, rewardPercentiles)
+    ): Future[FeeHistoryResult] {.async: (raises: [CancelledError, EthBackendError]).} =
+      handleBackendCall client.getClient().eth_feeHistory(
+        blockCount, newestBlock, rewardPercentiles
+      )
 
     sendRawTxProc = proc(
         txBytes: seq[byte]
-    ): Future[Hash32] {.async: (raises: [CancelledError]).} =
-      handleBackendCall await client.getClient().eth_sendRawTransaction(txBytes)
+    ): Future[Hash32] {.async: (raises: [CancelledError, EthBackendError]).} =
+      handleBackendCall client.getClient().eth_sendRawTransaction(txBytes)
 
   EthApiBackend(
     eth_chainId: ethChainIdProc,
