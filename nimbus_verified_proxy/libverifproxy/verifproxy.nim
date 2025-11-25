@@ -78,8 +78,7 @@ proc processVerifProxyTasks(ctx: ptr Context) {.exported.} =
       ctx.tasks.remove(taskNode)
       ctx.taskLen -= 1
 
-  # don't poll the endless loop of light client
-  if ctx.taskLen > 1:
+  if ctx.taskLen > 0:
     poll()
 
 proc createTask(cb: CallBackProc): Task =
