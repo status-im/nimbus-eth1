@@ -55,6 +55,65 @@ type
 
   # -------------------
 
+  ActivateSyncerHdl* =
+    proc(ctx: BeaconCtxRef) {.gcsafe, raises: [].}
+      ## Syncer activation function run when notified by header chain cache.
+
+  SuspendSyncerHdl* = proc(ctx: BeaconCtxRef) {.gcsafe, raises: [].}
+    ## Syncer hibernate function run when the current session fas finished.
+
+  SchedDaemonHdl* =
+    proc(ctx: BeaconCtxRef): Future[Duration] {.async: (raises: []).}
+      ## See `runDaemon()` described in `sync_sched.nim`
+
+  SchedStartHdl* =
+    proc(buddy: BeaconBuddyRef): bool {.gcsafe, raises: [].}
+      ## See `runStart()` described in `sync_sched.nim`
+
+  SchedStopHdl* =
+    proc(buddy: BeaconBuddyRef) {.gcsafe, raises: [].}
+      ## See `runStart()` described in `sync_sched.nim`
+
+  SchedPoolHdl* =
+    proc(buddy: BeaconBuddyRef; last: bool; laps: int):
+      bool {.gcsafe, raises: [].}
+        ## See `runPool()` described in `sync_sched.nim`
+
+  SchedPeerHdl* =
+    proc(buddy: BeaconBuddyRef; rank: PeerRanking):
+      Future[Duration] {.async: (raises: []).}
+        ## See `runPeer()` described in `sync_sched.nim`
+
+  GetBlockHeadersHdl* =
+    proc(buddy: BeaconBuddyRef; req: BlockHeadersRequest; bn: BlockNumber):
+      Future[Result[FetchHeadersData,BeaconError]] {.async: (raises: []).}
+        ## From the ethXX argument peer implied by `buddy` fetch a list of
+        ## headers.
+
+  SyncBlockHeadersHdl* =
+    proc(buddy: BeaconBuddyRef) {.gcsafe, raises: [].}
+      ## Status of syncer after `GetBlockHeadersHdl`
+
+  GetBlockBodiesHdl* =
+    proc(buddy: BeaconBuddyRef; request: BlockBodiesRequest):
+      Future[Result[FetchBodiesData,BeaconError]] {.async: (raises: []).}
+        ## Fetch bodies from the network.
+
+  SyncBlockBodiesHdl* =
+    proc(buddy: BeaconBuddyRef) {.gcsafe, raises: [].}
+      ## Status of syncer after `GetBlockBodiesHdl`
+
+  ImportBlockHdl* =
+    proc(buddy: BeaconBuddyRef; blk: EthBlock; effPeerID: Hash):
+      Future[Result[Duration,BeaconError]] {.async: (raises: []).}
+        ## Import a sinmgle block into `FC` module.
+
+  SyncImportBlockHdl* =
+    proc(buddy: BeaconBuddyRef) {.gcsafe, raises: [].}
+        ## Status of syncer after `ImportBlockHdl`
+
+  # -------------------
+
   BnRangeSet* = IntervalSetRef[BlockNumber,uint64]
     ## Disjunct sets of block number intervals
 
@@ -167,6 +226,24 @@ type
     etaInx: int                      ## Round robin index for `eta[]`
     etaRr: array[etaAvgPoints,float] ## Estimated ETA sample points
 
+  BeaconHandlersRef* = ref object of RootRef
+    ## Selected handlers that can be replaced for tracing. The version number
+    ## allows to identify overlays.
+    version*: int                    ## Overlay version unless 0 (i.e. base=0)
+    activate*: ActivateSyncerHdl     ## Allows for redirect (e.g. tracing)
+    suspend*: SuspendSyncerHdl       ## Ditto
+    schedDaemon*: SchedDaemonHdl     ## ...
+    schedStart*: SchedStartHdl
+    schedStop*: SchedStopHdl
+    schedPool*: SchedPoolHdl
+    schedPeer*: SchedPeerHdl
+    getBlockHeaders*: GetBlockHeadersHdl
+    syncBlockHeaders*: SyncBlockHeadersHdl
+    getBlockBodies*: GetBlockBodiesHdl
+    syncBlockBodies*: SyncBlockBodiesHdl
+    importBlock*: ImportBlockHdl
+    syncImportBlock*: SyncImportBlockHdl
+
   BeaconCtxData* = object
     ## Globally shared data extension
     hdrSync*: HeaderFetchSync        ## Syncing by linked header chains
@@ -178,6 +255,7 @@ type
 
     chain*: ForkedChainRef           ## Core database, FCU support
     hdrCache*: HeaderChainRef        ## Currently in tandem with `chain`
+    handlers*: BeaconHandlersRef     ## Allows for redirect (e.g. tracing)
 
     # Info, debugging, and error handling stuff
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one
@@ -214,6 +292,10 @@ func chain*(ctx: BeaconCtxRef): ForkedChainRef =
 func hdrCache*(ctx: BeaconCtxRef): HeaderChainRef =
   ## Shortcut
   ctx.pool.hdrCache
+
+func handler*(ctx: BeaconCtxRef): BeaconHandlersRef =
+  ## Shortcut
+  ctx.pool.handlers
 
 func nErrors*(buddy: BeaconBuddyRef): var BuddyErrors =
   ## Shortcut
