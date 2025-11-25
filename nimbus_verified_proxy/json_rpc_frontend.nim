@@ -205,12 +205,14 @@ proc injectEngineFrontend*(server: JsonRpcServer, frontend: EthApiFrontend) =
   server.getServer().rpc("eth_sendRawTransaction") do(txBytes: seq[byte]) -> Hash32:
     await frontend.eth_sendRawTransaction(txBytes)
 
-proc stop*(server: JsonRpcServer) {.async: (raises: [EngineError]).} =
+proc stop*(server: JsonRpcServer) {.async: (raises: [CancelledError, EngineError]).} =
   try:
     case server.kind
     of Http:
       await server.httpServer.closeWait()
     of WebSocket:
       await server.wsServer.closeWait()
+  except CancelledError as e:
+    raise e
   except CatchableError as e:
     raise newException(EngineError, e.msg)

@@ -127,20 +127,12 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
         newestBlock: BlockTag,
         rewardPercentiles: Opt[seq[float64]],
     ): Future[FeeHistoryResult] {.async: (raises: [CancelledError]).} =
-      try:
-        await client.getClient().eth_feeHistory(
-          blockCount, newestBlock, rewardPercentiles
-        )
-      except CatchableError as e:
-        raise newException(CancelledError, e.msg)
+      handleBackendCall await client.getClient().eth_feeHistory(blockCount, newestBlock, rewardPercentiles)
 
     sendRawTxProc = proc(
         txBytes: seq[byte]
     ): Future[Hash32] {.async: (raises: [CancelledError]).} =
-      try:
-        await client.getClient().eth_sendRawTransaction(txBytes)
-      except CatchableError as e:
-        raise newException(CancelledError, e.msg)
+      handleBackendCall await client.getClient().eth_sendRawTransaction(txBytes)
 
   EthApiBackend(
     eth_chainId: ethChainIdProc,
