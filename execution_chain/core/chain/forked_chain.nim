@@ -401,7 +401,8 @@ proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async:
           base = c.base.number,
           baseHash = c.base.hash.short,
           pendingFCU = c.pendingFCU.short,
-          resolvedFin = c.latestFinalizedBlockNumber,
+          resolvedFinNum = c.latestFinalized.number,
+          resolvedFinHash = c.latestFinalized.hash.short,
           dbSnapshotsCount = c.baseTxFrame.aTx.db.snapshots.len()
       else:
         debug "Finalized blocks persisted",
@@ -410,7 +411,8 @@ proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async:
           base = c.base.number,
           baseHash = c.base.hash.short,
           pendingFCU = c.pendingFCU.short,
-          resolvedFin = c.latestFinalizedBlockNumber,
+          resolvedFinNum = c.latestFinalized.number,
+          resolvedFinHash = c.latestFinalized.hash.short,
           dbSnapshotsCount = c.baseTxFrame.aTx.db.snapshots.len()
       c.lastBaseLogTime = time
       c.persistedCount = 0
@@ -475,8 +477,7 @@ proc validateBlock(c: ForkedChainRef,
 
   if blkHash == c.pendingFCU:
     # Resolve the hash into latestFinalizedBlockNumber
-    c.latestFinalizedBlockNumber = max(blk.header.number,
-      c.latestFinalizedBlockNumber)
+    discard c.tryUpdatePendingFCU(blkHash, blk.header.number)
 
   let
     # As a memory optimization we move the HashKeys (kMap) stored in the
@@ -490,7 +491,7 @@ proc validateBlock(c: ForkedChainRef,
   # TODO shortLog-equivalent for eth types
   debug "Validating block",
     blkHash, blk = (
-      parentHash: blk.header.parentHash,
+      parentHash: blk.header.parentHash.short,
       coinbase: blk.header.coinbase,
       stateRoot: blk.header.stateRoot,
       transactionsRoot: blk.header.transactionsRoot,
@@ -530,14 +531,14 @@ proc validateBlock(c: ForkedChainRef,
   let
     offset = c.baseDistance + c.persistBatchSize
     number =
-      if offset >= c.latestFinalizedBlockNumber:
+      if offset >= c.latestFinalized.number:
         0.uint64
       else:
-        c.latestFinalizedBlockNumber - offset
-  if c.pendingFCU != zeroHash32 and
-     c.base.number < number:
+        c.latestFinalized.number - offset
+  if c.base.number < number:
+    # 0 < number => latestFinalized.hash != zero
     let
-      base = c.calculateNewBase(c.latestFinalizedBlockNumber, c.latest)
+      base = c.calculateNewBase(c.latestFinalized.number, c.latest)
       prevBase = c.base.number
 
     c.updateFinalized(base, base)
@@ -696,7 +697,7 @@ proc importBlock*(c: ForkedChainRef, blk: Block):
     # Setting the finalized flag to true here has the effect of skipping the
     # stateroot check for performance reasons.
     let
-      isFinalized = blk.header.number <= c.latestFinalizedBlockNumber
+      isFinalized = blk.header.number <= c.latestFinalized.number
       parent = ?(await c.validateBlock(parent, blk, isFinalized))
     if c.quarantine.hasOrphans():
       c.queueOrphan(parent, isFinalized)
@@ -795,11 +796,11 @@ template queueForkChoice*(c: ForkedChainRef,
   await c.queue.addLast(item)
   item.responseFut
 
-func finHash*(c: ForkedChainRef): Hash32 =
-  c.pendingFCU
+func resolvedFinHash*(c: ForkedChainRef): Hash32 =
+  c.latestFinalized.hash
 
 func resolvedFinNumber*(c: ForkedChainRef): uint64 =
-  c.latestFinalizedBlockNumber
+  c.latestFinalized.number
 
 func haveBlockAndState*(c: ForkedChainRef, blockHash: Hash32): bool =
   ## Blocks still in memory with it's txFrame
@@ -897,7 +898,7 @@ proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Header, str
   err("Block not found, number = " & $number)
 
 func finalizedHeader*(c: ForkedChainRef): Header =
-  c.hashToBlock.withValue(c.pendingFCU, loc):
+  c.hashToBlock.withValue(c.latestFinalized.hash, loc):
     return loc[].header
 
   c.base.header
@@ -909,7 +910,7 @@ func safeHeader*(c: ForkedChainRef): Header =
   c.base.header
 
 func finalizedBlock*(c: ForkedChainRef): Block =
-  c.hashToBlock.withValue(c.pendingFCU, loc):
+  c.hashToBlock.withValue(c.latestFinalized.hash, loc):
     return loc[].blk
 
   c.base.blk

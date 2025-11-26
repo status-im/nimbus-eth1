@@ -36,7 +36,7 @@ type
     latest: uint
     heads: seq[uint]
     pendingFCU: Hash32
-    latestFinalizedBlockNumber: uint64
+    latestFinalized: FcuHashAndNumber
     txRecords: seq[TxRecord]
     fcuHead: FcuHashAndNumber
     fcuSafe: FcuHashAndNumber
@@ -65,7 +65,7 @@ proc append(w: var RlpWriter, fc: ForkedChainRef) =
 
   w.append(heads)
   w.append(fc.pendingFCU)
-  w.append(fc.latestFinalizedBlockNumber)
+  w.append(fc.latestFinalized)
   w.startList(fc.txRecords.len)
   for k, v in fc.txRecords:
     w.append(TxRecord(
@@ -90,7 +90,7 @@ proc read(rlp: var Rlp, T: type FcState): T {.raises: [RlpError].} =
   rlp.read(result.latest)
   rlp.read(result.heads)
   rlp.read(result.pendingFCU)
-  rlp.read(result.latestFinalizedBlockNumber)
+  rlp.read(result.latestFinalized)
   rlp.read(result.txRecords)
   rlp.read(result.fcuHead)
   rlp.read(result.fcuSafe)
@@ -187,7 +187,7 @@ proc reset(fc: ForkedChainRef, base: BlockRef) =
   fc.heads       = @[base]
   fc.hashToBlock = {base.hash: base}.toTable
   fc.pendingFCU  = zeroHash32
-  fc.latestFinalizedBlockNumber = 0'u64
+  fc.latestFinalized.reset()
   fc.txRecords.clear()
   fc.fcuHead.reset()
   fc.fcuSafe.reset()
@@ -222,8 +222,8 @@ proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbEr
     latestHash=fc.latest.hash.short,
     head=fc.fcuHead.number,
     headHash=fc.fcuHead.hash.short,
-    finalized=fc.latestFinalizedBlockNumber,
-    finalizedHash=fc.pendingFCU.short,
+    finalizedNum=fc.latestFinalized.number,
+    finalizedHash=fc.latestFinalized.hash.short,
     blocksSerialized=fc.hashToBlock.len,
     heads=fc.heads.toString
 
@@ -268,14 +268,15 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
     fc.heads.add blocks[h]
 
   fc.pendingFCU = state.pendingFCU
-  fc.latestFinalizedBlockNumber = state.latestFinalizedBlockNumber
+  fc.latestFinalized = state.latestFinalized
   fc.fcuHead = state.fcuHead
   fc.fcuSafe = state.fcuSafe
 
   info "Loading block DAG from database",
     base=fc.base.number,
     pendingFCU=fc.pendingFCU.short,
-    resolvedFin=fc.latestFinalizedBlockNumber,
+    resolvedFinNum=fc.latestFinalized.number,
+    resolvedFinHash=fc.latestFinalized.hash.short,
     canonicalHead=fc.fcuHead.number,
     safe=fc.fcuSafe.number,
     numBlocks=state.numBlocks,
@@ -315,11 +316,11 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
     let txFrame = val[].txFrame
     ?txFrame.fcuSafe(fc.fcuSafe.hash, fc.fcuSafe.number)
 
-  fc.hashToBlock.withValue(fc.pendingFCU, val) do:
+  fc.hashToBlock.withValue(fc.latestFinalized.hash, val) do:
     # Restore finalized marker
     for it in loopNotFinalized(val[]):
       it.finalize()
     let txFrame = val[].txFrame
-    ?txFrame.fcuFinalized(fc.pendingFCU, fc.latestFinalizedBlockNumber)
+    ?txFrame.fcuFinalized(fc.latestFinalized.hash, fc.latestFinalized.number)
 
   ok()
