@@ -249,15 +249,17 @@ proc procBlkEpilogue(
     withdrawalReqs = ?processDequeueWithdrawalRequests(vmState)
     consolidationReqs = ?processDequeueConsolidationRequests(vmState)
 
-  if vmState.balTrackerEnabled:
+  if header.blockAccessListHash.isSome:
+    doAssert vmState.balTrackerEnabled
     # Commit block access list tracker changes for post‑execution system calls
     vmState.balTracker.commitCallFrame()
 
-    if header.blockAccessListHash.isSome():
-      let bal = vmState.balTracker.getBlockAccessList().get()
-      bal[].validate(header.blockAccessListHash.get).isOkOr:
-        return err("block access list mismatch, expect: " &
-          $header.blockAccessListHash.get & ", got: " & $bal[].computeBlockAccessListHash())
+    let
+      bal = vmState.balTracker.getBlockAccessList().get()
+      balHash = bal[].computeBlockAccessListHash()
+    if header.blockAccessListHash.get != balHash:
+      return err("blockAccessListHash mismatch, expect: " &
+        $header.blockAccessListHash.get & ", got: " & $balHash)
 
   if not skipStateRootCheck:
     let stateRoot = vmState.ledger.getStateRoot()
