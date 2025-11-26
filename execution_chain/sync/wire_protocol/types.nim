@@ -9,7 +9,9 @@
 # according to those terms.
 
 import
-  ./eth/eth_types
+  ./eth/eth_types,
+  ./snap/snap_types
 
 export
-  eth_types
+  eth_types,
+  snap_types

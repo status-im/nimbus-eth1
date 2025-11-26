@@ -8,8 +8,11 @@
 # those terms.
 
 import
-  ./eth/[eth_requester, eth_responder]
+  ./eth/[eth_requester, eth_responder],
+  ./snap/[snap_requester, snap_responder]
 
 export
   eth_requester,
-  eth_responder
+  eth_responder,
+  snap_requester,
+  snap_responder

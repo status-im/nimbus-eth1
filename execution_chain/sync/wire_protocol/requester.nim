@@ -10,11 +10,14 @@
 import
   pkg/[chronos, eth/common],
   ../../networking/rlpx,
-  ./eth/[eth_requester, eth_types]
+  ./eth/[eth_requester, eth_types],
+  ./snap/[snap_requester, snap_types]
 
 export
   chronos,
   common,
   eth_requester,
   eth_types,
-  rlpx
+  rlpx,
+  snap_requester,
+  snap_types
