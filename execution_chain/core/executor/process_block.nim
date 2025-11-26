@@ -258,6 +258,14 @@ proc procBlkEpilogue(
       bal = vmState.balTracker.getBlockAccessList().get()
       balHash = bal[].computeBlockAccessListHash()
     if header.blockAccessListHash.get != balHash:
+      debug "wrong blockAccessListHash, generated block access list does not " &
+        "match expected blockAccessListHash in header",
+        blockNumber = header.number,
+        blockHash = header.computeBlockHash,
+        parentHash = header.parentHash,
+        expected = header.blockAccessListHash.get,
+        actual = balHash,
+        blockAccessList = $(bal[])
       return err("blockAccessListHash mismatch, expect: " &
         $header.blockAccessListHash.get & ", got: " & $balHash)
 
@@ -265,7 +273,7 @@ proc procBlkEpilogue(
     let stateRoot = vmState.ledger.getStateRoot()
     if header.stateRoot != stateRoot:
       # TODO replace logging with better error
-      debug "wrong state root in block",
+      debug "wrong stateRoot in block",
         blockNumber = header.number,
         blockHash = header.computeBlockHash,
         parentHash = header.parentHash,
