@@ -268,11 +268,11 @@ func tracingEnabled*(vmState: BaseVMState): bool =
 template balTrackerEnabled*(vmState: BaseVMState): bool =
   vmState.balTracker.isNil.not
 
-template blockAccessList*(vmState: BaseVMState): Opt[BlockAccessList] =
+template blockAccessList*(vmState: BaseVMState): Opt[BlockAccessListRef] =
   if vmState.balTrackerEnabled:
     vmState.balTracker.getBlockAccessList()
   else:
-    Opt.none(BlockAccessList)
+    Opt.none(BlockAccessListRef)
 
 proc captureTxStart*(vmState: BaseVMState, gasLimit: GasInt) =
   if vmState.tracingEnabled:

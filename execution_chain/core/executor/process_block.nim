@@ -255,9 +255,9 @@ proc procBlkEpilogue(
 
     if header.blockAccessListHash.isSome():
       let bal = vmState.balTracker.getBlockAccessList().get()
-      bal.validate(header.blockAccessListHash.get).isOkOr:
+      bal[].validate(header.blockAccessListHash.get).isOkOr:
         return err("block access list mismatch, expect: " &
-          $header.blockAccessListHash.get & ", got: " & $bal.computeBlockAccessListHash())
+          $header.blockAccessListHash.get & ", got: " & $bal[].computeBlockAccessListHash())
 
   if not skipStateRootCheck:
     let stateRoot = vmState.ledger.getStateRoot()

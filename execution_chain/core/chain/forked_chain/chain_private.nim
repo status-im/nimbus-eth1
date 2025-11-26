@@ -20,11 +20,14 @@ import
   ../../../stateless/[witness_generation, witness_verification, stateless_execution],
   ./chain_branch
 
-proc writeBaggage*(c: ForkedChainRef,
-        blk: Block, blkHash: Hash32,
-        txFrame: CoreDbTxRef,
-        receipts: openArray[StoredReceipt],
-        blockAccessList: Opt[BlockAccessList]) =
+proc writeBaggage*(
+    c: ForkedChainRef,
+    blk: Block,
+    blkHash: Hash32,
+    txFrame: CoreDbTxRef,
+    receipts: openArray[StoredReceipt],
+    blockAccessList: Opt[BlockAccessListRef],
+) =
   template header(): Header =
     blk.header
 
@@ -34,18 +37,22 @@ proc writeBaggage*(c: ForkedChainRef,
   if blk.withdrawals.isSome:
     txFrame.persistWithdrawals(
       header.withdrawalsRoot.expect("WithdrawalsRoot should be verified before"),
-      blk.withdrawals.get)
+      blk.withdrawals.get,
+    )
   if blockAccessList.isSome:
     txFrame.persistBlockAccessList(
       header.blockAccessListHash.expect("blockAccessListHash should be verified before"),
-      blk.blockAccessList.get)
+      blockAccessList.get()[],
+    )
 
-proc processBlock*(c: ForkedChainRef,
-                  parentBlk: BlockRef,
-                  txFrame: CoreDbTxRef,
-                  blk: Block,
-                  blkHash: Hash32,
-                  finalized: bool): Result[seq[StoredReceipt], string] =
+proc processBlock*(
+    c: ForkedChainRef,
+    parentBlk: BlockRef,
+    txFrame: CoreDbTxRef,
+    blk: Block,
+    blkHash: Hash32,
+    finalized: bool,
+): Result[seq[StoredReceipt], string] =
   template header(): Header =
     blk.header
 
@@ -55,7 +62,8 @@ proc processBlock*(c: ForkedChainRef,
     header,
     c.com,
     txFrame,
-    enableBalTracker = c.com.isAmsterdamOrLater(header.timestamp))
+    enableBalTracker = c.com.isAmsterdamOrLater(header.timestamp),
+  )
 
   ?c.com.validateHeaderAndKinship(blk, vmState.parent, txFrame)
 

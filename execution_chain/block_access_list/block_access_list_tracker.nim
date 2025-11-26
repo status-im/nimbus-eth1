@@ -74,7 +74,7 @@ type
       ## 1..n for transactions, n+1 for post-execution).
     callFrameSnapshots*: seq[CallFrameSnapshot]
       ## Stack of snapshots for nested call frames to handle reverts properly.
-    blockAccessList: Opt[BlockAccessList]
+    blockAccessList: Opt[BlockAccessListRef]
       ## Created by the builder and cached for reuse
 
 
@@ -422,7 +422,7 @@ proc normalizeBalanceAndStorageChanges*(tracker: BlockAccessListTrackerRef) =
     for address in addressesToRemove:
       tracker.pendingCallFrame.codeChanges.del(address)
 
-proc getBlockAccessList*(tracker: BlockAccessListTrackerRef, rebuild = false): lent Opt[BlockAccessList] =
+proc getBlockAccessList*(tracker: BlockAccessListTrackerRef, rebuild = false): lent Opt[BlockAccessListRef] =
   if rebuild or tracker.blockAccessList.isNone():
     tracker.blockAccessList = Opt.some(tracker.builder.buildBlockAccessList())
 
