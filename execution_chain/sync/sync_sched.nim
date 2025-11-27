@@ -34,14 +34,14 @@
 ##   intended for updating metrics, debug logging etc.
 ##
 ##
-## *runStart(buddy: BuddyRef[S,W]): bool*
+## *runStart(buddy: SyncPeerRef[S,W]): bool*
 ##   Initialise a new worker peer.
 ##
-## *runStop(buddy: BuddyRef[S,W])*
+## *runStop(buddy: SyncPeerRef[S,W])*
 ##   Clean up this worker peer.
 ##
 ##
-## *runPool(buddy: BuddyRef[S,W], last: bool; laps: int): bool*
+## *runPool(buddy: SyncPeerRef[S,W], last: bool; laps: int): bool*
 ##   Once started, the function `runPool()` is called for all worker peers in
 ##   sequence as long as the function returns `false`. There will be no other
 ##   `runPeer()` functions (see below) activated while `runPool()` is active.
@@ -59,7 +59,7 @@
 ##   Note that this function does *not* run in `async` mode.
 ##
 ##
-## *runPeer(buddy: BuddyRef[S,W]) {.async: (raises: []).}*
+## *runPeer(buddy: SyncPeerRef[S,W]) {.async: (raises: []).}*
 ##   This peer worker method is repeatedly invoked (exactly one per peer) while
 ##   the `buddy.ctrl.poolMode` flag is set `false`. All workers run
 ##   concurrently in `async` mode.
@@ -94,7 +94,7 @@ import
   ./[sync_desc, wire_protocol]
 
 type
-  ActivePeers[S,W] = LruCache[Hash,RunnerBuddyRef[S,W]]
+  ActivePeers[S,W] = LruCache[Hash,RunnerPeerRef[S,W]]
     ## List of active workers, using `Hash(Peer)` rather than `Peer` as a key.
 
   ZombiePeers = LruCache[Hash,chronos.Moment]
@@ -124,10 +124,10 @@ type
     activeMulti: int            ## Number of async workers active/running
     runCtrl: RunCtrl            ## Overall scheduler start/stop control
 
-  RunnerBuddyRef[S,W] = ref object
+  RunnerPeerRef[S,W] = ref object
     ## Per worker peer descriptor
     dsc: RunnerSyncRef[S,W]     ## Scheduler descriptor
-    worker: BuddyRef[S,W]       ## Worker peer data
+    worker: SyncPeerRef[S,W]    ## Worker peer data
     zombified: Moment           ## Time when it became undead (if any)
 
 const
@@ -187,17 +187,17 @@ proc nSyncPeers[S,W](dsc: RunnerSyncRef[S,W]): int =
 
 proc getSyncPeerFn[S,W](dsc: RunnerSyncRef[S,W]): GetSyncPeerFn[S,W] =
   ## Get particular active syncer peer (aka buddy)
-  result = proc(peerID: Hash): BuddyRef[S,W] =
+  result = proc(peerID: Hash): SyncPeerRef[S,W] =
     dsc.syncPeers.peek(peerID).isErrOr:
       return value.worker
     dsc.orphans.peek(peerID).isErrOr:
       return value.worker
-    # BuddyRef[S,W](nil)
+    # SyncPeerRef[S,W](nil)
 
 proc getSyncPeersFn[S,W](dsc: RunnerSyncRef[S,W]): GetSyncPeersFn[S,W] =
   ## Get a list of descriptor all active syncer peers (aka buddies)
-  result = proc(): seq[BuddyRef[S,W]] =
-    var list: seq[BuddyRef[S,W]]
+  result = proc(): seq[SyncPeerRef[S,W]] =
+    var list: seq[SyncPeerRef[S,W]]
     for w in dsc.syncPeers.values:
       list.add w.worker
     for w in dsc.orphans.values:
@@ -325,7 +325,7 @@ proc tickerLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
   dsc.tickerRunning = false
 
 
-proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async: (raises: []).} =
+proc workerLoop[S,W](buddy: RunnerPeerRef[S,W]) {.async: (raises: []).} =
   mixin runPeer, runPool, runStop
 
   let
@@ -373,7 +373,7 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async: (raises: []).} =
           ctx.poolMode = false
           # Pool mode: stop this round if returned `true`,
           #            last invocation this round with `true` argument
-          var delayed = BuddyRef[S,W](nil)
+          var delayed = SyncPeerRef[S,W](nil)
           for w in dsc.syncPeers.values:
             # Execute previous (aka delayed) item (unless first)
             if delayed.isNil or not delayed.runPool(last=false, laps=count):
@@ -526,9 +526,9 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
     return
 
   # Initialise worker for this peer
-  let buddy = RunnerBuddyRef[S,W](
+  let buddy = RunnerPeerRef[S,W](
     dsc:      dsc,
-    worker:   BuddyRef[S,W](
+    worker:   SyncPeerRef[S,W](
       ctx:    dsc.ctx,
       peer:   peer,
       peerID: peerID))

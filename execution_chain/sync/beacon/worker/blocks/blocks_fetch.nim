@@ -23,7 +23,7 @@ import
 # -----------------------------------------------------------------------------
 
 proc maybeSlowPeerError(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
     elapsed: Duration;
     hash: Hash32;
       ): bool =
@@ -32,7 +32,7 @@ proc maybeSlowPeerError(
     buddy.bdyFetchRegisterError(slowPeer=true)
 
     # Do not repeat the same time-consuming failed request
-    buddy.only.failedReq = BuddyFirstFetchReq(
+    buddy.only.failedReq = BcPeerFirstFetchReq(
       state:     SyncState.blocks,
       blockHash: hash)
 
@@ -41,8 +41,8 @@ proc maybeSlowPeerError(
   # false
 
 
-proc getBlockBodies(
-    buddy: BeaconBuddyRef;
+proc getBlockBodies*(
+    buddy: BeaconPeerRef;
     req: BlockBodiesRequest;
       ): Future[Result[FetchBodiesData,BeaconError]]
       {.async: (raises: []).} =
@@ -77,7 +77,7 @@ proc getBlockBodies(
 # ------------------------------------------------------------------------------
 
 template fetchBodies*(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
     request: BlockBodiesRequest;
     info: static[string];
       ): Opt[seq[BlockBody]] =

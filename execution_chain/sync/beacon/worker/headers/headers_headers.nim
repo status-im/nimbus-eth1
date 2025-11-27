@@ -24,7 +24,7 @@ import
 # ------------------------------------------------------------------------------
 
 template headersFetch*(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
     parent: Hash32;
     num: uint;
     info: static[string];
@@ -85,7 +85,7 @@ template headersFetch*(
 
 
 proc headersStashOnDisk*(
-  buddy: BeaconBuddyRef;
+  buddy: BeaconPeerRef;
   revHdrs: seq[Header];
   peerID: Hash;
   info: static[string];

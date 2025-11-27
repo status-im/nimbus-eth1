@@ -22,10 +22,10 @@ export
   helpers, sync_desc, worker_const, chain
 
 type
-  BeaconBuddyRef* = BuddyRef[BeaconCtxData,BeaconBuddyData]
+  BeaconPeerRef* = SyncPeerRef[BeaconCtxData,BeaconPeerData]
     ## Extended worker peer descriptor
 
-  BeaconCtxRef* = CtxRef[BeaconCtxData,BeaconBuddyData]
+  BeaconCtxRef* = CtxRef[BeaconCtxData,BeaconPeerData]
     ## Extended global descriptor
 
   # -------------------
@@ -119,7 +119,7 @@ type
     samples*: uint
     total*: uint64
 
-  BuddyThPutStats* = object
+  BcPeerThPutStats* = object
     ## Throughput statistice for fetching headers and bodies. The fileds
     ## have the following meaning:
     ##    sum:      -- Sum of samples, throuhputs per sec
@@ -129,14 +129,14 @@ type
     ##
     hdr*, blk*: StatsCollect
 
-  BuddyErrors* = tuple
+  BcPeerErrors* = tuple
     ## Count fetching and processing errors
     fetch: tuple[
       hdr, bdy: uint8]
     apply: tuple[
       hdr, blk: uint8]
 
-  BuddyFirstFetchReq* = object
+  BcPeerFirstFetchReq* = object
     ## Register fetch request. This is intended to avoid sending the same (or
     ## similar) fetch request again from the same peer that sent it previously.
     case state*: SyncState
@@ -147,11 +147,11 @@ type
     else:
       discard
 
-  BeaconBuddyData* = object
+  BeaconPeerData* = object
     ## Local descriptor data extension
-    nErrors*: BuddyErrors            ## Error register
-    thPutStats*: BuddyThPutStats     ## Throughput statistics
-    failedReq*: BuddyFirstFetchReq   ## Avoid sending the same request twice
+    nErrors*: BcPeerErrors           ## Error register
+    thPutStats*: BcPeerThPutStats    ## Throughput statistics
+    failedReq*: BcPeerFirstFetchReq  ## Avoid sending the same request twice
 
   InitTarget* = tuple
     hash: Hash32                     ## Some block hash to sync towards to
@@ -215,11 +215,11 @@ func hdrCache*(ctx: BeaconCtxRef): HeaderChainRef =
   ## Shortcut
   ctx.pool.hdrCache
 
-func nErrors*(buddy: BeaconBuddyRef): var BuddyErrors =
+func nErrors*(buddy: BeaconPeerRef): var BcPeerErrors =
   ## Shortcut
   buddy.only.nErrors
 
-proc getSyncPeer*(buddy: BeaconBuddyRef; peerID: Hash): BeaconBuddyRef =
+proc getSyncPeer*(buddy: BeaconPeerRef; peerID: Hash): BeaconPeerRef =
   ## Getter, retrieve syncer peer (aka buddy) by `peerID` argument
   if buddy.peerID == peerID: buddy else: buddy.ctx.getSyncPeer peerID
 
@@ -250,8 +250,8 @@ func syncState*(
    ctx.poolMode)
 
 func syncState*(
-    buddy: BeaconBuddyRef;
-      ): (BuddyRunState,SyncState,HeaderChainMode,bool) =
+    buddy: BeaconPeerRef;
+      ): (SyncPeerRunState,SyncState,HeaderChainMode,bool) =
   ## Getter, also includes buddy state
   (buddy.ctrl.state,
    buddy.ctx.pool.syncState,
@@ -276,7 +276,7 @@ func toMeanVar*(w: StatsCollect): MeanVarStats =
     result.samples = w.samples
     result.total = w.total
 
-func toMeanVar*(w: BuddyThPutStats): MeanVarStats =
+func toMeanVar*(w: BcPeerThPutStats): MeanVarStats =
   ## Combined statistics for headers and bodies
   toMeanVar StatsCollect(
     sum:     w.hdr.sum +     w.blk.sum,

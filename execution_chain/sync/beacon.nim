@@ -42,16 +42,16 @@ proc runDaemon(ctx: BeaconCtxRef): Future[Duration] {.async: (raises: []).} =
 proc runTicker(ctx: BeaconCtxRef) =
   worker.runTicker(ctx, "Ticker")
 
-proc runStart(buddy: BeaconBuddyRef): bool =
+proc runStart(buddy: BeaconPeerRef): bool =
   worker.start(buddy, "Start")
 
-proc runStop(buddy: BeaconBuddyRef) =
+proc runStop(buddy: BeaconPeerRef) =
   worker.stop(buddy, "Stop")
 
-proc runPool(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
+proc runPool(buddy: BeaconPeerRef; last: bool; laps: int): bool =
   worker.runPool(buddy, last, laps, "SyncMode")
 
-proc runPeer(buddy: BeaconBuddyRef): Future[Duration] {.async: (raises: []).} =
+proc runPeer(buddy: BeaconPeerRef): Future[Duration] {.async: (raises: []).} =
   let rank = buddy.classifyForFetching()
   return worker.runPeer(buddy, rank, "Peer")
 

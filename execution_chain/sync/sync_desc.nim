@@ -20,12 +20,12 @@ import
   ../networking/p2p
 
 type
-  GetSyncPeerFn*[S,W] = proc(peerID: Hash): BuddyRef[S,W] {.gcsafe, raises: [].}
+  GetSyncPeerFn*[S,W] = proc(peerID: Hash): SyncPeerRef[S,W] {.gcsafe, raises: [].}
     ## Get other active syncer peers (aka buddy) by its ID. This peer
     ## will not be returned unless the `runStart()` directive for this
     ## paricular peer (with `peerID` as ID) has returned `true`.
 
-  GetSyncPeersFn*[S,W] = proc(): seq[BuddyRef[S,W]] {.gcsafe, raises: [].}
+  GetSyncPeersFn*[S,W] = proc(): seq[SyncPeerRef[S,W]] {.gcsafe, raises: [].}
     ## Get the list of descriptors for all active syncer peers (aka buddies).
     ## The peers returned are all the peers where the `runStart()` directive
     ## has returned `true` (see `GetPeerFn`.)
@@ -33,22 +33,22 @@ type
   NSyncPeersFn*[S,W] = proc(): int {.gcsafe, raises: [].}
     ## Efficient version of `getSyncPeersFn().len`
 
-  BuddyRunState* = enum
+  SyncPeerRunState* = enum
     Running = 0             ## Running, default state
     Stopped                 ## Stopped or about stopping
     ZombieStop              ## Abandon/ignore (wait for pushed out of LRU table)
     ZombieRun               ## Extra zombie state to potentially recover from
 
-  BuddyCtrl* = object
+  SyncPeerCtrl* = object
     ## Control and state settings
-    runState: BuddyRunState     ## Access with getters
+    runState: SyncPeerRunState  ## Access with getters
 
-  BuddyRef*[S,W] = ref object of RootRef
+  SyncPeerRef*[S,W] = ref object of RootRef
     ## Worker peer state descriptor.
     ctx*: CtxRef[S,W]           ## Shared data descriptor back reference
     peer*: Peer                 ## Reference to eth `p2p` protocol entry
     peerID*: Hash               ## Hash of peer node
-    ctrl*: BuddyCtrl            ## Control and state settings
+    ctrl*: SyncPeerCtrl         ## Control and state settings
     only*: W                    ## Worker peer specific data
 
   CtxRef*[S,W] = ref object
@@ -66,35 +66,35 @@ type
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc `$`*[S,W](worker: BuddyRef[S,W]): string =
+proc `$`*[S,W](worker: SyncPeerRef[S,W]): string =
   $worker.peer & "$" & $worker.ctrl.runState
 
 # ------------------------------------------------------------------------------
-# Public getters, `BuddyRunState` execution control functions
+# Public getters, `SyncPeerRunState` execution control functions
 # ------------------------------------------------------------------------------
 
-proc state*(ctrl: BuddyCtrl): BuddyRunState =
-  ## Getter (logging only, details of `BuddyCtrl` are private)
+proc state*(ctrl: SyncPeerCtrl): SyncPeerRunState =
+  ## Getter (logging only, details of `SyncPeerCtrl` are private)
   ctrl.runState
 
-proc running*(ctrl: BuddyCtrl): bool =
+proc running*(ctrl: SyncPeerCtrl): bool =
   ## Getter, if `true` if `ctrl.state()` is `Running`
   ctrl.runState == Running
 
-proc stopped*(ctrl: BuddyCtrl): bool =
+proc stopped*(ctrl: SyncPeerCtrl): bool =
   ## Getter, if `true`, if `ctrl.state()` is not `Running`
   ctrl.runState != Running
 
-proc zombie*(ctrl: BuddyCtrl): bool =
+proc zombie*(ctrl: SyncPeerCtrl): bool =
   ## Getter, `true` if `ctrl.state()` is `Zombie` (i.e. not `running()` and
   ## not `stopped()`)
   ctrl.runState in {ZombieStop, ZombieRun}
 
 # ------------------------------------------------------------------------------
-# Public setters, `BuddyRunState` execution control functions
+# Public setters, `SyncPeerRunState` execution control functions
 # ------------------------------------------------------------------------------
 
-proc `zombie=`*(ctrl: var BuddyCtrl; value: bool) =
+proc `zombie=`*(ctrl: var SyncPeerCtrl; value: bool) =
   ## Setter
   if value:
     case ctrl.runState:
@@ -113,7 +113,7 @@ proc `zombie=`*(ctrl: var BuddyCtrl; value: bool) =
     else:
       discard
 
-proc `stopped=`*(ctrl: var BuddyCtrl; value: bool) =
+proc `stopped=`*(ctrl: var SyncPeerCtrl; value: bool) =
   ## Setter
   if value:
     case ctrl.runState:
@@ -128,7 +128,7 @@ proc `stopped=`*(ctrl: var BuddyCtrl; value: bool) =
     else:
       discard
 
-proc `forceRun=`*(ctrl: var BuddyCtrl; value: bool) =
+proc `forceRun=`*(ctrl: var SyncPeerCtrl; value: bool) =
   ## Setter, gets out of `Zombie` jail/locked state with `true` argument.
   if value:
     ctrl.runState = Running
