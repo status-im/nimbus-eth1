@@ -17,7 +17,7 @@ import
 
 const
   baseFolder = "tests/fixtures"
-  eestType = "engine_tests"
+  eestType = "blockchain_tests_engine"
   eestReleases = [
     "eest_develop",
     "eest_devnet"

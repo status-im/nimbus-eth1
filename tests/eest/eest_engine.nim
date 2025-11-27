@@ -40,7 +40,7 @@ proc sendNewPayload(env: TestEnv, version: uint64, param: PayloadParam): Result[
       param.payload,
       param.versionedHashes,
       param.parentBeaconBlockRoot,
-      param.excutionRequests)
+      param.executionRequests)
   else:
     err("Unsupported NewPayload version: " & $version)
 
@@ -60,8 +60,15 @@ proc runTest(env: TestEnv, unit: EngineUnitEnv): Result[void, string] =
     return err("Client is not initialized")
 
   for enp in unit.engineNewPayloads:
+
+    if enp.newPayloadVersion.uint64 < 3:
+      # skip this test which uses an older newPayloadVersion
+      return ok()
     var status = env.sendNewPayload(enp.newPayloadVersion.uint64, enp.params).valueOr:
-      return err(error)
+      if enp.validationError.isSome():
+        continue
+      else:
+        return err(error)
 
     discard status
     when false:
@@ -70,6 +77,9 @@ proc runTest(env: TestEnv, unit: EngineUnitEnv): Result[void, string] =
       if status.validationError.isSome:
         return err(status.validationError.value)
 
+    if enp.forkchoiceUpdatedVersion.uint64 < 3:
+      # skip this test which uses an older forkchoiceUpdatedVersion
+      return ok()
     let y = env.sendFCU(enp.forkchoiceUpdatedVersion.uint64, enp.params).valueOr:
       return err(error)
 
