@@ -45,7 +45,7 @@ proc schedDaemonProcessImpl(
 
 
 proc schedPeerProcessImpl(
-    buddy: ReplayBuddyRef;
+    buddy: ReplayPeerRef;
     instr: ReplaySchedPeerBegin;
     info: static[string];
       ) {.async: (raises: []).} =

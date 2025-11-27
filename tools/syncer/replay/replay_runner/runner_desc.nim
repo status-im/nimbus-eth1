@@ -39,21 +39,21 @@ const
 type
   ReplayWaitError* = tuple
     ## Capture exception or error context for waiting/polling instance
-    excp: BeaconErrorType
+    excp: ErrorType
     name: string
     msg: string
 
   # --------- internal context types ---------
 
-  ReplayBuddyRef* = ref object of BeaconBuddyRef
-    ## Replacement of `BeaconBuddyRef` in `runPeer()` and `runPool()`
+  ReplayPeerRef* = ref object of BeaconPeerRef
+    ## Replacement of `BeacomPeerRef` in `runPeer()` and `runPool()`
     isNew*: bool                       ## Set in `getOrNewPeer()` when created
     run*: ReplayRunnerRef              ## Back-reference for convenience
     frameID*: Opt[uint]                ## Begin/end frame
     message*: ReplayPayloadRef         ## Data message channel
 
   ReplayDaemonRef* = ref object
-    ## Daemeon job frame (similar to `ReplayBuddyRef`)
+    ## Daemeon job frame (similar to `ReplayPeerRef`)
     run*: ReplayRunnerRef              ## Back-reference for convenience
     frameID*: Opt[uint]                ## Begin/end frame
     message*: ReplayPayloadRef         ## Data message channel
@@ -73,7 +73,7 @@ type
 
     # Local state
     daemon*: ReplayDaemonRef           ## Currently active daemon, or `nil`
-    peers*: Table[Hash,ReplayBuddyRef] ## Begin/End for base frames
+    peers*: Table[Hash,ReplayPeerRef]  ## Begin/End for base frames
     nSyncPeers*: int                   ## Track active peer instances
     failTmoMax*: chronos.Duration      ## Keep track of largest timeout
 
@@ -85,7 +85,7 @@ type
 # ------------------------------------------------------------------------------
 
 proc replayGetSyncPeerFn*(run: ReplayRunnerRef): ReplayGetSyncPeerFn =
-  result = proc(peerID: Hash): BeaconBuddyRef =
+  result = proc(peerID: Hash): BeaconPeerRef =
     run.peers.withValue(peerID,val):
       return val[]
 

@@ -7,6 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push raises: [].}
+
 import
   std/[cmdline, os, strutils, terminal],
   pkg/[chronicles, results],

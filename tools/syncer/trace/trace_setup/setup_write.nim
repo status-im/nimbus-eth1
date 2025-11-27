@@ -53,7 +53,7 @@ proc writeValue*(
   ## Json writer mixin avoiding `{"value": NNN}` encapsulation
   w.writeValue(cast[uint64](v.nanoseconds))
 
-template traceWrite*(dsc: BeaconCtxRef|BeaconBuddyRef; capt: untyped) =
+template traceWrite*(dsc: BeaconCtxRef|BeaconPeerRef; capt: untyped) =
   type T = typeof capt
   const trp = T.toTraceRecType
   when dsc is BeaconCtxRef:

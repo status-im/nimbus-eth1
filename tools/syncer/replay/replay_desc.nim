@@ -33,10 +33,10 @@ type
   ReplayEndUpFn* = proc() {.gcsafe, raises: [].}
     ## Terminator control directive for runner/dispatcher
 
-  ReplayGetSyncPeerFn* = GetSyncPeerFn[BeaconCtxData,BeaconBuddyData]
+  ReplayGetSyncPeerFn* = GetSyncPeerFn[BeaconCtxData,BeaconPeerData]
     ## Shortcut
 
-  ReplayNSyncPeersFn* = NSyncPeersFn[BeaconCtxData,BeaconBuddyData]
+  ReplayNSyncPeersFn* = NSyncPeersFn[BeaconCtxData,BeaconPeerData]
     ## Shortcut
 
   ReplayRef* = ref object of BeaconHandlersSyncRef

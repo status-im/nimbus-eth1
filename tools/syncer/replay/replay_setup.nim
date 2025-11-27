@@ -52,20 +52,20 @@ template onException(
 # Private replacement handlers
 # ------------------------------------------------------------------------------
 
-proc noOpBuddy(buddy: BeaconBuddyRef) =
+proc noOpJob(buddy: BeaconPeerRef) =
   discard
 
-proc noOpSchedStartFalse(buddy: BeaconBuddyRef): bool =
+proc noOpSchedStartFalse(buddy: BeaconPeerRef): bool =
   return false
 
-proc noOpSchedPoolTrue(a: BeaconBuddyRef, b: bool, c: int): bool =
+proc noOpSchedPoolTrue(a: BeaconPeerRef, b: bool, c: int): bool =
   return true
 
 proc noOpSchedDaemon(ctx: BeaconCtxRef):
     Future[Duration] {.async: (raises: []).} =
   return replayWaitMuted
 
-proc noOpSchedPeer(buddy: BeaconBuddyRef; rank: PeerRanking):
+proc noOpSchedPeer(buddy: BeaconPeerRef; rank: PeerRanking):
     Future[Duration] {.async: (raises: []).} =
   return replayWaitMuted
 
@@ -100,15 +100,15 @@ proc replayStartCB(rpl: ReplayRunnerRef) =
   rpl.reader =           ReplayReaderRef.init(rpl.captStrm)
   rpl.schedDaemon =      noOpSchedDaemon
   rpl.schedStart =       noOpSchedStartFalse    # `false` => don't register
-  rpl.schedStop =        noOpBuddy
+  rpl.schedStop =        noOpJob
   rpl.schedPool =        noOpSchedPoolTrue      # `true` => stop repeating
   rpl.schedPeer =        noOpSchedPeer
   rpl.getBlockHeaders =  fetchHeadersHandler    # from dispatcher
-  rpl.syncBlockHeaders = noOpBuddy
+  rpl.syncBlockHeaders = noOpJob
   rpl.getBlockBodies =   fetchBodiesHandler     # from dispatcher
-  rpl.syncBlockBodies =  noOpBuddy
+  rpl.syncBlockBodies =  noOpJob
   rpl.importBlock =      importBlockHandler     # from dispatcher
-  rpl.syncImportBlock =  noOpBuddy
+  rpl.syncImportBlock =  noOpJob
   rpl.ctx.getSyncPeer =  rpl.replayGetSyncPeerFn() # normally a scheduler sevice
   rpl.ctx.nSyncPeers =   rpl.replayNSyncPeersFn()
 

@@ -32,7 +32,7 @@ logScope:
 type
   ReplayWaitResult* = Result[void,ReplayWaitError]
 
-  ReplayInstance = ReplayDaemonRef | ReplayBuddyRef
+  ReplayInstance = ReplayDaemonRef | ReplayPeerRef
 
   ReplayMsgInstrType =   ReplayFetchHeaders | ReplaySyncHeaders |
                          ReplayFetchBodies  | ReplaySyncBodies  |
@@ -159,7 +159,7 @@ proc newPeerImpl(
     run: ReplayRunnerRef;
     instr: ReplayPeerInstrType;
     info: static[string];
-      ): Opt[ReplayBuddyRef] =
+      ): Opt[ReplayPeerRef] =
   ## Register a new peer.
   ##
   if instr.bag.peerCtx.isNone():
@@ -172,11 +172,11 @@ proc newPeerImpl(
     val.isNew = false
     return ok(val[])
 
-  var buddy = ReplayBuddyRef(
+  var buddy = ReplayPeerRef(
     isNew:            true,
     run:              run,
     ctx:              run.ctx,
-    only: BeaconBuddyData(
+    only: BeaconPeerData(
       nErrors:        instr.bag.peerCtx.value.nErrors),
     peerID:           instr.bag.peerCtx.value.peerID,
     peer: Peer(
@@ -331,7 +331,7 @@ proc unprocListsDifferImpl(
 
 
 proc peerStatesDifferImpl(
-    buddy: ReplayBuddyRef;
+    buddy: ReplayPeerRef;
     instr: ReplayAnyInstrType;
     info: static[string];
       ): bool =
@@ -379,13 +379,13 @@ func toStr*(w: BlockHashOrNumber): string =
   if w.isHash: w.hash.short else: $w.number
 
 func peerStr*(desc: ReplayInstance): string =
-  when desc is ReplayBuddyRef:
+  when desc is ReplayPeerRef:
     $desc.peer
   elif desc is ReplayDaemonRef:
     "n/a"
 
 func peerIdStr*(desc: ReplayInstance): string =
-  when desc is ReplayBuddyRef:
+  when desc is ReplayPeerRef:
     desc.peerID.short
   elif desc is ReplayDaemonRef:
     "n/a"
@@ -396,7 +396,7 @@ func frameIdStr*(instr: ReplaySchedInstrType): string =
   else:
     "n/a"
 
-func frameIdStr*(desc: ReplayBuddyRef|ReplayDaemonRef): string =
+func frameIdStr*(desc: ReplayPeerRef|ReplayDaemonRef): string =
   if desc.frameID.isSome():
     desc.frameID.value.idStr
   else:
@@ -432,7 +432,7 @@ proc checkSyncerState*(
   if desc.unprocListsDifferImpl(instr, info):
     statesDiffer = true
 
-  when desc is ReplayBuddyRef:
+  when desc is ReplayPeerRef:
     if desc.peerStatesDifferImpl(instr, info):
       statesDiffer = true
 
@@ -463,7 +463,7 @@ proc getPeer*(
     run: ReplayRunnerRef;
     instr: ReplayPeerInstrType|ReplayMsgInstrType;
     info: static[string];
-      ): Opt[ReplayBuddyRef] =
+      ): Opt[ReplayPeerRef] =
   ## Get peer from peers table (if any)
   if instr.bag.peerCtx.isNone():
     warn info & ": missing peer ctx", n=run.iNum, serial=instr.bag.serial
@@ -479,7 +479,7 @@ proc newPeer*(
     run: ReplayRunnerRef;
     instr: ReplaySchedStart;
     info: static[string];
-      ): Opt[ReplayBuddyRef] =
+      ): Opt[ReplayPeerRef] =
   ## Register a new peer.
   ##
   return run.newPeerImpl(instr, info)
@@ -489,13 +489,13 @@ proc getOrNewPeerFrame*(
     run: ReplayRunnerRef;
     instr: ReplayPeerInstrType;
     info: static[string];
-      ): Opt[ReplayBuddyRef] =
+      ): Opt[ReplayPeerRef] =
   ## Get an existing one or register a new peer and set up `stage[0]`.
   ##
   if instr.bag.peerCtx.isNone():
     return err()
 
-  var buddy: ReplayBuddyRef
+  var buddy: ReplayPeerRef
   run.peers.withValue(instr.bag.peerCtx.value.peerID, val):
     buddy = val[]
     buddy.isNew = false
@@ -514,7 +514,7 @@ proc getOrNewPeerFrame*(
 
 
 proc delPeer*(
-    buddy: ReplayBuddyRef;
+    buddy: ReplayPeerRef;
     info: static[string];
       ) =
   ## Delete peer ID from registry and return the environment for the
@@ -584,7 +584,7 @@ proc waitForSyncedEnv*(
       {.async: (raises: []).} =
   ## ..
   ##
-  when desc is ReplayBuddyRef:
+  when desc is ReplayPeerRef:
     # The scheduler (see `sync_sched.nim`)  might have disconnected the peer
     # already as is captured in the instruction environment. This does not
     # apply to `zombie` settings which will be done by the application.
@@ -788,7 +788,7 @@ template withInstr*(
       doAssert desc.message.recType == dataType
       doAssert instr.bag.serial == desc.iNum
 
-      when desc is ReplayBuddyRef:
+      when desc is ReplayPeerRef:
         # The scheduler (see `sync_sched.nim`)  might have disconnected the
         # peer already which would be captured in the instruction environment.
         # This does not apply to `zombie` settings which will be handled by

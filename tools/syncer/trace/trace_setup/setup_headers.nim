@@ -27,7 +27,7 @@ logScope:
 # ------------------------------------------------------------------------------
 
 proc fetchHeadersTrace*(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
     req: BlockHeadersRequest;
     bn: BlockNumber;
       ): Future[Result[FetchHeadersData,BeaconError]]
@@ -54,7 +54,7 @@ proc fetchHeadersTrace*(
   return data
 
 proc syncHeadersTrace*(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
       ) =
   ## Replacement for `syncBlockHeaders()` handler,
   ##

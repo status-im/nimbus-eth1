@@ -12,7 +12,8 @@
 
 import
   pkg/[chronos, chronicles, eth/common, stew/interval_set],
-  ../../../execution_chain/sync/beacon/worker/[blocks, headers, worker_desc]
+  ../../../execution_chain/sync/beacon/worker/[
+    blocks, headers, helpers, worker_desc]
 
 logScope:
   topics = "beacon ticker"
@@ -43,10 +44,11 @@ type
     blkStagedBottom: BlockNumber
 
     state: SyncState
+    standByMode: bool
     nSyncPeers: int
     eta: chronos.Duration
 
-  TickerRef* = ref object of RootRef
+  TickerRef = ref object
     ## Ticker descriptor object
     started: Moment
     visited: Moment
@@ -59,6 +61,7 @@ type
 const
   tickerLogInterval = chronos.seconds(2)
   tickerLogSuppressMax = chronos.seconds(100)
+  tickerLogStandByMax = chronos.seconds(200)
 
 proc updater(ctx: BeaconCtxRef): TickerStats =
   ## Legacy stuff, will be probably be superseded by `metrics`
@@ -86,6 +89,7 @@ proc updater(ctx: BeaconCtxRef): TickerStats =
     nBlkUnprocFragm: ctx.blk.unprocessed.chunks,
 
     state:           ctx.pool.syncState,
+    standByMode:     ctx.pool.standByMode,
     nSyncPeers:      ctx.nSyncPeers(),
     eta:             ctx.pool.syncEta.avg)
 
@@ -93,72 +97,82 @@ proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
   let
     data = ctx.updater()
     now = Moment.now()
+    elapsed = now - t.visited
 
-  if now <= t.visited + tickerLogInterval:
+  if elapsed <= tickerLogInterval:
     return
 
-  if data != t.lastStats or
-    tickerLogSuppressMax < (now - t.visited):
-    let
-      B = if data.base == data.latest: "L" else: $data.base
-      L = if data.latest == data.coupler: "C" else: $data.latest
-      I = if data.top == 0: "n/a" else : $data.top
-      C = if data.coupler == data.dangling: "D"
-          elif data.coupler < high(int64).uint64: $data.coupler
-          else: "n/a"
-      D = if data.dangling == data.head: "H" else: $data.dangling
-      H = if data.head == data.target: "T"
-          elif data.activeOk: $data.head
-          else: "?" & $data.head
-      T = if data.activeOk: $data.target else: "?" & $data.target
-      F = if data.fin == 0: "n/a"
-          elif data.fin == data.target and data.activeOk: "T"
-          elif data.fin == data.head: "H"
-          elif data.fin == data.dangling: "D"
-          elif data.fin == data.latest: "L"
-          elif data.fin == data.base: "B"
-          else: $data.fin
+  if data.standByMode:
+    if elapsed <= tickerLogStandByMax:
+      return
+  elif data == t.lastStats and
+       elapsed <= tickerLogSuppressMax:
+    return
 
-      hS = if data.nHdrStaged == 0: "n/a"
-          else: $data.hdrStagedTop & "[" & $data.nHdrStaged & "]"
-      hU = if data.nHdrUnprocFragm == 0 and data.nHdrUnprocessed == 0: "n/a"
-          elif data.hdrUnprocTop == 0:
-            "(" & data.nHdrUnprocessed.toSI & "," & $data.nHdrUnprocFragm & ")"
-          else: $data.hdrUnprocTop & "(" &
-                data.nHdrUnprocessed.toSI & "," & $data.nHdrUnprocFragm & ")"
-      hQ = if hS == "n/a": hU
-           elif hU == "n/a": hS
-           else: hS & "<-" & hU
+  let
+    B = if data.base == data.latest: "L" else: $data.base
+    L = if data.latest == data.coupler: "C" else: $data.latest
+    I = if data.top == 0: "n/a" else : $data.top
+    C = if data.coupler == data.dangling: "D"
+        elif data.coupler < high(int64).uint64: $data.coupler
+        else: "n/a"
+    D = if data.dangling == data.head: "H" else: $data.dangling
+    H = if data.head == data.target: "T"
+        elif data.activeOk: $data.head
+        else: "?" & $data.head
+    T = if data.activeOk: $data.target else: "?" & $data.target
+    F = if data.fin == 0: "n/a"
+        elif data.fin == data.target and data.activeOk: "T"
+        elif data.fin == data.head: "H"
+        elif data.fin == data.dangling: "D"
+        elif data.fin == data.latest: "L"
+        elif data.fin == data.base: "B"
+        else: $data.fin
 
-      bS = if data.nBlkStaged == 0: "n/a"
-          else: $data.blkStagedBottom & "[" & $data.nBlkStaged & "]"
-      bU = if data.nBlkUnprocFragm == 0 and data.nBlkUnprocessed == 0: "n/a"
-          elif data.blkUnprocBottom == high(BlockNumber):
-            "(" & data.nBlkUnprocessed.toSI & "," & $data.nBlkUnprocFragm & ")"
-          else: $data.blkUnprocBottom & "(" &
-                data.nBlkUnprocessed.toSI & "," & $data.nBlkUnprocFragm & ")"
-      bQ = if bS == "n/a": bU
-           elif bU == "n/a": bS
-           else: bS & "<-" & bU
+    hS = if data.nHdrStaged == 0: "n/a"
+        else: $data.hdrStagedTop & "[" & $data.nHdrStaged & "]"
+    hU = if data.nHdrUnprocFragm == 0 and data.nHdrUnprocessed == 0: "n/a"
+        elif data.hdrUnprocTop == 0:
+          "(" & data.nHdrUnprocessed.toSI & "," & $data.nHdrUnprocFragm & ")"
+        else: $data.hdrUnprocTop & "(" &
+              data.nHdrUnprocessed.toSI & "," & $data.nHdrUnprocFragm & ")"
+    hQ = if hS == "n/a": hU
+         elif hU == "n/a": hS
+         else: hS & "<-" & hU
 
-      st = case data.state
-        of idle: "0"
-        of headers: "h"
-        of headersCancel: "x"
-        of headersFinish: "f"
-        of blocks: "b"
-        of blocksCancel: "x"
-        of blocksFinish: "f"
+    bS = if data.nBlkStaged == 0: "n/a"
+        else: $data.blkStagedBottom & "[" & $data.nBlkStaged & "]"
+    bU = if data.nBlkUnprocFragm == 0 and data.nBlkUnprocessed == 0: "n/a"
+        elif data.blkUnprocBottom == high(BlockNumber):
+          "(" & data.nBlkUnprocessed.toSI & "," & $data.nBlkUnprocFragm & ")"
+        else: $data.blkUnprocBottom & "(" &
+              data.nBlkUnprocessed.toSI & "," & $data.nBlkUnprocFragm & ")"
+    bQ = if bS == "n/a": bU
+         elif bU == "n/a": bS
+         else: bS & "<-" & bU
 
-      nP = data.nSyncPeers
+    st = case data.state
+      of idle: "0"
+      of headers: "h"
+      of headersCancel: "x"
+      of headersFinish: "f"
+      of blocks: "b"
+      of blocksCancel: "x"
+      of blocksFinish: "f"
 
-      # With `int64`, there are more than 29*10^10 years range for seconds
-      up = (now - t.started).toStr
-      eta = data.eta.toStr
+    nP = data.nSyncPeers
 
-    t.lastStats = data
-    t.visited = now
+    # With `int64`, there are more than 29*10^10 years range for seconds
+    up = (now - t.started).toStr
+    eta = data.eta.toStr
 
+  t.lastStats = data
+  t.visited = now
+
+  if data.standByMode:
+    debug "Sync stand-by mode", up, eta, nP, B, L,
+      D, H, T, F
+  else:
     case data.state
     of idle:
       debug "Sync state idle", up, eta, nP, B, L,
@@ -176,7 +190,7 @@ proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
 # Public function
 # ------------------------------------------------------------------------------
 
-proc syncTicker*(): BackgroundTicker =
+proc syncTicker*(): Ticker =
   let desc = TickerRef(started: Moment.now())
   return proc(ctx: BeaconCtxRef) =
     desc.tickerLogger(ctx)

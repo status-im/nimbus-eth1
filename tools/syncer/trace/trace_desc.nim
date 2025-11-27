@@ -28,7 +28,7 @@ export
   worker_desc
 
 const
-  TraceVersionID* = 20251119
+  TraceVersionID* = 20251203
 
   TraceSetupID* = 1                   ## Phase 1 layout ID, prepare
   TraceRunnerID* = 10                 ## Phase 2 layout ID, full execution
@@ -89,9 +89,9 @@ type
 
   TracePeerCtx* = object
     ## Optional sub-object for `TraceRecBase`
-    peerCtrl*: BuddyRunState          ## Sync peer run state
+    peerCtrl*: SyncPeerRunState       ## Sync peer run state
     peerID*: Hash                     ## Sync peer ID (if any)
-    nErrors*: BuddyErrors             ## Peer errors
+    nErrors*: PeerErrors              ## Peer errors
 
   TraceRecBase* = object of RootObj
     ## Trace context applicable with and without known peer

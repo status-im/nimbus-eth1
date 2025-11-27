@@ -47,7 +47,7 @@ proc toBnRange(
 # ------------------------------------------------------------------------------
 
 proc fetchBodiesTrace*(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
     req: BlockBodiesRequest;
       ): Future[Result[FetchBodiesData,BeaconError]]
       {.async: (raises: []).} =
@@ -73,7 +73,7 @@ proc fetchBodiesTrace*(
   return data
 
 proc syncBodiesTrace*(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
       ) =
   ## Replacement for `syncBlockBodies()` handler.
   var tRec: TraceSyncBodies
@@ -85,7 +85,7 @@ proc syncBodiesTrace*(
 
 
 proc importBlockTrace*(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
     ethBlock: EthBlock;
     effPeerID: Hash;
       ): Future[Result[Duration,BeaconError]]
@@ -111,7 +111,7 @@ proc importBlockTrace*(
   return data
 
 proc syncBlockTrace*(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
       ) =
   ## Replacement for `syncImportBlock()` handler.
   var tRec: TraceSyncBlock

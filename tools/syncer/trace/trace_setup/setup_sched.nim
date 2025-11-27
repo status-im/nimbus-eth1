@@ -25,10 +25,10 @@ logScope:
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc getIP(buddy: BeaconBuddyRef): IpAddress =
+proc getIP(buddy: BeaconPeerRef): IpAddress =
   buddy.peer.remote.node.address.ip
 
-proc getPort(buddy: BeaconBuddyRef): Port =
+proc getPort(buddy: BeaconPeerRef): Port =
   let peer = buddy.peer
   if peer.remote.node.address.tcpPort != Port(0):
     peer.remote.node.address.tcpPort
@@ -74,7 +74,7 @@ proc schedDaemonTrace*(
   return idleTime
 
 
-proc schedStartTrace*(buddy: BeaconBuddyRef): bool =
+proc schedStartTrace*(buddy: BeaconPeerRef): bool =
   ## Similar to `schedDaemonTrace()`
   ##
   let
@@ -97,7 +97,7 @@ proc schedStartTrace*(buddy: BeaconBuddyRef): bool =
   acceptOk
 
 
-proc schedStopTrace*(buddy: BeaconBuddyRef) =
+proc schedStopTrace*(buddy: BeaconPeerRef) =
   ## Similar to `schedDaemonTrace()`
   ##
   let ctx = buddy.ctx
@@ -117,7 +117,7 @@ proc schedStopTrace*(buddy: BeaconBuddyRef) =
       frameID=tRec.frameID.value.idStr, syncState=tRec.syncState
 
 
-proc schedPoolTrace*(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
+proc schedPoolTrace*(buddy: BeaconPeerRef; last: bool; laps: int): bool =
   ## Similar to `schedDaemonTrace()`
   ##
   let stopOk = buddy.ctx.trace.backup.schedPool(buddy, last, laps)
@@ -139,7 +139,7 @@ proc schedPoolTrace*(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
 
 
 proc schedPeerTrace*(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
     rank: PeerRanking;
       ): Future[Duration]
       {.async: (raises: []).} =

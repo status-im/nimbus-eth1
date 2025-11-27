@@ -55,14 +55,14 @@ func getBeaconError(e: ReplayWaitError): BeaconError =
 # ------------------------------------------------------------------------------
 
 proc fetchHeadersHandler*(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
     req: BlockHeadersRequest;
     bn: BlockNumber;
       ): Future[Result[FetchHeadersData,BeaconError]]
       {.async: (raises: []).} =
   ## Replacement for `getBlockHeaders()` handler.
   const info = "&fetchHeaders"
-  let buddy = ReplayBuddyRef(buddy)
+  let buddy = ReplayPeerRef(buddy)
 
   var data: ReplayFetchHeaders
   buddy.withInstr(typeof data, rlxBaseNum=false, ignLatestNum=false, info):

@@ -43,7 +43,7 @@ proc toBnRange(
 
 proc toStr(
     lst: openArray[Hash32];
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
     info: static[string];
       ): string =
   buddy.ctx.toBnRange(lst, info).toStr
@@ -85,13 +85,13 @@ func getBeaconError(e: ReplayWaitError): BeaconError =
 # ------------------------------------------------------------------------------
 
 proc fetchBodiesHandler*(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
     req: BlockBodiesRequest;
       ): Future[Result[FetchBodiesData,BeaconError]]
       {.async: (raises: []).} =
   const info = "&fetchBodies"
 
-  let buddy = ReplayBuddyRef(buddy)
+  let buddy = ReplayPeerRef(buddy)
 
   var data: ReplayFetchBodies
   buddy.withInstr(typeof data, rlxBaseNum=true, ignLatestNum=true, info):
@@ -118,7 +118,7 @@ proc fetchBodiesHandler*(
 
 
 proc importBlockHandler*(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
     ethBlock: EthBlock;
     effPeerID: Hash;
       ): Future[Result[Duration,BeaconError]]
@@ -126,7 +126,7 @@ proc importBlockHandler*(
   const info = "&importBlock"
 
   let
-    buddy = ReplayBuddyRef(buddy)
+    buddy = ReplayPeerRef(buddy)
     n = buddy.iNum
     peer = buddy.peerStr
     peerID = buddy.peerIdStr

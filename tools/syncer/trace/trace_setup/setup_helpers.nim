@@ -59,7 +59,7 @@ proc init*(tb: var TraceRecBase; ctx: BeaconCtxRef) =
     tb.slowPeer = ctx.pool.lastSlowPeer
 
 
-proc init*(tb: var TraceRecBase; buddy: BeaconBuddyRef) =
+proc init*(tb: var TraceRecBase; buddy: BeaconPeerRef) =
   ## Variant of `init()` for `buddy` rather than `ctx`
   let
     ctx = buddy.ctx
