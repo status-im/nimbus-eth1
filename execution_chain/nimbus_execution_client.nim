@@ -12,6 +12,12 @@
 import
   ../execution_chain/compile_info
 
+import chronos/futures
+
+proc workaround_future_string*(): string {.exportc.} =
+  # TODO https://github.com/nim-lang/Nim/issues/24844
+  return Future[string]().internalValue
+
 import
   chronicles,
   eth/net/nat,
