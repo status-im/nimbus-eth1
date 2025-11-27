@@ -484,6 +484,22 @@ type
         defaultValueDesc: "\"jwt.hex\" in the data directory (see --data-dir)"
         name: "debug-jwt-secret-value" .}: Option[string]
 
+      snapSyncEnabled* {.
+        hidden
+        desc: "Start syncer using snap to be followed by beacon sync." &
+              " Otherwise, a full sync will be performed by starting beacon" &
+              " sync immediately"
+        defaultValue: false
+        name: "debug-snap-sync" .}: bool
+
+      snapServerEnabled* {.
+        hidden
+        desc: "Always start the snap peer service, even when snap sync is" &
+              " disabled. With snap sync enabled, the snap peer service is" &
+              " also available"
+        defaultValue: false
+        name: "debug-snap-server" .}: bool
+
       beaconSyncTarget* {.
         hidden
         desc: "Manually set the initial sync target specified by its 32 byte" &
