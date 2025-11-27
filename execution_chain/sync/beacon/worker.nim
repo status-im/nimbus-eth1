@@ -203,6 +203,10 @@ template runPeer*(
         bodyRc = workerIdleLongWaitInterval
       break body
 
+    elif buddy.ctx.pool.syncState == SyncState.standByMode:
+      bodyRc = workerIdleLongWaitInterval
+      break body
+
     # Idle sleep unless there is something to do
     if not buddy.somethingToCollectOrUnstage():
       bodyRc = workerIdleWaitInterval

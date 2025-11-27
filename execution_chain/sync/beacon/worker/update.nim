@@ -170,22 +170,29 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
   ##
   # State machine
   # ::
-  #     idle <---------------+---+---+---.
-  #      |                   ^   ^   ^   |
-  #      v                   |   |   |   |
-  #     headers -> headersCancel |   |   |
-  #      |                       |   |   |
-  #      v                       |   |   |
-  #     headersFinish -----------'   |   |
-  #      |                           |   |
-  #      v                           |   |
-  #     blocks -> blocksCancel ------'   |
-  #      |                               |
-  #      v                               |
-  #     blocksFinish --------------------'
+  #     idle <-----------------------.
+  #      |                           |
+  #      v                           |
+  #     headers -> headersCancel --> +
+  #      |                           |
+  #      v                           |
+  #     headersFinish -------------> +
+  #      |                           |
+  #      v                           |
+  #     blocks -> blocksCancel ----> +
+  #      |                           |
+  #      v                           |
+  #     blocksFinish --------------> +
+  #                                  |
+  #                                  |
+  #     standByMode -----------------'
   #
   let newState =
     case ctx.pool.syncState:
+    of standByMode:
+      # Must be set externally to get out of that state
+      return
+
     of idle:
       ctx.idleNext info
 
@@ -248,6 +255,9 @@ proc updateLastBlockImported*(ctx: BeaconCtxRef; bn: BlockNumber) =
 proc updateActivateSyncer*(ctx: BeaconCtxRef) =
   ## If in hibernate mode, accept a cache session and activate syncer
   ##
+  if ctx.pool.syncState == standByMode:         # waiting for clear
+    return
+
   if ctx.hibernate and                          # only in idle mode
      ctx.pool.minInitBuddies <= ctx.nSyncPeers() and
      ctx.pool.initTarget.isNone():              # otherwise manual setup

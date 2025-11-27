@@ -75,6 +75,7 @@ proc config*(
     ethNode: EthereumNode;
     chain: ForkedChainRef;
     maxPeers: int;
+    standByMode = false;
       ) =
   ## Complete `BeaconSyncRef` descriptor initialisation.
   ##
@@ -84,6 +85,8 @@ proc config*(
   doAssert desc.ctx.isNil # This can only run once
   desc.initSync(ethNode, maxPeers)
   desc.ctx.pool.chain = chain
+  if standByMode:
+    desc.ctx.pool.syncState = SyncState.standByMode
 
   if not desc.lazyConfigHook.isNil:
     desc.lazyConfigHook(desc)
@@ -98,6 +101,13 @@ proc configTarget*(desc: BeaconSyncRef; hex: string; isFinal: bool): bool =
   except ValueError:
     discard
   # false
+
+
+proc activate*(desc: BeaconSyncRef) =
+  ## Clear stand-by mode (if any)
+  doAssert not desc.ctx.isNil
+  if desc.ctx.pool.syncState == SyncState.standByMode:
+    desc.ctx.pool.syncState = SyncState.idle
 
 proc start*(desc: BeaconSyncRef): bool =
   doAssert not desc.ctx.isNil
