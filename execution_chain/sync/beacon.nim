@@ -101,11 +101,14 @@ proc configTarget*(desc: BeaconSyncRef; hex: string; isFinal: bool): bool =
 
 proc start*(desc: BeaconSyncRef): bool =
   doAssert not desc.ctx.isNil
-  desc.startSync()
+  if not desc.isRunning and desc.startSync():
+    return true
+  # false
 
 proc stop*(desc: BeaconSyncRef) {.async.} =
   doAssert not desc.ctx.isNil
-  await desc.stopSync()
+  if desc.isRunning:
+    await desc.stopSync()
 
 # ------------------------------------------------------------------------------
 # End

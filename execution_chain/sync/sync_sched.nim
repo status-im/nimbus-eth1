@@ -635,9 +635,13 @@ proc startSync*[S,W](dsc: RunnerSyncRef[S,W]): bool =
       asyncSpawn dsc.tickerLoop()
       return true
 
+proc isRunning*[S,W](dsc: RunnerSyncRef[S,W]): bool =
+  dsc.runCtrl != terminated
+
 proc stopSync*[S,W](dsc: RunnerSyncRef[S,W]) {.async.} =
   ## Stop syncing and free peer handlers .
-  await dsc.terminate()
+  if dsc.runCtrl != terminated:
+    await dsc.terminate()
 
 # ------------------------------------------------------------------------------
 # End
