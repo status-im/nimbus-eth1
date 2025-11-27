@@ -25,7 +25,7 @@ import
   chronicles, chronos
 
 export
-  common, state
+  common, balTrackerEnabled
 
 logScope:
   topics = "vm computation"
@@ -286,15 +286,14 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
         # Transfer to beneficiary
         c.vmState.balTracker.trackAddBalanceChange(beneficiary, localBalance)
         db.addBalance(beneficiary, localBalance)
-        if db.shouldSelfDestruct6780(c.msg.contractAddress):
+        if db.selfDestruct6780(c.msg.contractAddress):
           c.vmState.balTracker.trackInTransactionSelfDestruct(c.msg.contractAddress)
-        db.selfDestruct6780(c.msg.contractAddress)
       else:
         # Zeroing contract balance except beneficiary is the same address
         db.subBalance(c.msg.contractAddress, localBalance)
         # Transfer to beneficiary
         db.addBalance(beneficiary, localBalance)
-        db.selfDestruct6780(c.msg.contractAddress)
+        discard db.selfDestruct6780(c.msg.contractAddress)
     else:
       if c.vmState.balTrackerEnabled:
         # Transfer to beneficiary
