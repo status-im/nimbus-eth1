@@ -36,7 +36,7 @@ proc nUnprocStr(ctx: BeaconCtxRef): string =
 # Public functions
 # ------------------------------------------------------------------------------
 
-func headersCollectOk*(buddy: BeaconBuddyRef): bool =
+func headersCollectOk*(buddy: BeaconPeerRef): bool =
   ## Helper for `worker.nim`, etc.
   if buddy.ctrl.running:
     let ctx = buddy.ctx
@@ -46,7 +46,7 @@ func headersCollectOk*(buddy: BeaconBuddyRef): bool =
   false
 
 
-template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
+template headersCollect*(buddy: BeaconPeerRef; info: static[string]) =
   ## Async/template
   ##
   ## Collect headers and either stash them on the header chain cache directly,
@@ -213,14 +213,14 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
 
 # --------------
 
-proc headersUnstageOk*(buddy: BeaconBuddyRef): bool =
+proc headersUnstageOk*(buddy: BeaconPeerRef): bool =
   ## Check whether import processing is possible
   ##
   let ctx = buddy.ctx
   not ctx.poolMode and
   0 < ctx.hdr.staged.len
 
-proc headersUnstage*(buddy: BeaconBuddyRef; info: static[string]): bool =
+proc headersUnstage*(buddy: BeaconPeerRef; info: static[string]): bool =
   ## Store headers from the `staged` queue onto the header chain cache.
   ##
   ## The function returns `false` if the caller should make sure to allow

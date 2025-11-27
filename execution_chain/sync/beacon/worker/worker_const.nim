@@ -22,6 +22,7 @@ type
     blocks                         ## see clause *(11)* of `README.md`
     blocksCancel                   ## stop this syncer scrum
     blocksFinish                   ## get ready for `idle`
+    standByMode                    ## wait for `clear-to-activate`
 
   DownloadPerformance* = enum
     rankingTooLow = 0              ## Lower mean throughput than others

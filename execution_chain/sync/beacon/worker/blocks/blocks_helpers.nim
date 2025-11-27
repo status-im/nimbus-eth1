@@ -19,11 +19,11 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-func blkErrors*(buddy: BeaconBuddyRef): string =
+func blkErrors*(buddy: BeaconPeerRef): string =
   $buddy.nErrors.fetch.bdy & "/" & $buddy.nErrors.apply.blk
 
 proc bdyFetchRegisterError*(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
     slowPeer = false;
     forceZombie = false) =
   buddy.nErrors.fetch.bdy.inc
@@ -45,20 +45,20 @@ func blkSessionStopped*(ctx: BeaconCtxRef): bool =
   ctx.poolMode or
   ctx.pool.syncState != SyncState.blocks
 
-func blkThroughput*(buddy: BeaconBuddyRef): string =
+func blkThroughput*(buddy: BeaconPeerRef): string =
   ## Print throuhput sratistics
   buddy.only.thPutStats.blk.toMeanVar.toStr
 
 # -------------
 
 proc blkNoSampleSize*(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
     elapsed: chronos.Duration;
       ) =
   discard buddy.only.thPutStats.blk.bpsSample(elapsed, 0)
 
 proc blkSampleSize*(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
     elapsed: chronos.Duration;
     size: int;
       ): uint =
