@@ -322,9 +322,9 @@ proc configurationMain*() =
       check config.logLevel == "DEBUG"
       check config.logFormat == StdoutLogKind.Json
 
-      check config.metricsEnabled == true
-      check config.metricsPort == 127.Port
-      check config.metricsAddress == parseIpAddress("111.222.33.203")
+      check config.metrics.enabled == true
+      check config.metrics.port == 127.Port
+      check config.metrics.address == parseIpAddress("111.222.33.203")
 
       privateAccess(ExecutionClientConf)
       check config.bootstrapNodes.len == 3
