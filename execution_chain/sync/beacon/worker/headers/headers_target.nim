@@ -42,7 +42,7 @@ proc headersTargetReset*(ctx: BeaconCtxRef) =
 
 
 template headersTargetActivate*(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
     info: static[string];
       ): bool =
   ## Async/template

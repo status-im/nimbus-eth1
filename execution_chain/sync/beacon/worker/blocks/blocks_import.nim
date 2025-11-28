@@ -21,7 +21,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc importBlock*(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
     blk: EthBlock;
     effPeerID: Hash;
       ): Future[Result[Duration,BeaconError]]

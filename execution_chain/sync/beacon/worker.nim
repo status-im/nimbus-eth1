@@ -33,7 +33,7 @@ proc release*(ctx: BeaconCtxRef; info: static[string]) =
   ctx.destroyServices()
 
 
-proc start*(buddy: BeaconBuddyRef; info: static[string]): bool =
+proc start*(buddy: BeaconPeerRef; info: static[string]): bool =
   ## Initialise worker peer
   let
     peer = buddy.peer
@@ -43,7 +43,7 @@ proc start*(buddy: BeaconBuddyRef; info: static[string]): bool =
     if not ctx.hibernate: debug info & ": useless peer already tried", peer
     return false
 
-  if not buddy.startBuddy():
+  if not buddy.startSyncPeer():
     if not ctx.hibernate: debug info & ": failed", peer
     return false
 
@@ -51,12 +51,12 @@ proc start*(buddy: BeaconBuddyRef; info: static[string]): bool =
     peer, nSyncPeers=ctx.nSyncPeers()
   true
 
-proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
+proc stop*(buddy: BeaconPeerRef; info: static[string]) =
   ## Clean up this peer
   if not buddy.ctx.hibernate: debug info & ": release peer", peer=buddy.peer,
     thPut=buddy.only.thPutStats.toMeanVar.toStr,
     nSyncPeers=(buddy.ctx.nSyncPeers()-1), state=($buddy.syncState)
-  buddy.stopBuddy()
+  buddy.stopSyncPeer()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -105,7 +105,7 @@ template runDaemon*(ctx: BeaconCtxRef; info: static[string]): Duration =
 
 
 proc runPool*(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
     last: bool;
     laps: int;
     info: static[string];
@@ -130,7 +130,7 @@ proc runPool*(
 
 
 template runPeer*(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
     rank: PeerRanking;
     info: static[string];
       ): Duration =
@@ -201,6 +201,10 @@ template runPeer*(
       # Potentially a manual sync target set up
       if not buddy.headersTargetActivate info:
         bodyRc = workerIdleLongWaitInterval
+      break body
+
+    elif buddy.ctx.pool.syncState == SyncState.standByMode:
+      bodyRc = workerIdleLongWaitInterval
       break body
 
     # Idle sleep unless there is something to do

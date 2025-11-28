@@ -23,7 +23,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc maybeSlowPeerError(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
     elapsed: Duration;
     bn: BlockNumber;
       ): bool =
@@ -32,7 +32,7 @@ proc maybeSlowPeerError(
     buddy.hdrFetchRegisterError(slowPeer=true)
 
     # Do not repeat the same time-consuming failed request
-    buddy.only.failedReq = BuddyFirstFetchReq(
+    buddy.only.failedReq = BcPeerFirstFetchReq(
       state:       SyncState.headers,
       blockNumber: bn)
 
@@ -40,8 +40,12 @@ proc maybeSlowPeerError(
 
   # false
 
-proc getBlockHeaders(
-    buddy: BeaconBuddyRef;
+# ------------------------------------------------------------------------------
+# Public handler
+# ------------------------------------------------------------------------------
+
+proc getBlockHeaders*(
+    buddy: BeaconPeerRef;
     req: BlockHeadersRequest;
     bn: BlockNumber;
       ): Future[Result[FetchHeadersData,BeaconError]]
@@ -77,7 +81,7 @@ proc getBlockHeaders(
 # ------------------------------------------------------------------------------
 
 template fetchHeadersReversed*(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
     ivReq: BnRange;
     topHash: Hash32;
     info: static[string];

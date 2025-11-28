@@ -42,16 +42,16 @@ proc runDaemon(ctx: BeaconCtxRef): Future[Duration] {.async: (raises: []).} =
 proc runTicker(ctx: BeaconCtxRef) =
   worker.runTicker(ctx, "Ticker")
 
-proc runStart(buddy: BeaconBuddyRef): bool =
+proc runStart(buddy: BeaconPeerRef): bool =
   worker.start(buddy, "Start")
 
-proc runStop(buddy: BeaconBuddyRef) =
+proc runStop(buddy: BeaconPeerRef) =
   worker.stop(buddy, "Stop")
 
-proc runPool(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
+proc runPool(buddy: BeaconPeerRef; last: bool; laps: int): bool =
   worker.runPool(buddy, last, laps, "SyncMode")
 
-proc runPeer(buddy: BeaconBuddyRef): Future[Duration] {.async: (raises: []).} =
+proc runPeer(buddy: BeaconPeerRef): Future[Duration] {.async: (raises: []).} =
   let rank = buddy.classifyForFetching()
   return worker.runPeer(buddy, rank, "Peer")
 
@@ -75,6 +75,7 @@ proc config*(
     ethNode: EthereumNode;
     chain: ForkedChainRef;
     maxPeers: int;
+    standByMode = false;
       ) =
   ## Complete `BeaconSyncRef` descriptor initialisation.
   ##
@@ -84,6 +85,8 @@ proc config*(
   doAssert desc.ctx.isNil # This can only run once
   desc.initSync(ethNode, maxPeers)
   desc.ctx.pool.chain = chain
+  if standByMode:
+    desc.ctx.pool.syncState = SyncState.standByMode
 
   if not desc.lazyConfigHook.isNil:
     desc.lazyConfigHook(desc)
@@ -99,13 +102,23 @@ proc configTarget*(desc: BeaconSyncRef; hex: string; isFinal: bool): bool =
     discard
   # false
 
+
+proc activate*(desc: BeaconSyncRef) =
+  ## Clear stand-by mode (if any)
+  doAssert not desc.ctx.isNil
+  if desc.ctx.pool.syncState == SyncState.standByMode:
+    desc.ctx.pool.syncState = SyncState.idle
+
 proc start*(desc: BeaconSyncRef): bool =
   doAssert not desc.ctx.isNil
-  desc.startSync()
+  if not desc.isRunning and desc.startSync():
+    return true
+  # false
 
 proc stop*(desc: BeaconSyncRef) {.async.} =
   doAssert not desc.ctx.isNil
-  await desc.stopSync()
+  if desc.isRunning:
+    await desc.stopSync()
 
 # ------------------------------------------------------------------------------
 # End

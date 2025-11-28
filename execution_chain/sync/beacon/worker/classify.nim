@@ -17,7 +17,7 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-func somethingToCollectOrUnstage*(buddy: BeaconBuddyRef): bool =
+func somethingToCollectOrUnstage*(buddy: BeaconPeerRef): bool =
   if buddy.ctx.hibernate:                        # not activated yet?
     return false
   if buddy.headersCollectOk() or                 # something on TODO list
@@ -28,7 +28,7 @@ func somethingToCollectOrUnstage*(buddy: BeaconBuddyRef): bool =
   false
 
 
-func classifyForFetching*(buddy: BeaconBuddyRef): PeerRanking =
+func classifyForFetching*(buddy: BeaconPeerRef): PeerRanking =
   ## Rank and classify peers by whether they should be used for fetching
   ## data.
   ##
@@ -46,7 +46,7 @@ func classifyForFetching*(buddy: BeaconBuddyRef): PeerRanking =
     if buddy.ctx.nSyncPeers() <= headersStagedQueueLengthMax + 1:
       return (qSlotsAvail, -1)
 
-    template hdr(b: BeaconBuddyRef): StatsCollect =
+    template hdr(b: BeaconPeerRef): StatsCollect =
       b.only.thPutStats.hdr
 
     # Are there throughput data available for this peer (aka buddy), at all?
@@ -76,7 +76,7 @@ func classifyForFetching*(buddy: BeaconBuddyRef): PeerRanking =
     if buddy.ctx.nSyncPeers() <= blocksStagedQueueLengthMax + 1:
       return (qSlotsAvail, -1)
 
-    template blk(b: BeaconBuddyRef): StatsCollect =
+    template blk(b: BeaconPeerRef): StatsCollect =
       b.only.thPutStats.blk
 
     if buddy.blk.samples == 0:

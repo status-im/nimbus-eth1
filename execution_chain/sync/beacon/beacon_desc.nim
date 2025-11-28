@@ -21,7 +21,7 @@ type
   BeaconSyncConfigHook* = proc(desc: BeaconSyncRef) {.gcsafe, raises: [].}
     ## Conditional configuration request hook
 
-  BeaconSyncRef* = ref object of RunnerSyncRef[BeaconCtxData,BeaconBuddyData]
+  BeaconSyncRef* = ref object of RunnerSyncRef[BeaconCtxData,BeaconPeerData]
     ## Instance descriptor, extends scheduler object
     lazyConfigHook*: BeaconSyncConfigHook
 

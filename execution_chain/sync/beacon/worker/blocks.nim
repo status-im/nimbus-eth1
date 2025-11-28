@@ -36,7 +36,7 @@ proc toStrIfAvail(bn: BlockNumber; ctx: BeaconCtxRef): string =
 # Public functions
 # ------------------------------------------------------------------------------
 
-func blocksCollectOk*(buddy: BeaconBuddyRef): bool =
+func blocksCollectOk*(buddy: BeaconPeerRef): bool =
   ## Check whether body records can be fetched and imported or stored
   ## on the `staged` queue.
   ##
@@ -49,7 +49,7 @@ func blocksCollectOk*(buddy: BeaconBuddyRef): bool =
 
 
 template blocksCollect*(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
     info: static[string]) =
   ## Async/template
   ##
@@ -136,7 +136,7 @@ template blocksCollect*(
         if ctx.subState.topNum < lastBn:
           ctx.blocksUnprocAppend(ctx.subState.topNum + 1, lastBn)
 
-        # Buddy might have been cancelled while importing blocks.
+        # Sync peer might have been cancelled while importing blocks.
         if buddy.ctrl.stopped or ctx.poolMode:
           break fetchBlocksBody                      # done, exit this block
 
@@ -207,7 +207,7 @@ template blocksCollect*(
 
 # --------------
 
-proc blocksUnstageOk*(buddy: BeaconBuddyRef): bool =
+proc blocksUnstageOk*(buddy: BeaconPeerRef): bool =
   ## Check whether import processing is possible
   ##
   let ctx = buddy.ctx
@@ -216,7 +216,7 @@ proc blocksUnstageOk*(buddy: BeaconBuddyRef): bool =
 
 
 template blocksUnstage*(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
     info: static[string];
       ): bool =
   ## Async/template

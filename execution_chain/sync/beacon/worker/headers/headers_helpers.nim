@@ -19,7 +19,7 @@ import
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc updateErrorState(buddy: BeaconBuddyRef) =
+proc updateErrorState(buddy: BeaconPeerRef) =
   ## Helper/wrapper
   if ((0 < buddy.nErrors.fetch.hdr or
        0 < buddy.nErrors.apply.hdr) and buddy.ctrl.stopped) or
@@ -33,10 +33,10 @@ proc updateErrorState(buddy: BeaconBuddyRef) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-func hdrErrors*(buddy: BeaconBuddyRef): string =
+func hdrErrors*(buddy: BeaconPeerRef): string =
   $buddy.nErrors.fetch.hdr & "/" & $buddy.nErrors.apply.hdr
 
-proc hdrFetchRegisterError*(buddy: BeaconBuddyRef;
+proc hdrFetchRegisterError*(buddy: BeaconPeerRef;
      slowPeer = false;
      forceZombie = false;
        ) =
@@ -52,7 +52,7 @@ proc hdrFetchRegisterError*(buddy: BeaconBuddyRef;
       # abandon `slow` peer as it is not the last one in the pool
       buddy.ctrl.zombie = true
 
-proc hdrProcRegisterError*(buddy: BeaconBuddyRef) =
+proc hdrProcRegisterError*(buddy: BeaconPeerRef) =
   buddy.nErrors.apply.hdr.inc
   buddy.updateErrorState()
 
@@ -65,20 +65,20 @@ func hdrSessionStopped*(ctx: BeaconCtxRef): bool =
   ctx.pool.syncState != SyncState.headers or
   ctx.hdrCache.state != collecting
 
-func hdrThroughput*(buddy: BeaconBuddyRef): string =
+func hdrThroughput*(buddy: BeaconPeerRef): string =
   ## Print throuhput sratistics
   buddy.only.thPutStats.hdr.toMeanVar.toStr
 
 # -------------
 
 proc hdrNoSampleSize*(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
     elapsed: chronos.Duration;
       ) =
   discard buddy.only.thPutStats.hdr.bpsSample(elapsed, 0)
 
 proc hdrSampleSize*(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
     elapsed: chronos.Duration;
     size: int;
       ): uint =

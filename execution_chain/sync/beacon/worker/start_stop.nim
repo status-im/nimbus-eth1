@@ -86,7 +86,7 @@ proc destroyServices*(ctx: BeaconCtxRef) =
 
 # ---------
 
-proc startBuddy*(buddy: BeaconBuddyRef): bool =
+proc startSyncPeer*(buddy: BeaconPeerRef): bool =
   ## Convenience setting for starting a new worker
   let
     ctx = buddy.ctx
@@ -104,7 +104,7 @@ proc startBuddy*(buddy: BeaconBuddyRef): bool =
     return true
 
 
-proc stopBuddy*(buddy: BeaconBuddyRef) =
+proc stopSyncPeer*(buddy: BeaconPeerRef) =
   let
     ctx = buddy.ctx
     nSyncPeers = ctx.nSyncPeers() - 1      # current peer is still registered

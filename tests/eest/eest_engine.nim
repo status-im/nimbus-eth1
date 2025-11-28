@@ -30,7 +30,13 @@ proc sendNewPayload(env: TestEnv, version: uint64, param: PayloadParam): Result[
   if not env.client.isSome:
     return err("Client is not initialized")
 
-  if version == 3:
+  if version == 1:
+    env.client.get().newPayloadV1(
+      param.payload)
+  elif version == 2:
+    env.client.get().newPayloadV2(
+      param.payload)
+  elif version == 3:
     env.client.get().newPayloadV3(
       param.payload,
       param.versionedHashes,
@@ -40,17 +46,30 @@ proc sendNewPayload(env: TestEnv, version: uint64, param: PayloadParam): Result[
       param.payload,
       param.versionedHashes,
       param.parentBeaconBlockRoot,
-      param.excutionRequests)
+      param.executionRequests)
+  elif version == 5:
+    env.client.get().newPayloadV5(
+      param.payload,
+      param.versionedHashes,
+      param.parentBeaconBlockRoot,
+      param.executionRequests)
   else:
     err("Unsupported NewPayload version: " & $version)
 
 proc sendFCU(env: TestEnv, version: uint64, param: PayloadParam): Result[ForkchoiceUpdatedResponse, string] =
+  if not env.client.isSome:
+    return err("Client is not initialized")
+
   let update = ForkchoiceStateV1(
     headblockHash:      param.payload.blockHash,
     finalizedblockHash: param.payload.blockHash
   )
 
-  if version == 3 and env.client.isSome:
+  if version == 1:
+    env.client.get().forkchoiceUpdatedV1(update)
+  elif version == 2:
+    env.client.get().forkchoiceUpdatedV2(update)
+  elif version == 3:
     env.client.get().forkchoiceUpdatedV3(update)
   else:
     err("Unsupported FCU version: " & $version)
@@ -60,8 +79,12 @@ proc runTest(env: TestEnv, unit: EngineUnitEnv): Result[void, string] =
     return err("Client is not initialized")
 
   for enp in unit.engineNewPayloads:
+
     var status = env.sendNewPayload(enp.newPayloadVersion.uint64, enp.params).valueOr:
-      return err(error)
+      if enp.validationError.isSome():
+        continue
+      else:
+        return err(error)
 
     discard status
     when false:
@@ -80,8 +103,7 @@ proc runTest(env: TestEnv, unit: EngineUnitEnv): Result[void, string] =
       if status.validationError.isSome:
         return err(status.validationError.value)
 
-  let header = env.client.get().latestHeader().valueOr:
-    return err(error)
+  let header = env.chain.latestHeader()
 
   if unit.lastblockhash != header.computeRlpHash:
     return err("last block hash mismatch")

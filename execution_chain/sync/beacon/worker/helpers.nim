@@ -82,7 +82,7 @@ func `$`*(w: Interval[BlockNumber,uint64]): string =
 func `$`*(w: (SyncState,HeaderChainMode,bool)): string =
   $w[0] & "." & $w[1] & (if w[2]: ":" & "poolMode" else: "")
 
-func `$`*(w: (BuddyRunState,SyncState,HeaderChainMode,bool)): string =
+func `$`*(w: (SyncPeerRunState,SyncState,HeaderChainMode,bool)): string =
   $w[0] & ":" & $(w[1],w[2],w[3])
 
 # End

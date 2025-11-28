@@ -40,7 +40,7 @@ func toStr(e: BeaconError): string =
 # ------------------------------------------------------------------------------
 
 template blocksFetchCheckImpl(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
     iv: BnRange;
     info: static[string];
       ): Opt[seq[EthBlock]] =
@@ -136,7 +136,7 @@ template blocksFetchCheckImpl(
 # ------------------------------------------------------------------------------
 
 template blocksFetch*(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
     num: uint;
     info: static[string];
       ): Opt[seq[EthBlock]] =
@@ -180,7 +180,7 @@ template blocksFetch*(
 
 
 template blocksImport*(
-    buddy: BeaconBuddyRef;
+    buddy: BeaconPeerRef;
     blocks: seq[EthBlock];
     peerID: Hash;
     info: static[string];
