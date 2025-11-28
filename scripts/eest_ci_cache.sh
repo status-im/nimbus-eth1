@@ -63,15 +63,20 @@ download_and_extract() {
   tar -xzf "${archive}" -C "${dest_dir}" --strip-components=1
 
   rm -rf "${dest_dir}/.meta"
+
   mv "${dest_dir}/blockchain_tests/static/state_tests/"* "${dest_dir}/blockchain_tests" 2>/dev/null || true
   rm -rf "${dest_dir}/blockchain_tests/static"
 
-  mkdir -p "${dest_dir}/engine_tests"
-  mv "${dest_dir}/blockchain_tests_engine/static/state_tests/"* "${dest_dir}/engine_tests" 2>/dev/null || true
-  rm -rf "${dest_dir}/blockchain_tests_engine"
+  mv "${dest_dir}/blockchain_tests_engine/static/state_tests/"* "${dest_dir}/blockchain_tests_engine" 2>/dev/null || true
+  rm -rf "${dest_dir}/blockchain_tests_engine/static"
 
   mv "${dest_dir}/state_tests/static/state_tests/"* "${dest_dir}/state_tests" 2>/dev/null || true
   rm -rf "${dest_dir}/state_tests/static"
+
+  # Remove unused tests
+  rm -rf "${dest_dir}/blockchain_tests_engine_x"
+  rm -rf "${dest_dir}/blockchain_tests_sync"
+  rm -rf "${dest_dir}/transaction_tests"
 
   rm -f "${archive}"
 

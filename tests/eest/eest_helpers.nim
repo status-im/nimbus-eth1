@@ -69,12 +69,13 @@ type
     payload*: ExecutionPayload
     versionedHashes*: Opt[seq[Hash32]]
     parentBeaconBlockRoot*: Opt[Hash32]
-    excutionRequests*: Opt[seq[seq[byte]]]
+    executionRequests*: Opt[seq[seq[byte]]]
 
   PayloadItem* = object
     params*: PayloadParam
     newPayloadVersion*: Numero
     forkchoiceUpdatedVersion*: Numero
+    validationError*: Opt[string]
 
   EnvConfig* = object
     network*: string
@@ -156,7 +157,7 @@ proc readValue*(
       of 2:
         r.readValue(val.parentBeaconBlockRoot)
       of 3:
-        r.readValue(val.excutionRequests)
+        r.readValue(val.executionRequests)
       else:
         r.raiseUnexpectedValue("Unexpected element")
 
