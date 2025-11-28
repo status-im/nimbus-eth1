@@ -193,13 +193,6 @@ when not defined(use_system_rocksdb) and not defined(windows):
   else:
     switch("gcc.linkerexe", "g++")
 
-# This applies per-file compiler flags to C files
-# which do not support {.localPassC: "...".}
-# Unfortunately this is filename based instead of path-based
-# Assumes GCC
-
-put("secp256k1.always", "-fno-lto -fomit-frame-pointer")
-
 # ############################################################
 #
 #                    No LTO for crypto
