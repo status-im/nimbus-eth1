@@ -47,7 +47,6 @@ import
   ]
 
 const
-  defaultMetricsServerPort = 8008
   copyright = "Copyright (c) " & compileYear & " Status Research & Development GmbH"
 
 type NStartUpCmd* {.pure.} = enum
@@ -94,22 +93,7 @@ type
       defaultValue: StdoutLogKind.Auto
       name: "log-format" .}: StdoutLogKind
 
-    metricsEnabled* {.
-      desc: "Enable the built-in metrics HTTP server"
-      defaultValue: false
-      name: "metrics" .}: bool
-
-    metricsPort* {.
-      desc: "Listening port of the built-in metrics HTTP server"
-      defaultValue: defaultMetricsServerPort
-      defaultValueDesc: $defaultMetricsServerPort
-      name: "metrics-port" .}: Port
-
-    metricsAddress* {.
-      desc: "Listening IP address of the built-in metrics HTTP server"
-      defaultValue: defaultAdminListenAddress
-      defaultValueDesc: $defaultAdminListenAddressDesc
-      name: "metrics-address" .}: IpAddress
+    metrics* {.flatten.}: MetricsConf
 
     numThreads* {.
       defaultValue: 0,
@@ -219,7 +203,7 @@ proc runBeaconNode(p: BeaconThreadConfig) {.thread.} =
   let engineUrl =
     EngineApiUrl.init(&"http://127.0.0.1:{defaultEngineApiPort}/", Opt.some(jwtKey))
 
-  config.metricsEnabled = false
+  config.metrics.enabled = false
   config.elUrls.add EngineApiUrlConfigValue(
     url: engineUrl.url, jwtSecret: some toHex(distinctBase(jwtKey))
   )
@@ -265,7 +249,7 @@ proc runBeaconNode(p: BeaconThreadConfig) {.thread.} =
 
 proc runExecutionClient(p: ExecutionThreadConfig) {.thread.} =
   var config = makeConfig(ignoreUnknown = true)
-  config.metricsEnabled = false
+  config.metrics.enabled = false
   config.engineApiEnabled = true
   config.engineApiPort = Port(defaultEngineApiPort)
   config.engineApiAddress = defaultAdminListenAddress
@@ -315,7 +299,7 @@ proc runCombinedClient() =
     # permissions are insecure.
     quit QuitFailure
 
-  let metricsServer = (waitFor config.initMetricsServer()).valueOr:
+  let metricsServer = (waitFor initMetricsServer(config.metrics)).valueOr:
     quit 1
 
   # Nim GC metrics (for the main thread) will be collected in onSecond(), but

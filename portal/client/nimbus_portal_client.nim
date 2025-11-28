@@ -240,7 +240,7 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
     quit QuitFailure
 
   ## Start metrics HTTP server
-  let metricsServer = waitFor(initMetricsServer(config)).valueOr:
+  let metricsServer = waitFor(initMetricsServer(config.metrics)).valueOr:
     quit QuitFailure # Logged in initMetricsServer
 
   ## Start the Portal node.
