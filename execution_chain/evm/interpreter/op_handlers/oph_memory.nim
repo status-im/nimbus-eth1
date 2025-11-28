@@ -43,6 +43,8 @@ proc sstoreImpl(c: Computation, slot, newValue: UInt256): EvmResultVoid =
   ? c.opcodeGasCost(Sstore, res.gasCost, "SSTORE")
   c.gasMeter.refundGas(res.gasRefund)
 
+  if c.vmState.balTrackerEnabled:
+    c.vmState.balTracker.trackStorageWrite(c.msg.contractAddress, slot, newValue)
   c.vmState.mutateLedger:
     db.setStorage(c.msg.contractAddress, slot, newValue)
   ok()
@@ -63,6 +65,8 @@ proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256, coldAcces
 
   c.gasMeter.refundGas(res.gasRefund)
 
+  if c.vmState.balTrackerEnabled:
+    c.vmState.balTracker.trackStorageWrite(c.msg.contractAddress, slot, newValue)
   c.vmState.mutateLedger:
     db.setStorage(c.msg.contractAddress, slot, newValue)
   ok()

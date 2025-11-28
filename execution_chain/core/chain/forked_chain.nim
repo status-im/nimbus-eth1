@@ -515,8 +515,6 @@ proc validateBlock(c: ForkedChainRef,
     txFrame.dispose()
     return err(error)
 
-  c.writeBaggage(blk, blkHash, txFrame, receipts)
-
   # Checkpoint creates a snapshot of ancestor changes in txFrame - it is an
   # expensive operation, specially when creating a new branch (ie when blk
   # is being applied to a block that is currently not a head).

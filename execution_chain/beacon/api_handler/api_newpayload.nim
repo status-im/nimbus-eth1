@@ -41,20 +41,41 @@ func validateVersionedHashed(payload: ExecutionPayload,
   true
 
 template validateVersion(com, timestamp, payloadVersion, apiVersion) =
-  if apiVersion == Version.V4:
+  if apiVersion == Version.V5:
+    if not com.isAmsterdamOrLater(timestamp):
+      raise unsupportedFork("newPayloadV5 expect payload timestamp fall within Amsterdam")
+    if payloadVersion != Version.V4:
+      raise invalidParams("newPayload" & $apiVersion &
+      " expect ExecutionPayloadV4" &
+      " but got ExecutionPayload" & $payloadVersion)
+
+  elif apiVersion == Version.V4:
     if not com.isPragueOrLater(timestamp):
       raise unsupportedFork("newPayloadV4 expect payload timestamp fall within Prague")
+    if payloadVersion != Version.V3:
+      raise invalidParams("newPayload" & $apiVersion &
+      " expect ExecutionPayloadV3" &
+      " but got ExecutionPayload" & $payloadVersion)
 
-  if com.isPragueOrLater(timestamp):
+  elif apiVersion == Version.V3:
+    if not com.isCancunOrLater(timestamp):
+      raise unsupportedFork("newPayloadV3 expect payload timestamp fall within Cancun")
+    if payloadVersion != Version.V3:
+      raise invalidParams("newPayload" & $apiVersion &
+      " expect ExecutionPayloadV3" &
+      " but got ExecutionPayload" & $payloadVersion)
+
+  if com.isAmsterdamOrLater(timestamp):
+    if payloadVersion != Version.V4:
+      raise invalidParams("if timestamp is Amsterdam or later, " &
+        "payload must be ExecutionPayloadV4, got ExecutionPayload" & $payloadVersion)
+
+  elif com.isPragueOrLater(timestamp):
     if payloadVersion != Version.V3:
       raise invalidParams("if timestamp is Prague or later, " &
         "payload must be ExecutionPayloadV3, got ExecutionPayload" & $payloadVersion)
 
-  if apiVersion == Version.V3:
-    if not com.isCancunOrLater(timestamp):
-      raise unsupportedFork("newPayloadV3 expect payload timestamp fall within Cancun")
-
-  if com.isCancunOrLater(timestamp):
+  elif com.isCancunOrLater(timestamp):
     if payloadVersion != Version.V3:
       raise invalidParams("if timestamp is Cancun or later, " &
         "payload must be ExecutionPayloadV3, got ExecutionPayload" & $payloadVersion)
@@ -67,13 +88,6 @@ template validateVersion(com, timestamp, payloadVersion, apiVersion) =
   elif payloadVersion != Version.V1:
     raise invalidParams("if timestamp is earlier than Shanghai, " &
       "payload must be ExecutionPayloadV1, got ExecutionPayload" & $payloadVersion)
-
-  if apiVersion == Version.V3 or apiVersion == Version.V4:
-    # both newPayloadV3 and newPayloadV4 expect ExecutionPayloadV3
-    if payloadVersion != Version.V3:
-      raise invalidParams("newPayload" & $apiVersion &
-      " expect ExecutionPayload3" &
-      " but got ExecutionPayload" & $payloadVersion)
 
 template validatePayload(apiVersion, payloadVersion, payload) =
   if payloadVersion >= Version.V2:
@@ -88,6 +102,11 @@ template validatePayload(apiVersion, payloadVersion, payload) =
     if payload.excessBlobGas.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         "excessBlobGas is expected from execution payload")
+
+  if apiVersion >= Version.V5 or payloadVersion >= Version.V4:
+    if payload.blockAccessList.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        "blockAccessList is expected from execution payload")
 
 # https://github.com/ethereum/execution-apis/blob/40088597b8b4f48c45184da002e27ffc3c37641f/src/engine/prague.md#request
 func validateExecutionRequest(blockHash: Hash32,

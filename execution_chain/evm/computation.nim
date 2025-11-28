@@ -25,7 +25,7 @@ import
   chronicles, chronos
 
 export
-  common
+  common, balTrackerEnabled
 
 logScope:
   topics = "vm computation"
@@ -81,23 +81,34 @@ proc getBlockHash*(c: Computation, number: BlockNumber): Hash32 =
   c.vmState.getAncestorHash(number)
 
 template accountExists*(c: Computation, address: Address): bool =
+  if c.vmState.balTrackerEnabled:
+    c.vmState.balTracker.trackAddressAccess(address)
+
   if c.fork >= FkSpurious:
     not c.vmState.readOnlyLedger.isDeadAccount(address)
   else:
     c.vmState.readOnlyLedger.accountExists(address)
 
 template getStorage*(c: Computation, slot: UInt256): UInt256 =
+  if c.vmState.balTrackerEnabled:
+    c.vmState.balTracker.trackStorageRead(c.msg.contractAddress, slot)
   c.vmState.readOnlyLedger.getStorage(c.msg.contractAddress, slot)
 
 template getBalance*(c: Computation, address: Address): UInt256 =
+  if c.vmState.balTrackerEnabled:
+    c.vmState.balTracker.trackAddressAccess(address)
   c.vmState.readOnlyLedger.getBalance(address)
 
 template getCodeSize*(c: Computation, address: Address): uint =
+  if c.vmState.balTrackerEnabled:
+    c.vmState.balTracker.trackAddressAccess(address)
   uint(c.vmState.readOnlyLedger.getCodeSize(address))
 
 template getCodeHash*(c: Computation, address: Address): Hash32 =
-  let
-    db = c.vmState.readOnlyLedger
+  if c.vmState.balTrackerEnabled:
+    c.vmState.balTracker.trackAddressAccess(address)
+
+  let db = c.vmState.readOnlyLedger
   if not db.accountExists(address) or db.isEmptyAccount(address):
     default(Hash32)
   else:
@@ -107,6 +118,8 @@ template selfDestruct*(c: Computation, address: Address) =
   c.execSelfDestruct(address)
 
 template getCode*(c: Computation, address: Address): CodeBytesRef =
+  if c.vmState.balTrackerEnabled:
+    c.vmState.balTracker.trackAddressAccess(address)
   c.vmState.readOnlyLedger.getCode(address)
 
 template setTransientStorage*(c: Computation, slot, val: UInt256) =
@@ -151,9 +164,13 @@ func shouldBurnGas*(c: Computation): bool =
   c.isError and c.error.burnsGas
 
 proc snapshot*(c: Computation) =
+  if c.vmState.balTrackerEnabled:
+    c.vmState.balTracker.beginCallFrame()
   c.savePoint = c.vmState.ledger.beginSavepoint()
 
 proc commit*(c: Computation) =
+  if c.vmState.balTrackerEnabled:
+    c.vmState.balTracker.commitCallFrame()
   c.vmState.ledger.commit(c.savePoint)
 
 proc dispose*(c: Computation) =
@@ -167,6 +184,8 @@ proc dispose*(c: Computation) =
   c.savePoint = nil
 
 proc rollback*(c: Computation) =
+  if c.vmState.balTrackerEnabled:
+    c.vmState.balTracker.rollbackCallFrame()
   c.vmState.ledger.rollback(c.savePoint)
 
 func setError*(c: Computation, msg: sink string, burnsGas = false) =
@@ -228,6 +247,8 @@ proc writeContract*(c: Computation) =
       reason = "Write new contract code").
         expect("enough gas since we checked against gasRemaining")
     c.vmState.mutateLedger:
+      if c.vmState.balTrackerEnabled:
+        c.vmState.balTracker.trackCodeChange(c.msg.contractAddress, c.output)
       db.setCode(c.msg.contractAddress, c.output)
     withExtra trace, "Writing new contract code"
     return
@@ -258,18 +279,32 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
 
     # Register the account to be deleted
     if c.fork >= FkCancun:
-      # Zeroing contract balance except beneficiary
-      # is the same address
-      db.subBalance(c.msg.contractAddress, localBalance)
-
-      # Transfer to beneficiary
-      db.addBalance(beneficiary, localBalance)
-
-      db.selfDestruct6780(c.msg.contractAddress)
+      if c.vmState.balTrackerEnabled:
+        # Zeroing contract balance except beneficiary is the same address
+        c.vmState.balTracker.trackSubBalanceChange(c.msg.contractAddress, localBalance)
+        db.subBalance(c.msg.contractAddress, localBalance)
+        # Transfer to beneficiary
+        c.vmState.balTracker.trackAddBalanceChange(beneficiary, localBalance)
+        db.addBalance(beneficiary, localBalance)
+        if db.selfDestruct6780(c.msg.contractAddress):
+          c.vmState.balTracker.trackInTransactionSelfDestruct(c.msg.contractAddress)
+      else:
+        # Zeroing contract balance except beneficiary is the same address
+        db.subBalance(c.msg.contractAddress, localBalance)
+        # Transfer to beneficiary
+        db.addBalance(beneficiary, localBalance)
+        discard db.selfDestruct6780(c.msg.contractAddress)
     else:
-      # Transfer to beneficiary
-      db.addBalance(beneficiary, localBalance)
-      db.selfDestruct(c.msg.contractAddress)
+      if c.vmState.balTrackerEnabled:
+        # Transfer to beneficiary
+        c.vmState.balTracker.trackAddBalanceChange(beneficiary, localBalance)
+        db.addBalance(beneficiary, localBalance)
+        c.vmState.balTracker.trackSelfDestruct(c.msg.contractAddress)
+        db.selfDestruct(c.msg.contractAddress)
+      else:
+        # Transfer to beneficiary
+        db.addBalance(beneficiary, localBalance)
+        db.selfDestruct(c.msg.contractAddress)
 
     trace "SELFDESTRUCT",
       contractAddress = c.msg.contractAddress.toHex,

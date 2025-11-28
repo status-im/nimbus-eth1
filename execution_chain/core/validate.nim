@@ -47,15 +47,13 @@ func validateBlockAccessList*(
   if com.isAmsterdamOrLater(header.timestamp):
     if header.blockAccessListHash.isNone:
       return err("Post-Amsterdam block header must have blockAccessListHash")
-    elif blockAccessList.isNone:
-      return err("Post-Amsterdam block body must have blockAccessList")
-    else:
+    if blockAccessList.isSome:
       if blockAccessList.get.validate(header.blockAccessListHash.get).isErr():
         return err("Mismatched blockAccessListHash blockNumber = " & $header.number)
   else:
     if header.blockAccessListHash.isSome:
       return err("Pre-Amsterdam block header must not have blockAccessListHash")
-    elif blockAccessList.isSome:
+    if blockAccessList.isSome:
       return err("Pre-Amsterdam block body must not have blockAccessList")
 
   return ok()

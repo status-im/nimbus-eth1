@@ -20,10 +20,14 @@ import
   ../../../stateless/[witness_generation, witness_verification, stateless_execution],
   ./chain_branch
 
-proc writeBaggage*(c: ForkedChainRef,
-        blk: Block, blkHash: Hash32,
-        txFrame: CoreDbTxRef,
-        receipts: openArray[StoredReceipt]) =
+proc writeBaggage*(
+    c: ForkedChainRef,
+    blk: Block,
+    blkHash: Hash32,
+    txFrame: CoreDbTxRef,
+    receipts: openArray[StoredReceipt],
+    blockAccessList: Opt[BlockAccessListRef],
+) =
   template header(): Header =
     blk.header
 
@@ -33,23 +37,33 @@ proc writeBaggage*(c: ForkedChainRef,
   if blk.withdrawals.isSome:
     txFrame.persistWithdrawals(
       header.withdrawalsRoot.expect("WithdrawalsRoot should be verified before"),
-      blk.withdrawals.get)
-  if blk.blockAccessList.isSome:
+      blk.withdrawals.get,
+    )
+  if blockAccessList.isSome:
     txFrame.persistBlockAccessList(
       header.blockAccessListHash.expect("blockAccessListHash should be verified before"),
-      blk.blockAccessList.get)
+      blockAccessList.get()[],
+    )
 
-proc processBlock*(c: ForkedChainRef,
-                  parentBlk: BlockRef,
-                  txFrame: CoreDbTxRef,
-                  blk: Block,
-                  blkHash: Hash32,
-                  finalized: bool): Result[seq[StoredReceipt], string] =
+proc processBlock*(
+    c: ForkedChainRef,
+    parentBlk: BlockRef,
+    txFrame: CoreDbTxRef,
+    blk: Block,
+    blkHash: Hash32,
+    finalized: bool,
+): Result[seq[StoredReceipt], string] =
   template header(): Header =
     blk.header
 
   let vmState = BaseVMState()
-  vmState.init(parentBlk.header, header, c.com, txFrame)
+  vmState.init(
+    parentBlk.header,
+    header,
+    c.com,
+    txFrame,
+    enableBalTracker = c.com.isAmsterdamOrLater(header.timestamp),
+  )
 
   ?c.com.validateHeaderAndKinship(blk, vmState.parent, txFrame)
 
@@ -92,5 +106,7 @@ proc processBlock*(c: ForkedChainRef,
   # We still need to write header to database
   # because validateUncles still need it
   ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory)
+
+  c.writeBaggage(blk, blkHash, txFrame, vmState.receipts, vmState.blockAccessList)
 
   ok(move(vmState.receipts))

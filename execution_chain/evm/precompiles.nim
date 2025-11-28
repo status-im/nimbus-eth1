@@ -758,6 +758,8 @@ proc getPrecompile*(fork: EVMFork, codeAddress: Address): Opt[Precompiles] =
   Opt.none(Precompiles)
 
 proc execPrecompile*(c: Computation, precompile: Precompiles) =
+  if c.vmState.balTrackerEnabled:
+    c.vmState.balTracker.trackAddressAccess(precompileAddrs[precompile])
   let fork = c.fork
   let res = case precompile
     of paEcRecover: ecRecover(c)
