@@ -23,6 +23,10 @@ type
   # Used to track changes within a call frame to enable proper handling
   # of reverts as specified in EIP-7928.
   CallFrameSnapshot* = object
+    touchedAddresses*: HashSet[Address]
+      ## Addresses read during this call frame.
+    storageReads*: HashSet[(Address, UInt256)]
+      ## Storage reads made during this call frame.
     storageChanges*: Table[(Address, UInt256), UInt256]
       ## Storage writes made during this call frame.
       ## Maps (address, storage key) -> storage value.
@@ -36,7 +40,6 @@ type
     codeChanges*: Table[Address, seq[byte]]
       ## Code changes made during this call frame.
       ## Maps address -> bytecode.
-
     inTransactionSelfDestructs*: HashSet[Address]
       ## Set of addresses which need to have writes removed (and in some cases
       ## also converted to reads) when commiting a call frame.
@@ -75,7 +78,7 @@ type
     callFrameSnapshots*: seq[CallFrameSnapshot]
       ## Stack of snapshots for nested call frames to handle reverts properly.
     blockAccessList: Opt[BlockAccessListRef]
-      ## Created by the builder and cached for reuse
+      ## Created by the builder and cached for reuse.
 
 
 template init(T: type CallFrameSnapshot): T =
@@ -138,6 +141,10 @@ proc commitCallFrame*(tracker: BlockAccessListTrackerRef) =
   doAssert tracker.hasPendingCallFrame()
 
   if tracker.hasParentCallFrame():
+    # Merge the pending call frame reads into the parent
+    tracker.parentCallFrame.touchedAddresses.incl(tracker.pendingCallFrame.touchedAddresses)
+    tracker.parentCallFrame.storageReads.incl(tracker.pendingCallFrame.storageReads)
+
     # Merge the pending call frame writes into the parent
 
     for address in tracker.pendingCallFrame.inTransactionSelfDestructs:
@@ -157,6 +164,14 @@ proc commitCallFrame*(tracker: BlockAccessListTrackerRef) =
       tracker.parentCallFrame.codeChanges[address] = newCode
 
   else:
+    # Merge the pending call frame reads into the builder
+    for address in tracker.pendingCallFrame.touchedAddresses:
+      tracker.builder.addTouchedAccount(address)
+    for storageKey in tracker.pendingCallFrame.storageReads:
+      tracker.builder.addStorageRead(storageKey[0], storageKey[1])
+
+    # Merge the pending call frame writes into the builder
+
     for address in tracker.pendingCallFrame.inTransactionSelfDestructs:
       tracker.handleInTransactionSelfDestruct(address)
 
@@ -179,7 +194,7 @@ proc commitCallFrame*(tracker: BlockAccessListTrackerRef) =
 
   tracker.popCallFrame()
 
-proc rollbackCallFrame*(tracker: BlockAccessListTrackerRef) =
+proc rollbackCallFrame*(tracker: BlockAccessListTrackerRef, rollbackReads = false) =
   ## Rollback changes from the current call frame.
   ## When a call reverts, this function:
   ## - Converts storage writes to reads
@@ -188,12 +203,29 @@ proc rollbackCallFrame*(tracker: BlockAccessListTrackerRef) =
   ## become reads and addresses remain in the access list.
   doAssert tracker.hasPendingCallFrame()
 
-  # Convert storage writes to reads
-  for key in tracker.pendingCallFrame.storageChanges.keys():
-    let (address, slot) = key
-    tracker.builder.addStorageRead(address, slot)
+  if rollbackReads:
+    tracker.popCallFrame()
+    return # discard all changes
 
-  # All touched addresses remain in the access list (already tracked)
+
+  if tracker.hasParentCallFrame():
+    # Merge the pending call frame reads into the parent
+    tracker.parentCallFrame.touchedAddresses.incl(tracker.pendingCallFrame.touchedAddresses)
+    tracker.parentCallFrame.storageReads.incl(tracker.pendingCallFrame.storageReads)
+
+    # Convert storage writes to reads
+    for storageKey in tracker.pendingCallFrame.storageChanges.keys():
+      tracker.parentCallFrame.storageReads.incl(storageKey)
+  else:
+    # Merge the pending call frame reads into the builder
+    for address in tracker.pendingCallFrame.touchedAddresses:
+      tracker.builder.addTouchedAccount(address)
+    for storageKey in tracker.pendingCallFrame.storageReads:
+      tracker.builder.addStorageRead(storageKey[0], storageKey[1])
+
+    # Convert storage writes to reads
+    for storageKey in tracker.pendingCallFrame.storageChanges.keys():
+      tracker.builder.addStorageRead(storageKey[0], storageKey[1])
 
   tracker.popCallFrame()
 
@@ -243,15 +275,17 @@ template trackAddressAccess*(tracker: BlockAccessListTrackerRef, address: Addres
   ## Track that an address was accessed.
   ## Records account access even when no state changes occur. This is
   ## important for operations that read account data without modifying it.
-  tracker.builder.addTouchedAccount(address)
+  assert tracker.hasPendingCallFrame()
+  tracker.pendingCallFrame.touchedAddresses.incl(address)
 
 proc trackStorageRead*(tracker: BlockAccessListTrackerRef, address: Address, slot: UInt256) =
   ## Track a storage read operation.
   ## Records that a storage slot was read and captures its pre-state value.
   ## The slot will only appear in the final access list if it wasn't also
   ## written to during block execution.
-  tracker.trackAddressAccess(address)
-  tracker.builder.addStorageRead(address, slot)
+  assert tracker.hasPendingCallFrame()
+  tracker.pendingCallFrame.touchedAddresses.incl(address)
+  tracker.pendingCallFrame.storageReads.incl((address, slot))
 
 proc trackStorageWrite*(tracker: BlockAccessListTrackerRef, address: Address, slot: UInt256, newValue: UInt256) =
   ## Track a storage write operation.

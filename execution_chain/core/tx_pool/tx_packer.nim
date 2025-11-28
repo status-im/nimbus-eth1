@@ -212,7 +212,7 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
   # Find out what to do next: accepting this tx or trying the next account
   if not vmState.classifyPacked(callResult.gasUsed):
     if vmState.balTrackerEnabled:
-      vmState.balTracker.rollbackCallFrame() # TODO: need to rollback reads as well
+      vmState.balTracker.rollbackCallFrame(rollbackReads = true)
     vmState.ledger.rollback(accTx)
     if vmState.classifyPackedNext():
       return ContinueWithNextAccount

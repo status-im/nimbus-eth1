@@ -150,15 +150,17 @@ suite "Block access list tracker":
 
   test "Track address access":
     check not builder.accounts.contains(address1)
-    tracker.trackAddressAccess(address1)
-    check builder.accounts.contains(address1)
-
     check not builder.accounts.contains(address2)
-    tracker.trackAddressAccess(address2)
-    check builder.accounts.contains(address2)
-
     check not builder.accounts.contains(address4)
+
+    tracker.beginCallFrame()
+    tracker.trackAddressAccess(address1)
+    tracker.trackAddressAccess(address2)
     tracker.trackAddressAccess(address4)
+    tracker.commitCallFrame()
+
+    check builder.accounts.contains(address1)
+    check builder.accounts.contains(address2)
     check builder.accounts.contains(address4)
 
   test "Begin, commit and rollback call frame":
@@ -249,7 +251,9 @@ suite "Block access list tracker":
     block:
       check not builder.accounts.contains(address1)
 
+      tracker.beginCallFrame()
       tracker.trackStorageRead(address1, slot1)
+      tracker.commitCallFrame()
 
       check builder.accounts.contains(address1)
       tracker.builder.accounts.withValue(address1, accData):
@@ -259,7 +263,9 @@ suite "Block access list tracker":
     block:
       check not builder.accounts.contains(address2)
 
+      tracker.beginCallFrame()
       tracker.trackStorageRead(address2, slot2)
+      tracker.commitCallFrame()
 
       check builder.accounts.contains(address2)
       tracker.builder.accounts.withValue(address2, accData):
