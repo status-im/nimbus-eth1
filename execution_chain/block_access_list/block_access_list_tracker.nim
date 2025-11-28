@@ -132,7 +132,7 @@ template popCallFrame(tracker: BlockAccessListTrackerRef) =
   tracker.callFrameSnapshots.setLen(tracker.callFrameSnapshots.len() - 1)
 
 proc handleInTransactionSelfDestruct*(tracker: BlockAccessListTrackerRef, address: Address)
-proc normalizeBalanceAndStorageChanges*(tracker: BlockAccessListTrackerRef)
+proc normalizePendingCallFrameChanges*(tracker: BlockAccessListTrackerRef)
 
 proc commitCallFrame*(tracker: BlockAccessListTrackerRef) =
   # Commit changes from the current call frame.
@@ -141,10 +141,6 @@ proc commitCallFrame*(tracker: BlockAccessListTrackerRef) =
   doAssert tracker.hasPendingCallFrame()
 
   if tracker.hasParentCallFrame():
-    # Merge the pending call frame reads into the parent
-    tracker.parentCallFrame.touchedAddresses.incl(tracker.pendingCallFrame.touchedAddresses)
-    tracker.parentCallFrame.storageReads.incl(tracker.pendingCallFrame.storageReads)
-
     # Merge the pending call frame writes into the parent
 
     for address in tracker.pendingCallFrame.inTransactionSelfDestructs:
@@ -163,19 +159,17 @@ proc commitCallFrame*(tracker: BlockAccessListTrackerRef) =
     for address, newCode in tracker.pendingCallFrame.codeChanges:
       tracker.parentCallFrame.codeChanges[address] = newCode
 
-  else:
-    # Merge the pending call frame reads into the builder
-    for address in tracker.pendingCallFrame.touchedAddresses:
-      tracker.builder.addTouchedAccount(address)
-    for storageKey in tracker.pendingCallFrame.storageReads:
-      tracker.builder.addStorageRead(storageKey[0], storageKey[1])
+    # Merge the pending call frame reads into the parent
+    tracker.parentCallFrame.touchedAddresses.incl(tracker.pendingCallFrame.touchedAddresses)
+    tracker.parentCallFrame.storageReads.incl(tracker.pendingCallFrame.storageReads)
 
+  else:
     # Merge the pending call frame writes into the builder
 
     for address in tracker.pendingCallFrame.inTransactionSelfDestructs:
       tracker.handleInTransactionSelfDestruct(address)
 
-    tracker.normalizeBalanceAndStorageChanges()
+    tracker.normalizePendingCallFrameChanges()
 
     let currentIndex = tracker.currentBlockAccessIndex
 
@@ -191,6 +185,12 @@ proc commitCallFrame*(tracker: BlockAccessListTrackerRef) =
 
     for address, newCode in tracker.pendingCallFrame.codeChanges:
       tracker.builder.addCodeChange(address, currentIndex, newCode)
+
+    # Merge the pending call frame reads into the builder
+    for address in tracker.pendingCallFrame.touchedAddresses:
+      tracker.builder.addTouchedAccount(address)
+    for storageKey in tracker.pendingCallFrame.storageReads:
+      tracker.builder.addStorageRead(storageKey[0], storageKey[1])
 
   tracker.popCallFrame()
 
@@ -388,7 +388,7 @@ proc handleInTransactionSelfDestruct*(tracker: BlockAccessListTrackerRef, addres
 
   for slot in slotsToConvert:
     let storageKey = (address, slot)
-    tracker.builder.addStorageRead(address, slot)
+    tracker.pendingCallFrame.storageReads.incl(storageKey)
     tracker.pendingCallFrame.storageChanges.del(storageKey)
 
   tracker.pendingCallFrame.balanceChanges.del(address)
@@ -397,8 +397,9 @@ proc handleInTransactionSelfDestruct*(tracker: BlockAccessListTrackerRef, addres
 
   tracker.trackBalanceChange(address, 0.u256)
 
-proc normalizeBalanceAndStorageChanges*(tracker: BlockAccessListTrackerRef) =
-  ## Normalize balance and storage changes for the current block access index.
+proc normalizePendingCallFrameChanges*(tracker: BlockAccessListTrackerRef) =
+  ## Normalize balance, nonce, code and storage changes for the current
+  ## block access index.
   ## This method filters out spurious balance and storage changes by removing all
   ## changes for addresses and slots where the post-execution balance/value equals
   ## the pre-execution/value balance.
@@ -422,8 +423,7 @@ proc normalizeBalanceAndStorageChanges*(tracker: BlockAccessListTrackerRef) =
       slotsToRemove.add(storageKey)
 
   for storageKey in slotsToRemove:
-    let (address, slot) = storageKey
-    tracker.builder.addStorageRead(address, slot)
+    tracker.pendingCallFrame.storageReads.incl(storageKey)
     tracker.pendingCallFrame.storageChanges.del(storageKey)
 
   block:
