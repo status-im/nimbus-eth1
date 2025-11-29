@@ -112,9 +112,13 @@ template fetchBodies*(
           buddy.bdyFetchRegisterError()
           buddy.blkNoSampleSize(elapsed)
         of EAlreadyTriedAndFailed:
-          # Just return `failed` (no error count or throughput stats)
-          discard
+          trace trEthRecvReceivedBlockBodies & " error", peer,
+            startHash=request.blockHashes[0].short, nReq,
+            ela=rc.error.elapsed.toStr, state=($buddy.syncState),
+            error=rc.error.excp, nErrors=buddy.nErrors.fetch.bdy
+          break body                                # return err()
 
+        # Debug message for other errors
         debug trEthRecvReceivedBlockBodies & " error", peer,
           startHash=request.blockHashes[0].short, nReq,
           ela=rc.error.elapsed.toStr, state=($buddy.syncState),
