@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or
 # distributed except according to those terms.
 
+{.push raises: [], gcsafe.}
+
 import
   eth/common,
   ../../execution_chain/db/core_db,
@@ -36,36 +38,48 @@ func cloneWith(
     dbType = CoreDbType(0);
     dbName = "";
       ): CaptureSpecs =
-  result = dsc
-  if network != 0.u256:
-    result.builtIn = true
-    result.network = network
-  elif 0 < genesis.len:
-    result.builtIn = false
-    result.genesis = genesis
+  var res =
+    if network != 0.u256:
+      CaptureSpecs(
+        name: dsc.name,
+        builtIn: true,
+        network: network,
+        files: dsc.files,
+        numBlocks: dsc.numBlocks,
+        dbType: dsc.dbType,
+        dbName: dsc.dbName)
+    elif 0 < genesis.len:
+      CaptureSpecs(
+        name: dsc.name,
+        builtIn: false,
+        genesis: genesis,
+        files: dsc.files,
+        numBlocks: dsc.numBlocks,
+        dbType: dsc.dbType,
+        dbName: dsc.dbName)
+    else:
+      dsc
   if 0 < name.len:
     if name[0] == '-':
-      result.name &= name
+      res.name &= name
     elif name[0] == '+' and 1 < name.len:
-      result.name &= name[1 .. ^1]
+      res.name &= name[1 .. ^1]
     else:
-      result.name = name
+      res.name = name
   if 0 < files.len:
-    result.files = files
+    res.files = files
   if 0 < numBlocks:
-    result.numBlocks = numBlocks
+    res.numBlocks = numBlocks
   if dbType != CoreDbType(0):
-    result.dbType = dbType
+    res.dbType = dbType
   if dbName == "":
-    result.dbName = result.name
+    res.dbName = res.name
   else:
-    result.dbName = dbName
+    res.dbName = dbName
+  res
 
 
-# Must not use `const` here, see `//github.com/nim-lang/Nim/issues/23295`
-# Waiting for fix `//github.com/nim-lang/Nim/pull/23297` (or similar) to
-# appear on local `Nim` compiler version.
-let
+const
   mainSample = CaptureSpecs(
     builtIn: true,
     name:    "main",
@@ -78,7 +92,7 @@ let
     builtIn: true,
     name:    "main",
     network: MainNet,
-    # The extren repo is identified by a tag file
+    # The extern repo is identified by a tag file
     files:   @["mainnet-extern.era1"])        # on external repo
 
   # ------------------
