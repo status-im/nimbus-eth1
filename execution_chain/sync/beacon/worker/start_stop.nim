@@ -90,18 +90,11 @@ proc startSyncPeer*(buddy: BeaconPeerRef): bool =
   ## Convenience setting for starting a new worker
   let
     ctx = buddy.ctx
-    peer = buddy.peer
     nSyncPeers = ctx.nSyncPeers() + 1      # current peer is not yet registered
 
-  template acceptProto(PROTO: type): bool =
-    peer.supports(PROTO) and
-    peer.state(PROTO).initialized
-
-  if acceptProto(eth69) or
-     acceptProto(eth68):
-    metrics.set(nec_sync_peers, nSyncPeers)
-    ctx.pool.lastSlowPeer = Opt.none(Hash)
-    return true
+  metrics.set(nec_sync_peers, nSyncPeers)
+  ctx.pool.lastSlowPeer = Opt.none(Hash)
+  true
 
 
 proc stopSyncPeer*(buddy: BeaconPeerRef) =

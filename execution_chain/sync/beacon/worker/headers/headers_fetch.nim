@@ -133,9 +133,13 @@ template fetchHeadersReversed*(
           buddy.hdrFetchRegisterError()
           buddy.hdrNoSampleSize(elapsed)
         of EAlreadyTriedAndFailed:
-          # Just return `failed` (no error count or throughput stats)
-          discard
+          trace trEthRecvReceivedBlockHeaders & ": error", peer,
+            req=ivReq, nReq=req.maxResults, hash=topHash.toStr,
+            ela=rc.error.elapsed.toStr, state=($buddy.syncState),
+            error=rc.error.excp, nErrors=buddy.nErrors.fetch.hdr
+          break body                               # return err()
 
+        # Debug message for other errors
         debug trEthRecvReceivedBlockHeaders & ": error", peer,
           req=ivReq, nReq=req.maxResults, hash=topHash.toStr,
           ela=rc.error.elapsed.toStr, state=($buddy.syncState),
