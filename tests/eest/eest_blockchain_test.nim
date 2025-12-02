@@ -23,11 +23,7 @@ const
   ]
 
 const skipFiles = [
-    "consolidation_requests.json",
-    "withdrawal_requests.json",
-    "bal_call_and_oog.json",
-    "bal_delegatecall_and_oog.json",
-    "value_transfer_gas_calculation.json"
+  ""
 ]
 
 runEESTSuite(
