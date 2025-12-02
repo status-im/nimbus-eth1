@@ -109,6 +109,20 @@ type
     shutdown
     running
 
+  PeerProtoCheck = ref object
+    hasProto: AcceptPeerOk      ## Sub protocol selector closure
+    acceptPeer: AcceptPeerOk    ## Can accept protocol enabled by `hasProto()`
+
+  RunnerPeerRef[S,W] = ref object
+    ## Per worker peer descriptor
+    dsc: RunnerSyncRef[S,W]     ## Scheduler descriptor
+    worker: SyncPeerRef[S,W]    ## Worker peer data
+    zombified: Moment           ## Time when it became undead (if any)
+
+  # ---- public types ----
+
+  AcceptPeerOk* = proc(peer: Peer): bool {.gcsafe, raises: [].}
+
   RunnerSyncRef*[S,W] = ref object of RootRef
     ## Module descriptor
     ctx*: CtxRef[S,W]           ## Shared data
@@ -123,12 +137,8 @@ type
     monitorLock: bool           ## Monitor mode is activated (non-async mode)
     activeMulti: int            ## Number of async workers active/running
     runCtrl: RunCtrl            ## Overall scheduler start/stop control
-
-  RunnerPeerRef[S,W] = ref object
-    ## Per worker peer descriptor
-    dsc: RunnerSyncRef[S,W]     ## Scheduler descriptor
-    worker: SyncPeerRef[S,W]    ## Worker peer data
-    zombified: Moment           ## Time when it became undead (if any)
+    po: PeerObserver            ## P2p protocol handler environment
+    filter: seq[PeerProtoCheck] ## List of p2p sub-protocol handler filters
 
 const
   zombieTimeToLinger = 20.seconds
@@ -180,6 +190,14 @@ proc key(peer: Peer): Hash =
 
 proc nSyncPeers[S,W](dsc: RunnerSyncRef[S,W]): int =
   dsc.syncPeers.len + dsc.orphans.len
+
+template lruReset(db: untyped): untyped =
+  ## Clear LRU list
+  db = typeof(db).init db.capacity
+
+proc alwaysAcceptPeerOk(peer: Peer): bool =
+  ## Some default call back function
+  true
 
 # ------------------------------------------------------------------------------
 # Private constructor helpers
@@ -497,9 +515,19 @@ proc terminate[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
 proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
   mixin runStart
 
-  # Ignore if shutdown is processing
+  # Ignore if shutdown processing
   if dsc.runCtrl != running:
     return
+
+  block protoFilter:
+    # Accept if accepted by some vetting filter
+    for filter in dsc.filter:
+      if filter.hasProto(peer) and
+         filter.acceptPeer(peer):
+        break protoFilter
+    # Otherwise ignore
+    if dsc.noisy: trace "No suitable protocol for peer", peer
+    return # fail
 
   # Make sure that the overflow list can absorb an eviced peer temporarily
   if dsc.orphans.capacity <= dsc.orphans.len and
@@ -607,30 +635,62 @@ proc initSync*[S,W](
   dsc.orphans = ActivePeers[S,W].init(1 + dsc.syncPeers.capacity div 2)
   dsc.zombies = ZombiePeers.init dsc.orphans.capacity
 
+  # Stash p2p protocol handlers to be further initalised, below
+  dsc.po.onPeerConnected = proc(p: Peer) {.gcsafe.} =
+    dsc.onPeerConnected(p)
+  dsc.po.onPeerDisconnected = proc(p: Peer) {.gcsafe.} =
+    dsc.onPeerDisconnected(p)
+
+  # Public context with service functions
   dsc.ctx = CtxRef[S,W](
     node:         node,
     getSyncPeer:  dsc.getSyncPeerFn(),
     getSyncPeers: dsc.getSyncPeersFn(),
     nSyncPeers:   dsc.nSyncPeersFn())
 
+
+proc addSyncProtocol*[S,W](
+    dsc: RunnerSyncRef[S,W];
+    PROTO: type;
+    acceptPeer = AcceptPeerOk(nil);
+      ) =
+  ## Activate scheduler for a particular protocol. The filter argument
+  ## function `acceptPeer` is run before any other connection handler. If
+  ## the former returns `true`, processing goes ahead.
+  ##
+  dsc.po.addProtocol PROTO
+  dsc.filter.add PeerProtoCheck(
+    hasProto: proc(p: Peer): bool {.gcsafe.} =
+      p.supports(PROTO),
+    acceptPeer:
+      (if acceptPeer.isNil: alwaysAcceptPeerOk else: acceptPeer))
+
+# ---------
+
 proc startSync*[S,W](dsc: RunnerSyncRef[S,W]): bool =
-  ## Set up `PeerObserver` handlers and start syncing.
+  ## Activate `PeerObserver` handlers and start syncing.
   mixin runSetup
 
   if dsc.runCtrl == terminated:
     # Initialise sub-systems
     if dsc.ctx.runSetup():
+      # Initialise descriptor for running, probably after an earlier
+      # termination. The `dsc.ctx.pool` might containg inter session
+      # data, so it is not reset here.
       dsc.runCtrl = running
+      dsc.ctx.poolMode = false
+      dsc.ctx.noisyLog = false
+      dsc.syncPeers.lruReset()
+      dsc.peerByIP.lruReset()
+      dsc.orphans.lruReset()
+      dsc.zombies.lruReset()
 
-      var po = PeerObserver(
-        onPeerConnected: proc(p: Peer) {.gcsafe.} =
-          dsc.onPeerConnected(p),
-        onPeerDisconnected: proc(p: Peer) {.gcsafe.} =
-          dsc.onPeerDisconnected(p))
-
-      po.addProtocol eth68
-      po.addProtocol eth69
-      dsc.peerPool.addObserver(dsc, po)
+      # Activate protocol handlers
+      dsc.peerPool.addObserver(dsc, dsc.po)
+      if dsc.filter.len == 0:
+        dsc.filter.add PeerProtoCheck(
+          hasProto:   alwaysAcceptPeerOk,
+          acceptPeer: alwaysAcceptPeerOk)
 
       asyncSpawn dsc.tickerLoop()
       return true

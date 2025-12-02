@@ -27,6 +27,17 @@ logScope:
   topics = "beacon sync"
 
 # ------------------------------------------------------------------------------
+# Private helper
+# ------------------------------------------------------------------------------
+
+proc addBeaconSyncProtocol(desc: BeaconSyncRef; PROTO: type) =
+  ## Add protocol and call back filter function for ethXX
+  desc.addSyncProtocol(PROTO):
+    proc(peer: Peer): bool =
+      let state = peer.state(PROTO)
+      not state.isNil and state.initialized
+
+# ------------------------------------------------------------------------------
 # Virtual methods/interface, `mixin` functions
 # ------------------------------------------------------------------------------
 
@@ -84,6 +95,13 @@ proc config*(
   ##
   doAssert desc.ctx.isNil # This can only run once
   desc.initSync(ethNode, maxPeers)
+
+  # Add most likely/highest priority protocol first. As of the current
+  # implementation, `eth68` descriptor(s) will not be fully initialised
+  # (i.e. `peer.state(eth68).isNil`) if `eth69` is available.
+  desc.addBeaconSyncProtocol(eth69)
+  desc.addBeaconSyncProtocol(eth68)
+
   desc.ctx.pool.chain = chain
   if standByMode:
     desc.ctx.pool.syncState = SyncState.standByMode
@@ -102,6 +120,7 @@ proc configTarget*(desc: BeaconSyncRef; hex: string; isFinal: bool): bool =
     discard
   # false
 
+# -----------------
 
 proc activate*(desc: BeaconSyncRef) =
   ## Clear stand-by mode (if any)
@@ -119,6 +138,7 @@ proc stop*(desc: BeaconSyncRef) {.async.} =
   doAssert not desc.ctx.isNil
   if desc.isRunning:
     await desc.stopSync()
+    desc.ctx.pool.reset # also clears stand-by mode
 
 # ------------------------------------------------------------------------------
 # End

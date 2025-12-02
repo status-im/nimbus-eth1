@@ -25,6 +25,8 @@ EXCLUDED_NIM_PACKAGES := 	\
   vendor/nimbus-eth2/vendor/nim-eth                   \
   vendor/nimbus-eth2/vendor/nim-faststreams           \
   vendor/nimbus-eth2/vendor/nim-http-utils            \
+  vendor/nimbus-eth2/vendor/nim-ngtcp2                \
+  vendor/nimbus-eth2/vendor/nim-quic                  \
   vendor/nimbus-eth2/vendor/nim-json-rpc              \
   vendor/nimbus-eth2/vendor/nim-json-serialization    \
   vendor/nimbus-eth2/vendor/nim-libbacktrace          \
@@ -89,11 +91,14 @@ PORTAL_TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(FLUFFY_TOOLS))
 OS_PLATFORM = $(shell $(CC) -dumpmachine)
 ifneq (, $(findstring darwin, $(OS_PLATFORM)))
   SHAREDLIBEXT = dylib
+  STATICLIBEXT = a
 else
 ifneq (, $(findstring mingw, $(OS_PLATFORM))$(findstring cygwin, $(OS_PLATFORM))$(findstring msys, $(OS_PLATFORM)))
   SHAREDLIBEXT = dll
+  STATICLIBEXT = lib
 else
   SHAREDLIBEXT = so
+  STATICLIBEXT = a
 endif
 endif
 
@@ -350,7 +355,8 @@ nimbus-verified-proxy-test: | build deps
 libverifproxy: | build deps
 	+ echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim --version && \
-		$(ENV_SCRIPT) nim c --app:lib -d:"libp2p_pki_schemes=secp256k1" --noMain:on --threads:on --nimcache:nimcache/libverifproxy -o:$(VERIF_PROXY_OUT_PATH)/$@.$(SHAREDLIBEXT) $(NIM_PARAMS) nimbus_verified_proxy/libverifproxy/verifproxy.nim
+		echo $(NIM_PARAMS) && \
+		$(ENV_SCRIPT) nim c --app:staticlib -d:"libp2p_pki_schemes=secp256k1" --noMain:on --out:$(VERIF_PROXY_OUT_PATH)/$@.$(STATICLIBEXT) $(NIM_PARAMS) nimbus_verified_proxy/libverifproxy/verifproxy.nim
 	cp nimbus_verified_proxy/libverifproxy/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
 	echo -e $(BUILD_END_MSG) "build/$@"
 

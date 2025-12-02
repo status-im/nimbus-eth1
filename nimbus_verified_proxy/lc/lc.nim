@@ -10,8 +10,9 @@
 import
   chronicles,
   chronos,
+  eth/common/keys, # used for keys.rng
   beacon_chain/gossip_processing/light_client_processor,
-  beacon_chain/beacon_clock,
+  beacon_chain/[beacon_clock, conf],
   ./lc_manager # use the modified light client manager
 
 type
@@ -20,8 +21,8 @@ type
   ) {.gcsafe, raises: [].}
 
   LightClient* = ref object
-    cfg: RuntimeConfig
-    forkDigests: ref ForkDigests
+    cfg*: RuntimeConfig
+    forkDigests*: ref ForkDigests
     getBeaconTime*: GetBeaconTimeFn
     store*: ref ForkedLightClientStore
     processor*: ref LightClientProcessor
@@ -144,16 +145,59 @@ proc new*(
 
   lightClient
 
+proc new*(
+    T: type LightClient, chain: Option[string], trustedBlockRoot: Option[Eth2Digest]
+): T =
+  let metadata = loadEth2Network(chain)
+
+  # just for short hand convenience
+  template cfg(): auto =
+    metadata.cfg
+
+  # initialize beacon node genesis data, beacon clock and forkDigests
+  let
+    genesisState =
+      try:
+        template genesisData(): auto =
+          metadata.genesis.bakedBytes
+
+        newClone(
+          readSszForkedHashedBeaconState(
+            cfg, genesisData.toOpenArray(genesisData.low, genesisData.high)
+          )
+        )
+      except CatchableError as err:
+        raiseAssert "Invalid baked-in state: " & err.msg
+
+    # getStateField reads seeks info directly from a byte array
+    # get genesis time and instantiate the beacon clock
+    genesisTime = getStateField(genesisState[], genesis_time)
+    beaconClock = BeaconClock.init(cfg.timeParams, genesisTime).valueOr:
+      error "Invalid genesis time in state", genesisTime
+      quit QuitFailure
+
+    # get the function that itself get the current beacon time
+    getBeaconTime = beaconClock.getBeaconTimeFn()
+    genesis_validators_root = getStateField(genesisState[], genesis_validators_root)
+    forkDigests = newClone ForkDigests.init(cfg, genesis_validators_root)
+
+    rng = keys.newRng()
+
+    # light client is set to optimistic finalization mode
+    lightClient = LightClient.new(
+      rng, cfg, forkDigests, getBeaconTime, genesis_validators_root,
+      LightClientFinalizationMode.Optimistic,
+    )
+
+  lightClient.trustedBlockRoot = trustedBlockRoot
+  lightClient
+
 proc setBackend*(lightClient: LightClient, backend: EthLCBackend) =
   lightClient.manager.backend = backend
 
-proc start*(lightClient: LightClient) =
+proc start*(lightClient: LightClient) {.async: (raises: [CancelledError]).} =
   info "Starting beacon light client", trusted_block_root = lightClient.trustedBlockRoot
-  lightClient.manager.start()
-
-proc stop*(lightClient: LightClient) {.async: (raises: []).} =
-  info "Stopping beacon light client"
-  await lightClient.manager.stop()
+  await lightClient.manager.start()
 
 proc resetToFinalizedHeader*(
     lightClient: LightClient,

@@ -267,7 +267,7 @@ proc runJwtAuth(noisy = defined(debug); keyFile = jwtKeyFile) =
 
     test "ws query no auth":
       let client = newRpcWebSocketClient()
-      expect WSFailedUpgradeError:
+      expect RpcTransportError:
         waitFor client.connect("ws://" & $server.localAddress)
 
     test "ws query with auth":

@@ -37,7 +37,6 @@ type
   UpdateVerifier* = ValueVerifier[ForkedLightClientUpdate]
   FinalityUpdateVerifier* = ValueVerifier[ForkedLightClientFinalityUpdate]
   OptimisticUpdateVerifier* = ValueVerifier[ForkedLightClientOptimisticUpdate]
-
   GetTrustedBlockRootCallback* = proc(): Option[Eth2Digest] {.gcsafe, raises: [].}
   GetBoolCallback* = proc(): bool {.gcsafe, raises: [].}
   GetSlotCallback* = proc(): Slot {.gcsafe, raises: [].}
@@ -293,6 +292,7 @@ proc query[E](
 
   # cancel all workers
   for i in 0 ..< NUM_WORKERS:
+    assert workers[i] != nil
     workers[i].cancelSoon()
 
   return success
@@ -385,13 +385,6 @@ proc loop(self: LightClientManager) {.async: (raises: [CancelledError]).} =
     # check for updates every slot
     await sleepAsync(self.timeParams.SLOT_DURATION)
 
-proc start*(self: var LightClientManager) =
+proc start*(self: LightClientManager) {.async: (raises: [CancelledError]).} =
   ## Start light client manager's loop.
-  doAssert self.loopFuture == nil
-  self.loopFuture = self.loop()
-
-proc stop*(self: var LightClientManager) {.async: (raises: []).} =
-  ## Stop light client manager's loop.
-  if self.loopFuture != nil:
-    await noCancel self.loopFuture.cancelAndWait()
-    self.loopFuture = nil
+  await self.loop()

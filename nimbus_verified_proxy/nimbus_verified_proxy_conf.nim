@@ -13,7 +13,8 @@ import
   json_rpc/rpcproxy, # must be early (compilation annoyance)
   json_serialization/std/net,
   beacon_chain/conf_light_client,
-  beacon_chain/nimbus_binary_common
+  beacon_chain/nimbus_binary_common,
+  std/strutils
 
 export net
 
