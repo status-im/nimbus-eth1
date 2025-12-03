@@ -77,7 +77,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
     let
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(keyBytes).valueOr:
-        raise invalidKeyErr()
+        raise invalidContentKeyError()
 
       contentLookupResult = (await p.contentLookup(keyBytes, contentId)).valueOr:
         raise contentNotFoundErr()
@@ -91,7 +91,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
     let
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(keyBytes).valueOr:
-        raise invalidKeyErr()
+        raise invalidContentKeyError()
 
     # TODO: Might want to restructure the lookup result here. Potentially doing
     # the json conversion in this module.
@@ -110,7 +110,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       offerValueBytes = hexToSeqByte(contentValue)
       contentId = p.toContentId(keyBytes).valueOr:
-        raise invalidKeyErr()
+        raise invalidContentKeyError()
 
     # TODO: Do we need to convert the received offer to a value without proofs before storing?
     p.storeContent(keyBytes, contentId, offerValueBytes)
@@ -119,7 +119,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
     let
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(keyBytes).valueOr:
-        raise invalidKeyErr()
+        raise invalidContentKeyError()
 
       valueBytes = p.dbGet(keyBytes, contentId).valueOr:
         raise contentNotFoundErr()
@@ -132,7 +132,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
     let
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       _ = p.toContentId(keyBytes).valueOr:
-        raise invalidKeyErr()
+        raise invalidContentKeyError()
       offerValueBytes = hexToSeqByte(contentValue)
 
       # TODO: Do we need to convert the received offer to a value without proofs before storing?

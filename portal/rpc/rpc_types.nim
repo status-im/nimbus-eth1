@@ -20,7 +20,8 @@ export jsonmarshal, routing_table, enr, node, results
 # Portal Network JSON-RPC errors
 
 const
-  # These errors are defined in the portal jsonrpc spec: https://github.com/ethereum/portal-network-specs/tree/master/jsonrpc
+  # These errors (code + msg) are defined in the Portal JSON-RPC spec:
+  # https://github.com/ethereum/portal-network-specs/tree/master/jsonrpc
   ContentNotFoundError* = (code: -39001, msg: "Content not found")
   ContentNotFoundErrorWithTrace* = (code: -39002, msg: "Content not found")
   PayloadTypeNotSupportedError* = (code: -39004, msg: "Payload type not supported")
@@ -32,11 +33,10 @@ const
     msg: "The client has blocked users from specifying the payload for this extension",
   )
 
-  # These errors are used by Nimbus Portal but are not yet in the spec
-  InvalidContentKeyError* = (code: -32602, msg: "Invalid content key")
-  InvalidContentValueError* = (code: -32603, msg: "Invalid content value")
+  # Errors used by Nimbus Portal but that are not part of current Portal JSON-RPC spec
+  InvalidContentKeyError* = (code: -39008, msg: "Invalid content key")
 
-template applicationError(error: (int, string)): auto =
+template applicationError*(error: (int, string)): auto =
   (ref ApplicationError)(code: error.code, msg: error.msg)
 
 template contentNotFoundErr*(): auto =
@@ -65,14 +65,8 @@ template payloadTypeRequiredError*(): auto =
 template userSpecifiedPayloadBlockedByClientError*(): auto =
   UserSpecifiedPayloadBlockedByClientError.applicationError()
 
-template invalidRequest*(error: (int, string)): auto =
-  (ref errors.InvalidRequest)(code: error.code, msg: error.msg)
-
-template invalidKeyErr*(): auto =
-  InvalidContentKeyError.invalidRequest()
-
-template invalidValueErr*(): auto =
-  InvalidContentValueError.invalidRequest()
+template invalidContentKeyError*(): auto =
+  InvalidContentKeyError.applicationError()
 
 type
   NodeInfo* = object
