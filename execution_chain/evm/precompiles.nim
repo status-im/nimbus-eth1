@@ -15,7 +15,7 @@ import
   ./[types, blake2b_f, blscurve],
   ./interpreter/[gas_meter, gas_costs, utils/utils_numeric],
   eth/common/keys,
-  chronicles,
+  #chronicles,
   nimcrypto/[ripemd, sha2, utils],
   stew/assign2,
   ../common/evmforks,
@@ -787,6 +787,7 @@ proc execPrecompile*(c: Computation, precompile: Precompiles) =
         c.setError(StatusCode.PrecompileFailure, $res.error.code, true)
       else:
         # swallow any other precompiles errors
-        debug "execPrecompiles validation error",
-          errCode = $res.error.code,
-          precompile = precompile
+        discard
+        # debug "execPrecompiles validation error",
+        #   errCode = $res.error.code,
+        #   precompile = precompile

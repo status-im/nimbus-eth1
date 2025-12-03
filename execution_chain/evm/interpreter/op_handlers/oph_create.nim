@@ -28,7 +28,7 @@ import
   ../op_codes,
   ./oph_defs,
   ./oph_helpers,
-  chronicles,
+  # chronicles,
   ../../state,
   ../../message,
   ../../../db/ledger
@@ -78,7 +78,7 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
 
   # EIP-3860
   if cpt.fork >= FkShanghai and memLen > EIP3860_MAX_INITCODE_SIZE:
-    trace "Initcode size exceeds maximum", initcodeSize = memLen
+    # trace "Initcode size exceeds maximum", initcodeSize = memLen
     return err(opErr(InvalidInitCode))
 
   let
@@ -94,19 +94,19 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
   cpt.returnData.setLen(0)
 
   if cpt.msg.depth >= MaxCallDepth:
-    debug "Computation Failure",
-      reason = "Stack too deep",
-      maxDepth = MaxCallDepth,
-      depth = cpt.msg.depth
+    # debug "Computation Failure",
+    #   reason = "Stack too deep",
+    #   maxDepth = MaxCallDepth,
+    #   depth = cpt.msg.depth
     return ok()
 
   if endowment != 0:
     let senderBalance = cpt.getBalance(cpt.msg.contractAddress)
     if senderBalance < endowment:
-      debug "Computation Failure",
-        reason = "Insufficient funds available to transfer",
-        required = endowment,
-        balance = senderBalance
+      # debug "Computation Failure",
+      #   reason = "Insufficient funds available to transfer",
+      #   required = endowment,
+      #   balance = senderBalance
       return ok()
 
   var createMsgGas = cpt.gasMeter.gasRemaining
@@ -148,7 +148,7 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
 
   # EIP-3860
   if cpt.fork >= FkShanghai and memLen > EIP3860_MAX_INITCODE_SIZE:
-    trace "Initcode size exceeds maximum", initcodeSize = memLen
+    # trace "Initcode size exceeds maximum", initcodeSize = memLen
     return err(opErr(InvalidInitCode))
 
   let
@@ -166,19 +166,19 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
   cpt.returnData.setLen(0)
 
   if cpt.msg.depth >= MaxCallDepth:
-    debug "Computation Failure",
-      reason = "Stack too deep",
-      maxDepth = MaxCallDepth,
-      depth = cpt.msg.depth
+    # debug "Computation Failure",
+    #   reason = "Stack too deep",
+    #   maxDepth = MaxCallDepth,
+    #   depth = cpt.msg.depth
     return ok()
 
   if endowment != 0:
     let senderBalance = cpt.getBalance(cpt.msg.contractAddress)
     if senderBalance < endowment:
-      debug "Computation Failure",
-        reason = "Insufficient funds available to transfer",
-        required = endowment,
-        balance = senderBalance
+      # debug "Computation Failure",
+      #   reason = "Insufficient funds available to transfer",
+      #   required = endowment,
+      #   balance = senderBalance
       return ok()
 
   var createMsgGas = cpt.gasMeter.gasRemaining

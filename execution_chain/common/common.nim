@@ -10,24 +10,23 @@
 {.push raises: [].}
 
 import
-  chronicles,
-  eth/common/eth_types_json_serialization,
+  #chronicles,
+  #eth/common/eth_types_json_serialization,
   ../db/[core_db, ledger, storage_types, fcu_db],
   ../utils/[utils],
-  ".."/[constants, errors, version_info],
-  "."/[chain_config, evmforks, genesis, hardforks],
-  taskpools
+  ".."/[constants, errors],
+  "."/[chain_config, evmforks, genesis, hardforks]
+  #taskpools
 
 export
   chain_config,
   core_db,
   constants,
   errors,
-  eth_types_json_serialization,
+  # eth_types_json_serialization,
   evmforks,
   genesis,
   hardforks,
-  taskpools,
   utils
 
 type
@@ -87,7 +86,7 @@ type
     gasLimit: uint64
       ## Desired gas limit when building a block
 
-    taskpool*: Taskpool
+    taskpool*: pointer
       ## Shared task pool for offloading computation to other threads
 
     statelessProviderEnabled*: bool
@@ -123,13 +122,13 @@ proc initializeDb(com: CommonRef) =
     txFrame.hasKeyRc(key).expect "valid bool"
   if canonicalHeadHashKey().toOpenArray notin txFrame:
     let genesisHash = com.genesisHeader.computeBlockHash
-    info "Writing genesis to DB",
-      blockHash = genesisHash ,
-      stateRoot = com.genesisHeader.stateRoot,
-      difficulty = com.genesisHeader.difficulty,
-      gasLimit = com.genesisHeader.gasLimit,
-      timestamp = com.genesisHeader.timestamp,
-      nonce = com.genesisHeader.nonce
+    # info "Writing genesis to DB",
+    #   blockHash = genesisHash ,
+    #   stateRoot = com.genesisHeader.stateRoot,
+    #   difficulty = com.genesisHeader.difficulty,
+    #   gasLimit = com.genesisHeader.gasLimit,
+    #   timestamp = com.genesisHeader.timestamp,
+    #   nonce = com.genesisHeader.nonce
     doAssert(com.genesisHeader.number == 0.BlockNumber,
       "can't commit genesis block with number > 0")
     txFrame.persistHeaderAndSetHead(com.genesisHeader,
@@ -147,25 +146,25 @@ proc initializeDb(com: CommonRef) =
   let
     baseNum = txFrame.getSavedStateBlockNumber()
     base = txFrame.getBlockHeader(baseNum).valueOr:
-      fatal "Cannot load base block header",
-        baseNum, err = error
+      # fatal "Cannot load base block header",
+      #   baseNum, err = error
       quit 1
     baseHash = base.computeBlockHash
     finalized = txFrame.fcuFinalized().valueOr:
-      debug "Reverting to base", err = error
+      # debug "Reverting to base", err = error
       FcuHashAndNumber(hash: baseHash, number: base.number)
     head = txFrame.fcuHead().valueOr:
-      fatal "Reverting to base", err = error
+      # fatal "Reverting to base", err = error
       FcuHashAndNumber(hash: baseHash, number: base.number)
 
-  info "Database initialized",
-    base = (baseHash, base.number),
-    finalized = (finalized.hash, finalized.number),
-    head = (head.hash, head.number)
+  # info "Database initialized",
+  #   base = (baseHash, base.number),
+  #   finalized = (finalized.hash, finalized.number),
+  #   head = (head.hash, head.number)
 
 proc init(com         : CommonRef,
           db          : CoreDbRef,
-          taskpool    : Taskpool,
+          taskpool    : pointer,
           networkId   : NetworkId,
           config      : ChainConfig,
           genesis     : Genesis,
@@ -180,7 +179,7 @@ proc init(com         : CommonRef,
   com.config = config
   com.forkTransitionTable = config.toForkTransitionTable()
   com.networkId = networkId
-  com.extraData = ShortClientId
+  #com.extraData = ShortClientId
   com.taskpool = taskpool
   com.gasLimit = DEFAULT_GAS_LIMIT
 
@@ -230,7 +229,7 @@ proc isBlockAfterTtd(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool
 proc new*(
     _: type CommonRef;
     db: CoreDbRef;
-    taskpool: Taskpool;
+    taskpool: pointer;
     networkId: NetworkId = MainNet;
     params = networkParams(MainNet);
     initializeDb = true;
@@ -254,7 +253,7 @@ proc new*(
 proc new*(
     _: type CommonRef;
     db: CoreDbRef;
-    taskpool: Taskpool;
+    taskpool: pointer;
     config: ChainConfig;
     networkId: NetworkId = MainNet;
     initializeDb = true;

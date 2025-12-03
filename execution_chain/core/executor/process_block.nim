@@ -25,49 +25,49 @@ import
   ./executor_helpers,
   ./process_transaction,
   eth/common/[keys, transaction_utils],
-  chronicles,
-  results,
-  taskpools
+  # chronicles,
+  results #,
+  # taskpools
 
 template withSender(txs: openArray[Transaction], body: untyped) =
   # Execute transactions offloading the signature checking to the task pool if
   # it's available
-  if taskpool == nil:
-    for txIndex {.inject.}, tx {.inject.} in txs:
-      let sender {.inject.} = tx.recoverSender().valueOr(default(Address))
-      body
-  else:
-    type Entry = (Signature, Hash32, Flowvar[Address])
+  # if taskpool == nil:
+  for txIndex {.inject.}, tx {.inject.} in txs:
+    let sender {.inject.} = tx.recoverSender().valueOr(default(Address))
+    body
+  # else:
+  #   type Entry = (Signature, Hash32, Flowvar[Address])
 
-    proc recoverTask(e: ptr Entry): Address {.nimcall.} =
-      let pk = recover(e[][0], SkMessage(e[][1].data))
-      if pk.isOk():
-        pk[].to(Address)
-      else:
-        default(Address)
+  #   proc recoverTask(e: ptr Entry): Address {.nimcall.} =
+  #     let pk = recover(e[][0], SkMessage(e[][1].data))
+  #     if pk.isOk():
+  #       pk[].to(Address)
+  #     else:
+  #       default(Address)
 
-    var entries = newSeq[Entry](txs.len)
+  #   var entries = newSeq[Entry](txs.len)
 
-    # Prepare signature recovery tasks for each transaction - for simplicity,
-    # we use `default(Address)` to signal sig check failure
-    for i, e in entries.mpairs():
-      e[0] = txs[i].signature().valueOr(default(Signature))
-      e[1] = txs[i].rlpHashForSigning(txs[i].isEip155)
-      let a = addr e
-      # Spawning the task here allows it to start early, while we still haven't
-      # hashed subsequent txs
-      e[2] = taskpool.spawn recoverTask(a)
+  #   # Prepare signature recovery tasks for each transaction - for simplicity,
+  #   # we use `default(Address)` to signal sig check failure
+  #   for i, e in entries.mpairs():
+  #     e[0] = txs[i].signature().valueOr(default(Signature))
+  #     e[1] = txs[i].rlpHashForSigning(txs[i].isEip155)
+  #     let a = addr e
+  #     # Spawning the task here allows it to start early, while we still haven't
+  #     # hashed subsequent txs
+  #     e[2] = taskpool.spawn recoverTask(a)
 
-    for txIndex {.inject.}, e in entries.mpairs():
-      template tx(): untyped =
-        txs[txIndex]
+  #   for txIndex {.inject.}, e in entries.mpairs():
+  #     template tx(): untyped =
+  #       txs[txIndex]
 
-      # Sync blocks until the sender is available from the task pool - as soon
-      # as we have it, we can process this transaction while the senders of the
-      # other transactions are being computed
-      let sender {.inject.} = sync(e[2])
+  #     # Sync blocks until the sender is available from the task pool - as soon
+  #     # as we have it, we can process this transaction while the senders of the
+  #     # other transactions are being computed
+  #     let sender {.inject.} = sync(e[2])
 
-      body
+  #     body
 
 # Factored this out of procBlkPreamble so that it can be used directly for
 # stateless execution of specific transactions.
@@ -77,7 +77,7 @@ proc processTransactions*(
     transactions: seq[Transaction],
     skipReceipts = false,
     collectLogs = false,
-    taskpool: Taskpool = nil,
+    #taskpool: pointer = nil,
 ): Result[void, string] =
   vmState.receipts.setLen(if skipReceipts: 0 else: transactions.len)
   vmState.cumulativeGasUsed = 0
@@ -105,7 +105,7 @@ proc procBlkPreamble(
     vmState: BaseVMState,
     blk: Block,
     skipValidation, skipReceipts, skipUncles: bool,
-    taskpool: Taskpool,
+    # taskpool: pointer,
 ): Result[void, string] =
   template header(): Header =
     blk.header
@@ -161,7 +161,7 @@ proc procBlkPreamble(
 
     let collectLogs = header.requestsHash.isSome and not skipValidation
     ?processTransactions(
-      vmState, header, blk.transactions, skipReceipts, collectLogs, taskpool
+      vmState, header, blk.transactions, skipReceipts, collectLogs #, taskpool
     )
   elif blk.transactions.len > 0:
     return err("Transactions in block with empty txRoot")
@@ -182,8 +182,8 @@ proc procBlkPreamble(
 
   if vmState.cumulativeGasUsed != header.gasUsed:
     # TODO replace logging with better error
-    debug "gasUsed neq cumulativeGasUsed",
-      gasUsed = header.gasUsed, cumulativeGasUsed = vmState.cumulativeGasUsed
+    # debug "gasUsed neq cumulativeGasUsed",
+    #   gasUsed = header.gasUsed, cumulativeGasUsed = vmState.cumulativeGasUsed
     return err("gasUsed mismatch")
 
   if header.ommersHash != EMPTY_UNCLE_HASH:
@@ -233,13 +233,13 @@ proc procBlkEpilogue(
     let stateRoot = vmState.ledger.getStateRoot()
     if header.stateRoot != stateRoot:
       # TODO replace logging with better error
-      debug "wrong state root in block",
-        blockNumber = header.number,
-        blockHash = header.computeBlockHash,
-        parentHash = header.parentHash,
-        expected = header.stateRoot,
-        actual = stateRoot,
-        parentStateRoot = vmState.parent.stateRoot
+      # debug "wrong state root in block",
+      #   blockNumber = header.number,
+      #   blockHash = header.computeBlockHash,
+      #   parentHash = header.parentHash,
+      #   expected = header.stateRoot,
+      #   actual = stateRoot,
+      #   parentStateRoot = vmState.parent.stateRoot
       return
         err("stateRoot mismatch, expect: " & $header.stateRoot & ", got: " & $stateRoot)
 
@@ -247,19 +247,19 @@ proc procBlkEpilogue(
       let bloom = createBloom(vmState.receipts)
 
       if header.logsBloom != bloom:
-        debug "wrong logsBloom in block",
-          blockNumber = header.number, actual = bloom, expected = header.logsBloom
+        # debug "wrong logsBloom in block",
+        #   blockNumber = header.number, actual = bloom, expected = header.logsBloom
         return err("bloom mismatch")
 
       let receiptsRoot = calcReceiptsRoot(vmState.receipts)
       if header.receiptsRoot != receiptsRoot:
         # TODO replace logging with better error
-        debug "wrong receiptRoot in block",
-          blockNumber = header.number,
-          parentHash = header.parentHash.short,
-          blockHash = header.computeBlockHash.short,
-          actual = receiptsRoot,
-          expected = header.receiptsRoot
+        # debug "wrong receiptRoot in block",
+        #   blockNumber = header.number,
+        #   parentHash = header.parentHash.short,
+        #   blockHash = header.computeBlockHash.short,
+        #   actual = receiptsRoot,
+        #   expected = header.receiptsRoot
         return err("receiptRoot mismatch")
 
     if header.requestsHash.isSome:
@@ -275,12 +275,12 @@ proc procBlkEpilogue(
         )
 
       if header.requestsHash.get != requestsHash:
-        debug "wrong requestsHash in block",
-          blockNumber = header.number,
-          parentHash = header.parentHash.short,
-          blockHash = header.computeBlockHash.short,
-          actual = requestsHash,
-          expected = header.requestsHash.get
+        # debug "wrong requestsHash in block",
+        #   blockNumber = header.number,
+        #   parentHash = header.parentHash.short,
+        #   blockHash = header.computeBlockHash.short,
+        #   actual = requestsHash,
+        #   expected = header.requestsHash.get
         return err("requestsHash mismatch")
 
   ok()
@@ -296,10 +296,10 @@ proc processBlock*(
     skipReceipts: bool = false,
     skipUncles: bool = false,
     skipStateRootCheck: bool = false,
-    taskpool: Taskpool = nil,
+    #taskpool: Taskpool = nil,
 ): Result[void, string] =
   ## Generalised function to processes `blk` for any network.
-  ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles, taskpool)
+  ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles) #, taskpool)
 
   # EIP-3675: no reward for miner in POA/POS
   if not vmState.com.proofOfStake(blk.header, vmState.ledger.txFrame):

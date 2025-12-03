@@ -12,14 +12,15 @@
 
 import
   std/[macros, strformat],
-  pkg/[chronicles, chronos, stew/byteutils],
+  #pkg/[chronicles, chronos,
+  stew/byteutils,
   ".."/[constants, db/ledger],
   "."/[code_stream, computation, evm_errors],
   "."/[message, precompiles, state, types],
   ./interpreter/op_dispatcher
 
-logScope:
-  topics = "vm opcode"
+# logScope:
+#   topics = "vm opcode"
 
 # ------------------------------------------------------------------------------
 # Private functions

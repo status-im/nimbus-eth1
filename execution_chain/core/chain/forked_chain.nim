@@ -379,6 +379,11 @@ with --debug-eager-state-root."""
 
   count
 
+from std/times import getTime, toUnix
+
+proc now(_: type EthTime): EthTime =
+  getTime().toUnix.EthTime
+
 proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   if c.baseQueue.len > 0:
     let base = c.baseQueue.popFirst()

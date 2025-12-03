@@ -29,7 +29,7 @@ import
   ../utils/utils_numeric,
   ./oph_defs,
   ./oph_helpers,
-  chronicles,
+  # chronicles,
   eth/common/addresses,
   stew/assign2,
   stint,
@@ -219,10 +219,10 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
   cpt.returnData.setLen(0)
 
   if cpt.msg.depth >= MaxCallDepth:
-    debug "Computation Failure",
-      reason = "Stack too deep",
-      maximumDepth = MaxCallDepth,
-      depth = cpt.msg.depth
+    # debug "Computation Failure",
+    #   reason = "Stack too deep",
+    #   maximumDepth = MaxCallDepth,
+    #   depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
     return ok()
 
@@ -273,10 +273,10 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
   cpt.returnData.setLen(0)
 
   if cpt.msg.depth >= MaxCallDepth:
-    debug "Computation Failure",
-      reason = "Stack too deep",
-      maximumDepth = MaxCallDepth,
-      depth = cpt.msg.depth
+    # debug "Computation Failure",
+    #   reason = "Stack too deep",
+    #   maximumDepth = MaxCallDepth,
+    #   depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
     return ok()
 
@@ -327,10 +327,10 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
 
   cpt.returnData.setLen(0)
   if cpt.msg.depth >= MaxCallDepth:
-    debug "Computation Failure",
-      reason = "Stack too deep",
-      maximumDepth = MaxCallDepth,
-      depth = cpt.msg.depth
+    # debug "Computation Failure",
+    #   reason = "Stack too deep",
+    #   maximumDepth = MaxCallDepth,
+    #   depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
     return ok()
 
@@ -377,10 +377,10 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
   cpt.returnData.setLen(0)
 
   if cpt.msg.depth >= MaxCallDepth:
-    debug "Computation Failure",
-      reason = "Stack too deep",
-      maximumDepth = MaxCallDepth,
-      depth = cpt.msg.depth
+    # debug "Computation Failure",
+    #   reason = "Stack too deep",
+    #   maximumDepth = MaxCallDepth,
+    #   depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
     return ok()
 

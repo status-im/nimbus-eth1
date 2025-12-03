@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  chronicles,
+  #chronicles,
   eth/common/[addresses, headers],
   web3/eth_api_types,
   ../transaction/call_common,
@@ -44,10 +44,11 @@ proc toCallParams*(vmState: BaseVMState, args: TransactionArgs,
     gasLimit = GasInt args.gas.get()
 
   if globalGasCap != 0 and globalGasCap < gasLimit:
-    warn "Caller gas above allowance, capping",
-      requested = gasLimit,
-      cap = globalGasCap,
-      gasLimit = globalGasCap
+    discard
+    # warn "Caller gas above allowance, capping",
+    #   requested = gasLimit,
+    #   cap = globalGasCap,
+    #   gasLimit = globalGasCap
 
   var gasPrice = GasInt args.gasPrice.get(0.Quantity)
   if baseFee.isSome:

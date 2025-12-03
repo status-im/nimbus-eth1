@@ -15,7 +15,7 @@
 
 import
   std/[sequtils],
-  chronicles,
+  #chronicles,
   eth/[common, rlp],
   stew/byteutils,
   results,
@@ -24,8 +24,8 @@ import
   ".."/[aristo, storage_types],
   "."/base
 
-logScope:
-  topics = "core_db"
+# logScope:
+#   topics = "core_db"
 
 type
   TransactionKey* = object
@@ -84,7 +84,7 @@ iterator getBlockTransactionData*(
     for idx in 0'u16..<uint16.high:
       let key = hashIndexKey(txRoot, idx)
       let txData = db.getOrEmpty(key).valueOr:
-        warn "getBlockTransactionData", txRoot, key, error=($$error)
+        # warn "getBlockTransactionData", txRoot, key, error=($$error)
         break body
       if txData.len == 0:
         break body
@@ -98,8 +98,8 @@ iterator getBlockTransactions*(
     try:
       yield rlp.decode(encodedTx, Transaction)
     except RlpError as e:
-      warn "getBlockTransactions(): Cannot decode tx",
-        data = toHex(encodedTx), err=e.msg, errName=e.name
+      discard #warn "getBlockTransactions(): Cannot decode tx",
+      #  data = toHex(encodedTx), err=e.msg, errName=e.name
 
 iterator getBlockTransactionHashes*(
     db: CoreDbTxRef;
@@ -122,7 +122,7 @@ iterator getWithdrawals*(
     for idx in 0'u16..<uint16.high:
       let key = hashIndexKey(withdrawalsRoot, idx)
       let data = db.getOrEmpty(key).valueOr:
-        warn "getWithdrawals", withdrawalsRoot, key, error=($$error)
+        #warn "getWithdrawals", withdrawalsRoot, key, error=($$error)
         break body
       if data.len == 0:
         break body
@@ -140,7 +140,7 @@ iterator getReceipts*(
     for idx in 0'u16..<uint16.high:
       let key = hashIndexKey(receiptsRoot, idx)
       let data = db.getOrEmpty(key).valueOr:
-        warn "getReceipts", receiptsRoot, key, error=($$error)
+        discard #warn "getReceipts", receiptsRoot, key, error=($$error)
         break body
       if data.len == 0:
         break body
@@ -165,7 +165,7 @@ proc getBlockHeader*(
   const info = "getBlockHeader()"
   let data = db.get(genericHashKey(blockHash).toOpenArray).valueOr:
     if error.error != KvtNotFound:
-      warn info, blockHash, error=($$error)
+      discard #warn info, blockHash, error=($$error)
     return err("No block with hash " & $blockHash)
 
   wrapRlpException info:
@@ -186,7 +186,7 @@ proc getHash(
   const info = "getHash()"
   let data = db.get(key.toOpenArray).valueOr:
     if error.error != KvtNotFound:
-      warn info, key, error=($$error)
+      discard #warn info, key, error=($$error)
     return err($$error)
 
   wrapRlpException info:
@@ -215,12 +215,12 @@ proc getScore*(
   const info = "getScore()"
   let data = db.get(blockHashToScoreKey(blockHash).toOpenArray).valueOr:
     if error.error != KvtNotFound:
-      warn info, blockHash, error=($$error)
+      discard #warn info, blockHash, error=($$error)
     return Opt.none(UInt256)
   try:
     Opt.some(rlp.decode(data, UInt256))
   except RlpError as exc:
-    warn info, data = data.toHex(), error=exc.msg
+    discard #warn info, data = data.toHex(), error=exc.msg
     Opt.none(UInt256)
 
 proc headTotalDifficulty*(
@@ -250,7 +250,7 @@ proc addBlockNumberToHashLookup*(
     db: CoreDbTxRef; blockNumber: BlockNumber, blockHash: Hash32) =
   let blockNumberKey = blockNumberToHashKey(blockNumber)
   db.put(blockNumberKey.toOpenArray, rlp.encode(blockHash)).isOkOr:
-    warn "addBlockNumberToHashLookup", blockNumberKey, error=($$error)
+    discard #warn "addBlockNumberToHashLookup", blockNumberKey, error=($$error)
 
 proc persistTransactions*(
     db: CoreDbTxRef;
@@ -272,10 +272,10 @@ proc persistTransactions*(
       txKey = TransactionKey(blockNumber: blockNumber, index: idx.uint)
       key = hashIndexKey(txRoot, idx.uint16)
     db.put(key, encodedTx).isOkOr:
-      warn info, idx, error=($$error)
+      discard #warn info, idx, error=($$error)
       return
     db.put(blockKey.toOpenArray, rlp.encode(txKey)).isOkOr:
-      trace info, blockKey, error=($$error)
+      #trace info, blockKey, error=($$error)
       return
 
 proc getTransactionByIndex*(
@@ -306,7 +306,7 @@ proc getTransactionCount*(
   while true:
     let key = hashIndexKey(txRoot, txCount)
     let yes = db.hasKeyRc(key).valueOr:
-      warn info, txRoot, key, error=($$error)
+      discard #warn info, txRoot, key, error=($$error)
       return 0
     if yes:
       inc txCount
@@ -328,7 +328,7 @@ proc getUnclesCount*(
       let key = genericHashKey(ommersHash)
       db.get(key.toOpenArray).valueOr:
         if error.error != KvtNotFound:
-          warn info, ommersHash, error=($$error)
+          discard #warn info, ommersHash, error=($$error)
         return ok(0)
     return ok(rlpFromBytes(encodedUncles).listLen)
 
@@ -345,7 +345,7 @@ proc getUncles*(
       let key = genericHashKey(ommersHash)
       db.get(key.toOpenArray).valueOr:
         if error.error != KvtNotFound:
-          warn info, ommersHash, error=($$error)
+          discard #warn info, ommersHash, error=($$error)
         return ok(default(seq[Header]))
     return ok(rlp.decode(encodedUncles, seq[Header]))
 
@@ -360,7 +360,7 @@ proc persistWithdrawals*(
 
   db.put(withdrawalsKey(withdrawalsRoot).toOpenArray,
     rlp.encode(withdrawals)).isOkOr:
-      warn info, error=($$error)
+      discard #warn info, error=($$error)
       return
 
   when false:
@@ -369,7 +369,7 @@ proc persistWithdrawals*(
     for idx, wd in withdrawals:
       let key = hashIndexKey(withdrawalsRoot, idx.uint16)
       db.put(key, rlp.encode(wd)).isOkOr:
-        warn info, idx, error=($$error)
+        discard #warn info, idx, error=($$error)
         return
 
 proc getWithdrawals*(
@@ -384,7 +384,7 @@ proc getWithdrawals*(
 
     if res.isErr:
       if res.error.error != KvtNotFound:
-        warn info, withdrawalsRoot, error=($$res.error)
+        discard #warn info, withdrawalsRoot, error=($$res.error)
       else:
         # Fallback to old withdrawals format
         for wd in db.getWithdrawals(Withdrawal, withdrawalsRoot):
@@ -498,7 +498,7 @@ proc getUncleHashes*(
       key = genericHashKey(header.ommersHash)
       encodedUncles = db.get(key.toOpenArray).valueOr:
         if error.error != KvtNotFound:
-          warn "getUncleHashes()", ommersHash=header.ommersHash, error=($$error)
+          discard #warn "getUncleHashes()", ommersHash=header.ommersHash, error=($$error)
         return ok(default(seq[Hash32]))
     return ok(rlp.decode(encodedUncles, seq[Header]).mapIt(it.computeRlpHash))
 
@@ -511,7 +511,7 @@ proc getTransactionKey*(
       txKey = transactionHashToBlockKey(transactionHash)
       tx = db.get(txKey.toOpenArray).valueOr:
         if error.error != KvtNotFound:
-          warn "getTransactionKey()", transactionHash, error=($$error)
+          discard #warn "getTransactionKey()", transactionHash, error=($$error)
         return ok(default(TransactionKey))
     return ok(rlp.decode(tx, TransactionKey))
 
@@ -519,7 +519,7 @@ proc headerExists(db: CoreDbTxRef; blockHash: Hash32): bool =
   ## Returns True if the header with the given block hash is in our DB.
   db.hasKeyRc(genericHashKey(blockHash).toOpenArray).valueOr:
     if error.error != KvtNotFound:
-      warn "headerExists()", blockHash, error=($$error)
+      discard #warn "headerExists()", blockHash, error=($$error)
     return false
   # => true/false
 
@@ -556,7 +556,7 @@ proc persistReceipts*(
   for idx, rec in receipts:
     let key = hashIndexKey(receiptsRoot, idx.uint16)
     db.put(key, rlp.encode(rec)).isOkOr:
-      warn info, idx, error=($$error)
+      discard #warn info, idx, error=($$error)
 
 proc getReceipts*(
     db: CoreDbTxRef;
@@ -652,7 +652,7 @@ proc persistUncles*(db: CoreDbTxRef, uncles: openArray[Header]): Hash32 =
   let enc = rlp.encode(uncles)
   result = keccak256(enc)
   db.put(genericHashKey(result).toOpenArray, enc).isOkOr:
-    warn "persistUncles()", unclesHash=result, error=($$error)
+    #warn "persistUncles()", unclesHash=result, error=($$error)
     return EMPTY_ROOT_HASH
 
 proc persistWitness*(db: CoreDbTxRef, blockHash: Hash32, witness: Witness): Result[void, string] =

@@ -10,14 +10,14 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[tables, strutils, times, macros],
-  eth/rlp, eth/common/eth_types_json_serialization,
+  std/[tables, strutils, macros],
+  eth/rlp, #, eth/common/eth_types_json_serialization,
   eth/common/eth_types_rlp,
   stint, stew/[byteutils],
-  json_serialization, chronicles,
-  json_serialization/pkg/results,
-  json_serialization/std/tables,
-  json_serialization/lexer,
+  # json_serialization, chronicles,
+  # json_serialization/pkg/results,
+  # json_serialization/std/tables,
+  # json_serialization/lexer,
   ./[genesis_alloc, hardforks]
 
 export
@@ -62,32 +62,32 @@ const
   SepoliaNet* = 11155111.u256
   HoodiNet*   = 560048.u256
 
-createJsonFlavor JGenesis,
-  automaticObjectSerialization = false,
-  requireAllFields = false,
-  omitOptionalFields = true,
-  allowUnknownFields = true,
-  skipNullFields = true
+# createJsonFlavor JGenesis,
+#   automaticObjectSerialization = false,
+#   requireAllFields = false,
+#   omitOptionalFields = true,
+#   allowUnknownFields = true,
+#   skipNullFields = true
 
-NetworkParams.useDefaultReaderIn JGenesis
-GenesisAccount.useDefaultReaderIn JGenesis
-Genesis.useDefaultReaderIn JGenesis
-ChainConfig.useDefaultReaderIn JGenesis
-BlobSchedule.useDefaultReaderIn JGenesis
+# NetworkParams.useDefaultReaderIn JGenesis
+# GenesisAccount.useDefaultReaderIn JGenesis
+# Genesis.useDefaultReaderIn JGenesis
+# ChainConfig.useDefaultReaderIn JGenesis
+# BlobSchedule.useDefaultReaderIn JGenesis
 
 # ------------------------------------------------------------------------------
 # Private helper functions
 # ------------------------------------------------------------------------------
 
 # used by chronicles json writer
-proc writeValue(writer: var JsonWriter, value: Opt[EthTime])
-     {.gcsafe, raises: [IOError].} =
-  mixin writeValue
+# proc writeValue(writer: var JsonWriter, value: Opt[EthTime])
+#      {.gcsafe, raises: [IOError].} =
+#   mixin writeValue
 
-  if value.isSome:
-    writer.writeValue value.get.uint64
-  else:
-    writer.writeValue JsonString("null")
+#   if value.isSome:
+#     writer.writeValue value.get.uint64
+#   else:
+#     writer.writeValue JsonString("null")
 
 type
   Slots = object
@@ -161,116 +161,116 @@ template wrapError(body: untyped) =
   except ValueError as ex:
     raiseUnexpectedValue(reader, ex.msg)
 
-proc readValue(reader: var JsonReader[JGenesis], value: var UInt256)
-    {.gcsafe, raises: [SerializationError, IOError].} =
-  ## Mixin for `JGenesis.loadFile()`. Note that this driver applies the same
-  ## to `BlockNumber` fields as well as generic `UInt265` fields like the
-  ## account `balance`.
-  var (accu, ok) = (0.u256, true)
-  let tokKind = reader.tokKind
-  if tokKind == JsonValueKind.Number:
-    try:
-      reader.customIntValueIt:
-        accu = accu * 10 + it.u256
-    except CatchableError:
-      ok = false
-  elif tokKind == JsonValueKind.String:
-    try:
-      var (sLen, base) = (0, 10)
-      reader.customStringValueIt:
-        if ok:
-          var num = it.fromHex
-          if base <= num:
-            ok = false # cannot be larger than base
-          elif sLen < 2:
-            if 0 <= num:
-              accu = accu * base.u256 + num.u256
-            elif sLen == 1 and it in {'x', 'X'}:
-              base = 16 # handle "0x" prefix
-            else:
-              ok = false
-            sLen.inc
-          elif num < 0:
-            ok = false # not a hex digit
-          elif base == 10:
-            accu = accu * 10 + num.u256
-          else:
-            accu = accu * 16 + num.u256
-    except CatchableError:
-      reader.raiseUnexpectedValue("numeric string parse error")
-  else:
-    reader.raiseUnexpectedValue("expect int or hex/int string")
-  if not ok:
-    reader.raiseUnexpectedValue("Uint256 parse error")
-  value = accu
+# proc readValue(reader: var JsonReader[JGenesis], value: var UInt256)
+#     {.gcsafe, raises: [SerializationError, IOError].} =
+#   ## Mixin for `JGenesis.loadFile()`. Note that this driver applies the same
+#   ## to `BlockNumber` fields as well as generic `UInt265` fields like the
+#   ## account `balance`.
+#   var (accu, ok) = (0.u256, true)
+#   let tokKind = reader.tokKind
+#   if tokKind == JsonValueKind.Number:
+#     try:
+#       reader.customIntValueIt:
+#         accu = accu * 10 + it.u256
+#     except CatchableError:
+#       ok = false
+#   elif tokKind == JsonValueKind.String:
+#     try:
+#       var (sLen, base) = (0, 10)
+#       reader.customStringValueIt:
+#         if ok:
+#           var num = it.fromHex
+#           if base <= num:
+#             ok = false # cannot be larger than base
+#           elif sLen < 2:
+#             if 0 <= num:
+#               accu = accu * base.u256 + num.u256
+#             elif sLen == 1 and it in {'x', 'X'}:
+#               base = 16 # handle "0x" prefix
+#             else:
+#               ok = false
+#             sLen.inc
+#           elif num < 0:
+#             ok = false # not a hex digit
+#           elif base == 10:
+#             accu = accu * 10 + num.u256
+#           else:
+#             accu = accu * 16 + num.u256
+#     except CatchableError:
+#       reader.raiseUnexpectedValue("numeric string parse error")
+#   else:
+#     reader.raiseUnexpectedValue("expect int or hex/int string")
+#   if not ok:
+#     reader.raiseUnexpectedValue("Uint256 parse error")
+#   value = accu
 
-proc readValue(reader: var JsonReader[JGenesis], value: var Hash32)
-    {.gcsafe, raises: [SerializationError, IOError].} =
-  wrapError:
-    value = Hash32.fromHex(reader.readValue(string))
+# proc readValue(reader: var JsonReader[JGenesis], value: var Hash32)
+#     {.gcsafe, raises: [SerializationError, IOError].} =
+#   wrapError:
+#     value = Hash32.fromHex(reader.readValue(string))
 
-proc readValue(reader: var JsonReader[JGenesis], value: var Bytes8)
-    {.gcsafe, raises: [SerializationError, IOError].} =
-  wrapError:
-    value = fromHex[uint64](reader.readValue(string)).to(Bytes8)
+# proc readValue(reader: var JsonReader[JGenesis], value: var Bytes8)
+#     {.gcsafe, raises: [SerializationError, IOError].} =
+#   wrapError:
+#     value = fromHex[uint64](reader.readValue(string)).to(Bytes8)
 
-# genesis timestamp is in hex/dec
-proc readValue(reader: var JsonReader[JGenesis], value: var EthTime)
-    {.gcsafe, raises: [SerializationError, IOError].} =
-  wrapError:
-    let data = reader.readValue(string)
-    if data.len > 2 and data[1] == 'x':
-      value = fromHex[int64](data).EthTime
-    else:
-      # TODO: use safer uint64 parser
-      value = parseInt(data).EthTime
+# # genesis timestamp is in hex/dec
+# proc readValue(reader: var JsonReader[JGenesis], value: var EthTime)
+#     {.gcsafe, raises: [SerializationError, IOError].} =
+#   wrapError:
+#     let data = reader.readValue(string)
+#     if data.len > 2 and data[1] == 'x':
+#       value = fromHex[int64](data).EthTime
+#     else:
+#       # TODO: use safer uint64 parser
+#       value = parseInt(data).EthTime
 
-# but shanghaiTime and cancunTime in config is in int literal
-proc readValue(reader: var JsonReader[JGenesis], value: var Opt[EthTime])
-    {.gcsafe, raises: [IOError, JsonReaderError].} =
-  if reader.tokKind == JsonValueKind.Null:
-    reset value
-    reader.parseNull()
-  else:
-    # both readValue(GasInt/AccountNonce) will be called if
-    # we use readValue(int64/uint64)
-    let val = EthTime reader.parseInt(uint64)
-    value = Opt.some val
+# # but shanghaiTime and cancunTime in config is in int literal
+# proc readValue(reader: var JsonReader[JGenesis], value: var Opt[EthTime])
+#     {.gcsafe, raises: [IOError, JsonReaderError].} =
+#   if reader.tokKind == JsonValueKind.Null:
+#     reset value
+#     reader.parseNull()
+#   else:
+#     # both readValue(GasInt/AccountNonce) will be called if
+#     # we use readValue(int64/uint64)
+#     let val = EthTime reader.parseInt(uint64)
+#     value = Opt.some val
 
-proc readValue(reader: var JsonReader[JGenesis], value: var seq[byte])
-    {.gcsafe, raises: [SerializationError, IOError].} =
-  wrapError:
-    value = hexToSeqByte(reader.readValue(string))
+# proc readValue(reader: var JsonReader[JGenesis], value: var seq[byte])
+#     {.gcsafe, raises: [SerializationError, IOError].} =
+#   wrapError:
+#     value = hexToSeqByte(reader.readValue(string))
 
-proc readValue(reader: var JsonReader[JGenesis], value: var Address)
-    {.gcsafe, raises: [SerializationError, IOError].} =
-  wrapError:
-    value = Address.fromHex(reader.readValue(string))
+# proc readValue(reader: var JsonReader[JGenesis], value: var Address)
+#     {.gcsafe, raises: [SerializationError, IOError].} =
+#   wrapError:
+#     value = Address.fromHex(reader.readValue(string))
 
-proc readValue(reader: var JsonReader[JGenesis], value: var uint64)
-    {.gcsafe, raises: [SerializationError, IOError].} =
-  wrapError:
-    if reader.tokKind == JsonValueKind.Number:
-      value = reader.parseInt(uint64)
-    else:
-      let data = reader.readValue(string)
-      if data.len > 2 and data[1] == 'x':
-        value = fromHex[uint64](data)
-      else:
-        # TODO: use safer uint64 parser
-        value = parseInt(data).uint64
+# proc readValue(reader: var JsonReader[JGenesis], value: var uint64)
+#     {.gcsafe, raises: [SerializationError, IOError].} =
+#   wrapError:
+#     if reader.tokKind == JsonValueKind.Number:
+#       value = reader.parseInt(uint64)
+#     else:
+#       let data = reader.readValue(string)
+#       if data.len > 2 and data[1] == 'x':
+#         value = fromHex[uint64](data)
+#       else:
+#         # TODO: use safer uint64 parser
+#         value = parseInt(data).uint64
 
-proc readValue(reader: var JsonReader[JGenesis], value: var GenesisStorage)
-    {.gcsafe, raises: [SerializationError, IOError].} =
-  wrapError:
-    for key in reader.readObjectFields:
-      value[UInt256.fromHex(key)] = reader.readValue(UInt256)
+# proc readValue(reader: var JsonReader[JGenesis], value: var GenesisStorage)
+#     {.gcsafe, raises: [SerializationError, IOError].} =
+#   wrapError:
+#     for key in reader.readObjectFields:
+#       value[UInt256.fromHex(key)] = reader.readValue(UInt256)
 
-proc readValue(reader: var JsonReader[JGenesis], value: var GenesisAlloc)
-    {.gcsafe, raises: [SerializationError, IOError].} =
-  wrapError:
-    for key in reader.readObjectFields:
-      value[Address.fromHex(key)] = reader.readValue(GenesisAccount)
+# proc readValue(reader: var JsonReader[JGenesis], value: var GenesisAlloc)
+#     {.gcsafe, raises: [SerializationError, IOError].} =
+#   wrapError:
+#     for key in reader.readObjectFields:
+#       value[Address.fromHex(key)] = reader.readValue(GenesisAccount)
 
 const
   BlobScheduleTable: array[Cancun..HardFork.high, string] = [
@@ -309,11 +309,11 @@ macro blobScheduleParser(reader, key, value: typed): untyped =
   )
   result = caseStmt
 
-proc readValue(reader: var JsonReader[JGenesis], value: var array[Cancun..HardFork.high, Opt[BlobSchedule]])
-    {.gcsafe, raises: [SerializationError, IOError].} =
-  wrapError:
-    for key in reader.readObjectFields:
-      blobScheduleParser(reader, key, value)
+# proc readValue(reader: var JsonReader[JGenesis], value: var array[Cancun..HardFork.high, Opt[BlobSchedule]])
+#     {.gcsafe, raises: [SerializationError, IOError].} =
+#   wrapError:
+#     for key in reader.readObjectFields:
+#       blobScheduleParser(reader, key, value)
 
 macro fillArrayOfBlockNumberBasedForkOptionals(conf, tmp: typed): untyped =
   result = newStmtList()
@@ -363,11 +363,11 @@ proc validateChainConfig(conf: ChainConfig): bool =
 
     if lastBlockNumberBasedFork.number.isSome and cur.number.isSome:
       if lastBlockNumberBasedFork.number.get > cur.number.get:
-        error "Unsupported fork ordering",
-          lastFork=lastBlockNumberBasedFork.name,
-          lastNumber=lastBlockNumberBasedFork.number,
-          curFork=cur.name,
-          curNumber=cur.number
+        # error "Unsupported fork ordering",
+        #   lastFork=lastBlockNumberBasedFork.name,
+        #   lastNumber=lastBlockNumberBasedFork.number,
+        #   curFork=cur.name,
+        #   curNumber=cur.number
         return false
 
     # If it was optional and not set, then ignore it
@@ -383,11 +383,11 @@ proc validateChainConfig(conf: ChainConfig): bool =
 
     if lastTimeBasedFork.time.isSome and cur.time.isSome:
       if lastTimeBasedFork.time.get > cur.time.get:
-        error "Unsupported fork ordering",
-          lastFork=lastTimeBasedFork.name,
-          lastTime=lastTimeBasedFork.time,
-          curFork=cur.name,
-          curTime=cur.time
+        # error "Unsupported fork ordering",
+        #   lastFork=lastTimeBasedFork.name,
+        #   lastTime=lastTimeBasedFork.time,
+        #   curFork=cur.name,
+        #   curTime=cur.time
         return false
 
     # If it was optional and not set, then ignore it
@@ -419,7 +419,7 @@ const
   NumRegularForks = NumForksWithBlobSchedule - NumBPOForks
   BPOForks = getBPOForks(NumBPOForks)
   RegularForks = getRegularForks(NumRegularForks)
-  
+
 proc configureBlobSchedule(conf: ChainConfig) =
   if conf.blobSchedule[Cancun].isNone:
     conf.blobSchedule[Cancun] = Opt.some(BlobSchedule(target: 3'u64, max: 6'u64, baseFeeUpdateFraction: 3_338_477'u64))
@@ -434,69 +434,69 @@ proc configureBlobSchedule(conf: ChainConfig) =
         conf.blobSchedule[fork] = conf.blobSchedule[prevFork]
       if conf.blobSchedule[fork].value.baseFeeUpdateFraction == 0:
         # Set fallback to Cancun's baseFeeUpdateFraction and prevent division by zero
-        warn "baseFeeUpdateFraction not set, fallback to Cancun's", fork=fork
+        #warn "baseFeeUpdateFraction not set, fallback to Cancun's", fork=fork
         conf.blobSchedule[fork].value.baseFeeUpdateFraction = 3_338_477'u64
       prevFork = fork
 
   setBlobScheduleWithFallback(RegularForks)
   setBlobScheduleWithFallback(BPOForks)
 
-proc parseGenesis*(data: string): Genesis
-     {.gcsafe.} =
-  try:
-    result = JGenesis.decode(data, Genesis, allowUnknownFields = true)
-  except SerializationError as e:
-    error "Invalid genesis config file format", msg=e.formatMsg("")
-    return nil
+# proc parseGenesis*(data: string): Genesis
+#      {.gcsafe.} =
+#   try:
+#     result = JGenesis.decode(data, Genesis, allowUnknownFields = true)
+#   except SerializationError as e:
+#     #error "Invalid genesis config file format", msg=e.formatMsg("")
+#     return nil
 
-proc parseGenesisFile*(fileName: string): Genesis
-     {.gcsafe.} =
-  try:
-    result = JGenesis.loadFile(fileName, Genesis, allowUnknownFields = true)
-  except IOError as e:
-    error "Genesis I/O error", fileName, msg=e.msg
-    return nil
-  except SerializationError as e:
-    error "Invalid genesis config file format", msg=e.formatMsg("")
-    return nil
+# proc parseGenesisFile*(fileName: string): Genesis
+#      {.gcsafe.} =
+#   try:
+#     result = JGenesis.loadFile(fileName, Genesis, allowUnknownFields = true)
+#   except IOError as e:
+#     #error "Genesis I/O #error", fileName, msg=e.msg
+#     return nil
+#   except SerializationError as e:
+#     #error "Invalid genesis config file format", msg=e.formatMsg("")
+#     return nil
 
-proc validateNetworkParams(params: var NetworkParams, input: string, inputIsFile: bool): bool =
-  if params.genesis.isNil:
-    # lets try with geth's format
-    let genesis = if inputIsFile: parseGenesisFile(input)
-                  else: parseGenesis(input)
-    if genesis.isNil:
-      return false
-    params.genesis = genesis
+# proc validateNetworkParams(params: var NetworkParams, input: string, inputIsFile: bool): bool =
+#   if params.genesis.isNil:
+#     # lets try with geth's format
+#     let genesis = if inputIsFile: parseGenesisFile(input)
+#                   else: parseGenesis(input)
+#     if genesis.isNil:
+#       return false
+#     params.genesis = genesis
 
-  if params.config.isNil:
-    warn "Loaded custom network contains no 'config' data"
-    params.config = ChainConfig()
+#   if params.config.isNil:
+#     #warn "Loaded custom network contains no 'config' data"
+#     params.config = ChainConfig()
 
-  configureBlobSchedule(params.config)
-  validateChainConfig(params.config)
+#   configureBlobSchedule(params.config)
+#   validateChainConfig(params.config)
 
-proc loadNetworkParams*(fileName: string, params: var NetworkParams):
-    bool =
-  try:
-    params = JGenesis.loadFile(fileName, NetworkParams, allowUnknownFields = true)
-  except IOError as e:
-    error "Network params I/O error", fileName, msg=e.msg
-    return false
-  except SerializationError as e:
-    error "Invalid network params file format", fileName, msg=e.formatMsg("")
-    return false
+# proc loadNetworkParams*(fileName: string, params: var NetworkParams):
+#     bool =
+#   try:
+#     params = JGenesis.loadFile(fileName, NetworkParams, allowUnknownFields = true)
+#   except IOError as e:
+#     #error "Network params I/O #error", fileName, msg=e.msg
+#     return false
+#   except SerializationError as e:
+#     #error "Invalid network params file format", fileName, msg=e.formatMsg("")
+#     return false
 
-  validateNetworkParams(params, fileName, true)
+#   validateNetworkParams(params, fileName, true)
 
-proc decodeNetworkParams*(jsonString: string, params: var NetworkParams): bool =
-  try:
-    params = JGenesis.decode(jsonString, NetworkParams, allowUnknownFields = true)
-  except SerializationError as e:
-    error "Invalid network params format", msg=e.formatMsg("")
-    return false
+# proc decodeNetworkParams*(jsonString: string, params: var NetworkParams): bool =
+#   try:
+#     params = JGenesis.decode(jsonString, NetworkParams, allowUnknownFields = true)
+#   except SerializationError as e:
+#     #error "Invalid network params format", msg=e.formatMsg("")
+#     return false
 
-  validateNetworkParams(params, jsonString, false)
+#   validateNetworkParams(params, jsonString, false)
 
 func defaultBlobSchedule*(): array[Cancun..HardFork.high, Opt[BlobSchedule]] =
   [
@@ -701,7 +701,7 @@ template toLog(it: Genesis): auto =
   )
 
 # TODO formatIt doesn't work for nested Json objects
-chronicles.formatIt(Genesis):
-  toLog(it)
-proc writeValue*(w: var JsonWriter, value: Genesis) {.raises: [IOError].} =
-  w.writeValue(toLog(value))
+# chronicles.formatIt(Genesis):
+#   toLog(it)
+# proc writeValue*(w: var JsonWriter, value: Genesis) {.raises: [IOError].} =
+#   w.writeValue(toLog(value))

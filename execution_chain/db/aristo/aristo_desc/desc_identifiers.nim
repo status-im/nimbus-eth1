@@ -19,7 +19,7 @@ import
   eth/common/[base, hashes],
   eth/rlp, eth/trie/nibbles,
   stew/byteutils,
-  chronicles,
+  #chronicles,
   results,
   stint
 
@@ -87,7 +87,7 @@ type
 # Chronicles formatters
 # ------------------------------------------------------------------------------
 
-chronicles.formatIt(VertexID): $it
+# chronicles.formatIt(VertexID): $it
 
 # ------------------------------------------------------------------------------
 # Public helpers: `VertexID` scalar data model

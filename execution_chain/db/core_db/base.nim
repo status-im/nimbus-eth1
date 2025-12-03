@@ -12,8 +12,8 @@
 
 import
   std/typetraits,
-  chronicles,
-  chronos/timer,
+  #chronicles,
+  # chronos/timer,
   eth/common/[accounts, base, hashes],
   ../../constants,
   ../[kvt, aristo],
@@ -96,22 +96,22 @@ proc persist*(db: CoreDbRef, txFrame: CoreDbTxRef) =
     #      kvt changes written to memory but not to disk because of an aristo
     #      error), we have to panic instead.
 
-    let kvtTick = Moment.now()
+    # let kvtTick = Moment.now()
     db.kvt.persist(kvtBatch[], txFrame.kTx)
-    let mptTick = Moment.now()
+    # let mptTick = Moment.now()
     db.mpt.persist(mptBatch[], txFrame.aTx)
 
-    let endTick = Moment.now()
+    # let endTick = Moment.now()
     db.kvt.putEndFn(kvtBatch[]).isOkOr:
       raiseAssert $error
 
     db.mpt.putEndFn(mptBatch[]).isOkOr:
       raiseAssert $error
 
-    debug "Core DB persisted",
-      kvtDur = mptTick - kvtTick,
-      mptDur = endTick - mptTick,
-      endDur = Moment.now() - endTick
+    # debug "Core DB persisted",
+    #   kvtDur = mptTick - kvtTick,
+    #   mptDur = endTick - mptTick,
+    #   endDur = Moment.now() - endTick
   else:
     discard kvtBatch.expect("should always be able to create batch")
     discard mptBatch.expect("should always be able to create batch")

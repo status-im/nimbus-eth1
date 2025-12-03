@@ -9,8 +9,8 @@
 {.push raises: [].}
 
 import
-  chronicles,
-  chronos,
+  #chronicles,
+  #chronos,
   eth/common/eth_types_rlp,
   stew/assign2,
   ../evm/[types, state, internals],
@@ -25,6 +25,11 @@ import
 export
   call_common
 
+# from std/times import getTime, toUnix
+
+# proc now(_: type EthTime): EthTime =
+#   getTime().toUnix.EthTime
+
 proc rpcCallEvm*(args: TransactionArgs,
                  header: Header,
                  headerHash: Hash32,
@@ -35,7 +40,7 @@ proc rpcCallEvm*(args: TransactionArgs,
 
   let topHeader = Header(
     parentHash: headerHash,
-    timestamp:  EthTime.now(),
+    #timestamp:  EthTime(),
     gasLimit:   0.GasInt,              ## ???
     baseFeePerGas: Opt.none UInt256, ## ???
   )
@@ -101,13 +106,13 @@ proc rpcEstimateGas*(args: TransactionArgs,
     # If the allowance is larger than maximum GasInt, skip checking
     if allowance < high(GasInt).u256 and hi > allowance.truncate(GasInt):
       let transfer = args.value.get(0.u256)
-      warn "Gas estimation capped by limited funds", original=hi, balance,
-        sent=transfer, maxFeePerGas=feeCap, fundable=allowance
+      # warn "Gas estimation capped by limited funds", original=hi, balance,
+      #   sent=transfer, maxFeePerGas=feeCap, fundable=allowance
       hi = allowance.truncate(GasInt)
 
   # Recap the highest gas allowance with specified gasCap.
   if gasCap != 0 and hi > gasCap:
-    warn "Caller gas above allowance, capping", requested=hi, cap=gasCap
+    # warn "Caller gas above allowance, capping", requested=hi, cap=gasCap
     hi = gasCap
 
   cap = hi
@@ -154,7 +159,7 @@ proc rpcEstimateGas*(args: TransactionArgs,
   # Binary search the gas requirement, as it may be higher than the amount used
   let topHeader = Header(
     parentHash: headerHash,
-    timestamp:  EthTime.now(),
+    #timestamp:  EthTime.now(),
     gasLimit:   0.GasInt,              ## ???
     baseFeePerGas: Opt.none UInt256,   ## ???
   )

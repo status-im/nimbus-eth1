@@ -21,14 +21,14 @@ import
   ../common/[evmforks],
   ../utils/[utils, mergeutils],
   ../common/common,
-  eth/common/eth_types_rlp,
-  chronicles, chronos
+  eth/common/eth_types_rlp
+  #chronicles, chronos
 
 export
   common
 
-logScope:
-  topics = "vm computation"
+# logScope:
+#   topics = "vm computation"
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -201,14 +201,14 @@ proc writeContract*(c: Computation) =
 
   # EIP-3541 constraint (https://eips.ethereum.org/EIPS/eip-3541).
   if fork >= FkLondon and c.output[0] == 0xEF.byte:
-    withExtra trace, "New contract code starts with 0xEF byte, not allowed by EIP-3541"
+    # withExtra trace, "New contract code starts with 0xEF byte, not allowed by EIP-3541"
     c.setError(StatusCode.ContractValidationFailure, true)
     return
 
   # EIP-170 constraint (https://eips.ethereum.org/EIPS/eip-3541).
   if fork >= FkSpurious and len > EIP170_MAX_CODE_SIZE:
-    withExtra trace, "New contract code exceeds EIP-170 limit",
-      codeSize=len, maxSize=EIP170_MAX_CODE_SIZE
+    # withExtra trace, "New contract code exceeds EIP-170 limit",
+    #   codeSize=len, maxSize=EIP170_MAX_CODE_SIZE
     c.setError(StatusCode.OutOfGas, true)
     return
 
@@ -229,7 +229,7 @@ proc writeContract*(c: Computation) =
         expect("enough gas since we checked against gasRemaining")
     c.vmState.mutateLedger:
       db.setCode(c.msg.contractAddress, c.output)
-    withExtra trace, "Writing new contract code"
+    # withExtra trace, "Writing new contract code"
     return
 
   if fork >= FkHomestead:
@@ -241,7 +241,8 @@ proc writeContract*(c: Computation) =
     # https://github.com/ethereum/pyethereum/blob/d117c8f3fd93/ethereum/processblock.py#L304
     # https://github.com/ethereum/go-ethereum/blob/401354976bb4/core/vm/instructions.go#L586
     # The account already has zero-length code to handle nested calls.
-    withExtra trace, "New contract given empty code by pre-Homestead rules"
+    discard
+    # withExtra trace, "New contract given empty code by pre-Homestead rules"
 
 template chainTo*(c: Computation,
                   toChild: typeof(c.child),
@@ -271,10 +272,10 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
       db.addBalance(beneficiary, localBalance)
       db.selfDestruct(c.msg.contractAddress)
 
-    trace "SELFDESTRUCT",
-      contractAddress = c.msg.contractAddress.toHex,
-      localBalance = localBalance.toString,
-      beneficiary = beneficiary.toHex
+    # trace "SELFDESTRUCT",
+    #   contractAddress = c.msg.contractAddress.toHex,
+    #   localBalance = localBalance.toString,
+    #   beneficiary = beneficiary.toHex
 
 # Using `proc` as `addLogEntry()` might be `proc` in logging mode
 proc addLogEntry*(c: Computation, log: Log) =

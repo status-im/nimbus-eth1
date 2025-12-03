@@ -12,7 +12,7 @@
 
 import
   std/[tables, hashes, sets, typetraits],
-  chronicles,
+  #chronicles,
   eth/common/eth_types,
   results,
   minilru,
@@ -294,8 +294,8 @@ proc persistCode(acc: AccountRef, ac: LedgerRef) =
     let rc = ac.txFrame.put(
       contractHashKey(acc.statement.codeHash).toOpenArray, acc.code.bytes())
     if rc.isErr:
-      warn logTxt "persistCode()",
-       codeHash=acc.statement.codeHash, error=($$rc.error)
+      discard #warn logTxt "persistCode()",
+      # codeHash=acc.statement.codeHash, error=($$rc.error)
     else:
       # If the ledger changes rolled back entirely from the database, the ledger
       # code cache must also be cleared!
@@ -350,7 +350,7 @@ proc persistStorage(acc: AccountRef, ac: LedgerRef) =
         key = slotKey.slotHashToSlotKey
         rc = ac.txFrame.put(key.toOpenArray, blobify(slot).data)
       if rc.isErr:
-        warn logTxt "persistStorage()", slot, error=($$rc.error)
+        discard #warn logTxt "persistStorage()", slot, error=($$rc.error)
 
   acc.overlayStorage.clear()
 
@@ -484,7 +484,7 @@ proc getCode*(ac: LedgerRef,
         ac.code.get(acc.statement.codeHash).valueOr:
           var rc = ac.txFrame.get(contractHashKey(acc.statement.codeHash).toOpenArray)
           if rc.isErr:
-            warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=($$rc.error)
+            discard #warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=($$rc.error)
             CodeBytesRef()
           else:
             let newCode = CodeBytesRef.init(move(rc.value), persisted = true)
@@ -515,7 +515,7 @@ proc getCodeSize*(ac: LedgerRef, address: Address): int =
       var rc = ac.txFrame.len(contractHashKey(acc.statement.codeHash).toOpenArray)
 
       return rc.valueOr:
-        warn logTxt "getCodeSize()", codeHash=acc.statement.codeHash, error=($$rc.error)
+        discard #warn logTxt "getCodeSize()", codeHash=acc.statement.codeHash, error=($$rc.error)
         0
 
   acc.code.len()
@@ -819,11 +819,11 @@ iterator storage*(
   for (slotHash, value) in ac.txFrame.slotPairs eAddr.toAccountKey:
     let rc = ac.txFrame.get(slotHashToSlotKey(slotHash).toOpenArray)
     if rc.isErr:
-      warn logTxt "storage()", slotHash, error=($$rc.error)
+      discard #warn logTxt "storage()", slotHash, error=($$rc.error)
       continue
     let r = deblobify(rc.value, UInt256)
     if r.isErr:
-      warn logTxt "storage.deblobify", slotHash, msg=r.error
+      discard #warn logTxt "storage.deblobify", slotHash, msg=r.error
       continue
     yield (r.value, value)
 

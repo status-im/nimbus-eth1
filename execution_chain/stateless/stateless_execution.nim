@@ -72,8 +72,8 @@ proc statelessProcessBlock*(
     skipValidation = false,
     skipReceipts = false,
     skipUncles = true,
-    skipStateRootCheck = false,
-    taskpool = com.taskpool,
+    skipStateRootCheck = false #,
+    # taskpool = com.taskpool,
   )
   doAssert memoryVmState.ledger.getStateRoot() == blk.header.stateRoot
 

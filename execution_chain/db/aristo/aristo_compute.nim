@@ -12,7 +12,7 @@
 
 import
   std/strformat,
-  chronicles,
+  #chronicles,
   eth/common/[accounts_rlp, base_rlp, hashes_rlp],
   results,
   "."/[aristo_desc, aristo_get, aristo_layers],
@@ -84,9 +84,11 @@ proc putKeyAtLevel(
       ?batch.flush(db.db)
 
       if batch.count mod (batchSize * 100) == 0:
-        info "Writing computeKey cache", keys = batch.count, accounts = batch.progress
+        discard
+        # info "Writing computeKey cache", keys = batch.count, accounts = batch.progress
       else:
-        debug "Writing computeKey cache", keys = batch.count, accounts = batch.progress
+        discard
+        # debug "Writing computeKey cache", keys = batch.count, accounts = batch.progress
   else: # level > dbLevel but less than baseTxFrame level
     # Throw defect here because we should not be writing vertexes to the database if
     # from a lower level than the baseTxFrame level.
@@ -297,9 +299,9 @@ proc computeKeyImpl(
 
     if batch.count > 0:
       if batch.count >= batchSize * 100:
-        info "Wrote computeKey cache", keys = batch.count, accounts = "100.00%"
+        discard #info "Wrote computeKey cache", keys = batch.count, accounts = "100.00%"
       else:
-        debug "Wrote computeKey cache", keys = batch.count, accounts = "100.00%"
+        discard #debug "Wrote computeKey cache", keys = batch.count, accounts = "100.00%"
 
   ok (?res)[0]
 

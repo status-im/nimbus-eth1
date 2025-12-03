@@ -27,7 +27,7 @@
 
 import
   std/tables,
-  chronicles,
+  #chronicles,
   results,
   stew/byteutils,
   ./init_common,
@@ -106,7 +106,7 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
     proc(hdl: PutHdlRef): Result[void,KvtError] =
       let hdl = hdl.endSession db
       if hdl.error != KvtError(0):
-        debug logTxt "putEndFn: key/value failed", error=hdl.error
+        #debug logTxt "putEndFn: key/value failed", error=hdl.error
         return err(hdl.error)
 
       for k, v in hdl.tab:
@@ -128,7 +128,7 @@ proc getBackendFn(db: MemBackendRef): GetBackendFn =
   result =
     proc(): TypedBackendRef =
       db
-      
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -161,7 +161,7 @@ iterator walk*(
     if data.isValid:
       yield (key, data)
     else:
-      debug logTxt "walk() skip empty", key
+      discard #debug logTxt "walk() skip empty", key
 
 # ------------------------------------------------------------------------------
 # End

@@ -13,7 +13,7 @@ import
   std/strutils,
   eth/common/[base, headers],
   stew/endians2,
-  json_serialization,
+  # json_serialization,
   ../utils/utils,
   ./evmforks
 
@@ -173,8 +173,7 @@ type
     # specially crafted for network depends
     # solely on TTD  for transition to PoS
     # e.g. MainNet, but now has pass the transition
-    posBlock*
-      {.dontSerialize.} : Opt[BlockNumber]
+    posBlock*: Opt[BlockNumber]
 
     mergeNetsplitBlock* : Opt[BlockNumber]
 
