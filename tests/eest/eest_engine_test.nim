@@ -26,11 +26,6 @@ const
 
 const skipFiles = [
   "CALLBlake2f_MaxRounds.json", # Doesn't work in github CI
-  "consolidation_requests.json",
-  "withdrawal_requests.json",
-  "bal_call_and_oog.json",
-  "bal_delegatecall_and_oog.json",
-  "value_transfer_gas_calculation.json"
 ]
 
 runEESTSuite(
