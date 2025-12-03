@@ -10,7 +10,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[tables, strutils, times, macros],
+  std/[tables, strutils, macros],
   eth/rlp, eth/common/eth_types_json_serialization,
   eth/common/eth_types_rlp,
   stint, stew/[byteutils],
