@@ -32,7 +32,7 @@ proc maybeSlowPeerError(
     buddy.hdrFetchRegisterError(slowPeer=true)
 
     # Do not repeat the same time-consuming failed request
-    buddy.only.failedReq = BcPeerFirstFetchReq(
+    buddy.only.failedReq = PeerFirstFetchReq(
       state:       SyncState.headers,
       blockNumber: bn)
 
