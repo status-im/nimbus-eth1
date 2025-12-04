@@ -107,6 +107,7 @@ proc importBlocks*(config: ExecutionClientConf, com: CommonRef) =
     flags =
       boolFlag({PersistBlockFlag.Validation}, config.validation) +
       boolFlag({PersistBlockFlag.FullValidation}, config.fullValidation) +
+      boolFlag({PersistBlockFlag.PersistHeaders}, true) +
       boolFlag(PersistBodies, config.storeBodies) +
       boolFlag({PersistBlockFlag.PersistReceipts}, config.storeReceipts) +
       boolFlag({PersistBlockFlag.PersistSlotHashes}, config.storeSlotHashes)
