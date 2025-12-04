@@ -84,7 +84,6 @@ template fetchHeadersReversed*(
     buddy: BeaconPeerRef;
     ivReq: BnRange;
     topHash: Hash32;
-    info: static[string];
       ): Opt[seq[Header]] =
   ## Async/template
   ##

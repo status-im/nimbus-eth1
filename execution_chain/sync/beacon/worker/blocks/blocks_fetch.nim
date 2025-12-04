@@ -79,7 +79,6 @@ proc getBlockBodies*(
 template fetchBodies*(
     buddy: BeaconPeerRef;
     request: BlockBodiesRequest;
-    info: static[string];
       ): Opt[seq[BlockBody]] =
   ## Async/template
   ##

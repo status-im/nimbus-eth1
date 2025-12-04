@@ -83,7 +83,7 @@ template headersTargetActivate*(
 
     # Fetch header or return
     const iv = BnRange.new(0u,0u) # dummy interval
-    let hdrs = buddy.fetchHeadersReversed(iv, trg.hash, info).valueOr:
+    let hdrs = buddy.fetchHeadersReversed(iv, trg.hash).valueOr:
       if buddy.ctrl.running:
         trace info & ": peer failed on syncer target", peer,
           targetHash=trg.hash.short, isFinal=trg.isFinal,
