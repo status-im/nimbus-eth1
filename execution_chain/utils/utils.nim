@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[math, times, strutils],
+  std/math,
   eth/[common/eth_types_rlp, trie/ordered_trie],
   stew/byteutils,
   stew/assign2,
@@ -135,16 +135,6 @@ proc short*(h: Bytes32): string =
   bytes[0..2] = h.data[0..2]
   bytes[^3..^1] = h.data[^3..^1]
   bytes.toHex
-
-func short*(x: Duration): string =
-  let parts = x.toParts
-  if parts[Hours] > 0:
-    result.add $parts[Hours]
-    result.add ':'
-
-  result.add intToStr(parts[Minutes].int, 2)
-  result.add ':'
-  result.add intToStr(parts[Seconds].int, 2)
 
 proc decompose*(rlp: var Rlp,
                 header: var Header,

@@ -45,7 +45,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
     let
       contentKeyByteList = ContentKeyByteList.init(hexToSeqByte(contentKeyBytes))
       contentKey = decode(contentKeyByteList).valueOr:
-        raise invalidKeyErr()
+        raise invalidContentKeyError()
       contentId = toContentId(contentKey)
 
     n.portalProtocol.getLocalContent(contentKeyByteList, contentId).isErrOr:
@@ -66,7 +66,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
     let
       contentKeyByteList = ContentKeyByteList.init(hexToSeqByte(contentKeyBytes))
       contentKey = decode(contentKeyByteList).valueOr:
-        raise invalidKeyErr()
+        raise invalidContentKeyError()
       contentId = toContentId(contentKey)
 
     n.portalProtocol.getLocalContent(contentKeyByteList, contentId).isErrOr:
@@ -96,7 +96,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
     let
       contentKeyByteList = ContentKeyByteList.init(hexToSeqByte(contentKeyBytes))
       _ = decode(contentKeyByteList).valueOr:
-        raise invalidKeyErr()
+        raise invalidContentKeyError()
       offerValueBytes = hexToSeqByte(contentValueBytes)
 
       # Note: Not validating content as this would have a high impact on bridge
@@ -128,7 +128,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
       contentKeyByteList = ContentKeyByteList.init(hexToSeqByte(contentKeyBytes))
       offerValueBytes = hexToSeqByte(contentValueBytes)
       contentId = n.portalProtocol.toContentId(contentKeyByteList).valueOr:
-        raise invalidKeyErr()
+        raise invalidContentKeyError()
 
     n.portalProtocol.storeContent(contentKeyByteList, contentId, offerValueBytes)
 
@@ -136,7 +136,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
     let
       contentKeyByteList = ContentKeyByteList.init(hexToSeqByte(contentKeyBytes))
       contentId = n.portalProtocol.toContentId(contentKeyByteList).valueOr:
-        raise invalidKeyErr()
+        raise invalidContentKeyError()
 
       valueBytes = n.portalProtocol.getLocalContent(contentKeyByteList, contentId).valueOr:
         raise contentNotFoundErr()
@@ -145,7 +145,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
 
   rpcServer.rpc("portal_historyGetBlockBody") do(headerBytes: string) -> string:
     let header = decodeRlp(hexToSeqByte(headerBytes), Header).valueOr:
-      raise invalidRequest((code: -39005, msg: "Failed to decode header: " & error))
+      raise applicationError((code: -39010, msg: "Failed to decode header: " & error))
 
     let blockBody = (await n.getBlockBody(header)).valueOr:
       raise contentNotFoundErr()
@@ -154,7 +154,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
 
   rpcServer.rpc("portal_historyGetReceipts") do(headerBytes: string) -> string:
     let header = decodeRlp(hexToSeqByte(headerBytes), Header).valueOr:
-      raise invalidRequest((code: -39005, msg: "Failed to decode header: " & error))
+      raise applicationError((code: -39010, msg: "Failed to decode header: " & error))
 
     let receipts = (await n.getReceipts(header)).valueOr:
       raise contentNotFoundErr()
