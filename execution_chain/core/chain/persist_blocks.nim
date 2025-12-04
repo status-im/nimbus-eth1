@@ -51,7 +51,9 @@ type
 
   PersistStats* = tuple[blocks: int, txs: int, gas: GasInt]
 
-const PersistBodies* = {PersistTransactions, PersistUncles, PersistWithdrawals}
+const
+  PersistBodies* = {PersistTransactions, PersistUncles, PersistWithdrawals}
+  AllPersistBlockFlags = {PersistBlockFlag.low .. PersistBlockFlag.high}
 
 # ------------------------------------------------------------------------------
 # Private
@@ -67,7 +69,7 @@ proc getVmState(
       parent = ?txFrame.getBlockHeader(header.parentHash)
 
     doAssert txFrame.getSavedStateBlockNumber() == parent.number
-    vmState.init(parent, header, p.com, txFrame, storeSlotHash)
+    vmState.init(parent, header, p.com, txFrame, storeSlotHash = storeSlotHash)
     p.vmState = vmState
     assign(p.parent, parent)
   else:
@@ -217,7 +219,9 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
   ok()
 
 proc persistBlocks*(
-    com: CommonRef, blocks: openArray[Block], flags: PersistBlockFlags = {}
+    com: CommonRef,
+    blocks: openArray[Block],
+    flags: PersistBlockFlags = AllPersistBlockFlags
 ): Result[PersistStats, string] =
   # Run the VM here
   if blocks.len == 0:
