@@ -32,7 +32,7 @@ type
 
   BeaconError* = tuple
     ## Capture exception context for heders/bodies fetcher logging
-    excp: BeaconErrorType
+    excp: ErrorType
     name: string
     msg: string
     elapsed: Duration
@@ -46,10 +46,10 @@ type
     elapsed: Duration
 
   PeerRanking* = tuple
-    assessed: DownloadPerformance
+    assessed: PerfClass
     ranking: int
 
-  BackgroundTicker* =
+  Ticker* =
     proc(ctx: BeaconCtxRef) {.gcsafe, raises: [].}
       ## Some function that is invoked regularly
 
@@ -61,10 +61,10 @@ type
   BnRange* = Interval[BlockNumber,uint64]
     ## Single block number interval
 
-  StagedHeaderQueue* = SortedSet[BlockNumber,LinkedHChain]
+  StagedHeaderQueue* = SortedSet[BlockNumber,HeaderChain]
     ## Block intervals sorted by largest block number.
 
-  LinkedHChain* = object
+  HeaderChain* = object
     ## Headers list item.
     ##
     ## The list `revHdrs[]` is reversed, i.e. the largest block number has
@@ -119,7 +119,7 @@ type
     samples*: uint
     total*: uint64
 
-  BcPeerThPutStats* = object
+  ThPutStats* = object
     ## Throughput statistice for fetching headers and bodies. The fileds
     ## have the following meaning:
     ##    sum:      -- Sum of samples, throuhputs per sec
@@ -129,14 +129,14 @@ type
     ##
     hdr*, blk*: StatsCollect
 
-  BcPeerErrors* = tuple
+  PeerErrors* = tuple
     ## Count fetching and processing errors
     fetch: tuple[
       hdr, bdy: uint8]
     apply: tuple[
       hdr, blk: uint8]
 
-  BcPeerFirstFetchReq* = object
+  PeerFirstFetchReq* = object
     ## Register fetch request. This is intended to avoid sending the same (or
     ## similar) fetch request again from the same peer that sent it previously.
     case state*: SyncState
@@ -149,9 +149,9 @@ type
 
   BeaconPeerData* = object
     ## Local descriptor data extension
-    nErrors*: BcPeerErrors           ## Error register
-    thPutStats*: BcPeerThPutStats    ## Throughput statistics
-    failedReq*: BcPeerFirstFetchReq  ## Avoid sending the same request twice
+    nErrors*: PeerErrors             ## Error register
+    thPutStats*: ThPutStats          ## Throughput statistics
+    failedReq*: PeerFirstFetchReq    ## Avoid sending the same request twice
 
   InitTarget* = tuple
     hash: Hash32                     ## Some block hash to sync towards to
@@ -189,7 +189,7 @@ type
     lastNoPeersLog*: chronos.Moment  ## Control messages about missing peers
     lastSyncUpdLog*: chronos.Moment  ## Control update messages
     syncEta*: SyncEta                ## Estimated time until all in sync
-    ticker*: BackgroundTicker        ## Ticker function to run in background
+    ticker*: Ticker                  ## Ticker function to run in background
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -215,7 +215,7 @@ func hdrCache*(ctx: BeaconCtxRef): HeaderChainRef =
   ## Shortcut
   ctx.pool.hdrCache
 
-func nErrors*(buddy: BeaconPeerRef): var BcPeerErrors =
+func nErrors*(buddy: BeaconPeerRef): var PeerErrors =
   ## Shortcut
   buddy.only.nErrors
 
@@ -276,7 +276,7 @@ func toMeanVar*(w: StatsCollect): MeanVarStats =
     result.samples = w.samples
     result.total = w.total
 
-func toMeanVar*(w: BcPeerThPutStats): MeanVarStats =
+func toMeanVar*(w: ThPutStats): MeanVarStats =
   ## Combined statistics for headers and bodies
   toMeanVar StatsCollect(
     sum:     w.hdr.sum +     w.blk.sum,

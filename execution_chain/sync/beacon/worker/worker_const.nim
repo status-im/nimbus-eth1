@@ -24,14 +24,14 @@ type
     blocksFinish                   ## get ready for `idle`
     standByMode                    ## wait for `clear-to-activate`
 
-  DownloadPerformance* = enum
+  PerfClass* = enum
     rankingTooLow = 0              ## Lower mean throughput than others
     rankingOk                      ## Better mean throughput than some others
     notEnoughData                  ## Not enough data to assess
     qSlotsAvail                    ## No assessment needed (e.g. few peers)
     notApplicable                  ## Not useful here
 
-  BeaconErrorType* = enum
+  ErrorType* = enum
     ## For `FetchError` return code object/tuple
     ENoException = 0
     ESyncerTermination             ## Syncer was stopped
