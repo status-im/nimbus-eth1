@@ -518,17 +518,17 @@ type
 
       # TODO validation and storage options should be made non-hidden when the
       #      UX has stabilised and era1 storage is in the app
+      validation* {.
+        hidden
+        desc: "Enable per-chunk validation"
+        defaultValue: false
+        name: "debug-validation".}: bool
+
       fullValidation* {.
         hidden
         desc: "Enable full per-block validation (slow)"
         defaultValue: false
         name: "debug-full-validation".}: bool
-
-      noValidation* {.
-        hidden
-        desc: "Disble per-chunk validation"
-        defaultValue: true
-        name: "debug-no-validation".}: bool
 
       storeBodies* {.
         hidden
