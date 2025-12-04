@@ -26,7 +26,7 @@ proc writeBaggage*(
     blkHash: Hash32,
     txFrame: CoreDbTxRef,
     receipts: openArray[StoredReceipt],
-    blockAccessList: Opt[BlockAccessListRef],
+    generatedBal: Opt[BlockAccessListRef],
 ) =
   template header(): Header =
     blk.header
@@ -34,15 +34,22 @@ proc writeBaggage*(
   txFrame.persistTransactions(header.number, header.txRoot, blk.transactions)
   txFrame.persistReceipts(header.receiptsRoot, receipts)
   discard txFrame.persistUncles(blk.uncles)
+
   if blk.withdrawals.isSome:
     txFrame.persistWithdrawals(
       header.withdrawalsRoot.expect("WithdrawalsRoot should be verified before"),
       blk.withdrawals.get,
     )
-  if blockAccessList.isSome:
+
+  if blk.blockAccessList.isSome:
     txFrame.persistBlockAccessList(
       header.blockAccessListHash.expect("blockAccessListHash should be verified before"),
-      blockAccessList.get()[],
+      blk.blockAccessList.get(),
+    )
+  elif generatedBal.isSome:
+    txFrame.persistBlockAccessList(
+      header.blockAccessListHash.expect("blockAccessListHash should be verified before"),
+      generatedBal.get()[],
     )
 
 proc processBlock*(
@@ -62,7 +69,8 @@ proc processBlock*(
     header,
     c.com,
     txFrame,
-    enableBalTracker = c.com.isAmsterdamOrLater(header.timestamp),
+    enableBalTracker = (not finalized or blk.blockAccessList.isNone()) and
+        c.com.isAmsterdamOrLater(header.timestamp),
   )
 
   ?c.com.validateHeaderAndKinship(blk, vmState.parent, txFrame)
@@ -77,6 +85,16 @@ proc processBlock*(
       skipReceipts = false,
       skipUncles = true,
       skipStateRootCheck = finalized and not c.eagerStateRoot,
+      # Depending on the BAL retention period of clients, finalized blocks might
+      # be received without a BAL. In this case we skip checking the block BAL
+      # against the header bal hash.
+      skipPreExecBalCheck = finalized and blk.blockAccessList.isNone(),
+      # Finalized blocks are known to be canonical and therefore the bal hash
+      # in the header is known to be valid and so it should be good enough to
+      # simply check that the provide block BAL (when skipPreExecBalCheck = false)
+      # matches the header bal hash. In this case the post execution check can be
+      # skipped.
+      skipPostExecBalCheck = finalized and blk.blockAccessList.isSome(),
       taskpool = c.com.taskpool,
     )
 
