@@ -105,11 +105,11 @@ proc importBlocks*(config: ExecutionClientConf, com: CommonRef) =
       else:
         File(nil)
     flags =
-      boolFlag({PersistBlockFlag.NoValidation}, config.noValidation) +
-      boolFlag({PersistBlockFlag.NoFullValidation}, not config.fullValidation) +
-      boolFlag(NoPersistBodies, not config.storeBodies) +
-      boolFlag({PersistBlockFlag.NoPersistReceipts}, not config.storeReceipts) +
-      boolFlag({PersistBlockFlag.NoPersistSlotHashes}, not config.storeSlotHashes)
+      boolFlag({PersistBlockFlag.Validation}, config.validation) +
+      boolFlag({PersistBlockFlag.FullValidation}, config.fullValidation) +
+      boolFlag(PersistBodies, config.storeBodies) +
+      boolFlag({PersistBlockFlag.PersistReceipts}, config.storeReceipts) +
+      boolFlag({PersistBlockFlag.PersistSlotHashes}, config.storeSlotHashes)
     blk: Block
     persister = Persister.init(com, flags)
     cstats: PersistStats # stats at start of chunk

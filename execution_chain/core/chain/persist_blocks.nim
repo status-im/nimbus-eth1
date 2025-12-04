@@ -31,14 +31,14 @@ export results
 
 type
   PersistBlockFlag* = enum
-    NoValidation # Disable chunk state root validation
-    NoFullValidation # Disable per-block validation
-    NoPersistHeader
-    NoPersistTransactions
-    NoPersistUncles
-    NoPersistWithdrawals
-    NoPersistReceipts
-    NoPersistSlotHashes
+    Validation # Enable chunk state root validation
+    FullValidation # Enable per-block validation
+    PersistHeaders
+    PersistTransactions
+    PersistUncles
+    PersistWithdrawals
+    PersistReceipts
+    PersistSlotHashes
 
   PersistBlockFlags* = set[PersistBlockFlag]
 
@@ -51,7 +51,7 @@ type
 
   PersistStats* = tuple[blocks: int, txs: int, gas: GasInt]
 
-const NoPersistBodies* = {NoPersistTransactions, NoPersistUncles, NoPersistWithdrawals}
+const PersistBodies* = {PersistTransactions, PersistUncles, PersistWithdrawals}
 
 # ------------------------------------------------------------------------------
 # Private
@@ -67,7 +67,7 @@ proc getVmState(
       parent = ?txFrame.getBlockHeader(header.parentHash)
 
     doAssert txFrame.getSavedStateBlockNumber() == parent.number
-    vmState.init(parent, header, p.com, txFrame, storeSlotHash = storeSlotHash)
+    vmState.init(parent, header, p.com, txFrame, storeSlotHash)
     p.vmState = vmState
     assign(p.parent, parent)
   else:
@@ -87,7 +87,7 @@ func init*(T: type Persister, com: CommonRef, flags: PersistBlockFlags): T =
   T(com: com, flags: flags)
 
 proc checkpoint*(p: var Persister): Result[void, string] =
-  if NoValidation notin p.flags:
+  if Validation in p.flags:
     let stateRoot = p.vmState.ledger.txFrame.getStateRoot().valueOr:
       return err($$error)
 
@@ -135,8 +135,8 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
   #      what would be the consequences? We would roll back the full set of
   #      blocks which is fairly low-cost.
   let
-    skipValidation = NoValidation in p.flags
-    vmState = ?p.getVmState(header, storeSlotHash = NoPersistSlotHashes notin p.flags)
+    skipValidation = FullValidation notin p.flags
+    vmState = ?p.getVmState(header, storeSlotHash = PersistSlotHashes in p.flags)
     txFrame = vmState.ledger.txFrame
 
   # TODO even if we're skipping validation, we should perform basic sanity
@@ -152,8 +152,8 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     ?vmState.processBlock(
       blk,
       skipValidation,
-      skipReceipts = skipValidation and NoPersistReceipts in p.flags,
-      skipUncles = NoPersistUncles in p.flags,
+      skipReceipts = skipValidation and PersistReceipts notin p.flags,
+      skipUncles = PersistUncles notin p.flags,
       skipStateRootCheck = skipValidation,
       taskpool = com.taskpool,
     )
@@ -192,17 +192,17 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     ?vmState.ledger.txFrame.persistWitness(header.computeBlockHash(), witness)
 
 
-  if NoPersistHeader notin p.flags:
+  if PersistHeaders in p.flags:
     let blockHash = header.computeBlockHash()
     ?txFrame.persistHeaderAndSetHead(blockHash, header, com.startOfHistory)
 
-  if NoPersistTransactions notin p.flags:
+  if PersistTransactions in p.flags:
     txFrame.persistTransactions(header.number, header.txRoot, blk.transactions)
 
-  if NoPersistReceipts notin p.flags:
+  if PersistReceipts in p.flags:
     txFrame.persistReceipts(header.receiptsRoot, vmState.receipts)
 
-  if NoPersistWithdrawals notin p.flags and blk.withdrawals.isSome:
+  if PersistWithdrawals in p.flags and blk.withdrawals.isSome:
     txFrame.persistWithdrawals(
       header.withdrawalsRoot.expect("WithdrawalsRoot should be verified before"),
       blk.withdrawals.get,
