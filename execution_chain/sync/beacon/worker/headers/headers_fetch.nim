@@ -92,6 +92,9 @@ template fetchHeadersReversed*(
   ##
   var bodyRc = Opt[seq[Header]].err()
   block body:
+    const
+      sendInfo = trEthSendSendingGetBlockHeaders
+      recvInfo = trEthRecvReceivedBlockHeaders
     let
       peer {.inject,used.} = buddy.peer
       req = block:
@@ -112,7 +115,7 @@ template fetchHeadersReversed*(
               isHash:   false,
               number:   ivReq.maxPt))
 
-    trace trEthSendSendingGetBlockHeaders & " reverse", peer, req=ivReq,
+    trace sendInfo & " reverse", peer, req=ivReq,
       nReq=req.maxResults, hash=topHash.toStr, nErrors=buddy.nErrors.fetch.hdr
 
     let rc = await buddy.getBlockHeaders(req, BlockNumber ivReq.maxPt)
@@ -132,16 +135,14 @@ template fetchHeadersReversed*(
           buddy.hdrFetchRegisterError()
           buddy.hdrNoSampleSize(elapsed)
         of EAlreadyTriedAndFailed:
-          trace trEthRecvReceivedBlockHeaders & ": error", peer,
-            req=ivReq, nReq=req.maxResults, hash=topHash.toStr,
-            ela=rc.error.elapsed.toStr, state=($buddy.syncState),
+          trace recvInfo & " error", peer, req=ivReq, nReq=req.maxResults,
+            hash=topHash.toStr, ela=elapsed.toStr, state=($buddy.syncState),
             error=rc.error.excp, nErrors=buddy.nErrors.fetch.hdr
           break body                               # return err()
 
         # Debug message for other errors
-        debug trEthRecvReceivedBlockHeaders & ": error", peer,
-          req=ivReq, nReq=req.maxResults, hash=topHash.toStr,
-          ela=rc.error.elapsed.toStr, state=($buddy.syncState),
+        debug recvInfo & " error", peer, req=ivReq, nReq=req.maxResults,
+          hash=topHash.toStr, ela=elapsed.toStr, state=($buddy.syncState),
           error=($rc.error.excp & (if rc.error.name.len == 0: ""
                                    else: "(" & rc.error.name & ")")),
           msg=rc.error.msg, nErrors=buddy.nErrors.fetch.hdr
@@ -151,9 +152,8 @@ template fetchHeadersReversed*(
     if rc.isErr or buddy.ctrl.stopped:
       if not buddy.maybeSlowPeerError(elapsed, BlockNumber ivReq.maxPt):
         buddy.hdrFetchRegisterError()
-      trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
-        hash=topHash.toStr, nResp=0, ela=elapsed.toStr,
-        state=($buddy.syncState),
+      trace recvInfo & " error", peer, nReq=req.maxResults, hash=topHash.toStr,
+        nResp=0, ela=elapsed.toStr, state=($buddy.syncState),
         error=(if rc.isErr: $rc.error.excp else: "n/a"),
         nErrors=buddy.nErrors.fetch.hdr
       break body                                   # return err()
@@ -172,18 +172,18 @@ template fetchHeadersReversed*(
         # Slow response, definitely not fast enough
         discard buddy.maybeSlowPeerError(elapsed, BlockNumber ivReq.maxPt)
 
-      trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
-        hash=topHash.toStr, nResp=h.len, ela=elapsed.toStr,
-        state=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
+      trace recvInfo & " error", peer, nReq=req.maxResults, hash=topHash.toStr,
+        nResp=h.len, ela=elapsed.toStr, state=($buddy.syncState),
+        nErrors=buddy.nErrors.fetch.hdr
       break body                                   # return err()
 
     # Verify that the first block number matches the request
     if h[^1].number != ivReq.minPt and ivReq.minPt != 0:
       buddy.hdrFetchRegisterError(forceZombie=true)
-      trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
-        hash=topHash.toStr, reqMinPt=ivReq.minPt,
-        respMinPt=h[^1].number, nResp=h.len, ela=elapsed.toStr,
-        state=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
+      trace recvInfo & " error", peer, nReq=req.maxResults, hash=topHash.toStr,
+        reqMinPt=ivReq.minPt, respMinPt=h[^1].number, nResp=h.len,
+        ela=elapsed.toStr, state=($buddy.syncState),
+        nErrors=buddy.nErrors.fetch.hdr
       break body
 
     # Update download statistics
@@ -199,10 +199,10 @@ template fetchHeadersReversed*(
       buddy.nErrors.fetch.hdr = 0                  # reset error count
       buddy.ctx.pool.lastSlowPeer = Opt.none(Hash) # not last one or not error
 
-    trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
-      hash=topHash.toStr, ivResp=BnRange.new(h[^1].number,h[0].number),
-      nResp=h.len, ela=elapsed.toStr, thPut=(bps.toIECb(1) & "ps"),
-      state=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
+    trace recvInfo, peer, nReq=req.maxResults, hash=topHash.toStr,
+      ivResp=(h[^1].number,h[0].number).toStr, nResp=h.len, ela=elapsed.toStr,
+      thPut=(bps.toIECb(1) & "ps"), state=($buddy.syncState),
+      nErrors=buddy.nErrors.fetch.hdr
 
     bodyRc = Opt[seq[Header]].ok(h)
 
