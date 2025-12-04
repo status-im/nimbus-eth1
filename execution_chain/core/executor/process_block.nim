@@ -107,7 +107,7 @@ proc processTransactions*(
 proc procBlkPreamble(
     vmState: BaseVMState,
     blk: Block,
-    skipValidation, skipReceipts, skipUncles: bool,
+    skipValidation, skipReceipts, skipUncles: bool, skipPreExecBalCheck: bool,
     taskpool: Taskpool,
 ): Result[void, string] =
   template header(): Header =
@@ -152,7 +152,9 @@ proc procBlkPreamble(
   if com.isAmsterdamOrLater(header.timestamp):
     if header.blockAccessListHash.isNone:
       return err("Post-Amsterdam block header must have blockAccessListHash")
-    if not skipValidation and blk.blockAccessList.isSome:
+    if not skipPreExecBalCheck:
+      if blk.blockAccessList.isNone:
+        return err("Post-Amsterdam block body must have blockAccessList")
       if blk.blockAccessList.get.validate(header.blockAccessListHash.get).isErr():
         return err("Mismatched blockAccessListHash")
   else:
@@ -226,6 +228,7 @@ proc procBlkEpilogue(
     skipValidation: bool,
     skipReceipts: bool,
     skipStateRootCheck: bool,
+    skipPostExecBalCheck: bool
 ): Result[void, string] =
   template header(): Header =
     blk.header
@@ -249,7 +252,7 @@ proc procBlkEpilogue(
     withdrawalReqs = ?processDequeueWithdrawalRequests(vmState)
     consolidationReqs = ?processDequeueConsolidationRequests(vmState)
 
-  if header.blockAccessListHash.isSome:
+  if not skipPostExecBalCheck and vmState.com.isAmsterdamOrLater(header.timestamp):
     doAssert vmState.balTrackerEnabled
     # Commit block access list tracker changes for post‑execution system calls
     vmState.balTracker.commitCallFrame()
@@ -332,20 +335,22 @@ proc procBlkEpilogue(
 proc processBlock*(
     vmState: BaseVMState, ## Parent environment of header/body block
     blk: Block, ## Header/body block to add to the blockchain
-    skipValidation: bool = false,
-    skipReceipts: bool = false,
-    skipUncles: bool = false,
-    skipStateRootCheck: bool = false,
+    skipValidation = false,
+    skipReceipts = false,
+    skipUncles = false,
+    skipStateRootCheck = false,
+    skipPreExecBalCheck = false,
+    skipPostExecBalCheck = false,
     taskpool: Taskpool = nil,
 ): Result[void, string] =
   ## Generalised function to processes `blk` for any network.
-  ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles, taskpool)
+  ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles, skipPreExecBalCheck, taskpool)
 
   # EIP-3675: no reward for miner in POA/POS
   if not vmState.com.proofOfStake(blk.header, vmState.ledger.txFrame):
     vmState.calculateReward(blk.header, blk.uncles)
 
-  ?vmState.procBlkEpilogue(blk, skipValidation, skipReceipts, skipStateRootCheck)
+  ?vmState.procBlkEpilogue(blk, skipValidation, skipReceipts, skipStateRootCheck, skipPostExecBalCheck)
 
   ok()
 

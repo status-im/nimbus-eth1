@@ -67,9 +67,14 @@ proc getVmState(
       parent = ?txFrame.getBlockHeader(header.parentHash)
 
     doAssert txFrame.getSavedStateBlockNumber() == parent.number
-    vmState.init(parent, header, p.com, txFrame, storeSlotHash = storeSlotHash)
+
+    vmState.init(parent, header, p.com, txFrame, storeSlotHash = storeSlotHash,
+      enableBalTracker = NoValidation notin p.flags and
+          p.com.isAmsterdamOrLater(header.timestamp))
+
     p.vmState = vmState
     assign(p.parent, parent)
+
   else:
     if header.number != p.parent.number + 1:
       return err("Only linear histories supported by Persister")
@@ -155,6 +160,8 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
       skipReceipts = skipValidation and NoPersistReceipts in p.flags,
       skipUncles = NoPersistUncles in p.flags,
       skipStateRootCheck = skipValidation,
+      skipPreExecBalCheck = true,
+      skipPostExecBalCheck = skipValidation,
       taskpool = com.taskpool,
     )
 
