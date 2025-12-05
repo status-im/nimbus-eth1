@@ -92,7 +92,7 @@ template validatePayload(apiVersion, payloadVersion, payload) =
 # https://github.com/ethereum/execution-apis/blob/40088597b8b4f48c45184da002e27ffc3c37641f/src/engine/prague.md#request
 func validateExecutionRequest(blockHash: Hash32,
             requests: openArray[seq[byte]], apiVersion: Version):
-              Opt[PayloadStatusV1] {.raises: [InvalidRequest].} =
+              Opt[PayloadStatusV1] {.raises: [ApplicationError].} =
   var previousRequestType = -1
   for request in requests:
     if request.len == 0:
@@ -123,7 +123,7 @@ proc newPayload*(ben: BeaconEngineRef,
                  versionedHashes = Opt.none(seq[Hash32]),
                  beaconRoot = Opt.none(Hash32),
                  executionRequests = Opt.none(seq[seq[byte]])):
-                   Future[PayloadStatusV1] {.async: (raises: [CancelledError, InvalidRequest, RlpError]).} =
+                   Future[PayloadStatusV1] {.async: (raises: [CancelledError, ApplicationError, RlpError]).} =
 
   trace "Engine API request received",
     meth = "newPayload",
