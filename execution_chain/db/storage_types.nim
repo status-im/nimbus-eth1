@@ -111,7 +111,7 @@ func blockHashToWitnessKey*(h: Hash32): DbKey {.inline.} =
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 
-func blockAccessListHashKey*(h: Hash32): DbKey {.inline.} =
+func blockHashToBlockAccessListKey*(h: Hash32): DbKey {.inline.} =
   result.data[0] = byte ord(blockAccessList)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32

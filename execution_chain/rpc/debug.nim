@@ -266,5 +266,6 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
 
   server.rpc("debug_getBlockAccessListByBlockHash") do(blockHash: Hash32) -> BlockAccessList:
     ## Returns a block access list for the given block hash.
+
     chain.getBlockAccessList(blockHash).valueOr:
       raise newException(ValueError, error)
