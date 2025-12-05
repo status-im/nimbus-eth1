@@ -661,6 +661,7 @@ proc init*(
       fcuSafe:          fcuSafe,
       baseQueue:        initDeque[BlockRef](),
       lastBaseLogTime:  EthTime.now(),
+      badBlocks:        LruCache[Hash32, (Block, Opt[BlockAccessListRef])].init(100),
     )
 
   # updateFinalized will stop ancestor lineage
@@ -883,6 +884,12 @@ proc latestBlock*(c: ForkedChainRef): Block =
     # It's a base block
     return c.baseTxFrame.getEthBlock(c.latest.hash).expect("baseBlock exists")
   c.latest.blk
+
+proc getBadBlocks*(c: ForkedChainRef): seq[(Block, Opt[BlockAccessListRef])] =
+  var blks: seq[(Block, Opt[BlockAccessListRef])]
+  for badBlock in c.badBlocks.values():
+    blks.add(badBlock)
+  blks
 
 proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Header, string] =
   if number > c.latest.number:

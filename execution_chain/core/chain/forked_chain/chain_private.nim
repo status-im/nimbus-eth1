@@ -73,17 +73,19 @@ proc processBlock*(
         c.com.isAmsterdamOrLater(header.timestamp),
   )
 
-  ?c.com.validateHeaderAndKinship(blk, vmState.parent, txFrame)
+  c.com.validateHeaderAndKinship(blk, vmState.parent, txFrame).isOkOr:
+    c.badBlocks.put(blkHash, (blk, vmState.blockAccessList))
+    return err(error)
 
   template processBlock(): auto =
-    # When processing a finalized block, we optimistically assume that the state
-    # root will check out and delay such validation for when it's time to persist
-    # changes to disk
-    ?vmState.processBlock(
+    vmState.processBlock(
       blk,
       skipValidation = false,
       skipReceipts = false,
       skipUncles = true,
+      # When processing a finalized block, we optimistically assume that the state
+      # root will check out and delay such validation for when it's time to persist
+      # changes to disk
       skipStateRootCheck = finalized and not c.eagerStateRoot,
       # Depending on the BAL retention period of clients, finalized blocks might
       # be received without a BAL. In this case we skip checking the block BAL
@@ -96,7 +98,9 @@ proc processBlock*(
       # skipped.
       skipPostExecBalCheck = finalized and blk.blockAccessList.isSome(),
       taskpool = c.com.taskpool,
-    )
+    ).isOkOr:
+      c.badBlocks.put(blkHash, (blk, vmState.blockAccessList))
+      return err(error)
 
   if not vmState.com.statelessProviderEnabled:
     processBlock()
