@@ -71,7 +71,7 @@ proc getVmState(
     doAssert txFrame.getSavedStateBlockNumber() == parent.number
 
     vmState.init(parent, header, p.com, txFrame, storeSlotHash = storeSlotHash,
-      enableBalTracker = NoValidation notin p.flags and
+      enableBalTracker = FullValidation in p.flags and
           p.com.isAmsterdamOrLater(header.timestamp))
 
     p.vmState = vmState
