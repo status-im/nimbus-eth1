@@ -43,12 +43,12 @@ proc writeBaggage*(
 
   if blk.blockAccessList.isSome:
     txFrame.persistBlockAccessList(
-      header.blockAccessListHash.expect("blockAccessListHash should be verified before"),
+      blkHash,
       blk.blockAccessList.get(),
     )
   elif generatedBal.isSome:
     txFrame.persistBlockAccessList(
-      header.blockAccessListHash.expect("blockAccessListHash should be verified before"),
+      blkHash,
       generatedBal.get()[],
     )
 
