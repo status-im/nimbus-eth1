@@ -83,7 +83,7 @@ template blocksFetchCheckImpl(
     request.blockHashes[^1] = blocks[^1].header.computeBlockHash
 
     # Fetch bodies
-    let bodies = buddy.fetchBodies(request, info).valueOr:
+    let bodies = buddy.fetchBodies(request).valueOr:
       break body                                           # return err()
     if buddy.ctrl.stopped:
       break body                                           # return err()

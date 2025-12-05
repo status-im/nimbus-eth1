@@ -37,7 +37,7 @@ func headersStagedQueueIsEmpty*(ctx: BeaconCtxRef): bool =
 proc headersStagedQueueInsert*(
     ctx: BeaconCtxRef;
     key: BlockNumber;
-      ): Opt[SortedSetItemRef[BlockNumber,LinkedHChain]] =
+      ): Opt[SortedSetItemRef[BlockNumber,HeaderChain]] =
   let qItem = ctx.hdr.staged.insert(key).valueOr:
     return err()
   metrics.set(nec_sync_header_lists_staged, ctx.hdr.staged.len)

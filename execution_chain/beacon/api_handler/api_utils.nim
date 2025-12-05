@@ -136,38 +136,38 @@ proc validStatus*(validHash: common.Hash32): PayloadStatusV1 =
     latestValidHash: toValidHash(validHash)
   )
 
-proc invalidParams*(msg: string): ref InvalidRequest =
-  (ref InvalidRequest)(
+proc invalidParams*(msg: string): ref ApplicationError =
+  (ref ApplicationError)(
     code: engineApiInvalidParams,
     msg: msg
   )
 
-proc invalidForkChoiceState*(msg: string): ref InvalidRequest =
-  (ref InvalidRequest)(
+proc invalidForkChoiceState*(msg: string): ref ApplicationError =
+  (ref ApplicationError)(
     code: engineApiInvalidForkchoiceState,
     msg: msg
   )
 
-proc unknownPayload*(msg: string): ref InvalidRequest =
-  (ref InvalidRequest)(
+proc unknownPayload*(msg: string): ref ApplicationError =
+  (ref ApplicationError)(
     code: engineApiUnknownPayload,
     msg: msg
   )
 
-proc invalidAttr*(msg: string): ref InvalidRequest =
-  (ref InvalidRequest)(
+proc invalidAttr*(msg: string): ref ApplicationError =
+  (ref ApplicationError)(
     code: engineApiInvalidPayloadAttributes,
     msg: msg
   )
 
-proc unsupportedFork*(msg: string): ref InvalidRequest =
-  (ref InvalidRequest)(
+proc unsupportedFork*(msg: string): ref ApplicationError =
+  (ref ApplicationError)(
     code: engineApiUnsupportedFork,
     msg: msg
   )
 
-proc tooLargeRequest*(msg: string): ref InvalidRequest =
-  (ref InvalidRequest)(
+proc tooLargeRequest*(msg: string): ref ApplicationError =
+  (ref ApplicationError)(
     code: engineApiTooLargeRequest,
     msg: msg
   )

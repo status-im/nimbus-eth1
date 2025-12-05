@@ -53,7 +53,7 @@ template headersFetch*(
         break body                                  # stop, exit function
 
       # Fetch headers for this range of block numbers
-      rc = buddy.fetchHeadersReversed(iv, parent, info)
+      rc = buddy.fetchHeadersReversed(iv, parent)
 
     # Job might have been cancelled or completed while downloading headers.
     # If so, no more bookkeeping of headers must take place. The *books*

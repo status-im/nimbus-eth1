@@ -171,7 +171,6 @@ const
 
 template noisy[S,W](dsc: RunnerSyncRef[S,W]): bool =
   ## Log a bit more (typically while syncer is activated)
-  true or
   dsc.ctx.noisyLog
 
 func toStr(w: HashSet[Port]): string =
@@ -590,10 +589,6 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
 proc onPeerDisconnected[S,W](dsc: RunnerSyncRef[S,W], peer: Peer) =
   ## Disconnect running peer
   dsc.syncPeers.peek(peer.key).isErrOr:
-    if dsc.noisy: trace "Disconnecting peer", peer,
-      nSyncPeers=dsc.nSyncPeers(), nSyncPeersMax=dsc.syncPeers.capacity,
-      nPoolPeers=dsc.peerPool.len
-
     # If it is set a zombie, it will be taken care of when the
     # `workerLoop()` finishes.
     if value.worker.ctrl.running:
