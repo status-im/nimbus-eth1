@@ -15,7 +15,7 @@ import
   ../beacon_engine,
   ./api_utils
 
-{.push gcsafe, raises:[InvalidRequest].}
+{.push gcsafe, raises:[ApplicationError].}
 
 proc getBlobsV1*(ben: BeaconEngineRef,
                versionedHashes: openArray[VersionedHash]):
