@@ -13,8 +13,8 @@ import
   # std/json,
   stew/byteutils,
   json_rpc/rpcserver,
-  eth/common/block_access_lists,
-  # ./rpc_utils,
+  web3/[eth_api_types, conversions],
+  ./rpc_utils,
   ./rpc_types,
   #../tracer,
   #../evm/types,
@@ -22,18 +22,16 @@ import
   ../beacon/web3_eth_conv,
   ../core/tx_pool,
   ../core/chain/forked_chain,
-  ../stateless/witness_types,
-  web3/conversions
+  ../stateless/witness_types
 
-# type
-#   TraceOptions = object
-#     disableStorage: Opt[bool]
-#     disableMemory: Opt[bool]
-#     disableStack: Opt[bool]
-#     disableState: Opt[bool]
-#     disableStateDiff: Opt[bool]
+type
+  BadBlock = object
+    `block`: BlockObject
+    generatedBlockAccessList: Opt[BlockAccessList]
+    hash: Hash32
+    rlp: seq[byte]
 
-# TraceOptions.useDefaultSerializationIn JrpcConv
+BadBlock.useDefaultSerializationIn JrpcConv
 
 ExecutionWitness.useDefaultSerializationIn JrpcConv
 
@@ -44,6 +42,16 @@ StorageChange.useDefaultSerializationIn JrpcConv
 BalanceChange.useDefaultSerializationIn JrpcConv
 NonceChange.useDefaultSerializationIn JrpcConv
 CodeChange.useDefaultSerializationIn JrpcConv
+
+#type
+#   TraceOptions = object
+#     disableStorage: Opt[bool]
+#     disableMemory: Opt[bool]
+#     disableStack: Opt[bool]
+#     disableState: Opt[bool]
+#     disableStateDiff: Opt[bool]
+
+# TraceOptions.useDefaultSerializationIn JrpcConv
 
 # proc isTrue(x: Opt[bool]): bool =
 #   result = x.isSome and x.get() == true
@@ -106,6 +114,17 @@ proc getBlockAccessList*(
     return err("Block access list not found")
 
   ok(bal)
+
+proc getTotalDifficulty(chain: ForkedChainRef, blockHash: Hash32): UInt256 =
+
+  let txFrame = chain.txFrame(blockHash).txFrameBegin()
+  defer:
+    txFrame.dispose()
+
+  let totalDifficulty = txFrame.getScore(blockHash).valueOr:
+    return chain.baseTxFrame().headTotalDifficulty()
+
+  return totalDifficulty
 
 proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
   let
@@ -269,3 +288,22 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
 
     chain.getBlockAccessList(blockHash).valueOr:
       raise newException(ValueError, error)
+
+  server.rpc("debug_getBadBlocks") do() -> seq[BadBlock]:
+    ## Returns a list of the most recently processed bad blocks.
+    var badBlocks: seq[BadBlock]
+
+    let blks = chain.getBadBlocks()
+    for b in blks:
+      let
+        (blk, bal) = b
+        blkHash = blk.header.computeBlockHash()
+
+      badBlocks.add BadBlock(
+        `block`: populateBlockObject(
+          blkHash, blk, chain.getTotalDifficulty(blkHash), fullTx = true),
+        generatedBlockAccessList: bal.map(proc (bal: auto): auto = bal[]),
+        hash: blkHash,
+        rlp: rlp.encode(blk))
+
+    badBlocks
