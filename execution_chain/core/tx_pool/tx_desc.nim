@@ -87,8 +87,7 @@ proc setupVMState(com: CommonRef;
                   parentHash: Hash32,
                   pos: PosPayloadAttr,
                   parentFrame: CoreDbTxRef): BaseVMState =
-  let
-    fork = com.toEVMFork(pos.timestamp)
+  let fork = com.toEVMFork(pos.timestamp)
 
   BaseVMState.new(
     parent   = parent,
@@ -103,7 +102,8 @@ proc setupVMState(com: CommonRef;
       parentHash   : parentHash,
     ),
     txFrame = parentFrame.txFrameBegin(),
-    com     = com)
+    com     = com,
+    enableBalTracker = com.isAmsterdamOrLater(pos.timestamp))
 
 template append(tab: var TxSenderTab, sn: TxSenderNonceRef) =
   tab[item.sender] = sn

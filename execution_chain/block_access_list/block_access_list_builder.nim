@@ -43,6 +43,8 @@ type
     accounts*: Table[Address, AccountData]
       ## Maps address -> account data
 
+  BlockAccessListRef* = ref BlockAccessList
+
 template init*(T: type AccountData): T =
   AccountData()
 
@@ -119,11 +121,11 @@ func slotCmp(x, y: StorageKey | StorageValue): int =
 func slotChangesCmp(x, y: SlotChanges): int =
   cmp(x.slot.data.toHex(), y.slot.data.toHex())
 
-func addressCmp(x, y: AccountChanges): int =
+func accChangesCmp(x, y: AccountChanges): int =
   cmp(x.address.data.toHex(), y.address.data.toHex())
 
-func buildBlockAccessList*(builder: BlockAccessListBuilderRef): BlockAccessList =
-  var blockAccessList: BlockAccessList
+func buildBlockAccessList*(builder: BlockAccessListBuilderRef): BlockAccessListRef =
+  let blockAccessList: BlockAccessListRef = new BlockAccessList
 
   for address, accData in builder.accounts.mpairs():
     # Collect and sort storageChanges
@@ -163,7 +165,7 @@ func buildBlockAccessList*(builder: BlockAccessListBuilderRef): BlockAccessList 
       codeChanges.add((BlockAccessIndex(balIndex), Bytecode(code)))
     codeChanges.sort(balIndexCmp)
 
-    blockAccessList.add(AccountChanges(
+    blockAccessList[].add(AccountChanges(
       address: address,
       storageChanges: storageChanges,
       storageReads: storageReads,
@@ -172,6 +174,6 @@ func buildBlockAccessList*(builder: BlockAccessListBuilderRef): BlockAccessList 
       codeChanges: codeChanges
     ))
 
-  blockAccessList.sort(addressCmp)
+  blockAccessList[].sort(accChangesCmp)
 
   blockAccessList

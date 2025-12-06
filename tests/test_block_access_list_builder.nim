@@ -35,7 +35,7 @@ suite "Block access list builder":
     builder.addTouchedAccount(address1)
     builder.addTouchedAccount(address1) # duplicate
 
-    let bal = builder.buildBlockAccessList()
+    let bal = builder.buildBlockAccessList()[]
     check:
       bal.len() == 3
       bal[0].address == address1
@@ -58,7 +58,7 @@ suite "Block access list builder":
     builder.addStorageWrite(address1, slot3, 3, 4.u256)
     builder.addStorageWrite(address1, slot3, 3, 5.u256) # duplicate should overwrite
 
-    let bal = builder.buildBlockAccessList()
+    let bal = builder.buildBlockAccessList()[]
     check:
       bal.len() == 2
       bal[0].address == address1
@@ -77,7 +77,7 @@ suite "Block access list builder":
     builder.addStorageRead(address1, slot1)
     builder.addStorageRead(address1, slot1) # duplicate
 
-    let bal = builder.buildBlockAccessList()
+    let bal = builder.buildBlockAccessList()[]
     check:
       bal.len() == 3
       bal[0].address == address1
@@ -94,7 +94,7 @@ suite "Block access list builder":
     builder.addBalanceChange(address1, 2, 2.u256)
     builder.addBalanceChange(address1, 2, 10.u256) # duplicate should overwrite
 
-    let bal = builder.buildBlockAccessList()
+    let bal = builder.buildBlockAccessList()[]
     check:
       bal.len() == 3
       bal[0].address == address1
@@ -111,7 +111,7 @@ suite "Block access list builder":
     builder.addNonceChange(address3, 1, 1)
     builder.addNonceChange(address3, 1, 10) # duplicate should overwrite
 
-    let bal = builder.buildBlockAccessList()
+    let bal = builder.buildBlockAccessList()[]
     check:
       bal.len() == 3
       bal[0].address == address1
@@ -127,7 +127,7 @@ suite "Block access list builder":
     builder.addCodeChange(address1, 3, @[0x3.byte])
     builder.addCodeChange(address1, 3, @[0x4.byte]) # duplicate should overwrite
 
-    let bal = builder.buildBlockAccessList()
+    let bal = builder.buildBlockAccessList()[]
     check:
       bal.len() == 2
       bal[0].address == address1
@@ -171,7 +171,7 @@ suite "Block access list builder":
     builder.addCodeChange(address1, 3, @[0x3.byte])
     builder.addCodeChange(address1, 3, @[0x4.byte]) # duplicate should overwrite
 
-    let bal = builder.buildBlockAccessList()
+    let bal = builder.buildBlockAccessList()[]
     check:
       bal.len() == 3
 
