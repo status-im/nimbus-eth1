@@ -17,7 +17,7 @@ import
   ../../common,
   ../../networking/p2p,
   ./worker/headers/headers_target,
-  ./worker/[blocks, classify, headers, start_stop, update, worker_desc]
+  ./worker/[blocks, classify, headers, helpers, start_stop, update, worker_desc]
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions

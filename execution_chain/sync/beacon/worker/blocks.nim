@@ -16,7 +16,7 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../../../networking/p2p,
   ./blocks/[blocks_blocks, blocks_helpers, blocks_queue, blocks_unproc],
-  ./worker_desc
+  ./[helpers, worker_desc]
 
 export
   blocks_queue, blocks_unproc

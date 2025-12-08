@@ -16,7 +16,7 @@ import
   pkg/stew/interval_set,
   ../../../../networking/p2p,
   ../update/update_eta,
-  ../worker_desc,
+  ../[helpers, worker_desc],
   ./[headers_fetch, headers_helpers, headers_unproc]
 
 # ------------------------------------------------------------------------------
