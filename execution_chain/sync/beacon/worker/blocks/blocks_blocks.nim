@@ -16,7 +16,7 @@ import
   pkg/stew/interval_set,
   ../../../../networking/p2p,
   ../../../wire_protocol/types,
-  ../[update, worker_desc],
+  ../[helpers, update, worker_desc],
   ./[blocks_fetch, blocks_helpers, blocks_import, blocks_unproc]
 
 # ------------------------------------------------------------------------------

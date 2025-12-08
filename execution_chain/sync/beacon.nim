@@ -86,7 +86,6 @@ proc config*(
     ethNode: EthereumNode;
     chain: ForkedChainRef;
     maxPeers: int;
-    standByMode = false;
       ) =
   ## Complete `BeaconSyncRef` descriptor initialisation.
   ##
@@ -103,8 +102,6 @@ proc config*(
   desc.addBeaconSyncProtocol(eth68)
 
   desc.ctx.pool.chain = chain
-  if standByMode:
-    desc.ctx.pool.syncState = SyncState.standByMode
 
   if not desc.lazyConfigHook.isNil:
     desc.lazyConfigHook(desc)
@@ -128,10 +125,23 @@ proc activate*(desc: BeaconSyncRef) =
   if desc.ctx.pool.syncState == SyncState.standByMode:
     desc.ctx.pool.syncState = SyncState.idle
 
-proc start*(desc: BeaconSyncRef): bool =
+proc start*(desc: BeaconSyncRef; standByMode = false): bool =
+  ## This function returns `true` exactly if the run state could be changed.
+  ## The following expressions are equivalent:
+  ## * desc.start(true)
+  ## * desc.start(false) and desc.start(true)
+  ##
   doAssert not desc.ctx.isNil
-  if not desc.isRunning and desc.startSync():
-    return true
+  if desc.isRunning:
+    # Correct state to stand-by mode if possible
+    if standByMode and desc.ctx.pool.syncState == SyncState.idle:
+      desc.ctx.pool.syncState = SyncState.standByMode
+      return true
+  else:
+    if standByMode:
+      desc.ctx.pool.syncState = SyncState.standByMode
+    if desc.startSync():
+      return true
   # false
 
 proc stop*(desc: BeaconSyncRef) {.async.} =

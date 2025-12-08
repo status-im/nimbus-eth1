@@ -13,7 +13,7 @@
 import
   pkg/chronos,
   ../update/update_eta,
-  ../worker_desc
+  ../[helpers, worker_desc]
 
 # ------------------------------------------------------------------------------
 # Private helpers

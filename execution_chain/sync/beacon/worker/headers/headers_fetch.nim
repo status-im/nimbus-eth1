@@ -15,7 +15,7 @@ import
   pkg/eth/[common, rlp],
   pkg/stew/interval_set,
   ../../../wire_protocol,
-  ../worker_desc,
+  ../[helpers, worker_desc],
   ./headers_helpers
 
 # ------------------------------------------------------------------------------
