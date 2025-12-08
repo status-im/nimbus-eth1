@@ -15,16 +15,15 @@
 {.push raises: [].}
 
 import
-  nimcrypto/[rijndael, keccak, utils],
+  nimcrypto/[rijndael, utils],
   stew/[arrayops, byteutils, endians2, objects],
   results,
   eth/rlp,
+  eth/keccak/keccak,
   eth/common/keys,
   ./ecies
 
 export results
-
-type keccak256 = keccak.keccak256
 
 const
   # Auth message sizes
@@ -66,6 +65,8 @@ const
     ## ack-vsn = 4
 
 type
+  Keccak256 = keccak.Keccak256
+  
   Nonce* = array[KeyLength, byte]
 
   HandshakeFlag* = enum
@@ -95,8 +96,8 @@ type
   ConnectionSecret* = object
     aesKey*: array[aes256.sizeKey, byte]
     macKey*: array[KeyLength, byte]
-    egressMac*: keccak256
-    ingressMac*: keccak256
+    egressMac*: Keccak256
+    ingressMac*: Keccak256
 
   AuthResult*[T] = Result[T, AuthError]
 
@@ -343,8 +344,8 @@ proc getSecrets*(
   ## Derive secrets from handshake `h` using encrypted AuthMessage `authmsg` and
   ## encrypted AckMessage `ackmsg`.
   var
-    ctx0: keccak256
-    ctx1: keccak256
+    ctx0: Keccak256
+    ctx1: Keccak256
     mac1: MDigest[256]
     secret: ConnectionSecret
 

@@ -12,7 +12,8 @@
 {.push raises: [].}
 
 import
-  nimcrypto/[bcmode, keccak, rijndael, utils], results
+  nimcrypto/[bcmode, rijndael, utils], results,
+  eth/keccak/keccak
 from auth import ConnectionSecret
 
 export results
@@ -23,13 +24,15 @@ const
   maxUInt24 = (not uint32(0)) shl 8
 
 type
+  Keccak256 = keccak.Keccak256
+
   SecretState* = object
     ## Object represents current encryption/decryption context.
     aesenc*: CTR[aes256]
     aesdec*: CTR[aes256]
     macenc*: ECB[aes256]
-    emac*: keccak256
-    imac*: keccak256
+    emac*: Keccak256
+    imac*: Keccak256
 
   RlpxError* = enum
     IncorrectMac = "rlpx: MAC verification failed"
@@ -90,7 +93,7 @@ proc encrypt*(c: var SecretState, header: openArray[byte],
   ## `frame` must not be zero length.
   ## `output` must be at least `encryptedLength(len(frame))` length.
   var
-    tmpmac: keccak256
+    tmpmac: Keccak256
     aes: array[RlpHeaderLength, byte]
   let length = encryptedLength(len(frame))
   let frameLength = roundup16(len(frame))
@@ -166,7 +169,7 @@ proc decryptHeader*(c: var SecretState, data: openArray[byte]): RlpxResult[RlpxH
   ## `header` must be at least `RlpHeaderLength + RlpMacLength` length.
 
   var
-    tmpmac: keccak256
+    tmpmac: Keccak256
     aes: array[RlpHeaderLength, byte]
 
   if len(data) < RlpHeaderLength + RlpMacLength:
@@ -204,7 +207,7 @@ proc decryptBody*(c: var SecretState, data: openArray[byte], bodysize: int,
   ##
   ## On success completion `outlen` will hold actual size of decrypted body.
   var
-    tmpmac: keccak256
+    tmpmac: Keccak256
     aes: array[RlpHeaderLength, byte]
   let rsize = roundup16(bodysize)
   if len(data) < rsize + RlpMacLength:
