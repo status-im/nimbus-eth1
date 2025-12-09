@@ -168,14 +168,14 @@ proc runTrial2ok(env: TestEnv, ledger: LedgerRef; inx: int) =
   let eAddr = env.txs[inx].getRecipient
 
   block:
-    let accTx = ledger.beginSavepoint
+    ledger.beginSavePoint()
     ledger.modBalance(eAddr)
-    ledger.rollback(accTx)
+    ledger.rollback()
 
   block:
-    let accTx = ledger.beginSavepoint
+    ledger.beginSavePoint()
     ledger.modBalance(eAddr)
-    ledger.commit(accTx)
+    ledger.commit()
 
   ledger.persist()
 
@@ -185,26 +185,26 @@ proc runTrial3(env: TestEnv, ledger: LedgerRef; inx: int; rollback: bool) =
   let eAddr = env.txs[inx].getRecipient
 
   block:
-    let accTx = ledger.beginSavepoint
+    ledger.beginSavePoint()
     ledger.modBalance(eAddr)
-    ledger.commit(accTx)
+    ledger.commit()
     ledger.persist()
 
   block body2:
-    let accTx = ledger.beginSavepoint
+    ledger.beginSavePoint()
     ledger.modBalance(eAddr)
 
     if rollback:
-      ledger.rollback(accTx)
+      ledger.rollback()
       break body2
 
-    ledger.commit(accTx)
+    ledger.commit()
     ledger.persist()
 
   block:
-    let accTx = ledger.beginSavepoint
+    ledger.beginSavePoint()
     ledger.modBalance(eAddr)
-    ledger.commit(accTx)
+    ledger.commit()
     ledger.persist()
 
 
@@ -214,21 +214,21 @@ proc runTrial3Survive(env: TestEnv, ledger: LedgerRef; inx: int; noisy = false) 
 
   block:
     block:
-      let accTx = ledger.beginSavepoint
+      ledger.beginSavePoint()
       ledger.modBalance(eAddr)
-      ledger.commit(accTx)
+      ledger.commit()
       ledger.persist()
 
     block:
-      let accTx = ledger.beginSavepoint
+      ledger.beginSavePoint()
       ledger.modBalance(eAddr)
-      ledger.rollback(accTx)
+      ledger.rollback()
 
   block:
     block:
-      let accTx = ledger.beginSavepoint
+      ledger.beginSavePoint()
       ledger.modBalance(eAddr)
-      ledger.commit(accTx)
+      ledger.commit()
 
       ledger.persist()
 
@@ -240,33 +240,33 @@ proc runTrial4(env: TestEnv, ledger: LedgerRef; inx: int; rollback: bool) =
 
   block:
     block:
-      let accTx = ledger.beginSavepoint
+      ledger.beginSavePoint()
       ledger.modBalance(eAddr)
-      ledger.commit(accTx)
+      ledger.commit()
       ledger.persist()
 
     block:
-      let accTx = ledger.beginSavepoint
+      ledger.beginSavePoint()
       ledger.modBalance(eAddr)
-      ledger.commit(accTx)
+      ledger.commit()
       ledger.persist()
 
     block body3:
-      let accTx = ledger.beginSavepoint
+      ledger.beginSavePoint()
       ledger.modBalance(eAddr)
 
       if rollback:
-        ledger.rollback(accTx)
+        ledger.rollback()
         break body3
 
-      ledger.commit(accTx)
+      ledger.commit()
       ledger.persist()
 
   block:
     block:
-      let accTx = ledger.beginSavepoint
+      ledger.beginSavePoint()
       ledger.modBalance(eAddr)
-      ledger.commit(accTx)
+      ledger.commit()
       ledger.persist()
 
 # ------------------------------------------------------------------------------
@@ -309,6 +309,8 @@ proc runLedgerTransactionTests(noisy = true) =
           return
 
         let blk = r.get.blk
+        check blk.transactions.len == NumTransactions
+        
         env.importBlock(blk)
 
         check blk.transactions.len == NumTransactions
@@ -528,7 +530,7 @@ proc runLedgerBasicOperationsTests() =
       check ac.verifySlots(0xaa, 0x01) == false
       check ac.verifySlots(0xaa, 0x02) == false
 
-      var sp = ac.beginSavepoint
+      ac.beginSavePoint()
       # some new ones
       ac.accessList(0xbb, 0x03)
       ac.accessList(0xaa, 0x01)
@@ -540,18 +542,18 @@ proc runLedgerBasicOperationsTests() =
       check ac.verifySlots(0xbb, 0x01, 0x02, 0x03)
       check ac.verifySlots(0xcc, 0x01)
 
-      ac.rollback(sp)
+      ac.rollback()
       check ac.verifyAddrs(0xaa, 0xbb)
       check ac.verifyAddrs(0xcc) == false
       check ac.verifySlots(0xcc, 0x01) == false
 
-      sp = ac.beginSavepoint
+      ac.beginSavePoint()
       ac.accessList(0xbb, 0x03)
       ac.accessList(0xaa, 0x01)
       ac.accessList(0xcc, 0x01)
       ac.accessList(0xcc)
       ac.accessList(0xdd, 0x04)
-      ac.commit(sp)
+      ac.commit()
 
       check ac.verifyAddrs(0xaa, 0xbb, 0xcc)
       check ac.verifySlots(0xaa, 0x01)

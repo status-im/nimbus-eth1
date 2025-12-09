@@ -71,7 +71,7 @@ type
 
   LedgerRef* = ref object
     txFrame*: CoreDbTxRef
-    savePoint: LedgerSpRef
+    savePoints: seq[LedgerSavePoint]
     isDirty: bool
     ripemdSpecial: bool
     storeSlotHash*: bool
@@ -106,18 +106,11 @@ type
 
   ReadOnlyLedger* = distinct LedgerRef
 
-  TransactionState = enum
-    Pending
-    Committed
-    RolledBack
-
-  LedgerSpRef* = ref object
-    parentSavepoint: LedgerSpRef
+  LedgerSavePoint* = object
     cache: Table[Address, AccountRef]
     dirty: Table[Address, AccountRef]
     selfDestruct: HashSet[Address]
     accessList: ac_access_list.AccessList
-    state: TransactionState
     when debugLedgerRef:
       depth: int
 
@@ -132,6 +125,25 @@ const
     StorageChanged,
     NewlyCreated
     }
+
+# Disallow copying of LedgerSavePoint
+proc `=copy`(dest: var LedgerSavePoint; src: LedgerSavePoint) {.error: "Copying LedgerSavePoint is forbidden".} =
+  discard
+
+template hasPendingSavePoint(ledger: LedgerRef): bool =
+  ledger.savePoints.len() > 0
+
+template pendingSavePoint(ledger: LedgerRef): LedgerSavePoint =
+  ledger.savePoints[ledger.savePoints.high]
+
+template hasParentSavePoint(ledger: LedgerRef): bool =
+  ledger.savePoints.len() > 1
+
+template parentSavePoint(ledger: LedgerRef): LedgerSavePoint =
+  ledger.savePoints[ledger.savePoints.high - 1]
+
+template popSavePoint(ledger: LedgerRef) =
+  ledger.savePoints.setLen(ledger.savePoints.len() - 1)
 
 when debugLedgerRef:
   import
@@ -157,7 +169,7 @@ template toAccountKey*(eAddr: Address): Hash32 =
 template toSlotKey*(slot: UInt256): Hash32 =
   slot.toBytesBE.keccak256
 
-proc beginSavepoint*(ac: LedgerRef): LedgerSpRef {.gcsafe.}
+proc beginSavePoint*(ac: LedgerRef) {.gcsafe.}
 
 proc resetCoreDbAccount(ac: LedgerRef, acc: AccountRef) =
   const info = "resetCoreDbAccount(): "
@@ -178,16 +190,14 @@ proc getAccount(
       ac.witnessKeys[lookupKey] = false
 
   # search account from layers of cache
-  var sp = ac.savePoint
-  while sp != nil:
+  for sp in ac.savePoints.mitems:
     result = sp.cache.getOrDefault(address)
     if not result.isNil:
       return
-    sp = sp.parentSavepoint
 
   if ac.cache.pop(address, result):
     # Check second-level cache
-    ac.savePoint.cache[address] = result
+    ac.pendingSavePoint.cache[address] = result
     return
 
   # not found in cache, look into state trie
@@ -211,8 +221,8 @@ proc getAccount(
     return # ignore, don't cache
 
   # cache the account
-  ac.savePoint.cache[address] = result
-  ac.savePoint.dirty[address] = result
+  ac.pendingSavePoint.cache[address] = result
+  ac.pendingSavePoint.dirty[address] = result
 
 proc clone(acc: AccountRef, cloneStorage: bool): AccountRef =
   result = AccountRef(
@@ -357,17 +367,17 @@ proc persistStorage(acc: AccountRef, ac: LedgerRef) =
 proc makeDirty(ac: LedgerRef, address: Address, cloneStorage = true): AccountRef =
   ac.isDirty = true
   result = ac.getAccount(address)
-  if address in ac.savePoint.cache:
+  if address in ac.pendingSavePoint.cache:
     # it's already in latest savepoint
     result.flags.incl Dirty
-    ac.savePoint.dirty[address] = result
+    ac.pendingSavePoint.dirty[address] = result
     return
 
   # put a copy into latest savepoint
   result = result.clone(cloneStorage)
   result.flags.incl Dirty
-  ac.savePoint.cache[address] = result
-  ac.savePoint.dirty[address] = result
+  ac.pendingSavePoint.cache[address] = result
+  ac.pendingSavePoint.dirty[address] = result
 
 # ------------------------------------------------------------------------------
 # Public methods
@@ -382,70 +392,72 @@ proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool, collect
   result.slots = typeof(result.slots).init(slotsLruSize)
   result.collectWitness = collectWitness
   result.blockHashes = typeof(result.blockHashes).init(MAX_PREV_HEADER_DEPTH.int)
-  discard result.beginSavepoint
+  result.beginSavePoint()
 
 proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef): LedgerRef =
   init(x, db, false)
 
 proc getStateRoot*(ac: LedgerRef): Hash32 =
   # make sure all savepoint already committed
-  doAssert(ac.savePoint.parentSavepoint.isNil)
+  doAssert(not ac.hasParentSavePoint())
   # make sure all cache already committed
   doAssert(ac.isDirty == false)
   ac.txFrame.getStateRoot().expect("working database")
 
 proc isTopLevelClean*(ac: LedgerRef): bool =
   ## Getter, returns `true` if all pending data have been commited.
-  not ac.isDirty and ac.savePoint.parentSavepoint.isNil
+  not ac.isDirty and not ac.hasParentSavePoint()
 
-proc beginSavepoint*(ac: LedgerRef): LedgerSpRef =
-  new result
-  result.cache = Table[Address, AccountRef]()
-  result.accessList.init()
-  result.parentSavepoint = ac.savePoint
-  ac.savePoint = result
+proc beginSavePoint*(ac: LedgerRef) =
+  var sp = LedgerSavePoint()
+  sp.cache = Table[Address, AccountRef]()
+  sp.accessList.init()
+  # result.parentSavepoint = ac.savePoint
+  ac.savePoints.add(sp)
 
   when debugLedgerRef:
     if not result.parentSavePoint.isNil:
       result.depth = result.parentSavePoint.depth + 1
     inspectSavePoint("snapshot", result)
 
-proc rollback*(ac: LedgerRef, sp: LedgerSpRef) =
+proc rollback*(ac: LedgerRef) =
   # Transactions should be handled in a strictly nested fashion.
   # Any child transaction must be committed or rolled-back before
   # its parent transactions:
-  doAssert ac.savePoint == sp and sp.state == Pending
-  ac.savePoint = sp.parentSavepoint
-  sp.state = RolledBack
+  doAssert ac.hasPendingSavePoint()
+  # cannot rollback most inner savepoint
+  doAssert ac.hasParentSavePoint()
+
+  ac.popSavePoint()
 
   when debugLedgerRef:
     inspectSavePoint("rollback", ac.savePoint)
 
-proc commit*(ac: LedgerRef, sp: LedgerSpRef) =
+proc commit*(ac: LedgerRef) =
   # Transactions should be handled in a strictly nested fashion.
   # Any child transaction must be committed or rolled-back before
   # its parent transactions:
-  doAssert ac.savePoint == sp and sp.state == Pending
+  doAssert ac.hasPendingSavePoint()
   # cannot commit most inner savepoint
-  doAssert not sp.parentSavepoint.isNil
+  doAssert ac.hasParentSavePoint()
 
-  ac.savePoint = sp.parentSavepoint
-  ac.savePoint.cache.mergeAndReset(sp.cache)
-  ac.savePoint.dirty.mergeAndReset(sp.dirty)
-  ac.savePoint.accessList.mergeAndReset(sp.accessList)
-  ac.savePoint.selfDestruct.mergeAndReset(sp.selfDestruct)
-  sp.state = Committed
+  ac.parentSavePoint.cache.mergeAndReset(ac.pendingSavePoint.cache)
+  ac.parentSavePoint.dirty.mergeAndReset(ac.pendingSavePoint.dirty)
+  ac.parentSavePoint.accessList.mergeAndReset(ac.pendingSavePoint.accessList)
+  ac.parentSavePoint.selfDestruct.mergeAndReset(ac.pendingSavePoint.selfDestruct)
+
+  ac.popSavePoint()
 
   when debugLedgerRef:
     inspectSavePoint("commit", ac.savePoint)
 
-proc dispose*(ac: LedgerRef, sp: LedgerSpRef) =
-  if sp.state == Pending:
-    ac.rollback(sp)
+# proc dispose*(ac: LedgerRef) =
+#   if ac.hasParentSavePoint():
+#     ac.rollback(sp)
 
-proc safeDispose*(ac: LedgerRef, sp: LedgerSpRef) =
-  if (not isNil(sp)) and (sp.state == Pending):
-    ac.rollback(sp)
+# proc safeDispose*(ac: LedgerRef) =
+#   if (not isNil(sp)) and (sp.state == Pending):
+#     ac.rollback(sp)
 
 proc getCodeHash*(ac: LedgerRef, address: Address): Hash32 =
   let acc = ac.getAccount(address, false)
@@ -663,14 +675,14 @@ proc clearStorage*(ac: LedgerRef, address: Address) =
 
 proc deleteAccount*(ac: LedgerRef, address: Address) =
   # make sure all savepoints already committed
-  doAssert(ac.savePoint.parentSavepoint.isNil)
+  doAssert(not ac.hasParentSavePoint())
   let acc = ac.getAccount(address)
-  ac.savePoint.dirty[address] = acc
+  ac.pendingSavePoint.dirty[address] = acc
   ac.kill acc
 
 proc selfDestruct*(ac: LedgerRef, address: Address) =
   ac.setBalance(address, 0.u256)
-  ac.savePoint.selfDestruct.incl address
+  ac.pendingSavePoint.selfDestruct.incl address
 
 proc selfDestruct6780*(ac: LedgerRef, address: Address) =
   let acc = ac.getAccount(address, false)
@@ -681,7 +693,7 @@ proc selfDestruct6780*(ac: LedgerRef, address: Address) =
     ac.selfDestruct(address)
 
 proc selfDestructLen*(ac: LedgerRef): int =
-  ac.savePoint.selfDestruct.len
+  ac.pendingSavePoint.selfDestruct.len
 
 proc ripemdSpecial*(ac: LedgerRef) =
   ac.ripemdSpecial = true
@@ -695,12 +707,12 @@ proc deleteEmptyAccount(ac: LedgerRef, address: Address) =
   if not acc.exists:
     return
 
-  ac.savePoint.dirty[address] = acc
+  ac.pendingSavePoint.dirty[address] = acc
   ac.kill acc
 
 proc clearEmptyAccounts(ac: LedgerRef) =
   # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md
-  for acc in ac.savePoint.dirty.values():
+  for acc in ac.pendingSavePoint.dirty.values():
     if Touched in acc.flags and
         acc.isEmpty and acc.exists:
       ac.kill acc
@@ -738,15 +750,15 @@ proc persist*(ac: LedgerRef,
   const info = "persist(): "
 
   # make sure all savepoint already committed
-  doAssert(ac.savePoint.parentSavepoint.isNil)
+  doAssert(not ac.hasParentSavePoint())
 
   if clearEmptyAccount:
     ac.clearEmptyAccounts()
 
-  for address in ac.savePoint.selfDestruct:
+  for address in ac.pendingSavePoint.selfDestruct:
     ac.deleteAccount(address)
 
-  for (eAddr,acc) in ac.savePoint.dirty.pairs(): # This is a hotspot in block processing
+  for (eAddr,acc) in ac.pendingSavePoint.dirty.pairs(): # This is a hotspot in block processing
     case acc.persistMode()
     of Update:
       if CodeChanged in acc.flags:
@@ -762,27 +774,27 @@ proc persist*(ac: LedgerRef,
       ac.txFrame.delete(acc.toAccountKey).isOkOr:
         if error.error != AccNotFound:
           raiseAssert info & $$error
-      ac.savePoint.cache.del eAddr
+      ac.pendingSavePoint.cache.del eAddr
     of DoNothing:
       # dead man tell no tales
       # remove touched dead account from cache
       if Alive notin acc.flags:
-        ac.savePoint.cache.del eAddr
+        ac.pendingSavePoint.cache.del eAddr
 
     acc.flags = acc.flags - resetFlags
-  ac.savePoint.dirty.clear()
+  ac.pendingSavePoint.dirty.clear()
 
   if clearCache:
     # This overwrites the cache from the previous persist, providing a crude LRU
     # scheme with little overhead
     # TODO https://github.com/nim-lang/Nim/issues/23759
-    swap(ac.cache, ac.savePoint.cache)
-    ac.savePoint.cache.reset()
+    swap(ac.cache, ac.pendingSavePoint.cache)
+    ac.pendingSavePoint.cache.reset()
 
-  ac.savePoint.selfDestruct.clear()
+  ac.pendingSavePoint.selfDestruct.clear()
 
   # EIP2929
-  ac.savePoint.accessList.clear()
+  ac.pendingSavePoint.accessList.clear()
 
   ac.isDirty = false
 
@@ -792,21 +804,21 @@ proc persist*(ac: LedgerRef,
 
 iterator addresses*(ac: LedgerRef): Address =
   # make sure all savepoint already committed
-  doAssert(ac.savePoint.parentSavepoint.isNil)
-  for address, _ in ac.savePoint.cache:
+  doAssert(not ac.hasParentSavePoint())
+  for address, _ in ac.pendingSavePoint.cache:
     yield address
 
 iterator accounts*(ac: LedgerRef): Account =
   # make sure all savepoint already committed
-  doAssert(ac.savePoint.parentSavepoint.isNil)
-  for _, acc in ac.savePoint.cache:
+  doAssert(not ac.hasParentSavePoint())
+  for _, acc in ac.pendingSavePoint.cache:
     yield ac.txFrame.recast(
       acc.toAccountKey, acc.statement).value
 
 iterator pairs*(ac: LedgerRef): (Address, Account) =
   # make sure all savepoint already committed
-  doAssert(ac.savePoint.parentSavepoint.isNil)
-  for address, acc in ac.savePoint.cache:
+  doAssert(not ac.hasParentSavePoint())
+  for address, acc in ac.pendingSavePoint.cache:
     yield (address, ac.txFrame.recast(
       acc.toAccountKey, acc.statement).value)
 
@@ -842,31 +854,27 @@ proc getStorageRoot*(ac: LedgerRef, address: Address): Hash32 =
   else: ac.txFrame.slotStorageRoot(acc.toAccountKey).valueOr: EMPTY_ROOT_HASH
 
 proc accessList*(ac: LedgerRef, address: Address) =
-  ac.savePoint.accessList.add(address)
+  ac.pendingSavePoint.accessList.add(address)
 
 proc accessList*(ac: LedgerRef, address: Address, slot: UInt256) =
-  ac.savePoint.accessList.add(address, slot)
+  ac.pendingSavePoint.accessList.add(address, slot)
 
 func inAccessList*(ac: LedgerRef, address: Address): bool =
-  var sp = ac.savePoint
-  while sp != nil:
+  for sp in ac.savePoints.mitems:
     result = sp.accessList.contains(address)
     if result:
       return
-    sp = sp.parentSavepoint
 
 func inAccessList*(ac: LedgerRef, address: Address, slot: UInt256): bool =
-  var sp = ac.savePoint
-  while sp != nil:
+  for sp in ac.savePoints.mitems:
     result = sp.accessList.contains(address, slot)
     if result:
       return
-    sp = sp.parentSavepoint
 
 func getAccessList*(ac: LedgerRef): transactions.AccessList =
   # make sure all savepoint already committed
-  doAssert(ac.savePoint.parentSavepoint.isNil)
-  ac.savePoint.accessList.getAccessList()
+  doAssert(not ac.hasParentSavePoint())
+  ac.pendingSavePoint.accessList.getAccessList()
 
 proc getEthAccount*(ac: LedgerRef, address: Address): Account =
   let acc = ac.getAccount(address, false)

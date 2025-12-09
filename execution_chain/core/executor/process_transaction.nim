@@ -41,7 +41,6 @@ func eip1559BaseFee(header: Header; fork: EVMFork): UInt256 =
 
 proc commitOrRollbackDependingOnGasUsed(
     vmState: BaseVMState;
-    accTx: LedgerSpRef;
     header: Header;
     tx: Transaction;
     gasUsed: GasInt;
@@ -53,11 +52,11 @@ proc commitOrRollbackDependingOnGasUsed(
   # an early stop. It would rather detect differing values for the  block
   # header `gasUsed` and the `vmState.cumulativeGasUsed` at a later stage.
   if header.gasLimit < vmState.cumulativeGasUsed + gasUsed:
-    vmState.ledger.rollback(accTx)
+    vmState.ledger.rollback()
     err(&"invalid tx: block header gasLimit reached. gasLimit={header.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasUsed}")
   else:
     # Accept transaction and collect mining fee.
-    vmState.ledger.commit(accTx)
+    vmState.ledger.commit()
     vmState.ledger.addBalance(vmState.coinbase(), gasUsed.u256 * priorityFee.u256)
     vmState.cumulativeGasUsed += gasUsed
 
@@ -108,17 +107,16 @@ proc processTransactionImpl(
   let
     com = vmState.com
     txRes = roDB.validateTransaction(tx, sender, header.gasLimit, baseFee256, excessBlobGas, com, fork)
-    res = if txRes.isOk:      
+    res = if txRes.isOk:
       # Execute the transaction.
       vmState.captureTxStart(tx.gasLimit)
-      let
-        accTx = vmState.ledger.beginSavepoint
+      vmState.ledger.beginSavePoint()
       var
         callResult = tx.txCallEvm(sender, vmState, baseFee)
       vmState.captureTxEnd(tx.gasLimit - callResult.gasUsed)
 
       let tmp = commitOrRollbackDependingOnGasUsed(
-        vmState, accTx, header, tx, callResult.gasUsed, priorityFee, blobGasUsed)
+        vmState, header, tx, callResult.gasUsed, priorityFee, blobGasUsed)
 
       if tmp.isErr():
         err(tmp.error)

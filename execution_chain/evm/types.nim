@@ -56,6 +56,11 @@ type
     allLogs*          : seq[Log] # EIP-6110
     gasRefunded*      : int64    # Global gasRefunded counter
 
+  TransactionState* = enum
+    Pending
+    Committed
+    RolledBack
+
   Computation* = ref object
     # The execution computation
     vmState*:               BaseVMState
@@ -69,13 +74,13 @@ type
     logEntries*:            seq[Log]
     transientStorage*:      TransientStorage
     error*:                 Error
-    savePoint*:             LedgerSpRef
     instr*:                 Op
     opIndex*:               int
     parent*, child*:        Computation
     continuation*:          proc(): EvmResultVoid {.gcsafe, raises: [].}
     keepStack*:             bool
     finalStack*:            seq[UInt256]
+    txState*:               TransactionState
 
   StatusCode* {.pure.} = enum
     None

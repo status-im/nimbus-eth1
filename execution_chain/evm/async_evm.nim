@@ -163,10 +163,10 @@ proc callFetchingState(
     vmState.ledger.clearWitnessKeys()
     vmState.ledger.clearBlockHashesCache()
 
-    let sp = vmState.ledger.beginSavepoint()
+    vmState.ledger.beginSavePoint()
     evmResult = rpcCallEvm(tx, header, vmState, EVM_CALL_GAS_CAP)
     inc evmCallCount
-    vmState.ledger.rollback(sp) # all state changes from the call are reverted
+    vmState.ledger.rollback() # all state changes from the call are reverted
 
     # Collect the keys after executing the transaction
     lastWitnessKeys = ensureMove(witnessKeys)
@@ -283,7 +283,7 @@ proc call(
 
   vmState.ledger.clearWitnessKeys()
   let
-    sp = vmState.ledger.beginSavepoint()
+    sp = vmState.ledger.beginSavePoint()
     evmResult = rpcCallEvm(tx, header, vmState, EVM_CALL_GAS_CAP)
   vmState.ledger.rollback(sp) # all state changes from the call are reverted
 

@@ -188,21 +188,20 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
     return ContinueWithNextAccount
 
   # Execute EVM for this transaction
-  let
-    accTx = vmState.ledger.beginSavepoint
-    callResult = item.tx.txCallEvm(item.sender, pst.vmState, pst.baseFee)
+  vmState.ledger.beginSavePoint()
 
+  let callResult = item.tx.txCallEvm(item.sender, pst.vmState, pst.baseFee)
   doAssert 0 <= callResult.gasUsed
 
   # Find out what to do next: accepting this tx or trying the next account
   if not vmState.classifyPacked(callResult.gasUsed):
-    vmState.ledger.rollback(accTx)
+    vmState.ledger.rollback()
     if vmState.classifyPackedNext():
       return ContinueWithNextAccount
     return StopCollecting
 
   # Commit ledger changes
-  vmState.ledger.commit(accTx)
+  vmState.ledger.commit()
 
   vmState.ledger.persist(clearEmptyAccount = vmState.fork >= FkSpurious)
 

@@ -151,23 +151,27 @@ func shouldBurnGas*(c: Computation): bool =
   c.isError and c.error.burnsGas
 
 proc snapshot*(c: Computation) =
-  c.savePoint = c.vmState.ledger.beginSavepoint()
+  c.vmState.ledger.beginSavePoint()
+  c.txState = Pending
 
 proc commit*(c: Computation) =
-  c.vmState.ledger.commit(c.savePoint)
+  c.vmState.ledger.commit()
+  c.txState = Committed
 
 proc dispose*(c: Computation) =
-  c.vmState.ledger.safeDispose(c.savePoint)
+  echo "dispose called"
+  if c.txState == Pending:
+    c.vmState.ledger.rollback()
+    c.txState = RolledBack
   if c.stack != nil:
     if c.keepStack:
       c.finalStack = toSeq(c.stack.items())
-
     c.stack.dispose()
     c.stack = nil
-  c.savePoint = nil
 
 proc rollback*(c: Computation) =
-  c.vmState.ledger.rollback(c.savePoint)
+  c.vmState.ledger.rollback()
+  c.txState = RolledBack
 
 func setError*(c: Computation, msg: sink string, burnsGas = false) =
   c.error = Error(status: StatusCode.Failure, info: move(msg), burnsGas: burnsGas)
