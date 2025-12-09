@@ -106,13 +106,12 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
     bindIp = config.listenAddress
     udpPort = Port(config.udpPort)
     (extIp, extPorts) = setupAddress(
-      config.nat, config.listenAddress, @[(port: udpPort, protocol: PortProtocol.UDP)], "nimbus_portal_client"
+      config.nat,
+      config.listenAddress,
+      @[(port: udpPort, protocol: PortProtocol.UDP)],
+      "nimbus_portal_client",
     )
-    extUdpPort =
-      if isSome(extPorts[0]):
-        Opt.some(extPorts[0].value().port)
-      else:
-        Opt.none(Port)
+    extUdpPort = extPorts[0].toPort()
     (netkey, newNetKey) =
       if config.networkKey.isSome():
         (config.networkKey.get(), true)
