@@ -159,7 +159,6 @@ proc commit*(c: Computation) =
   c.txState = Committed
 
 proc dispose*(c: Computation) =
-  echo "dispose called"
   if c.txState == Pending:
     c.vmState.ledger.rollback()
     c.txState = RolledBack

@@ -282,10 +282,10 @@ proc call(
   debug "Executing call", blockNumber = header.number, to = tx.to.get()
 
   vmState.ledger.clearWitnessKeys()
-  let
-    sp = vmState.ledger.beginSavePoint()
-    evmResult = rpcCallEvm(tx, header, vmState, EVM_CALL_GAS_CAP)
-  vmState.ledger.rollback(sp) # all state changes from the call are reverted
+
+  vmState.ledger.beginSavePoint()
+  let evmResult = rpcCallEvm(tx, header, vmState, EVM_CALL_GAS_CAP)
+  vmState.ledger.rollback() # all state changes from the call are reverted
 
   evmResult.toCallResult()
 

@@ -106,7 +106,7 @@ type
 
   ReadOnlyLedger* = distinct LedgerRef
 
-  LedgerSavePoint* = object
+  LedgerSavePoint = object
     cache: Table[Address, AccountRef]
     dirty: Table[Address, AccountRef]
     selfDestruct: HashSet[Address]
@@ -189,28 +189,29 @@ proc getAccount(
     if not ac.witnessKeys.contains(lookupKey):
       ac.witnessKeys[lookupKey] = false
 
+  var acc: AccountRef
   # search account from layers of cache
-  for sp in ac.savePoints.mitems:
-    result = sp.cache.getOrDefault(address)
-    if not result.isNil:
-      return
+  for i in countdown(ac.savePoints.high, ac.savePoints.low):
+    acc = ac.savePoints[i].cache.getOrDefault(address)
+    if not acc.isNil:
+      return acc
 
-  if ac.cache.pop(address, result):
+  if ac.cache.pop(address, acc):
     # Check second-level cache
-    ac.pendingSavePoint.cache[address] = result
-    return
+    ac.pendingSavePoint.cache[address] = acc
+    return acc
 
   # not found in cache, look into state trie
   let
     accPath = address.toAccountKey
     rc = ac.txFrame.fetch accPath
   if rc.isOk:
-    result = AccountRef(
+    acc = AccountRef(
       statement: rc.value,
       accPath:   accPath,
       flags:     {Alive})
   elif shouldCreate:
-    result = AccountRef(
+    acc = AccountRef(
       statement: CoreDbAccount(
         nonce:    emptyEthAccount.nonce,
         balance:  emptyEthAccount.balance,
@@ -218,11 +219,13 @@ proc getAccount(
       accPath:    accPath,
       flags:      {Alive, IsNew})
   else:
-    return # ignore, don't cache
+    return acc # ignore, don't cache
 
   # cache the account
-  ac.pendingSavePoint.cache[address] = result
-  ac.pendingSavePoint.dirty[address] = result
+  ac.pendingSavePoint.cache[address] = acc
+  ac.pendingSavePoint.dirty[address] = acc
+
+  acc
 
 proc clone(acc: AccountRef, cloneStorage: bool): AccountRef =
   result = AccountRef(
@@ -366,18 +369,21 @@ proc persistStorage(acc: AccountRef, ac: LedgerRef) =
 
 proc makeDirty(ac: LedgerRef, address: Address, cloneStorage = true): AccountRef =
   ac.isDirty = true
-  result = ac.getAccount(address)
+
+  var acc = ac.getAccount(address)
   if address in ac.pendingSavePoint.cache:
     # it's already in latest savepoint
-    result.flags.incl Dirty
-    ac.pendingSavePoint.dirty[address] = result
-    return
+    acc.flags.incl Dirty
+    ac.pendingSavePoint.dirty[address] = acc
+    return acc
 
   # put a copy into latest savepoint
-  result = result.clone(cloneStorage)
-  result.flags.incl Dirty
-  ac.pendingSavePoint.cache[address] = result
-  ac.pendingSavePoint.dirty[address] = result
+  acc = acc.clone(cloneStorage)
+  acc.flags.incl Dirty
+  ac.pendingSavePoint.cache[address] = acc
+  ac.pendingSavePoint.dirty[address] = acc
+
+  acc
 
 # ------------------------------------------------------------------------------
 # Public methods
@@ -412,7 +418,6 @@ proc beginSavePoint*(ac: LedgerRef) =
   var sp = LedgerSavePoint()
   sp.cache = Table[Address, AccountRef]()
   sp.accessList.init()
-  # result.parentSavepoint = ac.savePoint
   ac.savePoints.add(sp)
 
   when debugLedgerRef:
@@ -629,7 +634,7 @@ proc setCode*(ac: LedgerRef, address: Address, code: seq[byte]) =
   acc.flags.incl {Alive}
   let codeHash = keccak256(code)
   if acc.statement.codeHash != codeHash:
-    var acc = ac.makeDirty(address)
+    let acc = ac.makeDirty(address)
     acc.statement.codeHash = codeHash
     # Try to reuse cache entry if it exists, but don't save the code - it's not
     # a given that it will be executed within LRU range
@@ -647,7 +652,7 @@ proc setStorage*(ac: LedgerRef, address: Address, slot, value: UInt256) =
 
   let oldValue = acc.storageValue(slot, ac)
   if oldValue != value:
-    var acc = ac.makeDirty(address)
+    let acc = ac.makeDirty(address)
     acc.overlayStorage[slot] = value
     acc.flags.incl StorageChanged
 
@@ -860,14 +865,14 @@ proc accessList*(ac: LedgerRef, address: Address, slot: UInt256) =
   ac.pendingSavePoint.accessList.add(address, slot)
 
 func inAccessList*(ac: LedgerRef, address: Address): bool =
-  for sp in ac.savePoints.mitems:
-    result = sp.accessList.contains(address)
+  for i in countdown(ac.savePoints.high, ac.savePoints.low):
+    result = ac.savePoints[i].accessList.contains(address)
     if result:
       return
 
 func inAccessList*(ac: LedgerRef, address: Address, slot: UInt256): bool =
-  for sp in ac.savePoints.mitems:
-    result = sp.accessList.contains(address, slot)
+  for i in countdown(ac.savePoints.high, ac.savePoints.low):
+    result = ac.savePoints[i].accessList.contains(address, slot)
     if result:
       return
 
