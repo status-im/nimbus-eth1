@@ -9,8 +9,8 @@
 
 import
   std/net,
-  testutils/fuzzing, chronicles, nimcrypto/keccak,
-  eth/[common/keys],
+  testutils/fuzzing, chronicles,
+  eth/[common/keys, keccak/keccak],
   results,
   ../../../../execution_chain/networking/discoveryv4,
   ../../p2p_test_helper
@@ -22,7 +22,7 @@ proc packData(payload: openArray[byte], pk: PrivateKey): seq[byte] =
   let
     payloadSeq = @payload
     signature = @(pk.sign(payload).toRaw())
-    msgHash = keccak256.digest(signature & payloadSeq)
+    msgHash = Keccak256.digest(signature & payloadSeq)
   result = @(msgHash.data) & signature & payloadSeq
 
 init:

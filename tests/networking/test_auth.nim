@@ -11,7 +11,8 @@
 
 import
   unittest2,
-  nimcrypto/[utils, keccak],
+  nimcrypto/utils,
+  eth/keccak/keccak,
   eth/common/keys,
   ../../execution_chain/networking/rlpx/auth
 
