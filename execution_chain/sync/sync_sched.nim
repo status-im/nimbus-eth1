@@ -205,24 +205,32 @@ proc alwaysAcceptPeerOk(peer: Peer): bool =
 proc getSyncPeerFn[S,W](dsc: RunnerSyncRef[S,W]): GetSyncPeerFn[S,W] =
   ## Get particular active syncer peer (aka buddy)
   result = proc(peerID: Hash): SyncPeerRef[S,W] =
-    dsc.syncPeers.peek(peerID).isErrOr:
-      return value.worker
-    dsc.orphans.peek(peerID).isErrOr:
-      return value.worker
+    if dsc.runCtrl == running:
+      var rc = dsc.syncPeers.peek(peerID)
+      if rc.isErr:
+        rc = dsc.orphans.peek(peerID)
+      if rc.isOk and rc.value.worker.ctrl.running:
+        return rc.value.worker
     # SyncPeerRef[S,W](nil)
 
 proc getSyncPeersFn[S,W](dsc: RunnerSyncRef[S,W]): GetSyncPeersFn[S,W] =
   ## Get a list of descriptor all active syncer peers (aka buddies)
   result = proc(): seq[SyncPeerRef[S,W]] =
     var list: seq[SyncPeerRef[S,W]]
-    for w in dsc.syncPeers.values:
-      list.add w.worker
-    for w in dsc.orphans.values:
-      list.add w.worker
+    if dsc.runCtrl == running:
+      for w in dsc.syncPeers.values:
+        if w.worker.ctrl.running:
+          list.add w.worker
+      for w in dsc.orphans.values:
+        if w.worker.ctrl.running:
+          list.add w.worker
     list
 
 proc nSyncPeersFn[S,W](dsc: RunnerSyncRef[S,W]): NSyncPeersFn[S,W] =
-  ## Efficient version of `dsc.getSyncPeersFn().len`
+  ## Efficient version of `dsc.getSyncPeersFn().len`. This number returned
+  ## here might be slightly larger than `dsc.getSyncPeersFn().len` because
+  ## peers marked `stopped` (i.e. to be terminated) are also included
+  ## in the count.
   result = proc(): int =
     dsc.nSyncPeers()
 
