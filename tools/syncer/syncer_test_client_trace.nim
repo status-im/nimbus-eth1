@@ -31,20 +31,32 @@ type
 
     nSessions {.
       desc: "Run a trace for this many sessions (i.e. from activation to " &
-            "suspension)"
-      defaultValue: 1
-      name: "num-trace-sessions" .}: uint
+            "suspension) rather than a single one"
+      name: "num-trace-sessions" .}: Option[uint16]
 
     nPeersMin {.
       desc: "Minimal number of peers needed for activating the first syncer " &
              "session"
       defaultValue: 0
-      name: "num-peers-min" .}: uint
+      name: "num-peers-min" .}: uint16
 
     noSyncTicker {.
       desc: "Disable logging sync status regularly"
       defaultValue: false
       name: "disable-sync-ticker" .}: bool
+
+    snapSyncTarget {.
+      desc: "Manually set the initial block hash to derive the sync target" &
+            " state root from. The block hash is specified its 32 byte" &
+            " hash represented by a hex string"
+      name: "snap-sync-target" .}: Option[string]
+
+    snapSyncUpdateFile {.
+      desc: "Provide a file that contains the block hash or block number" &
+            " to derive the current state root from. This file might not" &
+            " exist yet and can be updated over time to direct to a new" &
+            " state root for a block with increased height/number"
+      name: "snap-sync-update-file" .}: Option[string]
 
   SplitCmdLine = tuple
     leftArgs: seq[string]  # split command line: left to "--" marker (nimbus)
@@ -76,14 +88,34 @@ proc beaconSyncConfig(conf: ToolConfig): BeaconSyncConfigHook =
       desc.ctx.pool.ticker = syncTicker()
     if 1 < conf.nPeersMin:
       desc.ctx.pool.minInitBuddies = conf.nPeersMin.int
-    if conf.nSessions == 0 or
-       conf.captureFile.isNone:
+    var nSessions = 1
+    if conf.nSessions.isSome():
+      nSessions = conf.nSessions.unsafeGet.int
+      if nSessions == 0:
+        return
+      if conf.captureFile.isNone():
+        fatal "Capture file missing for explicit mumber of sessions", nSessions
+        quit QuitFailure
+    elif conf.captureFile.isNone():
       return
     desc.ctx.traceSetup(
                fileName = conf.captureFile.unsafeGet.string,
-               nSessions = conf.nSessions.int).isOkOr:
+               nSessions = nSessions).isOkOr:
       fatal "Cannot set up trace handlers", error
       quit(QuitFailure)
+
+proc snapSyncConfig(conf: ToolConfig): SnapSyncConfigHook =
+  return proc(desc: SnapSyncRef) =
+    if conf.snapSyncTarget.isSome():
+      let hash32 = conf.snapSyncTarget.unsafeGet
+      if not desc.configTarget(hash32):
+        fatal "Error parsing hash32 argument for --snap-sync-target", hash32
+        quit QuitFailure
+    if conf.snapSyncUpdateFile.isSome():
+      let fileName = conf.snapSyncUpdateFile.unsafeGet
+      if not desc.configUpdateFile(fileName):
+        fatal "Error parsing file name for --snap-sync-update-file", fileName
+        quit QuitFailure
 
 # ------------------------------------------------------------------------------
 # Main
@@ -104,7 +136,8 @@ let
 
   # Update node config for lazy beacon sync update
   nodeConf = NimbusNode(
-    beaconSyncRef: BeaconSyncRef.init rightConf.beaconSyncConfig)
+    beaconSyncRef: BeaconSyncRef.init rightConf.beaconSyncConfig,
+    snapSyncRef:   SnapSyncRef.init rightConf.snapSyncConfig)
 
 # Run execution client
 leftConf.main(nodeConf)
