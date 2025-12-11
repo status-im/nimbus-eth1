@@ -416,7 +416,10 @@ func blsG1Add(c: Computation): EvmResultVoid =
 
   ? c.gasMeter.consumeGas(Bls12381G1AddGas, reason="blsG1Add Precompile")
 
-  var a, b: BLS_G1
+  var
+    a {.noinit.}: BLS_G1
+    b {.noinit.}: BLS_G1
+
   if not a.decodePoint(input.toOpenArray(0, 127)):
     return err(prcErr(PrcInvalidPoint))
 
@@ -492,9 +495,9 @@ func blsG1MultiExp(c: Computation): EvmResultVoid =
   ? c.gasMeter.consumeGas(gas, reason="blsG1MultiExp Precompile")
 
   var
-    p: BLS_G1
-    s: BLS_SCALAR
-    acc: BLS_G1
+    p {.noinit.}: BLS_G1
+    s {.noinit.}: BLS_SCALAR
+    acc {.noinit.}: BLS_G1
 
   # Decode point scalar pairs
   for i in 0..<K:
@@ -531,7 +534,10 @@ func blsG2Add(c: Computation): EvmResultVoid =
 
   ? c.gasMeter.consumeGas(Bls12381G2AddGas, reason="blsG2Add Precompile")
 
-  var a, b: BLS_G2
+  var
+    a {.noinit.}: BLS_G2
+    b {.noinit.}: BLS_G2
+
   if not a.decodePoint(input.toOpenArray(0, 255)):
     return err(prcErr(PrcInvalidPoint))
 
@@ -560,9 +566,9 @@ func blsG2MultiExp(c: Computation): EvmResultVoid =
   ? c.gasMeter.consumeGas(gas, reason="blsG2MultiExp Precompile")
 
   var
-    p: BLS_G2
-    s: BLS_SCALAR
-    acc: BLS_G2
+    p {.noinit.}: BLS_G2
+    s {.noinit.}: BLS_SCALAR
+    acc {.noinit.}: BLS_G2
 
   # Decode point scalar pairs
   for i in 0..<K:
@@ -605,9 +611,9 @@ func blsPairing(c: Computation): EvmResultVoid =
   ? c.gasMeter.consumeGas(gas, reason="blsG2Pairing Precompile")
 
   var
-    g1: BLS_G1P
-    g2: BLS_G2P
-    acc: BLS_ACC
+    g1 {.noinit.}: BLS_G1P
+    g2 {.noinit.}: BLS_G2P
+    acc {.noinit.}: BLS_ACC
 
   # Decode pairs
   for i in 0..<K:
@@ -649,7 +655,7 @@ func blsMapG1(c: Computation): EvmResultVoid =
 
   ? c.gasMeter.consumeGas(Bls12381MapG1Gas, reason="blsMapG1 Precompile")
 
-  var fe: BLS_FE
+  var fe {.noinit.}: BLS_FP
   if not fe.decodeFE(input):
     return err(prcErr(PrcInvalidPoint))
 
@@ -669,7 +675,7 @@ func blsMapG2(c: Computation): EvmResultVoid =
 
   ? c.gasMeter.consumeGas(Bls12381MapG2Gas, reason="blsMapG2 Precompile")
 
-  var fe: BLS_FE2
+  var fe {.noinit.}: BLS_FP2
   if not fe.decodeFE(input):
     return err(prcErr(PrcInvalidPoint))
 
@@ -715,7 +721,7 @@ proc p256verify(c: Computation): EvmResultVoid =
 
   # Check scalar and field bounds (r, s ∈ (0, n), qx, qy ∈ [0, p))
   var
-    pk: EcPublicKey
+    pk {.noinit.}: EcPublicKey
 
   if not pk.initRaw(data[96, 159]):
     failed()
