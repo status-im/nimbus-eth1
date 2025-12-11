@@ -18,8 +18,6 @@ type
   BLS_FP* = blst_fp
   BLS_FP2* = blst_fp2
   BLS_SCALAR* = blst_scalar
-  BLS_FE* = blst_fp
-  BLS_FE2* = blst_fp2
   BLS_ACC* = blst_fp12
   BLS_G1P* = blst_p1_affine
   BLS_G2P* = blst_p2_affine
@@ -93,32 +91,6 @@ func toBytes(fp: BLS_FP, output: var openArray[byte]): bool =
   blst_bendian_from_fp(pa[], toCC(fp))
   true
 
-func pack(g: var BLS_G1, x, y: BLS_FP): bool =
-  let src = blst_p1_affine(x: x, y: y)
-  blst_p1_from_affine(toCV(g), toCC(src))
-  blst_p1_on_curve(toCV(g)).int == 1
-
-func unpack(g: BLS_G1, x, y: var BLS_FP): bool =
-  var dst: blst_p1_affine
-  blst_p1_to_affine(toCV(dst), toCC(g))
-  x = dst.x
-  y = dst.y
-  true
-
-func pack(g: var BLS_G2, x0, x1, y0, y1: BLS_FP): bool =
-  let src = blst_p2_affine(x: blst_fp2(fp: [x0, x1]), y: blst_fp2(fp: [y0, y1]))
-  blst_p2_from_affine(toCV(g), toCC(src))
-  blst_p2_on_curve(toCV(g)).int == 1
-
-func unpack(g: BLS_G2, x0, x1, y0, y1: var BLS_FP): bool =
-  var dst: blst_p2_affine
-  blst_p2_to_affine(toCV(dst), toCC(g))
-  x0 = dst.x.fp[0]
-  x1 = dst.x.fp[1]
-  y0 = dst.y.fp[0]
-  y1 = dst.y.fp[1]
-  true
-
 func nbits(s: BLS_SCALAR): uint =
   var k = sizeof(s.b) - 1
   while k >= 0 and s.b[k] == 0: dec k
@@ -145,19 +117,11 @@ func add*(a: var BLS_G2, b: BLS_G2) {.inline.} =
 func mul*(a: var BLS_G2, b: BLS_SCALAR) {.inline.} =
   blst_p2_mult(toCV(a), toCV(a), b.b[0].unsafeAddr, b.nbits)
 
-func mapFPToG1*(fp: BLS_FE): BLS_G1 {.inline.} =
+func mapFPToG1*(fp: BLS_FP): BLS_G1 {.inline.} =
   blst_map_to_g1(toCV(result), toCC(fp), nil)
 
-func mapFPToG2*(fp: BLS_FE2): BLS_G2 {.inline.} =
+func mapFPToG2*(fp: BLS_FP2): BLS_G2 {.inline.} =
   blst_map_to_g2(toCV(result), toCC(fp), nil)
-
-func pack(g: var BLS_G1P, x, y: BLS_FP): bool =
-  g = blst_p1_affine(x: x, y: y)
-  blst_p1_affine_on_curve(toCV(g)).int == 1
-
-func pack(g: var BLS_G2P, x0, x1, y0, y1: BLS_FP): bool =
-  g = blst_p2_affine(x: blst_fp2(fp: [x0, x1]), y: blst_fp2(fp: [y0, y1]))
-  blst_p2_affine_on_curve(toCV(g)).int == 1
 
 func subgroupCheck*(P: BLS_G1): bool {.inline.} =
   blst_p1_in_g1(toCC(P)).int == 1
@@ -182,9 +146,9 @@ func check*(x: BLS_ACC): bool {.inline.} =
   blst_final_exp(toCV(ret), toCC(x))
   blst_fp12_is_one(toCV(ret)).int == 1
 
-# decodeFieldElement expects 64 byte input with zero top 16 bytes,
+# decodeFE expects 64 byte input with zero top 16 bytes,
 # returns lower 48 bytes.
-func decodeFieldElement*(res: var BLS_FP, input: openArray[byte]): bool =
+func decodeFE*(res: var BLS_FP, input: openArray[byte]): bool =
   if input.len != 64:
     return false
 
@@ -195,16 +159,7 @@ func decodeFieldElement*(res: var BLS_FP, input: openArray[byte]): bool =
 
   res.fromBytes input.toOpenArray(16, 63)
 
-func decodeFE*(res: var BLS_FE, input: openArray[byte]): bool =
-  const
-    fieldModulus = StUint[512].fromHex "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab"
-  if not res.decodeFieldElement(input):
-    return false
-  var z: StUint[512]
-  z.initFromBytesBE(input)
-  z < fieldModulus
-
-func decodeFE*(res: var BLS_FE2, input: openArray[byte]): bool =
+func decodeFE*(res: var BLS_FP2, input: openArray[byte]): bool =
   if input.len != 128:
     return false
 
@@ -213,47 +168,103 @@ func decodeFE*(res: var BLS_FE2, input: openArray[byte]): bool =
      result = true
 
 # DecodePoint given encoded (x, y) coordinates in 128 bytes returns a valid G1 Point.
-func decodePoint*(g: var (BLS_G1 | BLS_G1P), data: openArray[byte]): bool =
+func decodePoint*(g: var BLS_G1P, data: openArray[byte]): bool =
   if data.len != 128:
     return false
 
-  var x, y: BLS_FP
-  if x.decodeFieldElement(data.toOpenArray(0, 63)) and
-     y.decodeFieldElement(data.toOpenArray(64, 127)):
-     result = g.pack(x, y)
+  if not g.x.decodeFE(data.toOpenArray(0, 63)):
+    return false
+  if not g.y.decodeFE(data.toOpenArray(64, 127)):
+    return false
+
+  blst_p1_affine_on_curve(toCV(g)).int == 1
+
+func decodePoint*(g: var BLS_G1, data: openArray[byte]): bool =
+  if data.len != 128:
+    return false
+
+  var src {.noinit.}: blst_p1_affine
+  if not src.x.decodeFE(data.toOpenArray(0, 63)):
+    return false
+
+  if not src.y.decodeFE(data.toOpenArray(64, 127)):
+    return false
+
+  blst_p1_from_affine(toCV(g), toCC(src))
+  blst_p1_on_curve(toCV(g)).int == 1
 
 # EncodePoint encodes a point into 128 bytes.
 func encodePoint*(g: BLS_G1, output: var openArray[byte]): bool =
   if output.len != 128:
     return false
 
-  var x, y: BLS_FP
-  if g.unpack(x, y) and
-     x.toBytes(output.toOpenArray(16, 63)) and
-     y.toBytes(output.toOpenArray(64+16, 127)):
-     result = true
+  var dst {.noinit.}: blst_p1_affine
+  blst_p1_to_affine(toCV(dst), toCC(g))
+  if not dst.x.toBytes(output.toOpenArray(16, 63)):
+    return false
+
+  if not dst.y.toBytes(output.toOpenArray(64+16, 127)):
+    return false
+
+  true
 
 # DecodePoint given encoded (x, y) coordinates in 256 bytes returns a valid G2 Point.
-func decodePoint*(g: var (BLS_G2 | BLS_G2P), data: openArray[byte]): bool =
+func decodePoint*(g: var BLS_G2P, data: openArray[byte]): bool =
   if data.len != 256:
     return false
 
-  var x0, x1, y0, y1: BLS_FP
-  if x0.decodeFieldElement(data.toOpenArray(0, 63)) and
-     x1.decodeFieldElement(data.toOpenArray(64, 127)) and
-     y0.decodeFieldElement(data.toOpenArray(128, 191)) and
-     y1.decodeFieldElement(data.toOpenArray(192, 255)):
-     result = g.pack(x0, x1, y0, y1)
+  if not g.x.fp[0].decodeFE(data.toOpenArray(0, 63)):
+    return false
+
+  if not g.x.fp[1].decodeFE(data.toOpenArray(64, 127)):
+    return false
+
+  if not g.y.fp[0].decodeFE(data.toOpenArray(128, 191)):
+    return false
+
+  if not g.y.fp[1].decodeFE(data.toOpenArray(192, 255)):
+    return false
+
+  blst_p2_affine_on_curve(toCV(g)).int == 1
+
+func decodePoint*(g: var BLS_G2, data: openArray[byte]): bool =
+  if data.len != 256:
+    return false
+
+  var src {.noinit.}: blst_p2_affine
+  if not src.x.fp[0].decodeFE(data.toOpenArray(0, 63)):
+    return false
+
+  if not src.x.fp[1].decodeFE(data.toOpenArray(64, 127)):
+    return false
+
+  if not src.y.fp[0].decodeFE(data.toOpenArray(128, 191)):
+    return false
+
+  if not src.y.fp[1].decodeFE(data.toOpenArray(192, 255)):
+    return false
+
+  blst_p2_from_affine(toCV(g), toCC(src))
+  blst_p2_on_curve(toCV(g)).int == 1
 
 # EncodePoint encodes a point into 256 bytes.
 func encodePoint*(g: BLS_G2, output: var openArray[byte]): bool =
   if output.len != 256:
     return false
 
-  var x0, x1, y0, y1: BLS_FP
-  if g.unpack(x0, x1, y0, y1) and
-     x0.toBytes(output.toOpenArray(16, 63)) and
-     x1.toBytes(output.toOpenArray(80, 127)) and
-     y0.toBytes(output.toOpenArray(144, 192)) and
-     y1.toBytes(output.toOpenArray(208, 255)):
-     result = true
+  var dst {.noinit.}: blst_p2_affine
+  blst_p2_to_affine(toCV(dst), toCC(g))
+
+  if not dst.x.fp[0].toBytes(output.toOpenArray(16, 63)):
+    return false
+
+  if not dst.x.fp[1].toBytes(output.toOpenArray(80, 127)):
+    return false
+
+  if not dst.y.fp[0].toBytes(output.toOpenArray(144, 192)):
+    return false
+
+  if not dst.y.fp[1].toBytes(output.toOpenArray(208, 255)):
+    return false
+
+  true
