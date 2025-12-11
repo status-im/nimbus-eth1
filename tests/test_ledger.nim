@@ -15,6 +15,7 @@ import
   minilru,
   results,
   chronos,
+  ../execution_chain/utils/time_utils,
   ../execution_chain/conf,
   ../execution_chain/db/storage_types,
   ../execution_chain/common/common,
@@ -286,7 +287,7 @@ proc runLedgerTransactionTests(noisy = true) =
     test "Create transactions and blocks":
       var
         recipientSeed = 501
-        blockTime = EthTime.now()
+        blockTime = EthTime.currentTime()
 
       for _ in 0..<NumBlocks:
         for _ in 0..<NumTransactions:

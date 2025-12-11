@@ -14,6 +14,7 @@ import
   json_rpc/[rpcserver, rpcclient],
   eth/rlp,
   eth/common/[transaction_utils, addresses],
+  ../execution_chain/utils/time_utils,
   ../hive_integration/engine_client,
   ../execution_chain/[constants, transaction, conf, version_info],
   ../execution_chain/db/[ledger, storage_types],
@@ -260,7 +261,7 @@ proc generateBlock(env: var TestEnv) =
   # generate block
   xp.prevRandao = prevRandao
   xp.feeRecipient = feeRecipient
-  xp.timestamp = EthTime.now()
+  xp.timestamp = EthTime.currentTime()
 
   let bundle = xp.assembleBlock().valueOr:
     debugEcho error

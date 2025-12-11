@@ -16,6 +16,7 @@ import
   results,
   unittest2,
   chronos,
+  ../execution_chain/utils/time_utils,
   ../hive_integration/tx_sender,
   ../hive_integration/blobs,
   ../execution_chain/db/ledger,
@@ -244,7 +245,7 @@ suite "TxPool test suite":
 
   xp.prevRandao = prevRandao
   xp.feeRecipient = feeRecipient
-  xp.timestamp = EthTime.now()
+  xp.timestamp = EthTime.currentTime()
 
   test "Bad blob tx":
     let acc = mx.getAccount(7)
@@ -832,7 +833,7 @@ suite "TxPool test suite":
     let
       config = initConf(Prague)
       cc = config.networkParams.config
-      timestamp = EthTime.now()
+      timestamp = EthTime.currentTime()
 
     # set osaka transition time
     cc.osakaTime = Opt.some(timestamp + 2)

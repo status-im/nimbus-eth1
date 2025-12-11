@@ -23,7 +23,7 @@ import
   ../core/tx_pool,
   ../beacon/web3_eth_conv,
   ../transaction,
-  ../transaction/call_evm,
+  ../transaction/call_evm_rpc,
   ../evm/evm_errors,
   ../core/eip4844,
   ../core/pooled_txs_rlp,
