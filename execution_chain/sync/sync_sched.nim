@@ -169,10 +169,6 @@ const
 # Private debugging helpers
 # ------------------------------------------------------------------------------
 
-template noisy[S,W](dsc: RunnerSyncRef[S,W]): bool =
-  ## Log a bit more (typically while syncer is activated)
-  dsc.ctx.noisyLog
-
 func toStr(w: HashSet[Port]): string =
   "{" & w.toSeq.mapIt(it.uint).sorted.mapIt($it).join(",") & "}"
 
@@ -282,7 +278,7 @@ proc acceptByIP[S,W](dsc: RunnerSyncRef[S,W], peer: Peer): bool =
     return true
 
   # Port table full. Cannot add this peer.
-  if dsc.noisy: trace "Too many peers with same IP, rejected", peer,
+  trace "Too many peers with same IP, rejected", peer,
     otherPorts=ports.toStr, nSyncPeers=dsc.nSyncPeers(),
     nSyncPeersMax=dsc.syncPeers.capacity, nPoolPeers=dsc.peerPool.len
   return false
@@ -533,7 +529,7 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
          filter.acceptPeer(peer):
         break protoFilter
     # Otherwise ignore
-    if dsc.noisy: trace "No suitable protocol for peer", peer
+    trace "No suitable protocol for peer", peer
     return # fail
 
   # Make sure that the overflow list can absorb an eviced peer temporarily
@@ -548,7 +544,7 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
   dsc.zombies.peek(peerID).isErrOr:
     let elapsed = Moment.now() - value
     if elapsed < zombieTimeToLinger:
-      if dsc.noisy: trace "Reconnecting zombie peer ignored", peer,
+      trace "Reconnecting zombie peer ignored", peer,
         nSyncPeers=dsc.nSyncPeers(), nSyncPeersMax=dsc.syncPeers.capacity,
         nPoolPeers=dsc.peerPool.len,
         canReconnectIn=(zombieTimeToLinger-elapsed).toString(2)
@@ -568,7 +564,7 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
       peer:   peer,
       peerID: peerID))
   if not buddy.worker.runStart():
-    if dsc.noisy: trace "Ignoring useless peer", peer,
+    trace "Ignoring useless peer", peer,
       nSyncPeers=dsc.nSyncPeers(), nSyncPeersMax=dsc.syncPeers.capacity,
       nPoolPeers=dsc.peerPool.len
     return
@@ -586,7 +582,7 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
       if evBuddy.worker.ctrl.running:
         evBuddy.worker.ctrl.stopped = true
 
-      if dsc.noisy: trace "Evicted peer", peer=evPeer,
+      trace "Evicted peer", peer=evPeer,
         state=evBuddy.worker.ctrl.state, nSyncPeers=dsc.nSyncPeers(),
         nSyncPeersMax=dsc.syncPeers.capacity, nPoolPeers=dsc.peerPool.len
 
@@ -682,7 +678,6 @@ proc startSync*[S,W](dsc: RunnerSyncRef[S,W]): bool =
       # data, so it is not reset here.
       dsc.runCtrl = running
       dsc.ctx.poolMode = false
-      dsc.ctx.noisyLog = false
       dsc.syncPeers.lruReset()
       dsc.peerByIP.lruReset()
       dsc.orphans.lruReset()

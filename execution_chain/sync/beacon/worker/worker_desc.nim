@@ -235,10 +235,6 @@ proc `hibernate=`*(ctx: BeaconCtxRef; val: bool) =
   ## Setter
   ctx.daemon = not val
 
-  # Control some error messages on the scheduler (e.g. zombie/banned-peer
-  # reconnection attempts, LRU flushing out oldest peer etc.)
-  ctx.noisyLog = not val
-
 # -----
 
 func syncState*(
