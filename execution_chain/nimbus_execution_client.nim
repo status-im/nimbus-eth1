@@ -98,8 +98,17 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
       fatal "Get network keys error", msg = error
       quit(QuitFailure)
     natId = NimbusName & " " & NimbusVersion
-    (extIp, extTcpPort, extUdpPort) =
-      setupAddress(config.nat, config.listenAddress, config.tcpPort, config.udpPort, natId)
+    (extIp, extPorts) = setupAddress(
+      config.nat,
+      config.listenAddress,
+      @[
+        (port: config.tcpPort, protocol: PortProtocol.TCP),
+        (port: config.udpPort, protocol: PortProtocol.UDP),
+      ],
+      natId,
+    )
+    extTcpPort = extPorts[0].toPort()
+    extUdpPort = extPorts[1].toPort()
 
     bootstrapNodes = config.getBootstrapNodes()
     fc = nimbus.fc
