@@ -57,7 +57,7 @@ template blocksFetchCheckImpl(
     let
       ctx = buddy.ctx
       iv {.inject,used.} = iv
-      peer {.inject,used.} = buddy.peer
+      peer {.inject,used.} = $buddy.peer                   # logging only
 
     # Preset headers to be completed with bodies. Also collect block
     # hashes for fetching missing blocks.
@@ -197,7 +197,7 @@ template blocksImport*(
   block body:
     let
       ctx = buddy.ctx
-      peer = buddy.peer
+      peer {.inject,used.} = $buddy.peer           # logging only
       iv {.inject.} =
         BnRange.new(blocks[0].header.number, blocks[^1].header.number)
     doAssert iv.len == blocks.len.uint64

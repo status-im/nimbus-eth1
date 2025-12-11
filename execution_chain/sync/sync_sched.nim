@@ -582,19 +582,19 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
 
   # Add peer entry. This might evict the least used entry from the LRU table.
   dsc.registerByIP peer
-  for (evOk, evKey, evBuddy) in dsc.syncPeers.putWithEvicted(peerID, buddy):
+  for (evOk, key, value) in dsc.syncPeers.putWithEvicted(peerID, buddy):
     if evOk:
-      let evPeer = evBuddy.worker.peer
+      let evPeer = value.worker.peer
       dsc.unregisterByIP evPeer
-      dsc.orphans.put(evKey, evBuddy)      # adopt orphan temorarily
+      dsc.orphans.put(key, value)      # adopt orphan temorarily
 
       # If it is set a zombie, it will be taken care of when the
       # `workerLoop()` finishes.
-      if evBuddy.worker.ctrl.running:
-        evBuddy.worker.ctrl.stopped = true
+      if value.worker.ctrl.running:
+        value.worker.ctrl.stopped = true
 
       trace "Evicted peer", peer=evPeer,
-        state=evBuddy.worker.ctrl.state, nSyncPeers=dsc.nSyncPeers(),
+        state=value.worker.ctrl.state, nSyncPeers=dsc.nSyncPeers(),
         nSyncPeersMax=dsc.syncPeers.capacity, nPoolPeers=dsc.peerPool.len
 
   # Hand over to worker loop

@@ -36,7 +36,7 @@ proc release*(ctx: BeaconCtxRef; info: static[string]) =
 proc start*(buddy: BeaconPeerRef; info: static[string]): bool =
   ## Initialise worker peer
   let
-    peer = buddy.peer
+    peer {.inject,used.} = $buddy.peer              # logging only
     ctx = buddy.ctx
 
   if not ctx.pool.seenData and buddy.peerID in ctx.pool.failedPeers:
@@ -53,8 +53,8 @@ proc start*(buddy: BeaconPeerRef; info: static[string]): bool =
 
 proc stop*(buddy: BeaconPeerRef; info: static[string]) =
   ## Clean up this peer
-  if not buddy.ctx.hibernate: debug info & ": release peer", peer=buddy.peer,
-    thPut=buddy.only.thPutStats.toMeanVar.toStr,
+  if not buddy.ctx.hibernate: debug info & ": release peer",
+    peer=buddy.peer, thPut=buddy.only.thPutStats.toMeanVar.toStr,
     nSyncPeers=(buddy.ctx.nSyncPeers()-1), state=($buddy.syncState)
   buddy.stopSyncPeer()
 
@@ -146,8 +146,7 @@ template runPeer*(
     if buddy.somethingToCollectOrUnstage():
 
       trace info & ": start processing", peer=buddy.peer,
-        thPut=buddy.only.thPutStats.toMeanVar.toStr,
-        rankInfo=($rank.assessed),
+        thPut=buddy.only.thPutStats.toMeanVar.toStr, rankInfo=($rank.assessed),
         rank=(if rank.ranking < 0: "n/a" else: $rank.ranking),
         nSyncPeers=buddy.ctx.nSyncPeers(), state=($buddy.syncState)
 
