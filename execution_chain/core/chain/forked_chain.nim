@@ -21,6 +21,7 @@ import
   ../../evm/state,
   ../validate,
   ../../portal/portal,
+  ../../utils/time_utils,
   ./forked_chain/[
     chain_desc,
     chain_branch,
@@ -388,7 +389,7 @@ proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async:
     minLogInterval = 5
 
   if c.baseQueue.len == 0:
-    let time = EthTime.now()
+    let time = EthTime.currentTime()
     if time - c.lastBaseLogTime > minLogInterval:
       # Log only if more than one block persisted
       # This is to avoid log spamming, during normal operation
@@ -662,7 +663,7 @@ proc init*(
       fcuHead:          fcuHead,
       fcuSafe:          fcuSafe,
       baseQueue:        initDeque[BlockRef](),
-      lastBaseLogTime:  EthTime.now(),
+      lastBaseLogTime:  EthTime.currentTime(),
     )
 
   # updateFinalized will stop ancestor lineage

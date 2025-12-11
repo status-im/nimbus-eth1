@@ -18,7 +18,7 @@ import
   eth/common/[base, addresses, accounts, headers, transactions],
   ../db/[ledger, access_list],
   ../common/common,
-  ../transaction/call_evm,
+  ../transaction/call_evm_rpc,
   ../evm/[types, state, evm_errors],
   ./async_evm_backend
 
