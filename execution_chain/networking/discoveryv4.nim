@@ -13,11 +13,11 @@ import
   std/[times, net],
   chronos,
   stint,
-  nimcrypto/keccak,
   chronicles,
   stew/objects,
   results,
   eth/rlp,
+  eth/keccak/keccak,
   eth/common/keys,
   eth/enode/enode,
   ./discoveryv4/kademlia
@@ -54,7 +54,7 @@ type
 
   DiscResult*[T] = Result[T, cstring]
 
-  keccak256 = keccak.keccak256
+  Keccak256 = keccak.Keccak256
 
   UnpackedMsg = object
     cmdId: CommandId
@@ -90,13 +90,13 @@ proc pack(cmdId: CommandId, payload: openArray[byte], pk: PrivateKey): seq[byte]
   result[MAC_SIZE ..< MAC_SIZE + SIG_SIZE] =
     pk.sign(result.toOpenArray(HEAD_SIZE, result.high)).toRaw()
   result[0 ..< MAC_SIZE] =
-    keccak256.digest(result.toOpenArray(MAC_SIZE, result.high)).data
+    Keccak256.digest(result.toOpenArray(MAC_SIZE, result.high)).data
 
 proc validateMsgHash(msg: openArray[byte]): DiscResult[MDigest[256]] =
   if msg.len > HEAD_SIZE:
     var ret: MDigest[256]
     ret.data[0 .. ^1] = msg.toOpenArray(0, ret.data.high)
-    if ret == keccak256.digest(msg.toOpenArray(MAC_SIZE, msg.high)):
+    if ret == Keccak256.digest(msg.toOpenArray(MAC_SIZE, msg.high)):
       ok(ret)
     else:
       err("disc: invalid message hash")

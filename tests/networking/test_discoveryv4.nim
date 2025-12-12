@@ -13,8 +13,8 @@ import
   std/sequtils,
   chronos,
   stew/byteutils,
-  nimcrypto/keccak,
   testutils/unittests,
+  eth/keccak/keccak,
   eth/common/keys,
   ./stubloglevel,
   ../../execution_chain/networking/discoveryv4
@@ -36,7 +36,7 @@ proc packData(payload: openArray[byte], pk: PrivateKey): seq[byte] =
   let
     payloadSeq = @payload
     signature = @(pk.sign(payload).toRaw())
-    msgHash = keccak256.digest(signature & payloadSeq)
+    msgHash = Keccak256.digest(signature & payloadSeq)
   result = @(msgHash.data) & signature & payloadSeq
 
 proc nodeIdInNodes(id: NodeId, nodes: openArray[Node]): bool =

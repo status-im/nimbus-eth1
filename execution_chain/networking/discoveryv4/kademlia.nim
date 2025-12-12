@@ -10,7 +10,7 @@
 
 import
   std/[tables, hashes, times, algorithm, sets, sequtils],
-  chronos, chronicles, stint, nimcrypto/keccak, metrics, results,
+  chronos, chronicles, stint, eth/keccak/keccak, metrics, results,
   eth/common/keys, eth/p2p/discoveryv5/random2,
   eth/enode/enode
 
@@ -70,7 +70,7 @@ const
 proc len(r: RoutingTable): int
 
 proc toNodeId*(pk: PublicKey): NodeId =
-  readUintBE[256](keccak256.digest(pk.toRaw()).data)
+  readUintBE[256](Keccak256.digest(pk.toRaw()).data)
 
 proc newNode*(pk: PublicKey, address: Address): Node =
   result.new()

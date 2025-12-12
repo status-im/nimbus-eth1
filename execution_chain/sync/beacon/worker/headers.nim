@@ -16,7 +16,7 @@ import
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
   ./headers/[headers_headers, headers_helpers, headers_queue, headers_unproc],
-  ./worker_desc
+  ./[helpers, worker_desc]
 
 export
   headers_queue, headers_unproc

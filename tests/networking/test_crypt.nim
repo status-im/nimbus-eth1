@@ -11,7 +11,8 @@
 
 import
   unittest2,
-  nimcrypto/[utils, keccak, sysrand],
+  nimcrypto/[utils, sysrand],
+  eth/keccak/keccak,
   eth/common/keys,
   ../../execution_chain/networking/rlpx/[auth, rlpxcrypt]
 

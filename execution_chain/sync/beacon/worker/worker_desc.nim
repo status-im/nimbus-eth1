@@ -19,7 +19,7 @@ import
   ./[helpers, worker_const]
 
 export
-  helpers, sync_desc, worker_const, chain
+  sync_desc, worker_const, chain
 
 type
   BeaconPeerRef* = SyncPeerRef[BeaconCtxData,BeaconPeerData]
