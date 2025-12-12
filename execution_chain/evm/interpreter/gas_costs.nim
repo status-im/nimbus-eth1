@@ -66,9 +66,10 @@ type
     #   - μ: a value popped from the stack or its size.
 
     kind*: Op
-    isNewAccount*: bool
+    isNewAccount*: proc(): bool {.gcsafe, raises: [].}
     gasLeft*: GasInt
-    gasCallEIPs*: GasInt
+    gasCallEIP2929*: proc(): GasInt {.gcsafe, raises: [].}
+    gasCallDelegate*: proc(): GasInt {.gcsafe, raises: [].}
     contractGas*: UInt256
     currentMemSize*: GasNatural
     memOffset*: GasNatural
@@ -351,7 +352,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
       static(FeeSchedule[GasLogData]) * memLength +
       static(4 * FeeSchedule[GasLogTopic]))
 
-  func `prefix gasCall`(value: UInt256, params: GasParams): EvmResult[CallGasResult] {.nimcall.} =
+  proc `prefix gasCall`(value: UInt256, params: GasParams): EvmResult[CallGasResult] {.nimcall.} =
     # From the Yellow Paper, going through the equation from bottom to top
     # https://ethereum.github.io/yellowpaper/paper.pdf#appendix.H
     #
@@ -373,20 +374,30 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
     # the current implementation - https://github.com/ethereum/EIPs/issues/8
 
     # Both gasCost and childGasLimit are always on positive side
-
-    var gasLeft = params.gasLeft
-    if gasLeft < params.gasCallEIPs:
-      return err(opErr(OutOfGas))
-    gasLeft -= params.gasCallEIPs
-
-    var gasCost: GasInt = `prefix gasMemoryExpansion`(
+    var
+      gasLeft = params.gasLeft
+      gasCost: GasInt = `prefix gasMemoryExpansion`(
                              params.currentMemSize,
                              params.memOffset,
                              params.memLength)
-    var childGasLimit: GasInt
+    # Cxfer
+    if not value.isZero and params.kind in {Call, CallCode}:
+      gasCost += static(GasInt(FeeSchedule[GasCallValue]))
+    # Cextra
+    gasCost += static(GasInt(FeeSchedule[GasCall]))
+
+    gasCost += params.gasCallEIP2929()
+
+    if gasLeft < gasCost:
+      return err(opErr(OutOfGas))
+
+    gasCost += params.gasCallDelegate()
+
+    if gasLeft < gasCost:
+      return err(opErr(OutOfGas))
 
     # Cnew_account
-    if params.isNewAccount and params.kind == Call:
+    if params.isNewAccount() and params.kind == Call:
       when fork < FkSpurious:
         # Pre-EIP161 all account creation calls consumed 25000 gas.
         gasCost += static(GasInt(FeeSchedule[GasNewAccount]))
@@ -397,18 +408,13 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
         if not value.isZero:
           gasCost += static(GasInt(FeeSchedule[GasNewAccount]))
 
-    # Cxfer
-    if not value.isZero and params.kind in {Call, CallCode}:
-      gasCost += static(GasInt(FeeSchedule[GasCallValue]))
-
-    # Cextra
-    gasCost += static(GasInt(FeeSchedule[GasCall]))
-
     if gasLeft < gasCost:
       return err(opErr(OutOfGas))
+
     gasLeft -= gasCost
 
     # Cgascap
+    var childGasLimit: GasInt
     when fork >= FkTangerine:
       # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-150.md
       let gas = `prefix all_but_one_64th`(gasLeft)
@@ -422,11 +428,10 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
         return err(gasErr(GasIntOverflow))
       childGasLimit = params.contractGas.truncate(GasInt)
 
-    if gasCost.u256 + childGasLimit.u256 + params.gasCallEIPs.u256 > high(GasInt).u256:
+    if gasCost.u256 + childGasLimit.u256 > high(GasInt).u256:
       return err(gasErr(GasIntOverflow))
 
     gasCost += childGasLimit
-    gasCost += params.gasCallEIPs
 
     # Ccallgas - Gas sent to the child message
     if not value.isZero and params.kind in {Call, CallCode}:

@@ -87,6 +87,9 @@ proc processTransactions*(
     if sender == default(Address):
       return err("Could not get sender for tx with index " & $(txIndex))
 
+    if vmState.balTrackerEnabled:
+      vmState.balTracker.setBlockAccessIndex(txIndex + 1)
+
     let rc = vmState.processTransaction(tx, sender, header)
     if rc.isErr:
       return err("Error processing tx with index " & $(txIndex) & ":" & rc.error)
@@ -104,11 +107,16 @@ proc processTransactions*(
 proc procBlkPreamble(
     vmState: BaseVMState,
     blk: Block,
-    skipValidation, skipReceipts, skipUncles: bool,
+    skipValidation, skipReceipts, skipUncles: bool, skipPreExecBalCheck: bool,
     taskpool: Taskpool,
 ): Result[void, string] =
   template header(): Header =
     blk.header
+
+  # Setup block access list tracker for pre‑execution system calls
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.setBlockAccessIndex(0)
+    vmState.balTracker.beginCallFrame()
 
   let com = vmState.com
   if com.daoForkSupport and com.daoForkBlock.get == header.number:
@@ -144,16 +152,20 @@ proc procBlkPreamble(
   if com.isAmsterdamOrLater(header.timestamp):
     if header.blockAccessListHash.isNone:
       return err("Post-Amsterdam block header must have blockAccessListHash")
-    elif blk.blockAccessList.isNone:
-      return err("Post-Amsterdam block body must have blockAccessList")
-    elif not skipValidation:
+    if not skipPreExecBalCheck:
+      if blk.blockAccessList.isNone:
+        return err("Post-Amsterdam block body must have blockAccessList")
       if blk.blockAccessList.get.validate(header.blockAccessListHash.get).isErr():
         return err("Mismatched blockAccessListHash")
   else:
     if header.blockAccessListHash.isSome:
       return err("Pre-Amsterdam block header must not have blockAccessListHash")
-    elif blk.blockAccessList.isSome:
+    if blk.blockAccessList.isSome:
       return err("Pre-Amsterdam block body must not have blockAccessList")
+
+  # Commit block access list tracker changes for pre‑execution system calls
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.commitCallFrame()
 
   if header.txRoot != EMPTY_ROOT_HASH:
     if blk.transactions.len == 0:
@@ -166,14 +178,24 @@ proc procBlkPreamble(
   elif blk.transactions.len > 0:
     return err("Transactions in block with empty txRoot")
 
+  # Setup block access list tracker for post‑execution system calls
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.setBlockAccessIndex(blk.transactions.len() + 1)
+    vmState.balTracker.beginCallFrame()
+
   if com.isShanghaiOrLater(header.timestamp):
     if header.withdrawalsRoot.isNone:
       return err("Post-Shanghai block header must have withdrawalsRoot")
     if blk.withdrawals.isNone:
       return err("Post-Shanghai block body must have withdrawals")
 
-    for withdrawal in blk.withdrawals.get:
-      vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
+    if vmState.balTrackerEnabled:
+      for withdrawal in blk.withdrawals.get:
+        vmState.balTracker.trackAddBalanceChange(withdrawal.address, withdrawal.weiAmount)
+        vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
+    else:
+      for withdrawal in blk.withdrawals.get:
+        vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
   else:
     if header.withdrawalsRoot.isSome:
       return err("Pre-Shanghai block header must not have withdrawalsRoot")
@@ -206,6 +228,7 @@ proc procBlkEpilogue(
     skipValidation: bool,
     skipReceipts: bool,
     skipStateRootCheck: bool,
+    skipPostExecBalCheck: bool
 ): Result[void, string] =
   template header(): Header =
     blk.header
@@ -229,11 +252,31 @@ proc procBlkEpilogue(
     withdrawalReqs = ?processDequeueWithdrawalRequests(vmState)
     consolidationReqs = ?processDequeueConsolidationRequests(vmState)
 
+  if not skipPostExecBalCheck and vmState.com.isAmsterdamOrLater(header.timestamp):
+    doAssert vmState.balTrackerEnabled
+    # Commit block access list tracker changes for post‑execution system calls
+    vmState.balTracker.commitCallFrame()
+
+    let
+      bal = vmState.balTracker.getBlockAccessList().get()
+      balHash = bal[].computeBlockAccessListHash()
+    if header.blockAccessListHash.get != balHash:
+      debug "wrong blockAccessListHash, generated block access list does not " &
+        "match expected blockAccessListHash in header",
+        blockNumber = header.number,
+        blockHash = header.computeBlockHash,
+        parentHash = header.parentHash,
+        expected = header.blockAccessListHash.get,
+        actual = balHash,
+        blockAccessList = $(bal[])
+      return err("blockAccessListHash mismatch, expect: " &
+        $header.blockAccessListHash.get & ", got: " & $balHash)
+
   if not skipStateRootCheck:
     let stateRoot = vmState.ledger.getStateRoot()
     if header.stateRoot != stateRoot:
       # TODO replace logging with better error
-      debug "wrong state root in block",
+      debug "wrong stateRoot in block",
         blockNumber = header.number,
         blockHash = header.computeBlockHash,
         parentHash = header.parentHash,
@@ -292,20 +335,22 @@ proc procBlkEpilogue(
 proc processBlock*(
     vmState: BaseVMState, ## Parent environment of header/body block
     blk: Block, ## Header/body block to add to the blockchain
-    skipValidation: bool = false,
-    skipReceipts: bool = false,
-    skipUncles: bool = false,
-    skipStateRootCheck: bool = false,
+    skipValidation = false,
+    skipReceipts = false,
+    skipUncles = false,
+    skipStateRootCheck = false,
+    skipPreExecBalCheck = false,
+    skipPostExecBalCheck = false,
     taskpool: Taskpool = nil,
 ): Result[void, string] =
   ## Generalised function to processes `blk` for any network.
-  ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles, taskpool)
+  ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles, skipPreExecBalCheck, taskpool)
 
   # EIP-3675: no reward for miner in POA/POS
   if not vmState.com.proofOfStake(blk.header, vmState.ledger.txFrame):
     vmState.calculateReward(blk.header, blk.uncles)
 
-  ?vmState.procBlkEpilogue(blk, skipValidation, skipReceipts, skipStateRootCheck)
+  ?vmState.procBlkEpilogue(blk, skipValidation, skipReceipts, skipStateRootCheck, skipPostExecBalCheck)
 
   ok()
 

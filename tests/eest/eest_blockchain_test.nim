@@ -18,11 +18,12 @@ const
   eestType = "blockchain_tests"
   eestReleases = [
     "eest_develop",
-    "eest_devnet"
+    "eest_devnet",
+    "eest_bal"
   ]
 
 const skipFiles = [
-    ""
+  ""
 ]
 
 runEESTSuite(

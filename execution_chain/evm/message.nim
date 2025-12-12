@@ -15,7 +15,8 @@ import
   ./precompiles,
   ../common/evmforks,
   ../utils/utils,
-  ../db/ledger
+  ../db/ledger,
+  ../core/eip7702
 
 proc isCreate*(message: Message): bool =
   message.kind in {CallKind.Create, CallKind.Create2}
@@ -26,6 +27,8 @@ proc generateContractAddress*(vmState: BaseVMState,
                               salt = ZERO_CONTRACTSALT,
                               code = CodeBytesRef(nil)): Address =
   if kind == CallKind.Create:
+    if vmState.balTrackerEnabled:
+      vmState.balTracker.trackAddressAccess(sender)
     let creationNonce = vmState.readOnlyLedger().getNonce(sender)
     generateAddress(sender, creationNonce)
   else:
@@ -37,6 +40,15 @@ proc getCallCode*(vmState: BaseVMState, codeAddress: Address): CodeBytesRef =
     return CodeBytesRef(nil)
 
   if vmState.fork >= FkPrague:
+    if vmState.balTrackerEnabled:
+      vmState.balTracker.trackAddressAccess(codeAddress)
+      let
+        code = vmState.readOnlyLedger.getCode(codeAddress)
+        delegateTo = parseDelegationAddress(code)
+      if delegateTo.isSome():
+        vmState.balTracker.trackAddressAccess(delegateTo.get())
     vmState.readOnlyLedger.resolveCode(codeAddress)
   else:
+    if vmState.balTrackerEnabled:
+      vmState.balTracker.trackAddressAccess(codeAddress)
     vmState.readOnlyLedger.getCode(codeAddress)

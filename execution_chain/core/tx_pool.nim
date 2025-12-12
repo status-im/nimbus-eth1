@@ -45,6 +45,7 @@ import
   ./chain/forked_chain,
   ./pooled_txs
 
+from ../evm/state import blockAccessList
 from eth/common/eth_types_rlp import rlpHash
 
 # ------------------------------------------------------------------------------
@@ -161,7 +162,7 @@ proc assembleBlock*(
       wrapperVersion: getWrapperVersion(com, blk.header.timestamp)
     )
     currentRlpSize = rlp.getEncodedLength(blk.header)
-  
+
   if blk.withdrawals.isSome:
     currentRlpSize = currentRlpSize + rlp.getEncodedLength(blk.withdrawals.get())
 
@@ -207,6 +208,10 @@ proc assembleBlock*(
       Opt.some(pst.executionRequests)
     else:
       Opt.none(seq[seq[byte]])
+
+  if com.isAmsterdamOrLater(blk.header.timestamp):
+    let bal = xp.vmState.blockAccessList.expect("block access list exists")
+    blk.blockAccessList = Opt.some(bal[])
 
   ok AssembledBlock(
     blk: blk,
