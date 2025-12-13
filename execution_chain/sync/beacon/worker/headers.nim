@@ -57,7 +57,7 @@ template headersCollect*(buddy: BeaconPeerRef; info: static[string]) =
   block body:
     let
       ctx = buddy.ctx
-      peer {.inject,used.} = buddy.peer
+      peer {.inject,used.} = $buddy.peer             # logging only
 
     if ctx.headersUnprocIsEmpty() or
        ctx.hdrCache.state != collecting:
@@ -229,7 +229,7 @@ proc headersUnstage*(buddy: BeaconPeerRef; info: static[string]): bool =
   ##
   let
     ctx = buddy.ctx
-    peer = buddy.peer
+    peer {.inject,used.} = $buddy.peer                       # logging only
 
   if ctx.hdr.staged.len == 0:
     return false                                             # switch peer

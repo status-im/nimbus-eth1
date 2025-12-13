@@ -80,7 +80,12 @@ func `$`*(w: Interval[BlockNumber,uint64]): string =
   w.toStr
 
 func `$`*(w: (SyncState,HeaderChainMode,bool)): string =
-  $w[0] & "." & $w[1] & (if w[2]: ":" & "poolMode" else: "")
+  result = $w[0]
+  if (w[0] == blocks and w[1] != locked) or
+     (w[0] == headers and w[1] != collecting):
+    result &= "." & $w[1]
+  if w[2]:
+    result &= ":" & "poolMode"
 
 func `$`*(w: (SyncPeerRunState,SyncState,HeaderChainMode,bool)): string =
   $w[0] & ":" & $(w[1],w[2],w[3])
