@@ -32,10 +32,19 @@ logScope:
 
 proc addBeaconSyncProtocol(desc: BeaconSyncRef; PROTO: type) =
   ## Add protocol and call back filter function for ethXX
-  desc.addSyncProtocol(PROTO):
-    proc(peer: Peer): bool =
-      let state = peer.state(PROTO)
-      not state.isNil and state.initialized
+  proc acceptPeer(peer: Peer): bool =
+    let state = peer.state(PROTO)
+    not state.isNil and state.initialized
+
+  proc initWorker(worker: SyncPeerRef[BeaconCtxData,BeaconPeerData]) =
+    when PROTO is eth68:
+      worker.only.pivotHash = worker.peer.state(PROTO).bestHash
+    elif PROTO is eth69:
+      worker.only.pivotHash = worker.peer.state(PROTO).latestHash
+    else:
+      {.error: "Unsupported eth/?? version".}
+
+  desc.addSyncProtocol(PROTO, acceptPeer, initWorker)
 
 # ------------------------------------------------------------------------------
 # Virtual methods/interface, `mixin` functions

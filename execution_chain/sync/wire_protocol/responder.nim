@@ -360,6 +360,7 @@ proc eth68PeerConnected(peer: Peer) {.async: (
   trace "Peer matches our network", peer
 
   peer.state(eth68).initialized = true
+  peer.state(eth68).bestHash = m.bestHash
 
 proc eth69PeerConnected(peer: Peer) {.async: (
     raises: [CancelledError, EthP2PError]).} =

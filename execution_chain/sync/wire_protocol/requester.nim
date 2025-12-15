@@ -23,7 +23,7 @@ export
 defineProtocol(PROTO = eth68,
                version = 68,
                rlpxName = "eth",
-               PeerStateType = EthPeerState,
+               PeerStateType = Eth68PeerState,
                NetworkStateType = EthWireRef)
 
 defineProtocol(PROTO = eth69,
