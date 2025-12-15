@@ -17,7 +17,6 @@ import
   results,
   ./types,
   ./requester,
-  ../../utils/time_utils,
   ../../networking/p2p,
   ../../core/tx_pool,
   ../../core/pooled_txs_rlp,
@@ -90,7 +89,7 @@ proc syncerRunning*(wire: EthWireRef): bool =
     thresholdTime = 3 * 15
 
   let
-    nowTime = EthTime.currentTime()
+    nowTime = EthTime.now()
     headerTime = wire.chain.latestHeader.timestamp
 
   let running = (nowTime - headerTime) > thresholdTime

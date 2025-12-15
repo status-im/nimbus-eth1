@@ -11,7 +11,6 @@
 import
   chronicles,
   eth/common/eth_types_rlp,
-  ../utils/time_utils,
   ../evm/[types, state, internals],
   ../db/ledger,
   ../transaction,
@@ -34,7 +33,7 @@ proc rpcCallEvm*(args: TransactionArgs,
 
   let topHeader = Header(
     parentHash: headerHash,
-    timestamp:  EthTime.currentTime(),
+    timestamp:  EthTime.now(),
     gasLimit:   0.GasInt,              ## ???
     baseFeePerGas: Opt.none UInt256, ## ???
   )
@@ -153,7 +152,7 @@ proc rpcEstimateGas*(args: TransactionArgs,
   # Binary search the gas requirement, as it may be higher than the amount used
   let topHeader = Header(
     parentHash: headerHash,
-    timestamp:  EthTime.currentTime(),
+    timestamp:  EthTime.now(),
     gasLimit:   0.GasInt,              ## ???
     baseFeePerGas: Opt.none UInt256,   ## ???
   )
