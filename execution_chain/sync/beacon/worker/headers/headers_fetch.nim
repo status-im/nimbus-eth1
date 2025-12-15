@@ -40,11 +40,19 @@ proc maybeSlowPeerError(
 
   # false
 
+func errStr(rc: Result[FetchHeadersData,BeaconError]): string =
+  if rc.isErr:
+    result = $rc.error.excp
+    if 0 < rc.error.name.len:
+      result &= "(" & rc.error.name & ")"
+  else:
+    result = "n/a"
+
 # ------------------------------------------------------------------------------
-# Public handler
+# Private function(s)
 # ------------------------------------------------------------------------------
 
-proc getBlockHeaders*(
+proc getBlockHeaders(
     buddy: BeaconPeerRef;
     req: BlockHeadersRequest;
     bn: BlockNumber;
@@ -77,7 +85,7 @@ proc getBlockHeaders*(
   return ok((move resp, Moment.now()-start))
 
 # ------------------------------------------------------------------------------
-# Public function
+# Public function(s)
 # ------------------------------------------------------------------------------
 
 template fetchHeadersReversed*(
@@ -96,7 +104,7 @@ template fetchHeadersReversed*(
       sendInfo = trEthSendSendingGetBlockHeaders
       recvInfo = trEthRecvReceivedBlockHeaders
     let
-      peer {.inject,used.} = buddy.peer
+      peer {.inject,used.} = $buddy.peer           # logging only
       req = block:
         if topHash != emptyRoot:
           BlockHeadersRequest(
@@ -137,15 +145,13 @@ template fetchHeadersReversed*(
         of EAlreadyTriedAndFailed:
           trace recvInfo & " error", peer, req=ivReq, nReq=req.maxResults,
             hash=topHash.toStr, ela=elapsed.toStr, state=($buddy.syncState),
-            error=rc.error.excp, nErrors=buddy.nErrors.fetch.hdr
+            error=rc.errStr, nErrors=buddy.nErrors.fetch.hdr
           break body                               # return err()
 
         # Debug message for other errors
         debug recvInfo & " error", peer, req=ivReq, nReq=req.maxResults,
           hash=topHash.toStr, ela=elapsed.toStr, state=($buddy.syncState),
-          error=($rc.error.excp & (if rc.error.name.len == 0: ""
-                                   else: "(" & rc.error.name & ")")),
-          msg=rc.error.msg, nErrors=buddy.nErrors.fetch.hdr
+          error=rc.errStr, msg=rc.error.msg, nErrors=buddy.nErrors.fetch.hdr
         break body                                 # return err()
 
     # Evaluate result
@@ -154,8 +160,7 @@ template fetchHeadersReversed*(
         buddy.hdrFetchRegisterError()
       trace recvInfo & " error", peer, nReq=req.maxResults, hash=topHash.toStr,
         nResp=0, ela=elapsed.toStr, state=($buddy.syncState),
-        error=(if rc.isErr: $rc.error.excp else: "n/a"),
-        nErrors=buddy.nErrors.fetch.hdr
+        error=rc.errStr, nErrors=buddy.nErrors.fetch.hdr
       break body                                   # return err()
 
     # Verify the correct number of block headers received

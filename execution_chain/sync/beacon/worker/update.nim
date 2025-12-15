@@ -182,17 +182,10 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
   #     blocks -> blocksCancel ----> +
   #      |                           |
   #      v                           |
-  #     blocksFinish --------------> +
-  #                                  |
-  #                                  |
-  #     standByMode -----------------'
+  #     blocksFinish ----------------'
   #
   let newState =
     case ctx.pool.syncState:
-    of standByMode:
-      # Must be set externally to get out of that state
-      return
-
     of idle:
       ctx.idleNext info
 
@@ -255,7 +248,7 @@ proc updateLastBlockImported*(ctx: BeaconCtxRef; bn: BlockNumber) =
 proc updateActivateSyncer*(ctx: BeaconCtxRef) =
   ## If in hibernate mode, accept a cache session and activate syncer
   ##
-  if ctx.pool.syncState == standByMode:         # waiting for clear
+  if ctx.pool.standByMode:                      # waiting for clear
     return
 
   if ctx.hibernate and                          # only in idle mode

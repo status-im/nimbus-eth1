@@ -17,7 +17,7 @@ import
   ../constants, stint,
   ../utils/utils,
   ../transaction,
-  ../transaction/call_evm,
+  ../transaction/call_evm_rpc,
   ../core/eip4844,
   ../core/chain/forked_chain,
   ../evm/types,

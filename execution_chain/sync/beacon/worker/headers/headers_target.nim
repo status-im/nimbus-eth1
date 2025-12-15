@@ -63,7 +63,7 @@ template headersTargetActivate*(
       break body                                           # return
 
     let
-      peer {.inject.} = buddy.peer
+      peer {.inject,used.} = $buddy.peer                   # logging only
       trg = ctx.pool.initTarget.unsafeGet
 
     # Require minimum of sync peers

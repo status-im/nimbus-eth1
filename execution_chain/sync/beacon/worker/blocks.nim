@@ -57,7 +57,7 @@ template blocksCollect*(
   ##
   let
     ctx = buddy.ctx
-    peer = buddy.peer
+    peer = $buddy.peer                               # logging only
 
   block body:
     if ctx.blocksUnprocIsEmpty():
@@ -234,7 +234,7 @@ template blocksUnstage*(
       break body                                   # return false => switch peer
 
     var
-      peer {.inject.} = buddy.peer
+      peer {.inject,used.} = $buddy.peer           # logging only
       nImported {.inject.} = 0u64                  # statistics
       nUnstaged  {.inject.} = 0                    # ditto
       importedOK = false                           # imported some blocks
