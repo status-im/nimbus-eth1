@@ -220,9 +220,13 @@ proc run(config: PortalCliConf) =
     rng = newRng()
     bindIp = config.listenAddress
     udpPort = Port(config.udpPort)
-    # TODO: allow for no TCP port mapping!
-    (extIp, _, extUdpPort) =
-      setupAddress(config.nat, config.listenAddress, udpPort, udpPort, "portalcli")
+    (extIp, extPorts) = setupAddress(
+      config.nat,
+      config.listenAddress,
+      @[(port: udpPort, protocol: PortProtocol.UDP)],
+      "portalcli",
+    )
+    extUdpPort = extPorts[0].toPort()
 
   var bootstrapRecords: seq[Record]
   loadBootstrapFile(string config.bootstrapNodesFile, bootstrapRecords)

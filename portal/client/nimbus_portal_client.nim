@@ -105,10 +105,13 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
   let
     bindIp = config.listenAddress
     udpPort = Port(config.udpPort)
-    # TODO: allow for no TCP port mapping!
-    (extIp, _, extUdpPort) = setupAddress(
-      config.nat, config.listenAddress, udpPort, udpPort, "nimbus_portal_client"
+    (extIp, extPorts) = setupAddress(
+      config.nat,
+      config.listenAddress,
+      @[(port: udpPort, protocol: PortProtocol.UDP)],
+      "nimbus_portal_client",
     )
+    extUdpPort = extPorts[0].toPort()
     (netkey, newNetKey) =
       if config.networkKey.isSome():
         (config.networkKey.get(), true)

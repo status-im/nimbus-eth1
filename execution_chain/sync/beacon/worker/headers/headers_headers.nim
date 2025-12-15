@@ -37,7 +37,7 @@ template headersFetch*(
   ##
   let
     ctx = buddy.ctx
-    peer = buddy.peer
+    peer {.inject,used.} = $buddy.peer              # logging only
 
   var bodyRc = Opt[seq[Header]].err()
   block body:
@@ -95,7 +95,7 @@ proc headersStashOnDisk*(
   ## failure, this function returns the number of headers stored.
   let
     ctx = buddy.ctx
-    peer = buddy.peer
+    peer {.inject,used.} = $buddy.peer           # logging only
     dTop = ctx.hdrCache.antecedent.number        # current antecedent
     rc = ctx.hdrCache.put(revHdrs)               # verify and save headers
 

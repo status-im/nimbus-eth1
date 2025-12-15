@@ -18,9 +18,6 @@ import
 
 export block_access_lists, hashes, results
 
-func slotCmp(x, y: StorageKey | StorageValue): int =
-  cmp(x.data.toHex(), y.data.toHex())
-
 func validate*(bal: BlockAccessList, expectedHash: Hash32): Result[void, string] =
   ## Validate that a block access list is structurally correct and matches the expected hash.
 
@@ -44,7 +41,7 @@ func validate*(bal: BlockAccessList, expectedHash: Hash32): Result[void, string]
   for accountChanges in bal:
     # Validate storage changes slots are sorted lexicographically
     let storageChangesSlots = accountChanges.storageChanges.mapIt(it.slot)
-    if storageChangesSlots != storageChangesSlots.sorted(slotCmp):
+    if storageChangesSlots != storageChangesSlots.sorted():
       return err("Storage changes slots should be sorted lexicographically")
 
     # Check storage changes are sorted by blockAccessIndex
@@ -55,7 +52,7 @@ func validate*(bal: BlockAccessList, expectedHash: Hash32): Result[void, string]
 
     # Validate storage reads are sorted lexicographically
     let storageReadsSlots = accountChanges.storageReads
-    if storageReadsSlots != storageReadsSlots.sorted(slotCmp):
+    if storageReadsSlots != storageReadsSlots.sorted():
       return err("Storage reads should be sorted lexicographically")
 
     # Check balance changes are sorted by blockAccessIndex

@@ -119,29 +119,18 @@ proc configTarget*(desc: BeaconSyncRef; hex: string; isFinal: bool): bool =
 
 # -----------------
 
-proc activate*(desc: BeaconSyncRef) =
-  ## Clear stand-by mode (if any)
-  doAssert not desc.ctx.isNil
-  if desc.ctx.pool.syncState == SyncState.standByMode:
-    desc.ctx.pool.syncState = SyncState.idle
-
-proc start*(desc: BeaconSyncRef; standByMode = false): bool =
+proc start*(desc: BeaconSyncRef; standBy = false): bool =
   ## This function returns `true` exactly if the run state could be changed.
   ## The following expressions are equivalent:
   ## * desc.start(true)
   ## * desc.start(false) and desc.start(true)
   ##
   doAssert not desc.ctx.isNil
-  if desc.isRunning:
-    # Correct state to stand-by mode if possible
-    if standByMode and desc.ctx.pool.syncState == SyncState.idle:
-      desc.ctx.pool.syncState = SyncState.standByMode
-      return true
-  else:
-    if standByMode:
-      desc.ctx.pool.syncState = SyncState.standByMode
-    if desc.startSync():
-      return true
+  let save = desc.ctx.pool.standByMode
+  desc.ctx.pool.standByMode = standBy # the ticker sees this when starting
+  if desc.startSync(standBy):
+    return true
+  desc.ctx.pool.standByMode = save
   # false
 
 proc stop*(desc: BeaconSyncRef) {.async.} =
