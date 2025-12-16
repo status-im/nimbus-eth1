@@ -10,7 +10,6 @@
 
 import
   eth/common/eth_types, stint,
-  chronos,
   results,
   ../evm/[types, state],
   ../evm/[message, precompiles, internals, interpreter_dispatch],
