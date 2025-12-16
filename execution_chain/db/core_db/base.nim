@@ -13,12 +13,15 @@
 import
   std/typetraits,
   chronicles,
-  chronos/timer,
   eth/common/[accounts, base, hashes],
   ../../constants,
   ../[kvt, aristo],
   ../kvt/kvt_init/init_common,
   ./base/[base_desc, base_helpers]
+
+# Persist performance metrics are disabled on bare metal
+when not defined(`any`) and not defined(standalone):
+  import chronos/timer
 
 export
   CoreDbAccount,
@@ -96,22 +99,30 @@ proc persist*(db: CoreDbRef, txFrame: CoreDbTxRef) =
     #      kvt changes written to memory but not to disk because of an aristo
     #      error), we have to panic instead.
 
-    let kvtTick = Moment.now()
-    db.kvt.persist(kvtBatch[], txFrame.kTx)
-    let mptTick = Moment.now()
-    db.mpt.persist(mptBatch[], txFrame.aTx)
+    when not defined(`any`) and not defined(standalone):
+      let kvtTick = Moment.now()
+      db.kvt.persist(kvtBatch[], txFrame.kTx)
+      let mptTick = Moment.now()
+      db.mpt.persist(mptBatch[], txFrame.aTx)
 
-    let endTick = Moment.now()
-    db.kvt.putEndFn(kvtBatch[]).isOkOr:
-      raiseAssert $error
+      let endTick = Moment.now()
+      db.kvt.putEndFn(kvtBatch[]).isOkOr:
+        raiseAssert $error
+      db.mpt.putEndFn(mptBatch[]).isOkOr:
+        raiseAssert $error
 
-    db.mpt.putEndFn(mptBatch[]).isOkOr:
-      raiseAssert $error
+      debug "Core DB persisted",
+        kvtDur = mptTick - kvtTick,
+        mptDur = endTick - mptTick,
+        endDur = Moment.now() - endTick
+    else:
+      db.kvt.persist(kvtBatch[], txFrame.kTx)
+      db.mpt.persist(mptBatch[], txFrame.aTx)
+      db.kvt.putEndFn(kvtBatch[]).isOkOr:
+        raiseAssert $error
+      db.mpt.putEndFn(mptBatch[]).isOkOr:
+        raiseAssert $error
 
-    debug "Core DB persisted",
-      kvtDur = mptTick - kvtTick,
-      mptDur = endTick - mptTick,
-      endDur = Moment.now() - endTick
   else:
     discard kvtBatch.expect("should always be able to create batch")
     discard mptBatch.expect("should always be able to create batch")
