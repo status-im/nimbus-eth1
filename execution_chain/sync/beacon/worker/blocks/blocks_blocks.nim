@@ -56,7 +56,6 @@ template blocksFetchCheckImpl(
   block body:
     let
       ctx = buddy.ctx
-      iv {.inject,used.} = iv
       peer {.inject,used.} = $buddy.peer                   # logging only
 
     # Preset headers to be completed with bodies. Also collect block
@@ -68,16 +67,16 @@ template blocksFetchCheckImpl(
     for n in 1u ..< iv.len:
       let header = ctx.hdrCache.get(iv.minPt + n).valueOr:
         # There is nothing one can do here
-        chronicles.info "Block header missing (reorg triggered)", peer, iv, n,
-          nth=(iv.minPt + n)
+        chronicles.info "Block header missing (reorg triggered)", peer,
+          iv=($iv), n, nth=(iv.minPt + n)
         ctx.subState.cancelRequest = true                  # So require reorg
         break body                                         # return err()
       request.blockHashes[n - 1] = header.parentHash
       blocks[n].header = header
     blocks[0].header = ctx.hdrCache.get(iv.minPt).valueOr:
       # There is nothing one can do here
-      chronicles.info "Block header missing (reorg triggered)", peer, iv, n=0,
-        nth=iv.minPt
+      chronicles.info "Block header missing (reorg triggered)", peer,
+        iv=($iv), n=0, nth=iv.minPt
       ctx.subState.cancelRequest = true                    # So require reorg
       break body                                           # return err()
     request.blockHashes[^1] = blocks[^1].header.computeBlockHash
@@ -105,7 +104,7 @@ template blocksFetchCheckImpl(
           # Oops, cut off the rest
           blocks.setLen(n)                                 # curb off junk
           buddy.bdyFetchRegisterError()
-          trace info & ": Cut off junk blocks", peer, iv, n=n,
+          trace info & ": Cut off junk blocks", peer, iv=($iv), n=n,
             nTxs=bodies[n].transactions.len, nBodies,
             nErrors=buddy.nErrors.fetch.bdy
           break loop
@@ -204,7 +203,7 @@ template blocksImport*(
 
     var isError = false
     block loop:
-      trace info & ": start importing blocks", peer, iv, nBlocks=iv.len,
+      trace info & ": start importing blocks", peer, iv=($iv), nBlocks=iv.len,
         base=ctx.chain.baseNumber, head=ctx.chain.latestNumber
 
       for n in 0 ..< blocks.len:
@@ -232,21 +231,24 @@ template blocksImport*(
 
             # Proper logging ..
             if ctx.subState.cancelRequest:
-              warn "Blocks import error (cancel this session)", n=n, iv,
+              warn "Blocks import error (cancel this session)", n=n,
+                iv=($iv),
                 nBlocks=iv.len, nthBn,
                 nthHash=ctx.getNthHash(blocks, n).short,
                 base=ctx.chain.baseNumber,
                 head=ctx.chain.latestNumber,
                 blkFailCount=ctx.subState.procFailCount, error=error.toStr
             elif error.excp == ESyncerTermination:
-              chronicles.debug "Blocks import error (skip remaining)", n=n, iv,
+              chronicles.debug "Blocks import error (skip remaining)", n=n,
+                iv=($iv),
                 nBlocks=iv.len, nthBn,
                 nthHash=ctx.getNthHash(blocks, n).short,
                 base=ctx.chain.baseNumber,
                 head=ctx.chain.latestNumber,
                 blkFailCount=ctx.subState.procFailCount, error=error.toStr
             else:
-              chronicles.info "Blocks import error (skip remaining)", n=n, iv,
+              chronicles.info "Blocks import error (skip remaining)", n=n,
+                iv=($iv),
                 nBlocks=iv.len, nthBn,
                 nthHash=ctx.getNthHash(blocks, n).short,
                 base=ctx.chain.baseNumber,

@@ -84,6 +84,9 @@ type
   EthPeerState* = ref object of RootRef
     initialized*: bool
 
+  Eth68PeerState* = ref object of EthPeerState
+    bestHash*: Hash32
+
   Eth69PeerState* = ref object of EthPeerState
     earliest*: uint64
     latest*: uint64
