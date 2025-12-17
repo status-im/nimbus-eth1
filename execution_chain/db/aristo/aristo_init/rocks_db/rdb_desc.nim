@@ -14,7 +14,6 @@
 {.push raises: [].}
 
 import
-  std/os,
   std/concurrency/atomics,
   stew/endians2,
   ../../../core_db/backend/rocksdb_desc,

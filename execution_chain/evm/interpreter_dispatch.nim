@@ -12,7 +12,8 @@
 
 import
   std/[macros, strformat],
-  pkg/[chronicles, chronos, stew/byteutils],
+  chronicles,
+  stew/byteutils,
   ".."/[constants, db/ledger],
   "."/[code_stream, computation, evm_errors],
   "."/[message, precompiles, state, types],
