@@ -31,12 +31,13 @@ const
   genesisFile = "tests/customgenesis/cancun123.json"
 
 proc makeCom(config: ExecutionClientConf): CommonRef =
-  CommonRef.new(
+  let com = CommonRef.new(
     newCoreDbRef DefaultDbMemory,
-    Taskpool.new(),
     config.networkId,
     config.networkParams
   )
+  com.taskpool = Taskpool.new()
+  com
 
 proc envConfig(): ExecutionClientConf =
   makeConfig(@[

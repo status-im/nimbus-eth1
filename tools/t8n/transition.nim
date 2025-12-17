@@ -483,7 +483,8 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
     config.depositContractAddress = ctx.env.depositContractAddress
     config.chainId = conf.stateChainId.ChainId
 
-    let com = CommonRef.new(newCoreDbRef DefaultDbMemory, Taskpool.new(), config)
+    let com = CommonRef.new(newCoreDbRef DefaultDbMemory, config)
+    com.taskpool = Taskpool.new()
 
     # Sanity check, to not `panic` in state_transition
     if com.isLondonOrLater(ctx.env.currentNumber):

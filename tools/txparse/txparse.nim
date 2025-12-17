@@ -44,7 +44,7 @@ proc main() =
   let
     memDB  = newCoreDbRef DefaultDbMemory
     config = getChainConfig("Prague")
-    com    = CommonRef.new(memDB, nil, config)
+    com    = CommonRef.new(memDB, config)
 
   for hexLine in stdin.lines:
     com.parseTx(hexLine)

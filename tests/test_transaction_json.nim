@@ -39,7 +39,7 @@ proc testTxByFork(tx: Transaction, forkData: JsonNode, forkName: string, testSta
   let
     config = getChainConfig(forkName)
     memDB  = newCoreDbRef DefaultDbMemory
-    com    = CommonRef.new(memDB, nil, config)
+    com    = CommonRef.new(memDB, config)
 
   validateTxBasic(com, tx, nameToFork[forkName]).isOkOr:
     return
