@@ -157,7 +157,6 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
       skipReceipts = skipValidation and PersistReceipts notin p.flags,
       skipUncles = PersistUncles notin p.flags,
       skipStateRootCheck = skipValidation,
-      taskpool = com.taskpool,
     )
 
   if not vmState.com.statelessProviderEnabled:

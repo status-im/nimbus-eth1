@@ -270,11 +270,15 @@ proc runExecutionClient(p: ExecutionThreadConfig) {.thread.} =
 
   info "Launching execution client", version = FullVersionStr, config
 
-  let
-    # TODO https://github.com/status-im/nim-taskpools/issues/6
-    #      share taskpool between bn and ec
-    taskpool = setupTaskpool(int config.numThreads)
-    com = setupCommonRef(config, taskpool)
+  when compileOption("threads"):
+    let
+      # TODO https://github.com/status-im/nim-taskpools/issues/6
+      #      share taskpool between bn and ec
+      taskpool = setupTaskpool(int config.numThreads)
+      com = setupCommonRef(config)
+    com.taskpool = taskpool
+  else:
+    let com = setupCommonRef(config)
 
   dynamicLogScope(comp = "ec"):
     nimbus_execution_client.runExeClient(config, com, p.tsp.justWait())

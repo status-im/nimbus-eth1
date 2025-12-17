@@ -231,7 +231,8 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionCli
       expected=calculatedId
     quit(QuitFailure)
 
-proc setupCommonRef*(config: ExecutionClientConf, taskpool: Taskpool): CommonRef =
+
+proc setupCommonRef*(config: ExecutionClientConf): CommonRef =
   let coreDB = AristoDbRocks.newCoreDbRef(
       config.dataDir,
       config.dbOptions(noKeyCache = config.cmd == NimbusCmd.`import`))
@@ -240,7 +241,6 @@ proc setupCommonRef*(config: ExecutionClientConf, taskpool: Taskpool): CommonRef
 
   let com = CommonRef.new(
     db = coreDB,
-    taskpool = taskpool,
     networkId = config.networkId,
     params = config.networkParams,
     statelessProviderEnabled = config.statelessProviderEnabled,
@@ -347,9 +347,14 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
     if metricsServer.isSome():
       waitFor metricsServer.stopMetricsServer()
 
-  let
-    taskpool = setupTaskpool(config.numThreads)
-    com = setupCommonRef(config, taskpool)
+  when compileOption("threads"):
+    let
+      taskpool = setupTaskpool(config.numThreads)
+      com = setupCommonRef(config)
+    com.taskpool = taskpool
+  else:
+    let com = setupCommonRef(config)
+
   defer:
     com.db.finish()
 
