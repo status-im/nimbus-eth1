@@ -172,7 +172,6 @@ func convToPartialBlock(blk: BlockObject): BlockObject =
     nonce: blk.nonce,
     mixHash: blk.mixHash,
     size: blk.size,
-    totalDifficulty: blk.totalDifficulty,
     transactions: txHashes,
     uncles: @[],
     baseFeePerGas: blk.baseFeePerGas,

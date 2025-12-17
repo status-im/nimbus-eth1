@@ -145,9 +145,7 @@ proc getHeaderByNumber*(
 
 proc getBlockByNumber*(
     client: RpcClient, blockId: BlockIdentifier
-): Future[Result[(Header, BlockBody, UInt256), string]] {.
-    async: (raises: [CancelledError])
-.} =
+): Future[Result[(Header, BlockBody), string]] {.async: (raises: [CancelledError]).} =
   let blockObject =
     try:
       await client.eth_getBlockByNumber(blockId, fullTransactions = true)
@@ -172,7 +170,6 @@ proc getBlockByNumber*(
         uncles: uncles,
         withdrawals: blockObject.withdrawals,
       ),
-      blockObject.totalDifficulty,
     )
   )
 

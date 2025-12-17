@@ -48,12 +48,6 @@ template chain(api: ServerAPIRef): ForkedChainRef =
 func newServerAPI*(txPool: TxPoolRef): ServerAPIRef =
   ServerAPIRef(txPool: txPool)
 
-proc getTotalDifficulty*(api: ServerAPIRef, blockHash: Hash32): UInt256 =
-  # TODO forkedchain!
-  let totalDifficulty = api.com.db.baseTxFrame().getScore(blockHash).valueOr:
-    return api.com.db.baseTxFrame().headTotalDifficulty()
-  return totalDifficulty
-
 proc getProof*(
     accDB: LedgerRef, address: Address, slots: seq[UInt256]
 ): ProofResponse =
@@ -199,7 +193,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       return nil
 
     return populateBlockObject(
-      blockHash, blk, api.getTotalDifficulty(blockHash), fullTransactions
+      blockHash, blk, fullTransactions
     )
 
   server.rpc("eth_getBlockByNumber") do(
@@ -215,7 +209,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
     let blockHash = blk.header.computeBlockHash
     return populateBlockObject(
-      blockHash, blk, api.getTotalDifficulty(blockHash), fullTransactions
+      blockHash, blk, fullTransactions
     )
 
   server.rpc("eth_syncing") do() -> SyncingStatus:
@@ -688,7 +682,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       uncleHash = uncle.header.computeBlockHash
 
     return populateBlockObject(
-      uncleHash, uncle, api.getTotalDifficulty(uncleHash), false, true
+      uncleHash, uncle, false, true
     )
 
   server.rpc("eth_getUncleByBlockNumberAndIndex") do(
@@ -712,7 +706,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       uncleHash = uncle.header.computeBlockHash
 
     return populateBlockObject(
-      uncleHash, uncle, api.getTotalDifficulty(uncleHash), false, true
+      uncleHash, uncle, false, true
     )
 
   server.rpc("eth_config") do() -> EthConfigObject:

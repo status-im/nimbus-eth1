@@ -109,7 +109,7 @@ proc cmdExportEra1(config: ExporterConf) =
       var headerRecords: seq[historical_hashes_accumulator.HeaderRecord]
       for blockNumber in startNumber .. endNumber:
         let
-          (header, body, totalDifficulty) = (
+          (header, body) = (
             waitFor noCancel(client.getBlockByNumber(blockId(blockNumber)))
           ).valueOr:
             error "Failed retrieving block, skip creation of era1 file",
@@ -122,14 +122,16 @@ proc cmdExportEra1(config: ExporterConf) =
               blockNumber, error
             break writeFileBlock
 
+        # Note: It is no longer possible to retrieve the total difficulty via JSON-RPC
+        # Hence the accumulator and era1 files generated through this way will be not
+        # fully correct.
         headerRecords.add(
           historical_hashes_accumulator.HeaderRecord(
-            blockHash: header.computeRlpHash(), totalDifficulty: totalDifficulty
+            blockHash: header.computeRlpHash(), totalDifficulty: 0.u256
           )
         )
 
-        group.update(e2, blockNumber, header, body, receipts, totalDifficulty).get()
-
+        group.update(e2, blockNumber, header, body, receipts, 0.u256).get()
       accumulatorRoot = getEpochRecordRoot(headerRecords)
 
       group.finish(e2, accumulatorRoot, endNumber).get()

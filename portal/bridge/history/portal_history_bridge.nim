@@ -67,7 +67,7 @@ proc runLatestLoop(
   var lastBlockNumber = 0'u64
   while true:
     let t0 = Moment.now()
-    let (header, body, _) = (await bridge.web3Client.getBlockByNumber(blockId)).valueOr:
+    let (header, body) = (await bridge.web3Client.getBlockByNumber(blockId)).valueOr:
       error "Failed to get latest block", error
       await sleepAsync(1.seconds)
       continue

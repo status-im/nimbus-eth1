@@ -37,7 +37,7 @@ proc exportBlock*(
 ): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   let
     blockId = blockId(blockNumber)
-    (header, body, _) = ?(await client.getBlockByNumber(blockId))
+    (header, body) = ?(await client.getBlockByNumber(blockId))
     receipts = ?(await client.getStoredReceiptsByNumber(blockId))
 
   toBlockData(header, body, receipts).dumpToYaml(fileName)

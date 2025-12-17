@@ -128,7 +128,6 @@ proc populateTransactionObject*(tx: Transaction,
 
 proc populateBlockObject*(blockHash: Hash32,
                           blk: Block,
-                          totalDifficulty: UInt256,
                           fullTx: bool,
                           withUncles: bool = false): BlockObject =
   template header: auto = blk.header
@@ -157,7 +156,6 @@ proc populateBlockObject*(blockHash: Hash32,
   result.gasUsed   = Quantity(header.gasUsed)
   result.timestamp = Quantity(header.timestamp)
   result.baseFeePerGas = header.baseFeePerGas
-  result.totalDifficulty = totalDifficulty
 
   if not withUncles:
     result.uncles = blk.uncles.mapIt(it.computeBlockHash)
