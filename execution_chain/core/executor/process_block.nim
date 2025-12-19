@@ -26,17 +26,12 @@ import
   ./process_transaction,
   eth/common/[keys, transaction_utils],
   chronicles,
-  results,
-  taskpools
+  results
 
-template withSender(txs: openArray[Transaction], body: untyped) =
-  # Execute transactions offloading the signature checking to the task pool if
-  # it's available
-  if taskpool == nil:
-    for txIndex {.inject.}, tx {.inject.} in txs:
-      let sender {.inject.} = tx.recoverSender().valueOr(default(Address))
-      body
-  else:
+when compileOption("threads"):
+  import taskpools
+
+  template withSenderParallel(txs: openArray[Transaction], body: untyped, taskpool: Taskpool) =
     type Entry = (Signature, Hash32, Flowvar[Address])
 
     proc recoverTask(e: ptr Entry): Address {.nimcall.} =
@@ -69,6 +64,22 @@ template withSender(txs: openArray[Transaction], body: untyped) =
 
       body
 
+template withSenderSerial(txs: openArray[Transaction], body: untyped) =
+  for txIndex {.inject.}, tx {.inject.} in txs:
+    let sender {.inject.} = tx.recoverSender().valueOr(default(Address))
+    body
+
+template withSender(vmState: BaseVMState, txs: openArray[Transaction], body: untyped) =
+  when compileOption("threads"):
+    # Execute transactions offloading the signature checking to the task pool if
+    # it's available
+    if vmState.com.taskpool == nil:
+      withSenderSerial(txs, body)
+    else:
+      withSenderParallel(txs, body, vmState.com.taskpool)
+  else:
+    withSenderSerial(txs, body)
+
 # Factored this out of procBlkPreamble so that it can be used directly for
 # stateless execution of specific transactions.
 proc processTransactions*(
@@ -76,14 +87,13 @@ proc processTransactions*(
     header: Header,
     transactions: seq[Transaction],
     skipReceipts = false,
-    collectLogs = false,
-    taskpool: Taskpool = nil,
+    collectLogs = false
 ): Result[void, string] =
   vmState.receipts.setLen(if skipReceipts: 0 else: transactions.len)
   vmState.cumulativeGasUsed = 0
   vmState.allLogs = @[]
 
-  withSender(transactions):
+  vmState.withSender(transactions):
     if sender == default(Address):
       return err("Could not get sender for tx with index " & $(txIndex))
 
@@ -108,7 +118,6 @@ proc procBlkPreamble(
     vmState: BaseVMState,
     blk: Block,
     skipValidation, skipReceipts, skipUncles: bool, skipPreExecBalCheck: bool,
-    taskpool: Taskpool,
 ): Result[void, string] =
   template header(): Header =
     blk.header
@@ -173,7 +182,7 @@ proc procBlkPreamble(
 
     let collectLogs = header.requestsHash.isSome and not skipValidation
     ?processTransactions(
-      vmState, header, blk.transactions, skipReceipts, collectLogs, taskpool
+      vmState, header, blk.transactions, skipReceipts, collectLogs
     )
   elif blk.transactions.len > 0:
     return err("Transactions in block with empty txRoot")
@@ -341,10 +350,9 @@ proc processBlock*(
     skipStateRootCheck = false,
     skipPreExecBalCheck = false,
     skipPostExecBalCheck = false,
-    taskpool: Taskpool = nil,
 ): Result[void, string] =
   ## Generalised function to processes `blk` for any network.
-  ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles, skipPreExecBalCheck, taskpool)
+  ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles, skipPreExecBalCheck)
 
   # EIP-3675: no reward for miner in POA/POS
   if not vmState.com.proofOfStake(blk.header, vmState.ledger.txFrame):

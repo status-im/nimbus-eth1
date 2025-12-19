@@ -97,7 +97,6 @@ proc processBlock*(
       # matches the header bal hash. In this case the post execution check can be
       # skipped.
       skipPostExecBalCheck = finalized and blk.blockAccessList.isSome(),
-      taskpool = c.com.taskpool,
     ).isOkOr:
       c.badBlocks.put(blkHash, (blk, vmState.blockAccessList))
       return err(error)

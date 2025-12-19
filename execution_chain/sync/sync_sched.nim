@@ -110,9 +110,10 @@ type
     allRunning                  ## Running, full support
     standByMode                 ## Suspending worker and deamon loop
 
-  PeerProtoCheck = ref object
+  PeerProtoCheck[S,W] = ref object
     hasProto: AcceptPeerOk      ## Sub protocol selector closure
     acceptPeer: AcceptPeerOk    ## Can accept protocol enabled by `hasProto()`
+    initWorker: InitWorker[S,W] ## Initialise if `acceptPeer()` succeeds
 
   RunnerPeerRef[S,W] = ref object
     ## Per worker peer descriptor
@@ -123,6 +124,7 @@ type
   # ---- public types ----
 
   AcceptPeerOk* = proc(peer: Peer): bool {.gcsafe, raises: [].}
+  InitWorker*[S,W] = proc(worker: SyncPeerRef[S,W]) {.gcsafe, raises: [].}
 
   RunnerSyncRef*[S,W] = ref object of RootRef
     ## Module descriptor
@@ -139,7 +141,7 @@ type
     activeMulti: int            ## Number of async workers active/running
     runCtrl: RunCtrl            ## Overall scheduler start/stop control
     po: PeerObserver            ## P2p protocol handler environment
-    filter: seq[PeerProtoCheck] ## List of p2p sub-protocol handler filters
+    filter: seq[PeerProtoCheck[S,W]] ## List of p2p sub-protocol handler filters
 
 const
   tickerExecLoopWaitInterval = 5.seconds
@@ -197,9 +199,12 @@ template lruReset(db: untyped): untyped =
   ## Clear LRU list
   db = typeof(db).init db.capacity
 
-proc alwaysAcceptPeerOk(peer: Peer): bool =
+func alwaysAcceptPeerOk(peer: Peer): bool =
   ## Some default call back function
   true
+
+func noopInitWorker[S,W](w: SyncPeerRef[S,W]) =
+  discard
 
 # ------------------------------------------------------------------------------
 # Private constructor helpers
@@ -533,11 +538,14 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
   if dsc.runCtrl notin {allRunning,standByMode}:
     return
 
+  var initWorker: InitWorker[S,W]
   block protoFilter:
     # Accept if accepted by some vetting filter
     for filter in dsc.filter:
       if filter.hasProto(peer) and
          filter.acceptPeer(peer):
+        # Load per-protocal initialisation
+        initWorker = filter.initWorker
         break protoFilter
     # Otherwise ignore
     trace "No suitable protocol for peer", peer
@@ -574,6 +582,7 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
       ctx:    dsc.ctx,
       peer:   peer,
       peerID: peerID))
+  buddy.worker.initWorker()              # function was set above
   if not buddy.worker.runStart():
     trace "Ignoring useless peer", peer,
       nSyncPeers=dsc.nSyncPeers(), nSyncPeersMax=dsc.syncPeers.capacity,
@@ -662,18 +671,21 @@ proc initSync*[S,W](
 proc addSyncProtocol*[S,W](
     dsc: RunnerSyncRef[S,W];
     PROTO: type;
-    acceptPeer = AcceptPeerOk(nil);
+    acceptPeer: AcceptPeerOk = nil;
+    initWorker: InitWorker[S,W] = nil;
       ) =
   ## Activate scheduler for a particular protocol. The filter argument
   ## function `acceptPeer` is run before any other connection handler. If
   ## the former returns `true`, processing goes ahead.
   ##
   dsc.po.addProtocol PROTO
-  dsc.filter.add PeerProtoCheck(
+  dsc.filter.add PeerProtoCheck[S,W](
     hasProto: proc(p: Peer): bool {.gcsafe.} =
       p.supports(PROTO),
     acceptPeer:
-      (if acceptPeer.isNil: alwaysAcceptPeerOk else: acceptPeer))
+      (if acceptPeer.isNil: alwaysAcceptPeerOk else: acceptPeer),
+    initWorker:
+      (if initWorker.isNil: noopInitWorker[S,W] else: initWorker))
 
 # ---------
 
@@ -702,9 +714,10 @@ proc startSync*[S,W](dsc: RunnerSyncRef[S,W]; standBy = false): bool =
       # Activate protocol handlers
       dsc.peerPool.addObserver(dsc, dsc.po)
       if dsc.filter.len == 0:
-        dsc.filter.add PeerProtoCheck(
+        dsc.filter.add PeerProtoCheck[S,W](
           hasProto:   alwaysAcceptPeerOk,
-          acceptPeer: alwaysAcceptPeerOk)
+          acceptPeer: alwaysAcceptPeerOk,
+          initWorker: noopInitWorker[S,W])
 
       asyncSpawn dsc.tickerLoop()
       return true

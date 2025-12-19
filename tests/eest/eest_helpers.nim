@@ -241,7 +241,7 @@ proc prepareEnv*(
     var testEnv = TestEnv()
 
     let
-      com = CommonRef.new(memDB, nil, config,
+      com = CommonRef.new(memDB, config,
         statelessProviderEnabled = statelessEnabled,
         statelessWitnessValidation = statelessEnabled)
       chain = ForkedChainRef.init(com, enableQueue = true, persistBatchSize = 1)

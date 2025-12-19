@@ -164,7 +164,6 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
       skipStateRootCheck = skipValidation,
       skipPreExecBalCheck = true,
       skipPostExecBalCheck = skipValidation,
-      taskpool = com.taskpool,
     )
 
   if not vmState.com.statelessProviderEnabled:

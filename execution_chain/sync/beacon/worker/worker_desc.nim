@@ -149,6 +149,7 @@ type
 
   BeaconPeerData* = object
     ## Local descriptor data extension
+    pivotHash*: Hash32               ## Peer best/latest hash (for `snap` sync)
     nErrors*: PeerErrors             ## Error register
     thPutStats*: ThPutStats          ## Throughput statistics
     failedReq*: PeerFirstFetchReq    ## Avoid sending the same request twice

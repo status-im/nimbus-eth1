@@ -5,7 +5,7 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import chronicles, stint, stew/byteutils, ./interpreter/op_codes, ./code_bytes
+import stint, stew/byteutils, ./interpreter/op_codes, ./code_bytes
 
 export code_bytes
 

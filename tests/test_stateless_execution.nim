@@ -36,7 +36,7 @@ procSuite "Stateless Execution Tests":
       era0 = Era1DbRef.init(sourcePath / "replay", "mainnet", 15537394'u64).expect("Era files present")
       # Stateless provider is enabled so that witnesses will be generated
       # and stored in the database
-      com = CommonRef.new(db, nil, statelessProviderEnabled = true)
+      com = CommonRef.new(db, statelessProviderEnabled = true)
       fc = ForkedChainRef.init(com, enableQueue = false)
 
   asyncTest "Stateless process block - replay mainnet era1":
@@ -65,7 +65,6 @@ procSuite "Stateless Execution Tests":
 
     let com2 = CommonRef.new(
       db = nil,
-      taskpool = nil,
       config = chainConfigForNetwork(networkId),
       networkId = networkId,
       initializeDb = false
@@ -80,7 +79,6 @@ procSuite "Stateless Execution Tests":
 
     let com2 = CommonRef.new(
       db = nil,
-      taskpool = nil,
       config = chainConfigForNetwork(networkId),
       networkId = networkId,
       initializeDb = false

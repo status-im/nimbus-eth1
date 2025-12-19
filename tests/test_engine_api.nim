@@ -61,7 +61,6 @@ proc setupConfig(genesisFile: string): ExecutionClientConf =
 proc setupCom(config: ExecutionClientConf): CommonRef =
   CommonRef.new(
     newCoreDbRef DefaultDbMemory,
-    nil,
     config.networkId,
     config.networkParams
   )
