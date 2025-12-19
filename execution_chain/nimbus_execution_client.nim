@@ -135,9 +135,16 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
     rng = nimbus.rng,
     forkIdProcs = forkIdProcs)
 
-  # Add peer service protocol capabilities
-  nimbus.ethWire = nimbus.ethNode.addEthHandlerCapability(nimbus.txPool)
-  if config.snapSyncEnabled or config.snapServerEnabled:
+  # Add peer service protocol capabilities. If `snap` sync is used, then there
+  # can be only one active `eth` protocol version assuming that the number of
+  # messages differ with the `eth` versions. Due to tight packaging of message
+  # IDs, different `eth` protocol lengths lead to varying `snap` message IDs
+  # depending on the `eth` version. To handle this is currently unsupported.
+  #
+  let doSnapSync = config.snapSyncEnabled or config.snapServerEnabled
+  nimbus.ethWire =
+    nimbus.ethNode.addEthHandlerCapability(nimbus.txPool, latestOnly=doSnapSync)
+  if doSnapSync:
     nimbus.snapWire = nimbus.ethNode.addSnapHandlerCapability()
 
   # Connect directly to the static nodes
@@ -171,7 +178,8 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
     syncerShouldRun = true
 
   # Configure beacon syncer.
-  nimbus.beaconSyncRef.config(nimbus.ethNode, nimbus.fc, config.maxPeers)
+  nimbus.beaconSyncRef.config(
+    nimbus.ethNode, nimbus.fc, config.maxPeers, latestOnly=doSnapSync)
 
   # Optional for pre-setting the sync target (e.g. for debugging)
   if config.beaconSyncTarget.isSome():

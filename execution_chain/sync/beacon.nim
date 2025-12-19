@@ -95,8 +95,16 @@ proc config*(
     ethNode: EthereumNode;
     chain: ForkedChainRef;
     maxPeers: int;
+    latestOnly = false;
       ) =
   ## Complete `BeaconSyncRef` descriptor initialisation.
+  ##
+  ## If the `snap` protocol is used as well, the argument `latestOnly` must be
+  ## set `true`. There can only be one active `eth` protocol version assuming
+  ## that the number of messages differ with the `eth` versions. Due to tight
+  ## packaging of message IDs, different `eth` protocol lengths lead to varying
+  ## `snap` message IDs depending on the `eth` version. To handle this is
+  ## currently unsupported.
   ##
   ## Note that the `init()` constructor might have specified a configuration
   ## task to be run at the end of the `config()` function.
@@ -108,7 +116,8 @@ proc config*(
   # implementation, `eth68` descriptor(s) will not be fully initialised
   # (i.e. `peer.state(eth68).isNil`) if `eth69` is available.
   desc.addBeaconSyncProtocol(eth69)
-  desc.addBeaconSyncProtocol(eth68)
+  if not latestOnly:
+    desc.addBeaconSyncProtocol(eth68)
 
   desc.ctx.pool.chain = chain
 
