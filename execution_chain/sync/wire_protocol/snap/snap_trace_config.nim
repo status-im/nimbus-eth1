@@ -1,5 +1,5 @@
-# Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# nimbus
+# Copyright (c) 2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -8,12 +8,11 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-{.used, push raises: [].}
+const
+  # Some static noisy settings for `snap` debugging
+  trSnapTraceGossipOk* = true
+    ## `trace` log each sync network message.
+  trEthTraceHandlerOk* = true
+    ## `trace` application handler message.
 
-import
-  ./eth/eth_setup,
-  ./snap/snap_setup
-
-export
-  eth_setup,
-  snap_setup
+# End

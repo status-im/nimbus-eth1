@@ -19,6 +19,7 @@ import
   ./core/tx_pool,
   ./sync/peers,
   ./sync/beacon as beacon_sync,
+  ./sync/snap as snap_sync,
   ./sync/wire_protocol,
   ./beacon/beacon_engine,
   ./common
@@ -35,6 +36,7 @@ export
   tx_pool,
   peers,
   beacon_sync,
+  snap_sync,
   beacon_engine,
   common
 
@@ -47,8 +49,10 @@ type
     txPool*: TxPoolRef
     peerManager*: PeerManagerRef
     beaconSyncRef*: BeaconSyncRef
+    snapSyncRef*: SnapSyncRef
     beaconEngine*: BeaconEngineRef
-    wire*: EthWireRef
+    ethWire*: EthWireRef
+    snapWire*: SnapWireStateRef
     accountsManager*: ref AccountsManager
     rng*: ref HmacDrbgContext
 
@@ -63,10 +67,14 @@ proc closeWait*(nimbus: NimbusNode) {.async.} =
     waitedFutures.add nimbus.ethNode.closeWait()
   if nimbus.peerManager.isNil.not:
     waitedFutures.add nimbus.peerManager.stop()
+  if nimbus.snapSyncRef.isNil.not:
+    waitedFutures.add nimbus.snapSyncRef.stop()
+  if nimbus.snapWire.isNil.not:
+    waitedFutures.add nimbus.snapWire.stop()
   if nimbus.beaconSyncRef.isNil.not:
     waitedFutures.add nimbus.beaconSyncRef.stop()
-  if nimbus.wire.isNil.not:
-    waitedFutures.add nimbus.wire.stop()
+  if nimbus.ethWire.isNil.not:
+    waitedFutures.add nimbus.ethWire.stop()
 
   waitedFutures.add nimbus.fc.stopProcessingQueue()
 
