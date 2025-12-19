@@ -94,13 +94,15 @@ func ethTxs*(list: openArray[Web3Tx]):
     result.add ethTx(x)
 
 func ethBlockAccessList*(
-    bal: openArray[byte]): BlockAccessList {.gcsafe, raises: [RlpError].} =
-  rlp.decode(bal, BlockAccessList)
+    balRlpBytes: openArray[byte]): BlockAccessListRef {.gcsafe, raises: [RlpError].} =
+  let bal: BlockAccessListRef = new BlockAccessList
+  bal[] = rlp.decode(balRlpBytes, BlockAccessList)
+  bal
 
 func ethBlockAccessList*(
-    bal: Opt[seq[byte]]): Opt[BlockAccessList] {.gcsafe, raises: [RlpError].} =
+    bal: Opt[seq[byte]]): Opt[BlockAccessListRef] {.gcsafe, raises: [RlpError].} =
   if bal.isNone():
-    Opt.none(BlockAccessList)
+    Opt.none(BlockAccessListRef)
   else:
     Opt.some(ethBlockAccessList(bal.get))
 
@@ -165,10 +167,10 @@ func w3Txs*(list: openArray[common.Transaction]): seq[Web3Tx] =
   for tx in list:
     result.add w3Tx(tx)
 
-func w3BlockAccessList*(bal: BlockAccessList): seq[byte] =
-  bal.encode()
+func w3BlockAccessList*(bal: BlockAccessListRef): seq[byte] =
+  bal[].encode()
 
-func w3BlockAccessList*(bal: Opt[BlockAccessList]): Opt[seq[byte]] =
+func w3BlockAccessList*(bal: Opt[BlockAccessListRef]): Opt[seq[byte]] =
   if bal.isNone():
     Opt.none(seq[byte])
   else:

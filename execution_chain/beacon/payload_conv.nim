@@ -50,7 +50,7 @@ func balHash(bal: Opt[seq[byte]]): Opt[Hash32] =
 # Public functions
 # ------------------------------------------------------------------------------
 
-func executionPayload*(blk: Block): ExecutionPayload =
+func executionPayload*(blk: Block, bal: Opt[BlockAccessListRef]): ExecutionPayload =
   ExecutionPayload(
     parentHash   : blk.header.parentHash,
     feeRecipient : blk.header.coinbase,
@@ -69,7 +69,7 @@ func executionPayload*(blk: Block): ExecutionPayload =
     withdrawals  : w3Withdrawals blk.withdrawals,
     blobGasUsed  : w3Qty blk.header.blobGasUsed,
     excessBlobGas: w3Qty blk.header.excessBlobGas,
-    blockAccessList: w3BlockAccessList blk.blockAccessList
+    blockAccessList: w3BlockAccessList bal
   )
 
 func executionPayloadV1V2*(blk: Block): ExecutionPayloadV1OrV2 =
@@ -120,23 +120,28 @@ func blockHeader*(p: ExecutionPayload,
     blockAccessListHash: balHash p.blockAccessList,
   )
 
-func blockBody*(p: ExecutionPayload):
-                  BlockBody {.gcsafe, raises: [RlpError].} =
+func blockBody*(
+  p: ExecutionPayload
+): BlockBody {.gcsafe, raises: [RlpError].} =
   BlockBody(
     uncles      : @[],
     transactions: ethTxs p.transactions,
     withdrawals : ethWithdrawals p.withdrawals,
-    blockAccessList: ethBlockAccessList p.blockAccessList,
   )
 
-func ethBlock*(p: ExecutionPayload,
-               parentBeaconBlockRoot: Opt[Hash32],
-               requestsHash: Opt[Hash32]):
-                 Block {.gcsafe, raises: [RlpError].} =
+template blockAccessList*(
+  p: ExecutionPayload
+): Opt[BlockAccessListRef] =
+  ethBlockAccessList p.blockAccessList
+
+func ethBlock*(
+  p: ExecutionPayload,
+  parentBeaconBlockRoot: Opt[Hash32],
+  requestsHash: Opt[Hash32]
+): Block {.gcsafe, raises: [RlpError].} =
   Block(
     header      : blockHeader(p, parentBeaconBlockRoot, requestsHash),
     uncles      : @[],
     transactions: ethTxs p.transactions,
     withdrawals : ethWithdrawals p.withdrawals,
-    blockAccessList: ethBlockAccessList p.blockAccessList,
   )

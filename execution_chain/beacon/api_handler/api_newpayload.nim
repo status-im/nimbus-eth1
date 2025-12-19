@@ -180,6 +180,13 @@ proc newPayload*(ben: BeaconEngineRef,
         warn "Failed to decode payload",
           error = e.msg
         return invalidStatus(payload.blockHash, "Failed to decode payload")
+    blockAccessList =
+      try:
+        blockAccessList(payload)
+      except RlpError as e:
+        warn "Failed to decode payload",
+          error = e.msg
+        return invalidStatus(payload.blockHash, "Failed to decode payload")
 
   template header: Header = blk.header
 
@@ -213,7 +220,7 @@ proc newPayload*(ben: BeaconEngineRef,
   # will not trigger a sync cycle. That is fine though, if we get a fork choice
   # update after legit payload executions.
   let parent = chain.headerByHash(header.parentHash).valueOr:
-    return ben.delayPayloadImport(blockHash, blk)
+    return ben.delayPayloadImport(blockHash, blk, blockAccessList)
 
   # We have an existing parent, do some sanity checks to avoid the beacon client
   # triggering too early
@@ -240,7 +247,7 @@ proc newPayload*(ben: BeaconEngineRef,
     return invalidStatus(parent.computeBlockHash, "Invalid timestamp")
 
   if not chain.haveBlockAndState(header.parentHash):
-    chain.quarantine.addOrphan(blockHash, blk)
+    chain.quarantine.addOrphan(blockHash, blk, blockAccessList)
     warn "State not available, ignoring new payload",
       hash   = blockHash,
       number = header.number
@@ -252,7 +259,7 @@ proc newPayload*(ben: BeaconEngineRef,
   trace "Importing block without sethead",
     hash = blockHash, number = header.number
 
-  let vres = await chain.queueImportBlock(blk)
+  let vres = await chain.queueImportBlock(blk, blockAccessList)
   if vres.isErr:
     warn "Error importing block",
       number = header.number,

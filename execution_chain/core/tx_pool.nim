@@ -137,6 +137,7 @@ type AssembledBlock* = object
   blobsBundle*: BlobsBundle
   blockValue*: UInt256
   executionRequests*: Opt[seq[seq[byte]]]
+  blockAccessList*: Opt[BlockAccessListRef]
 
 func getWrapperVersion(com: CommonRef, timestamp: EthTime): WrapperVersion =
   if com.isOsakaOrLater(timestamp):
@@ -209,15 +210,19 @@ proc assembleBlock*(
     else:
       Opt.none(seq[seq[byte]])
 
-  if com.isAmsterdamOrLater(blk.header.timestamp):
-    let bal = xp.vmState.blockAccessList.expect("block access list exists")
-    blk.blockAccessList = Opt.some(bal[])
+  let bal =
+    if com.isAmsterdamOrLater(blk.header.timestamp):
+      doAssert(xp.vmState.blockAccessList.isSome())
+      xp.vmState.blockAccessList
+    else:
+      Opt.none(BlockAccessListRef)
 
   ok AssembledBlock(
     blk: blk,
     blobsBundle: blobsBundleOpt,
     blockValue: pst.blockValue,
-    executionRequests: executionRequestsOpt)
+    executionRequests: executionRequestsOpt,
+    blockAccessList: bal)
 
 # ------------------------------------------------------------------------------
 # PoS payload attributes getters

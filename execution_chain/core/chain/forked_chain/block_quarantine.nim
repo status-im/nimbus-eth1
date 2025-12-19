@@ -12,7 +12,7 @@ import
   std/tables,
   results,
   minilru,
-  eth/common/blocks
+  eth/common/[blocks, block_access_lists]
 
 
 type
@@ -23,7 +23,7 @@ type
     ## This only stores blocks that cannot be linked to the
     ## ForkedChain due to missing ancestor(s).
 
-    orphans: LruCache[Hash32, Block]
+    orphans: LruCache[Hash32, (Block, Opt[BlockAccessListRef])]
       ## Blocks that we don't have a parent for - when we resolve the
       ## parent, we can proceed to resolving the block as well - we
       ## index this by parentHash.
@@ -43,15 +43,20 @@ const
 
 func init*(T: type Quarantine): T =
   T(
-    orphans: LruCache[Hash32, Block].init(MaxOrphans),
+    orphans: LruCache[Hash32, (Block, Opt[BlockAccessListRef])].init(MaxOrphans),
     headers: LruCache[Hash32, Header].init(MaxTrackedHeaders),
   )
 
-func addOrphan*(quarantine: var Quarantine, blockHash: Hash32, blk: Block) =
-  quarantine.orphans.put(blk.header.parentHash, blk)
+func addOrphan*(
+    quarantine: var Quarantine,
+    blockHash: Hash32,
+    blk: Block,
+    blockAccessList: Opt[BlockAccessListRef]
+  ) =
+  quarantine.orphans.put(blk.header.parentHash, (blk, blockAccessList))
   quarantine.headers.put(blockHash, blk.header)
 
-func popOrphan*(quarantine: var Quarantine, parentHash: Hash32): Opt[Block] =
+func popOrphan*(quarantine: var Quarantine, parentHash: Hash32): Opt[(Block, Opt[BlockAccessListRef])] =
   quarantine.orphans.pop(parentHash)
 
 func hasOrphans*(quarantine: Quarantine): bool =

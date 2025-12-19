@@ -42,25 +42,30 @@ const
 func validateBlockAccessList*(
     com: CommonRef,
     header: Header,
-    blockAccessList: Opt[BlockAccessList]
-    ): Result[void, string] =
+    blockAccessList: Opt[BlockAccessListRef],
+    skipPreExecBalCheck: bool): Result[void, string] =
+
   if com.isAmsterdamOrLater(header.timestamp):
     if header.blockAccessListHash.isNone:
       return err("Post-Amsterdam block header must have blockAccessListHash")
-    if blockAccessList.isSome:
+    if not skipPreExecBalCheck:
+      if blockAccessList.isNone:
+        return err("Post-Amsterdam block must have blockAccessList")
       if blockAccessList.get.validate(header.blockAccessListHash.get).isErr():
         return err("Mismatched blockAccessListHash blockNumber = " & $header.number)
   else:
     if header.blockAccessListHash.isSome:
       return err("Pre-Amsterdam block header must not have blockAccessListHash")
     if blockAccessList.isSome:
-      return err("Pre-Amsterdam block body must not have blockAccessList")
+      return err("Pre-Amsterdam block must not have blockAccessList")
 
   return ok()
 
 proc validateHeader(
     com: CommonRef;
     blk: Block;
+    blockAccessList: Opt[BlockAccessListRef];
+    skipPreExecBalCheck: bool;
     parentHeader: Header;
     txFrame: CoreDbTxRef;
       ): Result[void,string] =
@@ -119,7 +124,7 @@ proc validateHeader(
   ? com.validateWithdrawals(header, blk.withdrawals)
   ? com.validateEip4844Header(header, parentHeader, blk.transactions)
   ? com.validateGasLimitOrBaseFee(header, parentHeader)
-  ? com.validateBlockAccessList(header, blk.blockAccessList)
+  ? com.validateBlockAccessList(header, blockAccessList, skipPreExecBalCheck)
 
   ok()
 
@@ -180,8 +185,13 @@ proc validateUncles(com: CommonRef; header: Header; txFrame: CoreDbTxRef,
       return err("Uncle's parent must me older")
 
     let uncleParent = ?txFrame.getBlockHeader(uncle.parentHash)
-    ? com.validateHeader(
-      Block.init(uncle, BlockBody()), uncleParent, txFrame)
+    ?com.validateHeader(
+      Block.init(uncle, BlockBody()),
+      Opt.none(BlockAccessListRef),
+      false,
+      uncleParent,
+      txFrame
+    )
 
   ok()
 
@@ -395,6 +405,8 @@ proc validateTransaction*(
 proc validateHeaderAndKinship*(
     com: CommonRef;
     blk: Block;
+    blockAccessList: Opt[BlockAccessListRef];
+    skipPreExecBalCheck: bool,
     parent: Header;
     txFrame: CoreDbTxRef
       ): Result[void, string] =
@@ -405,7 +417,7 @@ proc validateHeaderAndKinship*(
       return err("Header.extraData larger than 32 bytes")
     return ok()
 
-  ? com.validateHeader(blk, parent, txFrame)
+  ? com.validateHeader(blk, blockAccessList, skipPreExecBalCheck, parent, txFrame)
 
   if blk.uncles.len > MAX_UNCLES:
     return err("Number of uncles exceed limit.")

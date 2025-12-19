@@ -152,7 +152,13 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
   #      sanity checks should be performed early in the processing pipeline no
   #      matter their provenance.
   if not skipValidation:
-    ?com.validateHeaderAndKinship(blk, vmState.parent, txFrame)
+    ?com.validateHeaderAndKinship(
+      blk,
+      Opt.none(BlockAccessListRef),
+      skipPreExecBalCheck = true,
+      vmState.parent,
+      txFrame
+    )
 
   template processBlock(): auto =
     # Generate receipts for storage or validation but skip them otherwise
@@ -162,7 +168,6 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
       skipReceipts = skipValidation and PersistReceipts notin p.flags,
       skipUncles = PersistUncles notin p.flags,
       skipStateRootCheck = skipValidation,
-      skipPreExecBalCheck = true,
       skipPostExecBalCheck = skipValidation,
     )
 

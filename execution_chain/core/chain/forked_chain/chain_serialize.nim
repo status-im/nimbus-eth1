@@ -129,7 +129,14 @@ proc replayBlock(fc: ForkedChainRef;
   # Set finalized to true in order to skip the stateroot check when replaying the
   # block because the blocks should have already been checked previously during
   # the initial block execution.
-  var receipts = fc.processBlock(parent, txFrame, blk.blk, blk.hash, finalized = true).valueOr:
+  var receipts = fc.processBlock(
+    parent,
+    txFrame,
+    blk.blk,
+    Opt.none(BlockAccessListRef),
+    blk.hash,
+    finalized = true
+  ).valueOr:
     txFrame.dispose()
     return err(error)
 

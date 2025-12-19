@@ -113,7 +113,7 @@ proc getBlockAccessList*(
   let bal = (?txFrame.getBlockAccessList(blockHash)).valueOr:
     return err("Block access list not found")
 
-  ok(bal)
+  ok(bal[])
 
 proc getTotalDifficulty(chain: ForkedChainRef, blockHash: Hash32): UInt256 =
 

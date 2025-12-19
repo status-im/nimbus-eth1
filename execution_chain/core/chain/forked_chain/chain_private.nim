@@ -23,6 +23,7 @@ import
 proc writeBaggage*(
     c: ForkedChainRef,
     blk: Block,
+    blockAccessList: Opt[BlockAccessListRef],
     blkHash: Hash32,
     txFrame: CoreDbTxRef,
     receipts: openArray[StoredReceipt],
@@ -41,15 +42,15 @@ proc writeBaggage*(
       blk.withdrawals.get,
     )
 
-  if blk.blockAccessList.isSome:
+  if blockAccessList.isSome:
     txFrame.persistBlockAccessList(
       blkHash,
-      blk.blockAccessList.get(),
+      blockAccessList.get(),
     )
   elif generatedBal.isSome:
     txFrame.persistBlockAccessList(
       blkHash,
-      generatedBal.get()[],
+      generatedBal.get(),
     )
 
 proc processBlock*(
@@ -57,6 +58,7 @@ proc processBlock*(
     parentBlk: BlockRef,
     txFrame: CoreDbTxRef,
     blk: Block,
+    blockAccessList: Opt[BlockAccessListRef],
     blkHash: Hash32,
     finalized: bool,
 ): Result[seq[StoredReceipt], string] =
@@ -69,11 +71,20 @@ proc processBlock*(
     header,
     c.com,
     txFrame,
-    enableBalTracker = (not finalized or blk.blockAccessList.isNone()) and
+    enableBalTracker = (not finalized or blockAccessList.isNone()) and
         c.com.isAmsterdamOrLater(header.timestamp),
   )
 
-  c.com.validateHeaderAndKinship(blk, vmState.parent, txFrame).isOkOr:
+  c.com.validateHeaderAndKinship(
+    blk,
+    blockAccessList,
+    # Depending on the BAL retention period of clients, finalized blocks might
+    # be received without a BAL. In this case we skip checking the BAL against
+    # the header bal hash.
+    skipPreExecBalCheck = finalized and blockAccessList.isNone(),
+    vmState.parent,
+    txFrame
+  ).isOkOr:
     c.badBlocks.put(blkHash, (blk, vmState.blockAccessList))
     return err(error)
 
@@ -87,16 +98,12 @@ proc processBlock*(
       # root will check out and delay such validation for when it's time to persist
       # changes to disk
       skipStateRootCheck = finalized and not c.eagerStateRoot,
-      # Depending on the BAL retention period of clients, finalized blocks might
-      # be received without a BAL. In this case we skip checking the block BAL
-      # against the header bal hash.
-      skipPreExecBalCheck = finalized and blk.blockAccessList.isNone(),
       # Finalized blocks are known to be canonical and therefore the bal hash
       # in the header is known to be valid and so it should be good enough to
       # simply check that the provide block BAL (when skipPreExecBalCheck = false)
       # matches the header bal hash. In this case the post execution check can be
       # skipped.
-      skipPostExecBalCheck = finalized and blk.blockAccessList.isSome(),
+      skipPostExecBalCheck = not vmState.balTrackerEnabled
     ).isOkOr:
       c.badBlocks.put(blkHash, (blk, vmState.blockAccessList))
       return err(error)
@@ -128,6 +135,6 @@ proc processBlock*(
   # because validateUncles still need it
   ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory)
 
-  c.writeBaggage(blk, blkHash, txFrame, vmState.receipts, vmState.blockAccessList)
+  c.writeBaggage(blk, blockAccessList, blkHash, txFrame, vmState.receipts, vmState.blockAccessList)
 
   ok(move(vmState.receipts))

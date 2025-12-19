@@ -146,9 +146,11 @@ func getPayloadBundle*(ben: BeaconEngineRef, id: Bytes8): Opt[ExecutionBundle] =
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
-proc generateExecutionBundle*(ben: BeaconEngineRef,
-                      attrs: PayloadAttributes):
-                         Result[ExecutionBundle, string] =
+proc generateExecutionBundle*(
+  ben: BeaconEngineRef,
+  attrs: PayloadAttributes
+): Result[ExecutionBundle, string] =
+
   wrapException:
     let
       xp  = ben.txPool
@@ -175,7 +177,7 @@ proc generateExecutionBundle*(ben: BeaconEngineRef,
       return err "extraData length should not exceed 32 bytes"
 
     ok ExecutionBundle(
-      payload: executionPayload(bundle.blk),
+      payload: executionPayload(bundle.blk, bundle.blockAccessList),
       blobsBundle: bundle.blobsBundle,
       blockValue: bundle.blockValue,
       executionRequests: bundle.executionRequests)
@@ -245,13 +247,18 @@ proc checkInvalidAncestor*(ben: BeaconEngineRef,
 # either via a forkchoice update or a sync extension. This method is meant to
 # be called by the newpayload command when the block seems to be ok, but some
 # prerequisite prevents it from being processed (e.g. no parent, or snap sync).
-proc delayPayloadImport*(ben: BeaconEngineRef, blockHash: Hash32, blk: Block): PayloadStatusV1 =
+proc delayPayloadImport*(
+  ben: BeaconEngineRef,
+  blockHash: Hash32,
+  blk: Block,
+  blockAccessList: Opt[BlockAccessListRef]
+): PayloadStatusV1 =
   # Sanity check that this block's parent is not on a previously invalidated
   # chain. If it is, mark the block as invalid too.
   ben.checkInvalidAncestor(blk.header.parentHash, blockHash).valueOr:
     # Stash the block away for a potential forced forkchoice update to it
     # at a later time.
-    ben.chain.quarantine.addOrphan(blockHash, blk)
+    ben.chain.quarantine.addOrphan(blockHash, blk, blockAccessList)
     return PayloadStatusV1(status: PayloadExecutionStatus.syncing)
 
 func latestFork*(ben: BeaconEngineRef): HardFork =

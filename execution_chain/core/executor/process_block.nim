@@ -117,7 +117,7 @@ proc processTransactions*(
 proc procBlkPreamble(
     vmState: BaseVMState,
     blk: Block,
-    skipValidation, skipReceipts, skipUncles: bool, skipPreExecBalCheck: bool,
+    skipValidation, skipReceipts, skipUncles: bool
 ): Result[void, string] =
   template header(): Header =
     blk.header
@@ -161,16 +161,9 @@ proc procBlkPreamble(
   if com.isAmsterdamOrLater(header.timestamp):
     if header.blockAccessListHash.isNone:
       return err("Post-Amsterdam block header must have blockAccessListHash")
-    if not skipPreExecBalCheck:
-      if blk.blockAccessList.isNone:
-        return err("Post-Amsterdam block body must have blockAccessList")
-      if blk.blockAccessList.get.validate(header.blockAccessListHash.get).isErr():
-        return err("Mismatched blockAccessListHash")
   else:
     if header.blockAccessListHash.isSome:
       return err("Pre-Amsterdam block header must not have blockAccessListHash")
-    if blk.blockAccessList.isSome:
-      return err("Pre-Amsterdam block body must not have blockAccessList")
 
   # Commit block access list tracker changes for pre‑execution system calls
   if vmState.balTrackerEnabled:
@@ -348,11 +341,10 @@ proc processBlock*(
     skipReceipts = false,
     skipUncles = false,
     skipStateRootCheck = false,
-    skipPreExecBalCheck = false,
     skipPostExecBalCheck = false,
 ): Result[void, string] =
   ## Generalised function to processes `blk` for any network.
-  ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles, skipPreExecBalCheck)
+  ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles)
 
   # EIP-3675: no reward for miner in POA/POS
   if not vmState.com.proofOfStake(blk.header, vmState.ledger.txFrame):

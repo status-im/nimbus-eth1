@@ -43,8 +43,6 @@ type
     accounts*: Table[Address, AccountData]
       ## Maps address -> account data
 
-  BlockAccessListRef* = ref BlockAccessList
-
 template init*(T: type AccountData): T =
   AccountData()
 

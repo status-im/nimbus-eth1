@@ -18,11 +18,11 @@ import
 
 export block_access_lists, hashes, results
 
-func validate*(bal: BlockAccessList, expectedHash: Hash32): Result[void, string] =
+func validate*(bal: BlockAccessListRef, expectedHash: Hash32): Result[void, string] =
   ## Validate that a block access list is structurally correct and matches the expected hash.
 
   # Check that storage changes and reads don't overlap for the same slot.
-  for accountChanges in bal:
+  for accountChanges in bal[]:
     var changedSlots: HashSet[StorageKey]
 
     for slotChanges in accountChanges.storageChanges:
@@ -33,12 +33,12 @@ func validate*(bal: BlockAccessList, expectedHash: Hash32): Result[void, string]
         return err("A slot should not be in both changes and reads")
 
   # Validate ordering (addresses should be sorted lexicographically).
-  let balAddresses = bal.mapIt(it.address.data.toHex())
+  let balAddresses = bal[].mapIt(it.address.data.toHex())
   if balAddresses != balAddresses.sorted():
     return err("Addresses should be sorted lexicographically")
 
   # Validate ordering of fields for each account
-  for accountChanges in bal:
+  for accountChanges in bal[]:
     # Validate storage changes slots are sorted lexicographically
     let storageChangesSlots = accountChanges.storageChanges.mapIt(it.slot)
     if storageChangesSlots != storageChangesSlots.sorted():
@@ -71,7 +71,7 @@ func validate*(bal: BlockAccessList, expectedHash: Hash32): Result[void, string]
       return err("Code changes should be sorted by blockAccessIndex")
 
   # Check that the block access list matches the expected hash.
-  if bal.computeBlockAccessListHash() != expectedHash:
+  if bal[].computeBlockAccessListHash() != expectedHash:
     return err("Computed block access list hash does not match the expected hash")
 
   ok()
