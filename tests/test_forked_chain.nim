@@ -46,7 +46,6 @@ proc setupEnv(): TestEnv =
 proc newCom(env: TestEnv): CommonRef =
   CommonRef.new(
       newCoreDbRef DefaultDbMemory,
-      nil,
       env.config.networkId,
       env.config.networkParams
     )
@@ -54,7 +53,6 @@ proc newCom(env: TestEnv): CommonRef =
 proc newCom(env: TestEnv, db: CoreDbRef): CommonRef =
   CommonRef.new(
       db,
-      nil,
       env.config.networkId,
       env.config.networkParams
     )
@@ -791,7 +789,7 @@ procSuite "ForkedChain mainnet replay":
   setup:
     let
       era0 = Era1DbRef.init(sourcePath / "replay", "mainnet", 15537394'u64).expect("Era files present")
-      com = CommonRef.new(AristoDbMemory.newCoreDbRef(), nil)
+      com = CommonRef.new(AristoDbMemory.newCoreDbRef())
       fc = ForkedChainRef.init(com, enableQueue = true)
 
   asyncTest "Replay mainnet era, single FCU":

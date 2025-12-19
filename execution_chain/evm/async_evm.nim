@@ -103,7 +103,6 @@ proc init*(
 ): T =
   let com = CommonRef.new(
     DefaultDbMemory.newCoreDbRef(),
-    taskpool = nil,
     config = chainConfigForNetwork(networkId),
     initializeDb = false,
     statelessProviderEnabled = true, # Enables collection of witness keys

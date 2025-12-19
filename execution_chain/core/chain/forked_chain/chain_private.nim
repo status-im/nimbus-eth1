@@ -62,8 +62,7 @@ proc processBlock*(c: ForkedChainRef,
       skipValidation = false,
       skipReceipts = false,
       skipUncles = true,
-      skipStateRootCheck = finalized and not c.eagerStateRoot,
-      taskpool = c.com.taskpool,
+      skipStateRootCheck = finalized and not c.eagerStateRoot
     )
 
   if not vmState.com.statelessProviderEnabled:

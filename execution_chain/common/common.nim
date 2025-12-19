@@ -15,8 +15,7 @@ import
   ../db/[core_db, ledger, storage_types, fcu_db],
   ../utils/[utils],
   ".."/[constants, errors, version_info],
-  "."/[chain_config, evmforks, genesis, hardforks],
-  taskpools
+  "."/[chain_config, evmforks, genesis, hardforks]
 
 export
   chain_config,
@@ -27,8 +26,11 @@ export
   evmforks,
   genesis,
   hardforks,
-  taskpools,
   utils
+
+when compileOption("threads"):
+  import taskpools
+  export taskpools
 
 type
   HeaderChainUpdateCB* = proc(hdr: Header; fin: Hash32) {.gcsafe, raises: [].}
@@ -87,8 +89,9 @@ type
     gasLimit: uint64
       ## Desired gas limit when building a block
 
-    taskpool*: Taskpool
-      ## Shared task pool for offloading computation to other threads
+    when compileOption("threads"):
+      taskpool*: Taskpool
+        ## Shared task pool for offloading computation to other threads
 
     statelessProviderEnabled*: bool
       ## Enable the stateless provider. This turns on the features required
@@ -165,7 +168,6 @@ proc initializeDb(com: CommonRef) =
 
 proc init(com         : CommonRef,
           db          : CoreDbRef,
-          taskpool    : Taskpool,
           networkId   : NetworkId,
           config      : ChainConfig,
           genesis     : Genesis,
@@ -181,7 +183,6 @@ proc init(com         : CommonRef,
   com.forkTransitionTable = config.toForkTransitionTable()
   com.networkId = networkId
   com.extraData = ShortClientId
-  com.taskpool = taskpool
   com.gasLimit = DEFAULT_GAS_LIMIT
 
   # com.forkIdCalculator and com.genesisHash are set
@@ -230,7 +231,6 @@ proc isBlockAfterTtd(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool
 proc new*(
     _: type CommonRef;
     db: CoreDbRef;
-    taskpool: Taskpool;
     networkId: NetworkId = MainNet;
     params = networkParams(MainNet);
     initializeDb = true;
@@ -243,7 +243,6 @@ proc new*(
   new(result)
   result.init(
     db,
-    taskpool,
     networkId,
     params.config,
     params.genesis,
@@ -254,7 +253,6 @@ proc new*(
 proc new*(
     _: type CommonRef;
     db: CoreDbRef;
-    taskpool: Taskpool;
     config: ChainConfig;
     networkId: NetworkId = MainNet;
     initializeDb = true;
@@ -267,7 +265,6 @@ proc new*(
   new(result)
   result.init(
     db,
-    taskpool,
     networkId,
     config,
     nil,
