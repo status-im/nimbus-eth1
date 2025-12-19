@@ -25,7 +25,7 @@ type JsonRpcServer* = ref object
 
 proc init*(
     T: type JsonRpcServer, url: Web3Url
-): JsonRpcServer {.raises: [JsonRpcError, ValueError, TransportAddressError].} =
+): EngineResult[JsonRpcServer] =
   let
     auth = @[httpCors(@[])] # TODO: for now we serve all cross origin requests
     parsedUrl = parseUri(url.web3Url)
@@ -34,35 +34,43 @@ proc init*(
       if parsedUrl.port == "":
         8545
       else:
-        parseInt(parsedUrl.port)
-    listenAddress = initTAddress(hostname, port)
+        try:
+          parseInt(parsedUrl.port)
+        except ValueError:
+          return err((FrontendError, "Could not parse the port number"))
 
-  case url.kind
-  of HttpUrl:
-    JsonRpcServer(
-      kind: Http, httpServer: newRpcHttpServer([listenAddress], RpcRouter.init(), auth)
-    )
-  of WsUrl:
-    let server =
-      JsonRpcServer(kind: WebSocket, wsServer: newRpcWebSocketServer(listenAddress))
+    listenAddress =
+      try:
+        initTAddress(hostname, port)
+      except TransportAddressError as e:
+        return err((FrontendError, e.msg))
 
-    server.wsServer.router = RpcRouter.init()
-    server
+  try:
+    case url.kind
+    of HttpUrl:
+      return ok(JsonRpcServer(
+        kind: Http,
+        httpServer: newRpcHttpServer([listenAddress], RpcRouter.init(), auth),
+      ))
+    of WsUrl:
+      let server =
+        JsonRpcServer(kind: WebSocket, wsServer: newRpcWebSocketServer(listenAddress))
+
+      server.wsServer.router = RpcRouter.init()
+      return ok(server)
+  except JsonRpcError as e:
+    return err((FrontendError, e.msg))
 
 func getServer(server: JsonRpcServer): RpcServer =
   case server.kind
   of Http: server.httpServer
   of WebSocket: server.wsServer
 
-proc start*(server: JsonRpcServer): Result[void, string] =
+proc start*(server: JsonRpcServer): EngineResult[void] =
   try:
-    case server.kind
-    of Http:
-      server.httpServer.start()
-    of WebSocket:
-      server.wsServer.start()
-  except CatchableError as e:
-    return err(e.msg)
+    server.getServer().start()
+  except JsonRpcError as e:
+    return err((FrontendError, e.msg))
 
   ok()
 
@@ -194,12 +202,5 @@ proc injectEngineFrontend*(server: JsonRpcServer, frontend: EthApiFrontend) =
   server.getServer().rpc("eth_sendRawTransaction") do(txBytes: seq[byte]) -> Hash32:
     await frontend.eth_sendRawTransaction(txBytes)
 
-proc stop*(server: JsonRpcServer) {.async: (raises: [CancelledError]).} =
-  try:
-    case server.kind
-    of Http:
-      await server.httpServer.closeWait()
-    of WebSocket:
-      await server.wsServer.closeWait()
-  except CatchableError as e:
-    raise newException(CancelledError, e.msg)
+proc stop*(server: JsonRpcServer) {.async: (raises: []).} =
+  server.getServer().closeWait()

@@ -31,15 +31,15 @@ proc init*(T: type JsonRpcClient, url: Web3Url): JsonRpcClient =
 
 proc start*(
     client: JsonRpcClient
-): Future[Result[void, string]] {.async: (raises: []).} =
+): EngineResult[void] {.async: (raises: [CancelledError]).} =
   try:
     case client.kind
     of Http:
       await client.httpClient.connect(client.url)
     of WebSocket:
       await client.wsClient.connect(uri = client.url, compression = false, flags = {})
-  except CatchableError as e:
-    return err(e.msg)
+  except JsonRpcError as e:
+    return err((BackendError, e.msg))
 
   ok()
 
@@ -48,105 +48,91 @@ template getClient(client: JsonRpcClient): RpcClient =
   of Http: client.httpClient
   of WebSocket: client.wsClient
 
+template handleBackendCall(callBackend: untyped): auto =
+  try:
+    ok(await callBackend)
+  except CancelledError as e:
+    raise e
+  except RpcPostError as e:
+    return err((BackendEncodingError, e.msg))
+  except ErrorResponse as e:
+    return err((BackendFetchError, e.msg))
+  except JsonRpcError as e:
+    return err((BackendDecodingError, e.msg))
+  except InvalidResponse as e:
+    return err((BackendDecodingError, e.msg))
+  except FailedHttpResponse as e:
+    return err((BackendDecodingError, e.msg))
+
 proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
   let
-    ethChainIdProc = proc(): Future[UInt256] {.async: (raises: [CancelledError]).} =
-      try:
-        await client.getClient().eth_chainId()
-      except CatchableError as e:
-        raise newException(CancelledError, e.msg)
+    ethChainIdProc = proc(): Future[EngineResult[UInt256]] {.
+        async: (raises: [CancelledError])
+    .} =
+      handleBackendCall client.getClient().eth_chainId()
 
     getBlockByHashProc = proc(
         blkHash: Hash32, fullTransactions: bool
-    ): Future[BlockObject] {.async: (raises: [CancelledError]).} =
-      try:
-        await client.getClient().eth_getBlockByHash(blkHash, fullTransactions)
-      except CatchableError as e:
-        raise newException(CancelledError, e.msg)
+    ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
+      handleBackendCall client.getClient().eth_getBlockByHash(blkHash, fullTransactions)
 
     getBlockByNumberProc = proc(
         blkNum: BlockTag, fullTransactions: bool
-    ): Future[BlockObject] {.async: (raises: [CancelledError]).} =
-      try:
-        await client.getClient().eth_getBlockByNumber(blkNum, fullTransactions)
-      except CatchableError as e:
-        raise newException(CancelledError, e.msg)
+    ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
+      handleBackendCall client.getClient().eth_getBlockByNumber(
+        blkNum, fullTransactions
+      )
 
     getProofProc = proc(
         address: Address, slots: seq[UInt256], blockId: BlockTag
-    ): Future[ProofResponse] {.async: (raises: [CancelledError]).} =
-      try:
-        await client.getClient().eth_getProof(address, slots, blockId)
-      except CatchableError as e:
-        raise newException(CancelledError, e.msg)
+    ): Future[EngineResult[ProofResponse]] {.async: (raises: [CancelledError]).} =
+      handleBackendCall client.getClient().eth_getProof(address, slots, blockId)
 
     createAccessListProc = proc(
         args: TransactionArgs, blockId: BlockTag
-    ): Future[AccessListResult] {.async: (raises: [CancelledError]).} =
-      try:
-        await client.getClient().eth_createAccessList(args, blockId)
-      except CatchableError as e:
-        raise newException(CancelledError, e.msg)
+    ): Future[EngineResult[AccessListResult]] {.async: (raises: [CancelledError]).} =
+      handleBackendCall client.getClient().eth_createAccessList(args, blockId)
 
     getCodeProc = proc(
         address: Address, blockId: BlockTag
-    ): Future[seq[byte]] {.async: (raises: [CancelledError]).} =
-      try:
-        await client.getClient().eth_getCode(address, blockId)
-      except CatchableError as e:
-        raise newException(CancelledError, e.msg)
+    ): Future[EngineResult[seq[byte]]] {.async: (raises: [CancelledError]).} =
+      handleBackendCall client.getClient().eth_getCode(address, blockId)
 
     getTransactionByHashProc = proc(
         txHash: Hash32
-    ): Future[TransactionObject] {.async: (raises: [CancelledError]).} =
-      try:
-        await client.getClient().eth_getTransactionByHash(txHash)
-      except CatchableError as e:
-        raise newException(CancelledError, e.msg)
+    ): Future[EngineResult[TransactionObject]] {.async: (raises: [CancelledError]).} =
+      handleBackendCall client.getClient().eth_getTransactionByHash(txHash)
 
     getTransactionReceiptProc = proc(
         txHash: Hash32
-    ): Future[ReceiptObject] {.async: (raises: [CancelledError]).} =
-      try:
-        await client.getClient().eth_getTransactionReceipt(txHash)
-      except CatchableError as e:
-        raise newException(CancelledError, e.msg)
+    ): Future[EngineResult[ReceiptObject]] {.async: (raises: [CancelledError]).} =
+      handleBackendCall client.getClient().eth_getTransactionReceipt(txHash)
 
     getBlockReceiptsProc = proc(
         blockId: BlockTag
-    ): Future[Opt[seq[ReceiptObject]]] {.async: (raises: [CancelledError]).} =
-      try:
-        await client.getClient().eth_getBlockReceipts(blockId)
-      except CatchableError as e:
-        raise newException(CancelledError, e.msg)
+    ): Future[EngineResult[Opt[seq[ReceiptObject]]]] {.
+        async: (raises: [CancelledError])
+    .} =
+      handleBackendCall client.getClient().eth_getBlockReceipts(blockId)
 
     getLogsProc = proc(
         filterOptions: FilterOptions
-    ): Future[seq[LogObject]] {.async: (raises: [CancelledError]).} =
-      try:
-        await client.getClient().eth_getLogs(filterOptions)
-      except CatchableError as e:
-        raise newException(CancelledError, e.msg)
+    ): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).} =
+      handleBackendCall client.getClient().eth_getLogs(filterOptions)
 
     feeHistoryProc = proc(
         blockCount: Quantity,
         newestBlock: BlockTag,
         rewardPercentiles: Opt[seq[float64]],
-    ): Future[FeeHistoryResult] {.async: (raises: [CancelledError]).} =
-      try:
-        await client.getClient().eth_feeHistory(
-          blockCount, newestBlock, rewardPercentiles
-        )
-      except CatchableError as e:
-        raise newException(CancelledError, e.msg)
+    ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).} =
+      handleBackendCall client.getClient().eth_feeHistory(
+        blockCount, newestBlock, rewardPercentiles
+      )
 
     sendRawTxProc = proc(
         txBytes: seq[byte]
-    ): Future[Hash32] {.async: (raises: [CancelledError]).} =
-      try:
-        await client.getClient().eth_sendRawTransaction(txBytes)
-      except CatchableError as e:
-        raise newException(CancelledError, e.msg)
+    ): Future[EngineResult[Hash32]] {.async: (raises: [CancelledError]).} =
+      handleBackendCall client.getClient().eth_sendRawTransaction(txBytes)
 
   EthApiBackend(
     eth_chainId: ethChainIdProc,
@@ -163,8 +149,7 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
     eth_sendRawTransaction: sendRawTxProc,
   )
 
-proc stop*(client: JsonRpcClient) {.async: (raises: [CancelledError]).} =
-  try:
-    await client.getClient().close()
-  except CatchableError:
-    raise newException(CancelledError, "coudln't close the json rpc client")
+proc stop*(
+    client: JsonRpcClient
+) {.async: (raises: []).} =
+  await client.getClient().close()

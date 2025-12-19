@@ -34,111 +34,156 @@ type
 
   BlockTag* = eth_api_types.RtBlockIdentifier
 
+
+  # All EngineError's are propagated back to the application. 
+  # Anything that need not be propagated must either be translated 
+  # or absorbed.
+  EngineError* = enum
+    # these errors are abstracted to support a simple architecture 
+    # (encode -> fetch -> decode) that is adaptable for different 
+    # kinds of backends. These errors help in scoring endpoints too.
+    BackendEncodingError
+    BackendFetchError
+    BackendDecodingError
+    BackendError # generic backend error
+
+    FrontendError # generic frontend error
+
+    # besides backend errors the other errors that can occur
+    # There is not much use to differentiating these and are done
+    # to this extent just for the sake of it.
+    UnvailableDataError
+    InvalidDataError
+    VerificationError
+
+
+  EngineResult*[T] = Result[T, (EngineError, string)]
+
   # Backend API
   EthApiBackend* = object
-    eth_chainId*: proc(): Future[UInt256] {.async: (raises: [CancelledError]).}
+    eth_chainId*:
+      proc(): Future[EngineResult[UInt256]] {.async: (raises: [CancelledError]).}
     eth_getBlockByHash*: proc(
       blkHash: Hash32, fullTransactions: bool
-    ): Future[BlockObject] {.async: (raises: [CancelledError]).}
+    ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).}
     eth_getBlockByNumber*: proc(
       blkNum: BlockTag, fullTransactions: bool
-    ): Future[BlockObject] {.async: (raises: [CancelledError]).}
+    ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).}
     eth_getProof*: proc(
       address: Address, slots: seq[UInt256], blockId: BlockTag
-    ): Future[ProofResponse] {.async: (raises: [CancelledError]).}
+    ): Future[EngineResult[ProofResponse]] {.async: (raises: [CancelledError]).}
     eth_createAccessList*: proc(
       args: TransactionArgs, blockId: BlockTag
-    ): Future[AccessListResult] {.async: (raises: [CancelledError]).}
-    eth_getCode*: proc(address: Address, blockId: BlockTag): Future[seq[byte]] {.
+    ): Future[EngineResult[AccessListResult]] {.async: (raises: [CancelledError]).}
+    eth_getCode*: proc(address: Address, blockId: BlockTag): Future[EngineResult[seq[byte]]] {.
       async: (raises: [CancelledError])
     .}
-    eth_getBlockReceipts*: proc(blockId: BlockTag): Future[Opt[seq[ReceiptObject]]] {.
+    eth_getBlockReceipts*: proc(blockId: BlockTag): Future[EngineResult[Opt[seq[ReceiptObject]]]] {.
       async: (raises: [CancelledError])
     .}
-    eth_getTransactionReceipt*:
-      proc(txHash: Hash32): Future[ReceiptObject] {.async: (raises: [CancelledError]).}
-    eth_getTransactionByHash*: proc(txHash: Hash32): Future[TransactionObject] {.
+    eth_getTransactionReceipt*: proc(txHash: Hash32): Future[EngineResult[ReceiptObject]] {.
       async: (raises: [CancelledError])
     .}
-    eth_getLogs*: proc(filterOptions: FilterOptions): Future[seq[LogObject]] {.
+    eth_getTransactionByHash*: proc(txHash: Hash32): Future[EngineResult[TransactionObject]] {.
+      async: (raises: [CancelledError])
+    .}
+    eth_getLogs*: proc(filterOptions: FilterOptions): Future[EngineResult[seq[LogObject]]] {.
       async: (raises: [CancelledError])
     .}
     eth_feeHistory*: proc(
       blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: Opt[seq[float64]]
-    ): Future[FeeHistoryResult] {.async: (raises: [CancelledError]).}
-    eth_sendRawTransaction*:
-      proc(txBytes: seq[byte]): Future[Hash32] {.async: (raises: [CancelledError]).}
+    ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).}
+    eth_sendRawTransaction*: proc(txBytes: seq[byte]): Future[EngineResult[Hash32]] {.
+      async: (raises: [CancelledError])
+    .}
 
   # Frontend API
   EthApiFrontend* = object # Chain
-    eth_chainId*: proc(): Future[UInt256] {.async: (raises: [ValueError]).}
-    eth_blockNumber*: proc(): Future[uint64] {.async: (raises: [ValueError]).}
+    eth_chainId*:
+      proc(): Future[EngineResult[UInt256]] {.async: (raises: [CancelledError]).}
+    eth_blockNumber*:
+      proc(): Future[EngineResult[uint64]] {.async: (raises: [CancelledError]).}
 
     # State
-    eth_getBalance*: proc(address: Address, blockId: BlockTag): Future[UInt256] {.
-      async: (raises: [ValueError])
+    eth_getBalance*: proc(address: Address, blockId: BlockTag): Future[EngineResult[UInt256]] {.
+      async: (raises: [CancelledError])
     .}
     eth_getStorageAt*: proc(
       address: Address, slot: UInt256, blockId: BlockTag
-    ): Future[FixedBytes[32]] {.async: (raises: [ValueError]).}
+    ): Future[EngineResult[FixedBytes[32]]] {.async: (raises: [CancelledError]).}
     eth_getTransactionCount*: proc(
       address: Address, blockId: BlockTag
-    ): Future[Quantity] {.async: (raises: [ValueError]).}
-    eth_getCode*: proc(address: Address, blockId: BlockTag): Future[seq[byte]] {.
-      async: (raises: [ValueError])
+    ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).}
+    eth_getCode*: proc(address: Address, blockId: BlockTag): Future[EngineResult[seq[byte]]] {.
+      async: (raises: [CancelledError])
     .}
     eth_getProof*: proc(
       address: Address, slots: seq[UInt256], blockId: BlockTag
-    ): Future[ProofResponse] {.async: (raises: [ValueError]).}
+    ): Future[EngineResult[ProofResponse]] {.async: (raises: [CancelledError]).}
 
     # Block
     eth_getBlockByHash*: proc(
       blkHash: Hash32, fullTransactions: bool
-    ): Future[BlockObject] {.async: (raises: [ValueError]).}
+    ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).}
     eth_getBlockByNumber*: proc(
       blkNum: BlockTag, fullTransactions: bool
-    ): Future[BlockObject] {.async: (raises: [ValueError]).}
-    eth_getUncleCountByBlockHash*:
-      proc(blkHash: Hash32): Future[Quantity] {.async: (raises: [ValueError]).}
-    eth_getUncleCountByBlockNumber*:
-      proc(blkNum: BlockTag): Future[Quantity] {.async: (raises: [ValueError]).}
-    eth_getBlockTransactionCountByHash*:
-      proc(blkHash: Hash32): Future[Quantity] {.async: (raises: [ValueError]).}
-    eth_getBlockTransactionCountByNumber*:
-      proc(blkNum: BlockTag): Future[Quantity] {.async: (raises: [ValueError]).}
+    ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).}
+    eth_getUncleCountByBlockHash*: proc(blkHash: Hash32): Future[EngineResult[Quantity]] {.
+      async: (raises: [CancelledError])
+    .}
+    eth_getUncleCountByBlockNumber*: proc(blkNum: BlockTag): Future[EngineResult[Quantity]] {.
+      async: (raises: [CancelledError])
+    .}
+    eth_getBlockTransactionCountByHash*: proc(blkHash: Hash32): Future[EngineResult[Quantity]] {.
+      async: (raises: [CancelledError])
+    .}
+    eth_getBlockTransactionCountByNumber*: proc(blkNum: BlockTag): Future[EngineResult[Quantity]] {.
+      async: (raises: [CancelledError])
+    .}
 
     # Transaction
     eth_getTransactionByBlockHashAndIndex*: proc(
       blkHash: Hash32, index: Quantity
-    ): Future[TransactionObject] {.async: (raises: [ValueError]).}
+    ): Future[EngineResult[TransactionObject]] {.async: (raises: [CancelledError]).}
     eth_getTransactionByBlockNumberAndIndex*: proc(
       blkNum: BlockTag, index: Quantity
-    ): Future[TransactionObject] {.async: (raises: [ValueError]).}
-    eth_getTransactionByHash*:
-      proc(txHash: Hash32): Future[TransactionObject] {.async: (raises: [ValueError]).}
+    ): Future[EngineResult[TransactionObject]] {.async: (raises: [CancelledError]).}
+    eth_getTransactionByHash*: proc(txHash: Hash32): Future[EngineResult[TransactionObject]] {.
+      async: (raises: [CancelledError])
+    .}
 
     # EVM
     eth_call*: proc(
       args: TransactionArgs, blockId: BlockTag, optimisticFetch: bool = true
-    ): Future[seq[byte]] {.async: (raises: [CancelledError, ValueError]).}
+    ): Future[EngineResult[seq[byte]]] {.async: (raises: [CancelledError]).}
     eth_createAccessList*: proc(
       args: TransactionArgs, blockId: BlockTag, optimisticFetch: bool = true
-    ): Future[AccessListResult] {.async: (raises: [CancelledError, ValueError]).}
+    ): Future[EngineResult[AccessListResult]] {.async: (raises: [CancelledError]).}
     eth_estimateGas*: proc(
       args: TransactionArgs, blockId: BlockTag, optimisticFetch: bool = true
-    ): Future[Quantity] {.async: (raises: [CancelledError, ValueError]).}
+    ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).}
 
     # Receipts
-    eth_getBlockReceipts*: proc(blockId: BlockTag): Future[Opt[seq[ReceiptObject]]] {.
-      async: (raises: [ValueError])
+    eth_getBlockReceipts*: proc(blockId: BlockTag): Future[EngineResult[Opt[seq[ReceiptObject]]]] {.
+      async: (raises: [CancelledError])
     .}
-    eth_getTransactionReceipt*:
-      proc(txHash: Hash32): Future[ReceiptObject] {.async: (raises: [ValueError]).}
-    eth_getLogs*: proc(filterOptions: FilterOptions): Future[seq[LogObject]] {.
-      async: (raises: [ValueError])
+    eth_getTransactionReceipt*: proc(txHash: Hash32): Future[EngineResult[ReceiptObject]] {.
+      async: (raises: [CancelledError])
     .}
-    eth_newFilter*: proc(filterOptions: FilterOptions): Future[string] {.
-      async: (raises: [ValueError])
+    eth_getLogs*: proc(filterOptions: FilterOptions): Future[EngineResult[seq[LogObject]]] {.
+      async: (raises: [CancelledError])
+    .}
+    eth_newFilter*: proc(filterOptions: FilterOptions): Future[EngineResult[string]] {.
+      async: (raises: [CancelledError])
+    .}
+    eth_uninstallFilter*: proc(filterId: string): Future[EngineResult[bool]] {.
+      async: (raises: [CancelledError])
+    .}
+    eth_getFilterLogs*: proc(filterId: string): Future[EngineResult[seq[LogObject]]] {.
+      async: (raises: [CancelledError])
+    .}
+    eth_getFilterChanges*: proc(filterId: string): Future[EngineResult[seq[LogObject]]] {.
+      async: (raises: [CancelledError])
     .}
     eth_uninstallFilter*:
       proc(filterId: string): Future[bool] {.async: (raises: [ValueError]).}
@@ -148,15 +193,18 @@ type
       proc(filterId: string): Future[seq[LogObject]] {.async: (raises: [ValueError]).}
 
     # Fee-based
-    eth_blobBaseFee*: proc(): Future[UInt256] {.async: (raises: [ValueError]).}
-    eth_gasPrice*: proc(): Future[Quantity] {.async: (raises: [ValueError]).}
+    eth_blobBaseFee*:
+      proc(): Future[EngineResult[UInt256]] {.async: (raises: [CancelledError]).}
+    eth_gasPrice*:
+      proc(): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).}
     eth_maxPriorityFeePerGas*:
-      proc(): Future[Quantity] {.async: (raises: [ValueError]).}
+      proc(): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).}
     eth_feeHistory*: proc(
       blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: Opt[seq[float64]]
-    ): Future[FeeHistoryResult] {.async: (raises: [CancelledError]).}
-    eth_sendRawTransaction*:
-      proc(txBytes: seq[byte]): Future[Hash32] {.async: (raises: [CancelledError]).}
+    ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).}
+    eth_sendRawTransaction*: proc(txBytes: seq[byte]): Future[EngineResult[Hash32]] {.
+      async: (raises: [CancelledError])
+    .}
 
   FilterStoreItem* = object
     filter*: FilterOptions
