@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -11,8 +11,16 @@
 {.push raises:[].}
 
 import
-  pkg/[chronicles, chronos],
-  ./worker/worker_desc
+  std/os,
+  pkg/[chronicles, chronos, minilru, results],
+  ./worker/[account, helpers, start_stop, state_db, worker_desc]
+
+logScope:
+  topics = "snap sync"
+
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
@@ -20,19 +28,37 @@ import
 
 proc setup*(ctx: SnapCtxRef; info: static[string]): bool =
   ## Global set up
+  ctx.setupServices info
   true
 
 proc release*(ctx: SnapCtxRef; info: static[string]) =
   ## Global clean up
-  discard
+  ctx.destroyServices()
+
 
 proc start*(buddy: SnapPeerRef; info: static[string]): bool =
   ## Initialise worker peer
+  let
+    peer {.inject,used.} = $buddy.peer              # logging only
+    ctx = buddy.ctx
+
+  if not ctx.pool.seenData and buddy.peerID in ctx.pool.failedPeers:
+    debug info & ": useless peer already tried", peer
+    return false
+
+  if not buddy.startSyncPeer():
+    debug info & ": failed", peer
+    return false
+
+  debug info & ": new peer", peer, nSyncPeers=ctx.nSyncPeers(),
+    peerType=buddy.only.peerType, clientId=buddy.peer.clientId
   true
 
 proc stop*(buddy: SnapPeerRef; info: static[string]) =
   ## Clean up this peer
-  discard
+  debug info & ": release peer", peer=buddy.peer,
+    nSyncPeers=(buddy.ctx.nSyncPeers()-1), state=($buddy.syncState)
+  buddy.stopSyncPeer()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -56,8 +82,8 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
   ##
   ## The template returns a suggested idle time for after this task.
   ##
-  debug info & ": not implemented for snap sync", nSyncPeers=ctx.nSyncPeers()
-  chronos.seconds(10)
+  debug info & ": snap sync not implemented yet", nSyncPeers=ctx.nSyncPeers()
+  chronos.seconds(30)
 
 proc runPool*(
     buddy: SnapPeerRef;
@@ -79,13 +105,12 @@ proc runPool*(
   ##
   ## Note that this function does not run in `async` mode.
   ##
-  debug info & ": not implemented for snap sync", peer=buddy.peer,
+  debug info & ": snap sync not implemented yet", peer=buddy.peer,
     nSyncPeers=buddy.ctx.nSyncPeers()
   true # stop
 
 template runPeer*(
     buddy: SnapPeerRef;
-    rank: PeerRanking;
     info: static[string];
       ): Duration =
   ## Async/template
@@ -95,9 +120,21 @@ template runPeer*(
   ##
   ## The template returns a suggested idle time for after this task.
   ##
-  debug info & ": not implemented for snap sync", peer=buddy.peer,
-    nSyncPeers=buddy.ctx.nSyncPeers()
-  chronos.seconds(10)
+  var bodyRc = chronos.nanoseconds(0)
+  block body:
+    let
+      ctx = buddy.ctx
+      peer {.inject,used.} = $buddy.peer            # logging only
+
+    buddy.accountRangeImport info
+
+    debug info & ": snap sync not implemented yet", peer,
+      nSyncPeers=ctx.nSyncPeers()
+
+    bodyRc = chronos.seconds(10)
+    # End block: `body`
+
+  bodyRc
 
 # ------------------------------------------------------------------------------
 # End
