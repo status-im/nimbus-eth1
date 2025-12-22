@@ -391,8 +391,5 @@ proc getEthConfigObject*(com: CommonRef,
   return res
 
 proc getTotalDifficulty*(chain: ForkedChainRef, blockHash: Hash32): Opt[UInt256] =
-  let txFrame = chain.txFrame(blockHash).txFrameBegin()
-  defer:
-    txFrame.dispose()
-
-  txFrame.getScore(blockHash)
+  # Note: It's ok to use baseTxFrame for TD as this is for historical blocks
+  chain.baseTxFrame().getScore(blockHash)
