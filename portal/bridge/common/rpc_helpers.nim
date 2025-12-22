@@ -145,7 +145,7 @@ proc getHeaderByNumber*(
 
 proc getBlockByNumber*(
     client: RpcClient, blockId: BlockIdentifier
-): Future[Result[(Header, BlockBody, UInt256), string]] {.
+): Future[Result[(Header, BlockBody, Opt[UInt256]), string]] {.
     async: (raises: [CancelledError])
 .} =
   let blockObject =

@@ -48,11 +48,8 @@ template chain(api: ServerAPIRef): ForkedChainRef =
 func newServerAPI*(txPool: TxPoolRef): ServerAPIRef =
   ServerAPIRef(txPool: txPool)
 
-proc getTotalDifficulty*(api: ServerAPIRef, blockHash: Hash32): UInt256 =
-  # TODO forkedchain!
-  let totalDifficulty = api.com.db.baseTxFrame().getScore(blockHash).valueOr:
-    return api.com.db.baseTxFrame().headTotalDifficulty()
-  return totalDifficulty
+proc getTotalDifficulty*(api: ServerAPIRef, blockHash: Hash32): Opt[UInt256] =
+  api.txPool.chain.getTotalDifficulty(blockHash)
 
 proc getProof*(
     accDB: LedgerRef, address: Address, slots: seq[UInt256]
