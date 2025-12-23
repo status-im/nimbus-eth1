@@ -208,14 +208,14 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
     nimbus.snapSyncRef = SnapSyncRef(nil)
 
-proc init*(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
+proc init*(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, channel: Opt[RpcChannelPtrs]) =
   nimbus.accountsManager = new AccountsManager
   nimbus.rng = newRng()
 
   basicServices(nimbus, config, com)
   manageAccounts(nimbus, config)
   setupP2P(nimbus, config, com)
-  setupRpc(nimbus, config, com)
+  setupRpc(nimbus, config, com, channel)
 
   # Not starting any syncer if there is definitely no way to run it. This
   # avoids polling (i.e. waiting for instructions) and some logging.
@@ -232,9 +232,9 @@ proc init*(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
     nimbus.snapSyncRef = SnapSyncRef(nil)
 
-proc init*(T: type NimbusNode, config: ExecutionClientConf, com: CommonRef): T =
+proc init*(T: type NimbusNode, config: ExecutionClientConf, com: CommonRef, channel: Opt[RpcChannelPtrs]): T =
   let nimbus = T()
-  nimbus.init(config, com)
+  nimbus.init(config, com, channel)
   nimbus
 
 proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionClientConf) =
@@ -306,6 +306,7 @@ proc runExeClient*(
     com: CommonRef,
     stopper: StopFuture,
     nimbus = NimbusNode(nil),
+    channel = Opt.none(RpcChannelPtrs),
 ) =
   ## Launches and runs the execution client for pre-configured `nimbus` and
   ## `conf` argument descriptors.
@@ -313,9 +314,9 @@ proc runExeClient*(
 
   var nimbus = nimbus
   if nimbus.isNil:
-    nimbus = NimbusNode.init(config, com)
+    nimbus = NimbusNode.init(config, com, channel)
   else:
-    nimbus.init(config, com)
+    nimbus.init(config, com, channel)
 
   defer:
     let
