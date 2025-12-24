@@ -28,7 +28,7 @@ suite "Block access list validation":
     let builder = BlockAccessListBuilderRef.init()
 
   test "Empty BAL should equal the EMPTY_BLOCK_ACCESS_LIST_HASH":
-    let emptyBal = builder.buildBlockAccessList()
+    let emptyBal = builder.buildBlockAccessList()[]
     check:
       emptyBal.validate(EMPTY_BLOCK_ACCESS_LIST_HASH).isOk()
       emptyBal.validate(default(Hash32)).isErr()
@@ -69,7 +69,7 @@ suite "Block access list validation":
     builder.addCodeChange(address1, 3, @[0x3.byte])
     builder.addCodeChange(address1, 3, @[0x4.byte]) # duplicate should overwrite
 
-    let bal = builder.buildBlockAccessList()
+    let bal = builder.buildBlockAccessList()[]
     check bal.validate(bal.computeBlockAccessListHash()).isOk()
 
   test "Storage changes and reads don't overlap for the same slot":
@@ -77,8 +77,9 @@ suite "Block access list validation":
     builder.addStorageWrite(address1, slot2, 2, 2.u256)
     builder.addStorageWrite(address1, slot3, 3, 3.u256)
 
-    var bal = builder.buildBlockAccessList()
+    var bal = builder.buildBlockAccessList()[]
     bal[0].storageReads = @[slot1]
+
     check bal.validate(bal.computeBlockAccessListHash()).isErr()
 
   test "Account changes out of order should fail validation":
@@ -86,7 +87,7 @@ suite "Block access list validation":
     builder.addTouchedAccount(address2)
     builder.addTouchedAccount(address3)
 
-    var bal = builder.buildBlockAccessList()
+    var bal = builder.buildBlockAccessList()[]
     check bal.validate(bal.computeBlockAccessListHash()).isOk()
     bal[0] = bal[2]
     check bal.validate(bal.computeBlockAccessListHash()).isErr()
@@ -96,7 +97,7 @@ suite "Block access list validation":
     builder.addStorageWrite(address1, slot2, 2, 2.u256)
     builder.addStorageWrite(address1, slot3, 3, 3.u256)
 
-    var bal = builder.buildBlockAccessList()
+    var bal = builder.buildBlockAccessList()[]
     check bal.validate(bal.computeBlockAccessListHash()).isOk()
     bal[0].storageChanges[0] = bal[0].storageChanges[2]
     check bal.validate(bal.computeBlockAccessListHash()).isErr()
@@ -106,7 +107,7 @@ suite "Block access list validation":
     builder.addStorageWrite(address1, slot1, 1, 1.u256)
     builder.addStorageWrite(address1, slot1, 2, 2.u256)
 
-    var bal = builder.buildBlockAccessList()
+    var bal = builder.buildBlockAccessList()[]
     check bal.validate(bal.computeBlockAccessListHash()).isOk()
     bal[0].storageChanges[0].changes[0] = bal[0].storageChanges[0].changes[2]
     check bal.validate(bal.computeBlockAccessListHash()).isErr()
@@ -116,7 +117,7 @@ suite "Block access list validation":
     builder.addStorageRead(address1, slot2)
     builder.addStorageRead(address1, slot3)
 
-    var bal = builder.buildBlockAccessList()
+    var bal = builder.buildBlockAccessList()[]
     check bal.validate(bal.computeBlockAccessListHash()).isOk()
     bal[0].storageReads[0] = bal[0].storageReads[2]
     check bal.validate(bal.computeBlockAccessListHash()).isErr()
@@ -126,7 +127,7 @@ suite "Block access list validation":
     builder.addBalanceChange(address1, 2, 2.u256)
     builder.addBalanceChange(address1, 3, 3.u256)
 
-    var bal = builder.buildBlockAccessList()
+    var bal = builder.buildBlockAccessList()[]
     check bal.validate(bal.computeBlockAccessListHash()).isOk()
     bal[0].balanceChanges[0] = bal[0].balanceChanges[2]
     check bal.validate(bal.computeBlockAccessListHash()).isErr()
@@ -136,7 +137,7 @@ suite "Block access list validation":
     builder.addNonceChange(address1, 2, 2)
     builder.addNonceChange(address1, 3, 3)
 
-    var bal = builder.buildBlockAccessList()
+    var bal = builder.buildBlockAccessList()[]
     check bal.validate(bal.computeBlockAccessListHash()).isOk()
     bal[0].nonceChanges[0] = bal[0].nonceChanges[2]
     check bal.validate(bal.computeBlockAccessListHash()).isErr()
@@ -146,7 +147,7 @@ suite "Block access list validation":
     builder.addCodeChange(address1, 1, @[0x2.byte])
     builder.addCodeChange(address1, 2, @[0x3.byte])
 
-    var bal = builder.buildBlockAccessList()
+    var bal = builder.buildBlockAccessList()[]
     check bal.validate(bal.computeBlockAccessListHash()).isOk()
     bal[0].codeChanges[0] = bal[0].codeChanges[2]
     check bal.validate(bal.computeBlockAccessListHash()).isErr()

@@ -44,7 +44,7 @@ suite "Block access list tracker":
       coreDb = newCoreDbRef(DefaultDbMemory)
       ledger = LedgerRef.init(coreDb.baseTxFrame())
       builder = BlockAccessListBuilderRef.init()
-      tracker = StateChangeTrackerRef.init(ledger.ReadOnlyLedger, builder)
+      tracker = BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger, builder)
 
     # Setup in test data in db
 
@@ -150,15 +150,17 @@ suite "Block access list tracker":
 
   test "Track address access":
     check not builder.accounts.contains(address1)
-    tracker.trackAddressAccess(address1)
-    check builder.accounts.contains(address1)
-
     check not builder.accounts.contains(address2)
-    tracker.trackAddressAccess(address2)
-    check builder.accounts.contains(address2)
-
     check not builder.accounts.contains(address4)
+
+    tracker.beginCallFrame()
+    tracker.trackAddressAccess(address1)
+    tracker.trackAddressAccess(address2)
     tracker.trackAddressAccess(address4)
+    tracker.commitCallFrame()
+
+    check builder.accounts.contains(address1)
+    check builder.accounts.contains(address2)
     check builder.accounts.contains(address4)
 
   test "Begin, commit and rollback call frame":
@@ -249,7 +251,9 @@ suite "Block access list tracker":
     block:
       check not builder.accounts.contains(address1)
 
+      tracker.beginCallFrame()
       tracker.trackStorageRead(address1, slot1)
+      tracker.commitCallFrame()
 
       check builder.accounts.contains(address1)
       tracker.builder.accounts.withValue(address1, accData):
@@ -259,7 +263,9 @@ suite "Block access list tracker":
     block:
       check not builder.accounts.contains(address2)
 
+      tracker.beginCallFrame()
       tracker.trackStorageRead(address2, slot2)
+      tracker.commitCallFrame()
 
       check builder.accounts.contains(address2)
       tracker.builder.accounts.withValue(address2, accData):
@@ -346,7 +352,7 @@ suite "Block access list tracker":
 
     check:
       not tracker.pendingCallFrame().storageChanges.contains((address1, slot1))
-      not tracker.pendingCallFrame().balanceChanges.contains(address1)
+      tracker.pendingCallFrame().balanceChanges.contains(address1)
       not tracker.pendingCallFrame().nonceChanges.contains(address1)
       not tracker.pendingCallFrame().codeChanges.contains(address1)
 
@@ -357,6 +363,6 @@ suite "Block access list tracker":
       check:
         slot1 notin accData[].storageChanges
         slot1 in accData[].storageReads
-        balIndex notin accData[].balanceChanges
+        balIndex in accData[].balanceChanges
         balIndex notin accData[].nonceChanges
         balIndex notin accData[].codeChanges

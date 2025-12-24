@@ -410,18 +410,16 @@ proc getTransactions*(
     return ok(move(res))
 
 proc persistBlockAccessList*(
-    db: CoreDbTxRef, blockAccessListHash: Hash32, bal: BlockAccessList) =
-  db.put(blockAccessListHashKey(blockAccessListHash).toOpenArray, bal.encode())
+    db: CoreDbTxRef, blockHash: Hash32, bal: BlockAccessList) =
+  db.put(blockHashToBlockAccessListKey(blockHash).toOpenArray, bal.encode())
     .expect("persistBlockAccessList should succeed")
 
 proc getBlockAccessList*(
-    db: CoreDbTxRef,
-    blockAccessListHash: Hash32): Result[Opt[BlockAccessList], string] =
-  if blockAccessListHash == EMPTY_BLOCK_ACCESS_LIST_HASH:
-    return ok(Opt.some(default(BlockAccessList)))
-
-  let balBytes = db.getOrEmpty(blockAccessListHashKey(blockAccessListHash).toOpenArray).valueOr:
-    return err("getBlockAccessList: " & $$error)
+    db: CoreDbTxRef, blockHash: Hash32): Result[Opt[BlockAccessList], string] =
+  let balBytes = db.getOrEmpty(
+      blockHashToBlockAccessListKey(blockHash).toOpenArray
+    ).valueOr:
+      return err("getBlockAccessList: " & $$error)
 
   if balBytes == EmptyBlob:
     return ok(Opt.none(BlockAccessList))
