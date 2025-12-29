@@ -21,7 +21,7 @@ additional_services:
   - assertoor
 mev_type: null
 assertoor_params:
-  image: "ethpandaops/assertoor"
+  image: "ethpandaops/assertoor:master"
   run_stability_check: false
   run_block_proposal_check: true
   run_transaction_test: true
