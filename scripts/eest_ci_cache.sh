@@ -56,6 +56,11 @@ download_and_extract() {
     fi
   fi
 
+  # Remove any existing tests from a prior download
+  rm -rf "${dest_dir}/blockchain_tests"
+  rm -rf "${dest_dir}/blockchain_tests_engine"
+  rm -rf "${dest_dir}/state_tests"
+
   echo "Downloading and extracting EEST test vectors for ${name} ${version}"
 
   cd "${FIXTURES_DIR}"
