@@ -23,7 +23,7 @@ import
   ../core/tx_pool,
   ../beacon/web3_eth_conv,
   ../transaction,
-  ../transaction/call_evm,
+  ../transaction/call_evm_rpc,
   ../evm/evm_errors,
   ../core/eip4844,
   ../core/pooled_txs_rlp,
@@ -48,11 +48,8 @@ template chain(api: ServerAPIRef): ForkedChainRef =
 func newServerAPI*(txPool: TxPoolRef): ServerAPIRef =
   ServerAPIRef(txPool: txPool)
 
-proc getTotalDifficulty*(api: ServerAPIRef, blockHash: Hash32): UInt256 =
-  # TODO forkedchain!
-  let totalDifficulty = api.com.db.baseTxFrame().getScore(blockHash).valueOr:
-    return api.com.db.baseTxFrame().headTotalDifficulty()
-  return totalDifficulty
+proc getTotalDifficulty*(api: ServerAPIRef, blockHash: Hash32): Opt[UInt256] =
+  api.txPool.chain.getTotalDifficulty(blockHash)
 
 proc getProof*(
     accDB: LedgerRef, address: Address, slots: seq[UInt256]

@@ -97,7 +97,7 @@ proc initEnv(config: ExecutionClientConf): TestEnv =
     # create the sender first, because it will modify networkParams
     sender = TxSender.new(config.networkParams, 30)
     com    = CommonRef.new(newCoreDbRef DefaultDbMemory,
-               nil, config.networkId, config.networkParams)
+               config.networkId, config.networkParams)
     chain  = ForkedChainRef.init(com)
 
   TestEnv(

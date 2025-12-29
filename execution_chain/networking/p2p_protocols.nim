@@ -19,8 +19,8 @@ export
   p2p_enums, p2p_errors
 
 const
-  MAX_PROTOCOLS* = 3
-   ## devp2p, eth68, eth69
+  MAX_PROTOCOLS* = 4
+   ## devp2p, eth68, eth69, snap1
    ## modify if you need more
 
 type

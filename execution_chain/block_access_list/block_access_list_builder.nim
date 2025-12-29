@@ -113,11 +113,8 @@ proc addCodeChange*(
 func balIndexCmp(x, y: StorageChange | BalanceChange | NonceChange | CodeChange): int =
   cmp(x.blockAccessIndex, y.blockAccessIndex)
 
-func slotCmp(x, y: StorageKey | StorageValue): int =
-  cmp(x.data.toHex(), y.data.toHex())
-
 func slotChangesCmp(x, y: SlotChanges): int =
-  cmp(x.slot.data.toHex(), y.slot.data.toHex())
+  cmp(x.slot, y.slot)
 
 func addressCmp(x, y: AccountChanges): int =
   cmp(x.address.data.toHex(), y.address.data.toHex())
@@ -132,18 +129,18 @@ func buildBlockAccessList*(builder: BlockAccessListBuilderRef): BlockAccessList 
       var slotChanges: seq[StorageChange]
 
       for balIndex, value in changes:
-        slotChanges.add((BlockAccessIndex(balIndex), StorageValue(value.toBytesBE())))
+        slotChanges.add((BlockAccessIndex(balIndex), StorageValue(value)))
       slotChanges.sort(balIndexCmp)
 
-      storageChanges.add((StorageKey(slot.toBytesBE()), slotChanges))
+      storageChanges.add((StorageKey(slot), slotChanges))
     storageChanges.sort(slotChangesCmp)
 
     # Collect and sort storageReads
     var storageReads: seq[StorageKey]
     for slot in accData.storageReads:
       if slot notin accData.storageChanges:
-        storageReads.add(StorageKey(slot.toBytesBE()))
-    storageReads.sort(slotCmp)
+        storageReads.add(StorageKey(slot))
+    storageReads.sort()
 
     # Collect and sort balanceChanges
     var balanceChanges: seq[BalanceChange]

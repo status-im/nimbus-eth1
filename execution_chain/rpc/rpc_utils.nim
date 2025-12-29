@@ -17,7 +17,7 @@ import
   ../constants, stint,
   ../utils/utils,
   ../transaction,
-  ../transaction/call_evm,
+  ../transaction/call_evm_rpc,
   ../core/eip4844,
   ../core/chain/forked_chain,
   ../evm/types,
@@ -128,7 +128,7 @@ proc populateTransactionObject*(tx: Transaction,
 
 proc populateBlockObject*(blockHash: Hash32,
                           blk: Block,
-                          totalDifficulty: UInt256,
+                          totalDifficulty: Opt[UInt256],
                           fullTx: bool,
                           withUncles: bool = false): BlockObject =
   template header: auto = blk.header
@@ -389,3 +389,7 @@ proc getEthConfigObject*(com: CommonRef,
     res.last = Opt.none(ConfigObject)
 
   return res
+
+proc getTotalDifficulty*(chain: ForkedChainRef, blockHash: Hash32): Opt[UInt256] =
+  # Note: It's ok to use baseTxFrame for TD as this is for historical blocks
+  chain.baseTxFrame().getScore(blockHash)

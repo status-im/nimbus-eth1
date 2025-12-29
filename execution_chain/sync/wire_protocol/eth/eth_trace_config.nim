@@ -13,7 +13,7 @@ const
   # Some static noisy settings for `eth` debugging
   trEthTracePacketsOk* = true
     ## `trace` log each sync network message.
-  trEthTraceGossipOk* = true and false
+  trEthTraceGossipOk* = false
     ## `trace` log each sync network message.
   trEthTraceHandshakesOk* = true
     ## `trace` log each network handshake message.

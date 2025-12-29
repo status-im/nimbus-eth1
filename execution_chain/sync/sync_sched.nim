@@ -106,12 +106,14 @@ type
 
   RunCtrl = enum
     terminated = 0
-    shutdown
-    running
+    shutdown                    ## About to terminate
+    allRunning                  ## Running, full support
+    standByMode                 ## Suspending worker and deamon loop
 
-  PeerProtoCheck = ref object
+  PeerProtoCheck[S,W] = ref object
     hasProto: AcceptPeerOk      ## Sub protocol selector closure
     acceptPeer: AcceptPeerOk    ## Can accept protocol enabled by `hasProto()`
+    initWorker: InitWorker[S,W] ## Initialise if `acceptPeer()` succeeds
 
   RunnerPeerRef[S,W] = ref object
     ## Per worker peer descriptor
@@ -122,6 +124,7 @@ type
   # ---- public types ----
 
   AcceptPeerOk* = proc(peer: Peer): bool {.gcsafe, raises: [].}
+  InitWorker*[S,W] = proc(worker: SyncPeerRef[S,W]) {.gcsafe, raises: [].}
 
   RunnerSyncRef*[S,W] = ref object of RootRef
     ## Module descriptor
@@ -138,20 +141,29 @@ type
     activeMulti: int            ## Number of async workers active/running
     runCtrl: RunCtrl            ## Overall scheduler start/stop control
     po: PeerObserver            ## P2p protocol handler environment
-    filter: seq[PeerProtoCheck] ## List of p2p sub-protocol handler filters
+    filter: seq[PeerProtoCheck[S,W]] ## List of p2p sub-protocol handler filters
 
 const
+  tickerExecLoopWaitInterval = 5.seconds
+    ## Run exec loop with ticker body and then wait some time
+
+  daemonExecLoopTimeElapsedMin = 50.milliseconds
+    ## Minimum elapsed time the deamon exec loop needs for a single lap. If it
+    ## is faster, asynchroneous sleep seconds are added. in order to avoid
+    ## cpu overload.
+
+  workerExecLoopTimeElapsedMin = 50.milliseconds
+    ## Ditto for worker exec loop
+
+  workerExecLoopStandByModeIdleTime = 10.seconds
+    ## Worker loop idle time polling for stand-by-mode
+
   zombieTimeToLinger = 20.seconds
     ## Maximum time a zombie is kept on the database.
 
-  execLoopTimeElapsedMin = 50.milliseconds
-    ## Minimum elapsed time an exec loop needs for a single lap. If it is
-    ## faster, asynchroneous sleep seconds are added. in order to avoid
-    ## cpu overload.
-
   execLoopTaskSwitcher = 1.nanoseconds
     ## Asynchroneous waiting time at the end of an exec loop unless some sleep
-    ## seconds were added as decribed by `execLoopTimeElapsedMin`, above.
+    ## seconds were added as decribed by `xxxExecLoopTimeElapsedMin`, above.
 
   execLoopPollingTime = 50.milliseconds
     ## Single asynchroneous time interval wait state for event polling
@@ -162,16 +174,9 @@ const
   termWaitPollingTime = 10.milliseconds
     ## Wait for instance to have terminated for shutdown
 
-  tickerWaitInterval = 5.seconds
-    ## Ticker loop interval
-
 # ------------------------------------------------------------------------------
 # Private debugging helpers
 # ------------------------------------------------------------------------------
-
-template noisy[S,W](dsc: RunnerSyncRef[S,W]): bool =
-  ## Log a bit more (typically while syncer is activated)
-  dsc.ctx.noisyLog
 
 func toStr(w: HashSet[Port]): string =
   "{" & w.toSeq.mapIt(it.uint).sorted.mapIt($it).join(",") & "}"
@@ -194,9 +199,12 @@ template lruReset(db: untyped): untyped =
   ## Clear LRU list
   db = typeof(db).init db.capacity
 
-proc alwaysAcceptPeerOk(peer: Peer): bool =
+func alwaysAcceptPeerOk(peer: Peer): bool =
   ## Some default call back function
   true
+
+func noopInitWorker[S,W](w: SyncPeerRef[S,W]) =
+  discard
 
 # ------------------------------------------------------------------------------
 # Private constructor helpers
@@ -205,24 +213,32 @@ proc alwaysAcceptPeerOk(peer: Peer): bool =
 proc getSyncPeerFn[S,W](dsc: RunnerSyncRef[S,W]): GetSyncPeerFn[S,W] =
   ## Get particular active syncer peer (aka buddy)
   result = proc(peerID: Hash): SyncPeerRef[S,W] =
-    dsc.syncPeers.peek(peerID).isErrOr:
-      return value.worker
-    dsc.orphans.peek(peerID).isErrOr:
-      return value.worker
+    if dsc.runCtrl in {allRunning,standByMode}:
+      var rc = dsc.syncPeers.peek(peerID)
+      if rc.isErr:
+        rc = dsc.orphans.peek(peerID)
+      if rc.isOk and rc.value.worker.ctrl.running:
+        return rc.value.worker
     # SyncPeerRef[S,W](nil)
 
 proc getSyncPeersFn[S,W](dsc: RunnerSyncRef[S,W]): GetSyncPeersFn[S,W] =
   ## Get a list of descriptor all active syncer peers (aka buddies)
   result = proc(): seq[SyncPeerRef[S,W]] =
     var list: seq[SyncPeerRef[S,W]]
-    for w in dsc.syncPeers.values:
-      list.add w.worker
-    for w in dsc.orphans.values:
-      list.add w.worker
+    if dsc.runCtrl in {allRunning,standByMode}:
+      for w in dsc.syncPeers.values:
+        if w.worker.ctrl.running:
+          list.add w.worker
+      for w in dsc.orphans.values:
+        if w.worker.ctrl.running:
+          list.add w.worker
     list
 
 proc nSyncPeersFn[S,W](dsc: RunnerSyncRef[S,W]): NSyncPeersFn[S,W] =
-  ## Efficient version of `dsc.getSyncPeersFn().len`
+  ## Efficient version of `dsc.getSyncPeersFn().len`. This number returned
+  ## here might be slightly larger than `dsc.getSyncPeersFn().len` because
+  ## peers marked `stopped` (i.e. to be terminated) are also included
+  ## in the count.
   result = proc(): int =
     dsc.nSyncPeers()
 
@@ -274,7 +290,7 @@ proc acceptByIP[S,W](dsc: RunnerSyncRef[S,W], peer: Peer): bool =
     return true
 
   # Port table full. Cannot add this peer.
-  if dsc.noisy: trace "Too many peers with same IP, rejected", peer,
+  trace "Too many peers with same IP, rejected", peer,
     otherPorts=ports.toStr, nSyncPeers=dsc.nSyncPeers(),
     nSyncPeersMax=dsc.syncPeers.capacity, nPoolPeers=dsc.peerPool.len
   return false
@@ -286,7 +302,7 @@ proc acceptByIP[S,W](dsc: RunnerSyncRef[S,W], peer: Peer): bool =
 proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
   mixin runDaemon
 
-  if dsc.ctx.daemon and dsc.runCtrl == running:
+  if dsc.ctx.daemon and dsc.runCtrl == allRunning:
     dsc.daemonRunning = true
 
     # Continue until stopped
@@ -303,8 +319,9 @@ proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
       # caused by some empty sub-tasks which are out of this scheduler control.
       let
         elapsed = Moment.now() - startMoment
-        suspend = if execLoopTimeElapsedMin <= elapsed: execLoopTaskSwitcher
-                  else: execLoopTimeElapsedMin - elapsed
+        suspend =
+          if daemonExecLoopTimeElapsedMin <= elapsed: execLoopTaskSwitcher
+          else: daemonExecLoopTimeElapsedMin - elapsed
       try:
         await sleepAsync max(suspend, idleTime)
       except CancelledError:
@@ -322,19 +339,21 @@ proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
 proc tickerLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
   mixin runTicker
 
-  if dsc.runCtrl == running:
+  if dsc.runCtrl in {allRunning,standByMode}:
     dsc.tickerRunning = true
 
-    while dsc.runCtrl == running:
+    while dsc.runCtrl in {allRunning,standByMode}:
       # Dispatch daemon sevice if needed
-      if not dsc.daemonRunning and dsc.ctx.daemon:
+      if not dsc.daemonRunning and
+         dsc.ctx.daemon and
+         dsc.runCtrl == allRunning:
         asyncSpawn dsc.daemonLoop()
 
       # Run ticker job
       dsc.ctx.runTicker()
 
       try:
-        await sleepAsync tickerWaitInterval
+        await sleepAsync tickerExecLoopWaitInterval
       except CancelledError:
         trace "Ticker loop sleep was cancelled"
         break
@@ -355,11 +374,8 @@ proc workerLoop[S,W](buddy: RunnerPeerRef[S,W]) {.async: (raises: []).} =
   # Continue until stopped
   block taskExecLoop:
 
-    template isShutdown(): bool =
-      dsc.runCtrl != running
-
     template isActive(): bool =
-      worker.ctrl.running and not isShutdown()
+      worker.ctrl.running and dsc.runCtrl notin {terminated,shutdown}
 
     while isActive():
       # Enforce minimum time spend on this loop
@@ -399,7 +415,7 @@ proc workerLoop[S,W](buddy: RunnerPeerRef[S,W]) {.async: (raises: []).} =
               delayed = nil # not executing any final item
               break # `true` => stop
             # Shutdown in progress?
-            if isShutdown():
+            if dsc.runCtrl in {terminated,shutdown}:
               dsc.monitorLock = false
               break taskExecLoop
           if not delayed.isNil:
@@ -408,6 +424,9 @@ proc workerLoop[S,W](buddy: RunnerPeerRef[S,W]) {.async: (raises: []).} =
             break
           count.inc
         dsc.monitorLock = false
+
+      elif dsc.runCtrl == standByMode:
+        idleTime = workerExecLoopStandByModeIdleTime
 
       else:
         # Rotate LRU connection table so this `worker` becomes most used
@@ -422,7 +441,7 @@ proc workerLoop[S,W](buddy: RunnerPeerRef[S,W]) {.async: (raises: []).} =
         dsc.activeMulti.dec
 
       # Check for shutdown
-      if isShutdown():
+      if dsc.runCtrl in {terminated,shutdown}:
         worker.ctrl.stopped = true
         break taskExecLoop
 
@@ -438,8 +457,9 @@ proc workerLoop[S,W](buddy: RunnerPeerRef[S,W]) {.async: (raises: []).} =
       # caused by some empty sub-tasks which are out of this scheduler control.
       let
         elapsed = Moment.now() - startMoment
-        suspend = if execLoopTimeElapsedMin <= elapsed: execLoopTaskSwitcher
-                  else: execLoopTimeElapsedMin - elapsed
+        suspend =
+          if workerExecLoopTimeElapsedMin <= elapsed: execLoopTaskSwitcher
+          else: workerExecLoopTimeElapsedMin - elapsed
       try:
         await sleepAsync max(suspend, idleTime)
       except CancelledError:
@@ -449,7 +469,7 @@ proc workerLoop[S,W](buddy: RunnerPeerRef[S,W]) {.async: (raises: []).} =
         break taskExecLoop # stop on error (must not end up in busy-loop)
 
       # Need to re-check after potential task switch
-      if isShutdown() or worker.ctrl.stopped:
+      if dsc.runCtrl in {terminated,shutdown}:
         worker.ctrl.stopped = true
         break taskExecLoop
 
@@ -473,7 +493,7 @@ proc terminate[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
   ## Request termination and wait for sub-tasks to finish
   mixin runRelease
 
-  if dsc.runCtrl == running:
+  if dsc.runCtrl in {allRunning,standByMode}:
     # Gracefully shut down async services
     dsc.runCtrl = shutdown
     dsc.ctx.daemon = false
@@ -515,17 +535,20 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
   mixin runStart
 
   # Ignore if shutdown processing
-  if dsc.runCtrl != running:
+  if dsc.runCtrl notin {allRunning,standByMode}:
     return
 
+  var initWorker: InitWorker[S,W]
   block protoFilter:
     # Accept if accepted by some vetting filter
     for filter in dsc.filter:
       if filter.hasProto(peer) and
          filter.acceptPeer(peer):
+        # Load per-protocal initialisation
+        initWorker = filter.initWorker
         break protoFilter
     # Otherwise ignore
-    if dsc.noisy: trace "No suitable protocol for peer", peer
+    trace "No suitable protocol for peer", peer
     return # fail
 
   # Make sure that the overflow list can absorb an eviced peer temporarily
@@ -540,7 +563,7 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
   dsc.zombies.peek(peerID).isErrOr:
     let elapsed = Moment.now() - value
     if elapsed < zombieTimeToLinger:
-      if dsc.noisy: trace "Reconnecting zombie peer ignored", peer,
+      trace "Reconnecting zombie peer ignored", peer,
         nSyncPeers=dsc.nSyncPeers(), nSyncPeersMax=dsc.syncPeers.capacity,
         nPoolPeers=dsc.peerPool.len,
         canReconnectIn=(zombieTimeToLinger-elapsed).toString(2)
@@ -559,27 +582,28 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
       ctx:    dsc.ctx,
       peer:   peer,
       peerID: peerID))
+  buddy.worker.initWorker()              # function was set above
   if not buddy.worker.runStart():
-    if dsc.noisy: trace "Ignoring useless peer", peer,
+    trace "Ignoring useless peer", peer,
       nSyncPeers=dsc.nSyncPeers(), nSyncPeersMax=dsc.syncPeers.capacity,
       nPoolPeers=dsc.peerPool.len
     return
 
   # Add peer entry. This might evict the least used entry from the LRU table.
   dsc.registerByIP peer
-  for (evOk, evKey, evBuddy) in dsc.syncPeers.putWithEvicted(peerID, buddy):
+  for (evOk, key, value) in dsc.syncPeers.putWithEvicted(peerID, buddy):
     if evOk:
-      let evPeer = evBuddy.worker.peer
+      let evPeer = value.worker.peer
       dsc.unregisterByIP evPeer
-      dsc.orphans.put(evKey, evBuddy)      # adopt orphan temorarily
+      dsc.orphans.put(key, value)      # adopt orphan temorarily
 
       # If it is set a zombie, it will be taken care of when the
       # `workerLoop()` finishes.
-      if evBuddy.worker.ctrl.running:
-        evBuddy.worker.ctrl.stopped = true
+      if value.worker.ctrl.running:
+        value.worker.ctrl.stopped = true
 
-      if dsc.noisy: trace "Evicted peer", peer=evPeer,
-        state=evBuddy.worker.ctrl.state, nSyncPeers=dsc.nSyncPeers(),
+      trace "Evicted peer", peer=evPeer,
+        state=value.worker.ctrl.state, nSyncPeers=dsc.nSyncPeers(),
         nSyncPeersMax=dsc.syncPeers.capacity, nPoolPeers=dsc.peerPool.len
 
   # Hand over to worker loop
@@ -647,34 +671,41 @@ proc initSync*[S,W](
 proc addSyncProtocol*[S,W](
     dsc: RunnerSyncRef[S,W];
     PROTO: type;
-    acceptPeer = AcceptPeerOk(nil);
+    acceptPeer: AcceptPeerOk = nil;
+    initWorker: InitWorker[S,W] = nil;
       ) =
   ## Activate scheduler for a particular protocol. The filter argument
   ## function `acceptPeer` is run before any other connection handler. If
   ## the former returns `true`, processing goes ahead.
   ##
   dsc.po.addProtocol PROTO
-  dsc.filter.add PeerProtoCheck(
+  dsc.filter.add PeerProtoCheck[S,W](
     hasProto: proc(p: Peer): bool {.gcsafe.} =
       p.supports(PROTO),
     acceptPeer:
-      (if acceptPeer.isNil: alwaysAcceptPeerOk else: acceptPeer))
+      (if acceptPeer.isNil: alwaysAcceptPeerOk else: acceptPeer),
+    initWorker:
+      (if initWorker.isNil: noopInitWorker[S,W] else: initWorker))
 
 # ---------
 
-proc startSync*[S,W](dsc: RunnerSyncRef[S,W]): bool =
-  ## Activate `PeerObserver` handlers and start syncing.
+proc startSync*[S,W](dsc: RunnerSyncRef[S,W]; standBy = false): bool =
+  ## Activate `PeerObserver` handlers and start syncing. This function also
+  ## sets rum or stand-by mode according to argument `standBy`.
+  ##
+  ## The function returns `true` if the run state was changed.
+  ##
   mixin runSetup
 
-  if dsc.runCtrl == terminated:
+  case dsc.runCtrl:
+  of terminated:
     # Initialise sub-systems
     if dsc.ctx.runSetup():
       # Initialise descriptor for running, probably after an earlier
       # termination. The `dsc.ctx.pool` might containg inter session
       # data, so it is not reset here.
-      dsc.runCtrl = running
+      dsc.runCtrl = (if standBy: standByMode else: allRunning)
       dsc.ctx.poolMode = false
-      dsc.ctx.noisyLog = false
       dsc.syncPeers.lruReset()
       dsc.peerByIP.lruReset()
       dsc.orphans.lruReset()
@@ -683,19 +714,37 @@ proc startSync*[S,W](dsc: RunnerSyncRef[S,W]): bool =
       # Activate protocol handlers
       dsc.peerPool.addObserver(dsc, dsc.po)
       if dsc.filter.len == 0:
-        dsc.filter.add PeerProtoCheck(
+        dsc.filter.add PeerProtoCheck[S,W](
           hasProto:   alwaysAcceptPeerOk,
-          acceptPeer: alwaysAcceptPeerOk)
+          acceptPeer: alwaysAcceptPeerOk,
+          initWorker: noopInitWorker[S,W])
 
       asyncSpawn dsc.tickerLoop()
       return true
 
+  of standByMode:
+    if not standBy:
+      dsc.runCtrl = allRunning
+      return true
+
+  of allRunning:
+    if standBy:
+      dsc.runCtrl = standByMode
+      return true
+
+  of shutdown:
+    discard
+  # false
+
 proc isRunning*[S,W](dsc: RunnerSyncRef[S,W]): bool =
-  dsc.runCtrl != terminated
+  dsc.runCtrl notin {terminated,shutdown}
+
+proc isStandBy*[S,W](dsc: RunnerSyncRef[S,W]): bool =
+  dsc.runCtrl == standByMode
 
 proc stopSync*[S,W](dsc: RunnerSyncRef[S,W]) {.async.} =
   ## Stop syncing and free peer handlers .
-  if dsc.runCtrl != terminated:
+  if dsc.runCtrl notin {terminated,shutdown}:
     await dsc.terminate()
 
 # ------------------------------------------------------------------------------

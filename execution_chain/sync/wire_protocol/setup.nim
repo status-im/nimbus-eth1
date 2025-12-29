@@ -11,24 +11,9 @@
 {.used, push raises: [].}
 
 import
-  ../../networking/p2p,
-  ../../core/tx_pool,
-  ./requester,
-  ./handler
+  ./eth/eth_setup,
+  ./snap/snap_setup
 
-# ------------------------------------------------------------------------------
-# Public functions: convenience mappings for `eth`
-# ------------------------------------------------------------------------------
-proc addEthHandlerCapability*(
-    node: EthereumNode;
-    txPool: TxPoolRef;
-      ): EthWireRef =
-  ## Install wire prototcol handlers for each cap.
-  let wire = EthWireRef.new(txPool, node)
-  node.addCapability(eth68, wire)
-  node.addCapability(eth69, wire)
-  wire
-
-# ------------------------------------------------------------------------------
-# End
-# ------------------------------------------------------------------------------
+export
+  eth_setup,
+  snap_setup

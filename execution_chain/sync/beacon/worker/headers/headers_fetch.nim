@@ -40,11 +40,21 @@ proc maybeSlowPeerError(
 
   # false
 
+func errStr(rc: Result[FetchHeadersData,BeaconError]): string =
+  if rc.isErr:
+    result = $rc.error.excp
+    if 0 < rc.error.name.len:
+      result &= "(" & rc.error.name & ")"
+    if 0 < rc.error.msg.len:
+      result &= "[" & rc.error.msg & "]"
+  else:
+    result = "n/a"
+
 # ------------------------------------------------------------------------------
-# Public handler
+# Private function(s)
 # ------------------------------------------------------------------------------
 
-proc getBlockHeaders*(
+proc getBlockHeaders(
     buddy: BeaconPeerRef;
     req: BlockHeadersRequest;
     bn: BlockNumber;
@@ -77,7 +87,7 @@ proc getBlockHeaders*(
   return ok((move resp, Moment.now()-start))
 
 # ------------------------------------------------------------------------------
-# Public function
+# Public function(s)
 # ------------------------------------------------------------------------------
 
 template fetchHeadersReversed*(
@@ -96,7 +106,8 @@ template fetchHeadersReversed*(
       sendInfo = trEthSendSendingGetBlockHeaders
       recvInfo = trEthRecvReceivedBlockHeaders
     let
-      peer {.inject,used.} = buddy.peer
+      peer {.inject,used.} = $buddy.peer           # logging only
+      hash {.inject,used.} = topHash.toStr         # logging only
       req = block:
         if topHash != emptyRoot:
           BlockHeadersRequest(
@@ -115,8 +126,8 @@ template fetchHeadersReversed*(
               isHash:   false,
               number:   ivReq.maxPt))
 
-    trace sendInfo & " reverse", peer, req=ivReq,
-      nReq=req.maxResults, hash=topHash.toStr, nErrors=buddy.nErrors.fetch.hdr
+    trace sendInfo & " reverse", peer, req=($ivReq), nReq=req.maxResults, hash,
+      state=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
 
     let rc = await buddy.getBlockHeaders(req, BlockNumber ivReq.maxPt)
     var elapsed: Duration
@@ -135,27 +146,27 @@ template fetchHeadersReversed*(
           buddy.hdrFetchRegisterError()
           buddy.hdrNoSampleSize(elapsed)
         of EAlreadyTriedAndFailed:
-          trace recvInfo & " error", peer, req=ivReq, nReq=req.maxResults,
-            hash=topHash.toStr, ela=elapsed.toStr, state=($buddy.syncState),
-            error=rc.error.excp, nErrors=buddy.nErrors.fetch.hdr
+          trace recvInfo & " error", peer, req=($ivReq), nReq=req.maxResults,
+            hash, ela=elapsed.toStr, state=($buddy.syncState), error=rc.errStr,
+            nErrors=buddy.nErrors.fetch.hdr
           break body                               # return err()
 
         # Debug message for other errors
-        debug recvInfo & " error", peer, req=ivReq, nReq=req.maxResults,
-          hash=topHash.toStr, ela=elapsed.toStr, state=($buddy.syncState),
-          error=($rc.error.excp & (if rc.error.name.len == 0: ""
-                                   else: "(" & rc.error.name & ")")),
-          msg=rc.error.msg, nErrors=buddy.nErrors.fetch.hdr
+        debug recvInfo & " error", peer, req=($ivReq), nReq=req.maxResults,
+          hash, ela=elapsed.toStr, state=($buddy.syncState), error=rc.errStr,
+          nErrors=buddy.nErrors.fetch.hdr
         break body                                 # return err()
+
+    let
+      ela {.inject,used.} = elapsed.toStr           # logging only
+      state {.inject,used.} = $buddy.syncState      # logging only
 
     # Evaluate result
     if rc.isErr or buddy.ctrl.stopped:
       if not buddy.maybeSlowPeerError(elapsed, BlockNumber ivReq.maxPt):
         buddy.hdrFetchRegisterError()
-      trace recvInfo & " error", peer, nReq=req.maxResults, hash=topHash.toStr,
-        nResp=0, ela=elapsed.toStr, state=($buddy.syncState),
-        error=(if rc.isErr: $rc.error.excp else: "n/a"),
-        nErrors=buddy.nErrors.fetch.hdr
+      trace recvInfo & " error", peer, req=($ivReq), nReq=req.maxResults, hash,
+        nResp=0, ela, state, error=rc.errStr, nErrors=buddy.nErrors.fetch.hdr
       break body                                   # return err()
 
     # Verify the correct number of block headers received
@@ -172,18 +183,16 @@ template fetchHeadersReversed*(
         # Slow response, definitely not fast enough
         discard buddy.maybeSlowPeerError(elapsed, BlockNumber ivReq.maxPt)
 
-      trace recvInfo & " error", peer, nReq=req.maxResults, hash=topHash.toStr,
-        nResp=h.len, ela=elapsed.toStr, state=($buddy.syncState),
-        nErrors=buddy.nErrors.fetch.hdr
+      trace recvInfo & " error", peer, nReq=req.maxResults, hash, nResp=h.len,
+        ela, state, nErrors=buddy.nErrors.fetch.hdr
       break body                                   # return err()
 
     # Verify that the first block number matches the request
     if h[^1].number != ivReq.minPt and ivReq.minPt != 0:
       buddy.hdrFetchRegisterError(forceZombie=true)
-      trace recvInfo & " error", peer, nReq=req.maxResults, hash=topHash.toStr,
+      trace recvInfo & " error", peer, nReq=req.maxResults, hash,
         reqMinPt=ivReq.minPt, respMinPt=h[^1].number, nResp=h.len,
-        ela=elapsed.toStr, state=($buddy.syncState),
-        nErrors=buddy.nErrors.fetch.hdr
+        ela, state, nErrors=buddy.nErrors.fetch.hdr
       break body
 
     # Update download statistics
@@ -199,10 +208,9 @@ template fetchHeadersReversed*(
       buddy.nErrors.fetch.hdr = 0                  # reset error count
       buddy.ctx.pool.lastSlowPeer = Opt.none(Hash) # not last one or not error
 
-    trace recvInfo, peer, nReq=req.maxResults, hash=topHash.toStr,
-      ivResp=(h[^1].number,h[0].number).toStr, nResp=h.len, ela=elapsed.toStr,
-      thPut=(bps.toIECb(1) & "ps"), state=($buddy.syncState),
-      nErrors=buddy.nErrors.fetch.hdr
+    trace recvInfo, peer, nReq=req.maxResults, hash, ivResp=(h[^1].number,
+      h[0].number).toStr, nResp=h.len, ela, thPut=(bps.toIECb(1) & "ps"),
+      state, nErrors=buddy.nErrors.fetch.hdr
 
     bodyRc = Opt[seq[Header]].ok(h)
 

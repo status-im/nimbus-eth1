@@ -149,6 +149,7 @@ type
 
   BeaconPeerData* = object
     ## Local descriptor data extension
+    pivotHash*: Hash32               ## Peer best/latest hash (for `snap` sync)
     nErrors*: PeerErrors             ## Error register
     thPutStats*: ThPutStats          ## Throughput statistics
     failedReq*: PeerFirstFetchReq    ## Avoid sending the same request twice
@@ -171,7 +172,8 @@ type
     ## Globally shared data extension
     hdrSync*: HeaderFetchSync        ## Syncing by linked header chains
     blkSync*: BlocksFetchSync        ## For importing/executing blocks
-    syncState*: SyncState            ## Last known layout state
+    syncState*: SyncState            ## Current syncer state
+    standByMode*: bool               ## Do not activate if `true`
     subState*: SyncSubState          ## Additional state variables
     nextMetricsUpdate*: Moment       ## For updating metrics
     nextAsyncNanoSleep*: Moment      ## Use nano-sleeps for task switch
@@ -234,10 +236,6 @@ func hibernate*(ctx: BeaconCtxRef): bool =
 proc `hibernate=`*(ctx: BeaconCtxRef; val: bool) =
   ## Setter
   ctx.daemon = not val
-
-  # Control some error messages on the scheduler (e.g. zombie/banned-peer
-  # reconnection attempts, LRU flushing out oldest peer etc.)
-  ctx.noisyLog = not val
 
 # -----
 

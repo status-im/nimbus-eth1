@@ -32,10 +32,19 @@ logScope:
 
 proc addBeaconSyncProtocol(desc: BeaconSyncRef; PROTO: type) =
   ## Add protocol and call back filter function for ethXX
-  desc.addSyncProtocol(PROTO):
-    proc(peer: Peer): bool =
-      let state = peer.state(PROTO)
-      not state.isNil and state.initialized
+  proc acceptPeer(peer: Peer): bool =
+    let state = peer.state(PROTO)
+    not state.isNil and state.initialized
+
+  proc initWorker(worker: SyncPeerRef[BeaconCtxData,BeaconPeerData]) =
+    when PROTO is eth68:
+      worker.only.pivotHash = worker.peer.state(PROTO).bestHash
+    elif PROTO is eth69:
+      worker.only.pivotHash = worker.peer.state(PROTO).latestHash
+    else:
+      {.error: "Unsupported eth/?? version".}
+
+  desc.addSyncProtocol(PROTO, acceptPeer, initWorker)
 
 # ------------------------------------------------------------------------------
 # Virtual methods/interface, `mixin` functions
@@ -86,8 +95,16 @@ proc config*(
     ethNode: EthereumNode;
     chain: ForkedChainRef;
     maxPeers: int;
+    latestOnly = false;
       ) =
   ## Complete `BeaconSyncRef` descriptor initialisation.
+  ##
+  ## If the `snap` protocol is used as well, the argument `latestOnly` must be
+  ## set `true`. There can only be one active `eth` protocol version assuming
+  ## that the number of messages differ with the `eth` versions. Due to tight
+  ## packaging of message IDs, different `eth` protocol lengths lead to varying
+  ## `snap` message IDs depending on the `eth` version. To handle this is
+  ## currently unsupported.
   ##
   ## Note that the `init()` constructor might have specified a configuration
   ## task to be run at the end of the `config()` function.
@@ -99,7 +116,8 @@ proc config*(
   # implementation, `eth68` descriptor(s) will not be fully initialised
   # (i.e. `peer.state(eth68).isNil`) if `eth69` is available.
   desc.addBeaconSyncProtocol(eth69)
-  desc.addBeaconSyncProtocol(eth68)
+  if not latestOnly:
+    desc.addBeaconSyncProtocol(eth68)
 
   desc.ctx.pool.chain = chain
 
@@ -119,29 +137,18 @@ proc configTarget*(desc: BeaconSyncRef; hex: string; isFinal: bool): bool =
 
 # -----------------
 
-proc activate*(desc: BeaconSyncRef) =
-  ## Clear stand-by mode (if any)
-  doAssert not desc.ctx.isNil
-  if desc.ctx.pool.syncState == SyncState.standByMode:
-    desc.ctx.pool.syncState = SyncState.idle
-
-proc start*(desc: BeaconSyncRef; standByMode = false): bool =
+proc start*(desc: BeaconSyncRef; standBy = false): bool =
   ## This function returns `true` exactly if the run state could be changed.
   ## The following expressions are equivalent:
   ## * desc.start(true)
   ## * desc.start(false) and desc.start(true)
   ##
   doAssert not desc.ctx.isNil
-  if desc.isRunning:
-    # Correct state to stand-by mode if possible
-    if standByMode and desc.ctx.pool.syncState == SyncState.idle:
-      desc.ctx.pool.syncState = SyncState.standByMode
-      return true
-  else:
-    if standByMode:
-      desc.ctx.pool.syncState = SyncState.standByMode
-    if desc.startSync():
-      return true
+  let save = desc.ctx.pool.standByMode
+  desc.ctx.pool.standByMode = standBy # the ticker sees this when starting
+  if desc.startSync(standBy):
+    return true
+  desc.ctx.pool.standByMode = save
   # false
 
 proc stop*(desc: BeaconSyncRef) {.async.} =

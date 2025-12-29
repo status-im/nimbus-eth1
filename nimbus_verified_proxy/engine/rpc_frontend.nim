@@ -378,7 +378,6 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
   .} =
     let com = CommonRef.new(
       DefaultDbMemory.newCoreDbRef(),
-      taskpool = nil,
       config = chainConfigForNetwork(engine.chainId),
       initializeDb = false,
       statelessProviderEnabled = true, # Enables collection of witness keys

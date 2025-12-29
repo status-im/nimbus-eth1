@@ -72,8 +72,7 @@ proc statelessProcessBlock*(
     skipValidation = false,
     skipReceipts = false,
     skipUncles = true,
-    skipStateRootCheck = false,
-    taskpool = com.taskpool,
+    skipStateRootCheck = false
   )
   doAssert memoryVmState.ledger.getStateRoot() == blk.header.stateRoot
 
@@ -83,7 +82,7 @@ proc statelessProcessBlock*(
     witness: ExecutionWitness, id: NetworkId, config: ChainConfig, blk: Block
 ): Result[void, string] =
   let com = CommonRef.new(
-    db = nil, taskpool = nil, config = config, networkId = id, initializeDb = false
+    db = nil, config = config, networkId = id, initializeDb = false
   )
   statelessProcessBlock(witness, com, blk)
 

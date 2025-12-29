@@ -40,8 +40,21 @@ proc maybeSlowPeerError(
 
   # false
 
+func errStr(rc: Result[FetchBodiesData,BeaconError]): string =
+  if rc.isErr:
+    result = $rc.error.excp
+    if 0 < rc.error.name.len:
+      result &= "(" & rc.error.name & ")"
+    if 0 < rc.error.msg.len:
+      result &= "[" & rc.error.msg & "]"
+  else:
+    result = "n/a"
 
-proc getBlockBodies*(
+# ------------------------------------------------------------------------------
+# Private function(s)
+# ------------------------------------------------------------------------------
+
+proc getBlockBodies(
     buddy: BeaconPeerRef;
     req: BlockBodiesRequest;
       ): Future[Result[FetchBodiesData,BeaconError]]
@@ -73,7 +86,7 @@ proc getBlockBodies*(
   return ok((move resp, Moment.now()-start))
 
 # ------------------------------------------------------------------------------
-# Public functions
+# Public function(s)
 # ------------------------------------------------------------------------------
 
 template fetchBodies*(
@@ -90,11 +103,11 @@ template fetchBodies*(
       sendInfo = trEthSendSendingGetBlockBodies
       recvInfo = trEthRecvReceivedBlockBodies
     let
-      peer {.inject,used.} = buddy.peer
+      peer {.inject,used.} = $buddy.peer            # logging only
       nReq {.inject,used.} = request.blockHashes.len
 
     if request.blockHashes.len == 0:
-      trace sendInfo & " empty request", peer, nReq,
+      trace sendInfo & " empty request", peer, nReq, state=($buddy.syncState),
         nErrors=buddy.nErrors.fetch.bdy
       break body
 
@@ -123,25 +136,25 @@ template fetchBodies*(
         of EAlreadyTriedAndFailed:
           trace recvInfo & " error", peer, startHash=startHash.short, nReq,
             ela=rc.error.elapsed.toStr, state=($buddy.syncState),
-            error=rc.error.excp, nErrors=buddy.nErrors.fetch.bdy
+            error=rc.errStr, nErrors=buddy.nErrors.fetch.bdy
           break body                                # return err()
 
         # Debug message for other errors
         debug recvInfo & " error", peer, startHash=startHash.short, nReq,
-          ela=elapsed.toStr, state=($buddy.syncState),
-          error=($rc.error.excp & (if rc.error.name.len == 0: ""
-                                   else: "(" & rc.error.name & ")")),
-          msg=rc.error.msg, nErrors=buddy.nErrors.fetch.bdy
+          ela=elapsed.toStr, state=($buddy.syncState), error=rc.errStr,
+          nErrors=buddy.nErrors.fetch.bdy
         break body                                  # return err()
+
+    let
+      ela {.inject,used.} = elapsed.toStr           # logging only
+      state {.inject,used.} = $buddy.syncState      # logging only
 
     # Evaluate result
     if rc.isErr or buddy.ctrl.stopped:
       if not buddy.maybeSlowPeerError(elapsed, request.blockHashes[0]):
         buddy.bdyFetchRegisterError()
       trace recvInfo & " error", peer, startHash=startHash.short, nReq,
-        ela=elapsed.toStr, state=($buddy.syncState),
-        error=(if rc.isErr: $rc.error.excp else: "n/a"),
-        nErrors=buddy.nErrors.fetch.bdy
+        ela, state, error=rc.errStr, nErrors=buddy.nErrors.fetch.bdy
       break body                                    # return err()
 
     # Verify the correct number of block bodies received
@@ -159,8 +172,7 @@ template fetchBodies*(
         discard buddy.maybeSlowPeerError(elapsed, request.blockHashes[0])
 
       trace recvInfo & " error", peer, startHash=startHash.short, nReq,
-        nResp=b.len, ela=elapsed.toStr, state=($buddy.syncState),
-        nErrors=buddy.nErrors.fetch.bdy
+        nResp=b.len, ela, state, nErrors=buddy.nErrors.fetch.bdy
       break body                                    # return err()
 
     # Update download statistics
@@ -176,9 +188,8 @@ template fetchBodies*(
       buddy.nErrors.fetch.bdy = 0                   # reset error count
       buddy.ctx.pool.lastSlowPeer = Opt.none(Hash)  # not last one or not error
 
-    trace recvInfo, peer, startHash=startHash.short, nReq,
-      nResp=b.len, ela=elapsed.toStr, thPut=(bps.toIECb(1) & "ps"),
-      state=($buddy.syncState), nErrors=buddy.nErrors.fetch.bdy
+    trace recvInfo, peer, startHash=startHash.short, nReq, nResp=b.len, ela,
+      thPut=(bps.toIECb(1) & "ps"), state, nErrors=buddy.nErrors.fetch.bdy
 
     bodyRc = Opt[seq[BlockBody]].ok(b)
 

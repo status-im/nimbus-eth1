@@ -98,8 +98,17 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
       fatal "Get network keys error", msg = error
       quit(QuitFailure)
     natId = NimbusName & " " & NimbusVersion
-    (extIp, extTcpPort, extUdpPort) =
-      setupAddress(config.nat, config.listenAddress, config.tcpPort, config.udpPort, natId)
+    (extIp, extPorts) = setupAddress(
+      config.nat,
+      config.listenAddress,
+      @[
+        (port: config.tcpPort, protocol: PortProtocol.TCP),
+        (port: config.udpPort, protocol: PortProtocol.UDP),
+      ],
+      natId,
+    )
+    extTcpPort = extPorts[0].toPort()
+    extUdpPort = extPorts[1].toPort()
 
     bootstrapNodes = config.getBootstrapNodes()
     fc = nimbus.fc
@@ -126,8 +135,17 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
     rng = nimbus.rng,
     forkIdProcs = forkIdProcs)
 
-  # Add protocol capabilities
-  nimbus.wire = nimbus.ethNode.addEthHandlerCapability(nimbus.txPool)
+  # Add peer service protocol capabilities. If `snap` sync is used, then there
+  # can be only one active `eth` protocol version assuming that the number of
+  # messages differ with the `eth` versions. Due to tight packaging of message
+  # IDs, different `eth` protocol lengths lead to varying `snap` message IDs
+  # depending on the `eth` version. To handle this is currently unsupported.
+  #
+  let doSnapSync = config.snapSyncEnabled or config.snapServerEnabled
+  nimbus.ethWire =
+    nimbus.ethNode.addEthHandlerCapability(nimbus.txPool, latestOnly=doSnapSync)
+  if doSnapSync:
+    nimbus.snapWire = nimbus.ethNode.addSnapHandlerCapability()
 
   # Connect directly to the static nodes
   let staticPeers = config.getStaticPeers()
@@ -160,21 +178,35 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
     syncerShouldRun = true
 
   # Configure beacon syncer.
-  nimbus.beaconSyncRef.config(nimbus.ethNode, nimbus.fc, config.maxPeers)
+  nimbus.beaconSyncRef.config(
+    nimbus.ethNode, nimbus.fc, config.maxPeers, latestOnly=doSnapSync)
 
   # Optional for pre-setting the sync target (e.g. for debugging)
   if config.beaconSyncTarget.isSome():
     syncerShouldRun = true
-    let hex = config.beaconSyncTarget.unsafeGet
-    if not nimbus.beaconSyncRef.configTarget(hex, config.beaconSyncTargetIsFinal):
+    let
+      hex = config.beaconSyncTarget.unsafeGet
+      isFinal = config.beaconSyncTargetIsFinal
+    if not nimbus.beaconSyncRef.configTarget(hex, isFinal):
       fatal "Error parsing hash32 argument for --debug-beacon-sync-target",
         hash32=hex
       quit QuitFailure
+
+  # Configure snap sync if enabled. When done it will resume beacon sync.
+  if config.snapSyncEnabled:
+    if nimbus.snapSyncRef.isNil:
+      nimbus.snapSyncRef = SnapSyncRef.init()
+    else:
+      syncerShouldRun = true
+
+    # Configure snap syncer.
+    nimbus.snapSyncRef.config(nimbus.ethNode, config.maxPeers)
 
   # Deactivating syncer if there is definitely no need to run it. This
   # avoids polling (i.e. waiting for instructions) and some logging.
   if not syncerShouldRun:
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
+    nimbus.snapSyncRef = SnapSyncRef(nil)
 
 proc init*(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
   nimbus.accountsManager = new AccountsManager
@@ -185,11 +217,20 @@ proc init*(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
   setupP2P(nimbus, config, com)
   setupRpc(nimbus, config, com)
 
-  # Not starting syncer if there is definitely no way to run it. This
+  # Not starting any syncer if there is definitely no way to run it. This
   # avoids polling (i.e. waiting for instructions) and some logging.
-  if not nimbus.beaconSyncRef.isNil and
-      not nimbus.beaconSyncRef.start():
+  block startSyncer:
+    if not nimbus.beaconSyncRef.isNil:
+      if nimbus.snapSyncRef.isNil:
+        # Run full sync by starting beacon sync now.
+        if nimbus.beaconSyncRef.start():
+          break startSyncer
+      else:
+        # Start snap sync. When done it will resume beacon sync.
+        if nimbus.snapSyncRef.start(nimbus.beaconSyncRef):
+          break startSyncer
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
+    nimbus.snapSyncRef = SnapSyncRef(nil)
 
 proc init*(T: type NimbusNode, config: ExecutionClientConf, com: CommonRef): T =
   let nimbus = T()
@@ -222,7 +263,8 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionCli
       expected=calculatedId
     quit(QuitFailure)
 
-proc setupCommonRef*(config: ExecutionClientConf, taskpool: Taskpool): CommonRef =
+
+proc setupCommonRef*(config: ExecutionClientConf): CommonRef =
   let coreDB = AristoDbRocks.newCoreDbRef(
       config.dataDir,
       config.dbOptions(noKeyCache = config.cmd == NimbusCmd.`import`))
@@ -231,7 +273,6 @@ proc setupCommonRef*(config: ExecutionClientConf, taskpool: Taskpool): CommonRef
 
   let com = CommonRef.new(
     db = coreDB,
-    taskpool = taskpool,
     networkId = config.networkId,
     params = config.networkParams,
     statelessProviderEnabled = config.statelessProviderEnabled,
@@ -338,9 +379,14 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
     if metricsServer.isSome():
       waitFor metricsServer.stopMetricsServer()
 
-  let
-    taskpool = setupTaskpool(config.numThreads)
-    com = setupCommonRef(config, taskpool)
+  when compileOption("threads"):
+    let
+      taskpool = setupTaskpool(config.numThreads)
+      com = setupCommonRef(config)
+    com.taskpool = taskpool
+  else:
+    let com = setupCommonRef(config)
+
   defer:
     com.db.finish()
 

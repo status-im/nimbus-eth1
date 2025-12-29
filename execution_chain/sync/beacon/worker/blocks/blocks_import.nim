@@ -30,7 +30,7 @@ proc importBlock*(
   let
     start = Moment.now()
     ctx = buddy.ctx
-    peer = buddy.peer
+    peer {.inject,used.} = $buddy.peer              # logging only
 
   if blk.header.number <= ctx.chain.baseNumber:
     trace "Ignoring block less eq. base", peer, blk=blk.header.number,
