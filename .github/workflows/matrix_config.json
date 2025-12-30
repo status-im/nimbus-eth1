@@ -18,7 +18,7 @@
     {
       "os": "macos",
       "cpu": "arm64",
-      "builder": "macos-14"
+      "builder": "macos-15"
     }
   ]
 }
