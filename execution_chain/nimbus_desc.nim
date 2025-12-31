@@ -23,7 +23,9 @@ import
   ./sync/wire_protocol,
   ./beacon/beacon_engine,
   ./common,
-  ./pruner
+  ./pruner,
+  json_rpc/rpcchannels
+>>>>>>> 30a028be5 (Switch cl-el comms to RpcChannel)
 
 when enabledLogLevel == TRACE:
   import std/sequtils
@@ -46,6 +48,7 @@ type
   NimbusNode* = ref object
     httpServer*: NimbusHttpServerRef
     engineApiServer*: NimbusHttpServerRef
+    engineApiChannel*: RpcChannelServer
     ethNode*: EthereumNode
     fc*: ForkedChainRef
     txPool*: TxPoolRef

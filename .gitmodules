@@ -243,4 +243,7 @@
 	path = vendor/portal-sepolia
 	url = https://github.com/status-im/portal-sepolia
 	ignore = untracked
+[submodule "vendor/nim-async-channels"]
+	path = vendor/nim-async-channels
+	url = https://github.com/status-im/nim-async-channels
 	branch = master
