@@ -23,7 +23,8 @@ suite "test fees verification":
   test "check api methods":
     let
       ts = TestApiState.init(1.u256)
-      engine = initTestEngine(ts, 1, 1)
+      engine = initTestEngine(ts, 1, 1).valueOr:
+        raise newException(TestProxyError, error.errMsg)
       blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Paris.json")
 
     ts.loadBlock(blk)
@@ -35,16 +36,15 @@ suite "test fees verification":
 
     # we are only checking the API interface atm
     check:
-      gasPrice > Quantity(0)
-      priorityFee > Quantity(0)
+      gasPrice.isOk()
+      priorityFee.isOk()
+      gasPrice.get() > Quantity(0)
+      priorityFee.get() > Quantity(0)
 
-    try:
-      let blobFee = waitFor engine.frontend.eth_blobBaseFee()
-      # blobs weren't enables on paris
-      check false
-    except CatchableError:
-      # TODO: change this to an appropriate error whenever refactoring is done
-      check true
+    let blobFee = waitFor engine.frontend.eth_blobBaseFee()
+
+    # blobs weren't enabled on paris
+    check blobFee.isErr()
 
     ts.clear()
     engine.headerStore.clear()
@@ -57,7 +57,8 @@ suite "test fees verification":
     let blobFeePrague = waitFor engine.frontend.eth_blobBaseFee()
 
     check:
-      blobFeePrague > u256(0)
+      blobFeePrague.isOk()
+      blobFeePrague.get() > u256(0)
 
     ts.clear()
     engine.headerStore.clear()

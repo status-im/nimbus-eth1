@@ -20,6 +20,9 @@ import
   ../engine/engine,
   ./test_api_backend
 
+type 
+  TestProxyError* = object of CatchableError
+
 proc getBlockFromJson*(filepath: string): BlockObject {.raises: [SerializationError].} =
   let blkBytes = readAllBytes(filepath)
   JrpcConv.decode(blkBytes.get, BlockObject)
@@ -71,7 +74,7 @@ template `==`*(logs1: seq[LogObject], logs2: seq[LogObject]): bool =
 
 proc initTestEngine*(
     testState: TestApiState, headerCacheLen: int, maxBlockWalk: uint64
-): RpcVerificationEngine {.raises: [CatchableError].} =
+): EngineResult[RpcVerificationEngine] =
   let
     engineConf = RpcVerificationEngineConf(
       chainId: 1.u256,
@@ -81,8 +84,8 @@ proc initTestEngine*(
       codeCacheLen: 1,
       storageCacheLen: 1,
     )
-    engine = RpcVerificationEngine.init(engineConf)
+    engine = ?RpcVerificationEngine.init(engineConf)
 
   engine.backend = initTestApiBackend(testState)
 
-  return engine
+  ok(engine)
