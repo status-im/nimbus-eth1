@@ -54,7 +54,8 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
   ): Future[EngineResult[FixedBytes[32]]] {.async: (raises: [CancelledError]).} =
     let
       header = ?(await engine.getHeader(quantityTag))
-      storage = ?(await engine.getStorageAt(address, slot, header.number, header.stateRoot))
+      storage =
+        ?(await engine.getStorageAt(address, slot, header.number, header.stateRoot))
 
     ok(storage.to(Bytes32))
 
@@ -179,10 +180,14 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     # access list keys to fetch the required state using eth_getProof.
     ?(await engine.populateCachesUsingAccessList(header.number, header.stateRoot, tx))
 
-    let (accessList, error, gasUsed) = (await engine.evm.createAccessList(header, tx, optimisticStateFetch)).valueOr:
+    let (accessList, error, gasUsed) = (
+      await engine.evm.createAccessList(header, tx, optimisticStateFetch)
+    ).valueOr:
       return err((VerificationError, "access list calculation failed -> " & error))
 
-    ok(AccessListResult(accessList: accessList, error: error, gasUsed: gasUsed.Quantity))
+    ok(
+      AccessListResult(accessList: accessList, error: error, gasUsed: gasUsed.Quantity)
+    )
 
   engine.frontend.eth_estimateGas = proc(
       tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: bool = true
@@ -211,13 +216,16 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     let tx = ?(await engine.backend.eth_getTransactionByHash(txHash))
 
     if tx.hash != txHash:
-      return err((
-        VerificationError,
-        "the downloaded transaction hash doesn't match the requested transaction hash",
-      ))
+      return err(
+        (
+          VerificationError,
+          "the downloaded transaction hash doesn't match the requested transaction hash",
+        )
+      )
 
     if not checkTxHash(tx, txHash):
-      return err((VerificationError, "the transaction doesn't hash to the provided hash"))
+      return
+        err((VerificationError, "the transaction doesn't hash to the provided hash"))
 
     ok(tx)
 
@@ -257,7 +265,9 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     for i in 0 .. (MAX_ID_TRIES + 1):
       if randomBytes(id) != len(id):
-        return err((InvalidDataError, "Couldn't generate a random identifier for the filter"))
+        return err(
+          (InvalidDataError, "Couldn't generate a random identifier for the filter")
+        )
 
       strId = toHex(id)
 
@@ -265,7 +275,8 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
         break
 
       if i >= MAX_ID_TRIES:
-        return err((InvalidDataError, "Couldn't create a unique identifier for the filter"))
+        return
+          err((InvalidDataError, "Couldn't create a unique identifier for the filter"))
 
     engine.filterStore[strId] =
       FilterStoreItem(filter: filterOptions, blockMarker: Opt.none(Quantity))
@@ -292,7 +303,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
   engine.frontend.eth_getFilterChanges = proc(
       filterId: string
   ): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).} =
-    let filterItem = 
+    let filterItem =
       try:
         engine.filterStore[filterId]
       except KeyError as e:
@@ -304,7 +315,8 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
       toBlock = filter.toBlock.get().number
 
     if filterItem.blockMarker.isSome() and toBlock <= filterItem.blockMarker.get():
-      return err((UnavailableDataError, "No changes for the filter since the last query"))
+      return
+        err((UnavailableDataError, "No changes for the filter since the last query"))
 
     let
       fromBlock =

@@ -44,7 +44,7 @@ suite "test transaction verification":
       if tx.kind == tohTx:
         ts.loadTransaction(tx.tx.hash, tx.tx)
         let verifiedTx = waitFor engine.frontend.eth_getTransactionByHash(tx.tx.hash)
-        check: 
+        check:
           verifiedTx.isOk()
           verifiedTx.get() == tx.tx
 

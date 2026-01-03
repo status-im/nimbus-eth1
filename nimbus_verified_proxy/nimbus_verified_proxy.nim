@@ -83,8 +83,7 @@ proc connectLCToEngine*(lightClient: LightClient, engine: RpcVerificationEngine)
   lightClient.onFinalizedHeader = onFinalizedHeader
   lightClient.onOptimisticHeader = onOptimisticHeader
 
-type
-  ProxyError = object of CatchableError
+type ProxyError = object of CatchableError
 
 proc run(
     config: VerifiedProxyConf

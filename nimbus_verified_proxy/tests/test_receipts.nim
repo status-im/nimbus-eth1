@@ -123,9 +123,7 @@ suite "test receipts verification":
           )
         ],
       blockHash: Opt.none(Hash32),
-    )
-
-      # create a filter
+    ) # create a filter
     let newFilter = waitFor engine.frontend.eth_newFilter(filterOptions)
 
     check newFilter.isOk()
@@ -187,7 +185,8 @@ suite "test receipts verification":
       filterChanges.isOk()
       filterChanges.get().len == logs.len
 
-    let againFilterChanges = waitFor engine.frontend.eth_getFilterChanges(newFilter.get())
+    let againFilterChanges =
+      waitFor engine.frontend.eth_getFilterChanges(newFilter.get())
 
     check:
       againFilterChanges.isErr()

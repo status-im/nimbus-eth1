@@ -23,9 +23,7 @@ type JsonRpcServer* = ref object
   of WebSocket:
     wsServer: RpcWebSocketServer
 
-proc init*(
-    T: type JsonRpcServer, url: Web3Url
-): EngineResult[JsonRpcServer] =
+proc init*(T: type JsonRpcServer, url: Web3Url): EngineResult[JsonRpcServer] =
   let
     auth = @[httpCors(@[])] # TODO: for now we serve all cross origin requests
     parsedUrl = parseUri(url.web3Url)
@@ -48,10 +46,12 @@ proc init*(
   try:
     case url.kind
     of HttpUrl:
-      return ok(JsonRpcServer(
-        kind: Http,
-        httpServer: newRpcHttpServer([listenAddress], RpcRouter.init(), auth),
-      ))
+      return ok(
+        JsonRpcServer(
+          kind: Http,
+          httpServer: newRpcHttpServer([listenAddress], RpcRouter.init(), auth),
+        )
+      )
     of WsUrl:
       let server =
         JsonRpcServer(kind: WebSocket, wsServer: newRpcWebSocketServer(listenAddress))
@@ -69,8 +69,10 @@ func getServer(server: JsonRpcServer): RpcServer =
 proc start*(server: JsonRpcServer): EngineResult[void] =
   try:
     case server.kind
-    of Http: server.httpServer.start()
-    of WebSocket: server.wsServer.start()
+    of Http:
+      server.httpServer.start()
+    of WebSocket:
+      server.wsServer.start()
   except JsonRpcError as e:
     return err((FrontendError, e.msg))
 
@@ -137,27 +139,37 @@ proc injectEngineFrontend*(server: JsonRpcServer, frontend: EthApiFrontend) =
   server.getServer().rpc("eth_getTransactionByBlockNumberAndIndex") do(
     blockTag: BlockTag, index: Quantity
   ) -> TransactionObject:
-    unpackEngineResult(await frontend.eth_getTransactionByBlockNumberAndIndex(blockTag, index))
+    unpackEngineResult(
+      await frontend.eth_getTransactionByBlockNumberAndIndex(blockTag, index)
+    )
 
   server.getServer().rpc("eth_getTransactionByBlockHashAndIndex") do(
     blockHash: Hash32, index: Quantity
   ) -> TransactionObject:
-    unpackEngineResult(await frontend.eth_getTransactionByBlockHashAndIndex(blockHash, index))
+    unpackEngineResult(
+      await frontend.eth_getTransactionByBlockHashAndIndex(blockHash, index)
+    )
 
   server.getServer().rpc("eth_call") do(
     tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]
   ) -> seq[byte]:
-    unpackEngineResult(await frontend.eth_call(tx, blockTag, optimisticStateFetch.get(true)))
+    unpackEngineResult(
+      await frontend.eth_call(tx, blockTag, optimisticStateFetch.get(true))
+    )
 
   server.getServer().rpc("eth_createAccessList") do(
     tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]
   ) -> AccessListResult:
-    unpackEngineResult(await frontend.eth_createAccessList(tx, blockTag, optimisticStateFetch.get(true)))
+    unpackEngineResult(
+      await frontend.eth_createAccessList(tx, blockTag, optimisticStateFetch.get(true))
+    )
 
   server.getServer().rpc("eth_estimateGas") do(
     tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]
   ) -> Quantity:
-    unpackEngineResult(await frontend.eth_estimateGas(tx, blockTag, optimisticStateFetch.get(true)))
+    unpackEngineResult(
+      await frontend.eth_estimateGas(tx, blockTag, optimisticStateFetch.get(true))
+    )
 
   server.getServer().rpc("eth_getTransactionByHash") do(
     txHash: Hash32
@@ -203,12 +215,16 @@ proc injectEngineFrontend*(server: JsonRpcServer, frontend: EthApiFrontend) =
   server.getServer().rpc("eth_feeHistory") do(
     blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: Opt[seq[float64]]
   ) -> FeeHistoryResult:
-    unpackEngineResult(await frontend.eth_feeHistory(blockCount, newestBlock, rewardPercentiles))
+    unpackEngineResult(
+      await frontend.eth_feeHistory(blockCount, newestBlock, rewardPercentiles)
+    )
 
   server.getServer().rpc("eth_sendRawTransaction") do(txBytes: seq[byte]) -> Hash32:
     unpackEngineResult(await frontend.eth_sendRawTransaction(txBytes))
 
 proc stop*(server: JsonRpcServer) {.async: (raises: []).} =
-  case server.kind:
-  of Http: await server.httpServer.closeWait()
-  of WebSocket: await server.wsServer.closeWait()
+  case server.kind
+  of Http:
+    await server.httpServer.closeWait()
+  of WebSocket:
+    await server.wsServer.closeWait()

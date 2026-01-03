@@ -43,7 +43,9 @@ proc toTransactions*(txs: openArray[TxOrHash]): EngineResult[seq[Transaction]] =
     if x.kind == tohTx:
       convertedTxs.add toTransaction(x.tx)
     else:
-      return err((InvalidDataError, "cannot construct a transaction trie using only txhashes"))
+      return err(
+        (InvalidDataError, "cannot construct a transaction trie using only txhashes")
+      )
 
   return ok(convertedTxs)
 
@@ -60,4 +62,9 @@ proc verifyTransactions*(
   if rootHash == txRoot:
     return ok()
 
-  err((VerificationError, "calculated tx trie root doesn't match the provided tx trie root"))
+  err(
+    (
+      VerificationError,
+      "calculated tx trie root doesn't match the provided tx trie root",
+    )
+  )

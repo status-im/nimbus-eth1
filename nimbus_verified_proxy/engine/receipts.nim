@@ -49,8 +49,12 @@ proc getReceipts(
 
   if rxs.isSome():
     if orderedTrieRoot(toReceipts(rxs.get())) != header.receiptsRoot:
-      return
-        err((VerificationError, "downloaded receipts do not evaluate to the receipts root of the block"))
+      return err(
+        (
+          VerificationError,
+          "downloaded receipts do not evaluate to the receipts root of the block",
+        )
+      )
   else:
     return err((VerificationError, "error downloading the receipts"))
 

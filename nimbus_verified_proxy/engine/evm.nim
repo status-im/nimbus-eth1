@@ -33,7 +33,9 @@ proc toAsyncEvmStateBackend*(engine: RpcVerificationEngine): AsyncEvmStateBacken
     storageProc = proc(
         header: Header, address: Address, slotKey: UInt256
     ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).} =
-      let storageSlot = (await engine.getStorageAt(address, slotKey, header.number, header.stateRoot)).valueOr:
+      let storageSlot = (
+        await engine.getStorageAt(address, slotKey, header.number, header.stateRoot)
+      ).valueOr:
         return Opt.none(UInt256)
 
       Opt.some(storageSlot)

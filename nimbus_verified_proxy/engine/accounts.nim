@@ -91,7 +91,8 @@ proc getStorageFromProof*(
   let storageProof = proof.storageProof[storageProofIndex]
 
   if len(storageProof.proof) == 0:
-    return err((VerificationError, "empty mpt proof for account with not empty storage"))
+    return
+      err((VerificationError, "empty mpt proof for account with not empty storage"))
 
   if storageProof.key != requestedSlot:
     return err((VerificationError, "received proof for invalid slot"))
@@ -198,7 +199,10 @@ proc populateCachesForAccountAndSlots(
 
   if engine.accountsCache.get(accountCacheKey).isNone() or slotsToFetch.len() > 0:
     let
-      proof = ?(await engine.backend.eth_getProof(address, slotsToFetch, blockId(blockNumber)))
+      proof =
+        ?(
+          await engine.backend.eth_getProof(address, slotsToFetch, blockId(blockNumber))
+        )
       account = getAccountFromProof(
         stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
         proof.storageHash, proof.accountProof,
@@ -222,7 +226,8 @@ proc populateCachesUsingAccessList*(
     stateRoot: Root,
     tx: TransactionArgs,
 ): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
-  let accessListRes: AccessListResult = ?(await engine.backend.eth_createAccessList(tx, blockId(blockNumber)))
+  let accessListRes: AccessListResult =
+    ?(await engine.backend.eth_createAccessList(tx, blockId(blockNumber)))
 
   var futs = newSeqOfCap[Future[EngineResult[void]]](accessListRes.accessList.len())
   for accessPair in accessListRes.accessList:

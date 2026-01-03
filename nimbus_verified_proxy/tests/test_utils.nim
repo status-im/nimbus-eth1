@@ -20,8 +20,7 @@ import
   ../engine/engine,
   ./test_api_backend
 
-type 
-  TestProxyError* = object of CatchableError
+type TestProxyError* = object of CatchableError
 
 proc getBlockFromJson*(filepath: string): BlockObject {.raises: [SerializationError].} =
   let blkBytes = readAllBytes(filepath)

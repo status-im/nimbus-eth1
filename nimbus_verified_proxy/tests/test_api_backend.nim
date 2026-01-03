@@ -186,9 +186,12 @@ func convToPartialBlock(blk: BlockObject): BlockObject =
 
 proc initTestApiBackend*(t: TestApiState): EthApiBackend =
   let
-    ethChainIdProc = proc(): Future[EngineResult[UInt256]] {.async: (raises: [CancelledError]).} =
+    ethChainIdProc = proc(): Future[EngineResult[UInt256]] {.
+        async: (raises: [CancelledError])
+    .} =
       if t.chainId == u256(0):
-        return err((BackendDecodingError, "chainId not set in test backend or is set to 0"))
+        return
+          err((BackendDecodingError, "chainId not set in test backend or is set to 0"))
 
       ok(t.chainId)
 
@@ -252,7 +255,9 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
 
     getBlockReceiptsProc = proc(
         blockId: BlockTag
-    ): Future[EngineResult[Opt[seq[ReceiptObject]]]] {.async: (raises: [CancelledError]).} =
+    ): Future[EngineResult[Opt[seq[ReceiptObject]]]] {.
+        async: (raises: [CancelledError])
+    .} =
       try:
         # we directly use number here because the verified proxy should never use aliases
         let blkHash = t.nums[blockId.number]

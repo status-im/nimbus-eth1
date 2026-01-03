@@ -29,15 +29,30 @@ proc resolveBlockTag*(
     case tag
     of "latest":
       let hLatest = engine.headerStore.latest.valueOr:
-        return err((UnavailableDataError, "Couldn't get the latest block number from header store"))
+        return err(
+          (
+            UnavailableDataError,
+            "Couldn't get the latest block number from header store",
+          )
+        )
       ok(BlockTag(kind: bidNumber, number: Quantity(hLatest.number)))
     of "finalized":
       let hFinalized = engine.headerStore.finalized.valueOr:
-        return err((UnavailableDataError, "Couldn't get the finalized block number from header store"))
+        return err(
+          (
+            UnavailableDataError,
+            "Couldn't get the finalized block number from header store",
+          )
+        )
       ok(BlockTag(kind: bidNumber, number: Quantity(hFinalized.number)))
     of "earliest":
       let hEarliest = engine.headerStore.earliest.valueOr:
-        return err((UnavailableDataError, "Couldn't get the earliest block number from header store"))
+        return err(
+          (
+            UnavailableDataError,
+            "Couldn't get the earliest block number from header store",
+          )
+        )
       ok(BlockTag(kind: bidNumber, number: Quantity(hEarliest.number)))
     else:
       err((InvalidDataError, "No support for block tag " & $blockTag))
@@ -85,10 +100,13 @@ proc walkBlocks(
 
   let numBlocks = sourceNum - targetNum
   if numBlocks > engine.maxBlockWalk:
-    return err((VerificationError,
-      "Cannot query more than " & $engine.maxBlockWalk &
-        " to verify the chain for the requested block"
-    ))
+    return err(
+      (
+        VerificationError,
+        "Cannot query more than " & $engine.maxBlockWalk &
+          " to verify the chain for the requested block",
+      )
+    )
 
   for i in 0 ..< numBlocks:
     let nextHeader =
@@ -105,7 +123,12 @@ proc walkBlocks(
         let header = convHeader(blk)
 
         if header.computeBlockHash != nextHash:
-          return err((VerificationError, "Encountered an invalid block header while walking the chain"))
+          return err(
+            (
+              VerificationError,
+              "Encountered an invalid block header while walking the chain",
+            )
+          )
 
         header
 
@@ -121,11 +144,15 @@ proc verifyHeader(
 ): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
   # verify calculated hash with the requested hash
   if header.computeBlockHash != hash:
-    return err((VerificationError, "hashed block header doesn't match with blk.hash(downloaded)"))
+    return err(
+      (VerificationError, "hashed block header doesn't match with blk.hash(downloaded)")
+    )
 
   if not engine.headerStore.contains(hash):
     let latestHeader = engine.headerStore.latest.valueOr:
-      return err((UnavailableDataError, "Couldn't get the latest header, syncing in progress"))
+      return err(
+        (UnavailableDataError, "Couldn't get the latest header, syncing in progress")
+      )
 
     # walk blocks backwards(time) from source to target
     ?(
@@ -150,10 +177,16 @@ proc verifyBlock(
   # verify withdrawals
   if blk.withdrawalsRoot.isSome():
     if blk.withdrawalsRoot.get() != orderedTrieRoot(blk.withdrawals.get(@[])):
-      return err((VerificationError, "Withdrawals within the block do not yield the same withdrawals root"))
+      return err(
+        (
+          VerificationError,
+          "Withdrawals within the block do not yield the same withdrawals root",
+        )
+      )
   else:
     if blk.withdrawals.isSome():
-      return err((VerificationError, "Block contains withdrawals but no withdrawalsRoot"))
+      return
+        err((VerificationError, "Block contains withdrawals but no withdrawalsRoot"))
 
   ok()
 
@@ -165,7 +198,12 @@ proc getBlock*(
 
   # verify requested hash with the downloaded hash
   if blockHash != blk.hash:
-    return err((VerificationError, "the downloaded block hash doesn't match with the requested hash"))
+    return err(
+      (
+        VerificationError,
+        "the downloaded block hash doesn't match with the requested hash",
+      )
+    )
 
   # verify the block
   ?(await engine.verifyBlock(blk, fullTransactions))
@@ -181,8 +219,12 @@ proc getBlock*(
   let blk = ?(await engine.backend.eth_getBlockByNumber(numberTag, fullTransactions))
 
   if numberTag.number != blk.number:
-    return
-      err((VerificationError, "the downloaded block number doesn't match with the requested block number"))
+    return err(
+      (
+        VerificationError,
+        "the downloaded block number doesn't match with the requested block number",
+      )
+    )
 
   # verify the block
   ?(await engine.verifyBlock(blk, fullTransactions))
@@ -205,7 +247,12 @@ proc getHeader*(
   let header = convHeader(blk)
 
   if blockHash != blk.hash:
-    return err((VerificationError, "the blk.hash(downloaded) doesn't match with the provided hash"))
+    return err(
+      (
+        VerificationError,
+        "the blk.hash(downloaded) doesn't match with the provided hash",
+      )
+    )
 
   ?(await engine.verifyHeader(header, blockHash))
 
@@ -230,8 +277,12 @@ proc getHeader*(
   let header = convHeader(blk)
 
   if n != header.number:
-    return
-      err((VerificationError, "the downloaded block number doesn't match with the requested block number"))
+    return err(
+      (
+        VerificationError,
+        "the downloaded block number doesn't match with the requested block number",
+      )
+    )
 
   ?(await engine.verifyHeader(header, blk.hash))
 

@@ -21,7 +21,7 @@ import
 suite "test verified blocks":
   let
     ts = TestApiState.init(1.u256)
-    engine = initTestEngine(ts, 1, 9).valueOr: # header store holds 1 and maxBlockWalk is 9
+    engine = initTestEngine(ts, 1, 9).valueOr:
       raise newException(TestProxyError, error.errMsg)
 
   test "check fetching blocks on every fork":
@@ -108,13 +108,15 @@ suite "test verified blocks":
         kind: BlockIdentifierKind.bidNumber, number: Quantity(targetBlockNum + 1)
       )
 
-    let verifiedBlkUnreachable = waitFor engine.frontend.eth_getBlockByNumber(unreachableTargetTag, true)
+    let verifiedBlkUnreachable =
+      waitFor engine.frontend.eth_getBlockByNumber(unreachableTargetTag, true)
 
     check:
       verifiedBlkUnreachable.isErr()
       verifiedBlkUnreachable.error.errType == VerificationError
 
-    let verifiedBlkReachable = waitFor engine.frontend.eth_getBlockByNumber(reachableTargetTag, true)
+    let verifiedBlkReachable =
+      waitFor engine.frontend.eth_getBlockByNumber(reachableTargetTag, true)
 
     check:
       verifiedBlkReachable.isOk()
