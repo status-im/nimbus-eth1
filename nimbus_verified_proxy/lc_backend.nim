@@ -42,16 +42,18 @@ func new*(
 ): LCRestClientPool =
   LCRestClientPool(cfg: cfg, forkDigests: forkDigests, clients: @[])
 
-proc addEndpoints*(pool: LCRestClientPool, urlList: UrlList) {.raises: [ValueError].} =
+proc addEndpoints*(pool: LCRestClientPool, urlList: UrlList): Result[void, string] =
   for endpoint in urlList:
     if endpoint in pool.urls:
       continue
 
     let restClient = RestClientRef.new(endpoint).valueOr:
-      raise newException(ValueError, $error)
+      return err($error)
 
     pool.clients.add(LCRestClient(score: 0, restClient: restClient))
     pool.urls.add(endpoint)
+
+  ok()
 
 proc closeAll*(pool: LCRestClientPool) {.async: (raises: []).} =
   for client in pool.clients:

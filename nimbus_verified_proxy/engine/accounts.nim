@@ -28,7 +28,7 @@ proc getAccountFromProof*(
     accountCodeHash: Hash32,
     accountStorageRoot: Hash32,
     mptNodes: seq[RlpEncodedBytes],
-): Result[Account, string] =
+): EngineResult[Account] =
   let
     mptNodesBytes = mptNodes.mapIt(distinctBase(it))
     acc = Account(
@@ -48,11 +48,11 @@ proc getAccountFromProof*(
   of ValidProof:
     return ok(acc)
   of InvalidProof:
-    return err(proofResult.errorMsg)
+    return err((VerificationError, proofResult.errorMsg))
 
 proc getStorageFromProof(
     account: Account, storageProof: StorageProof
-): Result[UInt256, string] =
+): EngineResult[UInt256] =
   let
     storageMptNodes = storageProof.proof.mapIt(distinctBase(it))
     key = toSeq(keccak256(toBytesBE(storageProof.key)).data)
@@ -66,14 +66,14 @@ proc getStorageFromProof(
   of ValidProof:
     return ok(storageProof.value)
   of InvalidProof:
-    return err(proofResult.errorMsg)
+    return err((VerificationError, proofResult.errorMsg))
 
 proc getStorageFromProof*(
     stateRoot: Hash32,
     requestedSlot: UInt256,
     proof: ProofResponse,
     storageProofIndex = 0,
-): Result[UInt256, string] =
+): EngineResult[UInt256] =
   let account =
     ?getAccountFromProof(
       stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
@@ -86,15 +86,15 @@ proc getStorageFromProof*(
     return ok(u256(0))
 
   if proof.storageProof.len() <= storageProofIndex:
-    return err("no storage proof for requested slot")
+    return err((VerificationError, "no storage proof for requested slot"))
 
   let storageProof = proof.storageProof[storageProofIndex]
 
   if len(storageProof.proof) == 0:
-    return err("empty mpt proof for account with not empty storage")
+    return err((VerificationError, "empty mpt proof for account with not empty storage"))
 
   if storageProof.key != requestedSlot:
-    return err("received proof for invalid slot")
+    return err((VerificationError, "received proof for invalid slot"))
 
   getStorageFromProof(account, storageProof)
 
@@ -103,7 +103,7 @@ proc getAccount*(
     address: Address,
     blockNumber: base.BlockNumber,
     stateRoot: Root,
-): Future[Result[Account, string]] {.async: (raises: []).} =
+): Future[EngineResult[Account]] {.async: (raises: [CancelledError]).} =
   let
     cacheKey = (stateRoot, address)
     cachedAcc = engine.accountsCache.get(cacheKey)
@@ -113,11 +113,7 @@ proc getAccount*(
   info "Forwarding eth_getAccount", blockNumber
 
   let
-    proof =
-      try:
-        await engine.backend.eth_getProof(address, @[], blockId(blockNumber))
-      except CatchableError as e:
-        return err(e.msg)
+    proof = ?(await engine.backend.eth_getProof(address, @[], blockId(blockNumber)))
 
     account = getAccountFromProof(
       stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
@@ -134,10 +130,9 @@ proc getCode*(
     address: Address,
     blockNumber: base.BlockNumber,
     stateRoot: Root,
-): Future[Result[seq[byte], string]] {.async: (raises: []).} =
+): Future[EngineResult[seq[byte]]] {.async: (raises: [CancelledError]).} =
   # get verified account details for the address at blockNumber
-  let account = (await engine.getAccount(address, blockNumber, stateRoot)).valueOr:
-    return err(error)
+  let account = ?(await engine.getAccount(address, blockNumber, stateRoot))
 
   # if the account does not have any code, return empty hex data
   if account.codeHash == EMPTY_CODE_HASH:
@@ -151,11 +146,7 @@ proc getCode*(
 
   info "Forwarding eth_getCode", blockNumber
 
-  let code =
-    try:
-      await engine.backend.eth_getCode(address, blockId(blockNumber))
-    except CatchableError as e:
-      return err(e.msg)
+  let code = ?(await engine.backend.eth_getCode(address, blockId(blockNumber)))
 
   # verify the byte code. since we verified the account against
   # the state root we just need to verify the code hash
@@ -163,7 +154,7 @@ proc getCode*(
     engine.codeCache.put(cacheKey, code)
     return ok(code)
   else:
-    return err("received code doesn't match the account code hash")
+    return err((VerificationError, "received code doesn't match the account code hash"))
 
 proc getStorageAt*(
     engine: RpcVerificationEngine,
@@ -171,7 +162,7 @@ proc getStorageAt*(
     slot: UInt256,
     blockNumber: base.BlockNumber,
     stateRoot: Root,
-): Future[Result[UInt256, string]] {.async: (raises: []).} =
+): Future[EngineResult[UInt256]] {.async: (raises: [CancelledError]).} =
   let
     cacheKey = (stateRoot, address, slot)
     cachedSlotValue = engine.storageCache.get(cacheKey)
@@ -181,11 +172,7 @@ proc getStorageAt*(
   info "Forwarding eth_getStorageAt", blockNumber
 
   let
-    proof =
-      try:
-        await engine.backend.eth_getProof(address, @[slot], blockId(blockNumber))
-      except CatchableError as e:
-        return err(e.msg)
+    proof = ?(await engine.backend.eth_getProof(address, @[slot], blockId(blockNumber)))
 
     slotValue = getStorageFromProof(stateRoot, slot, proof)
 
@@ -200,7 +187,7 @@ proc populateCachesForAccountAndSlots(
     slots: seq[UInt256],
     blockNumber: base.BlockNumber,
     stateRoot: Root,
-): Future[Result[void, string]] {.async: (raises: []).} =
+): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
   var slotsToFetch: seq[UInt256]
   for s in slots:
     let storageCacheKey = (stateRoot, address, s)
@@ -211,11 +198,7 @@ proc populateCachesForAccountAndSlots(
 
   if engine.accountsCache.get(accountCacheKey).isNone() or slotsToFetch.len() > 0:
     let
-      proof =
-        try:
-          await engine.backend.eth_getProof(address, slotsToFetch, blockId(blockNumber))
-        except CatchableError as e:
-          return err(e.msg)
+      proof = ?(await engine.backend.eth_getProof(address, slotsToFetch, blockId(blockNumber)))
       account = getAccountFromProof(
         stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
         proof.storageHash, proof.accountProof,
@@ -238,23 +221,16 @@ proc populateCachesUsingAccessList*(
     blockNumber: base.BlockNumber,
     stateRoot: Root,
     tx: TransactionArgs,
-): Future[Result[void, string]] {.async: (raises: []).} =
-  let accessListRes: AccessListResult =
-    try:
-      await engine.backend.eth_createAccessList(tx, blockId(blockNumber))
-    except CatchableError as e:
-      return err(e.msg)
+): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
+  let accessListRes: AccessListResult = ?(await engine.backend.eth_createAccessList(tx, blockId(blockNumber)))
 
-  var futs = newSeqOfCap[Future[Result[void, string]]](accessListRes.accessList.len())
+  var futs = newSeqOfCap[Future[EngineResult[void]]](accessListRes.accessList.len())
   for accessPair in accessListRes.accessList:
     let slots = accessPair.storageKeys.mapIt(UInt256.fromBytesBE(it.data))
     futs.add engine.populateCachesForAccountAndSlots(
       accessPair.address, slots, blockNumber, stateRoot
     )
 
-  try:
-    await allFutures(futs)
-  except CatchableError as e:
-    return err(e.msg)
+  await allFutures(futs)
 
   ok()

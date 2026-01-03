@@ -7,9 +7,9 @@
 
 {.push raises: [], gcsafe.}
 
-import results, stint
+import results, stint, types
 
-func chainIdToNetworkId*(chainId: UInt256): Result[UInt256, string] =
+func chainIdToNetworkId*(chainId: UInt256): EngineResult[UInt256] =
   if chainId == 1.u256: # mainnet
     ok(1.u256)
   elif chainId == 11155111.u256: # sepolia
@@ -17,4 +17,4 @@ func chainIdToNetworkId*(chainId: UInt256): Result[UInt256, string] =
   elif chainId == 560048.u256: # hoodi
     ok(560048.u256)
   else:
-    err("Unknown chainId")
+    err((InvalidDataError, "Unknown chainId"))

@@ -33,12 +33,9 @@ import
 
 proc verifyChainId(
     engine: RpcVerificationEngine
-): Future[void] {.async: (raises: []).} =
-  let providerId =
-    try:
-      await engine.backend.eth_chainId()
-    except CatchableError:
-      0.u256
+): Future[void] {.async: (raises: [CancelledError]).} =
+  let providerId = (await engine.backend.eth_chainId()).valueOr:
+    0.u256
 
   # This is a chain/network mismatch error between the Nimbus verified proxy and
   # the application using it. Fail fast to avoid misusage. The user must fix
@@ -86,9 +83,12 @@ proc connectLCToEngine*(lightClient: LightClient, engine: RpcVerificationEngine)
   lightClient.onFinalizedHeader = onFinalizedHeader
   lightClient.onOptimisticHeader = onOptimisticHeader
 
+type
+  ProxyError = object of CatchableError
+
 proc run(
     config: VerifiedProxyConf
-) {.async: (raises: [ValueError, CatchableError]), gcsafe.} =
+) {.async: (raises: [ProxyError, CancelledError]), gcsafe.} =
   {.gcsafe.}:
     setupLogging(config.logLevel, config.logStdout)
 
@@ -107,12 +107,14 @@ proc run(
       codeCacheLen: config.codeCacheLen,
       storageCacheLen: config.storageCacheLen,
     )
-    engine = RpcVerificationEngine.init(engineConf)
+    engine = RpcVerificationEngine.init(engineConf).valueOr:
+      raise newException(ProxyError, "Couldn't initialize verification engine")
     lc = LightClient.new(config.eth2Network, some config.trustedBlockRoot)
 
     #initialize frontend and backend for JSON-RPC
     jsonRpcClient = JsonRpcClient.init(config.backendUrl)
-    jsonRpcServer = JsonRpcServer.init(config.frontendUrl)
+    jsonRpcServer = JsonRpcServer.init(config.frontendUrl).valueOr:
+      raise newException(ProxyError, "Couldn't initialize the server end of proxy")
 
     # initialize backend for light client updates
     lcRestClientPool = LCRestClientPool.new(lc.cfg, lc.forkDigests)
@@ -133,14 +135,15 @@ proc run(
   # start frontend and backend for JSON-RPC
   var status = await jsonRpcClient.start()
   if status.isErr():
-    raise newException(ValueError, status.error)
+    raise newException(ProxyError, status.error.errMsg)
 
   status = jsonRpcServer.start()
   if status.isErr():
-    raise newException(ValueError, status.error)
+    raise newException(ProxyError, status.error.errMsg)
 
   # adding endpoints will also start the backend
-  lcRestClientPool.addEndpoints(config.beaconApiUrls)
+  if lcRestClientPool.addEndpoints(config.beaconApiUrls).isErr():
+    raise newException(ProxyError, "Couldn't add endpoints for light client queries")
 
   # verify chain id that the proxy is connected to
   await engine.verifyChainId()
@@ -154,7 +157,7 @@ proc run(
     raise e
 
 # noinline to keep it in stack traces
-proc main() {.noinline, raises: [CatchableError].} =
+proc main() {.noinline, raises: [ProxyError, CancelledError].} =
   const
     banner = "Nimbus Verified Proxy " & FullVersionStr
     copyright =

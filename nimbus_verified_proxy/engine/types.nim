@@ -52,12 +52,12 @@ type
     # besides backend errors the other errors that can occur
     # There is not much use to differentiating these and are done
     # to this extent just for the sake of it.
-    UnvailableDataError
+    UnavailableDataError
     InvalidDataError
     VerificationError
 
-
-  EngineResult*[T] = Result[T, (EngineError, string)]
+  ErrorTuple = tuple[errType: EngineError, errMsg: string]
+  EngineResult*[T] = Result[T, ErrorTuple]
 
   # Backend API
   EthApiBackend* = object
@@ -176,21 +176,12 @@ type
     eth_newFilter*: proc(filterOptions: FilterOptions): Future[EngineResult[string]] {.
       async: (raises: [CancelledError])
     .}
-    eth_uninstallFilter*: proc(filterId: string): Future[EngineResult[bool]] {.
-      async: (raises: [CancelledError])
-    .}
-    eth_getFilterLogs*: proc(filterId: string): Future[EngineResult[seq[LogObject]]] {.
-      async: (raises: [CancelledError])
-    .}
-    eth_getFilterChanges*: proc(filterId: string): Future[EngineResult[seq[LogObject]]] {.
-      async: (raises: [CancelledError])
-    .}
     eth_uninstallFilter*:
-      proc(filterId: string): Future[bool] {.async: (raises: [ValueError]).}
+      proc(filterId: string): Future[EngineResult[bool]] {.async: (raises: [CancelledError]).}
     eth_getFilterLogs*:
-      proc(filterId: string): Future[seq[LogObject]] {.async: (raises: [ValueError]).}
+      proc(filterId: string): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).}
     eth_getFilterChanges*:
-      proc(filterId: string): Future[seq[LogObject]] {.async: (raises: [ValueError]).}
+      proc(filterId: string): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).}
 
     # Fee-based
     eth_blobBaseFee*:

@@ -31,7 +31,7 @@ proc init*(T: type JsonRpcClient, url: Web3Url): JsonRpcClient =
 
 proc start*(
     client: JsonRpcClient
-): EngineResult[void] {.async: (raises: [CancelledError]).} =
+): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
   try:
     case client.kind
     of Http:
@@ -48,91 +48,231 @@ template getClient(client: JsonRpcClient): RpcClient =
   of Http: client.httpClient
   of WebSocket: client.wsClient
 
-template handleBackendCall(callBackend: untyped): auto =
-  try:
-    ok(await callBackend)
-  except CancelledError as e:
-    raise e
-  except RpcPostError as e:
-    return err((BackendEncodingError, e.msg))
-  except ErrorResponse as e:
-    return err((BackendFetchError, e.msg))
-  except JsonRpcError as e:
-    return err((BackendDecodingError, e.msg))
-  except InvalidResponse as e:
-    return err((BackendDecodingError, e.msg))
-  except FailedHttpResponse as e:
-    return err((BackendDecodingError, e.msg))
-
 proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
   let
     ethChainIdProc = proc(): Future[EngineResult[UInt256]] {.
         async: (raises: [CancelledError])
     .} =
-      handleBackendCall client.getClient().eth_chainId()
+      try:
+        ok(await client.getClient().eth_chainId())
+      except CancelledError as e:
+        raise e
+      except RpcPostError as e:
+        return err((BackendEncodingError, e.msg))
+      except ErrorResponse as e:
+        return err((BackendFetchError, e.msg))
+      except JsonRpcError as e:
+        return err((BackendDecodingError, e.msg))
+      except InvalidResponse as e:
+        return err((BackendDecodingError, e.msg))
+      except CatchableError as e:
+        return err((BackendError, e.msg))
 
     getBlockByHashProc = proc(
         blkHash: Hash32, fullTransactions: bool
     ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
-      handleBackendCall client.getClient().eth_getBlockByHash(blkHash, fullTransactions)
+      try:
+        ok(await client.getClient().eth_getBlockByHash(blkHash, fullTransactions))
+      except CancelledError as e:
+        raise e
+      except RpcPostError as e:
+        return err((BackendEncodingError, e.msg))
+      except ErrorResponse as e:
+        return err((BackendFetchError, e.msg))
+      except JsonRpcError as e:
+        return err((BackendDecodingError, e.msg))
+      except InvalidResponse as e:
+        return err((BackendDecodingError, e.msg))
+      except CatchableError as e:
+        return err((BackendError, e.msg))
 
     getBlockByNumberProc = proc(
         blkNum: BlockTag, fullTransactions: bool
     ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
-      handleBackendCall client.getClient().eth_getBlockByNumber(
-        blkNum, fullTransactions
-      )
+      try:
+        ok(await client.getClient().eth_getBlockByNumber(blkNum, fullTransactions))
+      except CancelledError as e:
+        raise e
+      except RpcPostError as e:
+        return err((BackendEncodingError, e.msg))
+      except ErrorResponse as e:
+        return err((BackendFetchError, e.msg))
+      except JsonRpcError as e:
+        return err((BackendDecodingError, e.msg))
+      except InvalidResponse as e:
+        return err((BackendDecodingError, e.msg))
+      except CatchableError as e:
+        return err((BackendError, e.msg))
 
     getProofProc = proc(
         address: Address, slots: seq[UInt256], blockId: BlockTag
     ): Future[EngineResult[ProofResponse]] {.async: (raises: [CancelledError]).} =
-      handleBackendCall client.getClient().eth_getProof(address, slots, blockId)
+      try:
+        ok(await client.getClient().eth_getProof(address, slots, blockId))
+      except CancelledError as e:
+        raise e
+      except RpcPostError as e:
+        return err((BackendEncodingError, e.msg))
+      except ErrorResponse as e:
+        return err((BackendFetchError, e.msg))
+      except JsonRpcError as e:
+        return err((BackendDecodingError, e.msg))
+      except InvalidResponse as e:
+        return err((BackendDecodingError, e.msg))
+      except CatchableError as e:
+        return err((BackendError, e.msg))
 
     createAccessListProc = proc(
         args: TransactionArgs, blockId: BlockTag
     ): Future[EngineResult[AccessListResult]] {.async: (raises: [CancelledError]).} =
-      handleBackendCall client.getClient().eth_createAccessList(args, blockId)
+      try:
+        ok(await client.getClient().eth_createAccessList(args, blockId))
+      except CancelledError as e:
+        raise e
+      except RpcPostError as e:
+        return err((BackendEncodingError, e.msg))
+      except ErrorResponse as e:
+        return err((BackendFetchError, e.msg))
+      except JsonRpcError as e:
+        return err((BackendDecodingError, e.msg))
+      except InvalidResponse as e:
+        return err((BackendDecodingError, e.msg))
+      except CatchableError as e:
+        return err((BackendError, e.msg))
 
     getCodeProc = proc(
         address: Address, blockId: BlockTag
     ): Future[EngineResult[seq[byte]]] {.async: (raises: [CancelledError]).} =
-      handleBackendCall client.getClient().eth_getCode(address, blockId)
+      try:
+        ok(await client.getClient().eth_getCode(address, blockId))
+      except CancelledError as e:
+        raise e
+      except RpcPostError as e:
+        return err((BackendEncodingError, e.msg))
+      except ErrorResponse as e:
+        return err((BackendFetchError, e.msg))
+      except JsonRpcError as e:
+        return err((BackendDecodingError, e.msg))
+      except InvalidResponse as e:
+        return err((BackendDecodingError, e.msg))
+      except CatchableError as e:
+        return err((BackendError, e.msg))
 
     getTransactionByHashProc = proc(
         txHash: Hash32
     ): Future[EngineResult[TransactionObject]] {.async: (raises: [CancelledError]).} =
-      handleBackendCall client.getClient().eth_getTransactionByHash(txHash)
+      try:
+        ok(await client.getClient().eth_getTransactionByHash(txHash))
+      except CancelledError as e:
+        raise e
+      except RpcPostError as e:
+        return err((BackendEncodingError, e.msg))
+      except ErrorResponse as e:
+        return err((BackendFetchError, e.msg))
+      except JsonRpcError as e:
+        return err((BackendDecodingError, e.msg))
+      except InvalidResponse as e:
+        return err((BackendDecodingError, e.msg))
+      except CatchableError as e:
+        return err((BackendError, e.msg))
 
     getTransactionReceiptProc = proc(
         txHash: Hash32
     ): Future[EngineResult[ReceiptObject]] {.async: (raises: [CancelledError]).} =
-      handleBackendCall client.getClient().eth_getTransactionReceipt(txHash)
+      try:
+        ok(await client.getClient().eth_getTransactionReceipt(txHash))
+      except CancelledError as e:
+        raise e
+      except RpcPostError as e:
+        return err((BackendEncodingError, e.msg))
+      except ErrorResponse as e:
+        return err((BackendFetchError, e.msg))
+      except JsonRpcError as e:
+        return err((BackendDecodingError, e.msg))
+      except InvalidResponse as e:
+        return err((BackendDecodingError, e.msg))
+      except CatchableError as e:
+        return err((BackendError, e.msg))
 
     getBlockReceiptsProc = proc(
         blockId: BlockTag
     ): Future[EngineResult[Opt[seq[ReceiptObject]]]] {.
         async: (raises: [CancelledError])
     .} =
-      handleBackendCall client.getClient().eth_getBlockReceipts(blockId)
+      try:
+        ok(await client.getClient().eth_getBlockReceipts(blockId))
+      except CancelledError as e:
+        raise e
+      except RpcPostError as e:
+        return err((BackendEncodingError, e.msg))
+      except ErrorResponse as e:
+        return err((BackendFetchError, e.msg))
+      except JsonRpcError as e:
+        return err((BackendDecodingError, e.msg))
+      except InvalidResponse as e:
+        return err((BackendDecodingError, e.msg))
+      except CatchableError as e:
+        return err((BackendError, e.msg))
 
     getLogsProc = proc(
         filterOptions: FilterOptions
     ): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).} =
-      handleBackendCall client.getClient().eth_getLogs(filterOptions)
+      try:
+        ok(await client.getClient().eth_getLogs(filterOptions))
+      except CancelledError as e:
+        raise e
+      except RpcPostError as e:
+        return err((BackendEncodingError, e.msg))
+      except ErrorResponse as e:
+        return err((BackendFetchError, e.msg))
+      except JsonRpcError as e:
+        return err((BackendDecodingError, e.msg))
+      except InvalidResponse as e:
+        return err((BackendDecodingError, e.msg))
+      except CatchableError as e:
+        return err((BackendError, e.msg))
 
     feeHistoryProc = proc(
         blockCount: Quantity,
         newestBlock: BlockTag,
         rewardPercentiles: Opt[seq[float64]],
     ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).} =
-      handleBackendCall client.getClient().eth_feeHistory(
-        blockCount, newestBlock, rewardPercentiles
-      )
+      try:
+        ok(await client.getClient().eth_feeHistory(blockCount, newestBlock, rewardPercentiles))
+      except CancelledError as e:
+        raise e
+      except RpcPostError as e:
+        return err((BackendEncodingError, e.msg))
+      except ErrorResponse as e:
+        return err((BackendFetchError, e.msg))
+      except JsonRpcError as e:
+        return err((BackendDecodingError, e.msg))
+      except InvalidResponse as e:
+        return err((BackendDecodingError, e.msg))
+      except CatchableError as e:
+        return err((BackendError, e.msg))
+
+
 
     sendRawTxProc = proc(
         txBytes: seq[byte]
     ): Future[EngineResult[Hash32]] {.async: (raises: [CancelledError]).} =
-      handleBackendCall client.getClient().eth_sendRawTransaction(txBytes)
+      try:
+        ok(await client.getClient().eth_sendRawTransaction(txBytes))
+      except CancelledError as e:
+        raise e
+      except RpcPostError as e:
+        return err((BackendEncodingError, e.msg))
+      except ErrorResponse as e:
+        return err((BackendFetchError, e.msg))
+      except JsonRpcError as e:
+        return err((BackendDecodingError, e.msg))
+      except InvalidResponse as e:
+        return err((BackendDecodingError, e.msg))
+      except CatchableError as e:
+        return err((BackendError, e.msg))
+
+
 
   EthApiBackend(
     eth_chainId: ethChainIdProc,
