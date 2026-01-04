@@ -1,0 +1,63 @@
+# Nimbus - Hive CI Agent
+# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
+
+# Dockerfile for running Hive tests in a containerized Jenkins agent
+# Used by ci/hive.groovy
+
+FROM ubuntu:24.04
+
+SHELL ["/bin/bash", "-c"]
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install base dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    wget \
+    gnupg \
+    lsb-release \
+    git \
+    git-lfs \
+    build-essential \
+    software-properties-common \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Docker CLI
+RUN install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc \
+    && chmod a+r /etc/apt/keyrings/docker.asc \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+    $(. /etc/os-release && echo "${VERSION_CODENAME}") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Go
+ARG GO_VERSION=1.23.4
+RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" | tar -C /usr/local -xz
+ENV PATH="/usr/local/go/bin:${PATH}"
+ENV GOPATH="/opt/go"
+ENV GOCACHE="/opt/go/cache"
+ENV PATH="${GOPATH}/bin:${PATH}"
+
+# Install Java (for Jenkins agent)
+RUN apt-get update && apt-get install -y --no-install-recommends openjdk-21-jre-headless \
+    && rm -rf /var/lib/apt/lists/*
+
+# Clone and build Hive in /opt (won't be shadowed by Jenkins volume mounts)
+RUN mkdir -p /opt/go /opt/hive \
+    && git clone --depth 1 https://github.com/ethereum/hive.git /opt/hive \
+    && cd /opt/hive \
+    && go build -o hive . \
+    && go build -o hiveview ./cmd/hiveview \
+    && chmod -R 777 /opt/hive /opt/go
+
+ENV PATH="/opt/hive:${PATH}"
