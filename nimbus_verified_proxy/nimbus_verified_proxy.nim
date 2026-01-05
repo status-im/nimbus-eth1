@@ -31,6 +31,12 @@ import
   ./json_rpc_frontend,
   ../execution_chain/version_info
 
+# error object to translate results to error
+# NOTE: all results are translated to errors only in this file
+# to allow effective usage of verified proxy code in other projects
+# without the need of exceptions
+type ProxyError = object of CatchableError
+
 proc verifyChainId(
     engine: RpcVerificationEngine
 ): Future[void] {.async: (raises: [CancelledError]).} =
@@ -82,8 +88,6 @@ proc connectLCToEngine*(lightClient: LightClient, engine: RpcVerificationEngine)
 
   lightClient.onFinalizedHeader = onFinalizedHeader
   lightClient.onOptimisticHeader = onOptimisticHeader
-
-type ProxyError = object of CatchableError
 
 proc run(
     config: VerifiedProxyConf

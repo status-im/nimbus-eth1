@@ -78,9 +78,12 @@ proc start*(server: JsonRpcServer): EngineResult[void] =
 
   ok()
 
+# this unpacks the result objects returned by frontend and translates result errors
+# to exceptions. This is done becquse the `rpc` macro of the RpcServer is built to 
+# catch exceptions rather than parse the result object directly
 template unpackEngineResult[T](res: EngineResult[T]): T =
   res.valueOr:
-    raise newException(ValueError, error.errMsg)
+    raise newException(ValueError, $error.errType & " -> " & error.errMsg)
 
 proc injectEngineFrontend*(server: JsonRpcServer, frontend: EthApiFrontend) =
   server.getServer().rpc("eth_blockNumber") do() -> uint64:
