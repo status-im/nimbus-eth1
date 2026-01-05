@@ -137,6 +137,8 @@ proc walkBlocks(
 
       nextHash = unverifiedHeader.parentHash
 
+    downloadedHeaders.clear()
+
     nextNum = nextNum - numDownloads
 
   err("the requested block is not part of the canonical chain")
