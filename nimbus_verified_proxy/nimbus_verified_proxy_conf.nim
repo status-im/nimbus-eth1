@@ -1,5 +1,5 @@
 # nimbus_verified_proxy
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -109,10 +109,10 @@ type VerifiedProxyConf* = object
 
   # (Untrusted) web3 provider
   # No default - Needs to be provided by the user
-  backendUrl* {.
+  backendUrls* {.
     desc: "URL of the web3 data provider",
     name: "backend-url"
-  .}: Web3Url
+  .}: seq[Web3Url]
 
   # Listening endpoint of the proxy
   # (verified) web3 end
@@ -145,6 +145,15 @@ proc parseCmdArg*(T: type Web3Url, p: string): T {.raises: [ValueError].} =
     raise newException(
       ValueError, "Web3 url should have defined scheme (http/https/ws/wss)"
     )
+
+proc parseCmdArg*(T: type seq[Web3Url], p: string): T {.raises: [ValueError].} =
+  let urls = p.split(',')
+  var parsedWeb3Urls: seq[Web3Url]
+
+  for u in urls:
+    parsedWeb3Urls.add(parseCmdArg(Web3Url, u))
+
+  parsedWeb3Urls
 
 proc parseCmdArg*(T: type UrlList, p: string): T {.raises: [ValueError].} =
   let urls = p.split(',')
