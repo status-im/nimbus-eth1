@@ -151,7 +151,7 @@ proc parseCmdArg*(T: type seq[Web3Url], p: string): T {.raises: [ValueError].} =
   var parsedWeb3Urls: seq[Web3Url]
 
   for u in urls:
-    parsedWeb3Urls.add(parseCmdArg(Web3Url, u)) 
+    parsedWeb3Urls.add(parseCmdArg(Web3Url, u))
 
   parsedWeb3Urls
 
