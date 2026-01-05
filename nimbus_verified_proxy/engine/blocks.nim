@@ -79,7 +79,6 @@ proc walkBlocks(
     sourceHash: Hash32,
     targetHash: Hash32,
 ): Future[Result[void, string]] {.async: (raises: []).} =
-  var nextHash = sourceHash
   info "Starting block walk to verify requested block", blockHash = targetHash
 
   let numBlocks = sourceNum - targetNum
@@ -89,35 +88,56 @@ proc walkBlocks(
         " to verify the chain for the requested block"
     )
 
-  for i in 0 ..< numBlocks:
-    let nextHeader =
-      if engine.headerStore.contains(nextHash):
-        engine.headerStore.get(nextHash).get()
+  let PARALLEL_DOWNLOADS = uint64(2)
+  var
+    nextHash = sourceHash # sourceHash is already the parent hash
+    nextNum = sourceNum - 1
+    downloadedHeaders: Table[base.BlockNumber, Header]
+
+  while nextNum > targetNum:
+    let numDownloads =
+      if ((nextNum - PARALLEL_DOWNLOADS + 1) > targetNum):
+        PARALLEL_DOWNLOADS
       else:
-        let blk =
-          try:
-            await engine.backend.eth_getBlockByHash(nextHash, false)
-          except CatchableError as e:
-            return err(
-              "Couldn't get block " & $nextHash & " during the chain traversal: " & e.msg
-            )
+        nextNum - targetNum
 
-        trace "getting next block",
-          hash = nextHash,
-          number = blk.number,
-          remaining = distinctBase(blk.number) - targetNum
+    for i in nextNum - numDownloads + 1 .. nextNum:
+      let header =
+        if engine.headerStore.contains(i):
+          engine.headerStore.get(i).get()
+        else:
+          let blk =
+            try:
+              await engine.backend.eth_getBlockByNumber(
+                BlockTag(kind: bidNumber, number: Quantity(i)), false
+              )
+            except CatchableError as e:
+              return err(
+                "Couldn't get block " & $i & " during the chain traversal: " & e.msg
+              )
 
-        let header = convHeader(blk)
+          let h = convHeader(blk)
 
-        if header.computeBlockHash != nextHash:
-          return err("Encountered an invalid block header while walking the chain")
+          h
 
-        header
+      downloadedHeaders[i] = header
 
-    if nextHeader.parentHash == targetHash:
-      return ok()
+    for j in 0 ..< numDownloads:
+      let unverifiedHeader =
+        try:
+          downloadedHeaders[nextNum - j]
+        except KeyError as e:
+          return err("Cannot find downloaded block of the block walk")
 
-    nextHash = nextHeader.parentHash
+      if unverifiedHeader.computeBlockHash != nextHash:
+        return err("Encountered an invalid block header while walking the chain")
+
+      if unverifiedHeader.parentHash == targetHash:
+        return ok()
+
+      nextHash = unverifiedHeader.parentHash
+
+    nextNum = nextNum - numDownloads
 
   err("the requested block is not part of the canonical chain")
 
