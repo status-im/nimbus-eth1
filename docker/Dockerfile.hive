@@ -28,6 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git-lfs \
     build-essential \
     software-properties-common \
+    openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Docker CLI

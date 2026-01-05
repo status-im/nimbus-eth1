@@ -122,7 +122,17 @@ pipeline {
   post {
     success { script { github.notifyPR(true) } }
     failure { script { github.notifyPR(false) } }
+    always {
+      archiveArtifacts artifacts: 'simulation-results/**', allowEmptyArchive: true
+      sshagent(credentials: ['jenkins-ssh']) {
+        sh '''
+          if [ -d /opt/hive/workspace/logs ]; then
+            scp -r /opt/hive/workspace/logs/* \
+              jenkins@node-01.he-eu-hel1.ci.hive.status.im:/home/jenkins/hive/workspace/logs/ || true
+          fi
+        '''
+      }
+    }
     cleanup { sh './scripts/hive-cleanup.sh || true' }
-    always { archiveArtifacts artifacts: 'simulation-results/**', allowEmptyArchive: true }
   }
 }
