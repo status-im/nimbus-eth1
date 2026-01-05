@@ -109,10 +109,10 @@ type VerifiedProxyConf* = object
 
   # (Untrusted) web3 provider
   # No default - Needs to be provided by the user
-  backendUrl* {.
+  backendUrls* {.
     desc: "URL of the web3 data provider",
     name: "backend-url"
-  .}: Web3Url
+  .}: seq[Web3Url]
 
   # Listening endpoint of the proxy
   # (verified) web3 end
