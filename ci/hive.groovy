@@ -69,49 +69,70 @@ pipeline {
       parallel {
         stage('sync neth-nimbus') {
           steps {
-            timeout(time: params.TIMEOUT_MINUTES.toInteger(), unit: 'MINUTES') {
-              sh """
-                cd /opt/hive && ./hive \
-                --sim "${params.SIMULATION_NAME}" \
-                --client-file="${WORKSPACE}/ci/neth-nimbus-sync-config.yml" \
-                --sim.parallelism=${params.PARALLELISM} \
-                --sim.loglevel 4 \
-                --docker.nocache hive/clients/nimbus-el \
-                --docker.pull true \
-                ${params.DOCKER_BUILDOUTPUT ? '--docker.buildoutput' : ''}
-              """
+            script {
+              try {
+                timeout(time: params.TIMEOUT_MINUTES.toInteger(), unit: 'MINUTES') {
+                  sh """
+                    cd /opt/hive && ./hive \
+                    --sim "${params.SIMULATION_NAME}" \
+                    --client-file="${WORKSPACE}/ci/neth-nimbus-sync-config.yml" \
+                    --sim.parallelism=${params.PARALLELISM} \
+                    --sim.loglevel 4 \
+                    --docker.nocache hive/clients/nimbus-el \
+                    --docker.pull true \
+                    ${params.DOCKER_BUILDOUTPUT ? '--docker.buildoutput' : ''}
+                  """
+                }
+              } catch (e) {
+                env.FAILED_NETH_NIMBUS = 'true'
+                throw e
+              }
             }
           }
         }
         stage('sync reth-nimbus') {
           steps {
-            timeout(time: params.TIMEOUT_MINUTES.toInteger(), unit: 'MINUTES') {
-              sh """
-                cd /opt/hive && ./hive \
-                --sim "${params.SIMULATION_NAME}" \
-                --client-file="${WORKSPACE}/ci/reth-nimbus-sync-config.yml" \
-                --sim.parallelism=${params.PARALLELISM} \
-                --sim.loglevel 4 \
-                --docker.nocache hive/clients/nimbus-el \
-                --docker.pull true \
-                ${params.DOCKER_BUILDOUTPUT ? '--docker.buildoutput' : ''}
-              """
+            script {
+              try {
+                timeout(time: params.TIMEOUT_MINUTES.toInteger(), unit: 'MINUTES') {
+                  sh """
+                    cd /opt/hive && ./hive \
+                    --sim "${params.SIMULATION_NAME}" \
+                    --client-file="${WORKSPACE}/ci/reth-nimbus-sync-config.yml" \
+                    --sim.parallelism=${params.PARALLELISM} \
+                    --sim.loglevel 4 \
+                    --docker.nocache hive/clients/nimbus-el \
+                    --docker.pull true \
+                    ${params.DOCKER_BUILDOUTPUT ? '--docker.buildoutput' : ''}
+                  """
+                }
+              } catch (e) {
+                env.FAILED_RETH_NIMBUS = 'true'
+                throw e
+              }
             }
           }
         }
         stage('sync erigon-nimbus') {
           steps {
-            timeout(time: params.TIMEOUT_MINUTES.toInteger(), unit: 'MINUTES') {
-              sh """
-                cd /opt/hive && ./hive \
-                --sim "${params.SIMULATION_NAME}" \
-                --client-file="${WORKSPACE}/ci/erigon-nimbus-sync-config.yml" \
-                --sim.parallelism=${params.PARALLELISM} \
-                --sim.loglevel 4 \
-                --docker.nocache hive/clients/nimbus-el \
-                --docker.pull true \
-                ${params.DOCKER_BUILDOUTPUT ? '--docker.buildoutput' : ''}
-              """
+            script {
+              try {
+                timeout(time: params.TIMEOUT_MINUTES.toInteger(), unit: 'MINUTES') {
+                  sh """
+                    cd /opt/hive && ./hive \
+                    --sim "${params.SIMULATION_NAME}" \
+                    --client-file="${WORKSPACE}/ci/erigon-nimbus-sync-config.yml" \
+                    --sim.parallelism=${params.PARALLELISM} \
+                    --sim.loglevel 4 \
+                    --docker.nocache hive/clients/nimbus-el \
+                    --docker.pull true \
+                    ${params.DOCKER_BUILDOUTPUT ? '--docker.buildoutput' : ''}
+                  """
+                }
+              } catch (e) {
+                env.FAILED_ERIGON_NIMBUS = 'true'
+                throw e
+              }
             }
           }
         }
@@ -121,13 +142,40 @@ pipeline {
 
   post {
     success { script { github.notifyPR(true) } }
-    failure { script { github.notifyPR(false) } }
+    failure {
+      script {
+        github.notifyPR(false)
+        def failedStages = []
+        if (env.FAILED_NETH_NIMBUS == 'true') failedStages.add('neth-nimbus')
+        if (env.FAILED_RETH_NIMBUS == 'true') failedStages.add('reth-nimbus')
+        if (env.FAILED_ERIGON_NIMBUS == 'true') failedStages.add('erigon-nimbus')
+        def failedList = failedStages.join(', ') ?: 'unknown'
+        withCredentials([string(credentialsId: 'discord-hive-webhook', variable: 'DISCORD_WEBHOOK_URL')]) {
+          sh """
+            curl -s -H "Content-Type: application/json" -X POST "\${DISCORD_WEBHOOK_URL}" -d '{
+              "embeds": [{
+                "title": "Hive Test Failure",
+                "description": "Hive tests failed for **nimbus-eth1**",
+                "color": 15158332,
+                "fields": [
+                  {"name": "Branch", "value": "${env.GIT_BRANCH}", "inline": true},
+                  {"name": "Build", "value": "#${env.BUILD_NUMBER}", "inline": true},
+                  {"name": "Simulation", "value": "${params.SIMULATION_NAME}", "inline": true},
+                  {"name": "Failed Stages", "value": "${failedList}", "inline": false},
+                  {"name": "Links", "value": "[Jenkins Build](${env.BUILD_URL}) | [Hive Dashboard](https://hive.nimbus.team/#summary-sort=name&suite=sync)", "inline": false}
+                ]
+              }]
+            }'
+          """
+        }
+      }
+    }
     always {
       archiveArtifacts artifacts: 'simulation-results/**', allowEmptyArchive: true
       sshagent(credentials: ['jenkins-ssh']) {
         sh '''
           if [ -d /opt/hive/workspace/logs ]; then
-            scp -r /opt/hive/workspace/logs/* \
+            scp -o StrictHostKeyChecking=no -r /opt/hive/workspace/logs/* \
               jenkins@node-01.he-eu-hel1.ci.hive.status.im:/home/jenkins/hive/workspace/logs/ || true
           fi
         '''
