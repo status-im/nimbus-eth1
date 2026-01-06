@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -8,6 +8,7 @@
 # those terms.
 
 import
+  std/sequtils,
   results,
   json_rpc/errors,
   web3/engine_api_types,
@@ -50,3 +51,18 @@ proc getBlobsV2*(ben: BeaconEngineRef,
     list.add blobAndProof
 
   ok(list)
+
+proc getBlobsV3*(ben: BeaconEngineRef,
+               versionedHashes: openArray[VersionedHash]):
+                  seq[Opt[BlobAndProofV2]] =
+  # https://github.com/ethereum/execution-apis/pull/719
+  if versionedHashes.len > 128:
+    raise tooLargeRequest("the number of requested blobs is too large")
+
+  if ben.latestFork < Osaka:
+    raise unsupportedFork(
+      "getBlobsV3 called before Osaka has been activated")
+
+  versionedHashes.mapIt(
+    ben.txPool.getBlobAndProofV2(it)
+  )
