@@ -115,17 +115,6 @@ proc getBlockAccessList*(
 
   ok(bal)
 
-proc getTotalDifficulty(chain: ForkedChainRef, blockHash: Hash32): UInt256 =
-
-  let txFrame = chain.txFrame(blockHash).txFrameBegin()
-  defer:
-    txFrame.dispose()
-
-  let totalDifficulty = txFrame.getScore(blockHash).valueOr:
-    return chain.baseTxFrame().headTotalDifficulty()
-
-  return totalDifficulty
-
 proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
   let
     # chainDB = com.db
