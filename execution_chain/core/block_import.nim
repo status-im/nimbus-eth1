@@ -17,7 +17,8 @@ import
   ./chain,
   ../conf,
   ../utils/utils,
-  beacon_chain/process_state
+  beacon_chain/process_state,
+  ./chain/forked_chain/chain_serialize
 
 proc importRlpBlocks*(blocksRlp:seq[byte],
                       chain: ForkedChainRef,
@@ -87,11 +88,17 @@ proc importRlpBlocks*(config: ExecutionClientConf, com: CommonRef): Future[void]
 
   # success or not, we quit after importing blocks
   for i, blocksFile in config.blocksFile:
-    (await importRlpBlocks(string blocksFile, chain, i == config.blocksFile.len-1)).isOkOr:
+    (await importRlpBlocks(string blocksFile, chain, false)).isOkOr:
       warn "Error when importing blocks", msg=error
       # Finalize the existing chain in case of rlp read error
       (await chain.forkChoice(chain.latestHash, chain.latestHash)).isOkOr:
         error "Error when finalizing chain", msg=error
       quit(QuitFailure)
+
+  let txFrame = chain.baseTxFrame
+  chain.serialize(txFrame).isOkOr:
+    error "FC.serialize error: ", msg = error
+  txFrame.checkpoint(chain.base.blk.header.number, skipSnapshot = true)
+  com.db.persist(txFrame)
 
   quit(QuitSuccess)
