@@ -144,29 +144,30 @@ pipeline {
     success { script { github.notifyPR(true) } }
     failure {
       script {
-        github.notifyPR(false)
-        def failedStages = []
-        if (env.FAILED_NETH_NIMBUS == 'true') failedStages.add('neth-nimbus')
-        if (env.FAILED_RETH_NIMBUS == 'true') failedStages.add('reth-nimbus')
-        if (env.FAILED_ERIGON_NIMBUS == 'true') failedStages.add('erigon-nimbus')
-        def failedList = failedStages.join(', ') ?: 'unknown'
-        withCredentials([string(credentialsId: 'discord-hive-webhook', variable: 'DISCORD_WEBHOOK_URL')]) {
-          sh """
-            curl -s -H "Content-Type: application/json" -X POST "\${DISCORD_WEBHOOK_URL}" -d '{
-              "embeds": [{
-                "title": "Hive Test Failure",
-                "description": "Hive tests failed for **nimbus-eth1**",
-                "color": 15158332,
-                "fields": [
-                  {"name": "Branch", "value": "${env.GIT_BRANCH}", "inline": true},
-                  {"name": "Build", "value": "#${env.BUILD_NUMBER}", "inline": true},
-                  {"name": "Simulation", "value": "${params.SIMULATION_NAME}", "inline": true},
-                  {"name": "Failed Stages", "value": "${failedList}", "inline": false},
-                  {"name": "Links", "value": "[Jenkins Build](${env.BUILD_URL}) | [Hive Dashboard](https://hive.nimbus.team/#summary-sort=name&suite=sync)", "inline": false}
-                ]
-              }]
-            }'
-          """
+        github.notifyPR(true)
+        if (env.CHANGE_ID) {
+          def failedStages = []
+          if (env.FAILED_NETH_NIMBUS) failedStages.add('neth-nimbus')
+          if (env.FAILED_RETH_NIMBUS) failedStages.add('reth-nimbus')
+          if (env.FAILED_ERIGON_NIMBUS) failedStages.add('erigon-nimbus')
+          def failedList = failedStages.join(', ') ?: 'unknown'
+          withCredentials([string(credentialsId: 'discord-hive-webhook', variable: 'DISCORD_WEBHOOK_URL')]) {
+            sh """
+              curl -s -H "Content-Type: application/json" -X POST "\${DISCORD_WEBHOOK_URL}" -d '{
+                "embeds": [{
+                  "title": "Hive Test Failure",
+                  "description": "Hive tests failed for [PR-${env.CHANGE_ID}](https://github.com/status-im/nimbus-eth1/pull/${env.CHANGE_ID})",
+                  "color": 15158332,
+                  "fields": [
+                    {"name": "Branch", "value": "[${env.CHANGE_BRANCH}](https://github.com/status-im/nimbus-eth1/tree/${env.CHANGE_BRANCH})", "inline": true},
+                    {"name": "Build", "value": "[#${env.BUILD_NUMBER}](https://ci.status.im/blue/organizations/jenkins/nimbus-eth1%2Fplatforms%2Flinux%2Fx86_64%2Fhive/detail/PR-${env.CHANGE_ID}/${env.BUILD_NUMBER}/pipeline/)", "inline": true},
+                    {"name": "Simulation", "value": "${params.SIMULATION_NAME}", "inline": true},
+                    {"name": "Failed Stages", "value": "[${failedList}](https://hive.nimbus.team/#summary-sort=name&suite=sync)", "inline": false}
+                  ]
+                }]
+              }'
+            """
+          }
         }
       }
     }
@@ -176,7 +177,7 @@ pipeline {
         sh '''
           if [ -d /opt/hive/workspace/logs ]; then
             scp -o StrictHostKeyChecking=no -r /opt/hive/workspace/logs/* \
-              jenkins@node-01.he-eu-hel1.ci.hive.status.im:/home/jenkins/hive/workspace/logs/ || true
+              jenkins@node-01.he-eu-hel1.ci.hive.status.im:/home/jenkins/hive/workspace/logs/
           fi
         '''
       }
