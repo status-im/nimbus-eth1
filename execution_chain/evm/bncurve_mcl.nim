@@ -64,7 +64,7 @@ func deserialize(P: var BnG2, buf: openArray[byte]): bool =
 # serialize Fp as 32 byte big-endian number.
 func serialize(buf: var openArray[byte], x: BnFp): bool =
   # sigh, getStr output buf is zero terminated
-  var tmp: array[33, byte]
+  var tmp {.noinit.}: array[33, byte]
   result = mclBnFp_getStr(cast[ptr char](tmp[0].addr), 32, x.addr, ioMode) == 32.mclSize
   assign(buf.toOpenArray(0, 31), tmp.toOpenArray(0, 31))
 
