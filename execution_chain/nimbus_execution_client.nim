@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -142,8 +142,7 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
   # depending on the `eth` version. To handle this is currently unsupported.
   #
   let doSnapSync = config.snapSyncEnabled or config.snapServerEnabled
-  nimbus.ethWire =
-    nimbus.ethNode.addEthHandlerCapability(nimbus.txPool, latestOnly=doSnapSync)
+  nimbus.ethWire = nimbus.ethNode.addEthHandlerCapability(nimbus.txPool)
   if doSnapSync:
     nimbus.snapWire = nimbus.ethNode.addSnapHandlerCapability()
 
@@ -178,8 +177,7 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
     syncerShouldRun = true
 
   # Configure beacon syncer.
-  nimbus.beaconSyncRef.config(
-    nimbus.ethNode, nimbus.fc, config.maxPeers, latestOnly=doSnapSync)
+  nimbus.beaconSyncRef.config(nimbus.ethNode, nimbus.fc, config.maxPeers)
 
   # Optional for pre-setting the sync target (e.g. for debugging)
   if config.beaconSyncTarget.isSome():
