@@ -8,6 +8,7 @@
 # those terms.
 
 import
+  std/sequtils,
   results,
   json_rpc/errors,
   web3/engine_api_types,
@@ -62,8 +63,6 @@ proc getBlobsV3*(ben: BeaconEngineRef,
     raise unsupportedFork(
       "getBlobsV3 called before Osaka has been activated")
 
-  var list = newSeqOfCap[Opt[BlobAndProofV2]](versionedHashes.len)
-  for v in versionedHashes:
-    list.add ben.txPool.getBlobAndProofV2(v)
-
-  list
+  versionedHashes.mapIt(
+    ben.txPool.getBlobAndProofV2(it)
+  )

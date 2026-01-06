@@ -120,6 +120,6 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
                                          Opt[seq[BlobAndProofV2]]:
     return engine.getBlobsV2(versionedHashes)
 
-  server.rpc("engine_getBlobsV2") do(versionedHashes: seq[VersionedHash]) ->
+  server.rpc("engine_getBlobsV3") do(versionedHashes: seq[VersionedHash]) ->
                                          seq[Opt[BlobAndProofV2]]:
     return engine.getBlobsV3(versionedHashes)
