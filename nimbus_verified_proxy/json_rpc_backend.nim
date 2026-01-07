@@ -72,7 +72,10 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
         blkHash: Hash32, fullTransactions: bool
     ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
       try:
-        ok(await client.getClient().eth_getBlockByHash(blkHash, fullTransactions))
+        let res = await client.getClient().eth_getBlockByHash(blkHash, fullTransactions)
+        if res.isNil():
+          return err((BackendFetchError, "Obtained nil response for the RPC request"))
+        ok(res)
       except CancelledError as e:
         raise e
       except RpcPostError as e:
@@ -90,7 +93,11 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
         blkNum: BlockTag, fullTransactions: bool
     ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
       try:
-        ok(await client.getClient().eth_getBlockByNumber(blkNum, fullTransactions))
+        let res =
+          await client.getClient().eth_getBlockByNumber(blkNum, fullTransactions)
+        if res.isNil():
+          return err((BackendFetchError, "Obtained nil response for the RPC request"))
+        ok(res)
       except CancelledError as e:
         raise e
       except RpcPostError as e:
@@ -162,7 +169,10 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
         txHash: Hash32
     ): Future[EngineResult[TransactionObject]] {.async: (raises: [CancelledError]).} =
       try:
-        ok(await client.getClient().eth_getTransactionByHash(txHash))
+        let res = await client.getClient().eth_getTransactionByHash(txHash)
+        if res.isNil():
+          return err((BackendFetchError, "Obtained nil response for the RPC request"))
+        ok(res)
       except CancelledError as e:
         raise e
       except RpcPostError as e:
@@ -180,7 +190,10 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
         txHash: Hash32
     ): Future[EngineResult[ReceiptObject]] {.async: (raises: [CancelledError]).} =
       try:
-        ok(await client.getClient().eth_getTransactionReceipt(txHash))
+        let res = await client.getClient().eth_getTransactionReceipt(txHash)
+        if res.isNil():
+          return err((BackendFetchError, "Obtained nil response for the RPC request"))
+        ok(res)
       except CancelledError as e:
         raise e
       except RpcPostError as e:
