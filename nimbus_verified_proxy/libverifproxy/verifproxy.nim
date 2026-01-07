@@ -141,9 +141,15 @@ template callbackToC(ctx: ptr Context, cb: CallBackProc, asyncCall: untyped) =
       task.finished = true
       task.status = RET_ERROR
     else:
-      task.response = Json.encode(fut.value())
-      task.finished = true
-      task.status = RET_SUCCESS
+      let res = fut.value()
+      if res.isErr():
+        task.response = $res.error.errType & ": " & res.error.errMsg
+        task.finished = true
+        task.status = RET_ERROR
+      else:
+        task.response = Json.encode(res.get())
+        task.finished = true
+        task.status = RET_SUCCESS
 
   task.fut = fut
 
