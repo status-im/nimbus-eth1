@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -83,43 +83,51 @@ proc disconnect*(
 proc getDispatcher(
     node: EthereumNode, otherPeerCapabilities: openArray[Capability]
 ): Opt[Dispatcher] =
-  template copyTo(src, dest; index: int) =
-    for i in 0 ..< src.len:
-      dest[index + i] = src[i]
 
-  func addOrReplace(dispatcher: Dispatcher, localProtocol: ProtocolInfo) =
-    for i, proto in dispatcher.activeProtocols:
-      if proto.capability.name == localProtocol.capability.name:
-        if localProtocol.capability.version > proto.capability.version:
-          dispatcher.activeProtocols[i] = localProtocol
-        return
-
-    dispatcher.activeProtocols.add localProtocol
-    localProtocol.messages.copyTo(
-      dispatcher.messages, dispatcher.protocolOffsets[localProtocol.index].value.int
-    )
-
-  let dispatcher = Dispatcher()
+  # Start of first sub-protocol message ID
   var nextUserMsgId = 0x10u64
 
+  # Initialise the return value (sort of) by the base protocol messages padded
+  # up to the first sub-protocol message ID
+  let dispatcher = Dispatcher(messages: newSeq[MessageInfo](nextUserMsgId))
+  for i in 0 ..< devp2pInfo.messages.len:
+    dispatcher.messages[i] = devp2pInfo.messages[i]
+
+  # Match `node.protocols[]` against the the `otherPeerCapabilities[]`. For
+  # the `node.protocols[]` array, the higher version instances of a protocol
+  # family come first which has the effect of being more prefered for a match.
+  var protoFamilySeen = "" # does not match anything
   for localProtocol in node.protocols:
-    let idx = localProtocol.index
-    block findMatchingProtocol:
-      for remoteCapability in otherPeerCapabilities:
-        if localProtocol.capability == remoteCapability:
-          dispatcher.protocolOffsets[idx] = Opt.some(nextUserMsgId)
-          nextUserMsgId += localProtocol.messages.len.uint64
-          break findMatchingProtocol
+    #
+    # One must pick only one for each proto family (e.g. eth/69, eth/68). The
+    # protocol families are grouped together in `node.protocols[]` so that only
+    # the previous family needs to be checked for avoiding duplicates.
+    if localProtocol.capability.name != protoFamilySeen:
+      block findMatchingProtocol:
+        for remoteCapability in otherPeerCapabilities:
+          if localProtocol.capability == remoteCapability:
 
-  dispatcher.messages = newSeq[MessageInfo](nextUserMsgId)
-  devp2pInfo.messages.copyTo(dispatcher.messages, 0)
+            # Calculate offsets
+            let msgOffset = nextUserMsgId
+            nextUserMsgId += localProtocol.messages.len.uint64
 
-  for localProtocol in node.protocols:
-    let idx = localProtocol.index
-    if dispatcher.protocolOffsets[idx].isSome:
-      dispatcher.addOrReplace(localProtocol)
+            # Register message ID offset
+            let idx = localProtocol.index
+            dispatcher.protocolOffsets[idx] = Opt.some(msgOffset)
 
-  if dispatcher.numProtocols == 0:
+            # Collect actvated protocol
+            dispatcher.activeProtocols.add localProtocol
+
+            # Pack message descriptors
+            dispatcher.messages.setLen(nextUserMsgId)
+            for i in 0 ..< localProtocol.messages.len:
+              dispatcher.messages[msgOffset.int + i] = localProtocol.messages[i]
+
+            # Done with this protocol family
+            protoFamilySeen = localProtocol.capability.name
+            break findMatchingProtocol
+
+  if dispatcher.activeProtocols.len == 0:
     Opt.none(Dispatcher)
   else:
     Opt.some(dispatcher)
