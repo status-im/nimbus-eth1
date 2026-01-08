@@ -25,9 +25,7 @@ import
   ../network/wire/portal_protocol_config
 
 const
-  defaultListenAddress* = (static parseIpAddress("0.0.0.0"))
   defaultAdminListenAddress* = (static parseIpAddress("127.0.0.1"))
-  defaultListenAddressDesc = $defaultListenAddress
   defaultAdminListenAddressDesc = $defaultAdminListenAddress
 
   defaultStorageCapacity* = 2000'u32 # 2 GB default
@@ -77,11 +75,9 @@ type
       uint16
 
     listenAddress* {.
-      defaultValue: defaultListenAddress,
-      defaultValueDesc: $defaultListenAddressDesc,
-      desc: "Listening address for the Discovery v5 traffic",
-      name: "listen-address"
-    .}: IpAddress
+      desc: "Listening address for the Discovery v5 traffic"
+      defaultValueDesc: "*"
+      name: "listen-address" .}: Option[IpAddress]
 
     network* {.
       desc:
@@ -123,6 +119,14 @@ type
       defaultValueDesc: "any",
       name: "nat"
     .}: NatConfig
+
+    # Note: add enrIpv4Address option that would deprecate nat:extip
+    # Or have one enr-address that accepts multiple addresses? (ipv4/ipv6)
+    enrIpv6Address* {.
+      hidden,
+      desc: "Specifies the IPv6 address to be advertised in the node’s ENR",
+      name: "debug-enr-ipv6-address"
+    .}: Option[IpAddress]
 
     enrAutoUpdate* {.
       defaultValue: false,
