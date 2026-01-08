@@ -40,8 +40,9 @@ type ProxyError = object of CatchableError
 proc verifyChainId(
     engine: RpcVerificationEngine
 ): Future[void] {.async: (raises: [CancelledError]).} =
+  const ZERO_U256 = 0.u256 # pushed construction of zero to compile time
   let providerId = (await engine.backend.eth_chainId()).valueOr:
-    0.u256
+    ZERO_U256
 
   # This is a chain/network mismatch error between the Nimbus verified proxy and
   # the application using it. Fail fast to avoid misusage. The user must fix
