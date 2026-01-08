@@ -20,7 +20,20 @@ import
 
 # ------------------------------------------------------------------------------
 # Private helpers
-# ------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+
+template getBlockHeaders(
+    buddy: BeaconPeerRef;
+    req: BlockHeadersRequest;
+    bn: BlockNumber;
+       ): Result[FetchHeadersData,BeaconError] =
+  ## Async/template
+  ##
+  ## Wrapper around `getBlockHeaders()` handler
+  ##
+  let rc = await buddy.ctx.handler.getBlockHeaders(buddy, req, bn)
+  buddy.ctx.handler.syncBlockHeaders(buddy) # debugging, sync, replay
+  rc
 
 proc maybeSlowPeerError(
     buddy: BeaconPeerRef;
@@ -51,10 +64,10 @@ func errStr(rc: Result[FetchHeadersData,BeaconError]): string =
     result = "n/a"
 
 # ------------------------------------------------------------------------------
-# Private function(s)
+# Public Handler
 # ------------------------------------------------------------------------------
 
-proc getBlockHeaders(
+proc getBlockHeadersCB*(
     buddy: BeaconPeerRef;
     req: BlockHeadersRequest;
     bn: BlockNumber;
@@ -129,7 +142,7 @@ template fetchHeadersReversed*(
     trace sendInfo & " reverse", peer, req=($ivReq), nReq=req.maxResults, hash,
       state=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
 
-    let rc = await buddy.getBlockHeaders(req, BlockNumber ivReq.maxPt)
+    let rc = buddy.getBlockHeaders(req, BlockNumber ivReq.maxPt)
     var elapsed: Duration
     if rc.isOk:
       elapsed = rc.value.elapsed
