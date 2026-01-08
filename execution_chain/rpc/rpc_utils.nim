@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -390,6 +390,12 @@ proc getEthConfigObject*(com: CommonRef,
 
   return res
 
-proc getTotalDifficulty*(chain: ForkedChainRef, blockHash: Hash32): Opt[UInt256] =
-  # Note: It's ok to use baseTxFrame for TD as this is for historical blocks
-  chain.baseTxFrame().getScore(blockHash)
+proc getTotalDifficulty*(chain: ForkedChainRef, blockHash: Hash32, header: Header): Opt[UInt256] =
+  # Note:
+  # The database data model stores (the same) total difficulty for each new PoS block. Thus need to
+  # check here if PoS block or not.
+  if chain.com.proofOfStake(header, chain.baseTxFrame()):
+    Opt.none(UInt256)
+  else:
+    # Note: It's ok to use baseTxFrame for TD as this is for historical blocks
+    chain.baseTxFrame().getScore(blockHash)

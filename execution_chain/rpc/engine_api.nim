@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2025 Status Research & Development GmbH
+# Copyright (c) 2021-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -40,6 +40,7 @@ const supportedMethods: HashSet[string] =
     "engine_getClientVersionV1",
     "engine_getBlobsV1",
     "engine_getBlobsV2",
+    "engine_getBlobsV3"
   ])
 
 # I'm trying to keep the handlers below very thin, and move the
@@ -130,3 +131,7 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
   server.rpc("engine_getBlobsV2") do(versionedHashes: seq[VersionedHash]) ->
                                          Opt[seq[BlobAndProofV2]]:
     return engine.getBlobsV2(versionedHashes)
+
+  server.rpc("engine_getBlobsV3") do(versionedHashes: seq[VersionedHash]) ->
+                                         seq[Opt[BlobAndProofV2]]:
+    return engine.getBlobsV3(versionedHashes)

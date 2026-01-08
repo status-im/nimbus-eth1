@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2025 Status Research & Development GmbH
+# Copyright (c) 2021-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -40,25 +40,6 @@ proc connectToRpcServers(config: PortalTestnetConf): Future[seq[RpcClient]] {.as
 
   return clients
 
-# Note:
-# When doing json-rpc requests following `RpcPostError` can occur:
-# "Failed to send POST Request with JSON-RPC." when a `HttpClientRequestRef`
-# POST request is send in the json-rpc http client.
-# This error is raised when the httpclient hits error:
-# "Could not send request headers", which in its turn is caused by the
-# "Incomplete data sent or received" in `AsyncStream`, which is caused by
-# `ECONNRESET` or `EPIPE` error (see `isConnResetError()`) on the TCP stream.
-# This can occur when the server side closes the connection, which happens after
-# a `httpHeadersTimeout` of default 10 seconds (set on `HttpServerRef.new()`).
-# In order to avoid here hitting this timeout a `close()` is done after each
-# json-rpc call. Because the first json-rpc call opens up the connection, and it
-# remains open until a close() (or timeout). No need to do another connect
-# before any new call as the proc `connectToRpcServers` doesn't actually connect
-# to servers, as client.connect doesn't do that. It just sets the `httpAddress`.
-# Yes, this client json rpc API couldn't be more confusing.
-# Could also just retry each call on failure, which would set up a new
-# connection.
-
 # We are kind of abusing the unittest2 here to run json rpc tests against other
 # processes. Needs to be compiled with `-d:unittest2DisableParamFiltering` or
 # the confutils cli will not work.
@@ -72,7 +53,6 @@ procSuite "Portal testnet tests":
     var nodeInfos: seq[NodeInfo]
     for client in clients:
       let nodeInfo = await client.discv5_nodeInfo()
-      await client.close()
       nodeInfos.add(nodeInfo)
 
     # Kick off the network by trying to add all records to each node.
@@ -89,11 +69,9 @@ procSuite "Portal testnet tests":
             x.enr
         )
       )
-      await client.close()
 
     for client in clients:
       let routingTableInfo = await client.discv5_routingTableInfo()
-      await client.close()
       var start: seq[NodeId]
       let nodes = foldl(routingTableInfo.buckets, a & b, start)
       # A node will have at least the first bucket filled. One could increase
@@ -114,7 +92,6 @@ procSuite "Portal testnet tests":
     var nodeInfos: seq[NodeInfo]
     for client in clients:
       let nodeInfo = await client.portal_historyNodeInfo()
-      await client.close()
       nodeInfos.add(nodeInfo)
 
     for client in clients:
@@ -124,11 +101,9 @@ procSuite "Portal testnet tests":
             x.enr
         )
       )
-      await client.close()
 
     for client in clients:
       let routingTableInfo = await client.portal_historyRoutingTableInfo()
-      await client.close()
       var start: seq[NodeId]
       let nodes = foldl(routingTableInfo.buckets, a & b, start)
       check nodes.len >= (min(config.nodeCount - 1, 16))
@@ -138,5 +113,5 @@ procSuite "Portal testnet tests":
     for client in clients:
       var enr: Record
       enr = await client.portal_historyLookupEnr(randomNodeInfo.nodeId)
-      await client.close()
       check enr == randomNodeInfo.enr
+      await client.close()

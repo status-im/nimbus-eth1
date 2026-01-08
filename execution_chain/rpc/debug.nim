@@ -290,7 +290,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
 
       badBlocks.add BadBlock(
         `block`: populateBlockObject(
-          blkHash, blk, chain.getTotalDifficulty(blkHash), fullTx = true),
+          blkHash, blk, chain.getTotalDifficulty(blkHash, blk.header), fullTx = true),
         generatedBlockAccessList: bal.map(proc (bal: auto): auto = bal[]),
         hash: blkHash,
         rlp: rlp.encode(blk))
