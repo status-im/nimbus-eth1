@@ -59,17 +59,19 @@ const
   connectLoopSleep = chronos.milliseconds(2000)
   updateLoopSleep = chronos.seconds(15)
   maxConcurrentConnectionRequests = 40
-  sleepBeforeTryingARandomBootnode = chronos.milliseconds(3000)
 
-  ## Period of time for dead / unreachable peers.
   SeenTableTimeDeadPeer = chronos.minutes(10)
-  ## Period of time for Useless peers, either because of no matching
-  ## capabilities or on an irrelevant network.
+    ## Period of time for dead / unreachable peers.
+
   SeenTableTimeUselessPeer = chronos.hours(24)
-  ## Period of time for peers with a protocol error.
+    ## Period of time for Useless peers, either because of no matching
+    ## capabilities or on an irrelevant network.
+
   SeenTableTimeProtocolError = chronos.minutes(30)
-  ## Period of time for peers with general disconnections / transport errors.
+    ## Period of time for peers with a protocol error.
+
   SeenTableTimeReconnect = chronos.minutes(5)
+    ## Period of time for peers with general disconnections / transport errors.
 
 #------------------------------------------------------------------------------
 # Private functions
