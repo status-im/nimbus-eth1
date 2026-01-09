@@ -122,17 +122,28 @@ proc selfDestructEIP2929Op(cpt: VmCpt): EvmResultVoid =
   ## selfDestructEIP2929 (auto generated comment)
   ? cpt.checkInStaticContext()
 
+  let beneficiary = ? cpt.stack.popAddress()
+
+  var beneficiaryIsCold = false
+  cpt.vmState.mutateLedger:
+    if not db.inAccessList(beneficiary):
+      beneficiaryIsCold = true
+
+  var staticGasCosts = cpt.gasCosts[SelfDestruct].sc_handler(false)
+  if beneficiaryIsCold:
+    staticGasCosts += ColdAccountAccessCost
+  if staticGasCosts > cpt.gasMeter.gasRemaining:
+    return EvmResultVoid.err(gasErr(OutOfGas))
+
   let
-    beneficiary = ? cpt.stack.popAddress()
     isDead = not cpt.accountExists(beneficiary)
     balance = cpt.getBalance(cpt.msg.contractAddress)
     condition = isDead and not balance.isZero
 
-  var
-    gasCost = cpt.gasCosts[SelfDestruct].sc_handler(condition)
+  var gasCost = cpt.gasCosts[SelfDestruct].sc_handler(condition)
 
   cpt.vmState.mutateLedger:
-    if not db.inAccessList(beneficiary):
+    if beneficiaryIsCold:
       db.accessList(beneficiary)
       gasCost = gasCost + ColdAccountAccessCost
 

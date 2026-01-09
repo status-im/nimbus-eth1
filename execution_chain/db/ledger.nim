@@ -672,13 +672,16 @@ proc selfDestruct*(ac: LedgerRef, address: Address) =
   ac.setBalance(address, 0.u256)
   ac.savePoint.selfDestruct.incl address
 
-proc selfDestruct6780*(ac: LedgerRef, address: Address) =
+proc selfDestruct6780*(ac: LedgerRef, address: Address): bool =
   let acc = ac.getAccount(address, false)
   if acc.isNil:
-    return
+    return false
 
   if NewlyCreated in acc.flags:
     ac.selfDestruct(address)
+    true
+  else:
+    false
 
 proc selfDestructLen*(ac: LedgerRef): int =
   ac.savePoint.selfDestruct.len
