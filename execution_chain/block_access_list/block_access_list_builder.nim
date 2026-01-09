@@ -74,6 +74,9 @@ template addTouchedAccount*(builder: ConcurrentBlockAccessListBuilderRef, addres
   withLock(builder.lock):
     ensureAccount(builder, address)
 
+func addTouchedAccount*(builder: ptr ConcurrentBlockAccessListBuilderRef, adr: Address) =
+  builder[].addTouchedAccount(adr)
+
 proc addStorageWrite*(
     builder: BlockAccessListBuilderRef,
     address: Address,
@@ -88,7 +91,7 @@ proc addStorageWrite*(
     accData[].storageChanges.withValue(slot, slotChanges):
       slotChanges[][blockAccessIndex] = newValue
 
-proc addStorageWrite*(
+template addStorageWrite*(
     builder: ConcurrentBlockAccessListBuilderRef,
     address: Address,
     slot: UInt256,
@@ -97,15 +100,26 @@ proc addStorageWrite*(
   withLock(builder.lock):
     addStorageWrite(builder.BlockAccessListBuilderRef, address, slot, blockAccessIndex, newValue)
 
+func addStorageWrite*(
+    builder: ptr ConcurrentBlockAccessListBuilderRef,
+    address: Address,
+    slot: UInt256,
+    blockAccessIndex: int,
+    newValue: UInt256) =
+  builder[].addStorageWrite(address, slot, blockAccessIndex, newValue)
+
 proc addStorageRead*(builder: BlockAccessListBuilderRef, address: Address, slot: UInt256) =
   builder.ensureAccount(address)
 
   builder.accounts.withValue(address, accData):
     accData[].storageReads.incl(slot)
 
-proc addStorageRead*(builder: ConcurrentBlockAccessListBuilderRef, address: Address, slot: UInt256) =
+template addStorageRead*(builder: ConcurrentBlockAccessListBuilderRef, address: Address, slot: UInt256) =
   withLock(builder.lock):
     addStorageRead(builder.BlockAccessListBuilderRef, address, slot)
+
+func addStorageRead*(builder: ptr ConcurrentBlockAccessListBuilderRef, address: Address, slot: UInt256) =
+  builder[].addStorageRead(address, slot)
 
 proc addBalanceChange*(
     builder: BlockAccessListBuilderRef,
@@ -117,13 +131,20 @@ proc addBalanceChange*(
   builder.accounts.withValue(address, accData):
     accData[].balanceChanges[blockAccessIndex] = postBalance
 
-proc addBalanceChange*(
+template addBalanceChange*(
     builder: ConcurrentBlockAccessListBuilderRef,
     address: Address,
     blockAccessIndex: int,
     postBalance: UInt256) =
   withLock(builder.lock):
     addBalanceChange(builder.BlockAccessListBuilderRef, address, blockAccessIndex, postBalance)
+
+func addBalanceChange*(
+    builder: ptr ConcurrentBlockAccessListBuilderRef,
+    address: Address,
+    blockAccessIndex: int,
+    postBalance: UInt256) =
+  builder[].addBalanceChange(address, blockAccessIndex, postBalance)
 
 proc addNonceChange*(
     builder: BlockAccessListBuilderRef,
@@ -135,13 +156,20 @@ proc addNonceChange*(
   builder.accounts.withValue(address, accData):
     accData[].nonceChanges[blockAccessIndex] = newNonce
 
-proc addNonceChange*(
+template addNonceChange*(
     builder: ConcurrentBlockAccessListBuilderRef,
     address: Address,
     blockAccessIndex: int,
     newNonce: AccountNonce) =
   withLock(builder.lock):
     addNonceChange(builder.BlockAccessListBuilderRef, address, blockAccessIndex, newNonce)
+
+func addNonceChange*(
+    builder: ptr ConcurrentBlockAccessListBuilderRef,
+    address: Address,
+    blockAccessIndex: int,
+    newNonce: AccountNonce) =
+  builder[].addNonceChange(address, blockAccessIndex, newNonce)
 
 proc addCodeChange*(
     builder: BlockAccessListBuilderRef,
@@ -153,13 +181,20 @@ proc addCodeChange*(
   builder.accounts.withValue(address, accData):
     accData[].codeChanges[blockAccessIndex] = newCode
 
-proc addCodeChange*(
+template addCodeChange*(
     builder: ConcurrentBlockAccessListBuilderRef,
     address: Address,
     blockAccessIndex: int,
     newCode: seq[byte]) =
   withLock(builder.lock):
     addCodeChange(builder.BlockAccessListBuilderRef, address, blockAccessIndex, newCode)
+
+func addCodeChange*(
+    builder: ptr ConcurrentBlockAccessListBuilderRef,
+    address: Address,
+    blockAccessIndex: int,
+    newCode: seq[byte]) =
+  builder[].addCodeChange(address, blockAccessIndex, newCode)
 
 func balIndexCmp(x, y: StorageChange | BalanceChange | NonceChange | CodeChange): int =
   cmp(x.blockAccessIndex, y.blockAccessIndex)
