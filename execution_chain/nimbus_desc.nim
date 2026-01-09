@@ -22,7 +22,8 @@ import
   ./sync/snap as snap_sync,
   ./sync/wire_protocol,
   ./beacon/beacon_engine,
-  ./common
+  ./common,
+  json_rpc/rpcchannels
 
 when enabledLogLevel == TRACE:
   import std/sequtils
@@ -44,6 +45,7 @@ type
   NimbusNode* = ref object
     httpServer*: NimbusHttpServerRef
     engineApiServer*: NimbusHttpServerRef
+    engineApiChannel*: RpcChannelServer
     ethNode*: EthereumNode
     fc*: ForkedChainRef
     txPool*: TxPoolRef

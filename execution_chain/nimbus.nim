@@ -16,15 +16,15 @@ proc workaround*(): int {.exportc.} =
   return int(Future[Quantity]().internalValue)
 
 import
-  std/[os, net, options, strformat, terminal, typetraits],
+  std/[os, net, options, terminal, typetraits],
   stew/io2,
   chronos/threadsync,
   chronicles,
   metrics,
   metrics/chronos_httpserver,
-  nimcrypto/sysrand,
   eth/enr/enr,
   eth/net/nat,
+  json_rpc/rpcchannels,
   eth/p2p/discoveryv5/random2,
   beacon_chain/spec/[engine_authentication],
   beacon_chain/validators/keystore_management,
@@ -36,7 +36,6 @@ import
     nimbus_binary_common,
     process_state,
   ],
-  ./rpc/jwt_auth,
   ./[
     constants,
     conf as ecconf,
@@ -170,13 +169,13 @@ type
     tcpPort: Port
     udpPort: Port
     elSync: bool
+    channel: RpcChannelPtrs
 
   ExecutionThreadConfig = object
     tsp: ThreadSignalPtr
     tcpPort: Port
     udpPort: Option[Port]
-
-var jwtKey: JwtSharedKey
+    channel: RpcChannelPtrs
 
 proc dataDir*(config: NimbusConf): string =
   string config.dataDirFlag.get(
@@ -190,14 +189,14 @@ proc justWait(tsp: ThreadSignalPtr) {.async: (raises: [CancelledError]).} =
     notice "Waiting failed", err = exc.msg
 
 proc elSyncLoop(
-    dag: ChainDAGRef, url: EngineApiUrl
+    dag: ChainDAGRef, elManager: ELManager
 ) {.async: (raises: [CancelledError]).} =
   while true:
     await sleepAsync(12.seconds)
 
     # TODO trigger only when the EL needs syncing
     try:
-      await syncToEngineApi(dag, url)
+      await syncToEngineApi(dag, elManager.channel())
     except CatchableError as exc:
       # This can happen when the EL is busy doing some work, specially on
       # startup
@@ -208,17 +207,8 @@ proc runBeaconNode(p: BeaconThreadConfig) {.thread.} =
     stderr.writeLine error # Logging not yet set up
     quit QuitFailure
 
-  let engineUrl = EngineApiUrl.init(
-    &"http://127.0.0.1:{defaultEngineApiPort}/", Opt.some(@(distinctBase(jwtKey)))
-  )
-
   config.metricsEnabled = false
-  config.elUrls =
-    @[
-      EngineApiUrlConfigValue(
-        url: engineUrl.url, jwtSecret: some toHex(distinctBase(jwtKey))
-      )
-    ]
+  config.elUrls = @[EngineApiUrlConfigValue(channel: Opt.some(p.channel))]
   config.statusBarEnabled = false # Multi-threading issues due to logging
   config.tcpPort = p.tcpPort
   config.udpPort = p.udpPort
@@ -244,7 +234,7 @@ proc runBeaconNode(p: BeaconThreadConfig) {.thread.} =
     return
 
   if p.elSync:
-    discard elSyncLoop(node.dag, engineUrl)
+    discard elSyncLoop(node.dag, node.elManager)
 
   dynamicLogScope(comp = "bn"):
     if node.nickname != "":
@@ -259,11 +249,8 @@ proc runBeaconNode(p: BeaconThreadConfig) {.thread.} =
 proc runExecutionClient(p: ExecutionThreadConfig) {.thread.} =
   var config = makeConfig(ignoreUnknown = true)
   config.metricsEnabled = false
-  config.engineApiEnabled = true
-  config.engineApiPort = Port(defaultEngineApiPort)
-  config.engineApiAddress = defaultAdminListenAddress
-  config.jwtSecret.reset()
-  config.jwtSecretValue = some toHex(distinctBase(jwtKey))
+  config.engineApiEnabled = false
+  config.engineApiChannelEnabled = true
   config.agentString = "nimbus"
   config.tcpPort = p.tcpPort
   config.udpPortFlag = p.udpPort
@@ -281,16 +268,14 @@ proc runExecutionClient(p: ExecutionThreadConfig) {.thread.} =
     let com = setupCommonRef(config)
 
   dynamicLogScope(comp = "ec"):
-    nimbus_execution_client.runExeClient(config, com, p.tsp.justWait())
+    nimbus_execution_client.runExeClient(
+      config, com, p.tsp.justWait(), channel = Opt.some p.channel
+    )
 
   # Stop the other thread as well, in case `runExeClient` stopped early
   waitFor p.tsp.fire()
 
 proc runCombinedClient() =
-  # Make it harder to connect to the (internal) engine - this will of course
-  # go away
-  discard randomBytes(distinctBase(jwtKey))
-
   const banner = "Nimbus v0.0.1"
 
   var config = NimbusConf.loadWithBanners(banner, copyright, [specBanner], true).valueOr:
@@ -329,6 +314,9 @@ proc runCombinedClient() =
       "Baked-in KZG setup is correct"
     )
 
+  var channel: RpcChannel
+  let pairs = channel.open().expect("working channel")
+
   var bnThread: Thread[BeaconThreadConfig]
   let bnStop = ThreadSignalPtr.new().expect("working ThreadSignalPtr")
   createThread(
@@ -339,6 +327,7 @@ proc runCombinedClient() =
       tcpPort: config.beaconTcpPort.get(config.tcpPort.get(Port defaultEth2TcpPort)),
       udpPort: config.beaconUdpPort.get(config.udpPort.get(Port defaultEth2TcpPort)),
       elSync: config.elSync,
+      channel: pairs,
     ),
   )
 
@@ -361,6 +350,7 @@ proc runCombinedClient() =
           some(Port(uint16(config.udpPort.get()) + 1))
         else:
           none(Port),
+      channel: pairs,
     ),
   )
 
