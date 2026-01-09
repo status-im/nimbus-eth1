@@ -443,7 +443,7 @@ proc getBlockBody*(
       body.withdrawals = Opt.some(wds)
 
     if header.blockAccessListHash.isSome:
-      body.blockAccessList = ?db.getBlockAccessList(header.blockAccessListHash.get)
+      body.blockAccessList = ?db.getBlockAccessList(header.computeBlockHash())
 
     return ok(move(body))
 
