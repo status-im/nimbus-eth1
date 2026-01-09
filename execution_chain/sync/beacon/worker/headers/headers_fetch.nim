@@ -188,10 +188,10 @@ template fetchHeadersReversed*(
       break body                                   # return err()
 
     # Verify that the first block number matches the request
-    if h[^1].number != ivReq.minPt and ivReq.minPt != 0:
+    if h[0].number != ivReq.maxPt and ivReq.maxPt != 0:
       buddy.hdrFetchRegisterError(forceZombie=true)
       trace recvInfo & " error", peer, nReq=req.maxResults, hash,
-        reqMinPt=ivReq.minPt, respMinPt=h[^1].number, nResp=h.len,
+        reqMaxPt=ivReq.maxPt, respMaxPt=h[0].number, nResp=h.len,
         ela, state, nErrors=buddy.nErrors.fetch.hdr
       break body
 
