@@ -135,12 +135,7 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
     rng = nimbus.rng,
     forkIdProcs = forkIdProcs)
 
-  # Add peer service protocol capabilities. If `snap` sync is used, then there
-  # can be only one active `eth` protocol version assuming that the number of
-  # messages differ with the `eth` versions. Due to tight packaging of message
-  # IDs, different `eth` protocol lengths lead to varying `snap` message IDs
-  # depending on the `eth` version. To handle this is currently unsupported.
-  #
+  # Add peer service protocol capabilities.
   let doSnapSync = config.snapSyncEnabled or config.snapServerEnabled
   nimbus.ethWire = nimbus.ethNode.addEthHandlerCapability(nimbus.txPool)
   if doSnapSync:
@@ -199,6 +194,9 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
 
     # Configure snap syncer.
     nimbus.snapSyncRef.config(nimbus.ethNode, config.maxPeers)
+  else:
+    # Disable any external setup unless explicitely activated
+    nimbus.snapSyncRef = SnapSyncRef(nil)
 
   # Deactivating syncer if there is definitely no need to run it. This
   # avoids polling (i.e. waiting for instructions) and some logging.
