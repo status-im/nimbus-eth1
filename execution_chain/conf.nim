@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -6,7 +6,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   std/[
@@ -469,6 +469,11 @@ type
         defaultValue: @[]
         defaultValueDesc: "*"
         name: "allowed-origins" .}: seq[string]
+
+      # https://eips.ethereum.org/EIPS/eip-7872
+      maxBlobs* {.
+        desc: "EIP-7870 max blobs while packing a payload"
+        name: "max-blob" .}: Option[uint8]
 
       # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/authentication.md#key-distribution
       jwtSecret* {.
