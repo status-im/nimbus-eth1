@@ -1,0 +1,102 @@
+{
+  pkgs ? import <nixpkgs> { },
+  # Source code of this repo.
+  src ? ../.,
+  # Options: nimbus, fluffy, nimbus_portal_client, nimbus_portal_bridge
+  targets ? ["nimbus"],
+  # Options: 0,1,2
+  verbosity ? 2,
+  # Perform 2-stage bootstrap instead of 3-stage to save time.
+  quickAndDirty ? true,
+  # These are the only platforms tested in CI and considered stable.
+  stableSystems ? [
+    "x86_64-linux" "aarch64-linux" "armv7a-linux"
+    "x86_64-darwin" "aarch64-darwin"
+    "x86_64-windows"
+  ],
+}:
+
+# The 'or' is to handle src fallback to ../. which lack submodules attribue.
+assert pkgs.lib.assertMsg ((src.submodules or true) == true)
+  "Unable to build without submodules. Append '?submodules=1#' to the URI.";
+
+let
+  inherit (pkgs) stdenv lib writeScriptBin callPackage;
+
+  revision = lib.substring 0 8 (src.rev or "00000000");
+in stdenv.mkDerivation rec {
+  pname = "nimbus";
+  version = "${callPackage ./version.nix {}}-${revision}";
+
+  inherit src;
+
+  # Fix for Nim compiler calling 'git rev-parse' and 'lsb_release'.
+  nativeBuildInputs = let
+    fakeGit = writeScriptBin "git" "echo ${version}";
+    fakeLsbRelease = writeScriptBin "lsb_release" "echo nix";
+  in
+    with pkgs; [ fakeGit fakeLsbRelease perl which ]
+    ++ lib.optionals stdenv.isDarwin [ pkgs.darwin.cctools ];
+
+  enableParallelBuilding = true;
+
+  # Disable CPU optmizations that make binary not portable.
+  NIMFLAGS = "-d:disableMarchNative -d:git_revision_override=${revision}";
+  # Avoid Nim cache permission errors.
+  XDG_CACHE_HOME = "/tmp";
+
+  NIX_DEBUG = 7;
+
+  makeFlags = targets ++ [
+    "V=${toString verbosity}"
+    # TODO: Compile Nim in a separate derivation to save time.
+    "QUICK_AND_DIRTY_COMPILER=${if quickAndDirty then "1" else "0"}"
+    "QUICK_AND_DIRTY_NIMBLE=${if quickAndDirty then "1" else "0"}"
+  ];
+
+  patchPhase = ''
+    patchShebangs scripts vendor/nimbus-build-system vendor/nim-rocksdb > /dev/null
+    # Avoid CA Cert download error
+    sed -i '196,200d' vendor/nimbus-build-system/scripts/build_nim.sh
+    mkdir bin
+    cp ${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt bin/cacert.pem
+  '';
+
+  # Generate the nimbus-build-system.paths file.
+  configurePhase = ''
+    make nimbus-build-system-paths
+  '';
+
+  # Avoid nimbus-build-system invoking `git clone` to build Nim.
+  preBuild = ''
+    pushd vendor/nimbus-build-system/vendor/Nim
+    mkdir dist
+    cp -r ${callPackage ./nimble.nix {}}    dist/nimble
+    cp -r ${callPackage ./checksums.nix {}} dist/checksums
+    cp -r ${callPackage ./csources.nix {}}  csources_v2
+    chmod 777 -R dist/nimble csources_v2
+    popd
+  '';
+
+  installPhase = ''
+    mkdir -p $out/bin
+    rm -f build/generate_makefile
+    cp build/* $out/bin
+  '';
+
+  meta = with lib; {
+    homepage = "https://nimbus.guide/";
+    downloadPage = "https://github.com/status-im/nimbus-eth1/releases";
+    changelog = "https://github.com/status-im/nimbus-eth1/blob/master/CHANGELOG.md";
+    description = "Nimbus is a lightweight client for the Ethereum consensus layer";
+    longDescription = ''
+      Nimbus is an extremely efficient consensus layer client implementation.
+      While it's optimised for embedded systems and resource-restricted devices --
+      including Raspberry Pis, its low resource usage also makes it an excellent choice
+      for any server or desktop (where it simply takes up fewer resources).
+    '';
+    license = with licenses; [asl20 mit];
+    mainProgram = builtins.head targets;
+    platforms = stableSystems;
+  };
+}
