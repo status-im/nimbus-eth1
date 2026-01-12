@@ -101,7 +101,9 @@ proc getEthApiBackend*(pool: JsonRpcClientPool): EthApiBackend =
         blkHash: Hash32, fullTransactions: bool
     ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
       try:
-        let res = await client.getClient().eth_getBlockByHash(blkHash, fullTransactions)
+        let res = await pool.getClientFromPool().resolveClient().eth_getBlockByHash(
+          blkHash, fullTransactions
+        )
         if res.isNil():
           return err((BackendFetchError, "Obtained nil response for the RPC request"))
         ok(res)
@@ -122,8 +124,9 @@ proc getEthApiBackend*(pool: JsonRpcClientPool): EthApiBackend =
         blkNum: BlockTag, fullTransactions: bool
     ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
       try:
-        let res =
-          await client.getClient().eth_getBlockByNumber(blkNum, fullTransactions)
+        let res = await pool.getClientFromPool().resolveClient().eth_getBlockByNumber(
+          blkNum, fullTransactions
+        )
         if res.isNil():
           return err((BackendFetchError, "Obtained nil response for the RPC request"))
         ok(res)
@@ -206,7 +209,10 @@ proc getEthApiBackend*(pool: JsonRpcClientPool): EthApiBackend =
         txHash: Hash32
     ): Future[EngineResult[TransactionObject]] {.async: (raises: [CancelledError]).} =
       try:
-        let res = await client.getClient().eth_getTransactionByHash(txHash)
+        let res = await pool
+        .getClientFromPool()
+        .resolveClient()
+        .eth_getTransactionByHash(txHash)
         if res.isNil():
           return err((BackendFetchError, "Obtained nil response for the RPC request"))
         ok(res)
@@ -227,7 +233,10 @@ proc getEthApiBackend*(pool: JsonRpcClientPool): EthApiBackend =
         txHash: Hash32
     ): Future[EngineResult[ReceiptObject]] {.async: (raises: [CancelledError]).} =
       try:
-        let res = await client.getClient().eth_getTransactionReceipt(txHash)
+        let res = await pool
+        .getClientFromPool()
+        .resolveClient()
+        .eth_getTransactionReceipt(txHash)
         if res.isNil():
           return err((BackendFetchError, "Obtained nil response for the RPC request"))
         ok(res)
