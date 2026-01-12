@@ -122,7 +122,8 @@ proc getEthApiBackend*(pool: JsonRpcClientPool): EthApiBackend =
         blkNum: BlockTag, fullTransactions: bool
     ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
       try:
-        let res = await client.getClient().eth_getBlockByNumber(blkNum, fullTransactions)
+        let res =
+          await client.getClient().eth_getBlockByNumber(blkNum, fullTransactions)
         if res.isNil():
           return err((BackendFetchError, "Obtained nil response for the RPC request"))
         ok(res)
