@@ -60,6 +60,7 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
       of "Auto": StdoutLogKind.Auto
       else: StdoutLogKind.None
     maxBlockWalk = jsonNode.getOrDefault("maxBlockWalk").getInt(1000)
+    parallelBlockDownloads = jsonNode.getOrDefault("parallelBlockDownloads").getInt(10)
     headerStoreLen = jsonNode.getOrDefault("headerStoreLen").getInt(256)
     storageCacheLen = jsonNode.getOrDefault("storageCacheLen").getInt(256)
     codeCacheLen = jsonNode.getOrDefault("codeCacheLen").getInt(64)
@@ -78,6 +79,7 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
     storageCacheLen: storageCacheLen,
     codeCacheLen: codeCacheLen,
     accountCacheLen: accountCacheLen,
+    parallelBlockDownloads: uint64(parallelBlockDownloads),
   )
 
 proc run*(
@@ -95,6 +97,7 @@ proc run*(
       accountCacheLen: config.accountCacheLen,
       codeCacheLen: config.codeCacheLen,
       storageCacheLen: config.storageCacheLen,
+      parallelBlockDownloads: config.parallelBlockDownloads,
     )
     engine = RpcVerificationEngine.init(engineConf).valueOr:
       raise newException(ProxyError, error.errMsg)
