@@ -12,6 +12,7 @@
 import
   chronicles,
   eth/rlp,
+  eth/common,
   stew/io2,
   chronos,
   ./chain,
@@ -20,9 +21,10 @@ import
   beacon_chain/process_state,
   ./chain/forked_chain/chain_serialize
 
-proc importRlpBlocks*(blocksRlp:seq[byte],
-                      chain: ForkedChainRef,
-                      finalize: bool):
+# Only parse the RLP data and feeds blocks into the ForkedChainRef
+# Dont make any fork-choice calls here
+proc importRlpBlocks*(blocksRlp: seq[byte],
+                      chain: ForkedChainRef):
                         Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   var
     # the encoded rlp can contains one or more blocks
@@ -65,40 +67,70 @@ proc importRlpBlocks*(blocksRlp:seq[byte],
         hash=blk.header.computeBlockHash.short,
         number=blk.header.number,
         msg=res.error
-      if finalize:
-        ? (await chain.forkChoice(chain.latestHash, chain.latestHash))
       return res
-
-  if finalize:
-    ? (await chain.forkChoice(chain.latestHash, chain.latestHash))
 
   ok()
 
 proc importRlpBlocks*(importFile: string,
-                     chain: ForkedChainRef,
-                     finalize: bool): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
+                     chain: ForkedChainRef): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   let bytes = io2.readAllBytes(importFile).valueOr:
     return err($error)
-  await importRlpBlocks(bytes, chain, finalize)
+  await importRlpBlocks(bytes, chain)
 
-proc importRlpBlocks*(config: ExecutionClientConf, com: CommonRef): Future[void] {.async: (raises: [CancelledError]).} =
-  # Both baseDistance and persistBatchSize are 0,
-  # we want changes persisted immediately
+# Handle the  fork-choice update
+proc finalizeImportedChain(
+    chain: ForkedChainRef,
+    treatSegmentFinalized: bool
+  ): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
+  let headHash = chain.latestHash
+  var finalizedHash =
+    if treatSegmentFinalized:
+      headHash
+    else:
+      chain.resolvedFinHash()
+  # for when chain is brand new, fall back to the current base hash
+  if finalizedHash == Hash32.default:
+    finalizedHash = chain.baseHash()
+
+  (await chain.forkChoice(headHash, finalizedHash)).isOkOr:
+    return err(error)
+  ok()
+
+proc importRlpFiles*(
+    files: seq[string],
+    com: CommonRef,
+    treatSegmentFinalized: bool
+  ): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
+  if files.len == 0:
+    return ok()
+
   let chain = ForkedChainRef.init(com, baseDistance = 0, persistBatchSize = 1)
 
-  # success or not, we quit after importing blocks
-  for i, blocksFile in config.blocksFile:
-    (await importRlpBlocks(string blocksFile, chain, false)).isOkOr:
-      warn "Error when importing blocks", msg=error
-      # Finalize the existing chain in case of rlp read error
-      (await chain.forkChoice(chain.latestHash, chain.latestHash)).isOkOr:
-        error "Error when finalizing chain", msg=error
-      quit(QuitFailure)
+  for blocksFile in files:
+    (await importRlpBlocks(blocksFile, chain)).isOkOr:
+      let errMsg = error
+      (await finalizeImportedChain(chain, true)).isOkOr:
+        error "Error when finalizing chain after import failure", msg=error
+      return err(errMsg)
+
+  (await finalizeImportedChain(chain, treatSegmentFinalized)).isOkOr:
+    return err(error)
 
   let txFrame = chain.baseTxFrame
   chain.serialize(txFrame).isOkOr:
-    error "FC.serialize error: ", msg = error
+    return err("FC.serialize error: " & ($error))
   txFrame.checkpoint(chain.base.blk.header.number, skipSnapshot = true)
   com.db.persist(txFrame)
+
+  ok()
+
+proc importRlpBlocks*(config: ExecutionClientConf, com: CommonRef): Future[void] {.async: (raises: [CancelledError]).} =
+  var files: seq[string]
+  for blocksFile in config.blocksFile:
+    files.add string(blocksFile)
+
+  (await importRlpFiles(files, com, true)).isOkOr:
+    warn "Error when importing blocks", msg=error
+    quit(QuitFailure)
 
   quit(QuitSuccess)

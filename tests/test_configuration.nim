@@ -52,6 +52,20 @@ proc configurationMain*() =
       check bb.cmd == NimbusCmd.`import-rlp`
       check bb.blocksFile[0].string == genesisFile
 
+    test "bootstrap-blocks-file parsing":
+      let defaults = makeTestConfig()
+      check defaults.bootstrapBlocksFile.len == 0
+      check defaults.bootstrapBlocksFinalized
+
+      let cfg = makeConfig(@[
+        "--bootstrap-blocks-file:" & genesisFile,
+        "--debug-bootstrap-finalized:false",
+      ])
+      check cfg.cmd == NimbusCmd.executionClient
+      check cfg.bootstrapBlocksFile.len == 1
+      check cfg.bootstrapBlocksFile[0].string == genesisFile
+      check cfg.bootstrapBlocksFinalized == false
+
     test "network loading config file with no genesis data":
       # no genesis will fallback to geth compatibility mode
       let config = makeConfig(@["--network:" & noGenesis])

@@ -507,6 +507,17 @@ type
               " CL which will result in a smaller memory footprint"
         name: "debug-beacon-sync-target-is-final".}: bool
 
+      bootstrapBlocksFile* {.
+        desc: "Import RLP encoded block files before starting the client"
+        defaultValue: @[]
+        name: "bootstrap-blocks-file" .}: seq[InputFile]
+
+      bootstrapBlocksFinalized* {.
+        hidden
+        desc: "Treat bootstrap RLP imports as finalized chain segments"
+        defaultValue: true
+        name: "debug-bootstrap-finalized" .}: bool
+
     of NimbusCmd.`import`:
       maxBlocks* {.
         desc: "Maximum number of blocks to import"

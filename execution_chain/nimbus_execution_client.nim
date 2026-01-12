@@ -291,6 +291,57 @@ proc setupCommonRef*(config: ExecutionClientConf): CommonRef =
 
   com
 
+proc runStartupImports(config: ExecutionClientConf, com: CommonRef) =
+  if config.cmd != NimbusCmd.executionClient:
+    return
+
+  let
+    runArchiveImport = config.era1DirFlag.isSome or config.eraDirFlag.isSome
+    runRlpImport = config.bootstrapBlocksFile.len > 0
+
+  if not (runArchiveImport or runRlpImport):
+    return
+  # Make sure not to hydrate from 2 different sources
+  if runArchiveImport and runRlpImport:
+    fatal "Cannot combine archive imports with bootstrap RLP imports in a single start",
+      era1Dir = config.era1Dir,
+      eraDir = config.eraDir,
+      bootstrapFiles = config.bootstrapBlocksFile.len
+    quit(QuitFailure)
+
+  notice "Pre-start import requested",
+    archives = runArchiveImport,
+    rlp = runRlpImport
+
+  if runArchiveImport:
+    debug "Starting archive import",
+      era1Dir = config.era1Dir,
+      eraDir = config.eraDir
+    importBlocks(config, com)
+
+  if runRlpImport:
+    var files: seq[string]
+    for blocksFile in config.bootstrapBlocksFile:
+      files.add string(blocksFile)
+
+    debug "Starting bootstrap RLP import",
+      files = files,
+      finalized = config.bootstrapBlocksFinalized
+
+    let rlpResult =
+      try:
+        waitFor importRlpFiles(files, com, config.bootstrapBlocksFinalized)
+      except CancelledError:
+        raiseAssert "Bootstrap import future should not be cancelled"
+
+    rlpResult.isOkOr:
+      fatal "Failed importing bootstrap RLP blocks",
+        msg = error,
+        finalized = config.bootstrapBlocksFinalized
+      quit(QuitFailure)
+
+  notice "Pre-start import complete"
+
 # ------------------------------------------------------------------------------
 # Public functions, `main()` API
 # ------------------------------------------------------------------------------
@@ -385,6 +436,10 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
 
   defer:
     com.db.finish()
+
+ # used for loading of era/era-1 or rlp files during start up process
+ #we keep the importer in isolation as well
+  runStartupImports(config, com)
 
   case config.cmd
   of NimbusCmd.`import`:
