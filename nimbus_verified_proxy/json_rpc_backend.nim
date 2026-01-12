@@ -9,7 +9,6 @@
 
 import
   stint,
-  presto/client,
   eth/common/keys, # used for keys.rng
   json_rpc/[rpcclient, rpcproxy],
   web3/[eth_api, eth_api_types],
