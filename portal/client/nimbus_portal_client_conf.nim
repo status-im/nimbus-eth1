@@ -65,7 +65,7 @@ type
     .}: string
 
     logFormat* {.
-      desc: "Choice of log format (auto, colors, nocolors, json)"
+      desc: "Choice of log format (auto, colors, nocolors, json)",
       defaultValueDesc: "auto",
       defaultValue: StdoutLogKind.Auto,
       name: "log-format"

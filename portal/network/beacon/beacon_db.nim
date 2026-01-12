@@ -323,7 +323,8 @@ proc size*(db: BeaconDb): int64 =
   var size: int64 = 0
   discard (
     db.sizeStmt.exec do(res: int64):
-      size = res).expectDb()
+      size = res
+  ).expectDb()
   return size
 
 func close(store: var BestLightClientUpdateStore) =
