@@ -472,7 +472,7 @@ type
 
       # https://eips.ethereum.org/EIPS/eip-7872
       maxBlobs* {.
-        desc: "EIP-7870 max blobs while packing a payload"
+        desc: "EIP-7872 maximum blobs used when building a local payload"
         name: "max-blobs" .}: Option[uint8]
 
       # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/authentication.md#key-distribution
