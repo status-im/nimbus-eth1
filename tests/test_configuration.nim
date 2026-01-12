@@ -314,7 +314,7 @@ proc configurationMain*() =
       check config.networkParams.config.isNil.not
 
       check config.logLevel == "DEBUG"
-      check config.logStdout == StdoutLogKind.Json
+      check config.logFormat == StdoutLogKind.Json
 
       check config.metricsEnabled == true
       check config.metricsPort == 127.Port

@@ -9,27 +9,19 @@
 {.push raises: [].}
 
 import
-  std/[
-    options,
-    strutils,
-    os,
-    uri,
-    net
-  ],
-  pkg/[
-    chronos/transports/common,
-    chronicles,
-    confutils,
-    confutils/defs,
-    confutils/std/net as confnet,
-    confutils/toml/defs as tomldefs,
-    confutils/json/defs as jsdefs,
-    json_serialization/std/net as jsnet,
-    toml_serialization/std/net as tomlnet,
-    results,
-    beacon_chain/buildinfo,
-    beacon_chain/nimbus_binary_common,
-  ],
+  std/[options, strutils, os, uri, net],
+  chronos/transports/common,
+  chronicles,
+  confutils,
+  confutils/defs,
+  confutils/std/net as confnet,
+  confutils/toml/defs as tomldefs,
+  confutils/json/defs as jsdefs,
+  json_serialization/std/net as jsnet,
+  toml_serialization/std/net as tomlnet,
+  results,
+  beacon_chain/buildinfo,
+  beacon_chain/nimbus_binary_common,
   toml_serialization,
   eth/[common, net/nat, net/nat_toml],
   ./networking/bootnodes,
@@ -94,12 +86,12 @@ type
       name: "data-dir" .}: Option[OutDir]
 
     era1DirFlag* {.
-      desc: "Directory where era1 (pre-merge) archive can be found"
+      desc: "Directory for era1 archive (pre-merge history)"
       defaultValueDesc: "<data-dir>/era1"
       name: "era1-dir" .}: Option[OutDir]
 
     eraDirFlag* {.
-      desc: "Directory where era (post-merge) archive can be found"
+      desc: "Directory for era archive (post-merge history)"
       defaultValueDesc: "<data-dir>/era"
       name: "era-dir" .}: Option[OutDir]
 
@@ -135,14 +127,14 @@ type
       defaultValueDesc: $DEFAULT_GAS_LIMIT
       name: "gas-limit" .}: uint64
 
+    # https://ethereum.org/developers/docs/networks/#ethereum-testnets
     network {.
-      separator: "\pETHEREUM NETWORK OPTIONS:"
       desc: "Name or id number of Ethereum network"
       longDesc:
         "- mainnet/1       : Ethereum main network\n" &
-        "- sepolia/11155111: Test network (proof-of-work)\n" &
-        "- hoodi/560048    : The second long-standing, merged-from-genesis, public Ethereum testnet\n" &
-        "- path            : /path/to/genesis-or-network-configuration.json\n" &
+        "- sepolia/11155111: Testnet for smart contract testing\n" &
+        "- hoodi/560048    : Testnet for staking and hard forks\n" &
+        "- custom/path     : /path/to/genesis-or-network-configuration.json\n" &
         "Both --network: name/path --network:id can be set at the same time to override network id number"
       defaultValue: @[] # the default value is set in makeConfig
       defaultValueDesc: "mainnet(1)"
@@ -173,9 +165,8 @@ type
       defaultValue: "INFO"
       name: "log-level" .}: string
 
-    logStdout* {.
-      hidden
-      desc: "Specifies what kind of logs should be written to stdout (auto, colors, nocolors, json)"
+    logFormat* {.
+      desc: "Choice of log format (auto, colors, nocolors, json)"
       defaultValueDesc: "auto"
       defaultValue: StdoutLogKind.Auto
       name: "log-format" .}: StdoutLogKind
@@ -806,6 +797,12 @@ func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
     maxSnapshots = config.aristoDbMaxSnapshots,
   )
 
+func jwtSecretOpt*(config: ExecutionClientConf): Opt[InputFile] =
+  if config.jwtSecret.isSome:
+    Opt.some config.jwtSecret.get
+  else:
+    Opt.none InputFile
+
 {.pop.}
 
 #-------------------------------------------------------------------
@@ -825,3 +822,4 @@ proc makeConfig*(cmdLine = commandLineParams(), ignoreUnknown = false): Executio
 when isMainModule:
   # for testing purpose
   discard makeConfig()
+

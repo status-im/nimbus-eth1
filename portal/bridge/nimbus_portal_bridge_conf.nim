@@ -52,10 +52,8 @@ type
     logLevel* {.desc: "Sets the log level", defaultValue: "INFO", name: "log-level".}:
       string
 
-    logStdout* {.
-      hidden,
-      desc:
-        "Specifies what kind of logs should be written to stdout (auto, colors, nocolors, json)",
+    logFormat* {.
+      desc: "Choice of log format (auto, colors, nocolors, json)"
       defaultValueDesc: "auto",
       defaultValue: StdoutLogKind.Auto,
       name: "log-format"

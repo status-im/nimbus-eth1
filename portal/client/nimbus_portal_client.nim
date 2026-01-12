@@ -64,7 +64,7 @@ proc init(T: type PortalClient): T =
   PortalClient()
 
 proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableError].} =
-  setupLogging(config.logLevel, config.logStdout)
+  setupLogging(config.logLevel, config.logFormat)
 
   notice "Launching Nimbus Portal client",
     version = fullVersionStr, cmdParams = commandLineParams()

@@ -206,16 +206,10 @@ proc setupRpc*(nimbus: NimbusNode, config: ExecutionClientConf,
     return
 
   # Provide JWT authentication handler for rpcHttpServer
-  let jwtKey = block:
-    # Create or load shared secret
-    let rc = nimbus.rng.jwtSharedSecret(config)
-    if rc.isErr:
-      fatal "Failed create or load shared secret",
-        msg = $(rc.unsafeError) # avoid side effects
-      quit(QuitFailure)
-    rc.value
-
   let
+    jwtKey = nimbus.rng.jwtSharedSecret(config).valueOr:
+      fatal "Failed create or load shared secret", error
+      quit(QuitFailure)
     allowedOrigins = config.getAllowedOrigins()
     jwtAuthHook = httpJwtAuth(jwtKey)
     corsHook = httpCors(allowedOrigins)

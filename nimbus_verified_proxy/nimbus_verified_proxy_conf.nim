@@ -43,9 +43,8 @@ type VerifiedProxyConf* = object
     name: "log-level"
   .}: string
 
-  logStdout* {.
-    hidden,
-    desc: "Specifies what kind of logs should be written to stdout (auto, colors, nocolors, json)",
+  logFormat* {.
+    desc: "Choice of log format (auto, colors, nocolors, json)"
     defaultValueDesc: "auto",
     defaultValue: StdoutLogKind.Auto,
     name: "log-format"
@@ -60,8 +59,8 @@ type VerifiedProxyConf* = object
 
   # Network
   eth2Network* {.
-    desc: "The Eth2 network to join",
-    defaultValueDesc: "mainnet",
+    desc: "Consensus network to join (mainnet, hoodi, sepolia, custom/path)"
+    defaultValueDesc: "mainnet"
     name: "network"
   .}: Option[string]
 

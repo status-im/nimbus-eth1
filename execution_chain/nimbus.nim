@@ -51,9 +51,17 @@ const
   copyright = "Copyright (c) " & compileYear & " Status Research & Development GmbH"
 
 type NStartUpCmd* {.pure.} = enum
-  nimbus
-  beaconNode
-  executionClient
+  nimbus = "Run Ethereum node"
+  beaconNode = "Run beacon node in stand-alone mode"
+  executionClient = "Run execution client in stand-alone mode"
+
+proc matchSymbolName*(T: type enum, p: string): T {.raises: [ValueError].} =
+  let p = normalize(p)
+  for e in T:
+    if e.symbolName.normalize() == p:
+      return e
+
+  raise (ref ValueError)(msg: p & " does not match")
 
 #!fmt: off
 type
@@ -65,24 +73,23 @@ type
       desc: "Loads the configuration from a TOML file"
       name: "config-file" .}: Option[InputFile]
 
+    network* {.
+      desc: "Name of Ethereum network to join (mainnet, hoodi, sepolia, custom/folder)"
+      defaultValueDesc: "mainnet"
+      name: "network" .}: Option[string]
+
     dataDirFlag* {.
       desc: "The directory where nimbus will store all blockchain data"
       abbr: "d"
       name: "data-dir" .}: Option[OutDir]
-
-    eth2Network* {.
-      desc: "The network to join (mainnet, hoodi, sepolia, custom/folder)"
-      defaultValueDesc: "mainnet"
-      name: "network" .}: Option[string]
 
     logLevel* {.
       desc: "Sets the log level for process and topics (e.g. \"DEBUG; TRACE:discv5,libp2p; REQUIRED:none; DISABLED:none\")"
       defaultValue: "INFO"
       name: "log-level" .}: string
 
-    logStdout* {.
-      hidden
-      desc: "Specifies what kind of logs should be written to stdout (auto, colors, nocolors, json)"
+    logFormat* {.
+      desc: "Choice of log format (auto, colors, nocolors, json)"
       defaultValueDesc: "auto"
       defaultValue: StdoutLogKind.Auto
       name: "log-format" .}: StdoutLogKind
@@ -141,6 +148,7 @@ type
       defaultValue: true
       name: "el-sync" .}: bool
 
+    # detect if user added --engine-api option which is not valid in unified mode
     engineApiEnabled* {.
       hidden
       desc: "Enable the Engine API"
@@ -180,7 +188,7 @@ var jwtKey: JwtSharedKey
 
 proc dataDir*(config: NimbusConf): string =
   string config.dataDirFlag.get(
-    OutDir defaultDataDir("", config.eth2Network.loadEth2Network().cfg.name)
+    OutDir defaultDataDir("", config.network.loadEth2Network().cfg.name)
   )
 
 proc justWait(tsp: ThreadSignalPtr) {.async: (raises: [CancelledError]).} =
@@ -208,20 +216,19 @@ proc runBeaconNode(p: BeaconThreadConfig) {.thread.} =
     stderr.writeLine error # Logging not yet set up
     quit QuitFailure
 
-  let engineUrl = EngineApiUrl.init(
-    &"http://127.0.0.1:{defaultEngineApiPort}/", Opt.some(@(distinctBase(jwtKey)))
-  )
+  let engineUrl =
+    EngineApiUrl.init(&"http://127.0.0.1:{defaultEngineApiPort}/", Opt.some(jwtKey))
 
   config.metricsEnabled = false
-  config.elUrls =
-    @[
-      EngineApiUrlConfigValue(
-        url: engineUrl.url, jwtSecret: some toHex(distinctBase(jwtKey))
-      )
-    ]
+  config.elUrls.add EngineApiUrlConfigValue(
+    url: engineUrl.url, jwtSecret: some toHex(distinctBase(jwtKey))
+  )
+
   config.statusBarEnabled = false # Multi-threading issues due to logging
   config.tcpPort = p.tcpPort
   config.udpPort = p.udpPort
+
+  config.rpcEnabled.reset() # --rpc is meant for the EL
 
   info "Launching beacon node",
     version = fullVersionStr,
@@ -291,13 +298,14 @@ proc runCombinedClient() =
   # go away
   discard randomBytes(distinctBase(jwtKey))
 
-  const banner = "Nimbus v0.0.1"
+  const banner = "Nimbus v0.0.1\p\pSubcommand options can also be used with the main node, see `beaconNode --help` and `executionClient --help`"
 
-  var config = NimbusConf.loadWithBanners(banner, copyright, [specBanner], true).valueOr:
+  var config = NimbusConf.loadWithBanners(
+    banner, copyright, [specBanner], ignoreUnknown = true, setupLogger = true
+  ).valueOr:
     writePanicLine error # Logging not yet set up
     quit QuitFailure
 
-  setupLogging(config.logLevel, config.logStdout, none OutFile)
   setupFileLimits()
 
   ProcessState.setupStopHandlers()
@@ -383,32 +391,28 @@ proc main() {.noinline, raises: [CatchableError].} =
     isBN = false
   for i in 0 ..< params.len:
     try:
-      discard NimbusCmd.parseCmdArg(params[i])
+      discard NimbusCmd.matchSymbolName(params[i])
       isEC = true
-      params.delete(i)
       break
     except ValueError:
       discard
     try:
-      discard BNStartUpCmd.parseCmdArg(params[i])
+      discard BNStartUpCmd.matchSymbolName(params[i])
       isBN = true
-      params.delete(i)
       break
     except ValueError:
       discard
 
     try:
-      let cmd = NStartUpCmd.parseCmdArg(params[i])
-
-      if cmd == NStartUpCmd.beaconNode:
+      case NStartUpCmd.matchSymbolName(params[i])
+      of NStartUpCmd.beaconNode:
         isBN = true
-        params.delete(i)
         break
-
-      if cmd == NStartUpCmd.executionClient:
+      of NStartUpCmd.executionClient:
         isEC = true
-        params.delete(i)
         break
+      else:
+        discard
     except ValueError:
       discard
 

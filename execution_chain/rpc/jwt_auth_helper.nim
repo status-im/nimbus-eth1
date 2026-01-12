@@ -34,11 +34,11 @@ JwtIatPayload.useDefaultSerializationIn JAuth
 
 {.push gcsafe, raises: [].}
 
-proc decodeJwtHeader*(jsonBytes: string): JwtHeader
+proc decodeJwtHeader*(jsonBytes: seq[byte]): JwtHeader
         {.gcsafe, raises: [SerializationError].} =
   JAuth.decode(jsonBytes, JwtHeader)
 
-proc decodeJwtIatPayload*(jsonBytes: string): JwtIatPayload
+proc decodeJwtIatPayload*(jsonBytes: seq[byte]): JwtIatPayload
         {.gcsafe, raises: [SerializationError].} =
   JAuth.decode(jsonBytes, JwtIatPayload)
 

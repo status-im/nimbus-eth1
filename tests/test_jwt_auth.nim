@@ -13,6 +13,7 @@
 
 import
   std/[sequtils, strformat],
+  stew/arrayops,
   ../execution_chain/conf,
   ../execution_chain/rpc/jwt_auth,
   ../execution_chain/rpc {.all.},
@@ -27,9 +28,7 @@ from std/base64 import encode
 from std/os import DirSep, fileExists, removeFile, splitFile, splitPath, `/`
 from std/times import getTime, toUnix
 
-type
-  UnGuardedKey =
-    array[jwtMinSecretLen,byte]
+type UnGuardedKey = array[32,byte]
 
 const
   jwtKeyFile ="jwtsecret.txt"       # external shared secret file
@@ -42,7 +41,7 @@ const
 let
   fakeKey = block:
     var rc: JwtSharedKey
-    discard rc.fromHex((0..31).mapIt(15 - (it mod 16)).mapIt(it.byte).toHex)
+    discard parseJwtSharedKey((0..31).mapIt(15 - (it mod 16)).mapIt(it.byte).toHex)
     rc
 
 # ------------------------------------------------------------------------------
@@ -76,10 +75,10 @@ when isMainModule:
 # Private Functions
 # ------------------------------------------------------------------------------
 
-func fakeGenSecret(fake: JwtSharedKey): JwtGenSecret =
+func fakeGenSecret(fake: JwtSharedKey): Rng =
   ## Key random generator, fake version
-  proc: JwtSharedKey =
-    fake
+  proc(v: var openArray[byte]) =
+    discard v.copyFrom(distinctBase fake)
 
 func base64urlEncode(x: auto): string =
   ## from nimbus-eth2, engine_authentication.nim
