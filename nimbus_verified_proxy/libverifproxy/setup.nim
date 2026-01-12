@@ -37,9 +37,9 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
         raise newException(
           ProxyError, "Couldn't parse `trustedBlockRoot` from JSON config: " & e.msg
         )
-    backendUrl =
+    backendUrls =
       try:
-        parseCmdArg(Web3Url, jsonNode["backendUrl"].getStr())
+        parseCmdArg(seq[Web3Url], jsonNode["backendUrls"].getStr())
       except CatchableError as e:
         raise newException(
           ProxyError, "Couldn't parse `backendUrl` from JSON config: " & e.msg
@@ -68,7 +68,7 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
   return VerifiedProxyConf(
     eth2Network: eth2Network,
     trustedBlockRoot: trustedBlockRoot,
-    backendUrl: backendUrl,
+    backendUrls: backendUrls,
     beaconApiUrls: beaconApiUrls,
     logLevel: logLevel,
     logFormat: logFormat,
@@ -101,7 +101,7 @@ proc run*(
     lc = LightClient.new(config.eth2Network, some config.trustedBlockRoot)
 
     # initialize backend for JSON-RPC
-    jsonRpcClient = JsonRpcClient.init(config.backendUrl)
+    jsonRpcClientPool = JsonRpcClientPool.new()
 
     # initialize backend for light client updates
     lcRestClientPool = LCRestClientPool.new(lc.cfg, lc.forkDigests)
@@ -114,13 +114,13 @@ proc run*(
   lc.setBackend(lcRestClientPool.getEthLCBackend())
 
   # the backend only needs the url to connect to
-  engine.backend = jsonRpcClient.getEthApiBackend()
+  engine.backend = jsonRpcClientPool.getEthApiBackend()
 
   # inject the frontend into c context
   ctx.frontend = engine.frontend
 
   # start backend
-  var status = await jsonRpcClient.start()
+  var status = await jsonRpcClientPool.addEndpoints(config.backendUrls)
   if status.isErr():
     raise newException(ProxyError, status.error.errMsg)
 
