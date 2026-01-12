@@ -225,6 +225,7 @@ type
     # config items
     chainId*: UInt256
     maxBlockWalk*: uint64
+    parallelBlockDownloads*: uint64
 
   RpcVerificationEngineConf* = ref object
     chainId*: UInt256
@@ -233,3 +234,4 @@ type
     accountCacheLen*: int
     codeCacheLen*: int
     storageCacheLen*: int
+    parallelBlockDownloads*: uint64

@@ -19,6 +19,7 @@ proc init*(
     accountsCache: AccountsCache.init(config.accountCacheLen),
     codeCache: CodeCache.init(config.codeCacheLen),
     storageCache: StorageCache.init(config.storageCacheLen),
+    parallelBlockDownloads: config.parallelBlockDownloads,
   )
 
   engine.registerDefaultFrontend()
