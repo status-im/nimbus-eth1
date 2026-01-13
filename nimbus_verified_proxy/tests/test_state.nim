@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -23,7 +23,8 @@ import
 suite "test state verification":
   let
     ts = TestApiState.init(1.u256)
-    engine = initTestEngine(ts, 1, 1)
+    engine = initTestEngine(ts, 1, 1).valueOr:
+      raise newException(TestProxyError, error.errMsg)
 
   test "test EVM-based methods":
     let
@@ -70,17 +71,24 @@ suite "test state verification":
       verifiedEstimate = waitFor engine.frontend.eth_estimateGas(tx, latestTag)
 
     check:
-      verifiedBalance == UInt256.fromHex("0x1d663f6a4afc5b01abb5d")
-      verifiedNonce == Quantity(1)
-      verifiedCode == contractCode
-      verifiedSlot.to(UInt256) ==
+      verifiedBalance.isOk()
+      verifiedNonce.isOk()
+      verifiedCode.isOk()
+      verifiedSlot.isOk()
+      verifiedCall.isOk()
+      verifiedAccessList.isOk()
+      verifiedEstimate.isOk()
+      verifiedBalance.get() == UInt256.fromHex("0x1d663f6a4afc5b01abb5d")
+      verifiedNonce.get() == Quantity(1)
+      verifiedCode.get() == contractCode
+      verifiedSlot.get().to(UInt256) ==
         UInt256.fromHex(
           "0x000000000000000000000000000000000000000000000000288a82d13c3d1600"
         )
-      verifiedCall ==
+      verifiedCall.get() ==
         "000000000000000000000000000000000000000000000000288a82d13c3d1600".hexToSeqByte()
-      verifiedAccessList == accessList
-      verifiedEstimate == Quantity(22080)
+      verifiedAccessList.get() == accessList
+      verifiedEstimate.get() == Quantity(22080)
 
     ts.clear()
     engine.headerStore.clear()

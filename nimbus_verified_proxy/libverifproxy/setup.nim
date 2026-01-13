@@ -1,5 +1,5 @@
 # nimbus_verified_proxy
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -19,29 +19,38 @@ import
   ../json_rpc_backend,
   ./types
 
-proc load(
-    T: type VerifiedProxyConf, configJson: string
-): T {.raises: [CatchableError, ValueError].} =
-  let jsonNode = parseJson($configJson)
+type ProxyError = object of CatchableError
+
+proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyError].} =
+  let jsonNode =
+    try:
+      parseJson($configJson)
+    except CatchableError as e: # IOError, ValueError and OSError
+      raise newException(ProxyError, "error parsing json: " & e.msg)
 
   let
     eth2Network = some(jsonNode.getOrDefault("eth2Network").getStr("mainnet"))
     trustedBlockRoot =
-      if jsonNode.contains("trustedBlockRoot"):
+      try:
         Eth2Digest.fromHex(jsonNode["trustedBlockRoot"].getStr())
-      else:
-        raise
-          newException(ValueError, "`trustedBlockRoot` not specified in JSON config")
+      except KeyError as e:
+        raise newException(
+          ProxyError, "Couldn't parse `trustedBlockRoot` from JSON config: " & e.msg
+        )
     backendUrl =
-      if jsonNode.contains("backendUrl"):
+      try:
         parseCmdArg(Web3Url, jsonNode["backendUrl"].getStr())
-      else:
-        raise newException(ValueError, "`backendUrl` not specified in JSON config")
+      except CatchableError as e:
+        raise newException(
+          ProxyError, "Couldn't parse `backendUrl` from JSON config: " & e.msg
+        )
     beaconApiUrls =
-      if jsonNode.contains("beaconApiUrls"):
+      try:
         parseCmdArg(UrlList, jsonNode["beaconApiUrls"].getStr())
-      else:
-        raise newException(ValueError, "`beaconApiUrls` not specified in JSON config")
+      except CatchableError as e:
+        raise newException(
+          ProxyError, "Couldn't parse `beaconApiUrls` from JSON config: " & e.msg
+        )
     logLevel = jsonNode.getOrDefault("logLevel").getStr("INFO")
     logStdout =
       case jsonNode.getOrDefault("logStdout").getStr("None")
@@ -73,7 +82,7 @@ proc load(
 
 proc run*(
     ctx: ptr Context, configJson: string
-) {.async: (raises: [ValueError, CancelledError, CatchableError]).} =
+) {.async: (raises: [ProxyError, CancelledError]).} =
   let config = VerifiedProxyConf.load(configJson)
 
   setupLogging(config.logLevel, config.logStdout)
@@ -87,7 +96,8 @@ proc run*(
       codeCacheLen: config.codeCacheLen,
       storageCacheLen: config.storageCacheLen,
     )
-    engine = RpcVerificationEngine.init(engineConf)
+    engine = RpcVerificationEngine.init(engineConf).valueOr:
+      raise newException(ProxyError, error.errMsg)
     lc = LightClient.new(config.eth2Network, some config.trustedBlockRoot)
 
     # initialize backend for JSON-RPC
@@ -112,10 +122,11 @@ proc run*(
   # start backend
   var status = await jsonRpcClient.start()
   if status.isErr():
-    raise newException(ValueError, status.error)
+    raise newException(ProxyError, status.error.errMsg)
 
   # adding endpoints will also start the backend
-  lcRestClientPool.addEndpoints(config.beaconApiUrls)
+  if lcRestClientPool.addEndpoints(config.beaconApiUrls).isErr():
+    raise newException(ProxyError, "Couldn't add endpoints for light client queries")
 
   # this starts the light client manager which is
   # an endless loop

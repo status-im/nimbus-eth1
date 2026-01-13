@@ -1,5 +1,5 @@
 # nimbus_verified_proxy
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -11,7 +11,7 @@ import ./types, ./utils, ./rpc_frontend, ./header_store, ./evm
 
 proc init*(
     T: type RpcVerificationEngine, config: RpcVerificationEngineConf
-): T {.raises: [ValueError].} =
+): EngineResult[T] =
   let engine = RpcVerificationEngine(
     chainId: config.chainId,
     maxBlockWalk: config.maxBlockWalk,
@@ -23,9 +23,9 @@ proc init*(
 
   engine.registerDefaultFrontend()
 
-  let networkId = chainIdToNetworkId(config.chainId).valueOr:
-    raise newException(ValueError, error)
+  let networkId = ?chainIdToNetworkId(config.chainId)
+
   # since AsyncEvm requires a few transport methods (getStorage, getCode etc.) for initialization, we initialize the proxy first then the evm within it
   engine.evm = AsyncEvm.init(engine.toAsyncEvmStateBackend(), networkId)
 
-  engine
+  ok(engine)
