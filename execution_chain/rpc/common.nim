@@ -51,35 +51,35 @@ type
     network*: PeerNetworkInfo
     protocols*: JsonNode   # Protocol-specific data
 
-NodePorts.useDefaultSerializationIn JrpcConv
-NodeInfo.useDefaultSerializationIn JrpcConv
-PeerNetworkInfo.useDefaultSerializationIn JrpcConv
-PeerInfo.useDefaultSerializationIn JrpcConv
+NodePorts.useDefaultSerializationIn EthJson
+NodeInfo.useDefaultSerializationIn EthJson
+PeerNetworkInfo.useDefaultSerializationIn EthJson
+PeerInfo.useDefaultSerializationIn EthJson
 
-JrpcConv.automaticSerialization(int, true)
+EthJson.automaticSerialization(int, true)
 
 proc setupCommonRpc*(node: EthereumNode, config: ExecutionClientConf, server: RpcServer) =
-  server.rpc("web3_clientVersion") do() -> string:
+  server.rpc("web3_clientVersion", EthJson) do() -> string:
     result = config.agentString
 
-  server.rpc("web3_sha3") do(data: seq[byte]) -> Hash32:
+  server.rpc("web3_sha3", EthJson) do(data: seq[byte]) -> Hash32:
     result = keccak256(data)
 
-  server.rpc("net_version") do() -> string:
+  server.rpc("net_version", EthJson) do() -> string:
     result = $config.networkId
 
-  server.rpc("net_listening") do() -> bool:
+  server.rpc("net_listening", EthJson) do() -> bool:
     let numPeers = node.numPeers
     result = numPeers < config.maxPeers
 
-  server.rpc("net_peerCount") do() -> Quantity:
+  server.rpc("net_peerCount", EthJson) do() -> Quantity:
     let peerCount = uint node.numPeers
     result = w3Qty(peerCount)
 
 proc setupAdminRpc*(nimbus: NimbusNode, config: ExecutionClientConf, server: RpcServer) =
   let node = nimbus.ethNode
 
-  server.rpc("admin_nodeInfo") do() -> NodeInfo:
+  server.rpc("admin_nodeInfo", EthJson) do() -> NodeInfo:
     let
       enode = toENode(node)
       nodeId = toNodeId(node.keys.pubkey)
@@ -96,7 +96,7 @@ proc setupAdminRpc*(nimbus: NimbusNode, config: ExecutionClientConf, server: Rpc
 
     return nodeInfo
 
-  server.rpc("admin_addPeer") do(enode: string) -> bool:
+  server.rpc("admin_addPeer", EthJson) do(enode: string) -> bool:
     var res = ENode.fromString(enode)
     if res.isOk:
       asyncSpawn node.connectToNode(res.get())
@@ -105,7 +105,7 @@ proc setupAdminRpc*(nimbus: NimbusNode, config: ExecutionClientConf, server: Rpc
     # invalid params `-32602`(kurtosis test)
     raise (ref ApplicationError)(code: -32602, msg: "Invalid ENode")
 
-  server.rpc("admin_peers") do() -> seq[PeerInfo]:
+  server.rpc("admin_peers", EthJson) do() -> seq[PeerInfo]:
     var peers: seq[PeerInfo]
     for peer in node.peerPool.peers:
       if peer.connectionState == Connected:
@@ -143,6 +143,6 @@ proc setupAdminRpc*(nimbus: NimbusNode, config: ExecutionClientConf, server: Rpc
 
     return peers
 
-  server.rpc("admin_quit") do() -> string:
+  server.rpc("admin_quit", EthJson) do() -> string:
     ProcessState.scheduleStop("admin_quit")
     result = "EXITING"

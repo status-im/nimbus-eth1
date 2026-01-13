@@ -23,14 +23,14 @@ export tables
 # Portal Network JSON-RPC implementation as per specification:
 # https://github.com/ethereum/portal-network-specs/tree/master/jsonrpc
 
-ContentInfo.useDefaultSerializationIn JrpcConv
-TraceContentLookupResult.useDefaultSerializationIn JrpcConv
-TraceObject.useDefaultSerializationIn JrpcConv
-NodeMetadata.useDefaultSerializationIn JrpcConv
-TraceResponse.useDefaultSerializationIn JrpcConv
+ContentInfo.useDefaultSerializationIn EthJson
+TraceContentLookupResult.useDefaultSerializationIn EthJson
+TraceObject.useDefaultSerializationIn EthJson
+NodeMetadata.useDefaultSerializationIn EthJson
+TraceResponse.useDefaultSerializationIn EthJson
 
 proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
-  rpcServer.rpc("portal_beaconFindContent") do(
+  rpcServer.rpc("portal_beaconFindContent", EthJson) do(
     enr: Record, contentKey: string
   ) -> JsonString:
     let
@@ -47,16 +47,16 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
         let res = ContentInfo(
           content: foundContent.content.to0xHex(), utpTransfer: foundContent.utpTransfer
         )
-        JrpcConv.encode(res).JsonString
+        EthJson.encode(res).JsonString
       of Nodes:
         let enrs = foundContent.nodes.map(
           proc(n: Node): Record =
             n.record
         )
-        let jsonEnrs = JrpcConv.encode(enrs)
+        let jsonEnrs = EthJson.encode(enrs)
         ("{\"enrs\":" & jsonEnrs & "}").JsonString
 
-  rpcServer.rpc("portal_beaconOffer") do(
+  rpcServer.rpc("portal_beaconOffer", EthJson) do(
     enr: Record, contentItems: seq[ContentItem]
   ) -> string:
     let node = toNodeWithAddress(enr)
@@ -73,7 +73,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
     SSZ.encode(offerResult).to0xHex()
 
-  rpcServer.rpc("portal_beaconGetContent") do(contentKey: string) -> ContentInfo:
+  rpcServer.rpc("portal_beaconGetContent", EthJson) do(contentKey: string) -> ContentInfo:
     let
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(keyBytes).valueOr:
@@ -85,7 +85,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
     ContentInfo(content: content, utpTransfer: contentLookupResult.utpTransfer)
 
-  rpcServer.rpc("portal_beaconTraceGetContent") do(
+  rpcServer.rpc("portal_beaconTraceGetContent", EthJson) do(
     contentKey: string
   ) -> TraceContentLookupResult:
     let
@@ -98,12 +98,12 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
     let
       res = await p.traceContentLookup(keyBytes, contentId)
       _ = res.content.valueOr:
-        let data = Opt.some(JrpcConv.encode(res.trace).JsonString)
+        let data = Opt.some(EthJson.encode(res.trace).JsonString)
         raise contentNotFoundErrWithTrace(data)
 
     res
 
-  rpcServer.rpc("portal_beaconStore") do(
+  rpcServer.rpc("portal_beaconStore", EthJson) do(
     contentKey: string, contentValue: string
   ) -> bool:
     let
@@ -115,7 +115,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
     # TODO: Do we need to convert the received offer to a value without proofs before storing?
     p.storeContent(keyBytes, contentId, offerValueBytes)
 
-  rpcServer.rpc("portal_beaconLocalContent") do(contentKey: string) -> string:
+  rpcServer.rpc("portal_beaconLocalContent", EthJson) do(contentKey: string) -> string:
     let
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(keyBytes).valueOr:
@@ -126,7 +126,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
     valueBytes.to0xHex()
 
-  rpcServer.rpc("portal_beaconPutContent") do(
+  rpcServer.rpc("portal_beaconPutContent", EthJson) do(
     contentKey: string, contentValue: string
   ) -> PutContentResult:
     let
@@ -158,7 +158,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       ),
     )
 
-  rpcServer.rpc("portal_beaconRandomGossip") do(
+  rpcServer.rpc("portal_beaconRandomGossip", EthJson) do(
     contentKey: string, contentValue: string
   ) -> int:
     let
