@@ -106,7 +106,6 @@ proc walkBlocks(
       )
     )
 
-  let PARALLEL_DOWNLOADS = engine.parallelBlockDownloads
   var
     nextHash = sourceHash # sourceHash is already the parent hash
     nextNum = sourceNum - 1
@@ -114,8 +113,8 @@ proc walkBlocks(
 
   while nextNum > targetNum:
     let numDownloads =
-      if ((nextNum - PARALLEL_DOWNLOADS + 1) > targetNum):
-        PARALLEL_DOWNLOADS
+      if ((nextNum - engine.parallelBlockDownloads + 1) > targetNum):
+        engine.parallelBlockDownloads
       else:
         nextNum - targetNum
 
@@ -175,18 +174,46 @@ proc verifyHeader(
       (VerificationError, "hashed block header doesn't match with blk.hash(downloaded)")
     )
 
-  if not engine.headerStore.contains(hash):
-    let latestHeader = engine.headerStore.latest.valueOr:
-      return err(
-        (UnavailableDataError, "Couldn't get the latest header, syncing in progress")
-      )
+  # if the header is available in the store just use that (already verified)
+  if engine.headerStore.contains(hash):
+    return ok()
+  # walk blocks backwards(time) from source to target
+  else:
+    let
+      earliest = engine.headerStore.earliest.valueOr:
+        return err(
+          (UnavailableDataError, "earliest block is not available yet. Still syncing?")
+        )
+      finalized = engine.headerStore.finalized.valueOr:
+        return err(
+          (UnavailableDataError, "finalized block is not available yet. Still syncing?")
+        )
+      latest = engine.headerStore.latest.valueOr:
+        return err(
+          (UnavailableDataError, "latest block is not available yet. Still syncing?")
+        )
 
-    # walk blocks backwards(time) from source to target
-    ?(
-      await engine.walkBlocks(
-        latestHeader.number, header.number, latestHeader.parentHash, hash
-      )
-    )
+    # header is older than earliest and earliest is finalized
+    if header.number < earliest.number:
+      # earliest is finalized
+      if earliest.number < finalized.number:
+        ?await engine.walkBlocks(
+          earliest.number, header.number, earliest.parentHash, hash
+        )
+      # earliest is not finalized (headerstore is smaller than 2 epochs or chain hasn't finalized for long)
+      else:
+        ?await engine.walkBlocks(
+          finalized.number, header.number, finalized.parentHash, hash
+        )
+    # is within the boundaries of header store but not found
+    else:
+      if header.number < finalized.number:
+        ?await engine.walkBlocks(
+          finalized.number, header.number, finalized.parentHash, hash
+        )
+      else:
+        # optimistic walk
+        ?await engine.walkBlocks(latest.number, header.number, latest.parentHash, hash)
 
   ok()
 
