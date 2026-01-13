@@ -37,20 +37,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 2  # In PR, has extra merge commit: ^1 = PR, ^2 = base
-
-      - name: Check nph formatting
-        # Pin nph to a specific version to avoid sudden style differences.
-        # Updating nph version should be accompanied with running the new
-        # version on the nimbus_verified_proxy directory.
-        run: |
-          VERSION="v0.6.1"
-          ARCHIVE="nph-linux_x64.tar.gz"
-          curl -L "https://github.com/arnetheduck/nph/releases/download/${VERSION}/${ARCHIVE}" -o ${ARCHIVE}
-          tar -xzf ${ARCHIVE}
-          ./nph nimbus_verified_proxy/
-          ./nph portal/
-          git diff --exit-code
-
+      - name: Check `nph` formatting
+        uses: arnetheduck/nph-action@v1
+        with:
+          version: 0.6.2
+          options: "nimbus_verified_proxy/ portal/"
       - name: Check copyright year & version
         if: ${{ !cancelled() }} && github.event_name == 'pull_request'
         run: |

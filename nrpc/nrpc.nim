@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -21,7 +21,7 @@ import
     web3,
   web3/[engine_api, primitives, conversions],
   beacon_chain/process_state,
-  beacon_chain/spec/digest,
+  beacon_chain/spec/[digest, engine_authentication],
   beacon_chain/el/el_conf,
   beacon_chain/el/el_manager,
   beacon_chain/el/engine_api_conversions,
@@ -139,7 +139,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
       if conf.jwtSecret.isSome():
         loadJwtSecret(Opt.some(conf.jwtSecret.get()))
       else:
-        Opt.none(seq[byte])
+        Opt.none(JwtSharedKey)
     engineUrl = EngineApiUrl.init(conf.elEngineApi, jwtSecret)
 
     # Create the client for the engine api

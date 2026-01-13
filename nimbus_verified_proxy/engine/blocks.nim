@@ -1,5 +1,5 @@
 # nimbus_verified_proxy
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -23,24 +23,39 @@ import
 
 proc resolveBlockTag*(
     engine: RpcVerificationEngine, blockTag: BlockTag
-): Result[BlockTag, string] =
+): EngineResult[BlockTag] =
   if blockTag.kind == bidAlias:
     let tag = blockTag.alias.toLowerAscii()
     case tag
     of "latest":
       let hLatest = engine.headerStore.latest.valueOr:
-        return err("Couldn't get the latest block number from header store")
+        return err(
+          (
+            UnavailableDataError,
+            "Couldn't get the latest block number from header store",
+          )
+        )
       ok(BlockTag(kind: bidNumber, number: Quantity(hLatest.number)))
     of "finalized":
       let hFinalized = engine.headerStore.finalized.valueOr:
-        return err("Couldn't get the latest block number from header store")
+        return err(
+          (
+            UnavailableDataError,
+            "Couldn't get the finalized block number from header store",
+          )
+        )
       ok(BlockTag(kind: bidNumber, number: Quantity(hFinalized.number)))
     of "earliest":
       let hEarliest = engine.headerStore.earliest.valueOr:
-        return err("Couldn't get the latest block number from header store")
+        return err(
+          (
+            UnavailableDataError,
+            "Couldn't get the earliest block number from header store",
+          )
+        )
       ok(BlockTag(kind: bidNumber, number: Quantity(hEarliest.number)))
     else:
-      err("No support for block tag " & $blockTag)
+      err((InvalidDataError, "No support for block tag " & $blockTag))
   else:
     ok(blockTag)
 
@@ -78,15 +93,19 @@ proc walkBlocks(
     targetNum: base.BlockNumber,
     sourceHash: Hash32,
     targetHash: Hash32,
-): Future[Result[void, string]] {.async: (raises: []).} =
+): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
   var nextHash = sourceHash
+
   info "Starting block walk to verify requested block", blockHash = targetHash
 
   let numBlocks = sourceNum - targetNum
   if numBlocks > engine.maxBlockWalk:
     return err(
-      "Cannot query more than " & $engine.maxBlockWalk &
-        " to verify the chain for the requested block"
+      (
+        VerificationError,
+        "Cannot query more than " & $engine.maxBlockWalk &
+          " to verify the chain for the requested block",
+      )
     )
 
   for i in 0 ..< numBlocks:
@@ -94,13 +113,7 @@ proc walkBlocks(
       if engine.headerStore.contains(nextHash):
         engine.headerStore.get(nextHash).get()
       else:
-        let blk =
-          try:
-            await engine.backend.eth_getBlockByHash(nextHash, false)
-          except CatchableError as e:
-            return err(
-              "Couldn't get block " & $nextHash & " during the chain traversal: " & e.msg
-            )
+        let blk = ?(await engine.backend.eth_getBlockByHash(nextHash, false))
 
         trace "getting next block",
           hash = nextHash,
@@ -110,7 +123,12 @@ proc walkBlocks(
         let header = convHeader(blk)
 
         if header.computeBlockHash != nextHash:
-          return err("Encountered an invalid block header while walking the chain")
+          return err(
+            (
+              VerificationError,
+              "Encountered an invalid block header while walking the chain",
+            )
+          )
 
         header
 
@@ -119,18 +137,22 @@ proc walkBlocks(
 
     nextHash = nextHeader.parentHash
 
-  err("the requested block is not part of the canonical chain")
+  err((VerificationError, "the requested block is not part of the canonical chain"))
 
 proc verifyHeader(
     engine: RpcVerificationEngine, header: Header, hash: Hash32
-): Future[Result[void, string]] {.async: (raises: []).} =
+): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
   # verify calculated hash with the requested hash
   if header.computeBlockHash != hash:
-    return err("hashed block header doesn't match with blk.hash(downloaded)")
+    return err(
+      (VerificationError, "hashed block header doesn't match with blk.hash(downloaded)")
+    )
 
   if not engine.headerStore.contains(hash):
     let latestHeader = engine.headerStore.latest.valueOr:
-      return err("Couldn't get the latest header, syncing in progress")
+      return err(
+        (UnavailableDataError, "Couldn't get the latest header, syncing in progress")
+      )
 
     # walk blocks backwards(time) from source to target
     ?(
@@ -143,7 +165,7 @@ proc verifyHeader(
 
 proc verifyBlock(
     engine: RpcVerificationEngine, blk: BlockObject, fullTransactions: bool
-): Future[Result[void, string]] {.async: (raises: []).} =
+): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
   let header = convHeader(blk)
 
   ?(await engine.verifyHeader(header, blk.hash))
@@ -155,26 +177,33 @@ proc verifyBlock(
   # verify withdrawals
   if blk.withdrawalsRoot.isSome():
     if blk.withdrawalsRoot.get() != orderedTrieRoot(blk.withdrawals.get(@[])):
-      return err("Withdrawals within the block do not yield the same withdrawals root")
+      return err(
+        (
+          VerificationError,
+          "Withdrawals within the block do not yield the same withdrawals root",
+        )
+      )
   else:
     if blk.withdrawals.isSome():
-      return err("Block contains withdrawals but no withdrawalsRoot")
+      return
+        err((VerificationError, "Block contains withdrawals but no withdrawalsRoot"))
 
   ok()
 
 proc getBlock*(
     engine: RpcVerificationEngine, blockHash: Hash32, fullTransactions: bool
-): Future[Result[BlockObject, string]] {.async: (raises: []).} =
+): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
   # get the target block
-  let blk =
-    try:
-      await engine.backend.eth_getBlockByHash(blockHash, fullTransactions)
-    except CatchableError as e:
-      return err(e.msg)
+  let blk = ?(await engine.backend.eth_getBlockByHash(blockHash, fullTransactions))
 
   # verify requested hash with the downloaded hash
   if blockHash != blk.hash:
-    return err("the downloaded block hash doesn't match with the requested hash")
+    return err(
+      (
+        VerificationError,
+        "the downloaded block hash doesn't match with the requested hash",
+      )
+    )
 
   # verify the block
   ?(await engine.verifyBlock(blk, fullTransactions))
@@ -183,20 +212,19 @@ proc getBlock*(
 
 proc getBlock*(
     engine: RpcVerificationEngine, blockTag: BlockTag, fullTransactions: bool
-): Future[Result[BlockObject, string]] {.async: (raises: []).} =
-  let numberTag = engine.resolveBlockTag(blockTag).valueOr:
-    return err(error)
+): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
+  let numberTag = ?engine.resolveBlockTag(blockTag)
 
   # get the target block
-  let blk =
-    try:
-      await engine.backend.eth_getBlockByNumber(numberTag, fullTransactions)
-    except CatchableError as e:
-      return err(e.msg)
+  let blk = ?(await engine.backend.eth_getBlockByNumber(numberTag, fullTransactions))
 
   if numberTag.number != blk.number:
-    return
-      err("the downloaded block number doesn't match with the requested block number")
+    return err(
+      (
+        VerificationError,
+        "the downloaded block number doesn't match with the requested block number",
+      )
+    )
 
   # verify the block
   ?(await engine.verifyBlock(blk, fullTransactions))
@@ -205,7 +233,7 @@ proc getBlock*(
 
 proc getHeader*(
     engine: RpcVerificationEngine, blockHash: Hash32
-): Future[Result[Header, string]] {.async: (raises: []).} =
+): Future[EngineResult[Header]] {.async: (raises: [CancelledError]).} =
   let cachedHeader = engine.headerStore.get(blockHash)
 
   if cachedHeader.isNone():
@@ -214,16 +242,17 @@ proc getHeader*(
     return ok(cachedHeader.get())
 
   # get the target block
-  let blk =
-    try:
-      await engine.backend.eth_getBlockByHash(blockHash, false)
-    except CatchableError as e:
-      return err(e.msg)
+  let blk = ?(await engine.backend.eth_getBlockByHash(blockHash, false))
 
   let header = convHeader(blk)
 
   if blockHash != blk.hash:
-    return err("the blk.hash(downloaded) doesn't match with the provided hash")
+    return err(
+      (
+        VerificationError,
+        "the blk.hash(downloaded) doesn't match with the provided hash",
+      )
+    )
 
   ?(await engine.verifyHeader(header, blockHash))
 
@@ -231,10 +260,9 @@ proc getHeader*(
 
 proc getHeader*(
     engine: RpcVerificationEngine, blockTag: BlockTag
-): Future[Result[Header, string]] {.async: (raises: []).} =
+): Future[EngineResult[Header]] {.async: (raises: [CancelledError]).} =
   let
-    numberTag = engine.resolveBlockTag(blockTag).valueOr:
-      return err(error)
+    numberTag = ?engine.resolveBlockTag(blockTag)
     n = distinctBase(numberTag.number)
     cachedHeader = engine.headerStore.get(n)
 
@@ -244,17 +272,17 @@ proc getHeader*(
     return ok(cachedHeader.get())
 
   # get the target block
-  let blk =
-    try:
-      await engine.backend.eth_getBlockByNumber(numberTag, false)
-    except CatchableError as e:
-      return err(e.msg)
+  let blk = ?(await engine.backend.eth_getBlockByNumber(numberTag, false))
 
   let header = convHeader(blk)
 
   if n != header.number:
-    return
-      err("the downloaded block number doesn't match with the requested block number")
+    return err(
+      (
+        VerificationError,
+        "the downloaded block number doesn't match with the requested block number",
+      )
+    )
 
   ?(await engine.verifyHeader(header, blk.hash))
 

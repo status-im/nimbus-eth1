@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -135,15 +135,9 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
     rng = nimbus.rng,
     forkIdProcs = forkIdProcs)
 
-  # Add peer service protocol capabilities. If `snap` sync is used, then there
-  # can be only one active `eth` protocol version assuming that the number of
-  # messages differ with the `eth` versions. Due to tight packaging of message
-  # IDs, different `eth` protocol lengths lead to varying `snap` message IDs
-  # depending on the `eth` version. To handle this is currently unsupported.
-  #
+  # Add peer service protocol capabilities.
   let doSnapSync = config.snapSyncEnabled or config.snapServerEnabled
-  nimbus.ethWire =
-    nimbus.ethNode.addEthHandlerCapability(nimbus.txPool, latestOnly=doSnapSync)
+  nimbus.ethWire = nimbus.ethNode.addEthHandlerCapability(nimbus.txPool)
   if doSnapSync:
     nimbus.snapWire = nimbus.ethNode.addSnapHandlerCapability()
 
@@ -178,8 +172,7 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
     syncerShouldRun = true
 
   # Configure beacon syncer.
-  nimbus.beaconSyncRef.config(
-    nimbus.ethNode, nimbus.fc, config.maxPeers, latestOnly=doSnapSync)
+  nimbus.beaconSyncRef.config(nimbus.ethNode, nimbus.fc, config.maxPeers)
 
   # Optional for pre-setting the sync target (e.g. for debugging)
   if config.beaconSyncTarget.isSome():
@@ -201,6 +194,9 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
 
     # Configure snap syncer.
     nimbus.snapSyncRef.config(nimbus.ethNode, config.maxPeers)
+  else:
+    # Disable any external setup unless explicitely activated
+    nimbus.snapSyncRef = SnapSyncRef(nil)
 
   # Deactivating syncer if there is definitely no need to run it. This
   # avoids polling (i.e. waiting for instructions) and some logging.
@@ -347,7 +343,7 @@ proc runExeClient*(
 # noinline to keep it in stack traces
 proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   # Set up logging before everything else
-  setupLogging(config.logLevel, config.logStdout)
+  setupLogging(config.logLevel, config.logFormat)
   setupFileLimits()
 
   info "Launching execution client", version = FullVersionStr, config

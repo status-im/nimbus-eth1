@@ -1,5 +1,5 @@
 # nimbus_verified_proxy
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -23,9 +23,7 @@ type JsonRpcServer* = ref object
   of WebSocket:
     wsServer: RpcWebSocketServer
 
-proc init*(
-    T: type JsonRpcServer, url: Web3Url
-): JsonRpcServer {.raises: [JsonRpcError, ValueError, TransportAddressError].} =
+proc init*(T: type JsonRpcServer, url: Web3Url): EngineResult[JsonRpcServer] =
   let
     auth = @[httpCors(@[])] # TODO: for now we serve all cross origin requests
     parsedUrl = parseUri(url.web3Url)
@@ -34,172 +32,202 @@ proc init*(
       if parsedUrl.port == "":
         8545
       else:
-        parseInt(parsedUrl.port)
-    listenAddress = initTAddress(hostname, port)
+        try:
+          parseInt(parsedUrl.port)
+        except ValueError:
+          return err((FrontendError, "Could not parse the port number"))
 
-  case url.kind
-  of HttpUrl:
-    JsonRpcServer(
-      kind: Http, httpServer: newRpcHttpServer([listenAddress], RpcRouter.init(), auth)
-    )
-  of WsUrl:
-    let server =
-      JsonRpcServer(kind: WebSocket, wsServer: newRpcWebSocketServer(listenAddress))
+    listenAddress =
+      try:
+        initTAddress(hostname, port)
+      except TransportAddressError as e:
+        return err((FrontendError, e.msg))
 
-    server.wsServer.router = RpcRouter.init()
-    server
+  try:
+    case url.kind
+    of HttpUrl:
+      return ok(
+        JsonRpcServer(
+          kind: Http,
+          httpServer: newRpcHttpServer([listenAddress], RpcRouter.init(), auth),
+        )
+      )
+    of WsUrl:
+      let server =
+        JsonRpcServer(kind: WebSocket, wsServer: newRpcWebSocketServer(listenAddress))
+
+      server.wsServer.router = RpcRouter.init()
+      return ok(server)
+  except JsonRpcError as e:
+    return err((FrontendError, e.msg))
 
 func getServer(server: JsonRpcServer): RpcServer =
   case server.kind
   of Http: server.httpServer
   of WebSocket: server.wsServer
 
-proc start*(server: JsonRpcServer): Result[void, string] =
+proc start*(server: JsonRpcServer): EngineResult[void] =
   try:
     case server.kind
     of Http:
       server.httpServer.start()
     of WebSocket:
       server.wsServer.start()
-  except CatchableError as e:
-    return err(e.msg)
+  except JsonRpcError as e:
+    return err((FrontendError, e.msg))
 
   ok()
 
+# this unpacks the result objects returned by frontend and translates result errors
+# to exceptions. This is done becquse the `rpc` macro of the RpcServer is built to 
+# catch exceptions rather than parse the result object directly
+template unpackEngineResult[T](res: EngineResult[T]): T =
+  res.valueOr:
+    raise newException(ValueError, $error.errType & " -> " & error.errMsg)
+
 proc injectEngineFrontend*(server: JsonRpcServer, frontend: EthApiFrontend) =
   server.getServer().rpc("eth_blockNumber") do() -> uint64:
-    await frontend.eth_blockNumber()
+    unpackEngineResult(await frontend.eth_blockNumber())
 
   server.getServer().rpc("eth_getBalance") do(
     address: Address, quantityTag: BlockTag
   ) -> UInt256:
-    await frontend.eth_getBalance(address, quantityTag)
+    unpackEngineResult(await frontend.eth_getBalance(address, quantityTag))
 
   server.getServer().rpc("eth_getStorageAt") do(
     address: Address, slot: UInt256, quantityTag: BlockTag
   ) -> FixedBytes[32]:
-    await frontend.eth_getStorageAt(address, slot, quantityTag)
+    unpackEngineResult(await frontend.eth_getStorageAt(address, slot, quantityTag))
 
   server.getServer().rpc("eth_getTransactionCount") do(
     address: Address, quantityTag: BlockTag
   ) -> Quantity:
-    await frontend.eth_getTransactionCount(address, quantityTag)
+    unpackEngineResult(await frontend.eth_getTransactionCount(address, quantityTag))
 
   server.getServer().rpc("eth_getCode") do(
     address: Address, quantityTag: BlockTag
   ) -> seq[byte]:
-    await frontend.eth_getCode(address, quantityTag)
+    unpackEngineResult(await frontend.eth_getCode(address, quantityTag))
 
   server.getServer().rpc("eth_getBlockByHash") do(
     blockHash: Hash32, fullTransactions: bool
   ) -> BlockObject:
-    await frontend.eth_getBlockByHash(blockHash, fullTransactions)
+    unpackEngineResult(await frontend.eth_getBlockByHash(blockHash, fullTransactions))
 
   server.getServer().rpc("eth_getBlockByNumber") do(
     blockTag: BlockTag, fullTransactions: bool
   ) -> BlockObject:
-    await frontend.eth_getBlockByNumber(blockTag, fullTransactions)
+    unpackEngineResult(await frontend.eth_getBlockByNumber(blockTag, fullTransactions))
 
   server.getServer().rpc("eth_getUncleCountByBlockNumber") do(
     blockTag: BlockTag
   ) -> Quantity:
-    await frontend.eth_getUncleCountByBlockNumber(blockTag)
+    unpackEngineResult(await frontend.eth_getUncleCountByBlockNumber(blockTag))
 
   server.getServer().rpc("eth_getUncleCountByBlockHash") do(
     blockHash: Hash32
   ) -> Quantity:
-    await frontend.eth_getUncleCountByBlockHash(blockHash)
+    unpackEngineResult(await frontend.eth_getUncleCountByBlockHash(blockHash))
 
   server.getServer().rpc("eth_getBlockTransactionCountByNumber") do(
     blockTag: BlockTag
   ) -> Quantity:
-    await frontend.eth_getBlockTransactionCountByNumber(blockTag)
+    unpackEngineResult(await frontend.eth_getBlockTransactionCountByNumber(blockTag))
 
   server.getServer().rpc("eth_getBlockTransactionCountByHash") do(
     blockHash: Hash32
   ) -> Quantity:
-    await frontend.eth_getBlockTransactionCountByHash(blockHash)
+    unpackEngineResult(await frontend.eth_getBlockTransactionCountByHash(blockHash))
 
   server.getServer().rpc("eth_getTransactionByBlockNumberAndIndex") do(
     blockTag: BlockTag, index: Quantity
   ) -> TransactionObject:
-    await frontend.eth_getTransactionByBlockNumberAndIndex(blockTag, index)
+    unpackEngineResult(
+      await frontend.eth_getTransactionByBlockNumberAndIndex(blockTag, index)
+    )
 
   server.getServer().rpc("eth_getTransactionByBlockHashAndIndex") do(
     blockHash: Hash32, index: Quantity
   ) -> TransactionObject:
-    await frontend.eth_getTransactionByBlockHashAndIndex(blockHash, index)
+    unpackEngineResult(
+      await frontend.eth_getTransactionByBlockHashAndIndex(blockHash, index)
+    )
 
   server.getServer().rpc("eth_call") do(
     tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]
   ) -> seq[byte]:
-    await frontend.eth_call(tx, blockTag, optimisticStateFetch.get(true))
+    unpackEngineResult(
+      await frontend.eth_call(tx, blockTag, optimisticStateFetch.get(true))
+    )
 
   server.getServer().rpc("eth_createAccessList") do(
     tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]
   ) -> AccessListResult:
-    await frontend.eth_createAccessList(tx, blockTag, optimisticStateFetch.get(true))
+    unpackEngineResult(
+      await frontend.eth_createAccessList(tx, blockTag, optimisticStateFetch.get(true))
+    )
 
   server.getServer().rpc("eth_estimateGas") do(
     tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]
   ) -> Quantity:
-    await frontend.eth_estimateGas(tx, blockTag, optimisticStateFetch.get(true))
+    unpackEngineResult(
+      await frontend.eth_estimateGas(tx, blockTag, optimisticStateFetch.get(true))
+    )
 
   server.getServer().rpc("eth_getTransactionByHash") do(
     txHash: Hash32
   ) -> TransactionObject:
-    await frontend.eth_getTransactionByHash(txHash)
+    unpackEngineResult(await frontend.eth_getTransactionByHash(txHash))
 
   server.getServer().rpc("eth_getBlockReceipts") do(
     blockTag: BlockTag
   ) -> Opt[seq[ReceiptObject]]:
-    await frontend.eth_getBlockReceipts(blockTag)
+    unpackEngineResult(await frontend.eth_getBlockReceipts(blockTag))
 
   server.getServer().rpc("eth_getTransactionReceipt") do(
     txHash: Hash32
   ) -> ReceiptObject:
-    await frontend.eth_getTransactionReceipt(txHash)
+    unpackEngineResult(await frontend.eth_getTransactionReceipt(txHash))
 
   server.getServer().rpc("eth_getLogs") do(
     filterOptions: FilterOptions
   ) -> seq[LogObject]:
-    await frontend.eth_getLogs(filterOptions)
+    unpackEngineResult(await frontend.eth_getLogs(filterOptions))
 
   server.getServer().rpc("eth_newFilter") do(filterOptions: FilterOptions) -> string:
-    await frontend.eth_newFilter(filterOptions)
+    unpackEngineResult(await frontend.eth_newFilter(filterOptions))
 
   server.getServer().rpc("eth_uninstallFilter") do(filterId: string) -> bool:
-    await frontend.eth_uninstallFilter(filterId)
+    unpackEngineResult(await frontend.eth_uninstallFilter(filterId))
 
   server.getServer().rpc("eth_getFilterLogs") do(filterId: string) -> seq[LogObject]:
-    await frontend.eth_getFilterLogs(filterId)
+    unpackEngineResult(await frontend.eth_getFilterLogs(filterId))
 
   server.getServer().rpc("eth_getFilterChanges") do(filterId: string) -> seq[LogObject]:
-    await frontend.eth_getFilterChanges(filterId)
+    unpackEngineResult(await frontend.eth_getFilterChanges(filterId))
 
   server.getServer().rpc("eth_blobBaseFee") do() -> UInt256:
-    await frontend.eth_blobBaseFee()
+    unpackEngineResult(await frontend.eth_blobBaseFee())
 
   server.getServer().rpc("eth_gasPrice") do() -> Quantity:
-    await frontend.eth_gasPrice()
+    unpackEngineResult(await frontend.eth_gasPrice())
 
   server.getServer().rpc("eth_maxPriorityFeePerGas") do() -> Quantity:
-    await frontend.eth_maxPriorityFeePerGas()
+    unpackEngineResult(await frontend.eth_maxPriorityFeePerGas())
 
   server.getServer().rpc("eth_feeHistory") do(
     blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: Opt[seq[float64]]
   ) -> FeeHistoryResult:
-    await frontend.eth_feeHistory(blockCount, newestBlock, rewardPercentiles)
+    unpackEngineResult(
+      await frontend.eth_feeHistory(blockCount, newestBlock, rewardPercentiles)
+    )
 
   server.getServer().rpc("eth_sendRawTransaction") do(txBytes: seq[byte]) -> Hash32:
-    await frontend.eth_sendRawTransaction(txBytes)
+    unpackEngineResult(await frontend.eth_sendRawTransaction(txBytes))
 
-proc stop*(server: JsonRpcServer) {.async: (raises: [CancelledError]).} =
-  try:
-    case server.kind
-    of Http:
-      await server.httpServer.closeWait()
-    of WebSocket:
-      await server.wsServer.closeWait()
-  except CatchableError as e:
-    raise newException(CancelledError, e.msg)
+proc stop*(server: JsonRpcServer) {.async: (raises: []).} =
+  case server.kind
+  of Http:
+    await server.httpServer.closeWait()
+  of WebSocket:
+    await server.wsServer.closeWait()

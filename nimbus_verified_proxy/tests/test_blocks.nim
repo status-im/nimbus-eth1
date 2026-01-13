@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -21,7 +21,8 @@ import
 suite "test verified blocks":
   let
     ts = TestApiState.init(1.u256)
-    engine = initTestEngine(ts, 1, 9) # header store holds 1 and maxBlockWalk is 9
+    engine = initTestEngine(ts, 1, 9).valueOr:
+      raise newException(TestProxyError, error.errMsg)
 
   test "check fetching blocks on every fork":
     let forkBlockNames = [
@@ -39,7 +40,9 @@ suite "test verified blocks":
 
       let verifiedBlk = waitFor engine.frontend.eth_getBlockByHash(blk.hash, true)
 
-      check blk == verifiedBlk
+      check:
+        verifiedBlk.isOk()
+        blk == verifiedBlk.get()
 
       ts.clear()
       engine.headerStore.clear()
@@ -62,16 +65,24 @@ suite "test verified blocks":
       engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
 
     var verifiedBlk = waitFor engine.frontend.eth_getBlockByNumber(numberTag, true)
-    check blk == verifiedBlk
+    check:
+      verifiedBlk.isOk()
+      blk == verifiedBlk.get()
 
     verifiedBlk = waitFor engine.frontend.eth_getBlockByNumber(finalTag, true)
-    check blk == verifiedBlk
+    check:
+      verifiedBlk.isOk()
+      blk == verifiedBlk.get()
 
     verifiedBlk = waitFor engine.frontend.eth_getBlockByNumber(earliestTag, true)
-    check blk == verifiedBlk
+    check:
+      verifiedBlk.isOk()
+      blk == verifiedBlk.get()
 
     verifiedBlk = waitFor engine.frontend.eth_getBlockByNumber(latestTag, true)
-    check blk == verifiedBlk
+    check:
+      verifiedBlk.isOk()
+      blk == verifiedBlk.get()
 
   test "check block walk":
     ts.clear()
@@ -97,21 +108,18 @@ suite "test verified blocks":
         kind: BlockIdentifierKind.bidNumber, number: Quantity(targetBlockNum + 1)
       )
 
-    # TODO: catch the exact error 
-    try:
-      let verifiedBlk =
-        waitFor engine.frontend.eth_getBlockByNumber(unreachableTargetTag, true)
-      check(false)
-    except CatchableError:
-      check(true)
+    let verifiedBlkUnreachable =
+      waitFor engine.frontend.eth_getBlockByNumber(unreachableTargetTag, true)
 
-    # TODO: catch the exact error 
-    try:
-      let verifiedBlk =
-        waitFor engine.frontend.eth_getBlockByNumber(reachableTargetTag, true)
-      check(true)
-    except CatchableError:
-      check(false)
+    check:
+      verifiedBlkUnreachable.isErr()
+      verifiedBlkUnreachable.error.errType == VerificationError
+
+    let verifiedBlkReachable =
+      waitFor engine.frontend.eth_getBlockByNumber(reachableTargetTag, true)
+
+    check:
+      verifiedBlkReachable.isOk()
 
   test "check block related API methods":
     ts.clear()
@@ -138,12 +146,20 @@ suite "test verified blocks":
         numberTag, Quantity(0)
       )
 
-    check Quantity(blk.uncles.len()) == uncleCountByHash
-    check uncleCountByHash == uncleCountByNum
-    check Quantity(blk.transactions.len()) == txCountByHash
-    check txCountByHash == txCountByNum
+    check:
+      uncleCountByHash.isOk()
+      uncleCountByNum.isOk()
+      txCountByHash.isOk()
+      txCountByNum.isOk()
+      Quantity(blk.uncles.len()) == uncleCountByHash.get()
+      uncleCountByHash.get() == uncleCountByNum.get()
+      Quantity(blk.transactions.len()) == txCountByHash.get()
+      txCountByHash.get() == txCountByNum.get()
 
     doAssert blk.transactions[0].kind == tohTx
 
-    check txByHash == blk.transactions[0].tx
-    check txByHash == txByNum
+    check:
+      txByHash.isOk()
+      txByNum.isOk()
+      txByHash.get() == blk.transactions[0].tx
+      txByHash.get() == txByNum.get()

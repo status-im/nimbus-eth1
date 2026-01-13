@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -55,8 +55,8 @@ type
       desc: "Name or id number of Ethereum network"
       longDesc:
         "- mainnet/1       : Ethereum main network\n" &
-        "- sepolia/11155111: Test network (proof-of-work)\n" &
-        "- hoodi/560048    : The second long-standing, merged-from-genesis, public Ethereum testnet\n" &
+        "- sepolia/11155111: Testnet for smart contract testing\n" &
+        "- hoodi/560048    : Testnet for staking and hard forks\n" &
         "- path            : Custom config for private Ethereum Network (as /path/to/metadata)\n" &
         "                    Path to a folder containing custom network configuration files\n" &
         "                    such as genesis.json, config.yaml, etc.\n" &
@@ -82,10 +82,6 @@ type
       defaultValue: LogLevel.INFO
       defaultValueDesc: $LogLevel.INFO
       name: "log-level" }: LogLevel
-
-    logFile* {.
-      desc: "Specifies a path for the written Json log file"
-      name: "log-file" }: Option[OutFile]
 
     case cmd* {.
       command
