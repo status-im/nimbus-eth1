@@ -10,9 +10,10 @@ import
   std/[hashes, json],
   stew/[byteutils, endians2],
   eth/p2p/discoveryv5/node,
-  eth/utp/[utp_discv5_protocol, utp_router]
+  eth/utp/[utp_discv5_protocol, utp_router],
+  web3/conversions
 
-export json
+export conversions, json
 
 type SKey* = object
   id*: uint16
