@@ -152,8 +152,7 @@ proc getBlockBodies*(ctx: EthWireRef,
     BlockBody(
       transactions: blk.transactions,
       uncles: blk.uncles,
-      withdrawals: blk.withdrawals,
-      blockAccessList: blk.blockAccessList
+      withdrawals: blk.withdrawals
     )
 
   for blockHash in hashes:
