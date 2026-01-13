@@ -378,6 +378,58 @@ type
       defaultValue: false
       name: "stateless-witness-validation" .}: bool
 
+    # Archive import tuning shared between the standalone `import` command
+    # and the automatic archive import executed before startup.
+    maxBlocks* {.
+      desc: "Maximum number of blocks to import"
+      defaultValue: uint64.high()
+      name: "max-blocks" .}: uint64
+
+    chunkSize* {.
+      desc: "Number of blocks per database transaction"
+      defaultValue: 8192
+      name: "chunk-size" .}: uint64
+
+    csvStats* {.
+      hidden
+      desc: "Save performance statistics to CSV"
+      name: "debug-csv-stats".}: Option[string]
+
+    # TODO validation and storage options should be made non-hidden when the
+    #      UX has stabilised and era1 storage is in the app
+    validation* {.
+      hidden
+      desc: "Enable per-chunk validation"
+      defaultValue: false
+      name: "debug-validation".}: bool
+
+    fullValidation* {.
+      hidden
+      desc: "Enable full per-block validation (slow)"
+      defaultValue: false
+      name: "debug-full-validation".}: bool
+
+    storeBodies* {.
+      hidden
+      desc: "Store block blodies in database"
+      defaultValue: false
+      name: "debug-store-bodies".}: bool
+
+    # TODO this option should probably only cover the redundant parts, ie
+    #      those that are in era1 files - era files presently do not store
+    #      receipts
+    storeReceipts* {.
+      hidden
+      desc: "Store receipts in database"
+      defaultValue: false
+      name: "debug-store-receipts".}: bool
+
+    storeSlotHashes* {.
+      hidden
+      desc: "Store reverse slot hashes in database"
+      defaultValue: false
+      name: "debug-store-slot-hashes".}: bool
+
     case cmd* {.
       command
       defaultValue: NimbusCmd.executionClient .}: NimbusCmd
@@ -518,56 +570,9 @@ type
         defaultValue: true
         name: "debug-bootstrap-finalized" .}: bool
 
+    # We now load all the import specific configurations directly into  ExecutionClientConf
     of NimbusCmd.`import`:
-      maxBlocks* {.
-        desc: "Maximum number of blocks to import"
-        defaultValue: uint64.high()
-        name: "max-blocks" .}: uint64
-
-      chunkSize* {.
-        desc: "Number of blocks per database transaction"
-        defaultValue: 8192
-        name: "chunk-size" .}: uint64
-
-      csvStats* {.
-        hidden
-        desc: "Save performance statistics to CSV"
-        name: "debug-csv-stats".}: Option[string]
-
-      # TODO validation and storage options should be made non-hidden when the
-      #      UX has stabilised and era1 storage is in the app
-      validation* {.
-        hidden
-        desc: "Enable per-chunk validation"
-        defaultValue: false
-        name: "debug-validation".}: bool
-
-      fullValidation* {.
-        hidden
-        desc: "Enable full per-block validation (slow)"
-        defaultValue: false
-        name: "debug-full-validation".}: bool
-
-      storeBodies* {.
-        hidden
-        desc: "Store block blodies in database"
-        defaultValue: false
-        name: "debug-store-bodies".}: bool
-
-      # TODO this option should probably only cover the redundant parts, ie
-      #      those that are in era1 files - era files presently do not store
-      #      receipts
-      storeReceipts* {.
-        hidden
-        desc: "Store receipts in database"
-        defaultValue: false
-        name: "debug-store-receipts".}: bool
-
-      storeSlotHashes* {.
-        hidden
-        desc: "Store reverse slot hashes in database"
-        defaultValue: false
-        name: "debug-store-slot-hashes".}: bool
+        discard
 
     of NimbusCmd.`import-rlp`:
       blocksFile* {.

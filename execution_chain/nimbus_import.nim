@@ -31,11 +31,6 @@ declareCounter nec_imported_transactions, "Transactions processed during import"
 
 declareCounter nec_imported_gas, "Gas processed during import"
 
-# Used in import mode
-const
-  DefaultImportMaxBlocks = uint64.high()
-  DefaultImportChunkSize = 8192'u64
-
 proc openCsv(name: string): File =
   try:
     let f = open(name, fmAppend)
@@ -92,46 +87,30 @@ template boolFlag(flags, b): PersistBlockFlags =
 proc running(): bool =
   not ProcessState.stopIt(notice("Shutting down", reason = it))
 
-# Shared importer used both by the standalone `import` subcommand and the execution-client startup .
-proc importBlocks*(
-    config: ExecutionClientConf,
-    com: CommonRef,
-    importMode = false
-  ) =
+proc importBlocks*(config: ExecutionClientConf, com: CommonRef) =
   let
     start = com.db.baseTxFrame().getSavedStateBlockNumber() + 1
     (cfg, genesis_validators_root, lastEra1Block, firstSlotAfterMerge) =
       getMetadata(config.networkId)
     time0 = Moment.now()
 
-    maxBlocks =
-      if importMode: config.maxBlocks else: DefaultImportMaxBlocks
-    chunkSize =
-      if importMode: config.chunkSize else: DefaultImportChunkSize
-    csvStats =
-      (if importMode: config.csvStats else: none(string))
-    validationEnabled = importMode and config.validation
-    fullValidationEnabled = importMode and config.fullValidation
-    storeBodiesEnabled = importMode and config.storeBodies
-    storeReceiptsEnabled = importMode and config.storeReceipts
-    storeSlotHashesEnabled = importMode and config.storeSlotHashes
   # These variables are used from closures on purpose, so as to place them on
   # the heap rather than the stack
   var
     slot = 1'u64
     time1 = Moment.now() # time at start of chunk
     csv =
-      if csvStats.isSome:
-        openCsv(csvStats.get())
+      if config.csvStats.isSome:
+        openCsv(config.csvStats.get())
       else:
         File(nil)
     flags =
-      boolFlag({PersistBlockFlag.Validation}, validationEnabled) +
-      boolFlag({PersistBlockFlag.FullValidation}, fullValidationEnabled) +
+      boolFlag({PersistBlockFlag.Validation}, config.validation) +
+      boolFlag({PersistBlockFlag.FullValidation}, config.fullValidation) +
       boolFlag({PersistBlockFlag.PersistHeaders}, true) +
-      boolFlag(PersistBodies, storeBodiesEnabled) +
-      boolFlag({PersistBlockFlag.PersistReceipts}, storeReceiptsEnabled) +
-      boolFlag({PersistBlockFlag.PersistSlotHashes}, storeSlotHashesEnabled)
+      boolFlag(PersistBodies, config.storeBodies) +
+      boolFlag({PersistBlockFlag.PersistReceipts}, config.storeReceipts) +
+      boolFlag({PersistBlockFlag.PersistSlotHashes}, config.storeSlotHashes)
     blk: Block
     persister = Persister.init(com, flags)
     cstats: PersistStats # stats at start of chunk
@@ -163,7 +142,7 @@ proc importBlocks*(
   proc checkpoint(force: bool = false) =
     let (blocks, txs, gas) = persister.stats
 
-    if not force and blocks.uint64 mod chunkSize != 0:
+    if not force and blocks.uint64 mod config.chunkSize != 0:
       return
 
     persister.checkpoint().isOkOr:
@@ -305,7 +284,7 @@ proc importBlocks*(
         return false
       true
 
-    while running() and persister.stats.blocks.uint64 < maxBlocks and
+    while running() and persister.stats.blocks.uint64 < config.maxBlocks and
         blockNumber <= lastEra1Block:
       if not loadEraBlock(blockNumber):
         notice "No more `era1` blocks to import", blockNumber, slot
@@ -363,7 +342,7 @@ proc importBlocks*(
         true
 
       while running() and moreEraAvailable and
-          persister.stats.blocks.uint64 < maxBlocks and slot < endSlot:
+          persister.stats.blocks.uint64 < config.maxBlocks and slot < endSlot:
         if not loadEra1Block():
           slot += 1
           continue
