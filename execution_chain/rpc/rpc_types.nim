@@ -24,9 +24,9 @@ type
   BlockTag* = eth_api_types.RtBlockIdentifier
 
 # Block access list json serialization
-AccountChanges.useDefaultSerializationIn JrpcConv
-SlotChanges.useDefaultSerializationIn JrpcConv
-StorageChange.useDefaultSerializationIn JrpcConv
-BalanceChange.useDefaultSerializationIn JrpcConv
-NonceChange.useDefaultSerializationIn JrpcConv
-CodeChange.useDefaultSerializationIn JrpcConv
+AccountChanges.useDefaultSerializationIn EthJson
+SlotChanges.useDefaultSerializationIn EthJson
+StorageChange.useDefaultSerializationIn EthJson
+BalanceChange.useDefaultSerializationIn EthJson
+NonceChange.useDefaultSerializationIn EthJson
+CodeChange.useDefaultSerializationIn EthJson

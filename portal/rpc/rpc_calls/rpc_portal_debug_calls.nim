@@ -11,9 +11,9 @@ import json_rpc/rpcclient, ../rpc_types
 
 export rpc_types
 
-Opt[string].useDefaultSerializationIn JrpcConv
+Opt[string].useDefaultSerializationIn EthJson
 
-createRpcSigsFromNim(RpcClient):
+createRpcSigsFromNim(RpcClient, EthJson):
   ## Portal History Network json-rpc debug & custom calls
   proc portal_debug_historyGossipHeaders(
     era1File: string, epochRecordFile: Opt[string]

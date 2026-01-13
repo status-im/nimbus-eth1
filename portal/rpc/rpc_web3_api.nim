@@ -7,8 +7,8 @@
 
 {.push raises: [].}
 
-import json_rpc/rpcserver, ../version
+import json_rpc/rpcserver, ./rpc_types, ../version
 
 proc installWeb3ApiHandlers*(rpcServer: RpcServer) =
-  rpcServer.rpc("web3_clientVersion") do() -> string:
+  rpcServer.rpc("web3_clientVersion", EthJson) do() -> string:
     return clientVersion

@@ -11,7 +11,6 @@ import
   std/[atomics, json, net, lists],
   beacon_chain/spec/[digest, network],
   beacon_chain/nimbus_binary_common,
-  json_rpc/[jsonmarshal],
   web3/[eth_api_types, conversions],
   ../engine/types,
   ../nimbus_verified_proxy_conf,

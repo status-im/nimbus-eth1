@@ -19,7 +19,7 @@ from ../../hive_integration/engine_client import toBlockHeader, toTransactions
 
 export stateless_execution
 
-ExecutionWitness.useDefaultSerializationIn JrpcConv
+ExecutionWitness.useDefaultSerializationIn EthJson
 
 proc readFileToStr*(filePath: string): Result[string, string] =
   let fileStr = io2.readAllChars(filePath).valueOr:
@@ -34,13 +34,13 @@ func toBytes*(hexStr: string): Result[seq[byte], string] =
 
 func decodeJson*(T: type ExecutionWitness, jsonStr: string): Result[T, string] =
   try:
-    ok(JrpcConv.decode(jsonStr, T))
+    ok(EthJson.decode(jsonStr, T))
   except SerializationError as e:
     err("Error decoding json string: " & e.msg)
 
 func decodeJson*(T: type BlockObject, jsonStr: string): Result[T, string] =
   try:
-    ok(JrpcConv.decode(jsonStr, T))
+    ok(EthJson.decode(jsonStr, T))
   except SerializationError as e:
     err("Error decoding json string: " & e.msg)
 
