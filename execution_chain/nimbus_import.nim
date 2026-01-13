@@ -92,15 +92,18 @@ template boolFlag(flags, b): PersistBlockFlags =
 proc running(): bool =
   not ProcessState.stopIt(notice("Shutting down", reason = it))
 
-# importblocks importer should be able to be used by import and nimbus_execution_client command both
-proc importBlocks*(config: ExecutionClientConf, com: CommonRef) =
+# Shared importer used both by the standalone `import` subcommand and the execution-client startup .
+proc importBlocks*(
+    config: ExecutionClientConf,
+    com: CommonRef,
+    importMode = false
+  ) =
   let
     start = com.db.baseTxFrame().getSavedStateBlockNumber() + 1
     (cfg, genesis_validators_root, lastEra1Block, firstSlotAfterMerge) =
       getMetadata(config.networkId)
     time0 = Moment.now()
 
-    importMode = config.cmd == NimbusCmd.`import`
     maxBlocks =
       if importMode: config.maxBlocks else: DefaultImportMaxBlocks
     chunkSize =
