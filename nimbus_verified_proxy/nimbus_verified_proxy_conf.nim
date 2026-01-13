@@ -8,8 +8,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/os,
-  std/strutils,
+  std/[os, strutils, sequtils],
   json_rpc/rpcproxy, # must be early (compilation annoyance)
   json_serialization/std/net,
   beacon_chain/conf_light_client,
@@ -147,12 +146,7 @@ proc parseCmdArg*(T: type Web3Url, p: string): T {.raises: [ValueError].} =
 
 proc parseCmdArg*(T: type seq[Web3Url], p: string): T {.raises: [ValueError].} =
   let urls = p.split(',')
-  var parsedWeb3Urls: seq[Web3Url]
-
-  for u in urls:
-    parsedWeb3Urls.add(parseCmdArg(Web3Url, u))
-
-  parsedWeb3Urls
+  urls.mapIt(parseCmdArg(Web3Url, it))
 
 proc parseCmdArg*(T: type UrlList, p: string): T {.raises: [ValueError].} =
   let urls = p.split(',')
