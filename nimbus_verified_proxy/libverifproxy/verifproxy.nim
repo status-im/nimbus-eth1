@@ -11,7 +11,6 @@ import
   std/[atomics, json, net, strutils, lists],
   beacon_chain/spec/[digest, network],
   beacon_chain/nimbus_binary_common,
-  json_rpc/[jsonmarshal],
   web3/[eth_api_types, conversions],
   ../engine/types,
   ../nimbus_verified_proxy_conf,
@@ -190,7 +189,7 @@ func unpackArg(
 # generalized overloading
 func unpackArg(arg: string, argType: type): Result[argType, string] {.raises: [].} =
   try:
-    ok(JrpcConv.decode(arg, argType))
+    ok(EthJson.decode(arg, argType))
   except CatchableError as e:
     err("Parameter of type " & $argType & " coudln't be decoded: " & e.msg)
 

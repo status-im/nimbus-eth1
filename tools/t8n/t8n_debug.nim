@@ -20,7 +20,7 @@ const
   testFile = "tests/fixtures/eest/blockchain_tests/stChainId/chainId.json"
 
 type
-  BCTConv* = JrpcConv
+  BCTConv* = EthJson
 
   BCTBlock* = object
     rlp*: seq[byte]

@@ -10,7 +10,7 @@ import json_rpc/rpcclient, ../../rpc/rpc_types, ./utp_rpc_types
 
 export utp_rpc_types
 
-createRpcSigsFromNim(RpcClient):
+createRpcSigsFromNim(RpcClient, EthJson):
   proc utp_connect(enr: Record): SKey
   proc utp_write(k: SKey, b: string): bool
   proc utp_read(k: SKey, n: int): string
