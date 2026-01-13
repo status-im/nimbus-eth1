@@ -28,108 +28,107 @@ proc installPortalCommonApiHandlers*(
 ) =
   const networkStr = network.symbolName()
 
-  rpcServer.rpc("portal_" & networkStr & "NodeInfo") do() -> NodeInfo:
-    return p.routingTable.getNodeInfo()
+  rpcServer.rpcContext(EthJson):
+    rpc("portal_" & networkStr & "NodeInfo") do() -> NodeInfo:
+      return p.routingTable.getNodeInfo()
 
-  rpcServer.rpc("portal_" & networkStr & "RoutingTableInfo") do() -> RoutingTableInfo:
-    return getRoutingTableInfo(p.routingTable)
+    rpc("portal_" & networkStr & "RoutingTableInfo") do() -> RoutingTableInfo:
+      return getRoutingTableInfo(p.routingTable)
 
-  rpcServer.rpc("portal_" & networkStr & "AddEnr") do(enr: Record) -> bool:
-    let node = Node.fromRecord(enr)
-    if p.addNode(node) == Added:
-      p.routingTable.setJustSeen(node)
-      true
-    else:
-      false
-
-  rpcServer.rpc("portal_" & networkStr & "AddEnrs") do(enrs: seq[Record]) -> bool:
-    # Note: unspecified RPC, but useful for our local testnet test
-    for enr in enrs:
+    rpc("portal_" & networkStr & "AddEnr") do(enr: Record) -> bool:
       let node = Node.fromRecord(enr)
       if p.addNode(node) == Added:
         p.routingTable.setJustSeen(node)
+        true
+      else:
+        false
 
-    return true
+    rpc("portal_" & networkStr & "AddEnrs") do(enrs: seq[Record]) -> bool:
+      # Note: unspecified RPC, but useful for our local testnet test
+      for enr in enrs:
+        let node = Node.fromRecord(enr)
+        if p.addNode(node) == Added:
+          p.routingTable.setJustSeen(node)
 
-  rpcServer.rpc("portal_" & networkStr & "GetEnr") do(nodeId: NodeId) -> Record:
-    if p.localNode.id == nodeId:
-      return p.localNode.record
-
-    let node = p.getNode(nodeId)
-    if node.isSome():
-      return node.get().record
-    else:
-      raise newException(ValueError, "Record not in local routing table.")
-
-  rpcServer.rpc("portal_" & networkStr & "DeleteEnr") do(nodeId: NodeId) -> bool:
-    # TODO: Adjust `removeNode` to accept NodeId as param and to return bool.
-    let node = p.getNode(nodeId)
-    if node.isSome():
-      p.routingTable.removeNode(node.get())
       return true
-    else:
-      return false
 
-  rpcServer.rpc("portal_" & networkStr & "LookupEnr") do(nodeId: NodeId) -> Record:
-    let lookup = await p.resolve(nodeId)
-    if lookup.isSome():
-      return lookup.get().record
-    else:
-      raise newException(ValueError, "Record not found in DHT lookup.")
+    rpc("portal_" & networkStr & "GetEnr") do(nodeId: NodeId) -> Record:
+      if p.localNode.id == nodeId:
+        return p.localNode.record
 
-  rpcServer.rpc("portal_" & networkStr & "Ping") do(
-    enr: Record, payloadType: Opt[uint16], payload: Opt[UnknownPayload]
-  ) -> PingResult:
-    if payloadType.isSome() and payloadType.get() != CapabilitiesType:
-      # We only support sending the default CapabilitiesPayload for now.
-      # This is fine because according to the spec clients are only required
-      # to support the standard extensions.
-      raise payloadTypeNotSupportedError()
+      let node = p.getNode(nodeId)
+      if node.isSome():
+        return node.get().record
+      else:
+        raise newException(ValueError, "Record not in local routing table.")
 
-    if payload.isSome():
-      # We don't support passing in a custom payload. In order to implement
-      # this we use the empty UnknownPayload type which is defined in the spec
-      # as a json object with no required fields. Just using it here to indicate
-      # if an object was supplied or not and then throw the correct error if so.
-      raise userSpecifiedPayloadBlockedByClientError()
+    rpc("portal_" & networkStr & "DeleteEnr") do(nodeId: NodeId) -> bool:
+      # TODO: Adjust `removeNode` to accept NodeId as param and to return bool.
+      let node = p.getNode(nodeId)
+      if node.isSome():
+        p.routingTable.removeNode(node.get())
+        return true
+      else:
+        return false
 
-    let
-      node = toNodeWithAddress(enr)
-      pong = (await p.ping(node)).valueOr:
-        raise newException(ValueError, $error)
+    rpc("portal_" & networkStr & "LookupEnr") do(nodeId: NodeId) -> Record:
+      let lookup = await p.resolve(nodeId)
+      if lookup.isSome():
+        return lookup.get().record
+      else:
+        raise newException(ValueError, "Record not found in DHT lookup.")
 
-    let
-      (enrSeq, payloadType, capabilitiesPayload) = pong
-      clientInfo = capabilitiesPayload.client_info.asSeq()
-      payload = (
-        string.fromBytes(clientInfo),
-        capabilitiesPayload.data_radius,
-        capabilitiesPayload.capabilities.asSeq(),
-      )
+    rpc("portal_" & networkStr & "Ping") do(
+      enr: Record, payloadType: Opt[uint16], payload: Opt[UnknownPayload]
+    ) -> PingResult:
+      if payloadType.isSome() and payloadType.get() != CapabilitiesType:
+        # We only support sending the default CapabilitiesPayload for now.
+        # This is fine because according to the spec clients are only required
+        # to support the standard extensions.
+        raise payloadTypeNotSupportedError()
 
-    return PingResult(
-      enrSeq: EnrSeqNumber(enrSeq), payloadType: payloadType, payload: payload
-    )
+      if payload.isSome():
+        # We don't support passing in a custom payload. In order to implement
+        # this we use the empty UnknownPayload type which is defined in the spec
+        # as a json object with no required fields. Just using it here to indicate
+        # if an object was supplied or not and then throw the correct error if so.
+        raise userSpecifiedPayloadBlockedByClientError()
 
-  rpcServer.rpc("portal_" & networkStr & "FindNodes") do(
-    enr: Record, distances: seq[uint16]
-  ) -> seq[Record]:
-    let
-      node = toNodeWithAddress(enr)
-      nodes = await p.findNodes(node, distances)
-    if nodes.isErr():
-      raise newException(ValueError, $nodes.error)
-    else:
-      return nodes.get().map(
-          proc(n: Node): Record =
-            n.record
+      let
+        node = toNodeWithAddress(enr)
+        pong = (await p.ping(node)).valueOr:
+          raise newException(ValueError, $error)
+
+      let
+        (enrSeq, payloadType, capabilitiesPayload) = pong
+        clientInfo = capabilitiesPayload.client_info.asSeq()
+        payload = (
+          string.fromBytes(clientInfo),
+          capabilitiesPayload.data_radius,
+          capabilitiesPayload.capabilities.asSeq(),
         )
 
-  rpcServer.rpc("portal_" & networkStr & "RecursiveFindNodes") do(
-    nodeId: NodeId
-  ) -> seq[Record]:
-    let discovered = await p.lookup(nodeId)
-    return discovered.map(
-      proc(n: Node): Record =
-        n.record
-    )
+      return PingResult(
+        enrSeq: EnrSeqNumber(enrSeq), payloadType: payloadType, payload: payload
+      )
+
+    rpc("portal_" & networkStr & "FindNodes") do(
+      enr: Record, distances: seq[uint16]
+    ) -> seq[Record]:
+      let
+        node = toNodeWithAddress(enr)
+        nodes = await p.findNodes(node, distances)
+      if nodes.isErr():
+        raise newException(ValueError, $nodes.error)
+      else:
+        return nodes.get().map(
+            proc(n: Node): Record =
+              n.record
+          )
+
+    rpc("portal_" & networkStr & "RecursiveFindNodes") do(nodeId: NodeId) -> seq[Record]:
+      let discovered = await p.lookup(nodeId)
+      return discovered.map(
+        proc(n: Node): Record =
+          n.record
+      )

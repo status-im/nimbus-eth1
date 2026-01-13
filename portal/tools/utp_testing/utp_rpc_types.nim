@@ -8,25 +8,25 @@
 
 import
   std/[hashes, json],
-  json_rpc/jsonmarshal,
   stew/[byteutils, endians2],
   eth/p2p/discoveryv5/node,
-  eth/utp/[utp_discv5_protocol, utp_router]
+  eth/utp/[utp_discv5_protocol, utp_router],
+  web3/eth_json_marshal
 
-export jsonmarshal, json
+export eth_json_marshal, json
 
 type SKey* = object
   id*: uint16
   nodeId*: NodeId
 
-proc writeValue*(w: var JsonWriter[JrpcConv], v: SKey) {.gcsafe, raises: [IOError].} =
+proc writeValue*(w: var JsonWriter[EthJson], v: SKey) {.gcsafe, raises: [IOError].} =
   let hex = v.nodeId.toBytesBE().toHex()
   let numId = v.id.toBytesBE().toHex()
   let finalStr = hex & numId
   w.writeValue(finalStr)
 
 proc readValue*(
-    r: var JsonReader[JrpcConv], val: var SKey
+    r: var JsonReader[EthJson], val: var SKey
 ) {.gcsafe, raises: [IOError, JsonReaderError].} =
   let str = r.parseString()
   if str.len < 64:

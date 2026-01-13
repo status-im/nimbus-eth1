@@ -11,7 +11,7 @@ import json_rpc/rpcclient, ../rpc_types, ../rpc_discovery_api
 
 export rpc_types, rpc_discovery_api
 
-createRpcSigsFromNim(RpcClient):
+createRpcSigsFromNim(RpcClient, EthJson):
   # Discovery v5 json-rpc calls
   proc discv5_nodeInfo(): NodeInfo
   proc discv5_updateNodeInfo(kvPairs: seq[(string, string)]): RoutingTableInfo

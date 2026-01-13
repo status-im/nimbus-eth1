@@ -77,7 +77,7 @@ procSuite "Discovery v5 JSON-RPC API":
   asyncTest "Get local node info":
     let tc = await setupTest(rng)
     let jsonBytes = await tc.client.call("discv5_nodeInfo", %[])
-    let resp = JrpcConv.decode(jsonBytes.string, JsonNode)
+    let resp = EthJson.decode(jsonBytes.string, JsonNode)
 
     check:
       resp.contains("nodeId")
