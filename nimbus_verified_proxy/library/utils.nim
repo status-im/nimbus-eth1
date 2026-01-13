@@ -11,7 +11,6 @@ import
   std/[strutils],
   stint,
   stew/byteutils,
-  json_rpc/[jsonmarshal],
   web3/[conversions, eth_api_types],
   beacon_chain/spec/eth2_apis/eth2_rest_json_serialization,
   ../engine/types
@@ -51,13 +50,13 @@ func unpackArg*(
 
 func unpackArg*(arg: string, argType: type): Result[argType, string] {.raises: [].} =
   try:
-    ok(JrpcConv.decode(arg, argType))
+    ok(EthJson.decode(arg, argType))
   except CatchableError as e:
     err("Parameter of type " & $argType & " coudln't be decoded: " & e.msg)
 
 func packArg*[T](arg: T): Result[string, string] {.raises: [].} =
   try:
-    ok(JrpcConv.encode(arg))
+    ok(EthJson.encode(arg))
   except CatchableError as e:
     err("Parameter coudln't be encoded: " & e.msg)
 
