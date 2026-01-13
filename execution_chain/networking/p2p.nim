@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  std/[tables, algorithm, typetraits, strutils, net],
+  std/[tables, typetraits, strutils, net],
   chronos, chronos/timer, chronicles,
   eth/common/keys,
   eth/enode/enode,
@@ -150,7 +150,29 @@ proc addCapability*(node: EthereumNode,
                     networkState: RootRef = nil) =
   doAssert node.connectionState == ConnectionState.None
 
-  let pos = lowerBound(node.protocols, p, rlpx.cmp)
+  # Find insertion index `pos`.
+  #
+  # The array `node.protocols[]` is sorted by the capability fields with
+  # * <name>    -- sorted implicitely given by the registry order
+  # * <version> -- sorted numerically by highest version first
+  #
+  var pos = node.protocols.len
+  block findInsertionIndex:
+    for inx in 0 ..< node.protocols.len:
+      # Find clustered protocol family names
+      if p.capability.name == node.protocols[inx].capability.name:
+
+        # Get insertion point right before the next smaller version
+        pos = inx
+        while pos < node.protocols.len:
+          if node.protocols[pos].capability.name != p.capability.name or
+             node.protocols[pos].capability.version < p.capability.version:
+            break findInsertionIndex
+          if node.protocols[pos].capability.version == p.capability.version:
+            raiseAssert "Duplicate protocol registry for " & $p.capability
+          pos.inc
+        break findInsertionIndex
+
   node.protocols.insert(p, pos)
   node.capabilities.insert(p.capability, pos)
 

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -22,7 +22,8 @@ import
 suite "test receipts verification":
   let
     ts = TestApiState.init(1.u256)
-    engine = initTestEngine(ts, 1, 1)
+    engine = initTestEngine(ts, 1, 1).valueOr:
+      raise newException(TestProxyError, error.errMsg)
 
   test "get receipts using block tags":
     let
@@ -40,20 +41,30 @@ suite "test receipts verification":
       engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
 
     var verified = waitFor engine.frontend.eth_getBlockReceipts(numberTag)
-    check rxs == verified.get()
+    check:
+      verified.isOk()
+      verified.get().get() == rxs
 
     verified = waitFor engine.frontend.eth_getBlockReceipts(finalTag)
-    check rxs == verified.get()
+    check:
+      verified.isOk()
+      verified.get().get() == rxs
 
     verified = waitFor engine.frontend.eth_getBlockReceipts(earliestTag)
-    check rxs == verified.get()
+    check:
+      verified.isOk()
+      verified.get().get() == rxs
 
     verified = waitFor engine.frontend.eth_getBlockReceipts(latestTag)
-    check rxs == verified.get()
+    check:
+      verified.isOk()
+      verified.get().get() == rxs
 
     let verifiedReceipt =
       waitFor engine.frontend.eth_getTransactionReceipt(rxs[0].transactionHash)
-    check rxs[0] == verifiedReceipt
+    check:
+      verifiedReceipt.isOk()
+      verifiedReceipt.get() == rxs[0]
 
     ts.clear()
     engine.headerStore.clear()
@@ -93,7 +104,9 @@ suite "test receipts verification":
 
       ts.loadLogs(filterOptions, logs)
       let verifiedLogs = waitFor engine.frontend.eth_getLogs(filterOptions)
-      check verifiedLogs.len == logs.len
+      check:
+        verifiedLogs.isOk()
+        verifiedLogs.get().len == logs.len
 
     ts.clear()
     engine.headerStore.clear()
@@ -110,21 +123,25 @@ suite "test receipts verification":
           )
         ],
       blockHash: Opt.none(Hash32),
-    )
+    ) # create a filter
+    let newFilter = waitFor engine.frontend.eth_newFilter(filterOptions)
 
-    let
-      # create a filter
-      newFilter = waitFor engine.frontend.eth_newFilter(filterOptions)
-      # deleting will prove if the filter was created
-      delStatus = waitFor engine.frontend.eth_uninstallFilter(newFilter)
+    check newFilter.isOk()
 
-    check delStatus
+    # deleting will prove if the filter was created
+    let delStatus = waitFor engine.frontend.eth_uninstallFilter(newFilter.get())
+
+    check:
+      delStatus.isOk()
+      delStatus.get()
 
     let
       unknownFilterId = "thisisacorrectfilterid"
-      delStatus2 = waitFor engine.frontend.eth_uninstallFilter(newFilter)
+      delStatus2 = waitFor engine.frontend.eth_uninstallFilter(newFilter.get())
 
-    check not delStatus2
+    check:
+      delStatus.isOk()
+      not delStatus2.get()
 
   test "get logs using filter changes":
     let
@@ -154,20 +171,26 @@ suite "test receipts verification":
 
     ts.loadLogs(filterOptions, logs)
 
+    let newFilter = waitFor engine.frontend.eth_newFilter(filterOptions)
+
+    check newFilter.isOk()
+
     let
-      # create a filter
-      newFilter = waitFor engine.frontend.eth_newFilter(filterOptions)
-      filterLogs = waitFor engine.frontend.eth_getFilterLogs(newFilter)
-      filterChanges = waitFor engine.frontend.eth_getFilterChanges(newFilter)
+      filterLogs = waitFor engine.frontend.eth_getFilterLogs(newFilter.get())
+      filterChanges = waitFor engine.frontend.eth_getFilterChanges(newFilter.get())
 
-    check filterLogs.len == logs.len
-    check filterChanges.len == logs.len
+    check:
+      filterLogs.isOk()
+      filterLogs.get().len == logs.len
+      filterChanges.isOk()
+      filterChanges.get().len == logs.len
 
-    try:
-      let againFilterChanges = waitFor engine.frontend.eth_getFilterChanges(newFilter)
-      check false
-    except CatchableError:
-      check true
+    let againFilterChanges =
+      waitFor engine.frontend.eth_getFilterChanges(newFilter.get())
+
+    check:
+      againFilterChanges.isErr()
+      againFilterChanges.error.errType == UnavailableDataError
 
     ts.clear()
     engine.headerStore.clear()

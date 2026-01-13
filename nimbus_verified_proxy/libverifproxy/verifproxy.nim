@@ -1,5 +1,5 @@
 # nimbus_verified_proxy
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -141,9 +141,15 @@ template callbackToC(ctx: ptr Context, cb: CallBackProc, asyncCall: untyped) =
       task.finished = true
       task.status = RET_ERROR
     else:
-      task.response = Json.encode(fut.value())
-      task.finished = true
-      task.status = RET_SUCCESS
+      let res = fut.value()
+      if res.isErr():
+        task.response = $res.error.errType & ": " & res.error.errMsg
+        task.finished = true
+        task.status = RET_ERROR
+      else:
+        task.response = Json.encode(res.get())
+        task.finished = true
+        task.status = RET_SUCCESS
 
   task.fut = fut
 

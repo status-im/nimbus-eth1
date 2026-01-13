@@ -109,7 +109,7 @@ proc cmdExportEra1(config: ExporterConf) =
       var headerRecords: seq[historical_hashes_accumulator.HeaderRecord]
       for blockNumber in startNumber .. endNumber:
         let
-          (header, body, totalDifficulty) = (
+          (header, body, totalDifficultyOpt) = (
             waitFor noCancel(client.getBlockByNumber(blockId(blockNumber)))
           ).valueOr:
             error "Failed retrieving block, skip creation of era1 file",
@@ -121,6 +121,10 @@ proc cmdExportEra1(config: ExporterConf) =
             error "Failed retrieving receipts, skip creation of era1 file",
               blockNumber, error
             break writeFileBlock
+          totalDifficulty = totalDifficultyOpt.valueOr:
+            error "Pre-merge block request failed returning total difficulty, era1 file will not be fully valid",
+              blockNumber
+            0.u256
 
         headerRecords.add(
           historical_hashes_accumulator.HeaderRecord(

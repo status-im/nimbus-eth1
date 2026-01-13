@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -48,11 +48,8 @@ template chain(api: ServerAPIRef): ForkedChainRef =
 func newServerAPI*(txPool: TxPoolRef): ServerAPIRef =
   ServerAPIRef(txPool: txPool)
 
-proc getTotalDifficulty*(api: ServerAPIRef, blockHash: Hash32): UInt256 =
-  # TODO forkedchain!
-  let totalDifficulty = api.com.db.baseTxFrame().getScore(blockHash).valueOr:
-    return api.com.db.baseTxFrame().headTotalDifficulty()
-  return totalDifficulty
+proc getTotalDifficulty*(api: ServerAPIRef, blockHash: Hash32, header: Header): Opt[UInt256] =
+  api.txPool.chain.getTotalDifficulty(blockHash, header)
 
 proc getProof*(
     accDB: LedgerRef, address: Address, slots: seq[UInt256]
@@ -199,7 +196,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       return nil
 
     return populateBlockObject(
-      blockHash, blk, api.getTotalDifficulty(blockHash), fullTransactions
+      blockHash, blk, api.getTotalDifficulty(blockHash, blk.header), fullTransactions
     )
 
   server.rpc("eth_getBlockByNumber") do(
@@ -215,7 +212,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
     let blockHash = blk.header.computeBlockHash
     return populateBlockObject(
-      blockHash, blk, api.getTotalDifficulty(blockHash), fullTransactions
+      blockHash, blk, api.getTotalDifficulty(blockHash, blk.header), fullTransactions
     )
 
   server.rpc("eth_syncing") do() -> SyncingStatus:
@@ -688,7 +685,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       uncleHash = uncle.header.computeBlockHash
 
     return populateBlockObject(
-      uncleHash, uncle, api.getTotalDifficulty(uncleHash), false, true
+      uncleHash, uncle, api.getTotalDifficulty(uncleHash, uncle.header), false, true
     )
 
   server.rpc("eth_getUncleByBlockNumberAndIndex") do(
@@ -712,7 +709,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       uncleHash = uncle.header.computeBlockHash
 
     return populateBlockObject(
-      uncleHash, uncle, api.getTotalDifficulty(uncleHash), false, true
+      uncleHash, uncle, api.getTotalDifficulty(uncleHash, uncle.header), false, true
     )
 
   server.rpc("eth_config") do() -> EthConfigObject:

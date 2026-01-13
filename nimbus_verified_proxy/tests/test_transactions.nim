@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -34,7 +34,9 @@ suite "test transaction verification":
   test "check eth api methods":
     let
       ts = TestApiState.init(1.u256)
-      engine = initTestEngine(ts, 1, 1)
+      engine = initTestEngine(ts, 1, 1).valueOr:
+        raise newException(TestProxyError, error.errMsg)
+
         # defining port 8888 is a hack for addr in use errors
       blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Paris.json")
 
@@ -42,5 +44,8 @@ suite "test transaction verification":
       if tx.kind == tohTx:
         ts.loadTransaction(tx.tx.hash, tx.tx)
         let verifiedTx = waitFor engine.frontend.eth_getTransactionByHash(tx.tx.hash)
-        check verifiedTx == tx.tx
+        check:
+          verifiedTx.isOk()
+          verifiedTx.get() == tx.tx
+
         ts.clear()

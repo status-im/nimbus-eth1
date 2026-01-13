@@ -289,7 +289,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
           # Calculate the versioned hashes from the kzg commitments
           let versioned_hashes = mapIt(
             forkyBlck.message.body.blob_kzg_commitments,
-            engine_api.VersionedHash(kzg_commitment_to_versioned_hash(it)),
+            kzg_commitment_to_versioned_hash(it),
           )
           payloadResponse = await rpcClient.newPayload(
             payload, versioned_hashes, forkyBlck.message.parent_root.to(Hash32)
@@ -304,7 +304,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
             # Calculate the versioned hashes from the kzg commitments
             versioned_hashes = mapIt(
               forkyBlck.message.body.blob_kzg_commitments,
-              engine_api.VersionedHash(kzg_commitment_to_versioned_hash(it)),
+              kzg_commitment_to_versioned_hash(it),
             )
             # Execution Requests for Electra
             execution_requests = block:

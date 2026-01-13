@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -31,10 +31,9 @@ logScope:
 # ------------------------------------------------------------------------------
 
 proc addBeaconSyncProtocol(desc: BeaconSyncRef; PROTO: type) =
-  ## Add protocol and call back filter function for ethXX
+  ## Add protocol and call back filter & init functions for ethXX
   proc acceptPeer(peer: Peer): bool =
-    let state = peer.state(PROTO)
-    not state.isNil and state.initialized
+    peer.state(PROTO).initialized
 
   proc initWorker(worker: SyncPeerRef[BeaconCtxData,BeaconPeerData]) =
     when PROTO is eth68:
@@ -98,15 +97,22 @@ proc config*(
       ) =
   ## Complete `BeaconSyncRef` descriptor initialisation.
   ##
+  ## If the `snap` protocol is used as well, the argument `latestOnly` must be
+  ## set `true`. There can only be one active `eth` protocol version assuming
+  ## that the number of messages differ with the `eth` versions. Due to tight
+  ## packaging of message IDs, different `eth` protocol lengths lead to varying
+  ## `snap` message IDs depending on the `eth` version. To handle this is
+  ## currently unsupported.
+  ##
   ## Note that the `init()` constructor might have specified a configuration
   ## task to be run at the end of the `config()` function.
   ##
   doAssert desc.ctx.isNil # This can only run once
   desc.initSync(ethNode, maxPeers)
 
-  # Add most likely/highest priority protocol first. As of the current
-  # implementation, `eth68` descriptor(s) will not be fully initialised
-  # (i.e. `peer.state(eth68).isNil`) if `eth69` is available.
+  # The registration order for protocols is largely irrelevant, yet the first
+  # will always be compared with the activated protocol which is likely to be
+  # expected the latest version of the `eth` protocol family.
   desc.addBeaconSyncProtocol(eth69)
   desc.addBeaconSyncProtocol(eth68)
 

@@ -11,12 +11,10 @@
 {.push raises: [].}
 
 import
-  chronicles, chronos,
-  ./types,
-  ./requester,
-  ./broadcast,
-  ../../core/[chain, tx_pool, pooled_txs_rlp],
-  ../../networking/p2p
+  pkg/[chronicles, chronos],
+  ../../../core/[chain, tx_pool, pooled_txs_rlp],
+  ../../../networking/p2p,
+  ./[eth_broadcast, eth_types]
 
 logScope:
   topics = "eth-wire"
@@ -154,7 +152,8 @@ proc getBlockBodies*(ctx: EthWireRef,
     BlockBody(
       transactions: blk.transactions,
       uncles: blk.uncles,
-      withdrawals: blk.withdrawals
+      withdrawals: blk.withdrawals,
+      blockAccessList: blk.blockAccessList
     )
 
   for blockHash in hashes:
