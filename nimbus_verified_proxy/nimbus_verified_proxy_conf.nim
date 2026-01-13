@@ -1,5 +1,5 @@
 # nimbus_verified_proxy
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -43,9 +43,8 @@ type VerifiedProxyConf* = object
     name: "log-level"
   .}: string
 
-  logStdout* {.
-    hidden,
-    desc: "Specifies what kind of logs should be written to stdout (auto, colors, nocolors, json)",
+  logFormat* {.
+    desc: "Choice of log format (auto, colors, nocolors, json)"
     defaultValueDesc: "auto",
     defaultValue: StdoutLogKind.Auto,
     name: "log-format"
@@ -60,8 +59,8 @@ type VerifiedProxyConf* = object
 
   # Network
   eth2Network* {.
-    desc: "The Eth2 network to join",
-    defaultValueDesc: "mainnet",
+    desc: "Consensus network to join (mainnet, hoodi, sepolia, custom/path)"
+    defaultValueDesc: "mainnet"
     name: "network"
   .}: Option[string]
 

@@ -94,7 +94,7 @@ proc run(
     config: VerifiedProxyConf
 ) {.async: (raises: [ProxyError, CancelledError]), gcsafe.} =
   {.gcsafe.}:
-    setupLogging(config.logLevel, config.logStdout)
+    setupLogging(config.logLevel, config.logFormat)
 
     try:
       notice "Launching Nimbus verified proxy",

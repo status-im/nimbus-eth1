@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -34,11 +34,11 @@ JwtIatPayload.useDefaultSerializationIn JAuth
 
 {.push gcsafe, raises: [].}
 
-proc decodeJwtHeader*(jsonBytes: string): JwtHeader
+proc decodeJwtHeader*(jsonBytes: seq[byte]): JwtHeader
         {.gcsafe, raises: [SerializationError].} =
   JAuth.decode(jsonBytes, JwtHeader)
 
-proc decodeJwtIatPayload*(jsonBytes: string): JwtIatPayload
+proc decodeJwtIatPayload*(jsonBytes: seq[byte]): JwtIatPayload
         {.gcsafe, raises: [SerializationError].} =
   JAuth.decode(jsonBytes, JwtIatPayload)
 

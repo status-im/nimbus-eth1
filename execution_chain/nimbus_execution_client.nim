@@ -343,7 +343,7 @@ proc runExeClient*(
 # noinline to keep it in stack traces
 proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   # Set up logging before everything else
-  setupLogging(config.logLevel, config.logStdout)
+  setupLogging(config.logLevel, config.logFormat)
   setupFileLimits()
 
   info "Launching execution client", version = FullVersionStr, config
