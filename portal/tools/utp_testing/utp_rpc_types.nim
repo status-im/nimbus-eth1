@@ -11,9 +11,9 @@ import
   stew/[byteutils, endians2],
   eth/p2p/discoveryv5/node,
   eth/utp/[utp_discv5_protocol, utp_router],
-  web3/conversions
+  web3/eth_json_marshal
 
-export conversions, json
+export eth_json_marshal, json
 
 type SKey* = object
   id*: uint16

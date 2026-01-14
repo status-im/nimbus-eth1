@@ -14,9 +14,9 @@ import
   results,
   eth/p2p/discoveryv5/[routing_table, node],
   json_serialization/pkg/results,
-  web3/conversions
+  web3/eth_json_marshal
 
-export conversions, routing_table, enr, node, results
+export eth_json_marshal, routing_table, enr, node, results
 
 # Portal Network JSON-RPC errors
 
