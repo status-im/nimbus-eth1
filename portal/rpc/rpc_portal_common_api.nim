@@ -42,7 +42,9 @@ proc installPortalCommonApiHandlers*(
     else:
       false
 
-  rpcServer.rpc("portal_" & networkStr & "AddEnrs", EthJson) do(enrs: seq[Record]) -> bool:
+  rpcServer.rpc("portal_" & networkStr & "AddEnrs", EthJson) do(
+    enrs: seq[Record]
+  ) -> bool:
     # Note: unspecified RPC, but useful for our local testnet test
     for enr in enrs:
       let node = Node.fromRecord(enr)
@@ -61,7 +63,9 @@ proc installPortalCommonApiHandlers*(
     else:
       raise newException(ValueError, "Record not in local routing table.")
 
-  rpcServer.rpc("portal_" & networkStr & "DeleteEnr", EthJson) do(nodeId: NodeId) -> bool:
+  rpcServer.rpc("portal_" & networkStr & "DeleteEnr", EthJson) do(
+    nodeId: NodeId
+  ) -> bool:
     # TODO: Adjust `removeNode` to accept NodeId as param and to return bool.
     let node = p.getNode(nodeId)
     if node.isSome():
@@ -70,7 +74,9 @@ proc installPortalCommonApiHandlers*(
     else:
       return false
 
-  rpcServer.rpc("portal_" & networkStr & "LookupEnr", EthJson) do(nodeId: NodeId) -> Record:
+  rpcServer.rpc("portal_" & networkStr & "LookupEnr", EthJson) do(
+    nodeId: NodeId
+  ) -> Record:
     let lookup = await p.resolve(nodeId)
     if lookup.isSome():
       return lookup.get().record

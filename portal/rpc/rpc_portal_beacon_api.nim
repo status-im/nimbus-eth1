@@ -73,7 +73,9 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
     SSZ.encode(offerResult).to0xHex()
 
-  rpcServer.rpc("portal_beaconGetContent", EthJson) do(contentKey: string) -> ContentInfo:
+  rpcServer.rpc("portal_beaconGetContent", EthJson) do(
+    contentKey: string
+  ) -> ContentInfo:
     let
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(keyBytes).valueOr:

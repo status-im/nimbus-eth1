@@ -194,16 +194,22 @@ proc injectEngineFrontend*(server: JsonRpcServer, frontend: EthApiFrontend) =
   ) -> seq[LogObject]:
     unpackEngineResult(await frontend.eth_getLogs(filterOptions))
 
-  server.getServer().rpc("eth_newFilter", EthJson) do(filterOptions: FilterOptions) -> string:
+  server.getServer().rpc("eth_newFilter", EthJson) do(
+    filterOptions: FilterOptions
+  ) -> string:
     unpackEngineResult(await frontend.eth_newFilter(filterOptions))
 
   server.getServer().rpc("eth_uninstallFilter", EthJson) do(filterId: string) -> bool:
     unpackEngineResult(await frontend.eth_uninstallFilter(filterId))
 
-  server.getServer().rpc("eth_getFilterLogs", EthJson) do(filterId: string) -> seq[LogObject]:
+  server.getServer().rpc("eth_getFilterLogs", EthJson) do(
+    filterId: string
+  ) -> seq[LogObject]:
     unpackEngineResult(await frontend.eth_getFilterLogs(filterId))
 
-  server.getServer().rpc("eth_getFilterChanges", EthJson) do(filterId: string) -> seq[LogObject]:
+  server.getServer().rpc("eth_getFilterChanges", EthJson) do(
+    filterId: string
+  ) -> seq[LogObject]:
     unpackEngineResult(await frontend.eth_getFilterChanges(filterId))
 
   server.getServer().rpc("eth_blobBaseFee", EthJson) do() -> UInt256:
@@ -222,7 +228,9 @@ proc injectEngineFrontend*(server: JsonRpcServer, frontend: EthApiFrontend) =
       await frontend.eth_feeHistory(blockCount, newestBlock, rewardPercentiles)
     )
 
-  server.getServer().rpc("eth_sendRawTransaction", EthJson) do(txBytes: seq[byte]) -> Hash32:
+  server.getServer().rpc("eth_sendRawTransaction", EthJson) do(
+    txBytes: seq[byte]
+  ) -> Hash32:
     unpackEngineResult(await frontend.eth_sendRawTransaction(txBytes))
 
 proc stop*(server: JsonRpcServer) {.async: (raises: []).} =

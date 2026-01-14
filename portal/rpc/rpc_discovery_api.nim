@@ -30,7 +30,9 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Proto
   rpcServer.rpc("discv5_nodeInfo", EthJson) do() -> NodeInfo:
     return d.routingTable.getNodeInfo()
 
-  rpcServer.rpc("discv5_updateNodeInfo", EthJson) do(kvPairs: seq[(string, string)]) -> NodeInfo:
+  rpcServer.rpc("discv5_updateNodeInfo", EthJson) do(
+    kvPairs: seq[(string, string)]
+  ) -> NodeInfo:
     # TODO: Not according to spec, as spec only allows socket address.
     # portal-specs PR has been created with suggested change as is here.
     let enrFields = kvPairs.map(
@@ -113,7 +115,9 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Proto
             n.record
         )
 
-  rpcServer.rpc("discv5_talkReq", EthJson) do(enr: Record, protocol, payload: string) -> string:
+  rpcServer.rpc("discv5_talkReq", EthJson) do(
+    enr: Record, protocol, payload: string
+  ) -> string:
     let
       node = toNodeWithAddress(enr)
       talkresp = await d.talkReq(node, hexToSeqByte(protocol), hexToSeqByte(payload))

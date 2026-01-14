@@ -41,7 +41,9 @@ TraceResponse.useDefaultSerializationIn EthJson
 # less code duplication + automatic retries, but the specific error messages + extra content
 # info would need to be added to the existing calls.
 proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
-  rpcServer.rpc("portal_historyGetContent", EthJson) do(contentKeyBytes: string) -> ContentInfo:
+  rpcServer.rpc("portal_historyGetContent", EthJson) do(
+    contentKeyBytes: string
+  ) -> ContentInfo:
     let
       contentKeyByteList = ContentKeyByteList.init(hexToSeqByte(contentKeyBytes))
       contentKey = decode(contentKeyByteList).valueOr:
@@ -132,7 +134,9 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
 
     n.portalProtocol.storeContent(contentKeyByteList, contentId, offerValueBytes)
 
-  rpcServer.rpc("portal_historyLocalContent", EthJson) do(contentKeyBytes: string) -> string:
+  rpcServer.rpc("portal_historyLocalContent", EthJson) do(
+    contentKeyBytes: string
+  ) -> string:
     let
       contentKeyByteList = ContentKeyByteList.init(hexToSeqByte(contentKeyBytes))
       contentId = n.portalProtocol.toContentId(contentKeyByteList).valueOr:
