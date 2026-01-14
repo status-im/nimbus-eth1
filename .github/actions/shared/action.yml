@@ -140,7 +140,7 @@ runs:
       if: inputs.nim-cache == 'true'
       shell: bash
       run: |
-        make -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinCache init
+        make -j${ncpu} NIM_COMMIT=${{ matrix.branch }} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinCache init
 
     - name: Get latest nim-rocksdb commit hash
       if: inputs.rocksdb-cache == 'true'

@@ -57,7 +57,7 @@ jobs:
       run:
         shell: bash
 
-    name: '${{ matrix.os }}-${{ matrix.cpu }}'
+    name: ${{ matrix.os }}-${{ matrix.cpu }}${{ matrix.branch != '' && ' (Nim ' || '' }}${{ matrix.branch-short }}${{ matrix.branch != '' && ')' || '' }}
     runs-on: ${{ matrix.builder }}
     steps:
       - name: Checkout nimbus-eth1
