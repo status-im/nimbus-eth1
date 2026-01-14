@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -15,7 +15,8 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../core/chain,
   ../networking/p2p,
-  ./snap/[snap_desc, worker, worker/classify],
+  ./snap/[snap_desc, worker],
+  ./snap/worker/helpers,
   ./[sync_sched, wire_protocol]
 
 from ./beacon
@@ -53,8 +54,7 @@ proc runPool(buddy: SnapPeerRef; last: bool; laps: int): bool =
   worker.runPool(buddy, last, laps, "SyncMode")
 
 proc runPeer(buddy: SnapPeerRef): Future[Duration] {.async: (raises: []).} =
-  let rank = buddy.classifyForFetching()
-  return worker.runPeer(buddy, rank, "Peer")
+  return worker.runPeer(buddy, "Peer")
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -93,7 +93,11 @@ proc configTarget*(desc: SnapSyncRef; hex: string): bool =
   ## Set up inital target root (if any, mainly for debugging)
   doAssert not desc.ctx.isNil
   try:
-    desc.ctx.pool.initBlockHash = Hash32.fromHex(hex)
+    var target: SnapTarget
+    if desc.ctx.pool.target.isSome():
+      target = desc.ctx.pool.target.value
+    target.blockHash = BlockHash(Hash32.fromHex(hex))
+    desc.ctx.pool.target = Opt.some(target)
     return true
   except ValueError:
     discard
@@ -103,7 +107,11 @@ proc configUpdateFile*(desc: SnapSyncRef; file: string): bool =
   ## Update file containing the target
   doAssert not desc.ctx.isNil
   if 0 < file.len:
-    desc.ctx.pool.stateUpdateFile = file
+    var target: SnapTarget
+    if desc.ctx.pool.target.isSome():
+      target = desc.ctx.pool.target.value
+    target.updateFile = file
+    desc.ctx.pool.target = Opt.some(target)
     return true
   # false
 
