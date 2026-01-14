@@ -29,7 +29,7 @@ EEST_DEVNET_URL="https://github.com/ethereum/execution-spec-tests/releases/downl
 
 # --- BAL Release ---
 EEST_BAL_NAME="bal"
-EEST_BAL_VERSION="v2.0.0"
+EEST_BAL_VERSION="v3.0.1"
 EEST_BAL_DIR="${FIXTURES_DIR}/eest_bal"
 EEST_BAL_ARCHIVE="fixtures_bal.tar.gz"
 EEST_BAL_URL="https://github.com/ethereum/execution-spec-tests/releases/download/${EEST_BAL_NAME}%40${EEST_BAL_VERSION}/${EEST_BAL_ARCHIVE}"
