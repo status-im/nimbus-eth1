@@ -63,6 +63,15 @@ jobs:
       - name: Checkout nimbus-eth1
         uses: actions/checkout@v4
 
+      - name: Clean up disk space
+        if: runner.os == 'Linux'
+        run: |
+          sudo rm -rf /usr/lib/jvm || true
+          sudo rm -rf /usr/local/.ghcup || true
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /usr/share/dotnet || true
+          sudo rm -rf /usr/share/swift || true
+
       - id: shared-action
         uses: ./.github/actions/shared
         with:
