@@ -82,6 +82,7 @@ jobs:
 
       - name: Run nimbus-eth1 tests
         run: |
+          ./env.sh nim --version
           gcc --version
           #export ZERO_AR_DATE=1 # avoid timestamps in binaries
           DEFAULT_MAKE_FLAGS="-j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache"
