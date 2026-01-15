@@ -391,35 +391,23 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   of NimbusCmd.`import`:
     importBlocks(config, com)
   else:
-    let
-      runArchiveImport = config.era1DirFlag.isSome or config.eraDirFlag.isSome
-      runRlpImport = config.bootstrapBlocksFile.len > 0
+    let runRlpImport = config.bootstrapBlocksFile.len > 0
 
-    if runArchiveImport or runRlpImport:
-      notice "Pre-start import requested", archives = runArchiveImport, rlp = runRlpImport
+    if runRlpImport:
+      var files: seq[string]
+      for blocksFile in config.bootstrapBlocksFile:
+        files.add string(blocksFile)
 
-      if runArchiveImport and runRlpImport:
-        fatal "Cannot combine archive imports with bootstrap RLP imports in a single start",era1Dir = config.era1Dir, eraDir = config.eraDir, bootstrapFiles = config.bootstrapBlocksFile.len
-        quit(QuitFailure)
+      notice "Pre-start RLP import", files = files, finalized = config.bootstrapBlocksFinalized
 
-      if runArchiveImport:
-        warn "Archive bootstrap import is disabled for era ", era1Dir = config.era1Dir, eraDir = config.eraDir
+      try:
+        (waitFor importRlpFiles(files, com, config.bootstrapBlocksFinalized)).isOkOr:
+          fatal "Failed importing bootstrap RLP blocks", msg = error, finalized = config.bootstrapBlocksFinalized
+          quit(QuitFailure)
+      except CancelledError:
+        raiseAssert "Bootstrap import future should not be cancelled"
 
-      if runRlpImport:
-        var files: seq[string]
-        for blocksFile in config.bootstrapBlocksFile:
-          files.add string(blocksFile)
-
-        debug "Starting bootstrap RLP import", files = files, finalized = config.bootstrapBlocksFinalized
-
-        try:
-          (waitFor importRlpFiles(files, com, config.bootstrapBlocksFinalized)).isOkOr:
-            fatal "Failed importing bootstrap RLP blocks", msg = error, finalized = config.bootstrapBlocksFinalized
-            quit(QuitFailure)
-        except CancelledError:
-          raiseAssert "Bootstrap import future should not be cancelled"
-
-      notice "Pre-start import complete"
+      notice "Pre-start RLP import complete"
 
     runExeClient(config, com, nil, nimbus=nimbus)
 
