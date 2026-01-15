@@ -22,10 +22,8 @@ import
 # Only parse the RLP data and feed blocks into the ForkedChainRef.
 # Optionally finalize via fork-choice when requested.
 proc importRlpBlocks*(
-    blocksRlp: seq[byte],
-    chain: ForkedChainRef,
-    finalize: bool
-  ): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
+    blocksRlp: seq[byte], chain: ForkedChainRef, finalize: bool
+): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   var
     # the encoded rlp can contain one or more blocks
     rlp = rlpFromBytes(blocksRlp)
@@ -34,11 +32,12 @@ proc importRlpBlocks*(
     firstSkip = Opt.none(uint64)
 
   while not ProcessState.stopIt(notice("Shutting down", reason = it)) and rlp.hasData:
-    blk = try:
-      rlp.read(Block)
-    except RlpError as e:
-      # terminate if there was a decoding error
-      return err($e.name & ": " & e.msg)
+    blk =
+      try:
+        rlp.read(Block)
+      except RlpError as e:
+        # terminate if there was a decoding error
+        return err($e.name & ": " & e.msg)
 
     if blk.header.number <= chain.baseNumber:
       if firstSkip.isNone:
@@ -47,56 +46,50 @@ proc importRlpBlocks*(
 
     if firstSkip.isSome:
       if firstSkip.get == blk.header.number - 1:
-        info "Block number smaller than base",
-          skip=firstSkip.get
+        info "Block number smaller than base", skip = firstSkip.get
       else:
         info "Block number smaller than base",
-          startSkip=firstSkip.get,
-          skipTo=blk.header.number-1
+          startSkip = firstSkip.get, skipTo = blk.header.number - 1
       firstSkip.reset()
 
     if not printBanner:
       info "Start importing block",
-        hash=blk.header.computeBlockHash.short,
-        number=blk.header.number
+        hash = blk.header.computeBlockHash.short, number = blk.header.number
       printBanner = true
 
     let res = await chain.importBlock(blk)
     if res.isErr:
       error "Error occurred when importing block",
-        hash=blk.header.computeBlockHash.short,
-        number=blk.header.number,
-        msg=res.error
+        hash = blk.header.computeBlockHash.short,
+        number = blk.header.number,
+        msg = res.error
       if finalize:
-        ? (await chain.forkChoice(chain.latestHash, chain.latestHash))
+        ?(await chain.forkChoice(chain.latestHash, chain.latestHash))
       return res
 
   if finalize:
-    ? (await chain.forkChoice(chain.latestHash, chain.latestHash))
+    ?(await chain.forkChoice(chain.latestHash, chain.latestHash))
 
   ok()
 
 proc importRlpBlocks*(
-    importFile: string,
-    chain: ForkedChainRef,
-    finalize: bool
-  ): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
+    importFile: string, chain: ForkedChainRef, finalize: bool
+): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   let bytes = io2.readAllBytes(importFile).valueOr:
     return err($error)
   await importRlpBlocks(bytes, chain, finalize)
 
-proc importRlpBlocks*(config: ExecutionClientConf, com: CommonRef): Future[void] {.async: (raises: [CancelledError]).} =
+proc importRlpBlocks*(
+    config: ExecutionClientConf, com: CommonRef
+): Future[void] {.async: (raises: [CancelledError]).} =
   if config.bootstrapBlocksFile.len == 0:
     return
 
-  var files: seq[string]
-  for blocksFile in config.bootstrapBlocksFile:
-    files.add string(blocksFile)
-
   let chain = ForkedChainRef.init(com, baseDistance = 0, persistBatchSize = 1)
 
-  for blocksFile in files:
-    (await importRlpBlocks(blocksFile, chain, config.bootstrapBlocksFinalized)).isOkOr:
+  for blocksFile in config.bootstrapBlocksFile:
+    let filePath = string(blocksFile)
+    (await importRlpBlocks(filePath, chain, config.bootstrapBlocksFinalized)).isOkOr:
       warn "Error when importing blocks", msg = error
       if config.bootstrapBlocksFinalized:
         (await chain.forkChoice(chain.latestHash, chain.latestHash)).isOkOr:
