@@ -102,16 +102,64 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
   )
 
   ## Network configuration
+  ##
+  ## - bind IP is dual stack:
+  ##  - both enrIpv6Address and nat:extip set: use those
+  ##  - only nat:extip set: use nat:extip for v4 and getBestRoute for v6
+  ##  - only enrIpv6Address set: use enrIpv6Address for v6 and getBestRoute + nat for v4
+  ##  - none set: use getBestRoute + nat for v4 and getBestRoute for v6
+  ## - bind IP is only v4:
+  ##  - nat:extip set: use nat:extip for v4
+  ##  - none set: use getBestRoute + nat for v4
+  ## - bind IP is only v6:
+  ##  - enrIpv6Address set: use enrIpv6Address for v6
+  ##  - none set: use getBestRoute for v6
+
   let
-    bindIp = config.listenAddress
     udpPort = Port(config.udpPort)
-    (extIp, extPorts) = setupAddress(
-      config.nat,
-      config.listenAddress,
-      @[(port: udpPort, protocol: PortProtocol.UDP)],
-      "nimbus_portal_client",
-    )
-    extUdpPort = extPorts[0].toPort()
+    listenAddress =
+      if config.listenAddress.isSome():
+        config.listenAddress.get()
+      else:
+        getAutoAddress(Port(0)).toIpAddress()
+
+    (extIp4, extIp6, extUdpPort) =
+      if listenAddress == AnyAddress6.toIpAddress():
+        let
+          extIp6 =
+            if config.enrIpv6Address.isSome():
+              Opt.some(config.enrIpv6Address.get())
+            else:
+              getRoutePrefSrcv6(listenAddress)
+
+          (extIp4, extPorts) = setupAddress(
+            config.nat,
+            listenAddress,
+            @[(port: udpPort, protocol: PortProtocol.UDP)],
+            "nimbus_portal_client",
+          )
+          extUdpPort = extPorts[0].toPort()
+
+        (extIp4, extIp6, extUdpPort)
+      elif listenAddress.family == IpAddressFamily.IPv6:
+        let extIp6 =
+          if config.enrIpv6Address.isSome():
+            Opt.some(config.enrIpv6Address.get())
+          else:
+            getRoutePrefSrcv6(listenAddress)
+        (Opt.none(IpAddress), extIp6, Opt.some(udpPort))
+      else: # listenAddress.family == IpAddressFamily.IPv4
+        let
+          (extIp4, extPorts) = setupAddress(
+            config.nat,
+            listenAddress,
+            @[(port: udpPort, protocol: PortProtocol.UDP)],
+            "nimbus_portal_client",
+          )
+          extUdpPort = extPorts[0].toPort()
+
+        (extIp4, Opt.none(IpAddress), extUdpPort)
+
     (netkey, newNetKey) =
       if config.networkKey.isSome():
         (config.networkKey.get(), true)
@@ -146,7 +194,10 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
     )
     d = newProtocol(
       netkey,
-      extIp,
+      extIp4,
+      Opt.none(Port),
+      extUdpPort,
+      extIp6,
       Opt.none(Port),
       extUdpPort,
       # Note: usage of the client field "c" is replaced with ping extensions client_info.
@@ -157,7 +208,7 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
       ],
       bootstrapRecords = bootstrapRecords,
       previousRecord = previousEnr,
-      bindIp = bindIp,
+      bindIp = Opt.some(listenAddress),
       bindPort = udpPort,
       enrAutoUpdate = config.enrAutoUpdate,
       config = discoveryConfig,

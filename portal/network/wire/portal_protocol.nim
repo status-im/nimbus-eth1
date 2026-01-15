@@ -909,7 +909,7 @@ proc findNodes*(
 
   let records = ?recordsFromBytes(response.enrs)
   ok(
-    verifyNodesRecords(records, dst, enrsResultLimit, distances).filterIt(
+    verifyNodesRecords(records, dst, p.localNode, enrsResultLimit, distances).filterIt(
       not p.isBanned(it.id)
     )
   )
@@ -987,7 +987,7 @@ proc findContent*(
     )
   of enrsType:
     let records = ?recordsFromBytes(response.enrs)
-    let verifiedNodes = verifyNodesRecords(records, dst, enrsResultLimit)
+    let verifiedNodes = verifyNodesRecords(records, dst, p.localNode, enrsResultLimit)
 
     ok(
       FoundContent(
