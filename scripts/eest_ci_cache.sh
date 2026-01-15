@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2025 Status Research & Development GmbH.
+# Copyright (c) 2025-2026 Status Research & Development GmbH.
 # Licensed under either of:
 # - Apache License, version 2.0
 # - MIT license
@@ -15,7 +15,7 @@ FIXTURES_DIR="${REPO_DIR}/tests/fixtures"
 
 # --- Current Release Develop ---
 EEST_DEVELOP_NAME="Mainnet Develop"
-EEST_DEVELOP_VERSION="v5.3.0"
+EEST_DEVELOP_VERSION="v5.4.0"
 EEST_DEVELOP_DIR="${FIXTURES_DIR}/eest_develop"
 EEST_DEVELOP_ARCHIVE="fixtures_develop.tar.gz"
 EEST_DEVELOP_URL="https://github.com/ethereum/execution-spec-tests/releases/download/${EEST_DEVELOP_VERSION}/${EEST_DEVELOP_ARCHIVE}"
