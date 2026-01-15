@@ -391,23 +391,11 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   of NimbusCmd.`import`:
     importBlocks(config, com)
   else:
-    let runRlpImport = config.bootstrapBlocksFile.len > 0
-
-    if runRlpImport:
-      var files: seq[string]
-      for blocksFile in config.bootstrapBlocksFile:
-        files.add string(blocksFile)
-
-      notice "Pre-start RLP import", files = files, finalized = config.bootstrapBlocksFinalized
-
+    if config.bootstrapBlocksFile.len > 0:
       try:
-        (waitFor importRlpFiles(files, com, config.bootstrapBlocksFinalized)).isOkOr:
-          fatal "Failed importing bootstrap RLP blocks", msg = error, finalized = config.bootstrapBlocksFinalized
-          quit(QuitFailure)
+        waitFor importRlpBlocks(config, com)
       except CancelledError:
-        raiseAssert "Bootstrap import future should not be cancelled"
-
-      notice "Pre-start RLP import complete"
+        raiseAssert "Nothing cancels the future"
 
     runExeClient(config, com, nil, nimbus=nimbus)
 

@@ -12,22 +12,22 @@
 import
   chronicles,
   eth/rlp,
-  eth/common,
   stew/io2,
   chronos,
   ./chain,
   ../conf,
-  ../utils/utils,
   beacon_chain/process_state,
   ./chain/forked_chain/chain_serialize
 
-# Only parse the RLP data and feeds blocks into the ForkedChainRef
-# Dont make any fork-choice calls here
-proc importRlpBlocks*(blocksRlp: seq[byte],
-                      chain: ForkedChainRef):
-                        Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
+# Only parse the RLP data and feed blocks into the ForkedChainRef.
+# Optionally finalize via fork-choice when requested.
+proc importRlpBlocks*(
+    blocksRlp: seq[byte],
+    chain: ForkedChainRef,
+    finalize: bool
+  ): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   var
-    # the encoded rlp can contains one or more blocks
+    # the encoded rlp can contain one or more blocks
     rlp = rlpFromBytes(blocksRlp)
     blk: Block
     printBanner = false
@@ -63,63 +63,48 @@ proc importRlpBlocks*(blocksRlp: seq[byte],
 
     let res = await chain.importBlock(blk)
     if res.isErr:
-      error "Error occured when importing block",
+      error "Error occurred when importing block",
         hash=blk.header.computeBlockHash.short,
         number=blk.header.number,
         msg=res.error
+      if finalize:
+        ? (await chain.forkChoice(chain.latestHash, chain.latestHash))
       return res
 
+  if finalize:
+    ? (await chain.forkChoice(chain.latestHash, chain.latestHash))
+
   ok()
 
-proc importRlpBlocks*(importFile: string,
-                     chain: ForkedChainRef): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
+proc importRlpBlocks*(
+    importFile: string,
+    chain: ForkedChainRef,
+    finalize: bool
+  ): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   let bytes = io2.readAllBytes(importFile).valueOr:
     return err($error)
-  await importRlpBlocks(bytes, chain)
+  await importRlpBlocks(bytes, chain, finalize)
 
-# Handle the  fork-choice update
-proc finalizeImportedChain(
-    chain: ForkedChainRef,
-    treatSegmentFinalized: bool
-  ): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
-  let headHash = chain.latestHash
-  var finalizedHash =
-    if treatSegmentFinalized:
-      headHash
-    else:
-      chain.resolvedFinHash()
-  # for when chain is brand new, fall back to the current base hash
-  if finalizedHash == Hash32.default:
-    finalizedHash = chain.baseHash()
+proc importRlpBlocks*(config: ExecutionClientConf, com: CommonRef): Future[void] {.async: (raises: [CancelledError]).} =
+  if config.bootstrapBlocksFile.len == 0:
+    return
 
-  (await chain.forkChoice(headHash, finalizedHash)).isOkOr:
-    return err(error)
-  ok()
-
-proc importRlpFiles*(
-    files: seq[string],
-    com: CommonRef,
-    treatSegmentFinalized: bool
-  ): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
-  if files.len == 0:
-    return ok()
+  var files: seq[string]
+  for blocksFile in config.bootstrapBlocksFile:
+    files.add string(blocksFile)
 
   let chain = ForkedChainRef.init(com, baseDistance = 0, persistBatchSize = 1)
 
   for blocksFile in files:
-    (await importRlpBlocks(blocksFile, chain)).isOkOr:
-      let errMsg = error
-      (await finalizeImportedChain(chain, true)).isOkOr:
-        error "Error when finalizing chain after import failure", msg=error
-      return err(errMsg)
-
-  (await finalizeImportedChain(chain, treatSegmentFinalized)).isOkOr:
-    return err(error)
+    (await importRlpBlocks(blocksFile, chain, config.bootstrapBlocksFinalized)).isOkOr:
+      warn "Error when importing blocks", msg = error
+      if config.bootstrapBlocksFinalized:
+        (await chain.forkChoice(chain.latestHash, chain.latestHash)).isOkOr:
+          error "Error when finalizing chain", msg = error
+      quit(QuitFailure)
 
   let txFrame = chain.baseTxFrame
   chain.serialize(txFrame).isOkOr:
-    return err("FC.serialize error: " & ($error))
+    error "FC.serialize error: ", msg = error
   txFrame.checkpoint(chain.base.blk.header.number, skipSnapshot = true)
   com.db.persist(txFrame)
-
-  ok()
