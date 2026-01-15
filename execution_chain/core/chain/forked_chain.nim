@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -8,7 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   std/[tables, algorithm, strformat],
@@ -78,7 +78,7 @@ func appendBlock(c: ForkedChainRef,
   c.heads.add newBlock
   newBlock
 
-proc fcuSetHead(c: ForkedChainRef,
+func fcuSetHead(c: ForkedChainRef,
                 txFrame: CoreDbTxRef,
                 header: Header,
                 hash: Hash32,
@@ -196,7 +196,7 @@ func calculateNewBase(
 
   doAssert(false, "Unreachable code, target base should exists")
 
-proc removeBlockFromCache(c: ForkedChainRef, b: BlockRef) =
+func removeBlockFromCache(c: ForkedChainRef, b: BlockRef) =
   c.hashToBlock.del(b.hash)
   for tx in b.blk.transactions:
     c.txRecords.del(computeRlpHash(tx))
@@ -210,7 +210,7 @@ proc removeBlockFromCache(c: ForkedChainRef, b: BlockRef) =
   # Clear parent and let GC claim the memory earlier
   b.parent = nil
 
-proc updateHead(c: ForkedChainRef, head: BlockRef) =
+func updateHead(c: ForkedChainRef, head: BlockRef) =
   ## Update head if the new head is different from current head.
 
   c.fcuSetHead(head.txFrame,
@@ -218,7 +218,7 @@ proc updateHead(c: ForkedChainRef, head: BlockRef) =
     head.hash,
     head.number)
 
-proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) =
+func updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) =
   # Pruning
   # ::
   #                       - B5 - B6 - B7 - B8
@@ -617,6 +617,7 @@ proc init*(
     persistBatchSize = PersistBatchSize;
     dynamicBatchSize = false;
     eagerStateRoot = false;
+    maxBlobs = none(uint8);
     enableQueue = false;
       ): T =
   ## Constructor that uses the current database ledger state for initialising.
@@ -658,6 +659,7 @@ proc init*(
       baseDistance:     baseDistance,
       persistBatchSize: persistBatchSize,
       dynamicBatchSize: dynamicBatchSize,
+      maxBlobs:         maxBlobs,
       quarantine:       Quarantine.init(),
       fcuHead:          fcuHead,
       fcuSafe:          fcuSafe,

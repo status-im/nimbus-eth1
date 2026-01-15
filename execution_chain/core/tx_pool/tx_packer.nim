@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -12,7 +12,7 @@
 ## =============================================================
 ##
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   stew/sorted_set,
@@ -76,14 +76,14 @@ proc classifyValidatePacked(vmState: BaseVMState; item: TxItemRef): bool =
   roDB.validateTransaction(
     item.tx, item.sender, gasLimit, baseFee, excessBlobGas, vmState.com, fork).isOk
 
-proc classifyPacked(vmState: BaseVMState; moreBurned: GasInt): bool =
+func classifyPacked(vmState: BaseVMState; moreBurned: GasInt): bool =
   ## Classifier for *packing* (i.e. adding up `gasUsed` values after executing
   ## in the VM.) This function checks whether the sum of the arguments
   ## `gasBurned` and `moreGasBurned` is within acceptable constraints.
   let totalGasUsed = vmState.cumulativeGasUsed + moreBurned
   totalGasUsed < vmState.blockCtx.gasLimit
 
-proc classifyPackedNext(vmState: BaseVMState): bool =
+func classifyPackedNext(vmState: BaseVMState): bool =
   ## Classifier for *packing* (i.e. adding up `gasUsed` values after executing
   ## in the VM.) This function returns `true` if the packing level is still
   ## low enough to proceed trying to accumulate more items.
@@ -166,7 +166,15 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
     if vmState.fork >= FkOsaka and item.tx.versionedHashes.len.uint64 > MAX_BLOBS_PER_TX:
       return ContinueWithNextAccount
 
-    let maxBlobsPerBlock = getMaxBlobsPerBlock(vmState.com, vmState.fork)
+    let
+      maxForkBlobsPerBlock = getMaxBlobsPerBlock(vmState.com, vmState.fork)
+      maxBlobsPerBlock =
+        if xp.chain.maxBlobs.isSome:
+          # https://eips.ethereum.org/EIPS/eip-7872#specification
+          # "If the minimum is zero, set the minimum to one."
+          min(max(xp.chain.maxBlobs.get, 1).uint64, maxForkBlobsPerBlock)
+        else:
+          maxForkBlobsPerBlock
     if (pst.numBlobPerBlock + item.tx.versionedHashes.len).uint64 > maxBlobsPerBlock:
       return ContinueWithNextAccount
 
@@ -265,7 +273,7 @@ func getExtraData(com: CommonRef): seq[byte] =
   else:
     com.extraData.toBytes
 
-proc assembleHeader*(pst: TxPacker, xp: TxPoolRef): Header =
+func assembleHeader*(pst: TxPacker, xp: TxPoolRef): Header =
   ## Generate a new header, a child of the cached `head`
   let
     vmState = pst.vmState

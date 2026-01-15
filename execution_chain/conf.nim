@@ -6,7 +6,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   std/[options, strutils, os, uri, net],
@@ -460,6 +460,11 @@ type
         defaultValue: @[]
         defaultValueDesc: "*"
         name: "allowed-origins" .}: seq[string]
+
+      # https://eips.ethereum.org/EIPS/eip-7872
+      maxBlobs* {.
+        desc: "EIP-7872 maximum blobs used when building a local payload"
+        name: "max-blobs" .}: Option[uint8]
 
       # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/authentication.md#key-distribution
       jwtSecret* {.

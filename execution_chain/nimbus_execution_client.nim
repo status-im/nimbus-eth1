@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   ../execution_chain/compile_info
@@ -61,6 +61,7 @@ proc basicServices(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonR
     eagerStateRoot = config.eagerStateRootCheck,
     persistBatchSize = config.persistBatchSize,
     dynamicBatchSize = config.dynamicBatchSize,
+    maxBlobs = config.maxBlobs,
     enableQueue = true)
   if config.deserializeFcState:
     fc.deserialize().isOkOr:
