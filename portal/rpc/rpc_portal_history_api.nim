@@ -30,18 +30,20 @@ export tables
 # These methods to be used for EL client integration.
 # They require the Header parameter in order for validation on the JSON-RPC server side (= Portal node).
 
-ContentInfo.useDefaultSerializationIn JrpcConv
-TraceContentLookupResult.useDefaultSerializationIn JrpcConv
-TraceObject.useDefaultSerializationIn JrpcConv
-FailureInfo.useDefaultSerializationIn JrpcConv
-NodeMetadata.useDefaultSerializationIn JrpcConv
-TraceResponse.useDefaultSerializationIn JrpcConv
+ContentInfo.useDefaultSerializationIn EthJson
+TraceContentLookupResult.useDefaultSerializationIn EthJson
+TraceObject.useDefaultSerializationIn EthJson
+FailureInfo.useDefaultSerializationIn EthJson
+NodeMetadata.useDefaultSerializationIn EthJson
+TraceResponse.useDefaultSerializationIn EthJson
 
 # TODO: It would be cleaner to use the existing getContent call for
 # less code duplication + automatic retries, but the specific error messages + extra content
 # info would need to be added to the existing calls.
 proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
-  rpcServer.rpc("portal_historyGetContent") do(contentKeyBytes: string) -> ContentInfo:
+  rpcServer.rpc("portal_historyGetContent", EthJson) do(
+    contentKeyBytes: string
+  ) -> ContentInfo:
     let
       contentKeyByteList = ContentKeyByteList.init(hexToSeqByte(contentKeyBytes))
       contentKey = decode(contentKeyByteList).valueOr:
@@ -60,7 +62,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
       content = contentLookupResult.content.to0xHex()
     ContentInfo(content: content, utpTransfer: contentLookupResult.utpTransfer)
 
-  rpcServer.rpc("portal_historyTraceGetContent") do(
+  rpcServer.rpc("portal_historyTraceGetContent", EthJson) do(
     contentKeyBytes: string
   ) -> TraceContentLookupResult:
     let
@@ -85,12 +87,12 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
     let
       res = await n.portalProtocol.traceContentLookup(contentKeyByteList, contentId)
       valueBytes = res.content.valueOr:
-        let data = Opt.some(JrpcConv.encode(res.trace).JsonString)
+        let data = Opt.some(EthJson.encode(res.trace).JsonString)
         raise contentNotFoundErrWithTrace(data)
 
     res
 
-  rpcServer.rpc("portal_historyPutContent") do(
+  rpcServer.rpc("portal_historyPutContent", EthJson) do(
     contentKeyBytes: string, contentValueBytes: string
   ) -> PutContentResult:
     let
@@ -121,7 +123,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
       ),
     )
 
-  rpcServer.rpc("portal_historyStore") do(
+  rpcServer.rpc("portal_historyStore", EthJson) do(
     contentKeyBytes: string, contentValueBytes: string
   ) -> bool:
     let
@@ -132,7 +134,9 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
 
     n.portalProtocol.storeContent(contentKeyByteList, contentId, offerValueBytes)
 
-  rpcServer.rpc("portal_historyLocalContent") do(contentKeyBytes: string) -> string:
+  rpcServer.rpc("portal_historyLocalContent", EthJson) do(
+    contentKeyBytes: string
+  ) -> string:
     let
       contentKeyByteList = ContentKeyByteList.init(hexToSeqByte(contentKeyBytes))
       contentId = n.portalProtocol.toContentId(contentKeyByteList).valueOr:
@@ -143,7 +147,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
 
     valueBytes.to0xHex()
 
-  rpcServer.rpc("portal_historyGetBlockBody") do(headerBytes: string) -> string:
+  rpcServer.rpc("portal_historyGetBlockBody", EthJson) do(headerBytes: string) -> string:
     let header = decodeRlp(hexToSeqByte(headerBytes), Header).valueOr:
       raise applicationError((code: -39010, msg: "Failed to decode header: " & error))
 
@@ -152,7 +156,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
 
     rlp.encode(blockBody).to0xHex()
 
-  rpcServer.rpc("portal_historyGetReceipts") do(headerBytes: string) -> string:
+  rpcServer.rpc("portal_historyGetReceipts", EthJson) do(headerBytes: string) -> string:
     let header = decodeRlp(hexToSeqByte(headerBytes), Header).valueOr:
       raise applicationError((code: -39010, msg: "Failed to decode header: " & error))
 

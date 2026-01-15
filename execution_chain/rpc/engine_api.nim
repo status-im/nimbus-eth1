@@ -46,63 +46,63 @@ const supportedMethods: HashSet[string] =
 # versions, they'll need to be able to share code.
 proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
 
-  server.rpc("engine_exchangeCapabilities") do(methods: seq[string]) -> seq[string]:
+  server.rpc("engine_exchangeCapabilities", EthJson) do(methods: seq[string]) -> seq[string]:
     return methods.filterIt(supportedMethods.contains(it))
 
-  server.rpc("engine_newPayloadV1") do(payload: ExecutionPayloadV1) -> PayloadStatusV1:
+  server.rpc("engine_newPayloadV1", EthJson) do(payload: ExecutionPayloadV1) -> PayloadStatusV1:
     await engine.newPayload(Version.V1, payload.executionPayload)
 
-  server.rpc("engine_newPayloadV2") do(payload: ExecutionPayload) -> PayloadStatusV1:
+  server.rpc("engine_newPayloadV2", EthJson) do(payload: ExecutionPayload) -> PayloadStatusV1:
     await engine.newPayload(Version.V2, payload)
 
-  server.rpc("engine_newPayloadV3") do(payload: ExecutionPayload,
+  server.rpc("engine_newPayloadV3", EthJson) do(payload: ExecutionPayload,
                                        expectedBlobVersionedHashes: Opt[seq[Hash32]],
                                        parentBeaconBlockRoot: Opt[Hash32]) -> PayloadStatusV1:
     await engine.newPayload(Version.V3, payload, expectedBlobVersionedHashes, parentBeaconBlockRoot)
 
-  server.rpc("engine_newPayloadV4") do(payload: ExecutionPayload,
+  server.rpc("engine_newPayloadV4", EthJson) do(payload: ExecutionPayload,
                                        expectedBlobVersionedHashes: Opt[seq[Hash32]],
                                        parentBeaconBlockRoot: Opt[Hash32],
                                        executionRequests: Opt[seq[seq[byte]]]) -> PayloadStatusV1:
     await engine.newPayload(Version.V4, payload,
       expectedBlobVersionedHashes, parentBeaconBlockRoot, executionRequests)
 
-  server.rpc("engine_getPayloadV1") do(payloadId: Bytes8) -> ExecutionPayloadV1:
+  server.rpc("engine_getPayloadV1", EthJson) do(payloadId: Bytes8) -> ExecutionPayloadV1:
     return engine.getPayload(Version.V1, payloadId).executionPayload.V1
 
-  server.rpc("engine_getPayloadV2") do(payloadId: Bytes8) -> GetPayloadV2Response:
+  server.rpc("engine_getPayloadV2", EthJson) do(payloadId: Bytes8) -> GetPayloadV2Response:
     return engine.getPayload(Version.V2, payloadId)
 
-  server.rpc("engine_getPayloadV3") do(payloadId: Bytes8) -> GetPayloadV3Response:
+  server.rpc("engine_getPayloadV3", EthJson) do(payloadId: Bytes8) -> GetPayloadV3Response:
     return engine.getPayloadV3(payloadId)
 
-  server.rpc("engine_getPayloadV4") do(payloadId: Bytes8) -> GetPayloadV4Response:
+  server.rpc("engine_getPayloadV4", EthJson) do(payloadId: Bytes8) -> GetPayloadV4Response:
     return engine.getPayloadV4(payloadId)
 
-  server.rpc("engine_getPayloadV5") do(payloadId: Bytes8) -> GetPayloadV5Response:
+  server.rpc("engine_getPayloadV5", EthJson) do(payloadId: Bytes8) -> GetPayloadV5Response:
     return engine.getPayloadV5(payloadId)
 
-  server.rpc("engine_forkchoiceUpdatedV1") do(update: ForkchoiceStateV1,
+  server.rpc("engine_forkchoiceUpdatedV1", EthJson) do(update: ForkchoiceStateV1,
                     attrs: Opt[PayloadAttributesV1]) -> ForkchoiceUpdatedResponse:
     await engine.forkchoiceUpdated(Version.V1, update, attrs.payloadAttributes)
 
-  server.rpc("engine_forkchoiceUpdatedV2") do(update: ForkchoiceStateV1,
+  server.rpc("engine_forkchoiceUpdatedV2", EthJson) do(update: ForkchoiceStateV1,
                     attrs: Opt[PayloadAttributes]) -> ForkchoiceUpdatedResponse:
     await engine.forkchoiceUpdated(Version.V2, update, attrs)
 
-  server.rpc("engine_forkchoiceUpdatedV3") do(update: ForkchoiceStateV1,
+  server.rpc("engine_forkchoiceUpdatedV3", EthJson) do(update: ForkchoiceStateV1,
                     attrs: Opt[PayloadAttributes]) -> ForkchoiceUpdatedResponse:
     await engine.forkchoiceUpdated(Version.V3, update, attrs)
 
-  server.rpc("engine_getPayloadBodiesByHashV1") do(hashes: seq[Hash32]) ->
+  server.rpc("engine_getPayloadBodiesByHashV1", EthJson) do(hashes: seq[Hash32]) ->
                                                seq[Opt[ExecutionPayloadBodyV1]]:
     return engine.getPayloadBodiesByHash(hashes)
 
-  server.rpc("engine_getPayloadBodiesByRangeV1") do(
+  server.rpc("engine_getPayloadBodiesByRangeV1", EthJson) do(
       start: Quantity, count: Quantity) -> seq[Opt[ExecutionPayloadBodyV1]]:
     return engine.getPayloadBodiesByRange(start.uint64, count.uint64)
 
-  server.rpc("engine_getClientVersionV1") do(version: ClientVersionV1) ->
+  server.rpc("engine_getClientVersionV1", EthJson) do(version: ClientVersionV1) ->
                                          seq[ClientVersionV1]:
     # TODO: what should we do with the `version` parameter?
     return @[ClientVersionV1(
@@ -112,14 +112,14 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
       commit: FixedBytes[4](GitRevisionBytes),
     )]
 
-  server.rpc("engine_getBlobsV1") do(versionedHashes: seq[VersionedHash]) ->
+  server.rpc("engine_getBlobsV1", EthJson) do(versionedHashes: seq[VersionedHash]) ->
                                          seq[Opt[BlobAndProofV1]]:
     return engine.getBlobsV1(versionedHashes)
 
-  server.rpc("engine_getBlobsV2") do(versionedHashes: seq[VersionedHash]) ->
+  server.rpc("engine_getBlobsV2", EthJson) do(versionedHashes: seq[VersionedHash]) ->
                                          Opt[seq[BlobAndProofV2]]:
     return engine.getBlobsV2(versionedHashes)
 
-  server.rpc("engine_getBlobsV3") do(versionedHashes: seq[VersionedHash]) ->
+  server.rpc("engine_getBlobsV3", EthJson) do(versionedHashes: seq[VersionedHash]) ->
                                          seq[Opt[BlobAndProofV2]]:
     return engine.getBlobsV3(versionedHashes)

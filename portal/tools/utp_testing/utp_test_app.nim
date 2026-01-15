@@ -40,11 +40,11 @@ type AppConf* = object
     name: "rpc-listen-address"
   .}: IpAddress
 
-proc writeValue*(w: var JsonWriter[JrpcConv], v: Record) {.gcsafe, raises: [IOError].} =
+proc writeValue*(w: var JsonWriter[EthJson], v: Record) {.gcsafe, raises: [IOError].} =
   w.writeValue(v.toURI())
 
 proc readValue*(
-    r: var JsonReader[JrpcConv], val: var Record
+    r: var JsonReader[EthJson], val: var Record
 ) {.gcsafe, raises: [IOError, JsonReaderError].} =
   val = enr.Record.fromURI(r.parseString()).valueOr:
     r.raiseUnexpectedValue("Invalid ENR")
@@ -55,7 +55,7 @@ proc installUtpHandlers(
     s: UtpDiscv5Protocol,
     t: ref Table[SKey, UtpSocket[NodeAddress]],
 ) {.raises: [].} =
-  srv.rpc("utp_connect") do(r: enr.Record) -> SKey:
+  srv.rpc("utp_connect", EthJson) do(r: enr.Record) -> SKey:
     let node = Node.fromRecord(r)
     let nodeAddress = NodeAddress.init(node).unsafeGet()
     discard d.addNode(node)
@@ -68,7 +68,7 @@ proc installUtpHandlers(
     else:
       raise newException(ValueError, "Connection to node Failed.")
 
-  srv.rpc("utp_write") do(k: SKey, b: string) -> bool:
+  srv.rpc("utp_write", EthJson) do(k: SKey, b: string) -> bool:
     let sock = t.getOrDefault(k)
     let bytes = hexToSeqByte(b)
     if sock != nil:
@@ -82,7 +82,7 @@ proc installUtpHandlers(
     else:
       raise newException(ValueError, "Socket with provided key is missing")
 
-  srv.rpc("utp_get_connections") do() -> seq[SKey]:
+  srv.rpc("utp_get_connections", EthJson) do() -> seq[SKey]:
     var keys = newSeq[SKey]()
 
     for k in t.keys:
@@ -90,7 +90,7 @@ proc installUtpHandlers(
 
     return keys
 
-  srv.rpc("utp_read") do(k: SKey, n: int) -> string:
+  srv.rpc("utp_read", EthJson) do(k: SKey, n: int) -> string:
     let sock = t.getOrDefault(k)
     if sock != nil:
       let res = await sock.read(n)
@@ -99,7 +99,7 @@ proc installUtpHandlers(
     else:
       raise newException(ValueError, "Socket with provided key is missing")
 
-  srv.rpc("utp_close") do(k: SKey) -> bool:
+  srv.rpc("utp_close", EthJson) do(k: SKey) -> bool:
     let sock = t.getOrDefault(k)
     if sock != nil:
       await sock.closeWait()

@@ -32,8 +32,8 @@ import
 #     disableState: Opt[bool]
 #     disableStateDiff: Opt[bool]
 
-# TraceOptions.useDefaultSerializationIn JrpcConv
-ExecutionWitness.useDefaultSerializationIn JrpcConv
+# TraceOptions.useDefaultSerializationIn EthJson
+ExecutionWitness.useDefaultSerializationIn EthJson
 
 # proc isTrue(x: Opt[bool]): bool =
 #   result = x.isSome and x.get() == true
@@ -89,7 +89,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
     # chainDB = com.db
     chain = txPool.chain
 
-  # server.rpc("debug_traceTransaction") do(data: Hash32, options: Opt[TraceOptions]) -> JsonNode:
+  # server.rpc("debug_traceTransaction", EthJson) do(data: Hash32, options: Opt[TraceOptions]) -> JsonNode:
   #   ## The traceTransaction debugging method will attempt to run the transaction in the exact
   #   ## same manner as it was executed on the network. It will replay any transaction that may
   #   ## have been executed prior to this one before it will finally attempt to execute the
@@ -111,7 +111,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
 
   #   traceTransaction(com, header, transactions, txDetails.index, flags)
 
-  # server.rpc("debug_dumpBlockStateByNumber") do(quantityTag: BlockTag) -> JsonNode:
+  # server.rpc("debug_dumpBlockStateByNumber", EthJson) do(quantityTag: BlockTag) -> JsonNode:
   #   ## Retrieves the state that corresponds to the block number and returns
   #   ## a list of accounts (including storage and code).
   #   ##
@@ -124,7 +124,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
 
   #   dumpBlockState(com, EthBlock.init(move(header), move(body)))
 
-  # server.rpc("debug_dumpBlockStateByHash") do(data: Hash32) -> JsonNode:
+  # server.rpc("debug_dumpBlockStateByHash", EthJson) do(data: Hash32) -> JsonNode:
   #   ## Retrieves the state that corresponds to the block number and returns
   #   ## a list of accounts (including storage and code).
   #   ##
@@ -135,7 +135,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
 
   #   dumpBlockState(com, blk)
 
-  # server.rpc("debug_traceBlockByNumber") do(quantityTag: BlockTag, options: Opt[TraceOptions]) -> JsonNode:
+  # server.rpc("debug_traceBlockByNumber", EthJson) do(quantityTag: BlockTag, options: Opt[TraceOptions]) -> JsonNode:
   #   ## The traceBlock method will return a full stack trace of all invoked opcodes of all transaction
   #   ## that were included included in this block.
   #   ##
@@ -150,7 +150,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
 
   #   traceBlock(com, EthBlock.init(move(header), move(body)), flags)
 
-  # server.rpc("debug_traceBlockByHash") do(data: Hash32, options: Opt[TraceOptions]) -> JsonNode:
+  # server.rpc("debug_traceBlockByHash", EthJson) do(data: Hash32, options: Opt[TraceOptions]) -> JsonNode:
   #   ## The traceBlock method will return a full stack trace of all invoked opcodes of all transaction
   #   ## that were included included in this block.
   #   ##
@@ -165,7 +165,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
 
   #   traceBlock(com, EthBlock.init(move(header), move(body)), flags)
 
-  # server.rpc("debug_setHead") do(quantityTag: BlockTag) -> bool:
+  # server.rpc("debug_setHead", EthJson) do(quantityTag: BlockTag) -> bool:
   #   ## Sets the current head of the local chain by block number.
   #   ## Note, this is a destructive action and may severely damage your chain.
   #   ## Use with extreme caution.
@@ -173,7 +173,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
   #     header = chainDB.headerFromTag(quantityTag)
   #   chainDB.setHead(header)
 
-  # server.rpc("debug_getRawBlock") do(quantityTag: BlockTag) -> seq[byte]:
+  # server.rpc("debug_getRawBlock", EthJson) do(quantityTag: BlockTag) -> seq[byte]:
   #   ## Returns an RLP-encoded block.
   #   var
   #     header = chainDB.headerFromTag(quantityTag)
@@ -182,18 +182,18 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
 
   #   rlp.encode(EthBlock.init(move(header), move(body)))
 
-  # server.rpc("debug_getRawHeader") do(quantityTag: BlockTag) -> seq[byte]:
+  # server.rpc("debug_getRawHeader", EthJson) do(quantityTag: BlockTag) -> seq[byte]:
   #   ## Returns an RLP-encoded header.
   #   let header = chainDB.headerFromTag(quantityTag)
   #   rlp.encode(header)
 
-  # server.rpc("debug_getRawReceipts") do(quantityTag: BlockTag) -> seq[seq[byte]]:
+  # server.rpc("debug_getRawReceipts", EthJson) do(quantityTag: BlockTag) -> seq[seq[byte]]:
   #   ## Returns an array of EIP-2718 binary-encoded receipts.
   #   let header = chainDB.headerFromTag(quantityTag)
   #   for receipt in chainDB.getReceipts(header.receiptsRoot):
   #     result.add rlp.encode(receipt)
 
-  # server.rpc("debug_getRawTransaction") do(data: Hash32) -> seq[byte]:
+  # server.rpc("debug_getRawTransaction", EthJson) do(data: Hash32) -> seq[byte]:
   #   ## Returns an EIP-2718 binary-encoded transaction.
   #   let txHash = data
   #   let res = txPool.getItem(txHash)
@@ -211,7 +211,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
 
   #   raise newException(ValueError, "Transaction not found " & data.toHex)
 
-  server.rpc("debug_executionWitness") do(quantityTag: BlockTag) -> ExecutionWitness:
+  server.rpc("debug_executionWitness", EthJson) do(quantityTag: BlockTag) -> ExecutionWitness:
     ## Returns an execution witness for the given block number.
     let header = chain.headerFromTag(quantityTag).valueOr:
       raise newException(ValueError, "Header not found")
@@ -219,12 +219,12 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
     chain.getExecutionWitness(header.computeBlockHash()).valueOr:
       raise newException(ValueError, error)
 
-  server.rpc("debug_executionWitnessByBlockHash") do(blockHash: Hash32) -> ExecutionWitness:
+  server.rpc("debug_executionWitnessByBlockHash", EthJson) do(blockHash: Hash32) -> ExecutionWitness:
     ## Returns an execution witness for the given block hash.
     chain.getExecutionWitness(blockHash).valueOr:
       raise newException(ValueError, error)
 
-  server.rpc("debug_getHeaderByNumber") do(blockTag: BlockTag) -> string:
+  server.rpc("debug_getHeaderByNumber", EthJson) do(blockTag: BlockTag) -> string:
     ## Returns the rlp encoded block header in hex for the given block number / tag.
     # Note: When proposing this method for inclusion in the JSON-RPC spec,
     # consider returning a header JSON object instead of RLP. Likely to be more accepted.
