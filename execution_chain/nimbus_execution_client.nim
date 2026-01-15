@@ -390,11 +390,6 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   case config.cmd
   of NimbusCmd.`import`:
     importBlocks(config, com)
-  of NimbusCmd.`import - rlp`:
-    try:
-      waitFor importRlpBlocks(config, com)
-    except CancelledError:
-      raiseAssert "Nothing cancels the future"
   else:
     let
       runArchiveImport = config.era1DirFlag.isSome or config.eraDirFlag.isSome
@@ -408,8 +403,7 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
         quit(QuitFailure)
 
       if runArchiveImport:
-        debug "Starting archive import",era1Dir = config.era1Dir,eraDir = config.eraDir
-        importBlocks(config, com)
+        warn "Archive bootstrap import is disabled for era ", era1Dir = config.era1Dir, eraDir = config.eraDir
 
       if runRlpImport:
         var files: seq[string]

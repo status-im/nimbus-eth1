@@ -44,14 +44,6 @@ proc configurationMain*() =
       check dd.dataDir() == "apple\\bin"
       check dd.keyStoreDir == "banana/bin"
 
-    test "import-rlp":
-      let aa = makeTestConfig()
-      check aa.cmd == NimbusCmd.executionClient
-
-      let bb = makeConfig(@["import-rlp", genesisFile])
-      check bb.cmd == NimbusCmd.`import-rlp`
-      check bb.blocksFile[0].string == genesisFile
-
     test "bootstrap-blocks-file parsing":
       let defaults = makeTestConfig()
       check defaults.bootstrapBlocksFile.len == 0

@@ -123,14 +123,3 @@ proc importRlpFiles*(
   com.db.persist(txFrame)
 
   ok()
-
-proc importRlpBlocks*(config: ExecutionClientConf, com: CommonRef): Future[void] {.async: (raises: [CancelledError]).} =
-  var files: seq[string]
-  for blocksFile in config.blocksFile:
-    files.add string(blocksFile)
-
-  (await importRlpFiles(files, com, true)).isOkOr:
-    warn "Error when importing blocks", msg=error
-    quit(QuitFailure)
-
-  quit(QuitSuccess)
