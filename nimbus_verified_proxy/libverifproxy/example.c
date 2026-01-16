@@ -18,47 +18,47 @@
 char filterId[67];
 bool filterCreated = false;
 
-void onBlockNumber(Context *ctx, int status, char *res) {
+void onBlockNumber(Context *ctx, unsigned int reqId, int status, char *res) {
   printf("Blocknumber: %s\n", res);
   freeResponse(res);
 }
 
-void onStart(Context *ctx, int status, char *res) {
+void onStart(Context *ctx, unsigned int reqId, int status, char *res) {
   if (status < 0){ // callback onStart is called only for errors
-    printf("Problem while starting verified proxy\n");
+    printf("Problem while starting verified proxy: %s\n", res);
     stopVerifProxy(ctx);
     freeContext(ctx);
     exit(EXIT_FAILURE);
   }
 }
 
-void onStorage(Context *ctx, int status, char *res) {
+void onStorage(Context *ctx, unsigned int reqId, int status, char *res) {
   printf("Storage: %s\n", res);
   freeResponse(res);
 }
 
-void onBalance(Context *ctx, int status, char *res) {
+void onBalance(Context *ctx, unsigned int reqId, int status, char *res) {
   printf("Balance: %s\n", res);
   freeResponse(res);
 }
 
-void onNonce(Context *ctx, int status, char *res) {
+void onNonce(Context *ctx, unsigned int reqId, int status, char *res) {
   printf("Nonce: %s\n", res);
   freeResponse(res);
 }
 
-void onCode(Context *ctx, int status, char *res) {
+void onCode(Context *ctx, unsigned int reqId, int status, char *res) {
   printf("Code: %s\n", res);
   freeResponse(res);
 }
 
-void genericCallback(Context *ctx, int status, char *res) {
-  printf("Status: %d\n", status);
+void genericCallback(Context *ctx, unsigned int reqId, int status, char *res) {
+  printf("ReqID: %d, Status: %d\n", reqId, status);
   if (status < 0) printf("Error: %s\n", res);
   freeResponse(res);
 }
 
-void onFilterCreate(Context *ctx, int status, char *res) {
+void onFilterCreate(Context *ctx, unsigned int reqId, int status, char *res) {
   if (status == RET_SUCCESS) {
     strncpy(filterId, &res[1], strlen(res) - 2); // remove quotes
     filterId[strlen(res) - 2] = '\0';
@@ -67,7 +67,7 @@ void onFilterCreate(Context *ctx, int status, char *res) {
   freeResponse(res);
 }
 
-void onCallComplete(Context *ctx, int status, char *res) {
+void onCallComplete(Context *ctx, unsigned int reqId, int status, char *res) {
   if (status == RET_SUCCESS) {
     printf("Call Complete: %s\n", res);
   } else {
@@ -76,7 +76,7 @@ void onCallComplete(Context *ctx, int status, char *res) {
   freeResponse(res);
 }
 
-void onLogs(Context *ctx, int status, char *res) {
+void onLogs(Context *ctx, unsigned int reqId, int status, char *res) {
   if (status == RET_SUCCESS) {
     printf("Logs fetch successful\n");
   } else {
@@ -91,43 +91,43 @@ void makeCalls(Context *ctx) {
   char *CALL_ARGS = "{\"to\": \"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2\",\"data\": \"0x70a08231000000000000000000000000De5ae63A348C4d63343C8E20Fb6286909418c8A4\"}";
   char *FILTER_OPTIONS = "{\"fromBlock\": \"latest\", \"toBlock\": \"latest\", \"topics\":[\"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef\"]}";
 
-  eth_blockNumber(ctx, onBlockNumber);
-  eth_getBalance(ctx, "0x954a86C613fd1fBaC9C7A43a071A68254C75E4AC", "latest", onBalance);
-  eth_getStorageAt(ctx, "0x954a86C613fd1fBaC9C7A43a071A68254C75E4AC", "0x0", "latest", onStorage);
-  eth_getTransactionCount(ctx, "0x954a86C613fd1fBaC9C7A43a071A68254C75E4AC", "latest", onNonce);
-  eth_getCode(ctx, "0x954a86C613fd1fBaC9C7A43a071A68254C75E4AC", "latest", onCode);
+  eth_blockNumber(ctx, 0, onBlockNumber);
+  eth_getBalance(ctx, 0, "0x954a86C613fd1fBaC9C7A43a071A68254C75E4AC", "latest", onBalance);
+  eth_getStorageAt(ctx, 0, "0x954a86C613fd1fBaC9C7A43a071A68254C75E4AC", "0x0", "latest", onStorage);
+  eth_getTransactionCount(ctx, 0, "0x954a86C613fd1fBaC9C7A43a071A68254C75E4AC", "latest", onNonce);
+  eth_getCode(ctx, 0, "0x954a86C613fd1fBaC9C7A43a071A68254C75E4AC", "latest", onCode);
 
   /* -------- Blocks & Uncles -------- */
 
-  eth_getBlockByHash(ctx, BLOCK_HASH, false, genericCallback);
-  eth_getBlockByNumber(ctx, "latest", false, genericCallback);
-  eth_getUncleCountByBlockNumber(ctx, "latest", genericCallback);
-  eth_getUncleCountByBlockHash(ctx, BLOCK_HASH, genericCallback);
+  eth_getBlockByHash(ctx, 0, BLOCK_HASH, false, genericCallback);
+  eth_getBlockByNumber(ctx, 0, "latest", false, genericCallback);
+  eth_getUncleCountByBlockNumber(ctx, 0, "latest", genericCallback);
+  eth_getUncleCountByBlockHash(ctx, 0, BLOCK_HASH, genericCallback);
 
-  eth_getBlockTransactionCountByNumber(ctx, "latest", genericCallback);
-  eth_getBlockTransactionCountByHash(ctx, BLOCK_HASH, genericCallback);
+  eth_getBlockTransactionCountByNumber(ctx, 0, "latest", genericCallback);
+  eth_getBlockTransactionCountByHash(ctx, 0, BLOCK_HASH, genericCallback);
 
   /* -------- Transactions -------- */
-  eth_getTransactionByBlockNumberAndIndex(ctx, "latest", 0ULL, genericCallback);
-  eth_getTransactionByBlockHashAndIndex(ctx, BLOCK_HASH, 0ULL, genericCallback);
+  eth_getTransactionByBlockNumberAndIndex(ctx, 0, "latest", 0ULL, genericCallback);
+  eth_getTransactionByBlockHashAndIndex(ctx, 0, BLOCK_HASH, 0ULL, genericCallback);
 
-  eth_getTransactionByHash(ctx, TX_HASH, genericCallback);
-  eth_getTransactionReceipt(ctx, TX_HASH, genericCallback);
+  eth_getTransactionByHash(ctx, 0, TX_HASH, genericCallback);
+  eth_getTransactionReceipt(ctx, 0, TX_HASH, genericCallback);
 
-  eth_getBlockReceipts(ctx, "latest", genericCallback);
+  eth_getBlockReceipts(ctx, 0, "latest", genericCallback);
 
   /* -------- Calls, Access Lists, Gas Estimation -------- */
-  eth_call(ctx, CALL_ARGS, "latest", true, onCallComplete);
-  eth_createAccessList(ctx, CALL_ARGS, "latest", false, onCallComplete);
-  eth_estimateGas(ctx, CALL_ARGS, "latest", false, onCallComplete);
+  eth_call(ctx, 0, CALL_ARGS, "latest", true, onCallComplete);
+  eth_createAccessList(ctx, 0, CALL_ARGS, "latest", false, onCallComplete);
+  eth_estimateGas(ctx, 0, CALL_ARGS, "latest", false, onCallComplete);
 
   /* -------- Logs & Filters -------- */
-  eth_getLogs(ctx, FILTER_OPTIONS, onLogs);
+  eth_getLogs(ctx, 0, FILTER_OPTIONS, onLogs);
   if (filterCreated) {
-    eth_getFilterLogs(ctx, filterId, onLogs);
-    eth_getFilterChanges(ctx, filterId, onLogs);
+    eth_getFilterLogs(ctx, 0, filterId, onLogs);
+    eth_getFilterChanges(ctx, 0, filterId, onLogs);
   } else {
-    eth_newFilter(ctx, FILTER_OPTIONS, onFilterCreate);
+    eth_newFilter(ctx, 0, FILTER_OPTIONS, onFilterCreate);
   }
 }
 
@@ -138,7 +138,7 @@ int main() {
     "{"
     "\"eth2Network\": \"mainnet\","
     "\"trustedBlockRoot\": \"0x2558d82e8b29c4151a0683e4f9d480d229d84b27b51a976f56722e014227e723\","
-    "\"backendUrl\": \"https://eth.blockrazor.xyz\","
+    "\"backendUrls\": \"https://eth.blockrazor.xyz\","
     "\"beaconApiUrls\": \"http://testing.mainnet.beacon-api.nimbus.team,http://www.lightclientdata.org\","
     "\"logLevel\": \"FATAL\","
     "\"logStdout\": \"None\""
