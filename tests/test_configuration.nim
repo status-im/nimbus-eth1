@@ -50,7 +50,7 @@ proc configurationMain*() =
       check defaults.bootstrapBlocksFinalized == false
 
       let cfg = makeConfig(@[
-        "--bootstrap-blocks-file:" & genesisFile,
+        "--debug-bootstrap-blocks-file:" & genesisFile,
         "--debug-bootstrap-finalized:false",
       ])
       check cfg.cmd == NimbusCmd.executionClient
