@@ -731,7 +731,6 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ## Returns the block access list for a block by block hash.
     ##
     ## data: hash of block.
-    ## Returns the block access list or nil when none was found.
     let header = api.chain.headerByHash(data).valueOr:
       raise newException(ValueError, "Block not found")
 
@@ -751,7 +750,6 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ## Returns the block access list for a block by number.
     ##
     ## quantityTag: a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
-    ## Returns the block access list or nil when none was found.
     let header = api.headerFromTag(quantityTag).valueOr:
       raise newException(ValueError, "Block not found")
 
