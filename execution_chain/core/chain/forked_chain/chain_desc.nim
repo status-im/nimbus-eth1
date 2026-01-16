@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -89,6 +89,9 @@ type
     dynamicBatchSize*: bool
       # Enable adjusting the persistBatchSize dynamically based on the
       # time it takes to update base.
+
+    maxBlobs*: Option[uint8]
+      # For EIP-7872; allows constraining of max blobs packed into each payload
 
     portal*: HistoryExpiryRef
       # History Expiry tracker and portal access entry point

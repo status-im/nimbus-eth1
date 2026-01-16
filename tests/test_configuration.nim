@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2025 Status Research & Development GmbH
+# Copyright (c) 2019-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -314,7 +314,7 @@ proc configurationMain*() =
       check config.networkParams.config.isNil.not
 
       check config.logLevel == "DEBUG"
-      check config.logStdout == StdoutLogKind.Json
+      check config.logFormat == StdoutLogKind.Json
 
       check config.metricsEnabled == true
       check config.metricsPort == 127.Port

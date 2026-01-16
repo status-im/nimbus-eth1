@@ -52,8 +52,8 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
           ProxyError, "Couldn't parse `beaconApiUrls` from JSON config: " & e.msg
         )
     logLevel = jsonNode.getOrDefault("logLevel").getStr("INFO")
-    logStdout =
-      case jsonNode.getOrDefault("logStdout").getStr("None")
+    logFormat =
+      case jsonNode.getOrDefault("logFormat").getStr("None")
       of "Colors": StdoutLogKind.Colors
       of "NoColors": StdoutLogKind.NoColors
       of "Json": StdoutLogKind.Json
@@ -71,7 +71,7 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
     backendUrl: backendUrl,
     beaconApiUrls: beaconApiUrls,
     logLevel: logLevel,
-    logStdout: logStdout,
+    logFormat: logFormat,
     dataDirFlag: none(OutDir),
     maxBlockWalk: uint64(maxBlockWalk),
     headerStoreLen: headerStoreLen,
@@ -85,7 +85,7 @@ proc run*(
 ) {.async: (raises: [ProxyError, CancelledError]).} =
   let config = VerifiedProxyConf.load(configJson)
 
-  setupLogging(config.logLevel, config.logStdout)
+  setupLogging(config.logLevel, config.logFormat)
 
   let
     engineConf = RpcVerificationEngineConf(

@@ -11,18 +11,7 @@
 {.push raises: [].}
 
 import
-  ./worker/worker_desc,
-  ../[sync_desc, sync_sched]
+  header/header_state
 
 export
-  sync_desc, worker_desc
-
-type
-  SnapSyncConfigHook* = proc(desc: SnapSyncRef) {.gcsafe, raises: [].}
-    ## Conditional configuration request hook
-
-  SnapSyncRef* = ref object of RunnerSyncRef[SnapCtxData,SnapPeerData]
-    ## Instance descriptor, extends scheduler object
-    lazyConfigHook*: SnapSyncConfigHook
-
-# End
+  header_state

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2025 Status Research & Development GmbH
+# Copyright (c) 2021-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -64,7 +64,7 @@ proc init(T: type PortalClient): T =
   PortalClient()
 
 proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableError].} =
-  setupLogging(config.logLevel, config.logStdout)
+  setupLogging(config.logLevel, config.logFormat)
 
   notice "Launching Nimbus Portal client",
     version = fullVersionStr, cmdParams = commandLineParams()
@@ -142,13 +142,14 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
   ## Discovery v5 protocol setup
   let
     discoveryConfig = DiscoveryConfig.init(
-      config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop, 512
+      config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop, 512, false
     )
     d = newProtocol(
       netkey,
       extIp,
       Opt.none(Port),
       extUdpPort,
+      Opt.none(Port),
       # Note: usage of the client field "c" is replaced with ping extensions client_info.
       # This can be removed in the future when no more tooling relies on it.
       localEnrFields = [
@@ -157,12 +158,11 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
       ],
       bootstrapRecords = bootstrapRecords,
       previousRecord = previousEnr,
-      bindIp = bindIp,
+      bindIp = Opt.some(bindIp),
       bindPort = udpPort,
       enrAutoUpdate = config.enrAutoUpdate,
       config = discoveryConfig,
       rng = rng,
-      banNodes = not config.disableBanNodes,
     )
 
   d.open()

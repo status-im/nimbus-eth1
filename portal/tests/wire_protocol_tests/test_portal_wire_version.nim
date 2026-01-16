@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -26,7 +26,7 @@ suite "Portal Wire Protocol Version":
   test "ENR with no Portal version field":
     let
       localPortalEnrField = PortalEnrField.init(0'u8, 1'u8, 1.chainId())
-      enr = Record.init(1, pk, ip, port, port, []).expect("Valid ENR init")
+      enr = Record.init(1, pk, ip, port, port, port, []).expect("Valid ENR init")
 
     let version = enr.highestCommonPortalVersionAndChain(localPortalEnrField)
     check:
@@ -38,7 +38,9 @@ suite "Portal Wire Protocol Version":
       localPortalEnrField = PortalEnrField.init(0'u8, 1'u8, 1.chainId())
       portalEnrField = @[byte 0xc0] # Empty rlp list
       customEnrFields = [toFieldPair(portalEnrKey, portalEnrField)]
-      enr = Record.init(1, pk, ip, port, port, customEnrFields).expect("Valid ENR init")
+      enr = Record.init(1, pk, ip, port, port, port, customEnrFields).expect(
+          "Valid ENR init"
+        )
 
     let version = enr.highestCommonPortalVersionAndChain(localPortalEnrField)
     check version.isErr()
@@ -49,7 +51,9 @@ suite "Portal Wire Protocol Version":
       portalEnrField = PortalEnrField.init(2'u8, 255'u8, 2.chainId())
 
       customEnrFields = [toFieldPair(portalEnrKey, rlp.encode(portalEnrField))]
-      enr = Record.init(1, pk, ip, port, port, customEnrFields).expect("Valid ENR init")
+      enr = Record.init(1, pk, ip, port, port, port, customEnrFields).expect(
+          "Valid ENR init"
+        )
 
     let version = enr.highestCommonPortalVersionAndChain(localPortalEnrField)
     check version.isErr()
@@ -60,7 +64,9 @@ suite "Portal Wire Protocol Version":
       portalEnrField = PortalEnrField.init(1'u8, 3'u8, 1.chainId())
 
       customEnrFields = [toFieldPair(portalEnrKey, rlp.encode(portalEnrField))]
-      enr = Record.init(1, pk, ip, port, port, customEnrFields).expect("Valid ENR init")
+      enr = Record.init(1, pk, ip, port, port, port, customEnrFields).expect(
+          "Valid ENR init"
+        )
 
     let version = enr.highestCommonPortalVersionAndChain(localPortalEnrField)
     check:
@@ -72,7 +78,9 @@ suite "Portal Wire Protocol Version":
       localPortalEnrField = PortalEnrField.init(0'u8, 2'u8, 1.chainId())
       portalEnrField = PortalEnrField.init(0'u8, 3'u8, 1.chainId())
       customEnrFields = [toFieldPair(portalEnrKey, rlp.encode(portalEnrField))]
-      enr = Record.init(1, pk, ip, port, port, customEnrFields).expect("Valid ENR init")
+      enr = Record.init(1, pk, ip, port, port, port, customEnrFields).expect(
+          "Valid ENR init"
+        )
 
     let version = enr.highestCommonPortalVersionAndChain(localPortalEnrField)
     check:
@@ -84,7 +92,9 @@ suite "Portal Wire Protocol Version":
       localPortalEnrField = PortalEnrField.init(0'u8, 1'u8, 1.chainId())
       portalEnrField = PortalEnrField.init(2'u8, 1'u8, 1.chainId())
       customEnrFields = [toFieldPair(portalEnrKey, rlp.encode(portalEnrField))]
-      enr = Record.init(1, pk, ip, port, port, customEnrFields).expect("Valid ENR init")
+      enr = Record.init(1, pk, ip, port, port, port, customEnrFields).expect(
+          "Valid ENR init"
+        )
 
     let version = enr.highestCommonPortalVersionAndChain(localPortalEnrField)
     check version.isErr()
@@ -95,7 +105,9 @@ suite "Portal Wire Protocol Version":
       portalEnrField = PortalEnrField.init(1'u8, 3'u8, 2.chainId())
 
       customEnrFields = [toFieldPair(portalEnrKey, rlp.encode(portalEnrField))]
-      enr = Record.init(1, pk, ip, port, port, customEnrFields).expect("Valid ENR init")
+      enr = Record.init(1, pk, ip, port, port, port, customEnrFields).expect(
+          "Valid ENR init"
+        )
 
     let version = enr.highestCommonPortalVersionAndChain(localPortalEnrField)
     check version.isErr()

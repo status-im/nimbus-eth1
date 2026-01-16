@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -52,10 +52,8 @@ type
     logLevel* {.desc: "Sets the log level", defaultValue: "INFO", name: "log-level".}:
       string
 
-    logStdout* {.
-      hidden,
-      desc:
-        "Specifies what kind of logs should be written to stdout (auto, colors, nocolors, json)",
+    logFormat* {.
+      desc: "Choice of log format (auto, colors, nocolors, json)",
       defaultValueDesc: "auto",
       defaultValue: StdoutLogKind.Auto,
       name: "log-format"
