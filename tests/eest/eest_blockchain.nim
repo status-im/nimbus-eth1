@@ -50,7 +50,7 @@ proc runTest(env: TestEnv, unit: BlockchainUnitEnv): Future[Result[void, string]
   var lastStateRoot = unit.genesisBlockHeader.stateRoot
 
   for blk in blocks:
-    let res = await env.chain.importBlock(blk.blk)
+    let res = await env.chain.importBlock(blk.blk, finalized = true)
     if res.isOk:
       if unit.lastblockhash == blk.blk.header.computeBlockHash:
         lastStateRoot = blk.blk.header.stateRoot

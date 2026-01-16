@@ -254,39 +254,40 @@ proc procBlkEpilogue(
     withdrawalReqs = ?processDequeueWithdrawalRequests(vmState)
     consolidationReqs = ?processDequeueConsolidationRequests(vmState)
 
-  if not skipPostExecBalCheck and vmState.com.isAmsterdamOrLater(header.timestamp):
-    doAssert vmState.balTrackerEnabled
-    # Commit block access list tracker changes for post‑execution system calls
-    vmState.balTracker.commitCallFrame()
+  if not skipValidation:
+    if not skipPostExecBalCheck and vmState.com.isAmsterdamOrLater(header.timestamp):
+      doAssert vmState.balTrackerEnabled
+      # Commit block access list tracker changes for post‑execution system calls
+      vmState.balTracker.commitCallFrame()
 
-    let
-      bal = vmState.balTracker.getBlockAccessList().get()
-      balHash = bal[].computeBlockAccessListHash()
-    if header.blockAccessListHash.get != balHash:
-      debug "wrong blockAccessListHash, generated block access list does not " &
-        "match expected blockAccessListHash in header",
-        blockNumber = header.number,
-        blockHash = header.computeBlockHash,
-        parentHash = header.parentHash,
-        expected = header.blockAccessListHash.get,
-        actual = balHash,
-        blockAccessList = $(bal[])
-      return err("blockAccessListHash mismatch, expect: " &
-        $header.blockAccessListHash.get & ", got: " & $balHash)
+      let
+        bal = vmState.balTracker.getBlockAccessList().get()
+        balHash = bal[].computeBlockAccessListHash()
+      if header.blockAccessListHash.get != balHash:
+        debug "wrong blockAccessListHash, generated block access list does not " &
+          "match expected blockAccessListHash in header",
+          blockNumber = header.number,
+          blockHash = header.computeBlockHash,
+          parentHash = header.parentHash,
+          expected = header.blockAccessListHash.get,
+          actual = balHash,
+          blockAccessList = $(bal[])
+        return err("blockAccessListHash mismatch, expect: " &
+          $header.blockAccessListHash.get & ", got: " & $balHash)
 
-  if not skipStateRootCheck:
-    let stateRoot = vmState.ledger.getStateRoot()
-    if header.stateRoot != stateRoot:
-      # TODO replace logging with better error
-      debug "wrong stateRoot in block",
-        blockNumber = header.number,
-        blockHash = header.computeBlockHash,
-        parentHash = header.parentHash,
-        expected = header.stateRoot,
-        actual = stateRoot,
-        parentStateRoot = vmState.parent.stateRoot
-      return
-        err("stateRoot mismatch, expect: " & $header.stateRoot & ", got: " & $stateRoot)
+    if not skipStateRootCheck:
+      let stateRoot = vmState.ledger.getStateRoot()
+      if header.stateRoot != stateRoot:
+        # TODO replace logging with better error
+        debug "wrong stateRoot in block",
+          blockNumber = header.number,
+          blockHash = header.computeBlockHash,
+          parentHash = header.parentHash,
+          expected = header.stateRoot,
+          actual = stateRoot,
+          parentStateRoot = vmState.parent.stateRoot
+        return
+          err("stateRoot mismatch, expect: " & $header.stateRoot & ", got: " & $stateRoot)
 
     if not skipReceipts:
       let bloom = createBloom(vmState.receipts)
