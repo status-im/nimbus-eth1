@@ -515,7 +515,7 @@ type
         hidden
         desc: "Import RLP encoded block files before starting the client"
         defaultValue: @[]
-        name: "bootstrap-blocks-file" .}: seq[InputFile]
+        name: "debug-bootstrap-blocks-file" .}: seq[InputFile]
 
       bootstrapBlocksFinalized* {.
         hidden
