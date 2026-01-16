@@ -25,4 +25,10 @@ type
     ## Instance descriptor, extends scheduler object
     lazyConfigHook*: BeaconSyncConfigHook
 
+  BeaconHandlersSyncRef* = ref object of BeaconHandlersRef
+    ## Add start/stop helpers to function list. By default, this functiona
+    ## are no-ops.
+    startSync*: proc(self: BeaconHandlersSyncRef) {.gcsafe, raises: [].}
+    stopSync*: proc(self: BeaconHandlersSyncRef) {.gcsafe, raises: [].}
+
 # End
