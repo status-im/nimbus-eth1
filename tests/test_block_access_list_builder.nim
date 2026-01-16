@@ -12,6 +12,7 @@
 
 import
   unittest2,
+  taskpools,
   ../execution_chain/block_access_list/block_access_list_builder
 
 suite "Block access list builder":
@@ -32,7 +33,7 @@ suite "Block access list builder":
     builder.addTouchedAccount(address1)
     builder.addTouchedAccount(address1) # duplicate
 
-    let bal = builder.buildBlockAccessList()
+    let bal = builder.buildBlockAccessList()[]
     check:
       bal.len() == 3
       bal[0].address == address1
@@ -55,7 +56,7 @@ suite "Block access list builder":
     builder.addStorageWrite(address1, slot3, 3, 4.u256)
     builder.addStorageWrite(address1, slot3, 3, 5.u256) # duplicate should overwrite
 
-    let bal = builder.buildBlockAccessList()
+    let bal = builder.buildBlockAccessList()[]
     check:
       bal.len() == 2
       bal[0].address == address1
@@ -74,7 +75,7 @@ suite "Block access list builder":
     builder.addStorageRead(address1, slot1)
     builder.addStorageRead(address1, slot1) # duplicate
 
-    let bal = builder.buildBlockAccessList()
+    let bal = builder.buildBlockAccessList()[]
     check:
       bal.len() == 3
       bal[0].address == address1
@@ -91,7 +92,7 @@ suite "Block access list builder":
     builder.addBalanceChange(address1, 2, 2.u256)
     builder.addBalanceChange(address1, 2, 10.u256) # duplicate should overwrite
 
-    let bal = builder.buildBlockAccessList()
+    let bal = builder.buildBlockAccessList()[]
     check:
       bal.len() == 3
       bal[0].address == address1
@@ -108,7 +109,7 @@ suite "Block access list builder":
     builder.addNonceChange(address3, 1, 1)
     builder.addNonceChange(address3, 1, 10) # duplicate should overwrite
 
-    let bal = builder.buildBlockAccessList()
+    let bal = builder.buildBlockAccessList()[]
     check:
       bal.len() == 3
       bal[0].address == address1
@@ -124,7 +125,7 @@ suite "Block access list builder":
     builder.addCodeChange(address1, 3, @[0x3.byte])
     builder.addCodeChange(address1, 3, @[0x4.byte]) # duplicate should overwrite
 
-    let bal = builder.buildBlockAccessList()
+    let bal = builder.buildBlockAccessList()[]
     check:
       bal.len() == 2
       bal[0].address == address1
@@ -168,7 +169,197 @@ suite "Block access list builder":
     builder.addCodeChange(address1, 3, @[0x3.byte])
     builder.addCodeChange(address1, 3, @[0x4.byte]) # duplicate should overwrite
 
-    let bal = builder.buildBlockAccessList()
+    let bal = builder.buildBlockAccessList()[]
+    check:
+      bal.len() == 3
+
+      bal[0].address == address1
+      bal[0].storageChanges.len() == 3
+      bal[0].storageChanges[0] == (slot1, @[(1.BlockAccessIndex, 1.u256)])
+      bal[0].storageChanges[1] == (slot2, @[(2.BlockAccessIndex, 2.u256)])
+      bal[0].storageChanges[2] == (slot3, @[(0.BlockAccessIndex, 3.u256), (3.BlockAccessIndex, 5.u256)])
+      bal[0].storageReads.len() == 0 # read removed by storage change with the same slot
+      bal[0].balanceChanges == @[(2.BlockAccessIndex, 10.u256)]
+      bal[0].nonceChanges == @[(3.BlockAccessIndex, 3.AccountNonce)]
+      bal[0].codeChanges == @[(3.BlockAccessIndex, @[0x4.byte])]
+
+      bal[1].address == address2
+      bal[1].storageChanges.len() == 1
+      bal[1].storageChanges[0] == (slot1, @[(1.BlockAccessIndex, 1.u256)])
+      bal[1].storageReads == @[slot2, slot3]
+      bal[1].balanceChanges == @[(0.BlockAccessIndex, 1.u256), (1.BlockAccessIndex, 0.u256)]
+      bal[1].nonceChanges == @[(1.BlockAccessIndex, 1.AccountNonce), (2.BlockAccessIndex, 2.AccountNonce)]
+      bal[1].codeChanges == @[(0.BlockAccessIndex, @[0x1.byte]), (1.BlockAccessIndex, @[0x2.byte])]
+
+      bal[2].address == address3
+      bal[2].storageReads == @[slot3]
+      bal[2].balanceChanges == @[(3.BlockAccessIndex, 3.u256)]
+      bal[2].nonceChanges == @[(1.BlockAccessIndex, 10.AccountNonce)]
+
+suite "Concurrent block access list builder":
+  const
+    address1 = address"0x10007bc31cedb7bfb8a345f31e668033056b2728"
+    address2 = address"0x20007bc31cedb7bfb8a345f31e668033056b2728"
+    address3 = address"0x30007bc31cedb7bfb8a345f31e668033056b2728"
+    slot1 = 1.u256()
+    slot2 = 2.u256()
+    slot3 = 3.u256()
+
+  setup:
+    let
+      taskpool = Taskpool.new()
+      builder = ConcurrentBlockAccessListBuilderRef.init()
+      builderPtr = builder.addr
+
+  test "Add touched account":
+    taskpool.spawn builderPtr.addTouchedAccount(address3)
+    taskpool.spawn builderPtr.addTouchedAccount(address2)
+    taskpool.spawn builderPtr.addTouchedAccount(address1)
+    taskpool.spawn builderPtr.addTouchedAccount(address1) # duplicate
+
+    taskpool.syncAll()
+
+    let bal = builder.buildBlockAccessList()[]
+    check:
+      bal.len() == 3
+      bal[0].address == address1
+      bal[1].address == address2
+      bal[2].address == address3
+
+    for accChange in bal:
+      check:
+        accChange.storageChanges.len() == 0
+        accChange.storageReads.len() == 0
+        accChange.balanceChanges.len() == 0
+        accChange.nonceChanges.len() == 0
+        accChange.codeChanges.len() == 0
+
+  test "Add storage write":
+    taskpool.spawn builderPtr.addStorageWrite(address1, slot3, 0, 3.u256)
+    taskpool.spawn builderPtr.addStorageWrite(address1, slot2, 2, 2.u256)
+    taskpool.spawn builderPtr.addStorageWrite(address1, slot1, 1, 1.u256)
+    taskpool.spawn builderPtr.addStorageWrite(address2, slot1, 1, 1.u256)
+    taskpool.spawn builderPtr.addStorageWrite(address1, slot3, 3, 5.u256)
+
+    taskpool.syncAll()
+
+    let bal = builder.buildBlockAccessList()[]
+    check:
+      bal.len() == 2
+      bal[0].address == address1
+      bal[0].storageChanges.len() == 3
+      bal[0].storageChanges[0] == (slot1, @[(1.BlockAccessIndex, 1.u256)])
+      bal[0].storageChanges[1] == (slot2, @[(2.BlockAccessIndex, 2.u256)])
+      bal[0].storageChanges[2] == (slot3, @[(0.BlockAccessIndex, 3.u256), (3.BlockAccessIndex, 5.u256)])
+      bal[1].address == address2
+      bal[1].storageChanges.len() == 1
+      bal[1].storageChanges[0] == (slot1, @[(1.BlockAccessIndex, 1.u256)])
+
+  test "Add storage read":
+    taskpool.spawn builderPtr.addStorageRead(address2, slot3)
+    taskpool.spawn builderPtr.addStorageRead(address2, slot2)
+    taskpool.spawn builderPtr.addStorageRead(address3, slot3)
+    taskpool.spawn builderPtr.addStorageRead(address1, slot1)
+    taskpool.spawn builderPtr.addStorageRead(address1, slot1) # duplicate
+
+    taskpool.syncAll()
+
+    let bal = builder.buildBlockAccessList()[]
+    check:
+      bal.len() == 3
+      bal[0].address == address1
+      bal[0].storageReads == @[slot1]
+      bal[1].address == address2
+      bal[1].storageReads == @[slot2, slot3]
+      bal[2].address == address3
+      bal[2].storageReads == @[slot3]
+
+  test "Add balance change":
+    taskpool.spawn builderPtr.addBalanceChange(address2, 1, 0.u256)
+    taskpool.spawn builderPtr.addBalanceChange(address2, 0, 1.u256)
+    taskpool.spawn builderPtr.addBalanceChange(address3, 3, 3.u256)
+    taskpool.spawn builderPtr.addBalanceChange(address1, 2, 10.u256)
+
+    taskpool.syncAll()
+
+    let bal = builder.buildBlockAccessList()[]
+    check:
+      bal.len() == 3
+      bal[0].address == address1
+      bal[0].balanceChanges == @[(2.BlockAccessIndex, 10.u256)]
+      bal[1].address == address2
+      bal[1].balanceChanges == @[(0.BlockAccessIndex, 1.u256), (1.BlockAccessIndex, 0.u256)]
+      bal[2].address == address3
+      bal[2].balanceChanges == @[(3.BlockAccessIndex, 3.u256)]
+
+  test "Add nonce change":
+    taskpool.spawn builderPtr.addNonceChange(address1, 3, 3)
+    taskpool.spawn builderPtr.addNonceChange(address2, 2, 2)
+    taskpool.spawn builderPtr.addNonceChange(address2, 1, 1)
+    taskpool.spawn builderPtr.addNonceChange(address3, 1, 10)
+
+    taskpool.syncAll()
+
+    let bal = builder.buildBlockAccessList()[]
+    check:
+      bal.len() == 3
+      bal[0].address == address1
+      bal[0].nonceChanges == @[(3.BlockAccessIndex, 3.AccountNonce)]
+      bal[1].address == address2
+      bal[1].nonceChanges == @[(1.BlockAccessIndex, 1.AccountNonce), (2.BlockAccessIndex, 2.AccountNonce)]
+      bal[2].address == address3
+      bal[2].nonceChanges == @[(1.BlockAccessIndex, 10.AccountNonce)]
+
+  test "Add code change":
+    taskpool.spawn builderPtr.addCodeChange(address2, 0, @[0x1.byte])
+    taskpool.spawn builderPtr.addCodeChange(address2, 1, @[0x2.byte])
+    taskpool.spawn builderPtr.addCodeChange(address1, 3, @[0x4.byte])
+
+    taskpool.syncAll()
+
+    let bal = builder.buildBlockAccessList()[]
+    check:
+      bal.len() == 2
+      bal[0].address == address1
+      bal[0].codeChanges == @[(3.BlockAccessIndex, @[0x4.byte])]
+      bal[1].address == address2
+      bal[1].codeChanges == @[(0.BlockAccessIndex, @[0x1.byte]), (1.BlockAccessIndex, @[0x2.byte])]
+
+  test "All changes and reads":
+    taskpool.spawn builderPtr.addTouchedAccount(address3)
+    taskpool.spawn builderPtr.addTouchedAccount(address2)
+    taskpool.spawn builderPtr.addTouchedAccount(address1)
+    taskpool.spawn builderPtr.addTouchedAccount(address1) # duplicate
+
+    taskpool.spawn builderPtr.addStorageWrite(address1, slot3, 0, 3.u256)
+    taskpool.spawn builderPtr.addStorageWrite(address1, slot2, 2, 2.u256)
+    taskpool.spawn builderPtr.addStorageWrite(address1, slot1, 1, 1.u256)
+    taskpool.spawn builderPtr.addStorageWrite(address2, slot1, 1, 1.u256)
+    taskpool.spawn builderPtr.addStorageWrite(address1, slot3, 3, 5.u256)
+
+    taskpool.spawn builderPtr.addStorageRead(address2, slot3)
+    taskpool.spawn builderPtr.addStorageRead(address2, slot2)
+    taskpool.spawn builderPtr.addStorageRead(address3, slot3)
+    taskpool.spawn builderPtr.addStorageRead(address1, slot1)
+    taskpool.spawn builderPtr.addStorageRead(address1, slot1) # duplicate
+
+    taskpool.spawn builderPtr.addBalanceChange(address2, 1, 0.u256)
+    taskpool.spawn builderPtr.addBalanceChange(address2, 0, 1.u256)
+    taskpool.spawn builderPtr.addBalanceChange(address3, 3, 3.u256)
+    taskpool.spawn builderPtr.addBalanceChange(address1, 2, 10.u256)
+
+    taskpool.spawn builderPtr.addNonceChange(address1, 3, 3)
+    taskpool.spawn builderPtr.addNonceChange(address2, 2, 2)
+    taskpool.spawn builderPtr.addNonceChange(address2, 1, 1)
+    taskpool.spawn builderPtr.addNonceChange(address3, 1, 10)
+
+    taskpool.spawn builderPtr.addCodeChange(address2, 0, @[0x1.byte])
+    taskpool.spawn builderPtr.addCodeChange(address2, 1, @[0x2.byte])
+    taskpool.spawn builderPtr.addCodeChange(address1, 3, @[0x4.byte])
+
+    taskpool.syncAll()
+
+    let bal = builder.buildBlockAccessList()[]
     check:
       bal.len() == 3
 

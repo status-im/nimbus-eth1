@@ -13,13 +13,16 @@
 import
   std/[tables, deques],
   chronos,
+  minilru,
   ../../../common,
   ../../../db/[core_db, fcu_db],
   ../../../portal/portal,
   ./block_quarantine,
   ./chain_branch
 
-export tables
+from ../../../block_access_list/block_access_list_builder import BlockAccessListRef
+
+export tables, minilru
 
 type
   QueueItem* = object
@@ -101,6 +104,11 @@ type
     processingQueueLoop*: Future[void].Raising([CancelledError])
       # Prevent async re-entrancy messing up FC state
       # on both `importBlock` and `forkChoice`.
+
+    badBlocks*: LruCache[Hash32, (Block, Opt[BlockAccessListRef])]
+      # Recent blocks that failed validation for any reason,
+      # indexed by block hash and containing a tuple of the block
+      # and the generated block access list.
 
 # ------------------------------------------------------------------------------
 # These functions are private to ForkedChainRef

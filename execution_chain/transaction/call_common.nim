@@ -44,6 +44,8 @@ proc initialAccessListEIP2929(call: CallParams) =
     if not call.isCreate:
       db.accessList(call.to)
       # If the `call.to` has a delegation, also warm its target.
+      if vmState.balTrackerEnabled:
+        vmState.balTracker.trackAddressAccess(call.to)
       let target = parseDelegationAddress(db.getCode(call.to))
       if target.isSome:
         db.accessList(target[])
@@ -67,6 +69,8 @@ proc preExecComputation(vmState: BaseVMState, call: CallParams): int64 =
   let ledger = vmState.ledger
 
   if not call.isCreate:
+    if vmState.balTrackerEnabled:
+      vmState.balTracker.trackIncNonceChange(call.sender)
     ledger.incNonce(call.sender)
 
   # EIP-7702
@@ -87,6 +91,8 @@ proc preExecComputation(vmState: BaseVMState, call: CallParams): int64 =
     ledger.accessList(authority)
 
     # 5. Verify the code of authority is either empty or already delegated.
+    if vmState.balTrackerEnabled:
+      vmState.balTracker.trackAddressAccess(authority)
     let code = ledger.getCode(authority)
     if code.len > 0:
       if not parseDelegation(code):
@@ -101,12 +107,18 @@ proc preExecComputation(vmState: BaseVMState, call: CallParams): int64 =
       gasRefund += PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST
 
     # 8. Set the code of authority to be 0xef0100 || address. This is a delegation designation.
-    if auth.address == zeroAddress:
-      ledger.setCode(authority, @[])
-    else:
-      ledger.setCode(authority, @(addressToDelegation(auth.address)))
+    let authCode =
+      if auth.address == zeroAddress:
+        @[]
+      else:
+        @(addressToDelegation(auth.address))
+    if vmState.balTrackerEnabled:
+      vmState.balTracker.trackCodeChange(authority, authCode)
+    ledger.setCode(authority, authCode)
 
     # 9. Increase the nonce of authority by one.
+    if vmState.balTrackerEnabled:
+      vmState.balTracker.trackNonceChange(authority, auth.nonce + 1)
     ledger.setNonce(authority, auth.nonce + 1)
 
   gasRefund
@@ -186,12 +198,16 @@ proc prepareToRunComputation(host: TransactionHost, call: CallParams) =
       fork = vmState.fork
 
     vmState.mutateLedger:
+      if vmState.balTrackerEnabled:
+        vmState.balTracker.trackSubBalanceChange(call.sender, call.gasLimit.u256 * call.gasPrice.u256)
       db.subBalance(call.sender, call.gasLimit.u256 * call.gasPrice.u256)
 
       # EIP-4844
       if fork >= FkCancun:
         let blobFee = calcDataFee(call.versionedHashes.len,
           vmState.blockCtx.excessBlobGas, vmState.com, fork)
+        if vmState.balTrackerEnabled:
+          vmState.balTracker.trackSubBalanceChange(call.sender, blobFee)
         db.subBalance(call.sender, blobFee)
 
 proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): GasInt =
@@ -226,6 +242,8 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
 
   # Refund for unused gas.
   if gasRemaining > 0 and not call.noGasCharge:
+    if host.vmState.balTrackerEnabled:
+      host.vmState.balTracker.trackAddBalanceChange(call.sender, gasRemaining.u256 * call.gasPrice.u256)
     host.vmState.mutateLedger:
       db.addBalance(call.sender, gasRemaining.u256 * call.gasPrice.u256)
 
