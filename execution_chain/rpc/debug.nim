@@ -35,14 +35,6 @@ BadBlock.useDefaultSerializationIn JrpcConv
 
 ExecutionWitness.useDefaultSerializationIn JrpcConv
 
-# Block access list json serialization
-AccountChanges.useDefaultSerializationIn JrpcConv
-SlotChanges.useDefaultSerializationIn JrpcConv
-StorageChange.useDefaultSerializationIn JrpcConv
-BalanceChange.useDefaultSerializationIn JrpcConv
-NonceChange.useDefaultSerializationIn JrpcConv
-CodeChange.useDefaultSerializationIn JrpcConv
-
 #type
 #   TraceOptions = object
 #     disableStorage: Opt[bool]
@@ -101,19 +93,6 @@ proc getExecutionWitness*(chain: ForkedChainRef, blockHash: Hash32): Result[Exec
     executionWitness.addHeader(rlp.encode(header))
 
   ok(executionWitness)
-
-proc getBlockAccessList*(
-    chain: ForkedChainRef,
-    blockHash: Hash32): Result[BlockAccessList, string] =
-
-  let txFrame = chain.txFrame(blockHash).txFrameBegin()
-  defer:
-    txFrame.dispose()
-
-  let bal = (?txFrame.getBlockAccessList(blockHash)).valueOr:
-    return err("Block access list not found")
-
-  ok(bal[])
 
 proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
   let
@@ -264,20 +243,6 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
 
     rlp.encode(header).to0xHex()
 
-  server.rpc("debug_getBlockAccessList") do(quantityTag: BlockTag) -> BlockAccessList:
-    ## Returns a block access list for the given block number.
-    let header = chain.headerFromTag(quantityTag).valueOr:
-      raise newException(ValueError, "Header not found")
-
-    chain.getBlockAccessList(header.computeBlockHash()).valueOr:
-      raise newException(ValueError, error)
-
-  server.rpc("debug_getBlockAccessListByBlockHash") do(blockHash: Hash32) -> BlockAccessList:
-    ## Returns a block access list for the given block hash.
-
-    chain.getBlockAccessList(blockHash).valueOr:
-      raise newException(ValueError, error)
-
   server.rpc("debug_getBadBlocks") do() -> seq[BadBlock]:
     ## Returns a list of the most recently processed bad blocks.
     var badBlocks: seq[BadBlock]
@@ -296,3 +261,22 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
         rlp: rlp.encode(blk))
 
     badBlocks
+
+  # We should remove these two block access list endpoints at some point
+  # or at least update them to return the BAL in RLP format since the same
+  # functionality is now provied by eth_getBlockAccessListByBlockNumber
+  # and eth_getBlockAccessListByBlockHash
+
+  server.rpc("debug_getBlockAccessList") do(quantityTag: BlockTag) -> BlockAccessList:
+    ## Returns a block access list for the given block number.
+    let header = chain.headerFromTag(quantityTag).valueOr:
+      raise newException(ValueError, "Header not found")
+
+    chain.getBlockAccessList(header.computeBlockHash()).valueOr:
+      raise newException(ValueError, "Block access list not found")
+
+  server.rpc("debug_getBlockAccessListByBlockHash") do(blockHash: Hash32) -> BlockAccessList:
+    ## Returns a block access list for the given block hash.
+
+    chain.getBlockAccessList(blockHash).valueOr:
+      raise newException(ValueError, "Block access list not found")

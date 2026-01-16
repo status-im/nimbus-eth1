@@ -8,7 +8,8 @@
 # those terms.
 
 import
-  web3/eth_api_types,
+  eth/common/block_access_lists,
+  web3/[eth_api_types, conversions],
   ../beacon/web3_eth_conv
 
 export
@@ -21,3 +22,11 @@ type
   # BlockTag instead of BlockId:
   # prevent type clash with eth2 BlockId in portal/verified_proxy
   BlockTag* = eth_api_types.RtBlockIdentifier
+
+# Block access list json serialization
+AccountChanges.useDefaultSerializationIn JrpcConv
+SlotChanges.useDefaultSerializationIn JrpcConv
+StorageChange.useDefaultSerializationIn JrpcConv
+BalanceChange.useDefaultSerializationIn JrpcConv
+NonceChange.useDefaultSerializationIn JrpcConv
+CodeChange.useDefaultSerializationIn JrpcConv

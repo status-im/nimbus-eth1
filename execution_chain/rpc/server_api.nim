@@ -726,3 +726,43 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       lastFork = api.com.lastFork(currentFork)
 
     return api.com.getEthConfigObject(api.chain, currentFork, nextFork, lastFork)
+
+  server.rpc("eth_getBlockAccessListByBlockHash") do(data: Hash32) -> Opt[BlockAccessList]:
+    ## Returns the block access list for a block by block hash.
+    ##
+    ## data: hash of block.
+    ## Returns the block access list or nil when none was found.
+    let header = api.chain.headerByHash(data).valueOr:
+      raise newException(ValueError, "Block not found")
+
+    if not api.com.isAmsterdamOrLater(header.timestamp):
+      raise newException(ValueError, "Block access list not available for pre-Amsterdam blocks")
+
+    let bal = api.chain.getBlockAccessList(data).valueOr:
+      if header.number <= api.chain.resolvedFinNumber:
+        # This block is finalized so if the bal is missing it means it was pruned.
+        raise newException(ValueError, "Pruned history unavailable")
+      else:
+        return Opt.none(BlockAccessList)
+
+    Opt.some(bal)
+
+  server.rpc("eth_getBlockAccessListByBlockNumber") do(quantityTag: BlockTag) -> Opt[BlockAccessList]:
+    ## Returns the block access list for a block by number.
+    ##
+    ## quantityTag: a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
+    ## Returns the block access list or nil when none was found.
+    let header = api.headerFromTag(quantityTag).valueOr:
+      raise newException(ValueError, "Block not found")
+
+    if not api.com.isAmsterdamOrLater(header.timestamp):
+      raise newException(ValueError, "Block access list not available for pre-Amsterdam blocks")
+
+    let bal = api.chain.getBlockAccessList(header.computeRlpHash()).valueOr:
+      if header.number <= api.chain.resolvedFinNumber:
+        # This block is finalized so if the bal is missing it means it was pruned.
+        raise newException(ValueError, "Pruned history unavailable")
+      else:
+        return Opt.none(BlockAccessList)
+
+    Opt.some(bal)
