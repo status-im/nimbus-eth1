@@ -1,0 +1,48 @@
+# Copyright (c) 2019-2026 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
+# Used by ci/hive.groovy
+
+FROM harbor.status.im/infra/ci-build-containers:linux-base-1.0.0
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PATH="/usr/local/go/bin:/opt/go/bin:/opt/hive:${PATH}"
+ENV GOPATH="/opt/go"
+ENV GOCACHE="/opt/go/cache"
+
+USER root
+
+# Install Docker CLI
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+  && install -m 0755 -d /etc/apt/keyrings \
+  && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
+  && chmod a+r /etc/apt/keyrings/docker.asc \
+  && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian \
+    $(. /etc/os-release && echo "${VERSION_CODENAME}") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin \
+  && rm -rf /var/lib/apt/lists/*
+
+# Install Go
+ARG GO_VERSION=1.23.4
+RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" | tar -C /usr/local -xz
+
+# Install Java (for Jenkins agent)
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openjdk-17-jre-headless \
+  && rm -rf /var/lib/apt/lists/*
+
+# Clone and build Hive
+RUN mkdir -p /opt/go /opt/hive \
+  && git clone --depth 1 https://github.com/ethereum/hive.git /opt/hive \
+  && cd /opt/hive \
+  && go build -o hive . \
+  && go build -o hiveview ./cmd/hiveview \
+  && rm -rf /opt/hive/.git /opt/go/cache /opt/go/pkg \
+  && chmod -R 777 /opt/hive /opt/go
+
+USER jenkins
