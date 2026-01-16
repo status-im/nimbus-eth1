@@ -74,17 +74,18 @@ proc processVerifProxyTasks(ctx: ptr Context) {.exported.} =
   for taskNode in ctx.tasks.nodes:
     let task = taskNode.value
     if task.finished:
-      task.cb(ctx, task.status, alloc(task.response))
+      task.cb(ctx, task.reqId, task.status, alloc(task.response))
       ctx.tasks.remove(taskNode)
       ctx.taskLen -= 1
 
   if ctx.taskLen > 0:
     poll()
 
-proc createTask(cb: CallBackProc): Task =
+proc createTask(cb: CallBackProc, reqId: cuint): Task =
   let task = Task()
   task.finished = false
   task.cb = cb
+  task.reqId = reqId
   task
 
 proc startVerifProxy(configJson: cstring, cb: CallBackProc): ptr Context {.exported.} =
@@ -94,25 +95,35 @@ proc startVerifProxy(configJson: cstring, cb: CallBackProc): ptr Context {.expor
   try:
     initLib()
   except Exception as e:
-    cb(ctx, RET_DESER_ERROR, alloc(e.msg))
+    cb(ctx, 0, RET_DESER_ERROR, alloc(e.msg))
+    return
 
   let
-    task = createTask(cb)
+    task = createTask(cb, uint32(0))
     fut = run(ctx, $configJson)
 
-  fut.addCallback proc(_: pointer) {.gcsafe.} =
-    if fut.cancelled():
-      task.response = Json.encode(fut.error())
-      task.finished = true
-      task.status = RET_CANCELLED
-    elif fut.failed():
-      task.response = Json.encode(fut.error())
-      task.finished = true
-      task.status = RET_ERROR
+  if not fut.finished:
+    fut.addCallback proc(_: pointer) {.gcsafe.} =
+      if fut.cancelled():
+        task.response = Json.encode(fut.error())
+        task.finished = true
+        task.status = RET_CANCELLED
+      elif fut.failed():
+        debugEcho "future failed"
+        task.response = Json.encode(fut.error())
+        task.finished = true
+        task.status = RET_ERROR
+      else:
+        task.response = "success" # since return type is void
+        task.finished = true
+        task.status = RET_SUCCESS
+  else:
+    if fut.failed() or fut.cancelled():
+      cb(ctx, 0, RET_ERROR, alloc(fut.error().msg))
+      return
     else:
-      task.response = "success" # since return type is void
-      task.finished = true
-      task.status = RET_SUCCESS
+      cb(ctx, 0, RET_ERROR, alloc("Future finished prematurely!"))
+      return
 
   task.fut = fut
   ctx.tasks.add(task)
@@ -124,20 +135,20 @@ proc stopVerifProxy(ctx: ptr Context) {.exported.} =
   ctx.stop = true
 
 # NOTE: this is not the C callback. This is just a callback for the future
-template callbackToC(ctx: ptr Context, cb: CallBackProc, asyncCall: untyped) =
-  let task = createTask(cb)
-  ctx.tasks.add(task)
-  ctx.taskLen += 1
+template callbackToC(
+    ctx: ptr Context, reqId: cuint, cb: CallBackProc, asyncCall: untyped
+) =
+  let
+    task = createTask(cb, reqId)
+    fut = asyncCall
 
-  let fut = asyncCall
-
-  fut.addCallback proc(_: pointer) {.gcsafe.} =
+  proc processFuture[T](fut: Future[T], task: Task) {.gcsafe.} =
     if fut.cancelled():
-      task.response = Json.encode(fut.error())
+      task.response = Json.encode(fut.error().msg)
       task.finished = true
       task.status = RET_CANCELLED
     elif fut.failed():
-      task.response = Json.encode(fut.error())
+      task.response = Json.encode(fut.error().msg)
       task.finished = true
       task.status = RET_ERROR
     else:
@@ -151,7 +162,15 @@ template callbackToC(ctx: ptr Context, cb: CallBackProc, asyncCall: untyped) =
         task.finished = true
         task.status = RET_SUCCESS
 
+  if not fut.finished:
+    fut.addCallback proc(_: pointer) {.gcsafe.} =
+      processFuture(fut, task)
+  else:
+    processFuture(fut, task)
+
   task.fut = fut
+  ctx.tasks.add(task)
+  ctx.taskLen += 1
 
 # taken from nim-json-rpc and adapted
 func unpackArg(
@@ -194,27 +213,32 @@ func unpackArg(arg: string, argType: type): Result[argType, string] {.raises: []
   except CatchableError as e:
     err("Parameter of type " & $argType & " coudln't be decoded: " & e.msg)
 
-proc eth_blockNumber(ctx: ptr Context, cb: CallBackProc) {.exported.} =
-  callbackToC(ctx, cb):
+proc eth_blockNumber(ctx: ptr Context, reqId: cuint, cb: CallBackProc) {.exported.} =
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_blockNumber()
 
 proc eth_getBalance(
-    ctx: ptr Context, address: cstring, blockTag: cstring, cb: CallBackProc
+    ctx: ptr Context,
+    reqId: cuint,
+    address: cstring,
+    blockTag: cstring,
+    cb: CallBackProc,
 ) {.exported.} =
   let
     addressTyped = unpackArg($address, Address).valueOr:
-      cb(ctx, RET_DESER_ERROR, alloc(error))
+      cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
       return
 
     blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
-      cb(ctx, RET_DESER_ERROR, alloc(error))
+      cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
       return
 
-  callbackToC(ctx, cb):
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_getBalance(addressTyped, blockTagTyped)
 
 proc eth_getStorageAt(
     ctx: ptr Context,
+    reqId: cuint,
     address: cstring,
     slot: cstring,
     blockTag: cstring,
@@ -222,138 +246,163 @@ proc eth_getStorageAt(
 ) {.exported.} =
   let
     addressTyped = unpackArg($address, Address).valueOr:
-      cb(ctx, RET_DESER_ERROR, alloc(error))
+      cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
       return
 
     slotTyped = unpackArg($slot, UInt256).valueOr:
-      cb(ctx, RET_DESER_ERROR, alloc(error))
+      cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
       return
 
     blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
-      cb(ctx, RET_DESER_ERROR, alloc(error))
+      cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
       return
 
-  callbackToC(ctx, cb):
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_getStorageAt(addressTyped, slotTyped, blockTagTyped)
 
 proc eth_getTransactionCount(
-    ctx: ptr Context, address: cstring, blockTag: cstring, cb: CallBackProc
+    ctx: ptr Context,
+    reqId: cuint,
+    address: cstring,
+    blockTag: cstring,
+    cb: CallBackProc,
 ) {.exported.} =
   let
     addressTyped = unpackArg($address, Address).valueOr:
-      cb(ctx, RET_DESER_ERROR, alloc(error))
+      cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
       return
 
     blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
-      cb(ctx, RET_DESER_ERROR, alloc(error))
+      cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
       return
 
-  callbackToC(ctx, cb):
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_getTransactionCount(addressTyped, blockTagTyped)
 
 proc eth_getCode(
-    ctx: ptr Context, address: cstring, blockTag: cstring, cb: CallBackProc
+    ctx: ptr Context,
+    reqId: cuint,
+    address: cstring,
+    blockTag: cstring,
+    cb: CallBackProc,
 ) {.exported.} =
   let
     addressTyped = unpackArg($address, Address).valueOr:
-      cb(ctx, RET_DESER_ERROR, alloc(error))
+      cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
       return
 
     blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
-      cb(ctx, RET_DESER_ERROR, alloc(error))
+      cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
       return
 
-  callbackToC(ctx, cb):
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_getCode(addressTyped, blockTagTyped)
 
 proc eth_getBlockByHash(
-    ctx: ptr Context, blockHash: cstring, fullTransactions: bool, cb: CallBackProc
+    ctx: ptr Context,
+    reqId: cuint,
+    blockHash: cstring,
+    fullTransactions: bool,
+    cb: CallBackProc,
 ) {.exported.} =
   let blockHashTyped = unpackArg($blockHash, Hash32).valueOr:
-    cb(ctx, RET_DESER_ERROR, alloc(error))
+    cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
     return
 
-  callbackToC(ctx, cb):
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_getBlockByHash(blockHashTyped, fullTransactions)
 
 proc eth_getBlockByNumber(
-    ctx: ptr Context, blockTag: cstring, fullTransactions: bool, cb: CallBackProc
+    ctx: ptr Context,
+    reqId: cuint,
+    blockTag: cstring,
+    fullTransactions: bool,
+    cb: CallBackProc,
 ) {.exported.} =
   let blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
-    cb(ctx, RET_DESER_ERROR, alloc(error))
+    cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
     return
 
-  callbackToC(ctx, cb):
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_getBlockByNumber(blockTagTyped, fullTransactions)
 
 proc eth_getUncleCountByBlockNumber(
-    ctx: ptr Context, blockTag: cstring, cb: CallBackProc
+    ctx: ptr Context, reqId: cuint, blockTag: cstring, cb: CallBackProc
 ) {.exported.} =
   let blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
-    cb(ctx, RET_DESER_ERROR, alloc(error))
+    cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
     return
 
-  callbackToC(ctx, cb):
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_getUncleCountByBlockNumber(blockTagTyped)
 
 proc eth_getUncleCountByBlockHash(
-    ctx: ptr Context, blockHash: cstring, cb: CallBackProc
+    ctx: ptr Context, reqId: cuint, blockHash: cstring, cb: CallBackProc
 ) {.exported.} =
   let blockHashTyped = unpackArg($blockHash, Hash32).valueOr:
-    cb(ctx, RET_DESER_ERROR, alloc(error))
+    cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
     return
 
-  callbackToC(ctx, cb):
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_getUncleCountByBlockHash(blockHashTyped)
 
 proc eth_getBlockTransactionCountByNumber(
-    ctx: ptr Context, blockTag: cstring, cb: CallBackProc
+    ctx: ptr Context, reqId: cuint, blockTag: cstring, cb: CallBackProc
 ) {.exported.} =
   let blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
-    cb(ctx, RET_DESER_ERROR, alloc(error))
+    cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
     return
 
-  callbackToC(ctx, cb):
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_getBlockTransactionCountByNumber(blockTagTyped)
 
 proc eth_getBlockTransactionCountByHash(
-    ctx: ptr Context, blockHash: cstring, cb: CallBackProc
+    ctx: ptr Context, reqId: cuint, blockHash: cstring, cb: CallBackProc
 ) {.exported.} =
   let blockHashTyped = unpackArg($blockHash, Hash32).valueOr:
-    cb(ctx, RET_DESER_ERROR, alloc(error))
+    cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
     return
 
-  callbackToC(ctx, cb):
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_getBlockTransactionCountByHash(blockHashTyped)
 
 proc eth_getTransactionByBlockNumberAndIndex(
-    ctx: ptr Context, blockTag: cstring, index: culonglong, cb: CallBackProc
+    ctx: ptr Context,
+    reqId: cuint,
+    blockTag: cstring,
+    index: culonglong,
+    cb: CallBackProc,
 ) {.exported.} =
   let
     blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
-      cb(ctx, RET_DESER_ERROR, alloc(error))
+      cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
       return
 
     indexTyped = Quantity(uint64(index))
 
-  callbackToC(ctx, cb):
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_getTransactionByBlockNumberAndIndex(blockTagTyped, indexTyped)
 
 proc eth_getTransactionByBlockHashAndIndex(
-    ctx: ptr Context, blockHash: cstring, index: culonglong, cb: CallBackProc
+    ctx: ptr Context,
+    reqId: cuint,
+    blockHash: cstring,
+    index: culonglong,
+    cb: CallBackProc,
 ) {.exported.} =
   let
     blockHashTyped = unpackArg($blockHash, Hash32).valueOr:
-      cb(ctx, RET_DESER_ERROR, alloc(error))
+      cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
       return
 
     indexTyped = Quantity(uint64(index))
 
-  callbackToC(ctx, cb):
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_getTransactionByBlockHashAndIndex(blockHashTyped, indexTyped)
 
 proc eth_call(
     ctx: ptr Context,
+    reqId: cuint,
     txArgs: cstring,
     blockTag: cstring,
     optimisticStateFetch: bool,
@@ -361,18 +410,19 @@ proc eth_call(
 ) {.exported.} =
   let
     txArgsTyped = unpackArg($txArgs, TransactionArgs).valueOr:
-      cb(ctx, RET_DESER_ERROR, alloc(error))
+      cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
       return
 
     blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
-      cb(ctx, RET_DESER_ERROR, alloc(error))
+      cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
       return
 
-  callbackToC(ctx, cb):
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_call(txArgsTyped, blockTagTyped, optimisticStateFetch)
 
 proc eth_createAccessList(
     ctx: ptr Context,
+    reqId: cuint,
     txArgs: cstring,
     blockTag: cstring,
     optimisticStateFetch: bool,
@@ -380,18 +430,19 @@ proc eth_createAccessList(
 ) {.exported.} =
   let
     txArgsTyped = unpackArg($txArgs, TransactionArgs).valueOr:
-      cb(ctx, RET_DESER_ERROR, alloc(error))
+      cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
       return
 
     blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
-      cb(ctx, RET_DESER_ERROR, alloc(error))
+      cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
       return
 
-  callbackToC(ctx, cb):
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_createAccessList(txArgsTyped, blockTagTyped, optimisticStateFetch)
 
 proc eth_estimateGas(
     ctx: ptr Context,
+    reqId: cuint,
     txArgs: cstring,
     blockTag: cstring,
     optimisticStateFetch: bool,
@@ -399,106 +450,108 @@ proc eth_estimateGas(
 ) {.exported.} =
   let
     txArgsTyped = unpackArg($txArgs, TransactionArgs).valueOr:
-      cb(ctx, RET_DESER_ERROR, alloc(error))
+      cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
       return
 
     blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
-      cb(ctx, RET_DESER_ERROR, alloc(error))
+      cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
       return
 
-  callbackToC(ctx, cb):
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_estimateGas(txArgsTyped, blockTagTyped, optimisticStateFetch)
 
 proc eth_getTransactionByHash(
-    ctx: ptr Context, txHash: cstring, cb: CallBackProc
+    ctx: ptr Context, reqId: cuint, txHash: cstring, cb: CallBackProc
 ) {.exported.} =
   let txHashTyped = unpackArg($txHash, Hash32).valueOr:
-    cb(ctx, RET_DESER_ERROR, alloc(error))
+    cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
     return
 
-  callbackToC(ctx, cb):
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_getTransactionByHash(txHashTyped)
 
 proc eth_getBlockReceipts(
-    ctx: ptr Context, blockTag: cstring, cb: CallBackProc
+    ctx: ptr Context, reqId: cuint, blockTag: cstring, cb: CallBackProc
 ) {.exported.} =
   let blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
-    cb(ctx, RET_DESER_ERROR, alloc(error))
+    cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
     return
 
-  callbackToC(ctx, cb):
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_getBlockReceipts(blockTagTyped)
 
 proc eth_getTransactionReceipt(
-    ctx: ptr Context, txHash: cstring, cb: CallBackProc
+    ctx: ptr Context, reqId: cuint, txHash: cstring, cb: CallBackProc
 ) {.exported.} =
   let txHashTyped = unpackArg($txHash, Hash32).valueOr:
-    cb(ctx, RET_DESER_ERROR, alloc(error))
+    cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
     return
 
-  callbackToC(ctx, cb):
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_getTransactionReceipt(txHashTyped)
 
 proc eth_getLogs(
-    ctx: ptr Context, filterOptions: cstring, cb: CallBackProc
+    ctx: ptr Context, reqId: cuint, filterOptions: cstring, cb: CallBackProc
 ) {.exported.} =
   let filterOptionsTyped = unpackArg($filterOptions, FilterOptions).valueOr:
-    cb(ctx, RET_DESER_ERROR, alloc(error))
+    cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
     return
 
-  callbackToC(ctx, cb):
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_getLogs(filterOptionsTyped)
 
 proc eth_newFilter(
-    ctx: ptr Context, filterOptions: cstring, cb: CallBackProc
+    ctx: ptr Context, reqId: cuint, filterOptions: cstring, cb: CallBackProc
 ) {.exported.} =
   let filterOptionsTyped = unpackArg($filterOptions, FilterOptions).valueOr:
-    cb(ctx, RET_DESER_ERROR, alloc(error))
+    cb(ctx, reqId, RET_DESER_ERROR, alloc(error))
     return
 
-  callbackToC(ctx, cb):
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_newFilter(filterOptionsTyped)
 
 proc eth_uninstallFilter(
-    ctx: ptr Context, filterId: cstring, cb: CallBackProc
+    ctx: ptr Context, reqId: cuint, filterId: cstring, cb: CallBackProc
 ) {.exported.} =
-  callbackToC(ctx, cb):
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_uninstallFilter($filterId)
 
 proc eth_getFilterLogs(
-    ctx: ptr Context, filterId: cstring, cb: CallBackProc
+    ctx: ptr Context, reqId: cuint, filterId: cstring, cb: CallBackProc
 ) {.exported.} =
-  callbackToC(ctx, cb):
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_getFilterLogs($filterId)
 
 proc eth_getFilterChanges(
-    ctx: ptr Context, filterId: cstring, cb: CallBackProc
+    ctx: ptr Context, reqId: cuint, filterId: cstring, cb: CallBackProc
 ) {.exported.} =
-  callbackToC(ctx, cb):
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_getFilterChanges($filterId)
 
-proc eth_blobBaseFee(ctx: ptr Context, cb: CallBackProc) {.exported.} =
-  callbackToC(ctx, cb):
+proc eth_blobBaseFee(ctx: ptr Context, reqId: cuint, cb: CallBackProc) {.exported.} =
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_blobBaseFee()
 
-proc eth_gasPrice(ctx: ptr Context, cb: CallBackProc) {.exported.} =
-  callbackToC(ctx, cb):
+proc eth_gasPrice(ctx: ptr Context, reqId: cuint, cb: CallBackProc) {.exported.} =
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_gasPrice()
 
-proc eth_maxPriorityFeePerGas(ctx: ptr Context, cb: CallBackProc) {.exported.} =
-  callbackToC(ctx, cb):
+proc eth_maxPriorityFeePerGas(
+    ctx: ptr Context, reqId: cuint, cb: CallBackProc
+) {.exported.} =
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_maxPriorityFeePerGas()
 
 proc eth_sendRawTransaction(
-    ctx: ptr Context, txHexBytes: cstring, cb: CallBackProc
+    ctx: ptr Context, reqId: cuint, txHexBytes: cstring, cb: CallBackProc
 ) {.exported.} =
   let txBytes =
     try:
       let temp = hexToSeqByte($txHexBytes)
       temp
     except ValueError as e:
-      cb(ctx, RET_DESER_ERROR, alloc(e.msg))
+      cb(ctx, reqId, RET_DESER_ERROR, alloc(e.msg))
       return
 
-  callbackToC(ctx, cb):
+  callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_sendRawTransaction(txBytes)
