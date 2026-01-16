@@ -47,7 +47,7 @@ proc configurationMain*() =
     test "bootstrap-blocks-file parsing":
       let defaults = makeTestConfig()
       check defaults.bootstrapBlocksFile.len == 0
-      check defaults.bootstrapBlocksFinalized
+      check defaults.bootstrapBlocksFinalized == false
 
       let cfg = makeConfig(@[
         "--bootstrap-blocks-file:" & genesisFile,
