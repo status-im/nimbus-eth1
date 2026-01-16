@@ -45,6 +45,7 @@ import
   ./chain/forked_chain,
   ./pooled_txs
 
+from ../evm/state import blockAccessList
 from eth/common/eth_types_rlp import rlpHash
 
 # ------------------------------------------------------------------------------
@@ -136,6 +137,7 @@ type AssembledBlock* = object
   blobsBundle*: BlobsBundle
   blockValue*: UInt256
   executionRequests*: Opt[seq[seq[byte]]]
+  blockAccessList*: Opt[BlockAccessListRef]
 
 func getWrapperVersion(com: CommonRef, timestamp: EthTime): WrapperVersion =
   if com.isOsakaOrLater(timestamp):
@@ -161,7 +163,7 @@ proc assembleBlock*(
       wrapperVersion: getWrapperVersion(com, blk.header.timestamp)
     )
     currentRlpSize = rlp.getEncodedLength(blk.header)
-  
+
   if blk.withdrawals.isSome:
     currentRlpSize = currentRlpSize + rlp.getEncodedLength(blk.withdrawals.get())
 
@@ -208,11 +210,19 @@ proc assembleBlock*(
     else:
       Opt.none(seq[seq[byte]])
 
+  let bal =
+    if com.isAmsterdamOrLater(blk.header.timestamp):
+      doAssert(xp.vmState.blockAccessList.isSome())
+      xp.vmState.blockAccessList
+    else:
+      Opt.none(BlockAccessListRef)
+
   ok AssembledBlock(
     blk: blk,
     blobsBundle: blobsBundleOpt,
     blockValue: pst.blockValue,
-    executionRequests: executionRequestsOpt)
+    executionRequests: executionRequestsOpt,
+    blockAccessList: bal)
 
 # ------------------------------------------------------------------------------
 # PoS payload attributes getters

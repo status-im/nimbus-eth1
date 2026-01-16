@@ -37,7 +37,9 @@ proc importBlock*(
       B=ctx.chain.baseNumber, L=ctx.chain.latestNumber
   else:
     try:
-      (await ctx.chain.queueImportBlock(blk)).isOkOr:
+      # TODO: The block access list needs to be passed in when available over devp2p
+      # and when the block falls within the BAL retention period.
+      (await ctx.chain.queueImportBlock(blk, Opt.none(BlockAccessListRef))).isOkOr:
         return err((ENoException, "", error, Moment.now() - start))
     except CancelledError as e:
       return err((ECancelledError,$e.name,e.msg,Moment.now()-start))

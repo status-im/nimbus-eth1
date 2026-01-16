@@ -463,10 +463,14 @@ proc queueUpdateBase(c: ForkedChainRef, base: BlockRef)
       c.processUpdateBase()
     await c.queue.addLast(QueueItem(handler: asyncHandler))
 
-proc validateBlock(c: ForkedChainRef,
-          parent: BlockRef,
-          blk: Block, finalized: bool): Future[Result[BlockRef, string]]
-            {.async: (raises: [CancelledError]).} =
+proc validateBlock(
+    c: ForkedChainRef,
+    parent: BlockRef,
+    blk: Block,
+    blockAccessList: Opt[BlockAccessListRef],
+    finalized: bool
+  ): Future[Result[BlockRef, string]] {.async: (raises: [CancelledError]).} =
+
   let
     blkHash = blk.header.computeBlockHash
     existingBlock = c.hashToBlock.getOrDefault(blkHash)
@@ -511,11 +515,9 @@ proc validateBlock(c: ForkedChainRef,
     parentTxFrame=cast[uint](parentFrame),
     txFrame=cast[uint](txFrame)
 
-  var receipts = c.processBlock(parent, txFrame, blk, blkHash, finalized).valueOr:
+  var receipts = c.processBlock(parent, txFrame, blk, blockAccessList, blkHash, finalized).valueOr:
     txFrame.dispose()
     return err(error)
-
-  c.writeBaggage(blk, blkHash, txFrame, receipts)
 
   # Checkpoint creates a snapshot of ancestor changes in txFrame - it is an
   # expensive operation, specially when creating a new branch (ie when blk
@@ -575,7 +577,7 @@ proc processOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false): Futu
     orphan = c.quarantine.popOrphan(parent.hash).valueOr:
       # No more orphaned block
       return ok()
-    parent = (await c.validateBlock(parent, orphan, finalized)).valueOr:
+    parent = (await c.validateBlock(parent, orphan[0], orphan[1], finalized)).valueOr:
       # Silent?
       # We don't return error here because the import is still ok()
       # but the quarantined blocks may not linked
@@ -665,6 +667,7 @@ proc init*(
       fcuSafe:          fcuSafe,
       baseQueue:        initDeque[BlockRef](),
       lastBaseLogTime:  EthTime.now(),
+      badBlocks:        LruCache[Hash32, (Block, Opt[BlockAccessListRef])].init(100),
     )
 
   # updateFinalized will stop ancestor lineage
@@ -677,8 +680,12 @@ proc init*(
 
   fc
 
-proc importBlock*(c: ForkedChainRef, blk: Block):
-       Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
+proc importBlock*(
+    c: ForkedChainRef,
+    blk: Block,
+    blockAccessList = Opt.none(BlockAccessListRef),
+    finalized = false
+  ): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   ## Try to import block to canonical or side chain.
   ## return error if the block is invalid
   ##
@@ -701,8 +708,8 @@ proc importBlock*(c: ForkedChainRef, blk: Block):
     # Setting the finalized flag to true here has the effect of skipping the
     # stateroot check for performance reasons.
     let
-      isFinalized = blk.header.number <= c.latestFinalized.number
-      parent = ?(await c.validateBlock(parent, blk, isFinalized))
+      isFinalized = finalized or blk.header.number <= c.latestFinalized.number
+      parent = ?(await c.validateBlock(parent, blk, blockAccessList, isFinalized))
     if c.quarantine.hasOrphans():
       c.queueOrphan(parent, isFinalized)
 
@@ -715,7 +722,7 @@ proc importBlock*(c: ForkedChainRef, blk: Block):
       parentHash = header.parentHash.short
 
     # Put into quarantine and hope we receive the parent block
-    c.quarantine.addOrphan(blockHash, blk)
+    c.quarantine.addOrphan(blockHash, blk, blockAccessList)
     return err("Block is not part of valid chain")
 
   ok()
@@ -775,9 +782,14 @@ proc stopProcessingQueue*(c: ForkedChainRef) {.async: (raises: []).} =
   # at the same time FC.serialize modify the state, crash can happen.
   await noCancel c.processingQueueLoop.cancelAndWait()
 
-template queueImportBlock*(c: ForkedChainRef, blk: Block): auto =
+template queueImportBlock*(
+    c: ForkedChainRef,
+    blk: Block,
+    blockAccessList = Opt.none(BlockAccessListRef),
+    finalized = false): auto =
+
   proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError], raw: true).} =
-    c.importBlock(blk)
+    c.importBlock(blk, blockAccessList, finalized)
 
   let item = QueueItem(
     responseFut: Future[Result[void, string]].Raising([CancelledError]).init(),
@@ -888,6 +900,12 @@ proc latestBlock*(c: ForkedChainRef): Block =
     return c.baseTxFrame.getEthBlock(c.latest.hash).expect("baseBlock exists")
   c.latest.blk
 
+proc getBadBlocks*(c: ForkedChainRef): seq[(Block, Opt[BlockAccessListRef])] =
+  var blks: seq[(Block, Opt[BlockAccessListRef])]
+  for badBlock in c.badBlocks.values():
+    blks.add(badBlock)
+  blks
+
 proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Header, string] =
   if number > c.latest.number:
     return err("Requested block number not exists: " & $number)
@@ -951,7 +969,6 @@ proc blockBodyByHash*(c: ForkedChainRef, blockHash: Hash32): Result[BlockBody, s
       transactions: blk.transactions,
       uncles: blk.uncles,
       withdrawals: blk.withdrawals,
-      blockAccessList: blk.blockAccessList,
     ))
   c.baseTxFrame.getBlockBody(blockHash)
 

@@ -84,14 +84,27 @@ func ethWithdrawals*(x: Opt[seq[WithdrawalV1]]):
   if x.isNone: Opt.none(seq[Withdrawal])
   else: Opt.some(ethWithdrawals x.get)
 
-func ethTx*(x: Web3Tx): common.Transaction {.gcsafe, raises:[RlpError].} =
+func ethTx*(x: Web3Tx): common.Transaction {.gcsafe, raises: [RlpError].} =
   result = rlp.decode(distinctBase x, common.Transaction)
 
 func ethTxs*(list: openArray[Web3Tx]):
-               seq[common.Transaction] {.gcsafe, raises:[RlpError].} =
+               seq[common.Transaction] {.gcsafe, raises: [RlpError].} =
   result = newSeqOfCap[common.Transaction](list.len)
   for x in list:
     result.add ethTx(x)
+
+func ethBlockAccessList*(
+    balRlpBytes: openArray[byte]): BlockAccessListRef {.gcsafe, raises: [RlpError].} =
+  let bal: BlockAccessListRef = new BlockAccessList
+  bal[] = rlp.decode(balRlpBytes, BlockAccessList)
+  bal
+
+func ethBlockAccessList*(
+    bal: Opt[seq[byte]]): Opt[BlockAccessListRef] {.gcsafe, raises: [RlpError].} =
+  if bal.isNone():
+    Opt.none(BlockAccessListRef)
+  else:
+    Opt.some(ethBlockAccessList(bal.get))
 
 # ------------------------------------------------------------------------------
 # Eth types to Web3 types
@@ -153,5 +166,14 @@ func w3Txs*(list: openArray[common.Transaction]): seq[Web3Tx] =
   result = newSeqOfCap[Web3Tx](list.len)
   for tx in list:
     result.add w3Tx(tx)
+
+func w3BlockAccessList*(bal: BlockAccessListRef): seq[byte] =
+  bal[].encode()
+
+func w3BlockAccessList*(bal: Opt[BlockAccessListRef]): Opt[seq[byte]] =
+  if bal.isNone():
+    Opt.none(seq[byte])
+  else:
+    Opt.some(w3BlockAccessList(bal.get))
 
 chronicles.formatIt(Quantity): $(distinctBase it)
