@@ -150,12 +150,7 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
       Opt.none(Port),
       extUdpPort,
       Opt.none(Port),
-      # Note: usage of the client field "c" is replaced with ping extensions client_info.
-      # This can be removed in the future when no more tooling relies on it.
-      localEnrFields = [
-        toFieldPair("c", enrClientInfoShort),
-        toFieldPair(portalEnrKey, getPortalEnrField(config.network)),
-      ],
+      localEnrFields = [toFieldPair(portalEnrKey, getPortalEnrField(config.network))],
       bootstrapRecords = bootstrapRecords,
       previousRecord = previousEnr,
       bindIp = Opt.some(bindIp),
