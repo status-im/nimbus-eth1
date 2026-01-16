@@ -166,7 +166,7 @@ jobs:
           build/nimbus_portal_client --help
           env CC=gcc make ${DEFAULT_MAKE_FLAGS} NIM_COMMIT=${{ matrix.branch }} portal-tools
           # CC is needed to select correct compiler 32/64 bit
-          env CC=gcc CXX=g++ make ${DEFAULT_MAKE_FLAGS} portal-test
+          env CC=gcc CXX=g++ make ${DEFAULT_MAKE_FLAGS} NIM_COMMIT=${{ matrix.branch }} portal-test
 
       - name: Run Nimbus Portal tests (Macos)
         if: runner.os == 'Macos'

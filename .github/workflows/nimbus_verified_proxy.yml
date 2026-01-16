@@ -79,4 +79,4 @@ jobs:
           make ${DEFAULT_MAKE_FLAGS} NIM_COMMIT=${{ matrix.branch }} nimbus_verified_proxy libverifproxy
           build/nimbus_verified_proxy --help
           # "-static" option will not work for osx unless static system libraries are provided
-          make ${DEFAULT_MAKE_FLAGS} nimbus-verified-proxy-test
+          make ${DEFAULT_MAKE_FLAGS} NIM_COMMIT=${{ matrix.branch }} nimbus-verified-proxy-test
