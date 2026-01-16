@@ -157,7 +157,6 @@ jobs:
         run: |
           ./env.sh nim --version
           gcc --version
-          ./env.sh nim -v
           ldd --version
           export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
           DEFAULT_MAKE_FLAGS="-j${ncpu}"
