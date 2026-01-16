@@ -9,8 +9,8 @@ import std/lists, ../engine/types, chronos
 
 type
   Task* = ref object
-    status*: int
-    name*: string
+    status*: cint
+    reqId*: cuint
     response*: string
     finished*: bool
     cb*: CallBackProc
@@ -23,8 +23,9 @@ type
     stop*: bool
     frontend*: EthApiFrontend
 
-  CallBackProc* =
-    proc(ctx: ptr Context, status: int, res: cstring) {.cdecl, gcsafe, raises: [].}
+  CallBackProc* = proc(ctx: ptr Context, reqId: cuint, status: cint, res: cstring) {.
+    cdecl, gcsafe, raises: []
+  .}
 
 const RET_SUCCESS*: cint = 0 # when the call to eth api frontend is successful
 const RET_ERROR*: cint = -1 # when the call to eth api frontend failed with an error
