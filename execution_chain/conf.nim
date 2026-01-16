@@ -60,7 +60,6 @@ type
   NimbusCmd* {.pure.} = enum
     executionClient
     `import`
-    `import-rlp`
 
   RpcFlag* {.pure.} = enum
     ## RPC flags
@@ -512,6 +511,18 @@ type
               " CL which will result in a smaller memory footprint"
         name: "debug-beacon-sync-target-is-final".}: bool
 
+      bootstrapBlocksFile* {.
+        desc: "Import RLP encoded block files before starting the client"
+        defaultValue: @[]
+        name: "bootstrap-blocks-file" .}: seq[InputFile]
+
+      bootstrapBlocksFinalized* {.
+        hidden
+        desc: "Treat bootstrap RLP imports as finalized chain segments"
+        defaultValue: false
+        name: "debug-bootstrap-finalized" .}: bool
+
+    # We now load all the import specific configurations directly into  ExecutionClientConf
     of NimbusCmd.`import`:
       maxBlocks* {.
         desc: "Maximum number of blocks to import"
@@ -562,12 +573,6 @@ type
         desc: "Store reverse slot hashes in database"
         defaultValue: false
         name: "debug-store-slot-hashes".}: bool
-
-    of NimbusCmd.`import-rlp`:
-      blocksFile* {.
-        argument
-        desc: "One or more RLP encoded block(s) files"
-        name: "blocks-file" .}: seq[InputFile]
 
 func parseHexOrDec256(p: string): UInt256 {.raises: [ValueError].} =
   if startsWith(p, "0x"):
@@ -827,4 +832,3 @@ proc makeConfig*(cmdLine = commandLineParams(), ignoreUnknown = false): Executio
 when isMainModule:
   # for testing purpose
   discard makeConfig()
-
