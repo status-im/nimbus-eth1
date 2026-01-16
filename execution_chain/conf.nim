@@ -519,7 +519,7 @@ type
       bootstrapBlocksFinalized* {.
         hidden
         desc: "Treat bootstrap RLP imports as finalized chain segments"
-        defaultValue: true
+        defaultValue: false
         name: "debug-bootstrap-finalized" .}: bool
 
     # We now load all the import specific configurations directly into  ExecutionClientConf

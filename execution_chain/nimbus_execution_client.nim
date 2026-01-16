@@ -9,7 +9,8 @@
 
 {.push raises: [], gcsafe.}
 
-import ../execution_chain/compile_info
+import
+  ../execution_chain/compile_info
 
 import
   chronicles,
@@ -29,20 +30,25 @@ import
   beacon_chain/[nimbus_binary_common, process_state],
   beacon_chain/validators/keystore_management
 
-const DontQuit = low(int) ## To be used with `onException()` or `onCancelledException()`
+const
+  DontQuit = low(int)
+    ## To be used with `onException()` or `onCancelledException()`
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-template onException(quitCode: static[int], info: static[string], code: untyped) =
+template onException(
+    quitCode: static[int];
+    info: static[string];
+    code: untyped) =
   try:
     code
   except CatchableError as e:
     when quitCode == DontQuit:
-      error info, error = ($e.name), msg = e.msg
+      error info, error=($e.name), msg=e.msg
     else:
-      fatal info, error = ($e.name), msg = e.msg
+      fatal info, error=($e.name), msg=e.msg
       quit(quitCode)
 
 # ------------------------------------------------------------------------------
@@ -51,20 +57,17 @@ template onException(quitCode: static[int], info: static[string], code: untyped)
 
 proc basicServices(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
   # Setup the chain
-  let fc = ForkedChainRef.init(
-    com,
+  let fc = ForkedChainRef.init(com,
     eagerStateRoot = config.eagerStateRootCheck,
     persistBatchSize = config.persistBatchSize,
     dynamicBatchSize = config.dynamicBatchSize,
     maxBlobs = config.maxBlobs,
-    enableQueue = true,
-  )
+    enableQueue = true)
   if config.deserializeFcState:
     fc.deserialize().isOkOr:
-      warn "Loading block DAG from database", msg = error
+      warn "Loading block DAG from database", msg=error
   else:
-    warn "Skipped loading of block DAG from database",
-      deserializeFcState = config.deserializeFcState
+    warn "Skipped loading of block DAG from database", deserializeFcState = config.deserializeFcState
 
   nimbus.fc = fc
   # Setup history expiry and portal
@@ -119,24 +122,19 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
     let header = fc.latestHeader()
     com.compatibleForkId(id, header.number, header.timestamp)
 
-  let forkIdProcs =
-    ForkIdProcs(forkId: forkIdProc, compatibleForkId: compatibleForkIdProc)
+  let forkIdProcs = ForkIdProcs(
+    forkId: forkIdProc,
+    compatibleForkId: compatibleForkIdProc,
+  )
 
   nimbus.ethNode = newEthereumNode(
-    keypair,
-    extIp,
-    extTcpPort,
-    extUdpPort,
-    config.networkId,
-    config.agentString,
+    keypair, extIp, extTcpPort, extUdpPort, config.networkId, config.agentString,
     minPeers = config.maxPeers,
     bootstrapNodes = bootstrapNodes,
-    bindUdpPort = config.udpPort,
-    bindTcpPort = config.tcpPort,
+    bindUdpPort = config.udpPort, bindTcpPort = config.tcpPort,
     bindIp = config.listenAddress,
     rng = nimbus.rng,
-    forkIdProcs = forkIdProcs,
-  )
+    forkIdProcs = forkIdProcs)
 
   # Add peer service protocol capabilities.
   let doSnapSync = config.snapSyncEnabled or config.snapServerEnabled
@@ -148,8 +146,10 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
   let staticPeers = config.getStaticPeers()
   if staticPeers.len > 0:
     nimbus.peerManager = PeerManagerRef.new(
-      nimbus.ethNode.peerPool, config.reconnectInterval, config.reconnectMaxRetry,
-      staticPeers,
+      nimbus.ethNode.peerPool,
+      config.reconnectInterval,
+      config.reconnectMaxRetry,
+      staticPeers
     )
     nimbus.peerManager.start()
 
@@ -162,8 +162,8 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
     )
 
   # Initalise beacon sync descriptor.
-  var syncerShouldRun =
-    (config.maxPeers > 0 or staticPeers.len > 0) and config.engineApiServerEnabled()
+  var syncerShouldRun = (config.maxPeers > 0 or staticPeers.len > 0) and
+                        config.engineApiServerEnabled()
 
   # The beacon sync descriptor might have been pre-allocated with additional
   # features. So do not override.
@@ -182,7 +182,8 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
       hex = config.beaconSyncTarget.unsafeGet
       isFinal = config.beaconSyncTargetIsFinal
     if not nimbus.beaconSyncRef.configTarget(hex, isFinal):
-      fatal "Error parsing hash32 argument for --debug-beacon-sync-target", hash32 = hex
+      fatal "Error parsing hash32 argument for --debug-beacon-sync-target",
+        hash32=hex
       quit QuitFailure
 
   # Configure snap sync if enabled. When done it will resume beacon sync.
@@ -233,13 +234,11 @@ proc init*(T: type NimbusNode, config: ExecutionClientConf, com: CommonRef): T =
   nimbus.init(config, com)
   nimbus
 
-proc preventLoadingDataDirForTheWrongNetwork(
-    db: CoreDbRef, config: ExecutionClientConf
-) =
+proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionClientConf) =
   proc writeDataDirId(kvt: CoreDbTxRef, calculatedId: Hash32) =
-    info "Writing data dir ID", ID = calculatedId
+    info "Writing data dir ID", ID=calculatedId
     kvt.put(dataDirIdKey().toOpenArray, calculatedId.data).isOkOr:
-      fatal "Cannot write data dir ID", ID = calculatedId
+      fatal "Cannot write data dir ID", ID=calculatedId
       quit(QuitFailure)
     db.persist(kvt)
 
@@ -257,13 +256,15 @@ proc preventLoadingDataDirForTheWrongNetwork(
 
   if calculatedId.data != dataDirIdBytes:
     fatal "Data dir already initialized with other network configuration",
-      get = dataDirIdBytes.toHex, expected = calculatedId
+      get=dataDirIdBytes.toHex,
+      expected=calculatedId
     quit(QuitFailure)
+
 
 proc setupCommonRef*(config: ExecutionClientConf): CommonRef =
   let coreDB = AristoDbRocks.newCoreDbRef(
-    config.dataDir, config.dbOptions(noKeyCache = config.cmd == NimbusCmd.`import`)
-  )
+      config.dataDir,
+      config.dbOptions(noKeyCache = config.cmd == NimbusCmd.`import`))
 
   preventLoadingDataDirForTheWrongNetwork(coreDB, config)
 
@@ -272,16 +273,19 @@ proc setupCommonRef*(config: ExecutionClientConf): CommonRef =
     networkId = config.networkId,
     params = config.networkParams,
     statelessProviderEnabled = config.statelessProviderEnabled,
-    statelessWitnessValidation = config.statelessWitnessValidation,
-  )
+    statelessWitnessValidation = config.statelessWitnessValidation)
 
   if config.extraData.len > 32:
     warn "ExtraData exceeds 32 bytes limit, truncate",
-      extraData = config.extraData, len = config.extraData.len
+      extraData=config.extraData,
+      len=config.extraData.len
 
-  if config.gasLimit > GAS_LIMIT_MAXIMUM or config.gasLimit < GAS_LIMIT_MINIMUM:
+  if config.gasLimit > GAS_LIMIT_MAXIMUM or
+     config.gasLimit < GAS_LIMIT_MINIMUM:
     warn "GasLimit not in expected range, truncate",
-      min = GAS_LIMIT_MINIMUM, max = GAS_LIMIT_MAXIMUM, get = config.gasLimit
+      min=GAS_LIMIT_MINIMUM,
+      max=GAS_LIMIT_MAXIMUM,
+      get=config.gasLimit
 
   com.extraData = config.extraData
   com.gasLimit = config.gasLimit
@@ -320,6 +324,12 @@ proc runExeClient*(
     txFrame.checkpoint(fc.base.blk.header.number, skipSnapshot = true)
     com.db.persist(txFrame)
 
+ # Rlp import is there, first load the chain segment
+  if config.bootstrapBlocksFile.len > 0:
+    try:
+      waitFor importRlpBlocks(config, com, nimbus.fc)
+    except CancelledError:
+      raiseAssert "Nothing cancels the future"
   # Be graceful about ctrl-c during init
   if ProcessState.stopping.isNone:
     ProcessState.notifyRunning()
@@ -387,13 +397,7 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   of NimbusCmd.`import`:
     importBlocks(config, com)
   else:
-    if config.bootstrapBlocksFile.len > 0:
-      try:
-        waitFor importRlpBlocks(config, com)
-      except CancelledError:
-        raiseAssert "Nothing cancels the future"
-
-    runExeClient(config, com, nil, nimbus = nimbus)
+    runExeClient(config, com, nil, nimbus=nimbus)
 
 when isMainModule:
   main()

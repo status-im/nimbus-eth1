@@ -16,8 +16,7 @@ import
   chronos,
   ./chain,
   ../conf,
-  beacon_chain/process_state,
-  ./chain/forked_chain/chain_serialize
+  beacon_chain/process_state
 
 # Only parse the RLP data and feed blocks into the ForkedChainRef.
 # Optionally finalize via fork-choice when requested.
@@ -80,12 +79,10 @@ proc importRlpBlocks*(
   await importRlpBlocks(bytes, chain, finalize)
 
 proc importRlpBlocks*(
-    config: ExecutionClientConf, com: CommonRef
+    config: ExecutionClientConf, com: CommonRef, chain: ForkedChainRef
 ): Future[void] {.async: (raises: [CancelledError]).} =
   if config.bootstrapBlocksFile.len == 0:
     return
-
-  let chain = ForkedChainRef.init(com, baseDistance = 0, persistBatchSize = 1)
 
   for blocksFile in config.bootstrapBlocksFile:
     let filePath = string(blocksFile)
@@ -96,8 +93,3 @@ proc importRlpBlocks*(
           error "Error when finalizing chain", msg = error
       quit(QuitFailure)
 
-  let txFrame = chain.baseTxFrame
-  chain.serialize(txFrame).isOkOr:
-    error "FC.serialize error: ", msg = error
-  txFrame.checkpoint(chain.base.blk.header.number, skipSnapshot = true)
-  com.db.persist(txFrame)
