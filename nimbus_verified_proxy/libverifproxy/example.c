@@ -92,41 +92,74 @@ void makeCalls(Context *ctx) {
   char *FILTER_OPTIONS = "{\"fromBlock\": \"latest\", \"toBlock\": \"latest\", \"topics\":[\"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef\"]}";
 
   eth_blockNumber(ctx, 0, onBlockNumber);
+  nvp_call(ctx, 0, "eth_blockNumber", "[]", onBlockNumber);
+
   eth_getBalance(ctx, 0, "0x954a86C613fd1fBaC9C7A43a071A68254C75E4AC", "latest", onBalance);
+  nvp_call(ctx, 0, "eth_getBalance", "[\"0x954a86C613fd1fBaC9C7A43a071A68254C75E4AC\", \"latest\"]", onBalance);
+
   eth_getStorageAt(ctx, 0, "0x954a86C613fd1fBaC9C7A43a071A68254C75E4AC", "0x0", "latest", onStorage);
+  nvp_call(ctx, 0, "eth_getStorageAt", "[\"0x954a86C613fd1fBaC9C7A43a071A68254C75E4AC\", \"0x0\", \"latest\"]", onStorage);
+
   eth_getTransactionCount(ctx, 0, "0x954a86C613fd1fBaC9C7A43a071A68254C75E4AC", "latest", onNonce);
+  nvp_call(ctx, 0, "eth_getTransactionCount", "[\"0x954a86C613fd1fBaC9C7A43a071A68254C75E4AC\", \"latest\"]", onNonce);
+
   eth_getCode(ctx, 0, "0x954a86C613fd1fBaC9C7A43a071A68254C75E4AC", "latest", onCode);
+  nvp_call(ctx, 0, "eth_getCode", "[\"0x954a86C613fd1fBaC9C7A43a071A68254C75E4AC\", \"latest\"]", onCode);
 
   /* -------- Blocks & Uncles -------- */
 
-  eth_getBlockByHash(ctx, 0, BLOCK_HASH, false, genericCallback);
-  eth_getBlockByNumber(ctx, 0, "latest", false, genericCallback);
-  eth_getUncleCountByBlockNumber(ctx, 0, "latest", genericCallback);
-  eth_getUncleCountByBlockHash(ctx, 0, BLOCK_HASH, genericCallback);
+  eth_getBlockByHash(ctx, 10, BLOCK_HASH, false, genericCallback);
+  nvp_call(ctx, 11, "eth_getBlockByHash", "[\"0xc62fa4cbdd48175b1171d8b7cede250ac1bea47ace4d19db344b922cd1e63111\", \"false\"]", genericCallback);
 
-  eth_getBlockTransactionCountByNumber(ctx, 0, "latest", genericCallback);
+  eth_getBlockByNumber(ctx, 20, "latest", false, genericCallback);
+  nvp_call(ctx, 21, "eth_getBlockByNumber", "[\"latest\", \"false\"]", genericCallback);
+
+  eth_getUncleCountByBlockNumber(ctx, 30, "latest", genericCallback);
+  nvp_call(ctx, 31, "eth_getUncleCountByBlockNumber", "[\"latest\"]", genericCallback);
+
+  eth_getUncleCountByBlockHash(ctx, 40, BLOCK_HASH, genericCallback);
+  nvp_call(ctx, 41, "eth_getUncleCountByBlockHash", "[\"0xc62fa4cbdd48175b1171d8b7cede250ac1bea47ace4d19db344b922cd1e63111\"]", genericCallback);
+
+  eth_getBlockTransactionCountByNumber(ctx, 50, "latest", genericCallback);
+  nvp_call(ctx, 51, "eth_getBlockTransactionCountByNumber", "[\"latest\"]", genericCallback);
+
   eth_getBlockTransactionCountByHash(ctx, 0, BLOCK_HASH, genericCallback);
+  nvp_call(ctx, 0, "eth_getBlockTransactionCountByHash", "[\"0xc62fa4cbdd48175b1171d8b7cede250ac1bea47ace4d19db344b922cd1e63111\"]", genericCallback);
 
   /* -------- Transactions -------- */
   eth_getTransactionByBlockNumberAndIndex(ctx, 0, "latest", 0ULL, genericCallback);
+  nvp_call(ctx, 0, "eth_getTransactionByBlockNumberAndIndex", "[\"latest\", \"0x0\"]", genericCallback);
+
   eth_getTransactionByBlockHashAndIndex(ctx, 0, BLOCK_HASH, 0ULL, genericCallback);
+  nvp_call(ctx, 0, "eth_getTransactionByBlockHashAndIndex", "[\"0xc62fa4cbdd48175b1171d8b7cede250ac1bea47ace4d19db344b922cd1e63111\", \"0x0\"]", genericCallback);
 
   eth_getTransactionByHash(ctx, 0, TX_HASH, genericCallback);
+  nvp_call(ctx, 0, "eth_getTransactionByHash", "[\"0xbbcd3d9bc70874c03453caa19fd91239abb0eef84dc61ca33e2110df81df330c\"]", genericCallback);
+
   eth_getTransactionReceipt(ctx, 0, TX_HASH, genericCallback);
+  nvp_call(ctx, 0, "eth_getTransactionReceipt", "[\"0xbbcd3d9bc70874c03453caa19fd91239abb0eef84dc61ca33e2110df81df330c\"]", genericCallback);
 
   eth_getBlockReceipts(ctx, 0, "latest", genericCallback);
+  nvp_call(ctx, 0, "eth_getBlockReceipts", "[\"latest\"]", genericCallback);
 
   /* -------- Calls, Access Lists, Gas Estimation -------- */
-  eth_call(ctx, 0, CALL_ARGS, "latest", true, onCallComplete);
-  eth_createAccessList(ctx, 0, CALL_ARGS, "latest", false, onCallComplete);
-  eth_estimateGas(ctx, 0, CALL_ARGS, "latest", false, onCallComplete);
+  eth_call(ctx, 111, CALL_ARGS, "latest", true, onCallComplete);
+  nvp_call(ctx, 112, "eth_call", "[{\"to\": \"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2\",\"data\": \"0x70a08231000000000000000000000000De5ae63A348C4d63343C8E20Fb6286909418c8A4\"}, \"latest\", \"true\"]", onCallComplete);
+
+  eth_createAccessList(ctx, 222, CALL_ARGS, "latest", false, onCallComplete);
+  nvp_call(ctx, 223, "eth_createAccessList", "[{\"to\": \"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2\",\"data\": \"0x70a08231000000000000000000000000De5ae63A348C4d63343C8E20Fb6286909418c8A4\"}, \"latest\", \"false\"]", onCallComplete);
+
+  eth_estimateGas(ctx, 333, CALL_ARGS, "latest", false, onCallComplete);
+  nvp_call(ctx, 334, "eth_estimateGas", "[{\"to\": \"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2\",\"data\": \"0x70a08231000000000000000000000000De5ae63A348C4d63343C8E20Fb6286909418c8A4\"}, \"latest\", \"false\"]", onCallComplete);
 
   /* -------- Logs & Filters -------- */
-  eth_getLogs(ctx, 0, FILTER_OPTIONS, onLogs);
+  eth_getLogs(ctx, 444, FILTER_OPTIONS, onLogs);
+  nvp_call(ctx, 445, "eth_getLogs", "[{\"fromBlock\": \"latest\", \"toBlock\": \"latest\", \"topics\":[\"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef\"]}]", onLogs);
   if (filterCreated) {
     eth_getFilterLogs(ctx, 0, filterId, onLogs);
     eth_getFilterChanges(ctx, 0, filterId, onLogs);
   } else {
+    nvp_call(ctx, 555, "eth_newFilter", "[{\"fromBlock\": \"latest\", \"toBlock\": \"latest\", \"topics\":[\"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef\"]}]", onFilterCreate);
     eth_newFilter(ctx, 0, FILTER_OPTIONS, onFilterCreate);
   }
 }
