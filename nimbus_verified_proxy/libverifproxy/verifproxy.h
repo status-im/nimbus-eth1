@@ -94,6 +94,17 @@ void stopVerifProxy(Context *ctx);
  */
 void processVerifProxyTasks(Context *ctx);
 
+/**
+ * call any RPC method
+ *
+ * @param ctx       Context pointer.
+ * @param reqId     Request ID
+ * @param name      Name of the RPC method
+ * @param params    parameters required for the RPC method
+ * @param cb        Callback invoked with a hex block number.
+ */
+void nvp_call(Context *ctx, unsigned int reqId, char* name, char* params, CallBackProc cb);
+
 /* ========================================================================== */
 /*                               BASIC CHAIN DATA                              */
 /* ========================================================================== */

@@ -555,3 +555,159 @@ proc eth_sendRawTransaction(
 
   callbackToC(ctx, reqId, cb):
     ctx.frontend.eth_sendRawTransaction(txBytes)
+
+proc nvp_call(
+    ctx: ptr Context, reqId: cuint, name: cstring, params: cstring, cb: CallBackProc
+) {.exported.} =
+  let parsedParams =
+    try:
+      let jsonNode = parseJson($params)
+      jsonNode.getElems(@[])
+    except CatchableError as e:
+      cb(ctx, reqId, RET_DESER_ERROR, alloc(e.msg))
+      return
+
+  template requireParams(n: int) =
+    if parsedParams.len < n:
+      cb(ctx, reqId, RET_DESER_ERROR, alloc("parameters missing"))
+      return
+
+  case $name
+  of "eth_blockNumber":
+    requireParams(0)
+    eth_blockNumber(ctx, reqId, cb)
+  of "eth_getBalance":
+    requireParams(2)
+    eth_getBalance(
+      ctx, reqId, parsedParams[0].getStr().cstring, parsedParams[1].getStr().cstring, cb
+    )
+  of "eth_getStorageAt":
+    requireParams(3)
+    eth_getStorageAt(
+      ctx,
+      reqId,
+      parsedParams[0].getStr().cstring,
+      parsedParams[1].getStr().cstring,
+      parsedParams[2].getStr().cstring,
+      cb,
+    )
+  of "eth_getTransactionCount":
+    requireParams(2)
+    eth_getTransactionCount(
+      ctx, reqId, parsedParams[0].getStr().cstring, parsedParams[1].getStr().cstring, cb
+    )
+  of "eth_getCode":
+    requireParams(2)
+    eth_getCode(
+      ctx, reqId, parsedParams[0].getStr().cstring, parsedParams[1].getStr().cstring, cb
+    )
+  of "eth_getBlockByHash":
+    requireParams(2)
+    eth_getBlockByHash(
+      ctx, reqId, parsedParams[0].getStr().cstring, parsedParams[1].getBool(), cb
+    )
+  of "eth_getBlockByNumber":
+    requireParams(2)
+    eth_getBlockByNumber(
+      ctx, reqId, parsedParams[0].getStr().cstring, parsedParams[1].getBool(), cb
+    )
+  of "eth_getUncleCountByBlockNumber":
+    requireParams(1)
+    eth_getUncleCountByBlockNumber(ctx, reqId, parsedParams[0].getStr().cstring, cb)
+  of "eth_getUncleCountByBlockHash":
+    requireParams(1)
+    eth_getUncleCountByBlockHash(ctx, reqId, parsedParams[0].getStr().cstring, cb)
+  of "eth_getBlockTransactionCountByNumber":
+    requireParams(1)
+    eth_getBlockTransactionCountByNumber(
+      ctx, reqId, parsedParams[0].getStr().cstring, cb
+    )
+  of "eth_getBlockTransactionCountByHash":
+    requireParams(1)
+    eth_getBlockTransactionCountByHash(ctx, reqId, parsedParams[0].getStr().cstring, cb)
+  of "eth_getTransactionByBlockNumberAndIndex":
+    requireParams(2)
+    eth_getTransactionByBlockNumberAndIndex(
+      ctx,
+      reqId,
+      parsedParams[0].getStr().cstring,
+      parsedParams[1].getBiggestInt().culonglong,
+      cb,
+    )
+  of "eth_getTransactionByBlockHashAndIndex":
+    requireParams(2)
+    eth_getTransactionByBlockHashAndIndex(
+      ctx,
+      reqId,
+      parsedParams[0].getStr().cstring,
+      parsedParams[1].getBiggestInt().culonglong,
+      cb,
+    )
+  of "eth_call":
+    requireParams(3)
+    eth_call(
+      ctx,
+      reqId,
+      ($parsedParams[0]).cstring,
+      parsedParams[1].getStr().cstring,
+      parsedParams[2].getBool(),
+      cb,
+    )
+  of "eth_createAccessList":
+    requireParams(3)
+    eth_createAccessList(
+      ctx,
+      reqId,
+      ($parsedParams[0]).cstring,
+      parsedParams[1].getStr().cstring,
+      parsedParams[2].getBool(),
+      cb,
+    )
+  of "eth_estimateGas":
+    requireParams(3)
+    eth_estimateGas(
+      ctx,
+      reqId,
+      ($parsedParams[0]).cstring,
+      parsedParams[1].getStr().cstring,
+      parsedParams[2].getBool(),
+      cb,
+    )
+  of "eth_getTransactionByHash":
+    requireParams(1)
+    eth_getTransactionByHash(ctx, reqId, parsedParams[0].getStr().cstring, cb)
+  of "eth_getBlockReceipts":
+    requireParams(1)
+    eth_getBlockReceipts(ctx, reqId, parsedParams[0].getStr().cstring, cb)
+  of "eth_getTransactionReceipt":
+    requireParams(1)
+    eth_getTransactionReceipt(ctx, reqId, parsedParams[0].getStr().cstring, cb)
+  of "eth_getLogs":
+    requireParams(1)
+    eth_getLogs(ctx, reqId, ($parsedParams[0]).cstring, cb)
+  of "eth_newFilter":
+    requireParams(1)
+    eth_newFilter(ctx, reqId, ($parsedParams[0]).cstring, cb)
+  of "eth_uninstallFilter":
+    requireParams(1)
+    eth_uninstallFilter(ctx, reqId, parsedParams[0].getStr().cstring, cb)
+  of "eth_getFilterLogs":
+    requireParams(1)
+    eth_getFilterLogs(ctx, reqId, parsedParams[0].getStr().cstring, cb)
+  of "eth_getFilterChanges":
+    requireParams(1)
+    eth_getFilterChanges(ctx, reqId, parsedParams[0].getStr().cstring, cb)
+  of "eth_blobBaseFee":
+    requireParams(0)
+    eth_blobBaseFee(ctx, reqId, cb)
+  of "eth_gasPrice":
+    requireParams(0)
+    eth_gasPrice(ctx, reqId, cb)
+  of "eth_maxPriorityFeePerGas":
+    requireParams(0)
+    eth_maxPriorityFeePerGas(ctx, reqId, cb)
+  of "eth_sendRawTransaction":
+    requireParams(1)
+    eth_sendRawTransaction(ctx, reqId, parsedParams[0].getStr().cstring, cb)
+  else:
+    cb(ctx, reqId, RET_DESER_ERROR, alloc("unknown method"))
