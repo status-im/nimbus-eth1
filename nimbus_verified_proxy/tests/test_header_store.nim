@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -80,6 +80,17 @@ suite "test proxy header store":
     check store.latest.isSome()
     check store.latest.get.number == 11
     check store.get(BlockNumber(1)).isNone()
+
+  test "earliest":
+    let store = HeaderStore.new(10)
+    for i in 0 ..< 15:
+      discard store.add(headerGenerator(i))
+
+      check:
+        store.earliest.isSome()
+
+        # last index(9) + 1 because the header store holds on to the evicted value as the earliest
+        store.earliest.get().number == uint64(max((i - 10), 0))
 
   test "update finalized":
     let store = HeaderStore.new(10)
