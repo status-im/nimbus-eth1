@@ -91,5 +91,3 @@ proc importRlpBlocks*(
       if config.bootstrapBlocksFinalized:
         (await chain.forkChoice(chain.latestHash, chain.latestHash)).isOkOr:
           error "Error when finalizing chain", msg = error
-      quit(QuitFailure)
-
