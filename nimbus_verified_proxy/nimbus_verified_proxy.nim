@@ -37,21 +37,6 @@ import
 # without the need of exceptions
 type ProxyError = object of CatchableError
 
-proc verifyChainId(
-    engine: RpcVerificationEngine
-): Future[void] {.async: (raises: [CancelledError]).} =
-  const ZERO_U256 = 0.u256 # pushed construction of zero to compile time
-  let providerId = (await engine.backend.eth_chainId()).valueOr:
-    ZERO_U256
-
-  # This is a chain/network mismatch error between the Nimbus verified proxy and
-  # the application using it. Fail fast to avoid misusage. The user must fix
-  # the configuration.
-  if engine.chainId != providerId:
-    fatal "The specified data provider serves data for a different chain",
-      expectedChain = engine.chainId, providerChain = providerId
-    quit 1
-
 func getConfiguredChainId*(chain: Option[string]): UInt256 =
   let net = chain.get("mainnet").toLowerAscii()
   case net
@@ -116,12 +101,15 @@ proc run(
     lc = LightClient.new(config.eth2Network, some config.trustedBlockRoot)
 
     #initialize frontend and backend for JSON-RPC
-    jsonRpcClient = JsonRpcClient.init(config.backendUrl)
+    jsonRpcClientPool = JsonRpcClientPool.new()
     jsonRpcServer = JsonRpcServer.init(config.frontendUrl).valueOr:
       raise newException(ProxyError, "Couldn't initialize the server end of proxy")
 
     # initialize backend for light client updates
     lcRestClientPool = LCRestClientPool.new(lc.cfg, lc.forkDigests)
+
+  if (await jsonRpcClientPool.addEndpoints(config.backendUrls)).isErr():
+    raise newException(ProxyError, "Couldn't add endpoints for the web3 backend")
 
   # connect light client to LC by registering on header methods 
   # to use engine header store
@@ -132,25 +120,17 @@ proc run(
   lc.setBackend(lcRestClientPool.getEthLCBackend())
 
   # the backend only needs the url of the RPC provider
-  engine.backend = jsonRpcClient.getEthApiBackend()
+  engine.backend = jsonRpcClientPool.getEthApiBackend()
   # inject frontend
   jsonRpcServer.injectEngineFrontend(engine.frontend)
 
-  # start frontend and backend for JSON-RPC
-  var status = await jsonRpcClient.start()
-  if status.isErr():
-    raise newException(ProxyError, status.error.errMsg)
-
-  status = jsonRpcServer.start()
+  let status = jsonRpcServer.start()
   if status.isErr():
     raise newException(ProxyError, status.error.errMsg)
 
   # adding endpoints will also start the backend
   if lcRestClientPool.addEndpoints(config.beaconApiUrls).isErr():
     raise newException(ProxyError, "Couldn't add endpoints for light client queries")
-
-  # verify chain id that the proxy is connected to
-  await engine.verifyChainId()
 
   # this starts the light client manager which is
   # an endless loop
