@@ -18,7 +18,7 @@ if [[ -z "${1}" ]]; then
 fi
 
 PLATFORM="${1}"
-BINARIES="nimbus_execution_client nimbus_verified_proxy"
+BINARIES="nimbus_execution_client nimbus_verified_proxy nimbus_portal_client"
 ROCKSDB_DIR=/usr/rocksdb
 
 echo -e "\nPLATFORM=${PLATFORM}"

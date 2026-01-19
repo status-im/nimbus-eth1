@@ -1,8 +1,8 @@
 # Binary Nimbus distribution
 
-This binary distribution of the Nimbus Execution Client & Verified Proxy package is compiled
-in a [reproducible way](https://reproducible-builds.org/) from source files
-hosted at https://github.com/status-im/nimbus-eth1.
+The binary distribution of the Nimbus Execution Client, Nimbus Verified Proxy and
+Nimbus Portal Client is compiled in a [reproducible way](https://reproducible-builds.org/)
+from source files hosted at https://github.com/status-im/nimbus-eth1.
 
 The tarball containing this README uses the following naming scheme:
 
