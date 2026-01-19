@@ -23,7 +23,7 @@ type
     stop*: bool
     frontend*: EthApiFrontend
 
-  CallBackProc* = proc(ctx: ptr Context, userData: pointer, status: cint, res: cstring) {.
+  CallBackProc* = proc(ctx: ptr Context, status: cint, res: cstring, userData: pointer) {.
     cdecl, gcsafe, raises: []
   .}
 
