@@ -10,7 +10,7 @@ import std/lists, ../engine/types, chronos
 type
   Task* = ref object
     status*: cint
-    reqId*: cuint
+    userData*: pointer
     response*: string
     finished*: bool
     cb*: CallBackProc
@@ -23,7 +23,7 @@ type
     stop*: bool
     frontend*: EthApiFrontend
 
-  CallBackProc* = proc(ctx: ptr Context, reqId: cuint, status: cint, res: cstring) {.
+  CallBackProc* = proc(ctx: ptr Context, userData: pointer, status: cint, res: cstring) {.
     cdecl, gcsafe, raises: []
   .}
 
