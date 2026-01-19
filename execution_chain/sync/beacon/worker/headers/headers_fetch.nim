@@ -198,7 +198,7 @@ template fetchHeadersReversed*(
     # Update download statistics
     let bps = buddy.hdrSampleSize(elapsed, h.getEncodedLength)
 
-    # Request did not fail
+    # This request did not fail (maybe another one did): reset anyway
     buddy.only.failedReq.reset
 
     # Ban an overly slow peer for a while when observed consecutively.

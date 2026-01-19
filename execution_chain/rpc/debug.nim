@@ -13,7 +13,8 @@ import
   # std/json,
   stew/byteutils,
   json_rpc/rpcserver,
-  # ./rpc_utils,
+  web3/[eth_api_types, conversions],
+  ./rpc_utils,
   ./rpc_types,
   #../tracer,
   #../evm/types,
@@ -21,10 +22,28 @@ import
   ../beacon/web3_eth_conv,
   ../core/tx_pool,
   ../core/chain/forked_chain,
-  ../stateless/witness_types,
-  web3/conversions
+  ../stateless/witness_types
 
-# type
+type
+  BadBlock = object
+    `block`: BlockObject
+    generatedBlockAccessList: Opt[BlockAccessList]
+    hash: Hash32
+    rlp: seq[byte]
+
+BadBlock.useDefaultSerializationIn JrpcConv
+
+ExecutionWitness.useDefaultSerializationIn JrpcConv
+
+# Block access list json serialization
+AccountChanges.useDefaultSerializationIn JrpcConv
+SlotChanges.useDefaultSerializationIn JrpcConv
+StorageChange.useDefaultSerializationIn JrpcConv
+BalanceChange.useDefaultSerializationIn JrpcConv
+NonceChange.useDefaultSerializationIn JrpcConv
+CodeChange.useDefaultSerializationIn JrpcConv
+
+#type
 #   TraceOptions = object
 #     disableStorage: Opt[bool]
 #     disableMemory: Opt[bool]
@@ -33,7 +52,6 @@ import
 #     disableStateDiff: Opt[bool]
 
 # TraceOptions.useDefaultSerializationIn JrpcConv
-ExecutionWitness.useDefaultSerializationIn JrpcConv
 
 # proc isTrue(x: Opt[bool]): bool =
 #   result = x.isSome and x.get() == true
@@ -83,6 +101,19 @@ proc getExecutionWitness*(chain: ForkedChainRef, blockHash: Hash32): Result[Exec
     executionWitness.addHeader(rlp.encode(header))
 
   ok(executionWitness)
+
+proc getBlockAccessList*(
+    chain: ForkedChainRef,
+    blockHash: Hash32): Result[BlockAccessList, string] =
+
+  let txFrame = chain.txFrame(blockHash).txFrameBegin()
+  defer:
+    txFrame.dispose()
+
+  let bal = (?txFrame.getBlockAccessList(blockHash)).valueOr:
+    return err("Block access list not found")
+
+  ok(bal[])
 
 proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
   let
@@ -232,3 +263,36 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
       raise newException(ValueError, error)
 
     rlp.encode(header).to0xHex()
+
+  server.rpc("debug_getBlockAccessList") do(quantityTag: BlockTag) -> BlockAccessList:
+    ## Returns a block access list for the given block number.
+    let header = chain.headerFromTag(quantityTag).valueOr:
+      raise newException(ValueError, "Header not found")
+
+    chain.getBlockAccessList(header.computeBlockHash()).valueOr:
+      raise newException(ValueError, error)
+
+  server.rpc("debug_getBlockAccessListByBlockHash") do(blockHash: Hash32) -> BlockAccessList:
+    ## Returns a block access list for the given block hash.
+
+    chain.getBlockAccessList(blockHash).valueOr:
+      raise newException(ValueError, error)
+
+  server.rpc("debug_getBadBlocks") do() -> seq[BadBlock]:
+    ## Returns a list of the most recently processed bad blocks.
+    var badBlocks: seq[BadBlock]
+
+    let blks = chain.getBadBlocks()
+    for b in blks:
+      let
+        (blk, bal) = b
+        blkHash = blk.header.computeBlockHash()
+
+      badBlocks.add BadBlock(
+        `block`: populateBlockObject(
+          blkHash, blk, chain.getTotalDifficulty(blkHash, blk.header), fullTx = true),
+        generatedBlockAccessList: bal.map(proc (bal: auto): auto = bal[]),
+        hash: blkHash,
+        rlp: rlp.encode(blk))
+
+    badBlocks

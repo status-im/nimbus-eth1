@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -146,9 +146,10 @@ proc new*(
       enrIp = enrIp,
       enrTcpPort = enrTcpPort,
       enrUdpPort = enrUdpPort,
+      enrQuicPort = Opt.none(Port),
       bootstrapRecords = bootstrapNodes.enrs,
       bindPort = bindPort,
-      bindIp = bindIp,
+      bindIp = Opt.some(bindIp),
       enrAutoUpdate = true,
       rng = rng
     ),

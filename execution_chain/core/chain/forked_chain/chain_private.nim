@@ -20,50 +20,93 @@ import
   ../../../stateless/[witness_generation, witness_verification, stateless_execution],
   ./chain_branch
 
-proc writeBaggage*(c: ForkedChainRef,
-        blk: Block, blkHash: Hash32,
-        txFrame: CoreDbTxRef,
-        receipts: openArray[StoredReceipt]) =
+proc writeBaggage*(
+    c: ForkedChainRef,
+    blk: Block,
+    blockAccessList: Opt[BlockAccessListRef],
+    blkHash: Hash32,
+    txFrame: CoreDbTxRef,
+    receipts: openArray[StoredReceipt],
+    generatedBal: Opt[BlockAccessListRef],
+) =
   template header(): Header =
     blk.header
 
   txFrame.persistTransactions(header.number, header.txRoot, blk.transactions)
   txFrame.persistReceipts(header.receiptsRoot, receipts)
   discard txFrame.persistUncles(blk.uncles)
+
   if blk.withdrawals.isSome:
     txFrame.persistWithdrawals(
       header.withdrawalsRoot.expect("WithdrawalsRoot should be verified before"),
-      blk.withdrawals.get)
-  if blk.blockAccessList.isSome:
-    txFrame.persistBlockAccessList(
-      header.blockAccessListHash.expect("blockAccessListHash should be verified before"),
-      blk.blockAccessList.get)
+      blk.withdrawals.get,
+    )
 
-proc processBlock*(c: ForkedChainRef,
-                  parentBlk: BlockRef,
-                  txFrame: CoreDbTxRef,
-                  blk: Block,
-                  blkHash: Hash32,
-                  finalized: bool): Result[seq[StoredReceipt], string] =
+  if blockAccessList.isSome:
+    txFrame.persistBlockAccessList(
+      blkHash,
+      blockAccessList.get(),
+    )
+  elif generatedBal.isSome:
+    txFrame.persistBlockAccessList(
+      blkHash,
+      generatedBal.get(),
+    )
+
+proc processBlock*(
+    c: ForkedChainRef,
+    parentBlk: BlockRef,
+    txFrame: CoreDbTxRef,
+    blk: Block,
+    blockAccessList: Opt[BlockAccessListRef],
+    blkHash: Hash32,
+    finalized: bool,
+): Result[seq[StoredReceipt], string] =
   template header(): Header =
     blk.header
 
   let vmState = BaseVMState()
-  vmState.init(parentBlk.header, header, c.com, txFrame)
+  vmState.init(
+    parentBlk.header,
+    header,
+    c.com,
+    txFrame,
+    enableBalTracker = (not finalized or blockAccessList.isNone()) and
+        c.com.isAmsterdamOrLater(header.timestamp),
+  )
 
-  ?c.com.validateHeaderAndKinship(blk, vmState.parent, txFrame)
+  c.com.validateHeaderAndKinship(
+    blk,
+    blockAccessList,
+    # Depending on the BAL retention period of clients, finalized blocks might
+    # be received without a BAL. In this case we skip checking the BAL against
+    # the header bal hash.
+    skipPreExecBalCheck = finalized and blockAccessList.isNone(),
+    vmState.parent,
+    txFrame
+  ).isOkOr:
+    c.badBlocks.put(blkHash, (blk, vmState.blockAccessList))
+    return err(error)
 
   template processBlock(): auto =
-    # When processing a finalized block, we optimistically assume that the state
-    # root will check out and delay such validation for when it's time to persist
-    # changes to disk
-    ?vmState.processBlock(
+    vmState.processBlock(
       blk,
       skipValidation = false,
       skipReceipts = false,
       skipUncles = true,
-      skipStateRootCheck = finalized and not c.eagerStateRoot
-    )
+      # When processing a finalized block, we optimistically assume that the state
+      # root will check out and delay such validation for when it's time to persist
+      # changes to disk
+      skipStateRootCheck = finalized and not c.eagerStateRoot,
+      # Finalized blocks are known to be canonical and therefore the bal hash
+      # in the header is known to be valid and so it should be good enough to
+      # simply check that the provide block BAL (when skipPreExecBalCheck = false)
+      # matches the header bal hash. In this case the post execution check can be
+      # skipped.
+      skipPostExecBalCheck = not vmState.balTrackerEnabled
+    ).isOkOr:
+      c.badBlocks.put(blkHash, (blk, vmState.blockAccessList))
+      return err(error)
 
   if not vmState.com.statelessProviderEnabled:
     processBlock()
@@ -91,5 +134,7 @@ proc processBlock*(c: ForkedChainRef,
   # We still need to write header to database
   # because validateUncles still need it
   ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory)
+
+  c.writeBaggage(blk, blockAccessList, blkHash, txFrame, vmState.receipts, vmState.blockAccessList)
 
   ok(move(vmState.receipts))

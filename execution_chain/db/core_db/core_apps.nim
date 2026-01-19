@@ -410,23 +410,22 @@ proc getTransactions*(
     return ok(move(res))
 
 proc persistBlockAccessList*(
-    db: CoreDbTxRef, blockAccessListHash: Hash32, bal: BlockAccessList) =
-  db.put(blockAccessListHashKey(blockAccessListHash).toOpenArray, bal.encode())
+    db: CoreDbTxRef, blockHash: Hash32, bal: BlockAccessListRef) =
+  db.put(blockHashToBlockAccessListKey(blockHash).toOpenArray, bal[].encode())
     .expect("persistBlockAccessList should succeed")
 
 proc getBlockAccessList*(
-    db: CoreDbTxRef,
-    blockAccessListHash: Hash32): Result[Opt[BlockAccessList], string] =
-  if blockAccessListHash == EMPTY_BLOCK_ACCESS_LIST_HASH:
-    return ok(Opt.some(default(BlockAccessList)))
-
-  let balBytes = db.getOrEmpty(blockAccessListHashKey(blockAccessListHash).toOpenArray).valueOr:
-    return err("getBlockAccessList: " & $$error)
+    db: CoreDbTxRef, blockHash: Hash32): Result[Opt[BlockAccessListRef], string] =
+  let balBytes = db.getOrEmpty(
+      blockHashToBlockAccessListKey(blockHash).toOpenArray
+    ).valueOr:
+      return err("getBlockAccessList: " & $$error)
 
   if balBytes == EmptyBlob:
-    return ok(Opt.none(BlockAccessList))
+    return ok(Opt.none(BlockAccessListRef))
 
-  let bal = BlockAccessList.decode(balBytes).valueOr:
+  let bal: BlockAccessListRef = new BlockAccessList
+  bal[] = BlockAccessList.decode(balBytes).valueOr:
     return err("getBlockAccessList: " & $error)
 
   ok(Opt.some(bal))
@@ -443,9 +442,6 @@ proc getBlockBody*(
     if header.withdrawalsRoot.isSome:
       let wds = ?db.getWithdrawals(header.withdrawalsRoot.get)
       body.withdrawals = Opt.some(wds)
-
-    if header.blockAccessListHash.isSome:
-      body.blockAccessList = ?db.getBlockAccessList(header.blockAccessListHash.get)
 
     return ok(move(body))
 

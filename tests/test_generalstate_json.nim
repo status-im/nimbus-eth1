@@ -208,6 +208,9 @@ proc generalStateJsonMain*(debugMode = false) =
     suite "new generalstate json tests: eest_devnet":
       jsonTest("eest_devnet/state_tests", "GeneralStateTestsDevnet", testFixture)
 
+    suite "new generalstate json tests: eest_bal":
+      jsonTest("eest_bal/state_tests", "GeneralStateTestsBal", testFixture)
+
   else:
     # execute single test in debug mode
     if config.testSubject.len == 0:

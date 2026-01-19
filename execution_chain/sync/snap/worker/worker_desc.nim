@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -11,16 +11,17 @@
 {.push raises:[].}
 
 import
-  pkg/[eth/common, results],
+  std/sets,
+  pkg/[chronos, eth/common, minilru, results],
   ../../../core/chain,
-  ../../sync_desc,
-  ./worker_const
+  ../../[sync_desc, wire_protocol],
+  ./[state_db, worker_const]
 
 from ../../beacon
   import BeaconPeerRef, BeaconSyncRef
 
 export
-  chain, common, sync_desc, results, worker_const
+  chain, common, state_db, sync_desc, results, worker_const
 
 
 type
@@ -30,24 +31,76 @@ type
   SnapCtxRef* = CtxRef[SnapCtxData,SnapPeerData]
     ## Extended global descriptor
 
+  StateRootSet* = LruCache[StateRoot,uint8]
+    ## Used for avoiding sending the same failed request twice. This data
+    ## structure is used as a self-cleaning hash set. The data argument is
+    ## unused.
+
   # -------------------
 
-  PeerRanking* = tuple
-    assessed: PerfClass
-    ranking: int
+  SnapError* = tuple
+    ## Capture exception context for heders/bodies fetcher logging
+    excp: ErrorType
+    name: string
+    msg: string
+    elapsed: Duration
+
+  FetchHeadersData* = tuple
+    packet: BlockHeadersPacket
+    elapsed: Duration
+
+  FetchAccountsData* = tuple
+    packet: AccountRangePacket
+    elapsed: Duration
+
+  Ticker* =
+    proc(ctx: SnapCtxRef) {.gcsafe, raises: [].}
+      ## Some function that is invoked regularly
 
   # -------------------
+
+  PeerErrors* = object
+    ## Count fetching and processing errors
+    fetch*: tuple[
+      acc: uint8]
+    apply*: tuple[
+      acc: uint8]
+
+  PeerFirstFetchReq* = object
+    ## Register fetch request. This is intended to avoid sending the same (or
+    ## similar) fetch request again from the same peer that sent it previously.
+    account*: StateRootSet           ## Account fetch
 
   SnapPeerData* = object
     ## Local descriptor data extension
+    pivotRoot*: Opt[StateRoot]       ## Derived from peer best/latest hash
+    nErrors*: PeerErrors             ## Error register
+    peerType*: string                ## Self declared peer type
+    failedReq*: PeerFirstFetchReq    ## Don't send the same failed request twice
+
+  SnapTarget* = tuple
+    ## Bundled target settings
+    blockHash: BlockHash
+    updateFile: string
 
   SnapCtxData* = object
     ## Globally shared data extension
+    syncState*: SyncState            ## Last known layout state
     beaconSync*: BeaconSyncRef       ## Beacon syncer to resume after snap sync
+    stateDB*: StateDbRef             ## Incomplete states DB
 
     # Preloading/manual state update
-    initBlockHash*: Hash32           ## Optional for setting up root target
-    stateUpdateFile*: string         ## Read block hash/number from file
+    target*: Opt[SnapTarget]         ## Optional for setting up a sync target
+    stateUpdateChecked*: string      ## Last update value (avoids log spamming)
+
+    # Info, debugging, and error handling stuff
+    lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one
+    failedPeers*: HashSet[Hash]      ## Detect dead end sync by collecting peers
+    seenData*: bool                  ## Set `true` if data were fetched, already
+    lastPeerSeen*: chronos.Moment    ## Time when the last peer was abandoned
+    lastNoPeersLog*: chronos.Moment  ## Control messages about missing peers
+    lastSyncUpdLog*: chronos.Moment  ## Control update messages
+    ticker*: Ticker                  ## Ticker function to run in background
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -56,6 +109,23 @@ type
 func chain*(ctx: SnapCtxRef): ForkedChainRef =
   ## Getter
   ctx.pool.beaconSync.ctx.pool.chain
+
+func nErrors*(buddy: SnapPeerRef): var PeerErrors =
+  ## Shortcut
+  buddy.only.nErrors
+
+
+func syncState*(ctx: SnapCtxRef): (SyncState, bool) =
+  (ctx.pool.syncState, ctx.poolMode)
+
+func syncState*(
+    buddy: SnapPeerRef;
+      ): (string, SyncPeerRunState, SyncState, bool) =
+  (buddy.only.peerType,
+   buddy.ctrl.state,
+   buddy.ctx.pool.syncState,
+   buddy.ctx.poolMode)
+
 
 proc getSnapPeer*(buddy: SnapPeerRef; peerID: Hash): SnapPeerRef =
   ## Getter, retrieve syncer peer (aka buddy) by `peerID` argument.
