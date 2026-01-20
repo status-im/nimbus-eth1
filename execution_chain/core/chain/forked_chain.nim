@@ -1124,3 +1124,9 @@ iterator txHashInRange*(c: ForkedChainRef, fromHash: Hash32, toHash: Hash32): Ha
     for tx in it.blk.transactions:
       let txHash = computeRlpHash(tx)
       yield txHash
+
+proc getBlockAccessList*(c: ForkedChainRef, blockHash: Hash32): Opt[BlockAccessList] =
+  let bal = c.txFrame(blockHash).getBlockAccessList(blockHash).valueOr:
+    return Opt.none(BlockAccessList)
+
+  bal.map(proc (v: auto): auto = v[])
