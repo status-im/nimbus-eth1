@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -12,7 +12,7 @@
 ## =============================================================
 ##
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   stew/sorted_set,
@@ -76,14 +76,14 @@ proc classifyValidatePacked(vmState: BaseVMState; item: TxItemRef): bool =
   roDB.validateTransaction(
     item.tx, item.sender, gasLimit, baseFee, excessBlobGas, vmState.com, fork).isOk
 
-proc classifyPacked(vmState: BaseVMState; moreBurned: GasInt): bool =
+func classifyPacked(vmState: BaseVMState; moreBurned: GasInt): bool =
   ## Classifier for *packing* (i.e. adding up `gasUsed` values after executing
   ## in the VM.) This function checks whether the sum of the arguments
   ## `gasBurned` and `moreGasBurned` is within acceptable constraints.
   let totalGasUsed = vmState.cumulativeGasUsed + moreBurned
   totalGasUsed < vmState.blockCtx.gasLimit
 
-proc classifyPackedNext(vmState: BaseVMState): bool =
+func classifyPackedNext(vmState: BaseVMState): bool =
   ## Classifier for *packing* (i.e. adding up `gasUsed` values after executing
   ## in the VM.) This function returns `true` if the packing level is still
   ## low enough to proceed trying to accumulate more items.
@@ -113,6 +113,8 @@ proc runTxCommit(pst: var TxPacker; item: TxItemRef; callResult: LogResult, xp: 
     gasTip  = item.tx.tip(pst.baseFee)
 
   let reward = callResult.gasUsed.u256 * gasTip.u256
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.trackAddBalanceChange(xp.feeRecipient, reward)
   vmState.ledger.addBalance(xp.feeRecipient, reward)
   pst.blockValue += reward
 
@@ -141,6 +143,11 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string] =
     stateRoot: xp.vmState.parent.stateRoot,
   )
 
+  # Setup block access list tracker for pre‑execution system calls
+  if xp.vmState.balTrackerEnabled:
+    xp.vmState.balTracker.setBlockAccessIndex(0)
+    xp.vmState.balTracker.beginCallFrame()
+
   # EIP-4788
   if xp.nextFork >= FkCancun:
     let beaconRoot = xp.parentBeaconBlockRoot
@@ -151,6 +158,10 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string] =
   if xp.nextFork >= FkPrague:
     xp.vmState.processParentBlockHash(xp.vmState.blockCtx.parentHash).isOkOr:
       return err(error)
+
+  # Commit block access list tracker changes for pre‑execution system calls
+  if xp.vmState.balTrackerEnabled:
+    xp.vmState.balTracker.commitCallFrame()
 
   ok(packer)
 
@@ -166,7 +177,15 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
     if vmState.fork >= FkOsaka and item.tx.versionedHashes.len.uint64 > MAX_BLOBS_PER_TX:
       return ContinueWithNextAccount
 
-    let maxBlobsPerBlock = getMaxBlobsPerBlock(vmState.com, vmState.fork)
+    let
+      maxForkBlobsPerBlock = getMaxBlobsPerBlock(vmState.com, vmState.fork)
+      maxBlobsPerBlock =
+        if xp.chain.maxBlobs.isSome:
+          # https://eips.ethereum.org/EIPS/eip-7872#specification
+          # "If the minimum is zero, set the minimum to one."
+          min(max(xp.chain.maxBlobs.get, 1).uint64, maxForkBlobsPerBlock)
+        else:
+          maxForkBlobsPerBlock
     if (pst.numBlobPerBlock + item.tx.versionedHashes.len).uint64 > maxBlobsPerBlock:
       return ContinueWithNextAccount
 
@@ -187,6 +206,10 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
   if not vmState.classifyValidatePacked(item):
     return ContinueWithNextAccount
 
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.setBlockAccessIndex(pst.packedTxs.len() + 1)
+    vmState.balTracker.beginCallFrame()
+
   # Execute EVM for this transaction
   let
     accTx = vmState.ledger.beginSavepoint
@@ -196,6 +219,8 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
 
   # Find out what to do next: accepting this tx or trying the next account
   if not vmState.classifyPacked(callResult.gasUsed):
+    if vmState.balTrackerEnabled:
+      vmState.balTracker.rollbackCallFrame(rollbackReads = true)
     vmState.ledger.rollback(accTx)
     if vmState.classifyPackedNext():
       return ContinueWithNextAccount
@@ -213,6 +238,9 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
   vmState.blobGasUsed += blobGasUsed
   vmState.gasPool -= item.tx.gasLimit
 
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.commitCallFrame()
+
   ContinueWithNextAccount
 
 proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
@@ -220,10 +248,20 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
     vmState = pst.vmState
     ledger = vmState.ledger
 
+  # Setup block access list tracker for post‑execution system calls
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.setBlockAccessIndex(pst.packedTxs.len() + 1)
+    vmState.balTracker.beginCallFrame()
+
   # EIP-4895
   if vmState.fork >= FkShanghai:
-    for withdrawal in xp.withdrawals:
-      ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
+    if vmState.balTrackerEnabled:
+      for withdrawal in xp.withdrawals:
+        vmState.balTracker.trackAddBalanceChange(withdrawal.address, withdrawal.weiAmount)
+        ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
+    else:
+      for withdrawal in xp.withdrawals:
+        ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
 
   # EIP-6110, EIP-7002, EIP-7251
   if vmState.fork >= FkPrague:
@@ -240,6 +278,11 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
   pst.receiptsRoot = vmState.receipts.calcReceiptsRoot
   pst.logsBloom = vmState.receipts.createBloom
   pst.stateRoot = vmState.ledger.getStateRoot()
+
+  # Commit block access list tracker changes for post‑execution system calls
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.commitCallFrame()
+
   ok()
 
 # ------------------------------------------------------------------------------
@@ -265,13 +308,13 @@ func getExtraData(com: CommonRef): seq[byte] =
   else:
     com.extraData.toBytes
 
-proc assembleHeader*(pst: TxPacker, xp: TxPoolRef): Header =
+func assembleHeader*(pst: TxPacker, xp: TxPoolRef): Header =
   ## Generate a new header, a child of the cached `head`
   let
     vmState = pst.vmState
     com = vmState.com
 
-  result = Header(
+  var header = Header(
     parentHash:    vmState.blockCtx.parentHash,
     ommersHash:    EMPTY_UNCLE_HASH,
     coinbase:      xp.feeRecipient,
@@ -290,12 +333,12 @@ proc assembleHeader*(pst: TxPacker, xp: TxPoolRef): Header =
     )
 
   if com.isShanghaiOrLater(xp.timestamp):
-    result.withdrawalsRoot = Opt.some(calcWithdrawalsRoot(xp.withdrawals))
+    header.withdrawalsRoot = Opt.some(calcWithdrawalsRoot(xp.withdrawals))
 
   if com.isCancunOrLater(xp.timestamp):
-    result.parentBeaconBlockRoot = Opt.some(xp.parentBeaconBlockRoot)
-    result.blobGasUsed = Opt.some vmState.blobGasUsed
-    result.excessBlobGas = Opt.some vmState.blockCtx.excessBlobGas
+    header.parentBeaconBlockRoot = Opt.some(xp.parentBeaconBlockRoot)
+    header.blobGasUsed = Opt.some vmState.blobGasUsed
+    header.excessBlobGas = Opt.some vmState.blockCtx.excessBlobGas
 
   if com.isPragueOrLater(xp.timestamp):
     let requestsHash = calcRequestsHash([
@@ -303,7 +346,14 @@ proc assembleHeader*(pst: TxPacker, xp: TxPoolRef): Header =
       (WITHDRAWAL_REQUEST_TYPE, pst.withdrawalReqs),
       (CONSOLIDATION_REQUEST_TYPE, pst.consolidationReqs)
     ])
-    result.requestsHash = Opt.some(requestsHash)
+    header.requestsHash = Opt.some(requestsHash)
+
+  if com.isAmsterdamOrLater(xp.timestamp):
+    let bal = vmState.blockAccessList.expect("block access list exists")
+    header.blockAccessListHash = Opt.some(bal[].computeBlockAccessListHash())
+
+  header
+
 
 func blockValue*(pst: TxPacker): UInt256 =
   pst.blockValue

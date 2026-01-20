@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -90,10 +90,6 @@ if defined(disableMarchNative):
     else:
       switch("passC", "-mssse3")
       switch("passL", "-mssse3")
-elif defined(macosx) and defined(arm64):
-  # Apple's Clang can't handle "-march=native" on M1: https://github.com/status-im/nimbus-eth2/issues/2758
-  switch("passC", "-mcpu=apple-m1")
-  switch("passL", "-mcpu=apple-m1")
 elif defined(riscv64):
   # riscv64 needs specification of ISA with extensions. 'gc' is widely supported
   # and seems to be the minimum extensions needed to build.
@@ -103,7 +99,8 @@ elif defined(linux) and defined(arm64):
   # clang can't handle "-march=native"
   switch("passC", "-march=armv8-a")
   switch("passL", "-march=armv8-a")
-else:
+elif not(defined(macos) and defined(arm64)):
+  # Apple's Clang can't handle "-march=native" on M1: https://github.com/status-im/nimbus-eth2/issues/2758
   switch("passC", "-march=native")
   switch("passL", "-march=native")
   if defined(i386) or defined(amd64):

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,13 +13,16 @@
 import
   std/[tables, deques],
   chronos,
+  minilru,
   ../../../common,
   ../../../db/[core_db, fcu_db],
   ../../../portal/portal,
   ./block_quarantine,
   ./chain_branch
 
-export tables
+from ../../../block_access_list/block_access_list_builder import BlockAccessListRef
+
+export tables, minilru
 
 type
   QueueItem* = object
@@ -87,6 +90,9 @@ type
       # Enable adjusting the persistBatchSize dynamically based on the
       # time it takes to update base.
 
+    maxBlobs*: Option[uint8]
+      # For EIP-7872; allows constraining of max blobs packed into each payload
+
     portal*: HistoryExpiryRef
       # History Expiry tracker and portal access entry point
 
@@ -98,6 +104,11 @@ type
     processingQueueLoop*: Future[void].Raising([CancelledError])
       # Prevent async re-entrancy messing up FC state
       # on both `importBlock` and `forkChoice`.
+
+    badBlocks*: LruCache[Hash32, (Block, Opt[BlockAccessListRef])]
+      # Recent blocks that failed validation for any reason,
+      # indexed by block hash and containing a tuple of the block
+      # and the generated block access list.
 
 # ------------------------------------------------------------------------------
 # These functions are private to ForkedChainRef

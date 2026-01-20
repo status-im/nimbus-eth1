@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   ../execution_chain/compile_info
@@ -61,6 +61,7 @@ proc basicServices(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonR
     eagerStateRoot = config.eagerStateRootCheck,
     persistBatchSize = config.persistBatchSize,
     dynamicBatchSize = config.dynamicBatchSize,
+    maxBlobs = config.maxBlobs,
     enableQueue = true)
   if config.deserializeFcState:
     fc.deserialize().isOkOr:
@@ -323,6 +324,12 @@ proc runExeClient*(
     txFrame.checkpoint(fc.base.blk.header.number, skipSnapshot = true)
     com.db.persist(txFrame)
 
+ # Rlp import is there, first load the chain segment
+  if config.bootstrapBlocksFile.len > 0:
+    try:
+      waitFor importRlpBlocks(config, com, nimbus.fc)
+    except CancelledError:
+      raiseAssert "Nothing cancels the future"
   # Be graceful about ctrl-c during init
   if ProcessState.stopping.isNone:
     ProcessState.notifyRunning()
@@ -389,11 +396,6 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   case config.cmd
   of NimbusCmd.`import`:
     importBlocks(config, com)
-  of NimbusCmd.`import - rlp`:
-    try:
-      waitFor importRlpBlocks(config, com)
-    except CancelledError:
-      raiseAssert "Nothing cancels the future"
   else:
     runExeClient(config, com, nil, nimbus=nimbus)
 

@@ -419,7 +419,7 @@ const
   NumRegularForks = NumForksWithBlobSchedule - NumBPOForks
   BPOForks = getBPOForks(NumBPOForks)
   RegularForks = getRegularForks(NumRegularForks)
-  
+
 proc configureBlobSchedule(conf: ChainConfig) =
   if conf.blobSchedule[Cancun].isNone:
     conf.blobSchedule[Cancun] = Opt.some(BlobSchedule(target: 3'u64, max: 6'u64, baseFeeUpdateFraction: 3_338_477'u64))
@@ -508,7 +508,7 @@ func defaultBlobSchedule*(): array[Cancun..HardFork.high, Opt[BlobSchedule]] =
     Bpo3  : Opt.none(BlobSchedule),
     Bpo4  : Opt.none(BlobSchedule),
     Bpo5  : Opt.none(BlobSchedule),
-    Amsterdam: Opt.none(BlobSchedule),
+    Amsterdam: Opt.some(BlobSchedule(target: 14'u64, max: 21'u64, baseFeeUpdateFraction: 11_684_671'u64)),
   ]
 
 func chainConfigForNetwork*(id: NetworkId): ChainConfig =

@@ -41,20 +41,41 @@ func validateVersionedHashed(payload: ExecutionPayload,
   true
 
 template validateVersion(com, timestamp, payloadVersion, apiVersion) =
-  if apiVersion == Version.V4:
+  if apiVersion == Version.V5:
+    if not com.isAmsterdamOrLater(timestamp):
+      raise unsupportedFork("newPayloadV5 expect payload timestamp fall within Amsterdam")
+    if payloadVersion != Version.V4:
+      raise invalidParams("newPayload" & $apiVersion &
+      " expect ExecutionPayloadV4" &
+      " but got ExecutionPayload" & $payloadVersion)
+
+  elif apiVersion == Version.V4:
     if not com.isPragueOrLater(timestamp):
       raise unsupportedFork("newPayloadV4 expect payload timestamp fall within Prague")
+    if payloadVersion != Version.V3:
+      raise invalidParams("newPayload" & $apiVersion &
+      " expect ExecutionPayloadV3" &
+      " but got ExecutionPayload" & $payloadVersion)
 
-  if com.isPragueOrLater(timestamp):
+  elif apiVersion == Version.V3:
+    if not com.isCancunOrLater(timestamp):
+      raise unsupportedFork("newPayloadV3 expect payload timestamp fall within Cancun")
+    if payloadVersion != Version.V3:
+      raise invalidParams("newPayload" & $apiVersion &
+      " expect ExecutionPayloadV3" &
+      " but got ExecutionPayload" & $payloadVersion)
+
+  if com.isAmsterdamOrLater(timestamp):
+    if payloadVersion != Version.V4:
+      raise invalidParams("if timestamp is Amsterdam or later, " &
+        "payload must be ExecutionPayloadV4, got ExecutionPayload" & $payloadVersion)
+
+  elif com.isPragueOrLater(timestamp):
     if payloadVersion != Version.V3:
       raise invalidParams("if timestamp is Prague or later, " &
         "payload must be ExecutionPayloadV3, got ExecutionPayload" & $payloadVersion)
 
-  if apiVersion == Version.V3:
-    if not com.isCancunOrLater(timestamp):
-      raise unsupportedFork("newPayloadV3 expect payload timestamp fall within Cancun")
-
-  if com.isCancunOrLater(timestamp):
+  elif com.isCancunOrLater(timestamp):
     if payloadVersion != Version.V3:
       raise invalidParams("if timestamp is Cancun or later, " &
         "payload must be ExecutionPayloadV3, got ExecutionPayload" & $payloadVersion)
@@ -67,13 +88,6 @@ template validateVersion(com, timestamp, payloadVersion, apiVersion) =
   elif payloadVersion != Version.V1:
     raise invalidParams("if timestamp is earlier than Shanghai, " &
       "payload must be ExecutionPayloadV1, got ExecutionPayload" & $payloadVersion)
-
-  if apiVersion == Version.V3 or apiVersion == Version.V4:
-    # both newPayloadV3 and newPayloadV4 expect ExecutionPayloadV3
-    if payloadVersion != Version.V3:
-      raise invalidParams("newPayload" & $apiVersion &
-      " expect ExecutionPayload3" &
-      " but got ExecutionPayload" & $payloadVersion)
 
 template validatePayload(apiVersion, payloadVersion, payload) =
   if payloadVersion >= Version.V2:
@@ -88,6 +102,11 @@ template validatePayload(apiVersion, payloadVersion, payload) =
     if payload.excessBlobGas.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         "excessBlobGas is expected from execution payload")
+
+  if apiVersion >= Version.V5 or payloadVersion >= Version.V4:
+    if payload.blockAccessList.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        "blockAccessList is expected from execution payload")
 
 # https://github.com/ethereum/execution-apis/blob/40088597b8b4f48c45184da002e27ffc3c37641f/src/engine/prague.md#request
 func validateExecutionRequest(blockHash: Hash32,
@@ -161,6 +180,13 @@ proc newPayload*(ben: BeaconEngineRef,
         warn "Failed to decode payload",
           error = e.msg
         return invalidStatus(payload.blockHash, "Failed to decode payload")
+    blockAccessList =
+      try:
+        blockAccessList(payload)
+      except RlpError as e:
+        warn "Failed to decode payload",
+          error = e.msg
+        return invalidStatus(payload.blockHash, "Failed to decode payload")
 
   template header: Header = blk.header
 
@@ -194,7 +220,7 @@ proc newPayload*(ben: BeaconEngineRef,
   # will not trigger a sync cycle. That is fine though, if we get a fork choice
   # update after legit payload executions.
   let parent = chain.headerByHash(header.parentHash).valueOr:
-    return ben.delayPayloadImport(blockHash, blk)
+    return ben.delayPayloadImport(blockHash, blk, blockAccessList)
 
   # We have an existing parent, do some sanity checks to avoid the beacon client
   # triggering too early
@@ -221,7 +247,7 @@ proc newPayload*(ben: BeaconEngineRef,
     return invalidStatus(parent.computeBlockHash, "Invalid timestamp")
 
   if not chain.haveBlockAndState(header.parentHash):
-    chain.quarantine.addOrphan(blockHash, blk)
+    chain.quarantine.addOrphan(blockHash, blk, blockAccessList)
     warn "State not available, ignoring new payload",
       hash   = blockHash,
       number = header.number
@@ -233,7 +259,7 @@ proc newPayload*(ben: BeaconEngineRef,
   trace "Importing block without sethead",
     hash = blockHash, number = header.number
 
-  let vres = await chain.queueImportBlock(blk)
+  let vres = await chain.queueImportBlock(blk, blockAccessList)
   if vres.isErr:
     warn "Error importing block",
       number = header.number,

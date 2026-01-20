@@ -1,5 +1,5 @@
 # Nimbus - Portal Network
-# Copyright (c) 2021-2025 Status Research & Development GmbH
+# Copyright (c) 2021-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -26,7 +26,7 @@ proc initDiscoveryNode*(
     previousRecord = Opt.none(enr.Record),
 ): discv5_protocol.Protocol {.raises: [CatchableError].} =
   # set bucketIpLimit to allow bucket split
-  let config = DiscoveryConfig.init(1000, 24, 5)
+  let config = DiscoveryConfig.init(1000, 24, 5, 512, true)
 
   var enrFields: seq[(string, seq[byte])]
   enrFields.add(localEnrFields)
@@ -39,13 +39,13 @@ proc initDiscoveryNode*(
     Opt.some(address.ip),
     Opt.some(address.port),
     Opt.some(address.port),
+    Opt.none(Port),
     bindPort = address.port,
     bootstrapRecords = bootstrapRecords,
     localEnrFields = enrFields,
     previousRecord = previousRecord,
     config = config,
     rng = rng,
-    banNodes = true,
   )
 
   result.open()

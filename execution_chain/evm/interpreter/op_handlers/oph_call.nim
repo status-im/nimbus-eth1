@@ -55,7 +55,8 @@ type
     memOffset:       int
     memLength:       int
     contractAddress: Address
-    gasCallEIPs:     GasInt
+    gasCallEIP2929:  proc(): GasInt {.gcsafe, raises: [].}
+    gasCallDelegate: proc(): GasInt {.gcsafe, raises: [].}
 
 proc gasCallEIP2929(c: Computation, address: Address): GasInt =
   c.vmState.mutateLedger:
@@ -81,16 +82,27 @@ proc updateStackAndParams(q: var LocalParams; c: Computation) =
     q.memOffset = q.memOutPos
     q.memLength = q.memOutLen
 
+  let codeAddress = q.codeAddress
+
   # EIP2929: This came before old gas calculator
   #           because it will affect `c.gasMeter.gasRemaining`
   #           and further `childGasLimit`
-  if FkBerlin <= c.fork:
-    q.gasCallEIPs = gasCallEIP2929(c, q.codeAddress)
+  q.gasCallEIP2929 =
+    proc(): GasInt =
+      if FkBerlin <= c.fork:
+        gasCallEIP2929(c, codeAddress)
+      else:
+        0.GasInt
 
-  if FkPrague <= c.fork:
-    let delegateTo = parseDelegationAddress(c.getCode(q.codeAddress))
-    if delegateTo.isSome:
-      q.gasCallEIPs += delegateResolutionCost(c, delegateTo[])
+  q.gasCallDelegate =
+    proc(): GasInt =
+      if FkPrague <= c.fork:
+        let delegateTo = parseDelegationAddress(c.getCode(codeAddress)).valueOr:
+          return 0.GasInt
+        delegateResolutionCost(c, delegateTo)
+      else:
+        0.GasInt
+
 
 proc callParams(c: Computation): EvmResult[LocalParams] =
   ## Helper for callOp()
@@ -202,17 +214,19 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
 
   let
     p = ? cpt.callParams
+    isNewAccount = proc(): bool = not cpt.accountExists(p.contractAddress)
     (gasCost, childGasLimit) = ? cpt.gasCosts[Call].c_handler(
       p.value,
       GasParams(
-        kind:           Call,
-        isNewAccount:   not cpt.accountExists(p.contractAddress),
-        gasLeft:        cpt.gasMeter.gasRemaining,
-        gasCallEIPs:    p.gasCallEIPs,
-        contractGas:    p.gas,
-        currentMemSize: cpt.memory.len,
-        memOffset:      p.memOffset,
-        memLength:      p.memLength))
+        kind:            Call,
+        isNewAccount:    isNewAccount,
+        gasLeft:         cpt.gasMeter.gasRemaining,
+        gasCallEIP2929:  p.gasCallEIP2929,
+        gasCallDelegate: p.gasCallDelegate,
+        contractGas:     p.gas,
+        currentMemSize:  cpt.memory.len,
+        memOffset:       p.memOffset,
+        memLength:       p.memLength))
 
   ? cpt.opcodeGasCost(Call, gasCost, reason = $Call)
 
@@ -256,17 +270,19 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
   ## 0xf2, Message-call into this account with an alternative account's code.
   let
     p = ? cpt.callCodeParams
+    isNewAccount = proc(): bool = not cpt.accountExists(p.contractAddress)
     (gasCost, childGasLimit) = ? cpt.gasCosts[CallCode].c_handler(
       p.value,
       GasParams(
-        kind:           CallCode,
-        isNewAccount:   not cpt.accountExists(p.contractAddress),
-        gasLeft:        cpt.gasMeter.gasRemaining,
-        gasCallEIPs:    p.gasCallEIPs,
-        contractGas:    p.gas,
-        currentMemSize: cpt.memory.len,
-        memOffset:      p.memOffset,
-        memLength:      p.memLength))
+        kind:            CallCode,
+        isNewAccount:    isNewAccount,
+        gasLeft:         cpt.gasMeter.gasRemaining,
+        gasCallEIP2929:  p.gasCallEIP2929,
+        gasCallDelegate: p.gasCallDelegate,
+        contractGas:     p.gas,
+        currentMemSize:  cpt.memory.len,
+        memOffset:       p.memOffset,
+        memLength:       p.memLength))
 
   ? cpt.opcodeGasCost(CallCode, gasCost, reason = $CallCode)
 
@@ -311,17 +327,19 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
   ##       code, but persisting the current values for sender and value.
   let
     p = ? cpt.delegateCallParams
+    isNewAccount = proc(): bool = not cpt.accountExists(p.contractAddress)
     (gasCost, childGasLimit) = ? cpt.gasCosts[DelegateCall].c_handler(
       p.value,
       GasParams(
-        kind:           DelegateCall,
-        isNewAccount:   not cpt.accountExists(p.contractAddress),
-        gasLeft:        cpt.gasMeter.gasRemaining,
-        gasCallEIPs:    p.gasCallEIPs,
-        contractGas:    p.gas,
-        currentMemSize: cpt.memory.len,
-        memOffset:      p.memOffset,
-        memLength:      p.memLength))
+        kind:            DelegateCall,
+        isNewAccount:    isNewAccount,
+        gasLeft:         cpt.gasMeter.gasRemaining,
+        gasCallEIP2929:  p.gasCallEIP2929,
+        gasCallDelegate: p.gasCallDelegate,
+        contractGas:     p.gas,
+        currentMemSize:  cpt.memory.len,
+        memOffset:       p.memOffset,
+        memLength:       p.memLength))
 
   ? cpt.opcodeGasCost(DelegateCall, gasCost, reason = $DelegateCall)
 
@@ -360,17 +378,19 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
 
   let
     p = ? cpt.staticCallParams
+    isNewAccount = proc(): bool = not cpt.accountExists(p.contractAddress)
     (gasCost, childGasLimit) = ? cpt.gasCosts[StaticCall].c_handler(
       p.value,
       GasParams(
-        kind:           StaticCall,
-        isNewAccount:   not cpt.accountExists(p.contractAddress),
-        gasLeft:        cpt.gasMeter.gasRemaining,
-        gasCallEIPs:    p.gasCallEIPs,
-        contractGas:    p.gas,
-        currentMemSize: cpt.memory.len,
-        memOffset:      p.memOffset,
-        memLength:      p.memLength))
+        kind:            StaticCall,
+        isNewAccount:    isNewAccount,
+        gasLeft:         cpt.gasMeter.gasRemaining,
+        gasCallEIP2929:  p.gasCallEIP2929,
+        gasCallDelegate: p.gasCallDelegate,
+        contractGas:     p.gas,
+        currentMemSize:  cpt.memory.len,
+        memOffset:       p.memOffset,
+        memLength:       p.memLength))
 
   ? cpt.opcodeGasCost(StaticCall, gasCost, reason = $StaticCall)
 

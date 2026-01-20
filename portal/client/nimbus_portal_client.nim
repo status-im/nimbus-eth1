@@ -142,27 +142,22 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
   ## Discovery v5 protocol setup
   let
     discoveryConfig = DiscoveryConfig.init(
-      config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop, 512
+      config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop, 512, false
     )
     d = newProtocol(
       netkey,
       extIp,
       Opt.none(Port),
       extUdpPort,
-      # Note: usage of the client field "c" is replaced with ping extensions client_info.
-      # This can be removed in the future when no more tooling relies on it.
-      localEnrFields = [
-        toFieldPair("c", enrClientInfoShort),
-        toFieldPair(portalEnrKey, getPortalEnrField(config.network)),
-      ],
+      Opt.none(Port),
+      localEnrFields = [toFieldPair(portalEnrKey, getPortalEnrField(config.network))],
       bootstrapRecords = bootstrapRecords,
       previousRecord = previousEnr,
-      bindIp = bindIp,
+      bindIp = Opt.some(bindIp),
       bindPort = udpPort,
       enrAutoUpdate = config.enrAutoUpdate,
       config = discoveryConfig,
       rng = rng,
-      banNodes = not config.disableBanNodes,
     )
 
   d.open()

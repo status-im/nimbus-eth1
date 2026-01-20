@@ -8,8 +8,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/os,
-  std/strutils,
+  std/[os, strutils, sequtils],
   json_rpc/rpcproxy, # must be early (compilation annoyance)
   json_serialization/std/net,
   beacon_chain/conf_light_client,
@@ -108,10 +107,10 @@ type VerifiedProxyConf* = object
 
   # (Untrusted) web3 provider
   # No default - Needs to be provided by the user
-  backendUrl* {.
+  backendUrls* {.
     desc: "URL of the web3 data provider",
     name: "backend-url"
-  .}: Web3Url
+  .}: seq[Web3Url]
 
   # Listening endpoint of the proxy
   # (verified) web3 end
@@ -144,6 +143,10 @@ proc parseCmdArg*(T: type Web3Url, p: string): T {.raises: [ValueError].} =
     raise newException(
       ValueError, "Web3 url should have defined scheme (http/https/ws/wss)"
     )
+
+proc parseCmdArg*(T: type seq[Web3Url], p: string): T {.raises: [ValueError].} =
+  let urls = p.split(',')
+  urls.mapIt(parseCmdArg(Web3Url, it))
 
 proc parseCmdArg*(T: type UrlList, p: string): T {.raises: [ValueError].} =
   let urls = p.split(',')
