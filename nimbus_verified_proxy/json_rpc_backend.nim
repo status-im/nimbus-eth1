@@ -9,52 +9,87 @@
 
 import
   stint,
+  eth/common/keys, # used for keys.rng
   json_rpc/[rpcclient, rpcproxy],
   web3/[eth_api, eth_api_types],
   ./engine/types,
   ./nimbus_verified_proxy_conf
 
-type JsonRpcClient* = ref object
-  url: string
-  case kind*: ClientKind
-  of Http:
-    httpClient: RpcHttpClient
-  of WebSocket:
-    wsClient: RpcWebSocketClient
-
-proc init*(T: type JsonRpcClient, url: Web3Url): JsonRpcClient =
-  case url.kind
-  of HttpUrl:
-    JsonRpcClient(kind: Http, httpClient: newRpcHttpClient(), url: url.web3Url)
-  of WsUrl:
-    JsonRpcClient(kind: WebSocket, wsClient: newRpcWebSocketClient(), url: url.web3Url)
-
-proc start*(
-    client: JsonRpcClient
-): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
-  try:
-    case client.kind
+type
+  JsonRpcClient* = ref object
+    case kind*: ClientKind
     of Http:
-      await client.httpClient.connect(client.url)
+      httpClient: RpcHttpClient
     of WebSocket:
-      await client.wsClient.connect(uri = client.url, compression = false, flags = {})
-  except JsonRpcError as e:
-    return err((BackendError, e.msg))
+      wsClient: RpcWebSocketClient
 
-  ok()
+  JsonRpcClientPool* = ref object
+    rng: ref HmacDrbgContext
+    urls: seq[string]
+    clients: seq[JsonRpcClient]
 
-template getClient(client: JsonRpcClient): RpcClient =
+proc new*(T: type JsonRpcClientPool): T =
+  let rng = keys.newRng()
+  JsonRpcClientPool(rng: rng, urls: @[], clients: @[])
+
+template resolveClient(client: JsonRpcClient): RpcClient =
   case client.kind
   of Http: client.httpClient
   of WebSocket: client.wsClient
 
-proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
+proc addEndpoints*(
+    pool: JsonRpcClientPool, urlList: seq[Web3Url]
+): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
+  for endpoint in urlList:
+    if endpoint.web3Url in pool.urls:
+      continue
+
+    try:
+      case endpoint.kind
+      of HttpUrl:
+        let client = JsonRpcClient(kind: Http, httpClient: newRpcHttpClient())
+        await client.httpClient.connect(endpoint.web3Url)
+        pool.clients.add(client)
+        pool.urls.add(endpoint.web3Url)
+      of WsUrl:
+        let client = JsonRpcClient(kind: WebSocket, wsClient: newRpcWebSocketClient())
+        await client.wsClient.connect(
+          uri = endpoint.web3Url, compression = false, flags = {}
+        )
+        pool.clients.add(client)
+        pool.urls.add(endpoint.web3Url)
+    except JsonRpcError as e:
+      return err((BackendError, e.msg))
+
+  ok()
+
+proc closeAll*(pool: JsonRpcClientPool) {.async: (raises: []).} =
+  for client in pool.clients:
+    await client.resolveClient().close()
+
+  pool.clients.setLen(0)
+  pool.urls.setLen(0)
+
+proc getClientFromPool(pool: JsonRpcClientPool): JsonRpcClient =
+  var randomNum: uint64
+  pool.rng[].generate(randomNum)
+
+  # NOTE: we use the mod operator to bring the random number into range
+  # this introduces a bias in the output distribution but is negligible
+  # for this use case. The bias becomes insignificant when score filters
+  # are used to select clients in the future.
+  pool.clients[randomNum mod uint64(pool.clients.len)]
+
+template resolveClientFromPool(pool: JsonRpcClientPool): RpcClient =
+  pool.getClientFromPool().resolveClient()
+
+proc getEthApiBackend*(pool: JsonRpcClientPool): EthApiBackend =
   let
     ethChainIdProc = proc(): Future[EngineResult[UInt256]] {.
         async: (raises: [CancelledError])
     .} =
       try:
-        ok(await client.getClient().eth_chainId())
+        ok(await pool.resolveClientFromPool().eth_chainId())
       except CancelledError as e:
         raise e
       except RpcPostError as e:
@@ -72,7 +107,9 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
         blkHash: Hash32, fullTransactions: bool
     ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
       try:
-        let res = await client.getClient().eth_getBlockByHash(blkHash, fullTransactions)
+        let res = await pool.resolveClientFromPool().eth_getBlockByHash(
+          blkHash, fullTransactions
+        )
         if res.isNil():
           return err((BackendFetchError, "Obtained nil response for the RPC request"))
         ok(res)
@@ -93,8 +130,9 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
         blkNum: BlockTag, fullTransactions: bool
     ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
       try:
-        let res =
-          await client.getClient().eth_getBlockByNumber(blkNum, fullTransactions)
+        let res = await pool.resolveClientFromPool().eth_getBlockByNumber(
+          blkNum, fullTransactions
+        )
         if res.isNil():
           return err((BackendFetchError, "Obtained nil response for the RPC request"))
         ok(res)
@@ -115,7 +153,7 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
         address: Address, slots: seq[UInt256], blockId: BlockTag
     ): Future[EngineResult[ProofResponse]] {.async: (raises: [CancelledError]).} =
       try:
-        ok(await client.getClient().eth_getProof(address, slots, blockId))
+        ok(await pool.resolveClientFromPool().eth_getProof(address, slots, blockId))
       except CancelledError as e:
         raise e
       except RpcPostError as e:
@@ -133,7 +171,7 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
         args: TransactionArgs, blockId: BlockTag
     ): Future[EngineResult[AccessListResult]] {.async: (raises: [CancelledError]).} =
       try:
-        ok(await client.getClient().eth_createAccessList(args, blockId))
+        ok(await pool.resolveClientFromPool().eth_createAccessList(args, blockId))
       except CancelledError as e:
         raise e
       except RpcPostError as e:
@@ -151,7 +189,7 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
         address: Address, blockId: BlockTag
     ): Future[EngineResult[seq[byte]]] {.async: (raises: [CancelledError]).} =
       try:
-        ok(await client.getClient().eth_getCode(address, blockId))
+        ok(await pool.resolveClientFromPool().eth_getCode(address, blockId))
       except CancelledError as e:
         raise e
       except RpcPostError as e:
@@ -169,7 +207,7 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
         txHash: Hash32
     ): Future[EngineResult[TransactionObject]] {.async: (raises: [CancelledError]).} =
       try:
-        let res = await client.getClient().eth_getTransactionByHash(txHash)
+        let res = await pool.resolveClientFromPool().eth_getTransactionByHash(txHash)
         if res.isNil():
           return err((BackendFetchError, "Obtained nil response for the RPC request"))
         ok(res)
@@ -190,7 +228,7 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
         txHash: Hash32
     ): Future[EngineResult[ReceiptObject]] {.async: (raises: [CancelledError]).} =
       try:
-        let res = await client.getClient().eth_getTransactionReceipt(txHash)
+        let res = await pool.resolveClientFromPool().eth_getTransactionReceipt(txHash)
         if res.isNil():
           return err((BackendFetchError, "Obtained nil response for the RPC request"))
         ok(res)
@@ -213,7 +251,7 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
         async: (raises: [CancelledError])
     .} =
       try:
-        ok(await client.getClient().eth_getBlockReceipts(blockId))
+        ok(await pool.resolveClientFromPool().eth_getBlockReceipts(blockId))
       except CancelledError as e:
         raise e
       except RpcPostError as e:
@@ -231,7 +269,7 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
         filterOptions: FilterOptions
     ): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).} =
       try:
-        ok(await client.getClient().eth_getLogs(filterOptions))
+        ok(await pool.resolveClientFromPool().eth_getLogs(filterOptions))
       except CancelledError as e:
         raise e
       except RpcPostError as e:
@@ -252,7 +290,7 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
     ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).} =
       try:
         ok(
-          await client.getClient().eth_feeHistory(
+          await pool.resolveClientFromPool().eth_feeHistory(
             blockCount, newestBlock, rewardPercentiles
           )
         )
@@ -273,7 +311,7 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
         txBytes: seq[byte]
     ): Future[EngineResult[Hash32]] {.async: (raises: [CancelledError]).} =
       try:
-        ok(await client.getClient().eth_sendRawTransaction(txBytes))
+        ok(await pool.resolveClientFromPool().eth_sendRawTransaction(txBytes))
       except CancelledError as e:
         raise e
       except RpcPostError as e:
@@ -301,6 +339,3 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
     eth_feeHistory: feeHistoryProc,
     eth_sendRawTransaction: sendRawTxProc,
   )
-
-proc stop*(client: JsonRpcClient) {.async: (raises: []).} =
-  await client.getClient().close()

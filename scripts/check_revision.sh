@@ -42,7 +42,7 @@ if [[ $COPYRIGHT_YEAR_START_GET != *$COPYRIGHT_YEAR_START_EXPECT*  ]]; then
 fi
 
 LAUNCHING_INFO_EXPECT="Launching execution client"
-LAUNCHING_INFO_GET=$($EL import-rlp | head -n 1)
+LAUNCHING_INFO_GET=$($EL import | head -n 1)
 
 if [[ $LAUNCHING_INFO_GET != *$LAUNCHING_INFO_EXPECT*  ]]; then
   echo "\"Launching execution client\" should appear at first line"

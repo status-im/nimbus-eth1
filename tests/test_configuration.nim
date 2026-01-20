@@ -44,13 +44,19 @@ proc configurationMain*() =
       check dd.dataDir() == "apple\\bin"
       check dd.keyStoreDir == "banana/bin"
 
-    test "import-rlp":
-      let aa = makeTestConfig()
-      check aa.cmd == NimbusCmd.executionClient
+    test "bootstrap-blocks-file parsing":
+      let defaults = makeTestConfig()
+      check defaults.bootstrapBlocksFile.len == 0
+      check defaults.bootstrapBlocksFinalized == false
 
-      let bb = makeConfig(@["import-rlp", genesisFile])
-      check bb.cmd == NimbusCmd.`import-rlp`
-      check bb.blocksFile[0].string == genesisFile
+      let cfg = makeConfig(@[
+        "--debug-bootstrap-blocks-file:" & genesisFile,
+        "--debug-bootstrap-finalized:false",
+      ])
+      check cfg.cmd == NimbusCmd.executionClient
+      check cfg.bootstrapBlocksFile.len == 1
+      check cfg.bootstrapBlocksFile[0].string == genesisFile
+      check cfg.bootstrapBlocksFinalized == false
 
     test "network loading config file with no genesis data":
       # no genesis will fallback to geth compatibility mode
