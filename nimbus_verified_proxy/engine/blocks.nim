@@ -8,7 +8,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/strutils,
+  std/[strutils, sequtils],
   results,
   chronicles,
   web3/[eth_api_types, eth_api],
@@ -109,42 +109,43 @@ proc walkBlocks(
   var
     nextHash = sourceHash # sourceHash is already the parent hash
     nextNum = sourceNum - 1
-    downloadedHeaders: Table[base.BlockNumber, Header]
+    downloadedHeaders: Table[Hash32, Header]
+    futs: seq[Future[EngineResult[BlockObject]]]
 
   while nextNum > targetNum:
-    let numDownloads =
-      if ((nextNum - engine.parallelBlockDownloads + 1) > targetNum):
-        engine.parallelBlockDownloads
+    futs = @[]
+    downloadedHeaders.clear()
+
+    while nextNum > targetNum and uint64(futs.len) < engine.parallelBlockDownloads:
+      if not engine.headerStore.contains(nextNum):
+        let tag = BlockTag(kind: bidNumber, number: Quantity(nextNum))
+        futs.add(engine.backend.eth_getBlockByNumber(tag, false))
+
+      nextNum -= 1
+
+    await allFutures(futs)
+
+    for futBlk in futs:
+      if futBlk.cancelled() or futBlk.failed():
+        return
+          err((UnavailableDataError, "Error downloading a block during the block walk"))
       else:
-        nextNum - targetNum
+        let
+          blk = ?futBlk.value()
+          h = convHeader(blk)
+        downloadedHeaders[blk.hash] = h
 
-    for i in nextNum - numDownloads + 1 .. nextNum:
-      let header =
-        if engine.headerStore.contains(i):
-          engine.headerStore.get(i).get()
-        else:
-          let
-            blk =
-              ?(
-                await engine.backend.eth_getBlockByNumber(
-                  BlockTag(kind: bidNumber, number: Quantity(i)), false
-                )
-              )
-
-            h = convHeader(blk)
-
-          h
-
-      downloadedHeaders[i] = header
-
-    for j in 0 ..< numDownloads:
+    for j in 0 ..< futs.len:
       let unverifiedHeader =
-        try:
-          downloadedHeaders[nextNum - j]
-        except KeyError as e:
-          return err(
-            (UnavailableDataError, "Cannot find downloaded block of the block walk")
-          )
+        if engine.headerStore.contains(nextHash):
+          engine.headerStore.get(nextHash).get()
+        else:
+          try:
+            downloadedHeaders[nextHash]
+          except KeyError as e:
+            return err(
+              (UnavailableDataError, "Cannot find downloaded block of the block walk")
+            )
 
       if unverifiedHeader.computeBlockHash != nextHash:
         return err(
@@ -158,10 +159,6 @@ proc walkBlocks(
         return ok()
 
       nextHash = unverifiedHeader.parentHash
-
-    downloadedHeaders.clear()
-
-    nextNum = nextNum - numDownloads # because we walk along the history(past)
 
   err((VerificationError, "the requested block is not part of the canonical chain"))
 
