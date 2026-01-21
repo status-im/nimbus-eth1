@@ -8,7 +8,7 @@
 
 
 import
-  std/[options, typetraits],
+  std/typetraits,
   unittest2,
   eth/[common/eth_types],
   ../execution_chain/rpc/filters,
