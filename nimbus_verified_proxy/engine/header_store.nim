@@ -154,7 +154,7 @@ func updateFinalized*(
     self: HeaderStore, header: Header, hHash: Hash32
 ): Result[void, string] =
   # add header to the chain - if it already exists it won't be added
-  addHeader(header, hHash)
+  self.addHeader(header, hHash)
 
   if self.finalized.isSome():
     if self.finalized.get().number < header.number:
