@@ -193,7 +193,7 @@ proc verifyHeader(
           (UnavailableDataError, "latest block is not available yet. Still syncing?")
         )
 
-    # header is older than earliest and earliest is finalized
+    # header is older than earliest
     if header.number < earliest.number:
       # earliest is finalized
       if earliest.number < finalized.number:
@@ -205,7 +205,7 @@ proc verifyHeader(
         ?await engine.walkBlocks(
           finalized.number, header.number, finalized.parentHash, hash
         )
-    # is within the boundaries of header store but not found
+    # is within the boundaries of header store but not found in cache
     else:
       if header.number < finalized.number:
         ?await engine.walkBlocks(
