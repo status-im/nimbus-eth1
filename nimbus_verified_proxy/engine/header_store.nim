@@ -1,5 +1,5 @@
 # nimbus_verified_proxy
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -133,9 +133,27 @@ func contains*(self: HeaderStore, hash: Hash32): bool =
 func contains*(self: HeaderStore, number: base.BlockNumber): bool =
   self.hashes.contains(number)
 
+proc addHeader(self: HeaderStore, header: Header, hHash: Hash32) =
+  # Only add if it didn't exist before - the implementation of `latest` relies
+  # on this..
+  if hHash notin self.headers:
+    self.hashes.put(header.number, hHash)
+    var flagEvicted = false
+    for (evicted, key, value) in self.headers.putWithEvicted(hHash, header):
+      if evicted:
+        flagEvicted = true
+        self.earliest = Opt.some(value)
+        self.earliestHash = Opt.some(key)
+
+    # because the iterator doesn't yield when only new items are being added
+    # to the cache
+    if self.earliest.isNone() and (not flagEvicted):
+      self.earliest = Opt.some(header)
+      self.earliestHash = Opt.some(hHash)
+
 func updateFinalized*(
     self: HeaderStore, header: Header, hHash: Hash32
-): Result[bool, string] =
+): Result[void, string] =
   if self.finalized.isSome():
     if self.finalized.get().number < header.number:
       self.finalized = Opt.some(header)
@@ -145,34 +163,20 @@ func updateFinalized*(
   else:
     self.finalized = Opt.some(header)
     self.finalizedHash = Opt.some(hHash)
-    self.earliest = Opt.some(header)
-    self.earliestHash = Opt.some(hHash)
 
-  return ok(true)
+  return ok()
 
 func updateFinalized*(
     self: HeaderStore, header: ForkedLightClientHeader
-): Result[bool, string] =
+): Result[void, string] =
   let execHeader = convLCHeader(header).valueOr:
     return err(error)
 
   withForkyHeader(header):
     when lcDataFork > LightClientDataFork.Altair:
-      let execHash = forkyHeader.execution.block_hash.asBlockHash
+      ?self.updateFinalized(execHeader, forkyHeader.execution.block_hash.asBlockHash)
 
-      if self.finalized.isSome():
-        if self.finalized.get().number < execHeader.number:
-          self.finalized = Opt.some(execHeader)
-          self.finalizedHash = Opt.some(execHash)
-        else:
-          return err("finalized update header is older")
-      else:
-        self.finalized = Opt.some(execHeader)
-        self.finalizedHash = Opt.some(execHash)
-        self.earliest = Opt.some(execHeader)
-        self.earliestHash = Opt.some(execHash)
-
-  return ok(true)
+  return ok()
 
 func add*(self: HeaderStore, header: Header, hHash: Hash32): Result[void, string] =
   let latestHeader = self.latest
@@ -182,33 +186,19 @@ func add*(self: HeaderStore, header: Header, hHash: Hash32): Result[void, string
     if header.number <= latestHeader.get().number:
       return err("block is older than the latest one")
 
-  # Only add if it didn't exist before - the implementation of `latest` relies
-  # on this..
-  if hHash notin self.headers:
-    self.headers.put(hHash, header)
-    self.hashes.put(header.number, hHash)
+  # add header to the store and update earliest
+  self.addHeader(header, hHash)
+
   ok()
 
 func add*(self: HeaderStore, header: ForkedLightClientHeader): Result[void, string] =
-  let
-    execHeader = convLCHeader(header).valueOr:
-      return err(error)
-    latestHeader = self.latest
-
-  # check the ordering of headers. This allows for gaps but always maintains an incremental order
-  if latestHeader.isSome():
-    if execHeader.number <= latestHeader.get().number:
-      return err("block is older than the latest one")
+  let execHeader = convLCHeader(header).valueOr:
+    return err(error)
 
   withForkyHeader(header):
     when lcDataFork > LightClientDataFork.Altair:
-      let execHash = forkyHeader.execution.block_hash.asBlockHash
+      ?self.add(execHeader, forkyHeader.execution.block_hash.asBlockHash)
 
-      # Only add if it didn't exist before - the implementation of `latest` relies
-      # on this..
-      if execHash notin self.headers:
-        self.headers.put(execHash, execHeader)
-        self.hashes.put(execHeader.number, execHash)
   ok()
 
 func latestHash*(self: HeaderStore): Opt[Hash32] =
