@@ -59,12 +59,19 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
       of "Json": StdoutLogKind.Json
       of "Auto": StdoutLogKind.Auto
       else: StdoutLogKind.None
-    maxBlockWalk = jsonNode.getOrDefault("maxBlockWalk").getInt(1000)
-    parallelBlockDownloads = jsonNode.getOrDefault("parallelBlockDownloads").getInt(10)
+    maxBlockWalk = jsonNode.getOrDefault("maxBlockWalk").getBiggestInt(1000)
+    parallelBlockDownloads =
+      jsonNode.getOrDefault("parallelBlockDownloads").getBiggestInt(10)
     headerStoreLen = jsonNode.getOrDefault("headerStoreLen").getInt(256)
     storageCacheLen = jsonNode.getOrDefault("storageCacheLen").getInt(256)
     codeCacheLen = jsonNode.getOrDefault("codeCacheLen").getInt(64)
     accountCacheLen = jsonNode.getOrDefault("accountCacheLen").getInt(128)
+
+  template safeCast(val) =
+    if val < 0:
+      0
+    else:
+      uint64(val)
 
   return VerifiedProxyConf(
     eth2Network: eth2Network,
@@ -74,12 +81,12 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
     logLevel: logLevel,
     logFormat: logFormat,
     dataDirFlag: none(OutDir),
-    maxBlockWalk: uint64(maxBlockWalk),
+    maxBlockWalk: safeCast(maxBlockWalk),
     headerStoreLen: headerStoreLen,
     storageCacheLen: storageCacheLen,
     codeCacheLen: codeCacheLen,
     accountCacheLen: accountCacheLen,
-    parallelBlockDownloads: uint64(parallelBlockDownloads),
+    parallelBlockDownloads: safeCast(parallelBlockDownloads),
   )
 
 proc run*(
