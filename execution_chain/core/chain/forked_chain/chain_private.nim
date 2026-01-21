@@ -53,6 +53,30 @@ proc writeBaggage*(
       generatedBal.get(),
     )
 
+proc applyBlockAccessList(vmState: BaseVMState, header: Header, bal: BlockAccessListRef) =
+  # This function assumes that the bal has been validated and therefore
+  # each of the change lists should already be sorted in ascending order
+  # by blockAccessIndex.
+  # We only need to apply the last state change for each of the change lists
+  # since these will overwrite earlier changes anyway.
+  vmState.mutateLedger:
+    for accChanges in bal[]:
+      if accChanges.balanceChanges.len() > 0:
+        db.setBalance(accChanges.address, accChanges.balanceChanges[^1].postBalance)
+      if accChanges.nonceChanges.len() > 0:
+        db.setNonce(accChanges.address, accChanges.nonceChanges[^1].newNonce)
+      if accChanges.codeChanges.len() > 0:
+        db.setCode(accChanges.address, accChanges.codeChanges[^1].newCode)
+
+      for storageChange in accChanges.storageChanges:
+        if storageChange.changes.len() > 0:
+          db.setStorage(accChanges.address, storageChange.slot, storageChange.changes[^1].newValue)
+
+    db.persist(
+      clearEmptyAccount = vmState.com.isSpuriousOrLater(header.number),
+      clearCache = true
+    )
+
 proc processBlock*(
     c: ForkedChainRef,
     parentBlk: BlockRef,
@@ -108,7 +132,11 @@ proc processBlock*(
       c.badBlocks.put(blkHash, (blk, vmState.blockAccessList))
       return err(error)
 
-  if not vmState.com.statelessProviderEnabled:
+  if finalized and blockAccessList.isSome():
+    # The bal is validated against the header balHash in validateHeaderAndKinship
+    # so here we skip processing of the block and simply apply the bal state diff.
+    vmState.applyBlockAccessList(header, blockAccessList.get())
+  elif not vmState.com.statelessProviderEnabled:
     processBlock()
   else:
     # Clear the caches before executing the block to ensure we collect the correct
