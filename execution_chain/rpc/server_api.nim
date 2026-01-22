@@ -593,6 +593,139 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       if index >= uint64(blk.transactions.len):
         return nil
 
+      populateTransactionObject(
+        blk.transactions[index], Opt.some(blk.header.computeBlockHash), Opt.some(blk.header.number), Opt.some(index)
+      )
+
+    rpc("eth_getProof") do(
+      data: Address, slots: seq[UInt256], quantityTag: BlockTag
+    ) -> ProofResponse:
+      ## Returns information about an account and storage slots (if the account is a contract
+      ## and the slots are requested) along with account and storage proofs which prove the
+      ## existence of the values in the state.
+      ## See spec here: https://eips.ethereum.org/EIPS/eip-1186
+      ##
+      ## data: address of the account.
+      ## slots: integers of the positions in the storage to return with storage proofs.
+      ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+      ## Returns: the proof response containing the account, account proof and storage proof
+      let accDB = api.ledgerFromTag(quantityTag).valueOr:
+        raise newException(ValueError, "Block not found")
+
+      getProof(accDB, data, slots)
+
+    rpc("eth_getBlockReceipts") do(
+      quantityTag: BlockTag
+    ) -> Opt[seq[ReceiptObject]]:
+      ## Returns the receipts of a block.
+      let
+        blk = api.blockFromTag(quantityTag).valueOr:
+          raise newException(ValueError, "Block not found")
+        blkHash = blk.header.computeBlockHash
+        receipts = api.chain.receiptsByBlockHash(blkHash).valueOr:
+          return Opt.none(seq[ReceiptObject])
+
+      var
+        prevGasUsed = GasInt(0)
+        recs: seq[ReceiptObject]
+        index = 0'u64
+
+      try:
+        for receipt in receipts:
+          let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
+          prevGasUsed = receipt.cumulativeGasUsed
+          recs.add populateReceipt(receipt, gasUsed, blk.transactions[index], index, blk.header, api.com)
+          inc index
+        return Opt.some(recs)
+      except CatchableError:
+        return Opt.none(seq[ReceiptObject])
+
+    rpc("eth_createAccessList") do(
+      args: TransactionArgs, quantityTag: BlockTag
+    ) -> AccessListResult:
+      ## Generates an access list for a transaction.
+      try:
+        let header = api.headerFromTag(quantityTag).valueOr:
+          raise newException(ValueError, "Block not found")
+        return createAccessList(header, api.com, api.chain, args)
+      except CatchableError as exc:
+        return AccessListResult(error: Opt.some("createAccessList error: " & exc.msg))
+
+    rpc("eth_blobBaseFee") do() -> Quantity:
+      ## Returns the base fee per blob gas in wei.
+      let header = api.headerFromTag(blockId("latest")).valueOr:
+        raise newException(ValueError, "Block not found")
+      if header.blobGasUsed.isNone:
+        raise newException(ValueError, "blobGasUsed missing from latest header")
+      if header.excessBlobGas.isNone:
+        raise newException(ValueError, "excessBlobGas missing from latest header")
+      let blobBaseFee =
+        getBlobBaseFee(header.excessBlobGas.get, api.com, api.com.toEVMFork(header)) * header.blobGasUsed.get.u256
+      if blobBaseFee > high(uint64).u256:
+        raise newException(ValueError, "blobBaseFee is bigger than uint64.max")
+      return w3Qty blobBaseFee.truncate(uint64)
+
+    rpc("eth_getUncleByBlockHashAndIndex") do(
+      data: Hash32, quantity: Quantity
+    ) -> BlockObject:
+      ## Returns information about a uncle of a block by hash and uncle index position.
+      ##
+      ## data: hash of block.
+      ## quantity: the uncle's index position.
+      ## Returns BlockObject or nil when no block was found.
+      let index = uint64(quantity)
+      let blk = api.chain.blockByHash(data).valueOr:
+        return nil
+
+      if index < 0 or index >= blk.uncles.len.uint64:
+        return nil
+
+      let
+        uncle = api.chain.blockByHash(blk.uncles[index].computeBlockHash).valueOr:
+          return nil
+        uncleHash = uncle.header.computeBlockHash
+
+      return populateBlockObject(
+        uncleHash, uncle, api.getTotalDifficulty(uncleHash, uncle.header), false, true
+      )
+
+    rpc("eth_getUncleByBlockNumberAndIndex") do(
+      quantityTag: BlockTag, quantity: Quantity
+    ) -> BlockObject:
+      # Returns information about a uncle of a block by number and uncle index position.
+      ##
+      ## quantityTag: a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
+      ## quantity: the uncle's index position.
+      ## Returns BlockObject or nil when no block was found.
+      let index = uint64(quantity)
+      let blk = api.blockFromTag(quantityTag).valueOr:
+        return nil
+
+      if index < 0 or index >= blk.uncles.len.uint64:
+        return nil
+
+      let
+        uncle = api.chain.blockByHash(blk.uncles[index].computeBlockHash).valueOr:
+          return nil
+        uncleHash = uncle.header.computeBlockHash
+
+      return populateBlockObject(
+        uncleHash, uncle, api.getTotalDifficulty(uncleHash, uncle.header), false, true
+      )
+
+    rpc("eth_config") do() -> EthConfigObject:
+      ## Returns the current, next and last configuration
+      ## Doesn't work pre-shangai
+      ## https://eips.ethereum.org/EIPS/eip-7910
+      let currentFork = api.com.toHardFork(api.chain.latestHeader.forkDeterminationInfo)
+
+      if currentFork < Shanghai:
+        return nil
+
+      let
+        nextFork = api.com.nextFork(currentFork)
+        lastFork = api.com.lastFork(currentFork)
+
       return api.com.getEthConfigObject(api.chain, currentFork, nextFork, lastFork)
 
     rpc("eth_getBlockAccessListByBlockHash") do(data: Hash32) -> Opt[BlockAccessList]:

@@ -12,9 +12,7 @@ import
   web3/[eth_api_types, conversions],
   ../beacon/web3_eth_conv
 
-export
-  eth_api_types,
-  web3_eth_conv
+export eth_api_types, web3_eth_conv
 
 type
   FilterLog* = eth_api_types.LogObject
@@ -24,9 +22,9 @@ type
   BlockTag* = eth_api_types.RtBlockIdentifier
 
 # Block access list json serialization
-AccountChanges.useDefaultSerializationIn JrpcConv
-SlotChanges.useDefaultSerializationIn JrpcConv
-StorageChange.useDefaultSerializationIn JrpcConv
-BalanceChange.useDefaultSerializationIn JrpcConv
-NonceChange.useDefaultSerializationIn JrpcConv
-CodeChange.useDefaultSerializationIn JrpcConv
+AccountChanges.useDefaultSerializationIn EthJson
+SlotChanges.useDefaultSerializationIn EthJson
+StorageChange.useDefaultSerializationIn EthJson
+BalanceChange.useDefaultSerializationIn EthJson
+NonceChange.useDefaultSerializationIn EthJson
+CodeChange.useDefaultSerializationIn EthJson
