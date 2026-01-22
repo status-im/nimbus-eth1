@@ -44,7 +44,7 @@ const
 chronicles.formatIt(IoErrorCode):
   $it
 
-createRpcSigsFromNim(RpcClient):
+createRpcSigsFromNim(RpcClient, EthJson):
   # EL debug call to get header for validation
   proc debug_getHeaderByNumber(blockNumber: BlockIdentifier): string
 
