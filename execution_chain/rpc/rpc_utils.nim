@@ -217,6 +217,7 @@ proc populateReceipt*(rec: StoredReceipt, gasUsed: GasInt, tx: Transaction,
       transactionHash: Opt.some(res.transactionHash),
       blockHash: Opt.some(res.blockHash),
       blockNumber: Opt.some(res.blockNumber),
+      blockTimestamp: Opt.some(Quantity(header.timestamp)),
       # The actual fields
       address: log.address,
       data: log.data,
