@@ -20,7 +20,7 @@ import
   web3/conversions,
   beacon_chain/process_state
 
-from json_rpc/server import RpcServer, rpc
+from json_rpc/server import RpcServer, rpc, rpcContext
 
 {.push raises: [].}
 
