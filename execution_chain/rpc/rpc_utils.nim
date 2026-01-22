@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, algorithm],
+  std/[sequtils, algorithm, strutils],
   ./rpc_types,
   ./params,
   ../db/ledger,
@@ -399,3 +399,35 @@ proc getTotalDifficulty*(chain: ForkedChainRef, blockHash: Hash32, header: Heade
   else:
     # Note: It's ok to use baseTxFrame for TD as this is for historical blocks
     chain.baseTxFrame().getScore(blockHash)
+
+proc headerFromTag*(chain: ForkedChainRef, blockTag: BlockTag): Result[Header, string] =
+  if blockTag.kind == bidAlias:
+    let tag = blockTag.alias.toLowerAscii
+    case tag
+    of "latest":
+      ok(chain.latestHeader)
+    of "finalized":
+      ok(chain.finalizedHeader)
+    of "safe":
+      ok(chain.safeHeader)
+    else:
+      err("Unsupported block tag " & tag)
+  else:
+    let blockNum = base.BlockNumber blockTag.number
+    chain.headerByNumber(blockNum)
+
+proc blockFromTag*(chain: ForkedChainRef, blockTag: BlockTag): Result[Block, string] =
+  if blockTag.kind == bidAlias:
+    let tag = blockTag.alias.toLowerAscii
+    case tag
+    of "latest":
+      ok(chain.latestBlock)
+    of "finalized":
+      ok(chain.finalizedBlock)
+    of "safe":
+      ok(chain.safeBlock)
+    else:
+      err("Unsupported block tag " & tag)
+  else:
+    let blockNum = base.BlockNumber blockTag.number
+    chain.blockByNumber(blockNum)

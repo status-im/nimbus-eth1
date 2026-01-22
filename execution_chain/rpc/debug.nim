@@ -57,22 +57,6 @@ ExecutionWitness.useDefaultSerializationIn JrpcConv
 #     if opts.disableState.isTrue  : result.incl TracerFlags.DisableState
 #     if opts.disableStateDiff.isTrue: result.incl TracerFlags.DisableStateDiff
 
-proc headerFromTag(chain: ForkedChainRef, blockTag: BlockTag): Result[Header, string] =
-  if blockTag.kind == bidAlias:
-    let tag = blockTag.alias.toLowerAscii
-    case tag
-    of "latest":
-      return ok(chain.latestHeader)
-    of "finalized":
-      return ok(chain.finalizedHeader)
-    of "safe":
-      return ok(chain.safeHeader)
-    else:
-      return err("Unsupported block tag " & tag)
-  else:
-    let blockNum = base.BlockNumber blockTag.number
-    return chain.headerByNumber(blockNum)
-
 proc getExecutionWitness*(chain: ForkedChainRef, blockHash: Hash32): Result[ExecutionWitness, string] =
   let txFrame = chain.txFrame(blockHash).txFrameBegin()
   defer:
@@ -183,43 +167,45 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
   #     header = chainDB.headerFromTag(quantityTag)
   #   chainDB.setHead(header)
 
-  # server.rpc("debug_getRawBlock") do(quantityTag: BlockTag) -> seq[byte]:
-  #   ## Returns an RLP-encoded block.
-  #   var
-  #     header = chainDB.headerFromTag(quantityTag)
-  #     blockHash = chainDB.getBlockHash(header.number)
-  #     body = chainDB.getBlockBody(blockHash)
+  server.rpc("debug_getRawBlock") do(blockTag: BlockTag) -> seq[byte]:
+    ## Returns an RLP-encoded block.
+    let blockFromTag = chain.blockFromTag(blockTag).valueOr:
+      raise newException(ValueError, error)
 
-  #   rlp.encode(EthBlock.init(move(header), move(body)))
+    rlp.encode(blockFromTag)
 
-  # server.rpc("debug_getRawHeader") do(quantityTag: BlockTag) -> seq[byte]:
-  #   ## Returns an RLP-encoded header.
-  #   let header = chainDB.headerFromTag(quantityTag)
-  #   rlp.encode(header)
+  server.rpc("debug_getRawHeader") do(blockTag: BlockTag) -> seq[byte]:
+    ## Returns an RLP-encoded header.
+    let header = chain.headerFromTag(blockTag).valueOr:
+      raise newException(ValueError, error)
+    rlp.encode(header)
 
-  # server.rpc("debug_getRawReceipts") do(quantityTag: BlockTag) -> seq[seq[byte]]:
-  #   ## Returns an array of EIP-2718 binary-encoded receipts.
-  #   let header = chainDB.headerFromTag(quantityTag)
-  #   for receipt in chainDB.getReceipts(header.receiptsRoot):
-  #     result.add rlp.encode(receipt)
+  server.rpc("debug_getRawReceipts") do(blockTag: BlockTag) -> seq[seq[byte]]:
+    ## Returns an array of EIP-2718 binary-encoded receipts.
+    let header = chain.headerFromTag(blockTag).valueOr:
+      raise newException(ValueError, error)
+    var res: seq[seq[byte]]
+    for receipt in chain.baseTxFrame.getReceipts(header.receiptsRoot):
+      res.add rlp.encode(receipt)
 
-  # server.rpc("debug_getRawTransaction") do(data: Hash32) -> seq[byte]:
-  #   ## Returns an EIP-2718 binary-encoded transaction.
-  #   let txHash = data
-  #   let res = txPool.getItem(txHash)
-  #   if res.isOk:
-  #     return rlp.encode(res.get().tx)
+    res
 
-  #   let txDetails = chainDB.getTransactionKey(txHash)
-  #   if txDetails.index < 0:
-  #     raise newException(ValueError, "Transaction not found " & data.toHex)
+  server.rpc("debug_getRawTransaction") do(txHash: Hash32) -> seq[byte]:
+    ## Returns an EIP-2718 binary-encoded transaction.
+    let res = txPool.getItem(txHash)
+    if res.isOk:
+      return rlp.encode(res.get().tx)
 
-  #   let header = chainDB.getBlockHeader(txDetails.blockNumber)
-  #   var tx: Transaction
-  #   if chainDB.getTransaction(header.txRoot, txDetails.index, tx):
-  #     return rlp.encode(tx)
+    let
+      (blockHash, txId) = chain.txDetailsByTxHash(txHash).valueOr:
+        raise newException(ValueError, "Transaction not found")
+      blk = chain.blockByHash(blockHash).valueOr:
+        raise newException(ValueError, "Block not found")
 
-  #   raise newException(ValueError, "Transaction not found " & data.toHex)
+    if blk.transactions.len <= int(txId):
+      raise newException(ValueError, "Transaction not found")
+
+    rlp.encode(blk.transactions[txId])
 
   server.rpc("debug_executionWitness") do(quantityTag: BlockTag) -> ExecutionWitness:
     ## Returns an execution witness for the given block number.
