@@ -8,7 +8,7 @@
 import
   chronos,
   stew/byteutils,
-  std/[atomics, json, net, strutils, lists],
+  std/[atomics, json, net, lists],
   beacon_chain/spec/[digest, network],
   beacon_chain/nimbus_binary_common,
   json_rpc/[jsonmarshal],
@@ -53,14 +53,6 @@ proc destroy[T](x: ptr T) =
 proc freeContext(ctx: ptr Context) {.exported.} =
   ctx.destroy()
 
-proc alloc(str: string): cstring =
-  var ret = cast[cstring](allocShared(str.len + 1))
-  let s = cast[seq[char]](str)
-  for i in 0 ..< str.len:
-    ret[i] = s[i]
-  ret[str.len] = '\0'
-  return ret
-
 proc processVerifProxyTasks(ctx: ptr Context) {.exported.} =
   var delList: seq[int] = @[]
 
@@ -89,7 +81,10 @@ proc createTask(cb: CallBackProc, userData: pointer): Task =
   task
 
 proc startVerifProxy(
-    configJson: cstring, cb: CallBackProc, userData: pointer
+    configJson: cstring,
+    transportProc: TransportProc,
+    cb: CallBackProc,
+    userData: pointer,
 ): ptr Context {.exported.} =
   let ctx = Context.new().toUnmanagedPtr()
   ctx.stop = false
@@ -102,7 +97,7 @@ proc startVerifProxy(
 
   let
     task = createTask(cb, userData)
-    fut = run(ctx, $configJson)
+    fut = run(ctx, $configJson, transportProc)
 
   proc processFuture[T](fut: Future[T], task: Task) {.gcsafe.} =
     if fut.cancelled():
@@ -171,47 +166,6 @@ template callbackToC(
   task.fut = fut
   ctx.tasks.add(task)
   ctx.taskLen += 1
-
-# taken from nim-json-rpc and adapted
-func unpackArg(
-    arg: string, argType: type Address
-): Result[Address, string] {.raises: [].} =
-  try:
-    ok(Address.fromHex(arg))
-  except ValueError as e:
-    err("Parameter of type " & $argType & " coudln't be decoded: " & e.msg)
-
-func unpackArg(
-    arg: string, argType: type BlockTag
-): Result[BlockTag, string] {.raises: [].} =
-  try:
-    ok(BlockTag(kind: bidNumber, number: Quantity(fromHex[uint64](arg))))
-  except ValueError:
-    # if it is an invalid alias it verification engine will throw an error
-    ok(BlockTag(kind: bidAlias, alias: arg))
-
-func unpackArg(
-    arg: string, argType: type UInt256
-): Result[UInt256, string] {.raises: [].} =
-  try:
-    ok(UInt256.fromHex(arg))
-  except ValueError as e:
-    err("Parameter of type " & $argType & " coudldn't be decoded: " & e.msg)
-
-func unpackArg(
-    arg: string, argType: type Hash32
-): Result[Hash32, string] {.raises: [].} =
-  try:
-    ok(Hash32.fromHex(arg))
-  except ValueError as e:
-    err("Parameter of type " & $argType & " coudldn't be decoded: " & e.msg)
-
-# generalized overloading
-func unpackArg(arg: string, argType: type): Result[argType, string] {.raises: [].} =
-  try:
-    ok(JrpcConv.decode(arg, argType))
-  except CatchableError as e:
-    err("Parameter of type " & $argType & " coudln't be decoded: " & e.msg)
 
 proc eth_blockNumber(
     ctx: ptr Context, cb: CallBackProc, userData: pointer
