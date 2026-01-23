@@ -52,6 +52,21 @@ typedef struct Context Context;
 typedef void (*CallBackProc)(Context *ctx, int status, char *result, void *userData);
 
 /**
+ * Transport functions used to dispatch JSON RPC requests. (Must be implemented in the
+ * application using the verified proxy library)
+ *
+ * @param ctx       Execution context passed to the original request.
+ * @param name      name of the RPC method
+ * @param params    JSON serialized params required for the RPC method 
+ * @param cb        Callback to be called with userData passed (see below)
+ * @param userData  pointer to user data. Used to link multiple response callbacks
+ *                  back to their queries. Implementation of transport functions
+ *                  must appropriately relay back the userData via the transport
+ *                  callback function (see above)
+ */
+typedef void (*TransportProc)(Context *ctx, char *name, char *params, CallBackProc cb, void *userData);
+
+/**
  * Start the verification proxy with a given configuration.
  *
  * @param configJson JSON string describing the configuration for the verification proxy.
@@ -61,7 +76,7 @@ typedef void (*CallBackProc)(Context *ctx, int status, char *result, void *userD
  * @return           Pointer to a new Context object representing the running proxy.
  *                   Must be freed using freeContext() when no longer needed.
  */
-ETH_RESULT_USE_CHECK Context *startVerifProxy(char* configJson, CallBackProc onStart, void *userData);
+ETH_RESULT_USE_CHECK Context *startVerifProxy(char* configJson, TransportProc transport, CallBackProc onStart, void *userData);
 
 /**
  * Free the JSON encoded result returned via the callback.
