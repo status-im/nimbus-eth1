@@ -87,14 +87,14 @@ proc getProof*(
       storageProof: storage,
     )
 
-proc headerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[Header, string] =
+proc headerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[Header, string] {.raises: ApplicationError.} =
   api.chain.headerFromTag(blockTag)
 
-proc headerFromTag(api: ServerAPIRef, blockTag: Opt[BlockTag]): Result[Header, string] =
+proc headerFromTag(api: ServerAPIRef, blockTag: Opt[BlockTag]): Result[Header, string] {.raises: ApplicationError.} =
   let blockId = blockTag.get(defaultTag)
   api.headerFromTag(blockId)
 
-proc ledgerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[LedgerRef, string] =
+proc ledgerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[LedgerRef, string] {.raises: ApplicationError.} =
   # TODO avoid loading full header if hash is given
   let
     header = ?api.headerFromTag(blockTag)
@@ -103,7 +103,7 @@ proc ledgerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[LedgerRef, str
   # TODO maybe use a new frame derived from txFrame, to protect against abuse?
   ok(LedgerRef.init(txFrame))
 
-proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[Block, string] =
+proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[Block, string] {.raises: ApplicationError.} =
   api.chain.blockFromTag(blockTag)
 
 proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManager) =
@@ -182,7 +182,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ## fullTransactions: If true it returns the full transaction objects, if false only the hashes of the transactions.
     ## Returns BlockObject or nil when no block was found.
     let blk = api.blockFromTag(blockTag).valueOr:
-      return nil
+      # return nil
+      raise newException(ValueError, error)
+
 
     let blockHash = blk.header.computeBlockHash
     return populateBlockObject(
@@ -593,7 +595,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ## Returns the receipts of a block.
     let
       blk = api.blockFromTag(quantityTag).valueOr:
-        raise newException(ValueError, "Block not found")
+        raise newException(ValueError, "Block not found") # should be null, put none?
       blkHash = blk.header.computeBlockHash
       receipts = api.chain.receiptsByBlockHash(blkHash).valueOr:
         return Opt.none(seq[ReceiptObject])

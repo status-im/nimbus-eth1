@@ -170,14 +170,13 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
   server.rpc("debug_getRawBlock") do(blockTag: BlockTag) -> seq[byte]:
     ## Returns an RLP-encoded block.
     let blockFromTag = chain.blockFromTag(blockTag).valueOr:
-      raise newException(ValueError, error)
-
+      raise (ref ApplicationError)(code: -32000, msg: error)
     rlp.encode(blockFromTag)
 
   server.rpc("debug_getRawHeader") do(blockTag: BlockTag) -> seq[byte]:
     ## Returns an RLP-encoded header.
     let header = chain.headerFromTag(blockTag).valueOr:
-      raise newException(ValueError, error)
+      raise (ref ApplicationError)(code: -32000, msg: error)
     rlp.encode(header)
 
   server.rpc("debug_getRawReceipts") do(blockTag: BlockTag) -> seq[seq[byte]]:

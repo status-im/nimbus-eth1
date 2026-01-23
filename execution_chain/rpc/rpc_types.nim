@@ -9,12 +9,14 @@
 
 import
   eth/common/block_access_lists,
+  json_rpc/rpcserver,
   web3/[eth_api_types, conversions],
   ../beacon/web3_eth_conv
 
 export
   eth_api_types,
-  web3_eth_conv
+  web3_eth_conv,
+  rpcserver
 
 type
   FilterLog* = eth_api_types.LogObject
@@ -30,3 +32,11 @@ StorageChange.useDefaultSerializationIn JrpcConv
 BalanceChange.useDefaultSerializationIn JrpcConv
 NonceChange.useDefaultSerializationIn JrpcConv
 CodeChange.useDefaultSerializationIn JrpcConv
+
+const executionApiInvalidParams* = -32602
+
+proc invalidParams*(msg: string): ref ApplicationError =
+  (ref ApplicationError)(
+    code: executionApiInvalidParams,
+    msg: msg
+  )
