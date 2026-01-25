@@ -20,7 +20,7 @@ bool filterCreated = false;
 
 void onBlockNumber(Context *ctx, int status, char *res, void *userData) {
   printf("Blocknumber: %s\n", res);
-  freeResponse(res);
+  freeNimAllocatedString(res);
 }
 
 void onStart(Context *ctx, int status, char *res, void *userData) {
@@ -34,28 +34,28 @@ void onStart(Context *ctx, int status, char *res, void *userData) {
 
 void onStorage(Context *ctx, int status, char *res, void *userData) {
   printf("Storage: %s\n", res);
-  freeResponse(res);
+  freeNimAllocatedString(res);
 }
 
 void onBalance(Context *ctx, int status, char *res, void *userData) {
   printf("Balance: %s\n", res);
-  freeResponse(res);
+  freeNimAllocatedString(res);
 }
 
 void onNonce(Context *ctx, int status, char *res, void *userData) {
   printf("Nonce: %s\n", res);
-  freeResponse(res);
+  freeNimAllocatedString(res);
 }
 
 void onCode(Context *ctx, int status, char *res, void *userData) {
   printf("Code: %s\n", res);
-  freeResponse(res);
+  freeNimAllocatedString(res);
 }
 
 void genericCallback(Context *ctx, int status, char *res, void *userData) {
   printf("ReqID: %s, Status: %d\n", (char *)userData, status);
   if (status < 0) printf("Error: %s\n", res);
-  freeResponse(res);
+  freeNimAllocatedString(res);
 }
 
 void onFilterCreate(Context *ctx, int status, char *res, void *userData) {
@@ -64,7 +64,7 @@ void onFilterCreate(Context *ctx, int status, char *res, void *userData) {
     filterId[strlen(res) - 2] = '\0';
     filterCreated = true;
   }
-  freeResponse(res);
+  freeNimAllocatedString(res);
 }
 
 void onCallComplete(Context *ctx, int status, char *res, void *userData) {
@@ -73,7 +73,7 @@ void onCallComplete(Context *ctx, int status, char *res, void *userData) {
   } else {
     printf("Call Error: %s\n", res);
   }
-  freeResponse(res);
+  freeNimAllocatedString(res);
 }
 
 void onLogs(Context *ctx, int status, char *res, void *userData) {
@@ -82,7 +82,7 @@ void onLogs(Context *ctx, int status, char *res, void *userData) {
   } else {
     printf("Logs Fetch Error: %s\n", res);
   }
-  freeResponse(res);
+  freeNimAllocatedString(res);
 }
 
 void makeCalls(Context *ctx) {
@@ -173,9 +173,16 @@ void send_error_transport(Context *ctx, char *name, char *params, CallBackProc c
   if(strcmp(name, "eth_getBlockByNumber")) {
     char *res = (char *)malloc(strlen(BLOCK));
     strcpy(res, BLOCK);
+
+    // free the params string if we are done using it
+    freeNimAllocatedString(params);
+
     cb(ctx, RET_SUCCESS, res, userData);
     free(res);
   } else {
+    // free the params string if we are done using it
+    freeNimAllocatedString(params);
+
     cb(ctx, RET_ERROR, "transport not implemented yet", userData);
   }
 }

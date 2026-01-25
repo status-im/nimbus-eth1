@@ -36,7 +36,7 @@ proc initLib() =
     locals = addr(locals)
     nimGC_setStackBottom(locals)
 
-proc freeResponse(res: cstring) {.exported.} =
+proc freeNimAllocatedString(res: cstring) {.exported.} =
   deallocShared(res)
 
 proc toUnmanagedPtr[T](x: ref T): ptr T =
@@ -105,7 +105,6 @@ proc startVerifProxy(
       task.finished = true
       task.status = RET_CANCELLED
     elif fut.failed():
-      debugEcho "future failed"
       task.response = Json.encode(fut.error())
       task.finished = true
       task.status = RET_ERROR
@@ -531,7 +530,8 @@ proc nvp_call(
 
   template requireParams(n: int) =
     if parsedParams.len < n:
-      cb(ctx, RET_DESER_ERROR, ("parameters missing").cstring, userData)
+      # we use alloc for static strings because the C will try to free the string
+      cb(ctx, RET_DESER_ERROR, alloc("parameters missing"), userData)
       return
 
   case $name
@@ -686,4 +686,5 @@ proc nvp_call(
     requireParams(1)
     eth_sendRawTransaction(ctx, parsedParams[0].getStr().cstring, cb, userData)
   else:
-    cb(ctx, RET_DESER_ERROR, ("unknown method").cstring, userData)
+    # we use alloc for static strings because the C will try to free the string
+    cb(ctx, RET_DESER_ERROR, alloc("unknown method"), userData)
