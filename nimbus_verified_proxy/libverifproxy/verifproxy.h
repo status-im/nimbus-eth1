@@ -46,7 +46,7 @@ typedef struct Context Context;
  * @param ctx       Execution context passed to the original request.
  * @param status    return codes as defined above
  * @param result    pointer of the JSON encoded result string (allocated by Nim - 
- *                  must be freed using freeResponse)
+ *                  must be freed using freeNimAllocatedString)
  * @param userData  pointer to user data
  */
 typedef void (*CallBackProc)(Context *ctx, int status, char *result, void *userData);
@@ -57,7 +57,9 @@ typedef void (*CallBackProc)(Context *ctx, int status, char *result, void *userD
  *
  * @param ctx       Execution context passed to the original request.
  * @param name      name of the RPC method
- * @param params    JSON serialized params required for the RPC method 
+ * @param params    JSON serialized params required for the RPC method.(allocated by Nim - 
+ *                  must be freed using freeNimAllocatedString)
+ *                  heap by nim and must be freed by C using freeNimString
  * @param cb        Callback to be called with userData passed (see below)
  * @param userData  pointer to user data. Used to link multiple response callbacks
  *                  back to their queries. Implementation of transport functions
@@ -79,11 +81,13 @@ typedef void (*TransportProc)(Context *ctx, char *name, char *params, CallBackPr
 ETH_RESULT_USE_CHECK Context *startVerifProxy(char* configJson, TransportProc transport, CallBackProc onStart, void *userData);
 
 /**
- * Free the JSON encoded result returned via the callback.
+ * Free strings allocated by Nim. This currently include the JSON encoded result 
+ * returned via the callback for eth_* methods and the params string passed via
+ * the transport proc
  *
  * @param res   pointer to the JSON encoded result string
  */
-void freeResponse(char *res);
+void freeNimAllocatedString(char *res);
 
 /**
  * Free a Context object returned by startVerifProxy().
