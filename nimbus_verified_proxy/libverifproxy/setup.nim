@@ -27,11 +27,13 @@ proc transportCallback[T](
 ) {.cdecl, gcsafe, raises: [].} =
   let data = cast[ref CallBackData[T]](userData)
   if status == RET_SUCCESS:
-    let chainId = cast[Result[T, string]](unpackArg($res, T))
-    if chainId.isErr():
-      data.fut.complete(EngineResult[T].err((BackendDecodingError, chainId.error)))
+    # using $ on C allocated strings copies the context therefore it is safe to free the
+    # pointer on the C side. Also allows managing the memeory on one end only.
+    let deserResult = unpackArg($res, T)
+    if deserResult.isErr():
+      data.fut.complete(EngineResult[T].err((BackendDecodingError, deserResult.error)))
       return
-    data.fut.complete(EngineResult[T].ok(chainId.get()))
+    data.fut.complete(EngineResult[T].ok(deserResult.get()))
   elif status == RET_ERROR:
     data.fut.complete(EngineResult[T].err((BackendError, $res)))
   elif status == RET_CANCELLED:
