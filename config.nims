@@ -162,11 +162,11 @@ if canEnableDebuggingSymbols:
   # add debugging symbols and original files and line numbers
   --debugger:native
 
-# switch("warningAsError", "BareExcept:on")
-# switch("warningAsError", "CaseTransition:on")
-# switch("warningAsError", "UnusedImport:on")
-# switch("hintAsError", "ConvFromXtoItselfNotNeeded:on")
-# switch("hintAsError", "DuplicateModuleImport:on")
+switch("warningAsError", "BareExcept:on")
+switch("warningAsError", "CaseTransition:on")
+switch("warningAsError", "UnusedImport:on")
+switch("hintAsError", "ConvFromXtoItselfNotNeeded:on")
+switch("hintAsError", "DuplicateModuleImport:on")
 
 # nim-kzg shipping their own blst, nimbus-eth1 too.
 # disable nim-kzg's blst
