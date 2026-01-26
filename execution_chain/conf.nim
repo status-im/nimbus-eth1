@@ -44,6 +44,7 @@ func getLogLevels(): string =
 
 const
   defaultExecutionPort*    = 30303
+  defaultMetricsServerPort = 9093
   defaultHttpPort          = 8545
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/authentication.md#jwt-specifications
   defaultEngineApiPort*    = 8551
@@ -167,7 +168,7 @@ type
       defaultValue: StdoutLogKind.Auto
       name: "log-format" .}: StdoutLogKind
 
-    metrics* {.flatten.}: MetricsConf
+    metrics* {.flatten: (port: defaultMetricsServerPort).}: MetricsConf
 
     bootstrapNodes {.
       separator: "\pNETWORKING OPTIONS:"
