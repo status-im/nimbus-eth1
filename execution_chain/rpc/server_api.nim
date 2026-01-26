@@ -11,7 +11,7 @@
 
 import
   chronicles,
-  std/[sequtils, strutils],
+  std/sequtils,
   stint,
   web3/[conversions, eth_api_types],
   eth/common/[base, transaction_utils],
@@ -88,20 +88,7 @@ proc getProof*(
     )
 
 proc headerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[Header, string] =
-  if blockTag.kind == bidAlias:
-    let tag = blockTag.alias.toLowerAscii
-    case tag
-    of "latest":
-      return ok(api.chain.latestHeader)
-    of "finalized":
-      return ok(api.chain.finalizedHeader)
-    of "safe":
-      return ok(api.chain.safeHeader)
-    else:
-      return err("Unsupported block tag " & tag)
-  else:
-    let blockNum = base.BlockNumber blockTag.number
-    return api.chain.headerByNumber(blockNum)
+  api.chain.headerFromTag(blockTag)
 
 proc headerFromTag(api: ServerAPIRef, blockTag: Opt[BlockTag]): Result[Header, string] =
   let blockId = blockTag.get(defaultTag)
@@ -117,20 +104,7 @@ proc ledgerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[LedgerRef, str
   ok(LedgerRef.init(txFrame))
 
 proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[Block, string] =
-  if blockTag.kind == bidAlias:
-    let tag = blockTag.alias.toLowerAscii
-    case tag
-    of "latest":
-      return ok(api.chain.latestBlock)
-    of "finalized":
-      return ok(api.chain.finalizedBlock)
-    of "safe":
-      return ok(api.chain.safeBlock)
-    else:
-      return err("Unsupported block tag " & tag)
-  else:
-    let blockNum = base.BlockNumber blockTag.number
-    return api.chain.blockByNumber(blockNum)
+  api.chain.blockFromTag(blockTag)
 
 proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManager) =
   server.rpc("eth_getBalance") do(data: Address, blockTag: BlockTag) -> UInt256:
