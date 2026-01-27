@@ -36,6 +36,7 @@ import
     test_op_misc,
     test_precompiles,
     test_rpc,
+    test_snap,
     test_transaction_json,
     test_txpool,
     test_networking,
