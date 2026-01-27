@@ -686,6 +686,13 @@ proc selfDestruct6780*(ac: LedgerRef, address: Address): bool =
 proc selfDestructLen*(ac: LedgerRef): int =
   ac.savePoint.selfDestruct.len
 
+iterator nonZeroSelfDestructAccounts*(ac: LedgerRef): (Address, UInt256) =
+  for address in ac.savePoint.selfDestruct:
+    let value = ac.getBalance(address)
+    if value.isZero:
+      continue
+    yield (address, value)
+
 proc ripemdSpecial*(ac: LedgerRef) =
   ac.ripemdSpecial = true
 

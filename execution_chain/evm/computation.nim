@@ -11,10 +11,10 @@
 {.push raises: [].}
 
 import
-  std/sequtils,
+  std/[sequtils, heapqueue],
   ".."/[db/ledger, constants],
-  "."/[code_stream, memory, stack, state],
-  "."/[types],
+  ./[code_stream, memory, stack, state],
+  ./[types],
   ./interpreter/[gas_meter, gas_costs, op_codes],
   ./evm_errors,
   ./code_bytes,
@@ -22,7 +22,8 @@ import
   ../utils/[utils, mergeutils],
   ../common/common,
   eth/common/eth_types_rlp,
-  chronicles, chronos
+  chronicles, chronos,
+  stew/assign2
 
 export
   common, balTrackerEnabled
@@ -273,6 +274,66 @@ template chainTo*(c: Computation,
     c.continuation = nil
     after
 
+# Using `proc` as `addLogEntry()` might be `proc` in logging mode
+proc addLogEntry*(c: Computation, log: Log) =
+  c.logEntries.add log
+
+func createSelfDestructLog(beneficiary: Address, value: UInt256): Log =
+  # Selfdestruct event signature (keccak256('Selfdestruct(address,uint256)'))
+  const eventSig = bytes32"0x4bfaba3443c1a1836cd362418edc679fc96cae8449cbefccb6457cdf2c943083"
+  var log: Log
+  log.topics = newSeq[Topic](2)
+  log.address = SYSTEM_ADDRESS
+  log.topics[0] = eventSig
+  assign(log.topics[1].data.toOpenArray(12, 31), beneficiary.data)
+  assign(log.data, value.toBytesBE())
+
+func createTransferLog(originator, beneficiary: Address, value: UInt256): Log =
+  # Transfer event signature (keccak256('Transfer(address,address,uint256)'))
+  const eventSig = bytes32"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+  var log: Log
+  log.topics = newSeq[Topic](3)
+  log.address = SYSTEM_ADDRESS
+  log.topics[0] = eventSig
+  assign(log.topics[1].data.toOpenArray(12, 31), originator.data)
+  assign(log.topics[2].data.toOpenArray(12, 31), beneficiary.data)
+  assign(log.data, value.toBytesBE())
+
+func emitSelfDestructLog(c: Computation, beneficiary: Address, value: UInt256) =
+  if value.isZero:
+    return
+
+  if c.msg.contractAddress == beneficiary:
+    # SELFDESTRUCT to self → Selfdestruct log (LOG2)
+    c.addLogEntry(createSelfDestructLog(beneficiary, value))
+  else:
+    # SELFDESTRUCT to other → Transfer log (LOG3)
+    c.addLogEntry(createTransferLog(c.msg.contractAddress, beneficiary, value))
+
+type
+  Closure = object
+    address: Address
+    value: UInt256
+
+func `<`(a, b: Closure): bool =
+  cmpMem(a.address.data[0].addr, b.address.data[0].addr, 20) < 0
+    
+proc emitClosureLogs*(c: Computation) =
+  # Collect selfdestruct addresses with nonzero balances, sorted lexicographically
+  var closures = initHeapQueue[Closure]()
+  for address, value in c.vmState.ledger.nonZeroSelfDestructAccounts:
+    closures.push(Closure(address: address, value: value))
+
+  # Emit Selfdestruct log for each closure
+  while closures.len > 0:
+    let cc = closures.pop()
+    c.addLogEntry(createSelfDestructLog(cc.address, cc.value))
+
+func emitTransferLog*(c: Computation) =
+  if c.msg.value.isZero:
+    return
+  c.addLogEntry(createTransferLog(c.msg.sender, c.msg.contractAddress, c.msg.value))
+
 proc execSelfDestruct*(c: Computation, beneficiary: Address) =
   c.vmState.mutateLedger:
     let localBalance = c.getBalance(c.msg.contractAddress)
@@ -306,14 +367,13 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
         db.addBalance(beneficiary, localBalance)
         db.selfDestruct(c.msg.contractAddress)
 
+    if c.fork >= FkAmsterdam:
+      c.emitSelfDestructLog(beneficiary, localBalance)
+
     trace "SELFDESTRUCT",
       contractAddress = c.msg.contractAddress.toHex,
       localBalance = localBalance.toString,
       beneficiary = beneficiary.toHex
-
-# Using `proc` as `addLogEntry()` might be `proc` in logging mode
-proc addLogEntry*(c: Computation, log: Log) =
-  c.logEntries.add log
 
 func merge*(c, child: Computation) =
   c.logEntries.mergeAndReset(child.logEntries)

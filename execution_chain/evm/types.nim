@@ -103,7 +103,6 @@ type
     CallCode      # Request CALLCODE.
     Create        # Request CREATE.
     Create2       # Request CREATE2. Valid since Constantinople.
-    EofCreate     # Request EOFCREATE. Valid since Osaka.
 
   MsgFlags* {.pure.} = enum
     Static
