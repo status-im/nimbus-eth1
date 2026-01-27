@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -19,7 +19,8 @@ import
   ../../../db/core_db,
   ../../../db/fcu_db,
   ../../../db/storage_types,
-  ../../../utils/utils
+  ../../../utils/utils,
+  ../../../common
 
 logScope:
   topics = "forked chain"
@@ -125,6 +126,11 @@ proc replayBlock(fc: ForkedChainRef;
   let
     parentFrame = parent.txFrame
     txFrame = parentFrame.txFrameBegin()
+    blockAccessList =
+      if fc.com.isAmsterdamOrLater(blk.header.timestamp):
+        ?parentFrame.getBlockAccessList(blk.hash)
+      else:
+        Opt.none(BlockAccessListRef)
 
   # Set finalized to true in order to skip the stateroot check when replaying the
   # block because the blocks should have already been checked previously during
@@ -133,7 +139,7 @@ proc replayBlock(fc: ForkedChainRef;
     parent,
     txFrame,
     blk.blk,
-    Opt.none(BlockAccessListRef),
+    blockAccessList,
     blk.hash,
     finalized = true
   ).valueOr:
