@@ -628,12 +628,10 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ## Returns the base fee per blob gas in wei.
     let header = api.headerFromTag(blockId("latest")).valueOr:
       raise newException(ValueError, "Block not found")
-    if header.blobGasUsed.isNone:
-      raise newException(ValueError, "blobGasUsed missing from latest header")
     if header.excessBlobGas.isNone:
       raise newException(ValueError, "excessBlobGas missing from latest header")
     let blobBaseFee =
-      getBlobBaseFee(header.excessBlobGas.get, api.com, api.com.toEVMFork(header)) * header.blobGasUsed.get.u256
+      getBlobBaseFee(header.excessBlobGas.get, api.com, api.com.toEVMFork(header))
     if blobBaseFee > high(uint64).u256:
       raise newException(ValueError, "blobBaseFee is bigger than uint64.max")
     return w3Qty blobBaseFee.truncate(uint64)
