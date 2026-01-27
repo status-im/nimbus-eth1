@@ -29,7 +29,7 @@ template updateTarget(
     # Check whether explicit target setup is configured
     if buddy.ctx.pool.target.isSome():
       let
-        peer {.inject,used.} = $buddy.peer              # logging only
+        peer {.inject,used.} = $buddy.peer          # logging only
         ctx = buddy.ctx
 
       # Single target block hash
@@ -38,17 +38,20 @@ template updateTarget(
         if rc.isErr and rc.error:                       # real error
           trace info & ": failed fetching pivot hash", peer,
             hash=ctx.pool.target.value.blockHash.toStr
-        elif ctx.pool.target.value.updateFile.len == 0:
-          ctx.pool.target = Opt.none(SnapTarget)        # No more target entries
-          break body                                    # noting more to do here
-        else:
+        elif 0 < ctx.pool.target.value.updateFile.len:
           var target = ctx.pool.target.value
           target.blockHash = BlockHash(zeroHash32)
           ctx.pool.target = Opt.some(target)
+        else:
+          ctx.pool.target = Opt.none(SnapTarget)    # No more target entries
+          break body                                # noting more to do here
 
       # Check whether a file target setup is configured
       if 0 < ctx.pool.target.value.updateFile.len:
-        discard buddy.headerStateLoad( ctx.pool.target.value.updateFile, info)
+        trace info & ": target update from file", peer,
+          file=ctx.pool.target.value.updateFile
+        discard buddy.headerStateLoad(ctx.pool.target.value.updateFile, info)
+        trace info & ": target update from file.. done", peer
 
   discard # visual alignment
 
@@ -65,8 +68,8 @@ template download(
       ctx = buddy.ctx
       sdb = ctx.pool.stateDB
 
-      peer {.inject,used.} = $buddy.peer                # logging only
-      root {.inject,used.} = state.rootStr              # logging only
+      peer {.inject,used.} = $buddy.peer            # logging only
+      root {.inject,used.} = state.rootStr          # logging only
 
       iv = state.unproc.fetchLeast(unprocAccountsRangeMax).valueOr:
         trace info & ": no more unpocessed", peer, root, stateDB=sdb.toStr
@@ -91,7 +94,8 @@ template download(
     debug info & ": accounts downloaded", peer, root, iv=iv.to(float).toStr,
       nAccounts=accData.accounts.len, nProof=accData.proof.len,
       stateDB=sdb.toStr
-    discard
+
+    discard                                         # visual alignment
 
 # ------------------------------------------------------------------------------
 # Public function
