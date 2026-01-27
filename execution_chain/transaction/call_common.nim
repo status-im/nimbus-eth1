@@ -1,6 +1,6 @@
 # Nimbus - Common entry point to the EVM from all different callers
 #
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -272,12 +272,18 @@ proc finishRunningComputation(
       result.stack = move(c.finalStack)
       result.memory = move(c.memory)
       if c.isSuccess:
+        # EIP-7708: Emit closure logs for accounts with remaining balance before deletion
+        if c.fork >= FkAmsterdam:
+          c.emitClosureLogs()
         result.logEntries = move(c.logEntries)
   elif T is GasInt:
     result = call.gasLimit - gasRemaining
   elif T is LogResult:
     result.gasUsed = call.gasLimit - gasRemaining
     if c.isSuccess:
+      # EIP-7708: Emit closure logs for accounts with remaining balance before deletion
+      if c.fork >= FkAmsterdam:
+        c.emitClosureLogs()
       result.logEntries = move(c.logEntries)
   elif T is string:
     if c.isError:
