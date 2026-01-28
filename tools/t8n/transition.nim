@@ -139,7 +139,8 @@ proc toTxReceipt(receipt: StoredReceipt,
     contractAddress: contractAddress,
     gasUsed: gasUsed,
     blockHash: default(Hash32),
-    transactionIndex: txIndex
+    transactionIndex: txIndex,
+    gasSpent: rec.gasSpent,
   )
 
 proc calcLogsHash(receipts: openArray[StoredReceipt]): Hash32 =

@@ -100,6 +100,7 @@ type
     gasUsed*: GasInt
     blockHash*: Hash32
     transactionIndex*: int
+    gasSpent*: Opt[GasInt]
 
   # ExecutionResult contains the execution status after running a state test, any
   # error that might have occurred and a dump of the final state if requested.

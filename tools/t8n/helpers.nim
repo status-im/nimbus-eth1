@@ -423,6 +423,8 @@ func `@@`(x: TxReceipt): JsonNode =
     "blockHash"        : @@(x.blockHash),
     "transactionIndex" : @@(x.transactionIndex)
   }
+  if x.gasSpent.isSome:
+    result["gasSpent"] = @@(x.gasSpent.value)
   if x.txType > TxLegacy:
     result["type"] = %("0x" & toHex(x.txType.int, 1))
 

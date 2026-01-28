@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -44,31 +44,31 @@ proc commitOrRollbackDependingOnGasUsed(
     accTx: LedgerSpRef;
     header: Header;
     tx: Transaction;
-    gasUsed: GasInt;
+    blockGasUsed: GasInt;
     priorityFee: GasInt;
     blobGasUsed: GasInt;
       ): Result[void, string] =
   # Make sure that the tx does not exceed the maximum cumulative limit as
   # set in the block header. Again, the eip-1559 reference does not mention
   # an early stop. It would rather detect differing values for the  block
-  # header `gasUsed` and the `vmState.cumulativeGasUsed` at a later stage.
-  if header.gasLimit < vmState.cumulativeGasUsed + gasUsed:
+  # header `blockGasUsed` and the `vmState.cumulativeGasUsed` at a later stage.
+  if header.gasLimit < vmState.cumulativeGasUsed + blockGasUsed:
     if vmState.balTrackerEnabled:
       vmState.balTracker.rollbackCallFrame()
     vmState.ledger.rollback(accTx)
-    err(&"invalid tx: block header gasLimit reached. gasLimit={header.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasUsed}")
+    err(&"invalid tx: block header gasLimit reached. gasLimit={header.gasLimit}, blockGasUsed={vmState.cumulativeGasUsed}, addition={blockGasUsed}")
   else:
     # Accept transaction and collect mining fee.
     if vmState.balTrackerEnabled:
-      vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), gasUsed.u256 * priorityFee.u256)
+      vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), blockGasUsed.u256 * priorityFee.u256)
       vmState.balTracker.commitCallFrame()
     vmState.ledger.commit(accTx)
-    vmState.ledger.addBalance(vmState.coinbase(), gasUsed.u256 * priorityFee.u256)
-    vmState.cumulativeGasUsed += gasUsed
+    vmState.ledger.addBalance(vmState.coinbase(), blockGasUsed.u256 * priorityFee.u256)
+    vmState.cumulativeGasUsed += blockGasUsed
 
     # Return remaining gas to the block gas counter so it is
     # available for the next transaction.
-    vmState.gasPool += tx.gasLimit - gasUsed
+    vmState.gasPool += tx.gasLimit - blockGasUsed
     vmState.blobGasUsed += blobGasUsed
     ok()
 
@@ -122,10 +122,10 @@ proc processTransactionImpl(
       let accTx = vmState.ledger.beginSavepoint()
 
       var callResult = tx.txCallEvm(sender, vmState, baseFee)
-      vmState.captureTxEnd(tx.gasLimit - callResult.gasUsed)
+      vmState.captureTxEnd(tx.gasLimit - callResult.blockGasUsed)
 
       let tmp = commitOrRollbackDependingOnGasUsed(
-        vmState, accTx, header, tx, callResult.gasUsed, priorityFee, blobGasUsed)
+        vmState, accTx, header, tx, callResult.blockGasUsed, priorityFee, blobGasUsed)
 
       if tmp.isErr():
         err(tmp.error)
