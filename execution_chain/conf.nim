@@ -48,8 +48,6 @@ const
   defaultHttpPort          = 8545
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/authentication.md#jwt-specifications
   defaultEngineApiPort*    = 8551
-  defaultAdminListenAddress = (static parseIpAddress("127.0.0.1"))
-  defaultAdminListenAddressDesc = $defaultAdminListenAddress & ", meaning local host only"
   logLevelDesc = getLogLevels()
 
 let
@@ -170,22 +168,7 @@ type
       defaultValue: StdoutLogKind.Auto
       name: "log-format" .}: StdoutLogKind
 
-    metricsEnabled* {.
-      desc: "Enable the built-in metrics HTTP server"
-      defaultValue: false
-      name: "metrics" .}: bool
-
-    metricsPort* {.
-      desc: "Listening port of the built-in metrics HTTP server"
-      defaultValue: defaultMetricsServerPort
-      defaultValueDesc: $defaultMetricsServerPort
-      name: "metrics-port" .}: Port
-
-    metricsAddress* {.
-      desc: "Listening IP address of the built-in metrics HTTP server"
-      defaultValue: defaultAdminListenAddress
-      defaultValueDesc: $defaultAdminListenAddressDesc
-      name: "metrics-address" .}: IpAddress
+    metrics* {.flatten: (port: defaultMetricsServerPort).}: MetricsConf
 
     bootstrapNodes {.
       separator: "\pNETWORKING OPTIONS:"
