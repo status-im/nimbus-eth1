@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -30,7 +30,14 @@ template validateVersion(attr, com, apiVersion) =
     version   = attr.version
     timestamp = ethTime(attr.timestamp)
 
-  if apiVersion == Version.V3:
+  if apiVersion == Version.V4:
+    if version != apiVersion:
+      raise invalidAttr("forkChoiceUpdatedV4 expect PayloadAttributesV4" &
+      " but got PayloadAttributes" & $version)
+    if not com.isAmsterdamOrLater(timestamp):
+      raise unsupportedFork(
+        "forkchoiceUpdatedV4 get invalid payloadAttributes timestamp")
+  elif apiVersion == Version.V3:
     if version != apiVersion:
       raise invalidAttr("forkChoiceUpdatedV3 expect PayloadAttributesV3" &
       " but got PayloadAttributes" & $version)

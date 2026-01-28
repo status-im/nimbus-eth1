@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -69,7 +69,8 @@ func executionPayload*(blk: Block, bal: Opt[BlockAccessListRef]): ExecutionPaylo
     withdrawals  : w3Withdrawals blk.withdrawals,
     blobGasUsed  : w3Qty blk.header.blobGasUsed,
     excessBlobGas: w3Qty blk.header.excessBlobGas,
-    blockAccessList: w3BlockAccessList bal
+    blockAccessList: w3BlockAccessList bal,
+    slotNumber   : w3Qty blk.header.slotNumber,
   )
 
 func executionPayloadV1V2*(blk: Block): ExecutionPayloadV1OrV2 =
@@ -118,6 +119,7 @@ func blockHeader*(p: ExecutionPayload,
     parentBeaconBlockRoot: parentBeaconBlockRoot,
     requestsHash   : requestsHash,
     blockAccessListHash: balHash p.blockAccessList,
+    slotNumber     : u64(p.slotNumber),
   )
 
 func blockBody*(
