@@ -1,6 +1,6 @@
 # Nimbus - Common entry point to the EVM from all different callers
 #
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -210,7 +210,7 @@ proc prepareToRunComputation(host: TransactionHost, call: CallParams) =
           vmState.balTracker.trackSubBalanceChange(call.sender, blobFee)
         db.subBalance(call.sender, blobFee)
 
-proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): GasInt =
+proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): (GasInt, GasInt) =
   let
     c = host.computation
     fork = host.vmState.fork
@@ -221,25 +221,32 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
                           else:
                             2.GasInt
 
-  var gasRemaining = 0.GasInt
+  var
+    gasRemaining = 0.GasInt
+    gasBeforeRefunds = 0.GasInt
 
   # Calculated gas used, taking into account refund rules.
   if call.noRefund:
     gasRemaining = c.gasMeter.gasRemaining
+    gasBeforeRefunds = gasRemaining
   else:
     if c.shouldBurnGas:
       c.gasMeter.gasRemaining = 0
+    gasBeforeRefunds = gasRemaining
     let maxRefund = (call.gasLimit - c.gasMeter.gasRemaining) div MaxRefundQuotient
     let refund = min(c.getGasRefund(), maxRefund)
     c.gasMeter.returnGas(refund)
     gasRemaining = c.gasMeter.gasRemaining
 
-  let gasUsed = call.gasLimit - gasRemaining
+  # EIP-7778.1: User gas accounting unchanged
+  # userGasSpent == what the user pays
+  let userGasSpent = call.gasLimit - gasRemaining
   if fork >= FkPrague:
-    if host.floorDataGas > gasUsed:
+    if host.floorDataGas > userGasSpent:
       gasRemaining = call.gasLimit - host.floorDataGas
       c.gasMeter.gasRemaining = gasRemaining
 
+  # EIP-7778.1: User gas accounting unchanged
   # Refund for unused gas.
   if gasRemaining > 0 and not call.noGasCharge:
     if host.vmState.balTrackerEnabled:
@@ -247,16 +254,27 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
     host.vmState.mutateLedger:
       db.addBalance(call.sender, gasRemaining.u256 * call.gasPrice.u256)
 
-  gasRemaining
+  # EIP-7778.2: Block gas accounting modified
+  if fork >= FkAmsterdam:
+    gasRemaining = gasBeforeRefunds
+    let blockGasUsed = call.gasLimit - gasRemaining
+    if host.floorDataGas > blockGasUsed:
+      gasRemaining = call.gasLimit - host.floorDataGas
+      c.gasMeter.gasRemaining = gasRemaining
+
+  (userGasSpent, gasRemaining)
 
 proc finishRunningComputation(
     host: TransactionHost, call: CallParams, T: type): T =
-  let c = host.computation
+  let
+    c = host.computation
+    (userGasSpent, gasRemaining) = calculateAndPossiblyRefundGas(host, call)
+    evmGasUsed = c.msg.gas - gasRemaining # evm gas used without intrinsic gas
 
-  let gasRemaining = calculateAndPossiblyRefundGas(host, call)
-  # evm gas used without intrinsic gas
-  let evmGasUsed = c.msg.gas - gasRemaining
   host.vmState.captureEnd(c, c.output, evmGasUsed, c.errorOpt)
+
+  when T isnot LogResult:
+    discard userGasSpent
 
   when T is CallResult|DebugCallResult:
     # Collecting the result can be unnecessarily expensive when (re)-processing
@@ -276,7 +294,8 @@ proc finishRunningComputation(
   elif T is GasInt:
     result = call.gasLimit - gasRemaining
   elif T is LogResult:
-    result.gasUsed = call.gasLimit - gasRemaining
+    result.userGasSpent = userGasSpent
+    result.blockGasUsed = call.gasLimit - gasRemaining
     if c.isSuccess:
       result.logEntries = move(c.logEntries)
   elif T is string:

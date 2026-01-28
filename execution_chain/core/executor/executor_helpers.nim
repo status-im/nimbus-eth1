@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -62,6 +62,10 @@ proc makeReceipt*(
   rec.receiptType = txType
   rec.cumulativeGasUsed = vmState.cumulativeGasUsed
   assign(rec.logs, callResult.logEntries)
+
+  if vmState.com.isAmsterdamOrLater(vmState.blockCtx.timestamp):
+    rec.gasSpent = Opt.some(callResult.userGasSpent)
+
   rec
 
 # ------------------------------------------------------------------------------

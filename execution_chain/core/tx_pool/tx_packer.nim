@@ -112,7 +112,7 @@ proc runTxCommit(pst: var TxPacker; item: TxItemRef; callResult: LogResult, xp: 
     inx     = pst.packedTxs.len
     gasTip  = item.tx.tip(pst.baseFee)
 
-  let reward = callResult.gasUsed.u256 * gasTip.u256
+  let reward = callResult.blockGasUsed.u256 * gasTip.u256
   if vmState.balTrackerEnabled:
     vmState.balTracker.trackAddBalanceChange(xp.feeRecipient, reward)
   vmState.ledger.addBalance(xp.feeRecipient, reward)
@@ -124,10 +124,10 @@ proc runTxCommit(pst: var TxPacker; item: TxItemRef; callResult: LogResult, xp: 
 
   # Return remaining gas to the block gas counter so it is
   # available for the next transaction.
-  vmState.gasPool += item.tx.gasLimit - callResult.gasUsed
+  vmState.gasPool += item.tx.gasLimit - callResult.blockGasUsed
 
-  # gasUsed accounting
-  vmState.cumulativeGasUsed += callResult.gasUsed
+  # blockGasUsed accounting
+  vmState.cumulativeGasUsed += callResult.blockGasUsed
   vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType, callResult)
   pst.packedTxs.add item
 
@@ -215,10 +215,10 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
     accTx = vmState.ledger.beginSavepoint
     callResult = item.tx.txCallEvm(item.sender, pst.vmState, pst.baseFee)
 
-  doAssert 0 <= callResult.gasUsed
+  doAssert 0 <= callResult.blockGasUsed
 
   # Find out what to do next: accepting this tx or trying the next account
-  if not vmState.classifyPacked(callResult.gasUsed):
+  if not vmState.classifyPacked(callResult.blockGasUsed):
     if vmState.balTrackerEnabled:
       vmState.balTracker.rollbackCallFrame(rollbackReads = true)
     vmState.ledger.rollback(accTx)

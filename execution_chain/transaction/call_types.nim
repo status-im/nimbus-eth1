@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -56,7 +56,8 @@ type
 
   LogResult* = object
     logEntries*: seq[Log]
-    gasUsed*:    GasInt
+    blockGasUsed*: GasInt
+    userGasSpent*: GasInt # Gas actually spent by the transaction after refunds (what the user pays)
 
   OutputResult* = object
     error*:   string
