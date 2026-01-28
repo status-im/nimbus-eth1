@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2025 Status Research & Development GmbH
+# Copyright (c) 2019-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -183,6 +183,119 @@ proc opMiscMain*() =
       memory:
         "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4E4F4A1B1"
         "0x00"
+
+    assembler:
+      title: "DUPN"
+      code: "60016000808080808080808080808080808080e600"
+      fork: Amsterdam
+      stack:
+        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
+
+    assembler:
+      title: "SWAPN"
+      code: "600160008080808080808080808080808080806002e700"
+      fork: Amsterdam
+      stack:
+        [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
+
+    assembler:
+      title: "EXCHANGE"
+      code: "600060016002e801"
+      fork: Amsterdam
+      stack:
+        [1, 0, 2]
+
+    assembler:
+      title: "INVALID_SWAPN_LOW"
+      code: "e75b"
+      fork: Amsterdam
+      success: false
+
+    assembler:
+      title: "JUMP over INVALID_DUPN"
+      code: "600456e65b"
+      fork: Amsterdam
+      success: true
+
+    assembler:
+      title: "INVALID_DUPN_LOW"
+      code: "e65b"
+      fork: Amsterdam
+      success: false
+
+    assembler:
+      title: "INVALID_EXCHANGE_LOW"
+      code: "e850"
+      fork: Amsterdam
+      success: false
+
+    assembler:
+      title: "INVALID_DUPN_HIGH"
+      code: "e67f"
+      fork: Amsterdam
+      success: false
+
+    assembler:
+      title: "INVALID_SWAPN_HIGH"
+      code: "e77f"
+      fork: Amsterdam
+      success: false
+
+    assembler:
+      title: "INVALID_EXCHANGE_HIGH"
+      code: "e87f"
+      fork: Amsterdam
+      success: false
+
+    assembler:
+      title: "UNDERFLOW_DUPN"
+      code: "5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5fe600"  # (n=17, need 17 items, have 16)
+      fork: Amsterdam
+      success: false
+      stack: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+    assembler:
+      title: "UNDERFLOW_SWAPN"
+      code: "5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5fe700" # (n=17, need 18 items, have 17)
+      fork: Amsterdam
+      success: false
+      stack: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+    assembler:
+      title: "UNDERFLOW_EXCHANGE"
+      code: "60016002e801" # (n,m)=(1,2), need 3 items, have 2
+      fork: Amsterdam
+      success: false
+      stack: [1, 2]
+
+    assembler:
+      title: "MISSING_IMMEDIATE_DUPN"
+      code:
+        DupN # no operand
+      fork: Amsterdam
+      success: false
+
+    assembler:
+      title: "MISSING_IMMEDIATE_SWAPN"
+      code:
+        SwapN # no operand
+      fork: Amsterdam
+      success: false
+
+    assembler:
+      title: "MISSING_IMMEDIATE_EXCHANGE"
+      code:
+        Exchange # no operand
+      fork: Amsterdam
+      success: false
+
+    assembler:
+      title:  "PC_INCREMENT"
+      code:  "600060006000e80115"
+      fork: Amsterdam
+      stack:
+        [0, 0, 1]
+
 #[
   EIP-2315: Simple Subroutines for the EVM
   disabled reason: not included in Berlin hard fork
