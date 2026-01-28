@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -166,6 +166,38 @@ func swap*(stack: EvmStack, position: static int): EvmResultVoid =
     ok()
   else:
     err(stackErr(StackInsufficient))
+
+func swapN*(stack: EvmStack, position: int): EvmResultVoid =
+  ## Swap the `top` and `top - position` items
+  let
+    idx = position + 1 # locals help compiler reason about overflows
+    len = stack.len
+  if stack.len >= idx:
+    let
+      l1 = len - 1
+      li = len - idx
+    let tmp {.noinit.} = stack[l1]
+    stack[l1] = stack[li]
+    stack[li] = tmp
+    ok()
+  else:
+    err(stackErr(StackInsufficient))
+
+func exchange*(stack: EvmStack, n, m: int): EvmResultVoid =
+  let need = max(n, m) + 1
+
+  # EXCHANGE operates on the (n+1)'th and (m+1)'th stack items,
+  # so the stack must contain at least max(n, m)+1 elements.
+  if stack.len < need:
+    return err(stackErr(StackInsufficient))
+
+  # The (n+1)‘th stack item is swapped with the (m+1)‘th stack item.
+  let indexN = stack.len - 1 - n
+  let indexM = stack.len - 1 - m
+  let tmp {.noinit.} = stack[indexN]
+  stack[indexN] = stack[indexM]
+  stack[indexM] = tmp
+  ok()
 
 func dup*(stack: EvmStack, position: int): EvmResultVoid =
   ## Push copy of item at `top - position`

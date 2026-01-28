@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -91,6 +91,16 @@ func bytes*(c: CodeStream): lent seq[byte] =
 func atEnd*(c: CodeStream): bool =
   c.pc >= c.code.bytes.len
 
+func getImmediateByte*(c: var CodeStream): int =
+  var x = 0
+  let bytes {.cursor.} = c.code.bytes
+  if c.pc < c.code.bytes.len:
+    {.push checks: off.}
+    x = int(bytes[c.pc])
+    {.pop.}
+    inc c.pc
+  x
+
 proc decompile*(original: CodeStream): seq[(int, Op, string)] =
   # behave as https://etherscan.io/opcode-tool
   var c = CodeStream.init(original.bytes)
@@ -98,6 +108,8 @@ proc decompile*(original: CodeStream): seq[(int, Op, string)] =
     var op = c.next
     if op >= Push1 and op <= Push32:
       result.add((c.pc - 1, op, "0x" & c.read(op.int - 95).toHex))
+    elif op in {DupN, SwapN, Exchange}:
+      result.add((c.pc - 1, op, $c.getImmediateByte))
     elif op != Op.Stop:
       result.add((c.pc - 1, op, ""))
     else:
