@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -185,8 +185,13 @@ type
     Nop0xCF, Nop0xD0, Nop0xD1, Nop0xD2, Nop0xD3, Nop0xD4,
     Nop0xD5, Nop0xD6, Nop0xD7, Nop0xD8, Nop0xD9, Nop0xDA,
     Nop0xDB, Nop0xDC, Nop0xDD, Nop0xDE, Nop0xDF, Nop0xE0,
-    Nop0xE1, Nop0xE2, Nop0xE3, Nop0xE4, Nop0xE5, Nop0xE6,
-    Nop0xE7, Nop0xE8, Nop0xE9, Nop0xEA, Nop0xEB,
+    Nop0xE1, Nop0xE2, Nop0xE3, Nop0xE4, Nop0xE5,
+
+    DupN =           0xE6,
+    SwapN =          0xE7,
+    Exchange =       0xE8,
+
+    Nop0xE9, Nop0xEA, Nop0xEB,
 
     EofCreate =      0xec,
     TxCreate =       0xed,
