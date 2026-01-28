@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -107,8 +107,9 @@ type
     BaseFee =        0x48, ## Get block’s base fee. EIP-3198
     BlobHash =       0x49, ## Get transaction's versionedHash. EIP-4844
     BlobBaseFee =    0x4A, ## Returns the current data-blob base-fee
+    SlotNum =        0x4B, ## Returns the current slot number. EIP-7843
 
-    Nop0x4B, Nop0x4C, Nop0x4D,
+    Nop0x4C, Nop0x4D,
     Nop0x4E, Nop0x4F, ## ..
 
     # 50s: Stack, Memory, Storage and Flow Operations

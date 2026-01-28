@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -44,6 +44,7 @@ type
     prevRandao  : Bytes32
     withdrawals : seq[Withdrawal] ## EIP-4895
     beaconRoot  : Hash32 ## EIP-4788
+    slotNumber  : uint64 ## EIP-7843
 
   TxPoolRef* = ref object
     vmState  : BaseVMState
@@ -100,6 +101,7 @@ proc setupVMState(com: CommonRef;
       coinbase     : pos.feeRecipient,
       excessBlobGas: com.calcExcessBlobGas(parent, fork),
       parentHash   : parentHash,
+      slotNumber   : pos.slotNumber,
     ),
     txFrame = parentFrame.txFrameBegin(),
     com     = com,
@@ -479,6 +481,9 @@ proc withdrawals*(xp: TxPoolRef): seq[Withdrawal] =
 func parentBeaconBlockRoot*(xp: TxPoolRef): Hash32 =
   xp.pos.beaconRoot
 
+func slotNumber*(xp: TxPoolRef): uint64 =
+  xp.pos.slotNumber
+
 # ------------------------------------------------------------------------------
 # PoS payload attributes setters
 # ------------------------------------------------------------------------------
@@ -497,3 +502,6 @@ proc `withdrawals=`*(xp: TxPoolRef, val: sink seq[Withdrawal]) =
 
 proc `parentBeaconBlockRoot=`*(xp: TxPoolRef, val: Hash32) =
   xp.pos.beaconRoot = val
+
+proc `slotNumber=`*(xp: TxPoolRef, val: uint64) =
+  xp.pos.slotNumber = val
