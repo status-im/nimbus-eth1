@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -87,6 +87,9 @@ func blobBaseFeeOp(cpt: VmCpt): EvmResultVoid =
   ## 0x4a, Get the block's base fee.
   cpt.stack.push cpt.getBlobBaseFee
 
+func slotNumOp(cpt: VmCpt): EvmResultVoid =
+  ## 0x4b, Returns the current slot number. EIP-7843
+  cpt.stack.push cpt.getSlotNum
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries
@@ -169,7 +172,13 @@ const
      forks: VmOpCancunAndLater,
      name: "blobBaseFee",
      info: "Returns the current data-blob base-fee",
-     exec: blobBaseFeeOp)]
+     exec: blobBaseFeeOp),
+
+    (opCode: SlotNum,     ## 0x4b, EIP-7843 Returns the current slot number
+     forks: VmOpAmsterdamAndLater,
+     name: "slotNumber",
+     info: "Returns the current slot number",
+     exec: slotNumOp)]
 
 # ------------------------------------------------------------------------------
 # End

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -51,6 +51,9 @@ template getGasLimit*(c: Computation): GasInt =
 
 template getBaseFee*(c: Computation): UInt256 =
   c.vmState.blockCtx.baseFeePerGas.get(0.u256)
+
+template getSlotNum*(c: Computation): UInt256 =
+  c.vmState.blockCtx.slotNumber.u256
 
 template getChainId*(c: Computation): UInt256 =
   c.vmState.com.chainId
