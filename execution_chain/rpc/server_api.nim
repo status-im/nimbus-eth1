@@ -354,9 +354,14 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         raise newException(ValueError, "Block not found")
       headerHash = header.computeBlockHash
       txFrame = api.chain.txFrame(headerHash)
-      #TODO: change 0 to configureable gas cap
+      # TODO: change 0 to configureable gas cap
       gasUsed = rpcEstimateGas(args, header, headerHash, api.com, txFrame, DEFAULT_RPC_GAS_CAP).valueOr:
-        raise newException(ValueError, "rpcEstimateGas error: " & $error.code)
+        let data = Opt.some(JrpcConv.encode(error[1].output.to0xHex()).JsonString)
+        raise (ref ApplicationError)(
+          code: 3,
+          msg: $error[1].error,
+          data: data,
+        )
     Quantity(gasUsed)
 
   server.rpc("eth_gasPrice") do() -> Quantity:

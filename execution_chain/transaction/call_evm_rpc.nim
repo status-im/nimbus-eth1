@@ -1,6 +1,6 @@
 # Nimbus - Various ways of calling the EVM
 #
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -57,17 +57,20 @@ proc rpcCallEvm*(args: TransactionArgs,
 proc rpcEstimateGas*(args: TransactionArgs,
                      header: Header,
                      vmState: BaseVMState,
-                     gasCap: GasInt): EvmResult[GasInt] =
+                     gasCap: GasInt): Result[GasInt, (EvmErrorObj, OutputResult)] =
   # Binary search the gas requirement, as it may be higher than the amount used
+  # TODO: rpcEstimateGas does not seem to add gas cost for EIP-7702
+  # authorization, see test case estimate-with-eip-7702.io of
+  # execution-apis tests
   let fork    = vmState.fork
   let txGas   = GasInt gasFees[fork][GasTransaction] # txGas always 21000, use constants?
-  var params  = ? toCallParams(vmState, args, gasCap, header.baseFeePerGas)
+  var params  = toCallParams(vmState, args, gasCap, header.baseFeePerGas).valueOr:
+    return err((evmErr(EvmInvalidParam), OutputResult()))
 
   var
     lo : GasInt = txGas - 1
     hi : GasInt = GasInt args.gas.get(0.Quantity)
     cap: GasInt
-
 
   # Determine the highest gas limit can be used during the estimation.
   if hi < txGas:
@@ -78,21 +81,21 @@ proc rpcEstimateGas*(args: TransactionArgs,
   var feeCap = GasInt args.gasPrice.get(0.Quantity)
   if args.gasPrice.isSome and
     (args.maxFeePerGas.isSome or args.maxPriorityFeePerGas.isSome):
-    return err(evmErr(EvmInvalidParam))
+    return err((evmErr(EvmInvalidParam), OutputResult()))
   elif args.maxFeePerGas.isSome:
     feeCap = GasInt args.maxFeePerGas.get
 
   # Recap the highest gas limit with account's available balance.
   if feeCap > 0:
     if args.source.isNone:
-      return err(evmErr(EvmInvalidParam))
+      return err((evmErr(EvmInvalidParam), OutputResult()))
 
     let balance = vmState.readOnlyLedger.getBalance(args.source.get)
     var available = balance
     if args.value.isSome:
       let value = args.value.get
       if value > available:
-        return err(evmErr(EvmInvalidParam))
+        return err((evmErr(EvmInvalidParam), OutputResult()))
       available -= value
 
     let allowance = available div feeCap.u256
@@ -114,32 +117,34 @@ proc rpcEstimateGas*(args: TransactionArgs,
     minGasLimit = max(intrinsicGas, floorDataGas)
 
   # Create a helper to check if a gas allowance results in an executable transaction
-  proc executable(gasLimit: GasInt): EvmResult[bool] =
+  proc executable(gasLimit: GasInt): Result[void, OutputResult] =
     if minGasLimit > gasLimit:
       # Special case, raise gas limit
-      return ok(true)
+      return err(OutputResult())
 
     params.gasLimit = gasLimit
     # TODO: bail out on consensus error similar to validateTransaction
-    let res = runComputation(params, string)
-    ok(res.len > 0)
+    let res = runComputation(params, OutputResult)
+    if res.error.len > 0:
+      err(res)
+    else:
+      ok()
 
   # Execute the binary search and hone in on an executable gas limit
   while lo+1 < hi:
     let mid = (hi + lo) div 2
-    let failed = ? executable(mid)
-    if failed:
+    if executable(mid).isErr:
       lo = mid
     else:
       hi = mid
 
   # Reject the transaction as invalid if it still fails at the highest allowance
   if hi == cap:
-    let failed = ? executable(hi)
-    if failed:
+    let failed = executable(hi)
+    if failed.isErr:
       # TODO: provide more descriptive EVM error beside out of gas
       # e.g. revert and other EVM errors
-      return err(evmErr(EvmInvalidParam))
+      return err((evmErr(EvmInvalidParam), failed.error))
 
   ok(hi)
 
@@ -148,7 +153,7 @@ proc rpcEstimateGas*(args: TransactionArgs,
                      headerHash: Hash32,
                      com: CommonRef,
                      parentFrame: CoreDbTxRef,
-                     gasCap: GasInt): EvmResult[GasInt] =
+                     gasCap: GasInt): Result[GasInt, (EvmErrorObj, OutputResult)] =
   # Binary search the gas requirement, as it may be higher than the amount used
   let topHeader = Header(
     parentHash: headerHash,
