@@ -11,7 +11,7 @@
 
 import
   chronicles,
-  std/[sequtils, strutils],
+  std/sequtils,
   stint,
   web3/[conversions, eth_api_types],
   eth/common/[base, transaction_utils],
@@ -88,20 +88,7 @@ proc getProof*(
     )
 
 proc headerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[Header, string] =
-  if blockTag.kind == bidAlias:
-    let tag = blockTag.alias.toLowerAscii
-    case tag
-    of "latest":
-      return ok(api.chain.latestHeader)
-    of "finalized":
-      return ok(api.chain.finalizedHeader)
-    of "safe":
-      return ok(api.chain.safeHeader)
-    else:
-      return err("Unsupported block tag " & tag)
-  else:
-    let blockNum = base.BlockNumber blockTag.number
-    return api.chain.headerByNumber(blockNum)
+  api.chain.headerFromTag(blockTag)
 
 proc headerFromTag(api: ServerAPIRef, blockTag: Opt[BlockTag]): Result[Header, string] =
   let blockId = blockTag.get(defaultTag)
@@ -117,20 +104,7 @@ proc ledgerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[LedgerRef, str
   ok(LedgerRef.init(txFrame))
 
 proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[Block, string] =
-  if blockTag.kind == bidAlias:
-    let tag = blockTag.alias.toLowerAscii
-    case tag
-    of "latest":
-      return ok(api.chain.latestBlock)
-    of "finalized":
-      return ok(api.chain.finalizedBlock)
-    of "safe":
-      return ok(api.chain.safeBlock)
-    else:
-      return err("Unsupported block tag " & tag)
-  else:
-    let blockNum = base.BlockNumber blockTag.number
-    return api.chain.blockByNumber(blockNum)
+  api.chain.blockFromTag(blockTag)
 
 proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManager) =
   server.rpc("eth_getBalance") do(data: Address, blockTag: BlockTag) -> UInt256:
@@ -654,12 +628,10 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ## Returns the base fee per blob gas in wei.
     let header = api.headerFromTag(blockId("latest")).valueOr:
       raise newException(ValueError, "Block not found")
-    if header.blobGasUsed.isNone:
-      raise newException(ValueError, "blobGasUsed missing from latest header")
     if header.excessBlobGas.isNone:
       raise newException(ValueError, "excessBlobGas missing from latest header")
     let blobBaseFee =
-      getBlobBaseFee(header.excessBlobGas.get, api.com, api.com.toEVMFork(header)) * header.blobGasUsed.get.u256
+      getBlobBaseFee(header.excessBlobGas.get, api.com, api.com.toEVMFork(header))
     if blobBaseFee > high(uint64).u256:
       raise newException(ValueError, "blobBaseFee is bigger than uint64.max")
     return w3Qty blobBaseFee.truncate(uint64)

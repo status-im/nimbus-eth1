@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -96,13 +96,13 @@ proc deriveLogs*(
           # TODO investigate how to handle this field
           # - in nimbus info about log removel would need to be kept at synchronization
           # level, to keep track about potential re-orgs
-          # - in fluffy there is no concept of re-org
           removed: false,
           logIndex: Opt.some(Quantity(logIndex)),
           transactionIndex: Opt.some(Quantity(i)),
           transactionHash: Opt.some(txHash),
           blockHash: Opt.some(blkHash),
           blockNumber: Opt.some(Quantity(header.number)),
+          blockTimestamp: Opt.some(Quantity(header.timestamp)),
           address: log.address,
           data: log.data,
           #  TODO topics should probably be kept as Hash32 in receipts

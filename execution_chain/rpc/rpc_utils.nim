@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, algorithm],
+  std/[sequtils, algorithm, strutils],
   ./rpc_types,
   ./params,
   ../db/ledger,
@@ -217,6 +217,7 @@ proc populateReceipt*(rec: StoredReceipt, gasUsed: GasInt, tx: Transaction,
       transactionHash: Opt.some(res.transactionHash),
       blockHash: Opt.some(res.blockHash),
       blockNumber: Opt.some(res.blockNumber),
+      blockTimestamp: Opt.some(Quantity(header.timestamp)),
       # The actual fields
       address: log.address,
       data: log.data,
@@ -399,3 +400,35 @@ proc getTotalDifficulty*(chain: ForkedChainRef, blockHash: Hash32, header: Heade
   else:
     # Note: It's ok to use baseTxFrame for TD as this is for historical blocks
     chain.baseTxFrame().getScore(blockHash)
+
+proc headerFromTag*(chain: ForkedChainRef, blockTag: BlockTag): Result[Header, string] =
+  if blockTag.kind == bidAlias:
+    let tag = blockTag.alias.toLowerAscii
+    case tag
+    of "latest":
+      ok(chain.latestHeader)
+    of "finalized":
+      ok(chain.finalizedHeader)
+    of "safe":
+      ok(chain.safeHeader)
+    else:
+      err("Unsupported block tag " & tag)
+  else:
+    let blockNum = base.BlockNumber blockTag.number
+    chain.headerByNumber(blockNum)
+
+proc blockFromTag*(chain: ForkedChainRef, blockTag: BlockTag): Result[Block, string] =
+  if blockTag.kind == bidAlias:
+    let tag = blockTag.alias.toLowerAscii
+    case tag
+    of "latest":
+      ok(chain.latestBlock)
+    of "finalized":
+      ok(chain.finalizedBlock)
+    of "safe":
+      ok(chain.safeBlock)
+    else:
+      err("Unsupported block tag " & tag)
+  else:
+    let blockNum = base.BlockNumber blockTag.number
+    chain.blockByNumber(blockNum)
