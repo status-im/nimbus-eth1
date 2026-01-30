@@ -58,6 +58,12 @@ type
             " state root for a block with increased height/number"
       name: "snap-sync-update-file" .}: Option[string]
 
+    snapSyncDataDir {.
+      desc: "Provide the directory for the snap assembly database. This" &
+            " option overrides --data-dir for snap, which is the default"
+      name: "snap-sync-data-dir" .}: Option[string]
+
+
   SplitCmdLine = tuple
     leftArgs: seq[string]  # split command line: left to "--" marker (nimbus)
     rightArgs: seq[string] # split command line: right to "--" marker (tool)
@@ -104,7 +110,7 @@ proc beaconSyncConfig(conf: ToolConfig): BeaconSyncConfigHook =
       fatal "Cannot set up trace handlers", error
       quit(QuitFailure)
 
-proc snapSyncConfig(conf: ToolConfig): SnapSyncConfigHook =
+proc snapSyncConfig(conf: ToolConfig, defaultDir: string): SnapSyncConfigHook =
   return proc(desc: SnapSyncRef) =
     if conf.snapSyncTarget.isSome():
       let hash32 = conf.snapSyncTarget.unsafeGet
@@ -116,6 +122,10 @@ proc snapSyncConfig(conf: ToolConfig): SnapSyncConfigHook =
       if not desc.configUpdateFile(fileName):
         fatal "Error parsing file name for --snap-sync-update-file", fileName
         quit QuitFailure
+    let snapBaseDir = conf.snapSyncDataDir.get(otherwise = defaultDir)
+    if not desc.configBaseDir(snapBaseDir):
+      fatal "Cannot create snap base dir", snapBaseDir
+      quit QuitFailure
 
 # ------------------------------------------------------------------------------
 # Main
@@ -137,7 +147,7 @@ let
   # Update node config for lazy beacon sync update
   nodeConf = NimbusNode(
     beaconSyncRef: BeaconSyncRef.init rightConf.beaconSyncConfig,
-    snapSyncRef:   SnapSyncRef.init rightConf.snapSyncConfig)
+    snapSyncRef:   SnapSyncRef.init rightConf.snapSyncConfig(leftConf.dataDir))
 
 # Run execution client
 leftConf.main(nodeConf)
