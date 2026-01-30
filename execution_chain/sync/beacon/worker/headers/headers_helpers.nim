@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -24,7 +24,7 @@ proc updateErrorState(buddy: BeaconPeerRef) =
   if ((0 < buddy.nErrors.fetch.hdr or
        0 < buddy.nErrors.apply.hdr) and buddy.ctrl.stopped) or
      nFetchHeadersErrThreshold < buddy.nErrors.fetch.hdr or
-     nProcHeadersErrThreshold < buddy.nErrors.apply.hdr:
+     nStashHeadersErrThreshold < buddy.nErrors.apply.hdr:
 
     # Make sure that this peer does not immediately reconnect
     buddy.ctrl.zombie = true

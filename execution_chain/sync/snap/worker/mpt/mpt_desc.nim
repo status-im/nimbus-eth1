@@ -14,10 +14,7 @@ import
   pkg/eth/common/[base, hashes],
   ../../../../db/aristo/aristo_desc/desc_nibbles,
   ../../../wire_protocol/snap/snap_types,
-   ../worker_desc
-
-export
-  desc_nibbles, snap_types, worker_desc
+  ../state_db
 
 type
   NodeKey* = object

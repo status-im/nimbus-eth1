@@ -20,21 +20,18 @@ import
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc maybeSlowPeerError(
-    buddy: SnapPeerRef;
-    elapsed: Duration;
-    root: StateRoot;
-      ): bool =
+proc registerPeerError(buddy: SnapPeerRef; root: StateRoot; slowPeer=false) =
+  ## Do not repeat the same time-consuming failed request
+  buddy.accFetchRegisterError(slowPeer)
+  buddy.only.failedReq.account.put(root,0u8)
+
+proc maybeSlowPeerError(buddy: SnapPeerRef; ela: Duration; root: StateRoot) =
   ## Register slow response, definitely not fast enough
-  if fetchAccountSnapTimeout <= elapsed:
-    buddy.hdrFetchRegisterError(slowPeer=true)
+  if fetchAccountSnapTimeout <= ela:
+    buddy.registerPeerError(root, slowPeer=true)
+  else:
+    buddy.accFetchRegisterError()
 
-    # Do not repeat the same time-consuming failed request
-    buddy.only.failedReq.account.put(root,0u8)
-
-    return true
-
-  # false
 
 proc getAccounts(
     buddy: SnapPeerRef;
@@ -60,6 +57,7 @@ proc getAccounts(
     return err((ECatchableError,$e.name,$e.msg,Moment.now()-start))
 
   return ok((move resp, Moment.now()-start))
+
 
 func errStr(rc: Result[FetchAccountsData,SnapError]): string =
   if rc.isErr:
@@ -117,7 +115,7 @@ template fetchAccounts*(
           buddy.nErrors.fetch.acc.inc
           buddy.ctrl.zombie = true
         of ECatchableError, EMissingEthContext:
-          buddy.hdrFetchRegisterError()
+          buddy.accFetchRegisterError()
         of EAlreadyTriedAndFailed:
           trace recvInfo & " error", peer, root, reqAcc, nReqAcc,
             ela=elapsed.toStr, state=($buddy.syncState), error=rc.errStr,
@@ -136,8 +134,7 @@ template fetchAccounts*(
 
     # Evaluate error result (if any)
     if rc.isErr or buddy.ctrl.stopped:
-      if not buddy.maybeSlowPeerError(elapsed, stateRoot):
-        buddy.hdrFetchRegisterError()
+      buddy.maybeSlowPeerError(elapsed, stateRoot)
       trace recvInfo & " error", peer, root, reqAcc, nReqAcc,
         ela, state, error=rc.errStr, nErrors=buddy.nErrors.fetch.acc
       break body                                          # return err()
@@ -171,15 +168,17 @@ template fetchAccounts*(
         let respAccPreMax = rc.value.packet.accounts[^2].accHash.to(ItemKey)
         if ivReq.maxPt < respAccPreMax:
           # Bogus peer returning additional rubbish
-          buddy.hdrFetchRegisterError(forceZombie=true)
-          trace recvInfo & " excess top accounts", peer, root, reqAcc, nReqAcc,
+          buddy.accFetchRegisterError(forceZombie=true)
+          trace recvInfo & " excess accounts", peer, root, reqAcc, nReqAcc,
             respAcc, nRespAcc, respAccPreMax=respAccPreMax.to(float),
             nRespProof, ela, state, nErrors=buddy.nErrors.fetch.acc
           break body                                      # return err()
 
       if nRespProof == 0:
-        # Empty proof can only happen for an empty response.
+        # Empty proof can only happen for an empty response. This is a
+        # protcol violation.
         #
+        buddy.accFetchRegisterError(forceZombie=true)
         trace recvInfo & " missing proof", peer, root, reqAcc, nReqAcc,
           respAcc, nRespAcc, nRespProof, ela, state,
           nErrors=buddy.nErrors.fetch.acc
@@ -187,13 +186,22 @@ template fetchAccounts*(
 
       trace recvInfo, peer, root, reqAcc, nReqAcc, respAcc, nRespAcc,
         nRespProof, ela, state, nErrors=buddy.nErrors.fetch.acc
+
+    elif nRespProof == 0:
+      # No data available for this state root.
+      #
+      buddy.registerPeerError(stateRoot)
+      trace recvInfo & " not available", peer, root, reqAcc, nReqAcc,
+        ela, state, nErrors=buddy.nErrors.fetch.acc
+      break body                                          # return err()
+
     else:
       trace recvInfo, peer, root, reqAcc, nReqAcc, nRespAcc,
         nRespProof, ela, state, nErrors=buddy.nErrors.fetch.acc
 
     # Ban an overly slow peer for a while when observed consecutively.
     if fetchAccountSnapTimeout < elapsed:
-      buddy.hdrFetchRegisterError(slowPeer=true)
+      buddy.accFetchRegisterError(slowPeer=true)
     else:
       buddy.nErrors.fetch.acc = 0                         # reset error count
       buddy.ctx.pool.lastSlowPeer = Opt.none(Hash)        # not last one/error

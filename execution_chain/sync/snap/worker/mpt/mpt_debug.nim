@@ -15,7 +15,9 @@ import
   std/[algorithm, hashes, tables,
        sequtils, streams, strformat, strutils, syncio, typetraits],
   pkg/[eth/common, eth/rlp, stew/byteutils, zlib],
-  ../helpers,
+  ../../../../db/aristo/aristo_desc/desc_nibbles,
+  ../../../wire_protocol/snap/snap_types,
+  ../[helpers, state_db],
   ./mpt_desc
 
 type

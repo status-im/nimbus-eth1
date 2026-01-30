@@ -14,11 +14,7 @@ import
   std/[hashes, sequtils, tables, typetraits],
   pkg/[eth/common, minilru, stew/sorted_set],
   ../[helpers, worker_const],
-  ./unproc_item_keys
-
-export
-  unproc_item_keys
-
+  ./[item_key, unproc_item_keys]
 
 type
   StateRoot* = distinct Hash32
@@ -52,7 +48,6 @@ type
     byNumber: StateByNumber             ## States indexed by block number
     byHash: StateByHash                 ## States indexed by block hash
     byRoot: StateByRoot                 ## States indexed by state root
-    evicted*: EvictedStates             ## Referes to abanoned states
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -77,7 +72,6 @@ template del(
     data: StateDataRef;
     ignStateRoot: static[bool] = false;
       ) =
-  db.evicted.add (data.header.number, data.blockHash)
   db.byNumber.del data.header.number             # delete index
   db.byHash.del data.blockHash                   # ditto
   when not ignStateRoot:
@@ -157,6 +151,18 @@ proc get*(db: StateDbRef; hash: BlockHash): Opt[StateDataRef] =
 
 proc get*(db: StateDbRef; root: StateRoot): Opt[StateDataRef] =
   db.byRoot.peek root
+
+
+proc hasKey*(db: StateDbRef; height: BlockNumber): bool =
+  if not db.pvState.isNil and db.pvState.header.number == height:
+    return true
+  db.byNumber.eq(height).isOk()
+
+proc hasKey*(db: StateDbRef; hash: BlockHash): bool =
+  db.byHash.peek(hash).isOk()
+
+proc hasKey*(db: StateDbRef; root: StateRoot): bool =
+  db.byRoot.peek(root).isOk()
 
 
 proc upScore*(data: StateDataRef) =
@@ -324,8 +330,6 @@ proc toStr*(db: StateDbRef): string =
     result[^1] = '}'
 
   result &= "[" &  $nKeys & "/" & $db.byRoot.capacity & "]"
-  if 0 < db.evicted.len:
-    result &= "+" & $db.evicted.len
 
 # ------------------------------------------------------------------------------
 # End

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -111,10 +111,6 @@ const
     ## more than `nFetchHeadersErrThreshold` times in a row, then this peer will
     ## be banned for a while.
 
-  nProcHeadersErrThreshold* = 2
-    ## Similar to `nFetchHeadersErrThreshold` but for the later part when
-    ## errors occur while block headers are queued and further processed.
-
   nStashHeadersErrThreshold* = 2
     ## Abort headers download and the whole sync session with it if too many
     ## failed header chain cache storage requests occur.
@@ -139,7 +135,7 @@ const
     ## Similar to `nFetchHeadersErrThreshold`.
 
   nProcBlocksErrThreshold* = 2
-    ## Similar to `nProcHeadersErrThreshold`.
+    ## Similar to `nStashHeadersErrThreshold`.
 
   nImportBlocksErrThreshold* = 2
     ## Abort block import and the whole sync session with it if too many
