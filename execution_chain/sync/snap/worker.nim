@@ -29,7 +29,6 @@ logScope:
 proc setup*(ctx: SnapCtxRef; info: static[string]): bool =
   ## Global set up
   ctx.setupServices info
-  true
 
 proc release*(ctx: SnapCtxRef; info: static[string]) =
   ## Global clean up

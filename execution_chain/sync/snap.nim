@@ -11,6 +11,7 @@
 {.push raises: [].}
 
 import
+  std/[dirs, paths],
   pkg/[chronicles, chronos, results],
   pkg/stew/[interval_set, sorted_set],
   ../core/chain,
@@ -88,6 +89,17 @@ proc config*(
   if not desc.lazyConfigHook.isNil:
     desc.lazyConfigHook(desc)
     desc.lazyConfigHook = nil
+
+proc configBaseDir*(desc: SnapSyncRef; dir: string): bool =
+  ## Set up database folder.
+  doAssert not desc.ctx.isNil
+  try:
+    Path(dir).createDir()
+    desc.ctx.pool.baseDir = dir
+    return true
+  except OSError, IOError:
+    discard
+  # false
 
 proc configTarget*(desc: SnapSyncRef; hex: string): bool =
   ## Set up inital target root (if any, mainly for debugging)

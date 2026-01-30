@@ -28,6 +28,9 @@ type
     ECancelledError                ## Exception
 
 const
+  snapAsmFolder* = "snap"
+    ## Folder for assembly database (different from aristo `ecdb` folder)
+
   twoHundredYears* = chronos.days(365 * 200 + 48)
     ## Large Duration constant considered sort of infinite.
 
@@ -87,5 +90,8 @@ const
   # -----------
 
   nProcAccountErrThreshold* = 4
+    ## Similar to `nFetchAccountSnapErrThreshold` but for the later part
+    ## when errors occur while cached data packets are processed.
+
 
 # End
