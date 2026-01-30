@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -25,9 +25,10 @@ proc coinbaseStateClearing*(vmState: BaseVMState,
   # create the account in VMs prior to the state clearing rules,
   # as well as conditionally cleaning up the coinbase account when left
   # empty in VMs after the state clearing rules came into effect.
+  let isSpuriousAndLater = vmState.fork >= FkSpurious
 
   vmState.mutateLedger:
-    if touched:
+    if touched and isSpuriousAndLater:
       db.addBalance(miner, 0.u256)
 
     # db.persist is an important step when using `db/ledger`
@@ -37,4 +38,4 @@ proc coinbaseStateClearing*(vmState: BaseVMState,
 
     # do not clear cache, we need the cache when constructing
     # post state
-    db.persist(clearEmptyAccount = vmState.fork >= FkSpurious)
+    db.persist(clearEmptyAccount = isSpuriousAndLater)
