@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -19,7 +19,8 @@ import
   ../../../db/core_db,
   ../../../db/fcu_db,
   ../../../db/storage_types,
-  ../../../utils/utils
+  ../../../utils/utils,
+  ../../../common
 
 logScope:
   topics = "forked chain"
@@ -45,9 +46,13 @@ type
 # RLP serializer functions
 # ------------------------------------------------------------------------------
 
+proc append(w: var RlpWriter, bal: BlockAccessListRef) =
+  w.append(bal[])
+
 proc append(w: var RlpWriter, b: BlockRef) =
   w.startList(3)
   w.append(b.blk)
+  w.append(b.blockAccessList)
   w.append(b.hash)
   let parentIndex = if b.parent.isNil: 0'u
                     else: b.parent.index + 1'u
@@ -76,10 +81,14 @@ proc append(w: var RlpWriter, fc: ForkedChainRef) =
   w.append(fc.fcuHead)
   w.append(fc.fcuSafe)
 
+proc read(rlp: var Rlp, T: type BlockAccessListRef): T {.raises: [RlpError].} =
+  rlp.read(result[])
+
 proc read(rlp: var Rlp, T: type BlockRef): T {.raises: [RlpError].} =
   rlp.tryEnterList()
   result = T()
   rlp.read(result.blk)
+  rlp.read(result.blockAccessList)
   rlp.read(result.hash)
   rlp.read(result.index)
 
@@ -129,11 +138,11 @@ proc replayBlock(fc: ForkedChainRef;
   # Set finalized to true in order to skip the stateroot check when replaying the
   # block because the blocks should have already been checked previously during
   # the initial block execution.
-  var receipts = fc.processBlock(
+  var (receipts, _) = fc.processBlock(
     parent,
     txFrame,
     blk.blk,
-    Opt.none(BlockAccessListRef),
+    blk.blockAccessList,
     blk.hash,
     finalized = true
   ).valueOr:

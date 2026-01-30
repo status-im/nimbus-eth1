@@ -52,17 +52,19 @@ const
 func appendBlock(c: ForkedChainRef,
          parent: BlockRef,
          blk: Block,
+         blockAccessList: Opt[BlockAccessListRef],
          blkHash: Hash32,
          txFrame: CoreDbTxRef,
          receipts: sink seq[StoredReceipt]): BlockRef =
 
   let newBlock = BlockRef(
-    blk     : blk,
-    txFrame : txFrame,
+    blk: blk,
+    blockAccessList: blockAccessList,
+    txFrame: txFrame,
     receipts: move(receipts),
-    hash    : blkHash,
-    parent  : parent,
-    index   : 0, # Only finalized segment have finalized marker
+    hash: blkHash,
+    parent: parent,
+    index: 0, # Only finalized segment have finalized marker
   )
 
   c.hashToBlock[blkHash] = newBlock
@@ -515,7 +517,7 @@ proc validateBlock(
     parentTxFrame=cast[uint](parentFrame),
     txFrame=cast[uint](txFrame)
 
-  var receipts = c.processBlock(parent, txFrame, blk, blockAccessList, blkHash, finalized).valueOr:
+  var (receipts, bal) = c.processBlock(parent, txFrame, blk, blockAccessList, blkHash, finalized).valueOr:
     txFrame.dispose()
     return err(error)
 
@@ -524,7 +526,7 @@ proc validateBlock(
   # is being applied to a block that is currently not a head).
   txFrame.checkpoint(blk.header.number, skipSnapshot = false)
 
-  let newBlock = c.appendBlock(parent, blk, blkHash, txFrame, move(receipts))
+  let newBlock = c.appendBlock(parent, blk, bal, blkHash, txFrame, move(receipts))
 
   for i, tx in blk.transactions:
     c.txRecords[computeRlpHash(tx)] = (blkHash, uint64(i))

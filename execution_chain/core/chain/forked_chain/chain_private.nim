@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -26,8 +26,7 @@ proc writeBaggage*(
     blockAccessList: Opt[BlockAccessListRef],
     blkHash: Hash32,
     txFrame: CoreDbTxRef,
-    receipts: openArray[StoredReceipt],
-    generatedBal: Opt[BlockAccessListRef],
+    receipts: openArray[StoredReceipt]
 ) =
   template header(): Header =
     blk.header
@@ -47,11 +46,6 @@ proc writeBaggage*(
       blkHash,
       blockAccessList.get(),
     )
-  elif generatedBal.isSome:
-    txFrame.persistBlockAccessList(
-      blkHash,
-      generatedBal.get(),
-    )
 
 proc processBlock*(
     c: ForkedChainRef,
@@ -61,7 +55,7 @@ proc processBlock*(
     blockAccessList: Opt[BlockAccessListRef],
     blkHash: Hash32,
     finalized: bool,
-): Result[seq[StoredReceipt], string] =
+): Result[(seq[StoredReceipt], Opt[BlockAccessListRef]), string] =
   template header(): Header =
     blk.header
 
@@ -135,6 +129,12 @@ proc processBlock*(
   # because validateUncles still need it
   ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory)
 
-  c.writeBaggage(blk, blockAccessList, blkHash, txFrame, vmState.receipts, vmState.blockAccessList)
+  let bal = 
+    if blockAccessList.isSome: 
+      blockAccessList 
+    else: 
+      vmState.blockAccessList
 
-  ok(move(vmState.receipts))
+  c.writeBaggage(blk, bal, blkHash, txFrame, vmState.receipts)
+
+  ok((move(vmState.receipts), bal))

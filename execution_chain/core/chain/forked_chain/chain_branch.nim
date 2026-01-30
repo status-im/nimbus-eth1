@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -11,13 +11,13 @@
 {.push raises: [].}
 
 import
-  eth/common/blocks,
-  eth/common/receipts,
+  eth/common/[blocks, block_access_lists, receipts],
   ../../../db/core_db
 
 type
   BlockRef* = ref object
     blk*     : Block
+    blockAccessList*: Opt[BlockAccessListRef]
     txFrame* : CoreDbTxRef
     receipts*: seq[StoredReceipt]
     hash*    : Hash32
