@@ -82,6 +82,7 @@ proc initTestEngine*(
       accountCacheLen: 1,
       codeCacheLen: 1,
       storageCacheLen: 1,
+      parallelBlockDownloads: 2, # >1 required for block walk tests
     )
     engine = ?RpcVerificationEngine.init(engineConf)
 
