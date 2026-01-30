@@ -142,7 +142,7 @@ proc walkBlocks(
         else:
           try:
             downloadedHeaders[nextHash]
-          except KeyError as e:
+          except KeyError:
             return err(
               (UnavailableDataError, "Cannot find downloaded block of the block walk")
             )
