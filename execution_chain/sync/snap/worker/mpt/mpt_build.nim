@@ -310,9 +310,7 @@ proc mergeSubTree(
 # Private functions, finalisation and export helpers
 # ------------------------------------------------------------------------------
 
-proc reKeyWalker(
-    node: NodeRef;
-      ) =
+proc reKeyWalker(node: NodeRef) =
   ## Recursively calculate rlp-data and node keys.
   ##
   case node.kind:
@@ -357,7 +355,7 @@ proc reKeyWalker(
 
 proc exportTrie(
     node: NodeRef;
-    data: var seq[(NodeKey,seq[byte])];
+    data: var seq[(seq[byte],seq[byte])];
     ok: var bool;
       ) =
   ## Recursively export rlp encodings
@@ -373,10 +371,10 @@ proc exportTrie(
       if w.xtData.len == 0:
         ok = false
         return
-      data.add (w.selfKey, w.xtData)
-      data.add (w.brKey, w.brData)
+      data.add (w.selfKey.to(seq[byte]), w.xtData)
+      data.add (w.brKey.to(seq[byte]), w.brData)
     else:
-      data.add (w.selfKey, w.brData)
+      data.add (w.selfKey.to(seq[byte]), w.brData)
 
     for n in 0 .. 15:
       if not w.brLinks[n].isNil:
@@ -389,7 +387,7 @@ proc exportTrie(
     if w.lfData.len == 0:
       ok = false
       return
-    data.add (w.selfKey, w.lfData)
+    data.add (w.selfKey.to(seq[byte]), w.lfData)
 
   of Stop:
     ok = false
@@ -556,14 +554,15 @@ proc validate*(
       return ok(db)
   err()
 
-proc pairs*(db: NodeTrieRef): seq[(NodeKey,seq[byte])] =
+proc pairs*(db: NodeTrieRef): seq[(seq[byte],seq[byte])] =
   ## Export partial MPT. If an error occurs, no data is exported.
   ##
   if db.isComplete():
-    var (ok, data) = (true, seq[(NodeKey,seq[byte])].default)
+    var (ok, data) = (true, seq[(seq[byte],seq[byte])].default)
     db.root.exportTrie(data, ok)
     if ok:
       return data
+  # @[]
 
 # ------------------------------------------------------------------------------
 # End
