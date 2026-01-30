@@ -12,9 +12,8 @@
 
 import
   std/[os, paths, sequtils, streams],
-  pkg/[eth/common, unittest2],
-  ../../execution_chain/sync/snap/worker/mpt/mpt_debug,
-  ../../execution_chain/sync/snap/worker/mpt
+  pkg/unittest2,
+  ../../execution_chain/sync/snap/worker/[mpt, mpt/mpt_debug, worker_desc]
 
 const
   baseDir = [".", "..", ".."/"..", $DirSep]

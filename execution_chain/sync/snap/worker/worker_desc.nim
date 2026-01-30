@@ -14,14 +14,17 @@ import
   std/sets,
   pkg/[chronos, eth/common, minilru, results],
   ../../../core/chain,
-  ../../[sync_desc, wire_protocol],
+  ../../sync_desc,
+  ../../wire_protocol/types as wire_types,
   ./[state_db, worker_const]
 
+from ./mpt/mpt_assembly
+  import MptAsmRef
 from ../../beacon
   import BeaconPeerRef, BeaconSyncRef
 
 export
-  chain, common, state_db, sync_desc, results, worker_const
+  chain, common, results, state_db, sync_desc, wire_types, worker_const
 
 
 type
@@ -88,6 +91,9 @@ type
     syncState*: SyncState            ## Last known layout state
     beaconSync*: BeaconSyncRef       ## Beacon syncer to resume after snap sync
     stateDB*: StateDbRef             ## Incomplete states DB
+    baseDir*: string                 ## Path for assembly database
+    mptAsm*: MptAsmRef               ## Assembly database
+    mptEla*: chronos.Duration        ## Accumulated MPT proof processing time
 
     # Preloading/manual state update
     target*: Opt[SnapTarget]         ## Optional for setting up a sync target

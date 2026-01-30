@@ -9,7 +9,7 @@
 # distributed except according to those terms.
 
 import
-  ./mpt/[mpt_build, mpt_desc]
+  ./mpt/[mpt_assembly, mpt_build, mpt_desc]
 
 export
-  mpt_build, mpt_desc
+  mpt_assembly, mpt_build, mpt_desc
