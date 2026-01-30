@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -103,7 +103,7 @@ proc headersStashOnDisk*(
     # Mark peer that produced that unusable headers list as a zombie
     let srcPeer = buddy.getSyncPeer peerID
     if not srcPeer.isNil:
-      srcPeer.only.nErrors.apply.hdr = nProcHeadersErrThreshold + 1
+      srcPeer.only.nErrors.apply.hdr = nStashHeadersErrThreshold + 1
 
     # Check whether it is enough to skip the current headers list, only
     if ctx.subState.procFailNum != dTop:
