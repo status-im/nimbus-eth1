@@ -18,10 +18,6 @@ import
   std/math,
   pkg/[eth/common, stint, stew/interval_set]
 
-export
-  Hash32, stint, interval_set
-
-
 type
   ItemKey* = distinct UInt256
     ## Account trie item key, hash etc. as a scalar (allows arithmetic)

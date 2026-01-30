@@ -14,11 +14,7 @@ import
   std/[hashes, sequtils, tables, typetraits],
   pkg/[eth/common, minilru, stew/sorted_set],
   ../[helpers, worker_const],
-  ./unproc_item_keys
-
-export
-  unproc_item_keys
-
+  ./[item_key, unproc_item_keys]
 
 type
   StateRoot* = distinct Hash32

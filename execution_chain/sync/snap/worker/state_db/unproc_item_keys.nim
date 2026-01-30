@@ -12,12 +12,8 @@
 
 import
   std/sequtils,
-  pkg/eth/rlp,
+  pkg/[eth/rlp, stint, stew/interval_set],
   ./item_key
-
-export
-  item_key
-
 
 type
   UnprocItemKeys* = object
