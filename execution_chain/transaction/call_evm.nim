@@ -1,6 +1,6 @@
 # Nimbus - Various ways of calling the EVM
 #
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -52,9 +52,6 @@ proc callParamsForTest(tx: Transaction, sender: Address, vmState: BaseVMState): 
     isCreate:     tx.contractCreation,
     value:        tx.value,
     input:        tx.payload,
-
-    noIntrinsic:  true, # Don't charge intrinsic gas.
-    noRefund:     true, # Don't apply gas refund/burn rule.
   )
   if tx.txType > TxLegacy:
     assign(result.accessList, tx.accessList)
