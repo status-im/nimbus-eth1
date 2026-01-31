@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -235,6 +235,7 @@ proc exec(ctx: TransContext,
 
   vmState.receipts = newSeqOfCap[StoredReceipt](ctx.txList.len)
   vmState.cumulativeGasUsed = 0
+  vmState.blockGasUsed = 0
 
   if ctx.env.parentBeaconBlockRoot.isSome:
     vmState.processBeaconBlockRoot(ctx.env.parentBeaconBlockRoot.get).isOkOr:

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -91,6 +91,7 @@ proc processTransactions*(
 ): Result[void, string] =
   vmState.receipts.setLen(if skipReceipts: 0 else: transactions.len)
   vmState.cumulativeGasUsed = 0
+  vmState.blockGasUsed = 0
   vmState.allLogs = @[]
 
   vmState.withSender(transactions):
@@ -204,11 +205,18 @@ proc procBlkPreamble(
     if blk.withdrawals.isSome:
       return err("Pre-Shanghai block body must not have withdrawals")
 
-  if vmState.cumulativeGasUsed != header.gasUsed:
-    # TODO replace logging with better error
-    debug "gasUsed neq cumulativeGasUsed",
-      gasUsed = header.gasUsed, cumulativeGasUsed = vmState.cumulativeGasUsed
-    return err("gasUsed mismatch")
+  if com.isAmsterdamOrLater(header.timestamp):
+    if vmState.blockGasUsed != header.gasUsed:
+      # TODO replace logging with better error
+      debug "gasUsed neq blockGasUsed",
+        gasUsed = header.gasUsed, blockGasUsed = vmState.blockGasUsed
+      return err("gasUsed mismatch")
+  else:
+    if vmState.cumulativeGasUsed != header.gasUsed:
+      # TODO replace logging with better error
+      debug "gasUsed neq cumulativeGasUsed",
+        gasUsed = header.gasUsed, cumulativeGasUsed = vmState.cumulativeGasUsed
+      return err("gasUsed mismatch")
 
   if header.ommersHash != EMPTY_UNCLE_HASH:
     # TODO It's strange that we persist uncles before processing block but the

@@ -54,19 +54,36 @@ method getAncestorHash*(vmState: BaseVMState; blockNumber: BlockNumber): Hash32 
     return keccak256(toBytes($blockNumber))
 
 func normalizeFileName(x: string): string =
-  const invalidChars = ['/', '\\', '?', '%', '*', ':', '|', '"', '<', '>', ',', ';', '=']
+  const MAX_FILENAME_LEN = 50
+  const invalidChars = ['/', '\\', '?', '%', '*', ':', '|', '"', '<', '>', ',', ';', '=', '.']
   result = newStringOfCap(x.len)
   for c in x:
     if c in invalidChars: result.add '_'
     else: result.add c
+  if result.len > MAX_FILENAME_LEN:
+    result = result.substr(0, 5) & "_" & result.substr(result.len - MAX_FILENAME_LEN - 6)
 
-proc dumpDebugData(ctx: TestCtx, vmState: BaseVMState, gasUsed: GasInt, success: bool) =
+func `@@`(logs: openArray[Log]): JsonNode =
+  result = newJArray()
+  for x in logs:
+    var yy = %{
+      "address": %($x.address),
+    }
+    var topics = newJArray()
+    for z in x.topics:
+      topics.add %($z)
+    yy["topics"] = topics
+    yy["data"] = %("0x" & x.data.toHex)
+    result.add yy
+
+proc dumpDebugData(ctx: TestCtx, vmState: BaseVMState, gasUsed: GasInt, logs: openArray[Log], success: bool) =
   let tracerInst = LegacyTracer(vmState.tracer)
   let tracingResult = if ctx.trace: tracerInst.getTracingResult() else: %[]
   let debugData = %{
     "gasUsed": %gasUsed,
     "structLogs": tracingResult,
-    "accounts": vmState.dumpAccounts()
+    "accounts": vmState.dumpAccounts(),
+    "logs": @@logs,
   }
   let status = if success: "_success" else: "_failed"
   let fileName = normalizeFileName(ctx.name)
@@ -119,7 +136,7 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
     check(ctx.expectedLogs == actualLogsHash)
     if ctx.debugMode:
       let success = ctx.expectedLogs == actualLogsHash and obtainedHash == ctx.expectedHash
-      ctx.dumpDebugData(vmState, callResult.gasUsed, success)
+      ctx.dumpDebugData(vmState, callResult.gasUsed, callResult.logEntries, success)
 
 proc testSubFixture(ctx: var TestCtx, fixture: JsonNode, testStatusIMPL: var TestStatus,
                  trace = false, debugMode = false) =
@@ -196,14 +213,11 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
     testSubFixture(ctx, child, testStatusIMPL, trace, debugMode)
 
 proc generalStateJsonMain*(debugMode = false) =
-  const
-    newFolder = "eest_develop/state_tests"
-
   let config = getConfiguration()
   if config.testSubject == "" or not debugMode:
     # run all test fixtures
     suite "new generalstate json tests: eest_develop":
-      jsonTest(newFolder, "GeneralStateTestsStatic", testFixture, slowGSTTests)
+      jsonTest("eest_develop/state_tests", "GeneralStateTestsStatic", testFixture, slowGSTTests)
 
     suite "new generalstate json tests: eest_devnet":
       jsonTest("eest_devnet/state_tests", "GeneralStateTestsDevnet", testFixture)
@@ -217,7 +231,7 @@ proc generalStateJsonMain*(debugMode = false) =
       echo "missing test subject"
       quit(QuitFailure)
 
-    let path = "tests" / "fixtures" / newFolder
+    let path = "tests/fixtures/eest_devnet/state_tests"
     let n = json.parseFile(path / config.testSubject)
     var testStatusIMPL: TestStatus
     testFixture(n, testStatusIMPL, config.trace, true)

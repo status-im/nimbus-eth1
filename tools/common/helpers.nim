@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -157,6 +157,8 @@ func getChainConfig*(network: string, c: ChainConfig) =
     c.assignTime(HardFork.Bpo5, EthTime(15000))
   of $TestFork.Amsterdam:
     c.assignTime(HardFork.Amsterdam, TimeZero)
+  of $TestFork.BPO2ToAmsterdamAtTime15k:
+    c.assignTime(HardFork.Amsterdam, EthTime(15000))
   else:
     raise newException(ValueError, "unsupported network " & network)
 

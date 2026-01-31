@@ -52,8 +52,16 @@ proc commitOrRollbackDependingOnGasUsed(
   # set in the block header. Again, the eip-1559 reference does not mention
   # an early stop. It would rather detect differing values for the  block
   # header `gasUsed` and the `vmState.cumulativeGasUsed` at a later stage.
-  let gasUsed = callResult.gasUsed
-  if header.gasLimit < vmState.cumulativeGasUsed + gasUsed:
+  let
+    gasUsed = callResult.gasUsed
+    blockGasUsed = callResult.blockGasUsed
+
+  let limit = if vmState.fork >= FkAmsterdam:
+                vmState.blockGasUsed + blockGasUsed
+              else:
+                vmState.cumulativeGasUsed + gasUsed
+
+  if header.gasLimit < limit:
     if vmState.balTrackerEnabled:
       vmState.balTracker.rollbackCallFrame()
     vmState.ledger.rollback(accTx)
@@ -66,10 +74,11 @@ proc commitOrRollbackDependingOnGasUsed(
     vmState.ledger.commit(accTx)
     vmState.ledger.addBalance(vmState.coinbase(), gasUsed.u256 * priorityFee.u256)
     vmState.cumulativeGasUsed += gasUsed
+    vmState.blockGasUsed += blockGasUsed
 
     # Return remaining gas to the block gas counter so it is
     # available for the next transaction.
-    vmState.gasPool += tx.gasLimit - callResult.blockGasUsed
+    vmState.gasPool += tx.gasLimit - blockGasUsed
     vmState.blobGasUsed += blobGasUsed
     ok()
 

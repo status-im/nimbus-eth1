@@ -49,6 +49,7 @@ proc init(
   self.tracer = tracer
   self.receipts.setLen(0)
   self.cumulativeGasUsed = 0
+  self.blockGasUsed = 0
   self.gasCosts = self.fork.forkToSchedule
   self.blobGasUsed = 0'u64
   self.allLogs.setLen(0)
