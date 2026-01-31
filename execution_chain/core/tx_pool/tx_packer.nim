@@ -351,6 +351,7 @@ func assembleHeader*(pst: TxPacker, xp: TxPoolRef): Header =
   if com.isAmsterdamOrLater(xp.timestamp):
     let bal = vmState.blockAccessList.expect("block access list exists")
     header.blockAccessListHash = Opt.some(bal[].computeBlockAccessListHash())
+    header.slotNumber = Opt.some(xp.slotNumber)
 
   header
 

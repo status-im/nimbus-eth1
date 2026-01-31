@@ -85,6 +85,7 @@ proc toGenesisHeader*(
 
   if fork >= Amsterdam:
     result.blockAccessListHash = Opt.some(EMPTY_BLOCK_ACCESS_LIST_HASH)
+    result.slotNumber = Opt.some(0'u64)
 
 proc toGenesisHeader*(
     genesis: Genesis;

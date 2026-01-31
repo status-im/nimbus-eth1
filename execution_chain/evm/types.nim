@@ -33,6 +33,7 @@ type
     coinbase*         : Address
     excessBlobGas*    : uint64
     parentHash*       : Hash32
+    slotNumber*       : uint64
 
   TxContext* = object
     origin*         : Address
