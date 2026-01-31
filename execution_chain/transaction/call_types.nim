@@ -52,7 +52,8 @@ type
 
   LogResult* = object
     logEntries*: seq[Log]
-    gasUsed*:    GasInt
+    gasUsed*: GasInt
+    blockGasUsed*: GasInt
 
   OutputResult* = object
     error*:   string

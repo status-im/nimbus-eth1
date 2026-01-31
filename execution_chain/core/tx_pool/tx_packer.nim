@@ -124,7 +124,7 @@ proc runTxCommit(pst: var TxPacker; item: TxItemRef; callResult: LogResult, xp: 
 
   # Return remaining gas to the block gas counter so it is
   # available for the next transaction.
-  vmState.gasPool += item.tx.gasLimit - callResult.gasUsed
+  vmState.gasPool += item.tx.gasLimit - callResult.blockGasUsed
 
   # gasUsed accounting
   vmState.cumulativeGasUsed += callResult.gasUsed
