@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -11,10 +11,10 @@
 {.push raises: [].}
 
 import
-  std/sequtils,
+  std/[sequtils, heapqueue],
   ".."/[db/ledger, constants],
-  "."/[code_stream, memory, stack, state],
-  "."/[types],
+  ./[code_stream, memory, stack, state],
+  ./[types],
   ./interpreter/[gas_meter, gas_costs, op_codes],
   ./evm_errors,
   ./code_bytes,
@@ -22,7 +22,8 @@ import
   ../utils/[utils, mergeutils],
   ../common/common,
   eth/common/eth_types_rlp,
-  chronicles, chronos
+  chronicles, chronos,
+  stew/assign2
 
 export
   common, balTrackerEnabled
@@ -51,6 +52,9 @@ template getGasLimit*(c: Computation): GasInt =
 
 template getBaseFee*(c: Computation): UInt256 =
   c.vmState.blockCtx.baseFeePerGas.get(0.u256)
+
+template getSlotNum*(c: Computation): UInt256 =
+  c.vmState.blockCtx.slotNumber.u256
 
 template getChainId*(c: Computation): UInt256 =
   c.vmState.com.chainId
@@ -273,9 +277,72 @@ template chainTo*(c: Computation,
     c.continuation = nil
     after
 
+# Using `proc` as `addLogEntry()` might be `proc` in logging mode
+proc addLogEntry*(c: Computation, log: Log) =
+  c.logEntries.add log
+
+func createSelfDestructLog(beneficiary: Address, value: UInt256): Log =
+  # Selfdestruct event signature (keccak256('Selfdestruct(address,uint256)'))
+  const eventSig = bytes32"0x4bfaba3443c1a1836cd362418edc679fc96cae8449cbefccb6457cdf2c943083"
+  result.topics = newSeq[Topic](2)
+  result.address = SYSTEM_ADDRESS
+  assign(result.topics[0], eventSig)
+  assign(result.topics[1].data.toOpenArray(12, 31), beneficiary.data)
+  assign(result.data, value.toBytesBE())
+
+func createTransferLog(originator, beneficiary: Address, value: UInt256): Log =
+  # Transfer event signature (keccak256('Transfer(address,address,uint256)'))
+  const eventSig = bytes32"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+  result.topics = newSeq[Topic](3)
+  result.address = SYSTEM_ADDRESS
+  assign(result.topics[0], eventSig)
+  assign(result.topics[1].data.toOpenArray(12, 31), originator.data)
+  assign(result.topics[2].data.toOpenArray(12, 31), beneficiary.data)
+  assign(result.data, value.toBytesBE())
+
+func emitSelfDestructLog(c: Computation, beneficiary: Address, value: UInt256, newContract: bool) =
+  if value.isZero:
+    return
+
+  if c.msg.contractAddress != beneficiary:
+    # SELFDESTRUCT to other → Transfer log (LOG3)
+    c.addLogEntry(createTransferLog(c.msg.contractAddress, beneficiary, value))
+  elif newContract:
+    # SELFDESTRUCT to self → Selfdestruct log (LOG2)
+    c.addLogEntry(createSelfDestructLog(beneficiary, value))
+
+type
+  Closure = object
+    address: Address
+    value: UInt256
+
+func `<`(a, b: Closure): bool =
+  cmpMem(a.address.data[0].addr, b.address.data[0].addr, 20) < 0
+
+proc emitClosureLogs*(c: Computation) =
+  # Collect selfdestruct addresses with nonzero balances, sorted lexicographically
+  var closures = initHeapQueue[Closure]()
+  for address, value in c.vmState.ledger.nonZeroSelfDestructAccounts:
+    closures.push(Closure(address: address, value: value))
+
+  # Emit Selfdestruct log for each closure
+  while closures.len > 0:
+    let cc = closures.pop()
+    c.addLogEntry(createSelfDestructLog(cc.address, cc.value))
+
+func emitTransferLog*(c: Computation) =
+  if c.msg.value.isZero:
+    return
+
+  if c.msg.sender == c.msg.contractAddress:
+    return
+
+  c.addLogEntry(createTransferLog(c.msg.sender, c.msg.contractAddress, c.msg.value))
+
 proc execSelfDestruct*(c: Computation, beneficiary: Address) =
   c.vmState.mutateLedger:
     let localBalance = c.getBalance(c.msg.contractAddress)
+    var newContract = false
 
     # Register the account to be deleted
     if c.fork >= FkCancun:
@@ -288,12 +355,16 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
         db.addBalance(beneficiary, localBalance)
         if db.selfDestruct6780(c.msg.contractAddress):
           c.vmState.balTracker.trackInTransactionSelfDestruct(c.msg.contractAddress)
+          newContract = true
       else:
         # Zeroing contract balance except beneficiary is the same address
         db.subBalance(c.msg.contractAddress, localBalance)
         # Transfer to beneficiary
         db.addBalance(beneficiary, localBalance)
-        discard db.selfDestruct6780(c.msg.contractAddress)
+        newContract = db.selfDestruct6780(c.msg.contractAddress)
+
+      if c.fork >= FkAmsterdam:
+        c.emitSelfDestructLog(beneficiary, localBalance, newContract)
     else:
       if c.vmState.balTrackerEnabled:
         # Transfer to beneficiary
@@ -310,10 +381,6 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
       contractAddress = c.msg.contractAddress.toHex,
       localBalance = localBalance.toString,
       beneficiary = beneficiary.toHex
-
-# Using `proc` as `addLogEntry()` might be `proc` in logging mode
-proc addLogEntry*(c: Computation, log: Log) =
-  c.logEntries.add log
 
 func merge*(c, child: Computation) =
   c.logEntries.mergeAndReset(child.logEntries)
