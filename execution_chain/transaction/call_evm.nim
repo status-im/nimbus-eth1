@@ -52,6 +52,7 @@ proc callParamsForTest(tx: Transaction, sender: Address, vmState: BaseVMState): 
     isCreate:     tx.contractCreation,
     value:        tx.value,
     input:        tx.payload,
+    sysCall:      true,
   )
   if tx.txType > TxLegacy:
     assign(result.accessList, tx.accessList)
