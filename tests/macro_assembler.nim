@@ -9,20 +9,18 @@
 # according to those terms.
 
 import
-  std/[macrocache, strutils, strformat],
+  std/[macrocache, strutils],
   eth/common/[keys, transaction_utils],
   unittest2,
   chronicles,
   stew/byteutils,
-  stew/shims/macros,
-  stint
+  stew/shims/macros
 
 import
   ../execution_chain/db/ledger,
   ../execution_chain/evm/types,
   ../execution_chain/evm/interpreter/op_codes,
   ../execution_chain/evm/internals,
-  ../execution_chain/evm/code_stream,
   ../execution_chain/transaction/[call_common, call_evm],
   ../execution_chain/evm/state,
   ../execution_chain/core/pow/difficulty
@@ -53,7 +51,6 @@ type
     gasUsed* : Opt[GasInt]
     data*    : seq[byte]
     output*  : seq[byte]
-    debug*   : bool
 
   MacroAssembler = object
     setup    : NimNode
@@ -81,21 +78,11 @@ proc validateVMWord(val: NimNode): VMWord =
   val.expectKind(nnkStrLit)
   validateVMWord(val.strVal, val)
 
-proc vmWordsFromInts(val: NimNode): seq[VMWord] =
-  val.expectKind(nnkBracket)
-  for x in val:
-    x.expectKind(nnkIntLit)
-    result.add u256(x.intVal).toBytesBE()
-
 proc parseVMWords(list: NimNode): seq[VMWord] =
   result = @[]
   list.expectKind nnkStmtList
   for val in list:
-    val.expectKind({nnkStrLit, nnkBracket})
-    if val.kind == nnkStrLit:
-      result.add validateVMWord(val)
-    else:
-      result.add vmWordsFromInts(val)
+    result.add validateVMWord(val)
 
 proc validateStorage(val: NimNode): Storage =
   val.expectKind(nnkCall)
@@ -227,7 +214,6 @@ proc parseAssembler(list: NimNode): MacroAssembler =
     of "storage": result.asmBlock.storage = parseStorage(body)
     of "logs"   : result.asmBlock.logs    = parseLogs(body)
     of "success": result.asmBlock.success = parseSuccess(body)
-    of "debug"  : result.asmBlock.debug   = parseSuccess(body)
     of "data"   : result.asmBlock.data    = parseData(body)
     of "output" : result.asmBlock.output  = parseData(body)
     of "gasused": result.asmBlock.gasUsed = parseGasUsed(body)
@@ -270,7 +256,7 @@ proc generateAssemblerTest(masm: MacroAssembler): NimNode =
     echo result.toStrLit.strVal
 
 const
-  codeAddress = address"460121576cc7df020759730751f92bd62fd78dd6"
+  codeAddress* = address"460121576cc7df020759730751f92bd62fd78dd6"
   coinbase = address"bb7b8287f3f0a933474a79eae42cbca977791171"
 
 proc initVMEnv*(network: string): BaseVMState =
@@ -297,13 +283,6 @@ proc initVMEnv*(network: string): BaseVMState =
 
 proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: DebugCallResult): bool =
   let com = vmState.com
-  if boa.debug:
-    echo "Decompile: ", boa.title
-    var c = CodeStream.init(CodeBytesRef.init(boa.code))
-    let opcodes = c.decompile()
-    for op in opcodes:
-      echo &"[{op[0]}]\t{op[1]}\t{op[2]}"
-
   if not asmResult.isError:
     if boa.success == false:
       error "different success value", expected=boa.success, actual=true
