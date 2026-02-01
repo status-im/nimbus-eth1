@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2025 Status Research & Development GmbH
+# Copyright (c) 2019-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -256,7 +256,7 @@ proc generateAssemblerTest(masm: MacroAssembler): NimNode =
     echo result.toStrLit.strVal
 
 const
-  codeAddress = address"460121576cc7df020759730751f92bd62fd78dd6"
+  codeAddress* = address"460121576cc7df020759730751f92bd62fd78dd6"
   coinbase = address"bb7b8287f3f0a933474a79eae42cbca977791171"
 
 proc initVMEnv*(network: string): BaseVMState =
