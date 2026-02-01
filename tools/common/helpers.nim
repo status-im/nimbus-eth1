@@ -23,7 +23,8 @@ const
 proc createForkTransitionTable(transitionFork: HardFork,
                                b: Opt[BlockNumber],
                                t: Opt[EthTime],
-                               ttd: Opt[DifficultyInt]): ForkTransitionTable =
+                               ttd: Opt[DifficultyInt],
+                               excludes: openArray[HardFork] = []): ForkTransitionTable =
 
   proc blockNumberToUse(f: HardFork): Opt[BlockNumber] =
     if f < transitionFork:
@@ -50,14 +51,18 @@ proc createForkTransitionTable(transitionFork: HardFork,
   for f in firstTimeBasedFork .. high(HardFork):
     result.timeThresholds[f] = timeToUse(f)
 
+  for x in excludes:
+    result.timeThresholds[x] = Opt.none(EthTime)
+
 proc assignNumber(c: ChainConfig, transitionFork: HardFork, n: BlockNumber) =
   let table = createForkTransitionTable(transitionFork,
     Opt.some(n), Opt.none(EthTime), Opt.none(DifficultyInt))
   c.populateFromForkTransitionTable(table)
 
-proc assignTime(c: ChainConfig, transitionFork: HardFork, t: EthTime) =
+proc assignTime(c: ChainConfig, transitionFork: HardFork, t: EthTime, excludes: openArray[HardFork] = []) =
   let table = createForkTransitionTable(transitionFork,
-    Opt.none(BlockNumber), Opt.some(t), Opt.none(DifficultyInt))
+    Opt.none(BlockNumber), Opt.some(t), Opt.none(DifficultyInt), excludes)
+
   c.populateFromForkTransitionTable(table)
   c.terminalTotalDifficulty = Opt.some(0.u256)
 
@@ -158,7 +163,8 @@ func getChainConfig*(network: string, c: ChainConfig) =
   of $TestFork.Amsterdam:
     c.assignTime(HardFork.Amsterdam, TimeZero)
   of $TestFork.BPO2ToAmsterdamAtTime15k:
-    c.assignTime(HardFork.Amsterdam, EthTime(15000))
+    let excludes = [HardFork.Bpo3, HardFork.Bpo4, HardFork.Bpo5]
+    c.assignTime(HardFork.Amsterdam, EthTime(15000), excludes)
   else:
     raise newException(ValueError, "unsupported network " & network)
 
