@@ -45,7 +45,6 @@ proc commitOrRollbackDependingOnGasUsed(
     header: Header;
     tx: Transaction;
     callResult: LogResult;
-    priorityFee: GasInt;
     blobGasUsed: GasInt;
       ): Result[void, string] =
   # Make sure that the tx does not exceed the maximum cumulative limit as
@@ -69,10 +68,8 @@ proc commitOrRollbackDependingOnGasUsed(
   else:
     # Accept transaction and collect mining fee.
     if vmState.balTrackerEnabled:
-      vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), gasUsed.u256 * priorityFee.u256)
       vmState.balTracker.commitCallFrame()
     vmState.ledger.commit(accTx)
-    vmState.ledger.addBalance(vmState.coinbase(), gasUsed.u256 * priorityFee.u256)
     vmState.cumulativeGasUsed += gasUsed
     vmState.blockGasUsed += blockGasUsed
 
@@ -96,7 +93,6 @@ proc processTransactionImpl(
     roDB = vmState.readOnlyLedger
     baseFee256 = header.eip1559BaseFee(fork)
     baseFee = baseFee256.truncate(GasInt)
-    priorityFee = min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFee)
     excessBlobGas = header.excessBlobGas.get(0'u64)
 
   # buy gas, then the gas goes into gasMeter
@@ -135,7 +131,7 @@ proc processTransactionImpl(
       vmState.captureTxEnd(tx.gasLimit - callResult.gasUsed)
 
       let tmp = commitOrRollbackDependingOnGasUsed(
-        vmState, accTx, header, tx, callResult, priorityFee, blobGasUsed)
+        vmState, accTx, header, tx, callResult, blobGasUsed)
 
       if tmp.isErr():
         err(tmp.error)

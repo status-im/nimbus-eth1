@@ -27,6 +27,7 @@ proc callParamsForTx(tx: Transaction, sender: Address, vmState: BaseVMState, bas
     vmState:      vmState,
     gasPrice:     tx.effectiveGasPrice(baseFee),
     gasLimit:     tx.gasLimit,
+    priorityFee:  min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFee),
     sender:       sender,
     to:           tx.destination,
     isCreate:     tx.contractCreation,
@@ -42,11 +43,12 @@ proc callParamsForTx(tx: Transaction, sender: Address, vmState: BaseVMState, bas
   if tx.txType == TxEip7702:
     assign(result.authorizationList, tx.authorizationList)
 
-proc callParamsForTest(tx: Transaction, sender: Address, vmState: BaseVMState): CallParams =
+proc callParamsForTest(tx: Transaction, sender: Address, vmState: BaseVMState, baseFee: GasInt): CallParams =
   result = CallParams(
     vmState:      vmState,
     gasPrice:     tx.gasPrice,
     gasLimit:     tx.gasLimit,
+    priorityFee:  min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFee),
     sender:       sender,
     to:           tx.destination,
     isCreate:     tx.contractCreation,
@@ -72,6 +74,7 @@ proc txCallEvm*(tx: Transaction,
 
 proc testCallEvm*(tx: Transaction,
                   sender: Address,
-                  vmState: BaseVMState): DebugCallResult =
-  let call = callParamsForTest(tx, sender, vmState)
+                  vmState: BaseVMState,
+                  baseFee: GasInt = 0): DebugCallResult =
+  let call = callParamsForTest(tx, sender, vmState, baseFee)
   runComputation(call, DebugCallResult)

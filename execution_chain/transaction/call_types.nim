@@ -28,6 +28,7 @@ type
     origin*:       Opt[addresses.Address] # Default origin is `sender`.
     gasPrice*:     GasInt               # Gas price for this call.
     gasLimit*:     GasInt               # Maximum gas available for this call.
+    priorityFee*:  GasInt               # Gas tip for fee recipient(coinbase/miner).
     sender*:       addresses.Address    # Sender account.
     to*:           addresses.Address    # Recipient (ignored when `isCreate`).
     isCreate*:     bool                 # True if this is a contract creation.

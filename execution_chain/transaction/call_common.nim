@@ -216,6 +216,7 @@ proc prepareToRunComputation(host: TransactionHost, call: CallParams) =
 proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): GasUsed =
   let
     c = host.computation
+    vmState = host.vmState
     fork = host.vmState.fork
 
   # EIP-3529: Reduction in refunds
@@ -248,10 +249,16 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
   let txGasLeft = call.gasLimit - txGasUsed
   if txGasLeft > 0:
     let gasRefundAmount = txGasLeft.u256 * call.gasPrice.u256
-    if host.vmState.balTrackerEnabled:
-      host.vmState.balTracker.trackAddBalanceChange(call.sender, gasRefundAmount)
-    host.vmState.mutateLedger:
+    if vmState.balTrackerEnabled:
+      vmState.balTracker.trackAddBalanceChange(call.sender, gasRefundAmount)
+    vmState.mutateLedger:
       db.addBalance(call.sender, gasRefundAmount)
+
+  let txFee = txGasUsed.u256 * call.priorityFee.u256
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), txFee)
+  vmState.mutateLedger:
+    db.addBalance(vmState.coinbase(), txFee)
 
   GasUsed(
     evmGasUsed: c.msg.gas - txGasLeft,
