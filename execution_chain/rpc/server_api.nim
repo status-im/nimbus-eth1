@@ -106,6 +106,56 @@ proc ledgerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[LedgerRef, str
 proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[Block, string] =
   api.chain.blockFromTag(blockTag)
 
+proc getLogsForBlock(
+    chain: ForkedChainRef, header: Header, opts: FilterOptions
+): Opt[seq[FilterLog]] =
+  if headerBloomFilter(header, opts.address, opts.topics):
+    let
+      blkHash = header.computeBlockHash
+      blockBody = chain.blockBodyByHash(blkHash).valueOr:
+        return Opt.none(seq[FilterLog])
+      receipts = chain.receiptsByBlockHash(blkHash).valueOr:
+        return Opt.none(seq[FilterLog])
+      cachedHashes = chain.memoryTxHashesForBlock(blkHash)
+    # Note: this will hit assertion error if number of block transactions
+    # do not match block receipts.
+    # Although this is fine as number of receipts should always match number
+    # of transactions
+    if blockBody.transactions.len != receipts.len:
+      warn "Transactions and receipts length mismatch",
+        number = header.number, hash = blkHash.short,
+        txs = blockBody.transactions.len, receipts = receipts.len
+      return Opt.none(seq[FilterLog])
+    let logs = deriveLogs(header, blockBody.transactions, receipts, opts, cachedHashes)
+    return Opt.some(logs)
+  else:
+    return Opt.some(newSeq[FilterLog](0))
+
+proc getLogsForRange(
+    chain: ForkedChainRef,
+    start: base.BlockNumber,
+    finish: base.BlockNumber,
+    opts: FilterOptions,
+): seq[FilterLog] =
+  var
+    logs = newSeq[FilterLog]()
+    blockNum = start
+
+  while blockNum <= finish:
+    let
+      header = chain.headerByNumber(blockNum).valueOr:
+        return logs
+      filtered = chain.getLogsForBlock(header, opts).valueOr:
+        return logs
+    logs.add(filtered)
+    blockNum = blockNum + 1
+  return logs
+
+template sign(privateKey: PrivateKey, message: string): seq[byte] =
+  # message length encoded as ASCII representation of decimal
+  let msgData = "\x19Ethereum Signed Message:\n" & $message.len & message
+  @(sign(privateKey, msgData.toBytes()).toRaw())
+
 proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManager) =
   server.rpc(EthJson):
     proc eth_getBalance(data: Address, blockTag: BlockTag): UInt256 =
@@ -203,52 +253,6 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         )
         return SyncingStatus(syncing: true, syncObject: sync)
 
-  proc getLogsForBlock(
-      chain: ForkedChainRef, header: Header, opts: FilterOptions
-  ): Opt[seq[FilterLog]] =
-    if headerBloomFilter(header, opts.address, opts.topics):
-      let
-        blkHash = header.computeBlockHash
-        blockBody = chain.blockBodyByHash(blkHash).valueOr:
-          return Opt.none(seq[FilterLog])
-        receipts = chain.receiptsByBlockHash(blkHash).valueOr:
-          return Opt.none(seq[FilterLog])
-        cachedHashes = chain.memoryTxHashesForBlock(blkHash)
-      # Note: this will hit assertion error if number of block transactions
-      # do not match block receipts.
-      # Although this is fine as number of receipts should always match number
-      # of transactions
-      if blockBody.transactions.len != receipts.len:
-        warn "Transactions and receipts length mismatch",
-          number = header.number, hash = blkHash.short,
-          txs = blockBody.transactions.len, receipts = receipts.len
-        return Opt.none(seq[FilterLog])
-      let logs = deriveLogs(header, blockBody.transactions, receipts, opts, cachedHashes)
-      return Opt.some(logs)
-    else:
-      return Opt.some(newSeq[FilterLog](0))
-
-  proc getLogsForRange(
-      chain: ForkedChainRef,
-      start: base.BlockNumber,
-      finish: base.BlockNumber,
-      opts: FilterOptions,
-  ): seq[FilterLog] =
-    var
-      logs = newSeq[FilterLog]()
-      blockNum = start
-
-    while blockNum <= finish:
-      let
-        header = chain.headerByNumber(blockNum).valueOr:
-          return logs
-        filtered = chain.getLogsForBlock(header, opts).valueOr:
-          return logs
-      logs.add(filtered)
-      blockNum = blockNum + 1
-    return logs
-
-  server.rpc(EthJson):
     proc eth_getLogs(filterOptions: FilterOptions): seq[FilterLog] =
       ## filterOptions: settings for this filter.
       ## Returns a list of all logs matching a given filter object.
@@ -418,12 +422,6 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
       Quantity(blk.uncles.len)
 
-  template sign(privateKey: PrivateKey, message: string): seq[byte] =
-    # message length encoded as ASCII representation of decimal
-    let msgData = "\x19Ethereum Signed Message:\n" & $message.len & message
-    @(sign(privateKey, msgData.toBytes()).toRaw())
-
-  server.rpc(EthJson):
     proc eth_sign(data: Address, message: seq[byte]): seq[byte] =
       ## The sign method calculates an Ethereum specific signature with: sign(keccak256("\x19Ethereum Signed Message:\n" + len(message) + message))).
       ## By adding a prefix to the message makes the calculated signature recognisable as an Ethereum specific signature.
