@@ -11,7 +11,7 @@ import std/json, json_rpc/rpcclient, ../rpc_types
 
 export rpc_types
 
-createRpcSigsFromNim(RpcClient):
+createRpcSigsFromNim(RpcClient, EthJson):
   ## Portal History Network json-rpc calls
   proc portal_historyNodeInfo(): NodeInfo
   proc portal_historyRoutingTableInfo(): RoutingTableInfo

@@ -51,98 +51,100 @@ type
     network*: PeerNetworkInfo
     protocols*: JsonNode   # Protocol-specific data
 
-NodePorts.useDefaultSerializationIn JrpcConv
-NodeInfo.useDefaultSerializationIn JrpcConv
-PeerNetworkInfo.useDefaultSerializationIn JrpcConv
-PeerInfo.useDefaultSerializationIn JrpcConv
+NodePorts.useDefaultSerializationIn EthJson
+NodeInfo.useDefaultSerializationIn EthJson
+PeerNetworkInfo.useDefaultSerializationIn EthJson
+PeerInfo.useDefaultSerializationIn EthJson
 
-JrpcConv.automaticSerialization(int, true)
+EthJson.automaticSerialization(int, true)
 
 proc setupCommonRpc*(node: EthereumNode, config: ExecutionClientConf, server: RpcServer) =
-  server.rpc("web3_clientVersion") do() -> string:
-    result = config.agentString
+  server.rpc(EthJson):
+    proc web3_clientVersion(): string =
+      result = config.agentString
 
-  server.rpc("web3_sha3") do(data: seq[byte]) -> Hash32:
-    result = keccak256(data)
+    proc web3_sha3(data: seq[byte]): Hash32 =
+      result = keccak256(data)
 
-  server.rpc("net_version") do() -> string:
-    result = $config.networkId
+    proc net_version(): string =
+      result = $config.networkId
 
-  server.rpc("net_listening") do() -> bool:
-    let numPeers = node.numPeers
-    result = numPeers < config.maxPeers
+    proc net_listening(): bool =
+      let numPeers = node.numPeers
+      result = numPeers < config.maxPeers
 
-  server.rpc("net_peerCount") do() -> Quantity:
-    let peerCount = uint node.numPeers
-    result = w3Qty(peerCount)
+    proc net_peerCount(): Quantity =
+      let peerCount = uint node.numPeers
+      result = w3Qty(peerCount)
 
 proc setupAdminRpc*(nimbus: NimbusNode, config: ExecutionClientConf, server: RpcServer) =
   let node = nimbus.ethNode
 
-  server.rpc("admin_nodeInfo") do() -> NodeInfo:
-    let
-      enode = toENode(node)
-      nodeId = toNodeId(node.keys.pubkey)
-      nodeInfo = NodeInfo(
-        id: nodeId.toHex,
-        name: config.agentString,
-        enode: $enode,
-        ip: $enode.address.ip,
-        ports: NodePorts(
-          discovery: int(enode.address.udpPort),
-          listener: int(enode.address.tcpPort)
-        )
-      )
-
-    return nodeInfo
-
-  server.rpc("admin_addPeer") do(enode: string) -> bool:
-    var res = ENode.fromString(enode)
-    if res.isOk:
-      asyncSpawn node.connectToNode(res.get())
-      return true
-    # Weird it is, but when addPeer fails, the calee expect
-    # invalid params `-32602`(kurtosis test)
-    raise (ref ApplicationError)(code: -32602, msg: "Invalid ENode")
-
-  server.rpc("admin_peers") do() -> seq[PeerInfo]:
-    var peers: seq[PeerInfo]
-    for peer in node.peerPool.peers:
-      if peer.connectionState == Connected:
-        let
-          nodeId = peer.remote.id
-          clientId = peer.clientId
-          enode = $peer.remote.node
-          remoteIp = $peer.remote.node.address.ip
-          remoteTcpPort = $peer.remote.node.address.tcpPort
-          localEnode = toENode(node)
-          localIp = $localEnode.address.ip
-          localTcpPort = $localEnode.address.tcpPort
-          caps = node.capabilities.mapIt(it.name & "/" & $it.version)
-
-        # Create protocols object with version info
-        var protocolsObj = newJObject()
-        for capability in node.capabilities:
-          protocolsObj[capability.name] = %*{"version": capability.version}
-
-        let peerInfo = PeerInfo(
-          caps: caps,
-          enode: enode,
+  server.rpc(EthJson):
+    proc admin_nodeInfo(): NodeInfo =
+      let
+        enode = toENode(node)
+        nodeId = toNodeId(node.keys.pubkey)
+        nodeInfo = NodeInfo(
           id: nodeId.toHex,
-          name: clientId,
-          network: PeerNetworkInfo(
-            inbound: peer.inbound,
-            localAddress: localIp & ":" & localTcpPort,
-            remoteAddress: remoteIp & ":" & remoteTcpPort,
-            `static`: false,  # TODO: implement static peer tracking
-            trusted: false # TODO: implement trusted peer tracking
-          ),
-          protocols: protocolsObj
+          name: config.agentString,
+          enode: $enode,
+          ip: $enode.address.ip,
+          ports: NodePorts(
+            discovery: int(enode.address.udpPort),
+            listener: int(enode.address.tcpPort)
+          )
         )
-        peers.add(peerInfo)
 
-    return peers
+      return nodeInfo
 
-  server.rpc("admin_quit") do() -> string:
-    ProcessState.scheduleStop("admin_quit")
-    result = "EXITING"
+    proc admin_addPeer(enode: string): bool =
+      var res = ENode.fromString(enode)
+      if res.isOk:
+        asyncSpawn node.connectToNode(res.get())
+        return true
+      # Weird it is, but when addPeer fails, the calee expect
+      # invalid params `-32602`(kurtosis test)
+      raise (ref ApplicationError)(code: -32602, msg: "Invalid ENode")
+
+    proc admin_peers(): seq[PeerInfo] =
+      var peers: seq[PeerInfo]
+      for peer in node.peerPool.peers:
+        if peer.connectionState == Connected:
+          let
+            nodeId = peer.remote.id
+            clientId = peer.clientId
+            enode = $peer.remote.node
+            remoteIp = $peer.remote.node.address.ip
+            remoteTcpPort = $peer.remote.node.address.tcpPort
+            localEnode = toENode(node)
+            localIp = $localEnode.address.ip
+            localTcpPort = $localEnode.address.tcpPort
+            caps = node.capabilities.mapIt(it.name & "/" & $it.version)
+
+          # Create protocols object with version info
+          var protocolsObj = newJObject()
+          for capability in node.capabilities:
+            protocolsObj[capability.name] = %*{"version": capability.version}
+
+          let peerInfo = PeerInfo(
+            caps: caps,
+            enode: enode,
+            id: nodeId.toHex,
+            name: clientId,
+            network: PeerNetworkInfo(
+              inbound: peer.inbound,
+              localAddress: localIp & ":" & localTcpPort,
+              remoteAddress: remoteIp & ":" & remoteTcpPort,
+              `static`: false,  # TODO: implement static peer tracking
+              trusted: false # TODO: implement trusted peer tracking
+            ),
+            protocols: protocolsObj
+          )
+          peers.add(peerInfo)
+
+      return peers
+
+    proc admin_quit(): string =
+      ProcessState.scheduleStop("admin_quit")
+      result = "EXITING"

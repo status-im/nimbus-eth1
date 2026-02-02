@@ -40,11 +40,11 @@ type AppConf* = object
     name: "rpc-listen-address"
   .}: IpAddress
 
-proc writeValue*(w: var JsonWriter[JrpcConv], v: Record) {.gcsafe, raises: [IOError].} =
+proc writeValue*(w: var JsonWriter[EthJson], v: Record) {.gcsafe, raises: [IOError].} =
   w.writeValue(v.toURI())
 
 proc readValue*(
-    r: var JsonReader[JrpcConv], val: var Record
+    r: var JsonReader[EthJson], val: var Record
 ) {.gcsafe, raises: [IOError, JsonReaderError].} =
   val = enr.Record.fromURI(r.parseString()).valueOr:
     r.raiseUnexpectedValue("Invalid ENR")
@@ -55,57 +55,58 @@ proc installUtpHandlers(
     s: UtpDiscv5Protocol,
     t: ref Table[SKey, UtpSocket[NodeAddress]],
 ) {.raises: [].} =
-  srv.rpc("utp_connect") do(r: enr.Record) -> SKey:
-    let node = Node.fromRecord(r)
-    let nodeAddress = NodeAddress.init(node).unsafeGet()
-    discard d.addNode(node)
-    let connResult = await s.connectTo(nodeAddress)
-    if (connResult.isOk()):
-      let socket = connResult.get()
-      let sKey = socket.socketKey.toSKey()
-      t[sKey] = socket
-      return sKey
-    else:
-      raise newException(ValueError, "Connection to node Failed.")
+  srv.rpc(EthJson):
+    utp_connect(r: enr.Record): SKey =
+      let node = Node.fromRecord(r)
+      let nodeAddress = NodeAddress.init(node).unsafeGet()
+      discard d.addNode(node)
+      let connResult = await s.connectTo(nodeAddress)
+      if (connResult.isOk()):
+        let socket = connResult.get()
+        let sKey = socket.socketKey.toSKey()
+        t[sKey] = socket
+        return sKey
+      else:
+        raise newException(ValueError, "Connection to node Failed.")
 
-  srv.rpc("utp_write") do(k: SKey, b: string) -> bool:
-    let sock = t.getOrDefault(k)
-    let bytes = hexToSeqByte(b)
-    if sock != nil:
-      # TODO consider doing it async to avoid json-rpc timeouts in case of large writes
-      let res = await sock.write(bytes)
-      if res.isOk():
+    utp_write(k: SKey, b: string): bool =
+      let sock = t.getOrDefault(k)
+      let bytes = hexToSeqByte(b)
+      if sock != nil:
+        # TODO consider doing it async to avoid json-rpc timeouts in case of large writes
+        let res = await sock.write(bytes)
+        if res.isOk():
+          return true
+        else:
+          # TODO return correct errors instead of just true/false
+          return false
+      else:
+        raise newException(ValueError, "Socket with provided key is missing")
+
+    utp_get_connections(): seq[SKey] =
+      var keys = newSeq[SKey]()
+
+      for k in t.keys:
+        keys.add(k)
+
+      return keys
+
+    utp_read(k: SKey, n: int): string =
+      let sock = t.getOrDefault(k)
+      if sock != nil:
+        let res = await sock.read(n)
+        let asHex = res.toHex()
+        return asHex
+      else:
+        raise newException(ValueError, "Socket with provided key is missing")
+
+    utp_close(k: SKey): bool =
+      let sock = t.getOrDefault(k)
+      if sock != nil:
+        await sock.closeWait()
         return true
       else:
-        # TODO return correct errors instead of just true/false
-        return false
-    else:
-      raise newException(ValueError, "Socket with provided key is missing")
-
-  srv.rpc("utp_get_connections") do() -> seq[SKey]:
-    var keys = newSeq[SKey]()
-
-    for k in t.keys:
-      keys.add(k)
-
-    return keys
-
-  srv.rpc("utp_read") do(k: SKey, n: int) -> string:
-    let sock = t.getOrDefault(k)
-    if sock != nil:
-      let res = await sock.read(n)
-      let asHex = res.toHex()
-      return asHex
-    else:
-      raise newException(ValueError, "Socket with provided key is missing")
-
-  srv.rpc("utp_close") do(k: SKey) -> bool:
-    let sock = t.getOrDefault(k)
-    if sock != nil:
-      await sock.closeWait()
-      return true
-    else:
-      raise newException(ValueError, "Socket with provided key is missing")
+        raise newException(ValueError, "Socket with provided key is missing")
 
 proc buildAcceptConnection(
     t: ref Table[SKey, UtpSocket[NodeAddress]]
