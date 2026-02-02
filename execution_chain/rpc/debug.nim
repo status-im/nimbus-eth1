@@ -11,7 +11,6 @@
 
 import
   # std/json,
-  stew/byteutils,
   json_rpc/rpcserver,
   web3/[eth_api_types, conversions],
   ./rpc_utils,
@@ -219,15 +218,6 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
     ## Returns an execution witness for the given block hash.
     chain.getExecutionWitness(blockHash).valueOr:
       raise newException(ValueError, error)
-
-  server.rpc("debug_getHeaderByNumber") do(blockTag: BlockTag) -> string:
-    ## Returns the rlp encoded block header in hex for the given block number / tag.
-    # Note: When proposing this method for inclusion in the JSON-RPC spec,
-    # consider returning a header JSON object instead of RLP. Likely to be more accepted.
-    let header = chain.headerFromTag(blockTag).valueOr:
-      raise newException(ValueError, error)
-
-    rlp.encode(header).to0xHex()
 
   server.rpc("debug_getBadBlocks") do() -> seq[BadBlock]:
     ## Returns a list of the most recently processed bad blocks.
