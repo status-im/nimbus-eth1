@@ -266,12 +266,21 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
     blockGasUsedInTx: blockGasUsedInTx,
   )
 
+proc sysCallGasUsed(host: TransactionHost, call: CallParams): GasUsed =
+  let
+    c = host.computation
+    txGasUsed = call.gasLimit - c.gasMeter.gasRemaining
+  GasUsed(
+    evmGasUsed: c.msg.gas - c.gasMeter.gasRemaining,
+    txGasUsed: txGasUsed,
+    blockGasUsedInTx: txGasUsed,
+  )
 
 proc finishRunningComputation(
     host: TransactionHost, call: CallParams, T: type): T =
   let
     c = host.computation
-    gasUsed = if call.sysCall: GasUsed()
+    gasUsed = if call.sysCall: sysCallGasUsed(host, call)
               else: calculateAndPossiblyRefundGas(host, call)
 
   # evm gas used without intrinsic gas
