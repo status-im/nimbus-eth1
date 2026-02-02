@@ -49,7 +49,7 @@ import
 const
   defaultMetricsServerPort = 8008
   copyright = "Copyright (c) " & compileYear & " Status Research & Development GmbH"
-  projectId = "nimbus" & "/" & FullVersionStr & "/" & CpuInfo
+  projectId = "Nimbus" & "/" & FullVersionStr & "/" & CpuInfo
 
 type NStartUpCmd* {.pure.} = enum
   nimbus = "Run Ethereum node"
