@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2025 Status Research & Development GmbH
+# Copyright (c) 2019-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -11,7 +11,9 @@
 import
   macro_assembler,
   unittest2,
-  eth/common
+  eth/common,
+  ../execution_chain/evm/state,
+  ../execution_chain/db/ledger
 
 proc opCustomMain*() =
   suite "Custom Opcodes Test":
@@ -196,13 +198,25 @@ proc opCustomMain*() =
       stack: "0x00000000000000000000000000000000000000000000000000000000000f4434"
 
     assembler: # EIP2929 BALANCE OP
-      title: "EIP2929 BALANCE_1"
+      title: "EIP2929 BALANCE_1 WARM"
+      setup:
+        vmState.mutateLedger:
+          db.accessList(codeAddress)
       code:
         Address
         Balance
       stack: "0x00000000000000000000000000000000000000000000000000000000000f4434"
       fork: Berlin
       gasused: 102
+
+    assembler:
+      title: "EIP2929 BALANCE_1 COLD"
+      code:
+        Address
+        Balance
+      stack: "0x00000000000000000000000000000000000000000000000000000000000f4434"
+      fork: Berlin
+      gasused: 2602
 
     assembler: # ORIGIN OP
       title: "ORIGIN_1"
