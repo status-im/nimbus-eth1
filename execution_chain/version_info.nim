@@ -18,7 +18,7 @@ import
 export version
 
 const
-  NimbusName* = "nimbus-eth1"
+  NimbusName* = "nimbus_execution_client"
   ## project name string
 
   #GitRevisionOverride {.strdefine.} = ""
@@ -32,6 +32,8 @@ const
 
   FullVersionStr* = "v" & NimbusVersion & "-" & GitRevision
 
-  ClientId* = &"{NimbusName}/{FullVersionStr}/{hostOS}-{hostCPU}/Nim-{NimVersion}"
+  CpuInfo* = &"{hostOS}-{hostCPU}/Nim-{NimVersion}"
+
+  ClientId* = &"{NimbusName}/{FullVersionStr}/{CpuInfo}"
 
   ShortClientId* = NimbusName & "/" & FullVersionStr
