@@ -58,5 +58,3 @@ proc prune*(config: ExecutionClientConf, com: CommonRef) =
   txFrame.setHistoryExpired(currentBlock)
   checkpoint()
   notice "Completed Purging", blocksExistFrom=currentBlock-1, till=start
-
-  
