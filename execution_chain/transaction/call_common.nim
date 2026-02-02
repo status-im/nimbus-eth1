@@ -28,7 +28,6 @@ type
   TransactionHost = ref object
     vmState:         BaseVMState
     computation:     Computation
-    sysCall:         bool
     floorDataGas:    GasInt
 
   GasUsed = object
@@ -146,7 +145,6 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
                                    else: intrinsicGas(call, vmState.fork)
     host = TransactionHost(
       vmState: vmState,
-      sysCall: call.sysCall,
       floorDataGas: floorDataGas,
       # All other defaults in `TransactionHost` are fine.
     )
