@@ -31,7 +31,8 @@ requires "nim >= 2.2.4",
   "blscurve",
   "evmc",
   "web3",
-  "minilru"
+  "minilru",
+  "intops"
 
 binDir = "build"
 
