@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -410,7 +410,7 @@ proc estimateGas*(
     evmResult = rpcEstimateGas(tx, header, vmState, EVM_CALL_GAS_CAP)
     gasEstimate =
       ?evmResult.mapErr(
-        proc(e: EvmErrorObj): string =
-          "EVM execution failed: " & $e.code
+        proc(e: (EvmErrorObj, OutputResult)): string =
+          "EVM execution failed: " & $e[0].code
       )
   ok(gasEstimate)

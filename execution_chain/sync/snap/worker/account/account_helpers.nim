@@ -32,10 +32,10 @@ proc updateErrorState(buddy: SnapPeerRef) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-func hdrErrors*(buddy: SnapPeerRef): string =
+func accErrors*(buddy: SnapPeerRef): string =
   $buddy.nErrors.fetch.acc & "/" & $buddy.nErrors.apply.acc
 
-proc hdrFetchRegisterError*(buddy: SnapPeerRef;
+proc accFetchRegisterError*(buddy: SnapPeerRef;
      slowPeer = false;
      forceZombie = false;
        ) =
@@ -51,7 +51,7 @@ proc hdrFetchRegisterError*(buddy: SnapPeerRef;
       # abandon `slow` peer as it is not the last one in the pool
       buddy.ctrl.zombie = true
 
-proc hdrProcRegisterError*(buddy: SnapPeerRef) =
+proc accProcRegisterError*(buddy: SnapPeerRef) =
   buddy.nErrors.apply.acc.inc
   buddy.updateErrorState()
 

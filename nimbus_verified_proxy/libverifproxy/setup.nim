@@ -59,7 +59,8 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
       of "Json": StdoutLogKind.Json
       of "Auto": StdoutLogKind.Auto
       else: StdoutLogKind.None
-    maxBlockWalk = jsonNode.getOrDefault("maxBlockWalk").getInt(1000)
+    maxBlockWalk = jsonNode.getOrDefault("maxBlockWalk").getBiggestInt(1000)
+    prllBlkDwnlds = jsonNode.getOrDefault("parallelBlockDownloads").getBiggestInt(10)
     headerStoreLen = jsonNode.getOrDefault("headerStoreLen").getInt(256)
     storageCacheLen = jsonNode.getOrDefault("storageCacheLen").getInt(256)
     codeCacheLen = jsonNode.getOrDefault("codeCacheLen").getInt(64)
@@ -73,11 +74,20 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
     logLevel: logLevel,
     logFormat: logFormat,
     dataDirFlag: none(OutDir),
-    maxBlockWalk: uint64(maxBlockWalk),
+    maxBlockWalk:
+      if maxBlockWalk < 0:
+        uint64(0)
+      else:
+        uint64(maxBlockWalk),
     headerStoreLen: headerStoreLen,
     storageCacheLen: storageCacheLen,
     codeCacheLen: codeCacheLen,
     accountCacheLen: accountCacheLen,
+    parallelBlockDownloads:
+      if prllBlkDwnlds < 0:
+        uint64(0)
+      else:
+        uint64(prllBlkDwnlds),
   )
 
 proc run*(
@@ -95,6 +105,7 @@ proc run*(
       accountCacheLen: config.accountCacheLen,
       codeCacheLen: config.codeCacheLen,
       storageCacheLen: config.storageCacheLen,
+      parallelBlockDownloads: config.parallelBlockDownloads,
     )
     engine = RpcVerificationEngine.init(engineConf).valueOr:
       raise newException(ProxyError, error.errMsg)

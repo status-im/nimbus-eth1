@@ -98,6 +98,13 @@ type VerifiedProxyConf* = object
     name: "debug-max-walk"
   .}: uint64
 
+  parallelBlockDownloads* {.
+    hidden,
+    desc: "Number of blocks downloaded parallely. Affects memory usage",
+    defaultValue: 10,
+    name: "debug-parallel-downloads"
+  .}: uint64
+
   # Consensus light sync
   # No default - Needs to be provided by the user
   trustedBlockRoot* {.

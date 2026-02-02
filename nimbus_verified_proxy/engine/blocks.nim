@@ -8,7 +8,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/strutils,
+  std/[strutils, sequtils],
   results,
   chronicles,
   web3/[eth_api_types, eth_api],
@@ -94,8 +94,6 @@ proc walkBlocks(
     sourceHash: Hash32,
     targetHash: Hash32,
 ): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
-  var nextHash = sourceHash
-
   info "Starting block walk to verify requested block", blockHash = targetHash
 
   let numBlocks = sourceNum - targetNum
@@ -108,34 +106,59 @@ proc walkBlocks(
       )
     )
 
-  for i in 0 ..< numBlocks:
-    let nextHeader =
-      if engine.headerStore.contains(nextHash):
-        engine.headerStore.get(nextHash).get()
+  var
+    nextHash = sourceHash # sourceHash is already the parent hash
+    nextNum = sourceNum - 1
+    downloadedHeaders: Table[Hash32, Header]
+    futs: seq[Future[EngineResult[BlockObject]]]
+
+  while nextNum > targetNum:
+    futs = @[]
+    downloadedHeaders.clear()
+
+    while nextNum > targetNum and uint64(futs.len) < engine.parallelBlockDownloads:
+      if not engine.headerStore.contains(nextNum):
+        let tag = BlockTag(kind: bidNumber, number: Quantity(nextNum))
+        futs.add(engine.backend.eth_getBlockByNumber(tag, false))
+
+      nextNum -= 1
+
+    await allFutures(futs)
+
+    for futBlk in futs:
+      if futBlk.cancelled() or futBlk.failed():
+        return
+          err((UnavailableDataError, "Error downloading a block during the block walk"))
       else:
-        let blk = ?(await engine.backend.eth_getBlockByHash(nextHash, false))
+        let
+          blk = ?futBlk.value()
+          h = convHeader(blk)
+        downloadedHeaders[blk.hash] = h
 
-        trace "getting next block",
-          hash = nextHash,
-          number = blk.number,
-          remaining = distinctBase(blk.number) - targetNum
-
-        let header = convHeader(blk)
-
-        if header.computeBlockHash != nextHash:
-          return err(
-            (
-              VerificationError,
-              "Encountered an invalid block header while walking the chain",
+    for j in 0 ..< futs.len:
+      let unverifiedHeader =
+        if engine.headerStore.contains(nextHash):
+          engine.headerStore.get(nextHash).get()
+        else:
+          try:
+            downloadedHeaders[nextHash]
+          except KeyError:
+            return err(
+              (UnavailableDataError, "Cannot find downloaded block of the block walk")
             )
+
+      if unverifiedHeader.computeBlockHash != nextHash:
+        return err(
+          (
+            VerificationError,
+            "Encountered an invalid block header while walking the chain",
           )
+        )
 
-        header
+      if unverifiedHeader.parentHash == targetHash:
+        return ok()
 
-    if nextHeader.parentHash == targetHash:
-      return ok()
-
-    nextHash = nextHeader.parentHash
+      nextHash = unverifiedHeader.parentHash
 
   err((VerificationError, "the requested block is not part of the canonical chain"))
 
@@ -148,18 +171,46 @@ proc verifyHeader(
       (VerificationError, "hashed block header doesn't match with blk.hash(downloaded)")
     )
 
-  if not engine.headerStore.contains(hash):
-    let latestHeader = engine.headerStore.latest.valueOr:
-      return err(
-        (UnavailableDataError, "Couldn't get the latest header, syncing in progress")
-      )
+  # if the header is available in the store just use that (already verified)
+  if engine.headerStore.contains(hash):
+    return ok()
+  # walk blocks backwards(time) from source to target
+  else:
+    let
+      earliest = engine.headerStore.earliest.valueOr:
+        return err(
+          (UnavailableDataError, "earliest block is not available yet. Still syncing?")
+        )
+      finalized = engine.headerStore.finalized.valueOr:
+        return err(
+          (UnavailableDataError, "finalized block is not available yet. Still syncing?")
+        )
+      latest = engine.headerStore.latest.valueOr:
+        return err(
+          (UnavailableDataError, "latest block is not available yet. Still syncing?")
+        )
 
-    # walk blocks backwards(time) from source to target
-    ?(
-      await engine.walkBlocks(
-        latestHeader.number, header.number, latestHeader.parentHash, hash
-      )
-    )
+    # header is older than earliest
+    if header.number < earliest.number:
+      # earliest is finalized
+      if earliest.number < finalized.number:
+        ?await engine.walkBlocks(
+          earliest.number, header.number, earliest.parentHash, hash
+        )
+      # earliest is not finalized (headerstore is smaller than 2 epochs or chain hasn't finalized for long)
+      else:
+        ?await engine.walkBlocks(
+          finalized.number, header.number, finalized.parentHash, hash
+        )
+    # is within the boundaries of header store but not found in cache
+    else:
+      if header.number < finalized.number:
+        ?await engine.walkBlocks(
+          finalized.number, header.number, finalized.parentHash, hash
+        )
+      else:
+        # optimistic walk
+        ?await engine.walkBlocks(latest.number, header.number, latest.parentHash, hash)
 
   ok()
 

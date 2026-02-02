@@ -14,17 +14,16 @@
 
 import
   std/strformat,
-  pkg/chronos,
+  pkg/[chronos, stew/interval_set],
   ../../../core/chain,
   ../../../networking/p2p,
-  ../../../utils/prettify as utils_prettify,
-  ../../../utils/utils,
+  ../../../utils/[prettify, utils],
   ../../sync_desc,
   ./state_db/item_key,
   ./worker_const
 
 export
-  utils_prettify, short, `$`
+  prettify, short, `$`
 
 
 func toStr*(h: Hash32): string =

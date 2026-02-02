@@ -100,6 +100,7 @@ suite "test verified blocks":
       ts.loadBlock(blk)
       if i == sourceBlockNum:
         check engine.headerStore.add(convHeader(blk), blk.hash).isOk()
+        check engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
 
     let
       unreachableTargetTag =

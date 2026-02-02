@@ -12,10 +12,10 @@
 
 import
   std/strutils,
-  pkg/[chronos, metrics, minilru],
+  pkg/[chronos, chronicles, metrics, minilru],
   ../../../networking/p2p,
   ../../wire_protocol,
-  ./[state_db, worker_desc]
+  ./[mpt, state_db, worker_desc]
 
 declareGauge nec_snap_peers, "" &
   "Number of currently active snap instances"
@@ -33,19 +33,27 @@ template setLastPeerSeen(ctx: SnapCtxRef) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc setupServices*(ctx: SnapCtxRef; info: static[string]) =
+proc setupServices*(ctx: SnapCtxRef; info: static[string]): bool =
   ## Helper for `setup()`: Enable external call-back based services
 
   # Set up accouning DB
   ctx.pool.stateDB = StateDbRef.init()
 
+  # Set up assembly DB
+  ctx.pool.mptAsm = MptAsmRef.init(ctx.pool.baseDir, info).valueOr:
+    return false
+
   # Set up ticker, disabled by default
   if ctx.pool.ticker.isNil:
     ctx.pool.ticker = proc(ctx: SnapCtxRef) = discard
 
+  true
+
 proc destroyServices*(ctx: SnapCtxRef) =
   ## Helper for `release()`
-  discard
+  if not ctx.pool.mptAsm.isNil:
+    ctx.pool.mptAsm.close()
+    ctx.pool.mptAsm = MptAsmRef(nil)
 
 # ---------
 

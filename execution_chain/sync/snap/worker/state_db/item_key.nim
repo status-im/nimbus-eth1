@@ -18,10 +18,6 @@ import
   std/math,
   pkg/[eth/common, stint, stew/interval_set]
 
-export
-  Hash32, stint, interval_set
-
-
 type
   ItemKey* = distinct UInt256
     ## Account trie item key, hash etc. as a scalar (allows arithmetic)
@@ -40,7 +36,8 @@ template to*(w: ItemKey; T: type UInt256): T = w.T
 template to*(w: UInt256; T: type ItemKey): T = w.T
 
 template to*(w: ItemKey; T: type Hash32): T = w.UInt256.to(Bytes32).T
-template to*(w: Hash32; T: type ItemKey): T = w.Bytes32.to(UInt256).T
+template to*(w: Hash32; T: type UInt256): T = w.Bytes32.to(T)
+template to*(w: Hash32; T: type ItemKey): T = w.to(UInt256).T
 
 template to*(w: SomeUnsignedInt; T: type ItemKey): T = w.to(UInt256).T
 

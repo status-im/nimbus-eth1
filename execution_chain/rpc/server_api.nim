@@ -354,9 +354,14 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         raise newException(ValueError, "Block not found")
       headerHash = header.computeBlockHash
       txFrame = api.chain.txFrame(headerHash)
-      #TODO: change 0 to configureable gas cap
+      # TODO: change 0 to configureable gas cap
       gasUsed = rpcEstimateGas(args, header, headerHash, api.com, txFrame, DEFAULT_RPC_GAS_CAP).valueOr:
-        raise newException(ValueError, "rpcEstimateGas error: " & $error.code)
+        let data = Opt.some(JrpcConv.encode(error[1].output.to0xHex()).JsonString)
+        raise (ref ApplicationError)(
+          code: 3,
+          msg: $error[1].error,
+          data: data,
+        )
     Quantity(gasUsed)
 
   server.rpc("eth_gasPrice") do() -> Quantity:
@@ -628,12 +633,10 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ## Returns the base fee per blob gas in wei.
     let header = api.headerFromTag(blockId("latest")).valueOr:
       raise newException(ValueError, "Block not found")
-    if header.blobGasUsed.isNone:
-      raise newException(ValueError, "blobGasUsed missing from latest header")
     if header.excessBlobGas.isNone:
       raise newException(ValueError, "excessBlobGas missing from latest header")
     let blobBaseFee =
-      getBlobBaseFee(header.excessBlobGas.get, api.com, api.com.toEVMFork(header)) * header.blobGasUsed.get.u256
+      getBlobBaseFee(header.excessBlobGas.get, api.com, api.com.toEVMFork(header))
     if blobBaseFee > high(uint64).u256:
       raise newException(ValueError, "blobBaseFee is bigger than uint64.max")
     return w3Qty blobBaseFee.truncate(uint64)
