@@ -30,8 +30,8 @@ NodeMetadata.useDefaultSerializationIn EthJson
 TraceResponse.useDefaultSerializationIn EthJson
 
 proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
-  rpcServer.rpcContext(EthJson):
-    rpc("portal_beaconFindContent") do(enr: Record, contentKey: string) -> JsonString:
+  rpcServer.rpc(EthJson):
+    proc portal_beaconFindContent(enr: Record, contentKey: string): JsonString =
       let
         node = toNodeWithAddress(enr)
         foundContentResult =
@@ -44,8 +44,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
         case foundContent.kind
         of Content:
           let res = ContentInfo(
-            content: foundContent.content.to0xHex(),
-            utpTransfer: foundContent.utpTransfer,
+            content: foundContent.content.to0xHex(), utpTransfer: foundContent.utpTransfer
           )
           EthJson.encode(res).JsonString
         of Nodes:
@@ -56,7 +55,9 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
           let jsonEnrs = EthJson.encode(enrs)
           ("{\"enrs\":" & jsonEnrs & "}").JsonString
 
-    rpc("portal_beaconOffer") do(enr: Record, contentItems: seq[ContentItem]) -> string:
+    proc portal_beaconOffer(
+      enr: Record, contentItems: seq[ContentItem]
+    ): string =
       let node = toNodeWithAddress(enr)
 
       var contentOffers: seq[ContentKV]
@@ -71,7 +72,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
       SSZ.encode(offerResult).to0xHex()
 
-    rpc("portal_beaconGetContent") do(contentKey: string) -> ContentInfo:
+    proc portal_beaconGetContent(contentKey: string): ContentInfo =
       let
         keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
         contentId = p.toContentId(keyBytes).valueOr:
@@ -83,9 +84,9 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
       ContentInfo(content: content, utpTransfer: contentLookupResult.utpTransfer)
 
-    rpc("portal_beaconTraceGetContent") do(
+    proc portal_beaconTraceGetContent(
       contentKey: string
-    ) -> TraceContentLookupResult:
+    ): TraceContentLookupResult =
       let
         keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
         contentId = p.toContentId(keyBytes).valueOr:
@@ -101,7 +102,9 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
       res
 
-    rpc("portal_beaconStore") do(contentKey: string, contentValue: string) -> bool:
+    proc portal_beaconStore(
+      contentKey: string, contentValue: string
+    ): bool =
       let
         keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
         offerValueBytes = hexToSeqByte(contentValue)
@@ -111,7 +114,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       # TODO: Do we need to convert the received offer to a value without proofs before storing?
       p.storeContent(keyBytes, contentId, offerValueBytes)
 
-    rpc("portal_beaconLocalContent") do(contentKey: string) -> string:
+    proc portal_beaconLocalContent(contentKey: string): string =
       let
         keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
         contentId = p.toContentId(keyBytes).valueOr:
@@ -122,9 +125,9 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
       valueBytes.to0xHex()
 
-    rpc("portal_beaconPutContent") do(
+    proc portal_beaconPutContent(
       contentKey: string, contentValue: string
-    ) -> PutContentResult:
+    ): PutContentResult =
       let
         keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
         _ = p.toContentId(keyBytes).valueOr:
@@ -154,7 +157,9 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
         ),
       )
 
-    rpc("portal_beaconRandomGossip") do(contentKey: string, contentValue: string) -> int:
+    proc portal_beaconRandomGossip(
+      contentKey: string, contentValue: string
+    ): int =
       let
         keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
         offerValueBytes = hexToSeqByte(contentValue)

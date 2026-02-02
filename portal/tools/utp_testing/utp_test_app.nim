@@ -55,8 +55,8 @@ proc installUtpHandlers(
     s: UtpDiscv5Protocol,
     t: ref Table[SKey, UtpSocket[NodeAddress]],
 ) {.raises: [].} =
-  srv.rpcContext(EthJson):
-    rpc("utp_connect") do(r: enr.Record) -> SKey:
+  srv.rpc(EthJson):
+    utp_connect(r: enr.Record): SKey =
       let node = Node.fromRecord(r)
       let nodeAddress = NodeAddress.init(node).unsafeGet()
       discard d.addNode(node)
@@ -69,7 +69,7 @@ proc installUtpHandlers(
       else:
         raise newException(ValueError, "Connection to node Failed.")
 
-    rpc("utp_write") do(k: SKey, b: string) -> bool:
+    utp_write(k: SKey, b: string): bool =
       let sock = t.getOrDefault(k)
       let bytes = hexToSeqByte(b)
       if sock != nil:
@@ -83,7 +83,7 @@ proc installUtpHandlers(
       else:
         raise newException(ValueError, "Socket with provided key is missing")
 
-    rpc("utp_get_connections") do() -> seq[SKey]:
+    utp_get_connections(): seq[SKey] =
       var keys = newSeq[SKey]()
 
       for k in t.keys:
@@ -91,7 +91,7 @@ proc installUtpHandlers(
 
       return keys
 
-    rpc("utp_read") do(k: SKey, n: int) -> string:
+    utp_read(k: SKey, n: int): string =
       let sock = t.getOrDefault(k)
       if sock != nil:
         let res = await sock.read(n)
@@ -100,7 +100,7 @@ proc installUtpHandlers(
       else:
         raise newException(ValueError, "Socket with provided key is missing")
 
-    rpc("utp_close") do(k: SKey) -> bool:
+    utp_close(k: SKey): bool =
       let sock = t.getOrDefault(k)
       if sock != nil:
         await sock.closeWait()

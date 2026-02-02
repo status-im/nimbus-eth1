@@ -107,8 +107,8 @@ proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[Block, string] 
   api.chain.blockFromTag(blockTag)
 
 proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManager) =
-  server.rpcContext(EthJson):
-    rpc("eth_getBalance") do(data: Address, blockTag: BlockTag) -> UInt256:
+  server.rpc(EthJson):
+    proc eth_getBalance(data: Address, blockTag: BlockTag): UInt256 =
       ## Returns the balance of the account of given address.
       let
         ledger = api.ledgerFromTag(blockTag).valueOr:
@@ -116,9 +116,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         address = data
       ledger.getBalance(address)
 
-    rpc("eth_getStorageAt") do(
+    proc eth_getStorageAt(
       data: Address, slot: UInt256, blockTag: BlockTag
-    ) -> FixedBytes[32]:
+    ): FixedBytes[32] =
       ## Returns the value from a storage position at a given address.
       let
         ledger = api.ledgerFromTag(blockTag).valueOr:
@@ -127,9 +127,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         value = ledger.getStorage(address, slot)
       value.to(Bytes32)
 
-    rpc("eth_getTransactionCount") do(
+    proc eth_getTransactionCount(
       data: Address, blockTag: BlockTag
-    ) -> Quantity:
+    ): Quantity =
       ## Returns the number of transactions ak.s. nonce sent from an address.
       let
         ledger = api.ledgerFromTag(blockTag).valueOr:
@@ -138,14 +138,14 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         nonce = ledger.getNonce(address)
       Quantity(nonce)
 
-    rpc("eth_blockNumber") do() -> Quantity:
+    proc eth_blockNumber(): Quantity =
       ## Returns integer of the current block number the client is on.
       Quantity(api.chain.latestNumber)
 
-    rpc("eth_chainId") do() -> UInt256:
+    proc eth_chainId(): UInt256 =
       return api.com.chainId
 
-    rpc("eth_getCode") do(data: Address, blockTag: BlockTag) -> seq[byte]:
+    proc eth_getCode(data: Address, blockTag: BlockTag): seq[byte] =
       ## Returns code at a given address.
       ##
       ## data: address
@@ -157,9 +157,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         address = data
       ledger.getCode(address).bytes()
 
-    rpc("eth_getBlockByHash") do(
+    proc eth_getBlockByHash(
       data: Hash32, fullTransactions: bool
-    ) -> BlockObject:
+    ): BlockObject =
       ## Returns information about a block by hash.
       ##
       ## data: Hash of a block.
@@ -174,9 +174,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         blockHash, blk, api.getTotalDifficulty(blockHash, blk.header), fullTransactions
       )
 
-    rpc("eth_getBlockByNumber") do(
+    proc eth_getBlockByNumber(
       blockTag: BlockTag, fullTransactions: bool
-    ) -> BlockObject:
+    ): BlockObject =
       ## Returns information about a block by block number.
       ##
       ## blockTag: integer of a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
@@ -190,7 +190,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         blockHash, blk, api.getTotalDifficulty(blockHash, blk.header), fullTransactions
       )
 
-    rpc("eth_syncing") do() -> SyncingStatus:
+    proc eth_syncing(): SyncingStatus =
       ## Returns SyncObject or false when not syncing.
       let (start, current, target) = api.com.beaconSyncerProgress()
       if start == 0 and current == 0 and target == 0:
@@ -203,52 +203,53 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         )
         return SyncingStatus(syncing: true, syncObject: sync)
 
-    proc getLogsForBlock(
-        chain: ForkedChainRef, header: Header, opts: FilterOptions
-    ): Opt[seq[FilterLog]] =
-      if headerBloomFilter(header, opts.address, opts.topics):
-        let
-          blkHash = header.computeBlockHash
-          blockBody = chain.blockBodyByHash(blkHash).valueOr:
-            return Opt.none(seq[FilterLog])
-          receipts = chain.receiptsByBlockHash(blkHash).valueOr:
-            return Opt.none(seq[FilterLog])
-          cachedHashes = chain.memoryTxHashesForBlock(blkHash)
-        # Note: this will hit assertion error if number of block transactions
-        # do not match block receipts.
-        # Although this is fine as number of receipts should always match number
-        # of transactions
-        if blockBody.transactions.len != receipts.len:
-          warn "Transactions and receipts length mismatch",
-            number = header.number, hash = blkHash.short,
-            txs = blockBody.transactions.len, receipts = receipts.len
+  proc getLogsForBlock(
+      chain: ForkedChainRef, header: Header, opts: FilterOptions
+  ): Opt[seq[FilterLog]] =
+    if headerBloomFilter(header, opts.address, opts.topics):
+      let
+        blkHash = header.computeBlockHash
+        blockBody = chain.blockBodyByHash(blkHash).valueOr:
           return Opt.none(seq[FilterLog])
-        let logs = deriveLogs(header, blockBody.transactions, receipts, opts, cachedHashes)
-        return Opt.some(logs)
-      else:
-        return Opt.some(newSeq[FilterLog](0))
+        receipts = chain.receiptsByBlockHash(blkHash).valueOr:
+          return Opt.none(seq[FilterLog])
+        cachedHashes = chain.memoryTxHashesForBlock(blkHash)
+      # Note: this will hit assertion error if number of block transactions
+      # do not match block receipts.
+      # Although this is fine as number of receipts should always match number
+      # of transactions
+      if blockBody.transactions.len != receipts.len:
+        warn "Transactions and receipts length mismatch",
+          number = header.number, hash = blkHash.short,
+          txs = blockBody.transactions.len, receipts = receipts.len
+        return Opt.none(seq[FilterLog])
+      let logs = deriveLogs(header, blockBody.transactions, receipts, opts, cachedHashes)
+      return Opt.some(logs)
+    else:
+      return Opt.some(newSeq[FilterLog](0))
 
-    proc getLogsForRange(
-        chain: ForkedChainRef,
-        start: base.BlockNumber,
-        finish: base.BlockNumber,
-        opts: FilterOptions,
-    ): seq[FilterLog] =
-      var
-        logs = newSeq[FilterLog]()
-        blockNum = start
+  proc getLogsForRange(
+      chain: ForkedChainRef,
+      start: base.BlockNumber,
+      finish: base.BlockNumber,
+      opts: FilterOptions,
+  ): seq[FilterLog] =
+    var
+      logs = newSeq[FilterLog]()
+      blockNum = start
 
-      while blockNum <= finish:
-        let
-          header = chain.headerByNumber(blockNum).valueOr:
-            return logs
-          filtered = chain.getLogsForBlock(header, opts).valueOr:
-            return logs
-        logs.add(filtered)
-        blockNum = blockNum + 1
-      return logs
+    while blockNum <= finish:
+      let
+        header = chain.headerByNumber(blockNum).valueOr:
+          return logs
+        filtered = chain.getLogsForBlock(header, opts).valueOr:
+          return logs
+      logs.add(filtered)
+      blockNum = blockNum + 1
+    return logs
 
-    rpc("eth_getLogs") do(filterOptions: FilterOptions) -> seq[FilterLog]:
+  server.rpc(EthJson):
+    proc eth_getLogs(filterOptions: FilterOptions): seq[FilterLog] =
       ## filterOptions: settings for this filter.
       ## Returns a list of all logs matching a given filter object.
       ## TODO: Current implementation is pretty naive and not efficient
@@ -281,7 +282,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         # returned. This is consistent with, what other ethereum clients return
         return api.chain.getLogsForRange(blockFrom.number, blockTo.number, filterOptions)
 
-    rpc("eth_sendRawTransaction") do(txBytes: seq[byte]) -> Hash32:
+    proc eth_sendRawTransaction(txBytes: seq[byte]): Hash32 =
       ## Creates new message call transaction or a contract creation for signed transactions.
       ##
       ## data: the signed transaction data.
@@ -305,7 +306,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
       txHash
 
-    rpc("eth_call") do(args: TransactionArgs, blockTag: BlockTag) -> seq[byte]:
+    proc eth_call(args: TransactionArgs, blockTag: BlockTag): seq[byte] =
       ## Executes a new message call immediately without creating a transaction on the block chain.
       ##
       ## call: the transaction call object.
@@ -320,7 +321,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
           raise newException(ValueError, "rpcCallEvm error: " & $error.code)
       res.output
 
-    rpc("eth_getTransactionReceipt") do(data: Hash32) -> ReceiptObject:
+    proc eth_getTransactionReceipt(data: Hash32): ReceiptObject =
       ## Returns the receipt of a transaction by transaction hash.
       ##
       ## data: Hash of a transaction.
@@ -342,7 +343,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         if txid == uint64(idx):
           return populateReceipt(receipt, gasUsed, blk.transactions[txid], txid, blk.header, api.com)
 
-    rpc("eth_estimateGas") do(args: TransactionArgs) -> Quantity:
+    proc eth_estimateGas(args: TransactionArgs): Quantity =
       ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
       ## The transaction will not be added to the blockchain. Note that the estimate may be significantly more than
       ## the amount of gas actually used by the transaction, for a variety of reasons including EVM mechanics and node performance.
@@ -355,22 +356,27 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
           raise newException(ValueError, "Block not found")
         headerHash = header.computeBlockHash
         txFrame = api.chain.txFrame(headerHash)
-        #TODO: change 0 to configureable gas cap
+        # TODO: change 0 to configureable gas cap
         gasUsed = rpcEstimateGas(args, header, headerHash, api.com, txFrame, DEFAULT_RPC_GAS_CAP).valueOr:
-          raise newException(ValueError, "rpcEstimateGas error: " & $error.code)
+          let data = Opt.some(JrpcConv.encode(error[1].output.to0xHex()).JsonString)
+          raise (ref ApplicationError)(
+            code: 3,
+            msg: $error[1].error,
+            data: data,
+          )
       Quantity(gasUsed)
 
-    rpc("eth_gasPrice") do() -> Quantity:
+    proc eth_gasPrice(): Quantity =
       ## Returns an integer of the current gas price in wei.
       w3Qty(calculateMedianGasPrice(api.chain).uint64)
 
-    rpc("eth_accounts") do() -> seq[Address]:
+    proc eth_accounts(): seq[Address] =
       ## Returns a list of addresses owned by client.
       result = newSeqOfCap[Address](am[].numAccounts)
       for k in am[].addresses:
         result.add k
 
-    rpc("eth_getBlockTransactionCountByHash") do(data: Hash32) -> Quantity:
+    proc eth_getBlockTransactionCountByHash(data: Hash32): Quantity =
       ## Returns the number of transactions in a block from a block matching the given block hash.
       ##
       ## data: hash of a block
@@ -380,9 +386,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
       Quantity(blk.transactions.len)
 
-    rpc("eth_getBlockTransactionCountByNumber") do(
+    proc eth_getBlockTransactionCountByNumber(
       blockTag: BlockTag
-    ) -> Quantity:
+    ): Quantity =
       ## Returns the number of transactions in a block from a block matching the given block number.
       ##
       ## blockTag: integer of a block number, or the string "latest", "earliest" or "pending", see the default block parameter.
@@ -392,7 +398,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
       Quantity(blk.transactions.len)
 
-    rpc("eth_getUncleCountByBlockHash") do(data: Hash32) -> Quantity:
+    proc eth_getUncleCountByBlockHash(data: Hash32): Quantity =
       ## Returns the number of uncles in a block from a block matching the given block hash.
       ##
       ## data: hash of a block.
@@ -402,7 +408,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
       Quantity(blk.uncles.len)
 
-    rpc("eth_getUncleCountByBlockNumber") do(blockTag: BlockTag) -> Quantity:
+    proc eth_getUncleCountByBlockNumber(blockTag: BlockTag): Quantity =
       ## Returns the number of uncles in a block from a block matching the given block number.
       ##
       ## blockTag: integer of a block number, or the string "latest", see the default block parameter.
@@ -412,12 +418,13 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
       Quantity(blk.uncles.len)
 
-    template sign(privateKey: PrivateKey, message: string): seq[byte] =
-      # message length encoded as ASCII representation of decimal
-      let msgData = "\x19Ethereum Signed Message:\n" & $message.len & message
-      @(sign(privateKey, msgData.toBytes()).toRaw())
+  template sign(privateKey: PrivateKey, message: string): seq[byte] =
+    # message length encoded as ASCII representation of decimal
+    let msgData = "\x19Ethereum Signed Message:\n" & $message.len & message
+    @(sign(privateKey, msgData.toBytes()).toRaw())
 
-    rpc("eth_sign") do(data: Address, message: seq[byte]) -> seq[byte]:
+  server.rpc(EthJson):
+    proc eth_sign(data: Address, message: seq[byte]): seq[byte] =
       ## The sign method calculates an Ethereum specific signature with: sign(keccak256("\x19Ethereum Signed Message:\n" + len(message) + message))).
       ## By adding a prefix to the message makes the calculated signature recognisable as an Ethereum specific signature.
       ## This prevents misuse where a malicious DApp can sign arbitrary data (e.g. transaction) and use the signature to impersonate the victim.
@@ -434,7 +441,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         raise newException(ValueError, "Account locked, please unlock it first")
       sign(acc.privateKey, cast[string](message))
 
-    rpc("eth_signTransaction") do(data: TransactionArgs) -> seq[byte]:
+    proc eth_signTransaction(data: TransactionArgs): seq[byte] =
       ## Signs a transaction that can be submitted to the network at a later time using with
       ## eth_sendRawTransaction
       let
@@ -452,7 +459,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         signedTx = signTransaction(tx, acc.privateKey, eip155)
       return rlp.encode(signedTx)
 
-    rpc("eth_sendTransaction") do(data: TransactionArgs) -> Hash32:
+    proc eth_sendTransaction(data: TransactionArgs): Hash32 =
       ## Creates new message call transaction or a contract creation, if the data field contains code.
       ##
       ## obj: the transaction object.
@@ -506,7 +513,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
       txHash
 
-    rpc("eth_getTransactionByHash") do(data: Hash32) -> TransactionObject:
+    proc eth_getTransactionByHash(data: Hash32): TransactionObject =
       ## Returns the information about a transaction requested by transaction hash.
       ##
       ## data: hash of a transaction.
@@ -533,9 +540,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         Opt.some(txId),
       )
 
-    rpc("eth_getTransactionByBlockHashAndIndex") do(
+    proc eth_getTransactionByBlockHashAndIndex(
       data: Hash32, quantity: Quantity
-    ) -> TransactionObject:
+    ): TransactionObject =
       ## Returns information about a transaction by block hash and transaction index position.
       ##
       ## data: hash of a block.
@@ -552,9 +559,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         blk.transactions[index], Opt.some(data), Opt.some(blk.header.number), Opt.some(index)
       )
 
-    rpc("eth_getTransactionByBlockNumberAndIndex") do(
+    proc eth_getTransactionByBlockNumberAndIndex(
       quantityTag: BlockTag, quantity: Quantity
-    ) -> TransactionObject:
+    ): TransactionObject =
       ## Returns information about a transaction by block number and transaction index position.
       ##
       ## quantityTag: a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
@@ -571,9 +578,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         blk.transactions[index], Opt.some(blk.header.computeBlockHash), Opt.some(blk.header.number), Opt.some(index)
       )
 
-    rpc("eth_getProof") do(
+    proc eth_getProof(
       data: Address, slots: seq[UInt256], quantityTag: BlockTag
-    ) -> ProofResponse:
+    ): ProofResponse =
       ## Returns information about an account and storage slots (if the account is a contract
       ## and the slots are requested) along with account and storage proofs which prove the
       ## existence of the values in the state.
@@ -588,9 +595,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
       getProof(accDB, data, slots)
 
-    rpc("eth_getBlockReceipts") do(
+    proc eth_getBlockReceipts(
       quantityTag: BlockTag
-    ) -> Opt[seq[ReceiptObject]]:
+    ): Opt[seq[ReceiptObject]] =
       ## Returns the receipts of a block.
       let
         blk = api.blockFromTag(quantityTag).valueOr:
@@ -614,9 +621,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       except CatchableError:
         return Opt.none(seq[ReceiptObject])
 
-    rpc("eth_createAccessList") do(
+    proc eth_createAccessList(
       args: TransactionArgs, quantityTag: BlockTag
-    ) -> AccessListResult:
+    ): AccessListResult =
       ## Generates an access list for a transaction.
       try:
         let header = api.headerFromTag(quantityTag).valueOr:
@@ -625,23 +632,21 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       except CatchableError as exc:
         return AccessListResult(error: Opt.some("createAccessList error: " & exc.msg))
 
-    rpc("eth_blobBaseFee") do() -> Quantity:
+    proc eth_blobBaseFee(): Quantity =
       ## Returns the base fee per blob gas in wei.
       let header = api.headerFromTag(blockId("latest")).valueOr:
         raise newException(ValueError, "Block not found")
-      if header.blobGasUsed.isNone:
-        raise newException(ValueError, "blobGasUsed missing from latest header")
       if header.excessBlobGas.isNone:
         raise newException(ValueError, "excessBlobGas missing from latest header")
       let blobBaseFee =
-        getBlobBaseFee(header.excessBlobGas.get, api.com, api.com.toEVMFork(header)) * header.blobGasUsed.get.u256
+        getBlobBaseFee(header.excessBlobGas.get, api.com, api.com.toEVMFork(header))
       if blobBaseFee > high(uint64).u256:
         raise newException(ValueError, "blobBaseFee is bigger than uint64.max")
       return w3Qty blobBaseFee.truncate(uint64)
 
-    rpc("eth_getUncleByBlockHashAndIndex") do(
+    proc eth_getUncleByBlockHashAndIndex(
       data: Hash32, quantity: Quantity
-    ) -> BlockObject:
+    ): BlockObject =
       ## Returns information about a uncle of a block by hash and uncle index position.
       ##
       ## data: hash of block.
@@ -663,9 +668,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         uncleHash, uncle, api.getTotalDifficulty(uncleHash, uncle.header), false, true
       )
 
-    rpc("eth_getUncleByBlockNumberAndIndex") do(
+    proc eth_getUncleByBlockNumberAndIndex(
       quantityTag: BlockTag, quantity: Quantity
-    ) -> BlockObject:
+    ): BlockObject =
       # Returns information about a uncle of a block by number and uncle index position.
       ##
       ## quantityTag: a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
@@ -687,7 +692,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         uncleHash, uncle, api.getTotalDifficulty(uncleHash, uncle.header), false, true
       )
 
-    rpc("eth_config") do() -> EthConfigObject:
+    proc eth_config(): EthConfigObject =
       ## Returns the current, next and last configuration
       ## Doesn't work pre-shangai
       ## https://eips.ethereum.org/EIPS/eip-7910
@@ -702,7 +707,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
       return api.com.getEthConfigObject(api.chain, currentFork, nextFork, lastFork)
 
-    rpc("eth_getBlockAccessListByBlockHash") do(data: Hash32) -> Opt[BlockAccessList]:
+    proc eth_getBlockAccessListByBlockHash(data: Hash32): Opt[BlockAccessList] =
       ## Returns the block access list for a block by block hash.
       ##
       ## data: hash of block.
@@ -721,7 +726,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
       Opt.some(bal)
 
-    rpc("eth_getBlockAccessListByBlockNumber") do(quantityTag: BlockTag) -> Opt[BlockAccessList]:
+    proc eth_getBlockAccessListByBlockNumber(quantityTag: BlockTag): Opt[BlockAccessList] =
       ## Returns the block access list for a block by number.
       ##
       ## quantityTag: a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.

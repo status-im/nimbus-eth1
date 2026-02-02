@@ -27,11 +27,11 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Proto
   ## Discovery v5 JSON-RPC API such as defined here:
   ## https://github.com/ethereum/portal-network-specs/tree/master/jsonrpc
 
-  rpcServer.rpcContext(EthJson):
-    rpc("discv5_nodeInfo") do() -> NodeInfo:
+  rpcServer.rpc(EthJson):
+    proc discv5_nodeInfo(): NodeInfo =
       return d.routingTable.getNodeInfo()
 
-    rpc("discv5_updateNodeInfo") do(kvPairs: seq[(string, string)]) -> NodeInfo:
+    proc discv5_updateNodeInfo(kvPairs: seq[(string, string)]): NodeInfo =
       # TODO: Not according to spec, as spec only allows socket address.
       # portal-specs PR has been created with suggested change as is here.
       let enrFields = kvPairs.map(
@@ -44,17 +44,17 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Proto
 
       return d.routingTable.getNodeInfo()
 
-    rpc("discv5_routingTableInfo") do() -> RoutingTableInfo:
+    proc discv5_routingTableInfo(): RoutingTableInfo =
       return getRoutingTableInfo(d.routingTable)
 
-    rpc("discv5_addEnr") do(enr: Record) -> bool:
+    proc discv5_addEnr(enr: Record): bool =
       let node = Node.fromRecord(enr)
       let res = d.addNode(node)
       if res:
         d.routingTable.setJustSeen(node)
       return res
 
-    rpc("discv5_addEnrs") do(enrs: seq[Record]) -> bool:
+    proc discv5_addEnrs(enrs: seq[Record]): bool =
       # Note: unspecified RPC, but useful for our local testnet test
       # TODO: We could also adjust the API of addNode & fromRecord to accept a seen
       # parameter, but perhaps only if that makes sense on other locations in
@@ -66,14 +66,14 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Proto
 
       return true
 
-    rpc("discv5_getEnr") do(nodeId: NodeId) -> Record:
+    proc discv5_getEnr(nodeId: NodeId): Record =
       let node = d.getNode(nodeId)
       if node.isSome():
         return node.get().record
       else:
         raise newException(ValueError, "Record not in local routing table.")
 
-    rpc("discv5_deleteEnr") do(nodeId: NodeId) -> bool:
+    proc discv5_deleteEnr(nodeId: NodeId): bool =
       # TODO: Adjust `removeNode` to accept NodeId as param and to return bool.
       let node = d.getNode(nodeId)
       if node.isSome():
@@ -82,14 +82,14 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Proto
       else:
         raise newException(ValueError, "Record not in local routing table.")
 
-    rpc("discv5_lookupEnr") do(nodeId: NodeId) -> Record:
+    proc discv5_lookupEnr(nodeId: NodeId): Record =
       let lookup = await d.resolve(nodeId)
       if lookup.isSome():
         return lookup.get().record
       else:
         raise newException(ValueError, "Record not found in DHT lookup.")
 
-    rpc("discv5_ping") do(enr: Record) -> PongResponse:
+    proc discv5_ping(enr: Record): PongResponse =
       let
         node = toNodeWithAddress(enr)
         pong = await d.ping(node)
@@ -100,7 +100,7 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Proto
         let p = pong.get()
         return PongResponse(enrSeq: p.enrSeq, recipientIP: $p.ip, recipientPort: p.port)
 
-    rpc("discv5_findNode") do(enr: Record, distances: seq[uint16]) -> seq[Record]:
+    proc discv5_findNode(enr: Record, distances: seq[uint16]): seq[Record] =
       let
         node = toNodeWithAddress(enr)
         nodes = await d.findNode(node, distances)
@@ -112,7 +112,7 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Proto
               n.record
           )
 
-    rpc("discv5_talkReq") do(enr: Record, protocol, payload: string) -> string:
+    proc discv5_talkReq(enr: Record, protocol, payload: string): string =
       let
         node = toNodeWithAddress(enr)
         talkresp = await d.talkReq(node, hexToSeqByte(protocol), hexToSeqByte(payload))
@@ -121,7 +121,7 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Proto
       else:
         return talkresp.get().toHex()
 
-    rpc("discv5_recursiveFindNodes") do(nodeId: NodeId) -> seq[Record]:
+    proc discv5_recursiveFindNodes(nodeId: NodeId): seq[Record] =
       let discovered = await d.lookup(nodeId)
       return discovered.map(
         proc(n: Node): Record =

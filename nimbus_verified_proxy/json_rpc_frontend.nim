@@ -86,128 +86,128 @@ template unpackEngineResult[T](res: EngineResult[T]): T =
     raise newException(ValueError, $error.errType & " -> " & error.errMsg)
 
 proc injectEngineFrontend*(server: JsonRpcServer, frontend: EthApiFrontend) =
-  server.getServer().rpcContext(EthJson):
-    rpc("eth_blockNumber") do() -> uint64:
+  server.getServer().rpc(EthJson):
+    proc eth_blockNumber(): uint64 =
       unpackEngineResult(await frontend.eth_blockNumber())
 
-    rpc("eth_getBalance") do(address: Address, quantityTag: BlockTag) -> UInt256:
+    proc eth_getBalance(address: Address, quantityTag: BlockTag): UInt256:
       unpackEngineResult(await frontend.eth_getBalance(address, quantityTag))
 
-    rpc("eth_getStorageAt") do(
+    proc eth_getStorageAt(
       address: Address, slot: UInt256, quantityTag: BlockTag
-    ) -> FixedBytes[32]:
+    ): FixedBytes[32] =
       unpackEngineResult(await frontend.eth_getStorageAt(address, slot, quantityTag))
 
-    rpc("eth_getTransactionCount") do(
+    proc eth_getTransactionCount(
       address: Address, quantityTag: BlockTag
-    ) -> Quantity:
+    ): Quantity =
       unpackEngineResult(await frontend.eth_getTransactionCount(address, quantityTag))
 
-    rpc("eth_getCode") do(address: Address, quantityTag: BlockTag) -> seq[byte]:
+    proc eth_getCode(address: Address, quantityTag: BlockTag): seq[byte] =
       unpackEngineResult(await frontend.eth_getCode(address, quantityTag))
 
-    rpc("eth_getBlockByHash") do(
+    proc eth_getBlockByHash(
       blockHash: Hash32, fullTransactions: bool
-    ) -> BlockObject:
+    ): BlockObject =
       unpackEngineResult(await frontend.eth_getBlockByHash(blockHash, fullTransactions))
 
-    rpc("eth_getBlockByNumber") do(
+    proc eth_getBlockByNumber(
       blockTag: BlockTag, fullTransactions: bool
-    ) -> BlockObject:
+    ): BlockObject =
       unpackEngineResult(
         await frontend.eth_getBlockByNumber(blockTag, fullTransactions)
       )
 
-    rpc("eth_getUncleCountByBlockNumber") do(blockTag: BlockTag) -> Quantity:
+    proc eth_getUncleCountByBlockNumber(blockTag: BlockTag): Quantity =
       unpackEngineResult(await frontend.eth_getUncleCountByBlockNumber(blockTag))
 
-    rpc("eth_getUncleCountByBlockHash") do(blockHash: Hash32) -> Quantity:
+    proc eth_getUncleCountByBlockHash(blockHash: Hash32): Quantity =
       unpackEngineResult(await frontend.eth_getUncleCountByBlockHash(blockHash))
 
-    rpc("eth_getBlockTransactionCountByNumber") do(blockTag: BlockTag) -> Quantity:
+    proc eth_getBlockTransactionCountByNumber(blockTag: BlockTag): Quantity =
       unpackEngineResult(await frontend.eth_getBlockTransactionCountByNumber(blockTag))
 
-    rpc("eth_getBlockTransactionCountByHash") do(blockHash: Hash32) -> Quantity:
+    proc eth_getBlockTransactionCountByHash(blockHash: Hash32): Quantity =
       unpackEngineResult(await frontend.eth_getBlockTransactionCountByHash(blockHash))
 
-    rpc("eth_getTransactionByBlockNumberAndIndex") do(
+    proc eth_getTransactionByBlockNumberAndIndex(
       blockTag: BlockTag, index: Quantity
-    ) -> TransactionObject:
+    ): TransactionObject =
       unpackEngineResult(
         await frontend.eth_getTransactionByBlockNumberAndIndex(blockTag, index)
       )
 
-    rpc("eth_getTransactionByBlockHashAndIndex") do(
+    proc eth_getTransactionByBlockHashAndIndex(
       blockHash: Hash32, index: Quantity
-    ) -> TransactionObject:
+    ): TransactionObject =
       unpackEngineResult(
         await frontend.eth_getTransactionByBlockHashAndIndex(blockHash, index)
       )
 
-    rpc("eth_call") do(
+    proc eth_call(
       tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]
-    ) -> seq[byte]:
+    ): seq[byte] =
       unpackEngineResult(
         await frontend.eth_call(tx, blockTag, optimisticStateFetch.get(true))
       )
 
-    rpc("eth_createAccessList") do(
+    proc eth_createAccessList(
       tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]
-    ) -> AccessListResult:
+    ): AccessListResult =
       unpackEngineResult(
         await frontend.eth_createAccessList(
           tx, blockTag, optimisticStateFetch.get(true)
         )
       )
 
-    rpc("eth_estimateGas") do(
+    proc eth_estimateGas(
       tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]
-    ) -> Quantity:
+    ): Quantity =
       unpackEngineResult(
         await frontend.eth_estimateGas(tx, blockTag, optimisticStateFetch.get(true))
       )
 
-    rpc("eth_getTransactionByHash") do(txHash: Hash32) -> TransactionObject:
+    proc eth_getTransactionByHash(txHash: Hash32): TransactionObject =
       unpackEngineResult(await frontend.eth_getTransactionByHash(txHash))
 
-    rpc("eth_getBlockReceipts") do(blockTag: BlockTag) -> Opt[seq[ReceiptObject]]:
+    proc eth_getBlockReceipts(blockTag: BlockTag): Opt[seq[ReceiptObject]] =
       unpackEngineResult(await frontend.eth_getBlockReceipts(blockTag))
 
-    rpc("eth_getTransactionReceipt") do(txHash: Hash32) -> ReceiptObject:
+    proc eth_getTransactionReceipt(txHash: Hash32): ReceiptObject =
       unpackEngineResult(await frontend.eth_getTransactionReceipt(txHash))
 
-    rpc("eth_getLogs") do(filterOptions: FilterOptions) -> seq[LogObject]:
+    proc eth_getLogs(filterOptions: FilterOptions): seq[LogObject] =
       unpackEngineResult(await frontend.eth_getLogs(filterOptions))
 
-    rpc("eth_newFilter") do(filterOptions: FilterOptions) -> string:
+    proc eth_newFilter(filterOptions: FilterOptions): string =
       unpackEngineResult(await frontend.eth_newFilter(filterOptions))
 
-    rpc("eth_uninstallFilter") do(filterId: string) -> bool:
+    proc eth_uninstallFilter(filterId: string): bool =
       unpackEngineResult(await frontend.eth_uninstallFilter(filterId))
 
-    rpc("eth_getFilterLogs") do(filterId: string) -> seq[LogObject]:
+    proc eth_getFilterLogs(filterId: string): seq[LogObject] =
       unpackEngineResult(await frontend.eth_getFilterLogs(filterId))
 
-    rpc("eth_getFilterChanges") do(filterId: string) -> seq[LogObject]:
+    proc eth_getFilterChanges(filterId: string): seq[LogObject] =
       unpackEngineResult(await frontend.eth_getFilterChanges(filterId))
 
-    rpc("eth_blobBaseFee") do() -> UInt256:
+    proc eth_blobBaseFee(): UInt256 =
       unpackEngineResult(await frontend.eth_blobBaseFee())
 
-    rpc("eth_gasPrice") do() -> Quantity:
+    proc eth_gasPrice(): Quantity =
       unpackEngineResult(await frontend.eth_gasPrice())
 
-    rpc("eth_maxPriorityFeePerGas") do() -> Quantity:
+    proc eth_maxPriorityFeePerGas(): Quantity =
       unpackEngineResult(await frontend.eth_maxPriorityFeePerGas())
 
-    rpc("eth_feeHistory") do(
+    proc eth_feeHistory(
       blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: Opt[seq[float64]]
-    ) -> FeeHistoryResult:
+    ): FeeHistoryResult =
       unpackEngineResult(
         await frontend.eth_feeHistory(blockCount, newestBlock, rewardPercentiles)
       )
 
-    rpc("eth_sendRawTransaction") do(txBytes: seq[byte]) -> Hash32:
+    proc eth_sendRawTransaction(txBytes: seq[byte]): Hash32 =
       unpackEngineResult(await frontend.eth_sendRawTransaction(txBytes))
 
 proc stop*(server: JsonRpcServer) {.async: (raises: []).} =

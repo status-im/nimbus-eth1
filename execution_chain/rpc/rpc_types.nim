@@ -12,7 +12,9 @@ import
   web3/[eth_api_types, conversions],
   ../beacon/web3_eth_conv
 
-export eth_api_types, web3_eth_conv
+export
+  eth_api_types,
+  web3_eth_conv
 
 type
   FilterLog* = eth_api_types.LogObject
