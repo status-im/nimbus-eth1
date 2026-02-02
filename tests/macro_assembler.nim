@@ -9,18 +9,20 @@
 # according to those terms.
 
 import
-  std/[macrocache, strutils],
+  std/[macrocache, strutils, strformat],
   eth/common/[keys, transaction_utils],
   unittest2,
   chronicles,
   stew/byteutils,
-  stew/shims/macros
+  stew/shims/macros,
+  stint
 
 import
   ../execution_chain/db/ledger,
   ../execution_chain/evm/types,
   ../execution_chain/evm/interpreter/op_codes,
   ../execution_chain/evm/internals,
+  ../execution_chain/evm/code_stream,
   ../execution_chain/transaction/[call_common, call_evm],
   ../execution_chain/evm/state,
   ../execution_chain/core/pow/difficulty
@@ -51,6 +53,8 @@ type
     gasUsed* : Opt[GasInt]
     data*    : seq[byte]
     output*  : seq[byte]
+    debug*   : bool
+    enableLogs: bool
 
   MacroAssembler = object
     setup    : NimNode
@@ -78,11 +82,21 @@ proc validateVMWord(val: NimNode): VMWord =
   val.expectKind(nnkStrLit)
   validateVMWord(val.strVal, val)
 
+proc vmWordsFromInts(val: NimNode): seq[VMWord] =
+  val.expectKind(nnkBracket)
+  for x in val:
+    x.expectKind(nnkIntLit)
+    result.add u256(x.intVal).toBytesBE()
+
 proc parseVMWords(list: NimNode): seq[VMWord] =
   result = @[]
   list.expectKind nnkStmtList
   for val in list:
-    result.add validateVMWord(val)
+    val.expectKind({nnkStrLit, nnkBracket})
+    if val.kind == nnkStrLit:
+      result.add validateVMWord(val)
+    else:
+      result.add vmWordsFromInts(val)
 
 proc validateStorage(val: NimNode): Storage =
   val.expectKind(nnkCall)
@@ -212,9 +226,12 @@ proc parseAssembler(list: NimNode): MacroAssembler =
     of "memory" : result.asmBlock.memory  = parseVMWords(body)
     of "stack"  : result.asmBlock.stack   = parseVMWords(body)
     of "storage": result.asmBlock.storage = parseStorage(body)
-    of "logs"   : result.asmBlock.logs    = parseLogs(body)
+    of "logs"   :
+      result.asmBlock.logs = parseLogs(body)
+      result.asmBlock.enableLogs = true
     of "success": result.asmBlock.success = parseSuccess(body)
     of "data"   : result.asmBlock.data    = parseData(body)
+    of "debug"  : result.asmBlock.debug   = parseSuccess(body)
     of "output" : result.asmBlock.output  = parseData(body)
     of "gasused": result.asmBlock.gasUsed = parseGasUsed(body)
     of "fork"   : result.forkStr = parseFork(body)
@@ -283,6 +300,13 @@ proc initVMEnv*(network: string): BaseVMState =
 
 proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: DebugCallResult): bool =
   let com = vmState.com
+  if boa.debug:
+    echo "Decompile: ", boa.title
+    var c = CodeStream.init(CodeBytesRef.init(boa.code))
+    let opcodes = c.decompile()
+    for op in opcodes:
+      echo &"[{op[0]}]\t{op[1]}\t{op[2]}"
+
   if not asmResult.isError:
     if boa.success == false:
       error "different success value", expected=boa.success, actual=true
@@ -339,31 +363,32 @@ proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: DebugCallR
       error "storage has different value", key=key, expected=val, actual
       return false
 
-  let logs = asmResult.logEntries
-  if logs.len != boa.logs.len:
-    error "different logs len", expected=boa.logs.len, actual=logs.len
-    return false
+  if boa.enableLogs:
+    let logs = asmResult.logEntries
+    if logs.len != boa.logs.len:
+      error "different logs len", expected=boa.logs.len, actual=logs.len
+      return false
 
-  for i, log in boa.logs:
-    let eAddr = log.address.toHex()
-    let aAddr = logs[i].address.toHex()
-    if eAddr != aAddr:
-      error "different address", expected=eAddr, actual=aAddr, idx=i
-      return false
-    let eData = log.data.toHex()
-    let aData = logs[i].data.toHex()
-    if eData != aData:
-      error "different data", expected=eData, actual=aData, idx=i
-      return false
-    if log.topics.len != logs[i].topics.len:
-      error "different topics len", expected=log.topics.len, actual=logs[i].topics.len, idx=i
-      return false
-    for x, t in log.topics:
-      let eTopic = t.toHex()
-      let aTopic = logs[i].topics[x].toHex()
-      if eTopic != aTopic:
-        error "different topic in log entry", expected=eTopic, actual=aTopic, logIdx=i, topicIdx=x
+    for i, log in boa.logs:
+      let eAddr = log.address.toHex()
+      let aAddr = logs[i].address.toHex()
+      if eAddr != aAddr:
+        error "different address", expected=eAddr, actual=aAddr, idx=i
         return false
+      let eData = log.data.toHex()
+      let aData = logs[i].data.toHex()
+      if eData != aData:
+        error "different data", expected=eData, actual=aData, idx=i
+        return false
+      if log.topics.len != logs[i].topics.len:
+        error "different topics len", expected=log.topics.len, actual=logs[i].topics.len, idx=i
+        return false
+      for x, t in log.topics:
+        let eTopic = t.toHex()
+        let aTopic = logs[i].topics[x].toHex()
+        if eTopic != aTopic:
+          error "different topic in log entry", expected=eTopic, actual=aTopic, logIdx=i, topicIdx=x
+          return false
 
   if boa.output.len > 0:
     let actual = asmResult.output.toHex()
