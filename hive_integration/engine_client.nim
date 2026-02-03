@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -71,6 +71,13 @@ proc forkchoiceUpdatedV3*(client: RpcClient,
   wrapTrySimpleRes:
     client.engine_forkchoiceUpdatedV3(update, payloadAttributes)
 
+proc forkchoiceUpdatedV4*(client: RpcClient,
+      update: ForkchoiceStateV1,
+      payloadAttributes = Opt.none(PayloadAttributesV4)):
+        Result[ForkchoiceUpdatedResponse, string] =
+  wrapTrySimpleRes:
+    client.engine_forkchoiceUpdatedV4(update, payloadAttributes)
+
 proc forkchoiceUpdated*(client: RpcClient,
                         version: Version,
                         update: ForkchoiceStateV1,
@@ -80,7 +87,8 @@ proc forkchoiceUpdated*(client: RpcClient,
   of Version.V1: return client.forkchoiceUpdatedV1(update, attr.V1)
   of Version.V2: return client.forkchoiceUpdatedV2(update, attr.V2)
   of Version.V3: return client.forkchoiceUpdatedV3(update, attr.V3)
-  of Version.V4, Version.V5, Version.V6: discard
+  of Version.V4: return client.forkchoiceUpdatedV4(update, attr.V4)
+  of Version.V5, Version.V6: discard
 
 proc getPayloadV1*(client: RpcClient, payloadId: Bytes8): Result[ExecutionPayloadV1, string] =
   wrapTrySimpleRes:
