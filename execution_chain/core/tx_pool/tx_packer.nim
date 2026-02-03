@@ -119,6 +119,9 @@ proc runTxCommit(pst: var TxPacker; item: TxItemRef; callResult: LogResult, xp: 
     gasTip  = item.tx.tip(pst.baseFee)
 
   let reward = callResult.gasUsed.u256 * gasTip.u256
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.trackAddBalanceChange(xp.feeRecipient, reward)
+  vmState.ledger.addBalance(xp.feeRecipient, reward)
   pst.blockValue += reward
 
   # Update receipts sequence
