@@ -211,7 +211,7 @@ template storageDownload*(
     let acc = accounts
        .filterIt(not it.accBody.storageRoot.isEmpty)
        .mapIt( (it.accHash.to(ItemKey),
-                it.accBody.storageRoot.Hash32.to(StoreRoot)) )
+                it.accBody.storageRoot.to(Hash32).to(StoreRoot)) )
 
     if buddy.ctrl.stopped:
       state.register acc                            # stash data and return

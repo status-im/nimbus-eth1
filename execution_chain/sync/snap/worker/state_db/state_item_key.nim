@@ -100,6 +100,12 @@ func flStr*(w: (ItemKey,ItemKey)): string =
 func flStr*(w: ItemKeyRange): string =
   (w.minPt,w.maxPt).flStr
 
+func lenStr*(w: (ItemKey,ItemKey)): string =
+  (w[0].to(UInt256),w[1].to(UInt256)).lenStr
+
+func lenStr*(w: ItemKeyRange): string =
+  (w.minPt,w.maxPt).lenStr
+
 func `$`*(w: ItemKey|ItemKeyRange): string =
   w.flStr
 

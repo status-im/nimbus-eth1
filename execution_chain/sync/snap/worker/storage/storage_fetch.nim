@@ -107,7 +107,7 @@ template fetchStorage*(
       peer {.inject,used.} = $buddy.peer            # logging only
       root {.inject,used.} = stateRoot.toStr        # logging only
       reqSto {.inject,used.} = ivReq.flStr          # logging only
-      nReqSto {.inject,used.} = ivReq.len.flStr     # logging only
+      nReqSto {.inject,used.} = ivReq.lenStr        # logging only
 
     # Verify consistency as received from caller
     doAssert 0 < accounts.len

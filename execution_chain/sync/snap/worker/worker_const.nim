@@ -65,16 +65,18 @@ const
 
   # ----------------------
 
-  unprocAccountsRangeMax* = (1.u256 shl 251) # 64 different intervals max
-    ## Soft bytes limit to request accounts
+  unprocAccountsRangeMax* = (1.u256 shl 240) # ~65k intervals
+    ## Soft bytes limit to request accounts. This is used for parallelisation
+    ## so that different peers can start with different intervals. Typically,
+    ## these intervals are sparsely filled and there will be returned not
+    ## more than  ~1k accounts.
 
-
-  stateDbCapacity* = 4
-    ## Maximal numbers of simultanous incomplete states
-
-  stateDbBlockHeightWindow* = 128
-    ## Block numbers on the database may have this distance, at most. The
-    ## least entries will be deleted for moving the widow forward.
+  stateDbCapacity* = 8
+    ## Maximal numbers of simultanously incomplete states. Note that the
+    ## protocol suggests a single peer to provide a download window of 128
+    ## state roots corresponding to consecutibe block numbers.
+    ##
+    ## Note that there are about 400k accounts on `mainnet` (as of early 2026.)
 
   nWorkingStateRootsMax* = 3
     ## Stop the current session after accounts could be downloaded for this
@@ -86,6 +88,7 @@ const
   fetchHeadersRlpxTimeout* = chronos.seconds(30)
     ## Timeout cap for the `RLPX` handler when fetching header. This value
 
+  # -----------
 
   fetchAccountSnapTimeout* = chronos.seconds(120)
     ## Timeout cap for the `RLPX` handler when fetching accounts.
@@ -95,8 +98,6 @@ const
 
   fetchAccountSnapBytesLimit* = 50 * 1024
     ## Soft bytes limit to request accounts
-
-  # -----------
 
   nProcAccountErrThreshold* = 4
     ## Similar to `nFetchAccountSnapErrThreshold` but for the later part

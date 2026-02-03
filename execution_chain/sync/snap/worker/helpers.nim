@@ -110,6 +110,18 @@ func flStr*(w: (UInt256,UInt256)): string =
   else:
     "0..2^256"
 
+func lenStr*(w: (UInt256,UInt256)): string =
+  if w[0] == 0 and w[1] == high(UInt256):
+    "2^256"
+  elif w[0] <= w[1]:
+    let z = w[1] - w[0]
+    if z < high(int).u256:
+      $z
+    else:
+      z.to(float).toStr
+  else:
+    "?"
+
 # --------------
 
 func toStr*(a: chronos.Duration): string =
