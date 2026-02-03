@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2026 Status Research & Development GmbH
+# Copyright (c) 2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -49,10 +49,7 @@ proc toCallParams*(vmState: BaseVMState, args: TransactionArgs,
       cap = globalGasCap,
       gasLimit = globalGasCap
 
-  var
-    gasPrice = GasInt args.gasPrice.get(0.Quantity)
-    priorityFee = gasPrice
-
+  var gasPrice = GasInt args.gasPrice.get(0.Quantity)
   if baseFee.isSome:
     # A basefee is provided, necessitating EIP-1559-type execution
     let maxPriorityFee = GasInt args.maxPriorityFeePerGas.get(0.Quantity)
@@ -61,7 +58,7 @@ proc toCallParams*(vmState: BaseVMState, args: TransactionArgs,
     # Backfill the legacy gasPrice for EVM execution, unless we're all zeroes
     if maxPriorityFee > 0 or maxFee > 0:
       let baseFee = baseFee.get().truncate(GasInt)
-      priorityFee = min(maxPriorityFee, maxFee - baseFee)
+      let priorityFee = min(maxPriorityFee, maxFee - baseFee)
       gasPrice = priorityFee + baseFee
 
   template versionedHashes(args: TransactionArgs): seq[VersionedHash] =
@@ -77,7 +74,6 @@ proc toCallParams*(vmState: BaseVMState, args: TransactionArgs,
     isCreate:        args.to.isNone,
     gasLimit:        gasLimit,
     gasPrice:        gasPrice,
-    priorityFee:     priorityFee,
     value:           args.value.get(0.u256),
     input:           args.payload(),
     accessList:      args.accessList.get(@[]),
