@@ -36,6 +36,9 @@ type
 template to*(w: ItemKey; T: type UInt256): T = w.T
 template to*(w: UInt256; T: type ItemKey): T = w.T
 
+template to*(w: array[32,byte]; T: type ItemKey): T = w.Bytes32.to(UInt256).T
+  ## Handy for converting the result of `desc_nibbles.getBytes()`
+
 template to*(w: ItemKey; T: type Hash32): T = w.UInt256.to(Bytes32).T
 template to*(w: Hash32; T: type UInt256): T = w.Bytes32.to(T)
 template to*(w: Hash32; T: type ItemKey): T = w.to(UInt256).T
@@ -96,7 +99,7 @@ func `$`*(w: ItemKey|ItemKeyRange): string =
 # Other public helpers
 # ------------------------------------------------------------------------------
 
-func to*(w: UInt256; T: type float): T =
+func to*(w: UInt256; _: type float): float =
   ## Lossy conversion to `float` -- great for printing
   ##
   when sizeof(float) != sizeof(uint):
