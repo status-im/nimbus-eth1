@@ -20,6 +20,7 @@ import
   ../../transaction,
   ../../evm/state,
   ../../evm/types,
+  ../../evm/eip7708,
   ../../constants,
   ../eip4844,
   ../eip7691,
@@ -44,7 +45,7 @@ proc commitOrRollbackDependingOnGasUsed(
     accTx: LedgerSpRef;
     header: Header;
     tx: Transaction;
-    callResult: LogResult;
+    callResult: var LogResult;
     priorityFee: GasInt;
     blobGasUsed: GasInt;
       ): Result[void, string] =
@@ -68,13 +69,18 @@ proc commitOrRollbackDependingOnGasUsed(
     err(&"invalid tx: block header gasLimit reached. gasLimit={header.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasUsed}")
   else:
     # Accept transaction and collect mining fee.
+    let txFee = gasUsed.u256 * priorityFee.u256
     if vmState.balTrackerEnabled:
-      vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), gasUsed.u256 * priorityFee.u256)
+      vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), txFee)
       vmState.balTracker.commitCallFrame()
     vmState.ledger.commit(accTx)
-    vmState.ledger.addBalance(vmState.coinbase(), gasUsed.u256 * priorityFee.u256)
+    vmState.ledger.addBalance(vmState.coinbase(), txFee)
     vmState.cumulativeGasUsed += gasUsed
     vmState.blockGasUsed += blockGasUsed
+
+    # EIP-7708: Emit closure logs for accounts with remaining balance before deletion
+    if vmState.fork >= FkAmsterdam:
+      emitClosureLogs(vmState, callResult.logEntries)
 
     # Return remaining gas to the block gas counter so it is
     # available for the next transaction.

@@ -292,9 +292,6 @@ proc finishRunningComputation(
       result.stack = move(c.finalStack)
       result.memory = move(c.memory)
       if c.isSuccess:
-        # EIP-7708: Emit closure logs for accounts with remaining balance before deletion
-        if c.fork >= FkAmsterdam:
-          c.emitClosureLogs()
         result.logEntries = move(c.logEntries)
   elif T is GasInt:
     result = gasUsed.txGasUsed
@@ -302,9 +299,6 @@ proc finishRunningComputation(
     result.gasUsed = gasUsed.txGasUsed
     result.blockGasUsed = gasUsed.blockGasUsedInTx
     if c.isSuccess:
-      # EIP-7708: Emit closure logs for accounts with remaining balance before deletion
-      if c.fork >= FkAmsterdam:
-        c.emitClosureLogs()
       result.logEntries = move(c.logEntries)
   elif T is string:
     if c.isError:
