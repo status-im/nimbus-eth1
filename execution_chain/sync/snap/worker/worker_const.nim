@@ -102,5 +102,18 @@ const
     ## Similar to `nFetchAccountSnapErrThreshold` but for the later part
     ## when errors occur while cached data packets are processed.
 
+  # -----------
+
+  fetchStorageSnapTimeout* = chronos.seconds(120)
+    ## Similar to `fetchAccountSnapTimeout`
+
+  nFetchStorageSnapErrThreshold* = 4
+    ## Similar to `nFetchAccountSnapErrThreshold`
+
+  fetchStorageSnapBytesLimit* = 50 * 1024
+    ## Similar to `fetchAccountSnapBytesLimit`
+
+  nProcStorageErrThreshold* = 4
+    ## Similar to `nProcAccountErrThreshold`
 
 # End

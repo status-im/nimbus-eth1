@@ -56,6 +56,16 @@ type
     packet: AccountRangePacket
     elapsed: Duration
 
+  FetchStorageData* = tuple
+    packet: StorageRangesPacket
+    elapsed: Duration
+
+  StorageRangesData* = tuple
+    ## Derived from `StorageRangesPacket`
+    slots: seq[seq[StorageItem]]                    # Slots without proof
+    slot: seq[StorageItem]                          # Incomplete slot with proof
+    proof: seq[ProofNode]                           # Prof for `slot`
+
   Ticker* =
     proc(ctx: SnapCtxRef) {.gcsafe, raises: [].}
       ## Some function that is invoked regularly

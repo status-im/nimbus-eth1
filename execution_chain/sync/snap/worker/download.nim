@@ -12,7 +12,7 @@
 
 import
   pkg/[chronicles, chronos],
-  ./[account, helpers, header, mpt, state_db, worker_desc]
+  ./[account, helpers, header, mpt, state_db, storage, worker_desc]
 
 # ------------------------------------------------------------------------------
 # Public function(s)
@@ -47,7 +47,7 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
       let ethPeer = buddy.getEthPeer()              # get `ethXX` peer if avail
       if not ethPeer.isNil:
         trace info & ": assigning best/latest pivotHash", peer,
-          hash=ethPeer.only.pivotHash.short
+          hash=ethPeer.only.pivotHash.short, nSyncPeers=ctx.nSyncPeers()
         buddy.headerStateRegister(BlockHash(ethPeer.only.pivotHash)).isErrOr:
           buddy.only.pivotRoot = Opt.some(value)
 
@@ -72,9 +72,10 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
     #   + not older than the first two states (if any),
     #   + and no more than `nWorkingStateRoots`
     #
-    var nStates {.inject.} = 0
+    var
+      nStatesOk {.inject.} = 0
+      nStatesIdle {.inject.} = 0
     block downloadLoop:
-
       for state in sdb.items(startWith=theseFirst, truncate=true):
         var didSomething = false
         while true:
@@ -82,19 +83,28 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
             break downloadLoop
           let acc = buddy.accountDownload(state, info).valueOr:
             break                                   # done this state, try next
-          let used {.used.} = acc                   # FIXME: will go away 
+          buddy.storageDownload(state, acc, info)   # fetch storage
           didSomething = true                       # continue with this one
 
         if didSomething:
           ctx.daemon = true                         # unless enabled, already
-          nStates.inc
-          if nWorkingStateRootsMax <= nStates:
+          nStatesOk.inc
+          if nWorkingStateRootsMax <= nStatesOk:
             break downloadLoop                      # all done for now
+        else:
+          nStatesIdle.inc
 
-    trace info & ": download states", peer, syncState=buddy.syncState,
-      nStates
+    # Abandon peer if useless
+    if buddy.ctrl.running and
+       0 < ctx.nSyncPeers() and
+       nStatesOk == 0 and 0 < nStatesIdle:
+      buddy.ctrl.stopped = true
 
-  discard # visual alignment
+    trace info & ": downloaded states", peer, syncState=buddy.syncState,
+      nStatesOk, nStatesIdle, nSyncPeers=ctx.nSyncPeers(),
+      state=($buddy.syncState)
+
+  discard                                           # visual alignment
 
 # ------------------------------------------------------------------------------
 # End
