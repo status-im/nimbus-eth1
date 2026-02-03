@@ -228,7 +228,7 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
   # Calculated gas used, taking into account refund rules.
   let
     txGasUsedBeforeRefund = call.gasLimit - c.gasMeter.gasRemaining
-    maxRefund = (call.gasLimit - c.gasMeter.gasRemaining) div MaxRefundQuotient
+    maxRefund = txGasUsedBeforeRefund div MaxRefundQuotient
     txGasRefund = min(c.getGasRefund(), maxRefund)
     txGasUsedAfterRefund = txGasUsedBeforeRefund - txGasRefund
 
