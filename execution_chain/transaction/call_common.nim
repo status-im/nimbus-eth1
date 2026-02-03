@@ -30,6 +30,11 @@ type
     computation:     Computation
     floorDataGas:    GasInt
 
+  GasUsed = object
+    evmGasUsed: GasInt
+    txGasUsed: GasInt
+    blockGasUsedInTx: GasInt
+
 proc initialAccessListEIP2929(call: CallParams) =
   # EIP2929 initial access list.
   let vmState = call.vmState
@@ -206,9 +211,10 @@ proc prepareToRunComputation(host: TransactionHost, call: CallParams) =
         vmState.balTracker.trackSubBalanceChange(call.sender, blobFee)
       db.subBalance(call.sender, blobFee)
 
-proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): GasInt =
+proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): GasUsed =
   let
     c = host.computation
+    vmState = host.vmState
     fork = host.vmState.fork
 
   # EIP-3529: Reduction in refunds
@@ -216,48 +222,65 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
                             5.GasInt
                           else:
                             2.GasInt
-
-  var gasRemaining = 0.GasInt
-
-  # Calculated gas used, taking into account refund rules.
   if c.shouldBurnGas:
     c.gasMeter.gasRemaining = 0
-  let maxRefund = (call.gasLimit - c.gasMeter.gasRemaining) div MaxRefundQuotient
-  let refund = min(c.getGasRefund(), maxRefund)
-  c.gasMeter.returnGas(refund)
-  gasRemaining = c.gasMeter.gasRemaining
 
-  let gasUsed = call.gasLimit - gasRemaining
+  # Calculated gas used, taking into account refund rules.
+  let
+    txGasUsedBeforeRefund = call.gasLimit - c.gasMeter.gasRemaining
+    maxRefund = txGasUsedBeforeRefund div MaxRefundQuotient
+    txGasRefund = min(c.getGasRefund(), maxRefund)
+    txGasUsedAfterRefund = txGasUsedBeforeRefund - txGasRefund
+
+  var
+    txGasUsed = txGasUsedAfterRefund
+    blockGasUsedInTx = txGasUsed
+
   if fork >= FkPrague:
-    if host.floorDataGas > gasUsed:
-      gasRemaining = call.gasLimit - host.floorDataGas
-      c.gasMeter.gasRemaining = gasRemaining
+    txGasUsed = max(txGasUsedAfterRefund, host.floorDataGas)
+    blockGasUsedInTx = txGasUsed
 
   # Refund for unused gas.
-  if gasRemaining > 0:
-    if host.vmState.balTrackerEnabled:
-      host.vmState.balTracker.trackAddBalanceChange(call.sender, gasRemaining.u256 * call.gasPrice.u256)
-    host.vmState.mutateLedger:
-      db.addBalance(call.sender, gasRemaining.u256 * call.gasPrice.u256)
+  let txGasLeft = call.gasLimit - txGasUsed
+  if txGasLeft > 0:
+    let gasRefundAmount = txGasLeft.u256 * call.gasPrice.u256
+    if vmState.balTrackerEnabled:
+      vmState.balTracker.trackAddBalanceChange(call.sender, gasRefundAmount)
+    vmState.mutateLedger:
+      db.addBalance(call.sender, gasRefundAmount)
 
-  gasRemaining
+  GasUsed(
+    evmGasUsed: c.msg.gas - txGasLeft,
+    txGasUsed: txGasUsed,
+    blockGasUsedInTx: blockGasUsedInTx,
+  )
+
+proc sysCallGasUsed(host: TransactionHost, call: CallParams): GasUsed =
+  let
+    c = host.computation
+    txGasUsed = call.gasLimit - c.gasMeter.gasRemaining
+  GasUsed(
+    evmGasUsed: c.msg.gas - c.gasMeter.gasRemaining,
+    txGasUsed: txGasUsed,
+    blockGasUsedInTx: txGasUsed,
+  )
 
 proc finishRunningComputation(
     host: TransactionHost, call: CallParams, T: type): T =
-  let c = host.computation
+  let
+    c = host.computation
+    gasUsed = if call.sysCall: sysCallGasUsed(host, call)
+              else: calculateAndPossiblyRefundGas(host, call)
 
-  let gasRemaining = if call.sysCall: c.gasMeter.gasRemaining
-                     else: calculateAndPossiblyRefundGas(host, call)
   # evm gas used without intrinsic gas
-  let evmGasUsed = c.msg.gas - gasRemaining
-  host.vmState.captureEnd(c, c.output, evmGasUsed, c.errorOpt)
+  host.vmState.captureEnd(c, c.output, gasUsed.evmGasUsed, c.errorOpt)
 
   when T is CallResult|DebugCallResult:
     # Collecting the result can be unnecessarily expensive when (re)-processing
     # transactions
     if c.isError:
       result.error = c.error.info
-    result.gasUsed = call.gasLimit - gasRemaining
+    result.gasUsed = gasUsed.txGasUsed
     result.output = system.move(c.output)
     result.contractAddress = if call.isCreate: c.msg.contractAddress
                              else: default(addresses.Address)
@@ -268,9 +291,10 @@ proc finishRunningComputation(
       if c.isSuccess:
         result.logEntries = move(c.logEntries)
   elif T is GasInt:
-    result = call.gasLimit - gasRemaining
+    result = gasUsed.txGasUsed
   elif T is LogResult:
-    result.gasUsed = call.gasLimit - gasRemaining
+    result.gasUsed = gasUsed.txGasUsed
+    result.blockGasUsed = gasUsed.blockGasUsedInTx
     if c.isSuccess:
       result.logEntries = move(c.logEntries)
   elif T is string:
