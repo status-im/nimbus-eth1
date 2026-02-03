@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -18,7 +18,7 @@ import
 export version
 
 const
-  NimbusName* = "nimbus-eth1"
+  NimbusName* = "NimbusExecutionClient"
   ## project name string
 
   #GitRevisionOverride {.strdefine.} = ""
@@ -32,6 +32,8 @@ const
 
   FullVersionStr* = "v" & NimbusVersion & "-" & GitRevision
 
-  ClientId* = &"{NimbusName}/{FullVersionStr}/{hostOS}-{hostCPU}/Nim-{NimVersion}"
+  CpuInfo* = &"{hostOS}-{hostCPU}/Nim-{NimVersion}"
+
+  ClientId* = &"{NimbusName}/{FullVersionStr}/{CpuInfo}"
 
   ShortClientId* = NimbusName & "/" & FullVersionStr

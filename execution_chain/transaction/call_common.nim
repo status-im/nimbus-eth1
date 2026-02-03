@@ -28,7 +28,6 @@ type
   TransactionHost = ref object
     vmState:         BaseVMState
     computation:     Computation
-    sysCall:         bool
     floorDataGas:    GasInt
 
   GasUsed = object
@@ -146,7 +145,6 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
                                    else: intrinsicGas(call, vmState.fork)
     host = TransactionHost(
       vmState: vmState,
-      sysCall: call.sysCall,
       floorDataGas: floorDataGas,
       # All other defaults in `TransactionHost` are fine.
     )
@@ -216,6 +214,7 @@ proc prepareToRunComputation(host: TransactionHost, call: CallParams) =
 proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): GasUsed =
   let
     c = host.computation
+    vmState = host.vmState
     fork = host.vmState.fork
 
   # EIP-3529: Reduction in refunds
@@ -229,7 +228,7 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
   # Calculated gas used, taking into account refund rules.
   let
     txGasUsedBeforeRefund = call.gasLimit - c.gasMeter.gasRemaining
-    maxRefund = (call.gasLimit - c.gasMeter.gasRemaining) div MaxRefundQuotient
+    maxRefund = txGasUsedBeforeRefund div MaxRefundQuotient
     txGasRefund = min(c.getGasRefund(), maxRefund)
     txGasUsedAfterRefund = txGasUsedBeforeRefund - txGasRefund
 
@@ -248,9 +247,9 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
   let txGasLeft = call.gasLimit - txGasUsed
   if txGasLeft > 0:
     let gasRefundAmount = txGasLeft.u256 * call.gasPrice.u256
-    if host.vmState.balTrackerEnabled:
-      host.vmState.balTracker.trackAddBalanceChange(call.sender, gasRefundAmount)
-    host.vmState.mutateLedger:
+    if vmState.balTrackerEnabled:
+      vmState.balTracker.trackAddBalanceChange(call.sender, gasRefundAmount)
+    vmState.mutateLedger:
       db.addBalance(call.sender, gasRefundAmount)
 
   GasUsed(

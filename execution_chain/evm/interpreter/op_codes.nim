@@ -193,7 +193,7 @@ type
     Exchange =       0xE8,
 
     Nop0xE9, Nop0xEA, Nop0xEB, Nop0xEC, Nop0xED, Nop0xEE,
-    Nop0xEF,
+    Nop0xEF, ## ..
 
     # f0s: System operations
     Create =         0xf0, ## Create a new account with associated code.
