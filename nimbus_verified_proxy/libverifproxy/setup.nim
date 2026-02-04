@@ -9,6 +9,7 @@ import
   chronos,
   std/json,
   stint,
+  eth/common/keys, # used for keys.rng
   beacon_chain/spec/digest,
   beacon_chain/nimbus_binary_common,
   web3/[eth_api_types, conversions],
@@ -39,15 +40,36 @@ proc transportCallback[T](
   elif status == RET_CANCELLED:
     data.fut.fail((ref CancelledError)(msg: $res))
 
-proc getEthApiBackend*(ctx: ptr Context, transportProc: TransportProc): EthApiBackend =
+proc getRandomBackendUrl(rng: ref HmacDrbgContext, urls: seq[Web3Url]): string =
+  var randomNum: uint64
+  rng[].generate(randomNum)
+
+  # NOTE: we use the mod operator to bring the random number into range
+  # this introduces a bias in the output distribution but is negligible
+  # for this use case. The bias becomes insignificant when score filters
+  # are used to select clients in the future.
+  let url = urls[randomNum mod uint64(urls.len)]
+
+  url.web3Url
+
+proc getEthApiBackend*(
+    ctx: ptr Context, urls: seq[Web3Url], transportProc: TransportProc
+): EthApiBackend =
   let
+    rng = keys.newRng()
     ethChainIdProc = proc(): Future[EngineResult[UInt256]] {.
         async: (raises: [CancelledError])
     .} =
-      let fut =
-        Future[EngineResult[UInt256]].Raising([CancelledError]).init("blkByHash")
+      let
+        fut = Future[EngineResult[UInt256]].Raising([CancelledError]).init("blkByHash")
+        url = getRandomBackendUrl(rng, urls)
       transportProc(
-        ctx, "eth_chainId", "[]", transportCallback[UInt256], createCbData(fut)
+        ctx,
+        alloc(url),
+        "eth_chainId",
+        "[]",
+        transportCallback[UInt256],
+        createCbData(fut),
       )
       await fut
 
@@ -61,9 +83,11 @@ proc getEthApiBackend*(ctx: ptr Context, transportProc: TransportProc): EthApiBa
         blkHashSer = packArg(blkHash).valueOr:
           return err((BackendEncodingError, error))
         params = "[" & blkHashSer & ", " & fullFlagStr & "]"
+        url = getRandomBackendUrl(rng, urls)
 
       transportProc(
         ctx,
+        alloc(url),
         "eth_getBlockByHash",
         alloc(params),
         transportCallback[BlockObject],
@@ -82,9 +106,11 @@ proc getEthApiBackend*(ctx: ptr Context, transportProc: TransportProc): EthApiBa
         blkNumSer = packArg(blkNum).valueOr:
           return err((BackendEncodingError, error))
         params = "[" & blkNumSer & ", " & fullFlagStr & "]"
+        url = getRandomBackendUrl(rng, urls)
 
       transportProc(
         ctx,
+        alloc(url),
         "eth_getBlockByNumber",
         alloc(params),
         transportCallback[BlockObject],
@@ -106,9 +132,11 @@ proc getEthApiBackend*(ctx: ptr Context, transportProc: TransportProc): EthApiBa
           return err((BackendEncodingError, error))
 
         params = "[" & addressSer & ", " & slotsSer & ", " & blockIdSer & "]"
+        url = getRandomBackendUrl(rng, urls)
 
       transportProc(
         ctx,
+        alloc(url),
         "eth_getProof",
         alloc(params),
         transportCallback[ProofResponse],
@@ -128,9 +156,11 @@ proc getEthApiBackend*(ctx: ptr Context, transportProc: TransportProc): EthApiBa
         blockIdSer = packArg(blockId).valueOr:
           return err((BackendEncodingError, error))
         params = "[" & txArgsSer & ", " & blockIdSer & "]"
+        url = getRandomBackendUrl(rng, urls)
 
       transportProc(
         ctx,
+        alloc(url),
         "eth_createAccessList",
         alloc(params),
         transportCallback[AccessListResult],
@@ -148,9 +178,11 @@ proc getEthApiBackend*(ctx: ptr Context, transportProc: TransportProc): EthApiBa
         blockIdSer = packArg(blockId).valueOr:
           return err((BackendEncodingError, error))
         params = "[" & addressSer & ", " & blockIdSer & "]"
+        url = getRandomBackendUrl(rng, urls)
 
       transportProc(
         ctx,
+        alloc(url),
         "eth_getCode",
         alloc(params),
         transportCallback[seq[byte]],
@@ -168,9 +200,11 @@ proc getEthApiBackend*(ctx: ptr Context, transportProc: TransportProc): EthApiBa
         txHashSer = packArg(txHash).valueOr:
           return err((BackendEncodingError, error))
         params = "[" & txHashSer & "]"
+        url = getRandomBackendUrl(rng, urls)
 
       transportProc(
         ctx,
+        alloc(url),
         "eth_getTransactionByHash",
         alloc(params),
         transportCallback[TransactionObject],
@@ -188,9 +222,11 @@ proc getEthApiBackend*(ctx: ptr Context, transportProc: TransportProc): EthApiBa
         txHashSer = packArg(txHash).valueOr:
           return err((BackendEncodingError, error))
         params = "[" & txHashSer & "]"
+        url = getRandomBackendUrl(rng, urls)
 
       transportProc(
         ctx,
+        alloc(url),
         "eth_getTransactionReceipt",
         alloc(params),
         transportCallback[ReceiptObject],
@@ -210,9 +246,11 @@ proc getEthApiBackend*(ctx: ptr Context, transportProc: TransportProc): EthApiBa
         blockIdSer = packArg(blockId).valueOr:
           return err((BackendEncodingError, error))
         params = "[" & blockIdSer & "]"
+        url = getRandomBackendUrl(rng, urls)
 
       transportProc(
         ctx,
+        alloc(url),
         "eth_getBlockReceipts",
         alloc(params),
         transportCallback[Opt[seq[ReceiptObject]]],
@@ -229,9 +267,11 @@ proc getEthApiBackend*(ctx: ptr Context, transportProc: TransportProc): EthApiBa
         filterOptionsSer = packArg(filterOptions).valueOr:
           return err((BackendEncodingError, error))
         params = "[" & filterOptionsSer & "]"
+        url = getRandomBackendUrl(rng, urls)
 
       transportProc(
         ctx,
+        alloc(url),
         "eth_getLogs",
         alloc(params),
         transportCallback[seq[LogObject]],
@@ -247,9 +287,11 @@ proc getEthApiBackend*(ctx: ptr Context, transportProc: TransportProc): EthApiBa
         txBytesSer = packArg(txBytes).valueOr:
           return err((BackendEncodingError, error))
         params = "[" & txBytesSer & "]"
+        url = getRandomBackendUrl(rng, urls)
 
       transportProc(
         ctx,
+        alloc(url),
         "eth_sendRawTransaction",
         alloc(params),
         transportCallback[Hash32],
@@ -371,7 +413,7 @@ proc run*(
   # add light client backend
   lc.setBackend(lcRestClientPool.getEthLCBackend())
 
-  engine.backend = getEthApiBackend(ctx, transportProc)
+  engine.backend = getEthApiBackend(ctx, config.backendUrls, transportProc)
 
   # inject the frontend into c context
   ctx.frontend = engine.frontend
