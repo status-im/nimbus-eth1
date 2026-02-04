@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -162,7 +162,7 @@ proc afterExecCreate(c: Computation) =
     c.rollback()
 
 const MsgKindToOp: array[CallKind, Op] =
-  [Call, DelegateCall, CallCode, Create, Create2, EofCreate]
+  [Call, DelegateCall, CallCode, Create, Create2]
 
 func msgToOp(msg: Message): Op =
   if MsgFlags.Static in msg.flags:

@@ -11,7 +11,6 @@
 
 import
   # std/json,
-  stew/byteutils,
   json_rpc/rpcserver,
   web3/[eth_api_types, conversions],
   ./rpc_utils,
@@ -167,68 +166,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
   #     header = chainDB.headerFromTag(quantityTag)
   #   chainDB.setHead(header)
 
-  server.rpc("debug_getRawBlock") do(blockTag: BlockTag) -> seq[byte]:
-    ## Returns an RLP-encoded block.
-    let blockFromTag = chain.blockFromTag(blockTag).valueOr:
-      raise newException(ValueError, error)
-
-    rlp.encode(blockFromTag)
-
-  server.rpc("debug_getRawHeader") do(blockTag: BlockTag) -> seq[byte]:
-    ## Returns an RLP-encoded header.
-    let header = chain.headerFromTag(blockTag).valueOr:
-      raise newException(ValueError, error)
-    rlp.encode(header)
-
-  server.rpc("debug_getRawReceipts") do(blockTag: BlockTag) -> seq[seq[byte]]:
-    ## Returns an array of EIP-2718 binary-encoded receipts.
-    let header = chain.headerFromTag(blockTag).valueOr:
-      raise newException(ValueError, error)
-    var res: seq[seq[byte]]
-    for receipt in chain.baseTxFrame.getReceipts(header.receiptsRoot):
-      res.add rlp.encode(receipt)
-
-    res
-
-  server.rpc("debug_getRawTransaction") do(txHash: Hash32) -> seq[byte]:
-    ## Returns an EIP-2718 binary-encoded transaction.
-    let res = txPool.getItem(txHash)
-    if res.isOk:
-      return rlp.encode(res.get().tx)
-
-    let
-      (blockHash, txId) = chain.txDetailsByTxHash(txHash).valueOr:
-        raise newException(ValueError, "Transaction not found")
-      blk = chain.blockByHash(blockHash).valueOr:
-        raise newException(ValueError, "Block not found")
-
-    if blk.transactions.len <= int(txId):
-      raise newException(ValueError, "Transaction not found")
-
-    rlp.encode(blk.transactions[txId])
-
-  server.rpc("debug_executionWitness") do(quantityTag: BlockTag) -> ExecutionWitness:
-    ## Returns an execution witness for the given block number.
-    let header = chain.headerFromTag(quantityTag).valueOr:
-      raise newException(ValueError, "Header not found")
-
-    chain.getExecutionWitness(header.computeBlockHash()).valueOr:
-      raise newException(ValueError, error)
-
-  server.rpc("debug_executionWitnessByBlockHash") do(blockHash: Hash32) -> ExecutionWitness:
-    ## Returns an execution witness for the given block hash.
-    chain.getExecutionWitness(blockHash).valueOr:
-      raise newException(ValueError, error)
-
-  server.rpc("debug_getHeaderByNumber") do(blockTag: BlockTag) -> string:
-    ## Returns the rlp encoded block header in hex for the given block number / tag.
-    # Note: When proposing this method for inclusion in the JSON-RPC spec,
-    # consider returning a header JSON object instead of RLP. Likely to be more accepted.
-    let header = chain.headerFromTag(blockTag).valueOr:
-      raise newException(ValueError, error)
-
-    rlp.encode(header).to0xHex()
-
+  # https://ethereum.github.io/execution-apis/api/methods/debug_getBadBlocks
   server.rpc("debug_getBadBlocks") do() -> seq[BadBlock]:
     ## Returns a list of the most recently processed bad blocks.
     var badBlocks: seq[BadBlock]
@@ -248,21 +186,61 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
 
     badBlocks
 
-  # We should remove these two block access list endpoints at some point
-  # or at least update them to return the BAL in RLP format since the same
-  # functionality is now provied by eth_getBlockAccessListByBlockNumber
-  # and eth_getBlockAccessListByBlockHash
+  # https://ethereum.github.io/execution-apis/api/methods/debug_getRawBlock
+  server.rpc("debug_getRawBlock") do(blockTag: BlockTag) -> seq[byte]:
+    ## Returns an RLP-encoded block.
+    let blockFromTag = chain.blockFromTag(blockTag).valueOr:
+      raise newException(ValueError, error)
 
-  server.rpc("debug_getBlockAccessList") do(quantityTag: BlockTag) -> BlockAccessList:
-    ## Returns a block access list for the given block number.
+    rlp.encode(blockFromTag)
+
+  # https://ethereum.github.io/execution-apis/api/methods/debug_getRawHeader
+  server.rpc("debug_getRawHeader") do(blockTag: BlockTag) -> seq[byte]:
+    ## Returns an RLP-encoded header.
+    let header = chain.headerFromTag(blockTag).valueOr:
+      raise newException(ValueError, error)
+    rlp.encode(header)
+
+  # https://ethereum.github.io/execution-apis/api/methods/debug_getRawReceipts
+  server.rpc("debug_getRawReceipts") do(blockTag: BlockTag) -> seq[seq[byte]]:
+    ## Returns an array of EIP-2718 binary-encoded receipts.
+    let header = chain.headerFromTag(blockTag).valueOr:
+      raise newException(ValueError, error)
+    var res: seq[seq[byte]]
+    for receipt in chain.baseTxFrame.getReceipts(header.receiptsRoot):
+      res.add rlp.encode(receipt)
+
+    res
+
+  # https://ethereum.github.io/execution-apis/api/methods/debug_getRawTransaction
+  server.rpc("debug_getRawTransaction") do(txHash: Hash32) -> seq[byte]:
+    ## Returns an EIP-2718 binary-encoded transaction.
+    let res = txPool.getItem(txHash)
+    if res.isOk:
+      return rlp.encode(res.get().tx)
+
+    let
+      (blockHash, txId) = chain.txDetailsByTxHash(txHash).valueOr:
+        raise newException(ValueError, "Transaction not found")
+      blk = chain.blockByHash(blockHash).valueOr:
+        raise newException(ValueError, "Block not found")
+
+    if blk.transactions.len <= int(txId):
+      raise newException(ValueError, "Transaction not found")
+
+    rlp.encode(blk.transactions[txId])
+
+  ## Execution Witness endpoints - not specified in the Execution API
+
+  server.rpc("debug_executionWitness") do(quantityTag: BlockTag) -> ExecutionWitness:
+    ## Returns an execution witness for the given block number.
     let header = chain.headerFromTag(quantityTag).valueOr:
       raise newException(ValueError, "Header not found")
 
-    chain.getBlockAccessList(header.computeBlockHash()).valueOr:
-      raise newException(ValueError, "Block access list not found")
+    chain.getExecutionWitness(header.computeBlockHash()).valueOr:
+      raise newException(ValueError, error)
 
-  server.rpc("debug_getBlockAccessListByBlockHash") do(blockHash: Hash32) -> BlockAccessList:
-    ## Returns a block access list for the given block hash.
-
-    chain.getBlockAccessList(blockHash).valueOr:
-      raise newException(ValueError, "Block access list not found")
+  server.rpc("debug_executionWitnessByBlockHash") do(blockHash: Hash32) -> ExecutionWitness:
+    ## Returns an execution witness for the given block hash.
+    chain.getExecutionWitness(blockHash).valueOr:
+      raise newException(ValueError, error)

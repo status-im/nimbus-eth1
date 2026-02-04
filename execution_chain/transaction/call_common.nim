@@ -1,6 +1,6 @@
 # Nimbus - Common entry point to the EVM from all different callers
 #
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -28,8 +28,12 @@ type
   TransactionHost = ref object
     vmState:         BaseVMState
     computation:     Computation
-    sysCall:         bool
     floorDataGas:    GasInt
+
+  GasUsed = object
+    evmGasUsed: GasInt
+    txGasUsed: GasInt
+    blockGasUsedInTx: GasInt
 
 proc initialAccessListEIP2929(call: CallParams) =
   # EIP2929 initial access list.
@@ -137,11 +141,10 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
   vmState.gasRefunded = 0
 
   let
-    (intrinsicGas, floorDataGas) = if call.noIntrinsic: (0.GasInt, 0.GasInt)
+    (intrinsicGas, floorDataGas) = if call.sysCall: (0.GasInt, 0.GasInt)
                                    else: intrinsicGas(call, vmState.fork)
     host = TransactionHost(
       vmState: vmState,
-      sysCall: call.sysCall,
       floorDataGas: floorDataGas,
       # All other defaults in `TransactionHost` are fine.
     )
@@ -188,31 +191,30 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
 
 proc prepareToRunComputation(host: TransactionHost, call: CallParams) =
   # Must come after `setupHost` for correct fork.
-  if not call.noAccessList:
-    initialAccessListEIP2929(call)
+  initialAccessListEIP2929(call)
 
   # Charge for gas.
-  if not call.noGasCharge:
-    let
-      vmState = host.vmState
-      fork = vmState.fork
+  let
+    vmState = host.vmState
+    fork = vmState.fork
 
-    vmState.mutateLedger:
+  vmState.mutateLedger:
+    if vmState.balTrackerEnabled:
+      vmState.balTracker.trackSubBalanceChange(call.sender, call.gasLimit.u256 * call.gasPrice.u256)
+    db.subBalance(call.sender, call.gasLimit.u256 * call.gasPrice.u256)
+
+    # EIP-4844
+    if fork >= FkCancun:
+      let blobFee = calcDataFee(call.versionedHashes.len,
+        vmState.blockCtx.excessBlobGas, vmState.com, fork)
       if vmState.balTrackerEnabled:
-        vmState.balTracker.trackSubBalanceChange(call.sender, call.gasLimit.u256 * call.gasPrice.u256)
-      db.subBalance(call.sender, call.gasLimit.u256 * call.gasPrice.u256)
+        vmState.balTracker.trackSubBalanceChange(call.sender, blobFee)
+      db.subBalance(call.sender, blobFee)
 
-      # EIP-4844
-      if fork >= FkCancun:
-        let blobFee = calcDataFee(call.versionedHashes.len,
-          vmState.blockCtx.excessBlobGas, vmState.com, fork)
-        if vmState.balTrackerEnabled:
-          vmState.balTracker.trackSubBalanceChange(call.sender, blobFee)
-        db.subBalance(call.sender, blobFee)
-
-proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): GasInt =
+proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): GasUsed =
   let
     c = host.computation
+    vmState = host.vmState
     fork = host.vmState.fork
 
   # EIP-3529: Reduction in refunds
@@ -220,50 +222,65 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
                             5.GasInt
                           else:
                             2.GasInt
-
-  var gasRemaining = 0.GasInt
+  if c.shouldBurnGas:
+    c.gasMeter.gasRemaining = 0
 
   # Calculated gas used, taking into account refund rules.
-  if call.noRefund:
-    gasRemaining = c.gasMeter.gasRemaining
-  else:
-    if c.shouldBurnGas:
-      c.gasMeter.gasRemaining = 0
-    let maxRefund = (call.gasLimit - c.gasMeter.gasRemaining) div MaxRefundQuotient
-    let refund = min(c.getGasRefund(), maxRefund)
-    c.gasMeter.returnGas(refund)
-    gasRemaining = c.gasMeter.gasRemaining
+  let
+    txGasUsedBeforeRefund = call.gasLimit - c.gasMeter.gasRemaining
+    maxRefund = txGasUsedBeforeRefund div MaxRefundQuotient
+    txGasRefund = min(c.getGasRefund(), maxRefund)
+    txGasUsedAfterRefund = txGasUsedBeforeRefund - txGasRefund
 
-  let gasUsed = call.gasLimit - gasRemaining
+  var
+    txGasUsed = txGasUsedAfterRefund
+    blockGasUsedInTx = txGasUsed
+
   if fork >= FkPrague:
-    if host.floorDataGas > gasUsed:
-      gasRemaining = call.gasLimit - host.floorDataGas
-      c.gasMeter.gasRemaining = gasRemaining
+    txGasUsed = max(txGasUsedAfterRefund, host.floorDataGas)
+    blockGasUsedInTx = txGasUsed
 
   # Refund for unused gas.
-  if gasRemaining > 0 and not call.noGasCharge:
-    if host.vmState.balTrackerEnabled:
-      host.vmState.balTracker.trackAddBalanceChange(call.sender, gasRemaining.u256 * call.gasPrice.u256)
-    host.vmState.mutateLedger:
-      db.addBalance(call.sender, gasRemaining.u256 * call.gasPrice.u256)
+  let txGasLeft = call.gasLimit - txGasUsed
+  if txGasLeft > 0:
+    let gasRefundAmount = txGasLeft.u256 * call.gasPrice.u256
+    if vmState.balTrackerEnabled:
+      vmState.balTracker.trackAddBalanceChange(call.sender, gasRefundAmount)
+    vmState.mutateLedger:
+      db.addBalance(call.sender, gasRefundAmount)
 
-  gasRemaining
+  GasUsed(
+    evmGasUsed: c.msg.gas - txGasLeft,
+    txGasUsed: txGasUsed,
+    blockGasUsedInTx: blockGasUsedInTx,
+  )
+
+proc sysCallGasUsed(host: TransactionHost, call: CallParams): GasUsed =
+  let
+    c = host.computation
+    txGasUsed = call.gasLimit - c.gasMeter.gasRemaining
+  GasUsed(
+    evmGasUsed: c.msg.gas - c.gasMeter.gasRemaining,
+    txGasUsed: txGasUsed,
+    blockGasUsedInTx: txGasUsed,
+  )
 
 proc finishRunningComputation(
     host: TransactionHost, call: CallParams, T: type): T =
-  let c = host.computation
+  let
+    c = host.computation
+    gasUsed = if call.sysCall: sysCallGasUsed(host, call)
+              else: calculateAndPossiblyRefundGas(host, call)
 
-  let gasRemaining = calculateAndPossiblyRefundGas(host, call)
   # evm gas used without intrinsic gas
-  let evmGasUsed = c.msg.gas - gasRemaining
-  host.vmState.captureEnd(c, c.output, evmGasUsed, c.errorOpt)
+  host.vmState.captureEnd(c, c.output, gasUsed.evmGasUsed, c.errorOpt)
 
   when T is CallResult|DebugCallResult:
     # Collecting the result can be unnecessarily expensive when (re)-processing
     # transactions
     if c.isError:
       result.error = c.error.info
-    result.gasUsed = call.gasLimit - gasRemaining
+    result.gasUsed = gasUsed.txGasUsed
     result.output = system.move(c.output)
     result.contractAddress = if call.isCreate: c.msg.contractAddress
                              else: default(addresses.Address)
@@ -274,9 +291,10 @@ proc finishRunningComputation(
       if c.isSuccess:
         result.logEntries = move(c.logEntries)
   elif T is GasInt:
-    result = call.gasLimit - gasRemaining
+    result = gasUsed.txGasUsed
   elif T is LogResult:
-    result.gasUsed = call.gasLimit - gasRemaining
+    result.gasUsed = gasUsed.txGasUsed
+    result.blockGasUsed = gasUsed.blockGasUsedInTx
     if c.isSuccess:
       result.logEntries = move(c.logEntries)
   elif T is string:
@@ -293,7 +311,8 @@ proc finishRunningComputation(
 
 proc runComputation*(call: CallParams, T: type): T =
   let host = setupHost(call, keepStack = T is DebugCallResult)
-  prepareToRunComputation(host, call)
+  if not call.sysCall:
+    prepareToRunComputation(host, call)
 
   # Pre-execution sanity checks
   host.computation.preExecComputation()

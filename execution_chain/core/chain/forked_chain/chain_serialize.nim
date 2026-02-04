@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -125,6 +125,7 @@ proc replayBlock(fc: ForkedChainRef;
   let
     parentFrame = parent.txFrame
     txFrame = parentFrame.txFrameBegin()
+    blockAccessList = ?fc.baseTxFrame.getBlockAccessList(blk.hash)
 
   # Set finalized to true in order to skip the stateroot check when replaying the
   # block because the blocks should have already been checked previously during
@@ -133,12 +134,17 @@ proc replayBlock(fc: ForkedChainRef;
     parent,
     txFrame,
     blk.blk,
-    Opt.none(BlockAccessListRef),
+    blockAccessList,
     blk.hash,
     finalized = true
   ).valueOr:
     txFrame.dispose()
     return err(error)
+  
+  # After processing the block the BAL should now be stored in the txFrame in 
+  # memory so we can delete the copy on disk
+  if blockAccessList.isSome():
+    fc.baseTxFrame.deleteBlockAccessList(blk.hash)
 
   # Checkpoint creates a snapshot of ancestor changes in txFrame - it is an
   # expensive operation, specially when creating a new branch (ie when blk
@@ -221,6 +227,11 @@ proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbEr
 
   for b in fc.hashToBlock.values:
     ?txFrame.put(blockIndexKey(b.index), rlp.encode(b))
+    # Move the BAL from the block txFrame into the target (base) txFrame
+    let bal = b.txFrame.getBlockAccessList(b.hash).valueOr:
+      Opt.none(BlockAccessListRef)
+    if bal.isSome():
+      txFrame.persistBlockAccessList(b.hash, bal.get())
 
   info "Blocks DAG written to database",
     base=fc.base.number,
