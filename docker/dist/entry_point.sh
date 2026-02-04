@@ -210,7 +210,7 @@ if [[ "${PLATFORM}" == "windows_amd64" ]]; then
 fi
 
 for BINARY in ${BINARIES}; do
-  cp -a "./build/${BINARY}${EXT}" "${DIST_PATH}/build/"
+  cp "./build/${BINARY}${EXT}" "${DIST_PATH}/build/"
   if [[ "${PLATFORM}" =~ macOS ]]; then
     # Collect debugging info and filter out warnings.
     #
@@ -222,7 +222,7 @@ for BINARY in ${BINARIES}; do
       grep -v "while processing" |
       grep -v "warning: line table parameters mismatch. Cannot emit." ||
       true
-    cp -a "./build/${BINARY}.dSYM" "${DIST_PATH}/build/"
+    cp "./build/${BINARY}.dSYM" "${DIST_PATH}/build/"
   fi
   cd "${DIST_PATH}/build"
   sha512sum "${BINARY}${EXT}" >"${BINARY}.sha512sum"
