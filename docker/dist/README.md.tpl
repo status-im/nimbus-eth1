@@ -7,7 +7,7 @@ hosted at https://github.com/status-im/nimbus-eth1.
 The tarball containing this README uses the following naming scheme:
 
 ```bash
-nimbus_execution_client-<TARGET OS>-<TARGET CPU>-<VERSION>-<GIT COMMIT>.tar.gz
+nimbus-<TARGET OS>-<TARGET CPU>-<VERSION>-<GIT COMMIT>.tar.gz
 nimbus_verified_proxy-<TARGET OS>-<TARGET CPU>-<VERSION>-<GIT COMMIT>.tar.gz
 ```
 

@@ -29,4 +29,4 @@ STOPSIGNAL SIGINT
 # Docker refuses to copy the source directory here, so read it as "nimbus-eth1/*"
 COPY "nimbus-eth1" "/home/user/nimbus-eth1/"
 WORKDIR "/home/user/nimbus-eth1/"
-ENTRYPOINT ["/home/user/nimbus-eth1/build/nimbus_execution_client"]
+ENTRYPOINT ["/home/user/nimbus-eth1/build/nimbus"]
