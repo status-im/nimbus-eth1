@@ -56,6 +56,7 @@ typedef void (*CallBackProc)(Context *ctx, int status, char *result, void *userD
  * application using the verified proxy library)
  *
  * @param ctx       Execution context passed to the original request.
+ * @param url       URL of the endpoint to forward this request to
  * @param name      name of the RPC method
  * @param params    JSON serialized params required for the RPC method.(allocated by Nim - 
  *                  must be freed using freeNimAllocatedString)
@@ -66,7 +67,7 @@ typedef void (*CallBackProc)(Context *ctx, int status, char *result, void *userD
  *                  must appropriately relay back the userData via the transport
  *                  callback function (see above)
  */
-typedef void (*TransportProc)(Context *ctx, char *name, char *params, CallBackProc cb, void *userData);
+typedef void (*TransportProc)(Context *ctx, char *url, char *name, char *params, CallBackProc cb, void *userData);
 
 /**
  * Start the verification proxy with a given configuration.
@@ -110,9 +111,11 @@ void stopVerifProxy(Context *ctx);
  * This function should be called periodically to allow the proxy to handle
  * queued tasks, callbacks, and events. It is non-blocking.
  *
- * @param ctx Context pointer representing the running proxy.
+ * @param   ctx     Context pointer representing the running proxy.
+ * @return  status  if the proxy was stopped this would return an error code RET_ERROR
+ *                  else it would return RET_SUCCESS
  */
-void processVerifProxyTasks(Context *ctx);
+ETH_RESULT_USE_CHECK int processVerifProxyTasks(Context *ctx);
 
 /**
  * call any RPC method

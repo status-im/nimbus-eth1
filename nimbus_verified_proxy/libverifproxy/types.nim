@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[strutils, lists],
+  std/[locks, strutils, lists],
   stint,
   stew/byteutils,
   ../engine/types,
@@ -25,6 +25,7 @@ type
 
   Context* = object
     config*: string
+    lock*: Lock
     tasks*: SinglyLinkedList[Task]
     taskLen*: int
     stop*: bool
@@ -36,6 +37,7 @@ type
 
   TransportProc* = proc(
     ctx: ptr Context,
+    url: cstring,
     name: cstring,
     params: cstring,
     cb: CallBackProc,
