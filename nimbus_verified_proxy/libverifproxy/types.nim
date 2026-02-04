@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[locks, strutils, lists],
+  std/[strutils, lists],
   stint,
   stew/byteutils,
   ../engine/types,
@@ -25,7 +25,6 @@ type
 
   Context* = object
     config*: string
-    lock*: Lock
     tasks*: SinglyLinkedList[Task]
     taskLen*: int
     stop*: bool

@@ -8,7 +8,7 @@
 import
   chronos,
   stew/byteutils,
-  std/[locks, atomics, json, net, lists],
+  std/[atomics, json, net, lists],
   beacon_chain/spec/[digest, network],
   beacon_chain/nimbus_binary_common,
   json_rpc/[jsonmarshal],
@@ -58,20 +58,16 @@ proc processVerifProxyTasks(ctx: ptr Context): cint {.exported.} =
 
   # cancel all tasks if stopped
   if ctx.stop:
-    ctx.lock.acquire()
     for task in ctx.tasks:
       waitFor task.fut.cancelAndWait()
-    ctx.lock.release()
     return RET_CANCELLED
 
   for taskNode in ctx.tasks.nodes:
     let task = taskNode.value
     if task.finished:
       task.cb(ctx, task.status, alloc(task.response), task.userData)
-      ctx.lock.acquire()
       ctx.tasks.remove(taskNode)
       ctx.taskLen -= 1
-      ctx.lock.release()
 
   if ctx.taskLen > 0:
     poll()
@@ -92,7 +88,6 @@ proc startVerifProxy(
     userData: pointer,
 ): ptr Context {.exported.} =
   let ctx = Context.new().toUnmanagedPtr()
-  ctx.lock.initLock()
   ctx.stop = false
 
   try:
@@ -100,8 +95,6 @@ proc startVerifProxy(
   except Exception as e:
     cb(ctx, RET_ERROR, alloc(e.msg), userData)
     return
-
-  ctx.lock.acquire()
 
   let
     task = createTask(cb, userData)
@@ -131,8 +124,6 @@ proc startVerifProxy(
   ctx.tasks.add(task)
   ctx.taskLen += 1
 
-  ctx.lock.release()
-
   return ctx
 
 proc stopVerifProxy(ctx: ptr Context) {.exported.} =
@@ -142,8 +133,6 @@ proc stopVerifProxy(ctx: ptr Context) {.exported.} =
 template callbackToC(
     ctx: ptr Context, cb: CallBackProc, userData: pointer, asyncCall: untyped
 ) =
-  ctx.lock.acquire()
-
   let
     task = createTask(cb, userData)
     fut = asyncCall
@@ -177,8 +166,6 @@ template callbackToC(
   task.fut = fut
   ctx.tasks.add(task)
   ctx.taskLen += 1
-
-  ctx.lock.release()
 
 proc eth_blockNumber(
     ctx: ptr Context, cb: CallBackProc, userData: pointer
