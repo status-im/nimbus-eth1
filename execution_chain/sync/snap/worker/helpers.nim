@@ -19,7 +19,6 @@ import
   ../../../networking/p2p,
   ../../../utils/[prettify, utils],
   ../../sync_desc,
-  ./state_db/item_key,
   ./worker_const
 
 export
@@ -30,21 +29,6 @@ func toStr*(h: Hash32): string =
   if h == emptyRoot: "n/a"
   elif h == zeroHash32: "n/a"
   else: h.short
-
-
-func toStr*(w: ItemKey): string =
-  if w == high(ItemKey): "n/a" else: $(w.to(UInt256))
-
-func toStr*(w: (ItemKey,ItemKey)): string =
-  func xStr(w: ItemKey): string =
-    if w == high(ItemKey): "high(ItemKey)" else: $(w.to(UInt256))
-  if w[0] < w[1]: $(w[0].to(UInt256)) & ".." & w[1].xStr
-  elif w[0] == w[1]: w[0].xStr
-  else: "n/a"
-
-func toStr*(w: ItemKeyRange): string =
-  (w.minPt,w.maxPt).toStr
-
 
 func toStr*(w: float): string =
   &"{w:.7g}" # => 1.234567e+x
@@ -63,9 +47,6 @@ func toStr*(a: chronos.Duration): string =
   s
 
 # -----------
-
-func `$`*(w: ItemKey|ItemKeyRange): string =
-  w.toStr
 
 func `$`*(w: (SyncState,bool)): string =
   $w[0] & (if w[1]: "+" & "poolMode" else: "")

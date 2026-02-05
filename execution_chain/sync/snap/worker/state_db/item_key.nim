@@ -15,8 +15,9 @@
 {.push raises:[].}
 
 import
-  std/math,
-  pkg/[eth/common, stint, stew/interval_set]
+  std/[fenv, math],
+  pkg/[eth/common, stint, stew/interval_set],
+  ../helpers
 
 type
   ItemKey* = distinct UInt256
@@ -71,18 +72,41 @@ const
   ItemKeyRangeMax* = ItemKeyRange.new(low(ItemKey),high(ItemKey))
 
 # ------------------------------------------------------------------------------
+# Public print functions
+# ------------------------------------------------------------------------------
+
+func toStr*(w: ItemKey): string =
+  if w == high(ItemKey): "n/a" else: $(w.to(UInt256))
+
+func toStr*(w: (ItemKey,ItemKey)): string =
+  func xStr(w: ItemKey): string =
+    if w == high(ItemKey): "high(ItemKey)" else: $(w.to(UInt256))
+  if w[0] < w[1]: $(w[0].to(UInt256)) & ".." & w[1].xStr
+  elif w[0] == w[1]: w[0].xStr
+  else: "n/a"
+
+func toStr*(w: ItemKeyRange): string =
+  (w.minPt,w.maxPt).toStr
+
+
+func `$`*(w: ItemKey|ItemKeyRange): string =
+  w.toStr
+
+# ------------------------------------------------------------------------------
 # Other public helpers
 # ------------------------------------------------------------------------------
 
 func to*(w: UInt256; T: type float): T =
   ## Lossy conversion to `float` -- great for printing
-  if w == high(UInt256):
-    return Inf
-  let mantissaLen = 256 - w.leadingZeros
-  if mantissaLen <= 64:
-    return w.truncate(uint64).T
-  let exp = mantissaLen - 64
-  (w shr exp).truncate(uint64).T * 2f.pow(exp.float)
+  ##
+  when sizeof(float) != sizeof(uint):
+    {.error: "Expected float having the same size as uint".}
+  let mantissa = 256 - w.leadingZeros
+  if mantissa <= mantissaDigits(float):         # `<= 53` on a 64 bit system
+    return w.truncate(uint).float
+  # Calculate `w / 2^exp * 2^exp` = `w`
+  let exp = mantissa - mantissaDigits(float)
+  (w shr exp).truncate(uint).float * 2f.pow(exp.float)
 
 func to*(w: ItemKey; _: type float): float =
   w.UInt256.to(float)
