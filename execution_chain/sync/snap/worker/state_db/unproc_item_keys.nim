@@ -116,6 +116,32 @@ proc fetchLeast*(udb: UnprocItemKeys; maxLen: static[int]): Opt[ItemKeyRange] =
   udb.fetchLeast(ivLenMax)
 
 
+proc fetchSubRange*(
+    udb: UnprocItemKeys;
+    iv: ItemKeyRange;
+      ): Opt[ItemKeyRange] =
+  ## Fetch a sub-interval of the argument interval `iv` from the unprocessed
+  ## data ranges.
+  ##
+  let
+    # Fetch bottom/left interval with least block numbers
+    jv = udb.unprocessed.ge(iv.minPt).valueOr:
+      return err()
+
+    # Curb interval `jv` to maximal length
+    kv = block:
+      if jv.maxPt <= iv.maxPt:
+        jv
+      elif jv.minPt <= iv.maxPt:                    # now: `iv.maxPt < jv.maxPt`
+        ItemKeyRange.new(jv.minPt, iv.maxPt)
+      else:
+        return err()                                # empty intersection
+
+  discard udb.unprocessed.reduce(kv)
+  doAssert udb.borrowed.merge(kv) == kv.len
+  ok(kv)
+
+
 proc commit*(
     udb: UnprocItemKeys;
     iv: ItemKeyRange;                               # from `fetchLeast()`
