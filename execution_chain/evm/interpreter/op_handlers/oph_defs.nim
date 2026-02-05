@@ -89,7 +89,7 @@ const
     VmOpPragueAndLater - {FkPrague}
 
   VmOpAmsterdamAndLater* =
-    VmOpOsakaAndLater - {FkOsaka}
+    {FkAmsterdam..EVMFork.high}
 
 # ------------------------------------------------------------------------------
 # End
