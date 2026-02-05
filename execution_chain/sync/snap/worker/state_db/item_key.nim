@@ -118,5 +118,40 @@ func to*(w: ItemKeyRange; _: type float): (float,float) =
   (w.minPt, w.maxPt).to(float)
 
 # ------------------------------------------------------------------------------
+# Functions extending the `ItemKeyRange` basic functionality
+# ------------------------------------------------------------------------------
+
+proc init*(T: type ItemKeyRangeSet, ivInit: ItemKeyRange): T =
+  ## Some shortcut
+  let ikrs = ItemKeyRangeSet.init()
+  discard ikrs.merge ivInit
+  ikrs
+
+proc fetchLeast*(ikrs: ItemKeyRangeSet; maxLen: UInt256): Opt[ItemKeyRange] =
+  ## Borrowed from `unproc_item_keys.nim` for a single `ItemKeyRangeSet`
+  ## (w/o the `borrowed` part.)
+  ##
+  let
+    jv = ikrs.ge().valueOr:
+      return err()
+    kv = block:
+      if maxLen == 0 or (jv.len != 0 and jv.len <= maxLen):
+        jv
+      else:
+        ItemKeyRange.new(jv.minPt, jv.minPt + (maxLen - 1.u256))
+
+  discard ikrs.reduce(kv)
+  ok(kv)
+
+func totalRatio*(ikrs: ItemKeyRangeSet): float =
+  ## Borrowed from `unproc_item_keys.nim` for a single `ItemKeyRangeSet`
+  ## (w/o the `borrowed` part.)
+  ##
+  let total = ikrs.total()
+  if total == 0:
+    return (if ikrs.chunks() == 0: 0f else: 1f)
+  total.per256()
+
+# ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
