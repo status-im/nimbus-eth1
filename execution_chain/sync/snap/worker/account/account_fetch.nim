@@ -16,6 +16,10 @@ import
   ../[helpers, state_db, worker_desc],
   ./account_helpers
 
+type
+  FetchAccountsResult* = Result[AccountRangePacket,ErrorType]
+    ## Shortcut
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
@@ -77,12 +81,12 @@ template fetchAccounts*(
     buddy: SnapPeerRef;
     stateRoot: StateRoot;                                 # DB state
     ivReq: ItemKeyRange;                                  # Range to be fetched
-      ): Opt[AccountRangePacket] =
+      ): FetchAccountsResult =
   ## Async/template
   ##
   ## Fetch accounts from the network.
   ##
-  var bodyRc = Opt[AccountRangePacket].err()
+  var bodyRc = FetchAccountsResult.err(EGeneric)
   block body:
     const
       sendInfo = trSnapSendSendingGetAccountRange
@@ -107,20 +111,24 @@ template fetchAccounts*(
       elapsed = rc.value.elapsed
     else:
       elapsed = rc.error.elapsed
+      bodyRc = FetchAccountsResult.err(rc.error.excp)
       block evalError:
         case rc.error.excp:
-        of EGeneric, ESyncerTermination:
+        of EGeneric:
           break evalError
-        of EPeerDisconnected, ECancelledError:
-          buddy.nErrors.fetch.acc.inc
-          buddy.ctrl.zombie = true
-        of ECatchableError, EMissingEthContext:
-          buddy.accFetchRegisterError()
         of EAlreadyTriedAndFailed:
           trace recvInfo & " error", peer, root, reqAcc, nReqAcc,
             ela=elapsed.toStr, state=($buddy.syncState), error=rc.errStr,
             nErrors=buddy.nErrors.fetch.acc
           break body                               # return err()
+        of EPeerDisconnected, ECancelledError:
+          buddy.nErrors.fetch.acc.inc
+          buddy.ctrl.zombie = true
+        of ECatchableError:
+          buddy.accFetchRegisterError()
+        of ENoDataAvailable, EMissingEthContext:
+          # Not allowed here -- internal error
+          raiseAssert "Unexpected error " & $rc.error.excp
 
         # Debug message for other errors
         debug recvInfo & " error", peer, root, reqAcc, nReqAcc,
@@ -193,6 +201,7 @@ template fetchAccounts*(
       buddy.registerPeerError(stateRoot)
       trace recvInfo & " not available", peer, root, reqAcc, nReqAcc,
         ela, state, nErrors=buddy.nErrors.fetch.acc
+      bodyRc = FetchAccountsResult.err(ENoDataAvailable)
       break body                                          # return err()
 
     else:
@@ -206,7 +215,7 @@ template fetchAccounts*(
       buddy.nErrors.fetch.acc = 0                         # reset error count
       buddy.ctx.pool.lastSlowPeer = Opt.none(Hash)        # not last one/error
 
-    bodyRc = Opt[AccountRangePacket].ok(rc.value.packet)
+    bodyRc = FetchAccountsResult.ok(rc.value.packet)
 
   bodyRc
 
