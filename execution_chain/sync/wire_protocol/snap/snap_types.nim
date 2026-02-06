@@ -122,7 +122,7 @@ proc snapRd(r: var Rlp, T: type SnapCodeHash): T {.gcsafe, raises: [RlpError]} =
   ## RLP mixin, decoding
   if r.isEmpty():
     r.skipElem()
-    EMPTY_SHA3.T                            # optimised snap encoding
+    EMPTY_CODE_HASH.T                       # optimised snap encoding
   else:
     r.read(Hash32).T
 

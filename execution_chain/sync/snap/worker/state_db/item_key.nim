@@ -15,7 +15,7 @@
 {.push raises:[].}
 
 import
-  std/[fenv, math],
+  std/[fenv, hashes, math],
   pkg/[eth/common, stint, stew/interval_set],
   ../helpers
 
@@ -28,6 +28,12 @@ type
 
   ItemKeyRange* = Interval[ItemKey,UInt256]
     ## Single interval of item keys (e.g. account/storage hashes(
+
+# ------------------------------------------------------------------------------
+# Public `tables` support
+# ------------------------------------------------------------------------------
+
+func hash*(w: ItemKey): Hash = w.UInt256.hash
 
 # ------------------------------------------------------------------------------
 # Public `ItemKey` / `Hash32` interoperability

@@ -34,7 +34,7 @@ template updateTarget(
 
       # Single target block hash
       if ctx.pool.target.value.blockHash != BlockHash(zeroHash32):
-        let rc = buddy.headerStateSet(ctx.pool.target.value.blockHash)
+        let rc = buddy.headerStateRegister(ctx.pool.target.value.blockHash)
         if rc.isErr and rc.error:                       # real error
           trace info & ": failed fetching pivot hash", peer,
             hash=ctx.pool.target.value.blockHash.toStr
@@ -118,7 +118,7 @@ template accountRangeImport*(buddy: SnapPeerRef; info: static[string]) =
       if not ethPeer.isNil:
         trace info & ": processing best/latest pivotHash", peer,
           hash=ethPeer.only.pivotHash.short
-        buddy.headerStateSet(BlockHash(ethPeer.only.pivotHash)).isErrOr:
+        buddy.headerStateRegister(BlockHash(ethPeer.only.pivotHash)).isErrOr:
           buddy.only.pivotRoot = Opt.some(value)
 
     # Check for maual target settings
