@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -560,6 +560,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
           BaseFee:         fixed GasBase,
           BlobHash:        fixed GasVeryLow,
           BlobBaseFee:     fixed GasBase,
+          SlotNum:         fixed GasBase,
 
           # 50s: Stack, Memory, Storage and Flow Operations
           Pop:            fixed GasBase,
@@ -659,6 +660,11 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
           Log2:           memExpansion `prefix gasLog2`,
           Log3:           memExpansion `prefix gasLog3`,
           Log4:           memExpansion `prefix gasLog4`,
+
+          # e0s
+          DupN:           fixed GasVeryLow,
+          SwapN:          fixed GasVeryLow,
+          Exchange:       fixed GasVeryLow,
 
           # f0s: System operations
           Create:         handleCreate `prefix gasCreate`,

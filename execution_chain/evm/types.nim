@@ -33,6 +33,7 @@ type
     coinbase*         : Address
     excessBlobGas*    : uint64
     parentHash*       : Hash32
+    slotNumber*       : uint64
 
   TxContext* = object
     origin*         : Address
@@ -52,6 +53,7 @@ type
     tracer*           : TracerRef
     receipts*         : seq[StoredReceipt]
     cumulativeGasUsed*: GasInt
+    blockGasUsed*     : GasInt
     gasCosts*         : GasCosts
     blobGasUsed*      : uint64
     allLogs*          : seq[Log] # EIP-6110

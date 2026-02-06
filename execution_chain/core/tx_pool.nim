@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -233,13 +233,15 @@ export
   timestamp,
   prevRandao,
   withdrawals,
-  parentBeaconBlockRoot
+  parentBeaconBlockRoot,
+  slotNumber
 
 # feeRecipient(xp: TxPoolRef): Address
 # timestamp(xp: TxPoolRef): EthTime
 # prevRandao(xp: TxPoolRef): Bytes32
 # withdrawals(xp: TxPoolRef): seq[Withdrawal]
 # parentBeaconBlockRoot(xp: TxPoolRef): Hash32
+# slotNumber(xp: TxPoolRef): uint64
 
 # ------------------------------------------------------------------------------
 # PoS payload attributes setters
@@ -250,10 +252,12 @@ export
   `timestamp=`,
   `prevRandao=`,
   `withdrawals=`,
-  `parentBeaconBlockRoot=`
+  `parentBeaconBlockRoot=`,
+  `slotNumber=`
 
 # `feeRecipient=`(xp: TxPoolRef, val: Address)
 # `timestamp=`(xp: TxPoolRef, val: EthTime)
 # `prevRandao=`(xp: TxPoolRef, val: Bytes32)
 # `withdrawals=`(xp: TxPoolRef, val: sink seq[Withdrawal])
 # `parentBeaconBlockRoot=`(xp: TxPoolRef, val: Hash32)
+# `slotNumber=`(xp: TxPoolRef, val: uint64)

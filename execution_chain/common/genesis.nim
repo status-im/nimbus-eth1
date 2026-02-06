@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -85,6 +85,7 @@ proc toGenesisHeader*(
 
   if fork >= Amsterdam:
     result.blockAccessListHash = Opt.some(EMPTY_BLOCK_ACCESS_LIST_HASH)
+    result.slotNumber = Opt.some(0'u64)
 
 proc toGenesisHeader*(
     genesis: Genesis;

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -49,6 +49,7 @@ proc init(
   self.tracer = tracer
   self.receipts.setLen(0)
   self.cumulativeGasUsed = 0
+  self.blockGasUsed = 0
   self.gasCosts = self.fork.forkToSchedule
   self.blobGasUsed = 0'u64
   self.allLogs.setLen(0)
@@ -65,6 +66,7 @@ func blockCtx(header: Header): BlockContext =
     coinbase     : header.coinbase,
     excessBlobGas: header.excessBlobGas.get(0'u64),
     parentHash   : header.parentHash,
+    slotNumber   : header.slotNumber.get(0'u64),
   )
 
 # --------------

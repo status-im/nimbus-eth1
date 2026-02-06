@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -43,6 +43,8 @@ proc computePayloadId*(blockHash: common.Hash32,
       ctx.update(wd)
   if params.parentBeaconBlockRoot.isSome:
     ctx.update(distinctBase params.parentBeaconBlockRoot.value)
+  if params.slotNumber.isSome:
+    ctx.update(toBytesBE distinctBase params.slotNumber.get)
   ctx.finish dest.data
   ctx.clear()
   (distinctBase result)[0..7] = dest.data[0..7]
