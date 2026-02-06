@@ -13,6 +13,7 @@
 import
   std/sequtils,
   pkg/[eth/rlp, stint, stew/interval_set],
+  ../helpers,
   ./item_key
 
 type
@@ -81,10 +82,7 @@ proc clear*(udb: var UnprocItemKeys) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc fetchLeast*(
-    udb: UnprocItemKeys;
-    maxLen = high(UInt256);
-      ): Opt[ItemKeyRange] =
+proc fetchLeast*(udb: UnprocItemKeys; maxLen: UInt256): Opt[ItemKeyRange] =
   ## Fetch the least/leftmost interval from `ItemKey` ranges with maximal size
   ## `maxLen`, where `0` is interpreted as `2^256`.
   ##
@@ -93,9 +91,9 @@ proc fetchLeast*(
     jv = udb.unprocessed.ge().valueOr:
       return err()
 
-    # Curb interval to maximal length `maxLen`
+    # Curb interval to maximal length (note `0` => `2^256`)
     iv = block:
-      if maxLen == 0 or (0 < jv.len and jv.len <= maxLen):
+      if maxLen == 0 or (jv.len != 0 and jv.len <= maxLen):
         jv
       else:
         # Curb interval `jv` to length `maxLen`
@@ -113,16 +111,50 @@ proc fetchLeast*(
 
 proc fetchLeast*(udb: UnprocItemKeys; maxLen: static[int]): Opt[ItemKeyRange] =
   ## Variant of `fetchLeast()` with convenient type for  `maxLen`
+  ##
   const ivLenMax = max(maxLen,0).uint.to(UInt256)
   udb.fetchLeast(ivLenMax)
 
 
-proc commit*(udb: UnprocItemKeys; iv: ItemKeyRange) =
+proc fetchSubRange*(
+    udb: UnprocItemKeys;
+    iv: ItemKeyRange;
+      ): Opt[ItemKeyRange] =
+  ## Fetch a sub-interval of the argument interval `iv` from the unprocessed
+  ## data ranges.
+  ##
+  let
+    # Fetch bottom/left interval with least block numbers
+    jv = udb.unprocessed.ge(iv.minPt).valueOr:
+      return err()
+
+    # Curb interval `jv` to maximal length
+    kv = block:
+      if jv.maxPt <= iv.maxPt:
+        jv
+      elif jv.minPt <= iv.maxPt:                    # now: `iv.maxPt < jv.maxPt`
+        ItemKeyRange.new(jv.minPt, iv.maxPt)
+      else:
+        return err()                                # empty intersection
+
+  discard udb.unprocessed.reduce(kv)
+  doAssert udb.borrowed.merge(kv) == kv.len
+  ok(kv)
+
+
+proc commit*(
+    udb: UnprocItemKeys;
+    iv: ItemKeyRange;                               # from `fetchLeast()`
+      ) =
   ## Commit back all of processed range, i.e. remove it from the borrowed set
   ##
   doAssert udb.borrowed.reduce(iv) == iv.len
 
-proc commit*(udb: UnprocItemKeys; iv, unproc: ItemKeyRange) =
+proc commit*(
+    udb: UnprocItemKeys;
+    iv: ItemKeyRange;                               # from `fetchLeast()`
+    unproc: ItemKeyRange;                           # unprocessed sub-interval
+      ) =
   ## Variant of `commit()` which merges back some unprocessed range `unproc`
   ##
   doAssert udb.borrowed.reduce(iv) == iv.len
@@ -130,9 +162,9 @@ proc commit*(udb: UnprocItemKeys; iv, unproc: ItemKeyRange) =
 
 proc commit*(
     udb: UnprocItemKeys;
-    iv: ItemKeyRange;
-    minKey: ItemKey;
-    maxKey: ItemKey;
+    iv: ItemKeyRange;                               # from `fetchLeast()`
+    minKey: ItemKey;                                # unprocessed intv. start
+    maxKey: ItemKey;                                # unprocessed intv. last
       ) =
   ## Variant of `commit()` which merges back some unprocessed
   ## range `[minKey,maxKey]`
@@ -144,8 +176,8 @@ proc commit*(
 
 proc overCommit*(
     udb: UnprocItemKeys;
-    minKey: ItemKey;
-    maxKey: ItemKey;
+    minKey: ItemKey;                                # processed intv. start
+    maxKey: ItemKey;                                # processed intv. last
       ) =
   ## Reduce unprocessed list by some range `[minKey,maxKey]`. This happens
   ## typically when a bit more accont or storage items are send via `snap`
@@ -180,11 +212,10 @@ func avail*(udb: UnprocItemKeys): Opt[UInt256] =
   ## `UInt256`, the maximum value `1+2^256` is returned as `ok(0)`, while the
   ## least value `0` is returned as `err()`.
   ##
-  let u = udb.unprocessed.total()
-  if u == 0 and udb.unprocessed.chunks() == 0:
-    err()
+  if udb.unprocessed.chunks() == 0:
+    err()                                           # representing zero items
   else:
-    ok(u)
+    ok udb.unprocessed.total()
 
 func availBottom*(udb: UnprocItemKeys): ItemKey =
   ## Returns the least `ItemKey` entity from the `unprocessed` ranges set. It
@@ -196,10 +227,10 @@ func availBottom*(udb: UnprocItemKeys): ItemKey =
 
 func availTop*(udb: UnprocItemKeys): ItemKey =
   ## Returns the largest`ItemKey` entity from the `unprocessed` ranges set. It
-  ## will default to `low(ItemKey)` (aka zero) if the range set is empty.
+  ## will default to `0` if the range set is empty.
   ##
   let iv = udb.unprocessed.le().valueOr:
-    return low(ItemKey)
+    return low(ItemKey)                             # aka 0 representing `2^256`
   iv.maxPt
 
 
@@ -207,7 +238,7 @@ func total*(udb: UnprocItemKeys): Opt[UInt256] =
   ## Returns the sum of `borrowed` and `unprocessed` range sizes.
   ##
   ## Due to residue class arithmetic and limitations of the number range
-  ## `UInt256`, the maximum value `1+2^256` is returned as `ok(0)`, while the
+  ## `UInt256`, the maximum value `2^256` is returned as `ok(0)`, while the
   ## least value `0` is returned as `err()`.
   ##
   if udb.borrowed.chunks() == 0:
@@ -215,11 +246,11 @@ func total*(udb: UnprocItemKeys): Opt[UInt256] =
   else:
     let b = udb.borrowed.total()
     if udb.unprocessed.chunks() == 0:
-      ok(b) # 0 represents `1 + 2^256`
+      ok(b)                                         # 0 represents `2^256`
     else:
       let ub = udb.unprocessed.total() + (b - 1)
-      if ub == high(UInt256):
-        ok(low(UInt256))
+      if ub == high(UInt256):                       # which is `2^256-1`
+        ok(low UInt256)                             # aka 0 representing `2^256`
       else:
         ok(ub+1)
 
@@ -263,6 +294,17 @@ func totalTop*(udb: UnprocItemKeys): ItemKey =
       else:
         low(ItemKey)
   max(uMax, bMax)
+
+
+func totalRatio*(udb: UnprocItemKeys): float =
+  ## The function returns the factor of how much more data are to be processed
+  ## (i.e. `total()/2^256`.) This calculation considers borrowed ranges as
+  ## unprocessed.
+  ##
+  ## This function returns an approximation only of the real factor due to
+  ## lossy conversion from `UInt256` values to `float`.
+  ##
+  udb.total().per256()
 
 # ------------------------------------------------------------------------------
 # End

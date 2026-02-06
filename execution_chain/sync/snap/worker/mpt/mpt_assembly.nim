@@ -18,11 +18,11 @@
 ##
 ## This module will always pull in the `RocksDB` library. There is no
 ## in-memory part (which avoids the `RocksDB` library) as provided by the
-## `CorrDb` via different `memory` and `persistent` sub-modules.
+## `CoreDb` via different `memory` and `persistent` sub-modules.
 ##
-## For the moment, no column families will be used.
+## No column families are used, here.
 ##
-## Storage formats by column type:
+## Key/value storage formats by column type:
 ##
 ## * RawAccPkg:
 ##   + key65: <col, root, start>
@@ -101,13 +101,13 @@ type
 func decodeRawAccPkg(data: seq[byte]): Result[DecodedRawAccPkg,string] =
   when sizeof(Hash) != sizeof(uint):
     {.error: "Hash type must have size of uint".}
-  const info = "decodeRawAccPkg: "
+  const info = "decodeRawAccPkg"
   var
     rd = data.rlpFromBytes
     res: DecodedRawAccPkg
   try:
     rd.tryEnterList()
-    res.limit = rd.read(UInt256).ItemKey
+    res.limit = ItemKey(rd.read(UInt256))
     res.packet = rd.read(AccountRangePacket)
     res.peerID = Hash(cast[int](rd.read uint))
   except RlpError as e:
@@ -122,7 +122,7 @@ template encodeRawAccPkg(
   when sizeof(Hash) != sizeof(uint):
     {.error: "Hash type must have size of uint".}
   var wrt = initRlpList 3
-  wrt.append limit.distinctBase
+  wrt.append limit.to(UInt256)
   wrt.append packet
   wrt.append cast[uint](peerID)
   wrt.finish()
@@ -310,7 +310,7 @@ proc init*(T: type MptAsmRef, baseDir: string, info: static[string]): Opt[T] =
       error info & ": Cannot backup old assembly folder", asmDir, bakDir, excpt
       return err()
 
-    when true: # FIXME: debugging
+    when extraTraceMessages: # FIXME: debugging -- will go away
       let adb = bakDir.distinctBase.openRocksDb().valueOr:
         error info & ": Can't create assembly DB", bakDir, `error`=error
         return err()
@@ -426,7 +426,7 @@ proc putRawAccPkg*(
     packet: AccountRangePacket;
     peerID: Hash;
       ): Result[void,string] =
-  db.put65(root, start, limit.encodeRawAccPkg(packet, peerID), RawAccPkg)
+  db.put65(root, start, encodeRawAccPkg(limit, packet, peerID), RawAccPkg)
 
 proc delRawAccPkg*(
     db: MptAsmRef;
