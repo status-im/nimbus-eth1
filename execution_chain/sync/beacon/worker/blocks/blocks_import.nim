@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -16,11 +16,14 @@ import
   ../../../wire_protocol,
   ../worker_desc
 
+logScope:
+  topics = "beacon sync"
+
 # ------------------------------------------------------------------------------
-# Public function
+# Public handler
 # ------------------------------------------------------------------------------
 
-proc importBlock*(
+proc importBlockCB*(
     buddy: BeaconPeerRef;
     blk: EthBlock;
     effPeerID: Hash;
