@@ -267,11 +267,8 @@ latest commits when they are not ready to be used in the superproject.
 Adding the submodule "https://github.com/status-im/foo" to "vendor/foo":
 
 ```bash
-vendor/nimbus-build-system/scripts/add_submodule.sh status-im/foo
-# or
-./env.sh add_submodule status-im/foo
-# want to place it in "vendor/bar" instead?
-./env.sh add_submodule status-im/foo vendor/bar
+git submodule add --force https://github.com/status-im/foo.git "vendor/foo"
+git config -f .gitmodules submodule.vendor.foo.ignore untracked
 ```
 
 Removing the submodule "vendor/bar":
