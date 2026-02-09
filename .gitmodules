@@ -10,9 +10,9 @@
   branch = master
 [submodule "vendor/nim-stint"]
 	path = vendor/nim-stint
-	url = https://github.com/moigagoo/nim-stint.git
-	ignore = untracked
-	branch = feature/intops
+	url = https://github.com/status-im/nim-stint.git
+	ignore = dirty
+	branch = master
 [submodule "vendor/nim-rocksdb"]
   path = vendor/nim-rocksdb
   url = https://github.com/status-im/nim-rocksdb.git
@@ -60,9 +60,9 @@
   branch = master
 [submodule "vendor/nim-bncurve"]
 	path = vendor/nim-bncurve
-	url = https://github.com/moigagoo/nim-bncurve.git
-	ignore = untracked
-	branch = feature/intops
+	url = https://github.com/status-im/nim-bncurve.git
+	ignore = dirty
+	branch = master
 [submodule "vendor/nim-confutils"]
   path = vendor/nim-confutils
   url = https://github.com/status-im/nim-confutils.git
