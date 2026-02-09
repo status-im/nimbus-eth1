@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -429,6 +429,10 @@ proc getBlockAccessList*(
     return err("getBlockAccessList: " & $error)
 
   ok(Opt.some(bal))
+
+proc deleteBlockAccessList*(db: CoreDbTxRef, blockHash: Hash32) =
+  db.del(blockHashToBlockAccessListKey(blockHash).toOpenArray)
+    .expect("deleteBlockAccessList should succeed")
 
 proc getBlockBody*(
     db: CoreDbTxRef;

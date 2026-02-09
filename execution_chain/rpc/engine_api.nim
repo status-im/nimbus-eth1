@@ -35,8 +35,11 @@ const supportedMethods: HashSet[string] =
     "engine_forkchoiceUpdatedV1",
     "engine_forkchoiceUpdatedV2",
     "engine_forkchoiceUpdatedV3",
+    "engine_forkchoiceUpdatedV4",
     "engine_getPayloadBodiesByHashV1",
-    "engine_getPayloadBodiesByRangeV1",
+    "engine_getPayloadBodiesByHashV2",
+    "engine_getPayloadBodiesByRangeV1",    
+    "engine_getPayloadBodiesByRangeV2",
     "engine_getClientVersionV1",
     "engine_getBlobsV1",
     "engine_getBlobsV2",
@@ -106,13 +109,25 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
                     attrs: Opt[PayloadAttributes]) -> ForkchoiceUpdatedResponse:
     await engine.forkchoiceUpdated(Version.V3, update, attrs)
 
+  server.rpc("engine_forkchoiceUpdatedV4") do(update: ForkchoiceStateV1,
+                    attrs: Opt[PayloadAttributes]) -> ForkchoiceUpdatedResponse:
+    await engine.forkchoiceUpdated(Version.V4, update, attrs)
+
   server.rpc("engine_getPayloadBodiesByHashV1") do(hashes: seq[Hash32]) ->
                                                seq[Opt[ExecutionPayloadBodyV1]]:
-    return engine.getPayloadBodiesByHash(hashes)
+    return engine.getPayloadBodiesByHashV1(hashes)
+
+  server.rpc("engine_getPayloadBodiesByHashV2") do(hashes: seq[Hash32]) ->
+                                               seq[Opt[ExecutionPayloadBodyV2]]:
+    return engine.getPayloadBodiesByHashV2(hashes)
 
   server.rpc("engine_getPayloadBodiesByRangeV1") do(
       start: Quantity, count: Quantity) -> seq[Opt[ExecutionPayloadBodyV1]]:
-    return engine.getPayloadBodiesByRange(start.uint64, count.uint64)
+    return engine.getPayloadBodiesByRangeV1(start.uint64, count.uint64)
+
+  server.rpc("engine_getPayloadBodiesByRangeV2") do(
+      start: Quantity, count: Quantity) -> seq[Opt[ExecutionPayloadBodyV2]]:
+    return engine.getPayloadBodiesByRangeV2(start.uint64, count.uint64)
 
   server.rpc("engine_getClientVersionV1") do(version: ClientVersionV1) ->
                                          seq[ClientVersionV1]:

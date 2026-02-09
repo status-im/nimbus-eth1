@@ -23,7 +23,7 @@ logScope:
 # Private function
 # ------------------------------------------------------------------------------
 
-template headerStateSet(
+template headerStateRegister(
     buddy: SnapPeerRef;
     blockNumber: BlockNumber;
       ): Result[StateRoot,bool] =
@@ -52,7 +52,7 @@ template headerStateSet(
     let header = buddy.headerFetch(blockNumber).valueOr:
       break body # error
 
-    ctx.pool.stateDB.update(header)
+    ctx.pool.stateDB.register(header)
     bodyRc = Result[StateRoot,bool].ok(StateRoot(header.stateRoot))
 
   bodyRc # return
@@ -92,7 +92,7 @@ proc readData(
 # Public function(s)
 # ------------------------------------------------------------------------------
 
-template headerStateSet*(
+template headerStateRegister*(
     buddy: SnapPeerRef;
     blockHash: BlockHash;
       ): Result[StateRoot,bool] =
@@ -123,7 +123,7 @@ template headerStateSet*(
     if header.number == 0:
       break body # error
 
-    ctx.pool.stateDB.update(header, blockHash)
+    ctx.pool.stateDB.register(header, blockHash)
     bodyRc = Result[StateRoot,bool].ok(StateRoot(header.stateRoot))
 
   bodyRc # return
@@ -166,7 +166,7 @@ template headerStateLoad*(
         try:
           let blkHash = BlockHash(Hash32.fromHex(data))
           if blkHash != BlockHash(zeroHash32):
-            bodyRc = buddy.headerStateSet(blkHash)
+            bodyRc = buddy.headerStateRegister(blkHash)
             if bodyRc.isErr() and bodyRc.error():
               trace info & ": state update failed", peer, fileName,
                 blockHash=blkHash.toStr
@@ -179,7 +179,7 @@ template headerStateLoad*(
         try:
           let number = data.parseUInt.uint64
           if 0 < number:
-            bodyRc = buddy.headerStateSet(number)
+            bodyRc = buddy.headerStateRegister(number)
             if bodyRc.isErr() and bodyRc.error():
               trace info & ": state update failed", peer, fileName,
                 blockNumber=number
