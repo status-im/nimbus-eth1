@@ -26,7 +26,7 @@ type
 
   AccountRangeData* = tuple
     root: StateRoot
-    start: Hash32
+    start: ItemKey
     pck: AccountRangePacket
     error: string
     lnr: int
@@ -332,12 +332,12 @@ func to*(db: NodeTrieRef, T: type DebugTrieRef): T =
 proc dumpToFile*(
     fPath: string;
     root: StateRoot;
-    start: Hash32;
+    start: ItemKey;
     pck: AccountRangePacket;
       ): bool =
   let s =
     $Hash32(root) & "\n" &
-    $start & "\n" &
+    $start.to(Hash32) & "\n" &
     rlp.encode(pck).toHex & "\n" &
     "\n"
   try:
@@ -378,7 +378,7 @@ proc accountRangeFromFile*(
     if line.len == 0:
       result.error = "Missing line: Hash32 value"
       return
-    result.start = Hash32.fromHex line
+    result.start = (Hash32.fromHex line).to(ItemKey)
 
     result.lnr.inc
     line = fd.readLine
@@ -417,7 +417,7 @@ proc accountRangeFromUnzip*(gz: GUnzipRef; lnr=0): AccountRangeData =
     if line.len == 0:
       result.error = "Missing line: Hash32 value"
       return
-    result.start = Hash32.fromHex line
+    result.start = (Hash32.fromHex line).to(ItemKey)
 
     result.lnr.inc
     line =  gz.nextLine.valueOr:

@@ -15,8 +15,9 @@
 {.push raises:[].}
 
 import
-  std/math,
-  pkg/[eth/common, stint, stew/interval_set]
+  std/[fenv, hashes, math],
+  pkg/[eth/common, stint, stew/interval_set],
+  ../helpers
 
 type
   ItemKey* = distinct UInt256
@@ -29,11 +30,20 @@ type
     ## Single interval of item keys (e.g. account/storage hashes(
 
 # ------------------------------------------------------------------------------
+# Public `tables` support
+# ------------------------------------------------------------------------------
+
+func hash*(w: ItemKey): Hash = w.UInt256.hash
+
+# ------------------------------------------------------------------------------
 # Public `ItemKey` / `Hash32` interoperability
 # ------------------------------------------------------------------------------
 
 template to*(w: ItemKey; T: type UInt256): T = w.T
 template to*(w: UInt256; T: type ItemKey): T = w.T
+
+template to*(w: array[32,byte]; T: type ItemKey): T = w.Bytes32.to(UInt256).T
+  ## Handy for converting the result of `desc_nibbles.getBytes()`
 
 template to*(w: ItemKey; T: type Hash32): T = w.UInt256.to(Bytes32).T
 template to*(w: Hash32; T: type UInt256): T = w.Bytes32.to(T)
@@ -71,18 +81,41 @@ const
   ItemKeyRangeMax* = ItemKeyRange.new(low(ItemKey),high(ItemKey))
 
 # ------------------------------------------------------------------------------
+# Public print functions
+# ------------------------------------------------------------------------------
+
+func toStr*(w: ItemKey): string =
+  if w == high(ItemKey): "n/a" else: $(w.to(UInt256))
+
+func toStr*(w: (ItemKey,ItemKey)): string =
+  func xStr(w: ItemKey): string =
+    if w == high(ItemKey): "high(ItemKey)" else: $(w.to(UInt256))
+  if w[0] < w[1]: $(w[0].to(UInt256)) & ".." & w[1].xStr
+  elif w[0] == w[1]: w[0].xStr
+  else: "n/a"
+
+func toStr*(w: ItemKeyRange): string =
+  (w.minPt,w.maxPt).toStr
+
+
+func `$`*(w: ItemKey|ItemKeyRange): string =
+  w.toStr
+
+# ------------------------------------------------------------------------------
 # Other public helpers
 # ------------------------------------------------------------------------------
 
-func to*(w: UInt256; T: type float): T =
+func to*(w: UInt256; _: type float): float =
   ## Lossy conversion to `float` -- great for printing
-  if w == high(UInt256):
-    return Inf
-  let mantissaLen = 256 - w.leadingZeros
-  if mantissaLen <= 64:
-    return w.truncate(uint64).T
-  let exp = mantissaLen - 64
-  (w shr exp).truncate(uint64).T * 2f.pow(exp.float)
+  ##
+  when sizeof(float) != sizeof(uint):
+    {.error: "Expected float having the same size as uint".}
+  let mantissa = 256 - w.leadingZeros
+  if mantissa <= mantissaDigits(float):         # `<= 53` on a 64 bit system
+    return w.truncate(uint).float
+  # Calculate `w / 2^exp * 2^exp` = `w`
+  let exp = mantissa - mantissaDigits(float)
+  (w shr exp).truncate(uint).float * 2f.pow(exp.float)
 
 func to*(w: ItemKey; _: type float): float =
   w.UInt256.to(float)
@@ -92,6 +125,41 @@ func to*(w: (ItemKey,ItemKey); _: type float): (float,float) =
 
 func to*(w: ItemKeyRange; _: type float): (float,float) =
   (w.minPt, w.maxPt).to(float)
+
+# ------------------------------------------------------------------------------
+# Functions extending the `ItemKeyRange` basic functionality
+# ------------------------------------------------------------------------------
+
+proc init*(T: type ItemKeyRangeSet, ivInit: ItemKeyRange): T =
+  ## Some shortcut
+  let ikrs = ItemKeyRangeSet.init()
+  discard ikrs.merge ivInit
+  ikrs
+
+proc fetchLeast*(ikrs: ItemKeyRangeSet; maxLen: UInt256): Opt[ItemKeyRange] =
+  ## Borrowed from `unproc_item_keys.nim` for a single `ItemKeyRangeSet`
+  ## (w/o the `borrowed` part.)
+  ##
+  let
+    jv = ikrs.ge().valueOr:
+      return err()
+    kv = block:
+      if maxLen == 0 or (jv.len != 0 and jv.len <= maxLen):
+        jv
+      else:
+        ItemKeyRange.new(jv.minPt, jv.minPt + (maxLen - 1.u256))
+
+  discard ikrs.reduce(kv)
+  ok(kv)
+
+func totalRatio*(ikrs: ItemKeyRangeSet): float =
+  ## Borrowed from `unproc_item_keys.nim` for a single `ItemKeyRangeSet`
+  ## (w/o the `borrowed` part.)
+  ##
+  let total = ikrs.total()
+  if total == 0:
+    return (if ikrs.chunks() == 0: 0f else: 1f)
+  total.per256()
 
 # ------------------------------------------------------------------------------
 # End

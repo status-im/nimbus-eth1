@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,7 +13,7 @@
 import
   chronicles,
   web3/engine_api_types,
-  eth/common/blocks_rlp,
+  eth/common/[blocks_rlp, block_access_lists_rlp],
   eth/common/hashes,
   ./core_db/base,
   ./core_db/core_apps,
@@ -76,7 +76,53 @@ proc getExecutionPayloadBodyV1*(
 
   ok(move(body))
 
-func toPayloadBody*(blk: Block): ExecutionPayloadBodyV1 =
+proc getExecutionPayloadBodyV2*(
+    db: CoreDbTxRef;
+    header: Header;
+      ): Result[ExecutionPayloadBodyV2, string] =
+  const info = "getExecutionPayloadBodyV2()"
+  var body: ExecutionPayloadBodyV2
+
+  for encodedTx in db.getBlockTransactionData(header.txRoot):
+    body.transactions.add TypedTransaction(encodedTx)
+
+  # Txs not there in db - Happens during era1/era import, when we don't store txs and receipts
+  if (body.transactions.len == 0 and header.txRoot != emptyRoot):
+    return err("No transactions found in db for txRoot " & $header.txRoot)
+
+  if header.withdrawalsRoot.isSome:
+    let withdrawalsRoot = header.withdrawalsRoot.value
+    if withdrawalsRoot == emptyRoot:
+      var wds: seq[WithdrawalV1]
+      body.withdrawals = Opt.some(wds)
+      return ok(move(body))
+
+    wrapRlpException info:
+      let bytes = db.get(withdrawalsKey(withdrawalsRoot).toOpenArray).valueOr:
+        if error.error != KvtNotFound:
+          warn info, withdrawalsRoot, error=($$error)
+        else:
+          # Fallback to old withdrawals format
+          var wds: seq[WithdrawalV1]
+          for wd in db.getWithdrawals(WithdrawalV1, withdrawalsRoot):
+            wds.add(wd)
+          body.withdrawals = Opt.some(wds)
+        return ok(move(body))
+
+      var list = rlp.decode(bytes, seq[WithdrawalV1])
+      body.withdrawals = Opt.some(move(list))
+  
+  if header.blockAccessListHash.isSome():
+    let bal = ?db.getBlockAccessList(header.computeRlpHash())
+    body.blockAccessList = 
+        if bal.isSome():
+          Opt.some(bal.get()[].encode())
+        else:
+          Opt.none(seq[byte])
+
+  ok(move(body))
+
+func toPayloadBodyV1*(blk: Block): ExecutionPayloadBodyV1 =
   var wds: seq[WithdrawalV1]
   if blk.withdrawals.isSome:
     for w in blk.withdrawals.get:
@@ -90,4 +136,24 @@ func toPayloadBody*(blk: Block): ExecutionPayloadBodyV1 =
                    Opt.some(wds)
                  else:
                    Opt.none(seq[WithdrawalV1])
+  )
+
+func toPayloadBodyV2*(blk: Block, blockAccessList: Opt[BlockAccessListRef]): ExecutionPayloadBodyV2 =
+  var wds: seq[WithdrawalV1]
+  if blk.withdrawals.isSome:
+    for w in blk.withdrawals.get:
+      wds.add w3Withdrawal(w)
+
+  ExecutionPayloadBodyV2(
+    transactions: w3Txs(blk.transactions),
+    # pre Shanghai block return null withdrawals
+    # post Shanghai block return at least empty slice
+    withdrawals: if blk.withdrawals.isSome:
+                   Opt.some(wds)
+                 else:
+                   Opt.none(seq[WithdrawalV1]),
+    blockAccessList: if blockAccessList.isSome():
+                       Opt.some(blockAccessList.get()[].encode())
+                     else:
+                       Opt.none(seq[byte])
   )

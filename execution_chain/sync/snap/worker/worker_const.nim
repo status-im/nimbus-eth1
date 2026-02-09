@@ -20,7 +20,7 @@ type
   ErrorType* = enum
     ## For `FetchError` return code object/tuple
     EGeneric = 0                   ## Not further specified error
-    ESyncerTermination             ## Syncer was stopped
+    ENoDataAvailable               ## Out of scope
     EMissingEthContext             ## Cannot retrieve `eth` peer descriptor
     EAlreadyTriedAndFailed         ## The same action failed before
     EPeerDisconnected              ## Exception

@@ -93,7 +93,7 @@ proc init*(T: type StateDbRef): T =
 # Public function(s)
 # ------------------------------------------------------------------------------
 
-proc update*(db: StateDbRef; header: Header; blockHash: BlockHash) =
+proc register*(db: StateDbRef; header: Header; blockHash: BlockHash) =
   ## Update or register new account state record on database
   ##
   db.byNumber.eq(header.number).isErrOr:
@@ -132,11 +132,11 @@ proc update*(db: StateDbRef; header: Header; blockHash: BlockHash) =
   doAssert db.byNumber.len == db.byRoot.len
   discard                                         # visual alignment
 
-proc update*(db: StateDbRef; header: Header; hash: Hash32) =
-  db.update(header, BlockHash(hash))
+proc register*(db: StateDbRef; header: Header; hash: Hash32) =
+  db.register(header, BlockHash(hash))
 
-proc update*(db: StateDbRef; header: Header) =
-  db.update(header, BlockHash(header.computeBlockHash))
+proc register*(db: StateDbRef; header: Header) =
+  db.register(header, BlockHash(header.computeBlockHash))
 
 
 proc get*(db: StateDbRef; height: BlockNumber): Opt[StateDataRef] =

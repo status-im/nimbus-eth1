@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -52,6 +52,7 @@ type
     BPO5
     BPO4ToBPO5AtTime15k
     Amsterdam
+    BPO2ToAmsterdamAtTime15k
 
   LogLevel* = enum
     Silent

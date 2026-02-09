@@ -31,15 +31,6 @@ proc append(w: var RlpWriter, val: AccBody) =
   w.append val.codeHash.Hash32
 
 # ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-func high(T: type Hash32): T = high(UInt256).to(Bytes32).T
-
-func `<`(a, b: Hash32): bool = a.distinctBase < b.distinctBase
-func `<=`(a, b: Hash32): bool = not (b < a)
-
-# ------------------------------------------------------------------------------
 # Private functions: constructor helpers
 # ------------------------------------------------------------------------------
 
@@ -141,7 +132,7 @@ proc nodeStash*(
 proc updateProofTree(
     node: NodeRef;                         # Current node, start node
     path: NibblesBuf;                      # Current path, recursively updated
-    last: var Hash32;                      # Path of last leaf, visited
+    last: var ItemKey;                     # Path of last leaf, visited
       ) =
   ## Recursively label path prefixes, resolve extensions, and return the
   ## right boundary leaf path (if any).
@@ -167,7 +158,7 @@ proc updateProofTree(
         down.updateProofTree(path & NibblesBuf.nibble(byte n), last)
 
   of Leaf:
-    last = getBytes(path & LeafNodeRef(node).lfPfx).to(Hash32)
+    last = getBytes(path & LeafNodeRef(node).lfPfx).to(ItemKey)
 
   of Stop:
     StopNodeRef(node).path = path
@@ -413,7 +404,7 @@ proc init*(
 proc init*(
     T: type NodeTrieRef;
     stateRoot: StateRoot;
-    start: Hash32;
+    start: ItemKey;
     nodes: openArray[ProofNode];
       ): T =
   ## Create a partial MPT from a list of rlp encoded nodes. Some conditions
@@ -454,12 +445,12 @@ proc init*(
       tmpLinks.del stopKey
 
   # Label path prefixes and join Extensions
-  var limit = high(Hash32)
+  var limit = high(ItemKey)
   db.root.updateProofTree(NibblesBuf(), limit)
 
   # Select sub-roots, links within min/max bounds
   for (key,stopNode) in tmpLinks.pairs:
-    let path = stopNode.path.getBytes.to(Hash32)
+    let path = stopNode.path.getBytes.to(ItemKey)
     if start <= path and path < limit:
       db.stops[key] = stopNode
     else:
@@ -538,7 +529,7 @@ proc isComplete*(db: NodeTrieRef): bool =
 
 proc validate*(
     root: StateRoot;
-    start: Hash32;
+    start: ItemKey;
     pck: AccountRangePacket;
       ): Opt[NodeTrieRef] =
   ## Validate snap account data package.

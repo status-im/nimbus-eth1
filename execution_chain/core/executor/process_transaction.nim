@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -157,13 +157,7 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32):
       gasPrice : 0.GasInt,
       to       : BEACON_ROOTS_ADDRESS,
       input    : @(beaconRoot.data),
-
-      # It's a systemCall, no need for other knicks knacks
-      sysCall     : true,
-      noAccessList: true,
-      noIntrinsic : true,
-      noGasCharge : true,
-      noRefund    : true,
+      sysCall  : true,
     )
 
   # runComputation a.k.a syscall/evm.call
@@ -187,13 +181,7 @@ proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32):
       gasPrice : 0.GasInt,
       to       : HISTORY_STORAGE_ADDRESS,
       input    : @(prevHash.data),
-
-      # It's a systemCall, no need for other knicks knacks
-      sysCall     : true,
-      noAccessList: true,
-      noIntrinsic : true,
-      noGasCharge : true,
-      noRefund    : true,
+      sysCall  : true,
     )
 
   # runComputation a.k.a syscall/evm.call
@@ -215,13 +203,7 @@ proc processDequeueWithdrawalRequests*(vmState: BaseVMState): Result[seq[byte], 
       gasLimit : 30_000_000.GasInt,
       gasPrice : 0.GasInt,
       to       : WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
-
-      # It's a systemCall, no need for other knicks knacks
-      sysCall     : true,
-      noAccessList: true,
-      noIntrinsic : true,
-      noGasCharge : true,
-      noRefund    : true,
+      sysCall  : true,
     )
 
   # runComputation a.k.a syscall/evm.call
@@ -243,13 +225,7 @@ proc processDequeueConsolidationRequests*(vmState: BaseVMState): Result[seq[byte
       gasLimit : 30_000_000.GasInt,
       gasPrice : 0.GasInt,
       to       : CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
-
-      # It's a systemCall, no need for other knicks knacks
-      sysCall     : true,
-      noAccessList: true,
-      noIntrinsic : true,
-      noGasCharge : true,
-      noRefund    : true,
+      sysCall  : true,
     )
 
   # runComputation a.k.a syscall/evm.call

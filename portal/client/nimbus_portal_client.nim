@@ -22,7 +22,8 @@ import
   eth/common/keys,
   eth/net/nat,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  web3/[eth_api_types, conversions],
+  web3/eth_api,
+  beacon_chain/[nimbus_binary_common, process_state],
   ../common/common_utils,
   ../rpc/[
     rpc_discovery_api, rpc_portal_common_api, rpc_portal_history_api,
@@ -34,7 +35,6 @@ import
   ../version,
   ../logging,
   ../bridge/common/rpc_helpers,
-  beacon_chain/[nimbus_binary_common, process_state],
   ./nimbus_portal_client_conf
 
 const
@@ -43,10 +43,6 @@ const
 
 chronicles.formatIt(IoErrorCode):
   $it
-
-createRpcSigsFromNim(RpcClient):
-  # EL debug call to get header for validation
-  proc debug_getHeaderByNumber(blockNumber: BlockIdentifier): string
 
 func optionToOpt[T](o: Option[T]): Opt[T] =
   if o.isSome():
@@ -197,8 +193,8 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
           blockNumber: uint64
       ): Future[Result[Header, string]] {.async: (raises: [CancelledError]), gcsafe.} =
         try:
-          let header = await rpcClient.debug_getHeaderByNumber(blockId(blockNumber))
-          decodeRlp(header.hexToSeqByte(), Header)
+          let header = await rpcClient.debug_getRawHeader(blockId(blockNumber))
+          decodeRlp(header.distinctBase(), Header)
         except CatchableError as e:
           err(e.msg)
     else:
