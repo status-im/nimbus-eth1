@@ -71,31 +71,28 @@ template download(
       peer {.inject,used.} = $buddy.peer            # logging only
       root {.inject,used.} = state.rootStr          # logging only
 
-      iv = state.unproc.fetchLeast(unprocAccountsRangeMax).valueOr:
+      iv = sdb.fetchAccountRange(state).valueOr:
         trace info & ": no more unpocessed", peer, root, stateDB=sdb.toStr
         break body
 
       accData = buddy.fetchAccounts(state.root, iv).valueOr:
-        state.unproc.commit(iv, iv) # registry roll back
+        sdb.rollbackAccountRange(state, iv)         # registry roll back
         state.downScore()
         trace info & ": account download failed", peer, root,
           iv=iv.to(float).toStr, stateDB=sdb.toStr
         break body
 
-    # Accept, update registry
-    if 0 < accData.accounts.len:
-      let accTop = accData.accounts[^1].accHash.to(ItemKey)
-      state.unproc.commit(iv, accTop + 1, iv.maxPt)
-      state.unproc.overCommit(iv.maxPt + 1, accTop)
-      state.upScore()
-    else:
-      state.downScore()
+      limit = if accData.accounts.len == 0: high(ItemKey)
+              else: accData.accounts[^1].accHash.to(ItemKey)
+
+    state.upScore()                                 # got some data
+    sdb.commitAccountRange(state, iv, limit)        # update registry
 
     debug info & ": accounts downloaded", peer, root, iv=iv.to(float).toStr,
       nAccounts=accData.accounts.len, nProof=accData.proof.len,
       stateDB=sdb.toStr
 
-    discard                                         # visual alignment
+  discard                                           # visual alignment
 
 # ------------------------------------------------------------------------------
 # Public function
@@ -129,7 +126,10 @@ template accountRangeImport*(buddy: SnapPeerRef; info: static[string]) =
       break body
 
     # Fetch for state DB items, start with pivot root
-    for state in sdb.items(startWith=buddy.only.pivotRoot, truncate=true):
+    let startQueue =
+      if buddy.only.pivotRoot.isSome: @[buddy.only.pivotRoot.value]
+      else: @[]
+    for state in sdb.items(startWith=startQueue, truncate=true):
       if buddy.ctrl.stopped:
         break
       trace info & ": download state", peer, root=state.rootStr,

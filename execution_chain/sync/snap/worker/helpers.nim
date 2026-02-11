@@ -32,6 +32,19 @@ func toStr*(h: Hash32): string =
 
 # --------------
 
+func to*(w: UInt256; _: type float): float =
+  ## Lossy conversion to `float`
+  ##
+  when sizeof(float) != sizeof(uint):
+    {.error: "Expected float having the same size as uint".}
+  let mantissa = 256 - w.leadingZeros
+  if mantissa <= mantissaDigits(float):             # `<= 53` on a 64 bit system
+    return w.truncate(uint).float
+  # Calculate `w / 2^exp * 2^exp` = `w`
+  let exp = mantissa - mantissaDigits(float)        # is positive
+  (w shr exp).truncate(uint).float * 2f.pow(exp.float)
+
+
 func per256*(w: UInt256): float =
   ## Represents the quotiont `w / 2^256` as `float` value. Note that the
   ## result is non-negaive and always smaller than `1f`.
@@ -83,6 +96,19 @@ func toStr*(w: (float,float), precision: static[int] = 4): string =
   if w[0] < w[1]: w[0].toStr(precision) & ".." & w[1].toStr(precision)
   elif w[0] == w[1]: w[0].toStr(precision)
   else: "n/a"
+
+func flStr*(w: UInt256): string =
+  if w == high(UInt256): "2^256"
+  elif w == 0: "0"
+  else: w.to(float).toStr
+
+func flStr*(w: (UInt256,UInt256)): string =
+  if w[0] != 0:
+    (w[0].to(float),w[1].to(float)).toStr
+  elif w[1] != high(UInt256):
+    "0.." & w[1].flStr
+  else:
+    "0..2^256"
 
 # --------------
 
