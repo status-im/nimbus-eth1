@@ -69,7 +69,7 @@ proc pruneLoop(pruner: BackgroundPrunerRef) {.async: (raises: [CancelledError]).
       var lastPruned = currentBlock
 
       for blkNum in currentBlock .. batchEnd:
-        let header = baseTx.getBlockHeader(blkNum).valueOr:
+        let header = txFrame.getBlockHeader(blkNum).valueOr:
           warn "Background pruner: failed to get header",
             blkNum = blkNum, error = error
           continue
