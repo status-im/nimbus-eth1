@@ -65,14 +65,14 @@ type
   PeerErrors* = object
     ## Count fetching and processing errors
     fetch*: tuple[
-      acc: uint8]
+      acc, sto, cde, tri: uint8]     ## Accounts, storage, code, trie nodes
     apply*: tuple[
-      acc: uint8]
+      acc, sto, cde, tri: uint8]
 
   PeerFirstFetchReq* = object
     ## Register fetch request. This is intended to avoid sending the same (or
     ## similar) fetch request again from the same peer that sent it previously.
-    account*: StateRootSet           ## Account fetch
+    stateRoot*: StateRootSet         ## Account fetch (per state root)
 
   SnapPeerData* = object
     ## Local descriptor data extension

@@ -37,6 +37,10 @@ const
   metricsUpdateInterval* = chronos.seconds(10)
     ## Wait at least this time before next update
 
+  daemonOkInterval* = chronos.milliseconds(1200)
+    ## Some waiting time at the end of the daemon task which always lingers
+    ## in the background.
+
   daemonWaitInterval* = chronos.seconds(10)
     ## Some waiting time at the end of the daemon task which always lingers
     ## in the background.
@@ -71,6 +75,11 @@ const
   stateDbBlockHeightWindow* = 128
     ## Block numbers on the database may have this distance, at most. The
     ## least entries will be deleted for moving the widow forward.
+
+  nWorkingStateRootsMax* = 3
+    ## Stop the current session after accounts could be downloaded for this
+    ## many different state roots. The session will then be released and a
+    ## new one started.
 
   # -----------
 

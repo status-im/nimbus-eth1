@@ -35,10 +35,11 @@ proc updateErrorState(buddy: SnapPeerRef) =
 func accErrors*(buddy: SnapPeerRef): string =
   $buddy.nErrors.fetch.acc & "/" & $buddy.nErrors.apply.acc
 
-proc accFetchRegisterError*(buddy: SnapPeerRef;
-     slowPeer = false;
-     forceZombie = false;
-       ) =
+proc accFetchRegisterError*(
+    buddy: SnapPeerRef;
+    slowPeer = false;
+    forceZombie = false;
+      ) =
   buddy.nErrors.fetch.acc.inc
   if nFetchAccountSnapErrThreshold < buddy.nErrors.fetch.acc:
     if not forceZombie and buddy.ctx.nSyncPeers() == 1 and slowPeer:
