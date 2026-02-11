@@ -31,14 +31,14 @@ proc accountRequeue*(ctx: SnapCtxRef; info: static[string]): bool =
   let
     adb = ctx.pool.mptAsm
 
-  for w in adb.walkRawAccPkg():
+  for w in adb.walkRawAccounts():
     # Validate packet
     let
       then = Moment.now()
       mpt = block:
         let rc = w.root.validate(w.start, w.packet)
         block cleanUp:
-          adb.delRawAccPkg(w.root, w.start).isOkOr:
+          adb.delRawAccounts(w.root, w.start).isOkOr:
             trace info & ": error deleting packet", root=w.root.toStr,
               iv=(w.start,w.limit).to(float).toStr,
               nAccounts=w.packet.accounts.len, nProof=w.packet.proof.len,
