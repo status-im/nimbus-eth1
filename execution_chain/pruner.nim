@@ -13,11 +13,15 @@ import
   chronicles,
   chronos,
   results,
+  eth/common/times,
   ./db/core_db,
   ./common
 
 logScope:
   topic = "pruner"
+
+const
+  RetentionPeriod = 6 * 30 * 24 * 60 * 60'u64 # ~6 months in seconds
 
 type
   BackgroundPrunerRef* = ref object
@@ -47,36 +51,48 @@ proc pruneLoop(pruner: BackgroundPrunerRef) {.async: (raises: [CancelledError]).
       baseTx = pruner.com.db.baseTxFrame()
       start = baseTx.getSavedStateBlockNumber()
       begin = baseTx.getHistoryExpired()
+      cutoff = EthTime(EthTime.now().uint64 - RetentionPeriod)
 
     if begin >= start:
       await sleepAsync(pruner.loopDelay)
       continue
 
     notice "Background pruner: starting cycle",
-      fromBlock = begin, toBlock = start
+      fromBlock = begin, toBlock = start, cutoffTimestamp = cutoff.uint64
 
     var currentBlock = begin
-    while currentBlock <= start:
+    var reachedRetentionWindow = false
+
+    while currentBlock <= start and not reachedRetentionWindow:
       var txFrame = pruner.com.db.baseTxFrame().txFrameBegin()
       let batchEnd = min(currentBlock + pruner.batchSize - 1, start)
+      var lastPruned = currentBlock
 
       for blkNum in currentBlock .. batchEnd:
+        let header = baseTx.getBlockHeader(blkNum).valueOr:
+          warn "Background pruner: failed to get header",
+            blkNum = blkNum, error = error
+          continue
+        if header.timestamp >= cutoff:
+          reachedRetentionWindow = true
+          break
         txFrame.deleteBlockBodyAndReceipts(blkNum).isOkOr:
           warn "Background pruner: failed to delete",
             blkNum = blkNum, error = error
+        lastPruned = blkNum + 1
 
-      txFrame.setHistoryExpired(batchEnd + 1)
+      txFrame.setHistoryExpired(lastPruned)
       txFrame.checkpoint(start, skipSnapshot = true)
       pruner.com.db.persist(txFrame)
 
       notice "Background pruner: batch persisted",
-        blks = batchEnd
+        blks = lastPruned
 
-      currentBlock = batchEnd + 1
+      currentBlock = lastPruned
       await sleepAsync(pruner.batchDelay)
 
     notice "Background pruner: cycle complete",
-      prunedUpTo = start
+      prunedUpTo = currentBlock
 
     await sleepAsync(pruner.loopDelay)
 
