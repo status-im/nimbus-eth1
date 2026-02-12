@@ -488,7 +488,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
     com.taskpool = Taskpool.new()
 
     # Sanity check, to not `panic` in state_transition
-    if com.isLondonOrLater(ctx.env.currentNumber):
+    if com.isLondonOrLater(ctx.env.currentNumber, ctx.env.currentTimestamp):
       if ctx.env.currentBaseFee.isSome:
         # Already set, currentBaseFee has precedent over parentBaseFee.
         discard

@@ -337,15 +337,14 @@ func activationTime*(com: CommonRef, fork: HardFork): Opt[EthTime] =
 func toEVMFork*(com: CommonRef, header: Header): EVMFork =
   com.toEVMFork(forkDeterminationInfo(header))
 
-func isSpuriousOrLater*(com: CommonRef, number: BlockNumber): bool =
-  com.toHardFork(number.forkDeterminationInfo) >= Spurious
+func isSpuriousOrLater*(com: CommonRef, number: BlockNumber, time: EthTime): bool =
+  com.toHardFork(forkDeterminationInfo(number, time)) >= Spurious
 
-func isByzantiumOrLater*(com: CommonRef, number: BlockNumber): bool =
-  com.toHardFork(number.forkDeterminationInfo) >= Byzantium
+func isByzantiumOrLater*(com: CommonRef, number: BlockNumber, time: EthTime): bool =
+  com.toHardFork(forkDeterminationInfo(number, time)) >= Byzantium
 
-func isLondonOrLater*(com: CommonRef, number: BlockNumber): bool =
-  # TODO: Fixme, use only London comparator
-  com.toHardFork(number.forkDeterminationInfo) >= London
+func isLondonOrLater*(com: CommonRef, number: BlockNumber, time: EthTime): bool =
+  com.toHardFork(forkDeterminationInfo(number, time)) >= London
 
 func forkId*(com: CommonRef, head, time: uint64): ForkId {.gcsafe.} =
   ## Get ForkId for given block number / timestamp (EIP-2124/2364/6122)

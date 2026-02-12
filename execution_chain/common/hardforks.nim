@@ -82,14 +82,6 @@ type
     time*: Opt[EthTime]
     td*: Opt[DifficultyInt]
 
-func forkDeterminationInfo*(n: BlockNumber): ForkDeterminationInfo =
-  # FIXME: All callers of this function are suspect; I'm guess we should
-  # always be using both block number and time. But we have a few places,
-  # like various tests, where we only have block number and the tests are
-  # meant for pre-Merge forks, so maybe those are okay.
-  ForkDeterminationInfo(
-    number: n, time: Opt.none(EthTime), td: Opt.none(DifficultyInt))
-
 func forkDeterminationInfo*(n: BlockNumber, t: EthTime): ForkDeterminationInfo =
   ForkDeterminationInfo(
     number: n, time: Opt.some(t), td: Opt.none(DifficultyInt))
