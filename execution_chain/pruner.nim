@@ -34,8 +34,8 @@ type
 proc init*(
     T: type BackgroundPrunerRef,
     com: CommonRef,
-    batchSize = 150'u64,
-    batchDelay = chronos.milliseconds(10),
+    batchSize = 10'u64,
+    batchDelay = chronos.milliseconds(20),
     loopDelay = chronos.seconds(60),
 ): T =
   T(
@@ -53,6 +53,7 @@ proc pruneLoop(pruner: BackgroundPrunerRef) {.async: (raises: [CancelledError]).
       begin = baseTx.getHistoryExpired()
       cutoff = EthTime(EthTime.now().uint64 - RetentionPeriod)
 
+    # TODO: timestamp based check
     if begin >= start:
       await sleepAsync(pruner.loopDelay)
       continue
@@ -61,6 +62,7 @@ proc pruneLoop(pruner: BackgroundPrunerRef) {.async: (raises: [CancelledError]).
       fromBlock = begin, toBlock = start, cutoffTimestamp = cutoff.uint64
 
     var currentBlock = begin
+    # TODO: Update retention Window calculation
     var reachedRetentionWindow = false
 
     while currentBlock <= start and not reachedRetentionWindow:
@@ -100,60 +102,6 @@ proc pruneLoop(pruner: BackgroundPrunerRef) {.async: (raises: [CancelledError]).
 
     await sleepAsync(pruner.loopDelay)
 
-# Alternative approach: persist KVT changes directly to backend without
-# frame replacement. Creates a child txFrame for isolation, does deletions,
-# then writes only KVT sTab entries to the RocksDB backend via
-# putBegFn/putKvpFn/putEndFn — bypassing the frame hierarchy that causes
-# the base reference swap. Persists immediately instead of waiting for FC.
-#
-# Requires: import ./db/kvt/kvt_desc, ./db/core_db/base/base_desc
-#
-# proc pruneLoopDirect(pruner: BackgroundPrunerRef) {.async: (raises: [CancelledError]).} =
-#   while true:
-#     let
-#       baseTx = pruner.com.db.baseTxFrame()
-#       start = baseTx.getSavedStateBlockNumber()
-#       begin = baseTx.getHistoryExpired()
-#       cutoff = EthTime(EthTime.now().uint64 - RetentionPeriod)
-#
-#     if begin >= start:
-#       await sleepAsync(pruner.loopDelay)
-#       continue
-#
-#     var currentBlock = begin
-#     var reachedRetentionWindow = false
-#
-#     while currentBlock <= start and not reachedRetentionWindow:
-#       var txFrame = pruner.com.db.baseTxFrame().txFrameBegin()
-#       let batchEnd = min(currentBlock + pruner.batchSize - 1, start)
-#       var lastPruned = currentBlock
-#
-#       for blkNum in currentBlock .. batchEnd:
-#         let header = txFrame.getBlockHeader(blkNum).valueOr:
-#           continue
-#         if header.timestamp >= cutoff:
-#           reachedRetentionWindow = true
-#           break
-#         txFrame.deleteBlockBodyAndReceipts(blkNum).isOkOr:
-#           discard
-#         lastPruned = blkNum + 1
-#
-#       txFrame.setHistoryExpired(lastPruned)
-#
-#       # Write KVT changes directly to backend — no frame replacement
-#       let kvt = pruner.com.db.kvt
-#       let batch = kvt.putBegFn()
-#       if batch.isOk():
-#         for k, v in txFrame.kTx.sTab:
-#           kvt.putKvpFn(batch[], k, v)
-#         kvt.putEndFn(batch[]).isOkOr:
-#           raiseAssert $error
-#       txFrame.kTx.sTab.clear()
-#
-#       currentBlock = lastPruned
-#       await sleepAsync(pruner.batchDelay)
-#
-#     await sleepAsync(pruner.loopDelay)
 
 proc start*(pruner: BackgroundPrunerRef) =
   pruner.loopFut = pruner.pruneLoop()
