@@ -5,14 +5,16 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [], gcsafe.}
+
 import
-  std/[strutils, lists],
+  std/[lists, strutils],
   stint,
   stew/byteutils,
-  ../engine/types,
   chronos,
   json_rpc/[jsonmarshal],
-  web3/[eth_api_types, conversions]
+  web3/[conversions, eth_api_types],
+  ../engine/types
 
 type
   Task* = ref object
