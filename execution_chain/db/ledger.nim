@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -685,6 +685,13 @@ proc selfDestruct6780*(ac: LedgerRef, address: Address): bool =
 
 proc selfDestructLen*(ac: LedgerRef): int =
   ac.savePoint.selfDestruct.len
+
+iterator nonZeroSelfDestructAccounts*(ac: LedgerRef): (Address, UInt256) =
+  for address in ac.savePoint.selfDestruct:
+    let value = ac.getBalance(address)
+    if value.isZero:
+      continue
+    yield (address, value)
 
 proc ripemdSpecial*(ac: LedgerRef) =
   ac.ripemdSpecial = true

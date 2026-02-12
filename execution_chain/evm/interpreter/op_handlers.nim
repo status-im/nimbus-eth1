@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -24,7 +24,7 @@ import
   ./op_handlers/[oph_defs,
                  oph_arithmetic, oph_hash, oph_envinfo, oph_blockdata,
                  oph_memory, oph_push, oph_dup, oph_swap, oph_log,
-                 oph_create, oph_call, oph_sysops]
+                 oph_create, oph_call, oph_sysops, oph_eip8024]
 
 const
   allHandlersList = [
@@ -40,7 +40,9 @@ const
     (VmOpExecLog,        "Log"),
     (VmOpExecCreate,     "Create"),
     (VmOpExecCall,       "Call"),
-    (VmOpExecSysOp,      "SysOp")]
+    (VmOpExecSysOp,      "SysOp"),
+    (VmOpExecEIP8024,    "EIP-8024"),
+  ]
 
 # ------------------------------------------------------------------------------
 # Helper
