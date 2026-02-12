@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -47,7 +47,7 @@ proc calcEip1599BaseFee*(com: CommonRef; parent: Header): UInt256 =
 
   # If the current block is the first EIP-1559 block, return the
   # initial base fee.
-  if com.isLondonOrLater(parent.number):
+  if com.isLondonOrLater(parent.number, parent.timestamp):
     eip1559.calcEip1599BaseFee(parent.gasLimit, parent.gasUsed, parent.baseFeePerGas.get(0.u256))
   else:
     EIP1559_INITIAL_BASE_FEE
@@ -56,7 +56,7 @@ proc calcEip1599BaseFee*(com: CommonRef; parent: Header): UInt256 =
 proc verifyEip1559Header(com: CommonRef;
                          parent, header: Header): Result[void, string] =
   ## Verify that the gas limit remains within allowed bounds
-  let limit = if com.isLondonOrLater(parent.number):
+  let limit = if com.isLondonOrLater(parent.number, parent.timestamp):
                 parent.gasLimit
               else:
                 parent.gasLimit * EIP1559_ELASTICITY_MULTIPLIER
@@ -82,7 +82,7 @@ proc verifyEip1559Header(com: CommonRef;
 proc validateGasLimitOrBaseFee*(com: CommonRef;
                                 header, parent: Header): Result[void, string] =
 
-  if not com.isLondonOrLater(header.number):
+  if not com.isLondonOrLater(header.number, header.timestamp):
     # Verify BaseFee not present before EIP-1559 fork.
     let baseFeePerGas = header.baseFeePerGas.get(0.u256)
     if not baseFeePerGas.isZero:

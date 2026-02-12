@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -81,14 +81,6 @@ type
     number*: BlockNumber
     time*: Opt[EthTime]
     td*: Opt[DifficultyInt]
-
-func forkDeterminationInfo*(n: BlockNumber): ForkDeterminationInfo =
-  # FIXME: All callers of this function are suspect; I'm guess we should
-  # always be using both block number and time. But we have a few places,
-  # like various tests, where we only have block number and the tests are
-  # meant for pre-Merge forks, so maybe those are okay.
-  ForkDeterminationInfo(
-    number: n, time: Opt.none(EthTime), td: Opt.none(DifficultyInt))
 
 func forkDeterminationInfo*(n: BlockNumber, t: EthTime): ForkDeterminationInfo =
   ForkDeterminationInfo(

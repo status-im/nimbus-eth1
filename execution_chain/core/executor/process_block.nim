@@ -248,7 +248,7 @@ proc procBlkEpilogue(
     # Clearing the account cache here helps manage its size when replaying
     # large ranges of blocks, implicitly limiting its size using the gas limit
     db.persist(
-      clearEmptyAccount = vmState.com.isSpuriousOrLater(header.number),
+      clearEmptyAccount = vmState.com.isSpuriousOrLater(header.number, header.timestamp),
       clearCache = true
     )
 
