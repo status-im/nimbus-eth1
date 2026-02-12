@@ -8,14 +8,18 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-## This module provides a `Hash32` mapping into a scalar space with some
-## arithmetic basics and some interval list functionality.
+## This module provides a `Hash32` isomorphism to a scalar space with
+## arithmetic basics and some interval list functionality. This data
+## type is used for
+##
+## * accounts and account ranges
+## * storage slots and slot ranges
 ##
 
 {.push raises:[].}
 
 import
-  std/[fenv, hashes, math],
+  std/hashes,
   pkg/[eth/common, stint, stew/interval_set],
   ../helpers
 
@@ -28,6 +32,9 @@ type
 
   ItemKeyRange* = Interval[ItemKey,UInt256]
     ## Single interval of item keys (e.g. account/storage hashes(
+
+# const
+#   ItemKeyRangeMax => defined below
 
 # ------------------------------------------------------------------------------
 # Public `tables` support
@@ -84,38 +91,27 @@ const
 # Public print functions
 # ------------------------------------------------------------------------------
 
-func toStr*(w: ItemKey): string =
-  if w == high(ItemKey): "n/a" else: $(w.to(UInt256))
+func flStr*(w: ItemKey): string =
+  w.to(UInt256).flStr
 
-func toStr*(w: (ItemKey,ItemKey)): string =
-  func xStr(w: ItemKey): string =
-    if w == high(ItemKey): "high(ItemKey)" else: $(w.to(UInt256))
-  if w[0] < w[1]: $(w[0].to(UInt256)) & ".." & w[1].xStr
-  elif w[0] == w[1]: w[0].xStr
-  else: "n/a"
+func flStr*(w: (ItemKey,ItemKey)): string =
+  (w[0].to(UInt256),w[1].to(UInt256)).flStr
 
-func toStr*(w: ItemKeyRange): string =
-  (w.minPt,w.maxPt).toStr
+func flStr*(w: ItemKeyRange): string =
+  (w.minPt,w.maxPt).flStr
 
+func lenStr*(w: (ItemKey,ItemKey)): string =
+  (w[0].to(UInt256),w[1].to(UInt256)).lenStr
+
+func lenStr*(w: ItemKeyRange): string =
+  (w.minPt,w.maxPt).lenStr
 
 func `$`*(w: ItemKey|ItemKeyRange): string =
-  w.toStr
+  w.flStr
 
 # ------------------------------------------------------------------------------
 # Other public helpers
 # ------------------------------------------------------------------------------
-
-func to*(w: UInt256; _: type float): float =
-  ## Lossy conversion to `float` -- great for printing
-  ##
-  when sizeof(float) != sizeof(uint):
-    {.error: "Expected float having the same size as uint".}
-  let mantissa = 256 - w.leadingZeros
-  if mantissa <= mantissaDigits(float):         # `<= 53` on a 64 bit system
-    return w.truncate(uint).float
-  # Calculate `w / 2^exp * 2^exp` = `w`
-  let exp = mantissa - mantissaDigits(float)
-  (w shr exp).truncate(uint).float * 2f.pow(exp.float)
 
 func to*(w: ItemKey; _: type float): float =
   w.UInt256.to(float)

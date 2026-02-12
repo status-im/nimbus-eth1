@@ -11,10 +11,9 @@
 {.push raises: [].}
 
 import
-  account/[account_download, account_requeue]
+  ./storage/storage_download
 
 export
-  account_download,
-  account_requeue
+  storage_download
 
 # End

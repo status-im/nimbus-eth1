@@ -24,15 +24,27 @@
 ##
 ## Key/value storage formats by column type:
 ##
-## * RawAccPkg:
+## * RawAccounts:
 ##   + key65: <col, root, start>
 ##   + value: <limit, packet, peerID>
 ##   where
-##   + col: `RawAccPkg`
+##   + col: `RawAccounts`
 ##   + root: `StateRoot`
 ##   + start: `ItemKey`
 ##   + limit: `ItemKey`
 ##   + packet: `AccountRangePacket`
+##   + peerID: `Hash`
+##
+## * RawStoSlot:
+##   + key65: <col, root, start>
+##   + value: <limit, slot, proof, peerID>
+##   where
+##   + col: `RawAccounts`
+##   + root: `StateRoot`
+##   + start: `ItemKey`
+##   + limit: `ItemKey`
+##   + slot: `seq[StorageItem]`
+##   + proof: `seq[ProofNode]`
 ##   + peerID: `Hash`
 ##
 ## * MptAccounts:
@@ -68,25 +80,35 @@ logScope:
 const
   EmptyBlob = seq[byte].default
 
+  EmptyProof = seq[ProofNode].default
+
   extraTraceMessages = true
     ## Enable additional logging noise
 
 type
   MptAsmCol = enum
     AdminCol = 0
-    RawAccPkg                                     # as fetched from network
-    MptAccounts,                                  # list of (key,none) pairs
+    RawAccounts                                     # as fetched from network
+    RawStoSlot                                      # ditto
+    MptAccounts                                     # list of (key,none) pairs
+    MptStoSlot                                      # ditto
 
   MptAsmRef* = ref object
     adb*: RocksDbReadWriteRef
     dir*: Path
 
-  DecodedRawAccPkg* = tuple
+  DecodedRawAccounts* = tuple
     limit: ItemKey
     packet: AccountRangePacket
     peerID: Hash
 
-  WalkRawAccPkg* = tuple
+  DecodedRawStoSlot* = tuple
+    limit: ItemKey
+    slot: seq[StorageItem]                          # Incomplete slot with proof
+    proof: seq[ProofNode]                           # Prof for `slot`
+    peerID: Hash
+
+  WalkRawAccounts* = tuple
     root: StateRoot
     start: ItemKey
     limit: ItemKey
@@ -94,17 +116,26 @@ type
     peerID: Hash
     error: string
 
+  WalkRawStoSlot* = tuple
+    root: StateRoot
+    start: ItemKey
+    limit: ItemKey
+    slot: seq[StorageItem]                          # Incomplete slot with proof
+    proof: seq[ProofNode]                           # Prof for `slot`
+    peerID: Hash
+    error: string
+
 # ------------------------------------------------------------------------------
 # Private RLP helpers
 # ------------------------------------------------------------------------------
 
-func decodeRawAccPkg(data: seq[byte]): Result[DecodedRawAccPkg,string] =
+func decodeRawAccounts(data: seq[byte]): Result[DecodedRawAccounts,string] =
   when sizeof(Hash) != sizeof(uint):
     {.error: "Hash type must have size of uint".}
-  const info = "decodeRawAccPkg"
+  const info = "decodeRawAccounts"
   var
     rd = data.rlpFromBytes
-    res: DecodedRawAccPkg
+    res: DecodedRawAccounts
   try:
     rd.tryEnterList()
     res.limit = ItemKey(rd.read(UInt256))
@@ -114,7 +145,25 @@ func decodeRawAccPkg(data: seq[byte]): Result[DecodedRawAccPkg,string] =
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(move res)
 
-template encodeRawAccPkg(
+func decodeRawStoSlot(data: seq[byte]): Result[DecodedRawStoSlot,string] =
+  when sizeof(Hash) != sizeof(uint):
+    {.error: "Hash type must have size of uint".}
+  const info = "decodeRawAccounts"
+  var
+    rd = data.rlpFromBytes
+    res: DecodedRawStoSlot
+  try:
+    rd.tryEnterList()
+    res.limit = ItemKey(rd.read(UInt256))
+    res.slot = rd.read(seq[StorageItem])
+    res.proof = rd.read(seq[ProofNode])
+    res.peerID = Hash(cast[int](rd.read uint))
+  except RlpError as e:
+    return err(info & ": " & $e.name & "(" & e.msg & ")")
+  ok(move res)
+
+
+template encodeRawAccounts(
     limit: ItemKey;
     packet: AccountRangePacket;
     peerID: Hash;
@@ -124,6 +173,21 @@ template encodeRawAccPkg(
   var wrt = initRlpList 3
   wrt.append limit.to(UInt256)
   wrt.append packet
+  wrt.append cast[uint](peerID)
+  wrt.finish()
+
+template encodeRawStoSlot(
+    limit: ItemKey;
+    slot: seq[StorageItem];
+    proof: seq[ProofNode];
+    peerID: Hash;
+      ): untyped =
+  when sizeof(Hash) != sizeof(uint):
+    {.error: "Hash type must have size of uint".}
+  var wrt = initRlpList 4
+  wrt.append limit.to(UInt256)
+  wrt.append slot
+  wrt.append proof
   wrt.append cast[uint](peerID)
   wrt.finish()
 
@@ -409,16 +473,16 @@ iterator walkMptAccounts*(
 
 # -------------
 
-proc getRawAccPkg*(
+proc getRawAccounts*(
     db: MptAsmRef;
     root: StateRoot;
     start: ItemKey;
-      ): Result[DecodedRawAccPkg,string] =
-  let data = db.get65(root, start, RawAccPkg).valueOr:
+      ): Result[DecodedRawAccounts,string] =
+  let data = db.get65(root, start, RawAccounts).valueOr:
     return err(error)
-  data.decodeRawAccPkg()
+  data.decodeRawAccounts()
 
-proc putRawAccPkg*(
+proc putRawAccounts*(
     db: MptAsmRef;
     root: StateRoot;
     start: ItemKey;
@@ -426,22 +490,22 @@ proc putRawAccPkg*(
     packet: AccountRangePacket;
     peerID: Hash;
       ): Result[void,string] =
-  db.put65(root, start, encodeRawAccPkg(limit, packet, peerID), RawAccPkg)
+  db.put65(root, start, encodeRawAccounts(limit, packet, peerID), RawAccounts)
 
-proc delRawAccPkg*(
+proc delRawAccounts*(
     db: MptAsmRef;
     root: StateRoot;
     start: ItemKey;
       ): Result[void,string] =
-  db.del65(root, start, RawAccPkg)
+  db.del65(root, start, RawAccounts)
 
-iterator walkRawAccPkg*(db: MptAsmRef): WalkRawAccPkg =
-  for (key1,key2,value) in db.adb.rWalk65(RawAccPkg.key65(), RawAccPkg):
+iterator walkRawAccounts*(db: MptAsmRef): WalkRawAccounts =
+  for (key1,key2,value) in db.adb.rWalk65(RawAccounts.key65(), RawAccounts):
     let
       root = StateRoot(key1)
       start = key2.to(ItemKey)
-      w = value.decodeRawAccPkg().valueOr:
-        var oops: WalkRawAccPkg
+      w = value.decodeRawAccounts().valueOr:
+        var oops: WalkRawAccounts
         oops.root = root
         oops.start = start
         oops.error = error
@@ -449,21 +513,92 @@ iterator walkRawAccPkg*(db: MptAsmRef): WalkRawAccPkg =
         continue
     yield (root, start, w.limit, w.packet, w.peerID, "")
 
-iterator walkRawAccPkg*(db: MptAsmRef, root: StateRoot): WalkRawAccPkg =
-  ## Variant of `walkRawAccPkg()` for fixed `root`
-  for (key1,key2,value) in db.adb.rWalk65(RawAccPkg.key65(root), RawAccPkg):
+iterator walkRawAccounts*(db: MptAsmRef, root: StateRoot): WalkRawAccounts =
+  ## Variant of `walkRawAccounts()` for fixed `root`
+  for (key1,key2,value) in db.adb.rWalk65(RawAccounts.key65(root), RawAccounts):
     if StateRoot(key1) != root:
       break
     let
       start = key2.to(ItemKey)
-      w = value.decodeRawAccPkg().valueOr:
-        var oops: WalkRawAccPkg
+      w = value.decodeRawAccounts().valueOr:
+        var oops: WalkRawAccounts
         oops.root = root
         oops.start = start
         oops.error = error
         yield oops
         continue
     yield (root, start, w.limit, w.packet, w.peerID, "")
+
+# -------------
+
+proc getRawStoSlot*(
+    db: MptAsmRef;
+    root: StateRoot;
+    start: ItemKey;
+      ): Result[DecodedRawStoSlot,string] =
+  let data = db.get65(root, start, RawStoSlot).valueOr:
+    return err(error)
+  data.decodeRawStoSlot()
+
+proc putRawStoSlot*(
+    db: MptAsmRef;
+    root: StateRoot;
+    start: ItemKey;
+    limit: ItemKey;
+    slot: seq[StorageItem];
+    proof: seq[ProofNode];
+    peerID: Hash;
+      ): Result[void,string] =
+  db.put65(
+    root, start, encodeRawStoSlot(limit, slot, proof, peerID), RawStoSlot)
+
+proc putRawStoSlot*(
+    db: MptAsmRef;
+    root: StateRoot;
+    slot: seq[StorageItem];
+    peerID: Hash;
+      ): Result[void,string] =
+  db.put65(
+    root, low(ItemKey),
+    encodeRawStoSlot(high(ItemKey), slot, EmptyProof, peerID),
+    RawStoSlot)
+
+proc delRawStoSlot*(
+    db: MptAsmRef;
+    root: StateRoot;
+    start: ItemKey;
+      ): Result[void,string] =
+  db.del65(root, start, RawStoSlot)
+
+iterator walkRawStoSlot*(db: MptAsmRef): WalkRawStoSlot =
+  for (key1,key2,value) in db.adb.rWalk65(RawStoSlot.key65(), RawStoSlot):
+    let
+      root = StateRoot(key1)
+      start = key2.to(ItemKey)
+      w = value.decodeRawStoSlot().valueOr:
+        var oops: WalkRawStoSlot
+        oops.root = root
+        oops.start = start
+        oops.error = error
+        yield oops
+        continue
+    yield (root, start, w.limit, w.slot, w.proof, w.peerID, "")
+
+iterator walkRawStoSlot*(db: MptAsmRef, root: StateRoot): WalkRawStoSlot =
+  ## Variant of `walkRawStoSlot()` for fixed `root`
+  for (key1,key2,value) in db.adb.rWalk65(RawStoSlot.key65(root), RawStoSlot):
+    if StateRoot(key1) != root:
+      break
+    let
+      start = key2.to(ItemKey)
+      w = value.decodeRawStoSlot().valueOr:
+        var oops: WalkRawStoSlot
+        oops.root = root
+        oops.start = start
+        oops.error = error
+        yield oops
+        continue
+    yield (root, start, w.limit, w.slot, w.proof, w.peerID, "")
 
 # ------------------------------------------------------------------------------
 # End

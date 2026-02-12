@@ -11,9 +11,11 @@
 {.push raises:[].}
 
 import
-  state_db/[item_key, state_desc, unproc_item_keys]
+  state_db/[
+    state_db_api, state_identifiers, state_item_key, state_unproc_item_keys]
 
 export
-  item_key,
-  state_desc,
-  unproc_item_keys
+  state_db_api,
+  state_identifiers,
+  state_item_key,
+  state_unproc_item_keys
