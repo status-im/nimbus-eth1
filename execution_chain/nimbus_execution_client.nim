@@ -27,6 +27,7 @@ import
   ./common/chain_config_hash,
   ./portal/portal,
   ./networking/[bootnodes, netkeys],
+  ./nimbus_erae,
   beacon_chain/[nimbus_binary_common, process_state],
   beacon_chain/validators/keystore_management
 
@@ -396,6 +397,10 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   case config.cmd
   of NimbusCmd.`import`:
     importBlocks(config, com)
+  of NimbusCmd.exportEraE:
+    exportEraE(config, com)
+  of NimbusCmd.verifyEraE:
+    verifyEraEFile(config, config.eraFile.string)
   else:
     runExeClient(config, com, nil, nimbus=nimbus)
 
