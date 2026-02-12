@@ -18,7 +18,7 @@ import
   ./common
 
 logScope:
-  topic = "pruner"
+  topics = "pruner"
 
 const
   RetentionPeriod = 6 * 30 * 24 * 60 * 60'u64 # ~6 months in seconds
@@ -27,33 +27,28 @@ type
   BackgroundPrunerRef* = ref object
     com: CommonRef
     batchSize: uint64
-    batchDelay: chronos.Duration
     loopDelay: chronos.Duration
     loopFut: Future[void].Raising([CancelledError])
 
 proc init*(
     T: type BackgroundPrunerRef,
     com: CommonRef,
-    batchSize = 10'u64,
-    batchDelay = chronos.milliseconds(20),
-    loopDelay = chronos.seconds(60),
+    batchSize = 50'u64,
+    loopDelay = chronos.seconds(5),
 ): T =
   T(
     com: com,
     batchSize: batchSize,
-    batchDelay: batchDelay,
     loopDelay: loopDelay,
   )
 
 proc pruneLoop(pruner: BackgroundPrunerRef) {.async: (raises: [CancelledError]).} =
   while true:
     let
-      baseTx = pruner.com.db.baseTxFrame()
-      start = baseTx.getSavedStateBlockNumber()
-      begin = baseTx.getHistoryExpired()
+      start = pruner.com.db.baseTxFrame.getSavedStateBlockNumber()
+      begin = pruner.com.db.baseTxFrame.getHistoryExpired()
       cutoff = EthTime(EthTime.now().uint64 - RetentionPeriod)
 
-    # TODO: timestamp based check
     if begin >= start:
       await sleepAsync(pruner.loopDelay)
       continue
@@ -62,12 +57,31 @@ proc pruneLoop(pruner: BackgroundPrunerRef) {.async: (raises: [CancelledError]).
       fromBlock = begin, toBlock = start, cutoffTimestamp = cutoff.uint64
 
     var currentBlock = begin
-    # TODO: Update retention Window calculation
     var reachedRetentionWindow = false
+    var prevBaseNumber = start
+    var prunedSincePersist = 0'u64
 
     while currentBlock <= start and not reachedRetentionWindow:
       # Re-read baseTxFrame each iteration — FC's persist may have replaced it
       let baseTx = pruner.com.db.baseTxFrame()
+
+      # Detect if FC persisted by checking if base block number advanced.
+      # FC's updateBase always advances the base before persisting.
+      let curBaseNumber = baseTx.getSavedStateBlockNumber()
+      if curBaseNumber != prevBaseNumber:
+        prunedSincePersist = 0
+        prevBaseNumber = curBaseNumber
+
+      # Cap deletions between FC persists to avoid unbounded sTab growth.
+      # During header-download phase FC doesn't persist, so without this cap
+      # millions of deletion entries accumulate in sTab and choke the first
+      # block import.
+      if prunedSincePersist >= pruner.batchSize:
+        notice "Background pruner: waiting for persist",
+          prunedSincePersist = prunedSincePersist
+        await sleepAsync(pruner.loopDelay)
+        continue
+
       let batchEnd = min(currentBlock + pruner.batchSize - 1, start)
       var lastPruned = currentBlock
 
@@ -90,12 +104,12 @@ proc pruneLoop(pruner: BackgroundPrunerRef) {.async: (raises: [CancelledError]).
         lastPruned = blkNum + 1
 
       baseTx.setHistoryExpired(lastPruned)
+      prunedSincePersist += (lastPruned - currentBlock)
 
       notice "Background pruner: batch complete",
         blks = lastPruned
 
       currentBlock = lastPruned
-      await sleepAsync(pruner.batchDelay)
 
     notice "Background pruner: cycle complete",
       prunedUpTo = currentBlock
