@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -50,7 +50,7 @@ func createBloom*(receipts: openArray[StoredReceipt]): Bloom =
 proc makeReceipt*(
     vmState: BaseVMState; txType: TxType, callResult: LogResult): StoredReceipt =
   var rec: StoredReceipt
-  if vmState.com.isByzantiumOrLater(vmState.blockNumber):
+  if vmState.com.isByzantiumOrLater(vmState.blockNumber, vmState.blockCtx.timestamp):
     rec.isHash = false
     rec.status = vmState.status
   else:

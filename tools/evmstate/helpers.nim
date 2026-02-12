@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -135,6 +135,7 @@ proc parseHeader*(n: JsonNode): Header =
     withdrawalsRoot: optional(Hash32, "currentWithdrawalsRoot"),
     excessBlobGas  : optional(uint64, "currentExcessBlobGas"),
     parentBeaconBlockRoot: optional(Hash32, "currentBeaconRoot"),
+    slotNumber: optional(uint64, "slotNumber"),
   )
 
 proc parseParentHeader*(n: JsonNode): Header =
