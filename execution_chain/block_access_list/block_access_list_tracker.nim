@@ -53,7 +53,7 @@ type
   BlockAccessListTrackerRef* = ref object
     ledger*: ReadOnlyLedger
       ## Used to fetch the pre-transaction values from the state.
-    builder*: BlockAccessListBuilderRef
+    builder*: ConcurrentBlockAccessListBuilderRef
       ## The builder instance that accumulates all tracked changes.
     preStorageCache*: Table[(Address, UInt256), UInt256]
       ## Cache of pre-transaction storage values, keyed by (address, slot) tuples.
@@ -91,7 +91,7 @@ proc `=copy`(dest: var CallFrameSnapshot; src: CallFrameSnapshot) {.error: "Copy
 proc init*(
     T: type BlockAccessListTrackerRef,
     ledger: ReadOnlyLedger,
-    builder = BlockAccessListBuilderRef.init()): T =
+    builder = ConcurrentBlockAccessListBuilderRef.init()): T =
   BlockAccessListTrackerRef(ledger: ledger, builder: builder)
 
 proc setBlockAccessIndex*(tracker: BlockAccessListTrackerRef, blockAccessIndex: int) =

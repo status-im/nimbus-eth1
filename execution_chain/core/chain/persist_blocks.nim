@@ -164,6 +164,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     # Generate receipts for storage or validation but skip them otherwise
     ?vmState.processBlock(
       blk,
+      blockAccessList = Opt.none(BlockAccessListRef),
       skipValidation,
       skipReceipts = skipValidation and PersistReceipts notin p.flags,
       skipUncles = PersistUncles notin p.flags,

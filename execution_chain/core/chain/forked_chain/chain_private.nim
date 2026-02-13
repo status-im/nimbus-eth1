@@ -94,6 +94,7 @@ proc processBlock*(
   template processBlock(): auto =
     vmState.processBlock(
       blk,
+      blockAccessList,
       skipValidation = false,
       skipReceipts = false,
       skipUncles = true,

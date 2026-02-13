@@ -28,6 +28,9 @@ import
   chronicles,
   results
 
+# TODO: make this a debug cli flag
+const parallelTxExecutionEnabled = true
+
 when compileOption("threads"):
   import taskpools
 
@@ -64,6 +67,116 @@ when compileOption("threads"):
 
       body
 
+  # TODO: improve function names and refactor
+  proc processTransactionTask(
+      vmState: BaseVMState,
+      txIndex: int,
+      tx: Transaction,
+      header: Header,
+      skipReceipts: bool,
+      collectLogs: bool,
+      blockAccessList: BlockAccessListRef
+  ): Result[void, string] =
+    let sender = tx.recoverSender().valueOr:
+      return err("Could not get sender for tx with index " & $(txIndex))
+
+    if vmState.balTrackerEnabled:
+      vmState.balTracker.setBlockAccessIndex(txIndex + 1)
+
+    let rc = vmState.processTransaction(tx, sender, header)
+    if rc.isErr:
+      return err("Error processing tx with index " & $(txIndex) & ":" & rc.error)
+    if skipReceipts:
+      # TODO don't generate logs at all if we're not going to put them in receipts
+      if collectLogs:
+        vmState.allLogs.add rc.value.logEntries
+    else:
+      vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType, rc.value)
+      if collectLogs:
+        vmState.allLogs.add vmState.receipts[txIndex].logs
+
+  # TODO: are pointers needed here
+  proc processTransactionTask(
+      blockVmState: ptr BaseVMState,
+      txIndex: int,
+      tx: ptr Transaction,
+      header: ptr Header,
+      skipReceipts: bool,
+      collectLogs: bool,
+      blockAccessList: ptr BlockAccessListRef
+  ): Result[void, void] =
+
+    # For now setup a separate vmState per transaction lazily.
+    # This will likely be very slow and so this will be refactored away
+    # later once more of the types are made thread safe.
+    let txVmState = BaseVMState()
+    txVmState.init(
+      blockVmState[].parent,
+      header[],
+      blockVmState[].com,
+      blockVmState[].ledger.txFrame,
+      enableBalTracker = false # manually setup the bal tracker
+    )
+
+    # Setup ledger
+    let txLedger = LedgerRef.init(
+      blockVmState[].ledger.txFrame,
+      blockVmState[].ledger.storeSlotHash,
+      collectWitness = false)
+
+    # Apply prestate to ledger
+
+    # Setup bal tracker
+    # the same thread safe builder instance is shared between all trackers
+    if blockVmState[].balTrackerEnabled():
+      txVmState.balTracker = BlockAccessListTrackerRef.init(
+        txLedger.ReadOnlyLedger,
+        blockVmState[].balTracker.builder
+      )
+
+    processTransactionTask(
+      txVmState,
+      txIndex,
+      tx[],
+      header[],
+      skipReceipts,
+      collectLogs,
+      blockAccessList[]).isOkOr:
+        return err()
+
+    ok()
+
+  proc processTransactionsParallel(
+      vmState: BaseVMState,
+      header: Header,
+      transactions: seq[Transaction],
+      skipReceipts: bool,
+      collectLogs: bool,
+      blockAccessList: Opt[BlockAccessListRef]
+  ): Result[void, string] =
+    doAssert not vmState.com.taskpool.isNil()
+    doAssert blockAccessList.isSome()
+
+    vmState.receipts.setLen(if skipReceipts: 0 else: transactions.len)
+    vmState.cumulativeGasUsed = 0
+    vmState.blockGasUsed = 0
+    vmState.allLogs = @[]
+
+    let bal = blockAccessList.get()
+    var futs = newSeq[Flowvar[Result[void, void]]](transactions.len)
+
+    # Submit all transaction processing tasks to the taskpool
+    for txIndex, tx in transactions:
+      futs[txIndex] = vmState.com.taskpool.spawn processTransactionTask(
+        vmState.addr, txIndex, tx.addr, header.addr, skipReceipts, collectLogs, bal.addr)
+
+    # Wait for all tasks to complete
+    for txIndex, f in futs:
+      sync(f).isOkOr:
+        return err("parallel tx execution failed for transaction with index: " & $txIndex)
+
+    ok()
+
 template withSenderSerial(txs: openArray[Transaction], body: untyped) =
   for txIndex {.inject.}, tx {.inject.} in txs:
     let sender {.inject.} = tx.recoverSender().valueOr(default(Address))
@@ -80,9 +193,7 @@ template withSender(vmState: BaseVMState, txs: openArray[Transaction], body: unt
   else:
     withSenderSerial(txs, body)
 
-# Factored this out of procBlkPreamble so that it can be used directly for
-# stateless execution of specific transactions.
-proc processTransactions*(
+proc processTransactionsSerial(
     vmState: BaseVMState,
     header: Header,
     transactions: seq[Transaction],
@@ -115,10 +226,27 @@ proc processTransactions*(
         vmState.allLogs.add vmState.receipts[txIndex].logs
   ok()
 
+proc processTransactions(
+    vmState: BaseVMState,
+    header: Header,
+    transactions: seq[Transaction],
+    skipReceipts: bool,
+    collectLogs: bool,
+    blockAccessList: Opt[BlockAccessListRef]
+): Result[void, string] =
+  when compileOption("threads"):
+    if parallelTxExecutionEnabled:
+      vmState.processTransactionsParallel(header, transactions, skipReceipts, collectLogs, blockAccessList)
+    else:
+      vmState.processTransactionsSerial(header, transactions, skipReceipts, collectLogs)
+  else:
+    vmState.processTransactionsSerial(header, transactions, skipReceipts, collectLogs)
+
 proc procBlkPreamble(
     vmState: BaseVMState,
     blk: Block,
-    skipValidation, skipReceipts, skipUncles: bool
+    blockAccessList: Opt[BlockAccessListRef],
+    skipValidation, skipReceipts, skipUncles: bool,
 ): Result[void, string] =
   template header(): Header =
     blk.header
@@ -176,7 +304,7 @@ proc procBlkPreamble(
 
     let collectLogs = header.requestsHash.isSome and not skipValidation
     ?processTransactions(
-      vmState, header, blk.transactions, skipReceipts, collectLogs
+      vmState, header, blk.transactions, skipReceipts, collectLogs, blockAccessList
     )
   elif blk.transactions.len > 0:
     return err("Transactions in block with empty txRoot")
@@ -346,6 +474,7 @@ proc procBlkEpilogue(
 proc processBlock*(
     vmState: BaseVMState, ## Parent environment of header/body block
     blk: Block, ## Header/body block to add to the blockchain
+    blockAccessList = Opt.none(BlockAccessListRef),
     skipValidation = false,
     skipReceipts = false,
     skipUncles = false,
@@ -353,7 +482,7 @@ proc processBlock*(
     skipPostExecBalCheck = false,
 ): Result[void, string] =
   ## Generalised function to processes `blk` for any network.
-  ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles)
+  ?vmState.procBlkPreamble(blk, blockAccessList, skipValidation, skipReceipts, skipUncles)
 
   # EIP-3675: no reward for miner in POA/POS
   if not vmState.com.proofOfStake(blk.header, vmState.ledger.txFrame):
