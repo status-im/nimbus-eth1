@@ -9,20 +9,16 @@
 
 import
   std/[tables, sets, times, random],
-  chronos,
-  chronos/ratelimit,
-  chronicles,
-  eth/common/hashes,
-  eth/common/times,
-  results,
-  ./types,
-  ./requester,
-  ../../networking/p2p,
-  ../../core/tx_pool,
-  ../../core/pooled_txs_rlp,
-  ../../core/eip4844,
-  ../../core/eip7594,
-  ../../core/chain/forked_chain
+  pkg/[chronos, chronicles, results],
+  pkg/chronos/ratelimit,
+  pkg/eth/common/[hashes, times],
+  ../../../core/chain/forked_chain,
+  ../../../core/eip4844,
+  ../../../core/eip7594,
+  ../../../core/pooled_txs_rlp,
+  ../../../core/tx_pool,
+  ../../../networking/p2p,
+  ./[eth_requester, eth_types]
 
 logScope:
   topics = "tx-broadcast"
