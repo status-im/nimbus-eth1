@@ -69,7 +69,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os }}-${{ matrix.cpu }}-checksum
-          path: ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus_execution_client.sha512sum
+          path: ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus.sha512sum
           retention-days: 2
 
   run-binary:
