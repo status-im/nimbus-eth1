@@ -36,13 +36,12 @@ proc accountRequeue*(ctx: SnapCtxRef; info: static[string]): bool =
     let
       then = Moment.now()
       mpt = block:
-        let rc = w.root.validate(w.start, w.packet)
+        let rc = w.root.validate(w.start, w.accounts, w.proof)
         block cleanUp:
           adb.delRawAccounts(w.root, w.start).isOkOr:
             trace info & ": error deleting packet", root=w.root.toStr,
               iv=(w.start,w.limit).to(float).toStr,
-              nAccounts=w.packet.accounts.len, nProof=w.packet.proof.len,
-              `error`=error
+              nAccounts=w.accounts.len, nProof=w.proof.len,`error`=error
           break cleanUp
 
         if rc.isErr:
@@ -54,10 +53,10 @@ proc accountRequeue*(ctx: SnapCtxRef; info: static[string]): bool =
           # Done for now
           ctx.pool.mptEla += (Moment.now() - then)
           debug info & ": accounts validation failed", root=w.root.toStr,
-            iv=(w.start,w.limit).to(float).toStr,
-            nAccounts=w.packet.accounts.len, nProof=w.packet.proof.len,
-            elaSum=ctx.pool.mptEla.toStr
-          doAssert dumpAccFailFile.dumpToFile(w.root, w.start, w.packet)
+            iv=(w.start,w.limit).to(float).toStr, nAccounts=w.accounts.len,
+            nProof=w.proof.len, elaSum=ctx.pool.mptEla.toStr
+          doAssert dumpAccFailFile.dumpToFile(
+            w.root, w.start, w.accounts, w.proof)
           return true                               # failed, but did something
 
         rc.value
@@ -69,17 +68,16 @@ proc accountRequeue*(ctx: SnapCtxRef; info: static[string]): bool =
 
       if rc.isErr:
         debug info & ": caching accounts failed", root=w.root.toStr,
-          iv=(w.start,w.limit).to(float).toStr,
-          nAccounts=w.packet.accounts.len, nProof=w.packet.proof.len,
-          elaSum=ctx.pool.mptEla.toStr, error=rc.error
-        doAssert dumpAccFailFile.dumpToFile(w.root, w.start, w.packet)
+          iv=(w.start,w.limit).to(float).toStr, nAccounts=w.accounts.len,
+          nProof=w.proof.len, elaSum=ctx.pool.mptEla.toStr, error=rc.error
+        doAssert dumpAccFailFile.dumpToFile(
+          w.root, w.start, w.accounts, w.proof)
         return true                                 # failed, but did something
 
     # Successfully stored
     debug info & ": accounts stored", root=w.root.toStr,
-      iv=(w.start,w.limit).to(float).toStr,
-      nAccounts=w.packet.accounts.len, nProof=w.packet.proof.len,
-      elaSum=ctx.pool.mptEla.toStr
+      iv=(w.start,w.limit).to(float).toStr, nAccounts=w.accounts.len,
+      nProof=w.proof.len, elaSum=ctx.pool.mptEla.toStr
     return true
 
   # false                                           # no serious work done

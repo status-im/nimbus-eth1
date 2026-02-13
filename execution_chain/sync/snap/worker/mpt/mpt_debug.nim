@@ -351,6 +351,16 @@ proc dumpToFile*(
 
   # false
 
+proc dumpToFile*(
+    fPath: string;
+    root: StateRoot;
+    start: ItemKey;
+    accounts: seq[SnapAccount];
+    proof: seq[ProofNode]
+      ): bool =
+  fPath.dumpToFile(
+    root, start, AccountRangePacket(accounts: accounts, proof: proof))
+
 
 proc accountRangeFromFile*(
     fd: var File;

@@ -63,11 +63,13 @@ template accountDownload*(
       nProof {.inject,used.} = data.proof.len       # logging only
 
     # Stash accounts data packet to be processed later
-    adb.putRawAccounts(state.root,ivReq.minPt,limit,data,buddy.peerID).isOkOr:
-      sdb.rollbackAccountRange(state, ivReq)        # registry roll back
-      debug info & ": caching accounts failed", peer, root, iv,
-        nAccounts, nProof
-      break body                                    # return err()
+    adb.putRawAccounts(
+      state.root, ivReq.minPt, limit, data.accounts, data.proof,
+      buddy.peerID).isOkOr:
+        sdb.rollbackAccountRange(state, ivReq)      # registry roll back
+        debug info & ": caching accounts failed", peer, root, iv,
+          nAccounts, nProof
+        break body                                  # return err()
 
     state.upScore()                                 # got some data
     sdb.commitAccountRange(state, ivReq, limit)     # update registry
