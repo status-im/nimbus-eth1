@@ -118,6 +118,17 @@ when compileOption("threads"):
       enableBalTracker = false # manually setup the bal tracker
     )
 
+    # For now assuming only single threaded
+    # Copy data from blockVmState
+    txVmState.gasPool = blockVmState.gasPool
+    txVmState.receipts = blockVmState.receipts
+    txVmState.cumulativeGasUsed = blockVmState.cumulativeGasUsed
+    txVmState.blockGasUsed = blockVmState.blockGasUsed
+    txVmState.gasCosts = blockVmState.gasCosts
+    txVmState.blobGasUsed = blockVmState.blobGasUsed
+    txVmState.gasRefunded = blockVmState.gasRefunded
+    txVmState.allLogs = blockVmState.allLogs
+
     # Setup ledger
     let txLedger = LedgerRef.init(
       blockVmState[].ledger.txFrame,
@@ -134,17 +145,32 @@ when compileOption("threads"):
         blockVmState[].balTracker.builder
       )
 
-    processTransactionTask(
+    let r = processTransactionTask(
       txVmState,
       txIndex,
       tx[],
       header[],
       skipReceipts,
       collectLogs,
-      blockAccessList[]).isOkOr:
-        return err()
+      blockAccessList[])
 
-    ok()
+    # For now assuming only single threaded
+    # Copy data from blockVmState
+    blockVmState.gasPool = txVmState.gasPool
+    blockVmState.receipts = txVmState.receipts
+    blockVmState.cumulativeGasUsed = txVmState.cumulativeGasUsed
+    blockVmState.blockGasUsed = txVmState.blockGasUsed
+    blockVmState.gasCosts = txVmState.gasCosts
+    blockVmState.blobGasUsed = txVmState.blobGasUsed
+    blockVmState.gasRefunded = txVmState.gasRefunded
+    blockVmState.allLogs = txVmState.allLogs
+
+    if r.isOk():
+      ok()
+    else:
+      err()
+
+
 
   proc processTransactionsParallel(
       vmState: BaseVMState,
