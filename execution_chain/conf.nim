@@ -60,6 +60,7 @@ type
   NimbusCmd* {.pure.} = enum
     executionClient
     `import`
+    `prune`
 
   RpcFlag* {.pure.} = enum
     ## RPC flags
@@ -523,6 +524,11 @@ type
         defaultValue: false
         name: "debug-bootstrap-finalized" .}: bool
 
+      backgroundPruning* {.
+        desc: "Enable background pruning of expired block bodies and receipts"
+        defaultValue: false
+        name: "background-pruning" .}: bool
+
     # We now load all the import specific configurations directly into  ExecutionClientConf
     of NimbusCmd.`import`:
       maxBlocks* {.
@@ -574,6 +580,24 @@ type
         desc: "Store reverse slot hashes in database"
         defaultValue: false
         name: "debug-store-slot-hashes".}: bool
+
+    of NimbusCmd.`prune`:
+      purgeLimit* {.
+        desc: "Purge history in database till this block number"
+        defaultValue: 0'u64
+        name: "purge-limit" .}: uint64
+
+      purgeReceipts* {.
+        desc: "Purge receipts from database"
+        defaultValue: true
+        name: "purge-receipts" .}: bool
+
+      purgeBlocks* {.
+        desc: "Purge block bodies from database"
+        defaultValue: true
+        name: "purge-blocks" .}: bool
+
+      # TODO : add hidden flags for more minute control over txs, withdrawals
 
 func parseHexOrDec256(p: string): UInt256 {.raises: [ValueError].} =
   if startsWith(p, "0x"):
