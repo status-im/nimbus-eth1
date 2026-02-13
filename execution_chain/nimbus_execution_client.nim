@@ -374,7 +374,7 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   # Metrics are useful not just when running node but also during import
   let metricsServer =
     try:
-      waitFor(initMetricsServer(config)).valueOr:
+      waitFor(initMetricsServer(config.metrics)).valueOr:
         quit(QuitFailure)
     except CancelledError:
       raiseAssert "Never cancelled"
