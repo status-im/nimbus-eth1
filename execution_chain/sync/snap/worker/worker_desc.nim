@@ -66,6 +66,10 @@ type
     slot: seq[StorageItem]                          # Incomplete slot with proof
     proof: seq[ProofNode]                           # Prof for `slot`
 
+  FetchCodesData* = tuple
+    packet: ByteCodesPacket
+    elapsed: Duration
+
   Ticker* =
     proc(ctx: SnapCtxRef) {.gcsafe, raises: [].}
       ## Some function that is invoked regularly

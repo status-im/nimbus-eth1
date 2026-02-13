@@ -117,4 +117,18 @@ const
   nProcStorageErrThreshold* = 4
     ## Similar to `nProcAccountErrThreshold`
 
+  # -----------
+
+  fetchCodesSnapTimeout* = chronos.seconds(120)
+    ## Similar to `fetchAccountSnapTimeout`
+
+  nFetchCodesSnapErrThreshold* = 4
+    ## Similar to `nFetchAccountSnapErrThreshold`
+
+  fetchCodesSnapBytesLimit* = 50 * 1024
+    ## Similar to `fetchAccountSnapBytesLimit`
+
+  nProcCodesErrThreshold* = 4
+    ## Similar to `nProcAccountErrThreshold`
+
 # End

@@ -49,6 +49,17 @@
 ##   + proof:    `seq[ProofNode]`
 ##   + peerID:   `Hash`
 ##
+## * RawByteCode:
+##   + key65: <col, root, start>
+##   + value: <limit, code, peerID>
+##   where
+##   + col:      `RawByteCodes`
+##   + root:     `StateRoot`
+##   * start:    `ItemKey`
+##   + limit:    `ItemKey`
+##   + codes:    `seq[(CodeHash,CodeItem)]`
+##   + peerID:   `Hash`
+##
 ## * MptAccounts:
 ##   + key65: <col, root, start>
 ##   + value: <limit, partTrie>
@@ -96,7 +107,7 @@ type
     RawStoSlot                                      # ditto
     RawByteCode                                     # ditto
     MptAccounts                                     # list of (key,node) pairs
-    MptStoSlot                                      # ditto
+    MptStoSlot                                      # list of (key,code) pairs
 
   MptAsmRef* = ref object
     adb*: RocksDbReadWriteRef
@@ -112,6 +123,11 @@ type
     limit: ItemKey
     slot: seq[StorageItem]
     proof: seq[ProofNode]
+    peerID: Hash
+
+  DecodedRawByteCode* = tuple
+    limit: ItemKey
+    codes: seq[(CodeHash,CodeItem)]
     peerID: Hash
 
   WalkRawAccounts* = tuple
@@ -130,6 +146,14 @@ type
     limit: ItemKey                                  # `high()` unless incomplete
     slot: seq[StorageItem]
     proof: seq[ProofNode]                           # Prof for `slot` (if any)
+    peerID: Hash
+    error: string
+
+  WalkRawByteCode* = tuple
+    root: StateRoot
+    start: ItemKey                                  # account coverage
+    limit: ItemKey                                  # account coverage
+    codes: seq[(CodeHash,CodeItem)]
     peerID: Hash
     error: string
 
@@ -170,6 +194,20 @@ func decodeRawStoSlot(data: seq[byte]): Result[DecodedRawStoSlot,string] =
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(move res)
 
+func decodeRawByteCode(data: seq[byte]): Result[DecodedRawByteCode,string] =
+  const info = "decodeRawByteCode"
+  var
+    rd = data.rlpFromBytes
+    res: DecodedRawByteCode
+  try:
+    rd.tryEnterList()
+    res.limit = rd.read(UInt256).to(ItemKey)
+    res.codes = rd.read(seq[(CodeHash,CodeItem)])
+    res.peerID = Hash(cast[int](rd.read uint))
+  except RlpError as e:
+    return err(info & ": " & $e.name & "(" & e.msg & ")")
+  ok(move res)
+
 
 template encodeRawAccounts(
     limit: ItemKey;
@@ -194,6 +232,18 @@ template encodeRawStoSlot(
   wrt.append limit.to(UInt256)
   wrt.append slot
   wrt.append proof
+  wrt.append cast[uint](peerID)
+  wrt.finish()
+
+template encodeRawByteCode(
+    limit: ItemKey;
+    codes: seq[(CodeHash,CodeItem)];
+    peerID: Hash;
+      ): untyped =
+  const info = "decodeRawByteCode"
+  var wrt = initRlpList 3
+  wrt.append limit.to(UInt256)
+  wrt.append codes
   wrt.append cast[uint](peerID)
   wrt.finish()
 
@@ -741,6 +791,65 @@ iterator walkRawStoSlot*(
         yield oops
         continue
     yield (root, acc, start, w.limit, w.slot, w.proof, w.peerID, "")
+
+# -------------
+
+proc getRawByteCode*(
+    db: MptAsmRef;
+    root: StateRoot;
+    start: ItemKey;
+    limit: ItemKey;
+      ): Result[DecodedRawByteCode,string] =
+  let data = db.get65(root, start, RawByteCode).valueOr:
+    return err(error)
+  data.decodeRawByteCode()
+
+proc putRawAyteCode*(
+    db: MptAsmRef;
+    root: StateRoot;
+    start: ItemKey;
+    limit: ItemKey;
+    codes: seq[(CodeHash,CodeItem)];
+    peerID: Hash;
+      ): Result[void,string] =
+  db.put65(root, start, encodeRawByteCode(limit, codes, peerID), RawAccounts)
+
+proc delRawByteCode*(
+    db: MptAsmRef;
+    root: StateRoot;
+    start: ItemKey;
+      ): Result[void,string] =
+  db.del65(root, start, RawAccounts)
+
+iterator walkRawByteCode*(db: MptAsmRef): WalkRawByteCode =
+  for (key1,key2,value) in db.adb.rWalk65(RawByteCode.key65(), RawByteCode):
+    let
+      root = StateRoot(key1)
+      start = key2.to(ItemKey)
+      w = value.decodeRawByteCode().valueOr:
+        var oops: WalkRawByteCode
+        oops.root = root
+        oops.start = start
+        oops.error = error
+        yield oops
+        continue
+    yield (root, start, w.limit, w.codes, w.peerID, "")
+
+iterator walkRawByteCode*(db: MptAsmRef, root: StateRoot): WalkRawByteCode =
+  ## Variant of `walkRawAccounts()` for fixed `root`
+  for (key1,key2,value) in db.adb.rWalk65(RawByteCode.key65(root), RawByteCode):
+    if StateRoot(key1) != root:
+      break
+    let
+      start = key2.to(ItemKey)
+      w = value.decodeRawByteCode().valueOr:
+        var oops: WalkRawByteCode
+        oops.root = root
+        oops.start = start
+        oops.error = error
+        yield oops
+        continue
+    yield (root, start, w.limit, w.codes, w.peerID, "")
 
 # ------------------------------------------------------------------------------
 # End
