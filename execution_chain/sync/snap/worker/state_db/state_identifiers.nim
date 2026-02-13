@@ -22,18 +22,44 @@ type
   DistinctHash32* = StateRoot | BlockHash | StoreRoot | CodeHash
     ## For generic function arguments
 
+  DistinctSeqHash32* = seq[StoreRoot] | seq[CodeHash]
+    ## For generic function arguments
+
+# ------------------------------------------------------------------------------
+# Public `Rlp` and `Table` helpers
+# ------------------------------------------------------------------------------
+
 func hash*(a: DistinctHash32): Hash =
   ## Mixin for table or minilru drivers
   hashes.hash(a.distinctBase)
 
+proc read*[T: DistinctHash32](
+    r: var Rlp; _: type T): T {.gcsafe, raises: [RlpError]} =
+  ## RLP mixin, decoding
+  r.read(Hash32).T
+
+proc append*[T: DistinctHash32](w: var RlpWriter, val: T) =
+  w.append Hash32(val)
+
 func `==`*(a, b: DistinctHash32): bool = a.distinctBase == b.distinctBase
 func `!=`*(a, b: DistinctHash32): bool = a.distinctBase != b.distinctBase
 
+# ------------------------------------------------------------------------------
+# Public type mappers
+# ------------------------------------------------------------------------------
+
+template to*[T: DistinctHash32](w: Hash32, _: type T): T = T(w)
+
+template to*[T: Hash32](w: DistinctHash32; _: type T): T = T(w)
+
+template to*[T: seq[Hash32]](w: DistinctSeqHash32, _: type T): T = cast[T](w)
+
+# ------------------------------------------------------------------------------
+# Public print function()s
+# ------------------------------------------------------------------------------
+
 func toStr*(w: DistinctHash32): string = w.Hash32.short
 
-template to*(w: Hash32, _: type StateRoot): StateRoot = StateRoot(w)
-template to*(w: Hash32, _: type BlockHash): BlockHash = BlockHash(w)
-template to*(w: Hash32, _: type StoreRoot): StoreRoot = StoreRoot(w)
-template to*(w: Hash32, _: type CodeHash): CodeHash = CodeHash(w)
-
+# ------------------------------------------------------------------------------
 # End
+# ------------------------------------------------------------------------------

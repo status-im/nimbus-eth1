@@ -19,7 +19,7 @@
 {.push raises:[].}
 
 import
-  std/hashes,
+  std/[hashes, sequtils],
   pkg/[eth/common, stint, stew/interval_set],
   ../helpers
 
@@ -46,17 +46,26 @@ func hash*(w: ItemKey): Hash = w.UInt256.hash
 # Public `ItemKey` / `Hash32` interoperability
 # ------------------------------------------------------------------------------
 
-template to*(w: ItemKey; T: type UInt256): T = w.T
-template to*(w: UInt256; T: type ItemKey): T = w.T
+template to*[T: UInt256](w: ItemKey; _: type T): T = w.T
+template to*[T: ItemKey](w: UInt256; _: type T): T = w.T
 
-template to*(w: array[32,byte]; T: type ItemKey): T = w.Bytes32.to(UInt256).T
+template to*[T: Hash32](w: ItemKey; _: type T): T = w.UInt256.to(Bytes32).T
+template to*[T: UInt256](w: Hash32; _: type T): T = w.Bytes32.to(T)
+template to*[T: ItemKey](w: Hash32; _: type T): T = w.to(UInt256).T
+template to*[T: ItemKey](w: SomeUnsignedInt; _: type T): T = w.to(UInt256).T
+
+template to*[T: ItemKey](w: array[32,byte]; _: type T): T =
   ## Handy for converting the result of `desc_nibbles.getBytes()`
+  w.Bytes32.to(UInt256).T
 
-template to*(w: ItemKey; T: type Hash32): T = w.UInt256.to(Bytes32).T
-template to*(w: Hash32; T: type UInt256): T = w.Bytes32.to(T)
-template to*(w: Hash32; T: type ItemKey): T = w.to(UInt256).T
+template to*[T: Hash32](w: seq[ItemKey], _: type seq[T]): seq[T] =
+  ## No shortcut here (e.g. `cast[]()`) as there are different representations
+  ## of the same data.
+  w.mapIt(it.to(T))
 
-template to*(w: SomeUnsignedInt; T: type ItemKey): T = w.to(UInt256).T
+template to*[T: ItemKey](w: seq[Hash32], _: type seq[T]): seq[T] =
+  ## Dito
+  w.mapIt(it.to(T))
 
 # ------------------------------------------------------------------------------
 # Public `ItemKey` base arithmetic
