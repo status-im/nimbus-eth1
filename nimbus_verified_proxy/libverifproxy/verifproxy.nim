@@ -24,18 +24,6 @@ import
 
 proc NimMain() {.importc, exportc, dynlib.}
 
-var initialized: Atomic[bool]
-
-proc initLib() =
-  if not initialized.exchange(true):
-    NimMain() # Every Nim library needs to call `NimMain` once exactly
-  when declared(setupForeignThreadGc):
-    setupForeignThreadGc()
-  when declared(nimGC_setStackBottom):
-    var locals {.volatile, noinit.}: pointer
-    locals = addr(locals)
-    nimGC_setStackBottom(locals)
-
 proc freeNimAllocatedString(res: cstring) {.exported.} =
   deallocShared(res)
 
@@ -81,6 +69,18 @@ proc createTask(cb: CallBackProc, userData: pointer): Task =
   task.userData = userData
   task
 
+# adding a watchdog loop tricks the chronos event loop to think that the
+# timer to be checked is sooner. This is relevant for one specific edge case
+# When the first async task is dispatched with a long timer (ex. sleepAsync(10s))
+# and `poll` is called to advance the event loop, chronos will wait. Because it
+# sees only one timer event to be checked. This will stop new async tasks from
+# being dispatched in time. If the async event loop has two async tasks dispatched
+# with one not having long timers this edge case wouldn't arise. Also this specific
+# edge case only exists in the way the C library is structured.
+proc watchDogLoop(wdTimeout: int) {.async: (raises: [CancelledError]).} =
+  while true:
+    await sleepAsync(milliseconds(wdTimeout))
+
 proc startVerifProxy(
     configJson: cstring,
     transportProc: TransportProc,
@@ -90,14 +90,13 @@ proc startVerifProxy(
   let ctx = Context.new().toUnmanagedPtr()
   ctx.stop = false
 
-  try:
-    initLib()
-  except Exception as e:
-    cb(ctx, RET_ERROR, alloc(e.msg), userData)
-    return
+  when defined(setupForeignThreadGc):
+    setupForeignThreadGc()
 
   let
     task = createTask(cb, userData)
+    wdTask = createTask(nil, nil)
+    wdFut = watchDogLoop(1) 
     fut = run(ctx, $configJson, transportProc)
 
   proc processFuture(fut: Future[void], task: Task) {.gcsafe.} =
@@ -120,13 +119,23 @@ proc startVerifProxy(
   else: # when the future errors or is cancelled before awaiting on something
     processFuture(fut, task)
 
+  if not wdFut.finished:
+    wdFut.addCallback proc(_: pointer) {.gcsafe.} =
+      processFuture(wdFut, task)
+  else: # when the future errors or is cancelled before awaiting on something
+    processFuture(wdFut, task)
+
   task.fut = fut
+  wdTask.fut = wdFut
   ctx.tasks.add(task)
-  ctx.taskLen += 1
+  ctx.tasks.add(wdTask)
+  ctx.taskLen += 2
 
   return ctx
 
 proc stopVerifProxy(ctx: ptr Context) {.exported.} =
+  when defined(setupForeignThreadGc):
+    tearDownForeignThreadGc()
   ctx.stop = true
 
 # NOTE: this is not the C callback. This is just a callback for the future
