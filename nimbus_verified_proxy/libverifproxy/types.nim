@@ -110,8 +110,7 @@ func packArg*[T](arg: T): Result[string, string] {.raises: [].} =
 
 proc alloc*(str: string): cstring =
   var ret = cast[cstring](allocShared(str.len + 1))
-  let s = cast[seq[char]](str)
   for i in 0 ..< str.len:
-    ret[i] = s[i]
+    ret[i] = str[i]
   ret[str.len] = '\0'
   return ret
