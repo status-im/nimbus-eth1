@@ -96,7 +96,7 @@ proc startVerifProxy(
   let
     task = createTask(cb, userData)
     wdTask = createTask(nil, nil)
-    wdFut = watchDogLoop(1) 
+    wdFut = watchDogLoop(1)
     fut = run(ctx, $configJson, transportProc)
 
   proc processFuture(fut: Future[void], task: Task) {.gcsafe.} =

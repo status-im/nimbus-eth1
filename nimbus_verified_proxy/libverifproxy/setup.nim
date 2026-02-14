@@ -421,7 +421,9 @@ proc run*(
   # adding endpoints will also start the backend
   let status = lcRestClientPool.addEndpoints(config.beaconApiUrls)
   if status.isErr():
-    raise newException(ProxyError, "Couldn't add endpoints for light client queries" & status.error)
+    raise newException(
+      ProxyError, "Couldn't add endpoints for light client queries" & status.error
+    )
 
   # this starts the light client manager which is
   # an endless loop
