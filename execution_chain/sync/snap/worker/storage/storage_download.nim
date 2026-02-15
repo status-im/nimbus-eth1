@@ -23,12 +23,13 @@ import
 proc putStoAndProof(
     adb: MptAsmRef;
     root: StateRoot;
+    account: ItemKey;
     start: ItemKey;
     limit: ItemKey;
     data: StorageRangesData;
     peerID: Hash;
       ): Result[void,string] =
-  adb.putRawStoSlot(root, start, limit, data.slot, data.proof, peerID)
+  adb.putRawStoSlot(root, account, start, limit, data.slot, data.proof, peerID)
 
 proc register(state: StateDataRef, acc: seq[(ItemKey,StoreRoot)]) =
   for (key,val) in acc:
@@ -86,13 +87,13 @@ template downloadImpl(
 
         # Store complete sub-trees on database
         for n in 0 ..< data.slots.len:
-          adb.putRawStoSlot(sRoot, data.slots[n], peerID).isOkOr:
-            state.register(accounts[start .. ^1])   # stash data and return
+          adb.putRawStoSlot(sRoot, accLeft[n][0], data.slots[n], peerID).isOkOr:
+            state.register(accLeft[n .. ^1])   # stash data and return
             trace info & ": storing slots failed", peer, root, nStored=n,
-              start, nAccLeft=(accounts.len - start)
+              start=(start+n), nAccLeft=(accLeft.len - n)
             break body                              # error => return
-          start.inc                                 # adj. stepwise for logging
           bodyRc = true                             # did something => ret code
+        start += data.slots.len
 
       # Store partial slot on database
       if 0 < data.slot.len:
@@ -100,12 +101,13 @@ template downloadImpl(
         start.inc
         let accLeft = accounts[start .. ^1]         # shortcut for the rest
         var limit = data.slot[^1].slotHash.to(ItemKey)
-        adb.putStoAndProof(sRoot, low(ItemKey), limit, data, peerID).isOkOr:
-          state.register(thisAcc)                   # stash this trie fully
-          state.register(accLeft)                   # stash rest and return
-          trace info & ": storing partial slots failed", peer, root,
-            start, nAccLeft=accLeft.len
-          break body                                # error => return
+        adb.putStoAndProof(
+          sRoot, thisAcc[0], low(ItemKey), limit, data, peerID).isOkOr:
+            state.register(thisAcc)                 # stash this trie fully
+            state.register(accLeft)                 # stash rest and return
+            trace info & ": storing partial slots failed", peer, root,
+              start, nAccLeft=accLeft.len
+            break body                              # error => return
         bodyRc = true                               # did something => ret code
 
         # Download the rest of the sub-trie
@@ -120,13 +122,16 @@ template downloadImpl(
               nAccLeft=accLeft.len, iv=iv.flStr, `error`=error
             break body                            # error => return
 
-          limit = ivData.slot[^1].slotHash.to(ItemKey)
-          adb.putStoAndProof(sRoot, iv.minPt, limit, ivData, peerID).isOkOr:
-            state.register(thisAcc, iv)             # stash part. trie
-            state.register(accLeft)                 # stash rest and return
-            trace info & ": storing partial slots failed", peer, root, start,
-              nAccLeft=accLeft.len, iv=iv.flStr, limit=limit.flStr
-            break body                              # error => return
+          limit = if ivData.slot.len == 0: high(ItemKey)
+                  else: ivData.slot[^1].slotHash.to(ItemKey)
+
+          adb.putStoAndProof(
+            sRoot, thisAcc[0], iv.minPt, limit, ivData, peerID).isOkOr:
+              state.register(thisAcc, iv)           # stash part. trie
+              state.register(accLeft)               # stash rest and return
+              trace info & ": storing partial slots failed", peer, root, start,
+                nAccLeft=accLeft.len, iv=iv.flStr, limit=limit.flStr
+              break body                            # error => return
 
           # End `while` range left
         # End non-empty slot with partial range
@@ -227,5 +232,5 @@ template storageDownload*(
   discard                                           # visual alignment
 
 # ------------------------------------------------------------------------------
-# Public function
+# End
 # ------------------------------------------------------------------------------

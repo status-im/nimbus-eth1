@@ -151,12 +151,15 @@ template fetchAccounts*(
     let
       nRespAcc {.inject.} = rc.value.packet.accounts.len
       nRespProof {.inject.} = rc.value.packet.proof.len
+    var
+      respAcc {.inject,used.} = "n/a"               # logging only
 
     if 0 < nRespAcc:
       let
         accMin = rc.value.packet.accounts[0].accHash.to(ItemKey)
         accMax = rc.value.packet.accounts[^1].accHash.to(ItemKey)
-        respAcc {.inject,used.} = (accMin,accMax).flStr # logging only
+
+      respAcc = (accMin,accMax).flStr               # logging only
 
       if accMin < ivReq.minPt:
         trace recvInfo & " min account too low", peer, root, reqAcc, nReqAcc,
@@ -185,8 +188,6 @@ template fetchAccounts*(
       # will know about that. What will happen when a proof is missing
       # is that the trie `validation()` function will fail at a later
       # stage.
-      trace recvInfo, peer, root, reqAcc, nReqAcc, respAcc, nRespAcc,
-        nRespProof, ela, state, nErrors=buddy.nErrors.fetch.acc
 
     elif nRespProof == 0:
       # No data available for this state root.
@@ -197,16 +198,15 @@ template fetchAccounts*(
       bodyRc = FetchAccountsResult.err(ENoDataAvailable)
       break body                                    # return err()
 
-    else:
-      trace recvInfo, peer, root, reqAcc, nReqAcc, nRespAcc,
-        nRespProof, ela, state, nErrors=buddy.nErrors.fetch.acc
-
     # Ban an overly slow peer for a while when observed consecutively.
     if fetchAccountSnapTimeout < elapsed:
       buddy.accFetchRegisterError(slowPeer=true)
     else:
       buddy.nErrors.fetch.acc = 0                   # reset error count
       buddy.ctx.pool.lastSlowPeer = Opt.none(Hash)  # not last one/error
+
+    trace recvInfo, peer, root, reqAcc, nReqAcc, respAcc, nRespAcc,
+      nRespProof, ela, state, nErrors=buddy.nErrors.fetch.acc
 
     bodyRc = FetchAccountsResult.ok(rc.value.packet)
 
