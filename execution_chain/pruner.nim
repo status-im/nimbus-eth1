@@ -33,8 +33,8 @@ type
 proc init*(
     T: type BackgroundPrunerRef,
     com: CommonRef,
-    batchSize = 50'u64,
-    loopDelay = chronos.seconds(5),
+    batchSize = 40'u64,
+    loopDelay = chronos.seconds(3),
 ): T =
   T(
     com: com,
