@@ -232,7 +232,6 @@ proc init*(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
   if config.backgroundPruning:
     nimbus.backgroundPruner = BackgroundPrunerRef.init(com)
     nimbus.backgroundPruner.start()
-    notice "Background pruner started"
 
 proc init*(T: type NimbusNode, config: ExecutionClientConf, com: CommonRef): T =
   let nimbus = T()

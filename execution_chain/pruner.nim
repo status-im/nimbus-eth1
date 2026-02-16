@@ -33,7 +33,7 @@ type
 proc init*(
     T: type BackgroundPrunerRef,
     com: CommonRef,
-    batchSize = 40'u64,
+    batchSize = 100'u64,
     loopDelay = chronos.seconds(3),
 ): T =
   T(
@@ -77,7 +77,7 @@ proc pruneLoop(pruner: BackgroundPrunerRef) {.async: (raises: [CancelledError]).
       # millions of deletion entries accumulate in sTab and choke the first
       # block import.
       if prunedSincePersist >= pruner.batchSize:
-        notice "Background pruner: waiting for persist",
+        debug "Background pruner: waiting for persist",
           prunedSincePersist = prunedSincePersist
         await sleepAsync(pruner.loopDelay)
         continue
