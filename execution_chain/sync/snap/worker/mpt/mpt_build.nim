@@ -530,13 +530,14 @@ proc isComplete*(db: NodeTrieRef): bool =
 proc validate*(
     root: StateRoot;
     start: ItemKey;
-    pck: AccountRangePacket;
+    accounts: seq[SnapAccount];
+    proof: seq[ProofNode]
       ): Opt[NodeTrieRef] =
   ## Validate snap account data package.
   ##
-  let db = NodeTrieRef.init(root, start, pck.proof)
+  let db = NodeTrieRef.init(root, start, proof)
   if not db.isNil:
-    for acc in pck.accounts:
+    for acc in accounts:
       if not db.merge(acc):
         return err()
 

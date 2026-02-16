@@ -12,7 +12,7 @@
 
 import
   pkg/[chronicles, chronos],
-  ./[account, helpers, header, mpt, state_db, storage, worker_desc]
+  ./[account, code, helpers, header, mpt, state_db, storage, worker_desc]
 
 # ------------------------------------------------------------------------------
 # Public function(s)
@@ -83,7 +83,8 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
             break downloadLoop
           let acc = buddy.accountDownload(state, info).valueOr:
             break                                   # done this state, try next
-          buddy.storageDownload(state, acc, info)   # fetch storage
+          buddy.storageDownload(state, acc, info)   # fetch storage slotes
+          buddy.codeDownload(state, acc, info)      # fetch byte codes
           didSomething = true                       # continue with this one
 
         if didSomething:

@@ -13,6 +13,9 @@
     "muirGlacierBlock": 0,
     "berlinBlock": 0,
     "londonBlock": 0,
+    "cancunTime": 0,
+    "pragueTime": 0,
+    "osakaTime": 0,
     "blobSchedule": {
       "cancun": {
         "target": 3,

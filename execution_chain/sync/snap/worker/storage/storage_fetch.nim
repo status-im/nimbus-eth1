@@ -11,7 +11,6 @@
 {.push raises: [].}
 
 import
-  std/sequtils,
   pkg/[chronicles, chronos, minilru, stew/interval_set],
   ../../../wire_protocol,
   ../[helpers, state_db, worker_desc],
@@ -33,7 +32,7 @@ proc registerPeerError(buddy: SnapPeerRef; root: StateRoot; slowPeer=false) =
 
 proc maybeSlowPeerError(buddy: SnapPeerRef; ela: Duration; root: StateRoot) =
   ## Register slow response, definitely not fast enough
-  if fetchAccountSnapTimeout <= ela:
+  if fetchStorageSnapTimeout <= ela:
     buddy.registerPeerError(root, slowPeer=true)
   else:
     buddy.stoFetchRegisterError()
@@ -44,7 +43,7 @@ proc getStorage(
     req: StorageRangesRequest;
       ): Future[Result[FetchStorageData,SnapError]]
       {.async: (raises: []).} =
-  ## Wrapper around `getAccountRange()`
+  ## Wrapper around `getStorageRanges()`
   let start = Moment.now()
 
   buddy.only.failedReq.stateRoot.peek(StateRoot(req.rootHash)).isErrOr:
@@ -87,7 +86,7 @@ template fetchStorage*(
       ): FetchStorageResult =
   ## Async/template
   ##
-  ## Fetch accounts from the network.
+  ## Fetch storage slots from the network.
   ##
   var bodyRc = FetchStorageResult.err(EGeneric)
   block body:
@@ -100,7 +99,7 @@ template fetchStorage*(
       nReqAcc {.inject.} = accounts.len
       fetchReq = StorageRangesRequest(
         rootHash:      stateRoot.Hash32,
-        accountHashes: accounts.mapIt(it.to(Hash32)),
+        accountHashes: accounts.to(seq[Hash32]),
         startingHash:  ivReq.minPt.to(Hash32),
         limitHash:     ivReq.maxPt.to(Hash32),
         responseBytes: fetchStorageSnapBytesLimit)
@@ -241,10 +240,6 @@ template fetchStorage*(
         stoData.slot = slot
         stoData.proof = rc.value.packet.proof
 
-      trace recvInfo, peer, root, nReqAcc, reqSto, nReqSto,
-        nRespSlots=($stoData.slots.len & "+" & $(0 < stoData.slot.len).ord),
-        nRespProof, ela, state, nErrors=buddy.nErrors.fetch.sto
-
     elif nRespProof == 0:
       # Both, proof + slots are empty. This means that there is no storage
       # data available for this state root.
@@ -261,9 +256,6 @@ template fetchStorage*(
       # This is usually returned instead of a single, empty response slot.
       #
       stoData.proof = rc.value.packet.proof
-
-      trace recvInfo, peer, root, nReqAcc, reqSto, nReqSto, nRespSlots,
-        nRespProof, ela, state, nErrors=buddy.nErrors.fetch.sto
 
     else:
       # This makes no sense:
@@ -287,8 +279,12 @@ template fetchStorage*(
     if fetchStorageSnapTimeout < elapsed:
       buddy.stoFetchRegisterError(slowPeer=true)
     else:
-      buddy.nErrors.fetch.acc = 0                   # reset error count
+      buddy.nErrors.fetch.sto = 0                   # reset error count
       buddy.ctx.pool.lastSlowPeer = Opt.none(Hash)  # not last one/error
+
+    trace recvInfo, peer, root, nReqAcc, reqSto, nReqSto,
+      nRespSlots=($stoData.slots.len & "+" & $(0 < stoData.slot.len).ord),
+      nRespProof, ela, state, nErrors=buddy.nErrors.fetch.sto
 
     bodyRc = FetchStorageResult.ok(stoData)
 
