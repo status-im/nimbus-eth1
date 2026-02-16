@@ -29,7 +29,7 @@ import
 
 from std/sequtils import mapIt
 from std/heapqueue import len
-from web3/engine_api_types import ExecutionPayloadBodyV1
+from web3/engine_api_types import ExecutionPayloadBodyV1, ExecutionPayloadBodyV2
 
 logScope:
   topics = "forked chain"
@@ -991,7 +991,7 @@ proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
 
 proc payloadBodyV1ByHash*(c: ForkedChainRef, blockHash: Hash32): Result[ExecutionPayloadBodyV1, string] =
   c.hashToBlock.withValue(blockHash, loc):
-    return ok(toPayloadBody(loc[].blk))
+    return ok(toPayloadBodyV1(loc[].blk))
 
   var header = ?c.baseTxFrame.getBlockHeader(blockHash)
   var blk = c.baseTxFrame.getExecutionPayloadBodyV1(header)
@@ -1001,7 +1001,25 @@ proc payloadBodyV1ByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Executio
     if c.isPortalActive:
       var blockBodyPortal = ?c.portal.getBlockBodyByHeader(header)
       # Same as above
-      return ok(toPayloadBody(EthBlock.init(move(header), move(blockBodyPortal))))
+      return ok(toPayloadBodyV1(EthBlock.init(move(header), move(blockBodyPortal))))
+
+  move(blk)
+
+proc payloadBodyV2ByHash*(c: ForkedChainRef, blockHash: Hash32): Result[ExecutionPayloadBodyV2, string] =
+  c.hashToBlock.withValue(blockHash, loc):
+    return ok(toPayloadBodyV2(loc[].blk, ?loc[].txFrame.getBlockAccessList(loc[].hash)))
+
+  var header = ?c.baseTxFrame.getBlockHeader(blockHash)
+  var blk = c.baseTxFrame.getExecutionPayloadBodyV2(header)
+
+  if blk.isErr:
+    # Serve portal data if block not found in db
+    if c.isPortalActive:
+      var blockBodyPortal = ?c.portal.getBlockBodyByHeader(header)
+      # Same as above
+      return ok(toPayloadBodyV2(
+        EthBlock.init(move(header), move(blockBodyPortal)), 
+          ?c.baseTxFrame.getBlockAccessList(header.computeRlpHash())))
 
   move(blk)
 
@@ -1018,13 +1036,38 @@ proc payloadBodyV1ByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Exec
       if c.isPortalActive:
         var blockBodyPortal = ?c.portal.getBlockBodyByHeader(header)
         # same as above
-        return ok(toPayloadBody(EthBlock.init(move(header), move(blockBodyPortal))))
+        return ok(toPayloadBodyV1(EthBlock.init(move(header), move(blockBodyPortal))))
 
     return blk
 
   for it in ancestors(c.latest):
     if number >= it.number:
-      return ok(toPayloadBody(it.blk))
+      return ok(toPayloadBodyV1(it.blk))
+
+  err("Block not found, number = " & $number)
+
+proc payloadBodyV2ByNumber*(c: ForkedChainRef, number: BlockNumber): Result[ExecutionPayloadBodyV2, string] =
+  if number > c.latest.number:
+    return err("Requested block number not exists: " & $number)
+
+  if number <= c.base.number:
+    var header = ?c.baseTxFrame.getBlockHeader(number)
+    let blk = c.baseTxFrame.getExecutionPayloadBodyV2(header)
+
+    if blk.isErr:
+      # Serve portal data if block not found in db
+      if c.isPortalActive:
+        var blockBodyPortal = ?c.portal.getBlockBodyByHeader(header)
+        # same as above
+        return ok(toPayloadBodyV2(
+          EthBlock.init(move(header), move(blockBodyPortal)), 
+            ?c.baseTxFrame.getBlockAccessList(header.computeRlpHash())))
+
+    return blk
+
+  for it in ancestors(c.latest):
+    if number >= it.number:
+      return ok(toPayloadBodyV2(it.blk, ?it.txFrame.getBlockAccessList(it.hash)))
 
   err("Block not found, number = " & $number)
 
@@ -1065,7 +1108,7 @@ proc receiptsByBlockHash*(c: ForkedChainRef, blockHash: Hash32): Result[seq[Stor
 
   c.baseTxFrame.getReceipts(header.receiptsRoot)
 
-func payloadBodyV1InMemory*(c: ForkedChainRef,
+proc payloadBodyV1InMemory*(c: ForkedChainRef,
                             first: BlockNumber,
                             last: BlockNumber,
                             list: var seq[Opt[ExecutionPayloadBodyV1]]) =
@@ -1078,7 +1121,22 @@ func payloadBodyV1InMemory*(c: ForkedChainRef,
 
   for i in countdown(blocks.len-1, 0):
     let y = blocks[i]
-    list.add Opt.some(toPayloadBody(y.blk))
+    list.add Opt.some(toPayloadBodyV1(y.blk))
+
+proc payloadBodyV2InMemory*(c: ForkedChainRef,
+                            first: BlockNumber,
+                            last: BlockNumber,
+                            list: var seq[Opt[ExecutionPayloadBodyV2]]) =
+  var
+    blocks = newSeqOfCap[BlockRef](last-first+1)
+
+  for it in ancestors(c.latest):
+    if it.number >= first and it.number <= last:
+      blocks.add(it)
+
+  for i in countdown(blocks.len-1, 0):
+    let y = blocks[i]
+    list.add Opt.some(toPayloadBodyV2(y.blk, y.txFrame.getBlockAccessList(y.hash).expect("ok")))
 
 func equalOrAncestorOf*(c: ForkedChainRef, blockHash: Hash32, headHash: Hash32): bool =
   if blockHash == headHash:

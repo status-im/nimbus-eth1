@@ -79,6 +79,10 @@ proc beforeExecCall(c: Computation) =
         db.subBalance(c.msg.sender, c.msg.value)
         db.addBalance(c.msg.contractAddress, c.msg.value)
 
+    if c.fork >= FkAmsterdam:
+      # EIP-7708: Emit transfer log for ETH-tx or contract call and CALL op code
+      c.emitTransferLog()
+
 proc afterExecCall(c: Computation) =
   ## Collect all of the accounts that *may* need to be deleted based on EIP161
   ## https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md
@@ -123,8 +127,6 @@ proc beforeExecCreate(c: Computation): bool =
     c.rollback()
     return true
 
-
-
   c.vmState.mutateLedger:
     if c.vmState.balTrackerEnabled:
       c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
@@ -143,6 +145,10 @@ proc beforeExecCreate(c: Computation): bool =
       if c.fork >= FkSpurious:
         # EIP161 nonce incrementation
         db.incNonce(c.msg.contractAddress)
+
+  if c.fork >= FkAmsterdam:
+    # EIP-7708: Emit transfer log for contract creation and CREATE op code
+    c.emitTransferLog()
 
   return false
 

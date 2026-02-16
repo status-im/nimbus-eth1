@@ -56,6 +56,20 @@ type
     packet: AccountRangePacket
     elapsed: Duration
 
+  FetchStorageData* = tuple
+    packet: StorageRangesPacket
+    elapsed: Duration
+
+  StorageRangesData* = tuple
+    ## Derived from `StorageRangesPacket`
+    slots: seq[seq[StorageItem]]                    # Slots without proof
+    slot: seq[StorageItem]                          # Incomplete slot with proof
+    proof: seq[ProofNode]                           # Prof for `slot`
+
+  FetchCodesData* = tuple
+    packet: ByteCodesPacket
+    elapsed: Duration
+
   Ticker* =
     proc(ctx: SnapCtxRef) {.gcsafe, raises: [].}
       ## Some function that is invoked regularly
@@ -65,14 +79,14 @@ type
   PeerErrors* = object
     ## Count fetching and processing errors
     fetch*: tuple[
-      acc: uint8]
+      acc, sto, cde, tri: uint8]     ## Accounts, storage, code, trie nodes
     apply*: tuple[
-      acc: uint8]
+      acc, sto, cde, tri: uint8]
 
   PeerFirstFetchReq* = object
     ## Register fetch request. This is intended to avoid sending the same (or
     ## similar) fetch request again from the same peer that sent it previously.
-    account*: StateRootSet           ## Account fetch
+    stateRoot*: StateRootSet         ## Account fetch (per state root)
 
   SnapPeerData* = object
     ## Local descriptor data extension

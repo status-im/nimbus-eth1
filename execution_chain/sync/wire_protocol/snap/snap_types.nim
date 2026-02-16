@@ -122,7 +122,7 @@ proc snapRd(r: var Rlp, T: type SnapCodeHash): T {.gcsafe, raises: [RlpError]} =
   ## RLP mixin, decoding
   if r.isEmpty():
     r.skipElem()
-    EMPTY_SHA3.T                            # optimised snap encoding
+    EMPTY_CODE_HASH.T                       # optimised snap encoding
   else:
     r.read(Hash32).T
 
@@ -134,7 +134,7 @@ proc snapApp(w: var RlpWriter, val: SnapRootHash) =
     w.append Hash32(val)
 
 proc snapApp(w: var RlpWriter, val: SnapCodeHash) =
-  if Hash32(val) == EMPTY_SHA3:
+  if Hash32(val) == EMPTY_CODE_HASH:
     w.startList 0                           # optimised snap encoding
   else:
     w.append Hash32(val)
@@ -150,7 +150,10 @@ func isEmpty*(a: SnapRootHash): bool =
   Hash32(a) == EMPTY_ROOT_HASH or Hash32(a) == zeroHash32
 
 func isEmpty*(a: SnapCodeHash): bool =
-  Hash32(a) == EMPTY_SHA3 or Hash32(a) == zeroHash32
+  Hash32(a) == EMPTY_CODE_HASH or Hash32(a) == zeroHash32
+
+func to*(a: SnapDistinctHashes; _: type Hash32): Hash32 =
+  Hash32(a)
 
 # ------------------------------------------------------------------------------
 # Public serialisation helpers

@@ -20,6 +20,7 @@ import
   ../../transaction,
   ../../evm/state,
   ../../evm/types,
+  ../../evm/eip7708,
   ../../constants,
   ../eip4844,
   ../eip7691,
@@ -44,7 +45,7 @@ proc commitOrRollbackDependingOnGasUsed(
     accTx: LedgerSpRef;
     header: Header;
     tx: Transaction;
-    gasUsed: GasInt;
+    callResult: var LogResult;
     priorityFee: GasInt;
     blobGasUsed: GasInt;
       ): Result[void, string] =
@@ -52,23 +53,38 @@ proc commitOrRollbackDependingOnGasUsed(
   # set in the block header. Again, the eip-1559 reference does not mention
   # an early stop. It would rather detect differing values for the  block
   # header `gasUsed` and the `vmState.cumulativeGasUsed` at a later stage.
-  if header.gasLimit < vmState.cumulativeGasUsed + gasUsed:
+  let
+    gasUsed = callResult.gasUsed
+    blockGasUsed = callResult.blockGasUsed
+
+  let limit = if vmState.fork >= FkAmsterdam:
+                vmState.blockGasUsed + blockGasUsed
+              else:
+                vmState.cumulativeGasUsed + gasUsed
+
+  if header.gasLimit < limit:
     if vmState.balTrackerEnabled:
       vmState.balTracker.rollbackCallFrame()
     vmState.ledger.rollback(accTx)
     err(&"invalid tx: block header gasLimit reached. gasLimit={header.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasUsed}")
   else:
     # Accept transaction and collect mining fee.
+    let txFee = gasUsed.u256 * priorityFee.u256
     if vmState.balTrackerEnabled:
-      vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), gasUsed.u256 * priorityFee.u256)
+      vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), txFee)
       vmState.balTracker.commitCallFrame()
     vmState.ledger.commit(accTx)
-    vmState.ledger.addBalance(vmState.coinbase(), gasUsed.u256 * priorityFee.u256)
+    vmState.ledger.addBalance(vmState.coinbase(), txFee)
     vmState.cumulativeGasUsed += gasUsed
+    vmState.blockGasUsed += blockGasUsed
+
+    # EIP-7708: Emit closure logs for accounts with remaining balance before deletion
+    if vmState.fork >= FkAmsterdam:
+      emitClosureLogs(vmState, callResult.logEntries)
 
     # Return remaining gas to the block gas counter so it is
     # available for the next transaction.
-    vmState.gasPool += tx.gasLimit - gasUsed
+    vmState.gasPool += tx.gasLimit - blockGasUsed
     vmState.blobGasUsed += blobGasUsed
     ok()
 
@@ -125,7 +141,7 @@ proc processTransactionImpl(
       vmState.captureTxEnd(tx.gasLimit - callResult.gasUsed)
 
       let tmp = commitOrRollbackDependingOnGasUsed(
-        vmState, accTx, header, tx, callResult.gasUsed, priorityFee, blobGasUsed)
+        vmState, accTx, header, tx, callResult, priorityFee, blobGasUsed)
 
       if tmp.isErr():
         err(tmp.error)

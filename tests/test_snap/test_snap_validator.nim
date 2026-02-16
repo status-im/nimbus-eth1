@@ -59,43 +59,41 @@ suite "Snap Data Validator":
     var db: NodeTrieRef
 
     test name:
-      let validated = p.root.validate(p.start, p.pck)
+      let validated = p.root.validate(p.start, p.pck.accounts, p.pck.proof)
       check validated.isOk
       if validated.isOk:
         db = validated.value
 
     test name & ", last proof node chopped must fail":
-      var q = p
-      q.pck.proof.setLen(p.pck.proof.len-1)
-      check q.root.validate(q.start, q.pck).isErr
+      var proof = p.pck.proof
+      proof.setLen(p.pck.proof.len-1)
+      check p.root.validate(p.start, p.pck.accounts, proof).isErr
 
     test name & ", last two accounts chopped must fail":
       # The last account is typically part of the proof, as well. So chopping
       # it would not change anything.
-      var q = p
-      q.pck.accounts.setLen(p.pck.accounts.len-2)
-      check q.root.validate(q.start, q.pck).isErr
+      var accounts = p.pck.accounts
+      accounts.setLen(p.pck.accounts.len-2)
+      check p.root.validate(p.start, accounts, p.pck.proof).isErr
 
     test name & ", full tree dump as proof nodes":
       block needDb:
         if db.isNil:
-          db = p.root.validate(p.start, p.pck).valueOr:
+          db = p.root.validate(p.start, p.pck.accounts, p.pck.proof).valueOr:
             skip()
             break needDb
-        var q = p
-        q.pck.proof = db.pairs.mapIt(ProofNode it[1])
-        check q.root.validate(q.start, q.pck).isOk
+        let proof = db.pairs.mapIt(ProofNode it[1])
+        check p.root.validate(p.start, p.pck.accounts, proof).isOk
 
     test name & ", curbed tree dump as proof nodes must fail":
       block needDb:
         if db.isNil:
-          db = p.root.validate(p.start, p.pck).valueOr:
+          db = p.root.validate(p.start, p.pck.accounts, p.pck.proof).valueOr:
             skip()
             break needDb
-        var q = p
-        q.pck.proof = db.pairs.mapIt(ProofNode it[1])
-        q.pck.proof.setLen(q.pck.proof.len - 1)
-        check q.root.validate(q.start, q.pck).isErr
+        var proof = db.pairs.mapIt(ProofNode it[1])
+        proof.setLen(p.pck.proof.len - 1)
+        check p.root.validate(p.start, p.pck.accounts, proof).isErr
 
     stm.close()
 

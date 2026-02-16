@@ -236,7 +236,10 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
     txGasUsed = txGasUsedAfterRefund
     blockGasUsedInTx = txGasUsed
 
-  if fork >= FkPrague:
+  if fork >= FkAmsterdam:
+    txGasUsed = max(txGasUsedAfterRefund, host.floorDataGas)
+    blockGasUsedInTx = max(txGasUsedBeforeRefund, host.floorDataGas)
+  elif fork >= FkPrague:
     txGasUsed = max(txGasUsedAfterRefund, host.floorDataGas)
     blockGasUsedInTx = txGasUsed
 

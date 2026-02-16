@@ -20,7 +20,7 @@ type
   ErrorType* = enum
     ## For `FetchError` return code object/tuple
     EGeneric = 0                   ## Not further specified error
-    ESyncerTermination             ## Syncer was stopped
+    ENoDataAvailable               ## Out of scope
     EMissingEthContext             ## Cannot retrieve `eth` peer descriptor
     EAlreadyTriedAndFailed         ## The same action failed before
     EPeerDisconnected              ## Exception
@@ -36,6 +36,10 @@ const
 
   metricsUpdateInterval* = chronos.seconds(10)
     ## Wait at least this time before next update
+
+  daemonOkInterval* = chronos.milliseconds(1200)
+    ## Some waiting time at the end of the daemon task which always lingers
+    ## in the background.
 
   daemonWaitInterval* = chronos.seconds(10)
     ## Some waiting time at the end of the daemon task which always lingers
@@ -61,22 +65,30 @@ const
 
   # ----------------------
 
-  unprocAccountsRangeMax* = (1.u256 shl 251) # 64 different intervals max
-    ## Soft bytes limit to request accounts
+  unprocAccountsRangeMax* = (1.u256 shl 240) # ~65k intervals
+    ## Soft bytes limit to request accounts. This is used for parallelisation
+    ## so that different peers can start with different intervals. Typically,
+    ## these intervals are sparsely filled and there will be returned not
+    ## more than  ~1k accounts.
 
+  stateDbCapacity* = 8
+    ## Maximal numbers of simultanously incomplete states. Note that the
+    ## protocol suggests a single peer to provide a download window of 128
+    ## state roots corresponding to consecutibe block numbers.
+    ##
+    ## Note that there are about 400k accounts on `mainnet` (as of early 2026.)
 
-  stateDbCapacity* = 4
-    ## Maximal numbers of simultanous incomplete states
-
-  stateDbBlockHeightWindow* = 128
-    ## Block numbers on the database may have this distance, at most. The
-    ## least entries will be deleted for moving the widow forward.
+  nWorkingStateRootsMax* = 3
+    ## Stop the current session after accounts could be downloaded for this
+    ## many different state roots. The session will then be released and a
+    ## new one started.
 
   # -----------
 
   fetchHeadersRlpxTimeout* = chronos.seconds(30)
     ## Timeout cap for the `RLPX` handler when fetching header. This value
 
+  # -----------
 
   fetchAccountSnapTimeout* = chronos.seconds(120)
     ## Timeout cap for the `RLPX` handler when fetching accounts.
@@ -87,11 +99,36 @@ const
   fetchAccountSnapBytesLimit* = 50 * 1024
     ## Soft bytes limit to request accounts
 
-  # -----------
-
   nProcAccountErrThreshold* = 4
     ## Similar to `nFetchAccountSnapErrThreshold` but for the later part
     ## when errors occur while cached data packets are processed.
 
+  # -----------
+
+  fetchStorageSnapTimeout* = chronos.seconds(120)
+    ## Similar to `fetchAccountSnapTimeout`
+
+  nFetchStorageSnapErrThreshold* = 4
+    ## Similar to `nFetchAccountSnapErrThreshold`
+
+  fetchStorageSnapBytesLimit* = 50 * 1024
+    ## Similar to `fetchAccountSnapBytesLimit`
+
+  nProcStorageErrThreshold* = 4
+    ## Similar to `nProcAccountErrThreshold`
+
+  # -----------
+
+  fetchCodesSnapTimeout* = chronos.seconds(120)
+    ## Similar to `fetchAccountSnapTimeout`
+
+  nFetchCodesSnapErrThreshold* = 4
+    ## Similar to `nFetchAccountSnapErrThreshold`
+
+  fetchCodesSnapBytesLimit* = 50 * 1024
+    ## Similar to `fetchAccountSnapBytesLimit`
+
+  nProcCodesErrThreshold* = 4
+    ## Similar to `nProcAccountErrThreshold`
 
 # End

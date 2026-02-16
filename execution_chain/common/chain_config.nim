@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2025 Status Research & Development GmbH
+# Copyright (c) 2021-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -394,31 +394,16 @@ proc validateChainConfig(conf: ChainConfig): bool =
     if cur.time.isSome:
       lastTimeBasedFork = cur
 
-func numBPOForks(): int {.compileTime.} =
-  for x in Prague..HardFork.high:
-    if toLowerAscii($x).startsWith("bpo"):
-      inc result
+macro blobScheduleActivation(conf: typed): untyped =
+  # Automated blob schedule parser generator
+  var res = nnkBracket.newTree
+  for fork in Cancun..HardFork.high:
+    let activationName = BlobScheduleTable[fork] & "Time"
+    let fieldIdent = newIdentNode(activationName)
+    res.add quote do:
+      `conf`.`fieldIdent`
 
-func getBPOForks(N: static[int]): array[N, HardFork] {.compileTime.} =
-  var i = 0
-  for x in Prague..HardFork.high:
-    if toLowerAscii($x).startsWith("bpo"):
-      result[i] = x
-      inc i
-
-func getRegularForks(N: static[int]): array[N, HardFork] {.compileTime.} =
-  var i = 0
-  for x in Prague..HardFork.high:
-    if not toLowerAscii($x).startsWith("bpo"):
-      result[i] = x
-      inc i
-
-const
-  NumForksWithBlobSchedule = HardFork.high.int - Prague.int + 1 # minus Cancun, but cardinal + 1
-  NumBPOForks = numBPOForks()
-  NumRegularForks = NumForksWithBlobSchedule - NumBPOForks
-  BPOForks = getBPOForks(NumBPOForks)
-  RegularForks = getRegularForks(NumRegularForks)
+  res
 
 proc configureBlobSchedule(conf: ChainConfig) =
   if conf.blobSchedule[Cancun].isNone:
@@ -427,19 +412,18 @@ proc configureBlobSchedule(conf: ChainConfig) =
     if conf.blobSchedule[Cancun].value.baseFeeUpdateFraction == 0:
       conf.blobSchedule[Cancun].value.baseFeeUpdateFraction = 3_338_477'u64
 
-  template setBlobScheduleWithFallback(forks) =
-    var prevFork = Cancun
-    for fork in forks:
-      if conf.blobSchedule[fork].isNone:
-        conf.blobSchedule[fork] = conf.blobSchedule[prevFork]
-      if conf.blobSchedule[fork].value.baseFeeUpdateFraction == 0:
-        # Set fallback to Cancun's baseFeeUpdateFraction and prevent division by zero
-        warn "baseFeeUpdateFraction not set, fallback to Cancun's", fork=fork
-        conf.blobSchedule[fork].value.baseFeeUpdateFraction = 3_338_477'u64
-      prevFork = fork
+  let blobScheduleTime: array[Cancun..HardFork.high, Opt[EthTime]] = blobScheduleActivation(conf)
 
-  setBlobScheduleWithFallback(RegularForks)
-  setBlobScheduleWithFallback(BPOForks)
+  var prevFork = Cancun
+  for fork in Prague..HardFork.high:
+    if conf.blobSchedule[fork].isNone:
+      conf.blobSchedule[fork] = conf.blobSchedule[prevFork]
+    if conf.blobSchedule[fork].value.baseFeeUpdateFraction == 0:
+      # Set fallback to Cancun's baseFeeUpdateFraction and prevent division by zero
+      warn "baseFeeUpdateFraction not set, fallback to Cancun's", fork=fork
+      conf.blobSchedule[fork].value.baseFeeUpdateFraction = 3_338_477'u64
+    if blobScheduleTime[fork].isSome:
+      prevFork = fork
 
 proc parseGenesis*(data: string): Genesis
      {.gcsafe.} =
