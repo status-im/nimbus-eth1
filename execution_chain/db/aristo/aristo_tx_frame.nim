@@ -13,7 +13,7 @@
 ##
 {.push raises: [].}
 
-import results, ./[aristo_desc, aristo_layers]
+import std/locks, results, ./[aristo_desc, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -132,12 +132,16 @@ proc txFrameBegin*(
   let parent = if parentFrame == nil: db.txRef else: parentFrame
   doAssert not parent.isDisposed()
 
+  var lock = Lock()
+  initLock(lock)
+
   AristoTxRef(
     db: db,
     parent: parent,
     kMap: if moveParentHashKeys: move(parent.kMap) else: default(parent.kMap.type),
     vTop: parent.vTop,
-    level: parent.level + 1)
+    level: parent.level + 1,
+    lock: lock)
 
 proc dispose*(txFrame: AristoTxRef) =
   if not txFrame.db.isNil():

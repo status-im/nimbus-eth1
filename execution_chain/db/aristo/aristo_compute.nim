@@ -11,7 +11,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/strformat,
+  std/[strformat, locks],
   chronicles,
   eth/common/[accounts_rlp, base_rlp, hashes_rlp],
   results,
@@ -77,17 +77,19 @@ proc putKeyAtLevel(
 
   if level >= db.db.baseTxFrame().level:
     let txRef = db.deltaAtLevel(level)
-    txRef.layersPutKey(rvid, vtx, key)
+    withLock(db.lock):
+      txRef.layersPutKey(rvid, vtx, key)
   elif level == dbLevel:
-    ?batch.putVtx(db.db, rvid, vtx, key)
+    withLock(db.lock):
+      ?batch.putVtx(db.db, rvid, vtx, key)
 
-    if batch.count mod batchSize == 0:
-      ?batch.flush(db.db)
+      if batch.count mod batchSize == 0:
+        ?batch.flush(db.db)
 
-      if batch.count mod (batchSize * 100) == 0:
-        info "Writing computeKey cache", keys = batch.count, accounts = batch.progress
-      else:
-        debug "Writing computeKey cache", keys = batch.count, accounts = batch.progress
+        if batch.count mod (batchSize * 100) == 0:
+          info "Writing computeKey cache", keys = batch.count, accounts = batch.progress
+        else:
+          debug "Writing computeKey cache", keys = batch.count, accounts = batch.progress
   else: # level > dbLevel but less than baseTxFrame level
     # Throw defect here because we should not be writing vertexes to the database if
     # from a lower level than the baseTxFrame level.
@@ -118,10 +120,12 @@ template encodeExt(w: var RlpWriter, pfx: NibblesBuf, branchKey: HashKey): HashK
 proc getKey(
     db: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool
 ): Result[((HashKey, VertexRef), int), AristoError] =
-  ok when skipLayers:
-    (?db.db.getKeyBe(rvid, {GetVtxFlag.PeekCache}), dbLevel)
-  else:
-    ?db.getKeyRc(rvid, {})
+  withLock(db.lock):
+    let key = when skipLayers:
+      (?db.db.getKeyBe(rvid, {GetVtxFlag.PeekCache}), dbLevel)
+    else:
+      ?db.getKeyRc(rvid, {})
+    return ok(key)
 
 template childVid(vp: VertexRef): VertexID =
   # If we have to recurse into a child, where would that recusion start?
@@ -277,7 +281,8 @@ proc computeKeyImpl(
               batchPtr: ptr WriteBatch = batch.addr
               vtxPtr = keyvtxs[minIdx][0][1].addr
               level = keyvtxs[minIdx][1]
-            futs[minIdx] = taskpool.spawn computeKeyImplTask(db.addr, vid, batchPtr, vtxPtr, level, skipLayers = skipLayers)
+            futs[minIdx] = taskpool.spawn computeKeyImplTask(
+              db.addr, vid, batchPtr, vtxPtr, level, skipLayers = skipLayers)
           if taskpool != nil:
             debugEcho "After enter computed (rvid.root, vtx.bVid(uint8 minIdx)) key with id: ", (rvid.root, vtx.bVid(uint8 minIdx))
           batch.leave(n)
@@ -357,8 +362,8 @@ proc computeKey*(
 ): Result[HashKey, AristoError] =
 
   try:
-    let taskpool = Taskpool.new(num_threads = 1)
-
+    let taskpool = Taskpool.new(num_threads = 20)
+    debugEcho "taskpool.numThreads = ", taskpool.numThreads
     ## Compute the key for an arbitrary vertex ID. If successful, the length of
     ## the resulting key might be smaller than 32. If it is used as a root vertex
     ## state/hash, it must be converted to a `Hash32` (using (`.to(Hash32)`) as
@@ -372,8 +377,8 @@ proc computeKey*(
 
 proc computeKeys*(db: AristoTxRef, root: VertexID): Result[void, AristoError] =
   try:
-    let taskpool = Taskpool.new(num_threads = 1)
-
+    let taskpool = Taskpool.new(num_threads = 20)
+    debugEcho "taskpool.numThreads = ", taskpool.numThreads
     ## Ensure that key cache is topped up with the latest state root
     discard db.computeKeyImpl((root, root), skipLayers = true, taskpool)
   except:

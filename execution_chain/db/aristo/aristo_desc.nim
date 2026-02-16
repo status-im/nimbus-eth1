@@ -22,7 +22,7 @@
 {.push raises: [].}
 
 import
-  std/[hashes, sequtils, sets, tables, heapqueue],
+  std/[hashes, sequtils, sets, tables, heapqueue, locks],
   eth/common/hashes, eth/trie/nibbles,
   results,
   ./aristo_constants,
@@ -83,6 +83,8 @@ type
       ## -1 = stored in database, where relevant though typically should be
       ## compared with the base layer level instead.
 
+    lock*: Lock
+
   Snapshot* = object
     vtx*: Table[RootedVertexID, VtxSnapshot]
     acc*: Table[Hash32, (AccLeafRef, int)]
@@ -134,6 +136,8 @@ type
       ## The maximum number of snapshots to hold in the snapshots queue. When the queue
       ## is full (queue.len == maxSnapshots) then the oldest snapshot is removed from
       ## the queue and cleaned up.
+
+    taskpool
 
   Leg* = object
     ## For constructing a `VertexPath`

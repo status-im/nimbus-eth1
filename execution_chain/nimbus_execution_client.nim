@@ -261,10 +261,17 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionCli
     quit(QuitFailure)
 
 
-proc setupCommonRef*(config: ExecutionClientConf): CommonRef =
-  let coreDB = AristoDbRocks.newCoreDbRef(
-      config.dataDir,
-      config.dbOptions(noKeyCache = config.cmd == NimbusCmd.`import`))
+proc setupCommonRef*(config: ExecutionClientConf, taskpool: Taskpool = nil): CommonRef =
+  let
+    dbOpts = config.dbOptions(noKeyCache = config.cmd == NimbusCmd.`import`)
+    coreDB = AristoDbRocks.newCoreDbRef(config.dataDir, dbOpts)
+  coreDB.mpt.taskpool = taskpool
+
+  if dbOpts.rdbKeyCacheSize > 0:
+    # Make sure key cache isn't empty
+    coreDB.mpt.txRef.computeKeys(STATE_ROOT_VID).isOkOr:
+      fatal "Cannot compute root keys", msg = error
+      quit(QuitFailure)
 
   preventLoadingDataDirForTheWrongNetwork(coreDB, config)
 
@@ -274,6 +281,7 @@ proc setupCommonRef*(config: ExecutionClientConf): CommonRef =
     params = config.networkParams,
     statelessProviderEnabled = config.statelessProviderEnabled,
     statelessWitnessValidation = config.statelessWitnessValidation)
+  com.taskpool = taskpool
 
   if config.extraData.len > 32:
     warn "ExtraData exceeds 32 bytes limit, truncate",
@@ -385,8 +393,7 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   when compileOption("threads"):
     let
       taskpool = setupTaskpool(config.numThreads)
-      com = setupCommonRef(config)
-    com.taskpool = taskpool
+      com = setupCommonRef(config, taskpool)
   else:
     let com = setupCommonRef(config)
 
