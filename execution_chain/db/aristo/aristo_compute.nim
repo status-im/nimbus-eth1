@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -8,13 +8,14 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   std/strformat,
   chronicles,
   eth/common/[accounts_rlp, base_rlp, hashes_rlp],
   results,
+  taskpools,
   "."/[aristo_desc, aristo_get, aristo_layers],
   ./aristo_desc/desc_backend
 
@@ -138,6 +139,15 @@ template childVid(vp: VertexRef): VertexID =
   of StoLeaf:
     default(VertexID)
 
+proc computeKeyImplTask(
+    db: ptr AristoTxRef,
+    rvid: RootedVertexID,
+    batch: ptr WriteBatch,
+    vtx: ptr VertexRef,
+    level: int,
+    skipLayers: bool,
+): Result[(HashKey, int), AristoError]
+
 proc computeKeyImpl(
     db: AristoTxRef,
     rvid: RootedVertexID,
@@ -145,6 +155,7 @@ proc computeKeyImpl(
     vtx: VertexRef,
     level: int,
     skipLayers: static bool,
+    taskpool: Taskpool
 ): Result[(HashKey, int), AristoError] =
   # The bloom filter available used only when creating the key cache from an
   # empty state
@@ -176,6 +187,7 @@ proc computeKeyImpl(
                       keyvtxl[0][1],
                       keyvtxl[1],
                       skipLayers = skipLayers,
+                      nil
                     )
               level = max(level, sl)
               skey
@@ -200,6 +212,10 @@ proc computeKeyImpl(
       var keyvtxs: array[16, ((HashKey, VertexRef), int)]
       for n, subvid in vtx.pairs:
         keyvtxs[n] = ?db.getKey((rvid.root, subvid), skipLayers)
+        if taskpool != nil:
+          debugEcho "Fetched (rvid.root, subvid) key with id: ", (rvid.root, subvid)
+
+      var futs: array[16, Flowvar[Result[(HashKey, int), AristoError]]]
 
       # Make sure we have keys computed for each hash
       block keysComputed:
@@ -215,7 +231,8 @@ proc computeKeyImpl(
           # The O(n^2) sort/search here is fine given the small size of the list
           for nibble, keyvtx in keyvtxs.mpairs:
             let subvid = vtx.bVid(uint8 nibble)
-            if (not subvid.isValid) or keyvtx[0][0].isValid:
+            #debugEcho "futs[nibble].isSpawned(): ", futs[nibble].isSpawned()
+            if (not subvid.isValid) or futs[nibble].isSpawned() or keyvtx[0][0].isValid:
               n += 1 # no need to compute key
               continue
 
@@ -229,7 +246,10 @@ proc computeKeyImpl(
                   keyvtx[0][1],
                   keyvtx[1],
                   skipLayers = skipLayers,
+                  nil
                 )
+              if taskpool != nil:
+                debugEcho "Computed (rvid.root, subvid) key with id: ", (rvid.root, subvid)
               n += 1
               continue
 
@@ -241,15 +261,30 @@ proc computeKeyImpl(
             break keysComputed
 
           batch.enter(n)
-          (keyvtxs[minIdx][0][0], keyvtxs[minIdx][1]) =
-            ?db.computeKeyImpl(
-              (rvid.root, vtx.bVid(uint8 minIdx)),
-              batch,
-              keyvtxs[minIdx][0][1],
-              keyvtxs[minIdx][1],
-              skipLayers = skipLayers,
-            )
+          if taskpool.isNil():
+            (keyvtxs[minIdx][0][0], keyvtxs[minIdx][1]) =
+              ?db.computeKeyImpl(
+                (rvid.root, vtx.bVid(uint8 minIdx)),
+                batch,
+                keyvtxs[minIdx][0][1],
+                keyvtxs[minIdx][1],
+                skipLayers = skipLayers,
+                nil
+              )
+          else:
+            let
+              vid = (rvid.root, vtx.bVid(uint8 minIdx))
+              batchPtr: ptr WriteBatch = batch.addr
+              vtxPtr = keyvtxs[minIdx][0][1].addr
+              level = keyvtxs[minIdx][1]
+            futs[minIdx] = taskpool.spawn computeKeyImplTask(db.addr, vid, batchPtr, vtxPtr, level, skipLayers = skipLayers)
+          if taskpool != nil:
+            debugEcho "After enter computed (rvid.root, vtx.bVid(uint8 minIdx)) key with id: ", (rvid.root, vtx.bVid(uint8 minIdx))
           batch.leave(n)
+
+      for i, f in futs:
+        if f.isSpawned():
+          (keyvtxs[i][0][0], keyvtxs[i][1]) = ?sync(f)
 
       template writeBranch(w: var RlpWriter, vtx: BranchRef): HashKey =
         w.encodeBranch(vtx):
@@ -278,8 +313,21 @@ proc computeKeyImpl(
     ?db.putKeyAtLevel(rvid, BranchRef(vtx), key, level, batch)
   ok (key, level)
 
+proc computeKeyImplTask(
+    db: ptr AristoTxRef,
+    rvid: RootedVertexID,
+    batch: ptr WriteBatch,
+    vtx: ptr VertexRef,
+    level: int,
+    skipLayers: bool,
+): Result[(HashKey, int), AristoError] =
+  if skipLayers:
+    db[].computeKeyImpl(rvid, batch[], vtx[], level, true, nil)
+  else:
+    db[].computeKeyImpl(rvid, batch[], vtx[], level, false, nil)
+
 proc computeKeyImpl(
-    db: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool
+    db: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool, taskpool: Taskpool
 ): Result[HashKey, AristoError] =
   let (keyvtx, level) =
     when skipLayers:
@@ -291,7 +339,7 @@ proc computeKeyImpl(
     return ok(keyvtx[0])
 
   var batch: WriteBatch
-  let res = computeKeyImpl(db, rvid, batch, keyvtx[1], level, skipLayers = skipLayers)
+  let res = computeKeyImpl(db, rvid, batch, keyvtx[1], level, skipLayers = skipLayers, taskpool)
   if res.isOk:
     ?batch.flush(db.db)
 
@@ -307,16 +355,30 @@ proc computeKey*(
     db: AristoTxRef, # Database, top layer
     rvid: RootedVertexID, # Vertex to convert
 ): Result[HashKey, AristoError] =
-  ## Compute the key for an arbitrary vertex ID. If successful, the length of
-  ## the resulting key might be smaller than 32. If it is used as a root vertex
-  ## state/hash, it must be converted to a `Hash32` (using (`.to(Hash32)`) as
-  ## in `db.computeKey(rvid).value.to(Hash32)` which always results in a
-  ## 32 byte value.
-  computeKeyImpl(db, rvid, skipLayers = false)
+
+  try:
+    let taskpool = Taskpool.new(num_threads = 1)
+
+    ## Compute the key for an arbitrary vertex ID. If successful, the length of
+    ## the resulting key might be smaller than 32. If it is used as a root vertex
+    ## state/hash, it must be converted to a `Hash32` (using (`.to(Hash32)`) as
+    ## in `db.computeKey(rvid).value.to(Hash32)` which always results in a
+    ## 32 byte value.
+    return computeKeyImpl(db, rvid, skipLayers = false, taskpool)
+  except:
+    echo "error"
+    discard
+
 
 proc computeKeys*(db: AristoTxRef, root: VertexID): Result[void, AristoError] =
-  ## Ensure that key cache is topped up with the latest state root
-  discard db.computeKeyImpl((root, root), skipLayers = true)
+  try:
+    let taskpool = Taskpool.new(num_threads = 1)
+
+    ## Ensure that key cache is topped up with the latest state root
+    discard db.computeKeyImpl((root, root), skipLayers = true, taskpool)
+  except:
+    echo "error"
+    discard
 
   ok()
 
