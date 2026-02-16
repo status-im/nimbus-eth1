@@ -30,6 +30,9 @@ import
   ./aristo_desc/desc_backend,
   minilru
 
+when compileOption("threads"):
+  import taskpools
+  export taskpools
 
 # Not auto-exporting backend
 export
@@ -137,7 +140,12 @@ type
       ## is full (queue.len == maxSnapshots) then the oldest snapshot is removed from
       ## the queue and cleaned up.
 
-    taskpool
+    parallelStateRootComputation*: bool
+      ## Enables parallel state root computation.
+
+    when compileOption("threads"):
+      taskpool*: Taskpool
+        ## Shared task pool for offloading computation to other threads
 
   Leg* = object
     ## For constructing a `VertexPath`

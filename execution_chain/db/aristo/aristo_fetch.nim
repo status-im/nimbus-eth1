@@ -305,7 +305,13 @@ proc fetchStateRoot*(
     db: AristoTxRef;
       ): Result[Hash32,AristoError] =
   ## Fetch the Merkle hash of the account root.
-  db.retrieveMerkleHash(STATE_ROOT_VID)
+  let key =
+    db.computeStateRoot().valueOr:
+      if error in [GetVtxNotFound, GetKeyNotFound]:
+        return ok(emptyRoot)
+      return err(error)
+
+  ok key.to(Hash32)
 
 proc hasPathAccount*(
     db: AristoTxRef;

@@ -261,17 +261,10 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionCli
     quit(QuitFailure)
 
 
-proc setupCommonRef*(config: ExecutionClientConf, taskpool: Taskpool = nil): CommonRef =
+proc setupCommonRef*(config: ExecutionClientConf): (CommonRef, bool) =
   let
     dbOpts = config.dbOptions(noKeyCache = config.cmd == NimbusCmd.`import`)
     coreDB = AristoDbRocks.newCoreDbRef(config.dataDir, dbOpts)
-  coreDB.mpt.taskpool = taskpool
-
-  if dbOpts.rdbKeyCacheSize > 0:
-    # Make sure key cache isn't empty
-    coreDB.mpt.txRef.computeKeys(STATE_ROOT_VID).isOkOr:
-      fatal "Cannot compute root keys", msg = error
-      quit(QuitFailure)
 
   preventLoadingDataDirForTheWrongNetwork(coreDB, config)
 
@@ -281,7 +274,6 @@ proc setupCommonRef*(config: ExecutionClientConf, taskpool: Taskpool = nil): Com
     params = config.networkParams,
     statelessProviderEnabled = config.statelessProviderEnabled,
     statelessWitnessValidation = config.statelessWitnessValidation)
-  com.taskpool = taskpool
 
   if config.extraData.len > 32:
     warn "ExtraData exceeds 32 bytes limit, truncate",
@@ -298,7 +290,7 @@ proc setupCommonRef*(config: ExecutionClientConf, taskpool: Taskpool = nil): Com
   com.extraData = config.extraData
   com.gasLimit = config.gasLimit
 
-  com
+  (com, dbOpts.rdbKeyCacheSize > 0)
 
 # ------------------------------------------------------------------------------
 # Public functions, `main()` API
@@ -393,9 +385,17 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   when compileOption("threads"):
     let
       taskpool = setupTaskpool(config.numThreads)
-      com = setupCommonRef(config, taskpool)
+      (com, keyCacheEnabled) = setupCommonRef(config)
+    com.taskpool = taskpool
+    com.db.mpt.taskpool = taskpool
   else:
-    let com = setupCommonRef(config)
+    let (com, keyCacheEnabled) = setupCommonRef(config)
+
+  if keyCacheEnabled:
+    # Make sure key cache isn't empty
+    discard com.db.mpt.txRef.computeStateRoot().valueOr:
+      fatal "Cannot compute root keys", msg = error
+      quit(QuitFailure)
 
   defer:
     com.db.finish()

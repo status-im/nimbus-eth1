@@ -353,6 +353,12 @@ type
       defaultValueDesc: $defaultMaxSnapshots
       name: "debug-aristo-db-max-snapshots" .}: int
 
+    parallelStateRootComputation* {.
+      hidden
+      defaultValue: false
+      desc: "Compute state root in parallel using multiple threads"
+      name: "debug-parallel-state-root".}: bool
+
     eagerStateRootCheck* {.
       hidden
       desc: "Eagerly check state roots when syncing finalized blocks"
@@ -806,6 +812,7 @@ func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
       else: config.rdbBranchCacheSize,
     rdbPrintStats = config.rdbPrintStats,
     maxSnapshots = config.aristoDbMaxSnapshots,
+    parallelStateRootComputation = config.parallelStateRootComputation
   )
 
 func jwtSecretOpt*(config: ExecutionClientConf): Opt[InputFile] =

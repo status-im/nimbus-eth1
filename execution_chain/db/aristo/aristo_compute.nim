@@ -15,7 +15,6 @@ import
   chronicles,
   eth/common/[accounts_rlp, base_rlp, hashes_rlp],
   results,
-  taskpools,
   "."/[aristo_desc, aristo_get, aristo_layers],
   ./aristo_desc/desc_backend
 
@@ -159,7 +158,7 @@ proc computeKeyImpl(
     vtx: VertexRef,
     level: int,
     skipLayers: static bool,
-    taskpool: Taskpool
+    parallel: static bool
 ): Result[(HashKey, int), AristoError] =
   # The bloom filter available used only when creating the key cache from an
   # empty state
@@ -191,7 +190,7 @@ proc computeKeyImpl(
                       keyvtxl[0][1],
                       keyvtxl[1],
                       skipLayers = skipLayers,
-                      nil
+                      parallel = false
                     )
               level = max(level, sl)
               skey
@@ -216,10 +215,11 @@ proc computeKeyImpl(
       var keyvtxs: array[16, ((HashKey, VertexRef), int)]
       for n, subvid in vtx.pairs:
         keyvtxs[n] = ?db.getKey((rvid.root, subvid), skipLayers)
-        if taskpool != nil:
+        if db.db.taskpool != nil:
           debugEcho "Fetched (rvid.root, subvid) key with id: ", (rvid.root, subvid)
 
-      var futs: array[16, Flowvar[Result[(HashKey, int), AristoError]]]
+      when parallel:
+        var futs: array[16, Flowvar[Result[(HashKey, int), AristoError]]]
 
       # Make sure we have keys computed for each hash
       block keysComputed:
@@ -234,9 +234,14 @@ proc computeKeyImpl(
 
           # The O(n^2) sort/search here is fine given the small size of the list
           for nibble, keyvtx in keyvtxs.mpairs:
+            when parallel:
+              if futs[nibble].isSpawned():
+                n += 1 # no need to compute key
+                continue
+
             let subvid = vtx.bVid(uint8 nibble)
             #debugEcho "futs[nibble].isSpawned(): ", futs[nibble].isSpawned()
-            if (not subvid.isValid) or futs[nibble].isSpawned() or keyvtx[0][0].isValid:
+            if (not subvid.isValid) or keyvtx[0][0].isValid:
               n += 1 # no need to compute key
               continue
 
@@ -250,9 +255,9 @@ proc computeKeyImpl(
                   keyvtx[0][1],
                   keyvtx[1],
                   skipLayers = skipLayers,
-                  nil
+                  parallel = false
                 )
-              if taskpool != nil:
+              if db.db.taskpool != nil:
                 debugEcho "Computed (rvid.root, subvid) key with id: ", (rvid.root, subvid)
               n += 1
               continue
@@ -265,7 +270,7 @@ proc computeKeyImpl(
             break keysComputed
 
           batch.enter(n)
-          if taskpool.isNil():
+          when not parallel:
             (keyvtxs[minIdx][0][0], keyvtxs[minIdx][1]) =
               ?db.computeKeyImpl(
                 (rvid.root, vtx.bVid(uint8 minIdx)),
@@ -273,7 +278,7 @@ proc computeKeyImpl(
                 keyvtxs[minIdx][0][1],
                 keyvtxs[minIdx][1],
                 skipLayers = skipLayers,
-                nil
+                parallel = false
               )
           else:
             let
@@ -281,15 +286,16 @@ proc computeKeyImpl(
               batchPtr: ptr WriteBatch = batch.addr
               vtxPtr = keyvtxs[minIdx][0][1].addr
               level = keyvtxs[minIdx][1]
-            futs[minIdx] = taskpool.spawn computeKeyImplTask(
+            futs[minIdx] = db.db.taskpool.spawn computeKeyImplTask(
               db.addr, vid, batchPtr, vtxPtr, level, skipLayers = skipLayers)
-          if taskpool != nil:
+          if db.db.taskpool != nil:
             debugEcho "After enter computed (rvid.root, vtx.bVid(uint8 minIdx)) key with id: ", (rvid.root, vtx.bVid(uint8 minIdx))
           batch.leave(n)
 
-      for i, f in futs:
-        if f.isSpawned():
-          (keyvtxs[i][0][0], keyvtxs[i][1]) = ?sync(f)
+      when parallel:
+        for i, f in futs:
+          if f.isSpawned():
+            (keyvtxs[i][0][0], keyvtxs[i][1]) = ?sync(f)
 
       template writeBranch(w: var RlpWriter, vtx: BranchRef): HashKey =
         w.encodeBranch(vtx):
@@ -327,12 +333,12 @@ proc computeKeyImplTask(
     skipLayers: bool,
 ): Result[(HashKey, int), AristoError] =
   if skipLayers:
-    db[].computeKeyImpl(rvid, batch[], vtx[], level, true, nil)
+    db[].computeKeyImpl(rvid, batch[], vtx[], level, skipLayers = true, parallel = false)
   else:
-    db[].computeKeyImpl(rvid, batch[], vtx[], level, false, nil)
+    db[].computeKeyImpl(rvid, batch[], vtx[], level, skipLayers = false, parallel = false)
 
 proc computeKeyImpl(
-    db: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool, taskpool: Taskpool
+    db: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool, parallel: static bool
 ): Result[HashKey, AristoError] =
   let (keyvtx, level) =
     when skipLayers:
@@ -344,7 +350,16 @@ proc computeKeyImpl(
     return ok(keyvtx[0])
 
   var batch: WriteBatch
-  let res = computeKeyImpl(db, rvid, batch, keyvtx[1], level, skipLayers = skipLayers, taskpool)
+  let res = computeKeyImpl(
+    db,
+    rvid,
+    batch,
+    keyvtx[1],
+    level,
+    skipLayers = skipLayers,
+    parallel = parallel
+  )
+
   if res.isOk:
     ?batch.flush(db.db)
 
@@ -360,32 +375,29 @@ proc computeKey*(
     db: AristoTxRef, # Database, top layer
     rvid: RootedVertexID, # Vertex to convert
 ): Result[HashKey, AristoError] =
+  ## Compute the key for an arbitrary vertex ID. If successful, the length of
+  ## the resulting key might be smaller than 32. If it is used as a root vertex
+  ## state/hash, it must be converted to a `Hash32` (using (`.to(Hash32)`) as
+  ## in `db.computeKey(rvid).value.to(Hash32)` which always results in a
+  ## 32 byte value.
+  db.computeKeyImpl(rvid, skipLayers = false, parallel = false)
 
-  try:
-    let taskpool = Taskpool.new(num_threads = 20)
-    debugEcho "taskpool.numThreads = ", taskpool.numThreads
-    ## Compute the key for an arbitrary vertex ID. If successful, the length of
-    ## the resulting key might be smaller than 32. If it is used as a root vertex
-    ## state/hash, it must be converted to a `Hash32` (using (`.to(Hash32)`) as
-    ## in `db.computeKey(rvid).value.to(Hash32)` which always results in a
-    ## 32 byte value.
-    return computeKeyImpl(db, rvid, skipLayers = false, taskpool)
-  except:
-    echo "error"
-    discard
-
-
-proc computeKeys*(db: AristoTxRef, root: VertexID): Result[void, AristoError] =
-  try:
-    let taskpool = Taskpool.new(num_threads = 20)
-    debugEcho "taskpool.numThreads = ", taskpool.numThreads
-    ## Ensure that key cache is topped up with the latest state root
-    discard db.computeKeyImpl((root, root), skipLayers = true, taskpool)
-  except:
-    echo "error"
-    discard
-
-  ok()
+proc computeStateRoot*(db: AristoTxRef): Result[HashKey, AristoError] =
+  ## Ensure that key cache is topped up with the latest state root
+  ## and return the computed value.
+  debugEcho "db.db.parallelStateRootComputation: ", db.db.parallelStateRootComputation
+  if db.db.parallelStateRootComputation:
+    db.computeKeyImpl(
+      (STATE_ROOT_VID, STATE_ROOT_VID),
+      skipLayers = true,
+      parallel = when compileOption("threads"): true else: false
+    )
+  else:
+    db.computeKeyImpl(
+      (STATE_ROOT_VID, STATE_ROOT_VID),
+      skipLayers = true,
+      parallel = false
+    )
 
 # ------------------------------------------------------------------------------
 # End
