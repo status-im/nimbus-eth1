@@ -18,7 +18,7 @@ import
   metrics,
   stew/byteutils,
   kzg4844/kzg,
-  ./[conf, constants, nimbus_desc, nimbus_import, nimbus_prune, rpc, version_info],
+  ./[conf, constants, nimbus_desc, nimbus_import, rpc, version_info],
   ./core/block_import,
   ./core/chain/forked_chain/chain_serialize,
   ./db/core_db/persistent,
@@ -398,8 +398,6 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
     com.db.finish()
 
   case config.cmd
-  of NimbusCmd.`prune`:
-    prune(config, com)
   of NimbusCmd.`import`:
     importBlocks(config, com)
   else:

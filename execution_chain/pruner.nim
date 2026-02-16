@@ -36,11 +36,7 @@ proc init*(
     batchSize = 100'u64,
     loopDelay = chronos.seconds(3),
 ): T =
-  T(
-    com: com,
-    batchSize: batchSize,
-    loopDelay: loopDelay,
-  )
+  T(com: com, batchSize: batchSize, loopDelay: loopDelay)
 
 proc pruneLoop(pruner: BackgroundPrunerRef) {.async: (raises: [CancelledError]).} =
   while true:
@@ -56,10 +52,11 @@ proc pruneLoop(pruner: BackgroundPrunerRef) {.async: (raises: [CancelledError]).
     notice "Background pruner: starting cycle",
       fromBlock = begin, toBlock = start, cutoffTimestamp = cutoff.uint64
 
-    var currentBlock = begin
-    var reachedRetentionWindow = false
-    var prevBaseNumber = start
-    var prunedSincePersist = 0'u64
+    var
+      currentBlock = begin
+      reachedRetentionWindow = false
+      prevBaseNumber = start
+      prunedSincePersist = 0'u64
 
     while currentBlock <= start and not reachedRetentionWindow:
       # Re-read baseTxFrame each iteration — FC's persist may have replaced it
@@ -92,34 +89,29 @@ proc pruneLoop(pruner: BackgroundPrunerRef) {.async: (raises: [CancelledError]).
       # concurrent async tasks (engine API, sync) that hold the old reference.
       for blkNum in currentBlock .. batchEnd:
         let header = baseTx.getBlockHeader(blkNum).valueOr:
-          warn "Background pruner: failed to get header",
-            blkNum = blkNum, error = error
+          warn "Background pruner: failed to get header", blkNum = blkNum, error = error
           continue
         if header.timestamp >= cutoff:
           reachedRetentionWindow = true
           break
         baseTx.deleteBlockBodyAndReceipts(blkNum).isOkOr:
-          warn "Background pruner: failed to delete",
-            blkNum = blkNum, error = error
+          warn "Background pruner: failed to delete", blkNum = blkNum, error = error
         lastPruned = blkNum + 1
 
       baseTx.setHistoryExpired(lastPruned)
       prunedSincePersist += (lastPruned - currentBlock)
 
-      notice "Background pruner: batch complete",
-        blks = lastPruned
+      notice "Background pruner: batch complete", blks = lastPruned
 
       currentBlock = lastPruned
 
-    notice "Background pruner: cycle complete",
-      prunedUpTo = currentBlock
+    notice "Background pruner: cycle complete", prunedUpTo = currentBlock
 
     await sleepAsync(pruner.loopDelay)
-
 
 proc start*(pruner: BackgroundPrunerRef) =
   pruner.loopFut = pruner.pruneLoop()
 
 proc stop*(pruner: BackgroundPrunerRef) {.async: (raises: []).} =
   if not pruner.loopFut.isNil:
-    await noCancel pruner.loopFut.cancelAndWait()
+    await pruner.loopFut.cancelAndWait()
