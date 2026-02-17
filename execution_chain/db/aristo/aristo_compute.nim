@@ -18,7 +18,9 @@ import
   "."/[aristo_desc, aristo_get, aristo_layers],
   ./aristo_desc/desc_backend
 
-type WriteBatch = tuple[writer: PutHdlRef, count: int, depth: int, prefix: uint64]
+export chronicles, aristo_desc
+
+type WriteBatch* = tuple[writer: PutHdlRef, count: int, depth: int, prefix: uint64]
 
 # Keep write batch size _around_ 1mb, give or take some overhead - this is a
 # tradeoff between efficiency and memory usage with diminishing returns the
@@ -374,28 +376,34 @@ proc computeKeyImpl(
 proc computeKey*(
     db: AristoTxRef, # Database, top layer
     rvid: RootedVertexID, # Vertex to convert
+    skipLayers: static bool = false
 ): Result[HashKey, AristoError] =
+  debugEcho "Called computeKey"
   ## Compute the key for an arbitrary vertex ID. If successful, the length of
   ## the resulting key might be smaller than 32. If it is used as a root vertex
   ## state/hash, it must be converted to a `Hash32` (using (`.to(Hash32)`) as
   ## in `db.computeKey(rvid).value.to(Hash32)` which always results in a
   ## 32 byte value.
-  db.computeKeyImpl(rvid, skipLayers = false, parallel = false)
+  db.computeKeyImpl(rvid, skipLayers, parallel = false)
 
-proc computeStateRoot*(db: AristoTxRef): Result[HashKey, AristoError] =
+proc computeStateRoot*(
+    db: AristoTxRef,
+    skipLayers: static bool = false
+): Result[HashKey, AristoError] =
+  debugEcho "Called computeStateRoot"
   ## Ensure that key cache is topped up with the latest state root
   ## and return the computed value.
   debugEcho "db.db.parallelStateRootComputation: ", db.db.parallelStateRootComputation
   if db.db.parallelStateRootComputation:
     db.computeKeyImpl(
       (STATE_ROOT_VID, STATE_ROOT_VID),
-      skipLayers = true,
+      skipLayers,
       parallel = when compileOption("threads"): true else: false
     )
   else:
     db.computeKeyImpl(
       (STATE_ROOT_VID, STATE_ROOT_VID),
-      skipLayers = true,
+      skipLayers,
       parallel = false
     )
 

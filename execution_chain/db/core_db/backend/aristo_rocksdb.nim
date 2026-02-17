@@ -197,12 +197,6 @@ proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions): CoreDbRef =
       raiseAssert "Could not initialize aristo: " & $error
     kdb = KvtDbRef.init(baseDb)
 
-  if opts.rdbKeyCacheSize > 0:
-    # Make sure key cache isn't empty
-    adb.txRef.computeKeys(STATE_ROOT_VID).isOkOr:
-      fatal "Cannot compute root keys", msg = error
-      quit(QuitFailure)
-
   AristoDbRocks.create(kdb, adb)
 
 # ------------------------------------------------------------------------------

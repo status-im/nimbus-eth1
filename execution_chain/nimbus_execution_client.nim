@@ -21,6 +21,7 @@ import
   ./[conf, constants, nimbus_desc, nimbus_import, rpc, version_info],
   ./core/block_import,
   ./core/chain/forked_chain/chain_serialize,
+  ./db/aristo/aristo_compute,
   ./db/core_db/persistent,
   ./db/storage_types,
   ./sync/wire_protocol,
@@ -393,7 +394,7 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
 
   if keyCacheEnabled:
     # Make sure key cache isn't empty
-    discard com.db.mpt.txRef.computeStateRoot().valueOr:
+    discard com.db.mpt.txRef.computeStateRoot(skipLayers = true).valueOr:
       fatal "Cannot compute root keys", msg = error
       quit(QuitFailure)
 
