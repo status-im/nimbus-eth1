@@ -36,6 +36,7 @@ import
     nimbus_binary_common,
     process_state,
   ],
+  ./db/aristo/aristo_compute,
   ./rpc/jwt_auth,
   ./[
     constants,
@@ -283,10 +284,17 @@ proc runExecutionClient(p: ExecutionThreadConfig) {.thread.} =
       # TODO https://github.com/status-im/nim-taskpools/issues/6
       #      share taskpool between bn and ec
       taskpool = setupTaskpool(int config.numThreads)
-      com = setupCommonRef(config)
+      (com, keyCacheEnabled) = setupCommonRef(config)
     com.taskpool = taskpool
+    com.db.mpt.taskpool = taskpool
   else:
-    let com = setupCommonRef(config)
+    let (com, keyCacheEnabled) = setupCommonRef(config)
+
+  if keyCacheEnabled:
+    # Make sure key cache isn't empty
+    discard com.db.mpt.txRef.computeStateRoot(skipLayers = true).valueOr:
+      fatal "Cannot compute root keys", msg = error
+      quit(QuitFailure)
 
   dynamicLogScope(comp = "ec"):
     nimbus_execution_client.runExeClient(config, com, p.tsp.justWait())
