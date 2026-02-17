@@ -64,7 +64,7 @@ suite "History Block Proofs - Historical Summaries":
     ]
 
   test "BlockProofHistoricalSummaries for Execution BlockHeader":
-    let blockRoots = getStateField(state[], block_roots).data
+    let blockRoots = state[].block_roots.data
 
     withState(state[]):
       when consensusFork >= ConsensusFork.Capella:

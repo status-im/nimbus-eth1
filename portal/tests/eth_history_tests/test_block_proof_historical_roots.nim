@@ -66,10 +66,9 @@ suite "History Block Proofs - Historical Roots":
     let
       # Historical batch of first historical root
       batch = HistoricalBatch(
-        block_roots: getStateField(state[], block_roots).data,
-        state_roots: getStateField(state[], state_roots).data,
+        block_roots: state[].block_roots.data, state_roots: state[].state_roots.data
       )
-      historical_roots = getStateField(state[], historical_roots)
+      historical_roots = state[].historical_roots
 
     # for i in 0..<(SLOTS_PER_HISTORICAL_ROOT - 1): # Test all blocks
     for i in blocksToTest:

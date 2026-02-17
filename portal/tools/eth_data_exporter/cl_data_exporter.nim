@@ -49,10 +49,10 @@ proc getBeaconData*(): (RuntimeConfig, ref ForkDigests, BeaconClock) =
         )
       except SerializationError as err:
         raiseAssert "Invalid baked-in state: " & err.msg
-    genesis_validators_root = getStateField(genesisState[], genesis_validators_root)
+    genesis_validators_root = genesisState[].genesis_validators_root
     forkDigests = newClone ForkDigests.init(metadata.cfg, genesis_validators_root)
 
-    genesisTime = getStateField(genesisState[], genesis_time)
+    genesisTime = genesisState[].genesis_time
     beaconClock = BeaconClock.init(metadata.cfg.timeParams, genesisTime).valueOr:
       error "Invalid genesis time in state", genesisTime
       quit QuitFailure
@@ -242,7 +242,7 @@ proc exportHistoricalRoots*(
     error "No beacon state found"
     quit 1
 
-  let historical_roots = getStateField(state[], historical_roots)
+  let historical_roots = state[].historical_roots
 
   let res = io2.writeFile(file, SSZ.encode(historical_roots))
   if res.isErr():
@@ -279,8 +279,7 @@ proc getBlockProofBellatrix(
 
   let
     batch = HistoricalBatch(
-      block_roots: getStateField(state, block_roots).data,
-      state_roots: getStateField(state, state_roots).data,
+      block_roots: state.block_roots.data, state_roots: state.state_roots.data
     )
 
     beaconBlock = db.getBlock(
@@ -357,7 +356,7 @@ proc loadHistoricalSummariesFromEra(
     except SerializationError as exc:
       return err("Unable to read state: " & exc.msg)
 
-  return ok((state[].historical_summaries(), getStateField(state[], slot)))
+  return ok((state[].historical_summaries(), state[].slot))
 
 proc getBlockProofCapella(
     dataDir: string, eraDir: string, slotNumber: uint64
@@ -402,7 +401,7 @@ proc getBlockProofCapella(
       error "Failed to load Capella block", slot
       quit QuitFailure
 
-    blockRoots = getStateField(state, block_roots).data
+    blockRoots = state.block_roots.data
     blockProof = block_proof_historical_summaries.buildProof(
       blockRoots, beaconBlock.message
     ).valueOr:
@@ -466,7 +465,7 @@ proc getBlockProofDeneb(
       error "Failed to load Capella block", slot
       quit QuitFailure
 
-    blockRoots = getStateField(state, block_roots).data
+    blockRoots = state.block_roots.data
     blockProof = block_proof_historical_summaries.buildProof(
       blockRoots, beaconBlock.message
     ).valueOr:

@@ -48,7 +48,7 @@ suite "Beacon Chain Historical Summaries With Proof - Test Vectors":
 
     # Although the test data is generated from a test state, we need to use the
     # forkDigests of mainnet as apparently these are used in the generated test vector.
-    genesis_validators_root = getStateField(genesisState[], genesis_validators_root)
+    genesis_validators_root = genesisState[].genesis_validators_root
     # genesis_validators_root = Digest.fromHex(
     #   "0x2170688a9e92595fb353c0a2ad6733431a8066c7ecb48ab3b2aaf9091a1722b1"
     # )

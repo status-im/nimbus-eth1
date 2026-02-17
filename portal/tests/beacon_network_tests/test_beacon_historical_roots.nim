@@ -35,7 +35,7 @@ suite "Beacon Chain Historical Roots":
     blocks.add(addTestBlock(state[], cache, cfg = cfg).bellatrixData)
 
   test "Historical Roots Proof":
-    let historical_roots = getStateField(state[], historical_roots)
+    let historical_roots = state[].historical_roots
 
     let res = buildProof(state[])
     check res.isOk()

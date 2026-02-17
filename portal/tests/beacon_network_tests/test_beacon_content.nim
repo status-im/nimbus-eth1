@@ -41,7 +41,7 @@ suite "Beacon Content Keys and Values - Test Vectors":
         )
       except CatchableError as err:
         raiseAssert "Invalid baked-in state: " & err.msg
-    genesis_validators_root = getStateField(genesisState[], genesis_validators_root)
+    genesis_validators_root = genesisState[].genesis_validators_root
     forkDigests = newClone ForkDigests.init(metadata.cfg, genesis_validators_root)
 
   for path in walkDirRec(testVectorDir, yieldFilter = {pcDir}):
