@@ -124,7 +124,7 @@ suite "Aristo compute":
     db.persist(batch, txFrame)
     check db.putEndFn(batch).isOk()
 
-    check txFrame.computeKeys(root).isOk()
+    check txFrame.computeStateRoot(skipLayers = true).isOk()
 
     let w = txFrame.computeKey((root, root)).value.to(Hash32)
     check w == samples[^1][^1][2]

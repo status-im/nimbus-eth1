@@ -20,7 +20,15 @@ import
 
 export chronicles, aristo_desc
 
-type WriteBatch* = tuple[writer: PutHdlRef, count: int, depth: int, prefix: uint64]
+type WriteBatch* = object
+  writer*: PutHdlRef
+  count*: int
+  depth*: int
+  prefix*: uint64
+
+# Disallow copying of WriteBatch
+proc `=copy`(dest: var WriteBatch; src: WriteBatch) {.error: "Copying WriteBatch is forbidden".} =
+  discard
 
 # Keep write batch size _around_ 1mb, give or take some overhead - this is a
 # tradeoff between efficiency and memory usage with diminishing returns the
@@ -217,8 +225,6 @@ proc computeKeyImpl(
       var keyvtxs: array[16, ((HashKey, VertexRef), int)]
       for n, subvid in vtx.pairs:
         keyvtxs[n] = ?db.getKey((rvid.root, subvid), skipLayers)
-        if db.db.taskpool != nil:
-          debugEcho "Fetched (rvid.root, subvid) key with id: ", (rvid.root, subvid)
 
       when parallel:
         var futs: array[16, Flowvar[Result[(HashKey, int), AristoError]]]
@@ -242,7 +248,6 @@ proc computeKeyImpl(
                 continue
 
             let subvid = vtx.bVid(uint8 nibble)
-            #debugEcho "futs[nibble].isSpawned(): ", futs[nibble].isSpawned()
             if (not subvid.isValid) or keyvtx[0][0].isValid:
               n += 1 # no need to compute key
               continue
@@ -259,8 +264,6 @@ proc computeKeyImpl(
                   skipLayers = skipLayers,
                   parallel = false
                 )
-              if db.db.taskpool != nil:
-                debugEcho "Computed (rvid.root, subvid) key with id: ", (rvid.root, subvid)
               n += 1
               continue
 
@@ -271,8 +274,17 @@ proc computeKeyImpl(
           if minIdx == keyvtxs.len + 1: # no uncomputed key found!
             break keysComputed
 
-          batch.enter(n)
-          when not parallel:
+
+          when parallel:
+            let
+              vid = (rvid.root, vtx.bVid(uint8 minIdx))
+              batchPtr: ptr WriteBatch = batch.addr
+              vtxPtr = keyvtxs[minIdx][0][1].addr
+              level = keyvtxs[minIdx][1]
+            futs[minIdx] = db.db.taskpool.spawn computeKeyImplTask(
+              db.addr, vid, batchPtr, vtxPtr, level, skipLayers = skipLayers)
+          else:
+            #batch.enter(n)
             (keyvtxs[minIdx][0][0], keyvtxs[minIdx][1]) =
               ?db.computeKeyImpl(
                 (rvid.root, vtx.bVid(uint8 minIdx)),
@@ -282,17 +294,7 @@ proc computeKeyImpl(
                 skipLayers = skipLayers,
                 parallel = false
               )
-          else:
-            let
-              vid = (rvid.root, vtx.bVid(uint8 minIdx))
-              batchPtr: ptr WriteBatch = batch.addr
-              vtxPtr = keyvtxs[minIdx][0][1].addr
-              level = keyvtxs[minIdx][1]
-            futs[minIdx] = db.db.taskpool.spawn computeKeyImplTask(
-              db.addr, vid, batchPtr, vtxPtr, level, skipLayers = skipLayers)
-          if db.db.taskpool != nil:
-            debugEcho "After enter computed (rvid.root, vtx.bVid(uint8 minIdx)) key with id: ", (rvid.root, vtx.bVid(uint8 minIdx))
-          batch.leave(n)
+            #batch.leave(n)
 
       when parallel:
         for i, f in futs:
@@ -378,7 +380,6 @@ proc computeKey*(
     rvid: RootedVertexID, # Vertex to convert
     skipLayers: static bool = false
 ): Result[HashKey, AristoError] =
-  debugEcho "Called computeKey"
   ## Compute the key for an arbitrary vertex ID. If successful, the length of
   ## the resulting key might be smaller than 32. If it is used as a root vertex
   ## state/hash, it must be converted to a `Hash32` (using (`.to(Hash32)`) as
@@ -390,10 +391,8 @@ proc computeStateRoot*(
     db: AristoTxRef,
     skipLayers: static bool = false
 ): Result[HashKey, AristoError] =
-  debugEcho "Called computeStateRoot"
   ## Ensure that key cache is topped up with the latest state root
   ## and return the computed value.
-  debugEcho "db.db.parallelStateRootComputation: ", db.db.parallelStateRootComputation
   if db.db.parallelStateRootComputation:
     db.computeKeyImpl(
       (STATE_ROOT_VID, STATE_ROOT_VID),

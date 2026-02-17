@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -72,8 +72,8 @@ template addTouchedAccount*(builder: ConcurrentBlockAccessListBuilderRef, addres
   withLock(builder.lock):
     ensureAccount(builder, address)
 
-func addTouchedAccount*(builder: ptr ConcurrentBlockAccessListBuilderRef, adr: Address) =
-  builder[].addTouchedAccount(adr)
+func addTouchedAccount*(builder: ptr ConcurrentBlockAccessListBuilderRef, address: Address) =
+  builder[].addTouchedAccount(address)
 
 proc addStorageWrite*(
     builder: BlockAccessListBuilderRef,
@@ -191,8 +191,8 @@ func addCodeChange*(
     builder: ptr ConcurrentBlockAccessListBuilderRef,
     address: Address,
     blockAccessIndex: int,
-    newCode: seq[byte]) =
-  builder[].addCodeChange(address, blockAccessIndex, newCode)
+    newCode: openArray[byte]) =
+  builder[].addCodeChange(address, blockAccessIndex, @newCode)
 
 func balIndexCmp(x, y: StorageChange | BalanceChange | NonceChange | CodeChange): int =
   cmp(x.blockAccessIndex, y.blockAccessIndex)
