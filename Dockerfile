@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,13 +13,14 @@ FROM debian:trixie-slim AS build
 SHELL ["/bin/bash", "-c"]
 
 RUN apt-get clean && apt update \
- && apt -y install curl build-essential git-lfs librocksdb-dev
+ && apt -y install curl build-essential git-lfs
 
 RUN ldd --version
 
 ADD . /root/nimbus-eth1
 
 RUN cd /root/nimbus-eth1 \
+ && rm -rf build/ \
  && make -j$(nproc) init \
  && make -j$(nproc) DISABLE_MARCH_NATIVE=1 V=1 nimbus_execution_client
 
@@ -30,7 +31,7 @@ FROM debian:trixie-slim AS deploy
 
 SHELL ["/bin/bash", "-c"]
 RUN apt-get clean && apt update \
- && apt -y install build-essential librocksdb-dev
+ && apt -y install build-essential
 RUN apt update && apt -y upgrade
 
 RUN ldd --version
