@@ -221,6 +221,9 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
       blk.withdrawals.get,
     )
 
+  if p.flags * {PersistTransactions, PersistReceipts, PersistWithdrawals} == {}:
+    txFrame.setHistoryExpired(header.number)
+    
   p.stats.blocks += 1
   p.stats.txs += blk.transactions.len
   p.stats.gas += blk.header.gasUsed
