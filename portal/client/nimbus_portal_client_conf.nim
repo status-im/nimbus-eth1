@@ -26,9 +26,7 @@ import
 
 const
   defaultListenAddress* = (static parseIpAddress("0.0.0.0"))
-  defaultAdminListenAddress* = (static parseIpAddress("127.0.0.1"))
   defaultListenAddressDesc = $defaultListenAddress
-  defaultAdminListenAddressDesc = $defaultAdminListenAddress
 
   defaultStorageCapacity* = 2000'u32 # 2 GB default
   defaultStorageCapacityDesc* = $defaultStorageCapacity
@@ -164,22 +162,7 @@ type
       name: "debug-netkey-nodeid-prefix-unsafe"
     .}: Option[string]
 
-    metricsEnabled* {.
-      defaultValue: false, desc: "Enable the metrics server", name: "metrics"
-    .}: bool
-
-    metricsAddress* {.
-      defaultValue: defaultAdminListenAddress,
-      defaultValueDesc: $defaultAdminListenAddressDesc,
-      desc: "Listening address of the metrics server",
-      name: "metrics-address"
-    .}: IpAddress
-
-    metricsPort* {.
-      defaultValue: 8008,
-      desc: "Listening HTTP port of the metrics server",
-      name: "metrics-port"
-    .}: Port
+    metrics* {.flatten.}: MetricsConf
 
     rpcEnabled* {.
       desc: "Enable the HTTP JSON-RPC server", defaultValue: false, name: "rpc"
