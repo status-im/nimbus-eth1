@@ -7,7 +7,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-excluded_files="config.yaml|.gitmodules|.gitignore|.gitattributes"
+excluded_files="config.yaml|.gitmodules|.gitignore|.gitattributes|Makefile"
 excluded_extensions="json|md|png|txt|toml|gz|key|rlp|era1|cfg|py|sh|in|patch|md.tpl|nix|lock|yml"
 
 current_year=$(date +"%Y")

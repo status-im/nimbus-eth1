@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -38,12 +38,12 @@ proc loadNetworkData*(networkName: string): NetworkInitData =
       except SerializationError as err:
         raiseAssert "Invalid baked-in state: " & err.msg
 
-    genesisTime = getStateField(genesisState[], genesis_time)
+    genesisTime = genesisState[].genesis_time
     beaconClock = BeaconClock.init(metadata.cfg.timeParams, genesisTime).valueOr:
       error "Invalid genesis time in state", genesisTime
       quit QuitFailure
 
-    genesis_validators_root = getStateField(genesisState[], genesis_validators_root)
+    genesis_validators_root = genesisState[].genesis_validators_root
 
     forks = newClone ForkDigests.init(metadata.cfg, genesis_validators_root)
 
