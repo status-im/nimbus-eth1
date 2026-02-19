@@ -155,17 +155,15 @@ jobs:
       - name: Create and push multi-arch manifest (versioned)
         run: |
           TAG="${{ steps.extract_tag.outputs.tag }}"
-          docker manifest create statusim/nimbus-eth1:${TAG} \
-            --amend statusim/nimbus-eth1:linux-amd64-${TAG} \
-            --amend statusim/nimbus-eth1:linux-arm64-${TAG}
-          docker manifest push statusim/nimbus-eth1:${TAG}
+          docker buildx imagetools create -t statusim/nimbus-eth1:${TAG} \
+            statusim/nimbus-eth1:linux-amd64-${TAG} \
+            statusim/nimbus-eth1:linux-arm64-${TAG}
 
       - name: Create and push multi-arch manifest (latest)
         run: |
-          docker manifest create statusim/nimbus-eth1:latest \
-            --amend statusim/nimbus-eth1:linux-amd64-latest \
-            --amend statusim/nimbus-eth1:linux-arm64-latest
-          docker manifest push statusim/nimbus-eth1:latest
+          docker buildx imagetools create -t statusim/nimbus-eth1:latest \
+            statusim/nimbus-eth1:linux-amd64-latest \
+            statusim/nimbus-eth1:linux-arm64-latest
 
   prepare-release:
     name: Prepare release draft
