@@ -43,6 +43,11 @@ type
     accounts*: Table[Address, AccountData]
       ## Maps address -> account data
 
+  # Warning: This type is not yet safe to use with the refc memory manager
+  # across threads because it turns out that the Table type uses a seq internally
+  # which can re-allocate the internal buffer (when increasing the seq capacity)
+  # in a different thread local heap to the heap of the owning thread and this
+  # might cause a memory leak.
   ConcurrentBlockAccessListBuilderRef* = ref object of BlockAccessListBuilderRef
     lock: Lock
 
@@ -173,17 +178,17 @@ proc addCodeChange*(
     builder: BlockAccessListBuilderRef,
     address: Address,
     blockAccessIndex: int,
-    newCode: seq[byte]) =
+    newCode: openArray[byte]) =
   builder.ensureAccount(address)
 
   builder.accounts.withValue(address, accData):
-    accData[].codeChanges[blockAccessIndex] = newCode
+    accData[].codeChanges[blockAccessIndex] = @newCode
 
 template addCodeChange*(
     builder: ConcurrentBlockAccessListBuilderRef,
     address: Address,
     blockAccessIndex: int,
-    newCode: seq[byte]) =
+    newCode: openArray[byte]) =
   withLock(builder.lock):
     addCodeChange(builder.BlockAccessListBuilderRef, address, blockAccessIndex, newCode)
 
@@ -191,7 +196,7 @@ func addCodeChange*(
     builder: ptr ConcurrentBlockAccessListBuilderRef,
     address: Address,
     blockAccessIndex: int,
-    newCode: seq[byte]) =
+    newCode: openArray[byte]) =
   builder[].addCodeChange(address, blockAccessIndex, newCode)
 
 func balIndexCmp(x, y: StorageChange | BalanceChange | NonceChange | CodeChange): int =
