@@ -14,12 +14,46 @@ import
   eth/common/[block_access_lists, block_access_lists_rlp, hashes],
   stint,
   stew/byteutils,
-  results
+  results,
+  ../constants
 
 export block_access_lists, hashes, results
 
-func validate*(bal: BlockAccessListRef, expectedHash: Hash32): Result[void, string] =
+# The block access list is constrained by the block gas limit rather than a fixed
+# maximum number of items. The constraint is defined as:
+#
+# bal_items <= block_gas_limit // ITEM_COST
+#
+# Where:
+# - bal_items = addresses + storage_keys
+# - ITEM_COST = 2000
+
+const BAL_ITEM_COST = 2000.GasInt
+
+func checkBalSize(bal: BlockAccessListRef, blockGasLimit: GasInt): Result[void, string] =
+  let addressCount = bal[].len()
+
+  var storageKeysCount = 0
+  for accChanges in bal[]:
+    storageKeysCount += accChanges.storageChanges.len()
+    storageKeysCount += accChanges.storageReads.len()
+
+  let balItemCount = addressCount + storageKeysCount
+
+  if balItemCount.GasInt <= blockGasLimit div BAL_ITEM_COST:
+    ok()
+  else:
+    err("BAL exceeds max items cap")
+
+func validate*(
+    bal: BlockAccessListRef,
+    expectedHash: Hash32,
+    blockGasLimit: GasInt = DEFAULT_GAS_LIMIT
+): Result[void, string] =
   ## Validate that a block access list is structurally correct and matches the expected hash.
+
+  # Check the size of the BAL to protect against DOS attacks
+  ?bal.checkBalSize(blockGasLimit)
 
   # Check that storage changes and reads don't overlap for the same slot.
   for accountChanges in bal[]:

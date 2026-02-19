@@ -51,8 +51,8 @@ func validateBlockAccessList*(
     if not skipPreExecBalCheck:
       if blockAccessList.isNone:
         return err("Post-Amsterdam block must have blockAccessList")
-      if blockAccessList.get.validate(header.blockAccessListHash.get).isErr():
-        return err("Mismatched blockAccessListHash blockNumber = " & $header.number)
+      blockAccessList.get.validate(header.blockAccessListHash.get, header.gasLimit).isOkOr:
+        return err("blockAccessList failed pre-execution validation: " & $error)
   else:
     if header.blockAccessListHash.isSome:
       return err("Pre-Amsterdam block header must not have blockAccessListHash")
