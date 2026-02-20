@@ -110,6 +110,6 @@ func packArg*[T](arg: T): Result[string, string] {.raises: [].} =
 
 proc alloc*(str: string): cstring =
   var ret = cast[cstring](allocShared(str.len + 1))
-  copyMem(addr ret[0], addr str[0], str.len)
+  copyMem(ret, str.cstring, str.len)
   ret[str.len] = '\0'
   return ret
