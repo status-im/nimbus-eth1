@@ -30,7 +30,9 @@ export block_access_lists, hashes, results
 
 const BAL_ITEM_COST = 2000.GasInt
 
-func checkBalSize(bal: BlockAccessListRef, blockGasLimit: GasInt): Result[void, string] =
+func checkBalSize(
+    bal: BlockAccessListRef, blockGasLimit: GasInt
+): Result[void, string] =
   let addressCount = bal[].len()
 
   var storageKeysCount = 0
@@ -45,12 +47,10 @@ func checkBalSize(bal: BlockAccessListRef, blockGasLimit: GasInt): Result[void, 
   else:
     err("BAL exceeds max items cap")
 
-
-
 func validate*(
     bal: BlockAccessListRef,
     expectedHash: Hash32,
-    blockGasLimit: GasInt = DEFAULT_GAS_LIMIT
+    blockGasLimit: GasInt = DEFAULT_GAS_LIMIT,
 ): Result[void, string] =
   ## Validate that a block access list is structurally correct and matches the expected hash.
 
@@ -63,7 +63,6 @@ func validate*(
 
   # Validate ordering of fields for each account
   for accountChanges in bal[]:
-
     # Validate storage changes slots are sorted lexicographically
     if not accountChanges.storageChanges.isSorted(slotChangesCmp):
       return err("Storage changes slots should be sorted lexicographically")
