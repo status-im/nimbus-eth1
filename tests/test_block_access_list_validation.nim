@@ -16,7 +16,7 @@ import
   ../execution_chain/block_access_list/[block_access_list_builder, block_access_list_validation]
 
 const
-  ENABLE_BENCHMARKS = true
+  ENABLE_BENCHMARKS = false
 
   address1 = address"0x10007bc31cedb7bfb8a345f31e668033056b2728"
   address2 = address"0x20007bc31cedb7bfb8a345f31e668033056b2728"

@@ -9,17 +9,12 @@
 
 {.push raises: [], gcsafe.}
 
-import eth/common/[addresses, block_access_lists]
-
-func `<`*(a, b: Address): bool =
-  for i in 0 ..< 20:
-    if a.data[i] < b.data[i]:
-      return true
-
-  false
+import
+  eth/common/[addresses, block_access_lists],
+  stew/byteutils
 
 func accChangesCmp*(x, y: AccountChanges): int =
-  cmp(x.address, y.address)
+  cmp(x.address.data(), y.address.data())
 
 func slotChangesCmp*(x, y: SlotChanges): int =
   cmp(x.slot, y.slot)
@@ -34,7 +29,7 @@ proc cmpTreatEqualAsGreater[T](x, y: T): int =
   if x < y: -1 else: 1
 
 func accChangesCmpTreatEqualAsGreater*(x, y: AccountChanges): int =
-  cmpTreatEqualAsGreater(x.address, y.address)
+  cmpTreatEqualAsGreater(x.address.data(), y.address.data())
 
 func slotChangesCmpTreatEqualAsGreater*(x, y: SlotChanges): int =
   cmpTreatEqualAsGreater(x.slot, y.slot)
