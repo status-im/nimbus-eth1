@@ -41,11 +41,11 @@ make nimbus_verified_proxy
 
 ### Run the Nimbus Verified Proxy
 
-Two options need to be explicitly configured by the user:
+Three options need to be explicitly configured by the user:
 
 * `--trusted-block-root`: The consensus light client starts syncing from a trusted block. This trusted block should be somewhat recent ([~1-2 weeks](https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/weak-subjectivity.md)) and needs to be configured each time when starting the Nimbus Verified Proxy.
 
-* `--web3-url` - As the proxy does not use any storage, it needs access to an Ethereum JSON RPC endpoint to provide the requested data. This can be a regular full node, or an external web3 data provider like
+* `--backend-url` - As the proxy does not use any storage, it needs access to an Ethereum JSON RPC endpoint to provide the requested data. This can be a regular full node, or an external web3 data provider like
 [Alchemy](https://www.alchemy.com/).
 
     A first requirement for the web3 data provider is that it must support the standard Ethereum JSON RPC Execution API, including the [eth_getProof](https://eips.ethereum.org/EIPS/eip-1186) call.
@@ -57,6 +57,8 @@ This is verified on start-up by querying the provider its `eth_chainId` endpoint
 received chain id with the one configured locally. If this validation fails, the Nimbus Verified Proxy will quit.
 
 > Note: Infura currently does not support the `eth_getProof` call.
+
+* `--external-beacon-api-url` - URL of the consensus light client data provider (beacon node REST API). This is used to bootstrap and follow the tip of the consensus chain. Multiple URLs can be provided by repeating the option.
 
 #### Obtaining a trusted block root
 
@@ -73,18 +75,19 @@ A block root may be obtained from a trusted beacon node or from a trusted provid
 
 * Trusted provider, e.g. Beaconcha.in:
 
-    On the [beaconcha.in](https://beaconcha.in) website ([Goerli](https://prater.beaconcha.in)), navigate to the `Epochs` section and select a recent `Finalized` epoch. Then, scroll down to the bottom of the page. If the bottom-most slot has a `Proposed` status, copy its `Root Hash`. Otherwise, for example if the bottom-most slot was `Missed`, go back and pick a different epoch.
+    On the [beaconcha.in](https://beaconcha.in) website, navigate to the `Epochs` section and select a recent `Finalized` epoch. Then, scroll down to the bottom of the page. If the bottom-most slot has a `Proposed` status, copy its `Root Hash`. Otherwise, for example if the bottom-most slot was `Missed`, go back and pick a different epoch.
 
 #### Start the process
-To start the proxy for the Goerli network, run the following command (inserting your own trusted block root and replacing the web3-url to your provider of choice):
+To start the proxy for Mainnet, run the following command (inserting your own trusted block root and replacing the URLs to your providers of choice):
 
 ```bash
 # From the nimbus-eth1 repository
 TRUSTED_BLOCK_ROOT=0x1234567890123456789012345678901234567890123456789012345678901234 # Replace this
 ./build/nimbus_verified_proxy \
-    --network=goerli \
+    --network=mainnet \
     --trusted-block-root=${TRUSTED_BLOCK_ROOT} \
-    --web3-url="wss://eth-goerli.g.alchemy.com/v2/<ApiKey>"
+    --backend-url="wss://eth-mainnet.g.alchemy.com/v2/<ApiKey>" \
+    --external-beacon-api-url="https://beaconstate.info"
 ```
 
 ### Using the Nimbus Verified Proxy with existing Wallets
