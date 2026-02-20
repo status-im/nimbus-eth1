@@ -13,7 +13,7 @@ import
   std/[tables, sets, algorithm, locks],
   eth/common/[block_access_lists, block_access_lists_rlp],
   stint,
-  stew/byteutils
+  ./block_access_list_utils
 
 export block_access_lists
 
@@ -198,15 +198,6 @@ func addCodeChange*(
     blockAccessIndex: int,
     newCode: openArray[byte]) =
   builder[].addCodeChange(address, blockAccessIndex, newCode)
-
-func balIndexCmp(x, y: StorageChange | BalanceChange | NonceChange | CodeChange): int =
-  cmp(x.blockAccessIndex, y.blockAccessIndex)
-
-func slotChangesCmp(x, y: SlotChanges): int =
-  cmp(x.slot, y.slot)
-
-func accChangesCmp(x, y: AccountChanges): int =
-  cmp(x.address.data.toHex(), y.address.data.toHex())
 
 func buildBlockAccessList*(builder: BlockAccessListBuilderRef): BlockAccessListRef =
   let blockAccessList: BlockAccessListRef = new BlockAccessList

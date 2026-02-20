@@ -10,12 +10,12 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[sets, sequtils, algorithm],
+  std/[sets, algorithm],
   eth/common/[block_access_lists, block_access_lists_rlp, hashes],
   stint,
-  stew/byteutils,
   results,
-  ../constants
+  ../constants,
+  ./block_access_list_utils
 
 export block_access_lists, hashes, results
 
@@ -45,6 +45,8 @@ func checkBalSize(bal: BlockAccessListRef, blockGasLimit: GasInt): Result[void, 
   else:
     err("BAL exceeds max items cap")
 
+
+
 func validate*(
     bal: BlockAccessListRef,
     expectedHash: Hash32,
@@ -55,53 +57,43 @@ func validate*(
   # Check the size of the BAL to protect against DOS attacks
   ?bal.checkBalSize(blockGasLimit)
 
-  # Check that storage changes and reads don't overlap for the same slot.
-  for accountChanges in bal[]:
-    var changedSlots: HashSet[StorageKey]
-
-    for slotChanges in accountChanges.storageChanges:
-      changedSlots.incl(slotChanges.slot)
-
-    for slot in accountChanges.storageReads:
-      if changedSlots.contains(slot):
-        return err("A slot should not be in both changes and reads")
-
   # Validate ordering (addresses should be sorted lexicographically).
-  let balAddresses = bal[].mapIt(it.address.data.toHex())
-  if balAddresses != balAddresses.sorted():
+  if not bal[].isSorted(accChangesCmp):
     return err("Addresses should be sorted lexicographically")
 
   # Validate ordering of fields for each account
   for accountChanges in bal[]:
+
     # Validate storage changes slots are sorted lexicographically
-    let storageChangesSlots = accountChanges.storageChanges.mapIt(it.slot)
-    if storageChangesSlots != storageChangesSlots.sorted():
+    if not accountChanges.storageChanges.isSorted(slotChangesCmp):
       return err("Storage changes slots should be sorted lexicographically")
 
     # Check storage changes are sorted by blockAccessIndex
+    var changedSlots: HashSet[StorageKey]
     for slotChanges in accountChanges.storageChanges:
-      let indices = slotChanges.changes.mapIt(it.blockAccessIndex)
-      if indices != indices.sorted():
+      changedSlots.incl(slotChanges.slot)
+      if not slotChanges.changes.isSorted(balIndexCmp):
         return err("Slot changes should be sorted by blockAccessIndex")
 
+    # Check that storage changes and reads don't overlap for the same slot.
+    for slot in accountChanges.storageReads:
+      if changedSlots.contains(slot):
+        return err("A slot should not be in both changes and reads")
+
     # Validate storage reads are sorted lexicographically
-    let storageReadsSlots = accountChanges.storageReads
-    if storageReadsSlots != storageReadsSlots.sorted():
+    if not accountChanges.storageReads.isSorted():
       return err("Storage reads should be sorted lexicographically")
 
     # Check balance changes are sorted by blockAccessIndex
-    let balanceIndices = accountChanges.balanceChanges.mapIt(it.blockAccessIndex)
-    if balanceIndices != balanceIndices.sorted():
+    if not accountChanges.balanceChanges.isSorted(balIndexCmp):
       return err("Balance changes should be sorted by blockAccessIndex")
 
     # Check nonce changes are sorted by blockAccessIndex
-    let nonceIndices = accountChanges.nonceChanges.mapIt(it.blockAccessIndex)
-    if nonceIndices != nonceIndices.sorted():
+    if not accountChanges.nonceChanges.isSorted(balIndexCmp):
       return err("Nonce changes should be sorted by blockAccessIndex")
 
     # Check code changes are sorted by blockAccessIndex
-    let codeIndices = accountChanges.codeChanges.mapIt(it.blockAccessIndex)
-    if codeIndices != codeIndices.sorted():
+    if not accountChanges.codeChanges.isSorted(balIndexCmp):
       return err("Code changes should be sorted by blockAccessIndex")
 
   # Check that the block access list matches the expected hash.

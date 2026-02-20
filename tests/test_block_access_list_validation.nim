@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -11,9 +11,12 @@
 {.used.}
 
 import
+  std/times,
   unittest2,
   eth/common/block_access_lists_rlp,
   ../execution_chain/block_access_list/[block_access_list_builder, block_access_list_validation]
+
+const ENABLE_BENCHMARKS = true
 
 suite "Block access list validation":
   const
@@ -151,3 +154,50 @@ suite "Block access list validation":
     check bal.validate(bal[].computeBlockAccessListHash()).isOk()
     bal[0].codeChanges[0] = bal[0].codeChanges[2]
     check bal.validate(bal[].computeBlockAccessListHash()).isErr()
+
+  when ENABLE_BENCHMARKS:
+    test "Benchmark validation":
+      builder.addTouchedAccount(address3)
+      builder.addTouchedAccount(address2)
+      builder.addTouchedAccount(address1)
+      builder.addTouchedAccount(address1) # duplicate
+
+      builder.addStorageWrite(address1, slot3, 0, 3.u256)
+      builder.addStorageWrite(address1, slot2, 2, 2.u256)
+      builder.addStorageWrite(address1, slot1, 1, 1.u256)
+      builder.addStorageWrite(address2, slot1, 1, 1.u256)
+      builder.addStorageWrite(address1, slot3, 3, 4.u256)
+      builder.addStorageWrite(address1, slot3, 3, 5.u256) # duplicate should overwrite
+
+      builder.addStorageRead(address2, slot3)
+      builder.addStorageRead(address2, slot2)
+      builder.addStorageRead(address3, slot3)
+      builder.addStorageRead(address1, slot1)
+      builder.addStorageRead(address1, slot1) # duplicate
+
+      builder.addBalanceChange(address2, 1, 0.u256)
+      builder.addBalanceChange(address2, 0, 1.u256)
+      builder.addBalanceChange(address3, 3, 3.u256)
+      builder.addBalanceChange(address1, 2, 2.u256)
+      builder.addBalanceChange(address1, 2, 10.u256) # duplicate should overwrite
+
+      builder.addNonceChange(address1, 3, 3)
+      builder.addNonceChange(address2, 2, 2)
+      builder.addNonceChange(address2, 1, 1)
+      builder.addNonceChange(address3, 1, 1)
+      builder.addNonceChange(address3, 1, 10) # duplicate should overwrite
+
+      builder.addCodeChange(address2, 0, @[0x1.byte])
+      builder.addCodeChange(address2, 1, @[0x2.byte])
+      builder.addCodeChange(address1, 3, @[0x3.byte])
+      builder.addCodeChange(address1, 3, @[0x4.byte]) # duplicate should overwrite
+
+      let
+        bal = builder.buildBlockAccessList()
+        balHash = bal[].computeBlockAccessListHash()
+        start = cpuTime()
+      for i in 0..<1000000:
+        check bal.validate(balHash).isOk()
+      let finish = cpuTime()
+
+      echo "Total run time: ", (finish - start)
