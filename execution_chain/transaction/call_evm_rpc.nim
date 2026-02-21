@@ -70,17 +70,20 @@ proc rpcEstimateGas*(args: TransactionArgs,
   var
     lo : GasInt = txGas - 1
     hi : GasInt = GasInt args.gas.get(0.Quantity)
+    cap: GasInt
 
   # Determine the highest gas limit can be used during the estimation.
   if hi < txGas:
     # block's gasLimit act as the gas ceiling
     hi = header.gasLimit
 
-  # Normalize the execution fee per gas used by the estimator.
+  # Normalize the max fee per gas the call is willing to spend.
+  var feeCap = GasInt args.gasPrice.get(0.Quantity)
   if args.gasPrice.isSome and
     (args.maxFeePerGas.isSome or args.maxPriorityFeePerGas.isSome):
     return err((evmErr(EvmInvalidParam), OutputResult()))
-  let feeCap = params.gasPrice
+  elif args.maxFeePerGas.isSome:
+    feeCap = GasInt args.maxFeePerGas.get
 
   # Recap the highest gas limit with account's available balance.
   if feeCap > 0:
@@ -91,7 +94,7 @@ proc rpcEstimateGas*(args: TransactionArgs,
     var available = balance
     if args.value.isSome:
       let value = args.value.get
-      if value >= available:
+      if value > available:
         return err((evmErr(EvmInvalidParam), OutputResult()))
       available -= value
 
@@ -100,7 +103,7 @@ proc rpcEstimateGas*(args: TransactionArgs,
     if allowance < high(GasInt).u256 and hi > allowance.truncate(GasInt):
       let transfer = args.value.get(0.u256)
       warn "Gas estimation capped by limited funds", original=hi, balance,
-        sent=transfer, feePerGas=feeCap, fundable=allowance
+        sent=transfer, maxFeePerGas=feeCap, fundable=allowance
       hi = allowance.truncate(GasInt)
 
   # Recap the highest gas allowance with specified gasCap.
@@ -108,6 +111,7 @@ proc rpcEstimateGas*(args: TransactionArgs,
     warn "Caller gas above allowance, capping", requested=hi, cap=gasCap
     hi = gasCap
 
+  cap = hi
   let
     (intrinsicGas, floorDataGas) = intrinsicGas(params, fork)
     minGasLimit = max(intrinsicGas, floorDataGas)
@@ -126,13 +130,34 @@ proc rpcEstimateGas*(args: TransactionArgs,
     else:
       ok(res)
 
-  # First execute at the highest allowance. If this fails, the tx is invalid for estimation under current constraints.
-  let firstRun = executable(hi).valueOr:
+  # Short circuit estimation check: plain value transfer (no data, to has no code) – try 21000 first
+  if not params.isCreate and params.input.len == 0 and
+     vmState.readOnlyLedger.getCodeSize(params.to) == 0:
+    if executable(txGas).isOk:
+      # If the transaction is executable, return the transaction gas limit
+      return ok(txGas)
+    
+
+  # Execute at highest gas limit first; if it fails, return immediately (no binary search)
+  params.gasLimit = hi
+  let highResult = executable(hi).valueOr:
     return err((evmErr(EvmInvalidParam), error))
 
-  # Used gas from the unconstrained execution is typically a better lower bound.
-  if firstRun.gasUsed > 0:
-    lo = max(lo, firstRun.gasUsed - 1)
+  if highResult.error.len > 0:
+    return err((evmErr(EvmInvalidParam), OutputResult(
+      error: highResult.error, output: highResult.output)))
+
+  if highResult.gasUsed>0:
+    lo = max(lo, highResult.gasUsed - 1)
+
+  # Optimistic try: (usedGas + CallStipend) * 64/63 often succeeds and narrows the range
+  let callStipend = GasInt gasFees[fork][GasCallStipend]
+  let optimisticGasLimit = (highResult.gasUsed + callStipend) * 64 div 63
+  if optimisticGasLimit < hi:
+    if executable(optimisticGasLimit).isErr:
+      lo = optimisticGasLimit
+    else:
+      hi = optimisticGasLimit
 
   # Execute the binary search and hone in on an executable gas limit
   while lo+1 < hi:
@@ -141,6 +166,11 @@ proc rpcEstimateGas*(args: TransactionArgs,
       lo = mid
     else:
       hi = mid
+
+  # Reject the transaction as invalid if it still fails at the highest allowance
+  if hi == cap:
+    let failed = executable(hi).valueOr:
+      return err((evmErr(EvmInvalidParam), error))
 
   ok(hi)
 

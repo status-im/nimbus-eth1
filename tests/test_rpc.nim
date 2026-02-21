@@ -537,6 +537,43 @@ proc rpcMain*() =
       let res = await client.eth_estimateGas(eip1559Args)
       check res == w3Qty(gasBudget)
     # Todo: Add https://github.com/ethereum/execution-apis/blob/main/tests/eth_estimateGas/estimate-with-eip7702.io and https://github.com/ethereum/execution-apis/blob/main/tests/eth_estimateGas/estimate-with-eip4844.io
+
+    test "eth_estimateGas short-circuit plain transfer to EOA":
+      let ec = TransactionArgs(
+        `from`: Opt.some(signer),
+        to: Opt.some(extraAddress),
+        gas: Opt.some(w3Qty(42000'u)),
+        gasPrice: Opt.some(w3Qty(100'u)),
+        value: Opt.some(100.u256)
+      )
+      let res = await client.eth_estimateGas(ec)
+      check res == w3Qty(21000'u64)
+
+    test "eth_estimateGas insufficient funds returns error":
+      let ec = TransactionArgs(
+        `from`: Opt.some(extraAddress),
+        to: Opt.some(signer),
+        gas: Opt.some(w3Qty(21000'u)),
+        gasPrice: Opt.some(w3Qty(1'u)),
+        value: Opt.some(1.u256)
+      )
+      expect(CatchableError):
+        discard await client.eth_estimateGas(ec)
+
+    test "eth_estimateGas contract call with data uses full estimation(optimistic gas limit)":
+      let ec = TransactionArgs(
+        `from`: Opt.some(signer),
+        to: Opt.some(contractAddress),
+        gas: Opt.some(w3Qty(100_000'u)),
+        gasPrice: Opt.some(w3Qty(6'u)),
+        value: Opt.some(8.u256),
+        input: Opt.some(hexToSeqByte("0001020304"))
+      )
+      let res = await client.eth_estimateGas(ec)
+      check res > w3Qty(20999'u64)
+      # Contract returns deadbeef; gas should be 21k + call overhead
+      check res <= w3Qty(100_000'u64)
+
     test "eth_getBlockByHash":
       let res = await client.eth_getBlockByHash(env.blockHash, true)
       check res.isNil.not
