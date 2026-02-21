@@ -75,7 +75,7 @@ A block root may be obtained from a trusted beacon node or from a trusted provid
 
 * Trusted provider, e.g. Beaconcha.in:
 
-    On the [beaconcha.in](https://beaconcha.in) website, navigate to the `Epochs` section and select a recent `Finalized` epoch. Then, scroll down to the bottom of the page. If the bottom-most slot has a `Proposed` status, copy its `Root Hash`. Otherwise, for example if the bottom-most slot was `Missed`, go back and pick a different epoch.
+    On [beaconcha.in](https://beaconcha.in), navigate to the `Epochs` section and select a recent `Finalized` epoch. Then, scroll down to the bottom of the page. If the bottom-most slot has a `Proposed` status, copy its `Root Hash`. Otherwise, for example if the bottom-most slot was `Missed`, go back and pick a different epoch.
 
 #### Start the process
 To start the proxy for Mainnet, run the following command (inserting your own trusted block root and replacing the URLs to your providers of choice):
