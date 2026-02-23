@@ -56,8 +56,9 @@ type
 
   StateDbRef* = ref object
     ## Download states db
-    unproc: ItemKeyRangeSet             ## Global unprocessed accounts
+    unproc: ItemKeyRangeSet             ## Globally unprocessed accounts
     overlays: uint                      ## Number of `unproc` resets/re-inits
+    topDone: StateDataRef               ## Least unproc data
     byNumber: StateByNumber             ## States indexed by block number
     byHash: StateByHash                 ## States indexed by block hash
     byRoot: StateByRoot                 ## States indexed by state root
@@ -65,11 +66,6 @@ type
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
-
-proc del(db: StateDbRef, state: StateDataRef) =
-  discard db.byNumber.delete state.header.number  # delete index
-  db.byHash.del state.blockHash                   # ditto
-  db.byRoot.del StateRoot(state.header.stateRoot) # ...
 
 proc maxUnproc(db: StateDbRef): StateDataRef =
   ## Find the DB record with the maximal unprocessed interval range. If there
@@ -101,38 +97,15 @@ proc maxUnproc(db: StateDbRef): StateDataRef =
       todo = value
     rc = walk.next
 
-proc minUnproc(db: StateDbRef): StateDataRef =
-  ## Find the DB record with the minimal non-zero unprocessed interval range.
-  ## If there are more than one items with the same  range, the one with the
-  ## larger block number is returned.
-  ##
-  var
-    walk = WalkByNumber.init(db.byNumber)
-    rc = walk.last
-  defer: walk.destroy
-  if rc.isErr:
-    return StateDataRef(nil)
-
-  # Preset `result` to cover the case when all entries have the same
-  # total unprocessed size of what is to be done.
-  result = rc.value.data
-  var todo = high(UInt256)
-
-  while rc.isOk:
-    # Here: err() means zero => nothing more to do
-    rc.value.data.unproc.total.isErrOr:             # `err()` => `0` => ignore
-      if value != 0 and value < todo:               # here: `0 => 2^256`
-        todo = value
-        result = rc.value.data
-    rc = walk.prev
-
 # ------------------------------------------------------------------------------
 # Public constructor
 # ------------------------------------------------------------------------------
 
 proc init*(T: type StateDbRef): T =
-  T(unproc:   ItemKeyRangeSet.init ItemKeyRangeMax,
+  let db = T(
+    unproc:   ItemKeyRangeSet.init ItemKeyRangeMax,
     byNumber: StateByNumber.init())
+  db
 
 # ------------------------------------------------------------------------------
 # Public unprocessed account ranges administration
@@ -202,6 +175,12 @@ proc commitAccountRange*(
   else: # iv.maxPt == limit
     state.unproc.commit(iv)
 
+  # Updates state record with the most account ranges processed, i.e. the
+  # least unpprocessed account ranges left.
+  db.topDone.unproc.total.isErrOr:                  # otherwise all done
+    if value == 0 or state.unproc.total.value < value:
+      db.topDone = state
+
 # ------------------------------------------------------------------------------
 # Public state database function(s)
 # ------------------------------------------------------------------------------
@@ -209,6 +188,13 @@ proc commitAccountRange*(
 proc register*(db: StateDbRef; header: Header; blockHash: BlockHash) =
   ## Update or register new account state record on database
   ##
+  proc del(db: StateDbRef, state: StateDataRef) =
+    discard db.byNumber.delete state.header.number  # delete index
+    db.byHash.del state.blockHash                   # ditto
+    db.byRoot.del StateRoot(state.header.stateRoot) # ...
+    if db.topDone == state:
+      db.topDone = StateDataRef(nil)
+
   db.byNumber.eq(header.number).isErrOr:
     if value.data.blockHash == blockHash:
       return                                        # already registered
@@ -232,6 +218,13 @@ proc register*(db: StateDbRef; header: Header; blockHash: BlockHash) =
   db.byNumber.findOrInsert(header.number).value.data = newState
   db.byHash[blockHash] = newState
   db.byRoot[StateRoot header.stateRoot] = newState
+
+  if db.topDone.isNil:
+    db.topDone = newState
+  else:
+    db.topDone.unproc.total.isErrOr:
+      if value == 0:                                # nothing done yet?
+        db.topDone = newState                       # use the latest one
 
   doAssert db.byNumber.len == db.byHash.len
   doAssert db.byNumber.len == db.byRoot.len
@@ -276,7 +269,7 @@ proc getMaxDone*(db: StateDbRef): Opt[StateDataRef] =
   if db.byHash.len == 0:
     err()
   else:
-    ok db.minUnproc()
+    ok db.topDone
 
 
 
@@ -505,6 +498,8 @@ func toStr*(db: StateDbRef): string =
       result &= $(state.height - base4)
     else:
       result &= $state.height
+    if db.topDone == state:
+      result &= "*"
     result &= ":" & state.unproc.totalRatio.toStr(4)
     result &= "(" & $state.byAccount.len & ")"
     if 0 < state.sdScore.up or
