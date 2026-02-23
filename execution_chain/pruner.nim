@@ -10,6 +10,7 @@
 {.push raises: [].}
 
 import
+  std/times,
   chronicles,
   chronos,
   results,
@@ -21,7 +22,8 @@ logScope:
   topics = "pruner"
 
 const
-  RetentionPeriod = 6 * 30 * 24 * 60 * 60'u64 # ~6 months in seconds
+  # MIN_EPOCHS_FOR_BLOCK_REQUESTS (33,024) * SLOTS_PER_EPOCH (32) * SECONDS_PER_SLOT (12)
+  RetentionPeriod = 33_024'u64 * 32 * 12
 
 type
   BackgroundPrunerRef* = ref object
@@ -43,14 +45,14 @@ proc pruneLoop(pruner: BackgroundPrunerRef) {.async: (raises: [CancelledError]).
     let
       start = pruner.com.db.baseTxFrame.getSavedStateBlockNumber()
       begin = pruner.com.db.baseTxFrame.getHistoryExpired()
-      cutoff = EthTime(EthTime.now().uint64 - RetentionPeriod)
+      cutoff = EthTime(getTime().toUnix.uint64 - RetentionPeriod)
 
     if begin >= start:
       await sleepAsync(pruner.loopDelay)
       continue
 
     notice "Background pruner: starting cycle",
-      fromBlock = begin, toBlock = start, cutoffTimestamp = cutoff.uint64
+      fromBlock = begin, toBlock = start, cutoffTimestamp = distinctBase(cutoff)
 
     var
       currentBlock = begin
