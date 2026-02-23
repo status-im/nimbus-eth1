@@ -66,6 +66,12 @@ const
   # size when creating a new contract.
   EIP3860_MAX_INITCODE_SIZE* =              2 * EIP170_MAX_CODE_SIZE
 
+  # See https://eips.ethereum.org/EIPS/eip-7954. 
+  # - Update contract code size limit of 24KiB(0x6000 bytes) to 32KiB(0x8000 bytes).
+  # - Update initcode size limit of 48KiB(0xC000 bytes) to 64KiB(0x10000 bytes).
+  EIP7954_MAX_CODE_SIZE* =                  0x8000
+  EIP7954_MAX_INITCODE_SIZE* =              0x10000
+  
   # EIP
   MaxPrecompilesAddr* =                     0xFFFF
 
