@@ -12,10 +12,13 @@
 
 import
   std/strutils,
-  pkg/[chronos, chronicles, metrics, minilru],
+  pkg/[chronicles, metrics, minilru],
   ../../../networking/p2p,
   ../../wire_protocol,
   ./[mpt, state_db, worker_desc]
+
+logScope:
+  topics = "snap sync"
 
 declareGauge nec_snap_peers, "" &
   "Number of currently active snap instances"
