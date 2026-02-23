@@ -208,8 +208,7 @@ proc register*(db: StateDbRef; header: Header; blockHash: BlockHash) =
     byAccount: DataByAccount.init())
   newState.unproc.init ItemKeyRangeMax
 
-  # Update pivot and move block height window when necessary. The pivot is
-  # always at the top of the block height window.
+  # Move block height window when necessary.
   if stateDbCapacity <= db.byNumber.len:
     # Clear item with the largest unprocessed data range
     db.del db.maxUnproc()                           # remove index columns
@@ -262,15 +261,6 @@ func get*(db: StateDbRef; root: StateRoot): Opt[StateDataRef] =
     return ok value[]
   err()
 
-proc getMaxDone*(db: StateDbRef): Opt[StateDataRef] =
-  ## Find the DB record with a minimal non-zero unprocessed interval range.
-  ## If there are more than one items with the same  range, the one with the
-  ## larger block number is returned.
-  if db.byHash.len == 0:
-    err()
-  else:
-    ok db.topDone
-
 
 
 proc upScore*(data: StateDataRef) =
@@ -298,14 +288,23 @@ func len*(db: StateDbRef): int =
   db.byNumber.len
 
 func pivot*(db: StateDbRef): Opt[StateDataRef] =
+  ## Retrieve the state data record with a minimal unprocessed interval range.
+  if db.topDone.isNil:
+    err()
+  else:
+    ok db.topDone
+
+func top*(db: StateDbRef): Opt[StateDataRef] =
+  ## Retrieve the state data record with the highest block number.
   let val = db.byNumber.le(high BlockNumber).valueOr:
     return err()
   ok val.data
 
-func pvNum*(db: StateDbRef): BlockNumber =
-  let pv = db.pivot.valueOr:
+func topNum*(db: StateDbRef): BlockNumber =
+  ## Retrieve the highest block number used for a state record.
+  let top = db.top.valueOr:
     return BlockNumber(0)
-  pv.header.number
+  top.header.number
 
 # ------------------------------------------------------------------------------
 # Public storage slots database function(s)
@@ -486,11 +485,11 @@ func toStr*(db: StateDbRef): string =
   if nKeys == 0:
     return "n/a"
   let
-    pvNum = db.pvNum
-    base3 = (pvNum div 1000) * 1000
-    base4 = (pvNum div 10000) * 10000
+    topNum = db.topNum
+    base3 = (topNum div 1000) * 1000
+    base4 = (topNum div 10000) * 10000
 
-  result = $pvNum & "->{"
+  result = $topNum & "->{"
   for state in db.items(ascending=false):
     if 0 < base3 and base3 < state.height:
       result &= $(state.height - base3)

@@ -57,11 +57,10 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
 
     # Fetch for state DB items, start with pivot root
     var theseFirst: seq[StateRoot]
-    let maxDone = sdb.getMaxDone()
-    if maxDone.isSome():                            # the one with mose done yet
-      theseFirst.add StateRoot(maxDone.unsafeGet().header.stateRoot)
-    if buddy.only.pivotRoot.isSome():               # best supported by peer
-      theseFirst.add buddy.only.pivotRoot.unsafeGet()
+    sdb.pivot.isErrOr:                              # the one with most done yet
+      theseFirst.add StateRoot(value.header.stateRoot)
+    buddy.only.pivotRoot.isErrOr:                   # best supported by peer
+      theseFirst.add value
 
     # Run `download()` for available states, the order of which is
     # determined by the following criteria with deacening priority
