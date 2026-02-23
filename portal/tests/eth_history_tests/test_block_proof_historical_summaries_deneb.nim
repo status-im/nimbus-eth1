@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -66,7 +66,7 @@ suite "History Block Proofs - Historical Summaries - Deneb":
     ]
 
   test "BlockProofHistoricalSummariesDeneb for Execution BlockHeader":
-    let blockRoots = getStateField(state[], block_roots).data
+    let blockRoots = state[].block_roots.data
 
     withState(state[]):
       when consensusFork >= ConsensusFork.Capella:

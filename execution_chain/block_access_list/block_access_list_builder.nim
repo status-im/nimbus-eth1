@@ -13,7 +13,7 @@ import
   std/[tables, sets, algorithm, locks],
   eth/common/[block_access_lists, block_access_lists_rlp],
   stint,
-  stew/byteutils
+  ./block_access_list_utils
 
 export block_access_lists
 
@@ -25,14 +25,10 @@ type
   AccountData = object
     storageChanges*: Table[UInt256, Table[int, UInt256]]
       ## Maps storage key -> block access index -> storage value
-    storageReads*: HashSet[UInt256]
-      ## Set of storage keys
-    balanceChanges*: Table[int, UInt256]
-      ## Maps block access index -> balance
-    nonceChanges*: Table[int, AccountNonce]
-      ## Maps block access index -> nonce
-    codeChanges*: Table[int, seq[byte]]
-      ## Maps block access index -> code
+    storageReads*: HashSet[UInt256] ## Set of storage keys
+    balanceChanges*: Table[int, UInt256] ## Maps block access index -> balance
+    nonceChanges*: Table[int, AccountNonce] ## Maps block access index -> nonce
+    codeChanges*: Table[int, seq[byte]] ## Maps block access index -> code
 
   # Builder for constructing a BlockAccessList efficiently during transaction
   # execution. The builder accumulates all account and storage accesses during
@@ -40,9 +36,13 @@ type
   # tracked by address, field type, and block access list index to enable
   # efficient reconstruction of state changes.
   BlockAccessListBuilderRef* = ref object of RootObj
-    accounts*: Table[Address, AccountData]
-      ## Maps address -> account data
+    accounts*: Table[Address, AccountData] ## Maps address -> account data
 
+  # Warning: This type is not yet safe to use with the refc memory manager
+  # across threads because it turns out that the Table type uses a seq internally
+  # which can re-allocate the internal buffer (when increasing the seq capacity)
+  # in a different thread local heap to the heap of the owning thread and this
+  # might cause a memory leak.
   ConcurrentBlockAccessListBuilderRef* = ref object of BlockAccessListBuilderRef
     lock: Lock
 
@@ -50,7 +50,9 @@ template init*(T: type AccountData): T =
   AccountData()
 
 # Disallow copying of AccountData
-proc `=copy`(dest: var AccountData; src: AccountData) {.error: "Copying AccountData is forbidden".} =
+proc `=copy`(
+    dest: var AccountData, src: AccountData
+) {.error: "Copying AccountData is forbidden".} =
   discard
 
 template init*(T: type BlockAccessListBuilderRef): T =
@@ -68,7 +70,9 @@ func ensureAccount(builder: BlockAccessListBuilderRef, address: Address) =
 template addTouchedAccount*(builder: BlockAccessListBuilderRef, address: Address) =
   ensureAccount(builder, address)
 
-template addTouchedAccount*(builder: ConcurrentBlockAccessListBuilderRef, address: Address) =
+template addTouchedAccount*(
+    builder: ConcurrentBlockAccessListBuilderRef, address: Address
+) =
   withLock(builder.lock):
     ensureAccount(builder, address)
 
@@ -80,7 +84,8 @@ proc addStorageWrite*(
     address: Address,
     slot: UInt256,
     blockAccessIndex: int,
-    newValue: UInt256) =
+    newValue: UInt256,
+) =
   builder.ensureAccount(address)
 
   builder.accounts.withValue(address, accData):
@@ -94,36 +99,47 @@ template addStorageWrite*(
     address: Address,
     slot: UInt256,
     blockAccessIndex: int,
-    newValue: UInt256) =
+    newValue: UInt256,
+) =
   withLock(builder.lock):
-    addStorageWrite(builder.BlockAccessListBuilderRef, address, slot, blockAccessIndex, newValue)
+    addStorageWrite(
+      builder.BlockAccessListBuilderRef, address, slot, blockAccessIndex, newValue
+    )
 
 func addStorageWrite*(
     builder: ptr ConcurrentBlockAccessListBuilderRef,
     address: Address,
     slot: UInt256,
     blockAccessIndex: int,
-    newValue: UInt256) =
+    newValue: UInt256,
+) =
   builder[].addStorageWrite(address, slot, blockAccessIndex, newValue)
 
-proc addStorageRead*(builder: BlockAccessListBuilderRef, address: Address, slot: UInt256) =
+proc addStorageRead*(
+    builder: BlockAccessListBuilderRef, address: Address, slot: UInt256
+) =
   builder.ensureAccount(address)
 
   builder.accounts.withValue(address, accData):
     accData[].storageReads.incl(slot)
 
-template addStorageRead*(builder: ConcurrentBlockAccessListBuilderRef, address: Address, slot: UInt256) =
+template addStorageRead*(
+    builder: ConcurrentBlockAccessListBuilderRef, address: Address, slot: UInt256
+) =
   withLock(builder.lock):
     addStorageRead(builder.BlockAccessListBuilderRef, address, slot)
 
-func addStorageRead*(builder: ptr ConcurrentBlockAccessListBuilderRef, address: Address, slot: UInt256) =
+func addStorageRead*(
+    builder: ptr ConcurrentBlockAccessListBuilderRef, address: Address, slot: UInt256
+) =
   builder[].addStorageRead(address, slot)
 
 proc addBalanceChange*(
     builder: BlockAccessListBuilderRef,
     address: Address,
     blockAccessIndex: int,
-    postBalance: UInt256) =
+    postBalance: UInt256,
+) =
   builder.ensureAccount(address)
 
   builder.accounts.withValue(address, accData):
@@ -133,22 +149,27 @@ template addBalanceChange*(
     builder: ConcurrentBlockAccessListBuilderRef,
     address: Address,
     blockAccessIndex: int,
-    postBalance: UInt256) =
+    postBalance: UInt256,
+) =
   withLock(builder.lock):
-    addBalanceChange(builder.BlockAccessListBuilderRef, address, blockAccessIndex, postBalance)
+    addBalanceChange(
+      builder.BlockAccessListBuilderRef, address, blockAccessIndex, postBalance
+    )
 
 func addBalanceChange*(
     builder: ptr ConcurrentBlockAccessListBuilderRef,
     address: Address,
     blockAccessIndex: int,
-    postBalance: UInt256) =
+    postBalance: UInt256,
+) =
   builder[].addBalanceChange(address, blockAccessIndex, postBalance)
 
 proc addNonceChange*(
     builder: BlockAccessListBuilderRef,
     address: Address,
     blockAccessIndex: int,
-    newNonce: AccountNonce) =
+    newNonce: AccountNonce,
+) =
   builder.ensureAccount(address)
 
   builder.accounts.withValue(address, accData):
@@ -158,32 +179,38 @@ template addNonceChange*(
     builder: ConcurrentBlockAccessListBuilderRef,
     address: Address,
     blockAccessIndex: int,
-    newNonce: AccountNonce) =
+    newNonce: AccountNonce,
+) =
   withLock(builder.lock):
-    addNonceChange(builder.BlockAccessListBuilderRef, address, blockAccessIndex, newNonce)
+    addNonceChange(
+      builder.BlockAccessListBuilderRef, address, blockAccessIndex, newNonce
+    )
 
 func addNonceChange*(
     builder: ptr ConcurrentBlockAccessListBuilderRef,
     address: Address,
     blockAccessIndex: int,
-    newNonce: AccountNonce) =
+    newNonce: AccountNonce,
+) =
   builder[].addNonceChange(address, blockAccessIndex, newNonce)
 
 proc addCodeChange*(
     builder: BlockAccessListBuilderRef,
     address: Address,
     blockAccessIndex: int,
-    newCode: seq[byte]) =
+    newCode: openArray[byte],
+) =
   builder.ensureAccount(address)
 
   builder.accounts.withValue(address, accData):
-    accData[].codeChanges[blockAccessIndex] = newCode
+    accData[].codeChanges[blockAccessIndex] = @newCode
 
 template addCodeChange*(
     builder: ConcurrentBlockAccessListBuilderRef,
     address: Address,
     blockAccessIndex: int,
-    newCode: seq[byte]) =
+    newCode: openArray[byte],
+) =
   withLock(builder.lock):
     addCodeChange(builder.BlockAccessListBuilderRef, address, blockAccessIndex, newCode)
 
@@ -193,15 +220,6 @@ func addCodeChange*(
     blockAccessIndex: int,
     newCode: openArray[byte]) =
   builder[].addCodeChange(address, blockAccessIndex, @newCode)
-
-func balIndexCmp(x, y: StorageChange | BalanceChange | NonceChange | CodeChange): int =
-  cmp(x.blockAccessIndex, y.blockAccessIndex)
-
-func slotChangesCmp(x, y: SlotChanges): int =
-  cmp(x.slot, y.slot)
-
-func accChangesCmp(x, y: AccountChanges): int =
-  cmp(x.address.data.toHex(), y.address.data.toHex())
 
 func buildBlockAccessList*(builder: BlockAccessListBuilderRef): BlockAccessListRef =
   let blockAccessList: BlockAccessListRef = new BlockAccessList
@@ -244,20 +262,24 @@ func buildBlockAccessList*(builder: BlockAccessListBuilderRef): BlockAccessListR
       codeChanges.add((BlockAccessIndex(balIndex), Bytecode(code)))
     codeChanges.sort(balIndexCmp)
 
-    blockAccessList[].add(AccountChanges(
-      address: address,
-      storageChanges: storageChanges,
-      storageReads: storageReads,
-      balanceChanges: balanceChanges,
-      nonceChanges: nonceChanges,
-      codeChanges: codeChanges
-    ))
+    blockAccessList[].add(
+      AccountChanges(
+        address: address,
+        storageChanges: storageChanges,
+        storageReads: storageReads,
+        balanceChanges: balanceChanges,
+        nonceChanges: nonceChanges,
+        codeChanges: codeChanges,
+      )
+    )
 
   blockAccessList[].sort(accChangesCmp)
 
   blockAccessList
 
-func buildBlockAccessList*(builder: ConcurrentBlockAccessListBuilderRef): BlockAccessListRef =
+func buildBlockAccessList*(
+    builder: ConcurrentBlockAccessListBuilderRef
+): BlockAccessListRef =
   var bal: BlockAccessListRef
   withLock(builder.lock):
     bal = buildBlockAccessList(builder.BlockAccessListBuilderRef)
