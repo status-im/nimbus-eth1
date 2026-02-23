@@ -11,13 +11,12 @@
 {.push raises: [].}
 
 import
-  eth/common/blocks,
-  eth/common/receipts,
+  eth/common/[headers, receipts],
   ../../../db/core_db
 
 type
   BlockRef* = ref object
-    blk*     : Block
+    header*  : Header
     txFrame* : CoreDbTxRef
     receipts*: seq[StoredReceipt]
     hash*    : Hash32
@@ -27,11 +26,8 @@ type
       # Alias to parent when serializing
       # Also used for DAG node finalized marker
 
-template header*(b: BlockRef): Header =
-  b.blk.header
-
 template number*(b: BlockRef): BlockNumber =
-  b.blk.header.number
+  b.header.number
 
 func `==`*(a, b: BlockRef): bool =
   if a.isNil.not and b.isNil.not:
@@ -50,7 +46,7 @@ template loopItImpl(condition: untyped, init: BlockRef) =
     it = next 
 
 template stateRoot*(b: BlockRef): Hash32 =
-  b.blk.header.stateRoot
+  b.header.stateRoot
 
 const
   DAG_NODE_FINALIZED = 1

@@ -46,8 +46,9 @@ type
 # ------------------------------------------------------------------------------
 
 proc append(w: var RlpWriter, b: BlockRef) =
+  let fullBlk = b.txFrame.getEthBlock(b.hash).expect("block body must be in txFrame during serialize")
   w.startList(3)
-  w.append(b.blk)
+  w.append(fullBlk)
   w.append(b.hash)
   let parentIndex = if b.parent.isNil: 0'u
                     else: b.parent.index + 1'u
@@ -79,7 +80,9 @@ proc append(w: var RlpWriter, fc: ForkedChainRef) =
 proc read(rlp: var Rlp, T: type BlockRef): T {.raises: [RlpError].} =
   rlp.tryEnterList()
   result = T()
-  rlp.read(result.blk)
+  var blk: Block
+  rlp.read(blk)           # Parse full block from RLP (old format)
+  result.header = blk.header  # Store only header in BlockRef
   rlp.read(result.hash)
   rlp.read(result.index)
 
@@ -121,7 +124,8 @@ proc getState(db: CoreDbTxRef): Opt[FcState] =
 
 proc replayBlock(fc: ForkedChainRef;
                  parent: BlockRef,
-                 blk: BlockRef): Result[void, string] =
+                 blk: BlockRef,
+                 fullBlk: Block): Result[void, string] =
   let
     parentFrame = parent.txFrame
     txFrame = parentFrame.txFrameBegin()
@@ -133,7 +137,7 @@ proc replayBlock(fc: ForkedChainRef;
   var receipts = fc.processBlock(
     parent,
     txFrame,
-    blk.blk,
+    fullBlk,
     blockAccessList,
     blk.hash,
     finalized = true
@@ -159,6 +163,7 @@ proc replayBlock(fc: ForkedChainRef;
 proc replayBranch(fc: ForkedChainRef;
     parent: BlockRef;
     head: BlockRef;
+    bodies: Table[Hash32, Block];
     ): Result[void, string] =
 
   var blocks = newSeqOfCap[BlockRef](head.number - parent.number)
@@ -170,12 +175,15 @@ proc replayBranch(fc: ForkedChainRef;
 
   var parent = parent
   for i in countdown(blocks.len-1, 0):
-    ?fc.replayBlock(parent, blocks[i])
+    bodies.withValue(blocks[i].hash, fullBlk):
+      ?fc.replayBlock(parent, blocks[i], fullBlk)
+    do:
+      return err("block body not found for hash: " & $blocks[i].hash)
     parent = blocks[i]
 
   ok()
 
-proc replay(fc: ForkedChainRef): Result[void, string] =
+proc replay(fc: ForkedChainRef; bodies: Table[Hash32, Block]): Result[void, string] =
   # Should have no parent
   doAssert fc.base.parent.isNil
 
@@ -189,7 +197,7 @@ proc replay(fc: ForkedChainRef): Result[void, string] =
   for head in fc.heads:
     for it in ancestors(head):
       if it.txFrame.isNil.not:
-        ?fc.replayBranch(it, head)
+        ?fc.replayBranch(it, head, bodies)
         break
 
   ok()
@@ -252,7 +260,9 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
     return err("Cannot find previous FC state in database")
 
   let prevBase = fc.base
-  var blocks = newSeq[BlockRef](state.numBlocks)
+  var
+    blocks = newSeq[BlockRef](state.numBlocks)
+    bodies = initTable[Hash32, Block]()
 
   # Sanity Checks for the FC state
   if state.latest > state.numBlocks or
@@ -270,11 +280,17 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
 
   try:
     for i in 0..<state.numBlocks:
-      let
-        data = fc.baseTxFrame.get(blockIndexKey(i)).valueOr:
-          return err("Cannot find branch data")
-        branch = rlp.decode(data, BlockRef)
-      blocks[i] = branch
+      let data = fc.baseTxFrame.get(blockIndexKey(i)).valueOr:
+        return err("Cannot find branch data")
+      # Single pass: parse full block for replay and keep only header in BlockRef
+      var r = rlpFromBytes(data)
+      r.tryEnterList()
+      var fullBlk: Block
+      r.read(fullBlk)
+      blocks[i] = BlockRef(header: fullBlk.header)
+      r.read(blocks[i].hash)
+      r.read(blocks[i].index)
+      bodies[blocks[i].hash] = move(fullBlk)
   except RlpError as exc:
     return err(exc.msg)
 
@@ -315,7 +331,7 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
       b.parent = blocks[b.index-1]
     fc.hashToBlock[b.hash] = b
 
-  fc.replay().isOkOr:
+  fc.replay(bodies).isOkOr:
     fc.reset(prevBase)
     return err(error)
 

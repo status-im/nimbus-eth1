@@ -55,7 +55,7 @@ func pp*(n: BlockNumber): string = $n
 func pp*(h: Header): string = $h.number
 func pp*(b: Block): string = $b.header.number
 func pp*(h: Hash32): string = h.short
-func pp*(d: BlockRef): string = d.blk.header.pp
+func pp*(d: BlockRef): string = d.header.pp
 func pp*(d: ptr BlockRef): string = d[].pp
 func pp*(rc: Result[Header,string]): string =
   if rc.isOk: rc.value.pp else: "err(" &  rc.error & ")"

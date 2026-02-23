@@ -57,7 +57,7 @@ func appendBlock(c: ForkedChainRef,
          receipts: sink seq[StoredReceipt]): BlockRef =
 
   let newBlock = BlockRef(
-    blk     : blk,
+    header  : blk.header,
     txFrame : txFrame,
     receipts: move(receipts),
     hash    : blkHash,
@@ -198,10 +198,15 @@ func calculateNewBase(
 
 func removeBlockFromCache(c: ForkedChainRef, b: BlockRef) =
   c.hashToBlock.del(b.hash)
-  for tx in b.blk.transactions:
-    c.txRecords.del(computeRlpHash(tx))
 
-  b.blk.reset
+  # Collect and remove tx records belonging to this block
+  var toRemove: seq[Hash32]
+  for txHash, (blkHash, _) in c.txRecords.pairs:
+    if blkHash == b.hash:
+      toRemove.add(txHash)
+  for txHash in toRemove:
+    c.txRecords.del(txHash)
+
   b.receipts.reset
   b.txFrame.dispose()
 
@@ -642,7 +647,7 @@ proc init*(
     baseHash = baseTxFrame.getBlockHash(base).expect("baseHash exists")
     baseHeader = baseTxFrame.getBlockHeader(baseHash).expect("base header exists")
     baseBlock = BlockRef(
-      blk     : Block(header: baseHeader),
+      header  : baseHeader,
       txFrame : baseTxFrame,
       hash    : baseHash,
       parent  : BlockRef(nil),
@@ -873,11 +878,13 @@ func isHistoryExpiryActive*(c: ForkedChainRef): bool =
 func isPortalActive(c: ForkedChainRef): bool =
   (not c.portal.isNil) and c.portal.portalEnabled
 
-func memoryTransaction*(c: ForkedChainRef, txHash: Hash32): Opt[(Transaction, BlockNumber)] =
+proc memoryTransaction*(c: ForkedChainRef, txHash: Hash32): Opt[(Transaction, BlockNumber)] =
   let (blockHash, index) = c.txRecords.getOrDefault(txHash, (Hash32.default, 0'u64))
   let b = c.hashToBlock.getOrDefault(blockHash)
   if b.isOk:
-    return Opt.some( (b.blk.transactions[index], b.number) )
+    let tx = b.txFrame.getTransactionByIndex(b.header.txRoot, index.uint16).valueOr:
+      return Opt.none((Transaction, BlockNumber))
+    return Opt.some((tx, b.number))
   return Opt.none((Transaction, BlockNumber))
 
 func memoryTxHashesForBlock*(c: ForkedChainRef, blockHash: Hash32): Opt[seq[Hash32]] =
@@ -895,10 +902,7 @@ func memoryTxHashesForBlock*(c: ForkedChainRef, blockHash: Hash32): Opt[seq[Hash
   Opt.some(cachedTxHashes.mapIt(it[0]))
 
 proc latestBlock*(c: ForkedChainRef): Block =
-  if c.latest.number == c.base.number:
-    # It's a base block
-    return c.baseTxFrame.getEthBlock(c.latest.hash).expect("baseBlock exists")
-  c.latest.blk
+  c.latest.txFrame.getEthBlock(c.latest.hash).expect("latestBlock exists")
 
 proc getBadBlocks*(c: ForkedChainRef): seq[(Block, Opt[BlockAccessListRef])] =
   var blks: seq[(Block, Opt[BlockAccessListRef])]
@@ -931,17 +935,17 @@ func safeHeader*(c: ForkedChainRef): Header =
 
   c.base.header
 
-func finalizedBlock*(c: ForkedChainRef): Block =
+proc finalizedBlock*(c: ForkedChainRef): Block =
   c.hashToBlock.withValue(c.latestFinalized.hash, loc):
-    return loc[].blk
+    return loc[].txFrame.getEthBlock(loc[].hash).expect("finalizedBlock exists")
 
-  c.base.blk
+  c.baseTxFrame.getEthBlock(c.base.hash).expect("base finalizedBlock exists")
 
-func safeBlock*(c: ForkedChainRef): Block =
+proc safeBlock*(c: ForkedChainRef): Block =
   c.hashToBlock.withValue(c.fcuSafe.hash, loc):
-    return loc[].blk
+    return loc[].txFrame.getEthBlock(loc[].hash).expect("safeBlock exists")
 
-  c.base.blk
+  c.baseTxFrame.getEthBlock(c.base.hash).expect("base safeBlock exists")
 
 proc headerByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Header, string] =
   c.hashToBlock.withValue(blockHash, loc):
@@ -964,12 +968,7 @@ proc txDetailsByTxHash*(c: ForkedChainRef, txHash: Hash32): Result[(Hash32, uint
 # Aristo returns empty txs for both non-existent blocks and existing blocks with no txs [ Solve ? ]
 proc blockBodyByHash*(c: ForkedChainRef, blockHash: Hash32): Result[BlockBody, string] =
   c.hashToBlock.withValue(blockHash, loc):
-    let blk = loc[].blk
-    return ok(BlockBody(
-      transactions: blk.transactions,
-      uncles: blk.uncles,
-      withdrawals: blk.withdrawals,
-    ))
+    return loc[].txFrame.getBlockBody(loc[].header)
   c.baseTxFrame.getBlockBody(blockHash)
 
 proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
@@ -977,7 +976,7 @@ proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/shanghai.md#specification-3
   # 4. Client software MAY NOT respond to requests for finalized blocks by hash.
   c.hashToBlock.withValue(blockHash, loc):
-    return ok(loc[].blk)
+    return loc[].txFrame.getEthBlock(loc[].hash)
   var header = ?c.baseTxFrame.getBlockHeader(blockHash)
   var blockBody = c.baseTxFrame.getBlockBody(header).valueOr:
     # Serve portal data if block not found in db
@@ -991,7 +990,8 @@ proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
 
 proc payloadBodyV1ByHash*(c: ForkedChainRef, blockHash: Hash32): Result[ExecutionPayloadBodyV1, string] =
   c.hashToBlock.withValue(blockHash, loc):
-    return ok(toPayloadBodyV1(loc[].blk))
+    let blk = ?loc[].txFrame.getEthBlock(loc[].hash)
+    return ok(toPayloadBodyV1(blk))
 
   var header = ?c.baseTxFrame.getBlockHeader(blockHash)
   var blk = c.baseTxFrame.getExecutionPayloadBodyV1(header)
@@ -1007,7 +1007,8 @@ proc payloadBodyV1ByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Executio
 
 proc payloadBodyV2ByHash*(c: ForkedChainRef, blockHash: Hash32): Result[ExecutionPayloadBodyV2, string] =
   c.hashToBlock.withValue(blockHash, loc):
-    return ok(toPayloadBodyV2(loc[].blk, ?loc[].txFrame.getBlockAccessList(loc[].hash)))
+    let blk = ?loc[].txFrame.getEthBlock(loc[].hash)
+    return ok(toPayloadBodyV2(blk, ?loc[].txFrame.getBlockAccessList(loc[].hash)))
 
   var header = ?c.baseTxFrame.getBlockHeader(blockHash)
   var blk = c.baseTxFrame.getExecutionPayloadBodyV2(header)
@@ -1042,7 +1043,8 @@ proc payloadBodyV1ByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Exec
 
   for it in ancestors(c.latest):
     if number >= it.number:
-      return ok(toPayloadBodyV1(it.blk))
+      let blk = ?it.txFrame.getEthBlock(it.hash)
+      return ok(toPayloadBodyV1(blk))
 
   err("Block not found, number = " & $number)
 
@@ -1067,7 +1069,8 @@ proc payloadBodyV2ByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Exec
 
   for it in ancestors(c.latest):
     if number >= it.number:
-      return ok(toPayloadBodyV2(it.blk, ?it.txFrame.getBlockAccessList(it.hash)))
+      let blk = ?it.txFrame.getEthBlock(it.hash)
+      return ok(toPayloadBodyV2(blk, ?it.txFrame.getBlockAccessList(it.hash)))
 
   err("Block not found, number = " & $number)
 
@@ -1089,7 +1092,7 @@ proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, strin
 
   for it in ancestors(c.latest):
     if number >= it.number:
-      return ok(it.blk)
+      return it.txFrame.getEthBlock(it.hash)
 
   err("Block not found, number = " & $number)
 
@@ -1121,7 +1124,8 @@ proc payloadBodyV1InMemory*(c: ForkedChainRef,
 
   for i in countdown(blocks.len-1, 0):
     let y = blocks[i]
-    list.add Opt.some(toPayloadBodyV1(y.blk))
+    let blk = y.txFrame.getEthBlock(y.hash).valueOr: continue
+    list.add Opt.some(toPayloadBodyV1(blk))
 
 proc payloadBodyV2InMemory*(c: ForkedChainRef,
                             first: BlockNumber,
@@ -1136,7 +1140,8 @@ proc payloadBodyV2InMemory*(c: ForkedChainRef,
 
   for i in countdown(blocks.len-1, 0):
     let y = blocks[i]
-    list.add Opt.some(toPayloadBodyV2(y.blk, y.txFrame.getBlockAccessList(y.hash).expect("ok")))
+    let blk = y.txFrame.getEthBlock(y.hash).valueOr: continue
+    list.add Opt.some(toPayloadBodyV2(blk, y.txFrame.getBlockAccessList(y.hash).expect("ok")))
 
 func equalOrAncestorOf*(c: ForkedChainRef, blockHash: Hash32, headHash: Hash32): bool =
   if blockHash == headHash:
@@ -1179,9 +1184,9 @@ iterator txHashInRange*(c: ForkedChainRef, fromHash: Hash32, toHash: Hash32): Ha
   for it in ancestors(head):
     if toHash == it.hash:
       break
-    for tx in it.blk.transactions:
-      let txHash = computeRlpHash(tx)
-      yield txHash
+    let body = it.txFrame.getBlockBody(it.header).valueOr(BlockBody())
+    for tx in body.transactions:
+      yield computeRlpHash(tx)
 
 proc getBlockAccessList*(c: ForkedChainRef, blockHash: Hash32): Opt[BlockAccessList] =
   let bal = c.txFrame(blockHash).getBlockAccessList(blockHash).valueOr:
