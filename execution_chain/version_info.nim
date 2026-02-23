@@ -18,7 +18,7 @@ import
 export version
 
 const
-  NimbusName* = "NimbusExecutionClient"
+  NimbusName* = "Nimbus"
   ## project name string
 
   #GitRevisionOverride {.strdefine.} = ""
