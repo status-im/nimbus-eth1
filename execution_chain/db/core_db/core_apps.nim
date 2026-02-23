@@ -809,17 +809,12 @@ proc setHistoryExpired*(
 proc getHistoryExpired*(
     db: CoreDbTxRef;
       ): BlockNumber =
-  const info = "getHistoryExpired()"
   let
     key = historyExpiryIdKey()
-    blkNum = db.getOrEmpty(key.toOpenArray).valueOr:
-      warn info, error=($$error)
-      @[]
-
-  if blkNum.len == 0:
-    return BlockNumber(0)
-
-  return BlockNumber(uint64.fromBytesLE(blkNum))
+    blkNum = db.get(key.toOpenArray).valueOr:
+      return BlockNumber(0)
+    
+  BlockNumber(uint64.fromBytesLE(blkNum))
 
 # ------------------------------------------------------------------------------
 # End
