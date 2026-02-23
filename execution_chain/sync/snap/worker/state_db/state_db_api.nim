@@ -12,10 +12,16 @@
 
 import
   std/[hashes, sequtils, sets, tables],
-  pkg/eth/common,
+  pkg/[eth/common, metrics],
   pkg/stew/[interval_set, sorted_set],
   ../[helpers, worker_const],
   ./[state_identifiers, state_item_key, state_unproc_item_keys]
+
+declareGauge nec_snap_acc_coverage, "" &
+  "Factor of accumulated accounts covered over all state roots"
+
+declareGauge nec_snap_max_acc_state_coverage, "" &
+  "Max factor of accounts covered related to a single state root"
 
 type
   StateByNumber = SortedSet[BlockNumber,StateDataRef]
@@ -105,6 +111,8 @@ proc init*(T: type StateDbRef): T =
   let db = T(
     unproc:   ItemKeyRangeSet.init ItemKeyRangeMax,
     byNumber: StateByNumber.init())
+  metrics.set(nec_snap_acc_coverage, 0f)
+  metrics.set(nec_snap_max_acc_state_coverage, 0f)
   db
 
 # ------------------------------------------------------------------------------
@@ -180,6 +188,14 @@ proc commitAccountRange*(
   db.topDone.unproc.total.isErrOr:                  # otherwise all done
     if value == 0 or state.unproc.total.value < value:
       db.topDone = state
+
+  let topCoverage = 1f - db.topDone.unproc.totalRatio
+  metrics.set(nec_snap_acc_coverage,
+    # There is no `borrowed` sub-register for the total coverage register. So
+    # it might be temporarily below `topCoverage`. As this would make metrics
+    # confusing, it is maxed out, here.
+    max(topCoverage, (1f - db.unproc.totalRatio) * (1 + db.overlays).float))
+  metrics.set(nec_snap_max_acc_state_coverage, topCoverage)
 
 # ------------------------------------------------------------------------------
 # Public state database function(s)
