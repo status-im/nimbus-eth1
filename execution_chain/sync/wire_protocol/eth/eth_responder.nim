@@ -262,15 +262,15 @@ proc getReceiptsUserHandler[PROTO](response: Responder; hashes: seq[Hash32]) {.
 proc getReceipts70UserHandler[PROTO](response: Responder; req: StoredReceipts70Request) {.
     async: (raises: [CancelledError, EthP2PError]).} =
   let peer = response.peer
-  trace trEthRecvReceived & "GetReceipts (0x0f)", peer, hashes = hashes.len
+  trace trEthRecvReceived & "GetReceipts (0x0f)", peer, hashes = req.blockHashes.len
   let ctx = peer.networkState(PROTO)
   let rec = ctx.getStoredReceipts70(req)
   if rec.receipts.len > 0:
     trace trEthSendReplying & "with Receipts (0x10)", peer, sent = rec.receipts.len,
-          requested = hashes.len
+          requested = req.blockHashes.len
   else:
     trace trEthSendReplying & "EMPTY Receipts (0x10)", peer, sent = 0,
-          requested = hashes.len
+          requested = req.blockHashes.len
   await response.receipts(rec.lastBlockIncomplete, rec.receipts)
 
 proc getReceiptsThunk[PROTO](peer: Peer; data: Rlp) {.
