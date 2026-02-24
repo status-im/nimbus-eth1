@@ -13,7 +13,7 @@
 import
   std/[os, strutils],
   pkg/[chronicles, chronos],
-  ../worker_desc,
+  ../../worker_desc,
   ./header_fetch
 
 logScope:

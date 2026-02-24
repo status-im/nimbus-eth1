@@ -13,8 +13,7 @@
 import
   std/os,
   pkg/[chronicles, chronos, minilru, results],
-  ./worker/[
-    account, download, header, helpers, start_stop, state_db, worker_desc]
+  ./worker/[download, helpers, start_stop, state_db, worker_desc]
 
 logScope:
   topics = "snap sync"

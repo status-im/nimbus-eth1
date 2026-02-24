@@ -13,7 +13,7 @@
 import
   std/sequtils,
   pkg/[chronicles, chronos],
-  ../[helpers, mpt, state_db, worker_desc],
+  ../../[helpers, mpt, state_db, worker_desc],
   ./code_fetch
 
 # ------------------------------------------------------------------------------

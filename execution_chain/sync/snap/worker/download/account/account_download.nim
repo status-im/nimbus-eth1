@@ -12,7 +12,7 @@
 
 import
   pkg/[chronicles, chronos],
-  ../[helpers, mpt, state_db, worker_desc],
+  ../../[helpers, mpt, state_db, worker_desc],
   ./account_fetch
 
 # ------------------------------------------------------------------------------
