@@ -29,8 +29,10 @@ import
   ./lc_backend,
   ./json_rpc_backend,
   ./json_rpc_frontend,
-  ../execution_chain/version_info,
-  system/ansi_c
+  ../execution_chain/version_info
+
+when defined(posix):
+  import system/ansi_c
 
 # error object to translate results to error
 # NOTE: all results are translated to errors only in this file
@@ -186,7 +188,7 @@ proc main() {.raises: [].} =
 
   setControlCHook(controlCHook)
 
-  when declared(ansi_c.SIGTERM):
+  when defined(posix):
     proc sigTermHandler(sig: cint) {.noconv.} =
       {.gcsafe.}:
         notice "Shutting down after SIGTERM"
