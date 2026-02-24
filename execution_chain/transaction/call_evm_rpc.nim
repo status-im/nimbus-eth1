@@ -63,17 +63,16 @@ proc rpcEstimateGas*(args: TransactionArgs,
   # authorization, see test case estimate-with-eip-7702.io of
   # execution-apis tests
   let fork    = vmState.fork
-  let txGas   = GasInt gasFees[fork][GasTransaction] # txGas always 21000, use constants?
   var params  = toCallParams(vmState, args, gasCap, header.baseFeePerGas).valueOr:
     return err((evmErr(EvmInvalidParam), OutputResult()))
 
   var
-    lo : GasInt = txGas - 1
+    lo : GasInt = TX_BASE_COST - 1
     hi : GasInt = GasInt args.gas.get(0.Quantity)
     cap: GasInt
 
   # Determine the highest gas limit can be used during the estimation.
-  if hi < txGas:
+  if hi < TX_BASE_COST:
     # block's gasLimit act as the gas ceiling
     hi = header.gasLimit
 
