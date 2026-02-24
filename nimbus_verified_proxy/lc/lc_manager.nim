@@ -7,7 +7,7 @@
 
 {.push raises: [].}
 
-import 
+import
   std/sequtils,
   chronos,
   chronicles,
