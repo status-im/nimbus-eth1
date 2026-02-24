@@ -11,34 +11,46 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[strformat, locks],
+  std/[strformat, locks, atomics],
   chronicles,
   eth/common/[accounts_rlp, base_rlp, hashes_rlp],
   results,
-  "."/[aristo_desc, aristo_get, aristo_layers],
+  "."/[aristo_desc, aristo_get], #, aristo_layers],
   ./aristo_desc/desc_backend
 
 export chronicles, aristo_desc
 
 type WriteBatch* = object
   writer*: PutHdlRef
-  count*: int
+  count*: Atomic[int]
   depth*: int
   prefix*: uint64
+  lock*: Lock
 
 # Disallow copying of WriteBatch
 proc `=copy`(dest: var WriteBatch; src: WriteBatch) {.error: "Copying WriteBatch is forbidden".} =
   discard
+
+# func createLock(): Lock =
+#   var lock = Lock()
+#   initLock(lock)
+#   lock
+
+# func init(T: type WriteBatch): WriteBatch =
+#   WriteBatch(lock: createLock())
 
 # Keep write batch size _around_ 1mb, give or take some overhead - this is a
 # tradeoff between efficiency and memory usage with diminishing returns the
 # larger it is..
 const batchSize = 1024 * 1024 div (sizeof(RootedVertexID) + sizeof(HashKey))
 
-proc flush(batch: var WriteBatch, db: AristoDbRef): Result[void, AristoError] =
-  if batch.writer != nil:
+proc flush(batch: var WriteBatch, db: AristoDbRef, recreate: static bool = true): Result[void, AristoError] =
+  withLock(batch.lock):
     ?db.putEndFn batch.writer
-    batch.writer = nil
+    when recreate:
+      batch.writer = ?db.putBegFn()
+    else:
+      batch.writer = nil
   ok()
 
 proc putVtx(
@@ -48,11 +60,9 @@ proc putVtx(
     vtx: VertexRef,
     key: HashKey,
 ): Result[void, AristoError] =
-  if batch.writer == nil:
-    batch.writer = ?db.putBegFn()
-
-  db.putVtxFn(batch.writer, rvid, vtx, key)
-  batch.count += 1
+  withLock(batch.lock):
+    db.putVtxFn(batch.writer, rvid, vtx, key)
+  batch.count.atomicInc()
 
   ok()
 
@@ -85,20 +95,21 @@ proc putKeyAtLevel(
   ## corresponding hash!)
 
   if level >= db.db.baseTxFrame().level:
-    let txRef = db.deltaAtLevel(level)
-    withLock(db.lock):
-      txRef.layersPutKey(rvid, vtx, key)
+    discard
+    # let txRef = db.deltaAtLevel(level)
+    # withLock(db.lock):
+    #   txRef.layersPutKey(rvid, vtx, key)
   elif level == dbLevel:
-    withLock(db.lock):
-      ?batch.putVtx(db.db, rvid, vtx, key)
+    # withLock(db.lock):
+    ?batch.putVtx(db.db, rvid, vtx, key)
 
-      if batch.count mod batchSize == 0:
-        ?batch.flush(db.db)
+    if batch.count.load(moRelaxed) mod batchSize == 0:
+      ?batch.flush(db.db)
 
-        if batch.count mod (batchSize * 100) == 0:
-          info "Writing computeKey cache", keys = batch.count, accounts = batch.progress
-        else:
-          debug "Writing computeKey cache", keys = batch.count, accounts = batch.progress
+      if batch.count.load(moRelaxed) mod (batchSize * 100) == 0:
+        info "Writing computeKey cache", keys = batch.count.load(moRelaxed), accounts = batch.progress
+      else:
+        debug "Writing computeKey cache", keys = batch.count.load(moRelaxed), accounts = batch.progress
   else: # level > dbLevel but less than baseTxFrame level
     # Throw defect here because we should not be writing vertexes to the database if
     # from a lower level than the baseTxFrame level.
@@ -129,12 +140,12 @@ template encodeExt(w: var RlpWriter, pfx: NibblesBuf, branchKey: HashKey): HashK
 proc getKey(
     db: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool
 ): Result[((HashKey, VertexRef), int), AristoError] =
-  withLock(db.lock):
-    let key = when skipLayers:
-      (?db.db.getKeyBe(rvid, {GetVtxFlag.PeekCache}), dbLevel)
-    else:
-      ?db.getKeyRc(rvid, {})
-    return ok(key)
+  # withLock(db.lock):
+  let key = when skipLayers:
+    (?db.db.getKeyBe(rvid, {GetVtxFlag.PeekCache}), dbLevel)
+  else:
+    ?db.getKeyRc(rvid, {})
+  return ok(key)
 
 template childVid(vp: VertexRef): VertexID =
   # If we have to recurse into a child, where would that recusion start?
@@ -336,10 +347,14 @@ proc computeKeyImplTask(
     level: int,
     skipLayers: bool,
 ): Result[(HashKey, int), AristoError] =
+  # var batch: WriteBatch
   if skipLayers:
     db[].computeKeyImpl(rvid, batch[], vtx[], level, skipLayers = true, parallel = false)
   else:
     db[].computeKeyImpl(rvid, batch[], vtx[], level, skipLayers = false, parallel = false)
+  # if res.isOk:
+  #   ?batch.flush(db.db)
+  # res
 
 proc computeKeyImpl(
     db: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool, parallel: static bool
@@ -354,6 +369,9 @@ proc computeKeyImpl(
     return ok(keyvtx[0])
 
   var batch: WriteBatch
+  initLock(batch.lock)
+  batch.writer = ?db.db.putBegFn()
+
   let res = computeKeyImpl(
     db,
     rvid,
@@ -365,13 +383,13 @@ proc computeKeyImpl(
   )
 
   if res.isOk:
-    ?batch.flush(db.db)
+    ?batch.flush(db.db, recreate = false)
 
-    if batch.count > 0:
-      if batch.count >= batchSize * 100:
-        info "Wrote computeKey cache", keys = batch.count, accounts = "100.00%"
+    if batch.count.load(moRelaxed) > 0:
+      if batch.count.load(moRelaxed) >= batchSize * 100:
+        info "Wrote computeKey cache", keys = batch.count.load(moRelaxed), accounts = "100.00%"
       else:
-        debug "Wrote computeKey cache", keys = batch.count, accounts = "100.00%"
+        debug "Wrote computeKey cache", keys = batch.count.load(moRelaxed), accounts = "100.00%"
 
   ok (?res)[0]
 

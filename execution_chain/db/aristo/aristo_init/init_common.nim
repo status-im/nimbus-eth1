@@ -91,8 +91,8 @@ proc initInstance*(
   doAssert maxSnapshots > 0
   let vTop = (?db.getLstFn()).vTop
   db.txRef = AristoTxRef(db: db, vTop: vTop, snapshot: Snapshot(level: Opt.some(0)))
-  db.accLeaves = LruCache[Hash32, AccLeafRef].init(ACC_LRU_SIZE)
-  db.stoLeaves = LruCache[Hash32, StoLeafRef].init(ACC_LRU_SIZE)
+  # db.accLeaves = LruCache[Hash32, AccLeafRef].init(ACC_LRU_SIZE)
+  # db.stoLeaves = LruCache[Hash32, StoLeafRef].init(ACC_LRU_SIZE)
   db.maxSnapshots = maxSnapshots
   db.parallelStateRootComputation = parallelStateRootComputation
   ok()

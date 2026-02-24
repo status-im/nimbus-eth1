@@ -43,16 +43,16 @@ proc retrieveLeaf(
 proc cachedAccLeaf*(db: AristoTxRef; accPath: Hash32): Opt[AccLeafRef] =
   # Return vertex from layers or cache, `nil` if it's known to not exist and
   # none otherwise
-  db.layersGetAccLeaf(accPath) or
-    db.db.accLeaves.get(accPath) or
-    Opt.none(AccLeafRef)
+  db.layersGetAccLeaf(accPath) or Opt.none(AccLeafRef)
+    # db.db.accLeaves.get(accPath) or
+    # Opt.none(AccLeafRef)
 
 proc cachedStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[StoLeafRef] =
   # Return vertex from layers or cache, `nil` if it's known to not exist and
   # none otherwise
-  db.layersGetStoLeaf(mixPath) or
-    db.db.stoLeaves.get(mixPath) or
-    Opt.none(StoLeafRef)
+  db.layersGetStoLeaf(mixPath) or Opt.none(StoLeafRef)
+    # db.db.stoLeaves.get(mixPath) or
+    # Opt.none(StoLeafRef)
 
 proc retrieveAccStatic(
     db: AristoTxRef;
@@ -138,12 +138,12 @@ proc retrieveAccLeaf(
     return ok leafVtx[]
 
   let (staticVtx, path, next) = db.retrieveAccStatic(accPath).valueOr:
-    if error == FetchPathNotFound:
-      db.db.accLeaves.put(accPath, nil)
+    # if error == FetchPathNotFound:
+    #   db.db.accLeaves.put(accPath, nil)
     return err(error)
 
   if staticVtx.isValid():
-    db.db.accLeaves.put(accPath, staticVtx)
+    # db.db.accLeaves.put(accPath, staticVtx)
     return ok staticVtx
 
   # Updated payloads are stored in the layers so if we didn't find them there,
@@ -155,12 +155,12 @@ proc retrieveAccLeaf(
         # meaning that it was a hit - else searches for non-existing paths would
         # skew the results towards more depth than exists in the MPT
         db.db.lookups.hits += 1
-        db.db.accLeaves.put(accPath, nil)
+        # db.db.accLeaves.put(accPath, nil)
       return err(error)
 
   db.db.lookups.higher += 1
 
-  db.db.accLeaves.put(accPath, AccLeafRef(leafVtx))
+  # db.db.accLeaves.put(accPath, AccLeafRef(leafVtx))
 
   ok AccLeafRef(leafVtx)
 
@@ -255,11 +255,11 @@ proc retrieveStoragePayload(
   # it must have been in the database
   let leafVtx = db.retrieveLeaf(
       ? db.fetchStorageIdImpl(accPath), NibblesBuf.fromBytes(stoPath.data)).valueOr:
-    if error == FetchPathNotFound:
-      db.db.stoLeaves.put(mixPath, nil)
+    # if error == FetchPathNotFound:
+    #   db.db.stoLeaves.put(mixPath, nil)
     return err(error)
 
-  db.db.stoLeaves.put(mixPath, StoLeafRef(leafVtx))
+  # db.db.stoLeaves.put(mixPath, StoLeafRef(leafVtx))
 
   ok StoLeafRef(leafVtx).stoData
 
