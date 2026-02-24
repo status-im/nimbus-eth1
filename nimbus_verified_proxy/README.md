@@ -45,7 +45,7 @@ Three options need to be explicitly configured by the user:
 
 * `--trusted-block-root`: The consensus light client starts syncing from a trusted block. This trusted block should be somewhat recent ([~1-2 weeks](https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/weak-subjectivity.md)) and needs to be configured each time when starting the Nimbus Verified Proxy.
 
-* `--backend-url` - As the proxy does not use any storage, it needs access to an Ethereum JSON RPC endpoint to provide the requested data. This can be a regular full node, or an external web3 data provider like
+* `--execution-api-url` - As the proxy does not use any storage, it needs access to an Ethereum JSON RPC endpoint to provide the requested data. This can be a regular full node, or an external web3 data provider like
 [Alchemy](https://www.alchemy.com/).
 
     A first requirement for the web3 data provider is that it must support the standard Ethereum JSON RPC Execution API, including the [eth_getProof](https://eips.ethereum.org/EIPS/eip-1186) call.
@@ -58,7 +58,7 @@ received chain id with the one configured locally. If this validation fails, the
 
 > Note: Infura currently does not support the `eth_getProof` call.
 
-* `--external-beacon-api-url` - URL of the consensus light client data provider (beacon node REST API). This is used to bootstrap and follow the tip of the consensus chain. Multiple URLs can be provided by repeating the option.
+* `--beacon-api-url` - URL of the consensus light client data provider (beacon node REST API). This is used to bootstrap and follow the tip of the consensus chain. Multiple URLs can be provided by repeating the option.
 
 #### Obtaining a trusted block root
 
@@ -86,8 +86,10 @@ TRUSTED_BLOCK_ROOT=0x12345678901234567890123456789012345678901234567890123456789
 ./build/nimbus_verified_proxy \
     --network=mainnet \
     --trusted-block-root=${TRUSTED_BLOCK_ROOT} \
-    --backend-url="wss://eth-mainnet.g.alchemy.com/v2/<ApiKey>" \
-    --external-beacon-api-url="https://beaconstate.info"
+    --execution-api-url="wss://eth-mainnet.g.alchemy.com/v2/<ApiKey>" \
+    --beacon-api-url="https://beaconstate.info" \
+    --listen-url="http://127.0.0.1:8545" \
+    --listen-url="ws://127.0.0.1:8546"
 ```
 
 ### Using the Nimbus Verified Proxy with existing Wallets
