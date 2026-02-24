@@ -183,6 +183,7 @@ proc main() {.raises: [].} =
   proc sigTermHandler(sig: cint) {.noconv.} =
     notice "Shutting down after SIGTERM"
     quit QuitSuccess
+
   discard c_signal(ansi_c.SIGTERM, sigTermHandler)
 
   # adding gcsafe because we are accessing a global variable here
