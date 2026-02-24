@@ -402,7 +402,8 @@ proc getTotalDifficulty*(chain: ForkedChainRef, blockHash: Hash32, header: Heade
     chain.baseTxFrame().getScore(blockHash)
 
 proc headerFromTag*(chain: ForkedChainRef, blockTag: BlockTag): Result[Header, string] =
-  if blockTag.kind == bidAlias:
+  case blockTag.kind
+  of bidAlias:
     let tag = blockTag.alias.toLowerAscii
     case tag
     of "latest":
@@ -413,12 +414,15 @@ proc headerFromTag*(chain: ForkedChainRef, blockTag: BlockTag): Result[Header, s
       ok(chain.safeHeader)
     else:
       err("Unsupported block tag " & tag)
-  else:
+  of bidNumber:
     let blockNum = base.BlockNumber blockTag.number
     chain.headerByNumber(blockNum)
+  of bidHash:
+    chain.headerByHash(blockTag.hash)
 
 proc blockFromTag*(chain: ForkedChainRef, blockTag: BlockTag): Result[Block, string] =
-  if blockTag.kind == bidAlias:
+  case blockTag.kind
+  of bidAlias:
     let tag = blockTag.alias.toLowerAscii
     case tag
     of "latest":
@@ -429,6 +433,8 @@ proc blockFromTag*(chain: ForkedChainRef, blockTag: BlockTag): Result[Block, str
       ok(chain.safeBlock)
     else:
       err("Unsupported block tag " & tag)
-  else:
+  of bidNumber:
     let blockNum = base.BlockNumber blockTag.number
     chain.blockByNumber(blockNum)
+  of bidHash:
+    chain.blockByHash(blockTag.hash)
