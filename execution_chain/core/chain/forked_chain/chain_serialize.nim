@@ -134,18 +134,18 @@ proc replayBlock(fc: ForkedChainRef;
   # Set finalized to true in order to skip the stateroot check when replaying the
   # block because the blocks should have already been checked previously during
   # the initial block execution.
-  var receipts = fc.processBlock(
+  fc.processBlock(
     parent,
     txFrame,
     fullBlk,
     blockAccessList,
     blk.hash,
     finalized = true
-  ).valueOr:
+  ).isOkOr:
     txFrame.dispose()
     return err(error)
-  
-  # After processing the block the BAL should now be stored in the txFrame in 
+
+  # After processing the block the BAL should now be stored in the txFrame in
   # memory so we can delete the copy on disk
   if blockAccessList.isSome():
     fc.baseTxFrame.deleteBlockAccessList(blk.hash)
@@ -156,7 +156,6 @@ proc replayBlock(fc: ForkedChainRef;
   txFrame.checkpoint(blk.header.number, skipSnapshot = false)
 
   blk.txFrame = txFrame
-  blk.receipts = move(receipts)
 
   ok()
 

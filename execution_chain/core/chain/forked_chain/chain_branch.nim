@@ -11,14 +11,13 @@
 {.push raises: [].}
 
 import
-  eth/common/[headers, receipts],
+  eth/common/headers,
   ../../../db/core_db
 
 type
   BlockRef* = ref object
     header*  : Header
     txFrame* : CoreDbTxRef
-    receipts*: seq[StoredReceipt]
     hash*    : Hash32
     parent*  : BlockRef
 

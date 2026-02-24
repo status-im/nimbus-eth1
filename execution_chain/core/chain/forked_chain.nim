@@ -53,13 +53,11 @@ func appendBlock(c: ForkedChainRef,
          parent: BlockRef,
          blk: Block,
          blkHash: Hash32,
-         txFrame: CoreDbTxRef,
-         receipts: sink seq[StoredReceipt]): BlockRef =
+         txFrame: CoreDbTxRef): BlockRef =
 
   let newBlock = BlockRef(
     header  : blk.header,
     txFrame : txFrame,
-    receipts: move(receipts),
     hash    : blkHash,
     parent  : parent,
     index   : 0, # Only finalized segment have finalized marker
@@ -207,7 +205,6 @@ func removeBlockFromCache(c: ForkedChainRef, b: BlockRef) =
   for txHash in toRemove:
     c.txRecords.del(txHash)
 
-  b.receipts.reset
   b.txFrame.dispose()
 
   # Mark it as removed, don't remove it twice
@@ -520,7 +517,7 @@ proc validateBlock(
     parentTxFrame=cast[uint](parentFrame),
     txFrame=cast[uint](txFrame)
 
-  var receipts = c.processBlock(parent, txFrame, blk, blockAccessList, blkHash, finalized).valueOr:
+  c.processBlock(parent, txFrame, blk, blockAccessList, blkHash, finalized).isOkOr:
     txFrame.dispose()
     return err(error)
 
@@ -529,7 +526,7 @@ proc validateBlock(
   # is being applied to a block that is currently not a head).
   txFrame.checkpoint(blk.header.number, skipSnapshot = false)
 
-  let newBlock = c.appendBlock(parent, blk, blkHash, txFrame, move(receipts))
+  let newBlock = c.appendBlock(parent, blk, blkHash, txFrame)
 
   for i, tx in blk.transactions:
     c.txRecords[computeRlpHash(tx)] = (blkHash, uint64(i))
@@ -1104,7 +1101,8 @@ proc blockHeader*(c: ForkedChainRef, blk: BlockHashOrNumber): Result[Header, str
 proc receiptsByBlockHash*(c: ForkedChainRef, blockHash: Hash32): Result[seq[StoredReceipt], string] =
   if blockHash != c.base.hash:
     c.hashToBlock.withValue(blockHash, loc):
-      return ok(loc[].receipts)
+      let header = ?loc[].txFrame.getBlockHeader(loc[].hash)
+      return loc[].txFrame.getReceipts(header.receiptsRoot)
 
   let header = c.baseTxFrame.getBlockHeader(blockHash).valueOr:
     return err("Block header not found")
