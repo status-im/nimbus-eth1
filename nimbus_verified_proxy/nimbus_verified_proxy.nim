@@ -185,13 +185,15 @@ proc main() {.raises: [].} =
     quit QuitFailure
 
   setControlCHook(controlCHook)
-  proc sigTermHandler(sig: cint) {.noconv.} =
-    {.gcsafe.}:
-      notice "Shutting down after SIGTERM"
-      if runFut != nil:
-        runFut.cancelSoon()
 
-  discard c_signal(ansi_c.SIGTERM, sigTermHandler)
+  when declared(ansi_c.SIGTERM):
+    proc sigTermHandler(sig: cint) {.noconv.} =
+      {.gcsafe.}:
+        notice "Shutting down after SIGTERM"
+        if runFut != nil:
+          runFut.cancelSoon()
+
+    discard c_signal(ansi_c.SIGTERM, sigTermHandler)
 
   # adding gcsafe because we are accessing a global variable here
   {.gcsafe.}:
