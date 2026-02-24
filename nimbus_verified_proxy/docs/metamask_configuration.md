@@ -19,8 +19,8 @@ API_KEY=abcd # Replace this
 ./build/nimbus_verified_proxy \
     --network=mainnet \
     --trusted-block-root=${TRUSTED_BLOCK_ROOT} \
-    --backend-url="wss://eth-mainnet.g.alchemy.com/v2/${API_KEY}" \
-    --external-beacon-api-url="https://beaconstate.info"
+    --execution-api-url="wss://eth-mainnet.g.alchemy.com/v2/${API_KEY}" \
+    --beacon-api-url="https://beaconstate.info"
 ```
 
 
