@@ -78,12 +78,12 @@ proc connectLCToEngine*(lightClient: LightClient, engine: RpcVerificationEngine)
 
 proc startFrontends(
     engine: RpcVerificationEngine, urls: seq[Web3Url]
-) {.raises: [ProxyError].} =
-  var countFailed = 0
+): seq[JsonRpcServer] {.raises: [ProxyError].} =
+  var servers: seq[JsonRpcServer] = @[]
+
   for url in urls:
     let server = JsonRpcServer.init(url).valueOr:
-      countFailed += 1
-      info "Error initializing frontend server", error = error.errMsg
+      error "Error initializing frontend server", error = error.errMsg
       continue
 
     # inject frontend
@@ -91,11 +91,15 @@ proc startFrontends(
 
     let status = server.start()
     if status.isErr():
-      countFailed += 1
-      info "Error starting frontend server", error = status.error.errMsg
+      error "Error starting frontend server", error = status.error.errMsg
+      continue
 
-  if countFailed >= urls.len:
+    servers.add(server)
+
+  if servers.len == 0:
     raise newException(ProxyError, "Couldn't start any frontends for verified proxy")
+
+  servers
 
 proc run(
     config: VerifiedProxyConf
@@ -143,7 +147,7 @@ proc run(
   # the backend only needs the url of the RPC provider
   engine.backend = jsonRpcClientPool.getEthApiBackend()
 
-  engine.startFrontends(config.frontendUrls)
+  let frontendServers = engine.startFrontends(config.frontendUrls)
 
   # adding endpoints will also start the backend
   if lcRestClientPool.addEndpoints(config.beaconApiUrls).isErr():
@@ -155,7 +159,8 @@ proc run(
     await lc.start()
   except CancelledError as e:
     debug "light client cancelled"
-    await jsonRpcServer.stop()
+    for s in frontendServers:
+      await s.stop()
     await jsonRpcClientPool.closeAll()
     await lcRestClientPool.closeAll()
     raise e
@@ -181,8 +186,10 @@ proc main() {.raises: [].} =
 
   setControlCHook(controlCHook)
   proc sigTermHandler(sig: cint) {.noconv.} =
-    notice "Shutting down after SIGTERM"
-    quit QuitSuccess
+    {.gcsafe.}:
+      notice "Shutting down after SIGTERM"
+      if runFut != nil:
+        runFut.cancelSoon()
 
   discard c_signal(ansi_c.SIGTERM, sigTermHandler)
 
