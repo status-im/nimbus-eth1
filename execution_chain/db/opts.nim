@@ -22,7 +22,7 @@ const
     ## The row cache is disabled by default as the rdb lru caches do a better
     ## job at a similar abstraction level - ie they work at the same granularity
     ## as the rocksdb row cache but with less overhead
-  defaultBlockCacheSize* = 1024 * 1024 * 1024 * 2
+  defaultBlockCacheSize* = (1024 * 1024 * 1024 * 2)'u64
     ## The block cache is used to cache indicies, ribbon filters and
     ## decompressed data, roughly in that priority order. At the time of writing
     ## we have about 2 giga-entries in the MPT - with the ribbon filter

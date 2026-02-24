@@ -196,6 +196,9 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
       sender:          call.sender,
       value:           call.value,
     )
+
+    gasRefund = if call.sysCall: 0'i64
+                else: preExecComputation(vmState, call)
     code = if call.isCreate:
              msg.contractAddress = generateContractAddress(call.vmState, CallKind.Create, call.sender)
              CodeBytesRef.init(call.input)
