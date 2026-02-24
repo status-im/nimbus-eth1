@@ -266,7 +266,8 @@ proc query[E](
       try:
         await one(workers)
       except ValueError:
-        raiseAssert "unreachable: pending is non-empty"
+        # ValueError arises only when `workers` is empty
+        raiseAssert "should not reach here"
 
     workers.keepItIf(not it.finished())
     if winner.completed() and winner.value():
