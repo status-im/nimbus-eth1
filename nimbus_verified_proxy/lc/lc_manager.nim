@@ -82,7 +82,6 @@ type
     getFinalizedSlot: GetSlotCallback
     getOptimisticSlot: GetSlotCallback
     getBeaconTime: GetBeaconTimeFn
-    loopFuture: Future[void].Raising([CancelledError])
 
 func init*(
     T: type LightClientManager,

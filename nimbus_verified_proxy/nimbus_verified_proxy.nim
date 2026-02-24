@@ -29,7 +29,8 @@ import
   ./lc_backend,
   ./json_rpc_backend,
   ./json_rpc_frontend,
-  ../execution_chain/version_info
+  ../execution_chain/version_info,
+  system/ansi_c
 
 # error object to translate results to error
 # NOTE: all results are translated to errors only in this file
@@ -154,10 +155,21 @@ proc run(
     await lc.start()
   except CancelledError as e:
     debug "light client cancelled"
+    await jsonRpcServer.stop()
+    await jsonRpcClientPool.closeAll()
+    await lcRestClientPool.closeAll()
     raise e
 
+var runFut: Future[void] = nil
+
+proc controlCHook() {.noconv.} =
+  {.gcsafe.}:
+    notice "Shutting down after Ctrl-C"
+    if runFut != nil:
+      runFut.cancelSoon()
+
 # noinline to keep it in stack traces
-proc main() {.noinline, raises: [ProxyError, CancelledError].} =
+proc main() {.raises: [].} =
   const
     banner = "Nimbus Verified Proxy " & FullVersionStr
     copyright =
@@ -167,7 +179,25 @@ proc main() {.noinline, raises: [ProxyError, CancelledError].} =
     writePanicLine error # Logging not yet set up
     quit QuitFailure
 
-  waitFor run(config)
+  setControlCHook(controlCHook)
+  proc sigTermHandler(sig: cint) {.noconv.} =
+    notice "Shutting down after SIGTERM"
+    quit QuitSuccess
+  discard c_signal(ansi_c.SIGTERM, sigTermHandler)
+
+  # adding gcsafe because we are accessing a global variable here
+  {.gcsafe.}:
+    runFut = run(config)
+    try:
+      waitFor runFut
+    except CancelledError:
+      notice "Shutdown complete"
+    except ProxyError as e:
+      fatal "Proxy error", error = e.msg
+      quit QuitFailure
+    except CatchableError as e:
+      fatal "Unexpected error", error = e.msg
+      quit QuitFailure
 
 when isMainModule:
   main()

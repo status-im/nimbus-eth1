@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2026 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -22,7 +22,7 @@ const
     ## The row cache is disabled by default as the rdb lru caches do a better
     ## job at a similar abstraction level - ie they work at the same granularity
     ## as the rocksdb row cache but with less overhead
-  defaultBlockCacheSize* = 2147483648'u64
+  defaultBlockCacheSize* = 1024 * 1024 * 1024 * 2
     ## The block cache is used to cache indicies, ribbon filters and
     ## decompressed data, roughly in that priority order. At the time of writing
     ## we have about 2 giga-entries in the MPT - with the ribbon filter
