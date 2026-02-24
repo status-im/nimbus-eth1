@@ -75,6 +75,27 @@ proc connectLCToEngine*(lightClient: LightClient, engine: RpcVerificationEngine)
   lightClient.onFinalizedHeader = onFinalizedHeader
   lightClient.onOptimisticHeader = onOptimisticHeader
 
+proc startFrontends(
+    engine: RpcVerificationEngine, urls: seq[Web3Url]
+) {.raises: [ProxyError].} =
+  var countFailed = 0
+  for url in urls:
+    let server = JsonRpcServer.init(url).valueOr:
+      countFailed += 1
+      info "Error initializing frontend server", error = error.errMsg
+      continue
+
+    # inject frontend
+    server.injectEngineFrontend(engine.frontend)
+
+    let status = server.start()
+    if status.isErr():
+      countFailed += 1
+      info "Error starting frontend server", error = status.error.errMsg
+
+  if countFailed >= urls.len:
+    raise newException(ProxyError, "Couldn't start any frontends for verified proxy")
+
 proc run(
     config: VerifiedProxyConf
 ) {.async: (raises: [ProxyError, CancelledError]), gcsafe.} =
@@ -103,8 +124,6 @@ proc run(
 
     #initialize frontend and backend for JSON-RPC
     jsonRpcClientPool = JsonRpcClientPool.new()
-    jsonRpcServer = JsonRpcServer.init(config.frontendUrl).valueOr:
-      raise newException(ProxyError, "Couldn't initialize the server end of proxy")
 
     # initialize backend for light client updates
     lcRestClientPool = LCRestClientPool.new(lc.cfg, lc.forkDigests)
@@ -122,12 +141,8 @@ proc run(
 
   # the backend only needs the url of the RPC provider
   engine.backend = jsonRpcClientPool.getEthApiBackend()
-  # inject frontend
-  jsonRpcServer.injectEngineFrontend(engine.frontend)
 
-  let status = jsonRpcServer.start()
-  if status.isErr():
-    raise newException(ProxyError, status.error.errMsg)
+  engine.startFrontends(config.frontendUrls)
 
   # adding endpoints will also start the backend
   if lcRestClientPool.addEndpoints(config.beaconApiUrls).isErr():
