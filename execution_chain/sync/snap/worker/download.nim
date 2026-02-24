@@ -62,7 +62,7 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
     # Fetch for state DB items, start with pivot root
     var theseFirst: seq[StateRoot]
     sdb.pivot.isErrOr:                              # the one with most done yet
-      theseFirst.add StateRoot(value.header.stateRoot)
+      theseFirst.add value.stateRoot
     buddy.only.pivotRoot.isErrOr:                   # best supported by peer
       theseFirst.add value
 

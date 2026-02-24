@@ -62,7 +62,7 @@ template downloadImpl(
     let
       ctx = buddy.ctx
       adb = ctx.pool.mptAsm
-      sRoot = state.root
+      sRoot = state.stateRoot
       peerID = buddy.peerID
 
       peer {.inject,used.} = $buddy.peer            # logging only

@@ -48,7 +48,7 @@ template accountDownload*(
     trace info & ": requesting account range", peer, root, iv
 
     let
-      data = buddy.fetchAccounts(state.root, ivReq).valueOr:
+      data = buddy.fetchAccounts(state.stateRoot, ivReq).valueOr:
         sdb.rollbackAccountRange(state, ivReq)      # registry roll back
         if error == ENoDataAvailable:
           state.downScore()
@@ -64,7 +64,7 @@ template accountDownload*(
 
     # Stash accounts data packet to be processed later
     adb.putRawAccounts(
-      state.root, ivReq.minPt, limit, data.accounts, data.proof,
+      state.stateRoot, ivReq.minPt, limit, data.accounts, data.proof,
       buddy.peerID).isOkOr:
         sdb.rollbackAccountRange(state, ivReq)      # registry roll back
         debug info & ": caching accounts failed", peer, root, iv,
