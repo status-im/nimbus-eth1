@@ -128,7 +128,7 @@ proc run(
     # initialize backend for light client updates
     lcRestClientPool = LCRestClientPool.new(lc.cfg, lc.forkDigests)
 
-  if (await jsonRpcClientPool.addEndpoints(config.backendUrls)).isErr():
+  if (await jsonRpcClientPool.addEndpoints(config.executionApiUrls)).isErr():
     raise newException(ProxyError, "Couldn't add endpoints for the web3 backend")
 
   # connect light client to LC by registering on header methods 

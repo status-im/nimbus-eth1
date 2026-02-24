@@ -329,9 +329,9 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
         raise newException(
           ProxyError, "Couldn't parse `trustedBlockRoot` from JSON config: " & e.msg
         )
-    backendUrls =
+    executionApiUrls =
       try:
-        parseCmdArg(seq[Web3Url], jsonNode["backendUrls"].getStr())
+        parseCmdArg(seq[Web3Url], jsonNode["executionApiUrls"].getStr())
       except CatchableError as e:
         raise newException(
           ProxyError, "Couldn't parse `backendUrl` from JSON config: " & e.msg
@@ -361,7 +361,7 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
   return VerifiedProxyConf(
     eth2Network: eth2Network,
     trustedBlockRoot: trustedBlockRoot,
-    backendUrls: backendUrls,
+    executionApiUrls: executionApiUrls,
     beaconApiUrls: beaconApiUrls,
     logLevel: logLevel,
     logFormat: logFormat,
@@ -413,7 +413,7 @@ proc run*(
   # add light client backend
   lc.setBackend(lcRestClientPool.getEthLCBackend())
 
-  engine.backend = getEthApiBackend(ctx, config.backendUrls, transportProc)
+  engine.backend = getEthApiBackend(ctx, config.executionApiUrls, transportProc)
 
   # inject the frontend into c context
   ctx.frontend = engine.frontend
