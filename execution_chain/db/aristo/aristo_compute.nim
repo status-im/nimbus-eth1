@@ -18,7 +18,7 @@ import
   "."/[aristo_desc, aristo_get], #, aristo_layers],
   ./aristo_desc/desc_backend
 
-export chronicles, aristo_desc
+export aristo_desc, chronicles
 
 type WriteBatch* = object
   writer*: PutHdlRef
@@ -310,6 +310,12 @@ proc computeKeyImpl(
       when parallel:
         for i, f in futs:
           if f.isSpawned():
+            while not f.isReady():
+              # Busy waiting for task to prevent the main thread from stealing the task
+              # which can cause memory corruption issues when using heap memory with refc.
+              # Eventually the main thread will handle all in memory writes to the database
+              # so it won't be idle once that part is implemented.
+              discard
             (keyvtxs[i][0][0], keyvtxs[i][1]) = ?sync(f)
 
       template writeBranch(w: var RlpWriter, vtx: BranchRef): HashKey =
