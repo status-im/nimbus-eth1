@@ -420,7 +420,7 @@ proc headerFromTag*(chain: ForkedChainRef, blockTag: BlockTag): Result[Header, s
   of bidHash:
     chain.headerByHash(blockTag.hash)
 
-proc blockFromTag*(chain: ForkedChainRef, blockTag: BlockTag): Result[Block, string] =
+proc blockFromTag*(chain: ForkedChainRef, blockTag: BlockTag, noHash: bool = false): Result[Block, string] =
   case blockTag.kind
   of bidAlias:
     let tag = blockTag.alias.toLowerAscii
@@ -437,4 +437,6 @@ proc blockFromTag*(chain: ForkedChainRef, blockTag: BlockTag): Result[Block, str
     let blockNum = base.BlockNumber blockTag.number
     chain.blockByNumber(blockNum)
   of bidHash:
+    if noHash:
+      return err("query by hash not supported for this function")
     chain.blockByHash(blockTag.hash)

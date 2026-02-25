@@ -103,8 +103,8 @@ proc ledgerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[LedgerRef, str
   # TODO maybe use a new frame derived from txFrame, to protect against abuse?
   ok(LedgerRef.init(txFrame))
 
-proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[Block, string] =
-  api.chain.blockFromTag(blockTag)
+proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag, noHash: bool = false): Result[Block, string] =
+  api.chain.blockFromTag(blockTag, noHash)
 
 proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManager) =
   server.rpc("eth_getBalance") do(data: Address, blockTag: BlockTag) -> UInt256:
@@ -181,7 +181,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ## blockTag: integer of a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
     ## fullTransactions: If true it returns the full transaction objects, if false only the hashes of the transactions.
     ## Returns BlockObject or nil when no block was found.
-    let blk = api.blockFromTag(blockTag).valueOr:
+    let blk = api.blockFromTag(blockTag, noHash = true).valueOr:
       return nil
 
     let blockHash = blk.header.computeBlockHash
@@ -391,8 +391,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ##
     ## blockTag: integer of a block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns integer of the number of transactions in this block.
-    let blk = api.blockFromTag(blockTag).valueOr:
-      raise newException(ValueError, "Block not found")
+    let blk = api.blockFromTag(blockTag, noHash = true).valueOr:
+      raise newException(ValueError, "Block not found: " & error)
 
     Quantity(blk.transactions.len)
 
@@ -411,8 +411,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ##
     ## blockTag: integer of a block number, or the string "latest", see the default block parameter.
     ## Returns integer of the number of uncles in this block.
-    let blk = api.blockFromTag(blockTag).valueOr:
-      raise newException(ValueError, "Block not found")
+    let blk = api.blockFromTag(blockTag, noHash = true).valueOr:
+      raise newException(ValueError, "Block not found: " & error)
 
     Quantity(blk.uncles.len)
 
@@ -565,7 +565,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ## quantity: the transaction index position.
     ## NOTE : "pending" blockTag is not supported.
     let index = uint64(quantity)
-    let blk = api.blockFromTag(quantityTag).valueOr:
+    let blk = api.blockFromTag(quantityTag, noHash = true).valueOr:
       return nil
 
     if index >= uint64(blk.transactions.len):
