@@ -18,13 +18,12 @@ on:
       - 'portal/**'
       - '**/*.md'
       - '.github/workflows/portal*.yml'
-      - 'nimbus_verified_proxy/**'
-      - '.github/workflows/nimbus_verified_proxy.yml'
 
   workflow_dispatch:
 
 env:
-  REGISTRY_IMAGE: statusim/nimbus-eth1
+  EL_REGISTRY_IMAGE: statusim/nimbus-eth1
+  PROXY_REGISTRY_IMAGE: statusim/nvp
 
 jobs:
   build:
@@ -52,11 +51,11 @@ jobs:
           # Replace '/' with '-' to create a unique identifier for this platform
           echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
 
-      - name: Docker meta
+      - name: Docker meta (EL)
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY_IMAGE }}
+          images: ${{ env.EL_REGISTRY_IMAGE }}
 
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -77,7 +76,7 @@ jobs:
           context: .
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          tags: ${{ env.REGISTRY_IMAGE }}
+          tags: ${{ env.EL_REGISTRY_IMAGE }}
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
 
       - name: Export digest
@@ -94,16 +93,54 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+      - name: Docker meta (proxy)
+        id: meta-proxy
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.PROXY_REGISTRY_IMAGE }}
+
+      - name: Build and push proxy by digest
+        id: build-proxy
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.proxy
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta-proxy.outputs.labels }}
+          tags: ${{ env.PROXY_REGISTRY_IMAGE }}
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export proxy digest
+        run: |
+          mkdir -p ${{ runner.temp }}/proxy-digests
+          digest="${{ steps.build-proxy.outputs.digest }}"
+          touch "${{ runner.temp }}/proxy-digests/${digest#sha256:}"
+
+      - name: Upload proxy digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: proxy-digests-${{ env.PLATFORM_PAIR }}
+          path: ${{ runner.temp }}/proxy-digests/*
+          if-no-files-found: error
+          retention-days: 1
+
   merge:
     runs-on: ubuntu-latest
     needs:
       - build
     steps:
-      - name: Download digests
+      - name: Download el digests
         uses: actions/download-artifact@v4
         with:
           path: ${{ runner.temp }}/digests
           pattern: digests-*
+          merge-multiple: true
+
+      - name: Download proxy digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/proxy-digests
+          pattern: proxy-digests-*
           merge-multiple: true
 
       - name: Login to Docker Hub
@@ -119,7 +156,16 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY_IMAGE }}
+          images: ${{ env.EL_REGISTRY_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+
+      - name: Docker meta (proxy)
+        id: meta-proxy
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.PROXY_REGISTRY_IMAGE }}
           tags: |
             type=ref,event=branch
             type=sha,prefix={{branch}}-
@@ -129,8 +175,21 @@ jobs:
         run: |
           jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON"
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)
+            $(printf '${{ env.EL_REGISTRY_IMAGE }}@sha256:%s ' *)
+
+      - name: Create proxy manifest list and push
+        working-directory: ${{ runner.temp }}/proxy-digests
+        env:
+          DOCKER_METADATA_OUTPUT_JSON: ${{ steps.meta-proxy.outputs.json }}
+        run: |
+          jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON"
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.PROXY_REGISTRY_IMAGE }}@sha256:%s ' *)
 
       - name: Inspect image
         run: |
-          docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
+          docker buildx imagetools inspect ${{ env.EL_REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
+
+      - name: Inspect proxy image
+        run: |
+          docker buildx imagetools inspect ${{ env.PROXY_REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
