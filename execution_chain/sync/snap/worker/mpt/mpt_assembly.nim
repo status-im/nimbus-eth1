@@ -24,9 +24,18 @@
 ##
 ## Key/value storage formats by column type:
 ##
+## * BlockData:
+##   + key33: <col, root>
+##   + value: <hash, number>
+##   where
+##   + col:      `RawAccounts`
+##   + root:     `StateRoot`
+##   + hash:     `BlockHash`
+##   + number:   `BlockNumber`
+##
 ## * RawAccounts:
 ##   + key65: <col, root, start>
-##   + value: <limit, accounts, prrof, peerID>
+##   + value: <limit, accounts, proof, peerID>
 ##   where
 ##   + col:      `RawAccounts`
 ##   + root:     `StateRoot`
@@ -101,17 +110,22 @@ const
     ## Enable additional logging noise
 
 type
+  MptAsmRef* = ref object
+    adb: RocksDbReadWriteRef
+    dir: Path
+
   MptAsmCol = enum
     AdminCol = 0
+    BlockData                                       # root -> block hash/number
     RawAccounts                                     # as fetched from network
     RawStoSlot                                      # ditto
     RawByteCode                                     # ditto
     MptAccounts                                     # list of (key,node) pairs
     MptStoSlot                                      # list of (key,code) pairs
 
-  MptAsmRef* = ref object
-    adb*: RocksDbReadWriteRef
-    dir*: Path
+  DecodedBlockData* = tuple
+    hash: BlockHash
+    number: BlockNumber
 
   DecodedRawAccounts* = tuple
     limit: ItemKey
@@ -129,6 +143,13 @@ type
     limit: ItemKey
     codes: seq[(CodeHash,CodeItem)]
     peerID: Hash
+
+
+  WalkBlockData* = tuple
+    root: StateRoot
+    hash: BlockHash
+    number: BlockNumber
+    error: string
 
   WalkRawAccounts* = tuple
     root: StateRoot
@@ -164,6 +185,19 @@ type
 when sizeof(Hash) != sizeof(uint):
   {.error: "Hash type must have size of uint".}
 
+func decodeBlockData(data: seq[byte]): Result[DecodedBlockData,string] =
+  const info = "decodeBlockData"
+  var
+    rd = data.rlpFromBytes
+    res: DecodedBlockData
+  try:
+    rd.tryEnterList()
+    res.hash = rd.read(Hash32).to(BlockHash)
+    res.number = rd.read(BlockNumber)
+  except RlpError as e:
+    return err(info & ": " & $e.name & "(" & e.msg & ")")
+  ok(move res)
+
 func decodeRawAccounts(data: seq[byte]): Result[DecodedRawAccounts,string] =
   const info = "decodeRawAccounts"
   var
@@ -174,13 +208,13 @@ func decodeRawAccounts(data: seq[byte]): Result[DecodedRawAccounts,string] =
     res.limit = rd.read(UInt256).to(ItemKey)
     res.accounts = rd.read(seq[SnapAccount])
     res.proof = rd.read(seq[ProofNode])
-    res.peerID = Hash(cast[int](rd.read uint))
+    res.peerID = cast[Hash](rd.read uint)
   except RlpError as e:
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(move res)
 
 func decodeRawStoSlot(data: seq[byte]): Result[DecodedRawStoSlot,string] =
-  const info = "decodeRawAccounts"
+  const info = "decodeRawStoSlot"
   var
     rd = data.rlpFromBytes
     res: DecodedRawStoSlot
@@ -189,7 +223,7 @@ func decodeRawStoSlot(data: seq[byte]): Result[DecodedRawStoSlot,string] =
     res.limit = rd.read(UInt256).to(ItemKey)
     res.slot = rd.read(seq[StorageItem])
     res.proof = rd.read(seq[ProofNode])
-    res.peerID = Hash(cast[int](rd.read uint))
+    res.peerID = cast[Hash](rd.read uint)
   except RlpError as e:
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(move res)
@@ -203,11 +237,20 @@ func decodeRawByteCode(data: seq[byte]): Result[DecodedRawByteCode,string] =
     rd.tryEnterList()
     res.limit = rd.read(UInt256).to(ItemKey)
     res.codes = rd.read(seq[(CodeHash,CodeItem)])
-    res.peerID = Hash(cast[int](rd.read uint))
+    res.peerID = cast[Hash](rd.read uint)
   except RlpError as e:
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(move res)
 
+
+template encodeBlockData(
+    hash: BlockHash;
+    number: BlockNumber;
+      ): untyped =
+  var wrt = initRlpList 2
+  wrt.append hash.to(Hash32)
+  wrt.append number
+  wrt.finish()
 
 template encodeRawAccounts(
     limit: ItemKey;
@@ -240,7 +283,6 @@ template encodeRawByteCode(
     codes: seq[(CodeHash,CodeItem)];
     peerID: Hash;
       ): untyped =
-  const info = "decodeRawByteCode"
   var wrt = initRlpList 3
   wrt.append limit.to(UInt256)
   wrt.append codes
@@ -294,8 +336,6 @@ proc rDel(
     return err(info & error)
   ok()
 
-# --------------
-
 iterator rWalk(
     adb: RocksDbRef;
     pfx: openArray[byte];
@@ -325,30 +365,30 @@ iterator rWalk(
       rit.next()
       yield (key, val)
 
-when false: # not needed at the moment
-  iterator rWalk65(
-      adb: RocksDbRef;
-      pfx: openArray[byte];
-        ): tuple[col: MptAsmCol, key1, key2: Hash32, data: seq[byte]] =
-    ## Variant of `rWalk()` for 65 byte keys
-    ##
-    var key1, key2: Hash32
-    for (key,value) in adb.rWalk(pfx):
-      const
-        minKey0 = low(MptAsmCol).ord.byte
-        maxKey0 = high(MptAsmCol).ord.byte
-      if key.len == 65 and minKey0 <= key[0] and key[0] <= maxKey0:
-        (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
-        (addr (key2.distinctBase)[0]).copyMem(addr key[33], 32)
-        yield (MptAsmCol(key[0]), key1, key2, value)
+# --------------
 
-iterator rWalk65(
+iterator colWalk33(
     adb: RocksDbRef;
     pfx: openArray[byte];
-    col: MptAsmCol;
-      ): tuple[key1, key2: Hash32, data: seq[byte]] =
-  ## Variant of `rWalk()` for 65 byte keys
+      ): tuple[key: Hash32, data: seq[byte]] =
+  ## Variant of `rWalk()` for 33 byte keys staying at column `pfc[0]`
   ##
+  let col = pfx[0]
+  var key1: Hash32
+  for (key,value) in adb.rWalk(pfx):
+    if 0 < key.len and col.ord.byte != key[0]:
+      break
+    if key.len == 33:
+      (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
+      yield (key1, value)
+
+iterator colWalk65(
+    adb: RocksDbRef;
+    pfx: openArray[byte];
+      ): tuple[key1, key2: Hash32, data: seq[byte]] =
+  ## Variant of `rWalk()` for 65 byte keys staying at column `pfc[0]`
+  ##
+  let col = pfx[0]
   var key1, key2: Hash32
   for (key,value) in adb.rWalk(pfx):
     if 0 < key.len and col.ord.byte != key[0]:
@@ -358,32 +398,13 @@ iterator rWalk65(
       (addr (key2.distinctBase)[0]).copyMem(addr key[33], 32)
       yield (key1, key2, value)
 
-
-when false: # not needed at the moment
-  iterator rWalk97(
-      adb: RocksDbRef;
-      pfx: openArray[byte];
-        ): tuple[col: MptAsmCol, key1, key2, key3: Hash32, data: seq[byte]] =
-    ## Variant of `rWalk()` for 97 byte keys
-    ##
-    var key1, key2, key3: Hash32
-    for (key,value) in adb.rWalk(pfx):
-      const
-        minKey0 = low(MptAsmCol).ord.byte
-        maxKey0 = high(MptAsmCol).ord.byte
-      if key.len == 97 and minKey0 <= key[0] and key[0] <= maxKey0:
-        (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
-        (addr (key2.distinctBase)[0]).copyMem(addr key[33], 32)
-        (addr (key3.distinctBase)[0]).copyMem(addr key[65], 32)
-        yield (MptAsmCol(key[0]), key1, key2, key3, value)
-
-iterator rWalk97(
+iterator colWalk97(
     adb: RocksDbRef;
     pfx: openArray[byte];
-    col: MptAsmCol;
       ): tuple[key1, key2, key3: Hash32, data: seq[byte]] =
-  ## Variant of `rWalk()` for 97 byte keys
+  ## Variant of `rWalk()` for 97 byte keys staying at column `pfc[0]`
   ##
+  let col = pfx[0]
   var key1, key2, key3: Hash32
   for (key,value) in adb.rWalk(pfx):
     if 0 < key.len and col.ord.byte != key[0]:
@@ -393,6 +414,33 @@ iterator rWalk97(
       (addr (key2.distinctBase)[0]).copyMem(addr key[33], 32)
       (addr (key2.distinctBase)[0]).copyMem(addr key[65], 32)
       yield (key1, key2, key3, value)
+
+# --------------
+
+template key33(col: MptAsmCol; key1: untyped): openArray[byte] =
+  var key: array[33,byte]
+  key[0] = col.ord
+  (addr key[1]).copyMem(addr (key1.distinctBase)[0], 32)
+  key.toOpenArray(0,32)
+
+template key33(col: MptAsmCol): openArray[byte] =
+  var key: array[33,byte]
+  key[0] = col.ord
+  key.toOpenArray(0,32)
+
+template get33(db: MptAsmRef; col: MptAsmCol; root: StateRoot): untyped =
+  db.adb.rGet(col.key33(root))
+
+template put33(
+    db: MptAsmRef;
+    col: MptAsmCol;
+    root: StateRoot;
+    data: openArray[byte];
+      ): untyped =
+  db.adb.rPut(col.key33(root), data)
+
+template del33(db: MptAsmRef; col: MptAsmCol; root: StateRoot): untyped =
+  db.adb.rDel(col.key33(root))
 
 # --------------
 
@@ -416,28 +464,28 @@ template key65(col: MptAsmCol): openArray[byte] =
 
 template get65(
     db: MptAsmRef;
+    col: MptAsmCol;
     root: StateRoot;
     start: ItemKey;
-    col: MptAsmCol;
       ): untyped =
   let startHash = start.to(Hash32)
   db.adb.rGet(col.key65(root, startHash))
 
 template put65(
     db: MptAsmRef;
+    col: MptAsmCol;
     root: StateRoot;
     start: ItemKey;
     data: openArray[byte];
-    col: MptAsmCol;
       ): untyped =
   let startHash = start.to(Hash32)
   db.adb.rPut(col.key65(root, startHash), data)
 
 template del65(
     db: MptAsmRef;
+    col: MptAsmCol;
     root: StateRoot;
     start: ItemKey;
-    col: MptAsmCol;
       ): untyped =
   let startHash = start.to(Hash32)
   db.adb.rDel(col.key65(root, startHash))
@@ -472,10 +520,10 @@ template key97(col: MptAsmCol): openArray[byte] =
 
 template get97(
     db: MptAsmRef;
+    col: MptAsmCol;
     root: StateRoot;
     acc: ItemKey;
     start: ItemKey;
-    col: MptAsmCol;
       ): untyped =
   let
     startHash = start.to(Hash32)
@@ -484,11 +532,11 @@ template get97(
 
 template put97(
     db: MptAsmRef;
+    col: MptAsmCol;
     root: StateRoot;
     acc: ItemKey;
     start: ItemKey;
     data: openArray[byte];
-    col: MptAsmCol;
       ): untyped =
   let
     startHash = start.to(Hash32)
@@ -497,10 +545,10 @@ template put97(
 
 template del97(
     db: MptAsmRef;
+    col: MptAsmCol;
     root: StateRoot;
     acc: ItemKey;
     start: ItemKey;
-    col: MptAsmCol;
       ): untyped =
   let
     startHash = start.to(Hash32)
@@ -518,10 +566,8 @@ proc closeDb(db: MptAsmRef) =
 
 proc openDb(db: MptAsmRef; info: static[string]): bool =
   db.adb = db.dir.distinctBase.openRocksDb().valueOr:
-    error info & ": Cannot create rocksdb assembly DB",
-      dir=db.dir, `error`=error
+    error info & ": Cannot create assembly DB", dir=db.dir, `error`=error
     return false
-
   true
 
 proc newDbFolder(db: MptAsmRef; info: static[string]): bool =
@@ -537,8 +583,7 @@ proc newDbFolder(db: MptAsmRef; info: static[string]): bool =
         excpt = $e.name & "(" & e.msg & ")"
       except IOError as e:
         excpt = $e.name & "(" & e.msg & ")"
-      error info & ": Cannot backup old assembly folder",
-        dir=db.dir, bakDir, excpt
+      error info & ": Cannot backup DB folder", dir=db.dir, bakDir, excpt
       return false
 
   block createSnapFolder:
@@ -550,8 +595,7 @@ proc newDbFolder(db: MptAsmRef; info: static[string]): bool =
       excpt = $e.name & "(" & e.msg & ")"
     except IOError as e:
       excpt = $e.name & "(" & e.msg & ")"
-    error info & ": Cannot create assembly folder",
-      dir=db.dir, excpt
+    error info & ": Cannot create assembly folder", dir=db.dir, excpt
     return false
 
   true
@@ -618,12 +662,46 @@ proc init*(
 # Public functions
 # ------------------------------------------------------------------------------
 
+proc getBlockData*(
+    db: MptAsmRef;
+    root: StateRoot;
+      ): Result[(BlockHash,BlockNumber),string] =
+  let data = db.get33(BlockData, root).valueOr:
+    return err(error)
+  data.decodeBlockData()
+
+proc putBlockData*(
+    db: MptAsmRef;
+    root: StateRoot;
+    hash: BlockHash;
+    number: BlockNumber;
+      ): Result[void,string] =
+  db.put33(BlockData, root, encodeBlockData(hash, number))
+
+proc delBlockData*(
+    db: MptAsmRef;
+    root: StateRoot;
+      ): Result[void,string] =
+  db.del33(BlockData, root)
+
+iterator walkBlockData*(db: MptAsmRef): WalkBlockData =
+  for (key,value) in db.adb.colWalk33 BlockData.key33():
+    let w = value.decodeBlockData().valueOr:
+        var oops: WalkBlockData
+        oops.root = StateRoot(key)
+        oops.error = error
+        yield oops
+        continue
+    yield (StateRoot(key), w.hash, w.number, "")
+
+# -------------
+
 proc getMptAccounts*(
     db: MptAsmRef;
     root: StateRoot;
     start: ItemKey;
       ): Result[seq[(seq[byte],seq[byte])],string] =
-  let data = db.get65(root, start, MptAccounts).valueOr:
+  let data = db.get65(MptAccounts, root, start).valueOr:
     return err(error)
 
   const info = "getMptAccounts: "
@@ -641,26 +719,26 @@ proc putMptAccounts*(
     start: ItemKey;
     data: seq[(seq[byte],seq[byte])];
       ): Result[void,string] =
-  db.put65(root, start, rlp.encode(data), MptAccounts)
+  db.put65(MptAccounts, root, start, rlp.encode(data))
 
 proc delMptAccounts*(
     db: MptAsmRef;
     root: StateRoot;
     start: ItemKey;
       ): Result[void,string] =
-  db.del65(root, start, MptAccounts)
+  db.del65(MptAccounts, root, start)
 
 iterator walkMptAccounts*(
     db: MptAsmRef;
       ): tuple[root: StateRoot, start: ItemKey, data: seq[byte]] =
-  for (key1,key2,val) in db.adb.rWalk65(MptAccounts.key65(), MptAccounts):
+  for (key1,key2,val) in db.adb.colWalk65 MptAccounts.key65():
     yield (StateRoot(key1), key2.to(ItemKey), val)
 
 iterator walkMptAccounts*(
     db: MptAsmRef;
     root: StateRoot;
       ): tuple[start: ItemKey, data: seq[byte]] =
-  for (key1,key2,val) in db.adb.rWalk65(MptAccounts.key65(root), MptAccounts):
+  for (key1,key2,val) in db.adb.colWalk65 MptAccounts.key65(root):
     if key1 != Hash32(root):
       break
     yield (key2.to(ItemKey), val)
@@ -672,7 +750,7 @@ proc getRawAccounts*(
     root: StateRoot;
     start: ItemKey;
       ): Result[DecodedRawAccounts,string] =
-  let data = db.get65(root, start, RawAccounts).valueOr:
+  let data = db.get65(RawAccounts, root, start).valueOr:
     return err(error)
   data.decodeRawAccounts()
 
@@ -686,17 +764,17 @@ proc putRawAccounts*(
     peerID: Hash;
       ): Result[void,string] =
   db.put65(
-    root, start, encodeRawAccounts(limit, accounts, proof, peerID), RawAccounts)
+    RawAccounts, root, start, encodeRawAccounts(limit, accounts, proof, peerID))
 
 proc delRawAccounts*(
     db: MptAsmRef;
     root: StateRoot;
     start: ItemKey;
       ): Result[void,string] =
-  db.del65(root, start, RawAccounts)
+  db.del65(RawAccounts, root, start)
 
 iterator walkRawAccounts*(db: MptAsmRef): WalkRawAccounts =
-  for (key1,key2,value) in db.adb.rWalk65(RawAccounts.key65(), RawAccounts):
+  for (key1,key2,value) in db.adb.colWalk65 RawAccounts.key65():
     let
       root = StateRoot(key1)
       start = key2.to(ItemKey)
@@ -711,7 +789,7 @@ iterator walkRawAccounts*(db: MptAsmRef): WalkRawAccounts =
 
 iterator walkRawAccounts*(db: MptAsmRef, root: StateRoot): WalkRawAccounts =
   ## Variant of `walkRawAccounts()` for fixed `root`
-  for (key1,key2,value) in db.adb.rWalk65(RawAccounts.key65(root), RawAccounts):
+  for (key1,key2,value) in db.adb.colWalk65 RawAccounts.key65(root):
     if StateRoot(key1) != root:
       break
     let
@@ -733,7 +811,7 @@ proc getRawStoSlot*(
     account: ItemKey;
     start: ItemKey;
       ): Result[DecodedRawStoSlot,string] =
-  let data = db.get97(root, account, start, RawStoSlot).valueOr:
+  let data = db.get97(RawStoSlot, root, account, start).valueOr:
     return err(error)
   data.decodeRawStoSlot()
 
@@ -748,7 +826,7 @@ proc putRawStoSlot*(
     peerID: Hash;
       ): Result[void,string] =
   db.put97(
-    root, acc, start, encodeRawStoSlot(limit, slot, proof, peerID), RawStoSlot)
+    RawStoSlot, root, acc, start, encodeRawStoSlot(limit, slot, proof, peerID))
 
 proc putRawStoSlot*(
     db: MptAsmRef;
@@ -758,9 +836,8 @@ proc putRawStoSlot*(
     peerID: Hash;
       ): Result[void,string] =
   db.put97(
-    root, acc, low(ItemKey),
-    encodeRawStoSlot(high(ItemKey), slot, EmptyProof, peerID),
-    RawStoSlot)
+    RawStoSlot, root, acc, low(ItemKey),
+    encodeRawStoSlot(high(ItemKey), slot, EmptyProof, peerID))
 
 proc delRawStoSlot*(
     db: MptAsmRef;
@@ -768,10 +845,10 @@ proc delRawStoSlot*(
     acc: ItemKey;
     start: ItemKey;
       ): Result[void,string] =
-  db.del97(root, acc, start, RawStoSlot)
+  db.del97(RawStoSlot, root, acc, start)
 
 iterator walkRawStoSlot*(db: MptAsmRef): WalkRawStoSlot =
-  for (k1,k2,k3,val) in db.adb.rWalk97(RawStoSlot.key97(), RawStoSlot):
+  for (k1,k2,k3,val) in db.adb.colWalk97 RawStoSlot.key97():
     let
       root = k1.to(StateRoot)
       acc = k2.to(ItemKey)
@@ -788,7 +865,7 @@ iterator walkRawStoSlot*(db: MptAsmRef): WalkRawStoSlot =
 
 iterator walkRawStoSlot*(db: MptAsmRef, root: StateRoot): WalkRawStoSlot =
   ## Variant of `walkRawStoSlot()` for fixed `root`
-  for (k1,k2,k3,val) in db.adb.rWalk97(RawStoSlot.key97(root), RawStoSlot):
+  for (k1,k2,k3,val) in db.adb.colWalk97 RawStoSlot.key97(root):
     if k1.to(StateRoot) != root:
       break
     let
@@ -811,7 +888,7 @@ iterator walkRawStoSlot*(
       ): WalkRawStoSlot =
   ## Variant of `walkRawStoSlot()` for fixed `root`
   let aHash = acc.to(Hash32)
-  for (k1,k2,k3,val) in db.adb.rWalk97(RawStoSlot.key97(root,aHash),RawStoSlot):
+  for (k1,k2,k3,val) in db.adb.colWalk97 RawStoSlot.key97(root,aHash):
     if k1.to(StateRoot) != root or
        k2.to(ItemKey) != acc:
       break
@@ -835,11 +912,11 @@ proc getRawByteCode*(
     start: ItemKey;
     limit: ItemKey;
       ): Result[DecodedRawByteCode,string] =
-  let data = db.get65(root, start, RawByteCode).valueOr:
+  let data = db.get65(RawByteCode, root, start).valueOr:
     return err(error)
   data.decodeRawByteCode()
 
-proc putRawAyteCode*(
+proc putRawByteCode*(
     db: MptAsmRef;
     root: StateRoot;
     start: ItemKey;
@@ -847,44 +924,65 @@ proc putRawAyteCode*(
     codes: seq[(CodeHash,CodeItem)];
     peerID: Hash;
       ): Result[void,string] =
-  db.put65(root, start, encodeRawByteCode(limit, codes, peerID), RawAccounts)
+  db.put65(RawByteCode, root, start, encodeRawByteCode(limit, codes, peerID))
 
 proc delRawByteCode*(
     db: MptAsmRef;
     root: StateRoot;
     start: ItemKey;
       ): Result[void,string] =
-  db.del65(root, start, RawAccounts)
+  db.del65(RawAccounts, root, start)
 
 iterator walkRawByteCode*(db: MptAsmRef): WalkRawByteCode =
-  for (key1,key2,value) in db.adb.rWalk65(RawByteCode.key65(), RawByteCode):
+  for (key1,key2,value) in db.adb.colWalk65 RawByteCode.key65():
     let
-      root = StateRoot(key1)
-      start = key2.to(ItemKey)
+      root1 = StateRoot(key1)
+      start2 = key2.to(ItemKey)
       w = value.decodeRawByteCode().valueOr:
         var oops: WalkRawByteCode
-        oops.root = root
-        oops.start = start
+        oops.root = root1
+        oops.start = start2
         oops.error = error
         yield oops
         continue
-    yield (root, start, w.limit, w.codes, w.peerID, "")
+    yield (root1, start2, w.limit, w.codes, w.peerID, "")
 
 iterator walkRawByteCode*(db: MptAsmRef, root: StateRoot): WalkRawByteCode =
   ## Variant of `walkRawAccounts()` for fixed `root`
-  for (key1,key2,value) in db.adb.rWalk65(RawByteCode.key65(root), RawByteCode):
+  for (key1,key2,value) in db.adb.colWalk65 RawByteCode.key65(root):
     if StateRoot(key1) != root:
       break
     let
-      start = key2.to(ItemKey)
+      start2 = key2.to(ItemKey)
       w = value.decodeRawByteCode().valueOr:
         var oops: WalkRawByteCode
         oops.root = root
-        oops.start = start
+        oops.start = start2
         oops.error = error
         yield oops
         continue
-    yield (root, start, w.limit, w.codes, w.peerID, "")
+    yield (root, start2, w.limit, w.codes, w.peerID, "")
+
+iterator walkRawByteCode*(
+    db: MptAsmRef;
+    root: StateRoot;
+    start: ItemKey;
+      ): WalkRawByteCode =
+  ## Variant of `walkRawAccounts()` for fixed `root` and `start` account
+  let startHash = start.to(Hash32)
+  for (key1,key2,value) in db.adb.colWalk65 RawByteCode.key65(root,startHash):
+    if StateRoot(key1) != root:
+      break
+    let
+      start2 = key2.to(ItemKey)
+      w = value.decodeRawByteCode().valueOr:
+        var oops: WalkRawByteCode
+        oops.root = root
+        oops.start = start2
+        oops.error = error
+        yield oops
+        continue
+    yield (root, start2, w.limit, w.codes, w.peerID, "")
 
 # ------------------------------------------------------------------------------
 # End

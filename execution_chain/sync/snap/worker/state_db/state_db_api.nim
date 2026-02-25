@@ -191,10 +191,6 @@ proc register*(
 proc register*(db: StateDbRef; header: Header; hash: BlockHash) =
   discard db.register(StateRoot(header.stateRoot), hash, header.number)
 
-proc register*(db: StateDbRef; header: Header) =
-  db.register(header, BlockHash(header.computeBlockHash))
-
-
 
 func hasKey*(db: StateDbRef; bn: BlockNumber): bool =
   db.byNumber.eq(bn).isOk()

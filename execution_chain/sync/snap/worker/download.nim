@@ -50,9 +50,10 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
     if buddy.only.pivotRoot.isNone():
       let ethPeer = buddy.getEthPeer()              # get `ethXX` peer if avail
       if not ethPeer.isNil:
+        let hash = BlockHash(ethPeer.only.pivotHash)
         trace info & ": assigning best/latest pivotHash", peer,
-          hash=ethPeer.only.pivotHash.short, nSyncPeers=ctx.nSyncPeers()
-        buddy.headerStateRegister(BlockHash(ethPeer.only.pivotHash)).isErrOr:
+          hash=hash.toStr, nSyncPeers=ctx.nSyncPeers()
+        buddy.headerStateRegister(hash, info).isErrOr:
           buddy.only.pivotRoot = Opt.some(value)
 
     if sdb.len == 0:
