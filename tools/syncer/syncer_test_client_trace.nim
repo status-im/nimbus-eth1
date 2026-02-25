@@ -63,6 +63,13 @@ type
             " option overrides --data-dir for snap, which is the default"
       name: "snap-sync-data-dir" .}: Option[string]
 
+    snapSyncResume {.
+      desc: "Use the cached data from a previous session if there is any." &
+            " Otherwise, data from a previous snap session will be moved" &
+            " to a backup directory, the name ending with ~"
+      defaultValue: false
+      name: "snap-sync-resume" .}: bool
+
 
   SplitCmdLine = tuple
     leftArgs: seq[string]  # split command line: left to "--" marker (nimbus)
@@ -122,10 +129,9 @@ proc snapSyncConfig(conf: ToolConfig, defaultDir: string): SnapSyncConfigHook =
       if not desc.configUpdateFile(fileName):
         fatal "Error parsing file name for --snap-sync-update-file", fileName
         quit QuitFailure
-    let snapBaseDir = conf.snapSyncDataDir.get(otherwise = defaultDir)
-    if not desc.configBaseDir(snapBaseDir):
-      fatal "Cannot create snap base dir", snapBaseDir
-      quit QuitFailure
+    desc.configBaseDir(
+      conf.snapSyncDataDir.get(otherwise = defaultDir),
+      conf.snapSyncResume)
 
 # ------------------------------------------------------------------------------
 # Main
