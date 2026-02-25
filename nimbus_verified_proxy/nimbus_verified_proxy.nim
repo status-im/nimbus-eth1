@@ -18,7 +18,7 @@ import
   beacon_chain/networking/network_metadata,
   beacon_chain/spec/beaconstate,
   beacon_chain/conf,
-  beacon_chain/[beacon_clock, buildinfo, nimbus_binary_common],
+  beacon_chain/[beacon_clock, buildinfo, nimbus_binary_common, process_state],
   ../execution_chain/common/common,
   ./nimbus_verified_proxy_conf,
   ./engine/engine,
@@ -30,9 +30,6 @@ import
   ./json_rpc_backend,
   ./json_rpc_frontend,
   ../execution_chain/version_info
-
-when defined(posix):
-  import system/ansi_c
 
 # error object to translate results to error
 # NOTE: all results are translated to errors only in this file
@@ -167,15 +164,6 @@ proc run(
     await lcRestClientPool.closeAll()
     raise e
 
-var runFut: Future[void] = nil
-
-proc controlCHook() {.noconv.} =
-  {.gcsafe.}:
-    notice "Shutting down after Ctrl-C"
-    if runFut != nil:
-      runFut.cancelSoon()
-
-# noinline to keep it in stack traces
 proc main() {.raises: [].} =
   const
     banner = "Nimbus Verified Proxy " & FullVersionStr
@@ -186,30 +174,33 @@ proc main() {.raises: [].} =
     writePanicLine error # Logging not yet set up
     quit QuitFailure
 
-  setControlCHook(controlCHook)
+  ProcessState.setupStopHandlers()
+  ProcessState.notifyRunning()
 
-  when defined(posix):
-    proc sigTermHandler(sig: cint) {.noconv.} =
-      {.gcsafe.}:
-        notice "Shutting down after SIGTERM"
-        if runFut != nil:
-          runFut.cancelSoon()
+  let runFut = run(config)
 
-    discard c_signal(ansi_c.SIGTERM, sigTermHandler)
+  while not (
+    ProcessState.stopIt(notice("Triggering a shut down", reason = it)) or
+    runFut.finished()
+  )
+  :
+    poll()
 
-  # adding gcsafe because we are accessing a global variable here
-  {.gcsafe.}:
-    runFut = run(config)
-    try:
-      waitFor runFut
-    except CancelledError:
-      notice "Shutdown complete"
-    except ProxyError as e:
-      fatal "Proxy error", error = e.msg
-      quit QuitFailure
-    except CatchableError as e:
-      fatal "Unexpected error", error = e.msg
-      quit QuitFailure
+  # if runFut didn't finish process must have been stopped
+  if not runFut.finished:
+    runFut.cancelSoon()
+
+  try:
+    # critical that we waitFor here, it will propagate the error
+    waitFor runFut
+  except CancelledError:
+    notice "Shutdown complete"
+  except ProxyError as e:
+    fatal "Proxy error", error = e.msg
+    quit QuitFailure
+  except CatchableError as e:
+    fatal "Unexpected error", error = e.msg
+    quit QuitFailure
 
 when isMainModule:
   main()
