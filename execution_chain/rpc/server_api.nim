@@ -597,8 +597,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
   ) -> Opt[seq[ReceiptObject]]:
     ## Returns the receipts of a block.
     let
-      blk = api.blockFromTag(quantityTag).valueOr:
-        raise newException(ValueError, "Block not found")
+      blk = api.blockFromTag(quantityTag, noHash = true).valueOr:
+        raise newException(ValueError, "Block not found: " & error)
       blkHash = blk.header.computeBlockHash
       receipts = api.chain.receiptsByBlockHash(blkHash).valueOr:
         return Opt.none(seq[ReceiptObject])
