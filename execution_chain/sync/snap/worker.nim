@@ -61,7 +61,10 @@ template updateTarget(
 
 proc setup*(ctx: SnapCtxRef; info: static[string]): bool =
   ## Global set up
-  ctx.setupServices info
+  if ctx.setupServices info:
+    return true
+  error info & ": Setup failed, snap sync disabled"
+  # false
 
 proc release*(ctx: SnapCtxRef; info: static[string]) =
   ## Global clean up

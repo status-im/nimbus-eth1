@@ -40,7 +40,7 @@ proc setupServices*(ctx: SnapCtxRef; info: static[string]): bool =
   ctx.pool.stateDB = StateDbRef.init()
 
   # Set up assembly DB
-  ctx.pool.mptAsm = MptAsmRef.init(ctx.pool.baseDir, info).valueOr:
+  ctx.pool.mptAsm = MptAsmRef.init(ctx.pool.baseDir, true, info).valueOr:
     return false
 
   # Set up ticker, disabled by default

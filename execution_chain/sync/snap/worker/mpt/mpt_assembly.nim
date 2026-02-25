@@ -325,21 +325,22 @@ iterator rWalk(
       rit.next()
       yield (key, val)
 
-iterator rWalk65(
-    adb: RocksDbRef;
-    pfx: openArray[byte];
-      ): tuple[col: MptAsmCol, key1, key2: Hash32, data: seq[byte]] =
-  ## Variant of `rWalk()` for 65 byte keys
-  ##
-  var key1, key2: Hash32
-  for (key,value) in adb.rWalk(pfx):
-    const
-      minKey0 = low(MptAsmCol).ord.byte
-      maxKey0 = high(MptAsmCol).ord.byte
-    if key.len == 65 and minKey0 <= key[0] and key[0] <= maxKey0:
-      (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
-      (addr (key2.distinctBase)[0]).copyMem(addr key[33], 32)
-      yield (MptAsmCol(key[0]), key1, key2, value)
+when false: # not needed at the moment
+  iterator rWalk65(
+      adb: RocksDbRef;
+      pfx: openArray[byte];
+        ): tuple[col: MptAsmCol, key1, key2: Hash32, data: seq[byte]] =
+    ## Variant of `rWalk()` for 65 byte keys
+    ##
+    var key1, key2: Hash32
+    for (key,value) in adb.rWalk(pfx):
+      const
+        minKey0 = low(MptAsmCol).ord.byte
+        maxKey0 = high(MptAsmCol).ord.byte
+      if key.len == 65 and minKey0 <= key[0] and key[0] <= maxKey0:
+        (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
+        (addr (key2.distinctBase)[0]).copyMem(addr key[33], 32)
+        yield (MptAsmCol(key[0]), key1, key2, value)
 
 iterator rWalk65(
     adb: RocksDbRef;
@@ -358,22 +359,23 @@ iterator rWalk65(
       yield (key1, key2, value)
 
 
-iterator rWalk97(
-    adb: RocksDbRef;
-    pfx: openArray[byte];
-      ): tuple[col: MptAsmCol, key1, key2, key3: Hash32, data: seq[byte]] =
-  ## Variant of `rWalk()` for 97 byte keys
-  ##
-  var key1, key2, key3: Hash32
-  for (key,value) in adb.rWalk(pfx):
-    const
-      minKey0 = low(MptAsmCol).ord.byte
-      maxKey0 = high(MptAsmCol).ord.byte
-    if key.len == 97 and minKey0 <= key[0] and key[0] <= maxKey0:
-      (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
-      (addr (key2.distinctBase)[0]).copyMem(addr key[33], 32)
-      (addr (key3.distinctBase)[0]).copyMem(addr key[65], 32)
-      yield (MptAsmCol(key[0]), key1, key2, key3, value)
+when false: # not needed at the moment
+  iterator rWalk97(
+      adb: RocksDbRef;
+      pfx: openArray[byte];
+        ): tuple[col: MptAsmCol, key1, key2, key3: Hash32, data: seq[byte]] =
+    ## Variant of `rWalk()` for 97 byte keys
+    ##
+    var key1, key2, key3: Hash32
+    for (key,value) in adb.rWalk(pfx):
+      const
+        minKey0 = low(MptAsmCol).ord.byte
+        maxKey0 = high(MptAsmCol).ord.byte
+      if key.len == 97 and minKey0 <= key[0] and key[0] <= maxKey0:
+        (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
+        (addr (key2.distinctBase)[0]).copyMem(addr key[33], 32)
+        (addr (key3.distinctBase)[0]).copyMem(addr key[65], 32)
+        yield (MptAsmCol(key[0]), key1, key2, key3, value)
 
 iterator rWalk97(
     adb: RocksDbRef;
@@ -506,71 +508,70 @@ template del97(
   db.adb.rDel(col.key97(root, account, startHash))
 
 # ------------------------------------------------------------------------------
-# Public constructor
+# Private constructor helpers
 # ------------------------------------------------------------------------------
 
-proc init*(T: type MptAsmRef, baseDir: string, info: static[string]): Opt[T] =
-  if baseDir.len == 0:
-    error info & "No base directory for assembly DB"
-    return err()
+proc closeDb(db: MptAsmRef) =
+  if not db.adb.isNil:
+    db.adb.close()
+    db.adb = RocksDbReadWriteRef(nil)
 
-  let asmDir = Path(baseDir) / Path(snapAsmFolder)
-  if asmDir.dirExists:
-    let bakDir = Path(asmDir.distinctBase & "~")
+proc openDb(db: MptAsmRef; info: static[string]): bool =
+  db.adb = db.dir.distinctBase.openRocksDb().valueOr:
+    error info & ": Cannot create rocksdb assembly DB",
+      dir=db.dir, `error`=error
+    return false
+
+  true
+
+proc newDbFolder(db: MptAsmRef; info: static[string]): bool =
+  if db.dir.dirExists:
+    let bakDir = Path(db.dir.distinctBase & "~")
     block backupOldFolder:
       var excpt = ""
       try:
         bakDir.removeDir()
-        asmDir.moveDir bakDir
+        db.dir.moveDir bakDir
         break backupOldFolder
       except OSError as e:
         excpt = $e.name & "(" & e.msg & ")"
       except IOError as e:
         excpt = $e.name & "(" & e.msg & ")"
-      error info & ": Cannot backup old assembly folder", asmDir, bakDir, excpt
-      return err()
-
-    when extraTraceMessages: # FIXME: debugging -- will go away
-      let adb = bakDir.distinctBase.openRocksDb().valueOr:
-        error info & ": Can't create assembly DB", bakDir, `error`=error
-        return err()
-      defer: adb.close()
-      for (col,key1,key2,val) in adb.rWalk65(EmptyBlob):
-        trace info & ": dump", bak=bakDir.splitFile.name,
-          col, key1=key1.toStr, key2=key2.toStr, nData=val.len
-      for (col,key1,key2,key3,val) in adb.rWalk97(EmptyBlob):
-        trace info & ": dump", bak=bakDir.splitFile.name,
-          col, key1=key1.toStr, key2=key2.toStr, key3=key3.toStr, nData=val.len
+      error info & ": Cannot backup old assembly folder",
+        dir=db.dir, bakDir, excpt
+      return false
 
   block createSnapFolder:
     var excpt = ""
     try:
-      asmDir.createDir()
+      db.dir.createDir()
       break createSnapFolder
     except OSError as e:
       excpt = $e.name & "(" & e.msg & ")"
     except IOError as e:
       excpt = $e.name & "(" & e.msg & ")"
-    error info & ": Cannot create assembly folder", asmDir, excpt
-    return err()
+    error info & ": Cannot create assembly folder",
+      dir=db.dir, excpt
+    return false
 
-  let db = T(dir: asmDir)
-  db.adb = asmDir.distinctBase.openRocksDb().valueOr:
-    error info & ": Cannot create rocksdb assembly DB", asmDir, `error`=error
-    return err()
+  true
 
-  ok db
+# ------------------------------------------------------------------------------
+# Public constructor
+# ------------------------------------------------------------------------------
 
 proc close*(db: MptAsmRef, eradicate = false) =
-  db.adb.close()
-  db.adb = nil
+  ## Close database unless done yet. If the argument `eradicate` is set
+  ## `true`, then the database will be physically deleted.
+  ##
+  db.closeDb()
   if eradicate:
     try:
       db.dir.removeDir()
 
       # Remove the base folder if it is empty
       block done:
-        for w in db.dir.walkDirRec():
+        for w in db.dir.parentDir.walkDirRec():
           # Ignore backup files
           let p = w.distinctBase
           if 0 < p.len and p[^1] != '~':
@@ -578,6 +579,40 @@ proc close*(db: MptAsmRef, eradicate = false) =
         db.dir.removeDir()
     except CatchableError:
       discard
+
+proc clear*(db: MptAsmRef; info: static[string]): bool =
+  ## Close database and move it to a backup directory, then re-open a new
+  ## database. Any previous backup database will be deleted.
+  ##
+  ## This function returns the argument true if database backup and
+  ## re-open succeeded, and `false` otherwise.
+  ##
+  db.closeDb()
+  db.newDbFolder(info) and db.openDb(info)
+
+proc init*(
+    T: type MptAsmRef;
+    baseDir: string;
+    newDb: bool;
+    info: static[string];
+      ): Opt[T] =
+  ## Create or open an existing database. If the ergument `newDb` is set
+  ## `false`, the database is opened. Otherwise, `MptAsmRef.init(dir,true)`
+  ## is roughly equivalent to
+  ## ::
+  ##   let db = MptAsmRef.init(dir,false).expect "value"
+  ##   discard db.clear()
+  ##
+  if baseDir.len == 0:
+    error info & ": No base directory for assembly DB"
+
+  else:
+    let db = T(dir: Path(baseDir) / Path(snapAsmFolder))
+    if not newDb or db.newDbFolder(info):
+      if db.openDb(info):
+        return ok db
+
+  err()
 
 # ------------------------------------------------------------------------------
 # Public functions
