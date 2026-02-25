@@ -64,12 +64,6 @@ switch("passL", "-fno-omit-frame-pointer")
 --threads:on
 --mm:orc
 --excessiveStackTrace:on
-# enable metric collection
---define:metrics
-# for heap-usage-by-instance-type metrics and object base-type strings
---define:nimTypeNames
---styleCheck:usages
---styleCheck:error
 
 # Workaround for v2.2.8 regression; remove with v2.2.10
 # https://github.com/nim-lang/Nim/pull/25343
@@ -77,41 +71,6 @@ switch("passL", "-fno-omit-frame-pointer")
 
 switch("define", "nim_compiler_path=" & currentDir & "env.sh nim")
 switch("define", "withoutPCRE")
-
-when not defined(disable_libbacktrace):
-  --define:nimStackTraceOverride
-  switch("import", "libbacktrace")
-else:
-  --stacktrace:on
-  --linetrace:on
-
-var canEnableDebuggingSymbols = true
-if defined(macosx):
-  # The default open files limit is too low on macOS (512), breaking the
-  # "--debugger:native" build. It can be increased with `ulimit -n 1024`.
-  let openFilesLimitTarget = 1024
-  var openFilesLimit = 0
-  try:
-    openFilesLimit = staticExec("ulimit -n").strip(chars = Whitespace + Newlines).parseInt()
-    if openFilesLimit < openFilesLimitTarget:
-      echo "Open files limit too low to enable debugging symbols and lightweight stack traces."
-      echo "Increase it with \"ulimit -n " & $openFilesLimitTarget & "\""
-      canEnableDebuggingSymbols = false
-  except:
-    echo "ulimit error"
-# We ignore this resource limit on Windows, where a default `ulimit -n` of 256
-# in Git Bash is apparently ignored by the OS, and on Linux where the default of
-# 1024 is good enough for us.
-
-if canEnableDebuggingSymbols:
-  # add debugging symbols and original files and line numbers
-  --debugger:native
-
-switch("warningAsError", "BareExcept:on")
-switch("warningAsError", "CaseTransition:on")
-switch("warningAsError", "UnusedImport:on")
-switch("hintAsError", "ConvFromXtoItselfNotNeeded:on")
-switch("hintAsError", "DuplicateModuleImport:on")
 
 # nim-kzg shipping their own blst, nimbus-eth1 too.
 # disable nim-kzg's blst
@@ -127,38 +86,13 @@ when not defined(use_system_rocksdb) and not defined(windows):
   else:
     switch("gcc.linkerexe", "g++")
 
-# ############################################################
-#
-#                    No LTO for crypto
-#
-# ############################################################
-
 # This applies per-file compiler flags to C files
 # which do not support {.localPassC: "-fno-lto".}
 # Unfortunately this is filename based instead of path-based
 # Assumes GCC
-
-# BLST
-put("server.always", "-fno-lto")
-put("assembly.always", "-fno-lto")
 
 # Secp256k1
 # -fomit-frame-pointer for:
 # https://github.com/status-im/nimbus-eth1/issues/2127
 # https://github.com/status-im/nimbus-eth2/issues/6324
 put("secp256k1.always", "-fno-lto -fomit-frame-pointer")
-
-# BearSSL - only RNGs
-put("aesctr_drbg.always", "-fno-lto")
-put("hmac_drbg.always", "-fno-lto")
-put("sysrng.always", "-fno-lto")
-
-# ############################################################
-#
-#                    Spurious warnings
-#
-# ############################################################
-
-# sqlite3.c: In function ‘sqlite3SelectNew’:
-# vendor/nim-sqlite3-abi/sqlite3.c:124500: warning: function may return address of local variable [-Wreturn-local-addr]
-put("sqlite3.always", "-fno-lto") # -Wno-return-local-addr
