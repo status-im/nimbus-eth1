@@ -23,13 +23,17 @@ logScope:
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc getOrMakeState(ctx: SnapCtxRef, root: StateRoot): Opt[StateDataRef] =
+proc getOrMakeState(
+    ctx: SnapCtxRef;
+    root: StateRoot;
+    info: static[string];
+      ): Opt[StateDataRef] =
   let sdb = ctx.pool.stateDB
   sdb.get(root).isErrOr:
     return ok value
   let (hash,number) = ctx.pool.mptAsm.getBlockData(root).valueOr:
     return err()
-  ok sdb.register(root, hash, number)
+  ok sdb.register(root, hash, number, info)
 
 proc storageRecover(ctx: SnapCtxRef, state: StateDataRef, acc: SnapAccount) =
   let storageRoot = acc.accBody.storageRoot
@@ -93,7 +97,7 @@ proc sessionResumeDownload*(ctx: SnapCtxRef; info: static[string]): bool =
         continue
 
       # Get state record (with all accounts unprocessed when created)
-      var state = ctx.getOrMakeState(w.root).valueOr:
+      var state = ctx.getOrMakeState(w.root, info).valueOr:
         # Cannot resolve, ignore this state root
         ignRoot = w.root
         continue

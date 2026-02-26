@@ -62,6 +62,7 @@ template downloadImpl(
     let
       ctx = buddy.ctx
       adb = ctx.pool.mptAsm
+      sdb = ctx.pool.stateDB
       sRoot = state.stateRoot
       peerID = buddy.peerID
 
@@ -84,6 +85,10 @@ template downloadImpl(
           trace info & ": fetching slots failed", peer, root,
             start, nAccLeft=accLeft.len
           break body                                # error => return
+
+        if not sdb.hasKey(sRoot):                   # evicted => return
+          bodyRc = false                            # ignore downloaded data
+          break body
 
         # Store complete sub-trees on database
         for n in 0 ..< data.slots.len:
@@ -122,6 +127,10 @@ template downloadImpl(
               nAccLeft=accLeft.len, iv=iv.flStr, `error`=error
             break body                            # error => return
 
+          if not sdb.hasKey(sRoot):               # evicted => return
+            bodyRc = false                        # ignore downloaded data
+            break body
+
           limit = if ivData.slot.len == 0: high(ItemKey)
                   else: ivData.slot[^1].slotHash.to(ItemKey)
 
@@ -156,6 +165,8 @@ template downloadFromQueue(
   var bodyRc = false
   block body:
     let
+      ctx = buddy.ctx
+      sdb = ctx.pool.stateDB
       peer {.inject,used.} = $buddy.peer            # logging only
       root {.inject,used.} = state.rootStr          # logging only
 
@@ -179,6 +190,9 @@ template downloadFromQueue(
     if 0 < fullTries.len:
       if buddy.downloadImpl(state, fullTries, ItemKeyRangeMax, info):
         bodyRc = true
+      elif not sdb.hasKey(state.stateRoot):         # evicted => return
+        bodyRc = false                              # ignore downloaded data
+        break body
 
     # Process partial tries (one by one)
     while partStart < partTries.len:
@@ -196,6 +210,9 @@ template downloadFromQueue(
 
       if buddy.downloadImpl(state, acc, iv, info):
         bodyRc = true
+      elif not sdb.hasKey(state.stateRoot):         # evicted => return
+        bodyRc = false                              # ignore downloaded data
+        break body
       # End `while`
 
   bodyRc                                            # return code
@@ -213,6 +230,10 @@ template storageDownload*(
   ## Async/template
   ##
   block body:
+    let sdb = buddy.ctx.pool.stateDB
+    if not sdb.hasKey(state.stateRoot):             # evicted => return
+      break body
+
     let acc = accounts
        .filterIt(not it.accBody.storageRoot.isEmpty)
        .mapIt( (it.accHash.to(ItemKey),
@@ -222,7 +243,9 @@ template storageDownload*(
       state.register acc                            # stash data and return
       break body                                    # all done
 
-    discard buddy.downloadImpl(state, acc, ItemKeyRangeMax, info)
+    if not buddy.downloadImpl(state, acc, ItemKeyRangeMax, info) and
+       not sdb.hasKey(state.stateRoot):             # evicted => return
+      break body                                    # all done
 
     while not buddy.ctrl.stopped and
           0 < state.len and

@@ -12,10 +12,13 @@
 
 import
   std/[hashes, sequtils, sets, tables],
-  pkg/[eth/common, metrics],
+  pkg/[chronicles, eth/common, metrics],
   pkg/stew/[interval_set, sorted_set],
   ../[helpers, worker_const],
   ./[state_identifiers, state_item_key, state_unproc_item_keys]
+
+logScope:
+  topics = "snap sync"
 
 declareGauge nec_snap_acc_coverage, "" &
   "Factor of accumulated accounts covered over all state roots"
@@ -69,6 +72,8 @@ type
     byNumber: StateByNumber             ## States indexed by block number
     byHash: StateByHash                 ## States indexed by block hash
     byRoot: StateByRoot                 ## States indexed by state root
+
+func toStr*(db: StateDbRef): string     ## Forward declaration
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -145,6 +150,7 @@ proc register*(
     root: StateRoot;
     hash: BlockHash;
     number: BlockNumber;
+    info: static[string];
       ): StateDataRef =
   ## Update or register new account state record on database
   ##
@@ -154,6 +160,7 @@ proc register*(
     db.byRoot.del state.stateRoot                   # ...
     if db.topDone == state:
       db.topDone = StateDataRef(nil)
+    debug info & ": evicted state record", root=state.rootStr, hash=hash.toStr
 
   db.byNumber.eq(number).isErrOr:
     if value.data.blockHash == hash:
@@ -188,14 +195,19 @@ proc register*(
 
   newState                                          # return state record
 
-proc register*(db: StateDbRef; header: Header; hash: BlockHash) =
-  discard db.register(StateRoot(header.stateRoot), hash, header.number)
+proc register*(
+    db: StateDbRef;
+    header: Header;
+    hash: BlockHash;
+    info: static[string];
+      ) =
+  discard db.register(StateRoot(header.stateRoot), hash, header.number, info)
 
 
 func hasKey*(db: StateDbRef; bn: BlockNumber): bool =
   db.byNumber.eq(bn).isOk()
 
-func hasKey*(db: StateDbRef; hash: BlockHash): bool =
+func hasKey*(db: StateDbRef ; hash: BlockHash): bool =
   db.byHash.hasKey(hash)
 
 func hasKey*(db: StateDbRef; root: StateRoot): bool =
@@ -254,12 +266,6 @@ func top*(db: StateDbRef): Opt[StateDataRef] =
   let val = db.byNumber.le(high BlockNumber).valueOr:
     return err()
   ok val.data
-
-func topNum*(db: StateDbRef): BlockNumber =
-  ## Retrieve the highest block number used for a state record.
-  let top = db.top.valueOr:
-    return BlockNumber(0)
-  top.blockNumber
 
 # ------------------------------------------------------------------------------
 # Public unprocessed account ranges administration
@@ -520,7 +526,7 @@ func toStr*(db: StateDbRef): string =
   if nKeys == 0:
     return "n/a"
   let
-    topNum = db.topNum
+    topNum = if db.topDone.isNil: BlockNumber(0) else: db.topDone.blockNumber
     base3 = (topNum div 1000) * 1000
     base4 = (topNum div 10000) * 10000
 
