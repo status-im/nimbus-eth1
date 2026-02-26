@@ -12,7 +12,11 @@
 
 import
   pkg/[chronicles, chronos],
-  ./[account, code, helpers, header, mpt, state_db, storage, worker_desc]
+  ./download/[account, code, header, storage],
+  ./[helpers, mpt, state_db, worker_desc]
+
+export
+  account, code, header, storage
 
 # ------------------------------------------------------------------------------
 # Public function(s)
@@ -46,9 +50,10 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
     if buddy.only.pivotRoot.isNone():
       let ethPeer = buddy.getEthPeer()              # get `ethXX` peer if avail
       if not ethPeer.isNil:
+        let hash = BlockHash(ethPeer.only.pivotHash)
         trace info & ": assigning best/latest pivotHash", peer,
-          hash=ethPeer.only.pivotHash.short, nSyncPeers=ctx.nSyncPeers()
-        buddy.headerStateRegister(BlockHash(ethPeer.only.pivotHash)).isErrOr:
+          hash=hash.toStr, nSyncPeers=ctx.nSyncPeers()
+        buddy.headerStateRegister(hash, info).isErrOr:
           buddy.only.pivotRoot = Opt.some(value)
 
     if sdb.len == 0:
@@ -57,11 +62,10 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
 
     # Fetch for state DB items, start with pivot root
     var theseFirst: seq[StateRoot]
-    let maxDone = sdb.getMaxDone()
-    if maxDone.isSome():                            # the one with mose done yet
-      theseFirst.add StateRoot(maxDone.unsafeGet().header.stateRoot)
-    if buddy.only.pivotRoot.isSome():               # best supported by peer
-      theseFirst.add buddy.only.pivotRoot.unsafeGet()
+    sdb.pivot.isErrOr:                              # the one with most done yet
+      theseFirst.add value.stateRoot
+    buddy.only.pivotRoot.isErrOr:                   # best supported by peer
+      theseFirst.add value
 
     # Run `download()` for available states, the order of which is
     # determined by the following criteria with deacening priority
