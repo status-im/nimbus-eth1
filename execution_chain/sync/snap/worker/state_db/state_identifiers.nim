@@ -11,6 +11,7 @@
 
 import
   std/[hashes, typetraits],
+  ../../../wire_protocol,
   pkg/eth/common
 
 type
@@ -53,6 +54,10 @@ template to*[T: DistinctHash32](w: Hash32, _: type T): T = T(w)
 template to*[T: Hash32](w: DistinctHash32; _: type T): T = T(w)
 
 template to*[T: seq[Hash32]](w: DistinctSeqHash32, _: type T): T = cast[T](w)
+
+template to*[T: StoreRoot](w: SnapRootHash, _: type T): T = T(w.Hash32)
+
+template to*[T: CodeHash](w: SnapCodeHash, _: type T): T = T(w.Hash32)
 
 # ------------------------------------------------------------------------------
 # Public print function()s

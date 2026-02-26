@@ -90,16 +90,11 @@ proc config*(
     desc.lazyConfigHook(desc)
     desc.lazyConfigHook = nil
 
-proc configBaseDir*(desc: SnapSyncRef; dir: string): bool =
+proc configBaseDir*(desc: SnapSyncRef; dir: string; resume: bool) =
   ## Set up database folder.
   doAssert not desc.ctx.isNil
-  try:
-    Path(dir).createDir()
-    desc.ctx.pool.baseDir = dir
-    return true
-  except OSError, IOError:
-    discard
-  # false
+  desc.ctx.pool.baseDir = dir
+  desc.ctx.pool.resume = resume
 
 proc configTarget*(desc: SnapSyncRef; hex: string): bool =
   ## Set up inital target root (if any, mainly for debugging)
