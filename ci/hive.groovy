@@ -59,7 +59,7 @@ pipeline {
   stages {
     stage('Build nimbus-eth1') {
       steps {
-        sh 'docker build -f "${WORKSPACE}/Dockerfile" "${WORKSPACE}"'
+        sh 'docker build -t statusim/nimbus-eth1:master -f "${WORKSPACE}/Dockerfile" "${WORKSPACE}"'
       }
     }
     stage('Prepare Hive') {
@@ -88,7 +88,6 @@ pipeline {
                     --sim.parallelism=${params.PARALLELISM} \
                     --sim.loglevel 4 \
                     --docker.nocache hive/clients/nimbus-el \
-                    --docker.pull true \
                     ${params.DOCKER_BUILDOUTPUT ? '--docker.buildoutput' : ''}
                   """
                 }
@@ -114,33 +113,6 @@ pipeline {
                     --sim.parallelism=${params.PARALLELISM} \
                     --sim.loglevel 4 \
                     --docker.nocache hive/clients/nimbus-el \
-                    --docker.pull true \
-                    ${params.DOCKER_BUILDOUTPUT ? '--docker.buildoutput' : ''}
-                  """
-                }
-              } catch (e) {
-                failedStages << env.STAGE_NAME
-                throw e
-              }
-            }
-          }
-        }
-        stage('sync erigon-nimbus') {
-          options {
-            timeout(time: params.TIMEOUT_MINUTES, unit: 'MINUTES')
-          }
-          steps {
-            script {
-              try {
-                dir('hive') {
-                  sh """
-                    ./hive \
-                    --sim "${params.SIMULATION_NAME}" \
-                    --client-file="${WORKSPACE}/ci/erigon-nimbus-sync-config.yml" \
-                    --sim.parallelism=${params.PARALLELISM} \
-                    --sim.loglevel 4 \
-                    --docker.nocache hive/clients/nimbus-el \
-                    --docker.pull true \
                     ${params.DOCKER_BUILDOUTPUT ? '--docker.buildoutput' : ''}
                   """
                 }
