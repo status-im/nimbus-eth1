@@ -5,11 +5,11 @@ to make use of the proxy.
 
 ### 1. Building the Nimbus Verified Proxy
 
-First build the Nimbus Verified Proxy as explained [here](../README.md#Build-light-client-proxy).
+First build the Nimbus Verified Proxy as explained [here](../README.md#build-the-nimbus-verified-proxy-from-source).
 
 ### 2. Configuring and running the Nimbus Verified Proxy
 
-To start the proxy for the Goerli network, run the following command (inserting your own `TRUSTED_BLOCK_ROOT` and Alchemy `API_KEY`):
+To start the proxy for Mainnet, run the following command (inserting your own `TRUSTED_BLOCK_ROOT` and Alchemy `API_KEY`):
 
 
 ```bash
@@ -17,9 +17,10 @@ To start the proxy for the Goerli network, run the following command (inserting 
 TRUSTED_BLOCK_ROOT=0x1234567890123456789012345678901234567890123456789012345678901234 # Replace this
 API_KEY=abcd # Replace this
 ./build/nimbus_verified_proxy \
-    --network=goerli \
+    --network=mainnet \
     --trusted-block-root=${TRUSTED_BLOCK_ROOT} \
-    --web3-url="wss://eth-goerli.g.alchemy.com/v2/${API_KEY}"
+    --execution-api-url="wss://eth-mainnet.g.alchemy.com/v2/${API_KEY}" \
+    --beacon-api-url="https://beaconstate.info"
 ```
 
 
@@ -44,10 +45,10 @@ To add custom network in MetaMask browser extension:
 2. In `settings`, go to `networks` tab.
 3. Click on the `Add a network` button.
 4. Click on `Add a network manually`.
-5. Type a Network name of choice, e.g. "Trusted Goerli".
+5. Type a Network name of choice, e.g. "Trusted Mainnet".
 The `New RPC URL` field must be configured to point to the HTTP server of the proxy. In this
 example it will be `http://127.0.0.1:8545`. The `Chain ID` field must be set to the chain id of
-the network used by the proxy. The chain id for Goerli is `5`.
+the network used by the proxy. The chain id for Mainnet is `1`.
 
 If everything went smooth there should be a new network in `Networks` drop down menu.
 
