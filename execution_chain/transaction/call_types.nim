@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -36,10 +36,6 @@ type
     accessList*:   AccessList           # EIP-2930 (Berlin) tx access list.
     versionedHashes*: seq[VersionedHash]   # EIP-4844 (Cancun) blob versioned hashes
     authorizationList*: seq[Authorization] # EIP-7702 (Prague) authorization list
-    noIntrinsic*:  bool                 # Don't charge intrinsic gas.
-    noAccessList*: bool                 # Don't initialise EIP-2929 access list.
-    noGasCharge*:  bool                 # Don't charge sender account for gas.
-    noRefund*:     bool                 # Don't apply gas refund/burn rule.
     sysCall*:      bool                 # System call or ordinary call
 
   # Standard call result.
@@ -56,7 +52,8 @@ type
 
   LogResult* = object
     logEntries*: seq[Log]
-    gasUsed*:    GasInt
+    gasUsed*: GasInt
+    blockGasUsed*: GasInt
 
   OutputResult* = object
     error*:   string
@@ -79,7 +76,7 @@ func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork): (GasInt, GasI
   # of gas needed to send this transaction (but that is not actually used
   # for computation).
   var
-    intrinsicGas = gasFees[fork][GasTransaction]
+    intrinsicGas = TX_BASE_COST
     floorDataGas = intrinsicGas
     tokens = 0
 
@@ -105,7 +102,7 @@ func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork): (GasInt, GasI
   if fork >= FkBerlin:
     for account in call.accessList:
       intrinsicGas += ACCESS_LIST_ADDRESS_COST
-      intrinsicGas += GasInt(account.storageKeys.len) * ACCESS_LIST_STORAGE_KEY_COST
+      intrinsicGas += account.storageKeys.len * ACCESS_LIST_STORAGE_KEY_COST
 
   if fork >= FkPrague:
     intrinsicGas += call.authorizationList.len * PER_EMPTY_ACCOUNT_COST

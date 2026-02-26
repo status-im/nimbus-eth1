@@ -27,6 +27,7 @@ EXCLUDED_NIM_PACKAGES := 	\
   vendor/nimbus-eth2/vendor/nim-http-utils            \
   vendor/nimbus-eth2/vendor/nim-ngtcp2                \
   vendor/nimbus-eth2/vendor/nim-quic                  \
+  vendor/nimbus-eth2/vendor/nim-intops                \
   vendor/nimbus-eth2/vendor/nim-json-rpc              \
   vendor/nimbus-eth2/vendor/nim-json-serialization    \
   vendor/nimbus-eth2/vendor/nim-libbacktrace          \

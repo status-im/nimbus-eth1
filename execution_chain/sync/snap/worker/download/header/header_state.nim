@@ -13,7 +13,7 @@
 import
   std/[os, strutils],
   pkg/[chronicles, chronos],
-  ../worker_desc,
+  ../../[mpt, worker_desc],
   ./header_fetch
 
 logScope:
@@ -23,9 +23,10 @@ logScope:
 # Private function
 # ------------------------------------------------------------------------------
 
-template headerStateSet(
+template headerStateRegister(
     buddy: SnapPeerRef;
     blockNumber: BlockNumber;
+    info: static[string];
       ): Result[StateRoot,bool] =
   ## Async/template
   ##
@@ -49,11 +50,20 @@ template headerStateSet(
       bodyRc = Result[StateRoot,bool].err(false)
       break body # no change
 
-    let header = buddy.headerFetch(blockNumber).valueOr:
+    let
+      header = buddy.headerFetch(blockNumber).valueOr:
+        break body # error
+      root = StateRoot(header.stateRoot)
+      hash = BlockHash(header.computeBlockHash)
+
+    # Store root -> block data mapping
+    ctx.pool.mptAsm.putBlockData(root, hash, blockNumber).isOkOr:
+      trace info & ": Cannot store state root map", peer,
+        stateRoot=root.toStr, blockHash=hash.toStr, blockNumber
       break body # error
 
-    ctx.pool.stateDB.update(header)
-    bodyRc = Result[StateRoot,bool].ok(StateRoot(header.stateRoot))
+    ctx.pool.stateDB.register(header, hash)
+    bodyRc = Result[StateRoot,bool].ok(root)
 
   bodyRc # return
 
@@ -66,7 +76,7 @@ proc readData(
 
   var file: File
   if not file.open(fileName):
-    trace info & ": cannot open", peer, fileName
+    trace info & ": Cannot open file", peer, fileName
     return err()
   defer: file.close()
 
@@ -74,16 +84,16 @@ proc readData(
   try:
     lns = file.readAll.splitLines()
   except IOError:
-    trace info & ": read error", peer, fileName
+    trace info & ": Read error", peer, fileName
     return err()
 
   if lns.len == 0 or lns[0].len == 0:
-    trace info & ": empty file", peer, fileName
+    trace info & ": Empty file", peer, fileName
     return err()
 
   let data = lns[0].strip
   if 66 < data.len: # max: 2 + 64
-    trace info & ": data contents too large", peer, fileName, data
+    trace info & ": Data contents too large", peer, fileName, data
     return err()
 
   ok(data)
@@ -92,9 +102,10 @@ proc readData(
 # Public function(s)
 # ------------------------------------------------------------------------------
 
-template headerStateSet*(
+template headerStateRegister*(
     buddy: SnapPeerRef;
-    blockHash: BlockHash;
+    hash: BlockHash;
+    info: static[string];
       ): Result[StateRoot,bool] =
   ## Async/template
   ##
@@ -109,22 +120,31 @@ template headerStateSet*(
   ##
   var bodyRc = Result[StateRoot,bool].err(true) # defaults to: error
   block body:
-    if blockHash == BlockHash(zeroHash32):
+    if hash == BlockHash(zeroHash32):
       break body # no change
 
     let ctx = buddy.ctx
-    ctx.pool.stateDB.get(blockHash).isErrOr:
+    ctx.pool.stateDB.get(hash).isErrOr:
       bodyRc = Result[StateRoot,bool].err(false)
       break body # no change
 
-    let header = buddy.headerFetch(blockHash).valueOr:
+    let
+      header = buddy.headerFetch(hash).valueOr:
+        break body # error
+      root = StateRoot(header.stateRoot)
+      blockNumber = header.number
+
+    if blockNumber == 0:
       break body # error
 
-    if header.number == 0:
+    # Store root -> block data mapping
+    ctx.pool.mptAsm.putBlockData(root, hash, blockNumber).isOkOr:
+      trace info & ": Cannot store state root map", peer,
+        stateRoot=root.toStr, blockHash=hash.toStr, blockNumber
       break body # error
 
-    ctx.pool.stateDB.update(header, blockHash)
-    bodyRc = Result[StateRoot,bool].ok(StateRoot(header.stateRoot))
+    ctx.pool.stateDB.register(header, hash)
+    bodyRc = Result[StateRoot,bool].ok(root)
 
   bodyRc # return
 
@@ -166,9 +186,9 @@ template headerStateLoad*(
         try:
           let blkHash = BlockHash(Hash32.fromHex(data))
           if blkHash != BlockHash(zeroHash32):
-            bodyRc = buddy.headerStateSet(blkHash)
+            bodyRc = buddy.headerStateRegister(blkHash, info)
             if bodyRc.isErr() and bodyRc.error():
-              trace info & ": state update failed", peer, fileName,
+              trace info & ": State update failed", peer, fileName,
                 blockHash=blkHash.toStr
           break parseAndUpdate
         except ValueError:
@@ -179,15 +199,15 @@ template headerStateLoad*(
         try:
           let number = data.parseUInt.uint64
           if 0 < number:
-            bodyRc = buddy.headerStateSet(number)
+            bodyRc = buddy.headerStateRegister(number, info)
             if bodyRc.isErr() and bodyRc.error():
-              trace info & ": state update failed", peer, fileName,
+              trace info & ": State update failed", peer, fileName,
                 blockNumber=number
           break parseAndUpdate
         except ValueError:
           discard
 
-      trace info & ": parse error", peer, fileName, data
+      trace info & ": Parse error", peer, fileName, data
       bodyRc = Result[StateRoot,bool].err(true)
       # End block `parseAndUpdate`
 

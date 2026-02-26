@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -14,14 +14,13 @@ import
   web3/execution_types,
   ./api_utils
 
-{.push gcsafe, raises:[CatchableError].}
+{.push gcsafe, raises: [CatchableError].}
 
-const
-  maxBodyRequest = 32
+const maxBodyRequest = 32
 
-proc getPayloadBodiesByHash*(ben: BeaconEngineRef,
-                             hashes: seq[Hash32]):
-                               seq[Opt[ExecutionPayloadBodyV1]] =
+proc getPayloadBodiesByHashV1*(
+    ben: BeaconEngineRef, hashes: seq[Hash32]
+): seq[Opt[ExecutionPayloadBodyV1]] =
   if hashes.len > maxBodyRequest:
     raise tooLargeRequest("request exceeds max allowed " & $maxBodyRequest)
 
@@ -35,9 +34,25 @@ proc getPayloadBodiesByHash*(ben: BeaconEngineRef,
 
   move(list)
 
-proc getPayloadBodiesByRange*(ben: BeaconEngineRef,
-                              start: uint64, count: uint64):
-                                seq[Opt[ExecutionPayloadBodyV1]] =
+proc getPayloadBodiesByHashV2*(
+    ben: BeaconEngineRef, hashes: seq[Hash32]
+): seq[Opt[ExecutionPayloadBodyV2]] =
+  if hashes.len > maxBodyRequest:
+    raise tooLargeRequest("request exceeds max allowed " & $maxBodyRequest)
+
+  var list = newSeqOfCap[Opt[ExecutionPayloadBodyV2]](hashes.len)
+
+  for h in hashes:
+    var body = ben.chain.payloadBodyV2ByHash(h).valueOr:
+      list.add Opt.none(ExecutionPayloadBodyV2)
+      continue
+    list.add Opt.some(move(body))
+
+  move(list)
+
+proc getPayloadBodiesByRangeV1*(
+    ben: BeaconEngineRef, start: uint64, count: uint64
+): seq[Opt[ExecutionPayloadBodyV1]] =
   if start == 0:
     raise invalidParams("start block should greater than zero")
 
@@ -47,8 +62,7 @@ proc getPayloadBodiesByRange*(ben: BeaconEngineRef,
   if count > maxBodyRequest:
     raise tooLargeRequest("request exceeds max allowed " & $maxBodyRequest)
 
-  var
-    last = start+count-1
+  var last = start + count - 1
 
   if start > ben.chain.latestNumber:
     # requested range beyond the latest known block.
@@ -58,11 +72,11 @@ proc getPayloadBodiesByRange*(ben: BeaconEngineRef,
     last = ben.chain.latestNumber
 
   let base = ben.chain.baseNumber
-  var list = newSeqOfCap[Opt[ExecutionPayloadBodyV1]](last-start+1)
+  var list = newSeqOfCap[Opt[ExecutionPayloadBodyV1]](last - start + 1)
 
   if start < base:
     # get bodies from database.
-    for bn in start..min(last, base):
+    for bn in start .. min(last, base):
       var body = ben.chain.payloadBodyV1ByNumber(bn).valueOr:
         list.add Opt.none(ExecutionPayloadBodyV1)
         continue
@@ -73,5 +87,45 @@ proc getPayloadBodiesByRange*(ben: BeaconEngineRef,
       ben.chain.payloadBodyV1InMemory(base, last, list)
   else:
     ben.chain.payloadBodyV1InMemory(start, last, list)
+
+  move(list)
+
+proc getPayloadBodiesByRangeV2*(
+    ben: BeaconEngineRef, start: uint64, count: uint64
+): seq[Opt[ExecutionPayloadBodyV2]] =
+  if start == 0:
+    raise invalidParams("start block should greater than zero")
+
+  if count == 0:
+    raise invalidParams("blocks count should greater than zero")
+
+  if count > maxBodyRequest:
+    raise tooLargeRequest("request exceeds max allowed " & $maxBodyRequest)
+
+  var last = start + count - 1
+
+  if start > ben.chain.latestNumber:
+    # requested range beyond the latest known block.
+    return
+
+  if last > ben.chain.latestNumber:
+    last = ben.chain.latestNumber
+
+  let base = ben.chain.baseNumber
+  var list = newSeqOfCap[Opt[ExecutionPayloadBodyV2]](last - start + 1)
+
+  if start < base:
+    # get bodies from database.
+    for bn in start .. min(last, base):
+      var body = ben.chain.payloadBodyV2ByNumber(bn).valueOr:
+        list.add Opt.none(ExecutionPayloadBodyV2)
+        continue
+      list.add Opt.some(move(body))
+
+    # get bodies from cache in FC module.
+    if last > base:
+      ben.chain.payloadBodyV2InMemory(base, last, list)
+  else:
+    ben.chain.payloadBodyV2InMemory(start, last, list)
 
   move(list)

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -42,7 +42,6 @@ type
     GasTXCreate,        # Paid by all contract-creating transactions after the Homestead transition.
     GasTXDataZero,      # Paid for every zero byte of data or code for a transaction.
     GasTXDataNonZero,   # Paid for every non-zero byte of data or code for a transaction.
-    GasTransaction,     # Paid for every transaction.
     GasLog,             # Partial payment for a LOG operation.
     GasLogData,         # Paid for each byte in a LOG operation’s data.
     GasLogTopic,        # Paid for each topic of a LOG operation.
@@ -134,14 +133,16 @@ type
   GasCosts* = array[Op, GasCost]
 
 const
+  TX_BASE_COST*          = 21000
+
   # From EIP-2929
   ColdSloadCost*         = 2100
   ColdAccountAccessCost* = 2600
   WarmStorageReadCost*   = 100
 
   # From EIP-2930 (Berlin).
-  ACCESS_LIST_STORAGE_KEY_COST* = 1900.GasInt
-  ACCESS_LIST_ADDRESS_COST*     = 2400.GasInt
+  ACCESS_LIST_STORAGE_KEY_COST* = 1900
+  ACCESS_LIST_ADDRESS_COST*     = 2400
 
 template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
 
@@ -560,6 +561,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
           BaseFee:         fixed GasBase,
           BlobHash:        fixed GasVeryLow,
           BlobBaseFee:     fixed GasBase,
+          SlotNum:         fixed GasBase,
 
           # 50s: Stack, Memory, Storage and Flow Operations
           Pop:            fixed GasBase,
@@ -660,6 +662,11 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
           Log3:           memExpansion `prefix gasLog3`,
           Log4:           memExpansion `prefix gasLog4`,
 
+          # e0s
+          DupN:           fixed GasVeryLow,
+          SwapN:          fixed GasVeryLow,
+          Exchange:       fixed GasVeryLow,
+
           # f0s: System operations
           Create:         handleCreate `prefix gasCreate`,
           Call:           handleCall `prefix gasCall`,
@@ -704,7 +711,6 @@ const
     GasTXCreate:        0,      # Changed to 32000 in Homestead (EIP2)
     GasTXDataZero:      4,
     GasTXDataNonZero:   68,
-    GasTransaction:     21000,
     GasLog:             375,
     GasLogData:         8,
     GasLogTopic:        375,

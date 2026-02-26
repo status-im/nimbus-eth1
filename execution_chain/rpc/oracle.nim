@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -87,7 +87,7 @@ func toBytes(list: openArray[float64]): seq[byte] =
     result.add(cast[uint64](x).toBytesLE)
 
 func calcBaseFee(com: CommonRef, bc: BlockContent): UInt256 =
-  if com.isLondonOrLater(bc.blockNumber + 1):
+  if com.isLondonOrLater(bc.blockNumber + 1, bc.header.timestamp):
     calcEip1599BaseFee(
       bc.header.gasLimit,
       bc.header.gasUsed,

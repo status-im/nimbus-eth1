@@ -41,6 +41,8 @@ proc addBeaconSyncProtocol(desc: BeaconSyncRef; PROTO: type) =
       worker.only.pivotHash = worker.peer.state(PROTO).bestHash
     elif PROTO is eth69:
       worker.only.pivotHash = worker.peer.state(PROTO).latestHash
+    elif PROTO is eth70:
+      worker.only.pivotHash = worker.peer.state(PROTO).latestHash
     else:
       {.error: "Unsupported eth/?? version".}
 
@@ -144,6 +146,7 @@ proc config*(
   # The registration order for protocols is largely irrelevant, yet the first
   # will always be compared with the activated protocol which is likely to be
   # expected the latest version of the `eth` protocol family.
+  desc.addBeaconSyncProtocol(eth70)
   desc.addBeaconSyncProtocol(eth69)
   desc.addBeaconSyncProtocol(eth68)
 

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -79,6 +79,10 @@ proc beforeExecCall(c: Computation) =
         db.subBalance(c.msg.sender, c.msg.value)
         db.addBalance(c.msg.contractAddress, c.msg.value)
 
+    if c.fork >= FkAmsterdam:
+      # EIP-7708: Emit transfer log for ETH-tx or contract call and CALL op code
+      c.emitTransferLog()
+
 proc afterExecCall(c: Computation) =
   ## Collect all of the accounts that *may* need to be deleted based on EIP161
   ## https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md
@@ -123,8 +127,6 @@ proc beforeExecCreate(c: Computation): bool =
     c.rollback()
     return true
 
-
-
   c.vmState.mutateLedger:
     if c.vmState.balTrackerEnabled:
       c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
@@ -144,6 +146,10 @@ proc beforeExecCreate(c: Computation): bool =
         # EIP161 nonce incrementation
         db.incNonce(c.msg.contractAddress)
 
+  if c.fork >= FkAmsterdam:
+    # EIP-7708: Emit transfer log for contract creation and CREATE op code
+    c.emitTransferLog()
+
   return false
 
 proc afterExecCreate(c: Computation) =
@@ -162,7 +168,7 @@ proc afterExecCreate(c: Computation) =
     c.rollback()
 
 const MsgKindToOp: array[CallKind, Op] =
-  [Call, DelegateCall, CallCode, Create, Create2, EofCreate]
+  [Call, DelegateCall, CallCode, Create, Create2]
 
 func msgToOp(msg: Message): Op =
   if MsgFlags.Static in msg.flags:

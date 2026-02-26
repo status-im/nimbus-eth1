@@ -298,7 +298,7 @@ proc runCombinedClient() =
   # go away
   discard randomBytes(distinctBase(jwtKey))
 
-  const banner = "Nimbus v0.0.1\p\pSubcommand options can also be used with the main node, see `beaconNode --help` and `executionClient --help`"
+  const banner = ClientId & "\p\pSubcommand options can also be used with the main node, see `beaconNode --help` and `executionClient --help`"
 
   var config = NimbusConf.loadWithBanners(
     banner, copyright, [specBanner], ignoreUnknown = true, setupLogger = true

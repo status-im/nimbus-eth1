@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -51,8 +51,8 @@ func validateBlockAccessList*(
     if not skipPreExecBalCheck:
       if blockAccessList.isNone:
         return err("Post-Amsterdam block must have blockAccessList")
-      if blockAccessList.get.validate(header.blockAccessListHash.get).isErr():
-        return err("Mismatched blockAccessListHash blockNumber = " & $header.number)
+      blockAccessList.get.validate(header.blockAccessListHash.get, header.gasLimit).isOkOr:
+        return err("blockAccessList failed pre-execution validation: " & $error)
   else:
     if header.blockAccessListHash.isSome:
       return err("Pre-Amsterdam block header must not have blockAccessListHash")
@@ -259,8 +259,11 @@ func validateTxBasic*(
     if tx.txType == TxEip7702 and fork < FkPrague:
       return err("invalid tx: Eip7702 Tx type detected before Prague")
 
+  if fork >= FkAmsterdam and tx.contractCreation and tx.payload.len > EIP7954_MAX_INITCODE_SIZE:
+    return err("invalid tx: initcode size exceeds EIP-7954 maximum")
+
   if fork >= FkShanghai and tx.contractCreation and tx.payload.len > EIP3860_MAX_INITCODE_SIZE:
-    return err("invalid tx: initcode size exceeds maximum")
+    return err("invalid tx: initcode size exceeds EIP-3860 maximum")
 
   # The total must be the larger of the two
   if tx.maxFeePerGasNorm < tx.maxPriorityFeePerGasNorm:

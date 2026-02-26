@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,11 +13,12 @@
 import
   std/sequtils,
   ".."/[db/ledger, constants],
-  "."/[code_stream, memory, stack, state],
-  "."/[types],
+  ./[code_stream, memory, stack, state],
+  ./[types],
   ./interpreter/[gas_meter, gas_costs, op_codes],
   ./evm_errors,
   ./code_bytes,
+  ./eip7708,
   ../common/[evmforks],
   ../utils/[utils, mergeutils],
   ../common/common,
@@ -25,7 +26,9 @@ import
   chronicles, chronos
 
 export
-  common, balTrackerEnabled
+  common, balTrackerEnabled,
+  emitTransferLog,
+  addLogEntry
 
 logScope:
   topics = "vm computation"
@@ -51,6 +54,9 @@ template getGasLimit*(c: Computation): GasInt =
 
 template getBaseFee*(c: Computation): UInt256 =
   c.vmState.blockCtx.baseFeePerGas.get(0.u256)
+
+template getSlotNum*(c: Computation): UInt256 =
+  c.vmState.blockCtx.slotNumber.u256
 
 template getChainId*(c: Computation): UInt256 =
   c.vmState.com.chainId
@@ -224,6 +230,13 @@ proc writeContract*(c: Computation) =
     c.setError(StatusCode.ContractValidationFailure, true)
     return
 
+  # EIP-7954 constraint (https://eips.ethereum.org/EIPS/eip-7954).
+  if fork >= FkAmsterdam and len > EIP7954_MAX_CODE_SIZE:
+    withExtra trace, "New contract code exceeds EIP-7954 limit",
+      codeSize=len, maxSize=EIP7954_MAX_CODE_SIZE
+    c.setError(StatusCode.OutOfGas, true)
+    return
+
   # EIP-170 constraint (https://eips.ethereum.org/EIPS/eip-3541).
   if fork >= FkSpurious and len > EIP170_MAX_CODE_SIZE:
     withExtra trace, "New contract code exceeds EIP-170 limit",
@@ -276,6 +289,7 @@ template chainTo*(c: Computation,
 proc execSelfDestruct*(c: Computation, beneficiary: Address) =
   c.vmState.mutateLedger:
     let localBalance = c.getBalance(c.msg.contractAddress)
+    var newContract = false
 
     # Register the account to be deleted
     if c.fork >= FkCancun:
@@ -288,12 +302,16 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
         db.addBalance(beneficiary, localBalance)
         if db.selfDestruct6780(c.msg.contractAddress):
           c.vmState.balTracker.trackInTransactionSelfDestruct(c.msg.contractAddress)
+          newContract = true
       else:
         # Zeroing contract balance except beneficiary is the same address
         db.subBalance(c.msg.contractAddress, localBalance)
         # Transfer to beneficiary
         db.addBalance(beneficiary, localBalance)
-        discard db.selfDestruct6780(c.msg.contractAddress)
+        newContract = db.selfDestruct6780(c.msg.contractAddress)
+
+      if c.fork >= FkAmsterdam:
+        c.emitSelfDestructLog(beneficiary, localBalance, newContract)
     else:
       if c.vmState.balTrackerEnabled:
         # Transfer to beneficiary
@@ -310,10 +328,6 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
       contractAddress = c.msg.contractAddress.toHex,
       localBalance = localBalance.toString,
       beneficiary = beneficiary.toHex
-
-# Using `proc` as `addLogEntry()` might be `proc` in logging mode
-proc addLogEntry*(c: Computation, log: Log) =
-  c.logEntries.add log
 
 func merge*(c, child: Computation) =
   c.logEntries.mergeAndReset(child.logEntries)

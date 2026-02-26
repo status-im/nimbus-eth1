@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -81,7 +81,10 @@ proc processBlock*(
     # Depending on the BAL retention period of clients, finalized blocks might
     # be received without a BAL. In this case we skip checking the BAL against
     # the header bal hash.
-    skipPreExecBalCheck = finalized and blockAccessList.isNone(),
+    # For now we allow BALs to be optional even for finalized blocks for bal-devnet-2.
+    # Once clients have implemented the devp2p eth/70 protocol we can require BALs
+    # to be present for finalized blocks.
+    skipPreExecBalCheck = blockAccessList.isNone(), # finalized and blockAccessList.isNone(),
     vmState.parent,
     txFrame
   ).isOkOr:

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2025 Status Research & Development GmbH
+# Copyright (c) 2019-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -174,7 +174,7 @@ proc customGenesisTest() =
       validateBlobSchedule(cg, Prague, 6, 9, 5007716)
       validateBlobSchedule(cg, Osaka, 6, 9, 5007716) # fallback to Prague
       validateBlobSchedule(cg, Bpo1, 9, 12, 5008888)
-      validateBlobSchedule(cg, Amsterdam, 6, 9, 5007716) # fallback to Osaka, not Bpo1
+      validateBlobSchedule(cg, Amsterdam, 9, 12, 5008888) # fallback to bpo1, not Bpo2
 
 
 proc genesisMain() =

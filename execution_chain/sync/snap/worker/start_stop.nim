@@ -12,10 +12,13 @@
 
 import
   std/strutils,
-  pkg/[chronos, chronicles, metrics, minilru],
+  pkg/[chronicles, metrics, minilru],
   ../../../networking/p2p,
   ../../wire_protocol,
-  ./[mpt, state_db, worker_desc]
+  ./[mpt, session, state_db, worker_desc]
+
+logScope:
+  topics = "snap sync"
 
 declareGauge nec_snap_peers, "" &
   "Number of currently active snap instances"
@@ -40,12 +43,17 @@ proc setupServices*(ctx: SnapCtxRef; info: static[string]): bool =
   ctx.pool.stateDB = StateDbRef.init()
 
   # Set up assembly DB
-  ctx.pool.mptAsm = MptAsmRef.init(ctx.pool.baseDir, info).valueOr:
+  ctx.pool.mptAsm = MptAsmRef.init(
+      ctx.pool.baseDir, not ctx.pool.resume, info).valueOr:
     return false
 
   # Set up ticker, disabled by default
   if ctx.pool.ticker.isNil:
     ctx.pool.ticker = proc(ctx: SnapCtxRef) = discard
+
+  # Recover session (if any)
+  if ctx.pool.resume and ctx.sessionResumeDownload(info):
+    debug info & ": resuming download session"
 
   true
 
@@ -66,7 +74,7 @@ proc startSyncPeer*(buddy: SnapPeerRef): bool =
   # Initialise peer data
   buddy.only.peerType = buddy.peer.clientId.split('/',1)[0]
   buddy.only.failedReq = PeerFirstFetchReq(
-    account: StateRootSet.init stateDbCapacity)
+    stateRoot: StateRootSet.init stateDbCapacity)
 
   # Reset global register for fall-back peer
   ctx.pool.lastSlowPeer = Opt.none(Hash)

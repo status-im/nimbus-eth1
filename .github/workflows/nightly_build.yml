@@ -69,7 +69,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os }}-${{ matrix.cpu }}-checksum
-          path: ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus_execution_client.sha512sum
+          path: ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus.sha512sum
           retention-days: 2
 
   run-binary:
@@ -95,7 +95,8 @@ jobs:
       - name: Run binary
         run: |
           tar -xvzf nimbus-eth1-${{ matrix.os }}-${{ matrix.cpu }}-nightly-latest.tar.gz --strip-components=1
-          build/nimbus_execution_client --help
+          build/nimbus --help
+          build/nimbus_verified_proxy --help
 
   nightly-build-release:
     name: Nightly build release
