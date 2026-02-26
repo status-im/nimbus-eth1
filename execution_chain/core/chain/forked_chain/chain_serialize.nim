@@ -185,12 +185,17 @@ proc replay(fc: ForkedChainRef): Result[void, string] =
 
   # Base block always have finalized marker
   fc.base.finalize()
+  trace "finalized base"
 
   for head in fc.heads:
+    trace "working with head", num=head.number
     for it in ancestors(head):
       if it.txFrame.isNil.not:
+        trace "replaying block", num=it.number
         ?fc.replayBranch(it, head)
         break
+      else:
+        trace "isNil", num=it.number
 
   ok()
 
@@ -307,14 +312,17 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
     fc.reset(prevBase)
     return err("loaded baseHash != baseHash")
 
+  trace "Loading transactions"
   for tx in state.txRecords:
     fc.txRecords[tx.txHash] = (tx.blockHash, tx.blockNumber)
 
+  trace "Loading blocks"
   for b in blocks:
     if b.index > 0:
       b.parent = blocks[b.index-1]
     fc.hashToBlock[b.hash] = b
 
+  trace "start fc.replay()"
   fc.replay().isOkOr:
     fc.reset(prevBase)
     return err(error)
