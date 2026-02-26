@@ -38,7 +38,7 @@ import
     test_rpc,
     test_snap,
     test_transaction_json,
-    # test_txpool,
+    test_txpool,
     test_networking,
     test_pooled_tx,
     test_stateless_witness_types,
