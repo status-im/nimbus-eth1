@@ -22,10 +22,10 @@ template isAddress(bytes: openArray[byte]): bool =
 template isSlot(bytes: openArray[byte]): bool =
   bytes.len() == 32
 
-template toAccountKey(address: Address): Hash32 =
+template computeAccPath(address: Address): Hash32 =
   keccak256(address.data)
 
-template toSlotKey(slot: UInt256): Hash32 =
+template computeSlotKey(slot: UInt256): Hash32 =
   keccak256(slot.toBytesBE())
 
 func putAll(
@@ -131,7 +131,7 @@ func verifyState*(
   var codeHashes: HashSet[Hash32]
   for address, slots in keysTable:
     let
-      accPath = address.toAccountKey()
+      accPath = address.computeAccPath()
       maybeAccLeaf = verifyProof(stateTable, preStateRoot, accPath).valueOr:
         return err("Account proof verification failed against pre-stateroot")
       accLeaf = maybeAccLeaf.valueOr:
@@ -148,7 +148,7 @@ func verifyState*(
     # because the verification will always return an error in this case.
     if account.storageRoot != EMPTY_ROOT_HASH:
       for slot in slots:
-        let slotPath = slot.toSlotKey()
+        let slotPath = slot.computeSlotKey()
         discard verifyProof(stateTable, account.storageRoot, slotPath).valueOr:
           return err("Slot proof verification failed against pre-stateroot")
 

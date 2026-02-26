@@ -60,8 +60,8 @@ type
 
 proc gasCallEIP2929(c: Computation, address: Address): GasInt =
   c.vmState.mutateLedger:
-    if not db.inAccessList(address):
-      db.accessList(address)
+    if not ledger.inAccessList(address):
+      ledger.accessList(address)
 
       # The WarmStorageReadCostEIP2929 (100) is already deducted in
       # the form of a constant `gasCall`

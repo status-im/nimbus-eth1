@@ -63,8 +63,8 @@ method captureOpStart*(act: AccessListTracer, c: Computation,
   # AccessListTracer is not using captureOpEnd
   # no need to return op index
 
-func equal*(ac: AccessListTracer, other: AccessListTracer): bool =
-  ac.list.equal(other.list)
+func equal*(alt: AccessListTracer, other: AccessListTracer): bool =
+  alt.list.equal(other.list)
 
-func accessList*(ac: AccessListTracer): common.AccessList =
-  ac.list.getAccessList()
+func accessList*(alt: AccessListTracer): common.AccessList =
+  alt.list.getAccessList()

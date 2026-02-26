@@ -126,7 +126,7 @@ proc selfDestructEIP2929Op(cpt: VmCpt): EvmResultVoid =
 
   var beneficiaryIsCold = false
   cpt.vmState.mutateLedger:
-    if not db.inAccessList(beneficiary):
+    if not ledger.inAccessList(beneficiary):
       beneficiaryIsCold = true
 
   var staticGasCosts = cpt.gasCosts[SelfDestruct].sc_handler(false)
@@ -144,7 +144,7 @@ proc selfDestructEIP2929Op(cpt: VmCpt): EvmResultVoid =
 
   cpt.vmState.mutateLedger:
     if beneficiaryIsCold:
-      db.accessList(beneficiary)
+      ledger.accessList(beneficiary)
       gasCost = gasCost + ColdAccountAccessCost
 
   ? cpt.opcodeGasCost(SelfDestruct,

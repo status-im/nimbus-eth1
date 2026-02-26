@@ -6,10 +6,10 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[os, macros, json, strformat, strutils, tables],
+  std/[os, macros, json, strutils, tables],
   stew/byteutils, net, eth/common/keys, unittest2,
   testutils/markdown_reports,
-  ../execution_chain/[constants, conf, transaction, errors],
+  ../execution_chain/[constants, conf, transaction],
   ../execution_chain/db/ledger,
   ../execution_chain/common,
   ../execution_chain/networking/[netkeys, p2p]
@@ -115,36 +115,6 @@ func getHexadecimalInt*(j: JsonNode): int64 =
   var data: StUint[64]
   data = fromHex(StUint[64], j.getStr)
   result = cast[int64](data)
-
-proc verifyLedger*(wantedState: JsonNode, ledger: ReadOnlyLedger) =
-  for ac, accountData in wantedState:
-    let account = EthAddress.fromHex(ac)
-    for slot, value in accountData{"storage"}:
-      let
-        slotId = UInt256.fromHex slot
-        wantedValue = UInt256.fromHex value.getStr
-
-      let actualValue = ledger.getStorage(account, slotId)
-      #if not found:
-      #  raise newException(ValidationError, "account not found:  " & ac)
-      if actualValue != wantedValue:
-        raise newException(ValidationError, &"{ac} storageDiff: [{slot}] {actualValue.toHex} != {wantedValue.toHex}")
-
-    let
-      wantedCode = hexToSeqByte(accountData{"code"}.getStr)
-      wantedBalance = UInt256.fromHex accountData{"balance"}.getStr
-      wantedNonce = accountData{"nonce"}.getHexadecimalInt.AccountNonce
-
-      actualCode = ledger.getCode(account).bytes()
-      actualBalance = ledger.getBalance(account)
-      actualNonce = ledger.getNonce(account)
-
-    if wantedCode != actualCode:
-      raise newException(ValidationError, &"{ac} codeDiff {wantedCode.toHex} != {actualCode.toHex}")
-    if wantedBalance != actualBalance:
-      raise newException(ValidationError, &"{ac} balanceDiff {wantedBalance.toHex} != {actualBalance.toHex}")
-    if wantedNonce != actualNonce:
-      raise newException(ValidationError, &"{ac} nonceDiff {wantedNonce.toHex} != {actualNonce.toHex}")
 
 proc setupEthNode*(
     config: ExecutionClientConf, rng: var HmacDrbgContext,

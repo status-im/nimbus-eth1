@@ -124,8 +124,8 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
   let sender = ctx.tx.recoverSender().expect("valid signature")
 
   vmState.mutateLedger:
-    setupLedger(pre, db)
-    db.persist(clearEmptyAccount = false) # settle accounts storage
+    setupLedger(pre, ledger)
+    ledger.persist(clearEmptyAccount = false) # settle accounts storage
 
   var callResult: LogResult
   defer:
