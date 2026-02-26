@@ -29,7 +29,7 @@ proc putStoAndProof(
     data: StorageRangesData;
     peerID: Hash;
       ): Result[void,string] =
-  adb.putRawStoSlot(root, account, start, limit, data.slot, data.proof, peerID)
+  adb.putStoSlot(root, account, start, limit, data.slot, data.proof, peerID)
 
 proc register(state: StateDataRef, acc: seq[(ItemKey,StoreRoot)]) =
   for (key,val) in acc:
@@ -92,7 +92,7 @@ template downloadImpl(
 
         # Store complete sub-trees on database
         for n in 0 ..< data.slots.len:
-          adb.putRawStoSlot(sRoot, accLeft[n][0], data.slots[n], peerID).isOkOr:
+          adb.putStoSlot(sRoot, accLeft[n][0], data.slots[n], peerID).isOkOr:
             state.register(accLeft[n .. ^1])   # stash data and return
             trace info & ": storing slots failed", peer, root, nStored=n,
               start=(start+n), nAccLeft=(accLeft.len - n)

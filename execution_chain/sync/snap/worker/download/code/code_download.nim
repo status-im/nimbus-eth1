@@ -70,7 +70,7 @@ template downloadImpl(
         break body
 
       # Store byte codes on database
-      adb.putRawByteCode(
+      adb.putByteCode(
         sRoot, accLeft[0][0], accLeft[^1][0],
         codeHashes.zip data.codes, peerID).isOkOr:
           state.register(accLeft)                   # stash data and return

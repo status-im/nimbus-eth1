@@ -11,7 +11,7 @@
 {.push raises:[].}
 
 import
-  std/[hashes, sequtils, sets, tables],
+  std/[hashes, sequtils, sets, strformat, tables],
   pkg/[chronicles, eth/common, metrics],
   pkg/stew/[interval_set, sorted_set],
   ../[helpers, worker_const],
@@ -152,7 +152,8 @@ proc register*(
     number: BlockNumber;
     info: static[string];
       ): StateDataRef =
-  ## Update or register new account state record on database
+  ## Update or register new account state record on database. The result is
+  ## the current state record, or the new one created (not `nil`.)
   ##
   proc del(db: StateDbRef, state: StateDataRef) =
     discard db.byNumber.delete state.blockNumber    # delete index
@@ -270,6 +271,17 @@ func top*(db: StateDbRef): Opt[StateDataRef] =
 # ------------------------------------------------------------------------------
 # Public unprocessed account ranges administration
 # -----------------------------------------------------------------------------
+
+proc totalAccountRange*(
+    state: StateDataRef;                            # current state record
+      ): Opt[UInt256] =
+  ## Get the accumulated lengths of the account ranges left for downloading.
+  ##
+  ## Due to residue class arithmetic and limitations of the number range
+  ## `UInt256`, the maximum value `2^256` is returned as `ok(0)`, while the
+  ## least value `0` (i.e. nothing left) is returned as `err()`.
+  ##
+  state.unproc.total()
 
 proc fetchAccountRange*(
     db: StateDbRef;
@@ -522,20 +534,21 @@ func rootStr*(state: StateDataRef): string =
   state.stateRoot.Hash32.short & "(" & $state.blockNumber & ")"
 
 func toStr*(db: StateDbRef): string =
-  let nKeys = db.byNumber.len
-  if nKeys == 0:
-    return "n/a"
   let
-    topNum = if db.topDone.isNil: BlockNumber(0) else: db.topDone.blockNumber
-    base3 = (topNum div 1000) * 1000
-    base4 = (topNum div 10000) * 10000
+    top = db.top.valueOr:
+      return "n/a"
+    base2 = (top.blockNumber div 100) * 100
+    base3 = (top.blockNumber div 1000) * 1000
+    base4 = (top.blockNumber div 10000) * 10000
 
-  result = $topNum & "->{"
+  result = $top.blockNumber & "->{"
   for state in db.items(ascending=false):
-    if 0 < base3 and base3 < state.blockNumber:
-      result &= $(state.blockNumber - base3)
-    elif 0 < base4 and base4 < state.blockNumber:
-      result &= $(state.blockNumber - base4)
+    if 0 < base2 and base2 <= state.blockNumber:
+      result &= &"{(state.blockNumber - base2):02}"
+    elif 0 < base3 and base3 <= state.blockNumber:
+      result &= &"{(state.blockNumber - base3):03}"
+    elif 0 < base4 and base4 <= state.blockNumber:
+      result &= &"{(state.blockNumber - base4):04}"
     else:
       result &= $state.blockNumber
     if db.topDone == state:
