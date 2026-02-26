@@ -17,7 +17,7 @@ import
   ../common/state_clearing,
   ../../execution_chain/[evm/types, evm/state, transaction],
   ../../execution_chain/common/common,
-  ../../execution_chain/ledger/ledger,
+  ../../execution_chain/db/ledger,
   ../../execution_chain/utils/utils,
   ../../execution_chain/core/pow/difficulty,
   ../../execution_chain/core/dao,
@@ -550,7 +550,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       parent      = parent,
       header      = header,
       com         = com,
-      txFrame     = com.ledger.baseTxFrame(),
+      txFrame     = com.db.baseTxFrame(),
       storeSlotHash = true
     )
 

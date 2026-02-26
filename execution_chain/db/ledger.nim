@@ -660,9 +660,9 @@ proc clearEmptyAccounts(ledger: LedgerRef) =
 
   # https://github.com/ethereum/EIPs/issues/716
   if ledger.ripemdSpecial:
-    let acc = ledger.getAccount(address, false)
+    let acc = ledger.getAccount(RIPEMD_ADDR, false)
     if not acc.isNil and acc.isEmpty and acc.exists:
-      ledger.savePoint.dirty[address] = acc
+      ledger.savePoint.dirty[RIPEMD_ADDR] = acc
       ledger.kill acc
 
     ledger.ripemdSpecial = false
