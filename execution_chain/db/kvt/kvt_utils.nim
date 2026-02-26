@@ -41,6 +41,14 @@ proc getBeLen*(
   ##
   db.lenKvpFn key
 
+# ------------
+
+proc delRangeBe*(
+    db: KvtDbRef,
+    startKey, endKey: openArray[byte],
+    compactRange = false
+    ): Result[void, KvtError] =
+  db.delRangeKvpFn(startKey, endKey, compactRange)
 
 # ------------
 

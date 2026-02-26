@@ -26,7 +26,7 @@
 {.push raises: [].}
 
 import
-  std/tables,
+  std/[tables, sets],
   chronicles,
   results,
   stew/byteutils,
@@ -116,6 +116,24 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
 
 # -------------
 
+proc delRangeKvpFn(db: MemBackendRef): DelRangeKvpFn =
+  result =
+    proc(startKey, endKey: openArray[byte], compactRange: bool): Result[void, KvtError] =
+      if startKey.len == 0 or endKey.len == 0:
+        return err(KeyInvalid)
+
+      var toDelete: HashSet[seq[byte]]
+      for k in db.tab.keys():
+        if (k == startKey or k > startKey) and k < endKey:
+          toDelete.incl(k)
+
+      for k in toDelete:
+        db.tab.del(k)
+
+      ok()
+
+# -------------
+
 proc closeFn(db: MemBackendRef): CloseFn =
   result =
     proc(ignore: bool) =
@@ -128,7 +146,7 @@ proc getBackendFn(db: MemBackendRef): GetBackendFn =
   result =
     proc(): TypedBackendRef =
       db
-      
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -144,6 +162,8 @@ proc memoryBackend*: KvtDbRef =
   db.putBegFn = putBegFn be
   db.putKvpFn = putKvpFn be
   db.putEndFn = putEndFn be
+
+  db.delRangeKvpFn = delRangeKvpFn(be)
 
   db.closeFn = closeFn be
   db.getBackendFn = getBackendFn be

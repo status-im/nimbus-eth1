@@ -48,6 +48,12 @@ type
 
   # -------------
 
+  DelRangeKvpFn* =
+    proc(startKey, endKey: openArray[byte], compactRange: bool): Result[void, KvtError] {.gcsafe, raises: [].}
+      ## Generic backend database bulk delete function.
+
+  # -------------
+
   CloseFn* =
     proc(eradicate: bool) {.gcsafe, raises: [].}
       ## Generic destructor for the `Kvt DB` backend. The argument `eradicate`
@@ -76,10 +82,12 @@ type
     putKvpFn*: PutKvpFn              ## Bulk store key-value pairs
     putEndFn*: PutEndFn              ## Commit bulk store session
 
+    delRangeKvpFn*: DelRangeKvpFn    ## Bulk delete key-value pairs
+
     closeFn*: CloseFn                ## Generic destructor
 
     getBackendFn*: GetBackendFn
-    
+
     txRef*: KvtTxRef
       ## Tx holding data scheduled to be written to disk during the next
       ## `persist` call
