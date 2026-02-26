@@ -36,13 +36,4 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends openjdk-17-jre-headless \
   && rm -rf /var/lib/apt/lists/*
 
-# Clone and build Hive
-RUN mkdir -p /opt/go /opt/hive \
-  && git clone --depth 1 https://github.com/ethereum/hive.git /opt/hive \
-  && cd /opt/hive \
-  && go build -o hive . \
-  && go build -o hiveview ./cmd/hiveview \
-  && rm -rf /opt/hive/.git /opt/go/cache /opt/go/pkg \
-  && chmod -R 777 /opt/hive /opt/go
-
 USER jenkins
