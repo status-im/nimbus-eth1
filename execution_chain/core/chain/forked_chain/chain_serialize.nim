@@ -185,17 +185,12 @@ proc replay(fc: ForkedChainRef): Result[void, string] =
 
   # Base block always have finalized marker
   fc.base.finalize()
-  trace "finalized base"
 
   for head in fc.heads:
-    trace "working with head", num=head.number
     for it in ancestors(head):
       if it.txFrame.isNil.not:
-        trace "replaying block", num=it.number
         ?fc.replayBranch(it, head)
         break
-      else:
-        trace "isNil", num=it.number
 
   ok()
 
