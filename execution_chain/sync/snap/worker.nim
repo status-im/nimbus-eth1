@@ -13,10 +13,21 @@
 import
   std/os,
   pkg/[chronicles, chronos, minilru, results],
-  ./worker/[download, helpers, start_stop, state_db, worker_desc]
+  ./worker/[download, helpers, session, start_stop, state_db, worker_desc]
 
 logScope:
   topics = "snap sync"
+
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+func toStr(error: SnapError): string =
+  result = $error.excp
+  if 0 < error.name.len:
+    result &= "(" & error.name & ")"
+  if 0 < error.msg.len:
+    result &= "[" & error.msg & "]"
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
@@ -87,9 +98,18 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
     of SnapDownload:
       bodyRc = daemonWaitDownloadInterval           # take a nap
 
-    of SnapMkTrie:                                  # TBD ..
-      warn info & ": mkTrie not yet implemented"
-      bodyRc = chronos.seconds(30)
+    of SnapMkTrie:
+      let
+        pvt = ctx.pool.stateDB.pivot.expect "valid pivot"
+        ela {.used.} = ctx.sessionMkTrie(pvt, info).valueOr:
+          debug info & ": mkTrie error", root=pvt.rootStr,
+            state=($ctx.syncState), ela=error.elapsed.toStr,
+            `error`=error.toStr
+          break body
+
+      block:
+        debug info & ": mkTrie imported", root=pvt.rootStr,
+          state=($ctx.syncState), ela=ela.toStr
 
     of SnapHealing:                                 # TBD ..
       warn info & ": healing not yet implemented"
