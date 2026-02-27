@@ -11,8 +11,7 @@
 
 import
   std/[sequtils, tables, typetraits],
-  pkg/[eth/common, stew/byteutils],
-  ../../../../db/aristo/aristo_desc/desc_nibbles,
+  pkg/[eth/common, eth/trie/nibbles, stew/byteutils],
   ../../../wire_protocol/snap/snap_types,
   ../state_db,
   ./mpt_desc
