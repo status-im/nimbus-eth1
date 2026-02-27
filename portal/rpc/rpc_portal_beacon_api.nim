@@ -26,12 +26,13 @@ export tables
 ContentInfo.useDefaultSerializationIn EthJson
 TraceContentLookupResult.useDefaultSerializationIn EthJson
 TraceObject.useDefaultSerializationIn EthJson
+FailureInfo.useDefaultSerializationIn EthJson
 NodeMetadata.useDefaultSerializationIn EthJson
 TraceResponse.useDefaultSerializationIn EthJson
 
 proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
   rpcServer.rpc(EthJson):
-    proc portal_beaconFindContent(enr: Record, contentKey: string): JsonString =
+    proc portal_beaconFindContent(enr: Record, contentKey: string): JsonString {.async: (raises: [ValueError, CancelledError]).} =
       let
         node = toNodeWithAddress(enr)
         foundContentResult =
@@ -57,7 +58,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
     proc portal_beaconOffer(
       enr: Record, contentItems: seq[ContentItem]
-    ): string =
+    ): string {.async: (raises: [ValueError, CancelledError]).} =
       let node = toNodeWithAddress(enr)
 
       var contentOffers: seq[ContentKV]
@@ -72,7 +73,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
       SSZ.encode(offerResult).to0xHex()
 
-    proc portal_beaconGetContent(contentKey: string): ContentInfo =
+    proc portal_beaconGetContent(contentKey: string): ContentInfo {.async: (raises: [ApplicationError, ValueError, CancelledError]).} =
       let
         keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
         contentId = p.toContentId(keyBytes).valueOr:
@@ -86,7 +87,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
     proc portal_beaconTraceGetContent(
       contentKey: string
-    ): TraceContentLookupResult =
+    ): TraceContentLookupResult {.async: (raises: [ApplicationError, ValueError, CancelledError]).} =
       let
         keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
         contentId = p.toContentId(keyBytes).valueOr:
@@ -104,7 +105,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
     proc portal_beaconStore(
       contentKey: string, contentValue: string
-    ): bool =
+    ): bool {.raises: [ApplicationError, ValueError].} =
       let
         keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
         offerValueBytes = hexToSeqByte(contentValue)
@@ -114,7 +115,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       # TODO: Do we need to convert the received offer to a value without proofs before storing?
       p.storeContent(keyBytes, contentId, offerValueBytes)
 
-    proc portal_beaconLocalContent(contentKey: string): string =
+    proc portal_beaconLocalContent(contentKey: string): string {.raises: [ApplicationError, ValueError].} =
       let
         keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
         contentId = p.toContentId(keyBytes).valueOr:
@@ -127,7 +128,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
     proc portal_beaconPutContent(
       contentKey: string, contentValue: string
-    ): PutContentResult =
+    ): PutContentResult {.async: (raises: [ApplicationError, ValueError, CancelledError]).} =
       let
         keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
         _ = p.toContentId(keyBytes).valueOr:
@@ -159,7 +160,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
     proc portal_beaconRandomGossip(
       contentKey: string, contentValue: string
-    ): int =
+    ): int {.async: (raises: [ValueError, CancelledError]).} =
       let
         keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
         offerValueBytes = hexToSeqByte(contentValue)

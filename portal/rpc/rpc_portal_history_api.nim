@@ -42,7 +42,7 @@ TraceResponse.useDefaultSerializationIn EthJson
 # info would need to be added to the existing calls.
 proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
   rpcServer.rpc(EthJson):
-    proc portal_historyGetContent(contentKeyBytes: string): ContentInfo =
+    proc portal_historyGetContent(contentKeyBytes: string): ContentInfo {.async: (raises: [ApplicationError, ValueError, CancelledError]).} =
       let
         contentKeyByteList = ContentKeyByteList.init(hexToSeqByte(contentKeyBytes))
         contentKey = decode(contentKeyByteList).valueOr:
@@ -63,7 +63,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
 
     proc portal_historyTraceGetContent(
       contentKeyBytes: string
-    ): TraceContentLookupResult =
+    ): TraceContentLookupResult {.async: (raises: [ApplicationError, ValueError, CancelledError]).} =
       let
         contentKeyByteList = ContentKeyByteList.init(hexToSeqByte(contentKeyBytes))
         contentKey = decode(contentKeyByteList).valueOr:
@@ -93,7 +93,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
 
     proc portal_historyPutContent(
       contentKeyBytes: string, contentValueBytes: string
-    ): PutContentResult =
+    ): PutContentResult {.async: (raises: [ApplicationError, ValueError, CancelledError]).} =
       let
         contentKeyByteList = ContentKeyByteList.init(hexToSeqByte(contentKeyBytes))
         _ = decode(contentKeyByteList).valueOr:
@@ -124,7 +124,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
 
     proc portal_historyStore(
       contentKeyBytes: string, contentValueBytes: string
-    ): bool =
+    ): bool {.raises: [ApplicationError, ValueError].} =
       let
         contentKeyByteList = ContentKeyByteList.init(hexToSeqByte(contentKeyBytes))
         offerValueBytes = hexToSeqByte(contentValueBytes)
@@ -133,7 +133,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
 
       n.portalProtocol.storeContent(contentKeyByteList, contentId, offerValueBytes)
 
-    proc portal_historyLocalContent(contentKeyBytes: string): string =
+    proc portal_historyLocalContent(contentKeyBytes: string): string {.raises: [ApplicationError, ValueError].} =
       let
         contentKeyByteList = ContentKeyByteList.init(hexToSeqByte(contentKeyBytes))
         contentId = n.portalProtocol.toContentId(contentKeyByteList).valueOr:
@@ -144,7 +144,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
 
       valueBytes.to0xHex()
 
-    proc portal_historyGetBlockBody(headerBytes: string): string =
+    proc portal_historyGetBlockBody(headerBytes: string): string {.async: (raises: [ApplicationError, ValueError, CancelledError]).} =
       let header = decodeRlp(hexToSeqByte(headerBytes), Header).valueOr:
         raise applicationError((code: -39010, msg: "Failed to decode header: " & error))
 
@@ -153,7 +153,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
 
       rlp.encode(blockBody).to0xHex()
 
-    proc portal_historyGetReceipts(headerBytes: string): string =
+    proc portal_historyGetReceipts(headerBytes: string): string {.async: (raises: [ApplicationError, ValueError, CancelledError]).} =
       let header = decodeRlp(hexToSeqByte(headerBytes), Header).valueOr:
         raise applicationError((code: -39010, msg: "Failed to decode header: " & error))
 

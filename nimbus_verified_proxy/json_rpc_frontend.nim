@@ -87,73 +87,73 @@ template unpackEngineResult[T](res: EngineResult[T]): T =
 
 proc injectEngineFrontend*(server: JsonRpcServer, frontend: EthApiFrontend) =
   server.getServer().rpc(EthJson):
-    proc eth_blockNumber(): uint64 =
+    proc eth_blockNumber(): uint64 {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(await frontend.eth_blockNumber())
 
-    proc eth_getBalance(address: Address, quantityTag: BlockTag): UInt256:
+    proc eth_getBalance(address: Address, quantityTag: BlockTag): UInt256 {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(await frontend.eth_getBalance(address, quantityTag))
 
     proc eth_getStorageAt(
       address: Address, slot: UInt256, quantityTag: BlockTag
-    ): FixedBytes[32] =
+    ): FixedBytes[32] {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(await frontend.eth_getStorageAt(address, slot, quantityTag))
 
     proc eth_getTransactionCount(
       address: Address, quantityTag: BlockTag
-    ): Quantity =
+    ): Quantity {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(await frontend.eth_getTransactionCount(address, quantityTag))
 
-    proc eth_getCode(address: Address, quantityTag: BlockTag): seq[byte] =
+    proc eth_getCode(address: Address, quantityTag: BlockTag): seq[byte] {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(await frontend.eth_getCode(address, quantityTag))
 
     proc eth_getBlockByHash(
       blockHash: Hash32, fullTransactions: bool
-    ): BlockObject =
+    ): BlockObject {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(await frontend.eth_getBlockByHash(blockHash, fullTransactions))
 
     proc eth_getBlockByNumber(
       blockTag: BlockTag, fullTransactions: bool
-    ): BlockObject =
+    ): BlockObject {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(
         await frontend.eth_getBlockByNumber(blockTag, fullTransactions)
       )
 
-    proc eth_getUncleCountByBlockNumber(blockTag: BlockTag): Quantity =
+    proc eth_getUncleCountByBlockNumber(blockTag: BlockTag): Quantity {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(await frontend.eth_getUncleCountByBlockNumber(blockTag))
 
-    proc eth_getUncleCountByBlockHash(blockHash: Hash32): Quantity =
+    proc eth_getUncleCountByBlockHash(blockHash: Hash32): Quantity {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(await frontend.eth_getUncleCountByBlockHash(blockHash))
 
-    proc eth_getBlockTransactionCountByNumber(blockTag: BlockTag): Quantity =
+    proc eth_getBlockTransactionCountByNumber(blockTag: BlockTag): Quantity {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(await frontend.eth_getBlockTransactionCountByNumber(blockTag))
 
-    proc eth_getBlockTransactionCountByHash(blockHash: Hash32): Quantity =
+    proc eth_getBlockTransactionCountByHash(blockHash: Hash32): Quantity {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(await frontend.eth_getBlockTransactionCountByHash(blockHash))
 
     proc eth_getTransactionByBlockNumberAndIndex(
       blockTag: BlockTag, index: Quantity
-    ): TransactionObject =
+    ): TransactionObject {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(
         await frontend.eth_getTransactionByBlockNumberAndIndex(blockTag, index)
       )
 
     proc eth_getTransactionByBlockHashAndIndex(
       blockHash: Hash32, index: Quantity
-    ): TransactionObject =
+    ): TransactionObject {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(
         await frontend.eth_getTransactionByBlockHashAndIndex(blockHash, index)
       )
 
     proc eth_call(
       tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]
-    ): seq[byte] =
+    ): seq[byte] {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(
         await frontend.eth_call(tx, blockTag, optimisticStateFetch.get(true))
       )
 
     proc eth_createAccessList(
       tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]
-    ): AccessListResult =
+    ): AccessListResult {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(
         await frontend.eth_createAccessList(
           tx, blockTag, optimisticStateFetch.get(true)
@@ -162,52 +162,52 @@ proc injectEngineFrontend*(server: JsonRpcServer, frontend: EthApiFrontend) =
 
     proc eth_estimateGas(
       tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]
-    ): Quantity =
+    ): Quantity {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(
         await frontend.eth_estimateGas(tx, blockTag, optimisticStateFetch.get(true))
       )
 
-    proc eth_getTransactionByHash(txHash: Hash32): TransactionObject =
+    proc eth_getTransactionByHash(txHash: Hash32): TransactionObject {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(await frontend.eth_getTransactionByHash(txHash))
 
-    proc eth_getBlockReceipts(blockTag: BlockTag): Opt[seq[ReceiptObject]] =
+    proc eth_getBlockReceipts(blockTag: BlockTag): Opt[seq[ReceiptObject]] {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(await frontend.eth_getBlockReceipts(blockTag))
 
-    proc eth_getTransactionReceipt(txHash: Hash32): ReceiptObject =
+    proc eth_getTransactionReceipt(txHash: Hash32): ReceiptObject {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(await frontend.eth_getTransactionReceipt(txHash))
 
-    proc eth_getLogs(filterOptions: FilterOptions): seq[LogObject] =
+    proc eth_getLogs(filterOptions: FilterOptions): seq[LogObject] {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(await frontend.eth_getLogs(filterOptions))
 
-    proc eth_newFilter(filterOptions: FilterOptions): string =
+    proc eth_newFilter(filterOptions: FilterOptions): string {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(await frontend.eth_newFilter(filterOptions))
 
-    proc eth_uninstallFilter(filterId: string): bool =
+    proc eth_uninstallFilter(filterId: string): bool {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(await frontend.eth_uninstallFilter(filterId))
 
-    proc eth_getFilterLogs(filterId: string): seq[LogObject] =
+    proc eth_getFilterLogs(filterId: string): seq[LogObject] {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(await frontend.eth_getFilterLogs(filterId))
 
-    proc eth_getFilterChanges(filterId: string): seq[LogObject] =
+    proc eth_getFilterChanges(filterId: string): seq[LogObject] {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(await frontend.eth_getFilterChanges(filterId))
 
-    proc eth_blobBaseFee(): UInt256 =
+    proc eth_blobBaseFee(): UInt256 {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(await frontend.eth_blobBaseFee())
 
-    proc eth_gasPrice(): Quantity =
+    proc eth_gasPrice(): Quantity {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(await frontend.eth_gasPrice())
 
-    proc eth_maxPriorityFeePerGas(): Quantity =
+    proc eth_maxPriorityFeePerGas(): Quantity {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(await frontend.eth_maxPriorityFeePerGas())
 
     proc eth_feeHistory(
       blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: Opt[seq[float64]]
-    ): FeeHistoryResult =
+    ): FeeHistoryResult {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(
         await frontend.eth_feeHistory(blockCount, newestBlock, rewardPercentiles)
       )
 
-    proc eth_sendRawTransaction(txBytes: seq[byte]): Hash32 =
+    proc eth_sendRawTransaction(txBytes: seq[byte]): Hash32 {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(await frontend.eth_sendRawTransaction(txBytes))
 
 proc stop*(server: JsonRpcServer) {.async: (raises: []).} =

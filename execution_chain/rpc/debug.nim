@@ -188,7 +188,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
       badBlocks
 
     # https://ethereum.github.io/execution-apis/api/methods/debug_getRawBlock
-    proc debug_getRawBlock(blockTag: BlockTag): seq[byte] =
+    proc debug_getRawBlock(blockTag: BlockTag): seq[byte] {.raises: [ValueError].} =
       ## Returns an RLP-encoded block.
       let blockFromTag = chain.blockFromTag(blockTag).valueOr:
         raise newException(ValueError, error)
@@ -196,14 +196,14 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
       rlp.encode(blockFromTag)
 
     # https://ethereum.github.io/execution-apis/api/methods/debug_getRawHeader
-    proc debug_getRawHeader(blockTag: BlockTag): seq[byte] =
+    proc debug_getRawHeader(blockTag: BlockTag): seq[byte] {.raises: [ValueError].} =
       ## Returns an RLP-encoded header.
       let header = chain.headerFromTag(blockTag).valueOr:
         raise newException(ValueError, error)
       rlp.encode(header)
 
     # https://ethereum.github.io/execution-apis/api/methods/debug_getRawReceipts
-    proc debug_getRawReceipts(blockTag: BlockTag): seq[seq[byte]] =
+    proc debug_getRawReceipts(blockTag: BlockTag): seq[seq[byte]] {.raises: [ValueError, RlpError].} =
       ## Returns an array of EIP-2718 binary-encoded receipts.
       let header = chain.headerFromTag(blockTag).valueOr:
         raise newException(ValueError, error)
@@ -214,7 +214,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
       res
 
     # https://ethereum.github.io/execution-apis/api/methods/debug_getRawTransaction
-    proc debug_getRawTransaction(txHash: Hash32): seq[byte] =
+    proc debug_getRawTransaction(txHash: Hash32): seq[byte] {.raises: [ValueError].} =
       ## Returns an EIP-2718 binary-encoded transaction.
       let res = txPool.getItem(txHash)
       if res.isOk:
@@ -231,9 +231,9 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
 
       rlp.encode(blk.transactions[txId])
 
-    ## Execution Witness endpoints - not specified in the Execution API
+    # Execution Witness endpoints - not specified in the Execution API
 
-    proc debug_executionWitness(quantityTag: BlockTag): ExecutionWitness =
+    proc debug_executionWitness(quantityTag: BlockTag): ExecutionWitness {.raises: [ValueError].} =
       ## Returns an execution witness for the given block number.
       let header = chain.headerFromTag(quantityTag).valueOr:
         raise newException(ValueError, "Header not found")
@@ -241,7 +241,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
       chain.getExecutionWitness(header.computeBlockHash()).valueOr:
         raise newException(ValueError, error)
 
-    proc debug_executionWitnessByBlockHash(blockHash: Hash32): ExecutionWitness =
+    proc debug_executionWitnessByBlockHash(blockHash: Hash32): ExecutionWitness {.raises: [ValueError].} =
       ## Returns an execution witness for the given block hash.
       chain.getExecutionWitness(blockHash).valueOr:
         raise newException(ValueError, error)

@@ -31,7 +31,7 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Proto
     proc discv5_nodeInfo(): NodeInfo =
       return d.routingTable.getNodeInfo()
 
-    proc discv5_updateNodeInfo(kvPairs: seq[(string, string)]): NodeInfo =
+    proc discv5_updateNodeInfo(kvPairs: seq[(string, string)]): NodeInfo {.raises: [ValueError].} =
       # TODO: Not according to spec, as spec only allows socket address.
       # portal-specs PR has been created with suggested change as is here.
       let enrFields = kvPairs.map(
@@ -66,14 +66,14 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Proto
 
       return true
 
-    proc discv5_getEnr(nodeId: NodeId): Record =
+    proc discv5_getEnr(nodeId: NodeId): Record {.raises: [ValueError].} =
       let node = d.getNode(nodeId)
       if node.isSome():
         return node.get().record
       else:
         raise newException(ValueError, "Record not in local routing table.")
 
-    proc discv5_deleteEnr(nodeId: NodeId): bool =
+    proc discv5_deleteEnr(nodeId: NodeId): bool {.raises: [ValueError].} =
       # TODO: Adjust `removeNode` to accept NodeId as param and to return bool.
       let node = d.getNode(nodeId)
       if node.isSome():
@@ -82,14 +82,14 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Proto
       else:
         raise newException(ValueError, "Record not in local routing table.")
 
-    proc discv5_lookupEnr(nodeId: NodeId): Record =
+    proc discv5_lookupEnr(nodeId: NodeId): Record {.async: (raises: [ValueError, CancelledError]).} =
       let lookup = await d.resolve(nodeId)
       if lookup.isSome():
         return lookup.get().record
       else:
         raise newException(ValueError, "Record not found in DHT lookup.")
 
-    proc discv5_ping(enr: Record): PongResponse =
+    proc discv5_ping(enr: Record): PongResponse {.async: (raises: [ValueError, CancelledError]).} =
       let
         node = toNodeWithAddress(enr)
         pong = await d.ping(node)
@@ -100,7 +100,7 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Proto
         let p = pong.get()
         return PongResponse(enrSeq: p.enrSeq, recipientIP: $p.ip, recipientPort: p.port)
 
-    proc discv5_findNode(enr: Record, distances: seq[uint16]): seq[Record] =
+    proc discv5_findNode(enr: Record, distances: seq[uint16]): seq[Record] {.async: (raises: [ValueError, CancelledError]).} =
       let
         node = toNodeWithAddress(enr)
         nodes = await d.findNode(node, distances)
@@ -112,7 +112,7 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Proto
               n.record
           )
 
-    proc discv5_talkReq(enr: Record, protocol, payload: string): string =
+    proc discv5_talkReq(enr: Record, protocol, payload: string): string {.async: (raises: [ValueError, CancelledError]).} =
       let
         node = toNodeWithAddress(enr)
         talkresp = await d.talkReq(node, hexToSeqByte(protocol), hexToSeqByte(payload))
@@ -121,7 +121,7 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Proto
       else:
         return talkresp.get().toHex()
 
-    proc discv5_recursiveFindNodes(nodeId: NodeId): seq[Record] =
+    proc discv5_recursiveFindNodes(nodeId: NodeId): seq[Record] {.async: (raises: [CancelledError]).} =
       let discovered = await d.lookup(nodeId)
       return discovered.map(
         proc(n: Node): Record =

@@ -98,7 +98,7 @@ proc setupAdminRpc*(nimbus: NimbusNode, config: ExecutionClientConf, server: Rpc
 
       return nodeInfo
 
-    proc admin_addPeer(enode: string): bool =
+    proc admin_addPeer(enode: string): bool {.raises: [ApplicationError].} =
       var res = ENode.fromString(enode)
       if res.isOk:
         asyncSpawn node.connectToNode(res.get())

@@ -54,79 +54,79 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
     proc engine_exchangeCapabilities(methods: seq[string]): seq[string] =
       return methods.filterIt(supportedMethods.contains(it))
 
-    proc engine_newPayloadV1(payload: ExecutionPayloadV1): PayloadStatusV1 {.async.} =
+    proc engine_newPayloadV1(payload: ExecutionPayloadV1): PayloadStatusV1 {.async: (raises: [CancelledError, ApplicationError, RlpError]).} =
       await engine.newPayload(Version.V1, payload.executionPayload)
 
-    proc engine_newPayloadV2(payload: ExecutionPayload): PayloadStatusV1 {.async.} =
+    proc engine_newPayloadV2(payload: ExecutionPayload): PayloadStatusV1 {.async: (raises: [CancelledError, ApplicationError, RlpError]).} =
       await engine.newPayload(Version.V2, payload)
 
     proc engine_newPayloadV3(payload: ExecutionPayload,
                                         expectedBlobVersionedHashes: Opt[seq[Hash32]],
-                                        parentBeaconBlockRoot: Opt[Hash32]): PayloadStatusV1 {.async.} =
+                                        parentBeaconBlockRoot: Opt[Hash32]): PayloadStatusV1 {.async: (raises: [CancelledError, ApplicationError, RlpError]).} =
       await engine.newPayload(Version.V3, payload, expectedBlobVersionedHashes, parentBeaconBlockRoot)
 
     proc engine_newPayloadV4(payload: ExecutionPayload,
                                         expectedBlobVersionedHashes: Opt[seq[Hash32]],
                                         parentBeaconBlockRoot: Opt[Hash32],
-                                        executionRequests: Opt[seq[seq[byte]]]): PayloadStatusV1 {.async.} =
+                                        executionRequests: Opt[seq[seq[byte]]]): PayloadStatusV1 {.async: (raises: [CancelledError, ApplicationError, RlpError]).} =
       await engine.newPayload(Version.V4, payload,
         expectedBlobVersionedHashes, parentBeaconBlockRoot, executionRequests)
 
     proc engine_newPayloadV5(payload: ExecutionPayload,
                                         expectedBlobVersionedHashes: Opt[seq[Hash32]],
                                         parentBeaconBlockRoot: Opt[Hash32],
-                                        executionRequests: Opt[seq[seq[byte]]]): PayloadStatusV1 {.async.} =
+                                        executionRequests: Opt[seq[seq[byte]]]): PayloadStatusV1 {.async: (raises: [CancelledError, ApplicationError, RlpError]).} =
       await engine.newPayload(Version.V5, payload,
         expectedBlobVersionedHashes, parentBeaconBlockRoot, executionRequests)
 
-    proc engine_getPayloadV1(payloadId: Bytes8): ExecutionPayloadV1 =
+    proc engine_getPayloadV1(payloadId: Bytes8): ExecutionPayloadV1 {.raises: [CatchableError].} =
       return engine.getPayload(Version.V1, payloadId).executionPayload.V1
 
-    proc engine_getPayloadV2(payloadId: Bytes8): GetPayloadV2Response =
+    proc engine_getPayloadV2(payloadId: Bytes8): GetPayloadV2Response {.raises: [CatchableError].} =
       return engine.getPayload(Version.V2, payloadId)
 
-    proc engine_getPayloadV3(payloadId: Bytes8): GetPayloadV3Response =
+    proc engine_getPayloadV3(payloadId: Bytes8): GetPayloadV3Response {.raises: [CatchableError].} =
       return engine.getPayloadV3(payloadId)
 
-    proc engine_getPayloadV4(payloadId: Bytes8): GetPayloadV4Response =
+    proc engine_getPayloadV4(payloadId: Bytes8): GetPayloadV4Response {.raises: [CatchableError].} =
       return engine.getPayloadV4(payloadId)
 
-    proc engine_getPayloadV5(payloadId: Bytes8): GetPayloadV5Response =
+    proc engine_getPayloadV5(payloadId: Bytes8): GetPayloadV5Response {.raises: [CatchableError].} =
       return engine.getPayloadV5(payloadId)
 
-    proc engine_getPayloadV6(payloadId: Bytes8): GetPayloadV6Response =
+    proc engine_getPayloadV6(payloadId: Bytes8): GetPayloadV6Response {.raises: [CatchableError].} =
       return engine.getPayloadV6(payloadId)
 
     proc engine_forkchoiceUpdatedV1(update: ForkchoiceStateV1,
-                      attrs: Opt[PayloadAttributesV1]): ForkchoiceUpdatedResponse {.async.} =
+                      attrs: Opt[PayloadAttributesV1]): ForkchoiceUpdatedResponse {.async: (raises: [CancelledError, ApplicationError]).} =
       await engine.forkchoiceUpdated(Version.V1, update, attrs.payloadAttributes)
 
     proc engine_forkchoiceUpdatedV2(update: ForkchoiceStateV1,
-                      attrs: Opt[PayloadAttributes]): ForkchoiceUpdatedResponse {.async.} =
+                      attrs: Opt[PayloadAttributes]): ForkchoiceUpdatedResponse {.async: (raises: [CancelledError, ApplicationError]).} =
       await engine.forkchoiceUpdated(Version.V2, update, attrs)
 
     proc engine_forkchoiceUpdatedV3(update: ForkchoiceStateV1,
-                      attrs: Opt[PayloadAttributes]): ForkchoiceUpdatedResponse {.async.} =
+                      attrs: Opt[PayloadAttributes]): ForkchoiceUpdatedResponse {.async: (raises: [CancelledError, ApplicationError]).} =
       await engine.forkchoiceUpdated(Version.V3, update, attrs)
 
     proc engine_forkchoiceUpdatedV4(update: ForkchoiceStateV1,
-                      attrs: Opt[PayloadAttributes]): ForkchoiceUpdatedResponse {.async.} =
+                      attrs: Opt[PayloadAttributes]): ForkchoiceUpdatedResponse {.async: (raises: [CancelledError, ApplicationError]).} =
       await engine.forkchoiceUpdated(Version.V4, update, attrs)
 
     proc engine_getPayloadBodiesByHashV1(hashes: seq[Hash32]):
-                                                seq[Opt[ExecutionPayloadBodyV1]] =
+                                                seq[Opt[ExecutionPayloadBodyV1]] {.raises: [CatchableError].} =
       return engine.getPayloadBodiesByHashV1(hashes)
 
     proc engine_getPayloadBodiesByHashV2(hashes: seq[Hash32]):
-                                                seq[Opt[ExecutionPayloadBodyV2]] =
+                                                seq[Opt[ExecutionPayloadBodyV2]] {.raises: [CatchableError].} =
       return engine.getPayloadBodiesByHashV2(hashes)
 
     proc engine_getPayloadBodiesByRangeV1(
-        start: Quantity, count: Quantity): seq[Opt[ExecutionPayloadBodyV1]] =
+        start: Quantity, count: Quantity): seq[Opt[ExecutionPayloadBodyV1]] {.raises: [CatchableError].} =
       return engine.getPayloadBodiesByRangeV1(start.uint64, count.uint64)
 
     proc engine_getPayloadBodiesByRangeV2(
-        start: Quantity, count: Quantity): seq[Opt[ExecutionPayloadBodyV2]] =
+        start: Quantity, count: Quantity): seq[Opt[ExecutionPayloadBodyV2]] {.raises: [CatchableError].} =
       return engine.getPayloadBodiesByRangeV2(start.uint64, count.uint64)
 
     proc engine_getClientVersionV1(version: ClientVersionV1):
@@ -140,13 +140,13 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
       )]
 
     proc engine_getBlobsV1(versionedHashes: seq[VersionedHash]):
-                                          seq[Opt[BlobAndProofV1]] =
+                                          seq[Opt[BlobAndProofV1]] {.raises: [ApplicationError].} =
       return engine.getBlobsV1(versionedHashes)
 
     proc engine_getBlobsV2(versionedHashes: seq[VersionedHash]):
-                                          Opt[seq[BlobAndProofV2]] =
+                                          Opt[seq[BlobAndProofV2]] {.raises: [ApplicationError].} =
       return engine.getBlobsV2(versionedHashes)
 
     proc engine_getBlobsV3(versionedHashes: seq[VersionedHash]):
-                                          seq[Opt[BlobAndProofV2]] =
+                                          seq[Opt[BlobAndProofV2]] {.raises: [ApplicationError].} =
       return engine.getBlobsV3(versionedHashes)
