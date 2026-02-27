@@ -45,7 +45,7 @@ suite "Kvt TxFrame":
 
     db.finish()
 
-  test "Delete":
+  test "Delete - delBe":
     let
       tx0 = db.txFrameBegin(db.baseTxFrame())
 
@@ -71,7 +71,7 @@ suite "Kvt TxFrame":
 
     db.finish()
 
-  test "Delete range":
+  test "Delete range - delRangeBe":
     let
       tx0 = db.txFrameBegin(db.baseTxFrame())
 
@@ -94,5 +94,103 @@ suite "Kvt TxFrame":
         not tx.hasKey([byte 0, 1, 1])
         not tx.hasKey([byte 0, 1, 2])
         tx.get([byte 0, 1, 3]).expect("entry") == @[byte 0, 1, 6]
+
+    db.finish()
+
+  test "MultiGet - multiGetBe":
+    let
+      tx0 = db.txFrameBegin(db.baseTxFrame())
+
+    check:
+      tx0.put([byte 0, 1, 1], [byte 0, 1, 4]).isOk()
+      tx0.put([byte 0, 1, 2], [byte 0, 1, 5]).isOk()
+      tx0.put([byte 0, 1, 3], [byte 0, 1, 6]).isOk()
+
+    let batch = db.putBegFn().expect("working batch")
+    db.persist(batch, tx0)
+    check:
+      db.putEndFn(batch).isOk()
+
+    block:
+      # test using seq inputs
+      let keys = @[
+        @[byte 0, 1, 1],
+        @[byte 0, 1, 2],
+        @[byte 0, 1, 4]
+      ]
+      var values = newSeq[Opt[seq[byte]]](keys.len())
+
+      let r = db.multiGetBe(keys, values)
+      check:
+        r.isOk()
+        values[0] == Opt.some(@[byte 0, 1, 4])
+        values[1] == Opt.some(@[byte 0, 1, 5])
+        values[2] == Opt.none(seq[byte])
+
+    block:
+      # test using array inputs
+      let keys = [
+        @[byte 0, 1, 1],
+        @[byte 0, 1, 2],
+        @[byte 0, 1, 4]
+      ]
+      var values: array[3, Opt[seq[byte]]]
+
+      let r = db.multiGetBe(keys, values)
+      check:
+        r.isOk()
+        values[0] == Opt.some(@[byte 0, 1, 4])
+        values[1] == Opt.some(@[byte 0, 1, 5])
+        values[2] == Opt.none(seq[byte])
+
+    db.finish()
+
+  test "MultiGet - multiGet":
+    let
+      tx0 = db.txFrameBegin(db.baseTxFrame())
+
+    check:
+      tx0.put([byte 0, 1, 1], [byte 0, 1, 4]).isOk()
+      tx0.put([byte 0, 1, 2], [byte 0, 1, 5]).isOk()
+
+    let batch = db.putBegFn().expect("working batch")
+    db.persist(batch, tx0)
+    check:
+      db.putEndFn(batch).isOk()
+
+    let tx1 = db.txFrameBegin(db.baseTxFrame())
+    check tx1.put([byte 0, 1, 3], [byte 0, 1, 6]).isOk()
+
+    block:
+      # test using seq inputs
+      let keys = @[
+        @[byte 0, 1, 1],
+        @[byte 0, 1, 3],
+        @[byte 0, 1, 4]
+      ]
+      var values = newSeq[Opt[seq[byte]]](keys.len())
+
+      let r = tx1.multiGet(keys, values)
+      check:
+        r.isOk()
+        values[0] == Opt.some(@[byte 0, 1, 4])
+        values[1] == Opt.some(@[byte 0, 1, 6])
+        values[2] == Opt.none(seq[byte])
+
+    block:
+      # test using array inputs
+      let keys = [
+        @[byte 0, 1, 1],
+        @[byte 0, 1, 3],
+        @[byte 0, 1, 4]
+      ]
+      var values: array[3, Opt[seq[byte]]]
+
+      let r = tx1.multiGet(keys, values)
+      check:
+        r.isOk()
+        values[0] == Opt.some(@[byte 0, 1, 4])
+        values[1] == Opt.some(@[byte 0, 1, 6])
+        values[2] == Opt.none(seq[byte])
 
     db.finish()
