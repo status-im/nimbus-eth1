@@ -48,6 +48,10 @@ type
 
   # -------------
 
+  DelKvpFn* =
+    proc(key: openArray[byte]): Result[void, KvtError] {.gcsafe, raises: [].}
+      ## Generic backend database delete function.
+
   DelRangeKvpFn* =
     proc(startKey, endKey: openArray[byte], compactRange: bool): Result[void, KvtError] {.gcsafe, raises: [].}
       ## Generic backend database bulk delete function.
@@ -82,6 +86,7 @@ type
     putKvpFn*: PutKvpFn              ## Bulk store key-value pairs
     putEndFn*: PutEndFn              ## Commit bulk store session
 
+    delKvpFn*: DelKvpFn              ## Delete key-value pair
     delRangeKvpFn*: DelRangeKvpFn    ## Bulk delete key-value pairs
 
     closeFn*: CloseFn                ## Generic destructor

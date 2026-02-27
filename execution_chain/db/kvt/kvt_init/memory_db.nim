@@ -116,6 +116,16 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
 
 # -------------
 
+proc delKvpFn(db: MemBackendRef): DelKvpFn =
+  result =
+    proc(key: openArray[byte]): Result[void, KvtError] =
+      if key.len == 0:
+        return err(KeyInvalid)
+
+      db.tab.del(@key)
+
+      ok()
+
 proc delRangeKvpFn(db: MemBackendRef): DelRangeKvpFn =
   result =
     proc(startKey, endKey: openArray[byte], compactRange: bool): Result[void, KvtError] =
@@ -163,6 +173,7 @@ proc memoryBackend*: KvtDbRef =
   db.putKvpFn = putKvpFn be
   db.putEndFn = putEndFn be
 
+  db.delKvpFn = delKvpFn(be)
   db.delRangeKvpFn = delRangeKvpFn(be)
 
   db.closeFn = closeFn be

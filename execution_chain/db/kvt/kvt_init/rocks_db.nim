@@ -141,6 +141,16 @@ proc putEndFn(db: RdbBackendRef, cf: static[KvtCFs]): PutEndFn =
 
 # -------------
 
+proc delKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): DelKvpFn =
+  result =
+    proc(key: openArray[byte]): Result[void, KvtError] =
+      db.rdb.store[cf].delete(key).isOkOr:
+        when extraTraceMessages:
+          debug "delKvpFn() failed", error=($error)
+        return err(RdbBeDriverDelError)
+
+      ok()
+
 proc delRangeKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): DelRangeKvpFn =
   result =
     proc(startKey, endKey: openArray[byte], compactRange: bool): Result[void, KvtError] =
@@ -189,6 +199,7 @@ proc rocksDbKvtBackend*(baseDb: RocksDbInstanceRef, cf: static[KvtCFs]): KvtDbRe
   db.putKvpFn = putKvpFn(be, cf)
   db.putEndFn = putEndFn(be, cf)
 
+  db.delKvpFn = delKvpFn(be, cf)
   db.delRangeKvpFn = delRangeKvpFn(be, cf)
 
   db.closeFn = closeFn be
