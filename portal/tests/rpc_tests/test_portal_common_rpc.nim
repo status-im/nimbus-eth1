@@ -76,7 +76,7 @@ procSuite "Portal Common JSON-RPC API":
     let
       tc = await setupHistoryTest(rng)
       jsonBytes = await tc.client.call("portal_historyNodeInfo", %[])
-      resp = JrpcConv.decode(jsonBytes.string, JsonNode)
+      resp = EthJson.decode(jsonBytes.string, JsonNode)
 
     check:
       resp.contains("enr")
@@ -94,7 +94,7 @@ procSuite "Portal Common JSON-RPC API":
     let
       tc = await setupHistoryTest(rng)
       jsonBytes = await tc.client.call("portal_historyRoutingTableInfo", %[])
-      resp = JrpcConv.decode(jsonBytes.string, JsonNode)
+      resp = EthJson.decode(jsonBytes.string, JsonNode)
 
     check:
       resp.contains("localNodeId")
@@ -112,7 +112,7 @@ procSuite "Portal Common JSON-RPC API":
       testEnr = testHistoryNode.localNode.record
 
       jsonBytes = await tc.client.call("portal_historyAddEnr", %[testEnr.toURI()])
-    check JrpcConv.decode(jsonBytes.string, bool)
+    check EthJson.decode(jsonBytes.string, bool)
 
     await testHistoryNode.stop()
     await tc.stop()
@@ -124,7 +124,7 @@ procSuite "Portal Common JSON-RPC API":
       nodeId = tc.historyNode.localNode.id
       jsonBytes =
         await tc.client.call("portal_historyGetEnr", %[nodeId.toBytesBE().to0xHex()])
-    check JrpcConv.decode(jsonBytes.string, string) ==
+    check EthJson.decode(jsonBytes.string, string) ==
       tc.historyNode.localNode.record.toURI()
 
     await tc.stop()
@@ -142,7 +142,7 @@ procSuite "Portal Common JSON-RPC API":
     let jsonBytes = await tc.client.call(
       "portal_historyDeleteEnr", %[testNodeId.toBytesBE().to0xHex()]
     )
-    check JrpcConv.decode(jsonBytes.string, bool)
+    check EthJson.decode(jsonBytes.string, bool)
 
     await testHistoryNode.stop()
     await tc.stop()
@@ -161,7 +161,7 @@ procSuite "Portal Common JSON-RPC API":
     params.add(%testHistoryNode.localNode.record.toURI())
     # Note: Not adding payloadType and payload to use defaults
     let jsonBytes = await tc.client.call("portal_historyPing", params)
-    let resp = JrpcConv.decode(jsonBytes.string, JsonNode)
+    let resp = EthJson.decode(jsonBytes.string, JsonNode)
 
     check:
       resp.contains("enrSeq")
@@ -194,7 +194,7 @@ procSuite "Portal Common JSON-RPC API":
     params.add(%testHistoryNode.localNode.record.toURI())
     params.add(%[0]) # 0 = own ENR
     let jsonBytes = await tc.client.call("portal_historyFindNodes", params)
-    check JrpcConv.decode(jsonBytes.string, JsonNode).kind == JArray
+    check EthJson.decode(jsonBytes.string, JsonNode).kind == JArray
 
     await testHistoryNode.stop()
     await tc.stop()
@@ -207,6 +207,6 @@ procSuite "Portal Common JSON-RPC API":
     let jsonBytes = await tc.client.call(
       "portal_historyRecursiveFindNodes", %[nodeId.toBytesBE().to0xHex()]
     )
-    check JrpcConv.decode(jsonBytes.string, JsonNode).kind == JArray
+    check EthJson.decode(jsonBytes.string, JsonNode).kind == JArray
 
     await tc.stop()
