@@ -211,7 +211,7 @@ func removeBlockFromCache(c: ForkedChainRef, b: BlockRef) =
   b.txFrame = nil
   # Clear parent and let GC claim the memory earlier
   b.parent = nil
-  b.header = default(Header)   # frees extraData seq immediately
+  b.header.reset()   # frees extraData seq immediately
 
 func updateHead(c: ForkedChainRef, head: BlockRef) =
   ## Update head if the new head is different from current head.
