@@ -165,8 +165,7 @@ proc parseCmdArg*(T: type UrlList, p: string): T {.raises: [ValueError].} =
 # NOTE: this is overridden here instead of importing from beacon_chain/conf.nim to
 # avoid importing miniupnpc because of the dependency chain below 
 # nim-libp2p -> nim-nat-traversal -> miniupnpc
-func parseCmdArg*(T: type Eth2Digest, input: string): T
-                 {.raises: [ValueError].} =
+func parseCmdArg*(T: type Eth2Digest, input: string): T {.raises: [ValueError].} =
   Eth2Digest.fromHex(input)
 
 proc completeCmdArg*(T: type Web3Url, val: string): seq[string] =

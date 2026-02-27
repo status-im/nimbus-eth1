@@ -24,7 +24,8 @@ var threadId {.threadvar.}: int
 
 when defined(windows):
   proc getCurrentThreadId(): int32 {.
-    stdcall, dynlib: "kernel32", importc: "GetCurrentThreadId".}
+    stdcall, dynlib: "kernel32", importc: "GetCurrentThreadId"
+  .}
 
   proc getThreadId*(): int =
     ## Gets the ID of the currently running thread.
@@ -82,19 +83,24 @@ elif defined(freebsd):
   when defined(amd64) or defined(i386):
     const SYS_thr_self = 432
   else:
-    var SYS_thr_self {.importc:"SYS_thr_self", header:"<sys/syscall.h>".}: cint
+    var SYS_thr_self {.importc: "SYS_thr_self", header: "<sys/syscall.h>".}: cint
 
   when defined(cpu64):
     type
       Off {.importc: "off_t", header: "<sys/types.h>".} = int64
       Quad {.importc: "quad_t", header: "<sys/types.h>".} = int64
+
     proc syscall(arg: Quad): Off {.varargs, importc: "__syscall", header: "<unistd.h>".}
   else:
     proc syscall(arg: cint): cint {.varargs, importc: "syscall", header: "<unistd.h>".}
 
   proc getThreadId*(): int =
     ## Gets the ID of the currently running thread.
-    var tid = when defined(cpu64): Off(0) else: cint(0)
+    var tid =
+      when defined(cpu64):
+        Off(0)
+      else:
+        cint(0)
     if threadId == 0:
       discard syscall(SYS_thr_self, addr tid)
       threadId = int(tid)
@@ -102,7 +108,8 @@ elif defined(freebsd):
 
 elif defined(macosx):
   proc syscall(arg: cint): cint {.varargs, importc: "syscall", header: "<unistd.h>".}
-  var SYS_thread_selfid {.importc:"SYS_thread_selfid", header:"<sys/syscall.h>".}: cint
+  var SYS_thread_selfid {.importc: "SYS_thread_selfid", header: "<sys/syscall.h>".}:
+    cint
 
   proc getThreadId*(): int =
     ## Gets the ID of the currently running thread.

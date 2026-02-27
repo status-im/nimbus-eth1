@@ -181,7 +181,8 @@ when isMainModule:
   while not (
     ProcessState.stopIt(notice("Triggering a shut down", reason = it)) or
     runFut.finished()
-  ):
+  )
+  :
     poll()
 
   # if runFut didn't finish process must have been stopped
