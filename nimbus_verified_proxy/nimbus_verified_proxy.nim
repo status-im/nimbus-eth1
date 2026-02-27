@@ -16,10 +16,8 @@ import
   json_rpc/rpcproxy,
   beacon_chain/gossip_processing/light_client_processor,
   beacon_chain/networking/network_metadata,
-  beacon_chain/spec/beaconstate,
-  beacon_chain/conf,
-  beacon_chain/[beacon_clock, buildinfo, nimbus_binary_common, process_state],
-  beacon_chain/spec/forks,
+  beacon_chain/spec/[forks, beaconstate],
+  beacon_chain/[conf, beacon_clock, buildinfo, nimbus_binary_common, process_state],
   ../execution_chain/common/common,
   ./nimbus_verified_proxy_conf,
   ./engine/engine,
@@ -206,7 +204,7 @@ proc run(
       await c.stop()
     raise e
 
-proc main() {.raises: [].} =
+when isMainModule:
   const
     banner = "Nimbus Verified Proxy " & FullVersionStr
     copyright =
@@ -224,8 +222,7 @@ proc main() {.raises: [].} =
   while not (
     ProcessState.stopIt(notice("Triggering a shut down", reason = it)) or
     runFut.finished()
-  )
-  :
+  ):
     poll()
 
   # if runFut didn't finish process must have been stopped
@@ -244,5 +241,4 @@ proc main() {.raises: [].} =
     fatal "Unexpected error", error = e.msg
     quit QuitFailure
 
-when isMainModule:
-  main()
+  waitFor run(config)

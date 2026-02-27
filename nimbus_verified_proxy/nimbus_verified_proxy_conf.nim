@@ -8,9 +8,10 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[strutils],
+  std/[os, strutils, sequtils, uri],
   json_serialization/std/net,
-  beacon_chain/conf_light_client,
+  confutils/toml/defs as confTomlDefs,
+  beacon_chain/spec/digest,
   beacon_chain/nimbus_binary_common
 
 export net
@@ -38,13 +39,6 @@ type VerifiedProxyConf* = object
     defaultValue: StdoutLogKind.Auto,
     name: "log-format"
   .}: StdoutLogKind
-
-  # Storage
-  dataDirFlag* {.
-    desc: "The directory where nimbus will store all blockchain data",
-    abbr: "d",
-    name: "data-dir"
-  .}: Option[OutDir]
 
   # Network
   eth2Network* {.
