@@ -8,10 +8,11 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[os, strutils, sequtils],
+  std/[os, strutils, sequtils, uri],
   json_rpc/rpcproxy, # must be early (compilation annoyance)
   json_serialization/std/net,
-  beacon_chain/conf_light_client,
+  confutils/toml/defs as confTomlDefs,
+  beacon_chain/spec/digest,
   beacon_chain/nimbus_binary_common
 
 export net
@@ -48,13 +49,6 @@ type VerifiedProxyConf* = object
     defaultValue: StdoutLogKind.Auto,
     name: "log-format"
   .}: StdoutLogKind
-
-  # Storage
-  dataDirFlag* {.
-    desc: "The directory where nimbus will store all blockchain data",
-    abbr: "d",
-    name: "data-dir"
-  .}: Option[OutDir]
 
   # Network
   eth2Network* {.
@@ -168,10 +162,20 @@ proc parseCmdArg*(T: type UrlList, p: string): T {.raises: [ValueError].} =
 
   UrlList(urls)
 
+# NOTE: this is overridden here instead of importing from beacon_chain/conf.nim to
+# avoid importing miniupnpc because of the dependency chain below 
+# nim-libp2p -> nim-nat-traversal -> miniupnpc
+func parseCmdArg*(T: type Eth2Digest, input: string): T
+                 {.raises: [ValueError].} =
+  Eth2Digest.fromHex(input)
+
 proc completeCmdArg*(T: type Web3Url, val: string): seq[string] =
   @[]
 
 proc completeCmdArg*(T: type UrlList, val: string): seq[string] =
+  @[]
+
+proc completeCmdArg*(T: type Eth2Digest, val: string): seq[string] =
   @[]
 
 # TODO: Cannot use ClientConfig in VerifiedProxyConf due to the fact that
