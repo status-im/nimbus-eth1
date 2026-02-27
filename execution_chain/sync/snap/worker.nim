@@ -115,12 +115,26 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
   ## On a fresh start, the flag `ctx.daemon` will not be set `true` before the
   ## first usable request from the CL (via RPC) stumbles in.
   ##
-  ## The template returns a suggested idle time for after this task.
+  ## The template returns a suggested idle time for waiting after this task.
   ##
   var bodyRc = chronos.nanoseconds(0)               # to be re-invoked, soon?
   block body:
+    ctx.updateSyncState info
+    case ctx.pool.syncState:
+    of SnapDownload:
+      bodyRc = daemonWaitDownloadInterval           # take a nap
 
-    bodyRc = daemonWaitInterval                     # take a short nap
+    of SnapMkTrie:                                  # TBD ..
+      warn info & ": mkTrie not yet implemented"
+      bodyRc = chronos.seconds(30)
+
+    of SnapHealing:                                 # TBD ..
+      warn info & ": healing not yet implemented"
+      bodyRc = chronos.seconds(30)
+
+    else:
+      bodyRc = daemonWaitElseInterval               # take a nap
+
     # End block: `body`
 
   bodyRc
@@ -160,13 +174,17 @@ template runPeer*(
   ##
   var bodyRc = chronos.nanoseconds(0)
   block body:
-    # Check for manual target settings
-    buddy.updateTarget info
+    case buddy.ctx.pool.syncState:
+    of SnapDownload:
+      # Check for manual target settings
+      buddy.updateTarget info
 
-    # Download and chace accounts, storage slots, contracts
-    buddy.download info
+      # Download and chace accounts, storage slots, contracts
+      buddy.download info
 
-    bodyRc = chronos.seconds(10)
+    else:
+      bodyRc = peerWaitElseInterval
+
     # End block: `body`
 
   bodyRc

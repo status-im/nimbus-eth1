@@ -95,7 +95,6 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
           # End `while` single state download
 
         if didSomething:
-          ctx.daemon = true                         # unless enabled, already
           nStatesOk.inc
           if nWorkingStateRootsMax <= nStatesOk:
             break downloadLoop                      # all done for now

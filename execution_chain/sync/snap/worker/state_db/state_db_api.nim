@@ -61,7 +61,8 @@ type
     blockHash*: BlockHash               ## Corresponds to `stateRoot`
     blockNumber*: BlockNumber           ## Corresponds to `stateRoot`
     unproc: UnprocItemKeys              ## Unprocessed accounts
-    byAccount: DataByAccount            ## List of storage states
+    byAccount: DataByAccount            ## List of storage/code states to fetch
+    healingReady: bool                  ## Ready for healing if `true`
     sdScore: StateDataScore             ## Thumbs up/down
 
   StateDbRef* = ref object
@@ -142,7 +143,7 @@ proc clear*(db: StateDbRef) =
   metrics.set(nec_snap_max_acc_state_coverage, 0f)
 
 # ------------------------------------------------------------------------------
-# Public state database function(s)
+# Public database root state functions
 # ------------------------------------------------------------------------------
 
 proc register*(
@@ -230,7 +231,6 @@ func get*(db: StateDbRef; root: StateRoot): Opt[StateDataRef] =
   err()
 
 
-
 proc upScore*(data: StateDataRef) =
   data.sdScore.up.inc
 
@@ -248,10 +248,6 @@ proc downScore*(db: StateDbRef; number: BlockNumber): bool =
     return true
 
 
-
-func free*(db: StateDbRef): uint =
-  max(0, stateDbCapacity - db.byNumber.len).uint
-
 func len*(db: StateDbRef): int =
   db.byNumber.len
 
@@ -267,6 +263,13 @@ func top*(db: StateDbRef): Opt[StateDataRef] =
   let val = db.byNumber.le(high BlockNumber).valueOr:
     return err()
   ok val.data
+
+
+proc setHealingReady*(data: StateDataRef) =
+  data.healingReady = true
+
+proc getHealingReady*(data: StateDataRef): bool =
+  data.healingReady
 
 # ------------------------------------------------------------------------------
 # Public unprocessed account ranges administration
@@ -373,7 +376,7 @@ proc setAccountRange*(
   db.updateMetrics()
 
 # ------------------------------------------------------------------------------
-# Public storage slots database function(s)
+# Public storage slots and code database function(s)
 # ------------------------------------------------------------------------------
 
 proc register*(
@@ -529,6 +532,12 @@ iterator items*(
 # ------------------------------------------------------------------------------
 # Public debugging helpers
 # ------------------------------------------------------------------------------
+
+func bnStr*(state: StateDataRef): string =
+  $state.blockNumber
+
+func bnStr*(rc: Opt[StateDataRef]): string =
+  if rc.isErr: "n/a" else: $rc.value.blockNumber
 
 func rootStr*(state: StateDataRef): string =
   state.stateRoot.Hash32.short & "(" & $state.blockNumber & ")"
