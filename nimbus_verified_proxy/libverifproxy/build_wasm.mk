@@ -96,6 +96,7 @@ nim-to-c:
 	nim c \
 	  --cpu:wasm32 \
 	  --os:linux \
+	  "--path:$(REPO_ROOT)/nimbus_verified_proxy/libverifproxy/shims" \
 	  -d:emscripten \
 	  -d:noSignalHandler \
 	  -d:useMalloc \
