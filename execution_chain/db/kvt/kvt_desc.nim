@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -48,6 +48,16 @@ type
 
   # -------------
 
+  DelKvpFn* =
+    proc(key: openArray[byte]): Result[void, KvtError] {.gcsafe, raises: [].}
+      ## Generic backend database delete function.
+
+  DelRangeKvpFn* =
+    proc(startKey, endKey: openArray[byte], compactRange: bool): Result[void, KvtError] {.gcsafe, raises: [].}
+      ## Generic backend database bulk delete function.
+
+  # -------------
+
   CloseFn* =
     proc(eradicate: bool) {.gcsafe, raises: [].}
       ## Generic destructor for the `Kvt DB` backend. The argument `eradicate`
@@ -76,10 +86,13 @@ type
     putKvpFn*: PutKvpFn              ## Bulk store key-value pairs
     putEndFn*: PutEndFn              ## Commit bulk store session
 
+    delKvpFn*: DelKvpFn              ## Delete key-value pair
+    delRangeKvpFn*: DelRangeKvpFn    ## Bulk delete key-value pairs
+
     closeFn*: CloseFn                ## Generic destructor
 
     getBackendFn*: GetBackendFn
-    
+
     txRef*: KvtTxRef
       ## Tx holding data scheduled to be written to disk during the next
       ## `persist` call

@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -41,6 +41,20 @@ proc getBeLen*(
   ##
   db.lenKvpFn key
 
+# ------------
+
+proc delBe*(
+    db: KvtDbRef,
+    key: openArray[byte]
+    ): Result[void, KvtError] =
+  db.delKvpFn(key)
+
+proc delRangeBe*(
+    db: KvtDbRef,
+    startKey, endKey: openArray[byte],
+    compactRange = false
+    ): Result[void, KvtError] =
+  db.delRangeKvpFn(startKey, endKey, compactRange)
 
 # ------------
 
