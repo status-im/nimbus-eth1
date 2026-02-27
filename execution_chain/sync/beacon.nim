@@ -15,9 +15,10 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../core/chain,
   ../networking/p2p,
-  ./beacon/worker/headers/headers_target,
   ./beacon/[beacon_desc, worker],
-  ./beacon/worker/classify,
+  ./beacon/worker/blocks/[blocks_fetch, blocks_import],
+  ./beacon/worker/headers/[headers_fetch, headers_target],
+  ./beacon/worker/[classify, update],
   ./[sync_sched, wire_protocol]
 
 export
@@ -48,33 +49,63 @@ proc addBeaconSyncProtocol(desc: BeaconSyncRef; PROTO: type) =
   desc.addSyncProtocol(PROTO, acceptPeer, initWorker)
 
 # ------------------------------------------------------------------------------
+# Interceptable handlers
+# ------------------------------------------------------------------------------
+
+proc schedDaemonCB(
+    ctx: BeaconCtxRef;
+      ): Future[Duration]
+      {.async: (raises: []).} =
+  return worker.runDaemon(ctx, "Daemon") # async/template
+
+proc schedStartCB(buddy: BeaconPeerRef): bool =
+  return worker.start(buddy, "Start")
+
+proc schedStopCB(buddy: BeaconPeerRef) =
+  worker.stop(buddy, "Stop")
+
+proc schedPoolCB(buddy: BeaconPeerRef; last: bool; laps: int): bool =
+  return worker.runPool(buddy, last, laps, "SyncMode")
+
+proc schedPeerCB(
+    buddy: BeaconPeerRef;
+    rank: PeerRanking;
+      ): Future[Duration]
+      {.async: (raises: []).} =
+  return worker.runPeer(buddy, rank, "Peer") # async/template
+
+proc noOpFn(buddy: BeaconPeerRef) = discard
+proc noOpEx(self: BeaconHandlersSyncRef) = discard
+
+# ------------------------------------------------------------------------------
 # Virtual methods/interface, `mixin` functions
 # ------------------------------------------------------------------------------
 
 proc runSetup(ctx: BeaconCtxRef): bool =
-  worker.setup(ctx, "Setup")
+  return worker.setup(ctx, "Setup")
 
 proc runRelease(ctx: BeaconCtxRef) =
   worker.release(ctx, "Release")
 
-proc runDaemon(ctx: BeaconCtxRef): Future[Duration] {.async: (raises: []).} =
-  return worker.runDaemon(ctx, "Daemon")
-
 proc runTicker(ctx: BeaconCtxRef) =
   worker.runTicker(ctx, "Ticker")
 
+
+proc runDaemon(ctx: BeaconCtxRef): Future[Duration] {.async: (raises: []).} =
+  return await ctx.handler.schedDaemon(ctx)
+
 proc runStart(buddy: BeaconPeerRef): bool =
-  worker.start(buddy, "Start")
+  return buddy.ctx.handler.schedStart(buddy)
 
 proc runStop(buddy: BeaconPeerRef) =
-  worker.stop(buddy, "Stop")
+  buddy.ctx.handler.schedStop(buddy)
 
 proc runPool(buddy: BeaconPeerRef; last: bool; laps: int): bool =
-  worker.runPool(buddy, last, laps, "SyncMode")
+  return buddy.ctx.handler.schedPool(buddy, last, laps)
 
 proc runPeer(buddy: BeaconPeerRef): Future[Duration] {.async: (raises: []).} =
   let rank = buddy.classifyForFetching()
-  return worker.runPeer(buddy, rank, "Peer")
+  return await buddy.ctx.handler.schedPeer(buddy, rank)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -121,6 +152,25 @@ proc config*(
 
   desc.ctx.pool.chain = chain
 
+  # Set up handlers so they can be overlayed
+  desc.ctx.pool.handlers = BeaconHandlersSyncRef(
+    version:          0,
+    activate:         updateActivateCB,
+    suspend:          updateSuspendCB,
+    schedDaemon:      schedDaemonCB,
+    schedStart:       schedStartCB,
+    schedStop:        schedStopCB,
+    schedPool:        schedPoolCB,
+    schedPeer:        schedPeerCB,
+    getBlockHeaders:  getBlockHeadersCB,
+    syncBlockHeaders: noOpFn,
+    getBlockBodies:   getBlockBodiesCB,
+    syncBlockBodies:  noOpFn,
+    importBlock:      importBlockCB,
+    syncImportBlock:  noOpFn,
+    startSync:        noOpEx,
+    stopSync:         noOpEx)
+
   if not desc.lazyConfigHook.isNil:
     desc.lazyConfigHook(desc)
     desc.lazyConfigHook = nil
@@ -146,7 +196,12 @@ proc start*(desc: BeaconSyncRef; standBy = false): bool =
   doAssert not desc.ctx.isNil
   let save = desc.ctx.pool.standByMode
   desc.ctx.pool.standByMode = standBy # the ticker sees this when starting
-  if desc.startSync(standBy):
+  if desc.isRunning:
+    if desc.startSync(standBy):
+      return true
+  elif desc.startSync(standBy):
+    let w = BeaconHandlersSyncRef(desc.ctx.pool.handlers)
+    w.startSync(w)
     return true
   desc.ctx.pool.standByMode = save
   # false
@@ -154,6 +209,8 @@ proc start*(desc: BeaconSyncRef; standBy = false): bool =
 proc stop*(desc: BeaconSyncRef) {.async.} =
   doAssert not desc.ctx.isNil
   if desc.isRunning:
+    let w = BeaconHandlersSyncRef(desc.ctx.pool.handlers)
+    w.stopSync(w)
     await desc.stopSync()
     desc.ctx.pool.reset # also clears stand-by mode
 
