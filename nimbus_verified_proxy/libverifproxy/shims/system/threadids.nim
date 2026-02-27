@@ -12,5 +12,6 @@ when defined(emscripten):
     ## Gets the ID of the currently running thread.
     ## Emscripten (single-threaded WASM): always returns 1.
     1
+
 else:
   import threadids
