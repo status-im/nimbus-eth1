@@ -186,6 +186,20 @@ proc len*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[int] =
   else:
     err(rc.error.toError(""))
 
+proc multiGet*(
+    kvt: CoreDbTxRef,
+    keys: openArray[seq[byte]],
+    values: var openArray[Opt[seq[byte]]],
+    sortedInput = false
+      ): CoreDbRc[void] =
+  ## Fetch a batch of values having the given keys. Returned values are copied into
+  ## the values array. The values array should be pre-allocated and have the same
+  ## size as the keys array.
+  kvt.kTx.multiGet(keys, values, sortedInput).isOkOr:
+    return err(error.toError(""))
+
+  ok()
+
 proc del*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[void] =
   kvt.kTx.del(key).isOkOr:
     return err(error.toError(""))
