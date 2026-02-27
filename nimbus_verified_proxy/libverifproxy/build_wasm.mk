@@ -41,6 +41,8 @@ SECP_FLAGS := \
   -I$(SECP256K1)/src
 
 NIMCACHE_SRCS := $(wildcard $(OUT)/nimcache/*.c)
+PRESETS_C     := $(wildcard $(OUT)/nimcache/*presets.nim.c)
+PRESETS_O     := $(patsubst $(OUT)/nimcache/%.c,$(OBJ_DIR)/nc/%.o,$(PRESETS_C))
 LTM_SRCS      := $(wildcard $(LTM)/mp_*.c $(LTM)/s_mp_*.c)
 
 BEARSSL_SRCS := \
@@ -124,8 +126,8 @@ $(OBJ_DIR)/nc/%.o: $(OUT)/nimcache/%.c
 # presets.nim.c is set as a special target to disable compile-time optimisation
 # this is done because it takes a huge amount of time to compile with opt. Instead
 # the file is directed for link time optimisation -flto
-$(OBJ_DIR)/nc/@m..@s..@svendor@snimbus-eth2@sbeacon_chain@sspec@spresets.nim.o: \
-    $(OUT)/nimcache/@m..@s..@svendor@snimbus-eth2@sbeacon_chain@sspec@spresets.nim.c
+$(PRESETS_O): $(PRESETS_C)
+	@echo "Compiling presets.nim without optimization"
 	@mkdir -p $(dir $@)
 	@emcc $(filter-out -Os,$(CFLAGS)) -O0 -flto -c $< -o $@
 	@echo "[CC] nimcache/presets.nim.c (O0+flto) ...done"
