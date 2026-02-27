@@ -41,19 +41,27 @@ proc getBeLen*(
   ##
   db.lenKvpFn key
 
+proc multiGetBe*(
+    db: KvtDbRef,
+    keys: openArray[seq[byte]],
+    values: var openArray[Opt[seq[byte]]],
+    sortedInput = false,
+      ): Result[void, KvtError] =
+  db.multiGetKvpFn(keys, values, sortedInput)
+
 # ------------
 
 proc delBe*(
     db: KvtDbRef,
     key: openArray[byte]
-    ): Result[void, KvtError] =
+      ): Result[void, KvtError] =
   db.delKvpFn(key)
 
 proc delRangeBe*(
     db: KvtDbRef,
     startKey, endKey: openArray[byte],
     compactRange = false
-    ): Result[void, KvtError] =
+      ): Result[void, KvtError] =
   db.delRangeKvpFn(startKey, endKey, compactRange)
 
 # ------------
