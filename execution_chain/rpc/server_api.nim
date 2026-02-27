@@ -339,195 +339,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         receipts = api.chain.receiptsByBlockHash(blockHash).valueOr:
           return nil
 
-  server.rpc("eth_sign") do(data: Address, message: seq[byte]) -> seq[byte]:
-    ## The sign method calculates an Ethereum specific signature with: sign(keccak256("\x19Ethereum Signed Message:\n" + len(message) + message))).
-    ## By adding a prefix to the message makes the calculated signature recognisable as an Ethereum specific signature.
-    ## This prevents misuse where a malicious DApp can sign arbitrary data (e.g. transaction) and use the signature to impersonate the victim.
-    ## Note the address to sign with must be unlocked.
-    ##
-    ## data: address.
-    ## message: message to sign.
-    ## Returns signature.
-    let
-      address = data
-      acc = am[].getAccount(address).tryGet()
-
-    if not acc.unlocked:
-      raise newException(ValueError, "Account locked, please unlock it first")
-    sign(acc.privateKey, cast[string](message))
-
-  server.rpc("eth_signTransaction") do(data: TransactionArgs) -> seq[byte]:
-    ## Signs a transaction that can be submitted to the network at a later time using with
-    ## eth_sendRawTransaction
-    let
-      address = data.`from`.get()
-      acc = am[].getAccount(address).tryGet()
-
-    if not acc.unlocked:
-      raise newException(ValueError, "Account locked, please unlock it first")
-
-    let
-      ledger = api.ledgerFromTag(blockId("latest")).valueOr:
-        raise newException(ValueError, "Latest Block not found")
-      tx = unsignedTx(data, api.chain, ledger.getNonce(address) + 1, api.com.chainId)
-      eip155 = api.com.isEIP155(api.chain.latestNumber)
-      signedTx = signTransaction(tx, acc.privateKey, eip155)
-    return rlp.encode(signedTx)
-
-  server.rpc("eth_sendTransaction") do(data: TransactionArgs) -> Hash32:
-    ## Creates new message call transaction or a contract creation, if the data field contains code.
-    ##
-    ## obj: the transaction object.
-    ## Returns the transaction hash, or the zero hash if the transaction is not yet available.
-    ## Note: Use eth_getTransactionReceipt to get the contract address, after the transaction was mined, when you created a contract.
-    let
-      address = data.`from`.get()
-      acc = am[].getAccount(address).tryGet()
-
-    if not acc.unlocked:
-      raise newException(ValueError, "Account locked, please unlock it first")
-
-    let
-      ledger = api.ledgerFromTag(blockId("latest")).valueOr:
-        raise newException(ValueError, "Latest Block not found")
-      tx = unsignedTx(data, api.chain, ledger.getNonce(address) + 1, api.com.chainId)
-      eip155 = api.com.isEIP155(api.chain.latestNumber)
-      signedTx = signTransaction(tx, acc.privateKey, eip155)
-      blobsBundle =
-        if signedTx.txType == TxEip4844:
-          if data.blobs.isNone or data.commitments.isNone or data.proofs.isNone:
-            raise newException(ValueError, "EIP-4844 transaction needs blobs")
-          if data.blobs.get.len != signedTx.versionedHashes.len:
-            raise newException(ValueError, "Incorrect number of blobs")
-          if data.commitments.get.len != signedTx.versionedHashes.len:
-            raise newException(ValueError, "Incorrect number of commitments")
-          if data.proofs.get.len != signedTx.versionedHashes.len:
-            raise newException(ValueError, "Incorrect number of proofs")
-          BlobsBundle(
-            blobs: data.blobs.get,
-            commitments: data.commitments.get,
-            proofs: data.proofs.get,
-          )
-        else:
-          if data.blobs.isSome or data.commitments.isSome or data.proofs.isSome:
-            raise newException(ValueError, "Blobs require EIP-4844 transaction")
-          nil
-      pooledTx = PooledTransaction(tx: signedTx, blobsBundle: blobsBundle)
-
-    api.txPool.addTx(pooledTx).isOkOr:
-      raise newException(ValueError, $error)
-
-    let txHash = computeRlpHash(signedTx)
-    info "Submitted transaction",
-      endpoint = "eth_sendTransaction",
-      txHash = txHash,
-      sender = address,
-      recipient = data.`to`.get(),
-      nonce = pooledTx.tx.nonce,
-      value = pooledTx.tx.value
-
-    txHash
-
-  server.rpc("eth_getTransactionByHash") do(data: Hash32) -> TransactionObject:
-    ## Returns the information about a transaction requested by transaction hash.
-    ##
-    ## data: hash of a transaction.
-    ## Returns requested transaction information.
-    let
-      txHash = data
-      res = api.txPool.getItem(txHash)
-    if res.isOk:
-      return populateTransactionObject(res.get().tx, Opt.none(Hash32), Opt.none(uint64))
-
-    let
-      (blockHash, txId) = api.chain.txDetailsByTxHash(txHash).valueOr:
-        return nil
-      blk = api.chain.blockByHash(blockHash).valueOr:
-        return nil
-
-    if blk.transactions.len <= int(txId):
-      return nil
-
-    return populateTransactionObject(
-      blk.transactions[txId],
-      Opt.some(blockHash),
-      Opt.some(blk.header.number),
-      Opt.some(txId),
-    )
-
-  server.rpc("eth_getTransactionByBlockHashAndIndex") do(
-    data: Hash32, quantity: Quantity
-  ) -> TransactionObject:
-    ## Returns information about a transaction by block hash and transaction index position.
-    ##
-    ## data: hash of a block.
-    ## quantity: integer of the transaction index position.
-    ## Returns  requested transaction information.
-    let index = uint64(quantity)
-    let blk = api.chain.blockByHash(data).valueOr:
-      return nil
-
-    if index >= uint64(blk.transactions.len):
-      return nil
-
-    populateTransactionObject(
-      blk.transactions[index], Opt.some(data), Opt.some(blk.header.number), Opt.some(index)
-    )
-
-  server.rpc("eth_getTransactionByBlockNumberAndIndex") do(
-    quantityTag: BlockTag, quantity: Quantity
-  ) -> TransactionObject:
-    ## Returns information about a transaction by block number and transaction index position.
-    ##
-    ## quantityTag: a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
-    ## quantity: the transaction index position.
-    ## NOTE : "pending" blockTag is not supported.
-    let index = uint64(quantity)
-    let blk = api.blockFromTag(quantityTag).valueOr:
-      return nil
-
-    if index >= uint64(blk.transactions.len):
-      return nil
-
-    populateTransactionObject(
-      blk.transactions[index], Opt.some(blk.header.computeBlockHash), Opt.some(blk.header.number), Opt.some(index)
-    )
-
-  server.rpc("eth_getProof") do(
-    data: Address, slots: seq[UInt256], quantityTag: BlockTag
-  ) -> ProofResponse:
-    ## Returns information about an account and storage slots (if the account is a contract
-    ## and the slots are requested) along with account and storage proofs which prove the
-    ## existence of the values in the state.
-    ## See spec here: https://eips.ethereum.org/EIPS/eip-1186
-    ##
-    ## data: address of the account.
-    ## slots: integers of the positions in the storage to return with storage proofs.
-    ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
-    ## Returns: the proof response containing the account, account proof and storage proof
-    let ledger = api.ledgerFromTag(quantityTag).valueOr:
-      raise newException(ValueError, "Block not found")
-
-    getProof(ledger, data, slots)
-
-  server.rpc("eth_getBlockReceipts") do(
-    quantityTag: BlockTag
-  ) -> Opt[seq[ReceiptObject]]:
-    ## Returns the receipts of a block.
-    let
-      blk = api.blockFromTag(quantityTag).valueOr:
-        raise newException(ValueError, "Block not found")
-      blkHash = blk.header.computeBlockHash
-      receipts = api.chain.receiptsByBlockHash(blkHash).valueOr:
-        return Opt.none(seq[ReceiptObject])
-
-    var
-      prevGasUsed = GasInt(0)
-      recs: seq[ReceiptObject]
-      index = 0'u64
-
-    try:
-      for receipt in receipts:
+      var prevGasUsed = 0'u64
+      for idx, receipt in receipts:
         let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
         prevGasUsed = receipt.cumulativeGasUsed
 
@@ -549,7 +362,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         txFrame = api.chain.txFrame(headerHash)
         # TODO: change 0 to configureable gas cap
         gasUsed = rpcEstimateGas(args, header, headerHash, api.com, txFrame, DEFAULT_RPC_GAS_CAP).valueOr:
-          let data = Opt.some(EthJson.encode(error[1].output.to0xHex()).JsonString)
+          let data = Opt.some(JrpcConv.encode(error[1].output.to0xHex()).JsonString)
           raise (ref ApplicationError)(
             code: 3,
             msg: $error[1].error,
@@ -637,9 +450,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         raise newException(ValueError, "Account locked, please unlock it first")
 
       let
-        accDB = api.ledgerFromTag(blockId("latest")).valueOr:
+        ledger = api.ledgerFromTag(blockId("latest")).valueOr:
           raise newException(ValueError, "Latest Block not found")
-        tx = unsignedTx(data, api.chain, accDB.getNonce(address) + 1, api.com.chainId)
+        tx = unsignedTx(data, api.chain, ledger.getNonce(address) + 1, api.com.chainId)
         eip155 = api.com.isEIP155(api.chain.latestNumber)
         signedTx = signTransaction(tx, acc.privateKey, eip155)
       return rlp.encode(signedTx)
@@ -658,9 +471,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         raise newException(ValueError, "Account locked, please unlock it first")
 
       let
-        accDB = api.ledgerFromTag(blockId("latest")).valueOr:
+        ledger = api.ledgerFromTag(blockId("latest")).valueOr:
           raise newException(ValueError, "Latest Block not found")
-        tx = unsignedTx(data, api.chain, accDB.getNonce(address) + 1, api.com.chainId)
+        tx = unsignedTx(data, api.chain, ledger.getNonce(address) + 1, api.com.chainId)
         eip155 = api.com.isEIP155(api.chain.latestNumber)
         signedTx = signTransaction(tx, acc.privateKey, eip155)
         blobsBundle =
@@ -775,10 +588,10 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       ## slots: integers of the positions in the storage to return with storage proofs.
       ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
       ## Returns: the proof response containing the account, account proof and storage proof
-      let accDB = api.ledgerFromTag(quantityTag).valueOr:
+      let ledger = api.ledgerFromTag(quantityTag).valueOr:
         raise newException(ValueError, "Block not found")
 
-      getProof(accDB, data, slots)
+      getProof(ledger, data, slots)
 
     proc eth_getBlockReceipts(
       quantityTag: BlockTag

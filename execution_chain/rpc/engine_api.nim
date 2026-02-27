@@ -54,28 +54,28 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
     proc engine_exchangeCapabilities(methods: seq[string]): seq[string] =
       return methods.filterIt(supportedMethods.contains(it))
 
-    proc engine_newPayloadV1(payload: ExecutionPayloadV1): PayloadStatusV1 =
+    proc engine_newPayloadV1(payload: ExecutionPayloadV1): PayloadStatusV1 {.async.} =
       await engine.newPayload(Version.V1, payload.executionPayload)
 
-    proc engine_newPayloadV2(payload: ExecutionPayload): PayloadStatusV1 =
+    proc engine_newPayloadV2(payload: ExecutionPayload): PayloadStatusV1 {.async.} =
       await engine.newPayload(Version.V2, payload)
 
     proc engine_newPayloadV3(payload: ExecutionPayload,
                                         expectedBlobVersionedHashes: Opt[seq[Hash32]],
-                                        parentBeaconBlockRoot: Opt[Hash32]): PayloadStatusV1 =
+                                        parentBeaconBlockRoot: Opt[Hash32]): PayloadStatusV1 {.async.} =
       await engine.newPayload(Version.V3, payload, expectedBlobVersionedHashes, parentBeaconBlockRoot)
 
     proc engine_newPayloadV4(payload: ExecutionPayload,
                                         expectedBlobVersionedHashes: Opt[seq[Hash32]],
                                         parentBeaconBlockRoot: Opt[Hash32],
-                                        executionRequests: Opt[seq[seq[byte]]]): PayloadStatusV1 =
+                                        executionRequests: Opt[seq[seq[byte]]]): PayloadStatusV1 {.async.} =
       await engine.newPayload(Version.V4, payload,
         expectedBlobVersionedHashes, parentBeaconBlockRoot, executionRequests)
 
     proc engine_newPayloadV5(payload: ExecutionPayload,
                                         expectedBlobVersionedHashes: Opt[seq[Hash32]],
                                         parentBeaconBlockRoot: Opt[Hash32],
-                                        executionRequests: Opt[seq[seq[byte]]]): PayloadStatusV1 =
+                                        executionRequests: Opt[seq[seq[byte]]]): PayloadStatusV1 {.async.} =
       await engine.newPayload(Version.V5, payload,
         expectedBlobVersionedHashes, parentBeaconBlockRoot, executionRequests)
 
@@ -98,40 +98,46 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
       return engine.getPayloadV6(payloadId)
 
     proc engine_forkchoiceUpdatedV1(update: ForkchoiceStateV1,
-                      attrs: Opt[PayloadAttributesV1]): ForkchoiceUpdatedResponse =
+                      attrs: Opt[PayloadAttributesV1]): ForkchoiceUpdatedResponse {.async.} =
       await engine.forkchoiceUpdated(Version.V1, update, attrs.payloadAttributes)
 
     proc engine_forkchoiceUpdatedV2(update: ForkchoiceStateV1,
-                      attrs: Opt[PayloadAttributes]): ForkchoiceUpdatedResponse =
+                      attrs: Opt[PayloadAttributes]): ForkchoiceUpdatedResponse {.async.} =
       await engine.forkchoiceUpdated(Version.V2, update, attrs)
 
     proc engine_forkchoiceUpdatedV3(update: ForkchoiceStateV1,
-                      attrs: Opt[PayloadAttributes]): ForkchoiceUpdatedResponse =
+                      attrs: Opt[PayloadAttributes]): ForkchoiceUpdatedResponse {.async.} =
       await engine.forkchoiceUpdated(Version.V3, update, attrs)
+
+    proc engine_forkchoiceUpdatedV4(update: ForkchoiceStateV1,
+                      attrs: Opt[PayloadAttributes]): ForkchoiceUpdatedResponse {.async.} =
+      await engine.forkchoiceUpdated(Version.V4, update, attrs)
 
     proc engine_getPayloadBodiesByHashV1(hashes: seq[Hash32]):
                                                 seq[Opt[ExecutionPayloadBodyV1]] =
-      return engine.getPayloadBodiesByHash(hashes)
+      return engine.getPayloadBodiesByHashV1(hashes)
 
-  server.rpc("engine_forkchoiceUpdatedV4") do(update: ForkchoiceStateV1,
-                    attrs: Opt[PayloadAttributes]) -> ForkchoiceUpdatedResponse:
-    await engine.forkchoiceUpdated(Version.V4, update, attrs)
+    proc engine_getPayloadBodiesByHashV2(hashes: seq[Hash32]):
+                                                seq[Opt[ExecutionPayloadBodyV2]] =
+      return engine.getPayloadBodiesByHashV2(hashes)
 
-  server.rpc("engine_getPayloadBodiesByHashV1") do(hashes: seq[Hash32]) ->
-                                               seq[Opt[ExecutionPayloadBodyV1]]:
-    return engine.getPayloadBodiesByHashV1(hashes)
+    proc engine_getPayloadBodiesByRangeV1(
+        start: Quantity, count: Quantity): seq[Opt[ExecutionPayloadBodyV1]] =
+      return engine.getPayloadBodiesByRangeV1(start.uint64, count.uint64)
 
-  server.rpc("engine_getPayloadBodiesByHashV2") do(hashes: seq[Hash32]) ->
-                                               seq[Opt[ExecutionPayloadBodyV2]]:
-    return engine.getPayloadBodiesByHashV2(hashes)
+    proc engine_getPayloadBodiesByRangeV2(
+        start: Quantity, count: Quantity): seq[Opt[ExecutionPayloadBodyV2]] =
+      return engine.getPayloadBodiesByRangeV2(start.uint64, count.uint64)
 
-  server.rpc("engine_getPayloadBodiesByRangeV1") do(
-      start: Quantity, count: Quantity) -> seq[Opt[ExecutionPayloadBodyV1]]:
-    return engine.getPayloadBodiesByRangeV1(start.uint64, count.uint64)
-
-  server.rpc("engine_getPayloadBodiesByRangeV2") do(
-      start: Quantity, count: Quantity) -> seq[Opt[ExecutionPayloadBodyV2]]:
-    return engine.getPayloadBodiesByRangeV2(start.uint64, count.uint64)
+    proc engine_getClientVersionV1(version: ClientVersionV1):
+                                          seq[ClientVersionV1] =
+      # TODO: what should we do with the `version` parameter?
+      return @[ClientVersionV1(
+        code: "NB",
+        name: NimbusName,
+        version: NimbusVersion,
+        commit: FixedBytes[4](GitRevisionBytes),
+      )]
 
     proc engine_getBlobsV1(versionedHashes: seq[VersionedHash]):
                                           seq[Opt[BlobAndProofV1]] =
