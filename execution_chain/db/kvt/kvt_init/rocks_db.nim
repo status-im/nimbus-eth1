@@ -101,6 +101,28 @@ proc lenKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): LenKvpFn =
 
       err(GetNotFound)
 
+proc multiGetKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): MultiGetKvpFn =
+  result =
+    proc(keys: openArray[seq[byte]], values: var openArray[Opt[seq[byte]]],
+        sortedInput: bool): Result[void, KvtError] =
+      assert keys.len() > 0
+      assert keys.len() == values.len()
+
+      let multiGetIter = db.rdb.store[cf].multiGetIter(keys, sortedInput).valueOr:
+        when extraTraceMessages:
+          debug "multiGetKvpFn() multiGetIter", error=($error)
+        return err(RdbBeDriverGetError)
+
+      var i = 0
+      for slice in multiGetIter:
+        values[i] = slice.map(
+          proc(s: auto): auto =
+            s.data()
+        )
+        inc i
+
+      ok()
+
 # -------------
 
 proc putBegFn(db: RdbBackendRef): PutBegFn =
@@ -194,6 +216,7 @@ proc rocksDbKvtBackend*(baseDb: RocksDbInstanceRef, cf: static[KvtCFs]): KvtDbRe
 
   db.getKvpFn = getKvpFn(be, cf)
   db.lenKvpFn = lenKvpFn(be, cf)
+  db.multiGetKvpFn = multiGetKvpFn(be, cf)
 
   db.putBegFn = putBegFn be
   db.putKvpFn = putKvpFn(be, cf)

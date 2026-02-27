@@ -84,6 +84,25 @@ proc lenKvpFn(db: MemBackendRef): LenKvpFn =
         return ok(data.len)
       err(GetNotFound)
 
+proc multiGetKvpFn(db: MemBackendRef): MultiGetKvpFn =
+  result =
+    proc(keys: openArray[seq[byte]], values: var openArray[Opt[seq[byte]]],
+         sortedInput: bool): Result[void, KvtError] =
+      assert keys.len() > 0
+      assert keys.len() == values.len()
+
+      for i, k in keys:
+        if k.len() == 0:
+          return err(KeyInvalid)
+
+        var data = db.tab.getOrVoid(@k)
+        if data.isValid:
+          values[i] = Opt.some(move(data))
+        else:
+          values[i] = Opt.none(seq[byte])
+
+      ok()
+
 # -------------
 
 proc putBegFn(db: MemBackendRef): PutBegFn =
@@ -168,6 +187,7 @@ proc memoryBackend*: KvtDbRef =
 
   db.getKvpFn = getKvpFn be
   db.lenKvpFn = lenKvpFn be
+  db.multiGetKvpFn = multiGetKvpFn be
 
   db.putBegFn = putBegFn be
   db.putKvpFn = putKvpFn be
