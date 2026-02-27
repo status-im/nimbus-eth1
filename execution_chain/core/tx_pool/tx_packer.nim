@@ -219,7 +219,7 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
 
   # Execute EVM for this transaction
   let
-    accTx = vmState.ledger.beginSavepoint
+    savePoint = vmState.ledger.beginSavePoint()
     callResult = item.tx.txCallEvm(item.sender, pst.vmState, pst.baseFee)
 
   doAssert 0 <= callResult.gasUsed
@@ -228,13 +228,13 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
   if not vmState.classifyPacked(callResult.gasUsed):
     if vmState.balTrackerEnabled:
       vmState.balTracker.rollbackCallFrame(rollbackReads = true)
-    vmState.ledger.rollback(accTx)
+    vmState.ledger.rollback(savePoint)
     if vmState.classifyPackedNext():
       return ContinueWithNextAccount
     return StopCollecting
 
   # Commit ledger changes
-  vmState.ledger.commit(accTx)
+  vmState.ledger.commit(savePoint)
 
   vmState.ledger.persist(clearEmptyAccount = vmState.fork >= FkSpurious)
 

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -41,7 +41,7 @@ proc setupLedger(genAccounts: GenesisAlloc, ledger: LedgerRef): Hash32 =
 
 proc checkProofsForExistingLeafs(
     genAccounts: GenesisAlloc,
-    accDB: LedgerRef,
+    ledger: LedgerRef,
     stateRoot: Hash32) =
 
   for address, account in genAccounts:
@@ -50,13 +50,13 @@ proc checkProofsForExistingLeafs(
       slots.add(k)
 
     let
-      proofResponse = getProof(accDB, address, slots)
+      proofResponse = getProof(ledger, address, slots)
       slotProofs = proofResponse.storageProof
 
     check:
       proofResponse.balance == account.balance
-      proofResponse.codeHash.toHash32() == accDB.getCodeHash(address)
-      proofResponse.storageHash.toHash32() == accDB.getStorageRoot(address)
+      proofResponse.codeHash.toHash32() == ledger.getCodeHash(address)
+      proofResponse.storageHash.toHash32() == ledger.getStorageRoot(address)
       verifyAccountLeafExists(stateRoot, proofResponse)
       slotProofs.len() == account.storage.len()
 
@@ -68,18 +68,18 @@ proc checkProofsForExistingLeafs(
 
 proc checkProofsForMissingLeafs(
     genAccounts: GenesisAlloc,
-    accDB: LedgerRef,
+    ledger: LedgerRef,
     stateRoot: Hash32) =
 
   let
     missingAddress = Address.fromHex("0x999999cf1046e68e36E1aA2E0E07105eDDD1f08E")
-    proofResponse = getProof(accDB, missingAddress, @[])
+    proofResponse = getProof(ledger, missingAddress, @[])
   check verifyAccountLeafMissing(stateRoot, proofResponse)
 
   for address, account in genAccounts:
     let
       missingSlot = u256("987654321123456676466544")
-      proofResponse2 = getProof(accDB, address, @[missingSlot])
+      proofResponse2 = getProof(ledger, address, @[missingSlot])
       slotProofs = proofResponse2.storageProof
 
     check slotProofs.len() == 1

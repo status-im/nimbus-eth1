@@ -131,7 +131,7 @@ proc procBlkPreamble(
   let com = vmState.com
   if com.daoForkSupport and com.daoForkBlock.get == header.number:
     vmState.mutateLedger:
-      db.applyDAOHardFork()
+      ledger.applyDAOHardFork()
 
   if not skipValidation: # Expensive!
     if blk.transactions.calcTxRoot != header.txRoot:
@@ -247,7 +247,7 @@ proc procBlkEpilogue(
   vmState.mutateLedger:
     # Clearing the account cache here helps manage its size when replaying
     # large ranges of blocks, implicitly limiting its size using the gas limit
-    db.persist(
+    ledger.persist(
       clearEmptyAccount = vmState.com.isSpuriousOrLater(header.number, header.timestamp),
       clearCache = true
     )
