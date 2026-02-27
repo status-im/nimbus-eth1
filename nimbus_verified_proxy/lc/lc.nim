@@ -13,8 +13,8 @@ import
   eth/common/keys, # used for keys.rng
   beacon_chain/gossip_processing/light_client_processor,
   beacon_chain/beacon_clock,
-  beacon_chain/networking/network_metadata,  # RuntimeConfig, getMetadataForNetwork
-  beacon_chain/spec/forks,                   # ForkDigests
+  beacon_chain/networking/network_metadata, # RuntimeConfig, getMetadataForNetwork
+  beacon_chain/spec/forks, # ForkDigests
   ./lc_manager # use the modified light client manager
 
 type
