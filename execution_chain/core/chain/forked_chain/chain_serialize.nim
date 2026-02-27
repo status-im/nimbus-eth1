@@ -166,7 +166,7 @@ proc replayBranch(fc: ForkedChainRef;
     ): Result[void, string] =
 
   var blocks = newSeqOfCap[BlockRef](head.number - parent.number)
-  for it in  ancestors(head):
+  for it in ancestors(head):
     if it.number > parent.number:
       blocks.add it
     else:
@@ -327,7 +327,13 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
 
   for b in blocks:
     if b.index > 0:
-      b.parent = blocks[b.index-1]
+      let parentCandidate = blocks[b.index-1]
+      # Check fc corruption
+      if parentCandidate.number + 1 != b.number:
+        fc.reset(prevBase)
+        return err("corrupted FC: block " & $b.number &
+          " has parent with unexpected number " & $parentCandidate.number)
+      b.parent = parentCandidate
     fc.hashToBlock[b.hash] = b
 
   fc.replay(bodies).isOkOr:

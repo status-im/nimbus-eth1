@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -141,6 +141,33 @@ proc putEndFn(db: RdbBackendRef, cf: static[KvtCFs]): PutEndFn =
 
 # -------------
 
+proc delKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): DelKvpFn =
+  result =
+    proc(key: openArray[byte]): Result[void, KvtError] =
+      db.rdb.store[cf].delete(key).isOkOr:
+        when extraTraceMessages:
+          debug "delKvpFn() failed", error=($error)
+        return err(RdbBeDriverDelError)
+
+      ok()
+
+proc delRangeKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): DelRangeKvpFn =
+  result =
+    proc(startKey, endKey: openArray[byte], compactRange: bool): Result[void, KvtError] =
+      db.rdb.store[cf].deleteRange(startKey, endKey).isOkOr:
+        when extraTraceMessages:
+          debug "delRangeKvpFn() deleteRange failed", error=($error)
+        return err(RdbBeDriverDelError)
+
+      if compactRange:
+        db.rdb.store[cf].suggestCompactRange(startKey, endKey).isOkOr:
+          when extraTraceMessages:
+            debug "delRangeKvpFn() suggestCompactRange failed", error=($error)
+          return err(RdbBeDriverDelError)
+      ok()
+
+# -------------
+
 proc closeFn(db: RdbBackendRef): CloseFn =
   result =
     proc(eradicate: bool) =
@@ -171,6 +198,9 @@ proc rocksDbKvtBackend*(baseDb: RocksDbInstanceRef, cf: static[KvtCFs]): KvtDbRe
   db.putBegFn = putBegFn be
   db.putKvpFn = putKvpFn(be, cf)
   db.putEndFn = putEndFn(be, cf)
+
+  db.delKvpFn = delKvpFn(be, cf)
+  db.delRangeKvpFn = delRangeKvpFn(be, cf)
 
   db.closeFn = closeFn be
   db.getBackendFn = getBackendFn be

@@ -12,7 +12,7 @@
 
 import
   pkg/chronos,
-  ../[helpers, worker_desc]
+  ../../[helpers, worker_desc]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -20,10 +20,10 @@ import
 
 proc updateErrorState(buddy: SnapPeerRef) =
   ## Helper/wrapper
-  if ((0 < buddy.nErrors.fetch.cde or
-       0 < buddy.nErrors.apply.cde) and buddy.ctrl.stopped) or
-     nFetchCodesSnapErrThreshold < buddy.nErrors.fetch.cde or
-     nProcCodesErrThreshold < buddy.nErrors.apply.cde:
+  if ((0 < buddy.nErrors.fetch.sto or
+       0 < buddy.nErrors.apply.sto) and buddy.ctrl.stopped) or
+     nFetchStorageSnapErrThreshold < buddy.nErrors.fetch.sto or
+     nProcStorageErrThreshold < buddy.nErrors.apply.sto:
 
     # Make sure that this peer does not immediately reconnect
     buddy.ctrl.zombie = true
@@ -32,16 +32,16 @@ proc updateErrorState(buddy: SnapPeerRef) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-func cdeErrors*(buddy: SnapPeerRef): string =
-  $buddy.nErrors.fetch.cde & "/" & $buddy.nErrors.apply.cde
+func stoErrors*(buddy: SnapPeerRef): string =
+  $buddy.nErrors.fetch.sto & "/" & $buddy.nErrors.apply.sto
 
-proc cdeFetchRegisterError*(
+proc stoFetchRegisterError*(
     buddy: SnapPeerRef;
     slowPeer = false;
     forceZombie = false;
       ) =
-  buddy.nErrors.fetch.cde.inc
-  if nFetchCodesSnapErrThreshold < buddy.nErrors.fetch.cde:
+  buddy.nErrors.fetch.sto.inc
+  if nFetchStorageSnapErrThreshold < buddy.nErrors.fetch.sto:
     if not forceZombie and buddy.ctx.nSyncPeers() == 1 and slowPeer:
       # The current peer is the last one and is lablelled `slow`. It would
       # have been zombified if it were not the last one. So it can still
@@ -52,8 +52,8 @@ proc cdeFetchRegisterError*(
       # abandon `slow` peer as it is not the last one in the pool
       buddy.ctrl.zombie = true
 
-proc cdeProcRegisterError*(buddy: SnapPeerRef) =
-  buddy.nErrors.apply.cde.inc
+proc stoProcRegisterError*(buddy: SnapPeerRef) =
+  buddy.nErrors.apply.sto.inc
   buddy.updateErrorState()
 
 # ------------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -124,8 +124,8 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
   let sender = ctx.tx.recoverSender().expect("valid signature")
 
   vmState.mutateLedger:
-    setupLedger(pre, db)
-    db.persist(clearEmptyAccount = false) # settle accounts storage
+    setupLedger(pre, ledger)
+    ledger.persist(clearEmptyAccount = false) # settle accounts storage
 
   var callResult: LogResult
   defer:
