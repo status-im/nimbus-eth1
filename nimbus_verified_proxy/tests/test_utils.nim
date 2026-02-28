@@ -86,6 +86,6 @@ proc initTestEngine*(
     )
     engine = ?RpcVerificationEngine.init(engineConf)
 
-  engine.backends = @[initTestApiBackend(testState)]
+  engine.registerBackend(initTestApiBackend(testState), fullCapabilities)
 
   ok(engine)

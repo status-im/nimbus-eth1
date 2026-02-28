@@ -91,7 +91,7 @@ proc startBackends(
         url = url.web3Url, error = startRes.error.errMsg
       continue
 
-    engine.backends.add(client.getEthApiBackend())
+    engine.registerBackend(client.getEthApiBackend(), fullCapabilities)
     clients.add(client)
 
   if clients.len == 0:
