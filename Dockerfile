@@ -22,7 +22,7 @@ ADD . /root/nimbus-eth1
 RUN cd /root/nimbus-eth1 \
  && rm -rf build/ \
  && make -j$(nproc) init \
- && make -j$(nproc) DISABLE_MARCH_NATIVE=1 V=1 nimbus_execution_client
+ && make -j$(nproc) DISABLE_MARCH_NATIVE=1 V=1 nimbus
 
 # --------------------------------- #
 # Starting new image to reduce size #
@@ -36,12 +36,12 @@ RUN apt update && apt -y upgrade
 
 RUN ldd --version
 
-RUN rm -f /home/user/nimbus-eth1/build/nimbus_execution_client
+RUN rm -f /home/user/nimbus-eth1/build/nimbus
 
-COPY --from=build /root/nimbus-eth1/build/nimbus_execution_client /home/user/nimbus-eth1/build/nimbus_execution_client
+COPY --from=build /root/nimbus-eth1/build/nimbus /home/user/nimbus-eth1/build/nimbus
 
 ENV PATH="/home/user/nimbus-eth1/build:${PATH}"
-ENTRYPOINT ["nimbus_execution_client"]
+ENTRYPOINT ["nimbus"]
 WORKDIR /home/user/nimbus-eth1/build
 
 STOPSIGNAL SIGINT
