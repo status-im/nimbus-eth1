@@ -129,7 +129,7 @@ runs:
         echo "nimbus_build_system=$nbsHash" >> $GITHUB_OUTPUT
 
     - name: Restore prebuilt Nim from cache
-      if: inputs.nim-cache == 'true'
+      if: inputs.nim-cache == 'true' && matrix.branch == null
       id: nim-cache
       uses: actions/cache@v4
       with:
@@ -140,7 +140,7 @@ runs:
       if: inputs.nim-cache == 'true'
       shell: bash
       run: |
-        make -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinCache init
+        make -j${ncpu} NIM_COMMIT=${{ matrix.branch }} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinCache init
 
     - name: Get latest nim-rocksdb commit hash
       if: inputs.rocksdb-cache == 'true'

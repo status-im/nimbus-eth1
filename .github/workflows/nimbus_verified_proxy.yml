@@ -57,7 +57,7 @@ jobs:
       run:
         shell: bash
 
-    name: '${{ matrix.os }}-${{ matrix.cpu }}'
+    name: ${{ matrix.os }}-${{ matrix.cpu }}${{ matrix.branch != '' && ' (Nim ' || '' }}${{ matrix.branch-short }}${{ matrix.branch != '' && ')' || '' }}
     runs-on: ${{ matrix.builder }}
     steps:
       - name: Checkout nimbus-eth1
@@ -73,9 +73,10 @@ jobs:
 
       - name: Run verified proxy tests
         run: |
+          ./env.sh nim --version
           gcc --version
           DEFAULT_MAKE_FLAGS="-j${ncpu}"
-          make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy libverifproxy
+          make ${DEFAULT_MAKE_FLAGS} NIM_COMMIT=${{ matrix.branch }} nimbus_verified_proxy libverifproxy
           build/nimbus_verified_proxy --help
           # "-static" option will not work for osx unless static system libraries are provided
-          make ${DEFAULT_MAKE_FLAGS} nimbus-verified-proxy-test
+          make ${DEFAULT_MAKE_FLAGS} NIM_COMMIT=${{ matrix.branch }} nimbus-verified-proxy-test
