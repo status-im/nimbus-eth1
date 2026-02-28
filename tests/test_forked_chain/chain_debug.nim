@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -55,7 +55,7 @@ func pp*(n: BlockNumber): string = $n
 func pp*(h: Header): string = $h.number
 func pp*(b: Block): string = $b.header.number
 func pp*(h: Hash32): string = h.short
-func pp*(d: BlockRef): string = d.blk.header.pp
+func pp*(d: BlockRef): string = d.header.pp
 func pp*(d: ptr BlockRef): string = d[].pp
 func pp*(rc: Result[Header,string]): string =
   if rc.isOk: rc.value.pp else: "err(" &  rc.error & ")"
