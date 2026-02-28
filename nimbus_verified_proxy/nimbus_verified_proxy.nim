@@ -75,6 +75,30 @@ proc connectLCToEngine*(lightClient: LightClient, engine: RpcVerificationEngine)
   lightClient.onFinalizedHeader = onFinalizedHeader
   lightClient.onOptimisticHeader = onOptimisticHeader
 
+proc startBackends(
+    engine: RpcVerificationEngine, urls: seq[Web3Url]
+): Future[seq[JsonRpcClient]] {.async: (raises: [ProxyError, CancelledError]).} =
+  var clients: seq[JsonRpcClient] = @[]
+
+  for url in urls:
+    let client = JsonRpcClient.init(url).valueOr:
+      error "Error initializing backend client", error = error.errMsg
+      continue
+
+    let startRes = await client.start()
+    if startRes.isErr():
+      error "Error connecting to backend",
+        url = url.web3Url, error = startRes.error.errMsg
+      continue
+
+    engine.registerBackend(client.getEthApiBackend(), fullCapabilities)
+    clients.add(client)
+
+  if clients.len == 0:
+    raise newException(ProxyError, "Couldn't connect to any execution API backend")
+
+  clients
+
 proc startFrontends(
     engine: RpcVerificationEngine, urls: seq[Web3Url]
 ): seq[JsonRpcServer] {.raises: [ProxyError].} =
@@ -126,25 +150,18 @@ proc run(
       raise newException(ProxyError, "Couldn't initialize verification engine")
     lc = LightClient.new(config.eth2Network, some config.trustedBlockRoot)
 
-    #initialize frontend and backend for JSON-RPC
-    jsonRpcClientPool = JsonRpcClientPool.new()
-
     # initialize backend for light client updates
     lcRestClientPool = LCRestClientPool.new(lc.cfg, lc.forkDigests)
 
-  if (await jsonRpcClientPool.addEndpoints(config.executionApiUrls)).isErr():
-    raise newException(ProxyError, "Couldn't add endpoints for the web3 backend")
+  let backendClients = await startBackends(engine, config.executionApiUrls)
 
-  # connect light client to LC by registering on header methods 
+  # connect light client to LC by registering on header methods
   # to use engine header store
   connectLCToEngine(lc, engine)
   lc.trustedBlockRoot = some config.trustedBlockRoot
 
   # add light client backend
   lc.setBackend(lcRestClientPool.getEthLCBackend())
-
-  # the backend only needs the url of the RPC provider
-  engine.backend = jsonRpcClientPool.getEthApiBackend()
 
   let frontendServers = engine.startFrontends(config.frontendUrls)
 
@@ -160,7 +177,8 @@ proc run(
     debug "light client cancelled"
     for s in frontendServers:
       await s.stop()
-    await jsonRpcClientPool.closeAll()
+    for c in backendClients:
+      await c.stop()
     await lcRestClientPool.closeAll()
     raise e
 

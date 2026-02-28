@@ -202,6 +202,22 @@ type
       async: (raises: [CancelledError])
     .}
 
+  BackendCapability* = enum
+    ChainId             # eth_chainId
+    GetBlockByHash      # eth_getBlockByHash
+    GetBlockByNumber    # eth_getBlockByNumber
+    GetProof            # eth_getProof
+    CreateAccessList    # eth_createAccessList
+    GetCode             # eth_getCode
+    GetBlockReceipts    # eth_getBlockReceipts
+    GetTransactionReceipt # eth_getTransactionReceipt
+    GetTransactionByHash  # eth_getTransactionByHash
+    GetLogs             # eth_getLogs
+    FeeHistory          # eth_feeHistory
+    SendRawTransaction  # eth_sendRawTransaction
+
+  BackendCapabilities* = set[BackendCapability]
+
   FilterStoreItem* = object
     filter*: FilterOptions
     blockMarker*: Opt[Quantity]
@@ -219,7 +235,8 @@ type
     storageCache*: StorageCache
 
     # interfaces
-    backend*: EthApiBackend
+    backends: seq[EthApiBackend]
+    capabilityIndex: array[BackendCapability, seq[int]]
     frontend*: EthApiFrontend
 
     # config items
@@ -235,3 +252,27 @@ type
     codeCacheLen*: int
     storageCacheLen*: int
     parallelBlockDownloads*: uint64
+
+const fullCapabilities* = BackendCapabilities(
+  {ChainId, GetBlockByHash, GetBlockByNumber, GetProof, CreateAccessList,
+   GetCode, GetBlockReceipts, GetTransactionReceipt, GetTransactionByHash,
+   GetLogs, FeeHistory, SendRawTransaction}
+)
+
+proc registerBackend*(
+    engine: RpcVerificationEngine,
+    backend: EthApiBackend,
+    capabilities: BackendCapabilities,
+) =
+  let idx = engine.backends.len
+  engine.backends.add(backend)
+  for cap in capabilities:
+    engine.capabilityIndex[cap].add(idx)
+
+func backendFor*(
+    engine: RpcVerificationEngine, cap: BackendCapability
+): EngineResult[EthApiBackend] =
+  let indices = engine.capabilityIndex[cap]
+  if indices.len == 0:
+    return err((BackendError, "No backend registered for capability: " & $cap))
+  ok(engine.backends[indices[0]])
