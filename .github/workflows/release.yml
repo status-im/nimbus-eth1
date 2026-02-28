@@ -144,9 +144,9 @@ jobs:
           cp -r nimbus-eth1 nimbus-verified-proxy
           REFNAME="${{ github.ref }}"
           TAG="${REFNAME#refs/tags/}"
-          DOCKER_BUILDKIT=1 docker build -f Dockerfile.proxy.${{ matrix.os }}-${{ matrix.cpu }} -t statusim/nvp:${{ matrix.os }}-${{ matrix.cpu }}-${TAG} -t statusim/nvp:${{ matrix.os }}-${{ matrix.cpu }}-latest .
-          docker push statusim/nvp:${{ matrix.os }}-${{ matrix.cpu }}-${TAG}
-          docker push statusim/nvp:${{ matrix.os }}-${{ matrix.cpu }}-latest
+          DOCKER_BUILDKIT=1 docker build -f Dockerfile.proxy.${{ matrix.os }}-${{ matrix.cpu }} -t statusim/nimbus-verified-proxy:${{ matrix.os }}-${{ matrix.cpu }}-${TAG} -t statusim/nimbus-verified-proxy:${{ matrix.os }}-${{ matrix.cpu }}-latest .
+          docker push statusim/nimbus-verified-proxy:${{ matrix.os }}-${{ matrix.cpu }}-${TAG}
+          docker push statusim/nimbus-verified-proxy:${{ matrix.os }}-${{ matrix.cpu }}-latest
 
   docker-multiarch:
     name: Create multi-arch Docker manifest
@@ -179,15 +179,15 @@ jobs:
       - name: Create and push proxy multi-arch manifest (versioned)
         run: |
           TAG="${{ steps.extract_tag.outputs.tag }}"
-          docker buildx imagetools create -t statusim/nvp:${TAG} \
-            statusim/nvp:linux-amd64-${TAG} \
-            statusim/nvp:linux-arm64-${TAG}
+          docker buildx imagetools create -t statusim/nimbus-verified-proxy:${TAG} \
+            statusim/nimbus-verified-proxy:linux-amd64-${TAG} \
+            statusim/nimbus-verified-proxy:linux-arm64-${TAG}
 
       - name: Create and push proxy multi-arch manifest (latest)
         run: |
-          docker buildx imagetools create -t statusim/nvp:latest \
-            statusim/nvp:linux-amd64-latest \
-            statusim/nvp:linux-arm64-latest
+          docker buildx imagetools create -t statusim/nimbus-verified-proxy:latest \
+            statusim/nimbus-verified-proxy:linux-amd64-latest \
+            statusim/nimbus-verified-proxy:linux-arm64-latest
 
   prepare-release:
     name: Prepare release draft
