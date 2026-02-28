@@ -14,7 +14,7 @@
 ## See `core_db/README.md` for implementation details
 ##
 ## This module provides a memory database only. For providing a persistent
-## constructor, import `db/code_db/persistent` though avoiding to
+## constructor, import `db/core_db/persistent` though avoiding to
 ## unnecessarily link to the persistent backend library (e.g. `rocksdb`)
 ## when a memory only database is used.
 ##
