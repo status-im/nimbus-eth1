@@ -83,7 +83,6 @@ FIXED_OBJS := \
 
 ALL_OBJS := $(NIMCACHE_OBJS) $(LTM_OBJS) $(BEARSSL_OBJS) $(FIXED_OBJS)
 
-.PHONY: wasm nim-to-c check-nimcache
 
 check-nimcache:
 	@[ -n "$(NIMCACHE_SRCS)" ] || { echo "Error: nimcache is empty — run 'make nim-to-c' before 'make wasm'"; exit 1; }
@@ -109,21 +108,43 @@ nim-to-c:
 	  -c \
 	  nimbus_verified_proxy/libverifproxy/verifproxy.nim
 
+EMCC_EXPORTED_FUNCTIONS := ["_nvp_start","_nvp_stop","_nvp_wasm_call","_nvp_deliver_transport","_nvp_free_string","_malloc","_free"]
+EMCC_EXPORTED_RUNTIME   := ["ccall","cwrap","UTF8ToString","stringToNewUTF8","addFunction","removeFunction"]
+EMCC_COMMON_FLAGS := \
+  -sEXPORTED_FUNCTIONS='$(EMCC_EXPORTED_FUNCTIONS)' \
+  -sEXPORTED_RUNTIME_METHODS='$(EMCC_EXPORTED_RUNTIME)' \
+  -sALLOW_MEMORY_GROWTH=1 \
+  -sALLOW_TABLE_GROWTH=1 \
+  -sMODULARIZE=1 \
+  -sEXPORT_NAME=VerifProxyModule \
+  -sEXPORT_ES6=1
+
+.PHONY: wasm wasm-debug nim-to-c check-nimcache
+
 wasm: $(OUT)/verifproxy_wasm.js
 
 $(OUT)/verifproxy_wasm.js: check-nimcache $(ALL_OBJS)
-	@echo "==> Linking $@"
+	@echo "==> Linking $@ (release)"
 	emcc -v \
-	  -Os \
+	  -O1 \
 	  -flto \
 	  -Wl,--error-limit=0 \
 	  $(ALL_OBJS) \
-	  -sEXPORTED_FUNCTIONS='["_NimMain","_wasm_start","_wasm_stop","_wasm_call","_wasm_deliver_transport","_freeNimAllocatedString","_malloc","_free"]' \
-	  -sEXPORTED_RUNTIME_METHODS='["UTF8ToString","stringToNewUTF8"]' \
-	  -sALLOW_MEMORY_GROWTH=1 \
-	  -sMODULARIZE=1 \
-	  -sEXPORT_NAME=VerifProxyModule \
+	  $(EMCC_COMMON_FLAGS) \
 	  -o $@
+
+
+wasm-debug: check-nimcache $(ALL_OBJS)
+	@echo "==> Linking $(OUT)/verifproxy_wasm.js (debug)"
+	emcc -v \
+	  -O1 \
+	  --profiling-funcs \
+	  -Wl,--error-limit=0 \
+	  $(ALL_OBJS) \
+	  $(EMCC_COMMON_FLAGS) \
+	  -sASSERTIONS=2 \
+	  -sSTACK_OVERFLOW_CHECK=2 \
+	  -o $(OUT)/verifproxy_wasm.js
 
 # nimcache
 $(OBJ_DIR)/nc/%.o: $(OUT)/nimcache/%.c
