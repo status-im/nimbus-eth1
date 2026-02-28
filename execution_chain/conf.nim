@@ -523,6 +523,11 @@ type
         defaultValue: false
         name: "debug-bootstrap-finalized" .}: bool
 
+      backgroundPruning* {.
+        desc: "Enable background pruning of expired block bodies and receipts"
+        defaultValue: false
+        name: "background-pruning" .}: bool
+
     # We now load all the import specific configurations directly into  ExecutionClientConf
     of NimbusCmd.`import`:
       maxBlocks* {.

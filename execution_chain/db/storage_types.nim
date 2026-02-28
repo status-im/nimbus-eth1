@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -30,6 +30,7 @@ type
     wdKey = 11
     witness = 12
     blockAccessList = 13
+    historyExpiryLimit = 14
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -65,6 +66,10 @@ func canonicalHeadHashKey*(): DbKey {.inline.} =
 
 func dataDirIdKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(dataDirId)
+  result.dataEndPos = 1
+
+func historyExpiryIdKey*(): DbKey {.inline.} =
+  result.data[0] = byte ord(historyExpiryLimit)
   result.dataEndPos = 1
 
 func slotHashToSlotKey*(h: Hash32): DbKey {.inline.} =

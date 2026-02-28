@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -22,7 +22,8 @@ import
   ./sync/snap as snap_sync,
   ./sync/wire_protocol,
   ./beacon/beacon_engine,
-  ./common
+  ./common,
+  ./pruner
 
 when enabledLogLevel == TRACE:
   import std/sequtils
@@ -38,7 +39,8 @@ export
   beacon_sync,
   snap_sync,
   beacon_engine,
-  common
+  common,
+  pruner
 
 type
   NimbusNode* = ref object
@@ -55,6 +57,7 @@ type
     snapWire*: SnapWireStateRef
     accountsManager*: ref AccountsManager
     rng*: ref HmacDrbgContext
+    backgroundPruner*: BackgroundPrunerRef
 
 proc closeWait*(nimbus: NimbusNode) {.async.} =
   trace "Graceful shutdown"
@@ -75,6 +78,9 @@ proc closeWait*(nimbus: NimbusNode) {.async.} =
     waitedFutures.add nimbus.beaconSyncRef.stop()
   if nimbus.ethWire.isNil.not:
     waitedFutures.add nimbus.ethWire.stop()
+
+  if nimbus.backgroundPruner.isNil.not:
+    waitedFutures.add nimbus.backgroundPruner.stop()
 
   waitedFutures.add nimbus.fc.stopProcessingQueue()
 

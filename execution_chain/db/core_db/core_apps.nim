@@ -17,7 +17,7 @@ import
   std/[sequtils],
   chronicles,
   eth/[common, rlp],
-  stew/byteutils,
+  stew/[byteutils, endians2],
   results,
   "../.."/[constants],
   "../.."/stateless/witness_types,
@@ -681,12 +681,19 @@ proc persistUncles*(db: CoreDbTxRef, uncles: openArray[Header]): Hash32 =
     warn "persistUncles()", unclesHash=result, error=($$error)
     return EMPTY_ROOT_HASH
 
-proc persistWitness*(db: CoreDbTxRef, blockHash: Hash32, witness: Witness): Result[void, string] =
+proc persistWitness*(
+    db: CoreDbTxRef;
+    blockHash: Hash32;
+    witness: Witness;
+      ): Result[void, string] =
   db.put(blockHashToWitnessKey(blockHash).toOpenArray, witness.encode()).isOkOr:
     return err("persistWitness: " & $$error)
   ok()
 
-proc getWitness*(db: CoreDbTxRef, blockHash: Hash32): Result[Witness, string] =
+proc getWitness*(
+    db: CoreDbTxRef;
+    blockHash: Hash32;
+      ): Result[Witness, string] =
   let witnessBytes = db.get(blockHashToWitnessKey(blockHash).toOpenArray).valueOr:
     return err("getWitness: " & $$error)
 
@@ -703,6 +710,137 @@ proc getCodeByHash*(db: CoreDbTxRef, codeHash: Hash32): Result[seq[byte], string
     return err("getCodeByHash: " & $$error)
 
   ok(code)
+
+proc deleteReceipts*(
+    db: CoreDbTxRef;
+    receiptsRoot: Hash32;   
+      ) =
+  const info = "deleteReceipts()"
+  if receiptsRoot == EMPTY_ROOT_HASH:
+    return
+  
+  for idx in 0'u16..<uint16.high:
+    let key = hashIndexKey(receiptsRoot, idx)
+    db.del(key).isOkOr:
+      warn info, idx, error=($$error)
+
+proc deleteReceipts*(
+    db: CoreDbTxRef;
+    blockNumber: BlockNumber;   
+      ): Result[void, string] =
+  const info = "deleteReceipts()"
+  let
+    header = ?db.getBlockHeader(blockNumber)
+    receiptsRoot = header.receiptsRoot
+
+  db.deleteReceipts(receiptsRoot)
+
+  ok()
+
+proc deleteTransactions*(
+    db: CoreDbTxRef;
+    txRoot: Hash32;
+      ) =
+  const info = "deleteTransactions()"
+  if txRoot == EMPTY_ROOT_HASH:
+    return
+
+  for idx in 0'u16..<uint16.high:
+    let key = hashIndexKey(txRoot, idx)
+    db.del(key).isOkOr:
+      warn info, idx, error=($$error)
+
+proc deleteUncles*(
+    db: CoreDbTxRef;
+    ommersHash: Hash32;
+      ) =
+  const info = "deleteUncles()"
+  if ommersHash == EMPTY_ROOT_HASH:
+    return
+
+  for idx in 0'u16..<uint16.high:
+    let key = hashIndexKey(ommersHash, idx)
+    db.del(key).isOkOr:
+      warn info, idx, error=($$error)
+
+proc deleteWithdrawals*(
+    db: CoreDbTxRef;
+    withdrawalsRoot: Hash32;
+      ) =
+  const info = "deleteWithdrawals()"
+  if withdrawalsRoot == EMPTY_ROOT_HASH:
+    return
+  
+  for idx in 0'u16..<uint16.high:
+    let key = hashIndexKey(withdrawalsRoot, idx)
+    db.del(key).isOkOr:
+      warn info, idx, error=($$error)
+
+proc deleteBlockBody*(
+    db: CoreDbTxRef;
+    blockHash: Hash32;
+      ): Result[void, string] =
+  const info = "deleteBlockBody()"
+  let header = ?db.getBlockHeader(blockHash)
+
+  try:
+    db.deleteTransactions(header.transactionsRoot)
+    db.deleteUncles(header.ommersHash)
+    if header.withdrawalsRoot.isSome:
+      db.deleteWithdrawals(header.withdrawalsRoot.get(EMPTY_ROOT_HASH))
+  except:
+    warn info, blkNum=header.number, error="Unknown Exception occurred"
+
+  ok()
+
+proc deleteBlockBody*(
+    db: CoreDbTxRef;
+    blockNumber: BlockNumber;
+      ): Result[void, string] =
+  const info = "deleteBlockBody()"
+  let header = ?db.getBlockHeader(blockNumber)
+
+  db.deleteTransactions(header.transactionsRoot)
+  db.deleteUncles(header.ommersHash)
+  if header.withdrawalsRoot.isSome:
+    db.deleteWithdrawals(header.withdrawalsRoot.get())
+
+  ok()
+
+proc deleteBlockBodyAndReceipts*(
+    db: CoreDbTxRef;
+    blockNumber: BlockNumber;
+      ): Result[void, string] =
+  const info = "deleteBlockBodyAndReceipts()"
+  let
+    header = ?db.getBlockHeader(blockNumber)
+
+  db.deleteTransactions(header.transactionsRoot)
+  db.deleteUncles(header.ommersHash)
+  if header.withdrawalsRoot.isSome:
+    db.deleteWithdrawals(header.withdrawalsRoot.get())
+  db.deleteReceipts(header.receiptsRoot)
+
+  ok()
+
+proc setHistoryExpired*(
+    db: CoreDbTxRef;
+    blockNumber: BlockNumber;
+      ) =
+  const info = "setHistoryExpired()"
+  let value = blockNumber.toBytesLE()
+  db.put(historyExpiryIdKey().toOpenArray, value).isOkOr:
+    warn info, blockNumber, error=($$error)
+
+proc getHistoryExpired*(
+    db: CoreDbTxRef;
+      ): BlockNumber =
+  let
+    key = historyExpiryIdKey()
+    blkNum = db.get(key.toOpenArray).valueOr:
+      return BlockNumber(0)
+    
+  BlockNumber(uint64.fromBytesLE(blkNum))
 
 # ------------------------------------------------------------------------------
 # End

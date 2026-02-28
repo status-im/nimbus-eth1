@@ -229,6 +229,10 @@ proc init*(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
     nimbus.snapSyncRef = SnapSyncRef(nil)
 
+  if config.backgroundPruning:
+    nimbus.backgroundPruner = BackgroundPrunerRef.init(com)
+    nimbus.backgroundPruner.start()
+
 proc init*(T: type NimbusNode, config: ExecutionClientConf, com: CommonRef): T =
   let nimbus = T()
   nimbus.init(config, com)
