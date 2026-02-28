@@ -29,8 +29,6 @@ const
   defaultListenAddress* = (static parseIpAddress("0.0.0.0"))
   defaultAdminListenAddress* = (static parseIpAddress("127.0.0.1"))
 
-  defaultListenAddressDesc = $defaultListenAddress
-  defaultAdminListenAddressDesc = $defaultAdminListenAddress
   # 100mb seems a bit smallish we may consider increasing defaults after some
   # network measurements
   defaultStorageSize* = uint32(1000 * 1000 * 100)
@@ -44,10 +42,7 @@ type
 
   PortalCliConf* = object
     logLevel* {.
-      defaultValue: LogLevel.DEBUG,
-      defaultValueDesc: $LogLevel.DEBUG,
-      desc: "Sets the log level",
-      name: "log-level"
+      defaultValue: LogLevel.DEBUG, desc: "Sets the log level", name: "log-level"
     .}: LogLevel
 
     udpPort* {.defaultValue: 9009, desc: "UDP listening port", name: "udp-port".}:
@@ -55,7 +50,6 @@ type
 
     listenAddress* {.
       defaultValue: defaultListenAddress,
-      defaultValueDesc: $defaultListenAddressDesc,
       desc: "Listening address for the Discovery v5 traffic",
       name: "listen-address"
     .}: IpAddress
@@ -107,7 +101,6 @@ type
 
     metricsAddress* {.
       defaultValue: defaultAdminListenAddress,
-      defaultValueDesc: $defaultAdminListenAddressDesc,
       desc: "Listening address of the metrics server",
       name: "metrics-address"
     .}: IpAddress
