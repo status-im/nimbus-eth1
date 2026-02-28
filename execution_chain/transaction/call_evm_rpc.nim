@@ -70,20 +70,18 @@ proc rpcEstimateGas*(args: TransactionArgs,
   var
     lo : GasInt = txGas - 1
     hi : GasInt = GasInt args.gas.get(0.Quantity)
-    cap: GasInt
 
   # Determine the highest gas limit can be used during the estimation.
   if hi < txGas:
     # block's gasLimit act as the gas ceiling
     hi = header.gasLimit
 
-  # Normalize the max fee per gas the call is willing to spend.
-  var feeCap = GasInt args.gasPrice.get(0.Quantity)
+  # Normalize the execution fee per gas used by the estimator.
   if args.gasPrice.isSome and
     (args.maxFeePerGas.isSome or args.maxPriorityFeePerGas.isSome):
     return err((evmErr(EvmInvalidParam), OutputResult()))
-  elif args.maxFeePerGas.isSome:
-    feeCap = GasInt args.maxFeePerGas.get
+
+  let feeCap = params.gasPrice
 
   # Recap the highest gas limit with account's available balance.
   if feeCap > 0:
@@ -94,7 +92,7 @@ proc rpcEstimateGas*(args: TransactionArgs,
     var available = balance
     if args.value.isSome:
       let value = args.value.get
-      if value > available:
+      if value >= available:
         return err((evmErr(EvmInvalidParam), OutputResult()))
       available -= value
 
@@ -103,7 +101,7 @@ proc rpcEstimateGas*(args: TransactionArgs,
     if allowance < high(GasInt).u256 and hi > allowance.truncate(GasInt):
       let transfer = args.value.get(0.u256)
       warn "Gas estimation capped by limited funds", original=hi, balance,
-        sent=transfer, maxFeePerGas=feeCap, fundable=allowance
+        sent=transfer, feePerGas=feeCap, fundable=allowance
       hi = allowance.truncate(GasInt)
 
   # Recap the highest gas allowance with specified gasCap.
@@ -111,7 +109,6 @@ proc rpcEstimateGas*(args: TransactionArgs,
     warn "Caller gas above allowance, capping", requested=hi, cap=gasCap
     hi = gasCap
 
-  cap = hi
   let
     (intrinsicGas, floorDataGas) = intrinsicGas(params, fork)
     minGasLimit = max(intrinsicGas, floorDataGas)
@@ -130,7 +127,7 @@ proc rpcEstimateGas*(args: TransactionArgs,
     else:
       ok(res)
 
-  # Short circuit estimation check: plain value transfer (no data, to has no code) – try 21000 first
+  # Short circuit estimation check: plain value transfer (no data, to has no code)
   if not params.isCreate and params.input.len == 0 and
      vmState.readOnlyLedger.getCodeSize(params.to) == 0:
     if executable(txGas).isOk:
@@ -166,11 +163,6 @@ proc rpcEstimateGas*(args: TransactionArgs,
       lo = mid
     else:
       hi = mid
-
-  # Reject the transaction as invalid if it still fails at the highest allowance
-  if hi == cap:
-    let failed = executable(hi).valueOr:
-      return err((evmErr(EvmInvalidParam), error))
 
   ok(hi)
 
