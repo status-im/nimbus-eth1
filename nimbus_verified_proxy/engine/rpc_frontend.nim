@@ -213,7 +213,9 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
   engine.frontend.eth_getTransactionByHash = proc(
       txHash: Hash32
   ): Future[EngineResult[TransactionObject]] {.async: (raises: [CancelledError]).} =
-    let tx = ?(await engine.backend.eth_getTransactionByHash(txHash))
+    let
+      backend = ?(engine.backendFor(GetTransactionByHash))
+      tx = ?(await backend.eth_getTransactionByHash(txHash))
 
     if tx.hash != txHash:
       return err(
@@ -239,7 +241,8 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
       txHash: Hash32
   ): Future[EngineResult[ReceiptObject]] {.async: (raises: [CancelledError]).} =
     let
-      rx = ?(await engine.backend.eth_getTransactionReceipt(txHash))
+      backend = ?(engine.backendFor(GetTransactionReceipt))
+      rx = ?(await backend.eth_getTransactionReceipt(txHash))
       rxs = ?(await engine.getReceipts(rx.blockHash))
 
     for r in rxs:
@@ -384,14 +387,17 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
   engine.frontend.eth_getProof = proc(
       address: Address, slots: seq[UInt256], blockId: BlockTag
   ): Future[EngineResult[ProofResponse]] {.async: (raises: [CancelledError]).} =
-    await engine.backend.eth_getProof(address, slots, blockId)
+    let backend = ?(engine.backendFor(GetProof))
+    await backend.eth_getProof(address, slots, blockId)
 
   engine.frontend.eth_feeHistory = proc(
       blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: Opt[seq[float64]]
   ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).} =
-    await engine.backend.eth_feeHistory(blockCount, newestBlock, rewardPercentiles)
+    let backend = ?(engine.backendFor(FeeHistory))
+    await backend.eth_feeHistory(blockCount, newestBlock, rewardPercentiles)
 
   engine.frontend.eth_sendRawTransaction = proc(
       txBytes: seq[byte]
   ): Future[EngineResult[Hash32]] {.async: (raises: [CancelledError]).} =
-    await engine.backend.eth_sendRawTransaction(txBytes)
+    let backend = ?(engine.backendFor(SendRawTransaction))
+    await backend.eth_sendRawTransaction(txBytes)

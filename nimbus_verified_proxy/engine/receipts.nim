@@ -45,7 +45,9 @@ func toReceipts(recs: openArray[ReceiptObject]): seq[Receipt] =
 proc getReceipts(
     engine: RpcVerificationEngine, header: Header, blockTag: types.BlockTag
 ): Future[EngineResult[seq[ReceiptObject]]] {.async: (raises: [CancelledError]).} =
-  let rxs = ?(await engine.backend.eth_getBlockReceipts(blockTag))
+  let
+    backend = ?(engine.backendFor(GetBlockReceipts))
+    rxs = ?(await backend.eth_getBlockReceipts(blockTag))
 
   if rxs.isSome():
     if orderedTrieRoot(toReceipts(rxs.get())) != header.receiptsRoot:
@@ -141,7 +143,8 @@ proc getLogs*(
 ): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).} =
   let
     resolvedFilter = ?engine.resolveFilterTags(filter)
-    logObjs = ?(await engine.backend.eth_getLogs(resolvedFilter))
+    backend = ?(engine.backendFor(GetLogs))
+    logObjs = ?(await backend.eth_getLogs(resolvedFilter))
 
   ?(await engine.verifyLogs(resolvedFilter, logObjs))
 

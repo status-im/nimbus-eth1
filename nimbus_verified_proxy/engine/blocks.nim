@@ -118,8 +118,10 @@ proc walkBlocks(
 
     while nextNum > targetNum and uint64(futs.len) < engine.parallelBlockDownloads:
       if not engine.headerStore.contains(nextNum):
-        let tag = BlockTag(kind: bidNumber, number: Quantity(nextNum))
-        futs.add(engine.backend.eth_getBlockByNumber(tag, false))
+        let
+          tag = BlockTag(kind: bidNumber, number: Quantity(nextNum))
+          backend = ?(engine.backendFor(GetBlockByNumber))
+        futs.add(backend.eth_getBlockByNumber(tag, false))
 
       nextNum -= 1
 
@@ -245,7 +247,9 @@ proc getBlock*(
     engine: RpcVerificationEngine, blockHash: Hash32, fullTransactions: bool
 ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
   # get the target block
-  let blk = ?(await engine.backend.eth_getBlockByHash(blockHash, fullTransactions))
+  let
+    backend = ?(engine.backendFor(GetBlockByHash))
+    blk = ?(await backend.eth_getBlockByHash(blockHash, fullTransactions))
 
   # verify requested hash with the downloaded hash
   if blockHash != blk.hash:
@@ -267,7 +271,9 @@ proc getBlock*(
   let numberTag = ?engine.resolveBlockTag(blockTag)
 
   # get the target block
-  let blk = ?(await engine.backend.eth_getBlockByNumber(numberTag, fullTransactions))
+  let
+    backend = ?(engine.backendFor(GetBlockByNumber))
+    blk = ?(await backend.eth_getBlockByNumber(numberTag, fullTransactions))
 
   if numberTag.number != blk.number:
     return err(
@@ -293,7 +299,9 @@ proc getHeader*(
     return ok(cachedHeader.get())
 
   # get the target block
-  let blk = ?(await engine.backend.eth_getBlockByHash(blockHash, false))
+  let
+    backend = ?(engine.backendFor(GetBlockByHash))
+    blk = ?(await backend.eth_getBlockByHash(blockHash, false))
 
   let header = convHeader(blk)
 
@@ -323,7 +331,9 @@ proc getHeader*(
     return ok(cachedHeader.get())
 
   # get the target block
-  let blk = ?(await engine.backend.eth_getBlockByNumber(numberTag, false))
+  let
+    backend = ?(engine.backendFor(GetBlockByNumber))
+    blk = ?(await backend.eth_getBlockByNumber(numberTag, false))
 
   let header = convHeader(blk)
 

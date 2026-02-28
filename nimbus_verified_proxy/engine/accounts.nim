@@ -114,7 +114,8 @@ proc getAccount*(
   info "Forwarding eth_getAccount", blockNumber
 
   let
-    proof = ?(await engine.backend.eth_getProof(address, @[], blockId(blockNumber)))
+    backend = ?(engine.backendFor(GetProof))
+    proof = ?(await backend.eth_getProof(address, @[], blockId(blockNumber)))
 
     account = getAccountFromProof(
       stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
@@ -147,7 +148,9 @@ proc getCode*(
 
   info "Forwarding eth_getCode", blockNumber
 
-  let code = ?(await engine.backend.eth_getCode(address, blockId(blockNumber)))
+  let
+    backend = ?(engine.backendFor(GetCode))
+    code = ?(await backend.eth_getCode(address, blockId(blockNumber)))
 
   # verify the byte code. since we verified the account against
   # the state root we just need to verify the code hash
@@ -173,7 +176,8 @@ proc getStorageAt*(
   info "Forwarding eth_getStorageAt", blockNumber
 
   let
-    proof = ?(await engine.backend.eth_getProof(address, @[slot], blockId(blockNumber)))
+    backend = ?(engine.backendFor(GetProof))
+    proof = ?(await backend.eth_getProof(address, @[slot], blockId(blockNumber)))
 
     slotValue = getStorageFromProof(stateRoot, slot, proof)
 
@@ -199,9 +203,10 @@ proc populateCachesForAccountAndSlots(
 
   if engine.accountsCache.get(accountCacheKey).isNone() or slotsToFetch.len() > 0:
     let
+      backend = ?(engine.backendFor(GetProof))
       proof =
         ?(
-          await engine.backend.eth_getProof(address, slotsToFetch, blockId(blockNumber))
+          await backend.eth_getProof(address, slotsToFetch, blockId(blockNumber))
         )
       account = getAccountFromProof(
         stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
@@ -226,8 +231,10 @@ proc populateCachesUsingAccessList*(
     stateRoot: Root,
     tx: TransactionArgs,
 ): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
-  let accessListRes: AccessListResult =
-    ?(await engine.backend.eth_createAccessList(tx, blockId(blockNumber)))
+  let
+    backend = ?(engine.backendFor(CreateAccessList))
+    accessListRes: AccessListResult =
+      ?(await backend.eth_createAccessList(tx, blockId(blockNumber)))
 
   var futs = newSeqOfCap[Future[EngineResult[void]]](accessListRes.accessList.len())
   for accessPair in accessListRes.accessList:
