@@ -56,8 +56,8 @@ type
     #
     rdKeyLru*: LruCache[VertexID,HashKey] ## Read cache
     rdKeySize*: int
-    rdVtxLru*: LruCache[VertexID,VertexRef] ## Read cache
-    rdVtxSize*: int
+    # rdVtxLru*: LruCache[VertexID,VertexRef] ## Read cache
+    # rdVtxSize*: int
 
     rdBranchLru*: LruCache[VertexID, (VertexID, uint16)]
     rdBranchSize*: int

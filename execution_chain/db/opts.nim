@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -42,7 +42,6 @@ const
   defaultMaxSnapshots* = 5
     ## The max number of snapshots to store in the aristo database.
 
-
 type DbOptions* = object # Options that are transported to the database layer
   maxOpenFiles*: int
   writeBufferSize*: int
@@ -53,6 +52,7 @@ type DbOptions* = object # Options that are transported to the database layer
   rdbBranchCacheSize*: int
   rdbPrintStats*: bool
   maxSnapshots*: int
+  parallelStateRootComputation*: bool
 
 func init*(
     T: type DbOptions,
@@ -65,6 +65,7 @@ func init*(
     rdbBranchCacheSize = defaultRdbBranchCacheSize,
     rdbPrintStats = false,
     maxSnapshots = defaultMaxSnapshots,
+    parallelStateRootComputation = false
 ): T =
   T(
     maxOpenFiles: maxOpenFiles,
@@ -76,4 +77,5 @@ func init*(
     rdbBranchCacheSize: rdbBranchCacheSize,
     rdbPrintStats: rdbPrintStats,
     maxSnapshots: maxSnapshots,
+    parallelStateRootComputation: parallelStateRootComputation
   )

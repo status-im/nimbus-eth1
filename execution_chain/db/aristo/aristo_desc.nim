@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -22,7 +22,7 @@
 {.push raises: [].}
 
 import
-  std/[hashes, sequtils, sets, tables, heapqueue],
+  std/[hashes, sequtils, sets, tables, heapqueue, locks],
   eth/common/hashes, eth/trie/nibbles,
   results,
   ./aristo_constants,
@@ -30,6 +30,9 @@ import
   ./aristo_desc/desc_backend,
   minilru
 
+when compileOption("threads"):
+  import taskpools
+  export taskpools
 
 # Not auto-exporting backend
 export
@@ -83,6 +86,8 @@ type
       ## -1 = stored in database, where relevant though typically should be
       ## compared with the base layer level instead.
 
+    lock*: Lock
+
   Snapshot* = object
     vtx*: Table[RootedVertexID, VtxSnapshot]
     acc*: Table[Hash32, (AccLeafRef, int)]
@@ -108,17 +113,17 @@ type
 
     txRef*: AristoTxRef              ## Bottom-most in-memory frame
 
-    accLeaves*: LruCache[Hash32, AccLeafRef]
-      ## Account path to payload cache - accounts are frequently accessed by
-      ## account path when contracts interact with them - this cache ensures
-      ## that we don't have to re-traverse the storage trie for every such
-      ## interaction
-      ## TODO a better solution would probably be to cache this in a type
-      ## exposed to the high-level API
+    # accLeaves*: LruCache[Hash32, AccLeafRef]
+    # Account path to payload cache - accounts are frequently accessed by
+    # account path when contracts interact with them - this cache ensures
+    # that we don't have to re-traverse the storage trie for every such
+    # interaction
+    # TODO a better solution would probably be to cache this in a type
+    # exposed to the high-level API
 
-    stoLeaves*: LruCache[Hash32, StoLeafRef]
-      ## Mixed account/storage path to payload cache - same as above but caches
-      ## the full lookup of storage slots
+    # stoLeaves*: LruCache[Hash32, StoLeafRef]
+    # Mixed account/storage path to payload cache - same as above but caches
+    # the full lookup of storage slots
 
     staticLevel*: int
       ## MPT level where "most" leaves can be found, for static vid lookups
@@ -134,6 +139,13 @@ type
       ## The maximum number of snapshots to hold in the snapshots queue. When the queue
       ## is full (queue.len == maxSnapshots) then the oldest snapshot is removed from
       ## the queue and cleaned up.
+
+    parallelStateRootComputation*: bool
+      ## Enables parallel state root computation.
+
+    when compileOption("threads"):
+      taskpool*: Taskpool
+        ## Shared task pool for offloading computation to other threads
 
   Leg* = object
     ## For constructing a `VertexPath`

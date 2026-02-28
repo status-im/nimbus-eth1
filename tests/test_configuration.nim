@@ -361,7 +361,7 @@ proc configurationMain*() =
       check config.rdbPrintStats == true
       check config.rewriteDatadirId == true
       check config.eagerStateRootCheck ==  false
-
+      check config.parallelStateRootComputation ==  false
       check config.statelessProviderEnabled == true
       check config.statelessWitnessValidation == true
 

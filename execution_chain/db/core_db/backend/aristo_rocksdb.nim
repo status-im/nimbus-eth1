@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -196,12 +196,6 @@ proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions): CoreDbRef =
     adb = AristoDbRef.init(opts, baseDb).valueOr:
       raiseAssert "Could not initialize aristo: " & $error
     kdb = KvtDbRef.init(baseDb)
-
-  if opts.rdbKeyCacheSize > 0:
-    # Make sure key cache isn't empty
-    adb.txRef.computeKeys(STATE_ROOT_VID).isOkOr:
-      fatal "Cannot compute root keys", msg = error
-      quit(QuitFailure)
 
   AristoDbRocks.create(kdb, adb)
 

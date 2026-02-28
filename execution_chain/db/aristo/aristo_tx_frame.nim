@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,7 +13,7 @@
 ##
 {.push raises: [].}
 
-import results, ./[aristo_desc, aristo_layers]
+import std/locks, results, ./[aristo_desc, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -132,12 +132,16 @@ proc txFrameBegin*(
   let parent = if parentFrame == nil: db.txRef else: parentFrame
   doAssert not parent.isDisposed()
 
+  var lock = Lock()
+  initLock(lock)
+
   AristoTxRef(
     db: db,
     parent: parent,
     kMap: if moveParentHashKeys: move(parent.kMap) else: default(parent.kMap.type),
     vTop: parent.vTop,
-    level: parent.level + 1)
+    level: parent.level + 1,
+    lock: lock)
 
 proc dispose*(txFrame: AristoTxRef) =
   if not txFrame.db.isNil():
@@ -255,30 +259,30 @@ proc persist*(db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
   # Copy back updated payloads into the shared database LRU caches.
 
   # Copy cached values from the snapshot
-  for accPath, v in txFrame.snapshot.acc:
-    if v[0] == nil:
-      db.accLeaves.del(accPath)
-    else:
-      discard db.accLeaves.update(accPath, v[0])
+  # for accPath, v in txFrame.snapshot.acc:
+  #   if v[0] == nil:
+  #     db.accLeaves.del(accPath)
+  #   else:
+  #     discard db.accLeaves.update(accPath, v[0])
 
-  for mixPath, v in txFrame.snapshot.sto:
-    if v[0] == nil:
-      db.stoLeaves.del(mixPath)
-    else:
-      discard db.stoLeaves.update(mixPath, v[0])
+  # for mixPath, v in txFrame.snapshot.sto:
+  #   if v[0] == nil:
+  #     db.stoLeaves.del(mixPath)
+  #   else:
+  #     discard db.stoLeaves.update(mixPath, v[0])
 
-  # Copy cached values from the txFrame
-  for accPath, vtx in txFrame.accLeaves:
-    if vtx == nil:
-      db.accLeaves.del(accPath)
-    else:
-      discard db.accLeaves.update(accPath, vtx)
+  # # Copy cached values from the txFrame
+  # for accPath, vtx in txFrame.accLeaves:
+  #   if vtx == nil:
+  #     db.accLeaves.del(accPath)
+  #   else:
+  #     discard db.accLeaves.update(accPath, vtx)
 
-  for mixPath, vtx in txFrame.stoLeaves:
-    if vtx == nil:
-      db.stoLeaves.del(mixPath)
-    else:
-      discard db.stoLeaves.update(mixPath, vtx)
+  # for mixPath, vtx in txFrame.stoLeaves:
+  #   if vtx == nil:
+  #     db.stoLeaves.del(mixPath)
+  #   else:
+  #     discard db.stoLeaves.update(mixPath, vtx)
 
   # Remove snapshot data that has been persisted to disk to save memory.
   # All snapshot records with a level lower than the current base level

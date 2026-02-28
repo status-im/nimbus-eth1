@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -124,7 +124,7 @@ suite "Aristo compute":
     db.persist(batch, txFrame)
     check db.putEndFn(batch).isOk()
 
-    check txFrame.computeKeys(root).isOk()
+    check txFrame.computeStateRoot(skipLayers = true).isOk()
 
     let w = txFrame.computeKey((root, root)).value.to(Hash32)
     check w == samples[^1][^1][2]

@@ -76,10 +76,8 @@ template addTouchedAccount*(
   withLock(builder.lock):
     ensureAccount(builder, address)
 
-func addTouchedAccount*(
-    builder: ptr ConcurrentBlockAccessListBuilderRef, adr: Address
-) =
-  builder[].addTouchedAccount(adr)
+func addTouchedAccount*(builder: ptr ConcurrentBlockAccessListBuilderRef, address: Address) =
+  builder[].addTouchedAccount(address)
 
 proc addStorageWrite*(
     builder: BlockAccessListBuilderRef,
@@ -220,9 +218,8 @@ func addCodeChange*(
     builder: ptr ConcurrentBlockAccessListBuilderRef,
     address: Address,
     blockAccessIndex: int,
-    newCode: openArray[byte],
-) =
-  builder[].addCodeChange(address, blockAccessIndex, newCode)
+    newCode: openArray[byte]) =
+  builder[].addCodeChange(address, blockAccessIndex, @newCode)
 
 func buildBlockAccessList*(builder: BlockAccessListBuilderRef): BlockAccessListRef =
   let blockAccessList: BlockAccessListRef = new BlockAccessList
