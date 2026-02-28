@@ -137,6 +137,17 @@ jobs:
           docker push statusim/nimbus-eth1:${{ matrix.os }}-${{ matrix.cpu }}-${TAG}
           docker push statusim/nimbus-eth1:${{ matrix.os }}-${{ matrix.cpu }}-latest
 
+      - name: Build and push a Docker image for verified proxy
+        if: matrix.os == 'linux' && startsWith(github.ref, 'refs/tags/v')
+        run: |
+          cd docker/dist/binaries
+          cp -r nimbus-eth1 nimbus-verified-proxy
+          REFNAME="${{ github.ref }}"
+          TAG="${REFNAME#refs/tags/}"
+          DOCKER_BUILDKIT=1 docker build -f Dockerfile.proxy.${{ matrix.os }}-${{ matrix.cpu }} -t statusim/nimbus-verified-proxy:${{ matrix.os }}-${{ matrix.cpu }}-${TAG} -t statusim/nimbus-verified-proxy:${{ matrix.os }}-${{ matrix.cpu }}-latest .
+          docker push statusim/nimbus-verified-proxy:${{ matrix.os }}-${{ matrix.cpu }}-${TAG}
+          docker push statusim/nimbus-verified-proxy:${{ matrix.os }}-${{ matrix.cpu }}-latest
+
   docker-multiarch:
     name: Create multi-arch Docker manifest
     needs: build
@@ -164,6 +175,19 @@ jobs:
           docker buildx imagetools create -t statusim/nimbus-eth1:latest \
             statusim/nimbus-eth1:linux-amd64-latest \
             statusim/nimbus-eth1:linux-arm64-latest
+
+      - name: Create and push proxy multi-arch manifest (versioned)
+        run: |
+          TAG="${{ steps.extract_tag.outputs.tag }}"
+          docker buildx imagetools create -t statusim/nimbus-verified-proxy:${TAG} \
+            statusim/nimbus-verified-proxy:linux-amd64-${TAG} \
+            statusim/nimbus-verified-proxy:linux-arm64-${TAG}
+
+      - name: Create and push proxy multi-arch manifest (latest)
+        run: |
+          docker buildx imagetools create -t statusim/nimbus-verified-proxy:latest \
+            statusim/nimbus-verified-proxy:linux-amd64-latest \
+            statusim/nimbus-verified-proxy:linux-arm64-latest
 
   prepare-release:
     name: Prepare release draft
