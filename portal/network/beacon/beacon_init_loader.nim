@@ -22,6 +22,9 @@ type NetworkInitData* = object
   forks*: ForkDigests
   genesis_validators_root*: Eth2Digest
 
+template loadNetworkMetaData*(networkName: string): Eth2NetworkMetadata =
+  loadEth2Network(some("mainnet"))
+
 proc loadNetworkData*(networkName: string): NetworkInitData =
   let
     metadata = loadEth2Network(some("mainnet"))
