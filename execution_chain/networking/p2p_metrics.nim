@@ -17,10 +17,10 @@ export
 
 declarePublicGauge rlpx_connected_peers, "Number of connected peers in the pool"
 
-declarePublicCounter rlpx_connect_success, "Number of successfull rlpx connects"
+declarePublicCounter rlpx_connect_success, "Number of successfull rlpx connects", labels = ["discversion"]
 
 declarePublicCounter rlpx_connect_failure,
-  "Number of rlpx connects that failed", labels = ["reason"]
+  "Number of rlpx connects that failed", labels = ["reason", "discversion"]
 
 declarePublicCounter rlpx_accept_success, "Number of successful rlpx accepted peers"
 
