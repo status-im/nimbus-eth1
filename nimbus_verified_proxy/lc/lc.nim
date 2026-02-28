@@ -12,7 +12,9 @@ import
   chronos,
   eth/common/keys, # used for keys.rng
   beacon_chain/gossip_processing/light_client_processor,
-  beacon_chain/[beacon_clock, conf],
+  beacon_chain/beacon_clock,
+  beacon_chain/networking/network_metadata, # RuntimeConfig, getMetadataForNetwork
+  beacon_chain/spec/forks, # ForkDigests
   ./lc_manager # use the modified light client manager
 
 type
@@ -148,7 +150,7 @@ proc new*(
 proc new*(
     T: type LightClient, chain: Option[string], trustedBlockRoot: Option[Eth2Digest]
 ): T =
-  let metadata = loadEth2Network(chain)
+  let metadata = getMetadataForNetwork(chain.get("mainnet"))
 
   # just for short hand convenience
   template cfg(): auto =

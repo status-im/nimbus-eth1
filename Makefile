@@ -104,6 +104,7 @@ endif
 endif
 
 VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
+VERIF_PROXY_WASM_OUT ?= build/verifproxy_wasm
 
 .PHONY: \
 	all \
@@ -117,6 +118,7 @@ VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 	fluffy \
 	nimbus_verified_proxy \
 	libverifproxy \
+	libverifproxy_wasm \
 	external_sync \
 	test \
 	test-reproducibility \
@@ -360,6 +362,12 @@ libverifproxy: | build deps
 		$(ENV_SCRIPT) nim c --app:staticlib -d:"libp2p_pki_schemes=secp256k1" --noMain:on --out:$(VERIF_PROXY_OUT_PATH)/$@.$(STATICLIBEXT) $(NIM_PARAMS) nimbus_verified_proxy/libverifproxy/verifproxy.nim
 	cp nimbus_verified_proxy/libverifproxy/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
 	echo -e $(BUILD_END_MSG) "build/$@"
+
+libverifproxy_wasm: | build deps
+	+ echo -e $(BUILD_MSG) "build/verifproxy_wasm" && \
+		VERIF_PROXY_WASM_OUT=$(VERIF_PROXY_WASM_OUT) \
+		nimbus_verified_proxy/libverifproxy/build_wasm.sh
+	echo -e $(BUILD_END_MSG) "build/verifproxy_wasm"
 
 # Stateless related targets
 
