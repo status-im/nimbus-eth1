@@ -509,6 +509,34 @@ proc rpcMain*() =
       let res = await client.eth_estimateGas(ec)
       check res == w3Qty(21000'u64)
 
+    test "eth_estimateGas respects available funds with EIP-1559 fees":
+      let
+        latestTag = blockId(1'u64)
+        latestBlock = await client.eth_getBlockByNumber(latestTag, false)
+      doAssert latestBlock.baseFeePerGas.isSome()
+
+      let
+        baseFee = latestBlock.baseFeePerGas.get().truncate(GasInt)
+        priorityFee = 1_000_000_000.GasInt
+        actualPrice = baseFee + priorityFee
+        hugeMaxFee = actualPrice * 50.GasInt
+        gasBudget = 21_000'u64
+        gasCost = actualPrice.uint64.u256 * gasBudget.u256
+        balance = await client.eth_getBalance(signer, latestTag)
+      doAssert balance > gasCost + 1.u256
+
+      let spendValue = balance - gasCost - 1.u256
+      let eip1559Args = TransactionArgs(
+        `from`: Opt.some(signer),
+        to: Opt.some(extraAddress),
+        value: Opt.some(spendValue),
+        maxFeePerGas: Opt.some(w3Qty(hugeMaxFee.uint64)),
+        maxPriorityFeePerGas: Opt.some(w3Qty(priorityFee.uint64)),
+      )
+
+      let res = await client.eth_estimateGas(eip1559Args)
+      check res == w3Qty(gasBudget)
+    # Todo: Add https://github.com/ethereum/execution-apis/blob/main/tests/eth_estimateGas/estimate-with-eip7702.io and https://github.com/ethereum/execution-apis/blob/main/tests/eth_estimateGas/estimate-with-eip4844.io
     test "eth_getBlockByHash":
       let res = await client.eth_getBlockByHash(env.blockHash, true)
       check res.isNil.not
