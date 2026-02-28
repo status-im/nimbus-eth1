@@ -219,7 +219,7 @@ type
     storageCache*: StorageCache
 
     # interfaces
-    backend*: EthApiBackend
+    backends*: seq[EthApiBackend]
     frontend*: EthApiFrontend
 
     # config items
@@ -235,3 +235,6 @@ type
     codeCacheLen*: int
     storageCacheLen*: int
     parallelBlockDownloads*: uint64
+
+func backend*(engine: RpcVerificationEngine): EthApiBackend =
+  engine.backends[0] # TODO: replace with proper selector logic

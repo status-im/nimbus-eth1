@@ -413,7 +413,7 @@ proc run*(
   # add light client backend
   lc.setBackend(lcRestClientPool.getEthLCBackend())
 
-  engine.backend = getEthApiBackend(ctx, config.executionApiUrls, transportProc)
+  engine.backends = @[getEthApiBackend(ctx, config.executionApiUrls, transportProc)]
 
   # inject the frontend into c context
   ctx.frontend = engine.frontend
