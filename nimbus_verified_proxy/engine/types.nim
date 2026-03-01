@@ -8,7 +8,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/tables,
+  std/[tables, random],
   json_rpc/rpcclient,
   web3/[eth_api, eth_api_types],
   stint,
@@ -34,12 +34,12 @@ type
 
   BlockTag* = eth_api_types.RtBlockIdentifier
 
-  # All EngineError's are propagated back to the application. 
-  # Anything that need not be propagated must either be translated 
+  # All EngineError's are propagated back to the application.
+  # Anything that need not be propagated must either be translated
   # or absorbed.
   EngineError* = enum
-    # these errors are abstracted to support a simple architecture 
-    # (encode -> fetch -> decode) that is adaptable for different 
+    # these errors are abstracted to support a simple architecture
+    # (encode -> fetch -> decode) that is adaptable for different
     # kinds of backends. These errors help in scoring endpoints too.
     BackendEncodingError
     BackendFetchError
@@ -54,8 +54,20 @@ type
     InvalidDataError
     VerificationError
 
-  ErrorTuple = tuple[errType: EngineError, errMsg: string]
+  ErrorTuple* = tuple[errType: EngineError, errMsg: string, backendIdx: int]
   EngineResult*[T] = Result[T, ErrorTuple]
+
+  ScoreDirection* = enum
+    Penalty = -1
+    Reward  = 1
+
+  ScoreFunc* = proc(
+    prevScore: int, direction: ScoreDirection
+  ): int {.noSideEffect, raises: [], gcsafe.}
+
+  BackendScore* = object
+    availability*: int   # penalised on transport errors
+    quality*:      int   # penalised on verification failures
 
   # Backend API
   EthApiBackend* = object
@@ -236,8 +248,13 @@ type
 
     # interfaces
     backends: seq[EthApiBackend]
+    scores*: seq[BackendScore]
     capabilityIndex: array[BackendCapability, seq[int]]
     frontend*: EthApiFrontend
+
+    # scoring
+    availabilityScoreFunc*: ScoreFunc
+    qualityScoreFunc*:      ScoreFunc
 
     # config items
     chainId*: UInt256
@@ -253,6 +270,21 @@ type
     storageCacheLen*: int
     parallelBlockDownloads*: uint64
 
+func eligible*(s: BackendScore): bool =
+  s.availability >= 0 and s.quality >= 0
+
+func defaultAvailabilityScoreFunc*(
+    prevScore: int, direction: ScoreDirection
+): int =
+  case direction
+  of Penalty: prevScore - 10
+  of Reward:  prevScore + 10
+
+func defaultQualityScoreFunc*(prevScore: int, direction: ScoreDirection): int =
+  case direction
+  of Penalty: prevScore - 50
+  of Reward:  prevScore + 10
+
 const fullCapabilities* = BackendCapabilities(
   {ChainId, GetBlockByHash, GetBlockByNumber, GetProof, CreateAccessList,
    GetCode, GetBlockReceipts, GetTransactionReceipt, GetTransactionByHash,
@@ -266,13 +298,32 @@ proc registerBackend*(
 ) =
   let idx = engine.backends.len
   engine.backends.add(backend)
+  engine.scores.add(BackendScore())   # availability = 0, quality = 0
   for cap in capabilities:
     engine.capabilityIndex[cap].add(idx)
 
-func backendFor*(
+proc backendFor*(
     engine: RpcVerificationEngine, cap: BackendCapability
-): EngineResult[EthApiBackend] =
+): EngineResult[(EthApiBackend, int)] =
   let indices = engine.capabilityIndex[cap]
-  if indices.len == 0:
-    return err((BackendError, "No backend registered for capability: " & $cap))
-  ok(engine.backends[indices[0]])
+  var eligibleIdxs: seq[int]
+  for b in engine.capabilityIndex[cap]:
+    if engine.scores[b].eligible():
+      eligibleIdxs.add(i)
+  if eligibleIdxs.len == 0:
+    return err((BackendError, "No eligible backend for capability: " & $cap, -1))
+  let chosen = eligibleIdxs[rand(eligibleIdxs.len - 1)]
+  ok((engine.backends[chosen], chosen))
+
+template tagBackend*[T](r: EngineResult[T], idx: int): EngineResult[T] =
+  block:
+    let taggedR: EngineResult[T] = r
+    if taggedR.isErr():
+      let e = taggedR.error
+      # if the error is not tagged then tag it
+      if taggedR.backendIdx < 0:
+        Result[T, ErrorTuple].err((e.errType, e.errMsg, idx))
+      else:
+        taggedR
+    else:
+      taggedR

@@ -46,8 +46,11 @@ proc getReceipts(
     engine: RpcVerificationEngine, header: Header, blockTag: types.BlockTag
 ): Future[EngineResult[seq[ReceiptObject]]] {.async: (raises: [CancelledError]).} =
   let
-    backend = ?(engine.backendFor(GetBlockReceipts))
-    rxs = ?(await backend.eth_getBlockReceipts(blockTag))
+    (backend, backendIdx) = ?(engine.backendFor(GetBlockReceipts))
+    rxs = ?(
+      (await backend.eth_getBlockReceipts(blockTag))
+      .tagBackend(backendIdx)
+    )
 
   if rxs.isSome():
     if orderedTrieRoot(toReceipts(rxs.get())) != header.receiptsRoot:
@@ -55,10 +58,11 @@ proc getReceipts(
         (
           VerificationError,
           "downloaded receipts do not evaluate to the receipts root of the block",
+          backendIdx,
         )
       )
   else:
-    return err((VerificationError, "error downloading the receipts"))
+    return err((BackendFetchError, "error downloading the receipts", backendIdx))
 
   return ok(rxs.get())
 
@@ -134,7 +138,8 @@ proc verifyLogs*(
           lg.blockNumber.get() < filter.fromBlock.get().number or
           lg.blockNumber.get() > filter.toBlock.get().number or
           (not match(toLog(lg), filter.address, filter.topics)):
-        return err((VerificationError, "one of the returned logs is invalid"))
+        # untagged(-1) so that the relevant backend can be tagged
+        return err((VerificationError, "one of the returned logs is invalid", -1))
 
   ok()
 
@@ -143,9 +148,12 @@ proc getLogs*(
 ): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).} =
   let
     resolvedFilter = ?engine.resolveFilterTags(filter)
-    backend = ?(engine.backendFor(GetLogs))
-    logObjs = ?(await backend.eth_getLogs(resolvedFilter))
+    (backend, backendIdx) = ?(engine.backendFor(GetLogs))
+    logObjs = ?(
+      (await backend.eth_getLogs(resolvedFilter))
+      .tagBackend(backendIdx)
+    )
 
-  ?(await engine.verifyLogs(resolvedFilter, logObjs))
+  ?((await engine.verifyLogs(resolvedFilter, logObjs)).tagBackend(backendIdx))
 
   return ok(logObjs)

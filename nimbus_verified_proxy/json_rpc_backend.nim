@@ -47,7 +47,7 @@ proc start*(
       )
     ok()
   except JsonRpcError as e:
-    return err((BackendError, e.msg))
+    return err((BackendError, e.msg, -1))
 
 proc stop*(client: JsonRpcClient): Future[void] {.async: (raises: []).} =
   await client.resolveClient().close()
@@ -62,15 +62,15 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
       except CancelledError as e:
         raise e
       except RpcPostError as e:
-        return err((BackendEncodingError, e.msg))
+        return err((BackendEncodingError, e.msg, -1))
       except ErrorResponse as e:
-        return err((BackendFetchError, e.msg))
+        return err((BackendFetchError, e.msg, -1))
       except JsonRpcError as e:
-        return err((BackendDecodingError, e.msg))
+        return err((BackendDecodingError, e.msg, -1))
       except InvalidResponse as e:
-        return err((BackendDecodingError, e.msg))
+        return err((BackendDecodingError, e.msg, -1))
       except CatchableError as e:
-        return err((BackendError, e.msg))
+        return err((BackendError, e.msg, -1))
 
     getBlockByHashProc = proc(
         blkHash: Hash32, fullTransactions: bool
@@ -79,20 +79,20 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
         let res =
           await client.resolveClient().eth_getBlockByHash(blkHash, fullTransactions)
         if res.isNil():
-          return err((BackendFetchError, "Obtained nil response for the RPC request"))
+          return err((BackendFetchError, "Obtained nil response for the RPC request", -1))
         ok(res)
       except CancelledError as e:
         raise e
       except RpcPostError as e:
-        return err((BackendEncodingError, e.msg))
+        return err((BackendEncodingError, e.msg, -1))
       except ErrorResponse as e:
-        return err((BackendFetchError, e.msg))
+        return err((BackendFetchError, e.msg, -1))
       except JsonRpcError as e:
-        return err((BackendDecodingError, e.msg))
+        return err((BackendDecodingError, e.msg, -1))
       except InvalidResponse as e:
-        return err((BackendDecodingError, e.msg))
+        return err((BackendDecodingError, e.msg, -1))
       except CatchableError as e:
-        return err((BackendError, e.msg))
+        return err((BackendError, e.msg, -1))
 
     getBlockByNumberProc = proc(
         blkNum: BlockTag, fullTransactions: bool
@@ -101,20 +101,20 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
         let res =
           await client.resolveClient().eth_getBlockByNumber(blkNum, fullTransactions)
         if res.isNil():
-          return err((BackendFetchError, "Obtained nil response for the RPC request"))
+          return err((BackendFetchError, "Obtained nil response for the RPC request", -1))
         ok(res)
       except CancelledError as e:
         raise e
       except RpcPostError as e:
-        return err((BackendEncodingError, e.msg))
+        return err((BackendEncodingError, e.msg, -1))
       except ErrorResponse as e:
-        return err((BackendFetchError, e.msg))
+        return err((BackendFetchError, e.msg, -1))
       except JsonRpcError as e:
-        return err((BackendDecodingError, e.msg))
+        return err((BackendDecodingError, e.msg, -1))
       except InvalidResponse as e:
-        return err((BackendDecodingError, e.msg))
+        return err((BackendDecodingError, e.msg, -1))
       except CatchableError as e:
-        return err((BackendError, e.msg))
+        return err((BackendError, e.msg, -1))
 
     getProofProc = proc(
         address: Address, slots: seq[UInt256], blockId: BlockTag
@@ -124,15 +124,15 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
       except CancelledError as e:
         raise e
       except RpcPostError as e:
-        return err((BackendEncodingError, e.msg))
+        return err((BackendEncodingError, e.msg, -1))
       except ErrorResponse as e:
-        return err((BackendFetchError, e.msg))
+        return err((BackendFetchError, e.msg, -1))
       except JsonRpcError as e:
-        return err((BackendDecodingError, e.msg))
+        return err((BackendDecodingError, e.msg, -1))
       except InvalidResponse as e:
-        return err((BackendDecodingError, e.msg))
+        return err((BackendDecodingError, e.msg, -1))
       except CatchableError as e:
-        return err((BackendError, e.msg))
+        return err((BackendError, e.msg, -1))
 
     createAccessListProc = proc(
         args: TransactionArgs, blockId: BlockTag
@@ -142,15 +142,15 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
       except CancelledError as e:
         raise e
       except RpcPostError as e:
-        return err((BackendEncodingError, e.msg))
+        return err((BackendEncodingError, e.msg, -1))
       except ErrorResponse as e:
-        return err((BackendFetchError, e.msg))
+        return err((BackendFetchError, e.msg, -1))
       except JsonRpcError as e:
-        return err((BackendDecodingError, e.msg))
+        return err((BackendDecodingError, e.msg, -1))
       except InvalidResponse as e:
-        return err((BackendDecodingError, e.msg))
+        return err((BackendDecodingError, e.msg, -1))
       except CatchableError as e:
-        return err((BackendError, e.msg))
+        return err((BackendError, e.msg, -1))
 
     getCodeProc = proc(
         address: Address, blockId: BlockTag
@@ -160,15 +160,15 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
       except CancelledError as e:
         raise e
       except RpcPostError as e:
-        return err((BackendEncodingError, e.msg))
+        return err((BackendEncodingError, e.msg, -1))
       except ErrorResponse as e:
-        return err((BackendFetchError, e.msg))
+        return err((BackendFetchError, e.msg, -1))
       except JsonRpcError as e:
-        return err((BackendDecodingError, e.msg))
+        return err((BackendDecodingError, e.msg, -1))
       except InvalidResponse as e:
-        return err((BackendDecodingError, e.msg))
+        return err((BackendDecodingError, e.msg, -1))
       except CatchableError as e:
-        return err((BackendError, e.msg))
+        return err((BackendError, e.msg, -1))
 
     getTransactionByHashProc = proc(
         txHash: Hash32
@@ -176,20 +176,20 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
       try:
         let res = await client.resolveClient().eth_getTransactionByHash(txHash)
         if res.isNil():
-          return err((BackendFetchError, "Obtained nil response for the RPC request"))
+          return err((BackendFetchError, "Obtained nil response for the RPC request", -1))
         ok(res)
       except CancelledError as e:
         raise e
       except RpcPostError as e:
-        return err((BackendEncodingError, e.msg))
+        return err((BackendEncodingError, e.msg, -1))
       except ErrorResponse as e:
-        return err((BackendFetchError, e.msg))
+        return err((BackendFetchError, e.msg, -1))
       except JsonRpcError as e:
-        return err((BackendDecodingError, e.msg))
+        return err((BackendDecodingError, e.msg, -1))
       except InvalidResponse as e:
-        return err((BackendDecodingError, e.msg))
+        return err((BackendDecodingError, e.msg, -1))
       except CatchableError as e:
-        return err((BackendError, e.msg))
+        return err((BackendError, e.msg, -1))
 
     getTransactionReceiptProc = proc(
         txHash: Hash32
@@ -197,20 +197,20 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
       try:
         let res = await client.resolveClient().eth_getTransactionReceipt(txHash)
         if res.isNil():
-          return err((BackendFetchError, "Obtained nil response for the RPC request"))
+          return err((BackendFetchError, "Obtained nil response for the RPC request", -1))
         ok(res)
       except CancelledError as e:
         raise e
       except RpcPostError as e:
-        return err((BackendEncodingError, e.msg))
+        return err((BackendEncodingError, e.msg, -1))
       except ErrorResponse as e:
-        return err((BackendFetchError, e.msg))
+        return err((BackendFetchError, e.msg, -1))
       except JsonRpcError as e:
-        return err((BackendDecodingError, e.msg))
+        return err((BackendDecodingError, e.msg, -1))
       except InvalidResponse as e:
-        return err((BackendDecodingError, e.msg))
+        return err((BackendDecodingError, e.msg, -1))
       except CatchableError as e:
-        return err((BackendError, e.msg))
+        return err((BackendError, e.msg, -1))
 
     getBlockReceiptsProc = proc(
         blockId: BlockTag
@@ -222,15 +222,15 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
       except CancelledError as e:
         raise e
       except RpcPostError as e:
-        return err((BackendEncodingError, e.msg))
+        return err((BackendEncodingError, e.msg, -1))
       except ErrorResponse as e:
-        return err((BackendFetchError, e.msg))
+        return err((BackendFetchError, e.msg, -1))
       except JsonRpcError as e:
-        return err((BackendDecodingError, e.msg))
+        return err((BackendDecodingError, e.msg, -1))
       except InvalidResponse as e:
-        return err((BackendDecodingError, e.msg))
+        return err((BackendDecodingError, e.msg, -1))
       except CatchableError as e:
-        return err((BackendError, e.msg))
+        return err((BackendError, e.msg, -1))
 
     getLogsProc = proc(
         filterOptions: FilterOptions
@@ -240,15 +240,15 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
       except CancelledError as e:
         raise e
       except RpcPostError as e:
-        return err((BackendEncodingError, e.msg))
+        return err((BackendEncodingError, e.msg, -1))
       except ErrorResponse as e:
-        return err((BackendFetchError, e.msg))
+        return err((BackendFetchError, e.msg, -1))
       except JsonRpcError as e:
-        return err((BackendDecodingError, e.msg))
+        return err((BackendDecodingError, e.msg, -1))
       except InvalidResponse as e:
-        return err((BackendDecodingError, e.msg))
+        return err((BackendDecodingError, e.msg, -1))
       except CatchableError as e:
-        return err((BackendError, e.msg))
+        return err((BackendError, e.msg, -1))
 
     feeHistoryProc = proc(
         blockCount: Quantity,
@@ -264,15 +264,15 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
       except CancelledError as e:
         raise e
       except RpcPostError as e:
-        return err((BackendEncodingError, e.msg))
+        return err((BackendEncodingError, e.msg, -1))
       except ErrorResponse as e:
-        return err((BackendFetchError, e.msg))
+        return err((BackendFetchError, e.msg, -1))
       except JsonRpcError as e:
-        return err((BackendDecodingError, e.msg))
+        return err((BackendDecodingError, e.msg, -1))
       except InvalidResponse as e:
-        return err((BackendDecodingError, e.msg))
+        return err((BackendDecodingError, e.msg, -1))
       except CatchableError as e:
-        return err((BackendError, e.msg))
+        return err((BackendError, e.msg, -1))
 
     sendRawTxProc = proc(
         txBytes: seq[byte]
@@ -282,15 +282,15 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
       except CancelledError as e:
         raise e
       except RpcPostError as e:
-        return err((BackendEncodingError, e.msg))
+        return err((BackendEncodingError, e.msg, -1))
       except ErrorResponse as e:
-        return err((BackendFetchError, e.msg))
+        return err((BackendFetchError, e.msg, -1))
       except JsonRpcError as e:
-        return err((BackendDecodingError, e.msg))
+        return err((BackendDecodingError, e.msg, -1))
       except InvalidResponse as e:
-        return err((BackendDecodingError, e.msg))
+        return err((BackendDecodingError, e.msg, -1))
       except CatchableError as e:
-        return err((BackendError, e.msg))
+        return err((BackendError, e.msg, -1))
 
   EthApiBackend(
     eth_chainId: ethChainIdProc,
