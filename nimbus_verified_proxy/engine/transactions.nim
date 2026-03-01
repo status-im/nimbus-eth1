@@ -45,7 +45,10 @@ proc toTransactions*(txs: openArray[TxOrHash]): EngineResult[seq[Transaction]] =
     else:
       # untagged(-1) so the relevant backend can be tagged
       return err(
-        (VerificationError, "cannot construct a transaction trie using only txhashes", -1)
+        (
+          VerificationError, "cannot construct a transaction trie using only txhashes",
+          -1,
+        )
       )
 
   return ok(convertedTxs)
@@ -67,7 +70,6 @@ proc verifyTransactions*(
   err(
     (
       VerificationError,
-      "calculated tx trie root doesn't match the provided tx trie root",
-      -1,
+      "calculated tx trie root doesn't match the provided tx trie root", -1,
     )
   )

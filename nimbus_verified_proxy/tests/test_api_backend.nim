@@ -190,8 +190,9 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
         async: (raises: [CancelledError])
     .} =
       if t.chainId == u256(0):
-        return
-          err((BackendDecodingError, "chainId not set in test backend or is set to 0", -1))
+        return err(
+          (BackendDecodingError, "chainId not set in test backend or is set to 0", -1)
+        )
 
       ok(t.chainId)
 

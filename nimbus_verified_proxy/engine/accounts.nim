@@ -99,7 +99,8 @@ proc getStorageFromProof*(
   if len(storageProof.proof) == 0:
     # we leave the error untagged so the backend responsible for
     # the error can be tagged. See tagBackend impl in types.nim
-    return err((VerificationError, "empty mpt proof for account with not empty storage", -1))
+    return
+      err((VerificationError, "empty mpt proof for account with not empty storage", -1))
 
   if storageProof.key != requestedSlot:
     # we leave the error untagged so the backend responsible for
@@ -124,19 +125,25 @@ proc getAccount*(
 
   let
     (backend, backendIdx) = ?(engine.backendFor(GetProof))
-    proof = ?(
-      (await backend.eth_getProof(address, @[], blockId(blockNumber)))
-      .tagBackend(backendIdx)
-    )
+    proof =
+      ?(
+        (await backend.eth_getProof(address, @[], blockId(blockNumber))).tagBackend(
+          backendIdx
+        )
+      )
 
-    account = ?(getAccountFromProof(
-      stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
-      proof.storageHash, proof.accountProof,
-    ).tagBackend(backendIdx))
+    account =
+      ?(
+        getAccountFromProof(
+          stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
+          proof.storageHash, proof.accountProof,
+        )
+        .tagBackend(backendIdx)
+      )
 
   engine.accountsCache.put(cacheKey, account)
 
-  return account
+  return ok(account)
 
 proc getCode*(
     engine: RpcVerificationEngine,
@@ -161,10 +168,12 @@ proc getCode*(
 
   let
     (backend, backendIdx) = ?(engine.backendFor(GetCode))
-    code = ?(
-      (await backend.eth_getCode(address, blockId(blockNumber)))
-      .tagBackend(backendIdx)
-    )
+    code =
+      ?(
+        (await backend.eth_getCode(address, blockId(blockNumber))).tagBackend(
+          backendIdx
+        )
+      )
 
   # verify the byte code. since we verified the account against
   # the state root we just need to verify the code hash
@@ -172,7 +181,12 @@ proc getCode*(
     engine.codeCache.put(cacheKey, code)
     return ok(code)
   else:
-    return err((VerificationError, "received code doesn't match the account code hash", backendIdx))
+    return err(
+      (
+        VerificationError, "received code doesn't match the account code hash",
+        backendIdx,
+      )
+    )
 
 proc getStorageAt*(
     engine: RpcVerificationEngine,
@@ -191,10 +205,12 @@ proc getStorageAt*(
 
   let
     (backend, backendIdx) = ?(engine.backendFor(GetProof))
-    proof = ?(
-      (await backend.eth_getProof(address, @[slot], blockId(blockNumber)))
-      .tagBackend(backendIdx)
-    )
+    proof =
+      ?(
+        (await backend.eth_getProof(address, @[slot], blockId(blockNumber))).tagBackend(
+          backendIdx
+        )
+      )
 
     slotValue = ?(getStorageFromProof(stateRoot, slot, proof).tagBackend(backendIdx))
 
@@ -220,21 +236,28 @@ proc populateCachesForAccountAndSlots(
   if engine.accountsCache.get(accountCacheKey).isNone() or slotsToFetch.len() > 0:
     let
       (backend, backendIdx) = ?(engine.backendFor(GetProof))
-      proof = ?(
-        (await backend.eth_getProof(address, slotsToFetch, blockId(blockNumber)))
-        .tagBackend(backendIdx)
-      )
+      proof =
+        ?(
+          (await backend.eth_getProof(address, slotsToFetch, blockId(blockNumber))).tagBackend(
+            backendIdx
+          )
+        )
 
-      account = ?(getAccountFromProof(
-        stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
-        proof.storageHash, proof.accountProof,
-      ).tagBackend(backendIdx))
+      account =
+        ?(
+          getAccountFromProof(
+            stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
+            proof.storageHash, proof.accountProof,
+          )
+          .tagBackend(backendIdx)
+        )
 
     engine.accountsCache.put(accountCacheKey, account)
 
     for i, s in slotsToFetch:
-      let 
-        slotValue = ?(getStorageFromProof(stateRoot, s, proof, i).tagBackend(backendIdx))
+      let
+        slotValue =
+          ?(getStorageFromProof(stateRoot, s, proof, i).tagBackend(backendIdx))
         storageCacheKey = (stateRoot, address, s)
 
       engine.storageCache.put(storageCacheKey, slotValue)
@@ -249,10 +272,12 @@ proc populateCachesUsingAccessList*(
 ): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
   let
     (backend, backendIdx) = ?(engine.backendFor(CreateAccessList))
-    accessListRes: AccessListResult = ?(
-      (await backend.eth_createAccessList(tx, blockId(blockNumber)))
-      .tagBackend(backendIdx)
-    )
+    accessListRes: AccessListResult =
+      ?(
+        (await backend.eth_createAccessList(tx, blockId(blockNumber))).tagBackend(
+          backendIdx
+        )
+      )
 
   var futs = newSeqOfCap[Future[EngineResult[void]]](accessListRes.accessList.len())
   for accessPair in accessListRes.accessList:
