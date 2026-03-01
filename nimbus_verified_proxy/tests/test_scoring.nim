@@ -89,7 +89,7 @@ suite "backend scoring":
     check:
       res.isErr()
       engine.scores[0].quality < 0
-      engine.scores[0].availability == 0
+      engine.scores[0].availability == 1
 
   test "ineligible backend not selected":
     let ts = TestApiState.init(1.u256)

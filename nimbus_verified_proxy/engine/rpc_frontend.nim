@@ -30,9 +30,11 @@ proc applyPenalty(engine: RpcVerificationEngine, e: ErrorTuple) =
     return
   let idx = e.backendIdx
   case e.errType
-  of BackendEncodingError, BackendFetchError, BackendDecodingError, BackendError:
+  of BackendFetchError, BackendDecodingError:
     engine.scores[idx].availability =
       engine.availabilityScoreFunc(engine.scores[idx].availability, Penalty)
+    engine.scores[idx].quality =
+      engine.qualityScoreFunc(engine.scores[idx].quality, UndoReward)
   of VerificationError:
     engine.scores[idx].quality =
       engine.qualityScoreFunc(engine.scores[idx].quality, Penalty)

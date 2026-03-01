@@ -57,9 +57,12 @@ type
   ErrorTuple* = tuple[errType: EngineError, errMsg: string, backendIdx: int]
   EngineResult*[T] = Result[T, ErrorTuple]
 
+  # every backend get rewarded by default, hence undo reward just removes the
+  # default reward (1 - 1 = 0) and penalty negatively scores (1 - 2 = -1)
   ScoreDirection* = enum
-    Penalty = -1
-    Reward = 1
+    Penalty = -2
+    UndoReward = -1
+    DefaultReward = 1
 
   ScoreFunc* = proc(prevScore: int, direction: ScoreDirection): int {.
     noSideEffect, raises: [], gcsafe
@@ -274,18 +277,10 @@ func eligible*(s: BackendScore): bool =
   s.availability >= 0 and s.quality >= 0
 
 func defaultAvailabilityScoreFunc*(prevScore: int, direction: ScoreDirection): int =
-  case direction
-  of Penalty:
-    prevScore - 10
-  of Reward:
-    prevScore + 10
+  prevScore + ord(direction)
 
 func defaultQualityScoreFunc*(prevScore: int, direction: ScoreDirection): int =
-  case direction
-  of Penalty:
-    prevScore - 50
-  of Reward:
-    prevScore + 10
+  prevScore + ord(direction)
 
 const fullCapabilities* = BackendCapabilities(
   {
@@ -317,6 +312,10 @@ proc backendFor*(
   if eligibleIdxs.len == 0:
     return err((BackendError, "No eligible backend for capability: " & $cap, -1))
   let chosen = eligibleIdxs[rand(eligibleIdxs.len - 1)]
+  engine.scores[chosen].availability =
+    engine.availabilityScoreFunc(engine.scores[chosen].availability, DefaultReward)
+  engine.scores[chosen].quality =
+    engine.qualityScoreFunc(engine.scores[chosen].quality, DefaultReward)
   ok((engine.backends[chosen], chosen))
 
 template tagBackend*[T](r: EngineResult[T], idx: int): EngineResult[T] =
