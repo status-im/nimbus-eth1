@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2025 Status Research & Development GmbH
+# Copyright (c) 2021-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -126,7 +126,7 @@ proc selfDestructEIP2929Op(cpt: VmCpt): EvmResultVoid =
 
   var beneficiaryIsCold = false
   cpt.vmState.mutateLedger:
-    if not db.inAccessList(beneficiary):
+    if not ledger.inAccessList(beneficiary):
       beneficiaryIsCold = true
 
   var staticGasCosts = cpt.gasCosts[SelfDestruct].sc_handler(false)
@@ -144,7 +144,7 @@ proc selfDestructEIP2929Op(cpt: VmCpt): EvmResultVoid =
 
   cpt.vmState.mutateLedger:
     if beneficiaryIsCold:
-      db.accessList(beneficiary)
+      ledger.accessList(beneficiary)
       gasCost = gasCost + ColdAccountAccessCost
 
   ? cpt.opcodeGasCost(SelfDestruct,

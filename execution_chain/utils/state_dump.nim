@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -69,30 +69,30 @@ proc `%`*(x: StateDump): JsonNode =
     "accounts": %(x.accounts)
   }
 
-proc dumpAccount*(db: LedgerRef, acc: Address): DumpAccount =
+proc dumpAccount(ledger: LedgerRef, acc: Address): DumpAccount =
   result = DumpAccount(
-    balance : db.getBalance(acc),
-    nonce   : db.getNonce(acc),
-    root    : db.getStorageRoot(acc),
-    codeHash: db.getCodeHash(acc),
-    code    : db.getCode(acc).bytes(),
+    balance : ledger.getBalance(acc),
+    nonce   : ledger.getNonce(acc),
+    root    : ledger.getStorageRoot(acc),
+    codeHash: ledger.getCodeHash(acc),
+    code    : ledger.getCode(acc).bytes(),
     key     : keccak256(acc.data)
   )
-  for k, v in db.cachedStorage(acc):
+  for k, v in ledger.cachedStorage(acc):
     result.storage[k] = v
 
-proc dumpAccounts*(db: LedgerRef): Table[Address, DumpAccount] =
-  for acc in db.addresses():
-    result[acc] = dumpAccount(db, acc)
+proc dumpAccounts*(ledger: LedgerRef): Table[Address, DumpAccount] =
+  for acc in ledger.addresses():
+    result[acc] = dumpAccount(ledger, acc)
 
-proc dumpState*(db: LedgerRef): StateDump =
+proc dumpState*(ledger: LedgerRef): StateDump =
   StateDump(
-    root: db.getStateRoot(),
-    accounts: dumpAccounts(db)
+    root: ledger.getStateRoot(),
+    accounts: dumpAccounts(ledger)
   )
 
 proc dumpAccounts*(ledger: LedgerRef, addresses: openArray[Address]): JsonNode =
   result = newJObject()
-  for ac in addresses:
-    result[ac.toHex] = %dumpAccount(ledger, ac)
+  for address in addresses:
+    result[address.toHex] = %dumpAccount(ledger, address)
 

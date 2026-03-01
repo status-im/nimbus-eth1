@@ -201,7 +201,7 @@ proc opCustomMain*() =
       title: "EIP2929 BALANCE_1 WARM"
       setup:
         vmState.mutateLedger:
-          db.accessList(codeAddress)
+          ledger.accessList(codeAddress)
       code:
         Address
         Balance

@@ -29,7 +29,7 @@ proc coinbaseStateClearing*(vmState: BaseVMState,
 
   vmState.mutateLedger:
     if touched and isSpuriousAndLater:
-      db.addBalance(miner, 0.u256)
+      ledger.addBalance(miner, 0.u256)
 
     # db.persist is an important step when using `db/ledger`
     # it will affect the account storage's location
@@ -38,4 +38,4 @@ proc coinbaseStateClearing*(vmState: BaseVMState,
 
     # do not clear cache, we need the cache when constructing
     # post state
-    db.persist(clearEmptyAccount = isSpuriousAndLater)
+    ledger.persist(clearEmptyAccount = isSpuriousAndLater)
