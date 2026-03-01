@@ -96,6 +96,7 @@ proc setupManager(pm: PeerManagerRef, boot: BootstrapNodes) =
   po.addProtocol eth68
   po.addProtocol eth69
   po.addProtocol eth70
+  po.addProtocol eth71
   pm.pool.addObserver(pm, po)
 
   for enode in boot.enodes:

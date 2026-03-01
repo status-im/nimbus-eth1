@@ -319,6 +319,29 @@ proc blockRangeUpdateThunk[PROTO](peer: Peer; data: Rlp) {.
                               peer, data, [earliest, latest, latestHash]):
     await blockRangeUpdateUserHandler[PROTO](peer, packet)
 
+proc getBlockAccessListsUserHandler[PROTO](response: Responder; req: BlockAccessListsRequest) {.
+    async: (raises: [CancelledError, EthP2PError]).} =
+  let peer = response.peer
+  trace trEthRecvReceived & "GetBlockAccessLists (0x12)", peer, hashes = req.blockHashes.len
+  let ctx = peer.networkState(PROTO)
+  let rec = ctx.getBlockAccessLists(req)
+  if rec.accessLists.len > 0:
+    trace trEthSendReplying & "with BAL (0x13)", peer, sent = rec.accessLists.len,
+          requested = req.blockHashes.len
+  else:
+    trace trEthSendReplying & "EMPTY BAL (0x13)", peer, sent = 0,
+          requested = req.blockHashes.len
+  await response.blockAccessLists(rec)
+  
+proc getBlockAccessListsThunk[PROTO](peer: Peer; data: Rlp) {.
+    async: (raises: [CancelledError, EthP2PError]).} =
+  PROTO.rlpxWithPacketResponder(BlockAccessListsRequest, peer, data):
+    await getBlockAccessListsUserHandler[PROTO](response, packet)
+
+proc blockAccessListsThunk[PROTO](peer: Peer; data: Rlp) {.
+    async: (raises: [CancelledError, EthP2PError]).} =
+  PROTO.rlpxWithFutureHandler(BlockAccessListsPacket,
+    BlockAccessListsMsg, peer, data, [accessLists])
 
 proc eth68PeerConnected(peer: Peer) {.async: (
     raises: [CancelledError, EthP2PError]).} =
@@ -492,6 +515,24 @@ proc eth70Registration() =
               blockRangeUpdateThunk[eth70], BlockRangeUpdatePacket)
   registerProtocol(protocol)
 
+proc eth71Registration() =
+  let
+    protocol = eth71.initProtocol()
+
+  setEventHandlers(protocol, eth69OrLaterPeerConnected[eth71], nil)
+  registerMsg(protocol, StatusMsg, "status",
+              status69OrLaterThunk[eth71], Status69Packet)
+  registerCommonThunk(protocol, eth71)
+  registerMsg(protocol, BlockRangeUpdateMsg, "blockRangeUpdate",
+              blockRangeUpdateThunk[eth71], BlockRangeUpdatePacket)
+  registerMsg(protocol, GetBlockAccessListsMsg, "getBlockAccessLists",
+              getBlockAccessListsThunk[eth71], BlockAccessListsRequest)
+  registerMsg(protocol, BlockAccessListsMsg, "blockAccessLists",
+              blockAccessListsThunk[eth71], BlockAccessListsPacket)
+
+  registerProtocol(protocol)
+
 eth68Registration()
 eth69Registration()
 eth70Registration()
+eth71Registration()
