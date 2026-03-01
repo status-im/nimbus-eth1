@@ -47,10 +47,7 @@ proc getReceipts(
 ): Future[EngineResult[seq[ReceiptObject]]] {.async: (raises: [CancelledError]).} =
   let
     (backend, backendIdx) = ?(engine.backendFor(GetBlockReceipts))
-    rxs = ?(
-      (await backend.eth_getBlockReceipts(blockTag))
-      .tagBackend(backendIdx)
-    )
+    rxs = ?((await backend.eth_getBlockReceipts(blockTag)).tagBackend(backendIdx))
 
   if rxs.isSome():
     if orderedTrieRoot(toReceipts(rxs.get())) != header.receiptsRoot:
@@ -149,10 +146,7 @@ proc getLogs*(
   let
     resolvedFilter = ?engine.resolveFilterTags(filter)
     (backend, backendIdx) = ?(engine.backendFor(GetLogs))
-    logObjs = ?(
-      (await backend.eth_getLogs(resolvedFilter))
-      .tagBackend(backendIdx)
-    )
+    logObjs = ?((await backend.eth_getLogs(resolvedFilter)).tagBackend(backendIdx))
 
   ?((await engine.verifyLogs(resolvedFilter, logObjs)).tagBackend(backendIdx))
 

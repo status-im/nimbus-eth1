@@ -32,7 +32,9 @@ proc transportCallback[T](
     # pointer on the C side. Also allows managing the memeory on one end only.
     let deserResult = unpackArg($res, T)
     if deserResult.isErr():
-      data.fut.complete(EngineResult[T].err((BackendDecodingError, deserResult.error, -1)))
+      data.fut.complete(
+        EngineResult[T].err((BackendDecodingError, deserResult.error, -1))
+      )
       return
     data.fut.complete(EngineResult[T].ok(deserResult.get()))
   elif status == RET_ERROR:

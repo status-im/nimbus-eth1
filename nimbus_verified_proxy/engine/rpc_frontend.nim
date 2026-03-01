@@ -61,7 +61,9 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     # Returns the number of the most recent block.
     let latest = engine.headerStore.latest.valueOr:
       # untagged(-1) because the error cannot be linked to any backend
-      return err((UnavailableDataError, "Couldn't get the latest header, still syncing?", -1))
+      return err(
+        (UnavailableDataError, "Couldn't get the latest header, still syncing?", -1)
+      )
 
     ok(latest.number.uint64)
 
@@ -69,7 +71,9 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
       address: Address, quantityTag: BlockTag
   ): Future[EngineResult[UInt256]] {.async: (raises: [CancelledError]).} =
     let header = engine.penaltyOr(await engine.getHeader(quantityTag))
-    let account = engine.penaltyOr(await engine.getAccount(address, header.number, header.stateRoot))
+    let account = engine.penaltyOr(
+      await engine.getAccount(address, header.number, header.stateRoot)
+    )
     ok(account.balance)
 
   engine.frontend.eth_getStorageAt = proc(
@@ -85,14 +89,17 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
       address: Address, quantityTag: BlockTag
   ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).} =
     let header = engine.penaltyOr(await engine.getHeader(quantityTag))
-    let account = engine.penaltyOr(await engine.getAccount(address, header.number, header.stateRoot))
+    let account = engine.penaltyOr(
+      await engine.getAccount(address, header.number, header.stateRoot)
+    )
     ok(Quantity(account.nonce))
 
   engine.frontend.eth_getCode = proc(
       address: Address, quantityTag: BlockTag
   ): Future[EngineResult[seq[byte]]] {.async: (raises: [CancelledError]).} =
     let header = engine.penaltyOr(await engine.getHeader(quantityTag))
-    let code = engine.penaltyOr(await engine.getCode(address, header.number, header.stateRoot))
+    let code =
+      engine.penaltyOr(await engine.getCode(address, header.number, header.stateRoot))
     ok(code)
 
   engine.frontend.eth_getBlockByHash = proc(
@@ -169,7 +176,9 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     # As a performance optimisation we concurrently pre-fetch the state needed
     # for the call by calling eth_createAccessList and then using the returned
     # access list keys to fetch the required state using eth_getProof.
-    engine.penaltyOr(await engine.populateCachesUsingAccessList(header.number, header.stateRoot, tx))
+    engine.penaltyOr(
+      await engine.populateCachesUsingAccessList(header.number, header.stateRoot, tx)
+    )
 
     let callResult = (await engine.evm.call(header, tx, optimisticStateFetch)).valueOr:
       # NOTE: untagged(-1) because this error cannot be linked to one specific backend
@@ -197,7 +206,9 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     # As a performance optimisation we concurrently pre-fetch the state needed
     # for the call by calling eth_createAccessList and then using the returned
     # access list keys to fetch the required state using eth_getProof.
-    engine.penaltyOr(await engine.populateCachesUsingAccessList(header.number, header.stateRoot, tx))
+    engine.penaltyOr(
+      await engine.populateCachesUsingAccessList(header.number, header.stateRoot, tx)
+    )
 
     let (accessList, error, gasUsed) = (
       await engine.evm.createAccessList(header, tx, optimisticStateFetch)
@@ -224,12 +235,15 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     # As a performance optimisation we concurrently pre-fetch the state needed
     # for the call by calling eth_createAccessList and then using the returned
     # access list keys to fetch the required state using eth_getProof.
-    engine.penaltyOr(await engine.populateCachesUsingAccessList(header.number, header.stateRoot, tx))
+    engine.penaltyOr(
+      await engine.populateCachesUsingAccessList(header.number, header.stateRoot, tx)
+    )
 
     let gasEstimate = (await engine.evm.estimateGas(header, tx, optimisticStateFetch)).valueOr:
       # NOTE: untagged(-1) because this error cannot be linked to one specific backend
       # and we cannot downscore every backend. Hence invalid data
-      return err((VerificationError, "gas estimation calculation failed -> " & error, -1))
+      return
+        err((VerificationError, "gas estimation calculation failed -> " & error, -1))
 
     ok(Quantity(gasEstimate))
 
@@ -251,8 +265,12 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
       )
 
     if not checkTxHash(tx, txHash):
-      return
-        err((VerificationError, "the transaction doesn't hash to the provided hash", backendIdx))
+      return err(
+        (
+          VerificationError, "the transaction doesn't hash to the provided hash",
+          backendIdx,
+        )
+      )
 
     ok(tx)
 
@@ -296,7 +314,10 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     for i in 0 .. (MAX_ID_TRIES + 1):
       if randomBytes(id) != len(id):
         return err(
-          (UnavailableDataError, "Couldn't generate a random identifier for the filter", -1)
+          (
+            UnavailableDataError,
+            "Couldn't generate a random identifier for the filter", -1,
+          )
         )
 
       strId = toHex(id)
@@ -305,8 +326,12 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
         break
 
       if i >= MAX_ID_TRIES:
-        return
-          err((UnavailableDataError, "Couldn't create a unique identifier for the filter", -1))
+        return err(
+          (
+            UnavailableDataError, "Couldn't create a unique identifier for the filter",
+            -1,
+          )
+        )
 
     engine.filterStore[strId] =
       FilterStoreItem(filter: filterOptions, blockMarker: Opt.none(Quantity))
@@ -326,7 +351,8 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
       filterId: string
   ): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).} =
     try:
-      let logObjs = engine.penaltyOr(await engine.getLogs(engine.filterStore[filterId].filter))
+      let logObjs =
+        engine.penaltyOr(await engine.getLogs(engine.filterStore[filterId].filter))
       ok(logObjs)
     except KeyError as e:
       err((FrontendError, "Filter doesn't exist", -1))
@@ -346,8 +372,9 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
       toBlock = filter.toBlock.get().number
 
     if filterItem.blockMarker.isSome() and toBlock <= filterItem.blockMarker.get():
-      return
-        err((UnavailableDataError, "No changes for the filter since the last query", -1))
+      return err(
+        (UnavailableDataError, "No changes for the filter since the last query", -1)
+      )
 
     let
       fromBlock =
@@ -424,8 +451,9 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
   ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).} =
     let (backend, backendIdx) = ?(engine.backendFor(FeeHistory))
     let feeHistory = engine.penaltyOr(
-      (await backend.eth_feeHistory(blockCount, newestBlock, rewardPercentiles))
-      .tagBackend(backendIdx)
+      (await backend.eth_feeHistory(blockCount, newestBlock, rewardPercentiles)).tagBackend(
+        backendIdx
+      )
     )
     ok(feeHistory)
 

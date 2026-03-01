@@ -59,15 +59,15 @@ type
 
   ScoreDirection* = enum
     Penalty = -1
-    Reward  = 1
+    Reward = 1
 
-  ScoreFunc* = proc(
-    prevScore: int, direction: ScoreDirection
-  ): int {.noSideEffect, raises: [], gcsafe.}
+  ScoreFunc* = proc(prevScore: int, direction: ScoreDirection): int {.
+    noSideEffect, raises: [], gcsafe
+  .}
 
   BackendScore* = object
-    availability*: int   # penalised on transport errors
-    quality*:      int   # penalised on verification failures
+    availability*: int # penalised on transport errors
+    quality*: int # penalised on verification failures
 
   # Backend API
   EthApiBackend* = object
@@ -215,18 +215,18 @@ type
     .}
 
   BackendCapability* = enum
-    ChainId             # eth_chainId
-    GetBlockByHash      # eth_getBlockByHash
-    GetBlockByNumber    # eth_getBlockByNumber
-    GetProof            # eth_getProof
-    CreateAccessList    # eth_createAccessList
-    GetCode             # eth_getCode
-    GetBlockReceipts    # eth_getBlockReceipts
+    ChainId # eth_chainId
+    GetBlockByHash # eth_getBlockByHash
+    GetBlockByNumber # eth_getBlockByNumber
+    GetProof # eth_getProof
+    CreateAccessList # eth_createAccessList
+    GetCode # eth_getCode
+    GetBlockReceipts # eth_getBlockReceipts
     GetTransactionReceipt # eth_getTransactionReceipt
-    GetTransactionByHash  # eth_getTransactionByHash
-    GetLogs             # eth_getLogs
-    FeeHistory          # eth_feeHistory
-    SendRawTransaction  # eth_sendRawTransaction
+    GetTransactionByHash # eth_getTransactionByHash
+    GetLogs # eth_getLogs
+    FeeHistory # eth_feeHistory
+    SendRawTransaction # eth_sendRawTransaction
 
   BackendCapabilities* = set[BackendCapability]
 
@@ -254,7 +254,7 @@ type
 
     # scoring
     availabilityScoreFunc*: ScoreFunc
-    qualityScoreFunc*:      ScoreFunc
+    qualityScoreFunc*: ScoreFunc
 
     # config items
     chainId*: UInt256
@@ -273,22 +273,26 @@ type
 func eligible*(s: BackendScore): bool =
   s.availability >= 0 and s.quality >= 0
 
-func defaultAvailabilityScoreFunc*(
-    prevScore: int, direction: ScoreDirection
-): int =
+func defaultAvailabilityScoreFunc*(prevScore: int, direction: ScoreDirection): int =
   case direction
-  of Penalty: prevScore - 10
-  of Reward:  prevScore + 10
+  of Penalty:
+    prevScore - 10
+  of Reward:
+    prevScore + 10
 
 func defaultQualityScoreFunc*(prevScore: int, direction: ScoreDirection): int =
   case direction
-  of Penalty: prevScore - 50
-  of Reward:  prevScore + 10
+  of Penalty:
+    prevScore - 50
+  of Reward:
+    prevScore + 10
 
 const fullCapabilities* = BackendCapabilities(
-  {ChainId, GetBlockByHash, GetBlockByNumber, GetProof, CreateAccessList,
-   GetCode, GetBlockReceipts, GetTransactionReceipt, GetTransactionByHash,
-   GetLogs, FeeHistory, SendRawTransaction}
+  {
+    ChainId, GetBlockByHash, GetBlockByNumber, GetProof, CreateAccessList, GetCode,
+    GetBlockReceipts, GetTransactionReceipt, GetTransactionByHash, GetLogs, FeeHistory,
+    SendRawTransaction,
+  }
 )
 
 proc registerBackend*(
@@ -298,7 +302,7 @@ proc registerBackend*(
 ) =
   let idx = engine.backends.len
   engine.backends.add(backend)
-  engine.scores.add(BackendScore())   # availability = 0, quality = 0
+  engine.scores.add(BackendScore()) # availability = 0, quality = 0
   for cap in capabilities:
     engine.capabilityIndex[cap].add(idx)
 
@@ -309,7 +313,7 @@ proc backendFor*(
   var eligibleIdxs: seq[int]
   for b in engine.capabilityIndex[cap]:
     if engine.scores[b].eligible():
-      eligibleIdxs.add(i)
+      eligibleIdxs.add(b)
   if eligibleIdxs.len == 0:
     return err((BackendError, "No eligible backend for capability: " & $cap, -1))
   let chosen = eligibleIdxs[rand(eligibleIdxs.len - 1)]
@@ -321,7 +325,7 @@ template tagBackend*[T](r: EngineResult[T], idx: int): EngineResult[T] =
     if taggedR.isErr():
       let e = taggedR.error
       # if the error is not tagged then tag it
-      if taggedR.backendIdx < 0:
+      if e.backendIdx < 0:
         Result[T, ErrorTuple].err((e.errType, e.errMsg, idx))
       else:
         taggedR
