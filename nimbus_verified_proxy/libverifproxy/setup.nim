@@ -32,11 +32,11 @@ proc transportCallback[T](
     # pointer on the C side. Also allows managing the memeory on one end only.
     let deserResult = unpackArg($res, T)
     if deserResult.isErr():
-      data.fut.complete(EngineResult[T].err((BackendDecodingError, deserResult.error)))
+      data.fut.complete(EngineResult[T].err((BackendDecodingError, deserResult.error, -1)))
       return
     data.fut.complete(EngineResult[T].ok(deserResult.get()))
   elif status == RET_ERROR:
-    data.fut.complete(EngineResult[T].err((BackendError, $res)))
+    data.fut.complete(EngineResult[T].err((BackendFetchError, $res, -1)))
   elif status == RET_CANCELLED:
     data.fut.fail((ref CancelledError)(msg: $res))
 
@@ -81,7 +81,7 @@ proc getEthApiBackend*(
           Future[EngineResult[BlockObject]].Raising([CancelledError]).init("blkByHash")
         fullFlagStr = if fullTransactions: "true" else: "false"
         blkHashSer = packArg(blkHash).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, -1))
         params = "[" & blkHashSer & ", " & fullFlagStr & "]"
         url = getRandomBackendUrl(rng, urls)
 
@@ -104,7 +104,7 @@ proc getEthApiBackend*(
           )
         fullFlagStr = if fullTransactions: "true" else: "false"
         blkNumSer = packArg(blkNum).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, -1))
         params = "[" & blkNumSer & ", " & fullFlagStr & "]"
         url = getRandomBackendUrl(rng, urls)
 
@@ -125,11 +125,11 @@ proc getEthApiBackend*(
         fut =
           Future[EngineResult[ProofResponse]].Raising([CancelledError]).init("getProof")
         addressSer = packArg(address).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, -1))
         slotsSer = packArg(slots).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, -1))
         blockIdSer = packArg(blockId).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, -1))
 
         params = "[" & addressSer & ", " & slotsSer & ", " & blockIdSer & "]"
         url = getRandomBackendUrl(rng, urls)
@@ -152,9 +152,9 @@ proc getEthApiBackend*(
             "createAL"
           )
         txArgsSer = packArg(txArgs).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, -1))
         blockIdSer = packArg(blockId).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, -1))
         params = "[" & txArgsSer & ", " & blockIdSer & "]"
         url = getRandomBackendUrl(rng, urls)
 
@@ -174,9 +174,9 @@ proc getEthApiBackend*(
       let
         fut = Future[EngineResult[seq[byte]]].Raising([CancelledError]).init("getCode")
         addressSer = packArg(address).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, -1))
         blockIdSer = packArg(blockId).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, -1))
         params = "[" & addressSer & ", " & blockIdSer & "]"
         url = getRandomBackendUrl(rng, urls)
 
@@ -198,7 +198,7 @@ proc getEthApiBackend*(
             "getTxByHash"
           )
         txHashSer = packArg(txHash).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, -1))
         params = "[" & txHashSer & "]"
         url = getRandomBackendUrl(rng, urls)
 
@@ -220,7 +220,7 @@ proc getEthApiBackend*(
             "getRxByHash"
           )
         txHashSer = packArg(txHash).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, -1))
         params = "[" & txHashSer & "]"
         url = getRandomBackendUrl(rng, urls)
 
@@ -244,7 +244,7 @@ proc getEthApiBackend*(
           .Raising([CancelledError])
           .init("getBlockRxs")
         blockIdSer = packArg(blockId).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, -1))
         params = "[" & blockIdSer & "]"
         url = getRandomBackendUrl(rng, urls)
 
@@ -265,7 +265,7 @@ proc getEthApiBackend*(
         fut =
           Future[EngineResult[seq[LogObject]]].Raising([CancelledError]).init("getLogs")
         filterOptionsSer = packArg(filterOptions).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, -1))
         params = "[" & filterOptionsSer & "]"
         url = getRandomBackendUrl(rng, urls)
 
@@ -285,7 +285,7 @@ proc getEthApiBackend*(
       let
         fut = Future[EngineResult[Hash32]].Raising([CancelledError]).init("sendRawTx")
         txBytesSer = packArg(txBytes).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, -1))
         params = "[" & txBytesSer & "]"
         url = getRandomBackendUrl(rng, urls)
 
