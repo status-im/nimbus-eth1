@@ -304,6 +304,13 @@ proc registerBackend*(
 proc backendFor*(
     engine: RpcVerificationEngine, cap: BackendCapability
 ): EngineResult[(EthApiBackend, int)] =
+  # Decay excluded backends toward 0 so they can recover over time
+  for s in engine.scores.mitems:
+    if s.availability < 0:
+      inc s.availability
+    if s.quality < 0:
+      inc s.quality
+
   let indices = engine.capabilityIndex[cap]
   var eligibleIdxs: seq[int]
   for b in engine.capabilityIndex[cap]:
