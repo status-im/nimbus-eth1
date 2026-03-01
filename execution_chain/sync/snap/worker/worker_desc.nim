@@ -106,7 +106,8 @@ type
     beaconSync*: BeaconSyncRef       ## Beacon syncer to resume after snap sync
     stateDB*: StateDbRef             ## Incomplete states DB
     baseDir*: string                 ## Path for assembly database
-    mptAsm*: MptAsmRef               ## Assembly database
+    resume*: bool                    ## Resume last session (if any)
+    mptAsm*: MptAsmRef               ## Assembly cache database
     mptEla*: chronos.Duration        ## Accumulated MPT proof processing time
 
     # Preloading/manual state update

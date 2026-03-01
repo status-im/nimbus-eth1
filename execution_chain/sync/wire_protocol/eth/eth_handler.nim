@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -117,6 +117,34 @@ proc getStoredReceipts*(ctx: EthWireRef,
       break
 
   move(list)
+
+proc getStoredReceipts70*(ctx: EthWireRef, req: StoredReceipts70Request):
+                    StoredReceipts70Packet =
+  let numHashes = uint64(req.blockHashes.len)
+  if req.firstBlockReceiptIndex >= numHashes:
+    result.lastBlockIncomplete = false
+    return
+
+  var
+    list: seq[seq[StoredReceipt]]
+    totalBytes = 0
+    numBlockQueried = 0'u64
+
+  for i in req.firstBlockReceiptIndex..<numHashes:
+    let blockHash = req.blockHashes[i]
+    var receiptList = ctx.chain.receiptsByBlockHash(blockHash).valueOr:
+      continue
+
+    totalBytes += getEncodedLength(receiptList)
+    list.add(move(receiptList))
+    inc numBlockQueried
+
+    if list.len >= MAX_RECEIPTS_SERVE or
+       totalBytes > SOFT_RESPONSE_LIMIT:
+      break
+
+  result.lastBlockIncomplete = (req.firstBlockReceiptIndex + numBlockQueried) != numHashes
+  result.receipts = move(list)
 
 proc getPooledTransactions*(ctx: EthWireRef,
                      hashes: openArray[Hash32]):

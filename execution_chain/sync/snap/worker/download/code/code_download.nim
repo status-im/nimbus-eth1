@@ -13,7 +13,7 @@
 import
   std/sequtils,
   pkg/[chronicles, chronos],
-  ../[helpers, mpt, state_db, worker_desc],
+  ../../[helpers, mpt, state_db, worker_desc],
   ./code_fetch
 
 # ------------------------------------------------------------------------------
@@ -44,7 +44,7 @@ template downloadImpl(
     let
       ctx = buddy.ctx
       adb = ctx.pool.mptAsm
-      sRoot = state.root
+      sRoot = state.stateRoot
       peerID = buddy.peerID
 
       peer {.inject,used.} = $buddy.peer            # logging only
@@ -59,22 +59,22 @@ template downloadImpl(
 
       # Fetch from network
       let data = buddy.fetchCodes(sRoot, codeHashes).valueOr:
-        state.register accLeft                    # stash data and return
+        state.register accLeft                      # stash data and return
         trace info & ": fetching codes failed", peer, root,
           start, nAccLeft=accLeft.len
-        break body                                # error => return
+        break body                                  # error => return
 
       # Store byte codes on database
-      adb.putRawAyteCode(
+      adb.putRawByteCode(
         sRoot, accLeft[0][0], accLeft[^1][0],
         codeHashes.zip data.codes, peerID).isOkOr:
-          state.register(accLeft)                 # stash data and return
+          state.register(accLeft)                   # stash data and return
           trace info & ": storing codes failed", peer, root,
             start, nAccLeft=accLeft.len
-          break body                              # error => return
+          break body                                # error => return
 
       start += data.codes.len
-      bodyRc = true                               # did something
+      bodyRc = true                                 # did something
 
       # End `while`
 

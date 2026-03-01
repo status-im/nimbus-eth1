@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  account/[account_download, account_requeue]
+  ./account/[account_download, account_requeue]
 
 export
   account_download,

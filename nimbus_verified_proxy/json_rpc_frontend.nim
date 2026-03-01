@@ -228,6 +228,8 @@ proc injectEngineFrontend*(server: JsonRpcServer, frontend: EthApiFrontend) =
 proc stop*(server: JsonRpcServer) {.async: (raises: []).} =
   case server.kind
   of Http:
+    await server.httpServer.stop()
     await server.httpServer.closeWait()
   of WebSocket:
+    server.wsServer.stop()
     await server.wsServer.closeWait()

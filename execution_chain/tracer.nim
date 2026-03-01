@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2025 Status Research & Development GmbH
+# Copyright (c) 2019-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -20,14 +20,14 @@ import
   ./common/common,
   ./constants,
   ./core/executor,
-  ./db/[core_db, ledger],
+  ./ledger/[core_ledger, ledger],
   ./evm/[code_bytes, state, types],
   ./evm/tracer/legacy_tracer,
   ./transaction,
   ./utils/utils
 
 type CaptCtxRef = ref object
-  db: CoreDbRef               # not `nil`
+  ledger: CoreDbRef               # not `nil`
   root: common.Hash32
 
 const
@@ -48,14 +48,14 @@ proc init(
     com: CommonRef;
     root: common.Hash32;
       ): T =
-  T(db: com.db, root: root)
+  T(ledger: com.ledger, root: root)
 
 proc init(
     T: type CaptCtxRef;
     com: CommonRef;
     topHeader: Header;
       ): T =
-  let header = com.db.baseTxFrame().getBlockHeader(topHeader.parentHash).expect("top header parent exists")
+  let header = com.ledger.baseTxFrame().getBlockHeader(topHeader.parentHash).expect("top header parent exists")
   T.init(com, header.stateRoot)
 
 # -------------------
@@ -90,7 +90,7 @@ proc dumpReceiptsImpl(
 
 proc captureAccount(
     n: JsonNode;
-    db: LedgerRef;
+    ledger: LedgerRef;
     address: Address;
     name: string;
       ) =
@@ -98,21 +98,21 @@ proc captureAccount(
   jaccount["name"] = %name
   jaccount["address"] = %(address.to0xHex)
 
-  let nonce = db.getNonce(address)
-  let balance = db.getBalance(address)
-  let codeHash = db.getCodeHash(address)
-  let storageRoot = db.getStorageRoot(address)
+  let nonce = ledger.getNonce(address)
+  let balance = ledger.getBalance(address)
+  let codeHash = ledger.getCodeHash(address)
+  let storageRoot = ledger.getStorageRoot(address)
 
   jaccount["nonce"] = %(conversions.`$`(nonce.Web3Quantity))
   jaccount["balance"] = %("0x" & balance.toHex)
 
-  let code = db.getCode(address)
+  let code = ledger.getCode(address)
   jaccount["codeHash"] = %(codeHash.to0xHex)
   jaccount["code"] = %("0x" & code.bytes.toHex(true))
   jaccount["storageRoot"] = %(storageRoot.to0xHex)
 
   var storage = newJObject()
-  for key, value in db.storage(address):
+  for key, value in ledger.storage(address):
     storage["0x" & key.dumpHex] = %("0x" & value.dumpHex)
   jaccount["storage"] = storage
 
@@ -132,7 +132,7 @@ proc traceTransactionImpl(
   let
     tracerInst = newLegacyTracer(tracerFlags)
     cc = CaptCtxRef.init(com, header)
-    txFrame = com.db.baseTxFrame()
+    txFrame = com.ledger.baseTxFrame()
     parent = txFrame.getBlockHeader(header.parentHash).valueOr:
       return newJNull()
     vmState = BaseVMState.new(parent, header, com, txFrame, storeSlotHash = true)
@@ -179,7 +179,7 @@ proc traceTransactionImpl(
   # internal transactions:
   let
     cx = stateCtx
-    ldgBefore = LedgerRef.init(com.db.baseTxFrame(), storeSlotHash = true)
+    ldgBefore = LedgerRef.init(com.ledger.baseTxFrame(), storeSlotHash = true)
 
   for idx, acc in tracedAccountsPairs(tracerInst):
     before.captureAccount(ldgBefore, acc, internalTxName & $idx)
@@ -205,7 +205,7 @@ proc dumpBlockStateImpl(
     # only need a stack dump when scanning for internal transaction address
     captureFlags = {DisableMemory, DisableStorage, EnableAccount}
     tracerInst = newLegacyTracer(captureFlags)
-    txFrame = com.db.baseTxFrame()
+    txFrame = com.ledger.baseTxFrame()
     parent = txFrame.getBlockHeader(header.parentHash).valueOr:
       return newJNull()
     vmState = BaseVMState.new(parent, header, com, txFrame, tracerInst, storeSlotHash = true)
@@ -214,7 +214,7 @@ proc dumpBlockStateImpl(
   var
     before = newJArray()
     after = newJArray()
-    stateBefore = LedgerRef.init(com.db.baseTxFrame(), storeSlotHash = true)
+    stateBefore = LedgerRef.init(com.ledger.baseTxFrame(), storeSlotHash = true)
 
   for idx, tx in blk.transactions:
     let sender = tx.recoverSender().expect("valid signature")
@@ -265,7 +265,7 @@ proc traceBlockImpl(
     cc = CaptCtxRef.init(com, header)
     tracerInst = newLegacyTracer(tracerFlags)
     # Tracer needs a database where the reverse slot hash table has been set up
-    txFrame = com.db.baseTxFrame()
+    txFrame = com.ledger.baseTxFrame()
     parent = txFrame.getBlockHeader(header.parentHash).valueOr:
       return newJNull()
     vmState = BaseVMState.new(parent, header, com, txFrame, tracerInst, storeSlotHash = true)
