@@ -102,7 +102,6 @@ type
     metricsPort* {.
       desc: "Listening port of the built-in metrics HTTP server"
       defaultValue: defaultMetricsServerPort
-      defaultValueDesc: $defaultMetricsServerPort
       name: "metrics-port" .}: Port
 
     metricsAddress* {.
