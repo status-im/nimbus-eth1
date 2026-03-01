@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -67,6 +67,10 @@ const
 
 iterator peers69OrLater(wire: EthWireRef, random: bool = false): Peer =
   var peers = newSeqOfCap[Peer](wire.node.numPeers)
+  for peer in wire.node.peers(eth70):
+    if peer.isNil:
+      continue
+    peers.add peer
   for peer in wire.node.peers(eth69):
     if peer.isNil:
       continue

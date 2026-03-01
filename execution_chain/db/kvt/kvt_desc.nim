@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -21,65 +21,76 @@ import
   ./kvt_desc/desc_error
 
 # Not auto-exporting backend
-export
-  hashes, tables, kvt_constants, desc_error
+export hashes, tables, kvt_constants, desc_error
 
 type
   GetKvpFn* =
-    proc(key: openArray[byte]): Result[seq[byte],KvtError] {.gcsafe, raises: [].}
-      ## Generic backend database retrieval function
-  LenKvpFn* =
-    proc(key: openArray[byte]): Result[int,KvtError] {.gcsafe, raises: [].}
-      ## Generic backend database retrieval function
+    proc(key: openArray[byte]): Result[seq[byte], KvtError] {.gcsafe, raises: [].}
+    ## Generic backend database retrieval function
+
+  LenKvpFn* = proc(key: openArray[byte]): Result[int, KvtError] {.gcsafe, raises: [].}
+    ## Generic backend database retrieval function
+
+  MultiGetKvpFn* = proc(
+    keys: openArray[seq[byte]], values: var openArray[Opt[seq[byte]]], sortedInput: bool
+  ): Result[void, KvtError] {.gcsafe, raises: [].}
+    ## Generic backend database bulk retrieval function
 
   # -------------
 
-  PutBegFn* =
-    proc(): Result[PutHdlRef,KvtError] {.gcsafe, raises: [].}
-      ## Generic transaction initialisation function
+  PutBegFn* = proc(): Result[PutHdlRef, KvtError] {.gcsafe, raises: [].}
+    ## Generic transaction initialisation function
 
-  PutKvpFn* =
-    proc(hdl: PutHdlRef; k, v: openArray[byte]) {.gcsafe, raises: [].}
-      ## Generic backend database bulk storage function.
+  PutKvpFn* = proc(hdl: PutHdlRef, k, v: openArray[byte]) {.gcsafe, raises: [].}
+    ## Generic backend database bulk storage function.
 
-  PutEndFn* =
-    proc(hdl: PutHdlRef): Result[void,KvtError] {.gcsafe, raises: [].}
-      ## Generic transaction termination function
+  PutEndFn* = proc(hdl: PutHdlRef): Result[void, KvtError] {.gcsafe, raises: [].}
+    ## Generic transaction termination function
 
   # -------------
 
-  CloseFn* =
-    proc(eradicate: bool) {.gcsafe, raises: [].}
-      ## Generic destructor for the `Kvt DB` backend. The argument `eradicate`
-      ## indicates that a full database deletion is requested. If passed
-      ## `false` the outcome might differ depending on the type of backend
-      ## (e.g. in-memory backends would eradicate on close.)
+  DelKvpFn* = proc(key: openArray[byte]): Result[void, KvtError] {.gcsafe, raises: [].}
+    ## Generic backend database delete function.
+
+  DelRangeKvpFn* = proc(
+    startKey, endKey: openArray[byte], compactRange: bool
+  ): Result[void, KvtError] {.gcsafe, raises: [].}
+    ## Generic backend database bulk delete function.
 
   # -------------
 
-  GetBackendFn* =
-    proc(): TypedBackendRef {.gcsafe, raises: [].}
-      ## Get a reference to typed backend.
+  CloseFn* = proc(eradicate: bool) {.gcsafe, raises: [].}
+    ## Generic destructor for the `Kvt DB` backend. The argument `eradicate`
+    ## indicates that a full database deletion is requested. If passed
+    ## `false` the outcome might differ depending on the type of backend
+    ## (e.g. in-memory backends would eradicate on close.)
 
-  KvtTxRef* = ref object
-    ## Transaction descriptor
-    db*: KvtDbRef                     ## Database descriptor
-    parent*: KvtTxRef                 ## Previous transaction
-    sTab*: Table[seq[byte],seq[byte]] ## Structural data table
+  # -------------
 
-  KvtDbRef* = ref object of RootRef
-    ## Backend interface.
-    getKvpFn*: GetKvpFn              ## Read key-value pair
-    lenKvpFn*: LenKvpFn              ## Read key-value pair length
+  GetBackendFn* = proc(): TypedBackendRef {.gcsafe, raises: [].}
+    ## Get a reference to typed backend.
 
-    putBegFn*: PutBegFn              ## Start bulk store session
-    putKvpFn*: PutKvpFn              ## Bulk store key-value pairs
-    putEndFn*: PutEndFn              ## Commit bulk store session
+  KvtTxRef* = ref object ## Transaction descriptor
+    db*: KvtDbRef ## Database descriptor
+    parent*: KvtTxRef ## Previous transaction
+    sTab*: Table[seq[byte], seq[byte]] ## Structural data table
 
-    closeFn*: CloseFn                ## Generic destructor
+  KvtDbRef* = ref object of RootRef ## Backend interface.
+    getKvpFn*: GetKvpFn ## Read key-value pair
+    lenKvpFn*: LenKvpFn ## Read key-value pair length
+    multiGetKvpFn*: MultiGetKvpFn ## Bulk read key-value pairs
+
+    putBegFn*: PutBegFn ## Start bulk store session
+    putKvpFn*: PutKvpFn ## Bulk store key-value pairs
+    putEndFn*: PutEndFn ## Commit bulk store session
+
+    delKvpFn*: DelKvpFn ## Delete key-value pair
+    delRangeKvpFn*: DelRangeKvpFn ## Bulk delete key-value pairs
+
+    closeFn*: CloseFn ## Generic destructor
 
     getBackendFn*: GetBackendFn
-    
+
     txRef*: KvtTxRef
       ## Tx holding data scheduled to be written to disk during the next
       ## `persist` call
@@ -88,7 +99,7 @@ type
 # Public helpers
 # ------------------------------------------------------------------------------
 
-func getOrVoid*(tab: Table[seq[byte],seq[byte]]; w: seq[byte]): seq[byte] =
+func getOrVoid*(tab: Table[seq[byte], seq[byte]], w: seq[byte]): seq[byte] =
   tab.getOrDefault(w, EmptyBlob)
 
 func isValid*(key: seq[byte]): bool =

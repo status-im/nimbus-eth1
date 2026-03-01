@@ -248,19 +248,22 @@ func validateTxBasic*(
 
   if validateFork:
     if tx.txType == TxEip2930 and fork < FkBerlin:
-      return err("invalid tx: Eip2930 Tx type detected before Berlin")
+      return err("invalid tx: EIP-2930 Tx type detected before Berlin")
 
     if tx.txType == TxEip1559 and fork < FkLondon:
-      return err("invalid tx: Eip1559 Tx type detected before London")
+      return err("invalid tx: EIP-1559 Tx type detected before London")
 
     if tx.txType == TxEip4844 and fork < FkCancun:
-      return err("invalid tx: Eip4844 Tx type detected before Cancun")
+      return err("invalid tx: EIP-4844 Tx type detected before Cancun")
 
     if tx.txType == TxEip7702 and fork < FkPrague:
-      return err("invalid tx: Eip7702 Tx type detected before Prague")
+      return err("invalid tx: EIP-7702 Tx type detected before Prague")
+
+  if fork >= FkAmsterdam and tx.contractCreation and tx.payload.len > EIP7954_MAX_INITCODE_SIZE:
+    return err("invalid tx: initcode size exceeds EIP-7954 maximum")
 
   if fork >= FkShanghai and tx.contractCreation and tx.payload.len > EIP3860_MAX_INITCODE_SIZE:
-    return err("invalid tx: initcode size exceeds maximum")
+    return err("invalid tx: initcode size exceeds EIP-3860 maximum")
 
   # The total must be the larger of the two
   if tx.maxFeePerGasNorm < tx.maxPriorityFeePerGasNorm:
@@ -328,7 +331,7 @@ func validateTxBasic*(
   ok()
 
 proc validateTransaction*(
-    roDB:     ReadOnlyLedger; ## Parent accounts environment for transaction
+    ledger:   ReadOnlyLedger; ## Parent accounts environment for transaction
     tx:       Transaction;     ## tx to validate
     sender:   Address;         ## tx.recoverSender
     maxLimit: GasInt;          ## gasLimit from block header
@@ -340,11 +343,11 @@ proc validateTransaction*(
   ? validateTxBasic(com, tx, fork)
 
   let
-    balance = roDB.getBalance(sender)
-    nonce = roDB.getNonce(sender)
+    balance = ledger.getBalance(sender)
+    nonce = ledger.getNonce(sender)
 
   # Note that the following check bears some plausibility but is _not_
-  # covered by the eip-1559 reference (sort of) pseudo code, for details
+  # covered by the EIP-1559 reference (sort of) pseudo code, for details
   # see `https://eips.ethereum.org/EIPS/eip-1559#specification`_
   #
   # Rather this check is needed for surviving the post-London unit test
@@ -384,7 +387,7 @@ proc validateTransaction*(
   # `eth_call` and `eth_estimateGas`
   # EOA = Externally Owned Account
   let
-    code = roDB.getCode(sender)
+    code = ledger.getCode(sender)
     delegated = code.parseDelegation()
   if code.len > 0 and not delegated:
     return err(&"invalid tx: sender is not an EOA. sender={sender.toHex}, codeLen={code.len}")

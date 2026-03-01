@@ -52,18 +52,18 @@ proc getTotalDifficulty*(api: ServerAPIRef, blockHash: Hash32, header: Header): 
   api.txPool.chain.getTotalDifficulty(blockHash, header)
 
 proc getProof*(
-    accDB: LedgerRef, address: Address, slots: seq[UInt256]
+    ledger: LedgerRef, address: Address, slots: seq[UInt256]
 ): ProofResponse =
   let
-    acc = accDB.getEthAccount(address)
-    accExists = accDB.accountExists(address)
-    accountProof = accDB.getAccountProof(address)
-    slotProofs = accDB.getStorageProof(address, slots)
+    acc = ledger.getEthAccount(address)
+    accExists = ledger.accountExists(address)
+    accountProof = ledger.getAccountProof(address)
+    slotProofs = ledger.getStorageProof(address, slots)
 
   var storage = newSeqOfCap[StorageProof](slots.len)
 
   for i, slotKey in slots:
-    let slotValue = accDB.getStorage(address, slotKey)
+    let slotValue = ledger.getStorage(address, slotKey)
     storage.add(
       StorageProof(
         key: slotKey, value: slotValue, proof: seq[RlpEncodedBytes](slotProofs[i])
@@ -449,9 +449,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       raise newException(ValueError, "Account locked, please unlock it first")
 
     let
-      accDB = api.ledgerFromTag(blockId("latest")).valueOr:
+      ledger = api.ledgerFromTag(blockId("latest")).valueOr:
         raise newException(ValueError, "Latest Block not found")
-      tx = unsignedTx(data, api.chain, accDB.getNonce(address) + 1, api.com.chainId)
+      tx = unsignedTx(data, api.chain, ledger.getNonce(address) + 1, api.com.chainId)
       eip155 = api.com.isEIP155(api.chain.latestNumber)
       signedTx = signTransaction(tx, acc.privateKey, eip155)
     return rlp.encode(signedTx)
@@ -470,9 +470,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       raise newException(ValueError, "Account locked, please unlock it first")
 
     let
-      accDB = api.ledgerFromTag(blockId("latest")).valueOr:
+      ledger = api.ledgerFromTag(blockId("latest")).valueOr:
         raise newException(ValueError, "Latest Block not found")
-      tx = unsignedTx(data, api.chain, accDB.getNonce(address) + 1, api.com.chainId)
+      tx = unsignedTx(data, api.chain, ledger.getNonce(address) + 1, api.com.chainId)
       eip155 = api.com.isEIP155(api.chain.latestNumber)
       signedTx = signTransaction(tx, acc.privateKey, eip155)
       blobsBundle =
@@ -587,10 +587,10 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ## slots: integers of the positions in the storage to return with storage proofs.
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns: the proof response containing the account, account proof and storage proof
-    let accDB = api.ledgerFromTag(quantityTag).valueOr:
+    let ledger = api.ledgerFromTag(quantityTag).valueOr:
       raise newException(ValueError, "Block not found")
 
-    getProof(accDB, data, slots)
+    getProof(ledger, data, slots)
 
   server.rpc("eth_getBlockReceipts") do(
     quantityTag: BlockTag

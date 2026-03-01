@@ -12,8 +12,8 @@
 
 import
   pkg/[chronicles, chronos, minilru],
-  ../../../wire_protocol,
-  ../[helpers, state_db, worker_desc],
+  ../../../../wire_protocol,
+  ../../[helpers, state_db, worker_desc],
   ./account_helpers
 
 type

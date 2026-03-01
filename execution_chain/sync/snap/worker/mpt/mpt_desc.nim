@@ -11,8 +11,7 @@
 
 import
   std/[tables, typetraits],
-  pkg/eth/common/[base, hashes],
-  ../../../../db/aristo/aristo_desc/desc_nibbles,
+  pkg/eth/common/[base, hashes], eth/trie/nibbles,
   ../../../wire_protocol/snap/snap_types,
   ../state_db
 

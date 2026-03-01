@@ -13,7 +13,7 @@
 import
   std/sequtils,
   pkg/[chronicles, chronos],
-  ../[helpers, mpt, state_db, worker_desc],
+  ../../[helpers, mpt, state_db, worker_desc],
   ./storage_fetch
 
 # ------------------------------------------------------------------------------
@@ -62,7 +62,7 @@ template downloadImpl(
     let
       ctx = buddy.ctx
       adb = ctx.pool.mptAsm
-      sRoot = state.root
+      sRoot = state.stateRoot
       peerID = buddy.peerID
 
       peer {.inject,used.} = $buddy.peer            # logging only

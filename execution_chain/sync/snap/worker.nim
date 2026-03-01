@@ -13,8 +13,7 @@
 import
   std/os,
   pkg/[chronicles, chronos, minilru, results],
-  ./worker/[
-    account, download, header, helpers, start_stop, state_db, worker_desc]
+  ./worker/[download, helpers, start_stop, state_db, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -37,11 +36,11 @@ template updateTarget(
         ctx = buddy.ctx
 
       # Single target block hash
-      if ctx.pool.target.value.blockHash != BlockHash(zeroHash32):
-        let rc = buddy.headerStateRegister(ctx.pool.target.value.blockHash)
+      let hash = ctx.pool.target.value.blockHash
+      if hash != BlockHash(zeroHash32):
+        let rc = buddy.headerStateRegister(hash, info)
         if rc.isErr and rc.error:                   # real error
-          trace info & ": failed fetching pivot hash", peer,
-            hash=ctx.pool.target.value.blockHash.toStr
+          trace info & ": failed fetching pivot hash", peer, hash=hash.toStr
         elif 0 < ctx.pool.target.value.updateFile.len:
           var target = ctx.pool.target.value
           target.blockHash = BlockHash(zeroHash32)
@@ -62,7 +61,10 @@ template updateTarget(
 
 proc setup*(ctx: SnapCtxRef; info: static[string]): bool =
   ## Global set up
-  ctx.setupServices info
+  if ctx.setupServices info:
+    return true
+  error info & ": Setup failed, snap sync disabled"
+  # false
 
 proc release*(ctx: SnapCtxRef; info: static[string]) =
   ## Global clean up
