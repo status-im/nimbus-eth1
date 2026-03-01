@@ -58,15 +58,20 @@ template rpcCall(body: untyped): untyped =
   except CancelledError as e:
     raise e
   except RpcPostError as e:
-    return err((BackendEncodingError, e.msg, -1))
+    result = err(typeof(result), (BackendEncodingError, e.msg, -1))
+    return
   except ErrorResponse as e:
-    return err((BackendFetchError, e.msg, -1))
+    result = err(typeof(result), (BackendFetchError, e.msg, -1))
+    return
   except JsonRpcError as e:
-    return err((BackendDecodingError, e.msg, -1))
+    result = err(typeof(result), (BackendDecodingError, e.msg, -1))
+    return
   except InvalidResponse as e:
-    return err((BackendDecodingError, e.msg, -1))
+    result = err(typeof(result), (BackendDecodingError, e.msg, -1))
+    return
   except CatchableError as e:
-    return err((BackendError, e.msg, -1))
+    result = err(typeof(result), (BackendError, e.msg, -1))
+    return
 
 proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
   let
