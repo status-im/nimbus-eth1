@@ -97,7 +97,19 @@ suite "backend scoring":
       raise newException(TestProxyError, error.errMsg)
     engine.registerBackend(initTestApiBackend(ts), fullCapabilities)
 
-    # Push the backend below the eligibility threshold
-    engine.scores[0].quality = -1
+    engine.scores[0].quality = -10
 
     check engine.backendFor(GetProof).isErr()
+
+  test "excluded backend recovers after enough requests":
+    let ts = TestApiState.init(1.u256)
+    let engine = RpcVerificationEngine.init(scoringEngineConf).valueOr:
+      raise newException(TestProxyError, error.errMsg)
+    engine.registerBackend(initTestApiBackend(ts), fullCapabilities)
+
+    engine.scores[0].quality = -4
+
+    for _ in 0 ..< 3:
+      check engine.backendFor(GetProof).isErr()
+
+    check engine.backendFor(GetProof).isOk()
