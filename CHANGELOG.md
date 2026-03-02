@@ -1,3 +1,36 @@
+2026-03-02 v0.3.0
+=================
+
+The Nimbus Ethereum client `v0.3.0` alpha, along with the Nimbus verified Proxy, are `medium-urgency` releases which introduce a single combined binary for both the consensus and execution layers, along with a unified client interface to both consensus and execution layers; more detail on this at https://blog.nimbus.team/the-nimbus-unified-client/
+
+### Improvements
+
+- Provide the Nimbus client as a single binary:
+  https://github.com/status-im/nimbus-eth1/pull/3966
+
+- Provide multiarch images for the Nimbus single binary:
+  https://github.com/status-im/nimbus-eth1/pull/3988
+
+- Provide a C API for verified proxy:
+  https://github.com/status-im/nimbus-eth1/pull/3745
+
+- Support multiple Web3 endpoints for verified proxy:
+  https://github.com/status-im/nimbus-eth1/pull/3891
+
+- Support multiple frontends for verified proxy:
+  https://github.com/status-im/nimbus-eth1/pull/4000
+
+- Support by the verified proxy to download blocks in parallel:
+  https://github.com/status-im/nimbus-eth1/pull/3892
+
+- Support getBlobsV3 in execution and unified client:
+  https://github.com/status-im/nimbus-eth1/pull/3893
+
+### Fixes
+
+- Avoid startup issues with corrupt databases:
+  https://github.com/status-im/nimbus-eth1/pull/4023
+
 2025-11-03 v0.2.2
 =================
 
