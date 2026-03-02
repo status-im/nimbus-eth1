@@ -26,15 +26,18 @@ export portal_protocol_config, rpc_types
 proc installPortalCommonApiHandlers*(
     rpcServer: RpcServer, p: PortalProtocol, network: static PortalSubnetwork
 ) =
+  template rpc(path: string, body: untyped): untyped =
+    rpc(rpcServer, path, EthJson, body)
+
   const networkStr = network.symbolName()
 
-  rpcServer.rpc("portal_" & networkStr & "NodeInfo") do() -> NodeInfo:
+  rpc("portal_" & networkStr & "NodeInfo") do() -> NodeInfo:
     return p.routingTable.getNodeInfo()
 
-  rpcServer.rpc("portal_" & networkStr & "RoutingTableInfo") do() -> RoutingTableInfo:
+  rpc("portal_" & networkStr & "RoutingTableInfo") do() -> RoutingTableInfo:
     return getRoutingTableInfo(p.routingTable)
 
-  rpcServer.rpc("portal_" & networkStr & "AddEnr") do(enr: Record) -> bool:
+  rpc("portal_" & networkStr & "AddEnr") do(enr: Record) -> bool:
     let node = Node.fromRecord(enr)
     if p.addNode(node) == Added:
       p.routingTable.setJustSeen(node)
@@ -42,7 +45,7 @@ proc installPortalCommonApiHandlers*(
     else:
       false
 
-  rpcServer.rpc("portal_" & networkStr & "AddEnrs") do(enrs: seq[Record]) -> bool:
+  rpc("portal_" & networkStr & "AddEnrs") do(enrs: seq[Record]) -> bool:
     # Note: unspecified RPC, but useful for our local testnet test
     for enr in enrs:
       let node = Node.fromRecord(enr)
@@ -51,7 +54,7 @@ proc installPortalCommonApiHandlers*(
 
     return true
 
-  rpcServer.rpc("portal_" & networkStr & "GetEnr") do(nodeId: NodeId) -> Record:
+  rpc("portal_" & networkStr & "GetEnr") do(nodeId: NodeId) -> Record:
     if p.localNode.id == nodeId:
       return p.localNode.record
 
@@ -61,7 +64,7 @@ proc installPortalCommonApiHandlers*(
     else:
       raise newException(ValueError, "Record not in local routing table.")
 
-  rpcServer.rpc("portal_" & networkStr & "DeleteEnr") do(nodeId: NodeId) -> bool:
+  rpc("portal_" & networkStr & "DeleteEnr") do(nodeId: NodeId) -> bool:
     # TODO: Adjust `removeNode` to accept NodeId as param and to return bool.
     let node = p.getNode(nodeId)
     if node.isSome():
@@ -70,14 +73,14 @@ proc installPortalCommonApiHandlers*(
     else:
       return false
 
-  rpcServer.rpc("portal_" & networkStr & "LookupEnr") do(nodeId: NodeId) -> Record:
+  rpc("portal_" & networkStr & "LookupEnr") do(nodeId: NodeId) -> Record:
     let lookup = await p.resolve(nodeId)
     if lookup.isSome():
       return lookup.get().record
     else:
       raise newException(ValueError, "Record not found in DHT lookup.")
 
-  rpcServer.rpc("portal_" & networkStr & "Ping") do(
+  rpc("portal_" & networkStr & "Ping") do(
     enr: Record, payloadType: Opt[uint16], payload: Opt[UnknownPayload]
   ) -> PingResult:
     if payloadType.isSome() and payloadType.get() != CapabilitiesType:
@@ -111,7 +114,7 @@ proc installPortalCommonApiHandlers*(
       enrSeq: EnrSeqNumber(enrSeq), payloadType: payloadType, payload: payload
     )
 
-  rpcServer.rpc("portal_" & networkStr & "FindNodes") do(
+  rpc("portal_" & networkStr & "FindNodes") do(
     enr: Record, distances: seq[uint16]
   ) -> seq[Record]:
     let
@@ -125,7 +128,7 @@ proc installPortalCommonApiHandlers*(
             n.record
         )
 
-  rpcServer.rpc("portal_" & networkStr & "RecursiveFindNodes") do(
+  rpc("portal_" & networkStr & "RecursiveFindNodes") do(
     nodeId: NodeId
   ) -> seq[Record]:
     let discovered = await p.lookup(nodeId)
