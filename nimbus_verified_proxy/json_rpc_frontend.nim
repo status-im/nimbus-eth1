@@ -35,13 +35,13 @@ proc init*(T: type JsonRpcServer, url: Web3Url): EngineResult[JsonRpcServer] =
         try:
           parseInt(parsedUrl.port)
         except ValueError:
-          return err((FrontendError, "Could not parse the port number", -1))
+          return err((FrontendError, "Could not parse the port number", UNTAGGED))
 
     listenAddress =
       try:
         initTAddress(hostname, port)
       except TransportAddressError as e:
-        return err((FrontendError, e.msg, -1))
+        return err((FrontendError, e.msg, UNTAGGED))
 
   try:
     case url.kind
@@ -59,7 +59,7 @@ proc init*(T: type JsonRpcServer, url: Web3Url): EngineResult[JsonRpcServer] =
       server.wsServer.router = RpcRouter.init()
       return ok(server)
   except JsonRpcError as e:
-    return err((FrontendError, e.msg, -1))
+    return err((FrontendError, e.msg, UNTAGGED))
 
 func getServer(server: JsonRpcServer): RpcServer =
   case server.kind
@@ -74,7 +74,7 @@ proc start*(server: JsonRpcServer): EngineResult[void] =
     of WebSocket:
       server.wsServer.start()
   except JsonRpcError as e:
-    return err((FrontendError, e.msg, -1))
+    return err((FrontendError, e.msg, UNTAGGED))
 
   ok()
 

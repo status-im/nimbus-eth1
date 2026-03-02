@@ -191,7 +191,10 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
     .} =
       if t.chainId == u256(0):
         return err(
-          (BackendDecodingError, "chainId not set in test backend or is set to 0", -1)
+          (
+            BackendDecodingError, "chainId not set in test backend or is set to 0",
+            UNTAGGED,
+          )
         )
 
       ok(t.chainId)
@@ -205,7 +208,7 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
         else:
           ok(convToPartialBlock(t.blocks[blkHash]))
       except KeyError as e:
-        err((BackendFetchError, e.msg, -1))
+        err((BackendFetchError, e.msg, UNTAGGED))
 
     getBlockByNumberProc = proc(
         blkNum: BlockTag, fullTransactions: bool
@@ -219,7 +222,7 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
         else:
           ok(convToPartialBlock(t.blocks[blkHash]))
       except KeyError as e:
-        err((BackendFetchError, e.msg, -1))
+        err((BackendFetchError, e.msg, UNTAGGED))
 
     getProofProc = proc(
         address: Address, slots: seq[UInt256], blkNum: BlockTag
@@ -230,7 +233,7 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
 
         ok(t.proofs[(address, slots, blkHash)])
       except KeyError as e:
-        err((BackendFetchError, e.msg, -1))
+        err((BackendFetchError, e.msg, UNTAGGED))
 
     createAccessListProc = proc(
         args: TransactionArgs, blkNum: BlockTag
@@ -241,7 +244,7 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
 
         ok(t.accessLists[(args, blkHash)])
       except KeyError as e:
-        err((BackendFetchError, e.msg, -1))
+        err((BackendFetchError, e.msg, UNTAGGED))
 
     getCodeProc = proc(
         address: Address, blkNum: BlockTag
@@ -252,7 +255,7 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
 
         ok(t.codes[(address, blkHash)])
       except KeyError as e:
-        err((BackendFetchError, e.msg, -1))
+        err((BackendFetchError, e.msg, UNTAGGED))
 
     getBlockReceiptsProc = proc(
         blockId: BlockTag
@@ -265,7 +268,7 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
 
         ok(Opt.some(t.blockReceipts[blkHash]))
       except KeyError as e:
-        err((BackendFetchError, e.msg, -1))
+        err((BackendFetchError, e.msg, UNTAGGED))
 
     getLogsProc = proc(
         filterOptions: FilterOptions
@@ -273,7 +276,7 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
       try:
         ok(t.logs[filterOptions])
       except KeyError as e:
-        err((BackendFetchError, e.msg, -1))
+        err((BackendFetchError, e.msg, UNTAGGED))
 
     getTransactionByHashProc = proc(
         txHash: Hash32
@@ -281,7 +284,7 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
       try:
         ok(t.transactions[txHash])
       except KeyError as e:
-        err((BackendFetchError, e.msg, -1))
+        err((BackendFetchError, e.msg, UNTAGGED))
 
     getTransactionReceiptProc = proc(
         txHash: Hash32
@@ -289,7 +292,7 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
       try:
         ok(t.receipts[txHash])
       except KeyError as e:
-        err((BackendFetchError, e.msg, -1))
+        err((BackendFetchError, e.msg, UNTAGGED))
 
   EthApiBackend(
     eth_chainId: ethChainIdProc,

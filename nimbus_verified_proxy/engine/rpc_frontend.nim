@@ -64,7 +64,10 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     let latest = engine.headerStore.latest.valueOr:
       # untagged(-1) because the error cannot be linked to any backend
       return err(
-        (UnavailableDataError, "Couldn't get the latest header, still syncing?", -1)
+        (
+          UnavailableDataError, "Couldn't get the latest header, still syncing?",
+          UNTAGGED,
+        )
       )
 
     ok(latest.number.uint64)
@@ -146,7 +149,8 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     let blk = engine.penaltyOr(await engine.getBlock(blockTag, true))
 
     if distinctBase(index) >= uint64(blk.transactions.len):
-      return err((FrontendError, "provided transaction index is outside bounds", -1))
+      return
+        err((FrontendError, "provided transaction index is outside bounds", UNTAGGED))
 
     let x = blk.transactions[distinctBase(index)]
 
@@ -158,7 +162,8 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     let blk = engine.penaltyOr(await engine.getBlock(blockHash, true))
 
     if distinctBase(index) >= uint64(blk.transactions.len):
-      return err((FrontendError, "provided transaction index is outside bounds", -1))
+      return
+        err((FrontendError, "provided transaction index is outside bounds", UNTAGGED))
 
     let x = blk.transactions[distinctBase(index)]
 
@@ -168,7 +173,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
       tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: bool = true
   ): Future[EngineResult[seq[byte]]] {.async: (raises: [CancelledError]).} =
     if tx.to.isNone():
-      return err((FrontendError, "to address is required", -1))
+      return err((FrontendError, "to address is required", UNTAGGED))
 
     let header = engine.penaltyOr(await engine.getHeader(blockTag))
 
@@ -185,12 +190,12 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     let callResult = (await engine.evm.call(header, tx, optimisticStateFetch)).valueOr:
       # NOTE: untagged(-1) because this error cannot be linked to one specific backend
       # and we cannot downscore every backend. Hence invalid data
-      return err((VerificationError, "contract call failed -> " & error, -1))
+      return err((VerificationError, "contract call failed -> " & error, UNTAGGED))
 
     if callResult.error.len() > 0:
       # NOTE: untagged(-1) because this error cannot be linked to one specific backend
       # and we cannot downscore every backend. Hence invalid data
-      return err((VerificationError, callResult.error, -1))
+      return err((VerificationError, callResult.error, UNTAGGED))
 
     ok(callResult.output)
 
@@ -198,7 +203,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
       tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: bool = true
   ): Future[EngineResult[AccessListResult]] {.async: (raises: [CancelledError]).} =
     if tx.to.isNone():
-      return err((FrontendError, "to address is required", -1))
+      return err((FrontendError, "to address is required", UNTAGGED))
 
     let header = engine.penaltyOr(await engine.getHeader(blockTag))
 
@@ -217,7 +222,8 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     ).valueOr:
       # NOTE: untagged(-1) because this error cannot be linked to one specific backend
       # and we cannot downscore every backend. Hence invalid data
-      return err((VerificationError, "access list calculation failed -> " & error, -1))
+      return
+        err((VerificationError, "access list calculation failed -> " & error, UNTAGGED))
 
     ok(
       AccessListResult(accessList: accessList, error: error, gasUsed: gasUsed.Quantity)
@@ -227,7 +233,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
       tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: bool = true
   ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).} =
     if tx.to.isNone():
-      return err((FrontendError, "to address is required", -1))
+      return err((FrontendError, "to address is required", UNTAGGED))
 
     let header = engine.penaltyOr(await engine.getHeader(blockTag))
 
@@ -244,8 +250,9 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     let gasEstimate = (await engine.evm.estimateGas(header, tx, optimisticStateFetch)).valueOr:
       # NOTE: untagged(-1) because this error cannot be linked to one specific backend
       # and we cannot downscore every backend. Hence invalid data
-      return
-        err((VerificationError, "gas estimation calculation failed -> " & error, -1))
+      return err(
+        (VerificationError, "gas estimation calculation failed -> " & error, UNTAGGED)
+      )
 
     ok(Quantity(gasEstimate))
 
@@ -307,7 +314,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
       filterOptions: FilterOptions
   ): Future[EngineResult[string]] {.async: (raises: [CancelledError]).} =
     if engine.filterStore.len >= MAX_FILTERS:
-      return err((UnavailableDataError, "FilterStore already full", -1))
+      return err((UnavailableDataError, "FilterStore already full", UNTAGGED))
 
     var
       id: array[8, byte] # 64bits
@@ -318,7 +325,8 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
         return err(
           (
             UnavailableDataError,
-            "Couldn't generate a random identifier for the filter", -1,
+            "Couldn't generate a random identifier for the filter",
+            UNTAGGED,
           )
         )
 
@@ -331,7 +339,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
         return err(
           (
             UnavailableDataError, "Couldn't create a unique identifier for the filter",
-            -1,
+            UNTAGGED,
           )
         )
 
@@ -357,7 +365,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
         engine.penaltyOr(await engine.getLogs(engine.filterStore[filterId].filter))
       ok(logObjs)
     except KeyError as e:
-      err((FrontendError, "Filter doesn't exist", -1))
+      err((FrontendError, "Filter doesn't exist", UNTAGGED))
 
   engine.frontend.eth_getFilterChanges = proc(
       filterId: string
@@ -366,7 +374,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
       try:
         engine.filterStore[filterId]
       except KeyError as e:
-        return err((FrontendError, "Filter doesn't exist", -1))
+        return err((FrontendError, "Filter doesn't exist", UNTAGGED))
 
     let
       filter = ?engine.resolveFilterTags(filterItem.filter)
@@ -375,7 +383,10 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     if filterItem.blockMarker.isSome() and toBlock <= filterItem.blockMarker.get():
       return err(
-        (UnavailableDataError, "No changes for the filter since the last query", -1)
+        (
+          UnavailableDataError, "No changes for the filter since the last query",
+          UNTAGGED,
+        )
       )
 
     let
@@ -400,7 +411,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     try:
       engine.filterStore[filterId].blockMarker = Opt.some(toBlock)
     except KeyError as e:
-      return err((FrontendError, "Filter doesn't exist", -1))
+      return err((FrontendError, "Filter doesn't exist", UNTAGGED))
 
     ok(logObjs)
 
@@ -417,9 +428,12 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     let header = engine.penaltyOr(await engine.getHeader(blockId("latest")))
 
     if header.blobGasUsed.isNone():
-      return err((UnavailableDataError, "blobGasUsed missing from latest header", -1))
+      return
+        err((UnavailableDataError, "blobGasUsed missing from latest header", UNTAGGED))
     if header.excessBlobGas.isNone():
-      return err((UnavailableDataError, "excessBlobGas missing from latest header", -1))
+      return err(
+        (UnavailableDataError, "excessBlobGas missing from latest header", UNTAGGED)
+      )
     let blobBaseFee =
       getBlobBaseFee(header.excessBlobGas.get, com, com.toEVMFork(header)) *
       header.blobGasUsed.get.u256

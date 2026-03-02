@@ -136,7 +136,7 @@ proc verifyLogs*(
           lg.blockNumber.get() > filter.toBlock.get().number or
           (not match(toLog(lg), filter.address, filter.topics)):
         # untagged(-1) so that the relevant backend can be tagged
-        return err((VerificationError, "one of the returned logs is invalid", -1))
+        return err((VerificationError, "one of the returned logs is invalid", UNTAGGED))
 
   ok()
 

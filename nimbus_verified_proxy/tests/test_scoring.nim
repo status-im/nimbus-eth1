@@ -43,7 +43,7 @@ suite "backend scoring":
     backend.eth_getProof = proc(
         address: Address, slots: seq[UInt256], blkNum: BlockTag
     ): Future[EngineResult[ProofResponse]] {.async: (raises: [CancelledError]).} =
-      return err((BackendFetchError, "simulated transport failure", -1))
+      return err((BackendFetchError, "simulated transport failure", UNTAGGED))
 
     let engine = RpcVerificationEngine.init(scoringEngineConf).valueOr:
       raise newException(TestProxyError, error.errMsg)

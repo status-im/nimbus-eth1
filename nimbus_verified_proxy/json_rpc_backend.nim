@@ -47,7 +47,7 @@ proc start*(
       )
     ok()
   except JsonRpcError as e:
-    return err((BackendError, e.msg, -1))
+    return err((BackendError, e.msg, UNTAGGED))
 
 proc stop*(client: JsonRpcClient): Future[void] {.async: (raises: []).} =
   await client.resolveClient().close()
@@ -58,19 +58,19 @@ template rpcCall(body: untyped): untyped =
   except CancelledError as e:
     raise e
   except RpcPostError as e:
-    result = err(typeof(result), (BackendEncodingError, e.msg, -1))
+    result = err(typeof(result), (BackendEncodingError, e.msg, UNTAGGED))
     return
   except ErrorResponse as e:
-    result = err(typeof(result), (BackendFetchError, e.msg, -1))
+    result = err(typeof(result), (BackendFetchError, e.msg, UNTAGGED))
     return
   except JsonRpcError as e:
-    result = err(typeof(result), (BackendDecodingError, e.msg, -1))
+    result = err(typeof(result), (BackendDecodingError, e.msg, UNTAGGED))
     return
   except InvalidResponse as e:
-    result = err(typeof(result), (BackendDecodingError, e.msg, -1))
+    result = err(typeof(result), (BackendDecodingError, e.msg, UNTAGGED))
     return
   except CatchableError as e:
-    result = err(typeof(result), (BackendError, e.msg, -1))
+    result = err(typeof(result), (BackendError, e.msg, UNTAGGED))
     return
 
 proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
@@ -88,8 +88,9 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
         let res =
           await client.resolveClient().eth_getBlockByHash(blkHash, fullTransactions)
         if res.isNil():
-          return
-            err((BackendFetchError, "Obtained nil response for the RPC request", -1))
+          return err(
+            (BackendFetchError, "Obtained nil response for the RPC request", UNTAGGED)
+          )
         ok(res)
 
     getBlockByNumberProc = proc(
@@ -99,8 +100,9 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
         let res =
           await client.resolveClient().eth_getBlockByNumber(blkNum, fullTransactions)
         if res.isNil():
-          return
-            err((BackendFetchError, "Obtained nil response for the RPC request", -1))
+          return err(
+            (BackendFetchError, "Obtained nil response for the RPC request", UNTAGGED)
+          )
         ok(res)
 
     getProofProc = proc(
@@ -127,8 +129,9 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
       rpcCall:
         let res = await client.resolveClient().eth_getTransactionByHash(txHash)
         if res.isNil():
-          return
-            err((BackendFetchError, "Obtained nil response for the RPC request", -1))
+          return err(
+            (BackendFetchError, "Obtained nil response for the RPC request", UNTAGGED)
+          )
         ok(res)
 
     getTransactionReceiptProc = proc(
@@ -137,8 +140,9 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
       rpcCall:
         let res = await client.resolveClient().eth_getTransactionReceipt(txHash)
         if res.isNil():
-          return
-            err((BackendFetchError, "Obtained nil response for the RPC request", -1))
+          return err(
+            (BackendFetchError, "Obtained nil response for the RPC request", UNTAGGED)
+          )
         ok(res)
 
     getBlockReceiptsProc = proc(

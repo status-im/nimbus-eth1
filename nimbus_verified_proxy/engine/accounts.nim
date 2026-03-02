@@ -50,7 +50,7 @@ proc getAccountFromProof*(
   of InvalidProof:
     # we leave the error untagged so the backend responsible for
     # the error can be tagged. See tagBackend impl in types.nim
-    return err((VerificationError, proofResult.errorMsg, -1))
+    return err((VerificationError, proofResult.errorMsg, UNTAGGED))
 
 proc getStorageFromProof(
     account: Account, storageProof: StorageProof
@@ -70,7 +70,7 @@ proc getStorageFromProof(
   of InvalidProof:
     # we leave the error untagged so the backend responsible for
     # the error can be tagged. See tagBackend impl in types.nim
-    return err((VerificationError, proofResult.errorMsg, -1))
+    return err((VerificationError, proofResult.errorMsg, UNTAGGED))
 
 proc getStorageFromProof*(
     stateRoot: Hash32,
@@ -92,20 +92,24 @@ proc getStorageFromProof*(
   if proof.storageProof.len() <= storageProofIndex:
     # we leave the error untagged so the backend responsible for
     # the error can be tagged. See tagBackend impl in types.nim
-    return err((VerificationError, "no storage proof for requested slot", -1))
+    return err((VerificationError, "no storage proof for requested slot", UNTAGGED))
 
   let storageProof = proof.storageProof[storageProofIndex]
 
   if len(storageProof.proof) == 0:
     # we leave the error untagged so the backend responsible for
     # the error can be tagged. See tagBackend impl in types.nim
-    return
-      err((VerificationError, "empty mpt proof for account with not empty storage", -1))
+    return err(
+      (
+        VerificationError, "empty mpt proof for account with not empty storage",
+        UNTAGGED,
+      )
+    )
 
   if storageProof.key != requestedSlot:
     # we leave the error untagged so the backend responsible for
     # the error can be tagged. See tagBackend impl in types.nim
-    return err((VerificationError, "received proof for invalid slot", -1))
+    return err((VerificationError, "received proof for invalid slot", UNTAGGED))
 
   getStorageFromProof(account, storageProof)
 
