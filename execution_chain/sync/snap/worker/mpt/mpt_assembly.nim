@@ -116,6 +116,11 @@ type
     StoSlot                                         # ditto
     ByteCode                                        # ditto
 
+    RootList                                        # active `AccTrie` roots
+    AccTrie                                         # hash -> node mapping
+    StoTrie                                         # hash -> node mapping
+    CodeList                                        # hash -> code mapping
+
   DecodedBlockData* = tuple
     hash: BlockHash
     number: BlockNumber
@@ -412,6 +417,29 @@ iterator colWalk97(
       (addr (key2.distinctBase)[0]).copyMem(addr key[33], 32)
       (addr (key2.distinctBase)[0]).copyMem(addr key[65], 32)
       yield (key1, key2, key3, value)
+
+# --------------
+
+template keyAtMost33(col: MptAsmCol; key: seq[byte]): openArray[byte] =
+  doAssert key.len < 33
+  var keyData: array[33,byte]
+  keyData[0] = col.ord
+  (addr keyData[1]).copyMem(addr key[0], key.len)
+  keyData.toOpenArray(0,key.len)
+
+template getAtMost33(db: MptAsmRef; col: MptAsmCol; key: seq[byte]): untyped =
+  db.adb.rGet(col.keyAtMost33 key)
+
+template putAtMost33(
+    db: MptAsmRef;
+    col: MptAsmCol;
+    key: seq[byte];
+    data: openArray[byte];
+      ): untyped =
+  db.adb.rPut(col.keyAtMost33 key, data)
+
+template delAtMost33(db: MptAsmRef; col: MptAsmCol; key: seq[byte]): untyped =
+  db.adb.rDel(col.keyAtMost33 key)
 
 # --------------
 
@@ -857,6 +885,74 @@ iterator walkByteCode*(
         yield oops
         continue
     yield (root, start2, w.limit, w.codes, w.peerID, "")
+
+# -------------
+
+proc getAccRoot*(
+    db: MptAsmRef;
+    root: StateRoot;
+      ): Result[byte,string] =
+  let data = db.get33(RootList, root).valueOr:
+    return err(error)
+  if data.len != 1:
+    return err("value size mismatch")
+  ok data[0]
+
+proc putAccRoot*(db: MptAsmRef; root: StateRoot; flag: byte): PutResult =
+  db.put33(RootList, root, @[flag])
+
+proc delAccRoot*(db: MptAsmRef; root: StateRoot): DelResult =
+  db.del33(RootList, root)
+
+iterator walkAccRoot*(db: MptAsmRef): (StateRoot,byte) =
+  for (key,value) in db.adb.colWalk33 RootList.key33():
+    if value.len == 1:
+      yield (StateRoot(key),value[0])
+
+# -------------
+
+proc getAccTrie*(db: MptAsmRef; key: seq[byte]): seq[byte] =
+  db.getAtMost33(AccTrie, key).isErrOr:
+    return value
+  # @[]
+
+proc putAccTrie*(db: MptAsmRef; nodes: seq[(seq[byte],seq[byte])]): PutResult =
+  for w in nodes:
+    db.putAtMost33(AccTrie, w[0], w[1]).isOkOr:
+      return err(error)
+  ok()
+
+proc delAccTrie*(db: MptAsmRef, key: seq[byte]): DelResult =
+  db.delAtMost33(AccTrie, key)
+
+# -------------
+
+proc getStoTrie*(db: MptAsmRef; key: seq[byte]): seq[byte] =
+  db.getAtMost33(StoTrie, key).isErrOr:
+    return value
+  # @[]
+
+proc putStoTrie*(db: MptAsmRef; nodes: seq[(seq[byte],seq[byte])]): PutResult =
+  for w in nodes:
+    db.putAtMost33(StoTrie, w[0], w[1]).isOkOr:
+      return err(error)
+  ok()
+
+proc delStoTrie*(db: MptAsmRef, key: seq[byte]): DelResult =
+  db.delAtMost33(StoTrie, key)
+
+# -------------
+
+proc getCodeList*(db: MptAsmRef; hash: Hash32): seq[byte] =
+  db.get33(CodeList, hash).isErrOr:
+    return value
+  # @[]
+
+proc putCodeList*(db: MptAsmRef; cdHash: CodeHash; data: CodeItem): PutResult =
+  db.put33(CodeList, cdHash.to(Hash32), data.to(seq[byte]))
+
+proc delCodeList*(db: MptAsmRef, hash: Hash32): DelResult =
+  db.del33(CodeList, hash)
 
 # ------------------------------------------------------------------------------
 # End
