@@ -33,7 +33,8 @@ proc resolveBlockTag*(
         return err(
           (
             UnavailableDataError,
-            "Couldn't get the latest block number from header store", -1,
+            "Couldn't get the latest block number from header store",
+            UNTAGGED,
           )
         )
       ok(BlockTag(kind: bidNumber, number: Quantity(hLatest.number)))
@@ -43,7 +44,8 @@ proc resolveBlockTag*(
         return err(
           (
             UnavailableDataError,
-            "Couldn't get the finalized block number from header store", -1,
+            "Couldn't get the finalized block number from header store",
+            UNTAGGED,
           )
         )
       ok(BlockTag(kind: bidNumber, number: Quantity(hFinalized.number)))
@@ -53,13 +55,14 @@ proc resolveBlockTag*(
         return err(
           (
             UnavailableDataError,
-            "Couldn't get the earliest block number from header store", -1,
+            "Couldn't get the earliest block number from header store",
+            UNTAGGED,
           )
         )
       ok(BlockTag(kind: bidNumber, number: Quantity(hEarliest.number)))
     else:
       # untagged(-1) so the relevant backend can be tagged
-      err((InvalidDataError, "No support for block tag " & $blockTag, -1))
+      err((InvalidDataError, "No support for block tag " & $blockTag, UNTAGGED))
   else:
     ok(blockTag)
 
@@ -107,7 +110,7 @@ proc walkBlocks(
         FrontendError,
         "Cannot query more than " & $engine.maxBlockWalk &
           " to verify the chain for the requested block",
-        -1,
+        UNTAGGED,
       )
     )
 
@@ -172,7 +175,12 @@ proc walkBlocks(
 
   # untagged(-1) so the relevant backend can be tagged. Since this is not the fault of the
   # backends that were responsible for the block walk
-  err((VerificationError, "the requested block is not part of the canonical chain", -1))
+  err(
+    (
+      VerificationError, "the requested block is not part of the canonical chain",
+      UNTAGGED,
+    )
+  )
 
 proc verifyHeader(
     engine: RpcVerificationEngine, header: Header, hash: Hash32
@@ -183,7 +191,8 @@ proc verifyHeader(
     return err(
       (
         VerificationError,
-        "hashed block header doesn't match with blk.hash(downloaded)", -1,
+        "hashed block header doesn't match with blk.hash(downloaded)",
+        UNTAGGED,
       )
     )
 
@@ -198,7 +207,7 @@ proc verifyHeader(
         return err(
           (
             UnavailableDataError, "earliest block is not available yet. Still syncing?",
-            -1,
+            UNTAGGED,
           )
         )
       finalized = engine.headerStore.finalized.valueOr:
@@ -206,7 +215,7 @@ proc verifyHeader(
         return err(
           (
             UnavailableDataError,
-            "finalized block is not available yet. Still syncing?", -1,
+            "finalized block is not available yet. Still syncing?", UNTAGGED,
           )
         )
       latest = engine.headerStore.latest.valueOr:
@@ -214,7 +223,7 @@ proc verifyHeader(
         return err(
           (
             UnavailableDataError, "latest block is not available yet. Still syncing?",
-            -1,
+            UNTAGGED,
           )
         )
 
@@ -260,14 +269,18 @@ proc verifyBlock(
       return err(
         (
           VerificationError,
-          "Withdrawals within the block do not yield the same withdrawals root", -1,
+          "Withdrawals within the block do not yield the same withdrawals root", 
+          UNTAGGED,
         )
       )
   else:
     if blk.withdrawals.isSome():
       # untagged(-1) so the relevant backend can be tagged
       return err(
-        (VerificationError, "Block contains withdrawals but no withdrawalsRoot", -1)
+        (
+          VerificationError, "Block contains withdrawals but no withdrawalsRoot",
+          UNTAGGED,
+        )
       )
 
   ok()
@@ -290,7 +303,8 @@ proc getBlock*(
     return err(
       (
         VerificationError,
-        "the downloaded block hash doesn't match with the requested hash", backendIdx,
+        "the downloaded block hash doesn't match with the requested hash",
+        backendIdx,
       )
     )
 

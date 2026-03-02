@@ -282,6 +282,8 @@ func defaultAvailabilityScoreFunc*(prevScore: int, direction: ScoreDirection): i
 func defaultQualityScoreFunc*(prevScore: int, direction: ScoreDirection): int =
   prevScore + ord(direction)
 
+const UNTAGGED* = -1
+  # backendIdx sentinel when error is not attributed to a specific backen
 const fullCapabilities* = BackendCapabilities(
   {
     ChainId, GetBlockByHash, GetBlockByNumber, GetProof, CreateAccessList, GetCode,
@@ -317,7 +319,7 @@ proc backendFor*(
     if engine.scores[b].eligible():
       eligibleIdxs.add(b)
   if eligibleIdxs.len == 0:
-    return err((BackendError, "No eligible backend for capability: " & $cap, -1))
+    return err((BackendError, "No eligible backend for capability: " & $cap, UNTAGGED))
   let chosen = eligibleIdxs[rand(eligibleIdxs.len - 1)]
   engine.scores[chosen].availability =
     engine.availabilityScoreFunc(engine.scores[chosen].availability, DefaultReward)
