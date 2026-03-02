@@ -59,6 +59,8 @@ template to*[T: StoreRoot](w: SnapRootHash, _: type T): T = T(w.Hash32)
 
 template to*[T: CodeHash](w: SnapCodeHash, _: type T): T = T(w.Hash32)
 
+template to*[T: seq[byte]](w: SnapDistinctBlobs, _: type T): T = T(w)
+
 # ------------------------------------------------------------------------------
 # Public print function()s
 # ------------------------------------------------------------------------------
