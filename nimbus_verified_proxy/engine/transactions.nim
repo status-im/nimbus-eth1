@@ -70,7 +70,6 @@ proc verifyTransactions*(
   err(
     (
       VerificationError,
-      "calculated tx trie root doesn't match the provided tx trie root",
-      UNTAGGED,
+      "calculated tx trie root doesn't match the provided tx trie root", UNTAGGED,
     )
   )

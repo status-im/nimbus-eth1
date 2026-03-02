@@ -325,8 +325,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
         return err(
           (
             UnavailableDataError,
-            "Couldn't generate a random identifier for the filter",
-            UNTAGGED,
+            "Couldn't generate a random identifier for the filter", UNTAGGED,
           )
         )
 
