@@ -63,7 +63,7 @@ template accountDownload*(
       nProof {.inject,used.} = data.proof.len       # logging only
 
     # Stash accounts data packet to be processed later
-    adb.putRawAccounts(
+    adb.putAccounts(
       state.stateRoot, ivReq.minPt, limit, data.accounts, data.proof,
       buddy.peerID).isOkOr:
         sdb.rollbackAccountRange(state, ivReq)      # registry roll back
