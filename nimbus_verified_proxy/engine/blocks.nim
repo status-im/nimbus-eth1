@@ -33,8 +33,7 @@ proc resolveBlockTag*(
         return err(
           (
             UnavailableDataError,
-            "Couldn't get the latest block number from header store",
-            UNTAGGED,
+            "Couldn't get the latest block number from header store", UNTAGGED,
           )
         )
       ok(BlockTag(kind: bidNumber, number: Quantity(hLatest.number)))
@@ -44,8 +43,7 @@ proc resolveBlockTag*(
         return err(
           (
             UnavailableDataError,
-            "Couldn't get the finalized block number from header store",
-            UNTAGGED,
+            "Couldn't get the finalized block number from header store", UNTAGGED,
           )
         )
       ok(BlockTag(kind: bidNumber, number: Quantity(hFinalized.number)))
@@ -55,8 +53,7 @@ proc resolveBlockTag*(
         return err(
           (
             UnavailableDataError,
-            "Couldn't get the earliest block number from header store",
-            UNTAGGED,
+            "Couldn't get the earliest block number from header store", UNTAGGED,
           )
         )
       ok(BlockTag(kind: bidNumber, number: Quantity(hEarliest.number)))
@@ -191,8 +188,7 @@ proc verifyHeader(
     return err(
       (
         VerificationError,
-        "hashed block header doesn't match with blk.hash(downloaded)",
-        UNTAGGED,
+        "hashed block header doesn't match with blk.hash(downloaded)", UNTAGGED,
       )
     )
 
@@ -269,7 +265,7 @@ proc verifyBlock(
       return err(
         (
           VerificationError,
-          "Withdrawals within the block do not yield the same withdrawals root", 
+          "Withdrawals within the block do not yield the same withdrawals root",
           UNTAGGED,
         )
       )
@@ -303,8 +299,7 @@ proc getBlock*(
     return err(
       (
         VerificationError,
-        "the downloaded block hash doesn't match with the requested hash",
-        backendIdx,
+        "the downloaded block hash doesn't match with the requested hash", backendIdx,
       )
     )
 
