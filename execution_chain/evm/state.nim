@@ -252,7 +252,7 @@ method getAncestorHash*(
 proc readOnlyLedger*(vmState: BaseVMState): ReadOnlyLedger {.inline.} =
   ReadOnlyLedger(vmState.ledger)
 
-template mutateLedger*(vmState: BaseVMState, body: untyped) =
+template mutateLedger*(vmState: BaseVMState, body: untyped): untyped =
   block:
     let ledger {.inject.} = vmState.ledger
     body
