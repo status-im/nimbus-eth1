@@ -33,17 +33,17 @@ proc toGenesisHeader*(
   ##
   ## The function returns the `Genesis` block header.
   ##
-  let ac = LedgerRef.init(db)
+  let ledger = LedgerRef.init(db)
 
   for address, account in g.alloc:
-    ac.setNonce(address, account.nonce)
-    ac.setBalance(address, account.balance)
-    ac.setCode(address, account.code)
+    ledger.setNonce(address, account.nonce)
+    ledger.setBalance(address, account.balance)
+    ledger.setCode(address, account.code)
 
     for k, v in account.storage:
-      ac.setStorage(address, k, v)
+      ledger.setStorage(address, k, v)
 
-  ac.persist()
+  ledger.persist()
 
   result = Header(
     nonce: g.nonce,
@@ -53,7 +53,7 @@ proc toGenesisHeader*(
     difficulty: g.difficulty,
     mixHash: g.mixHash,
     coinbase: g.coinbase,
-    stateRoot: ac.getStateRoot(),
+    stateRoot: ledger.getStateRoot(),
     parentHash: GENESIS_PARENT_HASH,
     transactionsRoot: EMPTY_ROOT_HASH,
     receiptsRoot: EMPTY_ROOT_HASH,

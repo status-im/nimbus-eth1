@@ -430,6 +430,32 @@ proc getBlockAccessList*(
 
   ok(Opt.some(bal))
 
+proc getBlockAccessLists*(
+    db: CoreDbTxRef,
+    blockHashes: openArray[Hash32],
+    bals: var openArray[Opt[BlockAccessListRef]]
+      ): Result[void, string] =
+  var
+    balKeys = newSeq[seq[byte]](blockHashes.len())
+    balValues = newSeq[Opt[seq[byte]]](blockHashes.len())
+
+  for i, blockHash in blockHashes:
+    balKeys[i] = @(blockHashToBlockAccessListKey(blockHash).toOpenArray())
+
+  db.multiGet(balKeys, balValues).isOkOr:
+    return err("getBlockAccessLists: " & $error)
+
+  for i, balBytes in balValues:
+    if balBytes.isSome():
+      let bal = new BlockAccessList
+      bal[] = BlockAccessList.decode(balBytes.get()).valueOr:
+        return err("getBlockAccessList: " & $error)
+      bals[i] = Opt.some(bal)
+    else:
+      bals[i] = Opt.none(BlockAccessListRef)
+
+  ok()
+
 proc deleteBlockAccessList*(db: CoreDbTxRef, blockHash: Hash32) =
   db.del(blockHashToBlockAccessListKey(blockHash).toOpenArray)
     .expect("deleteBlockAccessList should succeed")

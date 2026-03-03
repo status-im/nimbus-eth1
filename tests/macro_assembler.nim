@@ -418,8 +418,8 @@ proc runVM*(vmState: BaseVMState, boa: Assembler): bool =
   let
     com  = vmState.com
   vmState.mutateLedger:
-    db.setCode(codeAddress, boa.code)
-    db.setBalance(codeAddress, 1_000_000.u256)
+    ledger.setCode(codeAddress, boa.code)
+    ledger.setBalance(codeAddress, 1_000_000.u256)
   let tx = createSignedTx(boa.data, com.chainId)
   let asmResult = testCallEvm(tx, tx.recoverSender().expect("valid signature"), vmState)
   verifyAsmResult(vmState, boa, asmResult)

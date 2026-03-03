@@ -13,8 +13,6 @@ on:
     tags:
     - 'v*' # "v1.2.3"
 
-  workflow_dispatch:
-
 name: Upload Release Asset
 
 jobs:
@@ -139,9 +137,37 @@ jobs:
           docker push statusim/nimbus-eth1:${{ matrix.os }}-${{ matrix.cpu }}-${TAG}
           docker push statusim/nimbus-eth1:${{ matrix.os }}-${{ matrix.cpu }}-latest
 
+  docker-multiarch:
+    name: Create multi-arch Docker manifest
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract tag name
+        id: extract_tag
+        run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Create and push multi-arch manifest (versioned)
+        run: |
+          TAG="${{ steps.extract_tag.outputs.tag }}"
+          docker buildx imagetools create -t statusim/nimbus-eth1:${TAG} \
+            statusim/nimbus-eth1:linux-amd64-${TAG} \
+            statusim/nimbus-eth1:linux-arm64-${TAG}
+
+      - name: Create and push multi-arch manifest (latest)
+        run: |
+          docker buildx imagetools create -t statusim/nimbus-eth1:latest \
+            statusim/nimbus-eth1:linux-amd64-latest \
+            statusim/nimbus-eth1:linux-arm64-latest
+
   prepare-release:
     name: Prepare release draft
-    needs: build
+    needs: [build, docker-multiarch]
     runs-on: ubuntu-latest
     steps:
       - name: Download artefacts
@@ -218,24 +244,3 @@ jobs:
             windows-amd64-proxy
             macos-arm64-execution
             macos-arm64-proxy
-
-      #- name: Login to Docker Hub
-      #  uses: docker/login-action@v3
-      #  with:
-      #    username: ${{ secrets.DOCKERHUB_USERNAME }}
-      #    password: ${{ secrets.DOCKERHUB_TOKEN }}
-      #
-      #- name: Build multi-arch Docker image
-      #  run: |
-      #    REFNAME="${{ github.ref }}"
-      #    TAG="${REFNAME#refs/tags/}"
-      #    docker manifest create \
-      #      statusim/nimbus-eth1:multiarch-${TAG} \
-      #      --amend statusim/nimbus-eth1:amd64-${TAG} \
-      #      --amend statusim/nimbus-eth1:arm64-${TAG}
-      #    docker manifest push statusim/nimbus-eth1:multiarch-${TAG}
-      #    docker manifest create \
-      #      statusim/nimbus-eth1:multiarch-latest \
-      #      --amend statusim/nimbus-eth1:amd64-latest \
-      #      --amend statusim/nimbus-eth1:arm64-latest
-      #    docker manifest push statusim/nimbus-eth1:multiarch-latest

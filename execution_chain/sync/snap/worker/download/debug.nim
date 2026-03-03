@@ -12,7 +12,7 @@
 
 # Debugging
 import
-  ./mpt/mpt_debug
+  ../mpt/mpt_debug
 
 export
   mpt_debug

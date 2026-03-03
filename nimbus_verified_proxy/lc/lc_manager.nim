@@ -1,5 +1,5 @@
 # nimbus_verified_proxy
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -7,8 +7,10 @@
 
 {.push raises: [].}
 
-import chronos, chronicles
 import
+  std/sequtils,
+  chronos,
+  chronicles,
   beacon_chain/beacon_clock,
   beacon_chain/networking/peer_scores,
   beacon_chain/sync/[light_client_sync_helpers, sync_manager]
@@ -82,7 +84,6 @@ type
     getFinalizedSlot: GetSlotCallback
     getOptimisticSlot: GetSlotCallback
     getBeaconTime: GetBeaconTimeFn
-    loopFuture: Future[void].Raising([CancelledError])
 
 func init*(
     T: type LightClientManager,
@@ -252,50 +253,27 @@ proc query[E](
     self: LightClientManager, e: typedesc[E], key: E.K
 ): Future[bool] {.async: (raises: [CancelledError]).} =
   const NUM_WORKERS = 2
-  var workers: array[NUM_WORKERS, Future[bool]]
-
-  let progressFut = Future[void].Raising([CancelledError]).init("lcmanProgress")
-  var
-    numCompleted = 0
-    success = false
-    maxCompleted = workers.len
-
-  proc handleFinishedWorker(future: pointer) =
-    try:
-      let didProgress = cast[Future[bool]](future).read()
-      if didProgress and not progressFut.finished:
-        progressFut.complete()
-        success = true
-    except CatchableError:
-      discard
-    finally:
-      inc numCompleted
-      if numCompleted == maxCompleted:
-        progressFut.cancelSoon()
-
-  # Start concurrent workers
-  for i in 0 ..< workers.len:
-    try:
-      workers[i] = self.workerTask(e, key)
-      workers[i].addCallback(handleFinishedWorker)
-    except CancelledError as exc:
-      raise exc
-    except CatchableError:
-      workers[i] = newFuture[bool]()
-      workers[i].complete(false)
-
-  # Wait for any worker to report progress, or for all workers to finish
-  try:
-    waitFor progressFut
-  except CancelledError as e:
-    discard # cancellation only occurs when all workers have failed
-
-  # cancel all workers
+  var workers: seq[Future[bool]]
   for i in 0 ..< NUM_WORKERS:
-    assert workers[i] != nil
-    workers[i].cancelSoon()
+    workers.add(self.workerTask(e, key))
 
-  return success
+  defer:
+    for w in workers:
+      w.cancelSoon()
+
+  while workers.len > 0:
+    let winner =
+      try:
+        await one(workers)
+      except ValueError:
+        # ValueError arises only when `workers` is empty
+        raiseAssert "should not reach here"
+
+    workers.keepItIf(not it.finished())
+    if winner.completed() and winner.value():
+      return true
+
+  return false
 
 template query[E](
     self: LightClientManager, e: typedesc[E]

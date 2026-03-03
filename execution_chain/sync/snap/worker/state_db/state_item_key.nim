@@ -55,7 +55,7 @@ template to*[T: ItemKey](w: Hash32; _: type T): T = w.to(UInt256).T
 template to*[T: ItemKey](w: SomeUnsignedInt; _: type T): T = w.to(UInt256).T
 
 template to*[T: ItemKey](w: array[32,byte]; _: type T): T =
-  ## Handy for converting the result of `desc_nibbles.getBytes()`
+  ## Handy for converting the result of `nibbles.getBytes()`
   w.Bytes32.to(UInt256).T
 
 template to*[T: Hash32](w: seq[ItemKey], _: type seq[T]): seq[T] =

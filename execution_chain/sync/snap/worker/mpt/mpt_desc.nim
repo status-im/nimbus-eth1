@@ -11,8 +11,7 @@
 
 import
   std/[tables, typetraits],
-  pkg/eth/common/[base, hashes],
-  ../../../../db/aristo/aristo_desc/desc_nibbles,
+  pkg/eth/[common/base, common/hashes, trie/nibbles],
   ../../../wire_protocol/snap/snap_types,
   ../state_db
 
@@ -96,7 +95,7 @@ func to*(blob: openArray[byte]; T: type NodeKey): T =
   result.len = min(blob.len.int8,32)
   (addr result.data[0]).copyMem(addr blob[0], result.len)
 
-func to*(h: Hash32|StateRoot|BlockHash; T: type NodeKey): T =
+func to*(h: Hash32|StateRoot|StoreRoot|BlockHash; T: type NodeKey): T =
   ## Vaiiant of the former `to()`
   h.distinctBase.to(T)
 

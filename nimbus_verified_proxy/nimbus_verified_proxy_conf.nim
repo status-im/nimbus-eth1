@@ -114,25 +114,25 @@ type VerifiedProxyConf* = object
 
   # (Untrusted) web3 provider
   # No default - Needs to be provided by the user
-  backendUrls* {.
-    desc: "URL of the web3 data provider",
-    name: "backend-url"
+  executionApiUrls* {.
+    desc: "URL of the web3 data provider, Multiple URLs can be specified by defining the option again on the command line.",
+    name: "execution-api-url"
   .}: seq[Web3Url]
 
   # Listening endpoint of the proxy
   # (verified) web3 end
-  frontendUrl* {.
-    desc: "URL for the listening end of the proxy - [http/ws]://[address]:[port]",
-    defaultValue: Web3Url(kind: HttpUrl, web3Url: "http://127.0.0.1:8545"),
+  frontendUrls* {.
+    desc: "URL for the listening end of the proxy - [http/ws]://[address]:[port]. Multiple URLs can be specified by defining the option again on the command line",
+    defaultValue: @[Web3Url(kind: HttpUrl, web3Url: "http://127.0.0.1:8545")],
     defaultValueDesc: "http://127.0.0.1:8545",
-    name: "frontend-url"
-  .}: Web3Url
+    name: "listen-url"
+  .}: seq[Web3Url]
 
   # (Untrusted) web3 provider
   # No default - Needs to be provided by the user
   beaconApiUrls* {.
     desc: "URL of the light client data provider. Multiple URLs can be specified by defining the option again on the command line",
-    name: "external-beacon-api-url"
+    name: "beacon-api-url"
   .}: UrlList
 
 #!fmt: on

@@ -30,6 +30,7 @@ proc addEthHandlerCapability*(
   ## (trivially) the same message ID for all (i.e. the only one) base protocols.
   ##
   let wire = EthWireRef.new(txPool, node)
+  node.addCapability(eth70, wire)
   node.addCapability(eth69, wire)
   node.addCapability(eth68, wire)
   wire

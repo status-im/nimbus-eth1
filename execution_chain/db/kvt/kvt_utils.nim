@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -41,6 +41,28 @@ proc getBeLen*(
   ##
   db.lenKvpFn key
 
+proc multiGetBe*(
+    db: KvtDbRef,
+    keys: openArray[seq[byte]],
+    values: var openArray[Opt[seq[byte]]],
+    sortedInput = false,
+      ): Result[void, KvtError] =
+  db.multiGetKvpFn(keys, values, sortedInput)
+
+# ------------
+
+proc delBe*(
+    db: KvtDbRef,
+    key: openArray[byte]
+      ): Result[void, KvtError] =
+  db.delKvpFn(key)
+
+proc delRangeBe*(
+    db: KvtDbRef,
+    startKey, endKey: openArray[byte],
+    compactRange = false
+      ): Result[void, KvtError] =
+  db.delRangeKvpFn(startKey, endKey, compactRange)
 
 # ------------
 
@@ -102,6 +124,37 @@ proc len*(
   let len = db.layersLen(key).valueOr:
     return db.db.getBeLen key
   ok(len)
+
+proc multiGet*(
+    db: KvtTxRef,
+    keys: openArray[seq[byte]],
+    values: var openArray[Opt[seq[byte]]],
+    sortedInput = false,
+      ): Result[void, KvtError] =
+
+  var
+    remainingKeys: seq[seq[byte]] # keys to fetch from the db backend
+    keyIndexes: seq[int] # record the indexes from the original keys list
+
+  # First fetch each key from the in memory layers
+  for i, k in keys:
+    let value = db.layersGet(k)
+    if value.isSome():
+      values[i] = value
+    else:
+      remainingKeys.add(k)
+      keyIndexes.add(i)
+
+  # Fetch the remaining keys from the db backend
+  if remainingKeys.len() > 0:
+    var remainingValues = newSeq[Opt[seq[byte]]](remainingKeys.len())
+    ?db.db.multiGetBe(remainingKeys, remainingValues)
+
+    for i, v in remainingValues:
+      let index = keyIndexes[i]
+      values[index] = v
+
+  ok()
 
 proc hasKeyRc*(
     db: KvtTxRef;                     # Database

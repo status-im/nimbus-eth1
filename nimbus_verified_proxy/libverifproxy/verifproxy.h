@@ -1,6 +1,6 @@
 /**
  * nimbus_verified_proxy
- * Copyright (c) 2024-2025 Status Research & Development GmbH
+ * Copyright (c) 2024-2026 Status Research & Development GmbH
  * Licensed and distributed under either of
  *   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
  *   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -43,12 +43,31 @@ typedef struct Context Context;
 /**
  * Callback used for all asynchronous ETH API calls.
  *
- * @param ctx    Execution context passed to the original request.
- * @param status return codes as defined above
- * @param result pointer of the JSON encoded result string (allocated by Nim - 
- *               must be freed using freeResponse)
+ * @param ctx       Execution context passed to the original request.
+ * @param status    return codes as defined above
+ * @param result    pointer of the JSON encoded result string (allocated by Nim - 
+ *                  must be freed using freeNimAllocatedString)
+ * @param userData  pointer to user data
  */
-typedef void (*CallBackProc)(Context *ctx, int status, char *result);
+typedef void (*CallBackProc)(Context *ctx, int status, char *result, void *userData);
+
+/**
+ * Transport functions used to dispatch JSON RPC requests. (Must be implemented in the
+ * application using the verified proxy library)
+ *
+ * @param ctx       Execution context passed to the original request.
+ * @param url       URL of the endpoint to forward this request to
+ * @param name      name of the RPC method
+ * @param params    JSON serialized params required for the RPC method.(allocated by Nim - 
+ *                  must be freed using freeNimAllocatedString)
+ *                  heap by nim and must be freed by C using freeNimString
+ * @param cb        Callback to be called with userData passed (see below)
+ * @param userData  pointer to user data. Used to link multiple response callbacks
+ *                  back to their queries. Implementation of transport functions
+ *                  must appropriately relay back the userData via the transport
+ *                  callback function (see above)
+ */
+typedef void (*TransportProc)(Context *ctx, char *url, char *name, char *params, CallBackProc cb, void *userData);
 
 /**
  * Start the verification proxy with a given configuration.
@@ -56,17 +75,20 @@ typedef void (*CallBackProc)(Context *ctx, int status, char *result);
  * @param configJson JSON string describing the configuration for the verification proxy.
  * @param onStart    Callback invoked once the proxy has started. NOTE: The callback is invoked
  *                   only on error otherwise the proxy runs indefinitely
+ * @param userData   pointer to user data
  * @return           Pointer to a new Context object representing the running proxy.
  *                   Must be freed using freeContext() when no longer needed.
  */
-ETH_RESULT_USE_CHECK Context *startVerifProxy(char* configJson, CallBackProc onStart);
+ETH_RESULT_USE_CHECK Context *startVerifProxy(char* configJson, TransportProc transport, CallBackProc onStart, void *userData);
 
 /**
- * Free the JSON encoded result returned via the callback.
+ * Free strings allocated by Nim. This currently include the JSON encoded result 
+ * returned via the callback for eth_* methods and the params string passed via
+ * the transport proc
  *
  * @param res   pointer to the JSON encoded result string
  */
-void freeResponse(char *res);
+void freeNimAllocatedString(char *res);
 
 /**
  * Free a Context object returned by startVerifProxy().
@@ -89,9 +111,22 @@ void stopVerifProxy(Context *ctx);
  * This function should be called periodically to allow the proxy to handle
  * queued tasks, callbacks, and events. It is non-blocking.
  *
- * @param ctx Context pointer representing the running proxy.
+ * @param   ctx     Context pointer representing the running proxy.
+ * @return  status  if the proxy was stopped this would return an error code RET_ERROR
+ *                  else it would return RET_SUCCESS
  */
-void processVerifProxyTasks(Context *ctx);
+ETH_RESULT_USE_CHECK int processVerifProxyTasks(Context *ctx);
+
+/**
+ * call any RPC method
+ *
+ * @param ctx       Context pointer.
+ * @param name      Name of the RPC method
+ * @param params    parameters required for the RPC method
+ * @param cb        Callback invoked with a hex block number.
+ * @param userData  pointer to user data
+ */
+void nvp_call(Context *ctx, char* name, char* params, CallBackProc cb, void *userData);
 
 /* ========================================================================== */
 /*                               BASIC CHAIN DATA                              */
@@ -100,34 +135,38 @@ void processVerifProxyTasks(Context *ctx);
 /**
  * Retrieve the current blockchain head block number.
  *
- * @param ctx Context pointer.
- * @param cb  Callback invoked with a hex block number.
+ * @param ctx       Context pointer.
+ * @param cb        Callback invoked with a hex block number.
+ * @param userData  pointer to user data
  */
-void eth_blockNumber(Context *ctx, CallBackProc cb);
+void eth_blockNumber(Context *ctx, CallBackProc cb, void *userData);
 
 /**
  * Retrieve the EIP-4844 blob base fee.
  *
- * @param ctx Context pointer.
- * @param cb  Callback invoked with a hex blob base fee.
+ * @param ctx       Context pointer.
+ * @param cb        Callback invoked with a hex blob base fee.
+ * @param userData  pointer to user data
  */
-void eth_blobBaseFee(Context *ctx, CallBackProc cb);
+void eth_blobBaseFee(Context *ctx, CallBackProc cb, void *userData);
 
 /**
  * Retrieve the current gas price.
  *
- * @param ctx Context pointer.
- * @param cb  Callback invoked with a hex gas price.
+ * @param ctx       Context pointer.
+ * @param cb        Callback invoked with a hex gas price.
+ * @param userData  pointer to user data
  */
-void eth_gasPrice(Context *ctx, CallBackProc cb);
+void eth_gasPrice(Context *ctx, CallBackProc cb, void *userData);
 
 /**
  * Retrieve the suggested priority fee per gas.
  *
- * @param ctx Context pointer.
- * @param cb  Callback invoked with a hex gas tip.
+ * @param ctx       Context pointer.
+ * @param cb        Callback invoked with a hex gas tip.
+ * @param userData  pointer to user data
  */
-void eth_maxPriorityFeePerGas(Context *ctx, CallBackProc cb);
+void eth_maxPriorityFeePerGas(Context *ctx, CallBackProc cb, void *userData);
 
 
 /* ========================================================================== */
@@ -142,8 +181,9 @@ void eth_maxPriorityFeePerGas(Context *ctx, CallBackProc cb);
  * @param blockTag  A block identifier: "latest", "pending", "earliest", or a hex
  *                  block number such as "0x10d4f".
  * @param cb        Callback with the hex balance.
+ * @param userData  pointer to user data
  */
-void eth_getBalance(Context *ctx, char *address, char *blockTag, CallBackProc cb);
+void eth_getBalance(Context *ctx, char *address, char *blockTag, CallBackProc cb, void *userData);
 
 /**
  * Retrieve storage from a contract.
@@ -154,8 +194,9 @@ void eth_getBalance(Context *ctx, char *address, char *blockTag, CallBackProc cb
  * @param blockTag  A block identifier: "latest", "pending", "earliest", or a hex
  *                  block number such as "0x10d4f".
  * @param cb        Callback with the 32-byte hex slot value.
+ * @param userData  pointer to user data
  */
-void eth_getStorageAt(Context *ctx, char *address, char *slot, char *blockTag, CallBackProc cb);
+void eth_getStorageAt(Context *ctx, char *address, char *slot, char *blockTag, CallBackProc cb, void *userData);
 
 /**
  * Retrieve an address's transaction count (nonce).
@@ -165,8 +206,9 @@ void eth_getStorageAt(Context *ctx, char *address, char *slot, char *blockTag, C
  * @param blockTag  A block identifier: "latest", "pending", "earliest", or a hex
  *                  block number such as "0x10d4f".
  * @param cb        Callback with the hex nonce.
+ * @param userData  pointer to user data
  */
-void eth_getTransactionCount(Context *ctx, char *address, char *blockTag, CallBackProc cb);
+void eth_getTransactionCount(Context *ctx, char *address, char *blockTag, CallBackProc cb, void *userData);
 
 /**
  * Retrieve bytecode stored at an address.
@@ -176,8 +218,9 @@ void eth_getTransactionCount(Context *ctx, char *address, char *blockTag, CallBa
  * @param blockTag  A block identifier: "latest", "pending", "earliest", or a hex
  *                  block number such as "0x10d4f".
  * @param cb        Callback with hex bytecode.
+ * @param userData  pointer to user data
  */
-void eth_getCode(Context *ctx, char *address, char *blockTag, CallBackProc cb);
+void eth_getCode(Context *ctx, char *address, char *blockTag, CallBackProc cb, void *userData);
 
 
 /* ========================================================================== */
@@ -191,8 +234,9 @@ void eth_getCode(Context *ctx, char *address, char *blockTag, CallBackProc cb);
  * @param blockHash        32-byte hex encode block hash.
  * @param fullTransactions Whether full tx objects should be included.
  * @param cb               Callback with block data.
+ * @param userData         pointer to user data
  */
-void eth_getBlockByHash(Context *ctx, char *blockHash, bool fullTransactions, CallBackProc cb);
+void eth_getBlockByHash(Context *ctx, char *blockHash, bool fullTransactions, CallBackProc cb, void *userData);
 
 /**
  * Retrieve a block by number or tag.
@@ -202,8 +246,9 @@ void eth_getBlockByHash(Context *ctx, char *blockHash, bool fullTransactions, Ca
  *                         block number such as "0x10d4f".
  * @param fullTransactions Whether full tx objects should be included.
  * @param cb               Callback with block data.
+ * @param userData         pointer to user data
  */
-void eth_getBlockByNumber(Context *ctx, char *blockTag, bool fullTransactions, CallBackProc cb);
+void eth_getBlockByNumber(Context *ctx, char *blockTag, bool fullTransactions, CallBackProc cb, void *userData);
 
 /**
  * Get the number of uncles in a block.
@@ -212,8 +257,9 @@ void eth_getBlockByNumber(Context *ctx, char *blockTag, bool fullTransactions, C
  * @param blockTag  A block identifier: "latest", "pending", "earliest", or a hex
  *                  block number such as "0x10d4f".
  * @param cb        Callback with hex uncle count.
+ * @param userData  pointer to user data
  */
-void eth_getUncleCountByBlockNumber(Context *ctx, char *blockTag, CallBackProc cb);
+void eth_getUncleCountByBlockNumber(Context *ctx, char *blockTag, CallBackProc cb, void *userData);
 
 /**
  * Get the number of uncles in a block.
@@ -221,8 +267,9 @@ void eth_getUncleCountByBlockNumber(Context *ctx, char *blockTag, CallBackProc c
  * @param ctx       Context pointer.
  * @param blockHash 32-byte hex encode block hash.
  * @param cb        Callback with hex uncle count.
+ * @param userData  pointer to user data
  */
-void eth_getUncleCountByBlockHash(Context *ctx, char *blockHash, CallBackProc cb);
+void eth_getUncleCountByBlockHash(Context *ctx, char *blockHash, CallBackProc cb, void *userData);
 
 /**
  * Get the number of transactions in a block.
@@ -231,8 +278,9 @@ void eth_getUncleCountByBlockHash(Context *ctx, char *blockHash, CallBackProc cb
  * @param blockTag  A block identifier: "latest", "pending", "earliest", or a hex
  *                  block number such as "0x10d4f".
  * @param cb        Callback with hex transaction count.
+ * @param userData  pointer to user data
  */
-void eth_getBlockTransactionCountByNumber(Context *ctx, char *blockTag, CallBackProc cb);
+void eth_getBlockTransactionCountByNumber(Context *ctx, char *blockTag, CallBackProc cb, void *userData);
 
 /**
  * Get the number of transactions in a block identified by hash.
@@ -240,8 +288,9 @@ void eth_getBlockTransactionCountByNumber(Context *ctx, char *blockTag, CallBack
  * @param ctx       Context pointer.
  * @param blockHash 32-byte hex encode block hash.
  * @param cb        Callback with hex transaction count.
+ * @param userData  pointer to user data
  */
-void eth_getBlockTransactionCountByHash(Context *ctx, char *blockHash, CallBackProc cb);
+void eth_getBlockTransactionCountByHash(Context *ctx, char *blockHash, CallBackProc cb, void *userData);
 
 
 /* ========================================================================== */
@@ -256,12 +305,14 @@ void eth_getBlockTransactionCountByHash(Context *ctx, char *blockHash, CallBackP
  *                  block number such as "0x10d4f".
  * @param index     Zero-based transaction index
  * @param cb        Callback with transaction object.
+ * @param userData  pointer to user data
  */
 void eth_getTransactionByBlockNumberAndIndex(
     Context *ctx,
     char *blockTag,
     unsigned long long index,
-    CallBackProc cb
+    CallBackProc cb,
+    void *userData
 );
 
 /**
@@ -271,31 +322,35 @@ void eth_getTransactionByBlockNumberAndIndex(
  * @param blockHash 32-byte hex encode block hash.
  * @param index     Zero-based transaction index.
  * @param cb        Callback with transaction data.
+ * @param userData  pointer to user data
  */
 void eth_getTransactionByBlockHashAndIndex(
     Context *ctx,
     char *blockHash,
     unsigned long long index,
-    CallBackProc cb
+    CallBackProc cb,
+    void *userData
 );
 
 /**
  * Retrieve a transaction by hash.
  *
- * @param ctx     Context pointer.
- * @param txHash  32-byte hex encoded transaction hash.
- * @param cb      Callback with transaction object.
+ * @param ctx       Context pointer.
+ * @param txHash    32-byte hex encoded transaction hash.
+ * @param cb        Callback with transaction object.
+ * @param userData  pointer to user data
  */
-void eth_getTransactionByHash(Context *ctx, char *txHash, CallBackProc cb);
+void eth_getTransactionByHash(Context *ctx, char *txHash, CallBackProc cb, void *userData);
 
 /**
  * Retrieve a transaction receipt by hash.
  *
- * @param ctx     Context pointer.
- * @param txHash  32-byte hex encoded transaction hash.
- * @param cb      Callback with receipt data.
+ * @param ctx       Context pointer.
+ * @param txHash    32-byte hex encoded transaction hash.
+ * @param cb        Callback with receipt data.
+ * @param userData  pointer to user data
  */
-void eth_getTransactionReceipt(Context *ctx, char *txHash, CallBackProc cb);
+void eth_getTransactionReceipt(Context *ctx, char *txHash, CallBackProc cb, void *userData);
 
 
 /* ========================================================================== */
@@ -311,13 +366,15 @@ void eth_getTransactionReceipt(Context *ctx, char *txHash, CallBackProc cb);
  *                              block number such as "0x10d4f".
  * @param optimisticStateFetch  Whether optimistic state fetching is allowed.
  * @param cb                    Callback with call return data.
+ * @param userData              pointer to user data
  */
 void eth_call(
     Context *ctx,
     char *txArgs,
     char *blockTag,
     bool optimisticStateFetch,
-    CallBackProc cb
+    CallBackProc cb,
+    void *userData
 );
 
 /**
@@ -329,13 +386,15 @@ void eth_call(
  *                              block number such as "0x10d4f".
  * @param optimisticStateFetch  Whether optimistic state fetching is allowed.
  * @param cb                    Callback with access list object.
+ * @param userData              pointer to user data
  */
 void eth_createAccessList(
     Context *ctx,
     char *txArgs,
     char *blockTag,
     bool optimisticStateFetch,
-    CallBackProc cb
+    CallBackProc cb,
+    void *userData
 );
 
 /**
@@ -347,13 +406,15 @@ void eth_createAccessList(
  *                              block number such as "0x10d4f".
  * @param optimisticStateFetch  Whether optimistic state fetching is allowed.
  * @param cb                    Callback with hex gas estimate.
+ * @param userData              pointer to user data
  */
 void eth_estimateGas(
     Context *ctx,
     char *txArgs,
     char *blockTag,
     bool optimisticStateFetch,
-    CallBackProc cb
+    CallBackProc cb,
+    void *userData
 );
 
 
@@ -367,8 +428,9 @@ void eth_estimateGas(
  * @param ctx           Context pointer.
  * @param filterOptions JSON encoded string specifying the log filtering rules.
  * @param cb            Callback with array of matching logs.
+ * @param userData      pointer to user data
  */
-void eth_getLogs(Context *ctx, char *filterOptions, CallBackProc cb);
+void eth_getLogs(Context *ctx, char *filterOptions, CallBackProc cb, void *userData);
 
 /**
  * Create a new log filter.
@@ -376,8 +438,9 @@ void eth_getLogs(Context *ctx, char *filterOptions, CallBackProc cb);
  * @param ctx           Context pointer.
  * @param filterOptions JSON encoded string specifying the log filtering rules.
  * @param cb            Callback with filter ID (hex string).
+ * @param userData      pointer to user data
  */
-void eth_newFilter(Context *ctx, char *filterOptions, CallBackProc cb);
+void eth_newFilter(Context *ctx, char *filterOptions, CallBackProc cb, void *userData);
 
 /**
  * Remove an installed filter.
@@ -385,8 +448,9 @@ void eth_newFilter(Context *ctx, char *filterOptions, CallBackProc cb);
  * @param ctx      Context pointer.
  * @param filterId filter ID as a hex encoded string (as returned by eth_newFilter)
  * @param cb       Callback with boolean result.
+ * @param userData pointer to user data
  */
-void eth_uninstallFilter(Context *ctx, char *filterId, CallBackProc cb);
+void eth_uninstallFilter(Context *ctx, char *filterId, CallBackProc cb, void *userData);
 
 /**
  * Retrieve all logs for an installed filter.
@@ -394,8 +458,9 @@ void eth_uninstallFilter(Context *ctx, char *filterId, CallBackProc cb);
  * @param ctx      Context pointer.
  * @param filterId filter ID as a hex encoded string (as returned by eth_newFilter)
  * @param cb       Callback with log result array.
+ * @param userData pointer to user data
  */
-void eth_getFilterLogs(Context *ctx, char *filterId, CallBackProc cb);
+void eth_getFilterLogs(Context *ctx, char *filterId, CallBackProc cb, void *userData);
 
 /**
  * Retrieve new logs since the previous poll.
@@ -403,8 +468,9 @@ void eth_getFilterLogs(Context *ctx, char *filterId, CallBackProc cb);
  * @param ctx      Context pointer.
  * @param filterId filter ID as a hex encoded string (as returned by eth_newFilter)
  * @param cb       Callback with an array of new logs.
+ * @param userData pointer to user data
  */
-void eth_getFilterChanges(Context *ctx, char *filterId, CallBackProc cb);
+void eth_getFilterChanges(Context *ctx, char *filterId, CallBackProc cb, void *userData);
 
 
 /* ========================================================================== */
@@ -418,8 +484,9 @@ void eth_getFilterChanges(Context *ctx, char *filterId, CallBackProc cb);
  * @param blockTag  A block identifier: "latest", "pending", "earliest", or a hex
  *                  block number such as "0x10d4f".
  * @param cb        Callback with an array of receipts.
+ * @param userData  pointer to user data
  */
-void eth_getBlockReceipts(Context *ctx, char *blockTag, CallBackProc cb);
+void eth_getBlockReceipts(Context *ctx, char *blockTag, CallBackProc cb, void *userData);
 
 /**
  * Send a signed transaction to the RPC provider to be relayed in the network.
@@ -427,8 +494,9 @@ void eth_getBlockReceipts(Context *ctx, char *blockTag, CallBackProc cb);
  * @param ctx       Context pointer.
  * @param blockTag  Hex encoded signed transaction.
  * @param cb        Callback with an array of receipts.
+ * @param userData  pointer to user data
  */
-void eth_sendRawTransaction(Context *ctx, char *txHexBytes, CallBackProc cb);
+void eth_sendRawTransaction(Context *ctx, char *txHexBytes, CallBackProc cb, void *userData);
 
 #ifdef __cplusplus
 }

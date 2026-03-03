@@ -12,7 +12,7 @@
 
 import
   pkg/chronos,
-  ../[helpers, worker_desc]
+  ../../[helpers, worker_desc]
 
 # ------------------------------------------------------------------------------
 # Private helpers

@@ -12,8 +12,8 @@
 
 import
   pkg/[chronicles, chronos],
-  ../../../wire_protocol,
-  ../[helpers, worker_desc]
+  ../../../../wire_protocol,
+  ../../[helpers, worker_desc]
 
 # ------------------------------------------------------------------------------
 # Private function(s)

@@ -34,7 +34,7 @@ pipeline {
     )
     string(
       name: 'TIMEOUT_MINUTES',
-      defaultValue: '20',
+      defaultValue: '40',
       description: 'Timeout for each stage in minutes'
     )
     booleanParam(
@@ -64,7 +64,11 @@ pipeline {
     }
     stage('Prepare Hive') {
       steps {
-        sh 'cp -a /opt/hive ${WORKSPACE}/hive'
+        sh """
+          git clone --depth 1 https://github.com/ethereum/hive.git ${WORKSPACE}/hive
+          cd ${WORKSPACE}/hive
+          go build -o hive .
+        """
       }
     }
     stage('Run Hive Tests') {

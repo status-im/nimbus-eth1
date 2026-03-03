@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2025 Status Research & Development GmbH
+# Copyright (c) 2021-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -46,7 +46,7 @@ proc sstoreImpl(c: Computation, slot, newValue: UInt256): EvmResultVoid =
   if c.vmState.balTrackerEnabled:
     c.vmState.balTracker.trackStorageWrite(c.msg.contractAddress, slot, newValue)
   c.vmState.mutateLedger:
-    db.setStorage(c.msg.contractAddress, slot, newValue)
+    ledger.setStorage(c.msg.contractAddress, slot, newValue)
   ok()
 
 
@@ -68,7 +68,7 @@ proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256, coldAcces
   if c.vmState.balTrackerEnabled:
     c.vmState.balTracker.trackStorageWrite(c.msg.contractAddress, slot, newValue)
   c.vmState.mutateLedger:
-    db.setStorage(c.msg.contractAddress, slot, newValue)
+    ledger.setStorage(c.msg.contractAddress, slot, newValue)
   ok()
 
 func jumpImpl(c: Computation; jumpTarget: UInt256): EvmResultVoid =
@@ -220,8 +220,8 @@ proc sstoreEIP2929Op(cpt: VmCpt): EvmResultVoid =
 
   var coldAccessGas = 0.GasInt
   cpt.vmState.mutateLedger:
-    if not db.inAccessList(cpt.msg.contractAddress, slot):
-      db.accessList(cpt.msg.contractAddress, slot)
+    if not ledger.inAccessList(cpt.msg.contractAddress, slot):
+      ledger.accessList(cpt.msg.contractAddress, slot)
       coldAccessGas = ColdSloadCost
 
   sstoreNetGasMeteringImpl(cpt, slot, newValue, coldAccessGas)

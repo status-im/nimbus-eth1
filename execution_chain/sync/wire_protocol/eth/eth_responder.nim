@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -90,9 +90,9 @@ proc status69UserHandler(peer: Peer; packet: Status69Packet) {.
     latest = packet.latest,
     latestHash = packet.latestHash.short
 
-proc status69Thunk(peer: Peer; data: Rlp) {.
+proc status69OrLaterThunk[PROTO](peer: Peer; data: Rlp) {.
     async: (raises: [CancelledError, EthP2PError]).} =
-  eth69.rlpxWithPacketHandler(Status69Packet, peer, data,
+  PROTO.rlpxWithPacketHandler(Status69Packet, peer, data,
                                [version, networkId,
                                 genesisHash, forkId,
                                 earliest, latest, latestHash]):
@@ -259,21 +259,42 @@ proc getReceiptsUserHandler[PROTO](response: Responder; hashes: seq[Hash32]) {.
           requested = hashes.len
   await response.receipts(rec)
 
+proc getReceipts70UserHandler[PROTO](response: Responder; req: StoredReceipts70Request) {.
+    async: (raises: [CancelledError, EthP2PError]).} =
+  let peer = response.peer
+  trace trEthRecvReceived & "GetReceipts (0x0f)", peer, hashes = req.blockHashes.len
+  let ctx = peer.networkState(PROTO)
+  let rec = ctx.getStoredReceipts70(req)
+  if rec.receipts.len > 0:
+    trace trEthSendReplying & "with Receipts (0x10)", peer, sent = rec.receipts.len,
+          requested = req.blockHashes.len
+  else:
+    trace trEthSendReplying & "EMPTY Receipts (0x10)", peer, sent = 0,
+          requested = req.blockHashes.len
+  await response.receipts(rec.lastBlockIncomplete, rec.receipts)
+
 proc getReceiptsThunk[PROTO](peer: Peer; data: Rlp) {.
     async: (raises: [CancelledError, EthP2PError]).} =
-  PROTO.rlpxWithPacketResponder(seq[Hash32], peer, data):
-    await getReceiptsUserHandler[PROTO](response, packet)
+  when PROTO is eth70:
+    PROTO.rlpxWithPacketResponder(StoredReceipts70Request, peer, data):
+      await getReceipts70UserHandler[PROTO](response, packet)
+  else:
+    PROTO.rlpxWithPacketResponder(seq[Hash32], peer, data):
+      await getReceiptsUserHandler[PROTO](response, packet)
 
 proc receiptsThunk[PROTO](peer: Peer; data: Rlp) {.
     async: (raises: [CancelledError, EthP2PError]).} =
-  when PROTO is eth69:
+  when PROTO is eth70:
+    PROTO.rlpxWithFutureHandler(StoredReceipts70Packet,
+      ReceiptsMsg, peer, data, [lastBlockIncomplete, receipts])
+  elif PROTO is eth69:
     PROTO.rlpxWithFutureHandler(StoredReceiptsPacket, ReceiptsPacket,
       ReceiptsMsg, peer, data, [receipts])
   else:
     PROTO.rlpxWithFutureHandler(ReceiptsPacket,
       ReceiptsMsg, peer, data, [receipts])
 
-proc blockRangeUpdateUserHandler(peer: Peer; packet: BlockRangeUpdatePacket) {.
+proc blockRangeUpdateUserHandler[PROTO](peer: Peer; packet: BlockRangeUpdatePacket) {.
     async: (raises: [CancelledError, EthP2PError]).} =
 
   when trEthTraceGossipOk:
@@ -288,15 +309,15 @@ proc blockRangeUpdateUserHandler(peer: Peer; packet: BlockRangeUpdatePacket) {.
     await peer.disconnect(BreachOfProtocol)
     return
 
-  peer.state(eth69).earliest = packet.earliest
-  peer.state(eth69).latest = packet.latest
-  peer.state(eth69).latestHash = packet.latestHash
+  peer.state(PROTO).earliest = packet.earliest
+  peer.state(PROTO).latest = packet.latest
+  peer.state(PROTO).latestHash = packet.latestHash
 
 proc blockRangeUpdateThunk[PROTO](peer: Peer; data: Rlp) {.
     async: (raises: [CancelledError, EthP2PError]).} =
   PROTO.rlpxWithPacketHandler(BlockRangeUpdatePacket,
                               peer, data, [earliest, latest, latestHash]):
-    await blockRangeUpdateUserHandler(peer, packet)
+    await blockRangeUpdateUserHandler[PROTO](peer, packet)
 
 
 proc eth68PeerConnected(peer: Peer) {.async: (
@@ -353,14 +374,14 @@ proc eth68PeerConnected(peer: Peer) {.async: (
   peer.state(eth68).initialized = true
   peer.state(eth68).bestHash = m.bestHash
 
-proc eth69PeerConnected(peer: Peer) {.async: (
+proc eth69OrLaterPeerConnected[PROTO](peer: Peer) {.async: (
     raises: [CancelledError, EthP2PError]).} =
   let
     network = peer.network
-    ctx = peer.networkState(eth69)
+    ctx = peer.networkState(PROTO)
     status = ctx.getStatus69()
     packet = Status69Packet(
-      version: eth69.protocolVersion,
+      version: PROTO.protocolVersion,
       networkId : network.networkId,
       genesisHash: status.genesisHash,
       forkId: status.forkId,
@@ -378,7 +399,7 @@ proc eth69PeerConnected(peer: Peer) {.async: (
      forkHash = status.forkId.hash.toHex,
      forkNext = status.forkId.next
 
-  let m = await peer.status69(packet, timeout = chronos.seconds(10))
+  let m = await status69OrLater[PROTO](peer, packet, timeout = chronos.seconds(10))
   when trEthTraceHandshakesOk:
     trace "Handshake: Local and remote networkId", local = network.networkId,
           remote = m.networkId
@@ -406,10 +427,10 @@ proc eth69PeerConnected(peer: Peer) {.async: (
 
   trace "Peer matches our network", peer
 
-  peer.state(eth69).initialized = true
-  peer.state(eth69).earliest = m.earliest
-  peer.state(eth69).latest = m.latest
-  peer.state(eth69).latestHash = m.latestHash
+  peer.state(PROTO).initialized = true
+  peer.state(PROTO).earliest = m.earliest
+  peer.state(PROTO).latest = m.latest
+  peer.state(PROTO).latestHash = m.latestHash
 
 template registerCommonThunk(protocol: ProtocolInfo, PROTO: type) =
   registerMsg(protocol, NewBlockHashesMsg, "newBlockHashes",
@@ -451,13 +472,26 @@ proc eth69Registration() =
   let
     protocol = eth69.initProtocol()
 
-  setEventHandlers(protocol, eth69PeerConnected, nil)
+  setEventHandlers(protocol, eth69OrLaterPeerConnected[eth69], nil)
   registerMsg(protocol, StatusMsg, "status",
-              status69Thunk, Status69Packet)
+              status69OrLaterThunk[eth69], Status69Packet)
   registerCommonThunk(protocol, eth69)
   registerMsg(protocol, BlockRangeUpdateMsg, "blockRangeUpdate",
               blockRangeUpdateThunk[eth69], BlockRangeUpdatePacket)
   registerProtocol(protocol)
 
+proc eth70Registration() =
+  let
+    protocol = eth70.initProtocol()
+
+  setEventHandlers(protocol, eth69OrLaterPeerConnected[eth70], nil)
+  registerMsg(protocol, StatusMsg, "status",
+              status69OrLaterThunk[eth70], Status69Packet)
+  registerCommonThunk(protocol, eth70)
+  registerMsg(protocol, BlockRangeUpdateMsg, "blockRangeUpdate",
+              blockRangeUpdateThunk[eth70], BlockRangeUpdatePacket)
+  registerProtocol(protocol)
+
 eth68Registration()
 eth69Registration()
+eth70Registration()

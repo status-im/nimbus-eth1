@@ -28,7 +28,7 @@ func determineFork(vmState: BaseVMState): EVMFork =
 
 proc init(
       self:         BaseVMState;
-      ac:           LedgerRef,
+      ledger:       LedgerRef,
       parent:       Header;
       blockCtx:     BlockContext;
       com:          CommonRef;
@@ -38,7 +38,7 @@ proc init(
   ## Initialisation helper
   # Take care to (re)set all fields since the VMState might be recycled
   self.com = com
-  self.ledger = ac
+  self.ledger = ledger
   self.gasPool = blockCtx.gasLimit
   assign(self.parent, parent)
   assign(self.blockCtx, blockCtx)
@@ -95,16 +95,16 @@ proc new*(
   ## `BaseVMState` environment where the account state cache is synchronised
   ## with the `parent` block header.
   let
-    ac = LedgerRef.init(txFrame, storeSlotHash, com.statelessProviderEnabled)
+    ledger = LedgerRef.init(txFrame, storeSlotHash, com.statelessProviderEnabled)
     tracker =
       if enableBalTracker:
-        BlockAccessListTrackerRef.init(ac.ReadOnlyLedger)
+        BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger)
       else:
         nil
 
   new result
   result.init(
-    ac = ac,
+    ledger = ledger,
     parent   = parent,
     blockCtx = blockCtx,
     com      = com,
@@ -136,10 +136,10 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
     tracer = self.tracer
     tracker = self.balTracker
     com    = self.com
-    ac     = self.ledger
+    ledger     = self.ledger
     flags  = self.flags
   self.init(
-    ac       = ac,
+    ledger       = ledger,
     parent   = parent,
     blockCtx = blockCtx,
     com      = com,
@@ -180,15 +180,15 @@ proc init*(
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
   let
-    ac = LedgerRef.init(txFrame, storeSlotHash, com.statelessProviderEnabled)
+    ledger = LedgerRef.init(txFrame, storeSlotHash, com.statelessProviderEnabled)
     tracker =
       if enableBalTracker:
-        BlockAccessListTrackerRef.init(ac.ReadOnlyLedger)
+        BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger)
       else:
         nil
 
   self.init(
-    ac       = ac,
+    ledger       = ledger,
     parent   = parent,
     blockCtx = blockCtx(header),
     com      = com,
@@ -254,7 +254,7 @@ proc readOnlyLedger*(vmState: BaseVMState): ReadOnlyLedger {.inline.} =
 
 template mutateLedger*(vmState: BaseVMState, body: untyped) =
   block:
-    var db {.inject.} = vmState.ledger
+    let ledger {.inject.} = vmState.ledger
     body
 
 proc status*(vmState: BaseVMState): bool =

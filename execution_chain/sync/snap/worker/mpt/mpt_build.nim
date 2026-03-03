@@ -11,8 +11,7 @@
 
 import
   std/[sequtils, tables, typetraits],
-  pkg/[eth/common, stew/byteutils],
-  ../../../../db/aristo/aristo_desc/desc_nibbles,
+  pkg/[eth/common, eth/trie/nibbles, stew/byteutils],
   ../../../wire_protocol/snap/snap_types,
   ../state_db,
   ./mpt_desc
@@ -297,6 +296,21 @@ proc mergeSubTree(
 
   # NOTREACHED
 
+proc makeOrGetLeaf(db: NodeTrieRef; path: Hash32): Opt[LeafNodeRef] =
+  ## Unless done jet, make a leaf on the tree with the argument path `path`.
+  ##
+  # Find sub-tree
+  let (tree,pfx) = db.findSubTree(path).valueOr:
+    return err()
+
+  if pfx.len == 0:
+    return ok(LeafNodeRef nil)
+
+  let leaf = tree.mergeSubTree(pfx).valueOr:
+    return err()
+
+  ok(leaf)
+
 # ------------------------------------------------------------------------------
 # Private functions, finalisation and export helpers
 # ------------------------------------------------------------------------------
@@ -391,19 +405,19 @@ proc exportTrie(
 
 proc init*(
     T: type NodeTrieRef;
-    stateRoot: StateRoot;
+    root: StateRoot|StoreRoot;
       ): T =
   ## Create an empty MPT.
   let db = T()
   db.root = StopNodeRef(
     kind:    Stop,
-    selfKey: stateRoot.to(NodeKey))
+    selfKey: root.to(NodeKey))
   db.stops[db.root.selfKey] = StopNodeRef(db.root)
   db
 
 proc init*(
     T: type NodeTrieRef;
-    stateRoot: StateRoot;
+    root: StateRoot|StoreRoot;
     start: ItemKey;
     nodes: openArray[ProofNode];
       ): T =
@@ -416,11 +430,11 @@ proc init*(
   ## root node are silently discarded.
   ##
   if nodes.len == 0:
-    return NodeTrieRef.init stateRoot
+    return NodeTrieRef.init root
 
   let
     db = T()
-    root = stateRoot.to(NodeKey)
+    root = root.to(NodeKey)
   var
     tmpNodes: Table[NodeKey,NodeRef]
     tmpLinks: Table[NodeKey,StopNodeRef]
@@ -471,20 +485,21 @@ proc merge*(db: NodeTrieRef, acc: SnapAccount): bool =
   ##
   ## The function returns `true` if the account `acc` could be merged.
   ##
-  # Find sub-tree
-  let (tree,pfx) = db.findSubTree(acc.accHash).valueOr:
+  let leaf = db.makeOrGetLeaf(acc.accHash).valueOr:
     return false
-
-  if pfx.len == 0:
-    return true
-
-  # Merge/append
-  let leaf = tree.mergeSubTree(pfx).valueOr:
-    return false
-
-  # Update leaf record payload
-  leaf.lfPayload = rlp.encode(acc.accBody)
+  if not leaf.isNil:
+    leaf.lfPayload = rlp.encode(acc.accBody)
   true
+
+proc merge*(db: NodeTrieRef, sto: StorageItem): bool =
+  ## Ditto for storage slots.
+  ##
+  let leaf = db.makeOrGetLeaf(sto.slotHash).valueOr:
+    return false
+  if not leaf.isNil:
+    leaf.lfPayload = sto.slotData
+  true
+
 
 proc finalise*(db: NodeTrieRef): uint =
   ## Finalise an MPT.
@@ -527,18 +542,23 @@ proc isComplete*(db: NodeTrieRef): bool =
 
 # -----------
 
-proc validate*(
-    root: StateRoot;
+proc validate*[T: SnapAccount|StorageItem](
+    root: StateRoot|StoreRoot;
     start: ItemKey;
-    accounts: seq[SnapAccount];
-    proof: seq[ProofNode]
+    leafs: openArray[T];
+    proof: openArray[ProofNode]
       ): Opt[NodeTrieRef] =
-  ## Validate snap account data package.
+  ## Validate snap accounts or storage slot data package.
   ##
+  when root is StateRoot and T isnot SnapAccount:
+    {.error: "Leafs item must be of type SnapAccount for root type StateRoot".}
+  elif root is StoreRoot and T isnot StorageItem:
+    {.error: "Leafs item must be of type StorageItem for root type StoreRoot".}
+
   let db = NodeTrieRef.init(root, start, proof)
   if not db.isNil:
-    for acc in accounts:
-      if not db.merge(acc):
+    for leaf in leafs:
+      if not db.merge(leaf):
         return err()
 
     discard db.finalise()

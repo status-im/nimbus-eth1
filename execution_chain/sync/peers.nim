@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -95,6 +95,7 @@ proc setupManager(pm: PeerManagerRef, boot: BootstrapNodes) =
 
   po.addProtocol eth68
   po.addProtocol eth69
+  po.addProtocol eth70
   pm.pool.addObserver(pm, po)
 
   for enode in boot.enodes:
