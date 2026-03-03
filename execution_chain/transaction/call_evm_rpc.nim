@@ -80,6 +80,7 @@ proc rpcEstimateGas*(args: TransactionArgs,
   if args.gasPrice.isSome and
     (args.maxFeePerGas.isSome or args.maxPriorityFeePerGas.isSome):
     return err((evmErr(EvmInvalidParam), OutputResult()))
+
   let feeCap = params.gasPrice
 
   # Recap the highest gas limit with account's available balance.
@@ -126,13 +127,34 @@ proc rpcEstimateGas*(args: TransactionArgs,
     else:
       ok(res)
 
-  # First execute at the highest allowance. If this fails, the tx is invalid for estimation under current constraints.
-  let firstRun = executable(hi).valueOr:
+  # Short circuit estimation check: plain value transfer (no data, to has no code)
+  if not params.isCreate and params.input.len == 0 and
+     vmState.readOnlyLedger.getCodeSize(params.to) == 0:
+    if executable(txGas).isOk:
+      # If the transaction is executable, return the transaction gas limit
+      return ok(txGas)
+    
+
+  # Execute at highest gas limit first; if it fails, return immediately (no binary search)
+  params.gasLimit = hi
+  let highResult = executable(hi).valueOr:
     return err((evmErr(EvmInvalidParam), error))
 
-  # Used gas from the unconstrained execution is typically a better lower bound.
-  if firstRun.gasUsed > 0:
-    lo = max(lo, firstRun.gasUsed - 1)
+  if highResult.error.len > 0:
+    return err((evmErr(EvmInvalidParam), OutputResult(
+      error: highResult.error, output: highResult.output)))
+
+  if highResult.gasUsed>0:
+    lo = max(lo, highResult.gasUsed - 1)
+
+  # Optimistic try: (usedGas + CallStipend) * 64/63 often succeeds and narrows the range
+  let callStipend = GasInt gasFees[fork][GasCallStipend]
+  let optimisticGasLimit = (highResult.gasUsed + callStipend) * 64 div 63
+  if optimisticGasLimit < hi:
+    if executable(optimisticGasLimit).isErr:
+      lo = optimisticGasLimit
+    else:
+      hi = optimisticGasLimit
 
   # Execute the binary search and hone in on an executable gas limit
   while lo+1 < hi:
