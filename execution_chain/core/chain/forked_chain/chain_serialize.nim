@@ -218,6 +218,20 @@ func toString(list: openArray[BlockRef]): string =
 # ------------------------------------------------------------------------------
 
 proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbError] =
+  # Guard: refuse to persist a corrupt FC state that would cause crash-loops
+  # on restart. An empty heads list causes replay() to skip all blocks,
+  # leaving every txFrame nil and triggering the "deserialized node should
+  # have txFrame" error on the next deserialize. See #3777.
+  if fc.heads.len == 0:
+    warn "Skipping FC serialize: heads list is empty, state is corrupt"
+    return ok()
+
+  for b in fc.hashToBlock.values:
+    if b.txFrame.isNil:
+      warn "Skipping FC serialize: block has nil txFrame, state is corrupt",
+        number=b.number, hash=b.hash.short
+      return ok()
+
   var i = 0
   for b in fc.hashToBlock.values:
     b.index = uint i
@@ -260,6 +274,14 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
     warn "TODO: Inconsistent state found"
     fc.reset(prevBase)
     return err("Invalid state: latest block is greater than number of blocks")
+
+  # An empty heads list means serialize wrote corrupt state (shutdown race
+  # between processQueue and serialize — see #3777). Reject early rather
+  # than letting replay() silently skip all blocks and fail later with
+  # "deserialized node should have txFrame".
+  if state.heads.len == 0:
+    fc.reset(prevBase)
+    return err("Invalid state: empty heads list (corrupt FC serialization)")
 
   # Sanity Checks for all the heads in FC state
   for head in state.heads:
