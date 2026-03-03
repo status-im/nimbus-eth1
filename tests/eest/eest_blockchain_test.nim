@@ -19,7 +19,7 @@ const
   eestReleases = [
     "eest_develop",
     "eest_devnet",
-    "eest_bal"
+    #"eest_bal"
   ]
 
 const skipFiles = [

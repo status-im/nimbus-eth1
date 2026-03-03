@@ -16,6 +16,7 @@ import
   ../db/ledger,
   ../common/[common, evmforks],
   ../block_access_list/block_access_list_tracker,
+  ../core/eip8037,
   ./interpreter/[op_codes, gas_costs],
   ./types,
   ./evm_errors
@@ -67,6 +68,7 @@ func blockCtx(header: Header): BlockContext =
     excessBlobGas: header.excessBlobGas.get(0'u64),
     parentHash   : header.parentHash,
     slotNumber   : header.slotNumber.get(0'u64),
+    costPerGasByte: stateGasPerByte(header.gasLimit),
   )
 
 # --------------

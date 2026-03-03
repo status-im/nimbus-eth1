@@ -239,6 +239,7 @@ func gasCost*(tx: Transaction): UInt256 =
 func validateTxBasic*(
     com:      CommonRef,
     tx:       Transaction;     ## tx to validate
+    gasLimit: GasInt;
     fork:     EVMFork,
     validateFork: bool = true): Result[void, string] =
 
@@ -270,8 +271,8 @@ func validateTxBasic*(
     return err(&"invalid tx: maxFee is smaller than maxPriorityFee. maxFee={tx.maxFeePerGas}, maxPriorityFee={tx.maxPriorityFeePerGasNorm}")
 
   let
-    (intrinsicGas, floorDataGas) = tx.intrinsicGas(fork)
-    minGasLimit = max(intrinsicGas, floorDataGas)
+    intrinsic = tx.intrinsicGas(fork, gasLimit)
+    minGasLimit = max(intrinsic.regular, intrinsic.floorDataGas)
 
   if tx.gasLimit < minGasLimit:
     return err(&"invalid tx: not enough gas to perform calculation. avail={tx.gasLimit}, require={minGasLimit}")
@@ -334,13 +335,13 @@ proc validateTransaction*(
     ledger:   ReadOnlyLedger; ## Parent accounts environment for transaction
     tx:       Transaction;     ## tx to validate
     sender:   Address;         ## tx.recoverSender
-    maxLimit: GasInt;          ## gasLimit from block header
+    gasLimit: GasInt;          ## gasLimit from block header
     baseFee:  UInt256;         ## baseFee from block header
     excessBlobGas: uint64;     ## excessBlobGas from parent block header
     com:      CommonRef,
     fork:     EVMFork): Result[void, string] =
 
-  ? validateTxBasic(com, tx, fork)
+  ? validateTxBasic(com, tx, gasLimit, fork)
 
   let
     balance = ledger.getBalance(sender)
@@ -359,8 +360,8 @@ proc validateTransaction*(
   #
   # The parallel lowGasLimit.json test never triggers the case checked below
   # as the paricular transaction is omitted (the txs list is just set empty.)
-  if maxLimit < tx.gasLimit:
-    return err(&"invalid tx: block header gasLimit exceeded. maxLimit={maxLimit}, gasLimit={tx.gasLimit}")
+  if gasLimit < tx.gasLimit:
+    return err(&"invalid tx: block header gasLimit exceeded. maxLimit={gasLimit}, gasLimit={tx.gasLimit}")
 
   # ensure that the user was willing to at least pay the base fee
   if tx.maxFeePerGasNorm < baseFee.truncate(GasInt):

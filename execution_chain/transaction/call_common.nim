@@ -15,8 +15,7 @@ import
   ../evm/[message, precompiles, internals, interpreter_dispatch],
   ../db/ledger,
   ../common/evmforks,
-  ../core/eip4844,
-  ../core/eip7702,
+  ../core/[eip4844, eip7702, eip8037],
   ./call_types
 
 import ../evm/computation
@@ -108,7 +107,13 @@ proc preExecComputation(vmState: BaseVMState, call: CallParams): int64 =
 
     # 7. Add PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST gas to the global refund counter if authority exists in the trie.
     if ledger.accountExists(authority):
-      gasRefund += PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST
+      if vmState.fork >= FkAmsterdam:
+        let
+          newAccountCost = STATE_BYTES_PER_NEW_ACCOUNT * vmState.blockCtx.costPerGasByte
+          perAuthBaseCost = STATE_BYTES_PER_AUTH_BASE * vmState.blockCtx.costPerGasByte
+        gasRefund += int64(newAccountCost - perAuthBaseCost)
+      else:
+        gasRefund += PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST
 
     # 8. Set the code of authority to be 0xef0100 || address. This is a delegation designation.
     let authCode =
@@ -141,11 +146,12 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
   vmState.gasRefunded = 0
 
   let
-    (intrinsicGas, floorDataGas) = if call.sysCall: (0.GasInt, 0.GasInt)
-                                   else: intrinsicGas(call, vmState.fork)
+    intrinsic = if call.sysCall: IntrinsicGas()
+                else: intrinsicGas(call, vmState.fork, vmState.blockCtx.gasLimit)
+    intrinsicGas = intrinsic.regular + intrinsic.state
     host = TransactionHost(
       vmState: vmState,
-      floorDataGas: floorDataGas,
+      floorDataGas: intrinsic.floorDataGas,
       # All other defaults in `TransactionHost` are fine.
     )
 
