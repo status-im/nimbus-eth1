@@ -122,6 +122,37 @@ proc getKey(
   else:
     ?db.getKeyRc(rvid, {})
 
+proc multiGetBranchKeys(
+    db: AristoTxRef,
+    rvid: RootedVertexID,
+    vtx: VertexRef,
+    keyvtxs: var array[16, ((HashKey, VertexRef), int)], skipLayers: static bool
+): Result[void, AristoError] =
+  var rvids: seq[RootedVertexID]
+  var fetchedIndexes: seq[int]
+  for n, subvid in vtx.pairs:
+    rvids.add((rvid.root, subvid))
+    fetchedIndexes.add(n.int)
+
+  when skipLayers:
+    var keys = newSeq[Opt[(HashKey, VertexRef)]](rvids.len())
+    ?db.db.multiGetKeyBe(rvids, keys, {GetVtxFlag.PeekCache})
+
+    for i, k in keys:
+      if k.isSome():
+        let n = fetchedIndexes[i]
+        keyvtxs[n] = (k.get(), dbLevel)
+  else:
+    var keys = newSeq[Opt[((HashKey, VertexRef), int)]](rvids.len())
+    ?db.multiGetKeyRc(rvids, keys, {})
+
+    for i, k in keys:
+      if k.isSome():
+        let n = fetchedIndexes[i]
+        keyvtxs[n] = k.get()
+
+  ok()
+
 template childVid(vp: VertexRef): VertexID =
   # If we have to recurse into a child, where would that recusion start?
   let v = vp
@@ -198,8 +229,7 @@ proc computeKeyImpl(
       # to exploit their on-disk order
       let vtx = BranchRef(vtx)
       var keyvtxs: array[16, ((HashKey, VertexRef), int)]
-      for n, subvid in vtx.pairs:
-        keyvtxs[n] = ?db.getKey((rvid.root, subvid), skipLayers)
+      ?db.multiGetBranchKeys(rvid, vtx, keyvtxs, skipLayers)
 
       # Make sure we have keys computed for each hash
       block keysComputed:

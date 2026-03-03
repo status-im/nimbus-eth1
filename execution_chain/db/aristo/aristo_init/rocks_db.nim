@@ -120,6 +120,19 @@ proc getLstFn(db: RdbBackendRef): GetLstFn =
       # Decode data record
       data.deblobify SavedState
 
+proc multiGetKeyFn(db: RdbBackendRef): MultiGetKeyFn =
+  result =
+    proc(rvids: openArray[RootedVertexID], keys: var openArray[Opt[(HashKey, VertexRef)]],
+        flags: set[GetVtxFlag]): Result[void, AristoError] =
+      # assert rvids.len() > 0
+      # assert rvids.len() == keys.len()
+      db.rdb.getKeys(rvids, keys, flags).isOkOr:
+        when extraTraceMessages:
+          trace logTxt "multiGetKeyFn: failed", error=error[0], info=error[1]
+        return err(error[0])
+
+      ok()
+
 # -------------
 
 proc putBegFn(db: RdbBackendRef): PutBegFn =
@@ -198,6 +211,7 @@ proc rocksDbBackend*(
   db.getVtxFn = getVtxFn be
   db.getKeyFn = getKeyFn be
   db.getLstFn = getLstFn be
+  db.multiGetKeyFn = multiGetKeyFn be
 
   db.putBegFn = putBegFn be
   db.putVtxFn = putVtxFn be

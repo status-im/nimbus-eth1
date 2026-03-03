@@ -98,6 +98,7 @@ type
     getVtxFn*: GetVtxFn              ## Read vertex record
     getKeyFn*: GetKeyFn              ## Read Merkle hash/key
     getLstFn*: GetLstFn              ## Read saved state
+    multiGetKeyFn*: MultiGetKeyFn    ## Bulk read Merkle hash/keys
 
     putBegFn*: PutBegFn              ## Start bulk store session
     putVtxFn*: PutVtxFn              ## Bulk store vertex records

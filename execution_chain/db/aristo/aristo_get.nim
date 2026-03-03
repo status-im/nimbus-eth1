@@ -43,6 +43,15 @@ proc getKeyBe*(
   ## Get the Merkle hash/key from the backend if available.
   db.getKeyFn(rvid, flags)
 
+proc multiGetKeyBe*(
+    db: AristoDbRef,
+    rvids: openArray[RootedVertexID],
+    keys: var openArray[Opt[(HashKey, VertexRef)]],
+    flags: set[GetVtxFlag];
+      ): Result[void, AristoError] =
+  ## Get the Merkle hash/key from the backend if available.
+  db.multiGetKeyFn(rvids, keys, flags)
+
 # ------------------
 
 proc getVtxRc*(
@@ -105,6 +114,55 @@ proc getKey*(db: AristoTxRef; rvid: RootedVertexID): HashKey =
   ## The function returns `nil` on error or failure.
   ##
   (db.getKeyRc(rvid, {}).valueOr(((VOID_HASH_KEY, nil), 0)))[0][0]
+
+proc multiGetKeyRc*(
+    db: AristoTxRef,
+    rvids: openArray[RootedVertexID],
+    keys: var openArray[Opt[((HashKey, VertexRef), int)]],
+    flags: set[GetVtxFlag]): Result[void, AristoError] =
+
+  var
+    remainingRvids: seq[RootedVertexID] # keys to fetch from the db backend. TODO: maybe init seq of cap here
+    rvidIndexes: seq[int] # record the indexes from the original keys list. TODO: maybe init seq of cap here
+
+  # First fetch each key from the in memory layers
+  for i, rvid in rvids:
+    let key = db.layersGetKey(rvid).valueOr:
+      remainingRvids.add(rvid)
+      rvidIndexes.add(i)
+      continue
+
+    # If there is a zero key value, the entry is either marked for being
+    # updated or for deletion on the database. So check below.
+    if key[0].isValid:
+      keys[i] = Opt.some(((key[0], VertexRef(nil)), key[1]))
+      continue
+
+    # The zero key value does not refer to an update mark if there is no
+    # valid vertex (either on the cache or the backend whatever comes first.)
+    let vtx = db.layersGetVtx(rvid).valueOr:
+      # There was no vertex on the cache. So there must be one the backend (the
+      # reason for the key label to exists, at all.)
+      keys[i] = Opt.none(((HashKey, VertexRef), int))
+      continue
+
+    if vtx[0].isValid:
+      keys[i] = Opt.some(((VOID_HASH_KEY, vtx[0]), vtx[1]))
+    else:
+      keys[i] = Opt.none(((HashKey, VertexRef), int))
+
+  # Fetch the remaining keys from the db backend
+  if remainingRvids.len() > 0:
+    var remainingKeys = newSeq[Opt[(HashKey, VertexRef)]](remainingRvids.len())
+    ?db.db.multiGetKeyBe(remainingRvids, remainingKeys, flags)
+
+    for i, key in remainingKeys:
+      let index = rvidIndexes[i]
+      keys[index] = key.map(
+          proc(k: auto): auto =
+            (k, dbLevel)
+        )
+  ok()
 
 # ------------------------------------------------------------------------------
 # End

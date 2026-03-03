@@ -39,6 +39,12 @@ type
       {.gcsafe, raises: [].}
         ## Generic last recorded state stamp retrieval function
 
+  MultiGetKeyFn* =
+    proc(rvids: openArray[RootedVertexID], keys: var openArray[Opt[(HashKey, VertexRef)]],
+        flags: set[GetVtxFlag]): Result[void, AristoError] {.gcsafe, raises: [].}
+      ## Generic backend database retrieval function for bulk fetching
+      ## `Aristo DB` hash lookup values.
+
   # -------------
 
   PutHdlRef* = ref object of RootRef

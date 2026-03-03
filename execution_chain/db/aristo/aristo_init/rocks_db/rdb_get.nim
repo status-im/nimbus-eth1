@@ -14,6 +14,7 @@
 {.push raises: [].}
 
 import
+  std/sequtils,
   rocksdb,
   results,
   ../../[aristo_blobify, aristo_desc],
@@ -237,6 +238,81 @@ proc getVtx*(
       rdb.rdVtxLru.put(rvid.vid, res.value())
 
   ok res.value()
+
+
+proc getKeys*(
+    rdb: var RdbInst,
+    rvids: openArray[RootedVertexID],
+    keys: var openArray[Opt[(HashKey, VertexRef)]],
+    flags: set[GetVtxFlag]
+): Result[void, (AristoError, string)] =
+  var
+    remainingRvids: seq[RootedVertexID] # keys to fetch from the db backend. TODO: maybe init seq of cap here
+    rvidIndexes: seq[int] # record the indexes from the original keys list. TODO: maybe init seq of cap here
+
+  for i, rvid in rvids:
+    block:
+      # Try LRU cache first
+      let rc =
+        if GetVtxFlag.PeekCache in flags:
+          rdb.rdKeyLru.peek(rvid.vid)
+        else:
+          rdb.rdKeyLru.get(rvid.vid)
+
+      if rc.isOk:
+        rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
+        keys[i] = Opt.some((rc.value, VertexRef(nil)))
+        continue
+      else:
+        rdbKeyLruStats[rvid.to(RdbStateType)].inc(false)
+
+    block:
+      # We don't store keys for leaves, no need to hit the database
+      let rc = rdb.rdVtxLru.peek(rvid.vid)
+      if rc.isOk():
+        if rc.value().vType in Leaves:
+          keys[i] = Opt.some((VOID_HASH_KEY, rc.value()))
+          continue
+
+    remainingRvids.add(rvid)
+    rvidIndexes.add(i)
+
+  if remainingRvids.len() == 0:
+    return ok()
+
+  let multiGetIter = rdb.vtxCol.multiGetIter(remainingRvids.mapIt(@(it.blobify().data()))).valueOr:
+    const errSym = RdbBeDriverGetKeyError
+    when extraTraceMessages:
+      trace logTxt "getKeys", rvid, error = errSym, info = error
+    return err((errSym, error))
+
+  var i = 0
+  for slice in multiGetIter:
+    let index = rvidIndexes[i]
+    keys[index] = slice.map(
+      proc(s: auto): auto =
+        let hashKey = s.data(asOpenArray = true).deblobify(HashKey)
+        if hashKey.isSome():
+          (hashKey.get(), VertexRef(nil))
+        else:
+          (VOID_HASH_KEY, s.data(asOpenArray = true).deblobify(VertexRef).valueOr(nil))
+    )
+    # TODO: do we need to map Opt.none to (VOID_HASH_KEY, nil)
+
+    if keys[index].isSome():
+      # Update cache and return - in peek mode, avoid evicting cache items
+      if keys[index].get()[0] != VOID_HASH_KEY and
+          (GetVtxFlag.PeekCache notin flags or rdb.rdKeyLru.len < rdb.rdKeyLru.capacity):
+        rdb.rdKeyLru.put(rvids[index].vid, keys[index].get()[0])
+
+      if keys[index].get()[1] != VertexRef(nil) and rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
+        # Don't invalidate vertex cache entries because of key reads - the latter
+        # follow a different access pattern!
+        rdb.rdVtxLru.put(rvids[index].vid, keys[index].get()[1])
+
+    inc i
+
+  ok()
 
 # ------------------------------------------------------------------------------
 # End
