@@ -98,6 +98,10 @@ type
   GasMeter* = object
     gasRefunded*: int64
     gasRemaining*: GasInt
+    stateGasLeft*: GasInt
+    stateGasUsed*: GasInt
+    regularGasUsed*: GasInt
+
 
   CallKind* {.pure.} = enum
     Call          # Request CALL.
@@ -114,6 +118,7 @@ type
     kind*:             CallKind
     depth*:            int
     gas*:              GasInt
+    stateGas*:         GasInt
     sender*:           Address
     contractAddress*:  Address
     codeAddress*:      Address

@@ -48,6 +48,7 @@ proc execSubCreate(c: Computation; childMsg: Message;
   c.chainTo(child):
     if not child.shouldBurnGas:
       c.gasMeter.returnGas(child.gasMeter.gasRemaining)
+      c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
 
     if child.isSuccess:
       c.merge(child)
@@ -119,11 +120,15 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
     createMsgGas -= createMsgGas div 64
   ? cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE msg gas")
 
+  let stateGas = cpt.gasMeter.stateGasLeft
+  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "CREATE state gas")
+
   var
     childMsg = Message(
       kind:   CallKind.Create,
       depth:  cpt.msg.depth + 1,
       gas:    createMsgGas,
+      stateGas: stateGas,
       sender: cpt.msg.contractAddress,
       contractAddress: generateContractAddress(
         cpt.vmState,
@@ -196,12 +201,16 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
     createMsgGas -= createMsgGas div 64
   ? cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE2 msg gas")
 
+  let stateGas = cpt.gasMeter.stateGasLeft
+  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "CREATE2 state gas")
+
   var
     code = CodeBytesRef.init(cpt.memory.read(memPos, memLen))
     childMsg = Message(
       kind:   CallKind.Create2,
       depth:  cpt.msg.depth + 1,
       gas:    createMsgGas,
+      stateGas: stateGas,
       sender: cpt.msg.contractAddress,
       contractAddress: generateContractAddress(
         cpt.vmState,

@@ -149,6 +149,10 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
     intrinsic = if call.sysCall: IntrinsicGas()
                 else: intrinsicGas(call, vmState.fork, vmState.blockCtx.gasLimit)
     intrinsicGas = intrinsic.regular + intrinsic.state
+    executionGas = if call.gasLimit < intrinsicGas: 0.GasInt else: call.gasLimit - intrinsicGas
+    regularGasBudget = TX_GAS_LIMIT - intrinsic.regular
+    gasLeft = if vmState.fork >= FkAmsterdam: min(regularGasBudget, executionGas)
+              else: executionGas
     host = TransactionHost(
       vmState: vmState,
       floorDataGas: intrinsic.floorDataGas,
@@ -166,7 +170,8 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
       # Note that this is only a short term fix. In the longer term we need to
       # implement validation on all fields in the Message before executing in the EVM.
       # TODO: Implement full validation on all fields. See related issue: https://github.com/status-im/nimbus-eth1/issues/1524
-      gas:             if call.gasLimit < intrinsicGas: 0.GasInt else: call.gasLimit - intrinsicGas,
+      gas:             gasLeft,
+      stateGas:        executionGas - gasLeft,
       contractAddress: call.to,
       codeAddress:     call.to,
       sender:          call.sender,
@@ -230,6 +235,7 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
                             2.GasInt
   if c.shouldBurnGas:
     c.gasMeter.gasRemaining = 0
+    c.gasMeter.stateGasLeft = 0
 
   # Calculated gas used, taking into account refund rules.
   let

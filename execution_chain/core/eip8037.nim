@@ -16,6 +16,7 @@ const
   STATE_BYTES_PER_AUTH_BASE* = 23
   REGULAR_GAS_CREATE* = 9000
   REGULAR_PER_AUTH_BASE_COST* = 7500
+  STATE_BYTES_PER_STORAGE_SET* = 32
 
 func stateGasPerByte*(gasLimit: GasInt): GasInt =
   return 1174.GasInt

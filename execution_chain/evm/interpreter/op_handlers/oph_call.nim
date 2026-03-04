@@ -190,6 +190,7 @@ proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) =
   c.chainTo(child):
     if not child.shouldBurnGas:
       c.gasMeter.returnGas(child.gasMeter.gasRemaining)
+      c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
 
     if child.isSuccess:
       c.merge(child)
@@ -230,6 +231,9 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
 
   ? cpt.opcodeGasCost(Call, gasCost, reason = $Call)
 
+  let stateGas = cpt.gasMeter.stateGasLeft
+  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "CALL state gas")
+
   cpt.returnData.setLen(0)
 
   if cpt.msg.depth >= MaxCallDepth:
@@ -238,6 +242,7 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
       maximumDepth = MaxCallDepth,
       depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
+    cpt.gasMeter.returnStateGas(stateGas)
     return ok()
 
   cpt.memory.extend(p.memInPos, p.memInLen)
@@ -246,12 +251,14 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
   let senderBalance = cpt.getBalance(p.sender)
   if senderBalance < p.value:
     cpt.gasMeter.returnGas(childGasLimit)
+    cpt.gasMeter.returnStateGas(stateGas)
     return ok()
 
   var childMsg = Message(
     kind:            CallKind.Call,
     depth:           cpt.msg.depth + 1,
     gas:             childGasLimit,
+    stateGas:        stateGas,
     sender:          p.sender,
     contractAddress: p.contractAddress,
     codeAddress:     p.codeAddress,
@@ -286,6 +293,9 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
 
   ? cpt.opcodeGasCost(CallCode, gasCost, reason = $CallCode)
 
+  let stateGas = cpt.gasMeter.stateGasLeft
+  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "CALLCODE state gas")
+
   cpt.returnData.setLen(0)
 
   if cpt.msg.depth >= MaxCallDepth:
@@ -294,6 +304,7 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
       maximumDepth = MaxCallDepth,
       depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
+    cpt.gasMeter.returnStateGas(stateGas)
     return ok()
 
   cpt.memory.extend(p.memInPos, p.memInLen)
@@ -302,12 +313,14 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
   let senderBalance = cpt.getBalance(p.sender)
   if senderBalance < p.value:
     cpt.gasMeter.returnGas(childGasLimit)
+    cpt.gasMeter.returnStateGas(stateGas)
     return ok()
 
   var childMsg = Message(
     kind:            CallKind.CallCode,
     depth:           cpt.msg.depth + 1,
     gas:             childGasLimit,
+    stateGas:        stateGas,
     sender:          p.sender,
     contractAddress: p.contractAddress,
     codeAddress:     p.codeAddress,
@@ -343,6 +356,9 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
 
   ? cpt.opcodeGasCost(DelegateCall, gasCost, reason = $DelegateCall)
 
+  let stateGas = cpt.gasMeter.stateGasLeft
+  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "DELEGATECALL state gas")
+
   cpt.returnData.setLen(0)
   if cpt.msg.depth >= MaxCallDepth:
     debug "Computation Failure",
@@ -350,6 +366,7 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
       maximumDepth = MaxCallDepth,
       depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
+    cpt.gasMeter.returnStateGas(stateGas)
     return ok()
 
   cpt.memory.extend(p.memInPos, p.memInLen)
@@ -359,6 +376,7 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
     kind:            CallKind.DelegateCall,
     depth:           cpt.msg.depth + 1,
     gas:             childGasLimit,
+    stateGas:        stateGas,
     sender:          p.sender,
     contractAddress: p.contractAddress,
     codeAddress:     p.codeAddress,
@@ -394,6 +412,9 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
 
   ? cpt.opcodeGasCost(StaticCall, gasCost, reason = $StaticCall)
 
+  let stateGas = cpt.gasMeter.stateGasLeft
+  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "STATICCALL state gas")
+
   cpt.returnData.setLen(0)
 
   if cpt.msg.depth >= MaxCallDepth:
@@ -402,6 +423,7 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
       maximumDepth = MaxCallDepth,
       depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
+    cpt.gasMeter.returnStateGas(stateGas)
     return ok()
 
   cpt.memory.extend(p.memInPos, p.memInLen)
@@ -411,6 +433,7 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
     kind:            CallKind.Call,
     depth:           cpt.msg.depth + 1,
     gas:             childGasLimit,
+    stateGas:        stateGas,
     sender:          p.sender,
     contractAddress: p.contractAddress,
     codeAddress:     p.codeAddress,

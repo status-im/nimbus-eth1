@@ -146,7 +146,7 @@ func newComputation*(vmState: BaseVMState,
   new result
   result.vmState = vmState
   result.msg = message
-  result.gasMeter.init(message.gas)
+  result.gasMeter.init(message.gas, message.stateGas)
   result.keepStack = keepStack
 
   if not code.isNil:

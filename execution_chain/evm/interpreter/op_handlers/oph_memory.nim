@@ -50,7 +50,7 @@ proc sstoreImpl(c: Computation, slot, newValue: UInt256): EvmResultVoid =
   ok()
 
 
-proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256, coldAccess = 0.GasInt): EvmResultVoid =
+proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256, coldAccess = 0.GasInt, stateGas: bool = false): EvmResultVoid =
   let
     ledger = c.vmState.readOnlyLedger
     currentValue = c.getStorage(slot)
@@ -64,6 +64,9 @@ proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256, coldAcces
   ? c.opcodeGasCost(Sstore, res.gasCost + coldAccess, "SSTORE")
 
   c.gasMeter.refundGas(res.gasRefund)
+
+  if stateGas and res.stateGas > 0:
+    ? c.gasMeter.chargeStateGas(res.stateGas, reason = "SSTORE state gas")
 
   if c.vmState.balTrackerEnabled:
     c.vmState.balTracker.trackStorageWrite(c.msg.contractAddress, slot, newValue)
@@ -226,6 +229,30 @@ proc sstoreEIP2929Op(cpt: VmCpt): EvmResultVoid =
 
   sstoreNetGasMeteringImpl(cpt, slot, newValue, coldAccessGas)
 
+proc sstoreEIP8037Op(cpt: VmCpt): EvmResultVoid =
+  ## 0x55, EIP2929: sstore for Berlin and later
+  ? cpt.stack.lsCheck(2)
+  let
+    slot = cpt.stack.lsPeekInt(^1)
+    newValue = cpt.stack.lsPeekInt(^2)
+  cpt.stack.lsShrink(2)
+
+  ? checkInStaticContext(cpt)
+
+  # Minimum gas required to be present for an SSTORE call, not consumed
+  const SentryGasEIP2200 = 2300
+
+  if cpt.gasMeter.gasRemaining <= SentryGasEIP2200:
+    return err(opErr(OutOfGas))
+
+  var coldAccessGas = 0.GasInt
+  cpt.vmState.mutateLedger:
+    if not ledger.inAccessList(cpt.msg.contractAddress, slot):
+      ledger.accessList(cpt.msg.contractAddress, slot)
+      coldAccessGas = ColdSloadCost
+
+  sstoreNetGasMeteringImpl(cpt, slot, newValue, coldAccessGas, stateGas = true)
+
 # -------
 
 func jumpOp(cpt: VmCpt): EvmResultVoid =
@@ -375,16 +402,23 @@ const
 
     (opCode: Sstore,    ##  0x55, sstore for Istanbul and later
      forks: VmOpIstanbulAndLater - VmOpBerlinAndLater,
-     name: "sstoreEIP2200",
-     info: "EIP2200: sstore for Istanbul and later",
+     name: "sstoreEIP-2200",
+     info: "EIP-2200: sstore for Istanbul and later",
      exec: sstoreEIP2200Op),
 
 
     (opCode: Sstore,    ##  0x55, sstore for Berlin and later
-     forks: VmOpBerlinAndLater,
-     name: "sstoreEIP2929",
-     info: "EIP2929: sstore for Istanbul and later",
+     forks: VmOpBerlinAndLater - VmOpAmsterdamAndLater,
+     name: "sstoreEIP-2929",
+     info: "EIP-2929: sstore for Istanbul and later",
      exec: sstoreEIP2929Op),
+
+
+    (opCode: Sstore,    ##  0x55, sstore for Amsterdam and later
+     forks: VmOpAmsterdamAndLater,
+     name: "sstoreEIP-8037",
+     info: "EIP-8037: sstore for Amsterdam and later",
+     exec: sstoreEIP8037Op),
 
 
     (opCode: Jump,      ## 0x56, Jump
