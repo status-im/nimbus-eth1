@@ -18,7 +18,7 @@ import
   ../../../constants,
   ../../evm_errors,
   ../../../common/evmforks,
-  ../../../core/eip7702,
+  ../../../core/[eip7702, eip8037],
   ../../computation,
   ../../memory,
   ../../stack,
@@ -231,8 +231,13 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
 
   ? cpt.opcodeGasCost(Call, gasCost, reason = $Call)
 
+  if cpt.fork >= FkAmsterdam:
+    if isNewAccount() and p.value.isZero.not:
+      ? cpt.gasMeter.chargeStateGas(STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte,
+        reason = "CALL: State gas new account")
+
   let stateGas = cpt.gasMeter.stateGasLeft
-  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "CALL state gas")
+  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "CALL stateGas reservoir")
 
   cpt.returnData.setLen(0)
 
@@ -294,7 +299,7 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
   ? cpt.opcodeGasCost(CallCode, gasCost, reason = $CallCode)
 
   let stateGas = cpt.gasMeter.stateGasLeft
-  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "CALLCODE state gas")
+  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "CALLCODE stateGas reservoir")
 
   cpt.returnData.setLen(0)
 
@@ -357,7 +362,7 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
   ? cpt.opcodeGasCost(DelegateCall, gasCost, reason = $DelegateCall)
 
   let stateGas = cpt.gasMeter.stateGasLeft
-  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "DELEGATECALL state gas")
+  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "DELEGATECALL stateGas reservoir")
 
   cpt.returnData.setLen(0)
   if cpt.msg.depth >= MaxCallDepth:
@@ -413,7 +418,7 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
   ? cpt.opcodeGasCost(StaticCall, gasCost, reason = $StaticCall)
 
   let stateGas = cpt.gasMeter.stateGasLeft
-  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "STATICCALL state gas")
+  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "STATICCALL stateGas reservoir")
 
   cpt.returnData.setLen(0)
 

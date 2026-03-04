@@ -93,10 +93,8 @@ func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork, gasLimit: GasI
   if call.isCreate:
     if fork >= FkAmsterdam:
       stateGas += STATE_BYTES_PER_NEW_ACCOUNT * costPerStateByte
-      regularGas += REGULAR_GAS_CREATE
-    else:
-      regularGas += gasFees[fork][GasTXCreate]
 
+    regularGas += gasFees[fork][GasTXCreate]
     if fork >= FkShanghai:
       regularGas += (gasFees[fork][GasInitcodeWord] * call.input.len.wordCount)
 

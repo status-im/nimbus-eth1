@@ -19,6 +19,7 @@ import
   ../../evm_errors,
   ../../../common/evmforks,
   ../../../utils/utils,
+  ../../../core/eip8037,
   ../../computation,
   ../../memory,
   ../../stack,
@@ -92,10 +93,15 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
       currentMemSize: cpt.memory.len,
       memOffset:      memPos,
       memLength:      memLen)
-    gasCost = cpt.gasCosts[Create].cr_handler(1.u256, gasParams)
+    gasCost = cpt.gasCosts[Create].cr_handler(false, gasParams)
 
   ? cpt.opcodeGasCost(Create,
     gasCost, reason = "CREATE: GasCreate + memLen * memory expansion")
+
+  if cpt.fork >= FkAmsterdam:
+    ? cpt.gasMeter.chargeStateGas(STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte,
+      reason = "CREATE: State gas new account")
+
   cpt.memory.extend(memPos, memLen)
   cpt.returnData.setLen(0)
 
@@ -121,7 +127,7 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
   ? cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE msg gas")
 
   let stateGas = cpt.gasMeter.stateGasLeft
-  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "CREATE state gas")
+  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "CREATE stateGas reservoir")
 
   var
     childMsg = Message(
@@ -172,11 +178,16 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
       memOffset:      memPos,
       memLength:      memLen)
 
-  var gasCost = cpt.gasCosts[Create].cr_handler(1.u256, gasParams)
+  var gasCost = cpt.gasCosts[Create].cr_handler(false, gasParams)
   gasCost = gasCost + cpt.gasCosts[Create2].m_handler(0, 0, memLen)
 
   ? cpt.opcodeGasCost(Create2,
     gasCost, reason = "CREATE2: GasCreate + memLen * memory expansion")
+
+  if cpt.fork >= FkAmsterdam:
+    ? cpt.gasMeter.chargeStateGas(STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte,
+      reason = "CREATE2: State gas new account")
+
   cpt.memory.extend(memPos, memLen)
   cpt.returnData.setLen(0)
 
@@ -202,7 +213,7 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
   ? cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE2 msg gas")
 
   let stateGas = cpt.gasMeter.stateGasLeft
-  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "CREATE2 state gas")
+  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "CREATE2 stateGas reservoir")
 
   var
     code = CodeBytesRef.init(cpt.memory.read(memPos, memLen))

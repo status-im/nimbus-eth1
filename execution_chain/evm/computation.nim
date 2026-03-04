@@ -120,6 +120,9 @@ template getCodeHash*(c: Computation, address: Address): Hash32 =
   else:
     db.getCodeHash(address)
 
+template getCostPerStateByte*(c: Computation): GasInt =
+  c.vmState.blockCtx.costPerStateByte
+
 template selfDestruct*(c: Computation, address: Address) =
   c.execSelfDestruct(address)
 
@@ -276,7 +279,7 @@ proc writeContract*(c: Computation) =
   else:
     let
       gasParams = GasParamsCr(memLength: len)
-      codeCost = c.gasCosts[Create].cr_handler(0.u256, gasParams)
+      codeCost = c.gasCosts[Create].cr_handler(true, gasParams)
 
     if codeCost <= c.gasMeter.gasRemaining:
       c.gasMeter.consumeGas(codeCost,
