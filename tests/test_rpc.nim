@@ -509,6 +509,37 @@ proc rpcMain*() =
       let res = await client.eth_estimateGas(ec)
       check res == w3Qty(21000'u64)
 
+    test "eth_estimateGas includes EIP-7702 authorization intrinsic cost":
+      let
+        baseArgs = TransactionArgs(
+          `from`: Opt.some(signer),
+          to: Opt.some(extraAddress),
+          gas: Opt.some(w3Qty(100000'u)),
+          gasPrice: Opt.some(w3Qty(100'u)),
+          value: Opt.some(100.u256)
+        )
+        auth = Authorization(
+          chainId: env.chainId,
+          address: extraAddress,
+          nonce: 0.AccountNonce,
+          yParity: 0'u8,
+          r: 1.u256,
+          s: 1.u256
+        )
+        argsWithAuth = TransactionArgs(
+          `from`: baseArgs.`from`,
+          to: baseArgs.to,
+          gas: baseArgs.gas,
+          gasPrice: baseArgs.gasPrice,
+          value: baseArgs.value,
+          authorizationList: Opt.some(@[auth]),
+        )
+
+      let
+        baseRes = await client.eth_estimateGas(baseArgs)
+        authRes = await client.eth_estimateGas(argsWithAuth)
+      check baseRes != authRes
+
     test "eth_estimateGas respects available funds with EIP-1559 fees":
       let
         latestTag = blockId(1'u64)
@@ -536,18 +567,6 @@ proc rpcMain*() =
 
       let res = await client.eth_estimateGas(eip1559Args)
       check res == w3Qty(gasBudget)
-    # Todo: Add https://github.com/ethereum/execution-apis/blob/main/tests/eth_estimateGas/estimate-with-eip7702.io and https://github.com/ethereum/execution-apis/blob/main/tests/eth_estimateGas/estimate-with-eip4844.io
-
-    test "eth_estimateGas short-circuit plain transfer to EOA":
-      let ec = TransactionArgs(
-        `from`: Opt.some(signer),
-        to: Opt.some(extraAddress),
-        gas: Opt.some(w3Qty(42000'u)),
-        gasPrice: Opt.some(w3Qty(100'u)),
-        value: Opt.some(100.u256)
-      )
-      let res = await client.eth_estimateGas(ec)
-      check res == w3Qty(21000'u64)
 
     test "eth_estimateGas insufficient funds returns error":
       let ec = TransactionArgs(
@@ -570,8 +589,8 @@ proc rpcMain*() =
         input: Opt.some(hexToSeqByte("0001020304"))
       )
       let res = await client.eth_estimateGas(ec)
+      # gas should be 21k + call overhead
       check res > w3Qty(20999'u64)
-      # Contract returns deadbeef; gas should be 21k + call overhead
       check res <= w3Qty(100_000'u64)
 
     test "eth_getBlockByHash":

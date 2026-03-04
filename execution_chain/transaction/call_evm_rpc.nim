@@ -59,9 +59,6 @@ proc rpcEstimateGas*(args: TransactionArgs,
                      vmState: BaseVMState,
                      gasCap: GasInt): Result[GasInt, (EvmErrorObj, OutputResult)] =
   # Binary search the gas requirement, as it may be higher than the amount used
-  # TODO: rpcEstimateGas does not seem to add gas cost for EIP-7702
-  # authorization, see test case estimate-with-eip-7702.io of
-  # execution-apis tests
   let fork    = vmState.fork
   var params  = toCallParams(vmState, args, gasCap, header.baseFeePerGas).valueOr:
     return err((evmErr(EvmInvalidParam), OutputResult()))
@@ -129,24 +126,17 @@ proc rpcEstimateGas*(args: TransactionArgs,
   # Short circuit estimation check: plain value transfer (no data, to has no code)
   if not params.isCreate and params.input.len == 0 and
      vmState.readOnlyLedger.getCodeSize(params.to) == 0:
-    if executable(txGas).isOk:
-      # If the transaction is executable, return the transaction gas limit
-      return ok(txGas)
-    
+    if executable(TX_BASE_COST).isOk:
+      return ok(TX_BASE_COST)
 
   # Execute at highest gas limit first; if it fails, return immediately (no binary search)
-  params.gasLimit = hi
   let highResult = executable(hi).valueOr:
     return err((evmErr(EvmInvalidParam), error))
 
-  if highResult.error.len > 0:
-    return err((evmErr(EvmInvalidParam), OutputResult(
-      error: highResult.error, output: highResult.output)))
-
-  if highResult.gasUsed>0:
+  if highResult.gasUsed > 0:
     lo = max(lo, highResult.gasUsed - 1)
 
-  # Optimistic try: (usedGas + CallStipend) * 64/63 often succeeds and narrows the range
+  # Optimistic try: (usedGas + CallStipend) * 64/63
   let callStipend = GasInt gasFees[fork][GasCallStipend]
   let optimisticGasLimit = (highResult.gasUsed + callStipend) * 64 div 63
   if optimisticGasLimit < hi:
