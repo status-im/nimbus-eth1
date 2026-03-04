@@ -95,7 +95,7 @@ proc debug*(vms: BaseVMState): string =
   result.add "excessBlobGas    : " & $vms.blockCtx.excessBlobGas & "\n"
   result.add "parentHash       : " & $vms.blockCtx.parentHash & "\n"
   result.add "slotNumber       : " & $vms.blockCtx.slotNumber & "\n"
-  result.add "costPerGasByte   : " & $vms.blockCtx.costPerGasByte & "\n"
+  result.add "costPerStateByte : " & $vms.blockCtx.costPerStateByte & "\n"
   result.add "flags            : " & $vms.flags               & "\n"
   result.add "receipts.len     : " & $vms.receipts.len        & "\n"
   result.add "ledger.root      : " & $vms.ledger.getStateRoot() & "\n"

@@ -68,7 +68,7 @@ func blockCtx(header: Header): BlockContext =
     excessBlobGas: header.excessBlobGas.get(0'u64),
     parentHash   : header.parentHash,
     slotNumber   : header.slotNumber.get(0'u64),
-    costPerGasByte: stateGasPerByte(header.gasLimit),
+    costPerStateByte: stateGasPerByte(header.gasLimit),
   )
 
 # --------------

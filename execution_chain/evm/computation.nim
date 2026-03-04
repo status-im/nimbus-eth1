@@ -15,7 +15,7 @@ import
   ".."/[db/ledger, constants],
   ./[code_stream, memory, stack, state],
   ./[types],
-  ./interpreter/[gas_meter, gas_costs, op_codes],
+  ./interpreter/[gas_meter, gas_costs, op_codes, utils/utils_numeric],
   ./evm_errors,
   ./code_bytes,
   ./eip7708,
@@ -255,20 +255,39 @@ proc writeContract*(c: Computation) =
   # gas difference matters.  The new code can be called later in the
   # transaction too, before self-destruction wipes the account at the end.
 
-  let
-    gasParams = GasParamsCr(memLength: len)
-    codeCost = c.gasCosts[Create].cr_handler(0.u256, gasParams)
+  if fork >= FkAmsterdam:
+    let
+      codeDepositStateGas = len.GasInt * c.vmState.blockCtx.costPerStateByte
+      codeHashGas = (6 * wordCount(len)).GasInt
 
-  if codeCost <= c.gasMeter.gasRemaining:
-    c.gasMeter.consumeGas(codeCost,
-      reason = "Write new contract code").
-        expect("enough gas since we checked against gasRemaining")
-    c.vmState.mutateLedger:
-      if c.vmState.balTrackerEnabled:
-        c.vmState.balTracker.trackCodeChange(c.msg.contractAddress, c.output)
-      ledger.setCode(c.msg.contractAddress, c.output)
-    withExtra trace, "Writing new contract code"
-    return
+    if c.gasMeter.enoughGas(codeHashGas, codeDepositStateGas):
+      c.gasMeter.chargeStateGas(codeDepositStateGas,
+        reason = "Deposit state gas").
+          expect("enough gas since we checked against stateGasLeft")
+      c.gasMeter.consumeGas(codeHashGas,
+        reason = "Code hash gas").
+          expect("enough gas since we checked against gasRemaining")
+      c.vmState.mutateLedger:
+        if c.vmState.balTrackerEnabled:
+          c.vmState.balTracker.trackCodeChange(c.msg.contractAddress, c.output)
+        ledger.setCode(c.msg.contractAddress, c.output)
+      withExtra trace, "Writing new contract code"
+      return
+  else:
+    let
+      gasParams = GasParamsCr(memLength: len)
+      codeCost = c.gasCosts[Create].cr_handler(0.u256, gasParams)
+
+    if codeCost <= c.gasMeter.gasRemaining:
+      c.gasMeter.consumeGas(codeCost,
+        reason = "Write new contract code").
+          expect("enough gas since we checked against gasRemaining")
+      c.vmState.mutateLedger:
+        if c.vmState.balTrackerEnabled:
+          c.vmState.balTracker.trackCodeChange(c.msg.contractAddress, c.output)
+        ledger.setCode(c.msg.contractAddress, c.output)
+      withExtra trace, "Writing new contract code"
+      return
 
   if fork >= FkHomestead:
     # EIP-2 (https://eips.ethereum.org/EIPS/eip-2).

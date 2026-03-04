@@ -34,7 +34,7 @@ type
     excessBlobGas*    : uint64
     parentHash*       : Hash32
     slotNumber*       : uint64
-    costPerGasByte*   : GasInt
+    costPerStateByte* : GasInt
 
   TxContext* = object
     origin*         : Address

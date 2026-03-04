@@ -109,8 +109,8 @@ proc preExecComputation(vmState: BaseVMState, call: CallParams): int64 =
     if ledger.accountExists(authority):
       if vmState.fork >= FkAmsterdam:
         let
-          newAccountCost = STATE_BYTES_PER_NEW_ACCOUNT * vmState.blockCtx.costPerGasByte
-          perAuthBaseCost = STATE_BYTES_PER_AUTH_BASE * vmState.blockCtx.costPerGasByte
+          newAccountCost = STATE_BYTES_PER_NEW_ACCOUNT * vmState.blockCtx.costPerStateByte
+          perAuthBaseCost = STATE_BYTES_PER_AUTH_BASE * vmState.blockCtx.costPerStateByte
         gasRefund += int64(newAccountCost - perAuthBaseCost)
       else:
         gasRefund += PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST

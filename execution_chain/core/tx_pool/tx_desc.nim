@@ -105,7 +105,7 @@ proc setupVMState(com: CommonRef;
       excessBlobGas: com.calcExcessBlobGas(parent, fork),
       parentHash   : parentHash,
       slotNumber   : pos.slotNumber,
-      costPerGasByte: stateGasPerByte(gasLimit),
+      costPerStateByte: stateGasPerByte(gasLimit),
     ),
     txFrame = parentFrame.txFrameBegin(),
     com     = com,
