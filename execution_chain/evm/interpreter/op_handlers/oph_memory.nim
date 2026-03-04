@@ -27,7 +27,8 @@ import
   ./oph_defs,
   ./oph_helpers,
   ../../state,
-  ../../../db/ledger
+  ../../../db/ledger,
+  ../../../core/eip8037
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -57,7 +58,9 @@ proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256, coldAcces
 
     gasParam = GasParamsSs(
       currentValue: currentValue,
-      originalValue: ledger.getCommittedStorage(c.msg.contractAddress, slot))
+      originalValue: ledger.getCommittedStorage(c.msg.contractAddress, slot),
+      stateGasStorageSet: STATE_BYTES_PER_STORAGE_SET * c.getCostPerStateByte,
+      )
 
     res = c.gasCosts[Sstore].ss_handler(newValue, gasParam)
 

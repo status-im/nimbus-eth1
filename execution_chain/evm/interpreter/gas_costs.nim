@@ -420,7 +420,8 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
       when fork < FkSpurious:
         # Pre-EIP161 all account creation calls consumed 25000 gas.
         gasCost += static(GasInt(FeeSchedule[GasNewAccount]))
-      else:
+
+      when fork >= FkSpurious and fork < FkAmsterdam:
         # Afterwards, only those transfering value:
         # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-158.md
         # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md

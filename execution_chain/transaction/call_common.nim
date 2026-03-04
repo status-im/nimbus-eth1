@@ -153,17 +153,31 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
                 else: intrinsicGas(call, fork, vmState.blockCtx.gasLimit)
     gasRefund = if call.sysCall: 0
                 else: preExecComputation(vmState, call)
-    intrinsicGas = if isAmsterdamOrLater: intrinsic.regular + intrinsic.state - gasRefund.GasInt
-                   else: intrinsic.regular + intrinsic.state
+    intrinsicGas = intrinsic.regular + intrinsic.state
+    
+    # Prevent underflow which can occur when gasLimit is less than intrinsicGas.
+    # Note that this is only a short term fix. In the longer term we need to
+    # implement validation on all fields in the Message before executing in the EVM.
+    # TODO: Implement full validation on all fields. See related issue: https://github.com/status-im/nimbus-eth1/issues/1524    
     executionGas = if call.gasLimit < intrinsicGas: 0.GasInt else: call.gasLimit - intrinsicGas
     regularGasBudget = TX_GAS_LIMIT - intrinsic.regular
-    gasLeft = if isAmsterdamOrLater: min(regularGasBudget, executionGas)
-              else: executionGas
+    
+  var
+    gasLeft = executionGas
+    intrinsicStateGas = 0.GasInt
+    stateGas = 0.GasInt
+              
+  if isAmsterdamOrLater: 
+    gasLeft = min(regularGasBudget, executionGas)              
+    intrinsicStateGas = intrinsic.state - gasRefund.GasInt
+    stateGas = executionGas - gasLeft + gasRefund.GasInt
+    
+  let
     host = TransactionHost(
       vmState: vmState,
       floorDataGas: intrinsic.floorDataGas,
       intrinsicRegularGas: intrinsic.regular,
-      intrinsicStateGas: if isAmsterdamOrLater: intrinsic.state - gasRefund.GasInt else: 0.GasInt
+      intrinsicStateGas: intrinsicStateGas,
       # All other defaults in `TransactionHost` are fine.
     )
 
@@ -174,12 +188,8 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
                          CallKind.Call,
       # flags: {},
       # depth: 0,
-      # Prevent underflow which can occur when gasLimit is less than intrinsicGas.
-      # Note that this is only a short term fix. In the longer term we need to
-      # implement validation on all fields in the Message before executing in the EVM.
-      # TODO: Implement full validation on all fields. See related issue: https://github.com/status-im/nimbus-eth1/issues/1524
       gas:             gasLeft,
-      stateGas:        executionGas - gasLeft,
+      stateGas:        stateGas,
       contractAddress: call.to,
       codeAddress:     call.to,
       sender:          call.sender,
