@@ -270,12 +270,25 @@ func validateTxBasic*(
   if tx.maxFeePerGasNorm < tx.maxPriorityFeePerGasNorm:
     return err(&"invalid tx: maxFee is smaller than maxPriorityFee. maxFee={tx.maxFeePerGas}, maxPriorityFee={tx.maxPriorityFeePerGasNorm}")
 
-  let
-    intrinsic = tx.intrinsicGas(fork, gasLimit)
-    minGasLimit = max(intrinsic.regular, intrinsic.floorDataGas)
+  if fork >= FkAmsterdam:
+    let
+      intrinsic = tx.intrinsicGas(fork, gasLimit)
+      intrinsicGas = intrinsic.regular + intrinsic.state
+      minGasLimit = max(intrinsicGas, intrinsic.floorDataGas)
+      minRegularGasLimit = max(intrinsic.regular, intrinsic.floorDataGas)
 
-  if tx.gasLimit < minGasLimit:
-    return err(&"invalid tx: not enough gas to perform calculation. avail={tx.gasLimit}, require={minGasLimit}")
+    if minGasLimit > tx.gasLimit:
+      return err(&"invalid tx: not enough gas to perform calculation. avail={tx.gasLimit}, require={minGasLimit}")
+
+    if minRegularGasLimit > TX_GAS_LIMIT:
+      return err(&"invalid tx: Intrinsic regular or calldata floor exceeds TX_GAS_LIMIT={TX_GAS_LIMIT}, require={minRegularGasLimit}")
+  else:
+    let
+      intrinsic = tx.intrinsicGas(fork, gasLimit)
+      minGasLimit = max(intrinsic.regular, intrinsic.floorDataGas)
+
+    if tx.gasLimit < minGasLimit:
+      return err(&"invalid tx: not enough gas to perform calculation. avail={tx.gasLimit}, require={minGasLimit}")
 
   if fork >= FkCancun:
     if tx.payload.len > MAX_CALLDATA_SIZE:

@@ -79,3 +79,9 @@ func enoughGas*(gasMeter: GasMeter, regularGas, stateGas: GasInt): bool =
     return gasLeft >= regularGas
 
   false
+
+func burnGas*(gasMeter: var GasMeter) =
+  gasMeter.stateGasUsed += gasMeter.stateGasLeft
+  gasMeter.regularGasUsed += gasMeter.gasRemaining
+  gasMeter.gasRemaining = 0
+  gasMeter.stateGasLeft = 0

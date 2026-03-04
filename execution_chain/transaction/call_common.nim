@@ -28,11 +28,14 @@ type
     vmState:         BaseVMState
     computation:     Computation
     floorDataGas:    GasInt
+    intrinsicRegularGas: GasInt
+    intrinsicStateGas: GasInt
 
   GasUsed = object
     evmGasUsed: GasInt
     txGasUsed: GasInt
-    blockGasUsedInTx: GasInt
+    blockRegularGasUsed: GasInt
+    blockStateGasUsed: GasInt
 
 proc initialAccessListEIP2929(call: CallParams) =
   # EIP2929 initial access list.
@@ -108,10 +111,7 @@ proc preExecComputation(vmState: BaseVMState, call: CallParams): int64 =
     # 7. Add PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST gas to the global refund counter if authority exists in the trie.
     if ledger.accountExists(authority):
       if vmState.fork >= FkAmsterdam:
-        let
-          newAccountCost = STATE_BYTES_PER_NEW_ACCOUNT * vmState.blockCtx.costPerStateByte
-          perAuthBaseCost = STATE_BYTES_PER_AUTH_BASE * vmState.blockCtx.costPerStateByte
-        gasRefund += int64(newAccountCost - perAuthBaseCost)
+        gasRefund += int64(STATE_BYTES_PER_NEW_ACCOUNT * vmState.blockCtx.costPerStateByte)
       else:
         gasRefund += PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST
 
@@ -133,12 +133,14 @@ proc preExecComputation(vmState: BaseVMState, call: CallParams): int64 =
   gasRefund
 
 proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
-  let vmState = call.vmState
+  let
+    vmState = call.vmState
+    fork = vmState.fork
   vmState.txCtx = TxContext(
     origin         : call.origin.get(call.sender),
     gasPrice       : call.gasPrice,
     versionedHashes: call.versionedHashes,
-    blobBaseFee    : getBlobBaseFee(vmState.blockCtx.excessBlobGas, vmState.com, vmState.fork),
+    blobBaseFee    : getBlobBaseFee(vmState.blockCtx.excessBlobGas, vmState.com, fork),
   )
 
   # reset global gasRefund counter each time
@@ -146,16 +148,22 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
   vmState.gasRefunded = 0
 
   let
+    isAmsterdamOrLater = fork >= FkAmsterdam
     intrinsic = if call.sysCall: IntrinsicGas()
-                else: intrinsicGas(call, vmState.fork, vmState.blockCtx.gasLimit)
-    intrinsicGas = intrinsic.regular + intrinsic.state
+                else: intrinsicGas(call, fork, vmState.blockCtx.gasLimit)
+    gasRefund = if call.sysCall: 0
+                else: preExecComputation(vmState, call)
+    intrinsicGas = if isAmsterdamOrLater: intrinsic.regular + intrinsic.state - gasRefund.GasInt
+                   else: intrinsic.regular + intrinsic.state
     executionGas = if call.gasLimit < intrinsicGas: 0.GasInt else: call.gasLimit - intrinsicGas
     regularGasBudget = TX_GAS_LIMIT - intrinsic.regular
-    gasLeft = if vmState.fork >= FkAmsterdam: min(regularGasBudget, executionGas)
+    gasLeft = if isAmsterdamOrLater: min(regularGasBudget, executionGas)
               else: executionGas
     host = TransactionHost(
       vmState: vmState,
       floorDataGas: intrinsic.floorDataGas,
+      intrinsicRegularGas: intrinsic.regular,
+      intrinsicStateGas: if isAmsterdamOrLater: intrinsic.state - gasRefund.GasInt else: 0.GasInt
       # All other defaults in `TransactionHost` are fine.
     )
 
@@ -177,9 +185,6 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
       sender:          call.sender,
       value:           call.value,
     )
-
-    gasRefund = if call.sysCall: 0
-                else: preExecComputation(vmState, call)
     code = if call.isCreate:
              msg.contractAddress = generateContractAddress(call.vmState, CallKind.Create, call.sender)
              CodeBytesRef.init(call.input)
@@ -188,7 +193,8 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
              getCallCode(host.vmState, msg.codeAddress)
 
   host.computation = newComputation(vmState, keepStack, msg, code)
-  host.computation.addRefund(gasRefund)
+  if not isAmsterdamOrLater:
+    host.computation.addRefund(gasRefund)
   vmState.captureStart(host.computation, call.sender, call.to,
                        call.isCreate, call.input,
                        call.gasLimit, call.value)
@@ -234,26 +240,28 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
                           else:
                             2.GasInt
   if c.shouldBurnGas:
-    c.gasMeter.gasRemaining = 0
-    c.gasMeter.stateGasLeft = 0
+    c.gasMeter.burnGas()
 
   # Calculated gas used, taking into account refund rules.
   let
-    txGasUsedBeforeRefund = call.gasLimit - c.gasMeter.gasRemaining
+    txGasUsedBeforeRefund = call.gasLimit - c.gasMeter.gasRemaining - c.gasMeter.stateGasLeft
     maxRefund = txGasUsedBeforeRefund div MaxRefundQuotient
     txGasRefund = min(c.getGasRefund(), maxRefund)
     txGasUsedAfterRefund = txGasUsedBeforeRefund - txGasRefund
 
   var
     txGasUsed = txGasUsedAfterRefund
-    blockGasUsedInTx = txGasUsed
+    blockRegularGasUsed = txGasUsed
+    blockStateGasUsed = 0.GasInt
 
   if fork >= FkAmsterdam:
     txGasUsed = max(txGasUsedAfterRefund, host.floorDataGas)
-    blockGasUsedInTx = max(txGasUsedBeforeRefund, host.floorDataGas)
+    let txRegularGas = host.intrinsicRegularGas + c.gasMeter.regularGasUsed
+    blockRegularGasUsed = max(txRegularGas, host.floorDataGas)
+    blockStateGasUsed = host.intrinsicStateGas + c.gasMeter.stateGasUsed
   elif fork >= FkPrague:
     txGasUsed = max(txGasUsedAfterRefund, host.floorDataGas)
-    blockGasUsedInTx = txGasUsed
+    blockRegularGasUsed = txGasUsed
 
   # Refund for unused gas.
   let txGasLeft = call.gasLimit - txGasUsed
@@ -267,17 +275,18 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
   GasUsed(
     evmGasUsed: c.msg.gas - txGasLeft,
     txGasUsed: txGasUsed,
-    blockGasUsedInTx: blockGasUsedInTx,
+    blockRegularGasUsed: blockRegularGasUsed,
+    blockStateGasUsed: blockStateGasUsed,
   )
 
 proc sysCallGasUsed(host: TransactionHost, call: CallParams): GasUsed =
   let
     c = host.computation
-    txGasUsed = call.gasLimit - c.gasMeter.gasRemaining
+    txGasUsed = call.gasLimit - c.gasMeter.gasRemaining - c.gasMeter.stateGasLeft
   GasUsed(
-    evmGasUsed: c.msg.gas - c.gasMeter.gasRemaining,
+    evmGasUsed: c.msg.gas - c.gasMeter.gasRemaining - c.gasMeter.stateGasLeft,
     txGasUsed: txGasUsed,
-    blockGasUsedInTx: txGasUsed,
+    blockRegularGasUsed: txGasUsed,
   )
 
 proc finishRunningComputation(
@@ -309,7 +318,8 @@ proc finishRunningComputation(
     result = gasUsed.txGasUsed
   elif T is LogResult:
     result.gasUsed = gasUsed.txGasUsed
-    result.blockGasUsed = gasUsed.blockGasUsedInTx
+    result.blockRegularGasUsed = gasUsed.blockRegularGasUsed
+    result.blockStateGasUsed = gasUsed.blockStateGasUsed
     if c.isSuccess:
       result.logEntries = move(c.logEntries)
   elif T is string:

@@ -81,7 +81,7 @@ func classifyPacked(vmState: BaseVMState; moreBurned: GasInt): bool =
   ## in the VM.) This function checks whether the sum of the arguments
   ## `gasBurned` and `moreGasBurned` is within acceptable constraints.
   let totalGasUsed = if vmState.fork >= FkAmsterdam:
-                       vmState.blockGasUsed + moreBurned
+                       max(vmState.blockRegularGasUsed + moreBurned, vmState.blockStateGasUsed + moreBurned)
                      else:
                        vmState.cumulativeGasUsed + moreBurned
   totalGasUsed < vmState.blockCtx.gasLimit
@@ -94,7 +94,7 @@ func classifyPackedNext(vmState: BaseVMState): bool =
   ## This function is typically called as a follow up after a `false` return of
   ## `classifyPack()`.
   if vmState.fork >= FkAmsterdam:
-    vmState.blockGasUsed < vmState.blockCtx.gasLimit
+    max(vmState.blockRegularGasUsed, vmState.blockStateGasUsed) < vmState.blockCtx.gasLimit
   else:
     vmState.cumulativeGasUsed < vmState.blockCtx.gasLimit
 
@@ -130,11 +130,12 @@ proc runTxCommit(pst: var TxPacker; item: TxItemRef; callResult: LogResult, xp: 
 
   # Return remaining gas to the block gas counter so it is
   # available for the next transaction.
-  vmState.gasPool += item.tx.gasLimit - callResult.blockGasUsed
+  vmState.gasPool += item.tx.gasLimit - max(callResult.blockRegularGasUsed, callResult.blockStateGasUsed)
 
   # gasUsed accounting
   vmState.cumulativeGasUsed += callResult.gasUsed
-  vmState.blockGasUsed += callResult.blockGasUsed
+  vmState.blockRegularGasUsed += callResult.blockRegularGasUsed
+  vmState.blockStateGasUsed += callResult.blockStateGasUsed
   vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType, callResult)
   pst.packedTxs.add item
 
@@ -359,7 +360,7 @@ func assembleHeader*(pst: TxPacker, xp: TxPoolRef): Header =
     let bal = vmState.blockAccessList.expect("block access list exists")
     header.blockAccessListHash = Opt.some(bal[].computeBlockAccessListHash())
     header.slotNumber = Opt.some(xp.slotNumber)
-    header.gasUsed = vmState.blockGasUsed
+    header.gasUsed = max(vmState.blockRegularGasUsed, vmState.blockStateGasUsed)
 
   header
 

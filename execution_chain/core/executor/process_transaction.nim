@@ -55,10 +55,11 @@ proc commitOrRollbackDependingOnGasUsed(
   # header `gasUsed` and the `vmState.cumulativeGasUsed` at a later stage.
   let
     gasUsed = callResult.gasUsed
-    blockGasUsed = callResult.blockGasUsed
+    blockRegularGasUsed = callResult.blockRegularGasUsed
+    blockStateGasUsed = callResult.blockStateGasUsed
 
   let limit = if vmState.fork >= FkAmsterdam:
-                vmState.blockGasUsed + blockGasUsed
+                max(vmState.blockRegularGasUsed + blockRegularGasUsed, vmState.blockStateGasUsed + blockStateGasUsed)
               else:
                 vmState.cumulativeGasUsed + gasUsed
 
@@ -76,7 +77,8 @@ proc commitOrRollbackDependingOnGasUsed(
     vmState.ledger.commit(savePoint)
     vmState.ledger.addBalance(vmState.coinbase(), txFee)
     vmState.cumulativeGasUsed += gasUsed
-    vmState.blockGasUsed += blockGasUsed
+    vmState.blockRegularGasUsed += blockRegularGasUsed
+    vmState.blockStateGasUsed += blockStateGasUsed
 
     # EIP-7708: Emit closure logs for accounts with remaining balance before deletion
     if vmState.fork >= FkAmsterdam:
@@ -84,7 +86,7 @@ proc commitOrRollbackDependingOnGasUsed(
 
     # Return remaining gas to the block gas counter so it is
     # available for the next transaction.
-    vmState.gasPool += tx.gasLimit - blockGasUsed
+    vmState.gasPool += tx.gasLimit - max(blockRegularGasUsed, blockStateGasUsed)
     vmState.blobGasUsed += blobGasUsed
     ok()
 

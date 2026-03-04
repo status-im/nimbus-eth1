@@ -54,7 +54,8 @@ type
     tracer*           : TracerRef
     receipts*         : seq[StoredReceipt]
     cumulativeGasUsed*: GasInt
-    blockGasUsed*     : GasInt
+    blockRegularGasUsed*: GasInt
+    blockStateGasUsed*: GasInt
     gasCosts*         : GasCosts
     blobGasUsed*      : uint64
     allLogs*          : seq[Log] # EIP-6110
