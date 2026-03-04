@@ -30,6 +30,7 @@ import
 
 type ProxyError = object of CatchableError
 
+<<<<<<< HEAD
 proc transportCallback[T](
     ctx: ptr Context, status: cint, res: cstring, userData: pointer
 ) {.cdecl, gcsafe, raises: [].} =
@@ -52,6 +53,23 @@ proc transportCallback[T](
 proc getExecutionApiBackend*(
     ctx: ptr Context, url: string, transportProc: ExecutionTransportProc
 ): ExecutionApiBackend =
+=======
+proc getRandomBackendUrl(rng: ref HmacDrbgContext, urls: seq[Web3Url]): string =
+  var randomNum: uint64
+  rng[].generate(randomNum)
+
+  # NOTE: we use the mod operator to bring the random number into range
+  # this introduces a bias in the output distribution but is negligible
+  # for this use case. The bias becomes insignificant when score filters
+  # are used to select clients in the future.
+  let url = urls[randomNum mod uint64(urls.len)]
+
+  url.web3Url
+
+proc getEthApiBackend*(
+    ctx: ptr Context, urls: seq[Web3Url], transportProc: TransportProc
+): EthApiBackend =
+>>>>>>> dff6b0a27 (temp)
   let
     rng = keys.newRng()
     ethChainIdProc = proc(): Future[EngineResult[UInt256]] {.
@@ -65,7 +83,6 @@ proc getExecutionApiBackend*(
         alloc(url),
         "eth_chainId",
         "[]",
-        transportCallback[UInt256],
         createCbData(fut),
       )
       await fut
@@ -86,7 +103,6 @@ proc getExecutionApiBackend*(
         alloc(url),
         "eth_getBlockByHash",
         alloc(params),
-        transportCallback[BlockObject],
         createCbData(fut),
       )
       await fut
@@ -108,7 +124,6 @@ proc getExecutionApiBackend*(
         alloc(url),
         "eth_getBlockByNumber",
         alloc(params),
-        transportCallback[BlockObject],
         createCbData(fut),
       )
       await fut
@@ -133,7 +148,6 @@ proc getExecutionApiBackend*(
         alloc(url),
         "eth_getProof",
         alloc(params),
-        transportCallback[ProofResponse],
         createCbData(fut),
       )
       await fut
@@ -156,7 +170,6 @@ proc getExecutionApiBackend*(
         alloc(url),
         "eth_createAccessList",
         alloc(params),
-        transportCallback[AccessListResult],
         createCbData(fut),
       )
       await fut
@@ -177,7 +190,6 @@ proc getExecutionApiBackend*(
         alloc(url),
         "eth_getCode",
         alloc(params),
-        transportCallback[seq[byte]],
         createCbData(fut),
       )
       await fut
@@ -198,7 +210,6 @@ proc getExecutionApiBackend*(
         alloc(url),
         "eth_getTransactionByHash",
         alloc(params),
-        transportCallback[TransactionObject],
         createCbData(fut),
       )
       await fut
@@ -219,7 +230,6 @@ proc getExecutionApiBackend*(
         alloc(url),
         "eth_getTransactionReceipt",
         alloc(params),
-        transportCallback[ReceiptObject],
         createCbData(fut),
       )
       await fut
@@ -242,7 +252,6 @@ proc getExecutionApiBackend*(
         alloc(url),
         "eth_getBlockReceipts",
         alloc(params),
-        transportCallback[Opt[seq[ReceiptObject]]],
         createCbData(fut),
       )
       await fut
@@ -262,7 +271,6 @@ proc getExecutionApiBackend*(
         alloc(url),
         "eth_getLogs",
         alloc(params),
-        transportCallback[seq[LogObject]],
         createCbData(fut),
       )
       await fut
@@ -307,7 +315,6 @@ proc getExecutionApiBackend*(
         alloc(url),
         "eth_sendRawTransaction",
         alloc(params),
-        transportCallback[Hash32],
         createCbData(fut),
       )
       await fut

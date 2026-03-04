@@ -49,6 +49,6 @@ void nvp_wasm_call(char *name, char *params, CallBackProc cb) {
 }
 
 EMSCRIPTEN_KEEPALIVE
-void nvp_deliver_transport(CallBackProc cb, Context *ctx, int status, char *result, void *userData) {
-    cb(ctx, status, result, userData);
+void nvp_deliver_transport(Context *ctx, int status, char *result, void *userData) {
+    deliverTransport(ctx, status, result, userData);
 }

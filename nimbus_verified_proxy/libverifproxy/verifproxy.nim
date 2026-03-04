@@ -24,6 +24,13 @@ import
 
 proc NimMain() {.importc, exportc, dynlib.}
 
+proc deliverTransport(
+    ctx: ptr Context, status: cint, result: cstring, userData: pointer
+) {.cdecl, exportc, gcsafe, raises: [].} =
+  let data = cast[CallBackData](userData)
+  GC_unref(data)
+  data.complete(status, result)
+
 proc freeNimAllocatedString(res: cstring) {.exported.} =
   deallocShared(res)
 

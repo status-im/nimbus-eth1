@@ -17,15 +17,15 @@ const _mod = await VerifProxyModule({
   onAbort:  msg => console.error(`${TAG} WASM abort:`, msg),
 });
 
-const _transport = _mod.addFunction((ctxPtr, urlPtr, namePtr, paramsPtr, cbPtr, userDataPtr) => {
-  const url = _modUTF8ToString(urlPtr);
-  const name = _modUTF8ToString(namePtr);
-  const params = _modUTF8ToString(paramsPtr);
+const _transport = _mod.addFunction((ctxPtr, urlPtr, namePtr, paramsPtr, userDataPtr) => {
+  const url = _mod.UTF8ToString(urlPtr);
+  const name = _mod.UTF8ToString(namePtr);
+  const params = _mod.UTF8ToString(paramsPtr);
 
   _mod._nvp_free_string(urlPtr);
   _mod._nvp_free_string(paramsPtr);
 
-  console.debug(TAG, 'transport fired', { url, name, params, cbPtr, userDataPtr });
+  console.debug(TAG, 'transport fired', { url, name, params, userDataPtr });
 
   fetch(url, {
     method: 'POST',
@@ -39,19 +39,19 @@ const _transport = _mod.addFunction((ctxPtr, urlPtr, namePtr, paramsPtr, cbPtr, 
   })
     .then(r => r.text())
     .then(result => {
-      console.debug(TAG, 'transport ok', { name, cbPtr });
-      const buf = Module.stringToNewUTF8(result);
-      _mod._nvp_deliver_transport(cbPtr, ctxPtr, 0, buf, userDataPtr)
+      console.debug(TAG, 'transport ok', { name });
+      const buf = _mod.stringToNewUTF8(result);
+      _mod._nvp_deliver_transport(ctxPtr, 0, buf, userDataPtr);
       _mod._free(buf);
     })
     .catch(err => {
       console.error(TAG, 'fetch error', { name, err });
-      const buf = Module.stringToNewUTF8(err.message);
-      _mod._wasm_deliver_transport(cbFnPtr, ctxPtr, -1, buf, userDataPtr)
+      const buf = _mod.stringToNewUTF8(err.message);
+      _mod._nvp_deliver_transport(ctxPtr, -1, buf, userDataPtr);
       _mod._free(buf);
     });
   },
-  'viiiiii',
+  'viiiii',
 );
 
 function _makeCallback(resolve, reject) {

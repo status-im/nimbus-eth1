@@ -63,8 +63,7 @@ typedef void (*CallBackProc)(Context *ctx, int status, char *result, void *userD
  * @param cb        Callback to be called with userData passed (see below)
  * @param userData  pointer to user data. Used to link multiple response callbacks
  *                  back to their queries. Implementation of transport functions
- *                  must appropriately relay back the userData via the transport
- *                  callback function (see above)
+ *                  must call deliverTransport(ctx, status, result, userData) when done.
  */
 typedef void (*ExecutionTransportProc)(Context *ctx, char *url, char *name, char *params, CallBackProc cb, void *userData);
 
