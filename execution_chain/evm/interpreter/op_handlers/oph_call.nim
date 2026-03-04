@@ -58,8 +58,6 @@ type
     memOffset:       int
     memLength:       int
     contractAddress: Address
-    gasCallEIP2929:  proc(): GasInt {.gcsafe, raises: [].}
-    gasCallDelegate: proc(): GasInt {.gcsafe, raises: [].}
 
 proc updateStackAndParams(q: var LocalParams; c: Computation) =
   c.stack.lsTop(0)
@@ -76,11 +74,9 @@ proc updateStackAndParams(q: var LocalParams; c: Computation) =
     q.memOffset = q.memOutPos
     q.memLength = q.memOutLen
 
-  let codeAddress = q.codeAddress
-
-  # EIP2929: This came before old gas calculator
-  #           because it will affect `c.gasMeter.gasRemaining`
-  #           and further `childGasLimit`
+# EIP2929: This came before old gas calculator
+#           because it will affect `c.gasMeter.gasRemaining`
+#           and further `childGasLimit`
 proc gasCallEIP2929(c: Computation, codeAddress: Address): GasProc =
   if FkBerlin <= c.fork:
     GasProc proc(): GasInt =
