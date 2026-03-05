@@ -135,6 +135,12 @@ type VerifiedProxyConf* = object
     name: "beacon-api-url"
   .}: UrlList
 
+  privateTxUrls* {.
+    desc: "URL of a private transaction relay (builder). eth_sendRawTransaction will be routed to these URLs instead of the regular execution API. Multiple URLs can be specified by defining the option again on the command line.",
+    defaultValue: @[],
+    name: "private-tx-url"
+  .}: seq[Web3Url]
+
 #!fmt: on
 
 proc parseCmdArg*(T: type Web3Url, p: string): T {.raises: [ValueError].} =
