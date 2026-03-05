@@ -28,16 +28,16 @@
 ##   + key33: <col, root>
 ##   + value: <hash, number>
 ##   where
-##   + col:      `RawAccounts`
+##   + col:      `Accounts`
 ##   + root:     `StateRoot`
 ##   + hash:     `BlockHash`
 ##   + number:   `BlockNumber`
 ##
-## * RawAccounts:
+## * Accounts:
 ##   + key65: <col, root, start>
 ##   + value: <limit, accounts, proof, peerID>
 ##   where
-##   + col:      `RawAccounts`
+##   + col:      `Accounts`
 ##   + root:     `StateRoot`
 ##   + start:    `ItemKey`
 ##   + limit:    `ItemKey`
@@ -45,11 +45,11 @@
 ##   + proof:    `seq[ProofNode]`
 ##   + peerID:   `Hash`
 ##
-## * RawStoSlot:
+## * StoSlot:
 ##   + key97: <col, root, account, start>
 ##   + value: <limit, slot, proof, peerID>
 ##   where
-##   + col:      `RawAccounts`
+##   + col:      `Accounts`
 ##   + root:     `StateRoot`
 ##   * account:  `ItemKey`
 ##   + start:    `ItemKey`
@@ -58,28 +58,16 @@
 ##   + proof:    `seq[ProofNode]`
 ##   + peerID:   `Hash`
 ##
-## * RawByteCode:
+## * ByteCode:
 ##   + key65: <col, root, start>
 ##   + value: <limit, code, peerID>
 ##   where
-##   + col:      `RawByteCodes`
+##   + col:      `ByteCodes`
 ##   + root:     `StateRoot`
 ##   * start:    `ItemKey`
 ##   + limit:    `ItemKey`
 ##   + codes:    `seq[(CodeHash,CodeItem)]`
 ##   + peerID:   `Hash`
-##
-## * MptAccounts:
-##   + key65: <col, root, start>
-##   + value: <limit, partTrie>
-##   where
-##   + col:      `MptAccounts`
-##   + root:     `StateRoot`
-##   + start:    `ItemKey`
-##   + limit:    `ItemKey`
-##   + partTrie: `seq[tuple[key: seq[byte], node: seq[byte]]]`
-##   + key:      `seq[byte]` with 0 < length <= 32
-##   + node:     `seq[byte]` with 0 < length
 ##
 ## Additional assumptions:
 ##
@@ -110,36 +98,46 @@ const
     ## Enable additional logging noise
 
 type
+  PutResult* = Result[void,string]
+    ## Shortcut
+
+  DelResult* = Result[void,string]
+    ## Shortcut
+
   MptAsmRef* = ref object
     adb: RocksDbReadWriteRef
     dir: Path
 
   MptAsmCol = enum
-    AdminCol = 0
+    AdminCol = 0                                    # currently unused
+
     BlockData                                       # root -> block hash/number
-    RawAccounts                                     # as fetched from network
-    RawStoSlot                                      # ditto
-    RawByteCode                                     # ditto
-    MptAccounts                                     # list of (key,node) pairs
-    MptStoSlot                                      # list of (key,code) pairs
+    Accounts                                        # as fetched from network
+    StoSlot                                         # ditto
+    ByteCode                                        # ditto
+
+    RootList                                        # active `AccTrie` roots
+    AccTrie                                         # hash -> node mapping
+    StoTrie                                         # hash -> node mapping
+    CodeList                                        # hash -> code mapping
 
   DecodedBlockData* = tuple
     hash: BlockHash
     number: BlockNumber
 
-  DecodedRawAccounts* = tuple
+  DecodedAccounts* = tuple
     limit: ItemKey
     accounts: seq[SnapAccount]
     proof: seq[ProofNode]
     peerID: Hash
 
-  DecodedRawStoSlot* = tuple
+  DecodedStoSlot* = tuple
     limit: ItemKey
     slot: seq[StorageItem]
     proof: seq[ProofNode]
     peerID: Hash
 
-  DecodedRawByteCode* = tuple
+  DecodedByteCode* = tuple
     limit: ItemKey
     codes: seq[(CodeHash,CodeItem)]
     peerID: Hash
@@ -151,7 +149,7 @@ type
     number: BlockNumber
     error: string
 
-  WalkRawAccounts* = tuple
+  WalkAccounts* = tuple
     root: StateRoot
     start: ItemKey
     limit: ItemKey
@@ -160,7 +158,7 @@ type
     peerID: Hash
     error: string
 
-  WalkRawStoSlot* = tuple
+  WalkStoSlot* = tuple
     root: StateRoot
     account: ItemKey
     start: ItemKey                                  # `0` unless incomplete
@@ -170,7 +168,7 @@ type
     peerID: Hash
     error: string
 
-  WalkRawByteCode* = tuple
+  WalkByteCode* = tuple
     root: StateRoot
     start: ItemKey                                  # account coverage
     limit: ItemKey                                  # account coverage
@@ -198,11 +196,11 @@ func decodeBlockData(data: seq[byte]): Result[DecodedBlockData,string] =
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(move res)
 
-func decodeRawAccounts(data: seq[byte]): Result[DecodedRawAccounts,string] =
-  const info = "decodeRawAccounts"
+func decodeAccounts(data: seq[byte]): Result[DecodedAccounts,string] =
+  const info = "decodeAccounts"
   var
     rd = data.rlpFromBytes
-    res: DecodedRawAccounts
+    res: DecodedAccounts
   try:
     rd.tryEnterList()
     res.limit = rd.read(UInt256).to(ItemKey)
@@ -213,11 +211,11 @@ func decodeRawAccounts(data: seq[byte]): Result[DecodedRawAccounts,string] =
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(move res)
 
-func decodeRawStoSlot(data: seq[byte]): Result[DecodedRawStoSlot,string] =
-  const info = "decodeRawStoSlot"
+func decodeStoSlot(data: seq[byte]): Result[DecodedStoSlot,string] =
+  const info = "decodeStoSlot"
   var
     rd = data.rlpFromBytes
-    res: DecodedRawStoSlot
+    res: DecodedStoSlot
   try:
     rd.tryEnterList()
     res.limit = rd.read(UInt256).to(ItemKey)
@@ -228,11 +226,11 @@ func decodeRawStoSlot(data: seq[byte]): Result[DecodedRawStoSlot,string] =
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(move res)
 
-func decodeRawByteCode(data: seq[byte]): Result[DecodedRawByteCode,string] =
-  const info = "decodeRawByteCode"
+func decodeByteCode(data: seq[byte]): Result[DecodedByteCode,string] =
+  const info = "decodeByteCode"
   var
     rd = data.rlpFromBytes
-    res: DecodedRawByteCode
+    res: DecodedByteCode
   try:
     rd.tryEnterList()
     res.limit = rd.read(UInt256).to(ItemKey)
@@ -252,7 +250,7 @@ template encodeBlockData(
   wrt.append number
   wrt.finish()
 
-template encodeRawAccounts(
+template encodeAccounts(
     limit: ItemKey;
     accounts: seq[SnapAccount];
     proof: seq[ProofNode];
@@ -265,7 +263,7 @@ template encodeRawAccounts(
   wrt.append cast[uint](peerID)
   wrt.finish()
 
-template encodeRawStoSlot(
+template encodeStoSlot(
     limit: ItemKey;
     slot: seq[StorageItem];
     proof: seq[ProofNode];
@@ -278,7 +276,7 @@ template encodeRawStoSlot(
   wrt.append cast[uint](peerID)
   wrt.finish()
 
-template encodeRawByteCode(
+template encodeByteCode(
     limit: ItemKey;
     codes: seq[(CodeHash,CodeItem)];
     peerID: Hash;
@@ -317,7 +315,7 @@ proc rPut(
     adb: RocksDbReadWriteRef;
     key: openArray[byte];
     data: openArray[byte];
-      ): Result[void,string] =
+      ): PutResult =
   const info = "mpt/put: "
   adb.put(key, data).isOkOr:
     when extraTraceMessages:
@@ -325,10 +323,7 @@ proc rPut(
     return err(info & error)
   ok()
 
-proc rDel(
-    adb: RocksDbReadWriteRef;
-    key: openArray[byte];
-      ): Result[void,string] =
+proc rDel(adb: RocksDbReadWriteRef; key: openArray[byte]): DelResult =
   const info = "mpt/del: "
   adb.delete(key).isOkOr:
     when extraTraceMessages:
@@ -336,11 +331,26 @@ proc rDel(
     return err(info & error)
   ok()
 
+proc kvPair(rit: RocksIteratorRef): (seq[byte],seq[byte]) =
+  ## This helper must be provided as a separate function outside of the below
+  ## iterator. Otherwise the NIM compiler (version 2.2.4) might abort with an
+  ## error
+  ## ::
+  ##   internal error: inconsistent environment type
+  ##
+  ## when compiling the execution layer.
+  ##
+  var kv: typeof(result)
+  rit.key(proc(w: openArray[byte]) {.gcsafe, raises: [].} = kv[0] = @w)
+  rit.value(proc(w: openArray[byte]) {.gcsafe, raises: [].} = kv[1] = @w)
+  rit.next()
+  kv
+
 iterator rWalk(
     adb: RocksDbRef;
     pfx: openArray[byte];
       ): tuple[key: seq[byte], data: seq[byte]] =
-  ## Walk over key-value pairs of the hash key column of the database.
+  ## Walk over key-value pairs of the database.
   ##
   const info = "mpt/walk: "
   block walkBody:
@@ -355,15 +365,8 @@ iterator rWalk(
     else:
       rit.seekToKey(pfx)
 
-    var key, val: seq[byte]
-    proc readKey(w: openArray[byte]) = key = @w
-    proc readVal(w: openArray[byte]) = val = @w
-
     while rit.isValid():
-      rit.key(readKey)
-      rit.value(readVal)
-      rit.next()
-      yield (key, val)
+      yield rit.kvPair()
 
 # --------------
 
@@ -417,6 +420,29 @@ iterator colWalk97(
 
 # --------------
 
+template keyAtMost33(col: MptAsmCol; key: seq[byte]): openArray[byte] =
+  doAssert key.len < 33
+  var keyData: array[33,byte]
+  keyData[0] = col.ord
+  (addr keyData[1]).copyMem(addr key[0], key.len)
+  keyData.toOpenArray(0,key.len)
+
+template getAtMost33(db: MptAsmRef; col: MptAsmCol; key: seq[byte]): untyped =
+  db.adb.rGet(col.keyAtMost33 key)
+
+template putAtMost33(
+    db: MptAsmRef;
+    col: MptAsmCol;
+    key: seq[byte];
+    data: openArray[byte];
+      ): untyped =
+  db.adb.rPut(col.keyAtMost33 key, data)
+
+template delAtMost33(db: MptAsmRef; col: MptAsmCol; key: seq[byte]): untyped =
+  db.adb.rDel(col.keyAtMost33 key)
+
+# --------------
+
 template key33(col: MptAsmCol; key1: untyped): openArray[byte] =
   var key: array[33,byte]
   key[0] = col.ord
@@ -428,19 +454,19 @@ template key33(col: MptAsmCol): openArray[byte] =
   key[0] = col.ord
   key.toOpenArray(0,32)
 
-template get33(db: MptAsmRef; col: MptAsmCol; root: StateRoot): untyped =
-  db.adb.rGet(col.key33(root))
+template get33(db: MptAsmRef; col: MptAsmCol; key1: untyped): untyped =
+  db.adb.rGet(col.key33 key1)
 
 template put33(
     db: MptAsmRef;
     col: MptAsmCol;
-    root: StateRoot;
+    key1: untyped;
     data: openArray[byte];
       ): untyped =
-  db.adb.rPut(col.key33(root), data)
+  db.adb.rPut(col.key33 key1, data)
 
-template del33(db: MptAsmRef; col: MptAsmCol; root: StateRoot): untyped =
-  db.adb.rDel(col.key33(root))
+template del33(db: MptAsmRef; col: MptAsmCol; key1: untyped): untyped =
+  db.adb.rDel(col.key33 key1)
 
 # --------------
 
@@ -675,13 +701,10 @@ proc putBlockData*(
     root: StateRoot;
     hash: BlockHash;
     number: BlockNumber;
-      ): Result[void,string] =
+      ): PutResult =
   db.put33(BlockData, root, encodeBlockData(hash, number))
 
-proc delBlockData*(
-    db: MptAsmRef;
-    root: StateRoot;
-      ): Result[void,string] =
+proc delBlockData*(db: MptAsmRef; root: StateRoot): DelResult =
   db.del33(BlockData, root)
 
 iterator walkBlockData*(db: MptAsmRef): WalkBlockData =
@@ -696,65 +719,16 @@ iterator walkBlockData*(db: MptAsmRef): WalkBlockData =
 
 # -------------
 
-proc getMptAccounts*(
+proc getAccounts*(
     db: MptAsmRef;
     root: StateRoot;
     start: ItemKey;
-      ): Result[seq[(seq[byte],seq[byte])],string] =
-  let data = db.get65(MptAccounts, root, start).valueOr:
+      ): Result[DecodedAccounts,string] =
+  let data = db.get65(Accounts, root, start).valueOr:
     return err(error)
+  data.decodeAccounts()
 
-  const info = "getMptAccounts: "
-  var decoded: seq[(seq[byte],seq[byte])]
-  try:
-    decoded = rlp.decode(data, typeof decoded)
-  except RlpError as e:
-    return err(info & ": " & $e.name & "(" & e.msg & ")")
-
-  ok(move decoded)
-
-proc putMptAccounts*(
-    db: MptAsmRef;
-    root: StateRoot;
-    start: ItemKey;
-    data: seq[(seq[byte],seq[byte])];
-      ): Result[void,string] =
-  db.put65(MptAccounts, root, start, rlp.encode(data))
-
-proc delMptAccounts*(
-    db: MptAsmRef;
-    root: StateRoot;
-    start: ItemKey;
-      ): Result[void,string] =
-  db.del65(MptAccounts, root, start)
-
-iterator walkMptAccounts*(
-    db: MptAsmRef;
-      ): tuple[root: StateRoot, start: ItemKey, data: seq[byte]] =
-  for (key1,key2,val) in db.adb.colWalk65 MptAccounts.key65():
-    yield (StateRoot(key1), key2.to(ItemKey), val)
-
-iterator walkMptAccounts*(
-    db: MptAsmRef;
-    root: StateRoot;
-      ): tuple[start: ItemKey, data: seq[byte]] =
-  for (key1,key2,val) in db.adb.colWalk65 MptAccounts.key65(root):
-    if key1 != Hash32(root):
-      break
-    yield (key2.to(ItemKey), val)
-
-# -------------
-
-proc getRawAccounts*(
-    db: MptAsmRef;
-    root: StateRoot;
-    start: ItemKey;
-      ): Result[DecodedRawAccounts,string] =
-  let data = db.get65(RawAccounts, root, start).valueOr:
-    return err(error)
-  data.decodeRawAccounts()
-
-proc putRawAccounts*(
+proc putAccounts*(
     db: MptAsmRef;
     root: StateRoot;
     start: ItemKey;
@@ -762,24 +736,20 @@ proc putRawAccounts*(
     accounts: seq[SnapAccount];
     proof: seq[ProofNode];
     peerID: Hash;
-      ): Result[void,string] =
+      ): PutResult =
   db.put65(
-    RawAccounts, root, start, encodeRawAccounts(limit, accounts, proof, peerID))
+    Accounts, root, start, encodeAccounts(limit, accounts, proof, peerID))
 
-proc delRawAccounts*(
-    db: MptAsmRef;
-    root: StateRoot;
-    start: ItemKey;
-      ): Result[void,string] =
-  db.del65(RawAccounts, root, start)
+proc delAccounts*(db: MptAsmRef; root: StateRoot; start: ItemKey): DelResult =
+  db.del65(Accounts, root, start)
 
-iterator walkRawAccounts*(db: MptAsmRef): WalkRawAccounts =
-  for (key1,key2,value) in db.adb.colWalk65 RawAccounts.key65():
+iterator walkAccounts*(db: MptAsmRef): WalkAccounts =
+  for (key1,key2,value) in db.adb.colWalk65 Accounts.key65():
     let
       root = StateRoot(key1)
       start = key2.to(ItemKey)
-      w = value.decodeRawAccounts().valueOr:
-        var oops: WalkRawAccounts
+      w = value.decodeAccounts().valueOr:
+        var oops: WalkAccounts
         oops.root = root
         oops.start = start
         oops.error = error
@@ -787,15 +757,15 @@ iterator walkRawAccounts*(db: MptAsmRef): WalkRawAccounts =
         continue
     yield (root, start, w.limit, w.accounts, w.proof, w.peerID, "")
 
-iterator walkRawAccounts*(db: MptAsmRef, root: StateRoot): WalkRawAccounts =
-  ## Variant of `walkRawAccounts()` for fixed `root`
-  for (key1,key2,value) in db.adb.colWalk65 RawAccounts.key65(root):
+iterator walkAccounts*(db: MptAsmRef, root: StateRoot): WalkAccounts =
+  ## Variant of `walkAccounts()` for fixed `root`
+  for (key1,key2,value) in db.adb.colWalk65 Accounts.key65(root):
     if StateRoot(key1) != root:
       break
     let
       start = key2.to(ItemKey)
-      w = value.decodeRawAccounts().valueOr:
-        var oops: WalkRawAccounts
+      w = value.decodeAccounts().valueOr:
+        var oops: WalkAccounts
         oops.root = root
         oops.start = start
         oops.error = error
@@ -805,17 +775,17 @@ iterator walkRawAccounts*(db: MptAsmRef, root: StateRoot): WalkRawAccounts =
 
 # -------------
 
-proc getRawStoSlot*(
+proc getStoSlot*(
     db: MptAsmRef;
     root: StateRoot;
     account: ItemKey;
     start: ItemKey;
-      ): Result[DecodedRawStoSlot,string] =
-  let data = db.get97(RawStoSlot, root, account, start).valueOr:
+      ): Result[DecodedStoSlot,string] =
+  let data = db.get97(StoSlot, root, account, start).valueOr:
     return err(error)
-  data.decodeRawStoSlot()
+  data.decodeStoSlot()
 
-proc putRawStoSlot*(
+proc putStoSlot*(
     db: MptAsmRef;
     root: StateRoot;
     acc: ItemKey;
@@ -824,78 +794,44 @@ proc putRawStoSlot*(
     slot: seq[StorageItem];
     proof: seq[ProofNode];
     peerID: Hash;
-      ): Result[void,string] =
+      ): PutResult =
   db.put97(
-    RawStoSlot, root, acc, start, encodeRawStoSlot(limit, slot, proof, peerID))
+    StoSlot, root, acc, start, encodeStoSlot(limit, slot, proof, peerID))
 
-proc putRawStoSlot*(
+proc putStoSlot*(
     db: MptAsmRef;
     root: StateRoot;
     acc: ItemKey;
     slot: seq[StorageItem];
     peerID: Hash;
-      ): Result[void,string] =
+      ): PutResult =
   db.put97(
-    RawStoSlot, root, acc, low(ItemKey),
-    encodeRawStoSlot(high(ItemKey), slot, EmptyProof, peerID))
+    StoSlot, root, acc, low(ItemKey),
+    encodeStoSlot(high(ItemKey), slot, EmptyProof, peerID))
 
-proc delRawStoSlot*(
+proc delStoSlot*(
     db: MptAsmRef;
     root: StateRoot;
     acc: ItemKey;
     start: ItemKey;
-      ): Result[void,string] =
-  db.del97(RawStoSlot, root, acc, start)
+      ): DelResult =
+  db.del97(StoSlot, root, acc, start)
 
-iterator walkRawStoSlot*(db: MptAsmRef): WalkRawStoSlot =
-  for (k1,k2,k3,val) in db.adb.colWalk97 RawStoSlot.key97():
-    let
-      root = k1.to(StateRoot)
-      acc = k2.to(ItemKey)
-      start = k3.to(ItemKey)
-      w = val.decodeRawStoSlot().valueOr:
-        var oops: WalkRawStoSlot
-        oops.root = root
-        oops.account = acc
-        oops.start = start
-        oops.error = error
-        yield oops
-        continue
-    yield (root, acc, start, w.limit, w.slot, w.proof, w.peerID, "")
-
-iterator walkRawStoSlot*(db: MptAsmRef, root: StateRoot): WalkRawStoSlot =
-  ## Variant of `walkRawStoSlot()` for fixed `root`
-  for (k1,k2,k3,val) in db.adb.colWalk97 RawStoSlot.key97(root):
-    if k1.to(StateRoot) != root:
-      break
-    let
-      account = k2.to(ItemKey)
-      start = k3.to(ItemKey)
-      w = val.decodeRawStoSlot().valueOr:
-        var oops: WalkRawStoSlot
-        oops.root = root
-        oops.account = account
-        oops.start = start
-        oops.error = error
-        yield oops
-        continue
-    yield (root, account, start, w.limit, w.slot, w.proof, w.peerID, "")
-
-iterator walkRawStoSlot*(
+iterator walkStoSlot*(
     db: MptAsmRef;
     root: StateRoot;
     acc: ItemKey;
-      ): WalkRawStoSlot =
-  ## Variant of `walkRawStoSlot()` for fixed `root`
+      ): WalkStoSlot =
+  ## Variant of `walkStoSlot()` for fixed `root`
   let aHash = acc.to(Hash32)
-  for (k1,k2,k3,val) in db.adb.colWalk97 RawStoSlot.key97(root,aHash):
+  for (k1,k2,k3,val) in db.adb.colWalk97 StoSlot.key97(root,aHash):
     if k1.to(StateRoot) != root or
        k2.to(ItemKey) != acc:
       break
     let
       start = k3.to(ItemKey)
-      w = val.decodeRawStoSlot().valueOr:
-        var oops: WalkRawStoSlot
+      w = val.decodeStoSlot().valueOr:
+        var oops: WalkStoSlot
         oops.root = root
         oops.account = acc
         oops.start = start
@@ -906,83 +842,117 @@ iterator walkRawStoSlot*(
 
 # -------------
 
-proc getRawByteCode*(
+proc getByteCode*(
     db: MptAsmRef;
     root: StateRoot;
     start: ItemKey;
     limit: ItemKey;
-      ): Result[DecodedRawByteCode,string] =
-  let data = db.get65(RawByteCode, root, start).valueOr:
+      ): Result[DecodedByteCode,string] =
+  let data = db.get65(ByteCode, root, start).valueOr:
     return err(error)
-  data.decodeRawByteCode()
+  data.decodeByteCode()
 
-proc putRawByteCode*(
+proc putByteCode*(
     db: MptAsmRef;
     root: StateRoot;
     start: ItemKey;
     limit: ItemKey;
     codes: seq[(CodeHash,CodeItem)];
     peerID: Hash;
-      ): Result[void,string] =
-  db.put65(RawByteCode, root, start, encodeRawByteCode(limit, codes, peerID))
+      ): PutResult =
+  db.put65(ByteCode, root, start, encodeByteCode(limit, codes, peerID))
 
-proc delRawByteCode*(
+proc delByteCode*(db: MptAsmRef; root: StateRoot; start: ItemKey): DelResult =
+  db.del65(Accounts, root, start)
+
+iterator walkByteCode*(
     db: MptAsmRef;
     root: StateRoot;
     start: ItemKey;
-      ): Result[void,string] =
-  db.del65(RawAccounts, root, start)
-
-iterator walkRawByteCode*(db: MptAsmRef): WalkRawByteCode =
-  for (key1,key2,value) in db.adb.colWalk65 RawByteCode.key65():
-    let
-      root1 = StateRoot(key1)
-      start2 = key2.to(ItemKey)
-      w = value.decodeRawByteCode().valueOr:
-        var oops: WalkRawByteCode
-        oops.root = root1
-        oops.start = start2
-        oops.error = error
-        yield oops
-        continue
-    yield (root1, start2, w.limit, w.codes, w.peerID, "")
-
-iterator walkRawByteCode*(db: MptAsmRef, root: StateRoot): WalkRawByteCode =
-  ## Variant of `walkRawAccounts()` for fixed `root`
-  for (key1,key2,value) in db.adb.colWalk65 RawByteCode.key65(root):
-    if StateRoot(key1) != root:
-      break
-    let
-      start2 = key2.to(ItemKey)
-      w = value.decodeRawByteCode().valueOr:
-        var oops: WalkRawByteCode
-        oops.root = root
-        oops.start = start2
-        oops.error = error
-        yield oops
-        continue
-    yield (root, start2, w.limit, w.codes, w.peerID, "")
-
-iterator walkRawByteCode*(
-    db: MptAsmRef;
-    root: StateRoot;
-    start: ItemKey;
-      ): WalkRawByteCode =
-  ## Variant of `walkRawAccounts()` for fixed `root` and `start` account
+      ): WalkByteCode =
+  ## Variant of `walkAccounts()` for fixed `root` and `start` account
   let startHash = start.to(Hash32)
-  for (key1,key2,value) in db.adb.colWalk65 RawByteCode.key65(root,startHash):
+  for (key1,key2,value) in db.adb.colWalk65 ByteCode.key65(root,startHash):
     if StateRoot(key1) != root:
       break
     let
       start2 = key2.to(ItemKey)
-      w = value.decodeRawByteCode().valueOr:
-        var oops: WalkRawByteCode
+      w = value.decodeByteCode().valueOr:
+        var oops: WalkByteCode
         oops.root = root
         oops.start = start2
         oops.error = error
         yield oops
         continue
     yield (root, start2, w.limit, w.codes, w.peerID, "")
+
+# -------------
+
+proc getAccRoot*(
+    db: MptAsmRef;
+    root: StateRoot;
+      ): Result[byte,string] =
+  let data = db.get33(RootList, root).valueOr:
+    return err(error)
+  if data.len != 1:
+    return err("value size mismatch")
+  ok data[0]
+
+proc putAccRoot*(db: MptAsmRef; root: StateRoot; flag: byte): PutResult =
+  db.put33(RootList, root, @[flag])
+
+proc delAccRoot*(db: MptAsmRef; root: StateRoot): DelResult =
+  db.del33(RootList, root)
+
+iterator walkAccRoot*(db: MptAsmRef): (StateRoot,byte) =
+  for (key,value) in db.adb.colWalk33 RootList.key33():
+    if value.len == 1:
+      yield (StateRoot(key),value[0])
+
+# -------------
+
+proc getAccTrie*(db: MptAsmRef; key: seq[byte]): seq[byte] =
+  db.getAtMost33(AccTrie, key).isErrOr:
+    return value
+  # @[]
+
+proc putAccTrie*(db: MptAsmRef; nodes: seq[(seq[byte],seq[byte])]): PutResult =
+  for w in nodes:
+    db.putAtMost33(AccTrie, w[0], w[1]).isOkOr:
+      return err(error)
+  ok()
+
+proc delAccTrie*(db: MptAsmRef, key: seq[byte]): DelResult =
+  db.delAtMost33(AccTrie, key)
+
+# -------------
+
+proc getStoTrie*(db: MptAsmRef; key: seq[byte]): seq[byte] =
+  db.getAtMost33(StoTrie, key).isErrOr:
+    return value
+  # @[]
+
+proc putStoTrie*(db: MptAsmRef; nodes: seq[(seq[byte],seq[byte])]): PutResult =
+  for w in nodes:
+    db.putAtMost33(StoTrie, w[0], w[1]).isOkOr:
+      return err(error)
+  ok()
+
+proc delStoTrie*(db: MptAsmRef, key: seq[byte]): DelResult =
+  db.delAtMost33(StoTrie, key)
+
+# -------------
+
+proc getCodeList*(db: MptAsmRef; hash: Hash32): seq[byte] =
+  db.get33(CodeList, hash).isErrOr:
+    return value
+  # @[]
+
+proc putCodeList*(db: MptAsmRef; cdHash: CodeHash; data: CodeItem): PutResult =
+  db.put33(CodeList, cdHash.to(Hash32), data.to(seq[byte]))
+
+proc delCodeList*(db: MptAsmRef, hash: Hash32): DelResult =
+  db.del33(CodeList, hash)
 
 # ------------------------------------------------------------------------------
 # End

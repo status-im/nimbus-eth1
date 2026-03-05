@@ -44,6 +44,7 @@ template downloadImpl(
     let
       ctx = buddy.ctx
       adb = ctx.pool.mptAsm
+      sdb = ctx.pool.stateDB                        # logging only
       sRoot = state.stateRoot
       peerID = buddy.peerID
 
@@ -64,8 +65,12 @@ template downloadImpl(
           start, nAccLeft=accLeft.len
         break body                                  # error => return
 
+      if not sdb.hasKey(state.stateRoot):           # evicted => return
+        bodyRc = false                              # ignore downloaded data
+        break body
+
       # Store byte codes on database
-      adb.putRawByteCode(
+      adb.putByteCode(
         sRoot, accLeft[0][0], accLeft[^1][0],
         codeHashes.zip data.codes, peerID).isOkOr:
           state.register(accLeft)                   # stash data and return
@@ -125,6 +130,10 @@ template codeDownload*(
   ## Async/template
   ##
   block body:
+    let sdb = buddy.ctx.pool.stateDB
+    if not sdb.hasKey(state.stateRoot):             # evicted => return
+      break body
+
     let acc = accounts
        .filterIt(not it.accBody.codeHash.isEmpty)
        .mapIt( (it.accHash.to(ItemKey),
@@ -134,7 +143,9 @@ template codeDownload*(
       state.register acc                            # stash data and return
       break body                                    # all done
 
-    discard buddy.downloadImpl(state, acc, info)
+    if not buddy.downloadImpl(state, acc, info) and
+       not sdb.hasKey(state.stateRoot):             # evicted => return
+      break body                                    # all done
 
     while not buddy.ctrl.stopped and
           0 < state.len and

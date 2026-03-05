@@ -62,7 +62,7 @@ template headerStateRegister(
         stateRoot=root.toStr, blockHash=hash.toStr, blockNumber
       break body # error
 
-    ctx.pool.stateDB.register(header, hash)
+    ctx.pool.stateDB.register(header, hash, info)
     bodyRc = Result[StateRoot,bool].ok(root)
 
   bodyRc # return
@@ -143,7 +143,7 @@ template headerStateRegister*(
         stateRoot=root.toStr, blockHash=hash.toStr, blockNumber
       break body # error
 
-    ctx.pool.stateDB.register(header, hash)
+    ctx.pool.stateDB.register(header, hash, info)
     bodyRc = Result[StateRoot,bool].ok(root)
 
   bodyRc # return
