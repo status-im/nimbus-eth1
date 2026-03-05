@@ -106,7 +106,7 @@ type
       filterOptions: FilterOptions
     ): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).}
     eth_feeHistory*: proc(
-      blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: Opt[seq[float64]]
+      blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[uint8]
     ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).}
     eth_sendRawTransaction*: proc(txBytes: seq[byte]): Future[EngineResult[Hash32]] {.
       async: (raises: [CancelledError])
@@ -211,7 +211,7 @@ type
     eth_maxPriorityFeePerGas*:
       proc(): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).}
     eth_feeHistory*: proc(
-      blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: Opt[seq[float64]]
+      blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[uint8]
     ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).}
     eth_sendRawTransaction*: proc(txBytes: seq[byte]): Future[EngineResult[Hash32]] {.
       async: (raises: [CancelledError])
