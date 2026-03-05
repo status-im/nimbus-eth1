@@ -55,6 +55,7 @@ type
 
   GasFeeSchedule = array[GasFeeKind, Natural]
 
+  GasProc* = proc(): GasInt {.gcsafe, raises: [].}
   GasParams* = object
     # Yellow Paper, Appendix H - https://ethereum.github.io/yellowpaper/paper.pdf
     # GasCost is a function of (σ, μ):
@@ -67,8 +68,8 @@ type
     kind*: Op
     isNewAccount*: proc(): bool {.gcsafe, raises: [].}
     gasLeft*: GasInt
-    gasCallEIP2929*: proc(): GasInt {.gcsafe, raises: [].}
-    gasCallDelegate*: proc(): GasInt {.gcsafe, raises: [].}
+    gasCallEIP2929*: GasProc
+    gasCallDelegate*: GasProc
     contractGas*: UInt256
     currentMemSize*: GasNatural
     memOffset*: GasNatural
