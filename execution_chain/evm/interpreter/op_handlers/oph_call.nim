@@ -189,12 +189,17 @@ proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) =
 
   c.chainTo(child):
     if not child.shouldBurnGas:
-      c.gasMeter.returnGas(child.gasMeter.gasRemaining)
-      c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
+      c.gasMeter.returnGas(child.gasMeter.gasRemaining)      
 
     if child.isSuccess:
+      c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
       c.merge(child)
       c.stack.lsTop(1)
+    else:
+      # On failure (revert or exceptional halt) state changes are rolled back,
+      # so no state was actually grown.  The full original reservoir is restored
+      # to the parent and the child's state_gas_used is not accumulated.
+      c.gasMeter.returnStateGas(child.gasMeter.stateGasReservoir)
 
     let actualOutputSize = min(memLen, child.output.len)
     if actualOutputSize > 0:

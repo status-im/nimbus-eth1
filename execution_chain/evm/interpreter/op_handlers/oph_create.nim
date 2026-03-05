@@ -49,14 +49,19 @@ proc execSubCreate(c: Computation; childMsg: Message;
   c.chainTo(child):
     if not child.shouldBurnGas:
       c.gasMeter.returnGas(child.gasMeter.gasRemaining)
-      c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
 
     if child.isSuccess:
+      c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
       c.merge(child)
       c.stack.lsTop child.msg.contractAddress
-    elif not child.error.burnsGas: # Means return was `REVERT`.
-      # From create, only use `outputData` if child returned with `REVERT`.
-      c.returnData = move(child.output)
+    else:
+      # On failure (revert or exceptional halt) state changes are rolled back,
+      # so no state was actually grown.  The full original reservoir is restored
+      # to the parent and the child's state_gas_used is not accumulated.
+      c.gasMeter.returnStateGas(child.gasMeter.stateGasReservoir)
+      if not child.error.burnsGas: # Means return was `REVERT`.
+        # From create, only use `outputData` if child returned with `REVERT`.
+        c.returnData = move(child.output)
     ok()
 
 
