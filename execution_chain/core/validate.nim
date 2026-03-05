@@ -243,10 +243,6 @@ func validateTxBasic*(
     fork:     EVMFork,
     validateFork: bool = true): Result[void, string] =
 
-  # https://eips.ethereum.org/EIPS/eip-7825
-  if fork >= FkOsaka and tx.gasLimit > TX_GAS_LIMIT:
-    return err("tx.gasLimit " & $tx.gasLimit & " exceeds maximum " & $TX_GAS_LIMIT)
-
   if validateFork:
     if tx.txType == TxEip2930 and fork < FkBerlin:
       return err("invalid tx: EIP-2930 Tx type detected before Berlin")
@@ -284,6 +280,10 @@ func validateTxBasic*(
     if minRegularGasLimit > TX_GAS_LIMIT:
       return err(&"invalid tx: Intrinsic regular or calldata floor exceeds TX_GAS_LIMIT={TX_GAS_LIMIT}, require={minRegularGasLimit}")
   else:
+    # https://eips.ethereum.org/EIPS/eip-7825
+    if fork >= FkOsaka and tx.gasLimit > TX_GAS_LIMIT:
+      return err("tx.gasLimit " & $tx.gasLimit & " exceeds maximum " & $TX_GAS_LIMIT)
+
     let
       intrinsic = tx.intrinsicGas(fork, gasLimit)
       minGasLimit = max(intrinsic.regular, intrinsic.floorDataGas)
