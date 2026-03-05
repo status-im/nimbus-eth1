@@ -237,19 +237,20 @@ proc writeContract*(c: Computation) =
     c.setError(StatusCode.ContractValidationFailure, true)
     return
 
-  # EIP-7954 constraint (https://eips.ethereum.org/EIPS/eip-7954).
-  if fork >= FkAmsterdam and len > EIP7954_MAX_CODE_SIZE:
-    withExtra trace, "New contract code exceeds EIP-7954 limit",
-      codeSize=len, maxSize=EIP7954_MAX_CODE_SIZE
-    c.setError(StatusCode.OutOfGas, true)
-    return
-
-  # EIP-170 constraint (https://eips.ethereum.org/EIPS/eip-3541).
-  if fork >= FkSpurious and len > EIP170_MAX_CODE_SIZE:
-    withExtra trace, "New contract code exceeds EIP-170 limit",
-      codeSize=len, maxSize=EIP170_MAX_CODE_SIZE
-    c.setError(StatusCode.OutOfGas, true)
-    return
+  if fork >= FkSpurious:
+    if fork >= FkAmsterdam:
+      if len > EIP7954_MAX_CODE_SIZE:
+        # EIP-7954 constraint (https://eips.ethereum.org/EIPS/eip-7954).
+        withExtra trace, "New contract code exceeds EIP-7954 limit",
+          codeSize=len, maxSize=EIP7954_MAX_CODE_SIZE
+        c.setError(StatusCode.OutOfGas, true)
+        return
+    elif len > EIP170_MAX_CODE_SIZE:
+      # EIP-170 constraint (https://eips.ethereum.org/EIPS/eip-3541).
+      withExtra trace, "New contract code exceeds EIP-170 limit",
+        codeSize=len, maxSize=EIP170_MAX_CODE_SIZE
+      c.setError(StatusCode.OutOfGas, true)
+      return
 
   # Charge gas and write the code even if the code address is self-destructed.
   # Non-empty code in a newly created, self-destructed account is possible if

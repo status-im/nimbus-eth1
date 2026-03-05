@@ -260,11 +260,12 @@ func validateTxBasic*(
     if tx.txType == TxEip7702 and fork < FkPrague:
       return err("invalid tx: EIP-7702 Tx type detected before Prague")
 
-  if fork >= FkAmsterdam and tx.contractCreation and tx.payload.len > EIP7954_MAX_INITCODE_SIZE:
-    return err("invalid tx: initcode size exceeds EIP-7954 maximum")
-
-  if fork >= FkShanghai and tx.contractCreation and tx.payload.len > EIP3860_MAX_INITCODE_SIZE:
-    return err("invalid tx: initcode size exceeds EIP-3860 maximum")
+  if fork >= FkShanghai and tx.contractCreation:
+    if fork >= FkAmsterdam:
+      if tx.payload.len > EIP7954_MAX_INITCODE_SIZE:
+        return err("invalid tx: initcode size exceeds EIP-7954 maximum")
+    elif tx.payload.len > EIP3860_MAX_INITCODE_SIZE:
+      return err("invalid tx: initcode size exceeds EIP-3860 maximum")
 
   # The total must be the larger of the two
   if tx.maxFeePerGasNorm < tx.maxPriorityFeePerGasNorm:
