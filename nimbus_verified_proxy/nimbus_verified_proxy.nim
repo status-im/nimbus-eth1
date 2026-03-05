@@ -76,7 +76,7 @@ proc connectLCToEngine*(lightClient: LightClient, engine: RpcVerificationEngine)
   lightClient.onOptimisticHeader = onOptimisticHeader
 
 proc startBackends(
-    engine: RpcVerificationEngine, urls: seq[Web3Url], caps: BackendCapabilities
+    engine: RpcVerificationEngine, urls: seq[string], caps: BackendCapabilities
 ): Future[seq[JsonRpcClient]] {.async: (raises: [ProxyError, CancelledError]).} =
   var clients: seq[JsonRpcClient] = @[]
 
@@ -87,8 +87,7 @@ proc startBackends(
 
     let startRes = await client.start()
     if startRes.isErr():
-      error "Error connecting to backend",
-        url = url.web3Url, error = startRes.error.errMsg
+      error "Error connecting to backend", url = url, error = startRes.error.errMsg
       continue
 
     engine.registerBackend(client.getEthApiBackend(), caps)
@@ -100,7 +99,7 @@ proc startBackends(
   clients
 
 proc startPrivateTxBackends(
-    engine: RpcVerificationEngine, urls: seq[Web3Url]
+    engine: RpcVerificationEngine, urls: seq[string]
 ): Future[seq[JsonRpcClient]] {.async: (raises: [ProxyError, CancelledError]).} =
   var clients: seq[JsonRpcClient] = @[]
   for url in urls:
@@ -112,7 +111,7 @@ proc startPrivateTxBackends(
 
     if startRes.isErr():
       error "Error connecting to private tx backend",
-        url = url.web3Url, error = startRes.error.errMsg
+        url = url, error = startRes.error.errMsg
       continue
 
     engine.registerBackend(
@@ -126,7 +125,7 @@ proc startPrivateTxBackends(
   clients
 
 proc startFrontends(
-    engine: RpcVerificationEngine, urls: seq[Web3Url]
+    engine: RpcVerificationEngine, urls: seq[string]
 ): seq[JsonRpcServer] {.raises: [ProxyError].} =
   var servers: seq[JsonRpcServer] = @[]
 
