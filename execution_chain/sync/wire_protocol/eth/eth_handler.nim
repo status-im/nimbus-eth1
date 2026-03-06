@@ -273,6 +273,8 @@ proc getBlockAccessLists*(
       inc totalBytes # the empty rlp list takes only a single byte
 
     inc i
+  
+  res
 
 # ------------------------------------------------------------------------------
 # End
