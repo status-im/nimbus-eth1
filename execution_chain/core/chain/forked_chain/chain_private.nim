@@ -82,7 +82,7 @@ proc processBlock*(
     # be received without a BAL. In this case we skip checking the BAL against
     # the header bal hash.
     # For now we allow BALs to be optional even for finalized blocks for bal-devnet-2.
-    # Once clients have implemented the devp2p eth/70 protocol we can require BALs
+    # Once clients have implemented the devp2p eth/71 protocol we can require BALs
     # to be present for finalized blocks.
     skipPreExecBalCheck = blockAccessList.isNone(), # finalized and blockAccessList.isNone(),
     vmState.parent,
