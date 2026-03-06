@@ -124,7 +124,7 @@ type
     blockHashes*: seq[Hash32]
 
   BlockAccessListsPacket* = object
-    accessLists*: BlockAccessList
+    accessLists*: seq[BlockAccessList]
 
   SeenObject* = ref object
     lastSeen*: Time

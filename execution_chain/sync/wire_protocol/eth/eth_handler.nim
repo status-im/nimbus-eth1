@@ -25,6 +25,7 @@ const
   MAX_BODIES_SERVE    = 256
   # https://github.com/ethereum/devp2p/blob/master/caps/eth.md#getpooledtransactions-0x09
   MAX_TXS_SERVE       = 256
+  MAX_BALS_SERVE      = 256
   MAX_ACTION_HANDLER  = 128
 
 # ------------------------------------------------------------------------------
@@ -244,10 +245,36 @@ proc getBlockHeaders*(ctx: EthWireRef,
 
   move(list)
 
-proc getBlockAccessLists*(ctx: EthWireRef,
-                          req: BlockAccessListsRequest):
-                          BlockAccessListsPacket =
-  discard
+proc getBlockAccessLists*(
+    ctx: EthWireRef, req: BlockAccessListsRequest): BlockAccessListsPacket =
+  const emptyBal = default(BlockAccessList)
+
+  var blockHashes = req.blockHashes
+  blockHashes.setLen(min(req.blockHashes.len(), MAX_BALS_SERVE))
+
+  var balValues = newSeq[Opt[seq[byte]]](blockHashes.len())
+  ctx.chain.latestTxFrame.getBlockAccessLists(blockHashes, balValues).isOkOr:
+    trace "handlers.getBlockAccessLists: get block access lists failed", error = ($error)
+    
+  var 
+    totalBytes = 0
+    i = 0
+    res = BlockAccessListsPacket(
+      accessLists: newSeqOfCap[BlockAccessList](balValues.len())
+    )
+
+  while totalBytes <= SOFT_RESPONSE_LIMIT and i <= balValues.high:
+    if balValues[i].isSome():
+      res.accessLists.add BlockAccessList.decode(balValues[i].get())
+          .expect("BALs from the db should decode successfully")
+      totalBytes += balValues[i].get().len()
+    else:
+      res.accessLists.add(emptyBal)
+      inc totalBytes # the empty rlp list takes only a single byte
+
+    inc i
+  
+  res
 
 # ------------------------------------------------------------------------------
 # End
