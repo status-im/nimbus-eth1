@@ -242,4 +242,7 @@
 	path = vendor/nim-intops
 	url = https://github.com/vacp2p/nim-intops.git
 	ignore = untracked
+[submodule "vendor/nim-async-channels"]
+	path = vendor/nim-async-channels
+	url = https://github.com/status-im/nim-async-channels
 	branch = master

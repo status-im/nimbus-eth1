@@ -12,7 +12,7 @@
 import
   chronicles,
   websock/websock,
-  json_rpc/rpcserver,
+  json_rpc/[rpcserver, rpcchannels],
   ./rpc/[common, cors, debug, engine_api, jwt_auth, rpc_server, server_api],
   ./[conf, nimbus_desc]
 
@@ -23,7 +23,8 @@ export
   jwt_auth,
   cors,
   rpc_server,
-  server_api
+  server_api,
+  rpcchannels
 
 const DefaultChunkSize = 1024*1024
 
@@ -52,7 +53,6 @@ func installRPC(server: RpcServer,
 
   if RpcFlag.Debug in flags:
     setupDebugRpc(com, nimbus.txPool, server)
-
 
 proc newRpcWebsocketHandler(): RpcWebSocketHandler =
   let rng = HmacDrbgContext.new()
@@ -198,8 +198,8 @@ proc addServices(handlers: var seq[RpcHandlerProc],
     handlers.addHandler(server)
 
 proc setupRpc*(nimbus: NimbusNode, config: ExecutionClientConf,
-               com: CommonRef) =
-  if not config.engineApiEnabled:
+               com: CommonRef, channel: Opt[RpcChannelPtrs]) =
+  if not config.engineApiEnabled and channel.isNone():
     warn "Engine API disabled, the node will not respond to consensus client updates (enable with `--engine-api`)"
 
   if not config.serverEnabled:
@@ -251,3 +251,10 @@ proc setupRpc*(nimbus: NimbusNode, config: ExecutionClientConf,
       quit(QuitFailure)
     nimbus.engineApiServer = res.get
     nimbus.engineApiServer.start()
+
+    if channel.isSome():
+      nimbus.engineApiChannel = RpcChannelServer.new(channel[])
+
+      setupEngineAPI(nimbus.beaconEngine, nimbus.engineApiChannel)
+      installRPC(nimbus.engineApiChannel, nimbus, config, com, serverApi, {RpcFlag.Eth})
+      nimbus.engineApiChannel.start()
