@@ -261,6 +261,16 @@ template blocksImport*(
         # isOk => next instruction
         ctx.updateLastBlockImported nthBn          # block imported OK
         ctx.updateEtaBlocks()                      # metrics, eta estimate
+
+        # Free block body immediately - ForkedChain only retains the header.
+        # Transactions are already persisted as RLP bytes in the txFrame.
+
+        # reset(blocks[n].transactions)
+        # reset(blocks[n].uncles)
+        # reset(blocks[n].withdrawals)
+        # reset(blocks[n].header)
+        blocks[n].reset()
+        
         # End block: `loop`
 
     if not isError:

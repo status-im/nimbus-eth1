@@ -105,7 +105,7 @@ template blocksCollect*(
           discard ctx.blocksUnprocFetch(ctx.subState.topNum-bottom).expect("iv")
 
         # Fetch blocks and verify result
-        let blocks = buddy.blocksFetch(nFetchBodiesRequest, info).valueOr:
+        var blocks = buddy.blocksFetch(nFetchBodiesRequest, info).valueOr:
           break fetchBlocksBody                      # done, exit this function
 
         # Set flag that there were some blocks fetched at all
