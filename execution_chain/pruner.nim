@@ -1,0 +1,119 @@
+# Nimbus
+# Copyright (c) 2026 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT))
+# at your option.
+# This file may not be copied, modified, or distributed except according to
+# those terms.
+
+{.push raises: [].}
+
+import
+  std/times,
+  chronicles,
+  chronos,
+  results,
+  eth/common/times,
+  ./db/core_db,
+  ./common
+
+logScope:
+  topics = "pruner"
+
+const
+  # MIN_EPOCHS_FOR_BLOCK_REQUESTS (33,024) * SLOTS_PER_EPOCH (32) * SECONDS_PER_SLOT (12)
+  RetentionPeriod = 33_024'u64 * 32 * 12
+
+type
+  BackgroundPrunerRef* = ref object
+    com: CommonRef
+    batchSize: uint64
+    loopDelay: chronos.Duration
+    loopFut: Future[void].Raising([CancelledError])
+
+proc init*(
+    T: type BackgroundPrunerRef,
+    com: CommonRef,
+    batchSize = 100'u64,
+    loopDelay = chronos.seconds(3),
+): T =
+  T(com: com, batchSize: batchSize, loopDelay: loopDelay)
+
+proc pruneLoop(pruner: BackgroundPrunerRef) {.async: (raises: [CancelledError]).} =
+  while true:
+    let
+      start = pruner.com.db.baseTxFrame.getSavedStateBlockNumber()
+      begin = pruner.com.db.baseTxFrame.getHistoryExpired()
+      cutoff = EthTime(getTime().toUnix.uint64 - RetentionPeriod)
+
+    if begin >= start:
+      await sleepAsync(pruner.loopDelay)
+      continue
+
+    notice "Background pruner: starting cycle",
+      fromBlock = begin, toBlock = start, cutoffTimestamp = distinctBase(cutoff)
+
+    var
+      currentBlock = begin
+      reachedRetentionWindow = false
+      prevBaseNumber = start
+      prunedSincePersist = 0'u64
+
+    while currentBlock <= start and not reachedRetentionWindow:
+      # Re-read baseTxFrame each iteration — FC's persist may have replaced it
+      let baseTx = pruner.com.db.baseTxFrame()
+
+      # Detect if FC persisted by checking if base block number advanced.
+      # FC's updateBase always advances the base before persisting.
+      let curBaseNumber = baseTx.getSavedStateBlockNumber()
+      if curBaseNumber != prevBaseNumber:
+        prunedSincePersist = 0
+        prevBaseNumber = curBaseNumber
+
+      # Cap deletions between FC persists to avoid unbounded sTab growth.
+      # During header-download phase FC doesn't persist, so without this cap
+      # millions of deletion entries accumulate in sTab and choke the first
+      # block import.
+      if prunedSincePersist >= pruner.batchSize:
+        debug "Background pruner: waiting for persist",
+          prunedSincePersist = prunedSincePersist
+        await sleepAsync(pruner.loopDelay)
+        continue
+
+      let batchEnd = min(currentBlock + pruner.batchSize - 1, start)
+      var lastPruned = currentBlock
+
+      # No await points in this loop body — atomic from the async perspective.
+      # Deletions accumulate in baseTx's in-memory sTab and get written to disk
+      # when the ForkedChain next calls persist. We must NOT call persist()
+      # ourselves as it replaces the base frame reference, causing SIGSEGV in
+      # concurrent async tasks (engine API, sync) that hold the old reference.
+      for blkNum in currentBlock .. batchEnd:
+        let header = baseTx.getBlockHeader(blkNum).valueOr:
+          warn "Background pruner: failed to get header", blkNum = blkNum, error = error
+          continue
+        if header.timestamp >= cutoff:
+          reachedRetentionWindow = true
+          break
+        baseTx.deleteBlockBodyAndReceipts(blkNum).isOkOr:
+          warn "Background pruner: failed to delete", blkNum = blkNum, error = error
+        lastPruned = blkNum + 1
+
+      baseTx.setHistoryExpired(lastPruned)
+      prunedSincePersist += (lastPruned - currentBlock)
+
+      notice "Background pruner: batch complete", blks = lastPruned
+
+      currentBlock = lastPruned
+
+    notice "Background pruner: cycle complete", prunedUpTo = currentBlock
+
+    await sleepAsync(pruner.loopDelay)
+
+proc start*(pruner: BackgroundPrunerRef) =
+  pruner.loopFut = pruner.pruneLoop()
+
+proc stop*(pruner: BackgroundPrunerRef) {.async: (raises: []).} =
+  if not pruner.loopFut.isNil:
+    await pruner.loopFut.cancelAndWait()
