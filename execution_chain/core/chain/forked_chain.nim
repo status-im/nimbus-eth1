@@ -469,7 +469,7 @@ proc queueUpdateBase(c: ForkedChainRef, base: BlockRef)
 proc validateBlock(
     c: ForkedChainRef,
     parent: BlockRef,
-    blk: Block,
+    blk: ref Block,
     blockAccessList: Opt[BlockAccessListRef],
     finalized: bool
   ): Future[Result[BlockRef, string]] {.async: (raises: [CancelledError]).} =
@@ -518,7 +518,7 @@ proc validateBlock(
     parentTxFrame=cast[uint](parentFrame),
     txFrame=cast[uint](txFrame)
 
-  c.processBlock(parent, txFrame, blk, blockAccessList, blkHash, finalized).isOkOr:
+  c.processBlock(parent, txFrame, blk[], blockAccessList, blkHash, finalized).isOkOr:
     txFrame.dispose()
     return err(error)
 
@@ -527,10 +527,16 @@ proc validateBlock(
   # is being applied to a block that is currently not a head).
   txFrame.checkpoint(blk.header.number, skipSnapshot = false)
 
-  let newBlock = c.appendBlock(parent, blk, blkHash, txFrame)
+  let newBlock = c.appendBlock(parent, blk[], blkHash, txFrame)
 
   for i, tx in blk.transactions:
     c.txRecords[computeRlpHash(tx)] = (blkHash, uint64(i))
+
+  # Free block body immediately — header is preserved in BlockRef,
+  # body has been persisted to txFrame via writeBaggage.
+  reset(blk.transactions)
+  reset(blk.uncles)
+  reset(blk.withdrawals)
 
   # Entering base auto forward mode while avoiding forkChoice
   # handled region(head - baseDistance)
@@ -576,11 +582,16 @@ proc processOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false): Futu
     # https://github.com/status-im/nimbus-eth1/issues/3526
     return ok()
 
+  let orphan = c.quarantine.popOrphan(parent.hash).valueOr:
+    # No more orphaned block
+    return ok()
+
   let
-    orphan = c.quarantine.popOrphan(parent.hash).valueOr:
-      # No more orphaned block
-      return ok()
-    parent = (await c.validateBlock(parent, orphan[0], orphan[1], finalized)).valueOr:
+    sharedOrphan = block:
+      var r = new Block
+      r[] = orphan[0]
+      r
+    parent = (await c.validateBlock(parent, sharedOrphan, orphan[1], finalized)).valueOr:
       # Silent?
       # We don't return error here because the import is still ok()
       # but the quarantined blocks may not linked
@@ -685,7 +696,7 @@ proc init*(
 
 proc importBlock*(
     c: ForkedChainRef,
-    blk: Block,
+    blk: ref Block,
     blockAccessList = Opt.none(BlockAccessListRef),
     finalized = false
   ): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
@@ -725,10 +736,24 @@ proc importBlock*(
       parentHash = header.parentHash.short
 
     # Put into quarantine and hope we receive the parent block
-    c.quarantine.addOrphan(blockHash, blk, blockAccessList)
+    c.quarantine.addOrphan(blockHash, blk[], blockAccessList)
     return err("Block is not part of valid chain")
 
   ok()
+
+proc importBlock*(
+    c: ForkedChainRef,
+    blk: Block,
+    blockAccessList = Opt.none(BlockAccessListRef),
+    finalized = false
+  ): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
+  ## Convenience overload that wraps a value Block in a ref to avoid
+  ## deep copies through the async import chain.
+  let sharedBlk = block:
+    var r = new Block
+    r[] = blk
+    r
+  return await c.importBlock(sharedBlk, blockAccessList, finalized)
 
 proc forkChoice*(c: ForkedChainRef,
                  headHash: Hash32,
@@ -791,8 +816,15 @@ template queueImportBlock*(
     blockAccessList = Opt.none(BlockAccessListRef),
     finalized = false): auto =
 
+  # Wrap block in ref to avoid deep copies through the async closure chain.
+  # The ref is shared across importBlock → validateBlock → processBlock.
+  let sharedBlk = block:
+    var r = new Block
+    r[] = blk
+    r
+
   proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError], raw: true).} =
-    c.importBlock(blk, blockAccessList, finalized)
+    c.importBlock(sharedBlk, blockAccessList, finalized)
 
   let item = QueueItem(
     responseFut: Future[Result[void, string]].Raising([CancelledError]).init(),
