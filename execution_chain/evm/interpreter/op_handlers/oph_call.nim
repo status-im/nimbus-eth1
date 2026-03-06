@@ -42,6 +42,9 @@ import
 # ------------------------------------------------------------------------------
 
 type
+  # Implementation node: LocalParams is passed by `var` in the constructors
+  # below since copying it is (measurably) slow, specially during the ~2.3M
+  # block height attack
   LocalParams = object
     gas:             UInt256
     value:           UInt256
@@ -55,17 +58,6 @@ type
     memOffset:       int
     memLength:       int
     contractAddress: Address
-    gasCallEIP2929:  proc(): GasInt {.gcsafe, raises: [].}
-    gasCallDelegate: proc(): GasInt {.gcsafe, raises: [].}
-
-proc gasCallEIP2929(c: Computation, address: Address): GasInt =
-  c.vmState.mutateLedger:
-    if not ledger.inAccessList(address):
-      ledger.accessList(address)
-
-      # The WarmStorageReadCostEIP2929 (100) is already deducted in
-      # the form of a constant `gasCall`
-      return ColdAccountAccessCost - WarmStorageReadCost
 
 proc updateStackAndParams(q: var LocalParams; c: Computation) =
   c.stack.lsTop(0)
@@ -82,34 +74,42 @@ proc updateStackAndParams(q: var LocalParams; c: Computation) =
     q.memOffset = q.memOutPos
     q.memLength = q.memOutLen
 
-  let codeAddress = q.codeAddress
+# EIP2929: This came before old gas calculator
+#           because it will affect `c.gasMeter.gasRemaining`
+#           and further `childGasLimit`
+proc gasCallEIP2929(c: Computation, codeAddress: Address): GasProc =
+  if FkBerlin <= c.fork:
+    GasProc proc(): GasInt =
+      c.vmState.mutateLedger:
+        if not ledger.inAccessList(codeAddress):
+          ledger.accessList(codeAddress)
 
-  # EIP2929: This came before old gas calculator
-  #           because it will affect `c.gasMeter.gasRemaining`
-  #           and further `childGasLimit`
-  q.gasCallEIP2929 =
-    proc(): GasInt =
-      if FkBerlin <= c.fork:
-        gasCallEIP2929(c, codeAddress)
-      else:
-        0.GasInt
+          # The WarmStorageReadCostEIP2929 (100) is already deducted in
+          # the form of a constant `gasCall`
+          (ColdAccountAccessCost - WarmStorageReadCost).GasInt
+        else:
+          0.GasInt
+  else:
+    GasProc proc(): GasInt =
+      0.GasInt
 
-  q.gasCallDelegate =
-    proc(): GasInt =
-      if FkPrague <= c.fork:
-        let delegateTo = parseDelegationAddress(c.getCode(codeAddress)).valueOr:
-          return 0.GasInt
-        delegateResolutionCost(c, delegateTo)
-      else:
-        0.GasInt
+proc gasCallDelegate(c: Computation, codeAddress: Address): GasProc =
+  if FkPrague <= c.fork:
+    GasProc proc(): GasInt =
+      let delegateTo = parseDelegationAddress(c.getCode(codeAddress)).valueOr:
+        return 0.GasInt
+      delegateResolutionCost(c, delegateTo)
+  else:
+    GasProc proc(): GasInt =
+      0.GasInt
 
 
-proc callParams(c: Computation): EvmResult[LocalParams] =
+proc callParams(c: Computation, res: var LocalParams): EvmResult[void] =
   ## Helper for callOp()
 
   ? c.stack.lsCheck(7)
 
-  var res = LocalParams(
+  res = LocalParams(
     gas            : c.stack.lsPeekInt(^1),
     codeAddress    : c.stack.lsPeekAddress(^2),
     value          : c.stack.lsPeekInt(^3),
@@ -124,21 +124,21 @@ proc callParams(c: Computation): EvmResult[LocalParams] =
   c.stack.lsShrink(6)
   res.contractAddress = res.codeAddress
   res.updateStackAndParams(c)
-  ok(res)
+  ok()
 
 
-proc callCodeParams(c: Computation): EvmResult[LocalParams] =
+proc callCodeParams(c: Computation, res: var LocalParams): EvmResult[void] =
   ## Helper for callCodeOp()
-  var res = ? c.callParams()
+  ? c.callParams(res)
   res.contractAddress = c.msg.contractAddress
-  ok(res)
+  ok()
 
 
-proc delegateCallParams(c: Computation): EvmResult[LocalParams] =
+proc delegateCallParams(c: Computation, res: var LocalParams): EvmResult[void] =
   ## Helper for delegateCall()
 
   ? c.stack.lsCheck(6)
-  var res = LocalParams(
+  res = LocalParams(
     gas            : c.stack.lsPeekInt(^1),
     codeAddress    : c.stack.lsPeekAddress(^2),
     memInPos       : c.stack.lsPeekMemRef(^3),
@@ -153,14 +153,14 @@ proc delegateCallParams(c: Computation): EvmResult[LocalParams] =
 
   c.stack.lsShrink(5)
   res.updateStackAndParams(c)
-  ok(res)
+  ok()
 
 
-proc staticCallParams(c: Computation):  EvmResult[LocalParams] =
+proc staticCallParams(c: Computation, res: var LocalParams): EvmResult[void] =
   ## Helper for staticCall()
 
   ? c.stack.lsCheck(6)
-  var res = LocalParams(
+  res = LocalParams(
     gas            : c.stack.lsPeekInt(^1),
     codeAddress    : c.stack.lsPeekAddress(^2),
     memInPos       : c.stack.lsPeekMemRef(^3),
@@ -175,7 +175,7 @@ proc staticCallParams(c: Computation):  EvmResult[LocalParams] =
   c.stack.lsShrink(5)
   res.contractAddress = res.codeAddress
   res.updateStackAndParams(c)
-  ok(res)
+  ok()
 
 proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) =
   ## Call new VM -- helper for `Call`-like operations
@@ -218,8 +218,10 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
     if val > 0.u256:
       return err(opErr(StaticContext))
 
+  var p: LocalParams
+  ?cpt.callParams(p)
+
   let
-    p = ? cpt.callParams
     isNewAccount = proc(): bool = not cpt.accountExists(p.contractAddress)
     (gasCost, childGasLimit) = ? cpt.gasCosts[Call].c_handler(
       p.value,
@@ -227,8 +229,8 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
         kind:            Call,
         isNewAccount:    isNewAccount,
         gasLeft:         cpt.gasMeter.gasRemaining,
-        gasCallEIP2929:  p.gasCallEIP2929,
-        gasCallDelegate: p.gasCallDelegate,
+        gasCallEIP2929:  cpt.gasCallEIP2929(p.codeAddress),
+        gasCallDelegate: cpt.gasCallDelegate(p.codeAddress),
         contractGas:     p.gas,
         currentMemSize:  cpt.memory.len,
         memOffset:       p.memOffset,
@@ -285,8 +287,10 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
 
 proc callCodeOp(cpt: VmCpt): EvmResultVoid =
   ## 0xf2, Message-call into this account with an alternative account's code.
+  var p: LocalParams
+  ?cpt.callCodeParams(p)
+
   let
-    p = ? cpt.callCodeParams
     isNewAccount = proc(): bool = not cpt.accountExists(p.contractAddress)
     (gasCost, childGasLimit) = ? cpt.gasCosts[CallCode].c_handler(
       p.value,
@@ -294,8 +298,8 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
         kind:            CallCode,
         isNewAccount:    isNewAccount,
         gasLeft:         cpt.gasMeter.gasRemaining,
-        gasCallEIP2929:  p.gasCallEIP2929,
-        gasCallDelegate: p.gasCallDelegate,
+        gasCallEIP2929:  cpt.gasCallEIP2929(p.codeAddress),
+        gasCallDelegate: cpt.gasCallDelegate(p.codeAddress),
         contractGas:     p.gas,
         currentMemSize:  cpt.memory.len,
         memOffset:       p.memOffset,
@@ -348,8 +352,9 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
 proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
   ## 0xf4, Message-call into this account with an alternative account's
   ##       code, but persisting the current values for sender and value.
+  var p: LocalParams
+  ? cpt.delegateCallParams(p)
   let
-    p = ? cpt.delegateCallParams
     isNewAccount = proc(): bool = not cpt.accountExists(p.contractAddress)
     (gasCost, childGasLimit) = ? cpt.gasCosts[DelegateCall].c_handler(
       p.value,
@@ -357,8 +362,8 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
         kind:            DelegateCall,
         isNewAccount:    isNewAccount,
         gasLeft:         cpt.gasMeter.gasRemaining,
-        gasCallEIP2929:  p.gasCallEIP2929,
-        gasCallDelegate: p.gasCallDelegate,
+        gasCallEIP2929:  cpt.gasCallEIP2929(p.codeAddress),
+        gasCallDelegate: cpt.gasCallDelegate(p.codeAddress),
         contractGas:     p.gas,
         currentMemSize:  cpt.memory.len,
         memOffset:       p.memOffset,
@@ -403,9 +408,9 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
 
 proc staticCallOp(cpt: VmCpt): EvmResultVoid =
   ## 0xfa, Static message-call into an account.
-
+  var p: LocalParams
+  ?cpt.staticCallParams(p)
   let
-    p = ? cpt.staticCallParams
     isNewAccount = proc(): bool = not cpt.accountExists(p.contractAddress)
     (gasCost, childGasLimit) = ? cpt.gasCosts[StaticCall].c_handler(
       p.value,
@@ -413,8 +418,8 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
         kind:            StaticCall,
         isNewAccount:    isNewAccount,
         gasLeft:         cpt.gasMeter.gasRemaining,
-        gasCallEIP2929:  p.gasCallEIP2929,
-        gasCallDelegate: p.gasCallDelegate,
+        gasCallEIP2929:  cpt.gasCallEIP2929(p.codeAddress),
+        gasCallDelegate: cpt.gasCallDelegate(p.codeAddress),
         contractGas:     p.gas,
         currentMemSize:  cpt.memory.len,
         memOffset:       p.memOffset,

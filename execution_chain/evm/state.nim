@@ -255,7 +255,7 @@ method getAncestorHash*(
 proc readOnlyLedger*(vmState: BaseVMState): ReadOnlyLedger {.inline.} =
   ReadOnlyLedger(vmState.ledger)
 
-template mutateLedger*(vmState: BaseVMState, body: untyped) =
+template mutateLedger*(vmState: BaseVMState, body: untyped): untyped =
   block:
     let ledger {.inject.} = vmState.ledger
     body
@@ -322,8 +322,9 @@ proc captureGasCost*(vmState: BaseVMState,
                     comp: Computation,
                     op: Op, gasCost: GasInt, gasRemaining: GasInt,
                     depth: int) =
-  let fixed = vmState.gasCosts[op].kind == GckFixed
-  vmState.tracer.captureGasCost(comp, fixed, op, gasCost, gasRemaining, depth)
+  if vmState.tracingEnabled:
+    let fixed = vmState.gasCosts[op].kind == GckFixed
+    vmState.tracer.captureGasCost(comp, fixed, op, gasCost, gasRemaining, depth)
 
 proc captureOpEnd*(vmState: BaseVMState, comp: Computation, pc: int,
                    op: Op, gas: GasInt, refund: int64,
