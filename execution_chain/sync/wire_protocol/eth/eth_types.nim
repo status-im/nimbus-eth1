@@ -120,6 +120,12 @@ type
     latest*: uint64
     latestHash*: Hash32
 
+  BlockAccessListsRequest* = object
+    blockHashes*: seq[Hash32]
+
+  BlockAccessListsPacket* = object
+    accessLists*: BlockAccessList
+
   SeenObject* = ref object
     lastSeen*: Time
     peers*: HashSet[NodeId]
