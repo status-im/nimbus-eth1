@@ -20,52 +20,52 @@ import
   web3/eth_api_types,
   ../common/common
 
-export
-  call_common
+export call_common
 
-proc rpcCallEvm*(args: TransactionArgs,
-                 header: Header,
-                 headerHash: Hash32,
-                 com: CommonRef,
-                 parentFrame: CoreDbTxRef,
-                 globalGasCap = 0.GasInt): EvmResult[CallResult] =
+proc rpcCallEvm*(
+    args: TransactionArgs,
+    header: Header,
+    headerHash: Hash32,
+    com: CommonRef,
+    parentFrame: CoreDbTxRef,
+    globalGasCap = 0.GasInt,
+): EvmResult[CallResult] =
   # TODO: globalGasCap should configurable by user
 
   let topHeader = Header(
     parentHash: headerHash,
-    timestamp:  EthTime.now(),
-    gasLimit:   0.GasInt,              ## ???
+    timestamp: EthTime.now(),
+    gasLimit: 0.GasInt, ## ???
     baseFeePerGas: Opt.none UInt256, ## ???
   )
 
   let txFrame = parentFrame.txFrameBegin()
-  defer: txFrame.dispose() # always dispose state changes
+  defer:
+    txFrame.dispose() # always dispose state changes
 
   let vmState = BaseVMState.new(header, topHeader, com, txFrame)
-  let params  = ? toCallParams(vmState, args, globalGasCap, header.baseFeePerGas)
+  let params = ?toCallParams(vmState, args, globalGasCap, header.baseFeePerGas)
 
   ok(runComputation(params, CallResult))
 
-proc rpcCallEvm*(args: TransactionArgs,
-                 header: Header,
-                 vmState: BaseVMState,
-                 globalGasCap = 0.GasInt): EvmResult[CallResult] =
+proc rpcCallEvm*(
+    args: TransactionArgs, header: Header, vmState: BaseVMState, globalGasCap = 0.GasInt
+): EvmResult[CallResult] =
   # TODO: globalGasCap should configurable by user
-  let params  = ? toCallParams(vmState, args, globalGasCap, header.baseFeePerGas)
+  let params = ?toCallParams(vmState, args, globalGasCap, header.baseFeePerGas)
   ok(runComputation(params, CallResult))
 
-proc rpcEstimateGas*(args: TransactionArgs,
-                     header: Header,
-                     vmState: BaseVMState,
-                     gasCap: GasInt): Result[GasInt, (EvmErrorObj, OutputResult)] =
+proc rpcEstimateGas*(
+    args: TransactionArgs, header: Header, vmState: BaseVMState, gasCap: GasInt
+): Result[GasInt, (EvmErrorObj, OutputResult)] =
   # Binary search the gas requirement, as it may be higher than the amount used
-  let fork    = vmState.fork
-  var params  = toCallParams(vmState, args, gasCap, header.baseFeePerGas).valueOr:
+  let fork = vmState.fork
+  var params = toCallParams(vmState, args, gasCap, header.baseFeePerGas).valueOr:
     return err((evmErr(EvmInvalidParam), OutputResult()))
 
   var
-    lo : GasInt = TX_BASE_COST - 1
-    hi : GasInt = GasInt args.gas.get(0.Quantity)
+    lo: GasInt = TX_BASE_COST - 1
+    hi: GasInt = GasInt args.gas.get(0.Quantity)
 
   # Determine the highest gas limit can be used during the estimation.
   if hi < TX_BASE_COST:
@@ -74,7 +74,7 @@ proc rpcEstimateGas*(args: TransactionArgs,
 
   # Normalize the execution fee per gas used by the estimator.
   if args.gasPrice.isSome and
-    (args.maxFeePerGas.isSome or args.maxPriorityFeePerGas.isSome):
+      (args.maxFeePerGas.isSome or args.maxPriorityFeePerGas.isSome):
     return err((evmErr(EvmInvalidParam), OutputResult()))
 
   let feeCap = params.gasPrice
@@ -96,13 +96,17 @@ proc rpcEstimateGas*(args: TransactionArgs,
     # If the allowance is larger than maximum GasInt, skip checking
     if allowance < high(GasInt).u256 and hi > allowance.truncate(GasInt):
       let transfer = args.value.get(0.u256)
-      warn "Gas estimation capped by limited funds", original=hi, balance,
-        sent=transfer, feePerGas=feeCap, fundable=allowance
+      warn "Gas estimation capped by limited funds",
+        original = hi,
+        balance,
+        sent = transfer,
+        feePerGas = feeCap,
+        fundable = allowance
       hi = allowance.truncate(GasInt)
 
   # Recap the highest gas allowance with specified gasCap.
   if gasCap != 0 and hi > gasCap:
-    warn "Caller gas above allowance, capping", requested=hi, cap=gasCap
+    warn "Caller gas above allowance, capping", requested = hi, cap = gasCap
     hi = gasCap
 
   let
@@ -125,7 +129,7 @@ proc rpcEstimateGas*(args: TransactionArgs,
 
   # Short circuit estimation check: plain value transfer (no data, to has no code)
   if not params.isCreate and params.input.len == 0 and
-     vmState.readOnlyLedger.getCodeSize(params.to) == 0:
+      vmState.readOnlyLedger.getCodeSize(params.to) == 0:
     if executable(TX_BASE_COST).isOk:
       return ok(TX_BASE_COST)
 
@@ -146,7 +150,7 @@ proc rpcEstimateGas*(args: TransactionArgs,
       hi = optimisticGasLimit
 
   # Execute the binary search and hone in on an executable gas limit
-  while lo+1 < hi:
+  while lo + 1 < hi:
     let mid = (hi + lo) div 2
     if executable(mid).isErr:
       lo = mid
@@ -155,18 +159,20 @@ proc rpcEstimateGas*(args: TransactionArgs,
 
   ok(hi)
 
-proc rpcEstimateGas*(args: TransactionArgs,
-                     header: Header,
-                     headerHash: Hash32,
-                     com: CommonRef,
-                     parentFrame: CoreDbTxRef,
-                     gasCap: GasInt): Result[GasInt, (EvmErrorObj, OutputResult)] =
+proc rpcEstimateGas*(
+    args: TransactionArgs,
+    header: Header,
+    headerHash: Hash32,
+    com: CommonRef,
+    parentFrame: CoreDbTxRef,
+    gasCap: GasInt,
+): Result[GasInt, (EvmErrorObj, OutputResult)] =
   # Binary search the gas requirement, as it may be higher than the amount used
   let topHeader = Header(
     parentHash: headerHash,
-    timestamp:  EthTime.now(),
-    gasLimit:   0.GasInt,              ## ???
-    baseFeePerGas: Opt.none UInt256,   ## ???
+    timestamp: EthTime.now(),
+    gasLimit: 0.GasInt, ## ???
+    baseFeePerGas: Opt.none UInt256, ## ???
   )
 
   let txFrame = parentFrame.txFrameBegin()
