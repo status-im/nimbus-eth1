@@ -183,7 +183,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
         generatedBlockAccessList: bal.map(proc (bal: auto): auto = bal[]),
         hash: blkHash,
         rlp: rlp.encode(blk))
- 
+
     badBlocks
 
   # https://ethereum.github.io/execution-apis/api/methods/debug_getRawBlock
