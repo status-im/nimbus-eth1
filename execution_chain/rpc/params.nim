@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -13,6 +13,7 @@ import
   chronicles,
   eth/common/[addresses, headers],
   web3/eth_api_types,
+  ../transaction,
   ../transaction/call_common,
   ../evm/types,
   ../evm/evm_errors,
@@ -52,8 +53,19 @@ proc toCallParams*(vmState: BaseVMState, args: TransactionArgs,
   var gasPrice = GasInt args.gasPrice.get(0.Quantity)
   if baseFee.isSome:
     # A basefee is provided, necessitating EIP-1559-type execution
-    let maxPriorityFee = GasInt args.maxPriorityFeePerGas.get(0.Quantity)
-    let maxFee = GasInt args.maxFeePerGas.get(0.Quantity)
+    let
+        feeNormTx = Transaction(
+          txType:
+            if args.maxFeePerGas.isSome or args.maxPriorityFeePerGas.isSome:
+              TxEip1559
+            else:
+              TxLegacy,
+          gasPrice: GasInt args.gasPrice.get(0.Quantity),
+          maxPriorityFeePerGas: GasInt args.maxPriorityFeePerGas.get(0.Quantity),
+          maxFeePerGas: GasInt args.maxFeePerGas.get(0.Quantity),
+        )
+        maxPriorityFee = feeNormTx.maxPriorityFeePerGasNorm
+        maxFee = feeNormTx.maxFeePerGasNorm
 
     # Backfill the legacy gasPrice for EVM execution, unless we're all zeroes
     if maxPriorityFee > 0 or maxFee > 0:
@@ -78,6 +90,7 @@ proc toCallParams*(vmState: BaseVMState, args: TransactionArgs,
     input:           args.payload(),
     accessList:      args.accessList.get(@[]),
     versionedHashes: args.versionedHashes,
+    authorizationList: args.authorizationList.get(@[]),
   ))
 
 {.pop.}
