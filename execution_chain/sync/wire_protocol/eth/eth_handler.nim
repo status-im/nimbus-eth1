@@ -244,6 +244,11 @@ proc getBlockHeaders*(ctx: EthWireRef,
 
   move(list)
 
+proc getBlockAccessLists*(ctx: EthWireRef,
+                          req: BlockAccessListsRequest):
+                          BlockAccessListsPacket =
+  discard
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

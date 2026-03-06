@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -19,7 +19,8 @@ import
   ../evm/evm_errors,
   ../constants
 
-const ZeroAddr = ZERO_ADDRESS
+const
+  ZeroAddr = ZERO_ADDRESS
 
 func sender*(args: TransactionArgs): Address =
   args.source.get(ZeroAddr)
@@ -27,15 +28,12 @@ func sender*(args: TransactionArgs): Address =
 func destination*(args: TransactionArgs): Address =
   args.to.get(ZeroAddr)
 
-proc toCallParams*(
-    vmState: BaseVMState,
-    args: TransactionArgs,
-    globalGasCap: GasInt,
-    baseFee: Opt[UInt256],
-): EvmResult[CallParams] =
+proc toCallParams*(vmState: BaseVMState, args: TransactionArgs,
+                   globalGasCap: GasInt, baseFee: Opt[UInt256]): EvmResult[CallParams] =
+
   # Reject invalid combinations of pre- and post-1559 fee styles
   if args.gasPrice.isSome and
-      (args.maxFeePerGas.isSome or args.maxPriorityFeePerGas.isSome):
+    (args.maxFeePerGas.isSome or args.maxPriorityFeePerGas.isSome):
     return err(evmErr(EvmInvalidParam))
 
   # Set default gas & gas price if none were set
@@ -48,24 +46,26 @@ proc toCallParams*(
 
   if globalGasCap != 0 and globalGasCap < gasLimit:
     warn "Caller gas above allowance, capping",
-      requested = gasLimit, cap = globalGasCap, gasLimit = globalGasCap
+      requested = gasLimit,
+      cap = globalGasCap,
+      gasLimit = globalGasCap
 
   var gasPrice = GasInt args.gasPrice.get(0.Quantity)
   if baseFee.isSome:
     # A basefee is provided, necessitating EIP-1559-type execution
     let
-      feeNormTx = Transaction(
-        txType:
-          if args.maxFeePerGas.isSome or args.maxPriorityFeePerGas.isSome:
-            TxEip1559
-          else:
-            TxLegacy,
-        gasPrice: GasInt args.gasPrice.get(0.Quantity),
-        maxPriorityFeePerGas: GasInt args.maxPriorityFeePerGas.get(0.Quantity),
-        maxFeePerGas: GasInt args.maxFeePerGas.get(0.Quantity),
-      )
-      maxPriorityFee = feeNormTx.maxPriorityFeePerGasNorm
-      maxFee = feeNormTx.maxFeePerGasNorm
+        feeNormTx = Transaction(
+          txType:
+            if args.maxFeePerGas.isSome or args.maxPriorityFeePerGas.isSome:
+              TxEip1559
+            else:
+              TxLegacy,
+          gasPrice: GasInt args.gasPrice.get(0.Quantity),
+          maxPriorityFeePerGas: GasInt args.maxPriorityFeePerGas.get(0.Quantity),
+          maxFeePerGas: GasInt args.maxFeePerGas.get(0.Quantity),
+        )
+        maxPriorityFee = feeNormTx.maxPriorityFeePerGasNorm
+        maxFee = feeNormTx.maxFeePerGasNorm
 
     # Backfill the legacy gasPrice for EVM execution, unless we're all zeroes
     if maxPriorityFee > 0 or maxFee > 0:
@@ -79,20 +79,18 @@ proc toCallParams*(
     else:
       @[]
 
-  ok(
-    CallParams(
-      vmState: vmState,
-      sender: args.sender,
-      to: args.destination,
-      isCreate: args.to.isNone,
-      gasLimit: gasLimit,
-      gasPrice: gasPrice,
-      value: args.value.get(0.u256),
-      input: args.payload(),
-      accessList: args.accessList.get(@[]),
-      versionedHashes: args.versionedHashes,
-      authorizationList: args.authorizationList.get(@[]),
-    )
-  )
+  ok(CallParams(
+    vmState:         vmState,
+    sender:          args.sender,
+    to:              args.destination,
+    isCreate:        args.to.isNone,
+    gasLimit:        gasLimit,
+    gasPrice:        gasPrice,
+    value:           args.value.get(0.u256),
+    input:           args.payload(),
+    accessList:      args.accessList.get(@[]),
+    versionedHashes: args.versionedHashes,
+    authorizationList: args.authorizationList.get(@[]),
+  ))
 
 {.pop.}
