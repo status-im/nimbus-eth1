@@ -223,6 +223,16 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
 
   let
     isNewAccount = proc(): bool = not cpt.accountExists(p.contractAddress)
+
+  # EIP-8037: Charge state gas for new account creation BEFORE the 63/64
+  # child gas calculation. When state gas spills from an empty reservoir
+  # into regular gas, it must reduce the gas available for childGasLimit.
+  if cpt.fork >= FkAmsterdam:
+    if isNewAccount() and p.value.isZero.not:
+      ? cpt.gasMeter.chargeStateGas(STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte,
+        reason = "CALL: State gas new account")
+
+  let
     (gasCost, childGasLimit) = ? cpt.gasCosts[Call].c_handler(
       p.value,
       GasParams(
@@ -237,11 +247,6 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
         memLength:       p.memLength))
 
   ? cpt.opcodeGasCost(Call, gasCost, reason = $Call)
-
-  if cpt.fork >= FkAmsterdam:
-    if isNewAccount() and p.value.isZero.not:
-      ? cpt.gasMeter.chargeStateGas(STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte,
-        reason = "CALL: State gas new account")
 
   let stateGas = cpt.gasMeter.stateGasLeft
   ? cpt.gasMeter.chargeStateGas(stateGas, reason = "CALL stateGas reservoir")
