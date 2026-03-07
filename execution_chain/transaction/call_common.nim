@@ -11,6 +11,7 @@
 import
   eth/common/eth_types, stint,
   results,
+  chronicles,
   ../evm/[types, state],
   ../evm/[message, precompiles, internals, interpreter_dispatch],
   ../db/ledger,
@@ -269,6 +270,18 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
     let txRegularGas = host.intrinsicRegularGas + c.gasMeter.regularGasUsed
     blockRegularGasUsed = max(txRegularGas, host.floorDataGas)
     blockStateGasUsed = host.intrinsicStateGas + c.gasMeter.stateGasUsed
+    debug "EIP-8037 gas accounting",
+      intrinsicRegular = host.intrinsicRegularGas,
+      intrinsicState = host.intrinsicStateGas,
+      regularGasUsed = c.gasMeter.regularGasUsed,
+      stateGasUsed = c.gasMeter.stateGasUsed,
+      gasRemaining = c.gasMeter.gasRemaining,
+      stateGasLeft = c.gasMeter.stateGasLeft,
+      txRegularGas = txRegularGas,
+      blockRegularGasUsed = blockRegularGasUsed,
+      blockStateGasUsed = blockStateGasUsed,
+      txGasUsed = txGasUsed,
+      floorDataGas = host.floorDataGas
   elif fork >= FkPrague:
     txGasUsed = max(txGasUsedAfterRefund, host.floorDataGas)
     blockRegularGasUsed = txGasUsed
