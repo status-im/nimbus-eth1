@@ -13,7 +13,9 @@ import
   chronicles,
   beacon_chain/beacon_clock,
   beacon_chain/networking/peer_scores,
-  beacon_chain/sync/[light_client_sync_helpers, sync_manager]
+  beacon_chain/spec/forks,
+  beacon_chain/spec/light_client_sync,
+  beacon_chain/sync/light_client_sync_helpers
 
 logScope:
   topics = "lcman"

@@ -365,7 +365,6 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
     beaconApiUrls: beaconApiUrls,
     logLevel: logLevel,
     logFormat: logFormat,
-    dataDirFlag: none(OutDir),
     maxBlockWalk:
       if maxBlockWalk < 0:
         uint64(0)
