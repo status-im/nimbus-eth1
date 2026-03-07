@@ -7,11 +7,13 @@
 
 {.push raises: [], gcsafe.}
 
-import ./types, ./utils, ./rpc_frontend, ./header_store, ./evm
+import std/random, ./types, ./utils, ./rpc_frontend, ./header_store, ./evm
 
 proc init*(
     T: type RpcVerificationEngine, config: RpcVerificationEngineConf
 ): EngineResult[T] =
+  randomize()
+
   let engine = RpcVerificationEngine(
     chainId: config.chainId,
     maxBlockWalk: config.maxBlockWalk,
@@ -20,6 +22,8 @@ proc init*(
     codeCache: CodeCache.init(config.codeCacheLen),
     storageCache: StorageCache.init(config.storageCacheLen),
     parallelBlockDownloads: config.parallelBlockDownloads,
+    availabilityScoreFunc: defaultAvailabilityScoreFunc,
+    qualityScoreFunc: defaultQualityScoreFunc,
   )
 
   engine.registerDefaultFrontend()
