@@ -89,15 +89,15 @@ proc init*(rdb: var RdbInst, opts: DbOptions, baseDb: RocksDbInstanceRef) =
   # bytes -> entries based on overhead estimates
   rdb.rdKeySize =
     opts.rdbKeyCacheSize div (sizeof(VertexID) + sizeof(HashKey) + lruOverhead)
-  rdb.rdVtxSize =
-    opts.rdbVtxCacheSize div
-    (sizeof(VertexID) + sizeof(default(StoLeafRef)[]) + lruOverhead)
+  # rdb.rdVtxSize =
+  #   opts.rdbVtxCacheSize div
+  #   (sizeof(VertexID) + sizeof(default(StoLeafRef)[]) + lruOverhead)
 
   rdb.rdBranchSize =
     opts.rdbBranchCacheSize div (sizeof(typeof(rdb.rdBranchLru).V) + lruOverhead)
 
   rdb.rdKeyLru = typeof(rdb.rdKeyLru).init(rdb.rdKeySize)
-  rdb.rdVtxLru = typeof(rdb.rdVtxLru).init(rdb.rdVtxSize)
+  # rdb.rdVtxLru = typeof(rdb.rdVtxLru).init(rdb.rdVtxSize)
   rdb.rdBranchLru = typeof(rdb.rdBranchLru).init(rdb.rdBranchSize)
   rdb.rdbPrintStats =  opts.rdbPrintStats
 
@@ -108,11 +108,11 @@ proc destroy*(rdb: var RdbInst, eradicate: bool) =
   ## Destructor
   let
     ks = rdb.rdKeySize
-    vs = rdb.rdVtxSize
+    # vs = rdb.rdVtxSize
     bs = rdb.rdBranchSize
   rdb.baseDb.close(eradicate)
   if rdb.rdbPrintStats:
-    dumpCacheStats(ks, vs, bs)
+    dumpCacheStats(ks, 0, bs)
 
 # ------------------------------------------------------------------------------
 # End

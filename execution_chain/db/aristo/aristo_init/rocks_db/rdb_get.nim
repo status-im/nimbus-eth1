@@ -121,26 +121,26 @@ proc getAdm*(rdb: RdbInst): Result[seq[byte], (AristoError, string)] =
 proc getKey*(
     rdb: var RdbInst, rvid: RootedVertexID, flags: set[GetVtxFlag]
 ): Result[(HashKey, VertexRef), (AristoError, string)] =
-  block:
-    # Try LRU cache first
-    let rc =
-      if GetVtxFlag.PeekCache in flags:
-        rdb.rdKeyLru.peek(rvid.vid)
-      else:
-        rdb.rdKeyLru.get(rvid.vid)
+  # block:
+  #   # Try LRU cache first
+  #   let rc =
+  #     if GetVtxFlag.PeekCache in flags:
+  #       rdb.rdKeyLru.peek(rvid.vid)
+  #     else:
+  #       rdb.rdKeyLru.get(rvid.vid)
 
-    if rc.isOk:
-      rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
-      return ok((rc.value, nil))
+  #   if rc.isOk:
+  #     rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
+  #     return ok((rc.value, nil))
 
-    rdbKeyLruStats[rvid.to(RdbStateType)].inc(false)
+  #   rdbKeyLruStats[rvid.to(RdbStateType)].inc(false)
 
-  block:
-    # We don't store keys for leaves, no need to hit the database
-    let rc = rdb.rdVtxLru.peek(rvid.vid)
-    if rc.isOk():
-      if rc.value().vType in Leaves:
-        return ok((VOID_HASH_KEY, rc.value()))
+  # block:
+  #   # We don't store keys for leaves, no need to hit the database
+  #   let rc = rdb.rdVtxLru.peek(rvid.vid)
+  #   if rc.isOk():
+  #     if rc.value().vType in Leaves:
+  #       return ok((VOID_HASH_KEY, rc.value()))
 
   # Otherwise fetch from backend database
   # A threadvar is used to avoid allocating an environment for onData
@@ -164,14 +164,14 @@ proc getKey*(
     return ok((VOID_HASH_KEY, nil))
 
   # Update cache and return - in peek mode, avoid evicting cache items
-  if res.isSome() and
-      (GetVtxFlag.PeekCache notin flags or rdb.rdKeyLru.len < rdb.rdKeyLru.capacity):
-    rdb.rdKeyLru.put(rvid.vid, res.value())
+  # if res.isSome() and
+  #     (GetVtxFlag.PeekCache notin flags or rdb.rdKeyLru.len < rdb.rdKeyLru.capacity):
+  #   rdb.rdKeyLru.put(rvid.vid, res.value())
 
-  if vtx.isOk() and rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
-    # Don't invalidate vertex cache entries because of key reads - the latter
-    # follow a different access pattern!
-    rdb.rdVtxLru.put(rvid.vid, vtx.value())
+  # if vtx.isOk() and rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
+  #   # Don't invalidate vertex cache entries because of key reads - the latter
+  #   # follow a different access pattern!
+  #   rdb.rdVtxLru.put(rvid.vid, vtx.value())
 
   ok (res.valueOr(VOID_HASH_KEY), vtx.valueOr(nil))
 
@@ -189,18 +189,18 @@ proc getVtx*(
       rdbBranchLruStats[rvid.to(RdbStateType)].inc(true)
       return ok(BranchRef.init(rc[][0], rc[][1]))
 
-  block:
-    var rc =
-      if GetVtxFlag.PeekCache in flags:
-        rdb.rdVtxLru.peek(rvid.vid)
-      else:
-        rdb.rdVtxLru.get(rvid.vid)
+  # block:
+  #   var rc =
+  #     if GetVtxFlag.PeekCache in flags:
+  #       rdb.rdVtxLru.peek(rvid.vid)
+  #     else:
+  #       rdb.rdVtxLru.get(rvid.vid)
 
-    if rc.isOk:
-      rdbVtxLruStats[rvid.to(RdbStateType)][rc.value().vType.to(RdbVertexType)].inc(
-        true
-      )
-      return ok(move(rc.value))
+  #   if rc.isOk:
+  #     rdbVtxLruStats[rvid.to(RdbStateType)][rc.value().vType.to(RdbVertexType)].inc(
+  #       true
+  #     )
+  #     return ok(move(rc.value))
 
   # Otherwise fetch from backend database
   # A threadvar is used to avoid allocating an environment for onData
@@ -233,8 +233,8 @@ proc getVtx*(
     if res.value.vType == Branch:
       let vtx = BranchRef(res.value())
       rdb.rdBranchLru.put(rvid.vid, (vtx.startVid, vtx.used))
-    else:
-      rdb.rdVtxLru.put(rvid.vid, res.value())
+    # else:
+    #   rdb.rdVtxLru.put(rvid.vid, res.value())
 
   ok res.value()
 
