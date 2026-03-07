@@ -277,10 +277,20 @@ func eligible*(s: BackendScore): bool =
   s.availability >= 0 and s.quality >= 0
 
 func defaultAvailabilityScoreFunc*(prevScore: int, direction: ScoreDirection): int =
-  prevScore + ord(direction)
+  let newScore = prevScore + ord(direction)
+
+  if newScore < 0:
+    return -5 # push it down further
+  else:
+    min(5, newScore)
 
 func defaultQualityScoreFunc*(prevScore: int, direction: ScoreDirection): int =
-  prevScore + ord(direction)
+  let newScore = prevScore + ord(direction)
+
+  if newScore < 0:
+    return -10 # push it down further
+  else:
+    min(1, newScore)
 
 const UNTAGGED* = -1
   # backendIdx sentinel when error is not attributed to a specific backen
