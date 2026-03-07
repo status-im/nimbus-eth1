@@ -19,6 +19,7 @@ import
   ../../evm_errors,
   ../../../common/evmforks,
   ../../../utils/utils,
+  ../../../core/eip8037,
   ../../computation,
   ../../memory,
   ../../stack,
@@ -50,11 +51,17 @@ proc execSubCreate(c: Computation; childMsg: Message;
       c.gasMeter.returnGas(child.gasMeter.gasRemaining)
 
     if child.isSuccess:
+      c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
       c.merge(child)
       c.stack.lsTop child.msg.contractAddress
-    elif not child.error.burnsGas: # Means return was `REVERT`.
-      # From create, only use `outputData` if child returned with `REVERT`.
-      c.returnData = move(child.output)
+    else:
+      # On failure (revert or exceptional halt) state changes are rolled back,
+      # so no state was actually grown.  The full original reservoir is restored
+      # to the parent and the child's state_gas_used is not accumulated.
+      c.gasMeter.returnStateGas(child.gasMeter.stateGasReservoir)
+      if not child.error.burnsGas: # Means return was `REVERT`.
+        # From create, only use `outputData` if child returned with `REVERT`.
+        c.returnData = move(child.output)
     ok()
 
 
@@ -76,25 +83,31 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
   cpt.stack.lsShrink(2)
   cpt.stack.lsTop(0)
 
-  # EIP-7954
-  if cpt.fork >= FkAmsterdam and memLen > EIP7954_MAX_INITCODE_SIZE:
-    trace "Initcode size exceeds EIP-7954 maximum", initcodeSize = memLen
-    return err(opErr(InvalidInitCode))
-
-  # EIP-3860
-  if cpt.fork >= FkShanghai and memLen > EIP3860_MAX_INITCODE_SIZE:
-    trace "Initcode size exceeds EIP-3860 maximum", initcodeSize = memLen
-    return err(opErr(InvalidInitCode))
+  if cpt.fork >= FkShanghai:
+    if cpt.fork >= FkAmsterdam:
+      # EIP-7954
+      if memLen > EIP7954_MAX_INITCODE_SIZE:
+        trace "Initcode size exceeds EIP-7954 maximum", initcodeSize = memLen
+        return err(opErr(InvalidInitCode))
+    elif memLen > EIP3860_MAX_INITCODE_SIZE:
+      # EIP-3860
+      trace "Initcode size exceeds EIP-3860 maximum", initcodeSize = memLen
+      return err(opErr(InvalidInitCode))
 
   let
     gasParams = GasParamsCr(
       currentMemSize: cpt.memory.len,
       memOffset:      memPos,
       memLength:      memLen)
-    gasCost = cpt.gasCosts[Create].cr_handler(1.u256, gasParams)
+    gasCost = cpt.gasCosts[Create].cr_handler(false, gasParams)
 
   ? cpt.opcodeGasCost(Create,
     gasCost, reason = "CREATE: GasCreate + memLen * memory expansion")
+
+  if cpt.fork >= FkAmsterdam:
+    ? cpt.gasMeter.chargeStateGas(STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte,
+      reason = "CREATE: State gas new account")
+
   cpt.memory.extend(memPos, memLen)
   cpt.returnData.setLen(0)
 
@@ -119,11 +132,15 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
     createMsgGas -= createMsgGas div 64
   ? cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE msg gas")
 
+  let stateGas = cpt.gasMeter.stateGasLeft
+  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "CREATE stateGas reservoir")
+
   var
     childMsg = Message(
       kind:   CallKind.Create,
       depth:  cpt.msg.depth + 1,
       gas:    createMsgGas,
+      stateGas: stateGas,
       sender: cpt.msg.contractAddress,
       contractAddress: generateContractAddress(
         cpt.vmState,
@@ -151,15 +168,16 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
   cpt.stack.lsShrink(3)
   cpt.stack.lsTop(0)
 
-  # EIP-7954
-  if cpt.fork >= FkAmsterdam and memLen > EIP7954_MAX_INITCODE_SIZE:
-    trace "Initcode size exceeds EIP-7954 maximum", initcodeSize = memLen
-    return err(opErr(InvalidInitCode))
-
-  # EIP-3860
-  if cpt.fork >= FkShanghai and memLen > EIP3860_MAX_INITCODE_SIZE:
-    trace "Initcode size exceeds EIP-3860 maximum", initcodeSize = memLen
-    return err(opErr(InvalidInitCode))
+  if cpt.fork >= FkShanghai:
+    if cpt.fork >= FkAmsterdam:
+      # EIP-7954
+      if memLen > EIP7954_MAX_INITCODE_SIZE:
+        trace "Initcode size exceeds EIP-7954 maximum", initcodeSize = memLen
+        return err(opErr(InvalidInitCode))
+    elif memLen > EIP3860_MAX_INITCODE_SIZE:
+      # EIP-3860
+      trace "Initcode size exceeds EIP-3860 maximum", initcodeSize = memLen
+      return err(opErr(InvalidInitCode))
 
   let
     gasParams = GasParamsCr(
@@ -167,11 +185,16 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
       memOffset:      memPos,
       memLength:      memLen)
 
-  var gasCost = cpt.gasCosts[Create].cr_handler(1.u256, gasParams)
+  var gasCost = cpt.gasCosts[Create].cr_handler(false, gasParams)
   gasCost = gasCost + cpt.gasCosts[Create2].m_handler(0, 0, memLen)
 
   ? cpt.opcodeGasCost(Create2,
     gasCost, reason = "CREATE2: GasCreate + memLen * memory expansion")
+
+  if cpt.fork >= FkAmsterdam:
+    ? cpt.gasMeter.chargeStateGas(STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte,
+      reason = "CREATE2: State gas new account")
+
   cpt.memory.extend(memPos, memLen)
   cpt.returnData.setLen(0)
 
@@ -196,12 +219,16 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
     createMsgGas -= createMsgGas div 64
   ? cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE2 msg gas")
 
+  let stateGas = cpt.gasMeter.stateGasLeft
+  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "CREATE2 stateGas reservoir")
+
   var
     code = CodeBytesRef.init(cpt.memory.read(memPos, memLen))
     childMsg = Message(
       kind:   CallKind.Create2,
       depth:  cpt.msg.depth + 1,
       gas:    createMsgGas,
+      stateGas: stateGas,
       sender: cpt.msg.contractAddress,
       contractAddress: generateContractAddress(
         cpt.vmState,

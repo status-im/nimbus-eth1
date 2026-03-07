@@ -78,6 +78,7 @@ type
   GasParamsSs* = object
     currentValue*: UInt256
     originalValue*: UInt256
+    stateGasStorageSet*: GasInt
 
   GasParamsCr* = object
     currentMemSize*: GasNatural
@@ -99,6 +100,7 @@ type
   SStoreGasResult* = object
     gasCost*: GasInt
     gasRefund*: int64
+    stateGas*: GasInt
 
   CallGasResult = tuple[gasCost, childGasLimit: GasInt]
 
@@ -115,7 +117,7 @@ type
       m_handler*: proc(currentMemSize, memOffset, memLength: GasNatural): GasInt
                     {.nimcall, gcsafe, raises: [].}
     of GckCreate:
-      cr_handler*: proc(value: UInt256, params: GasParamsCr): GasInt
+      cr_handler*: proc(depositGas: bool, params: GasParamsCr): GasInt
                     {.nimcall, gcsafe, raises: [].}
     of GckCall:
       c_handler*: proc(value: UInt256, params: GasParams): EvmResult[CallGasResult]
@@ -212,8 +214,8 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
     if not value.isZero:
       result += GasInt(static(FeeSchedule[GasExpByte]) * (1 + log256(value)))
 
-  func `prefix gasCreate`(value: UInt256, params: GasParamsCr): GasInt {.nimcall.} =
-    if value.isZero:
+  func `prefix gasCreate`(depositGas: bool, params: GasParamsCr): GasInt {.nimcall.} =
+    if depositGas:
       result = GasInt(static(FeeSchedule[GasCodeDeposit]) * params.memLength)
     else:
       result = GasInt(static(FeeSchedule[GasCreate]) +
@@ -295,15 +297,28 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
         return res
 
       if params.originalValue == params.currentValue:
-        if params.originalValue.isZero: # create slot (2.1.1)
-          res.gasCost = InitGas
+        when fork >= FkAmsterdam:
+          res.gasCost = CleanGas # write existing slot (2.1.2)
+
+          if params.originalValue.isZero: # create slot (2.1.1)
+            res.stateGas = params.stateGasStorageSet
+            return res
+
+          if value.isZero: # delete slot (2.1.2b)
+            res.gasRefund = ClearRefund
+
           return res
 
-        if value.isZero: # delete slot (2.1.2b)
-          res.gasRefund = ClearRefund
+        else:
+          if params.originalValue.isZero: # create slot (2.1.1)
+            res.gasCost = InitGas
+            return res
 
-        res.gasCost = CleanGas # write existing slot (2.1.2)
-        return res
+          if value.isZero: # delete slot (2.1.2b)
+            res.gasRefund = ClearRefund
+
+          res.gasCost = CleanGas # write existing slot (2.1.2)
+          return res
 
       if not params.originalValue.isZero:
         if params.currentValue.isZero: # recreate slot (2.2.1.1)
@@ -313,7 +328,10 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
 
       if params.originalValue == value:
         if params.originalValue.isZero: # reset to original inexistent slot (2.2.2.1)
-          res.gasRefund += InitRefund
+          when fork >= FkAmsterdam:
+            res.gasRefund += params.stateGasStorageSet.int64 + CleanRefund
+          else:
+            res.gasRefund += InitRefund
         else: # reset to original existing slot (2.2.2.2)
           res.gasRefund += CleanRefund
 
@@ -403,7 +421,8 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
       when fork < FkSpurious:
         # Pre-EIP161 all account creation calls consumed 25000 gas.
         gasCost += static(GasInt(FeeSchedule[GasNewAccount]))
-      else:
+
+      when fork >= FkSpurious and fork < FkAmsterdam:
         # Afterwards, only those transfering value:
         # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-158.md
         # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md
@@ -447,7 +466,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
 
   func `prefix gasSelfDestruct`(condition: bool): GasInt {.nimcall.} =
     result += static(GasInt(FeeSchedule[GasSelfDestruct]))
-    when fork >= FkTangerine:
+    when fork >= FkTangerine and fork < FkAmsterdam:
       if condition:
         result += static(GasInt(FeeSchedule[GasNewAccount]))
 
@@ -483,7 +502,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
                   {.nimcall, gcsafe, raises: [].}): GasCost =
       GasCost(kind: GckCall, c_handler: handler)
 
-    func handleCreate(handler: proc(value: UInt256, gasParams: GasParamsCr): GasInt
+    func handleCreate(handler: proc(depositGas: bool, gasParams: GasParamsCr): GasInt
                   {.nimcall, gcsafe, raises: [].}): GasCost =
       GasCost(kind: GckCreate, cr_handler: handler)
 
@@ -778,6 +797,11 @@ func shanghaiGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
   result = previousFees
   result[GasInitcodeWord] = 2.GasInt  # INITCODE_WORD_COST from EIP-3860
 
+func amsterdamGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
+  result = previousFees
+  result[GasTXCreate] = 9000.GasInt  # EIP-8037
+  result[GasCreate] = 9000.GasInt  # EIP-8037
+
 const
   HomesteadGasFees = BaseGasFees.homesteadGasFees
   TangerineGasFees = HomesteadGasFees.tangerineGasFees
@@ -786,6 +810,7 @@ const
   BerlinGasFees = IstanbulGasFees.berlinGasFees
   LondonGasFees = BerlinGasFees.londonGasFees
   ShanghaiGasFees = LondonGasFees.shanghaiGasFees
+  AmsterdamGasFees = ShanghaiGasFees.amsterdamGasFees
 
   gasFees*: array[FkFrontier..FkLatest, GasFeeSchedule] = [
     FkFrontier: BaseGasFees,
@@ -808,7 +833,7 @@ const
     FkBpo3: ShanghaiGasFees,
     FkBpo4: ShanghaiGasFees,
     FkBpo5: ShanghaiGasFees,
-    FkAmsterdam: ShanghaiGasFees,
+    FkAmsterdam: AmsterdamGasFees,
   ]
 
 gasCosts(FkFrontier, base, BaseGasCosts)
@@ -820,6 +845,7 @@ gasCosts(FkIstanbul, istanbul, IstanbulGasCosts)
 gasCosts(FkBerlin, berlin, BerlinGasCosts)
 gasCosts(FkLondon, london, LondonGasCosts)
 gasCosts(FkShanghai, shanghai, ShanghaiGasCosts)
+gasCosts(FkAmsterdam, amsterdam, AmsterdamGasCosts)
 
 proc forkToSchedule*(fork: EVMFork): GasCosts =
   if fork < FkHomestead:
@@ -838,8 +864,10 @@ proc forkToSchedule*(fork: EVMFork): GasCosts =
     BerlinGasCosts
   elif fork < FkShanghai:
     LondonGasCosts
-  else:
+  elif fork < FkAmsterdam:
     ShanghaiGasCosts
+  else:
+    AmsterdamGasCosts
 
 const
   ## Precompile costs

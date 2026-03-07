@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -15,9 +15,13 @@ import
   ../evm_errors,
   ../types
 
-func init*(m: var GasMeter, startGas: GasInt) =
+func init*(m: var GasMeter, startGas: GasInt, stateGas: GasInt) =
   m.gasRemaining = startGas
   m.gasRefunded = 0
+  m.stateGasLeft = stateGas
+  m.stateGasReservoir = stateGas
+  m.stateGasUsed = 0
+  m.regularGasUsed = 0
 
 template consumeGas*(
     gasMeter: var GasMeter; amount: GasInt; reason: static string): EvmResultVoid =
@@ -28,11 +32,13 @@ template consumeGas*(
   if amount > gasMeter.gasRemaining:
     EvmResultVoid.err(gasErr(OutOfGas))
   else:
+    gasMeter.regularGasUsed += amount
     gasMeter.gasRemaining -= amount
     EvmResultVoid.ok()
 
 func returnGas*(gasMeter: var GasMeter; amount: GasInt) =
   gasMeter.gasRemaining += amount
+  gasMeter.regularGasUsed -= amount
 
 func refundGas*(gasMeter: var GasMeter; amount: int64) =
   # EIP-2183 Net gas metering for sstore is built upon idea
@@ -45,3 +51,38 @@ func refundGas*(gasMeter: var GasMeter; amount: int64) =
   # cannot be converted to uint64 too, because the sum of all children gas refund,
   # no matter positive or negative will be >= 0 when EVM finish execution.
   gasMeter.gasRefunded += amount
+
+func chargeStateGas*(gasMeter: var GasMeter; amount: GasInt, reason: string): EvmResultVoid =
+  if gasMeter.stateGasLeft >= amount:
+    gasMeter.stateGasLeft -= amount
+  elif gasMeter.stateGasLeft + gasMeter.gasRemaining >= amount:
+    let remainder = amount - gasMeter.stateGasLeft
+    gasMeter.stateGasLeft = 0
+    gasMeter.gasRemaining -= remainder
+  else:
+    return EvmResultVoid.err(gasErr(OutOfGas))
+
+  gasMeter.stateGasUsed += amount
+  EvmResultVoid.ok()
+
+func returnStateGas*(gasMeter: var GasMeter; amount: GasInt) =
+  gasMeter.stateGasLeft += amount
+  gasMeter.stateGasUsed -= amount
+
+func enoughGas*(gasMeter: GasMeter, regularGas, stateGas: GasInt): bool =
+  if gasMeter.stateGasLeft >= stateGas:
+    return gasMeter.gasRemaining >= regularGas
+
+  if gasMeter.stateGasLeft + gasMeter.gasRemaining >= stateGas:
+    let
+      remainder = stateGas - gasMeter.stateGasLeft
+      gasLeft = gasMeter.gasRemaining - remainder
+    return gasLeft >= regularGas
+
+  false
+
+func burnGas*(gasMeter: var GasMeter) =
+  gasMeter.stateGasUsed += gasMeter.stateGasLeft
+  gasMeter.regularGasUsed += gasMeter.gasRemaining
+  gasMeter.gasRemaining = 0
+  gasMeter.stateGasLeft = 0

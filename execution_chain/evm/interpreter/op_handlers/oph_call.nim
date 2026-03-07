@@ -18,7 +18,7 @@ import
   ../../../constants,
   ../../evm_errors,
   ../../../common/evmforks,
-  ../../../core/eip7702,
+  ../../../core/[eip7702, eip8037],
   ../../computation,
   ../../memory,
   ../../stack,
@@ -189,11 +189,17 @@ proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) =
 
   c.chainTo(child):
     if not child.shouldBurnGas:
-      c.gasMeter.returnGas(child.gasMeter.gasRemaining)
+      c.gasMeter.returnGas(child.gasMeter.gasRemaining)      
 
     if child.isSuccess:
+      c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
       c.merge(child)
       c.stack.lsTop(1)
+    else:
+      # On failure (revert or exceptional halt) state changes are rolled back,
+      # so no state was actually grown.  The full original reservoir is restored
+      # to the parent and the child's state_gas_used is not accumulated.
+      c.gasMeter.returnStateGas(child.gasMeter.stateGasReservoir)
 
     let actualOutputSize = min(memLen, child.output.len)
     if actualOutputSize > 0:
@@ -232,6 +238,14 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
 
   ? cpt.opcodeGasCost(Call, gasCost, reason = $Call)
 
+  if cpt.fork >= FkAmsterdam:
+    if isNewAccount() and p.value.isZero.not:
+      ? cpt.gasMeter.chargeStateGas(STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte,
+        reason = "CALL: State gas new account")
+
+  let stateGas = cpt.gasMeter.stateGasLeft
+  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "CALL stateGas reservoir")
+
   cpt.returnData.setLen(0)
 
   if cpt.msg.depth >= MaxCallDepth:
@@ -240,6 +254,7 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
       maximumDepth = MaxCallDepth,
       depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
+    cpt.gasMeter.returnStateGas(stateGas)
     return ok()
 
   cpt.memory.extend(p.memInPos, p.memInLen)
@@ -248,12 +263,14 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
   let senderBalance = cpt.getBalance(p.sender)
   if senderBalance < p.value:
     cpt.gasMeter.returnGas(childGasLimit)
+    cpt.gasMeter.returnStateGas(stateGas)
     return ok()
 
   var childMsg = Message(
     kind:            CallKind.Call,
     depth:           cpt.msg.depth + 1,
     gas:             childGasLimit,
+    stateGas:        stateGas,
     sender:          p.sender,
     contractAddress: p.contractAddress,
     codeAddress:     p.codeAddress,
@@ -290,6 +307,9 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
 
   ? cpt.opcodeGasCost(CallCode, gasCost, reason = $CallCode)
 
+  let stateGas = cpt.gasMeter.stateGasLeft
+  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "CALLCODE stateGas reservoir")
+
   cpt.returnData.setLen(0)
 
   if cpt.msg.depth >= MaxCallDepth:
@@ -298,6 +318,7 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
       maximumDepth = MaxCallDepth,
       depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
+    cpt.gasMeter.returnStateGas(stateGas)
     return ok()
 
   cpt.memory.extend(p.memInPos, p.memInLen)
@@ -306,12 +327,14 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
   let senderBalance = cpt.getBalance(p.sender)
   if senderBalance < p.value:
     cpt.gasMeter.returnGas(childGasLimit)
+    cpt.gasMeter.returnStateGas(stateGas)
     return ok()
 
   var childMsg = Message(
     kind:            CallKind.CallCode,
     depth:           cpt.msg.depth + 1,
     gas:             childGasLimit,
+    stateGas:        stateGas,
     sender:          p.sender,
     contractAddress: p.contractAddress,
     codeAddress:     p.codeAddress,
@@ -348,6 +371,9 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
 
   ? cpt.opcodeGasCost(DelegateCall, gasCost, reason = $DelegateCall)
 
+  let stateGas = cpt.gasMeter.stateGasLeft
+  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "DELEGATECALL stateGas reservoir")
+
   cpt.returnData.setLen(0)
   if cpt.msg.depth >= MaxCallDepth:
     debug "Computation Failure",
@@ -355,6 +381,7 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
       maximumDepth = MaxCallDepth,
       depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
+    cpt.gasMeter.returnStateGas(stateGas)
     return ok()
 
   cpt.memory.extend(p.memInPos, p.memInLen)
@@ -364,6 +391,7 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
     kind:            CallKind.DelegateCall,
     depth:           cpt.msg.depth + 1,
     gas:             childGasLimit,
+    stateGas:        stateGas,
     sender:          p.sender,
     contractAddress: p.contractAddress,
     codeAddress:     p.codeAddress,
@@ -399,6 +427,9 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
 
   ? cpt.opcodeGasCost(StaticCall, gasCost, reason = $StaticCall)
 
+  let stateGas = cpt.gasMeter.stateGasLeft
+  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "STATICCALL stateGas reservoir")
+
   cpt.returnData.setLen(0)
 
   if cpt.msg.depth >= MaxCallDepth:
@@ -407,6 +438,7 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
       maximumDepth = MaxCallDepth,
       depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
+    cpt.gasMeter.returnStateGas(stateGas)
     return ok()
 
   cpt.memory.extend(p.memInPos, p.memInLen)
@@ -416,6 +448,7 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
     kind:            CallKind.Call,
     depth:           cpt.msg.depth + 1,
     gas:             childGasLimit,
+    stateGas:        stateGas,
     sender:          p.sender,
     contractAddress: p.contractAddress,
     codeAddress:     p.codeAddress,
