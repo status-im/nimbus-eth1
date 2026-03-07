@@ -10,7 +10,7 @@
 
 ## This module automatically pulls in the persistent backend libraries at the
 ## linking stage (e.g. `rocksdb`) which can be avoided for pure memory DB
-## applications by importing `db/code_db/memory_only` (rather than
+## applications by importing `db/core_db/memory_only` (rather than
 ## `db/core_db/persistent`.)
 ##
 ## The right way to use this file on a conditional mode is to import it as in
