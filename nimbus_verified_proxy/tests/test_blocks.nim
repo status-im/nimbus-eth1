@@ -114,7 +114,7 @@ suite "test verified blocks":
 
     check:
       verifiedBlkUnreachable.isErr()
-      verifiedBlkUnreachable.error.errType == VerificationError
+      verifiedBlkUnreachable.error.errType == FrontendError
 
     let verifiedBlkReachable =
       waitFor engine.frontend.eth_getBlockByNumber(reachableTargetTag, true)
