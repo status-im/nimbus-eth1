@@ -49,9 +49,11 @@ proc execSubCreate(c: Computation; childMsg: Message;
   c.chainTo(child):
     if not child.shouldBurnGas:
       c.gasMeter.returnGas(child.gasMeter.gasRemaining)
+      c.gasMeter.appendRegularGasUsed(child.gasMeter.regularGasUsed)
 
     if child.isSuccess:
       c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
+      c.gasMeter.appendStateGasUsed(child.gasMeter.stateGasUsed)
       c.merge(child)
       c.stack.lsTop child.msg.contractAddress
     else:
@@ -131,10 +133,10 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
   var createMsgGas = cpt.gasMeter.gasRemaining
   if cpt.fork >= FkTangerine:
     createMsgGas -= createMsgGas div 64
-  ? cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE msg gas")
+  cpt.gasMeter.gasRemaining -= createMsgGas
 
   let stateGas = cpt.gasMeter.stateGasLeft
-  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "CREATE stateGas reservoir")
+  cpt.gasMeter.stateGasLeft = 0.GasInt
 
   var
     childMsg = Message(
@@ -218,10 +220,10 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
   var createMsgGas = cpt.gasMeter.gasRemaining
   if cpt.fork >= FkTangerine:
     createMsgGas -= createMsgGas div 64
-  ? cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE2 msg gas")
+  cpt.gasMeter.gasRemaining -= createMsgGas
 
   let stateGas = cpt.gasMeter.stateGasLeft
-  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "CREATE2 stateGas reservoir")
+  cpt.gasMeter.stateGasLeft = 0.GasInt
 
   var
     code = CodeBytesRef.init(cpt.memory.read(memPos, memLen))

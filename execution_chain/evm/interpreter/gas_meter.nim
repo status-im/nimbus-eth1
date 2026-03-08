@@ -37,7 +37,6 @@ template consumeGas*(
 
 func returnGas*(gasMeter: var GasMeter; amount: GasInt) =
   gasMeter.gasRemaining += amount
-  gasMeter.regularGasUsed -= amount
 
 func refundGas*(gasMeter: var GasMeter; amount: int64) =
   # EIP-2183 Net gas metering for sstore is built upon idea
@@ -66,7 +65,6 @@ func chargeStateGas*(gasMeter: var GasMeter; amount: GasInt, reason: string): Ev
 
 func returnStateGas*(gasMeter: var GasMeter; amount: GasInt) =
   gasMeter.stateGasLeft += amount
-  gasMeter.stateGasUsed -= amount
 
 func enoughGas*(gasMeter: GasMeter, regularGas, stateGas: GasInt): bool =
   if gasMeter.stateGasLeft >= stateGas:
@@ -85,3 +83,18 @@ func burnGas*(gasMeter: var GasMeter) =
   gasMeter.regularGasUsed += gasMeter.gasRemaining
   gasMeter.gasRemaining = 0
   gasMeter.stateGasLeft = 0
+
+func escrowSubcallRegularGas*(gasMeter: var GasMeter, subCallGas: GasInt) =
+  # Remove forwarded CALL* gas from the caller's regular gas usage.
+  #
+  # CALL* forwards `subCallGas` to the child frame as temporary escrow.
+  # Only gas actually burned by the child should be reintroduced via
+  # `incorporate_child_*` child gas accounting.
+
+  gasMeter.regularGasUsed -= subCallGas
+
+func appendRegularGasUsed*(gasMeter: var GasMeter, amount: GasInt) =
+  gasMeter.regularGasUsed += amount
+
+func appendStateGasUsed*(gasMeter: var GasMeter, amount: GasInt) =
+  gasMeter.stateGasUsed += amount

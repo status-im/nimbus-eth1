@@ -190,9 +190,11 @@ proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) =
   c.chainTo(child):
     if not child.shouldBurnGas:
       c.gasMeter.returnGas(child.gasMeter.gasRemaining)
+      c.gasMeter.appendRegularGasUsed(child.gasMeter.regularGasUsed)
 
     if child.isSuccess:
       c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
+      c.gasMeter.appendStateGasUsed(child.gasMeter.stateGasUsed)
       c.merge(child)
       c.stack.lsTop(1)
     else:
@@ -248,9 +250,7 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
         memLength:       p.memLength))
 
   ? cpt.opcodeGasCost(Call, gasCost, reason = $Call)
-
-  let stateGas = cpt.gasMeter.stateGasLeft
-  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "CALL stateGas reservoir")
+  cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
 
   cpt.returnData.setLen(0)
 
@@ -260,7 +260,6 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
       maximumDepth = MaxCallDepth,
       depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
-    cpt.gasMeter.returnStateGas(stateGas)
     return ok()
 
   cpt.memory.extend(p.memInPos, p.memInLen)
@@ -269,8 +268,11 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
   let senderBalance = cpt.getBalance(p.sender)
   if senderBalance < p.value:
     cpt.gasMeter.returnGas(childGasLimit)
-    cpt.gasMeter.returnStateGas(stateGas)
     return ok()
+
+  # Pass full reservoir to child (no 63/64 rule for state gas)
+  let stateGas = cpt.gasMeter.stateGasLeft
+  cpt.gasMeter.stateGasLeft = 0.GasInt
 
   var childMsg = Message(
     kind:            CallKind.Call,
@@ -312,9 +314,7 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
         memLength:       p.memLength))
 
   ? cpt.opcodeGasCost(CallCode, gasCost, reason = $CallCode)
-
-  let stateGas = cpt.gasMeter.stateGasLeft
-  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "CALLCODE stateGas reservoir")
+  cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
 
   cpt.returnData.setLen(0)
 
@@ -324,7 +324,6 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
       maximumDepth = MaxCallDepth,
       depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
-    cpt.gasMeter.returnStateGas(stateGas)
     return ok()
 
   cpt.memory.extend(p.memInPos, p.memInLen)
@@ -333,8 +332,11 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
   let senderBalance = cpt.getBalance(p.sender)
   if senderBalance < p.value:
     cpt.gasMeter.returnGas(childGasLimit)
-    cpt.gasMeter.returnStateGas(stateGas)
     return ok()
+
+  # Pass full reservoir to child (no 63/64 rule for state gas)
+  let stateGas = cpt.gasMeter.stateGasLeft
+  cpt.gasMeter.stateGasLeft = 0.GasInt
 
   var childMsg = Message(
     kind:            CallKind.CallCode,
@@ -376,9 +378,7 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
         memLength:       p.memLength))
 
   ? cpt.opcodeGasCost(DelegateCall, gasCost, reason = $DelegateCall)
-
-  let stateGas = cpt.gasMeter.stateGasLeft
-  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "DELEGATECALL stateGas reservoir")
+  cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
 
   cpt.returnData.setLen(0)
   if cpt.msg.depth >= MaxCallDepth:
@@ -387,11 +387,14 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
       maximumDepth = MaxCallDepth,
       depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
-    cpt.gasMeter.returnStateGas(stateGas)
     return ok()
 
   cpt.memory.extend(p.memInPos, p.memInLen)
   cpt.memory.extend(p.memOutPos, p.memOutLen)
+
+  # Pass full reservoir to child (no 63/64 rule for state gas)
+  let stateGas = cpt.gasMeter.stateGasLeft
+  cpt.gasMeter.stateGasLeft = 0.GasInt
 
   var childMsg = Message(
     kind:            CallKind.DelegateCall,
@@ -432,9 +435,7 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
         memLength:       p.memLength))
 
   ? cpt.opcodeGasCost(StaticCall, gasCost, reason = $StaticCall)
-
-  let stateGas = cpt.gasMeter.stateGasLeft
-  ? cpt.gasMeter.chargeStateGas(stateGas, reason = "STATICCALL stateGas reservoir")
+  cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
 
   cpt.returnData.setLen(0)
 
@@ -444,11 +445,14 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
       maximumDepth = MaxCallDepth,
       depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
-    cpt.gasMeter.returnStateGas(stateGas)
     return ok()
 
   cpt.memory.extend(p.memInPos, p.memInLen)
   cpt.memory.extend(p.memOutPos, p.memOutLen)
+
+  # Pass full reservoir to child (no 63/64 rule for state gas)
+  let stateGas = cpt.gasMeter.stateGasLeft
+  cpt.gasMeter.stateGasLeft = 0.GasInt
 
   var childMsg = Message(
     kind:            CallKind.Call,
