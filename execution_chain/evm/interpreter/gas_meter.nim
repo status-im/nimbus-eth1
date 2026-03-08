@@ -19,7 +19,6 @@ func init*(m: var GasMeter, startGas: GasInt, stateGas: GasInt) =
   m.gasRemaining = startGas
   m.gasRefunded = 0
   m.stateGasLeft = stateGas
-  m.stateGasReservoir = stateGas
   m.stateGasUsed = 0
   m.regularGasUsed = 0
 
