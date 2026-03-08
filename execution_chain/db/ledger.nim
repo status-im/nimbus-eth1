@@ -206,13 +206,10 @@ proc originalStorageValue(
 
   # Not in the original values cache - go to the DB unless it's a new account
   if acc.flags * {IsNew, NewlyCreated} == {}:
-
     let
       slotKey = ledger.slots.get(slot).valueOr:
         computeSlotKey(slot)
-      rc = ledger.txFrame.fetchSlot(acc.accPath, slotKey)
-    if rc.isOk:
-      result = rc.value
+    result = ledger.txFrame.fetchSlot(acc.accPath, slotKey).valueOr(0'u256)
 
   acc.originalStorage[slot] = result
 
@@ -505,7 +502,7 @@ proc contractCollision*(ledger: LedgerRef, address: Address): bool =
     return
   acc.statement.nonce != 0 or
     acc.statement.codeHash != EMPTY_CODE_HASH or
-      not ledger.txFrame.accountStorageEmpty(acc.accPath).valueOr(true)
+      ledger.txFrame.hasStorage(acc.accPath).valueOr(false)
 
 proc accountExists*(ledger: LedgerRef, address: Address): bool =
   let acc = ledger.getAccount(address, false)
@@ -593,8 +590,7 @@ proc clearStorage*(ledger: LedgerRef, address: Address) =
   let acc = ledger.getAccount(address)
   acc.flags.incl {Alive, NewlyCreated}
 
-  let empty = ledger.txFrame.accountStorageEmpty(acc.accPath).valueOr(true)
-  if not empty:
+  if ledger.txFrame.hasStorage(acc.accPath).valueOr(false):
     # need to clear the storage from the database first
     let acc = ledger.makeDirty(address, cloneStorage = false)
     # update caches
@@ -684,7 +680,6 @@ proc persist*(ledger: LedgerRef,
 
   # make sure all savePoint already committed
   doAssert(ledger.savePoint.parentSavePoint.isNil)
-
   if clearEmptyAccount:
     ledger.clearEmptyAccounts()
 

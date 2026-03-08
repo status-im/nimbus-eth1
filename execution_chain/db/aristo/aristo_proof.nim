@@ -122,10 +122,11 @@ proc makeStorageProof*(
       ): Result[(seq[seq[byte]], bool), AristoError] =
   ## Note that the function returns an error unless
   ## the argument `accPath` is valid.
-  let vid = db.fetchStorageID(accPath).valueOr:
-    if error == FetchPathStoRootMissing:
-      return ok((@[],false))
-    return err(error)
+  let vid = ?db.fetchStorageID(accPath)
+
+  if not vid.isValid():
+    return ok((@[],false))
+
   var
     nodesCache: NodesCache
     proof: seq[seq[byte]]
@@ -139,19 +140,15 @@ proc makeStorageProofs*(
       ): Result[seq[seq[seq[byte]]], AristoError] =
   ## Note that the function returns an error unless
   ## the argument `accPath` is valid.
-  let vid = db.fetchStorageID(accPath).valueOr:
-    if error == FetchPathStoRootMissing:
-      let emptyProofs = newSeq[seq[seq[byte]]](stoPaths.len())
-      return ok(emptyProofs)
-    return err(error)
+  let vid = ?db.fetchStorageID(accPath)
 
-  var
-    nodesCache: NodesCache
-    proofs = newSeqOfCap[seq[seq[byte]]](stoPaths.len())
-  for stoPath in stoPaths:
-    var proof: seq[seq[byte]]
-    discard ?db.makeProof(vid, NibblesBuf.fromBytes stoPath.data, nodesCache, proof)
-    proofs.add(proof)
+  var proofs = newSeq[seq[seq[byte]]](stoPaths.len())
+
+  if vid.isValid():
+    var nodesCache: NodesCache
+    for i, stoPath in stoPaths:
+      discard
+        ?db.makeProof(vid, NibblesBuf.fromBytes stoPath.data, nodesCache, proofs[i])
 
   ok(proofs)
 
@@ -164,16 +161,14 @@ proc makeStorageMultiProof(
       ): Result[void, AristoError] =
   ## Note that the function returns an error unless
   ## the argument `accPath` is valid.
-  let vid = db.fetchStorageID(accPath).valueOr:
-    if error == FetchPathStoRootMissing:
-      return ok()
-    return err(error)
+  let vid = ?db.fetchStorageID(accPath)
 
-  for stoPath in stoPaths:
-    var proof: seq[seq[byte]]
-    discard ?db.makeProof(vid, NibblesBuf.fromBytes stoPath.data, nodesCache, proof)
-    for node in proof:
-      multiProof.incl(node)
+  if vid.isValid():
+    for stoPath in stoPaths:
+      var proof: seq[seq[byte]]
+      discard ?db.makeProof(vid, NibblesBuf.fromBytes stoPath.data, nodesCache, proof)
+      for node in proof:
+        multiProof.incl(node)
 
   ok()
 

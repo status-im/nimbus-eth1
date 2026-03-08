@@ -58,7 +58,6 @@ type
     FetchAccInaccessible
     FetchAccPathWithoutLeaf
     FetchPathNotFound
-    FetchPathStoRootMissing
 
     # Get functions from `aristo_get.nim`
     GetKeyNotFound
