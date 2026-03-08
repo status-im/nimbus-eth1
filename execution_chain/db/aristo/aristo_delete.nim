@@ -128,7 +128,7 @@ proc deleteImpl(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc deleteAccountRecord*(
+proc deleteAccount*(
     db: AristoTxRef;
     accPath: Hash32;
       ): Result[void,AristoError] =
@@ -158,7 +158,7 @@ proc deleteAccountRecord*(
 
   ok()
 
-proc deleteStorageData*(
+proc deleteSlot*(
     db: AristoTxRef;
     accPath: Hash32;          # Implies storage data tree
     stoPath: Hash32;
@@ -223,7 +223,7 @@ proc deleteStorageTree*(
     db: AristoTxRef;                   # Database, top layer
     accPath: Hash32;                   # Implies storage data tree
       ): Result[void,AristoError] =
-  ## Variant of `deleteStorageData()` for purging the whole storage tree
+  ## Variant of `deleteSlot()` for purging the whole storage tree
   ## associated to the account argument `accPath`.
   ##
   var accHike: Hike

@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -79,7 +79,7 @@ proc putVtx*(
   let dsc = session.batch
   if vtx.isValid:
     dsc.put(rvid.blobify().data(), vtx.blobify(key), rdb.vtxCol.handle()).isOkOr:
-      # Caller must `rollback()` which will flush the `rdVtxLru` cache
+      # Caller must `rollback()` which will clear the `rdVtxLru` cache
       const errSym = RdbBeDriverPutVtxError
       when extraTraceMessages:
         trace logTxt "putVtx()", vid, error=errSym, info=error
@@ -113,7 +113,7 @@ proc putVtx*(
 
   else:
     dsc.delete(rvid.blobify().data(), rdb.vtxCol.handle()).isOkOr:
-      # Caller must `rollback()` which will flush the `rdVtxLru` cache
+      # Caller must `rollback()` which will clear the `rdVtxLru` cache
       const errSym = RdbBeDriverDelVtxError
       when extraTraceMessages:
         trace logTxt "putVtx()", vid, error=errSym, info=error

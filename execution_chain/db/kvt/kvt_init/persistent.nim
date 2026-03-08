@@ -20,10 +20,9 @@
 
 import
   ../kvt_desc,
-  "."/[rocks_db, memory_only]
+  ./rocks_db
 
 export
-  memory_only,
   kvt_desc
 
 # ------------------------------------------------------------------------------

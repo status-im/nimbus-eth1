@@ -11,6 +11,7 @@ import
   ../execution_chain/core/executor, test_config,
   ../execution_chain/transaction,
   ../execution_chain/[evm/state, evm/types],
+  ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/ledger,
   ../execution_chain/common/common,
   ../execution_chain/utils/[utils, debug],

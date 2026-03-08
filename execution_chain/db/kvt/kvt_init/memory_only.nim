@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -15,10 +15,9 @@
 
 import
   ../kvt_desc,
-  "."/[init_common, memory_db]
+  ./memory_db
 
 export
-  BackendType,
   MemBackendRef
 
 # ------------------------------------------------------------------------------
@@ -31,14 +30,6 @@ proc init*(T: type KvtDbRef): T =
   let db = memoryBackend()
   db.txRef = KvtTxRef(db: db)
   db
-
-proc finish*(db: KvtDbRef; eradicate = false) =
-  ## Backend destructor. The argument `eradicate` indicates that a full
-  ## database deletion is requested. If set `false` the outcome might differ
-  ## depending on the type of backend (e.g. the `BackendMemory` backend will
-  ## always eradicate on close.)
-  ##
-  db.closeFn eradicate
 
 # ------------------------------------------------------------------------------
 # End

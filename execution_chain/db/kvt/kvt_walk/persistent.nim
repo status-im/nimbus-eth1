@@ -19,11 +19,10 @@
 import
   ../kvt_init/[rocks_db, persistent],
   ../kvt_desc,
-  "."/[memory_only, walk_private]
+  ./[walk_private]
 
 export
   rocks_db,
-  memory_only,
   persistent
 
 # ------------------------------------------------------------------------------

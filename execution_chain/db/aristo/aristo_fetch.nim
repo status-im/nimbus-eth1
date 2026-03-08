@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -263,18 +263,6 @@ proc retrieveStoragePayload(
 
   ok StoLeafRef(leafVtx).stoData
 
-proc hasStoragePayload(
-    db: AristoTxRef;
-    accPath: Hash32;
-    stoPath: Hash32;
-      ): Result[bool,AristoError] =
-  let error = db.retrieveStoragePayload(accPath, stoPath).errorOr:
-    return ok(true)
-
-  if error == FetchPathNotFound:
-    return ok(false)
-  err(error)
-
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -291,7 +279,7 @@ proc fetchLastCheckpoint*(
   let state = ?db.db.getLstBe()
   ok state.serial
 
-proc fetchAccountRecord*(
+proc fetchAccount*(
     db: AristoTxRef;
     accPath: Hash32;
       ): Result[AristoAccount,AristoError] =
@@ -307,7 +295,7 @@ proc fetchStateRoot*(
   ## Fetch the Merkle hash of the account root.
   db.retrieveMerkleHash(STATE_ROOT_VID)
 
-proc hasPathAccount*(
+proc hasAccount*(
     db: AristoTxRef;
     accPath: Hash32;
       ): Result[bool,AristoError] =
@@ -316,7 +304,7 @@ proc hasPathAccount*(
   ##
   db.hasAccountPayload(accPath)
 
-proc fetchStorageData*(
+proc fetchSlot*(
     db: AristoTxRef;
     accPath: Hash32;
     stoPath: Hash32;
@@ -336,16 +324,6 @@ proc fetchStorageRoot*(
       return ok(emptyRoot) # no sub-tree
     return err(error)
   db.retrieveMerkleHash(stoID)
-
-proc hasPathStorage*(
-    db: AristoTxRef;
-    accPath: Hash32;
-    stoPath: Hash32;
-      ): Result[bool,AristoError] =
-  ## For a storage tree related to account `accPath`, query whether the data
-  ## record indexed by `path` exists on the database.
-  ##
-  db.hasStoragePayload(accPath, stoPath)
 
 proc hasStorageData*(
     db: AristoTxRef;

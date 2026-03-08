@@ -37,8 +37,8 @@ proc init*(
       raiseAssert "Cannot initialise " &
         $col & " descriptor: " & error
 
-proc destroy*(rdb: var RdbInst; eradicate: bool) =
-    rdb.baseDb.close(eradicate)
+proc close*(rdb: var RdbInst; wipe: bool) =
+    rdb.baseDb.close(wipe)
 
 # ------------------------------------------------------------------------------
 # End

@@ -204,7 +204,7 @@ proc mergePayloadImpl[LeafType, T](
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc mergeAccountRecord*(
+proc mergeAccount*(
     db: AristoTxRef;                   # Database, top layer
     accPath: Hash32;          # Even nibbled byte path
     accRec: AristoAccount;             # Account data
@@ -233,7 +233,7 @@ proc mergeAccountRecord*(
 
   ok true
 
-proc mergeStorageData*(
+proc mergeSlot*(
     db: AristoTxRef;                   # Database, top layer
     accPath: Hash32;                   # Needed for accounts payload
     stoPath: Hash32;                   # Storage data path (aka key)

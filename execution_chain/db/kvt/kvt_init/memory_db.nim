@@ -182,7 +182,7 @@ proc getBackendFn(db: MemBackendRef): GetBackendFn =
 
 proc memoryBackend*: KvtDbRef =
   let
-    be = MemBackendRef(beKind: BackendMemory)
+    be = MemBackendRef()
     db = KvtDbRef()
 
   db.getKvpFn = getKvpFn be
