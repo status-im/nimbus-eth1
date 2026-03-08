@@ -58,37 +58,51 @@ proc commitOrRollbackDependingOnGasUsed(
     blockRegularGasUsed = callResult.blockRegularGasUsed
     blockStateGasUsed = callResult.blockStateGasUsed
 
-  let limit = if vmState.fork >= FkAmsterdam:
-                max(vmState.blockRegularGasUsed + blockRegularGasUsed, vmState.blockStateGasUsed + blockStateGasUsed)
-              else:
-                vmState.cumulativeGasUsed + gasUsed
+  var
+    errorMsg = ""
 
-  if header.gasLimit < limit:
+  if vmState.fork >= FkAmsterdam:
+    let
+      regularGasAvailable = header.gasLimit - blockRegularGasUsed
+      stateGasAvailable = header.gasLimit - blockStateGasUsed
+
+    # Regular gas is capped at TX_MAX_GAS_LIMIT; state gas can use all
+    # of tx.gas (gas_left can be drawn for state gas when reservoir is empty)
+    if min(TX_GAS_LIMIT.GasInt, tx.gasLimit) > regularGasAvailable:
+      errorMsg = "invalid tx: regular gas used exceeds limit"
+    if tx.gasLimit > stateGasAvailable:
+      errorMsg = "invalid tx: state gas used exceeds limit"
+  else:
+    let limit = vmState.cumulativeGasUsed + gasUsed
+    if header.gasLimit < limit:
+      errorMsg = &"invalid tx: block header gasLimit reached. gasLimit={header.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasUsed}"
+
+  if errorMsg.len > 0:
     if vmState.balTrackerEnabled:
       vmState.balTracker.rollbackCallFrame()
     vmState.ledger.rollback(savePoint)
-    err(&"invalid tx: block header gasLimit reached. gasLimit={header.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasUsed}")
-  else:
-    # Accept transaction and collect mining fee.
-    let txFee = gasUsed.u256 * priorityFee.u256
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), txFee)
-      vmState.balTracker.commitCallFrame()
-    vmState.ledger.commit(savePoint)
-    vmState.ledger.addBalance(vmState.coinbase(), txFee)
-    vmState.cumulativeGasUsed += gasUsed
-    vmState.blockRegularGasUsed += blockRegularGasUsed
-    vmState.blockStateGasUsed += blockStateGasUsed
+    return err(errorMsg)
 
-    # EIP-7708: Emit closure logs for accounts with remaining balance before deletion
-    if vmState.fork >= FkAmsterdam:
-      emitClosureLogs(vmState, callResult.logEntries)
+  # Accept transaction and collect mining fee.
+  let txFee = gasUsed.u256 * priorityFee.u256
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), txFee)
+    vmState.balTracker.commitCallFrame()
+  vmState.ledger.commit(savePoint)
+  vmState.ledger.addBalance(vmState.coinbase(), txFee)
+  vmState.cumulativeGasUsed += gasUsed
+  vmState.blockRegularGasUsed += blockRegularGasUsed
+  vmState.blockStateGasUsed += blockStateGasUsed
 
-    # Return remaining gas to the block gas counter so it is
-    # available for the next transaction.
-    vmState.gasPool += tx.gasLimit - max(blockRegularGasUsed, blockStateGasUsed)
-    vmState.blobGasUsed += blobGasUsed
-    ok()
+  # EIP-7708: Emit closure logs for accounts with remaining balance before deletion
+  if vmState.fork >= FkAmsterdam:
+    emitClosureLogs(vmState, callResult.logEntries)
+
+  # Return remaining gas to the block gas counter so it is
+  # available for the next transaction.
+  vmState.gasPool += tx.gasLimit - max(blockRegularGasUsed, blockStateGasUsed)
+  vmState.blobGasUsed += blobGasUsed
+  ok()
 
 proc processTransactionImpl(
     vmState: BaseVMState; ## Parent accounts environment for transaction
