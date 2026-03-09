@@ -281,6 +281,33 @@ proc getEthApiBackend*(
       )
       await fut
 
+    feeHistoryProc = proc(
+        blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[uint8]
+    ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).} =
+      let
+        fut = Future[EngineResult[FeeHistoryResult]].Raising([CancelledError]).init(
+            "feeHistory"
+          )
+        blockCountSer = packArg(blockCount).valueOr:
+          return err((BackendEncodingError, error, UNTAGGED))
+        newestBlockSer = packArg(newestBlock).valueOr:
+          return err((BackendEncodingError, error, UNTAGGED))
+        rewardPercentilesSer = packArg(rewardPercentiles).valueOr:
+          return err((BackendEncodingError, error, UNTAGGED))
+        params =
+          "[" & blockCountSer & ", " & newestBlockSer & ", " & rewardPercentilesSer & "]"
+        url = getRandomBackendUrl(rng, urls)
+
+      transportProc(
+        ctx,
+        alloc(url),
+        "eth_feeHistory",
+        alloc(params),
+        transportCallback[FeeHistoryResult],
+        createCbData(fut),
+      )
+      await fut
+
     sendRawTxProc = proc(
         txBytes: seq[byte]
     ): Future[EngineResult[Hash32]] {.async: (raises: [CancelledError]).} =
@@ -312,6 +339,7 @@ proc getEthApiBackend*(
     eth_getLogs: getLogsProc,
     eth_getTransactionByHash: getTransactionByHashProc,
     eth_getTransactionReceipt: getTransactionReceiptProc,
+    eth_feeHistory: feeHistoryProc,
     eth_sendRawTransaction: sendRawTxProc,
   )
 
@@ -416,8 +444,7 @@ proc run*(
   lc.setBackend(lcRestClientPool.getEthLCBackend())
 
   engine.registerBackend(
-    getEthApiBackend(ctx, config.executionApiUrls, transportProc),
-    fullCapabilities - {FeeHistory},
+    getEthApiBackend(ctx, config.executionApiUrls, transportProc), fullCapabilities
   )
 
   # inject the frontend into c context
