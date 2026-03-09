@@ -42,7 +42,7 @@ func eip1559BaseFee(header: Header; fork: EVMFork): UInt256 =
 
 proc commitOrRollbackDependingOnGasUsed(
     vmState: BaseVMState;
-    accTx: LedgerSpRef;
+    savePoint: LedgerSpRef;
     header: Header;
     tx: Transaction;
     callResult: var LogResult;
@@ -50,7 +50,7 @@ proc commitOrRollbackDependingOnGasUsed(
     blobGasUsed: GasInt;
       ): Result[void, string] =
   # Make sure that the tx does not exceed the maximum cumulative limit as
-  # set in the block header. Again, the eip-1559 reference does not mention
+  # set in the block header. Again, the EIP-1559 reference does not mention
   # an early stop. It would rather detect differing values for the  block
   # header `gasUsed` and the `vmState.cumulativeGasUsed` at a later stage.
   let
@@ -65,7 +65,7 @@ proc commitOrRollbackDependingOnGasUsed(
   if header.gasLimit < limit:
     if vmState.balTrackerEnabled:
       vmState.balTracker.rollbackCallFrame()
-    vmState.ledger.rollback(accTx)
+    vmState.ledger.rollback(savePoint)
     err(&"invalid tx: block header gasLimit reached. gasLimit={header.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasUsed}")
   else:
     # Accept transaction and collect mining fee.
@@ -73,7 +73,7 @@ proc commitOrRollbackDependingOnGasUsed(
     if vmState.balTrackerEnabled:
       vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), txFee)
       vmState.balTracker.commitCallFrame()
-    vmState.ledger.commit(accTx)
+    vmState.ledger.commit(savePoint)
     vmState.ledger.addBalance(vmState.coinbase(), txFee)
     vmState.cumulativeGasUsed += gasUsed
     vmState.blockGasUsed += blockGasUsed
@@ -120,7 +120,7 @@ proc processTransactionImpl(
     return err("blobGasUsed " & $blobGasUsed &
       " exceeds maximum allowance " & $maxBlobGasPerBlock)
 
-  # Actually, the eip-1559 reference does not mention an early exit.
+  # Actually, the EIP-1559 reference does not mention an early exit.
   #
   # Even though database was not changed yet but, a `persist()` directive
   # before leaving is crucial for some unit tests that us a direct/deep call
@@ -135,13 +135,13 @@ proc processTransactionImpl(
 
       if vmState.balTrackerEnabled:
         vmState.balTracker.beginCallFrame()
-      let accTx = vmState.ledger.beginSavepoint()
+      let savePoint = vmState.ledger.beginSavePoint()
 
       var callResult = tx.txCallEvm(sender, vmState, baseFee)
       vmState.captureTxEnd(tx.gasLimit - callResult.gasUsed)
 
       let tmp = commitOrRollbackDependingOnGasUsed(
-        vmState, accTx, header, tx, callResult, priorityFee, blobGasUsed)
+        vmState, savePoint, header, tx, callResult, priorityFee, blobGasUsed)
 
       if tmp.isErr():
         err(tmp.error)

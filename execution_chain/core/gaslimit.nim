@@ -20,7 +20,7 @@ export
   eip1559
 
 # ------------------------------------------------------------------------------
-# Pre Eip 1559 gas limit validation
+# Pre EIP-1559 gas limit validation
 # ------------------------------------------------------------------------------
 
 proc validateGasLimit(header: Header; limit: GasInt): Result[void,string] =
@@ -38,7 +38,7 @@ proc validateGasLimit(header: Header; limit: GasInt): Result[void,string] =
   ok()
 
 # ------------------------------------------------------------------------------
-# Eip 1559 support
+# EIP-1559 support
 # ------------------------------------------------------------------------------
 
 # consensus/misc/eip1559.go(55): func CalcBaseFee(config [..]

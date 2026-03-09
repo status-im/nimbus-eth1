@@ -239,7 +239,7 @@ func total*(udb: UnprocItemKeys): Opt[UInt256] =
   ##
   ## Due to residue class arithmetic and limitations of the number range
   ## `UInt256`, the maximum value `2^256` is returned as `ok(0)`, while the
-  ## least value `0` is returned as `err()`.
+  ## least value `0` (i.e. nothing left) is returned as `err()`.
   ##
   if udb.borrowed.chunks() == 0:
     udb.avail()

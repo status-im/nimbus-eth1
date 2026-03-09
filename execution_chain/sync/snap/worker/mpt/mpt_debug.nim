@@ -14,8 +14,7 @@
 import
   std/[algorithm, hashes, tables,
        sequtils, streams, strformat, strutils, syncio, typetraits],
-  pkg/[eth/common, eth/rlp, stew/byteutils, zlib],
-  ../../../../db/aristo/aristo_desc/desc_nibbles,
+  pkg/[eth/common, eth/trie/nibbles, eth/rlp, stew/byteutils, zlib],
   ../../../wire_protocol/snap/snap_types,
   ../[helpers, state_db],
   ./mpt_desc
@@ -28,6 +27,13 @@ type
     root: StateRoot
     start: ItemKey
     pck: AccountRangePacket
+    error: string
+    lnr: int
+
+  StoreSlotRangeData* = tuple
+    root: StoreRoot
+    start: ItemKey
+    pck: StorageRangesPacket
     error: string
     lnr: int
 
@@ -235,6 +241,117 @@ proc checkTreeImpl(
 
   # NibblesBuf() => ok
 
+# --------------
+
+template rangeFromFile[T: AccountRangePacket|StorageRangesPacket](
+    fd: var File;
+    fPath: string;
+    lnr: int;
+      ): untyped =
+  when T is AccountRangePacket:
+    type U = StateRoot
+    type R = AccountRangeData
+  elif T is StorageRangesPacket:
+    type U = StoreRoot
+    type R = StoreSlotRangeData
+
+  var blockRc: R
+  block body:
+    if fd.isNil and not fd.open(fPath, fmRead):
+      blockRc.error = "Cannot open file \"" & fPath & "\" for reading"
+      break body
+
+    blockRc.lnr = lnr
+    try:
+      var line = ""
+
+      while line.len == 0 or line[0] == '#':
+        if fd.endOfFile:
+          blockRc.error = "End of file"
+          break body
+        blockRc.lnr.inc
+        line = fd.readLine
+      blockRc.root = U(Hash32.fromHex line)
+
+      blockRc.lnr.inc
+      line = fd.readLine
+      if line.len == 0:
+        blockRc.error = "Missing line: Hash32 value"
+        break body
+      blockRc.start = (Hash32.fromHex line).to(ItemKey)
+
+      blockRc.lnr.inc
+      line = fd.readLine
+      if line.len == 0:
+        blockRc.error = "Missing line: data packet value"
+        break body
+      blockRc.pck = rlp.decode(line.hexToSeqByte, T)
+
+    except IOError as e:
+      blockRc.error = $e.name & "(" & e.msg & ")"
+    except ValueError as e:
+      blockRc.error = $e.name & "(" & e.msg & ")"
+    except RlpError as e:
+      blockRc.error = $e.name & "(" & e.msg & ")"
+
+  blockRc
+
+template rangeFromUnzip[T: AccountRangePacket|StorageRangesPacket](
+    gz: GUnzipRef;
+    lnr: int;
+      ): untyped =
+  when T is AccountRangePacket:
+    type U = StateRoot
+    type R = AccountRangeData
+  elif T is StorageRangesPacket:
+    type U = StoreRoot
+    type R = StoreSlotRangeData
+
+  var blockRc: R
+  block body:
+    blockRc.lnr = lnr
+    try:
+      var line = ""
+
+      while line.len == 0 or line[0] == '#':
+        if gz.atEnd:
+          blockRc.error = "End of file"
+          return
+        blockRc.lnr.inc
+        line = gz.nextLine.valueOr:
+          blockRc.error = "Read error: " & $error
+          return
+      blockRc.root = U(Hash32.fromHex line)
+
+      blockRc.lnr.inc
+      line = gz.nextLine.valueOr:
+        blockRc.error = "Read error: " & $error
+        return
+      if line.len == 0:
+        blockRc.error = "Missing line: Hash32 value"
+        return
+      blockRc.start = (Hash32.fromHex line).to(ItemKey)
+
+      blockRc.lnr.inc
+      line =  gz.nextLine.valueOr:
+        blockRc.error = "Read error: " & $error
+        return
+      if line.len == 0:
+        blockRc.error = "Missing line:data packet value"
+        return
+      blockRc.pck = rlp.decode(line.hexToSeqByte, T)
+
+    except OSError as e:
+      blockRc.error = $e.name & "(" & e.msg & ")"
+    except IOError as e:
+      blockRc.error = $e.name & "(" & e.msg & ")"
+    except ValueError as e:
+      blockRc.error = $e.name & "(" & e.msg & ")"
+    except RlpError as e:
+      blockRc.error = $e.name & "(" & e.msg & ")"
+
+  blockRc
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -329,14 +446,20 @@ func to*(db: NodeTrieRef, T: type DebugTrieRef): T =
 # Public serialisation functions
 # ------------------------------------------------------------------------------
 
-proc dumpToFile*(
+proc dumpToFile*[T: AccountRangePacket|StorageRangesPacket](
     fPath: string;
-    root: StateRoot;
+    root: StateRoot|StoreRoot;
     start: ItemKey;
-    pck: AccountRangePacket;
+    pck: T;
       ): bool =
+  when root is StateRoot and T isnot AccountRangePacket:
+    {.error: "Leafs item must be of type AccountRangePacket" &
+             " for root type StateRoot".}
+  elif root is StoreRoot and T isnot StorageRangesPacket:
+    {.error: "Leafs item must be of type StorageRangesPacket" &
+             " for root type StoreRoot".}
   let s =
-    $Hash32(root) & "\n" &
+    $root.to(Hash32) & "\n" &
     $start.to(Hash32) & "\n" &
     rlp.encode(pck).toHex & "\n" &
     "\n"
@@ -348,18 +471,27 @@ proc dumpToFile*(
       return true
   except IOError:
     discard
-
   # false
 
 proc dumpToFile*(
     fPath: string;
     root: StateRoot;
     start: ItemKey;
-    accounts: seq[SnapAccount];
-    proof: seq[ProofNode]
+    data: openArray[SnapAccount];
+    proof: openArray[ProofNode]
       ): bool =
   fPath.dumpToFile(
-    root, start, AccountRangePacket(accounts: accounts, proof: proof))
+    root, start, AccountRangePacket(accounts: @data, proof: @proof))
+
+proc dumpToFile*(
+    fPath: string;
+    root: StoreRoot;
+    start: ItemKey;
+    data: openArray[StorageItem];
+    proof: openArray[ProofNode]
+      ): bool =
+  fPath.dumpToFile(
+    root, start, StorageRangesPacket(slots: @[@data], proof: @proof))
 
 
 proc accountRangeFromFile*(
@@ -367,85 +499,21 @@ proc accountRangeFromFile*(
     fPath: string;
     lnr = 0;
       ): AccountRangeData =
-  if fd.isNil and not fd.open(fPath, fmRead):
-    result.error = "Cannot open file \"" & fPath & "\" for reading"
-    return
+  rangeFromFile[AccountRangePacket](fd, fPath, lnr)
 
-  result.lnr = lnr
-  try:
-    var line = ""
-
-    while line.len == 0 or line[0] == '#':
-      if fd.endOfFile:
-        result.error = "End of file"
-        return
-      result.lnr.inc
-      line = fd.readLine
-    result.root = StateRoot(Hash32.fromHex line)
-
-    result.lnr.inc
-    line = fd.readLine
-    if line.len == 0:
-      result.error = "Missing line: Hash32 value"
-      return
-    result.start = (Hash32.fromHex line).to(ItemKey)
-
-    result.lnr.inc
-    line = fd.readLine
-    if line.len == 0:
-      result.error = "Missing line: AccountRangePacket value"
-      return
-    result.pck = rlp.decode(line.hexToSeqByte, AccountRangePacket)
-
-  except IOError as e:
-    result.error = $e.name & "(" & e.msg & ")"
-  except ValueError as e:
-    result.error = $e.name & "(" & e.msg & ")"
-  except RlpError as e:
-    result.error = $e.name & "(" & e.msg & ")"
+proc storeSlotRangeFromFile*(
+    fd: var File;
+    fPath: string;
+    lnr = 0;
+      ): StoreSlotRangeData =
+  rangeFromFile[StorageRangesPacket](fd, fPath, lnr)
 
 
-proc accountRangeFromUnzip*(gz: GUnzipRef; lnr=0): AccountRangeData =
-  result.lnr = lnr
-  try:
-    var line = ""
+proc accountRangeFromUnzip*(gz: GUnzipRef; lnr = 0): AccountRangeData =
+  rangeFromUnzip[AccountRangePacket](gz, lnr)
 
-    while line.len == 0 or line[0] == '#':
-      if gz.atEnd:
-        result.error = "End of file"
-        return
-      result.lnr.inc
-      line = gz.nextLine.valueOr:
-        result.error = "Read error: " & $error
-        return
-    result.root = StateRoot(Hash32.fromHex line)
-
-    result.lnr.inc
-    line = gz.nextLine.valueOr:
-      result.error = "Read error: " & $error
-      return
-    if line.len == 0:
-      result.error = "Missing line: Hash32 value"
-      return
-    result.start = (Hash32.fromHex line).to(ItemKey)
-
-    result.lnr.inc
-    line =  gz.nextLine.valueOr:
-      result.error = "Read error: " & $error
-      return
-    if line.len == 0:
-      result.error = "Missing line: AccountRangePacket value"
-      return
-    result.pck = rlp.decode(line.hexToSeqByte, AccountRangePacket)
-
-  except OSError as e:
-    result.error = $e.name & "(" & e.msg & ")"
-  except IOError as e:
-    result.error = $e.name & "(" & e.msg & ")"
-  except ValueError as e:
-    result.error = $e.name & "(" & e.msg & ")"
-  except RlpError as e:
-    result.error = $e.name & "(" & e.msg & ")"
+proc storeSlotRangeFromUnzip*(gz: GUnzipRef; lnr = 0): StoreSlotRangeData =
+  rangeFromUnzip[StorageRangesPacket](gz, lnr)
 
 
 proc initUnzip*(fPath: string): Result[(Stream,GUnzipRef),string] =

@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -26,7 +26,7 @@
 {.push raises: [].}
 
 import
-  std/tables,
+  std/[tables, sets],
   chronicles,
   results,
   stew/byteutils,
@@ -84,6 +84,25 @@ proc lenKvpFn(db: MemBackendRef): LenKvpFn =
         return ok(data.len)
       err(GetNotFound)
 
+proc multiGetKvpFn(db: MemBackendRef): MultiGetKvpFn =
+  result =
+    proc(keys: openArray[seq[byte]], values: var openArray[Opt[seq[byte]]],
+         sortedInput: bool): Result[void, KvtError] =
+      assert keys.len() > 0
+      assert keys.len() == values.len()
+
+      for i, k in keys:
+        if k.len() == 0:
+          return err(KeyInvalid)
+
+        var data = db.tab.getOrVoid(@k)
+        if data.isValid:
+          values[i] = Opt.some(move(data))
+        else:
+          values[i] = Opt.none(seq[byte])
+
+      ok()
+
 # -------------
 
 proc putBegFn(db: MemBackendRef): PutBegFn =
@@ -116,6 +135,34 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
 
 # -------------
 
+proc delKvpFn(db: MemBackendRef): DelKvpFn =
+  result =
+    proc(key: openArray[byte]): Result[void, KvtError] =
+      if key.len == 0:
+        return err(KeyInvalid)
+
+      db.tab.del(@key)
+
+      ok()
+
+proc delRangeKvpFn(db: MemBackendRef): DelRangeKvpFn =
+  result =
+    proc(startKey, endKey: openArray[byte], compactRange: bool): Result[void, KvtError] =
+      if startKey.len == 0 or endKey.len == 0:
+        return err(KeyInvalid)
+
+      var toDelete: HashSet[seq[byte]]
+      for k in db.tab.keys():
+        if (k == startKey or k > startKey) and k < endKey:
+          toDelete.incl(k)
+
+      for k in toDelete:
+        db.tab.del(k)
+
+      ok()
+
+# -------------
+
 proc closeFn(db: MemBackendRef): CloseFn =
   result =
     proc(ignore: bool) =
@@ -128,7 +175,7 @@ proc getBackendFn(db: MemBackendRef): GetBackendFn =
   result =
     proc(): TypedBackendRef =
       db
-      
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -140,10 +187,14 @@ proc memoryBackend*: KvtDbRef =
 
   db.getKvpFn = getKvpFn be
   db.lenKvpFn = lenKvpFn be
+  db.multiGetKvpFn = multiGetKvpFn be
 
   db.putBegFn = putBegFn be
   db.putKvpFn = putKvpFn be
   db.putEndFn = putEndFn be
+
+  db.delKvpFn = delKvpFn(be)
+  db.delRangeKvpFn = delRangeKvpFn(be)
 
   db.closeFn = closeFn be
   db.getBackendFn = getBackendFn be

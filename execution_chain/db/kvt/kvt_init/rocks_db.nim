@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -101,6 +101,28 @@ proc lenKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): LenKvpFn =
 
       err(GetNotFound)
 
+proc multiGetKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): MultiGetKvpFn =
+  result =
+    proc(keys: openArray[seq[byte]], values: var openArray[Opt[seq[byte]]],
+        sortedInput: bool): Result[void, KvtError] =
+      assert keys.len() > 0
+      assert keys.len() == values.len()
+
+      let multiGetIter = db.rdb.store[cf].multiGetIter(keys, sortedInput).valueOr:
+        when extraTraceMessages:
+          debug "multiGetKvpFn() multiGetIter", error=($error)
+        return err(RdbBeDriverGetError)
+
+      var i = 0
+      for slice in multiGetIter:
+        values[i] = slice.map(
+          proc(s: auto): auto =
+            s.data()
+        )
+        inc i
+
+      ok()
+
 # -------------
 
 proc putBegFn(db: RdbBackendRef): PutBegFn =
@@ -141,6 +163,33 @@ proc putEndFn(db: RdbBackendRef, cf: static[KvtCFs]): PutEndFn =
 
 # -------------
 
+proc delKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): DelKvpFn =
+  result =
+    proc(key: openArray[byte]): Result[void, KvtError] =
+      db.rdb.store[cf].delete(key).isOkOr:
+        when extraTraceMessages:
+          debug "delKvpFn() failed", error=($error)
+        return err(RdbBeDriverDelError)
+
+      ok()
+
+proc delRangeKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): DelRangeKvpFn =
+  result =
+    proc(startKey, endKey: openArray[byte], compactRange: bool): Result[void, KvtError] =
+      db.rdb.store[cf].deleteRange(startKey, endKey).isOkOr:
+        when extraTraceMessages:
+          debug "delRangeKvpFn() deleteRange failed", error=($error)
+        return err(RdbBeDriverDelError)
+
+      if compactRange:
+        db.rdb.store[cf].suggestCompactRange(startKey, endKey).isOkOr:
+          when extraTraceMessages:
+            debug "delRangeKvpFn() suggestCompactRange failed", error=($error)
+          return err(RdbBeDriverDelError)
+      ok()
+
+# -------------
+
 proc closeFn(db: RdbBackendRef): CloseFn =
   result =
     proc(eradicate: bool) =
@@ -167,10 +216,14 @@ proc rocksDbKvtBackend*(baseDb: RocksDbInstanceRef, cf: static[KvtCFs]): KvtDbRe
 
   db.getKvpFn = getKvpFn(be, cf)
   db.lenKvpFn = lenKvpFn(be, cf)
+  db.multiGetKvpFn = multiGetKvpFn(be, cf)
 
   db.putBegFn = putBegFn be
   db.putKvpFn = putKvpFn(be, cf)
   db.putEndFn = putEndFn(be, cf)
+
+  db.delKvpFn = delKvpFn(be, cf)
+  db.delRangeKvpFn = delRangeKvpFn(be, cf)
 
   db.closeFn = closeFn be
   db.getBackendFn = getBackendFn be
