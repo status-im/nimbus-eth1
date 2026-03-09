@@ -17,4 +17,5 @@ func chainIdToNetworkId*(chainId: UInt256): EngineResult[UInt256] =
   elif chainId == 560048.u256: # hoodi
     ok(560048.u256)
   else:
-    err((InvalidDataError, "Unknown chainId"))
+    # untagged(-1) so the relevant backend can be tagged
+    err((InvalidDataError, "Unknown chainId", UNTAGGED))
