@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-202 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -264,11 +264,6 @@ template blocksImport*(
 
         # Free block body immediately - ForkedChain only retains the header.
         # Transactions are already persisted as RLP bytes in the txFrame.
-
-        # reset(blocks[n].transactions)
-        # reset(blocks[n].uncles)
-        # reset(blocks[n].withdrawals)
-        # reset(blocks[n].header)
         blocks[n].reset()
         
         # End block: `loop`
