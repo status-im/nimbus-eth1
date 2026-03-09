@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -261,6 +261,11 @@ template blocksImport*(
         # isOk => next instruction
         ctx.updateLastBlockImported nthBn          # block imported OK
         ctx.updateEtaBlocks()                      # metrics, eta estimate
+
+        # Free block body immediately - ForkedChain only retains the header.
+        # Transactions are already persisted as RLP bytes in the txFrame.
+        blocks[n].reset()
+        
         # End block: `loop`
 
     if not isError:
