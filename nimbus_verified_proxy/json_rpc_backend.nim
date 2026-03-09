@@ -162,7 +162,9 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
         ok(await client.resolveClient().eth_getLogs(filterOptions))
 
     feeHistoryProc = proc(
-        blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: Opt[seq[float64]]
+        blockCount: Quantity,
+        newestBlock: BlockTag,
+        rewardPercentiles: Opt[seq[float64]],
     ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).} =
       rpcCall:
         ok(
