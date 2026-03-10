@@ -127,10 +127,6 @@ switch("passL", "-fno-omit-frame-pointer")
 --styleCheck:usages
 --styleCheck:error
 
-# Workaround for v2.2.8 regression; remove with v2.2.10
-# https://github.com/nim-lang/Nim/pull/25343
---mangle:cpp
-
 switch("define", "nim_compiler_path=" & currentDir & "env.sh nim")
 switch("define", "withoutPCRE")
 

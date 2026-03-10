@@ -341,6 +341,21 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "snap_peers"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "light-blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
           }
         ]
       },
@@ -382,6 +397,23 @@
           "legendFormat": "sync_peers",
           "range": true,
           "refId": "B",
+          "useBackend": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bdvimuocv3fggc"
+          },
+          "disableTextWrap": false,
+          "editorMode": "builder",
+          "expr": "nec_snap_peers{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+          "fullMetaSearch": false,
+          "hide": false,
+          "includeNullMetadata": true,
+          "instant": false,
+          "legendFormat": "snap_peers",
+          "range": true,
+          "refId": "D",
           "useBackend": false
         },
         {
@@ -958,6 +990,7 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
+            "axisSoftMin": 0,
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
@@ -998,9 +1031,56 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "none"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "nec_snap_acc_coverage_percent"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "snap_max_acc_state_coverage"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "super-light-orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "snap_acc_coverage"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 5,
@@ -1025,10 +1105,38 @@
       "pluginVersion": "12.1.1",
       "targets": [
         {
-          "refId": "A"
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bdvimuocv3fggc"
+          },
+          "disableTextWrap": false,
+          "editorMode": "builder",
+          "expr": "nec_snap_acc_coverage_pc{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "legendFormat": "snap_acc_coverage_pc",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bdvimuocv3fggc"
+          },
+          "disableTextWrap": false,
+          "editorMode": "builder",
+          "expr": "nec_snap_max_acc_state_coverage_pc{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+          "fullMetaSearch": false,
+          "hide": false,
+          "includeNullMetadata": true,
+          "legendFormat": "snap_max_acc_state_coverage_pc",
+          "range": true,
+          "refId": "B",
+          "useBackend": false
         }
       ],
-      "title": "",
+      "title": "Snap State",
       "transparent": true,
       "type": "timeseries"
     },
@@ -1335,6 +1443,6 @@
   "timepicker": {},
   "timezone": "Europe/London",
   "title": "Mainnet Sync",
-  "uid": "aejdv8m5igu40e",
-  "version": 12
+  "uid": "aejdv8m5igu40f",
+  "version": 25
 }

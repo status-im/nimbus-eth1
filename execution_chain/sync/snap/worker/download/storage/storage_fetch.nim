@@ -12,8 +12,8 @@
 
 import
   pkg/[chronicles, chronos, minilru, stew/interval_set],
-  ../../../wire_protocol,
-  ../[helpers, state_db, worker_desc],
+  ../../../../wire_protocol,
+  ../../[helpers, state_db, worker_desc],
   ./storage_helpers
 
 type

@@ -509,6 +509,28 @@ proc eth_maxPriorityFeePerGas(
   callbackToC(ctx, cb, userData):
     ctx.frontend.eth_maxPriorityFeePerGas()
 
+proc eth_feeHistory(
+    ctx: ptr Context,
+    blockCount: culonglong,
+    newestBlock: cstring,
+    rewardPercentiles: cstring,
+    cb: CallBackProc,
+    userData: pointer,
+) {.exported.} =
+  let
+    blockCountTyped = Quantity(uint64(blockCount))
+    newestBlockTyped = unpackArg($newestBlock, BlockTag).valueOr:
+      cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+      return
+    rewardPercentilesTyped = unpackArg($rewardPercentiles, seq[uint8]).valueOr:
+      cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+      return
+
+  callbackToC(ctx, cb, userData):
+    ctx.frontend.eth_feeHistory(
+      blockCountTyped, newestBlockTyped, rewardPercentilesTyped
+    )
+
 proc eth_sendRawTransaction(
     ctx: ptr Context, txHexBytes: cstring, cb: CallBackProc, userData: pointer
 ) {.exported.} =
@@ -692,6 +714,16 @@ proc nvp_call(
   of "eth_maxPriorityFeePerGas":
     requireParams(0)
     eth_maxPriorityFeePerGas(ctx, cb, userData)
+  of "eth_feeHistory":
+    requireParams(3)
+    eth_feeHistory(
+      ctx,
+      parsedParams[0].getBiggestInt().culonglong,
+      parsedParams[1].getStr().cstring,
+      ($parsedParams[2]).cstring,
+      cb,
+      userData,
+    )
   of "eth_sendRawTransaction":
     requireParams(1)
     eth_sendRawTransaction(ctx, parsedParams[0].getStr().cstring, cb, userData)

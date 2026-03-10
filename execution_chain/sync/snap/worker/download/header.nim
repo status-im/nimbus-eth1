@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  header/header_state
+  ./header/header_state
 
 export
   header_state

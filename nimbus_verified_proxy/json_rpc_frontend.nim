@@ -35,13 +35,13 @@ proc init*(T: type JsonRpcServer, url: Web3Url): EngineResult[JsonRpcServer] =
         try:
           parseInt(parsedUrl.port)
         except ValueError:
-          return err((FrontendError, "Could not parse the port number"))
+          return err((FrontendError, "Could not parse the port number", UNTAGGED))
 
     listenAddress =
       try:
         initTAddress(hostname, port)
       except TransportAddressError as e:
-        return err((FrontendError, e.msg))
+        return err((FrontendError, e.msg, UNTAGGED))
 
   try:
     case url.kind
@@ -59,7 +59,7 @@ proc init*(T: type JsonRpcServer, url: Web3Url): EngineResult[JsonRpcServer] =
       server.wsServer.router = RpcRouter.init()
       return ok(server)
   except JsonRpcError as e:
-    return err((FrontendError, e.msg))
+    return err((FrontendError, e.msg, UNTAGGED))
 
 func getServer(server: JsonRpcServer): RpcServer =
   case server.kind
@@ -74,7 +74,7 @@ proc start*(server: JsonRpcServer): EngineResult[void] =
     of WebSocket:
       server.wsServer.start()
   except JsonRpcError as e:
-    return err((FrontendError, e.msg))
+    return err((FrontendError, e.msg, UNTAGGED))
 
   ok()
 
@@ -216,7 +216,7 @@ proc injectEngineFrontend*(server: JsonRpcServer, frontend: EthApiFrontend) =
     unpackEngineResult(await frontend.eth_maxPriorityFeePerGas())
 
   server.getServer().rpc("eth_feeHistory") do(
-    blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: Opt[seq[float64]]
+    blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[uint8]
   ) -> FeeHistoryResult:
     unpackEngineResult(
       await frontend.eth_feeHistory(blockCount, newestBlock, rewardPercentiles)
@@ -228,6 +228,8 @@ proc injectEngineFrontend*(server: JsonRpcServer, frontend: EthApiFrontend) =
 proc stop*(server: JsonRpcServer) {.async: (raises: []).} =
   case server.kind
   of Http:
+    await server.httpServer.stop()
     await server.httpServer.closeWait()
   of WebSocket:
+    server.wsServer.stop()
     await server.wsServer.closeWait()

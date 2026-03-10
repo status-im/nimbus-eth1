@@ -194,7 +194,7 @@ int main() {
     "{"
     "\"eth2Network\": \"mainnet\","
     "\"trustedBlockRoot\": \"0x2558d82e8b29c4151a0683e4f9d480d229d84b27b51a976f56722e014227e723\","
-    "\"backendUrls\": \"https://eth.blockrazor.xyz,https://eth.nimbus.xyz\","
+    "\"executionApiUrls\": \"https://eth.blockrazor.xyz,https://eth.nimbus.xyz\","
     "\"beaconApiUrls\": \"http://testing.mainnet.beacon-api.nimbus.team,http://www.lightclientdata.org\","
     "\"logLevel\": \"FATAL\","
     "\"logStdout\": \"None\""

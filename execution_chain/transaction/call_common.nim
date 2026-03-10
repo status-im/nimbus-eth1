@@ -42,31 +42,31 @@ proc initialAccessListEIP2929(call: CallParams) =
     return
 
   vmState.mutateLedger:
-    db.accessList(call.sender)
+    ledger.accessList(call.sender)
     # For contract creations the EVM will add the contract address to the
     # access list itself, after calculating the new contract address.
     if not call.isCreate:
-      db.accessList(call.to)
+      ledger.accessList(call.to)
       # If the `call.to` has a delegation, also warm its target.
       if vmState.balTrackerEnabled:
         vmState.balTracker.trackAddressAccess(call.to)
-      let target = parseDelegationAddress(db.getCode(call.to))
+      let target = parseDelegationAddress(ledger.getCode(call.to))
       if target.isSome:
-        db.accessList(target[])
+        ledger.accessList(target[])
 
     # EIP3651 adds coinbase to the list of addresses that should start warm.
     if vmState.fork >= FkShanghai:
-      db.accessList(vmState.coinbase)
+      ledger.accessList(vmState.coinbase)
 
     # Adds the correct subset of precompiles.
     for c in activePrecompiles(vmState.fork):
-      db.accessList(c)
+      ledger.accessList(c)
 
     # EIP2930 optional access list.
     for account in call.accessList:
-      db.accessList(account.address)
+      ledger.accessList(account.address)
       for key in account.storageKeys:
-        db.accessList(account.address, key.to(UInt256))
+        ledger.accessList(account.address, key.to(UInt256))
 
 proc preExecComputation(vmState: BaseVMState, call: CallParams): int64 =
   var gasRefund = 0
@@ -201,7 +201,7 @@ proc prepareToRunComputation(host: TransactionHost, call: CallParams) =
   vmState.mutateLedger:
     if vmState.balTrackerEnabled:
       vmState.balTracker.trackSubBalanceChange(call.sender, call.gasLimit.u256 * call.gasPrice.u256)
-    db.subBalance(call.sender, call.gasLimit.u256 * call.gasPrice.u256)
+    ledger.subBalance(call.sender, call.gasLimit.u256 * call.gasPrice.u256)
 
     # EIP-4844
     if fork >= FkCancun:
@@ -209,7 +209,7 @@ proc prepareToRunComputation(host: TransactionHost, call: CallParams) =
         vmState.blockCtx.excessBlobGas, vmState.com, fork)
       if vmState.balTrackerEnabled:
         vmState.balTracker.trackSubBalanceChange(call.sender, blobFee)
-      db.subBalance(call.sender, blobFee)
+      ledger.subBalance(call.sender, blobFee)
 
 proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): GasUsed =
   let
@@ -250,7 +250,7 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
     if vmState.balTrackerEnabled:
       vmState.balTracker.trackAddBalanceChange(call.sender, gasRefundAmount)
     vmState.mutateLedger:
-      db.addBalance(call.sender, gasRefundAmount)
+      ledger.addBalance(call.sender, gasRefundAmount)
 
   GasUsed(
     evmGasUsed: c.msg.gas - txGasLeft,

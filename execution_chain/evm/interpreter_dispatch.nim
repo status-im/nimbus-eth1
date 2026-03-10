@@ -14,10 +14,10 @@ import
   std/[macros, strformat],
   chronicles,
   stew/byteutils,
-  ".."/[constants, db/ledger],
-  "."/[code_stream, computation, evm_errors],
-  "."/[message, precompiles, state, types],
-  ./interpreter/op_dispatcher
+  ../constants,
+  ../db/ledger,
+  ./interpreter/op_dispatcher,
+  ./[code_stream, computation, evm_errors, message, precompiles, state, types]
 
 logScope:
   topics = "vm opcode"
@@ -67,17 +67,17 @@ macro selectVM(v: VmCpt, fork: EVMFork, tracingEnabled: bool): EvmResultVoid =
   caseStmt
 
 proc beforeExecCall(c: Computation) =
-  c.snapshot()
+  c.beginSavePoint()
   if c.msg.kind == CallKind.Call:
     c.vmState.mutateLedger:
       if c.vmState.balTrackerEnabled:
         c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
-        db.subBalance(c.msg.sender, c.msg.value)
+        ledger.subBalance(c.msg.sender, c.msg.value)
         c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
-        db.addBalance(c.msg.contractAddress, c.msg.value)
+        ledger.addBalance(c.msg.contractAddress, c.msg.value)
       else:
-        db.subBalance(c.msg.sender, c.msg.value)
-        db.addBalance(c.msg.contractAddress, c.msg.value)
+        ledger.subBalance(c.msg.sender, c.msg.value)
+        ledger.addBalance(c.msg.contractAddress, c.msg.value)
 
     if c.fork >= FkAmsterdam:
       # EIP-7708: Emit transfer log for ETH-tx or contract call and CALL op code
@@ -100,7 +100,7 @@ proc afterExecCall(c: Computation) =
 
 proc beforeExecCreate(c: Computation): bool =
   c.vmState.mutateLedger:
-    let nonce = db.getNonce(c.msg.sender)
+    let nonce = ledger.getNonce(c.msg.sender)
     if nonce + 1 < nonce:
       let sender = c.msg.sender.toHex
       c.setError(
@@ -109,15 +109,15 @@ proc beforeExecCreate(c: Computation): bool =
       return true
     if c.vmState.balTrackerEnabled:
       c.vmState.balTracker.trackNonceChange(c.msg.sender, nonce + 1)
-    db.setNonce(c.msg.sender, nonce + 1)
+    ledger.setNonce(c.msg.sender, nonce + 1)
 
     # We add this to the access list _before_ taking a snapshot.
     # Even if the creation fails, the access-list change should not be rolled
     # back EIP2929
     if c.fork >= FkBerlin:
-      db.accessList(c.msg.contractAddress)
+      ledger.accessList(c.msg.contractAddress)
 
-  c.snapshot()
+  c.beginSavePoint()
 
   if c.vmState.balTrackerEnabled:
     c.vmState.balTracker.trackAddressAccess(c.msg.contractAddress)
@@ -130,21 +130,21 @@ proc beforeExecCreate(c: Computation): bool =
   c.vmState.mutateLedger:
     if c.vmState.balTrackerEnabled:
       c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
-      db.subBalance(c.msg.sender, c.msg.value)
+      ledger.subBalance(c.msg.sender, c.msg.value)
       c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
-      db.addBalance(c.msg.contractAddress, c.msg.value)
-      db.clearStorage(c.msg.contractAddress)
+      ledger.addBalance(c.msg.contractAddress, c.msg.value)
+      ledger.clearStorage(c.msg.contractAddress)
       if c.fork >= FkSpurious:
         # EIP161 nonce incrementation
         c.vmState.balTracker.trackIncNonceChange(c.msg.contractAddress)
-        db.incNonce(c.msg.contractAddress)
+        ledger.incNonce(c.msg.contractAddress)
     else:
-      db.subBalance(c.msg.sender, c.msg.value)
-      db.addBalance(c.msg.contractAddress, c.msg.value)
-      db.clearStorage(c.msg.contractAddress)
+      ledger.subBalance(c.msg.sender, c.msg.value)
+      ledger.addBalance(c.msg.contractAddress, c.msg.value)
+      ledger.clearStorage(c.msg.contractAddress)
       if c.fork >= FkSpurious:
         # EIP161 nonce incrementation
-        db.incNonce(c.msg.contractAddress)
+        ledger.incNonce(c.msg.contractAddress)
 
   if c.fork >= FkAmsterdam:
     # EIP-7708: Emit transfer log for contract creation and CREATE op code
@@ -159,8 +159,7 @@ proc afterExecCreate(c: Computation) =
     # Contract code should never be returned to the caller.  Only data from
     # `REVERT` is returned after a create.  Clearing in this branch covers the
     # right cases, particularly important with EVMC where it must be cleared.
-    if c.output.len > 0:
-      c.output = @[]
+    c.output.reset()
 
   if c.isSuccess:
     c.commit()
@@ -274,7 +273,7 @@ proc execCallOrCreate*(cParam: Computation) =
 
   while not c.isNil:
     c.dispose()
-    c = c.parent
+    (c.parent, c) = (nil.Computation, c.parent)
 
 func postExecComputation*(c: Computation) =
   if c.isSuccess:

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -66,11 +66,11 @@ proc calculateReward*(vmState: BaseVMState; account: Address;
     uncleReward = uncleReward * blockReward
     uncleReward = uncleReward div 8.u256
     vmState.mutateLedger:
-      db.addBalance(uncle.coinbase, uncleReward)
+      ledger.addBalance(uncle.coinbase, uncleReward)
     mainReward += blockReward div 32.u256
 
   vmState.mutateLedger:
-    db.addBalance(account, mainReward)
+    ledger.addBalance(account, mainReward)
 
 
 proc calculateReward*(vmState: BaseVMState;

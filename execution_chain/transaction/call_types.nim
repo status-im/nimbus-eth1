@@ -76,7 +76,7 @@ func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork): (GasInt, GasI
   # of gas needed to send this transaction (but that is not actually used
   # for computation).
   var
-    intrinsicGas = gasFees[fork][GasTransaction]
+    intrinsicGas = TX_BASE_COST
     floorDataGas = intrinsicGas
     tokens = 0
 
@@ -102,7 +102,7 @@ func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork): (GasInt, GasI
   if fork >= FkBerlin:
     for account in call.accessList:
       intrinsicGas += ACCESS_LIST_ADDRESS_COST
-      intrinsicGas += GasInt(account.storageKeys.len) * ACCESS_LIST_STORAGE_KEY_COST
+      intrinsicGas += account.storageKeys.len * ACCESS_LIST_STORAGE_KEY_COST
 
   if fork >= FkPrague:
     intrinsicGas += call.authorizationList.len * PER_EMPTY_ACCOUNT_COST
