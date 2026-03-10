@@ -46,7 +46,7 @@ type
     isValid: bool                    ## See also `isValid()` for `VertexID`
     vid: VertexID                    ## Storage root vertex ID
 
-  VertexRef* {.inheritable, pure.} = object #of RootObj
+  VertexRef* {.inheritable, pure.} = object of RootObj
     ## Vertex for building a hexary Patricia or Merkle Patricia Trie
     vType*: VertexType
 
@@ -117,7 +117,10 @@ template init*(
 
 const 
   emptyNibbles = NibblesBuf()
-  emptyVertex* = VertexRef(vType: Empty) # TODO: move this into aristo_constants?
+  #emptyVertex* = VertexRef(vType: Empty) # TODO: move this into aristo_constants?
+
+template emptyVertex*(): VertexRef =
+  VertexRef(vType: Empty)
 
 template empty*(_: type LeafRef): LeafRef =
   LeafRef(emptyVertex)
