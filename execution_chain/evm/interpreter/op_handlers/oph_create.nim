@@ -75,7 +75,6 @@ proc execSubCreate(c: Computation; childMsg: Message;
 
 proc createOp(cpt: VmCpt): EvmResultVoid =
   ## 0xf0, Create a new account with associated code
-  ? cpt.checkInStaticContext()
   ? cpt.stack.lsCheck(3)
 
   let
@@ -107,12 +106,15 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
   ? cpt.opcodeGasCost(Create,
     gasCost, reason = "CREATE: GasCreate + memLen * memory expansion")
 
+  cpt.memory.extend(memPos, memLen)
+  cpt.returnData.setLen(0)
+
   if cpt.fork >= FkAmsterdam:
+    # charge state gas before `checkInStaticContext`
     ? cpt.gasMeter.chargeStateGas(STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte,
       reason = "CREATE: State gas new account")
 
-  cpt.memory.extend(memPos, memLen)
-  cpt.returnData.setLen(0)
+  ? cpt.checkInStaticContext()
 
   if cpt.msg.depth >= MaxCallDepth:
     debug "Computation Failure",
@@ -158,7 +160,6 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
 
 proc create2Op(cpt: VmCpt): EvmResultVoid =
   ## 0xf5, Behaves identically to CREATE, except using keccak256
-  ? cpt.checkInStaticContext()
   ? cpt.stack.lsCheck(4)
 
   let
@@ -194,12 +195,15 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
   ? cpt.opcodeGasCost(Create2,
     gasCost, reason = "CREATE2: GasCreate + memLen * memory expansion")
 
+  cpt.memory.extend(memPos, memLen)
+  cpt.returnData.setLen(0)
+
   if cpt.fork >= FkAmsterdam:
+    # charge state gas before `checkInStaticContext`
     ? cpt.gasMeter.chargeStateGas(STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte,
       reason = "CREATE2: State gas new account")
 
-  cpt.memory.extend(memPos, memLen)
-  cpt.returnData.setLen(0)
+  ? cpt.checkInStaticContext()
 
   if cpt.msg.depth >= MaxCallDepth:
     debug "Computation Failure",
