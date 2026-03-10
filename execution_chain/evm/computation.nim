@@ -237,21 +237,6 @@ proc writeContract*(c: Computation) =
     c.setError(StatusCode.ContractValidationFailure, true)
     return
 
-  if fork >= FkSpurious:
-    if fork >= FkAmsterdam:
-      if len > EIP7954_MAX_CODE_SIZE:
-        # EIP-7954 constraint (https://eips.ethereum.org/EIPS/eip-7954).
-        withExtra trace, "New contract code exceeds EIP-7954 limit",
-          codeSize=len, maxSize=EIP7954_MAX_CODE_SIZE
-        c.setError(StatusCode.OutOfGas, true)
-        return
-    elif len > EIP170_MAX_CODE_SIZE:
-      # EIP-170 constraint (https://eips.ethereum.org/EIPS/eip-3541).
-      withExtra trace, "New contract code exceeds EIP-170 limit",
-        codeSize=len, maxSize=EIP170_MAX_CODE_SIZE
-      c.setError(StatusCode.OutOfGas, true)
-      return
-
   # Charge gas and write the code even if the code address is self-destructed.
   # Non-empty code in a newly created, self-destructed account is possible if
   # the init code calls `DELEGATECALL` or `CALLCODE` to other code which uses
@@ -259,39 +244,44 @@ proc writeContract*(c: Computation) =
   # gas difference matters.  The new code can be called later in the
   # transaction too, before self-destruction wipes the account at the end.
 
-  if fork >= FkAmsterdam:
-    let
-      codeDepositStateGas = len.GasInt * c.vmState.blockCtx.costPerStateByte
-      codeHashGas = (6 * wordCount(len)).GasInt
+  block writeContractCode:
+    if fork >= FkAmsterdam:
+      let
+        codeDepositStateGas = len.GasInt * c.vmState.blockCtx.costPerStateByte
+        codeHashGas = (6 * wordCount(len)).GasInt
 
-    block checkEnoughGas:
       c.gasMeter.chargeStateGas(codeDepositStateGas, reason = "Deposit state gas").isOkOr:
-        break checkEnoughGas
-        
-      c.gasMeter.consumeGas(codeHashGas, reason = "Code hash gas").isOkOr:
-        break checkEnoughGas
-      
-      c.vmState.mutateLedger:
-        if c.vmState.balTrackerEnabled:
-          c.vmState.balTracker.trackCodeChange(c.msg.contractAddress, c.output)
-        ledger.setCode(c.msg.contractAddress, c.output)
-      withExtra trace, "Writing new contract code"
-      return
-  else:
-    let
-      gasParams = GasParamsCr(memLength: len)
-      codeCost = c.gasCosts[Create].cr_handler(true, gasParams)
+        break writeContractCode
 
-    if codeCost <= c.gasMeter.gasRemaining:
-      c.gasMeter.consumeGas(codeCost,
-        reason = "Write new contract code").
-          expect("enough gas since we checked against gasRemaining")
-      c.vmState.mutateLedger:
-        if c.vmState.balTrackerEnabled:
-          c.vmState.balTracker.trackCodeChange(c.msg.contractAddress, c.output)
-        ledger.setCode(c.msg.contractAddress, c.output)
-      withExtra trace, "Writing new contract code"
-      return
+      c.gasMeter.consumeGas(codeHashGas, reason = "Code hash gas").isOkOr:
+        break writeContractCode
+
+      if len > EIP7954_MAX_CODE_SIZE:
+        # EIP-7954 constraint (https://eips.ethereum.org/EIPS/eip-7954).
+        withExtra trace, "New contract code exceeds EIP-7954 limit",
+          codeSize=len, maxSize=EIP7954_MAX_CODE_SIZE
+        break writeContractCode
+    else:
+      let
+        gasParams = GasParamsCr(memLength: len)
+        codeCost = c.gasCosts[Create].cr_handler(true, gasParams)
+
+      c.gasMeter.consumeGas(codeCost, reason = "Write new contract code").isOkOr:
+        break writeContractCode
+
+      if fork >= FkSpurious and len > EIP170_MAX_CODE_SIZE:
+        # EIP-170 constraint (https://eips.ethereum.org/EIPS/eip-3541).
+        withExtra trace, "New contract code exceeds EIP-170 limit",
+          codeSize=len, maxSize=EIP170_MAX_CODE_SIZE
+        c.setError(StatusCode.OutOfGas, true)
+        return
+
+    c.vmState.mutateLedger:
+      if c.vmState.balTrackerEnabled:
+        c.vmState.balTracker.trackCodeChange(c.msg.contractAddress, c.output)
+      ledger.setCode(c.msg.contractAddress, c.output)
+    withExtra trace, "Writing new contract code"
+    return
 
   if fork >= FkHomestead:
     # EIP-2 (https://eips.ethereum.org/EIPS/eip-2).

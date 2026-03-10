@@ -55,33 +55,13 @@ proc commitOrRollbackDependingOnGasUsed(
   # header `gasUsed` and the `vmState.cumulativeGasUsed` at a later stage.
   let
     gasUsed = callResult.gasUsed
-    blockRegularGasUsed = callResult.blockRegularGasUsed
-    blockStateGasUsed = callResult.blockStateGasUsed
+    limit = vmState.cumulativeGasUsed + gasUsed
 
-  var
-    errorMsg = ""
-
-  if vmState.fork >= FkAmsterdam:
-    let
-      regularGasAvailable = header.gasLimit - blockRegularGasUsed
-      stateGasAvailable = header.gasLimit - blockStateGasUsed
-
-    # Regular gas is capped at TX_MAX_GAS_LIMIT; state gas can use all
-    # of tx.gas (gas_left can be drawn for state gas when reservoir is empty)
-    if min(TX_GAS_LIMIT.GasInt, tx.gasLimit) > regularGasAvailable:
-      errorMsg = "invalid tx: regular gas used exceeds limit"
-    if tx.gasLimit > stateGasAvailable:
-      errorMsg = "invalid tx: state gas used exceeds limit"
-  else:
-    let limit = vmState.cumulativeGasUsed + gasUsed
-    if header.gasLimit < limit:
-      errorMsg = &"invalid tx: block header gasLimit reached. gasLimit={header.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasUsed}"
-
-  if errorMsg.len > 0:
+  if header.gasLimit < limit:
     if vmState.balTrackerEnabled:
       vmState.balTracker.rollbackCallFrame()
     vmState.ledger.rollback(savePoint)
-    return err(errorMsg)
+    return err(&"invalid tx: block header gasLimit reached. gasLimit={header.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasUsed}")
 
   # Accept transaction and collect mining fee.
   let txFee = gasUsed.u256 * priorityFee.u256
@@ -91,8 +71,8 @@ proc commitOrRollbackDependingOnGasUsed(
   vmState.ledger.commit(savePoint)
   vmState.ledger.addBalance(vmState.coinbase(), txFee)
   vmState.cumulativeGasUsed += gasUsed
-  vmState.blockRegularGasUsed += blockRegularGasUsed
-  vmState.blockStateGasUsed += blockStateGasUsed
+  vmState.blockRegularGasUsed += callResult.blockRegularGasUsed
+  vmState.blockStateGasUsed += callResult.blockStateGasUsed
 
   # EIP-7708: Emit closure logs for accounts with remaining balance before deletion
   if vmState.fork >= FkAmsterdam:
@@ -100,7 +80,7 @@ proc commitOrRollbackDependingOnGasUsed(
 
   # Return remaining gas to the block gas counter so it is
   # available for the next transaction.
-  vmState.gasPool += tx.gasLimit - max(blockRegularGasUsed, blockStateGasUsed)
+  vmState.gasPool += tx.gasLimit - max(callResult.blockRegularGasUsed, callResult.blockStateGasUsed)
   vmState.blobGasUsed += blobGasUsed
   ok()
 
@@ -125,6 +105,18 @@ proc processTransactionImpl(
   if vmState.gasPool < tx.gasLimit:
     return err("gas limit reached. gasLimit=" & $vmState.gasPool &
       ", gasNeeded=" & $tx.gasLimit)
+
+  if fork >= FkAmsterdam:
+    let
+      regularGasAvailable = header.gasLimit - vmState.blockRegularGasUsed
+      stateGasAvailable = header.gasLimit - vmState.blockStateGasUsed
+
+    # Regular gas is capped at TX_MAX_GAS_LIMIT; state gas can use all
+    # of tx.gas (gas_left can be drawn for state gas when reservoir is empty)
+    if min(TX_GAS_LIMIT.GasInt, tx.gasLimit) > regularGasAvailable:
+      return err("regular gas used exceeds limit")
+    if tx.gasLimit > stateGasAvailable:
+      return err("state gas used exceeds limit")
 
   vmState.gasPool -= tx.gasLimit
 
