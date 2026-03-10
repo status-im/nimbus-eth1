@@ -47,7 +47,9 @@ proc execSubCreate(c: Computation; childMsg: Message;
     child = newComputation(c.vmState, keepStack = false, childMsg, code)
 
   c.chainTo(child):
-    if not child.shouldBurnGas:
+    if child.shouldBurnGas:
+      c.gasMeter.appendRegularGasUsed(child.gasMeter.regularGasUsed + child.gasMeter.gasRemaining)
+    else:
       c.gasMeter.returnGas(child.gasMeter.gasRemaining)
       c.gasMeter.appendRegularGasUsed(child.gasMeter.regularGasUsed)
 
