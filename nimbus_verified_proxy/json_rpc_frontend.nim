@@ -216,7 +216,7 @@ proc injectEngineFrontend*(server: JsonRpcServer, frontend: EthApiFrontend) =
     unpackEngineResult(await frontend.eth_maxPriorityFeePerGas())
 
   server.getServer().rpc("eth_feeHistory") do(
-    blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[uint8]
+    blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[int]
   ) -> FeeHistoryResult:
     unpackEngineResult(
       await frontend.eth_feeHistory(blockCount, newestBlock, rewardPercentiles)

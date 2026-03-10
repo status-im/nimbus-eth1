@@ -462,7 +462,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     ok(proof)
 
   engine.frontend.eth_feeHistory = proc(
-      blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[uint8]
+      blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[int]
   ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).} =
     let (backend, backendIdx) = ?(engine.backendFor(FeeHistory))
     let feeHistory = engine.penaltyOr(
