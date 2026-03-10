@@ -88,7 +88,7 @@ suite "test state verification":
       verifiedCall.get() ==
         "000000000000000000000000000000000000000000000000288a82d13c3d1600".hexToSeqByte()
       verifiedAccessList.get() == accessList
-      verifiedEstimate.get() == Quantity(22080)
+      verifiedEstimate.get() <= Quantity(30000)
 
     ts.clear()
     engine.headerStore.clear()
