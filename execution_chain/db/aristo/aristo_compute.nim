@@ -11,7 +11,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[strformat, locks, atomics],
+  std/[strformat, locks, atomics, threadpool],
   chronicles,
   eth/common/[accounts_rlp, base_rlp, hashes_rlp],
   results,
@@ -238,7 +238,7 @@ proc computeKeyImpl(
         keyvtxs[n] = ?db.getKey((rvid.root, subvid), skipLayers)
 
       when parallel:
-        var futs: array[16, Flowvar[Result[(HashKey, int), AristoError]]]
+        var futs: array[16, threadpool.FlowVar[Result[(HashKey, int), AristoError]]]
 
       # Make sure we have keys computed for each hash
       block keysComputed:
@@ -254,7 +254,7 @@ proc computeKeyImpl(
           # The O(n^2) sort/search here is fine given the small size of the list
           for nibble, keyvtx in keyvtxs.mpairs:
             when parallel:
-              if futs[nibble].isSpawned():
+              if not futs[nibble].isNil(): # futs[nibble].isSpawned():
                 n += 1 # no need to compute key
                 continue
 
@@ -292,7 +292,7 @@ proc computeKeyImpl(
               batchPtr: ptr WriteBatch = batch.addr
               vtxPtr = keyvtxs[minIdx][0][1].addr
               level = keyvtxs[minIdx][1]
-            futs[minIdx] = db.db.taskpool.spawn computeKeyImplTask(
+            futs[minIdx] = threadpool.spawn computeKeyImplTask(
               db.addr, vid, batchPtr, vtxPtr, level, skipLayers = skipLayers)
           else:
             #batch.enter(n)
@@ -309,14 +309,14 @@ proc computeKeyImpl(
 
       when parallel:
         for i, f in futs:
-          if f.isSpawned():
-            while not f.isReady():
-              # Busy waiting for task to prevent the main thread from stealing the task
-              # which can cause memory corruption issues when using heap memory with refc.
-              # Eventually the main thread will handle all in memory writes to the database
-              # so it won't be idle once that part is implemented.
-              discard
-            (keyvtxs[i][0][0], keyvtxs[i][1]) = ?sync(f)
+          if not f.isNil(): #f.isSpawned():
+            # while not f.isReady():
+            #   # Busy waiting for task to prevent the main thread from stealing the task
+            #   # which can cause memory corruption issues when using heap memory with refc.
+            #   # Eventually the main thread will handle all in memory writes to the database
+            #   # so it won't be idle once that part is implemented.
+            #   discard
+            (keyvtxs[i][0][0], keyvtxs[i][1]) = ?(^f) #?sync(f)
 
       template writeBranch(w: var RlpWriter, vtx: BranchRef): HashKey =
         w.encodeBranch(vtx):
