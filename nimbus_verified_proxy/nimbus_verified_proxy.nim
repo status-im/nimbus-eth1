@@ -17,8 +17,7 @@ import
   beacon_chain/gossip_processing/light_client_processor,
   beacon_chain/networking/network_metadata,
   beacon_chain/spec/beaconstate,
-  beacon_chain/conf,
-  beacon_chain/[beacon_clock, buildinfo, nimbus_binary_common, process_state],
+  beacon_chain/[beacon_clock, nimbus_binary_common, process_state],
   ../execution_chain/common/common,
   ./nimbus_verified_proxy_conf,
   ./engine/engine,
@@ -182,7 +181,7 @@ proc run(
     await lcRestClientPool.closeAll()
     raise e
 
-proc main() {.raises: [].} =
+when isMainModule:
   const
     banner = "Nimbus Verified Proxy " & FullVersionStr
     copyright =
@@ -220,5 +219,4 @@ proc main() {.raises: [].} =
     fatal "Unexpected error", error = e.msg
     quit QuitFailure
 
-when isMainModule:
-  main()
+  waitFor run(config)
