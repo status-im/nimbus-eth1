@@ -117,16 +117,17 @@ proc beforeExecCreate(c: Computation): bool =
     if c.fork >= FkBerlin:
       ledger.accessList(c.msg.contractAddress)
 
-  c.beginSavePoint()
-
   if c.vmState.balTrackerEnabled:
     c.vmState.balTracker.trackAddressAccess(c.msg.contractAddress)
   if c.vmState.readOnlyLedger().contractCollision(c.msg.contractAddress):
     let blurb = c.msg.contractAddress.toHex
-    c.setError("Address collision when creating contract address=" & blurb, true)
-    c.rollback()
+    # Don't return remaining gas to parent and also don't burn it into regularGasUsed
+    c.gasMeter.gasRemaining = 0
+    c.setError("Address collision when creating contract address=" & blurb, false)
     return true
 
+  c.beginSavePoint()
+  
   c.vmState.mutateLedger:
     if c.vmState.balTrackerEnabled:
       c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
