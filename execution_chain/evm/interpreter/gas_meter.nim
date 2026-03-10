@@ -79,10 +79,8 @@ func enoughGas*(gasMeter: GasMeter, regularGas, stateGas: GasInt): bool =
   false
 
 func burnGas*(gasMeter: var GasMeter) =
-  gasMeter.stateGasUsed += gasMeter.stateGasLeft
   gasMeter.regularGasUsed += gasMeter.gasRemaining
   gasMeter.gasRemaining = 0
-  gasMeter.stateGasLeft = 0
 
 func escrowSubcallRegularGas*(gasMeter: var GasMeter, subCallGas: GasInt) =
   # Remove forwarded CALL* gas from the caller's regular gas usage.
