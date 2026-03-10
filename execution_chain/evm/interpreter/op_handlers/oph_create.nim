@@ -87,17 +87,6 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
   cpt.stack.lsShrink(2)
   cpt.stack.lsTop(0)
 
-  if cpt.fork >= FkShanghai:
-    if cpt.fork >= FkAmsterdam:
-      # EIP-7954
-      if memLen > EIP7954_MAX_INITCODE_SIZE:
-        trace "Initcode size exceeds EIP-7954 maximum", initcodeSize = memLen
-        return err(opErr(InvalidInitCode))
-    elif memLen > EIP3860_MAX_INITCODE_SIZE:
-      # EIP-3860
-      trace "Initcode size exceeds EIP-3860 maximum", initcodeSize = memLen
-      return err(opErr(InvalidInitCode))
-
   let
     gasParams = GasParamsCr(
       currentMemSize: cpt.memory.len,
@@ -111,10 +100,20 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
   cpt.memory.extend(memPos, memLen)
   cpt.returnData.setLen(0)
 
-  if cpt.fork >= FkAmsterdam:
-    # charge state gas before `checkInStaticContext`
-    ? cpt.gasMeter.chargeStateGas(STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte,
-      reason = "CREATE: State gas new account")
+  if cpt.fork >= FkShanghai:
+    if cpt.fork >= FkAmsterdam:
+      # charge state gas before `checkInStaticContext`
+      ? cpt.gasMeter.chargeStateGas(STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte,
+        reason = "CREATE: State gas new account")
+
+      # EIP-7954
+      if memLen > EIP7954_MAX_INITCODE_SIZE:
+        trace "Initcode size exceeds EIP-7954 maximum", initcodeSize = memLen
+        return err(opErr(InvalidInitCode))
+    elif memLen > EIP3860_MAX_INITCODE_SIZE:
+      # EIP-3860
+      trace "Initcode size exceeds EIP-3860 maximum", initcodeSize = memLen
+      return err(opErr(InvalidInitCode))
 
   ? cpt.checkInStaticContext()
 
@@ -174,17 +173,6 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
   cpt.stack.lsShrink(3)
   cpt.stack.lsTop(0)
 
-  if cpt.fork >= FkShanghai:
-    if cpt.fork >= FkAmsterdam:
-      # EIP-7954
-      if memLen > EIP7954_MAX_INITCODE_SIZE:
-        trace "Initcode size exceeds EIP-7954 maximum", initcodeSize = memLen
-        return err(opErr(InvalidInitCode))
-    elif memLen > EIP3860_MAX_INITCODE_SIZE:
-      # EIP-3860
-      trace "Initcode size exceeds EIP-3860 maximum", initcodeSize = memLen
-      return err(opErr(InvalidInitCode))
-
   let
     gasParams = GasParamsCr(
       currentMemSize: cpt.memory.len,
@@ -200,10 +188,20 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
   cpt.memory.extend(memPos, memLen)
   cpt.returnData.setLen(0)
 
-  if cpt.fork >= FkAmsterdam:
-    # charge state gas before `checkInStaticContext`
-    ? cpt.gasMeter.chargeStateGas(STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte,
-      reason = "CREATE2: State gas new account")
+  if cpt.fork >= FkShanghai:
+    if cpt.fork >= FkAmsterdam:
+      # charge state gas before `checkInStaticContext`
+      ? cpt.gasMeter.chargeStateGas(STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte,
+        reason = "CREATE2: State gas new account")
+
+      # EIP-7954
+      if memLen > EIP7954_MAX_INITCODE_SIZE:
+        trace "Initcode size exceeds EIP-7954 maximum", initcodeSize = memLen
+        return err(opErr(InvalidInitCode))
+    elif memLen > EIP3860_MAX_INITCODE_SIZE:
+      # EIP-3860
+      trace "Initcode size exceeds EIP-3860 maximum", initcodeSize = memLen
+      return err(opErr(InvalidInitCode))
 
   ? cpt.checkInStaticContext()
 
