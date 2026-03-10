@@ -10,10 +10,16 @@
 import
   std/uri,
   stint,
-  json_rpc/[rpcclient, rpcproxy],
+  json_rpc/[client, rpcclient, rpcproxy],
   web3/[eth_api, eth_api_types],
   ./engine/types,
   ./nimbus_verified_proxy_conf
+
+# created a new sig for the feeHistory method on the RpcClient type
+createRpcSigsFromNim(RpcClient):
+  proc eth_feeHistory(
+    blockCount: Quantity, newestBlock: BlockIdentifier, rewardPercentiles: seq[uint8]
+  ): FeeHistoryResult
 
 type JsonRpcClient* = ref object
   url: string
@@ -162,9 +168,7 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
         ok(await client.resolveClient().eth_getLogs(filterOptions))
 
     feeHistoryProc = proc(
-        blockCount: Quantity,
-        newestBlock: BlockTag,
-        rewardPercentiles: Opt[seq[float64]],
+        blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[uint8]
     ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).} =
       rpcCall:
         ok(
