@@ -66,18 +66,6 @@ func chargeStateGas*(gasMeter: var GasMeter; amount: GasInt, reason: string): Ev
 func returnStateGas*(gasMeter: var GasMeter; amount: GasInt) =
   gasMeter.stateGasLeft += amount
 
-func enoughGas*(gasMeter: GasMeter, regularGas, stateGas: GasInt): bool =
-  if gasMeter.stateGasLeft >= stateGas:
-    return gasMeter.gasRemaining >= regularGas
-
-  if gasMeter.stateGasLeft + gasMeter.gasRemaining >= stateGas:
-    let
-      remainder = stateGas - gasMeter.stateGasLeft
-      gasLeft = gasMeter.gasRemaining - remainder
-    return gasLeft >= regularGas
-
-  false
-
 func burnGas*(gasMeter: var GasMeter) =
   gasMeter.regularGasUsed += gasMeter.gasRemaining
   gasMeter.gasRemaining = 0

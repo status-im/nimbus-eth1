@@ -264,13 +264,13 @@ proc writeContract*(c: Computation) =
       codeDepositStateGas = len.GasInt * c.vmState.blockCtx.costPerStateByte
       codeHashGas = (6 * wordCount(len)).GasInt
 
-    if c.gasMeter.enoughGas(codeHashGas, codeDepositStateGas):
-      c.gasMeter.chargeStateGas(codeDepositStateGas,
-        reason = "Deposit state gas").
-          expect("enough gas since we checked against stateGasLeft")
-      c.gasMeter.consumeGas(codeHashGas,
-        reason = "Code hash gas").
-          expect("enough gas since we checked against gasRemaining")
+    block checkEnoughGas:
+      c.gasMeter.chargeStateGas(codeDepositStateGas, reason = "Deposit state gas").isOkOr:
+        break checkEnoughGas
+        
+      c.gasMeter.consumeGas(codeHashGas, reason = "Code hash gas").isOkOr:
+        break checkEnoughGas
+      
       c.vmState.mutateLedger:
         if c.vmState.balTrackerEnabled:
           c.vmState.balTracker.trackCodeChange(c.msg.contractAddress, c.output)
