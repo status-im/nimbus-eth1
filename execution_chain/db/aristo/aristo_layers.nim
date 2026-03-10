@@ -128,9 +128,9 @@ func layersResVtx*(
     db: AristoTxRef;
     rvid: RootedVertexID;
       ) =
-  ## Shortcut for `db.layersPutVtx(vid, VertexRef(nil))`. It is sort of the
+  ## Shortcut for `db.layersPutVtx(vid, emptyVertex)`. It is sort of the
   ## equivalent of a delete function.
-  db.layersPutVtx(rvid, VertexRef(nil))
+  db.layersPutVtx(rvid, emptyVertex)
 
 func layersPutKey*(
     db: AristoTxRef;

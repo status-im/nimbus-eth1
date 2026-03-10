@@ -131,7 +131,7 @@ proc getKey*(
 
     if rc.isOk:
       rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
-      return ok((rc.value, nil))
+      return ok((rc.value, emptyVertex))
 
     rdbKeyLruStats[rvid.to(RdbStateType)].inc(false)
 
@@ -161,7 +161,7 @@ proc getKey*(
     return err((errSym, error))
 
   if not gotData:
-    return ok((VOID_HASH_KEY, nil))
+    return ok((VOID_HASH_KEY, emptyVertex))
 
   # Update cache and return - in peek mode, avoid evicting cache items
   if res.isSome() and
@@ -173,7 +173,7 @@ proc getKey*(
     # follow a different access pattern!
     rdb.rdVtxLru.put(rvid.vid, vtx.value())
 
-  ok (res.valueOr(VOID_HASH_KEY), vtx.valueOr(nil))
+  ok (res.valueOr(VOID_HASH_KEY), vtx.valueOr(emptyVertex))
 
 proc getVtx*(
     rdb: var RdbInst, rvid: RootedVertexID, flags: set[GetVtxFlag]
@@ -216,7 +216,7 @@ proc getVtx*(
 
   if not gotData:
     rdbVtxLruStats[rvid.to(RdbStateType)][RdbVertexType.Empty].inc(false)
-    return ok(VertexRef(nil))
+    return ok(emptyVertex)
 
   if res.isErr():
     return err((res.error(), "Parsing failed")) # Parsing failed

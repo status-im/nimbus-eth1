@@ -32,6 +32,8 @@ proc delStoTreeNow(
     return err(error)
 
   case vtx.vType
+  of Empty:
+    raiseAssert("vertex is empty")
   of Branch:
     let vtx = BranchRef(vtx)
     for n, subvid in vtx.pairs():
@@ -45,7 +47,7 @@ proc delStoTreeNow(
   of StoLeaf:
     let vtx = StoLeafRef(vtx)
     let stoPath = Hash32((stoPath & vtx.pfx).getBytes())
-    db.layersPutStoLeaf(mixUp(accPath, stoPath), nil)
+    db.layersPutStoLeaf(mixUp(accPath, stoPath), StoLeafRef.empty())
   of AccLeaf:
     raiseAssert "Removing storage leaves only!"
   db.layersResVtx(rvid)

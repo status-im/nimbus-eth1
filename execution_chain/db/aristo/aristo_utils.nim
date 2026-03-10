@@ -39,6 +39,8 @@ proc toNode*(
   ##
 
   case vtx.vType:
+  of Empty:
+    raiseAssert("vertex is empty")
   of AccLeaf:
     let node = NodeRef(vtx: vtx.dup())
     # Need to resolve storage root for account leaf
@@ -66,11 +68,12 @@ proc toNode*(
 iterator subVids*(vtx: VertexRef): VertexID =
   ## Returns the list of all sub-vertex IDs for the argument `vtx`.
   case vtx.vType:
+  of Empty:
+    raiseAssert("vertex is empty")
   of AccLeaf:
     let stoID = AccLeafRef(vtx).stoID
     if stoID.isValid:
       yield stoID.vid
-
   of StoLeaf:
     discard
   of Branches:
@@ -80,6 +83,8 @@ iterator subVids*(vtx: VertexRef): VertexID =
 iterator subVidKeys*(node: NodeRef): (VertexID,HashKey) =
   ## Simolar to `subVids()` but for nodes
   case node.vtx.vType:
+  of Empty:
+    raiseAssert("vertex is empty")
   of AccLeaf:
     let stoID = AccLeafRef(node.vtx).stoID
     if stoID.isValid:

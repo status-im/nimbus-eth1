@@ -16,7 +16,7 @@ import
 # Utilities for merging source data into a target taking care to move data and
 # leave the source empty
 
-type MoveType = seq[byte]|ref
+type MoveType = seq[byte]|ref|object # TODO: remove ref here
   # Types that we simply move over when merging (instead of trying to join their
   # elements)
 

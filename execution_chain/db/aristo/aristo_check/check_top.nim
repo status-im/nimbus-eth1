@@ -87,6 +87,8 @@ proc checkTopCommon*(
       if topVid < rvid.vid:
         topVid = rvid.vid
       case vtx.vType:
+      of Empty:
+        raiseAssert("vertex is empty")
       of AccLeaf:
           let stoID = AccLeafRef(vtx).stoID
           if stoID.isValid:

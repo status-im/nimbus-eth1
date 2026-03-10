@@ -49,6 +49,8 @@ iterator rightPairs*(
         var x = hike.legs[^1]
 
         case x.wp.vtx.vType
+        of Empty:
+          raiseAssert("vertex is empty")
         of Branches:
           let vtx = BranchRef(x.wp.vtx)
           for i in uint8(x.nibble + 1) ..< 16u8:

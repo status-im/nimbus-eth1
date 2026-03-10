@@ -69,7 +69,7 @@ proc getVtx*(db: AristoTxRef; rvid: RootedVertexID, flags: set[GetVtxFlag] = {})
   ## Cascaded attempt to fetch a vertex from the cache layers or the backend.
   ## The function returns `nil` on error or failure.
   ##
-  db.getVtxRc(rvid).valueOr((VertexRef(nil), 0))[0]
+  db.getVtxRc(rvid).valueOr((emptyVertex, 0))[0]
 
 proc getKeyRc*(
     db: AristoTxRef; rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[((HashKey, VertexRef), int),AristoError] =
@@ -83,7 +83,7 @@ proc getKeyRc*(
     # If there is a zero key value, the entry is either marked for being
     # updated or for deletion on the database. So check below.
     if key[0].isValid:
-      return ok ((key[0], nil), key[1])
+      return ok ((key[0], emptyVertex), key[1])
 
     # The zero key value does not refer to an update mark if there is no
     # valid vertex (either on the cache or the backend whatever comes first.)
@@ -104,7 +104,7 @@ proc getKey*(db: AristoTxRef; rvid: RootedVertexID): HashKey =
   ## Cascaded attempt to fetch a vertex from the cache layers or the backend.
   ## The function returns `nil` on error or failure.
   ##
-  (db.getKeyRc(rvid, {}).valueOr(((VOID_HASH_KEY, nil), 0)))[0][0]
+  (db.getKeyRc(rvid, {}).valueOr(((VOID_HASH_KEY, emptyVertex), 0)))[0][0]
 
 # ------------------------------------------------------------------------------
 # End

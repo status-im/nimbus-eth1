@@ -33,6 +33,8 @@ proc to*(node: NodeRef, T: type array[2, seq[byte]]): T =
   ## and branch vertex argument, there will be a double item list result.
   ##
   case node.vtx.vType
+  of Empty:
+    raiseAssert("vertex is empty")
   of Branches:
     # Do branch node
     var wr = initRlpWriter()
@@ -78,6 +80,8 @@ proc digestTo*(node: NodeRef; T: type HashKey): T =
   ##
   var wr = initRlpWriter()
   case node.vtx.vType
+  of Empty:
+    raiseAssert("vertex is empty")
   of Branches:
     # Do branch node
     wr.startList(17)

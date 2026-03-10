@@ -61,6 +61,9 @@ proc chainRlpNodes(
 
   # Follow up child node
   case vtx.vType:
+  of Empty:
+    raiseAssert("vertex is empty")
+
   of Leaves:
     if path != vtx.pfx:
       err(PartChnLeafPathMismatch)
@@ -404,8 +407,9 @@ proc convertSubtrie(
           vtx: ExtBranchRef.init(segm, childBranch.startVid, childBranch.used))
 
     of 17: # Branch node
-      var key: array[16, HashKey]
-      let branch = BranchRef.init(default(VertexID), 0)
+      var 
+        key: array[16, HashKey]
+        branch = BranchRef.init(default(VertexID), 0)
       for i in 0 ..< 16:
         let
           link = rlpNode.listElem(i).rlpNodeToBytes()
@@ -436,8 +440,10 @@ proc putSubtrie(
 
   let node = nodes.getOrDefault(key)
   case node.vtx.vType:
+    of Empty:
+      raiseAssert("vertex is")
     of AccLeaf:
-      let accVtx = AccLeafRef(node.vtx)
+      var accVtx = AccLeafRef(node.vtx)
       if accVtx.stoID.isValid:
         let stoVid = db.vidFetch()
         accVtx.stoID = (true, stoVid)
@@ -450,13 +456,13 @@ proc putSubtrie(
           ?db.putSubtrie(k, nodes, r)
         else:
           # Write the known hash key setting the vtx to nil
-          db.layersPutKey(r, BranchRef(nil), k)
+          db.layersPutKey(r, BranchRef.empty(), k)
 
     of StoLeaf:
       discard
 
     of Branch, ExtBranch:
-      let bvtx = BranchRef(node.vtx)
+      var bvtx = BranchRef(node.vtx)
       bvtx.startVid = db.vidFetch(16)
 
       for n, subvid in node.vtx.pairs():
@@ -473,7 +479,7 @@ proc putSubtrie(
           ?db.putSubtrie(k, nodes, r)
         else:
           # Write the known hash key setting the vtx to nil
-          db.layersPutKey(r, BranchRef(nil), k)
+          db.layersPutKey(r, BranchRef.empty(), k)
 
   db.layersPutVtx(rvid, node.vtx)
 

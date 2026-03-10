@@ -126,6 +126,8 @@ template childVid(vp: VertexRef): VertexID =
   # If we have to recurse into a child, where would that recusion start?
   let v = vp
   case v.vType
+  of Empty:
+    raiseAssert("Vertex is empty")
   of AccLeaf:
     let v = AccLeafRef(v)
     if v.stoID.isValid:
@@ -157,6 +159,8 @@ proc computeKeyImpl(
 
   let key =
     case vtx.vType
+    of Empty:
+      raiseAssert("Vertex is empty")
     of AccLeaf:
       let vtx = AccLeafRef(vtx)
       writer.encodeLeaf(vtx.pfx):

@@ -86,6 +86,8 @@ proc retrieveAccStatic(
         continue
 
     case vtx[0].vType
+    of Empty:
+      raiseAssert("vertex is empty")
     of Leaves:
       let vtx = AccLeafRef(vtx[0])
 
@@ -126,7 +128,7 @@ proc retrieveAccStatic(
       break # Continue the search down the branch children, starting at `next`
 
   # We end up here when we have to continue the search down a branch
-  ok (nil, path, next)
+  ok (AccLeafRef.empty(), path, next)
 
 proc retrieveAccLeaf(
     db: AristoTxRef;
@@ -139,7 +141,7 @@ proc retrieveAccLeaf(
 
   let (staticVtx, path, next) = db.retrieveAccStatic(accPath).valueOr:
     if error == FetchPathNotFound:
-      db.db.accLeaves.put(accPath, nil)
+      db.db.accLeaves.put(accPath, AccLeafRef.empty())
     return err(error)
 
   if staticVtx.isValid():
@@ -155,7 +157,7 @@ proc retrieveAccLeaf(
         # meaning that it was a hit - else searches for non-existing paths would
         # skew the results towards more depth than exists in the MPT
         db.db.lookups.hits += 1
-        db.db.accLeaves.put(accPath, nil)
+        db.db.accLeaves.put(accPath, AccLeafRef.empty())
       return err(error)
 
   db.db.lookups.higher += 1
@@ -195,7 +197,7 @@ proc fetchStorageIdImpl(
   ## Helper function for retrieving a storage (vertex) ID for a given account.
   let
     leafVtx = ?db.retrieveAccLeaf(accPath)
-    stoID = leafVtx[].stoID
+    stoID = leafVtx.stoID
 
   if stoID.isValid:
     ok stoID.vid
@@ -217,7 +219,7 @@ proc fetchAccountHike*(
 
   # Prefer the leaf cache so as not to burden the lower layers
   let leaf = db.cachedAccLeaf(accPath)
-  if leaf == Opt.some(AccLeafRef(nil)):
+  if leaf == Opt.some(AccLeafRef.empty()):
     return err(FetchAccInaccessible)
 
   accPath.hikeUp(STATE_ROOT_VID, db, leaf, accHike).isOkOr:
@@ -256,7 +258,7 @@ proc retrieveStoragePayload(
   let leafVtx = db.retrieveLeaf(
       ? db.fetchStorageIdImpl(accPath), NibblesBuf.fromBytes(stoPath.data)).valueOr:
     if error == FetchPathNotFound:
-      db.db.stoLeaves.put(mixPath, nil)
+      db.db.stoLeaves.put(mixPath, StoLeafRef.empty())
     return err(error)
 
   db.db.stoLeaves.put(mixPath, StoLeafRef(leafVtx))

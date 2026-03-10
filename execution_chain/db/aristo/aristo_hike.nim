@@ -34,6 +34,8 @@ func getNibblesImpl(hike: Hike; start = 0; maxLen = high(int)): NibblesBuf =
   for n in start ..< min(hike.legs.len, maxLen):
     let leg = hike.legs[n]
     case leg.wp.vtx.vType:
+    of Empty:
+      raiseAssert("vertex is empty")
     of Branch:
       result = result & NibblesBuf.nibble(leg.nibble.byte)
     of ExtBranch:
@@ -81,6 +83,8 @@ proc step*(
     return err(HikeDanglingEdge)
 
   case vtx.vType:
+  of Empty:
+    raiseAssert("vertex is empty")
   of Leaves:
     # This must be the last vertex, so there cannot be any `tail` left.
     let vtx = LeafRef(vtx)
@@ -131,7 +135,7 @@ iterator stepUp*(
   var
     path = path
     next = if next == VertexID(0): root else: next
-    vtx = VertexRef(nil)
+    vtx = emptyVertex
   block iter:
     while true:
       (vtx, path, next) = step(path, (root, next), db).valueOr:
@@ -177,6 +181,9 @@ proc hikeUp*[LeafType](
     let wp = VidVtxPair(vid:vid, vtx:vtx)
 
     case vtx.vType
+    of Empty:
+      raiseAssert("vertex is empty")
+      
     of Leaves:
       hike.legs.add Leg(wp: wp, nibble: -1)
       hike.tail = path

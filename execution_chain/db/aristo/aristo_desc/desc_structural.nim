@@ -25,6 +25,7 @@ export stint, tables, accounts, base, hashes
 type
   VertexType* = enum
     ## Type of `Aristo Trie` vertex
+    Empty
     AccLeaf
     StoLeaf
     Branch
@@ -45,25 +46,25 @@ type
     isValid: bool                    ## See also `isValid()` for `VertexID`
     vid: VertexID                    ## Storage root vertex ID
 
-  VertexRef* {.inheritable, pure.} = ref object
+  VertexRef* {.inheritable, pure.} = object #of RootObj
     ## Vertex for building a hexary Patricia or Merkle Patricia Trie
     vType*: VertexType
 
-  BranchRef* = ref object of VertexRef
+  BranchRef* = object of VertexRef
     used*: uint16
     startVid*: VertexID
 
-  ExtBranchRef* = ref object of BranchRef
+  ExtBranchRef* = object of BranchRef
     pfx*: NibblesBuf
 
-  LeafRef* = ref object of VertexRef
+  LeafRef* = object of VertexRef
     pfx*: NibblesBuf
 
-  AccLeafRef* = ref object of LeafRef
+  AccLeafRef* = object of LeafRef
     account*: AristoAccount
     stoID*: StorageID              ## Storage vertex ID (if any)
 
-  StoLeafRef* = ref object of LeafRef
+  StoLeafRef* = object of LeafRef
     stoData*: UInt256
 
   NodeRef* = ref object of RootRef
@@ -114,12 +115,34 @@ template init*(
 ): ExtBranchRef =
   ExtBranchRef(vType: ExtBranch, pfx: pfxp, startVid: startVidp, used: usedp)
 
-const emptyNibbles = NibblesBuf()
+const 
+  emptyNibbles = NibblesBuf()
+  emptyVertex* = VertexRef(vType: Empty) # TODO: move this into aristo_constants?
+
+template empty*(_: type LeafRef): LeafRef =
+  LeafRef(emptyVertex)
+
+template empty*(_: type AccLeafRef): AccLeafRef =
+  AccLeafRef(emptyVertex)
+
+template empty*(_: type StoLeafRef): StoLeafRef =
+  StoLeafRef(emptyVertex)
+
+template empty*(_: type BranchRef): BranchRef =
+  BranchRef(emptyVertex)
+
+template empty*(_: type ExtBranchRef): ExtBranchRef =
+  ExtBranchRef(emptyVertex)
+
+template isNil*(vtx: VertexRef): bool =
+  vtx.vType == Empty
 
 # template used*(vtx: VertexRef): uint16 = BranchRef(vtx).used
 # template startVid*(vtx: VertexRef): VertexID = BranchRef(vtx).startVid
 template pfx*(vtx: VertexRef): NibblesBuf =
   case vtx.vType
+  of Empty:
+    raiseAssert("vertex is empty")
   of Leaves:
     LeafRef(vtx).pfx
   of ExtBranch:
@@ -139,7 +162,7 @@ func bVid*(vtx: BranchRef, nibble: uint8): VertexID =
   else:
     default(VertexID)
 
-func setUsed*(vtx: BranchRef, nibble: uint8, used: static bool): VertexID =
+func setUsed*(vtx: var BranchRef, nibble: uint8, used: static bool): VertexID =
   vtx.used =
     when used:
       vtx.used or (1'u16 shl nibble)
@@ -162,24 +185,28 @@ proc `==`*(a, b: VertexRef): bool =
   if b.isNil:
     return false
 
-  if unsafeAddr(a[]) != unsafeAddr(b[]):
+  if unsafeAddr(a) != unsafeAddr(b):
     if a.vType != b.vType:
       return false
     case a.vType
+    of Empty:
+      a.vType == b.vType
     of AccLeaf:
-      AccLeafRef(a)[] == AccLeafRef(b)[]
+      AccLeafRef(a) == AccLeafRef(b)
     of StoLeaf:
-      StoLeafRef(a)[] == StoLeafRef(b)[]
+      StoLeafRef(a) == StoLeafRef(b)
     of Branch:
-      BranchRef(a)[] == BranchRef(b)[]
+      BranchRef(a) == BranchRef(b)
     of ExtBranch:
-      ExtBranchRef(a)[] == ExtBranchRef(b)[]
+      ExtBranchRef(a) == ExtBranchRef(b)
   else:
     true
 
 iterator pairs*(vtx: VertexRef): tuple[nibble: uint8, vid: VertexID] =
   ## Iterates over the sub-vids of a branch (does nothing for leaves)
   case vtx.vType
+  of Empty:
+    discard
   of Leaves:
     discard
   of Branches:
@@ -192,6 +219,8 @@ iterator allPairs*(vtx: VertexRef): tuple[nibble: uint8, vid: VertexID] =
   ## Iterates over the sub-vids of a branch (does nothing for leaves) including
   ## currently unset nodes
   case vtx.vType
+  of Empty:
+    discard
   of Leaves:
     discard
   of Branches:
@@ -223,22 +252,24 @@ proc `==`*(a, b: NodeRef): bool =
 func dup*(vtx: VertexRef): VertexRef =
   ## Duplicate vertex.
   # Not using `deepCopy()` here (some `gc` needs `--deepcopy:on`.)
-  if vtx.isNil:
-    VertexRef(nil)
-  else:
-    case vtx.vType
-    of AccLeaf:
-      let vtx = AccLeafRef(vtx)
-      AccLeafRef.init(vtx.pfx, vtx.account, vtx.stoID)
-    of StoLeaf:
-      let vtx = StoLeafRef(vtx)
-      StoLeafRef.init(vtx.pfx, vtx.stoData)
-    of Branch:
-      let vtx = BranchRef(vtx)
-      BranchRef.init(vtx.startVid, vtx.used)
-    of ExtBranch:
-      let vtx = ExtBranchRef(vtx)
-      ExtBranchRef.init(vtx.pfx, vtx.startVid, vtx.used)
+  # if vtx.isNil:
+  #   emptyVertex
+  # else:
+  case vtx.vType
+  of Empty:
+    emptyVertex
+  of AccLeaf:
+    let vtx = AccLeafRef(vtx)
+    AccLeafRef.init(vtx.pfx, vtx.account, vtx.stoID)
+  of StoLeaf:
+    let vtx = StoLeafRef(vtx)
+    StoLeafRef.init(vtx.pfx, vtx.stoData)
+  of Branch:
+    let vtx = BranchRef(vtx)
+    BranchRef.init(vtx.startVid, vtx.used)
+  of ExtBranch:
+    let vtx = ExtBranchRef(vtx)
+    ExtBranchRef.init(vtx.pfx, vtx.startVid, vtx.used)
 
 template dup*(vtx: StoLeafRef): StoLeafRef =
   StoLeafRef(VertexRef(vtx).dup())
@@ -264,42 +295,41 @@ func `$`*(stoID: StorageID): string =
     $default(VertexID)
 
 func `$`*(vtx: AccLeafRef): string =
-  if vtx == nil:
+  if vtx.isNil():
     "A(nil)"
   else:
     "A(" & $vtx.pfx & ":" & $vtx.account & "," & $vtx.stoID & ")"
 
 func `$`*(vtx: StoLeafRef): string =
-  if vtx == nil:
+  if vtx.isNil():
     "S(nil)"
   else:
     "S(" & $vtx.pfx & ":" & $vtx.stoData & ")"
 
 func `$`*(vtx: BranchRef): string =
-  if vtx == nil:
+  if vtx.isNil():
     "B(nil)"
   else:
     "B(" & $vtx.startVid & "+" & toBin(BiggestInt(vtx.used), 16) & ")"
 
 func `$`*(vtx: ExtBranchRef): string =
-  if vtx == nil:
+  if vtx.isNil():
     "E(nil)"
   else:
     "E(" & $vtx.pfx & ":"  & $vtx.startVid & "+" & toBin(BiggestInt(vtx.used), 16) & ")"
 
 func `$`*(vtx: VertexRef): string =
-  if vtx == nil:
+  case vtx.vType
+  of Empty:
     "V(nil)"
-  else:
-    case vtx.vType
-    of AccLeaf:
-      $(AccLeafRef(vtx)[])
-    of StoLeaf:
-      $(StoLeafRef(vtx)[])
-    of Branch:
-      $(BranchRef(vtx)[])
-    of ExtBranch:
-      $(ExtBranchRef(vtx)[])
+  of AccLeaf:
+    $(AccLeafRef(vtx))
+  of StoLeaf:
+    $(StoLeafRef(vtx))
+  of Branch:
+    $(BranchRef(vtx))
+  of ExtBranch:
+    $(ExtBranchRef(vtx))
 
 
 # ------------------------------------------------------------------------------

@@ -102,6 +102,7 @@ template to*(v: RootedVertexID, T: type RdbStateType): RdbStateType =
 
 template to*(v: VertexType, T: type RdbVertexType): RdbVertexType =
   case v
+  of VertexType.Empty: RdbVertexType.Empty
   of VertexType.AccLeaf, VertexType.StoLeaf: RdbVertexType.Leaf
   of VertexType.Branch: RdbVertexType.Branch
   of VertexType.ExtBranch: RdbVertexType.ExtBranch

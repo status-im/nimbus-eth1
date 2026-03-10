@@ -256,26 +256,26 @@ proc persist*(db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
 
   # Copy cached values from the snapshot
   for accPath, v in txFrame.snapshot.acc:
-    if v[0] == nil:
+    if v[0] == AccLeafRef.empty():
       db.accLeaves.del(accPath)
     else:
       discard db.accLeaves.update(accPath, v[0])
 
   for mixPath, v in txFrame.snapshot.sto:
-    if v[0] == nil:
+    if v[0] == StoLeafRef.empty():
       db.stoLeaves.del(mixPath)
     else:
       discard db.stoLeaves.update(mixPath, v[0])
 
   # Copy cached values from the txFrame
   for accPath, vtx in txFrame.accLeaves:
-    if vtx == nil:
+    if vtx == AccLeafRef.empty():
       db.accLeaves.del(accPath)
     else:
       discard db.accLeaves.update(accPath, vtx)
 
   for mixPath, vtx in txFrame.stoLeaves:
-    if vtx == nil:
+    if vtx == StoLeafRef.empty():
       db.stoLeaves.del(mixPath)
     else:
       discard db.stoLeaves.update(mixPath, vtx)

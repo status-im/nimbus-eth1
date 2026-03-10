@@ -189,6 +189,8 @@ proc blobifyTo*(vtx: VertexRef, key: HashKey, data: var seq[byte]) =
 
   let bits =
     case vtx.vType
+    of Empty:
+      raiseAssert("Vertex should not be empty")
     of Branches:
       let
         vtx = BranchRef(vtx)
@@ -248,7 +250,7 @@ proc deblobifyLeaf(
       ?deblobify(data.toOpenArray(0, data.len - 2), UInt256),
     )
   elif (mask and 0xf0) == 0: # Only account fields set
-    let vtx = AccLeafRef(vType: AccLeaf, pfx: pfx)
+    var vtx = AccLeafRef(vType: AccLeaf, pfx: pfx)
     var
       start = 0
       lens = uint16.fromBytesBE(data.toOpenArray(data.len - 3, data.len - 2))
