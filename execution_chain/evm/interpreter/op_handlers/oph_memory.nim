@@ -64,12 +64,12 @@ proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256, coldAcces
 
     res = c.gasCosts[Sstore].ss_handler(newValue, gasParam)
 
+  if stateGas and res.stateGas > 0:
+    ? c.gasMeter.chargeStateGas(res.stateGas, reason = "SSTORE state gas")
+
   ? c.opcodeGasCost(Sstore, res.gasCost + coldAccess, "SSTORE")
 
   c.gasMeter.refundGas(res.gasRefund)
-
-  if stateGas and res.stateGas > 0:
-    ? c.gasMeter.chargeStateGas(res.stateGas, reason = "SSTORE state gas")
 
   if c.vmState.balTrackerEnabled:
     c.vmState.balTracker.trackStorageWrite(c.msg.contractAddress, slot, newValue)
