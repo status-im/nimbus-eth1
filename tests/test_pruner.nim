@@ -57,7 +57,7 @@ proc hasBe(kvt: KvtDbRef, key: openArray[byte]): bool =
 # Helper: read history expired block number from backend
 # (mirrors the pruner's local getHistoryExpiredBe)
 proc getHistoryExpiredBe(kvt: KvtDbRef): BlockNumber =
-  let blkNum = kvt.getBe(historyExpiryIdKey().toOpenArray).valueOr:
+  let blkNum = kvt.getBe(tailIdKey().toOpenArray).valueOr:
     return BlockNumber(0)
   BlockNumber(uint64.fromBytesLE(blkNum))
 
@@ -115,7 +115,7 @@ suite "Pruner KVT-level tests":
     let kvt = KvtDbRef.init()
 
   test "historyExpiryIdKey roundtrip via backend put/get":
-    let key = historyExpiryIdKey()
+    let key = tailIdKey()
 
     # Initially no history expired
     let initial = kvt.getBe(key.toOpenArray)

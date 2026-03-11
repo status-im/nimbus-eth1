@@ -72,16 +72,16 @@ proc deleteBlockBodyAndReceiptsBe(kvt: KvtDbRef, header: Header) =
 # Direct-backend progress tracking
 # ------------------------------------------------------------------------------
 
-proc setHistoryExpiredBe(kvt: KvtDbRef, blockNumber: BlockNumber) =
+proc setChainTailBe(kvt: KvtDbRef, blockNumber: BlockNumber) =
   let
-    key = historyExpiryIdKey()
+    key = tailIdKey()
     value = blockNumber.toBytesLE()
     batch = kvt.putBegFn().expect("pruner: putBegFn")
   kvt.putKvpFn(batch, key.toOpenArray, value)
   kvt.putEndFn(batch).expect("pruner: putEndFn")
 
-proc getHistoryExpiredBe(kvt: KvtDbRef): BlockNumber =
-  let blkNum = kvt.getBe(historyExpiryIdKey().toOpenArray).valueOr:
+proc getChainTailBe(kvt: KvtDbRef): BlockNumber =
+  let blkNum = kvt.getBe(tailIdKey().toOpenArray).valueOr:
     return BlockNumber(0)
   BlockNumber(uint64.fromBytesLE(blkNum))
 
@@ -104,7 +104,7 @@ proc pruneLoop(pruner: BackgroundPrunerRef) {.async: (raises: [CancelledError]).
     let
       baseTx = pruner.com.db.baseTxFrame()
       head = baseTx.getSavedStateBlockNumber()
-      tail = kvt.getHistoryExpiredBe()
+      tail = kvt.getChainTailBe()
       cutoff = EthTime(getTime().toUnix.uint64 - RetentionPeriod)
 
     debug "Pruner status", head, tail, cutoffTimestamp = distinctBase(cutoff)
@@ -132,7 +132,7 @@ proc pruneLoop(pruner: BackgroundPrunerRef) {.async: (raises: [CancelledError]).
       blocksSinceSave += 1
 
       if blocksSinceSave >= pruner.batchSize:
-        kvt.setHistoryExpiredBe(currentBlock)
+        kvt.setChainTailBe(currentBlock)
         blocksSinceSave = 0
 
         debug "Background pruner: batch complete", blks = currentBlock
@@ -148,7 +148,7 @@ proc pruneLoop(pruner: BackgroundPrunerRef) {.async: (raises: [CancelledError]).
 
     # Save final progress (covers partial batch at end / before break)
     if currentBlock > tail:
-      kvt.setHistoryExpiredBe(currentBlock)
+      kvt.setChainTailBe(currentBlock)
 
     notice "Pruning cycle completed", prunedUpTo = currentBlock
 
