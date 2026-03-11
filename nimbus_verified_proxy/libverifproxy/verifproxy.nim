@@ -522,7 +522,7 @@ proc eth_feeHistory(
     newestBlockTyped = unpackArg($newestBlock, BlockTag).valueOr:
       cb(ctx, RET_DESER_ERROR, alloc(error), userData)
       return
-    rewardPercentilesTyped = unpackArg($rewardPercentiles, seq[uint8]).valueOr:
+    rewardPercentilesTyped = unpackArg($rewardPercentiles, seq[int]).valueOr:
       cb(ctx, RET_DESER_ERROR, alloc(error), userData)
       return
 
