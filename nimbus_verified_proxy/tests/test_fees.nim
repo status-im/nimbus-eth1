@@ -62,3 +62,60 @@ suite "test fees verification":
 
     ts.clear()
     engine.headerStore.clear()
+
+  # we are only testing the API and params encoding for this method
+  # since it is only passed through to the provider (no verification)
+  test "eth_feeHistory accepts integer percentiles":
+    let
+      ts = TestApiState.init(1.u256)
+      engine = initTestEngine(ts, 1, 1).valueOr:
+        raise newException(TestProxyError, error.errMsg)
+      blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Paris.json")
+      blockCount = Quantity(4) # arbitrary number
+      newestBlock = blockId(blk.number)
+      percentiles = @[25, 50, 75]
+      expectedFeeHistory = FeeHistoryResult(
+        oldestBlock: blk.number,
+        baseFeePerGas: @[blk.baseFeePerGas.get(0.u256)],
+        gasUsedRatio: @[0.5],
+        reward: Opt.some(
+          @[@[1_000_000_000.u256], @[2_000_000_000.u256], @[3_000_000_000.u256]]
+        ),
+      )
+
+    ts.loadBlock(blk)
+    ts.loadFeeHistory(blockCount, newestBlock, expectedFeeHistory)
+
+    let history =
+      waitFor engine.frontend.eth_feeHistory(blockCount, newestBlock, percentiles)
+
+    check:
+      history.isOk()
+      history.get().oldestBlock == expectedFeeHistory.oldestBlock
+      history.get().baseFeePerGas == expectedFeeHistory.baseFeePerGas
+      history.get().gasUsedRatio == expectedFeeHistory.gasUsedRatio
+      history.get().reward == expectedFeeHistory.reward
+
+  test "eth_feeHistory with empty percentiles":
+    let
+      ts = TestApiState.init(1.u256)
+      engine = initTestEngine(ts, 1, 1).valueOr:
+        raise newException(TestProxyError, error.errMsg)
+      blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Paris.json")
+      blockCount = Quantity(1) # arbitrary number
+      newestBlock = blockId(blk.number)
+      expectedFeeHistory = FeeHistoryResult(
+        oldestBlock: blk.number,
+        baseFeePerGas: @[blk.baseFeePerGas.get(0.u256)],
+        gasUsedRatio: @[0.5],
+        reward: Opt.none(seq[FeeHistoryReward]),
+      )
+
+    ts.loadBlock(blk)
+    ts.loadFeeHistory(blockCount, newestBlock, expectedFeeHistory)
+
+    let history = waitFor engine.frontend.eth_feeHistory(blockCount, newestBlock, @[])
+
+    check:
+      history.isOk()
+      history.get().oldestBlock == expectedFeeHistory.oldestBlock

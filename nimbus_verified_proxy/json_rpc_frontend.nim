@@ -16,6 +16,9 @@ import
   ./engine/types,
   ./nimbus_verified_proxy_conf
 
+# for eth_feeHistory
+JrpcConv.automaticSerialization(int, true)
+
 type JsonRpcServer* = ref object
   case kind*: ClientKind #we reuse clientKind for servers also
   of Http:
@@ -216,7 +219,7 @@ proc injectEngineFrontend*(server: JsonRpcServer, frontend: EthApiFrontend) =
     unpackEngineResult(await frontend.eth_maxPriorityFeePerGas())
 
   server.getServer().rpc("eth_feeHistory") do(
-    blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[uint8]
+    blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[int]
   ) -> FeeHistoryResult:
     unpackEngineResult(
       await frontend.eth_feeHistory(blockCount, newestBlock, rewardPercentiles)
