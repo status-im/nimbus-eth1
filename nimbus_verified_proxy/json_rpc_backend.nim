@@ -14,6 +14,9 @@ import
   ./engine/types,
   ./nimbus_verified_proxy_conf
 
+# for eth_feeHistory
+JrpcConv.automaticSerialization(int, true)
+
 # created a new sig for the feeHistory method on the RpcClient type
 createRpcSigsFromNim(RpcClient):
   proc eth_feeHistory(

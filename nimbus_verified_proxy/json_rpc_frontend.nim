@@ -16,6 +16,9 @@ import
   ./engine/types,
   ./nimbus_verified_proxy_conf
 
+# for eth_feeHistory
+JrpcConv.automaticSerialization(int, true)
+
 type JsonRpcServer* = ref object
   case kind*: ClientKind #we reuse clientKind for servers also
   of Http:

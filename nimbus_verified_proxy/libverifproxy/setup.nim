@@ -282,7 +282,7 @@ proc getEthApiBackend*(
       await fut
 
     feeHistoryProc = proc(
-        blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[uint8]
+        blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[int]
     ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).} =
       let
         fut = Future[EngineResult[FeeHistoryResult]].Raising([CancelledError]).init(
