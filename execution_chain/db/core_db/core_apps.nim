@@ -17,7 +17,7 @@ import
   std/[sequtils],
   chronicles,
   eth/[common, rlp],
-  stew/byteutils,
+  stew/[byteutils, endians2],
   results,
   "../.."/[constants],
   "../.."/stateless/witness_types,
@@ -690,12 +690,19 @@ proc persistUncles*(db: CoreDbTxRef, uncles: openArray[Header]): Hash32 =
     warn "persistUncles()", unclesHash=result, error=($$error)
     return EMPTY_ROOT_HASH
 
-proc persistWitness*(db: CoreDbTxRef, blockHash: Hash32, witness: Witness): Result[void, string] =
+proc persistWitness*(
+    db: CoreDbTxRef;
+    blockHash: Hash32;
+    witness: Witness;
+      ): Result[void, string] =
   db.put(blockHashToWitnessKey(blockHash).toOpenArray, witness.encode()).isOkOr:
     return err("persistWitness: " & $$error)
   ok()
 
-proc getWitness*(db: CoreDbTxRef, blockHash: Hash32): Result[Witness, string] =
+proc getWitness*(
+    db: CoreDbTxRef;
+    blockHash: Hash32;
+      ): Result[Witness, string] =
   let witnessBytes = db.get(blockHashToWitnessKey(blockHash).toOpenArray).valueOr:
     return err("getWitness: " & $$error)
 
@@ -712,6 +719,25 @@ proc getCodeByHash*(db: CoreDbTxRef, codeHash: Hash32): Result[seq[byte], string
     return err("getCodeByHash: " & $$error)
 
   ok(code)
+
+proc setChainTail*(
+    db: CoreDbTxRef;
+    blockNumber: BlockNumber;
+      ) =
+  const info = "setChainTail()"
+  let value = blockNumber.toBytesLE()
+  db.put(tailIdKey().toOpenArray, value).isOkOr:
+    warn info, blockNumber, error=($$error)
+
+proc getChainTail*(
+    db: CoreDbTxRef;
+      ): BlockNumber =
+  let
+    key = tailIdKey()
+    blkNum = db.get(key.toOpenArray).valueOr:
+      return BlockNumber(0)
+    
+  BlockNumber(uint64.fromBytesLE(blkNum))
 
 # ------------------------------------------------------------------------------
 # End
