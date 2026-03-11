@@ -526,7 +526,7 @@ type
       backgroundPruning* {.
         desc: "Enable background pruning of expired block bodies and receipts"
         defaultValue: false
-        name: "background-pruning" .}: bool
+        name: "prune" .}: bool
 
     # We now load all the import specific configurations directly into  ExecutionClientConf
     of NimbusCmd.`import`:
