@@ -281,7 +281,7 @@ type
 
     numThreads* {.
       separator: "\pPERFORMANCE OPTIONS",
-      defaultValue: 1,
+      defaultValue: 0,
       desc: "Number of worker threads (\"0\" = use as many threads as there are CPU cores available)"
       name: "num-threads" .}: int
 
