@@ -42,13 +42,13 @@ type
 proc deleteTransactionsBe(kvt: KvtDbRef, txRoot: Hash32) =
   if txRoot == EMPTY_ROOT_HASH: return
   kvt.delRangeBe(hashIndexKey(txRoot, 0), hashIndexKey(txRoot, uint16.high),
-    compactRange = false).isOkOr:
+    compactRange = true).isOkOr:
     warn "pruner: deleteTransactionsBe", txRoot, error
 
 proc deleteReceiptsBe(kvt: KvtDbRef, receiptsRoot: Hash32) =
   if receiptsRoot == EMPTY_ROOT_HASH: return
   kvt.delRangeBe(hashIndexKey(receiptsRoot, 0), hashIndexKey(receiptsRoot, uint16.high),
-    compactRange = false).isOkOr:
+    compactRange = true).isOkOr:
     warn "pruner: deleteReceiptsBe", receiptsRoot, error
 
 proc deleteUnclesBe(kvt: KvtDbRef, ommersHash: Hash32) =
@@ -86,97 +86,71 @@ proc getHistoryExpiredBe(kvt: KvtDbRef): BlockNumber =
   BlockNumber(uint64.fromBytesLE(blkNum))
 
 # ------------------------------------------------------------------------------
-# Compaction helper
-# ------------------------------------------------------------------------------
-
-proc compactDeletedRanges(kvt: KvtDbRef, header: Header) =
-  ## Trigger RocksDB compaction for ranges deleted in recent batches.
-  ## Called once every 4 batches to amortize I/O cost.
-  if header.transactionsRoot != EMPTY_ROOT_HASH:
-    kvt.delRangeBe(hashIndexKey(header.transactionsRoot, 0),
-      hashIndexKey(header.transactionsRoot, uint16.high),
-      compactRange = true).isOkOr: discard
-  if header.receiptsRoot != EMPTY_ROOT_HASH:
-    kvt.delRangeBe(hashIndexKey(header.receiptsRoot, 0),
-      hashIndexKey(header.receiptsRoot, uint16.high),
-      compactRange = true).isOkOr: discard
-
-# ------------------------------------------------------------------------------
 # Public API
 # ------------------------------------------------------------------------------
 
 proc init*(
     T: type BackgroundPrunerRef,
     com: CommonRef,
-    batchSize = 250'u64,
+    batchSize = 100'u64,
     loopDelay = chronos.seconds(12),
 ): T =
   T(com: com, batchSize: batchSize, loopDelay: loopDelay)
 
 proc pruneLoop(pruner: BackgroundPrunerRef) {.async: (raises: [CancelledError]).} =
+  info "Starting pruner"
   let kvt = pruner.com.db.kvt
   while true:
     let
       baseTx = pruner.com.db.baseTxFrame()
-      start = baseTx.getSavedStateBlockNumber()
-      begin = kvt.getHistoryExpiredBe()
+      head = baseTx.getSavedStateBlockNumber()
+      tail = kvt.getHistoryExpiredBe()
       cutoff = EthTime(getTime().toUnix.uint64 - RetentionPeriod)
 
-    if begin >= start:
+    debug "Pruner status", head, tail, cutoffTimestamp = distinctBase(cutoff)
+
+    if tail >= head:
       await sleepAsync(pruner.loopDelay)
       continue
 
-    debug "Background pruner: starting cycle",
-      fromBlock = begin, toBlock = start, cutoffTimestamp = distinctBase(cutoff)
-
     var
-      currentBlock = begin
-      reachedRetentionWindow = false
-      batchCount = 0'u64
+      currentBlock = tail
+      blocksSinceSave = 0'u64
       lastLogTime = Moment.now()
 
-    while currentBlock <= start and not reachedRetentionWindow:
-      let batchEnd = min(currentBlock + pruner.batchSize - 1, start)
-      var lastPruned = currentBlock
-      let baseTx = pruner.com.db.baseTxFrame()
-
-      # No await points — atomic from async perspective.
-      # Deletions go directly to RocksDB backend via delBe/delRangeBe.
-      for blkNum in currentBlock .. batchEnd:
-        let header = baseTx.getBlockHeader(blkNum).valueOr:
-          warn "Background pruner: failed to get header", blkNum = blkNum, error = error
-          continue
-        if header.timestamp >= cutoff:
-          reachedRetentionWindow = true
+    while currentBlock <= head:
+      let
+        header = pruner.com.db.baseTxFrame.getBlockHeader(currentBlock).valueOr:
+          warn "Background pruner: failed to get header",
+            blkNum = currentBlock, error
           break
-        kvt.deleteBlockBodyAndReceiptsBe(header)
-        lastPruned = blkNum + 1
+      if header.timestamp >= cutoff:
+        break
 
-      kvt.setHistoryExpiredBe(lastPruned)
-      inc batchCount
+      kvt.deleteBlockBodyAndReceiptsBe(header)
+      currentBlock += 1
+      blocksSinceSave += 1
 
-      # Trigger RocksDB compaction once every 4 batches
-      if batchCount mod 4 == 0:
-        let lastHeader = baseTx.getBlockHeader(lastPruned - 1).valueOr:
-          Header()
-        kvt.compactDeletedRanges(lastHeader)
+      if blocksSinceSave >= pruner.batchSize:
+        kvt.setHistoryExpiredBe(currentBlock)
+        blocksSinceSave = 0
 
-      debug "Background pruner: batch complete", blks = lastPruned
+        debug "Background pruner: batch complete", blks = currentBlock
 
-      # Periodic status report (every 12 seconds)
-      if Moment.now() - lastLogTime >= chronos.seconds(12):
-        notice "Pruning history",
-          tail = currentBlock,
-          head = pruner.com.db.baseTxFrame().getSavedStateBlockNumber(),
-          pruned = currentBlock - begin
-        lastLogTime = Moment.now()
+        if Moment.now() - lastLogTime >= chronos.seconds(12):
+          info "Pruning history",
+            tail = currentBlock,
+            head = pruner.com.db.baseTxFrame().getSavedStateBlockNumber(),
+            pruned = currentBlock - tail
+          lastLogTime = Moment.now()
 
-      currentBlock = lastPruned
+        await sleepAsync(chronos.seconds(2))
 
-      # Yield to event loop between batches
-      await sleepAsync(chronos.seconds(1))
+    # Save final progress (covers partial batch at end / before break)
+    if currentBlock > tail:
+      kvt.setHistoryExpiredBe(currentBlock)
 
-    debug "Background pruner: cycle complete", prunedUpTo = currentBlock
+    notice "Pruning cycle completed", prunedUpTo = currentBlock
 
     await sleepAsync(pruner.loopDelay)
 
