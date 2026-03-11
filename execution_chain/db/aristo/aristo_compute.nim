@@ -11,67 +11,54 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[strformat, atomics, threadpool],
+  std/strformat,
   chronicles,
   eth/common/[accounts_rlp, base_rlp, hashes_rlp],
   results,
-  #taskpools/chase_lev_deques,
   "."/[aristo_desc, aristo_get], #, aristo_layers],
   ./aristo_desc/desc_backend,
   ../../concurrent/stack
 
-export aristo_desc, chronicles
+export aristo_desc, chronicles, stack
 
-type WriteBatch* = object
-  writer*: PutHdlRef
-  count*: Atomic[int]
-  depth*: int
-  prefix*: uint64
-  # lock*: Lock
+type
+  VertexBranch* = object
+    isExt*: bool
+    used*: uint16
+    startVid*: VertexID
+    pfx*: NibblesBuf
 
-type VertexBranch* = object
-  isExt*: bool
-  used*: uint16
-  startVid*: VertexID
-  pfx*: NibblesBuf
+  WriteBatch* = object
+    writer*: PutHdlRef
+    count*: int
+    depth*: int
+    prefix*: uint64
 
-
-# Disallow copying of WriteBatch
 proc `=copy`(dest: var WriteBatch; src: WriteBatch) {.error: "Copying WriteBatch is forbidden".} =
   discard
-
-# func createLock(): Lock =
-#   var lock = Lock()
-#   initLock(lock)
-#   lock
-
-# func init(T: type WriteBatch): WriteBatch =
-#   WriteBatch(lock: createLock())
 
 # Keep write batch size _around_ 1mb, give or take some overhead - this is a
 # tradeoff between efficiency and memory usage with diminishing returns the
 # larger it is..
 const batchSize = 1024 * 1024 div (sizeof(RootedVertexID) + sizeof(HashKey))
 
-proc flush(batch: var WriteBatch, db: AristoDbRef, recreate: static bool = true): Result[void, AristoError] =
-  # withLock(batch.lock):
-  ?db.putEndFn batch.writer
-  when recreate:
-    batch.writer = ?db.putBegFn()
-  else:
-    batch.writer = nil
+proc flush(batch: var WriteBatch, txRef: AristoDbRef): Result[void, AristoError] =
+  ?txRef.putEndFn batch.writer
+  batch.writer = nil
   ok()
 
 proc putVtx(
     batch: var WriteBatch,
-    db: AristoDbRef,
+    txRef: AristoDbRef,
     rvid: RootedVertexID,
     vtx: VertexRef,
     key: HashKey,
 ): Result[void, AristoError] =
-  # withLock(batch.lock):
-  db.putVtxFn(batch.writer, rvid, vtx, key)
-  batch.count.atomicInc()
+  if batch.writer.isNil():
+    batch.writer = ?txRef.putBegFn()
+
+  txRef.putVtxFn(batch.writer, rvid, vtx, key)
+  inc batch.count
 
   ok()
 
@@ -91,7 +78,7 @@ func leave(batch: var WriteBatch, nibble: uint8) =
   batch.depth -= 1
 
 proc putKeyAtLevel(
-    db: AristoTxRef,
+    txRef: AristoTxRef,
     rvid: RootedVertexID,
     vtx: BranchRef,
     key: HashKey,
@@ -103,27 +90,25 @@ proc putKeyAtLevel(
   ## set (vertex data may have been committed to disk without computing the
   ## corresponding hash!)
 
-  if level >= db.db.baseTxFrame().level:
+  if level >= txRef.db.baseTxFrame().level:
     discard
     # let txRef = db.deltaAtLevel(level)
-    # withLock(db.lock):
-    #   txRef.layersPutKey(rvid, vtx, key)
+    # txRef.layersPutKey(rvid, vtx, key)
   elif level == dbLevel:
-    # withLock(db.lock):
-    ?batch.putVtx(db.db, rvid, vtx, key)
+    ?batch.putVtx(txRef.db, rvid, vtx, key)
 
-    if batch.count.load(moRelaxed) mod batchSize == 0:
-      ?batch.flush(db.db)
+    if batch.count mod batchSize == 0:
+      ?batch.flush(txRef.db)
 
-      if batch.count.load(moRelaxed) mod (batchSize * 100) == 0:
-        info "Writing computeKey cache", keys = batch.count.load(moRelaxed), accounts = batch.progress
+      if batch.count mod (batchSize * 100) == 0:
+        info "Writing computeKey cache", keys = batch.count, accounts = batch.progress
       else:
-        debug "Writing computeKey cache", keys = batch.count.load(moRelaxed), accounts = batch.progress
+        debug "Writing computeKey cache", keys = batch.count, accounts = batch.progress
   else: # level > dbLevel but less than baseTxFrame level
     # Throw defect here because we should not be writing vertexes to the database if
     # from a lower level than the baseTxFrame level.
     raiseAssert("Cannot write keys at level < baseTxFrame level. Found level = " &
-        $level & ", baseTxFrame level = " & $db.db.baseTxFrame().level)
+        $level & ", baseTxFrame level = " & $txRef.db.baseTxFrame().level)
 
   ok()
 
@@ -147,13 +132,12 @@ template encodeExt(w: var RlpWriter, pfx: NibblesBuf, branchKey: HashKey): HashK
   w.finish().digestTo(HashKey)
 
 proc getKey(
-    db: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool
+    txRef: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool
 ): Result[((HashKey, VertexRef), int), AristoError] =
-  # withLock(db.lock):
   let key = when skipLayers:
-    (?db.db.getKeyBe(rvid, {GetVtxFlag.PeekCache}), dbLevel)
+    (?txRef.db.getKeyBe(rvid, {GetVtxFlag.PeekCache}), dbLevel)
   else:
-    ?db.getKeyRc(rvid, {})
+    ?txRef.getKeyRc(rvid, {})
   return ok(key)
 
 template childVid(vp: VertexRef): VertexID =
@@ -173,7 +157,7 @@ template childVid(vp: VertexRef): VertexID =
     default(VertexID)
 
 proc computeKeyImplTask(
-    db: ptr AristoTxRef,
+    txRef: ptr AristoTxRef,
     rvid: RootedVertexID,
     batch: ptr WriteBatch,
     vtx: ptr VertexRef,
@@ -183,7 +167,7 @@ proc computeKeyImplTask(
 ): Result[(HashKey, int), AristoError]
 
 proc computeKeyImpl(
-    db: AristoTxRef,
+    txRef: AristoTxRef,
     rvid: RootedVertexID,
     batch: var WriteBatch,
     vtx: VertexRef,
@@ -211,12 +195,12 @@ proc computeKeyImpl(
           skey =
             if stoID.isValid:
               let
-                keyvtxl = ?db.getKey((stoID.vid, stoID.vid), skipLayers)
+                keyvtxl = ?txRef.getKey((stoID.vid, stoID.vid), skipLayers)
                 (skey, sl) =
                   if keyvtxl[0][0].isValid:
                     (keyvtxl[0][0], keyvtxl[1])
                   else:
-                    ?db.computeKeyImpl(
+                    ?txRef.computeKeyImpl(
                       (stoID.vid, stoID.vid),
                       batch,
                       keyvtxl[0][1],
@@ -247,11 +231,11 @@ proc computeKeyImpl(
       let vtx = BranchRef(vtx)
       var keyvtxs: array[16, ((HashKey, VertexRef), int)]
       for n, subvid in vtx.pairs:
-        keyvtxs[n] = ?db.getKey((rvid.root, subvid), skipLayers)
+        keyvtxs[n] = ?txRef.getKey((rvid.root, subvid), skipLayers)
 
       when parallel:
         var 
-          futs: array[16, threadpool.FlowVar[Result[(HashKey, int), AristoError]]]
+          futs: array[16, Flowvar[Result[(HashKey, int), AristoError]]]
           buffers: array[16, ConcurrentStack[1024, (RootedVertexID, VertexBranch, HashKey, int)]]
 
       # Make sure we have keys computed for each hash
@@ -268,7 +252,7 @@ proc computeKeyImpl(
           # The O(n^2) sort/search here is fine given the small size of the list
           for nibble, keyvtx in keyvtxs.mpairs:
             when parallel:
-              if not futs[nibble].isNil(): # futs[nibble].isSpawned():
+              if futs[nibble].isSpawned():
                 n += 1 # no need to compute key
                 continue
 
@@ -281,7 +265,7 @@ proc computeKeyImpl(
             if not childVid.isValid:
               # leaf vertex without storage ID - we can compute the key trivially
               (keyvtx[0][0], keyvtx[1]) =
-                ?db.computeKeyImpl(
+                ?txRef.computeKeyImpl(
                   (rvid.root, subvid),
                   batch,
                   keyvtx[0][1],
@@ -308,12 +292,12 @@ proc computeKeyImpl(
               vtxPtr = keyvtxs[minIdx][0][1].addr
               level = keyvtxs[minIdx][1]
             buffers[minIdx].init()
-            futs[minIdx] = threadpool.spawn computeKeyImplTask(
-              db.addr, vid, batchPtr, vtxPtr, level, skipLayers = skipLayers, buffers[minIdx].addr)
+            futs[minIdx] = txRef.db.taskpool.spawn computeKeyImplTask(
+              txRef.addr, vid, batchPtr, vtxPtr, level, skipLayers = skipLayers, buffers[minIdx].addr)
           else:
             #batch.enter(n)
             (keyvtxs[minIdx][0][0], keyvtxs[minIdx][1]) =
-              ?db.computeKeyImpl(
+              ?txRef.computeKeyImpl(
                 (rvid.root, vtx.bVid(uint8 minIdx)),
                 batch,
                 keyvtxs[minIdx][0][1],
@@ -326,35 +310,35 @@ proc computeKeyImpl(
 
       when parallel:
         for i, f in futs:
-          if not f.isNil(): #f.isSpawned():
+          if f.isSpawned():
             var data = buffers[i].tryPop()
             while data.isSome():
               let v = data.get()
               if v[1].isExt:
                 let b = ExtBranchRef.init(v[1].pfx, v[1].startVid, v[1].used)
-                ?db.putKeyAtLevel(v[0], BranchRef(b), v[2], v[3], batch)
+                ?txRef.putKeyAtLevel(v[0], BranchRef(b), v[2], v[3], batch)
               else:
                 let b = BranchRef.init(v[1].startVid, v[1].used)
-                ?db.putKeyAtLevel(v[0], b, v[2], v[3], batch)
+                ?txRef.putKeyAtLevel(v[0], b, v[2], v[3], batch)
               
               data = buffers[i].tryPop()
             
         for i, f in futs:
-          if not f.isNil(): #f.isSpawned():
+          if f.isSpawned():
             while not f.isReady():
               var data = buffers[i].tryPop()
               while data.isSome():
                 let v = data.get()
                 if v[1].isExt:
                   let b = ExtBranchRef.init(v[1].pfx, v[1].startVid, v[1].used)
-                  ?db.putKeyAtLevel(v[0], BranchRef(b), v[2], v[3], batch)
+                  ?txRef.putKeyAtLevel(v[0], BranchRef(b), v[2], v[3], batch)
                 else:
                   let b = BranchRef.init(v[1].startVid, v[1].used)
-                  ?db.putKeyAtLevel(v[0], b, v[2], v[3], batch)
+                  ?txRef.putKeyAtLevel(v[0], b, v[2], v[3], batch)
                 
                 data = buffers[i].tryPop()
 
-            (keyvtxs[i][0][0], keyvtxs[i][1]) = ?(^f) #?sync(f)
+            (keyvtxs[i][0][0], keyvtxs[i][1]) = ?sync(f)
 
       template writeBranch(w: var RlpWriter, vtx: BranchRef): HashKey =
         w.encodeBranch(vtx):
@@ -379,10 +363,9 @@ proc computeKeyImpl(
   # root key also changing while leaves that have never been hashed will see
   # their hash being saved directly to the backend.
 
-  
   if vtx.vType in Branches:
     if buffer.isNil():
-      ?db.putKeyAtLevel(rvid, BranchRef(vtx), key, level, batch)
+      ?txRef.putKeyAtLevel(rvid, BranchRef(vtx), key, level, batch)
     else:
       if vtx.vType == ExtBranch:
         let b = ExtBranchRef(vtx)
@@ -396,7 +379,7 @@ proc computeKeyImpl(
   ok (key, level)
 
 proc computeKeyImplTask(
-    db: ptr AristoTxRef,
+    txRef: ptr AristoTxRef,
     rvid: RootedVertexID,
     batch: ptr WriteBatch,
     vtx: ptr VertexRef,
@@ -404,33 +387,28 @@ proc computeKeyImplTask(
     skipLayers: bool,
     buffer: ptr ConcurrentStack[1024, (RootedVertexID, VertexBranch, HashKey, int)]
 ): Result[(HashKey, int), AristoError] =
-  # var batch: WriteBatch
   if skipLayers:
-    db[].computeKeyImpl(rvid, batch[], vtx[], level, skipLayers = true, parallel = false, buffer)
+    txRef[].computeKeyImpl(rvid, batch[], vtx[], level, skipLayers = true, parallel = false, buffer)
   else:
-    db[].computeKeyImpl(rvid, batch[], vtx[], level, skipLayers = false, parallel = false, buffer)
-  # if res.isOk:
-  #   ?batch.flush(db.db)
-  # res
+    txRef[].computeKeyImpl(rvid, batch[], vtx[], level, skipLayers = false, parallel = false, buffer)
 
 proc computeKeyImpl(
-    db: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool, parallel: static bool
+    txRef: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool, parallel: static bool
 ): Result[HashKey, AristoError] =
   let (keyvtx, level) =
     when skipLayers:
-      (?db.db.getKeyBe(rvid, {GetVtxFlag.PeekCache}), dbLevel)
+      (?txRef.db.getKeyBe(rvid, {GetVtxFlag.PeekCache}), dbLevel)
     else:
-      ?db.getKeyRc(rvid, {})
+      ?txRef.getKeyRc(rvid, {})
 
   if keyvtx[0].isValid:
     return ok(keyvtx[0])
 
   var batch: WriteBatch
-  # initLock(batch.lock)
-  batch.writer = ?db.db.putBegFn()
+  batch.writer = ?txRef.db.putBegFn()
 
   let res = computeKeyImpl(
-    db,
+    txRef,
     rvid,
     batch,
     keyvtx[1],
@@ -441,42 +419,42 @@ proc computeKeyImpl(
   )
 
   if res.isOk:
-    ?batch.flush(db.db, recreate = false)
+    ?batch.flush(txRef.db)
 
-    if batch.count.load(moRelaxed) > 0:
-      if batch.count.load(moRelaxed) >= batchSize * 100:
-        info "Wrote computeKey cache", keys = batch.count.load(moRelaxed), accounts = "100.00%"
+    if batch.count > 0:
+      if batch.count >= batchSize * 100:
+        info "Wrote computeKey cache", keys = batch.count, accounts = "100.00%"
       else:
-        debug "Wrote computeKey cache", keys = batch.count.load(moRelaxed), accounts = "100.00%"
+        debug "Wrote computeKey cache", keys = batch.count, accounts = "100.00%"
 
   ok (?res)[0]
 
 proc computeKey*(
-    db: AristoTxRef, # Database, top layer
+    txRef: AristoTxRef, # Database, top layer
     rvid: RootedVertexID, # Vertex to convert
     skipLayers: static bool = false
 ): Result[HashKey, AristoError] =
   ## Compute the key for an arbitrary vertex ID. If successful, the length of
   ## the resulting key might be smaller than 32. If it is used as a root vertex
   ## state/hash, it must be converted to a `Hash32` (using (`.to(Hash32)`) as
-  ## in `db.computeKey(rvid).value.to(Hash32)` which always results in a
+  ## in `txRef.computeKey(rvid).value.to(Hash32)` which always results in a
   ## 32 byte value.
-  db.computeKeyImpl(rvid, skipLayers, parallel = false)
+  txRef.computeKeyImpl(rvid, skipLayers, parallel = false)
 
 proc computeStateRoot*(
-    db: AristoTxRef,
+    txRef: AristoTxRef,
     skipLayers: static bool = false
 ): Result[HashKey, AristoError] =
   ## Ensure that key cache is topped up with the latest state root
   ## and return the computed value.
-  if db.db.parallelStateRootComputation:
-    db.computeKeyImpl(
+  if txRef.db.parallelStateRootComputation:
+    txRef.computeKeyImpl(
       (STATE_ROOT_VID, STATE_ROOT_VID),
       skipLayers,
       parallel = when compileOption("threads"): true else: false
     )
   else:
-    db.computeKeyImpl(
+    txRef.computeKeyImpl(
       (STATE_ROOT_VID, STATE_ROOT_VID),
       skipLayers,
       parallel = false
