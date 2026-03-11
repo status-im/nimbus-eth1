@@ -56,24 +56,24 @@ type
   GasFeeSchedule = array[GasFeeKind, Natural]
 
   GasProc* = proc(): GasInt {.gcsafe, raises: [].}
-  GasParams* = object
-    # Yellow Paper, Appendix H - https://ethereum.github.io/yellowpaper/paper.pdf
-    # GasCost is a function of (σ, μ):
-    #   - σ is the full system state
-    #   - μ is the machine state
-    # In practice, we often require the following from
-    #   - σ: an account address
-    #   - μ: a value popped from the stack or its size.
 
+  GasParamsCall1* = object
     kind*: Op
-    isNewAccount*: proc(): bool {.gcsafe, raises: [].}
+    nonZeroVal*: bool
     gasLeft*: GasInt
     gasCallEIP2929*: GasProc
-    gasCallDelegate*: GasProc
-    contractGas*: UInt256
     currentMemSize*: GasNatural
     memOffset*: GasNatural
     memLength*: GasNatural
+
+  GasParamsCall2* = object
+    kind*: Op
+    nonZeroVal*: bool
+    gasCost1*: GasInt
+    isNewAccount*: proc(): bool {.gcsafe, raises: [].}
+    gasLeft*: GasInt    
+    gasCallDelegate*: GasProc
+    contractGas*: UInt256
 
   GasParamsSs* = object
     currentValue*: UInt256
@@ -104,6 +104,10 @@ type
 
   CallGasResult = tuple[gasCost, childGasLimit: GasInt]
 
+  CallGasHandlerProc1 = proc(params: GasParamsCall1): EvmResult[GasInt]
+                         {.nimcall, gcsafe, raises: [].}
+  CallGasHandlerProc2 = proc(params: GasParamsCall2): EvmResult[CallGasResult]
+                         {.nimcall, gcsafe, raises: [].}
   GasCost = object
     case kind*: GasCostKind
     of GckInvalidOp:
@@ -120,12 +124,8 @@ type
       cr_handler*: proc(depositGas: bool, params: GasParamsCr): GasInt
                     {.nimcall, gcsafe, raises: [].}
     of GckCall:
-      c_handler*: proc(value: UInt256, params: GasParams): EvmResult[CallGasResult]
-                    {.nimcall, gcsafe, raises: [].}
-      # We use gasCost/gasRefund for:
-      #   - Properly log and order cost and refund (for Sstore especially)
-      #   - Allow to use unsigned integer in the future
-      #   - CALL instruction requires passing the child message gas (Ccallgas in yellow paper)
+      c_handler1*: CallGasHandlerProc1
+      c_handler2*: CallGasHandlerProc2
     of GckSuicide:
       sc_handler*: proc(condition: bool): GasInt
                     {.nimcall, gcsafe, raises: [].}
@@ -372,44 +372,32 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
       static(FeeSchedule[GasLogData]) * memLength +
       static(4 * FeeSchedule[GasLogTopic]))
 
-  proc `prefix gasCall`(value: UInt256, params: GasParams): EvmResult[CallGasResult] {.nimcall.} =
-    # From the Yellow Paper, going through the equation from bottom to top
-    # https://ethereum.github.io/yellowpaper/paper.pdf#appendix.H
-    #
-    # More readable info on the subtleties wiki page: https://github.com/ethereum/wiki/wiki/Subtleties#other-operations
-    # CALL has a multi-part gas cost:
-    #
-    # - 700 base
-    # - 9000 additional if the value is nonzero
-    # - 25000 additional if the destination account does not yet exist
-    #
-    # The child message of a nonzero-value CALL operation (NOT the top-level message arising from a transaction!)
-    # gains an additional 2300 gas on top of the gas supplied by the calling account;
-    # this stipend can be considered to be paid out of the 9000 mandatory additional fee for nonzero-value calls.
-    # This ensures that a call recipient will always have enough gas to log that it received funds.
-    #
-    # EIP150 goes over computation: https://github.com/ethereum/eips/issues/150
-    #
-    # The discussion for the draft EIP-5, which proposes to change the CALL opcode also goes over
-    # the current implementation - https://github.com/ethereum/EIPs/issues/8
-
+  proc `prefix gasCall1`(params: GasParamsCall1): EvmResult[GasInt] {.nimcall.} =
     # Both gasCost and childGasLimit are always on positive side
     var
-      gasLeft = params.gasLeft
       gasCost: GasInt = `prefix gasMemoryExpansion`(
                              params.currentMemSize,
                              params.memOffset,
                              params.memLength)
     # Cxfer
-    if not value.isZero and params.kind in {Call, CallCode}:
+    if params.nonZeroVal and params.kind in {Call, CallCode}:
       gasCost += static(GasInt(FeeSchedule[GasCallValue]))
     # Cextra
     gasCost += static(GasInt(FeeSchedule[GasCall]))
 
     gasCost += params.gasCallEIP2929()
 
-    if gasLeft < gasCost:
+    if params.gasLeft < gasCost:
       return err(opErr(OutOfGas))
+
+    ok(gasCost)
+
+
+  proc `prefix gasCall2`(params: GasParamsCall2): EvmResult[CallGasResult] {.nimcall.} =
+    # Both gasCost and childGasLimit are always on positive side
+    var
+      gasLeft = params.gasLeft
+      gasCost = params.gasCost1
 
     gasCost += params.gasCallDelegate()
 
@@ -426,7 +414,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
         # Afterwards, only those transfering value:
         # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-158.md
         # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md
-        if not value.isZero:
+        if params.nonZeroVal:
           gasCost += static(GasInt(FeeSchedule[GasNewAccount]))
 
     if gasLeft < gasCost:
@@ -455,7 +443,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
     gasCost += childGasLimit
 
     # Ccallgas - Gas sent to the child message
-    if not value.isZero and params.kind in {Call, CallCode}:
+    if params.nonZeroVal and params.kind in {Call, CallCode}:
       childGasLimit += static(GasInt(FeeSchedule[GasCallStipend]))
 
     # at this point gasCost and childGasLimit is always > 0
@@ -498,9 +486,8 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
                   {.nimcall, gcsafe, raises: [].}): GasCost =
       GasCost(kind: GckMemExpansion, m_handler: handler)
 
-    func handleCall(handler: proc(value: UInt256, gasParams: GasParams): EvmResult[CallGasResult]
-                  {.nimcall, gcsafe, raises: [].}): GasCost =
-      GasCost(kind: GckCall, c_handler: handler)
+    func handleCall(handler1: CallGasHandlerProc1, handler2: CallGasHandlerProc2): GasCost =
+      GasCost(kind: GckCall, c_handler1: handler1, c_handler2: handler2)
 
     func handleCreate(handler: proc(depositGas: bool, gasParams: GasParamsCr): GasInt
                   {.nimcall, gcsafe, raises: [].}): GasCost =
@@ -689,12 +676,12 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
 
           # f0s: System operations
           Create:         handleCreate `prefix gasCreate`,
-          Call:           handleCall `prefix gasCall`,
-          CallCode:       handleCall `prefix gasCall`,
+          Call:           handleCall(`prefix gasCall1`, `prefix gasCall2`),
+          CallCode:       handleCall(`prefix gasCall1`, `prefix gasCall2`),
           Return:         memExpansion `prefix gasHalt`,
-          DelegateCall:   handleCall `prefix gasCall`,
+          DelegateCall:   handleCall(`prefix gasCall1`, `prefix gasCall2`),
           Create2:        memExpansion `prefix gasCreate2`,
-          StaticCall:     handleCall `prefix gasCall`,
+          StaticCall:     handleCall(`prefix gasCall1`, `prefix gasCall2`),
           Revert:         memExpansion `prefix gasHalt`,
           Invalid:        fixed GasZero,
           SelfDestruct:   handleSuicide `prefix gasSelfDestruct`

@@ -228,28 +228,35 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
 
   let
     isNewAccount = proc(): bool = not cpt.accountExists(p.contractAddress)
+    params1 = GasParamsCall1(
+      kind:            Call,
+      nonZeroVal:      p.value.isZero.not,
+      gasLeft:         cpt.gasMeter.gasRemaining,
+      gasCallEIP2929:  cpt.gasCallEIP2929(p.codeAddress),
+      currentMemSize:  cpt.memory.len,
+      memOffset:       p.memOffset,
+      memLength:       p.memLength,
+    )
+    gasCost1 = ? cpt.gasCosts[Call].c_handler1(params1)
 
   # EIP-8037: Charge state gas for new account creation BEFORE the 63/64
   # child gas calculation. When state gas spills from an empty reservoir
   # into regular gas, it must reduce the gas available for childGasLimit.
   if cpt.fork >= FkAmsterdam:
-    if isNewAccount() and p.value.isZero.not:
+    if isNewAccount() and params1.nonZeroVal:
       ? cpt.gasMeter.chargeStateGas(STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte,
         reason = "CALL: State gas new account")
 
   let
-    (gasCost, childGasLimit) = ? cpt.gasCosts[Call].c_handler(
-      p.value,
-      GasParams(
-        kind:            Call,
+    (gasCost, childGasLimit) = ? cpt.gasCosts[Call].c_handler2(
+      GasParamsCall2(
+        kind:            params1.kind,
+        nonZeroVal:      params1.nonZeroVal,
+        gasCost1:        gasCost1,
         isNewAccount:    isNewAccount,
         gasLeft:         cpt.gasMeter.gasRemaining,
-        gasCallEIP2929:  cpt.gasCallEIP2929(p.codeAddress),
         gasCallDelegate: cpt.gasCallDelegate(p.codeAddress),
-        contractGas:     p.gas,
-        currentMemSize:  cpt.memory.len,
-        memOffset:       p.memOffset,
-        memLength:       p.memLength))
+        contractGas:     p.gas))
 
   ? cpt.opcodeGasCost(Call, gasCost, reason = $Call)
   cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
@@ -302,18 +309,25 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
 
   let
     isNewAccount = proc(): bool = not cpt.accountExists(p.contractAddress)
-    (gasCost, childGasLimit) = ? cpt.gasCosts[CallCode].c_handler(
-      p.value,
-      GasParams(
-        kind:            CallCode,
+    params1 = GasParamsCall1(
+      kind:            CallCode,
+      nonZeroVal:      p.value.isZero.not,
+      gasLeft:         cpt.gasMeter.gasRemaining,
+      gasCallEIP2929:  cpt.gasCallEIP2929(p.codeAddress),
+      currentMemSize:  cpt.memory.len,
+      memOffset:       p.memOffset,
+      memLength:       p.memLength,
+    )
+    gasCost1 = ? cpt.gasCosts[Call].c_handler1(params1)
+    (gasCost, childGasLimit) = ? cpt.gasCosts[Call].c_handler2(
+      GasParamsCall2(
+        kind:            params1.kind,
+        nonZeroVal:      params1.nonZeroVal,
+        gasCost1:        gasCost1,
         isNewAccount:    isNewAccount,
         gasLeft:         cpt.gasMeter.gasRemaining,
-        gasCallEIP2929:  cpt.gasCallEIP2929(p.codeAddress),
         gasCallDelegate: cpt.gasCallDelegate(p.codeAddress),
-        contractGas:     p.gas,
-        currentMemSize:  cpt.memory.len,
-        memOffset:       p.memOffset,
-        memLength:       p.memLength))
+        contractGas:     p.gas))
 
   ? cpt.opcodeGasCost(CallCode, gasCost, reason = $CallCode)
   cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
@@ -366,18 +380,25 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
   ? cpt.delegateCallParams(p)
   let
     isNewAccount = proc(): bool = not cpt.accountExists(p.contractAddress)
-    (gasCost, childGasLimit) = ? cpt.gasCosts[DelegateCall].c_handler(
-      p.value,
-      GasParams(
-        kind:            DelegateCall,
+    params1 = GasParamsCall1(
+      kind:            DelegateCall,
+      nonZeroVal:      p.value.isZero.not,
+      gasLeft:         cpt.gasMeter.gasRemaining,
+      gasCallEIP2929:  cpt.gasCallEIP2929(p.codeAddress),
+      currentMemSize:  cpt.memory.len,
+      memOffset:       p.memOffset,
+      memLength:       p.memLength,
+    )
+    gasCost1 = ? cpt.gasCosts[Call].c_handler1(params1)
+    (gasCost, childGasLimit) = ? cpt.gasCosts[Call].c_handler2(
+      GasParamsCall2(
+        kind:            params1.kind,
+        nonZeroVal:      params1.nonZeroVal,
+        gasCost1:        gasCost1,
         isNewAccount:    isNewAccount,
         gasLeft:         cpt.gasMeter.gasRemaining,
-        gasCallEIP2929:  cpt.gasCallEIP2929(p.codeAddress),
         gasCallDelegate: cpt.gasCallDelegate(p.codeAddress),
-        contractGas:     p.gas,
-        currentMemSize:  cpt.memory.len,
-        memOffset:       p.memOffset,
-        memLength:       p.memLength))
+        contractGas:     p.gas))
 
   ? cpt.opcodeGasCost(DelegateCall, gasCost, reason = $DelegateCall)
   cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
@@ -423,18 +444,25 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
   ?cpt.staticCallParams(p)
   let
     isNewAccount = proc(): bool = not cpt.accountExists(p.contractAddress)
-    (gasCost, childGasLimit) = ? cpt.gasCosts[StaticCall].c_handler(
-      p.value,
-      GasParams(
-        kind:            StaticCall,
+    params1 = GasParamsCall1(
+      kind:            StaticCall,
+      nonZeroVal:      p.value.isZero.not,
+      gasLeft:         cpt.gasMeter.gasRemaining,
+      gasCallEIP2929:  cpt.gasCallEIP2929(p.codeAddress),
+      currentMemSize:  cpt.memory.len,
+      memOffset:       p.memOffset,
+      memLength:       p.memLength,
+    )
+    gasCost1 = ? cpt.gasCosts[Call].c_handler1(params1)
+    (gasCost, childGasLimit) = ? cpt.gasCosts[Call].c_handler2(
+      GasParamsCall2(
+        kind:            params1.kind,
+        nonZeroVal:      params1.nonZeroVal,
+        gasCost1:        gasCost1,
         isNewAccount:    isNewAccount,
         gasLeft:         cpt.gasMeter.gasRemaining,
-        gasCallEIP2929:  cpt.gasCallEIP2929(p.codeAddress),
         gasCallDelegate: cpt.gasCallDelegate(p.codeAddress),
-        contractGas:     p.gas,
-        currentMemSize:  cpt.memory.len,
-        memOffset:       p.memOffset,
-        memLength:       p.memLength))
+        contractGas:     p.gas))
 
   ? cpt.opcodeGasCost(StaticCall, gasCost, reason = $StaticCall)
   cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
