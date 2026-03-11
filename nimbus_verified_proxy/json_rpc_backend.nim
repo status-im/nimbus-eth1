@@ -8,6 +8,7 @@
 {.push raises: [], gcsafe.}
 
 import
+  std/uri,
   stint,
   json_rpc/[client, rpcclient, rpcproxy],
   web3/[eth_api, eth_api_types],
@@ -24,7 +25,7 @@ createRpcSigsFromNim(RpcClient):
   ): FeeHistoryResult
 
 type JsonRpcClient* = ref object
-  url: Web3Url
+  url: string
   case kind*: ClientKind
   of Http:
     httpClient: RpcHttpClient
@@ -36,12 +37,15 @@ template resolveClient(client: JsonRpcClient): RpcClient =
   of Http: client.httpClient
   of WebSocket: client.wsClient
 
-proc init*(T: type JsonRpcClient, url: Web3Url): EngineResult[JsonRpcClient] =
-  case url.kind
-  of HttpUrl:
+proc init*(T: type JsonRpcClient, url: string): EngineResult[JsonRpcClient] =
+  let scheme = parseUri(url).scheme.toLowerAscii()
+  case scheme
+  of "http", "https":
     ok(JsonRpcClient(url: url, kind: Http, httpClient: newRpcHttpClient()))
-  of WsUrl:
+  of "ws", "wss":
     ok(JsonRpcClient(url: url, kind: WebSocket, wsClient: newRpcWebSocketClient()))
+  else:
+    err((BackendError, "Invalid URL scheme: " & scheme, UNTAGGED))
 
 proc start*(
     client: JsonRpcClient
@@ -49,11 +53,9 @@ proc start*(
   try:
     case client.kind
     of Http:
-      await client.httpClient.connect(client.url.web3Url)
+      await client.httpClient.connect(client.url)
     of WebSocket:
-      await client.wsClient.connect(
-        uri = client.url.web3Url, compression = false, flags = {}
-      )
+      await client.wsClient.connect(uri = client.url, compression = false, flags = {})
     ok()
   except JsonRpcError as e:
     return err((BackendError, e.msg, UNTAGGED))

@@ -76,7 +76,7 @@ proc connectLCToEngine*(lightClient: LightClient, engine: RpcVerificationEngine)
   lightClient.onOptimisticHeader = onOptimisticHeader
 
 proc startBackends(
-    engine: RpcVerificationEngine, urls: seq[Web3Url]
+    engine: RpcVerificationEngine, urls: seq[string], caps: BackendCapabilities
 ): Future[seq[JsonRpcClient]] {.async: (raises: [ProxyError, CancelledError]).} =
   var clients: seq[JsonRpcClient] = @[]
 
@@ -87,11 +87,10 @@ proc startBackends(
 
     let startRes = await client.start()
     if startRes.isErr():
-      error "Error connecting to backend",
-        url = url.web3Url, error = startRes.error.errMsg
+      error "Error connecting to backend", url = url, error = startRes.error.errMsg
       continue
 
-    engine.registerBackend(client.getEthApiBackend(), fullCapabilities)
+    engine.registerBackend(client.getEthApiBackend(), caps)
     clients.add(client)
 
   if clients.len == 0:
@@ -99,8 +98,34 @@ proc startBackends(
 
   clients
 
+proc startPrivateTxBackends(
+    engine: RpcVerificationEngine, urls: seq[string]
+): Future[seq[JsonRpcClient]] {.async: (raises: [ProxyError, CancelledError]).} =
+  var clients: seq[JsonRpcClient] = @[]
+  for url in urls:
+    let client = JsonRpcClient.init(url).valueOr:
+      error "Error initializing private tx client", error = error.errMsg
+      continue
+
+    let startRes = await client.start()
+
+    if startRes.isErr():
+      error "Error connecting to private tx backend",
+        url = url, error = startRes.error.errMsg
+      continue
+
+    engine.registerBackend(
+      client.getEthApiBackend(), BackendCapabilities({SendRawTransaction})
+    )
+    clients.add(client)
+
+  if clients.len == 0:
+    raise newException(ProxyError, "Couldn't connect to any private mempool backend")
+
+  clients
+
 proc startFrontends(
-    engine: RpcVerificationEngine, urls: seq[Web3Url]
+    engine: RpcVerificationEngine, urls: seq[string]
 ): seq[JsonRpcServer] {.raises: [ProxyError].} =
   var servers: seq[JsonRpcServer] = @[]
 
@@ -153,7 +178,21 @@ proc run(
     # initialize backend for light client updates
     lcRestClientPool = LCRestClientPool.new(lc.cfg, lc.forkDigests)
 
-  let backendClients = await startBackends(engine, config.executionApiUrls)
+  let usePrivateTx = config.privateTxUrls.len > 0
+
+  let regularCaps =
+    if usePrivateTx:
+      fullCapabilities - {SendRawTransaction}
+    else:
+      fullCapabilities
+
+  let backendClients = await startBackends(engine, config.executionApiUrls, regularCaps)
+
+  let privateTxClients =
+    if usePrivateTx:
+      await startPrivateTxBackends(engine, config.privateTxUrls)
+    else:
+      @[]
 
   # connect light client to LC by registering on header methods
   # to use engine header store
@@ -178,6 +217,8 @@ proc run(
     for s in frontendServers:
       await s.stop()
     for c in backendClients:
+      await c.stop()
+    for c in privateTxClients:
       await c.stop()
     await lcRestClientPool.closeAll()
     raise e
