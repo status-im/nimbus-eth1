@@ -14,8 +14,11 @@ import
   chronicles,
   chronos,
   results,
+  stew/endians2,
   eth/common/times,
   ./db/core_db,
+  ./db/kvt/[kvt_desc, kvt_utils],
+  ./db/storage_types,
   ./common
 
 logScope:
@@ -32,63 +35,113 @@ type
     loopDelay: chronos.Duration
     loopFut: Future[void].Raising([CancelledError])
 
+# ------------------------------------------------------------------------------
+# Direct-backend deletion helpers (bypass transaction layer)
+# ------------------------------------------------------------------------------
+
+proc deleteTransactionsBe(kvt: KvtDbRef, txRoot: Hash32) =
+  if txRoot == EMPTY_ROOT_HASH: return
+  kvt.delRangeBe(hashIndexKey(txRoot, 0), hashIndexKey(txRoot, uint16.high),
+    compactRange = false).isOkOr:
+    warn "pruner: deleteTransactionsBe", txRoot, error
+
+proc deleteReceiptsBe(kvt: KvtDbRef, receiptsRoot: Hash32) =
+  if receiptsRoot == EMPTY_ROOT_HASH: return
+  kvt.delRangeBe(hashIndexKey(receiptsRoot, 0), hashIndexKey(receiptsRoot, uint16.high),
+    compactRange = false).isOkOr:
+    warn "pruner: deleteReceiptsBe", receiptsRoot, error
+
+proc deleteUnclesBe(kvt: KvtDbRef, ommersHash: Hash32) =
+  if ommersHash == EMPTY_UNCLE_HASH: return
+  kvt.delBe(genericHashKey(ommersHash).toOpenArray).isOkOr:
+    warn "pruner: deleteUnclesBe", ommersHash, error
+
+proc deleteWithdrawalsBe(kvt: KvtDbRef, withdrawalsRoot: Hash32) =
+  if withdrawalsRoot == EMPTY_ROOT_HASH: return
+  kvt.delBe(withdrawalsKey(withdrawalsRoot).toOpenArray).isOkOr:
+    warn "pruner: deleteWithdrawalsBe", withdrawalsRoot, error
+
+proc deleteBlockBodyAndReceiptsBe(kvt: KvtDbRef, header: Header) =
+  kvt.deleteTransactionsBe(header.transactionsRoot)
+  kvt.deleteUnclesBe(header.ommersHash)
+  if header.withdrawalsRoot.isSome:
+    kvt.deleteWithdrawalsBe(header.withdrawalsRoot.get())
+  kvt.deleteReceiptsBe(header.receiptsRoot)
+
+# ------------------------------------------------------------------------------
+# Direct-backend progress tracking
+# ------------------------------------------------------------------------------
+
+proc setHistoryExpiredBe(kvt: KvtDbRef, blockNumber: BlockNumber) =
+  let
+    key = historyExpiryIdKey()
+    value = blockNumber.toBytesLE()
+    batch = kvt.putBegFn().expect("pruner: putBegFn")
+  kvt.putKvpFn(batch, key.toOpenArray, value)
+  kvt.putEndFn(batch).expect("pruner: putEndFn")
+
+proc getHistoryExpiredBe(kvt: KvtDbRef): BlockNumber =
+  let blkNum = kvt.getBe(historyExpiryIdKey().toOpenArray).valueOr:
+    return BlockNumber(0)
+  BlockNumber(uint64.fromBytesLE(blkNum))
+
+# ------------------------------------------------------------------------------
+# Compaction helper
+# ------------------------------------------------------------------------------
+
+proc compactDeletedRanges(kvt: KvtDbRef, header: Header) =
+  ## Trigger RocksDB compaction for ranges deleted in recent batches.
+  ## Called once every 4 batches to amortize I/O cost.
+  if header.transactionsRoot != EMPTY_ROOT_HASH:
+    kvt.delRangeBe(hashIndexKey(header.transactionsRoot, 0),
+      hashIndexKey(header.transactionsRoot, uint16.high),
+      compactRange = true).isOkOr: discard
+  if header.receiptsRoot != EMPTY_ROOT_HASH:
+    kvt.delRangeBe(hashIndexKey(header.receiptsRoot, 0),
+      hashIndexKey(header.receiptsRoot, uint16.high),
+      compactRange = true).isOkOr: discard
+
+# ------------------------------------------------------------------------------
+# Public API
+# ------------------------------------------------------------------------------
+
 proc init*(
     T: type BackgroundPrunerRef,
     com: CommonRef,
-    batchSize = 100'u64,
-    loopDelay = chronos.seconds(3),
+    batchSize = 250'u64,
+    loopDelay = chronos.seconds(12),
 ): T =
   T(com: com, batchSize: batchSize, loopDelay: loopDelay)
 
 proc pruneLoop(pruner: BackgroundPrunerRef) {.async: (raises: [CancelledError]).} =
+  let kvt = pruner.com.db.kvt
   while true:
     let
-      start = pruner.com.db.baseTxFrame.getSavedStateBlockNumber()
-      begin = pruner.com.db.baseTxFrame.getHistoryExpired()
+      baseTx = pruner.com.db.baseTxFrame()
+      start = baseTx.getSavedStateBlockNumber()
+      begin = kvt.getHistoryExpiredBe()
       cutoff = EthTime(getTime().toUnix.uint64 - RetentionPeriod)
 
     if begin >= start:
       await sleepAsync(pruner.loopDelay)
       continue
 
-    notice "Background pruner: starting cycle",
+    debug "Background pruner: starting cycle",
       fromBlock = begin, toBlock = start, cutoffTimestamp = distinctBase(cutoff)
 
     var
       currentBlock = begin
       reachedRetentionWindow = false
-      prevBaseNumber = start
-      prunedSincePersist = 0'u64
+      batchCount = 0'u64
+      lastLogTime = Moment.now()
 
     while currentBlock <= start and not reachedRetentionWindow:
-      # Re-read baseTxFrame each iteration — FC's persist may have replaced it
-      let baseTx = pruner.com.db.baseTxFrame()
-
-      # Detect if FC persisted by checking if base block number advanced.
-      # FC's updateBase always advances the base before persisting.
-      let curBaseNumber = baseTx.getSavedStateBlockNumber()
-      if curBaseNumber != prevBaseNumber:
-        prunedSincePersist = 0
-        prevBaseNumber = curBaseNumber
-
-      # Cap deletions between FC persists to avoid unbounded sTab growth.
-      # During header-download phase FC doesn't persist, so without this cap
-      # millions of deletion entries accumulate in sTab and choke the first
-      # block import.
-      if prunedSincePersist >= pruner.batchSize:
-        debug "Background pruner: waiting for persist",
-          prunedSincePersist = prunedSincePersist
-        await sleepAsync(pruner.loopDelay)
-        continue
-
       let batchEnd = min(currentBlock + pruner.batchSize - 1, start)
       var lastPruned = currentBlock
+      let baseTx = pruner.com.db.baseTxFrame()
 
-      # No await points in this loop body — atomic from the async perspective.
-      # Deletions accumulate in baseTx's in-memory sTab and get written to disk
-      # when the ForkedChain next calls persist. We must NOT call persist()
-      # ourselves as it replaces the base frame reference, causing SIGSEGV in
-      # concurrent async tasks (engine API, sync) that hold the old reference.
+      # No await points — atomic from async perspective.
+      # Deletions go directly to RocksDB backend via delBe/delRangeBe.
       for blkNum in currentBlock .. batchEnd:
         let header = baseTx.getBlockHeader(blkNum).valueOr:
           warn "Background pruner: failed to get header", blkNum = blkNum, error = error
@@ -96,18 +149,34 @@ proc pruneLoop(pruner: BackgroundPrunerRef) {.async: (raises: [CancelledError]).
         if header.timestamp >= cutoff:
           reachedRetentionWindow = true
           break
-        baseTx.deleteBlockBodyAndReceipts(blkNum).isOkOr:
-          warn "Background pruner: failed to delete", blkNum = blkNum, error = error
+        kvt.deleteBlockBodyAndReceiptsBe(header)
         lastPruned = blkNum + 1
 
-      baseTx.setHistoryExpired(lastPruned)
-      prunedSincePersist += (lastPruned - currentBlock)
+      kvt.setHistoryExpiredBe(lastPruned)
+      inc batchCount
 
-      notice "Background pruner: batch complete", blks = lastPruned
+      # Trigger RocksDB compaction once every 4 batches
+      if batchCount mod 4 == 0:
+        let lastHeader = baseTx.getBlockHeader(lastPruned - 1).valueOr:
+          Header()
+        kvt.compactDeletedRanges(lastHeader)
+
+      debug "Background pruner: batch complete", blks = lastPruned
+
+      # Periodic status report (every 12 seconds)
+      if Moment.now() - lastLogTime >= chronos.seconds(12):
+        notice "Pruning history",
+          tail = currentBlock,
+          head = pruner.com.db.baseTxFrame().getSavedStateBlockNumber(),
+          pruned = currentBlock - begin
+        lastLogTime = Moment.now()
 
       currentBlock = lastPruned
 
-    notice "Background pruner: cycle complete", prunedUpTo = currentBlock
+      # Yield to event loop between batches
+      await sleepAsync(chronos.seconds(1))
+
+    debug "Background pruner: cycle complete", prunedUpTo = currentBlock
 
     await sleepAsync(pruner.loopDelay)
 
