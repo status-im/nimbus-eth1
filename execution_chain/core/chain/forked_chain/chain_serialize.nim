@@ -260,8 +260,8 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
 
   let prevBase = fc.base
   var
+    bodies: Table[Hash32, Block]
     blocks = newSeq[BlockRef](state.numBlocks)
-    bodies = initTable[Hash32, Block]()
 
   # Sanity Checks for the FC state
   if state.latest > state.numBlocks or
