@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -66,10 +66,7 @@ type
 
   ExporterConf* = object
     logLevel* {.
-      defaultValue: LogLevel.INFO,
-      defaultValueDesc: $LogLevel.INFO,
-      desc: "Sets the log level",
-      name: "log-level"
+      defaultValue: LogLevel.INFO, desc: "Sets the log level", name: "log-level"
     .}: LogLevel
     dataDir* {.
       desc: "The directory where generated data files will be exported to",
@@ -120,7 +117,6 @@ type
         accumulatorFileName* {.
           desc: "File to which the serialized accumulator is written",
           defaultValue: defaultAccumulatorFileName,
-          defaultValueDesc: $defaultAccumulatorFileName,
           name: "accumulator-file-name"
         .}: string
         writeEpochRecords* {.
@@ -132,7 +128,6 @@ type
         accumulatorFileNamePrint* {.
           desc: "File from which the serialized accumulator is read",
           defaultValue: defaultAccumulatorFileName,
-          defaultValueDesc: $defaultAccumulatorFileName,
           name: "accumulator-file-name"
         .}: string
       of exportHeaderRange:
