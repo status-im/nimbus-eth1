@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -51,13 +51,13 @@ func buildAccumulatorData*(
   err("Not enough headers provided to finish the accumulator")
 
 func buildProof*(
-    chainConfig: ChainConfig, header: Header, epochRecords: seq[EpochRecord]
+    header: Header, epochRecords: seq[EpochRecord]
 ): Result[HistoricalHashesAccumulatorProof, string] =
   let epochIndex = getEpochIndex(header)
   doAssert(epochIndex < uint64(epochRecords.len()))
   let epochRecord = epochRecords[epochIndex]
 
-  buildProof(chainConfig, header, epochRecord)
+  buildProof(header, epochRecord)
 
 proc toString(v: IoErrorCode): string =
   try:
