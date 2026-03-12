@@ -309,6 +309,29 @@ proc computeKeyImpl(
             #batch.leave(n)
 
       when parallel:
+        var runningFutsIndexes: set[uint8] = {}
+        for i, f in futs:
+          if f.isSpawned():
+            runningFutsIndexes.incl(i.uint8)
+        
+        while runningFutsIndexes.len() > 0:
+          for i, f in futs:
+            if runningFutsIndexes.contains(i.uint8):
+              let v = buffers[i].tryPop().valueOr:
+                # once we stop receiving data we check if the task is finished 
+                # and then remove it from the set
+                if f.isReady():
+                  runningFutsIndexes.excl(i.uint8)
+                continue
+              if v[1].isExt:
+                let b = ExtBranchRef.init(v[1].pfx, v[1].startVid, v[1].used)
+                ?txRef.putKeyAtLevel(v[0], BranchRef(b), v[2], v[3], batch)
+              else:
+                let b = BranchRef.init(v[1].startVid, v[1].used)
+                ?txRef.putKeyAtLevel(v[0], b, v[2], v[3], batch)
+        
+        # At this point all futures have finished running.
+        # Now we process any remaining data in the buffers.
         for i, f in futs:
           if f.isSpawned():
             var data = buffers[i].tryPop()
@@ -322,21 +345,6 @@ proc computeKeyImpl(
                 ?txRef.putKeyAtLevel(v[0], b, v[2], v[3], batch)
               
               data = buffers[i].tryPop()
-            
-        for i, f in futs:
-          if f.isSpawned():
-            while not f.isReady():
-              var data = buffers[i].tryPop()
-              while data.isSome():
-                let v = data.get()
-                if v[1].isExt:
-                  let b = ExtBranchRef.init(v[1].pfx, v[1].startVid, v[1].used)
-                  ?txRef.putKeyAtLevel(v[0], BranchRef(b), v[2], v[3], batch)
-                else:
-                  let b = BranchRef.init(v[1].startVid, v[1].used)
-                  ?txRef.putKeyAtLevel(v[0], b, v[2], v[3], batch)
-                
-                data = buffers[i].tryPop()
 
             (keyvtxs[i][0][0], keyvtxs[i][1]) = ?sync(f)
 
