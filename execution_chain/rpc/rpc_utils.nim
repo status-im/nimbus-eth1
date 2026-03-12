@@ -440,3 +440,22 @@ proc blockFromTag*(chain: ForkedChainRef, blockTag: BlockTag, noHash: bool = fal
     if noHash:
       return err("query by hash not supported for this function")
     chain.blockByHash(blockTag.hash)
+
+proc headerFromBlockId*(chain: ForkedChainRef, blockId: BlockNumberOrTagOrHash): Result[Header, string] =
+  case blockId.kind
+  of number:
+    let blockNum = base.BlockNumber blockId.number
+    chain.headerByNumber(blockNum).mapErr(proc(e: auto): auto = "Block not found")
+  of tag:
+    let tag = blockId.tag.toLowerAscii
+    case tag
+    of "latest":
+      ok(chain.latestHeader)
+    of "finalized":
+      ok(chain.finalizedHeader)
+    of "safe":
+      ok(chain.safeHeader)
+    else:
+      err("Unsupported block tag " & tag)
+  of hash:
+    chain.headerByHash(blockId.hash).mapErr(proc(e: auto): auto = "Block not found")

@@ -489,6 +489,26 @@ void eth_getFilterChanges(Context *ctx, char *filterId, CallBackProc cb, void *u
 void eth_getBlockReceipts(Context *ctx, char *blockTag, CallBackProc cb, void *userData);
 
 /**
+ * Retrieve fee history.
+ *
+ * @param ctx                Context pointer.
+ * @param blockCount         Number of blocks in the requested range (as integer).
+ * @param newestBlock        A block identifier: "latest", "pending", "earliest", or a hex
+ *                           block number such as "0x10d4f".
+ * @param rewardPercentiles  JSON encoded array of percentiles (e.g. "[25,75]"), or "null".
+ * @param cb                 Callback with FeeHistoryResult JSON object.
+ * @param userData           pointer to user data
+ */
+void eth_feeHistory(
+    Context *ctx,
+    unsigned long long blockCount,
+    char *newestBlock,
+    char *rewardPercentiles,
+    CallBackProc cb,
+    void *userData
+);
+
+/**
  * Send a signed transaction to the RPC provider to be relayed in the network.
  *
  * @param ctx       Context pointer.

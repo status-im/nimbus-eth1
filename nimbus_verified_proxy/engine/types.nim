@@ -8,7 +8,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/tables,
+  std/[tables, random],
   json_rpc/rpcclient,
   web3/[eth_api, eth_api_types],
   stint,
@@ -34,12 +34,12 @@ type
 
   BlockTag* = eth_api_types.RtBlockIdentifier
 
-  # All EngineError's are propagated back to the application. 
-  # Anything that need not be propagated must either be translated 
+  # All EngineError's are propagated back to the application.
+  # Anything that need not be propagated must either be translated
   # or absorbed.
   EngineError* = enum
-    # these errors are abstracted to support a simple architecture 
-    # (encode -> fetch -> decode) that is adaptable for different 
+    # these errors are abstracted to support a simple architecture
+    # (encode -> fetch -> decode) that is adaptable for different
     # kinds of backends. These errors help in scoring endpoints too.
     BackendEncodingError
     BackendFetchError
@@ -54,8 +54,23 @@ type
     InvalidDataError
     VerificationError
 
-  ErrorTuple = tuple[errType: EngineError, errMsg: string]
+  ErrorTuple* = tuple[errType: EngineError, errMsg: string, backendIdx: int]
   EngineResult*[T] = Result[T, ErrorTuple]
+
+  # every backend get rewarded by default, hence undo reward just removes the
+  # default reward (1 - 1 = 0) and penalty negatively scores (1 - 2 = -1)
+  ScoreDirection* = enum
+    Penalty = -2
+    UndoReward = -1
+    DefaultReward = 1
+
+  ScoreFunc* = proc(prevScore: int, direction: ScoreDirection): int {.
+    noSideEffect, raises: [], gcsafe
+  .}
+
+  BackendScore* = object
+    availability*: int # penalised on transport errors
+    quality*: int # penalised on verification failures
 
   # Backend API
   EthApiBackend* = object
@@ -91,7 +106,7 @@ type
       filterOptions: FilterOptions
     ): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).}
     eth_feeHistory*: proc(
-      blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: Opt[seq[float64]]
+      blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[int]
     ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).}
     eth_sendRawTransaction*: proc(txBytes: seq[byte]): Future[EngineResult[Hash32]] {.
       async: (raises: [CancelledError])
@@ -196,11 +211,27 @@ type
     eth_maxPriorityFeePerGas*:
       proc(): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).}
     eth_feeHistory*: proc(
-      blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: Opt[seq[float64]]
+      blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[int]
     ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).}
     eth_sendRawTransaction*: proc(txBytes: seq[byte]): Future[EngineResult[Hash32]] {.
       async: (raises: [CancelledError])
     .}
+
+  BackendCapability* = enum
+    ChainId # eth_chainId
+    GetBlockByHash # eth_getBlockByHash
+    GetBlockByNumber # eth_getBlockByNumber
+    GetProof # eth_getProof
+    CreateAccessList # eth_createAccessList
+    GetCode # eth_getCode
+    GetBlockReceipts # eth_getBlockReceipts
+    GetTransactionReceipt # eth_getTransactionReceipt
+    GetTransactionByHash # eth_getTransactionByHash
+    GetLogs # eth_getLogs
+    FeeHistory # eth_feeHistory
+    SendRawTransaction # eth_sendRawTransaction
+
+  BackendCapabilities* = set[BackendCapability]
 
   FilterStoreItem* = object
     filter*: FilterOptions
@@ -219,8 +250,14 @@ type
     storageCache*: StorageCache
 
     # interfaces
-    backend*: EthApiBackend
+    backends: seq[EthApiBackend]
+    scores*: seq[BackendScore]
+    capabilityIndex: array[BackendCapability, seq[int]]
     frontend*: EthApiFrontend
+
+    # scoring
+    availabilityScoreFunc*: ScoreFunc
+    qualityScoreFunc*: ScoreFunc
 
     # config items
     chainId*: UInt256
@@ -235,3 +272,80 @@ type
     codeCacheLen*: int
     storageCacheLen*: int
     parallelBlockDownloads*: uint64
+
+func eligible*(s: BackendScore): bool =
+  s.availability >= 0 and s.quality >= 0
+
+func defaultAvailabilityScoreFunc*(prevScore: int, direction: ScoreDirection): int =
+  let newScore = prevScore + ord(direction)
+
+  if newScore < 0:
+    return -5 # push it down further
+  else:
+    min(5, newScore)
+
+func defaultQualityScoreFunc*(prevScore: int, direction: ScoreDirection): int =
+  let newScore = prevScore + ord(direction)
+
+  if newScore < 0:
+    return -10 # push it down further
+  else:
+    min(1, newScore)
+
+const UNTAGGED* = -1
+  # backendIdx sentinel when error is not attributed to a specific backen
+const fullCapabilities* = BackendCapabilities(
+  {
+    ChainId, GetBlockByHash, GetBlockByNumber, GetProof, CreateAccessList, GetCode,
+    GetBlockReceipts, GetTransactionReceipt, GetTransactionByHash, GetLogs, FeeHistory,
+    SendRawTransaction,
+  }
+)
+
+proc registerBackend*(
+    engine: RpcVerificationEngine,
+    backend: EthApiBackend,
+    capabilities: BackendCapabilities,
+) =
+  let idx = engine.backends.len
+  engine.backends.add(backend)
+  engine.scores.add(BackendScore()) # availability = 0, quality = 0
+  for cap in capabilities:
+    engine.capabilityIndex[cap].add(idx)
+
+proc backendFor*(
+    engine: RpcVerificationEngine, cap: BackendCapability
+): EngineResult[(EthApiBackend, int)] =
+  # Decay excluded backends toward 0 so they can recover over time
+  for s in engine.scores.mitems:
+    if s.availability < 0:
+      inc s.availability
+    if s.quality < 0:
+      inc s.quality
+
+  let indices = engine.capabilityIndex[cap]
+  var eligibleIdxs: seq[int]
+  for b in engine.capabilityIndex[cap]:
+    if engine.scores[b].eligible():
+      eligibleIdxs.add(b)
+  if eligibleIdxs.len == 0:
+    return err((BackendError, "No eligible backend for capability: " & $cap, UNTAGGED))
+  let chosen = eligibleIdxs[rand(eligibleIdxs.len - 1)]
+  engine.scores[chosen].availability =
+    engine.availabilityScoreFunc(engine.scores[chosen].availability, DefaultReward)
+  engine.scores[chosen].quality =
+    engine.qualityScoreFunc(engine.scores[chosen].quality, DefaultReward)
+  ok((engine.backends[chosen], chosen))
+
+template tagBackend*[T](r: EngineResult[T], idx: int): EngineResult[T] =
+  block:
+    let taggedR: EngineResult[T] = r
+    if taggedR.isErr():
+      let e = taggedR.error
+      # if the error is not tagged then tag it
+      if e.backendIdx < 0:
+        Result[T, ErrorTuple].err((e.errType, e.errMsg, idx))
+      else:
+        taggedR
+    else:
+      taggedR

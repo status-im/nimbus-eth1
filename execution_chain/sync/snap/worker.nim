@@ -119,12 +119,6 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
   ##
   var bodyRc = chronos.nanoseconds(0)               # to be re-invoked, soon?
   block body:
-    # Run the DB verification and update jobs only while there are no active
-    # peers. So that downloading will get all the available processing time.
-    if ctx.nSyncPeers() == 0:
-      if ctx.accountRequeue(info):
-        bodyRc = daemonOkInterval
-        break body
 
     bodyRc = daemonWaitInterval                     # take a short nap
     # End block: `body`

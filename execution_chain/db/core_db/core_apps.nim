@@ -433,17 +433,26 @@ proc getBlockAccessList*(
 proc getBlockAccessLists*(
     db: CoreDbTxRef,
     blockHashes: openArray[Hash32],
-    bals: var openArray[Opt[BlockAccessListRef]]
+    balValues: var openArray[Opt[seq[byte]]]
       ): Result[void, string] =
-  var
-    balKeys = newSeq[seq[byte]](blockHashes.len())
-    balValues = newSeq[Opt[seq[byte]]](blockHashes.len())
+  var balKeys = newSeq[seq[byte]](blockHashes.len())
 
   for i, blockHash in blockHashes:
     balKeys[i] = @(blockHashToBlockAccessListKey(blockHash).toOpenArray())
 
   db.multiGet(balKeys, balValues).isOkOr:
     return err("getBlockAccessLists: " & $error)
+
+  ok()
+
+proc getBlockAccessLists*(
+    db: CoreDbTxRef,
+    blockHashes: openArray[Hash32],
+    bals: var openArray[Opt[BlockAccessListRef]]
+      ): Result[void, string] =
+  var balValues = newSeq[Opt[seq[byte]]](blockHashes.len())
+  
+  ?db.getBlockAccessLists(blockHashes, balValues)
 
   for i, balBytes in balValues:
     if balBytes.isSome():

@@ -52,7 +52,7 @@ proc setupServices*(ctx: SnapCtxRef; info: static[string]): bool =
     ctx.pool.ticker = proc(ctx: SnapCtxRef) = discard
 
   # Recover session (if any)
-  if ctx.pool.resume and ctx.sessionResumeDownload(info):
+  if ctx.pool.resume and ctx.resumeDownload(info):
     debug info & ": resuming download session"
 
   true

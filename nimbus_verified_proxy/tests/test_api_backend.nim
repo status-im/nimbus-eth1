@@ -18,6 +18,10 @@ type
   ProofQuery = (Address, seq[UInt256], Hash32)
   AccessListQuery = (TransactionArgs, Hash32)
   CodeQuery = (Address, Hash32)
+  # the query would normally also include the reward percentiles
+  # but we skip that because feeHistory is a pass-through method
+  # we are only testing the API and params encoding for it.
+  FeeHistoryQuery = (Quantity, BlockTag)
 
   TestApiState* = ref object
     chainId: UInt256
@@ -30,6 +34,7 @@ type
     receipts: Table[Hash32, ReceiptObject]
     transactions: Table[Hash32, TransactionObject]
     logs: Table[FilterOptions, seq[LogObject]]
+    feeHistories: Table[FeeHistoryQuery, FeeHistoryResult]
 
 func init*(T: type TestApiState, chainId: UInt256): T =
   TestApiState(chainId: chainId)
@@ -44,6 +49,7 @@ func clear*(t: TestApiState) =
   t.receipts.clear()
   t.transactions.clear()
   t.logs.clear()
+  t.feeHistories.clear()
 
 template loadBlock*(t: TestApiState, blk: BlockObject) =
   t.nums[blk.number] = blk.hash
@@ -97,11 +103,22 @@ template loadLogs*(
 ) =
   t.logs[filterOptions] = logs
 
+template loadFeeHistory*(
+    t: TestApiState,
+    blockCount: Quantity,
+    newestBlock: BlockTag,
+    feeHistory: FeeHistoryResult,
+) =
+  t.feeHistories[(blockCount, newestBlock)] = feeHistory
+
 func hash*(x: BlockTag): Hash =
   if x.kind == BlockIdentifierKind.bidAlias:
     return hash(x.alias)
   else:
     return hash(x.number)
+
+func hash*(x: FeeHistoryQuery): Hash =
+  hash(x[0].uint64) xor hash(x[1])
 
 # TODO: remove template below after this is resolved
 # https://github.com/nim-lang/Nim/issues/25087
@@ -190,8 +207,12 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
         async: (raises: [CancelledError])
     .} =
       if t.chainId == u256(0):
-        return
-          err((BackendDecodingError, "chainId not set in test backend or is set to 0"))
+        return err(
+          (
+            BackendDecodingError, "chainId not set in test backend or is set to 0",
+            UNTAGGED,
+          )
+        )
 
       ok(t.chainId)
 
@@ -204,7 +225,7 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
         else:
           ok(convToPartialBlock(t.blocks[blkHash]))
       except KeyError as e:
-        err((BackendFetchError, e.msg))
+        err((BackendFetchError, e.msg, UNTAGGED))
 
     getBlockByNumberProc = proc(
         blkNum: BlockTag, fullTransactions: bool
@@ -218,7 +239,7 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
         else:
           ok(convToPartialBlock(t.blocks[blkHash]))
       except KeyError as e:
-        err((BackendFetchError, e.msg))
+        err((BackendFetchError, e.msg, UNTAGGED))
 
     getProofProc = proc(
         address: Address, slots: seq[UInt256], blkNum: BlockTag
@@ -229,7 +250,7 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
 
         ok(t.proofs[(address, slots, blkHash)])
       except KeyError as e:
-        err((BackendFetchError, e.msg))
+        err((BackendFetchError, e.msg, UNTAGGED))
 
     createAccessListProc = proc(
         args: TransactionArgs, blkNum: BlockTag
@@ -240,7 +261,7 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
 
         ok(t.accessLists[(args, blkHash)])
       except KeyError as e:
-        err((BackendFetchError, e.msg))
+        err((BackendFetchError, e.msg, UNTAGGED))
 
     getCodeProc = proc(
         address: Address, blkNum: BlockTag
@@ -251,7 +272,7 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
 
         ok(t.codes[(address, blkHash)])
       except KeyError as e:
-        err((BackendFetchError, e.msg))
+        err((BackendFetchError, e.msg, UNTAGGED))
 
     getBlockReceiptsProc = proc(
         blockId: BlockTag
@@ -264,7 +285,7 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
 
         ok(Opt.some(t.blockReceipts[blkHash]))
       except KeyError as e:
-        err((BackendFetchError, e.msg))
+        err((BackendFetchError, e.msg, UNTAGGED))
 
     getLogsProc = proc(
         filterOptions: FilterOptions
@@ -272,7 +293,15 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
       try:
         ok(t.logs[filterOptions])
       except KeyError as e:
-        err((BackendFetchError, e.msg))
+        err((BackendFetchError, e.msg, UNTAGGED))
+
+    feeHistoryProc = proc(
+        blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[int]
+    ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).} =
+      try:
+        ok(t.feeHistories[(blockCount, newestBlock)])
+      except KeyError as e:
+        err((BackendFetchError, e.msg, UNTAGGED))
 
     getTransactionByHashProc = proc(
         txHash: Hash32
@@ -280,7 +309,7 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
       try:
         ok(t.transactions[txHash])
       except KeyError as e:
-        err((BackendFetchError, e.msg))
+        err((BackendFetchError, e.msg, UNTAGGED))
 
     getTransactionReceiptProc = proc(
         txHash: Hash32
@@ -288,7 +317,7 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
       try:
         ok(t.receipts[txHash])
       except KeyError as e:
-        err((BackendFetchError, e.msg))
+        err((BackendFetchError, e.msg, UNTAGGED))
 
   EthApiBackend(
     eth_chainId: ethChainIdProc,
@@ -301,4 +330,5 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
     eth_getTransactionReceipt: getTransactionReceiptProc,
     eth_getLogs: getLogsProc,
     eth_getBlockReceipts: getBlockReceiptsProc,
+    eth_feeHistory: feeHistoryProc,
   )
