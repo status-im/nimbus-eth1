@@ -43,8 +43,9 @@ proc `=copy`(dest: var WriteBatch; src: WriteBatch) {.error: "Copying WriteBatch
 const batchSize = 1024 * 1024 div (sizeof(RootedVertexID) + sizeof(HashKey))
 
 proc flush(batch: var WriteBatch, txRef: AristoDbRef): Result[void, AristoError] =
-  ?txRef.putEndFn batch.writer
-  batch.writer = nil
+  if batch.writer != nil:
+    ?txRef.putEndFn batch.writer
+    batch.writer = nil
   ok()
 
 proc putVtx(
@@ -54,7 +55,7 @@ proc putVtx(
     vtx: VertexRef,
     key: HashKey,
 ): Result[void, AristoError] =
-  if batch.writer.isNil():
+  if batch.writer == nil:
     batch.writer = ?txRef.putBegFn()
 
   txRef.putVtxFn(batch.writer, rvid, vtx, key)
@@ -413,8 +414,6 @@ proc computeKeyImpl(
     return ok(keyvtx[0])
 
   var batch: WriteBatch
-  batch.writer = ?txRef.db.putBegFn()
-
   let res = computeKeyImpl(
     txRef,
     rvid,
