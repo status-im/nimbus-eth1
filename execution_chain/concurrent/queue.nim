@@ -7,112 +7,124 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+## This implements a lock free thread safe concurrent queue which is designed
+## specifically for the single producer - single consumer scenario.
+## The queue is not designed to be thread safe when used by multiple producers 
+## and consumers threads.
+## Inspired by this blog post: https://nullprogram.com/blog/2022/05/14/
+## The size of the queue needs to be a power of 2.
+## E is the exponent so when E has a value of 2 the data array will have len 4.
+## T is the element type to be stored in the queue.
+
 {.push raises: [], gcsafe.}
 
-import std/locks, results
+import std/[atomics, math], results
 
-type ConcurrentQueue*[N: static int, T] = object
-  lock: Lock
-  data: array[N, T]
-  headIdx: int
-  tailIdx: int
-  count: int
+type ConcurrentQueue*[E: static int, T] = object
+  data: array[1 shl E, T]
+  exp: int 
+  indexes: Atomic[uint32]
 
 template capacity*(q: ConcurrentQueue): int =
   q.data.len() - 1
 
-template toDataIdx(q: ConcurrentQueue, queueIdx: int): int =
-  queueIdx mod q.capacity()
-
-template tailDataIdx(q: ConcurrentQueue): int = 
-  q.toDataIdx(q.tailIdx)
-
-template headDataIdx(q: ConcurrentQueue): int = 
-  q.toDataIdx(q.headIdx)
-
 func isPowerOfTwo(n: static int): bool =
   n > 0 and (n and (n - 1)) == 0
 
-proc init*(q: var ConcurrentQueue) =
+func init*(q: var ConcurrentQueue) =
   static: 
     doAssert isPowerOfTwo(q.data.len())
-  q.lock = Lock()
-  initLock(q.lock)
+  q.exp = log2(q.data.len().float).int
+  q.indexes.store(0.uint32)
 
-template isEmpty(q: ConcurrentQueue): bool =
-  q.headIdx == q.tailIdx
-
-template isFull(q: ConcurrentQueue): bool =
-  (q.headIdx + 1) mod q.data.len() == q.tailIdx
-
-proc tryPush*[N, T](q: var ConcurrentQueue[N, T], value: sink T): bool =
-  withLock(q.lock):
-    if not q.isFull():
-      q.data[q.headDataIdx()] = value
-      inc q.headIdx
-      return true
-    else:
-      return false
+func pushBegin(q: var ConcurrentQueue): int =
+  let 
+    r = q.indexes.load().int
+    mask = (1 shl q.exp) - 1
+    head = r and mask
+    tail = r shr 16 and mask
+    next = (head + 1) and mask
   
-proc tryPop*[N, T](q: var ConcurrentQueue[N, T]): Opt[T] =
-  withLock(q.lock):
-    if not q.isEmpty():
-      let value = move(q.data[q.tailDataIdx()])
-      inc q.tailIdx
-      return Opt.some(value)
-    else:
-      return Opt.none(T)
-      
-proc push*[N, T](q: var ConcurrentQueue[N, T], value: T) =
-  var pushed = q.tryPush(value)
-  while not pushed:
-    cpuRelax()
-    pushed = q.tryPush(value)
+  if (r and 0x8000) > 0: # avoid overflow on commit
+    discard q.indexes.fetchAnd(not 0x8000.uint32)
+  
+  if next == tail: -1 else: head
 
-proc pop*[N, T](q: var ConcurrentQueue[N, T]): Opt[T] =
-  var popped = q.tryPop()
-  while popped.isNone():
+template pushCommit(q: var ConcurrentQueue) =
+  q.indexes.atomicInc()
+
+func popBegin(q: var ConcurrentQueue): int =
+  let 
+    r = q.indexes.load().int
+    mask = (1 shl q.exp) - 1
+    head = r and mask
+    tail = r shr 16 and mask
+  
+  if head == tail: -1 else: tail
+
+template popCommit(q: var ConcurrentQueue) =
+  q.indexes += 0x10000
+
+func tryPush*[E, T](q: var ConcurrentQueue[E, T], value: sink T): bool =
+  let headIdx = q.pushBegin()
+  if headIdx < 0:
+    return false
+
+  q.data[headIdx] = value
+  q.pushCommit()
+  true
+  
+func tryPop*[E, T](q: var ConcurrentQueue[E, T]): Opt[T] =
+  let tailIdx = q.popBegin()
+  if tailIdx < 0:
+    return Opt.none(T)
+
+  let value = move(q.data[tailIdx])
+  q.popCommit()
+  Opt.some(value)
+      
+func push*[E, T](q: var ConcurrentQueue[E, T], value: sink T) =
+  var headIdx = q.pushBegin()
+  while headIdx < 0:
     cpuRelax()
-    popped = q.tryPop()
-  popped
+    headIdx = q.pushBegin()
+
+  q.data[headIdx] = value
+  q.pushCommit()
+
+func pop*[E, T](q: var ConcurrentQueue[E, T]): T =
+  var tailIdx = q.popBegin()
+  while tailIdx < 0:
+    cpuRelax()
+    tailIdx = q.popBegin()
+
+  let value = move(q.data[tailIdx])
+  q.popCommit()
+  value
 
 when isMainModule:
 
-  var queue: ConcurrentQueue[4, int]
+  var queue: ConcurrentQueue[2, int]
   queue.init()
 
   doAssert queue.capacity() == 3
-  doAssert queue.isFull() == false
-  doAssert queue.isEmpty() == true
 
   doAssert queue.tryPush(100) == true
   doAssert queue.tryPush(200) == true
   doAssert queue.tryPush(300) == true
   doAssert queue.tryPush(400) == false
 
-  doAssert queue.isFull() == true
-  doAssert queue.isEmpty() == false
-
   doAssert queue.tryPop() == Opt.some(100)
   doAssert queue.tryPop() == Opt.some(200)
   doAssert queue.tryPop() == Opt.some(300)
   doAssert queue.tryPop() == Opt.none(int)
 
-  doAssert queue.isFull() == false
-  doAssert queue.isEmpty() == true
-
-  queue.push(100)
-  queue.push(200)
-  queue.push(300)
+  queue.push(500)
+  queue.push(700)
+  queue.push(600)
   doAssert queue.tryPush(400) == false
 
-  doAssert queue.isFull() == true
-  doAssert queue.isEmpty() == false
-
-  doAssert queue.pop() == Opt.some(100)
-  doAssert queue.pop() == Opt.some(200)
-  doAssert queue.pop() == Opt.some(300)
+  doAssert queue.pop() == 500
+  doAssert queue.pop() == 700
+  doAssert queue.pop() == 600
   doAssert queue.tryPop() == Opt.none(int)
-
-  doAssert queue.isFull() == false
-  doAssert queue.isEmpty() == true

@@ -34,7 +34,7 @@ type
     depth*: int
     prefix*: uint64
   
-  ConcurrentBuffer* = ConcurrentQueue[1024, (RootedVertexID, VertexBranch, HashKey, int)]
+  ConcurrentBuffer* = ConcurrentQueue[8, (RootedVertexID, VertexBranch, HashKey, int)]
 
 proc `=copy`(dest: var WriteBatch; src: WriteBatch) {.error: "Copying WriteBatch is forbidden".} =
   discard
