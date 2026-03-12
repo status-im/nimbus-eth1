@@ -16,48 +16,48 @@ type ConcurrentStack*[N: static int, T] = object
   data: array[N, T]
   nextIndex: int
 
-proc init*(stack: var ConcurrentStack) =  
-  stack.lock = Lock()
-  initLock(stack.lock)
+proc init*(s: var ConcurrentStack) =  
+  s.lock = Lock()
+  initLock(s.lock)
 
-proc capacity*(stack: ConcurrentStack): int =
-  stack.data.len()
+template capacity*(s: ConcurrentStack): int =
+  s.data.len()
 
-proc isEmpty(stack: ConcurrentStack): bool =
-  stack.nextIndex == 0
+template isEmpty(s: ConcurrentStack): bool =
+  s.nextIndex == 0
 
-proc isFull(stack: ConcurrentStack): bool =
-  stack.nextIndex == stack.data.len() 
+template isFull(s: ConcurrentStack): bool =
+  s.nextIndex == s.data.len() 
 
-proc tryPush*[N, T](stack: var ConcurrentStack[N, T], value: T): bool =
-  withLock(stack.lock):
-    if not stack.isFull():
-      stack.data[stack.nextIndex] = value
-      inc stack.nextIndex
+proc tryPush*[N, T](s: var ConcurrentStack[N, T], value: T): bool =
+  withLock(s.lock):
+    if not s.isFull():
+      s.data[s.nextIndex] = value
+      inc s.nextIndex
       return true
     else:
       return false
   
-proc tryPop*[N, T](stack: var ConcurrentStack[N, T]): Opt[T] =
-  withLock(stack.lock):
-    if not stack.isEmpty():
-      let value = stack.data[stack.nextIndex - 1]
-      dec stack.nextIndex
+proc tryPop*[N, T](s: var ConcurrentStack[N, T]): Opt[T] =
+  withLock(s.lock):
+    if not s.isEmpty():
+      let value = s.data[s.nextIndex - 1]
+      dec s.nextIndex
       return Opt.some(value)
     else:
       return Opt.none(T)
       
-proc push*[N, T](stack: var ConcurrentStack[N, T], value: T) =
-  var pushed = stack.tryPush(value)
+proc push*[N, T](s: var ConcurrentStack[N, T], value: T) =
+  var pushed = s.tryPush(value)
   while not pushed:
     cpuRelax()
-    pushed = stack.tryPush(value)
+    pushed = s.tryPush(value)
 
-proc pop*[N, T](stack: var ConcurrentStack[N, T]): Opt[T] =
-  var popped = stack.tryPop()
+proc pop*[N, T](s: var ConcurrentStack[N, T]): Opt[T] =
+  var popped = s.tryPop()
   while popped.isNone():
     cpuRelax()
-    popped = stack.tryPop()
+    popped = s.tryPop()
   popped
 
 when isMainModule:

@@ -17,7 +17,7 @@ import
   results,
   "."/[aristo_desc, aristo_get], #, aristo_layers],
   ./aristo_desc/desc_backend,
-  ../../concurrent/stack
+  ../../concurrent/queue
 
 export aristo_desc, chronicles, stack
 
@@ -33,6 +33,8 @@ type
     count*: int
     depth*: int
     prefix*: uint64
+  
+  ConcurrentBuffer* = ConcurrentQueue[1024, (RootedVertexID, VertexBranch, HashKey, int)]
 
 proc `=copy`(dest: var WriteBatch; src: WriteBatch) {.error: "Copying WriteBatch is forbidden".} =
   discard
@@ -164,7 +166,7 @@ proc computeKeyImplTask(
     vtx: ptr VertexRef,
     level: int,
     skipLayers: bool,
-    buffer: ptr ConcurrentStack[1024, (RootedVertexID, VertexBranch, HashKey, int)]
+    buffer: ptr ConcurrentBuffer
 ): Result[(HashKey, int), AristoError]
 
 proc computeKeyImpl(
@@ -175,7 +177,7 @@ proc computeKeyImpl(
     level: int,
     skipLayers: static bool,
     parallel: static bool,
-    buffer: ptr ConcurrentStack[1024, (RootedVertexID, VertexBranch, HashKey, int)]
+    buffer: ptr ConcurrentBuffer
 ): Result[(HashKey, int), AristoError] =
   # The bloom filter available used only when creating the key cache from an
   # empty state
@@ -237,7 +239,7 @@ proc computeKeyImpl(
       when parallel:
         var 
           futs: array[16, Flowvar[Result[(HashKey, int), AristoError]]]
-          buffers: array[16, ConcurrentStack[1024, (RootedVertexID, VertexBranch, HashKey, int)]]
+          buffers: array[16, ConcurrentBuffer]
 
       # Make sure we have keys computed for each hash
       block keysComputed:
@@ -394,7 +396,7 @@ proc computeKeyImplTask(
     vtx: ptr VertexRef,
     level: int,
     skipLayers: bool,
-    buffer: ptr ConcurrentStack[1024, (RootedVertexID, VertexBranch, HashKey, int)]
+    buffer: ptr ConcurrentBuffer
 ): Result[(HashKey, int), AristoError] =
   if skipLayers:
     txRef[].computeKeyImpl(rvid, batch[], vtx[], level, skipLayers = true, parallel = false, buffer)
