@@ -38,8 +38,12 @@ concurrency: # Cancel stale PR builds (but not push builds)
   cancel-in-progress: true
 
 jobs:
+  matrix_config:
+    uses: ./.github/workflows/matrix_config.yml
+
   # separate job so it can run concurrently with other tests
   testutp:
+    needs: matrix_config
     # whole test setup runs on ubuntu so we do not need multiple arch setup here
     runs-on: ubuntu-22.04
     # TODO: for now only push event as this way it is easier to get branch name
@@ -69,6 +73,7 @@ jobs:
           echo "nimbus_build_system=$nbsHash" >> $GITHUB_OUTPUT
 
       - name: Restore prebuilt Nim binaries from cache
+        if: matrix.branch == null
         id: nim-cache
         uses: actions/cache@v4
         with:
@@ -77,7 +82,7 @@ jobs:
 
       - name: Build Nim and Nimbus-eth1 dependencies
         run: |
-          make -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinaries init
+          make -j${ncpu} NIM_COMMIT=${{ matrix.branch }} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinaries init
 
       - name: build uTP test app container
         run: |
@@ -109,9 +114,6 @@ jobs:
           PATH=$PATH$(find /usr/libexec/docker -name docker-compose -printf ":%h")
           docker-compose -f portal/tools/utp_testing/docker/docker-compose.yml down
 
-  matrix_config:
-    uses: ./.github/workflows/matrix_config.yml
-
   build:
     needs: matrix_config
 
@@ -123,7 +125,7 @@ jobs:
       run:
         shell: bash
 
-    name: '${{ matrix.os }}-${{ matrix.cpu }}'
+    name: ${{ matrix.os }}-${{ matrix.cpu }}${{ matrix.branch != '' && ' (Nim ' || '' }}${{ matrix.branch-short }}${{ matrix.branch != '' && ')' || '' }}
     runs-on: ${{ matrix.builder }}
     steps:
       - name: Checkout nimbus-eth1
@@ -140,6 +142,7 @@ jobs:
       - name: Run Nimbus Portal tests (Windows)
         if: runner.os == 'Windows'
         run: |
+          ./env.sh nim --version
           gcc --version
           DEFAULT_MAKE_FLAGS="-j${ncpu}"
           mingw32-make ${DEFAULT_MAKE_FLAGS} nimbus_portal_client
@@ -154,20 +157,21 @@ jobs:
       - name: Run Nimbus Portal tests (Linux)
         if: runner.os == 'Linux'
         run: |
+          ./env.sh nim --version
           gcc --version
-          ./env.sh nim -v
           ldd --version
           export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
           DEFAULT_MAKE_FLAGS="-j${ncpu}"
-          env CC=gcc make ${DEFAULT_MAKE_FLAGS} nimbus_portal_client
+          env CC=gcc make ${DEFAULT_MAKE_FLAGS} NIM_COMMIT=${{ matrix.branch }} nimbus_portal_client
           build/nimbus_portal_client --help
-          env CC=gcc make ${DEFAULT_MAKE_FLAGS} portal-tools
+          env CC=gcc make ${DEFAULT_MAKE_FLAGS} NIM_COMMIT=${{ matrix.branch }} portal-tools
           # CC is needed to select correct compiler 32/64 bit
-          env CC=gcc CXX=g++ make ${DEFAULT_MAKE_FLAGS} portal-test
+          env CC=gcc CXX=g++ make ${DEFAULT_MAKE_FLAGS} NIM_COMMIT=${{ matrix.branch }} portal-test
 
       - name: Run Nimbus Portal tests (Macos)
         if: runner.os == 'Macos'
         run: |
+          ./env.sh nim --version
           DEFAULT_MAKE_FLAGS="-j${ncpu}"
           make ${DEFAULT_MAKE_FLAGS} nimbus_portal_client
           build/nimbus_portal_client --help
