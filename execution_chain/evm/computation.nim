@@ -246,20 +246,25 @@ proc writeContract*(c: Computation) =
 
   block writeContractCode:
     if fork >= FkAmsterdam:
-      let
-        codeDepositStateGas = len.GasInt * c.vmState.blockCtx.costPerStateByte
-        codeHashGas = (6 * wordCount(len)).GasInt
-
-      c.gasMeter.chargeStateGas(codeDepositStateGas, reason = "Deposit state gas").isOkOr:
-        break writeContractCode
-
-      c.gasMeter.consumeGas(codeHashGas, reason = "Code hash gas").isOkOr:
-        break writeContractCode
-
+      # The order here is:
+      # 1. Check code size
+      # 2. Charge regular gas
+      # #. Charge state gas
+      # https://github.com/ethereum/execution-specs/commit/0c7d32c13bbd3fc91ea44ff56a32ca766d59f1d5
       if len > EIP7954_MAX_CODE_SIZE:
         # EIP-7954 constraint (https://eips.ethereum.org/EIPS/eip-7954).
         withExtra trace, "New contract code exceeds EIP-7954 limit",
           codeSize=len, maxSize=EIP7954_MAX_CODE_SIZE
+        break writeContractCode
+
+      let
+        codeDepositStateGas = len.GasInt * c.vmState.blockCtx.costPerStateByte
+        codeHashGas = (6 * wordCount(len)).GasInt
+
+      c.gasMeter.consumeGas(codeHashGas, reason = "Code hash gas").isOkOr:
+        break writeContractCode
+
+      c.gasMeter.chargeStateGas(codeDepositStateGas, reason = "Deposit state gas").isOkOr:
         break writeContractCode
     else:
       let
