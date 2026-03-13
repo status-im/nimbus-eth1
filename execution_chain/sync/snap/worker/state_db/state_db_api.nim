@@ -42,9 +42,6 @@ type
   DataByAccount = SortedSet[ItemKey,AccDataRef]
     ## For storage slots book keeping
 
-  StateDataScore* = tuple
-    up, down: uint
-
   AccDataRef* = ref object
     ## Incompleteed download states db for storage slots. For storage
     ## slots, there is a single interval for unprocessed slots. That
@@ -63,7 +60,6 @@ type
     unproc: UnprocItemKeys              ## Unprocessed accounts
     byAccount: DataByAccount            ## List of storage/code states to fetch
     healingReady: bool                  ## Ready for healing if `true`
-    sdScore: StateDataScore             ## Thumbs up/down
 
   StateDbRef* = ref object
     ## Download states db
@@ -229,23 +225,6 @@ func get*(db: StateDbRef; root: StateRoot): Opt[StateDataRef] =
   db.byRoot.withValue(root, value):
     return ok value[]
   err()
-
-
-proc upScore*(data: StateDataRef) =
-  data.sdScore.up.inc
-
-proc upScore*(db: StateDbRef; number: BlockNumber): bool  =
-  db.get(number).isErrOr:
-    value.sdScore.up.inc
-    return true
-
-proc downScore*(data: StateDataRef) =
-  data.sdScore.down.inc
-
-proc downScore*(db: StateDbRef; number: BlockNumber): bool =
-  db.get(number).isErrOr:
-    value.sdScore.down.inc
-    return true
 
 
 func len*(db: StateDbRef): int =
@@ -564,9 +543,6 @@ func toStr*(db: StateDbRef): string =
       result &= "*"
     result &= ":" & state.unproc.totalRatio.toStr(4)
     result &= "(" & $state.byAccount.len & ")"
-    if 0 < state.sdScore.up or
-       0 < state.sdScore.down:
-      result &= $state.sdScore.up & "/" & $state.sdScore.down
     result &= ","
   result[^1] = '}'
   result &= ":" & db.unproc.totalRatio.toStr(7) & "!" & $db.overlays
