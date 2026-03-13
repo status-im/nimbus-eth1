@@ -15,7 +15,7 @@ import
   chronicles,
   eth/common/[accounts_rlp, base_rlp, hashes_rlp],
   results,
-  "."/[aristo_desc, aristo_get], #, aristo_layers],
+  "."/[aristo_desc, aristo_get, aristo_layers],
   ./aristo_desc/desc_backend,
   ../../concurrent/queue
 
@@ -87,6 +87,7 @@ proc putKeyAtLevel(
     key: HashKey,
     level: int,
     batch: var WriteBatch,
+    locksEnabled: static bool
 ): Result[void, AristoError] =
   ## Store a hash key in the given layer or directly to the underlying database
   ## which helps ensure that memory usage is proportional to the pending change
@@ -94,9 +95,12 @@ proc putKeyAtLevel(
   ## corresponding hash!)
 
   if level >= txRef.db.baseTxFrame().level:
-    discard
-    # let txRef = db.deltaAtLevel(level)
-    # txRef.layersPutKey(rvid, vtx, key)
+    let frame = txRef.deltaAtLevel(level)
+    when locksEnabled:
+      frame.db.lock.lockWrite()
+    frame.layersPutKey(rvid, vtx, key)
+    when locksEnabled:
+      frame.db.lock.unlockWrite()
   elif level == dbLevel:
     ?batch.putVtx(txRef.db, rvid, vtx, key)
 
@@ -135,13 +139,34 @@ template encodeExt(w: var RlpWriter, pfx: NibblesBuf, branchKey: HashKey): HashK
   w.finish().digestTo(HashKey)
 
 proc getKey(
-    txRef: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool
+    txRef: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool, locksEnabled: static bool
 ): Result[((HashKey, VertexRef), int), AristoError] =
-  let key = when skipLayers:
-    (?txRef.db.getKeyBe(rvid, {GetVtxFlag.PeekCache}), dbLevel)
+  let flags = when skipLayers:
+    {GetVtxFlag.PeekCache}
   else:
-    ?txRef.getKeyRc(rvid, {})
-  return ok(key)
+    block body:
+      when locksEnabled:
+        txRef.db.lock.lockRead()
+        defer:
+          txRef.db.lock.unlockRead()
+
+      let key = txRef.layersGetKey(rvid).valueOr:
+        break body
+      if key[0].isValid:
+        return ok ((key[0], nil), key[1])
+
+      let vtx = txRef.layersGetVtx(rvid).valueOr:
+        return err(GetKeyNotFound)
+
+      if vtx[0].isValid:
+        return ok ((VOID_HASH_KEY, vtx[0]), vtx[1])
+      else:
+        return err(GetKeyNotFound)
+    
+    const emptySet: set[GetVtxFlag] = {}
+    emptySet
+
+  ok((?txRef.db.getKeyBe(rvid, flags), dbLevel))
 
 template childVid(vp: VertexRef): VertexID =
   # If we have to recurse into a child, where would that recusion start?
@@ -177,6 +202,7 @@ proc computeKeyImpl(
     level: int,
     skipLayers: static bool,
     parallel: static bool,
+    locksEnabled: static bool,
     buffer: ptr ConcurrentBuffer
 ): Result[(HashKey, int), AristoError] =
   # The bloom filter available used only when creating the key cache from an
@@ -198,7 +224,7 @@ proc computeKeyImpl(
           skey =
             if stoID.isValid:
               let
-                keyvtxl = ?txRef.getKey((stoID.vid, stoID.vid), skipLayers)
+                keyvtxl = ?txRef.getKey((stoID.vid, stoID.vid), skipLayers, locksEnabled)
                 (skey, sl) =
                   if keyvtxl[0][0].isValid:
                     (keyvtxl[0][0], keyvtxl[1])
@@ -210,6 +236,7 @@ proc computeKeyImpl(
                       keyvtxl[1],
                       skipLayers = skipLayers,
                       parallel = false,
+                      locksEnabled,
                       buffer
                     )
               level = max(level, sl)
@@ -234,7 +261,7 @@ proc computeKeyImpl(
       let vtx = BranchRef(vtx)
       var keyvtxs: array[16, ((HashKey, VertexRef), int)]
       for n, subvid in vtx.pairs:
-        keyvtxs[n] = ?txRef.getKey((rvid.root, subvid), skipLayers)
+        keyvtxs[n] = ?txRef.getKey((rvid.root, subvid), skipLayers, locksEnabled)
 
       when parallel:
         var 
@@ -275,6 +302,7 @@ proc computeKeyImpl(
                   keyvtx[1],
                   skipLayers = skipLayers,
                   parallel = false,
+                  locksEnabled,
                   buffer
                 )
               n += 1
@@ -307,6 +335,7 @@ proc computeKeyImpl(
                 keyvtxs[minIdx][1],
                 skipLayers = skipLayers,
                 parallel = false,
+                locksEnabled,
                 buffer
               )
             #batch.leave(n)
@@ -328,10 +357,10 @@ proc computeKeyImpl(
                 continue
               if v[1].isExt:
                 let b = ExtBranchRef.init(v[1].pfx, v[1].startVid, v[1].used)
-                ?txRef.putKeyAtLevel(v[0], BranchRef(b), v[2], v[3], batch)
+                ?txRef.putKeyAtLevel(v[0], BranchRef(b), v[2], v[3], batch, locksEnabled)
               else:
                 let b = BranchRef.init(v[1].startVid, v[1].used)
-                ?txRef.putKeyAtLevel(v[0], b, v[2], v[3], batch)
+                ?txRef.putKeyAtLevel(v[0], b, v[2], v[3], batch, locksEnabled)
         
         # At this point all futures have finished running.
         # Now we process any remaining data in the buffers.
@@ -342,10 +371,10 @@ proc computeKeyImpl(
               let v = data.get()
               if v[1].isExt:
                 let b = ExtBranchRef.init(v[1].pfx, v[1].startVid, v[1].used)
-                ?txRef.putKeyAtLevel(v[0], BranchRef(b), v[2], v[3], batch)
+                ?txRef.putKeyAtLevel(v[0], BranchRef(b), v[2], v[3], batch, locksEnabled)
               else:
                 let b = BranchRef.init(v[1].startVid, v[1].used)
-                ?txRef.putKeyAtLevel(v[0], b, v[2], v[3], batch)
+                ?txRef.putKeyAtLevel(v[0], b, v[2], v[3], batch, locksEnabled)
               
               data = buffers[i].tryPop()
 
@@ -376,7 +405,7 @@ proc computeKeyImpl(
 
   if vtx.vType in Branches:
     if buffer.isNil():
-      ?txRef.putKeyAtLevel(rvid, BranchRef(vtx), key, level, batch)
+      ?txRef.putKeyAtLevel(rvid, BranchRef(vtx), key, level, batch, locksEnabled)
     else:
       if vtx.vType == ExtBranch:
         let b = ExtBranchRef(vtx)
@@ -399,12 +428,12 @@ proc computeKeyImplTask(
     buffer: ptr ConcurrentBuffer
 ): Result[(HashKey, int), AristoError] =
   if skipLayers:
-    txRef[].computeKeyImpl(rvid, batch[], vtx[], level, skipLayers = true, parallel = false, buffer)
+    txRef[].computeKeyImpl(rvid, batch[], vtx[], level, skipLayers = true, parallel = false, locksEnabled = true, buffer)
   else:
-    txRef[].computeKeyImpl(rvid, batch[], vtx[], level, skipLayers = false, parallel = false, buffer)
+    txRef[].computeKeyImpl(rvid, batch[], vtx[], level, skipLayers = false, parallel = false, locksEnabled = true, buffer)
 
 proc computeKeyImpl(
-    txRef: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool, parallel: static bool
+    txRef: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool, parallel: static bool, locksEnabled: static bool
 ): Result[HashKey, AristoError] =
   let (keyvtx, level) =
     when skipLayers:
@@ -424,6 +453,7 @@ proc computeKeyImpl(
     level,
     skipLayers = skipLayers,
     parallel = parallel,
+    locksEnabled,
     nil
   )
 
@@ -448,7 +478,7 @@ proc computeKey*(
   ## state/hash, it must be converted to a `Hash32` (using (`.to(Hash32)`) as
   ## in `txRef.computeKey(rvid).value.to(Hash32)` which always results in a
   ## 32 byte value.
-  txRef.computeKeyImpl(rvid, skipLayers, parallel = false)
+  txRef.computeKeyImpl(rvid, skipLayers, parallel = false, locksEnabled = false)
 
 proc computeStateRoot*(
     txRef: AristoTxRef,
@@ -460,13 +490,15 @@ proc computeStateRoot*(
     txRef.computeKeyImpl(
       (STATE_ROOT_VID, STATE_ROOT_VID),
       skipLayers,
-      parallel = when compileOption("threads"): true else: false
+      parallel = when compileOption("threads"): true else: false,
+      locksEnabled = when compileOption("threads"): true else: false
     )
   else:
     txRef.computeKeyImpl(
       (STATE_ROOT_VID, STATE_ROOT_VID),
       skipLayers,
-      parallel = false
+      parallel = false,
+      locksEnabled = false
     )
 
 # ------------------------------------------------------------------------------

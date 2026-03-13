@@ -22,17 +22,17 @@
 {.push raises: [].}
 
 import
-  std/[hashes, sequtils, sets, tables, heapqueue, locks],
+  std/[hashes, sequtils, sets, tables, heapqueue],
   eth/common/hashes, eth/trie/nibbles,
   results,
+  minilru,
   ./aristo_constants,
   ./aristo_desc/[desc_error, desc_identifiers, desc_structural],
-  ./aristo_desc/desc_backend,
-  minilru
+  ./aristo_desc/desc_backend
 
 when compileOption("threads"):
-  import taskpools
-  export taskpools
+  import taskpools, ../../concurrent/readwritelock
+  export taskpools, readwritelock
 
 # Not auto-exporting backend
 export
@@ -85,8 +85,6 @@ type
       ## used to order data by age when working with layers.
       ## -1 = stored in database, where relevant though typically should be
       ## compared with the base layer level instead.
-
-    lock*: Lock
 
   Snapshot* = object
     vtx*: Table[RootedVertexID, VtxSnapshot]
@@ -145,7 +143,11 @@ type
 
     when compileOption("threads"):
       taskpool*: Taskpool
-        ## Shared task pool for offloading computation to other threads
+        ## Shared task pool for offloading computation to other threads.
+      
+      lock*: ReadWriteLock
+        ## A read-write lock used to support thread safe reads and writes to the 
+        ## database from multiple threads.
 
   Leg* = object
     ## For constructing a `VertexPath`

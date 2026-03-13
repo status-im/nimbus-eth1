@@ -95,6 +95,10 @@ proc initInstance*(
   # db.stoLeaves = LruCache[Hash32, StoLeafRef].init(ACC_LRU_SIZE)
   db.maxSnapshots = maxSnapshots
   db.parallelStateRootComputation = parallelStateRootComputation
+
+  when compileOption("threads"):
+    db.lock = ReadWriteLock.init()
+    
   ok()
 
 proc finish*(db: AristoDbRef; eradicate = false) =
