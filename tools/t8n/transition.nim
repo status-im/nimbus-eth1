@@ -235,7 +235,8 @@ proc exec(ctx: TransContext,
 
   vmState.receipts = newSeqOfCap[StoredReceipt](ctx.txList.len)
   vmState.cumulativeGasUsed = 0
-  vmState.blockGasUsed = 0
+  vmState.blockRegularGasUsed = 0
+  vmState.blockStateGasUsed = 0
 
   if ctx.env.parentBeaconBlockRoot.isSome:
     vmState.processBeaconBlockRoot(ctx.env.parentBeaconBlockRoot.get).isOkOr:
