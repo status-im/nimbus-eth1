@@ -30,6 +30,7 @@ type
     EPeerDisconnected              ## Exception
     ECatchableError                ## Exception
     ECancelledError                ## Exception
+    ETrieError                     ## Database error
 
 const
   snapAsmFolder* = "snap"
