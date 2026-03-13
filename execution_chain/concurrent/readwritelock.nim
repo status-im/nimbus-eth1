@@ -52,6 +52,20 @@ func unlockWrite*(rwLock: var ReadWriteLock) =
     rwLock.hasWriter = false
     rwLock.cond.broadcast()
 
+template withReadLock*(rwLock: var ReadWriteLock, body: untyped) =
+  rwLock.lockRead()
+  try:
+    body
+  finally:
+    rwLock.unlockRead()
+
+template withWriteLock*(rwLock: var ReadWriteLock, body: untyped) =
+  rwLock.lockWrite()
+  try:
+    body
+  finally:
+    rwLock.unlockWrite()
+
 when isMainModule:
   var rwLock = ReadWriteLock.init()
 

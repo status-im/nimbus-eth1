@@ -141,30 +141,29 @@ template encodeExt(w: var RlpWriter, pfx: NibblesBuf, branchKey: HashKey): HashK
 proc getKey(
     txRef: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool, locksEnabled: static bool
 ): Result[((HashKey, VertexRef), int), AristoError] =
-  let flags = when skipLayers:
-    {GetVtxFlag.PeekCache}
-  else:
-    block body:
-      when locksEnabled:
-        txRef.db.lock.lockRead()
-        defer:
-          txRef.db.lock.unlockRead()
-
-      let key = txRef.layersGetKey(rvid).valueOr:
-        break body
-      if key[0].isValid:
-        return ok ((key[0], nil), key[1])
-
-      let vtx = txRef.layersGetVtx(rvid).valueOr:
-        return err(GetKeyNotFound)
-
-      if vtx[0].isValid:
-        return ok ((VOID_HASH_KEY, vtx[0]), vtx[1])
-      else:
-        return err(GetKeyNotFound)
+  const 
+    emptyFlags: set[GetVtxFlag] = {}
+    flags = when skipLayers: {GetVtxFlag.PeekCache} else: emptyFlags
+  
+  block:
+    when locksEnabled:
+      txRef.db.lock.lockRead()
+      defer:
+        txRef.db.lock.unlockRead()
     
-    const emptySet: set[GetVtxFlag] = {}
-    emptySet
+    let key = txRef.layersGetKey(rvid).valueOr:
+      return ok((?txRef.db.getKeyBe(rvid, flags), dbLevel))
+    
+    if key[0].isValid:
+      return ok ((key[0], nil), key[1])
+
+    let vtx = txRef.layersGetVtx(rvid).valueOr:
+      return err(GetKeyNotFound)
+
+    if vtx[0].isValid:
+      return ok ((VOID_HASH_KEY, vtx[0]), vtx[1])
+    else:
+      return err(GetKeyNotFound)
 
   ok((?txRef.db.getKeyBe(rvid, flags), dbLevel))
 

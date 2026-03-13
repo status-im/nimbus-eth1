@@ -108,12 +108,75 @@ suite "Aristo compute":
         let rc = txFrame.check
         check rc == typeof(rc).ok()
 
+    test "Parallel - add and delete entries " & $n:
+      let
+        db = AristoDbRef.init()
+        txFrame = db.txRef
+        root = STATE_ROOT_VID
+      db.parallelStateRootComputation = true
+      db.taskpool = Taskpool.new(numThreads = 4)
+      
+      for (k, v, r) in sample:
+        checkpoint("k = " & k.toHex & ", v = " & $v)
+
+        check:
+          txFrame.mergeAccountRecord(k, v) == Result[bool, AristoError].ok(true)
+
+        # Check state against expected value
+        let w = txFrame.computeKey((root, root)).expect("no errors")
+        check r == w.to(Hash32)
+
+        let rc = txFrame.check
+        check rc == typeof(rc).ok()
+
+      # Reverse run deleting entries
+      var deletedKeys: HashSet[Hash32]
+      for iny, (k, v, r) in sample.reversed:
+        # Check whether key was already deleted
+        if k in deletedKeys:
+          continue
+        deletedKeys.incl k
+
+        # Check state against expected value
+        let w = txFrame.computeKey((root, root)).value.to(Hash32)
+
+        check r == w
+
+        check:
+          txFrame.deleteAccountRecord(k).isOk
+
+        let rc = txFrame.check
+        check rc == typeof(rc).ok()
+
   test "Pre-computed key":
     # TODO use mainnet genesis in this test?
     let
       db = AristoDbRef.init()
       txFrame = db.txRef
       root = STATE_ROOT_VID
+    
+    for (k, v, r) in samples[^1]:
+      check:
+        txFrame.mergeAccountRecord(k, v) == Result[bool, AristoError].ok(true)
+    txFrame.checkpoint(1, skipSnapshot = true)
+
+    let batch = db.putBegFn()[]
+    db.persist(batch, txFrame)
+    check db.putEndFn(batch).isOk()
+
+    check txFrame.computeStateRoot(skipLayers = true).isOk()
+
+    let w = txFrame.computeKey((root, root)).value.to(Hash32)
+    check w == samples[^1][^1][2]
+  
+  test "Parallel - pre-computed key":
+    # TODO use mainnet genesis in this test?
+    let
+      db = AristoDbRef.init()
+      txFrame = db.txRef
+      root = STATE_ROOT_VID
+    db.parallelStateRootComputation = true
+    db.taskpool = Taskpool.new(numThreads = 4)
 
     for (k, v, r) in samples[^1]:
       check:
