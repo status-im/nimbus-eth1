@@ -120,14 +120,20 @@ proc beforeExecCreate(c: Computation): bool =
   if c.vmState.balTrackerEnabled:
     c.vmState.balTracker.trackAddressAccess(c.msg.contractAddress)
   if c.vmState.readOnlyLedger().contractCollision(c.msg.contractAddress):
+    # Per EIP-684 collision behaves as an immediate exceptional halt,
+    # so the burned gas belongs in the regular dimension.
+    # On CREATE/CREATE2 address collision the 63/64 gas allocation is
+    # burned and added to regularGasUsed.
+    # But contract creation tx collision does not add the burned gas to
+    # regularGasUsed.
+    if c.msg.depth == 0:
+      c.gasMeter.gasRemaining = 0
     let blurb = c.msg.contractAddress.toHex
-    # Don't return remaining gas to parent and also don't burn it into regularGasUsed
-    c.gasMeter.gasRemaining = 0
-    c.setError("Address collision when creating contract address=" & blurb, false)
+    c.setError("Address collision when creating contract address=" & blurb, true)
     return true
 
   c.beginSavePoint()
-  
+
   c.vmState.mutateLedger:
     if c.vmState.balTrackerEnabled:
       c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
