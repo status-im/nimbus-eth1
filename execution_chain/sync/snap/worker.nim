@@ -19,43 +19,6 @@ logScope:
   topics = "snap sync"
 
 # ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-template updateTarget(
-    buddy: SnapPeerRef;
-    info: static[string];
-      ) =
-  ## Async/template
-  ##
-  block body:
-    # Check whether explicit target setup is configured
-    if buddy.ctx.pool.target.isSome():
-      let
-        peer {.inject,used.} = $buddy.peer          # logging only
-        ctx = buddy.ctx
-
-      # Single target block hash
-      let hash = ctx.pool.target.value.blockHash
-      if hash != BlockHash(zeroHash32):
-        let rc = buddy.headerStateRegister(hash, info)
-        if rc.isErr and rc.error:                   # real error
-          trace info & ": failed fetching pivot hash", peer, hash=hash.toStr
-        elif 0 < ctx.pool.target.value.updateFile.len:
-          var target = ctx.pool.target.value
-          target.blockHash = BlockHash(zeroHash32)
-          ctx.pool.target = Opt.some(target)
-        else:
-          ctx.pool.target = Opt.none(SnapTarget)    # No more target entries
-          break body                                # noting more to do here
-
-      # Check whether a file target setup is configured
-      if 0 < ctx.pool.target.value.updateFile.len:
-        discard buddy.headerStateLoad(ctx.pool.target.value.updateFile, info)
-
-  discard # visual alignment
-
-# ------------------------------------------------------------------------------
 # Public start/stop and admin functions
 # ------------------------------------------------------------------------------
 

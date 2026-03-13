@@ -11,7 +11,7 @@
 {.push raises:[].}
 
 import
-  std/[hashes, sequtils, sets, strformat, tables],
+  std/[hashes, sequtils, sets, strformat, strutils, tables],
   pkg/[chronicles, eth/common, metrics],
   pkg/stew/[interval_set, sorted_set],
   ../[helpers, worker_const],
@@ -159,6 +159,9 @@ proc register*(
     if db.topDone == state:
       db.topDone = StateDataRef(nil)
     debug info & ": evicted state record", root=state.rootStr, hash=hash.toStr
+    # Roll back global unproc register
+    for iv in state.unproc.unprocessed.complement.increasing:
+      discard db.unproc.merge(iv)                   # hand back interval
 
   db.byNumber.eq(number).isErrOr:
     if value.data.blockHash == hash:
@@ -508,6 +511,12 @@ iterator items*(
           yield data
         rc = db.byNumber.lt(key)
 
+func states*(db: StateDbRef): seq[StateDataRef] =
+  ## Variant of the `items` iterator returning a sequence where the states have
+  ## descending block height.
+  for state in db.items(truncate = false, ascending = false):
+    result.add state
+
 # ------------------------------------------------------------------------------
 # Public debugging helpers
 # ------------------------------------------------------------------------------
@@ -520,6 +529,12 @@ func bnStr*(rc: Opt[StateDataRef]): string =
 
 func rootStr*(state: StateDataRef): string =
   state.stateRoot.Hash32.short & "(" & $state.blockNumber & ")"
+
+func toStr*(db: seq[StateDataRef]): string =
+  ## Print a list of processed ranges for the argument stats.
+  "{" & db.mapIt(
+    $it.blockNumber & "^" &
+    it.unproc.unprocessed.complement.toStr).join(",") & "}"
 
 func toStr*(db: StateDbRef): string =
   let

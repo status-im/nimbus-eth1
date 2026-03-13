@@ -9,6 +9,10 @@ Project Status
 * Raw data download and storage is implemented
 * Previous download session can be resumed
 
+TODO
+
+* verify byte code
+
 Metrics
 -------
 
