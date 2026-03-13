@@ -63,6 +63,7 @@ type
   BlockDesc* = object
     blk*: EthBlock
     badBlock*: bool
+    bal*: Opt[BlockAccessListRef]
 
   Numero* = distinct uint64
 

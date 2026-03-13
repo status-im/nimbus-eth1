@@ -23,8 +23,18 @@ import
   ../../execution_chain/common/common,
   ../../hive_integration/engine_client,
   ./eest_helpers,
+  ./bal_parser,
   stew/byteutils,
   chronos
+
+proc parseBAL(node: JsonNode): Opt[BlockAccessListRef] =
+  if node.hasKey("blockAccessList"):
+    let bal = new(BlockAccessListRef)
+    bal[] = balFromJson(node["blockAccessList"])
+    return Opt.some(bal)
+
+  if node.hasKey("rlp_decoded"):
+    return parseBAL(node["rlp_decoded"])
 
 proc parseBlocks*(node: JsonNode): seq[BlockDesc] =
   for x in node:
@@ -33,6 +43,7 @@ proc parseBlocks*(node: JsonNode): seq[BlockDesc] =
       let blk = rlp.decode(blockRLP, EthBlock)
       result.add BlockDesc(
         blk: blk,
+        bal: parseBAL(x),
         badBlock: "expectException" in x,
       )
     except RlpError:
@@ -50,7 +61,7 @@ proc runTest(env: TestEnv, unit: BlockchainUnitEnv): Future[Result[void, string]
   var lastStateRoot = unit.genesisBlockHeader.stateRoot
 
   for blk in blocks:
-    let res = await env.chain.importBlock(blk.blk, finalized = true)
+    let res = await env.chain.importBlock(blk.blk, blk.bal, finalized = true)
     if res.isOk:
       if unit.lastblockhash == blk.blk.header.computeBlockHash:
         lastStateRoot = blk.blk.header.stateRoot
@@ -78,12 +89,14 @@ proc processFile*(fileName: string, statelessEnabled = false): bool =
     fixture = parseFixture(fileName, BlockchainFixture)
 
   var testPass = true
-  for unit in fixture.units:
+  for idx, unit in fixture.units:
+    #if idx != 1:
+    #  continue
     let header = unit.unit.genesisBlockHeader.to(Header)
     doAssert(unit.unit.genesisBlockHeader.hash == header.computeRlpHash)
     let env = prepareEnv(unit.unit, header, rpcEnabled = false, statelessEnabled)
     (waitFor env.runTest(unit.unit)).isOkOr:
-      echo "\nTestName: ", unit.name, " RunTest error: ", error, "\n"
+      echo "\n", idx, " TestName: ", unit.name, " RunTest error: ", error, "\n"
       testPass = false
     env.close()
 
