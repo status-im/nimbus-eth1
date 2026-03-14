@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -39,7 +39,7 @@ proc begin*(rdb: var RdbInst): SharedWriteBatchRef =
 proc rollback*(rdb: var RdbInst, session: SharedWriteBatchRef) =
   if not session.isClosed():
     rdb.rdKeyLru = typeof(rdb.rdKeyLru).init(rdb.rdKeySize)
-    rdb.rdVtxLru = typeof(rdb.rdVtxLru).init(rdb.rdVtxSize)
+    # rdb.rdVtxLru = typeof(rdb.rdVtxLru).init(rdb.rdVtxSize)
     rdb.rdBranchLru = typeof(rdb.rdBranchLru).init(rdb.rdBranchSize)
     session.close()
 
@@ -91,17 +91,17 @@ proc putVtx*(
 
     if vtx.vType == Branch:
       let vtx = BranchRef(vtx)
-      rdb.rdVtxLru.del(rvid.vid)
+      # rdb.rdVtxLru.del(rvid.vid)
       if rdb.rdBranchLru.len < rdb.rdBranchLru.capacity:
         rdb.rdBranchLru.put(rvid.vid, (vtx.startVid, vtx.used))
       else:
         discard rdb.rdBranchLru.update(rvid.vid, (vtx.startVid, vtx.used))
     else:
       rdb.rdBranchLru.del(rvid.vid)
-      if rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
-        rdb.rdVtxLru.put(rvid.vid, vtx)
-      else:
-        discard rdb.rdVtxLru.update(rvid.vid, vtx)
+      # if rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
+      #   rdb.rdVtxLru.put(rvid.vid, vtx)
+      # else:
+      #   discard rdb.rdVtxLru.update(rvid.vid, vtx)
 
     if key.isValid:
       if rdb.rdKeyLru.len < rdb.rdKeyLru.capacity:
@@ -121,7 +121,7 @@ proc putVtx*(
 
     # Update cache, vertex will most probably never be visited anymore
     rdb.rdBranchLru.del rvid.vid
-    rdb.rdVtxLru.del rvid.vid
+    # rdb.rdVtxLru.del rvid.vid
     rdb.rdKeyLru.del rvid.vid
 
   ok()

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -39,6 +39,8 @@ const
 suite "Aristo TxFrame":
   setup:
     let db = AristoDbRef.init()
+    db.parallelStateRootComputation = true
+    db.taskpool = Taskpool.new(numThreads = 4)
 
   test "Frames should independently keep data":
     let

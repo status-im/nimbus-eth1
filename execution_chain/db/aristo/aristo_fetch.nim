@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -255,11 +255,11 @@ proc retrieveStoragePayload(
   # it must have been in the database
   let leafVtx = db.retrieveLeaf(
       ? db.fetchStorageIdImpl(accPath), NibblesBuf.fromBytes(stoPath.data)).valueOr:
-    if error == FetchPathNotFound:
-      db.db.stoLeaves.put(mixPath, nil)
+    # if error == FetchPathNotFound:
+    #   db.db.stoLeaves.put(mixPath, nil)
     return err(error)
 
-  db.db.stoLeaves.put(mixPath, StoLeafRef(leafVtx))
+  # db.db.stoLeaves.put(mixPath, StoLeafRef(leafVtx))
 
   ok StoLeafRef(leafVtx).stoData
 
@@ -305,7 +305,13 @@ proc fetchStateRoot*(
     db: AristoTxRef;
       ): Result[Hash32,AristoError] =
   ## Fetch the Merkle hash of the account root.
-  db.retrieveMerkleHash(STATE_ROOT_VID)
+  let key =
+    db.computeStateRoot().valueOr:
+      if error in [GetVtxNotFound, GetKeyNotFound]:
+        return ok(emptyRoot)
+      return err(error)
+
+  ok key.to(Hash32)
 
 proc hasPathAccount*(
     db: AristoTxRef;

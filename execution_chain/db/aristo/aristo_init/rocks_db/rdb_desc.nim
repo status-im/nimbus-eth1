@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -56,8 +56,8 @@ type
     #
     rdKeyLru*: LruCache[VertexID,HashKey] ## Read cache
     rdKeySize*: int
-    rdVtxLru*: LruCache[VertexID,VertexRef] ## Read cache
-    rdVtxSize*: int
+    # rdVtxLru*: LruCache[VertexID,VertexRef] ## Read cache
+    # rdVtxSize*: int
 
     rdBranchLru*: LruCache[VertexID, (VertexID, uint16)]
     rdBranchSize*: int
