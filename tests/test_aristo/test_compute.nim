@@ -75,7 +75,8 @@ suite "Aristo compute":
         db = AristoDbRef.init()
         txFrame = db.txRef
         root = STATE_ROOT_VID
-
+      db.parallelStateRootComputation = false
+      
       for (k, v, r) in sample:
         checkpoint("k = " & k.toHex & ", v = " & $v)
 
@@ -154,7 +155,8 @@ suite "Aristo compute":
       db = AristoDbRef.init()
       txFrame = db.txRef
       root = STATE_ROOT_VID
-    
+    db.parallelStateRootComputation = false
+
     for (k, v, r) in samples[^1]:
       check:
         txFrame.mergeAccountRecord(k, v) == Result[bool, AristoError].ok(true)

@@ -143,27 +143,32 @@ proc getKey(
 ): Result[((HashKey, VertexRef), int), AristoError] =
   const 
     emptyFlags: set[GetVtxFlag] = {}
-    flags = when skipLayers: {GetVtxFlag.PeekCache} else: emptyFlags
+    flags = 
+      when skipLayers or locksEnabled: 
+        {GetVtxFlag.PeekCache} 
+      else: 
+        emptyFlags
   
-  block:
-    when locksEnabled:
-      txRef.db.lock.lockRead()
-      defer:
-        txRef.db.lock.unlockRead()
-    
-    let key = txRef.layersGetKey(rvid).valueOr:
-      return ok((?txRef.db.getKeyBe(rvid, flags), dbLevel))
-    
-    if key[0].isValid:
-      return ok ((key[0], nil), key[1])
+  when not skipLayers:
+    block body:
+      when locksEnabled:
+        txRef.db.lock.lockRead()
+        defer:
+          txRef.db.lock.unlockRead()
+      
+      let key = txRef.layersGetKey(rvid).valueOr:
+        break body
+      
+      if key[0].isValid:
+        return ok ((key[0], nil), key[1])
 
-    let vtx = txRef.layersGetVtx(rvid).valueOr:
-      return err(GetKeyNotFound)
+      let vtx = txRef.layersGetVtx(rvid).valueOr:
+        return err(GetKeyNotFound)
 
-    if vtx[0].isValid:
-      return ok ((VOID_HASH_KEY, vtx[0]), vtx[1])
-    else:
-      return err(GetKeyNotFound)
+      if vtx[0].isValid:
+        return ok ((VOID_HASH_KEY, vtx[0]), vtx[1])
+      else:
+        return err(GetKeyNotFound)
 
   ok((?txRef.db.getKeyBe(rvid, flags), dbLevel))
 
