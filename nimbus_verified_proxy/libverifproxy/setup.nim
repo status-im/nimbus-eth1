@@ -42,7 +42,7 @@ proc transportCallback[T](
   elif status == RET_CANCELLED:
     data.fut.fail((ref CancelledError)(msg: $res))
 
-proc getRandomBackendUrl(rng: ref HmacDrbgContext, urls: seq[Web3Url]): string =
+proc getRandomBackendUrl(rng: ref HmacDrbgContext, urls: seq[string]): string =
   var randomNum: uint64
   rng[].generate(randomNum)
 
@@ -50,12 +50,10 @@ proc getRandomBackendUrl(rng: ref HmacDrbgContext, urls: seq[Web3Url]): string =
   # this introduces a bias in the output distribution but is negligible
   # for this use case. The bias becomes insignificant when score filters
   # are used to select clients in the future.
-  let url = urls[randomNum mod uint64(urls.len)]
-
-  url.web3Url
+  urls[randomNum mod uint64(urls.len)]
 
 proc getEthApiBackend*(
-    ctx: ptr Context, urls: seq[Web3Url], transportProc: TransportProc
+    ctx: ptr Context, urls: seq[string], transportProc: TransportProc
 ): EthApiBackend =
   let
     rng = keys.newRng()
@@ -282,7 +280,7 @@ proc getEthApiBackend*(
       await fut
 
     feeHistoryProc = proc(
-        blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[uint8]
+        blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[int]
     ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).} =
       let
         fut = Future[EngineResult[FeeHistoryResult]].Raising([CancelledError]).init(
@@ -361,7 +359,7 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
         )
     executionApiUrls =
       try:
-        parseCmdArg(seq[Web3Url], jsonNode["executionApiUrls"].getStr())
+        parseCmdArg(UrlList, jsonNode["executionApiUrls"].getStr())
       except CatchableError as e:
         raise newException(
           ProxyError, "Couldn't parse `backendUrl` from JSON config: " & e.msg
@@ -372,6 +370,13 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
       except CatchableError as e:
         raise newException(
           ProxyError, "Couldn't parse `beaconApiUrls` from JSON config: " & e.msg
+        )
+    privateTxUrls =
+      try:
+        parseCmdArg(UrlList, jsonNode["privateTxUrls"].getStr())
+      except CatchableError as e:
+        raise newException(
+          ProxyError, "Couldn't parse `privateTxUrls` from JSON config: " & e.msg
         )
     logLevel = jsonNode.getOrDefault("logLevel").getStr("INFO")
     logFormat =
@@ -410,6 +415,7 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
         uint64(0)
       else:
         uint64(prllBlkDwnlds),
+    privateTxUrls: privateTxUrls,
   )
 
 proc run*(
@@ -443,9 +449,23 @@ proc run*(
   # add light client backend
   lc.setBackend(lcRestClientPool.getEthLCBackend())
 
+  let usePrivateTx = config.privateTxUrls.len > 0
+
+  let regularCaps =
+    if usePrivateTx:
+      fullCapabilities - {SendRawTransaction}
+    else:
+      fullCapabilities
+
   engine.registerBackend(
-    getEthApiBackend(ctx, config.executionApiUrls, transportProc), fullCapabilities
+    getEthApiBackend(ctx, config.executionApiUrls, transportProc), regularCaps
   )
+
+  if usePrivateTx:
+    engine.registerBackend(
+      getEthApiBackend(ctx, config.privateTxUrls, transportProc),
+      BackendCapabilities({SendRawTransaction}),
+    )
 
   # inject the frontend into c context
   ctx.frontend = engine.frontend
