@@ -89,7 +89,7 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
             break                                   # done this state, try next
           buddy.storageDownload(state, acc, info)   # fetch storage slots
           buddy.codeDownload(state, acc, info)      # fetch byte codes
-          if not sdb.hasKey(state.stateRoot):       # proceed unless evicted
+          if not state.isOperable():                # proceed unless evicted
             break
           didSomething = true                       # continue with this one
           # End `while` single state download

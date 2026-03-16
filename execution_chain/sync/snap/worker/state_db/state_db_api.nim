@@ -60,6 +60,7 @@ type
     unproc: UnprocItemKeys              ## Unprocessed accounts
     byAccount: DataByAccount            ## List of storage/code states to fetch
     healingReady: bool                  ## Ready for healing if `true`
+    deadState: bool                     ## State was evicted from database
 
   StateDbRef* = ref object
     ## Download states db
@@ -162,6 +163,7 @@ proc register*(
     # Roll back global unproc register
     for iv in state.unproc.unprocessed.complement.increasing:
       discard db.unproc.merge(iv)                   # hand back interval
+    state.deadState = true                          # mark it evicted
 
   db.byNumber.eq(number).isErrOr:
     if value.data.blockHash == hash:
@@ -247,11 +249,15 @@ func top*(db: StateDbRef): Opt[StateDataRef] =
   ok val.data
 
 
-proc setHealingReady*(data: StateDataRef) =
-  data.healingReady = true
+proc setHealingReady*(state: StateDataRef) =
+  state.healingReady = true
 
-proc getHealingReady*(data: StateDataRef): bool =
-  data.healingReady
+proc getHealingReady*(state: StateDataRef): bool =
+  state.healingReady
+
+proc isOperable*(state: StateDataRef): bool =
+  ## Check whether the state has not been evicted
+  not state.deadState
 
 # ------------------------------------------------------------------------------
 # Public unprocessed account ranges administration
@@ -266,7 +272,11 @@ proc totalAccountRange*(
   ## `UInt256`, the maximum value `2^256` is returned as `ok(0)`, while the
   ## least value `0` (i.e. nothing left) is returned as `err()`.
   ##
-  state.unproc.total()
+  ## If the state was evicted from the database, `err()` (for `0`) is
+  ## returned.
+  ##
+  if state.deadState: err()
+  else: state.unproc.total()
 
 proc fetchAccountRange*(
     db: StateDbRef;
@@ -276,6 +286,11 @@ proc fetchAccountRange*(
   ## returned account intervals for different `state` arguments will not
   ## overlap up until the range `0..2^256` is fully covered.
   ##
+  ## If the state was eviceted from the database, `err()` (for `none`) is
+  ## returned.
+  ##
+  if state.deadState:
+    return err()
   # Re-fill global register if exhausted
   if db.unproc.chunks == 0:
     db.overlays.inc
@@ -306,8 +321,9 @@ proc rollbackAccountRange*(
   ## Pass back the argument`iv` (as returned from `fetchAccountRange()`) to
   ## the registry managing unprocessed ranges.
   ##
-  state.unproc.commit(iv, iv)
-  discard db.unproc.merge(iv)
+  if not state.deadState:
+    state.unproc.commit(iv, iv)
+    discard db.unproc.merge(iv)
 
 proc commitAccountRange*(
     db: StateDbRef;
@@ -318,25 +334,27 @@ proc commitAccountRange*(
   ## Remove the completed interval `iv.minPt..limit`, and restore non-completed
   ## parts `limit+1..iv.maxPt` on the registry managing unprocessed ranges.
   ##
-  if limit < iv.maxPt:
-    state.unproc.commit(iv, limit + 1, iv.maxPt)
-    discard db.unproc.merge(limit + 1, iv.maxPt)
+  if not state.deadState:
+    if limit < iv.maxPt:
+      state.unproc.commit(iv, limit + 1, iv.maxPt)
+      discard db.unproc.merge(limit + 1, iv.maxPt)
 
-  elif iv.maxPt < limit:
-    state.unproc.commit(iv)
-    state.unproc.overCommit(iv.maxPt + 1, limit)
-    discard db.unproc.reduce(iv.maxPt + 1, limit)
+    elif iv.maxPt < limit:
+      state.unproc.commit(iv)
+      state.unproc.overCommit(iv.maxPt + 1, limit)
+      discard db.unproc.reduce(iv.maxPt + 1, limit)
 
-  else: # iv.maxPt == limit
-    state.unproc.commit(iv)
+    else: # iv.maxPt == limit
+      state.unproc.commit(iv)
 
-  # Updates state record with the most account ranges processed, i.e. the
-  # least unpprocessed account ranges left.
-  db.pivot.unproc.total.isErrOr:                    # otherwise all done
-    if value == 0 or state.unproc.total.value < value:
-      db.pivot = state
+    # Updates state record with the most account ranges processed, i.e. the
+    # least unpprocessed account ranges left.
+    db.pivot.unproc.total.isErrOr:                # otherwise all done
+      if value == 0 or state.unproc.total.value < value:
+        db.pivot = state
 
-  db.updateMetrics()
+    db.updateMetrics()
+
 
 proc setAccountRange*(
     db: StateDbRef;
@@ -346,16 +364,17 @@ proc setAccountRange*(
       ) =
   ## The function sets an account range and commits it immediately.
   ##
-  state.unproc.overCommit(start, limit)
-  discard db.unproc.reduce(start, limit)
+  if not state.deadState:
+    state.unproc.overCommit(start, limit)
+    discard db.unproc.reduce(start, limit)
 
-  # Updates state record with the most account ranges processed, i.e. the
-  # least unpprocessed account ranges left.
-  db.pivot.unproc.total.isErrOr:                    # otherwise all done
-    if value == 0 or state.unproc.total.value < value:
-      db.pivot = state
+    # Updates state record with the most account ranges processed, i.e. the
+    # least unpprocessed account ranges left.
+    db.pivot.unproc.total.isErrOr:                  # otherwise all done
+      if value == 0 or state.unproc.total.value < value:
+        db.pivot = state
 
-  db.updateMetrics()
+    db.updateMetrics()
 
 # ------------------------------------------------------------------------------
 # Public storage slots and code database function(s)
@@ -368,7 +387,8 @@ proc register*(
     iv = ItemKeyRangeMax) =
   ## Add storage slots to an account (if any.)
   ##
-  if stoRoot != StoreRoot(EMPTY_ROOT_HASH):
+  if not state.deadState and
+     stoRoot != StoreRoot(EMPTY_ROOT_HASH):
     var data: AccDataRef
     let rc = state.byAccount.eq(account)
     if rc.isOk:
@@ -385,7 +405,8 @@ proc register*(
     codeHash: CodeHash) =
   ## Add contract hash to an account (if any.)
   ##
-  if codeHash != CodeHash(EMPTY_CODE_HASH):
+  if not state.deadState and
+     codeHash != CodeHash(EMPTY_CODE_HASH):
     var data: AccDataRef
     let rc = state.byAccount.eq(account)
     if rc.isOk:
@@ -397,32 +418,37 @@ proc register*(
 
 
 func get*(state: StateDataRef, account: ItemKey): Opt[AccDataRef] =
-  state.byAccount.eq(account).isErrOr:
-    return ok(value.data)
+  if not state.deadState:
+    state.byAccount.eq(account).isErrOr:
+      return ok(value.data)
   err()
 
 func hasKey*(state: StateDataRef, account: ItemKey): bool =
-  state.byAccount.eq(account).isOk()
+  not state.deadState and state.byAccount.eq(account).isOk()
 
 
 proc delStorage*(state: StateDataRef, account: ItemKey) =
-  let kv = state.byAccount.eq(account).valueOr:
-    return
-  if kv.data.code == CodeHash(EMPTY_CODE_HASH):
-    discard state.byAccount.delete account
-  else:
-    kv.data.stoRoot = StoreRoot(EMPTY_ROOT_HASH)
+  if not state.deadState:
+    let kv = state.byAccount.eq(account).valueOr:
+      return
+    if kv.data.code == CodeHash(EMPTY_CODE_HASH):
+      discard state.byAccount.delete account
+    else:
+      kv.data.stoRoot = StoreRoot(EMPTY_ROOT_HASH)
 
 proc delCode*(state: StateDataRef, account: ItemKey) =
-  let kv = state.byAccount.eq(account).valueOr:
-    return
-  if kv.data.stoRoot == StoreRoot(EMPTY_ROOT_HASH):
-    discard state.byAccount.delete account
-  else:
-    kv.data.code = CodeHash(EMPTY_CODE_HASH)
+  if not state.deadState:
+    let kv = state.byAccount.eq(account).valueOr:
+      return
+    if kv.data.stoRoot == StoreRoot(EMPTY_ROOT_HASH):
+      discard state.byAccount.delete account
+    else:
+      kv.data.code = CodeHash(EMPTY_CODE_HASH)
 
 func len*(state: StateDataRef): int =
-  state.byAccount.len
+  if not state.deadState:
+    return state.byAccount.len
+  # 0
 
 # ------------------------------------------------------------------------------
 # Public iterator(s)
