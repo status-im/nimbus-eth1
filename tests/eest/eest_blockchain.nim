@@ -104,12 +104,12 @@ proc processFile*(fileName: string, statelessEnabled = false): bool =
     fixture = parseFixture(fileName, BlockchainFixture)
 
   var testPass = true
-  for idx, unit in fixture.units:
+  for unit in fixture.units:
     let header = unit.unit.genesisBlockHeader.to(Header)
     doAssert(unit.unit.genesisBlockHeader.hash == header.computeRlpHash)
     let env = prepareEnv(unit.unit, header, rpcEnabled = false, statelessEnabled)
     (waitFor env.runTest(unit.unit)).isOkOr:
-      echo "\n", idx, " TestName: ", unit.name, " RunTest error: ", error, "\n"
+      echo "TestName: ", unit.name, " RunTest error: ", error, "\n"
       testPass = false
     env.close()
 

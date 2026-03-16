@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2025 Status Research & Development GmbH
+# Copyright (c) 2019-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -41,7 +41,7 @@ proc testTxByFork(tx: Transaction, forkData: JsonNode, forkName: string, testSta
     memDB  = newCoreDbRef DefaultDbMemory
     com    = CommonRef.new(memDB, config)
 
-  validateTxBasic(com, tx, nameToFork[forkName]).isOkOr:
+  validateTxBasic(com, tx, 10_000_000, nameToFork[forkName]).isOkOr:
     return
 
   if forkData.len > 0 and "sender" in forkData:
