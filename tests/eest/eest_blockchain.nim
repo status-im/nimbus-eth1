@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025a-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -28,13 +28,28 @@ import
   chronos
 
 proc parseBAL(node: JsonNode): Opt[BlockAccessListRef] =
-  if node.hasKey("blockAccessList"):
-    let bal = new(BlockAccessListRef)
-    bal[] = balFromJson(node["blockAccessList"])
-    return Opt.some(bal)
+  const
+    deepValidationExceptions = [
+      "INVALID_BAL_MISSING_ACCOUNT",
+      "INVALID_BLOCK_ACCESS_LIST"
+    ]
 
-  if node.hasKey("rlp_decoded"):
-    return parseBAL(node["rlp_decoded"])
+  func doNotParseBAL(x: string): bool =
+    for y in deepValidationExceptions:
+      if y in x: return true
+    false
+
+  if "expectException" in node:
+    if doNotParseBAL(node["expectException"].getStr):
+      return Opt.none(BlockAccessListRef)
+
+  if "rlp_decoded" in node:
+    # Only need shallow validation
+    let inner = node["rlp_decoded"]
+    if "blockAccessList" in inner:
+      let bal = new(BlockAccessListRef)
+      bal[] = balFromJson(inner["blockAccessList"])
+      return Opt.some(bal)
 
 proc parseBlocks*(node: JsonNode): seq[BlockDesc] =
   for x in node:
@@ -90,8 +105,6 @@ proc processFile*(fileName: string, statelessEnabled = false): bool =
 
   var testPass = true
   for idx, unit in fixture.units:
-    #if idx != 1:
-    #  continue
     let header = unit.unit.genesisBlockHeader.to(Header)
     doAssert(unit.unit.genesisBlockHeader.hash == header.computeRlpHash)
     let env = prepareEnv(unit.unit, header, rpcEnabled = false, statelessEnabled)
