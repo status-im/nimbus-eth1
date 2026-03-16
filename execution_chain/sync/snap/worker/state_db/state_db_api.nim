@@ -65,7 +65,7 @@ type
     ## Download states db
     unproc: ItemKeyRangeSet             ## Globally unprocessed accounts
     overlays: uint                      ## Number of `unproc` resets/re-inits
-    topDone: StateDataRef               ## Least unproc data
+    pivot: StateDataRef                 ## Least unproc data
     byNumber: StateByNumber             ## States indexed by block number
     byHash: StateByHash                 ## States indexed by block hash
     byRoot: StateByRoot                 ## States indexed by state root
@@ -107,7 +107,7 @@ proc maxUnproc(db: StateDbRef): StateDataRef =
     rc = walk.next
 
 proc updateMetrics(db: StateDbRef) =
-  let topCoverage = 1f - db.topDone.unproc.totalRatio
+  let topCoverage = 1f - db.pivot.unproc.totalRatio
   metrics.set(nec_snap_acc_coverage,
     # There is no `borrowed` sub-register for the total coverage register. So
     # it might be temporarily below `topCoverage`. As this would make metrics
@@ -129,7 +129,7 @@ proc init*(T: type StateDbRef): T =
 
 proc clear*(db: StateDbRef) =
   db.overlays = 0
-  db.topDone = StateDataRef(nil)
+  db.pivot = StateDataRef(nil)
   db.unproc.clear
   db.byNumber.clear
   db.byNumber.clear
@@ -156,8 +156,8 @@ proc register*(
     discard db.byNumber.delete state.blockNumber    # delete index
     db.byHash.del state.blockHash                   # ditto
     db.byRoot.del state.stateRoot                   # ...
-    if db.topDone == state:
-      db.topDone = StateDataRef(nil)
+    if db.pivot == state:
+      db.pivot = StateDataRef(nil)
     debug info & ": evicted state record", root=state.rootStr, hash=hash.toStr
     # Roll back global unproc register
     for iv in state.unproc.unprocessed.complement.increasing:
@@ -187,12 +187,12 @@ proc register*(
   db.byHash[hash] = newState
   db.byRoot[root] = newState
 
-  if db.topDone.isNil:
-    db.topDone = newState
+  if db.pivot.isNil:
+    db.pivot = newState
   else:
-    db.topDone.unproc.total.isErrOr:
+    db.pivot.unproc.total.isErrOr:
       if value == 0:                                # nothing done yet?
-        db.topDone = newState                       # use the latest one
+        db.pivot = newState                         # use the latest one
 
   newState                                          # return state record
 
@@ -235,10 +235,10 @@ func len*(db: StateDbRef): int =
 
 func pivot*(db: StateDbRef): Opt[StateDataRef] =
   ## Retrieve the state data record with a minimal unprocessed interval range.
-  if db.topDone.isNil:
+  if db.pivot.isNil:
     err()
   else:
-    ok db.topDone
+    ok db.pivot
 
 func top*(db: StateDbRef): Opt[StateDataRef] =
   ## Retrieve the state data record with the highest block number.
@@ -332,9 +332,9 @@ proc commitAccountRange*(
 
   # Updates state record with the most account ranges processed, i.e. the
   # least unpprocessed account ranges left.
-  db.topDone.unproc.total.isErrOr:                  # otherwise all done
+  db.pivot.unproc.total.isErrOr:                    # otherwise all done
     if value == 0 or state.unproc.total.value < value:
-      db.topDone = state
+      db.pivot = state
 
   db.updateMetrics()
 
@@ -351,9 +351,9 @@ proc setAccountRange*(
 
   # Updates state record with the most account ranges processed, i.e. the
   # least unpprocessed account ranges left.
-  db.topDone.unproc.total.isErrOr:                  # otherwise all done
+  db.pivot.unproc.total.isErrOr:                    # otherwise all done
     if value == 0 or state.unproc.total.value < value:
-      db.topDone = state
+      db.pivot = state
 
   db.updateMetrics()
 
@@ -554,7 +554,7 @@ func toStr*(db: StateDbRef): string =
       result &= &"{(state.blockNumber - base4):04}"
     else:
       result &= $state.blockNumber
-    if db.topDone == state:
+    if db.pivot == state:
       result &= "*"
     result &= ":" & state.unproc.totalRatio.toStr(4)
     result &= "(" & $state.byAccount.len & ")"
