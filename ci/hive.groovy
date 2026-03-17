@@ -87,7 +87,7 @@ pipeline {
                     --client-file="${WORKSPACE}/ci/neth-nimbus-sync-config.yml" \
                     --sim.parallelism=${params.PARALLELISM} \
                     --sim.loglevel 4 \
-                    --sim.limit "^sync$" \
+                    --sim.limit "^sync\$" \
                     --docker.nocache hive/clients/nimbus-el \
                     ${params.DOCKER_BUILDOUTPUT ? '--docker.buildoutput' : ''}
                   """
@@ -113,7 +113,7 @@ pipeline {
                     --client-file="${WORKSPACE}/ci/reth-nimbus-sync-config.yml" \
                     --sim.parallelism=${params.PARALLELISM} \
                     --sim.loglevel 4 \
-                    --sim.limit "^sync$" \
+                    --sim.limit "^sync\$" \
                     --docker.nocache hive/clients/nimbus-el \
                     ${params.DOCKER_BUILDOUTPUT ? '--docker.buildoutput' : ''}
                   """
@@ -139,7 +139,7 @@ pipeline {
                     --client-file="${WORKSPACE}/ci/geth-nimbus-sync-config.yml" \
                     --sim.parallelism=${params.PARALLELISM} \
                     --sim.loglevel 4 \
-                    --sim.limit "^sync$" \
+                    --sim.limit "^sync\$" \
                     --docker.nocache hive/clients/nimbus-el \
                     ${params.DOCKER_BUILDOUTPUT ? '--docker.buildoutput' : ''}
                   """
