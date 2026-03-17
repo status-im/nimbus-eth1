@@ -20,10 +20,10 @@ import
 logScope:
   topics = "snap sync"
 
-declareGauge nec_snap_acc_coverage, "" &
-  "Factor of accumulated accounts covered over all state roots"
+declareGauge nec_snap_accumulated_state_coverage, "" &
+  "Factor of accumulated accounts covered over all state root records"
 
-declareGauge nec_snap_max_acc_state_coverage, "" &
+declareGauge nec_snap_pivot_state_coverage, "" &
   "Max factor of accounts covered related to a single state root"
 
 type
@@ -106,13 +106,10 @@ proc maxUnproc(db: StateDbRef): StateDataRef =
     rc = walk.next
 
 proc updateMetrics(db: StateDbRef) =
-  let topCoverage = 1f - db.pivot.unproc.totalRatio
-  metrics.set(nec_snap_acc_coverage,
-    # There is no `borrowed` sub-register for the total coverage register. So
-    # it might be temporarily below `topCoverage`. As this would make metrics
-    # confusing, it is maxed out, here.
-    max(topCoverage, (1f - db.unproc.totalRatio) * (1 + db.overlays).float))
-  metrics.set(nec_snap_max_acc_state_coverage, topCoverage)
+  metrics.set(nec_snap_accumulated_state_coverage,
+              ((1f - db.unproc.totalRatio) * (1+db.overlays).float))
+  metrics.set(nec_snap_pivot_state_coverage,
+              (1f - db.pivot.unproc.totalRatio))
 
 # ------------------------------------------------------------------------------
 # Public constructor
@@ -122,8 +119,8 @@ proc init*(T: type StateDbRef): T =
   let db = T(
     unproc:   ItemKeyRangeSet.init ItemKeyRangeMax,
     byNumber: StateByNumber.init())
-  metrics.set(nec_snap_acc_coverage, 0f)
-  metrics.set(nec_snap_max_acc_state_coverage, 0f)
+  metrics.set(nec_snap_accumulated_state_coverage, 0f)
+  metrics.set(nec_snap_pivot_state_coverage, 0f)
   db
 
 proc clear*(db: StateDbRef) =
@@ -134,8 +131,8 @@ proc clear*(db: StateDbRef) =
   db.byNumber.clear
   db.byHash.clear
   db.byRoot.clear
-  metrics.set(nec_snap_acc_coverage, 0f)
-  metrics.set(nec_snap_max_acc_state_coverage, 0f)
+  metrics.set(nec_snap_accumulated_state_coverage, 0f)
+  metrics.set(nec_snap_pivot_state_coverage, 0f)
 
 # ------------------------------------------------------------------------------
 # Public database root state functions
