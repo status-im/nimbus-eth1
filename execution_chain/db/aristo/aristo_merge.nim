@@ -34,9 +34,9 @@ proc layersPutLeaf[T](
     db: AristoTxRef, rvid: RootedVertexID, path: NibblesBuf, payload: T
 ): auto =
   when T is UInt256:
-    let vtx = StoLeafRef.init(path, payload)
+    let vtx = StoLeafData.init(path, payload)
   else:
-    let vtx = AccLeafRef.init(path, payload, default(StorageID))
+    let vtx = AccLeafData.init(path, payload, default(StorageID))
 
   db.layersPutVtx(rvid, vtx)
   vtx
@@ -47,7 +47,7 @@ proc mergePayloadImpl[LeafType, T](
     path: Hash32, # Leaf item to add to the database
     leaf: Opt[LeafType],
     payload: T, # Payload value
-): Result[(LeafType, VertexRef, LeafType), AristoError] =
+): Result[(LeafType, Vertex, LeafType), AristoError] =
   ## Merge the argument `(root,path)` key-value-pair into the top level vertex
   ## table of the database `db`. The `path` argument is used to address the
   ## leaf vertex with the payload. It is stored or updated on the database
@@ -82,16 +82,16 @@ proc mergePayloadImpl[LeafType, T](
           # Same path - replace the current vertex with a new payload
 
           when payload is AristoAccount:
-            if AccLeafRef(vtx).account == payload:
+            if AccLeafData(vtx).account == payload:
               return err(MergeNoAction)
-            let leafVtx = db.layersUpdate((root, cur), AccLeafRef(vtx))
+            let leafVtx = db.layersUpdate((root, cur), AccLeafData(vtx))
             leafVtx.account = payload
-            leafVtx.stoID = AccLeafRef(vtx).stoID
+            leafVtx.stoID = AccLeafData(vtx).stoID
 
           else:
-            if StoLeafRef(vtx).stoData == payload:
+            if StoLeafData(vtx).stoData == payload:
               return err(MergeNoAction)
-            let leafVtx = db.layersUpdate((root, cur), StoLeafRef(vtx))
+            let leafVtx = db.layersUpdate((root, cur), StoLeafData(vtx))
             leafVtx.stoData = payload
           (leafVtx, nil, nil)
         else:
@@ -105,19 +105,19 @@ proc mergePayloadImpl[LeafType, T](
                 db.vidFetch(16)
             branch =
               if n > 0:
-                ExtBranchRef.init(psuffix.slice(0, n), startVid, 0)
+                Vertex.initExtBranch(psuffix.slice(0, n), startVid, 0)
               else:
-                BranchRef.init(startVid, 0)
+                Vertex.initBranch(startVid, 0)
           let other = block: # Copy of existing leaf node, now one level deeper
             let
               local = branch.setUsed(vtx.pfx[n], true)
               pfx = vtx.pfx.slice(n + 1)
             when payload is AristoAccount:
-              let accVtx = db.layersPutLeaf((root, local), pfx, AccLeafRef(vtx).account)
-              accVtx.stoID = AccLeafRef(vtx).stoID
+              let accVtx = db.layersPutLeaf((root, local), pfx, AccLeafData(vtx).account)
+              accVtx.stoID = AccLeafData(vtx).stoID
               accVtx
             else:
-              db.layersPutLeaf((root, local), pfx, StoLeafRef(vtx).stoData)
+              db.layersPutLeaf((root, local), pfx, StoLeafData(vtx).stoData)
 
           let leafVtx = block: # Newly inserted leaf node
             let local = branch.setUsed(psuffix[n], true)
@@ -172,9 +172,9 @@ proc mergePayloadImpl[LeafType, T](
               db.vidFetch(16)
           branch =
             if n > 0:
-              ExtBranchRef.init(psuffix.slice(0, n), startVid, 0)
+              Vertex.initExtBranch(psuffix.slice(0, n), startVid, 0)
             else:
-              BranchRef.init(startVid, 0)
+              Vertex.initBranch(startVid, 0)
 
         block: # Copy the existing vertex and add it to the new branch
           let
@@ -184,9 +184,9 @@ proc mergePayloadImpl[LeafType, T](
           db.layersPutVtx(
             (root, local),
             if pfx.len > 0:
-              ExtBranchRef.init(pfx, vtx.startVid, vtx.used)
+              Vertex.initExtBranch(pfx, vtx.startVid, vtx.used)
             else:
-              BranchRef.init(vtx.startVid, vtx.used),
+              Vertex.initBranch(vtx.startVid, vtx.used),
           )
 
         let leafVtx = block: # add the new entry
@@ -248,7 +248,7 @@ proc mergeStorageData*(
     return err(MergeStoAccMissing)
 
   let
-    accVtx = AccLeafRef(accHike.legs[^1].wp.vtx)
+    accVtx = AccLeafData(accHike.legs[^1].wp.vtx)
     stoID = accVtx.stoID
 
     # Provide new storage ID when needed

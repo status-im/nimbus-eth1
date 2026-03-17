@@ -17,7 +17,7 @@
 ## Some semantic explanations;
 ##
 ## * HashKey, NodeRef etc. refer to the standard/legacy `Merkle Patricia Tree`
-## * VertexID, VertexRef, etc. refer to the `Aristo Trie`
+## * VertexID, Vertex, etc. refer to the `Aristo Trie`
 ##
 {.push raises: [].}
 
@@ -64,12 +64,12 @@ type
     db*: AristoDbRef                        ## Database descriptor
     parent*: AristoTxRef                    ## Previous transaction
 
-    sTab*: Table[RootedVertexID, VertexRef] ## Structural vertex table
+    sTab*: Table[RootedVertexID, Vertex] ## Structural vertex table
     kMap*: Table[RootedVertexID, HashKey]   ## Merkle hash key mapping
     vTop*: VertexID                         ## Last used vertex ID
 
-    accLeaves*: Table[Hash32, AccLeafRef]   ## Account path -> VertexRef
-    stoLeaves*: Table[Hash32, StoLeafRef]   ## Storage path -> VertexRef
+    accLeaves*: Table[Hash32, AccLeafData]   ## Account path -> Vertex
+    stoLeaves*: Table[Hash32, StoLeafData]   ## Storage path -> Vertex
 
     blockNumber*: Opt[uint64]               ## Block number set when checkpointing the frame
 
@@ -85,11 +85,11 @@ type
 
   Snapshot* = object
     vtx*: Table[RootedVertexID, VtxSnapshot]
-    acc*: Table[Hash32, (AccLeafRef, int)]
-    sto*: Table[Hash32, (StoLeafRef, int)]
+    acc*: Table[Hash32, (AccLeafData, int)]
+    sto*: Table[Hash32, (StoLeafData, int)]
     level*: Opt[int] # when this snapshot was taken
 
-  VtxSnapshot* = (VertexRef, HashKey, int)
+  VtxSnapshot* = (Vertex, HashKey, int)
     ## Unlike sTab/kMap, snapshot contains both vertex and key since at the time
     ## of writing, it's primarily used in contexts where both are present
 
@@ -108,7 +108,7 @@ type
 
     txRef*: AristoTxRef              ## Bottom-most in-memory frame
 
-    accLeaves*: LruCache[Hash32, AccLeafRef]
+    accLeaves*: LruCache[Hash32, AccLeafData]
       ## Account path to payload cache - accounts are frequently accessed by
       ## account path when contracts interact with them - this cache ensures
       ## that we don't have to re-traverse the storage trie for every such
@@ -116,7 +116,7 @@ type
       ## TODO a better solution would probably be to cache this in a type
       ## exposed to the high-level API
 
-    stoLeaves*: LruCache[Hash32, StoLeafRef]
+    stoLeaves*: LruCache[Hash32, StoLeafData]
       ## Mixed account/storage path to payload cache - same as above but caches
       ## the full lookup of storage slots
 
@@ -164,8 +164,8 @@ template mixUp*(accPath, stoPath: Hash32): Hash32 =
     v.data[i] = accPath.data[i] + stoPath.data[i]
   v
 
-func getOrVoid*[W](tab: Table[W,VertexRef]; w: W): VertexRef =
-  tab.getOrDefault(w, VertexRef(nil))
+func getOrVoid*[W](tab: Table[W,Vertex]; w: W): Vertex =
+  tab.getOrDefault(w, emptyVertex)
 
 func getOrVoid*[W](tab: Table[W,NodeRef]; w: W): NodeRef =
   tab.getOrDefault(w, NodeRef(nil))
@@ -179,8 +179,8 @@ func getOrVoid*[W](tab: Table[W,RootedVertexID]; w: W): RootedVertexID =
 func getOrVoid*[W](tab: Table[W,HashSet[RootedVertexID]]; w: W): HashSet[RootedVertexID] =
   tab.getOrDefault(w, default(HashSet[RootedVertexID]))
 
-func isValid*(vtx: VertexRef): bool =
-  not isNil(vtx)
+func isValid*(vtx: Vertex): bool =
+  not vtx.isEmpty()
 
 func isValid*(nd: NodeRef): bool =
   not isNil(nd)

@@ -30,7 +30,7 @@ iterator walkVtxBe*[T: MemBackendRef](
    _: type T;
    db: AristoDbRef;
    kinds = VertexTypes;
-     ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
+     ): tuple[rvid: RootedVertexID, vtx: Vertex] =
   ## Iterate over filtered memory backend or backend-less vertices. This
   ## function depends on the particular backend type name which must match
   ## the backend descriptor.
@@ -50,8 +50,8 @@ iterator walkKeyBe*[T: MemBackendRef](
 iterator walkPairs*[T: MemBackendRef](
    _: type T;
    db: AristoDbRef;
-     ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
-  ## Walk over all `(VertexID,VertexRef)` in the database. Note that entries
+     ): tuple[rvid: RootedVertexID, vtx: Vertex] =
+  ## Walk over all `(VertexID,Vertex)` in the database. Note that entries
   ## are unsorted.
   for (rvid,vtx) in walkPairsImpl[T](db):
     yield (rvid,vtx)

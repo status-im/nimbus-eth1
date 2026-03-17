@@ -20,12 +20,12 @@ import
 
 type
   GetVtxFn* =
-    proc(rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[VertexRef,AristoError] {.gcsafe, raises: [].}
+    proc(rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[Vertex,AristoError] {.gcsafe, raises: [].}
       ## Generic backend database retrieval function for a single structural
       ## `Aristo DB` data record.
 
   GetKeyFn* =
-    proc(rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[(HashKey, VertexRef),AristoError] {.gcsafe, raises: [].}
+    proc(rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[(HashKey, Vertex),AristoError] {.gcsafe, raises: [].}
       ## Generic backend database retrieval function for a single
       ## `Aristo DB` hash lookup value.
 
@@ -52,9 +52,9 @@ type
       ## Generic transaction initialisation function
 
   PutVtxFn* =
-    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: VertexRef, key: HashKey)
+    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: Vertex, key: HashKey)
       {.gcsafe, raises: [].}
-        ## Generic backend database bulk storage function, `VertexRef(nil)`
+        ## Generic backend database bulk storage function, `emptyVertex`
         ## values indicate that records should be deleted.
 
   PutLstFn* =

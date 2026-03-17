@@ -56,7 +56,7 @@ proc to*(node: NodeRef, T: type array[2, seq[byte]]): T =
       # Do for pure branch node
       [brData, @[]]
   of AccLeaf:
-    let vtx = AccLeafRef(node.vtx)
+    let vtx = AccLeafData(node.vtx)
     var wr = initRlpWriter()
     wr.startList(2)
     wr.append vtx.pfx.toHexPrefix(isleaf = true).data()
@@ -64,7 +64,7 @@ proc to*(node: NodeRef, T: type array[2, seq[byte]]): T =
 
     [wr.finish(), @[]]
   of StoLeaf:
-    let vtx = StoLeafRef(node.vtx)
+    let vtx = StoLeafData(node.vtx)
     var wr = initRlpWriter()
     wr.startList(2)
     wr.append vtx.pfx.toHexPrefix(isleaf = true).data()
@@ -93,13 +93,13 @@ proc digestTo*(node: NodeRef; T: type HashKey): T =
       wr.append node.vtx.pfx.toHexPrefix(isleaf = false).data()
       wr.append brHash
   of AccLeaf:
-    let vtx = AccLeafRef(node.vtx)
+    let vtx = AccLeafData(node.vtx)
 
     wr.startList(2)
     wr.append node.vtx.pfx.toHexPrefix(isleaf = true).data()
     wr.append vtx.account.toRlpBytes(node.key[0])
   of StoLeaf:
-    let vtx = StoLeafRef(node.vtx)
+    let vtx = StoLeafData(node.vtx)
     var wr = initRlpWriter()
     wr.startList(2)
     wr.append vtx.pfx.toHexPrefix(isleaf = true).data()

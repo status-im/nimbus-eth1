@@ -74,7 +74,7 @@ proc putAdm*(
 
 proc putVtx*(
     rdb: var RdbInst; session: SharedWriteBatchRef,
-    rvid: RootedVertexID; vtx: VertexRef, key: HashKey
+    rvid: RootedVertexID; vtx: Vertex, key: HashKey
       ): Result[void,(VertexID,AristoError,string)] =
   let dsc = session.batch
   if vtx.isValid:

@@ -21,7 +21,7 @@ import
 iterator walkVtxBeImpl*[T](
     db: AristoDbRef;                   # Database with optional backend filter
     kinds: set[VertexType];
-      ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
+      ): tuple[rvid: RootedVertexID, vtx: Vertex] =
   ## Generic iterator
   mixin walkVtx
 
@@ -73,8 +73,8 @@ iterator walkKeyBeImpl*[T](
 
 iterator walkPairsImpl*[T](
    db: AristoDbRef;                   # Database with top layer & backend filter
-     ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
-  ## Walk over all `(VertexID,VertexRef)` in the database. Note that entries
+     ): tuple[rvid: RootedVertexID, vtx: Vertex] =
+  ## Walk over all `(VertexID,Vertex)` in the database. Note that entries
   ## are unsorted.
   var seen: HashSet[VertexID]
   for (rvid,vtx) in db.layersWalkVtx seen:

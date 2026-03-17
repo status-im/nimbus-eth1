@@ -30,7 +30,7 @@ import
 iterator rightPairs*(
     db: AristoTxRef;                    # Database layer
     root: VertexID;
-      ): (Hash32,VertexRef) =
+      ): (Hash32,Vertex) =
   ## Depth-first iteration over leaves in trie in numerical nibble order, moving
   ## right (with the lowest nibbles on the left)
   var
@@ -75,7 +75,7 @@ iterator rightPairsStorage*(
       break body
     if stoID.isValid:
       for (path, vtx) in db.rightPairs(stoID):
-        yield (path, StoLeafRef(vtx).stoData)
+        yield (path, StoLeafData(vtx).stoData)
 
 # ------------------------------------------------------------------------------
 # End

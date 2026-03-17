@@ -43,7 +43,7 @@ proc delStoTreeNow(
         (rvid.root, subvid), accPath, stoPath & vtx.pfx & NibblesBuf.nibble(n)
       )
   of StoLeaf:
-    let vtx = StoLeafRef(vtx)
+    let vtx = StoLeafData(vtx)
     let stoPath = Hash32((stoPath & vtx.pfx).getBytes())
     db.layersPutStoLeaf(mixUp(accPath, stoPath), nil)
   of AccLeaf:

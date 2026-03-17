@@ -28,7 +28,7 @@ proc retrieveLeaf(
     root: VertexID;
     path: NibblesBuf;
     next = VertexID(0),
-      ): Result[VertexRef,AristoError] =
+      ): Result[Vertex,AristoError] =
   for step in stepUp(path, root, db, next):
     let vtx = step.valueOr:
       if error in HikeAcceptableStopsNotFound:
@@ -40,24 +40,24 @@ proc retrieveLeaf(
 
   return err(FetchPathNotFound)
 
-proc cachedAccLeaf*(db: AristoTxRef; accPath: Hash32): Opt[AccLeafRef] =
+proc cachedAccLeaf*(db: AristoTxRef; accPath: Hash32): Opt[AccLeafData] =
   # Return vertex from layers or cache, `nil` if it's known to not exist and
   # none otherwise
   db.layersGetAccLeaf(accPath) or
     db.db.accLeaves.get(accPath) or
-    Opt.none(AccLeafRef)
+    Opt.none(AccLeafData)
 
-proc cachedStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[StoLeafRef] =
+proc cachedStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[StoLeafData] =
   # Return vertex from layers or cache, `nil` if it's known to not exist and
   # none otherwise
   db.layersGetStoLeaf(mixPath) or
     db.db.stoLeaves.get(mixPath) or
-    Opt.none(StoLeafRef)
+    Opt.none(StoLeafData)
 
 proc retrieveAccStatic(
     db: AristoTxRef;
     accPath: Hash32;
-      ): Result[(AccLeafRef, NibblesBuf, VertexID),AristoError] =
+      ): Result[(AccLeafData, NibblesBuf, VertexID),AristoError] =
   # A static VertexID essentially splits the path into a prefix encoded in the
   # vid and the rest of the path stored as normal - here, instead of traversing
   # the trie from the root and selecting a path nibble by nibble we travers the
@@ -87,7 +87,7 @@ proc retrieveAccStatic(
 
     case vtx[0].vType
     of Leaves:
-      let vtx = AccLeafRef(vtx[0])
+      let vtx = AccLeafData(vtx[0])
 
       countHitOrLower()
       return
@@ -131,7 +131,7 @@ proc retrieveAccStatic(
 proc retrieveAccLeaf(
     db: AristoTxRef;
     accPath: Hash32;
-      ): Result[AccLeafRef,AristoError] =
+      ): Result[AccLeafData,AristoError] =
   if (let leafVtx = db.cachedAccLeaf(accPath); leafVtx.isSome()):
     if not leafVtx[].isValid():
       return err(FetchPathNotFound)
@@ -160,9 +160,9 @@ proc retrieveAccLeaf(
 
   db.db.lookups.higher += 1
 
-  db.db.accLeaves.put(accPath, AccLeafRef(leafVtx))
+  db.db.accLeaves.put(accPath, AccLeafData(leafVtx))
 
-  ok AccLeafRef(leafVtx)
+  ok AccLeafData(leafVtx)
 
 proc retrieveMerkleHash(
     db: AristoTxRef;
@@ -217,7 +217,7 @@ proc fetchAccountHike*(
 
   # Prefer the leaf cache so as not to burden the lower layers
   let leaf = db.cachedAccLeaf(accPath)
-  if leaf == Opt.some(AccLeafRef(nil)):
+  if leaf == Opt.some(AccLeafData(nil)):
     return err(FetchAccInaccessible)
 
   accPath.hikeUp(STATE_ROOT_VID, db, leaf, accHike).isOkOr:
@@ -259,9 +259,9 @@ proc retrieveStoragePayload(
       db.db.stoLeaves.put(mixPath, nil)
     return err(error)
 
-  db.db.stoLeaves.put(mixPath, StoLeafRef(leafVtx))
+  db.db.stoLeaves.put(mixPath, StoLeafData(leafVtx))
 
-  ok StoLeafRef(leafVtx).stoData
+  ok StoLeafData(leafVtx).stoData
 
 proc hasStoragePayload(
     db: AristoTxRef;

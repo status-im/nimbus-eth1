@@ -76,7 +76,7 @@ proc endSession(hdl: PutHdlRef; db: RdbBackendRef): RdbPutHdlRef =
 
 proc getVtxFn(db: RdbBackendRef): GetVtxFn =
   result =
-    proc(rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[VertexRef,AristoError] =
+    proc(rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[Vertex,AristoError] =
 
       # Fetch serialised data record
       let vtx = db.rdb.getVtx(rvid, flags).valueOr:
@@ -91,7 +91,7 @@ proc getVtxFn(db: RdbBackendRef): GetVtxFn =
 
 proc getKeyFn(db: RdbBackendRef): GetKeyFn =
   result =
-    proc(rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[(HashKey, VertexRef),AristoError] =
+    proc(rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[(HashKey, Vertex),AristoError] =
 
       # Fetch serialised data record
       let key = db.rdb.getKey(rvid, flags).valueOr:
@@ -129,7 +129,7 @@ proc putBegFn(db: RdbBackendRef): PutBegFn =
 
 proc putVtxFn(db: RdbBackendRef): PutVtxFn =
   result =
-    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: VertexRef, key: HashKey) =
+    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: Vertex, key: HashKey) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
         db.rdb.putVtx(hdl.session, rvid, vtx, key).isOkOr:
@@ -215,7 +215,7 @@ proc rocksDbBackend*(
 iterator walkVtx*(
     be: RdbBackendRef;
     kinds = VertexTypes;
-      ): tuple[evid: RootedVertexID, vtx: VertexRef] =
+      ): tuple[evid: RootedVertexID, vtx: Vertex] =
   ## Variant of `walk()` iteration over the vertex sub-table.
   for (rvid, vtx) in be.rdb.walkVtx(kinds):
     yield (rvid, vtx)

@@ -31,7 +31,7 @@ proc getVtxBe*(
     db: AristoDbRef;
     rvid: RootedVertexID;
     flags: set[GetVtxFlag] = {};
-      ): Result[VertexRef,AristoError] =
+      ): Result[Vertex,AristoError] =
   ## Get the vertex from the backened if available.
   db.getVtxFn(rvid, flags)
 
@@ -39,7 +39,7 @@ proc getKeyBe*(
     db: AristoDbRef;
     rvid: RootedVertexID;
     flags: set[GetVtxFlag];
-      ): Result[(HashKey, VertexRef),AristoError] =
+      ): Result[(HashKey, Vertex),AristoError] =
   ## Get the Merkle hash/key from the backend if available.
   db.getKeyFn(rvid, flags)
 
@@ -49,11 +49,11 @@ proc getVtxRc*(
     db: AristoTxRef;
     rvid: RootedVertexID;
     flags: set[GetVtxFlag] = {};
-      ): Result[(VertexRef, int),AristoError] =
+      ): Result[(Vertex, int),AristoError] =
   ## Cascaded attempt to fetch a vertex from the cache layers or the backend.
   ##
   block body:
-    # If the vertex marked is to be deleted on the backend, a `VertexRef(nil)`
+    # If the vertex marked is to be deleted on the backend, a `emptyVertex`
     # entry is kept in the local table in which case it is returned as the
     # error symbol `GetVtxNotFound`.
     let vtx = db.layersGetVtx(rvid).valueOr:
@@ -65,14 +65,14 @@ proc getVtxRc*(
 
   ok (?db.db.getVtxBe(rvid, flags), dbLevel)
 
-proc getVtx*(db: AristoTxRef; rvid: RootedVertexID, flags: set[GetVtxFlag] = {}): VertexRef =
+proc getVtx*(db: AristoTxRef; rvid: RootedVertexID, flags: set[GetVtxFlag] = {}): Vertex =
   ## Cascaded attempt to fetch a vertex from the cache layers or the backend.
   ## The function returns `nil` on error or failure.
   ##
-  db.getVtxRc(rvid).valueOr((VertexRef(nil), 0))[0]
+  db.getVtxRc(rvid).valueOr((emptyVertex, 0))[0]
 
 proc getKeyRc*(
-    db: AristoTxRef; rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[((HashKey, VertexRef), int),AristoError] =
+    db: AristoTxRef; rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[((HashKey, Vertex), int),AristoError] =
   ## Cascaded attempt to fetch a Merkle hash from the cache layers or the
   ## backend. This function will never return a `VOID_HASH_KEY` but rather
   ## some `GetKeyNotFound` or `GetKeyUpdateNeeded` error.

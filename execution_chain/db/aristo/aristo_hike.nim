@@ -67,7 +67,7 @@ func legsTo*(hike: Hike; numLegs: int; T: type NibblesBuf): T =
 
 proc step*(
     path: NibblesBuf, rvid: RootedVertexID, db: AristoTxRef
-      ): Result[(VertexRef, NibblesBuf, VertexID), AristoError] =
+      ): Result[(Vertex, NibblesBuf, VertexID), AristoError] =
   # Fetch next vertex
   let (vtx, _) = db.getVtxRc(rvid).valueOr:
     if error != GetVtxNotFound:
@@ -125,20 +125,20 @@ iterator stepUp*(
     root: VertexID;                              # Start vertex
     db: AristoTxRef;                             # Database
     next = VertexID(0)
-): Result[VertexRef, AristoError] =
+): Result[Vertex, AristoError] =
   ## For the argument `path`, iterate over the logest possible path in the
   ## argument database `db`.
   var
     path = path
     next = if next == VertexID(0): root else: next
-    vtx = VertexRef(nil)
+    vtx = emptyVertex
   block iter:
     while true:
       (vtx, path, next) = step(path, (root, next), db).valueOr:
-        yield Result[VertexRef, AristoError].err(error)
+        yield Result[Vertex, AristoError].err(error)
         break iter
 
-      yield Result[VertexRef, AristoError].ok(vtx)
+      yield Result[Vertex, AristoError].ok(vtx)
 
       if path.len == 0:
         break

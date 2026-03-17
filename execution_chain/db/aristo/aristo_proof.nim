@@ -342,7 +342,7 @@ proc convertLeaf(
   let node =
     if isStorage:
       let slotValue = rlp.decode(leafNode, UInt256)
-      NodeRef(vtx: StoLeafRef.init(segm, slotValue))
+      NodeRef(vtx: StoLeafData.init(segm, slotValue))
     else: # Account leaf
       let
         acc = rlp.decode(leafNode, Account)
@@ -351,7 +351,7 @@ proc convertLeaf(
           balance: acc.balance,
           codeHash: acc.codeHash)
         stoID = (acc.storageRoot != EMPTY_ROOT_HASH, default(VertexID))
-        n = NodeRef(vtx: AccLeafRef.init(segm, aristoAcc, stoID))
+        n = NodeRef(vtx: AccLeafData.init(segm, aristoAcc, stoID))
 
       n.key[0] = HashKey.fromBytes(acc.storageRoot.data).valueOr:
         return err(PartTrkLinkExpected)
@@ -365,7 +365,7 @@ proc convertSubtrie(
     dst: var Table[HashKey, NodeRef],
     isStorage: static bool): Result[void, AristoError] {.gcsafe, raises: [RlpError]} =
   # Precondition: trieNodes have already been validated using verifyProof
-  # Does not allocate any vertex ids when creating the VertexRef types.
+  # Does not allocate any vertex ids when creating the Vertex types.
   if key notin src:
     # Since we are processing a subtrie some nodes are expected to be missing
     return ok()
@@ -380,7 +380,7 @@ proc convertSubtrie(
         link = rlpNode.listElem(1).rlpNodeToBytes() # link or payload
       if isLeaf:
         let n = ?convertLeaf(link, segm, isStorage)
-        if not isStorage and AccLeafRef(n.vtx).stoID.isValid:
+        if not isStorage and AccLeafData(n.vtx).stoID.isValid:
           # Convert the storage subtrie
           ?convertSubtrie(n.key[0].to(Hash32), src, dst, isStorage = true)
         n
@@ -401,11 +401,11 @@ proc convertSubtrie(
 
         NodeRef(
           key: childNode.key,
-          vtx: ExtBranchRef.init(segm, childBranch.startVid, childBranch.used))
+          vtx: Vertex.initExtBranch(segm, childBranch.startVid, childBranch.used))
 
     of 17: # Branch node
       var key: array[16, HashKey]
-      let branch = BranchRef.init(default(VertexID), 0)
+      let branch = Vertex.initBranch(default(VertexID), 0)
       for i in 0 ..< 16:
         let
           link = rlpNode.listElem(i).rlpNodeToBytes()
@@ -437,7 +437,7 @@ proc putSubtrie(
   let node = nodes.getOrDefault(key)
   case node.vtx.vType:
     of AccLeaf:
-      let accVtx = AccLeafRef(node.vtx)
+      let accVtx = AccLeafData(node.vtx)
       if accVtx.stoID.isValid:
         let stoVid = db.vidFetch()
         accVtx.stoID = (true, stoVid)

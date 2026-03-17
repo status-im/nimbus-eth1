@@ -35,7 +35,7 @@ proc putVtx(
     batch: var WriteBatch,
     db: AristoDbRef,
     rvid: RootedVertexID,
-    vtx: VertexRef,
+    vtx: Vertex,
     key: HashKey,
 ): Result[void, AristoError] =
   if batch.writer == nil:
@@ -101,7 +101,7 @@ template encodeLeaf(w: var RlpWriter, pfx: NibblesBuf, leafData: untyped): HashK
   w.append(leafData)
   w.finish().digestTo(HashKey)
 
-template encodeBranch(w: var RlpWriter, vtx: VertexRef, subKeyForN: untyped): HashKey =
+template encodeBranch(w: var RlpWriter, vtx: Vertex, subKeyForN: untyped): HashKey =
   w.startList(17)
   for (n {.inject.}, subvid {.inject.}) in vtx.allPairs():
     w.append(subKeyForN)
@@ -116,18 +116,18 @@ template encodeExt(w: var RlpWriter, pfx: NibblesBuf, branchKey: HashKey): HashK
 
 proc getKey(
     db: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool
-): Result[((HashKey, VertexRef), int), AristoError] =
+): Result[((HashKey, Vertex), int), AristoError] =
   ok when skipLayers:
     (?db.db.getKeyBe(rvid, {GetVtxFlag.PeekCache}), dbLevel)
   else:
     ?db.getKeyRc(rvid, {})
 
-template childVid(vp: VertexRef): VertexID =
+template childVid(vp: Vertex): VertexID =
   # If we have to recurse into a child, where would that recusion start?
   let v = vp
   case v.vType
   of AccLeaf:
-    let v = AccLeafRef(v)
+    let v = AccLeafData(v)
     if v.stoID.isValid:
       v.stoID.vid
     else:
@@ -142,7 +142,7 @@ proc computeKeyImpl(
     db: AristoTxRef,
     rvid: RootedVertexID,
     batch: var WriteBatch,
-    vtx: VertexRef,
+    vtx: Vertex,
     level: int,
     skipLayers: static bool,
 ): Result[(HashKey, int), AristoError] =
@@ -158,7 +158,7 @@ proc computeKeyImpl(
   let key =
     case vtx.vType
     of AccLeaf:
-      let vtx = AccLeafRef(vtx)
+      let vtx = AccLeafData(vtx)
       writer.encodeLeaf(vtx.pfx):
         let
           stoID = vtx.stoID
@@ -189,7 +189,7 @@ proc computeKeyImpl(
           codeHash: vtx.account.codeHash,
         )
     of StoLeaf:
-      let vtx = StoLeafRef(vtx)
+      let vtx = StoLeafData(vtx)
       writer.encodeLeaf(vtx.pfx):
         # TODO avoid memory allocation when encoding storage data
         rlp.encode(vtx.stoData)
@@ -197,7 +197,7 @@ proc computeKeyImpl(
       # For branches, we need to load the vertices before recursing into them
       # to exploit their on-disk order
       let vtx = BranchRef(vtx)
-      var keyvtxs: array[16, ((HashKey, VertexRef), int)]
+      var keyvtxs: array[16, ((HashKey, Vertex), int)]
       for n, subvid in vtx.pairs:
         keyvtxs[n] = ?db.getKey((rvid.root, subvid), skipLayers)
 

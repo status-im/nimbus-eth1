@@ -92,11 +92,11 @@ proc buildSnapshot(txFrame: AristoTxRef, minLevel: int) =
           max(1024, max(frame.sTab.len, frame.snapshot.vtx.len))
         )
 
-        txFrame.snapshot.acc = initTable[Hash32, (AccLeafRef, int)](
+        txFrame.snapshot.acc = initTable[Hash32, (AccLeafData, int)](
           max(1024, max(frame.accLeaves.len, frame.snapshot.acc.len))
         )
 
-        txFrame.snapshot.sto = initTable[Hash32, (StoLeafRef, int)](
+        txFrame.snapshot.sto = initTable[Hash32, (StoLeafData, int)](
           max(1024, max(frame.stoLeaves.len, frame.snapshot.sto.len))
         )
 

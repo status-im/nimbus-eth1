@@ -98,17 +98,17 @@ proc deleteImpl(
       vtx =
         case nxt.vType
         of AccLeaf:
-          let nxt = AccLeafRef(nxt)
-          AccLeafRef.init(pfx & nxt.pfx, nxt.account, nxt.stoID)
+          let nxt = AccLeafData(nxt)
+          AccLeafData.init(pfx & nxt.pfx, nxt.account, nxt.stoID)
         of StoLeaf:
-          let nxt = StoLeafRef(nxt)
-          StoLeafRef.init(pfx & nxt.pfx, nxt.stoData)
+          let nxt = StoLeafData(nxt)
+          StoLeafData.init(pfx & nxt.pfx, nxt.stoData)
         of Branch:
           let nxt = BranchRef(nxt)
-          ExtBranchRef.init(pfx, nxt.startVid, nxt.used)
+          Vertex.initExtBranch(pfx, nxt.startVid, nxt.used)
         of ExtBranch:
           let nxt = ExtBranchRef(nxt)
-          ExtBranchRef.init(pfx & nxt.pfx, nxt.startVid, nxt.used)
+          Vertex.initExtBranch(pfx & nxt.pfx, nxt.startVid, nxt.used)
 
     # Put the new vertex at the id of the obsolete branch
     db.layersPutVtx((hike.root, br.vid), vtx)
@@ -140,7 +140,7 @@ proc deleteAccountRecord*(
     if error == FetchAccInaccessible:
       return ok() # Trying to delete something that doesn't exist is ok
     return err(error)
-  let stoID = AccLeafRef(accHike.legs[^1].wp.vtx).stoID
+  let stoID = AccLeafData(accHike.legs[^1].wp.vtx).stoID
 
   # Delete storage tree if present
   if stoID.isValid:
@@ -153,7 +153,7 @@ proc deleteAccountRecord*(
   if otherLeaf.isValid:
     db.layersPutAccLeaf(
       Hash32(getBytes(NibblesBuf.fromBytes(accPath.data).replaceSuffix(otherLeaf.pfx))),
-      AccLeafRef(otherLeaf),
+      AccLeafData(otherLeaf),
     )
 
   ok()
@@ -185,7 +185,7 @@ proc deleteStorageData*(
 
   let
     wpAcc = accHike.legs[^1].wp
-    accVtx = AccLeafRef(wpAcc.vtx)
+    accVtx = AccLeafData(wpAcc.vtx)
     stoID = accVtx.stoID
 
   if not stoID.isValid:
@@ -208,7 +208,7 @@ proc deleteStorageData*(
   if otherLeaf.isValid:
     let leafMixPath =
       mixUp(accPath, Hash32(getBytes(stoNibbles.replaceSuffix(otherLeaf.pfx))))
-    db.layersPutStoLeaf(leafMixPath, StoLeafRef(otherLeaf))
+    db.layersPutStoLeaf(leafMixPath, StoLeafData(otherLeaf))
 
   # If there was only one item (that got deleted), update the account as well
   if stoHike.legs.len == 1:
@@ -234,7 +234,7 @@ proc deleteStorageTree*(
 
   let
     wpAcc = accHike.legs[^1].wp
-    accVtx = AccLeafRef(wpAcc.vtx)
+    accVtx = AccLeafData(wpAcc.vtx)
     stoID = accVtx.stoID
 
   if not stoID.isValid:

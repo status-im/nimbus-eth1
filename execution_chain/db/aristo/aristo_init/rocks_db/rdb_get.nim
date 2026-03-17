@@ -120,7 +120,7 @@ proc getAdm*(rdb: RdbInst): Result[seq[byte], (AristoError, string)] =
 
 proc getKey*(
     rdb: var RdbInst, rvid: RootedVertexID, flags: set[GetVtxFlag]
-): Result[(HashKey, VertexRef), (AristoError, string)] =
+): Result[(HashKey, Vertex), (AristoError, string)] =
   block:
     # Try LRU cache first
     let rc =
@@ -131,7 +131,7 @@ proc getKey*(
 
     if rc.isOk:
       rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
-      return ok((rc.value, nil))
+      return ok((rc.value, emptyVertex))
 
     rdbKeyLruStats[rvid.to(RdbStateType)].inc(false)
 
@@ -145,14 +145,14 @@ proc getKey*(
   # Otherwise fetch from backend database
   # A threadvar is used to avoid allocating an environment for onData
   var res {.threadvar.}: Opt[HashKey]
-  var vtx {.threadvar.}: Result[VertexRef, AristoError]
+  var vtx {.threadvar.}: Result[Vertex, AristoError]
 
   let onData = proc(data: openArray[byte]) =
     res = data.deblobify(HashKey)
     if res.isSome():
       reset(vtx)
     else:
-      vtx = data.deblobify(VertexRef)
+      vtx = data.deblobify(Vertex)
 
   let gotData = rdb.vtxCol.get(rvid.blobify().data(), onData).valueOr:
     const errSym = RdbBeDriverGetKeyError
@@ -161,7 +161,7 @@ proc getKey*(
     return err((errSym, error))
 
   if not gotData:
-    return ok((VOID_HASH_KEY, nil))
+    return ok((VOID_HASH_KEY, emptyVertex))
 
   # Update cache and return - in peek mode, avoid evicting cache items
   if res.isSome() and
@@ -173,11 +173,11 @@ proc getKey*(
     # follow a different access pattern!
     rdb.rdVtxLru.put(rvid.vid, vtx.value())
 
-  ok (res.valueOr(VOID_HASH_KEY), vtx.valueOr(nil))
+  ok (res.valueOr(VOID_HASH_KEY), vtx.valueOr(emptyVertex))
 
 proc getVtx*(
     rdb: var RdbInst, rvid: RootedVertexID, flags: set[GetVtxFlag]
-): Result[VertexRef, (AristoError, string)] =
+): Result[Vertex, (AristoError, string)] =
   # Try LRU cache first
   block:
     let rc =
@@ -187,7 +187,7 @@ proc getVtx*(
         rdb.rdBranchLru.get(rvid.vid)
     if rc.isOk():
       rdbBranchLruStats[rvid.to(RdbStateType)].inc(true)
-      return ok(BranchRef.init(rc[][0], rc[][1]))
+      return ok(Vertex.initBranch(rc[][0], rc[][1]))
 
   block:
     var rc =
@@ -204,9 +204,9 @@ proc getVtx*(
 
   # Otherwise fetch from backend database
   # A threadvar is used to avoid allocating an environment for onData
-  var res {.threadvar.}: Result[VertexRef, AristoError]
+  var res {.threadvar.}: Result[Vertex, AristoError]
   let onData = proc(data: openArray[byte]) =
-    res = data.deblobify(VertexRef)
+    res = data.deblobify(Vertex)
 
   let gotData = rdb.vtxCol.get(rvid.blobify().data(), onData).valueOr:
     const errSym = RdbBeDriverGetVtxError
@@ -216,7 +216,7 @@ proc getVtx*(
 
   if not gotData:
     rdbVtxLruStats[rvid.to(RdbStateType)][RdbVertexType.Empty].inc(false)
-    return ok(VertexRef(nil))
+    return ok(emptyVertex)
 
   if res.isErr():
     return err((res.error(), "Parsing failed")) # Parsing failed
@@ -231,8 +231,7 @@ proc getVtx*(
   # Update cache and return - in peek mode, avoid evicting cache items
   if GetVtxFlag.PeekCache notin flags:
     if res.value.vType == Branch:
-      let vtx = BranchRef(res.value())
-      rdb.rdBranchLru.put(rvid.vid, (vtx.startVid, vtx.used))
+      rdb.rdBranchLru.put(rvid.vid, (res.value.branch.startVid, res.value.branch.used))
     else:
       rdb.rdVtxLru.put(rvid.vid, res.value())
 

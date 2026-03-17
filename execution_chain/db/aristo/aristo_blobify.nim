@@ -125,7 +125,7 @@ proc load256(data: openArray[byte]; start: var int, len: int): Result[UInt256,Ar
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc blobifyTo*(pyl: AccLeafRef, data: var seq[byte]) =
+proc blobifyTo*(pyl: AccLeafData, data: var seq[byte]) =
   # `lens` holds `len-1` since `mask` filters out the zero-length case (which
   # allows saving 1 bit per length)
   var lens: uint16
@@ -155,11 +155,11 @@ proc blobifyTo*(pyl: AccLeafRef, data: var seq[byte]) =
   data &= lens.toBytesBE()
   data &= [mask]
 
-proc blobifyTo*(pyl: StoLeafRef, data: var seq[byte]) =
+proc blobifyTo*(pyl: StoLeafData, data: var seq[byte]) =
   data &= pyl.stoData.blobify().data
   data &= [0x20.byte]
 
-proc blobifyTo*(vtx: VertexRef, key: HashKey, data: var seq[byte]) =
+proc blobifyTo*(vtx: Vertex, key: HashKey, data: var seq[byte]) =
   ## This function serialises the vertex argument to a database record.
   ## Contrary to RLP based serialisation, these records aim to align on
   ## fixed byte boundaries.
@@ -189,9 +189,10 @@ proc blobifyTo*(vtx: VertexRef, key: HashKey, data: var seq[byte]) =
 
   let bits =
     case vtx.vType
+    of Empty:
+      raiseAssert "Can't store empty vtx"
     of Branches:
       let
-        vtx = BranchRef(vtx)
         bits =
           if key.isValid and key.len == 32:
             # Shorter keys can be loaded from the vertex directly
@@ -200,24 +201,22 @@ proc blobifyTo*(vtx: VertexRef, key: HashKey, data: var seq[byte]) =
           else:
             0b00'u8
 
-      data.add vtx.startVid.blobify().data()
-      data.add toBytesBE(vtx.used)
+      data.add vtx.branch.startVid.blobify().data()
+      data.add toBytesBE(vtx.branch.used)
       if vtx.vType == ExtBranch:
-        writePfx(ExtBranchRef(vtx), bits)
+        writePfx(vtx, bits)
       else:
         bits shl 6
     of AccLeaf:
-      let vtx = AccLeafRef(vtx)
-      vtx.blobifyTo(data)
+      vtx.accLeaf.blobifyTo(data)
       writePfx(vtx, 0b01'u8)
     of StoLeaf:
-      let vtx = StoLeafRef(vtx)
-      vtx.blobifyTo(data)
+      vtx.stoLeaf.blobifyTo(data)
       writePfx(vtx, 0b01'u8)
 
   data &= [bits]
 
-proc blobify*(vtx: VertexRef, key: HashKey): seq[byte] =
+proc blobify*(vtx: Vertex, key: HashKey): seq[byte] =
   ## Variant of `blobify()`
   result = newSeqOfCap[byte](128)
   vtx.blobifyTo(key, result)
@@ -237,46 +236,46 @@ proc blobify*(lSst: SavedState): seq[byte] =
 proc deblobifyLeaf(
     data: openArray[byte];
     pfx: NibblesBuf;
-      ): Result[VertexRef,AristoError] =
+      ): Result[Vertex,AristoError] =
   if data.len == 0:
     return err(DeblobVtxTooShort)
 
   let mask = data[^1]
   if (mask and 0x20) > 0: # Slot storage data
-    ok StoLeafRef.init(
+    ok Vertex.initStoLeaf(
       pfx,
       ?deblobify(data.toOpenArray(0, data.len - 2), UInt256),
     )
   elif (mask and 0xf0) == 0: # Only account fields set
-    let vtx = AccLeafRef(vType: AccLeaf, pfx: pfx)
+    var accLeaf = AccLeafData(pfx: pfx)
     var
       start = 0
       lens = uint16.fromBytesBE(data.toOpenArray(data.len - 3, data.len - 2))
 
     if (mask and 0x01) > 0:
       let len = lens and 0b111
-      vtx.account.nonce = ?load64(data, start, int(len + 1))
+      accLeaf.account.nonce = ?load64(data, start, int(len + 1))
 
     if (mask and 0x02) > 0:
       let len = (lens shr 3) and 0b11111
-      vtx.account.balance = ?load256(data, start, int(len + 1))
+      accLeaf.account.balance = ?load256(data, start, int(len + 1))
 
     if (mask and 0x04) > 0:
       let len = (lens shr 8) and 0b111
-      vtx.stoID = (true, VertexID(?load64(data, start, int(len + 1))))
+      accLeaf.stoID = (true, VertexID(?load64(data, start, int(len + 1))))
 
     if (mask and 0x08) > 0:
       if data.len() < start + 32:
         return err(DeblobCodeLenUnsupported)
-      discard vtx.account.codeHash.data.copyFrom(data.toOpenArray(start, start + 31))
+      discard accLeaf.account.codeHash.data.copyFrom(data.toOpenArray(start, start + 31))
     else:
-      vtx.account.codeHash = EMPTY_CODE_HASH
+      accLeaf.account.codeHash = EMPTY_CODE_HASH
 
-    ok(vtx)
+    ok(Vertex(vType: AccLeaf, accLeaf: accLeaf))
   else:
     err(DeblobUnknown)
 
-proc deblobifyType*(record: openArray[byte]; T: type VertexRef):
+proc deblobifyType*(record: openArray[byte]; T: type Vertex):
     Result[VertexType, AristoError] =
   if record.len < 3:                                  # minimum `Leaf` record
     return err(DeblobVtxTooShort)
@@ -293,7 +292,7 @@ proc deblobifyType*(record: openArray[byte]; T: type VertexRef):
 
 proc deblobify*(
     record: openArray[byte];
-    T: type VertexRef;
+    T: type Vertex;
       ): Result[T,AristoError] =
   ## De-serialise a data record encoded with `blobify()`. The second
   ## argument `vtx` can be `nil`.
@@ -326,9 +325,9 @@ proc deblobify*(
     pos += 2
 
     if pathSegment.len > 0:
-      ExtBranchRef.init(pathSegment, startVid, used)
+      Vertex.initExtBranch(pathSegment, startVid, used)
     else:
-      BranchRef.init(startVid, used)
+      Vertex.initBranch(startVid, used)
   of true:
     ?record.toOpenArray(start, psPos - 1).deblobifyLeaf(pathSegment)
 

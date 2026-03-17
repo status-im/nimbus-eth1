@@ -22,7 +22,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc toNode*(
-    vtx: VertexRef;                    # Vertex to convert
+    vtx: Vertex;                    # Vertex to convert
     root: VertexID;                    # Sub-tree root the `vtx` belongs to
     db: AristoTxRef;                   # Database
       ): Result[NodeRef, seq[VertexID]] =
@@ -42,7 +42,7 @@ proc toNode*(
   of AccLeaf:
     let node = NodeRef(vtx: vtx.dup())
     # Need to resolve storage root for account leaf
-    let stoID = AccLeafRef(vtx).stoID
+    let stoID = AccLeafData(vtx).stoID
     if stoID.isValid:
       let key = db.computeKey((stoID.vid, stoID.vid)).valueOr:
         return err(@[stoID.vid])
@@ -63,11 +63,11 @@ proc toNode*(
       node.key[n] = key
     return ok node
 
-iterator subVids*(vtx: VertexRef): VertexID =
+iterator subVids*(vtx: Vertex): VertexID =
   ## Returns the list of all sub-vertex IDs for the argument `vtx`.
   case vtx.vType:
   of AccLeaf:
-    let stoID = AccLeafRef(vtx).stoID
+    let stoID = AccLeafData(vtx).stoID
     if stoID.isValid:
       yield stoID.vid
 
@@ -81,7 +81,7 @@ iterator subVidKeys*(node: NodeRef): (VertexID,HashKey) =
   ## Simolar to `subVids()` but for nodes
   case node.vtx.vType:
   of AccLeaf:
-    let stoID = AccLeafRef(node.vtx).stoID
+    let stoID = AccLeafData(node.vtx).stoID
     if stoID.isValid:
       yield (stoID.vid, node.key[0])
   of StoLeaf:

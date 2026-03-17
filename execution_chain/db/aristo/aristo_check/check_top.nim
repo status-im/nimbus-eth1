@@ -88,7 +88,7 @@ proc checkTopCommon*(
         topVid = rvid.vid
       case vtx.vType:
       of AccLeaf:
-          let stoID = AccLeafRef(vtx).stoID
+          let stoID = AccLeafData(vtx).stoID
           if stoID.isValid:
             let stoVid = stoID.vid
             if stoVid in stoRoots:

@@ -21,7 +21,7 @@ import
 # Public functions: getter variants
 # ------------------------------------------------------------------------------
 
-func layersGetVtx*(db: AristoTxRef; rvid: RootedVertexID): Opt[(VertexRef, int)] =
+func layersGetVtx*(db: AristoTxRef; rvid: RootedVertexID): Opt[(Vertex, int)] =
   ## Find a vertex on the cache layers. An `ok()` result might contain a
   ## `nil` vertex if it is stored on the cache  that way.
   ##
@@ -34,7 +34,7 @@ func layersGetVtx*(db: AristoTxRef; rvid: RootedVertexID): Opt[(VertexRef, int)]
     w.sTab.withValue(rvid, item):
       return Opt.some((item[], w.level))
 
-  Opt.none((VertexRef, int))
+  Opt.none((Vertex, int))
 
 func layersGetKey*(db: AristoTxRef; rvid: RootedVertexID): Opt[(HashKey, int)] =
   ## Find a hash key on the cache layers. An `ok()` result might contain a void
@@ -58,7 +58,7 @@ func layersGetKeyOrVoid*(db: AristoTxRef; rvid: RootedVertexID): HashKey =
   ## Simplified version of `layersGetKey()`
   (db.layersGetKey(rvid).valueOr (VOID_HASH_KEY, 0))[0]
 
-func layersGetAccLeaf*(db: AristoTxRef; accPath: Hash32): Opt[AccLeafRef] =
+func layersGetAccLeaf*(db: AristoTxRef; accPath: Hash32): Opt[AccLeafData] =
   for w in db.rstack(stopAtSnapshot = true):
     if w.snapshot.level.isSome():
       w.snapshot.acc.withValue(accPath, item):
@@ -68,9 +68,9 @@ func layersGetAccLeaf*(db: AristoTxRef; accPath: Hash32): Opt[AccLeafRef] =
     w.accLeaves.withValue(accPath, item):
       return Opt.some(item[])
 
-  Opt.none(AccLeafRef)
+  Opt.none(AccLeafData)
 
-func layersGetStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[StoLeafRef] =
+func layersGetStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[StoLeafData] =
   for w in db.rstack(stopAtSnapshot = true):
     if w.snapshot.level.isSome():
       w.snapshot.sto.withValue(mixPath, item):
@@ -80,7 +80,7 @@ func layersGetStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[StoLeafRef] =
     w.stoLeaves.withValue(mixPath, item):
       return Opt.some(item[])
 
-  Opt.none(StoLeafRef)
+  Opt.none(StoLeafData)
 
 # ------------------------------------------------------------------------------
 # Public functions: setter variants
@@ -89,7 +89,7 @@ func layersGetStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[StoLeafRef] =
 func layersPutVtx*(
     db: AristoTxRef;
     rvid: RootedVertexID;
-    vtx: VertexRef;
+    vtx: Vertex;
       ) =
   ## Store a fresh instance (or nil) of a vertex on the top layer
   db.sTab[rvid] = vtx
@@ -98,7 +98,7 @@ func layersPutVtx*(
   if db.snapshot.level.isSome():
     db.snapshot.vtx[rvid] = (vtx, VOID_HASH_KEY, db.level)
 
-func layersPrepareUpdate[T: VertexRef](db: AristoTxRef, rvid: RootedVertexID, vtx: T): T =
+func layersPrepareUpdate[T: Vertex](db: AristoTxRef, rvid: RootedVertexID, vtx: T): T =
   if rvid in db.sTab:
     vtx
   else:
@@ -121,16 +121,16 @@ func layersUpdate*[T: BranchRef | LeafRef](
     db.kMap.del(rvid)
 
   if db.snapshot.level.isSome():
-    db.snapshot.vtx[rvid] = (VertexRef(vtx), VOID_HASH_KEY, db.level)
+    db.snapshot.vtx[rvid] = (Vertex(vtx), VOID_HASH_KEY, db.level)
   vtx
 
 func layersResVtx*(
     db: AristoTxRef;
     rvid: RootedVertexID;
       ) =
-  ## Shortcut for `db.layersPutVtx(vid, VertexRef(nil))`. It is sort of the
+  ## Shortcut for `db.layersPutVtx(vid, emptyVertex)`. It is sort of the
   ## equivalent of a delete function.
-  db.layersPutVtx(rvid, VertexRef(nil))
+  db.layersPutVtx(rvid, emptyVertex)
 
 func layersPutKey*(
     db: AristoTxRef;
@@ -145,7 +145,7 @@ func layersPutKey*(
   db.kMap[rvid] = key
 
   if db.snapshot.level.isSome():
-    db.snapshot.vtx[rvid] = (VertexRef(vtx), key, db.level)
+    db.snapshot.vtx[rvid] = (Vertex(vtx), key, db.level)
 
 func layersResKey*(db: AristoTxRef; rvid: RootedVertexID, vtx: BranchRef) =
   ## Shortcut for `db.layersPutKey(vid, VOID_HASH_KEY)` which resets the hash
@@ -158,13 +158,13 @@ func layersResKeys*(db: AristoTxRef; hike: Hike, skip: int) =
     if hike.legs[^i].wp.vtx.vType in Branches:
       db.layersResKey((hike.root, hike.legs[^i].wp.vid), BranchRef(hike.legs[^i].wp.vtx))
 
-func layersPutAccLeaf*(db: AristoTxRef; accPath: Hash32; leafVtx: AccLeafRef) =
+func layersPutAccLeaf*(db: AristoTxRef; accPath: Hash32; leafVtx: AccLeafData) =
   db.accLeaves[accPath] = leafVtx
 
   if db.snapshot.level.isSome():
     db.snapshot.acc[accPath] = (leafVtx, db.level)
 
-func layersPutStoLeaf*(db: AristoTxRef; mixPath: Hash32; leafVtx: StoLeafRef) =
+func layersPutStoLeaf*(db: AristoTxRef; mixPath: Hash32; leafVtx: StoLeafData) =
   db.stoLeaves[mixPath] = leafVtx
 
   if db.snapshot.level.isSome():
@@ -238,8 +238,8 @@ proc mergeAndReset*(trg, src: AristoTxRef) =
 iterator layersWalkVtx*(
     db: AristoTxRef;
     seen: var HashSet[VertexID];
-      ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
-  ## Walk over all `(VertexID,VertexRef)` pairs on the cache layers. Note that
+      ): tuple[rvid: RootedVertexID, vtx: Vertex] =
+  ## Walk over all `(VertexID,Vertex)` pairs on the cache layers. Note that
   ## entries are unsorted.
   ##
   ## The argument `seen` collects a set of all visited vertex IDs including
@@ -253,7 +253,7 @@ iterator layersWalkVtx*(
 
 iterator layersWalkVtx*(
     db: AristoTxRef;
-      ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
+      ): tuple[rvid: RootedVertexID, vtx: Vertex] =
   ## Variant of `layersWalkVtx()`.
   var seen: HashSet[VertexID]
   for (rvid,vtx) in db.layersWalkVtx seen:

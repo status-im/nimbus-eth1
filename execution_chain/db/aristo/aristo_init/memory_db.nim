@@ -75,11 +75,11 @@ func endSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
 
 func getVtxFn(db: MemBackendRef): GetVtxFn =
   result =
-    proc(rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[VertexRef,AristoError] =
+    proc(rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[Vertex,AristoError] =
       # Fetch serialised data record
       let data = db.sTab.getOrDefault(rvid, EmptyBlob)
       if 0 < data.len:
-        let rc = data.deblobify(VertexRef)
+        let rc = data.deblobify(Vertex)
         when extraTraceMessages:
           if rc.isErr:
             trace logTxt "getVtxFn() failed", error=rc.error
@@ -88,11 +88,11 @@ func getVtxFn(db: MemBackendRef): GetVtxFn =
 
 func getKeyFn(db: MemBackendRef): GetKeyFn =
   result =
-    proc(rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[(HashKey, VertexRef),AristoError] =
+    proc(rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[(HashKey, Vertex),AristoError] =
       let data = db.sTab.getOrDefault(rvid, EmptyBlob)
       if 0 < data.len:
         let key = data.deblobify(HashKey).valueOr:
-          let vtx = data.deblobify(VertexRef).valueOr:
+          let vtx = data.deblobify(Vertex).valueOr:
             return err(GetKeyNotFound)
           return ok((VOID_HASH_KEY, vtx))
         return ok((key, nil))
@@ -113,7 +113,7 @@ func putBegFn(db: MemBackendRef): PutBegFn =
 
 func putVtxFn(db: MemBackendRef): PutVtxFn =
   result =
-    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: VertexRef, key: HashKey) =
+    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: Vertex, key: HashKey) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
         if vtx.isValid:
@@ -189,12 +189,12 @@ func memoryBackend*(): AristoDbRef =
 iterator walkVtx*(
     be: MemBackendRef;
     kinds = VertexTypes;
-      ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
+      ): tuple[rvid: RootedVertexID, vtx: Vertex] =
   ##  Iteration over the vertex sub-table.
   for n,rvid in be.sTab.keys.toSeq.sorted:
     let data = be.sTab.getOrDefault(rvid, EmptyBlob)
     if 0 < data.len:
-      let rc = data.deblobify VertexRef
+      let rc = data.deblobify Vertex
       if rc.isErr:
         when extraTraceMessages:
           debug logTxt "walkVtxFn() skip", n, rvid, error=rc.error
