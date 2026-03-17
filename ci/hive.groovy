@@ -73,32 +73,6 @@ pipeline {
     }
     stage('Run Hive Tests') {
       parallel {
-        stage('sync neth-nimbus') {
-          options {
-            timeout(time: params.TIMEOUT_MINUTES, unit: 'MINUTES')
-          }
-          steps {
-            script {
-              try {
-                dir('hive') {
-                  sh """
-                    ./hive \
-                    --sim "${params.SIMULATION_NAME}" \
-                    --client-file="${WORKSPACE}/ci/neth-nimbus-sync-config.yml" \
-                    --sim.parallelism=${params.PARALLELISM} \
-                    --sim.loglevel 4 \
-                    --sim.limit "^sync\$" \
-                    --docker.nocache hive/clients/nimbus-el \
-                    ${params.DOCKER_BUILDOUTPUT ? '--docker.buildoutput' : ''}
-                  """
-                }
-              } catch (e) {
-                failedStages << env.STAGE_NAME
-                throw e
-              }
-            }
-          }
-        }
         stage('sync reth-nimbus') {
           options {
             timeout(time: params.TIMEOUT_MINUTES, unit: 'MINUTES')
