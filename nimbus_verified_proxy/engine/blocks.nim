@@ -29,33 +29,37 @@ proc resolveBlockTag*(
     case tag
     of "latest":
       let hLatest = engine.headerStore.latest.valueOr:
+        # untagged(-1) so the relevant backend can be tagged
         return err(
           (
             UnavailableDataError,
-            "Couldn't get the latest block number from header store",
+            "Couldn't get the latest block number from header store", UNTAGGED,
           )
         )
       ok(BlockTag(kind: bidNumber, number: Quantity(hLatest.number)))
     of "finalized":
       let hFinalized = engine.headerStore.finalized.valueOr:
+        # untagged(-1) so the relevant backend can be tagged
         return err(
           (
             UnavailableDataError,
-            "Couldn't get the finalized block number from header store",
+            "Couldn't get the finalized block number from header store", UNTAGGED,
           )
         )
       ok(BlockTag(kind: bidNumber, number: Quantity(hFinalized.number)))
     of "earliest":
       let hEarliest = engine.headerStore.earliest.valueOr:
+        # untagged(-1) so the relevant backend can be tagged
         return err(
           (
             UnavailableDataError,
-            "Couldn't get the earliest block number from header store",
+            "Couldn't get the earliest block number from header store", UNTAGGED,
           )
         )
       ok(BlockTag(kind: bidNumber, number: Quantity(hEarliest.number)))
     else:
-      err((InvalidDataError, "No support for block tag " & $blockTag))
+      # untagged(-1) so the relevant backend can be tagged
+      err((InvalidDataError, "No support for block tag " & $blockTag, UNTAGGED))
   else:
     ok(blockTag)
 
@@ -100,9 +104,10 @@ proc walkBlocks(
   if numBlocks > engine.maxBlockWalk:
     return err(
       (
-        VerificationError,
+        FrontendError,
         "Cannot query more than " & $engine.maxBlockWalk &
           " to verify the chain for the requested block",
+        UNTAGGED,
       )
     )
 
@@ -116,24 +121,26 @@ proc walkBlocks(
     futs = @[]
     downloadedHeaders.clear()
 
+    # select one backend for batch requests
+    let (backend, backendIdx) = ?(engine.backendFor(GetBlockByNumber))
+
     while nextNum > targetNum and uint64(futs.len) < engine.parallelBlockDownloads:
       if not engine.headerStore.contains(nextNum):
         let tag = BlockTag(kind: bidNumber, number: Quantity(nextNum))
-        futs.add(engine.backend.eth_getBlockByNumber(tag, false))
+        futs.add(backend.eth_getBlockByNumber(tag, false))
 
       nextNum -= 1
 
     await allFutures(futs)
 
     for futBlk in futs:
-      if futBlk.cancelled() or futBlk.failed():
+      if not futBlk.completed():
         return
-          err((UnavailableDataError, "Error downloading a block during the block walk"))
-      else:
-        let
-          blk = ?futBlk.value()
-          h = convHeader(blk)
-        downloadedHeaders[blk.hash] = h
+          err((BackendFetchError, "block download failed or cancelled", backendIdx))
+      let
+        blk = ?(futBlk.value().tagBackend(backendIdx))
+        h = convHeader(blk)
+      downloadedHeaders[blk.hash] = h
 
     for j in 0 ..< futs.len:
       let unverifiedHeader =
@@ -144,14 +151,17 @@ proc walkBlocks(
             downloadedHeaders[nextHash]
           except KeyError:
             return err(
-              (UnavailableDataError, "Cannot find downloaded block of the block walk")
+              (
+                UnavailableDataError, "Cannot find downloaded block of the block walk",
+                backendIdx,
+              )
             )
 
       if unverifiedHeader.computeBlockHash != nextHash:
         return err(
           (
             VerificationError,
-            "Encountered an invalid block header while walking the chain",
+            "Encountered an invalid block header while walking the chain", backendIdx,
           )
         )
 
@@ -160,15 +170,26 @@ proc walkBlocks(
 
       nextHash = unverifiedHeader.parentHash
 
-  err((VerificationError, "the requested block is not part of the canonical chain"))
+  # untagged(-1) so the relevant backend can be tagged. Since this is not the fault of the
+  # backends that were responsible for the block walk
+  err(
+    (
+      VerificationError, "the requested block is not part of the canonical chain",
+      UNTAGGED,
+    )
+  )
 
 proc verifyHeader(
     engine: RpcVerificationEngine, header: Header, hash: Hash32
 ): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
   # verify calculated hash with the requested hash
   if header.computeBlockHash != hash:
+    # untagged(-1) so the relevant backend can be tagged
     return err(
-      (VerificationError, "hashed block header doesn't match with blk.hash(downloaded)")
+      (
+        VerificationError,
+        "hashed block header doesn't match with blk.hash(downloaded)", UNTAGGED,
+      )
     )
 
   # if the header is available in the store just use that (already verified)
@@ -178,16 +199,28 @@ proc verifyHeader(
   else:
     let
       earliest = engine.headerStore.earliest.valueOr:
+        # untagged(-1) because this doesn't link to any backend
         return err(
-          (UnavailableDataError, "earliest block is not available yet. Still syncing?")
+          (
+            UnavailableDataError, "earliest block is not available yet. Still syncing?",
+            UNTAGGED,
+          )
         )
       finalized = engine.headerStore.finalized.valueOr:
+        # untagged(-1) because this doesn't link to any backend
         return err(
-          (UnavailableDataError, "finalized block is not available yet. Still syncing?")
+          (
+            UnavailableDataError,
+            "finalized block is not available yet. Still syncing?", UNTAGGED,
+          )
         )
       latest = engine.headerStore.latest.valueOr:
+        # untagged(-1) because this doesn't link to any backend
         return err(
-          (UnavailableDataError, "latest block is not available yet. Still syncing?")
+          (
+            UnavailableDataError, "latest block is not available yet. Still syncing?",
+            UNTAGGED,
+          )
         )
 
     # header is older than earliest
@@ -228,16 +261,23 @@ proc verifyBlock(
   # verify withdrawals
   if blk.withdrawalsRoot.isSome():
     if blk.withdrawalsRoot.get() != orderedTrieRoot(blk.withdrawals.get(@[])):
+      # untagged(-1) so the relevant backend can be tagged
       return err(
         (
           VerificationError,
           "Withdrawals within the block do not yield the same withdrawals root",
+          UNTAGGED,
         )
       )
   else:
     if blk.withdrawals.isSome():
-      return
-        err((VerificationError, "Block contains withdrawals but no withdrawalsRoot"))
+      # untagged(-1) so the relevant backend can be tagged
+      return err(
+        (
+          VerificationError, "Block contains withdrawals but no withdrawalsRoot",
+          UNTAGGED,
+        )
+      )
 
   ok()
 
@@ -245,19 +285,26 @@ proc getBlock*(
     engine: RpcVerificationEngine, blockHash: Hash32, fullTransactions: bool
 ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
   # get the target block
-  let blk = ?(await engine.backend.eth_getBlockByHash(blockHash, fullTransactions))
+  let
+    (backend, backendIdx) = ?(engine.backendFor(GetBlockByHash))
+    blk =
+      ?(
+        (await backend.eth_getBlockByHash(blockHash, fullTransactions)).tagBackend(
+          backendIdx
+        )
+      )
 
   # verify requested hash with the downloaded hash
   if blockHash != blk.hash:
     return err(
       (
         VerificationError,
-        "the downloaded block hash doesn't match with the requested hash",
+        "the downloaded block hash doesn't match with the requested hash", backendIdx,
       )
     )
 
   # verify the block
-  ?(await engine.verifyBlock(blk, fullTransactions))
+  ?((await engine.verifyBlock(blk, fullTransactions)).tagBackend(backendIdx))
 
   ok(blk)
 
@@ -267,18 +314,26 @@ proc getBlock*(
   let numberTag = ?engine.resolveBlockTag(blockTag)
 
   # get the target block
-  let blk = ?(await engine.backend.eth_getBlockByNumber(numberTag, fullTransactions))
+  let
+    (backend, backendIdx) = ?(engine.backendFor(GetBlockByNumber))
+    blk =
+      ?(
+        (await backend.eth_getBlockByNumber(numberTag, fullTransactions)).tagBackend(
+          backendIdx
+        )
+      )
 
   if numberTag.number != blk.number:
     return err(
       (
         VerificationError,
         "the downloaded block number doesn't match with the requested block number",
+        backendIdx,
       )
     )
 
   # verify the block
-  ?(await engine.verifyBlock(blk, fullTransactions))
+  ?((await engine.verifyBlock(blk, fullTransactions)).tagBackend(backendIdx))
 
   ok(blk)
 
@@ -293,7 +348,9 @@ proc getHeader*(
     return ok(cachedHeader.get())
 
   # get the target block
-  let blk = ?(await engine.backend.eth_getBlockByHash(blockHash, false))
+  let
+    (backend, backendIdx) = ?(engine.backendFor(GetBlockByHash))
+    blk = ?((await backend.eth_getBlockByHash(blockHash, false)).tagBackend(backendIdx))
 
   let header = convHeader(blk)
 
@@ -301,11 +358,11 @@ proc getHeader*(
     return err(
       (
         VerificationError,
-        "the blk.hash(downloaded) doesn't match with the provided hash",
+        "the blk.hash(downloaded) doesn't match with the provided hash", backendIdx,
       )
     )
 
-  ?(await engine.verifyHeader(header, blockHash))
+  ?((await engine.verifyHeader(header, blockHash)).tagBackend(backendIdx))
 
   ok(header)
 
@@ -323,7 +380,10 @@ proc getHeader*(
     return ok(cachedHeader.get())
 
   # get the target block
-  let blk = ?(await engine.backend.eth_getBlockByNumber(numberTag, false))
+  let
+    (backend, backendIdx) = ?(engine.backendFor(GetBlockByNumber))
+    blk =
+      ?((await backend.eth_getBlockByNumber(numberTag, false)).tagBackend(backendIdx))
 
   let header = convHeader(blk)
 
@@ -332,9 +392,10 @@ proc getHeader*(
       (
         VerificationError,
         "the downloaded block number doesn't match with the requested block number",
+        backendIdx,
       )
     )
 
-  ?(await engine.verifyHeader(header, blk.hash))
+  ?((await engine.verifyHeader(header, blk.hash)).tagBackend(backendIdx))
 
   ok(header)
