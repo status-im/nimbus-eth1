@@ -62,11 +62,11 @@ func layersGetAccLeaf*(db: AristoTxRef; accPath: Hash32): Opt[AccLeafData] =
   for w in db.rstack(stopAtSnapshot = true):
     if w.snapshot.level.isSome():
       w.snapshot.acc.withValue(accPath, item):
-        return Opt.some(item[][0])
+        return item[][0]
       break
 
     w.accLeaves.withValue(accPath, item):
-      return Opt.some(item[])
+      return item[]
 
   Opt.none(AccLeafData)
 
@@ -74,11 +74,11 @@ func layersGetStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[StoLeafData] =
   for w in db.rstack(stopAtSnapshot = true):
     if w.snapshot.level.isSome():
       w.snapshot.sto.withValue(mixPath, item):
-        return Opt.some(item[][0])
+        return item[][0]
       break
 
     w.stoLeaves.withValue(mixPath, item):
-      return Opt.some(item[])
+      return item[]
 
   Opt.none(StoLeafData)
 
@@ -98,15 +98,15 @@ func layersPutVtx*(
   if db.snapshot.level.isSome():
     db.snapshot.vtx[rvid] = (vtx, VOID_HASH_KEY, db.level)
 
-func layersPrepareUpdate[T: Vertex](db: AristoTxRef, rvid: RootedVertexID, vtx: T): T =
+template layersPrepareUpdate(db: AristoTxRef, rvid: RootedVertexID, vtx: Vertex): Vertex =
   if rvid in db.sTab:
     vtx
   else:
-    let dup = vtx.dup()
-    db.sTab[rvid] = dup
-    dup
+    #let dup = vtx.dup()
+    db.sTab[rvid] = vtx
+    vtx
 
-func layersUpdate*[T: BranchRef | LeafRef](
+func layersUpdate*[T: Vertex](
     db: AristoTxRef;
     rvid: RootedVertexID;
     vtx: T;
@@ -116,12 +116,12 @@ func layersUpdate*[T: BranchRef | LeafRef](
   ## in a different layer and therefore should not be mutated.
   let vtx = db.layersPrepareUpdate(rvid, vtx)
 
-  when T is BranchRef:
+  if vtx.vType in Branches:
     # Only branches have keys stored and we're not changing vertex type
     db.kMap.del(rvid)
 
   if db.snapshot.level.isSome():
-    db.snapshot.vtx[rvid] = (Vertex(vtx), VOID_HASH_KEY, db.level)
+    db.snapshot.vtx[rvid] = (vtx, VOID_HASH_KEY, db.level)
   vtx
 
 func layersResVtx*(
@@ -135,7 +135,7 @@ func layersResVtx*(
 func layersPutKey*(
     db: AristoTxRef;
     rvid: RootedVertexID;
-    vtx: BranchRef,
+    vtx: Vertex,
     key: HashKey;
       ) =
   ## Store a (potentally void) hash key on the top layer - we don't store keys
@@ -145,9 +145,9 @@ func layersPutKey*(
   db.kMap[rvid] = key
 
   if db.snapshot.level.isSome():
-    db.snapshot.vtx[rvid] = (Vertex(vtx), key, db.level)
+    db.snapshot.vtx[rvid] = (vtx, key, db.level)
 
-func layersResKey*(db: AristoTxRef; rvid: RootedVertexID, vtx: BranchRef) =
+func layersResKey*(db: AristoTxRef; rvid: RootedVertexID, vtx: Vertex) =
   ## Shortcut for `db.layersPutKey(vid, VOID_HASH_KEY)` which resets the hash
   ## key cache for the given rvid / vtx
   discard db.layersUpdate(rvid, vtx)
@@ -156,19 +156,19 @@ func layersResKeys*(db: AristoTxRef; hike: Hike, skip: int) =
   ## Reset all cached keys along the given hike
   for i in (skip + 1)..hike.legs.len:
     if hike.legs[^i].wp.vtx.vType in Branches:
-      db.layersResKey((hike.root, hike.legs[^i].wp.vid), BranchRef(hike.legs[^i].wp.vtx))
+      db.layersResKey((hike.root, hike.legs[^i].wp.vid), hike.legs[^i].wp.vtx)
 
-func layersPutAccLeaf*(db: AristoTxRef; accPath: Hash32; leafVtx: AccLeafData) =
-  db.accLeaves[accPath] = leafVtx
-
-  if db.snapshot.level.isSome():
-    db.snapshot.acc[accPath] = (leafVtx, db.level)
-
-func layersPutStoLeaf*(db: AristoTxRef; mixPath: Hash32; leafVtx: StoLeafData) =
-  db.stoLeaves[mixPath] = leafVtx
+func layersPutAccLeaf*(db: AristoTxRef; accPath: Hash32; leaf: Opt[AccLeafData]) =
+  db.accLeaves[accPath] = leaf
 
   if db.snapshot.level.isSome():
-    db.snapshot.sto[mixPath] = (leafVtx, db.level)
+    db.snapshot.acc[accPath] = (leaf, db.level)
+
+func layersPutStoLeaf*(db: AristoTxRef; mixPath: Hash32; leaf: Opt[StoLeafData]) =
+  db.stoLeaves[mixPath] = leaf
+
+  if db.snapshot.level.isSome():
+    db.snapshot.sto[mixPath] = (leaf, db.level)
 
 # ------------------------------------------------------------------------------
 # Public functions

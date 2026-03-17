@@ -33,20 +33,15 @@ proc delStoTreeNow(
 
   case vtx.vType
   of Branch:
-    let vtx = BranchRef(vtx)
     for n, subvid in vtx.pairs():
       ?db.delStoTreeNow((rvid.root, subvid), accPath, stoPath & NibblesBuf.nibble(n))
   of ExtBranch:
-    let vtx = ExtBranchRef(vtx)
     for n, subvid in vtx.pairs():
-      ?db.delStoTreeNow(
-        (rvid.root, subvid), accPath, stoPath & vtx.pfx & NibblesBuf.nibble(n)
-      )
+      ?db.delStoTreeNow((rvid.root, subvid), accPath, stoPath & vtx.branch.pfx[] & NibblesBuf.nibble(n))
   of StoLeaf:
-    let vtx = StoLeafData(vtx)
-    let stoPath = Hash32((stoPath & vtx.pfx).getBytes())
-    db.layersPutStoLeaf(mixUp(accPath, stoPath), nil)
-  of AccLeaf:
+    let stoPath = Hash32((stoPath & vtx.stoLeaf.pfx).getBytes())
+    db.layersPutStoLeaf(mixUp(accPath, stoPath), Opt.none(StoLeafData))
+  of Empty, AccLeaf:
     raiseAssert "Removing storage leaves only!"
   db.layersResVtx(rvid)
 

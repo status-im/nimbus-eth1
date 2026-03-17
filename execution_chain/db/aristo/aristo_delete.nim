@@ -203,7 +203,7 @@ proc deleteStorageData*(
   db.layersResKeys(accHike, skip = 1)
 
   let otherLeaf = ?db.deleteImpl(stoHike)
-  db.layersPutStoLeaf(mixPath, nil)
+  db.layersPutStoLeaf(mixPath, Opt.none(StoLeafData))
 
   if otherLeaf.isValid:
     let leafMixPath =

@@ -64,7 +64,7 @@ func leave(batch: var WriteBatch, nibble: uint8) =
 proc putKeyAtLevel(
     db: AristoTxRef,
     rvid: RootedVertexID,
-    vtx: BranchRef,
+    vtx: Vertex,
     key: HashKey,
     level: int,
     batch: var WriteBatch,
@@ -122,20 +122,17 @@ proc getKey(
   else:
     ?db.getKeyRc(rvid, {})
 
-template childVid(vp: Vertex): VertexID =
+template childVid(v: Vertex): VertexID =
   # If we have to recurse into a child, where would that recusion start?
-  let v = vp
   case v.vType
   of AccLeaf:
-    let v = AccLeafData(v)
-    if v.stoID.isValid:
-      v.stoID.vid
+    if v.accLeaf.stoID.isValid:
+      v.accLeaf.stoID.vid
     else:
       default(VertexID)
   of Branch, ExtBranch:
-    let v = BranchRef(v)
-    v.startVid
-  of StoLeaf:
+    v.branch.startVid
+  of Empty, StoLeaf:
     default(VertexID)
 
 proc computeKeyImpl(
@@ -157,11 +154,12 @@ proc computeKeyImpl(
 
   let key =
     case vtx.vType
+    of Empty:
+      raiseAssert "unexpected empty vtx"
     of AccLeaf:
-      let vtx = AccLeafData(vtx)
-      writer.encodeLeaf(vtx.pfx):
+      writer.encodeLeaf(vtx.accLeaf.pfx):
         let
-          stoID = vtx.stoID
+          stoID = vtx.accLeaf.stoID
           skey =
             if stoID.isValid:
               let
@@ -183,20 +181,18 @@ proc computeKeyImpl(
               VOID_HASH_KEY
 
         rlp.encode Account(
-          nonce: vtx.account.nonce,
-          balance: vtx.account.balance,
+          nonce: vtx.accLeaf.account.nonce,
+          balance: vtx.accLeaf.account.balance,
           storageRoot: skey.to(Hash32),
-          codeHash: vtx.account.codeHash,
+          codeHash: vtx.accLeaf.account.codeHash,
         )
     of StoLeaf:
-      let vtx = StoLeafData(vtx)
-      writer.encodeLeaf(vtx.pfx):
+      writer.encodeLeaf(vtx.stoLeaf.pfx):
         # TODO avoid memory allocation when encoding storage data
-        rlp.encode(vtx.stoData)
+        rlp.encode(vtx.stoLeaf.stoData)
     of Branches:
       # For branches, we need to load the vertices before recursing into them
       # to exploit their on-disk order
-      let vtx = BranchRef(vtx)
       var keyvtxs: array[16, ((HashKey, Vertex), int)]
       for n, subvid in vtx.pairs:
         keyvtxs[n] = ?db.getKey((rvid.root, subvid), skipLayers)
@@ -214,7 +210,7 @@ proc computeKeyImpl(
 
           # The O(n^2) sort/search here is fine given the small size of the list
           for nibble, keyvtx in keyvtxs.mpairs:
-            let subvid = vtx.bVid(uint8 nibble)
+            let subvid = vtx.branch.bVid(uint8 nibble)
             if (not subvid.isValid) or keyvtx[0][0].isValid:
               n += 1 # no need to compute key
               continue
@@ -243,7 +239,7 @@ proc computeKeyImpl(
           batch.enter(n)
           (keyvtxs[minIdx][0][0], keyvtxs[minIdx][1]) =
             ?db.computeKeyImpl(
-              (rvid.root, vtx.bVid(uint8 minIdx)),
+              (rvid.root, vtx.branch.bVid(uint8 minIdx)),
               batch,
               keyvtxs[minIdx][0][1],
               keyvtxs[minIdx][1],
@@ -251,7 +247,7 @@ proc computeKeyImpl(
             )
           batch.leave(n)
 
-      template writeBranch(w: var RlpWriter, vtx: BranchRef): HashKey =
+      template writeBranch(w: var RlpWriter, vtx: Vertex): HashKey =
         w.encodeBranch(vtx):
           if subvid.isValid:
             level = max(level, keyvtxs[n][1])
@@ -260,8 +256,7 @@ proc computeKeyImpl(
             VOID_HASH_KEY
 
       if vtx.vType == ExtBranch:
-        let vtx = ExtBranchRef(vtx)
-        writer.encodeExt(vtx.pfx):
+        writer.encodeExt(vtx.branch.pfx[]):
           var bwriter = initRlpWriter()
           bwriter.writeBranch(vtx)
       else:
@@ -275,7 +270,7 @@ proc computeKeyImpl(
   # their hash being saved directly to the backend.
 
   if vtx.vType in Branches:
-    ?db.putKeyAtLevel(rvid, BranchRef(vtx), key, level, batch)
+    ?db.putKeyAtLevel(rvid, vtx, key, level, batch)
   ok (key, level)
 
 proc computeKeyImpl(

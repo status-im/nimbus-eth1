@@ -68,8 +68,8 @@ type
     kMap*: Table[RootedVertexID, HashKey]   ## Merkle hash key mapping
     vTop*: VertexID                         ## Last used vertex ID
 
-    accLeaves*: Table[Hash32, AccLeafData]   ## Account path -> Vertex
-    stoLeaves*: Table[Hash32, StoLeafData]   ## Storage path -> Vertex
+    accLeaves*: Table[Hash32, Opt[AccLeafData]]   ## Account path -> Vertex
+    stoLeaves*: Table[Hash32, Opt[StoLeafData]]   ## Storage path -> Vertex
 
     blockNumber*: Opt[uint64]               ## Block number set when checkpointing the frame
 
@@ -85,8 +85,8 @@ type
 
   Snapshot* = object
     vtx*: Table[RootedVertexID, VtxSnapshot]
-    acc*: Table[Hash32, (AccLeafData, int)]
-    sto*: Table[Hash32, (StoLeafData, int)]
+    acc*: Table[Hash32, (Opt[AccLeafData], int)]
+    sto*: Table[Hash32, (Opt[StoLeafData], int)]
     level*: Opt[int] # when this snapshot was taken
 
   VtxSnapshot* = (Vertex, HashKey, int)

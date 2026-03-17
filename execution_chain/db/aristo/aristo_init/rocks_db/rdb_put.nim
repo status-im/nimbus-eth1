@@ -90,12 +90,11 @@ proc putVtx*(
     # evict those that were just added)
 
     if vtx.vType == Branch:
-      let vtx = BranchRef(vtx)
       rdb.rdVtxLru.del(rvid.vid)
       if rdb.rdBranchLru.len < rdb.rdBranchLru.capacity:
-        rdb.rdBranchLru.put(rvid.vid, (vtx.startVid, vtx.used))
+        rdb.rdBranchLru.put(rvid.vid, (vtx.branch.startVid, vtx.branch.used))
       else:
-        discard rdb.rdBranchLru.update(rvid.vid, (vtx.startVid, vtx.used))
+        discard rdb.rdBranchLru.update(rvid.vid, (vtx.branch.startVid, vtx.branch.used))
     else:
       rdb.rdBranchLru.del(rvid.vid)
       if rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
