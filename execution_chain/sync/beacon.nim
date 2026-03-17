@@ -117,6 +117,7 @@ proc config*(
   # The registration order for protocols is largely irrelevant, yet the first
   # will always be compared with the activated protocol which is likely to be
   # expected the latest version of the `eth` protocol family.
+  desc.addBeaconSyncProtocol(eth71)
   desc.addBeaconSyncProtocol(eth70)
   desc.addBeaconSyncProtocol(eth69)
   desc.addBeaconSyncProtocol(eth68)
