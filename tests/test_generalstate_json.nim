@@ -111,12 +111,12 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
     sender = ctx.tx.recoverSender().expect("valid signature")
 
   vmState.mutateLedger:
-    setupLedger(ctx.pre, db)
+    setupLedger(ctx.pre, ledger)
 
     # this is an important step when using `db/ledger`
     # it will affect the account storage's location
     # during the next call to `getComittedStorage`
-    db.persist()
+    ledger.persist()
 
   let
     rc = vmState.processTransaction(

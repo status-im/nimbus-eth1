@@ -67,6 +67,10 @@ const
 
 iterator peers69OrLater(wire: EthWireRef, random: bool = false): Peer =
   var peers = newSeqOfCap[Peer](wire.node.numPeers)
+  for peer in wire.node.peers(eth71):
+    if peer.isNil:
+      continue
+    peers.add peer
   for peer in wire.node.peers(eth70):
     if peer.isNil:
       continue

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2025 Status Research & Development GmbH
+# Copyright (c) 2019-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -214,7 +214,7 @@ proc opEnvMain*() =
       title: "EXTCODECOPY_1"
       setup:
         vmState.mutateLedger:
-          db.setCode(acc, code)
+          ledger.setCode(acc, code)
       code:
         Push1 "0x04" # size
         Push1 "0x07" # code pos
@@ -232,7 +232,7 @@ proc opEnvMain*() =
       title: "EXTCODECOPY_2"
       setup:
         vmState.mutateLedger:
-          db.setCode(acc, code)
+          ledger.setCode(acc, code)
       code:
         Push1 "0x3E"
         Push1 "0x07"
@@ -252,7 +252,7 @@ proc opEnvMain*() =
       title: "EXTCODECOPY_3"
       setup:
         vmState.mutateLedger:
-          db.setCode(acc, code)
+          ledger.setCode(acc, code)
       code:
         Push1 "0x5E"
         Push1 "0x07"
@@ -273,7 +273,7 @@ proc opEnvMain*() =
       title: "EXTCODECOPY_4"
       setup:
         vmState.mutateLedger:
-          db.setCode(acc, code)
+          ledger.setCode(acc, code)
       code:
         Push2 "0x1234"
         Push1 "0x00"
@@ -328,7 +328,7 @@ proc opEnvMain*() =
       title: "EXTCODESIZE_1"
       setup:
         vmState.mutateLedger:
-          db.setCode(acc, code)
+          ledger.setCode(acc, code)
       code:
         Push20 "0xfbe0afcd7658ba86be41922059dd879c192d4c73"
         ExtCodeSize
@@ -343,7 +343,7 @@ proc opEnvMain*() =
       title: "EIP2929 EXTCODESIZE_1"
       setup:
         vmState.mutateLedger:
-          db.setCode(acc, code)
+          ledger.setCode(acc, code)
       code:
         Push20 "0xfbe0afcd7658ba86be41922059dd879c192d4c73"
         ExtCodeSize
@@ -356,7 +356,7 @@ proc opEnvMain*() =
       title: "EIP2929 EXTCODEHASH_1"
       setup:
         vmState.mutateLedger:
-          db.setCode(acc, code)
+          ledger.setCode(acc, code)
       code:
         Push20 "0xfbe0afcd7658ba86be41922059dd879c192d4c73"
         ExtCodeHash

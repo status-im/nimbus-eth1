@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -185,6 +185,20 @@ proc len*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[int] =
     err(rc.error.toError("", KvtNotFound))
   else:
     err(rc.error.toError(""))
+
+proc multiGet*(
+    kvt: CoreDbTxRef,
+    keys: openArray[seq[byte]],
+    values: var openArray[Opt[seq[byte]]],
+    sortedInput = false
+      ): CoreDbRc[void] =
+  ## Fetch a batch of values having the given keys. Returned values are copied into
+  ## the values array. The values array should be pre-allocated and have the same
+  ## size as the keys array.
+  kvt.kTx.multiGet(keys, values, sortedInput).isOkOr:
+    return err(error.toError(""))
+
+  ok()
 
 proc del*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[void] =
   kvt.kTx.del(key).isOkOr:
