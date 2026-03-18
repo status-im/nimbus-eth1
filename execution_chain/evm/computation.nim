@@ -87,7 +87,7 @@ proc getBlockHash*(c: Computation, number: BlockNumber): Hash32 =
   c.vmState.getAncestorHash(number)
 
 template accountExists*(c: Computation, address: Address): bool =
-  if c.vmState.balTrackerEnabled:
+  if c.balTrackerEnabled:
     c.vmState.balTracker.trackAddressAccess(address)
 
   if c.fork >= FkSpurious:
@@ -96,22 +96,22 @@ template accountExists*(c: Computation, address: Address): bool =
     c.vmState.readOnlyLedger.accountExists(address)
 
 template getStorage*(c: Computation, slot: UInt256): UInt256 =
-  if c.vmState.balTrackerEnabled:
+  if c.balTrackerEnabled:
     c.vmState.balTracker.trackStorageRead(c.msg.contractAddress, slot)
   c.vmState.readOnlyLedger.getStorage(c.msg.contractAddress, slot)
 
 template getBalance*(c: Computation, address: Address): UInt256 =
-  if c.vmState.balTrackerEnabled:
+  if c.balTrackerEnabled:
     c.vmState.balTracker.trackAddressAccess(address)
   c.vmState.readOnlyLedger.getBalance(address)
 
 template getCodeSize*(c: Computation, address: Address): uint =
-  if c.vmState.balTrackerEnabled:
+  if c.balTrackerEnabled:
     c.vmState.balTracker.trackAddressAccess(address)
   uint(c.vmState.readOnlyLedger.getCodeSize(address))
 
 template getCodeHash*(c: Computation, address: Address): Hash32 =
-  if c.vmState.balTrackerEnabled:
+  if c.balTrackerEnabled:
     c.vmState.balTracker.trackAddressAccess(address)
 
   let db = c.vmState.readOnlyLedger
@@ -124,7 +124,7 @@ template selfDestruct*(c: Computation, address: Address) =
   c.execSelfDestruct(address)
 
 template getCode*(c: Computation, address: Address): CodeBytesRef =
-  if c.vmState.balTrackerEnabled:
+  if c.balTrackerEnabled:
     c.vmState.balTracker.trackAddressAccess(address)
   c.vmState.readOnlyLedger.getCode(address)
 
@@ -148,6 +148,7 @@ func newComputation*(vmState: BaseVMState,
   result.msg = message
   result.gasMeter.init(message.gas)
   result.keepStack = keepStack
+  result.balTrackerEnabled = vmState.balTrackerEnabled
 
   if not code.isNil:
     result.code = CodeStream.init(code)
@@ -170,12 +171,12 @@ func shouldBurnGas*(c: Computation): bool =
   c.isError and c.error.burnsGas
 
 proc beginSavePoint*(c: Computation) =
-  if c.vmState.balTrackerEnabled:
+  if c.balTrackerEnabled:
     c.vmState.balTracker.beginCallFrame()
   c.savePoint = c.vmState.ledger.beginSavePoint()
 
 proc commit*(c: Computation) =
-  if c.vmState.balTrackerEnabled:
+  if c.balTrackerEnabled:
     c.vmState.balTracker.commitCallFrame()
   c.vmState.ledger.commit(c.savePoint)
   c.savePoint = nil
@@ -193,7 +194,7 @@ proc dispose*(c: Computation) =
     c.stack = nil
 
 proc rollback*(c: Computation) =
-  if c.vmState.balTrackerEnabled:
+  if c.balTrackerEnabled:
     c.vmState.balTracker.rollbackCallFrame()
   c.vmState.ledger.rollback(c.savePoint)
   c.savePoint = nil
@@ -264,7 +265,7 @@ proc writeContract*(c: Computation) =
       reason = "Write new contract code").
         expect("enough gas since we checked against gasRemaining")
     c.vmState.mutateLedger:
-      if c.vmState.balTrackerEnabled:
+      if c.balTrackerEnabled:
         c.vmState.balTracker.trackCodeChange(c.msg.contractAddress, c.output)
       ledger.setCode(c.msg.contractAddress, c.output)
     withExtra trace, "Writing new contract code"
@@ -297,7 +298,7 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
 
     # Register the account to be deleted
     if c.fork >= FkCancun:
-      if c.vmState.balTrackerEnabled:
+      if c.balTrackerEnabled:
         # Zeroing contract balance except beneficiary is the same address
         c.vmState.balTracker.trackSubBalanceChange(c.msg.contractAddress, localBalance)
         ledger.subBalance(c.msg.contractAddress, localBalance)
@@ -317,7 +318,7 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
       if c.fork >= FkAmsterdam:
         c.emitSelfDestructLog(beneficiary, localBalance, newContract)
     else:
-      if c.vmState.balTrackerEnabled:
+      if c.balTrackerEnabled:
         # Transfer to beneficiary
         c.vmState.balTracker.trackAddBalanceChange(beneficiary, localBalance)
         ledger.addBalance(beneficiary, localBalance)

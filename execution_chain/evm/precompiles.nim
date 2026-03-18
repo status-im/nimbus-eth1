@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -764,7 +764,7 @@ proc getPrecompile*(fork: EVMFork, codeAddress: Address): Opt[Precompiles] =
   Opt.none(Precompiles)
 
 proc execPrecompile*(c: Computation, precompile: Precompiles) =
-  if c.vmState.balTrackerEnabled:
+  if c.balTrackerEnabled:
     c.vmState.balTracker.trackAddressAccess(precompileAddrs[precompile])
   let fork = c.fork
   let res = case precompile

@@ -70,7 +70,7 @@ proc beforeExecCall(c: Computation) =
   c.beginSavePoint()
   if c.msg.kind == CallKind.Call:
     c.vmState.mutateLedger:
-      if c.vmState.balTrackerEnabled:
+      if c.balTrackerEnabled:
         c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
         ledger.subBalance(c.msg.sender, c.msg.value)
         c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
@@ -107,7 +107,7 @@ proc beforeExecCreate(c: Computation): bool =
         "Nonce overflow when sender=" & sender & " wants to create contract", false
       )
       return true
-    if c.vmState.balTrackerEnabled:
+    if c.balTrackerEnabled:
       c.vmState.balTracker.trackNonceChange(c.msg.sender, nonce + 1)
     ledger.setNonce(c.msg.sender, nonce + 1)
 
@@ -119,7 +119,7 @@ proc beforeExecCreate(c: Computation): bool =
 
   c.beginSavePoint()
 
-  if c.vmState.balTrackerEnabled:
+  if c.balTrackerEnabled:
     c.vmState.balTracker.trackAddressAccess(c.msg.contractAddress)
   if c.vmState.readOnlyLedger().contractCollision(c.msg.contractAddress):
     let blurb = c.msg.contractAddress.toHex
@@ -128,7 +128,7 @@ proc beforeExecCreate(c: Computation): bool =
     return true
 
   c.vmState.mutateLedger:
-    if c.vmState.balTrackerEnabled:
+    if c.balTrackerEnabled:
       c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
       ledger.subBalance(c.msg.sender, c.msg.value)
       c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
