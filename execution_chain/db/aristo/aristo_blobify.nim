@@ -32,17 +32,7 @@ type
   VertexBuf* = ArrayBuf[128, byte]
 
 func `&=`*(x: var VertexBuf, y: VertexBuf) =
-  #for e in y:
   x.add(y.data)
-
-# func add*(x: var VertexBuf, y: openArray[byte]) =
-#   for e in y:
-#     x.add(e)
-
-# template copyFrom*(x: var VertexBuf, data: openArray[T]) =
-
-#   v.n = typeof(v.n)(v.buf.copyFrom(data))
-
 
 func significantBytesBE(val: openArray[byte]): byte =
   for i in 0 ..< val.len:
@@ -61,7 +51,6 @@ func blobify*(v: StUint): SbeBuf[typeof(v)] =
 template data*(v: SbeBuf): openArray[byte] =
   let vv = v
   vv.buf.toOpenArray(vv.buf.len - int(vv.len), vv.buf.high)
-
 
 func blobify*(rvid: RootedVertexID): RVidBuf =
   # Length-prefixed root encoding creates a unique and common prefix for all
@@ -140,7 +129,37 @@ proc load256(data: openArray[byte]; start: var int, len: int): Result[UInt256,Ar
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc blobifyTo*(pyl: AccLeafRef, data: var VertexBuf) =
+# proc blobifyTo*(pyl: AccLeafRef, data: var VertexBuf) =
+#   # `lens` holds `len-1` since `mask` filters out the zero-length case (which
+#   # allows saving 1 bit per length)
+#   var lens: uint16
+#   var mask: byte
+#   if 0 < pyl.account.nonce:
+#     mask = mask or 0x01
+#     let tmp = pyl.account.nonce.blobify()
+#     lens += tmp.len - 1 # 3 bits
+#     data &= tmp.data()
+
+#   if 0 < pyl.account.balance:
+#     mask = mask or 0x02
+#     let tmp = pyl.account.balance.blobify()
+#     lens += uint16(tmp.len - 1) shl 3 # 5 bits
+#     data &= tmp.data()
+
+#   if pyl.stoID.isValid:
+#     mask = mask or 0x04
+#     let tmp = pyl.stoID.vid.blobify()
+#     lens += uint16(tmp.len - 1) shl 8 # 3 bits
+#     data &= tmp.data()
+
+#   if pyl.account.codeHash != EMPTY_CODE_HASH:
+#     mask = mask or 0x08
+#     data &= pyl.account.codeHash.data
+
+#   data &= lens.toBytesBE()
+#   data &= [mask]
+
+proc blobifyTo*(pyl: AccLeafRef, data: var (seq[byte]|VertexBuf)) =
   # `lens` holds `len-1` since `mask` filters out the zero-length case (which
   # allows saving 1 bit per length)
   var lens: uint16
@@ -170,45 +189,11 @@ proc blobifyTo*(pyl: AccLeafRef, data: var VertexBuf) =
   data &= lens.toBytesBE()
   data &= [mask]
 
-proc blobifyTo*(pyl: AccLeafRef, data: var seq[byte]) =
-  # `lens` holds `len-1` since `mask` filters out the zero-length case (which
-  # allows saving 1 bit per length)
-  var lens: uint16
-  var mask: byte
-  if 0 < pyl.account.nonce:
-    mask = mask or 0x01
-    let tmp = pyl.account.nonce.blobify()
-    lens += tmp.len - 1 # 3 bits
-    data &= tmp.data()
-
-  if 0 < pyl.account.balance:
-    mask = mask or 0x02
-    let tmp = pyl.account.balance.blobify()
-    lens += uint16(tmp.len - 1) shl 3 # 5 bits
-    data &= tmp.data()
-
-  if pyl.stoID.isValid:
-    mask = mask or 0x04
-    let tmp = pyl.stoID.vid.blobify()
-    lens += uint16(tmp.len - 1) shl 8 # 3 bits
-    data &= tmp.data()
-
-  if pyl.account.codeHash != EMPTY_CODE_HASH:
-    mask = mask or 0x08
-    data &= pyl.account.codeHash.data
-
-  data &= lens.toBytesBE()
-  data &= [mask]
-
-proc blobifyTo*(pyl: StoLeafRef, data: var VertexBuf) =
+proc blobifyTo*(pyl: StoLeafRef, data: var (seq[byte]|VertexBuf)) =
   data &= pyl.stoData.blobify().data
   data &= [0x20.byte]
 
-proc blobifyTo*(pyl: StoLeafRef, data: var seq[byte]) =
-  data &= pyl.stoData.blobify().data
-  data &= [0x20.byte]
-
-proc blobifyTo*(vtx: VertexRef, key: HashKey, data: var VertexBuf) =
+proc blobifyTo*(vtx: VertexRef, key: HashKey, data: var (seq[byte]|VertexBuf)) =
   ## This function serialises the vertex argument to a database record.
   ## Contrary to RLP based serialisation, these records aim to align on
   ## fixed byte boundaries.
@@ -268,64 +253,6 @@ proc blobifyTo*(vtx: VertexRef, key: HashKey, data: var VertexBuf) =
 
 template blobifyTo*(vtx: VertexRef, data: var VertexBuf) =
   vtx.blobifyTo(VOID_HASH_KEY, data)
-
-proc blobifyTo*(vtx: VertexRef, key: HashKey, data: var seq[byte]) =
-  ## This function serialises the vertex argument to a database record.
-  ## Contrary to RLP based serialisation, these records aim to align on
-  ## fixed byte boundaries.
-  ## ::
-  ##   Branch:
-  ##     <HashKey>      -- optional hash key
-  ##     startVid       -- vid of first child vertex
-  ##     used           -- bitmap of which children are included
-  ##     seq[byte]      -- hex encoded partial path (non-empty for extension nodes)
-  ##     0xtt + xx      -- bits + pathSegmentLen(6)
-  ##
-  ##   Leaf:
-  ##     seq[byte]      -- opaque leaf data payload (might be zero length)
-  ##     seq[byte]      -- hex encoded partial path (at least one byte)
-  ##     0xtt + yy      -- bits + partialPathLen(6)
-  ##
-
-  doAssert vtx.isValid
-
-  template writePfx(vtx, bits: untyped): untyped =
-    if vtx.pfx.len >= 0:
-      let pSegm = vtx.pfx.toHexPrefix(isleaf = vtx.vType in Leaves)
-      data &= pSegm.data()
-      (bits shl 6) or pSegm.len.byte
-    else:
-      (bits shl 6)
-
-  let bits =
-    case vtx.vType
-    of Branches:
-      let
-        vtx = BranchRef(vtx)
-        bits =
-          if key.isValid and key.len == 32:
-            # Shorter keys can be loaded from the vertex directly
-            data.add key.data()
-            0b10'u8
-          else:
-            0b00'u8
-
-      data.add vtx.startVid.blobify().data()
-      data.add toBytesBE(vtx.used)
-      if vtx.vType == ExtBranch:
-        writePfx(ExtBranchRef(vtx), bits)
-      else:
-        bits shl 6
-    of AccLeaf:
-      let vtx = AccLeafRef(vtx)
-      vtx.blobifyTo(data)
-      writePfx(vtx, 0b01'u8)
-    of StoLeaf:
-      let vtx = StoLeafRef(vtx)
-      vtx.blobifyTo(data)
-      writePfx(vtx, 0b01'u8)
-
-  data &= [bits]
 
 proc blobify*(vtx: VertexRef, key: HashKey): seq[byte] =
   ## Variant of `blobify()`

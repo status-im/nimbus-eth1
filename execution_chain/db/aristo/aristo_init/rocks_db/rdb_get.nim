@@ -150,9 +150,7 @@ proc getKey*(
 
   let onData = proc(data: openArray[byte]) =
     res = data.deblobify(HashKey)
-    if res.isSome():
-      reset(vtxBuf)
-    else:
+    if res.isNone():
       vtxBuf.add(data)
 
   let gotData = rdb.vtxCol.get(rvid.blobify().data(), onData).valueOr:
@@ -176,7 +174,7 @@ proc getKey*(
 
   let vtx = 
     if res.isNone():
-      vtxBuf.data().deblobify(VertexRef).valueOr(nil)
+      vtxBuf.data().deblobify(VertexRef)[]
     else:
       nil
 
@@ -214,9 +212,10 @@ proc getVtx*(
   # A threadvar is used to avoid allocating an environment for onData
   var res {.threadvar.}: Result[VertexRef, AristoError]
   var vtxBuf {.threadvar.}: VertexBuf
+
   let onData = proc(data: openArray[byte]) =
     res = data.deblobify(VertexRef)
-    if res.isOk():
+    if res.isOk() and res[].vType != Branch:
       vtxBuf.add(data)
 
   let gotData = rdb.vtxCol.get(rvid.blobify().data(), onData).valueOr:
