@@ -155,6 +155,12 @@ template pfx*(branch: BranchData): NibblesBuf =
   else:
     emptyNibbles
 
+template pfx*(accLeaf: AccLeafData): NibblesBuf =
+  accLeaf.pfx
+
+template pfx*(stoLeaf: StoLeafData): NibblesBuf =
+  stoLeaf.pfx
+
 func bVid*(branch: BranchData, nibble: uint8): VertexID =
   if (branch.used and (1'u16 shl nibble)) > 0:
     VertexID(uint64(branch.startVid) + nibble)

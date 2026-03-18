@@ -39,10 +39,12 @@ proc toNode*(
   ##
 
   case vtx.vType:
+  of Empty:
+    raiseAssert "Unexpected empty vertex"
   of AccLeaf:
-    let node = NodeRef(vtx: vtx.dup())
+    let node = NodeRef(vtx: vtx)
     # Need to resolve storage root for account leaf
-    let stoID = AccLeafData(vtx).stoID
+    let stoID = vtx.accLeaf.stoID
     if stoID.isValid:
       let key = db.computeKey((stoID.vid, stoID.vid)).valueOr:
         return err(@[stoID.vid])
@@ -51,12 +53,12 @@ proc toNode*(
     return ok node
 
   of StoLeaf:
-    let node = NodeRef(vtx: vtx.dup())
+    let node = NodeRef(vtx: vtx)
     # Need to resolve storage root for account leaf
     return ok node
 
   of Branch, ExtBranch:
-    let node = NodeRef(vtx: vtx.dup())
+    let node = NodeRef(vtx: vtx)
     for n, subvid in vtx.pairs():
       let key = db.computeKey((root, subvid)).valueOr:
         return err(@[subvid])
@@ -66,8 +68,10 @@ proc toNode*(
 iterator subVids*(vtx: Vertex): VertexID =
   ## Returns the list of all sub-vertex IDs for the argument `vtx`.
   case vtx.vType:
+  of Empty:
+    raiseAssert "Unexpected empty vertex"
   of AccLeaf:
-    let stoID = AccLeafData(vtx).stoID
+    let stoID = vtx.accLeaf.stoID
     if stoID.isValid:
       yield stoID.vid
 
@@ -80,8 +84,10 @@ iterator subVids*(vtx: Vertex): VertexID =
 iterator subVidKeys*(node: NodeRef): (VertexID,HashKey) =
   ## Simolar to `subVids()` but for nodes
   case node.vtx.vType:
+  of Empty:
+    raiseAssert "Unexpected empty vertex"
   of AccLeaf:
-    let stoID = AccLeafData(node.vtx).stoID
+    let stoID = node.vtx.accLeaf.stoID
     if stoID.isValid:
       yield (stoID.vid, node.key[0])
   of StoLeaf:
