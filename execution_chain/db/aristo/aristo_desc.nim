@@ -108,7 +108,7 @@ type
 
     txRef*: AristoTxRef              ## Bottom-most in-memory frame
 
-    accLeaves*: LruCache[Hash32, AccLeafData]
+    accLeaves*: LruCache[Hash32, Opt[AccLeafData]]
       ## Account path to payload cache - accounts are frequently accessed by
       ## account path when contracts interact with them - this cache ensures
       ## that we don't have to re-traverse the storage trie for every such
@@ -116,7 +116,7 @@ type
       ## TODO a better solution would probably be to cache this in a type
       ## exposed to the high-level API
 
-    stoLeaves*: LruCache[Hash32, StoLeafData]
+    stoLeaves*: LruCache[Hash32, Opt[StoLeafData]]
       ## Mixed account/storage path to payload cache - same as above but caches
       ## the full lookup of storage slots
 
@@ -181,6 +181,12 @@ func getOrVoid*[W](tab: Table[W,HashSet[RootedVertexID]]; w: W): HashSet[RootedV
 
 func isValid*(vtx: Vertex): bool =
   not vtx.isEmpty()
+
+template isValid*(accLeaf: Opt[AccLeafData]): bool =
+  accLeaf.isSome()
+
+template isValid*(stoLeaf: Opt[StoLeafData]): bool =
+  stoLeaf.isSome()
 
 func isValid*(nd: NodeRef): bool =
   not isNil(nd)

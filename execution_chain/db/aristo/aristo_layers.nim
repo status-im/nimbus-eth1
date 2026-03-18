@@ -58,29 +58,29 @@ func layersGetKeyOrVoid*(db: AristoTxRef; rvid: RootedVertexID): HashKey =
   ## Simplified version of `layersGetKey()`
   (db.layersGetKey(rvid).valueOr (VOID_HASH_KEY, 0))[0]
 
-func layersGetAccLeaf*(db: AristoTxRef; accPath: Hash32): Opt[AccLeafData] =
+func layersGetAccLeaf*(db: AristoTxRef; accPath: Hash32): Opt[Opt[AccLeafData]] =
   for w in db.rstack(stopAtSnapshot = true):
     if w.snapshot.level.isSome():
       w.snapshot.acc.withValue(accPath, item):
-        return item[][0]
+        return Opt.some(item[][0])
       break
 
     w.accLeaves.withValue(accPath, item):
-      return item[]
+      return Opt.some(item[])
 
-  Opt.none(AccLeafData)
+  Opt.none(Opt[AccLeafData])
 
-func layersGetStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[StoLeafData] =
+func layersGetStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[Opt[StoLeafData]] =
   for w in db.rstack(stopAtSnapshot = true):
     if w.snapshot.level.isSome():
       w.snapshot.sto.withValue(mixPath, item):
-        return item[][0]
+        return Opt.some(item[][0])
       break
 
     w.stoLeaves.withValue(mixPath, item):
-      return item[]
+      return Opt.some(item[])
 
-  Opt.none(StoLeafData)
+  Opt.none(Opt[StoLeafData])
 
 # ------------------------------------------------------------------------------
 # Public functions: setter variants
@@ -106,11 +106,11 @@ template layersPrepareUpdate(db: AristoTxRef, rvid: RootedVertexID, vtx: Vertex)
     db.sTab[rvid] = vtx
     vtx
 
-func layersUpdate*[T: Vertex](
+func layersUpdate*(
     db: AristoTxRef;
     rvid: RootedVertexID;
-    vtx: T;
-      ): T =
+    vtx: Vertex;
+      ): Vertex =
   ## Prepare the given vertex for updates, allocating a new one or updating the
   ## existing one depending whether it belongs to this layer already or resides
   ## in a different layer and therefore should not be mutated.

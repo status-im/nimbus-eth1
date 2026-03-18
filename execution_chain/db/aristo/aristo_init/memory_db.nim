@@ -95,7 +95,7 @@ func getKeyFn(db: MemBackendRef): GetKeyFn =
           let vtx = data.deblobify(Vertex).valueOr:
             return err(GetKeyNotFound)
           return ok((VOID_HASH_KEY, vtx))
-        return ok((key, nil))
+        return ok((key, emptyVertex))
       err(GetKeyNotFound)
 
 func getLstFn(db: MemBackendRef): GetLstFn =

@@ -25,14 +25,14 @@ import
 # Private heplers
 # ------------------------------------------------------------------------------
 
-proc branchStillNeeded(vtx: BranchRef, removed: int8): Result[int8,void] =
+proc branchStillNeeded(branch: BranchData, removed: int8): Result[int8,void] =
   ## Returns the nibble if there is only one reference left.
   var nibble = -1'i8
   for n in 0'i8 .. 15'i8:
     if n == removed:
       continue
 
-    if vtx.bVid(uint8 n).isValid:
+    if branch.bVid(uint8 n).isValid:
       if 0 <= nibble:
         return ok(-1)
       nibble = n
@@ -48,7 +48,7 @@ proc branchStillNeeded(vtx: BranchRef, removed: int8): Result[int8,void] =
 proc deleteImpl(
     db: AristoTxRef;                   # Database, top layer
     hike: Hike;                        # Fully expanded path
-      ): Result[LeafRef, AristoError] =
+      ): Result[Vertex, AristoError] =
   ## Removes the last node in the hike and returns the updated leaf in case
   ## a branch collapsed
 
@@ -62,16 +62,15 @@ proc deleteImpl(
   if hike.legs.len == 1:
     # This was the last node in the trie, meaning we don't have any branches or
     # leaves to update
-    return ok(nil)
+    return ok(emptyVertex)
 
   if hike.legs[^2].wp.vtx.vType notin Branches:
     return err(DelBranchExpexted)
 
   # Get current `Branch` vertex `br`
-  let
-    br = hike.legs[^2].wp
-    brVtx = BranchRef(br.vtx)
-    nbl = brVtx.branchStillNeeded(hike.legs[^2].nibble).valueOr:
+  let br = hike.legs[^2].wp
+  var brVtx = br.vtx
+  let nbl = brVtx.branch.branchStillNeeded(hike.legs[^2].nibble).valueOr:
       return err(DelBranchWithoutRefs)
 
   # Clear keys that include `br` - `br` itself will be replaced below
@@ -83,7 +82,7 @@ proc deleteImpl(
 
     # Get child vertex (there must be one after a `Branch` node)
     let
-      vid = brVtx.bVid(uint8 nbl)
+      vid = brVtx.branch.bVid(uint8 nbl)
       nxt = db.getVtx (hike.root, vid)
     if not nxt.isValid:
       return err(DelVidStaleVtx)
@@ -94,35 +93,33 @@ proc deleteImpl(
         if brVtx.vType == Branch:
           NibblesBuf.nibble(nbl.byte)
         else:
-          ExtBranchRef(brVtx).pfx & NibblesBuf.nibble(nbl.byte)
+          brVtx.branch.pfx[] & NibblesBuf.nibble(nbl.byte)
       vtx =
         case nxt.vType
+        of Empty:
+          raiseAssert "unexpected empty vtx"
         of AccLeaf:
-          let nxt = AccLeafData(nxt)
-          AccLeafData.init(pfx & nxt.pfx, nxt.account, nxt.stoID)
+          Vertex.initAccLeaf(pfx & nxt.accLeaf.pfx, nxt.accLeaf.account, nxt.accLeaf.stoID)
         of StoLeaf:
-          let nxt = StoLeafData(nxt)
-          StoLeafData.init(pfx & nxt.pfx, nxt.stoData)
+          Vertex.initStoLeaf(pfx & nxt.stoLeaf.pfx, nxt.stoLeaf.stoData)
         of Branch:
-          let nxt = BranchRef(nxt)
-          Vertex.initExtBranch(pfx, nxt.startVid, nxt.used)
+          Vertex.initExtBranch(pfx, nxt.branch.startVid, nxt.branch.used)
         of ExtBranch:
-          let nxt = ExtBranchRef(nxt)
-          Vertex.initExtBranch(pfx & nxt.pfx, nxt.startVid, nxt.used)
+          Vertex.initExtBranch(pfx & nxt.branch.pfx[], nxt.branch.startVid, nxt.branch.used)
 
     # Put the new vertex at the id of the obsolete branch
     db.layersPutVtx((hike.root, br.vid), vtx)
 
     if vtx.vType in Leaves:
-      ok(LeafRef(vtx))
+      ok(vtx)
     else:
-      ok(nil)
+      ok(emptyVertex)
   else:
     # Clear the removed leaf from the branch (that still contains other children)
-    let brDup = db.layersUpdate((hike.root, br.vid), brVtx)
-    discard brDup.setUsed(uint8 hike.legs[^2].nibble, false)
+    discard brVtx.branch.setUsed(uint8 hike.legs[^2].nibble, false)
+    discard db.layersUpdate((hike.root, br.vid), brVtx) 
 
-    ok(nil)
+    ok(emptyVertex)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -140,7 +137,7 @@ proc deleteAccountRecord*(
     if error == FetchAccInaccessible:
       return ok() # Trying to delete something that doesn't exist is ok
     return err(error)
-  let stoID = AccLeafData(accHike.legs[^1].wp.vtx).stoID
+  let stoID = accHike.legs[^1].wp.vtx.accLeaf.stoID
 
   # Delete storage tree if present
   if stoID.isValid:
@@ -148,12 +145,12 @@ proc deleteAccountRecord*(
 
   let otherLeaf = ?db.deleteImpl(accHike)
 
-  db.layersPutAccLeaf(accPath, nil)
+  db.layersPutAccLeaf(accPath, Opt.none(AccLeafData))
 
   if otherLeaf.isValid:
     db.layersPutAccLeaf(
       Hash32(getBytes(NibblesBuf.fromBytes(accPath.data).replaceSuffix(otherLeaf.pfx))),
-      AccLeafData(otherLeaf),
+      Opt.some(otherLeaf.accLeaf),
     )
 
   ok()
@@ -174,7 +171,7 @@ proc deleteStorageData*(
     mixPath = mixUp(accPath, stoPath)
     stoLeaf = db.cachedStoLeaf(mixPath)
 
-  if stoLeaf == Opt.some(nil):
+  if stoLeaf == Opt.some(Opt.none(StoLeafData)):
     return ok() # Trying to delete something that doesn't exist is ok
 
   var accHike: Hike
@@ -183,10 +180,9 @@ proc deleteStorageData*(
       return ok() # Trying to delete something that doesn't exist is ok
     return err(error)
 
-  let
-    wpAcc = accHike.legs[^1].wp
-    accVtx = AccLeafData(wpAcc.vtx)
-    stoID = accVtx.stoID
+  let wpAcc = accHike.legs[^1].wp
+  var accVtx = wpAcc.vtx
+  let stoID = accVtx.accLeaf.stoID
 
   if not stoID.isValid:
     return ok() # Trying to delete something that doesn't exist is ok
@@ -208,14 +204,15 @@ proc deleteStorageData*(
   if otherLeaf.isValid:
     let leafMixPath =
       mixUp(accPath, Hash32(getBytes(stoNibbles.replaceSuffix(otherLeaf.pfx))))
-    db.layersPutStoLeaf(leafMixPath, StoLeafData(otherLeaf))
+    db.layersPutStoLeaf(leafMixPath, Opt.some(otherLeaf.stoLeaf))
 
   # If there was only one item (that got deleted), update the account as well
   if stoHike.legs.len == 1:
     # De-register the deleted storage tree from the account record
-    let leaf = db.layersUpdate((accHike.root, wpAcc.vid), accVtx) # Dup on modify
-    leaf.stoID.isValid = false
-    db.layersPutAccLeaf(accPath, leaf)
+    accVtx.accLeaf.stoID.isValid = false
+    discard db.layersUpdate((accHike.root, wpAcc.vid), accVtx) # Dup on modify
+    
+    db.layersPutAccLeaf(accPath, Opt.some(accVtx.accLeaf))
 
   ok()
 
@@ -232,10 +229,9 @@ proc deleteStorageTree*(
       return ok() # Trying to delete something that doesn't exist is ok
     return err(error)
 
-  let
-    wpAcc = accHike.legs[^1].wp
-    accVtx = AccLeafData(wpAcc.vtx)
-    stoID = accVtx.stoID
+  let wpAcc = accHike.legs[^1].wp
+  var accVtx = wpAcc.vtx
+  let stoID = accVtx.accLeaf.stoID
 
   if not stoID.isValid:
     return ok() # Trying to delete something that doesn't exist is ok
@@ -246,9 +242,10 @@ proc deleteStorageTree*(
   ?db.delStoTreeImpl(stoID.vid, accPath)
 
   # De-register the deleted storage tree from the accounts record
-  let leaf = db.layersUpdate((accHike.root, wpAcc.vid), accVtx) # Dup on modify
-  leaf.stoID.isValid = false
-  db.layersPutAccLeaf(accPath, leaf)
+  accVtx.accLeaf.stoID.isValid = false
+  discard db.layersUpdate((accHike.root, wpAcc.vid), accVtx) # Dup on modify
+  
+  db.layersPutAccLeaf(accPath, Opt.some(accVtx.accLeaf))
 
   ok()
 

@@ -87,8 +87,8 @@ proc initInstance*(db: AristoDbRef, maxSnapshots = defaultMaxSnapshots): Result[
   doAssert maxSnapshots > 0
   let vTop = (?db.getLstFn()).vTop
   db.txRef = AristoTxRef(db: db, vTop: vTop, snapshot: Snapshot(level: Opt.some(0)))
-  db.accLeaves = LruCache[Hash32, AccLeafData].init(ACC_LRU_SIZE)
-  db.stoLeaves = LruCache[Hash32, StoLeafData].init(ACC_LRU_SIZE)
+  db.accLeaves = LruCache[Hash32, Opt[AccLeafData]].init(ACC_LRU_SIZE)
+  db.stoLeaves = LruCache[Hash32, Opt[StoLeafData]].init(ACC_LRU_SIZE)
   db.maxSnapshots = maxSnapshots
   ok()
 

@@ -46,27 +46,6 @@ type
     isValid: bool                    ## See also `isValid()` for `VertexID`
     vid: VertexID                    ## Storage root vertex ID
 
-  # Vertex* {.inheritable, pure.} = ref object
-  #   ## Vertex for building a hexary Patricia or Merkle Patricia Trie
-  #   vType*: VertexType
-
-  # BranchRef* = ref object of Vertex
-  #   used*: uint16
-  #   startVid*: VertexID
-
-  # ExtBranchRef* = ref object of BranchRef
-  #   pfx*: NibblesBuf
-
-  # LeafRef* = ref object of Vertex
-  #   pfx*: NibblesBuf
-
-  # AccLeafData* = ref object of LeafRef
-  #   account*: AristoAccount
-  #   stoID*: StorageID              ## Storage vertex ID (if any)
-
-  # StoLeafData* = ref object of LeafRef
-  #   stoData*: UInt256
-
   Vertex* = object
     ## Vertex for building a hexary Patricia or Merkle Patricia Trie
     case vType*: VertexType

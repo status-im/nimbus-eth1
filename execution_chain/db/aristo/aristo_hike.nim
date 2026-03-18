@@ -34,14 +34,16 @@ func getNibblesImpl(hike: Hike; start = 0; maxLen = high(int)): NibblesBuf =
   for n in start ..< min(hike.legs.len, maxLen):
     let leg = hike.legs[n]
     case leg.wp.vtx.vType:
+    of Empty:
+      raiseAssert "unexpected empty vtx"
     of Branch:
       result = result & NibblesBuf.nibble(leg.nibble.byte)
     of ExtBranch:
-      let vtx = ExtBranchRef(leg.wp.vtx)
-      result = result & vtx.pfx & NibblesBuf.nibble(leg.nibble.byte)
-    of Leaves:
-      let vtx = LeafRef(leg.wp.vtx)
-      result = result & vtx.pfx
+      result = result & leg.wp.vtx.branch.pfx[] & NibblesBuf.nibble(leg.nibble.byte)
+    of AccLeaf:
+      result = result & leg.wp.vtx.accLeaf.pfx
+    of StoLeaf:
+      result = result & leg.wp.vtx.stoLeaf.pfx
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -81,23 +83,29 @@ proc step*(
     return err(HikeDanglingEdge)
 
   case vtx.vType:
-  of Leaves:
+  of Empty:
+    raiseAssert "unexpected empty vtx"
+  of AccLeaf:
     # This must be the last vertex, so there cannot be any `tail` left.
-    let vtx = LeafRef(vtx)
-    if path.len != path.sharedPrefixLen(vtx.pfx):
+    if path.len != path.sharedPrefixLen(vtx.accLeaf.pfx):
+      return err(HikeLeafUnexpected)
+
+    ok (vtx, NibblesBuf(), VertexID(0))
+  of StoLeaf:
+    # This must be the last vertex, so there cannot be any `tail` left.
+    if path.len != path.sharedPrefixLen(vtx.stoLeaf.pfx):
       return err(HikeLeafUnexpected)
 
     ok (vtx, NibblesBuf(), VertexID(0))
 
   of Branch:
     # There must be some more data (aka `tail`) after a `Branch` vertex.
-    let vtx = BranchRef(vtx)
     if path.len <= 0:
       return err(HikeBranchTailEmpty)
 
     let
       nibble = path[0]
-      nextVid = vtx.bVid(nibble)
+      nextVid = vtx.branch.bVid(nibble)
 
     if not nextVid.isValid:
       return err(HikeBranchMissingEdge)
@@ -106,13 +114,12 @@ proc step*(
 
   of ExtBranch:
     # There must be some more data (aka `tail`) after a `Branch` vertex.
-    let vtx = ExtBranchRef(vtx)
-    if path.len <= vtx.pfx.len:
+    if path.len <= vtx.branch.pfx[].len:
       return err(HikeBranchTailEmpty)
 
     let
-      nibble = path[vtx.pfx.len]
-      nextVid = vtx.bVid(nibble)
+      nibble = path[vtx.branch.pfx[].len]
+      nextVid = vtx.branch.bVid(nibble)
 
     if not nextVid.isValid:
       return err(HikeBranchMissingEdge)
@@ -166,8 +173,11 @@ proc hikeUp*[LeafType](
 
   var vid = root
   while true:
-    if leaf.isSome() and leaf[].isValid and path == leaf[].pfx:
-      hike.legs.add Leg(wp: VidVtxPair(vid: vid, vtx: leaf[]), nibble: -1)
+    if leaf.isSome() and leaf[].isValid and path == leaf[][].pfx:
+      when LeafType is Opt[AccLeafData]:
+        hike.legs.add Leg(wp: VidVtxPair(vid: vid, vtx: Vertex(vType: AccLeaf, accLeaf: leaf[][])), nibble: -1)
+      else:
+        hike.legs.add Leg(wp: VidVtxPair(vid: vid, vtx: Vertex(vType: StoLeaf, stoLeaf: leaf[][])), nibble: -1)
       reset(hike.tail)
       break
 
@@ -177,6 +187,8 @@ proc hikeUp*[LeafType](
     let wp = VidVtxPair(vid:vid, vtx:vtx)
 
     case vtx.vType
+    of Empty:
+      raiseAssert "unexpected empty vtx"
     of Leaves:
       hike.legs.add Leg(wp: wp, nibble: -1)
       hike.tail = path
@@ -187,8 +199,7 @@ proc hikeUp*[LeafType](
       hike.legs.add Leg(wp: wp, nibble: int8 hike.tail[0])
 
     of ExtBranch:
-      let vtx = ExtBranchRef(vtx)
-      hike.legs.add Leg(wp: wp, nibble: int8 hike.tail[vtx.pfx.len])
+      hike.legs.add Leg(wp: wp, nibble: int8 hike.tail[vtx.branch.pfx[].len])
 
     hike.tail = path
     vid = next
