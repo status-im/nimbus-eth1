@@ -14,7 +14,7 @@ import
   ../../aristo as use_ari,
   ../../aristo/[aristo_init/memory_only, aristo_walk/memory_only],
   ../../kvt as use_kvt,
-  ../../kvt/[kvt_init/memory_only, kvt_walk/memory_only],
+  ../../kvt/[kvt_init/memory_only],
   ../base_desc
 
 export base_desc

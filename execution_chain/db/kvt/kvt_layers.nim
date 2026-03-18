@@ -66,34 +66,5 @@ proc mergeAndReset*(trg, src: KvtTxRef) =
   mergeAndReset(trg.sTab, src.sTab)
 
 # ------------------------------------------------------------------------------
-# Public iterators
-# ------------------------------------------------------------------------------
-
-iterator layersWalk*(
-    db: KvtTxRef;
-    seen: var HashSet[seq[byte]];
-      ): tuple[key: seq[byte], data: seq[byte]] =
-  ## Walk over all key-value pairs on the cache layers. Note that
-  ## entries are unsorted.
-  ##
-  ## The argument `seen` collects a set of all visited vertex IDs including
-  ## the one with a zero vertex which are othewise skipped by the iterator.
-  ## The `seen` argument must not be modified while the iterator is active.
-  ##
-  for w in db.rstack:
-    for (key,val) in w.sTab.pairs:
-      if key notin seen:
-        yield (key,val)
-        seen.incl key
-
-iterator layersWalk*(
-    db: KvtTxRef;
-      ): tuple[key: seq[byte], data: seq[byte]] =
-  ## Variant of `layersWalk()`.
-  var seen: HashSet[seq[byte]]
-  for (key,val) in db.layersWalk seen:
-    yield (key,val)
-
-# ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

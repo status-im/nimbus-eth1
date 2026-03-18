@@ -22,7 +22,7 @@ import
   results,
   ../kvt_desc,
   ./init_common,
-  ./rocks_db/[rdb_desc, rdb_get, rdb_init, rdb_put, rdb_walk]
+  ./rocks_db/[rdb_desc, rdb_get, rdb_init, rdb_put]
 
 export rdb_desc
 
@@ -222,18 +222,6 @@ proc rocksDbKvtBackend*(baseDb: RocksDbInstanceRef, cf: static[KvtCFs]): KvtDbRe
 
 proc getBaseDb*(db: RdbBackendRef): RocksDbInstanceRef =
   db.rdb.baseDb
-
-# ------------------------------------------------------------------------------
-# Public iterators (needs direct backend access)
-# ------------------------------------------------------------------------------
-
-iterator walk*(
-    be: RdbBackendRef;
-      ): tuple[key: seq[byte], data: seq[byte]] =
-  ## Walk over all key-value pairs of the database.
-  ##
-  for (k,v) in be.rdb.walk:
-    yield (k,v)
 
 # ------------------------------------------------------------------------------
 # End

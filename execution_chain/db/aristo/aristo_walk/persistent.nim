@@ -48,17 +48,6 @@ iterator walkKeyBe*[T: RdbBackendRef](
   for (rvid,key) in walkKeyBeImpl[T](db):
     yield (rvid,key)
 
-# -----------
-
-iterator walkPairs*[T: RdbBackendRef](
-   _: type T;
-   db: AristoDbRef;
-     ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
-  ## Walk over all `(VertexID,VertexRef)` in the database. Note that entries
-  ## are unsorted.
-  for (rvid,vtx) in walkPairsImpl[T](db):
-    yield (rvid,vtx)
-
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
