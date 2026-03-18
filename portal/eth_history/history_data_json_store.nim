@@ -60,7 +60,7 @@ proc getGenesisHeader*(id: NetworkId = MainNet): Header =
       debugEcho getCurrentException()[]
       raise (ref Defect)(msg: "Network parameters should be valid")
 
-  toGenesisHeader(params, AristoDbMemory.newCoreDbRef().txFrameBegin())
+  writeGenesisHeader(params, AristoDbMemory.newCoreDbRef().txFrameBegin())
 
 # Reading JSON Portal content and content keys
 
