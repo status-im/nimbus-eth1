@@ -15,7 +15,7 @@ import
   chronicles,
   eth/common/[hashes, blocks, receipts, headers_rlp],
   ../../execution_chain/common/[chain_config, genesis],
-  ../../execution_chain/common/db/core_db/memory_only,
+  ../../execution_chain/db/core_db/memory_only,
   ../network/history/history_content,
   ./block_proofs/historical_hashes_accumulator
 
