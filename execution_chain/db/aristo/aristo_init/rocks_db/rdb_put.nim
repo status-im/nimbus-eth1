@@ -98,10 +98,13 @@ proc putVtx*(
         discard rdb.rdBranchLru.update(rvid.vid, (vtx.startVid, vtx.used))
     else:
       rdb.rdBranchLru.del(rvid.vid)
+      
+      var vtxBuf: VertexBuf
+      vtx.blobifyTo(vtxBuf)
       if rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
-        rdb.rdVtxLru.put(rvid.vid, vtx)
+        rdb.rdVtxLru.put(rvid.vid, vtxBuf)
       else:
-        discard rdb.rdVtxLru.update(rvid.vid, vtx)
+        discard rdb.rdVtxLru.update(rvid.vid, vtxBuf)
 
     if key.isValid:
       if rdb.rdKeyLru.len < rdb.rdKeyLru.capacity:
