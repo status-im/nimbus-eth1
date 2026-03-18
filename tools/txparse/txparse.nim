@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,6 +13,7 @@ import
   stew/byteutils,
   eth/common/transaction_utils,
   ../common/helpers,
+  ../../execution_chain/db/core_db/memory_only,
   ../../execution_chain/transaction,
   ../../execution_chain/core/validate,
   ../../execution_chain/common/evmforks,

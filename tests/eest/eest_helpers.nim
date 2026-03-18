@@ -22,6 +22,7 @@ import
   ./chain_config_wrapper,
   ../../execution_chain/rpc,
   ../../execution_chain/common/hardforks,
+  ../../execution_chain/db/core_db/memory_only,
   ../../execution_chain/db/ledger,
   ../../execution_chain/core/chain/forked_chain,
   ../../execution_chain/core/tx_pool,

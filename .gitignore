@@ -54,3 +54,5 @@ tests/fixtures/eest_devnet
 tests/fixtures/eest_bal
 
 execution_chain/nimbus
+GeneralStateTestsBal.md
+GeneralStateTestsStatic.md

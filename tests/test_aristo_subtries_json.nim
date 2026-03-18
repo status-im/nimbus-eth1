@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -10,6 +10,7 @@ import
   unittest2,
   stint,
   eth/common/[hashes, addresses, accounts],
+  ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/[ledger, core_db],
    ../execution_chain/common/chain_config
 
