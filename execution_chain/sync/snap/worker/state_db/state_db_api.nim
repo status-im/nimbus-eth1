@@ -308,9 +308,9 @@ proc fetchAccountRange*(
       iRange = value
       # Unused ranges, subsets of `giv`
       if giv.minPt < value.minPt:
-        restore.add ItemKeyRange.new(giv.minPt, value.minPt-1)
+        discard db.unproc.merge(giv.minPt, value.minPt-1)
       if value.maxPt < giv.maxPt:
-        restore.add ItemKeyRange.new(value.maxPt+1,giv.maxPt)
+        discard db.unproc.merge(value.maxPt+1, giv.maxPt)
       break
     restore.add giv
 
