@@ -1,23 +1,45 @@
 {
   "nodes": {
+    "nimbusBuildSystem": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1771846495,
+        "narHash": "sha256-RvYf09Bb+35pyMmN/wjgXK9/QA/QIkKCaCXmeIz5sA4=",
+        "rev": "77b2c37f6bb50aac4796a1153b9fdee25d71a26e",
+        "revCount": 239,
+        "submodules": true,
+        "type": "git",
+        "url": "file:./vendor/nimbus-build-system"
+      },
+      "original": {
+        "submodules": true,
+        "type": "git",
+        "url": "file:./vendor/nimbus-build-system"
+      }
+    },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1767524784,
-        "narHash": "sha256-HDiDncE4t19U3cSg7Htf81L+vuFVO3FXFiw0KuHISgo=",
+        "lastModified": 1768818593,
+        "narHash": "sha256-sMGoIJFAdXvGh4lZppBxJd4FYHQbNWtuZY4sn70OcrY=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "63069dea28c77bb1bd082e6209f8446786999e67",
+        "rev": "2a777ace4b722f2714cc06d596f2476ee628c04a",
         "type": "github"
       },
       "original": {
         "owner": "NixOS",
-        "ref": "master",
         "repo": "nixpkgs",
+        "rev": "2a777ace4b722f2714cc06d596f2476ee628c04a",
         "type": "github"
       }
     },
     "root": {
       "inputs": {
+        "nimbusBuildSystem": "nimbusBuildSystem",
         "nixpkgs": "nixpkgs"
       }
     }

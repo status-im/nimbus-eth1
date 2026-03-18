@@ -2,12 +2,14 @@
   pkgs ? import <nixpkgs> { },
   # Source code of this repo.
   src ? ../.,
-  # Options: nimbus, fluffy, nimbus_portal_client, nimbus_portal_bridge
-  targets ? ["nimbus"],
+  # Nimbus-build-system package.
+  nim ? null,
+  # Options: nimbus, nimbus_execution_client, nimbus_portal_client, nimbus_portal_bridge
+  targets ? ["nimbus_execution_client"],
   # Options: 0,1,2
   verbosity ? 2,
-  # Perform 2-stage bootstrap instead of 3-stage to save time.
-  quickAndDirty ? true,
+  # FIXME: Necessary to compile EL client without linker failures.
+  disableLto ? true,
   # These are the only platforms tested in CI and considered stable.
   stableSystems ? [
     "x86_64-linux" "aarch64-linux" "armv7a-linux"
@@ -23,9 +25,9 @@ assert pkgs.lib.assertMsg ((src.submodules or true) == true)
 let
   inherit (pkgs) stdenv lib writeScriptBin callPackage;
 
-  revision = lib.substring 0 8 (src.rev or "00000000");
+  revision = lib.substring 0 8 (src.rev or src.dirtyRev or "00000000");
 in stdenv.mkDerivation rec {
-  pname = "nimbus";
+  pname = "nimbus-eth1";
   version = "${callPackage ./version.nix {}}-${revision}";
 
   inherit src;
@@ -35,47 +37,52 @@ in stdenv.mkDerivation rec {
     fakeGit = writeScriptBin "git" "echo ${version}";
     fakeLsbRelease = writeScriptBin "lsb_release" "echo nix";
   in
-    with pkgs; [ fakeGit fakeLsbRelease perl which ]
+    with pkgs; [ nim rocksdb fakeGit fakeLsbRelease perl which ]
     ++ lib.optionals stdenv.isDarwin [ pkgs.darwin.cctools ];
 
-  enableParallelBuilding = true;
+  #enableParallelBuilding = true;
+  enableParallelBuilding = false;
 
-  # Disable CPU optmizations that make binary not portable.
-  NIMFLAGS = "-d:disableMarchNative -d:git_revision_override=${revision}";
-  # Avoid Nim cache permission errors.
-  XDG_CACHE_HOME = "/tmp";
+  env = {
+    # Disable CPU optmizations that make binary not portable.
+    NIMFLAGS = "-d:disableMarchNative -d:git_revision_override=${revision}";
+    NIM_PARAMS = lib.optionalString disableLto " --passC:'-fno-lto' --passL:'-fno-lto'";
 
-  NIX_DEBUG = 7;
+    # Avoid Nim cache permission errors.
+    XDG_CACHE_HOME = "/tmp";
+
+    #NIX_DEBUG = 7;
+    #NIX_CFLAGS_COMPILE = " -fno-lto";
+    #NIX_CFLAGS_LINK = " -Wl,-plugin-opt=-disable-lto";
+    #NIX_CFLAGS_LINK = ''
+    #  -Wl,--verbose
+    #  -Wl,-plugin-opt=-debug
+    #  -Wl,-plugin-opt=-save-temps
+    #  -Wl,-plugin-opt=-v
+    #  -Wl,-Map,link.map
+    #'';
+  };
 
   makeFlags = targets ++ [
     "V=${toString verbosity}"
-    # TODO: Compile Nim in a separate derivation to save time.
-    "QUICK_AND_DIRTY_COMPILER=${if quickAndDirty then "1" else "0"}"
-    "QUICK_AND_DIRTY_NIMBLE=${if quickAndDirty then "1" else "0"}"
+    "NIM_PARAMS=$NIM_PARAMS"
+    # Built from nimbus-build-system via flake.
+    "USE_SYSTEM_NIM=1"
+    # FIXME: Building local RockDB fails silently.
+    "USE_SYSTEM_ROCKSDB=1"
   ];
 
   patchPhase = ''
-    patchShebangs scripts vendor/nimbus-build-system vendor/nim-rocksdb > /dev/null
+    patchShebangs scripts vendor
     # Avoid CA Cert download error
     sed -i '196,200d' vendor/nimbus-build-system/scripts/build_nim.sh
     mkdir bin
     cp ${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt bin/cacert.pem
   '';
 
-  # Generate the nimbus-build-system.paths file.
+  # Generate the nimbus-build-system.paths file with vendor module paths.
   configurePhase = ''
     make nimbus-build-system-paths
-  '';
-
-  # Avoid nimbus-build-system invoking `git clone` to build Nim.
-  preBuild = ''
-    pushd vendor/nimbus-build-system/vendor/Nim
-    mkdir dist
-    cp -r ${callPackage ./nimble.nix {}}    dist/nimble
-    cp -r ${callPackage ./checksums.nix {}} dist/checksums
-    cp -r ${callPackage ./csources.nix {}}  csources_v2
-    chmod 777 -R dist/nimble csources_v2
-    popd
   '';
 
   installPhase = ''

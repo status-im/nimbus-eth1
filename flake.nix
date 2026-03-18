@@ -1,9 +1,25 @@
 {
-  description = "nimbus-eth2";
+  description = "nimbus-eth1";
 
-  inputs.nixpkgs.url = github:NixOS/nixpkgs/master;
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs?rev=2a777ace4b722f2714cc06d596f2476ee628c04a";
+    nimbusBuildSystem = {
+      url = "git+file:./vendor/nimbus-build-system?submodules=1";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    self = {
+      # WARNING: Does not work with 'github:' schema URLs.
+      # https://github.com/NixOS/nix/issues/14982
+      submodules = true;
+      # Avoid fetching big files from vendor/hoodi submodule.
+      lfs = false;
+    };
+  };
 
-  outputs = { self, nixpkgs }:
+  outputs = { self, nixpkgs, nimbusBuildSystem }:
+    assert (builtins.compareVersions builtins.nixVersion "2.27") <= 0
+      -> throw "Nix 2.27 or newer needed for proper submodules support!";
+
     let
       stableSystems = [
         "x86_64-linux" "aarch64-linux" "armv7a-linux"
@@ -20,18 +36,22 @@
         buildTarget = pkgsFor.${system}.callPackage ./nix/default.nix {
           inherit stableSystems; src = self;
         };
-        build = targets: buildTarget.override { inherit targets; };
+        nim = nimbusBuildSystem.packages.${system}.nim;
+        build = targets: buildTarget.override { inherit targets nim; };
       in rec {
-        nimbus               = build ["nimbus"];
-        fluffy               = build ["fluffy"];
-        nimbus_portal_client = build ["nimbus_portal_client"];
-        nimbus_portal_bridge = build ["portal_bridge"];
+        nimbus                  = build ["nimbus"];
+        nimbus_execution_client = build ["nimbus_execution_client"];
+        nimbus_portal_client    = build ["nimbus_portal_client"];
+        nimbus_portal_bridge    = build ["portal_bridge"];
+        nimbus_fluffy           = build ["fluffy"];
 
         default = nimbus;
       });
 
       devShells = forAllSystems (system: {
-        default = pkgsFor.${system}.callPackage ./nix/shell.nix { };
+        default = pkgsFor.${system}.callPackage ./nix/shell.nix {
+          inherit (nimbusBuildSystem.packages.${system}) nim;
+        };
       });
     };
 }
