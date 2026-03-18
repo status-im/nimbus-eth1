@@ -123,21 +123,53 @@ proc fetchSubRange*(
   ## Fetch a sub-interval of the argument interval `iv` from the unprocessed
   ## data ranges.
   ##
-  let
-    # Fetch bottom/left interval with least block numbers
-    jv = udb.unprocessed.ge(iv.minPt).valueOr:
-      return err()
+  var kv: ItemKeyRange
+  block body:
+    # Note that `iv.len` is a represented by the residue class mod `2^256`.
+    # So `iv.len == 0` indicates that the size is 2^256 as interval cannot
+    # be empty by definition.
+    if iv.len == 0:                                 # => 2^256, largest interval
+      kv = udb.unprocessed.ge().valueOr:
+        return err()                                # no data
+      break body
+    let covered = udb.unprocessed.covered(iv)
+    if covered == iv.len:
+      kv = iv                                       # total overlap
+      break body
+    if covered == 0:
+      return err()                                  # no overlap, at all
 
-    # Curb interval `jv` to maximal length
-    kv = block:
-      if jv.maxPt <= iv.maxPt:
-        jv
-      elif jv.minPt <= iv.maxPt:                    # now: `iv.maxPt < jv.maxPt`
-        ItemKeyRange.new(jv.minPt, iv.maxPt)
-      else:
-        return err()                                # empty intersection
+    # Now, there us a partial overlap of `iv` with the `unprocessed`
+    # interval set.
+    udb.unprocessed.ge(iv.minPt).isErrOr:
+      # Found closest interval `value` which left point does not start before
+      # the left point of `iv`.
+      #   iv:        [-------..
+      #   value:       [-----..
 
-  discard udb.unprocessed.reduce(kv)
+      if value.maxPt <= iv.maxPt:
+        # iv:        [--------------]
+        # value:       [---------]
+        kv = value
+        break body
+
+      if value.minPt <= iv.maxPt:
+        # iv:        [--------------]
+        # value:       [----------------]
+        kv = ItemKeyRange.new(value.minPt, iv.maxPt)
+        break body
+
+      # Get predecessor interval of `value` interval, `jv` say. Note that
+      # there is an overlap of `iv` with some interval from `unprocessed`.
+      # So `jv` exists and the start `jv` is before `iv`.
+      #   iv:        [--------------]
+      #   value:                      [-----]
+      #   jv:   ..---------]
+      let jv = udb.unprocessed.le(value.minPt).expect "Valid interval"
+      kv = ItemKeyRange.new(iv.minPt,jv.maxPt)
+      # break body
+
+  doAssert udb.unprocessed.reduce(kv) == kv.len
   doAssert udb.borrowed.merge(kv) == kv.len
   ok(kv)
 
