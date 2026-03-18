@@ -1,4 +1,4 @@
-{ pkgs ? import <nixpkgs> {}}:
+{ pkgs ? import <nixpkgs> {}, nim }:
 
 let
   mkdocs-packages = ps: with ps; [
@@ -11,7 +11,7 @@ let
 in pkgs.mkShell {
 
   buildInputs = with pkgs; [
-    figlet
+    nim
     git
     git-lfs
     gnumake
@@ -38,7 +38,5 @@ in pkgs.mkShell {
     export NIX_ENFORCE_NO_NATIVE=0
     export USE_SYSTEM_GETOPT=1
     export MAKEFLAGS="-j$NIX_BUILD_CORES"
-
-    figlet "Welcome to Nimbus-eth2"
   '';
 }
