@@ -18,6 +18,8 @@ import
 
 export aristo_desc, results
 
+const MAX_VERTEX_BLOB_SIZE = 117
+
 # Allocation-free version short big-endian encoding that skips the leading
 # zeroes
 type
@@ -29,7 +31,7 @@ type
     buf*: array[sizeof(SbeBuf[VertexID]) * 2, byte]
     len*: byte
   
-  VertexBuf* = ArrayBuf[128, byte]
+  VertexBuf* = ArrayBuf[MAX_VERTEX_BLOB_SIZE, byte]
 
 func `&=`*(x: var VertexBuf, y: VertexBuf) =
   x.add(y.data)
@@ -226,7 +228,7 @@ template blobifyTo*(vtx: VertexRef, data: var VertexBuf) =
 
 proc blobify*(vtx: VertexRef, key: HashKey): seq[byte] =
   ## Variant of `blobify()`
-  result = newSeqOfCap[byte](128)
+  result = newSeqOfCap[byte](MAX_VERTEX_BLOB_SIZE)
   vtx.blobifyTo(key, result)
 
 proc blobifyTo*(lSst: SavedState; data: var seq[byte]) =
