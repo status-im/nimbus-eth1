@@ -182,7 +182,7 @@ proc getBackendFn(db: MemBackendRef): GetBackendFn =
 
 proc memoryBackend*: KvtDbRef =
   let
-    be = MemBackendRef(beKind: BackendMemory)
+    be = MemBackendRef()
     db = KvtDbRef()
 
   db.getKvpFn = getKvpFn be
@@ -199,20 +199,6 @@ proc memoryBackend*: KvtDbRef =
   db.closeFn = closeFn be
   db.getBackendFn = getBackendFn be
   db
-
-# ------------------------------------------------------------------------------
-# Public iterators (needs direct backend access)
-# ------------------------------------------------------------------------------
-
-iterator walk*(
-    be: MemBackendRef;
-      ): tuple[key: seq[byte], data: seq[byte]] =
-  ## Walk over all key-value pairs of the database.
-  for key, data in be.tab:
-    if data.isValid:
-      yield (key, data)
-    else:
-      debug logTxt "walk() skip empty", key
 
 # ------------------------------------------------------------------------------
 # End

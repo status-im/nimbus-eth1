@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -128,7 +128,7 @@ proc deleteImpl(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc deleteAccountRecord*(
+proc deleteAccount*(
     db: AristoTxRef;
     accPath: Hash32;
       ): Result[void,AristoError] =
@@ -158,7 +158,7 @@ proc deleteAccountRecord*(
 
   ok()
 
-proc deleteStorageData*(
+proc deleteSlot*(
     db: AristoTxRef;
     accPath: Hash32;          # Implies storage data tree
     stoPath: Hash32;
@@ -223,7 +223,7 @@ proc deleteStorageTree*(
     db: AristoTxRef;                   # Database, top layer
     accPath: Hash32;                   # Implies storage data tree
       ): Result[void,AristoError] =
-  ## Variant of `deleteStorageData()` for purging the whole storage tree
+  ## Variant of `deleteSlot()` for purging the whole storage tree
   ## associated to the account argument `accPath`.
   ##
   var accHike: Hike

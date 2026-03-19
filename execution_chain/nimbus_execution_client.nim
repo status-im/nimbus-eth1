@@ -395,7 +395,7 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
     let com = setupCommonRef(config)
 
   defer:
-    com.db.finish()
+    com.db.close()
 
   case config.cmd
   of NimbusCmd.`import`:

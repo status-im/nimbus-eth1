@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -70,11 +70,11 @@ type
   # -------------
 
   CloseFn* =
-    proc(eradicate: bool) {.gcsafe, raises: [].}
+    proc(wipe: bool) {.gcsafe, raises: [].}
       ## Generic destructor for the `Aristo DB` backend. The argument
-      ## `eradicate` indicates that a full database deletion is requested. If
+      ## `wipe` indicates that a full database deletion is requested. If
       ## passed `false` the outcome might differ depending on the type of
-      ## backend (e.g. in-memory backends will always eradicate on close.)
+      ## backend (e.g. in-memory backends will always wipe on close.)
 
 # ------------------------------------------------------------------------------
 # End

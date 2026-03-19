@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -17,7 +17,7 @@ import
   results,
   unittest2,
   ../execution_chain/db/opts,
-  ../execution_chain/db/core_db/persistent,
+  ../execution_chain/db/core_db/[memory_only, persistent],
   ../execution_chain/core/chain,
   ./replay/pp,
   ./test_coredb/[
@@ -117,12 +117,10 @@ proc getTmpDir(sampleDir = sampleDirRefFile): string =
   sampleDir.findFilePath.value.splitFile.dir
 
 
-proc flushDbDir(s: string) =
+proc wipeTestDir(s: string) =
   if s != "":
-    let dataDir = s / "nimbus"
-    if (dataDir / "data").dirExists:
-      # Typically under Windows: there might be stale file locks.
-      try: dataDir.removeDir except CatchableError: discard
+    let dataDir = s / "ecdb"
+    try: dataDir.removeDir except CatchableError: discard
     block dontClearUnlessEmpty:
       for w in s.walkDir:
         break dontClearUnlessEmpty
@@ -158,7 +156,7 @@ proc initRunnerDB(
     # Resolve for static `dbType`
     case dbType:
     of AristoDbMemory: AristoDbMemory.newCoreDbRef()
-    of AristoDbRocks: AristoDbRocks.newCoreDbRef(path, DbOptions.init())
+    of AristoDbRocks: AristoDbRocks.newCoreDbRef(path, DbOptions.init(), wipe = true)
     else: raiseAssert $dbType
 
   when false: # or true:
@@ -220,18 +218,15 @@ proc chainSyncRunner(
 
     persistent = dbType in CoreDbPersistentTypes
 
-  defer:
-    if persistent: baseDir.flushDbDir
-
   suite &"CoreDB and LedgerRef API on {fileInfo}, {dbType}":
 
     test &"Ledger API {numBlocksInfo} blocks":
       let
         com = initRunnerDB(dbDir, capture, dbType)
       defer:
-        com.db.finish(eradicate = finalDiskCleanUpOk)
+        com.db.close()
         if profilingOk: noisy.test_chainSyncProfilingPrint numBlocks
-        if persistent and finalDiskCleanUpOk: dbDir.flushDbDir
+        if persistent and finalDiskCleanUpOk: dbDir.wipeTestDir()
 
       check noisy.test_chainSync(filePaths, com, numBlocks,
         lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk,
@@ -264,7 +259,6 @@ proc persistentSyncPreLoadAndResumeRunner(
       effDbType
 
   doAssert dbType in CoreDbPersistentTypes
-  defer: baseDir.flushDbDir
 
   let
     firstPart = min(capture.numBlocks div 2, 200_000)
@@ -277,7 +271,7 @@ proc persistentSyncPreLoadAndResumeRunner(
       let
         com = initRunnerDB(dbDir, capture, dbType)
       defer:
-        com.db.finish(eradicate = finalDiskCleanUpOk)
+        com.db.close()
         if profilingOk: noisy.test_chainSyncProfilingPrint firstPart
 
       check noisy.test_chainSync(filePaths, com, firstPart,
@@ -288,9 +282,9 @@ proc persistentSyncPreLoadAndResumeRunner(
       let
         com = initRunnerDB(dbDir, capture, dbType)
       defer:
-        com.db.finish(eradicate = finalDiskCleanUpOk)
+        com.db.close()
         if profilingOk: noisy.test_chainSyncProfilingPrint secndPart
-        if finalDiskCleanUpOk: dbDir.flushDbDir
+        if finalDiskCleanUpOk: dbDir.wipeTestDir
 
       check noisy.test_chainSync(filePaths, com, secndPart,
         lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk,

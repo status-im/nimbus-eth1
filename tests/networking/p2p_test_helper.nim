@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -12,6 +12,7 @@ import
   chronos,
   stint,
   eth/common/keys,
+  ../../execution_chain/db/core_db/memory_only,
   ../../execution_chain/networking/p2p,
   ../../execution_chain/core/chain/forked_chain,
   ../../execution_chain/core/tx_pool,
