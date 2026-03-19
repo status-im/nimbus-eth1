@@ -50,8 +50,6 @@ template accountDownload*(
     let
       data = buddy.fetchAccounts(state.stateRoot, ivReq).valueOr:
         sdb.rollbackAccountRange(state, ivReq)      # registry roll back
-        if error == ENoDataAvailable:
-          state.downScore()
         trace info & ": account download failed", peer, root, iv,
           `error`=error
         break body                                  # return err()
@@ -71,7 +69,6 @@ template accountDownload*(
           nAccounts, nProof
         break body                                  # return err()
 
-    state.upScore()                                 # got some data
     sdb.commitAccountRange(state, ivReq, limit)     # update registry
     bodyRc = typeof(bodyRc).ok(data.accounts)       # return code
 

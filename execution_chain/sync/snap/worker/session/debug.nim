@@ -18,5 +18,6 @@ export
   mpt_debug
 const
   dumpAccFailFile* = "/tmp/failed-acc.txt"
+  dumpStoFailFile* = "/tmp/failed-sto.txt"
 
 # End

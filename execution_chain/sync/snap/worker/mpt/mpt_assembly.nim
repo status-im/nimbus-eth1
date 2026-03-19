@@ -663,7 +663,6 @@ proc clear*(db: MptAsmRef; info: static[string]): bool =
 proc init*(
     T: type MptAsmRef;
     baseDir: string;
-    newDb: bool;
     info: static[string];
       ): Opt[T] =
   ## Create or open an existing database. If the ergument `newDb` is set
@@ -678,9 +677,8 @@ proc init*(
 
   else:
     let db = T(dir: Path(baseDir) / Path(snapAsmFolder))
-    if not newDb or db.newDbFolder(info):
-      if db.openDb(info):
-        return ok db
+    if db.openDb(info):
+      return ok db
 
   err()
 
