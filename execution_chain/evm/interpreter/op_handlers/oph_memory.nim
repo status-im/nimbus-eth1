@@ -64,10 +64,13 @@ proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256, coldAcces
 
     res = c.gasCosts[Sstore].ss_handler(newValue, gasParam)
 
+  # Charge regular gas before state gas so that a regular-gas OOG
+  # does not consume state gas that would inflate the parent's
+  # reservoir on frame failure.
+  ? c.opcodeGasCost(Sstore, res.gasCost + coldAccess, "SSTORE")
+
   if stateGas and res.stateGas > 0:
     ? c.gasMeter.chargeStateGas(res.stateGas, reason = "SSTORE state gas")
-
-  ? c.opcodeGasCost(Sstore, res.gasCost + coldAccess, "SSTORE")
 
   c.gasMeter.refundGas(res.gasRefund)
 

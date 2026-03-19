@@ -183,12 +183,15 @@ proc selfDestructEIP8037Op(cpt: VmCpt): EvmResultVoid =
       ledger.accessList(beneficiary)
       gasCost = gasCost + ColdAccountAccessCost
 
+  # Charge regular gas before state gas so that a regular-gas OOG
+  # does not consume state gas that would inflate the parent's
+  # reservoir on frame failure.
+  ? cpt.opcodeGasCost(SelfDestruct,
+    gasCost, reason = "SELFDESTRUCT EIP-8037")
+
   if condition:
     ? cpt.gasMeter.chargeStateGas(STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte,
       reason = "SELFDESTRUCT EIP-8037: State gas new account")
-
-  ? cpt.opcodeGasCost(SelfDestruct,
-    gasCost, reason = "SELFDESTRUCT EIP-8037")
 
   cpt.selfDestruct(beneficiary)
   ok()
