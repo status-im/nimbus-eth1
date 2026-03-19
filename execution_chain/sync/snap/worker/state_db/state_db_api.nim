@@ -71,8 +71,6 @@ type
     byHash: StateByHash                 ## States indexed by block hash
     byRoot: StateByRoot                 ## States indexed by state root
 
-func toStr*(db: StateDbRef): string     ## Forward declaration
-
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
@@ -286,32 +284,44 @@ proc fetchAccountRange*(
   ## returned account intervals for different `state` arguments will not
   ## overlap up until the range `0..2^256` is fully covered.
   ##
-  ## If the state was eviceted from the database, `err()` (for `none`) is
+  ## If the state was evicted from the database, `err()` (for `none`) is
   ## returned.
   ##
-  if state.deadState:
+  if state.deadState or                             # evicted
+     state.unproc.avail().isErr():                  # all done this state
     return err()
-  # Re-fill global register if exhausted
   if db.unproc.chunks == 0:
+    # Re-fill global register if exhausted
     db.overlays.inc
-    discard db.unproc.merge ItemKeyRangeMax
-  let giv = db.unproc.fetchLeast(unprocAccountsRangeMax).expect "Account range"
+    db.unproc = ItemKeyRangeSet.init ItemKeyRangeMax
 
-  # Fetch this interval from local range set
-  let liv = state.unproc.fetchSubRange(giv).valueOr:
-    discard db.unproc.merge(giv)                    # restore global range
-    let ljv = state.unproc.fetchLeast(unprocAccountsRangeMax).valueOr:
-      return err()                                  # oops, all done here
-    discard db.unproc.reduce(ljv)                   # extract from global range
-    return ok(ljv)
+  # Fetch interval from state, coordinated by the global register. This results
+  # in minimal overlap of processed intervals over all active states.
+  var
+    restore: seq[ItemKeyRange]                      # temp. blocked items
+    iRange: ItemKeyRange                            # return value
+  while true:
+    let giv = db.unproc.fetchLeast(unprocAccountsRangeMax).valueOr:
+      # No overlapping data, fetch directly from `state`
+      iRange = state.unproc.fetchLeast(unprocAccountsRangeMax)
+                           .expect "Valid state range"
+      break
+    # Fetch this interval from local range set
+    state.unproc.fetchSubRange(giv).isErrOr:
+      iRange = value
+      # Unused ranges, subsets of `giv`
+      if giv.minPt < value.minPt:
+        restore.add ItemKeyRange.new(giv.minPt, value.minPt-1)
+      if value.maxPt < giv.maxPt:
+        restore.add ItemKeyRange.new(value.maxPt+1,giv.maxPt)
+      break
+    restore.add giv
 
-  # Update range for `liv` subset of `giv`
-  if giv.minPt < liv.minPt:
-    discard db.unproc.merge(giv.minPt, liv.minPt-1)
-  if liv.maxPt < giv.maxPt:
-    discard db.unproc.merge(liv.maxPt, giv.maxPt-1)
+  # Restore temporarily locked intervals
+  for iv in restore:
+    discard db.unproc.merge iv                      # restore global range
 
-  ok liv
+  ok iRange
 
 proc rollbackAccountRange*(
     db: StateDbRef;
@@ -354,7 +364,6 @@ proc commitAccountRange*(
         db.pivot = state
 
     db.updateMetrics()
-
 
 proc setAccountRange*(
     db: StateDbRef;
