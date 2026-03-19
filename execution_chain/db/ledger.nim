@@ -210,13 +210,15 @@ proc originalStorageValue(
     acc.originalStorage[].withValue(slot, val) do:
       return val[]
 
-  # Not in the original values cache - go to the DB.
-  let
-    slotKey = ledger.slots.get(slot).valueOr:
-      computeSlotKey(slot)
-    rc = ledger.txFrame.fetchSlot(acc.accPath, slotKey)
-  if rc.isOk:
-    result = rc.value
+  # Not in the original values cache - go to the DB unless it's a new account
+  if acc.flags * {IsNew, NewlyCreated} == {}:
+
+    let
+      slotKey = ledger.slots.get(slot).valueOr:
+        computeSlotKey(slot)
+      rc = ledger.txFrame.fetchSlot(acc.accPath, slotKey)
+    if rc.isOk:
+      result = rc.value
 
   acc.originalStorage[slot] = result
 
@@ -234,8 +236,6 @@ proc kill(ledger: LedgerRef, acc: AccountRef) =
   acc.flags.excl Alive
   acc.overlayStorage.clear()
   acc.originalStorage = nil
-
-  ledger.txFrame.clearStorage(acc.accPath).expect("txFrame.clearStorage works")
 
   acc.statement.nonce = EMPTY_ACCOUNT.nonce
   acc.statement.balance = EMPTY_ACCOUNT.balance
@@ -595,8 +595,6 @@ proc setStorage*(ledger: LedgerRef, address: Address, slot, value: UInt256) =
     acc.flags.incl StorageChanged
 
 proc clearStorage*(ledger: LedgerRef, address: Address) =
-  const info = "clearStorage(): "
-
   # If there is an existing account with the given address, it is overwritten.
   let acc = ledger.getAccount(address)
   acc.flags.incl {Alive, NewlyCreated}
@@ -605,8 +603,6 @@ proc clearStorage*(ledger: LedgerRef, address: Address) =
   if not empty:
     # need to clear the storage from the database first
     let acc = ledger.makeDirty(address, cloneStorage = false)
-    ledger.txFrame.clearStorage(acc.accPath).isOkOr:
-      raiseAssert info & $$error
     # update caches
     if acc.originalStorage.isNil.not:
       # also clear originalStorage cache, otherwise
@@ -706,6 +702,14 @@ proc persist*(ledger: LedgerRef,
     of Update:
       if CodeChanged in acc.flags:
         acc.persistCode(ledger)
+      if NewlyCreated in acc.flags:
+        # TODO https://github.com/status-im/nimbus-eth1/issues/4024
+        # When overwriting an account, other clients clear storage - it seems
+        # however there's limited spec clarity on this point - in particular,
+        # conformance tests pass both with and without this line at the time of
+        # writing!
+        ledger.txFrame.clearStorage(acc.accPath).expect("can clear storage of account")
+
       if StorageChanged in acc.flags:
         acc.persistStorage(ledger)
       else:

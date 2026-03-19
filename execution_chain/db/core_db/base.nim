@@ -410,13 +410,9 @@ proc fetchSlot*(
     stoPath: Hash32;
       ):  CoreDbRc[UInt256] =
   ## Like `fetch()` but with cascaded index `(accPath,slot)`.
-  let rc = acc.aTx.fetchSlot(accPath, stoPath)
-  if rc.isOk:
-    ok(rc.value)
-  elif rc.error == FetchPathNotFound:
-    err(rc.error.toError("", StoNotFound))
-  else:
-    err(rc.error.toError(""))
+  let res = acc.aTx.fetchSlot(accPath, stoPath).valueOr:
+    return err(error.toError(""))
+  ok res
 
 proc deleteSlot*(
     acc: CoreDbTxRef;
