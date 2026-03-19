@@ -223,6 +223,11 @@ proc blobifyTo*(vtx: VertexRef, key: HashKey, data: var VertexBuf) =
 
   data &= [bits]
 
+template blobify*(vtx: VertexRef, key: HashKey): openArray[byte] =
+  var vtxBuf: VertexBuf
+  vtx.blobifyTo(key, vtxBuf)
+  vtxBuf.data()
+
 proc blobifyTo*(lSst: SavedState; data: var seq[byte]) =
   ## Serialise a last saved state record
   data.add lSst.vTop.uint64.toBytesBE
