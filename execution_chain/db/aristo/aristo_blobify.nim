@@ -33,7 +33,7 @@ type
   
   VertexBuf* = ArrayBuf[MAX_VERTEX_BLOB_SIZE, byte]
 
-func `&=`*(x: var VertexBuf, y: VertexBuf) =
+template `&=`*(x: var VertexBuf, y: VertexBuf) =
   x.add(y.data)
 
 func significantBytesBE(val: openArray[byte]): byte =
@@ -131,7 +131,7 @@ proc load256(data: openArray[byte]; start: var int, len: int): Result[UInt256,Ar
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc blobifyTo*(pyl: AccLeafRef, data: var (seq[byte]|VertexBuf)) =
+proc blobifyTo*(pyl: AccLeafRef, data: var VertexBuf) =
   # `lens` holds `len-1` since `mask` filters out the zero-length case (which
   # allows saving 1 bit per length)
   var lens: uint16
@@ -161,11 +161,11 @@ proc blobifyTo*(pyl: AccLeafRef, data: var (seq[byte]|VertexBuf)) =
   data &= lens.toBytesBE()
   data &= [mask]
 
-proc blobifyTo*(pyl: StoLeafRef, data: var (seq[byte]|VertexBuf)) =
+proc blobifyTo*(pyl: StoLeafRef, data: var VertexBuf) =
   data &= pyl.stoData.blobify().data
   data &= [0x20.byte]
 
-proc blobifyTo*(vtx: VertexRef, key: HashKey, data: var (seq[byte]|VertexBuf)) =
+proc blobifyTo*(vtx: VertexRef, key: HashKey, data: var VertexBuf) =
   ## This function serialises the vertex argument to a database record.
   ## Contrary to RLP based serialisation, these records aim to align on
   ## fixed byte boundaries.
@@ -222,14 +222,6 @@ proc blobifyTo*(vtx: VertexRef, key: HashKey, data: var (seq[byte]|VertexBuf)) =
       writePfx(vtx, 0b01'u8)
 
   data &= [bits]
-
-template blobifyTo*(vtx: VertexRef, data: var VertexBuf) =
-  vtx.blobifyTo(VOID_HASH_KEY, data)
-
-proc blobify*(vtx: VertexRef, key: HashKey): seq[byte] =
-  ## Variant of `blobify()`
-  result = newSeqOfCap[byte](MAX_VERTEX_BLOB_SIZE)
-  vtx.blobifyTo(key, result)
 
 proc blobifyTo*(lSst: SavedState; data: var seq[byte]) =
   ## Serialise a last saved state record
