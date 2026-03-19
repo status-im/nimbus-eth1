@@ -17,6 +17,7 @@ import
   results,
   stint,
   ../../execution_chain/[evm/types, evm/state],
+  ../../execution_chain/db/core_db/memory_only,
   ../../execution_chain/db/ledger,
   ../../execution_chain/transaction,
   ../../execution_chain/core/executor,

@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -20,10 +20,6 @@ const
     ## Enforce session tracking
 
 type
-  BackendType* = enum
-    BackendMemory
-    BackendRocksDB
-
   StorageType* = enum
     ## Storage types, key prefix
     Oops = 0
@@ -36,7 +32,6 @@ type
 
   TypedBackendRef* = ref TypedBackendObj
   TypedBackendObj* = object of RootObj
-    beKind*: BackendType             ## Backend type identifier
     when verifyIxId:
       txGen: uint                    ## Transaction ID generator (for debugging)
       txId: uint                     ## Active transaction ID (for debugging)
@@ -92,18 +87,18 @@ proc initInstance*(db: AristoDbRef, maxSnapshots = defaultMaxSnapshots): Result[
   db.maxSnapshots = maxSnapshots
   ok()
 
-proc finish*(db: AristoDbRef; eradicate = false) =
-  ## Backend destructor. The argument `eradicate` indicates that a full
+proc close*(db: AristoDbRef; wipe = false) =
+  ## Backend destructor. The argument `wipe` indicates that a full
   ## database deletion is requested. If set `false` the outcome might differ
   ## depending on the type of backend (e.g. the `BackendMemory` backend will
-  ## always eradicate on close.)
+  ## always wipe on close.)
   ##
   ## In case of distributed descriptors accessing the same backend, all
   ## distributed descriptors will be destroyed.
   ##
   ## This distructor may be used on already *destructed* descriptors.
   ##
-  db.closeFn eradicate
+  db.closeFn wipe
 
 # ------------------------------------------------------------------------------
 # End

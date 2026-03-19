@@ -17,7 +17,7 @@ import
   ../../constants,
   ../[kvt, aristo],
   ../kvt/kvt_init/init_common,
-  ./base/[base_desc, base_helpers]
+  ./base_desc
 
 # Persist performance metrics are disabled on bare metal
 when not defined(`any`) and not defined(standalone):
@@ -37,6 +37,22 @@ import
     aristo_delete, aristo_desc, aristo_fetch, aristo_merge, aristo_proof,
     aristo_tx_frame],
   ../kvt/[kvt_desc, kvt_utils, kvt_tx_frame]
+
+func toError*(e: KvtError; s: string; error = Unspecified): CoreDbError =
+  CoreDbError(
+    error:    error,
+    ctx:      s,
+    isAristo: false,
+    kErr:     e)
+
+# ---------------
+
+func toError*(e: AristoError; s: string; error = Unspecified): CoreDbError =
+  CoreDbError(
+    error:    error,
+    ctx:      s,
+    isAristo: true,
+    aErr:     e)
 
 # ------------------------------------------------------------------------------
 # Public context constructors and administration
@@ -61,16 +77,16 @@ proc kvtBackend*(db: CoreDbRef): TypedBackendRef =
 # Public base descriptor methods
 # ------------------------------------------------------------------------------
 
-proc finish*(db: CoreDbRef; eradicate = false) =
-  ## Database destructor. If the argument `eradicate` is set `false`, the
+proc close*(db: CoreDbRef; wipe = false) =
+  ## Database destructor. If the argument `wipe` is set `false`, the
   ## database is left as-is and only the in-memory handlers are cleaned up.
   ##
   ## Otherwise the destructor is allowed to remove the database. This feature
   ## depends on the backend database. Currently, only the `AristoDbRocks` type
   ## backend removes the database on `true`.
 
-  db.kvt.finish(eradicate)
-  db.mpt.finish(eradicate)
+  db.kvt.close(wipe)
+  db.mpt.close(wipe)
 
 proc `$$`*(e: CoreDbError): string =
   ## Pretty print error symbol
@@ -241,14 +257,14 @@ proc hasKey*(kvt: CoreDbTxRef; key: openArray[byte]): bool =
 
 # ----------- accounts ---------------
 
-proc fetch*(
+proc fetchAccount*(
     acc: CoreDbTxRef;
     accPath: Hash32;
       ): CoreDbRc[CoreDbAccount] =
   ## Fetch the account data record for the particular account indexed by
   ## the key `accPath`.
   ##
-  let rc = acc.aTx.fetchAccountRecord(accPath)
+  let rc = acc.aTx.fetchAccount(accPath)
   if rc.isOk:
     ok(rc.value)
   elif rc.error == FetchPathNotFound:
@@ -256,14 +272,14 @@ proc fetch*(
   else:
     err(rc.error.toError(""))
 
-proc delete*(
+proc deleteAccount*(
     acc: CoreDbTxRef;
     accPath: Hash32;
       ): CoreDbRc[void] =
   ## Delete the particular account indexed by the key `accPath`. This
-  ## will also destroy an associated storage area.
+  ## will also clear the associated storage area.
   ##
-  acc.aTx.deleteAccountRecord(accPath).isOkOr:
+  acc.aTx.deleteAccount(accPath).isOkOr:
     return err(error.toError(""))
 
   ok()
@@ -280,7 +296,7 @@ proc clearStorage*(
 
   ok()
 
-proc merge*(
+proc mergeAccount*(
     acc: CoreDbTxRef;
     accPath: Hash32;
     accRec: CoreDbAccount;
@@ -288,21 +304,46 @@ proc merge*(
   ## Add or update the argument account data record `account`. Note that the
   ## `account` argument uniquely idendifies the particular account address.
   ##
-  acc.aTx.mergeAccountRecord(accPath, accRec).isOkOr:
+  acc.aTx.mergeAccount(accPath, accRec).isOkOr:
     return err(error.toError(""))
 
   ok()
 
-proc hasPath*(
+proc hasAccount*(
     acc: CoreDbTxRef;
     accPath: Hash32;
       ): CoreDbRc[bool] =
   ## Would be named `contains` if it returned `bool` rather than `Result[]`.
   ##
-  let rc = acc.aTx.hasPathAccount(accPath).valueOr:
+  let rc = acc.aTx.hasAccount(accPath).valueOr:
     return err(error.toError(""))
 
   ok(rc)
+
+proc fetchStorageRoot*(
+    acc: CoreDbTxRef;
+    accPath: Hash32;
+      ): CoreDbRc[Hash32] =
+  ## This function retrieves the Merkle state hash of the storage data
+  ## column (if available) related to the account  indexed by the key
+  ## `accPath`.`.
+  ##
+  let rc = acc.aTx.fetchStorageRoot(accPath).valueOr:
+    return err(error.toError(""))
+
+  ok(rc)
+
+proc accountStorageEmpty*(
+    acc: CoreDbTxRef;
+    accPath: Hash32;
+      ): CoreDbRc[bool] =
+  ## This function returns `true` if the storage root of the given account equals
+  ## EMPTY_ROOT, ie the account has no storage.
+  ##
+  let rc = acc.aTx.hasStorageData(accPath).valueOr:
+    return err(error.toError(""))
+
+  ok(not rc)
 
 proc getStateRoot*(acc: CoreDbTxRef): CoreDbRc[Hash32] =
   ## This function retrieves the Merkle state hash of the accounts
@@ -363,13 +404,13 @@ proc slotProofs*(
 
   ok(rc)
 
-proc slotFetch*(
+proc fetchSlot*(
     acc: CoreDbTxRef;
     accPath: Hash32;
     stoPath: Hash32;
       ):  CoreDbRc[UInt256] =
   ## Like `fetch()` but with cascaded index `(accPath,slot)`.
-  let rc = acc.aTx.fetchStorageData(accPath, stoPath)
+  let rc = acc.aTx.fetchSlot(accPath, stoPath)
   if rc.isOk:
     ok(rc.value)
   elif rc.error == FetchPathNotFound:
@@ -377,74 +418,32 @@ proc slotFetch*(
   else:
     err(rc.error.toError(""))
 
-proc slotDelete*(
+proc deleteSlot*(
     acc: CoreDbTxRef;
     accPath: Hash32;
     stoPath: Hash32;
       ):  CoreDbRc[void] =
   ## Like `delete()` but with cascaded index `(accPath,slot)`.
-  acc.aTx.deleteStorageData(accPath, stoPath).isOkOr:
+  acc.aTx.deleteSlot(accPath, stoPath).isOkOr:
     return err(error.toError(""))
 
   ok()
 
-proc slotHasPath*(
-    acc: CoreDbTxRef;
-    accPath: Hash32;
-    stoPath: Hash32;
-      ): CoreDbRc[bool] =
-  ## Like `hasPath()` but with cascaded index `(accPath,slot)`.
-  let rc = acc.aTx.hasPathStorage(accPath, stoPath).valueOr:
-    return err(error.toError(""))
-
-  ok(rc)
-
-proc slotMerge*(
+proc mergeSlot*(
     acc: CoreDbTxRef;
     accPath: Hash32;
     stoPath: Hash32;
     stoData: UInt256;
       ): CoreDbRc[void] =
   ## Like `merge()` but with cascaded index `(accPath,slot)`.
-  acc.aTx.mergeStorageData(accPath, stoPath, stoData).isOkOr:
+  acc.aTx.mergeSlot(accPath, stoPath, stoData).isOkOr:
     return err(error.toError(""))
 
   ok()
 
-proc slotStorageRoot*(
-    acc: CoreDbTxRef;
-    accPath: Hash32;
-      ): CoreDbRc[Hash32] =
-  ## This function retrieves the Merkle state hash of the storage data
-  ## column (if available) related to the account  indexed by the key
-  ## `accPath`.`.
-  ##
-  let rc = acc.aTx.fetchStorageRoot(accPath).valueOr:
-    return err(error.toError(""))
-
-  ok(rc)
-
-proc slotStorageEmpty*(
-    acc: CoreDbTxRef;
-    accPath: Hash32;
-      ): CoreDbRc[bool] =
-  ## This function returns `true` if the storage data column is empty or
-  ## missing.
-  ##
-  let rc = acc.aTx.hasStorageData(accPath).valueOr:
-    return err(error.toError(""))
-
-  ok(not rc)
-
-proc slotStorageEmptyOrVoid*(
-    acc: CoreDbTxRef;
-    accPath: Hash32;
-      ): bool =
-  ## Convenience wrapper, returns `true` where `slotStorageEmpty()` would fail.
-  let rc = acc.aTx.hasStorageData(accPath).valueOr:
-    return true
-
-  not rc
+iterator slotPairs*(acc: CoreDbTxRef; accPath: Hash32): (Hash32, UInt256) =
+  for a in acc.aTx.rightPairsStorage accPath:
+    yield a
 
 # ------------- other ----------------
 
@@ -455,7 +454,7 @@ proc recast*(
       ): CoreDbRc[Account] =
   ## Complete the argument `accRec` to the portable Ethereum representation
   ## of an account statement. This conversion may fail if the storage colState
-  ## hash (see `slotStorageRoot()` above) is currently unavailable.
+  ## hash (see `fetchStorageRoot()` above) is currently unavailable.
   ##
   let rc = acc.aTx.fetchStorageRoot(accPath).valueOr:
     return err(error.toError(""))

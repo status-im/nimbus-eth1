@@ -13,16 +13,7 @@
 ##
 ## The iterators provided here are currently available only by direct
 ## backend access
-## ::
-##   import
-##     kvt/kvt_init/kvt_rocksdb
-##
-##   let rc = KvtDb.init(BackendRocksDB, "/var/tmp")
-##   if rc.isOk:
-##     let be = rc.value.to(RdbBackendRef)
-##     for (n, key, vtx) in be.walkVtx:
-##       ...
-##
+
 {.push raises: [].}
 
 import
@@ -31,7 +22,7 @@ import
   results,
   ../kvt_desc,
   ./init_common,
-  ./rocks_db/[rdb_desc, rdb_get, rdb_init, rdb_put, rdb_walk]
+  ./rocks_db/[rdb_desc, rdb_get, rdb_init, rdb_put]
 
 export rdb_desc
 
@@ -192,8 +183,8 @@ proc delRangeKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): DelRangeKvpFn =
 
 proc closeFn(db: RdbBackendRef): CloseFn =
   result =
-    proc(eradicate: bool) =
-      db.rdb.destroy(eradicate)
+    proc(wipe: bool) =
+      db.rdb.close(wipe)
 
 # -------------
 
@@ -208,7 +199,7 @@ proc getBackendFn(db: RdbBackendRef): GetBackendFn =
 
 proc rocksDbKvtBackend*(baseDb: RocksDbInstanceRef, cf: static[KvtCFs]): KvtDbRef =
   let
-    be = RdbBackendRef(beKind: BackendRocksDB)
+    be = RdbBackendRef()
     db = KvtDbRef()
 
   # Initialise RocksDB
@@ -231,18 +222,6 @@ proc rocksDbKvtBackend*(baseDb: RocksDbInstanceRef, cf: static[KvtCFs]): KvtDbRe
 
 proc getBaseDb*(db: RdbBackendRef): RocksDbInstanceRef =
   db.rdb.baseDb
-
-# ------------------------------------------------------------------------------
-# Public iterators (needs direct backend access)
-# ------------------------------------------------------------------------------
-
-iterator walk*(
-    be: RdbBackendRef;
-      ): tuple[key: seq[byte], data: seq[byte]] =
-  ## Walk over all key-value pairs of the database.
-  ##
-  for (k,v) in be.rdb.walk:
-    yield (k,v)
 
 # ------------------------------------------------------------------------------
 # End

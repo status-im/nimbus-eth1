@@ -1,5 +1,5 @@
 # Nimbus - Portal Network
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -15,6 +15,7 @@ import
   chronicles,
   eth/common/[hashes, blocks, receipts, headers_rlp],
   ../../execution_chain/common/[chain_config, genesis],
+  ../../execution_chain/db/core_db/memory_only,
   ../network/history/history_content,
   ./block_proofs/historical_hashes_accumulator
 
@@ -59,7 +60,7 @@ proc getGenesisHeader*(id: NetworkId = MainNet): Header =
       debugEcho getCurrentException()[]
       raise (ref Defect)(msg: "Network parameters should be valid")
 
-  toGenesisHeader(params)
+  writeGenesisHeader(params, AristoDbMemory.newCoreDbRef().txFrameBegin())
 
 # Reading JSON Portal content and content keys
 

@@ -630,12 +630,12 @@ proc newDbFolder(db: MptAsmRef; info: static[string]): bool =
 # Public constructor
 # ------------------------------------------------------------------------------
 
-proc close*(db: MptAsmRef, eradicate = false) =
-  ## Close database unless done yet. If the argument `eradicate` is set
+proc close*(db: MptAsmRef, wipe = false) =
+  ## Close database unless done yet. If the argument `wipe` is set
   ## `true`, then the database will be physically deleted.
   ##
   db.closeDb()
-  if eradicate:
+  if wipe:
     try:
       db.dir.removeDir()
 
