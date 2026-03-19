@@ -19,9 +19,10 @@ import
   ../execution_chain/conf,
   ../execution_chain/utils/utils,
   ../execution_chain/core/chain/forked_chain,
+  ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/ledger,
   ../execution_chain/db/kvt,
-  ../execution_chain/db/kvt/kvt_utils,
+  ../execution_chain/db/kvt/[kvt_init/memory_only, kvt_utils],
   ../execution_chain/db/storage_types,
   ../execution_chain/pruner
 
@@ -136,7 +137,7 @@ suite "Pruner KVT-level tests":
     let updated = kvt.getBe(key.toOpenArray).expect("should exist")
     check BlockNumber(uint64.fromBytesLE(updated)) == newBlockNum
 
-    kvt.finish()
+    kvt.close()
 
 suite "Pruner integration tests":
   var env = setupEnv()
