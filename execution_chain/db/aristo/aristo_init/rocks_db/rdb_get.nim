@@ -147,10 +147,11 @@ proc getKey*(
   # A threadvar is used to avoid allocating an environment for onData
   var res {.threadvar.}: Opt[HashKey]
   var vtxBuf {.threadvar.}: VertexBuf
-
+  
   let onData = proc(data: openArray[byte]) =
     res = data.deblobify(HashKey)
     if res.isNone():
+      reset(vtxBuf)
       vtxBuf.add(data)
 
   let gotData = rdb.vtxCol.get(rvid.blobify().data(), onData).valueOr:
@@ -212,10 +213,11 @@ proc getVtx*(
   # A threadvar is used to avoid allocating an environment for onData
   var res {.threadvar.}: Result[VertexRef, AristoError]
   var vtxBuf {.threadvar.}: VertexBuf
-
+  
   let onData = proc(data: openArray[byte]) =
     res = data.deblobify(VertexRef)
     if res.isOk() and res[].vType != Branch:
+      reset(vtxBuf)
       vtxBuf.add(data)
 
   let gotData = rdb.vtxCol.get(rvid.blobify().data(), onData).valueOr:

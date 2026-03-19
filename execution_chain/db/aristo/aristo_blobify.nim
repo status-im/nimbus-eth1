@@ -129,36 +129,6 @@ proc load256(data: openArray[byte]; start: var int, len: int): Result[UInt256,Ar
 # Public functions
 # ------------------------------------------------------------------------------
 
-# proc blobifyTo*(pyl: AccLeafRef, data: var VertexBuf) =
-#   # `lens` holds `len-1` since `mask` filters out the zero-length case (which
-#   # allows saving 1 bit per length)
-#   var lens: uint16
-#   var mask: byte
-#   if 0 < pyl.account.nonce:
-#     mask = mask or 0x01
-#     let tmp = pyl.account.nonce.blobify()
-#     lens += tmp.len - 1 # 3 bits
-#     data &= tmp.data()
-
-#   if 0 < pyl.account.balance:
-#     mask = mask or 0x02
-#     let tmp = pyl.account.balance.blobify()
-#     lens += uint16(tmp.len - 1) shl 3 # 5 bits
-#     data &= tmp.data()
-
-#   if pyl.stoID.isValid:
-#     mask = mask or 0x04
-#     let tmp = pyl.stoID.vid.blobify()
-#     lens += uint16(tmp.len - 1) shl 8 # 3 bits
-#     data &= tmp.data()
-
-#   if pyl.account.codeHash != EMPTY_CODE_HASH:
-#     mask = mask or 0x08
-#     data &= pyl.account.codeHash.data
-
-#   data &= lens.toBytesBE()
-#   data &= [mask]
-
 proc blobifyTo*(pyl: AccLeafRef, data: var (seq[byte]|VertexBuf)) =
   # `lens` holds `len-1` since `mask` filters out the zero-length case (which
   # allows saving 1 bit per length)
@@ -382,7 +352,6 @@ proc deblobify*(
   ## De-serialise the last saved state data record previously encoded with
   ## `blobify()`.
   if data.len != 17:
-    debugEcho "data ", data.len
     return err(DeblobWrongSize)
   if data[^1] != 0x7f:
     return err(DeblobWrongType)
