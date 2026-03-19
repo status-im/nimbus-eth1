@@ -15,6 +15,7 @@ import
   ./test_helpers,
   eth/common/transaction_utils,
   ../tools/common/helpers as chp,
+  ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/core_db,
   ../execution_chain/common/common,
   ../execution_chain/transaction,

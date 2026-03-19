@@ -17,6 +17,7 @@ import
   ../common/state_clearing,
   ../../execution_chain/[evm/types, evm/state, transaction],
   ../../execution_chain/common/common,
+  ../../execution_chain/db/core_db/memory_only,
   ../../execution_chain/db/ledger,
   ../../execution_chain/utils/utils,
   ../../execution_chain/core/pow/difficulty,

@@ -13,6 +13,7 @@ import
   stew/byteutils,
   eth/common/transaction_utils,
   ../common/helpers,
+  ../../execution_chain/db/core_db/memory_only,
   ../../execution_chain/transaction,
   ../../execution_chain/core/validate,
   ../../execution_chain/common/evmforks,

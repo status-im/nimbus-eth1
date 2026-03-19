@@ -15,6 +15,7 @@ import
   eth/common/accounts,
   web3/[eth_api, eth_api_types],
   ../../execution_chain/core/eip4844,
+  ../../execution_chain/db/core_db/memory_only,
   ../../execution_chain/common/common,
   ./types,
   ./header_store,

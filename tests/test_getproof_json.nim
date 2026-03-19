@@ -9,6 +9,7 @@ import
   std/os,
   unittest2,
   web3/eth_api,
+  ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/[ledger, core_db],
   ../execution_chain/common/chain_config,
   ../execution_chain/rpc/server_api,

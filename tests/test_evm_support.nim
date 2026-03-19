@@ -11,6 +11,7 @@ import
   eth/common/[keys, transaction_utils],
   ../execution_chain/common,
   ../execution_chain/transaction,
+  ../execution_chain/db/core_db/memory_only,
   ../execution_chain/evm/types,
   ../execution_chain/evm/state,
   ../execution_chain/evm/evm_errors,

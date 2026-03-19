@@ -23,7 +23,7 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc toGenesisHeader*(
+proc writeGenesisHeader*(
     g: Genesis;
     db: CoreDbTxRef;
     fork: HardFork;
@@ -87,26 +87,18 @@ proc toGenesisHeader*(
     result.blockAccessListHash = Opt.some(EMPTY_BLOCK_ACCESS_LIST_HASH)
     result.slotNumber = Opt.some(0'u64)
 
-proc toGenesisHeader*(
-    genesis: Genesis;
-    fork: HardFork;
-    db = CoreDbTxRef(nil)): Header =
-  ## Generate the genesis block header from the `genesis` and `config`
-  ## argument value.
-  let
-    db  = if db.isNil: AristoDbMemory.newCoreDbRef().txFrameBegin() else: db
-  toGenesisHeader(genesis, db, fork)
-
-proc toGenesisHeader*(
+proc writeGenesisHeader*(
     params: NetworkParams;
-    db = CoreDbTxRef(nil)
+    db: CoreDbTxRef;
       ): Header =
   ## Generate the genesis block header from the `genesis` and `config`
   ## argument value.
   let map  = toForkTransitionTable(params.config)
   let fork = map.toHardFork(forkDeterminationInfo(0.BlockNumber, params.genesis.timestamp))
-  toGenesisHeader(params.genesis, fork, db)
+  writeGenesisHeader(params.genesis, db, fork)
 
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
+
+#
