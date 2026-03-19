@@ -13,7 +13,7 @@
 import
   std/typetraits,
   chronicles,
-  eth/common/[accounts, base, hashes],
+  eth/common/[accounts, addresses, base, hashes],
   ../../constants,
   ../[kvt, aristo],
   ../kvt/kvt_init/init_common,
@@ -53,6 +53,12 @@ func toError*(e: AristoError; s: string; error = Unspecified): CoreDbError =
     ctx:      s,
     isAristo: true,
     aErr:     e)
+
+template computeAccPath*(address: Address): Hash32 =
+  keccak256(address.data)
+
+template computeSlotKey*(slot: UInt256): Hash32 =
+  keccak256(slot.toBytesBE())
 
 # ------------------------------------------------------------------------------
 # Public context constructors and administration
