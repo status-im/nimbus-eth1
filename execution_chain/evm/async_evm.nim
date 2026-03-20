@@ -17,6 +17,7 @@ import
   minilru,
   eth/common/[base, addresses, accounts, headers, transactions],
   ../db/[ledger, access_list],
+  ../db/core_db/memory_only,
   ../common/common,
   ../transaction/call_evm_rpc,
   ../evm/[types, state, evm_errors],

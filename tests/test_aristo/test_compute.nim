@@ -121,7 +121,7 @@ suite "Aristo compute":
         checkpoint("k = " & k.toHex & ", v = " & $v)
 
         check:
-          txFrame.mergeAccountRecord(k, v) == Result[bool, AristoError].ok(true)
+          txFrame.mergeAccount(k, v) == Result[bool, AristoError].ok(true)
 
         # Check state against expected value
         let w = txFrame.computeKey((root, root)).expect("no errors")
@@ -144,7 +144,7 @@ suite "Aristo compute":
         check r == w
 
         check:
-          txFrame.deleteAccountRecord(k).isOk
+          txFrame.deleteAccount(k).isOk
 
         let rc = txFrame.check
         check rc == typeof(rc).ok()
@@ -159,7 +159,7 @@ suite "Aristo compute":
 
     for (k, v, r) in samples[^1]:
       check:
-        txFrame.mergeAccountRecord(k, v) == Result[bool, AristoError].ok(true)
+        txFrame.mergeAccount(k, v) == Result[bool, AristoError].ok(true)
     txFrame.checkpoint(1, skipSnapshot = true)
 
     let batch = db.putBegFn()[]

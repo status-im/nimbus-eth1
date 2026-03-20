@@ -51,22 +51,22 @@ suite "Aristo TxFrame":
       tx2c = db.txFrameBegin(tx1)
 
     check:
-      tx0.mergeAccountRecord(acc1[0], acc1[1]).isOk()
-      tx1.mergeAccountRecord(acc2[0], acc2[1]).isOk()
-      tx2.deleteAccountRecord(acc2[0]).isOk()
-      tx2b.deleteAccountRecord(acc1[0]).isOk()
-      tx2c.mergeAccountRecord(acc2[0], acc3[1]).isOk()
+      tx0.mergeAccount(acc1[0], acc1[1]).isOk()
+      tx1.mergeAccount(acc2[0], acc2[1]).isOk()
+      tx2.deleteAccount(acc2[0]).isOk()
+      tx2b.deleteAccount(acc1[0]).isOk()
+      tx2c.mergeAccount(acc2[0], acc3[1]).isOk()
 
     check:
-      tx0.fetchAccountRecord(acc1[0]).isOk()
-      tx0.fetchAccountRecord(acc2[0]).isErr() # Doesn't exist in tx0
-      tx1.fetchAccountRecord(acc1[0]).isOk()
-      tx1.fetchAccountRecord(acc1[0]).isOk()
-      tx2.fetchAccountRecord(acc1[0]).isOk()
-      tx2.fetchAccountRecord(acc2[0]).isErr() # Doesn't exist in tx2
-      tx2b.fetchAccountRecord(acc1[0]).isErr() # Doesn't exist in tx2b
+      tx0.fetchAccount(acc1[0]).isOk()
+      tx0.fetchAccount(acc2[0]).isErr() # Doesn't exist in tx0
+      tx1.fetchAccount(acc1[0]).isOk()
+      tx1.fetchAccount(acc1[0]).isOk()
+      tx2.fetchAccount(acc1[0]).isOk()
+      tx2.fetchAccount(acc2[0]).isErr() # Doesn't exist in tx2
+      tx2b.fetchAccount(acc1[0]).isErr() # Doesn't exist in tx2b
 
-      tx0.fetchAccountRecord(acc1[0]) == tx2.fetchAccountRecord(acc1[0])
+      tx0.fetchAccount(acc1[0]) == tx2.fetchAccount(acc1[0])
 
       tx0.fetchStateRoot() != tx1.fetchStateRoot()
       tx0.fetchStateRoot() == tx2.fetchStateRoot()
@@ -101,15 +101,15 @@ suite "Aristo TxFrame":
     check:
       db.putEndFn(batch).isOk()
 
-    db.finish()
+    db.close()
 
     block:
       # using the same backend but new txRef and cache
       db.initInstance().expect("working backend")
       let tx = db.baseTxFrame()
       check:
-        tx.fetchAccountRecord(acc1[0]).isOk()
-        tx.fetchAccountRecord(acc2[0]).isErr() # Doesn't exist in tx2
+        tx.fetchAccount(acc1[0]).isOk()
+        tx.fetchAccount(acc2[0]).isErr() # Doesn't exist in tx2
 
   test "Frames using moveParentHashKeys parameter":
     let
@@ -117,8 +117,8 @@ suite "Aristo TxFrame":
       tx1 = db.txFrameBegin(tx0)
 
     check:
-      tx0.mergeAccountRecord(acc1[0], acc1[1]).isOk()
-      tx1.mergeAccountRecord(acc2[0], acc2[1]).isOk()
+      tx0.mergeAccount(acc1[0], acc1[1]).isOk()
+      tx1.mergeAccount(acc2[0], acc2[1]).isOk()
       tx0.fetchStateRoot() != tx1.fetchStateRoot()
       tx0.kMap.len() == 0
       tx1.kMap.len() == 1
@@ -146,8 +146,8 @@ suite "Aristo TxFrame":
       tx1 = db.txFrameBegin(tx0)
 
     check:
-      tx0.mergeAccountRecord(acc1[0], acc1[1]).isOk()
-      tx1.mergeAccountRecord(acc2[0], acc2[1]).isOk()
+      tx0.mergeAccount(acc1[0], acc1[1]).isOk()
+      tx1.mergeAccount(acc2[0], acc2[1]).isOk()
       tx0.fetchStateRoot() != tx1.fetchStateRoot()
       tx0.kMap.len() == 0
       tx1.kMap.len() == 1
@@ -195,8 +195,8 @@ suite "Aristo TxFrame":
       tx1 = db.txFrameBegin(tx0)
 
     check:
-      tx0.mergeAccountRecord(acc1[0], acc1[1]).isOk()
-      tx1.mergeAccountRecord(acc2[0], acc2[1]).isOk()
+      tx0.mergeAccount(acc1[0], acc1[1]).isOk()
+      tx1.mergeAccount(acc2[0], acc2[1]).isOk()
       tx0.fetchStateRoot() != tx1.fetchStateRoot()
       tx0.kMap.len() == 0
       tx1.kMap.len() == 1
@@ -210,14 +210,14 @@ suite "Aristo TxFrame":
     check:
       db.putEndFn(batch).isOk()
 
-    db.finish()
+    db.close()
 
     # Load the data
     db.initInstance().expect("working backend")
     let tx = db.baseTxFrame()
     check:
-      tx.fetchAccountRecord(acc1[0]).isOk()
-      tx.fetchAccountRecord(acc2[0]).isOk()
+      tx.fetchAccount(acc1[0]).isOk()
+      tx.fetchAccount(acc2[0]).isOk()
 
   test "Frames using moveParentHashKeys parameter - moved to persist":
     let
@@ -225,8 +225,8 @@ suite "Aristo TxFrame":
       tx1 = db.txFrameBegin(tx0)
 
     check:
-      tx0.mergeAccountRecord(acc1[0], acc1[1]).isOk()
-      tx1.mergeAccountRecord(acc2[0], acc2[1]).isOk()
+      tx0.mergeAccount(acc1[0], acc1[1]).isOk()
+      tx1.mergeAccount(acc2[0], acc2[1]).isOk()
       tx0.fetchStateRoot() != tx1.fetchStateRoot()
       tx0.kMap.len() == 0
       tx1.kMap.len() == 1
@@ -240,14 +240,14 @@ suite "Aristo TxFrame":
     check:
       db.putEndFn(batch).isOk()
 
-    db.finish()
+    db.close()
 
     # Load the data
     db.initInstance().expect("working backend")
     let tx = db.baseTxFrame()
     check:
-      tx.fetchAccountRecord(acc1[0]).isOk()
-      tx.fetchAccountRecord(acc2[0]).isOk()
+      tx.fetchAccount(acc1[0]).isOk()
+      tx.fetchAccount(acc2[0]).isOk()
 
   # This test case reproduces a bug which triggers an:
   # `db.txId == 0`  [AssertionDefect]
@@ -263,13 +263,13 @@ suite "Aristo TxFrame":
 
     for i in 1..<10:
       let acc = makeAccount(i.uint64)
-      check tx1.mergeAccountRecord(acc[0], acc[1]).isOk()
+      check tx1.mergeAccount(acc[0], acc[1]).isOk()
     tx1.checkpoint(1, skipSnapshot = false)
 
     let tx2 = db.txFrameBegin(tx1)
     for i in 1..<10:
       let acc = makeAccount(i.uint64)
-      check tx2.mergeAccountRecord(acc[0], acc[1]).isOk()
+      check tx2.mergeAccount(acc[0], acc[1]).isOk()
     tx2.checkpoint(2, skipSnapshot = false)
 
     discard tx2.fetchStateRoot().get()
@@ -284,28 +284,28 @@ suite "Aristo TxFrame":
     let tx1 = db.txFrameBegin(db.baseTxFrame())
     for i in 1..<100:
       let acc = makeAccount(i.uint64)
-      check tx1.mergeAccountRecord(acc[0], acc[1]).isOk()
+      check tx1.mergeAccount(acc[0], acc[1]).isOk()
     tx1.checkpoint(1, skipSnapshot = false)
 
     # level 2
     let tx2 = db.txFrameBegin(tx1)
     for i in 100..<200:
       let acc = makeAccount(i.uint64)
-      check tx2.mergeAccountRecord(acc[0], acc[1]).isOk()
+      check tx2.mergeAccount(acc[0], acc[1]).isOk()
     tx2.checkpoint(2, skipSnapshot = false)
 
     # level 3
     let tx3 = db.txFrameBegin(tx2)
     for i in 200..<300:
       let acc = makeAccount(i.uint64)
-      check tx3.mergeAccountRecord(acc[0], acc[1]).isOk()
+      check tx3.mergeAccount(acc[0], acc[1]).isOk()
     tx3.checkpoint(3, skipSnapshot = false)
 
     # level 2
     let tx4 = db.txFrameBegin(tx1)
     for i in 300..<400:
       let acc = makeAccount(i.uint64)
-      check tx4.mergeAccountRecord(acc[0], acc[1]).isOk()
+      check tx4.mergeAccount(acc[0], acc[1]).isOk()
     tx4.checkpoint(2, skipSnapshot = false)
 
     block:
@@ -326,7 +326,7 @@ suite "Aristo TxFrame":
 
     for i in 1..<10:
       let acc = makeAccount(i.uint64)
-      check tx1.mergeAccountRecord(acc[0], acc[1]).isOk()
+      check tx1.mergeAccount(acc[0], acc[1]).isOk()
     tx1.checkpoint(1, skipSnapshot = false)
 
     let
@@ -346,7 +346,7 @@ suite "Aristo TxFrame":
 
     for i in 1..<10:
       let acc = makeAccount(i.uint64)
-      check tx1.mergeAccountRecord(acc[0], acc[1]).isOk()
+      check tx1.mergeAccount(acc[0], acc[1]).isOk()
 
     tx1.checkpoint(1, skipSnapshot = false)
 

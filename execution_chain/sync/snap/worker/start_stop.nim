@@ -15,7 +15,7 @@ import
   pkg/[chronicles, metrics, minilru],
   ../../../networking/p2p,
   ../../wire_protocol,
-  ./[mpt, session, state_db, worker_desc]
+  ./[mpt, state_db, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -43,18 +43,14 @@ proc setupServices*(ctx: SnapCtxRef; info: static[string]): bool =
   ctx.pool.stateDB = StateDbRef.init()
 
   # Set up assembly DB
-  ctx.pool.mptAsm = MptAsmRef.init(
-      ctx.pool.baseDir, not ctx.pool.resume, info).valueOr:
+  ctx.pool.mptAsm = MptAsmRef.init(ctx.pool.baseDir,info).valueOr:
     return false
 
   # Set up ticker, disabled by default
   if ctx.pool.ticker.isNil:
     ctx.pool.ticker = proc(ctx: SnapCtxRef) = discard
 
-  # Recover session (if any)
-  if ctx.pool.resume and ctx.resumeDownload(info):
-    debug info & ": resuming download session"
-
+  ctx.daemon = true                                 # disabled by default
   true
 
 proc destroyServices*(ctx: SnapCtxRef) =

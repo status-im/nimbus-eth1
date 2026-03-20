@@ -263,18 +263,6 @@ proc retrieveStoragePayload(
 
   ok StoLeafRef(leafVtx).stoData
 
-proc hasStoragePayload(
-    db: AristoTxRef;
-    accPath: Hash32;
-    stoPath: Hash32;
-      ): Result[bool,AristoError] =
-  let error = db.retrieveStoragePayload(accPath, stoPath).errorOr:
-    return ok(true)
-
-  if error == FetchPathNotFound:
-    return ok(false)
-  err(error)
-
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -291,7 +279,7 @@ proc fetchLastCheckpoint*(
   let state = ?db.db.getLstBe()
   ok state.serial
 
-proc fetchAccountRecord*(
+proc fetchAccount*(
     db: AristoTxRef;
     accPath: Hash32;
       ): Result[AristoAccount,AristoError] =
@@ -313,7 +301,7 @@ proc fetchStateRoot*(
 
   ok key.to(Hash32)
 
-proc hasPathAccount*(
+proc hasAccount*(
     db: AristoTxRef;
     accPath: Hash32;
       ): Result[bool,AristoError] =
@@ -322,7 +310,7 @@ proc hasPathAccount*(
   ##
   db.hasAccountPayload(accPath)
 
-proc fetchStorageData*(
+proc fetchSlot*(
     db: AristoTxRef;
     accPath: Hash32;
     stoPath: Hash32;
@@ -342,16 +330,6 @@ proc fetchStorageRoot*(
       return ok(emptyRoot) # no sub-tree
     return err(error)
   db.retrieveMerkleHash(stoID)
-
-proc hasPathStorage*(
-    db: AristoTxRef;
-    accPath: Hash32;
-    stoPath: Hash32;
-      ): Result[bool,AristoError] =
-  ## For a storage tree related to account `accPath`, query whether the data
-  ## record indexed by `path` exists on the database.
-  ##
-  db.hasStoragePayload(accPath, stoPath)
 
 proc hasStorageData*(
     db: AristoTxRef;

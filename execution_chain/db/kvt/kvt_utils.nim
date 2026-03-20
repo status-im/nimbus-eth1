@@ -185,6 +185,14 @@ proc hasKey*(
   ## an error.
   db.hasKeyRc(key).valueOr: false
 
+proc close*(db: KvtDbRef; wipe = false) =
+  ## Backend destructor. The argument `wipe` indicates that a full
+  ## database deletion is requested. If set `false` the outcome might differ
+  ## depending on the type of backend (e.g. the `BackendMemory` backend will
+  ## always wipe on close.)
+  ##
+  db.closeFn wipe
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

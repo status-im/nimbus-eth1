@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,7 +13,7 @@
 import
   eth/common/hashes,
   results,
-  ".."/[aristo_compute, aristo_desc, aristo_fetch, aristo_proof]
+  ../[aristo_desc, aristo_fetch, aristo_proof]
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -25,8 +25,8 @@ proc checkTwig*(
       ): Result[void,AristoError] =
   let
     proof = ? db.makeAccountProof(accPath)
-    key = ? db.computeKey (STATE_ROOT_VID,STATE_ROOT_VID)
-  discard ? proof[0].verifyProof(key.to(Hash32), accPath)
+    key = ? db.fetchStateRoot()
+  discard ? proof[0].verifyProof(key, accPath)
 
   ok()
 
@@ -37,9 +37,8 @@ proc checkTwig*(
       ): Result[void,AristoError] =
   let
     proof = ? db.makeStorageProof(accPath, stoPath)
-    vid = ? db.fetchStorageID accPath
-    key = ? db.computeKey (STATE_ROOT_VID,vid)
-  discard ? proof[0].verifyProof(key.to(Hash32), stoPath)
+    key = ? db.fetchStorageRoot accPath
+  discard ? proof[0].verifyProof(key, stoPath)
 
   ok()
 

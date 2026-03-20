@@ -16,6 +16,9 @@ import
   ./engine/types,
   ./nimbus_verified_proxy_conf
 
+# for eth_feeHistory
+JrpcConv.automaticSerialization(int, true)
+
 type JsonRpcServer* = ref object
   case kind*: ClientKind #we reuse clientKind for servers also
   of Http:
@@ -23,10 +26,10 @@ type JsonRpcServer* = ref object
   of WebSocket:
     wsServer: RpcWebSocketServer
 
-proc init*(T: type JsonRpcServer, url: Web3Url): EngineResult[JsonRpcServer] =
+proc init*(T: type JsonRpcServer, url: string): EngineResult[JsonRpcServer] =
   let
     auth = @[httpCors(@[])] # TODO: for now we serve all cross origin requests
-    parsedUrl = parseUri(url.web3Url)
+    parsedUrl = parseUri(url)
     hostname = if parsedUrl.hostname == "": "127.0.0.1" else: parsedUrl.hostname
     port =
       if parsedUrl.port == "":
@@ -44,20 +47,22 @@ proc init*(T: type JsonRpcServer, url: Web3Url): EngineResult[JsonRpcServer] =
         return err((FrontendError, e.msg, UNTAGGED))
 
   try:
-    case url.kind
-    of HttpUrl:
+    case parsedUrl.scheme.toLowerAscii()
+    of "http", "https":
       return ok(
         JsonRpcServer(
           kind: Http,
           httpServer: newRpcHttpServer([listenAddress], RpcRouter.init(), auth),
         )
       )
-    of WsUrl:
+    of "ws", "wss":
       let server =
         JsonRpcServer(kind: WebSocket, wsServer: newRpcWebSocketServer(listenAddress))
 
       server.wsServer.router = RpcRouter.init()
       return ok(server)
+    else:
+      return err((FrontendError, "Invalid URL scheme: " & parsedUrl.scheme, UNTAGGED))
   except JsonRpcError as e:
     return err((FrontendError, e.msg, UNTAGGED))
 
@@ -216,7 +221,7 @@ proc injectEngineFrontend*(server: JsonRpcServer, frontend: EthApiFrontend) =
     unpackEngineResult(await frontend.eth_maxPriorityFeePerGas())
 
   server.getServer().rpc("eth_feeHistory") do(
-    blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: Opt[seq[float64]]
+    blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[int]
   ) -> FeeHistoryResult:
     unpackEngineResult(
       await frontend.eth_feeHistory(blockCount, newestBlock, rewardPercentiles)

@@ -82,7 +82,7 @@ proc codesRecover(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc resumeDownload*(ctx: SnapCtxRef; info: static[string]): bool =
+proc sessionResume*(ctx: SnapCtxRef; info: static[string]): bool =
   let
     sdb = ctx.pool.stateDB
     adb = ctx.pool.mptAsm
@@ -94,7 +94,7 @@ proc resumeDownload*(ctx: SnapCtxRef; info: static[string]): bool =
 
     for w in adb.walkAccounts():                    # walk accounts
       if 0 < w.error.len:
-        error info & ": Corrupt data, resetting cache", error=w.error
+        error info & ": Corrupt data, resetting session", error=w.error
         break recoverStates
 
       # Some failed state root records
@@ -124,7 +124,7 @@ proc resumeDownload*(ctx: SnapCtxRef; info: static[string]): bool =
   # Any reset must take place outside the assembly DB iterator.
   sdb.clear()                                       # flush/reset state DB
   if not adb.clear(info):                           # ditto for assembly DB
-    raiseAssert info & ": Cannot clear cache DB"
+    raiseAssert info & ": Cannot clear session DB"
   # false
 
 # ------------------------------------------------------------------------------

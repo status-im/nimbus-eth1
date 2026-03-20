@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -105,7 +105,7 @@ template blocksCollect*(
           discard ctx.blocksUnprocFetch(ctx.subState.topNum-bottom).expect("iv")
 
         # Fetch blocks and verify result
-        let blocks = buddy.blocksFetch(nFetchBodiesRequest, info).valueOr:
+        var blocks = buddy.blocksFetch(nFetchBodiesRequest, info).valueOr:
           break fetchBlocksBody                      # done, exit this function
 
         # Set flag that there were some blocks fetched at all

@@ -17,7 +17,7 @@ import
   std/concurrency/atomics,
   stew/endians2,
   ../../../core_db/backend/rocksdb_desc,
-  ../../aristo_desc,
+  ../../[aristo_blobify, aristo_desc],
   ../init_common,
   minilru
 
@@ -56,8 +56,9 @@ type
     #
     rdKeyLru*: LruCache[VertexID,HashKey] ## Read cache
     rdKeySize*: int
-    # rdVtxLru*: LruCache[VertexID,VertexRef] ## Read cache
-    # rdVtxSize*: int
+
+    rdVtxLru*: LruCache[VertexID,VertexBuf] ## Read cache
+    rdVtxSize*: int
 
     rdBranchLru*: LruCache[VertexID, (VertexID, uint16)]
     rdBranchSize*: int

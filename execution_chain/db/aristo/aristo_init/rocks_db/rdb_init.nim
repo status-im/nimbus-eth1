@@ -13,7 +13,7 @@
 
 {.push raises: [].}
 
-import std/strformat, results, ../../aristo_desc, ./rdb_desc, ../../../opts
+import std/strformat, results,   ../../[aristo_blobify, aristo_desc], ./rdb_desc, ../../../opts
 
 # ------------------------------------------------------------------------------
 # Private constructor
@@ -89,30 +89,31 @@ proc init*(rdb: var RdbInst, opts: DbOptions, baseDb: RocksDbInstanceRef) =
   # bytes -> entries based on overhead estimates
   rdb.rdKeySize =
     opts.rdbKeyCacheSize div (sizeof(VertexID) + sizeof(HashKey) + lruOverhead)
-  # rdb.rdVtxSize =
-  #   opts.rdbVtxCacheSize div
-  #   (sizeof(VertexID) + sizeof(default(StoLeafRef)[]) + lruOverhead)
+
+  rdb.rdVtxSize =
+    opts.rdbVtxCacheSize div
+    (sizeof(VertexID) + sizeof(VertexBuf) + lruOverhead)
 
   rdb.rdBranchSize =
     opts.rdbBranchCacheSize div (sizeof(typeof(rdb.rdBranchLru).V) + lruOverhead)
 
   rdb.rdKeyLru = typeof(rdb.rdKeyLru).init(rdb.rdKeySize)
-  # rdb.rdVtxLru = typeof(rdb.rdVtxLru).init(rdb.rdVtxSize)
+  rdb.rdVtxLru = typeof(rdb.rdVtxLru).init(rdb.rdVtxSize)
   rdb.rdBranchLru = typeof(rdb.rdBranchLru).init(rdb.rdBranchSize)
   rdb.rdbPrintStats =  opts.rdbPrintStats
 
   rdb.vtxCol = baseDb.db.getColFamily($VtxCF).valueOr:
     raiseAssert "Cannot initialise VtxCF descriptor: " & error
 
-proc destroy*(rdb: var RdbInst, eradicate: bool) =
+proc close*(rdb: var RdbInst, wipe: bool) =
   ## Destructor
   let
     ks = rdb.rdKeySize
-    # vs = rdb.rdVtxSize
+    vs = rdb.rdVtxSize
     bs = rdb.rdBranchSize
-  rdb.baseDb.close(eradicate)
+  rdb.baseDb.close(wipe)
   if rdb.rdbPrintStats:
-    dumpCacheStats(ks, 0, bs)
+    dumpCacheStats(ks, vs, bs)
 
 # ------------------------------------------------------------------------------
 # End

@@ -78,8 +78,11 @@ proc putVtx*(
       ): Result[void,(VertexID,AristoError,string)] =
   let dsc = session.batch
   if vtx.isValid:
-    dsc.put(rvid.blobify().data(), vtx.blobify(key), rdb.vtxCol.handle()).isOkOr:
-      # Caller must `rollback()` which will flush the `rdVtxLru` cache
+    var vtxBuf: VertexBuf
+    vtx.blobifyTo(key, vtxBuf)
+
+    dsc.put(rvid.blobify().data(), vtxBuf.data(), rdb.vtxCol.handle()).isOkOr:
+      # Caller must `rollback()` which will clear the `rdVtxLru` cache
       const errSym = RdbBeDriverPutVtxError
       when extraTraceMessages:
         trace logTxt "putVtx()", vid, error=errSym, info=error
@@ -91,17 +94,18 @@ proc putVtx*(
 
     if vtx.vType == Branch:
       let vtx = BranchRef(vtx)
-      # rdb.rdVtxLru.del(rvid.vid)
+      rdb.rdVtxLru.del(rvid.vid)
       if rdb.rdBranchLru.len < rdb.rdBranchLru.capacity:
         rdb.rdBranchLru.put(rvid.vid, (vtx.startVid, vtx.used))
       else:
         discard rdb.rdBranchLru.update(rvid.vid, (vtx.startVid, vtx.used))
     else:
       rdb.rdBranchLru.del(rvid.vid)
-      # if rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
-      #   rdb.rdVtxLru.put(rvid.vid, vtx)
-      # else:
-      #   discard rdb.rdVtxLru.update(rvid.vid, vtx)
+      if rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
+        rdb.rdVtxLru.put(rvid.vid, vtxBuf)
+      else:
+        discard rdb.rdVtxLru.update(rvid.vid, vtxBuf)
+
 
     if key.isValid:
       if rdb.rdKeyLru.len < rdb.rdKeyLru.capacity:
@@ -113,7 +117,7 @@ proc putVtx*(
 
   else:
     dsc.delete(rvid.blobify().data(), rdb.vtxCol.handle()).isOkOr:
-      # Caller must `rollback()` which will flush the `rdVtxLru` cache
+      # Caller must `rollback()` which will clear the `rdVtxLru` cache
       const errSym = RdbBeDriverDelVtxError
       when extraTraceMessages:
         trace logTxt "putVtx()", vid, error=errSym, info=error

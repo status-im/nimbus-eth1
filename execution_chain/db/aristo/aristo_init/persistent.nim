@@ -43,8 +43,10 @@ proc init*(
     baseDb: RocksDbInstanceRef;
       ): Result[T, AristoError] =
   let db = rocksDbBackend(opts, baseDb)
+
   db.initInstance(opts.maxSnapshots, opts.parallelStateRootComputation).isOkOr:
-    db.closeFn(eradicate = false)
+    db.closeFn(wipe = false)
+
     return err(error)
   ok db
 

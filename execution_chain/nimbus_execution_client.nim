@@ -322,7 +322,7 @@ proc runExeClient*(
 
     fc.serialize(txFrame).isOkOr:
       error "FC.serialize error: ", msg = error
-    txFrame.checkpoint(fc.base.blk.header.number, skipSnapshot = true)
+    txFrame.checkpoint(fc.base.header.number, skipSnapshot = true)
     com.db.persist(txFrame)
 
  # Rlp import is there, first load the chain segment
@@ -399,7 +399,7 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
       quit(QuitFailure)
 
   defer:
-    com.db.finish()
+    com.db.close()
 
   case config.cmd
   of NimbusCmd.`import`:

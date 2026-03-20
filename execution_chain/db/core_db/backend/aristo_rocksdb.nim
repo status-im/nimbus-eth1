@@ -17,7 +17,8 @@ import
   results,
   ../../aristo/aristo_init/[rocks_db as use_ari, persistent],
   ../../kvt/kvt_init/[rocks_db as use_kvt, persistent],
-  ./[aristo_db, rocksdb_desc],
+  ../base_desc,
+  ./rocksdb_desc,
   ../../aristo/aristo_compute,
   ../../opts
 
@@ -160,7 +161,7 @@ proc toCfOpts*(opts: DbOptions, cache: CacheRef, bulk: bool): ColFamilyOptionsRe
 # Public constructor
 # ------------------------------------------------------------------------------
 
-proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions): CoreDbRef =
+proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions, reset = false): CoreDbRef =
   # Single rocksdb database with separate column families for mpt/kvt
 
   # The same column family options are used for all column families meaning that
@@ -189,7 +190,7 @@ proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions): CoreDbRef =
 
     cfDescs =
       @[($AristoCFs.VtxCF, acfOpts)] & KvtCFs.items().toSeq().mapIt(($it, kcfOpts))
-    baseDb = RocksDbInstanceRef.open(basePath, dbOpts, cfDescs).expect(
+    baseDb = RocksDbInstanceRef.open(basePath, dbOpts, cfDescs, reset).expect(
         "Open database from " & basePath
       )
 
@@ -197,7 +198,8 @@ proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions): CoreDbRef =
       raiseAssert "Could not initialize aristo: " & $error
     kdb = KvtDbRef.init(baseDb)
 
-  AristoDbRocks.create(kdb, adb)
+  CoreDbRef(kvt: kdb, mpt: adb)
+
 
 # ------------------------------------------------------------------------------
 # End
