@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -11,6 +11,7 @@ import
   eth/common/[keys, transaction_utils],
   ../execution_chain/common,
   ../execution_chain/transaction,
+  ../execution_chain/db/core_db/memory_only,
   ../execution_chain/evm/types,
   ../execution_chain/evm/state,
   ../execution_chain/evm/evm_errors,

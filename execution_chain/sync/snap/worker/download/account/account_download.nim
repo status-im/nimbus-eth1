@@ -50,8 +50,6 @@ template accountDownload*(
     let
       data = buddy.fetchAccounts(state.stateRoot, ivReq).valueOr:
         sdb.rollbackAccountRange(state, ivReq)      # registry roll back
-        if error == ENoDataAvailable:
-          state.downScore()
         trace info & ": account download failed", peer, root, iv,
           `error`=error
         break body                                  # return err()
@@ -63,7 +61,7 @@ template accountDownload*(
       nProof {.inject,used.} = data.proof.len       # logging only
 
     # Stash accounts data packet to be processed later
-    adb.putRawAccounts(
+    adb.putAccounts(
       state.stateRoot, ivReq.minPt, limit, data.accounts, data.proof,
       buddy.peerID).isOkOr:
         sdb.rollbackAccountRange(state, ivReq)      # registry roll back
@@ -71,7 +69,6 @@ template accountDownload*(
           nAccounts, nProof
         break body                                  # return err()
 
-    state.upScore()                                 # got some data
     sdb.commitAccountRange(state, ivReq, limit)     # update registry
     bodyRc = typeof(bodyRc).ok(data.accounts)       # return code
 

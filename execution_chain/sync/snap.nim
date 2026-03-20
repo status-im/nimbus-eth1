@@ -17,7 +17,7 @@ import
   ../core/chain,
   ../networking/p2p,
   ./snap/[snap_desc, worker],
-  ./snap/worker/helpers,
+  ./snap/worker/[helpers, update],
   ./[sync_sched, wire_protocol]
 
 from ./beacon
@@ -94,7 +94,8 @@ proc configBaseDir*(desc: SnapSyncRef; dir: string; resume: bool) =
   ## Set up database folder.
   doAssert not desc.ctx.isNil
   desc.ctx.pool.baseDir = dir
-  desc.ctx.pool.resume = resume
+  if resume: desc.ctx.updateSyncResume()
+  else: desc.ctx.updateSyncReset()
 
 proc configTarget*(desc: SnapSyncRef; hex: string): bool =
   ## Set up inital target root (if any, mainly for debugging)
@@ -111,7 +112,7 @@ proc configTarget*(desc: SnapSyncRef; hex: string): bool =
   # false
 
 proc configUpdateFile*(desc: SnapSyncRef; file: string): bool =
-  ## Update file containing the target
+  ## Update live file containing a target (only for debugging)
   doAssert not desc.ctx.isNil
   if 0 < file.len:
     var target: SnapTarget

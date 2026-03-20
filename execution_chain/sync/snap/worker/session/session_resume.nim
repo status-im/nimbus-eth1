@@ -23,13 +23,17 @@ logScope:
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc getOrMakeState(ctx: SnapCtxRef, root: StateRoot): Opt[StateDataRef] =
+proc getOrMakeState(
+    ctx: SnapCtxRef;
+    root: StateRoot;
+    info: static[string];
+      ): Opt[StateDataRef] =
   let sdb = ctx.pool.stateDB
   sdb.get(root).isErrOr:
     return ok value
   let (hash,number) = ctx.pool.mptAsm.getBlockData(root).valueOr:
     return err()
-  ok sdb.register(root, hash, number)
+  ok sdb.register(root, hash, number, info)
 
 proc storageRecover(ctx: SnapCtxRef, state: StateDataRef, acc: SnapAccount) =
   let storageRoot = acc.accBody.storageRoot
@@ -39,7 +43,7 @@ proc storageRecover(ctx: SnapCtxRef, state: StateDataRef, acc: SnapAccount) =
       accKey = acc.accHash.to(ItemKey)
       left = ItemKeyRangeSet.init ItemKeyRangeMax
 
-    for w in ctx.pool.mptAsm.walkRawStoSlot(state.stateRoot, accKey):
+    for w in ctx.pool.mptAsm.walkStoSlot(state.stateRoot, accKey):
       discard left.reduce(w.start, w.limit)
 
     # Get the least point in the range it there is any. Unprocessed storage
@@ -48,7 +52,11 @@ proc storageRecover(ctx: SnapCtxRef, state: StateDataRef, acc: SnapAccount) =
       return
     state.register(accKey, stoRoot, ItemKeyRange.new(iv.minPt, high(ItemKey)))
 
-proc codesRecover(ctx: SnapCtxRef, state: StateDataRef, lst: seq[SnapAccount]) =
+proc codesRecover(
+    ctx: SnapCtxRef;
+    state: StateDataRef;
+    lst: openArray[SnapAccount];
+      ) =
   if 0 < lst.len:
     let
       accMin = lst[0].accHash.to(ItemKey)
@@ -56,7 +64,7 @@ proc codesRecover(ctx: SnapCtxRef, state: StateDataRef, lst: seq[SnapAccount]) =
 
     # Find all available `CodeHash` keys
     var found: HashSet[CodeHash]
-    for w in ctx.pool.mptAsm.walkRawByteCode(state.stateRoot, accMin):
+    for w in ctx.pool.mptAsm.walkByteCode(state.stateRoot, accMin):
       if accMax < w.limit:
         break
       for (key,_) in w.codes:
@@ -64,16 +72,17 @@ proc codesRecover(ctx: SnapCtxRef, state: StateDataRef, lst: seq[SnapAccount]) =
 
     # Check for unprocessed byte codes
     for w in lst:
-      let codeHash = w.accBody.codeHash
-      if not w.accBody.codeHash.isEmpty:
-        if codeHash.to(CodeHash) notin found:
-          state.register(w.accHash.to(ItemKey), codeHash.to(CodeHash))
+      let
+        snapHash = w.accBody.codeHash
+        codeHash = snapHash.to(CodeHash)
+      if not snapHash.isEmpty and codeHash notin found:
+        state.register(w.accHash.to(ItemKey), codeHash)
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc sessionResumeDownload*(ctx: SnapCtxRef; info: static[string]): bool =
+proc sessionResume*(ctx: SnapCtxRef; info: static[string]): bool =
   let
     sdb = ctx.pool.stateDB
     adb = ctx.pool.mptAsm
@@ -83,9 +92,9 @@ proc sessionResumeDownload*(ctx: SnapCtxRef; info: static[string]): bool =
       resumedOk = false
       ignRoot = StateRoot(zeroHash32)               # some error mitigation
 
-    for w in adb.walkRawAccounts(): # WalkRawAccounts
+    for w in adb.walkAccounts():                    # walk accounts
       if 0 < w.error.len:
-        error info & ": Corrupt data, resetting cache", error=w.error
+        error info & ": Corrupt data, resetting session", error=w.error
         break recoverStates
 
       # Some failed state root records
@@ -93,7 +102,7 @@ proc sessionResumeDownload*(ctx: SnapCtxRef; info: static[string]): bool =
         continue
 
       # Get state record (with all accounts unprocessed when created)
-      var state = ctx.getOrMakeState(w.root).valueOr:
+      var state = ctx.getOrMakeState(w.root, info).valueOr:
         # Cannot resolve, ignore this state root
         ignRoot = w.root
         continue
@@ -115,7 +124,7 @@ proc sessionResumeDownload*(ctx: SnapCtxRef; info: static[string]): bool =
   # Any reset must take place outside the assembly DB iterator.
   sdb.clear()                                       # flush/reset state DB
   if not adb.clear(info):                           # ditto for assembly DB
-    raiseAssert info & ": Cannot clear cache DB"
+    raiseAssert info & ": Cannot clear session DB"
   # false
 
 # ------------------------------------------------------------------------------

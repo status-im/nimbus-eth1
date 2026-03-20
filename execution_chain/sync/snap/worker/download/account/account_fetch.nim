@@ -126,7 +126,7 @@ template fetchAccounts*(
           buddy.ctrl.zombie = true
         of ECatchableError:
           buddy.accFetchRegisterError()
-        of ENoDataAvailable, EMissingEthContext:
+        of ENoDataAvailable, EMissingEthContext, ETrieError:
           # Not allowed here -- internal error
           raiseAssert "Unexpected error " & $rc.error.excp
 

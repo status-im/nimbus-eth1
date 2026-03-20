@@ -59,11 +59,11 @@ type
 
   # -------------
 
-  CloseFn* = proc(eradicate: bool) {.gcsafe, raises: [].}
-    ## Generic destructor for the `Kvt DB` backend. The argument `eradicate`
+  CloseFn* = proc(wipe: bool) {.gcsafe, raises: [].}
+    ## Generic destructor for the `Kvt DB` backend. The argument `wipe`
     ## indicates that a full database deletion is requested. If passed
     ## `false` the outcome might differ depending on the type of backend
-    ## (e.g. in-memory backends would eradicate on close.)
+    ## (e.g. in-memory backends would wipe on close.)
 
   # -------------
 

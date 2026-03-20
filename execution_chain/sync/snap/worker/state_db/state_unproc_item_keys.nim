@@ -11,8 +11,7 @@
 {.push raises:[].}
 
 import
-  std/sequtils,
-  pkg/[eth/rlp, stint, stew/interval_set],
+  pkg/[stint, stew/interval_set],
   ../helpers,
   ./state_item_key
 
@@ -20,45 +19,6 @@ type
   UnprocItemKeys* = object
     unprocessed*: ItemKeyRangeSet    ## `ItemKey` processing requested
     borrowed*: ItemKeyRangeSet       ## In-process/locked ranges
-
-# ------------------------------------------------------------------------------
-# Public RLP encoding/decoding
-# ------------------------------------------------------------------------------
-
-proc read*(
-    r: var Rlp;
-    T: type ItemKeyRangeSet;
-      ): T
-      {.gcsafe, raises: [RlpError].} =
-  let lst = T.init()
-  for it in r.items:
-    let (a,b) = it.read (UInt256,UInt256)
-    discard lst.merge(a.ItemKey, b.ItemKey)
-  lst
-
-proc append*(w: var RlpWriter, data: ItemKeyRangeSet) =
-  w.append data.increasing.toSeq.mapIt((it.minPt.UInt256,it.maxPt.UInt256))
-
-
-proc serialise*(w: UnprocItemKeys): seq[byte] =
-  ## Same as `encode()`
-  rlp.encode w
-
-proc load*(udb: var UnprocItemKeys; data: seq[byte]; collapse = false): bool =
-  ## Import state from serialised RLP data. If the argument `collapse` is set
-  ## true, the `borrowed` part is imported into the `unprocessed` part.
-  try:
-    let w = rlp.decode(data, UnprocItemKeys)
-    udb.unprocessed = w.unprocessed
-    if collapse:
-      udb.borrowed.clear
-      for iv in w.borrowed.increasing:
-        discard udb.unprocessed.merge iv
-    else:
-      udb.borrowed = w.borrowed
-    return true
-  except RlpError:
-    discard
 
 # ------------------------------------------------------------------------------
 # Public constructor & friends
@@ -105,16 +65,9 @@ proc fetchLeast*(udb: UnprocItemKeys; maxLen: UInt256): Opt[ItemKeyRange] =
         #
         ItemKeyRange.new(jv.minPt, jv.minPt + (maxLen - 1.u256))
 
-  discard udb.unprocessed.reduce(iv)
+  doAssert udb.unprocessed.reduce(iv) == iv.len
   doAssert udb.borrowed.merge(iv) == iv.len
   ok(iv)
-
-proc fetchLeast*(udb: UnprocItemKeys; maxLen: static[int]): Opt[ItemKeyRange] =
-  ## Variant of `fetchLeast()` with convenient type for  `maxLen`
-  ##
-  const ivLenMax = max(maxLen,0).uint.to(UInt256)
-  udb.fetchLeast(ivLenMax)
-
 
 proc fetchSubRange*(
     udb: UnprocItemKeys;
@@ -123,21 +76,53 @@ proc fetchSubRange*(
   ## Fetch a sub-interval of the argument interval `iv` from the unprocessed
   ## data ranges.
   ##
-  let
-    # Fetch bottom/left interval with least block numbers
-    jv = udb.unprocessed.ge(iv.minPt).valueOr:
-      return err()
+  var kv: ItemKeyRange
+  block body:
+    # Note that `iv.len` is a represented by the residue class mod `2^256`.
+    # So `iv.len == 0` indicates that the size is 2^256 as interval cannot
+    # be empty by definition.
+    if iv.len == 0:                                 # => 2^256, largest interval
+      kv = udb.unprocessed.ge().valueOr:
+        return err()                                # no data
+      break body
+    let covered = udb.unprocessed.covered(iv)
+    if covered == iv.len:
+      kv = iv                                       # total overlap
+      break body
+    if covered == 0:
+      return err()                                  # no overlap, at all
 
-    # Curb interval `jv` to maximal length
-    kv = block:
-      if jv.maxPt <= iv.maxPt:
-        jv
-      elif jv.minPt <= iv.maxPt:                    # now: `iv.maxPt < jv.maxPt`
-        ItemKeyRange.new(jv.minPt, iv.maxPt)
-      else:
-        return err()                                # empty intersection
+    # Now, there us a partial overlap of `iv` with the `unprocessed`
+    # interval set.
+    udb.unprocessed.ge(iv.minPt).isErrOr:
+      # Found closest interval `value` which left point does not start before
+      # the left point of `iv`.
+      #   iv:        [-------..
+      #   value:       [-----..
 
-  discard udb.unprocessed.reduce(kv)
+      if value.maxPt <= iv.maxPt:
+        # iv:        [--------------]
+        # value:       [---------]
+        kv = value
+        break body
+
+      if value.minPt <= iv.maxPt:
+        # iv:        [--------------]
+        # value:       [----------------]
+        kv = ItemKeyRange.new(value.minPt, iv.maxPt)
+        break body
+
+      # Get predecessor interval of `value` interval, `jv` say. Note that
+      # there is an overlap of `iv` with some interval from `unprocessed`.
+      # So `jv` exists and the start `jv` is before `iv`.
+      #   iv:        [--------------]
+      #   value:                      [-----]
+      #   jv:   ..---------]
+      let jv = udb.unprocessed.le(value.minPt).expect "Valid interval"
+      kv = ItemKeyRange.new(iv.minPt,jv.maxPt)
+      # break body
+
+  doAssert udb.unprocessed.reduce(kv) == kv.len
   doAssert udb.borrowed.merge(kv) == kv.len
   ok(kv)
 
@@ -239,7 +224,7 @@ func total*(udb: UnprocItemKeys): Opt[UInt256] =
   ##
   ## Due to residue class arithmetic and limitations of the number range
   ## `UInt256`, the maximum value `2^256` is returned as `ok(0)`, while the
-  ## least value `0` is returned as `err()`.
+  ## least value `0` (i.e. nothing left) is returned as `err()`.
   ##
   if udb.borrowed.chunks() == 0:
     udb.avail()
