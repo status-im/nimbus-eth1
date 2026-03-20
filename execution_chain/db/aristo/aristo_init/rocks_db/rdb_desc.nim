@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -17,7 +17,7 @@ import
   std/concurrency/atomics,
   stew/endians2,
   ../../../core_db/backend/rocksdb_desc,
-  ../../aristo_desc,
+  ../../[aristo_blobify, aristo_desc],
   ../init_common,
   minilru
 
@@ -56,7 +56,7 @@ type
     #
     rdKeyLru*: LruCache[VertexID,HashKey] ## Read cache
     rdKeySize*: int
-    rdVtxLru*: LruCache[VertexID,VertexRef] ## Read cache
+    rdVtxLru*: LruCache[VertexID,VertexBuf] ## Read cache
     rdVtxSize*: int
 
     rdBranchLru*: LruCache[VertexID, (VertexID, uint16)]

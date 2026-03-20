@@ -78,7 +78,10 @@ proc putVtx*(
       ): Result[void,(VertexID,AristoError,string)] =
   let dsc = session.batch
   if vtx.isValid:
-    dsc.put(rvid.blobify().data(), vtx.blobify(key), rdb.vtxCol.handle()).isOkOr:
+    var vtxBuf: VertexBuf
+    vtx.blobifyTo(key, vtxBuf)
+
+    dsc.put(rvid.blobify().data(), vtxBuf.data(), rdb.vtxCol.handle()).isOkOr:
       # Caller must `rollback()` which will clear the `rdVtxLru` cache
       const errSym = RdbBeDriverPutVtxError
       when extraTraceMessages:
@@ -98,10 +101,11 @@ proc putVtx*(
         discard rdb.rdBranchLru.update(rvid.vid, (vtx.startVid, vtx.used))
     else:
       rdb.rdBranchLru.del(rvid.vid)
+      
       if rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
-        rdb.rdVtxLru.put(rvid.vid, vtx)
+        rdb.rdVtxLru.put(rvid.vid, vtxBuf)
       else:
-        discard rdb.rdVtxLru.update(rvid.vid, vtx)
+        discard rdb.rdVtxLru.update(rvid.vid, vtxBuf)
 
     if key.isValid:
       if rdb.rdKeyLru.len < rdb.rdKeyLru.capacity:
