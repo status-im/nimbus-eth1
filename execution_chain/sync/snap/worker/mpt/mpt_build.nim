@@ -35,16 +35,16 @@ proc append(w: var RlpWriter, val: AccBody) =
 
 proc nodeStash*(
     db: NodeTrieRef;                       # Needed for root node
-    rootKey: NodeKey;                      # State root key
+    rootKey: HashKey;                      # State root key
     proofNode: ProofNode;                  # Node to add
-    nodes: var Table[NodeKey,NodeRef];     # Collect nodes
-    links: var Table[NodeKey,StopNodeRef]; # Collect open links
+    nodes: var Table[HashKey,NodeRef];     # Collect nodes
+    links: var Table[HashKey,StopNodeRef]; # Collect open links
       ): bool =
   ## Decode a trusted rlp-encoded node and add it to the node list.
   ##
-  var selfKey = proofNode.digestTo(NodeKey)
+  var selfKey = proofNode.digestTo(HashKey)
   if selfKey.len < 32:
-    let forcedKey = proofNode.digestTo(NodeKey, force32=true)
+    let forcedKey = proofNode.digestTo(HashKey, force32=true)
     if forcedKey == rootKey:
       selfKey = forcedKey
 
@@ -88,7 +88,8 @@ proc nodeStash*(
         lfPfx:     nibbles,
         lfPayload: list[1])
     else:
-      let stopKey = list[1].to(NodeKey)
+      let stopKey = HashKey.fromBytes(list[1]).valueOr:
+        return false
       if links.hasKey stopKey:
         return false
       node = BranchNodeRef(
@@ -108,7 +109,8 @@ proc nodeStash*(
       brData: proofNode.distinctBase)
     for n in 0u8 .. 15u8:
       if 0 < list[n].len:
-        let stopKey = list[n].to(NodeKey)
+        let stopKey = HashKey.fromBytes(list[n]).valueOr:
+          return false
         if links.hasKey stopKey:
           return false
         let stopLink = StopNodeRef(
@@ -330,18 +332,18 @@ proc reKeyWalker(node: NodeRef) =
         # Note that the recursion is exhaustive as the sub-tree
         # is always a complete MPT (i.e. no dead links)
         br.brLinks[n].reKeyWalker()
-        wrt.append br.brLinks[n].selfKey.to(seq[byte])
+        wrt.append @(br.brLinks[n].selfKey.data)
     wrt.append ""
     br.brData = wrt.finish()
-    br.selfKey = br.brData.digestTo(NodeKey)
+    br.selfKey = br.brData.digestTo(HashKey)
 
     if 0 < br.xtPfx.len:
       br.selfKey.swap br.brKey
       wrt = initRlpList 2
       wrt.append br.xtPfx.toHexPrefix(false).toSeq
-      wrt.append br.brKey.to(seq[byte])
+      wrt.append @(br.brKey.data)
       br.xtData = wrt.finish()
-      br.selfKey = br.xtData.digestTo(NodeKey)
+      br.selfKey = br.xtData.digestTo(HashKey)
 
   of Leaf:
     let lf = LeafNodeRef(node)
@@ -349,7 +351,7 @@ proc reKeyWalker(node: NodeRef) =
     wrt.append lf.lfPfx.toHexPrefix(true).toSeq
     wrt.append lf.lfPayload
     lf.lfData = wrt.finish()
-    lf.selfKey = lf.lfData.digestTo(NodeKey)
+    lf.selfKey = lf.lfData.digestTo(HashKey)
 
   of Stop:
     let w = StopNodeRef(node)
@@ -376,10 +378,10 @@ proc exportTrie(
       if w.xtData.len == 0:
         ok = false
         return
-      data.add (w.selfKey.to(seq[byte]), w.xtData)
-      data.add (w.brKey.to(seq[byte]), w.brData)
+      data.add (@(w.selfKey.data), w.xtData)
+      data.add (@(w.brKey.data), w.brData)
     else:
-      data.add (w.selfKey.to(seq[byte]), w.brData)
+      data.add (@(w.selfKey.data), w.brData)
 
     for n in 0 .. 15:
       if not w.brLinks[n].isNil:
@@ -392,7 +394,7 @@ proc exportTrie(
     if w.lfData.len == 0:
       ok = false
       return
-    data.add (w.selfKey.to(seq[byte]), w.lfData)
+    data.add (@(w.selfKey.data), w.lfData)
 
   of Stop:
     ok = false
@@ -411,7 +413,7 @@ proc init*(
   let db = T()
   db.root = StopNodeRef(
     kind:    Stop,
-    selfKey: root.to(NodeKey))
+    selfKey: root.to(HashKey))
   db.stops[db.root.selfKey] = StopNodeRef(db.root)
   db
 
@@ -434,10 +436,10 @@ proc init*(
 
   let
     db = T()
-    root = root.to(NodeKey)
+    root = root.to(HashKey)
   var
-    tmpNodes: Table[NodeKey,NodeRef]
-    tmpLinks: Table[NodeKey,StopNodeRef]
+    tmpNodes: Table[HashKey,NodeRef]
+    tmpLinks: Table[HashKey,StopNodeRef]
   for n in 0 ..< nodes.len:
     if not db.nodeStash(root, nodes[n], tmpNodes, tmpLinks):
       return T(nil)
@@ -514,7 +516,7 @@ proc finalise*(db: NodeTrieRef): uint =
   ##  `merge()`) is still ongoing. It is only inefficient because
   ##   non-finalised sub-tyries need to be visited, again.
   ##
-  var resolved: seq[NodeKey]
+  var resolved: seq[HashKey]
   for (key,stopNode) in db.stops.pairs:
 
     if not stopNode.sub.isNil:
