@@ -22,12 +22,6 @@ template isAddress(bytes: openArray[byte]): bool =
 template isSlot(bytes: openArray[byte]): bool =
   bytes.len() == 32
 
-template computeAccPath(address: Address): Hash32 =
-  keccak256(address.data)
-
-template computeSlotKey(slot: UInt256): Hash32 =
-  keccak256(slot.toBytesBE())
-
 func putAll(
     keys: var Table[Address, HashSet[UInt256]], keysToAdd: openArray[seq[byte]]
 ): Result[void, string] =

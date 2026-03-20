@@ -24,7 +24,7 @@ import
   ./aristo/aristo_blobify
 
 export
-  code_bytes
+  code_bytes, core_db.computeAccPath, core_Db.computeSlotKey
 
 const
   codeLruSize = 16*1024
@@ -123,12 +123,6 @@ const
 
 template logTxt(info: static[string]): static[string] =
   "LedgerRef " & info
-
-template computeAccPath(address: Address): Hash32 =
-  keccak256(address.data)
-
-template computeSlotKey(slot: UInt256): Hash32 =
-  keccak256(slot.toBytesBE())
 
 proc getAccount(
     ledger: LedgerRef;
@@ -813,42 +807,6 @@ func getAccessList*(ledger: LedgerRef): transactions.AccessList =
   doAssert(ledger.savePoint.parentSavePoint.isNil)
   ledger.savePoint.accessList.getAccessList()
 
-proc getEthAccount*(ledger: LedgerRef, address: Address): Account =
-  let acc = ledger.getAccount(address, false)
-  if acc.isNil:
-    return EMPTY_ACCOUNT
-
-  ## Convert to legacy object, will throw an assert if that fails
-  let rc = ledger.txFrame.recast(acc.accPath, acc.statement)
-  if rc.isErr:
-    raiseAssert "getAccount(): cannot convert account: " & $$rc.error
-  rc.value
-
-proc getAccountProof*(ledger: LedgerRef, address: Address): seq[seq[byte]] =
-  let accProof = ledger.txFrame.proof(address.computeAccPath).valueOr:
-    raiseAssert "Failed to get account proof: " & $$error
-
-  accProof[0]
-
-proc getStorageProof*(ledger: LedgerRef, address: Address, slots: openArray[UInt256]): seq[seq[seq[byte]]] =
-  let
-    addressHash = address.computeAccPath
-    accountExists = ledger.txFrame.hasAccount(addressHash).valueOr:
-      raiseAssert "Call to hasAccount failed: " & $$error
-
-  if not accountExists:
-    let emptyProofs = newSeq[seq[seq[byte]]](slots.len)
-    return emptyProofs
-
-  var slotKeys: seq[Hash32]
-  for slot in slots:
-    let slotKey = ledger.slots.get(slot).valueOr:
-      computeSlotKey(slot)
-    slotKeys.add(slotKey)
-
-  ledger.txFrame.slotProofs(addressHash, slotKeys).valueOr:
-    raiseAssert "Failed to get slot proof: " & $$error
-
 # ------------------------------------------------------------------------------
 # Public virtual read-only methods
 # ------------------------------------------------------------------------------
@@ -868,8 +826,6 @@ proc isEmptyAccount*(ledger: ReadOnlyLedger, address: Address): bool = isEmptyAc
 proc getCommittedStorage*(ledger: ReadOnlyLedger, address: Address, slot: UInt256): UInt256 = getCommittedStorage(distinctBase ledger, address, slot)
 proc inAccessList*(ledger: ReadOnlyLedger, address: Address): bool = inAccessList(distinctBase ledger, address)
 proc inAccessList*(ledger: ReadOnlyLedger, address: Address, slot: UInt256): bool = inAccessList(distinctBase ledger, address)
-proc getAccountProof*(ledger: ReadOnlyLedger, address: Address): seq[seq[byte]] = getAccountProof(distinctBase ledger, address)
-proc getStorageProof*(ledger: ReadOnlyLedger, address: Address, slots: openArray[UInt256]): seq[seq[seq[byte]]] = getStorageProof(distinctBase ledger, address, slots)
 proc resolveCode*(ledger: ReadOnlyLedger, address: Address): CodeBytesRef = resolveCode(distinctBase ledger, address)
 
 # ------------------------------------------------------------------------------
