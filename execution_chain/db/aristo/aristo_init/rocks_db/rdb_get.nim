@@ -139,7 +139,7 @@ proc getKey*(
     # We don't store keys for leaves, no need to hit the database
     let rc = rdb.rdVtxLru.peek(rvid.vid)
     if rc.isOk():
-      let vtx = rc[].data().deblobify(VertexRef)[]
+      let vtx = rc[].data().deblobify(VertexRef).expect("valid data in db")
       if vtx.vType in Leaves:
         return ok((VOID_HASH_KEY, vtx))
 
@@ -148,7 +148,7 @@ proc getKey*(
   var res {.threadvar.}: Opt[HashKey]
   var vtxBuf {.threadvar.}: VertexBuf
   
-  let onData = proc(data: openArray[byte]) =
+  let onData = proc(data: openArray[byte]) {.nimcall.} =
     res = data.deblobify(HashKey)
     if res.isNone():
       reset(vtxBuf)
@@ -175,7 +175,7 @@ proc getKey*(
 
   let vtx = 
     if res.isNone():
-      vtxBuf.data().deblobify(VertexRef)[]
+      vtxBuf.data().deblobify(VertexRef).expect("valid data in db")
     else:
       nil
 
@@ -203,7 +203,7 @@ proc getVtx*(
         rdb.rdVtxLru.get(rvid.vid)
 
     if rc.isOk:
-      let vtx = rc[].data().deblobify(VertexRef)[]
+      let vtx = rc[].data().deblobify(VertexRef).expect("valid data in db")
       rdbVtxLruStats[rvid.to(RdbStateType)][vtx.vType.to(RdbVertexType)].inc(
         true
       )
@@ -214,7 +214,7 @@ proc getVtx*(
   var res {.threadvar.}: Result[VertexRef, AristoError]
   var vtxBuf {.threadvar.}: VertexBuf
   
-  let onData = proc(data: openArray[byte]) =
+  let onData = proc(data: openArray[byte]) {.nimcall.} =
     res = data.deblobify(VertexRef)
     if res.isOk() and res[].vType != Branch:
       reset(vtxBuf)
