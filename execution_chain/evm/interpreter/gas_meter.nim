@@ -84,3 +84,9 @@ func appendRegularGasUsed*(gasMeter: var GasMeter, amount: GasInt) =
 
 func appendStateGasUsed*(gasMeter: var GasMeter, amount: GasInt) =
   gasMeter.stateGasUsed += amount
+
+func checkGas*(gasMeter: GasMeter, cost, amount: GasInt): EvmResultVoid =
+  # Check enough state gas after `cost` consumption.
+  if amount > gasMeter.stateGasLeft + gasMeter.gasRemaining - cost:
+    return err(gasErr(OutOfGas))
+  ok()

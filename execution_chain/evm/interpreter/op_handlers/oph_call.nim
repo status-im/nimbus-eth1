@@ -239,16 +239,18 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
     )
     gasCost1 = ? cpt.gasCosts[Call].c_handler1(params1)
 
-  # eels reviewer think there is an issue with the design to charge gas multiple times.
-  # https://github.com/ethereum/execution-specs/pull/2526/changes#diff-28a1b575fd7c3d82832c0826cf58a881101643543d35c123c78ca65202152c23R456
-  ? cpt.opcodeGasCost(Call, gasCost1, reason = $Call)
-
   # EIP-8037: Charge state gas for new account creation BEFORE the 63/64
   # child gas calculation. When state gas spills from an empty reservoir
   # into regular gas, it must reduce the gas available for childGasLimit.
   if cpt.fork >= FkAmsterdam:
     if isNewAccount() and params1.nonZeroVal:
-      ? cpt.gasMeter.chargeStateGas(STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte,
+      let newAcccountStateGas = STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte
+      # eels reviewer think there is an issue with the design to charge regular gas multiple times.
+      # https://github.com/ethereum/execution-specs/pull/2526/changes#diff-28a1b575fd7c3d82832c0826cf58a881101643543d35c123c78ca65202152c23R456
+      # And it also make EVM tracer produce two traces of call or weird result.
+      # So we check it here before actually charging state gas and keep the tracer produce single trace of call.
+      ? cpt.gasMeter.checkGas(gasCost1, newAcccountStateGas)
+      ? cpt.gasMeter.chargeStateGas(newAcccountStateGas,
         reason = "CALL: State gas new account")
 
   let
@@ -256,7 +258,7 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
       GasParamsCall2(
         kind:            params1.kind,
         nonZeroVal:      params1.nonZeroVal,
-        gasCost1:        0.GasInt,
+        gasCost1:        gasCost1,
         isNewAccount:    isNewAccount,
         gasLeft:         cpt.gasMeter.gasRemaining,
         gasCallDelegate: cpt.gasCallDelegate(p.codeAddress),
