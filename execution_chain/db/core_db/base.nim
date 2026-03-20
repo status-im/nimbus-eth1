@@ -158,18 +158,6 @@ proc stateBlockNumber*(db: CoreDbTxRef): BlockNumber =
 
   rc.BlockNumber
 
-proc verifyProof*(
-    db: CoreDbRef;
-    proof: openArray[seq[byte]];
-    root: Hash32;
-    path: Hash32;
-      ): CoreDbRc[Opt[seq[byte]]] =
-  ## Variant of `verify()`.
-  let rc = verifyProof(proof, root, path).valueOr:
-    return err(error.toError("", ProofVerify))
-
-  ok(rc)
-
 # ------------------------------------------------------------------------------
 # Public key-value table methods
 # ------------------------------------------------------------------------------
@@ -255,7 +243,7 @@ proc hasKey*(kvt: CoreDbTxRef; key: openArray[byte]): bool =
   ## This function prototype is in line with the `hasKey` function for
   ## `Tables`.
   ##
-  result = kvt.kTx.hasKeyRc(key).valueOr: false
+  kvt.kTx.hasKeyRc(key).valueOr(false)
 
 # ------------------------------------------------------------------------------
 # Public methods for accounts
@@ -297,7 +285,7 @@ proc clearStorage*(
   ## Delete all data slots from the storage area associated with the
   ## particular account indexed by the key `accPath`.
   ##
-  acc.aTx.deleteStorageTree(accPath).isOkOr:
+  acc.aTx.clearStorage(accPath).isOkOr:
     return err(error.toError(""))
 
   ok()
@@ -339,17 +327,17 @@ proc fetchStorageRoot*(
 
   ok(rc)
 
-proc accountStorageEmpty*(
+proc hasStorage*(
     acc: CoreDbTxRef;
     accPath: Hash32;
       ): CoreDbRc[bool] =
   ## This function returns `true` if the storage root of the given account equals
   ## EMPTY_ROOT, ie the account has no storage.
   ##
-  let rc = acc.aTx.hasStorageData(accPath).valueOr:
+  let rc = acc.aTx.hasStorage(accPath).valueOr:
     return err(error.toError(""))
 
-  ok(not rc)
+  ok(rc)
 
 proc getStateRoot*(acc: CoreDbTxRef): CoreDbRc[Hash32] =
   ## This function retrieves the Merkle state hash of the accounts
