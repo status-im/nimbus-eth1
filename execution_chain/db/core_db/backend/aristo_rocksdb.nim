@@ -200,7 +200,6 @@ proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions, reset = false): Cor
 
   CoreDbRef(kvt: kdb, mpt: adb)
 
-
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

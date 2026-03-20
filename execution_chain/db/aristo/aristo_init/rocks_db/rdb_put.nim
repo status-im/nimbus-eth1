@@ -39,7 +39,7 @@ proc begin*(rdb: var RdbInst): SharedWriteBatchRef =
 proc rollback*(rdb: var RdbInst, session: SharedWriteBatchRef) =
   if not session.isClosed():
     rdb.rdKeyLru = typeof(rdb.rdKeyLru).init(rdb.rdKeySize)
-    # rdb.rdVtxLru = typeof(rdb.rdVtxLru).init(rdb.rdVtxSize)
+    rdb.rdVtxLru = typeof(rdb.rdVtxLru).init(rdb.rdVtxSize)
     rdb.rdBranchLru = typeof(rdb.rdBranchLru).init(rdb.rdBranchSize)
     session.close()
 
@@ -101,6 +101,7 @@ proc putVtx*(
         discard rdb.rdBranchLru.update(rvid.vid, (vtx.startVid, vtx.used))
     else:
       rdb.rdBranchLru.del(rvid.vid)
+      
       if rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
         rdb.rdVtxLru.put(rvid.vid, vtxBuf)
       else:
@@ -125,7 +126,7 @@ proc putVtx*(
 
     # Update cache, vertex will most probably never be visited anymore
     rdb.rdBranchLru.del rvid.vid
-    # rdb.rdVtxLru.del rvid.vid
+    rdb.rdVtxLru.del rvid.vid
     rdb.rdKeyLru.del rvid.vid
 
   ok()

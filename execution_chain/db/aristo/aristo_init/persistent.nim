@@ -46,8 +46,8 @@ proc init*(
 
   db.initInstance(opts.maxSnapshots, opts.parallelStateRootComputation).isOkOr:
     db.closeFn(wipe = false)
-
     return err(error)
+  
   ok db
 
 # ------------------------------------------------------------------------------

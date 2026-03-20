@@ -255,11 +255,11 @@ proc retrieveStoragePayload(
   # it must have been in the database
   let leafVtx = db.retrieveLeaf(
       ? db.fetchStorageIdImpl(accPath), NibblesBuf.fromBytes(stoPath.data)).valueOr:
-    # if error == FetchPathNotFound:
-    #   db.db.stoLeaves.put(mixPath, nil)
+    if error == FetchPathNotFound:
+      db.db.stoLeaves.put(mixPath, nil)
     return err(error)
 
-  # db.db.stoLeaves.put(mixPath, StoLeafRef(leafVtx))
+  db.db.stoLeaves.put(mixPath, StoLeafRef(leafVtx))
 
   ok StoLeafRef(leafVtx).stoData
 
