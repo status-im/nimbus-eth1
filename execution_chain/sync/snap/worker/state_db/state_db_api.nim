@@ -26,6 +26,9 @@ declareGauge nec_snap_accumulated_state_coverage, "" &
 declareGauge nec_snap_pivot_state_coverage, "" &
   "Max factor of accounts covered related to a single state root"
 
+declareGauge nec_snap_active_states, "" &
+  "Number of active state root indexed caches to download to"
+
 type
   StateByNumber = SortedSet[BlockNumber,StateDataRef]
     ## List of incomplete states downloaded from the `snap` network
@@ -105,11 +108,18 @@ proc maxUnproc(db: StateDbRef): StateDataRef =
       todo = value
     rc = walk.next
 
+
+proc resetMetrics(db: StateDbRef) =
+  metrics.set(nec_snap_accumulated_state_coverage, 0f)
+  metrics.set(nec_snap_pivot_state_coverage, 0f)
+  metrics.set(nec_snap_active_states, 0)
+
 proc updateMetrics(db: StateDbRef) =
   metrics.set(nec_snap_accumulated_state_coverage,
               ((1f - db.unproc.totalRatio) * (1+db.overlays).float))
   metrics.set(nec_snap_pivot_state_coverage,
               (1f - db.pivot.unproc.totalRatio))
+  metrics.set(nec_snap_active_states, db.byRoot.len)
 
 # ------------------------------------------------------------------------------
 # Public constructor
@@ -119,8 +129,7 @@ proc init*(T: type StateDbRef): T =
   let db = T(
     unproc:   ItemKeyRangeSet.init ItemKeyRangeMax,
     byNumber: StateByNumber.init())
-  metrics.set(nec_snap_accumulated_state_coverage, 0f)
-  metrics.set(nec_snap_pivot_state_coverage, 0f)
+  db.resetMetrics()
   db
 
 proc clear*(db: StateDbRef) =
@@ -131,8 +140,7 @@ proc clear*(db: StateDbRef) =
   db.byNumber.clear
   db.byHash.clear
   db.byRoot.clear
-  metrics.set(nec_snap_accumulated_state_coverage, 0f)
-  metrics.set(nec_snap_pivot_state_coverage, 0f)
+  db.resetMetrics()
 
 # ------------------------------------------------------------------------------
 # Public database root state functions
