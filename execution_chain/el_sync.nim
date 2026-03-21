@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -18,7 +18,8 @@ import
   web3/[engine_api, primitives, conversions],
   beacon_chain/consensus_object_pools/blockchain_dag,
   beacon_chain/el/[el_manager, engine_api_conversions],
-  beacon_chain/spec/[forks, presets, state_transition_block]
+  beacon_chain/spec/[forks, presets, state_transition_block],
+  json_rpc/client
 
 logScope:
   topics = "elsync"
@@ -87,23 +88,14 @@ proc findSlot(
 
   Opt.some importedSlot
 
-proc syncToEngineApi*(dag: ChainDAGRef, url: EngineApiUrl) {.async.} =
+proc syncToEngineApi*(dag: ChainDAGRef, rpcClient: RpcClient) {.async.} =
   # Takes blocks from the CL and sends them to the EL - the attempt is made
   # optimistically until something unexpected happens (reorg etc) at which point
   # the process ends
 
   let
     # Create the client for the engine api
-    # And exchange the capabilities for a test communication
-    web3 = await url.newWeb3()
-    rpcClient = web3.provider
     (lastEra1Block, firstSlotAfterMerge) = dag.cfg.loadNetworkConfig()
-
-  defer:
-    try:
-      await web3.close()
-    except:
-      discard
 
   # Load the EL state detials and create the beaconAPI client
   var elBlockNumber = uint64(await rpcClient.eth_blockNumber())

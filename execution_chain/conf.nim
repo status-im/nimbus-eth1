@@ -425,6 +425,12 @@ type
         defaultValue: false
         name: "engine-api" .}: bool
 
+      engineApiChannelEnabled* {.
+        hidden
+        desc: "Enable the Engine API Channel"
+        defaultValue: false
+        name: "debug-engine-api-channel" .}: bool
+
       engineApiPort* {.
         desc: "Listening port for the Engine API(http and ws)"
         defaultValue: defaultEngineApiPort
@@ -760,7 +766,7 @@ func getAllowedOrigins*(config: ExecutionClientConf): seq[Uri] =
     result.add parseUri(item)
 
 func engineApiServerEnabled*(config: ExecutionClientConf): bool =
-  config.engineApiEnabled or config.engineApiWsEnabled
+  config.engineApiEnabled or config.engineApiWsEnabled or config.engineApiChannelEnabled
 
 func shareServerWithEngineApi*(config: ExecutionClientConf): bool =
   config.engineApiServerEnabled and
