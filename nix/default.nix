@@ -24,48 +24,48 @@ assert pkgs.lib.assertMsg ((src.submodules or true) == true)
 
 let
   inherit (pkgs) stdenv lib writeScriptBin callPackage;
+  inherit (lib) substring optionals optionalString makeLibraryPath;
 
-  revision = lib.substring 0 8 (src.rev or src.dirtyRev or "00000000");
+  revision = substring 0 8 (src.rev or src.dirtyRev or "00000000");
 in stdenv.mkDerivation rec {
   pname = "nimbus-eth1";
   version = "${callPackage ./version.nix {}}-${revision}";
 
   inherit src;
 
+  #enableParallelBuilding = true;
+  enableParallelBuilding = false;
+
+  buildInputs = with pkgs; [
+    lz4 zstd rocksdb perl sqlite python3
+  ];
+
   # Fix for Nim compiler calling 'git rev-parse' and 'lsb_release'.
   nativeBuildInputs = let
     fakeGit = writeScriptBin "git" "echo ${version}";
-    fakeLsbRelease = writeScriptBin "lsb_release" "echo nix";
-  in
-    with pkgs; [ nim rocksdb fakeGit fakeLsbRelease perl which ]
-    ++ lib.optionals stdenv.isDarwin [ pkgs.darwin.cctools ];
-
-  #enableParallelBuilding = true;
-  enableParallelBuilding = false;
+  in with pkgs; [
+    nim fakeGit which
+  ] ++ optionals (!stdenv.isDarwin) [
+    lsb-release
+  ] ++ optionals stdenv.isDarwin [
+    pkgs.darwin.cctools
+  ];
 
   env = {
     # Disable CPU optmizations that make binary not portable.
     NIMFLAGS = "-d:disableMarchNative -d:git_revision_override=${revision}";
-    NIM_PARAMS = lib.optionalString disableLto " --passC:'-fno-lto' --passL:'-fno-lto'";
+    NIM_PARAMS = optionalString disableLto " --passC:'-fno-lto' --passL:'-fno-lto'";
+
+    # Provide runtime libraries for linking.
+    LD_LIBRARY_PATH = makeLibraryPath buildInputs;
 
     # Avoid Nim cache permission errors.
     XDG_CACHE_HOME = "/tmp";
-
-    #NIX_DEBUG = 7;
-    #NIX_CFLAGS_COMPILE = " -fno-lto";
-    #NIX_CFLAGS_LINK = " -Wl,-plugin-opt=-disable-lto";
-    #NIX_CFLAGS_LINK = ''
-    #  -Wl,--verbose
-    #  -Wl,-plugin-opt=-debug
-    #  -Wl,-plugin-opt=-save-temps
-    #  -Wl,-plugin-opt=-v
-    #  -Wl,-Map,link.map
-    #'';
   };
 
   makeFlags = targets ++ [
     "V=${toString verbosity}"
-    "NIM_PARAMS=$NIM_PARAMS"
+    #"NIM_PARAMS=$NIM_PARAMS"
     # Built from nimbus-build-system via flake.
     "USE_SYSTEM_NIM=1"
     # FIXME: Building local RockDB fails silently.

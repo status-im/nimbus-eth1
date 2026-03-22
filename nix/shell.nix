@@ -1,20 +1,13 @@
 { pkgs ? import <nixpkgs> {}, nim }:
 
 let
-  mkdocs-packages = ps: with ps; [
-    mkdocs
-    mkdocs-material
-    mkdocs-material-extensions
-    pymdown-extensions
-  ];
-  mkdocs-python = pkgs.python3.withPackages mkdocs-packages;
+  package = pkgs.callPackage ./default.nix { inherit nim; };
 in pkgs.mkShell {
+  inputsFrom = [ package ];
 
   buildInputs = with pkgs; [
-    nim
     git
     git-lfs
-    gnumake
     getopt
 
     # For the local simulation
@@ -24,11 +17,6 @@ in pkgs.mkShell {
     procps  # for killing processes with pkill
     curl    # for working with the node APIs
     jq      # for parsing beacon API for LC start
-    openjdk # for running web3signer
-
-    mkdocs-python
-  ] ++ lib.optionals (!stdenv.isDarwin) [
-    lsb-release
   ];
 
   shellHook = ''
