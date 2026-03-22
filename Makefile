@@ -245,12 +245,12 @@ libbacktrace:
 # nim-rocksdb
 ROCKSDB_CI_CACHE := build/rocksdb
 
-ifneq ($(USE_SYSTEM_ROCKSDB), 0)
 rocksdb:
+ifneq ($(USE_SYSTEM_ROCKSDB), 1)
 	+ MAKE="$(MAKE)" \
 		scripts/rocksdb_ci_cache.sh $(ROCKSDB_CI_CACHE)
 else
-rocksdb:
+	@echo "Using system RocksDB"
 endif
 
 eest:

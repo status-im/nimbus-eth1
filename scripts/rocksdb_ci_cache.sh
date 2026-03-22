@@ -8,6 +8,7 @@
 # according to those terms.
 
 set -e
+set -x
 
 # script arguments
 [[ $# -ne 1 ]] && { echo "Usage: $0 rocksdb_cache_dir"; }
@@ -42,7 +43,7 @@ fi
 
 # This scripts has it's own logic to detect rebuilt or not
 if [[ "$ON_WINDOWS" == "0" ]]; then
-  MAKE="${MAKE}" ${REPO_DIR}/vendor/nim-rocksdb/scripts/build_static_deps.sh
+  MAKE="${MAKE}" bash -x ${REPO_DIR}/vendor/nim-rocksdb/scripts/build_static_deps.sh
 else
   MAKE="${MAKE}" ${REPO_DIR}/vendor/nim-rocksdb/scripts/build_dlls_windows.sh
   mkdir -p ${REPO_DIR}/build
