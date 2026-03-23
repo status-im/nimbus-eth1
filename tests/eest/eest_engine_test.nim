@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -26,6 +26,7 @@ const
 
 const skipFiles = [
   "CALLBlake2f_MaxRounds.json", # Doesn't work in github CI
+  "test_withdrawal_requests.json",  # Enable this when bug in bal@v5.5.1 fixed
 ]
 
 runEESTSuite(
