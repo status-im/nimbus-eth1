@@ -17,7 +17,7 @@ import
   results,
   "."/[aristo_desc, aristo_get, aristo_layers],
   ./aristo_desc/desc_backend,
-  ../../concurrent/queue
+  ../../concurrency/queue
 
 export aristo_desc, chronicles, stack
 

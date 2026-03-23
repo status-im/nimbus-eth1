@@ -68,20 +68,27 @@ template popCommit(q: var ConcurrentQueue) =
 func tryPush*[E, T](q: var ConcurrentQueue[E, T], value: sink T): bool =
   let headIdx = q.pushBegin()
   if headIdx < 0:
-    return false
+    false
+  else:
+    q.data[headIdx] = value
+    q.pushCommit()
+    true
 
-  q.data[headIdx] = value
-  q.pushCommit()
-  true
-
-func tryPop*[E, T](q: var ConcurrentQueue[E, T]): Opt[T] =
+func tryPop*[E, T](q: var ConcurrentQueue[E, T], value: var T): bool =
   let tailIdx = q.popBegin()
   if tailIdx < 0:
-    return Opt.none(T)
+    false
+  else:
+    value = move(q.data[tailIdx])
+    q.popCommit()
+    true
 
-  let value = move(q.data[tailIdx])
-  q.popCommit()
-  Opt.some(value)
+template tryPop*[E, T](q: var ConcurrentQueue[E, T]): Opt[T] =
+  var value: T
+  if q.tryPop(value):
+    Opt.some(value)
+  else:
+    Opt.none(T)
 
 func push*[E, T](q: var ConcurrentQueue[E, T], value: sink T) =
   var headIdx = q.pushBegin()
@@ -92,14 +99,18 @@ func push*[E, T](q: var ConcurrentQueue[E, T], value: sink T) =
   q.data[headIdx] = value
   q.pushCommit()
 
-func pop*[E, T](q: var ConcurrentQueue[E, T]): T =
+func pop*[E, T](q: var ConcurrentQueue[E, T], value: var T) =
   var tailIdx = q.popBegin()
   while tailIdx < 0:
     cpuRelax()
     tailIdx = q.popBegin()
 
-  let value = move(q.data[tailIdx])
+  value = move(q.data[tailIdx])
   q.popCommit()
+
+template pop*[E, T](q: var ConcurrentQueue[E, T]): T =
+  var value: T
+  q.pop(value)
   value
 
 when isMainModule:
