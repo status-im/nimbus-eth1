@@ -21,10 +21,13 @@ type ReadWriteLock* = object
   readerCount: int
   hasWriter: bool
 
-func init*(T: type ReadWriteLock): T =
-  var rwLock = ReadWriteLock(readerCount: 0, hasWriter: false)
+func init*(rwLock: var ReadWriteLock) =
   initLock(rwLock.lock)
   initCond(rwLock.cond)
+
+func init*(T: type ReadWriteLock): T =
+  var rwLock = ReadWriteLock()
+  rwLock.init()
   rwLock
 
 func lockRead*(rwLock: var ReadWriteLock) =
