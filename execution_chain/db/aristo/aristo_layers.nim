@@ -141,11 +141,32 @@ func layersPutKey*(
   ## Store a (potentally void) hash key on the top layer - we don't store keys
   ## for leaves since these are trivial to compute
   let vtx = db.layersPrepareUpdate(rvid, vtx)
-
   db.kMap[rvid] = key
 
   if db.snapshot.level.isSome():
     db.snapshot.vtx[rvid] = (VertexRef(vtx), key, db.level)
+
+func layersMergeKey*(
+    db: AristoTxRef;
+    rvid: RootedVertexID;
+    key: HashKey;
+      ) =
+  ## Store a (potentally void) hash key on the top layer - we don't store keys
+  ## for leaves since these are trivial to compute
+  # Precondition: the vertex for the given rvid should exist
+  #TODO: remove
+  doAssert db.sTab.contains(rvid)
+  if db.snapshot.level.isSome():
+    doAssert db.snapshot.vtx.contains(rvid)
+  
+  db.kMap[rvid] = key
+
+  if db.snapshot.level.isSome():
+    db.snapshot.vtx.withValue(rvid, value):
+      value[1] = key
+    #TODO: remove
+    db.snapshot.vtx.withValue(rvid, value):
+      doAssert value[1] == key
 
 func layersResKey*(db: AristoTxRef; rvid: RootedVertexID, vtx: BranchRef) =
   ## Shortcut for `db.layersPutKey(vid, VOID_HASH_KEY)` which resets the hash

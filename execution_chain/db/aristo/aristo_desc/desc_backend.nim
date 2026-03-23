@@ -52,7 +52,7 @@ type
       ## Generic transaction initialisation function
 
   PutVtxFn* =
-    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: VertexRef, key: HashKey)
+    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: VertexRef, key: HashKey, mergeKey = false)
       {.gcsafe, raises: [].}
         ## Generic backend database bulk storage function, `VertexRef(nil)`
         ## values indicate that records should be deleted.

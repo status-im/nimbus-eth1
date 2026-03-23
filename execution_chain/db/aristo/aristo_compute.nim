@@ -34,7 +34,7 @@ type
     depth*: int
     prefix*: uint64
   
-  ConcurrentBuffer* = ConcurrentQueue[8, (RootedVertexID, VertexBranch, HashKey, int)]
+  ConcurrentBuffer* = ConcurrentQueue[8, (RootedVertexID, HashKey, int)]
 
 proc `=copy`(dest: var WriteBatch; src: WriteBatch) {.error: "Copying WriteBatch is forbidden".} =
   discard
@@ -60,7 +60,7 @@ proc putVtx(
   if batch.writer == nil:
     batch.writer = ?txRef.putBegFn()
 
-  txRef.putVtxFn(batch.writer, rvid, vtx, key)
+  txRef.putVtxFn(batch.writer, rvid, vtx, key, mergeKey = vtx.isNil())
   inc batch.count
 
   ok()
@@ -98,9 +98,13 @@ proc putKeyAtLevel(
     let frame = txRef.deltaAtLevel(level)
     when locksEnabled:
       frame.db.lock.lockWrite()
-    frame.layersPutKey(rvid, vtx, key)
+    if vtx.isNil():
+      frame.layersMergeKey(rvid, key)
+    else:
+      frame.layersPutKey(rvid, vtx, key)
     when locksEnabled:
       frame.db.lock.unlockWrite()
+
   elif level == dbLevel:
     ?batch.putVtx(txRef.db, rvid, vtx, key)
 
@@ -111,6 +115,7 @@ proc putKeyAtLevel(
         info "Writing computeKey cache", keys = batch.count, accounts = batch.progress
       else:
         debug "Writing computeKey cache", keys = batch.count, accounts = batch.progress
+
   else: # level > dbLevel but less than baseTxFrame level
     # Throw defect here because we should not be writing vertexes to the database if
     # from a lower level than the baseTxFrame level.
@@ -141,14 +146,6 @@ template encodeExt(w: var RlpWriter, pfx: NibblesBuf, branchKey: HashKey): HashK
 proc getKey(
     txRef: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool, locksEnabled: static bool
 ): Result[((HashKey, VertexRef), int), AristoError] =
-  const 
-    emptyFlags: set[GetVtxFlag] = {}
-    flags = 
-      when skipLayers or locksEnabled: 
-        {GetVtxFlag.PeekCache} 
-      else: 
-        emptyFlags
-  
   when not skipLayers:
     block body:
       when locksEnabled:
@@ -170,7 +167,7 @@ proc getKey(
       else:
         return err(GetKeyNotFound)
 
-  ok((?txRef.db.getKeyBe(rvid, flags), dbLevel))
+  ok((?txRef.db.getKeyBe(rvid, {}), dbLevel))
 
 template childVid(vp: VertexRef): VertexID =
   # If we have to recurse into a child, where would that recusion start?
@@ -353,34 +350,22 @@ proc computeKeyImpl(
         while runningFutsIndexes.len() > 0:
           for i, f in futs:
             if runningFutsIndexes.contains(i.uint8):
-              let v = buffers[i].tryPop().valueOr:
+              var v: (RootedVertexID, HashKey, int)
+              if not buffers[i].tryPop(v):
                 # once we stop receiving data we check if the task is finished 
                 # and then remove it from the set
                 if f.isReady():
                   runningFutsIndexes.excl(i.uint8)
                 continue
-              if v[1].isExt:
-                let b = ExtBranchRef.init(v[1].pfx, v[1].startVid, v[1].used)
-                ?txRef.putKeyAtLevel(v[0], BranchRef(b), v[2], v[3], batch, locksEnabled)
-              else:
-                let b = BranchRef.init(v[1].startVid, v[1].used)
-                ?txRef.putKeyAtLevel(v[0], b, v[2], v[3], batch, locksEnabled)
+              ?txRef.putKeyAtLevel(v[0], nil, v[1], v[2], batch, locksEnabled)
         
         # At this point all futures have finished running.
         # Now we process any remaining data in the buffers.
         for i, f in futs:
           if f.isSpawned():
-            var data = buffers[i].tryPop()
-            while data.isSome():
-              let v = data.get()
-              if v[1].isExt:
-                let b = ExtBranchRef.init(v[1].pfx, v[1].startVid, v[1].used)
-                ?txRef.putKeyAtLevel(v[0], BranchRef(b), v[2], v[3], batch, locksEnabled)
-              else:
-                let b = BranchRef.init(v[1].startVid, v[1].used)
-                ?txRef.putKeyAtLevel(v[0], b, v[2], v[3], batch, locksEnabled)
-              
-              data = buffers[i].tryPop()
+            var v: (RootedVertexID, HashKey, int)
+            while buffers[i].tryPop(v):
+              ?txRef.putKeyAtLevel(v[0], nil, v[1], v[2], batch, locksEnabled)
 
             (keyvtxs[i][0][0], keyvtxs[i][1]) = ?sync(f)
 
@@ -411,14 +396,7 @@ proc computeKeyImpl(
     if buffer.isNil():
       ?txRef.putKeyAtLevel(rvid, BranchRef(vtx), key, level, batch, locksEnabled)
     else:
-      if vtx.vType == ExtBranch:
-        let b = ExtBranchRef(vtx)
-        buffer[].push((rvid, VertexBranch(isExt: true, used: b.used, startVid: b.startVid, pfx: b.pfx), key, level))
-      elif vtx.vType == Branch:
-        let b = BranchRef(vtx)
-        buffer[].push((rvid, VertexBranch(isExt: false, used: b.used, startVid: b.startVid), key, level))
-      else:
-        raiseAssert("not expected")
+      buffer[].push((rvid, key, level))
 
   ok (key, level)
 

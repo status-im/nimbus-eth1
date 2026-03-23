@@ -31,7 +31,7 @@ import
   ./aristo_desc/desc_backend
 
 when compileOption("threads"):
-  import taskpools, ../../concurrent/readwritelock
+  import taskpools, ../../concurrency/readwritelock
   export taskpools, readwritelock
 
 # Not auto-exporting backend
