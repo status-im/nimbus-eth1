@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2025 Status Research & Development GmbH
+# Copyright (c) 2021-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -61,7 +61,7 @@ jobs:
     runs-on: ${{ matrix.builder }}
     steps:
       - name: Checkout nimbus-eth1
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - id: shared-action
         uses: ./.github/actions/shared
