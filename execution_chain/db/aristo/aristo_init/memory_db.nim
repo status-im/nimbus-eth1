@@ -117,7 +117,10 @@ func putVtxFn(db: MemBackendRef): PutVtxFn =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
         if vtx.isValid:
-          hdl.sTab[rvid] = vtx.blobify(key)
+          var vtxBuf: VertexBuf
+          vtx.blobifyTo(key, vtxBuf)
+
+          hdl.sTab[rvid] = @(vtxBuf.data())
         else:
           hdl.sTab[rvid] = EmptyBlob
 

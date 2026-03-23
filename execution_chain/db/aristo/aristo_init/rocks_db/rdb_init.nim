@@ -13,7 +13,7 @@
 
 {.push raises: [].}
 
-import std/strformat, results, ../../aristo_desc, ./rdb_desc, ../../../opts
+import std/strformat, results,   ../../[aristo_blobify, aristo_desc], ./rdb_desc, ../../../opts
 
 # ------------------------------------------------------------------------------
 # Private constructor
@@ -91,7 +91,7 @@ proc init*(rdb: var RdbInst, opts: DbOptions, baseDb: RocksDbInstanceRef) =
     opts.rdbKeyCacheSize div (sizeof(VertexID) + sizeof(HashKey) + lruOverhead)
   rdb.rdVtxSize =
     opts.rdbVtxCacheSize div
-    (sizeof(VertexID) + sizeof(default(StoLeafRef)[]) + lruOverhead)
+    (sizeof(VertexID) + sizeof(VertexBuf) + lruOverhead)
 
   rdb.rdBranchSize =
     opts.rdbBranchCacheSize div (sizeof(typeof(rdb.rdBranchLru).V) + lruOverhead)

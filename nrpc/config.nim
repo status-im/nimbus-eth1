@@ -80,7 +80,6 @@ type
       separator: "\pLOGGING AND DEBUGGING OPTIONS:"
       desc: "Sets the log level for process and topics (" & logLevelDesc & ")"
       defaultValue: LogLevel.INFO
-      defaultValueDesc: $LogLevel.INFO
       name: "log-level" }: LogLevel
 
     case cmd* {.

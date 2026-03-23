@@ -200,7 +200,7 @@ proc init(com         : CommonRef,
     # Must not overwrite the global state on the single state DB
 
     com.genesisHeader = txFrame.getBlockHeader(0.BlockNumber).valueOr:
-      writeGenesisHeader(genesis, txFrame, fork)
+      writeGenesis(genesis, txFrame, fork)
 
     com.setForkId(com.genesisHeader)
 
