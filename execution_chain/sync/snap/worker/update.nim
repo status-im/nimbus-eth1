@@ -40,7 +40,7 @@ proc downloadNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   sdb.pivot().isErrOr:
     # Check whether the `pivot` data have been fully downloaded
     if value.totalAccountRange().isErr():           # err => all accounts done
-      if value.len == 0:                            # no slots/code todo
+      if not value.hasCodeOrStorage():              # no slots/code todo
         return SnapMkTrie
     # Check whether total coverage is sufficient
     # TBD ..
@@ -130,6 +130,8 @@ template updateTarget*(
       ) =
   ## Async/template
   ##
+  ## Check for manuall sync target (e.g. set by a command line option)
+  ##
   block body:
     # Check whether explicit target setup is configured
     if buddy.ctx.pool.target.isSome():
@@ -138,22 +140,14 @@ template updateTarget*(
         ctx = buddy.ctx
 
       # Single target block hash
-      let hash = ctx.pool.target.value.blockHash
+      let hash = ctx.pool.target.value
       if hash != BlockHash(zeroHash32):
         let rc = buddy.headerStateRegister(hash, info)
         if rc.isErr and rc.error:                   # real error
           trace info & ": failed fetching pivot hash", peer, hash=hash.toStr
-        elif 0 < ctx.pool.target.value.updateFile.len:
-          var target = ctx.pool.target.value
-          target.blockHash = BlockHash(zeroHash32)
-          ctx.pool.target = Opt.some(target)
+          ctx.pool.target = Opt.some(hash)          # restore
         else:
-          ctx.pool.target = Opt.none(SnapTarget)    # No more target entries
-          break body                                # noting more to do here
-
-      # Check whether a file target setup is configured
-      if 0 < ctx.pool.target.value.updateFile.len:
-        discard buddy.headerStateLoad(ctx.pool.target.value.updateFile, info)
+          ctx.pool.target = Opt.none(BlockHash)     # No more target entries
 
   discard # visual alignment
 

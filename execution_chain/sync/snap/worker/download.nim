@@ -74,11 +74,9 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
     sdb.pivot.isErrOr:                              # the one with most done yet
       theseFirst.add value.stateRoot
     ctx.pool.clStateRoot.isErrOr:
-      if value notin theseFirst:
-        theseFirst.add value
+      theseFirst.add value
     buddy.only.pivotRoot.isErrOr:                   # best supported by peer
-      if value notin theseFirst:
-        theseFirst.add value
+      theseFirst.add value
 
     # Run `download()` for available states, the order of which is
     # determined by the following criteria with deacening priority
