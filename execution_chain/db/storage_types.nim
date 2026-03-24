@@ -31,6 +31,7 @@ type
     witness = 12
     blockAccessList = 13
     tail = 14
+    prunerState = 15
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -70,6 +71,10 @@ func dataDirIdKey*(): DbKey {.inline.} =
 
 func tailIdKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(tail)
+  result.dataEndPos = 1
+
+func prunerStateKey*(): DbKey {.inline.} =
+  result.data[0] = byte ord(prunerState)
   result.dataEndPos = 1
 
 func slotHashToSlotKey*(h: Hash32): DbKey {.inline.} =

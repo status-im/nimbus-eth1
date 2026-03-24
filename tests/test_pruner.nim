@@ -24,7 +24,8 @@ import
   ../execution_chain/db/kvt,
   ../execution_chain/db/kvt/[kvt_init/memory_only, kvt_utils],
   ../execution_chain/db/storage_types,
-  ../execution_chain/pruner
+  ../execution_chain/pruner,
+  ../execution_chain/pruner/serialize
 
 const
   genesisFile = "tests/customgenesis/cancun123.json"
@@ -274,3 +275,76 @@ suite "Pruner integration tests":
     let com = env.newCom()
     let kvt = com.db.kvt
     check kvt.getHistoryExpiredBe() == BlockNumber(0)
+
+suite "PrunerState serialization tests":
+  var env = setupEnv()
+
+  test "loadPrunerStateBe returns zero state when not set":
+    let kvt = KvtDbRef.init()
+    let state = kvt.loadPrunerStateBe()
+    check state.active == false
+    check state.tail == BlockNumber(0)
+    check state.head == BlockNumber(0)
+    kvt.close()
+
+  test "PrunerState RLP roundtrip":
+    let original = PrunerState(
+      active: true, tail: BlockNumber(42), head: BlockNumber(100))
+    let encoded = rlp.encode(original)
+    let decoded = rlp.decode(encoded, PrunerState)
+    check decoded.active == original.active
+    check decoded.tail == original.tail
+    check decoded.head == original.head
+
+  test "savePrunerStateBe/loadPrunerStateBe roundtrip":
+    let kvt = KvtDbRef.init()
+    let state = PrunerState(
+      active: true, tail: BlockNumber(500), head: BlockNumber(1000))
+    kvt.savePrunerStateBe(state)
+    let loaded = kvt.loadPrunerStateBe()
+    check loaded.active == state.active
+    check loaded.tail == state.tail
+    check loaded.head == state.head
+    kvt.close()
+
+  test "savePrunerStateBe overwrites previous state":
+    let kvt = KvtDbRef.init()
+    kvt.savePrunerStateBe(
+      PrunerState(active: true, tail: BlockNumber(10), head: BlockNumber(20)))
+    kvt.savePrunerStateBe(
+      PrunerState(active: false, tail: BlockNumber(99), head: BlockNumber(200)))
+    let loaded = kvt.loadPrunerStateBe()
+    check loaded.active == false
+    check loaded.tail == BlockNumber(99)
+    check loaded.head == BlockNumber(200)
+    kvt.close()
+
+  test "startup guard condition: active=true without --prune detected":
+    let com = env.newCom()
+    # Simulate a previous run with pruning enabled
+    com.db.kvt.savePrunerStateBe(
+      PrunerState(active: true, tail: BlockNumber(100), head: BlockNumber(500)))
+
+    # Verify: loading the state correctly reflects that pruning was previously active.
+    # In production this would trigger preventStartingWithoutPruning and fatal-exit.
+    let state = com.db.kvt.loadPrunerStateBe()
+    check state.active == true
+
+  test "pruner stop persists state to KVT":
+    let com = env.newCom()
+    # Pre-populate a state to simulate a previous run
+    com.db.kvt.savePrunerStateBe(
+      PrunerState(active: false, tail: BlockNumber(7), head: BlockNumber(50)))
+
+    # Init should load that state
+    let pruner = BackgroundPrunerRef.init(com)
+    check pruner.state.tail == BlockNumber(7)
+    check pruner.state.head == BlockNumber(50)
+
+    # Start and stop immediately
+    pruner.start()
+    waitFor pruner.stop()
+
+    # State should have been re-saved by stop with active = true (pruner was enabled)
+    let saved = com.db.kvt.loadPrunerStateBe()
+    check saved.active == true

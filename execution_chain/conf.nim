@@ -460,6 +460,11 @@ type
         defaultValueDesc: "*"
         name: "allowed-origins" .}: seq[string]
 
+      backgroundPruning* {.
+        desc: "Enable background pruning of expired block bodies and receipts"
+        defaultValue: false
+        name: "prune" .}: bool
+
       # https://eips.ethereum.org/EIPS/eip-7872
       maxBlobs* {.
         desc: "EIP-7872 maximum blobs used when building a local payload"
@@ -522,11 +527,6 @@ type
         desc: "Treat bootstrap RLP imports as finalized chain segments"
         defaultValue: false
         name: "debug-bootstrap-finalized" .}: bool
-
-      backgroundPruning* {.
-        desc: "Enable background pruning of expired block bodies and receipts"
-        defaultValue: false
-        name: "prune" .}: bool
 
     # We now load all the import specific configurations directly into  ExecutionClientConf
     of NimbusCmd.`import`:

@@ -14,19 +14,18 @@ import
   chronicles,
   chronos,
   results,
-  stew/endians2,
   eth/common/times,
-  ./db/core_db,
-  ./db/kvt/[kvt_desc, kvt_utils],
-  ./db/storage_types,
+  ./pruner/[db_utils, serialize],
   ./common
+
+export serialize
 
 logScope:
   topics = "pruner"
 
 const
   # MIN_EPOCHS_FOR_BLOCK_REQUESTS (33,024) * SLOTS_PER_EPOCH (32) * SECONDS_PER_SLOT (12)
-  RetentionPeriod = 33_024'u64 * 32 * 12
+  RetentionPeriod* = 33_024'u64 * 32 * 12
 
 type
   BackgroundPrunerRef* = ref object
@@ -34,56 +33,7 @@ type
     batchSize: uint64
     loopDelay: chronos.Duration
     loopFut: Future[void].Raising([CancelledError])
-
-# ------------------------------------------------------------------------------
-# Direct-backend deletion helpers (bypass transaction layer)
-# ------------------------------------------------------------------------------
-
-proc deleteTransactionsBe(kvt: KvtDbRef, txRoot: Hash32) =
-  if txRoot == EMPTY_ROOT_HASH: return
-  kvt.delRangeBe(hashIndexKey(txRoot, 0), hashIndexKey(txRoot, uint16.high),
-    compactRange = true).isOkOr:
-    warn "pruner: deleteTransactionsBe", txRoot, error
-
-proc deleteReceiptsBe(kvt: KvtDbRef, receiptsRoot: Hash32) =
-  if receiptsRoot == EMPTY_ROOT_HASH: return
-  kvt.delRangeBe(hashIndexKey(receiptsRoot, 0), hashIndexKey(receiptsRoot, uint16.high),
-    compactRange = true).isOkOr:
-    warn "pruner: deleteReceiptsBe", receiptsRoot, error
-
-proc deleteUnclesBe(kvt: KvtDbRef, ommersHash: Hash32) =
-  if ommersHash == EMPTY_UNCLE_HASH: return
-  kvt.delBe(genericHashKey(ommersHash).toOpenArray).isOkOr:
-    warn "pruner: deleteUnclesBe", ommersHash, error
-
-proc deleteWithdrawalsBe(kvt: KvtDbRef, withdrawalsRoot: Hash32) =
-  if withdrawalsRoot == EMPTY_ROOT_HASH: return
-  kvt.delBe(withdrawalsKey(withdrawalsRoot).toOpenArray).isOkOr:
-    warn "pruner: deleteWithdrawalsBe", withdrawalsRoot, error
-
-proc deleteBlockBodyAndReceiptsBe(kvt: KvtDbRef, header: Header) =
-  kvt.deleteTransactionsBe(header.transactionsRoot)
-  kvt.deleteUnclesBe(header.ommersHash)
-  if header.withdrawalsRoot.isSome:
-    kvt.deleteWithdrawalsBe(header.withdrawalsRoot.get())
-  kvt.deleteReceiptsBe(header.receiptsRoot)
-
-# ------------------------------------------------------------------------------
-# Direct-backend progress tracking
-# ------------------------------------------------------------------------------
-
-proc setChainTailBe(kvt: KvtDbRef, blockNumber: BlockNumber) =
-  let
-    key = tailIdKey()
-    value = blockNumber.toBytesLE()
-    batch = kvt.putBegFn().expect("pruner: putBegFn")
-  kvt.putKvpFn(batch, key.toOpenArray, value)
-  kvt.putEndFn(batch).expect("pruner: putEndFn")
-
-proc getChainTailBe(kvt: KvtDbRef): BlockNumber =
-  let blkNum = kvt.getBe(tailIdKey().toOpenArray).valueOr:
-    return BlockNumber(0)
-  BlockNumber(uint64.fromBytesLE(blkNum))
+    state*: PrunerState
 
 # ------------------------------------------------------------------------------
 # Public API
@@ -95,35 +45,48 @@ proc init*(
     batchSize = 100'u64,
     loopDelay = chronos.seconds(12),
 ): T =
-  T(com: com, batchSize: batchSize, loopDelay: loopDelay)
+  var state = com.db.kvt.loadPrunerStateBe()
+  state.active = true
+  T(
+    com: com, 
+    batchSize: batchSize, 
+    loopDelay: loopDelay, 
+    state: state
+  )
 
 proc pruneLoop(pruner: BackgroundPrunerRef) {.async: (raises: [CancelledError]).} =
   info "Starting pruner"
-  let kvt = pruner.com.db.kvt
+  let
+    kvt = pruner.com.db.kvt
+    oldState = kvt.loadPrunerStateBe()
+
   while true:
     let
       baseTx = pruner.com.db.baseTxFrame()
-      head = baseTx.getSavedStateBlockNumber()
-      tail = kvt.getChainTailBe()
       cutoff = EthTime(getTime().toUnix.uint64 - RetentionPeriod)
+      tail = kvt.getChainTailBe()
 
-    debug "Pruner status", head, tail, cutoffTimestamp = distinctBase(cutoff)
-
-    if tail >= head:
-      await sleepAsync(pruner.loopDelay)
-      continue
+    pruner.state.head = baseTx.getSavedStateBlockNumber()
+    pruner.state.tail = tail
 
     var
-      currentBlock = tail
+      currentBlock = pruner.state.tail
       blocksSinceSave = 0'u64
       lastLogTime = Moment.now()
 
-    while currentBlock <= head:
-      let
-        header = pruner.com.db.baseTxFrame.getBlockHeader(currentBlock).valueOr:
-          warn "Background pruner: failed to get header",
-            blkNum = currentBlock, error
-          break
+    debug "Pruner status",
+      head = pruner.state.head,
+      tail = pruner.state.tail,
+      cutoffTimestamp = distinctBase(cutoff)
+
+    if pruner.state.tail >= pruner.state.head:
+      await sleepAsync(pruner.loopDelay)
+      continue
+
+    while currentBlock <= pruner.state.head:
+      let header = pruner.com.db.baseTxFrame.getBlockHeader(currentBlock).valueOr:
+        warn "Background pruner: failed to get header", blkNum = currentBlock, error
+        break
       if header.timestamp >= cutoff:
         break
 
@@ -133,22 +96,24 @@ proc pruneLoop(pruner: BackgroundPrunerRef) {.async: (raises: [CancelledError]).
 
       if blocksSinceSave >= pruner.batchSize:
         kvt.setChainTailBe(currentBlock)
+        pruner.state.tail = currentBlock
         blocksSinceSave = 0
 
         debug "Background pruner: batch complete", blks = currentBlock
 
         if Moment.now() - lastLogTime >= chronos.seconds(12):
           info "Pruning history",
-            tail = currentBlock,
+            tail = pruner.state.tail,
             head = pruner.com.db.baseTxFrame().getSavedStateBlockNumber(),
-            pruned = currentBlock - tail
+            pruned = pruner.state.tail - tail
           lastLogTime = Moment.now()
 
         await sleepAsync(chronos.seconds(2))
 
     # Save final progress (covers partial batch at end / before break)
-    if currentBlock > tail:
+    if currentBlock > pruner.state.tail:
       kvt.setChainTailBe(currentBlock)
+      pruner.state.tail = currentBlock
 
     notice "Pruning cycle completed", prunedUpTo = currentBlock
 
@@ -160,3 +125,4 @@ proc start*(pruner: BackgroundPrunerRef) =
 proc stop*(pruner: BackgroundPrunerRef) {.async: (raises: []).} =
   if not pruner.loopFut.isNil:
     await pruner.loopFut.cancelAndWait()
+  pruner.com.db.kvt.savePrunerStateBe(pruner.state)

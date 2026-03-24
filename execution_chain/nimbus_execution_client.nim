@@ -232,6 +232,13 @@ proc init*(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
   if config.backgroundPruning:
     nimbus.backgroundPruner = BackgroundPrunerRef.init(com)
     nimbus.backgroundPruner.start()
+  else:
+    let state = com.db.kvt.loadPrunerStateBe()
+    if state.active:
+      fatal "Node was previously started with background pruning enabled (--prune). " &
+        "Historical block data may have been deleted, and might cause inconsistent DB " &
+        "Restart with --prune=true or use a fresh data directory."
+      quit(QuitFailure)
 
 proc init*(T: type NimbusNode, config: ExecutionClientConf, com: CommonRef): T =
   let nimbus = T()
@@ -263,7 +270,6 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionCli
       get=dataDirIdBytes.toHex,
       expected=calculatedId
     quit(QuitFailure)
-
 
 proc setupCommonRef*(config: ExecutionClientConf): CommonRef =
   let coreDB = AristoDbRocks.newCoreDbRef(
