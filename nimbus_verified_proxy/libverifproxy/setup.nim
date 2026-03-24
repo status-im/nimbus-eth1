@@ -373,7 +373,11 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
         )
     privateTxUrls =
       try:
-        parseCmdArg(UrlList, jsonNode["privateTxUrls"].getStr())
+        let rawUrls = jsonNode.getOrDefault("privateTxUrls").getStr("")
+        if rawUrls.len == 0:
+          UrlList(@[])
+        else:
+          parseCmdArg(UrlList, rawUrls)
       except CatchableError as e:
         raise newException(
           ProxyError, "Couldn't parse `privateTxUrls` from JSON config: " & e.msg
