@@ -130,6 +130,26 @@ proc putVtx*(
 
   ok()
 
+proc putVtxBlob*(
+    rdb: var RdbInst; session: SharedWriteBatchRef,
+    rvid: RootedVertexID; vtx: openArray[byte]
+      ): Result[void,(VertexID,AristoError,string)] =
+  let dsc = session.batch
+
+  dsc.put(rvid.blobify().data(), vtx, rdb.vtxCol.handle()).isOkOr:
+    # Caller must `rollback()` which will clear the `rdVtxLru` cache
+    const errSym = RdbBeDriverPutVtxError
+    when extraTraceMessages:
+      trace logTxt "putVtxBlob()", vid, error=errSym, info=error
+    return err((rvid.vid,errSym,error))
+  
+  # Delete the updated vertex from the caches to remove the any stale values
+  rdb.rdBranchLru.del rvid.vid
+  rdb.rdVtxLru.del rvid.vid
+  rdb.rdKeyLru.del rvid.vid
+
+  ok()
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

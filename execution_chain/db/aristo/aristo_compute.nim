@@ -15,7 +15,7 @@ import
   chronicles,
   eth/common/[accounts_rlp, base_rlp, hashes_rlp],
   results,
-  "."/[aristo_desc, aristo_get, aristo_layers],
+  "."/[aristo_desc, aristo_get, aristo_layers, aristo_blobify],
   ./aristo_desc/desc_backend,
   ../../concurrency/queue
 
@@ -34,7 +34,8 @@ type
     depth*: int
     prefix*: uint64
   
-  ConcurrentBuffer* = ConcurrentQueue[8, (RootedVertexID, HashKey, int)]
+  ConcurrentHashKeyQueue* = ConcurrentQueue[7, (RootedVertexID, HashKey, int)]
+  ConcurrentVertexBufQueue* = ConcurrentQueue[7, (RootedVertexID, VertexBuf)]
 
 proc `=copy`(dest: var WriteBatch; src: WriteBatch) {.error: "Copying WriteBatch is forbidden".} =
   discard
@@ -52,16 +53,18 @@ proc flush(batch: var WriteBatch, txRef: AristoDbRef): Result[void, AristoError]
 
 proc putVtx(
     batch: var WriteBatch,
-    txRef: AristoDbRef,
+    db: AristoDbRef,
     rvid: RootedVertexID,
     vtx: VertexRef,
     key: HashKey,
 ): Result[void, AristoError] =
   if batch.writer == nil:
-    batch.writer = ?txRef.putBegFn()
+    batch.writer = ?db.putBegFn()
 
-  txRef.putVtxFn(batch.writer, rvid, vtx, key)
+  db.putVtxFn(batch.writer, rvid, vtx, key)
   inc batch.count
+
+  # TODO: put the flush check here
 
   ok()
 
@@ -87,7 +90,7 @@ proc putKeyAtLevel(
     key: HashKey,
     level: int,
     batch: var WriteBatch,
-    locksEnabled: static bool
+    locksEnabled: static bool # TODO: remove this
 ): Result[void, AristoError] =
   ## Store a hash key in the given layer or directly to the underlying database
   ## which helps ensure that memory usage is proportional to the pending change
@@ -99,7 +102,7 @@ proc putKeyAtLevel(
     when locksEnabled:
       frame.db.lock.lockWrite()
     if vtx.isNil():
-      frame.layersMergeKey(rvid, key)
+      frame.layersMergeKey(rvid, key) # TODO: remove this
     else:
       frame.layersPutKey(rvid, vtx, key)
     when locksEnabled:
@@ -107,7 +110,8 @@ proc putKeyAtLevel(
 
   elif level == dbLevel:
     ?batch.putVtx(txRef.db, rvid, vtx, key)
-
+    
+    # TODO: put into a separate function
     if batch.count mod batchSize == 0:
       ?batch.flush(txRef.db)
 
@@ -121,6 +125,40 @@ proc putKeyAtLevel(
     # from a lower level than the baseTxFrame level.
     raiseAssert("Cannot write keys at level < baseTxFrame level. Found level = " &
         $level & ", baseTxFrame level = " & $txRef.db.baseTxFrame().level)
+
+  ok()
+
+proc mergeKeyAtLevel(
+    txRef: AristoTxRef,
+    rvid: RootedVertexID,
+    key: HashKey,
+    level: int) =
+  doAssert level >= txRef.db.baseTxFrame().level
+
+  let frame = txRef.deltaAtLevel(level)
+  withWriteLock(frame.db.lock):
+    frame.layersMergeKey(rvid, key)
+
+proc putVtxBlob(
+    batch: var WriteBatch,
+    db: AristoDbRef,
+    rvid: RootedVertexID,
+    vtx: openArray[byte], # TODO: should this be a openArray[byte]
+): Result[void, AristoError] =
+  if batch.writer == nil:
+    batch.writer = ?db.putBegFn()
+
+  db.putVtxBlobFn(batch.writer, rvid, vtx)
+  inc batch.count
+
+  # TODO: Pull this out into a separate function
+  if batch.count mod batchSize == 0:
+    ?batch.flush(db)
+
+    if batch.count mod (batchSize * 100) == 0:
+      info "Writing computeKey cache", keys = batch.count, accounts = batch.progress
+    else:
+      debug "Writing computeKey cache", keys = batch.count, accounts = batch.progress
 
   ok()
 
@@ -200,7 +238,8 @@ proc computeKeyImplTask(
     vtx: ptr VertexRef,
     level: int,
     skipLayers: bool,
-    buffer: ptr ConcurrentBuffer
+    keyQueue: ptr ConcurrentHashKeyQueue,
+    vtxBufQueue: ptr ConcurrentVertexBufQueue
 ): Result[(HashKey, int), AristoError]
 
 proc computeKeyImpl(
@@ -212,7 +251,8 @@ proc computeKeyImpl(
     skipLayers: static bool,
     parallel: static bool,
     locksEnabled: static bool,
-    buffer: ptr ConcurrentBuffer
+    keyQueue: ptr ConcurrentHashKeyQueue,
+    vtxBufQueue: ptr ConcurrentVertexBufQueue
 ): Result[(HashKey, int), AristoError] =
   # The bloom filter available used only when creating the key cache from an
   # empty state
@@ -246,7 +286,8 @@ proc computeKeyImpl(
                       skipLayers = skipLayers,
                       parallel = false,
                       locksEnabled,
-                      buffer
+                      keyQueue,
+                      vtxBufQueue
                     )
               level = max(level, sl)
               skey
@@ -275,7 +316,8 @@ proc computeKeyImpl(
       when parallel:
         var 
           futs: array[16, Flowvar[Result[(HashKey, int), AristoError]]]
-          buffers: array[16, ConcurrentBuffer]
+          keyQueues: array[16, ConcurrentHashKeyQueue]
+          vtxBufQueues: array[16, ConcurrentVertexBufQueue]
 
       # Make sure we have keys computed for each hash
       block keysComputed:
@@ -312,7 +354,8 @@ proc computeKeyImpl(
                   skipLayers = skipLayers,
                   parallel = false,
                   locksEnabled,
-                  buffer
+                  keyQueue,
+                  vtxBufQueue
                 )
               n += 1
               continue
@@ -331,9 +374,11 @@ proc computeKeyImpl(
               batchPtr: ptr WriteBatch = batch.addr
               vtxPtr = keyvtxs[minIdx][0][1].addr
               level = keyvtxs[minIdx][1]
-            buffers[minIdx].init()
+            keyQueues[minIdx].init()
+            vtxBufQueues[minIdx].init()
             futs[minIdx] = txRef.db.taskpool.spawn computeKeyImplTask(
-              txRef.addr, vid, batchPtr, vtxPtr, level, skipLayers = skipLayers, buffers[minIdx].addr)
+              txRef.addr, vid, batchPtr, vtxPtr, level, skipLayers = skipLayers, 
+              keyQueues[minIdx].addr, vtxBufQueues[minIdx].addr)
           else:
             #batch.enter(n)
             (keyvtxs[minIdx][0][0], keyvtxs[minIdx][1]) =
@@ -345,7 +390,8 @@ proc computeKeyImpl(
                 skipLayers = skipLayers,
                 parallel = false,
                 locksEnabled,
-                buffer
+                keyQueue,
+                vtxBufQueue
               )
             #batch.leave(n)
 
@@ -358,22 +404,42 @@ proc computeKeyImpl(
         while runningFutsIndexes.len() > 0:
           for i, f in futs:
             if runningFutsIndexes.contains(i.uint8):
-              var v: (RootedVertexID, HashKey, int)
-              if not buffers[i].tryPop(v):
+              var 
+                keyQueueEmpty = true
+                vtxBufQueuesEmpty = true
+
+              if not keyQueues[i].isEmpty():
+                var k: (RootedVertexID, HashKey, int)
+                if keyQueues[i].tryPop(k):
+                  txRef.mergeKeyAtLevel(k[0], k[1], k[2])
+                  keyQueueEmpty = false
+                  
+              if not vtxBufQueues[i].isEmpty():
+                var v: (RootedVertexID, VertexBuf)
+                if vtxBufQueues[i].tryPop(v):
+                  ?batch.putVtxBlob(txRef.db, v[0], v[1].data())
+                  vtxBufQueuesEmpty = false
+
+              if keyQueueEmpty and vtxBufQueuesEmpty:
                 # once we stop receiving data we check if the task is finished 
                 # and then remove it from the set
                 if f.isReady():
                   runningFutsIndexes.excl(i.uint8)
-                continue
-              ?txRef.putKeyAtLevel(v[0], nil, v[1], v[2], batch, locksEnabled)
-        
+
         # At this point all futures have finished running.
-        # Now we process any remaining data in the buffers.
+        # Now we process any remaining data in the queues.
         for i, f in futs:
           if f.isSpawned():
-            var v: (RootedVertexID, HashKey, int)
-            while buffers[i].tryPop(v):
-              ?txRef.putKeyAtLevel(v[0], nil, v[1], v[2], batch, locksEnabled)
+            debugEcho "f.isSpawned()"
+            if not keyQueues[i].isEmpty():
+              var k: (RootedVertexID, HashKey, int)
+              while keyQueues[i].tryPop(k):
+                txRef.mergeKeyAtLevel(k[0], k[1], k[2])
+
+            if not vtxBufQueues[i].isEmpty():
+              var v: (RootedVertexID, VertexBuf)
+              while vtxBufQueues[i].tryPop(v):
+                ?batch.putVtxBlob(txRef.db, v[0], v[1].data())
 
             (keyvtxs[i][0][0], keyvtxs[i][1]) = ?sync(f)
 
@@ -401,11 +467,18 @@ proc computeKeyImpl(
   # their hash being saved directly to the backend.
 
   if vtx.vType in Branches:
-    if buffer.isNil():
-      ?txRef.putKeyAtLevel(rvid, BranchRef(vtx), key, level, batch, locksEnabled)
+    if keyQueue.isNil():
+      ?txRef.putKeyAtLevel(rvid, BranchRef(vtx), key, level, batch, locksEnabled = false)
+    elif level >= txRef.db.baseTxFrame().level:
+      keyQueue[].push((rvid, key, level))
+    elif level == dbLevel:
+      var vtxBuf: VertexBuf
+      vtx.blobifyTo(key, vtxBuf)
+      vtxBufQueue[].push((rvid, vtxBuf))
     else:
-      buffer[].push((rvid, key, level))
-
+      raiseAssert("Cannot write keys at level < baseTxFrame level. Found level = " &
+        $level & ", baseTxFrame level = " & $txRef.db.baseTxFrame().level)
+        
   ok (key, level)
 
 proc computeKeyImplTask(
@@ -415,12 +488,15 @@ proc computeKeyImplTask(
     vtx: ptr VertexRef,
     level: int,
     skipLayers: bool,
-    buffer: ptr ConcurrentBuffer
+    keyQueue: ptr ConcurrentHashKeyQueue,
+    vtxBufQueue: ptr ConcurrentVertexBufQueue
 ): Result[(HashKey, int), AristoError] =
   if skipLayers:
-    txRef[].computeKeyImpl(rvid, batch[], vtx[], level, skipLayers = true, parallel = false, locksEnabled = true, buffer)
+    txRef[].computeKeyImpl(rvid, batch[], vtx[], level, skipLayers = true, 
+        parallel = false, locksEnabled = true, keyQueue, vtxBufQueue)
   else:
-    txRef[].computeKeyImpl(rvid, batch[], vtx[], level, skipLayers = false, parallel = false, locksEnabled = true, buffer)
+    txRef[].computeKeyImpl(rvid, batch[], vtx[], level, skipLayers = false, 
+        parallel = false, locksEnabled = true, keyQueue, vtxBufQueue)
 
 proc computeKeyImpl(
     txRef: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool, parallel: static bool, locksEnabled: static bool
@@ -444,6 +520,7 @@ proc computeKeyImpl(
     skipLayers = skipLayers,
     parallel = parallel,
     locksEnabled,
+    nil,
     nil
   )
 

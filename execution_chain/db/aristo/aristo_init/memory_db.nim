@@ -124,6 +124,13 @@ func putVtxFn(db: MemBackendRef): PutVtxFn =
         else:
           hdl.sTab[rvid] = EmptyBlob
 
+func putVtxBlobFn(db: MemBackendRef): PutVtxBlobFn =
+  result =
+    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: openArray[byte]) =
+      let hdl = hdl.getSession db
+      if hdl.error.isNil:
+        hdl.sTab[rvid] = @vtx
+
 func putLstFn(db: MemBackendRef): PutLstFn =
   result =
     proc(hdl: PutHdlRef; lst: SavedState) =
@@ -179,6 +186,7 @@ func memoryBackend*(): AristoDbRef =
 
   db.putBegFn = putBegFn be
   db.putVtxFn = putVtxFn be
+  db.putVtxBlobFn = putVtxBlobFn be
   db.putLstFn = putLstFn be
   db.putEndFn = putEndFn be
 

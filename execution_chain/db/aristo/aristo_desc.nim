@@ -104,6 +104,7 @@ type
 
     putBegFn*: PutBegFn              ## Start bulk store session
     putVtxFn*: PutVtxFn              ## Bulk store vertex records
+    putVtxBlobFn*: PutVtxBlobFn      ## Bulk store vertex records
     putLstFn*: PutLstFn              ## Store saved state
     putEndFn*: PutEndFn              ## Commit bulk store session
 

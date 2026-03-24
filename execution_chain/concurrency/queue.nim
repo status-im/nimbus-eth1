@@ -65,6 +65,12 @@ func popBegin(q: var ConcurrentQueue): int =
 template popCommit(q: var ConcurrentQueue) =
   q.indexes += 0x10000
 
+template isFull*[E, T](q: var ConcurrentQueue[E, T]): bool =
+  q.pushBegin() < 0
+
+template isEmpty*[E, T](q: var ConcurrentQueue[E, T]): bool =
+  q.popBegin() < 0
+
 func tryPush*[E, T](q: var ConcurrentQueue[E, T], value: sink T): bool =
   let headIdx = q.pushBegin()
   if headIdx < 0:
