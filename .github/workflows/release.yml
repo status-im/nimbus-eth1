@@ -44,7 +44,7 @@ jobs:
           sudo apt-get -qq -y install binfmt-support qemu-user-static
 
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.ref }}
 

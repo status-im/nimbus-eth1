@@ -13,7 +13,7 @@
 import
   std/typetraits,
   chronicles,
-  eth/common/[accounts, base, hashes],
+  eth/common/[accounts, addresses, base, hashes],
   ../../constants,
   ../[kvt, aristo],
   ../kvt/kvt_init/init_common,
@@ -53,6 +53,12 @@ func toError*(e: AristoError; s: string; error = Unspecified): CoreDbError =
     ctx:      s,
     isAristo: true,
     aErr:     e)
+
+template computeAccPath*(address: Address): Hash32 =
+  keccak256(address.data)
+
+template computeSlotKey*(slot: UInt256): Hash32 =
+  keccak256(slot.toBytesBE())
 
 # ------------------------------------------------------------------------------
 # Public context constructors and administration
@@ -152,18 +158,6 @@ proc stateBlockNumber*(db: CoreDbTxRef): BlockNumber =
 
   rc.BlockNumber
 
-proc verifyProof*(
-    db: CoreDbRef;
-    proof: openArray[seq[byte]];
-    root: Hash32;
-    path: Hash32;
-      ): CoreDbRc[Opt[seq[byte]]] =
-  ## Variant of `verify()`.
-  let rc = verifyProof(proof, root, path).valueOr:
-    return err(error.toError("", ProofVerify))
-
-  ok(rc)
-
 # ------------------------------------------------------------------------------
 # Public key-value table methods
 # ------------------------------------------------------------------------------
@@ -249,7 +243,7 @@ proc hasKey*(kvt: CoreDbTxRef; key: openArray[byte]): bool =
   ## This function prototype is in line with the `hasKey` function for
   ## `Tables`.
   ##
-  result = kvt.kTx.hasKeyRc(key).valueOr: false
+  kvt.kTx.hasKeyRc(key).valueOr(false)
 
 # ------------------------------------------------------------------------------
 # Public methods for accounts
@@ -291,7 +285,7 @@ proc clearStorage*(
   ## Delete all data slots from the storage area associated with the
   ## particular account indexed by the key `accPath`.
   ##
-  acc.aTx.deleteStorageTree(accPath).isOkOr:
+  acc.aTx.clearStorage(accPath).isOkOr:
     return err(error.toError(""))
 
   ok()
@@ -333,17 +327,17 @@ proc fetchStorageRoot*(
 
   ok(rc)
 
-proc accountStorageEmpty*(
+proc hasStorage*(
     acc: CoreDbTxRef;
     accPath: Hash32;
       ): CoreDbRc[bool] =
   ## This function returns `true` if the storage root of the given account equals
   ## EMPTY_ROOT, ie the account has no storage.
   ##
-  let rc = acc.aTx.hasStorageData(accPath).valueOr:
+  let rc = acc.aTx.hasStorage(accPath).valueOr:
     return err(error.toError(""))
 
-  ok(not rc)
+  ok(rc)
 
 proc getStateRoot*(acc: CoreDbTxRef): CoreDbRc[Hash32] =
   ## This function retrieves the Merkle state hash of the accounts
@@ -410,13 +404,9 @@ proc fetchSlot*(
     stoPath: Hash32;
       ):  CoreDbRc[UInt256] =
   ## Like `fetch()` but with cascaded index `(accPath,slot)`.
-  let rc = acc.aTx.fetchSlot(accPath, stoPath)
-  if rc.isOk:
-    ok(rc.value)
-  elif rc.error == FetchPathNotFound:
-    err(rc.error.toError("", StoNotFound))
-  else:
-    err(rc.error.toError(""))
+  let res = acc.aTx.fetchSlot(accPath, stoPath).valueOr:
+    return err(error.toError(""))
+  ok res
 
 proc deleteSlot*(
     acc: CoreDbTxRef;
