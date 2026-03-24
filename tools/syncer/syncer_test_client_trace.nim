@@ -45,24 +45,6 @@ type
       defaultValue: false
       name: "disable-sync-ticker" .}: bool
 
-    snapSyncTarget {.
-      desc: "Manually set the initial block hash to derive the sync target" &
-            " state root from. The block hash is specified its 32 byte" &
-            " hash represented by a hex string"
-      name: "snap-sync-target" .}: Option[string]
-
-    snapSyncUpdateFile {.
-      desc: "Provide a file that contains the block hash or block number" &
-            " to derive the current state root from. This file might not" &
-            " exist yet and can be updated over time to direct to a new" &
-            " state root for a block with increased height/number"
-      name: "snap-sync-update-file" .}: Option[string]
-
-    snapSyncDataDir {.
-      desc: "Provide the directory for the snap assembly database. This" &
-            " option overrides --data-dir for snap, which is the default"
-      name: "snap-sync-data-dir" .}: Option[string]
-
     snapSyncResume {.
       desc: "Use the cached data from a previous session if there is any." &
             " Otherwise, data from a previous snap session will be moved" &
@@ -119,19 +101,8 @@ proc beaconSyncConfig(conf: ToolConfig): BeaconSyncConfigHook =
 
 proc snapSyncConfig(conf: ToolConfig, defaultDir: string): SnapSyncConfigHook =
   return proc(desc: SnapSyncRef) =
-    if conf.snapSyncTarget.isSome():
-      let hash32 = conf.snapSyncTarget.unsafeGet
-      if not desc.configTarget(hash32):
-        fatal "Error parsing hash32 argument for --snap-sync-target", hash32
-        quit QuitFailure
-    if conf.snapSyncUpdateFile.isSome():
-      let fileName = conf.snapSyncUpdateFile.unsafeGet
-      if not desc.configUpdateFile(fileName):
-        fatal "Error parsing file name for --snap-sync-update-file", fileName
-        quit QuitFailure
-    desc.configBaseDir(
-      conf.snapSyncDataDir.get(otherwise = defaultDir),
-      conf.snapSyncResume)
+    if conf.snapSyncResume:
+      desc.configResume()
 
 # ------------------------------------------------------------------------------
 # Main
