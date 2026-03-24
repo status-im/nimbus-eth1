@@ -156,6 +156,10 @@ proc getEthPeer*(buddy: SnapPeerRef): BeaconPeerRef =
   ## for running `eth` protocol requests.
   buddy.ctx.pool.beaconSync.ctx.getSyncPeer buddy.peerID
 
+proc getEthPeers*(buddy: SnapPeerRef): seq[BeaconPeerRef] =
+  ##  Get all `eth` peer contexts available at the current time
+  buddy.ctx.pool.beaconSync.ctx.getSyncPeers()
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
