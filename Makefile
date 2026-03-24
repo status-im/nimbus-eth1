@@ -106,10 +106,10 @@ endif
 VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 ifneq (, $(findstring darwin, $(OS_PLATFORM)))
   VERIFPROXY_LDFLAGS = -framework Security
-else ifneq (, $(findstring mingw, $(OS_PLATFORM)))
+else ifneq (, $(findstring mingw, $(OS_PLATFORM))$(findstring windows-gnu, $(OS_PLATFORM)))
   VERIFPROXY_LDFLAGS = -lbcrypt -lpthread -lws2_32
 else
-  VERIFPROXY_LDFLAGS =
+  VERIFPROXY_LDFLAGS = -lm
 endif
 
 .PHONY: \
@@ -374,7 +374,7 @@ libverifproxy-test: | libverifproxy
 		-Wno-incompatible-pointer-types \
 		-o build/libverifproxy-test \
 		nimbus_verified_proxy/libverifproxy/test_api.c \
-		-lverifproxy -lstdc++ -lm $(VERIFPROXY_LDFLAGS)
+		-lverifproxy -lstdc++ $(VERIFPROXY_LDFLAGS)
 	./build/libverifproxy-test
 
 # Stateless related targets
