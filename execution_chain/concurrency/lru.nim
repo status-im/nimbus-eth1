@@ -433,20 +433,14 @@ func get*[K, V](s: var ConcurrentLruCache[K, V], key: auto): Opt[V] =
   ## Retrieve item and move it to the front of the LRU cache
   withWriteLock(s.lock):
     let index = ?s.tableGet(key)
-
     s.moveToFront(index)
-    
     result = Opt.some(s.nodes[index].value)
 
 func peek*[K, V](s: var ConcurrentLruCache[K, V], key: auto): Opt[V] =
   ## Retrieve item without moving it to the front
-  s.lock.lockRead()
-
-  let index = ?s.tableGet(key)
-
-  result = Opt.some(s.nodes[index].value)
-
-  s.lock.unlockRead()
+  withReadLock(s.lock):
+    let index = ?s.tableGet(key)
+    result = Opt.some(s.nodes[index].value)
 
 func update*(s: var ConcurrentLruCache, key: auto, value: auto): bool =
   ## Update and move an existing item to the front of the LRU cache - returns
