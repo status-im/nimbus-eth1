@@ -21,7 +21,7 @@ import
 
 type
   DebugTrieRef* = ref object of NodeTrieRef
-    nodeId*: Table[NodeRef,uint]     ## `NodeKey` display map
+    nodeId*: Table[NodeRef,uint]     ## `HashKey` display map
 
   AccountRangeData* = tuple
     root: StateRoot
@@ -124,8 +124,8 @@ proc nodeIdStr(node: NodeRef, db: DebugTrieRef): string =
       result &= SubRootNode
   result &= &"{node.getId(db):x}"
 
-func keyStr(key: NodeKey): string =
-  "<" & key.to(seq[byte]).toHex & "#" & $key.len & ">"
+func keyStr(key: HashKey): string =
+  "<" & key.data.toHex & "#" & $key.len & ">"
 
 proc indStr(indent: int): string =
   if 0 < indent:
@@ -387,7 +387,7 @@ proc toStr*(a: openArray[SnapAccount|ProofNode], indent=1): string =
       result &= "," & postfix
   result &= "]"
 
-func toStr*(key: NodeKey): string =
+func toStr*(key: HashKey): string =
   key.keyStr
 
 proc toStr*(node: NodeRef; db: DebugTrieRef): string =

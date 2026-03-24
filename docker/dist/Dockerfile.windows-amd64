@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -11,7 +11,7 @@
 # syntax=docker/dockerfile:1
 
 # The build is reproducible only if this base image stays the same.
-FROM statusim/nimbus-eth1:dist_base_eth1_v2_windows_amd64@sha256:b34f3503c157c1a205228eabc24a1f77f9469f4069cbcda9698886013dfe723e
+FROM statusim/nimbus-eth1:dist_base_eth1_v2_windows_amd64@sha256:5435b26795909f915d14a58f5202b0bcef035dc2d943c8855b81a64b094363b0
 
 SHELL ["/bin/bash", "-c"]
 
