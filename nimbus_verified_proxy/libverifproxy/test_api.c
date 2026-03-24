@@ -210,10 +210,80 @@ static void check_nvp_call_errors(Context *ctx) {
     TEST("nvp_call eth_sendRawTransaction non-hex: error returned", s.called && s.status == RET_DESER_ERROR);
 }
 
-void send_error_transport(Context *ctx, char *url, char *name, char *params, CallBackProc cb, void *userData) {
-  printf("Transport Request - url: %s, name: %s, params: %s\n", url, name, params);
-  freeNimAllocatedString(params);
-  cb(ctx, RET_ERROR, "transport not implemented yet", userData);
+static char *read_file(const char *path) {
+    FILE *f = fopen(path, "rb");
+    if (!f) return NULL;
+    fseek(f, 0, SEEK_END);
+    long len = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    char *buf = (char *)malloc((size_t)len + 1);
+    if (!buf) { fclose(f); return NULL; }
+    fread(buf, 1, (size_t)len, f);
+    buf[len] = '\0';
+    fclose(f);
+    return buf;
+}
+
+static void dispatch_transport(
+    Context *ctx, char *url, char *name, char *params,
+    CallBackProc cb, void *userData)
+{
+    (void)url;
+    freeNimAllocatedString(params);
+
+    const char *file = NULL;
+    if (strcmp(name, "eth_getBlockByNumber") == 0 ||
+        strcmp(name, "eth_getBlockByHash")   == 0)
+        file = "nimbus_verified_proxy/tests/data/Paris.json";
+    else if (strcmp(name, "eth_getProof") == 0)
+        file = "nimbus_verified_proxy/tests/data/storage_proof.json";
+
+    if (file) {
+        char *data = read_file(file);
+        if (data) {
+            cb(ctx, RET_SUCCESS, data, userData);
+            free(data);
+            return;
+        }
+    }
+
+    cb(ctx, RET_ERROR, "dispatch_transport: no response for method", userData);
+}
+
+static void drain(Context *ctx, int max_iters) {
+    for (int i = 0; i < max_iters; i++) {
+        if (processVerifProxyTasks(ctx) == RET_CANCELLED) break;
+    }
+}
+
+// we run two functions by mocking the transport to verify the event loop machinery
+// NOTE: this is very rudimentary because we run the processVerifProxyTasks for a
+// limited number of iterations and it is difficult to calculate the exact number of
+// iterations it has to be run for. If a test fails because the callback was never
+// called the iterations probably need to be increased.
+static void check_event_loop(Context *ctx) {
+    printf("\n Event loop\n");
+    CbState block_s = {0};
+    CbState balance_s = {0};
+
+    eth_getBlockByNumber(ctx, "0xed14f2", false, collect_error_cb, &block_s);
+    eth_getBalance(
+        ctx,
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "0xed14f2",
+        collect_error_cb, &balance_s);
+
+    drain(ctx, 200);
+
+    TEST("eth_getBlockByNumber: callback fired",  block_s.called);
+    TEST("eth_getBalance: callback fired",         balance_s.called);
+
+    // TODO: RET_SUCCESS requires block headers to be in the beacon-chain-verified
+    // header store. There is currently no C API to inject headers, so verification
+    // always fails.
+
+    // TEST("eth_getBlockByNumber: RET_SUCCESS", block_s.status == RET_SUCCESS);
+    // TEST("eth_getBalance: RET_SUCCESS",         balance_s.status == RET_SUCCESS);
 }
 
 int main(void) {
@@ -223,7 +293,7 @@ int main(void) {
 
     Context *ctx = startVerifProxy(
         (char *)TEST_CONFIG,
-        send_error_transport,
+        dispatch_transport,
         proxy_start_cb,
         NULL
     );
@@ -235,6 +305,7 @@ int main(void) {
 
     check_deser_errors(ctx);
     check_nvp_call_errors(ctx);
+    check_event_loop(ctx);
 
     stopVerifProxy(ctx);
     freeContext(ctx);
