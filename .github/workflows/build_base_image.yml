@@ -24,7 +24,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           organization: 'statusim'
           repositories: 'nimbus-eth1'
-          dry-run: true
+          dry-run: false
           protected-tags: 'dist_base_eth1_v2_macos_arm64,dist_base_eth1_v2_linux_arm64,dist_base_eth1_v2_linux_amd64,dist_base_eth1_v2_windows_amd64'
           custom-patterns: |
             {
