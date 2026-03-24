@@ -26,6 +26,9 @@ declareGauge nec_snap_accumulated_state_coverage, "" &
 declareGauge nec_snap_pivot_state_coverage, "" &
   "Max factor of accounts covered related to a single state root"
 
+declareGauge nec_snap_active_states, "" &
+  "Number of active state root indexed caches to download to"
+
 type
   StateByNumber = SortedSet[BlockNumber,StateDataRef]
     ## List of incomplete states downloaded from the `snap` network
@@ -71,45 +74,77 @@ type
     byHash: StateByHash                 ## States indexed by block hash
     byRoot: StateByRoot                 ## States indexed by state root
 
+func rootStr*(state: StateDataRef): string
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc maxUnproc(db: StateDbRef): StateDataRef =
-  ## Find the DB record with the maximal unprocessed interval range. If there
-  ## are more than one items with the same  range, the one with the smaller
-  ## block number is returned.
+func findMaxUnproc(db: StateDbRef; maxBlock: BlockNumber): StateDataRef =
+  ## Find the DB record with the maximal unprocessed interval range with block
+  ## number at most `maxBlock`. If there are more items with the same range,
+  ## the one with the smaller block number is returned.
   ##
   var
     walk = WalkByNumber.init(db.byNumber)
-    rc = walk.first
+    rc = walk.first                                 # increasing block height
   defer: walk.destroy
-  if rc.isErr:
-    return StateDataRef(nil)
 
-  # Preset `result` to cover the case when all entries have the same
-  # total unprocessed size of what is to be done.
-  result = rc.value.data
-  var todo = low(UInt256)
+  result = StateDataRef(nil)                        # empty => `nil`
+  var unprocData = low(UInt256)                     # min value for maximiser
 
   while rc.isOk:
-    # Here: err() means zero => nothing more to do
-    rc.value.data.unproc.total.isErrOr:
+    let state = rc.value.data
+    if maxBlock < state.blockNumber:
+      break                                         # no more records
+    state.unproc.total.isErrOr:                     # `err()` => `0` => ignore
       if value == 0:
-        # Here: `0 => 2^256`, nothing done yet (you cannot beat that.) As
-        # the loop runs with increasing block height, the least block number
-        # is preferred in case there are more than one `2^256` todo entries.
-        return rc.value.data
-      if todo < value:
-        result = rc.value.data
-      todo = value
-    rc = walk.next
+        # Here: `0` => `2^256`, nothing done yet (you cannot beat that.)
+        return state
+      if unprocData < value:
+        (result, unprocData) = (state, value)       # maximise stepwise
+    rc = walk.next                                  # increasing block height
+    # End `while`
+
+  # result
+
+func findMinUnproc(db: StateDbRef): StateDataRef =
+  ## Finf the state with the least nprocessed interval range. If there are
+  ## more items with the same# range, the one with the greater block number
+  ## is returned.
+  ##
+  var
+    walk = WalkByNumber.init(db.byNumber)
+    rc = walk.last                                  # decreasing block height
+  defer: walk.destroy
+
+  result = StateDataRef(nil)                        # empty => `nil`
+  var unprocData = high(UInt256)                    # max value for minimiser
+
+  while rc.isOk:
+    let
+      state = rc.value.data
+      stateUnproc = state.unproc.total.valueOr:     # `err()` => `0` => all done
+        return state
+    if stateUnproc != 0 and                         # `0` => `2^256`
+       stateUnproc < unprocData:
+      (result, unprocData) = (state, stateUnproc)   # minimise stepwise
+    rc = walk.prev                                  # decreasing block height
+    # End `while`
+
+  # result
+
+proc resetMetrics(db: StateDbRef) =
+  metrics.set(nec_snap_accumulated_state_coverage, 0f)
+  metrics.set(nec_snap_pivot_state_coverage, 0f)
+  metrics.set(nec_snap_active_states, 0)
 
 proc updateMetrics(db: StateDbRef) =
   metrics.set(nec_snap_accumulated_state_coverage,
               ((1f - db.unproc.totalRatio) * (1+db.overlays).float))
   metrics.set(nec_snap_pivot_state_coverage,
               (1f - db.pivot.unproc.totalRatio))
+  metrics.set(nec_snap_active_states, db.byRoot.len)
 
 # ------------------------------------------------------------------------------
 # Public constructor
@@ -119,8 +154,7 @@ proc init*(T: type StateDbRef): T =
   let db = T(
     unproc:   ItemKeyRangeSet.init ItemKeyRangeMax,
     byNumber: StateByNumber.init())
-  metrics.set(nec_snap_accumulated_state_coverage, 0f)
-  metrics.set(nec_snap_pivot_state_coverage, 0f)
+  db.resetMetrics()
   db
 
 proc clear*(db: StateDbRef) =
@@ -131,8 +165,7 @@ proc clear*(db: StateDbRef) =
   db.byNumber.clear
   db.byHash.clear
   db.byRoot.clear
-  metrics.set(nec_snap_accumulated_state_coverage, 0f)
-  metrics.set(nec_snap_pivot_state_coverage, 0f)
+  db.resetMetrics()
 
 # ------------------------------------------------------------------------------
 # Public database root state functions
@@ -154,7 +187,8 @@ proc register*(
     db.byRoot.del state.stateRoot                   # ...
     if db.pivot == state:
       db.pivot = StateDataRef(nil)
-    debug info & ": evicted state record", root=state.rootStr, hash=hash.toStr
+    debug info & ": evicted state record", root=state.rootStr,
+      hash=state.blockHash.toStr, isPivot=db.pivot.isNil
     # Roll back global unproc register
     for iv in state.unproc.unprocessed.complement.increasing:
       discard db.unproc.merge(iv)                   # hand back interval
@@ -177,13 +211,16 @@ proc register*(
   # Move block height window when necessary.
   if stateDbCapacity <= db.byNumber.len:
     # Clear item with the largest unprocessed data range
-    db.del db.maxUnproc()                           # remove index columns
+    db.del db.findMaxUnproc(db.pivot.blockNumber)   # remove index columns
+    if db.pivot.isNil:                              # update pivot if evicted
+      db.pivot = db.findMinUnproc()                 # night be `nil`
 
   # Add `newState` to database
   db.byNumber.findOrInsert(number).value.data = newState
   db.byHash[hash] = newState
   db.byRoot[root] = newState
 
+  # Set pivot as needed
   if db.pivot.isNil:
     db.pivot = newState
   else:
@@ -308,9 +345,9 @@ proc fetchAccountRange*(
       iRange = value
       # Unused ranges, subsets of `giv`
       if giv.minPt < value.minPt:
-        restore.add ItemKeyRange.new(giv.minPt, value.minPt-1)
+        discard db.unproc.merge(giv.minPt, value.minPt-1)
       if value.maxPt < giv.maxPt:
-        restore.add ItemKeyRange.new(value.maxPt+1,giv.maxPt)
+        discard db.unproc.merge(value.maxPt+1, giv.maxPt)
       break
     restore.add giv
 

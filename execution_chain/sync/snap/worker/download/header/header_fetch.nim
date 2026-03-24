@@ -25,27 +25,36 @@ proc getBlockHeaders(
       ): Future[Result[FetchHeadersData,SnapError]]
       {.async: (raises: []).} =
   ## Wrapper around `getBlockHeaders()`
-
   let
     start = Moment.now()
-    ethBuddy = buddy.getEthPeer()
+  var
+    count = 0
+    error = err((EMissingEthContext,"","",chronos.seconds(0)))
+    resp: BlockHeadersPacket
 
-  if ethBuddy.isNil:
-    return err((EMissingEthContext,"","",Moment.now()-start))
+  for ethBuddy in buddy.getEthPeers().items:
+    if nFetchHeaderPeersMax <= count:
+      break
+    if ethBuddy.ctrl.stopped:
+      continue
+    count.inc
+    try:
+      resp = (await ethBuddy.peer.getBlockHeaders(
+        req, fetchHeaderRlpxTimeout)).valueOr:
+          return err((EGeneric,"","",Moment.now()-start))
+    except PeerDisconnected as e:
+      error = err((EPeerDisconnected,$e.name,$e.msg,Moment.now()-start))
+      continue
+    except CancelledError as e:
+      error = err((ECancelledError,$e.name,$e.msg,Moment.now()-start))
+      continue
+    except CatchableError as e:
+      error = err((ECatchableError,$e.name,$e.msg,Moment.now()-start))
+      continue
+    return ok((move resp, Moment.now()-start))
 
-  var resp: BlockHeadersPacket
-  try:
-    resp = (await ethBuddy.peer.getBlockHeaders(
-      req, fetchHeadersRlpxTimeout)).valueOr:
-        return err((EGeneric,"","",Moment.now()-start))
-  except PeerDisconnected as e:
-    return err((EPeerDisconnected,$e.name,$e.msg,Moment.now()-start))
-  except CancelledError as e:
-    return err((ECancelledError,$e.name,$e.msg,Moment.now()-start))
-  except CatchableError as e:
-    return err((ECatchableError,$e.name,$e.msg,Moment.now()-start))
+  return error
 
-  return ok((move resp, Moment.now()-start))
 
 func errStr(rc: Result[FetchHeadersData,SnapError]): string =
   if rc.isErr:
