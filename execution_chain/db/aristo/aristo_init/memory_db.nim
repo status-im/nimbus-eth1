@@ -113,18 +113,12 @@ func putBegFn(db: MemBackendRef): PutBegFn =
 
 func putVtxFn(db: MemBackendRef): PutVtxFn =
   result =
-    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: VertexRef, key: HashKey, mergeKey: bool) =
+    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: VertexRef, key: HashKey) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        if vtx.isValid or mergeKey:
+        if vtx.isValid:
           var vtxBuf: VertexBuf
-
-          if mergeKey:
-            let record = hdl.sTab.getOrDefault(rvid, EmptyBlob)
-            doAssert record.len() > 0
-            record.mergeKey(key, vtxBuf)
-          else:
-            vtx.blobifyTo(key, vtxBuf)
+          vtx.blobifyTo(key, vtxBuf)
           
           hdl.sTab[rvid] = @(vtxBuf.data())
         else:

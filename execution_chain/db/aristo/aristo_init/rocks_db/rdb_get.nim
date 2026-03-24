@@ -168,8 +168,7 @@ proc getKey*(
       (GetVtxFlag.PeekCache notin flags or rdb.rdKeyLru.len < rdb.rdKeyLru.capacity):
     rdb.rdKeyLru.put(rvid.vid, res.value())
 
-  if res.isNone() and 
-      (GetVtxFlag.PeekCache notin flags or rdb.rdVtxLru.len < rdb.rdVtxLru.capacity):
+  if res.isNone() and rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
     # Don't invalidate vertex cache entries because of key reads - the latter
     # follow a different access pattern!
     rdb.rdVtxLru.put(rvid.vid, vtxBuf)

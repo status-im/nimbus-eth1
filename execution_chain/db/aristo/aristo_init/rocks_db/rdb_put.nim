@@ -74,28 +74,12 @@ proc putAdm*(
 
 proc putVtx*(
     rdb: var RdbInst; session: SharedWriteBatchRef,
-    rvid: RootedVertexID; vtx: VertexRef, key: HashKey, mergeKey: bool
+    rvid: RootedVertexID; vtx: VertexRef, key: HashKey
       ): Result[void,(VertexID,AristoError,string)] =
   let dsc = session.batch
-  if vtx.isValid or mergeKey:
+  if vtx.isValid:
     var vtxBuf: VertexBuf
-
-    if mergeKey:
-      doAssert key.len() == 32
-      # Merge requires the vertex to be present in the cache and the hash key is 32 bytes
-
-      let branchRes = rdb.rdBranchLru.peek(rvid.vid)
-      if branchRes.isOk():
-        let vtx = BranchRef.init(branchRes[][0], branchRes[][1])
-        vtx.blobifyTo(key, vtxBuf)
-      else:
-        let vtxRes = rdb.rdVtxLru.peek(rvid.vid)
-        if vtxRes.isOk:
-          vtxRes[].data().mergeKey(key, vtxBuf)
-        else:
-          raiseAssert "expected cached vtx"
-    else:
-      vtx.blobifyTo(key, vtxBuf)
+    vtx.blobifyTo(key, vtxBuf)
 
     dsc.put(rvid.blobify().data(), vtxBuf.data(), rdb.vtxCol.handle()).isOkOr:
       # Caller must `rollback()` which will clear the `rdVtxLru` cache

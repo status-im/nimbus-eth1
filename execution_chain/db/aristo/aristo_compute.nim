@@ -60,7 +60,7 @@ proc putVtx(
   if batch.writer == nil:
     batch.writer = ?txRef.putBegFn()
 
-  txRef.putVtxFn(batch.writer, rvid, vtx, key, mergeKey = vtx.isNil())
+  txRef.putVtxFn(batch.writer, rvid, vtx, key)
   inc batch.count
 
   ok()
@@ -146,6 +146,14 @@ template encodeExt(w: var RlpWriter, pfx: NibblesBuf, branchKey: HashKey): HashK
 proc getKey(
     txRef: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool, locksEnabled: static bool
 ): Result[((HashKey, VertexRef), int), AristoError] =
+  const 
+    emptyFlags: set[GetVtxFlag] = {}
+    flags = 
+      when skipLayers or locksEnabled: 
+        {GetVtxFlag.PeekCache} 
+      else: 
+        emptyFlags  
+  
   when not skipLayers:
     block body:
       when locksEnabled:
@@ -167,7 +175,7 @@ proc getKey(
       else:
         return err(GetKeyNotFound)
 
-  ok((?txRef.db.getKeyBe(rvid, {}), dbLevel))
+  ok((?txRef.db.getKeyBe(rvid, flags), dbLevel))
 
 template childVid(vp: VertexRef): VertexID =
   # If we have to recurse into a child, where would that recusion start?

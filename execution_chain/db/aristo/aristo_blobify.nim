@@ -223,21 +223,6 @@ proc blobifyTo*(vtx: VertexRef, key: HashKey, data: var VertexBuf) =
 
   data &= [bits]
 
-template hasHashKey*(record: openArray[byte]): bool =
-  record.len > 33 and (((record[^1] shr 6) and 0b10'u8) > 0)
-
-func mergeKey*(record: openArray[byte], key: HashKey, vtxBuf: var VertexBuf) =
-  doAssert key.len() == 32
-
-  if record.hasHashKey():
-    vtxBuf.add record
-    (addr vtxBuf.data[0]).copyMem(unsafeAddr key.data[0], 32)
-  else:
-    vtxBuf.add key.data()
-    vtxBuf.add record
-  
-  vtxBuf[vtxBuf.len() - 1] = 0b10'u8
-
 template blobify*(vtx: VertexRef, key: HashKey): openArray[byte] =
   var vtxBuf: VertexBuf
   vtx.blobifyTo(key, vtxBuf)
@@ -354,7 +339,7 @@ proc deblobify*(
     ?record.toOpenArray(start, psPos - 1).deblobifyLeaf(pathSegment)
 
 proc deblobify*(record: openArray[byte], T: type HashKey): Opt[HashKey] =
-  if record.hasHashKey():
+  if record.len > 33 and (((record[^1] shr 6) and 0b10'u8) > 0):
     HashKey.fromBytes(record.toOpenArray(0, 31))
   else:
     Opt.none(HashKey)

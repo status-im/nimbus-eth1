@@ -120,10 +120,10 @@ proc putBegFn(db: RdbBackendRef): PutBegFn =
 
 proc putVtxFn(db: RdbBackendRef): PutVtxFn =
   result =
-    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: VertexRef, key: HashKey, mergeKey: bool) =
+    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: VertexRef, key: HashKey) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        db.rdb.putVtx(hdl.session, rvid, vtx, key, mergeKey).isOkOr:
+        db.rdb.putVtx(hdl.session, rvid, vtx, key).isOkOr:
           hdl.error = TypedPutHdlErrRef(
             pfx:  VtxPfx,
             vid:  error[0],
