@@ -73,7 +73,8 @@ proc statelessProcessBlock*(
     skipValidation = false,
     skipReceipts = false,
     skipUncles = true,
-    skipStateRootCheck = false
+    skipStateRootCheck = false,
+    skipPostExecBalCheck = true,
   )
   doAssert memoryVmState.ledger.getStateRoot() == blk.header.stateRoot
 

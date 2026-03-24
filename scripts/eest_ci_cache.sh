@@ -34,6 +34,12 @@ EEST_BAL_DIR="${FIXTURES_DIR}/eest_bal"
 EEST_BAL_ARCHIVE="fixtures_bal.tar.gz"
 EEST_BAL_URL="https://github.com/ethereum/execution-spec-tests/releases/download/${EEST_BAL_NAME}%40${EEST_BAL_VERSION}/${EEST_BAL_ARCHIVE}"
 
+# --- zkevm Release ---
+EEST_ZKEVM_NAME="zkevm"
+EEST_ZKEVM_VERSION="v0.3.1"
+EEST_ZKEVM_DIR="${FIXTURES_DIR}/eest_zkevm"
+EEST_ZKEVM_ARCHIVE="fixtures_zkevm.tar.gz"
+EEST_ZKEVM_URL="https://github.com/ethereum/execution-spec-tests/releases/download/${EEST_ZKEVM_NAME}%40${EEST_ZKEVM_VERSION}/${EEST_ZKEVM_ARCHIVE}"
 
 download_and_extract() {
   local url="$1"
@@ -94,3 +100,4 @@ download_and_extract() {
 download_and_extract "${EEST_DEVELOP_URL}" "${EEST_DEVELOP_DIR}" "${EEST_DEVELOP_NAME}" "${EEST_DEVELOP_VERSION}" "${EEST_DEVELOP_ARCHIVE}"
 download_and_extract "${EEST_DEVNET_URL}" "${EEST_DEVNET_DIR}" "${EEST_DEVNET_NAME}" "${EEST_DEVNET_VERSION}" "${EEST_DEVNET_ARCHIVE}"
 download_and_extract "${EEST_BAL_URL}" "${EEST_BAL_DIR}" "${EEST_BAL_NAME}" "${EEST_BAL_VERSION}" "${EEST_BAL_ARCHIVE}"
+download_and_extract "${EEST_ZKEVM_URL}" "${EEST_ZKEVM_DIR}" "${EEST_ZKEVM_NAME}" "${EEST_ZKEVM_VERSION}" "${EEST_ZKEVM_ARCHIVE}"
