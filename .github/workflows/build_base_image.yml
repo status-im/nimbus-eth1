@@ -28,7 +28,19 @@ jobs:
           protected-tags: 'dist_base_eth1_v2_macos_arm64,dist_base_eth1_v2_linux_arm64,dist_base_eth1_v2_linux_amd64,dist_base_eth1_v2_windows_amd64'
           custom-patterns: |
             {
-              "^fix.*": 1 
+              "^fix.*": 1, 
+              "^Beacon.*": 1,
+              "^hot.*": 1,
+              "^bpo.*": 1,
+              "^fusaka.*": 1,
+              "^test.*": 1,
+              "^dynamic.*": 1,
+              "^get.*": 1,
+              "^perf.*": 1,
+              "^eip.*": 1,
+              "^berlin.*": 1,
+              "^peer.*": 1,
+              "^dist.*": 1
             }
           
 #jobs:
