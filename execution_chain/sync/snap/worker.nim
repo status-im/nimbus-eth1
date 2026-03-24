@@ -159,8 +159,6 @@ template runPeer*(
   block body:
     case buddy.ctx.pool.syncState:
     of SnapDownload:
-      # Check for manual target settings
-      buddy.updateTarget info
 
       # Download and chace accounts, storage slots, contracts
       buddy.download info

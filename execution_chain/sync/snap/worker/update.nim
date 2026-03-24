@@ -136,32 +136,55 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]) =
 # Other public functions
 # ------------------------------------------------------------------------------
 
-template updateTarget*(
-    buddy: SnapPeerRef;
-    info: static[string];
-      ) =
+template updateTarget*(buddy: SnapPeerRef, info: static[string]) =
   ## Async/template
   ##
-  ## Check for manuall sync target (e.g. set by a command line option)
+  ## Check for manually set sync target (e.g. set by a command line option)
   ##
   block body:
     # Check whether explicit target setup is configured
-    if buddy.ctx.pool.target.isSome():
-      let
-        peer {.inject,used.} = $buddy.peer          # logging only
-        ctx = buddy.ctx
+    let
+      ctx = buddy.ctx
+      hash = ctx.pool.target.valueOr:
+        break body                                  # nothing to do
 
-      # Single target block hash
-      let hash = ctx.pool.target.value
-      if hash != BlockHash(zeroHash32):
-        let rc = buddy.headerStateRegister(hash, info)
-        if rc.isErr:
-          trace info & ": failed fetching pivot hash", peer, hash=hash.toStr
-          ctx.pool.target = Opt.some(hash)          # restore
-        else:
-          ctx.pool.target = Opt.none(BlockHash)     # No more target entries
+    trace info & ": assigning manual target state", peer=buddy.peer,
+      hash=hash.toStr, nSyncPeers=ctx.nSyncPeers()
 
-  discard # visual alignment
+    buddy.headerStateRegister(hash, info).isErrOr:
+      ctx.pool.target = Opt.none(BlockHash)         # fetch only once
+    # End `block body`
+
+  discard                                           # visual alignment
+
+template updateFcuRoot*(buddy: SnapPeerRef, info: static[string]) =
+  ## Async/template
+  ##
+  ## Add state record derived from CL finalised hash. Register it done.
+  ## So it is not repeatedly re-processed (up to some race conditions.)
+  ##
+  block body:
+    if buddy.only.finRoot.isSome():
+      break body                                    # nothing to do
+
+    let
+      ctx = buddy.ctx
+      hash = BlockHash ctx.hdrCache.headHash()
+    if hash == BlockHash(zeroHash32):
+      break body                                    # no FCU request yet
+
+    ctx.pool.stateDB.get(hash).isErrOr:
+      buddy.only.finRoot = Opt.some(value.stateRoot)
+      break body                                    # already registered
+
+    trace info & ": assigning FC hash from CL", peer=buddy.peer,
+      hash=hash.toStr, nSyncPeers=ctx.nSyncPeers()
+
+    buddy.headerStateRegister(hash, info).isErrOr:
+      buddy.only.finRoot = Opt.some(value.stateRoot)
+    # End `block body`
+
+  discard                                           # visual alignment
 
 # ------------------------------------------------------------------------------
 # End
