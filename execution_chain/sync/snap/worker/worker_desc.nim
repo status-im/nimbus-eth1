@@ -107,11 +107,11 @@ type
     stateDB*: StateDbRef             ## Incomplete states DB
     baseDir*: string                 ## Path for assembly database
     mptAsm*: MptAsmRef               ## Assembly cache database
-    mptEla*: chronos.Duration        ## Accumulated MPT proof processing time
 
     # Preloading/manual state update
     target*: Opt[SnapTarget]         ## Optional for setting up a sync target
     stateUpdateChecked*: string      ## Last update value (avoids log spamming)
+    clStateRoot*: Opt[StateRoot]     ## State from CL finalised hash (if any)
 
     # Info, debugging, and error handling stuff
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one
@@ -129,6 +129,10 @@ type
 func chain*(ctx: SnapCtxRef): ForkedChainRef =
   ## Getter
   ctx.pool.beaconSync.ctx.pool.chain
+
+func hdrCache*(ctx: SnapCtxRef): HeaderChainRef =
+  ## Getter
+  ctx.pool.beaconSync.ctx.pool.hdrCache
 
 func nErrors*(buddy: SnapPeerRef): var PeerErrors =
   ## Shortcut
