@@ -430,7 +430,6 @@ proc computeKeyImpl(
         # Now we process any remaining data in the queues.
         for i, f in futs:
           if f.isSpawned():
-            debugEcho "f.isSpawned()"
             if not keyQueues[i].isEmpty():
               var k: (RootedVertexID, HashKey, int)
               while keyQueues[i].tryPop(k):
