@@ -194,7 +194,7 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
       syncerShouldRun = true
 
     # Configure snap syncer.
-    nimbus.snapSyncRef.config(nimbus.ethNode, config.maxPeers)
+    nimbus.snapSyncRef.config(nimbus.ethNode, config.dataDir, config.maxPeers)
   else:
     # Disable any external setup unless explicitely activated
     nimbus.snapSyncRef = SnapSyncRef(nil)

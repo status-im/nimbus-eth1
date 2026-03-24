@@ -75,6 +75,7 @@ proc init*(
 proc config*(
     desc: SnapSyncRef;
     ethNode: EthereumNode;
+    dataDir: string;
     maxPeers: int;
       ) =
   ## Complete `SnapSyncRef` descriptor initialisation.
@@ -85,15 +86,11 @@ proc config*(
   doAssert desc.ctx.isNil # This can only run once
   desc.initSync(ethNode, maxPeers)
   desc.addSyncProtocol snap1
+  desc.ctx.pool.baseDir = dataDir
 
   if not desc.lazyConfigHook.isNil:
     desc.lazyConfigHook(desc)
     desc.lazyConfigHook = nil
-
-proc configBaseDir*(desc: SnapSyncRef; dir: string) =
-  ## Set up database folder.
-  doAssert not desc.ctx.isNil
-  desc.ctx.pool.baseDir = dir
 
 proc configResume*(desc: SnapSyncRef; resume = true) =
   ## Set syncer into resume (or no-resume) mode. By default, the syncer is
