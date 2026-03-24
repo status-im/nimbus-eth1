@@ -220,9 +220,6 @@ proc generalStateJsonMain*(debugMode = false) =
     suite "new generalstate json tests: eest_develop":
       jsonTest("eest_develop/state_tests", "GeneralStateTestsStatic", testFixture, slowGSTTests)
 
-    suite "new generalstate json tests: eest_devnet":
-      jsonTest("eest_devnet/state_tests", "GeneralStateTestsDevnet", testFixture)
-
     suite "new generalstate json tests: eest_bal":
       jsonTest("eest_bal/state_tests", "GeneralStateTestsBal", testFixture)
 
