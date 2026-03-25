@@ -230,14 +230,6 @@ proc register*(
 
   newState                                          # return state record
 
-proc register*(
-    db: StateDbRef;
-    header: Header;
-    hash: BlockHash;
-    info: static[string];
-      ) =
-  discard db.register(StateRoot(header.stateRoot), hash, header.number, info)
-
 
 func hasKey*(db: StateDbRef; bn: BlockNumber): bool =
   db.byNumber.eq(bn).isOk()
@@ -283,9 +275,9 @@ func pivot*(db: StateDbRef): Opt[StateDataRef] =
 
 func top*(db: StateDbRef): Opt[StateDataRef] =
   ## Retrieve the state data record with the highest block number.
-  let val = db.byNumber.le(high BlockNumber).valueOr:
-    return err()
-  ok val.data
+  db.byNumber.le(high BlockNumber).isErrOr:
+    return ok value.data
+  err()
 
 
 proc setHealingReady*(state: StateDataRef) =

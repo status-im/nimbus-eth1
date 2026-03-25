@@ -143,7 +143,7 @@ template updateTarget*(
       let hash = ctx.pool.target.value
       if hash != BlockHash(zeroHash32):
         let rc = buddy.headerStateRegister(hash, info)
-        if rc.isErr and rc.error:                   # real error
+        if rc.isErr:
           trace info & ": failed fetching pivot hash", peer, hash=hash.toStr
           ctx.pool.target = Opt.some(hash)          # restore
         else:

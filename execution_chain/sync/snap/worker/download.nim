@@ -54,7 +54,7 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
         trace info & ": assigning best/latest pivotHash", peer,
           hash=hash.toStr, nSyncPeers=ctx.nSyncPeers()
         buddy.headerStateRegister(hash, info).isErrOr:
-          buddy.only.pivotRoot = Opt.some(value)
+          buddy.only.pivotRoot = Opt.some(value.stateRoot)
 
     # Add state from CL finalised hash
     if ctx.pool.clStateRoot.isNone():
@@ -63,7 +63,7 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
         trace info & ": assigning FC hash from CL", peer,
           hash=fcHead.toStr, nSyncPeers=ctx.nSyncPeers()
         buddy.headerStateRegister(fcHead, info).isErrOr:
-          ctx.pool.clStateRoot = Opt.some(value)
+          ctx.pool.clStateRoot = Opt.some(value.stateRoot)
 
     if sdb.len == 0:
       trace info & ": no state records", peer

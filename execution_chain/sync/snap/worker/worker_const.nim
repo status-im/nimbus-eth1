@@ -31,6 +31,7 @@ type
     ECatchableError                ## Exception
     ECancelledError                ## Exception
     ETrieError                     ## Database error
+    ELockError                     ## Locked by some other peer
 
 const
   snapAsmFolder* = "snap"
@@ -52,6 +53,9 @@ const
 
   mktrieThreadSwitchTimeSlot* = chronos.nanoseconds(1)
     ## Nano-sleep to allows pseudo/async thread switch
+
+  lockWaitPollingTime* = chronos.milliseconds(500)
+    ## Polling for a lock to be released
 
   # ----------------------
 
