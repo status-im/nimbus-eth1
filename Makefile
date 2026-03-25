@@ -206,9 +206,6 @@ ifeq ($(USE_LIBBACKTRACE), 0)
 endif
 
 deps: | deps-common nat-libs nimbus.nims
-ifneq ($(USE_LIBBACKTRACE), 0)
-deps: | libbacktrace
-endif
 
 # eth protocol settings, rules from "execution_chain/sync/protocol/eth/variables.mk"
 NIM_PARAMS := $(NIM_PARAMS) $(NIM_ETH_PARAMS)
@@ -245,10 +242,6 @@ nimbus: | build deps rocksdb
 # symlink
 nimbus.nims:
 	ln -s nimbus.nimble $@
-
-# nim-libbacktrace
-libbacktrace:
-	+ $(MAKE) -C vendor/nim-libbacktrace --no-print-directory BUILD_CXX_LIB=0
 
 # nim-rocksdb
 ROCKSDB_CI_CACHE := build/rocksdb
@@ -441,9 +434,6 @@ clean: | clean-common
 	rm -rf tools/t8n/{t8n,t8n_test}
 	rm -rf tools/evmstate/{evmstate,evmstate_test}
 	rm -rf tests/fixtures/eest
-ifneq ($(USE_LIBBACKTRACE), 0)
-	+ $(MAKE) -C vendor/nim-libbacktrace clean $(HANDLE_OUTPUT)
-endif
 
 # Note about building Nimbus as a library:
 #
