@@ -12,7 +12,8 @@
 
 import
   pkg/chronicles,
-  ./[download, mpt, session, worker_const, worker_desc]
+  ./download/header,
+  ./[mpt, session, worker_const, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -25,14 +26,21 @@ proc idleNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
   if not ctx.pool.mptAsm.clear info:
     return SnapIdle
-  SnapDownload
+  SnapReady
 
 proc resumeNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
   # Recover session (if any)
   if ctx.sessionResume(info):
     debug info & ": resuming download session"
-  SnapDownload
+  SnapReady
+
+proc readyNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+  ## State transition handler
+  if ctx.pool.target.isSome() or
+     ctx.hdrCache.headHash() != zeroHash32:
+    return SnapDownload
+  SnapReady
 
 proc downloadNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
@@ -76,11 +84,14 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]) =
   ##
   # State machine
   # ::
-  #     idle   resume
-  #      |      /
+  #     idle  resume
   #      |     /
   #      |    /
-  #      v   v
+  #      |   /
+  #      v  v
+  #     ready
+  #      |
+  #      v
   #     download <--.
   #      |          |
   #      v          |
@@ -98,6 +109,8 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]) =
       ctx.idleNext info
     of SnapResume:
       ctx.resumeNext info
+    of SnapReady:
+      ctx.readyNext info
     of SnapDownload:
       ctx.downloadNext info
     of SnapMkTrie:
@@ -116,9 +129,8 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]) =
   of SnapDownload, SnapMkTrie, SnapHealing:
     info "State changed", prevState, newState, top=sdb.top.bnStr,
       pivot=sdb.pivot.bnStr, nSyncPeers=ctx.nSyncPeers()
-  else:
-    debug "State changed", prevState, newState, top=sdb.top.bnStr,
-      pivot=sdb.pivot.bnStr, nSyncPeers=ctx.nSyncPeers()
+  of SnapIdle, SnapResume, SnapReady:
+    debug "State changed", prevState, newState
 
 # ------------------------------------------------------------------------------
 # Other public functions

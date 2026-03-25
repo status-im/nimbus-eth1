@@ -17,6 +17,7 @@ type
   SyncState* = enum
     SnapIdle = 0
     SnapResume                     ## Resume from previous session
+    SnapReady                      ## Wait for download state
     SnapDownload                   ## Downloading and caching data
     SnapMkTrie                     ## Assembling downloaded data
     SnapHealing                    ## Complete missing trie nodes
