@@ -724,11 +724,11 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
     return api.com.getEthConfigObject(api.chain, currentFork, nextFork, lastFork)
 
-  server.rpc("eth_getBlockAccessList") do(blockId: BlockNumberOrTagOrHash) -> Opt[BlockAccessList]:
+  server.rpc("eth_getBlockAccessList") do(quantityTag: BlockTag) -> Opt[BlockAccessList]:
     ## Returns the block access list by block number, tag or block hash.
     ##
 
-    let header = api.chain.headerFromBlockId(blockId).valueOr:
+    let header = api.chain.headerFromTag(quantityTag).valueOr:
       raise newException(ValueError, error)
 
     if not api.com.isAmsterdamOrLater(header.timestamp):
