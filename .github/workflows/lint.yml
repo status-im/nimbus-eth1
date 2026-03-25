@@ -40,7 +40,7 @@ jobs:
       - name: Check `nph` formatting
         uses: arnetheduck/nph-action@v1
         with:
-          version: 0.6.2
+          version: 0.7.0
           options: "nimbus_verified_proxy/ portal/"
       - name: Check copyright year & version
         if: ${{ !cancelled() }} && github.event_name == 'pull_request'
