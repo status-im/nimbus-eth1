@@ -11,6 +11,7 @@
 
 import
   std/[json, strutils],
+  unittest2,
   eth/common/headers_rlp,
   web3/eth_api_types,
   web3/engine_api_types,
@@ -317,11 +318,12 @@ template runEESTSuite*(
   for eest in eestReleases:
     suite eest & ": " & eestType:
       for fileName in walkDirRec(baseFolder / eest / eestType):
-        let last = fileName.splitPath().tail
-        if last in skipFiles:
-          continue
-        test last:
-          let res = processFile(fileName, statelessEnabled)
-          if not res:
-            debugEcho fileName.splitPath().tail
-          check res
+        test fileName:
+          let last = testName.splitPath().tail
+          if last in skipFiles:
+            skip()
+          else:
+            let res = processFile(testName, statelessEnabled)
+            if not res:
+              debugEcho last
+            check res
