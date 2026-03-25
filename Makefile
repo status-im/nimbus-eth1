@@ -406,7 +406,10 @@ eest_blockchain_test: | build deps eest eest_blockchain
 eest_stateless_execution_test: | build deps eest eest_blockchain
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
 
-eest_full_test: | eest_engine_test eest_blockchain_test eest_stateless_execution_test
+eest_full_test:
+	$(MAKE) eest_engine_test
+	$(MAKE) eest_blockchain_test
+	$(MAKE) eest_stateless_execution_test
 
 # builds transition tool
 t8n: | build deps
