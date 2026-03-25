@@ -18,7 +18,7 @@ import
   stew/byteutils,
   ../common/common,
   json_rpc/rpcserver,
-  ../db/ledger,
+  ../db/storage_types,
   ../core/chain/forked_chain,
   ../core/tx_pool,
   ../beacon/web3_eth_conv,
@@ -51,39 +51,45 @@ func newServerAPI*(txPool: TxPoolRef): ServerAPIRef =
 proc getTotalDifficulty*(api: ServerAPIRef, blockHash: Hash32, header: Header): Opt[UInt256] =
   api.txPool.chain.getTotalDifficulty(blockHash, header)
 
+const emptyDbAccount = CoreDbAccount(
+  nonce: EMPTY_ACCOUNT.nonce, balance: EMPTY_ACCOUNT.balance, codeHash: EMPTY_CODE_HASH
+)
+
 proc getProof*(
-    ledger: LedgerRef, address: Address, slots: seq[UInt256]
-): ProofResponse =
-  let
-    acc = ledger.getEthAccount(address)
-    accExists = ledger.accountExists(address)
-    accountProof = ledger.getAccountProof(address)
-    slotProofs = ledger.getStorageProof(address, slots)
-
-  var storage = newSeqOfCap[StorageProof](slots.len)
-
-  for i, slotKey in slots:
-    let slotValue = ledger.getStorage(address, slotKey)
-    storage.add(
-      StorageProof(
-        key: slotKey, value: slotValue, proof: seq[RlpEncodedBytes](slotProofs[i])
-      )
-    )
+    txFrame: CoreDbTxRef, address: Address, slots: seq[UInt256]
+): ProofResponse {.raises: [ValueError].} =
+  var
+    accPath = address.computeAccPath
+    accountProof = txFrame.proof(accPath).valueOr:
+      raise newException(ValueError, "Failed to get account proof: " & $error)
+    accExists = accountProof[1]
+    storage = slots.mapIt(StorageProof(key: it))
 
   if accExists:
+    var
+      acc = txFrame.fetchAccount(accPath).valueOr(emptyDbAccount)
+      storageRoot = txFrame.fetchStorageRoot(accPath).valueOr(emptyRoot)
+      slotKeys = slots.mapIt(computeSlotKey(it))
+      slotProofs = txFrame.slotProofs(accPath, slotKeys).valueOr:
+        raise newException(ValueError, "Failed to get slot proof: " & $error)
+
+    for i, item in storage.mpairs():
+      item.value = txFrame.fetchSlot(accPath, slotKeys[i]).valueOr(0.u256)
+      item.proof = seq[RlpEncodedBytes](move(slotProofs[i]))
+
     ProofResponse(
       address: address,
-      accountProof: seq[RlpEncodedBytes](accountProof),
+      accountProof: seq[RlpEncodedBytes](move(accountProof[0])),
       balance: acc.balance,
       nonce: w3Qty(acc.nonce),
       codeHash: acc.codeHash,
-      storageHash: acc.storageRoot,
+      storageHash: storageRoot,
       storageProof: storage,
     )
   else:
     ProofResponse(
       address: address,
-      accountProof: seq[RlpEncodedBytes](accountProof),
+      accountProof: seq[RlpEncodedBytes](move(accountProof[0])),
       storageProof: storage,
     )
 
@@ -94,36 +100,42 @@ proc headerFromTag(api: ServerAPIRef, blockTag: Opt[BlockTag]): Result[Header, s
   let blockId = blockTag.get(defaultTag)
   api.headerFromTag(blockId)
 
-proc ledgerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[LedgerRef, string] =
+proc frameFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[CoreDbTxRef, string] =
   # TODO avoid loading full header if hash is given
+
   let
     header = ?api.headerFromTag(blockTag)
-    txFrame = api.chain.txFrame(header)
+
+  if header.number < api.chain.baseNumber:
+    return err("Historical data not available")
 
   # TODO maybe use a new frame derived from txFrame, to protect against abuse?
-  ok(LedgerRef.init(txFrame))
+  ok api.chain.txFrame(header)
 
-proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[Block, string] =
-  api.chain.blockFromTag(blockTag)
+proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag, noHash: bool = false): Result[Block, string] =
+  api.chain.blockFromTag(blockTag, noHash)
 
 proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManager) =
   server.rpc("eth_getBalance") do(data: Address, blockTag: BlockTag) -> UInt256:
     ## Returns the balance of the account of given address.
     let
-      ledger = api.ledgerFromTag(blockTag).valueOr:
+      txFrame = api.frameFromTag(blockTag).valueOr:
         raise newException(ValueError, error)
       address = data
-    ledger.getBalance(address)
+      acc = txFrame.fetchAccount(address.computeAccPath).valueOr(emptyDbAccount)
+    acc.balance
 
   server.rpc("eth_getStorageAt") do(
     data: Address, slot: UInt256, blockTag: BlockTag
   ) -> FixedBytes[32]:
     ## Returns the value from a storage position at a given address.
     let
-      ledger = api.ledgerFromTag(blockTag).valueOr:
+      txFrame = api.frameFromTag(blockTag).valueOr:
         raise newException(ValueError, error)
       address = data
-      value = ledger.getStorage(address, slot)
+      accPath = address.computeAccPath
+      slotKey = computeSlotKey(slot)
+      value = txFrame.fetchSlot(accPath, slotKey).valueOr(0.u256)
     value.to(Bytes32)
 
   server.rpc("eth_getTransactionCount") do(
@@ -131,10 +143,12 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
   ) -> Quantity:
     ## Returns the number of transactions ak.s. nonce sent from an address.
     let
-      ledger = api.ledgerFromTag(blockTag).valueOr:
+      txFrame = api.frameFromTag(blockTag).valueOr:
         raise newException(ValueError, error)
       address = data
-      nonce = ledger.getNonce(address)
+      accPath = address.computeAccPath
+      acc = txFrame.fetchAccount(accPath).valueOr(emptyDbAccount)
+      nonce = acc.nonce
     Quantity(nonce)
 
   server.rpc("eth_blockNumber") do() -> Quantity:
@@ -151,10 +165,13 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ## blockTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns the code from the given address.
     let
-      ledger = api.ledgerFromTag(blockTag).valueOr:
+      txFrame = api.frameFromTag(blockTag).valueOr:
         raise newException(ValueError, error)
       address = data
-    ledger.getCode(address).bytes()
+      accPath = address.computeAccPath
+      acc = txFrame.fetchAccount(accPath).valueOr(emptyDbAccount)
+
+    txFrame.getCodeByHash(acc.codeHash).valueOr(@[])
 
   server.rpc("eth_getBlockByHash") do(
     data: Hash32, fullTransactions: bool
@@ -181,7 +198,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ## blockTag: integer of a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
     ## fullTransactions: If true it returns the full transaction objects, if false only the hashes of the transactions.
     ## Returns BlockObject or nil when no block was found.
-    let blk = api.blockFromTag(blockTag).valueOr:
+    let blk = api.blockFromTag(blockTag, noHash = true).valueOr:
       return nil
 
     let blockHash = blk.header.computeBlockHash
@@ -391,8 +408,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ##
     ## blockTag: integer of a block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns integer of the number of transactions in this block.
-    let blk = api.blockFromTag(blockTag).valueOr:
-      raise newException(ValueError, "Block not found")
+    let blk = api.blockFromTag(blockTag, noHash = true).valueOr:
+      raise newException(ValueError, "Block not found: " & error)
 
     Quantity(blk.transactions.len)
 
@@ -411,8 +428,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ##
     ## blockTag: integer of a block number, or the string "latest", see the default block parameter.
     ## Returns integer of the number of uncles in this block.
-    let blk = api.blockFromTag(blockTag).valueOr:
-      raise newException(ValueError, "Block not found")
+    let blk = api.blockFromTag(blockTag, noHash = true).valueOr:
+      raise newException(ValueError, "Block not found: " & error)
 
     Quantity(blk.uncles.len)
 
@@ -449,9 +466,10 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       raise newException(ValueError, "Account locked, please unlock it first")
 
     let
-      ledger = api.ledgerFromTag(blockId("latest")).valueOr:
+      txFrame = api.frameFromTag(blockId("latest")).valueOr:
         raise newException(ValueError, "Latest Block not found")
-      tx = unsignedTx(data, api.chain, ledger.getNonce(address) + 1, api.com.chainId)
+      accRec = txFrame.fetchAccount(address.computeAccPath).valueOr(emptyDbAccount)
+      tx = unsignedTx(data, api.chain, accRec.nonce + 1, api.com.chainId)
       eip155 = api.com.isEIP155(api.chain.latestNumber)
       signedTx = signTransaction(tx, acc.privateKey, eip155)
     return rlp.encode(signedTx)
@@ -470,9 +488,11 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       raise newException(ValueError, "Account locked, please unlock it first")
 
     let
-      ledger = api.ledgerFromTag(blockId("latest")).valueOr:
+      txFrame = api.frameFromTag(blockId("latest")).valueOr:
         raise newException(ValueError, "Latest Block not found")
-      tx = unsignedTx(data, api.chain, ledger.getNonce(address) + 1, api.com.chainId)
+      accRec = txFrame.fetchAccount(address.computeAccPath).valueOr(emptyDbAccount)
+
+      tx = unsignedTx(data, api.chain, accRec.nonce + 1, api.com.chainId)
       eip155 = api.com.isEIP155(api.chain.latestNumber)
       signedTx = signTransaction(tx, acc.privateKey, eip155)
       blobsBundle =
@@ -565,7 +585,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ## quantity: the transaction index position.
     ## NOTE : "pending" blockTag is not supported.
     let index = uint64(quantity)
-    let blk = api.blockFromTag(quantityTag).valueOr:
+    let blk = api.blockFromTag(quantityTag, noHash = true).valueOr:
       return nil
 
     if index >= uint64(blk.transactions.len):
@@ -587,18 +607,18 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ## slots: integers of the positions in the storage to return with storage proofs.
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns: the proof response containing the account, account proof and storage proof
-    let ledger = api.ledgerFromTag(quantityTag).valueOr:
-      raise newException(ValueError, "Block not found")
-
-    getProof(ledger, data, slots)
+    let
+      txFrame = api.frameFromTag(quantityTag).valueOr:
+        raise newException(ValueError, error)
+    getProof(txFrame, data, slots)
 
   server.rpc("eth_getBlockReceipts") do(
     quantityTag: BlockTag
   ) -> Opt[seq[ReceiptObject]]:
     ## Returns the receipts of a block.
     let
-      blk = api.blockFromTag(quantityTag).valueOr:
-        raise newException(ValueError, "Block not found")
+      blk = api.blockFromTag(quantityTag, noHash = true).valueOr:
+        raise newException(ValueError, "Block not found: " & error)
       blkHash = blk.header.computeBlockHash
       receipts = api.chain.receiptsByBlockHash(blkHash).valueOr:
         return Opt.none(seq[ReceiptObject])
@@ -704,11 +724,11 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
     return api.com.getEthConfigObject(api.chain, currentFork, nextFork, lastFork)
 
-  server.rpc("eth_getBlockAccessList") do(blockId: BlockNumberOrTagOrHash) -> Opt[BlockAccessList]:
+  server.rpc("eth_getBlockAccessList") do(quantityTag: BlockTag) -> Opt[BlockAccessList]:
     ## Returns the block access list by block number, tag or block hash.
     ##
 
-    let header = api.chain.headerFromBlockId(blockId).valueOr:
+    let header = api.chain.headerFromTag(quantityTag).valueOr:
       raise newException(ValueError, error)
 
     if not api.com.isAmsterdamOrLater(header.timestamp):

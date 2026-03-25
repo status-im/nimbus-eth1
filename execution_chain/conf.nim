@@ -52,9 +52,11 @@ const
   defaultAdminListenAddressDesc = $defaultAdminListenAddress & ", meaning local host only"
   logLevelDesc = getLogLevels()
 
-let
-  defaultListenAddress      = getAutoAddress(Port(0)).toIpAddress()
-  defaultListenAddressDesc  = $defaultListenAddress & ", meaning all network interfaces"
+template defaultListenAddress(): IpAddress =
+  getAutoAddress(Port(0)).toIpAddress()
+
+template defaultListenAddressDesc(): string =
+  $defaultListenAddress() & ", meaning all network interfaces"
 
 type
   NimbusCmd* {.pure.} = enum
@@ -117,13 +119,11 @@ type
       separator: "\pPAYLOAD BUILDING OPTIONS:"
       desc: "Value of extraData field when building an execution payload(max 32 bytes)"
       defaultValue: ShortClientId
-      defaultValueDesc: $ShortClientId
       name: "extra-data" .}: string
 
     gasLimit* {.
       desc: "Desired gas limit when building an execution payload"
       defaultValue: DEFAULT_GAS_LIMIT
-      defaultValueDesc: $DEFAULT_GAS_LIMIT
       name: "gas-limit" .}: uint64
 
     # https://ethereum.org/developers/docs/networks/#ethereum-testnets
@@ -178,13 +178,12 @@ type
     metricsPort* {.
       desc: "Listening port of the built-in metrics HTTP server"
       defaultValue: defaultMetricsServerPort
-      defaultValueDesc: $defaultMetricsServerPort
       name: "metrics-port" .}: Port
 
     metricsAddress* {.
       desc: "Listening IP address of the built-in metrics HTTP server"
       defaultValue: defaultAdminListenAddress
-      defaultValueDesc: $defaultAdminListenAddressDesc
+      defaultValueDesc: defaultAdminListenAddressDesc
       name: "metrics-address" .}: IpAddress
 
     bootstrapNodes {.
@@ -227,13 +226,12 @@ type
     listenAddress* {.
       desc: "Listening IP address for Ethereum P2P and Discovery traffic"
       defaultValue: defaultListenAddress
-      defaultValueDesc: $defaultListenAddressDesc
+      defaultValueDesc: defaultListenAddressDesc
       name: "listen-address" .}: IpAddress
 
     tcpPort* {.
       desc: "Ethereum P2P network listening TCP port"
       defaultValue: defaultExecutionPort
-      defaultValueDesc: $defaultExecutionPort
       name: "tcp-port" .}: Port
 
     udpPortFlag* {.
@@ -276,7 +274,6 @@ type
     agentString* {.
       desc: "Node agent string which is used as identifier in network"
       defaultValue: ClientId
-      defaultValueDesc: $ClientId
       name: "agent-string" .}: string
 
     numThreads* {.
@@ -298,43 +295,36 @@ type
     rocksdbMaxOpenFiles {.
       hidden
       defaultValue: defaultMaxOpenFiles
-      defaultValueDesc: $defaultMaxOpenFiles
       name: "debug-rocksdb-max-open-files".}: int
 
     rocksdbWriteBufferSize {.
       hidden
       defaultValue: defaultWriteBufferSize
-      defaultValueDesc: $defaultWriteBufferSize
       name: "debug-rocksdb-write-buffer-size".}: int
 
     rocksdbRowCacheSize {.
       hidden
       defaultValue: defaultRowCacheSize
-      defaultValueDesc: $defaultRowCacheSize
       name: "debug-rocksdb-row-cache-size".}: int
 
     rocksdbBlockCacheSize {.
       hidden
       defaultValue: defaultBlockCacheSize
-      defaultValueDesc: $defaultBlockCacheSize
       name: "debug-rocksdb-block-cache-size".}: int
 
     rdbVtxCacheSize {.
       hidden
       defaultValue: defaultRdbVtxCacheSize
-      defaultValueDesc: $defaultRdbVtxCacheSize
       name: "debug-rdb-vtx-cache-size".}: int
 
     rdbKeyCacheSize {.
       hidden
       defaultValue: defaultRdbKeyCacheSize
-      defaultValueDesc: $defaultRdbKeyCacheSize
       name: "debug-rdb-key-cache-size".}: int
 
     rdbBranchCacheSize {.
       hidden
       defaultValue: defaultRdbBranchCacheSize
-      defaultValueDesc: $defaultRdbBranchCacheSize
       name: "debug-rdb-branch-cache-size".}: int
 
     rdbPrintStats {.
@@ -350,7 +340,6 @@ type
     aristoDbMaxSnapshots* {.
       hidden
       defaultValue: defaultMaxSnapshots
-      defaultValueDesc: $defaultMaxSnapshots
       name: "debug-aristo-db-max-snapshots" .}: int
 
     eagerStateRootCheck* {.
@@ -386,7 +375,6 @@ type
         separator: "\pLOCAL SERVICES OPTIONS:"
         desc: "Listening port of the HTTP server(rpc, ws)"
         defaultValue: defaultHttpPort
-        defaultValueDesc: $defaultHttpPort
         name: "http-port" .}: Port
 
       httpAddress* {.
@@ -440,7 +428,6 @@ type
       engineApiPort* {.
         desc: "Listening port for the Engine API(http and ws)"
         defaultValue: defaultEngineApiPort
-        defaultValueDesc: $defaultEngineApiPort
         name: "engine-api-port" .}: Port
 
       engineApiAddress* {.

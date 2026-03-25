@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -9,7 +9,7 @@
 # according to those terms.
 
 # The build is reproducible only if this base image stays the same.
-FROM statusim/nimbus-eth1:dist_base_eth1_v2_linux_amd64@sha256:efa42e9735d99e78807ebcceb85b123142e0f4971b087ce66e4e89534b8fb424
+FROM statusim/nimbus-eth1:dist_base_eth1_v2_linux_amd64@sha256:75f15be28aed28e2a08c3cd59de8991ae1ce4c25cd7f05e0ae9419f69518e670
 
 SHELL ["/bin/bash", "-c"]
 

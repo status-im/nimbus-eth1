@@ -12,13 +12,9 @@ import strutils
 
 const currentDir = currentSourcePath()[0 .. ^(len("config.nims") + 1)]
 
-if getEnv("NIMBUS_BUILD_SYSTEM") == "yes" and
-   # BEWARE
-   # In Nim 1.6, config files are evaluated with a working directory
-   # matching where the Nim command was invocated. This means that we
-   # must do all file existance checks with full absolute paths:
-   system.fileExists(currentDir & "nimbus-build-system.paths"):
-  include "nimbus-build-system.paths"
+when withDir(thisDir(), system.fileExists("nimbus-build-system.paths")):
+  if getEnv("NIMBUS_BUILD_SYSTEM") == "yes":
+    include "nimbus-build-system.paths"
 
 const nimCachePathOverride {.strdefine.} = ""
 when nimCachePathOverride == "":
@@ -99,7 +95,7 @@ elif defined(linux) and defined(arm64):
   # clang can't handle "-march=native"
   switch("passC", "-march=armv8-a")
   switch("passL", "-march=armv8-a")
-elif not(defined(macos) and defined(arm64)):
+elif not(defined(macosx) and defined(arm64)):
   # Apple's Clang can't handle "-march=native" on M1: https://github.com/status-im/nimbus-eth2/issues/2758
   switch("passC", "-march=native")
   switch("passL", "-march=native")
@@ -214,3 +210,20 @@ put("sysrng.always", "-fno-lto")
 # sqlite3.c: In function ‘sqlite3SelectNew’:
 # vendor/nim-sqlite3-abi/sqlite3.c:124500: warning: function may return address of local variable [-Wreturn-local-addr]
 put("sqlite3.always", "-fno-lto") # -Wno-return-local-addr
+# ############################################################
+#
+#                QUIC does variable stack allocations
+#
+# ############################################################
+
+put("lsquic_enc_sess_ietf.always", "-fno-lto -Wno-stack-usage")
+put("lsquic_handshake.always", "-fno-lto -Wno-stack-usage")
+put("lsquic_hkdf.always", "-fno-lto -Wno-stack-usage")
+
+# ############################################################
+#
+#  Required for BoringSSL warning about frees on offset pointers
+#
+# ############################################################
+
+put("mem.always", "-Wno-free-nonheap-object")

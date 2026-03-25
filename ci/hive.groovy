@@ -1,7 +1,7 @@
 #!/usr/bin/env groovy
 
 /*
- * Copyright (c) 2019-2026 Status Research & Development GmbH
+ * Copyright (c) 2026 Status Research & Development GmbH
  * Licensed and distributed under either of
  *   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
  *   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -59,7 +59,7 @@ pipeline {
   stages {
     stage('Build nimbus-eth1') {
       steps {
-        sh 'docker build -f "${WORKSPACE}/Dockerfile" "${WORKSPACE}"'
+        sh 'docker build -t statusim/nimbus-eth1:master -f "${WORKSPACE}/Dockerfile" "${WORKSPACE}"'
       }
     }
     stage('Prepare Hive') {
@@ -73,32 +73,6 @@ pipeline {
     }
     stage('Run Hive Tests') {
       parallel {
-        stage('sync neth-nimbus') {
-          options {
-            timeout(time: params.TIMEOUT_MINUTES, unit: 'MINUTES')
-          }
-          steps {
-            script {
-              try {
-                dir('hive') {
-                  sh """
-                    ./hive \
-                    --sim "${params.SIMULATION_NAME}" \
-                    --client-file="${WORKSPACE}/ci/neth-nimbus-sync-config.yml" \
-                    --sim.parallelism=${params.PARALLELISM} \
-                    --sim.loglevel 4 \
-                    --docker.nocache hive/clients/nimbus-el \
-                    --docker.pull true \
-                    ${params.DOCKER_BUILDOUTPUT ? '--docker.buildoutput' : ''}
-                  """
-                }
-              } catch (e) {
-                failedStages << env.STAGE_NAME
-                throw e
-              }
-            }
-          }
-        }
         stage('sync reth-nimbus') {
           options {
             timeout(time: params.TIMEOUT_MINUTES, unit: 'MINUTES')
@@ -113,8 +87,8 @@ pipeline {
                     --client-file="${WORKSPACE}/ci/reth-nimbus-sync-config.yml" \
                     --sim.parallelism=${params.PARALLELISM} \
                     --sim.loglevel 4 \
+                    --sim.limit "^sync\$" \
                     --docker.nocache hive/clients/nimbus-el \
-                    --docker.pull true \
                     ${params.DOCKER_BUILDOUTPUT ? '--docker.buildoutput' : ''}
                   """
                 }
@@ -125,7 +99,7 @@ pipeline {
             }
           }
         }
-        stage('sync erigon-nimbus') {
+        stage('sync geth-nimbus') {
           options {
             timeout(time: params.TIMEOUT_MINUTES, unit: 'MINUTES')
           }
@@ -136,11 +110,11 @@ pipeline {
                   sh """
                     ./hive \
                     --sim "${params.SIMULATION_NAME}" \
-                    --client-file="${WORKSPACE}/ci/erigon-nimbus-sync-config.yml" \
+                    --client-file="${WORKSPACE}/ci/geth-nimbus-sync-config.yml" \
                     --sim.parallelism=${params.PARALLELISM} \
                     --sim.loglevel 4 \
+                    --sim.limit "^sync\$" \
                     --docker.nocache hive/clients/nimbus-el \
-                    --docker.pull true \
                     ${params.DOCKER_BUILDOUTPUT ? '--docker.buildoutput' : ''}
                   """
                 }

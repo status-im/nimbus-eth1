@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -139,20 +139,20 @@ proc getKey*(
     # We don't store keys for leaves, no need to hit the database
     let rc = rdb.rdVtxLru.peek(rvid.vid)
     if rc.isOk():
-      if rc.value().vType in Leaves:
-        return ok((VOID_HASH_KEY, rc.value()))
+      let vtx = rc[].data().deblobify(VertexRef).expect("valid data in db")
+      if vtx.vType in Leaves:
+        return ok((VOID_HASH_KEY, vtx))
 
   # Otherwise fetch from backend database
   # A threadvar is used to avoid allocating an environment for onData
   var res {.threadvar.}: Opt[HashKey]
-  var vtx {.threadvar.}: Result[VertexRef, AristoError]
-
-  let onData = proc(data: openArray[byte]) =
+  var vtxBuf {.threadvar.}: VertexBuf
+  
+  let onData = proc(data: openArray[byte]) {.nimcall.} =
     res = data.deblobify(HashKey)
-    if res.isSome():
-      reset(vtx)
-    else:
-      vtx = data.deblobify(VertexRef)
+    if res.isNone():
+      reset(vtxBuf)
+      vtxBuf.add(data)
 
   let gotData = rdb.vtxCol.get(rvid.blobify().data(), onData).valueOr:
     const errSym = RdbBeDriverGetKeyError
@@ -168,12 +168,18 @@ proc getKey*(
       (GetVtxFlag.PeekCache notin flags or rdb.rdKeyLru.len < rdb.rdKeyLru.capacity):
     rdb.rdKeyLru.put(rvid.vid, res.value())
 
-  if vtx.isOk() and rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
+  if res.isNone() and rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
     # Don't invalidate vertex cache entries because of key reads - the latter
     # follow a different access pattern!
-    rdb.rdVtxLru.put(rvid.vid, vtx.value())
+    rdb.rdVtxLru.put(rvid.vid, vtxBuf)
 
-  ok (res.valueOr(VOID_HASH_KEY), vtx.valueOr(nil))
+  let vtx = 
+    if res.isNone():
+      vtxBuf.data().deblobify(VertexRef).expect("valid data in db")
+    else:
+      nil
+
+  ok (res.valueOr(VOID_HASH_KEY), vtx)
 
 proc getVtx*(
     rdb: var RdbInst, rvid: RootedVertexID, flags: set[GetVtxFlag]
@@ -197,16 +203,22 @@ proc getVtx*(
         rdb.rdVtxLru.get(rvid.vid)
 
     if rc.isOk:
-      rdbVtxLruStats[rvid.to(RdbStateType)][rc.value().vType.to(RdbVertexType)].inc(
+      let vtx = rc[].data().deblobify(VertexRef).expect("valid data in db")
+      rdbVtxLruStats[rvid.to(RdbStateType)][vtx.vType.to(RdbVertexType)].inc(
         true
       )
-      return ok(move(rc.value))
+      return ok(vtx)
 
   # Otherwise fetch from backend database
   # A threadvar is used to avoid allocating an environment for onData
   var res {.threadvar.}: Result[VertexRef, AristoError]
-  let onData = proc(data: openArray[byte]) =
+  var vtxBuf {.threadvar.}: VertexBuf
+  
+  let onData = proc(data: openArray[byte]) {.nimcall.} =
     res = data.deblobify(VertexRef)
+    if res.isOk() and res[].vType != Branch:
+      reset(vtxBuf)
+      vtxBuf.add(data)
 
   let gotData = rdb.vtxCol.get(rvid.blobify().data(), onData).valueOr:
     const errSym = RdbBeDriverGetVtxError
@@ -234,7 +246,7 @@ proc getVtx*(
       let vtx = BranchRef(res.value())
       rdb.rdBranchLru.put(rvid.vid, (vtx.startVid, vtx.used))
     else:
-      rdb.rdVtxLru.put(rvid.vid, res.value())
+      rdb.rdVtxLru.put(rvid.vid, vtxBuf)
 
   ok res.value()
 

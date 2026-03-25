@@ -33,8 +33,7 @@ EXCLUDED_NIM_PACKAGES := 	\
   vendor/nimbus-eth2/vendor/nim-libbacktrace          \
   vendor/nimbus-eth2/vendor/nim-metrics               \
   vendor/nimbus-eth2/vendor/nim-nat-traversal         \
-  vendor/nimbus-eth2/vendor/nim-ngtcp2                \
-  vendor/nimbus-eth2/vendor/nim-quic                  \
+  vendor/nimbus-eth2/vendor/nim-lsquic                \
   vendor/nimbus-eth2/vendor/nim-results               \
   vendor/nimbus-eth2/vendor/nim-secp256k1             \
   vendor/nimbus-eth2/vendor/nim-serialization         \
@@ -104,6 +103,13 @@ endif
 endif
 
 VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
+ifneq (, $(findstring darwin, $(OS_PLATFORM)))
+  VERIFPROXY_LDFLAGS = -framework Security
+else ifneq (, $(findstring mingw, $(OS_PLATFORM))$(findstring windows-gnu, $(OS_PLATFORM)))
+  VERIFPROXY_LDFLAGS = -lbcrypt -lpthread -lws2_32
+else
+  VERIFPROXY_LDFLAGS = -lm
+endif
 
 .PHONY: \
 	all \
@@ -117,6 +123,7 @@ VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 	fluffy \
 	nimbus_verified_proxy \
 	libverifproxy \
+	libverifproxy-test \
 	external_sync \
 	test \
 	test-reproducibility \
@@ -131,6 +138,12 @@ VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 	dist-macos-arm64 \
 	dist \
 	eest \
+	eest_engine \
+	eest_engine_test \
+	eest_blockchain \
+	eest_blockchain_test \
+	eest_stateless_execution_test \
+	eest_full_test \
 	t8n \
 	t8n_test \
 	evmstate \
@@ -357,9 +370,17 @@ libverifproxy: | build deps
 	+ echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim --version && \
 		echo $(NIM_PARAMS) && \
-		$(ENV_SCRIPT) nim c --app:staticlib -d:"libp2p_pki_schemes=secp256k1" --noMain:on --out:$(VERIF_PROXY_OUT_PATH)/$@.$(STATICLIBEXT) $(NIM_PARAMS) nimbus_verified_proxy/libverifproxy/verifproxy.nim
+		$(ENV_SCRIPT) nim c --app:staticlib -d:"libp2p_pki_schemes=secp256k1" --noMain:on -d:disable_libbacktrace --out:$(VERIF_PROXY_OUT_PATH)/$@.$(STATICLIBEXT) $(NIM_PARAMS) nimbus_verified_proxy/libverifproxy/verifproxy.nim
 	cp nimbus_verified_proxy/libverifproxy/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
 	echo -e $(BUILD_END_MSG) "build/$@"
+
+libverifproxy-test: | libverifproxy
+	$(CC) -I$(VERIF_PROXY_OUT_PATH) -L$(VERIF_PROXY_OUT_PATH) \
+		-Wno-incompatible-pointer-types \
+		-o build/libverifproxy-test \
+		nimbus_verified_proxy/libverifproxy/test_api.c \
+		-lverifproxy -lstdc++ $(VERIFPROXY_LDFLAGS)
+	./build/libverifproxy-test
 
 # Stateless related targets
 
@@ -385,9 +406,10 @@ eest_blockchain_test: | build deps eest eest_blockchain
 eest_stateless_execution_test: | build deps eest eest_blockchain
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
 
-eest_full_test: | build deps eest_blockchain eest_engine
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/eest_blockchain_test.nim"
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/eest_engine_test.nim"
+eest_full_test:
+	$(MAKE) eest_engine_test
+	$(MAKE) eest_blockchain_test
+	$(MAKE) eest_stateless_execution_test
 
 # builds transition tool
 t8n: | build deps

@@ -18,6 +18,7 @@ import
   stint
 
 import
+  ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/ledger,
   ../execution_chain/evm/types,
   ../execution_chain/evm/interpreter/op_codes,
@@ -357,7 +358,7 @@ proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: DebugCallR
     let key = kv[0].toHex()
     let val = kv[1].toHex()
     let slotKey = UInt256.fromBytesBE(kv[0]).toBytesBE.keccak256
-    let data = al.slotFetch(accPath, slotKey).valueOr: default(UInt256)
+    let data = al.fetchSlot(accPath, slotKey).valueOr(0'u256)
     let actual = data.toBytesBE().toHex
     if val != actual:
       error "storage has different value", key=key, expected=val, actual

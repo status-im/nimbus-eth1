@@ -62,10 +62,10 @@ template downloadImpl(
     let
       ctx = buddy.ctx
       adb = ctx.pool.mptAsm
-      sdb = ctx.pool.stateDB
       sRoot = state.stateRoot
       peerID = buddy.peerID
 
+      sdb {.inject,used.} = ctx.pool.stateDB        # logging only
       peer {.inject,used.} = $buddy.peer            # logging only
       root {.inject,used.} = state.rootStr          # logging only
 
@@ -86,7 +86,7 @@ template downloadImpl(
             start, nAccLeft=accLeft.len
           break body                                # error => return
 
-        if not sdb.hasKey(sRoot):                   # evicted => return
+        if not state.isOperable():                  # evicted => return
           bodyRc = false                            # ignore downloaded data
           break body
 
@@ -127,7 +127,7 @@ template downloadImpl(
               nAccLeft=accLeft.len, iv=iv.flStr, `error`=error
             break body                            # error => return
 
-          if not sdb.hasKey(sRoot):               # evicted => return
+          if not state.isOperable():              # evicted => return
             bodyRc = false                        # ignore downloaded data
             break body
 
@@ -166,7 +166,7 @@ template downloadFromQueue(
   block body:
     let
       ctx = buddy.ctx
-      sdb = ctx.pool.stateDB
+      sdb {.inject,used.} = ctx.pool.stateDB        # logging only
       peer {.inject,used.} = $buddy.peer            # logging only
       root {.inject,used.} = state.rootStr          # logging only
 
@@ -190,7 +190,7 @@ template downloadFromQueue(
     if 0 < fullTries.len:
       if buddy.downloadImpl(state, fullTries, ItemKeyRangeMax, info):
         bodyRc = true
-      elif not sdb.hasKey(state.stateRoot):         # evicted => return
+      elif not state.isOperable():                  # evicted => return
         bodyRc = false                              # ignore downloaded data
         break body
 
@@ -210,7 +210,7 @@ template downloadFromQueue(
 
       if buddy.downloadImpl(state, acc, iv, info):
         bodyRc = true
-      elif not sdb.hasKey(state.stateRoot):         # evicted => return
+      elif not state.isOperable():                  # evicted => return
         bodyRc = false                              # ignore downloaded data
         break body
       # End `while`
@@ -230,8 +230,7 @@ template storageDownload*(
   ## Async/template
   ##
   block body:
-    let sdb = buddy.ctx.pool.stateDB
-    if not sdb.hasKey(state.stateRoot):             # evicted => return
+    if not state.isOperable():                      # evicted => return
       break body
 
     let acc = accounts
@@ -244,7 +243,7 @@ template storageDownload*(
       break body                                    # all done
 
     if not buddy.downloadImpl(state, acc, ItemKeyRangeMax, info) and
-       not sdb.hasKey(state.stateRoot):             # evicted => return
+       not state.isOperable():                      # evicted => return
       break body                                    # all done
 
     while not buddy.ctrl.stopped and

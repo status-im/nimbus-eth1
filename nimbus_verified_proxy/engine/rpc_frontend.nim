@@ -15,6 +15,7 @@ import
   eth/common/accounts,
   web3/[eth_api, eth_api_types],
   ../../execution_chain/core/eip4844,
+  ../../execution_chain/db/core_db/memory_only,
   ../../execution_chain/common/common,
   ./types,
   ./header_store,
@@ -462,7 +463,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     ok(proof)
 
   engine.frontend.eth_feeHistory = proc(
-      blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[uint8]
+      blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[int]
   ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).} =
     let (backend, backendIdx) = ?(engine.backendFor(FeeHistory))
     let feeHistory = engine.penaltyOr(
