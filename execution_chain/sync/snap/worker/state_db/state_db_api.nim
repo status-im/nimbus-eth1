@@ -230,14 +230,6 @@ proc register*(
 
   newState                                          # return state record
 
-proc register*(
-    db: StateDbRef;
-    header: Header;
-    hash: BlockHash;
-    info: static[string];
-      ) =
-  discard db.register(StateRoot(header.stateRoot), hash, header.number, info)
-
 
 func hasKey*(db: StateDbRef; bn: BlockNumber): bool =
   db.byNumber.eq(bn).isOk()
@@ -251,6 +243,13 @@ func hasKey*(db: StateDbRef; root: StateRoot): bool =
 func get*(db: StateDbRef; bn: BlockNumber): Opt[StateDataRef] =
   db.byNumber.eq(bn).isErrOr:
     return ok(value.data)
+  err()
+
+func next*(db: StateDbRef, bn: BlockNumber): Opt[StateDataRef] =
+  ## Retrieve the state data record which has the least higher block
+  ## number than the argument `bn`.
+  db.byNumber.gt(bn).isErrOr:
+    return ok value.data
   err()
 
 func get*(db: StateDbRef; hash: BlockHash): Opt[StateDataRef] =
@@ -276,9 +275,9 @@ func pivot*(db: StateDbRef): Opt[StateDataRef] =
 
 func top*(db: StateDbRef): Opt[StateDataRef] =
   ## Retrieve the state data record with the highest block number.
-  let val = db.byNumber.le(high BlockNumber).valueOr:
-    return err()
-  ok val.data
+  db.byNumber.le(high BlockNumber).isErrOr:
+    return ok value.data
+  err()
 
 
 proc setHealingReady*(state: StateDataRef) =
@@ -488,10 +487,8 @@ proc delCode*(state: StateDataRef, account: ItemKey) =
     else:
       kv.data.code = CodeHash(EMPTY_CODE_HASH)
 
-func len*(state: StateDataRef): int =
-  if not state.deadState:
-    return state.byAccount.len
-  # 0
+func hasCodeOrStorage*(state: StateDataRef): bool =
+  not state.deadState and 0 < state.byAccount.len
 
 # ------------------------------------------------------------------------------
 # Public iterator(s)
@@ -500,7 +497,7 @@ func len*(state: StateDataRef): int =
 iterator stoItems*(state: StateDataRef): tuple[key: ItemKey, data: AccDataRef] =
   ## Iterate over all account entries with increasing `ItemKey` keys and
   ## return non-empty storage tree information.
-  var rc = state.byAccount.ge(low(ItemKey))
+  var rc = state.byAccount.ge(low ItemKey)
   while rc.isOk:
     let (key, data) = (rc.value.key, rc.value.data)
     if data.stoRoot != StoreRoot(EMPTY_ROOT_HASH):
@@ -532,8 +529,9 @@ iterator items*(
   var seenItems: HashSet[BlockNumber]
   for w in startWith.items:
     db.byRoot.withValue(w,value):
-      seenItems.incl value.blockNumber
-      yield value[]
+      if value.blockNumber notin seenItems:
+        seenItems.incl value.blockNumber
+        yield value[]
 
   when ascending:
     var rc = db.byNumber.ge(0)

@@ -12,7 +12,8 @@
 
 import
   pkg/chronicles,
-  ./[download, mpt, session, worker_const, worker_desc]
+  ./download/header,
+  ./[mpt, session, worker_const, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -25,14 +26,21 @@ proc idleNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
   if not ctx.pool.mptAsm.clear info:
     return SnapIdle
-  SnapDownload
+  SnapReady
 
 proc resumeNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
   # Recover session (if any)
   if ctx.sessionResume(info):
     debug info & ": resuming download session"
-  SnapDownload
+  SnapReady
+
+proc readyNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+  ## State transition handler
+  if ctx.pool.target.isSome() or
+     ctx.hdrCache.headHash() != zeroHash32:
+    return SnapDownload
+  SnapReady
 
 proc downloadNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
@@ -40,7 +48,7 @@ proc downloadNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   sdb.pivot().isErrOr:
     # Check whether the `pivot` data have been fully downloaded
     if value.totalAccountRange().isErr():           # err => all accounts done
-      if value.len == 0:                            # no slots/code todo
+      if not value.hasCodeOrStorage():              # no slots/code todo
         return SnapMkTrie
     # Check whether total coverage is sufficient
     # TBD ..
@@ -76,11 +84,14 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]) =
   ##
   # State machine
   # ::
-  #     idle   resume
-  #      |      /
+  #     idle  resume
   #      |     /
   #      |    /
-  #      v   v
+  #      |   /
+  #      v  v
+  #     ready
+  #      |
+  #      v
   #     download <--.
   #      |          |
   #      v          |
@@ -98,6 +109,8 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]) =
       ctx.idleNext info
     of SnapResume:
       ctx.resumeNext info
+    of SnapReady:
+      ctx.readyNext info
     of SnapDownload:
       ctx.downloadNext info
     of SnapMkTrie:
@@ -116,46 +129,62 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]) =
   of SnapDownload, SnapMkTrie, SnapHealing:
     info "State changed", prevState, newState, top=sdb.top.bnStr,
       pivot=sdb.pivot.bnStr, nSyncPeers=ctx.nSyncPeers()
-  else:
-    debug "State changed", prevState, newState, top=sdb.top.bnStr,
-      pivot=sdb.pivot.bnStr, nSyncPeers=ctx.nSyncPeers()
+  of SnapIdle, SnapResume, SnapReady:
+    debug "State changed", prevState, newState
 
 # ------------------------------------------------------------------------------
 # Other public functions
 # ------------------------------------------------------------------------------
 
-template updateTarget*(
-    buddy: SnapPeerRef;
-    info: static[string];
-      ) =
+template updateTarget*(buddy: SnapPeerRef, info: static[string]) =
   ## Async/template
+  ##
+  ## Check for manually set sync target (e.g. set by a command line option)
   ##
   block body:
     # Check whether explicit target setup is configured
-    if buddy.ctx.pool.target.isSome():
-      let
-        peer {.inject,used.} = $buddy.peer          # logging only
-        ctx = buddy.ctx
+    let
+      ctx = buddy.ctx
+      hash = ctx.pool.target.valueOr:
+        break body                                  # nothing to do
 
-      # Single target block hash
-      let hash = ctx.pool.target.value.blockHash
-      if hash != BlockHash(zeroHash32):
-        let rc = buddy.headerStateRegister(hash, info)
-        if rc.isErr and rc.error:                   # real error
-          trace info & ": failed fetching pivot hash", peer, hash=hash.toStr
-        elif 0 < ctx.pool.target.value.updateFile.len:
-          var target = ctx.pool.target.value
-          target.blockHash = BlockHash(zeroHash32)
-          ctx.pool.target = Opt.some(target)
-        else:
-          ctx.pool.target = Opt.none(SnapTarget)    # No more target entries
-          break body                                # noting more to do here
+    trace info & ": assigning manual target state", peer=buddy.peer,
+      hash=hash.toStr, nSyncPeers=ctx.nSyncPeers()
 
-      # Check whether a file target setup is configured
-      if 0 < ctx.pool.target.value.updateFile.len:
-        discard buddy.headerStateLoad(ctx.pool.target.value.updateFile, info)
+    buddy.headerStateRegister(hash, info).isErrOr:
+      ctx.pool.target = Opt.none(BlockHash)         # fetch only once
+    # End `block body`
 
-  discard # visual alignment
+  discard                                           # visual alignment
+
+template updateFcuRoot*(buddy: SnapPeerRef, info: static[string]) =
+  ## Async/template
+  ##
+  ## Add state record derived from CL finalised hash. Register it done.
+  ## So it is not repeatedly re-processed (up to some race conditions.)
+  ##
+  block body:
+    if buddy.only.finRoot.isSome():
+      break body                                    # nothing to do
+
+    let
+      ctx = buddy.ctx
+      hash = BlockHash ctx.hdrCache.headHash()
+    if hash == BlockHash(zeroHash32):
+      break body                                    # no FCU request yet
+
+    ctx.pool.stateDB.get(hash).isErrOr:
+      buddy.only.finRoot = Opt.some(value.stateRoot)
+      break body                                    # already registered
+
+    trace info & ": assigning FC hash from CL", peer=buddy.peer,
+      hash=hash.toStr, nSyncPeers=ctx.nSyncPeers()
+
+    buddy.headerStateRegister(hash, info).isErrOr:
+      buddy.only.finRoot = Opt.some(value.stateRoot)
+    # End `block body`
+
+  discard                                           # visual alignment
 
 # ------------------------------------------------------------------------------
 # End

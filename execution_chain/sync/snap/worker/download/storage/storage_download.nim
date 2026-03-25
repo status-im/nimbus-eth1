@@ -247,7 +247,7 @@ template storageDownload*(
       break body                                    # all done
 
     while not buddy.ctrl.stopped and
-          0 < state.len and
+          state.hasCodeOrStorage and
           buddy.downloadFromQueue(state, info):
       continue
 

@@ -90,15 +90,10 @@ type
 
   SnapPeerData* = object
     ## Local descriptor data extension
-    pivotRoot*: Opt[StateRoot]       ## Derived from peer best/latest hash
+    finRoot*: Opt[StateRoot]         ## Some finalised state root (if any)
     nErrors*: PeerErrors             ## Error register
     peerType*: string                ## Self declared peer type
     failedReq*: PeerFirstFetchReq    ## Don't send the same failed request twice
-
-  SnapTarget* = tuple
-    ## Bundled target settings
-    blockHash: BlockHash
-    updateFile: string
 
   SnapCtxData* = object
     ## Globally shared data extension
@@ -109,9 +104,9 @@ type
     mptAsm*: MptAsmRef               ## Assembly cache database
 
     # Preloading/manual state update
-    target*: Opt[SnapTarget]         ## Optional for setting up a sync target
+    target*: Opt[BlockHash]          ## Optional for setting up a sync target
     stateUpdateChecked*: string      ## Last update value (avoids log spamming)
-    clStateRoot*: Opt[StateRoot]     ## State from CL finalised hash (if any)
+    lockedHeader*: HashSet[BlockHash] ## Currently fetched headers
 
     # Info, debugging, and error handling stuff
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one
