@@ -364,7 +364,6 @@ type
       httpAddress* {.
         desc: "Listening IP address of the HTTP server(rpc, ws)"
         defaultValue: defaultAdminListenAddress
-        defaultValueDesc: $defaultAdminListenAddressDesc
         name: "http-address" .}: IpAddress
 
       rpcEnabled* {.
@@ -417,7 +416,6 @@ type
       engineApiAddress* {.
         desc: "Listening address for the Engine API(http and ws)"
         defaultValue: defaultAdminListenAddress
-        defaultValueDesc: $defaultAdminListenAddressDesc
         name: "engine-api-address" .}: IpAddress
 
       engineApiWsEnabled* {.

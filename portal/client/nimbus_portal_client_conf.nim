@@ -171,7 +171,6 @@ type
     rpcAddress* {.
       desc: "Listening address of the HTTP JSON-RPC server",
       defaultValue: defaultAdminListenAddress,
-      defaultValueDesc: $defaultAdminListenAddressDesc,
       name: "rpc-address"
     .}: IpAddress
 
@@ -194,7 +193,6 @@ type
     wsAddress* {.
       desc: "Listening address of the WebSocket JSON-RPC server",
       defaultValue: defaultAdminListenAddress,
-      defaultValueDesc: $defaultAdminListenAddressDesc,
       name: "ws-address"
     .}: IpAddress
 
