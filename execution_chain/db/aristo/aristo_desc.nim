@@ -159,7 +159,6 @@ type
     ## Trie traversal path
     root*: VertexID                ## Handy for some fringe cases
     legs*: ArrayBuf[NibblesBuf.high + 1, Leg] ## Chain of vertices and IDs
-    tail*: NibblesBuf              ## Portion of non completed path
 
 const
   dbLevel* = -1

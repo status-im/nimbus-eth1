@@ -56,16 +56,29 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
         buddy.headerStateRegister(hash, info).isErrOr:
           buddy.only.pivotRoot = Opt.some(value)
 
+    # Add state from CL finalised hash
+    if ctx.pool.clStateRoot.isNone():
+      let fcHead = BlockHash ctx.hdrCache.headHash()
+      if fcHead != BlockHash(zeroHash32):
+        trace info & ": assigning FC hash from CL", peer,
+          hash=fcHead.toStr, nSyncPeers=ctx.nSyncPeers()
+        buddy.headerStateRegister(fcHead, info).isErrOr:
+          ctx.pool.clStateRoot = Opt.some(value)
+
     if sdb.len == 0:
       trace info & ": no state records", peer
-      break body
+      break body                                    # return err()
 
     # Fetch for state DB items, start with pivot root
     var theseFirst: seq[StateRoot]
     sdb.pivot.isErrOr:                              # the one with most done yet
       theseFirst.add value.stateRoot
+    ctx.pool.clStateRoot.isErrOr:
+      if value notin theseFirst:
+        theseFirst.add value
     buddy.only.pivotRoot.isErrOr:                   # best supported by peer
-      theseFirst.add value
+      if value notin theseFirst:
+        theseFirst.add value
 
     # Run `download()` for available states, the order of which is
     # determined by the following criteria with deacening priority

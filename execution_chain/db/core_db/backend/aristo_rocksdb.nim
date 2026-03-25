@@ -161,7 +161,7 @@ proc toCfOpts*(opts: DbOptions, cache: CacheRef, bulk: bool): ColFamilyOptionsRe
 # Public constructor
 # ------------------------------------------------------------------------------
 
-proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions, reset = false): CoreDbRef =
+proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions, wipe = false): CoreDbRef =
   # Single rocksdb database with separate column families for mpt/kvt
 
   # The same column family options are used for all column families meaning that
@@ -190,7 +190,7 @@ proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions, reset = false): Cor
 
     cfDescs =
       @[($AristoCFs.VtxCF, acfOpts)] & KvtCFs.items().toSeq().mapIt(($it, kcfOpts))
-    baseDb = RocksDbInstanceRef.open(basePath, dbOpts, cfDescs, reset).expect(
+    baseDb = RocksDbInstanceRef.open(basePath, dbOpts, cfDescs, wipe).expect(
         "Open database from " & basePath
       )
 

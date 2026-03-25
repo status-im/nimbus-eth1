@@ -356,6 +356,21 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "snap_active_states"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "semi-dark-yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
           }
         ]
       },
@@ -381,6 +396,23 @@
       },
       "pluginVersion": "12.1.1",
       "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bdvimuocv3fggc"
+          },
+          "disableTextWrap": false,
+          "editorMode": "builder",
+          "expr": "nec_snap_active_states{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+          "fullMetaSearch": false,
+          "hide": false,
+          "includeNullMetadata": true,
+          "instant": false,
+          "legendFormat": "snap_active_states",
+          "range": true,
+          "refId": "E",
+          "useBackend": false
+        },
         {
           "datasource": {
             "type": "prometheus",
@@ -1092,13 +1124,12 @@
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "nec_snap_pivot_state_coverage{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+          "expr": "nec_snap_accumulated_state_coverage{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
           "fullMetaSearch": false,
-          "hide": false,
           "includeNullMetadata": true,
-          "legendFormat": "pivot_state_coverage",
+          "legendFormat": "accumulated_state_coverage",
           "range": true,
-          "refId": "A",
+          "refId": "B",
           "useBackend": false
         },
         {
@@ -1108,12 +1139,13 @@
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "nec_snap_accumulated_state_coverage{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+          "expr": "nec_snap_pivot_state_coverage{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
           "fullMetaSearch": false,
+          "hide": false,
           "includeNullMetadata": true,
-          "legendFormat": "accumulated_state_coverage",
+          "legendFormat": "pivot_state_coverage",
           "range": true,
-          "refId": "B",
+          "refId": "A",
           "useBackend": false
         }
       ],
@@ -1418,12 +1450,12 @@
     "list": []
   },
   "time": {
-    "from": "now-5m",
+    "from": "now-30m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "Europe/London",
   "title": "Mainnet Sync",
-  "uid": "aejdv8m5igu40g",
-  "version": 26
+  "uid": "00000000000003",
+  "version": 3
 }

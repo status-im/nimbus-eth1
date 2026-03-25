@@ -119,10 +119,8 @@ proc getTmpDir(sampleDir = sampleDirRefFile): string =
 
 proc wipeTestDir(s: string) =
   if s != "":
-    let dataDir = s / "ecdb"
-    try: dataDir.removeDir except CatchableError: discard
     block dontClearUnlessEmpty:
-      for w in s.walkDir:
+      for w in s.walkDirRec:
         break dontClearUnlessEmpty
       try: s.removeDir except CatchableError: discard
 
@@ -224,7 +222,7 @@ proc chainSyncRunner(
       let
         com = initRunnerDB(dbDir, capture, dbType)
       defer:
-        com.db.close()
+        com.db.close(wipe = true)
         if profilingOk: noisy.test_chainSyncProfilingPrint numBlocks
         if persistent and finalDiskCleanUpOk: dbDir.wipeTestDir()
 
@@ -271,7 +269,7 @@ proc persistentSyncPreLoadAndResumeRunner(
       let
         com = initRunnerDB(dbDir, capture, dbType)
       defer:
-        com.db.close()
+        com.db.close(wipe = true)
         if profilingOk: noisy.test_chainSyncProfilingPrint firstPart
 
       check noisy.test_chainSync(filePaths, com, firstPart,
@@ -282,7 +280,7 @@ proc persistentSyncPreLoadAndResumeRunner(
       let
         com = initRunnerDB(dbDir, capture, dbType)
       defer:
-        com.db.close()
+        com.db.close(wipe = true)
         if profilingOk: noisy.test_chainSyncProfilingPrint secndPart
         if finalDiskCleanUpOk: dbDir.wipeTestDir
 

@@ -160,7 +160,7 @@ proc deleteAccount*(
 
 proc deleteSlot*(
     db: AristoTxRef;
-    accPath: Hash32;          # Implies storage data tree
+    accPath: Hash32;
     stoPath: Hash32;
       ): Result[void,AristoError] =
   ## For a given account argument `accPath`, this function deletes the
@@ -219,7 +219,7 @@ proc deleteSlot*(
 
   ok()
 
-proc deleteStorageTree*(
+proc clearStorage*(
     db: AristoTxRef;                   # Database, top layer
     accPath: Hash32;                   # Implies storage data tree
       ): Result[void,AristoError] =

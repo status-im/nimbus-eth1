@@ -47,12 +47,8 @@ nimbus-build-system.paths
 .vscode
 
 # EEST test vectors
-tests/fixtures/eest_static
-tests/fixtures/eest_stable
 tests/fixtures/eest_develop
-tests/fixtures/eest_devnet
 tests/fixtures/eest_bal
 
 execution_chain/nimbus
 GeneralStateTestsBal.md
-GeneralStateTestsStatic.md

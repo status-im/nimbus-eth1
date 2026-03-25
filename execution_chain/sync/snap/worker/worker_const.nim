@@ -75,7 +75,10 @@ const
 
   # -----------
 
-  fetchHeadersRlpxTimeout* = chronos.seconds(30)
+  nFetchHeaderPeersMax* = 5
+    ## Try at most this many `eth` peers for fetching a header
+
+  fetchHeaderRlpxTimeout* = chronos.seconds(30)
     ## Timeout cap for the `RLPX` handler when fetching header. This value
 
   # -----------

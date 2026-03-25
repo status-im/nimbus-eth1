@@ -11,3 +11,11 @@
 gcc -I./build/libverifproxy/ -L./build/libverifproxy/ -lverifproxy -lstdc++ -o proxy_from_c ./nimbus_verified_proxy/libverifproxy/example.c
 ./proxy_from_c
 ```
+
+### Required link flags by platform
+
+| Platform | Additional flags |
+|----------|-----------------|
+| macOS    | `-framework Security` |
+| Linux    | `-lm` |
+| Windows  | `-lbcrypt -lpthread -lws2_32` |
