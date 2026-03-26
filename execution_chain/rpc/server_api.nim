@@ -311,14 +311,6 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     api.txPool.addTx(pooledTx).isOkOr:
       raise newException(ValueError, $error)
 
-    debug "Submitted transaction",
-      endpoint = "eth_sendRawTransaction",
-      txHash = txHash,
-      sender = sender,
-      recipient = pooledTx.tx.getRecipient(sender),
-      nonce = pooledTx.tx.nonce,
-      value = pooledTx.tx.value
-
     txHash
 
   server.rpc("eth_call") do(args: TransactionArgs, blockTag: BlockTag) -> seq[byte]:
@@ -520,13 +512,6 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       raise newException(ValueError, $error)
 
     let txHash = computeRlpHash(signedTx)
-    info "Submitted transaction",
-      endpoint = "eth_sendTransaction",
-      txHash = txHash,
-      sender = address,
-      recipient = data.`to`.get(),
-      nonce = pooledTx.tx.nonce,
-      value = pooledTx.tx.value
 
     txHash
 
