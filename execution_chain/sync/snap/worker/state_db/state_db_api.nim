@@ -80,11 +80,24 @@ func rootStr*(state: StateDataRef): string
 # Private helpers
 # ------------------------------------------------------------------------------
 
-func findMaxUnproc(db: StateDbRef; maxBlock: BlockNumber): StateDataRef =
-  ## Find the DB record with the maximal unprocessed interval range with block
-  ## number at most `maxBlock`. If there are more items with the same range,
-  ## the one with the smaller block number is returned.
+func deletableState(db: StateDbRef): StateDataRef =
+  ## If the sate list is empty, `nil` is returned.
   ##
+  ## If the pivot state is not completed (i.e. has unprocessed data), this
+  ## function searches for the state with the maximal unprocessed accounts
+  ## data interval range with block number not exceeding the pivot state
+  ## block number. The resulting state will be returned which might include
+  ## the pivot state itself.
+  ##
+  ## If the pivot is completed  (i.e. no unprocessed data), it will never be
+  ## returned but the full state list without the pivot state is searched for
+  ## the state with maximal unprocessed accounts data interval. The result
+  ## might be `nil`.
+  ##
+  if db.byNumber.len == 0:                          # fringe condition
+    return StateDataRef(nil)                        # done (that was easy)
+  let
+    maxBlock = (if db.pivot.isNil: high BlockNumber else: db.pivot.blockNumber)
   var
     walk = WalkByNumber.init(db.byNumber)
     rc = walk.first                                 # increasing block height
@@ -95,21 +108,44 @@ func findMaxUnproc(db: StateDbRef; maxBlock: BlockNumber): StateDataRef =
 
   while rc.isOk:
     let state = rc.value.data
+    rc = walk.next                                  # set next state
     if maxBlock < state.blockNumber:
-      break                                         # no more records
-    state.unproc.total.isErrOr:                     # `err()` => `0` => ignore
-      if value == 0:
-        # Here: `0` => `2^256`, nothing done yet (you cannot beat that.)
+      break                                         # end of list (first pass)
+
+    state.unproc.total.isErrOr:                     # otherwise see below
+      if value == 0:                                # `0 => 2^256` => empty
         return state
       if unprocData < value:
         (result, unprocData) = (state, value)       # maximise stepwise
-    rc = walk.next                                  # increasing block height
+      continue
+    if result.isNil:                                # `err()` => empty state
+      (result, unprocData) = (state, 0.u256)        # maximise stepwise
     # End `while`
+
+  if result == db.pivot and
+     unprocData == 0 and                            # all accounts done with
+     0 < db.pivot.byAccount.len:                    # no more slots or code
+    # Now, a completed pivot state has the least block number. So re-initialise
+    # the minimiser and continue searching for least completed state.
+    (result, unprocData) = (StateDataRef(nil), low UInt256)
+    while rc.isOk:
+      let state = rc.value.data
+      rc = walk.next                                # set next state
+
+      state.unproc.total.isErrOr:                   # `err()` => `0` => ignore
+        if value == 0:                              # `0 => 2^256` => empty
+          return state
+        if unprocData < value:
+          (result, unprocData) = (state, value)     # maximise stepwise
+        continue
+      if result.isNil:                              # `err()` => empty state
+        result = state                              # initialise
+      # End `while`
 
   # result
 
 func findMinUnproc(db: StateDbRef): StateDataRef =
-  ## Finf the state with the least nprocessed interval range. If there are
+  ## Find the state with the least nprocessed interval range. If there are
   ## more items with the same# range, the one with the greater block number
   ## is returned.
   ##
@@ -122,14 +158,14 @@ func findMinUnproc(db: StateDbRef): StateDataRef =
   var unprocData = high(UInt256)                    # max value for minimiser
 
   while rc.isOk:
-    let
-      state = rc.value.data
-      stateUnproc = state.unproc.total.valueOr:     # `err()` => `0` => all done
-        return state
+    let state = rc.value.data
+    rc = walk.prev                                  # set previous state
+
+    let stateUnproc = state.unproc.total.valueOr:   # `err()` => `0` => all done
+      return state
     if stateUnproc != 0 and                         # `0` => `2^256`
        stateUnproc < unprocData:
       (result, unprocData) = (state, stateUnproc)   # minimise stepwise
-    rc = walk.prev                                  # decreasing block height
     # End `while`
 
   # result
@@ -211,7 +247,7 @@ proc register*(
   # Move block height window when necessary.
   if stateDbCapacity <= db.byNumber.len:
     # Clear item with the largest unprocessed data range
-    db.del db.findMaxUnproc(db.pivot.blockNumber)   # remove index columns
+    db.del db.deletableState()                      # remove index columns
     if db.pivot.isNil:                              # update pivot if evicted
       db.pivot = db.findMinUnproc()                 # night be `nil`
 
