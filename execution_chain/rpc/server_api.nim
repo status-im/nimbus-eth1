@@ -311,7 +311,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     api.txPool.addTx(pooledTx).isOkOr:
       raise newException(ValueError, $error)
 
-    info "Submitted transaction",
+    debug "Submitted transaction",
       endpoint = "eth_sendRawTransaction",
       txHash = txHash,
       sender = sender,
@@ -617,7 +617,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
   ) -> Opt[seq[ReceiptObject]]:
     ## Returns the receipts of a block.
     let
-      blk = api.blockFromTag(quantityTag, noHash = true).valueOr:
+      blk = api.blockFromTag(quantityTag).valueOr:
         raise newException(ValueError, "Block not found: " & error)
       blkHash = blk.header.computeBlockHash
       receipts = api.chain.receiptsByBlockHash(blkHash).valueOr:
