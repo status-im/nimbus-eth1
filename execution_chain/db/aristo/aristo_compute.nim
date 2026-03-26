@@ -426,6 +426,8 @@ proc computeKeyImpl(
                 ?batch.putVtxBlob(txRef.db, v[0], v[1].data())
 
             (keyvtxs[i][0][0], keyvtxs[i][1]) = ?sync(f)
+            keyQueues[i].dispose()
+            vtxBufQueues[i].dispose()
 
       template writeBranch(w: var RlpWriter, vtx: BranchRef): HashKey =
         w.encodeBranch(vtx):

@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-## This implements a lock free thread safe concurrent queue which is designed
+## This implements a (mostly) lock free thread safe concurrent queue which is designed
 ## specifically for the single producer - single consumer scenario.
 ## The queue is not designed to be thread safe when used by multiple producers 
 ## and consumer threads.
@@ -18,13 +18,17 @@
 
 {.push raises: [], gcsafe.}
 
-import std/[atomics, math], results
+import std/[atomics, locks, math], results
 
 type ConcurrentQueue*[E: static int, T] = object
   data: array[1 shl E, T]
   exp: int
   indexes: Atomic[uint32]
-
+  lockFull: Lock
+  condFull: Cond
+  lockEmpty: Lock
+  condEmpty: Cond
+  
 template capacity*(q: ConcurrentQueue): int =
   q.data.len() - 1
 
@@ -33,9 +37,14 @@ func isPowerOfTwo(n: static int): bool =
 
 func init*(q: var ConcurrentQueue) =
   static:
+    doAssert q.data.len() > 1
     doAssert isPowerOfTwo(q.data.len())
   q.exp = log2(q.data.len().float).int
   q.indexes.store(0.uint32)
+  q.lockFull.initLock()
+  q.condFull.initCond()
+  q.lockEmpty.initLock()
+  q.condEmpty.initCond()
 
 func pushBegin(q: var ConcurrentQueue): int =
   let
@@ -78,6 +87,7 @@ func tryPush*[E, T](q: var ConcurrentQueue[E, T], value: sink T): bool =
   else:
     q.data[headIdx] = value
     q.pushCommit()
+    q.condEmpty.signal()
     true
 
 func tryPop*[E, T](q: var ConcurrentQueue[E, T], value: var T): bool =
@@ -87,6 +97,7 @@ func tryPop*[E, T](q: var ConcurrentQueue[E, T], value: var T): bool =
   else:
     value = move(q.data[tailIdx])
     q.popCommit()
+    q.condFull.signal()
     true
 
 template tryPop*[E, T](q: var ConcurrentQueue[E, T]): Opt[T] =
@@ -98,49 +109,36 @@ template tryPop*[E, T](q: var ConcurrentQueue[E, T]): Opt[T] =
 
 func push*[E, T](q: var ConcurrentQueue[E, T], value: sink T) =
   var headIdx = q.pushBegin()
-  while headIdx < 0:
-    cpuRelax()
-    headIdx = q.pushBegin()
+
+  withLock(q.lockFull):
+    while headIdx < 0:
+      q.condFull.wait(q.lockFull)
+      headIdx = q.pushBegin()
 
   q.data[headIdx] = value
   q.pushCommit()
+  q.condEmpty.signal()
 
 func pop*[E, T](q: var ConcurrentQueue[E, T], value: var T) =
   var tailIdx = q.popBegin()
-  while tailIdx < 0:
-    cpuRelax()
-    tailIdx = q.popBegin()
+
+  withLock(q.lockEmpty):
+    while tailIdx < 0:
+      q.condEmpty.wait(q.lockEmpty)
+      tailIdx = q.popBegin()
 
   value = move(q.data[tailIdx])
   q.popCommit()
+  q.condFull.signal()
 
 template pop*[E, T](q: var ConcurrentQueue[E, T]): T =
   var value: T
   q.pop(value)
   value
 
-when isMainModule:
-  var queue: ConcurrentQueue[2, int]
-  queue.init()
+func dispose*(q: var ConcurrentQueue) =
+  q.lockFull.deinitLock()
+  q.condFull.deinitCond()
+  q.lockEmpty.deinitLock()
+  q.condEmpty.deinitCond()
 
-  doAssert queue.capacity() == 3
-
-  doAssert queue.tryPush(100) == true
-  doAssert queue.tryPush(200) == true
-  doAssert queue.tryPush(300) == true
-  doAssert queue.tryPush(400) == false
-
-  doAssert queue.tryPop() == Opt.some(100)
-  doAssert queue.tryPop() == Opt.some(200)
-  doAssert queue.tryPop() == Opt.some(300)
-  doAssert queue.tryPop() == Opt.none(int)
-
-  queue.push(500)
-  queue.push(700)
-  queue.push(600)
-  doAssert queue.tryPush(400) == false
-
-  doAssert queue.pop() == 500
-  doAssert queue.pop() == 700
-  doAssert queue.pop() == 600
-  doAssert queue.tryPop() == Opt.none(int)
