@@ -26,9 +26,9 @@ type
 func `<`(a, b: Closure): bool =
   cmpMem(a.address.data[0].addr, b.address.data[0].addr, 20) < 0
 
-func createSelfDestructLog(beneficiary: Address, value: UInt256): Log =
-  # Selfdestruct event signature (keccak256('Selfdestruct(address,uint256)'))
-  const eventSig = bytes32"0x4bfaba3443c1a1836cd362418edc679fc96cae8449cbefccb6457cdf2c943083"
+func createBurnLog(beneficiary: Address, value: UInt256): Log =
+  # Burn event signature (keccak256('Burn(address,uint256)'))
+  const eventSig = bytes32"0xcc16f5dbb4873280815c1ee09dbd06736cffcc184412cf7a71a0fdb75d397ca5"
   result.topics = newSeq[Topic](2)
   result.address = SYSTEM_ADDRESS
   assign(result.topics[0], eventSig)
@@ -57,8 +57,8 @@ func emitSelfDestructLog*(c: Computation, beneficiary: Address, value: UInt256, 
     # SELFDESTRUCT to other → Transfer log (LOG3)
     c.addLogEntry(createTransferLog(c.msg.contractAddress, beneficiary, value))
   elif newContract:
-    # SELFDESTRUCT to self → Selfdestruct log (LOG2)
-    c.addLogEntry(createSelfDestructLog(beneficiary, value))
+    # SELFDESTRUCT to self → Burn log (LOG2)
+    c.addLogEntry(createBurnLog(beneficiary, value))
 
 func emitTransferLog*(c: Computation) =
   if c.msg.value.isZero:
@@ -70,12 +70,12 @@ func emitTransferLog*(c: Computation) =
   c.addLogEntry(createTransferLog(c.msg.sender, c.msg.contractAddress, c.msg.value))
 
 proc emitClosureLogs*(vmState: BaseVMState, logs: var seq[Log]) =
-  # Collect selfdestruct addresses with nonzero balances, sorted lexicographically
+  # Collect addresses with nonzero balances, sorted lexicographically
   var closures = initHeapQueue[Closure]()
   for address, value in vmState.ledger.nonZeroSelfDestructAccounts:
     closures.push(Closure(address: address, value: value))
 
-  # Emit Selfdestruct log for each closure
+  # Emit Burn log for each closure
   while closures.len > 0:
     let cc = closures.pop()
-    logs.add(createSelfDestructLog(cc.address, cc.value))
+    logs.add(createBurnLog(cc.address, cc.value))

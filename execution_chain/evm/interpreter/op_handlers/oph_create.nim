@@ -19,6 +19,7 @@ import
   ../../evm_errors,
   ../../../common/evmforks,
   ../../../utils/utils,
+  ../../../core/eip8037,
   ../../computation,
   ../../memory,
   ../../stack,
@@ -46,15 +47,26 @@ proc execSubCreate(c: Computation; childMsg: Message;
     child = newComputation(c.vmState, keepStack = false, childMsg, code)
 
   c.chainTo(child):
-    if not child.shouldBurnGas:
+    if child.shouldBurnGas:
+      c.gasMeter.appendRegularGasUsed(child.gasMeter.regularGasUsed + child.gasMeter.gasRemaining)
+    else:
       c.gasMeter.returnGas(child.gasMeter.gasRemaining)
+      c.gasMeter.appendRegularGasUsed(child.gasMeter.regularGasUsed)
 
     if child.isSuccess:
+      c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
+      c.gasMeter.appendStateGasUsed(child.gasMeter.stateGasUsed)
       c.merge(child)
       c.stack.lsTop child.msg.contractAddress
-    elif not child.error.burnsGas: # Means return was `REVERT`.
-      # From create, only use `outputData` if child returned with `REVERT`.
-      c.returnData = move(child.output)
+    else:
+      # On failure (revert or exceptional halt) state changes are rolled back,
+      # so no state was actually grown.  All state gas, both reservoir and any
+      # that spilled into `gas_left`, is restored to the parent's reservoir and
+      # the child's `state_gas_used` is not accumulated.
+      c.gasMeter.returnStateGas(child.gasMeter.stateGasUsed + child.gasMeter.stateGasLeft)
+      if not child.error.burnsGas: # Means return was `REVERT`.
+        # From create, only use `outputData` if child returned with `REVERT`.
+        c.returnData = move(child.output)
     ok()
 
 
@@ -65,7 +77,6 @@ proc execSubCreate(c: Computation; childMsg: Message;
 
 proc createOp(cpt: VmCpt): EvmResultVoid =
   ## 0xf0, Create a new account with associated code
-  ? cpt.checkInStaticContext()
   ? cpt.stack.lsCheck(3)
 
   let
@@ -76,27 +87,35 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
   cpt.stack.lsShrink(2)
   cpt.stack.lsTop(0)
 
-  # EIP-7954
-  if cpt.fork >= FkAmsterdam and memLen > EIP7954_MAX_INITCODE_SIZE:
-    trace "Initcode size exceeds EIP-7954 maximum", initcodeSize = memLen
-    return err(opErr(InvalidInitCode))
-
-  # EIP-3860
-  if cpt.fork >= FkShanghai and memLen > EIP3860_MAX_INITCODE_SIZE:
-    trace "Initcode size exceeds EIP-3860 maximum", initcodeSize = memLen
-    return err(opErr(InvalidInitCode))
-
   let
     gasParams = GasParamsCr(
       currentMemSize: cpt.memory.len,
       memOffset:      memPos,
       memLength:      memLen)
-    gasCost = cpt.gasCosts[Create].cr_handler(1.u256, gasParams)
+    gasCost = cpt.gasCosts[Create].cr_handler(false, gasParams)
 
   ? cpt.opcodeGasCost(Create,
     gasCost, reason = "CREATE: GasCreate + memLen * memory expansion")
+
   cpt.memory.extend(memPos, memLen)
   cpt.returnData.setLen(0)
+
+  if cpt.fork >= FkShanghai:
+    if cpt.fork >= FkAmsterdam:
+      # charge state gas before `checkInStaticContext`
+      ? cpt.gasMeter.chargeStateGas(STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte,
+        reason = "CREATE: State gas new account")
+
+      # EIP-7954
+      if memLen > EIP7954_MAX_INITCODE_SIZE:
+        trace "Initcode size exceeds EIP-7954 maximum", initcodeSize = memLen
+        return err(opErr(InvalidInitCode))
+    elif memLen > EIP3860_MAX_INITCODE_SIZE:
+      # EIP-3860
+      trace "Initcode size exceeds EIP-3860 maximum", initcodeSize = memLen
+      return err(opErr(InvalidInitCode))
+
+  ? cpt.checkInStaticContext()
 
   if cpt.msg.depth >= MaxCallDepth:
     debug "Computation Failure",
@@ -117,13 +136,17 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
   var createMsgGas = cpt.gasMeter.gasRemaining
   if cpt.fork >= FkTangerine:
     createMsgGas -= createMsgGas div 64
-  ? cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE msg gas")
+  cpt.gasMeter.gasRemaining -= createMsgGas
+
+  let stateGas = cpt.gasMeter.stateGasLeft
+  cpt.gasMeter.stateGasLeft = 0.GasInt
 
   var
     childMsg = Message(
       kind:   CallKind.Create,
       depth:  cpt.msg.depth + 1,
       gas:    createMsgGas,
+      stateGas: stateGas,
       sender: cpt.msg.contractAddress,
       contractAddress: generateContractAddress(
         cpt.vmState,
@@ -138,7 +161,6 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
 
 proc create2Op(cpt: VmCpt): EvmResultVoid =
   ## 0xf5, Behaves identically to CREATE, except using keccak256
-  ? cpt.checkInStaticContext()
   ? cpt.stack.lsCheck(4)
 
   let
@@ -151,29 +173,37 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
   cpt.stack.lsShrink(3)
   cpt.stack.lsTop(0)
 
-  # EIP-7954
-  if cpt.fork >= FkAmsterdam and memLen > EIP7954_MAX_INITCODE_SIZE:
-    trace "Initcode size exceeds EIP-7954 maximum", initcodeSize = memLen
-    return err(opErr(InvalidInitCode))
-
-  # EIP-3860
-  if cpt.fork >= FkShanghai and memLen > EIP3860_MAX_INITCODE_SIZE:
-    trace "Initcode size exceeds EIP-3860 maximum", initcodeSize = memLen
-    return err(opErr(InvalidInitCode))
-
   let
     gasParams = GasParamsCr(
       currentMemSize: cpt.memory.len,
       memOffset:      memPos,
       memLength:      memLen)
 
-  var gasCost = cpt.gasCosts[Create].cr_handler(1.u256, gasParams)
+  var gasCost = cpt.gasCosts[Create].cr_handler(false, gasParams)
   gasCost = gasCost + cpt.gasCosts[Create2].m_handler(0, 0, memLen)
 
   ? cpt.opcodeGasCost(Create2,
     gasCost, reason = "CREATE2: GasCreate + memLen * memory expansion")
+
   cpt.memory.extend(memPos, memLen)
   cpt.returnData.setLen(0)
+
+  if cpt.fork >= FkShanghai:
+    if cpt.fork >= FkAmsterdam:
+      # charge state gas before `checkInStaticContext`
+      ? cpt.gasMeter.chargeStateGas(STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte,
+        reason = "CREATE2: State gas new account")
+
+      # EIP-7954
+      if memLen > EIP7954_MAX_INITCODE_SIZE:
+        trace "Initcode size exceeds EIP-7954 maximum", initcodeSize = memLen
+        return err(opErr(InvalidInitCode))
+    elif memLen > EIP3860_MAX_INITCODE_SIZE:
+      # EIP-3860
+      trace "Initcode size exceeds EIP-3860 maximum", initcodeSize = memLen
+      return err(opErr(InvalidInitCode))
+
+  ? cpt.checkInStaticContext()
 
   if cpt.msg.depth >= MaxCallDepth:
     debug "Computation Failure",
@@ -194,7 +224,10 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
   var createMsgGas = cpt.gasMeter.gasRemaining
   if cpt.fork >= FkTangerine:
     createMsgGas -= createMsgGas div 64
-  ? cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE2 msg gas")
+  cpt.gasMeter.gasRemaining -= createMsgGas
+
+  let stateGas = cpt.gasMeter.stateGasLeft
+  cpt.gasMeter.stateGasLeft = 0.GasInt
 
   var
     code = CodeBytesRef.init(cpt.memory.read(memPos, memLen))
@@ -202,6 +235,7 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
       kind:   CallKind.Create2,
       depth:  cpt.msg.depth + 1,
       gas:    createMsgGas,
+      stateGas: stateGas,
       sender: cpt.msg.contractAddress,
       contractAddress: generateContractAddress(
         cpt.vmState,
