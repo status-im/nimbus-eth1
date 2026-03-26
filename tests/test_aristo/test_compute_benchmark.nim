@@ -25,7 +25,7 @@ suite "Aristo compute benchmarks":
   const 
     NUM_THREADS = 16
     NUM_FRAMES = 10
-    NUM_ACCOUNTS_PER_FRAME = 200000
+    NUM_ACCOUNTS_PER_FRAME = 400000
 
   setup:
     let db = AristoDbRef.init()
