@@ -128,7 +128,7 @@ proc mergeKeyAtLevel(
   doAssert level >= txRef.db.baseTxFrame().level
 
   let frame = txRef.deltaAtLevel(level)
-  withWriteLock(frame.db.lock):
+  withWriteLock(frame.lock):
     frame.layersMergeKey(rvid, key)
 
 proc putVtxBlob(
@@ -179,9 +179,9 @@ proc getKey(
   when not skipLayers:
     block body:
       when parallel:
-        txRef.db.lock.lockRead()
+        txRef.lock.lockRead()
         defer:
-          txRef.db.lock.unlockRead()
+          txRef.lock.unlockRead()
       
       let key = txRef.layersGetKey(rvid).valueOr:
         break body

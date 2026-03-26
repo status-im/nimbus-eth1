@@ -24,16 +24,16 @@ import
 suite "Aristo compute benchmarks":
   const 
     NUM_THREADS = 16
-    NUM_ACCOUNTS = 2000000
+    NUM_FRAMES = 10
+    NUM_ACCOUNTS_PER_FRAME = 200000
 
   setup:
     let db = AristoDbRef.init()
     var txFrame = db.txRef
     db.taskpool = Taskpool.new(numThreads = NUM_THREADS)
 
-    const HALF_ACCOUNTS = NUM_ACCOUNTS div 2
 
-    for i in 0 ..< HALF_ACCOUNTS:
+    for i in 0 ..< NUM_ACCOUNTS_PER_FRAME:
       check:
         txFrame.mergeAccount(
           cast[Hash32](i), 
@@ -44,14 +44,23 @@ suite "Aristo compute benchmarks":
     db.persist(batch, txFrame)
     check db.putEndFn(batch).isOk()
     
-    txFrame = db.txFrameBegin(db.baseTxFrame())
+    txFrame = db.baseTxFrame()
     
-    for i in HALF_ACCOUNTS ..< NUM_ACCOUNTS:
-      check:
-        txFrame.mergeAccount(
-          cast[Hash32](i), 
-          AristoAccount(balance: i.u256(), codeHash: EMPTY_CODE_HASH)) == Result[bool, AristoError].ok(true)
-    txFrame.checkpoint(1, skipSnapshot = false)
+    for n in 1 .. NUM_FRAMES:
+      txFrame = db.txFrameBegin(txFrame)
+
+      let 
+        startIdx = NUM_ACCOUNTS_PER_FRAME * n
+        endIdx = startIdx + NUM_ACCOUNTS_PER_FRAME
+
+      for i in startIdx ..< endIdx:
+        check:
+          txFrame.mergeAccount(
+            cast[Hash32](i * i), 
+            AristoAccount(balance: i.u256(), codeHash: EMPTY_CODE_HASH)) == Result[bool, AristoError].ok(true)
+      
+      txFrame.checkpoint(1, skipSnapshot = false)
+
 
   test "Serial benchmark - skipLayers = false":
     db.parallelStateRootComputation = false

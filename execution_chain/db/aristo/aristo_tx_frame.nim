@@ -132,14 +132,22 @@ proc txFrameBegin*(
   let parent = if parentFrame == nil: db.txRef else: parentFrame
   doAssert not parent.isDisposed()
 
-  AristoTxRef(
+  let txRef = AristoTxRef(
     db: db,
     parent: parent,
     kMap: if moveParentHashKeys: move(parent.kMap) else: default(parent.kMap.type),
     vTop: parent.vTop,
     level: parent.level + 1)
 
+  when compileOption("threads"):
+    txRef.lock = ReadWriteLock.init()
+  
+  txRef
+
 proc dispose*(txFrame: AristoTxRef) =
+  when compileOption("threads"):
+    txFrame.lock.dispose()
+
   if not txFrame.db.isNil():
     txFrame.db.removeSnapshotFrame(txFrame)
   txFrame[].reset()

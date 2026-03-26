@@ -69,6 +69,10 @@ template withWriteLock*(rwLock: var ReadWriteLock, body: untyped) =
   finally:
     rwLock.unlockWrite()
 
+func dispose*(rwLock: var ReadWriteLock) =
+  deinitLock(rwLock.lock)
+  deinitCond(rwLock.cond)
+
 when isMainModule:
   var rwLock = ReadWriteLock.init()
 

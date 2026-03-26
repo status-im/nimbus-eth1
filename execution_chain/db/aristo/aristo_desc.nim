@@ -86,6 +86,11 @@ type
       ## -1 = stored in database, where relevant though typically should be
       ## compared with the base layer level instead.
 
+    when compileOption("threads"):      
+      lock*: ReadWriteLock
+        ## A read-write lock used to support thread safe reads and writes to the 
+        ## database from multiple threads.
+
   Snapshot* = object
     vtx*: Table[RootedVertexID, VtxSnapshot]
     acc*: Table[Hash32, (AccLeafRef, int)]
@@ -145,10 +150,6 @@ type
     when compileOption("threads"):
       taskpool*: Taskpool
         ## Shared task pool for offloading computation to other threads.
-      
-      lock*: ReadWriteLock
-        ## A read-write lock used to support thread safe reads and writes to the 
-        ## database from multiple threads.
 
   Leg* = object
     ## For constructing a `VertexPath`
