@@ -68,13 +68,14 @@ type
   StateDbRef* = ref object
     ## Download states db
     unproc: ItemKeyRangeSet             ## Globally unprocessed accounts
-    overlays: uint                      ## Number of `unproc` resets/re-inits
+    carryOver: float                    ## Number of `unproc` resets/re-inits
     pivot: StateDataRef                 ## Least unproc data
     byNumber: StateByNumber             ## States indexed by block number
     byHash: StateByHash                 ## States indexed by block hash
     byRoot: StateByRoot                 ## States indexed by state root
 
 func rootStr*(state: StateDataRef): string
+func accuAccountsCoverage*(db: StateDbRef): float
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -176,10 +177,8 @@ proc resetMetrics(db: StateDbRef) =
   metrics.set(nec_snap_active_states, 0)
 
 proc updateMetrics(db: StateDbRef) =
-  metrics.set(nec_snap_accumulated_state_coverage,
-              ((1f - db.unproc.totalRatio) * (1+db.overlays).float))
-  metrics.set(nec_snap_pivot_state_coverage,
-              (1f - db.pivot.unproc.totalRatio))
+  metrics.set(nec_snap_accumulated_state_coverage, db.accuAccountsCoverage())
+  metrics.set(nec_snap_pivot_state_coverage, (1f - db.pivot.unproc.totalRatio))
   metrics.set(nec_snap_active_states, db.byRoot.len)
 
 # ------------------------------------------------------------------------------
@@ -194,7 +193,7 @@ proc init*(T: type StateDbRef): T =
   db
 
 proc clear*(db: StateDbRef) =
-  db.overlays = 0
+  db.carryOver = 0f
   db.pivot = StateDataRef(nil)
   db.unproc.clear
   db.byNumber.clear
@@ -225,9 +224,11 @@ proc register*(
       db.pivot = StateDataRef(nil)
     debug info & ": evicted state record", root=state.rootStr,
       hash=state.blockHash.toStr, isPivot=db.pivot.isNil
-    # Roll back global unproc register
+    # Roll back global unproc register (as best as possible)
+    var carry = 0.u256
     for iv in state.unproc.unprocessed.complement.increasing:
-      discard db.unproc.merge(iv)                   # hand back interval
+      carry += db.unproc.merge(iv)                  # hand back interval
+    db.carryOver -= carry.per256                    # adjust by carry over field
     state.deadState = true                          # mark it evicted
 
   db.byNumber.eq(number).isErrOr:
@@ -326,6 +327,10 @@ proc isOperable*(state: StateDataRef): bool =
   ## Check whether the state has not been evicted
   not state.deadState
 
+func accuAccountsCoverage*(db: StateDbRef): float =
+  ## Coverage of accounts over all states
+  (1f - db.unproc.totalRatio) + db.carryOver
+
 # ------------------------------------------------------------------------------
 # Public unprocessed account ranges administration
 # -----------------------------------------------------------------------------
@@ -359,9 +364,10 @@ proc fetchAccountRange*(
   if state.deadState or                             # evicted
      state.unproc.avail().isErr():                  # all done this state
     return err()
+
+  # Carry over empty register and re-initialise
   if db.unproc.chunks == 0:
-    # Re-fill global register if exhausted
-    db.overlays.inc
+    db.carryOver += 1f
     db.unproc = ItemKeyRangeSet.init ItemKeyRangeMax
 
   # Fetch interval from state, coordinated by the global register. This results
@@ -451,6 +457,11 @@ proc setAccountRange*(
     db.pivot.unproc.total.isErrOr:                  # otherwise all done
       if value == 0 or state.unproc.total.value < value:
         db.pivot = state
+
+    # Carry over empty register and re-initialise
+    if db.unproc.chunks == 0:
+      db.carryOver += 1f
+      db.unproc = ItemKeyRangeSet.init ItemKeyRangeMax
 
     db.updateMetrics()
 
@@ -663,7 +674,7 @@ func toStr*(db: StateDbRef): string =
     result &= "(" & $state.byAccount.len & ")"
     result &= ","
   result[^1] = '}'
-  result &= ":" & db.unproc.totalRatio.toStr(7) & "!" & $db.overlays
+  result &= ":" & db.accuAccountsCoverage.toStr(7)
 
 # ------------------------------------------------------------------------------
 # End
