@@ -32,12 +32,14 @@ if defined(release) and not defined(disableLTO):
   # "-w" is not passed to the compiler during linking, so we need to disable
   # some warnings by hand.
   switch("passL", "-Wno-stringop-overflow -Wno-stringop-overread")
-  # TODO https://github.com/nim-lang/Nim/issues/25657 cannot use if defined..
-  put("gcc.options.always", get("gcc.options.always") & " -flto=auto -finline-limit=100000")
-  put("gcc.options.linker", get("gcc.options.linker") & " -flto=auto -finline-limit=100000")
 
-  put("clang.options.always", get("clang.options.always") & " -flto=thin")
-  put("clang.options.linker", get("clang.options.linker") & " -flto=thin")
+  # lto_incremental available as of Nim 1.6.14 / https://github.com/nim-lang/Nim/pull/21679
+  switch("define", "lto_incremental")
+
+  # According to early measurements, this helped make LTO make better choices -
+  # it probably needs to be re-tested for newer GCC versions..
+  put("gcc.options.always", get("gcc.options.always") & " -finline-limit=100000")
+  put("gcc.options.linker", get("gcc.options.linker") & " -finline-limit=100000")
 
   if defined(macosx):
     # https://clang.llvm.org/docs/CommandGuide/clang.html#cmdoption-flto
