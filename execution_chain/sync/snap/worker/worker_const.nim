@@ -58,6 +58,22 @@ const
   lockWaitPollingTime* = chronos.milliseconds(500)
     ## Polling for a lock to be released
 
+  accuAccountsCovMin* = 2.0
+    ## In absence of a completed pivot state, the syncer will stop downloading
+    ## if all accounts are covered at least by this factor. Then trie-assembly
+    ## and healing can take place if the pivot state is also sufficiently
+    ## covered (see  `accuPivotCovMin` below.)
+    ##
+    ## The reasoning for getting away without a completed pivot is that state
+    ## changes between consecutive trie states are small. There is a fair
+    ## chance that the pivot state will also have valid accounts identical
+    ## with other states.
+
+  accuPivotCovMin* = 0.7
+    ## If the total coverage has reached the factor `accuAccountsCovMin`, the
+    ## pivot must also have reached the factor `accuPivotCovMin` in order to
+    ## start trie assembly and healing.
+
   # ----------------------
 
   unprocAccountsRangeMax* = (1.u256 shl 240) # ~65k intervals

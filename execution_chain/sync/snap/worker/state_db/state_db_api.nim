@@ -323,32 +323,32 @@ proc setHealingReady*(state: StateDataRef) =
 proc getHealingReady*(state: StateDataRef): bool =
   state.healingReady
 
+
 proc isOperable*(state: StateDataRef): bool =
   ## Check whether the state has not been evicted
   not state.deadState
+
+proc isComplete*(state: StateDataRef): bool =
+  ## Check whether the state is complete
+  if not state.deadState and
+     state.unproc.unprocessed.chunks() == 0 and     # all accounts done with
+     0 < state.byAccount.len:                       # no more slots or code
+    return true
+  # false
 
 func accuAccountsCoverage*(db: StateDbRef): float =
   ## Coverage of accounts over all states
   (1f - db.unproc.totalRatio) + db.carryOver
 
+func accountsCoverage*(state: StateDataRef): float =
+  ## Coverage of accounts for a particular state
+  if not state.deadState:
+    return 1f - state.unproc.unprocessed.totalRatio # ignores `borrowed` items
+  # 0f
+
 # ------------------------------------------------------------------------------
 # Public unprocessed account ranges administration
 # -----------------------------------------------------------------------------
-
-proc totalAccountRange*(
-    state: StateDataRef;                            # current state record
-      ): Opt[UInt256] =
-  ## Get the accumulated lengths of the account ranges left for downloading.
-  ##
-  ## Due to residue class arithmetic and limitations of the number range
-  ## `UInt256`, the maximum value `2^256` is returned as `ok(0)`, while the
-  ## least value `0` (i.e. nothing left) is returned as `err()`.
-  ##
-  ## If the state was evicted from the database, `err()` (for `0`) is
-  ## returned.
-  ##
-  if state.deadState: err()
-  else: state.unproc.total()
 
 proc fetchAccountRange*(
     db: StateDbRef;

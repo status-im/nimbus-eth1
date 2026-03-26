@@ -19,6 +19,29 @@ logScope:
   topics = "snap sync"
 
 # ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+func pivotIsComplete(ctx: SnapCtxRef): bool =
+  ## State transition helper
+  ctx.pool.stateDB.pivot().isErrOr:
+    if value.isComplete():
+      return true
+  # false
+
+func pivotIsSufficient(ctx: SnapCtxRef): bool =
+  ## State transition helper
+  let sdb = ctx.pool.stateDB
+  # Check acummulated coverage
+  if sdb.accuAccountsCoverage() < accuAccountsCovMin:
+    return false                                    # not enough yet => fail
+  # Check pivot state
+  sdb.pivot().isErrOr:
+    if accuPivotCovMin <= value.accountsCoverage(): # check pivot coverage
+      return true                                   # enough => OK
+  false
+
+# ------------------------------------------------------------------------------
 # Private FSA transition functions
 # ------------------------------------------------------------------------------
 
@@ -33,25 +56,22 @@ proc resumeNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   # Recover session (if any)
   if ctx.sessionResume(info):
     debug info & ": resuming download session"
+    if ctx.pivotIsComplete():
+      return SnapMkTrie
   SnapReady
 
-proc readyNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+func readyNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
   if ctx.pool.target.isSome() or
      ctx.hdrCache.headHash() != zeroHash32:
     return SnapDownload
   SnapReady
 
-proc downloadNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+func downloadNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
-  let sdb = ctx.pool.stateDB
-  sdb.pivot().isErrOr:
-    # Check whether the `pivot` data have been fully downloaded
-    if value.totalAccountRange().isErr():           # err => all accounts done
-      if not value.hasCodeOrStorage():              # no slots/code todo
-        return SnapMkTrie
-    # Check whether total coverage is sufficient
-    # TBD ..
+  if ctx.pivotIsComplete() or
+     ctx.pivotIsSufficient():
+    return SnapMkTrie
   SnapDownload
 
 func mkTrieNext(ctx: SnapCtxRef; info: static[string]): SyncState =
@@ -84,24 +104,25 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]) =
   ##
   # State machine
   # ::
-  #     idle  resume
-  #      |     /
-  #      |    /
-  #      |   /
-  #      v  v
-  #     ready
-  #      |
-  #      v
-  #     download <--.
-  #      |          |
-  #      v          |
-  #     mkTrie -----'
-  #      |
-  #      v
-  #     healing
-  #      |
-  #      v
-  #     TBD ..
+  #       initialise
+  #        |      |
+  #        v      v
+  #    resume   idle
+  #      | |      |
+  #      | |      v
+  #      | `--> ready
+  #      |        |
+  #      |        v
+  #      |     download <--.
+  #      |        |        |
+  #      |        v        |
+  #      `----> mkTrie ----'
+  #               |
+  #               v
+  #            healing
+  #               |
+  #               v
+  #              TBD ..
   #
   let newState =
     case ctx.pool.syncState:
