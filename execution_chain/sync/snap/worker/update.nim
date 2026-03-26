@@ -184,6 +184,17 @@ template updateFcuRoot*(buddy: SnapPeerRef, info: static[string]) =
   ## Add state record derived from CL finalised hash. Register it done.
   ## So it is not repeatedly re-processed (up to some race conditions.)
   ##
+  ## Note that the best/latest header is not useful here as a substitute
+  ## for the CL finalised hash. Reasons are
+  ##
+  ## * It needs to be verified by a header back chain starting from a CL
+  ##   header at some time (as only the CL has authority.)
+  ##
+  ## * when starting a peer, it was observed (on `hoodi`) that the pper's
+  ##   best/latest header had a block number slightly larger than the latest
+  ##   cached CL finalised hash (which might be due to a race condition of
+  ##   two separate network entities.)
+  ##
   block body:
     if buddy.only.finRoot.isSome():
       break body                                    # nothing to do

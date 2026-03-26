@@ -117,11 +117,11 @@ template headerFetch*(
       break body                                    # return err()
     let rHash = BlockHash(h[0].computeBlockHash)
     if rHash != blockHash:
-      trace recvInfo & " garbled header", peer, hash, nReq,
-        recvHash=blockHash.toStr, expected=rHash.toStr, ela
+      trace recvInfo & " garbled header", peer, hash, blockNumber=h[0].number,
+        nReq, recvHash=blockHash.toStr, expected=rHash.toStr, ela
       break body                                    # return err()
 
-    trace recvInfo, peer, hash, nReq, nRecv=1, ela
+    trace recvInfo, peer, hash, blockNumber=h[0].number, nReq, nRecv=1, ela
     bodyRc = typeof(bodyRc).ok(h[0])
 
   bodyRc # return
