@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2025 Status Research & Development GmbH
+# Copyright (c) 2019-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,6 +14,7 @@ import
   unittest2,
   stew/[endians2, byteutils],
   ../execution_chain/common/common,
+  ../execution_chain/db/core_db/memory_only,
   ../execution_chain/utils/utils
 
 const

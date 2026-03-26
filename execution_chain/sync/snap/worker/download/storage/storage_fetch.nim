@@ -140,7 +140,7 @@ template fetchStorage*(
           buddy.ctrl.zombie = true
         of ECatchableError:
           buddy.stoFetchRegisterError()
-        of ENoDataAvailable, EMissingEthContext:
+        of ENoDataAvailable, EMissingEthContext, ETrieError, ELockError:
           # Not allowed here -- internal error
           raiseAssert "Unexpected error " & $rc.error.excp
 

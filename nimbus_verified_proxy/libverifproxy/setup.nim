@@ -32,15 +32,17 @@ proc transportCallback[T](
     # pointer on the C side. Also allows managing the memeory on one end only.
     let deserResult = unpackArg($res, T)
     if deserResult.isErr():
-      data.fut.complete(EngineResult[T].err((BackendDecodingError, deserResult.error)))
+      data.fut.complete(
+        EngineResult[T].err((BackendDecodingError, deserResult.error, UNTAGGED))
+      )
       return
     data.fut.complete(EngineResult[T].ok(deserResult.get()))
   elif status == RET_ERROR:
-    data.fut.complete(EngineResult[T].err((BackendError, $res)))
+    data.fut.complete(EngineResult[T].err((BackendFetchError, $res, UNTAGGED)))
   elif status == RET_CANCELLED:
     data.fut.fail((ref CancelledError)(msg: $res))
 
-proc getRandomBackendUrl(rng: ref HmacDrbgContext, urls: seq[Web3Url]): string =
+proc getRandomBackendUrl(rng: ref HmacDrbgContext, urls: seq[string]): string =
   var randomNum: uint64
   rng[].generate(randomNum)
 
@@ -48,12 +50,10 @@ proc getRandomBackendUrl(rng: ref HmacDrbgContext, urls: seq[Web3Url]): string =
   # this introduces a bias in the output distribution but is negligible
   # for this use case. The bias becomes insignificant when score filters
   # are used to select clients in the future.
-  let url = urls[randomNum mod uint64(urls.len)]
-
-  url.web3Url
+  urls[randomNum mod uint64(urls.len)]
 
 proc getEthApiBackend*(
-    ctx: ptr Context, urls: seq[Web3Url], transportProc: TransportProc
+    ctx: ptr Context, urls: seq[string], transportProc: TransportProc
 ): EthApiBackend =
   let
     rng = keys.newRng()
@@ -81,7 +81,7 @@ proc getEthApiBackend*(
           Future[EngineResult[BlockObject]].Raising([CancelledError]).init("blkByHash")
         fullFlagStr = if fullTransactions: "true" else: "false"
         blkHashSer = packArg(blkHash).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, UNTAGGED))
         params = "[" & blkHashSer & ", " & fullFlagStr & "]"
         url = getRandomBackendUrl(rng, urls)
 
@@ -104,7 +104,7 @@ proc getEthApiBackend*(
           )
         fullFlagStr = if fullTransactions: "true" else: "false"
         blkNumSer = packArg(blkNum).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, UNTAGGED))
         params = "[" & blkNumSer & ", " & fullFlagStr & "]"
         url = getRandomBackendUrl(rng, urls)
 
@@ -125,11 +125,11 @@ proc getEthApiBackend*(
         fut =
           Future[EngineResult[ProofResponse]].Raising([CancelledError]).init("getProof")
         addressSer = packArg(address).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, UNTAGGED))
         slotsSer = packArg(slots).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, UNTAGGED))
         blockIdSer = packArg(blockId).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, UNTAGGED))
 
         params = "[" & addressSer & ", " & slotsSer & ", " & blockIdSer & "]"
         url = getRandomBackendUrl(rng, urls)
@@ -152,9 +152,9 @@ proc getEthApiBackend*(
             "createAL"
           )
         txArgsSer = packArg(txArgs).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, UNTAGGED))
         blockIdSer = packArg(blockId).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, UNTAGGED))
         params = "[" & txArgsSer & ", " & blockIdSer & "]"
         url = getRandomBackendUrl(rng, urls)
 
@@ -174,9 +174,9 @@ proc getEthApiBackend*(
       let
         fut = Future[EngineResult[seq[byte]]].Raising([CancelledError]).init("getCode")
         addressSer = packArg(address).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, UNTAGGED))
         blockIdSer = packArg(blockId).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, UNTAGGED))
         params = "[" & addressSer & ", " & blockIdSer & "]"
         url = getRandomBackendUrl(rng, urls)
 
@@ -198,7 +198,7 @@ proc getEthApiBackend*(
             "getTxByHash"
           )
         txHashSer = packArg(txHash).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, UNTAGGED))
         params = "[" & txHashSer & "]"
         url = getRandomBackendUrl(rng, urls)
 
@@ -220,7 +220,7 @@ proc getEthApiBackend*(
             "getRxByHash"
           )
         txHashSer = packArg(txHash).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, UNTAGGED))
         params = "[" & txHashSer & "]"
         url = getRandomBackendUrl(rng, urls)
 
@@ -244,7 +244,7 @@ proc getEthApiBackend*(
           .Raising([CancelledError])
           .init("getBlockRxs")
         blockIdSer = packArg(blockId).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, UNTAGGED))
         params = "[" & blockIdSer & "]"
         url = getRandomBackendUrl(rng, urls)
 
@@ -265,7 +265,7 @@ proc getEthApiBackend*(
         fut =
           Future[EngineResult[seq[LogObject]]].Raising([CancelledError]).init("getLogs")
         filterOptionsSer = packArg(filterOptions).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, UNTAGGED))
         params = "[" & filterOptionsSer & "]"
         url = getRandomBackendUrl(rng, urls)
 
@@ -279,13 +279,40 @@ proc getEthApiBackend*(
       )
       await fut
 
+    feeHistoryProc = proc(
+        blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[int]
+    ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).} =
+      let
+        fut = Future[EngineResult[FeeHistoryResult]].Raising([CancelledError]).init(
+            "feeHistory"
+          )
+        blockCountSer = packArg(blockCount).valueOr:
+          return err((BackendEncodingError, error, UNTAGGED))
+        newestBlockSer = packArg(newestBlock).valueOr:
+          return err((BackendEncodingError, error, UNTAGGED))
+        rewardPercentilesSer = packArg(rewardPercentiles).valueOr:
+          return err((BackendEncodingError, error, UNTAGGED))
+        params =
+          "[" & blockCountSer & ", " & newestBlockSer & ", " & rewardPercentilesSer & "]"
+        url = getRandomBackendUrl(rng, urls)
+
+      transportProc(
+        ctx,
+        alloc(url),
+        "eth_feeHistory",
+        alloc(params),
+        transportCallback[FeeHistoryResult],
+        createCbData(fut),
+      )
+      await fut
+
     sendRawTxProc = proc(
         txBytes: seq[byte]
     ): Future[EngineResult[Hash32]] {.async: (raises: [CancelledError]).} =
       let
         fut = Future[EngineResult[Hash32]].Raising([CancelledError]).init("sendRawTx")
         txBytesSer = packArg(txBytes).valueOr:
-          return err((BackendEncodingError, error))
+          return err((BackendEncodingError, error, UNTAGGED))
         params = "[" & txBytesSer & "]"
         url = getRandomBackendUrl(rng, urls)
 
@@ -310,6 +337,7 @@ proc getEthApiBackend*(
     eth_getLogs: getLogsProc,
     eth_getTransactionByHash: getTransactionByHashProc,
     eth_getTransactionReceipt: getTransactionReceiptProc,
+    eth_feeHistory: feeHistoryProc,
     eth_sendRawTransaction: sendRawTxProc,
   )
 
@@ -331,7 +359,7 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
         )
     executionApiUrls =
       try:
-        parseCmdArg(seq[Web3Url], jsonNode["executionApiUrls"].getStr())
+        parseCmdArg(UrlList, jsonNode["executionApiUrls"].getStr())
       except CatchableError as e:
         raise newException(
           ProxyError, "Couldn't parse `backendUrl` from JSON config: " & e.msg
@@ -342,6 +370,17 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
       except CatchableError as e:
         raise newException(
           ProxyError, "Couldn't parse `beaconApiUrls` from JSON config: " & e.msg
+        )
+    privateTxUrls =
+      try:
+        let rawUrls = jsonNode.getOrDefault("privateTxUrls").getStr("")
+        if rawUrls.len == 0:
+          UrlList(@[])
+        else:
+          parseCmdArg(UrlList, rawUrls)
+      except CatchableError as e:
+        raise newException(
+          ProxyError, "Couldn't parse `privateTxUrls` from JSON config: " & e.msg
         )
     logLevel = jsonNode.getOrDefault("logLevel").getStr("INFO")
     logFormat =
@@ -380,6 +419,7 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
         uint64(0)
       else:
         uint64(prllBlkDwnlds),
+    privateTxUrls: privateTxUrls,
   )
 
 proc run*(
@@ -413,7 +453,23 @@ proc run*(
   # add light client backend
   lc.setBackend(lcRestClientPool.getEthLCBackend())
 
-  engine.backend = getEthApiBackend(ctx, config.executionApiUrls, transportProc)
+  let usePrivateTx = config.privateTxUrls.len > 0
+
+  let regularCaps =
+    if usePrivateTx:
+      fullCapabilities - {SendRawTransaction}
+    else:
+      fullCapabilities
+
+  engine.registerBackend(
+    getEthApiBackend(ctx, config.executionApiUrls, transportProc), regularCaps
+  )
+
+  if usePrivateTx:
+    engine.registerBackend(
+      getEthApiBackend(ctx, config.privateTxUrls, transportProc),
+      BackendCapabilities({SendRawTransaction}),
+    )
 
   # inject the frontend into c context
   ctx.frontend = engine.frontend

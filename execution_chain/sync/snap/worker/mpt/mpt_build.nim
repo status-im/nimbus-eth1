@@ -11,8 +11,7 @@
 
 import
   std/[sequtils, tables, typetraits],
-  pkg/[eth/common, stew/byteutils],
-  ../../../../db/aristo/aristo_desc/desc_nibbles,
+  pkg/[eth/common, eth/trie/nibbles, stew/byteutils],
   ../../../wire_protocol/snap/snap_types,
   ../state_db,
   ./mpt_desc
@@ -36,16 +35,16 @@ proc append(w: var RlpWriter, val: AccBody) =
 
 proc nodeStash*(
     db: NodeTrieRef;                       # Needed for root node
-    rootKey: NodeKey;                      # State root key
+    rootKey: HashKey;                      # State root key
     proofNode: ProofNode;                  # Node to add
-    nodes: var Table[NodeKey,NodeRef];     # Collect nodes
-    links: var Table[NodeKey,StopNodeRef]; # Collect open links
+    nodes: var Table[HashKey,NodeRef];     # Collect nodes
+    links: var Table[HashKey,StopNodeRef]; # Collect open links
       ): bool =
   ## Decode a trusted rlp-encoded node and add it to the node list.
   ##
-  var selfKey = proofNode.digestTo(NodeKey)
+  var selfKey = proofNode.digestTo(HashKey)
   if selfKey.len < 32:
-    let forcedKey = proofNode.digestTo(NodeKey, force32=true)
+    let forcedKey = proofNode.digestTo(HashKey, force32=true)
     if forcedKey == rootKey:
       selfKey = forcedKey
 
@@ -89,7 +88,8 @@ proc nodeStash*(
         lfPfx:     nibbles,
         lfPayload: list[1])
     else:
-      let stopKey = list[1].to(NodeKey)
+      let stopKey = HashKey.fromBytes(list[1]).valueOr:
+        return false
       if links.hasKey stopKey:
         return false
       node = BranchNodeRef(
@@ -109,7 +109,8 @@ proc nodeStash*(
       brData: proofNode.distinctBase)
     for n in 0u8 .. 15u8:
       if 0 < list[n].len:
-        let stopKey = list[n].to(NodeKey)
+        let stopKey = HashKey.fromBytes(list[n]).valueOr:
+          return false
         if links.hasKey stopKey:
           return false
         let stopLink = StopNodeRef(
@@ -297,6 +298,21 @@ proc mergeSubTree(
 
   # NOTREACHED
 
+proc makeOrGetLeaf(db: NodeTrieRef; path: Hash32): Opt[LeafNodeRef] =
+  ## Unless done jet, make a leaf on the tree with the argument path `path`.
+  ##
+  # Find sub-tree
+  let (tree,pfx) = db.findSubTree(path).valueOr:
+    return err()
+
+  if pfx.len == 0:
+    return ok(LeafNodeRef nil)
+
+  let leaf = tree.mergeSubTree(pfx).valueOr:
+    return err()
+
+  ok(leaf)
+
 # ------------------------------------------------------------------------------
 # Private functions, finalisation and export helpers
 # ------------------------------------------------------------------------------
@@ -316,18 +332,18 @@ proc reKeyWalker(node: NodeRef) =
         # Note that the recursion is exhaustive as the sub-tree
         # is always a complete MPT (i.e. no dead links)
         br.brLinks[n].reKeyWalker()
-        wrt.append br.brLinks[n].selfKey.to(seq[byte])
+        wrt.append @(br.brLinks[n].selfKey.data)
     wrt.append ""
     br.brData = wrt.finish()
-    br.selfKey = br.brData.digestTo(NodeKey)
+    br.selfKey = br.brData.digestTo(HashKey)
 
     if 0 < br.xtPfx.len:
       br.selfKey.swap br.brKey
       wrt = initRlpList 2
       wrt.append br.xtPfx.toHexPrefix(false).toSeq
-      wrt.append br.brKey.to(seq[byte])
+      wrt.append @(br.brKey.data)
       br.xtData = wrt.finish()
-      br.selfKey = br.xtData.digestTo(NodeKey)
+      br.selfKey = br.xtData.digestTo(HashKey)
 
   of Leaf:
     let lf = LeafNodeRef(node)
@@ -335,7 +351,7 @@ proc reKeyWalker(node: NodeRef) =
     wrt.append lf.lfPfx.toHexPrefix(true).toSeq
     wrt.append lf.lfPayload
     lf.lfData = wrt.finish()
-    lf.selfKey = lf.lfData.digestTo(NodeKey)
+    lf.selfKey = lf.lfData.digestTo(HashKey)
 
   of Stop:
     let w = StopNodeRef(node)
@@ -362,10 +378,10 @@ proc exportTrie(
       if w.xtData.len == 0:
         ok = false
         return
-      data.add (w.selfKey.to(seq[byte]), w.xtData)
-      data.add (w.brKey.to(seq[byte]), w.brData)
+      data.add (@(w.selfKey.data), w.xtData)
+      data.add (@(w.brKey.data), w.brData)
     else:
-      data.add (w.selfKey.to(seq[byte]), w.brData)
+      data.add (@(w.selfKey.data), w.brData)
 
     for n in 0 .. 15:
       if not w.brLinks[n].isNil:
@@ -378,7 +394,7 @@ proc exportTrie(
     if w.lfData.len == 0:
       ok = false
       return
-    data.add (w.selfKey.to(seq[byte]), w.lfData)
+    data.add (@(w.selfKey.data), w.lfData)
 
   of Stop:
     ok = false
@@ -391,19 +407,19 @@ proc exportTrie(
 
 proc init*(
     T: type NodeTrieRef;
-    stateRoot: StateRoot;
+    root: StateRoot|StoreRoot;
       ): T =
   ## Create an empty MPT.
   let db = T()
   db.root = StopNodeRef(
     kind:    Stop,
-    selfKey: stateRoot.to(NodeKey))
+    selfKey: root.to(HashKey))
   db.stops[db.root.selfKey] = StopNodeRef(db.root)
   db
 
 proc init*(
     T: type NodeTrieRef;
-    stateRoot: StateRoot;
+    root: StateRoot|StoreRoot;
     start: ItemKey;
     nodes: openArray[ProofNode];
       ): T =
@@ -416,14 +432,14 @@ proc init*(
   ## root node are silently discarded.
   ##
   if nodes.len == 0:
-    return NodeTrieRef.init stateRoot
+    return NodeTrieRef.init root
 
   let
     db = T()
-    root = stateRoot.to(NodeKey)
+    root = root.to(HashKey)
   var
-    tmpNodes: Table[NodeKey,NodeRef]
-    tmpLinks: Table[NodeKey,StopNodeRef]
+    tmpNodes: Table[HashKey,NodeRef]
+    tmpLinks: Table[HashKey,StopNodeRef]
   for n in 0 ..< nodes.len:
     if not db.nodeStash(root, nodes[n], tmpNodes, tmpLinks):
       return T(nil)
@@ -471,20 +487,21 @@ proc merge*(db: NodeTrieRef, acc: SnapAccount): bool =
   ##
   ## The function returns `true` if the account `acc` could be merged.
   ##
-  # Find sub-tree
-  let (tree,pfx) = db.findSubTree(acc.accHash).valueOr:
+  let leaf = db.makeOrGetLeaf(acc.accHash).valueOr:
     return false
-
-  if pfx.len == 0:
-    return true
-
-  # Merge/append
-  let leaf = tree.mergeSubTree(pfx).valueOr:
-    return false
-
-  # Update leaf record payload
-  leaf.lfPayload = rlp.encode(acc.accBody)
+  if not leaf.isNil:
+    leaf.lfPayload = rlp.encode(acc.accBody)
   true
+
+proc merge*(db: NodeTrieRef, sto: StorageItem): bool =
+  ## Ditto for storage slots.
+  ##
+  let leaf = db.makeOrGetLeaf(sto.slotHash).valueOr:
+    return false
+  if not leaf.isNil:
+    leaf.lfPayload = sto.slotData
+  true
+
 
 proc finalise*(db: NodeTrieRef): uint =
   ## Finalise an MPT.
@@ -499,7 +516,7 @@ proc finalise*(db: NodeTrieRef): uint =
   ##  `merge()`) is still ongoing. It is only inefficient because
   ##   non-finalised sub-tyries need to be visited, again.
   ##
-  var resolved: seq[NodeKey]
+  var resolved: seq[HashKey]
   for (key,stopNode) in db.stops.pairs:
 
     if not stopNode.sub.isNil:
@@ -527,18 +544,23 @@ proc isComplete*(db: NodeTrieRef): bool =
 
 # -----------
 
-proc validate*(
-    root: StateRoot;
+proc validate*[T: SnapAccount|StorageItem](
+    root: StateRoot|StoreRoot;
     start: ItemKey;
-    accounts: seq[SnapAccount];
-    proof: seq[ProofNode]
+    leafs: openArray[T];
+    proof: openArray[ProofNode]
       ): Opt[NodeTrieRef] =
-  ## Validate snap account data package.
+  ## Validate snap accounts or storage slot data package.
   ##
+  when root is StateRoot and T isnot SnapAccount:
+    {.error: "Leafs item must be of type SnapAccount for root type StateRoot".}
+  elif root is StoreRoot and T isnot StorageItem:
+    {.error: "Leafs item must be of type StorageItem for root type StoreRoot".}
+
   let db = NodeTrieRef.init(root, start, proof)
   if not db.isNil:
-    for acc in accounts:
-      if not db.merge(acc):
+    for leaf in leafs:
+      if not db.merge(leaf):
         return err()
 
     discard db.finalise()

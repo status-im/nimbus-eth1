@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -34,13 +34,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 2  # In PR, has extra merge commit: ^1 = PR, ^2 = base
       - name: Check `nph` formatting
         uses: arnetheduck/nph-action@v1
         with:
-          version: 0.6.2
+          version: 0.7.0
           options: "nimbus_verified_proxy/ portal/"
       - name: Check copyright year & version
         if: ${{ !cancelled() }} && github.event_name == 'pull_request'

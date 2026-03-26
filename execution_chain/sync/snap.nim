@@ -17,7 +17,7 @@ import
   ../core/chain,
   ../networking/p2p,
   ./snap/[snap_desc, worker],
-  ./snap/worker/helpers,
+  ./snap/worker/[helpers, update],
   ./[sync_sched, wire_protocol]
 
 from ./beacon
@@ -75,6 +75,7 @@ proc init*(
 proc config*(
     desc: SnapSyncRef;
     ethNode: EthereumNode;
+    dataDir: string;
     maxPeers: int;
       ) =
   ## Complete `SnapSyncRef` descriptor initialisation.
@@ -85,43 +86,28 @@ proc config*(
   doAssert desc.ctx.isNil # This can only run once
   desc.initSync(ethNode, maxPeers)
   desc.addSyncProtocol snap1
+  desc.ctx.pool.baseDir = dataDir
 
   if not desc.lazyConfigHook.isNil:
     desc.lazyConfigHook(desc)
     desc.lazyConfigHook = nil
 
-proc configBaseDir*(desc: SnapSyncRef; dir: string; resume: bool) =
-  ## Set up database folder.
+proc configResume*(desc: SnapSyncRef; resume = true) =
+  ## Set syncer into resume (or no-resume) mode. By default, the syncer is
+  ## in no-resume mode.
   doAssert not desc.ctx.isNil
-  desc.ctx.pool.baseDir = dir
-  desc.ctx.pool.resume = resume
+  if resume: desc.ctx.updateSyncResume()
+  else: desc.ctx.updateSyncReset()
 
 proc configTarget*(desc: SnapSyncRef; hex: string): bool =
   ## Set up inital target root (if any, mainly for debugging)
   doAssert not desc.ctx.isNil
   try:
-    var target: SnapTarget
-    if desc.ctx.pool.target.isSome():
-      target = desc.ctx.pool.target.value
-    target.blockHash = BlockHash(Hash32.fromHex(hex))
-    desc.ctx.pool.target = Opt.some(target)
+    desc.ctx.pool.target = Opt.some(BlockHash Hash32.fromHex(hex))
     return true
   except ValueError:
     discard
   # false
-
-proc configUpdateFile*(desc: SnapSyncRef; file: string): bool =
-  ## Update file containing the target
-  doAssert not desc.ctx.isNil
-  if 0 < file.len:
-    var target: SnapTarget
-    if desc.ctx.pool.target.isSome():
-      target = desc.ctx.pool.target.value
-    target.updateFile = file
-    desc.ctx.pool.target = Opt.some(target)
-    return true
-  # false
-
 
 proc start*(desc: SnapSyncRef; bcSyncRef: BeaconSyncRef): bool =
   ## Starting beacon sync in stand-by mode and then snap sync.

@@ -11,17 +11,23 @@
 {.push raises:[].}
 
 import
-  std/[hashes, sequtils, sets, tables],
-  pkg/[eth/common, metrics],
+  std/[hashes, sequtils, sets, strformat, strutils, tables],
+  pkg/[chronicles, eth/common, metrics],
   pkg/stew/[interval_set, sorted_set],
   ../[helpers, worker_const],
   ./[state_identifiers, state_item_key, state_unproc_item_keys]
 
-declareGauge nec_snap_acc_coverage, "" &
-  "Factor of accumulated accounts covered over all state roots"
+logScope:
+  topics = "snap sync"
 
-declareGauge nec_snap_max_acc_state_coverage, "" &
+declareGauge nec_snap_accumulated_state_coverage, "" &
+  "Factor of accumulated accounts covered over all state root records"
+
+declareGauge nec_snap_pivot_state_coverage, "" &
   "Max factor of accounts covered related to a single state root"
+
+declareGauge nec_snap_active_states, "" &
+  "Number of active state root indexed caches to download to"
 
 type
   StateByNumber = SortedSet[BlockNumber,StateDataRef]
@@ -39,9 +45,6 @@ type
   DataByAccount = SortedSet[ItemKey,AccDataRef]
     ## For storage slots book keeping
 
-  StateDataScore* = tuple
-    up, down: uint
-
   AccDataRef* = ref object
     ## Incompleteed download states db for storage slots. For storage
     ## slots, there is a single interval for unprocessed slots. That
@@ -58,60 +61,90 @@ type
     blockHash*: BlockHash               ## Corresponds to `stateRoot`
     blockNumber*: BlockNumber           ## Corresponds to `stateRoot`
     unproc: UnprocItemKeys              ## Unprocessed accounts
-    byAccount: DataByAccount            ## List of storage states
-    sdScore: StateDataScore             ## Thumbs up/down
+    byAccount: DataByAccount            ## List of storage/code states to fetch
+    healingReady: bool                  ## Ready for healing if `true`
+    deadState: bool                     ## State was evicted from database
 
   StateDbRef* = ref object
     ## Download states db
     unproc: ItemKeyRangeSet             ## Globally unprocessed accounts
     overlays: uint                      ## Number of `unproc` resets/re-inits
-    topDone: StateDataRef               ## Least unproc data
+    pivot: StateDataRef                 ## Least unproc data
     byNumber: StateByNumber             ## States indexed by block number
     byHash: StateByHash                 ## States indexed by block hash
     byRoot: StateByRoot                 ## States indexed by state root
+
+func rootStr*(state: StateDataRef): string
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc maxUnproc(db: StateDbRef): StateDataRef =
-  ## Find the DB record with the maximal unprocessed interval range. If there
-  ## are more than one items with the same  range, the one with the smaller
-  ## block number is returned.
+func findMaxUnproc(db: StateDbRef; maxBlock: BlockNumber): StateDataRef =
+  ## Find the DB record with the maximal unprocessed interval range with block
+  ## number at most `maxBlock`. If there are more items with the same range,
+  ## the one with the smaller block number is returned.
   ##
   var
     walk = WalkByNumber.init(db.byNumber)
-    rc = walk.first
+    rc = walk.first                                 # increasing block height
   defer: walk.destroy
-  if rc.isErr:
-    return StateDataRef(nil)
 
-  # Preset `result` to cover the case when all entries have the same
-  # total unprocessed size of what is to be done.
-  result = rc.value.data
-  var todo = low(UInt256)
+  result = StateDataRef(nil)                        # empty => `nil`
+  var unprocData = low(UInt256)                     # min value for maximiser
 
   while rc.isOk:
-    # Here: err() means zero => nothing more to do
-    rc.value.data.unproc.total.isErrOr:
+    let state = rc.value.data
+    if maxBlock < state.blockNumber:
+      break                                         # no more records
+    state.unproc.total.isErrOr:                     # `err()` => `0` => ignore
       if value == 0:
-        # Here: `0 => 2^256`, nothing done yet (you cannot beat that.) As
-        # the loop runs with increasing block height, the least block number
-        # is preferred in case there are more than one `2^256` todo entries.
-        return rc.value.data
-      if todo < value:
-        result = rc.value.data
-      todo = value
-    rc = walk.next
+        # Here: `0` => `2^256`, nothing done yet (you cannot beat that.)
+        return state
+      if unprocData < value:
+        (result, unprocData) = (state, value)       # maximise stepwise
+    rc = walk.next                                  # increasing block height
+    # End `while`
+
+  # result
+
+func findMinUnproc(db: StateDbRef): StateDataRef =
+  ## Finf the state with the least nprocessed interval range. If there are
+  ## more items with the same# range, the one with the greater block number
+  ## is returned.
+  ##
+  var
+    walk = WalkByNumber.init(db.byNumber)
+    rc = walk.last                                  # decreasing block height
+  defer: walk.destroy
+
+  result = StateDataRef(nil)                        # empty => `nil`
+  var unprocData = high(UInt256)                    # max value for minimiser
+
+  while rc.isOk:
+    let
+      state = rc.value.data
+      stateUnproc = state.unproc.total.valueOr:     # `err()` => `0` => all done
+        return state
+    if stateUnproc != 0 and                         # `0` => `2^256`
+       stateUnproc < unprocData:
+      (result, unprocData) = (state, stateUnproc)   # minimise stepwise
+    rc = walk.prev                                  # decreasing block height
+    # End `while`
+
+  # result
+
+proc resetMetrics(db: StateDbRef) =
+  metrics.set(nec_snap_accumulated_state_coverage, 0f)
+  metrics.set(nec_snap_pivot_state_coverage, 0f)
+  metrics.set(nec_snap_active_states, 0)
 
 proc updateMetrics(db: StateDbRef) =
-  let topCoverage = 1f - db.topDone.unproc.totalRatio
-  metrics.set(nec_snap_acc_coverage,
-    # There is no `borrowed` sub-register for the total coverage register. So
-    # it might be temporarily below `topCoverage`. As this would make metrics
-    # confusing, it is maxed out, here.
-    max(topCoverage, (1f - db.unproc.totalRatio) * (1 + db.overlays).float))
-  metrics.set(nec_snap_max_acc_state_coverage, topCoverage)
+  metrics.set(nec_snap_accumulated_state_coverage,
+              ((1f - db.unproc.totalRatio) * (1+db.overlays).float))
+  metrics.set(nec_snap_pivot_state_coverage,
+              (1f - db.pivot.unproc.totalRatio))
+  metrics.set(nec_snap_active_states, db.byRoot.len)
 
 # ------------------------------------------------------------------------------
 # Public constructor
@@ -121,23 +154,21 @@ proc init*(T: type StateDbRef): T =
   let db = T(
     unproc:   ItemKeyRangeSet.init ItemKeyRangeMax,
     byNumber: StateByNumber.init())
-  metrics.set(nec_snap_acc_coverage, 0f)
-  metrics.set(nec_snap_max_acc_state_coverage, 0f)
+  db.resetMetrics()
   db
 
 proc clear*(db: StateDbRef) =
   db.overlays = 0
-  db.topDone = StateDataRef(nil)
+  db.pivot = StateDataRef(nil)
   db.unproc.clear
   db.byNumber.clear
   db.byNumber.clear
   db.byHash.clear
   db.byRoot.clear
-  metrics.set(nec_snap_acc_coverage, 0f)
-  metrics.set(nec_snap_max_acc_state_coverage, 0f)
+  db.resetMetrics()
 
 # ------------------------------------------------------------------------------
-# Public state database function(s)
+# Public database root state functions
 # ------------------------------------------------------------------------------
 
 proc register*(
@@ -145,15 +176,23 @@ proc register*(
     root: StateRoot;
     hash: BlockHash;
     number: BlockNumber;
+    info: static[string];
       ): StateDataRef =
-  ## Update or register new account state record on database
+  ## Update or register new account state record on database. The result is
+  ## the current state record, or the new one created (not `nil`.)
   ##
   proc del(db: StateDbRef, state: StateDataRef) =
     discard db.byNumber.delete state.blockNumber    # delete index
     db.byHash.del state.blockHash                   # ditto
     db.byRoot.del state.stateRoot                   # ...
-    if db.topDone == state:
-      db.topDone = StateDataRef(nil)
+    if db.pivot == state:
+      db.pivot = StateDataRef(nil)
+    debug info & ": evicted state record", root=state.rootStr,
+      hash=state.blockHash.toStr, isPivot=db.pivot.isNil
+    # Roll back global unproc register
+    for iv in state.unproc.unprocessed.complement.increasing:
+      discard db.unproc.merge(iv)                   # hand back interval
+    state.deadState = true                          # mark it evicted
 
   db.byNumber.eq(number).isErrOr:
     if value.data.blockHash == hash:
@@ -172,30 +211,30 @@ proc register*(
   # Move block height window when necessary.
   if stateDbCapacity <= db.byNumber.len:
     # Clear item with the largest unprocessed data range
-    db.del db.maxUnproc()                           # remove index columns
+    db.del db.findMaxUnproc(db.pivot.blockNumber)   # remove index columns
+    if db.pivot.isNil:                              # update pivot if evicted
+      db.pivot = db.findMinUnproc()                 # night be `nil`
 
   # Add `newState` to database
   db.byNumber.findOrInsert(number).value.data = newState
   db.byHash[hash] = newState
   db.byRoot[root] = newState
 
-  if db.topDone.isNil:
-    db.topDone = newState
+  # Set pivot as needed
+  if db.pivot.isNil:
+    db.pivot = newState
   else:
-    db.topDone.unproc.total.isErrOr:
+    db.pivot.unproc.total.isErrOr:
       if value == 0:                                # nothing done yet?
-        db.topDone = newState                       # use the latest one
+        db.pivot = newState                         # use the latest one
 
   newState                                          # return state record
-
-proc register*(db: StateDbRef; header: Header; hash: BlockHash) =
-  discard db.register(StateRoot(header.stateRoot), hash, header.number)
 
 
 func hasKey*(db: StateDbRef; bn: BlockNumber): bool =
   db.byNumber.eq(bn).isOk()
 
-func hasKey*(db: StateDbRef; hash: BlockHash): bool =
+func hasKey*(db: StateDbRef ; hash: BlockHash): bool =
   db.byHash.hasKey(hash)
 
 func hasKey*(db: StateDbRef; root: StateRoot): bool =
@@ -204,6 +243,13 @@ func hasKey*(db: StateDbRef; root: StateRoot): bool =
 func get*(db: StateDbRef; bn: BlockNumber): Opt[StateDataRef] =
   db.byNumber.eq(bn).isErrOr:
     return ok(value.data)
+  err()
+
+func next*(db: StateDbRef, bn: BlockNumber): Opt[StateDataRef] =
+  ## Retrieve the state data record which has the least higher block
+  ## number than the argument `bn`.
+  db.byNumber.gt(bn).isErrOr:
+    return ok value.data
   err()
 
 func get*(db: StateDbRef; hash: BlockHash): Opt[StateDataRef] =
@@ -217,53 +263,51 @@ func get*(db: StateDbRef; root: StateRoot): Opt[StateDataRef] =
   err()
 
 
-
-proc upScore*(data: StateDataRef) =
-  data.sdScore.up.inc
-
-proc upScore*(db: StateDbRef; number: BlockNumber): bool  =
-  db.get(number).isErrOr:
-    value.sdScore.up.inc
-    return true
-
-proc downScore*(data: StateDataRef) =
-  data.sdScore.down.inc
-
-proc downScore*(db: StateDbRef; number: BlockNumber): bool =
-  db.get(number).isErrOr:
-    value.sdScore.down.inc
-    return true
-
-
-
-func free*(db: StateDbRef): uint =
-  max(0, stateDbCapacity - db.byNumber.len).uint
-
 func len*(db: StateDbRef): int =
   db.byNumber.len
 
 func pivot*(db: StateDbRef): Opt[StateDataRef] =
   ## Retrieve the state data record with a minimal unprocessed interval range.
-  if db.topDone.isNil:
+  if db.pivot.isNil:
     err()
   else:
-    ok db.topDone
+    ok db.pivot
 
 func top*(db: StateDbRef): Opt[StateDataRef] =
   ## Retrieve the state data record with the highest block number.
-  let val = db.byNumber.le(high BlockNumber).valueOr:
-    return err()
-  ok val.data
+  db.byNumber.le(high BlockNumber).isErrOr:
+    return ok value.data
+  err()
 
-func topNum*(db: StateDbRef): BlockNumber =
-  ## Retrieve the highest block number used for a state record.
-  let top = db.top.valueOr:
-    return BlockNumber(0)
-  top.blockNumber
+
+proc setHealingReady*(state: StateDataRef) =
+  state.healingReady = true
+
+proc getHealingReady*(state: StateDataRef): bool =
+  state.healingReady
+
+proc isOperable*(state: StateDataRef): bool =
+  ## Check whether the state has not been evicted
+  not state.deadState
 
 # ------------------------------------------------------------------------------
 # Public unprocessed account ranges administration
 # -----------------------------------------------------------------------------
+
+proc totalAccountRange*(
+    state: StateDataRef;                            # current state record
+      ): Opt[UInt256] =
+  ## Get the accumulated lengths of the account ranges left for downloading.
+  ##
+  ## Due to residue class arithmetic and limitations of the number range
+  ## `UInt256`, the maximum value `2^256` is returned as `ok(0)`, while the
+  ## least value `0` (i.e. nothing left) is returned as `err()`.
+  ##
+  ## If the state was evicted from the database, `err()` (for `0`) is
+  ## returned.
+  ##
+  if state.deadState: err()
+  else: state.unproc.total()
 
 proc fetchAccountRange*(
     db: StateDbRef;
@@ -273,27 +317,44 @@ proc fetchAccountRange*(
   ## returned account intervals for different `state` arguments will not
   ## overlap up until the range `0..2^256` is fully covered.
   ##
-  # Re-fill global register if exhausted
+  ## If the state was evicted from the database, `err()` (for `none`) is
+  ## returned.
+  ##
+  if state.deadState or                             # evicted
+     state.unproc.avail().isErr():                  # all done this state
+    return err()
   if db.unproc.chunks == 0:
+    # Re-fill global register if exhausted
     db.overlays.inc
-    discard db.unproc.merge ItemKeyRangeMax
-  let giv = db.unproc.fetchLeast(unprocAccountsRangeMax).expect "Account range"
+    db.unproc = ItemKeyRangeSet.init ItemKeyRangeMax
 
-  # Fetch this interval from local range set
-  let liv = state.unproc.fetchSubRange(giv).valueOr:
-    discard db.unproc.merge(giv)                    # restore global range
-    let ljv = state.unproc.fetchLeast(unprocAccountsRangeMax).valueOr:
-      return err()                                  # oops, all done here
-    discard db.unproc.reduce(ljv)                   # extract from global range
-    return ok(ljv)
+  # Fetch interval from state, coordinated by the global register. This results
+  # in minimal overlap of processed intervals over all active states.
+  var
+    restore: seq[ItemKeyRange]                      # temp. blocked items
+    iRange: ItemKeyRange                            # return value
+  while true:
+    let giv = db.unproc.fetchLeast(unprocAccountsRangeMax).valueOr:
+      # No overlapping data, fetch directly from `state`
+      iRange = state.unproc.fetchLeast(unprocAccountsRangeMax)
+                           .expect "Valid state range"
+      break
+    # Fetch this interval from local range set
+    state.unproc.fetchSubRange(giv).isErrOr:
+      iRange = value
+      # Unused ranges, subsets of `giv`
+      if giv.minPt < value.minPt:
+        discard db.unproc.merge(giv.minPt, value.minPt-1)
+      if value.maxPt < giv.maxPt:
+        discard db.unproc.merge(value.maxPt+1, giv.maxPt)
+      break
+    restore.add giv
 
-  # Update range for `liv` subset of `giv`
-  if giv.minPt < liv.minPt:
-    discard db.unproc.merge(giv.minPt, liv.minPt-1)
-  if liv.maxPt < giv.maxPt:
-    discard db.unproc.merge(liv.maxPt, giv.maxPt-1)
+  # Restore temporarily locked intervals
+  for iv in restore:
+    discard db.unproc.merge iv                      # restore global range
 
-  ok liv
+  ok iRange
 
 proc rollbackAccountRange*(
     db: StateDbRef;
@@ -303,8 +364,9 @@ proc rollbackAccountRange*(
   ## Pass back the argument`iv` (as returned from `fetchAccountRange()`) to
   ## the registry managing unprocessed ranges.
   ##
-  state.unproc.commit(iv, iv)
-  discard db.unproc.merge(iv)
+  if not state.deadState:
+    state.unproc.commit(iv, iv)
+    discard db.unproc.merge(iv)
 
 proc commitAccountRange*(
     db: StateDbRef;
@@ -315,25 +377,26 @@ proc commitAccountRange*(
   ## Remove the completed interval `iv.minPt..limit`, and restore non-completed
   ## parts `limit+1..iv.maxPt` on the registry managing unprocessed ranges.
   ##
-  if limit < iv.maxPt:
-    state.unproc.commit(iv, limit + 1, iv.maxPt)
-    discard db.unproc.merge(limit + 1, iv.maxPt)
+  if not state.deadState:
+    if limit < iv.maxPt:
+      state.unproc.commit(iv, limit + 1, iv.maxPt)
+      discard db.unproc.merge(limit + 1, iv.maxPt)
 
-  elif iv.maxPt < limit:
-    state.unproc.commit(iv)
-    state.unproc.overCommit(iv.maxPt + 1, limit)
-    discard db.unproc.reduce(iv.maxPt + 1, limit)
+    elif iv.maxPt < limit:
+      state.unproc.commit(iv)
+      state.unproc.overCommit(iv.maxPt + 1, limit)
+      discard db.unproc.reduce(iv.maxPt + 1, limit)
 
-  else: # iv.maxPt == limit
-    state.unproc.commit(iv)
+    else: # iv.maxPt == limit
+      state.unproc.commit(iv)
 
-  # Updates state record with the most account ranges processed, i.e. the
-  # least unpprocessed account ranges left.
-  db.topDone.unproc.total.isErrOr:                  # otherwise all done
-    if value == 0 or state.unproc.total.value < value:
-      db.topDone = state
+    # Updates state record with the most account ranges processed, i.e. the
+    # least unpprocessed account ranges left.
+    db.pivot.unproc.total.isErrOr:                # otherwise all done
+      if value == 0 or state.unproc.total.value < value:
+        db.pivot = state
 
-  db.updateMetrics()
+    db.updateMetrics()
 
 proc setAccountRange*(
     db: StateDbRef;
@@ -343,19 +406,20 @@ proc setAccountRange*(
       ) =
   ## The function sets an account range and commits it immediately.
   ##
-  state.unproc.overCommit(start, limit)
-  discard db.unproc.reduce(start, limit)
+  if not state.deadState:
+    state.unproc.overCommit(start, limit)
+    discard db.unproc.reduce(start, limit)
 
-  # Updates state record with the most account ranges processed, i.e. the
-  # least unpprocessed account ranges left.
-  db.topDone.unproc.total.isErrOr:                  # otherwise all done
-    if value == 0 or state.unproc.total.value < value:
-      db.topDone = state
+    # Updates state record with the most account ranges processed, i.e. the
+    # least unpprocessed account ranges left.
+    db.pivot.unproc.total.isErrOr:                  # otherwise all done
+      if value == 0 or state.unproc.total.value < value:
+        db.pivot = state
 
-  db.updateMetrics()
+    db.updateMetrics()
 
 # ------------------------------------------------------------------------------
-# Public storage slots database function(s)
+# Public storage slots and code database function(s)
 # ------------------------------------------------------------------------------
 
 proc register*(
@@ -365,7 +429,8 @@ proc register*(
     iv = ItemKeyRangeMax) =
   ## Add storage slots to an account (if any.)
   ##
-  if stoRoot != StoreRoot(EMPTY_ROOT_HASH):
+  if not state.deadState and
+     stoRoot != StoreRoot(EMPTY_ROOT_HASH):
     var data: AccDataRef
     let rc = state.byAccount.eq(account)
     if rc.isOk:
@@ -382,7 +447,8 @@ proc register*(
     codeHash: CodeHash) =
   ## Add contract hash to an account (if any.)
   ##
-  if codeHash != CodeHash(EMPTY_CODE_HASH):
+  if not state.deadState and
+     codeHash != CodeHash(EMPTY_CODE_HASH):
     var data: AccDataRef
     let rc = state.byAccount.eq(account)
     if rc.isOk:
@@ -394,32 +460,35 @@ proc register*(
 
 
 func get*(state: StateDataRef, account: ItemKey): Opt[AccDataRef] =
-  state.byAccount.eq(account).isErrOr:
-    return ok(value.data)
+  if not state.deadState:
+    state.byAccount.eq(account).isErrOr:
+      return ok(value.data)
   err()
 
 func hasKey*(state: StateDataRef, account: ItemKey): bool =
-  state.byAccount.eq(account).isOk()
+  not state.deadState and state.byAccount.eq(account).isOk()
 
 
 proc delStorage*(state: StateDataRef, account: ItemKey) =
-  let kv = state.byAccount.eq(account).valueOr:
-    return
-  if kv.data.code == CodeHash(EMPTY_CODE_HASH):
-    discard state.byAccount.delete account
-  else:
-    kv.data.stoRoot = StoreRoot(EMPTY_ROOT_HASH)
+  if not state.deadState:
+    let kv = state.byAccount.eq(account).valueOr:
+      return
+    if kv.data.code == CodeHash(EMPTY_CODE_HASH):
+      discard state.byAccount.delete account
+    else:
+      kv.data.stoRoot = StoreRoot(EMPTY_ROOT_HASH)
 
 proc delCode*(state: StateDataRef, account: ItemKey) =
-  let kv = state.byAccount.eq(account).valueOr:
-    return
-  if kv.data.stoRoot == StoreRoot(EMPTY_ROOT_HASH):
-    discard state.byAccount.delete account
-  else:
-    kv.data.code = CodeHash(EMPTY_CODE_HASH)
+  if not state.deadState:
+    let kv = state.byAccount.eq(account).valueOr:
+      return
+    if kv.data.stoRoot == StoreRoot(EMPTY_ROOT_HASH):
+      discard state.byAccount.delete account
+    else:
+      kv.data.code = CodeHash(EMPTY_CODE_HASH)
 
-func len*(state: StateDataRef): int =
-  state.byAccount.len
+func hasCodeOrStorage*(state: StateDataRef): bool =
+  not state.deadState and 0 < state.byAccount.len
 
 # ------------------------------------------------------------------------------
 # Public iterator(s)
@@ -428,7 +497,7 @@ func len*(state: StateDataRef): int =
 iterator stoItems*(state: StateDataRef): tuple[key: ItemKey, data: AccDataRef] =
   ## Iterate over all account entries with increasing `ItemKey` keys and
   ## return non-empty storage tree information.
-  var rc = state.byAccount.ge(low(ItemKey))
+  var rc = state.byAccount.ge(low ItemKey)
   while rc.isOk:
     let (key, data) = (rc.value.key, rc.value.data)
     if data.stoRoot != StoreRoot(EMPTY_ROOT_HASH):
@@ -460,8 +529,9 @@ iterator items*(
   var seenItems: HashSet[BlockNumber]
   for w in startWith.items:
     db.byRoot.withValue(w,value):
-      seenItems.incl value.blockNumber
-      yield value[]
+      if value.blockNumber notin seenItems:
+        seenItems.incl value.blockNumber
+        yield value[]
 
   when ascending:
     var rc = db.byNumber.ge(0)
@@ -508,37 +578,53 @@ iterator items*(
           yield data
         rc = db.byNumber.lt(key)
 
+func states*(db: StateDbRef): seq[StateDataRef] =
+  ## Variant of the `items` iterator returning a sequence where the states have
+  ## descending block height.
+  for state in db.items(truncate = false, ascending = false):
+    result.add state
+
 # ------------------------------------------------------------------------------
 # Public debugging helpers
 # ------------------------------------------------------------------------------
 
+func bnStr*(state: StateDataRef): string =
+  $state.blockNumber
+
+func bnStr*(rc: Opt[StateDataRef]): string =
+  if rc.isErr: "n/a" else: $rc.value.blockNumber
+
 func rootStr*(state: StateDataRef): string =
   state.stateRoot.Hash32.short & "(" & $state.blockNumber & ")"
 
-func toStr*(db: StateDbRef): string =
-  let nKeys = db.byNumber.len
-  if nKeys == 0:
-    return "n/a"
-  let
-    topNum = db.topNum
-    base3 = (topNum div 1000) * 1000
-    base4 = (topNum div 10000) * 10000
+func toStr*(db: seq[StateDataRef]): string =
+  ## Print a list of processed ranges for the argument stats.
+  "{" & db.mapIt(
+    $it.blockNumber & "^" &
+    it.unproc.unprocessed.complement.toStr).join(",") & "}"
 
-  result = $topNum & "->{"
+func toStr*(db: StateDbRef): string =
+  let
+    top = db.top.valueOr:
+      return "n/a"
+    base2 = (top.blockNumber div 100) * 100
+    base3 = (top.blockNumber div 1000) * 1000
+    base4 = (top.blockNumber div 10000) * 10000
+
+  result = $top.blockNumber & "->{"
   for state in db.items(ascending=false):
-    if 0 < base3 and base3 < state.blockNumber:
-      result &= $(state.blockNumber - base3)
-    elif 0 < base4 and base4 < state.blockNumber:
-      result &= $(state.blockNumber - base4)
+    if 0 < base2 and base2 <= state.blockNumber:
+      result &= &"{(state.blockNumber - base2):02}"
+    elif 0 < base3 and base3 <= state.blockNumber:
+      result &= &"{(state.blockNumber - base3):03}"
+    elif 0 < base4 and base4 <= state.blockNumber:
+      result &= &"{(state.blockNumber - base4):04}"
     else:
       result &= $state.blockNumber
-    if db.topDone == state:
+    if db.pivot == state:
       result &= "*"
     result &= ":" & state.unproc.totalRatio.toStr(4)
     result &= "(" & $state.byAccount.len & ")"
-    if 0 < state.sdScore.up or
-       0 < state.sdScore.down:
-      result &= $state.sdScore.up & "/" & $state.sdScore.down
     result &= ","
   result[^1] = '}'
   result &= ":" & db.unproc.totalRatio.toStr(7) & "!" & $db.overlays

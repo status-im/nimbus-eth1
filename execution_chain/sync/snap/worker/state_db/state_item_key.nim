@@ -55,7 +55,7 @@ template to*[T: ItemKey](w: Hash32; _: type T): T = w.to(UInt256).T
 template to*[T: ItemKey](w: SomeUnsignedInt; _: type T): T = w.to(UInt256).T
 
 template to*[T: ItemKey](w: array[32,byte]; _: type T): T =
-  ## Handy for converting the result of `desc_nibbles.getBytes()`
+  ## Handy for converting the result of `nibbles.getBytes()`
   w.Bytes32.to(UInt256).T
 
 template to*[T: Hash32](w: seq[ItemKey], _: type seq[T]): seq[T] =
@@ -115,6 +115,21 @@ func lenStr*(w: (ItemKey,ItemKey)): string =
 func lenStr*(w: ItemKeyRange): string =
   (w.minPt,w.maxPt).lenStr
 
+func toStr*(ikrs: ItemKeyRangeSet, maxIvs = 2): string =
+  result = "{"
+  var count = 0
+  for iv in ikrs.increasing:
+    if maxIvs <= count:
+      break
+    count.inc
+    result &= iv.flStr & ","
+  if count <= 0:
+    result &= "}"
+  elif count <= maxIvs:
+    result[^1] = '}'
+  else:
+    result &= "..[" & $ikrs.chunks & "]..}"
+
 func `$`*(w: ItemKey|ItemKeyRange): string =
   w.flStr
 
@@ -165,6 +180,12 @@ func totalRatio*(ikrs: ItemKeyRangeSet): float =
   if total == 0:
     return (if ikrs.chunks() == 0: 0f else: 1f)
   total.per256()
+
+func complement*(ikrs: ItemKeyRangeSet): ItemKeyRangeSet =
+  ## Missing functionality from `unterval_set` API.
+  result = ItemKeyRangeSet.init ItemKeyRangeMax
+  for iv in ikrs.increasing:
+    discard result.reduce iv
 
 # ------------------------------------------------------------------------------
 # End

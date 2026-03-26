@@ -12,9 +12,7 @@ import
   web3/[eth_api_types, conversions],
   ../beacon/web3_eth_conv
 
-export
-  eth_api_types,
-  web3_eth_conv
+export eth_api_types, web3_eth_conv
 
 type
   FilterLog* = eth_api_types.LogObject
@@ -22,6 +20,7 @@ type
   # BlockTag instead of BlockId:
   # prevent type clash with eth2 BlockId in portal/verified_proxy
   BlockTag* = eth_api_types.RtBlockIdentifier
+
 
 # Block access list json serialization
 AccountChanges.useDefaultSerializationIn JrpcConv

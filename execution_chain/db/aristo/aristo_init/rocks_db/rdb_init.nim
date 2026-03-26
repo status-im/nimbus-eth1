@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,7 +13,7 @@
 
 {.push raises: [].}
 
-import std/strformat, results, ../../aristo_desc, ./rdb_desc, ../../../opts
+import std/strformat, results,   ../../[aristo_blobify, aristo_desc], ./rdb_desc, ../../../opts
 
 # ------------------------------------------------------------------------------
 # Private constructor
@@ -91,7 +91,7 @@ proc init*(rdb: var RdbInst, opts: DbOptions, baseDb: RocksDbInstanceRef) =
     opts.rdbKeyCacheSize div (sizeof(VertexID) + sizeof(HashKey) + lruOverhead)
   rdb.rdVtxSize =
     opts.rdbVtxCacheSize div
-    (sizeof(VertexID) + sizeof(default(StoLeafRef)[]) + lruOverhead)
+    (sizeof(VertexID) + sizeof(VertexBuf) + lruOverhead)
 
   rdb.rdBranchSize =
     opts.rdbBranchCacheSize div (sizeof(typeof(rdb.rdBranchLru).V) + lruOverhead)
@@ -104,13 +104,13 @@ proc init*(rdb: var RdbInst, opts: DbOptions, baseDb: RocksDbInstanceRef) =
   rdb.vtxCol = baseDb.db.getColFamily($VtxCF).valueOr:
     raiseAssert "Cannot initialise VtxCF descriptor: " & error
 
-proc destroy*(rdb: var RdbInst, eradicate: bool) =
+proc close*(rdb: var RdbInst, wipe: bool) =
   ## Destructor
   let
     ks = rdb.rdKeySize
     vs = rdb.rdVtxSize
     bs = rdb.rdBranchSize
-  rdb.baseDb.close(eradicate)
+  rdb.baseDb.close(wipe)
   if rdb.rdbPrintStats:
     dumpCacheStats(ks, vs, bs)
 

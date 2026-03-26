@@ -44,7 +44,6 @@ template downloadImpl(
     let
       ctx = buddy.ctx
       adb = ctx.pool.mptAsm
-      sRoot = state.stateRoot
       peerID = buddy.peerID
 
       peer {.inject,used.} = $buddy.peer            # logging only
@@ -58,15 +57,19 @@ template downloadImpl(
         codeHashes = accLeft.mapIt(it[1])
 
       # Fetch from network
-      let data = buddy.fetchCodes(sRoot, codeHashes).valueOr:
+      let data = buddy.fetchCodes(state.stateRoot, codeHashes).valueOr:
         state.register accLeft                      # stash data and return
         trace info & ": fetching codes failed", peer, root,
           start, nAccLeft=accLeft.len
         break body                                  # error => return
 
+      if not state.isOperable():                    # evicted => return
+        bodyRc = false                              # ignore downloaded data
+        break body
+
       # Store byte codes on database
-      adb.putRawByteCode(
-        sRoot, accLeft[0][0], accLeft[^1][0],
+      adb.putByteCode(
+        state.stateRoot, accLeft[0][0], accLeft[^1][0],
         codeHashes.zip data.codes, peerID).isOkOr:
           state.register(accLeft)                   # stash data and return
           trace info & ": storing codes failed", peer, root,
@@ -125,6 +128,9 @@ template codeDownload*(
   ## Async/template
   ##
   block body:
+    if not state.isOperable():                      # evicted => return
+      break body
+
     let acc = accounts
        .filterIt(not it.accBody.codeHash.isEmpty)
        .mapIt( (it.accHash.to(ItemKey),
@@ -134,10 +140,12 @@ template codeDownload*(
       state.register acc                            # stash data and return
       break body                                    # all done
 
-    discard buddy.downloadImpl(state, acc, info)
+    if not buddy.downloadImpl(state, acc, info) and
+       not state.isOperable():                      # evicted => return
+      break body                                    # all done
 
     while not buddy.ctrl.stopped and
-          0 < state.len and
+          state.hasCodeOrStorage and
           buddy.downloadFromQueue(state, info):
       continue
 
