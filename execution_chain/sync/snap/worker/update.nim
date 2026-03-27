@@ -33,7 +33,7 @@ func pivotIsSufficient(ctx: SnapCtxRef): bool =
   ## State transition helper
   let sdb = ctx.pool.stateDB
   # Check acummulated coverage
-  if sdb.accuAccountsCoverage() < accuAccountsCovMin:
+  if sdb.accountsCoverage() < accuAccountsCovMin:
     return false                                    # not enough yet => fail
   # Check pivot state
   sdb.pivot().isErrOr:
@@ -148,8 +148,8 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]) =
   ctx.pool.syncState = newState
   case newState:
   of SnapDownload, SnapMkTrie, SnapHealing:
-    info "State changed", prevState, newState, top=sdb.top.bnStr,
-      pivot=sdb.pivot.bnStr, nSyncPeers=ctx.nSyncPeers()
+    chronicles.info info & ": State changed", prevState, newState,
+      top=sdb.top.bnStr, pivot=sdb.pivot.bnStr, nSyncPeers=ctx.nSyncPeers()
   of SnapIdle, SnapResume, SnapReady:
     debug "State changed", prevState, newState
 

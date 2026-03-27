@@ -75,7 +75,7 @@ type
     byRoot: StateByRoot                 ## States indexed by state root
 
 func rootStr*(state: StateDataRef): string
-func accuAccountsCoverage*(db: StateDbRef): float
+func accountsCoverage*(db: StateDbRef): float
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -171,13 +171,23 @@ func findMinUnproc(db: StateDbRef): StateDataRef =
 
   # result
 
+proc rollBackAccounts(db: StateDbRef, state: StateDataRef) =
+  ## Roll back global unproc register (as best as possible)
+  var carry = 0.u256
+  for iv in state.unproc.unprocessed.complement.increasing:
+    carry += db.unproc.merge(iv)                  # hand back interval
+  db.carryOver -= carry.per256                    # adjust by carry over field
+  let totalRatio = db.unproc.totalRatio
+  if db.carryOver < totalRatio - 1f:
+    db.carryOver = totalRatio - 1f
+
 proc resetMetrics(db: StateDbRef) =
   metrics.set(nec_snap_accumulated_state_coverage, 0f)
   metrics.set(nec_snap_pivot_state_coverage, 0f)
   metrics.set(nec_snap_active_states, 0)
 
 proc updateMetrics(db: StateDbRef) =
-  metrics.set(nec_snap_accumulated_state_coverage, db.accuAccountsCoverage())
+  metrics.set(nec_snap_accumulated_state_coverage, db.accountsCoverage())
   metrics.set(nec_snap_pivot_state_coverage, (1f - db.pivot.unproc.totalRatio))
   metrics.set(nec_snap_active_states, db.byRoot.len)
 
@@ -217,24 +227,25 @@ proc register*(
   ## the current state record, or the new one created (not `nil`.)
   ##
   proc del(db: StateDbRef, state: StateDataRef) =
+    doAssert not state.isNil
     discard db.byNumber.delete state.blockNumber    # delete index
     db.byHash.del state.blockHash                   # ditto
     db.byRoot.del state.stateRoot                   # ...
     if db.pivot == state:
       db.pivot = StateDataRef(nil)
-    debug info & ": evicted state record", root=state.rootStr,
-      hash=state.blockHash.toStr, isPivot=db.pivot.isNil
-    # Roll back global unproc register (as best as possible)
-    var carry = 0.u256
-    for iv in state.unproc.unprocessed.complement.increasing:
-      carry += db.unproc.merge(iv)                  # hand back interval
-    db.carryOver -= carry.per256                    # adjust by carry over field
+    db.rollBackAccounts state
     state.deadState = true                          # mark it evicted
 
   db.byNumber.eq(number).isErrOr:
-    if value.data.blockHash == hash:
+    let blockHash = value.data.blockHash
+    if blockHash == hash:
       return value.data                             # already registered
     # Otherwise, the entry will be replaced, below
+    if db.pivot == value.data:
+      debug info & ": replacing pivot", root=value.data.rootStr,
+        hash=blockHash.toStr, newRoot=root.Hash32.short,
+        newHash=hash.Hash32.short
+      discard                                       # in case `debug` is empty
     db.del value.data                               # remove index columns
 
   # New state record
@@ -336,9 +347,9 @@ proc isComplete*(state: StateDataRef): bool =
     return true
   # false
 
-func accuAccountsCoverage*(db: StateDbRef): float =
+func accountsCoverage*(db: StateDbRef): float =
   ## Coverage of accounts over all states
-  (1f - db.unproc.totalRatio) + db.carryOver
+  max(0f, 1f - db.unproc.totalRatio + db.carryOver)
 
 func accountsCoverage*(state: StateDataRef): float =
   ## Coverage of accounts for a particular state
@@ -670,11 +681,11 @@ func toStr*(db: StateDbRef): string =
       result &= $state.blockNumber
     if db.pivot == state:
       result &= "*"
-    result &= ":" & state.unproc.totalRatio.toStr(4)
+    result &= ":" & state.accountsCoverage.toStr(4)
     result &= "(" & $state.byAccount.len & ")"
     result &= ","
   result[^1] = '}'
-  result &= ":" & db.accuAccountsCoverage.toStr(7)
+  result &= ":" & db.accountsCoverage.toStr(4)
 
 # ------------------------------------------------------------------------------
 # End
