@@ -9,7 +9,12 @@
 
 {.push raises: [], gcsafe.}
 
+# To make the isMainModule functionality work
+{.define: unittest2DisableParamFiltering.}
+
 import
+  std/os,
+  unittest2,
   eth/common/headers_rlp,
   web3/eth_api_types,
   web3/engine_api_types,
@@ -112,30 +117,33 @@ proc runTest(env: TestEnv, unit: EngineUnitEnv): Result[void, string] =
 
   ok()
 
-proc processFile*(fileName: string, statelessEnabled = false): bool =
-  let
-    fixture = parseFixture(fileName, EngineFixture)
+proc processFile*(filePath: string, statelessEnabled = false, skipFiles: seq[string] = @[]) =
+  let fixture = parseFixture(filePath, EngineFixture)
+  let fileName = filePath.splitPath().tail
 
-  var testPass = true
   for unit in fixture.units:
-    let header = unit.unit.genesisBlockHeader.to(Header)
-    doAssert(unit.unit.genesisBlockHeader.hash == header.computeRlpHash)
-    let env = prepareEnv(unit.unit, header, rpcEnabled = true, statelessEnabled)
-    env.runTest(unit.unit).isOkOr:
-      echo "\nTestName: ", unit.name, " RunTest error: ", error, "\n"
-      testPass = false
-    env.close()
+    let
+      testName = unit.name
+      testUnit = unit.unit
+    test testName & " from " & filePath:
+      if fileName in skipFiles:
+        skip()
+      else:
+        let header = testUnit.genesisBlockHeader.to(Header)
+        check testUnit.genesisBlockHeader.hash == header.computeRlpHash
+        let env = prepareEnv(testUnit, header, rpcEnabled = true, statelessEnabled)
 
-  return testPass
+        let testResult = env.runTest(testUnit)
+        check testResult == Result[void, string].ok()
+
+        env.close()
 
 when isMainModule:
-  import
-    std/[cmdline, os],
-    unittest2
+  import std/cmdline
 
   if paramCount() == 0:
     let testFile = getAppFilename().splitPath().tail
     echo "Usage: " & testFile & " vector.json"
     quit(QuitFailure)
 
-  check processFile(paramStr(1))
+  processFile(paramStr(1))

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -7,8 +7,12 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+# To make the isMainModule functionality work
+{.define: unittest2DisableParamFiltering.}
+
 import
-  std/json,
+  std/[json, os],
+  unittest2,
   eth/common/headers_rlp,
   web3/eth_api_types,
   web3/engine_api_types,
@@ -45,7 +49,7 @@ proc rootExists(db: CoreDbTxRef; root: Hash32): bool =
     return false
   state == root
 
-proc runTest(env: TestEnv, unit: BlockchainUnitEnv): Future[Result[void, string]] {.async.} =
+proc runTest(env: TestEnv, unit: BlockchainUnitEnv, statelessEnabled = false): Future[Result[void, string]] {.async.} =
   let blocks = parseBlocks(unit.blocks)
   var lastStateRoot = unit.genesisBlockHeader.stateRoot
 
@@ -73,30 +77,33 @@ proc runTest(env: TestEnv, unit: BlockchainUnitEnv): Future[Result[void, string]
 
   ok()
 
-proc processFile*(fileName: string, statelessEnabled = false): bool =
-  let
-    fixture = parseFixture(fileName, BlockchainFixture)
+proc processFile*(filePath: string, statelessEnabled = false, skipFiles: seq[string] = @[]) =
+  let fixture = parseFixture(filePath, BlockchainFixture)
+  let fileName = filePath.splitPath().tail
 
-  var testPass = true
   for unit in fixture.units:
-    let header = unit.unit.genesisBlockHeader.to(Header)
-    doAssert(unit.unit.genesisBlockHeader.hash == header.computeRlpHash)
-    let env = prepareEnv(unit.unit, header, rpcEnabled = false, statelessEnabled)
-    (waitFor env.runTest(unit.unit)).isOkOr:
-      echo "\nTestName: ", unit.name, " RunTest error: ", error, "\n"
-      testPass = false
-    env.close()
+    let
+      testName = unit.name
+      testUnit = unit.unit
+    test testName & " from " & filePath:
+      if fileName in skipFiles:
+        skip()
+      else:
+        let header = testUnit.genesisBlockHeader.to(Header)
+        check testUnit.genesisBlockHeader.hash == header.computeRlpHash
+        let env = prepareEnv(testUnit, header, rpcEnabled = false, statelessEnabled)
 
-  return testPass
+        let testResult = waitFor env.runTest(testUnit, statelessEnabled)
+        check testResult == Result[void, string].ok()
+
+        env.close()
 
 when isMainModule:
-  import
-    os,
-    unittest2
+  import std/cmdline
 
   if paramCount() == 0:
     let testFile = getAppFilename().splitPath().tail
     echo "Usage: " & testFile & " vector.json"
     quit(QuitFailure)
 
-  check processFile(paramStr(1))
+  processFile(paramStr(1))
