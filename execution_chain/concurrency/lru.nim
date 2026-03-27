@@ -283,10 +283,10 @@ proc grow[K, V](v: var ConcurrentLruCache[K, V], newSize: uint32) =
     if b.index != 0:
       toOpenArray(v.buckets, 0, newTableSize - 1).tablePut(b.subhash, b.index)
 
-  v.bucketsLen = newTableSize
+  if v.bucketsLen > 0:
+    deallocShared(buckets)
 
-  # TODO: handle memory leak
-  #deallocShared(buckets)
+  v.bucketsLen = newTableSize
 
 func resetPayload(n: var LruNode) =
   # Resetting the payload is not needed for the cache itself (it will happily

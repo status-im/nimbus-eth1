@@ -108,28 +108,28 @@ template tryPop*[E, T](q: var ConcurrentQueue[E, T]): Opt[T] =
     Opt.none(T)
 
 func push*[E, T](q: var ConcurrentQueue[E, T], value: sink T) =
-  var headIdx = q.pushBegin()
-
   withLock(q.lockFull):
+    var headIdx = q.pushBegin()
+
     while headIdx < 0:
       q.condFull.wait(q.lockFull)
       headIdx = q.pushBegin()
 
-  q.data[headIdx] = value
-  q.pushCommit()
-  q.condEmpty.signal()
+    q.data[headIdx] = value
+    q.pushCommit()
+    q.condEmpty.signal()
 
 func pop*[E, T](q: var ConcurrentQueue[E, T], value: var T) =
-  var tailIdx = q.popBegin()
-
   withLock(q.lockEmpty):
+    var tailIdx = q.popBegin()
+
     while tailIdx < 0:
       q.condEmpty.wait(q.lockEmpty)
       tailIdx = q.popBegin()
 
-  value = move(q.data[tailIdx])
-  q.popCommit()
-  q.condFull.signal()
+    value = move(q.data[tailIdx])
+    q.popCommit()
+    q.condFull.signal()
 
 template pop*[E, T](q: var ConcurrentQueue[E, T]): T =
   var value: T
