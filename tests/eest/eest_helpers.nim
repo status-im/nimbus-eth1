@@ -29,6 +29,7 @@ import
   ../../execution_chain/core/tx_pool,
   ../../execution_chain/beacon/beacon_engine,
   ../../execution_chain/common/common,
+  ../../execution_chain/stateless/witness_types,
   ../../hive_integration/engine_client
 
 import ../../tools/common/helpers as chp except HardFork
@@ -65,6 +66,7 @@ type
   BlockDesc* = object
     blk*: EthBlock
     badBlock*: bool
+    witness*: Opt[ExecutionWitness]
 
   Numero* = distinct uint64
 
