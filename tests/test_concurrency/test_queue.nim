@@ -8,27 +8,31 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.used.}
 
 import results, taskpools, unittest2, ../../execution_chain/concurrency/queue
 
 
 suite "ConcurrentQueue Tests":
 
-  test "init, capacity":
+  test "init, capacity, dispose":
     block:
       var queue: ConcurrentQueue[2, int]
       queue.init()
       check queue.capacity() == 3
+      queue.dispose()
 
     block:
       var queue: ConcurrentQueue[3, int]
       queue.init()
-      check queue.capacity() == 7  
+      check queue.capacity() == 7
+      queue.dispose()
 
     block:
       var queue: ConcurrentQueue[4, int]
       queue.init()
-      check queue.capacity() == 15 
+      check queue.capacity() == 15
+      queue.dispose()
 
   test "isFull, isEmpty":
     var queue: ConcurrentQueue[2, int]
@@ -99,7 +103,7 @@ suite "ConcurrentQueue Tests":
       value == 300
       queue.isEmpty() == true
 
-  test "Combined operations":
+  test "Misc operations":
     var queue: ConcurrentQueue[2, int]
     queue.init()
 

@@ -18,8 +18,8 @@ import std/locks
 type ReadWriteLock* = object
   lock: Lock
   cond: Cond
-  readerCount: int
-  hasWriter: bool
+  readerCount*: int
+  hasWriter*: bool
 
 func init*(rwLock: var ReadWriteLock) =
   initLock(rwLock.lock)
@@ -38,6 +38,7 @@ func lockRead*(rwLock: var ReadWriteLock) =
 
 func unlockRead*(rwLock: var ReadWriteLock) =
   withLock(rwLock.lock):
+    assert rwLock.readerCount >= 1
     dec rwLock.readerCount
     if rwLock.readerCount == 0:
       rwLock.cond.broadcast()
@@ -52,6 +53,7 @@ func lockWrite*(rwLock: var ReadWriteLock) =
 
 func unlockWrite*(rwLock: var ReadWriteLock) =
   withLock(rwLock.lock):
+    assert rwLock.hasWriter
     rwLock.hasWriter = false
     rwLock.cond.broadcast()
 
@@ -72,20 +74,3 @@ template withWriteLock*(rwLock: var ReadWriteLock, body: untyped) =
 func dispose*(rwLock: var ReadWriteLock) =
   deinitLock(rwLock.lock)
   deinitCond(rwLock.cond)
-
-when isMainModule:
-  var rwLock = ReadWriteLock.init()
-
-  rwLock.lockRead()
-  rwLock.unlockRead()
-  rwLock.lockWrite()
-  rwLock.unlockWrite()
-
-  rwLock.lockRead()
-  rwLock.lockRead()
-  rwLock.lockRead()
-  rwLock.unlockRead()
-  rwLock.unlockRead()
-  rwLock.unlockRead()
-  rwLock.lockWrite()
-  rwLock.unlockWrite()
