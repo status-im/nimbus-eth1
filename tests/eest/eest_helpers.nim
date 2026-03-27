@@ -317,13 +317,5 @@ template runEESTSuite*(
 ) =
   for eest in eestReleases:
     suite eest & ": " & eestType:
-      for fileName in walkDirRec(baseFolder / eest / eestType):
-        test fileName:
-          let last = testName.splitPath().tail
-          if last in skipFiles:
-            skip()
-          else:
-            let res = processFile(testName, statelessEnabled)
-            if not res:
-              debugEcho last
-            check res
+      for filePath in walkDirRec(baseFolder / eest / eestType):
+        processFile(filePath, statelessEnabled, @skipFiles)
