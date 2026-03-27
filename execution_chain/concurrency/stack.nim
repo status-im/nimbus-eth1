@@ -52,7 +52,14 @@ proc tryPop*[N, T](s: var ConcurrentStack[N, T], value: var T): bool =
       return true
     else:
       return false
-      
+
+template tryPop*[N, T](s: var ConcurrentStack[N, T]): Opt[T] =
+  var value: T
+  if s.tryPop(value):
+    Opt.some(value)
+  else:
+    Opt.none(T)
+
 proc push*[N, T](s: var ConcurrentStack[N, T], value: T) =
   var pushed = s.tryPush(value)
   while not pushed:

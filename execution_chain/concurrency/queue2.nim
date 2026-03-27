@@ -69,7 +69,14 @@ proc tryPop*[N, T](q: var ConcurrentQueue[N, T], value: var T): bool =
       return true
     else:
       return false
-      
+
+template tryPop*[N, T](q: var ConcurrentQueue[N, T]): Opt[T] =
+  var value: T
+  if q.tryPop(value):
+    Opt.some(value)
+  else:
+    Opt.none(T)
+
 proc push*[N, T](q: var ConcurrentQueue[N, T], value: T) =
   var pushed = q.tryPush(value)
   while not pushed:
