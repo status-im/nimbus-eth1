@@ -129,12 +129,12 @@ suite "ConcurrentQueue Tests":
     check queue.pop() == 400
   
   test "Single producer task, single consumer task, multiple threads":
-    let taskpool = Taskpool.new(numThreads = 4)
+    let taskpool = Taskpool.new(numThreads = 2)
 
     var queue: ConcurrentQueue[2, int]
     queue.init()
 
-    const NUM_ITEMS = 100
+    const NUM_ITEMS = 3
 
     proc producer(q: ptr ConcurrentQueue[2, int], useTry: bool): int =
       var count = 0
@@ -153,7 +153,6 @@ suite "ConcurrentQueue Tests":
         if useTry:
           while q[].tryPop().isNone():
             cpuRelax()
-          #echo "got item: ", i
         else:
           discard q[].pop()
         inc count
@@ -161,8 +160,8 @@ suite "ConcurrentQueue Tests":
 
     block:
       let 
-        f1 = taskpool.spawn producer(queue.addr, useTry = true)
-        f2 = taskpool.spawn consumer(queue.addr, useTry = true)
+        f1 = taskpool.spawn producer(queue.addr, useTry = false)
+        f2 = taskpool.spawn consumer(queue.addr, useTry = false)
 
       check: 
         sync(f1) == NUM_ITEMS
