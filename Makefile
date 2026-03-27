@@ -178,8 +178,11 @@ GIT_SUBMODULE_UPDATE := git -c submodule."vendor/nimbus-eth2".update=none submod
 
 else # "variables.mk" was included. Business as usual until the end of this file.
 
+.NOTPARALLEL: nimbus_all
+nimbus_all: | nimbus nimbus_execution_client
+
 # default target, because it's the first one that doesn't start with '.'
-all: | $(TOOLS) nimbus nimbus_execution_client
+all: | $(TOOLS) nimbus_all
 
 # must be included after the default target
 -include $(BUILD_SYSTEM_DIR)/makefiles/targets.mk
