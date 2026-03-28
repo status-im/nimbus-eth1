@@ -19,6 +19,7 @@ import
   eth/[common/keys, net/nat],
   eth/p2p/discoveryv5/node,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
+  beacon_chain/nimbus_binary_common,
   ../common/common_utils,
   ../database/content_db,
   ../network/wire/
@@ -95,21 +96,7 @@ type
       name: "network-key"
     .}: PrivateKey
 
-    metricsEnabled* {.
-      defaultValue: false, desc: "Enable the metrics server", name: "metrics"
-    .}: bool
-
-    metricsAddress* {.
-      defaultValue: defaultAdminListenAddress,
-      desc: "Listening address of the metrics server",
-      name: "metrics-address"
-    .}: IpAddress
-
-    metricsPort* {.
-      defaultValue: 8008,
-      desc: "Listening HTTP port of the metrics server",
-      name: "metrics-port"
-    .}: Port
+    metrics* {.flatten.}: MetricsConf
 
     protocolId* {.
       defaultValue: getProtocolId(PortalSubnetwork.history),
@@ -268,23 +255,11 @@ proc run(config: PortalCliConf) =
       bootstrapRecords = bootstrapRecords,
     )
 
-  if config.metricsEnabled:
-    let
-      address = config.metricsAddress
-      port = config.metricsPort
-      url = "http://" & $address & ":" & $port & "/metrics"
-
-      server = MetricsHttpServerRef.new($address, port).valueOr:
-        error "Could not instantiate metrics HTTP server", url, error
-        quit QuitFailure
-
-    info "Starting metrics HTTP server", url
-    try:
-      waitFor server.start()
-    except MetricsError as exc:
-      fatal "Could not start metrics HTTP server",
-        url, error_msg = exc.msg, error_name = exc.name
-      quit QuitFailure
+  let metricsServer = (waitFor initMetricsServer(config.metrics)).valueOr:
+    quit QuitFailure
+  defer:
+    if metricsServer.isSome():
+      waitFor metricsServer.stopMetricsServer()
 
   case config.cmd
   of ping:
