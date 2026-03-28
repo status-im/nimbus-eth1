@@ -1,0 +1,76 @@
+# Nimbus
+# Copyright (c) 2026 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT))
+# at your option.
+# This file may not be copied, modified, or distributed except according to
+# those terms.
+
+## This implements a writer preferring read-write lock using a lock
+## and a condition varable. Multiple readers can hold the lock concurrently
+## but only a single write is allowed to hold the lock.
+
+{.push raises: [], gcsafe.}
+
+import std/locks
+
+type ReadWriteLock* = object
+  lock: Lock
+  cond: Cond
+  readerCount*: int
+  hasWriter*: bool
+
+func init*(rwLock: var ReadWriteLock) =
+  initLock(rwLock.lock)
+  initCond(rwLock.cond)
+
+func init*(T: type ReadWriteLock): T =
+  var rwLock = ReadWriteLock()
+  rwLock.init()
+  rwLock
+
+func lockRead*(rwLock: var ReadWriteLock) =
+  withLock(rwLock.lock):
+    while rwLock.hasWriter:
+      rwLock.cond.wait(rwLock.lock)
+    inc rwLock.readerCount
+
+func unlockRead*(rwLock: var ReadWriteLock) =
+  withLock(rwLock.lock):
+    assert rwLock.readerCount >= 1
+    dec rwLock.readerCount
+    if rwLock.readerCount == 0:
+      rwLock.cond.broadcast()
+
+func lockWrite*(rwLock: var ReadWriteLock) =
+  withLock(rwLock.lock):
+    while rwLock.hasWriter:
+      rwLock.cond.wait(rwLock.lock)
+    rwLock.hasWriter = true
+    while rwLock.readerCount > 0:
+      rwLock.cond.wait(rwLock.lock)
+
+func unlockWrite*(rwLock: var ReadWriteLock) =
+  withLock(rwLock.lock):
+    assert rwLock.hasWriter
+    rwLock.hasWriter = false
+    rwLock.cond.broadcast()
+
+template withReadLock*(rwLock: var ReadWriteLock, body: untyped) =
+  rwLock.lockRead()
+  try:
+    body
+  finally:
+    rwLock.unlockRead()
+
+template withWriteLock*(rwLock: var ReadWriteLock, body: untyped) =
+  rwLock.lockWrite()
+  try:
+    body
+  finally:
+    rwLock.unlockWrite()
+
+func dispose*(rwLock: var ReadWriteLock) =
+  deinitLock(rwLock.lock)
+  deinitCond(rwLock.cond)

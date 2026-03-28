@@ -107,6 +107,7 @@ proc putVtx*(
       else:
         discard rdb.rdVtxLru.update(rvid.vid, vtxBuf)
 
+
     if key.isValid:
       if rdb.rdKeyLru.len < rdb.rdKeyLru.capacity:
         rdb.rdKeyLru.put(rvid.vid, key)
@@ -114,7 +115,6 @@ proc putVtx*(
         discard rdb.rdKeyLru.update(rvid.vid, key)
     else:
       rdb.rdKeyLru.del rvid.vid
-
   else:
     dsc.delete(rvid.blobify().data(), rdb.vtxCol.handle()).isOkOr:
       # Caller must `rollback()` which will clear the `rdVtxLru` cache
@@ -127,6 +127,26 @@ proc putVtx*(
     rdb.rdBranchLru.del rvid.vid
     rdb.rdVtxLru.del rvid.vid
     rdb.rdKeyLru.del rvid.vid
+
+  ok()
+
+proc putVtxBlob*(
+    rdb: var RdbInst; session: SharedWriteBatchRef,
+    rvid: RootedVertexID; vtx: openArray[byte]
+      ): Result[void,(VertexID,AristoError,string)] =
+  let dsc = session.batch
+
+  dsc.put(rvid.blobify().data(), vtx, rdb.vtxCol.handle()).isOkOr:
+    # Caller must `rollback()` which will clear the `rdVtxLru` cache
+    const errSym = RdbBeDriverPutVtxError
+    when extraTraceMessages:
+      trace logTxt "putVtxBlob()", vid, error=errSym, info=error
+    return err((rvid.vid,errSym,error))
+  
+  # Delete the updated vertex from the caches to remove the any stale values
+  rdb.rdBranchLru.del rvid.vid
+  rdb.rdVtxLru.del rvid.vid
+  rdb.rdKeyLru.del rvid.vid
 
   ok()
 

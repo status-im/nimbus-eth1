@@ -39,6 +39,8 @@ const
 suite "Aristo TxFrame":
   setup:
     let db = AristoDbRef.init()
+    db.parallelStateRootComputation = true
+    db.taskpool = Taskpool.new(numThreads = 4)
 
   test "Frames should independently keep data":
     let

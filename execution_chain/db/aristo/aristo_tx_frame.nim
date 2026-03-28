@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -132,14 +132,22 @@ proc txFrameBegin*(
   let parent = if parentFrame == nil: db.txRef else: parentFrame
   doAssert not parent.isDisposed()
 
-  AristoTxRef(
+  let txRef = AristoTxRef(
     db: db,
     parent: parent,
     kMap: if moveParentHashKeys: move(parent.kMap) else: default(parent.kMap.type),
     vTop: parent.vTop,
     level: parent.level + 1)
 
+  when compileOption("threads"):
+    txRef.lock = ReadWriteLock.init()
+  
+  txRef
+
 proc dispose*(txFrame: AristoTxRef) =
+  when compileOption("threads"):
+    txFrame.lock.dispose()
+
   if not txFrame.db.isNil():
     txFrame.db.removeSnapshotFrame(txFrame)
   txFrame[].reset()
