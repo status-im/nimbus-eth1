@@ -45,6 +45,7 @@ pipeline {
   }
 
   options {
+    disableConcurrentBuilds()
     disableRestartFromStage()
     timestamps()
     ansiColor('xterm')
