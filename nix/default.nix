@@ -7,10 +7,10 @@
   # Options: nimbus, nimbus_execution_client, nimbus_portal_client, nimbus_portal_bridge
   targets ? ["nimbus_execution_client"],
   # Options: 0,1,2
-  verbosity ? 2,
+  verbosity ? 1,
   # FIXME: Necessary to compile EL client without linker failures.
   disableLto ? true,
-  # TODO: Support building rocksdb from vendor folder.
+  # Building RocksDB from vendor takes almost double the time.
   dynamicRocksDB ? true,
   # These are the only platforms tested in CI and considered stable.
   stableSystems ? [
@@ -39,9 +39,9 @@ in stdenv.mkDerivation rec {
   enableParallelBuilding = false;
 
   buildInputs = with pkgs; [
-    lz4 zstd perl sqlite python3
+    perl sqlite python3
   ] ++ optionals dynamicRocksDB [
-    rocksdb
+    lz4 zstd rocksdb
   ];
 
   runtimeDependencies = optionals dynamicRocksDB [ pkgs.rocksdb ];
@@ -49,10 +49,11 @@ in stdenv.mkDerivation rec {
   # Fix for Nim compiler calling 'git rev-parse' and 'lsb_release'.
   nativeBuildInputs = let
     fakeGit = writeScriptBin "git" "echo ${version}";
+    fakeHostname = writeScriptBin "hostname" "echo nix";
   in with pkgs; [
-    nim fakeGit which
+    nim which fakeGit fakeHostname
   ] ++ (if (!stdenv.isDarwin) then [
-    lsb-release
+    lsb-release inetutils
   ] else [
     pkgs.darwin.cctools
   ]);
@@ -62,12 +63,12 @@ in stdenv.mkDerivation rec {
     NIMFLAGS = "-d:disableMarchNative -d:git_revision_override=${revision}"
       + optionalString dynamicRocksDB " -d:rocksdb_dynamic_linking";
     NIX_LDFLAGS = optionalString dynamicRocksDB "-rpath ${makeLibraryPath [pkgs.rocksdb]}";
-    #NIX_LDFLAGS = optionalString dynamicRocksDB "-L${lib.getLib pkgs.rocksdb}/lib";
-    #NIX_LDFLAGS = optionalString dynamicRocksDB "-rpath ${lib.makeLibraryPath [ pkgs.rocksdb ]} $NIX_LDFLAGS";
-    #NIM_PARAMS = optionalString disableLto " --passC:'-fno-lto' --passL:'-fno-lto'";
 
     # Provide runtime libraries for linking.
     LD_LIBRARY_PATH = makeLibraryPath buildInputs;
+
+    # RocksDB fix for no Git command.
+    FORCE_GIT_SHA = "missing";
 
     # Avoid Nim cache permission errors.
     XDG_CACHE_HOME = "/tmp";
@@ -78,16 +79,14 @@ in stdenv.mkDerivation rec {
 
   makeFlags = targets ++ [
     "V=${toString verbosity}"
-    #"NIM_PARAMS=$NIM_PARAMS"
     # Built from nimbus-build-system via flake.
     "USE_SYSTEM_NIM=1"
   ] ++ optionals dynamicRocksDB [
-    # FIXME: Building local RockDB fails silently.
     "USE_SYSTEM_ROCKSDB=1"
   ];
 
   patchPhase = ''
-    patchShebangs scripts vendor
+    patchShebangs scripts vendor >/dev/null
   '';
 
   # Generate the nimbus-build-system.paths file with vendor module paths.
@@ -95,10 +94,22 @@ in stdenv.mkDerivation rec {
     make nimbus-build-system-paths
   '';
 
+  # Fix for RocksDB Makefile calling curl to fetch these sources.
+  preBuild = optionalString (!dynamicRocksDB) (let
+    zstd = callPackage ./zstd.nix { };
+    zlib = callPackage ./zlib.nix { };
+    lz4 = callPackage ./lz4.nix { };
+  in ''
+    sed -i '/clean_build_artifacts.sh/d' vendor/nim-rocksdb/scripts/build_static_deps.sh
+    cp -v ${zlib} vendor/nim-rocksdb/vendor/rocksdb/${zlib.name}
+    cp -v ${zstd} vendor/nim-rocksdb/vendor/rocksdb/${zstd.name}
+    cp -v ${lz4} vendor/nim-rocksdb/vendor/rocksdb/${lz4.name}
+  '');
+
   installPhase = ''
     mkdir -p $out/bin
     rm -f build/generate_makefile
-    cp build/* $out/bin
+    cp -r build/* $out/bin
   '';
 
   meta = with lib; {

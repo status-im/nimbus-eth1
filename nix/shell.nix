@@ -1,14 +1,11 @@
 { pkgs ? import <nixpkgs> {}, nim }:
 
-let
-  package = pkgs.callPackage ./default.nix { inherit nim; };
-in pkgs.mkShell {
-  inputsFrom = [ package ];
-
+pkgs.mkShell {
   buildInputs = with pkgs; [
     git
     git-lfs
     getopt
+    nim
 
     # For the local simulation
     openssl # for generating the JWT file
