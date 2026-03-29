@@ -17,6 +17,7 @@ type
   SyncState* = enum
     SnapIdle = 0
     SnapResume                     ## Resume from previous session
+    SnapReady                      ## Wait for download state
     SnapDownload                   ## Downloading and caching data
     SnapMkTrie                     ## Assembling downloaded data
     SnapHealing                    ## Complete missing trie nodes
@@ -31,6 +32,7 @@ type
     ECatchableError                ## Exception
     ECancelledError                ## Exception
     ETrieError                     ## Database error
+    ELockError                     ## Locked by some other peer
 
 const
   snapAsmFolder* = "snap"
@@ -52,6 +54,25 @@ const
 
   mktrieThreadSwitchTimeSlot* = chronos.nanoseconds(1)
     ## Nano-sleep to allows pseudo/async thread switch
+
+  lockWaitPollingTime* = chronos.milliseconds(500)
+    ## Polling for a lock to be released
+
+  accuAccountsCovMin* = 2.0
+    ## In absence of a completed pivot state, the syncer will stop downloading
+    ## if all accounts are covered at least by this factor. Then trie-assembly
+    ## and healing can take place if the pivot state is also sufficiently
+    ## covered (see  `accuPivotCovMin` below.)
+    ##
+    ## The reasoning for getting away without a completed pivot is that state
+    ## changes between consecutive trie states are small. There is a fair
+    ## chance that the pivot state will also have valid accounts identical
+    ## with other states.
+
+  accuPivotCovMin* = 0.7
+    ## If the total coverage has reached the factor `accuAccountsCovMin`, the
+    ## pivot must also have reached the factor `accuPivotCovMin` in order to
+    ## start trie assembly and healing.
 
   # ----------------------
 
@@ -75,7 +96,10 @@ const
 
   # -----------
 
-  fetchHeadersRlpxTimeout* = chronos.seconds(30)
+  nFetchHeaderPeersMax* = 5
+    ## Try at most this many `eth` peers for fetching a header
+
+  fetchHeaderRlpxTimeout* = chronos.seconds(30)
     ## Timeout cap for the `RLPX` handler when fetching header. This value
 
   # -----------
