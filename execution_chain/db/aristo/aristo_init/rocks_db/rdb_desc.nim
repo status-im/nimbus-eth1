@@ -19,9 +19,9 @@ import
   ../../../core_db/backend/rocksdb_desc,
   ../../[aristo_blobify, aristo_desc],
   ../init_common,
-  ../../../../concurrency/lru
+  minilru
 
-export lru, rocksdb_desc
+export minilru, rocksdb_desc
 
 const AdmKey* = default(seq[byte])
 
@@ -54,13 +54,13 @@ type
     # is less memory and time efficient (the latter one due to internal LRU
     # handling of the longer key.)
     #
-    rdKeyLru*: ConcurrentLruCache[VertexID,HashKey] ## Read cache
+    rdKeyLru*: LruCache[VertexID,HashKey] ## Read cache
     rdKeySize*: int
 
-    rdVtxLru*: ConcurrentLruCache[VertexID,VertexBuf] ## Read cache
+    rdVtxLru*: LruCache[VertexID,VertexBuf] ## Read cache
     rdVtxSize*: int
 
-    rdBranchLru*: ConcurrentLruCache[VertexID, (VertexID, uint16)]
+    rdBranchLru*: LruCache[VertexID, (VertexID, uint16)]
     rdBranchSize*: int
 
     rdbPrintStats*: bool               ## Print statistics on closure

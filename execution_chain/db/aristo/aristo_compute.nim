@@ -171,10 +171,13 @@ proc getKey(
   const 
     emptyFlags: set[GetVtxFlag] = {}
     flags = 
-      when skipLayers: 
-        {GetVtxFlag.PeekCache} 
-      else: 
-        emptyFlags  
+      when parallel:
+        {GetVtxFlag.PeekCache, GetVtxFlag.NoPutCache} 
+      else:
+        when skipLayers:
+          {GetVtxFlag.PeekCache} 
+        else: 
+          emptyFlags  
   
   when not skipLayers:
     block body:
@@ -544,7 +547,7 @@ proc computeStateRoot*(
 ): Result[HashKey, AristoError] =
   ## Ensure that key cache is topped up with the latest state root
   ## and return the computed value.
-  if txRef.db.parallelStateRootComputation and txRef.db.taskpool.numThreads > 1:
+  if txRef.db.parallelStateRootComputation and txRef.db.taskpool != nil and txRef.db.taskpool.numThreads > 1:
     txRef.computeKeyImpl(
       (STATE_ROOT_VID, STATE_ROOT_VID),
       skipLayers,
