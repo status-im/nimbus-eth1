@@ -33,6 +33,8 @@ type
     count*: int
     depth*: int
     prefix*: uint64
+    tasksCompleted*: int
+    tasksTotal*: int
   
   ConcurrentHashKeyQueue* = ConcurrentQueue[3, (RootedVertexID, HashKey, int)]
   ConcurrentVertexBufQueue* = ConcurrentQueue[3, (RootedVertexID, VertexBuf)]
@@ -45,10 +47,13 @@ proc `=copy`(dest: var WriteBatch; src: WriteBatch) {.error: "Copying WriteBatch
 # larger it is..
 const batchSize = 1024 * 1024 div (sizeof(RootedVertexID) + sizeof(HashKey))
 
-func progress(batch: WriteBatch): string =
+func progress(batch: WriteBatch, parallel: static bool): string =
   # Return an approximation on how much of the keyspace has been covered by
   # looking at the path prefix that we're currently processing
-  &"{(float(batch.prefix) / float(uint64.high)) * 100:02.2f}%"
+  when parallel:
+    &"{batch.tasksCompleted}/{batch.tasksTotal}"
+  else:
+    &"{(float(batch.prefix) / float(uint64.high)) * 100:02.2f}%"
 
 func enter(batch: var WriteBatch, nibble: uint8) =
   batch.depth += 1
@@ -66,14 +71,20 @@ proc flush(batch: var WriteBatch, db: AristoDbRef): Result[void, AristoError] =
     batch.writer = nil
   ok()
 
-template flushCheck(batch: var WriteBatch, db: AristoDbRef): Result[void, AristoError] =
+template flushCheck(batch: var WriteBatch, db: AristoDbRef, parallel: static bool): Result[void, AristoError] =
   if batch.count mod batchSize == 0:
     ?batch.flush(db)
-
-    if batch.count mod (batchSize * 100) == 0:
-      info "Writing computeKey cache", keys = batch.count, accounts = batch.progress
+    
+    when parallel:
+      if batch.count mod (batchSize * 100) == 0:
+        info "Writing computeKey cache", keys = batch.count, tasksCompleted = batch.progress(parallel)
+      else:
+        debug "Writing computeKey cache", keys = batch.count, tasksCompleted = batch.progress(parallel)
     else:
-      debug "Writing computeKey cache", keys = batch.count, accounts = batch.progress
+      if batch.count mod (batchSize * 100) == 0:
+        info "Writing computeKey cache", keys = batch.count, accounts = batch.progress(parallel)
+      else:
+        debug "Writing computeKey cache", keys = batch.count, accounts = batch.progress(parallel)
   ok()
 
 proc putVtx(
@@ -88,7 +99,7 @@ proc putVtx(
 
   db.putVtxFn(batch.writer, rvid, vtx, key)
   inc batch.count
-  ?batch.flushCheck(db)
+  ?batch.flushCheck(db, parallel = false)
 
   ok()
 
@@ -142,7 +153,7 @@ proc putVtxBlob(
 
   db.putVtxBlobFn(batch.writer, rvid, vtx)
   inc batch.count
-  ?batch.flushCheck(db)
+  ?batch.flushCheck(db, parallel = true)
 
   ok()
 
@@ -366,9 +377,11 @@ proc computeKeyImpl(
             futs[minIdx] = txRef.db.taskpool.spawn computeKeyImplTask(
               txRef.addr, vid, batchPtr, vtxPtr, level, skipLayers, 
               keyQueues[minIdx].addr, vtxBufQueues[minIdx].addr)
-          
+            inc batch.tasksTotal
+
           else:
-            #batch.enter(n)
+            when not parallel:
+              batch.enter(n)
             (keyvtxs[minIdx][0][0], keyvtxs[minIdx][1]) =
               ?txRef.computeKeyImpl(
                 (rvid.root, vtx.bVid(uint8 minIdx)),
@@ -381,7 +394,8 @@ proc computeKeyImpl(
                 keyQueue,
                 vtxBufQueue
               )
-            #batch.leave(n)
+            when not parallel:
+              batch.leave(n)
 
       when spawnTpTasks:
         var runningFutsIndexes: set[uint8] = {}
@@ -413,6 +427,7 @@ proc computeKeyImpl(
                 # and then remove it from the set
                 if f.isReady():
                   runningFutsIndexes.excl(i.uint8)
+                  inc batch.tasksCompleted
 
         # At this point all futures have finished running.
         # Now we process any remaining data in the queues.
@@ -522,10 +537,16 @@ proc computeKeyImpl(
     ?batch.flush(txRef.db)
 
     if batch.count > 0:
-      if batch.count >= batchSize * 100:
-        info "Wrote computeKey cache", keys = batch.count, accounts = "100.00%"
+      when parallel:
+        if batch.count >= batchSize * 100:
+          info "Wrote computeKey cache", keys = batch.count, tasksCompleted = batch.progress(parallel)
+        else:
+          debug "Wrote computeKey cache", keys = batch.count, tasksCompleted = batch.progress(parallel)
       else:
-        debug "Wrote computeKey cache", keys = batch.count, accounts = "100.00%"
+        if batch.count >= batchSize * 100:
+          info "Wrote computeKey cache", keys = batch.count, accounts = "100.00%"
+        else:
+          debug "Wrote computeKey cache", keys = batch.count, accounts = "100.00%"
 
   ok (?res)[0]
 
