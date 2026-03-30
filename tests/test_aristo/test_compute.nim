@@ -11,7 +11,7 @@
 {.used.}
 
 import
-  std/[algorithm, sets],
+  std/[algorithm, sets, times],
   unittest2,
   ../../execution_chain/db/aristo/[
     aristo_check,
@@ -193,3 +193,63 @@ suite "Aristo compute":
 
     let w = txFrame.computeKey((root, root)).value.to(Hash32)
     check w == samples[^1][^1][2]
+
+suite "Aristo compute short benchmark":
+  const 
+    NUM_THREADS = 4
+    NUM_FRAMES = 1000
+    NUM_ACCOUNTS_PER_FRAME = 100
+
+  setup:
+    let db = AristoDbRef.init()
+    var txFrame = db.txRef
+    db.taskpool = Taskpool.new(numThreads = NUM_THREADS)
+
+
+    for i in 0 ..< NUM_ACCOUNTS_PER_FRAME:
+      check:
+        txFrame.mergeAccount(
+          cast[Hash32](i), 
+          AristoAccount(balance: i.u256(), codeHash: EMPTY_CODE_HASH)) == Result[bool, AristoError].ok(true)
+    txFrame.checkpoint(1, skipSnapshot = true)
+
+    let batch = db.putBegFn()[]
+    db.persist(batch, txFrame)
+    check db.putEndFn(batch).isOk()
+    
+    txFrame = db.baseTxFrame()
+    
+    for n in 1 .. NUM_FRAMES:
+      txFrame = db.txFrameBegin(txFrame)
+
+      let 
+        startIdx = NUM_ACCOUNTS_PER_FRAME * n
+        endIdx = startIdx + NUM_ACCOUNTS_PER_FRAME
+
+      for i in startIdx ..< endIdx:
+        check:
+          txFrame.mergeAccount(
+            cast[Hash32](i * i), 
+            AristoAccount(balance: i.u256(), codeHash: EMPTY_CODE_HASH)) == Result[bool, AristoError].ok(true)
+      
+      txFrame.checkpoint(1, skipSnapshot = false)
+
+  test "Serial benchmark - skipLayers = false":
+    db.parallelStateRootComputation = false
+    debugEcho "\nSerial benchmark (skipLayers = false) running..."
+
+    let before = cpuTime()
+    check txFrame.computeStateRoot(skipLayers = false).isOk()
+    let elapsed = cpuTime() - before
+    
+    debugEcho "Serial benchmark (skipLayers = false) cpu time: ", elapsed
+
+  test "Parallel benchmark - skipLayers = false":
+    db.parallelStateRootComputation = true
+    debugEcho "\nParallel benchmark (skipLayers = false) running..."
+
+    let before = cpuTime()
+    check txFrame.computeStateRoot(skipLayers = false).isOk()
+    let elapsed = cpuTime() - before
+    
+    debugEcho "Parallel benchmark (skipLayers = false) cpu time: ", elapsed

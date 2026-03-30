@@ -21,7 +21,7 @@ import
     aristo_tx_frame,
   ]
 
-suite "Aristo compute benchmarks":
+suite "Aristo compute benchmark":
   const 
     NUM_THREADS = 16
     NUM_FRAMES = 10
