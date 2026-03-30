@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -16,6 +16,7 @@ import
   eth/rlp,
   ../common/common,
   ../db/ledger,
+  ../db/core_db/memory_only,
   ../evm/[types, state],
   ../core/executor/process_block,
   ./[witness_types, witness_verification]
@@ -64,7 +65,9 @@ proc statelessProcessBlock*(
 
   # Create evm instance using the in memory database.
   let memoryVmState = BaseVMState()
-  memoryVmState.init(parent, blk.header, com, memoryTxFrame, storeSlotHash = false)
+  memoryVmState.init(
+    parent, blk.header, com, memoryTxFrame, storeSlotHash = false,
+    enableBalTracker = com.isAmsterdamOrLater(blk.header.timestamp))
 
   # Execute the block with all validations enabled
   ?memoryVmState.processBlock(
@@ -72,7 +75,8 @@ proc statelessProcessBlock*(
     skipValidation = false,
     skipReceipts = false,
     skipUncles = true,
-    skipStateRootCheck = false
+    skipStateRootCheck = false,
+    skipPostExecBalCheck = not memoryVmState.balTrackerEnabled
   )
   doAssert memoryVmState.ledger.getStateRoot() == blk.header.stateRoot
 

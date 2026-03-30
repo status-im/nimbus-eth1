@@ -42,7 +42,7 @@ func eip1559BaseFee(header: Header; fork: EVMFork): UInt256 =
 
 proc commitOrRollbackDependingOnGasUsed(
     vmState: BaseVMState;
-    accTx: LedgerSpRef;
+    savePoint: LedgerSpRef;
     header: Header;
     tx: Transaction;
     callResult: var LogResult;
@@ -50,43 +50,39 @@ proc commitOrRollbackDependingOnGasUsed(
     blobGasUsed: GasInt;
       ): Result[void, string] =
   # Make sure that the tx does not exceed the maximum cumulative limit as
-  # set in the block header. Again, the eip-1559 reference does not mention
+  # set in the block header. Again, the EIP-1559 reference does not mention
   # an early stop. It would rather detect differing values for the  block
   # header `gasUsed` and the `vmState.cumulativeGasUsed` at a later stage.
   let
     gasUsed = callResult.gasUsed
-    blockGasUsed = callResult.blockGasUsed
-
-  let limit = if vmState.fork >= FkAmsterdam:
-                vmState.blockGasUsed + blockGasUsed
-              else:
-                vmState.cumulativeGasUsed + gasUsed
+    limit = vmState.cumulativeGasUsed + gasUsed
 
   if header.gasLimit < limit:
     if vmState.balTrackerEnabled:
       vmState.balTracker.rollbackCallFrame()
-    vmState.ledger.rollback(accTx)
-    err(&"invalid tx: block header gasLimit reached. gasLimit={header.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasUsed}")
-  else:
-    # Accept transaction and collect mining fee.
-    let txFee = gasUsed.u256 * priorityFee.u256
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), txFee)
-      vmState.balTracker.commitCallFrame()
-    vmState.ledger.commit(accTx)
-    vmState.ledger.addBalance(vmState.coinbase(), txFee)
-    vmState.cumulativeGasUsed += gasUsed
-    vmState.blockGasUsed += blockGasUsed
+    vmState.ledger.rollback(savePoint)
+    return err(&"invalid tx: block header gasLimit reached. gasLimit={header.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasUsed}")
 
-    # EIP-7708: Emit closure logs for accounts with remaining balance before deletion
-    if vmState.fork >= FkAmsterdam:
-      emitClosureLogs(vmState, callResult.logEntries)
+  # Accept transaction and collect mining fee.
+  let txFee = gasUsed.u256 * priorityFee.u256
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), txFee)
+    vmState.balTracker.commitCallFrame()
+  vmState.ledger.commit(savePoint)
+  vmState.ledger.addBalance(vmState.coinbase(), txFee)
+  vmState.cumulativeGasUsed += gasUsed
+  vmState.blockRegularGasUsed += callResult.blockRegularGasUsed
+  vmState.blockStateGasUsed += callResult.blockStateGasUsed
 
-    # Return remaining gas to the block gas counter so it is
-    # available for the next transaction.
-    vmState.gasPool += tx.gasLimit - blockGasUsed
-    vmState.blobGasUsed += blobGasUsed
-    ok()
+  # EIP-7708: Emit closure logs for accounts with remaining balance before deletion
+  if vmState.fork >= FkAmsterdam:
+    emitClosureLogs(vmState, callResult.logEntries)
+
+  # Return remaining gas to the block gas counter so it is
+  # available for the next transaction.
+  vmState.gasPool += tx.gasLimit - max(callResult.blockRegularGasUsed, callResult.blockStateGasUsed)
+  vmState.blobGasUsed += blobGasUsed
+  ok()
 
 proc processTransactionImpl(
     vmState: BaseVMState; ## Parent accounts environment for transaction
@@ -110,6 +106,18 @@ proc processTransactionImpl(
     return err("gas limit reached. gasLimit=" & $vmState.gasPool &
       ", gasNeeded=" & $tx.gasLimit)
 
+  if fork >= FkAmsterdam:
+    let
+      regularGasAvailable = header.gasLimit - vmState.blockRegularGasUsed
+      stateGasAvailable = header.gasLimit - vmState.blockStateGasUsed
+
+    # Regular gas is capped at TX_MAX_GAS_LIMIT; state gas can use all
+    # of tx.gas (gas_left can be drawn for state gas when reservoir is empty)
+    if min(TX_GAS_LIMIT.GasInt, tx.gasLimit) > regularGasAvailable:
+      return err("regular gas used exceeds limit")
+    if tx.gasLimit > stateGasAvailable:
+      return err("state gas used exceeds limit")
+
   vmState.gasPool -= tx.gasLimit
 
   # blobGasUsed will be added to vmState.blobGasUsed if the tx is ok.
@@ -120,7 +128,7 @@ proc processTransactionImpl(
     return err("blobGasUsed " & $blobGasUsed &
       " exceeds maximum allowance " & $maxBlobGasPerBlock)
 
-  # Actually, the eip-1559 reference does not mention an early exit.
+  # Actually, the EIP-1559 reference does not mention an early exit.
   #
   # Even though database was not changed yet but, a `persist()` directive
   # before leaving is crucial for some unit tests that us a direct/deep call
@@ -135,13 +143,13 @@ proc processTransactionImpl(
 
       if vmState.balTrackerEnabled:
         vmState.balTracker.beginCallFrame()
-      let accTx = vmState.ledger.beginSavepoint()
+      let savePoint = vmState.ledger.beginSavePoint()
 
       var callResult = tx.txCallEvm(sender, vmState, baseFee)
       vmState.captureTxEnd(tx.gasLimit - callResult.gasUsed)
 
       let tmp = commitOrRollbackDependingOnGasUsed(
-        vmState, accTx, header, tx, callResult, priorityFee, blobGasUsed)
+        vmState, savePoint, header, tx, callResult, priorityFee, blobGasUsed)
 
       if tmp.isErr():
         err(tmp.error)

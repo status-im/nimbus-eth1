@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2025 Status Research & Development GmbH
+# Copyright (c) 2021-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -28,16 +28,16 @@ import
 
 proc gasEip2929AccountCheck*(c: Computation; address: Address): GasInt =
   c.vmState.mutateLedger:
-    result = if not db.inAccessList(address):
-               db.accessList(address)
+    result = if not ledger.inAccessList(address):
+               ledger.accessList(address)
                ColdAccountAccessCost
              else:
                WarmStorageReadCost
 
 proc gasEip2929AccountCheck*(c: Computation; address: Address, slot: UInt256): GasInt =
   c.vmState.mutateLedger:
-    result = if not db.inAccessList(address, slot):
-               db.accessList(address, slot)
+    result = if not ledger.inAccessList(address, slot):
+               ledger.accessList(address, slot)
                ColdSloadCost
              else:
                WarmStorageReadCost
@@ -53,8 +53,8 @@ func checkInStaticContext*(c: Computation): EvmResultVoid =
 
 proc delegateResolutionCost*(c: Computation, address: Address): GasInt =
   c.vmState.mutateLedger:
-    if not db.inAccessList(address):
-      db.accessList(address)
+    if not ledger.inAccessList(address):
+      ledger.accessList(address)
       return ColdAccountAccessCost
     else:
       return WarmStorageReadCost

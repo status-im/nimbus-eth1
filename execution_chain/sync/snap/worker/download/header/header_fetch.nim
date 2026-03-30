@@ -1,0 +1,131 @@
+# Nimbus
+# Copyright (c) 2025-2026 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed
+# except according to those terms.
+
+{.push raises: [].}
+
+import
+  pkg/[chronicles, chronos],
+  ../../../../wire_protocol,
+  ../../[helpers, worker_desc]
+
+# ------------------------------------------------------------------------------
+# Private function(s)
+# ------------------------------------------------------------------------------
+
+proc getBlockHeaders(
+    buddy: SnapPeerRef;
+    req: BlockHeadersRequest;
+      ): Future[Result[FetchHeadersData,SnapError]]
+      {.async: (raises: []).} =
+  ## Wrapper around `getBlockHeaders()`
+  let
+    start = Moment.now()
+  var
+    count = 0
+    error = err((EMissingEthContext,"","",chronos.seconds(0)))
+    resp: BlockHeadersPacket
+
+  for ethBuddy in buddy.getEthPeers().items:
+    if nFetchHeaderPeersMax <= count:
+      break
+    if ethBuddy.ctrl.stopped:
+      continue
+    count.inc
+    try:
+      resp = (await ethBuddy.peer.getBlockHeaders(
+        req, fetchHeaderRlpxTimeout)).valueOr:
+          return err((EGeneric,"","",Moment.now()-start))
+    except PeerDisconnected as e:
+      error = err((EPeerDisconnected,$e.name,$e.msg,Moment.now()-start))
+      continue
+    except CancelledError as e:
+      error = err((ECancelledError,$e.name,$e.msg,Moment.now()-start))
+      continue
+    except CatchableError as e:
+      error = err((ECatchableError,$e.name,$e.msg,Moment.now()-start))
+      continue
+    return ok((move resp, Moment.now()-start))
+
+  return error
+
+
+func errStr(rc: Result[FetchHeadersData,SnapError]): string =
+  if rc.isErr:
+    result = $rc.error.excp
+    if 0 < rc.error.name.len:
+      result &= "(" & rc.error.name & ")"
+    if 0 < rc.error.msg.len:
+      result &= "[" & rc.error.msg & "]"
+  else:
+    result = "n/a"
+
+# ------------------------------------------------------------------------------
+# Public function(s)
+# ------------------------------------------------------------------------------
+
+template headerFetch*(
+    buddy: SnapPeerRef;
+    blockHash: BlockHash;
+      ): Result[Header,ErrorType] =
+  ## Async/template
+  ##
+  ## Fetch single header from the network.
+  ##
+  # Provide template-ready function body
+  var bodyRc = Result[Header,ErrorType].err(EGeneric)
+  block body:
+    const
+      sendInfo = trEthSendSendingGetBlockHeaders
+      recvInfo = trEthRecvReceivedBlockHeaders
+      nReq {.inject,used.} = 1                      # logging only
+    let
+      peer {.inject,used.} = $buddy.peer            # logging only
+      hash {.inject,used.} = blockHash.toStr        # logging only
+      req = BlockHeadersRequest(
+        maxResults: 1,
+        startBlock: BlockHashOrNumber(
+          isHash:   true,
+          hash:     blockHash.Hash32))
+
+    trace sendInfo, peer, hash, nReq=1
+
+    let rc = await buddy.getBlockHeaders(req)
+    var elapsed: Duration
+    if rc.isOk:
+      elapsed = rc.value.elapsed
+    else:
+      elapsed = rc.error.elapsed
+      debug recvInfo & " error", peer, hash, nReq,
+        ela=elapsed.toStr, error=rc.errStr
+      bodyRc = typeof(bodyRc).err(rc.error.excp)
+      break body                                    # return err()
+
+    let
+      ela {.inject,used.} = elapsed.toStr           # logging only
+
+    # Verify result
+    let h = rc.value.packet.headers
+    if h.len != 1:
+      trace recvInfo & " wrong # headers", peer, hash, nReq, nRecv=h.len, ela
+      break body                                    # return err()
+    let rHash = BlockHash(h[0].computeBlockHash)
+    if rHash != blockHash:
+      trace recvInfo & " garbled header", peer, hash, blockNumber=h[0].number,
+        nReq, recvHash=blockHash.toStr, expected=rHash.toStr, ela
+      break body                                    # return err()
+
+    trace recvInfo, peer, hash, blockNumber=h[0].number, nReq, nRecv=1, ela
+    bodyRc = typeof(bodyRc).ok(h[0])
+
+  bodyRc # return
+
+# ------------------------------------------------------------------------------
+# End
+# ------------------------------------------------------------------------------

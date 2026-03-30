@@ -17,6 +17,7 @@ import
   minilru,
   eth/common/[base, addresses, accounts, headers, transactions],
   ../db/[ledger, access_list],
+  ../db/core_db/memory_only,
   ../common/common,
   ../transaction/call_evm_rpc,
   ../evm/[types, state, evm_errors],
@@ -162,10 +163,10 @@ proc callFetchingState(
     vmState.ledger.clearWitnessKeys()
     vmState.ledger.clearBlockHashesCache()
 
-    let sp = vmState.ledger.beginSavepoint()
+    let savePoint = vmState.ledger.beginSavePoint()
     evmResult = rpcCallEvm(tx, header, vmState, EVM_CALL_GAS_CAP)
     inc evmCallCount
-    vmState.ledger.rollback(sp) # all state changes from the call are reverted
+    vmState.ledger.rollback(savePoint) # all state changes from the call are reverted
 
     # Collect the keys after executing the transaction
     lastWitnessKeys = ensureMove(witnessKeys)
@@ -282,9 +283,9 @@ proc call(
 
   vmState.ledger.clearWitnessKeys()
   let
-    sp = vmState.ledger.beginSavepoint()
+    savePoint = vmState.ledger.beginSavePoint()
     evmResult = rpcCallEvm(tx, header, vmState, EVM_CALL_GAS_CAP)
-  vmState.ledger.rollback(sp) # all state changes from the call are reverted
+  vmState.ledger.rollback(savePoint) # all state changes from the call are reverted
 
   evmResult.toCallResult()
 
@@ -353,7 +354,7 @@ proc createAccessList*(
   # one more time using the final access list which will impact the gas used value
   # returned in the callResult.
 
-  var al = access_list.AccessList.init()
+  var al = access_list.AccessList()
   for k, codeTouched in witnessKeys:
     let (adr, maybeSlot) = k
     if adr == fromAdr:

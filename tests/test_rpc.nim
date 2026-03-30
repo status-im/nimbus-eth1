@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -16,6 +16,7 @@ import
   eth/common/[transaction_utils, addresses],
   ../hive_integration/engine_client,
   ../execution_chain/[constants, transaction, conf, version_info],
+  ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/[ledger, storage_types],
   ../execution_chain/sync/wire_protocol,
   ../execution_chain/core/[tx_pool, chain, pow/difficulty],
@@ -508,6 +509,90 @@ proc rpcMain*() =
 
       let res = await client.eth_estimateGas(ec)
       check res == w3Qty(21000'u64)
+
+    test "eth_estimateGas includes EIP-7702 authorization intrinsic cost":
+      let
+        baseArgs = TransactionArgs(
+          `from`: Opt.some(signer),
+          to: Opt.some(extraAddress),
+          gas: Opt.some(w3Qty(100000'u)),
+          gasPrice: Opt.some(w3Qty(100'u)),
+          value: Opt.some(100.u256),
+        )
+        auth = Authorization(
+          chainId: env.chainId,
+          address: extraAddress,
+          nonce: 0.AccountNonce,
+          yParity: 0'u8,
+          r: 1.u256,
+          s: 1.u256,
+        )
+        argsWithAuth = TransactionArgs(
+          `from`: baseArgs.`from`,
+          to: baseArgs.to,
+          gas: baseArgs.gas,
+          gasPrice: baseArgs.gasPrice,
+          value: baseArgs.value,
+          authorizationList: Opt.some(@[auth]),
+        )
+
+      let
+        baseRes = await client.eth_estimateGas(baseArgs)
+        authRes = await client.eth_estimateGas(argsWithAuth)
+      check baseRes != authRes
+
+    test "eth_estimateGas respects available funds with EIP-1559 fees":
+      let
+        latestTag = blockId(1'u64)
+        latestBlock = await client.eth_getBlockByNumber(latestTag, false)
+      doAssert latestBlock.baseFeePerGas.isSome()
+
+      let
+        baseFee = latestBlock.baseFeePerGas.get().truncate(GasInt)
+        priorityFee = 1_000_000_000.GasInt
+        actualPrice = baseFee + priorityFee
+        hugeMaxFee = actualPrice * 50.GasInt
+        gasBudget = 21_000'u64
+        gasCost = actualPrice.uint64.u256 * gasBudget.u256
+        balance = await client.eth_getBalance(signer, latestTag)
+      doAssert balance > gasCost + 1.u256
+
+      let spendValue = balance - gasCost - 1.u256
+      let eip1559Args = TransactionArgs(
+        `from`: Opt.some(signer),
+        to: Opt.some(extraAddress),
+        value: Opt.some(spendValue),
+        maxFeePerGas: Opt.some(w3Qty(hugeMaxFee.uint64)),
+        maxPriorityFeePerGas: Opt.some(w3Qty(priorityFee.uint64)),
+      )
+
+      let res = await client.eth_estimateGas(eip1559Args)
+      check res == w3Qty(gasBudget)
+
+    test "eth_estimateGas insufficient funds returns error":
+      let ec = TransactionArgs(
+        `from`: Opt.some(extraAddress),
+        to: Opt.some(signer),
+        gas: Opt.some(w3Qty(21000'u)),
+        gasPrice: Opt.some(w3Qty(1'u)),
+        value: Opt.some(1.u256),
+      )
+      expect(CatchableError):
+        discard await client.eth_estimateGas(ec)
+
+    test "eth_estimateGas contract call with data uses full estimation(optimistic gas limit)":
+      let ec = TransactionArgs(
+        `from`: Opt.some(signer),
+        to: Opt.some(contractAddress),
+        gas: Opt.some(w3Qty(100_000'u)),
+        gasPrice: Opt.some(w3Qty(6'u)),
+        value: Opt.some(8.u256),
+        input: Opt.some(hexToSeqByte("0001020304")),
+      )
+      let res = await client.eth_estimateGas(ec)
+      # gas should be 21k + call overhead
+      check res > w3Qty(20999'u64)
+      check res <= w3Qty(100_000'u64)
 
     test "eth_getBlockByHash":
       let res = await client.eth_getBlockByHash(env.blockHash, true)

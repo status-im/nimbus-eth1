@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -51,8 +51,8 @@ func validateBlockAccessList*(
     if not skipPreExecBalCheck:
       if blockAccessList.isNone:
         return err("Post-Amsterdam block must have blockAccessList")
-      if blockAccessList.get.validate(header.blockAccessListHash.get).isErr():
-        return err("Mismatched blockAccessListHash blockNumber = " & $header.number)
+      blockAccessList.get.validate(header.blockAccessListHash.get, header.gasLimit).isOkOr:
+        return err("blockAccessList failed pre-execution validation: " & $error)
   else:
     if header.blockAccessListHash.isSome:
       return err("Pre-Amsterdam block header must not have blockAccessListHash")
@@ -239,39 +239,57 @@ func gasCost*(tx: Transaction): UInt256 =
 func validateTxBasic*(
     com:      CommonRef,
     tx:       Transaction;     ## tx to validate
+    gasLimit: GasInt;
     fork:     EVMFork,
     validateFork: bool = true): Result[void, string] =
 
-  # https://eips.ethereum.org/EIPS/eip-7825
-  if fork >= FkOsaka and tx.gasLimit > TX_GAS_LIMIT:
-    return err("tx.gasLimit " & $tx.gasLimit & " exceeds maximum " & $TX_GAS_LIMIT)
-
   if validateFork:
     if tx.txType == TxEip2930 and fork < FkBerlin:
-      return err("invalid tx: Eip2930 Tx type detected before Berlin")
+      return err("invalid tx: EIP-2930 Tx type detected before Berlin")
 
     if tx.txType == TxEip1559 and fork < FkLondon:
-      return err("invalid tx: Eip1559 Tx type detected before London")
+      return err("invalid tx: EIP-1559 Tx type detected before London")
 
     if tx.txType == TxEip4844 and fork < FkCancun:
-      return err("invalid tx: Eip4844 Tx type detected before Cancun")
+      return err("invalid tx: EIP-4844 Tx type detected before Cancun")
 
     if tx.txType == TxEip7702 and fork < FkPrague:
-      return err("invalid tx: Eip7702 Tx type detected before Prague")
+      return err("invalid tx: EIP-7702 Tx type detected before Prague")
 
-  if fork >= FkShanghai and tx.contractCreation and tx.payload.len > EIP3860_MAX_INITCODE_SIZE:
-    return err("invalid tx: initcode size exceeds maximum")
+  if fork >= FkShanghai and tx.contractCreation:
+    if fork >= FkAmsterdam:
+      if tx.payload.len > EIP7954_MAX_INITCODE_SIZE:
+        return err("invalid tx: initcode size exceeds EIP-7954 maximum")
+    elif tx.payload.len > EIP3860_MAX_INITCODE_SIZE:
+      return err("invalid tx: initcode size exceeds EIP-3860 maximum")
 
   # The total must be the larger of the two
   if tx.maxFeePerGasNorm < tx.maxPriorityFeePerGasNorm:
     return err(&"invalid tx: maxFee is smaller than maxPriorityFee. maxFee={tx.maxFeePerGas}, maxPriorityFee={tx.maxPriorityFeePerGasNorm}")
 
-  let
-    (intrinsicGas, floorDataGas) = tx.intrinsicGas(fork)
-    minGasLimit = max(intrinsicGas, floorDataGas)
+  if fork >= FkAmsterdam:
+    let
+      intrinsic = tx.intrinsicGas(fork, gasLimit)
+      intrinsicGas = intrinsic.regular + intrinsic.state
+      minGasLimit = max(intrinsicGas, intrinsic.floorDataGas)
+      minRegularGasLimit = max(intrinsic.regular, intrinsic.floorDataGas)
 
-  if tx.gasLimit < minGasLimit:
-    return err(&"invalid tx: not enough gas to perform calculation. avail={tx.gasLimit}, require={minGasLimit}")
+    if minGasLimit > tx.gasLimit:
+      return err(&"invalid tx: not enough gas to perform calculation. avail={tx.gasLimit}, require={minGasLimit}")
+
+    if minRegularGasLimit > TX_GAS_LIMIT:
+      return err(&"invalid tx: Intrinsic regular or calldata floor exceeds TX_GAS_LIMIT={TX_GAS_LIMIT}, require={minRegularGasLimit}")
+  else:
+    # https://eips.ethereum.org/EIPS/eip-7825
+    if fork >= FkOsaka and tx.gasLimit > TX_GAS_LIMIT:
+      return err("tx.gasLimit " & $tx.gasLimit & " exceeds maximum " & $TX_GAS_LIMIT)
+
+    let
+      intrinsic = tx.intrinsicGas(fork, gasLimit)
+      minGasLimit = max(intrinsic.regular, intrinsic.floorDataGas)
+
+    if tx.gasLimit < minGasLimit:
+      return err(&"invalid tx: not enough gas to perform calculation. avail={tx.gasLimit}, require={minGasLimit}")
 
   if fork >= FkCancun:
     if tx.payload.len > MAX_CALLDATA_SIZE:
@@ -328,23 +346,23 @@ func validateTxBasic*(
   ok()
 
 proc validateTransaction*(
-    roDB:     ReadOnlyLedger; ## Parent accounts environment for transaction
+    ledger:   ReadOnlyLedger; ## Parent accounts environment for transaction
     tx:       Transaction;     ## tx to validate
     sender:   Address;         ## tx.recoverSender
-    maxLimit: GasInt;          ## gasLimit from block header
+    gasLimit: GasInt;          ## gasLimit from block header
     baseFee:  UInt256;         ## baseFee from block header
     excessBlobGas: uint64;     ## excessBlobGas from parent block header
     com:      CommonRef,
     fork:     EVMFork): Result[void, string] =
 
-  ? validateTxBasic(com, tx, fork)
+  ? validateTxBasic(com, tx, gasLimit, fork)
 
   let
-    balance = roDB.getBalance(sender)
-    nonce = roDB.getNonce(sender)
+    balance = ledger.getBalance(sender)
+    nonce = ledger.getNonce(sender)
 
   # Note that the following check bears some plausibility but is _not_
-  # covered by the eip-1559 reference (sort of) pseudo code, for details
+  # covered by the EIP-1559 reference (sort of) pseudo code, for details
   # see `https://eips.ethereum.org/EIPS/eip-1559#specification`_
   #
   # Rather this check is needed for surviving the post-London unit test
@@ -356,8 +374,8 @@ proc validateTransaction*(
   #
   # The parallel lowGasLimit.json test never triggers the case checked below
   # as the paricular transaction is omitted (the txs list is just set empty.)
-  if maxLimit < tx.gasLimit:
-    return err(&"invalid tx: block header gasLimit exceeded. maxLimit={maxLimit}, gasLimit={tx.gasLimit}")
+  if gasLimit < tx.gasLimit:
+    return err(&"invalid tx: block header gasLimit exceeded. maxLimit={gasLimit}, gasLimit={tx.gasLimit}")
 
   # ensure that the user was willing to at least pay the base fee
   if tx.maxFeePerGasNorm < baseFee.truncate(GasInt):
@@ -384,7 +402,7 @@ proc validateTransaction*(
   # `eth_call` and `eth_estimateGas`
   # EOA = Externally Owned Account
   let
-    code = roDB.getCode(sender)
+    code = ledger.getCode(sender)
     delegated = code.parseDelegation()
   if code.len > 0 and not delegated:
     return err(&"invalid tx: sender is not an EOA. sender={sender.toHex}, codeLen={code.len}")

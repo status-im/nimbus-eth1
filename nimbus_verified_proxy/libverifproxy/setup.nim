@@ -8,18 +8,338 @@
 import
   chronos,
   std/json,
+  stint,
+  eth/common/keys, # used for keys.rng
   beacon_chain/spec/digest,
   beacon_chain/nimbus_binary_common,
+  web3/[eth_api_types, conversions],
   ../engine/types,
   ../engine/engine,
   ../lc/lc,
   ../lc_backend,
   ../nimbus_verified_proxy,
   ../nimbus_verified_proxy_conf,
-  ../json_rpc_backend,
   ./types
 
 type ProxyError = object of CatchableError
+
+proc transportCallback[T](
+    ctx: ptr Context, status: cint, res: cstring, userData: pointer
+) {.cdecl, gcsafe, raises: [].} =
+  let data = cast[ref CallBackData[T]](userData)
+  if status == RET_SUCCESS:
+    # using $ on C allocated strings copies the context therefore it is safe to free the
+    # pointer on the C side. Also allows managing the memeory on one end only.
+    let deserResult = unpackArg($res, T)
+    if deserResult.isErr():
+      data.fut.complete(
+        EngineResult[T].err((BackendDecodingError, deserResult.error, UNTAGGED))
+      )
+      return
+    data.fut.complete(EngineResult[T].ok(deserResult.get()))
+  elif status == RET_ERROR:
+    data.fut.complete(EngineResult[T].err((BackendFetchError, $res, UNTAGGED)))
+  elif status == RET_CANCELLED:
+    data.fut.fail((ref CancelledError)(msg: $res))
+
+proc getRandomBackendUrl(rng: ref HmacDrbgContext, urls: seq[string]): string =
+  var randomNum: uint64
+  rng[].generate(randomNum)
+
+  # NOTE: we use the mod operator to bring the random number into range
+  # this introduces a bias in the output distribution but is negligible
+  # for this use case. The bias becomes insignificant when score filters
+  # are used to select clients in the future.
+  urls[randomNum mod uint64(urls.len)]
+
+proc getEthApiBackend*(
+    ctx: ptr Context, urls: seq[string], transportProc: TransportProc
+): EthApiBackend =
+  let
+    rng = keys.newRng()
+    ethChainIdProc = proc(): Future[EngineResult[UInt256]] {.
+        async: (raises: [CancelledError])
+    .} =
+      let
+        fut = Future[EngineResult[UInt256]].Raising([CancelledError]).init("blkByHash")
+        url = getRandomBackendUrl(rng, urls)
+      transportProc(
+        ctx,
+        alloc(url),
+        "eth_chainId",
+        "[]",
+        transportCallback[UInt256],
+        createCbData(fut),
+      )
+      await fut
+
+    getBlockByHashProc = proc(
+        blkHash: Hash32, fullTransactions: bool
+    ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
+      let
+        fut =
+          Future[EngineResult[BlockObject]].Raising([CancelledError]).init("blkByHash")
+        fullFlagStr = if fullTransactions: "true" else: "false"
+        blkHashSer = packArg(blkHash).valueOr:
+          return err((BackendEncodingError, error, UNTAGGED))
+        params = "[" & blkHashSer & ", " & fullFlagStr & "]"
+        url = getRandomBackendUrl(rng, urls)
+
+      transportProc(
+        ctx,
+        alloc(url),
+        "eth_getBlockByHash",
+        alloc(params),
+        transportCallback[BlockObject],
+        createCbData(fut),
+      )
+      await fut
+
+    getBlockByNumberProc = proc(
+        blkNum: BlockTag, fullTransactions: bool
+    ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
+      let
+        fut = Future[EngineResult[BlockObject]].Raising([CancelledError]).init(
+            "blkByNumber"
+          )
+        fullFlagStr = if fullTransactions: "true" else: "false"
+        blkNumSer = packArg(blkNum).valueOr:
+          return err((BackendEncodingError, error, UNTAGGED))
+        params = "[" & blkNumSer & ", " & fullFlagStr & "]"
+        url = getRandomBackendUrl(rng, urls)
+
+      transportProc(
+        ctx,
+        alloc(url),
+        "eth_getBlockByNumber",
+        alloc(params),
+        transportCallback[BlockObject],
+        createCbData(fut),
+      )
+      await fut
+
+    getProofProc = proc(
+        address: Address, slots: seq[UInt256], blockId: BlockTag
+    ): Future[EngineResult[ProofResponse]] {.async: (raises: [CancelledError]).} =
+      let
+        fut =
+          Future[EngineResult[ProofResponse]].Raising([CancelledError]).init("getProof")
+        addressSer = packArg(address).valueOr:
+          return err((BackendEncodingError, error, UNTAGGED))
+        slotsSer = packArg(slots).valueOr:
+          return err((BackendEncodingError, error, UNTAGGED))
+        blockIdSer = packArg(blockId).valueOr:
+          return err((BackendEncodingError, error, UNTAGGED))
+
+        params = "[" & addressSer & ", " & slotsSer & ", " & blockIdSer & "]"
+        url = getRandomBackendUrl(rng, urls)
+
+      transportProc(
+        ctx,
+        alloc(url),
+        "eth_getProof",
+        alloc(params),
+        transportCallback[ProofResponse],
+        createCbData(fut),
+      )
+      await fut
+
+    createAccessListProc = proc(
+        txArgs: TransactionArgs, blockId: BlockTag
+    ): Future[EngineResult[AccessListResult]] {.async: (raises: [CancelledError]).} =
+      let
+        fut = Future[EngineResult[AccessListResult]].Raising([CancelledError]).init(
+            "createAL"
+          )
+        txArgsSer = packArg(txArgs).valueOr:
+          return err((BackendEncodingError, error, UNTAGGED))
+        blockIdSer = packArg(blockId).valueOr:
+          return err((BackendEncodingError, error, UNTAGGED))
+        params = "[" & txArgsSer & ", " & blockIdSer & "]"
+        url = getRandomBackendUrl(rng, urls)
+
+      transportProc(
+        ctx,
+        alloc(url),
+        "eth_createAccessList",
+        alloc(params),
+        transportCallback[AccessListResult],
+        createCbData(fut),
+      )
+      await fut
+
+    getCodeProc = proc(
+        address: Address, blockId: BlockTag
+    ): Future[EngineResult[seq[byte]]] {.async: (raises: [CancelledError]).} =
+      let
+        fut = Future[EngineResult[seq[byte]]].Raising([CancelledError]).init("getCode")
+        addressSer = packArg(address).valueOr:
+          return err((BackendEncodingError, error, UNTAGGED))
+        blockIdSer = packArg(blockId).valueOr:
+          return err((BackendEncodingError, error, UNTAGGED))
+        params = "[" & addressSer & ", " & blockIdSer & "]"
+        url = getRandomBackendUrl(rng, urls)
+
+      transportProc(
+        ctx,
+        alloc(url),
+        "eth_getCode",
+        alloc(params),
+        transportCallback[seq[byte]],
+        createCbData(fut),
+      )
+      await fut
+
+    getTransactionByHashProc = proc(
+        txHash: Hash32
+    ): Future[EngineResult[TransactionObject]] {.async: (raises: [CancelledError]).} =
+      let
+        fut = Future[EngineResult[TransactionObject]].Raising([CancelledError]).init(
+            "getTxByHash"
+          )
+        txHashSer = packArg(txHash).valueOr:
+          return err((BackendEncodingError, error, UNTAGGED))
+        params = "[" & txHashSer & "]"
+        url = getRandomBackendUrl(rng, urls)
+
+      transportProc(
+        ctx,
+        alloc(url),
+        "eth_getTransactionByHash",
+        alloc(params),
+        transportCallback[TransactionObject],
+        createCbData(fut),
+      )
+      await fut
+
+    getTransactionReceiptProc = proc(
+        txHash: Hash32
+    ): Future[EngineResult[ReceiptObject]] {.async: (raises: [CancelledError]).} =
+      let
+        fut = Future[EngineResult[ReceiptObject]].Raising([CancelledError]).init(
+            "getRxByHash"
+          )
+        txHashSer = packArg(txHash).valueOr:
+          return err((BackendEncodingError, error, UNTAGGED))
+        params = "[" & txHashSer & "]"
+        url = getRandomBackendUrl(rng, urls)
+
+      transportProc(
+        ctx,
+        alloc(url),
+        "eth_getTransactionReceipt",
+        alloc(params),
+        transportCallback[ReceiptObject],
+        createCbData(fut),
+      )
+      await fut
+
+    getBlockReceiptsProc = proc(
+        blockId: BlockTag
+    ): Future[EngineResult[Opt[seq[ReceiptObject]]]] {.
+        async: (raises: [CancelledError])
+    .} =
+      let
+        fut = Future[EngineResult[Opt[seq[ReceiptObject]]]]
+          .Raising([CancelledError])
+          .init("getBlockRxs")
+        blockIdSer = packArg(blockId).valueOr:
+          return err((BackendEncodingError, error, UNTAGGED))
+        params = "[" & blockIdSer & "]"
+        url = getRandomBackendUrl(rng, urls)
+
+      transportProc(
+        ctx,
+        alloc(url),
+        "eth_getBlockReceipts",
+        alloc(params),
+        transportCallback[Opt[seq[ReceiptObject]]],
+        createCbData(fut),
+      )
+      await fut
+
+    getLogsProc = proc(
+        filterOptions: FilterOptions
+    ): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).} =
+      let
+        fut =
+          Future[EngineResult[seq[LogObject]]].Raising([CancelledError]).init("getLogs")
+        filterOptionsSer = packArg(filterOptions).valueOr:
+          return err((BackendEncodingError, error, UNTAGGED))
+        params = "[" & filterOptionsSer & "]"
+        url = getRandomBackendUrl(rng, urls)
+
+      transportProc(
+        ctx,
+        alloc(url),
+        "eth_getLogs",
+        alloc(params),
+        transportCallback[seq[LogObject]],
+        createCbData(fut),
+      )
+      await fut
+
+    feeHistoryProc = proc(
+        blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[int]
+    ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).} =
+      let
+        fut = Future[EngineResult[FeeHistoryResult]].Raising([CancelledError]).init(
+            "feeHistory"
+          )
+        blockCountSer = packArg(blockCount).valueOr:
+          return err((BackendEncodingError, error, UNTAGGED))
+        newestBlockSer = packArg(newestBlock).valueOr:
+          return err((BackendEncodingError, error, UNTAGGED))
+        rewardPercentilesSer = packArg(rewardPercentiles).valueOr:
+          return err((BackendEncodingError, error, UNTAGGED))
+        params =
+          "[" & blockCountSer & ", " & newestBlockSer & ", " & rewardPercentilesSer & "]"
+        url = getRandomBackendUrl(rng, urls)
+
+      transportProc(
+        ctx,
+        alloc(url),
+        "eth_feeHistory",
+        alloc(params),
+        transportCallback[FeeHistoryResult],
+        createCbData(fut),
+      )
+      await fut
+
+    sendRawTxProc = proc(
+        txBytes: seq[byte]
+    ): Future[EngineResult[Hash32]] {.async: (raises: [CancelledError]).} =
+      let
+        fut = Future[EngineResult[Hash32]].Raising([CancelledError]).init("sendRawTx")
+        txBytesSer = packArg(txBytes).valueOr:
+          return err((BackendEncodingError, error, UNTAGGED))
+        params = "[" & txBytesSer & "]"
+        url = getRandomBackendUrl(rng, urls)
+
+      transportProc(
+        ctx,
+        alloc(url),
+        "eth_sendRawTransaction",
+        alloc(params),
+        transportCallback[Hash32],
+        createCbData(fut),
+      )
+      await fut
+
+  EthApiBackend(
+    eth_chainId: ethChainIdProc,
+    eth_getBlockByHash: getBlockByHashProc,
+    eth_getBlockByNumber: getBlockByNumberProc,
+    eth_getProof: getProofProc,
+    eth_createAccessList: createAccessListProc,
+    eth_getCode: getCodeProc,
+    eth_getBlockReceipts: getBlockReceiptsProc,
+    eth_getLogs: getLogsProc,
+    eth_getTransactionByHash: getTransactionByHashProc,
+    eth_getTransactionReceipt: getTransactionReceiptProc,
+    eth_feeHistory: feeHistoryProc,
+    eth_sendRawTransaction: sendRawTxProc,
+  )
 
 proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyError].} =
   let jsonNode =
@@ -37,9 +357,9 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
         raise newException(
           ProxyError, "Couldn't parse `trustedBlockRoot` from JSON config: " & e.msg
         )
-    backendUrls =
+    executionApiUrls =
       try:
-        parseCmdArg(seq[Web3Url], jsonNode["backendUrls"].getStr())
+        parseCmdArg(UrlList, jsonNode["executionApiUrls"].getStr())
       except CatchableError as e:
         raise newException(
           ProxyError, "Couldn't parse `backendUrl` from JSON config: " & e.msg
@@ -50,6 +370,17 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
       except CatchableError as e:
         raise newException(
           ProxyError, "Couldn't parse `beaconApiUrls` from JSON config: " & e.msg
+        )
+    privateTxUrls =
+      try:
+        let rawUrls = jsonNode.getOrDefault("privateTxUrls").getStr("")
+        if rawUrls.len == 0:
+          UrlList(@[])
+        else:
+          parseCmdArg(UrlList, rawUrls)
+      except CatchableError as e:
+        raise newException(
+          ProxyError, "Couldn't parse `privateTxUrls` from JSON config: " & e.msg
         )
     logLevel = jsonNode.getOrDefault("logLevel").getStr("INFO")
     logFormat =
@@ -69,7 +400,7 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
   return VerifiedProxyConf(
     eth2Network: eth2Network,
     trustedBlockRoot: trustedBlockRoot,
-    backendUrls: backendUrls,
+    executionApiUrls: executionApiUrls,
     beaconApiUrls: beaconApiUrls,
     logLevel: logLevel,
     logFormat: logFormat,
@@ -88,10 +419,11 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
         uint64(0)
       else:
         uint64(prllBlkDwnlds),
+    privateTxUrls: privateTxUrls,
   )
 
 proc run*(
-    ctx: ptr Context, configJson: string
+    ctx: ptr Context, configJson: string, transportProc: TransportProc
 ) {.async: (raises: [ProxyError, CancelledError]).} =
   let config = VerifiedProxyConf.load(configJson)
 
@@ -111,9 +443,6 @@ proc run*(
       raise newException(ProxyError, error.errMsg)
     lc = LightClient.new(config.eth2Network, some config.trustedBlockRoot)
 
-    # initialize backend for JSON-RPC
-    jsonRpcClientPool = JsonRpcClientPool.new()
-
     # initialize backend for light client updates
     lcRestClientPool = LCRestClientPool.new(lc.cfg, lc.forkDigests)
 
@@ -124,20 +453,33 @@ proc run*(
   # add light client backend
   lc.setBackend(lcRestClientPool.getEthLCBackend())
 
-  # the backend only needs the url to connect to
-  engine.backend = jsonRpcClientPool.getEthApiBackend()
+  let usePrivateTx = config.privateTxUrls.len > 0
+
+  let regularCaps =
+    if usePrivateTx:
+      fullCapabilities - {SendRawTransaction}
+    else:
+      fullCapabilities
+
+  engine.registerBackend(
+    getEthApiBackend(ctx, config.executionApiUrls, transportProc), regularCaps
+  )
+
+  if usePrivateTx:
+    engine.registerBackend(
+      getEthApiBackend(ctx, config.privateTxUrls, transportProc),
+      BackendCapabilities({SendRawTransaction}),
+    )
 
   # inject the frontend into c context
   ctx.frontend = engine.frontend
 
-  # start backend
-  var status = await jsonRpcClientPool.addEndpoints(config.backendUrls)
-  if status.isErr():
-    raise newException(ProxyError, status.error.errMsg)
-
   # adding endpoints will also start the backend
-  if lcRestClientPool.addEndpoints(config.beaconApiUrls).isErr():
-    raise newException(ProxyError, "Couldn't add endpoints for light client queries")
+  let status = lcRestClientPool.addEndpoints(config.beaconApiUrls)
+  if status.isErr():
+    raise newException(
+      ProxyError, "Couldn't add endpoints for light client queries" & status.error
+    )
 
   # this starts the light client manager which is
   # an endless loop

@@ -15,7 +15,12 @@ import
 
 type
   SyncState* = enum
-    idle = 0
+    SnapIdle = 0
+    SnapResume                     ## Resume from previous session
+    SnapReady                      ## Wait for download state
+    SnapDownload                   ## Downloading and caching data
+    SnapMkTrie                     ## Assembling downloaded data
+    SnapHealing                    ## Complete missing trie nodes
 
   ErrorType* = enum
     ## For `FetchError` return code object/tuple
@@ -26,6 +31,8 @@ type
     EPeerDisconnected              ## Exception
     ECatchableError                ## Exception
     ECancelledError                ## Exception
+    ETrieError                     ## Database error
+    ELockError                     ## Locked by some other peer
 
 const
   snapAsmFolder* = "snap"
@@ -34,34 +41,38 @@ const
   twoHundredYears* = chronos.days(365 * 200 + 48)
     ## Large Duration constant considered sort of infinite.
 
-  metricsUpdateInterval* = chronos.seconds(10)
-    ## Wait at least this time before next update
-
-  daemonOkInterval* = chronos.milliseconds(1200)
+  daemonWaitDownloadInterval* = chronos.seconds(10)
     ## Some waiting time at the end of the daemon task which always lingers
-    ## in the background.
+    ## in the background. This one is for `SnapDownload` state.
 
-  daemonWaitInterval* = chronos.seconds(10)
+  daemonWaitElseInterval* = chronos.seconds(10)
+    ## Ditto for other states than `SnapMkTrie` or `SnapHealing`.
+
+  peerWaitElseInterval* = chronos.milliseconds(1200)
     ## Some waiting time at the end of the daemon task which always lingers
-    ## in the background.
+    ## in the background. This one is for non-`SnapDownload` states.
 
-  noPeersLogWaitInterval* = chronos.seconds(50)
-    ## Control missing peers messages issued from time to time (if any.)
-
-  syncUpdateLogWaitInterval* = chronos.seconds(30)
-    ## Control log chatter for update messages
-
-  workerIdleWaitInterval* = chronos.seconds(1)
-  workerIdleLongWaitInterval* = chronos.seconds(5)
-    ## Sleep some time in multi-mode (i.e. concurrently running peers) if
-    ## there is nothing else to do
-  asyncThreadSwitchTimeSlot* = chronos.nanoseconds(1)
+  mktrieThreadSwitchTimeSlot* = chronos.nanoseconds(1)
     ## Nano-sleep to allows pseudo/async thread switch
 
-  asyncThreadSwitchGap* = chronos.milliseconds(300)
-    ## Controls nano-sleep tart switch density when using this in a loop (e.g.
-    ## for processing lists.) The constant requires a minimum time gap when
-    ## invoking a nano-sleep utility.
+  lockWaitPollingTime* = chronos.milliseconds(500)
+    ## Polling for a lock to be released
+
+  accuAccountsCovMin* = 2.0
+    ## In absence of a completed pivot state, the syncer will stop downloading
+    ## if all accounts are covered at least by this factor. Then trie-assembly
+    ## and healing can take place if the pivot state is also sufficiently
+    ## covered (see  `accuPivotCovMin` below.)
+    ##
+    ## The reasoning for getting away without a completed pivot is that state
+    ## changes between consecutive trie states are small. There is a fair
+    ## chance that the pivot state will also have valid accounts identical
+    ## with other states.
+
+  accuPivotCovMin* = 0.7
+    ## If the total coverage has reached the factor `accuAccountsCovMin`, the
+    ## pivot must also have reached the factor `accuPivotCovMin` in order to
+    ## start trie assembly and healing.
 
   # ----------------------
 
@@ -85,7 +96,10 @@ const
 
   # -----------
 
-  fetchHeadersRlpxTimeout* = chronos.seconds(30)
+  nFetchHeaderPeersMax* = 5
+    ## Try at most this many `eth` peers for fetching a header
+
+  fetchHeaderRlpxTimeout* = chronos.seconds(30)
     ## Timeout cap for the `RLPX` handler when fetching header. This value
 
   # -----------
@@ -115,6 +129,20 @@ const
     ## Similar to `fetchAccountSnapBytesLimit`
 
   nProcStorageErrThreshold* = 4
+    ## Similar to `nProcAccountErrThreshold`
+
+  # -----------
+
+  fetchCodesSnapTimeout* = chronos.seconds(120)
+    ## Similar to `fetchAccountSnapTimeout`
+
+  nFetchCodesSnapErrThreshold* = 4
+    ## Similar to `nFetchAccountSnapErrThreshold`
+
+  fetchCodesSnapBytesLimit* = 50 * 1024
+    ## Similar to `fetchAccountSnapBytesLimit`
+
+  nProcCodesErrThreshold* = 4
     ## Similar to `nProcAccountErrThreshold`
 
 # End

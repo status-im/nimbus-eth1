@@ -1,5 +1,5 @@
 # nimbus_verified_proxy
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -171,14 +171,14 @@ proc new*(
 
     # getStateField reads seeks info directly from a byte array
     # get genesis time and instantiate the beacon clock
-    genesisTime = getStateField(genesisState[], genesis_time)
+    genesisTime = genesisState[].genesis_time
     beaconClock = BeaconClock.init(cfg.timeParams, genesisTime).valueOr:
       error "Invalid genesis time in state", genesisTime
       quit QuitFailure
 
     # get the function that itself get the current beacon time
     getBeaconTime = beaconClock.getBeaconTimeFn()
-    genesis_validators_root = getStateField(genesisState[], genesis_validators_root)
+    genesis_validators_root = genesisState[].genesis_validators_root
     forkDigests = newClone ForkDigests.init(cfg, genesis_validators_root)
 
     rng = keys.newRng()

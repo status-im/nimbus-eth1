@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -66,10 +66,9 @@ suite "History Block Proofs - Historical Roots":
     let
       # Historical batch of first historical root
       batch = HistoricalBatch(
-        block_roots: getStateField(state[], block_roots).data,
-        state_roots: getStateField(state[], state_roots).data,
+        block_roots: state[].block_roots.data, state_roots: state[].state_roots.data
       )
-      historical_roots = getStateField(state[], historical_roots)
+      historical_roots = state[].historical_roots
 
     # for i in 0..<(SLOTS_PER_HISTORICAL_ROOT - 1): # Test all blocks
     for i in blocksToTest:

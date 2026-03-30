@@ -18,7 +18,7 @@ import
   beacon_chain/networking/network_metadata,
   beacon_chain/spec/beaconstate,
   beacon_chain/conf,
-  beacon_chain/[beacon_clock, buildinfo, nimbus_binary_common],
+  beacon_chain/[beacon_clock, buildinfo, nimbus_binary_common, process_state],
   ../execution_chain/common/common,
   ./nimbus_verified_proxy_conf,
   ./engine/engine,
@@ -75,6 +75,80 @@ proc connectLCToEngine*(lightClient: LightClient, engine: RpcVerificationEngine)
   lightClient.onFinalizedHeader = onFinalizedHeader
   lightClient.onOptimisticHeader = onOptimisticHeader
 
+proc startBackends(
+    engine: RpcVerificationEngine, urls: seq[string], caps: BackendCapabilities
+): Future[seq[JsonRpcClient]] {.async: (raises: [ProxyError, CancelledError]).} =
+  var clients: seq[JsonRpcClient] = @[]
+
+  for url in urls:
+    let client = JsonRpcClient.init(url).valueOr:
+      error "Error initializing backend client", error = error.errMsg
+      continue
+
+    let startRes = await client.start()
+    if startRes.isErr():
+      error "Error connecting to backend", url = url, error = startRes.error.errMsg
+      continue
+
+    engine.registerBackend(client.getEthApiBackend(), caps)
+    clients.add(client)
+
+  if clients.len == 0:
+    raise newException(ProxyError, "Couldn't connect to any execution API backend")
+
+  clients
+
+proc startPrivateTxBackends(
+    engine: RpcVerificationEngine, urls: seq[string]
+): Future[seq[JsonRpcClient]] {.async: (raises: [ProxyError, CancelledError]).} =
+  var clients: seq[JsonRpcClient] = @[]
+  for url in urls:
+    let client = JsonRpcClient.init(url).valueOr:
+      error "Error initializing private tx client", error = error.errMsg
+      continue
+
+    let startRes = await client.start()
+
+    if startRes.isErr():
+      error "Error connecting to private tx backend",
+        url = url, error = startRes.error.errMsg
+      continue
+
+    engine.registerBackend(
+      client.getEthApiBackend(), BackendCapabilities({SendRawTransaction})
+    )
+    clients.add(client)
+
+  if clients.len == 0:
+    raise newException(ProxyError, "Couldn't connect to any private mempool backend")
+
+  clients
+
+proc startFrontends(
+    engine: RpcVerificationEngine, urls: seq[string]
+): seq[JsonRpcServer] {.raises: [ProxyError].} =
+  var servers: seq[JsonRpcServer] = @[]
+
+  for url in urls:
+    let server = JsonRpcServer.init(url).valueOr:
+      error "Error initializing frontend server", error = error.errMsg
+      continue
+
+    # inject frontend
+    server.injectEngineFrontend(engine.frontend)
+
+    let status = server.start()
+    if status.isErr():
+      error "Error starting frontend server", error = status.error.errMsg
+      continue
+
+    servers.add(server)
+
+  if servers.len == 0:
+    raise newException(ProxyError, "Couldn't start any frontends for verified proxy")
+
+  servers
+
 proc run(
     config: VerifiedProxyConf
 ) {.async: (raises: [ProxyError, CancelledError]), gcsafe.} =
@@ -101,18 +175,26 @@ proc run(
       raise newException(ProxyError, "Couldn't initialize verification engine")
     lc = LightClient.new(config.eth2Network, some config.trustedBlockRoot)
 
-    #initialize frontend and backend for JSON-RPC
-    jsonRpcClientPool = JsonRpcClientPool.new()
-    jsonRpcServer = JsonRpcServer.init(config.frontendUrl).valueOr:
-      raise newException(ProxyError, "Couldn't initialize the server end of proxy")
-
     # initialize backend for light client updates
     lcRestClientPool = LCRestClientPool.new(lc.cfg, lc.forkDigests)
 
-  if (await jsonRpcClientPool.addEndpoints(config.backendUrls)).isErr():
-    raise newException(ProxyError, "Couldn't add endpoints for the web3 backend")
+  let usePrivateTx = config.privateTxUrls.len > 0
 
-  # connect light client to LC by registering on header methods 
+  let regularCaps =
+    if usePrivateTx:
+      fullCapabilities - {SendRawTransaction}
+    else:
+      fullCapabilities
+
+  let backendClients = await startBackends(engine, config.executionApiUrls, regularCaps)
+
+  let privateTxClients =
+    if usePrivateTx:
+      await startPrivateTxBackends(engine, config.privateTxUrls)
+    else:
+      @[]
+
+  # connect light client to LC by registering on header methods
   # to use engine header store
   connectLCToEngine(lc, engine)
   lc.trustedBlockRoot = some config.trustedBlockRoot
@@ -120,14 +202,7 @@ proc run(
   # add light client backend
   lc.setBackend(lcRestClientPool.getEthLCBackend())
 
-  # the backend only needs the url of the RPC provider
-  engine.backend = jsonRpcClientPool.getEthApiBackend()
-  # inject frontend
-  jsonRpcServer.injectEngineFrontend(engine.frontend)
-
-  let status = jsonRpcServer.start()
-  if status.isErr():
-    raise newException(ProxyError, status.error.errMsg)
+  let frontendServers = engine.startFrontends(config.frontendUrls)
 
   # adding endpoints will also start the backend
   if lcRestClientPool.addEndpoints(config.beaconApiUrls).isErr():
@@ -139,10 +214,16 @@ proc run(
     await lc.start()
   except CancelledError as e:
     debug "light client cancelled"
+    for s in frontendServers:
+      await s.stop()
+    for c in backendClients:
+      await c.stop()
+    for c in privateTxClients:
+      await c.stop()
+    await lcRestClientPool.closeAll()
     raise e
 
-# noinline to keep it in stack traces
-proc main() {.noinline, raises: [ProxyError, CancelledError].} =
+proc main() {.raises: [].} =
   const
     banner = "Nimbus Verified Proxy " & FullVersionStr
     copyright =
@@ -152,7 +233,33 @@ proc main() {.noinline, raises: [ProxyError, CancelledError].} =
     writePanicLine error # Logging not yet set up
     quit QuitFailure
 
-  waitFor run(config)
+  ProcessState.setupStopHandlers()
+  ProcessState.notifyRunning()
+
+  let runFut = run(config)
+
+  while not (
+    ProcessState.stopIt(notice("Triggering a shut down", reason = it)) or
+    runFut.finished()
+  )
+  :
+    poll()
+
+  # if runFut didn't finish process must have been stopped
+  if not runFut.finished:
+    runFut.cancelSoon()
+
+  try:
+    # critical that we waitFor here, it will propagate the error
+    waitFor runFut
+  except CancelledError:
+    notice "Shutdown complete"
+  except ProxyError as e:
+    fatal "Proxy error", error = e.msg
+    quit QuitFailure
+  except CatchableError as e:
+    fatal "Unexpected error", error = e.msg
+    quit QuitFailure
 
 when isMainModule:
   main()

@@ -17,7 +17,7 @@ import
   ../common/evmforks,
   ../evm/types,
   ../evm/internals,
-  ../core/eip7702
+  ../core/[eip7702, eip8037]
 
 export types
 
@@ -53,11 +53,17 @@ type
   LogResult* = object
     logEntries*: seq[Log]
     gasUsed*: GasInt
-    blockGasUsed*: GasInt
+    blockRegularGasUsed*: GasInt
+    blockStateGasUsed*: GasInt
 
   OutputResult* = object
     error*:   string
     output*:  seq[byte]
+
+  IntrinsicGas* = object
+    regular*: GasInt
+    state*: GasInt
+    floorDataGas*: GasInt
 
 template isCreate(tx: Transaction): bool =
   tx.contractCreation
@@ -71,41 +77,56 @@ func isError*(cr: CallResult): bool =
 const
   TOTAL_COST_FLOOR_PER_TOKEN = 10
 
-func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork): (GasInt, GasInt) =
+func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork, gasLimit: GasInt): IntrinsicGas =
   # Compute the baseline gas cost for this transaction.  This is the amount
   # of gas needed to send this transaction (but that is not actually used
   # for computation).
+  let
+    costPerStateByte = stateGasPerByte(gasLimit)
+
   var
-    intrinsicGas = gasFees[fork][GasTransaction]
-    floorDataGas = intrinsicGas
+    regularGas = TX_BASE_COST
+    stateGas = 0.GasInt
+    floorDataGas = regularGas
     tokens = 0
 
   # EIP-2 (Homestead) extra intrinsic gas for contract creations.
   if call.isCreate:
-    intrinsicGas += gasFees[fork][GasTXCreate]
+    if fork >= FkAmsterdam:
+      stateGas += STATE_BYTES_PER_NEW_ACCOUNT * costPerStateByte
+
+    regularGas += gasFees[fork][GasTXCreate]
     if fork >= FkShanghai:
-      intrinsicGas += (gasFees[fork][GasInitcodeWord] * call.input.len.wordCount)
+      regularGas += (gasFees[fork][GasInitcodeWord] * call.input.len.wordCount)
 
   # Input data cost, reduced in EIP-2028 (Istanbul).
   let gasZero    = gasFees[fork][GasTXDataZero]
   let gasNonZero = gasFees[fork][GasTXDataNonZero]
   for b in call.input:
     if b == 0:
-      intrinsicGas += gasZero
+      regularGas += gasZero
       tokens += 1
     else:
-      intrinsicGas += gasNonZero
+      regularGas += gasNonZero
       tokens += 4
 
 
   # EIP-2930 (Berlin) intrinsic gas for transaction access list.
   if fork >= FkBerlin:
     for account in call.accessList:
-      intrinsicGas += ACCESS_LIST_ADDRESS_COST
-      intrinsicGas += GasInt(account.storageKeys.len) * ACCESS_LIST_STORAGE_KEY_COST
+      regularGas += ACCESS_LIST_ADDRESS_COST
+      regularGas += account.storageKeys.len * ACCESS_LIST_STORAGE_KEY_COST
 
   if fork >= FkPrague:
-    intrinsicGas += call.authorizationList.len * PER_EMPTY_ACCOUNT_COST
+    if fork >= FkAmsterdam:
+      regularGas += REGULAR_PER_AUTH_BASE_COST * call.authorizationList.len
+      stateGas += (STATE_BYTES_PER_NEW_ACCOUNT + STATE_BYTES_PER_AUTH_BASE) * costPerStateByte * GasInt(call.authorizationList.len)
+    else:
+      regularGas += call.authorizationList.len * PER_EMPTY_ACCOUNT_COST
     floorDataGas += tokens * TOTAL_COST_FLOOR_PER_TOKEN
 
-  return (intrinsicGas.GasInt, floorDataGas.GasInt)
+  IntrinsicGas(
+    regular: regularGas.GasInt,
+    state: stateGas,
+    floorDataGas: floorDataGas.GasInt,
+  )

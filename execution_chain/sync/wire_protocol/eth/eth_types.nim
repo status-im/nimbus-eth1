@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -107,10 +107,24 @@ type
   StoredReceiptsPacket* = object
     receipts*: seq[seq[StoredReceipt]]
 
+  StoredReceipts70Request* = object
+    firstBlockReceiptIndex*: uint64
+    blockHashes*: seq[Hash32]
+
+  StoredReceipts70Packet* = object
+    lastBlockIncomplete*: bool
+    receipts*: seq[seq[StoredReceipt]]
+
   BlockRangeUpdatePacket* = object
     earliest*: uint64
     latest*: uint64
     latestHash*: Hash32
+
+  BlockAccessListsRequest* = object
+    blockHashes*: seq[Hash32]
+
+  BlockAccessListsPacket* = object
+    accessLists*: seq[BlockAccessList]
 
   SeenObject* = ref object
     lastSeen*: Time

@@ -11,6 +11,7 @@ import
   ../execution_chain/core/executor, test_config,
   ../execution_chain/transaction,
   ../execution_chain/[evm/state, evm/types],
+  ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/ledger,
   ../execution_chain/common/common,
   ../execution_chain/utils/[utils, debug],
@@ -111,12 +112,12 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
     sender = ctx.tx.recoverSender().expect("valid signature")
 
   vmState.mutateLedger:
-    setupLedger(ctx.pre, db)
+    setupLedger(ctx.pre, ledger)
 
     # this is an important step when using `db/ledger`
     # it will affect the account storage's location
     # during the next call to `getComittedStorage`
-    db.persist()
+    ledger.persist()
 
   let
     rc = vmState.processTransaction(
@@ -218,9 +219,6 @@ proc generalStateJsonMain*(debugMode = false) =
     # run all test fixtures
     suite "new generalstate json tests: eest_develop":
       jsonTest("eest_develop/state_tests", "GeneralStateTestsStatic", testFixture, slowGSTTests)
-
-    suite "new generalstate json tests: eest_devnet":
-      jsonTest("eest_devnet/state_tests", "GeneralStateTestsDevnet", testFixture)
 
     suite "new generalstate json tests: eest_bal":
       jsonTest("eest_bal/state_tests", "GeneralStateTestsBal", testFixture)

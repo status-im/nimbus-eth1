@@ -16,6 +16,7 @@ import
   ../db/ledger,
   ../common/[common, evmforks],
   ../block_access_list/block_access_list_tracker,
+  ../core/eip8037,
   ./interpreter/[op_codes, gas_costs],
   ./types,
   ./evm_errors
@@ -28,7 +29,7 @@ func determineFork(vmState: BaseVMState): EVMFork =
 
 proc init(
       self:         BaseVMState;
-      ac:           LedgerRef,
+      ledger:       LedgerRef,
       parent:       Header;
       blockCtx:     BlockContext;
       com:          CommonRef;
@@ -38,7 +39,7 @@ proc init(
   ## Initialisation helper
   # Take care to (re)set all fields since the VMState might be recycled
   self.com = com
-  self.ledger = ac
+  self.ledger = ledger
   self.gasPool = blockCtx.gasLimit
   assign(self.parent, parent)
   assign(self.blockCtx, blockCtx)
@@ -49,7 +50,8 @@ proc init(
   self.tracer = tracer
   self.receipts.setLen(0)
   self.cumulativeGasUsed = 0
-  self.blockGasUsed = 0
+  self.blockRegularGasUsed = 0
+  self.blockStateGasUsed = 0
   self.gasCosts = self.fork.forkToSchedule
   self.blobGasUsed = 0'u64
   self.allLogs.setLen(0)
@@ -67,6 +69,7 @@ func blockCtx(header: Header): BlockContext =
     excessBlobGas: header.excessBlobGas.get(0'u64),
     parentHash   : header.parentHash,
     slotNumber   : header.slotNumber.get(0'u64),
+    costPerStateByte: stateGasPerByte(header.gasLimit),
   )
 
 # --------------
@@ -95,16 +98,16 @@ proc new*(
   ## `BaseVMState` environment where the account state cache is synchronised
   ## with the `parent` block header.
   let
-    ac = LedgerRef.init(txFrame, storeSlotHash, com.statelessProviderEnabled)
+    ledger = LedgerRef.init(txFrame, storeSlotHash, com.statelessProviderEnabled)
     tracker =
       if enableBalTracker:
-        BlockAccessListTrackerRef.init(ac.ReadOnlyLedger)
+        BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger)
       else:
         nil
 
   new result
   result.init(
-    ac = ac,
+    ledger = ledger,
     parent   = parent,
     blockCtx = blockCtx,
     com      = com,
@@ -136,10 +139,10 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
     tracer = self.tracer
     tracker = self.balTracker
     com    = self.com
-    ac     = self.ledger
+    ledger     = self.ledger
     flags  = self.flags
   self.init(
-    ac       = ac,
+    ledger       = ledger,
     parent   = parent,
     blockCtx = blockCtx,
     com      = com,
@@ -180,15 +183,15 @@ proc init*(
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
   let
-    ac = LedgerRef.init(txFrame, storeSlotHash, com.statelessProviderEnabled)
+    ledger = LedgerRef.init(txFrame, storeSlotHash, com.statelessProviderEnabled)
     tracker =
       if enableBalTracker:
-        BlockAccessListTrackerRef.init(ac.ReadOnlyLedger)
+        BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger)
       else:
         nil
 
   self.init(
-    ac       = ac,
+    ledger       = ledger,
     parent   = parent,
     blockCtx = blockCtx(header),
     com      = com,
@@ -252,9 +255,9 @@ method getAncestorHash*(
 proc readOnlyLedger*(vmState: BaseVMState): ReadOnlyLedger {.inline.} =
   ReadOnlyLedger(vmState.ledger)
 
-template mutateLedger*(vmState: BaseVMState, body: untyped) =
+template mutateLedger*(vmState: BaseVMState, body: untyped): untyped =
   block:
-    var db {.inject.} = vmState.ledger
+    let ledger {.inject.} = vmState.ledger
     body
 
 proc status*(vmState: BaseVMState): bool =
@@ -319,8 +322,9 @@ proc captureGasCost*(vmState: BaseVMState,
                     comp: Computation,
                     op: Op, gasCost: GasInt, gasRemaining: GasInt,
                     depth: int) =
-  let fixed = vmState.gasCosts[op].kind == GckFixed
-  vmState.tracer.captureGasCost(comp, fixed, op, gasCost, gasRemaining, depth)
+  if vmState.tracingEnabled:
+    let fixed = vmState.gasCosts[op].kind == GckFixed
+    vmState.tracer.captureGasCost(comp, fixed, op, gasCost, gasRemaining, depth)
 
 proc captureOpEnd*(vmState: BaseVMState, comp: Computation, pc: int,
                    op: Op, gas: GasInt, refund: int64,

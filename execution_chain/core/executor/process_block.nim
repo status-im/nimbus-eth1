@@ -91,7 +91,8 @@ proc processTransactions*(
 ): Result[void, string] =
   vmState.receipts.setLen(if skipReceipts: 0 else: transactions.len)
   vmState.cumulativeGasUsed = 0
-  vmState.blockGasUsed = 0
+  vmState.blockRegularGasUsed = 0
+  vmState.blockStateGasUsed = 0
   vmState.allLogs = @[]
 
   vmState.withSender(transactions):
@@ -131,7 +132,7 @@ proc procBlkPreamble(
   let com = vmState.com
   if com.daoForkSupport and com.daoForkBlock.get == header.number:
     vmState.mutateLedger:
-      db.applyDAOHardFork()
+      ledger.applyDAOHardFork()
 
   if not skipValidation: # Expensive!
     if blk.transactions.calcTxRoot != header.txRoot:
@@ -206,10 +207,11 @@ proc procBlkPreamble(
       return err("Pre-Shanghai block body must not have withdrawals")
 
   if com.isAmsterdamOrLater(header.timestamp):
-    if vmState.blockGasUsed != header.gasUsed:
+    let blockGasUsed = max(vmState.blockRegularGasUsed, vmState.blockStateGasUsed)
+    if blockGasUsed != header.gasUsed:
       # TODO replace logging with better error
       debug "gasUsed neq blockGasUsed",
-        gasUsed = header.gasUsed, blockGasUsed = vmState.blockGasUsed
+        gasUsed = header.gasUsed, blockGasUsed = blockGasUsed
       return err("gasUsed mismatch")
   else:
     if vmState.cumulativeGasUsed != header.gasUsed:
@@ -247,7 +249,7 @@ proc procBlkEpilogue(
   vmState.mutateLedger:
     # Clearing the account cache here helps manage its size when replaying
     # large ranges of blocks, implicitly limiting its size using the gas limit
-    db.persist(
+    ledger.persist(
       clearEmptyAccount = vmState.com.isSpuriousOrLater(header.number, header.timestamp),
       clearCache = true
     )

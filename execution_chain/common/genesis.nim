@@ -23,27 +23,27 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc toGenesisHeader*(
-    g: Genesis;
-    db: CoreDbTxRef;
-    fork: HardFork;
-      ): Header =
+proc writeGenesisAlloc*(alloc: GenesisAlloc, db: CoreDbTxRef): Hash32 =
+  let ledger = LedgerRef.init(db)
+
+  for address, account in alloc:
+    ledger.setNonce(address, account.nonce)
+    ledger.setBalance(address, account.balance)
+    ledger.setCode(address, account.code)
+
+    for k, v in account.storage:
+      ledger.setStorage(address, k, v)
+
+  ledger.persist()
+  ledger.getStateRoot()
+
+proc writeGenesis*(g: Genesis, db: CoreDbTxRef, fork: HardFork): Header =
   ## Initialise block chain DB accounts derived from the `genesis.alloc` table
   ## of the `db` descriptor argument.
   ##
   ## The function returns the `Genesis` block header.
   ##
-  let ac = LedgerRef.init(db)
-
-  for address, account in g.alloc:
-    ac.setNonce(address, account.nonce)
-    ac.setBalance(address, account.balance)
-    ac.setCode(address, account.code)
-
-    for k, v in account.storage:
-      ac.setStorage(address, k, v)
-
-  ac.persist()
+  let stateRoot = writeGenesisAlloc(g.alloc, db)
 
   result = Header(
     nonce: g.nonce,
@@ -53,11 +53,11 @@ proc toGenesisHeader*(
     difficulty: g.difficulty,
     mixHash: g.mixHash,
     coinbase: g.coinbase,
-    stateRoot: ac.getStateRoot(),
+    stateRoot:stateRoot,
     parentHash: GENESIS_PARENT_HASH,
     transactionsRoot: EMPTY_ROOT_HASH,
     receiptsRoot: EMPTY_ROOT_HASH,
-    ommersHash: EMPTY_UNCLE_HASH
+    ommersHash: EMPTY_UNCLE_HASH,
   )
 
   if g.baseFeePerGas.isSome:
@@ -87,26 +87,16 @@ proc toGenesisHeader*(
     result.blockAccessListHash = Opt.some(EMPTY_BLOCK_ACCESS_LIST_HASH)
     result.slotNumber = Opt.some(0'u64)
 
-proc toGenesisHeader*(
-    genesis: Genesis;
-    fork: HardFork;
-    db = CoreDbTxRef(nil)): Header =
+proc writeGenesis*(params: NetworkParams, db: CoreDbTxRef): Header =
   ## Generate the genesis block header from the `genesis` and `config`
   ## argument value.
-  let
-    db  = if db.isNil: AristoDbMemory.newCoreDbRef().txFrameBegin() else: db
-  toGenesisHeader(genesis, db, fork)
-
-proc toGenesisHeader*(
-    params: NetworkParams;
-    db = CoreDbTxRef(nil)
-      ): Header =
-  ## Generate the genesis block header from the `genesis` and `config`
-  ## argument value.
-  let map  = toForkTransitionTable(params.config)
-  let fork = map.toHardFork(forkDeterminationInfo(0.BlockNumber, params.genesis.timestamp))
-  toGenesisHeader(params.genesis, fork, db)
+  let map = toForkTransitionTable(params.config)
+  let fork =
+    map.toHardFork(forkDeterminationInfo(0.BlockNumber, params.genesis.timestamp))
+  writeGenesis(params.genesis, db, fork)
 
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
+
+#

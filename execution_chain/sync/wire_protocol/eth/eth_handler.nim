@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -25,6 +25,7 @@ const
   MAX_BODIES_SERVE    = 256
   # https://github.com/ethereum/devp2p/blob/master/caps/eth.md#getpooledtransactions-0x09
   MAX_TXS_SERVE       = 256
+  MAX_BALS_SERVE      = 256
   MAX_ACTION_HANDLER  = 128
 
 # ------------------------------------------------------------------------------
@@ -117,6 +118,34 @@ proc getStoredReceipts*(ctx: EthWireRef,
       break
 
   move(list)
+
+proc getStoredReceipts70*(ctx: EthWireRef, req: StoredReceipts70Request):
+                    StoredReceipts70Packet =
+  let numHashes = uint64(req.blockHashes.len)
+  if req.firstBlockReceiptIndex >= numHashes:
+    result.lastBlockIncomplete = false
+    return
+
+  var
+    list: seq[seq[StoredReceipt]]
+    totalBytes = 0
+    numBlockQueried = 0'u64
+
+  for i in req.firstBlockReceiptIndex..<numHashes:
+    let blockHash = req.blockHashes[i]
+    var receiptList = ctx.chain.receiptsByBlockHash(blockHash).valueOr:
+      continue
+
+    totalBytes += getEncodedLength(receiptList)
+    list.add(move(receiptList))
+    inc numBlockQueried
+
+    if list.len >= MAX_RECEIPTS_SERVE or
+       totalBytes > SOFT_RESPONSE_LIMIT:
+      break
+
+  result.lastBlockIncomplete = (req.firstBlockReceiptIndex + numBlockQueried) != numHashes
+  result.receipts = move(list)
 
 proc getPooledTransactions*(ctx: EthWireRef,
                      hashes: openArray[Hash32]):
@@ -215,6 +244,37 @@ proc getBlockHeaders*(ctx: EthWireRef,
       break
 
   move(list)
+
+proc getBlockAccessLists*(
+    ctx: EthWireRef, req: BlockAccessListsRequest): BlockAccessListsPacket =
+  const emptyBal = default(BlockAccessList)
+
+  var blockHashes = req.blockHashes
+  blockHashes.setLen(min(req.blockHashes.len(), MAX_BALS_SERVE))
+
+  var balValues = newSeq[Opt[seq[byte]]](blockHashes.len())
+  ctx.chain.latestTxFrame.getBlockAccessLists(blockHashes, balValues).isOkOr:
+    trace "handlers.getBlockAccessLists: get block access lists failed", error = ($error)
+    
+  var 
+    totalBytes = 0
+    i = 0
+    res = BlockAccessListsPacket(
+      accessLists: newSeqOfCap[BlockAccessList](balValues.len())
+    )
+
+  while totalBytes <= SOFT_RESPONSE_LIMIT and i <= balValues.high:
+    if balValues[i].isSome():
+      res.accessLists.add BlockAccessList.decode(balValues[i].get())
+          .expect("BALs from the db should decode successfully")
+      totalBytes += balValues[i].get().len()
+    else:
+      res.accessLists.add(emptyBal)
+      inc totalBytes # the empty rlp list takes only a single byte
+
+    inc i
+  
+  res
 
 # ------------------------------------------------------------------------------
 # End

@@ -17,6 +17,7 @@ import
   ../common/state_clearing,
   ../../execution_chain/[evm/types, evm/state, transaction],
   ../../execution_chain/common/common,
+  ../../execution_chain/db/core_db/memory_only,
   ../../execution_chain/db/ledger,
   ../../execution_chain/utils/utils,
   ../../execution_chain/core/pow/difficulty,
@@ -103,15 +104,15 @@ proc envToHeader(env: EnvStruct): Header =
     excessBlobGas  : env.currentExcessBlobGas,
   )
 
-proc postState(db: LedgerRef, alloc: var GenesisAlloc) =
-  for accAddr in db.addresses():
+proc postState(ledger: LedgerRef, alloc: var GenesisAlloc) =
+  for accAddr in ledger.addresses():
     var acc = GenesisAccount(
-      code: db.getCode(accAddr).bytes(),
-      balance: db.getBalance(accAddr),
-      nonce: db.getNonce(accAddr)
+      code: ledger.getCode(accAddr).bytes(),
+      balance: ledger.getBalance(accAddr),
+      nonce: ledger.getNonce(accAddr)
     )
 
-    for k, v in db.storage(accAddr):
+    for k, v in ledger.storage(accAddr):
       acc.storage[k] = v
     alloc[accAddr] = acc
 
@@ -231,11 +232,12 @@ proc exec(ctx: TransContext,
   if vmState.com.daoForkSupport and
      vmState.com.daoForkBlock.get == vmState.blockNumber:
     vmState.mutateLedger:
-      db.applyDAOHardFork()
+      ledger.applyDAOHardFork()
 
   vmState.receipts = newSeqOfCap[StoredReceipt](ctx.txList.len)
   vmState.cumulativeGasUsed = 0
-  vmState.blockGasUsed = 0
+  vmState.blockRegularGasUsed = 0
+  vmState.blockStateGasUsed = 0
 
   if ctx.env.parentBeaconBlockRoot.isSome:
     vmState.processBeaconBlockRoot(ctx.env.parentBeaconBlockRoot.get).isOkOr:
@@ -306,11 +308,11 @@ proc exec(ctx: TransContext,
       uncleReward = uncleReward * blockReward
       uncleReward = uncleReward div 8.u256
       vmState.mutateLedger:
-        db.addBalance(uncle.address, uncleReward)
+        ledger.addBalance(uncle.address, uncleReward)
       mainReward += blockReward div 32.u256
 
     vmState.mutateLedger:
-      db.addBalance(ctx.env.currentCoinbase, mainReward)
+      ledger.addBalance(ctx.env.currentCoinbase, mainReward)
 
   if ctx.env.withdrawals.isSome:
     for withdrawal in ctx.env.withdrawals.get:
@@ -555,8 +557,8 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
     )
 
     vmState.mutateLedger:
-      db.setupAlloc(ctx.alloc)
-      db.persist(clearEmptyAccount = false)
+      ledger.setupAlloc(ctx.alloc)
+      ledger.persist(clearEmptyAccount = false)
 
     ctx.parseTxs(com.chainId)
     let res = exec(ctx, vmState, conf.stateReward, header, conf)

@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -37,8 +37,8 @@ proc init*(
       raiseAssert "Cannot initialise " &
         $col & " descriptor: " & error
 
-proc destroy*(rdb: var RdbInst; eradicate: bool) =
-    rdb.baseDb.close(eradicate)
+proc close*(rdb: var RdbInst; wipe: bool) =
+    rdb.baseDb.close(wipe)
 
 # ------------------------------------------------------------------------------
 # End

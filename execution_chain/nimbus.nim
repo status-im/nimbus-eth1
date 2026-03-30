@@ -49,7 +49,6 @@ import
 const
   defaultMetricsServerPort = 8008
   copyright = "Copyright (c) " & compileYear & " Status Research & Development GmbH"
-  projectId = "Nimbus" & "/" & FullVersionStr & "/" & CpuInfo
 
 type NStartUpCmd* {.pure.} = enum
   nimbus = "Run Ethereum node"
@@ -103,7 +102,6 @@ type
     metricsPort* {.
       desc: "Listening port of the built-in metrics HTTP server"
       defaultValue: defaultMetricsServerPort
-      defaultValueDesc: $defaultMetricsServerPort
       name: "metrics-port" .}: Port
 
     metricsAddress* {.
@@ -299,7 +297,7 @@ proc runCombinedClient() =
   # go away
   discard randomBytes(distinctBase(jwtKey))
 
-  const banner = projectId & "\p\pSubcommand options can also be used with the main node, see `beaconNode --help` and `executionClient --help`"
+  const banner = ClientId & "\p\pSubcommand options can also be used with the main node, see `beaconNode --help` and `executionClient --help`"
 
   var config = NimbusConf.loadWithBanners(
     banner, copyright, [specBanner], ignoreUnknown = true, setupLogger = true

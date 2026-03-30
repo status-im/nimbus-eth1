@@ -8,24 +8,14 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[os, strutils, sequtils],
-  json_rpc/rpcproxy, # must be early (compilation annoyance)
+  std/[strutils],
   json_serialization/std/net,
   beacon_chain/conf_light_client,
   beacon_chain/nimbus_binary_common
 
 export net
 
-type
-  Web3UrlKind* = enum
-    HttpUrl
-    WsUrl
-
-  Web3Url* = object
-    kind*: Web3UrlKind
-    web3Url*: string
-
-  UrlList* = seq[string]
+type UrlList* = seq[string]
 
 #!fmt: off
 type VerifiedProxyConf* = object
@@ -114,46 +104,34 @@ type VerifiedProxyConf* = object
 
   # (Untrusted) web3 provider
   # No default - Needs to be provided by the user
-  backendUrls* {.
-    desc: "URL of the web3 data provider",
-    name: "backend-url"
-  .}: seq[Web3Url]
+  executionApiUrls* {.
+    desc: "URL of the web3 data provider, Multiple URLs can be specified by defining the option again on the command line.",
+    name: "execution-api-url"
+  .}: UrlList
 
   # Listening endpoint of the proxy
   # (verified) web3 end
-  frontendUrl* {.
-    desc: "URL for the listening end of the proxy - [http/ws]://[address]:[port]",
-    defaultValue: Web3Url(kind: HttpUrl, web3Url: "http://127.0.0.1:8545"),
+  frontendUrls* {.
+    desc: "URL for the listening end of the proxy - [http/ws]://[address]:[port]. Multiple URLs can be specified by defining the option again on the command line",
+    defaultValue: @["http://127.0.0.1:8545"],
     defaultValueDesc: "http://127.0.0.1:8545",
-    name: "frontend-url"
-  .}: Web3Url
+    name: "listen-url"
+  .}: UrlList
 
   # (Untrusted) web3 provider
   # No default - Needs to be provided by the user
   beaconApiUrls* {.
     desc: "URL of the light client data provider. Multiple URLs can be specified by defining the option again on the command line",
-    name: "external-beacon-api-url"
+    name: "beacon-api-url"
+  .}: UrlList
+
+  privateTxUrls* {.
+    desc: "URL of a private transaction relay (builder). eth_sendRawTransaction will be routed to these URLs instead of the regular execution API. Multiple URLs can be specified by defining the option again on the command line.",
+    defaultValue: @[],
+    name: "private-tx-url"
   .}: UrlList
 
 #!fmt: on
-
-proc parseCmdArg*(T: type Web3Url, p: string): T {.raises: [ValueError].} =
-  let
-    url = parseUri(p)
-    normalizedScheme = url.scheme.toLowerAscii()
-
-  if (normalizedScheme == "http" or normalizedScheme == "https"):
-    Web3Url(kind: HttpUrl, web3Url: p)
-  elif (normalizedScheme == "ws" or normalizedScheme == "wss"):
-    Web3Url(kind: WsUrl, web3Url: p)
-  else:
-    raise newException(
-      ValueError, "Web3 url should have defined scheme (http/https/ws/wss)"
-    )
-
-proc parseCmdArg*(T: type seq[Web3Url], p: string): T {.raises: [ValueError].} =
-  let urls = p.split(',')
-  urls.mapIt(parseCmdArg(Web3Url, it))
 
 proc parseCmdArg*(T: type UrlList, p: string): T {.raises: [ValueError].} =
   let urls = p.split(',')
@@ -163,22 +141,11 @@ proc parseCmdArg*(T: type UrlList, p: string): T {.raises: [ValueError].} =
       parsed = parseUri(u)
       normalizedScheme = parsed.scheme.toLowerAscii()
 
-    if not (normalizedScheme == "http" or normalizedScheme == "https"):
-      raise newException(ValueError, "Light Client Endpoint should be a http(s) URL")
+    if normalizedScheme notin ["http", "https", "ws", "wss"]:
+      raise
+        newException(ValueError, "URL should have a valid scheme (http/https/ws/wss)")
 
   UrlList(urls)
 
-proc completeCmdArg*(T: type Web3Url, val: string): seq[string] =
-  @[]
-
 proc completeCmdArg*(T: type UrlList, val: string): seq[string] =
   @[]
-
-# TODO: Cannot use ClientConfig in VerifiedProxyConf due to the fact that
-# it contain `set[TLSFlags]` which does not have proper toml serialization
-func asClientConfig*(url: Web3Url): ClientConfig =
-  case url.kind
-  of HttpUrl:
-    getHttpClientConfig(url.web3Url)
-  of WsUrl:
-    getWebSocketClientConfig(url.web3Url, flags = {})

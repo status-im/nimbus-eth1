@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -20,10 +20,9 @@
 
 import
   ../kvt_desc,
-  "."/[rocks_db, memory_only]
+  ./rocks_db
 
 export
-  memory_only,
   kvt_desc
 
 # ------------------------------------------------------------------------------
