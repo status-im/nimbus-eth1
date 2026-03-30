@@ -12,13 +12,9 @@ import strutils
 
 const currentDir = currentSourcePath()[0 .. ^(len("config.nims") + 1)]
 
-if getEnv("NIMBUS_BUILD_SYSTEM") == "yes" and
-   # BEWARE
-   # In Nim 1.6, config files are evaluated with a working directory
-   # matching where the Nim command was invocated. This means that we
-   # must do all file existance checks with full absolute paths:
-   system.fileExists(currentDir & "nimbus-build-system.paths"):
-  include "nimbus-build-system.paths"
+when withDir(thisDir(), system.fileExists("nimbus-build-system.paths")):
+  if getEnv("NIMBUS_BUILD_SYSTEM") == "yes":
+    include "nimbus-build-system.paths"
 
 const nimCachePathOverride {.strdefine.} = ""
 when nimCachePathOverride == "":
@@ -37,18 +33,17 @@ if defined(release) and not defined(disableLTO):
   # some warnings by hand.
   switch("passL", "-Wno-stringop-overflow -Wno-stringop-overread")
 
-  if defined(macosx): # Clang
-    switch("passC", "-flto=thin")
-    switch("passL", "-flto=thin -Wl,-object_path_lto," & nimCachePath & "/lto")
-  elif defined(linux):
-    switch("passC", "-flto=auto")
-    switch("passL", "-flto=auto")
-    switch("passC", "-finline-limit=100000")
-    switch("passL", "-finline-limit=100000")
-  else:
-    # On windows, LTO needs more love and attention so "gcc-ar" and "gcc-ranlib" are
-    # used for static libraries.
-    discard
+  # lto_incremental available as of Nim 1.6.14 / https://github.com/nim-lang/Nim/pull/21679
+  switch("define", "lto_incremental")
+
+  # According to early measurements, this helped make LTO make better choices -
+  # it probably needs to be re-tested for newer GCC versions..
+  put("gcc.options.always", get("gcc.options.always") & " -finline-limit=100000")
+  put("gcc.options.linker", get("gcc.options.linker") & " -finline-limit=100000")
+
+  if defined(macosx):
+    # https://clang.llvm.org/docs/CommandGuide/clang.html#cmdoption-flto
+    put("clang.options.linker", get("clang.options.linker") & " -Wl,-object_path_lto," & nimCachePath & "/lto")
 
 # Hidden visibility allows for better position-independent codegen - it also
 # resolves a build issue in BLST where otherwise private symbols would require
@@ -99,7 +94,7 @@ elif defined(linux) and defined(arm64):
   # clang can't handle "-march=native"
   switch("passC", "-march=armv8-a")
   switch("passL", "-march=armv8-a")
-elif not(defined(macos) and defined(arm64)):
+elif not(defined(macosx) and defined(arm64)):
   # Apple's Clang can't handle "-march=native" on M1: https://github.com/status-im/nimbus-eth2/issues/2758
   switch("passC", "-march=native")
   switch("passL", "-march=native")
@@ -128,7 +123,6 @@ switch("passL", "-fno-omit-frame-pointer")
 --styleCheck:error
 
 switch("define", "nim_compiler_path=" & currentDir & "env.sh nim")
-switch("define", "withoutPCRE")
 
 when not defined(disable_libbacktrace):
   --define:nimStackTraceOverride
@@ -214,3 +208,20 @@ put("sysrng.always", "-fno-lto")
 # sqlite3.c: In function ‘sqlite3SelectNew’:
 # vendor/nim-sqlite3-abi/sqlite3.c:124500: warning: function may return address of local variable [-Wreturn-local-addr]
 put("sqlite3.always", "-fno-lto") # -Wno-return-local-addr
+# ############################################################
+#
+#                QUIC does variable stack allocations
+#
+# ############################################################
+
+put("lsquic_enc_sess_ietf.always", "-fno-lto -Wno-stack-usage")
+put("lsquic_handshake.always", "-fno-lto -Wno-stack-usage")
+put("lsquic_hkdf.always", "-fno-lto -Wno-stack-usage")
+
+# ############################################################
+#
+#  Required for BoringSSL warning about frees on offset pointers
+#
+# ############################################################
+
+put("mem.always", "-Wno-free-nonheap-object")

@@ -194,7 +194,14 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
       syncerShouldRun = true
 
     # Configure snap syncer.
-    nimbus.snapSyncRef.config(nimbus.ethNode, config.maxPeers)
+    nimbus.snapSyncRef.config(nimbus.ethNode, config.dataDir, config.maxPeers)
+
+    if config.snapSyncTarget.isSome():
+      let hex = config.snapSyncTarget.unsafeGet
+      if not nimbus.snapSyncRef.configTarget(hex):
+        fatal "Error parsing hash32 argument for --debug-snap-sync-target",
+          hash32=hex
+        quit QuitFailure
   else:
     # Disable any external setup unless explicitely activated
     nimbus.snapSyncRef = SnapSyncRef(nil)
@@ -391,7 +398,7 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
     let com = setupCommonRef(config)
 
   defer:
-    com.db.finish()
+    com.db.close()
 
   case config.cmd
   of NimbusCmd.`import`:

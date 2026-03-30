@@ -20,7 +20,7 @@ logScope:
   topics = "eth68/69"
 
 const
-  prettyEthProtoName* = "[eth/68/69]"
+  prettyEthProtoName* = "[eth/68:71]"
 
   # Pickeled tracer texts
   trEthRecvReceived* =

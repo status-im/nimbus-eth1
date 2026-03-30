@@ -11,6 +11,7 @@
 
 import
   std/[json, strutils],
+  unittest2,
   eth/common/headers_rlp,
   web3/eth_api_types,
   web3/engine_api_types,
@@ -22,11 +23,13 @@ import
   ./chain_config_wrapper,
   ../../execution_chain/rpc,
   ../../execution_chain/common/hardforks,
+  ../../execution_chain/db/core_db/memory_only,
   ../../execution_chain/db/ledger,
   ../../execution_chain/core/chain/forked_chain,
   ../../execution_chain/core/tx_pool,
   ../../execution_chain/beacon/beacon_engine,
   ../../execution_chain/common/common,
+  ../../execution_chain/stateless/witness_types,
   ../../hive_integration/engine_client
 
 import ../../tools/common/helpers as chp except HardFork
@@ -63,6 +66,8 @@ type
   BlockDesc* = object
     blk*: EthBlock
     badBlock*: bool
+    bal*: Opt[BlockAccessListRef]
+    witness*: Opt[ExecutionWitness]
 
   Numero* = distinct uint64
 
@@ -315,12 +320,5 @@ template runEESTSuite*(
 ) =
   for eest in eestReleases:
     suite eest & ": " & eestType:
-      for fileName in walkDirRec(baseFolder / eest / eestType):
-        let last = fileName.splitPath().tail
-        if last in skipFiles:
-          continue
-        test last:
-          let res = processFile(fileName, statelessEnabled)
-          if not res:
-            debugEcho fileName.splitPath().tail
-          check res
+      for filePath in walkDirRec(baseFolder / eest / eestType):
+        processFile(filePath, statelessEnabled, @skipFiles)

@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -144,7 +144,6 @@ type
     ## Trie traversal path
     root*: VertexID                ## Handy for some fringe cases
     legs*: ArrayBuf[NibblesBuf.high + 1, Leg] ## Chain of vertices and IDs
-    tail*: NibblesBuf              ## Portion of non completed path
 
 const
   dbLevel* = -1

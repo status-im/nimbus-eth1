@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -10,8 +10,9 @@ import
   unittest2,
   stint,
   eth/common/[hashes, addresses, accounts],
+  ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/[ledger, core_db],
-   ../execution_chain/common/chain_config
+  ../execution_chain/common/[chain_config, genesis]
 
 proc getGenesisAlloc(filePath: string): GenesisAlloc =
   var cn: NetworkParams
@@ -19,20 +20,6 @@ proc getGenesisAlloc(filePath: string): GenesisAlloc =
     quit(1)
 
   cn.genesis.alloc
-
-proc setupLedger(genAccounts: GenesisAlloc, ledger: LedgerRef): Hash32 =
-
-  for address, genAccount in genAccounts:
-    for slotKey, slotValue in genAccount.storage:
-      ledger.setStorage(address, slotKey, slotValue)
-
-    ledger.setNonce(address, genAccount.nonce)
-    ledger.setCode(address, genAccount.code)
-    ledger.setBalance(address, genAccount.balance)
-
-  ledger.persist()
-
-  ledger.getStateRoot()
 
 func toNodesTable(proofNodes: openArray[seq[byte]]): Table[Hash32, seq[byte]] =
   var nodes: Table[Hash32, seq[byte]]
@@ -60,14 +47,13 @@ suite "Aristo subtries json tests":
         accounts = getGenesisAlloc("tests" / "customgenesis" / file)
         coreDb = newCoreDbRef(DefaultDbMemory)
         txFrame = coreDb.baseTxFrame().txFrameBegin()
-        ledger = LedgerRef.init(txFrame)
-        stateRoot = setupLedger(accounts, ledger)
+        stateRoot = writeGenesisAlloc(accounts, txFrame)
 
       for address, account in accounts:
         let
           subtrieDb = newCoreDbRef(DefaultDbMemory)
           subtrieTxFrame = subtrieDb.baseTxFrame().txFrameBegin()
-          proof = ledger.getAccountProof(address)
+          proof = txFrame.proof(address.computeAccPath())[][0]
           nodes = toNodesTable(proof)
 
         # Check the state root of the subtrie
@@ -95,13 +81,11 @@ suite "Aristo subtries json tests":
 
   test "Single account proof with storage proofs subtries and check stateRoot":
     for file in genesisFiles:
-
       let
         accounts = getGenesisAlloc("tests" / "customgenesis" / file)
         coreDb = newCoreDbRef(DefaultDbMemory)
         txFrame = coreDb.baseTxFrame().txFrameBegin()
-        ledger = LedgerRef.init(txFrame)
-        stateRoot = setupLedger(accounts, ledger)
+        stateRoot = writeGenesisAlloc(accounts, txFrame)
 
       for address, account in accounts:
         let
@@ -109,12 +93,17 @@ suite "Aristo subtries json tests":
           subtrieTxFrame = subtrieDb.baseTxFrame().txFrameBegin()
 
         var
-          proofNodes = ledger.getAccountProof(address)
-          slots: seq[UInt256]
+          proof = txFrame.proof(address.computeAccPath())[]
+          proofNodes = proof[0]
+          slots: seq[Hash32]
         for k in account.storage.keys():
-          slots.add(k)
+          slots.add(k.computeSlotKey())
 
-        let storageProof = ledger.getStorageProof(address, slots)
+        let storageProof =
+          if proof[1]:
+            txFrame.slotProofs(address.computeAccPath(), slots)[]
+          else:
+            newSeq[seq[seq[byte]]](slots.len)
         for slotProof in storageProof:
           proofNodes &= slotProof
         let nodes = toNodesTable(proofNodes)
@@ -151,17 +140,16 @@ suite "Aristo subtries json tests":
 
   test "Single account and storage multiproof subtries and check stateRoot":
     for file in genesisFiles:
-
       let
         accounts = getGenesisAlloc("tests" / "customgenesis" / file)
         coreDb = newCoreDbRef(DefaultDbMemory)
-        ledger = LedgerRef.init(coreDb.baseTxFrame())
-        stateRoot = setupLedger(accounts, ledger)
+        txFrame = coreDb.baseTxFrame()
+        stateRoot = writeGenesisAlloc(accounts, txFrame)
 
       for address, account in accounts:
         let
           coreDb2 = newCoreDbRef(DefaultDbMemory)
-          txFrame = coreDb2.baseTxFrame().txFrameBegin()
+          txFrame2 = coreDb2.baseTxFrame().txFrameBegin()
 
         var slots: seq[Hash32]
         for k in account.storage.keys():
@@ -171,28 +159,27 @@ suite "Aristo subtries json tests":
         paths[keccak256(address.data())] = slots
 
         var proofNodes: seq[seq[byte]]
-        ledger.txFrame.multiProof(paths, proofNodes).expect("ok")
+        txFrame.multiProof(paths, proofNodes).expect("ok")
         let nodes = toNodesTable(proofNodes)
 
         check:
           paths.len() == 1
           proofNodes.len() > 0
           nodes.len() > 0
-          txFrame.putSubtrie(stateRoot, nodes).isOk()
-          txFrame.getStateRoot().get() == stateRoot
+          txFrame2.putSubtrie(stateRoot, nodes).isOk()
+          txFrame2.getStateRoot().get() == stateRoot
 
   test "All accounts and storage multiproof subtries and check stateRoot":
     for file in genesisFiles:
-
       let
         accounts = getGenesisAlloc("tests" / "customgenesis" / file)
         coreDb = newCoreDbRef(DefaultDbMemory)
-        ledger = LedgerRef.init(coreDb.baseTxFrame())
-        stateRoot = setupLedger(accounts, ledger)
+        txFrame = coreDb.baseTxFrame()
+        stateRoot = writeGenesisAlloc(accounts, txFrame)
 
       let
         coreDb2 = newCoreDbRef(DefaultDbMemory)
-        txFrame = coreDb2.baseTxFrame().txFrameBegin()
+        txFrame2 = coreDb2.baseTxFrame().txFrameBegin()
 
       var paths: Table[Hash32, seq[Hash32]]
 
@@ -204,15 +191,15 @@ suite "Aristo subtries json tests":
         paths[keccak256(address.data())] = slots
 
       var proofNodes: seq[seq[byte]]
-      ledger.txFrame.multiProof(paths, proofNodes).expect("ok")
+      txFrame.multiProof(paths, proofNodes).expect("ok")
       let nodes = toNodesTable(proofNodes)
 
       check:
         paths.len() == accounts.len()
         proofNodes.len() > 0
         nodes.len() > 0
-        txFrame.putSubtrie(stateRoot, nodes).isOk()
-        txFrame.getStateRoot().get() == stateRoot
+        txFrame2.putSubtrie(stateRoot, nodes).isOk()
+        txFrame2.getStateRoot().get() == stateRoot
 
   # By using a small value (1 in this case) and storing a large number of keys
   # this test reproduces the scenario where leaf trie nodes get embedded into

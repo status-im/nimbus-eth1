@@ -11,9 +11,10 @@
 {.push raises: [].}
 
 import
-  ./session/session_resume
+  ./session/[session_mktrie, session_resume]
 
 export
+  session_mktrie,
   session_resume
 
 # End

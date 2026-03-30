@@ -402,7 +402,8 @@ proc getTotalDifficulty*(chain: ForkedChainRef, blockHash: Hash32, header: Heade
     chain.baseTxFrame().getScore(blockHash)
 
 proc headerFromTag*(chain: ForkedChainRef, blockTag: BlockTag): Result[Header, string] =
-  if blockTag.kind == bidAlias:
+  case blockTag.kind
+  of bidAlias:
     let tag = blockTag.alias.toLowerAscii
     case tag
     of "latest":
@@ -413,12 +414,15 @@ proc headerFromTag*(chain: ForkedChainRef, blockTag: BlockTag): Result[Header, s
       ok(chain.safeHeader)
     else:
       err("Unsupported block tag " & tag)
-  else:
+  of bidNumber:
     let blockNum = base.BlockNumber blockTag.number
     chain.headerByNumber(blockNum)
+  of bidHash:
+    chain.headerByHash(blockTag.hash)
 
-proc blockFromTag*(chain: ForkedChainRef, blockTag: BlockTag): Result[Block, string] =
-  if blockTag.kind == bidAlias:
+proc blockFromTag*(chain: ForkedChainRef, blockTag: BlockTag, noHash: bool = false): Result[Block, string] =
+  case blockTag.kind
+  of bidAlias:
     let tag = blockTag.alias.toLowerAscii
     case tag
     of "latest":
@@ -429,25 +433,10 @@ proc blockFromTag*(chain: ForkedChainRef, blockTag: BlockTag): Result[Block, str
       ok(chain.safeBlock)
     else:
       err("Unsupported block tag " & tag)
-  else:
+  of bidNumber:
     let blockNum = base.BlockNumber blockTag.number
     chain.blockByNumber(blockNum)
-
-proc headerFromBlockId*(chain: ForkedChainRef, blockId: BlockNumberOrTagOrHash): Result[Header, string] =
-  case blockId.kind
-  of number:
-    let blockNum = base.BlockNumber blockId.number
-    chain.headerByNumber(blockNum).mapErr(proc(e: auto): auto = "Block not found")
-  of tag:
-    let tag = blockId.tag.toLowerAscii
-    case tag
-    of "latest":
-      ok(chain.latestHeader)
-    of "finalized":
-      ok(chain.finalizedHeader)
-    of "safe":
-      ok(chain.safeHeader)
-    else:
-      err("Unsupported block tag " & tag)
-  of hash:
-    chain.headerByHash(blockId.hash).mapErr(proc(e: auto): auto = "Block not found")
+  of bidHash:
+    if noHash:
+      return err("query by hash not supported for this function")
+    chain.blockByHash(blockTag.hash)

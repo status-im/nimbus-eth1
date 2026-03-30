@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -12,7 +12,7 @@
 
 import
   results,
-  ../../[aristo, kvt]
+  ../[aristo, kvt]
 
 type
   CoreDbType* = enum
@@ -39,22 +39,16 @@ type
     Unspecified
 
     AccNotFound
-    ColUnacceptable
-    HashNotAvailable
     KvtNotFound
-    MptNotFound
     ProofCreate
     ProofVerify
-    RlpException
     StoNotFound
-    TxPending
 
   # --------------------------------------------------
   # Production descriptors
   # --------------------------------------------------
   CoreDbRef* = ref object
     ## Database descriptor
-    dbType*: CoreDbType         ## Type of database backend
     mpt*: AristoDbRef           ## `Aristo` database
     kvt*: KvtDbRef              ## `KVT` key-value table
 

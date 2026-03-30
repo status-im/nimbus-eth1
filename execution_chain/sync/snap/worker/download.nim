@@ -13,7 +13,7 @@
 import
   pkg/[chronicles, chronos],
   ./download/[account, code, header, storage],
-  ./[helpers, mpt, state_db, worker_desc]
+  ./[helpers, mpt, state_db, update, worker_desc]
 
 export
   account, code, header, storage
@@ -46,25 +46,18 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
       sdb = ctx.pool.stateDB
       peer {.inject,used.} = $buddy.peer            # logging only
 
-    # Add new state records if pivots and free slots are available
-    if buddy.only.pivotRoot.isNone():
-      let ethPeer = buddy.getEthPeer()              # get `ethXX` peer if avail
-      if not ethPeer.isNil:
-        let hash = BlockHash(ethPeer.only.pivotHash)
-        trace info & ": assigning best/latest pivotHash", peer,
-          hash=hash.toStr, nSyncPeers=ctx.nSyncPeers()
-        buddy.headerStateRegister(hash, info).isErrOr:
-          buddy.only.pivotRoot = Opt.some(value)
+    buddy.updateTarget info                         # manual target set up?
+    buddy.updateFcuRoot info                        # FCU header => state
 
     if sdb.len == 0:
       trace info & ": no state records", peer
-      break body
+      break body                                    # return err()
 
     # Fetch for state DB items, start with pivot root
     var theseFirst: seq[StateRoot]
     sdb.pivot.isErrOr:                              # the one with most done yet
       theseFirst.add value.stateRoot
-    buddy.only.pivotRoot.isErrOr:                   # best supported by peer
+    buddy.only.finRoot.isErrOr:
       theseFirst.add value
 
     # Run `download()` for available states, the order of which is
@@ -89,13 +82,12 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
             break                                   # done this state, try next
           buddy.storageDownload(state, acc, info)   # fetch storage slots
           buddy.codeDownload(state, acc, info)      # fetch byte codes
-          if not sdb.hasKey(state.stateRoot):       # proceed unless evicted
+          if not state.isOperable():                # proceed unless evicted
             break
           didSomething = true                       # continue with this one
           # End `while` single state download
 
         if didSomething:
-          ctx.daemon = true                         # unless enabled, already
           nStatesOk.inc
           if nWorkingStateRootsMax <= nStatesOk:
             break downloadLoop                      # all done for now

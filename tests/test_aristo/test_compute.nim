@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -80,7 +80,7 @@ suite "Aristo compute":
         checkpoint("k = " & k.toHex & ", v = " & $v)
 
         check:
-          txFrame.mergeAccountRecord(k, v) == Result[bool, AristoError].ok(true)
+          txFrame.mergeAccount(k, v) == Result[bool, AristoError].ok(true)
 
         # Check state against expected value
         let w = txFrame.computeKey((root, root)).expect("no errors")
@@ -103,7 +103,7 @@ suite "Aristo compute":
         check r == w
 
         check:
-          txFrame.deleteAccountRecord(k).isOk
+          txFrame.deleteAccount(k).isOk
 
         let rc = txFrame.check
         check rc == typeof(rc).ok()
@@ -117,7 +117,7 @@ suite "Aristo compute":
 
     for (k, v, r) in samples[^1]:
       check:
-        txFrame.mergeAccountRecord(k, v) == Result[bool, AristoError].ok(true)
+        txFrame.mergeAccount(k, v) == Result[bool, AristoError].ok(true)
     txFrame.checkpoint(1, skipSnapshot = true)
 
     let batch = db.putBegFn()[]

@@ -97,18 +97,21 @@ func toStr*(w: (float,float), precision: static[int] = 4): string =
   elif w[0] == w[1]: w[0].toStr(precision)
   else: "n/a"
 
-func flStr*(w: UInt256): string =
+func flStr*(w: UInt256, precision: static[int] = 4): string =
   if w == high(UInt256): "2^256"
   elif w == 0: "0"
-  else: w.to(float).toStr
+  else: w.to(float).toStr(precision)
 
-func flStr*(w: (UInt256,UInt256)): string =
-  if w[0] != 0:
-    (w[0].to(float),w[1].to(float)).toStr
-  elif w[1] != high(UInt256):
-    "0.." & w[1].flStr
+func flStr*(w: (UInt256,UInt256), precision: static[int] = 4): string =
+  if w[0] == 0:
+    if w[1] == high(UInt256):
+      "0..2^256"
+    else:
+      "0.." & w[1].to(float).toStr(precision)
+  elif w[1] == high(UInt256):
+    w[0].to(float).toStr(precision) & "..2^256"
   else:
-    "0..2^256"
+    (w[0].to(float),w[1].to(float)).toStr(precision)
 
 func lenStr*(w: (UInt256,UInt256)): string =
   if w[0] == 0 and w[1] == high(UInt256):

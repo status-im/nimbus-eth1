@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -117,7 +117,10 @@ func putVtxFn(db: MemBackendRef): PutVtxFn =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
         if vtx.isValid:
-          hdl.sTab[rvid] = vtx.blobify(key)
+          var vtxBuf: VertexBuf
+          vtx.blobifyTo(key, vtxBuf)
+
+          hdl.sTab[rvid] = @(vtxBuf.data())
         else:
           hdl.sTab[rvid] = EmptyBlob
 
@@ -166,8 +169,8 @@ func closeFn(db: MemBackendRef): CloseFn =
 # ------------------------------------------------------------------------------
 
 func memoryBackend*(): AristoDbRef =
-  let 
-    be = MemBackendRef(beKind: BackendMemory)
+  let
+    be = MemBackendRef()
     db = AristoDbRef()
 
   db.getVtxFn = getVtxFn be
