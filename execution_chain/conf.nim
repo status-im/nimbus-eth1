@@ -480,6 +480,13 @@ type
         defaultValue: false
         name: "debug-snap-sync" .}: bool
 
+      snapSyncTarget* {.
+        desc: "Manually set the initial block hash to derive the target" &
+              " state root from. The block hash is specified by its 32" &
+              " byte hash represented by a hex string. This block hash must" &
+              " refer to a finalised block."
+        name: "debug-snap-sync-target" .}: Option[string]
+
       snapServerEnabled* {.
         hidden
         desc: "Always start the snap peer service, even when snap sync is" &

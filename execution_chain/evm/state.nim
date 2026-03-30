@@ -16,6 +16,7 @@ import
   ../db/ledger,
   ../common/[common, evmforks],
   ../block_access_list/block_access_list_tracker,
+  ../core/eip8037,
   ./interpreter/[op_codes, gas_costs],
   ./types,
   ./evm_errors
@@ -49,7 +50,8 @@ proc init(
   self.tracer = tracer
   self.receipts.setLen(0)
   self.cumulativeGasUsed = 0
-  self.blockGasUsed = 0
+  self.blockRegularGasUsed = 0
+  self.blockStateGasUsed = 0
   self.gasCosts = self.fork.forkToSchedule
   self.blobGasUsed = 0'u64
   self.allLogs.setLen(0)
@@ -67,6 +69,7 @@ func blockCtx(header: Header): BlockContext =
     excessBlobGas: header.excessBlobGas.get(0'u64),
     parentHash   : header.parentHash,
     slotNumber   : header.slotNumber.get(0'u64),
+    costPerStateByte: stateGasPerByte(header.gasLimit),
   )
 
 # --------------

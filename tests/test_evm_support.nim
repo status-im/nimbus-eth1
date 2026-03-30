@@ -244,7 +244,7 @@ proc runCodeStreamTests() =
       check(not codeStream.isValidOpcode(5))
 
 
-proc initGasMeter(startGas: GasInt): GasMeter = result.init(startGas)
+proc initGasMeter(startGas: GasInt): GasMeter = result.init(startGas, 0)
 
 proc gasMeters: seq[GasMeter] =
   @[initGasMeter(10), initGasMeter(100), initGasMeter(999)]
