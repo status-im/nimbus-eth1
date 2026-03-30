@@ -29,7 +29,9 @@ import
   ../../execution_chain/common/common,
   ../../execution_chain/stateless/witness_types,
   ../../hive_integration/engine_client,
-  ./eest_helpers
+  ./eest_helpers,
+  ./bal_parser
+
 
 from ../../execution_chain/rpc/debug import getExecutionWitness
 
@@ -54,6 +56,30 @@ proc parseWitness*(node: JsonNode): Opt[ExecutionWitness] =
   else:
     Opt.none(ExecutionWitness)
 
+proc parseBAL(node: JsonNode): Opt[BlockAccessListRef] =
+  const
+    deepValidationExceptions = [
+      "INVALID_BAL_MISSING_ACCOUNT",
+      "INVALID_BLOCK_ACCESS_LIST"
+    ]
+
+  func doNotParseBAL(x: string): bool =
+    for y in deepValidationExceptions:
+      if y in x: return true
+    false
+
+  if "expectException" in node:
+    if doNotParseBAL(node["expectException"].getStr):
+      return Opt.none(BlockAccessListRef)
+
+  if "rlp_decoded" in node:
+    # Only need shallow validation
+    let inner = node["rlp_decoded"]
+    if "blockAccessList" in inner:
+      let bal = new(BlockAccessListRef)
+      bal[] = balFromJson(inner["blockAccessList"])
+      return Opt.some(bal)
+
 proc parseBlocks*(node: JsonNode): seq[BlockDesc] =
   for x in node:
     try:
@@ -61,6 +87,7 @@ proc parseBlocks*(node: JsonNode): seq[BlockDesc] =
       let blk = rlp.decode(blockRLP, EthBlock)
       result.add BlockDesc(
         blk: blk,
+        bal: parseBAL(x),
         badBlock: "expectException" in x,
         witness: parseWitness(x)
       )
@@ -79,7 +106,7 @@ proc runTest(env: TestEnv, unit: BlockchainUnitEnv, statelessEnabled = false): F
   var latestStateRoot = unit.genesisBlockHeader.stateRoot
 
   for blk in blocks:
-    let res = await env.chain.importBlock(blk.blk, finalized = true)
+    let res = await env.chain.importBlock(blk.blk, blk.bal, finalized = true)
     if res.isOk:
       if unit.lastblockhash == blk.blk.header.computeBlockHash:
         latestStateRoot = blk.blk.header.stateRoot

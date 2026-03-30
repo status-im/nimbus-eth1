@@ -26,7 +26,7 @@ proc parseTx(com: CommonRef, hexLine: string) =
       tx = decodeTx(bytes)
       address = tx.recoverSender().expect("valid signature")
 
-    validateTxBasic(com, tx, FkPrague).isOkOr:
+    validateTxBasic(com, tx, 10_000_000, FkPrague).isOkOr:
       echo "err: ", error
 
     # everything ok

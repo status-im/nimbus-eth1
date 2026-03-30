@@ -66,6 +66,7 @@ type
   BlockDesc* = object
     blk*: EthBlock
     badBlock*: bool
+    bal*: Opt[BlockAccessListRef]
     witness*: Opt[ExecutionWitness]
 
   Numero* = distinct uint64
