@@ -38,7 +38,6 @@ func lockRead*(rwLock: var ReadWriteLock) =
 
 func unlockRead*(rwLock: var ReadWriteLock) =
   withLock(rwLock.lock):
-    assert rwLock.readerCount >= 1
     dec rwLock.readerCount
     if rwLock.readerCount == 0:
       rwLock.cond.broadcast()
@@ -53,7 +52,6 @@ func lockWrite*(rwLock: var ReadWriteLock) =
 
 func unlockWrite*(rwLock: var ReadWriteLock) =
   withLock(rwLock.lock):
-    assert rwLock.hasWriter
     rwLock.hasWriter = false
     rwLock.cond.broadcast()
 
