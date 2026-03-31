@@ -10,14 +10,17 @@
 
 import
   stint,
+  chronicles,
   chronos,
   json_rpc/jsonmarshal,
+  beacon_chain/networking/network_metadata,
   stew/[io2, byteutils],
   web3/[eth_api_types, conversions],
   eth/common/eth_types_rlp,
   ../../execution_chain/common/common,
   ../engine/types,
   ../engine/engine,
+  ../engine/rpc_frontend,
   ./test_api_backend
 
 type TestProxyError* = object of CatchableError
@@ -86,6 +89,7 @@ proc initTestEngine*(
     )
     engine = ?RpcVerificationEngine.init(engineConf)
 
-  engine.registerBackend(initTestApiBackend(testState), fullCapabilities)
+  engine.registerBackend(initTestApiBackend(testState), fullExecutionCapabilities)
+  engine.registerDefaultFrontend()
 
   ok(engine)

@@ -8,11 +8,15 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[tables, random],
+  std/[tables, random, options],
   json_rpc/rpcclient,
   web3/[eth_api, eth_api_types],
   stint,
   minilru,
+  chronos,
+  beacon_chain/spec/forks,
+  beacon_chain/gossip_processing/light_client_processor,
+  beacon_chain/beacon_clock,
   ../../execution_chain/evm/async_evm,
   ./header_store
 
@@ -24,13 +28,13 @@ const
 
 type
   AccountsCacheKey* = (Root, Address)
-  AccountsCache* = LruCache[AccountsCacheKey, Account]
+  AccountsCache* = minilru.LruCache[AccountsCacheKey, Account]
 
   CodeCacheKey* = (Root, Address)
-  CodeCache* = LruCache[CodeCacheKey, seq[byte]]
+  CodeCache* = minilru.LruCache[CodeCacheKey, seq[byte]]
 
   StorageCacheKey* = (Root, Address, UInt256)
-  StorageCache* = LruCache[StorageCacheKey, UInt256]
+  StorageCache* = minilru.LruCache[StorageCacheKey, UInt256]
 
   BlockTag* = eth_api_types.RtBlockIdentifier
 
@@ -72,8 +76,8 @@ type
     availability*: int # penalised on transport errors
     quality*: int # penalised on verification failures
 
-  # Backend API
-  EthApiBackend* = object
+  # Execution API Backend
+  ExecutionApiBackend* = object
     eth_chainId*:
       proc(): Future[EngineResult[UInt256]] {.async: (raises: [CancelledError]).}
     eth_getBlockByHash*: proc(
@@ -112,8 +116,8 @@ type
       async: (raises: [CancelledError])
     .}
 
-  # Frontend API
-  EthApiFrontend* = object # Chain
+  # Execution API Frontend
+  ExecutionApiFrontend* = object # Chain
     eth_chainId*:
       proc(): Future[EngineResult[UInt256]] {.async: (raises: [CancelledError]).}
     eth_blockNumber*:
@@ -217,6 +221,30 @@ type
       async: (raises: [CancelledError])
     .}
 
+  # Beacon API backend
+  LightClientBootstrapProc* = proc(
+    blockRoot: Eth2Digest
+  ): Future[EngineResult[ForkedLightClientBootstrap]] {.
+    async: (raises: [CancelledError])
+  .}
+  LightClientUpdatesByRangeProc* = proc(
+    startPeriod: SyncCommitteePeriod, count: uint64
+  ): Future[EngineResult[seq[ForkedLightClientUpdate]]] {.
+    async: (raises: [CancelledError])
+  .}
+  LightClientFinalityUpdateProc* = proc(): Future[
+    EngineResult[ForkedLightClientFinalityUpdate]
+  ] {.async: (raises: [CancelledError]).}
+  LightClientOptimisticUpdateProc* = proc(): Future[
+    EngineResult[ForkedLightClientOptimisticUpdate]
+  ] {.async: (raises: [CancelledError]).}
+
+  BeaconApiBackend* = object
+    getLightClientBootstrap*: LightClientBootstrapProc
+    getLightClientUpdatesByRange*: LightClientUpdatesByRangeProc
+    getLightClientFinalityUpdate*: LightClientFinalityUpdateProc
+    getLightClientOptimisticUpdate*: LightClientOptimisticUpdateProc
+
   BackendCapability* = enum
     ChainId # eth_chainId
     GetBlockByHash # eth_getBlockByHash
@@ -230,6 +258,10 @@ type
     GetLogs # eth_getLogs
     FeeHistory # eth_feeHistory
     SendRawTransaction # eth_sendRawTransaction
+    BeaconBootstrap
+    BeaconUpdates
+    BeaconFinality
+    BeaconOptimistic
 
   BackendCapabilities* = set[BackendCapability]
 
@@ -249,15 +281,26 @@ type
     codeCache*: CodeCache
     storageCache*: StorageCache
 
-    # interfaces
-    backends: seq[EthApiBackend]
-    scores*: seq[BackendScore]
+    numBackends: int
+    executionBackends: Table[int, ExecutionApiBackend]
+    beaconBackends: Table[int, BeaconApiBackend]
+    scores*: Table[int, BackendScore]
     capabilityIndex: array[BackendCapability, seq[int]]
-    frontend*: EthApiFrontend
+    frontend*: ExecutionApiFrontend
 
     # scoring
     availabilityScoreFunc*: ScoreFunc
     qualityScoreFunc*: ScoreFunc
+
+    lcStore*: ref ForkedLightClientStore
+    lcProcessor*: ref LightClientProcessor
+    trustedBlockRoot*: Option[Eth2Digest]
+    getBeaconTime*: GetBeaconTimeFn
+    timeParams*: TimeParams
+
+    # beacon metadata (stored for use by beacon backend factories)
+    cfg*: RuntimeConfig
+    forkDigests*: ref ForkDigests
 
     # config items
     chainId*: UInt256
@@ -266,12 +309,14 @@ type
 
   RpcVerificationEngineConf* = ref object
     chainId*: UInt256
+    eth2Network*: Option[string]
     maxBlockWalk*: uint64
     headerStoreLen*: int
     accountCacheLen*: int
     codeCacheLen*: int
     storageCacheLen*: int
     parallelBlockDownloads*: uint64
+    trustedBlockRoot*: Eth2Digest
 
 func eligible*(s: BackendScore): bool =
   s.availability >= 0 and s.quality >= 0
@@ -293,8 +338,8 @@ func defaultQualityScoreFunc*(prevScore: int, direction: ScoreDirection): int =
     min(1, newScore)
 
 const UNTAGGED* = -1
-  # backendIdx sentinel when error is not attributed to a specific backen
-const fullCapabilities* = BackendCapabilities(
+  # backendIdx sentinel when error is not attributed to a specific backend
+const fullExecutionCapabilities* = BackendCapabilities(
   {
     ChainId, GetBlockByHash, GetBlockByNumber, GetProof, CreateAccessList, GetCode,
     GetBlockReceipts, GetTransactionReceipt, GetTransactionByHash, GetLogs, FeeHistory,
@@ -302,40 +347,93 @@ const fullCapabilities* = BackendCapabilities(
   }
 )
 
+const fullBeaconCapabilities* = BackendCapabilities(
+  {BeaconBootstrap, BeaconUpdates, BeaconFinality, BeaconOptimistic}
+)
+
 proc registerBackend*(
     engine: RpcVerificationEngine,
-    backend: EthApiBackend,
+    backend: ExecutionApiBackend,
     capabilities: BackendCapabilities,
 ) =
-  let idx = engine.backends.len
-  engine.backends.add(backend)
-  engine.scores.add(BackendScore()) # availability = 0, quality = 0
+  let idx = engine.numBackends
+  engine.numBackends += 1
+  engine.executionBackends[idx] = backend
+  engine.scores[idx] = BackendScore() # availability = 0, quality = 0
   for cap in capabilities:
     engine.capabilityIndex[cap].add(idx)
 
-proc backendFor*(
+proc registerBackend*(
+    engine: RpcVerificationEngine,
+    backend: BeaconApiBackend,
+    capabilities: BackendCapabilities,
+) =
+  let idx = engine.numBackends
+  engine.numBackends += 1
+  engine.beaconBackends[idx] = backend
+  engine.scores[idx] = BackendScore() # availability = 0, quality = 0
+  for cap in capabilities:
+    engine.capabilityIndex[cap].add(idx)
+
+proc selectBackend(
     engine: RpcVerificationEngine, cap: BackendCapability
-): EngineResult[(EthApiBackend, int)] =
+): EngineResult[int] =
   # Decay excluded backends toward 0 so they can recover over time
-  for s in engine.scores.mitems:
+  for s in engine.scores.mvalues:
     if s.availability < 0:
       inc s.availability
     if s.quality < 0:
       inc s.quality
 
-  let indices = engine.capabilityIndex[cap]
   var eligibleIdxs: seq[int]
   for b in engine.capabilityIndex[cap]:
-    if engine.scores[b].eligible():
-      eligibleIdxs.add(b)
+    try:
+      if engine.scores[b].eligible():
+        eligibleIdxs.add(b)
+    except KeyError:
+      return err(
+        (
+          BackendError, "Backend registered for capability not found in scores",
+          UNTAGGED,
+        )
+      )
+
   if eligibleIdxs.len == 0:
     return err((BackendError, "No eligible backend for capability: " & $cap, UNTAGGED))
+
+  # randomly select a backend from eligible backends
   let chosen = eligibleIdxs[rand(eligibleIdxs.len - 1)]
-  engine.scores[chosen].availability =
-    engine.availabilityScoreFunc(engine.scores[chosen].availability, DefaultReward)
-  engine.scores[chosen].quality =
-    engine.qualityScoreFunc(engine.scores[chosen].quality, DefaultReward)
-  ok((engine.backends[chosen], chosen))
+
+  # add a default reward
+  try:
+    engine.scores[chosen].availability =
+      engine.availabilityScoreFunc(engine.scores[chosen].availability, DefaultReward)
+    engine.scores[chosen].quality =
+      engine.qualityScoreFunc(engine.scores[chosen].quality, DefaultReward)
+  except KeyError:
+    return err((BackendError, "Scores not found for the chosen backend", UNTAGGED))
+
+  ok(chosen)
+
+proc executionBackendFor*(
+    engine: RpcVerificationEngine, cap: BackendCapability
+): EngineResult[(ExecutionApiBackend, int)] =
+  let chosen = ?engine.selectBackend(cap)
+
+  try:
+    ok((engine.executionBackends[chosen], chosen))
+  except KeyError:
+    err((BackendError, "Chosen backend not found", UNTAGGED))
+
+proc beaconBackendFor*(
+    engine: RpcVerificationEngine, cap: BackendCapability
+): EngineResult[(BeaconApiBackend, int)] =
+  let chosen = ?engine.selectBackend(cap)
+
+  try:
+    ok((engine.beaconBackends[chosen], chosen))
+  except KeyError:
+    err((BackendError, "Chosen backend not found", UNTAGGED))
 
 template tagBackend*[T](r: EngineResult[T], idx: int): EngineResult[T] =
   block:
