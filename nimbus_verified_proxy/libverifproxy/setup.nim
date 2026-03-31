@@ -11,11 +11,15 @@ import
   stint,
   eth/common/keys, # used for keys.rng
   beacon_chain/spec/digest,
+  beacon_chain/spec/beaconstate,
+  beacon_chain/spec/forks,
+  beacon_chain/conf,
+  beacon_chain/beacon_clock,
+  beacon_chain/networking/network_metadata,
   beacon_chain/nimbus_binary_common,
   web3/[eth_api_types, conversions],
   ../engine/types,
   ../engine/engine,
-  ../lc/lc,
   ../lc_backend,
   ../nimbus_verified_proxy,
   ../nimbus_verified_proxy_conf,
@@ -52,9 +56,9 @@ proc getRandomBackendUrl(rng: ref HmacDrbgContext, urls: seq[string]): string =
   # are used to select clients in the future.
   urls[randomNum mod uint64(urls.len)]
 
-proc getEthApiBackend*(
-    ctx: ptr Context, urls: seq[string], transportProc: TransportProc
-): EthApiBackend =
+proc getExecutionApiBackend*(
+    ctx: ptr Context, urls: seq[Web3Url], transportProc: TransportProc
+): ExecutionApiBackend =
   let
     rng = keys.newRng()
     ethChainIdProc = proc(): Future[EngineResult[UInt256]] {.
@@ -326,7 +330,7 @@ proc getEthApiBackend*(
       )
       await fut
 
-  EthApiBackend(
+  ExecutionApiBackend(
     eth_chainId: ethChainIdProc,
     eth_getBlockByHash: getBlockByHashProc,
     eth_getBlockByNumber: getBlockByNumberProc,
@@ -432,26 +436,28 @@ proc run*(
   let
     engineConf = RpcVerificationEngineConf(
       chainId: getConfiguredChainId(config.eth2Network),
+      eth2Network: config.eth2Network,
       maxBlockWalk: config.maxBlockWalk,
       headerStoreLen: config.headerStoreLen,
       accountCacheLen: config.accountCacheLen,
       codeCacheLen: config.codeCacheLen,
       storageCacheLen: config.storageCacheLen,
       parallelBlockDownloads: config.parallelBlockDownloads,
+      trustedBlockRoot: config.trustedBlockRoot,
     )
     engine = RpcVerificationEngine.init(engineConf).valueOr:
       raise newException(ProxyError, error.errMsg)
-    lc = LightClient.new(config.eth2Network, some config.trustedBlockRoot)
 
-    # initialize backend for light client updates
-    lcRestClientPool = LCRestClientPool.new(lc.cfg, lc.forkDigests)
-
-  # connect light client to LC by registering on header methods 
-  # to use engine header store
-  connectLCToEngine(lc, engine)
-
-  # add light client backend
-  lc.setBackend(lcRestClientPool.getEthLCBackend())
+  # Set up beacon API backends
+  # TODO: use the same abstraction as execution api
+  for url in config.beaconApiUrls:
+    let client = BeaconApiRestClient.init(engine.cfg, engine.forkDigests, url)
+    let startRes = client.start()
+    if startRes.isErr():
+      warn "Error connecting to beacon backend",
+        url = url, error = startRes.error.errMsg
+      continue
+    engine.registerBackend(client.getBeaconApiBackend(), fullBeaconCapabilities)
 
   let usePrivateTx = config.privateTxUrls.len > 0
 
@@ -462,7 +468,8 @@ proc run*(
       fullCapabilities
 
   engine.registerBackend(
-    getEthApiBackend(ctx, config.executionApiUrls, transportProc), regularCaps
+    getExecutionApiBackend(ctx, config.executionApiUrls, transportProc),
+    regularCaps,
   )
 
   if usePrivateTx:
@@ -473,14 +480,3 @@ proc run*(
 
   # inject the frontend into c context
   ctx.frontend = engine.frontend
-
-  # adding endpoints will also start the backend
-  let status = lcRestClientPool.addEndpoints(config.beaconApiUrls)
-  if status.isErr():
-    raise newException(
-      ProxyError, "Couldn't add endpoints for light client queries" & status.error
-    )
-
-  # this starts the light client manager which is
-  # an endless loop
-  await lc.start()

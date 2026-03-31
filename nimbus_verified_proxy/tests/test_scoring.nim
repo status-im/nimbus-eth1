@@ -16,6 +16,7 @@ import
   eth/common/[base, eth_types_rlp],
   ../engine/blocks,
   ../engine/engine,
+  ../engine/rpc_frontend,
   ../engine/header_store,
   ../engine/types,
   ./test_utils,
@@ -47,7 +48,8 @@ suite "backend scoring":
 
     let engine = RpcVerificationEngine.init(scoringEngineConf).valueOr:
       raise newException(TestProxyError, error.errMsg)
-    engine.registerBackend(backend, fullCapabilities)
+    engine.registerBackend(backend, fullExecutionCapabilities)
+    engine.registerDefaultFrontend()
 
     check engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
 
@@ -80,7 +82,8 @@ suite "backend scoring":
 
     let engine = RpcVerificationEngine.init(scoringEngineConf).valueOr:
       raise newException(TestProxyError, error.errMsg)
-    engine.registerBackend(backend, fullCapabilities)
+    engine.registerBackend(backend, fullExecutionCapabilities)
+    engine.registerDefaultFrontend()
 
     check engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
 
@@ -95,21 +98,21 @@ suite "backend scoring":
     let ts = TestApiState.init(1.u256)
     let engine = RpcVerificationEngine.init(scoringEngineConf).valueOr:
       raise newException(TestProxyError, error.errMsg)
-    engine.registerBackend(initTestApiBackend(ts), fullCapabilities)
+    engine.registerBackend(initTestApiBackend(ts), fullExecutionCapabilities)
 
     engine.scores[0].quality = -10
 
-    check engine.backendFor(GetProof).isErr()
+    check engine.executionBackendFor(GetProof).isErr()
 
   test "excluded backend recovers after enough requests":
     let ts = TestApiState.init(1.u256)
     let engine = RpcVerificationEngine.init(scoringEngineConf).valueOr:
       raise newException(TestProxyError, error.errMsg)
-    engine.registerBackend(initTestApiBackend(ts), fullCapabilities)
+    engine.registerBackend(initTestApiBackend(ts), fullExecutionCapabilities)
 
     engine.scores[0].quality = -4
 
     for _ in 0 ..< 3:
-      check engine.backendFor(GetProof).isErr()
+      check engine.executionBackendFor(GetProof).isErr()
 
-    check engine.backendFor(GetProof).isOk()
+    check engine.executionBackendFor(GetProof).isOk()

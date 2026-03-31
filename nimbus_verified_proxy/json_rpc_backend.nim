@@ -84,7 +84,7 @@ template rpcCall(body: untyped): untyped =
     result = err(typeof(result), (BackendError, e.msg, UNTAGGED))
     return
 
-proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
+proc getExecutionApiBackend*(client: JsonRpcClient): ExecutionApiBackend =
   let
     ethChainIdProc = proc(): Future[EngineResult[UInt256]] {.
         async: (raises: [CancelledError])
@@ -186,7 +186,7 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
       rpcCall:
         ok(await client.resolveClient().eth_sendRawTransaction(txBytes))
 
-  EthApiBackend(
+  ExecutionApiBackend(
     eth_chainId: ethChainIdProc,
     eth_getBlockByHash: getBlockByHashProc,
     eth_getBlockByNumber: getBlockByNumberProc,

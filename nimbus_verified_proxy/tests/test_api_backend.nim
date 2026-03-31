@@ -201,7 +201,7 @@ func convToPartialBlock(blk: BlockObject): BlockObject =
     requestsHash: blk.requestsHash,
   )
 
-proc initTestApiBackend*(t: TestApiState): EthApiBackend =
+proc initTestApiBackend*(t: TestApiState): ExecutionApiBackend =
   let
     ethChainIdProc = proc(): Future[EngineResult[UInt256]] {.
         async: (raises: [CancelledError])
@@ -319,7 +319,7 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
       except KeyError as e:
         err((BackendFetchError, e.msg, UNTAGGED))
 
-  EthApiBackend(
+  ExecutionApiBackend(
     eth_chainId: ethChainIdProc,
     eth_getBlockByHash: getBlockByHashProc,
     eth_getBlockByNumber: getBlockByNumberProc,

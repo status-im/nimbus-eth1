@@ -30,7 +30,7 @@ type
     tasks*: SinglyLinkedList[Task]
     taskLen*: int
     stop*: bool
-    frontend*: EthApiFrontend
+    frontend*: ExecutionApiFrontend
 
   CallBackProc* = proc(ctx: ptr Context, status: cint, res: cstring, userData: pointer) {.
     cdecl, gcsafe, raises: []
