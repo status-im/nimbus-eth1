@@ -48,11 +48,13 @@ proc `=copy`(dest: var WriteBatch; src: WriteBatch) {.error: "Copying WriteBatch
 const batchSize = 1024 * 1024 div (sizeof(RootedVertexID) + sizeof(HashKey))
 
 func progress(batch: WriteBatch, parallel: static bool): string =
-  # Return an approximation on how much of the keyspace has been covered by
-  # looking at the path prefix that we're currently processing
   when parallel:
+    # Return the number of completed sub tasks out of the total. The total is usually 16
+    # but may be less depending on how many sub-tries need to have hashkeys computed.
     &"{batch.tasksCompleted}/{batch.tasksTotal}"
   else:
+    # Return an approximation on how much of the keyspace has been covered by
+    # looking at the path prefix that we're currently processing
     &"{(float(batch.prefix) / float(uint64.high)) * 100:02.2f}%"
 
 func enter(batch: var WriteBatch, nibble: uint8) =
@@ -400,34 +402,30 @@ proc computeKeyImpl(
       when spawnTpTasks:
         var runningFutsIndexes: set[uint8] = {}
         for i, f in futs:
-          if f.isSpawned():
+          if f.isSpawned() and not f.isReady():
             runningFutsIndexes.incl(i.uint8)
         
         while runningFutsIndexes.len() > 0:
-          for i, f in futs:
-            if runningFutsIndexes.contains(i.uint8):
-              var 
-                keyQueueEmpty = true
-                vtxBufQueuesEmpty = true
+          var toRemove: seq[uint8]
+          
+          for i in runningFutsIndexes:
+            if futs[i].isReady():
+              toRemove.add(i)
+              inc batch.tasksCompleted
+              continue
 
-              if not keyQueues[i].isEmpty():
-                var k: (RootedVertexID, HashKey, int)
-                if keyQueues[i].tryPop(k):
-                  txRef.mergeKeyAtLevel(k[0], k[1], k[2])
-                  keyQueueEmpty = false
-                  
-              if not vtxBufQueues[i].isEmpty():
-                var v: (RootedVertexID, VertexBuf)
-                if vtxBufQueues[i].tryPop(v):
-                  ?batch.putVtxBlob(txRef.db, v[0], v[1].data())
-                  vtxBufQueuesEmpty = false
+            if not keyQueues[i].isEmpty():
+              var k: (RootedVertexID, HashKey, int)
+              if keyQueues[i].tryPop(k):
+                txRef.mergeKeyAtLevel(k[0], k[1], k[2])
+                
+            if not vtxBufQueues[i].isEmpty():
+              var v: (RootedVertexID, VertexBuf)
+              if vtxBufQueues[i].tryPop(v):
+                ?batch.putVtxBlob(txRef.db, v[0], v[1].data())
 
-              if keyQueueEmpty and vtxBufQueuesEmpty:
-                # once we stop receiving data we check if the task is finished 
-                # and then remove it from the set
-                if f.isReady():
-                  runningFutsIndexes.excl(i.uint8)
-                  inc batch.tasksCompleted
+          for i in toRemove:
+            runningFutsIndexes.excl(i)
 
         # At this point all futures have finished running.
         # Now we process any remaining data in the queues.
