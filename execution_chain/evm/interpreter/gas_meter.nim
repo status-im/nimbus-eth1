@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -15,9 +15,12 @@ import
   ../evm_errors,
   ../types
 
-func init*(m: var GasMeter, startGas: GasInt) =
+func init*(m: var GasMeter, startGas: GasInt, stateGas: GasInt) =
   m.gasRemaining = startGas
   m.gasRefunded = 0
+  m.stateGasLeft = stateGas
+  m.stateGasUsed = 0
+  m.regularGasUsed = 0
 
 template consumeGas*(
     gasMeter: var GasMeter; amount: GasInt; reason: static string): EvmResultVoid =
@@ -28,6 +31,7 @@ template consumeGas*(
   if amount > gasMeter.gasRemaining:
     EvmResultVoid.err(gasErr(OutOfGas))
   else:
+    gasMeter.regularGasUsed += amount
     gasMeter.gasRemaining -= amount
     EvmResultVoid.ok()
 
@@ -45,3 +49,44 @@ func refundGas*(gasMeter: var GasMeter; amount: int64) =
   # cannot be converted to uint64 too, because the sum of all children gas refund,
   # no matter positive or negative will be >= 0 when EVM finish execution.
   gasMeter.gasRefunded += amount
+
+func chargeStateGas*(gasMeter: var GasMeter; amount: GasInt, reason: string): EvmResultVoid =
+  if gasMeter.stateGasLeft >= amount:
+    gasMeter.stateGasLeft -= amount
+  elif gasMeter.stateGasLeft + gasMeter.gasRemaining >= amount:
+    let remainder = amount - gasMeter.stateGasLeft
+    gasMeter.stateGasLeft = 0
+    gasMeter.gasRemaining -= remainder
+  else:
+    return EvmResultVoid.err(gasErr(OutOfGas))
+
+  gasMeter.stateGasUsed += amount
+  EvmResultVoid.ok()
+
+func returnStateGas*(gasMeter: var GasMeter; amount: GasInt) =
+  gasMeter.stateGasLeft += amount
+
+func burnGas*(gasMeter: var GasMeter) =
+  gasMeter.regularGasUsed += gasMeter.gasRemaining
+  gasMeter.gasRemaining = 0
+
+func escrowSubcallRegularGas*(gasMeter: var GasMeter, subCallGas: GasInt) =
+  # Remove forwarded CALL* gas from the caller's regular gas usage.
+  #
+  # CALL* forwards `subCallGas` to the child frame as temporary escrow.
+  # Only gas actually burned by the child should be reintroduced via
+  # `incorporate_child_*` child gas accounting.
+
+  gasMeter.regularGasUsed -= subCallGas
+
+func appendRegularGasUsed*(gasMeter: var GasMeter, amount: GasInt) =
+  gasMeter.regularGasUsed += amount
+
+func appendStateGasUsed*(gasMeter: var GasMeter, amount: GasInt) =
+  gasMeter.stateGasUsed += amount
+
+func checkGas*(gasMeter: GasMeter, cost, amount: GasInt): EvmResultVoid =
+  # Check enough state gas after `cost` consumption.
+  if amount > gasMeter.stateGasLeft + gasMeter.gasRemaining - cost:
+    return err(gasErr(OutOfGas))
+  ok()

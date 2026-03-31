@@ -83,8 +83,9 @@ if [[ "${PLATFORM}" == "windows_amd64" ]]; then
   # so we enable it here.
 
   # -d:PREFER_HASHTREE_SHA256:false, does not works with llvm mingw compiler
+  # -j1 will disable parallel build and prevent OOM in github CI
   make \
-    -j$(nproc) \
+    -j1 \
     CC="${CC}" \
     CXX="${CXX}" \
     OS=Windows_NT \
@@ -112,8 +113,9 @@ elif [[ "${PLATFORM}" == "linux_arm64" ]]; then
     USE_SYSTEM_ROCKSDB=0 \
     deps-common
 
+  # -j1 will disable parallel build and prevent OOM in github CI
   make \
-    -j$(nproc) \
+    -j1 \
     LOG_LEVEL="TRACE" \
     CC="${CC}" \
     CXX="${CXX}" \
@@ -155,8 +157,9 @@ elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
     USE_SYSTEM_ROCKSDB=0 \
     nat-libs
 
+  # -j1 will disable parallel build and prevent OOM in github CI
   make \
-    -j$(nproc) \
+    -j1 \
     LOG_LEVEL="TRACE" \
     CC="${CC}" \
     AR="${AR}" \
@@ -177,8 +180,9 @@ else # linux_amd64
 
   make -j$(nproc) init
 
+  # -j1 will disable parallel build and prevent OOM in github CI
   make \
-    -j$(nproc) \
+    -j1 \
     LOG_LEVEL="TRACE" \
     NIMFLAGS="${NIMFLAGS_COMMON} --gcc.linkerexe=g++ --passL:'-static-libstdc++'" \
     PARTIAL_STATIC_LINKING=1 \

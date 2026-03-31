@@ -110,8 +110,8 @@ proc rpcEstimateGas*(
     hi = gasCap
 
   let
-    (intrinsicGas, floorDataGas) = intrinsicGas(params, fork)
-    minGasLimit = max(intrinsicGas, floorDataGas)
+    intrinsic = intrinsicGas(params, fork, vmState.blockCtx.gasLimit)
+    minGasLimit = max(intrinsic.regular, intrinsic.floorDataGas)
 
   # Create a helper to check if a gas allowance results in an executable transaction
   proc executable(gasLimit: GasInt): Result[CallResult, OutputResult] =

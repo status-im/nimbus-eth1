@@ -36,15 +36,12 @@ jobs:
       - name: Get latest nim-rocksdb commit hash
         id: rocksdb-versions
         run: |
-          getHash() {
-            git ls-remote "https://github.com/$1" "${2:-HEAD}" | cut -f 1
-          }
-          rocksHash=$(getHash status-im/nim-rocksdb)
+          rocksHash=$(git rev-parse HEAD:vendor/nim-rocksdb)
           echo "nim_rocksdb=$rocksHash" >> $GITHUB_OUTPUT
 
       - name: Restore prebuilt rocksdb from cache
         id: rocksdb-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: RocksBinCache
           key: 'rocks-${{ matrix.os }}-${{ matrix.cpu }}-${{ steps.rocksdb-versions.outputs.nim_rocksdb }}'

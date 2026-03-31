@@ -311,14 +311,6 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     api.txPool.addTx(pooledTx).isOkOr:
       raise newException(ValueError, $error)
 
-    info "Submitted transaction",
-      endpoint = "eth_sendRawTransaction",
-      txHash = txHash,
-      sender = sender,
-      recipient = pooledTx.tx.getRecipient(sender),
-      nonce = pooledTx.tx.nonce,
-      value = pooledTx.tx.value
-
     txHash
 
   server.rpc("eth_call") do(args: TransactionArgs, blockTag: BlockTag) -> seq[byte]:
@@ -520,13 +512,6 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       raise newException(ValueError, $error)
 
     let txHash = computeRlpHash(signedTx)
-    info "Submitted transaction",
-      endpoint = "eth_sendTransaction",
-      txHash = txHash,
-      sender = address,
-      recipient = data.`to`.get(),
-      nonce = pooledTx.tx.nonce,
-      value = pooledTx.tx.value
 
     txHash
 
@@ -617,7 +602,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
   ) -> Opt[seq[ReceiptObject]]:
     ## Returns the receipts of a block.
     let
-      blk = api.blockFromTag(quantityTag, noHash = true).valueOr:
+      blk = api.blockFromTag(quantityTag).valueOr:
         raise newException(ValueError, "Block not found: " & error)
       blkHash = blk.header.computeBlockHash
       receipts = api.chain.receiptsByBlockHash(blkHash).valueOr:
@@ -724,11 +709,11 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
     return api.com.getEthConfigObject(api.chain, currentFork, nextFork, lastFork)
 
-  server.rpc("eth_getBlockAccessList") do(blockId: BlockNumberOrTagOrHash) -> Opt[BlockAccessList]:
+  server.rpc("eth_getBlockAccessList") do(quantityTag: BlockTag) -> Opt[BlockAccessList]:
     ## Returns the block access list by block number, tag or block hash.
     ##
 
-    let header = api.chain.headerFromBlockId(blockId).valueOr:
+    let header = api.chain.headerFromTag(quantityTag).valueOr:
       raise newException(ValueError, error)
 
     if not api.com.isAmsterdamOrLater(header.timestamp):

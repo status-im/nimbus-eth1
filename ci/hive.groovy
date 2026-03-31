@@ -44,7 +44,16 @@ pipeline {
     )
   }
 
+  /* Hack fix for params not being set on first run */
+  environment {
+    SIMULATION_NAME    = "${params.SIMULATION_NAME    ?: 'ethereum/sync'}"
+    PARALLELISM        = "${params.PARALLELISM        ?: '40'}"
+    TIMEOUT_MINUTES    = "${params.TIMEOUT_MINUTES}"
+    DOCKER_BUILDOUTPUT = "${params.DOCKER_BUILDOUTPUT ?: true}"
+  }
+
   options {
+    disableConcurrentBuilds()
     disableRestartFromStage()
     timestamps()
     ansiColor('xterm')
@@ -75,7 +84,7 @@ pipeline {
       parallel {
         stage('sync reth-nimbus') {
           options {
-            timeout(time: params.TIMEOUT_MINUTES, unit: 'MINUTES')
+            timeout(time: env.TIMEOUT_MINUTES, unit: 'MINUTES')
           }
           steps {
             script {
@@ -83,13 +92,13 @@ pipeline {
                 dir('hive') {
                   sh """
                     ./hive \
-                    --sim "${params.SIMULATION_NAME}" \
+                    --sim "${env.SIMULATION_NAME}" \
                     --client-file="${WORKSPACE}/ci/reth-nimbus-sync-config.yml" \
-                    --sim.parallelism=${params.PARALLELISM} \
+                    --sim.parallelism=${env.PARALLELISM} \
                     --sim.loglevel 4 \
                     --sim.limit "^sync\$" \
                     --docker.nocache hive/clients/nimbus-el \
-                    ${params.DOCKER_BUILDOUTPUT ? '--docker.buildoutput' : ''}
+                    ${env.DOCKER_BUILDOUTPUT == 'true' ? '--docker.buildoutput' : ''}
                   """
                 }
               } catch (e) {
@@ -101,7 +110,7 @@ pipeline {
         }
         stage('sync geth-nimbus') {
           options {
-            timeout(time: params.TIMEOUT_MINUTES, unit: 'MINUTES')
+            timeout(time: env.TIMEOUT_MINUTES, unit: 'MINUTES')
           }
           steps {
             script {
@@ -109,13 +118,13 @@ pipeline {
                 dir('hive') {
                   sh """
                     ./hive \
-                    --sim "${params.SIMULATION_NAME}" \
+                    --sim "${env.SIMULATION_NAME}" \
                     --client-file="${WORKSPACE}/ci/geth-nimbus-sync-config.yml" \
-                    --sim.parallelism=${params.PARALLELISM} \
+                    --sim.parallelism=${env.PARALLELISM} \
                     --sim.loglevel 4 \
                     --sim.limit "^sync\$" \
                     --docker.nocache hive/clients/nimbus-el \
-                    ${params.DOCKER_BUILDOUTPUT ? '--docker.buildoutput' : ''}
+                    ${env.DOCKER_BUILDOUTPUT == 'true' ? '--docker.buildoutput' : ''}
                   """
                 }
               } catch (e) {
@@ -138,7 +147,7 @@ pipeline {
         withCredentials([string(credentialsId: 'discord-hive-webhook', variable: 'DISCORD_WEBHOOK_URL')]) {
           withEnv([
             "FAILED_STAGES=${failedStages.join(', ') ?: 'unknown'}",
-            "SIMULATION_NAME=${params.SIMULATION_NAME}"
+            "SIMULATION_NAME=${env.SIMULATION_NAME}"
           ]) {
             sh './scripts/hive-notify-discord.sh'
           }

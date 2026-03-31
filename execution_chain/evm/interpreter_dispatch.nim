@@ -70,7 +70,7 @@ proc beforeExecCall(c: Computation) =
   c.beginSavePoint()
   if c.msg.kind == CallKind.Call:
     c.vmState.mutateLedger:
-      if c.vmState.balTrackerEnabled:
+      if c.balTrackerEnabled:
         c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
         ledger.subBalance(c.msg.sender, c.msg.value)
         c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
@@ -107,7 +107,7 @@ proc beforeExecCreate(c: Computation): bool =
         "Nonce overflow when sender=" & sender & " wants to create contract", false
       )
       return true
-    if c.vmState.balTrackerEnabled:
+    if c.balTrackerEnabled:
       c.vmState.balTracker.trackNonceChange(c.msg.sender, nonce + 1)
     ledger.setNonce(c.msg.sender, nonce + 1)
 
@@ -117,18 +117,25 @@ proc beforeExecCreate(c: Computation): bool =
     if c.fork >= FkBerlin:
       ledger.accessList(c.msg.contractAddress)
 
-  c.beginSavePoint()
-
-  if c.vmState.balTrackerEnabled:
+  if c.balTrackerEnabled:
     c.vmState.balTracker.trackAddressAccess(c.msg.contractAddress)
   if c.vmState.readOnlyLedger().contractCollision(c.msg.contractAddress):
+    # Per EIP-684 collision behaves as an immediate exceptional halt,
+    # so the burned gas belongs in the regular dimension.
+    # On CREATE/CREATE2 address collision the 63/64 gas allocation is
+    # burned and added to regularGasUsed.
+    # But contract creation tx collision does not add the burned gas to
+    # regularGasUsed.
+    if c.msg.depth == 0:
+      c.gasMeter.gasRemaining = 0
     let blurb = c.msg.contractAddress.toHex
     c.setError("Address collision when creating contract address=" & blurb, true)
-    c.rollback()
     return true
 
+  c.beginSavePoint()
+
   c.vmState.mutateLedger:
-    if c.vmState.balTrackerEnabled:
+    if c.balTrackerEnabled:
       c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
       ledger.subBalance(c.msg.sender, c.msg.value)
       c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)

@@ -78,11 +78,10 @@ proc getStorageFromProof*(
     proof: ProofResponse,
     storageProofIndex = 0,
 ): EngineResult[UInt256] =
-  let account =
-    ?getAccountFromProof(
-      stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
-      proof.storageHash, proof.accountProof,
-    )
+  let account = ?getAccountFromProof(
+    stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
+    proof.storageHash, proof.accountProof,
+  )
 
   if account.storageRoot == EMPTY_ROOT_HASH:
     # valid account with empty storage, in that case getStorageAt
@@ -129,21 +128,19 @@ proc getAccount*(
 
   let
     (backend, backendIdx) = ?(engine.backendFor(GetProof))
-    proof =
-      ?(
-        (await backend.eth_getProof(address, @[], blockId(blockNumber))).tagBackend(
-          backendIdx
-        )
+    proof = ?(
+      (await backend.eth_getProof(address, @[], blockId(blockNumber))).tagBackend(
+        backendIdx
       )
+    )
 
-    account =
-      ?(
-        getAccountFromProof(
-          stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
-          proof.storageHash, proof.accountProof,
-        )
-        .tagBackend(backendIdx)
+    account = ?(
+      getAccountFromProof(
+        stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
+        proof.storageHash, proof.accountProof,
       )
+      .tagBackend(backendIdx)
+    )
 
   engine.accountsCache.put(cacheKey, account)
 
@@ -172,12 +169,9 @@ proc getCode*(
 
   let
     (backend, backendIdx) = ?(engine.backendFor(GetCode))
-    code =
-      ?(
-        (await backend.eth_getCode(address, blockId(blockNumber))).tagBackend(
-          backendIdx
-        )
-      )
+    code = ?(
+      (await backend.eth_getCode(address, blockId(blockNumber))).tagBackend(backendIdx)
+    )
 
   # verify the byte code. since we verified the account against
   # the state root we just need to verify the code hash
@@ -209,12 +203,11 @@ proc getStorageAt*(
 
   let
     (backend, backendIdx) = ?(engine.backendFor(GetProof))
-    proof =
-      ?(
-        (await backend.eth_getProof(address, @[slot], blockId(blockNumber))).tagBackend(
-          backendIdx
-        )
+    proof = ?(
+      (await backend.eth_getProof(address, @[slot], blockId(blockNumber))).tagBackend(
+        backendIdx
       )
+    )
 
     slotValue = ?(getStorageFromProof(stateRoot, slot, proof).tagBackend(backendIdx))
 
@@ -240,21 +233,19 @@ proc populateCachesForAccountAndSlots(
   if engine.accountsCache.get(accountCacheKey).isNone() or slotsToFetch.len() > 0:
     let
       (backend, backendIdx) = ?(engine.backendFor(GetProof))
-      proof =
-        ?(
-          (await backend.eth_getProof(address, slotsToFetch, blockId(blockNumber))).tagBackend(
-            backendIdx
-          )
+      proof = ?(
+        (await backend.eth_getProof(address, slotsToFetch, blockId(blockNumber))).tagBackend(
+          backendIdx
         )
+      )
 
-      account =
-        ?(
-          getAccountFromProof(
-            stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
-            proof.storageHash, proof.accountProof,
-          )
-          .tagBackend(backendIdx)
+      account = ?(
+        getAccountFromProof(
+          stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
+          proof.storageHash, proof.accountProof,
         )
+        .tagBackend(backendIdx)
+      )
 
     engine.accountsCache.put(accountCacheKey, account)
 
@@ -276,12 +267,11 @@ proc populateCachesUsingAccessList*(
 ): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
   let
     (backend, backendIdx) = ?(engine.backendFor(CreateAccessList))
-    accessListRes: AccessListResult =
-      ?(
-        (await backend.eth_createAccessList(tx, blockId(blockNumber))).tagBackend(
-          backendIdx
-        )
+    accessListRes: AccessListResult = ?(
+      (await backend.eth_createAccessList(tx, blockId(blockNumber))).tagBackend(
+        backendIdx
       )
+    )
 
   var futs = newSeqOfCap[Future[EngineResult[void]]](accessListRes.accessList.len())
   for accessPair in accessListRes.accessList:
