@@ -601,6 +601,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     quantityTag: BlockTag
   ) -> Opt[seq[ReceiptObject]]:
     ## Returns the receipts of a block.
+    if quantityTag.kind == bidHash and quantityTag.requireCanonical:
+      raise newException(ValueError,
+        "requireCanonical is a pre-merge concept and is not supported")
     let
       blk = api.blockFromTag(quantityTag).valueOr:
         raise newException(ValueError, "Block not found: " & error)
