@@ -142,11 +142,6 @@ proc putVtxBlob*(
     when extraTraceMessages:
       trace logTxt "putVtxBlob()", vid, error=errSym, info=error
     return err((rvid.vid,errSym,error))
-  
-  # Delete the updated vertex from the caches to remove any stale values
-  rdb.rdBranchLru.del rvid.vid
-  rdb.rdVtxLru.del rvid.vid
-  rdb.rdKeyLru.del rvid.vid
 
   ok()
 
