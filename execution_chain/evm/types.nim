@@ -34,6 +34,7 @@ type
     excessBlobGas*    : uint64
     parentHash*       : Hash32
     slotNumber*       : uint64
+    costPerStateByte* : GasInt
 
   TxContext* = object
     origin*         : Address
@@ -53,7 +54,8 @@ type
     tracer*           : TracerRef
     receipts*         : seq[StoredReceipt]
     cumulativeGasUsed*: GasInt
-    blockGasUsed*     : GasInt
+    blockRegularGasUsed*: GasInt
+    blockStateGasUsed*: GasInt
     gasCosts*         : GasCosts
     blobGasUsed*      : uint64
     allLogs*          : seq[Log] # EIP-6110
@@ -80,6 +82,7 @@ type
     continuation*:          proc(): EvmResultVoid {.gcsafe, raises: [].}
     keepStack*:             bool
     finalStack*:            seq[UInt256]
+    balTrackerEnabled*:     bool
 
   StatusCode* {.pure.} = enum
     None
@@ -97,6 +100,9 @@ type
   GasMeter* = object
     gasRefunded*: int64
     gasRemaining*: GasInt
+    stateGasLeft*: GasInt
+    stateGasUsed*: GasInt
+    regularGasUsed*: GasInt
 
   CallKind* {.pure.} = enum
     Call          # Request CALL.
@@ -113,6 +119,7 @@ type
     kind*:             CallKind
     depth*:            int
     gas*:              GasInt
+    stateGas*:         GasInt
     sender*:           Address
     contractAddress*:  Address
     codeAddress*:      Address

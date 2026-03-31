@@ -29,6 +29,7 @@ import
   ../../execution_chain/core/tx_pool,
   ../../execution_chain/beacon/beacon_engine,
   ../../execution_chain/common/common,
+  ../../execution_chain/stateless/witness_types,
   ../../hive_integration/engine_client
 
 import ../../tools/common/helpers as chp except HardFork
@@ -65,6 +66,8 @@ type
   BlockDesc* = object
     blk*: EthBlock
     badBlock*: bool
+    bal*: Opt[BlockAccessListRef]
+    witness*: Opt[ExecutionWitness]
 
   Numero* = distinct uint64
 
@@ -317,13 +320,5 @@ template runEESTSuite*(
 ) =
   for eest in eestReleases:
     suite eest & ": " & eestType:
-      for fileName in walkDirRec(baseFolder / eest / eestType):
-        test fileName:
-          let last = testName.splitPath().tail
-          if last in skipFiles:
-            skip()
-          else:
-            let res = processFile(testName, statelessEnabled)
-            if not res:
-              debugEcho last
-            check res
+      for filePath in walkDirRec(baseFolder / eest / eestType):
+        processFile(filePath, statelessEnabled, @skipFiles)

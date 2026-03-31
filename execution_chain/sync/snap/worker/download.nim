@@ -13,7 +13,7 @@
 import
   pkg/[chronicles, chronos],
   ./download/[account, code, header, storage],
-  ./[helpers, mpt, state_db, worker_desc]
+  ./[helpers, mpt, state_db, update, worker_desc]
 
 export
   account, code, header, storage
@@ -46,24 +46,8 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
       sdb = ctx.pool.stateDB
       peer {.inject,used.} = $buddy.peer            # logging only
 
-    # Add new state records if pivots and free slots are available
-    if buddy.only.pivotRoot.isNone():
-      let ethPeer = buddy.getEthPeer()              # get `ethXX` peer if avail
-      if not ethPeer.isNil:
-        let hash = BlockHash(ethPeer.only.pivotHash)
-        trace info & ": assigning best/latest pivotHash", peer,
-          hash=hash.toStr, nSyncPeers=ctx.nSyncPeers()
-        buddy.headerStateRegister(hash, info).isErrOr:
-          buddy.only.pivotRoot = Opt.some(value)
-
-    # Add state from CL finalised hash
-    if ctx.pool.clStateRoot.isNone():
-      let fcHead = BlockHash ctx.hdrCache.headHash()
-      if fcHead != BlockHash(zeroHash32):
-        trace info & ": assigning FC hash from CL", peer,
-          hash=fcHead.toStr, nSyncPeers=ctx.nSyncPeers()
-        buddy.headerStateRegister(fcHead, info).isErrOr:
-          ctx.pool.clStateRoot = Opt.some(value)
+    buddy.updateTarget info                         # manual target set up?
+    buddy.updateFcuRoot info                        # FCU header => state
 
     if sdb.len == 0:
       trace info & ": no state records", peer
@@ -73,12 +57,8 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
     var theseFirst: seq[StateRoot]
     sdb.pivot.isErrOr:                              # the one with most done yet
       theseFirst.add value.stateRoot
-    ctx.pool.clStateRoot.isErrOr:
-      if value notin theseFirst:
-        theseFirst.add value
-    buddy.only.pivotRoot.isErrOr:                   # best supported by peer
-      if value notin theseFirst:
-        theseFirst.add value
+    buddy.only.finRoot.isErrOr:
+      theseFirst.add value
 
     # Run `download()` for available states, the order of which is
     # determined by the following criteria with deacening priority

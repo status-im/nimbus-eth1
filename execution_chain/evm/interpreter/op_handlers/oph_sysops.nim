@@ -16,11 +16,13 @@
 
 import
   stew/assign2,
+    ../../../core/eip8037,
   ../../evm_errors,
   ../../computation,
   ../../memory,
   ../../stack,
   ../../types,
+  ../gas_meter,
   ../gas_costs,
   ../op_codes,
   ./oph_defs,
@@ -64,7 +66,7 @@ proc revertOp(cpt: VmCpt): EvmResultVoid =
 
   cpt.memory.extend(pos, len)
   assign(cpt.output, cpt.memory.read(pos, len))
-  
+
   let revertReason = unpackRevertReason(cpt.output)
 
   let revertMsg =
@@ -98,7 +100,7 @@ proc selfDestructEIP150Op(cpt: VmCpt): EvmResultVoid =
     gasCost = cpt.gasCosts[SelfDestruct].sc_handler(condition)
 
   ? cpt.opcodeGasCost(SelfDestruct,
-    gasCost, reason = "SELFDESTRUCT EIP150")
+    gasCost, reason = "SELFDESTRUCT EIP-150")
   cpt.selfDestruct(beneficiary)
   ok()
 
@@ -114,7 +116,7 @@ proc selfDestructEIP161Op(cpt: VmCpt): EvmResultVoid =
     gasCost     = cpt.gasCosts[SelfDestruct].sc_handler(condition)
 
   ? cpt.opcodeGasCost(SelfDestruct,
-    gasCost, reason = "SELFDESTRUCT EIP161")
+    gasCost, reason = "SELFDESTRUCT EIP-161")
   cpt.selfDestruct(beneficiary)
   ok()
 
@@ -148,7 +150,49 @@ proc selfDestructEIP2929Op(cpt: VmCpt): EvmResultVoid =
       gasCost = gasCost + ColdAccountAccessCost
 
   ? cpt.opcodeGasCost(SelfDestruct,
-    gasCost, reason = "SELFDESTRUCT EIP2929")
+    gasCost, reason = "SELFDESTRUCT EIP-2929")
+  cpt.selfDestruct(beneficiary)
+  ok()
+
+proc selfDestructEIP8037Op(cpt: VmCpt): EvmResultVoid =
+  ## selfDestructEIP2929 (auto generated comment)
+  ? cpt.checkInStaticContext()
+
+  let beneficiary = ? cpt.stack.popAddress()
+
+  var beneficiaryIsCold = false
+  cpt.vmState.mutateLedger:
+    if not ledger.inAccessList(beneficiary):
+      beneficiaryIsCold = true
+
+  var staticGasCosts = cpt.gasCosts[SelfDestruct].sc_handler(false)
+  if beneficiaryIsCold:
+    staticGasCosts += ColdAccountAccessCost
+  if staticGasCosts > cpt.gasMeter.gasRemaining:
+    return EvmResultVoid.err(gasErr(OutOfGas))
+
+  let
+    isNewAccount = not cpt.accountExists(beneficiary)
+    balance = cpt.getBalance(cpt.msg.contractAddress)
+    condition = isNewAccount and not balance.isZero
+
+  var gasCost = cpt.gasCosts[SelfDestruct].sc_handler(condition)
+
+  cpt.vmState.mutateLedger:
+    if beneficiaryIsCold:
+      ledger.accessList(beneficiary)
+      gasCost = gasCost + ColdAccountAccessCost
+
+  # Charge regular gas before state gas so that a regular-gas OOG
+  # does not consume state gas that would inflate the parent's
+  # reservoir on frame failure.
+  ? cpt.opcodeGasCost(SelfDestruct,
+    gasCost, reason = "SELFDESTRUCT EIP-8037")
+
+  if condition:
+    ? cpt.gasMeter.chargeStateGas(STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte,
+      reason = "SELFDESTRUCT EIP-8037: State gas new account")
+
   cpt.selfDestruct(beneficiary)
   ok()
 
@@ -203,10 +247,16 @@ const
 
 
     (opCode: SelfDestruct, ## 0xff, EIP2929: self destruct, Berlin and later
-     forks: VmOpBerlinAndLater,
+     forks: VmOpBerlinAndLater - VmOpAmsterdamAndLater,
      name: "selfDestructEIP2929",
      info: "EIP2929: Halt execution and register account for later deletion",
-     exec: selfDestructEIP2929Op)]
+     exec: selfDestructEIP2929Op),
+
+    (opCode: SelfDestruct, ## 0xff, EIP2929: self destruct, Berlin and later
+     forks: VmOpAmsterdamAndLater,
+     name: "selfDestructEIP8037",
+     info: "EIP8037: Halt execution and register account for later deletion",
+     exec: selfDestructEIP8037Op)]
 
 # ------------------------------------------------------------------------------
 # End

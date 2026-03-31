@@ -23,6 +23,7 @@ import
   ../../db/ledger,
   ../../constants,
   ../../transaction,
+  ../../core/eip8037,
   ../chain/forked_chain,
   ../pow/header,
   ../eip4844,
@@ -88,13 +89,15 @@ proc setupVMState(com: CommonRef;
                   parentHash: Hash32,
                   pos: PosPayloadAttr,
                   parentFrame: CoreDbTxRef): BaseVMState =
-  let fork = com.toEVMFork(pos.timestamp)
+  let
+    fork = com.toEVMFork(pos.timestamp)
+    gasLimit = getGasLimit(com, parent)
 
   BaseVMState.new(
     parent   = parent,
     blockCtx = BlockContext(
       timestamp    : pos.timestamp,
-      gasLimit     : getGasLimit(com, parent),
+      gasLimit     : gasLimit,
       baseFeePerGas: getBaseFee(com, parent),
       prevRandao   : pos.prevRandao,
       difficulty   : UInt256.zero(),
@@ -102,6 +105,7 @@ proc setupVMState(com: CommonRef;
       excessBlobGas: com.calcExcessBlobGas(parent, fork),
       parentHash   : parentHash,
       slotNumber   : pos.slotNumber,
+      costPerStateByte: stateGasPerByte(gasLimit),
     ),
     txFrame = parentFrame.txFrameBegin(),
     com     = com,
@@ -163,6 +167,9 @@ func baseFee(xp: TxPoolRef): GasInt =
     xp.vmState.blockCtx.baseFeePerGas.get.truncate(GasInt)
   else:
     0.GasInt
+
+func gasLimit(xp: TxPoolRef): GasInt =
+  xp.vmState.blockCtx.gasLimit
 
 func excessBlobGas(xp: TxPoolRef): GasInt =
   xp.vmState.blockCtx.excessBlobGas
@@ -361,6 +368,7 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
   validateTxBasic(
     xp.com,
     ptx.tx,
+    xp.gasLimit,
     xp.nextFork,
     validateFork = true).isOkOr:
     debug "Invalid transaction: Basic validation failed",
