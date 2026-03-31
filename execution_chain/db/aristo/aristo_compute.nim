@@ -178,6 +178,34 @@ template encodeExt(w: var RlpWriter, pfx: NibblesBuf, branchKey: HashKey): HashK
   w.append(branchKey)
   w.finish().digestTo(HashKey)
 
+func layersGetKeyOrVtx*(
+    db: AristoTxRef,
+    rvid: RootedVertexID,
+    parallel: static bool): Opt[((HashKey, VertexRef), int)] =
+
+  for w in db.rstack(stopAtSnapshot = true):
+    if w.snapshot.level.isSome():
+      when parallel:
+        w.lock.lockRead()
+        defer:
+          w.lock.unlockRead()
+
+      w.snapshot.vtx.withValue(rvid, item):
+        return Opt.some(((item[][1], item[][0]), item[][2]))
+      break
+
+    when parallel:
+      w.lock.lockRead()
+      defer:
+        w.lock.unlockRead()
+
+    w.kMap.withValue(rvid, item):
+      return ok(((item[], nil), w.level))
+    w.sTab.withValue(rvid, item):
+      return Opt.some(((VOID_HASH_KEY, item[]), w.level))
+
+  Opt.none(((HashKey, VertexRef), int))
+
 proc getKey(
     txRef: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool, parallel: static bool
 ): Result[((HashKey, VertexRef), int), AristoError] =
@@ -193,25 +221,9 @@ proc getKey(
           emptyFlags  
   
   when not skipLayers:
-    block body:
-      when parallel:
-        txRef.lock.lockRead()
-        defer:
-          txRef.lock.unlockRead()
-      
-      let key = txRef.layersGetKey(rvid).valueOr:
-        break body
-      
-      if key[0].isValid:
-        return ok ((key[0], nil), key[1])
-
-      let vtx = txRef.layersGetVtx(rvid).valueOr:
-        return err(GetKeyNotFound)
-
-      if vtx[0].isValid:
-        return ok ((VOID_HASH_KEY, vtx[0]), vtx[1])
-      else:
-        return err(GetKeyNotFound)
+    let keyVtxRes = txRef.layersGetKeyOrVtx(rvid, parallel)
+    if keyVtxRes.isSome():
+      return ok(keyVtxRes[])
 
   ok((?txRef.db.getKeyBe(rvid, flags), dbLevel))
 
@@ -406,35 +418,37 @@ proc computeKeyImpl(
             runningFutsIndexes.incl(i.uint8)
         
         while runningFutsIndexes.len() > 0:
-          var toRemove: seq[uint8]
+          var indexesToRemove: seq[uint8]
           
           for i in runningFutsIndexes:
             if futs[i].isReady():
-              toRemove.add(i)
+              indexesToRemove.add(i)
               inc batch.tasksCompleted
               continue
 
-            if not keyQueues[i].isEmpty():
-              var k: (RootedVertexID, HashKey, int)
-              if keyQueues[i].tryPop(k):
-                txRef.mergeKeyAtLevel(k[0], k[1], k[2])
+            when not skipLayers:
+              if not keyQueues[i].isEmpty():
+                var k: (RootedVertexID, HashKey, int)
+                if keyQueues[i].tryPop(k):
+                  txRef.mergeKeyAtLevel(k[0], k[1], k[2])
                 
             if not vtxBufQueues[i].isEmpty():
               var v: (RootedVertexID, VertexBuf)
               if vtxBufQueues[i].tryPop(v):
                 ?batch.putVtxBlob(txRef.db, v[0], v[1].data())
 
-          for i in toRemove:
+          for i in indexesToRemove:
             runningFutsIndexes.excl(i)
 
         # At this point all futures have finished running.
         # Now we process any remaining data in the queues.
         for i, f in futs:
           if f.isSpawned():
-            if not keyQueues[i].isEmpty():
-              var k: (RootedVertexID, HashKey, int)
-              while keyQueues[i].tryPop(k):
-                txRef.mergeKeyAtLevel(k[0], k[1], k[2])
+            when not skipLayers:
+              if not keyQueues[i].isEmpty():
+                var k: (RootedVertexID, HashKey, int)
+                while keyQueues[i].tryPop(k):
+                  txRef.mergeKeyAtLevel(k[0], k[1], k[2])
 
             if not vtxBufQueues[i].isEmpty():
               var v: (RootedVertexID, VertexBuf)
