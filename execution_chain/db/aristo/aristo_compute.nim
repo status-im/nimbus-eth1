@@ -22,12 +22,6 @@ import
 export aristo_desc, chronicles, stack
 
 type
-  VertexBranch* = object
-    isExt*: bool
-    used*: uint16
-    startVid*: VertexID
-    pfx*: NibblesBuf
-
   WriteBatch* = object
     writer*: PutHdlRef
     count*: int
