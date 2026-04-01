@@ -81,19 +81,29 @@ func accountsCoverage*(db: StateDbRef): float
 # Private helpers
 # ------------------------------------------------------------------------------
 
-func deletableState(db: StateDbRef): StateDataRef =
-  ## If the sate list is empty, `nil` is returned.
+proc evictableState(db: StateDbRef; info: static[string]): StateDataRef =
+  ## If the state list is empty, `nil` is returned.
   ##
-  ## If the pivot state is not completed (i.e. has unprocessed data), this
-  ## function searches for the state with the maximal unprocessed accounts
-  ## data interval range with block number not exceeding the pivot state
-  ## block number. The resulting state will be returned which might include
-  ## the pivot state itself.
+  ## If there are some state which are not even partially completed (i.e.
+  ## all accounts are unprocessed), the one with the least block number is
+  ## returned.
   ##
-  ## If the pivot is completed  (i.e. no unprocessed data), it will never be
-  ## returned but the full state list without the pivot state is searched for
-  ## the state with maximal unprocessed accounts data interval. The result
-  ## might be `nil`.
+  ## Otherwise, if the pivot state is not completed (i.e. has unprocessed
+  ## data) and has the least block number and there is another state in the
+  ## list which is minimally completed when compared to the pivot state (see
+  ## constant `relativeCoverageEvictionThreshold`), off all such pivot
+  ## states the one with the least block number is selected.
+  ##
+  ## Otherwise, if the pivot state is not completed, this function searches
+  ## for the state with the maximal size of the unprocessed accounts data
+  ## range with block number not exceeding the one of the pivot state. The
+  ## resulting state will be returned which might include the pivot state
+  ## itself.
+  ##
+  ## Otherwise, if the pivot is completed (i.e. no unprocessed data), it will
+  ## never be returned but the full state list without the pivot state is
+  ## searched for the state with maximal unprocessed accounts data interval.
+  ## The result might be `nil`.
   ##
   if db.byNumber.len == 0:                          # fringe condition
     return StateDataRef(nil)                        # done (that was easy)
@@ -109,9 +119,9 @@ func deletableState(db: StateDbRef): StateDataRef =
 
   while rc.isOk:
     let state = rc.value.data
-    rc = walk.next                                  # set next state
     if maxBlock < state.blockNumber:
       break                                         # end of list (first pass)
+    rc = walk.next                                  # set next state
 
     state.unproc.total.isErrOr:                     # otherwise see below
       if value == 0:                                # `0 => 2^256` => empty
@@ -119,29 +129,39 @@ func deletableState(db: StateDbRef): StateDataRef =
       if unprocData < value:
         (result, unprocData) = (state, value)       # maximise stepwise
       continue
-    if result.isNil:                                # `err()` => empty state
+    if result.isNil:                                # prv `err()` => empty state
       (result, unprocData) = (state, 0.u256)        # maximise stepwise
     # End `while`
 
-  if result == db.pivot and
-     unprocData == 0 and                            # all accounts done with
-     0 < db.pivot.byAccount.len:                    # no more slots or code
-    # Now, a completed pivot state has the least block number. So re-initialise
-    # the minimiser and continue searching for least completed state.
-    (result, unprocData) = (StateDataRef(nil), low UInt256)
+  if result == db.pivot:
+    # Initialise a new maximiser and continue searching for the least
+    # completed state.
+    var otherData = low UInt256                     # keep `unprocData` safe
+    result= StateDataRef(nil)
     while rc.isOk:
       let state = rc.value.data
       rc = walk.next                                # set next state
 
       state.unproc.total.isErrOr:                   # `err()` => `0` => ignore
         if value == 0:                              # `0 => 2^256` => empty
-          return state
-        if unprocData < value:
-          (result, unprocData) = (state, value)     # maximise stepwise
+          return state                              # done
+        if otherData < value:
+          (result, otherData) = (state, value)      # maximise stepwise
         continue
-      if result.isNil:                              # `err()` => empty state
+      if result.isNil:                              # prv `err()` => empty state
         result = state                              # initialise
       # End `while`
+
+    # Now, all state are at least partially completed. Check whether the pivot
+    # was not fully completed in which case it can be deleted (unless there
+    # is a minimally completed state found.)
+    if unprocData != 0 or                           # not all accounts done with
+       db.pivot.byAccount.len != 0:                 # more slots or code to do
+      let ratio = unprocData.per256 / otherData.per256
+      if relativeCoverageEvictionThreshold < ratio: # check unprocessed ratio
+        debug info & ": selecting pivot for eviction", root=db.pivot.rootStr,
+          hash=db.pivot.blockHash.toStr, relativeCoverage=ratio.toStr(4)
+        result = db.pivot
 
   # result
 
@@ -259,7 +279,7 @@ proc register*(
   # Move block height window when necessary.
   if stateDbCapacity <= db.byNumber.len:
     # Clear item with the largest unprocessed data range
-    db.del db.deletableState()                      # remove index columns
+    db.del db.evictableState(info)                  # remove index columns
     if db.pivot.isNil:                              # update pivot if evicted
       db.pivot = db.findMinUnproc()                 # night be `nil`
 
