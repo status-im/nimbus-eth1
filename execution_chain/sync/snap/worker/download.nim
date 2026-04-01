@@ -75,6 +75,7 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
     block downloadLoop:
       for state in sdb.items(startWith=theseFirst, truncate=true):
         var didSomething = false
+        let state {.inject.} = state                # logging only, sub-template
         while true:
           if buddy.ctrl.stopped:                    # stop, nothing more to do
             break downloadLoop

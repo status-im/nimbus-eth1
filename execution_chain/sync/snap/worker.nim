@@ -95,6 +95,11 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
   block body:
     ctx.updateSyncState info
     case ctx.pool.syncState:
+    of SnapReady:
+      chronicles.info info & ": waiting for CL to send updates",
+        state=($ctx.syncState), nSyncPeers=ctx.nSyncPeers()
+      bodyRc = daemonWaitReadyInterval              # take a nap
+
     of SnapDownload:
       bodyRc = daemonWaitDownloadInterval           # take a nap
 
@@ -160,7 +165,7 @@ template runPeer*(
     case buddy.ctx.pool.syncState:
     of SnapDownload:
 
-      # Download and chace accounts, storage slots, contracts
+      # Download and cache accounts, storage slots, contracts
       buddy.download info
 
     else:
