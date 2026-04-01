@@ -53,15 +53,25 @@ proc commitOrRollbackDependingOnGasUsed(
   # set in the block header. Again, the EIP-1559 reference does not mention
   # an early stop. It would rather detect differing values for the  block
   # header `gasUsed` and the `vmState.cumulativeGasUsed` at a later stage.
-  let
-    gasUsed = callResult.gasUsed
-    limit = vmState.cumulativeGasUsed + gasUsed
+  let gasUsed = callResult.gasUsed
 
-  if header.gasLimit < limit:
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.rollbackCallFrame()
-    vmState.ledger.rollback(savePoint)
-    return err(&"invalid tx: block header gasLimit reached. gasLimit={header.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasUsed}")
+  # EIP-8037: block validity is max(blockRegularGas, blockStateGas) <= gasLimit
+  if vmState.fork >= FkAmsterdam:
+    let limit2d = max(
+      vmState.blockRegularGasUsed + callResult.blockRegularGasUsed,
+      vmState.blockStateGasUsed + callResult.blockStateGasUsed)
+    if header.gasLimit < limit2d:
+      if vmState.balTrackerEnabled:
+        vmState.balTracker.rollbackCallFrame()
+      vmState.ledger.rollback(savePoint)
+      return err(&"invalid tx: block gas limit reached (2D). gasLimit={header.gasLimit}, regularGas={vmState.blockRegularGasUsed}+{callResult.blockRegularGasUsed}, stateGas={vmState.blockStateGasUsed}+{callResult.blockStateGasUsed}")
+  else:
+    let limit = vmState.cumulativeGasUsed + gasUsed
+    if header.gasLimit < limit:
+      if vmState.balTrackerEnabled:
+        vmState.balTracker.rollbackCallFrame()
+      vmState.ledger.rollback(savePoint)
+      return err(&"invalid tx: block header gasLimit reached. gasLimit={header.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasUsed}")
 
   # Accept transaction and collect mining fee.
   let txFee = gasUsed.u256 * priorityFee.u256
