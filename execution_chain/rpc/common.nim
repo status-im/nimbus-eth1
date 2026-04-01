@@ -33,6 +33,7 @@ type
     id*    : string # UInt256 hex
     name*  : string
     enode* : string # Enode string
+    enr*   : Opt[string] # ENR URI string
     ip*    : string # address string
     ports* : NodePorts
 
@@ -83,10 +84,12 @@ proc setupAdminRpc*(nimbus: NimbusNode, config: ExecutionClientConf, server: Rpc
     let
       enode = toENode(node)
       nodeId = toNodeId(node.keys.pubkey)
+      enr = node.peerPool.eth1Discovery.getEnr()
       nodeInfo = NodeInfo(
         id: nodeId.toHex,
         name: config.agentString,
         enode: $enode,
+        enr: enr,
         ip: $enode.address.ip,
         ports: NodePorts(
           discovery: int(enode.address.udpPort),

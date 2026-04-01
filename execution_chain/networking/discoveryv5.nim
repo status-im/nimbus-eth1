@@ -19,7 +19,7 @@ import
 
 export
   Protocol, Node, Address, enr, newProtocol, open, seedTable, start, queryRandom, closeWait,
-  updateRecord
+  updateRecord, getRecord
 
 proc receiveV5*(d: Protocol, a: Address, packet: openArray[byte]): Result[void, cstring] =
   privateAccess(Protocol)
