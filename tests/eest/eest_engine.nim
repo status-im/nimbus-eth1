@@ -13,7 +13,6 @@
 {.define: unittest2DisableParamFiltering.}
 
 import
-  std/os,
   unittest2,
   eth/common/headers_rlp,
   web3/eth_api_types,
@@ -119,14 +118,13 @@ proc runTest(env: TestEnv, unit: EngineUnitEnv): Result[void, string] =
 
 proc processFile*(filePath: string, statelessEnabled = false, skipFiles: seq[string] = @[]) =
   let fixture = parseFixture(filePath, EngineFixture)
-  let fileName = filePath.splitPath().tail
 
   for unit in fixture.units:
     let
       testName = unit.name
       testUnit = unit.unit
     test testName & " from " & filePath:
-      if fileName in skipFiles:
+      if filePath in skipFiles:
         skip()
       else:
         let header = testUnit.genesisBlockHeader.to(Header)
@@ -139,7 +137,7 @@ proc processFile*(filePath: string, statelessEnabled = false, skipFiles: seq[str
         env.close()
 
 when isMainModule:
-  import std/cmdline
+  import std/[cmdline, os]
 
   if paramCount() == 0:
     let testFile = getAppFilename().splitPath().tail

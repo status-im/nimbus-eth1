@@ -24,8 +24,7 @@ const
   ]
 
 const skipFiles = [
-  "CALLBlake2f_MaxRounds.json", # Doesn't work in github CI
-  "test_withdrawal_requests.json",  # Enable this when bug in bal@v5.5.1 fixed
+  "tests/fixtures/eest_bal/blockchain_tests_engine/for_amsterdam/prague/eip7002_el_triggerable_withdrawals/test_withdrawal_requests.json"
 ]
 
 runEESTSuite(

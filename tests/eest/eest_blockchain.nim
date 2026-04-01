@@ -11,7 +11,7 @@
 {.define: unittest2DisableParamFiltering.}
 
 import
-  std/[json, os, algorithm],
+  std/[json, algorithm],
   unittest2,
   chronos,
   stew/byteutils,
@@ -151,14 +151,13 @@ proc runTest(env: TestEnv, unit: BlockchainUnitEnv, statelessEnabled = false): F
 
 proc processFile*(filePath: string, statelessEnabled = false, skipFiles: seq[string] = @[]) =
   let fixture = parseFixture(filePath, BlockchainFixture)
-  let fileName = filePath.splitPath().tail
 
   for unit in fixture.units:
     let
       testName = unit.name
       testUnit = unit.unit
     test testName & " from " & filePath:
-      if fileName in skipFiles:
+      if filePath in skipFiles:
         skip()
       else:
         let header = testUnit.genesisBlockHeader.to(Header)
@@ -171,11 +170,11 @@ proc processFile*(filePath: string, statelessEnabled = false, skipFiles: seq[str
         env.close()
 
 when isMainModule:
-  import std/cmdline
+  import std/[cmdline, os]
 
   if paramCount() == 0:
     let testFile = getAppFilename().splitPath().tail
     echo "Usage: " & testFile & " vector.json"
     quit(QuitFailure)
 
-  processFile(paramStr(1))
+  processFile(paramStr(1), true)
