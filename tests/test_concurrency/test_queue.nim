@@ -133,16 +133,18 @@ suite "ConcurrentQueue Tests":
     check queue.pop() == 400
   
   test "Single producer task, single consumer task, multiple threads":
-    let taskpool = Taskpool.new(numThreads = 2)
+    const 
+      queueExp = 2
+      numThreads = 4
+      numItems = 10000
 
-    var queue: ConcurrentQueue[2, int]
+    let taskpool = Taskpool.new(numThreads)
+    var queue: ConcurrentQueue[queueExp, int]
     queue.init()
 
-    const NUM_ITEMS = 100
-
-    proc producer(q: ptr ConcurrentQueue[2, int], useTry: bool): int =
+    proc producer(q: ptr ConcurrentQueue[queueExp, int], useTry: bool): int =
       var count = 0
-      for i in 0 ..< NUM_ITEMS:
+      for i in 0 ..< numItems:
         if useTry:
           while not q[].tryPush(i):
             cpuRelax()
@@ -151,9 +153,9 @@ suite "ConcurrentQueue Tests":
         inc count
       count
 
-    proc consumer(q: ptr ConcurrentQueue[2, int], useTry: bool): int =
+    proc consumer(q: ptr ConcurrentQueue[queueExp, int], useTry: bool): int =
       var count = 0
-      for i in 0 ..< NUM_ITEMS:
+      for i in 0 ..< numItems:
         if useTry:
           while q[].tryPop().isNone():
             cpuRelax()
@@ -168,8 +170,8 @@ suite "ConcurrentQueue Tests":
         f2 = taskpool.spawn consumer(queue.addr, useTry = false)
 
       check: 
-        sync(f1) == NUM_ITEMS
-        sync(f2) == NUM_ITEMS
+        sync(f1) == numItems
+        sync(f2) == numItems
 
     block:
       let 
@@ -177,8 +179,8 @@ suite "ConcurrentQueue Tests":
         f2 = taskpool.spawn consumer(queue.addr, useTry = true)
 
       check: 
-        sync(f1) == NUM_ITEMS
-        sync(f2) == NUM_ITEMS
+        sync(f1) == numItems
+        sync(f2) == numItems
 
     block:
       let 
@@ -186,8 +188,8 @@ suite "ConcurrentQueue Tests":
         f2 = taskpool.spawn consumer(queue.addr, useTry = false)
 
       check: 
-        sync(f1) == NUM_ITEMS
-        sync(f2) == NUM_ITEMS
+        sync(f1) == numItems
+        sync(f2) == numItems
 
     block:
       let 
@@ -195,5 +197,5 @@ suite "ConcurrentQueue Tests":
         f2 = taskpool.spawn consumer(queue.addr, useTry = true)
 
       check: 
-        sync(f1) == NUM_ITEMS
-        sync(f2) == NUM_ITEMS
+        sync(f1) == numItems
+        sync(f2) == numItems

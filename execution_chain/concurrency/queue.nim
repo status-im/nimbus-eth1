@@ -27,6 +27,8 @@ type ConcurrentQueue*[E: static int, T] = object
   lock: Lock
   condFull: Cond
   condEmpty: Cond
+  waitingPush: Atomic[bool]
+  waitingPop: Atomic[bool]
   
 template capacity*(q: ConcurrentQueue): int =
   q.data.len() - 1
@@ -85,8 +87,9 @@ func tryPush*[E, T](q: var ConcurrentQueue[E, T], value: sink T): bool =
   else:
     q.data[headIdx] = value
     q.pushCommit()
-    withLock(q.lock): 
-      q.condEmpty.signal()
+    if q.waitingPop.load() == true:
+      withLock(q.lock): 
+        q.condEmpty.signal()
     true
 
 func tryPop*[E, T](q: var ConcurrentQueue[E, T], value: var T): bool =
@@ -96,8 +99,9 @@ func tryPop*[E, T](q: var ConcurrentQueue[E, T], value: var T): bool =
   else:
     value = move(q.data[tailIdx])
     q.popCommit()
-    withLock(q.lock): 
-      q.condFull.signal()
+    if q.waitingPush.load() == true:
+      withLock(q.lock): 
+        q.condFull.signal()
     true
 
 template tryPop*[E, T](q: var ConcurrentQueue[E, T]): Opt[T] =
@@ -109,10 +113,14 @@ template tryPop*[E, T](q: var ConcurrentQueue[E, T]): Opt[T] =
 
 func push*[E, T](q: var ConcurrentQueue[E, T], value: sink T) =
   withLock(q.lock):
+    q.waitingPush.store(true)
+
     var headIdx = q.pushBegin()
     while headIdx < 0:
-      q.condFull.wait(q.lock)
+      q.condFull.wait(q.lock)  
       headIdx = q.pushBegin()
+    
+    q.waitingPush.store(false)
 
     q.data[headIdx] = value
     q.pushCommit()
@@ -120,11 +128,15 @@ func push*[E, T](q: var ConcurrentQueue[E, T], value: sink T) =
 
 func pop*[E, T](q: var ConcurrentQueue[E, T], value: var T) =
   withLock(q.lock):
+    q.waitingPop.store(true)
+
     var tailIdx = q.popBegin()
-    while tailIdx < 0:
+    while tailIdx < 0:  
       q.condEmpty.wait(q.lock)
       tailIdx = q.popBegin()
-
+    
+    q.waitingPop.store(false)
+    
     value = move(q.data[tailIdx])
     q.popCommit()
     q.condFull.signal()
