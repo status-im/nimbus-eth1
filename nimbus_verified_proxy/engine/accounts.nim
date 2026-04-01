@@ -78,10 +78,11 @@ proc getStorageFromProof*(
     proof: ProofResponse,
     storageProofIndex = 0,
 ): EngineResult[UInt256] =
-  let account = ?getAccountFromProof(
-    stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
-    proof.storageHash, proof.accountProof,
-  )
+  let account =
+    ?getAccountFromProof(
+      stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
+      proof.storageHash, proof.accountProof,
+    )
 
   if account.storageRoot == EMPTY_ROOT_HASH:
     # valid account with empty storage, in that case getStorageAt
@@ -135,13 +136,14 @@ proc getAccount*(
         )
       )
 
-    account = ?(
-      getAccountFromProof(
-        stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
-        proof.storageHash, proof.accountProof,
+    account =
+      ?(
+        getAccountFromProof(
+          stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
+          proof.storageHash, proof.accountProof,
+        )
+        .tagBackend(backendIdx)
       )
-      .tagBackend(backendIdx)
-    )
 
   engine.accountsCache.put(cacheKey, account)
 
@@ -245,13 +247,14 @@ proc populateCachesForAccountAndSlots(
           )
         )
 
-      account = ?(
-        getAccountFromProof(
-          stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
-          proof.storageHash, proof.accountProof,
+      account =
+        ?(
+          getAccountFromProof(
+            stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
+            proof.storageHash, proof.accountProof,
+          )
+          .tagBackend(backendIdx)
         )
-        .tagBackend(backendIdx)
-      )
 
     engine.accountsCache.put(accountCacheKey, account)
 
