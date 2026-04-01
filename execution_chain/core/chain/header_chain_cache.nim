@@ -91,7 +91,7 @@ type
     ante: Header                # antecedent, bottom of header chain
     head: Header                # top end of header chain, highest block number
     headHash: Hash32
-    consHeadNum: BlockNumber    # for logging, metrics etc.
+    consHead: Header            # for logging, metrics etc.
 
   # -----------------
 
@@ -146,7 +146,7 @@ func toStr(hc: HeaderChainRef): string =
   result &= ", " & $hc.session.ante.number
   if hc.session.ante != hc.session.head:
     result &= ".." & $hc.session.head.number
-  result &= "," & $hc.session.consHeadNum
+  result &= "," & $hc.session.consHead.number
   result &= ")"
 
 # ------------------------------------------------------------------------------
@@ -336,7 +336,7 @@ proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
     # any more. This happens if there is no need to catch up wholesale.
     # So, the `nec_sync_consensus_head` will just stay with its latest
     # value unless updated by `updateMetrics()`.
-    hc.session.consHeadNum = h.number
+    hc.session.consHead = h
     metrics.set(nec_sync_consensus_head, h.number.int64)
     if hc.chain.latestNumber <= h.number:
       metrics.set(nec_sync_distance_to_sync,
@@ -626,24 +626,28 @@ func antecedent*(hc: HeaderChainRef): Header =
 
 # --------------------
 
+func latestConsHead*(hc: HeaderChainRef): Header =
+  ## Getter: header of last `CL` head update (aka forkchoice update).
+  ##
+  ## This getter is for metrics purposes. The returned header hash a block
+  ## number which is typically larger than `head()` and will increase over
+  ## time while `head()` remains constant (for the current session.)
+  ##
+  hc.session.consHead
+
 func latestConsHeadNumber*(hc: HeaderChainRef): BlockNumber =
   ## Getter: block number of last `CL` head update (aka forkchoice update).
-  ##
-  ## This getter is for metrics purposes. The returned number is typically
-  ## larger than `head()` and will increased over time while `head()`
-  ## remains constant (for the current session.)
-  ##
-  hc.session.consHeadNum
+  hc.session.consHead.number
 
 proc updateMetrics*(hc: HeaderChainRef) =
   ## Update/adjust some metrics, i.p. `nec_sync_distance_to_sync`. If there
-  ## is no session and the latest execution head exceeds the `consHeadNum` from
-  ## the last active session, the `nec_sync_consensus_head` will be set to the
-  ## the latest execution head number.
+  ## is no session and the latest execution head exceeds the `consHead.number`
+  ## from the last active session, the `nec_sync_consensus_head` will be set
+  ## to the the latest execution head number.
   ##
-  if hc.chain.latestNumber <= hc.session.consHeadNum:
+  if hc.chain.latestNumber <= hc.session.consHead.number:
     metrics.set(nec_sync_distance_to_sync,
-      (hc.session.consHeadNum - hc.chain.latestNumber).int64)
+      (hc.session.consHead.number - hc.chain.latestNumber).int64)
   elif hc.session.mode == HeaderChainMode(0):
     metrics.set(nec_sync_consensus_head, hc.chain.latestNumber.int64)
     metrics.set(nec_sync_distance_to_sync, 0)
