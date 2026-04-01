@@ -573,11 +573,22 @@ func hasCodeOrStorage*(state: StateDataRef): bool =
 # Public iterator(s)
 # ------------------------------------------------------------------------------
 
-iterator stoItems*(state: StateDataRef): tuple[key: ItemKey, data: AccDataRef] =
+iterator stoItems*(
+    state: StateDataRef;
+    maxItems = high(int);
+      ): tuple[key: ItemKey, data: AccDataRef] =
   ## Iterate over all account entries with increasing `ItemKey` keys and
   ## return non-empty storage tree information.
-  var rc = state.byAccount.ge(low ItemKey)
-  while rc.isOk:
+  ##
+  ## This iterator is resilient against changes of the code base. Yet, after
+  ## adding entries with keys smaller than the last returned `key`, these
+  ## entries will be missed through the current cycle.
+  ##
+  var
+    count = 0
+    rc = state.byAccount.ge(low ItemKey)
+  while rc.isOk and count < maxItems:
+    count.inc
     let (key, data) = (rc.value.key, rc.value.data)
     if data.stoRoot != StoreRoot(EMPTY_ROOT_HASH):
       yield (key, data)

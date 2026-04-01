@@ -145,6 +145,9 @@ const
   nProcStorageErrThreshold* = 4
     ## Similar to `nProcAccountErrThreshold`
 
+  nFetchStorageSlotsMax* = 1024
+    ## Maximal size of storage slots downloaded in a single message.
+
   # -----------
 
   fetchCodesSnapTimeout* = chronos.seconds(120)

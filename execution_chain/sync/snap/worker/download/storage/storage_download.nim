@@ -20,6 +20,16 @@ import
 # Private helpers
 # ------------------------------------------------------------------------------
 
+proc rollBackPartTries(
+    buddy: SnapPeerRef;
+    state: StateDataRef;
+    part: openArray[(ItemKey,StoreRoot,ItemKeyRange)];
+    start: int;
+      ) =
+  ## helper
+  for n in start ..< part.len:
+    state.register(part[n][0], part[n][1], part[n][2])
+
 proc putStoAndProof(
     adb: MptAsmRef;
     root: StateRoot;
@@ -176,7 +186,7 @@ template downloadFromQueue(
       partTries: seq[(ItemKey,StoreRoot,ItemKeyRange)]
       partStart = 0                                 # start inx of `partTries[]`
 
-    for w in state.stoItems:
+    for w in state.stoItems(nFetchStorageSlotsMax):
       if w.data.stoLeft.len == 0:                   # `0` => `2^256``
         fullTries.add (w.key, w.data.stoRoot)
       else:
@@ -188,32 +198,35 @@ template downloadFromQueue(
 
     # Process full tries (all at once)
     if 0 < fullTries.len:
-      if buddy.downloadImpl(state, fullTries, ItemKeyRangeMax, info):
-        bodyRc = true
-      elif not state.isOperable():                  # evicted => return
-        bodyRc = false                              # ignore downloaded data
+      if not buddy.downloadImpl(state, fullTries, ItemKeyRangeMax, info) or
+         not state.isOperable():                    # evicted => return
+        bodyRc = false
         break body
+      bodyRc = true
 
     # Process partial tries (one by one)
     while partStart < partTries.len:
       if buddy.ctrl.stopped:                        # roll back `partTries[]`
-        for n in partStart ..< partTries.len:
-          state.register(partTries[n][0], partTries[n][1], partTries[n][2])
+        buddy.rollBackPartTries(state, partTries, partStart)
         trace info & ": rolled back to slots queue", peer, root,
           partStart, nTriesLeft=(partTries.len - partStart)
-        break
+        bodyRc = false
+        break body
 
       let
         acc = @[(partTries[partStart][0], partTries[partStart][1])]
         iv = partTries[partStart][2]
       partStart.inc
 
-      if buddy.downloadImpl(state, acc, iv, info):
-        bodyRc = true
-      elif not state.isOperable():                  # evicted => return
-        bodyRc = false                              # ignore downloaded data
+      if not buddy.downloadImpl(state, acc, iv, info) or
+         not state.isOperable():                    # evicted => return
+        bodyRc = false
         break body
-      # End `while`
+      bodyRc = true
+      # End `while
+
+    # Reaching here, `bodyRc` is `true` if all the previous `downloadImpl()`
+    # directives returned `true` (and there was no system request to stop.)
 
   bodyRc                                            # return code
 
@@ -230,26 +243,22 @@ template storageDownload*(
   ## Async/template
   ##
   block body:
-    if not state.isOperable():                      # evicted => return
-      break body
+    if state.isOperable():                          # evicted => return
 
-    let acc = accounts
-       .filterIt(not it.accBody.storageRoot.isEmpty)
-       .mapIt( (it.accHash.to(ItemKey),
-                it.accBody.storageRoot.to(Hash32).to(StoreRoot)) )
+      # Register downloads for peer synchronisateion
+      state.register accounts
+         .filterIt(not it.accBody.storageRoot.isEmpty)
+         .mapIt( (it.accHash.to(ItemKey),
+                  it.accBody.storageRoot.to(Hash32).to(StoreRoot)) )
 
-    if buddy.ctrl.stopped:
-      state.register acc                            # stash data and return
-      break body                                    # all done
+      if state.hasCodeOrStorage:
+        trace info & ": storage download", peer, root=state.rootStr,
+          `state`=($buddy.syncState)
 
-    if not buddy.downloadImpl(state, acc, ItemKeyRangeMax, info) and
-       not state.isOperable():                      # evicted => return
-      break body                                    # all done
-
-    while not buddy.ctrl.stopped and
-          state.hasCodeOrStorage and
-          buddy.downloadFromQueue(state, info):
-      continue
+        while not buddy.ctrl.stopped and
+              state.hasCodeOrStorage and
+              buddy.downloadFromQueue(state, info):
+          continue
 
   discard                                           # visual alignment
 
