@@ -24,9 +24,8 @@ type ConcurrentQueue*[E: static int, T] = object
   data: array[1 shl E, T]
   exp: int
   indexes: Atomic[uint32]
-  lockFull: Lock
+  lock: Lock
   condFull: Cond
-  lockEmpty: Lock
   condEmpty: Cond
   
 template capacity*(q: ConcurrentQueue): int =
@@ -41,9 +40,8 @@ func init*(q: var ConcurrentQueue) =
     doAssert isPowerOfTwo(q.data.len())
   q.exp = log2(q.data.len().float).int
   q.indexes.store(0.uint32)
-  q.lockFull.initLock()
+  q.lock.initLock()
   q.condFull.initCond()
-  q.lockEmpty.initLock()
   q.condEmpty.initCond()
 
 func pushBegin(q: var ConcurrentQueue): int =
@@ -87,7 +85,8 @@ func tryPush*[E, T](q: var ConcurrentQueue[E, T], value: sink T): bool =
   else:
     q.data[headIdx] = value
     q.pushCommit()
-    q.condEmpty.signal()
+    withLock(q.lock): 
+      q.condEmpty.signal()
     true
 
 func tryPop*[E, T](q: var ConcurrentQueue[E, T], value: var T): bool =
@@ -97,7 +96,8 @@ func tryPop*[E, T](q: var ConcurrentQueue[E, T], value: var T): bool =
   else:
     value = move(q.data[tailIdx])
     q.popCommit()
-    q.condFull.signal()
+    withLock(q.lock): 
+      q.condFull.signal()
     true
 
 template tryPop*[E, T](q: var ConcurrentQueue[E, T]): Opt[T] =
@@ -108,11 +108,10 @@ template tryPop*[E, T](q: var ConcurrentQueue[E, T]): Opt[T] =
     Opt.none(T)
 
 func push*[E, T](q: var ConcurrentQueue[E, T], value: sink T) =
-  withLock(q.lockFull):
+  withLock(q.lock):
     var headIdx = q.pushBegin()
-
     while headIdx < 0:
-      q.condFull.wait(q.lockFull)
+      q.condFull.wait(q.lock)
       headIdx = q.pushBegin()
 
     q.data[headIdx] = value
@@ -120,11 +119,10 @@ func push*[E, T](q: var ConcurrentQueue[E, T], value: sink T) =
     q.condEmpty.signal()
 
 func pop*[E, T](q: var ConcurrentQueue[E, T], value: var T) =
-  withLock(q.lockEmpty):
+  withLock(q.lock):
     var tailIdx = q.popBegin()
-
     while tailIdx < 0:
-      q.condEmpty.wait(q.lockEmpty)
+      q.condEmpty.wait(q.lock)
       tailIdx = q.popBegin()
 
     value = move(q.data[tailIdx])
@@ -137,8 +135,7 @@ template pop*[E, T](q: var ConcurrentQueue[E, T]): T =
   value
 
 func dispose*(q: var ConcurrentQueue) =
-  q.lockFull.deinitLock()
+  q.lock.deinitLock()
   q.condFull.deinitCond()
-  q.lockEmpty.deinitLock()
   q.condEmpty.deinitCond()
 

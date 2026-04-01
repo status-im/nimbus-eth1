@@ -138,7 +138,7 @@ suite "ConcurrentQueue Tests":
     var queue: ConcurrentQueue[2, int]
     queue.init()
 
-    const NUM_ITEMS = 3
+    const NUM_ITEMS = 100
 
     proc producer(q: ptr ConcurrentQueue[2, int], useTry: bool): int =
       var count = 0
