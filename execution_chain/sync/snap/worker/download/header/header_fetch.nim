@@ -115,13 +115,15 @@ template headerFetch*(
     if h.len != 1:
       trace recvInfo & " wrong # headers", peer, hash, nReq, nRecv=h.len, ela
       break body                                    # return err()
-    let rHash = BlockHash(h[0].computeBlockHash)
+    let
+      blockNumber {.inject,used.} = h[0].number     # logging only
+      rHash = BlockHash(h[0].computeBlockHash)
     if rHash != blockHash:
-      trace recvInfo & " garbled header", peer, hash, blockNumber=h[0].number,
+      trace recvInfo & " garbled header", peer, hash, blockNumber,
         nReq, recvHash=blockHash.toStr, expected=rHash.toStr, ela
       break body                                    # return err()
 
-    trace recvInfo, peer, hash, blockNumber=h[0].number, nReq, nRecv=1, ela
+    trace recvInfo, peer, hash, blockNumber, nReq, nRecv=1, ela
     bodyRc = typeof(bodyRc).ok(h[0])
 
   bodyRc # return
