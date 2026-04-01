@@ -41,6 +41,10 @@ const
   twoHundredYears* = chronos.days(365 * 200 + 48)
     ## Large Duration constant considered sort of infinite.
 
+  daemonWaitReadyInterval* = chronos.seconds(20)
+    ## Some polling interval time waiting until the system gets into download
+    ## state when the the FCU modue hash  a finalised header.
+
   daemonWaitDownloadInterval* = chronos.seconds(10)
     ## Some waiting time at the end of the daemon task which always lingers
     ## in the background. This one is for `SnapDownload` state.
