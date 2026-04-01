@@ -11,7 +11,7 @@
 
 import
   chronicles,
-  std/sequtils,
+  std/[sequtils],
   stint,
   web3/[conversions, eth_api_types],
   eth/common/[base, transaction_utils],
@@ -604,12 +604,24 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     if quantityTag.kind == bidHash and quantityTag.requireCanonical:
       raise newException(ValueError,
         "requireCanonical is a pre-merge concept and is not supported")
+
     let
-      blk = api.blockFromTag(quantityTag).valueOr:
-        raise newException(ValueError, "Block not found: " & error)
+      blk = case quantityTag.kind
+        of bidNumber:
+          api.chain.blockByNumber(base.BlockNumber(quantityTag.number)).valueOr:
+            return Opt.none(seq[ReceiptObject])
+        of bidHash:
+          api.chain.blockByHash(quantityTag.hash).valueOr:
+            return Opt.none(seq[ReceiptObject])
+        else:
+          api.blockFromTag(quantityTag).valueOr:
+            return Opt.none(seq[ReceiptObject])
       blkHash = blk.header.computeBlockHash
       receipts = api.chain.receiptsByBlockHash(blkHash).valueOr:
         return Opt.none(seq[ReceiptObject])
+
+    if blk.transactions.len == 0:
+      return Opt.some(newSeq[ReceiptObject]())
 
     var
       prevGasUsed = GasInt(0)

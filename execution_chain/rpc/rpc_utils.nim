@@ -192,7 +192,8 @@ proc populateReceipt*(rec: StoredReceipt, gasUsed: GasInt, tx: Transaction,
   res.blockNumber = Quantity(header.number)
   if sender.isSome():
     res.`from` = sender.get()
-  res.to = Opt.some(tx.destination)
+  if tx.to.isSome:
+    res.to = Opt.some(tx.destination)
   res.cumulativeGasUsed = Quantity(receipt.cumulativeGasUsed)
   res.gasUsed = Quantity(gasUsed)
   res.`type` = Opt.some Quantity(receipt.receiptType)
@@ -431,6 +432,9 @@ proc blockFromTag*(chain: ForkedChainRef, blockTag: BlockTag, noHash: bool = fal
       ok(chain.finalizedBlock)
     of "safe":
       ok(chain.safeBlock)
+    # wait till pruner pr is merged for tail
+    of "earliest":
+      chain.blockByNumber(base.BlockNumber(0))
     else:
       err("Unsupported block tag " & tag)
   of bidNumber:
