@@ -251,12 +251,11 @@ proc syncOnce*(
 
     let
       (backend, backendIdx) = ?(engine.beaconBackendFor(BeaconBootstrap))
-      res =
-        ?(
-          (await backend.getLightClientBootstrap(engine.trustedBlockRoot.get)).tagBackend(
-            backendIdx
-          )
+      res = ?(
+        (await backend.getLightClientBootstrap(engine.trustedBlockRoot.get)).tagBackend(
+          backendIdx
         )
+      )
     ?((await engine.processObject(res, "bootstrap")).tagBackend(backendIdx))
 
   let
@@ -279,14 +278,13 @@ proc syncOnce*(
 
     let
       (backend, backendIdx) = ?(engine.beaconBackendFor(BeaconUpdates))
-      updRes =
-        ?(
-          (
-            await backend.getLightClientUpdatesByRange(
-              finalized.sync_committee_period, count
-            )
-          ).tagBackend(backendIdx)
-        )
+      updRes = ?(
+        (
+          await backend.getLightClientUpdatesByRange(
+            finalized.sync_committee_period, count
+          )
+        ).tagBackend(backendIdx)
+      )
       check = distinctBase(updRes).checkLightClientUpdates(
           finalized.sync_committee_period, count
         )

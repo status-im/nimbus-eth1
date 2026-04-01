@@ -287,12 +287,11 @@ proc getBlock*(
   # get the target block
   let
     (backend, backendIdx) = ?(engine.executionBackendFor(GetBlockByHash))
-    blk =
-      ?(
-        (await backend.eth_getBlockByHash(blockHash, fullTransactions)).tagBackend(
-          backendIdx
-        )
+    blk = ?(
+      (await backend.eth_getBlockByHash(blockHash, fullTransactions)).tagBackend(
+        backendIdx
       )
+    )
 
   # verify requested hash with the downloaded hash
   if blockHash != blk.hash:
@@ -316,12 +315,11 @@ proc getBlock*(
   # get the target block
   let
     (backend, backendIdx) = ?(engine.executionBackendFor(GetBlockByNumber))
-    blk =
-      ?(
-        (await backend.eth_getBlockByNumber(numberTag, fullTransactions)).tagBackend(
-          backendIdx
-        )
+    blk = ?(
+      (await backend.eth_getBlockByNumber(numberTag, fullTransactions)).tagBackend(
+        backendIdx
       )
+    )
 
   if numberTag.number != blk.number:
     return err(
