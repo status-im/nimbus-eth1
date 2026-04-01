@@ -180,7 +180,8 @@ proc run(
     else:
       @[]
 
-  let execBackendClients = await startExecutionBackends(engine, config.executionApiUrls, regularCaps)
+  let execBackendClients =
+    await startExecutionBackends(engine, config.executionApiUrls, regularCaps)
   let beaconBackendClients = await startBeaconBackends(engine, config.beaconApiUrls)
   let frontendServers = engine.startFrontends(config.frontendUrls)
 

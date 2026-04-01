@@ -469,8 +469,7 @@ proc run*(
       fullExecutionCapabilities
 
   engine.registerBackend(
-    getExecutionApiBackend(ctx, config.executionApiUrls, transportProc),
-    regularCaps,
+    getExecutionApiBackend(ctx, config.executionApiUrls, transportProc), regularCaps
   )
 
   if usePrivateTx:

@@ -91,13 +91,14 @@ suite "test receipts verification":
         fromBlock: Opt.some(tag),
         toBlock: Opt.some(tag),
           # same tag because we load only one block into the backend
-        topics: @[
-          TopicOrList(
-            kind: SingleOrListKind.slkSingle,
-            single:
-              bytes32"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
-          )
-        ],
+        topics:
+          @[
+            TopicOrList(
+              kind: SingleOrListKind.slkSingle,
+              single:
+                bytes32"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+            )
+          ],
         blockHash: Opt.none(Hash32),
       )
 
@@ -113,13 +114,14 @@ suite "test receipts verification":
   test "create filters and uninstall filters":
     # filter options without any tags would test resolving default "latest"
     let filterOptions = FilterOptions(
-      topics: @[
-        TopicOrList(
-          kind: SingleOrListKind.slkSingle,
-          single:
-            bytes32"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
-        )
-      ],
+      topics:
+        @[
+          TopicOrList(
+            kind: SingleOrListKind.slkSingle,
+            single:
+              bytes32"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+          )
+        ],
       blockHash: Opt.none(Hash32),
     ) # create a filter
     let newFilter = waitFor engine.frontend.eth_newFilter(filterOptions)
@@ -156,13 +158,14 @@ suite "test receipts verification":
 
     # filter options without any tags would test resolving default "latest"
     let filterOptions = FilterOptions(
-      topics: @[
-        TopicOrList(
-          kind: SingleOrListKind.slkSingle,
-          single:
-            bytes32"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
-        )
-      ],
+      topics:
+        @[
+          TopicOrList(
+            kind: SingleOrListKind.slkSingle,
+            single:
+              bytes32"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+          )
+        ],
       blockHash: Opt.none(Hash32),
     )
 
