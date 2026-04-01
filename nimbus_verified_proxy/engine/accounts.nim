@@ -134,7 +134,6 @@ proc getAccount*(
           backendIdx
         )
       )
-    )
 
     account = ?(
       getAccountFromProof(
@@ -214,7 +213,6 @@ proc getStorageAt*(
           backendIdx
         )
       )
-    )
 
     slotValue = ?(getStorageFromProof(stateRoot, slot, proof).tagBackend(backendIdx))
 
@@ -246,7 +244,6 @@ proc populateCachesForAccountAndSlots(
             backendIdx
           )
         )
-      )
 
       account = ?(
         getAccountFromProof(
@@ -282,7 +279,6 @@ proc populateCachesUsingAccessList*(
           backendIdx
         )
       )
-    )
 
   var futs = newSeqOfCap[Future[EngineResult[void]]](accessListRes.accessList.len())
   for accessPair in accessListRes.accessList:

@@ -286,21 +286,13 @@ proc getBlock*(
 ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
   # get the target block
   let
-<<<<<<< HEAD
-    (backend, backendIdx) = ?(engine.backendFor(GetBlockByHash))
-    blk = ?(
-      (await backend.eth_getBlockByHash(blockHash, fullTransactions)).tagBackend(
-        backendIdx
-=======
     (backend, backendIdx) = ?(engine.executionBackendFor(GetBlockByHash))
     blk =
       ?(
         (await backend.eth_getBlockByHash(blockHash, fullTransactions)).tagBackend(
           backendIdx
         )
->>>>>>> 796885755 (refactor and extend scoring for lc)
       )
-    )
 
   # verify requested hash with the downloaded hash
   if blockHash != blk.hash:
@@ -323,21 +315,13 @@ proc getBlock*(
 
   # get the target block
   let
-<<<<<<< HEAD
-    (backend, backendIdx) = ?(engine.backendFor(GetBlockByNumber))
-    blk = ?(
-      (await backend.eth_getBlockByNumber(numberTag, fullTransactions)).tagBackend(
-        backendIdx
-=======
     (backend, backendIdx) = ?(engine.executionBackendFor(GetBlockByNumber))
     blk =
       ?(
         (await backend.eth_getBlockByNumber(numberTag, fullTransactions)).tagBackend(
           backendIdx
         )
->>>>>>> 796885755 (refactor and extend scoring for lc)
       )
-    )
 
   if numberTag.number != blk.number:
     return err(

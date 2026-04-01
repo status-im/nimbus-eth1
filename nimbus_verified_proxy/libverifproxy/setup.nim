@@ -20,6 +20,7 @@ import
   web3/[eth_api_types, conversions],
   ../engine/types,
   ../engine/engine,
+  ../engine/rpc_frontend,
   ../lc_backend,
   ../nimbus_verified_proxy,
   ../nimbus_verified_proxy_conf,
@@ -57,7 +58,7 @@ proc getRandomBackendUrl(rng: ref HmacDrbgContext, urls: seq[string]): string =
   urls[randomNum mod uint64(urls.len)]
 
 proc getExecutionApiBackend*(
-    ctx: ptr Context, urls: seq[Web3Url], transportProc: TransportProc
+    ctx: ptr Context, urls: seq[string], transportProc: TransportProc
 ): ExecutionApiBackend =
   let
     rng = keys.newRng()
@@ -463,9 +464,9 @@ proc run*(
 
   let regularCaps =
     if usePrivateTx:
-      fullCapabilities - {SendRawTransaction}
+      fullExecutionCapabilities - {SendRawTransaction}
     else:
-      fullCapabilities
+      fullExecutionCapabilities
 
   engine.registerBackend(
     getExecutionApiBackend(ctx, config.executionApiUrls, transportProc),
@@ -474,9 +475,11 @@ proc run*(
 
   if usePrivateTx:
     engine.registerBackend(
-      getEthApiBackend(ctx, config.privateTxUrls, transportProc),
+      getExecutionApiBackend(ctx, config.privateTxUrls, transportProc),
       BackendCapabilities({SendRawTransaction}),
     )
+
+  engine.registerDefaultFrontend()
 
   # inject the frontend into c context
   ctx.frontend = engine.frontend
