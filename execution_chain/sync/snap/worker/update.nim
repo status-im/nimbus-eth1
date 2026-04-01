@@ -63,7 +63,7 @@ proc resumeNext(ctx: SnapCtxRef; info: static[string]): SyncState =
 func readyNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
   if ctx.pool.target.isSome() or
-     ctx.hdrCache.headHash() != zeroHash32:
+     ctx.hdrCache.latestConsHeadNumber() != 0:
     return SnapDownload
   SnapReady
 
@@ -181,39 +181,48 @@ template updateTarget*(buddy: SnapPeerRef, info: static[string]) =
 template updateFcuRoot*(buddy: SnapPeerRef, info: static[string]) =
   ## Async/template
   ##
-  ## Add state record derived from CL finalised hash. Register it done.
-  ## So it is not repeatedly re-processed (up to some race conditions.)
+  ## Register state record derived from the finalised header sent from the
+  ## CL as FCU update and use it as peer target (or pivot.)
   ##
   ## Note that the best/latest header is not useful here as a substitute
   ## for the CL finalised hash. Reasons are
   ##
-  ## * It needs to be verified by a header back chain starting from a CL
-  ##   header at some time (as only the CL has authority.)
+  ## * In most cases, the best/latest hash is the same as the FCU update
   ##
-  ## * when starting a peer, it was observed (on `hoodi`) that the pper's
-  ##   best/latest header had a block number slightly larger than the latest
-  ##   cached CL finalised hash (which might be due to a race condition of
-  ##   two separate network entities.)
+  ## * Otherwise it needs to be verified by a header back chain starting
+  ##   from a CL header at some time as only the CL has authority. This
+  ##   would be an extra efford not deemed worth while.
   ##
   block body:
     if buddy.only.finRoot.isSome():
-      break body                                    # nothing to do
+      break body                                    # done, nothing to do
 
     let
       ctx = buddy.ctx
-      hash = BlockHash ctx.hdrCache.headHash()
-    if hash == BlockHash(zeroHash32):
+      hdr = ctx.hdrCache.latestConsHead()
+      blockNumber {.inject.} = BlockNumber(hdr.number)
+    if blockNumber == 0:
       break body                                    # no FCU request yet
 
+    let hash = BlockHash(hdr.computeBlockHash())
     ctx.pool.stateDB.get(hash).isErrOr:
+      trace info & ": using fin root from registry", peer=buddy.peer,
+        blockHash=hash.toStr, blockNumber, nSyncPeers=ctx.nSyncPeers()
       buddy.only.finRoot = Opt.some(value.stateRoot)
       break body                                    # already registered
 
-    trace info & ": assigning FC hash from CL", peer=buddy.peer,
-      hash=hash.toStr, nSyncPeers=ctx.nSyncPeers()
+    trace info & ": assigning FCU hash from CL", peer=buddy.peer,
+      hash=hash.toStr, blockNumber, nSyncPeers=ctx.nSyncPeers()
 
-    buddy.headerStateRegister(hash, info).isErrOr:
-      buddy.only.finRoot = Opt.some(value.stateRoot)
+    # Store root -> block data mapping
+    let root = StateRoot(hdr.stateRoot)
+    ctx.pool.mptAsm.putBlockData(root, hash, blockNumber).isOkOr:
+      trace info & ": Cannot store state root map", peer=buddy.peer,
+        stateRoot=root.toStr, blockHash=hash.toStr, blockNumber
+      break body                                    # done, storage error
+
+    discard ctx.pool.stateDB.register(root, hash, blockNumber, info)
+    buddy.only.finRoot = Opt.some(root)
     # End `block body`
 
   discard                                           # visual alignment
