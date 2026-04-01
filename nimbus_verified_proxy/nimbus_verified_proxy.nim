@@ -47,7 +47,7 @@ func getConfiguredChainId*(chain: Option[string]): UInt256 =
   else: 1.u256
 
 proc startExecutionBackends(
-    engine: RpcVerificationEngine, urls: seq[Web3Url], caps: BackendCapabilities
+    engine: RpcVerificationEngine, urls: seq[string], caps: BackendCapabilities
 ): Future[seq[JsonRpcClient]] {.async: (raises: [ProxyError, CancelledError]).} =
   var clients: seq[JsonRpcClient] = @[]
 
@@ -170,11 +170,9 @@ proc run(
 
   let regularCaps =
     if usePrivateTx:
-      fullCapabilities - {SendRawTransaction}
+      fullExecutionCapabilities - {SendRawTransaction}
     else:
-      fullCapabilities
-
-  let backendClients = await startBackends(engine, config.executionApiUrls, regularCaps)
+      fullExecutionCapabilities
 
   let privateTxClients =
     if usePrivateTx:
@@ -182,7 +180,7 @@ proc run(
     else:
       @[]
 
-  let execBackendClients = await startExecutionBackends(engine, config.executionApiUrls)
+  let execBackendClients = await startExecutionBackends(engine, config.executionApiUrls, regularCaps)
   let beaconBackendClients = await startBeaconBackends(engine, config.beaconApiUrls)
   let frontendServers = engine.startFrontends(config.frontendUrls)
 
