@@ -329,6 +329,8 @@ proc rpcMain*() =
         res.id.len > 0
         res.name == env.conf.agentString
         res.enode.startsWith("enode://")
+        res.enr.isSome
+        res.enr.get().startsWith("enr:")
         res.ip.len > 0
         res.ports.discovery > 0
         res.ports.listener > 0

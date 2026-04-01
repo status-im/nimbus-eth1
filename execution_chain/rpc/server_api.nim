@@ -11,7 +11,7 @@
 
 import
   chronicles,
-  std/[sequtils],
+  std/sequtils,
   stint,
   web3/[conversions, eth_api_types],
   eth/common/[base, transaction_utils],
