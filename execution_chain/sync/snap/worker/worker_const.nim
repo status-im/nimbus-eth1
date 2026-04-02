@@ -25,14 +25,16 @@ type
   ErrorType* = enum
     ## For `FetchError` return code object/tuple
     EGeneric = 0                   ## Not further specified error
-    ENoDataAvailable               ## Out of scope
+    ENoDataAvailable               ## Out of scope, unsuuported state
     EMissingEthContext             ## Cannot retrieve `eth` peer descriptor
     EAlreadyTriedAndFailed         ## The same action failed before
     EPeerDisconnected              ## Exception
     ECatchableError                ## Exception
     ECancelledError                ## Exception
-    ETrieError                     ## Database error
     ELockError                     ## Locked by some other peer
+    ETrieError                     ## Trie/mpt database error
+    ECacheError                    ## Database cache error
+    ECompleted                     ## Nothing to do, here
 
 const
   snapAsmFolder* = "snap"
