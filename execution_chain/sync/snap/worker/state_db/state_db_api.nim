@@ -133,7 +133,7 @@ proc evictableState(db: StateDbRef; info: static[string]): StateDataRef =
       (result, unprocData) = (state, 0.u256)        # maximise stepwise
     # End `while`
 
-  if result == db.pivot:
+  if result == db.pivot and rc.isOk:
     # Initialise a new maximiser and continue searching for the least
     # completed state.
     var otherData = low UInt256                     # keep `unprocData` safe
@@ -157,10 +157,11 @@ proc evictableState(db: StateDbRef; info: static[string]): StateDataRef =
     # is a minimally completed state found.)
     if unprocData != 0 or                           # not all accounts done with
        db.pivot.byAccount.len != 0:                 # more slots or code to do
-      let ratio = unprocData.per256 / otherData.per256
+      let ratio = (1f - otherData.per256) / (1f - unprocData.per256)
       if relativeCoverageEvictionThreshold < ratio: # check unprocessed ratio
         debug info & ": selecting pivot for eviction", root=db.pivot.rootStr,
-          hash=db.pivot.blockHash.toStr, relativeCoverage=ratio.toStr(4)
+          hash=db.pivot.blockHash.toStr, otherState=result.rootStr,
+          covRatio=ratio.toPC(4)
         result = db.pivot
 
   # result

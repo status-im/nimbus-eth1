@@ -27,7 +27,9 @@ proc dotFormat(w: float; digitsAfterDot: static[int]): string =
   elif digitsAfterDot == 3:
     &"{w:.3f}"
   elif digitsAfterDot == 4:
-    &"{w:.3f}"
+    &"{w:.4f}"
+  elif digitsAfterDot == 6:
+    &"{w:.6f}"
   else:
     {.error: "unsupported digitsAfterDot setting".}
 

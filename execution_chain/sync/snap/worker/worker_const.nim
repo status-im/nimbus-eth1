@@ -78,10 +78,10 @@ const
     ## pivot must also have reached the factor `accuPivotCovMin` in order to
     ## start trie assembly and healing.
 
-  relativeCoverageEvictionThreshold* = 0.2
+  relativeCoverageEvictionThreshold* = 0.1
     ## If the ratio
     ## ::
-    ##   unpocessed-pivot-acccounts-range / max-unpocessed-acccounts-range
+    ##   minimal-state-coverage / pivot-acccounts-coverage
     ##
     ## is not small enough, then the pivot state may be evicted from the
     ## states list to make space for a new state.
