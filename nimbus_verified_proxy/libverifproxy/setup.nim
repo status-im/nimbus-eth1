@@ -13,6 +13,7 @@ import
   beacon_chain/spec/digest,
   beacon_chain/spec/beaconstate,
   beacon_chain/spec/forks,
+  beacon_chain/spec/eth2_apis/eth2_rest_json_serialization,
   beacon_chain/conf,
   beacon_chain/beacon_clock,
   beacon_chain/networking/network_metadata,
@@ -22,6 +23,7 @@ import
   ../engine/engine,
   ../engine/rpc_frontend,
   ../lc_backend,
+  ../json_rpc_backend,
   ../nimbus_verified_proxy,
   ../nimbus_verified_proxy_conf,
   ./types
@@ -47,27 +49,17 @@ proc transportCallback[T](
   elif status == RET_CANCELLED:
     data.fut.fail((ref CancelledError)(msg: $res))
 
-proc getRandomBackendUrl(rng: ref HmacDrbgContext, urls: seq[string]): string =
-  var randomNum: uint64
-  rng[].generate(randomNum)
-
-  # NOTE: we use the mod operator to bring the random number into range
-  # this introduces a bias in the output distribution but is negligible
-  # for this use case. The bias becomes insignificant when score filters
-  # are used to select clients in the future.
-  urls[randomNum mod uint64(urls.len)]
-
 proc getExecutionApiBackend*(
-    ctx: ptr Context, urls: seq[string], transportProc: TransportProc
+    ctx: ptr Context, url: string, transportProc: ExecutionTransportProc
 ): ExecutionApiBackend =
   let
     rng = keys.newRng()
     ethChainIdProc = proc(): Future[EngineResult[UInt256]] {.
         async: (raises: [CancelledError])
     .} =
-      let
-        fut = Future[EngineResult[UInt256]].Raising([CancelledError]).init("blkByHash")
-        url = getRandomBackendUrl(rng, urls)
+      let fut =
+        Future[EngineResult[UInt256]].Raising([CancelledError]).init("blkByHash")
+
       transportProc(
         ctx,
         alloc(url),
@@ -88,7 +80,6 @@ proc getExecutionApiBackend*(
         blkHashSer = packArg(blkHash).valueOr:
           return err((BackendEncodingError, error, UNTAGGED))
         params = "[" & blkHashSer & ", " & fullFlagStr & "]"
-        url = getRandomBackendUrl(rng, urls)
 
       transportProc(
         ctx,
@@ -111,7 +102,6 @@ proc getExecutionApiBackend*(
         blkNumSer = packArg(blkNum).valueOr:
           return err((BackendEncodingError, error, UNTAGGED))
         params = "[" & blkNumSer & ", " & fullFlagStr & "]"
-        url = getRandomBackendUrl(rng, urls)
 
       transportProc(
         ctx,
@@ -137,7 +127,6 @@ proc getExecutionApiBackend*(
           return err((BackendEncodingError, error, UNTAGGED))
 
         params = "[" & addressSer & ", " & slotsSer & ", " & blockIdSer & "]"
-        url = getRandomBackendUrl(rng, urls)
 
       transportProc(
         ctx,
@@ -161,7 +150,6 @@ proc getExecutionApiBackend*(
         blockIdSer = packArg(blockId).valueOr:
           return err((BackendEncodingError, error, UNTAGGED))
         params = "[" & txArgsSer & ", " & blockIdSer & "]"
-        url = getRandomBackendUrl(rng, urls)
 
       transportProc(
         ctx,
@@ -183,7 +171,6 @@ proc getExecutionApiBackend*(
         blockIdSer = packArg(blockId).valueOr:
           return err((BackendEncodingError, error, UNTAGGED))
         params = "[" & addressSer & ", " & blockIdSer & "]"
-        url = getRandomBackendUrl(rng, urls)
 
       transportProc(
         ctx,
@@ -205,7 +192,6 @@ proc getExecutionApiBackend*(
         txHashSer = packArg(txHash).valueOr:
           return err((BackendEncodingError, error, UNTAGGED))
         params = "[" & txHashSer & "]"
-        url = getRandomBackendUrl(rng, urls)
 
       transportProc(
         ctx,
@@ -227,7 +213,6 @@ proc getExecutionApiBackend*(
         txHashSer = packArg(txHash).valueOr:
           return err((BackendEncodingError, error, UNTAGGED))
         params = "[" & txHashSer & "]"
-        url = getRandomBackendUrl(rng, urls)
 
       transportProc(
         ctx,
@@ -251,7 +236,6 @@ proc getExecutionApiBackend*(
         blockIdSer = packArg(blockId).valueOr:
           return err((BackendEncodingError, error, UNTAGGED))
         params = "[" & blockIdSer & "]"
-        url = getRandomBackendUrl(rng, urls)
 
       transportProc(
         ctx,
@@ -272,7 +256,6 @@ proc getExecutionApiBackend*(
         filterOptionsSer = packArg(filterOptions).valueOr:
           return err((BackendEncodingError, error, UNTAGGED))
         params = "[" & filterOptionsSer & "]"
-        url = getRandomBackendUrl(rng, urls)
 
       transportProc(
         ctx,
@@ -299,7 +282,6 @@ proc getExecutionApiBackend*(
           return err((BackendEncodingError, error, UNTAGGED))
         params =
           "[" & blockCountSer & ", " & newestBlockSer & ", " & rewardPercentilesSer & "]"
-        url = getRandomBackendUrl(rng, urls)
 
       transportProc(
         ctx,
@@ -319,7 +301,6 @@ proc getExecutionApiBackend*(
         txBytesSer = packArg(txBytes).valueOr:
           return err((BackendEncodingError, error, UNTAGGED))
         params = "[" & txBytesSer & "]"
-        url = getRandomBackendUrl(rng, urls)
 
       transportProc(
         ctx,
@@ -427,8 +408,120 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
     privateTxUrls: privateTxUrls,
   )
 
+proc beaconTransportCallback[T](
+    ctx: ptr Context, status: cint, res: cstring, userData: pointer
+) {.cdecl, gcsafe, raises: [].} =
+  let data = cast[ref CallBackData[T]](userData)
+  if status == RET_SUCCESS:
+    try:
+      data.fut.complete(
+        EngineResult[T].ok(RestJson.decode($res, T, allowUnknownFields = true))
+      )
+    except SerializationError as e:
+      data.fut.complete(EngineResult[T].err((BackendDecodingError, e.msg, UNTAGGED)))
+  elif status == RET_ERROR:
+    data.fut.complete(EngineResult[T].err((BackendFetchError, $res, UNTAGGED)))
+  elif status == RET_CANCELLED:
+    data.fut.fail((ref CancelledError)(msg: $res))
+
+proc getBeaconApiBackend*(
+    ctx: ptr Context, url: string, transportProc: BeaconTransportProc
+): BeaconApiBackend =
+  let
+    bootstrapProc = proc(
+        blockRoot: Eth2Digest
+    ): Future[EngineResult[ForkedLightClientBootstrap]] {.
+        async: (raises: [CancelledError])
+    .} =
+      let
+        fut = Future[EngineResult[ForkedLightClientBootstrap]]
+          .Raising([CancelledError])
+          .init("lcBootstrap")
+        params = alloc("{\"block_root\": \"" & $blockRoot & "\"}")
+
+      transportProc(
+        ctx,
+        alloc(url),
+        "getLightClientBootstrap",
+        params,
+        beaconTransportCallback[ForkedLightClientBootstrap],
+        createCbData(fut),
+      )
+      await fut
+
+    updatesProc = proc(
+        startPeriod: SyncCommitteePeriod, count: uint64
+    ): Future[EngineResult[seq[ForkedLightClientUpdate]]] {.
+        async: (raises: [CancelledError])
+    .} =
+      let
+        fut = Future[EngineResult[seq[ForkedLightClientUpdate]]]
+          .Raising([CancelledError])
+          .init("lcUpdates")
+        params = alloc(
+          "{\"start_period\": " & $startPeriod.uint64 & ", \"count\": " & $count & "}"
+        )
+
+      transportProc(
+        ctx,
+        alloc(url),
+        "getLightClientUpdatesByRange",
+        params,
+        beaconTransportCallback[seq[ForkedLightClientUpdate]],
+        createCbData(fut),
+      )
+      await fut
+
+    optimisticProc = proc(): Future[EngineResult[ForkedLightClientOptimisticUpdate]] {.
+        async: (raises: [CancelledError])
+    .} =
+      let
+        fut = Future[EngineResult[ForkedLightClientOptimisticUpdate]]
+          .Raising([CancelledError])
+          .init("lcOptimistic")
+        params = alloc("{}")
+
+      transportProc(
+        ctx,
+        alloc(url),
+        "getLightClientOptimisticUpdate",
+        params,
+        beaconTransportCallback[ForkedLightClientOptimisticUpdate],
+        createCbData(fut),
+      )
+      await fut
+
+    finalityProc = proc(): Future[EngineResult[ForkedLightClientFinalityUpdate]] {.
+        async: (raises: [CancelledError])
+    .} =
+      let
+        fut = Future[EngineResult[ForkedLightClientFinalityUpdate]]
+          .Raising([CancelledError])
+          .init("lcFinality")
+        params = alloc("{}")
+
+      transportProc(
+        ctx,
+        alloc(url),
+        "getLightClientFinalityUpdate",
+        params,
+        beaconTransportCallback[ForkedLightClientFinalityUpdate],
+        createCbData(fut),
+      )
+      await fut
+
+  BeaconApiBackend(
+    getLightClientBootstrap: bootstrapProc,
+    getLightClientUpdatesByRange: updatesProc,
+    getLightClientOptimisticUpdate: optimisticProc,
+    getLightClientFinalityUpdate: finalityProc,
+  )
+
 proc run*(
-    ctx: ptr Context, configJson: string, transportProc: TransportProc
+    ctx: ptr Context,
+    configJson: string,
+    executionTransportProc: ExecutionTransportProc,
+    beaconTransportProc: BeaconTransportProc,
 ) {.async: (raises: [ProxyError, CancelledError]).} =
   let config = VerifiedProxyConf.load(configJson)
 
@@ -447,37 +540,77 @@ proc run*(
       trustedBlockRoot: config.trustedBlockRoot,
       syncHeaderStore: config.syncHeaderStore,
     )
+
     engine = RpcVerificationEngine.init(engineConf).valueOr:
       raise newException(ProxyError, error.errMsg)
 
-  # Set up beacon API backends
-  # TODO: use the same abstraction as execution api
+    usePrivateTx = config.privateTxUrls.len > 0
+
+    regularCaps =
+      if usePrivateTx:
+        fullExecutionCapabilities - {SendRawTransaction}
+      else:
+        fullExecutionCapabilities
+
   for url in config.beaconApiUrls:
-    let client = BeaconApiRestClient.init(engine.cfg, engine.forkDigests, url)
-    let startRes = client.start()
-    if startRes.isErr():
-      warn "Error connecting to beacon backend",
-        url = url, error = startRes.error.errMsg
-      continue
-    engine.registerBackend(client.getBeaconApiBackend(), fullBeaconCapabilities)
-
-  let usePrivateTx = config.privateTxUrls.len > 0
-
-  let regularCaps =
-    if usePrivateTx:
-      fullExecutionCapabilities - {SendRawTransaction}
+    # Set up beacon backends — prefer the caller-supplied transport
+    if beaconTransportProc != nil:
+      engine.registerBackend(
+        getBeaconApiBackend(ctx, url, beaconTransportProc), fullBeaconCapabilities
+      )
     else:
-      fullExecutionCapabilities
+      let client = BeaconApiRestClient.init(engine.cfg, engine.forkDigests, url)
 
-  engine.registerBackend(
-    getExecutionApiBackend(ctx, config.executionApiUrls, transportProc), regularCaps
-  )
+      let startRes = client.start()
+
+      if startRes.isErr():
+        warn "Error connecting to beacon backend",
+          url = url, error = startRes.error.errMsg
+        continue
+
+      engine.registerBackend(client.getBeaconApiBackend(), fullBeaconCapabilities)
+
+  for url in config.executionApiUrls:
+    # Set up execution backends — prefer the caller-supplied transport
+    if executionTransportProc != nil:
+      engine.registerBackend(
+        getExecutionApiBackend(ctx, url, executionTransportProc), regularCaps
+      )
+    else:
+      let client = JsonRpcClient.init(url).valueOr:
+        error "Error initializing backend client", error = error.errMsg
+        continue
+
+      let startRes = await client.start()
+
+      if startRes.isErr():
+        error "Error connecting to backend", url = url, error = startRes.error.errMsg
+        continue
+
+      engine.registerBackend(client.getExecutionApiBackend(), regularCaps)
 
   if usePrivateTx:
-    engine.registerBackend(
-      getExecutionApiBackend(ctx, config.privateTxUrls, transportProc),
-      BackendCapabilities({SendRawTransaction}),
-    )
+    for url in config.privateTxUrls:
+      # Set up execution backends — prefer the caller-supplied transport
+      if executionTransportProc != nil:
+        engine.registerBackend(
+          getExecutionApiBackend(ctx, url, executionTransportProc),
+          BackendCapabilities({SendRawTransaction}),
+        )
+      else:
+        let client = JsonRpcClient.init(url).valueOr:
+          error "Error initializing backend client", error = error.errMsg
+          continue
+
+        let startRes = await client.start()
+
+        if startRes.isErr():
+          error "Error connecting to backend", url = url, error = startRes.error.errMsg
+          continue
+
+        engine.registerBackend(
+          client.getExecutionApiBackend(), BackendCapabilities({SendRawTransaction})
+        )
 
   engine.registerDefaultFrontend()
 

@@ -52,22 +52,41 @@ typedef struct Context Context;
 typedef void (*CallBackProc)(Context *ctx, int status, char *result, void *userData);
 
 /**
- * Transport functions used to dispatch JSON RPC requests. (Must be implemented in the
- * application using the verified proxy library)
+ * Transport function used to dispatch JSON RPC requests to execution endpoints.
+ * (Must be implemented in the application using the verified proxy library)
  *
  * @param ctx       Execution context passed to the original request.
- * @param url       URL of the endpoint to forward this request to
+ * @param url       URL of the provider to forward this request to
  * @param name      name of the RPC method
- * @param params    JSON serialized params required for the RPC method.(allocated by Nim - 
+ * @param params    JSON serialized params required for the RPC method.(allocated by Nim -
  *                  must be freed using freeNimAllocatedString)
- *                  heap by nim and must be freed by C using freeNimString
  * @param cb        Callback to be called with userData passed (see below)
  * @param userData  pointer to user data. Used to link multiple response callbacks
  *                  back to their queries. Implementation of transport functions
  *                  must appropriately relay back the userData via the transport
  *                  callback function (see above)
  */
-typedef void (*TransportProc)(Context *ctx, char *url, char *name, char *params, CallBackProc cb, void *userData);
+typedef void (*ExecutionTransportProc)(Context *ctx, char *url, char *name, char *params, CallBackProc cb, void *userData);
+
+/**
+ * Transport function used to dispatch beacon light client requests.
+ * (Must be implemented in the application using the verified proxy library)
+ *
+ * @param ctx       Execution context passed to the original request.
+ * @param url       URL of the provider to forward this request to
+ * @param endpoint  Name of the beacon LC endpoint:
+ *                    "getLightClientBootstrap"       — params: {"block_root": "0x..."}
+ *                    "getLightClientUpdatesByRange"  — params: {"start_period": N, "count": N}
+ *                    "getLightClientOptimisticUpdate" — params: {}
+ *                    "getLightClientFinalityUpdate"  — params: {}
+ * @param params    JSON serialized params (allocated by Nim -
+ *                  must be freed using freeNimAllocatedString)
+ * @param cb        Callback to invoke with the JSON response body
+ *                  ({"version":"deneb","data":{...}} for single objects;
+ *                   [{"version":"deneb","data":{...}},...] for updates)
+ * @param userData  pointer to user data
+ */
+typedef void (*BeaconTransportProc)(Context *ctx, char *url, char *endpoint, char *params, CallBackProc cb, void *userData);
 
 /**
  * Start the verification proxy with a given configuration.
@@ -79,7 +98,7 @@ typedef void (*TransportProc)(Context *ctx, char *url, char *name, char *params,
  * @return           Pointer to a new Context object representing the running proxy.
  *                   Must be freed using freeContext() when no longer needed.
  */
-ETH_RESULT_USE_CHECK Context *startVerifProxy(char* configJson, TransportProc transport, CallBackProc onStart, void *userData);
+ETH_RESULT_USE_CHECK Context *startVerifProxy(char* configJson, ExecutionTransportProc executionTransport, BeaconTransportProc beaconTransport, CallBackProc onStart, void *userData);
 
 /**
  * Free strings allocated by Nim. This currently include the JSON encoded result 
