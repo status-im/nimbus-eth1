@@ -46,6 +46,11 @@ func init*(q: var ConcurrentQueue) =
   q.condFull.initCond()
   q.condEmpty.initCond()
 
+func dispose*(q: var ConcurrentQueue) =
+  q.lock.deinitLock()
+  q.condFull.deinitCond()
+  q.condEmpty.deinitCond()
+
 func pushBegin(q: var ConcurrentQueue): int =
   let
     r = q.indexes.load().int
@@ -145,9 +150,4 @@ template pop*[E, T](q: var ConcurrentQueue[E, T]): T =
   var value: T
   q.pop(value)
   value
-
-func dispose*(q: var ConcurrentQueue) =
-  q.lock.deinitLock()
-  q.condFull.deinitCond()
-  q.condEmpty.deinitCond()
 

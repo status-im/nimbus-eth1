@@ -13,65 +13,74 @@
 
 {.push raises: [], gcsafe.}
 
-import std/locks
+import std/[atomics, locks], ./semaphore
 
-type ReadWriteLock* = object
-  lock: Lock
-  readerCond: Cond
-  writerCond: Cond
-  readerCount*: int
-  hasWriter*: bool
+const MAX_READERS: int32 = 1 shl 30
 
-func init*(rwLock: var ReadWriteLock) =
-  initLock(rwLock.lock)
-  initCond(rwLock.readerCond)
-  initCond(rwLock.writerCond)
+type
+  ReadWriteLock* = object
+    lock: Lock                         
+    writerWait: Semaphore     
+    readerWait: Semaphore   
+    numPending: Atomic[int32]     
+    readersDeparting: Atomic[int32]
+
+proc init*(l: var ReadWriteLock) =
+  initLock(l.lock)
+  l.writerWait.init()
+  l.readerWait.init()
+  l.numPending.store(0)
+  l.readersDeparting.store(0)
 
 func init*(T: type ReadWriteLock): T =
-  var rwLock = ReadWriteLock()
-  rwLock.init()
-  rwLock
+  var l = ReadWriteLock()
+  l.init()
+  l
 
-func lockRead*(rwLock: var ReadWriteLock) =
-  withLock(rwLock.lock):
-    while rwLock.hasWriter:
-      rwLock.readerCond.wait(rwLock.lock)
-    inc rwLock.readerCount
+proc dispose*(l: var ReadWriteLock) =
+  deinitLock(l.lock)
+  l.writerWait.dispose()
+  l.readerWait.dispose()
 
-func unlockRead*(rwLock: var ReadWriteLock) =
-  withLock(rwLock.lock):
-    dec rwLock.readerCount
-    if rwLock.readerCount == 0:
-      rwLock.writerCond.signal()
+template atomicAdd(a: var Atomic[int32], delta: int32): int32 =
+  a.fetchAdd(delta) + delta
 
-func lockWrite*(rwLock: var ReadWriteLock) =
-  withLock(rwLock.lock):
-    while rwLock.hasWriter:
-      rwLock.readerCond.wait(rwLock.lock)
-    rwLock.hasWriter = true
-    while rwLock.readerCount > 0:
-      rwLock.writerCond.wait(rwLock.lock)
+proc lockRead*(l: var ReadWriteLock) =
+  if atomicAdd(l.numPending, 1) < 0:
+    l.readerWait.wait()
 
-func unlockWrite*(rwLock: var ReadWriteLock) =
-  withLock(rwLock.lock):
-    rwLock.hasWriter = false
-    rwLock.readerCond.broadcast()
+proc unlockRead*(l: var ReadWriteLock) =
+  let r = atomicAdd(l.numPending, -1)
+  if r < 0:
+    assert r + 1 != 0 and r + 1 != -MAX_READERS
+    if atomicAdd(l.readersDeparting, -1) == 0:
+      l.writerWait.signal()
 
-template withReadLock*(rwLock: var ReadWriteLock, body: untyped) =
-  rwLock.lockRead()
+proc lockWrite*(l: var ReadWriteLock) =
+  acquire(l.lock)
+  let r = atomicAdd(l.numPending, -MAX_READERS) + MAX_READERS
+  if r != 0 and atomicAdd(l.readersDeparting, r) != 0:
+    l.writerWait.wait()
+
+proc unlockWrite*(l: var ReadWriteLock) =
+  let r = atomicAdd(l.numPending, MAX_READERS)
+  assert r < MAX_READERS
+  for i in 0 ..< int(r):
+    l.readerWait.signal()
+  release(l.lock)
+
+template withReadLock*(l: var ReadWriteLock, body: untyped) =
+  l.lockRead()
   try:
     body
   finally:
-    rwLock.unlockRead()
+    l.unlockRead()
 
-template withWriteLock*(rwLock: var ReadWriteLock, body: untyped) =
-  rwLock.lockWrite()
+template withWriteLock*(l: var ReadWriteLock, body: untyped) =
+  l.lockWrite()
   try:
     body
   finally:
-    rwLock.unlockWrite()
+    l.unlockWrite()
 
-func dispose*(rwLock: var ReadWriteLock) =
-  deinitLock(rwLock.lock)
-  deinitCond(rwLock.readerCond)
-  deinitCond(rwLock.writerCond)
+

@@ -10,8 +10,10 @@
 
 {.used.}
 
-import unittest2, ../../execution_chain/concurrency/readwritelock
-
+import 
+  std/[atomics, os],
+  unittest2,
+  ../../execution_chain/concurrency/readwritelock
 
 suite "ReadWriteLock Tests":
 
@@ -25,139 +27,210 @@ suite "ReadWriteLock Tests":
       rwLock.init()
       rwLock.dispose()
 
-  test "lock/unlock write":
-    var rwLock = ReadWriteLock.init()
-    check:
-      rwLock.hasWriter == false
-      rwLock.readerCount == 0
+  test "Single-thread read lock / unlock":
+    var rwl = ReadWriteLock.init()
+    rwl.lockRead()
+    rwl.unlockRead()
+    rwl.dispose()
 
-    rwLock.lockWrite()
-    check:
-      rwLock.hasWriter == true
-      rwLock.readerCount == 0
+  test "Single-thread write lock / unlock":
+    var rwl = ReadWriteLock.init()
+    rwl.lockWrite()
+    rwl.unlockWrite()
+    rwl.dispose()
 
-    #rwLock.lockWrite() # is blocked
+  test "Multiple concurrent readers do not block each other":
+    const NUM_READERS = 8
 
-    rwLock.unlockWrite()
-    check:
-      rwLock.hasWriter == false
-      rwLock.readerCount == 0
+    type ConcurrentReadersCtx = object
+      rwl: ReadWriteLock
+      sharedVal: int
+      results: array[NUM_READERS, int]
 
-  test "lock/unlock read":
-    var rwLock = ReadWriteLock.init()
-    check:
-      rwLock.hasWriter == false
-      rwLock.readerCount == 0
+    var ctx = ConcurrentReadersCtx(sharedVal: 42)
+    ctx.rwl.init()
 
-    rwLock.lockRead()
-    check:
-      rwLock.hasWriter == false
-      rwLock.readerCount == 1
+    proc readerThread(args: (ptr ConcurrentReadersCtx, int)) {.thread.} =
+      let (ctxPtr, idx) = args
+      ctxPtr.rwl.lockRead()
+      sleep(10)
+      ctxPtr.results[idx] = ctxPtr.sharedVal
+      ctxPtr.rwl.unlockRead()
 
-    rwLock.lockRead()
-    check:
-      rwLock.hasWriter == false
-      rwLock.readerCount == 2
+    var threads: array[NUM_READERS, Thread[(ptr ConcurrentReadersCtx, int)]]
+    for i in 0 ..< NUM_READERS:
+      createThread(threads[i], readerThread, (addr ctx, i))
+    for i in 0 ..< NUM_READERS:
+      joinThread(threads[i])
 
-    rwLock.lockRead()
-    check:
-      rwLock.hasWriter == false
-      rwLock.readerCount == 3
-    
-    #rwLock.lockWrite() # is blocked
+    for i in 0 ..< NUM_READERS:
+      check ctx.results[i] == 42
 
-    rwLock.unlockRead()
-    rwLock.unlockRead()
-    rwLock.unlockRead()
-    check:
-      rwLock.hasWriter == false
-      rwLock.readerCount == 0
+    ctx.rwl.dispose()
 
-  test "lock/unlock read then write":
-    var rwLock = ReadWriteLock.init()
+  test "Writer excludes readers – protected counter":
+    const
+      NUM_WRITERS = 4
+      INCREMENTS_PER_WRITER = 10_000
 
-    rwLock.lockRead()
-    rwLock.unlockRead()
-    check:
-      rwLock.hasWriter == false
-      rwLock.readerCount == 0
+    type WriterCtx = object
+      rwl: ReadWriteLock
+      counter: int
 
-    rwLock.lockWrite()
-    check:
-      rwLock.hasWriter == true
-      rwLock.readerCount == 0
+    var ctx = WriterCtx(counter: 0)
+    ctx.rwl.init()
 
-    rwLock.unlockWrite()
-    check:
-      rwLock.hasWriter == false
-      rwLock.readerCount == 0
+    proc writerThread(ctxPtr: ptr WriterCtx) {.thread.} =
+      for _ in 0 ..< INCREMENTS_PER_WRITER:
+        ctxPtr.rwl.lockWrite()
+        inc ctxPtr.counter
+        ctxPtr.rwl.unlockWrite()
 
-  test "lock/unlock write then read":
-    var rwLock = ReadWriteLock.init()
+    var threads: array[NUM_WRITERS, Thread[ptr WriterCtx]]
+    for i in 0 ..< NUM_WRITERS:
+      createThread(threads[i], writerThread, addr ctx)
+    for i in 0 ..< NUM_WRITERS:
+      joinThread(threads[i])
 
-    rwLock.lockWrite()
-    rwLock.unlockWrite()
-    check:
-      rwLock.hasWriter == false
-      rwLock.readerCount == 0
+    check ctx.counter == NUM_WRITERS * INCREMENTS_PER_WRITER
 
-    rwLock.lockRead()
-    check:
-      rwLock.hasWriter == false
-      rwLock.readerCount == 1
+    ctx.rwl.dispose()
 
-    rwLock.unlockRead()
-    check:
-      rwLock.hasWriter == false
-      rwLock.readerCount == 0
+  test "Mixed readers and writers – no torn reads":
+    const
+      NUM_READERS = 4
+      NUM_WRITERS = 2
+      ITERATIONS = 20_000
 
-  test "withReadLock":
-    var rwLock = ReadWriteLock.init()
+    type MixedCtx = object
+      rwl: ReadWriteLock
+      dataA: int
+      dataB: int
+      tornRead: Atomic[bool]
+      done: Atomic[bool]
 
-    var x: int
-    withReadLock(rwLock):
-      inc x
-      check:
-        rwLock.hasWriter == false
-        rwLock.readerCount == 1
-      
-      rwLock.lockRead()
-      check:
-        rwLock.hasWriter == false
-        rwLock.readerCount == 2
-      rwLock.unlockRead()
-  
-    check:
-      rwLock.hasWriter == false
-      rwLock.readerCount == 0
+    var ctx = MixedCtx(dataA: 0, dataB: 0)
+    ctx.rwl.init()
+    ctx.tornRead.store(false)
+    ctx.done.store(false)
 
-  test "withWriteLock":
-    var rwLock = ReadWriteLock.init()
+    proc readerProc(ctxPtr: ptr MixedCtx) {.thread.} =
+      while not ctxPtr.done.load():
+        ctxPtr.rwl.lockRead()
+        if ctxPtr.dataA != ctxPtr.dataB:
+          ctxPtr.tornRead.store(true)
+        ctxPtr.rwl.unlockRead()
 
-    var x: int
-    withWriteLock(rwLock):
-      inc x
-      check:
-        rwLock.hasWriter == true
-        rwLock.readerCount == 0
-  
-    check:
-      rwLock.hasWriter == false
-      rwLock.readerCount == 0
+    proc writerProc(args: (ptr MixedCtx, int)) {.thread.} =
+      let (ctxPtr, id) = args
+      for i in 0 ..< ITERATIONS:
+        ctxPtr.rwl.lockWrite()
+        let v = id * ITERATIONS + i
+        ctxPtr.dataA = v
+        ctxPtr.dataB = v
+        ctxPtr.rwl.unlockWrite()
 
-  test "Misc operations":
-    var rwLock = ReadWriteLock.init()
+    var rThreads: array[NUM_READERS, Thread[ptr MixedCtx]]
+    var wThreads: array[NUM_WRITERS, Thread[(ptr MixedCtx, int)]]
 
-    rwLock.lockRead()
-    rwLock.unlockRead()
-    rwLock.lockWrite()
-    rwLock.unlockWrite()
+    for i in 0 ..< NUM_READERS:
+      createThread(rThreads[i], readerProc, addr ctx)
+    for i in 0 ..< NUM_WRITERS:
+      createThread(wThreads[i], writerProc, (addr ctx, i))
 
-    rwLock.lockRead()
-    rwLock.lockRead()
-    rwLock.lockRead()
-    rwLock.unlockRead()
-    rwLock.unlockRead()
-    rwLock.unlockRead()
-    rwLock.lockWrite()
-    rwLock.unlockWrite()
+    for i in 0 ..< NUM_WRITERS:
+      joinThread(wThreads[i])
+
+    ctx.done.store(true)
+
+    for i in 0 ..< NUM_READERS:
+      joinThread(rThreads[i])
+
+    check not ctx.tornRead.load()
+
+    ctx.rwl.dispose()
+
+  test "Writers are mutually exclusive":
+    const
+      NUM_WRITERS = 4
+      ITERATIONS = 5_000
+
+    type MutexCtx = object
+      rwl: ReadWriteLock
+      concurrent: Atomic[int32]
+      violation: Atomic[bool]
+
+    var ctx: MutexCtx
+    ctx.rwl.init()
+    ctx.concurrent.store(0)
+    ctx.violation.store(false)
+
+    proc writerProc(ctxPtr: ptr MutexCtx) {.thread.} =
+      for _ in 0 ..< ITERATIONS:
+        ctxPtr.rwl.lockWrite()
+        let prev = ctxPtr.concurrent.fetchAdd(1)
+        if prev != 0:
+          ctxPtr.violation.store(true)
+        discard ctxPtr.concurrent.fetchAdd(-1)
+        ctxPtr.rwl.unlockWrite()
+
+    var threads: array[NUM_WRITERS, Thread[ptr MutexCtx]]
+    for i in 0 ..< NUM_WRITERS:
+      createThread(threads[i], writerProc, addr ctx)
+    for i in 0 ..< NUM_WRITERS:
+      joinThread(threads[i])
+
+    check not ctx.violation.load()
+
+    ctx.rwl.dispose()
+
+  test "withReadLock template":
+    var
+      rwl = ReadWriteLock.init()
+      value = 100
+      observed = 0
+
+    rwl.withReadLock:
+      observed = value
+
+    check observed == 100
+    rwl.dispose()
+
+  test "withWriteLock template":
+    var
+      rwl = ReadWriteLock.init()
+      value = 0
+
+    rwl.withWriteLock:
+      value = 999
+
+    check value == 999
+    rwl.dispose()
+
+  test "Sequential reads on same thread":
+    var rwl = ReadWriteLock.init()
+
+    rwl.lockRead()
+    rwl.unlockRead()
+    rwl.lockRead()
+    rwl.unlockRead()
+    rwl.lockRead()
+    rwl.unlockRead()
+
+    rwl.dispose()
+
+  test "Read-then-write sequencing on single thread":
+    var
+      rwl = ReadWriteLock.init()
+      value = 0
+
+    rwl.withReadLock:
+      check value == 0
+
+    rwl.withWriteLock:
+      value = 42
+
+    rwl.withReadLock:
+      check value == 42
+
+    rwl.dispose()
