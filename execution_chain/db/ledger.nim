@@ -394,12 +394,6 @@ proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool, collect
   discard result.beginSavePoint
 
 proc getCodeHash*(ledger: LedgerRef, address: Address): Hash32 =
-  if ledger.collectWitness:
-    let lookupKey = (address, Opt.none(UInt256))
-    # We overwrite any existing record here so that codeTouched is always set to
-    # true even if an account was previously accessed without touching the code
-    ledger.witnessKeys[lookupKey] = true
-
   let acc = ledger.getAccount(address, false)
   if acc.isNil: EMPTY_ACCOUNT.codeHash
   else: acc.statement.codeHash
