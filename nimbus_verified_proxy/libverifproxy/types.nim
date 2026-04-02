@@ -36,10 +36,19 @@ type
     cdecl, gcsafe, raises: []
   .}
 
-  TransportProc* = proc(
+  ExecutionTransportProc* = proc(
     ctx: ptr Context,
     url: cstring,
     name: cstring,
+    params: cstring,
+    cb: CallBackProc,
+    userData: pointer,
+  ) {.cdecl, gcsafe, raises: [].}
+
+  BeaconTransportProc* = proc(
+    ctx: ptr Context,
+    url: cstring,
+    endpoint: cstring,
     params: cstring,
     cb: CallBackProc,
     userData: pointer,

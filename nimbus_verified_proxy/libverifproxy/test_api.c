@@ -49,11 +49,12 @@ static void proxy_start_cb(Context *ctx, int status, char *res, void *userData) 
 static const char *TEST_CONFIG =
     "{"
     "\"eth2Network\": \"mainnet\","
-    "\"trustedBlockRoot\": \"0x2558d82e8b29c4151a0683e4f9d480d229d84b27b51a976f56722e014227e723\","
+    "\"trustedBlockRoot\": \"0x9bcb90ec3a294591b77dd2a58e973578715cdc0e6eeeb286bc06dd120057f18b\","
     "\"executionApiUrls\": \"http://127.0.0.1:19999\","
     "\"beaconApiUrls\":    \"http://127.0.0.1:19998\","
     "\"logLevel\":         \"FATAL\","
-    "\"logStdout\":        \"None\""
+    "\"logStdout\":        \"None\","
+    "\"syncHeaderStore\": true"
     "}";
 
 // these errors are returned before the actual frontend method is called
@@ -224,7 +225,7 @@ static char *read_file(const char *path) {
     return buf;
 }
 
-static void dispatch_transport(
+static void execution_dispatch_transport(
     Context *ctx, char *url, char *name, char *params,
     CallBackProc cb, void *userData)
 {
@@ -247,7 +248,36 @@ static void dispatch_transport(
         }
     }
 
-    cb(ctx, RET_ERROR, "dispatch_transport: no response for method", userData);
+    cb(ctx, RET_ERROR, "execution_dispatch_transport: no response for method", userData);
+}
+
+static void beacon_dispatch_transport(
+    Context *ctx, char *url, char *endpoint, char *params,
+    CallBackProc cb, void *userData)
+{
+    (void)url;
+    freeNimAllocatedString(params);
+
+    const char *file = NULL;
+    if (strcmp(endpoint, "getLightClientBootstrap") == 0)
+        file = "nimbus_verified_proxy/tests/data/lc_bootstrap.json";
+    else if (strcmp(endpoint, "getLightClientUpdatesByRange") == 0)
+        file = "nimbus_verified_proxy/tests/data/lc_updates.json";
+    else if (strcmp(endpoint, "getLightClientOptimisticUpdate") == 0)
+        file = "nimbus_verified_proxy/tests/data/lc_optimistic.json";
+    else if (strcmp(endpoint, "getLightClientFinalityUpdate") == 0)
+        file = "nimbus_verified_proxy/tests/data/lc_finality.json";
+
+    if (file) {
+        char *data = read_file(file);
+        if (data) {
+            cb(ctx, RET_SUCCESS, data, userData);
+            free(data);
+            return;
+        }
+    }
+
+    cb(ctx, RET_ERROR, "beacon_dispatch_transport: no response for endpoint", userData);
 }
 
 static void drain(Context *ctx, int max_iters) {
@@ -273,17 +303,12 @@ static void check_event_loop(Context *ctx) {
         "0xed14f2",
         collect_error_cb, &balance_s);
 
-    drain(ctx, 200);
+    drain(ctx, 2000);
 
     TEST("eth_getBlockByNumber: callback fired",  block_s.called);
     TEST("eth_getBalance: callback fired",         balance_s.called);
-
-    // TODO: RET_SUCCESS requires block headers to be in the beacon-chain-verified
-    // header store. There is currently no C API to inject headers, so verification
-    // always fails.
-
     // TEST("eth_getBlockByNumber: RET_SUCCESS", block_s.status == RET_SUCCESS);
-    // TEST("eth_getBalance: RET_SUCCESS",         balance_s.status == RET_SUCCESS);
+    // TEST("eth_getBalance: RET_SUCCESS",       balance_s.status == RET_SUCCESS);
 }
 
 int main(void) {
@@ -293,7 +318,8 @@ int main(void) {
 
     Context *ctx = startVerifProxy(
         (char *)TEST_CONFIG,
-        dispatch_transport,
+        execution_dispatch_transport,
+        beacon_dispatch_transport,
         proxy_start_cb,
         NULL
     );
