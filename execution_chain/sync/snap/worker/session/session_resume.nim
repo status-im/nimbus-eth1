@@ -12,7 +12,7 @@
 
 import
   std/sets,
-  pkg/[chronicles, stew/interval_set],
+  pkg/[chronicles, chronos, stew/interval_set],
   ../../../wire_protocol,
   ../[mpt, state_db, worker_desc]
 
@@ -88,52 +88,66 @@ proc codesRecover(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc sessionResume*(ctx: SnapCtxRef; info: static[string]): bool =
-  let
-    sdb = ctx.pool.stateDB
-    adb = ctx.pool.mptAsm
+template sessionResume*(ctx: SnapCtxRef; info: static[string]): bool =
+  ## Async/template
+  ##
+  var bodyRc = false
+  block body:
+    let
+      sdb = ctx.pool.stateDB
+      adb = ctx.pool.mptAsm
 
-  block recoverStates:
-    var
-      resumedOk = false
-      ignRoot = StateRoot(zeroHash32)               # some error mitigation
+    block recoverStates:
+      var
+        resumedOk = false
+        ignRoot = StateRoot(zeroHash32)             # some error mitigation
 
-    for w in adb.walkAccounts():                    # walk accounts
-      if 0 < w.error.len:
-        error info & ": Corrupt data, resetting session", error=w.error
-        break recoverStates
+      for w in adb.walkAccounts():                  # walk accounts
+        if 0 < w.error.len:
+          error info & ": Corrupt data, resetting session", error=w.error
+          break recoverStates
 
-      # Some failed state root records
-      if ignRoot == w.root:
-        continue
+        # Some failed state root records
+        if ignRoot == w.root:
+          continue
 
-      # Get state record (with all accounts unprocessed when created)
-      var state = ctx.getOrMakeState(w.root, info).valueOr:
-        # Cannot resolve, ignore this state root
-        ignRoot = w.root
-        continue
+        # Get state record (with all accounts unprocessed when created)
+        var state = ctx.getOrMakeState(w.root, info).valueOr:
+          # Cannot resolve, ignore this state root
+          ignRoot = w.root
+          continue
 
-      if not resumedOk:
-        chronicles.info info & ": resuming download session"
-      resumedOk = true
+        if not resumedOk:
+          chronicles.info info & ": resuming download session"
+        resumedOk = true
 
-      # Register seen accounts in state record
-      sdb.setAccountRange(state, w.start, w.limit)
+        # Register seen accounts in state record
+        sdb.setAccountRange(state, w.start, w.limit)
 
-      # Register unprocessed storages per account
-      for acc in w.accounts:
-        ctx.storageRecover(state, acc, info)
+        # Register unprocessed storages per account
+        for acc in w.accounts:
+          ctx.storageRecover(state, acc, info)
 
-      # Register unprocessed codes for the current account list
-      ctx.codesRecover(state, w.accounts, info)
+        # Register unprocessed codes for the current account list
+        ctx.codesRecover(state, w.accounts, info)
 
-    return resumedOk
+        try:
+          await sleepAsync mktrieThreadSwitchTimeSlot
+        except CancelledError as e:
+          chronicles.error info & ": resuming session cancelled",
+            error=($e.name & "(" & e.msg & ")")
+          break recoverStates
 
-  # Any reset must take place outside the assembly DB iterator.
-  sdb.clear()                                       # flush/reset state DB
-  if not adb.clear(info):                           # ditto for assembly DB
-    raiseAssert info & ": Cannot clear session DB"
-  # false
+      bodyRc = resumedOk
+      break body
+
+    # Any reset must take place outside the assembly DB iterator.
+    chronicles.info info & ": previous session abandoned"
+    sdb.clear()                                     # flush/reset state DB
+    if not adb.clear(info):                         # ditto for assembly DB
+      raiseAssert info & ": Cannot clear session DB"
+
+  bodyRc
 
 # ------------------------------------------------------------------------------
 # End
