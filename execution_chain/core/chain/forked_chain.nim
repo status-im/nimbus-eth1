@@ -360,23 +360,23 @@ with --debug-eager-state-root."""
     # Increasing the batch size can improve performance because the stateroot
     # computation and persist calls are performed less frequently.
     const
-      targetTime = 500.milliseconds
-      targetTimeDelta = 200.milliseconds
+      targetTime = 350.milliseconds
+      targetTimeDelta = 150.milliseconds
       targetTimeLowerBound = (targetTime - targetTimeDelta).milliseconds
       targetTimeUpperBound = (targetTime + targetTimeDelta).milliseconds
       batchSizeLowerBound = 4
-      batchSizeUpperBound = 512
+      batchSizeUpperBound = 256
 
     let
       finishTime = Moment.now()
       runTime = (finishTime - startTime).milliseconds
 
-    if runTime < targetTimeLowerBound and c.persistBatchSize <= batchSizeUpperBound:
-      c.persistBatchSize *= 2
+    if runTime < targetTimeLowerBound and c.persistBatchSize < batchSizeUpperBound:
+      c.persistBatchSize = min(c.persistBatchSize + 4, batchSizeUpperBound)
       info "Increased persistBatchSize", runTime, targetTime,
         persistBatchSize = c.persistBatchSize
-    elif runTime > targetTimeUpperBound and c.persistBatchSize >= batchSizeLowerBound:
-      c.persistBatchSize = c.persistBatchSize div 2
+    elif runTime > targetTimeUpperBound and c.persistBatchSize > batchSizeLowerBound:
+      c.persistBatchSize = max(c.persistBatchSize div 2, batchSizeLowerBound)
       info "Decreased persistBatchSize", runTime, targetTime,
         persistBatchSize = c.persistBatchSize
 
