@@ -29,7 +29,7 @@ import
 import ./engine
 
 template beaconSync(engine: RpcVerificationEngine) =
-  if engine.isSynced():
+  if not engine.isSynced():
     ?(await engine.syncOnce())
 
 proc applyPenalty(engine: RpcVerificationEngine, e: ErrorTuple) =
