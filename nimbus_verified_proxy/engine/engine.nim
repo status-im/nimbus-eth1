@@ -130,6 +130,8 @@ proc init*(
     discard
 
   proc onFinalizedHeader() =
+    if not config.syncHeaderStore:
+      return
     withForkyStore(engine.lcStore[]):
       when lcDataFork > LightClientDataFork.Altair:
         info "New LC finalized header",
@@ -146,6 +148,8 @@ proc init*(
         error "pre-bellatrix light client headers do not have the execution payload header"
 
   proc onOptimisticHeader() =
+    if not config.syncHeaderStore:
+      return
     withForkyStore(engine.lcStore[]):
       when lcDataFork > LightClientDataFork.Altair:
         info "New LC optimistic header",

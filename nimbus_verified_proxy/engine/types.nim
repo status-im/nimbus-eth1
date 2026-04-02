@@ -317,6 +317,9 @@ type
     storageCacheLen*: int
     parallelBlockDownloads*: uint64
     trustedBlockRoot*: Eth2Digest
+    ## When false the LC optimistic/finalized header callbacks do not write
+    ## to the header store. Useful in tests that manage the header store manually.
+    syncHeaderStore*: bool
 
 func eligible*(s: BackendScore): bool =
   s.availability >= 0 and s.quality >= 0

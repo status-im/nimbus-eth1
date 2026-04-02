@@ -26,14 +26,10 @@ import
   ./receipts,
   ./fees
 
-# Most of the light client is already tested and hence removed from the testing
-# process here. Also because it is significantly more complex to mock a beacon
-# light client than to just mute it during tests.
-when not defined(nimbus_verified_proxy_testing):
-  import ./engine
+import ./engine
 
 template beaconSync(engine: RpcVerificationEngine) =
-  when not defined(nimbus_verified_proxy_testing):
+  if engine.isSynced():
     ?(await engine.syncOnce())
 
 proc applyPenalty(engine: RpcVerificationEngine, e: ErrorTuple) =
