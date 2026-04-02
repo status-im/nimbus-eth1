@@ -195,10 +195,10 @@ proc rollBackAccounts(db: StateDbRef, state: StateDataRef) =
   ## Roll back global unproc register (as best as possible)
   var carry = 0.u256
   for iv in state.unproc.unprocessed.complement.increasing:
-    carry += db.unproc.merge(iv)                  # hand back interval
+    carry += (iv.len - db.unproc.merge iv)        # hand back processed ranges
   db.carryOver -= carry.per256                    # adjust by carry over field
   let totalRatio = db.unproc.totalRatio
-  if db.carryOver < totalRatio - 1f:
+  if db.carryOver < totalRatio - 1f:              # maybe some rounding errors?
     db.carryOver = totalRatio - 1f
 
 proc resetMetrics(db: StateDbRef) =
@@ -481,7 +481,7 @@ proc setAccountRange*(
   ##
   if not state.deadState:
     state.unproc.overCommit(start, limit)
-    discard db.unproc.reduce(start, limit)
+    db.carryOver += (limit - start + 1 - db.unproc.reduce(start, limit)).per256
 
     # Updates state record with the most account ranges processed, i.e. the
     # least unpprocessed account ranges left.
