@@ -702,11 +702,11 @@ func toStr*(db: StateDbRef): string =
       result &= $state.blockNumber
     if db.pivot == state:
       result &= "*"
-    result &= ":" & state.accountsCoverage.toStr(4)
-    result &= "(" & $state.byAccount.len & ")"
+    result &= ":" & state.accountsCoverage.toPC(6)
+    result &= "+" & $state.byAccount.len
     result &= ","
   result[^1] = '}'
-  result &= ":" & db.accountsCoverage.toStr(4)
+  result &= ":" & db.accountsCoverage.toPC(6)
 
 # ------------------------------------------------------------------------------
 # End
