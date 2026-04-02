@@ -586,7 +586,7 @@ iterator items*(
     db: StateDbRef;
     startWith = seq[StateRoot].default;
     truncate: static[bool] = false;
-    ascending: static[bool] = true;
+    ascending: static[bool] = false;
       ): StateDataRef =
   ## Iterate over all `db` entries with increasing block numbers.
   ##
@@ -659,7 +659,7 @@ iterator items*(
 func states*(db: StateDbRef): seq[StateDataRef] =
   ## Variant of the `items` iterator returning a sequence where the states have
   ## descending block height.
-  for state in db.items(truncate = false, ascending = false):
+  for state in db.items(truncate = false, ascending=false):
     result.add state
 
 # ------------------------------------------------------------------------------
