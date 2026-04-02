@@ -59,11 +59,8 @@ const skipFiles = [
   # --- eest_zkevm files with failures ---
   #
   "varying_calldata_costs.json",
-  "bal_aborted_account_access.json",
-  "bal_account_access_target.json",
   "bal_7002_partial_sweep.json",
   "witness_codes_delegated_eoa_insufficient_balance.json",
-  "witness_codes_extcode_delegated_eoa.json",
   "witness_codes_create_same_hash_then_read.json",
   "witness_headers_blockhash_at_offset.json",
   "witness_headers_blockhash_boundary.json",
