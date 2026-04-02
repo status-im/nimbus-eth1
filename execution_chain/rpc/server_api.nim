@@ -818,3 +818,6 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
             value = txFrame.fetchSlot(accPath, slotKey).valueOr(0.u256)
           res.data[i] = value.to(Bytes32)
         result.list.add(move(res))
+
+    proc eth_simulateV1(request: SimulationRequest, blockTag: BlockTag): seq[SimulateBlockResult] =
+      return @[]
