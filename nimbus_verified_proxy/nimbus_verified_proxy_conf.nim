@@ -95,6 +95,13 @@ type VerifiedProxyConf* = object
     name: "debug-parallel-downloads"
   .}: uint64
 
+  syncHeaderStore* {.
+    hidden,
+    desc: "Write LC optimistic/finalized headers to the header store",
+    defaultValue: true,
+    name: "debug-sync-header-store"
+  .}: bool
+
   # Consensus light sync
   # No default - Needs to be provided by the user
   trustedBlockRoot* {.

@@ -24,6 +24,7 @@ import
 
 let scoringEngineConf = RpcVerificationEngineConf(
   chainId: 1.u256,
+  trustedBlockRoot: TEST_TBR,
   maxBlockWalk: 1,
   headerStoreLen: 16,
   accountCacheLen: 1,
@@ -40,7 +41,7 @@ suite "backend scoring":
 
   test "availability penalty on transport failure":
     let ts = TestApiState.init(1.u256)
-    var backend = initTestApiBackend(ts)
+    var backend = initTestExecutionBackend(ts)
     backend.eth_getProof = proc(
         address: Address, slots: seq[UInt256], blkNum: BlockTag
     ): Future[EngineResult[ProofResponse]] {.async: (raises: [CancelledError]).} =
@@ -49,6 +50,7 @@ suite "backend scoring":
     let engine = RpcVerificationEngine.init(scoringEngineConf).valueOr:
       raise newException(TestProxyError, error.errMsg)
     engine.registerBackend(backend, fullExecutionCapabilities)
+    engine.setupTestBeacon(ts)
     engine.registerDefaultFrontend()
 
     check engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
@@ -62,7 +64,7 @@ suite "backend scoring":
 
   test "quality penalty on verification failure":
     let ts = TestApiState.init(1.u256)
-    var backend = initTestApiBackend(ts)
+    var backend = initTestExecutionBackend(ts)
     backend.eth_getProof = proc(
         address: Address, slots: seq[UInt256], blkNum: BlockTag
     ): Future[EngineResult[ProofResponse]] {.async: (raises: [CancelledError]).} =
@@ -83,6 +85,7 @@ suite "backend scoring":
     let engine = RpcVerificationEngine.init(scoringEngineConf).valueOr:
       raise newException(TestProxyError, error.errMsg)
     engine.registerBackend(backend, fullExecutionCapabilities)
+    engine.setupTestBeacon(ts)
     engine.registerDefaultFrontend()
 
     check engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
@@ -98,7 +101,7 @@ suite "backend scoring":
     let ts = TestApiState.init(1.u256)
     let engine = RpcVerificationEngine.init(scoringEngineConf).valueOr:
       raise newException(TestProxyError, error.errMsg)
-    engine.registerBackend(initTestApiBackend(ts), fullExecutionCapabilities)
+    engine.registerBackend(initTestExecutionBackend(ts), fullExecutionCapabilities)
 
     engine.scores[0].quality = -10
 
@@ -108,7 +111,7 @@ suite "backend scoring":
     let ts = TestApiState.init(1.u256)
     let engine = RpcVerificationEngine.init(scoringEngineConf).valueOr:
       raise newException(TestProxyError, error.errMsg)
-    engine.registerBackend(initTestApiBackend(ts), fullExecutionCapabilities)
+    engine.registerBackend(initTestExecutionBackend(ts), fullExecutionCapabilities)
 
     engine.scores[0].quality = -4
 

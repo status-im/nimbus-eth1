@@ -14,6 +14,9 @@ import
   chronos,
   json_rpc/jsonmarshal,
   beacon_chain/networking/network_metadata,
+  beacon_chain/beacon_clock,
+  beacon_chain/spec/forks,
+  beacon_chain/spec/eth2_apis/eth2_rest_json_serialization,
   stew/[io2, byteutils],
   web3/[eth_api_types, conversions],
   eth/common/eth_types_rlp,
@@ -22,6 +25,12 @@ import
   ../engine/engine,
   ../engine/rpc_frontend,
   ./test_api_backend
+
+const
+  TEST_TBR* = Eth2Digest.fromHex(
+    "0x9bcb90ec3a294591b77dd2a58e973578715cdc0e6eeeb286bc06dd120057f18b"
+  )
+  TEST_LC_SLOT* = Slot(14018019)
 
 type TestProxyError* = object of CatchableError
 
@@ -74,22 +83,61 @@ template `==`*(rxs1: seq[ReceiptObject], rxs2: seq[ReceiptObject]): bool =
 template `==`*(logs1: seq[LogObject], logs2: seq[LogObject]): bool =
   JrpcConv.encode(logs1).JsonString == JrpcConv.encode(logs2).JsonString
 
+proc readBeaconLCData*(T: type, path: string): T =
+  try:
+    RestJson.decode(readFile(path), T, allowUnknownFields = true)
+  except IOError as e:
+    raiseAssert "cannot read " & path & ": " & e.msg
+  except SerializationError as e:
+    raiseAssert "failed to decode LC Data from " & path & ": " & e.msg
+
+proc preLoadTestBeaconState*(t: TestApiState) =
+  const lcPeriod = TEST_LC_SLOT.sync_committee_period
+
+  let
+    bootstrap = ForkedLightClientBootstrap.readBeaconLCData(
+      "nimbus_verified_proxy/tests/data/lc_bootstrap.json"
+    )
+    updates = seq[ForkedLightClientUpdate].readBeaconLCData(
+      "nimbus_verified_proxy/tests/data/lc_updates.json"
+    )
+    optimistic = ForkedLightClientOptimisticUpdate.readBeaconLCData(
+      "nimbus_verified_proxy/tests/data/lc_optimistic.json"
+    )
+    finality = ForkedLightClientFinalityUpdate.readBeaconLCData(
+      "nimbus_verified_proxy/tests/data/lc_finality.json"
+    )
+
+  t.loadBootstrap(bootstrap, TEST_TBR)
+  t.loadUpdate(updates[0], lcPeriod)
+  t.loadOptimistic(optimistic)
+  t.loadFinality(finality)
+
+proc setupTestBeacon*(engine: RpcVerificationEngine, testState: TestApiState) =
+  testState.preLoadTestBeaconState()
+  engine.registerBackend(initTestBeaconBackend(testState), fullBeaconCapabilities)
+  engine.getBeaconTime = proc(): BeaconTime {.gcsafe, raises: [].} =
+    TEST_LC_SLOT.start_beacon_time(engine.timeParams)
+
 proc initTestEngine*(
     testState: TestApiState, headerCacheLen: int, maxBlockWalk: uint64
 ): EngineResult[RpcVerificationEngine] =
   let
     engineConf = RpcVerificationEngineConf(
       chainId: 1.u256,
+      trustedBlockRoot: TEST_TBR,
       maxBlockWalk: maxBlockWalk,
       headerStoreLen: headerCacheLen,
       accountCacheLen: 1,
       codeCacheLen: 1,
       storageCacheLen: 1,
       parallelBlockDownloads: 2, # >1 required for block walk tests
+      syncHeaderStore: false, # we inject finalized blocks directly into the header store
     )
     engine = ?RpcVerificationEngine.init(engineConf)
 
-  engine.registerBackend(initTestApiBackend(testState), fullExecutionCapabilities)
+  engine.registerBackend(initTestExecutionBackend(testState), fullExecutionCapabilities)
+  engine.setupTestBeacon(testState)
   engine.registerDefaultFrontend()
 
   ok(engine)

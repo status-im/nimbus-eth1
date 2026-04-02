@@ -162,6 +162,7 @@ proc run(
       storageCacheLen: config.storageCacheLen,
       parallelBlockDownloads: config.parallelBlockDownloads,
       trustedBlockRoot: config.trustedBlockRoot,
+      syncHeaderStore: config.syncHeaderStore,
     )
     engine = RpcVerificationEngine.init(engineConf).valueOr:
       raise newException(ProxyError, "Couldn't initialize verification engine")
