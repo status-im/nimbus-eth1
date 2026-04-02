@@ -415,7 +415,7 @@ iterator colWalk97(
     if key.len == 97:
       (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
       (addr (key2.distinctBase)[0]).copyMem(addr key[33], 32)
-      (addr (key2.distinctBase)[0]).copyMem(addr key[65], 32)
+      (addr (key3.distinctBase)[0]).copyMem(addr key[65], 32)
       yield (key1, key2, key3, value)
 
 # --------------
