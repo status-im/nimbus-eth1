@@ -101,6 +101,19 @@ proc rootExists(db: CoreDbTxRef; root: Hash32): bool =
     return false
   state == root
 
+proc shortLog(witness: ExecutionWitness): string =
+  var res = "ExecutionWitness:\n"
+  res.add "State:\n"
+  for stateNode in witness.state:
+    res.add stateNode.to0xHex() & "\n"
+  res.add "Codes:\n"
+  for codeNode in witness.codes:
+    res.add codeNode.to0xHex() & "\n"
+  res.add "Headers:\n"
+  for headerNode in witness.headers:
+    res.add headerNode.to0xHex() & "\n"
+  res
+
 proc runTest(env: TestEnv, unit: BlockchainUnitEnv, statelessEnabled = false): Future[Result[void, string]] {.async.} =
   let blocks = parseBlocks(unit.blocks)
   var latestStateRoot = unit.genesisBlockHeader.stateRoot
@@ -126,12 +139,14 @@ proc runTest(env: TestEnv, unit: BlockchainUnitEnv, statelessEnabled = false): F
           witness.state.sort()
           witness.codes.sort()
           let expectedWitness = blk.witness.value()
+          # Not comparing keys as these are not included in the test vectors.
+          # TODO: Remove them from our ExecutionWitness type?
           if witness.state != expectedWitness.state:
-            return err("Witness state mismatch")
+            return err("Witness state mismatch, got: " & $witness.shortLog & " expected: " & $expectedWitness.shortLog)
           if witness.codes != expectedWitness.codes:
-            return err("Witness codes mismatch")
+            return err("Witness codes mismatch, got: " & $witness.shortLog & " expected: " & $expectedWitness.shortLog)
           if witness.headers != expectedWitness.headers:
-            return err("Witness headers mismatch")
+            return err("Witness headers mismatch, got: " & $witness.shortLog & " expected: " & $expectedWitness.shortLog)
     else:
       if not blk.badBlock:
         return err("Good block was rejected at import: " & res.error)
@@ -178,4 +193,4 @@ when isMainModule:
     echo "Usage: " & testFile & " vector.json"
     quit(QuitFailure)
 
-  processFile(paramStr(1))
+  processFile(paramStr(1), true)

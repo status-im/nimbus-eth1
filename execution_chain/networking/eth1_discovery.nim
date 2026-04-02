@@ -225,6 +225,12 @@ proc getRandomBootnode*(proto: Eth1Discovery): Opt[NodeV4] =
           return Opt.none(NodeV4)
       return Opt.some(newNode(enode))
 
+func getEnr*(proto: Eth1Discovery): Opt[string] =
+  ## Get the ENR URI string of the local node from DiscoveryV5.
+  if proto.discv5.isNil.not:
+    return Opt.some(proto.discv5.getRecord().toURI())
+  Opt.none(string)
+
 func updateForkId*(proto: Eth1Discovery, forkId: ForkId) =
   # https://github.com/ethereum/devp2p/blob/bc76b9809a30e6dc5c8dcda996273f0f9bcf7108/enr-entries/eth.md
   if proto.discv5.isNil.not:
