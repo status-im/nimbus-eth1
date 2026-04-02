@@ -25,14 +25,16 @@ type
   ErrorType* = enum
     ## For `FetchError` return code object/tuple
     EGeneric = 0                   ## Not further specified error
-    ENoDataAvailable               ## Out of scope
+    ENoDataAvailable               ## Out of scope, unsuuported state
     EMissingEthContext             ## Cannot retrieve `eth` peer descriptor
     EAlreadyTriedAndFailed         ## The same action failed before
     EPeerDisconnected              ## Exception
     ECatchableError                ## Exception
     ECancelledError                ## Exception
-    ETrieError                     ## Database error
     ELockError                     ## Locked by some other peer
+    ETrieError                     ## Trie/mpt database error
+    ECacheError                    ## Database cache error
+    ECompleted                     ## Nothing to do, here
 
 const
   snapAsmFolder* = "snap"
@@ -78,10 +80,10 @@ const
     ## pivot must also have reached the factor `accuPivotCovMin` in order to
     ## start trie assembly and healing.
 
-  relativeCoverageEvictionThreshold* = 0.2
+  relativeCoverageEvictionThreshold* = 0.1
     ## If the ratio
     ## ::
-    ##   unpocessed-pivot-acccounts-range / max-unpocessed-acccounts-range
+    ##   minimal-state-coverage / pivot-acccounts-coverage
     ##
     ## is not small enough, then the pivot state may be evicted from the
     ## states list to make space for a new state.
