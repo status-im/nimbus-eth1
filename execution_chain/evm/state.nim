@@ -57,7 +57,7 @@ proc init(
   self.gasRefunded = 0
   self.balTracker = tracker
 
-func blockCtx(header: Header): BlockContext =
+func blockCtx*(header: Header): BlockContext =
   BlockContext(
     timestamp    : header.timestamp,
     gasLimit     : header.gasLimit,
