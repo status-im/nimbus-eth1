@@ -311,7 +311,6 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     let
       pooledTx = decodePooledTx(txBytes)
       txHash = computeRlpHash(pooledTx.tx)
-      sender = pooledTx.tx.recoverSender().get()
 
     api.txPool.addTx(pooledTx).isOkOr:
       raise newException(ValueError, $error)
@@ -774,3 +773,6 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
           value = txFrame.fetchSlot(accPath, slotKey).valueOr(0.u256)
         res.data[i] = value.to(Bytes32)
       result.list.add(move(res))
+
+  server.rpc("eth_simulateV1") do(request: SimulationRequest, blockTag: BlockTag) -> seq[SimulateBlockResult]:
+    return @[]
