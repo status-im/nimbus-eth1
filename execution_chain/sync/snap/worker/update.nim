@@ -54,10 +54,9 @@ proc idleNext(ctx: SnapCtxRef; info: static[string]): SyncState =
 proc resumeNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
   # Recover session (if any)
-  if ctx.sessionResume(info):
-    debug info & ": resuming download session"
-    if ctx.pivotIsComplete():
-      return SnapMkTrie
+  if ctx.sessionResume(info) and
+     ctx.pivotIsComplete():
+    return SnapMkTrie
   SnapReady
 
 func readyNext(ctx: SnapCtxRef; info: static[string]): SyncState =

@@ -35,7 +35,12 @@ proc getOrMakeState(
     return err()
   ok sdb.register(root, hash, number, info)
 
-proc storageRecover(ctx: SnapCtxRef, state: StateDataRef, acc: SnapAccount) =
+proc storageRecover(
+    ctx: SnapCtxRef;
+    state: StateDataRef;
+    acc: SnapAccount;
+    info: static[string];
+      ) =
   let storageRoot = acc.accBody.storageRoot
   if not storageRoot.isEmpty:
     let
@@ -56,6 +61,7 @@ proc codesRecover(
     ctx: SnapCtxRef;
     state: StateDataRef;
     lst: openArray[SnapAccount];
+    info: static[string];
       ) =
   if 0 < lst.len:
     let
@@ -107,6 +113,8 @@ proc sessionResume*(ctx: SnapCtxRef; info: static[string]): bool =
         ignRoot = w.root
         continue
 
+      if not resumedOk:
+        chronicles.info info & ": resuming download session"
       resumedOk = true
 
       # Register seen accounts in state record
@@ -114,10 +122,10 @@ proc sessionResume*(ctx: SnapCtxRef; info: static[string]): bool =
 
       # Register unprocessed storages per account
       for acc in w.accounts:
-        ctx.storageRecover(state, acc)
+        ctx.storageRecover(state, acc, info)
 
       # Register unprocessed codes for the current account list
-      ctx.codesRecover(state, w.accounts)
+      ctx.codesRecover(state, w.accounts, info)
 
     return resumedOk
 
