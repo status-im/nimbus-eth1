@@ -8,7 +8,7 @@
 # those terms.
 
 ## This implements a writer preferring read-write lock using a lock
-## and a condition varable. Multiple readers can hold the lock concurrently
+## and two condition varables. Multiple readers can hold the lock concurrently
 ## but only a single write is allowed to hold the lock.
 
 {.push raises: [], gcsafe.}
@@ -17,13 +17,15 @@ import std/locks
 
 type ReadWriteLock* = object
   lock: Lock
-  cond: Cond
+  readerCond: Cond
+  writerCond: Cond
   readerCount*: int
   hasWriter*: bool
 
 func init*(rwLock: var ReadWriteLock) =
   initLock(rwLock.lock)
-  initCond(rwLock.cond)
+  initCond(rwLock.readerCond)
+  initCond(rwLock.writerCond)
 
 func init*(T: type ReadWriteLock): T =
   var rwLock = ReadWriteLock()
@@ -33,27 +35,27 @@ func init*(T: type ReadWriteLock): T =
 func lockRead*(rwLock: var ReadWriteLock) =
   withLock(rwLock.lock):
     while rwLock.hasWriter:
-      rwLock.cond.wait(rwLock.lock)
+      rwLock.readerCond.wait(rwLock.lock)
     inc rwLock.readerCount
 
 func unlockRead*(rwLock: var ReadWriteLock) =
   withLock(rwLock.lock):
     dec rwLock.readerCount
     if rwLock.readerCount == 0:
-      rwLock.cond.broadcast()
+      rwLock.writerCond.signal()
 
 func lockWrite*(rwLock: var ReadWriteLock) =
   withLock(rwLock.lock):
     while rwLock.hasWriter:
-      rwLock.cond.wait(rwLock.lock)
+      rwLock.readerCond.wait(rwLock.lock)
     rwLock.hasWriter = true
     while rwLock.readerCount > 0:
-      rwLock.cond.wait(rwLock.lock)
+      rwLock.writerCond.wait(rwLock.lock)
 
 func unlockWrite*(rwLock: var ReadWriteLock) =
   withLock(rwLock.lock):
     rwLock.hasWriter = false
-    rwLock.cond.broadcast()
+    rwLock.readerCond.broadcast()
 
 template withReadLock*(rwLock: var ReadWriteLock, body: untyped) =
   rwLock.lockRead()
@@ -71,4 +73,5 @@ template withWriteLock*(rwLock: var ReadWriteLock, body: untyped) =
 
 func dispose*(rwLock: var ReadWriteLock) =
   deinitLock(rwLock.lock)
-  deinitCond(rwLock.cond)
+  deinitCond(rwLock.readerCond)
+  deinitCond(rwLock.writerCond)
