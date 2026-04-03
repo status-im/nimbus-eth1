@@ -77,6 +77,11 @@ proc execSubCreate(c: Computation; childMsg: Message;
 
 proc createOp(cpt: VmCpt): EvmResultVoid =
   ## 0xf0, Create a new account with associated code
+  if cpt.fork >= FkAmsterdam:
+    # Check static context before any gas charging
+    # https://github.com/ethereum/execution-specs/commit/b9f0afa931a773cdb764310035d0ff383ebecf9e
+    ? cpt.checkInStaticContext()
+
   ? cpt.stack.lsCheck(3)
 
   let
@@ -102,20 +107,22 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
 
   if cpt.fork >= FkShanghai:
     if cpt.fork >= FkAmsterdam:
-      # charge state gas before `checkInStaticContext`
-      ? cpt.gasMeter.chargeStateGas(STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte,
-        reason = "CREATE: State gas new account")
-
       # EIP-7954
       if memLen > EIP7954_MAX_INITCODE_SIZE:
         trace "Initcode size exceeds EIP-7954 maximum", initcodeSize = memLen
         return err(opErr(InvalidInitCode))
+
+      # Charge state gas after initcode size validation
+      # https://github.com/ethereum/execution-specs/commit/b9f0afa931a773cdb764310035d0ff383ebecf9e
+      ? cpt.gasMeter.chargeStateGas(STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte,
+        reason = "CREATE: State gas new account")
     elif memLen > EIP3860_MAX_INITCODE_SIZE:
       # EIP-3860
       trace "Initcode size exceeds EIP-3860 maximum", initcodeSize = memLen
       return err(opErr(InvalidInitCode))
 
-  ? cpt.checkInStaticContext()
+  if cpt.fork < FkAmsterdam:
+    ? cpt.checkInStaticContext()
 
   if cpt.msg.depth >= MaxCallDepth:
     debug "Computation Failure",
@@ -161,6 +168,11 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
 
 proc create2Op(cpt: VmCpt): EvmResultVoid =
   ## 0xf5, Behaves identically to CREATE, except using keccak256
+  if cpt.fork >= FkAmsterdam:
+    # Check static context before any gas charging
+    # https://github.com/ethereum/execution-specs/commit/b9f0afa931a773cdb764310035d0ff383ebecf9e
+    ? cpt.checkInStaticContext()
+
   ? cpt.stack.lsCheck(4)
 
   let
@@ -190,20 +202,22 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
 
   if cpt.fork >= FkShanghai:
     if cpt.fork >= FkAmsterdam:
-      # charge state gas before `checkInStaticContext`
-      ? cpt.gasMeter.chargeStateGas(STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte,
-        reason = "CREATE2: State gas new account")
-
       # EIP-7954
       if memLen > EIP7954_MAX_INITCODE_SIZE:
         trace "Initcode size exceeds EIP-7954 maximum", initcodeSize = memLen
         return err(opErr(InvalidInitCode))
+
+      # Charge state gas after initcode size validation
+      # https://github.com/ethereum/execution-specs/commit/b9f0afa931a773cdb764310035d0ff383ebecf9e
+      ? cpt.gasMeter.chargeStateGas(STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte,
+        reason = "CREATE2: State gas new account")
     elif memLen > EIP3860_MAX_INITCODE_SIZE:
       # EIP-3860
       trace "Initcode size exceeds EIP-3860 maximum", initcodeSize = memLen
       return err(opErr(InvalidInitCode))
 
-  ? cpt.checkInStaticContext()
+  if cpt.fork < FkAmsterdam:
+    ? cpt.checkInStaticContext()
 
   if cpt.msg.depth >= MaxCallDepth:
     debug "Computation Failure",
