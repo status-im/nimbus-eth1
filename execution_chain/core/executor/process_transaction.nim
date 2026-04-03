@@ -106,6 +106,14 @@ proc processTransactionImpl(
     baseFee = baseFee256.truncate(GasInt)
     priorityFee = min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFee)
     excessBlobGas = header.excessBlobGas.get(0'u64)
+    regularGasAvailable = header.gasLimit - vmState.blockRegularGasUsed
+
+  # Regular gas is capped at TX_MAX_GAS_LIMIT per EIP-7825.
+  # State gas is not checked per-tx; block-end validation enforces
+  # max(block_regular_gas_used, block_state_gas_used) <= gas_limit.
+  if min(TX_GAS_LIMIT.GasInt, tx.gasLimit) > regularGasAvailable:
+    let want = min(TX_GAS_LIMIT.GasInt, tx.gasLimit)
+    return err("regular gas used exceeds limit want: " & $want & ", available: " & $regularGasAvailable)
 
   # blobGasUsed will be added to vmState.blobGasUsed if the tx is ok.
   let
