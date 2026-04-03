@@ -133,7 +133,7 @@ proc evictableState(db: StateDbRef; info: static[string]): StateDataRef =
       (result, unprocData) = (state, 0.u256)        # maximise stepwise
     # End `while`
 
-  if result == db.pivot:
+  if result == db.pivot and rc.isOk:
     # Initialise a new maximiser and continue searching for the least
     # completed state.
     var otherData = low UInt256                     # keep `unprocData` safe
@@ -157,10 +157,11 @@ proc evictableState(db: StateDbRef; info: static[string]): StateDataRef =
     # is a minimally completed state found.)
     if unprocData != 0 or                           # not all accounts done with
        db.pivot.byAccount.len != 0:                 # more slots or code to do
-      let ratio = unprocData.per256 / otherData.per256
+      let ratio = (1f - otherData.per256) / (1f - unprocData.per256)
       if relativeCoverageEvictionThreshold < ratio: # check unprocessed ratio
         debug info & ": selecting pivot for eviction", root=db.pivot.rootStr,
-          hash=db.pivot.blockHash.toStr, relativeCoverage=ratio.toStr(4)
+          hash=db.pivot.blockHash.toStr, otherState=result.rootStr,
+          covRatio=ratio.toPC(4)
         result = db.pivot
 
   # result
@@ -195,10 +196,10 @@ proc rollBackAccounts(db: StateDbRef, state: StateDataRef) =
   ## Roll back global unproc register (as best as possible)
   var carry = 0.u256
   for iv in state.unproc.unprocessed.complement.increasing:
-    carry += db.unproc.merge(iv)                  # hand back interval
+    carry += (iv.len - db.unproc.merge iv)        # hand back processed ranges
   db.carryOver -= carry.per256                    # adjust by carry over field
   let totalRatio = db.unproc.totalRatio
-  if db.carryOver < totalRatio - 1f:
+  if db.carryOver < totalRatio - 1f:              # maybe some rounding errors?
     db.carryOver = totalRatio - 1f
 
 proc resetMetrics(db: StateDbRef) =
@@ -481,7 +482,7 @@ proc setAccountRange*(
   ##
   if not state.deadState:
     state.unproc.overCommit(start, limit)
-    discard db.unproc.reduce(start, limit)
+    db.carryOver += (limit - start + 1 - db.unproc.reduce(start, limit)).per256
 
     # Updates state record with the most account ranges processed, i.e. the
     # least unpprocessed account ranges left.
@@ -586,7 +587,7 @@ iterator items*(
     db: StateDbRef;
     startWith = seq[StateRoot].default;
     truncate: static[bool] = false;
-    ascending: static[bool] = true;
+    ascending: static[bool] = false;
       ): StateDataRef =
   ## Iterate over all `db` entries with increasing block numbers.
   ##
@@ -659,7 +660,7 @@ iterator items*(
 func states*(db: StateDbRef): seq[StateDataRef] =
   ## Variant of the `items` iterator returning a sequence where the states have
   ## descending block height.
-  for state in db.items(truncate = false, ascending = false):
+  for state in db.items(truncate = false, ascending=false):
     result.add state
 
 # ------------------------------------------------------------------------------
@@ -701,11 +702,11 @@ func toStr*(db: StateDbRef): string =
       result &= $state.blockNumber
     if db.pivot == state:
       result &= "*"
-    result &= ":" & state.accountsCoverage.toStr(4)
-    result &= "(" & $state.byAccount.len & ")"
+    result &= ":" & state.accountsCoverage.toPC(6)
+    result &= "+" & $state.byAccount.len
     result &= ","
   result[^1] = '}'
-  result &= ":" & db.accountsCoverage.toStr(4)
+  result &= ":" & db.accountsCoverage.toPC(6)
 
 # ------------------------------------------------------------------------------
 # End

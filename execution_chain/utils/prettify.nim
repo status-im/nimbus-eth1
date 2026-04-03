@@ -1,6 +1,6 @@
 # Nimbus - Types, data structures and shared utilities used in network sync
 #
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -27,7 +27,9 @@ proc dotFormat(w: float; digitsAfterDot: static[int]): string =
   elif digitsAfterDot == 3:
     &"{w:.3f}"
   elif digitsAfterDot == 4:
-    &"{w:.3f}"
+    &"{w:.4f}"
+  elif digitsAfterDot == 6:
+    &"{w:.6f}"
   else:
     {.error: "unsupported digitsAfterDot setting".}
 

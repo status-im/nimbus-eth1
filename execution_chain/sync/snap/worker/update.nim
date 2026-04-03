@@ -13,7 +13,7 @@
 import
   pkg/chronicles,
   ./download/header,
-  ./[mpt, session, worker_const, worker_desc]
+  ./[mpt, worker_const, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -54,10 +54,8 @@ proc idleNext(ctx: SnapCtxRef; info: static[string]): SyncState =
 proc resumeNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
   # Recover session (if any)
-  if ctx.sessionResume(info):
-    debug info & ": resuming download session"
-    if ctx.pivotIsComplete():
-      return SnapMkTrie
+  if ctx.pivotIsComplete():
+    return SnapMkTrie
   SnapReady
 
 func readyNext(ctx: SnapCtxRef; info: static[string]): SyncState =
