@@ -141,6 +141,8 @@ type
     dirty: Table[Address, AccountRef]
     selfDestruct: HashSet[Address]
     accessList: ac_access_list.AccessList
+    deployedCodeHashes: HashSet[Hash32]
+      ## Caches codeHashes deployed via CREATE in this savepoint.
 
 const
   resetFlags = {
@@ -520,6 +522,7 @@ proc commit*(ledger: LedgerRef, savePoint: LedgerSpRef) =
   ledger.savePoint.dirty.mergeAndReset(savePoint.dirty)
   ledger.savePoint.accessList.mergeAndReset(savePoint.accessList)
   ledger.savePoint.selfDestruct.mergeAndReset(savePoint.selfDestruct)
+  ledger.savePoint.deployedCodeHashes.mergeAndReset(savePoint.deployedCodeHashes)
 
   savePoint.parentSavePoint = nil # Release memory
 
@@ -565,16 +568,30 @@ proc getNonce*(ledger: LedgerRef, address: Address): AccountNonce =
   if acc.isNil: EMPTY_ACCOUNT.nonce
   else: acc.statement.nonce
 
+func isDeployedCode(ledger: LedgerRef, codeHash: Hash32): bool =
+  ## Check if codeHash was deployed in any currently active save point.
+  var sp = ledger.savePoint
+  while sp != nil:
+    if codeHash in sp.deployedCodeHashes:
+      return true
+    sp = sp.parentSavePoint
+  false
+
 proc getCode*(ledger: LedgerRef,
               address: Address,
               returnHash: static[bool] = false): auto =
+  let acc = ledger.getAccount(address, false)
+
   if ledger.collectWitness:
     let lookupKey = (address, Opt.none(UInt256))
-    # We overwrite any existing record here so that codeTouched is always set to
-    # true even if an account was previously accessed without touching the code
-    ledger.witnessKeys[lookupKey] = true
+    # Only mark codeTouched if the code isn't deployed in this block.
+    # Deployed code can be recovered from tx data directly.
+    # We overwrite any existing false entry so codeTouched is set to true
+    # even if the account was previously accessed without touching the code.
+    if acc.isNil or acc.statement.codeHash == EMPTY_CODE_HASH or
+        not ledger.isDeployedCode(acc.statement.codeHash):
+      ledger.witnessKeys[lookupKey] = true
 
-  let acc = ledger.getAccount(address, false)
   if acc.isNil:
     when returnHash:
       return (EMPTY_CODE_HASH, CodeBytesRef())
@@ -631,13 +648,14 @@ proc getOriginalCode*(ledger: LedgerRef, address: Address): CodeBytesRef =
   acc.original.code
 
 proc getCodeSize*(ledger: LedgerRef, address: Address): int =
+  let acc = ledger.getAccount(address, false)
+
   if ledger.collectWitness:
     let lookupKey = (address, Opt.none(UInt256))
-    # We overwrite any existing record here so that codeTouched is always set to
-    # true even if an account was previously accessed without touching the code
-    ledger.witnessKeys[lookupKey] = true
+    if acc.isNil or acc.statement.codeHash == EMPTY_CODE_HASH or
+        not ledger.isDeployedCode(acc.statement.codeHash):
+      ledger.witnessKeys[lookupKey] = true
 
-  let acc = ledger.getAccount(address, false)
   if acc.isNil:
     return 0
   getCodeSizeImpl(ledger, acc)
@@ -758,6 +776,8 @@ proc setCode*(ledger: LedgerRef, address: Address, code: seq[byte]) =
     # a given that it will be executed within LRU range
     acc.code = ledger.code.get(codeHash).valueOr(CodeBytesRef.init(code))
     acc.flags.incl CodeChanged
+    if ledger.collectWitness and code.len > 0:
+      ledger.savePoint.deployedCodeHashes.incl(codeHash)
 
 proc setStorage*(ledger: LedgerRef, address: Address, slot, value: UInt256) =
   let acc = ledger.getAccount(address)
@@ -888,6 +908,9 @@ template clearWitnessKeys*(ledger: LedgerRef) =
 template clearCollapsedSiblings*(ledger: LedgerRef) =
   ledger.txFrame.aTx.collapsedSiblings.setLen(0)
 
+template clearDeployedCodeHashes*(ledger: LedgerRef) =
+  ledger.savePoint.deployedCodeHashes.clear()
+
 proc getBlockHash*(ledger: LedgerRef, blockNumber: BlockNumber): Hash32 =
   # Range checks must be done earlier, any miss here treated as an error:
   # we record it as a fatalError.
@@ -979,6 +1002,7 @@ proc persist*(ledger: LedgerRef,
   if clearWitness:
     ledger.clearWitnessKeys()
     ledger.clearCollapsedSiblings()
+    ledger.clearDeployedCodeHashes()
     ledger.clearBlockHashesCache()
 
 iterator addresses*(ledger: LedgerRef): Address =
