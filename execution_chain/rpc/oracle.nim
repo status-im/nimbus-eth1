@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/[hashes, algorithm, strutils],
+  std/[hashes, algorithm],
   eth/eip1559,
   stew/keyed_queue,
   stew/endians2,
@@ -56,7 +56,6 @@ type
     reward : UInt256
 
   BlockRange = object
-    pendingBlock: Opt[uint64]
     lastBlock: uint64
     blocks: uint64
 
@@ -76,11 +75,8 @@ func new*(_: type Oracle, chain: ForkedChainRef): Oracle =
     historyCache: KeyedQueue[CacheKey, ProcessedFees].init(),
   )
 
-func hash*(x: CacheKey): Hash =
-  var h: Hash = 0
-  h = h !& hash(x.number)
-  h = h !& hash(x.percentiles)
-  result = !$h
+template com(oracle: Oracle): CommonRef =
+  oracle.chain.com
 
 func toBytes(list: openArray[float64]): seq[byte] =
   for x in list:
@@ -100,13 +96,14 @@ func calcBaseFee(com: CommonRef, bc: BlockContent): UInt256 =
 # fills in the rest of the fields.
 proc processBlock(oracle: Oracle, bc: BlockContent, percentiles: openArray[float64]): ProcessedFees =
   let
+    com = oracle.com
     fork = com.toEVMFork(bc.header)
-    maxBlobGasPerBlock = getMaxBlobGasPerBlock(electra)
+    maxBlobGasPerBlock = getMaxBlobGasPerBlock(com, fork)
   result = ProcessedFees(
     baseFee: bc.header.baseFeePerGas.get(0.u256),
     blobBaseFee: getBlobBaseFee(bc.header.excessBlobGas.get(0'u64), com, fork),
-    nextBaseFee: calcBaseFee(oracle.com, bc),
-    nextBlobBaseFee: getBlobBaseFee(calcExcessBlobGas(bc.header, com, fork), com, fork),
+    nextBaseFee: calcBaseFee(com, bc),
+    nextBlobBaseFee: getBlobBaseFee(calcExcessBlobGas(com, bc.header, fork), com, fork),
     gasUsedRatio: float64(bc.header.gasUsed) / float64(bc.header.gasLimit),
     blobGasUsedRatio: float64(bc.header.blobGasUsed.get(0'u64)) / float64(maxBlobGasPerBlock)
   )
@@ -157,8 +154,7 @@ proc processBlock(oracle: Oracle, bc: BlockContent, percentiles: openArray[float
     result.reward[i] = sorter[txIndex].reward
 
 # resolveBlockRange resolves the specified block range to absolute block numbers while also
-# enforcing backend specific limitations. The pending block and corresponding receipts are
-# also returned if requested and available.
+# enforcing backend specific limitations.
 # Note: an error is only returned if retrieving the head header has failed. If there are no
 # retrievable blocks in the specified range then zero block count is returned with no error.
 proc resolveBlockRange(oracle: Oracle, blockId: BlockTag, numBlocks: uint64): Result[BlockRange, string] =
@@ -170,7 +166,6 @@ proc resolveBlockRange(oracle: Oracle, blockId: BlockTag, numBlocks: uint64): Re
   var
     reqEnd: uint64
     blocks = numBlocks
-    pendingBlock: Opt[uint64]
 
   if blockId.kind == bidNumber:
     reqEnd = blockId.number.uint64
@@ -178,23 +173,8 @@ proc resolveBlockRange(oracle: Oracle, blockId: BlockTag, numBlocks: uint64): Re
     if head < reqEnd:
       return err("RequestBeyondHead: requested " & $reqEnd & ", head " & $head)
   else:
-    # Resolve block tag.
-    let tag = blockId.alias.toLowerAscii
-    var resolved: Header
-    if tag == "pending":
-      try:
-        resolved = headerFromTag(oracle.com.db, blockId)
-        pendingBlock = Opt.some(resolved.number)
-      except CatchableError:
-        # Pending block not supported by backend, process only until latest block.
-        resolved = headBlock
-        # Update total blocks to return to account for this.
-        dec blocks
-    else:
-      try:
-        resolved = headerFromTag(oracle.com.db, blockId)
-      except CatchableError as exc:
-        return err(exc.msg)
+    let resolved = oracle.chain.headerFromTag(blockId).valueOr:
+      return err(error)
 
     # Absolute number resolved.
     reqEnd = resolved.number
@@ -208,7 +188,6 @@ proc resolveBlockRange(oracle: Oracle, blockId: BlockTag, numBlocks: uint64): Re
     blocks = reqEnd + 1
 
   ok(BlockRange(
-    pendingBlock:pendingBlock,
     lastBlock: reqEnd,
     blocks: blocks,
   ))
@@ -221,18 +200,20 @@ proc getBlockContent(oracle: Oracle,
     blockNumber: blockNumber
   )
 
-  let db = oracle.com.db
-  try:
-    bc.header = db.getBlockHeader(blockNumber.BlockNumber)
-    for tx in db.getBlockTransactions(bc.header):
-      bc.txs.add tx
+  bc.header = oracle.chain.headerByNumber(blockNumber.BlockNumber).valueOr:
+    return err(error)
 
-    for rc in db.getReceipts(bc.header.receiptsRoot):
-      bc.receipts.add rc
-
+  if not fullBlock:
     return ok(bc)
-  except RlpError as exc:
-    return err(exc.msg)
+
+  let blk = oracle.chain.blockByNumber(blockNumber.BlockNumber).valueOr:
+    return err(error)
+
+  bc.txs = blk.transactions
+  bc.receipts = oracle.chain.receiptsByBlockHash(bc.header.computeBlockHash).valueOr:
+    return err(error)
+
+  ok(bc)
 
 type
   OracleResult = object
@@ -271,8 +252,8 @@ proc addToResult(res: var OracleResult, i: int, fees: ProcessedFees) =
 
 # FeeHistory returns data relevant for fee estimation based on the specified range of blocks.
 # The range can be specified either with absolute block numbers or ending with the latest
-# or pending block. Backends may or may not support gathering data from the pending block
-# or blocks older than a certain age (specified in maxHistory). The first block of the
+# block. Backends may or may not support blocks older than a certain age
+# (specified in maxHistory). The first block of the
 # actually processed range is returned to avoid ambiguity when parts of the requested range
 # are not available or when the head has changed during processing this request.
 # Three arrays are returned based on the processed blocks:
@@ -322,33 +303,26 @@ proc feeHistory*(oracle: Oracle,
     next = oldestBlock
     res = OracleResult.init(br.blocks.int)
 
-  for i in 0..<blocks:
+  for _ in 0..<blocks:
     # Retrieve the next block number to fetch
     let blockNumber = next
     inc next
     if blockNumber > br.lastBlock:
       break
 
-    if br.pendingBlock.isSome and blockNumber >= br.pendingBlock.get:
-      let
-        bc = oracle.getBlockContent(blockNumber, br.pendingBlock.get, fullBlock).valueOr:
-               return err(error)
-        fees = oracle.processBlock(bc, rewardPercentiles)
-      res.addToResult((blockNumber - oldestBlock).int, fees)
-    else:
-      let
-        cacheKey = CacheKey(number: blockNumber, percentiles: percentileKey)
-        fr = oracle.historyCache.lruFetch(cacheKey)
+    let
+      cacheKey = CacheKey(number: blockNumber, percentiles: percentileKey)
+      fr = oracle.historyCache.lruFetch(cacheKey)
 
-      if fr.isOk:
-        res.addToResult((blockNumber - oldestBlock).int, fr.get)
-      else:
-        let bc = oracle.getBlockContent(blockNumber, blockNumber, fullBlock).valueOr:
-          return err(error)
-        let fees = oracle.processBlock(bc, rewardPercentiles)
-        discard oracle.historyCache.lruAppend(cacheKey, fees, 2048)
-        # send to results even if empty to guarantee that blocks items are sent in total
-        res.addToResult((blockNumber - oldestBlock).int, fees)
+    if fr.isOk:
+      res.addToResult((blockNumber - oldestBlock).int, fr.get)
+    else:
+      let bc = oracle.getBlockContent(blockNumber, blockNumber, fullBlock).valueOr:
+        return err(error)
+      let fees = oracle.processBlock(bc, rewardPercentiles)
+      discard oracle.historyCache.lruAppend(cacheKey, fees, 2048)
+      # send to results even if empty to guarantee that blocks items are sent in total
+      res.addToResult((blockNumber - oldestBlock).int, fees)
 
   if res.firstMissing == 0:
     return ok(FeeHistoryResult())

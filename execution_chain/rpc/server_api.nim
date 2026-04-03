@@ -27,6 +27,7 @@ import
   ../evm/evm_errors,
   ../core/eip4844,
   ../core/pooled_txs_rlp,
+  ./oracle,
   ./rpc_types,
   ./rpc_utils,
   ./filters
@@ -116,6 +117,8 @@ proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag, noHash: bool = false): 
   api.chain.blockFromTag(blockTag, noHash)
 
 proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManager) =
+  let oracle = Oracle.new(api.chain)
+
   server.rpc("eth_getBalance") do(data: Address, blockTag: BlockTag) -> UInt256:
     ## Returns the balance of the account of given address.
     let
@@ -743,3 +746,11 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         return Opt.none(BlockAccessList)
 
     Opt.some(bal)
+
+  server.rpc("eth_feeHistory") do( blockCount: Quantity,newestBlock: BlockTag,rewardPercentiles: Opt[seq[float64]] ) -> FeeHistoryResult:
+      oracle.feeHistory(
+        blockCount.uint64,
+        newestBlock,
+        rewardPercentiles.get(@[])
+      ).valueOr:
+        raise newException(ValueError, error)

@@ -417,6 +417,8 @@ proc headerFromTag*(chain: ForkedChainRef, blockTag: BlockTag): Result[Header, s
       ok(chain.finalizedHeader)
     of "safe":
       ok(chain.safeHeader)
+    of "earliest":
+      chain.headerByNumber(base.BlockNumber(0))
     else:
       err("Unsupported block tag " & tag)
   of bidNumber:
