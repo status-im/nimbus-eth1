@@ -76,14 +76,16 @@ proc classifyValidatePacked(vmState: BaseVMState; item: TxItemRef): bool =
   roDB.validateTransaction(
     item.tx, item.sender, gasLimit, baseFee, excessBlobGas, vmState.com, fork).isOk
 
-func classifyPacked(vmState: BaseVMState; moreBurned: GasInt): bool =
+func classifyPacked(vmState: BaseVMState; callResult: LogResult): bool =
   ## Classifier for *packing* (i.e. adding up `gasUsed` values after executing
   ## in the VM.) This function checks whether the sum of the arguments
   ## `gasBurned` and `moreGasBurned` is within acceptable constraints.
   let totalGasUsed = if vmState.fork >= FkAmsterdam:
-                       max(vmState.blockRegularGasUsed + moreBurned, vmState.blockStateGasUsed + moreBurned)
+                       max(vmState.blockRegularGasUsed + callResult.blockRegularGasUsed,
+                         vmState.blockStateGasUsed + callResult.blockStateGasUsed)
                      else:
-                       vmState.cumulativeGasUsed + moreBurned
+                       vmState.cumulativeGasUsed + callResult.gasUsed
+
   totalGasUsed < vmState.blockCtx.gasLimit
 
 func classifyPackedNext(vmState: BaseVMState): bool =
@@ -127,10 +129,6 @@ proc runTxCommit(pst: var TxPacker; item: TxItemRef; callResult: LogResult, xp: 
   # Update receipts sequence
   if vmState.receipts.len <= inx:
     vmState.receipts.setLen(inx + receiptsExtensionSize)
-
-  # Return remaining gas to the block gas counter so it is
-  # available for the next transaction.
-  vmState.gasPool += item.tx.gasLimit - max(callResult.blockRegularGasUsed, callResult.blockStateGasUsed)
 
   # gasUsed accounting
   vmState.cumulativeGasUsed += callResult.gasUsed
@@ -203,13 +201,6 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
   if vmState.blobGasUsed + blobGasUsed > maxBlobGasPerBlock:
     return ContinueWithNextAccount
 
-  # Verify we have enough gas in gasPool
-  if vmState.gasPool < item.tx.gasLimit:
-    # skip this transaction and
-    # continue with next account
-    # if we don't have enough gas
-    return ContinueWithNextAccount
-
   # Validate transaction relative to the current vmState
   if not vmState.classifyValidatePacked(item):
     return ContinueWithNextAccount
@@ -226,7 +217,7 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
   doAssert 0 <= callResult.gasUsed
 
   # Find out what to do next: accepting this tx or trying the next account
-  if not vmState.classifyPacked(callResult.gasUsed):
+  if not vmState.classifyPacked(callResult):
     if vmState.balTrackerEnabled:
       vmState.balTracker.rollbackCallFrame(rollbackReads = true)
     vmState.ledger.rollback(savePoint)
@@ -244,7 +235,6 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
 
   pst.numBlobPerBlock += item.tx.versionedHashes.len
   vmState.blobGasUsed += blobGasUsed
-  vmState.gasPool -= item.tx.gasLimit
 
   if vmState.balTrackerEnabled:
     vmState.balTracker.commitCallFrame()

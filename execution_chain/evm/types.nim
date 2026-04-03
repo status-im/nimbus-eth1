@@ -45,7 +45,6 @@ type
   BaseVMState* = ref object of RootObj
     com*              : CommonRef
     ledger*           : LedgerRef
-    gasPool*          : GasInt
     parent*           : Header
     blockCtx*         : BlockContext
     txCtx*            : TxContext

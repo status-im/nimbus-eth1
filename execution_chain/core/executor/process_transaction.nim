@@ -83,15 +83,11 @@ proc commitOrRollbackDependingOnGasUsed(
   vmState.cumulativeGasUsed += gasUsed
   vmState.blockRegularGasUsed += callResult.blockRegularGasUsed
   vmState.blockStateGasUsed += callResult.blockStateGasUsed
+  vmState.blobGasUsed += blobGasUsed
 
   # EIP-7708: Emit closure logs for accounts with remaining balance before deletion
   if vmState.fork >= FkAmsterdam:
     emitClosureLogs(vmState, callResult.logEntries)
-
-  # Return remaining gas to the block gas counter so it is
-  # available for the next transaction.
-  vmState.gasPool += tx.gasLimit - max(callResult.blockRegularGasUsed, callResult.blockStateGasUsed)
-  vmState.blobGasUsed += blobGasUsed
   ok()
 
 proc processTransactionImpl(
@@ -110,25 +106,6 @@ proc processTransactionImpl(
     baseFee = baseFee256.truncate(GasInt)
     priorityFee = min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFee)
     excessBlobGas = header.excessBlobGas.get(0'u64)
-
-  # buy gas, then the gas goes into gasMeter
-  if vmState.gasPool < tx.gasLimit:
-    return err("gas limit reached. gasLimit=" & $vmState.gasPool &
-      ", gasNeeded=" & $tx.gasLimit)
-
-  if fork >= FkAmsterdam:
-    let
-      regularGasAvailable = header.gasLimit - vmState.blockRegularGasUsed
-      stateGasAvailable = header.gasLimit - vmState.blockStateGasUsed
-
-    # Regular gas is capped at TX_MAX_GAS_LIMIT; state gas can use all
-    # of tx.gas (gas_left can be drawn for state gas when reservoir is empty)
-    if min(TX_GAS_LIMIT.GasInt, tx.gasLimit) > regularGasAvailable:
-      return err("regular gas used exceeds limit")
-    if tx.gasLimit > stateGasAvailable:
-      return err("state gas used exceeds limit")
-
-  vmState.gasPool -= tx.gasLimit
 
   # blobGasUsed will be added to vmState.blobGasUsed if the tx is ok.
   let
