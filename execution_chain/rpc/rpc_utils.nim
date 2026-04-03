@@ -432,7 +432,7 @@ proc blockFromTag*(chain: ForkedChainRef, blockTag: BlockTag, noHash: bool = fal
       ok(chain.finalizedBlock)
     of "safe":
       ok(chain.safeBlock)
-    # wait till pruner pr is merged for tail
+    # wait till pruner pr is merged for tail semantics to be available, which is the appropriate way to resolve this tag
     of "earliest":
       chain.blockByNumber(base.BlockNumber(0))
     else:
