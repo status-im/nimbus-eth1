@@ -188,6 +188,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     # witness keys and block hashes when processing the block as these will be used
     # when building the witness.
     vmState.ledger.clearWitnessKeys()
+    vmState.ledger.clearDeployedCodeHashes()
     vmState.ledger.clearBlockHashesCache()
 
     processBlock()
