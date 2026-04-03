@@ -606,16 +606,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         "requireCanonical is a pre-merge concept and is not supported")
 
     let
-      blk = case quantityTag.kind
-        of bidNumber:
-          api.chain.blockByNumber(base.BlockNumber(quantityTag.number)).valueOr:
-            return Opt.none(seq[ReceiptObject])
-        of bidHash:
-          api.chain.blockByHash(quantityTag.hash).valueOr:
-            return Opt.none(seq[ReceiptObject])
-        else:
-          api.blockFromTag(quantityTag).valueOr:
-            return Opt.none(seq[ReceiptObject])
+      blk = api.blockFromTag(quantityTag).valueOr:
+        return Opt.none(seq[ReceiptObject])
       blkHash = blk.header.computeBlockHash
       receipts = api.chain.receiptsByBlockHash(blkHash).valueOr:
         return Opt.none(seq[ReceiptObject])
