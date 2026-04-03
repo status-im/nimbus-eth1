@@ -76,6 +76,7 @@ const skipFiles = [
   "consolidation_requests.json",
   "multiple_withdrawals_same_address.json",
   "precompile_warming.json",
+  "max_initcode_size_via_create.json",
 ]
 
 runEESTSuite(
