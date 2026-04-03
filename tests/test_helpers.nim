@@ -12,7 +12,8 @@ import
   ../execution_chain/[constants, conf, transaction],
   ../execution_chain/db/ledger,
   ../execution_chain/common,
-  ../execution_chain/networking/[netkeys, p2p]
+  ../execution_chain/networking/[netkeys, p2p],
+  ./eest/path_handler
 
 func revTable(list: array[FkFrontier..FkLatest, string]): Table[string, EVMFork] =
   for k, v in list:
@@ -75,6 +76,7 @@ proc jsonTestImpl*(inputFolder, outputName: string, handler, skipTest: NimNode):
       filenames.add(filename)
 
     doAssert(filenames.len > 0)
+
     for fname in filenames:
       let filename = fname
       test fname.substr(inputPath.len + 1):
@@ -84,7 +86,8 @@ proc jsonTestImpl*(inputFolder, outputName: string, handler, skipTest: NimNode):
             last = folder.splitPath().tail
           # we set this here because exceptions might be raised in the handler:
           status[last][name] = Status.Fail
-          let fixtures = parseJson(readFile(filename))
+
+          let fixtures = parseJson(readFile(handleLongPath(filename)))
           `handler`(fixtures, `testStatusIMPL`)
           if `testStatusIMPL` == OK:
             status[last][name] = Status.OK
