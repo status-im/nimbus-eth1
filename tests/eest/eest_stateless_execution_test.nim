@@ -61,7 +61,6 @@ const skipFiles = [
   "varying_calldata_costs.json",
   "bal_7002_partial_sweep.json",
   "witness_codes_delegated_eoa_insufficient_balance.json",
-  "witness_codes_create_same_hash_then_read.json",
   "witness_headers_blockhash_at_offset.json",
   "witness_headers_blockhash_boundary.json",
   "witness_headers_blockhash_in_reverted_tx.json",
