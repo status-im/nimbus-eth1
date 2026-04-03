@@ -41,6 +41,10 @@ const
   twoHundredYears* = chronos.days(365 * 200 + 48)
     ## Large Duration constant considered sort of infinite.
 
+  daemonWaitReadyInterval* = chronos.seconds(20)
+    ## Some polling interval time waiting until the system gets into download
+    ## state when the the FCU modue hash  a finalised header.
+
   daemonWaitDownloadInterval* = chronos.seconds(10)
     ## Some waiting time at the end of the daemon task which always lingers
     ## in the background. This one is for `SnapDownload` state.
@@ -73,6 +77,14 @@ const
     ## If the total coverage has reached the factor `accuAccountsCovMin`, the
     ## pivot must also have reached the factor `accuPivotCovMin` in order to
     ## start trie assembly and healing.
+
+  relativeCoverageEvictionThreshold* = 0.2
+    ## If the ratio
+    ## ::
+    ##   unpocessed-pivot-acccounts-range / max-unpocessed-acccounts-range
+    ##
+    ## is not small enough, then the pivot state may be evicted from the
+    ## states list to make space for a new state.
 
   # ----------------------
 

@@ -74,7 +74,7 @@ template headerStateRegister*(
 
     let
       root = StateRoot(rc.value.stateRoot)
-      blockNumber = rc.value.number
+      blockNumber {.inject.} = rc.value.number
 
     # Store root -> block data mapping
     ctx.pool.mptAsm.putBlockData(root, hash, blockNumber).isOkOr:
@@ -86,7 +86,7 @@ template headerStateRegister*(
     bodyRc = Result[StateDataRef,ErrorType].ok(
       sdb.register(root, hash, blockNumber, info))
 
-  bodyRc # return
+  bodyRc                                            # return
 
 # ------------------------------------------------------------------------------
 # End
