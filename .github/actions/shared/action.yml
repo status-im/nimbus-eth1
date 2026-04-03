@@ -34,21 +34,29 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - name: Windows missing wmic workaround
+      if: runner.os == 'Windows'
+      shell: powershell
+      run: |
+        $freeSpace = Get-PSDrive C | Select-Object Name, @{Name="Used(GB)";Expression={"{0:N2}" -f ($_.Used/1GB)}}, @{Name="Free(GB)";Expression={"{0:N2}" -f ($_.Free/1GB)}}, @{Name="Total(GB)";Expression={"{0:N2}" -f (($_.Used+$_.Free)/1GB)}}
+        $memory = Get-CimInstance Win32_OperatingSystem
+        $totalMemoryGB = [Math]::Round($memory.TotalVisibleMemorySize / 1KB / 1024, 2)
+        $freeMemoryGB = [Math]::Round($memory.FreePhysicalMemory / 1KB / 1024, 2)
+        "FREE_SPACE=$freeSpace" >> $env:GITHUB_ENV
+        "PHYSICAL_MEMORY=$totalMemoryGB" >> $env:GITHUB_ENV
+        "FREE_MEMORY=$freeMemoryGB" >> $env:GITHUB_ENV
+
     - name: Derive environment variables
       shell: bash
       run: |
         if [[ '${{ matrix.cpu }}' == 'amd64' ]]; then
           PLATFORM=x64
-          GOARCH=amd64
         elif [[ '${{ matrix.cpu }}' == 'arm64' ]]; then
           PLATFORM=arm64
-          GOARCH=arm64
         else
           PLATFORM=x86
-          GOARCH=386
         fi
         echo "PLATFORM=${PLATFORM}" >> $GITHUB_ENV
-        echo "GOARCH=${GOARCH}" >> $GITHUB_ENV
 
         ncpu=''
         case '${{ runner.os }}' in
@@ -70,8 +78,9 @@ runs:
           ncpu=${NUMBER_OF_PROCESSORS}
           CD=${PWD:1:1}
           echo "Number of cores: ${NUMBER_OF_PROCESSORS}"
-          echo "Physical memory: $(wmic ComputerSystem get TotalPhysicalMemory)"
-          echo -e "Partition sizes:\n$(wmic logicaldisk get name,size,freespace | grep -e "${CD^}" -e "FreeSpace")"
+          echo "Physical memory: ${PHYSICAL_MEMORY} GB"
+          echo "Free memory: ${FREE_MEMORY} GB"
+          echo -e "Partition sizes: ${FREE_SPACE}"
           ;;
         esac
         [[ -z "$ncpu" || $ncpu -le 0 ]] && ncpu=1
@@ -165,6 +174,7 @@ runs:
         path: |
           tests/fixtures/eest_devnet
           tests/fixtures/eest_bal
+          tests/fixtures/eest_zkevm
         # EEST release version contained in eest_ci_cache.sh.
         # Each time we bump EEST version, it should invalidate the cache too.
         key: eest-${{ hashFiles('scripts/eest_ci_cache.sh') }}
