@@ -201,6 +201,11 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
   if vmState.blobGasUsed + blobGasUsed > maxBlobGasPerBlock:
     return ContinueWithNextAccount
 
+  let
+    regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
+  if min(TX_GAS_LIMIT.GasInt, item.tx.gasLimit) > regularGasAvailable:
+    return ContinueWithNextAccount
+
   # Validate transaction relative to the current vmState
   if not vmState.classifyValidatePacked(item):
     return ContinueWithNextAccount
