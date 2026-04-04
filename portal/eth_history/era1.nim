@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -418,6 +418,39 @@ proc getBlockHeader*(
   ?f[].handle.get().setFilePos(pos, SeekPosition.SeekBegin).mapErr(ioErrorMsg)
 
   getBlockHeader(f, res)
+
+proc getBlockBody*(
+    f: Era1File, blockNumber: uint64, res: var BlockBody
+): Result[void, string] =
+  doAssert not isNil(f) and f[].handle.isSome
+  doAssert(
+    blockNumber >= f[].blockIdx.startNumber and blockNumber <= f[].blockIdx.endNumber,
+    "Wrong era1 file for selected block number",
+  )
+
+  let pos = f[].blockIdx.offsets[blockNumber - f[].blockIdx.startNumber]
+
+  ?f[].handle.get().setFilePos(pos, SeekPosition.SeekBegin).mapErr(ioErrorMsg)
+
+  ?skipRecord(f) # Header
+  getBlockBody(f, res)
+
+proc getReceipts*(
+    f: Era1File, blockNumber: uint64, res: var seq[Receipt]
+): Result[void, string] =
+  doAssert not isNil(f) and f[].handle.isSome
+  doAssert(
+    blockNumber >= f[].blockIdx.startNumber and blockNumber <= f[].blockIdx.endNumber,
+    "Wrong era1 file for selected block number",
+  )
+
+  let pos = f[].blockIdx.offsets[blockNumber - f[].blockIdx.startNumber]
+
+  ?f[].handle.get().setFilePos(pos, SeekPosition.SeekBegin).mapErr(ioErrorMsg)
+
+  ?skipRecord(f) # Header
+  ?skipRecord(f) # Body
+  getReceipts(f, res)
 
 proc getTotalDifficulty*(f: Era1File, blockNumber: uint64): Result[UInt256, string] =
   doAssert not isNil(f) and f[].handle.isSome
