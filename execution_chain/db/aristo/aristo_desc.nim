@@ -25,11 +25,14 @@ import
   std/[hashes, sequtils, sets, tables, heapqueue],
   eth/common/hashes, eth/trie/nibbles,
   results,
+  minilru,
   ./aristo_constants,
   ./aristo_desc/[desc_error, desc_identifiers, desc_structural],
-  ./aristo_desc/desc_backend,
-  minilru
+  ./aristo_desc/desc_backend
 
+when compileOption("threads"):
+  import taskpools, ../../concurrency/readwritelock
+  export taskpools, readwritelock
 
 # Not auto-exporting backend
 export
@@ -83,6 +86,11 @@ type
       ## -1 = stored in database, where relevant though typically should be
       ## compared with the base layer level instead.
 
+    when compileOption("threads"):      
+      lock*: ReadWriteLock
+        ## A read-write lock used to support thread safe reads and writes to the 
+        ## database from multiple threads.
+
   Snapshot* = object
     vtx*: Table[RootedVertexID, VtxSnapshot]
     acc*: Table[Hash32, (AccLeafRef, int)]
@@ -101,6 +109,7 @@ type
 
     putBegFn*: PutBegFn              ## Start bulk store session
     putVtxFn*: PutVtxFn              ## Bulk store vertex records
+    putVtxBlobFn*: PutVtxBlobFn      ## Bulk store vertex records
     putLstFn*: PutLstFn              ## Store saved state
     putEndFn*: PutEndFn              ## Commit bulk store session
 
@@ -134,6 +143,13 @@ type
       ## The maximum number of snapshots to hold in the snapshots queue. When the queue
       ## is full (queue.len == maxSnapshots) then the oldest snapshot is removed from
       ## the queue and cleaned up.
+
+    parallelStateRootComputation*: bool
+      ## Enables parallel state root computation.
+
+    when compileOption("threads"):
+      taskpool*: Taskpool
+        ## Shared task pool for offloading computation to other threads.
 
   Leg* = object
     ## For constructing a `VertexPath`
