@@ -170,7 +170,8 @@ proc toTracerFlags(conf: StateConf): set[TracerFlags] =
 template hasError(ctx: StateContext): bool =
   ctx.error.len > 0
 
-proc prepareAndRun(inputFile: string, conf: StateConf): bool =
+proc prepareAndRun(inputFile: string, conf: StateConf,
+                   allResults: var seq[StateResult]): bool =
   var
     ctx: StateContext
 
@@ -188,7 +189,6 @@ proc prepareAndRun(inputFile: string, conf: StateConf): bool =
     ctx.tracerFlags = toTracerFlags(conf)
 
   var
-    stateRes = newSeqOfCap[StateResult](post.len)
     index = 1
     hasError = false
 
@@ -207,7 +207,7 @@ proc prepareAndRun(inputFile: string, conf: StateConf): bool =
     ctx.expectedLogs = Hash32.fromJson(subTest["logs"])
     ctx.tx = parseTx(txData, subTest["indexes"])
     let res = ctx.runExecution(conf, pre)
-    stateRes.add res
+    allResults.add res
     hasError = hasError or ctx.hasError
 
   if conf.fork.len > 0:
@@ -235,7 +235,6 @@ proc prepareAndRun(inputFile: string, conf: StateConf): bool =
       for subTest in forkData:
         runSubTest(subTest)
 
-  writeResultToStdout(stateRes)
   not hasError
 
 when defined(chronicles_runtime_filtering):
@@ -271,6 +270,7 @@ proc main() =
     setVerbosity(conf.verbosity)
 
   let hasFilter = conf.run.len > 0
+  var allResults: seq[StateResult]
 
   if conf.inputFile.len > 0:
     if dirExists(conf.inputFile):
@@ -285,21 +285,25 @@ proc main() =
 
       var noError = true
       for f in files:
-        let res = prepareAndRun(f, conf)
+        let res = prepareAndRun(f, conf, allResults)
         noError = noError and res
 
+      writeResultToStdout(allResults)
       if not noError:
         quit(QuitFailure)
     else:
       # Single file mode
-      if not prepareAndRun(conf.inputFile, conf):
+      if not prepareAndRun(conf.inputFile, conf, allResults):
+        writeResultToStdout(allResults)
         quit(QuitFailure)
+      writeResultToStdout(allResults)
   else:
     # Stdin mode
     var noError = true
     for inputFile in lines(stdin):
-      let res = prepareAndRun(inputFile, conf)
+      let res = prepareAndRun(inputFile, conf, allResults)
       noError = noError and res
+    writeResultToStdout(allResults)
     if not noError:
       quit(QuitFailure)
 
