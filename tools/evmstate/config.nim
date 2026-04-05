@@ -74,8 +74,18 @@ type
       defaultValue: 0
       name: "verbosity" }: int
 
+    run* {.
+      desc: "regex filter for test names"
+      defaultValue: ""
+      name: "run" }: string
+
+    workers* {.
+      desc: "number of parallel workers (0 = auto)"
+      defaultValue: 1
+      name: "workers" }: int
+
     inputFile* {.
-      desc: "json file contains state test data"
+      desc: "json file or directory containing state test data"
       defaultValue: ""
       argument }: string
 

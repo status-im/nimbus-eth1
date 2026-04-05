@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[json, strutils, sets, tables, options, streams],
+  std/[json, strutils, sets, tables, options, streams, os],
   chronicles,
   eth/common/keys,
   eth/common/transaction_utils,
@@ -253,6 +253,15 @@ when defined(chronicles_runtime_filtering):
     let level = v.toLogLevel
     setLogLevel(level)
 
+proc collectJsonFiles(path: string): seq[string] =
+  ## Recursively collect all .json files under a directory, or return
+  ## the single file if path is a file.
+  if fileExists(path):
+    return @[path]
+  for entry in walkDirRec(path):
+    if entry.endsWith(".json") and "/.meta/" notin entry:
+      result.add(entry)
+
 proc main() =
   # https://github.com/status-im/nimbus-eth1/issues/3131
   setStdIoUnbuffered()
@@ -261,10 +270,32 @@ proc main() =
   when defined(chronicles_runtime_filtering):
     setVerbosity(conf.verbosity)
 
+  let hasFilter = conf.run.len > 0
+
   if conf.inputFile.len > 0:
-    if not prepareAndRun(conf.inputFile, conf):
-      quit(QuitFailure)
+    if dirExists(conf.inputFile):
+      # Directory mode: collect all JSON files and run sequentially
+      var files = collectJsonFiles(conf.inputFile)
+      if hasFilter:
+        var filtered: seq[string]
+        for f in files:
+          if conf.run in f:
+            filtered.add(f)
+        files = filtered
+
+      var noError = true
+      for f in files:
+        let res = prepareAndRun(f, conf)
+        noError = noError and res
+
+      if not noError:
+        quit(QuitFailure)
+    else:
+      # Single file mode
+      if not prepareAndRun(conf.inputFile, conf):
+        quit(QuitFailure)
   else:
+    # Stdin mode
     var noError = true
     for inputFile in lines(stdin):
       let res = prepareAndRun(inputFile, conf)
