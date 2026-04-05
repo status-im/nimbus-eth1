@@ -18,10 +18,12 @@ import
   web3/execution_types,
   json_rpc/rpcclient,
   json_rpc/rpcserver,
+  chronos,
   ../../execution_chain/db/ledger,
   ../../execution_chain/core/chain/forked_chain,
   ../../execution_chain/core/tx_pool,
   ../../execution_chain/beacon/beacon_engine,
+  ../../execution_chain/beacon/api_handler,
   ../../execution_chain/common/common,
   ../../hive_integration/engine_client,
   ./eest_helpers
@@ -128,6 +130,89 @@ proc processFile*(fileName: string, statelessEnabled = false): bool =
 
   return testPass
 
+proc toVersion(n: uint64): Version =
+  ## Convert 1-based Numero to Version enum.
+  case n
+  of 1: Version.V1
+  of 2: Version.V2
+  of 3: Version.V3
+  of 4: Version.V4
+  of 5: Version.V5
+  else: Version.V1
+
+proc sendNewPayloadDirect(ben: BeaconEngineRef, version: uint64, param: PayloadParam): Result[PayloadStatusV1, string] =
+  let npVersion = toVersion(version)
+  try:
+    ok(waitFor ben.newPayload(
+      npVersion,
+      param.payload,
+      param.versionedHashes,
+      param.parentBeaconBlockRoot,
+      param.executionRequests))
+  except ApplicationError as exc:
+    err(exc.msg)
+  except RlpError as exc:
+    err(exc.msg)
+  except CancelledError:
+    err("cancelled")
+
+proc sendFCUDirect(ben: BeaconEngineRef, version: uint64, param: PayloadParam): Result[ForkchoiceUpdatedResponse, string] =
+  let
+    fcuVersion = toVersion(version)
+    update = ForkchoiceStateV1(
+      headblockHash:      param.payload.blockHash,
+      finalizedblockHash: param.payload.blockHash
+    )
+  try:
+    ok(waitFor ben.forkchoiceUpdated(
+      fcuVersion, update, Opt.none(PayloadAttributes)))
+  except ApplicationError as exc:
+    err(exc.msg)
+  except CancelledError:
+    err("cancelled")
+
+proc runTestFast(env: TestEnv, unit: EngineUnitEnv): Result[void, string] =
+  ## Execute engine payloads via direct BeaconEngine method calls,
+  ## bypassing the HTTP RPC layer.
+  let ben = env.beaconEngine.get()
+
+  for enp in unit.engineNewPayloads:
+    var status = ben.sendNewPayloadDirect(enp.newPayloadVersion.uint64, enp.params).valueOr:
+      if enp.validationError.isSome():
+        continue
+      else:
+        return err(error)
+
+    discard status
+
+    let y = ben.sendFCUDirect(enp.forkchoiceUpdatedVersion.uint64, enp.params).valueOr:
+      return err(error)
+
+    discard y
+
+  let header = env.chain.latestHeader()
+
+  if unit.lastblockhash != header.computeRlpHash:
+    return err("last block hash mismatch")
+
+  ok()
+
+proc processFileFast*(fileName: string): bool =
+  let
+    fixture = parseFixture(fileName, EngineFixture)
+
+  var testPass = true
+  for unit in fixture.units:
+    let header = unit.unit.genesisBlockHeader.to(Header)
+    doAssert(unit.unit.genesisBlockHeader.hash == header.computeRlpHash)
+    let env = prepareEnv(unit.unit, header, engineDirect = true)
+    env.runTestFast(unit.unit).isOkOr:
+      echo "\nTestName: ", unit.name, " RunTest error: ", error, "\n"
+      testPass = false
+    env.close()
+
+  return testPass
+
 {.pop.}  # undo {.push raises: [], gcsafe.} for isMainModule block
 
 when isMainModule:
@@ -152,16 +237,19 @@ when isMainModule:
     echo "Usage: " & testFile & " [options] <file-or-directory>"
     echo ""
     echo "Options:"
+    echo "  --fast             Bypass HTTP RPC; call BeaconEngine directly"
     echo "  --run=<pattern>    Substring filter on file paths"
     echo "  --json             Output results as JSON array"
     echo "  --workers=<N>      Number of workers (accepted, runs sequentially)"
     echo ""
     echo "Examples:"
     echo "  " & testFile & " vector.json"
+    echo "  " & testFile & " --fast /path/to/blockchain_tests_engine/"
     echo "  " & testFile & " --json /path/to/blockchain_tests_engine/"
     echo "  " & testFile & " --run=eip7702 /path/to/blockchain_tests_engine/"
 
   var
+    fastEnabled = false
     jsonEnabled = false
     runFilter = ""
     workers = 1
@@ -174,6 +262,8 @@ when isMainModule:
     of cmdEnd: break
     of cmdLongOption, cmdShortOption:
       case p.key.toLowerAscii
+      of "fast":
+        fastEnabled = true
       of "json":
         jsonEnabled = true
       of "run":
@@ -215,7 +305,8 @@ when isMainModule:
     failCount = 0
 
   for f in files:
-    let pass = processFile(f)
+    let pass = if fastEnabled: processFileFast(f)
+               else: processFile(f)
     let rel = if dirExists(inputPath):
                 f.relativePath(inputPath)
               else:

@@ -17,14 +17,22 @@ import
   web3/execution_types,
   json_rpc/rpcclient,
   json_rpc/rpcserver,
+  ../../execution_chain/db/core_db/memory_only,
   ../../execution_chain/db/ledger,
   ../../execution_chain/core/chain/forked_chain,
+  ../../execution_chain/core/executor,
+  ../../execution_chain/core/validate,
+  ../../execution_chain/evm/state,
+  ../../execution_chain/evm/types,
   ../../execution_chain/beacon/beacon_engine,
   ../../execution_chain/common/common,
   ../../hive_integration/engine_client,
   ./eest_helpers,
   stew/byteutils,
   chronos
+
+import ../../tools/common/helpers as chp except HardFork
+import ../../tools/evmstate/helpers except HardFork
 
 proc parseBlocks*(node: JsonNode): seq[BlockDesc] =
   for x in node:
@@ -89,6 +97,117 @@ proc processFile*(fileName: string, statelessEnabled = false): bool =
 
   return testPass
 
+proc runTestFast(
+    com: CommonRef,
+    parentHeader: Header,
+    baseTxFrame: CoreDbTxRef,
+    unit: BlockchainUnitEnv): Result[void, string] =
+  ## Execute blocks directly through the executor, bypassing ForkedChainRef.
+  let blocks = parseBlocks(unit.blocks)
+  var
+    parent = parentHeader
+    currentFrame = baseTxFrame
+
+  for blk in blocks:
+    let childFrame = currentFrame.txFrameBegin()
+
+    let vmState = BaseVMState()
+    vmState.init(
+      parent = parent,
+      header = blk.blk.header,
+      com = com,
+      txFrame = childFrame,
+    )
+
+    # Header + kinship validation (gas limits, timestamps, etc.)
+    let valRes = com.validateHeaderAndKinship(
+      blk.blk,
+      blockAccessList = Opt.none(BlockAccessListRef),
+      skipPreExecBalCheck = true,
+      parent,
+      childFrame)
+    if valRes.isErr:
+      if blk.badBlock:
+        childFrame.dispose()
+        continue
+      else:
+        childFrame.dispose()
+        return err("Good block failed validation: " & valRes.error)
+
+    # Execute the block through the executor directly
+    let res = vmState.processBlock(
+      blk.blk,
+      skipValidation = false,
+      skipReceipts = false,
+      skipUncles = true,
+      skipStateRootCheck = false,
+      skipPostExecBalCheck = true,
+    )
+
+    if res.isOk:
+      if blk.badBlock:
+        childFrame.dispose()
+        return err("A bug? bad block imported")
+      # Persist the header so the next block can look up its parent
+      childFrame.persistHeader(
+        blk.blk.header.computeBlockHash, blk.blk.header).isOkOr:
+        childFrame.dispose()
+        return err("Failed to persist header: " & error)
+      parent = blk.blk.header
+      currentFrame = childFrame
+    else:
+      childFrame.dispose()
+      if not blk.badBlock:
+        return err("Good block rejected: " & res.error)
+
+  # Verify final state root
+  let stateRoot = currentFrame.getStateRoot().valueOr:
+    return err("Failed to get state root")
+  if stateRoot != parent.stateRoot:
+    return err("Final stateRoot mismatch: got " & $stateRoot &
+      " expected " & $parent.stateRoot)
+
+  ok()
+
+proc processFileFast*(fileName: string): bool =
+  let
+    fixture = parseFixture(fileName, BlockchainFixture)
+
+  var testPass = true
+  for unit in fixture.units:
+    try:
+      let
+        header = unit.unit.genesisBlockHeader.to(Header)
+        memDB = newCoreDbRef DefaultDbMemory
+        baseTx = memDB.baseTxFrame()
+        ledger = LedgerRef.init(baseTx)
+        config = getChainConfig(unit.unit.network)
+
+      config.chainId = unit.unit.config.chainid
+      config.blobSchedule = unit.unit.config.blobSchedule
+
+      doAssert(unit.unit.genesisBlockHeader.hash == header.computeRlpHash)
+
+      setupLedger(unit.unit.pre, ledger)
+      ledger.persist()
+
+      baseTx.persistHeaderAndSetHead(header).isOkOr:
+        echo "\nTestName: ", unit.name, " Failed to persist genesis: ", error, "\n"
+        testPass = false
+        continue
+
+      let com = CommonRef.new(memDB, config)
+
+      let res = runTestFast(com, header, baseTx, unit.unit)
+      if res.isErr:
+        echo "\nTestName: ", unit.name, " RunTest error: ", res.error, "\n"
+        testPass = false
+    except ValueError as exc:
+      echo "\nTestName: ", unit.name, " Error: ", exc.msg, "\n"
+      testPass = false
+
+  return testPass
+
 when isMainModule:
   import
     std/[os, parseopt, strutils]
@@ -111,16 +230,19 @@ when isMainModule:
     echo "Usage: " & testFile & " [options] <file-or-directory>"
     echo ""
     echo "Options:"
+    echo "  --fast             Bypass ForkedChainRef; call executor directly"
     echo "  --run=<pattern>    Substring filter on file paths"
     echo "  --json             Output results as JSON array"
     echo "  --workers=<N>      Number of workers (accepted, runs sequentially)"
     echo ""
     echo "Examples:"
     echo "  " & testFile & " vector.json"
+    echo "  " & testFile & " --fast /path/to/blockchain_tests/"
     echo "  " & testFile & " --json /path/to/blockchain_tests/"
     echo "  " & testFile & " --run=eip7702 /path/to/blockchain_tests/"
 
   var
+    fastEnabled = false
     jsonEnabled = false
     runFilter = ""
     workers = 1
@@ -133,6 +255,8 @@ when isMainModule:
     of cmdEnd: break
     of cmdLongOption, cmdShortOption:
       case p.key.toLowerAscii
+      of "fast":
+        fastEnabled = true
       of "json":
         jsonEnabled = true
       of "run":
@@ -174,7 +298,8 @@ when isMainModule:
     failCount = 0
 
   for f in files:
-    let pass = processFile(f)
+    let pass = if fastEnabled: processFileFast(f)
+               else: processFile(f)
     let rel = if dirExists(inputPath):
                 f.relativePath(inputPath)
               else:

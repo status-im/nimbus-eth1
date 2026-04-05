@@ -94,6 +94,7 @@ type
 
   TestEnv* = ref object
     chain*: ForkedChainRef
+    beaconEngine*: Opt[BeaconEngineRef]
     server*: Opt[RpcHttpServer]
     client*: Opt[RpcHttpClient]
 
@@ -223,6 +224,7 @@ proc prepareEnv*(
     unit: UnitEnv,
     genesis: Header,
     rpcEnabled = false,
+    engineDirect = false,
     statelessEnabled = false): TestEnv =
 
   try:
@@ -250,6 +252,7 @@ proc prepareEnv*(
       chain = ForkedChainRef.init(com, enableQueue = true, persistBatchSize = 1)
 
     testEnv.chain = chain
+    testEnv.beaconEngine = Opt.none(BeaconEngineRef)
     testEnv.client = Opt.none(RpcHttpClient)
     testEnv.server = Opt.none(RpcHttpServer)
 
@@ -269,8 +272,14 @@ proc prepareEnv*(
 
       let client = setupClient(server.localAddress[0].port)
 
+      testEnv.beaconEngine = Opt.some(beaconEngine)
       testEnv.client = Opt.some(client)
       testEnv.server = Opt.some(server)
+    elif engineDirect:
+      let
+        txPool = TxPoolRef.new(chain)
+        beaconEngine = BeaconEngineRef.new(txPool)
+      testEnv.beaconEngine = Opt.some(beaconEngine)
 
     return testEnv
   except ValueError as exc:
