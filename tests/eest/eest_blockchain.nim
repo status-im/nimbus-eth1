@@ -140,7 +140,7 @@ proc runTestFast(
       skipValidation = false,
       skipReceipts = false,
       skipUncles = true,
-      skipStateRootCheck = true,  # skip trie root computation in --fast mode
+      skipStateRootCheck = false,
       skipPostExecBalCheck = true,
     )
 
