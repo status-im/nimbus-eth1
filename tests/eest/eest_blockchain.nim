@@ -273,8 +273,6 @@ when isMainModule:
     of cmdArgument:
       inputPath = p.key
 
-  discard workers  # sequential only; flag accepted for CLI compatibility
-
   if inputPath.len == 0:
     printUsage()
     quit(QuitFailure)
@@ -292,14 +290,28 @@ when isMainModule:
     echo "No matching .json files found."
     quit(QuitFailure)
 
+  type FileResult = object
+    path: string
+    pass: bool
+
+  var fileResults: seq[FileResult]
+
+  if workers > 1:
+    discard workers  # TODO: in-process parallelism requires GC-safe procs
+  if true:
+    for f in files:
+      let pass = if fastEnabled: processFileFast(f)
+                 else: processFile(f)
+      fileResults.add(FileResult(path: f, pass: pass))
+
   var
     results: seq[TestResult]
     passCount = 0
     failCount = 0
 
-  for f in files:
-    let pass = if fastEnabled: processFileFast(f)
-               else: processFile(f)
+  for fr in fileResults:
+    let f = fr.path
+    let pass = fr.pass
     let rel = if dirExists(inputPath):
                 f.relativePath(inputPath)
               else:
