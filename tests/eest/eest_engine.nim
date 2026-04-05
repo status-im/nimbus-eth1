@@ -128,14 +128,120 @@ proc processFile*(fileName: string, statelessEnabled = false): bool =
 
   return testPass
 
+{.pop.}  # undo {.push raises: [], gcsafe.} for isMainModule block
+
 when isMainModule:
   import
-    std/[cmdline, os],
-    unittest2
+    std/[json, os, parseopt, strutils]
 
-  if paramCount() == 0:
+  type
+    TestResult = object
+      name: string
+      pass: bool
+      error: string
+
+  proc collectJsonFiles(path: string): seq[string] {.raises: [OSError].} =
+    if fileExists(path):
+      return @[path]
+    for entry in walkDirRec(path):
+      if entry.endsWith(".json") and "/.meta/" notin entry:
+        result.add(entry)
+
+  proc printUsage() =
     let testFile = getAppFilename().splitPath().tail
-    echo "Usage: " & testFile & " vector.json"
+    echo "Usage: " & testFile & " [options] <file-or-directory>"
+    echo ""
+    echo "Options:"
+    echo "  --run=<pattern>    Substring filter on file paths"
+    echo "  --json             Output results as JSON array"
+    echo "  --workers=<N>      Number of workers (accepted, runs sequentially)"
+    echo ""
+    echo "Examples:"
+    echo "  " & testFile & " vector.json"
+    echo "  " & testFile & " --json /path/to/blockchain_tests_engine/"
+    echo "  " & testFile & " --run=eip7702 /path/to/blockchain_tests_engine/"
+
+  var
+    jsonEnabled = false
+    runFilter = ""
+    workers = 1
+    inputPath = ""
+
+  var p = initOptParser(commandLineParams())
+  while true:
+    p.next()
+    case p.kind
+    of cmdEnd: break
+    of cmdLongOption, cmdShortOption:
+      case p.key.toLowerAscii
+      of "json":
+        jsonEnabled = true
+      of "run":
+        runFilter = p.val
+      of "workers":
+        workers = parseInt(p.val)
+      of "help", "h":
+        printUsage()
+        quit(QuitSuccess)
+      else:
+        echo "Unknown option: ", p.key
+        printUsage()
+        quit(QuitFailure)
+    of cmdArgument:
+      inputPath = p.key
+
+  discard workers  # sequential only; flag accepted for CLI compatibility
+
+  if inputPath.len == 0:
+    printUsage()
     quit(QuitFailure)
 
-  check processFile(paramStr(1))
+  var files = collectJsonFiles(inputPath)
+
+  if runFilter.len > 0:
+    var filtered: seq[string]
+    for f in files:
+      if runFilter in f:
+        filtered.add(f)
+    files = filtered
+
+  if files.len == 0:
+    echo "No matching .json files found."
+    quit(QuitFailure)
+
+  var
+    results: seq[TestResult]
+    passCount = 0
+    failCount = 0
+
+  for f in files:
+    let pass = processFile(f)
+    let rel = if dirExists(inputPath):
+                f.relativePath(inputPath)
+              else:
+                f.splitPath().tail
+    var errMsg = ""
+    if not pass:
+      errMsg = "test failed"
+      inc failCount
+    else:
+      inc passCount
+    results.add(TestResult(name: rel, pass: pass, error: errMsg))
+    if not jsonEnabled:
+      if pass:
+        echo "PASS: ", rel
+      else:
+        echo "FAIL: ", rel
+
+  if jsonEnabled:
+    var arr = newJArray()
+    for r in results:
+      arr.add(%*{"name": r.name, "pass": r.pass, "error": r.error})
+    echo $arr
+  else:
+    echo ""
+    echo "Total: ", files.len, " | Passed: ", passCount,
+      " | Failed: ", failCount
+
+  if failCount > 0:
+    quit(QuitFailure)
