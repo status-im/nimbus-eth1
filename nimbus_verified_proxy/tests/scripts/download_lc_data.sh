@@ -18,28 +18,28 @@ echo "Fetching slot for block root $block_root..."
 slot=$(curl -sf "$BEACON_URL/eth/v1/beacon/headers/$block_root" \
   -H "Accept: application/json" | jq -r '.data.header.message.slot')
 
-# 3. Download LC bootstrap
+# Download LC bootstrap
 echo "Downloading lc_bootstrap.json..."
 curl -sf "$BEACON_URL/eth/v1/beacon/light_client/bootstrap/$block_root" \
   -H "Accept: application/json" > "$DOWNLOAD_FOLDER/lc_bootstrap.json" || {
     echo "ERROR: failed to download bootstrap" >&2; exit 1; }
 
-# 4. Download LC optimistic update
+# Download LC optimistic update
 echo "Downloading lc_optimistic.json..."
 curl -sf "$BEACON_URL/eth/v1/beacon/light_client/optimistic_update" \
   -H "Accept: application/json" > "$DOWNLOAD_FOLDER/lc_optimistic.json" || {
     echo "ERROR: failed to download optimistic update" >&2; exit 1; }
 
-# 5. Download LC finality update
+# Download LC finality update
 echo "Downloading lc_finality.json..."
 curl -sf "$BEACON_URL/eth/v1/beacon/light_client/finality_update" \
   -H "Accept: application/json" > "$DOWNLOAD_FOLDER/lc_finality.json" || {
     echo "ERROR: failed to download finality update" >&2; exit 1; }
 
-# 6. Extract optimistic slot from downloaded file
+# Extract optimistic slot from downloaded file
 optimistic_slot=$(jq -r '.data.attested_header.beacon.slot' "$DOWNLOAD_FOLDER/lc_optimistic.json")
 
-# 7. Download LC updates for the period covering the optimistic slot
+# Download LC updates for the period covering the optimistic slot
 SLOTS_PER_PERIOD=8192
 period=$((optimistic_slot / SLOTS_PER_PERIOD))
 echo "Downloading lc_updates.json (period=$period)..."
