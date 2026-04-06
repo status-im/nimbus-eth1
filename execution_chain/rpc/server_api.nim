@@ -37,6 +37,7 @@ logScope:
 
 type ServerAPIRef* = ref object
   txPool: TxPoolRef
+  oracle: Oracle
 
 const defaultTag = blockId("latest")
 
@@ -47,7 +48,10 @@ template chain(api: ServerAPIRef): ForkedChainRef =
   api.txPool.chain
 
 func newServerAPI*(txPool: TxPoolRef): ServerAPIRef =
-  ServerAPIRef(txPool: txPool)
+  ServerAPIRef(
+    txPool: txPool,
+    oracle: Oracle.new(txPool.chain),
+  )
 
 proc getTotalDifficulty*(api: ServerAPIRef, blockHash: Hash32, header: Header): Opt[UInt256] =
   api.txPool.chain.getTotalDifficulty(blockHash, header)
@@ -116,7 +120,7 @@ proc frameFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[CoreDbTxRef, st
 proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag, noHash: bool = false): Result[Block, string] =
   api.chain.blockFromTag(blockTag, noHash)
 
-proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManager, oracle:Oracle) =
+proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManager) =
   server.rpc("eth_getBalance") do(data: Address, blockTag: BlockTag) -> UInt256:
     ## Returns the balance of the account of given address.
     let
@@ -748,7 +752,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
   server.rpc("eth_feeHistory") do(
     blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: Opt[seq[float64]]
   ) -> FeeHistoryResult:
-    oracle.feeHistory(blockCount.uint64, newestBlock, rewardPercentiles.get(@[])).valueOr:
+    api.oracle.feeHistory(blockCount.uint64, newestBlock, rewardPercentiles.get(@[])).valueOr:
       raise newException(ValueError, error)
 
   server.rpc("eth_maxPriorityFeePerGas") do() -> Quantity:
