@@ -105,7 +105,13 @@ proc processBlock(oracle: Oracle, bc: BlockContent, percentiles: openArray[float
     nextBaseFee: calcBaseFee(com, bc),
     nextBlobBaseFee: getBlobBaseFee(calcExcessBlobGas(com, bc.header, fork), com, fork),
     gasUsedRatio: float64(bc.header.gasUsed) / float64(bc.header.gasLimit),
-    blobGasUsedRatio: float64(bc.header.blobGasUsed.get(0'u64)) / float64(maxBlobGasPerBlock)
+    blobGasUsedRatio:
+      # for pre-Cancun blocks the division becomes 0/0,which leads the evalution to result in a Nan
+      # guard the divisor to divisor to make sure we dont hit that case
+      if maxBlobGasPerBlock == 0'u64:
+        0.0
+      else:
+        float64(bc.header.blobGasUsed.get(0'u64)) / float64(maxBlobGasPerBlock)
   )
 
   if percentiles.len == 0:
