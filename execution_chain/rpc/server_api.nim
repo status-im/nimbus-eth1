@@ -747,9 +747,11 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
     Opt.some(bal)
 
-  server.rpc("eth_feeHistory") do( blockCount: Quantity,newestBlock: BlockTag,rewardPercentiles: Opt[seq[float64]] ) -> FeeHistoryResult:
-      oracle.feeHistory(blockCount.uint64,newestBlock,rewardPercentiles.get(@[])).valueOr:
-        raise newException(ValueError, error)
+  server.rpc("eth_feeHistory") do(
+    blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: Opt[seq[float64]]
+  ) -> FeeHistoryResult:
+    oracle.feeHistory(blockCount.uint64, newestBlock, rewardPercentiles.get(@[])).valueOr:
+      raise newException(ValueError, error)
 
   server.rpc("eth_maxPriorityFeePerGas") do() -> Quantity:
     w3Qty(calculateMedianMaxPriorityFeePerGas(api.chain).uint64)
