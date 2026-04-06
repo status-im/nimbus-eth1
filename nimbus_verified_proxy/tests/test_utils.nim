@@ -30,7 +30,7 @@ const
   TEST_TBR* = Eth2Digest.fromHex(
     "0x9bcb90ec3a294591b77dd2a58e973578715cdc0e6eeeb286bc06dd120057f18b"
   )
-  TEST_LC_SLOT* = Slot(14018019)
+  TEST_LC_SLOT* = Slot(14018020)
 
 type TestProxyError* = object of CatchableError
 
@@ -116,8 +116,6 @@ proc preLoadTestBeaconState*(t: TestApiState) =
 proc setupTestBeacon*(engine: RpcVerificationEngine, testState: TestApiState) =
   testState.preLoadTestBeaconState()
   engine.registerBackend(initTestBeaconBackend(testState), fullBeaconCapabilities)
-  engine.getBeaconTime = proc(): BeaconTime {.gcsafe, raises: [].} =
-    TEST_LC_SLOT.start_beacon_time(engine.timeParams)
 
 proc initTestEngine*(
     testState: TestApiState, headerCacheLen: int, maxBlockWalk: uint64
@@ -132,7 +130,9 @@ proc initTestEngine*(
       codeCacheLen: 1,
       storageCacheLen: 1,
       parallelBlockDownloads: 2, # >1 required for block walk tests
-      syncHeaderStore: false, # we inject finalized blocks directly into the header store
+      syncHeaderStore: false,
+        # we inject finalized blocks directly into the header store
+      freezeAtSlot: TEST_LC_SLOT,
     )
     engine = ?RpcVerificationEngine.init(engineConf)
 

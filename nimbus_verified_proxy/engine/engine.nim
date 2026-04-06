@@ -98,7 +98,12 @@ proc init*(
     beaconClock = BeaconClock.init(metadata.cfg.timeParams, genesisTime).valueOr:
       error "Invalid genesis time in state", genesisTime
       quit QuitFailure
-    getBeaconTime = beaconClock.getBeaconTimeFn()
+    getBeaconTime =
+      if config.freezeAtSlot == Slot(0):
+        beaconClock.getBeaconTimeFn()
+      else:
+        proc(): BeaconTime {.gcsafe, raises: [].} =
+          config.freezeAtSlot.start_beacon_time(metadata.cfg.timeParams)
     genesis_validators_root = genesisState[].genesis_validators_root
     forkDigests = newClone ForkDigests.init(metadata.cfg, genesis_validators_root)
 
@@ -213,8 +218,9 @@ proc isSynced*(engine: RpcVerificationEngine): bool =
     return false
 
   let current = engine.getBeaconTime().slotOrZero(engine.timeParams)
-  # helps with "latest"
-  engine.getLCOptimisticSlot() >= current
+  # getOptimisticSlot rrturns the attested slot of the block which is always one behind
+  # the signing slot for sync committees. So we allow some room
+  engine.getLCOptimisticSlot() + 1 >= current
 
 proc processObject[T: SomeForkedLightClientObject](
     engine: RpcVerificationEngine, obj: T, endpoint: static string
@@ -305,7 +311,9 @@ proc syncOnce*(
     for update in updRes:
       ?((await engine.processObject(update, "updates")).tagBackend(backendIdx))
 
-  if optimistic < current:
+  # +1 because optimistic is the attested slot not the signed slot. Signed slot(sync committees)
+  # is always after the block has been attestted in  the current slot
+  if optimistic + 1 < current:
     let
       (backend, backendIdx) = ?(engine.beaconBackendFor(BeaconOptimistic))
       optRes =

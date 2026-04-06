@@ -382,6 +382,13 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
     storageCacheLen = jsonNode.getOrDefault("storageCacheLen").getInt(256)
     codeCacheLen = jsonNode.getOrDefault("codeCacheLen").getInt(64)
     accountCacheLen = jsonNode.getOrDefault("accountCacheLen").getInt(128)
+    syncHeaderStore = jsonNode.getOrDefault("syncHeaderStore").getBool(true)
+    freezeAtSlotRaw = jsonNode.getOrDefault("freezeAtSlot").getBiggestInt(0)
+    freezeAtSlot =
+      if freezeAtSlotRaw < 0:
+        0'u64
+      else:
+        uint64(freezeAtSlotRaw)
 
   return VerifiedProxyConf(
     eth2Network: eth2Network,
@@ -406,6 +413,8 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
       else:
         uint64(prllBlkDwnlds),
     privateTxUrls: privateTxUrls,
+    syncHeaderStore: syncHeaderStore,
+    freezeAtSlot: freezeAtSlot,
   )
 
 proc beaconTransportCallback[T](
@@ -539,6 +548,7 @@ proc run*(
       parallelBlockDownloads: config.parallelBlockDownloads,
       trustedBlockRoot: config.trustedBlockRoot,
       syncHeaderStore: config.syncHeaderStore,
+      freezeAtSlot: Slot(config.freezeAtSlot),
     )
 
     engine = RpcVerificationEngine.init(engineConf).valueOr:
