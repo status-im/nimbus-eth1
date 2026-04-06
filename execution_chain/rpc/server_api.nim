@@ -116,9 +116,7 @@ proc frameFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[CoreDbTxRef, st
 proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag, noHash: bool = false): Result[Block, string] =
   api.chain.blockFromTag(blockTag, noHash)
 
-proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManager) =
-  let oracle = Oracle.new(api.chain)
-
+proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManager, oracle:Oracle) =
   server.rpc("eth_getBalance") do(data: Address, blockTag: BlockTag) -> UInt256:
     ## Returns the balance of the account of given address.
     let
