@@ -37,6 +37,9 @@ static void collect_error_cb(Context *ctx, int status, char *res, void *userData
     s->called   = true;
     s->status   = status;
 
+    if (status != RET_SUCCESS)
+        fprintf(stderr, "  [cb] status=%d  res=%s\n", status, res ? res : "(null)");
+
     freeNimAllocatedString(res);
 }
 
@@ -54,7 +57,8 @@ static const char *TEST_CONFIG =
     "\"beaconApiUrls\":    \"http://127.0.0.1:19998\","
     "\"logLevel\":         \"FATAL\","
     "\"logStdout\":        \"None\","
-    "\"syncHeaderStore\": true"
+    "\"syncHeaderStore\": true,"
+    "\"freezeAtSlot\": 14018020"
     "}";
 
 // these errors are returned before the actual frontend method is called
@@ -225,19 +229,18 @@ static char *read_file(const char *path) {
     return buf;
 }
 
-static void execution_dispatch_transport(
+static void execution_transport(
     Context *ctx, char *url, char *name, char *params,
     CallBackProc cb, void *userData)
 {
     (void)url;
+    fprintf(stderr, "  [exec] %s  params=%s\n", name, params ? params : "(null)");
     freeNimAllocatedString(params);
 
     const char *file = NULL;
     if (strcmp(name, "eth_getBlockByNumber") == 0 ||
         strcmp(name, "eth_getBlockByHash")   == 0)
-        file = "nimbus_verified_proxy/tests/data/Paris.json";
-    else if (strcmp(name, "eth_getProof") == 0)
-        file = "nimbus_verified_proxy/tests/data/storage_proof.json";
+        file = "nimbus_verified_proxy/tests/data/block_0x17a2d23.json";
 
     if (file) {
         char *data = read_file(file);
@@ -248,15 +251,17 @@ static void execution_dispatch_transport(
         }
     }
 
-    cb(ctx, RET_ERROR, "execution_dispatch_transport: no response for method", userData);
+    cb(ctx, RET_ERROR, "execution_transport: no response for method", userData);
 }
 
-static void beacon_dispatch_transport(
+static void beacon_transport(
     Context *ctx, char *url, char *endpoint, char *params,
     CallBackProc cb, void *userData)
 {
     (void)url;
     freeNimAllocatedString(params);
+
+    printf("LC Transport Called: url: %s, endpoint: %s, params: %s\n", url, endpoint, params);
 
     const char *file = NULL;
     if (strcmp(endpoint, "getLightClientBootstrap") == 0)
@@ -277,7 +282,7 @@ static void beacon_dispatch_transport(
         }
     }
 
-    cb(ctx, RET_ERROR, "beacon_dispatch_transport: no response for endpoint", userData);
+    cb(ctx, RET_ERROR, "beacon_transport: no response for endpoint", userData);
 }
 
 static void drain(Context *ctx, int max_iters) {
@@ -293,22 +298,22 @@ static void drain(Context *ctx, int max_iters) {
 // called the iterations probably need to be increased.
 static void check_event_loop(Context *ctx) {
     printf("\n Event loop\n");
-    CbState block_s = {0};
-    CbState balance_s = {0};
+    CbState gas_s    = {0};
+    CbState prio_s   = {0};
+    CbState latest_s = {0};
 
-    eth_getBlockByNumber(ctx, "0xed14f2", false, collect_error_cb, &block_s);
-    eth_getBalance(
-        ctx,
-        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-        "0xed14f2",
-        collect_error_cb, &balance_s);
+    eth_gasPrice(ctx, collect_error_cb, &gas_s);
+    eth_maxPriorityFeePerGas(ctx, collect_error_cb, &prio_s);
+    eth_getBlockByNumber(ctx, "latest", false, collect_error_cb, &latest_s);
 
     drain(ctx, 2000);
 
-    TEST("eth_getBlockByNumber: callback fired",  block_s.called);
-    TEST("eth_getBalance: callback fired",         balance_s.called);
-    // TEST("eth_getBlockByNumber: RET_SUCCESS", block_s.status == RET_SUCCESS);
-    // TEST("eth_getBalance: RET_SUCCESS",       balance_s.status == RET_SUCCESS);
+    TEST("eth_gasPrice: callback fired",             gas_s.called);
+    TEST("eth_maxPriorityFeePerGas: callback fired", prio_s.called);
+    TEST("eth_getBlockByNumber latest: callback fired", latest_s.called);
+    TEST("eth_gasPrice: RET_SUCCESS",                gas_s.status  == RET_SUCCESS);
+    TEST("eth_maxPriorityFeePerGas: RET_SUCCESS",    prio_s.status == RET_SUCCESS);
+    TEST("eth_getBlockByNumber latest: RET_SUCCESS", latest_s.status == RET_SUCCESS);
 }
 
 int main(void) {
@@ -318,8 +323,8 @@ int main(void) {
 
     Context *ctx = startVerifProxy(
         (char *)TEST_CONFIG,
-        execution_dispatch_transport,
-        beacon_dispatch_transport,
+        execution_transport,
+        beacon_transport,
         proxy_start_cb,
         NULL
     );

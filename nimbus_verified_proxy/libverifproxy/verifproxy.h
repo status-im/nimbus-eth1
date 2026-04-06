@@ -91,12 +91,12 @@ typedef void (*BeaconTransportProc)(Context *ctx, char *url, char *endpoint, cha
 /**
  * Start the verification proxy with a given configuration.
  *
- * @param configJson JSON string describing the configuration for the verification proxy.
- * @param onStart    Callback invoked once the proxy has started. NOTE: The callback is invoked
- *                   only on error otherwise the proxy runs indefinitely
- * @param userData   pointer to user data
- * @return           Pointer to a new Context object representing the running proxy.
- *                   Must be freed using freeContext() when no longer needed.
+ * @param configJson     JSON string describing the configuration for the verification proxy.
+ * @param onStart        Callback invoked once the proxy has started. NOTE: The callback is invoked
+ *                       only on error otherwise the proxy runs indefinitely
+ * @param userData       pointer to user data
+ * @return               Pointer to a new Context object representing the running proxy.
+ *                       Must be freed using freeContext() when no longer needed.
  */
 ETH_RESULT_USE_CHECK Context *startVerifProxy(char* configJson, ExecutionTransportProc executionTransport, BeaconTransportProc beaconTransport, CallBackProc onStart, void *userData);
 
