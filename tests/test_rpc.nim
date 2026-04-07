@@ -329,6 +329,8 @@ proc rpcMain*() =
         res.id.len > 0
         res.name == env.conf.agentString
         res.enode.startsWith("enode://")
+        res.enr.isSome
+        res.enr.get().startsWith("enr:")
         res.ip.len > 0
         res.ports.discovery > 0
         res.ports.listener > 0
@@ -642,6 +644,33 @@ proc rpcMain*() =
           check receipts.len == 2
           check receipts[0].transactionIndex == 0.Quantity
           check receipts[1].transactionIndex == 1.Quantity
+
+    test "eth_getBlockReceipts with EIP-1898 object param":
+      # blockHash object form (what go-ethereum's ethclient sends)
+      let r1 = await client.call("eth_getBlockReceipts",
+        %[%*{"blockHash": $env.blockHash}])
+      let recs1 = JrpcConv.decode(r1.string, Opt[seq[ReceiptObject]])
+      check recs1.isSome
+      check recs1.get.len == 2
+
+      # blockHash with requireCanonical=false
+      let r2 = await client.call("eth_getBlockReceipts",
+        %[%*{"blockHash": $env.blockHash, "requireCanonical": false}])
+      let recs2 = JrpcConv.decode(r2.string, Opt[seq[ReceiptObject]])
+      check recs2.isSome
+      check recs2.get.len == 2
+
+      # blockNumber object form
+      let r3 = await client.call("eth_getBlockReceipts",
+        %[%*{"blockNumber": "0x1"}])
+      let recs3 = JrpcConv.decode(r3.string, Opt[seq[ReceiptObject]])
+      check recs3.isSome
+      check recs3.get.len == 2
+
+      # requireCanonical=true should fail
+      expect JsonRpcError:
+        discard await client.call("eth_getBlockReceipts",
+          %[%*{"blockHash": $env.blockHash, "requireCanonical": true}])
 
     test "eth_getTransactionReceipt":
       let res = await client.eth_getTransactionReceipt(env.txHash)

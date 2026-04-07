@@ -40,7 +40,6 @@ proc init(
   # Take care to (re)set all fields since the VMState might be recycled
   self.com = com
   self.ledger = ledger
-  self.gasPool = blockCtx.gasLimit
   assign(self.parent, parent)
   assign(self.blockCtx, blockCtx)
   const txCtx = default(TxContext)

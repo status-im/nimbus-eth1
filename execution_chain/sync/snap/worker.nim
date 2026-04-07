@@ -93,8 +93,17 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
   ##
   var bodyRc = chronos.nanoseconds(0)               # to be re-invoked, soon?
   block body:
-    ctx.updateSyncState info
+    # Check initial state before transition
+    if ctx.pool.syncState == SnapResume:
+      discard ctx.sessionResume(info)
+
+    ctx.updateSyncState info                        # set next state
     case ctx.pool.syncState:
+    of SnapReady:
+      chronicles.info info & ": waiting for CL to send updates",
+        state=($ctx.syncState), nSyncPeers=ctx.nSyncPeers()
+      bodyRc = daemonWaitReadyInterval              # take a nap
+
     of SnapDownload:
       bodyRc = daemonWaitDownloadInterval           # take a nap
 
@@ -160,7 +169,7 @@ template runPeer*(
     case buddy.ctx.pool.syncState:
     of SnapDownload:
 
-      # Download and chace accounts, storage slots, contracts
+      # Download and cache accounts, storage slots, contracts
       buddy.download info
 
     else:
