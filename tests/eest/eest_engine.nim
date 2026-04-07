@@ -305,23 +305,39 @@ when isMainModule:
     failCount = 0
 
   for f in files:
-    let pass = if fastEnabled: processFileFast(f)
-               else: processFile(f)
-    let rel = if dirExists(inputPath):
-                f.relativePath(inputPath)
-              else:
-                f.splitPath().tail
-    var errMsg = ""
-    if not pass:
-      errMsg = "test failed"
-      inc failCount
+    if jsonEnabled:
+      # Per-test results for JSON output
+      let fixture = parseFixture(f, EngineFixture)
+      for unit in fixture.units:
+        let header = unit.unit.genesisBlockHeader.to(Header)
+        let env = if fastEnabled:
+                    prepareEnv(unit.unit, header, engineDirect = true)
+                  else:
+                    prepareEnv(unit.unit, header, rpcEnabled = true)
+        let res = if fastEnabled:
+                    env.runTestFast(unit.unit)
+                  else:
+                    env.runTest(unit.unit)
+        var errMsg = ""
+        if res.isOk:
+          inc passCount
+        else:
+          errMsg = res.error
+          inc failCount
+        results.add(TestResult(name: unit.name, pass: res.isOk, error: errMsg))
+        env.close()
     else:
-      inc passCount
-    results.add(TestResult(name: rel, pass: pass, error: errMsg))
-    if not jsonEnabled:
+      let pass = if fastEnabled: processFileFast(f)
+                 else: processFile(f)
+      let rel = if dirExists(inputPath):
+                  f.relativePath(inputPath)
+                else:
+                  f.splitPath().tail
       if pass:
+        inc passCount
         echo "PASS: ", rel
       else:
+        inc failCount
         echo "FAIL: ", rel
 
   if jsonEnabled:

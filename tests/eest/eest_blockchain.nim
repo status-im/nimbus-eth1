@@ -294,39 +294,70 @@ when isMainModule:
     path: string
     pass: bool
 
-  var fileResults: seq[FileResult]
-
-  if workers > 1:
-    discard workers  # TODO: in-process parallelism requires GC-safe procs
-  if true:
-    for f in files:
-      let pass = if fastEnabled: processFileFast(f)
-                 else: processFile(f)
-      fileResults.add(FileResult(path: f, pass: pass))
-
   var
     results: seq[TestResult]
     passCount = 0
     failCount = 0
 
-  for fr in fileResults:
-    let f = fr.path
-    let pass = fr.pass
-    let rel = if dirExists(inputPath):
-                f.relativePath(inputPath)
-              else:
-                f.splitPath().tail
-    var errMsg = ""
-    if not pass:
-      errMsg = "test failed"
-      inc failCount
+  if workers > 1:
+    discard workers  # TODO: in-process parallelism requires GC-safe procs
+
+  for f in files:
+    if jsonEnabled:
+      # Per-test results for JSON output
+      let fixture = parseFixture(f, BlockchainFixture)
+      for unit in fixture.units:
+        let header = unit.unit.genesisBlockHeader.to(Header)
+        if fastEnabled:
+          try:
+            let
+              memDB = newCoreDbRef DefaultDbMemory
+              baseTx = memDB.baseTxFrame()
+              ledger = LedgerRef.init(baseTx)
+              config = getChainConfig(unit.unit.network)
+            config.chainId = unit.unit.config.chainid
+            config.blobSchedule = unit.unit.config.blobSchedule
+            setupLedger(unit.unit.pre, ledger)
+            ledger.persist()
+            let persistRes = baseTx.persistHeaderAndSetHead(header)
+            if persistRes.isErr:
+              inc failCount
+              results.add(TestResult(name: unit.name, pass: false,
+                error: "persist genesis: " & persistRes.error))
+              continue
+            let com = CommonRef.new(memDB, config)
+            let res = runTestFast(com, header, baseTx, unit.unit)
+            if res.isOk:
+              inc passCount
+              results.add(TestResult(name: unit.name, pass: true, error: ""))
+            else:
+              inc failCount
+              results.add(TestResult(name: unit.name, pass: false, error: res.error))
+          except CatchableError as e:
+            inc failCount
+            results.add(TestResult(name: unit.name, pass: false, error: e.msg))
+        else:
+          let env = prepareEnv(unit.unit, header, rpcEnabled = false)
+          let res = waitFor env.runTest(unit.unit)
+          if res.isOk:
+            inc passCount
+            results.add(TestResult(name: unit.name, pass: true, error: ""))
+          else:
+            inc failCount
+            results.add(TestResult(name: unit.name, pass: false, error: res.error))
+          env.close()
     else:
-      inc passCount
-    results.add(TestResult(name: rel, pass: pass, error: errMsg))
-    if not jsonEnabled:
+      let pass = if fastEnabled: processFileFast(f)
+                 else: processFile(f)
+      let rel = if dirExists(inputPath):
+                  f.relativePath(inputPath)
+                else:
+                  f.splitPath().tail
       if pass:
+        inc passCount
         echo "PASS: ", rel
       else:
+        inc failCount
         echo "FAIL: ", rel
 
   if jsonEnabled:
