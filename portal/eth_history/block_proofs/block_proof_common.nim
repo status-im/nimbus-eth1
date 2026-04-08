@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -9,23 +9,33 @@
 
 import results, stew/bitops2, beacon_chain/spec/presets, beacon_chain/spec/forks
 
+from beacon_chain/spec/datatypes/capella import ExecutionPayload
+from beacon_chain/spec/datatypes/deneb import ExecutionPayload
+
 const
-  # BeaconBlock level:
-  # - 8 as there are 5 fields
-  # - 4 as index (pos) of field is 4
-  gIndexTopLevel = (1 * 1 * 8 + 4)
-  # BeaconBlockBody level:
-  # - 16 as there are 10 fields
-  # - 9 as index (pos) of field is 9
-  gIndexMidLevel = (gIndexTopLevel * 1 * 16 + 9)
-  # ExecutionPayload level:
-  # - 16 as there are 14 fields
-  # - 12 as pos of field is 12
-  EXECUTION_BLOCK_HASH_GINDEX* = GeneralizedIndex(gIndexMidLevel * 1 * 16 + 12)
-  # ExecutionPayload Deneb level:
-  # - 32 as there are 17 fields
-  # - 12 as pos of field is 12
-  EXECUTION_BLOCK_HASH_GINDEX_DENEB* = GeneralizedIndex(gIndexMidLevel * 1 * 32 + 12)
+  # Note:
+  # This proof only works up until Fulu fork.
+  # For gloas+ the execution payload is no longer part of the BeaconBlockBody.
+  BEACON_BLOCK_BODY_GINDEX = get_generalized_index(fulu.BeaconBlock, "body")
+  EXECUTION_PAYLOAD_GINDEX =
+    get_generalized_index(fulu.BeaconBlockBody, "execution_payload")
+
+  BLOCK_HASH_GINDEX = get_generalized_index(capella.ExecutionPayload, "block_hash")
+  BLOCK_HASH_GINDEX_DENEB = get_generalized_index(deneb.ExecutionPayload, "block_hash")
+
+  EXECUTION_BLOCK_HASH_GINDEX* =
+    BEACON_BLOCK_BODY_GINDEX & EXECUTION_PAYLOAD_GINDEX & BLOCK_HASH_GINDEX
+  EXECUTION_BLOCK_HASH_GINDEX_DENEB* =
+    BEACON_BLOCK_BODY_GINDEX & EXECUTION_PAYLOAD_GINDEX & BLOCK_HASH_GINDEX_DENEB
+
+static:
+  doAssert BEACON_BLOCK_BODY_GINDEX == GeneralizedIndex(8 + 4)
+  doAssert EXECUTION_PAYLOAD_GINDEX == GeneralizedIndex(16 + 9)
+  doAssert BLOCK_HASH_GINDEX == GeneralizedIndex(16 + 12)
+  doAssert BLOCK_HASH_GINDEX_DENEB == GeneralizedIndex(32 + 12)
+
+  doAssert EXECUTION_BLOCK_HASH_GINDEX == GeneralizedIndex(3228)
+  doAssert EXECUTION_BLOCK_HASH_GINDEX_DENEB == GeneralizedIndex(6444)
 
 type
   ExecutionBlockProof* = array[log2trunc(EXECUTION_BLOCK_HASH_GINDEX), Digest]
