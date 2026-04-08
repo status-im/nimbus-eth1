@@ -119,10 +119,10 @@ proc getAdm*(rdb: RdbInst): Result[seq[byte], (AristoError, string)] =
   ok move(res)
 
 proc getKey*(
-    rdb: var RdbInst, rvid: RootedVertexID, flags: set[GetVtxFlag]
-): Result[(HashKey, VertexRef), (AristoError, string)] =
+    rdb: var RdbInst, rvid: RootedVertexID, flags: set[GetVtxFlag], vtxBuf: var VertexBuf,
+): Result[HashKey, (AristoError, string)] =
   block:
-    # Try LRU cache first
+    # Try key LRU cache first
     let rc =
       if GetVtxFlag.PeekCache in flags:
         rdb.rdKeyLru.peek(rvid.vid)
@@ -131,7 +131,7 @@ proc getKey*(
 
     if rc.isOk:
       rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
-      return ok((rc.value, nil))
+      return ok(rc.value)
 
     rdbKeyLruStats[rvid.to(RdbStateType)].inc(false)
 
@@ -139,20 +139,21 @@ proc getKey*(
     # We don't store keys for leaves, no need to hit the database
     let rc = rdb.rdVtxLru.peek(rvid.vid)
     if rc.isOk():
-      let vtx = rc[].data().deblobify(VertexRef).expect("valid data in db")
-      if vtx.vType in Leaves:
-        return ok((VOID_HASH_KEY, vtx))
-
+      let vType = rc[].data().deblobifyType(VertexRef)
+      if vType.isOk() and vType.value in Leaves:
+        vtxBuf = rc[]
+        return ok(VOID_HASH_KEY)
+  
   # Otherwise fetch from backend database
   # A threadvar is used to avoid allocating an environment for onData
   var res {.threadvar.}: Opt[HashKey]
-  var vtxBuf {.threadvar.}: VertexBuf
-  
+  var tmpBuf {.threadvar.}: VertexBuf
+
   let onData = proc(data: openArray[byte]) {.nimcall.} =
     res = data.deblobify(HashKey)
     if res.isNone():
-      reset(vtxBuf)
-      vtxBuf.add(data)
+      reset(tmpBuf)
+      tmpBuf.add(data)
 
   let gotData = rdb.vtxCol.get(rvid.blobify().data(), onData).valueOr:
     const errSym = RdbBeDriverGetKeyError
@@ -161,7 +162,7 @@ proc getKey*(
     return err((errSym, error))
 
   if not gotData:
-    return ok((VOID_HASH_KEY, nil))
+    return ok(VOID_HASH_KEY)
 
   # Update cache and return - in peek mode, avoid evicting cache items
   if res.isSome() and GetVtxFlag.NoPutCache notin flags and
@@ -171,15 +172,12 @@ proc getKey*(
   if res.isNone() and GetVtxFlag.NoPutCache notin flags and rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
     # Don't invalidate vertex cache entries because of key reads - the latter
     # follow a different access pattern!
-    rdb.rdVtxLru.put(rvid.vid, vtxBuf)
+    rdb.rdVtxLru.put(rvid.vid, tmpBuf)
 
-  let vtx = 
-    if res.isNone():
-      vtxBuf.data().deblobify(VertexRef).expect("valid data in db")
-    else:
-      nil
+  if res.isNone():
+    vtxBuf = tmpBuf
 
-  ok (res.valueOr(VOID_HASH_KEY), vtx)
+  ok res.valueOr(VOID_HASH_KEY)
 
 proc getVtx*(
     rdb: var RdbInst, rvid: RootedVertexID, flags: set[GetVtxFlag]

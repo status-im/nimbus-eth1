@@ -17,12 +17,17 @@
 import
   std/[hashes as std_hashes, strutils, tables],
   stint,
+  stew/arrayops,
   eth/common/[accounts, base, hashes],
   ./desc_identifiers
 
 export stint, tables, accounts, base, hashes
 
+const MAX_VERTEX_BLOB_SIZE* = 117
+
 type
+  VertexBuf* = ArrayBuf[MAX_VERTEX_BLOB_SIZE, byte]
+
   VertexType* = enum
     ## Type of `Aristo Trie` vertex
     AccLeaf

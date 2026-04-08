@@ -88,14 +88,13 @@ func getVtxFn(db: MemBackendRef): GetVtxFn =
 
 func getKeyFn(db: MemBackendRef): GetKeyFn =
   result =
-    proc(rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[(HashKey, VertexRef),AristoError] =
+    proc(rvid: RootedVertexID, flags: set[GetVtxFlag], vtxBuf: var VertexBuf): Result[HashKey,AristoError] =
       let data = db.sTab.getOrDefault(rvid, EmptyBlob)
       if 0 < data.len:
         let key = data.deblobify(HashKey).valueOr:
-          let vtx = data.deblobify(VertexRef).valueOr:
-            return err(GetKeyNotFound)
-          return ok((VOID_HASH_KEY, vtx))
-        return ok((key, nil))
+          vtxBuf.add(data)
+          return ok(VOID_HASH_KEY)
+        return ok(key) 
       err(GetKeyNotFound)
 
 func getLstFn(db: MemBackendRef): GetLstFn =

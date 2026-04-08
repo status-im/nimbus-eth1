@@ -15,7 +15,7 @@
 
 import
   results,
-  "."/[aristo_desc, aristo_layers]
+  "."/[aristo_desc, aristo_layers, aristo_blobify]
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -39,9 +39,19 @@ proc getKeyBe*(
     db: AristoDbRef;
     rvid: RootedVertexID;
     flags: set[GetVtxFlag];
-      ): Result[(HashKey, VertexRef),AristoError] =
+    vtxBuf: var VertexBuf;
+      ): Result[HashKey,AristoError] =
   ## Get the Merkle hash/key from the backend if available.
-  db.getKeyFn(rvid, flags)
+  db.getKeyFn(rvid, flags, vtxBuf)
+
+proc getKeyBe*(
+    db: AristoDbRef;
+    rvid: RootedVertexID;
+    flags: set[GetVtxFlag];
+      ): Result[(HashKey, VertexRef),AristoError] =
+  var vtxBuf: VertexBuf
+  let key = ?db.getKeyBe(rvid, flags, vtxBuf)
+  ok (key, ?vtxBuf.data().deblobify(VertexRef))
 
 # ------------------
 
@@ -98,7 +108,9 @@ proc getKeyRc*(
       # The vertex is to be deleted. So is the value key.
       return err(GetKeyNotFound)
 
-  ok (?db.db.getKeyBe(rvid, flags), dbLevel)
+  var vtxBuf: VertexBuf
+  let key = ?db.db.getKeyBe(rvid, flags, vtxBuf)
+  ok ((key, ?vtxBuf.data().deblobify(VertexRef)), dbLevel)
 
 proc getKey*(db: AristoTxRef; rvid: RootedVertexID): HashKey =
   ## Cascaded attempt to fetch a vertex from the cache layers or the backend.

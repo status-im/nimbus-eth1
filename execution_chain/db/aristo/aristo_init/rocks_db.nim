@@ -82,15 +82,15 @@ proc getVtxFn(db: RdbBackendRef): GetVtxFn =
 
 proc getKeyFn(db: RdbBackendRef): GetKeyFn =
   result =
-    proc(rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[(HashKey, VertexRef),AristoError] =
+    proc(rvid: RootedVertexID, flags: set[GetVtxFlag], vtxBuf: var VertexBuf): Result[HashKey,AristoError] =
 
       # Fetch serialised data record
-      let key = db.rdb.getKey(rvid, flags).valueOr:
+      let key = db.rdb.getKey(rvid, flags, vtxBuf).valueOr:
         when extraTraceMessages:
           trace logTxt "getKeyFn: failed", rvid, error=error[0], info=error[1]
         return err(error[0])
 
-      if (key[0].isValid or key[1].isValid):
+      if (key.isValid or vtxBuf.len() > 0):
         return ok(key)
 
       err(GetKeyNotFound)
