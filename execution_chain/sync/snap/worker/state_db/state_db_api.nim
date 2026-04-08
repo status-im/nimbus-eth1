@@ -21,11 +21,14 @@ import
 logScope:
   topics = "snap sync"
 
-declareGauge nec_snap_accumulated_state_coverage, "" &
-  "Factor of accumulated accounts covered over all state root records"
+declareGauge nec_snap_accumulated_states_coverage, "" &
+  "Factor of accumulated account ranges covered over all state root records"
 
 declareGauge nec_snap_pivot_state_coverage, "" &
-  "Max factor of accounts covered related to a single state root"
+  "Max factor of account ranges covered related to a single state root"
+
+declareGauge nec_snap_archived_states_coverage, "" &
+  "Factor of archived account ranges covered"
 
 declareGauge nec_snap_active_states, "" &
   "Number of active state root indexed caches to download to"
@@ -70,6 +73,7 @@ type
     ## Download states db
     allUnproc: ItemKeyRangeSet          ## Globally unprocessed accounts
     carryOver: float                    ## Overflow coverage
+    archived: float                     ## Evicted states coverage
     topNum: BlockNumber                 ## Latest observed block number
     byRank: StateByRank                 ## States indexed by some ranking
     byHash: StateByHash                 ## States indexed by block hash
@@ -95,16 +99,6 @@ proc updateRank(
     discard db.byRank.delete oldInx
     db.byRank.findOrInsert(newInx).value.data = state
 
-proc rollBackAccounts(db: StateDbRef, state: StateDataRef) =
-  ## Roll back global unproc register (as best as possible)
-  var carry = 0.u256
-  for iv in state.unproc.unprocessed.complement.increasing:
-    carry += (iv.len - db.allUnproc.merge iv)     # hand back processed ranges
-  db.carryOver -= carry.per256                    # adjust by carry over field
-  let totalRatio = db.allUnproc.totalRatio
-  if db.carryOver < totalRatio - 1f:              # maybe some rounding errors?
-    db.carryOver = totalRatio - 1f
-
 proc evict(db: StateDbRef, state: StateDataRef, info: static[string]) =
   ## Remove state from database and update range accounting. This may
   ## reset the `db.pivot` state to `nil`.
@@ -113,7 +107,18 @@ proc evict(db: StateDbRef, state: StateDataRef, info: static[string]) =
   db.byHash.del state.blockHash                     # ..
   db.byRoot.del state.stateRoot
   state.deadState = true                            # mark it evicted
-  db.rollBackAccounts state
+
+  # Roll back global `allUnproc`/`carryOver` registers. The acoounting goes as
+  # follows:
+  #
+  # * Processed intervals are not turned back as intervals, but the total
+  #   ratio is removed from the `carryOver` register.
+  #
+  # * The same total ratio is added to the archived register.
+  #
+  var processedRatio = 1f - state.unproc.totalRatio()
+  db.carryOver -= processedRatio                    # roll back
+  db.archived += processedRatio                     # roll forward
 
 
 proc allUnprocRollOverIfEmpty(db: StateDbRef) =
@@ -123,12 +128,14 @@ proc allUnprocRollOverIfEmpty(db: StateDbRef) =
     db.allUnproc = ItemKeyRangeSet.init ItemKeyRangeMax
 
 proc resetMetrics(db: StateDbRef) =
-  metrics.set(nec_snap_accumulated_state_coverage, 0f)
-  metrics.set(nec_snap_pivot_state_coverage, 0f)
+  metrics.set(nec_snap_archived_states_coverage, 0f)
+  metrics.set(nec_snap_accumulated_states_coverage, 0f)
   metrics.set(nec_snap_active_states, 0)
+  metrics.set(nec_snap_pivot_state_coverage, 0f)
 
 proc updateMetrics(db: StateDbRef) =
-  metrics.set(nec_snap_accumulated_state_coverage, db.accountsCoverage())
+  metrics.set(nec_snap_archived_states_coverage, db.archived)
+  metrics.set(nec_snap_accumulated_states_coverage, db.accountsCoverage())
   metrics.set(nec_snap_active_states, db.byRoot.len)
   db.byRank.ge(low StateRankIndex).isErrOr():
     metrics.set(nec_snap_pivot_state_coverage,
@@ -147,6 +154,7 @@ proc init*(T: type StateDbRef): T =
 
 proc clear*(db: StateDbRef) =
   db.carryOver = 0f
+  db.archived = 0f
   db.topNum = BlockNumber(0)
   db.allUnproc.clear
   db.byRank.clear
@@ -292,6 +300,7 @@ proc fetchAccountRange*(
       # No overlapping data, fetch directly from `state`
       iRange = state.unproc.fetchLeast(unprocAccountsRangeMax)
                            .expect "Valid state range"
+      db.carryOver += iRange.len.per256             # register as overflow
       break
     # Fetch this interval from local range set
     state.unproc.fetchSubRange(giv).isErrOr:
@@ -321,7 +330,7 @@ proc rollbackAccountRange*(
   ##
   if not state.deadState:
     state.unproc.commit(iv, iv)
-    discard db.allUnproc.merge(iv)
+    db.carryOver -= (iv.len - db.allUnproc.merge(iv)).per256
 
 proc commitAccountRange*(
     db: StateDbRef;
@@ -338,12 +347,14 @@ proc commitAccountRange*(
     let oldInx = state.rankIndex
     if limit < iv.maxPt:
       state.unproc.commit(iv, limit + 1, iv.maxPt)
-      discard db.allUnproc.merge(limit + 1, iv.maxPt)
+      db.carryOver -= (iv.maxPt - limit -
+                       db.allUnproc.merge(limit + 1, iv.maxPt)).per256
 
     elif iv.maxPt < limit:
       state.unproc.commit(iv)
       state.unproc.overCommit(iv.maxPt + 1, limit)
-      discard db.allUnproc.reduce(iv.maxPt + 1, limit)
+      db.carryOver += (limit - iv.maxPt -
+                       db.allUnproc.reduce(iv.maxPt + 1, limit)).per256
 
     else: # iv.maxPt == limit
       state.unproc.commit(iv)
@@ -363,7 +374,8 @@ proc setAccountRange*(
   if not state.deadState:
     let oldInx = state.rankIndex
     state.unproc.overCommit(start, limit)
-    db.carryOver += (limit-start+1 - db.allUnproc.reduce(start, limit)).per256
+    db.carryOver += (limit - start + 1 -
+                     db.allUnproc.reduce(start, limit)).per256
 
     db.updateRank(oldInx, state)                    # update ranking
     db.allUnprocRollOverIfEmpty()
@@ -559,6 +571,7 @@ func toStr*(db: StateDbRef): string =
   result[^1] = '}'
 
   result &= ":" & db.accountsCoverage.toPC(6)
+  result &= ":" & db.archived.toPC(6)
 
 # ------------------------------------------------------------------------------
 # End
