@@ -45,7 +45,6 @@ type
   BaseVMState* = ref object of RootObj
     com*              : CommonRef
     ledger*           : LedgerRef
-    gasPool*          : GasInt
     parent*           : Header
     blockCtx*         : BlockContext
     txCtx*            : TxContext
@@ -82,6 +81,7 @@ type
     continuation*:          proc(): EvmResultVoid {.gcsafe, raises: [].}
     keepStack*:             bool
     finalStack*:            seq[UInt256]
+    balTrackerEnabled*:     bool
 
   StatusCode* {.pure.} = enum
     None

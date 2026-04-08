@@ -84,19 +84,17 @@ jobs:
         run: |
           gcc --version
           #export ZERO_AR_DATE=1 # avoid timestamps in binaries
-          PARALLEL_JOBS="-j${ncpu}"
-          DEFAULT_MAKE_FLAGS="ROCKSDB_CI_CACHE=RocksBinCache"
+          DEFAULT_MAKE_FLAGS="-j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache"
           if [ '${{ matrix.os }}' == 'linux' ] && [ '${{ matrix.cpu }}' == 'arm64' ]; then
             # Parallel jobs exeution only on systems different from linux-arm64
-            PARALLEL_JOBS=""
             # To reduce memory usage on arm linux we build rocksdb separately
             make ${DEFAULT_MAKE_FLAGS} rocksdb
           fi
-          DEFAULT_MAKE_FLAGS="${PARALLEL_JOBS} ${DEFAULT_MAKE_FLAGS}"
-          make ${DEFAULT_MAKE_FLAGS} all test_import build_fuzzers check_revision
+          make ${DEFAULT_MAKE_FLAGS} nimbus tools build_fuzzers
+          # check_revision and test_import depend on nimbus_execution_client,
+          # best to run them together to avoid double builds
+          make ${DEFAULT_MAKE_FLAGS} nimbus_execution_client check_revision test_import
           # clear some space
           find . -type d -name "nimcache" -exec rm -rf {} +
-          # download eest fixtures first, and prevent overlapping parallel download
-          make -j1 eest
           # "-static" option will not work for osx unless static system libraries are provided
           make ${DEFAULT_MAKE_FLAGS} test t8n_test eest_full_test

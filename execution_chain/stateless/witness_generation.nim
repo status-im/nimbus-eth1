@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -87,19 +87,20 @@ proc build*(
     doAssert preStateLedger.getStateRoot() == parent.stateRoot
 
   var witness = Witness.build(ledger.getWitnessKeys(), preStateLedger)
-  witness.addHeaderHash(header.parentHash)
 
   let
     blockHashes = ledger.getBlockHashesCache()
     earliestBlockNumber = getEarliestCachedBlockNumber(blockHashes)
 
   if earliestBlockNumber.isSome():
-    var n = parent.number
-    while n >= earliestBlockNumber.get():
-      dec n
+    # Add headers in ascending block number order
+    # https://github.com/ethereum/execution-specs/blob/33aa038697162a3ba0aedbadf177c4c59ee5b007/src/ethereum/forks/amsterdam/stateless_host_exec_witness.py#L175-L176
+    for n in earliestBlockNumber.get() ..< parent.number:
       let blockHash = ledger.getBlockHash(BlockNumber(n))
       doAssert(blockHash != default(Hash32))
       witness.addHeaderHash(blockHash)
+
+  witness.addHeaderHash(header.parentHash)
 
   witness
 

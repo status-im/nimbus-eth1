@@ -229,6 +229,8 @@ $(TOOLS): | build deps rocksdb
 		echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "$${TOOL_DIR}/$@.nim"
 
+tools: | $(TOOLS)
+
 nimbus_execution_client: | build deps rocksdb
 	echo -e $(BUILD_MSG) "build/nimbus_execution_client" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/nimbus_execution_client "execution_chain/nimbus_execution_client.nim"
@@ -408,10 +410,8 @@ eest_blockchain_test: | build deps eest
 eest_stateless_execution_test: | build deps eest
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
 
-eest_full_test:
-	$(MAKE) eest_engine_test
-	$(MAKE) eest_blockchain_test
-	$(MAKE) eest_stateless_execution_test
+eest_full_test: | build deps eest
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/all_eest_tests.nim"
 
 # builds transition tool
 t8n: | build deps
