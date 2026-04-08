@@ -11,7 +11,7 @@
 {.used.}
 
 import
-  std/[algorithm, sets],
+  std/[algorithm, sets, times],
   unittest2,
   ../../execution_chain/db/aristo/[
     aristo_check,
@@ -75,7 +75,48 @@ suite "Aristo compute":
         db = AristoDbRef.init()
         txFrame = db.txRef
         root = STATE_ROOT_VID
+      db.parallelStateRootComputation = false
+      
+      for (k, v, r) in sample:
+        checkpoint("k = " & k.toHex & ", v = " & $v)
 
+        check:
+          txFrame.mergeAccount(k, v) == Result[bool, AristoError].ok(true)
+
+        # Check state against expected value
+        let w = txFrame.computeKey((root, root)).expect("no errors")
+        check r == w.to(Hash32)
+
+        let rc = txFrame.check
+        check rc == typeof(rc).ok()
+
+      # Reverse run deleting entries
+      var deletedKeys: HashSet[Hash32]
+      for iny, (k, v, r) in sample.reversed:
+        # Check whether key was already deleted
+        if k in deletedKeys:
+          continue
+        deletedKeys.incl k
+
+        # Check state against expected value
+        let w = txFrame.computeKey((root, root)).value.to(Hash32)
+
+        check r == w
+
+        check:
+          txFrame.deleteAccount(k).isOk
+
+        let rc = txFrame.check
+        check rc == typeof(rc).ok()
+
+    test "Parallel - add and delete entries " & $n:
+      let
+        db = AristoDbRef.init()
+        txFrame = db.txRef
+        root = STATE_ROOT_VID
+      db.parallelStateRootComputation = true
+      db.taskpool = Taskpool.new(numThreads = 4)
+      
       for (k, v, r) in sample:
         checkpoint("k = " & k.toHex & ", v = " & $v)
 
@@ -114,6 +155,7 @@ suite "Aristo compute":
       db = AristoDbRef.init()
       txFrame = db.txRef
       root = STATE_ROOT_VID
+    db.parallelStateRootComputation = false
 
     for (k, v, r) in samples[^1]:
       check:
@@ -124,7 +166,90 @@ suite "Aristo compute":
     db.persist(batch, txFrame)
     check db.putEndFn(batch).isOk()
 
-    check txFrame.computeKeys(root).isOk()
+    check txFrame.computeStateRoot(skipLayers = true).isOk()
 
     let w = txFrame.computeKey((root, root)).value.to(Hash32)
     check w == samples[^1][^1][2]
+  
+  test "Parallel - pre-computed key":
+    # TODO use mainnet genesis in this test?
+    let
+      db = AristoDbRef.init()
+      txFrame = db.txRef
+      root = STATE_ROOT_VID
+    db.parallelStateRootComputation = true
+    db.taskpool = Taskpool.new(numThreads = 4)
+
+    for (k, v, r) in samples[^1]:
+      check:
+        txFrame.mergeAccount(k, v) == Result[bool, AristoError].ok(true)
+    txFrame.checkpoint(1, skipSnapshot = true)
+
+    let batch = db.putBegFn()[]
+    db.persist(batch, txFrame)
+    check db.putEndFn(batch).isOk()
+
+    check txFrame.computeStateRoot(skipLayers = true).isOk()
+
+    let w = txFrame.computeKey((root, root)).value.to(Hash32)
+    check w == samples[^1][^1][2]
+
+suite "Aristo compute short benchmark":
+  const 
+    NUM_THREADS = 4
+    NUM_FRAMES = 1000
+    NUM_ACCOUNTS_PER_FRAME = 100
+
+  setup:
+    let db = AristoDbRef.init()
+    var txFrame = db.txRef
+    db.taskpool = Taskpool.new(numThreads = NUM_THREADS)
+
+
+    for i in 0 ..< NUM_ACCOUNTS_PER_FRAME:
+      check:
+        txFrame.mergeAccount(
+          cast[Hash32](i), 
+          AristoAccount(balance: i.u256(), codeHash: EMPTY_CODE_HASH)) == Result[bool, AristoError].ok(true)
+    txFrame.checkpoint(1, skipSnapshot = true)
+
+    let batch = db.putBegFn()[]
+    db.persist(batch, txFrame)
+    check db.putEndFn(batch).isOk()
+    
+    txFrame = db.baseTxFrame()
+    
+    for n in 1 .. NUM_FRAMES:
+      txFrame = db.txFrameBegin(txFrame)
+
+      let 
+        startIdx = NUM_ACCOUNTS_PER_FRAME * n
+        endIdx = startIdx + NUM_ACCOUNTS_PER_FRAME
+
+      for i in startIdx ..< endIdx:
+        check:
+          txFrame.mergeAccount(
+            cast[Hash32](i * i), 
+            AristoAccount(balance: i.u256(), codeHash: EMPTY_CODE_HASH)) == Result[bool, AristoError].ok(true)
+      
+      txFrame.checkpoint(1, skipSnapshot = false)
+
+  test "Serial benchmark - skipLayers = false":
+    db.parallelStateRootComputation = false
+    debugEcho "\nSerial benchmark (skipLayers = false) running..."
+
+    let before = cpuTime()
+    check txFrame.computeStateRoot(skipLayers = false).isOk()
+    let elapsed = cpuTime() - before
+    
+    debugEcho "Serial benchmark (skipLayers = false) cpu time: ", elapsed
+
+  test "Parallel benchmark - skipLayers = false":
+    db.parallelStateRootComputation = true
+    debugEcho "\nParallel benchmark (skipLayers = false) running..."
+
+    let before = cpuTime()
+    check txFrame.computeStateRoot(skipLayers = false).isOk()
+    let elapsed = cpuTime() - before
+    
+    debugEcho "Parallel benchmark (skipLayers = false) cpu time: ", elapsed
