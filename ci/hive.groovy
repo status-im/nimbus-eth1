@@ -74,6 +74,11 @@ pipeline {
         """
       }
     }
+    stage('Build hiveproxy') {
+      steps {
+        sh 'docker build -t hive/hiveproxy:latest ${WORKSPACE}/hive/hiveproxy'
+      }
+    }
     stage('Run Hive Tests') {
       parallel {
         stage('sync reth-nimbus') {

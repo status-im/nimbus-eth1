@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -248,32 +248,31 @@ proc gossipHistoricalSummaries(
     return err("No historical_summaries found")
 
   let summariesForked = summariesOpt.get()
-  withForkyHistoricalSummariesWithProof(summariesForked):
-    when historicalFork >= HistoricalSummariesFork.Electra:
-      let
-        epoch = forkySummaries.slot.epoch()
-        forkDigest = forkDigestAtEpoch(forkDigests[], epoch, cfg)
-        summariesWithProof = HistoricalSummariesWithProof(
-          epoch: epoch,
-          historical_summaries: forkySummaries.historical_summaries,
-          proof: forkySummaries.proof,
-        )
-        contentKey = encode(historicalSummariesContentKey(epoch.uint64))
-        content = encodeSsz(summariesWithProof, forkDigest)
+  case summariesForked.kind
+  of HistoricalSummariesFork.Electra:
+    let
+      forkySummaries = summariesForked.electraData
+      epoch = forkySummaries.slot.epoch()
+      forkDigest = forkDigestAtEpoch(forkDigests[], epoch, cfg)
+      summariesWithProof = HistoricalSummariesWithProof(
+        epoch: epoch,
+        historical_summaries: forkySummaries.historical_summaries,
+        proof: forkySummaries.proof,
+      )
+      contentKey = encode(historicalSummariesContentKey(epoch.uint64))
+      content = encodeSsz(summariesWithProof, forkDigest)
 
-      try:
-        let peers = await portalRpcClient.portal_beaconRandomGossip(
-          contentKey.asSeq().toHex(), content.toHex()
-        )
-        info "Beacon historical_summaries gossiped", peers, epoch
+    try:
+      let peers = await portalRpcClient.portal_beaconRandomGossip(
+        contentKey.asSeq().toHex(), content.toHex()
+      )
+      info "Beacon historical_summaries gossiped", peers, epoch
 
-        ok()
-      except CatchableError as e:
-        err("JSON-RPC error: " & $e.msg)
-    elif historicalFork >= HistoricalSummariesFork.Capella:
-      err("No historical summaries pre-Electra should be gossiped")
-    else:
-      err("No historical summaries pre-Capella")
+      ok()
+    except CatchableError as e:
+      err("JSON-RPC error: " & $e.msg)
+  of HistoricalSummariesFork.Capella:
+    err("No historical summaries pre-Electra should be gossiped")
 
 proc runBeacon*(config: PortalBridgeConf) {.raises: [CatchableError].} =
   notice "Launching Nimbus Portal beacon chain bridge", cmdParams = commandLineParams()
