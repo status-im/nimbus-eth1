@@ -13,29 +13,19 @@ from beacon_chain/spec/datatypes/capella import ExecutionPayload
 from beacon_chain/spec/datatypes/deneb import ExecutionPayload
 
 const
-  # Note:
+  # TODO:
   # This proof only works up until Fulu fork.
-  # For gloas+ the execution payload is no longer part of the BeaconBlockBody.
-  BEACON_BLOCK_BODY_GINDEX = get_generalized_index(fulu.BeaconBlock, "body")
-  EXECUTION_PAYLOAD_GINDEX =
-    get_generalized_index(fulu.BeaconBlockBody, "execution_payload")
-
-  BLOCK_HASH_GINDEX = get_generalized_index(capella.ExecutionPayload, "block_hash")
-  BLOCK_HASH_GINDEX_DENEB = get_generalized_index(deneb.ExecutionPayload, "block_hash")
-
-  EXECUTION_BLOCK_HASH_GINDEX* =
-    BEACON_BLOCK_BODY_GINDEX & EXECUTION_PAYLOAD_GINDEX & BLOCK_HASH_GINDEX
+  # For gloas+ the execution payload is no longer part of the BeaconBlockBody and thus
+  # an additional proof type is required.
+  EXECUTION_BLOCK_HASH_GINDEX* = get_generalized_index(
+    capella.BeaconBlock, "body", "execution_payload", "block_hash"
+  )
   EXECUTION_BLOCK_HASH_GINDEX_DENEB* =
-    BEACON_BLOCK_BODY_GINDEX & EXECUTION_PAYLOAD_GINDEX & BLOCK_HASH_GINDEX_DENEB
+    get_generalized_index(deneb.BeaconBlock, "body", "execution_payload", "block_hash")
 
 static:
-  doAssert BEACON_BLOCK_BODY_GINDEX == GeneralizedIndex(8 + 4)
-  doAssert EXECUTION_PAYLOAD_GINDEX == GeneralizedIndex(16 + 9)
-  doAssert BLOCK_HASH_GINDEX == GeneralizedIndex(16 + 12)
-  doAssert BLOCK_HASH_GINDEX_DENEB == GeneralizedIndex(32 + 12)
-
-  doAssert EXECUTION_BLOCK_HASH_GINDEX == GeneralizedIndex(3228)
-  doAssert EXECUTION_BLOCK_HASH_GINDEX_DENEB == GeneralizedIndex(6444)
+  doAssert EXECUTION_BLOCK_HASH_GINDEX == 3228.GeneralizedIndex
+  doAssert EXECUTION_BLOCK_HASH_GINDEX_DENEB == 6444.GeneralizedIndex
 
 type
   ExecutionBlockProof* = array[log2trunc(EXECUTION_BLOCK_HASH_GINDEX), Digest]
@@ -63,7 +53,7 @@ func buildProof*(
 func buildProof*(
     beaconBlock:
       deneb.TrustedBeaconBlock | deneb.BeaconBlock | electra.TrustedBeaconBlock |
-      electra.BeaconBlock
+      electra.BeaconBlock | fulu.TrustedBeaconBlock | fulu.BeaconBlock
 ): Result[ExecutionBlockProofDeneb, string] =
   var proof: ExecutionBlockProofDeneb
   ?beaconBlock.build_proof(EXECUTION_BLOCK_HASH_GINDEX_DENEB, proof)
