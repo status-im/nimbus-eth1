@@ -447,6 +447,11 @@ type
         defaultValueDesc: "*"
         name: "allowed-origins" .}: seq[string]
 
+      backgroundPruning* {.
+        desc: "Enable background pruning of expired block bodies and receipts"
+        defaultValue: false
+        name: "prune" .}: bool
+
       # https://eips.ethereum.org/EIPS/eip-7872
       maxBlobs* {.
         desc: "EIP-7872 maximum blobs used when building a local payload"
