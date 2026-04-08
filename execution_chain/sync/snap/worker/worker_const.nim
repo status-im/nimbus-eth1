@@ -162,4 +162,7 @@ const
   nProcCodesErrThreshold* = 4
     ## Similar to `nProcAccountErrThreshold`
 
+  nFetchByteCodesMax* = 1024
+    ## Maximal sise of byte codes downloaded in a single message.
+
 # End

@@ -594,6 +594,22 @@ iterator stoItems*(
       yield (key, data)
     rc = state.byAccount.gt(key)
 
+iterator codeItems*(
+    state: StateDataRef;
+    maxItems = high(int);
+      ): tuple[key: ItemKey, data: AccDataRef] =
+  ## Similar to `stoItems()` but for codes.
+  ##
+  var
+    count = 0
+    rc = state.byAccount.ge(low ItemKey)
+  while rc.isOk and count < maxItems:
+    count.inc
+    let (key, data) = (rc.value.key, rc.value.data)
+    if data.code != CodeHash(EMPTY_CODE_HASH):
+      yield (key, data)
+    rc = state.byAccount.gt(key)
+
 iterator items*(
     db: StateDbRef;
     startWith = seq[StateRoot].default;
