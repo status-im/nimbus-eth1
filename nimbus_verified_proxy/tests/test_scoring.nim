@@ -31,6 +31,7 @@ let scoringEngineConf = RpcVerificationEngineConf(
   codeCacheLen: 1,
   storageCacheLen: 1,
   parallelBlockDownloads: 2,
+  freezeAtSlot: TEST_LC_SLOT,
 )
 
 suite "backend scoring":
