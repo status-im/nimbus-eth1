@@ -147,7 +147,7 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]) =
   case newState:
   of SnapDownload, SnapMkTrie, SnapHealing:
     chronicles.info info & ": State changed", prevState, newState,
-      top=sdb.top.bnStr, pivot=sdb.pivot.bnStr, nSyncPeers=ctx.nSyncPeers()
+      top=sdb.top, pivot=sdb.pivot.bnStr, nSyncPeers=ctx.nSyncPeers()
   of SnapIdle, SnapResume, SnapReady:
     debug "State changed", prevState, newState
 
