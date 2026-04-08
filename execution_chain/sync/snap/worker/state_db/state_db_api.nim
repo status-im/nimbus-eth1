@@ -68,8 +68,8 @@ type
 
   StateDbRef* = ref object
     ## Download states db
-    unproc: ItemKeyRangeSet             ## Globally unprocessed accounts
-    carryOver: float                    ## Number of `unproc` resets/re-inits
+    allUnproc: ItemKeyRangeSet          ## Globally unprocessed accounts
+    carryOver: float                    ## Overflow coverage
     topNum: BlockNumber                 ## Latest observed block number
     byRank: StateByRank                 ## States indexed by some ranking
     byHash: StateByHash                 ## States indexed by block hash
@@ -99,9 +99,9 @@ proc rollBackAccounts(db: StateDbRef, state: StateDataRef) =
   ## Roll back global unproc register (as best as possible)
   var carry = 0.u256
   for iv in state.unproc.unprocessed.complement.increasing:
-    carry += (iv.len - db.unproc.merge iv)        # hand back processed ranges
+    carry += (iv.len - db.allUnproc.merge iv)     # hand back processed ranges
   db.carryOver -= carry.per256                    # adjust by carry over field
-  let totalRatio = db.unproc.totalRatio
+  let totalRatio = db.allUnproc.totalRatio
   if db.carryOver < totalRatio - 1f:              # maybe some rounding errors?
     db.carryOver = totalRatio - 1f
 
@@ -115,6 +115,12 @@ proc evict(db: StateDbRef, state: StateDataRef, info: static[string]) =
   state.deadState = true                            # mark it evicted
   db.rollBackAccounts state
 
+
+proc allUnprocRollOverIfEmpty(db: StateDbRef) =
+  ## Roll over empty register and re-initialise
+  if db.allUnproc.chunks == 0:
+    db.carryOver += 1f
+    db.allUnproc = ItemKeyRangeSet.init ItemKeyRangeMax
 
 proc resetMetrics(db: StateDbRef) =
   metrics.set(nec_snap_accumulated_state_coverage, 0f)
@@ -134,7 +140,7 @@ proc updateMetrics(db: StateDbRef) =
 
 proc init*(T: type StateDbRef): T =
   let db = T(
-    unproc:   ItemKeyRangeSet.init ItemKeyRangeMax,
+    allUnproc: ItemKeyRangeSet.init ItemKeyRangeMax,
     byRank:    StateByRank.init state_rank_index.cmp)
   db.resetMetrics()
   db
@@ -142,7 +148,7 @@ proc init*(T: type StateDbRef): T =
 proc clear*(db: StateDbRef) =
   db.carryOver = 0f
   db.topNum = BlockNumber(0)
-  db.unproc.clear
+  db.allUnproc.clear
   db.byRank.clear
   db.byHash.clear
   db.byRoot.clear
@@ -249,7 +255,7 @@ proc isComplete*(state: StateDataRef): bool =
 
 func accountsCoverage*(db: StateDbRef): float =
   ## Coverage of accounts over all states
-  max(0f, 1f - db.unproc.totalRatio + db.carryOver)
+  max(0f, 1f - db.allUnproc.totalRatio + db.carryOver)
 
 func accountsCoverage*(state: StateDataRef): float =
   ## Coverage of accounts for a particular state
@@ -276,18 +282,13 @@ proc fetchAccountRange*(
      state.unproc.avail().isErr():                  # all done this state
     return err()
 
-  # Carry over empty register and re-initialise
-  if db.unproc.chunks == 0:
-    db.carryOver += 1f
-    db.unproc = ItemKeyRangeSet.init ItemKeyRangeMax
-
   # Fetch interval from state, coordinated by the global register. This results
   # in minimal overlap of processed intervals over all active states.
   var
     restore: seq[ItemKeyRange]                      # temp. blocked items
     iRange: ItemKeyRange                            # return value
   while true:
-    let giv = db.unproc.fetchLeast(unprocAccountsRangeMax).valueOr:
+    let giv = db.allUnproc.fetchLeast(unprocAccountsRangeMax).valueOr:
       # No overlapping data, fetch directly from `state`
       iRange = state.unproc.fetchLeast(unprocAccountsRangeMax)
                            .expect "Valid state range"
@@ -297,16 +298,17 @@ proc fetchAccountRange*(
       iRange = value
       # Unused ranges, subsets of `giv`
       if giv.minPt < value.minPt:
-        discard db.unproc.merge(giv.minPt, value.minPt-1)
+        discard db.allUnproc.merge(giv.minPt, value.minPt-1)
       if value.maxPt < giv.maxPt:
-        discard db.unproc.merge(value.maxPt+1, giv.maxPt)
+        discard db.allUnproc.merge(value.maxPt+1, giv.maxPt)
       break
     restore.add giv
 
   # Restore temporarily locked intervals
   for iv in restore:
-    discard db.unproc.merge iv                      # restore global range
+    discard db.allUnproc.merge iv                   # restore global range
 
+  db.allUnprocRollOverIfEmpty()
   ok iRange
 
 proc rollbackAccountRange*(
@@ -319,7 +321,7 @@ proc rollbackAccountRange*(
   ##
   if not state.deadState:
     state.unproc.commit(iv, iv)
-    discard db.unproc.merge(iv)
+    discard db.allUnproc.merge(iv)
 
 proc commitAccountRange*(
     db: StateDbRef;
@@ -336,22 +338,18 @@ proc commitAccountRange*(
     let oldInx = state.rankIndex
     if limit < iv.maxPt:
       state.unproc.commit(iv, limit + 1, iv.maxPt)
-      discard db.unproc.merge(limit + 1, iv.maxPt)
+      discard db.allUnproc.merge(limit + 1, iv.maxPt)
 
     elif iv.maxPt < limit:
       state.unproc.commit(iv)
       state.unproc.overCommit(iv.maxPt + 1, limit)
-      discard db.unproc.reduce(iv.maxPt + 1, limit)
+      discard db.allUnproc.reduce(iv.maxPt + 1, limit)
 
     else: # iv.maxPt == limit
       state.unproc.commit(iv)
 
-    # Carry over empty register and re-initialise
-    if db.unproc.chunks == 0:
-      db.carryOver += 1f
-      db.unproc = ItemKeyRangeSet.init ItemKeyRangeMax
-
     db.updateRank(oldInx, state)                    # update ranking
+    db.allUnprocRollOverIfEmpty()
     db.updateMetrics()
 
 proc setAccountRange*(
@@ -365,14 +363,10 @@ proc setAccountRange*(
   if not state.deadState:
     let oldInx = state.rankIndex
     state.unproc.overCommit(start, limit)
-    db.carryOver += (limit - start + 1 - db.unproc.reduce(start, limit)).per256
-
-    # Carry over empty register and re-initialise
-    if db.unproc.chunks == 0:
-      db.carryOver += 1f
-      db.unproc = ItemKeyRangeSet.init ItemKeyRangeMax
+    db.carryOver += (limit-start+1 - db.allUnproc.reduce(start, limit)).per256
 
     db.updateRank(oldInx, state)                    # update ranking
+    db.allUnprocRollOverIfEmpty()
     db.updateMetrics()
 
 # ------------------------------------------------------------------------------
