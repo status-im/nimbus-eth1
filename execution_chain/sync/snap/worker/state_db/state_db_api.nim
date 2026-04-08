@@ -11,7 +11,7 @@
 {.push raises:[].}
 
 import
-  std/[hashes, sequtils, sets, strformat, strutils, tables],
+  std/[hashes, sequtils, sets, strutils, tables],
   pkg/[chronicles, eth/common, metrics],
   pkg/stew/[interval_set, sorted_set],
   ../[helpers, worker_const],
@@ -114,7 +114,6 @@ proc evict(db: StateDbRef, state: StateDataRef, info: static[string]) =
   var processedRatio = 1f - state.unproc.totalRatio()
   db.carryOver -= processedRatio                    # roll back
   db.archived += processedRatio                     # roll forward
-
 
 proc allUnprocRollOverIfEmpty(db: StateDbRef) =
   ## Roll over empty register and re-initialise
@@ -224,7 +223,7 @@ func top*(db: StateDbRef): BlockNumber =
   db.topNum
 
 func len*(db: StateDbRef): int =
-  db.byRank.len
+  db.byRoot.len
 
 
 proc setHealingReady*(state: StateDataRef) =
@@ -302,7 +301,7 @@ proc fetchAccountRange*(
   for iv in restore:
     discard db.allUnproc.merge iv                   # restore global range
 
-  db.allUnprocRollOverIfEmpty()
+  db.allUnprocRollOverIfEmpty()                     # global register roll over
   ok iRange
 
 proc rollbackAccountRange*(
@@ -345,7 +344,7 @@ proc commitAccountRange*(
       state.unproc.commit(iv)
 
     db.updateRank(oldInx, state)                    # update ranking
-    db.allUnprocRollOverIfEmpty()
+    db.allUnprocRollOverIfEmpty()                   # global register roll over
     db.updateMetrics()
 
 proc setAccountRange*(
@@ -363,7 +362,7 @@ proc setAccountRange*(
                      db.allUnproc.reduce(start, limit)).per256
 
     db.updateRank(oldInx, state)                    # update ranking
-    db.allUnprocRollOverIfEmpty()
+    db.allUnprocRollOverIfEmpty()                   # global register roll over
     db.updateMetrics()
 
 # ------------------------------------------------------------------------------
@@ -519,21 +518,15 @@ func bnStr*(rc: Opt[StateDataRef]): string =
 func rootStr*(state: StateDataRef): string =
   state.stateRoot.Hash32.short & "(" & $state.blockNumber & ")"
 
-func toStr*(db: seq[StateDataRef]): string =
-  ## Print a list of processed ranges for the argument stats.
-  "{" & db.mapIt(
+func toStr*(states: seq[StateDataRef]): string =
+  ## Print a list of processed ranges for the argument `states`.
+  "{" & states.mapIt(
     $it.blockNumber & "^" &
     it.unproc.unprocessed.complement.toStr).join(",") & "}"
 
 func toStr*(db: StateDbRef): string =
-  if db.byRank.len == 0:
+  if db.byRoot.len == 0:
     return "n/a"
-
-  let
-    base2 = (db.topNum div 100) * 100
-    base3 = (db.topNum div 1000) * 1000
-    base4 = (db.topNum div 10000) * 10000
-
   var walk = WalkByRank.init(db.byRank)
   defer: walk.destroy()
 
@@ -542,23 +535,16 @@ func toStr*(db: StateDbRef): string =
   while rc.isOk:
     let state = rc.value.data
     rc = walk.next
-
-    if 0 < base2 and base2 <= state.blockNumber:
-      result &= &"{(state.blockNumber - base2):02}"
-    elif 0 < base3 and base3 <= state.blockNumber:
-      result &= &"{(state.blockNumber - base3):03}"
-    elif 0 < base4 and base4 <= state.blockNumber:
-      result &= &"{(state.blockNumber - base4):04}"
-    else:
-      result &= $state.blockNumber
-
-    result &= ":" & state.accountsCoverage.toPC(6)
-    result &= "+" & $state.byAccount.len
-    result &= ","
+    result &=
+      $state.blockNumber &
+      "^" & $(db.topNum - state.blockNumber) &
+      ":" & state.accountsCoverage.toPC(6) &
+      "+" & $state.byAccount.len &
+      ","
   result[^1] = '}'
-
-  result &= ":" & db.accountsCoverage.toPC(6)
-  result &= ":" & db.archived.toPC(6)
+  result &=
+    ":" & db.accountsCoverage.toPC(6) &
+    ":" & db.archived.toPC(6)
 
 # ------------------------------------------------------------------------------
 # End

@@ -182,7 +182,7 @@ func totalRatio*(ikrs: ItemKeyRangeSet): float =
   total.per256()
 
 func complement*(ikrs: ItemKeyRangeSet): ItemKeyRangeSet =
-  ## Missing functionality from `unterval_set` API.
+  ## Missing functionality from `interval_set` API.
   result = ItemKeyRangeSet.init ItemKeyRangeMax
   for iv in ikrs.increasing:
     discard result.reduce iv

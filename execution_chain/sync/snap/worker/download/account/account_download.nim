@@ -41,20 +41,20 @@ template accountDownload*(
 
       ivReq = sdb.fetchAccountRange(state).valueOr:
         trace info & ": no more unpocessed", peer, root,
-          notAvailMax=buddy.only.notAvailMax, state=($buddy.syncState)
+          notAvailMax=buddy.only.notAvailMax, syncState=buddy.syncState
         bodyRc = typeof(bodyRc).err(ECompleted)
         break body                                  # return err()
 
       iv {.inject,used.} = ivReq.flStr              # logging only
 
     trace info & ": requesting account range", peer, root,
-      notAvailMax=buddy.only.notAvailMax, iv, state=($buddy.syncState)
+      notAvailMax=buddy.only.notAvailMax, iv, syncState=buddy.syncState
 
     let
       data = buddy.fetchAccounts(state.stateRoot, ivReq).valueOr:
         sdb.rollbackAccountRange(state, ivReq)      # registry roll back
         trace info & ": account download failed", peer, root,
-          notAvailMax=buddy.only.notAvailMax, iv, state=($buddy.syncState),
+          notAvailMax=buddy.only.notAvailMax, iv, syncState=buddy.syncState,
           `error`=error
         bodyRc = typeof(bodyRc).err(error)
         if error == ENoDataAvailable and            # not serving this state
@@ -75,7 +75,7 @@ template accountDownload*(
         sdb.rollbackAccountRange(state, ivReq)      # registry roll back
         debug info & ": caching accounts failed", peer, root,
           notAvailMax=buddy.only.notAvailMax, iv, nAccounts, nProof,
-          state=($buddy.syncState)
+          syncState=buddy.syncState
         bodyRc = typeof(bodyRc).err(ECacheError)
         break body                                  # return err()
 
@@ -84,7 +84,7 @@ template accountDownload*(
 
     debug info & ": accounts downloaded and cached", peer, root,
       notAvailMax=buddy.only.notAvailMax, iv, nAccounts, nProof,
-      state=($buddy.syncState)
+      syncState=buddy.syncState
 
   bodyRc
 
