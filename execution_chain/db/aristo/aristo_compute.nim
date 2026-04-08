@@ -159,9 +159,9 @@ template encodeLeaf(w: var RlpWriter, pfx: NibblesBuf, leafData: untyped): HashK
   w.append(leafData)
   w.finish().digestTo(HashKey)
 
-template encodeBranch(w: var RlpWriter, vtx: VertexRef, subKeyForN: untyped): HashKey =
+template encodeBranch(w: var RlpWriter, startVid: VertexID, used: uint16, subKeyForN: untyped): HashKey =
   w.startList(17)
-  for (n {.inject.}, subvid {.inject.}) in vtx.allPairs():
+  for (n {.inject.}, subvid {.inject.}) in allPairs(startVid, used):
     w.append(subKeyForN)
   w.append EmptyBlob
   w.finish().digestTo(HashKey)
@@ -201,8 +201,10 @@ func layersGetKeyOrVtx*(
   Opt.none(((HashKey, VertexRef), int))
 
 proc getKey(
-    txRef: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool, parallel: static bool
-): Result[((HashKey, VertexRef), int), AristoError] =
+    txRef: AristoTxRef, rvid: RootedVertexID, vtxBuf: var VertexBuf,
+    skipLayers: static bool, 
+    parallel: static bool
+): Result[(HashKey, int), AristoError] =
   const 
     emptyFlags: set[GetVtxFlag] = {}
     flags = 
@@ -217,31 +219,34 @@ proc getKey(
   when not skipLayers:
     let keyVtxRes = txRef.layersGetKeyOrVtx(rvid, parallel)
     if keyVtxRes.isSome():
-      return ok(keyVtxRes[])
+      var keyVtx: ((HashKey, VertexRef), int) = keyVtxRes[]
+      if keyVtx[0][1].isValid():
+        blobifyTo(keyVtx[0][1], keyVtx[0][0], vtxBuf)
+      return ok (keyVtx[0][0], keyVtx[1])
 
-  ok((?txRef.db.getKeyBe(rvid, flags), dbLevel))
+  ok((?txRef.db.getKeyBe(rvid, flags, vtxBuf), dbLevel))
 
-template childVid(vp: VertexRef): VertexID =
-  # If we have to recurse into a child, where would that recusion start?
-  let v = vp
-  case v.vType
-  of AccLeaf:
-    let v = AccLeafRef(v)
-    if v.stoID.isValid:
-      v.stoID.vid
-    else:
-      default(VertexID)
-  of Branch, ExtBranch:
-    let v = BranchRef(v)
-    v.startVid
-  of StoLeaf:
-    default(VertexID)
+# template childVid(vp: VertexRef): VertexID =
+#   # If we have to recurse into a child, where would that recusion start?
+#   let v = vp
+#   case v.vType
+#   of AccLeaf:
+#     let v = AccLeafRef(v)
+#     if v.stoID.isValid:
+#       v.stoID.vid
+#     else:
+#       default(VertexID)
+#   of Branch, ExtBranch:
+#     let v = BranchRef(v)
+#     v.startVid
+#   of StoLeaf:
+#     default(VertexID)
 
 proc computeKeyImplTask(
     txRef: ptr AristoTxRef,
     rvid: RootedVertexID,
     batch: ptr WriteBatch,
-    vtx: ptr VertexRef,
+    vtx: VertexBuf,
     level: int,
     skipLayers: bool,
     keyQueue: ptr ConcurrentHashKeyQueue,
@@ -252,7 +257,7 @@ proc computeKeyImpl(
     txRef: AristoTxRef,
     rvid: RootedVertexID,
     batch: var WriteBatch,
-    vtx: VertexRef,
+    vtx: VertexBuf,
     level: int,
     skipLayers: static bool,
     spawnTpTasks: static bool,
@@ -268,26 +273,28 @@ proc computeKeyImpl(
 
   # TODO this is the same code as when serializing NodeRef, without the NodeRef
   var writer = initRlpWriter()
+  
+  let vType = ?vtx.data().deblobifyType(VertexRef)
 
   let key =
-    case vtx.vType
+    case vType
     of AccLeaf:
-      let vtx = AccLeafRef(vtx)
       writer.encodeLeaf(vtx.pfx):
         let
-          stoID = vtx.stoID
+          (account, stoID) = ?vtx.deblobifyAccLeaf()
           skey =
             if stoID.isValid:
+              var vtxBuffer: VertexBuf
               let
-                keyvtxl = ?txRef.getKey((stoID.vid, stoID.vid), skipLayers, parallel)
+                keyvtxl = ?txRef.getKey((stoID.vid, stoID.vid), vtxBuffer, skipLayers, parallel)
                 (skey, sl) =
-                  if keyvtxl[0][0].isValid:
-                    (keyvtxl[0][0], keyvtxl[1])
+                  if keyvtxl[0].isValid:
+                    (keyvtxl[0], keyvtxl[1])
                   else:
                     ?txRef.computeKeyImpl(
                       (stoID.vid, stoID.vid),
                       batch,
-                      keyvtxl[0][1],
+                      vtxBuffer,
                       keyvtxl[1],
                       skipLayers = skipLayers,
                       spawnTpTasks = false,
@@ -301,23 +308,26 @@ proc computeKeyImpl(
               VOID_HASH_KEY
 
         rlp.encode Account(
-          nonce: vtx.account.nonce,
-          balance: vtx.account.balance,
+          nonce: account.nonce,
+          balance: account.balance,
           storageRoot: skey.to(Hash32),
-          codeHash: vtx.account.codeHash,
+          codeHash: account.codeHash,
         )
     of StoLeaf:
-      let vtx = StoLeafRef(vtx)
       writer.encodeLeaf(vtx.pfx):
         # TODO avoid memory allocation when encoding storage data
-        rlp.encode(vtx.stoData)
+        #let stoData = ?vtx.data().deblobifyStoLeaf()
+        rlp.encode(?vtx.deblobifyStoLeaf())
     of Branches:
       # For branches, we need to load the vertices before recursing into them
       # to exploit their on-disk order
-      let vtx = BranchRef(vtx)
-      var keyvtxs: array[16, ((HashKey, VertexRef), int)]
-      for n, subvid in vtx.pairs:
-        keyvtxs[n] = ?txRef.getKey((rvid.root, subvid), skipLayers, parallel)
+      let (startVid, used) = ?vtx.data().deblobifyBranch()
+      var keyvtxs: array[16, ((HashKey, VertexBuf), int)]
+
+      for n, subvid in pairs(startVid, used): # Implement pairs function
+        var vtxBuffer: VertexBuf
+        let (key, level) = ?txRef.getKey((rvid.root, subvid), vtxBuffer, skipLayers, parallel)
+        keyvtxs[n] = ((key, vtxBuffer), level)
 
       when spawnTpTasks:
         var 
@@ -343,12 +353,12 @@ proc computeKeyImpl(
                 n += 1 # no need to compute key
                 continue
 
-            let subvid = vtx.bVid(uint8 nibble)
+            let subvid = bVid(startVid, used, uint8 nibble)
             if (not subvid.isValid) or keyvtx[0][0].isValid:
               n += 1 # no need to compute key
               continue
 
-            let childVid = keyvtx[0][1].childVid
+            let childVid = ?keyvtx[0][1].data().childVid()
             if not childVid.isValid:
               # leaf vertex without storage ID - we can compute the key trivially
               (keyvtx[0][0], keyvtx[1]) =
@@ -375,15 +385,15 @@ proc computeKeyImpl(
 
           when spawnTpTasks:
             let
-              vid = (rvid.root, vtx.bVid(uint8 minIdx))
+              vid = (rvid.root, bVid(startVid, used, uint8 minIdx))
               batchPtr: ptr WriteBatch = batch.addr
-              vtxPtr = keyvtxs[minIdx][0][1].addr
+              # vtxPtr = keyvtxs[minIdx][0][1].addr
               level = keyvtxs[minIdx][1]
 
             keyQueues[minIdx].init()
             vtxBufQueues[minIdx].init()
             futs[minIdx] = txRef.db.taskpool.spawn computeKeyImplTask(
-              txRef.addr, vid, batchPtr, vtxPtr, level, skipLayers, 
+              txRef.addr, vid, batchPtr, keyvtxs[minIdx][0][1], level, skipLayers, 
               keyQueues[minIdx].addr, vtxBufQueues[minIdx].addr)
             inc batch.tasksTotal
 
@@ -392,7 +402,7 @@ proc computeKeyImpl(
               batch.enter(n)
             (keyvtxs[minIdx][0][0], keyvtxs[minIdx][1]) =
               ?txRef.computeKeyImpl(
-                (rvid.root, vtx.bVid(uint8 minIdx)),
+                (rvid.root, bVid(startVid, used, uint8 minIdx)),
                 batch,
                 keyvtxs[minIdx][0][1],
                 keyvtxs[minIdx][1],
@@ -453,21 +463,20 @@ proc computeKeyImpl(
             keyQueues[i].dispose()
             vtxBufQueues[i].dispose()
 
-      template writeBranch(w: var RlpWriter, vtx: BranchRef): HashKey =
-        w.encodeBranch(vtx):
+      template writeBranch(w: var RlpWriter, startVid: VertexID, used: uint16): HashKey =
+        w.encodeBranch(startVid, used):
           if subvid.isValid:
             level = max(level, keyvtxs[n][1])
             keyvtxs[n][0][0]
           else:
             VOID_HASH_KEY
 
-      if vtx.vType == ExtBranch:
-        let vtx = ExtBranchRef(vtx)
+      if vType == ExtBranch:
         writer.encodeExt(vtx.pfx):
           var bwriter = initRlpWriter()
-          bwriter.writeBranch(vtx)
+          bwriter.writeBranch(startVid, used)
       else:
-        writer.writeBranch(vtx)
+        writer.writeBranch(startVid, used)
 
   # Cache the hash into the same storage layer as the the top-most value that it
   # depends on (recursively) - this could be an ephemeral in-memory layer or the
@@ -476,19 +485,19 @@ proc computeKeyImpl(
   # root key also changing while leaves that have never been hashed will see
   # their hash being saved directly to the backend.
 
-  if vtx.vType in Branches:      
+  if vType in Branches:      
     when parallel and not spawnTpTasks:
       if level >= txRef.db.baseTxFrame().level:
         keyQueue[].push((rvid, key, level))
       elif level == dbLevel:
-        var vtxBuf: VertexBuf
-        vtx.blobifyTo(key, vtxBuf)
-        vtxBufQueue[].push((rvid, vtxBuf))
+        # var vtxBuf: VertexBuf
+        # vtx.blobifyTo(key, vtxBuf)
+        vtxBufQueue[].push((rvid, vtx))
       else:
         raiseAssert("Cannot write keys at level < baseTxFrame level. Found level = " &
           $level & ", baseTxFrame level = " & $txRef.db.baseTxFrame().level)
     else:
-      ?txRef.putKeyAtLevel(rvid, BranchRef(vtx), key, level, batch)
+      ?txRef.putKeyAtLevel(rvid, BranchRef(?vtx.data().deblobify(VertexRef)), key, level, batch)
 
   ok (key, level)
 
@@ -496,17 +505,17 @@ proc computeKeyImplTask(
     txRef: ptr AristoTxRef,
     rvid: RootedVertexID,
     batch: ptr WriteBatch,
-    vtx: ptr VertexRef,
+    vtx: VertexBuf,
     level: int,
     skipLayers: bool,
     keyQueue: ptr ConcurrentHashKeyQueue,
     vtxBufQueue: ptr ConcurrentVertexBufQueue
 ): Result[(HashKey, int), AristoError] =
   if skipLayers:
-    txRef[].computeKeyImpl(rvid, batch[], vtx[], level, skipLayers = true, 
+    txRef[].computeKeyImpl(rvid, batch[], vtx, level, skipLayers = true, 
         spawnTpTasks = false, parallel = true, keyQueue, vtxBufQueue)
   else:
-    txRef[].computeKeyImpl(rvid, batch[], vtx[], level, skipLayers = false, 
+    txRef[].computeKeyImpl(rvid, batch[], vtx, level, skipLayers = false, 
         spawnTpTasks = false, parallel = true, keyQueue, vtxBufQueue)
 
 proc computeKeyImpl(
@@ -525,12 +534,17 @@ proc computeKeyImpl(
   if keyvtx[0].isValid:
     return ok(keyvtx[0])
 
-  var batch: WriteBatch
+  var 
+    batch: WriteBatch
+    vtxBuf: VertexBuf
+
+  keyvtx[1].blobifyTo(keyvtx[0], vtxBuf)
+
   let res = computeKeyImpl(
     txRef,
     rvid,
     batch,
-    keyvtx[1],
+    vtxBuf,
     level,
     skipLayers,
     spawnTpTasks,

@@ -146,6 +146,12 @@ func bVid*(vtx: BranchRef, nibble: uint8): VertexID =
   else:
     default(VertexID)
 
+func bVid*(startVid: VertexID, used: uint16, nibble: uint8): VertexID =
+  if (used and (1'u16 shl nibble)) > 0:
+    VertexID(uint64(startVid) + nibble)
+  else:
+    default(VertexID)
+
 func setUsed*(vtx: BranchRef, nibble: uint8, used: static bool): VertexID =
   vtx.used =
     when used:
@@ -208,6 +214,21 @@ iterator allPairs*(vtx: VertexRef): tuple[nibble: uint8, vid: VertexID] =
         yield (n, VertexID(uint64(vtx.startVid) + n))
       else:
         yield (n, default(VertexID))
+
+iterator pairs*(startVid: VertexID, used: uint16): tuple[nibble: uint8, vid: VertexID] =
+  ## Iterates over the sub-vids of a branch (does nothing for leaves)
+  for n in 0'u8 .. 15'u8:
+    if (used and (1'u16 shl n)) > 0:
+      yield (n, VertexID(uint64(startVid) + n))
+
+iterator allPairs*(startVid: VertexID, used: uint16): tuple[nibble: uint8, vid: VertexID] =
+  ## Iterates over the sub-vids of a branch (does nothing for leaves) including
+  ## currently unset nodes
+  for n in 0'u8 .. 15'u8:
+    if (used and (1'u16 shl n)) > 0:
+      yield (n, VertexID(uint64(startVid) + n))
+    else:
+      yield (n, default(VertexID))
 
 proc `==`*(a, b: NodeRef): bool =
   ## Beware, potential deep comparison

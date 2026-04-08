@@ -18,8 +18,6 @@ import
 
 export aristo_desc, results
 
-const MAX_VERTEX_BLOB_SIZE = 117
-
 # Allocation-free version short big-endian encoding that skips the leading
 # zeroes
 type
@@ -31,8 +29,6 @@ type
     buf*: array[sizeof(SbeBuf[VertexID]) * 2, byte]
     len*: byte
   
-  VertexBuf* = ArrayBuf[MAX_VERTEX_BLOB_SIZE, byte]
-
 template `&=`*(x: var VertexBuf, y: VertexBuf) =
   x.add(y.data)
 
@@ -165,6 +161,27 @@ proc blobifyTo*(pyl: StoLeafRef, data: var VertexBuf) =
   data &= pyl.stoData.blobify().data
   data &= [0x20.byte]
 
+func deblobifyPfx*(record: openArray[byte]): Result[NibblesBuf, AristoError] =
+  if record.len < 3:
+    return err(DeblobVtxTooShort)
+
+  let psLen = int(record[^1] and 0b00111111)
+
+  if psLen == 0:
+    return ok default(NibblesBuf)
+
+  let psPos = record.len - psLen - 1
+  if psPos < 0 or psLen > record.len - 2:
+    return err(DeblobVtxTooShort)
+
+  let (_, pathSegment) =
+    NibblesBuf.fromHexPrefix record.toOpenArray(psPos, record.len - 2)
+
+  ok pathSegment
+
+template pfx*(vtx: VertexBuf): NibblesBuf =
+  vtx.data().deblobifyPfx().expect("valid vertex")
+
 proc blobifyTo*(vtx: VertexRef, key: HashKey, data: var VertexBuf) =
   ## This function serialises the vertex argument to a database record.
   ## Contrary to RLP based serialisation, these records aim to align on
@@ -240,10 +257,100 @@ proc blobify*(lSst: SavedState): seq[byte] =
   lSst.blobifyTo data
   data
 
+proc deblobifyBranch*(
+    record: openArray[byte];
+      ): Result[(VertexID, uint16), AristoError] =
+  if record.len < 3:
+    return err(DeblobBranchTooShort)
+
+  let
+    hasKey = ((record[^1] shr 6) and 0b10'u8) > 0
+    psLen  = int(record[^1] and 0b00111111)
+    start  = if hasKey: 32 else: 0
+    psPos  = record.len - psLen - 1     # first byte of path segment
+    svLen  = psPos - start - 2          # length of the startVid blob
+
+  if svLen < 1 or svLen > 8:
+    return err(DeblobBranchTooShort)
+
+  var pos = start
+  let
+    startVid = VertexID(?load64(record, pos, svLen))
+    used     = uint16.fromBytesBE(record.toOpenArray(pos, pos + 1))
+
+  ok (startVid, used)
+
+proc deblobifyStoLeaf*(
+    data: openArray[byte];
+      ): Result[UInt256,AristoError] =
+  assert data.len > 0
+  let mask = data[^1]
+  assert (mask and 0x20) > 0
+
+  deblobify(data.toOpenArray(0, data.len - 2), UInt256)
+
+proc deblobifyStoLeaf*(
+    vtxBuf: VertexBuf;
+      ): Result[UInt256,AristoError] =   
+  let
+    bits = vtxBuf[^1] shr 6
+    hasKey = (bits and 0b10'u8) > 0
+    psLen = int(vtxBuf[^1] and 0b00111111)
+    start = if hasKey: 32 else: 0
+    psPos = vtxBuf.len - psLen - 1
+
+  vtxBuf.data().toOpenArray(start, psPos - 1).deblobifyStoLeaf()
+
+proc deblobifyAccLeaf*(
+    data: openArray[byte];
+      ): Result[(AristoAccount, StorageID),AristoError] =
+  assert data.len > 0
+  let mask = data[^1]
+  assert (mask and 0xf0) == 0
+  
+  var
+    account: AristoAccount
+    stoID: StorageID
+    start = 0
+    lens = uint16.fromBytesBE(data.toOpenArray(data.len - 3, data.len - 2))
+
+  if (mask and 0x01) > 0:
+    let len = lens and 0b111
+    account.nonce = ?load64(data, start, int(len + 1))
+
+  if (mask and 0x02) > 0:
+    let len = (lens shr 3) and 0b11111
+    account.balance = ?load256(data, start, int(len + 1))
+
+  if (mask and 0x04) > 0:
+    let len = (lens shr 8) and 0b111
+    stoID = (true, VertexID(?load64(data, start, int(len + 1))))
+
+  if (mask and 0x08) > 0:
+    if data.len() < start + 32:
+      return err(DeblobCodeLenUnsupported)
+    discard account.codeHash.data.copyFrom(data.toOpenArray(start, start + 31))
+  else:
+    account.codeHash = EMPTY_CODE_HASH
+
+  ok (account, stoID)
+
+proc deblobifyAccLeaf*(
+    vtxBuf: VertexBuf;
+      ): Result[(AristoAccount, StorageID),AristoError] =
+  let
+    bits = vtxBuf[^1] shr 6
+    hasKey = (bits and 0b10'u8) > 0
+    psLen = int(vtxBuf[^1] and 0b00111111)
+    start = if hasKey: 32 else: 0
+    psPos = vtxBuf.len - psLen - 1
+
+  vtxBuf.data().toOpenArray(start, psPos - 1).deblobifyAccLeaf()
+
 proc deblobifyLeaf(
     data: openArray[byte];
     pfx: NibblesBuf;
-      ): Result[VertexRef,AristoError] =
+      ): Result[VertexRef, AristoError] =
   if data.len == 0:
     return err(DeblobVtxTooShort)
 
@@ -358,6 +465,103 @@ proc deblobify*(
   ok(SavedState(
     vTop: VertexID(uint64.fromBytesBE data.toOpenArray(0, 7)),
     serial: uint64.fromBytesBE data.toOpenArray(8, 15)))
+
+
+func childVid*(record: openArray[byte]): Result[VertexID, AristoError] =
+  ## Extract the child vertex ID that a recursive hash computation would need
+  ## to descend into, operating directly on the serialised ``VertexBuf`` byte
+  ## representation.  This mirrors the ``childVid(VertexRef)`` template from
+  ## ``aristo_compute.nim`` but avoids the heap allocation of a full
+  ## ``VertexRef`` deserialisation.
+  ##
+  ## Returns
+  ## * ``startVid`` for Branch / ExtBranch vertices
+  ## * ``stoID.vid`` for AccLeaf vertices that carry a valid storage root
+  ## * ``default(VertexID)`` for StoLeaf vertices and AccLeaf without storage
+  ##
+  if record.len < 3:
+    return err(DeblobVtxTooShort)
+
+  let
+    bits  = record[^1] shr 6
+    isLeaf = (bits and 0b01'u8) > 0
+    hasKey = (bits and 0b10'u8) > 0
+    psLen  = int(record[^1] and 0b00111111)
+
+  if not isLeaf:
+    # ---- Branch / ExtBranch ----
+    # Layout: [<HashKey 32>?] [startVid 1‑8] [used 2] [pfx psLen] [trailing 1]
+    let
+      start  = if hasKey: 32 else: 0
+      psPos  = record.len - psLen - 1          # first byte of path segment
+      svLen  = psPos - start - 2               # length of the startVid blob
+
+    if svLen < 1 or svLen > 8 or start + svLen + 2 > record.len - psLen - 1:
+      return err(DeblobBranchTooShort)
+
+    var pos = start
+    let startVid = ?load64(record, pos, svLen)  # advances pos past startVid
+    ok VertexID(startVid)
+
+  else:
+    # ---- Leaf ----
+    # Determine sub‑type from the mask byte that sits just before the hex‑
+    # prefix (which is `psLen` bytes before the trailing byte).
+    let psPos = record.len - psLen - 1  # first byte of path segment area
+    let
+      start = if hasKey: 32 else: 0     # always 0 for current leaf encoding
+      #leafData = record.toOpenArray(start, psPos - 1)
+      leafDataStart = start
+      leafDataEnd = psPos
+      leafDataLen = leafDataEnd - leafDataStart
+
+    if leafDataLen == 0:
+      return err(DeblobVtxTooShort)
+
+    let mask = record[leafDataEnd - 1]
+
+    if (mask and 0x20) > 0:
+      # ---- StoLeaf ----
+      # Storage leaves have no children.
+      ok default(VertexID)
+
+    elif (mask and 0xf0) == 0:
+      # ---- AccLeaf ----
+      # We only need the stoID field.  The payload preceding the 3‑byte
+      # trailer (mask + lens) is laid out as:
+      #   [nonce?] [balance?] [stoID.vid?] [codeHash?] [lens 2] [mask 1]
+      #
+      # `mask bit 0x04` → stoID is present
+      # `(lens shr 8) and 0b111` → `stoID_byte_length − 1`
+      if (mask and 0x04) == 0:
+        # No storage ID → nothing to recurse into.
+        return ok default(VertexID)
+
+      let lens = uint16.fromBytesBE(
+        record.toOpenArray(leafDataStart + leafDataLen - 3, leafDataStart + leafDataLen - 2))
+
+      # Walk past nonce and balance to reach the stoID bytes.
+      var pos = 0
+
+      if (mask and 0x01) > 0:            # nonce present
+        let nLen = int(lens and 0b111) + 1
+        pos += nLen
+
+      if (mask and 0x02) > 0:            # balance present
+        let bLen = int((lens shr 3) and 0b11111) + 1
+        pos += bLen
+
+      # stoID bytes
+      let sLen = int((lens shr 8) and 0b111) + 1
+      if leafDataLen < pos + sLen + 3:   # +3 for lens(2) + mask(1) trailer
+        return err(DeblobVtxTooShort)
+
+      let stoVid = ?deblobify(
+        record.toOpenArray(leafDataStart + pos, leafDataStart + pos + sLen - 1), uint64)
+      ok VertexID(stoVid)
+
+    else:
+      err(DeblobUnknown)
 
 # ------------------------------------------------------------------------------
 # End
