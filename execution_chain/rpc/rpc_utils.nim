@@ -92,11 +92,13 @@ proc unsignedTx*(tx: TransactionArgs,
 proc populateTransactionObject*(tx: Transaction,
                                 optionalHash: Opt[Hash32] = Opt.none(Hash32),
                                 optionalNumber: Opt[uint64] = Opt.none(uint64),
+                                optionalTimestamp: Opt[EthTime] = Opt.none(EthTime),
                                 txIndex: Opt[uint64] = Opt.none(uint64)): TransactionObject =
   result = TransactionObject()
   result.`type` = Opt.some Quantity(tx.txType)
   result.blockHash = optionalHash
   result.blockNumber = w3Qty(optionalNumber)
+  result.blockTimestamp = w3Qty(optionalTimestamp)
 
   if (let sender = tx.recoverSender(); sender.isOk):
     result.`from` = sender[]
@@ -166,7 +168,9 @@ proc populateBlockObject*(blockHash: Hash32,
     for i, tx in blk.transactions:
       let txObj = populateTransactionObject(tx,
         Opt.some(blockHash),
-        Opt.some(header.number), Opt.some(i.uint64))
+        Opt.some(header.number),
+        Opt.some(header.timestamp),
+        Opt.some(i.uint64))
       result.transactions.add txOrHash(txObj)
   else:
     for i, tx in blk.transactions:
