@@ -32,11 +32,6 @@ pipeline {
       defaultValue: '40',
       description: 'Number of parallel processes to run'
     )
-    string(
-      name: 'TIMEOUT_MINUTES',
-      defaultValue: '40',
-      description: 'Timeout for each stage in minutes'
-    )
     booleanParam(
       name: 'DOCKER_BUILDOUTPUT',
       defaultValue: true,
@@ -48,7 +43,6 @@ pipeline {
   environment {
     SIMULATION_NAME    = "${params.SIMULATION_NAME    ?: 'ethereum/sync'}"
     PARALLELISM        = "${params.PARALLELISM        ?: '40'}"
-    TIMEOUT_MINUTES    = "${params.TIMEOUT_MINUTES}"
     DOCKER_BUILDOUTPUT = "${params.DOCKER_BUILDOUTPUT ?: true}"
   }
 
@@ -57,7 +51,7 @@ pipeline {
     disableRestartFromStage()
     timestamps()
     ansiColor('xterm')
-    timeout(time: 24, unit: 'HOURS')
+    timeout(time: 1, unit: 'HOURS')
     buildDiscarder(logRotator(
       numToKeepStr: '5',
       daysToKeepStr: '30',
@@ -80,12 +74,14 @@ pipeline {
         """
       }
     }
+    stage('Build hiveproxy') {
+      steps {
+        sh 'docker build -t hive/hiveproxy:latest ${WORKSPACE}/hive/hiveproxy'
+      }
+    }
     stage('Run Hive Tests') {
       parallel {
         stage('sync reth-nimbus') {
-          options {
-            timeout(time: env.TIMEOUT_MINUTES, unit: 'MINUTES')
-          }
           steps {
             script {
               try {
@@ -109,9 +105,6 @@ pipeline {
           }
         }
         stage('sync geth-nimbus') {
-          options {
-            timeout(time: env.TIMEOUT_MINUTES, unit: 'MINUTES')
-          }
           steps {
             script {
               try {

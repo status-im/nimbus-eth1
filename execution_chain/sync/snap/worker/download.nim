@@ -79,8 +79,19 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
         while true:
           if buddy.ctrl.stopped:                    # stop, nothing more to do
             break downloadLoop
-          let acc = buddy.accountDownload(state, info).valueOr:
-            break                                   # done this state, try next
+          let
+            rc = buddy.accountDownload(state, info)
+            acc = if rc.isOk:
+                    rc.value
+                  elif rc.error == ENoDataAvailable: # not serving this one
+                    buddy.only.finRoot.isErrOr:
+                      if state.stateRoot == value:  # reset local pivot
+                        buddy.only.finRoot = Opt.none(StateRoot)
+                    break                           # done this state, try next
+                  elif rc.error == ECompleted:
+                    @[]                             # try left over storage/code
+                  else:
+                    break                           # done this state, try next
           buddy.storageDownload(state, acc, info)   # fetch storage slots
           buddy.codeDownload(state, acc, info)      # fetch byte codes
           if not state.isOperable():                # proceed unless evicted

@@ -604,12 +604,16 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     if quantityTag.kind == bidHash and quantityTag.requireCanonical:
       raise newException(ValueError,
         "requireCanonical is a pre-merge concept and is not supported")
+
     let
       blk = api.blockFromTag(quantityTag).valueOr:
-        raise newException(ValueError, "Block not found: " & error)
+        return Opt.none(seq[ReceiptObject])
       blkHash = blk.header.computeBlockHash
       receipts = api.chain.receiptsByBlockHash(blkHash).valueOr:
         return Opt.none(seq[ReceiptObject])
+
+    if blk.transactions.len == 0:
+      return Opt.some(newSeq[ReceiptObject]())
 
     var
       prevGasUsed = GasInt(0)

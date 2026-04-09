@@ -21,6 +21,7 @@ import
   json_rpc/rpcclient,
   json_rpc/rpcserver,
   ./chain_config_wrapper,
+  ./path_handler,
   ../../execution_chain/rpc,
   ../../execution_chain/common/hardforks,
   ../../execution_chain/db/core_db/memory_only,
@@ -321,4 +322,4 @@ template runEESTSuite*(
   for eest in eestReleases:
     suite eest & ": " & eestType:
       for filePath in walkDirRec(baseFolder / eest / eestType):
-        processFile(filePath, statelessEnabled, @skipFiles)
+        processFile(handleLongPath(filePath), statelessEnabled, @skipFiles)

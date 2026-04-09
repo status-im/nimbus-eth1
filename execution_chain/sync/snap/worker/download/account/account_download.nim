@@ -23,13 +23,13 @@ template accountDownload*(
     buddy: SnapPeerRef;                             # Snap peer
     state: StateDataRef;                            # Current state
     info: static[string];                           # Log message prefix
-      ): Opt[seq[SnapAccount]] =
+      ): Result[seq[SnapAccount],ErrorType] =
   ## Async/template
   ##
   ## On success, the template returns a list of accounts for storage and
   ## code processing.
   ##
-  var bodyRc = Opt[seq[SnapAccount]].err()
+  var bodyRc = Result[seq[SnapAccount],ErrorType].err(EGeneric)
   block body:
     let
       ctx = buddy.ctx
@@ -42,6 +42,7 @@ template accountDownload*(
       ivReq = sdb.fetchAccountRange(state).valueOr:
         trace info & ": no more unpocessed", peer, root,
           state=($buddy.syncState)
+        bodyRc = typeof(bodyRc).err(ECompleted)
         break body                                  # return err()
 
       iv {.inject,used.} = ivReq.flStr              # logging only
@@ -54,6 +55,7 @@ template accountDownload*(
         sdb.rollbackAccountRange(state, ivReq)      # registry roll back
         trace info & ": account download failed", peer, root, iv,
           state=($buddy.syncState), `error`=error
+        bodyRc = typeof(bodyRc).err(error)
         break body                                  # return err()
 
       limit = if data.accounts.len == 0: high(ItemKey)
@@ -69,6 +71,7 @@ template accountDownload*(
         sdb.rollbackAccountRange(state, ivReq)      # registry roll back
         debug info & ": caching accounts failed", peer, root, iv,
           nAccounts, nProof, state=($buddy.syncState)
+        bodyRc = typeof(bodyRc).err(ECacheError)
         break body                                  # return err()
 
     sdb.commitAccountRange(state, ivReq, limit)     # update registry

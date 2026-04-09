@@ -218,7 +218,7 @@ proc generalStateJsonMain*(debugMode = false) =
   if config.testSubject == "" or not debugMode:
     # run all test fixtures
     suite "new generalstate json tests: eest_develop":
-      jsonTest("eest_develop/state_tests", "GeneralStateTestsStatic", testFixture, slowGSTTests)
+      jsonTest("eest_develop/state_tests", "GeneralStateTestsDevelop", testFixture, slowGSTTests)
 
     suite "new generalstate json tests: eest_bal":
       jsonTest("eest_bal/state_tests", "GeneralStateTestsBal", testFixture)
