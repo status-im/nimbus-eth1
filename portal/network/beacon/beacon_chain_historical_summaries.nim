@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -18,10 +18,9 @@
 import stew/arrayops, results, beacon_chain/spec/forks, ../../common/common_types
 
 from stew/bitops2 import log2trunc
+from beacon_chain/spec/eth2_apis/rest_types import HISTORICAL_SUMMARIES_GINDEX_ELECTRA
 
-export results
-
-const HISTORICAL_SUMMARIES_GINDEX_ELECTRA* = GeneralizedIndex(91)
+export results, HISTORICAL_SUMMARIES_GINDEX_ELECTRA
 
 type
   HistoricalSummaries* = HashList[HistoricalSummary, Limit HISTORICAL_ROOTS_LIMIT]
