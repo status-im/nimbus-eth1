@@ -102,7 +102,7 @@ proc putVtx(
 proc putKeyAtLevel(
     txRef: AristoTxRef,
     rvid: RootedVertexID,
-    vtx: BranchRef,
+    vtxBuf: VertexBuf,
     key: HashKey,
     level: int,
     batch: var WriteBatch
@@ -114,9 +114,10 @@ proc putKeyAtLevel(
 
   if level >= txRef.db.baseTxFrame().level:
     let frame = txRef.deltaAtLevel(level)
-    frame.layersPutKey(rvid, vtx, key)
+    frame.layersMergeKey(rvid, key)
   
   elif level == dbLevel:
+    let vtx = ?vtxBuf.data().deblobify(VertexRef)
     ?batch.putVtx(txRef.db, rvid, vtx, key)
 
   else: # level > dbLevel but less than baseTxFrame level
@@ -488,12 +489,14 @@ proc computeKeyImpl(
       if level >= txRef.db.baseTxFrame().level:
         keyQueue[].push((rvid, key, level))
       elif level == dbLevel:
-        vtxBufQueue[].push((rvid, vtxBuf))
+        var vtxBuffer: VertexBuf
+        vtxBuf.data().patchKey(key, vtxBuffer)
+        vtxBufQueue[].push((rvid, vtxBuffer))
       else:
         raiseAssert("Cannot write keys at level < baseTxFrame level. Found level = " &
           $level & ", baseTxFrame level = " & $txRef.db.baseTxFrame().level)
     else:
-      ?txRef.putKeyAtLevel(rvid, BranchRef(?vtxBuf.data().deblobify(VertexRef)), key, level, batch)
+      ?txRef.putKeyAtLevel(rvid, vtxBuf, key, level, batch)
 
   ok (key, level)
 

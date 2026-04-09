@@ -466,6 +466,17 @@ proc deblobify*(
     vTop: VertexID(uint64.fromBytesBE data.toOpenArray(0, 7)),
     serial: uint64.fromBytesBE data.toOpenArray(8, 15)))
 
+func patchKey*(record: openArray[byte], key: HashKey, vtxBuf: var VertexBuf) =
+  assert record.len() >= 3
+  assert key.isValid and key.len == 32
+  let bits = record[^1] shr 6
+  assert (bits and 0b01'u8) == 0
+  assert (bits and 0b10'u8) == 0
+
+  vtxBuf.add key.data()
+  vtxBuf.add record
+  vtxBuf[vtxBuf.len() - 1] = vtxBuf[vtxBuf.len() - 1] or (0b10'u8 shl 6)
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
