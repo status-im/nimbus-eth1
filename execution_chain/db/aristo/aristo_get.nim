@@ -51,7 +51,10 @@ proc getKeyBe*(
       ): Result[(HashKey, VertexRef),AristoError] =
   var vtxBuf: VertexBuf
   let key = ?db.getKeyBe(rvid, flags, vtxBuf)
-  ok (key, ?vtxBuf.data().deblobify(VertexRef))
+  if key.isValid():
+    ok (key, nil)
+  else:
+    ok (key, ?vtxBuf.data().deblobify(VertexRef))
 
 # ------------------
 
@@ -108,9 +111,7 @@ proc getKeyRc*(
       # The vertex is to be deleted. So is the value key.
       return err(GetKeyNotFound)
 
-  var vtxBuf: VertexBuf
-  let key = ?db.db.getKeyBe(rvid, flags, vtxBuf)
-  ok ((key, ?vtxBuf.data().deblobify(VertexRef)), dbLevel)
+  ok (?db.db.getKeyBe(rvid, flags), dbLevel)
 
 proc getKey*(db: AristoTxRef; rvid: RootedVertexID): HashKey =
   ## Cascaded attempt to fetch a vertex from the cache layers or the backend.
