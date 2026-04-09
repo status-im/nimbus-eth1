@@ -161,27 +161,6 @@ proc blobifyTo*(pyl: StoLeafRef, data: var VertexBuf) =
   data &= pyl.stoData.blobify().data
   data &= [0x20.byte]
 
-func deblobifyPfx*(record: openArray[byte]): Result[NibblesBuf, AristoError] =
-  if record.len < 3:
-    return err(DeblobVtxTooShort)
-
-  let psLen = int(record[^1] and 0b00111111)
-
-  if psLen == 0:
-    return ok default(NibblesBuf)
-
-  let psPos = record.len - psLen - 1
-  if psPos < 0 or psLen > record.len - 2:
-    return err(DeblobVtxTooShort)
-
-  let (_, pathSegment) =
-    NibblesBuf.fromHexPrefix record.toOpenArray(psPos, record.len - 2)
-
-  ok pathSegment
-
-template pfx*(vtx: VertexBuf): NibblesBuf =
-  vtx.data().deblobifyPfx().expect("valid vertex")
-
 proc blobifyTo*(vtx: VertexRef, key: HashKey, data: var VertexBuf) =
   ## This function serialises the vertex argument to a database record.
   ## Contrary to RLP based serialisation, these records aim to align on
@@ -257,9 +236,35 @@ proc blobify*(lSst: SavedState): seq[byte] =
   lSst.blobifyTo data
   data
 
-proc deblobifyBranch*(
-    record: openArray[byte];
-      ): Result[(VertexID, uint16), AristoError] =
+func blobifyTo*(record: openArray[byte], key: HashKey, vtxBuf: var VertexBuf) =
+  assert record.len() >= 3
+  assert key.isValid and key.len() == 32
+  let bits = record[^1] shr 6
+  assert (bits and 0b01'u8) == 0
+  assert (bits and 0b10'u8) == 0
+
+  vtxBuf.add key.data()
+  vtxBuf.add record
+  vtxBuf[vtxBuf.len() - 1] = vtxBuf[vtxBuf.len() - 1] or (0b10'u8 shl 6)
+
+func deblobifyPfx*(record: openArray[byte]): Result[NibblesBuf, AristoError] =
+  if record.len() < 3:
+    return err(DeblobVtxTooShort)
+
+  let psLen = int(record[^1] and 0b00111111)
+  if psLen == 0:
+    return ok default(NibblesBuf)
+
+  let psPos = record.len() - psLen - 1
+  if psPos < 0 or psLen > record.len() - 2:
+    return err(DeblobVtxTooShort)
+
+  let (_, pathSegment) =
+    NibblesBuf.fromHexPrefix record.toOpenArray(psPos, record.len - 2)
+
+  ok pathSegment
+
+proc deblobifyBranch*(record: openArray[byte]): Result[(VertexID, uint16), AristoError] =
   if record.len < 3:
     return err(DeblobBranchTooShort)
 
@@ -267,8 +272,8 @@ proc deblobifyBranch*(
     hasKey = ((record[^1] shr 6) and 0b10'u8) > 0
     psLen  = int(record[^1] and 0b00111111)
     start  = if hasKey: 32 else: 0
-    psPos  = record.len - psLen - 1     # first byte of path segment
-    svLen  = psPos - start - 2          # length of the startVid blob
+    psPos  = record.len - psLen - 1 
+    svLen  = psPos - start - 2        
 
   if svLen < 1 or svLen > 8:
     return err(DeblobBranchTooShort)
@@ -276,22 +281,18 @@ proc deblobifyBranch*(
   var pos = start
   let
     startVid = VertexID(?load64(record, pos, svLen))
-    used     = uint16.fromBytesBE(record.toOpenArray(pos, pos + 1))
+    used = uint16.fromBytesBE(record.toOpenArray(pos, pos + 1))
 
   ok (startVid, used)
 
-proc deblobifyStoLeaf*(
-    data: openArray[byte];
-      ): Result[UInt256,AristoError] =
-  assert data.len > 0
-  let mask = data[^1]
+proc deblobifyStoData(record: openArray[byte]): Result[UInt256,AristoError] =
+  assert record.len() > 0
+  let mask = record[^1]
   assert (mask and 0x20) > 0
 
-  deblobify(data.toOpenArray(0, data.len - 2), UInt256)
+  deblobify(record.toOpenArray(0, record.len - 2), UInt256)
 
-proc deblobifyStoLeaf*(
-    vtxBuf: VertexBuf;
-      ): Result[UInt256,AristoError] =   
+proc deblobifyStoData*(vtxBuf: VertexBuf): Result[UInt256,AristoError] =
   let
     bits = vtxBuf[^1] shr 6
     hasKey = (bits and 0b10'u8) > 0
@@ -299,45 +300,41 @@ proc deblobifyStoLeaf*(
     start = if hasKey: 32 else: 0
     psPos = vtxBuf.len - psLen - 1
 
-  vtxBuf.data().toOpenArray(start, psPos - 1).deblobifyStoLeaf()
+  vtxBuf.data().toOpenArray(start, psPos - 1).deblobifyStoData()
 
-proc deblobifyAccLeaf*(
-    data: openArray[byte];
-      ): Result[(AristoAccount, StorageID),AristoError] =
-  assert data.len > 0
-  let mask = data[^1]
+proc deblobifyAccount(record: openArray[byte]): Result[(AristoAccount, StorageID),AristoError] =
+  assert record.len > 0
+  let mask = record[^1]
   assert (mask and 0xf0) == 0
   
   var
     account: AristoAccount
     stoID: StorageID
     start = 0
-    lens = uint16.fromBytesBE(data.toOpenArray(data.len - 3, data.len - 2))
+    lens = uint16.fromBytesBE(record.toOpenArray(record.len - 3, record.len - 2))
 
   if (mask and 0x01) > 0:
     let len = lens and 0b111
-    account.nonce = ?load64(data, start, int(len + 1))
+    account.nonce = ?load64(record, start, int(len + 1))
 
   if (mask and 0x02) > 0:
     let len = (lens shr 3) and 0b11111
-    account.balance = ?load256(data, start, int(len + 1))
+    account.balance = ?load256(record, start, int(len + 1))
 
   if (mask and 0x04) > 0:
     let len = (lens shr 8) and 0b111
-    stoID = (true, VertexID(?load64(data, start, int(len + 1))))
+    stoID = (true, VertexID(?load64(record, start, int(len + 1))))
 
   if (mask and 0x08) > 0:
-    if data.len() < start + 32:
+    if record.len() < start + 32:
       return err(DeblobCodeLenUnsupported)
-    discard account.codeHash.data.copyFrom(data.toOpenArray(start, start + 31))
+    discard account.codeHash.data.copyFrom(record.toOpenArray(start, start + 31))
   else:
     account.codeHash = EMPTY_CODE_HASH
 
   ok (account, stoID)
 
-proc deblobifyAccLeaf*(
-    vtxBuf: VertexBuf;
-      ): Result[(AristoAccount, StorageID),AristoError] =
+proc deblobifyAccount*(vtxBuf: VertexBuf): Result[(AristoAccount, StorageID),AristoError] =
   let
     bits = vtxBuf[^1] shr 6
     hasKey = (bits and 0b10'u8) > 0
@@ -345,7 +342,7 @@ proc deblobifyAccLeaf*(
     start = if hasKey: 32 else: 0
     psPos = vtxBuf.len - psLen - 1
 
-  vtxBuf.data().toOpenArray(start, psPos - 1).deblobifyAccLeaf()
+  vtxBuf.data().toOpenArray(start, psPos - 1).deblobifyAccount()
 
 proc deblobifyLeaf(
     data: openArray[byte];
@@ -465,17 +462,6 @@ proc deblobify*(
   ok(SavedState(
     vTop: VertexID(uint64.fromBytesBE data.toOpenArray(0, 7)),
     serial: uint64.fromBytesBE data.toOpenArray(8, 15)))
-
-func patchKey*(record: openArray[byte], key: HashKey, vtxBuf: var VertexBuf) =
-  assert record.len() >= 3
-  assert key.isValid and key.len == 32
-  let bits = record[^1] shr 6
-  assert (bits and 0b01'u8) == 0
-  assert (bits and 0b10'u8) == 0
-
-  vtxBuf.add key.data()
-  vtxBuf.add record
-  vtxBuf[vtxBuf.len() - 1] = vtxBuf[vtxBuf.len() - 1] or (0b10'u8 shl 6)
 
 # ------------------------------------------------------------------------------
 # End

@@ -227,12 +227,15 @@ proc getKey(
 
   ok((?txRef.db.getKeyBe(rvid, flags, vtxBuf), dbLevel))
 
+template pfx(vtx: VertexBuf): NibblesBuf =
+  vtx.data().deblobifyPfx().expect("valid vertex")
+
 template childVid(vtxBuf: VertexBuf): VertexID =
   # If we have to recurse into a child, where would that recusion start?
   let vType = vtxBuf.data().deblobifyType(VertexRef).expect("valid vertex")
   case vType
   of AccLeaf:
-    let stoID = vtxBuf.deblobifyAccLeaf().expect("valid accLeaf")[1]
+    let stoID = vtxBuf.deblobifyAccount().expect("valid accLeaf")[1]
     if stoID.isValid:
       stoID.vid
     else:
@@ -281,7 +284,7 @@ proc computeKeyImpl(
     of AccLeaf:
       writer.encodeLeaf(vtxBuf.pfx):
         let
-          (account, stoID) = ?vtxBuf.deblobifyAccLeaf()
+          (account, stoID) = ?vtxBuf.deblobifyAccount()
           skey =
             if stoID.isValid:
               var vtxBuffer: VertexBuf
@@ -316,7 +319,7 @@ proc computeKeyImpl(
     of StoLeaf:
       writer.encodeLeaf(vtxBuf.pfx):
         # TODO avoid memory allocation when encoding storage data
-        rlp.encode(?vtxBuf.deblobifyStoLeaf())
+        rlp.encode(?vtxBuf.deblobifyStoData())
     of Branches:
       # For branches, we need to load the vertices before recursing into them
       # to exploit their on-disk order
@@ -490,7 +493,7 @@ proc computeKeyImpl(
         keyQueue[].push((rvid, key, level))
       elif level == dbLevel:
         var vtxBuffer: VertexBuf
-        vtxBuf.data().patchKey(key, vtxBuffer)
+        vtxBuf.data().blobifyTo(key, vtxBuffer)
         vtxBufQueue[].push((rvid, vtxBuffer))
       else:
         raiseAssert("Cannot write keys at level < baseTxFrame level. Found level = " &
