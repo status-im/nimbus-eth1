@@ -158,20 +158,20 @@ template encodeLeaf(w: var RlpWriter, pfx: NibblesBuf, leafData: untyped): HashK
   w.startList(2)
   w.append(pfx.toHexPrefix(isLeaf = true).data())
   w.append(leafData)
-  w.finish().digestTo(HashKey)
+  w.finish().data().digestTo(HashKey)
 
 template encodeBranch(w: var RlpWriter, startVid: VertexID, used: uint16, subKeyForN: untyped): HashKey =
   w.startList(17)
   for (n {.inject.}, subvid {.inject.}) in allPairs(startVid, used):
     w.append(subKeyForN)
   w.append EmptyBlob
-  w.finish().digestTo(HashKey)
+  w.finish().data().digestTo(HashKey)
 
 template encodeExt(w: var RlpWriter, pfx: NibblesBuf, branchKey: HashKey): HashKey =
   w.startList(2)
   w.append(pfx.toHexPrefix(isLeaf = false).data())
   w.append(branchKey)
-  w.finish().digestTo(HashKey)
+  w.finish().data().digestTo(HashKey)
 
 func layersGetKeyOrVtx*(
     db: AristoTxRef,
@@ -275,7 +275,8 @@ proc computeKeyImpl(
   var level = level
 
   # TODO this is the same code as when serializing NodeRef, without the NodeRef
-  var writer = initRlpWriter()
+  #var writer = initRlpWriter()
+  var writer = RlpArrayBufWriter[1000]()
   
   let vType = ?vtxBuf.data().deblobifyType(VertexRef)
 
@@ -309,17 +310,24 @@ proc computeKeyImpl(
               skey
             else:
               VOID_HASH_KEY
-
-        rlp.encode Account(
-          nonce: account.nonce,
-          balance: account.balance,
-          storageRoot: skey.to(Hash32),
-          codeHash: account.codeHash,
-        )
+        # rlp.encode(Account(
+        #   nonce: account.nonce,
+        #   balance: account.balance,
+        #   storageRoot: skey.to(Hash32),
+        #   codeHash: account.codeHash
+        # ))
+        rlp.encodeToArrayBuf[111, Account](
+          Account(
+            nonce: account.nonce,
+            balance: account.balance,
+            storageRoot: skey.to(Hash32),
+            codeHash: account.codeHash
+          )
+        ).data()
     of StoLeaf:
       writer.encodeLeaf(vtxBuf.pfx):
-        # TODO avoid memory allocation when encoding storage data
-        rlp.encode(?vtxBuf.deblobifyStoData())
+        #rlp.encode(?vtxBuf.deblobifyStoData())
+        rlp.encodeToArrayBuf[33, UInt256](?vtxBuf.deblobifyStoData()).data()
     of Branches:
       # For branches, we need to load the vertices before recursing into them
       # to exploit their on-disk order
@@ -475,7 +483,7 @@ proc computeKeyImpl(
 
       if vType == ExtBranch:
         writer.encodeExt(vtxBuf.pfx):
-          var bwriter = initRlpWriter()
+          var bwriter = RlpArrayBufWriter[1000]()
           bwriter.writeBranch(startVid, used)
       else:
         writer.writeBranch(startVid, used)
