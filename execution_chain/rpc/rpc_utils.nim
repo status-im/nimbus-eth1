@@ -11,6 +11,7 @@
 
 import
   std/[sequtils, algorithm, strutils],
+  json_rpc/errors,
   ./rpc_types,
   ./params,
   ../db/ledger,
@@ -28,6 +29,12 @@ import
   ../common/common,
   eth/common/transaction_utils,
   web3/eth_api_types
+
+proc invalidParams*(msg: string): ref ApplicationError =
+  (ref ApplicationError)(
+    code: -32602,
+    msg: msg,
+  )
 
 proc calculateMedianGasPrice*(chain: ForkedChainRef): GasInt =
   const minGasPrice = 30_000_000_000.GasInt
