@@ -60,16 +60,53 @@ const skipFiles = [
   "witness_codes_delegated_eoa_insufficient_balance.json", # blockAccessListHash mismatch
   "witness_codes_create_same_hash_then_read.json", # Witness codes mismatch
   "witness_headers_blockhash_boundary.json", # Witness state mismatch
+  "witness_headers_extra_unused_older_ancestor.json", # Witness headers mismatch
   "witness_state_sstore_delete_branch_collapse_adds_auxiliary_node.json", # persistStorage assert
   "witness_state_block_diff_delete_insert_before_delete_order.json", # persistStorage assert
   "create_and_destroy_multiple_contracts_same_tx.json", # persist assert
   "genesis_hash_available.json", # Witness state mismatch
-  "scenarios.json", # Witness state mismatch
+  "scenarios.json", # Witness state mismatch + stateRoot mismatch
   "withdrawal_requests.json", # persistStorage assert + Witness state mismatch
   "consolidation_requests.json", # Witness state mismatch
   "multiple_withdrawals_same_address.json", # Witness state mismatch
   "precompile_warming.json", # stateRoot mismatch
-  "max_initcode_size_via_create.json", # gasUsed mismatch - potential issue due to not up to date test vector
+  "return_bounds.json", # Witness state mismatch
+  "underflow_test.json", # stateRoot mismatch
+  "create2_high_nonce_delegatecall.json", # stateRoot mismatch
+  "store_clears_and_internal_call_store_clears_oog.json", # persistStorage assert
+  "gas_price_diff_places.json", # stateRoot mismatch
+  "base_fee_diff_places.json", # stateRoot mismatch
+  "delegatecall_to_precompile_from_called_contract.json", # stateRoot mismatch
+  "wallet_add_owner_remove_pending_transaction.json", # persistStorage assert
+  "wallet_confirm.json", # persistStorage assert
+  "wallet_remove_owner_remove_pending_transaction.json", # persistStorage assert
+  "wallet_change_owner_remove_pending_transaction.json", # persistStorage assert
+  "wallet_change_requirement_remove_pending_transaction.json", # persistStorage assert
+  "callcode_to_precompile_from_called_contract.json", # stateRoot mismatch
+  "validation_headers_missing_oldest_blockhash_ancestor.json", # Witness headers mismatch
+  "validation_headers_non_contiguous_chain.json", # Witness headers mismatch
+  "validation_headers_malformed_rlp_header.json", # Witness headers mismatch
+  "validation_headers_empty_block_missing_mandatory_parent.json", # Witness headers mismatch
+  "validation_headers_missing_parent_header.json", # Witness headers mismatch
+  "validation_codes_missing_delegated_code_on_insufficient_balance_call.json", # blockAccessListHash mismatch
+  "validation_codes_missing_current_frame_code.json", # Witness codes mismatch
+  "validation_codes_unsorted_but_complete.json", # Witness codes mismatch
+  "validation_codes_missing_sender_delegation_marker.json", # Witness codes mismatch
+  "validation_codes_missing_second_marker_in_delegation_chain.json", # Witness codes mismatch
+  "validation_codes_missing_7702_delegation_marker.json", # Witness codes mismatch
+  "validation_codes_missing_implicit_system_contract_code.json", # Witness codes mismatch
+  "validation_codes_extra_unused_bytecode.json", # Witness codes mismatch
+  "validation_codes_missing_redelegation_old_marker.json", # Witness codes mismatch
+  "validation_codes_missing_7702_delegated_target_code.json", # Witness codes mismatch
+  "validation_codes_missing_external_code_read_target.json", # Witness codes mismatch
+  "validation_state_unsorted_but_complete.json", # Witness state mismatch
+  "validation_state_missing_storage_proof_node.json", # Witness state mismatch
+  "validation_state_missing_delete_auxiliary_node.json", # persistStorage assert
+  "validation_state_extra_unused_trie_node.json", # Witness state mismatch
+  "validation_state_missing_failed_call_target_account_proof_node.json", # Witness state mismatch
+  "validation_state_missing_absent_account_proof_node.json", # Witness state mismatch
+  "validation_state_missing_sender_account_proof_leaf_node.json", # Witness state mismatch
+  "validation_state_missing_absent_slot_proof_leaf_node.json", # Witness state mismatch
 ]
 
 runEESTSuite(

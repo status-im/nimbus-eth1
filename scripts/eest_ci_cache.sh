@@ -29,7 +29,7 @@ EEST_BAL_URL="https://github.com/ethereum/execution-spec-tests/releases/download
 
 # --- zkevm Release ---
 EEST_ZKEVM_NAME="zkevm"
-EEST_ZKEVM_VERSION="v0.3.2"
+EEST_ZKEVM_VERSION="v0.3.3"
 EEST_ZKEVM_DIR="${FIXTURES_DIR}/eest_zkevm"
 EEST_ZKEVM_ARCHIVE="fixtures_zkevm.tar.gz"
 EEST_ZKEVM_URL="https://github.com/ethereum/execution-spec-tests/releases/download/${EEST_ZKEVM_NAME}%40${EEST_ZKEVM_VERSION}/${EEST_ZKEVM_ARCHIVE}"
