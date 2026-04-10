@@ -19,7 +19,12 @@ import
   ./aristo_desc/desc_backend,
   ../../concurrency/queue
 
-export aristo_desc, chronicles, stack
+export aristo_desc, chronicles
+
+const
+  MAX_RLP_SIZE_ACCOUNT_LEAF = 112
+  MAX_RLP_SIZE_STORAGE_LEAF = 34
+  MAX_RLP_SIZE_BRANCH_NODE = 532
 
 type
   WriteBatch* = object
@@ -158,20 +163,20 @@ template encodeLeaf(w: var RlpWriter, pfx: NibblesBuf, leafData: untyped): HashK
   w.startList(2)
   w.append(pfx.toHexPrefix(isLeaf = true).data())
   w.append(leafData)
-  w.finish().data().digestTo(HashKey)
+  w.finish(asOpenArray = true).digestTo(HashKey)
 
 template encodeBranch(w: var RlpWriter, startVid: VertexID, used: uint16, subKeyForN: untyped): HashKey =
   w.startList(17)
   for (n {.inject.}, subvid {.inject.}) in allPairs(startVid, used):
     w.append(subKeyForN)
   w.append EmptyBlob
-  w.finish().data().digestTo(HashKey)
+  w.finish(asOpenArray = true).digestTo(HashKey)
 
 template encodeExt(w: var RlpWriter, pfx: NibblesBuf, branchKey: HashKey): HashKey =
   w.startList(2)
   w.append(pfx.toHexPrefix(isLeaf = false).data())
   w.append(branchKey)
-  w.finish().data().digestTo(HashKey)
+  w.finish(asOpenArray = true).digestTo(HashKey)
 
 func layersGetKeyOrVtx*(
     db: AristoTxRef,
@@ -276,7 +281,7 @@ proc computeKeyImpl(
 
   # TODO this is the same code as when serializing NodeRef, without the NodeRef
   #var writer = initRlpWriter()
-  var writer = RlpArrayBufWriter[1000]()
+  var writer = RlpArrayBufWriter[MAX_RLP_SIZE_BRANCH_NODE]()
   
   let vType = ?vtxBuf.data().deblobifyType(VertexRef)
 
@@ -310,24 +315,20 @@ proc computeKeyImpl(
               skey
             else:
               VOID_HASH_KEY
-        # rlp.encode(Account(
-        #   nonce: account.nonce,
-        #   balance: account.balance,
-        #   storageRoot: skey.to(Hash32),
-        #   codeHash: account.codeHash
-        # ))
-        rlp.encodeToArrayBuf[111, Account](
-          Account(
-            nonce: account.nonce,
-            balance: account.balance,
-            storageRoot: skey.to(Hash32),
-            codeHash: account.codeHash
-          )
-        ).data()
+
+        var w = RlpArrayBufWriter[MAX_RLP_SIZE_ACCOUNT_LEAF]()
+        w.append(Account(
+          nonce: account.nonce,
+          balance: account.balance,
+          storageRoot: skey.to(Hash32),
+          codeHash: account.codeHash
+        ))
+        w.finish(asOpenArray = true)
     of StoLeaf:
       writer.encodeLeaf(vtxBuf.pfx):
-        #rlp.encode(?vtxBuf.deblobifyStoData())
-        rlp.encodeToArrayBuf[33, UInt256](?vtxBuf.deblobifyStoData()).data()
+        var w = RlpArrayBufWriter[MAX_RLP_SIZE_STORAGE_LEAF]()
+        w.append(?vtxBuf.deblobifyStoData())
+        w.finish(asOpenArray = true)
     of Branches:
       # For branches, we need to load the vertices before recursing into them
       # to exploit their on-disk order
@@ -483,7 +484,7 @@ proc computeKeyImpl(
 
       if vType == ExtBranch:
         writer.encodeExt(vtxBuf.pfx):
-          var bwriter = RlpArrayBufWriter[1000]()
+          var bwriter = RlpArrayBufWriter[MAX_RLP_SIZE_BRANCH_NODE]()
           bwriter.writeBranch(startVid, used)
       else:
         writer.writeBranch(startVid, used)
