@@ -190,7 +190,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
   server.rpc("debug_getRawBlock") do(blockTag: BlockTag) -> seq[byte]:
     ## Returns an RLP-encoded block.
     let blockFromTag = chain.blockFromTag(blockTag).valueOr:
-      raise newException(ValueError, error)
+      raise invalidParams(error)
 
     rlp.encode(blockFromTag)
 
@@ -198,14 +198,14 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
   server.rpc("debug_getRawHeader") do(blockTag: BlockTag) -> seq[byte]:
     ## Returns an RLP-encoded header.
     let header = chain.headerFromTag(blockTag).valueOr:
-      raise newException(ValueError, error)
+      raise invalidParams(error)
     rlp.encode(header)
 
   # https://ethereum.github.io/execution-apis/api/methods/debug_getRawReceipts
   server.rpc("debug_getRawReceipts") do(blockTag: BlockTag) -> seq[seq[byte]]:
     ## Returns an array of EIP-2718 binary-encoded receipts.
     let header = chain.headerFromTag(blockTag).valueOr:
-      raise newException(ValueError, error)
+      raise invalidParams(error)
     var res: seq[seq[byte]]
     for receipt in chain.baseTxFrame.getReceipts(header.receiptsRoot):
       res.add rlp.encode(receipt)

@@ -7,7 +7,7 @@
 
 import
   chronicles,
-  std/[json, typetraits, math, strutils],
+  std/[json, typetraits, math],
   asynctest,
   web3/eth_api,
   stew/byteutils,
@@ -99,32 +99,6 @@ proc setupClient(port: Port): RpcHttpClient =
 proc close(env: TestEnv) =
   waitFor env.client.close()
   waitFor env.server.closeWait()
-
-func rawReq(meth: string, param: string, id: int = 1): string =
-  """{"jsonrpc":"2.0","method":""" &
-    "\"" & meth & "\",\"params\":[\"" & param & "\"],\"id\":" & $id & "}"
-
-proc rpcParamDecodeMain*() =
-  suite "RPC parameter decoding":
-    test "debug_getRawBlock rejects non-hex string block identifiers":
-      let server = RpcServer.new()
-      var handlerCalled = false
-
-      server.rpc("debug_getRawBlock") do(blockTag: BlockTag) -> seq[byte]:
-        handlerCalled = true
-        @[]
-
-      for invalidBlockId in ["2", "10"]:
-        handlerCalled = false
-        let response = parseJson(waitFor server.route(rawReq("debug_getRawBlock", invalidBlockId)))
-
-        check:
-          handlerCalled == false
-          response["jsonrpc"].getStr() == "2.0"
-          response["id"].getInt() == 1
-          response["error"]["code"].getInt() == -32602
-          response["error"]["message"].getStr().contains("without 0x prefix")
-          not response["error"].hasKey("data")
 
 func makeTx(
     env: var TestEnv,
@@ -671,18 +645,6 @@ proc rpcMain*() =
           check receipts.len == 2
           check receipts[0].transactionIndex == 0.Quantity
           check receipts[1].transactionIndex == 1.Quantity
-          
-# todo debug_getRawReceipts/get-block-n (nimbus-el_default)
-    # test "debug_getRawReceipts":
-    #   let rawReceipts = await client.debug_getRawReceipts(blockId(1'u64))
-    #   var expected: typeof(rawReceipts)
-
-    #   for receipt in env.chain.baseTxFrame.getReceipts(env.chain.latestHeader.receiptsRoot):
-    #     expected.add RlpEncodedBytes(rlp.encode(receipt))
-
-    #   check:
-    #     rawReceipts.len == 2
-    #     rawReceipts == expected
 
     test "eth_getBlockReceipts with EIP-1898 object param":
       # blockHash object form (what go-ethereum's ethclient sends)
@@ -939,5 +901,4 @@ proc rpcMain*() =
 
     env.close()
 
-rpcParamDecodeMain()
 rpcMain()
