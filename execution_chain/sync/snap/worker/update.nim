@@ -203,18 +203,19 @@ template updateFcuRoot*(buddy: SnapPeerRef, info: static[string]) =
     if blockNumber == 0:
       break body                                    # no FCU request yet
 
-    let hash = BlockHash(hdr.computeBlockHash())
-    ctx.pool.stateDB.get(hash).isErrOr:
+    let
+      hash = BlockHash(hdr.computeBlockHash())
+      root = StateRoot(hdr.stateRoot)
+    ctx.pool.stateDB.get(root).isErrOr:
       trace info & ": using fin root from registry", peer=buddy.peer,
         blockHash=hash.toStr, blockNumber, nSyncPeers=ctx.nSyncPeers()
-      buddy.only.finRoot = Opt.some(value.stateRoot)
+      buddy.only.finRoot = Opt.some(root)
       break body                                    # already registered
 
     trace info & ": assigning FCU hash from CL", peer=buddy.peer,
       hash=hash.toStr, blockNumber, nSyncPeers=ctx.nSyncPeers()
 
     # Store root -> block data mapping
-    let root = StateRoot(hdr.stateRoot)
     ctx.pool.mptAsm.putBlockData(root, hash, blockNumber).isOkOr:
       trace info & ": Cannot store state root map", peer=buddy.peer,
         stateRoot=root.toStr, blockHash=hash.toStr, blockNumber

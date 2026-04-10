@@ -106,7 +106,6 @@ type
     # Preloading/manual state update
     target*: Opt[BlockHash]          ## Optional for setting up a sync target
     stateUpdateChecked*: string      ## Last update value (avoids log spamming)
-    lockedHeader*: HashSet[BlockHash] ## Currently fetched headers
 
     # Info, debugging, and error handling stuff
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one

@@ -43,9 +43,6 @@ type
   StateByRoot = Table[StateRoot,StateDataRef]
     ## Same list as above, indexed by state root
 
-  StateByHash = Table[BlockHash,StateDataRef]
-    ## Same list as above, indexed by block hashes
-
   DataByAccount = SortedSet[ItemKey,AccDataRef]
     ## For storage slots book keeping
 
@@ -76,7 +73,6 @@ type
     archived: float                     ## Evicted states coverage
     topNum: BlockNumber                 ## Latest observed block number
     byRank: StateByRank                 ## States indexed by some ranking
-    byHash: StateByHash                 ## States indexed by block hash
     byRoot: StateByRoot                 ## States indexed by state root
 
 func accountsCoverage*(db: StateDbRef): float
@@ -104,8 +100,7 @@ proc evict(db: StateDbRef, state: StateDataRef, info: static[string]) =
   ## reset the `db.pivot` state to `nil`.
   ##
   discard db.byRank.delete state.rankIndex          # ditto
-  db.byHash.del state.blockHash                     # ..
-  db.byRoot.del state.stateRoot
+  db.byRoot.del state.stateRoot                     # ..
   state.deadState = true                            # mark it evicted
 
   # Roll back global `allUnproc`/`carryOver` registers. The acoounting goes as
@@ -158,7 +153,6 @@ proc clear*(db: StateDbRef) =
   db.topNum = BlockNumber(0)
   db.allUnproc.clear
   db.byRank.clear
-  db.byHash.clear
   db.byRoot.clear
   db.resetMetrics()
 
@@ -198,22 +192,13 @@ proc register*(
 
   # Add `newState` to database
   db.byRank.findOrInsert(newState.rankIndex).value.data = newState
-  db.byHash[hash] = newState
   db.byRoot[root] = newState
 
   newState                                          # return state record
 
 
-func hasKey*(db: StateDbRef ; hash: BlockHash): bool =
-  db.byHash.hasKey(hash)
-
 func hasKey*(db: StateDbRef; root: StateRoot): bool =
   db.byRoot.hasKey(root)
-
-func get*(db: StateDbRef; hash: BlockHash): Opt[StateDataRef] =
-  db.byHash.withValue(hash, value):
-    return ok value[]
-  err()
 
 func get*(db: StateDbRef; root: StateRoot): Opt[StateDataRef] =
   db.byRoot.withValue(root, value):
