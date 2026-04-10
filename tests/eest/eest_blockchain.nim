@@ -28,10 +28,10 @@ import
   ../../execution_chain/beacon/beacon_engine,
   ../../execution_chain/common/common,
   ../../execution_chain/stateless/witness_types,
+  ../../execution_chain/stateless/stateless_types,
   ../../hive_integration/engine_client,
   ./eest_helpers,
   ./bal_parser
-
 
 from ../../execution_chain/rpc/debug import getExecutionWitness
 
@@ -50,11 +50,21 @@ proc fromJson(T: type ExecutionWitness, n: JsonNode): ExecutionWitness =
     headers: hexListToSeqByteList(n, "headers")
   )
 
-proc parseWitness*(node: JsonNode): Opt[ExecutionWitness] =
+proc parseWitness(node: JsonNode): Opt[ExecutionWitness] =
   if "executionWitness" in node:
     Opt.some(ExecutionWitness.fromJson(node["executionWitness"]))
   else:
     Opt.none(ExecutionWitness)
+
+proc parseStatelessOutput(node: JsonNode): Opt[StatelessValidationResult] =
+  if "statelessOutputBytes" in node:
+    let sszBytes = hexToSeqByte(node["statelessOutputBytes"].getStr)
+    try:
+      Opt.some(SSZ.decode(sszBytes, StatelessValidationResult))
+    except SerializationError as e:
+      raiseAssert("Failed to deserialize StatelessValidationResult: " & e.msg)
+  else:
+    Opt.none(StatelessValidationResult)
 
 proc parseBAL(node: JsonNode): Opt[BlockAccessListRef] =
   const
@@ -89,7 +99,8 @@ proc parseBlocks*(node: JsonNode): seq[BlockDesc] =
         blk: blk,
         bal: parseBAL(x),
         badBlock: "expectException" in x,
-        witness: parseWitness(x)
+        witness: parseWitness(x),
+        statelessValidationResult: parseStatelessOutput(x)
       )
     except RlpError:
       # invalid rlp will not participate in block validation
@@ -126,7 +137,13 @@ proc runTest(env: TestEnv, unit: BlockchainUnitEnv, statelessEnabled = false): F
       if blk.badBlock:
         return err("Bad block got imported succesfully")
       else:
-        if statelessEnabled and blk.witness.isSome():
+        let successful_validation =
+          if blk.statelessValidationResult.isSome():
+            blk.statelessValidationResult.get().successful_validation
+          else:
+            true
+
+        if statelessEnabled and blk.witness.isSome() and successful_validation:
           # Get witness that should have been generated when importing the block
           var witness = env.chain.getExecutionWitness(blk.blk.header.computeRlpHash).valueOr:
             return err("Execution witness was not found in the database")

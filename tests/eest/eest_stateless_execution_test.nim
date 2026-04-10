@@ -83,30 +83,20 @@ const skipFiles = [
   "wallet_change_owner_remove_pending_transaction.json", # persistStorage assert
   "wallet_change_requirement_remove_pending_transaction.json", # persistStorage assert
   "callcode_to_precompile_from_called_contract.json", # stateRoot mismatch
-  "validation_headers_missing_oldest_blockhash_ancestor.json", # Witness headers mismatch
-  "validation_headers_non_contiguous_chain.json", # Witness headers mismatch
-  "validation_headers_malformed_rlp_header.json", # Witness headers mismatch
-  "validation_headers_empty_block_missing_mandatory_parent.json", # Witness headers mismatch
-  "validation_headers_missing_parent_header.json", # Witness headers mismatch
   "validation_codes_missing_delegated_code_on_insufficient_balance_call.json", # blockAccessListHash mismatch
-  "validation_codes_missing_current_frame_code.json", # Witness codes mismatch
-  "validation_codes_unsorted_but_complete.json", # Witness codes mismatch
-  "validation_codes_missing_sender_delegation_marker.json", # Witness codes mismatch
-  "validation_codes_missing_second_marker_in_delegation_chain.json", # Witness codes mismatch
-  "validation_codes_missing_7702_delegation_marker.json", # Witness codes mismatch
-  "validation_codes_missing_implicit_system_contract_code.json", # Witness codes mismatch
-  "validation_codes_extra_unused_bytecode.json", # Witness codes mismatch
-  "validation_codes_missing_redelegation_old_marker.json", # Witness codes mismatch
-  "validation_codes_missing_7702_delegated_target_code.json", # Witness codes mismatch
-  "validation_codes_missing_external_code_read_target.json", # Witness codes mismatch
-  "validation_state_unsorted_but_complete.json", # Witness state mismatch
-  "validation_state_missing_storage_proof_node.json", # Witness state mismatch
+  # This test vector specifically puts codes in unsorted order to test that stateless
+  # execution still works. But of course the witness will not match exactly.
+  "validation_codes_unsorted_but_complete.json",
+  # This test vector specifically adds unused butecode preimage to test that stateless
+  # execution still works. But of course the witness will not match exactly.
+  "validation_codes_extra_unused_bytecode.json",
+  # This test vector specifically puts state nodes in unsorted order to test that stateless
+  # execution still works. But of course the witness will not match exactly.
+  "validation_state_unsorted_but_complete.json",
   "validation_state_missing_delete_auxiliary_node.json", # persistStorage assert
-  "validation_state_extra_unused_trie_node.json", # Witness state mismatch
-  "validation_state_missing_failed_call_target_account_proof_node.json", # Witness state mismatch
-  "validation_state_missing_absent_account_proof_node.json", # Witness state mismatch
-  "validation_state_missing_sender_account_proof_leaf_node.json", # Witness state mismatch
-  "validation_state_missing_absent_slot_proof_leaf_node.json", # Witness state mismatch
+  # This test vector specifically adds unused trie nodes to test that stateless
+  # execution still works. But of course the witness will not match exactly.
+  "validation_state_extra_unused_trie_node.json",
 ]
 
 runEESTSuite(
