@@ -170,8 +170,9 @@ template updateTarget*(buddy: SnapPeerRef, info: static[string]) =
     trace info & ": assigning manual target state", peer=buddy.peer,
       hash=hash.toStr, nSyncPeers=ctx.nSyncPeers()
 
-    buddy.headerStateRegister(hash, info).isErrOr:
-      ctx.pool.target = Opt.none(BlockHash)         # fetch only once
+    ctx.pool.target = Opt.none(BlockHash)           # fetch only once
+    buddy.headerStateRegister(hash, info).isOkOr:
+      ctx.pool.target = Opt.some(hash)              # error => restore
     # End `block body`
 
   discard                                           # visual alignment
