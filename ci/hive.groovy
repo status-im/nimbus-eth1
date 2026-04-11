@@ -8,7 +8,7 @@
  * at your option. This file may not be copied, modified, or distributed except according to those terms.
  */
 
-library 'status-jenkins-lib@v1.9.33'
+library 'status-jenkins-lib@v1.9.42'
 
 def failedStages = []
 
@@ -39,11 +39,14 @@ pipeline {
     )
   }
 
-  /* Hack fix for params not being set on first run */
   environment {
+    /* Hack fix for params not being set on first run */
     SIMULATION_NAME    = "${params.SIMULATION_NAME    ?: 'ethereum/sync'}"
     PARALLELISM        = "${params.PARALLELISM        ?: '40'}"
     DOCKER_BUILDOUTPUT = "${params.DOCKER_BUILDOUTPUT ?: true}"
+    /* Necessary for GHCMGR build platform. */
+    PLATFORM = "${env.SIMULATION_NAME}"
+    PKG_URL = "${BUILD_URL}artifact/"
   }
 
   options {
@@ -148,9 +151,11 @@ pipeline {
       }
     }
     always {
-      archiveArtifacts artifacts: 'simulation-results/**', allowEmptyArchive: true
-      sshagent(credentials: ['jenkins-ssh']) {
-        sh './scripts/hive-upload-logs.sh'
+      script {
+        archiveArtifacts(artifacts: 'hive/workspace/logs/**', allowEmptyArchive: true)
+        sshagent(credentials: ['jenkins-ssh']) {
+          sh './scripts/hive-upload-logs.sh'
+        }
       }
     }
     cleanup {
