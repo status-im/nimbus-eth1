@@ -27,6 +27,7 @@ import
   ../evm/evm_errors,
   ../core/eip4844,
   ../core/pooled_txs_rlp,
+  ./oracle,
   ./rpc_types,
   ./rpc_utils,
   ./filters
@@ -36,6 +37,7 @@ logScope:
 
 type ServerAPIRef* = ref object
   txPool: TxPoolRef
+  oracle: Oracle
 
 const defaultTag = blockId("latest")
 
@@ -46,7 +48,10 @@ template chain(api: ServerAPIRef): ForkedChainRef =
   api.txPool.chain
 
 func newServerAPI*(txPool: TxPoolRef): ServerAPIRef =
-  ServerAPIRef(txPool: txPool)
+  ServerAPIRef(
+    txPool: txPool,
+    oracle: Oracle.new(txPool.chain),
+  )
 
 proc getTotalDifficulty*(api: ServerAPIRef, blockHash: Hash32, header: Header): Opt[UInt256] =
   api.txPool.chain.getTotalDifficulty(blockHash, header)
@@ -743,3 +748,12 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         return Opt.none(BlockAccessList)
 
     Opt.some(bal)
+
+  server.rpc("eth_feeHistory") do(
+    blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: Opt[seq[float64]]
+  ) -> FeeHistoryResult:
+    api.oracle.feeHistory(blockCount.uint64, newestBlock, rewardPercentiles.get(@[])).valueOr:
+      raise newException(ValueError, error)
+
+  server.rpc("eth_maxPriorityFeePerGas") do() -> Quantity:
+    w3Qty(calculateMedianMaxPriorityFeePerGas(api.chain).uint64)

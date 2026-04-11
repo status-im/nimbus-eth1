@@ -29,22 +29,23 @@ import
   eth/common/transaction_utils,
   web3/eth_api_types
 
+func median(prices: var openArray[GasInt]): GasInt =
+  if prices.len == 0:
+    return 0.GasInt
+
+  sort(prices)
+  let middle = prices.len div 2
+  if prices.len mod 2 == 0:
+    let
+      a = prices[middle].uint64
+      b = prices[middle - 1].uint64
+    return (a div 2 + b div 2 + ((a mod 2 + b mod 2) div 2)).GasInt
+
+  prices[middle]
+
 proc calculateMedianGasPrice*(chain: ForkedChainRef): GasInt =
   const minGasPrice = 30_000_000_000.GasInt
-  var prices  = newSeqOfCap[GasInt](64)
-  let blk = chain.latestBlock
-  for tx in blk.transactions:
-    prices.add(tx.gasPrice)
-
-  if prices.len > 0:
-    sort(prices)
-    let middle = prices.len div 2
-    if prices.len mod 2 == 0:
-      # prevent overflow
-      let price = prices[middle].uint64 + prices[middle - 1].uint64
-      result = (price div 2).GasInt
-    else:
-      result = prices[middle]
+  var prices = chain.latestBlock.transactions.mapIt(it.gasPrice)
 
   # TODO: This should properly incorporate the base fee in the block data,
   # and recommend a gas fee that likely gets the block to confirm.
@@ -53,7 +54,15 @@ proc calculateMedianGasPrice*(chain: ForkedChainRef): GasInt =
   # sane minimum for compatibility to unblock testing.
   # Note: When this is fixed, update `tests/graphql/queries.toml` and
   # re-enable the "query.gasPrice" test case (remove `skip = true`).
-  result = max(result, minGasPrice)
+  result = max(median(prices), minGasPrice)
+
+proc calculateMedianMaxPriorityFeePerGas*(chain: ForkedChainRef): GasInt =
+  let blk = chain.latestBlock
+  var prices = blk.transactions
+    .mapIt(it.effectiveGasTip(blk.header.baseFeePerGas))
+    .filterIt(it > 0.GasInt)
+
+  median(prices)
 
 proc unsignedTx*(tx: TransactionArgs,
                  chain: ForkedChainRef,
@@ -417,6 +426,8 @@ proc headerFromTag*(chain: ForkedChainRef, blockTag: BlockTag): Result[Header, s
       ok(chain.finalizedHeader)
     of "safe":
       ok(chain.safeHeader)
+    of "earliest":
+      chain.headerByNumber(base.BlockNumber(0))
     else:
       err("Unsupported block tag " & tag)
   of bidNumber:
