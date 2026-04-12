@@ -24,6 +24,13 @@ import
 
 proc NimMain() {.importc, exportc, dynlib.}
 
+proc deliverTransport(
+    ctx: ptr Context, status: cint, result: cstring, userData: pointer
+) {.cdecl, exportc, gcsafe, raises: [].} =
+  let data = cast[CallBackData](userData)
+  GC_unref(data)
+  data.complete(status, result)
+
 proc freeNimAllocatedString(res: cstring) {.exported.} =
   deallocShared(res)
 
@@ -83,7 +90,8 @@ proc watchDogLoop(wdTimeout: int) {.async: (raises: [CancelledError]).} =
 
 proc startVerifProxy(
     configJson: cstring,
-    transportProc: TransportProc,
+    executionTransportProc: ExecutionTransportProc,
+    beaconTransportProc: BeaconTransportProc,
     cb: CallBackProc,
     userData: pointer,
 ): ptr Context {.exported.} =
@@ -97,7 +105,7 @@ proc startVerifProxy(
     task = createTask(cb, userData)
     wdTask = createTask(nil, nil)
     wdFut = watchDogLoop(1)
-    fut = run(ctx, $configJson, transportProc)
+    fut = run(ctx, $configJson, executionTransportProc, beaconTransportProc)
 
   proc processFuture(fut: Future[void], task: Task) {.gcsafe.} =
     if fut.cancelled():

@@ -103,6 +103,7 @@ endif
 endif
 
 VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
+VERIF_PROXY_WASM_OUT ?= build/verifproxy_wasm
 ifneq (, $(findstring darwin, $(OS_PLATFORM)))
   VERIFPROXY_LDFLAGS = -framework Security
 else ifneq (, $(findstring mingw, $(OS_PLATFORM))$(findstring windows-gnu, $(OS_PLATFORM)))
@@ -124,6 +125,7 @@ endif
 	nimbus_verified_proxy \
 	libverifproxy \
 	libverifproxy-test \
+	libverifproxy_wasm \
 	external_sync \
 	test \
 	test-reproducibility \
@@ -376,6 +378,12 @@ libverifproxy-test: | libverifproxy
 		nimbus_verified_proxy/libverifproxy/test_api.c \
 		-lverifproxy -lstdc++ $(VERIFPROXY_LDFLAGS)
 	./build/libverifproxy-test
+
+libverifproxy_wasm: | build deps
+	+ echo -e $(BUILD_MSG) "build/verifproxy_wasm" && \
+		VERIF_PROXY_WASM_OUT=$(VERIF_PROXY_WASM_OUT) \
+		nimbus_verified_proxy/libverifproxy/build_wasm.sh
+	echo -e $(BUILD_END_MSG) "build/verifproxy_wasm"
 
 # Stateless related targets
 

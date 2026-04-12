@@ -127,7 +127,7 @@ proc getAccount*(
   info "Forwarding eth_getAccount", blockNumber
 
   let
-    (backend, backendIdx) = ?(engine.backendFor(GetProof))
+    (backend, backendIdx) = ?(engine.executionBackendFor(GetProof))
     proof = ?(
       (await backend.eth_getProof(address, @[], blockId(blockNumber))).tagBackend(
         backendIdx
@@ -168,7 +168,7 @@ proc getCode*(
   info "Forwarding eth_getCode", blockNumber
 
   let
-    (backend, backendIdx) = ?(engine.backendFor(GetCode))
+    (backend, backendIdx) = ?(engine.executionBackendFor(GetCode))
     code = ?(
       (await backend.eth_getCode(address, blockId(blockNumber))).tagBackend(backendIdx)
     )
@@ -202,7 +202,7 @@ proc getStorageAt*(
   info "Forwarding eth_getStorageAt", blockNumber
 
   let
-    (backend, backendIdx) = ?(engine.backendFor(GetProof))
+    (backend, backendIdx) = ?(engine.executionBackendFor(GetProof))
     proof = ?(
       (await backend.eth_getProof(address, @[slot], blockId(blockNumber))).tagBackend(
         backendIdx
@@ -232,7 +232,7 @@ proc populateCachesForAccountAndSlots(
 
   if engine.accountsCache.get(accountCacheKey).isNone() or slotsToFetch.len() > 0:
     let
-      (backend, backendIdx) = ?(engine.backendFor(GetProof))
+      (backend, backendIdx) = ?(engine.executionBackendFor(GetProof))
       proof = ?(
         (await backend.eth_getProof(address, slotsToFetch, blockId(blockNumber))).tagBackend(
           backendIdx
@@ -266,7 +266,7 @@ proc populateCachesUsingAccessList*(
     tx: TransactionArgs,
 ): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
   let
-    (backend, backendIdx) = ?(engine.backendFor(CreateAccessList))
+    (backend, backendIdx) = ?(engine.executionBackendFor(CreateAccessList))
     accessListRes: AccessListResult = ?(
       (await backend.eth_createAccessList(tx, blockId(blockNumber))).tagBackend(
         backendIdx

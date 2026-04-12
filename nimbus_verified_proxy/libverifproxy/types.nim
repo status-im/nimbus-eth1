@@ -30,35 +30,37 @@ type
     tasks*: SinglyLinkedList[Task]
     taskLen*: int
     stop*: bool
-    frontend*: EthApiFrontend
+    frontend*: ExecutionApiFrontend
 
   CallBackProc* = proc(ctx: ptr Context, status: cint, res: cstring, userData: pointer) {.
     cdecl, gcsafe, raises: []
   .}
 
-  TransportProc* = proc(
+  ExecutionTransportProc* = proc(
     ctx: ptr Context,
     url: cstring,
     name: cstring,
+    params: cstring,
+    userData: pointer,
+  ) {.cdecl, gcsafe, raises: [].}
+
+  BeaconTransportProc* = proc(
+    ctx: ptr Context,
+    url: cstring,
+    endpoint: cstring,
     params: cstring,
     cb: CallBackProc,
     userData: pointer,
   ) {.cdecl, gcsafe, raises: [].}
 
-  CallBackData*[T] = object
-    fut*: Future[EngineResult[T]]
+  CallBackData* = ref object
+    complete*: proc(status: cint, res: cstring) {.gcsafe, raises: [].}
 
 const RET_SUCCESS*: cint = 0 # when the call to eth api frontend is successful
 const RET_ERROR*: cint = -1 # when the call to eth api frontend failed with an error
 const RET_CANCELLED*: cint = -2 # when the call to the eth api frontend was cancelled
 # when an error occured while deserializing arguments from C to Nim
 const RET_DESER_ERROR*: cint = -3
-
-proc createCbData*[T](fut: Future[EngineResult[T]]): pointer =
-  let data = CallBackData[T].new()
-  data.fut = fut
-
-  cast[pointer](data)
 
 # taken from nim-json-rpc and adapted
 func unpackArg*(
@@ -113,3 +115,20 @@ proc alloc*(str: string): cstring =
   copyMem(ret, str.cstring, str.len)
   ret[str.len] = '\0'
   return ret
+
+proc createCbData*[T](fut: Future[EngineResult[T]]): pointer =
+  let data = CallBackData(
+    complete: proc(status: cint, res: cstring) {.gcsafe, raises: [].} =
+      if status == RET_SUCCESS:
+        let r = unpackArg($res, T)
+        if r.isErr():
+          fut.complete(EngineResult[T].err((BackendDecodingError, r.error)))
+        else:
+          fut.complete(EngineResult[T].ok(r.get()))
+      elif status == RET_ERROR:
+        fut.complete(EngineResult[T].err((BackendError, $res)))
+      elif status == RET_CANCELLED:
+        fut.fail((ref CancelledError)(msg: $res))
+  )
+  GC_ref(data)
+  cast[pointer](data)
