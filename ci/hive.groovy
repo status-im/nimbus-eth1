@@ -146,7 +146,7 @@ pipeline {
       }
     }
     always {
-      archiveArtifacts artifacts: 'simulation-results/**', allowEmptyArchive: true
+      archiveArtifacts artifacts: 'hive/workspace/logs/**', allowEmptyArchive: true
       sshagent(credentials: ['jenkins-ssh']) {
         sh './scripts/hive-upload-logs.sh'
       }
