@@ -193,11 +193,31 @@ template updateFcuRoot*(buddy: SnapPeerRef, info: static[string]) =
   ##   would be an extra efford not deemed worth while.
   ##
   block body:
-    if buddy.only.finRoot.isSome():
-      break body                                    # done, nothing to do
-
     let
       ctx = buddy.ctx
+      sdb = ctx.pool.stateDB
+      peer {.inject,used.} = $buddy.peer            # logging only
+
+    buddy.only.finRoot.isErrOr:                     # already set?
+      # Check whether this state root still applies. If so, then
+      # do nothing and return. Otherwise reset and find a new one.
+      #
+      # The underlying assumption is, that a `snap` peer serves a list of
+      # states with consecutive, increasing block numbers ending up near or
+      # at the latest block number of the FCU finalised hash.
+      #
+      let rc = sdb.get(value)
+      if rc.isErr:
+        buddy.only.finRoot = Opt.none(StateRoot)
+      elif buddy.only.notAvailMax <= rc.value.blockNumber:
+        buddy.only.finRoot = Opt.none(StateRoot)
+        trace info & ":fin root too old, disbanding", peer,
+          root=rc.value.rootStr, notAvailMax=buddy.only.notAvailMax,
+          syncState=buddy.syncState, nSyncPeers=ctx.nSyncPeers()
+      else:
+        break body                                  # done, nothing to do
+
+    let
       hdr = ctx.hdrCache.latestConsHead()
       blockNumber {.inject.} = BlockNumber(hdr.number)
     if blockNumber == 0:
@@ -207,21 +227,21 @@ template updateFcuRoot*(buddy: SnapPeerRef, info: static[string]) =
       hash = BlockHash(hdr.computeBlockHash())
       root = StateRoot(hdr.stateRoot)
     ctx.pool.stateDB.get(root).isErrOr:
-      trace info & ": using fin root from registry", peer=buddy.peer,
+      trace info & ": using fin root from registry", peer,
         blockHash=hash.toStr, blockNumber, nSyncPeers=ctx.nSyncPeers()
       buddy.only.finRoot = Opt.some(root)
       break body                                    # already registered
 
-    trace info & ": assigning FCU hash from CL", peer=buddy.peer,
+    trace info & ": assigning FCU hash from CL", peer,
       hash=hash.toStr, blockNumber, nSyncPeers=ctx.nSyncPeers()
 
     # Store root -> block data mapping
     ctx.pool.mptAsm.putBlockData(root, hash, blockNumber).isOkOr:
-      trace info & ": Cannot store state root map", peer=buddy.peer,
+      trace info & ": Cannot store state root map", peer,
         stateRoot=root.toStr, blockHash=hash.toStr, blockNumber
       break body                                    # done, storage error
 
-    discard ctx.pool.stateDB.register(root, hash, blockNumber, info)
+    discard sdb.register(root, hash, blockNumber, info)
     buddy.only.finRoot = Opt.some(root)
     # End `block body`
 

@@ -70,7 +70,8 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
       nStatesOk {.inject.} = 0
       nStatesIdle {.inject.} = 0
     block downloadLoop:
-      for state in sdb.items(startWith=theseFirst):
+      for state in sdb.items(startWith=theseFirst,
+                             ignoreLe=buddy.only.notAvailMax):
         var didSomething = false
         let state {.inject.} = state                # logging only, sub-template
         while true:
@@ -80,11 +81,6 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
             rc = buddy.accountDownload(state, info)
             acc = if rc.isOk:
                     rc.value
-                  elif rc.error == ENoDataAvailable: # not serving this one
-                    buddy.only.finRoot.isErrOr:
-                      if state.stateRoot == value:  # reset local pivot
-                        buddy.only.finRoot = Opt.none(StateRoot)
-                    break                           # done this state, try next
                   elif rc.error == ECompleted:
                     @[]                             # try left over storage/code
                   else:
@@ -98,8 +94,6 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
 
         if didSomething:
           nStatesOk.inc
-          if nWorkingStateRootsMax <= nStatesOk:
-            break downloadLoop                      # all done for now
         else:
           nStatesIdle.inc
         # End `for` a list of state
@@ -110,7 +104,8 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
        nStatesOk == 0 and 0 < nStatesIdle:
       buddy.ctrl.stopped = true
 
-    trace info & ": downloaded states", peer, syncState=buddy.syncState,
+    trace info & ": downloaded states", peer,
+      notAvailMax=buddy.only.notAvailMax, syncState=buddy.syncState,
       nStatesOk, nStatesIdle, nSyncPeers=ctx.nSyncPeers()
 
   discard                                           # visual alignment

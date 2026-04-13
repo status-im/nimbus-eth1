@@ -95,11 +95,6 @@ const
     ##
     ## Note that there are about 400k accounts on `mainnet` (as of early 2026.)
 
-  nWorkingStateRootsMax* = 3
-    ## Stop the current session after accounts could be downloaded for this
-    ## many different state roots. The session will then be released and a
-    ## new one started.
-
   # -----------
 
   nFetchHeaderPeersMax* = 5

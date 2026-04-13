@@ -482,9 +482,11 @@ iterator codeItems*(
 iterator items*(
     db: StateDbRef;
     startWith = seq[StateRoot].default;
+    ignoreLe = BlockNumber(0);
       ): StateDataRef =
-  ## Iterate over all `db` entries with decreasing rank, the pivot state
-  ## first which has the hihgest rank.
+  ## Iterate over all `db` entries with decreasing rank selecting the pivot
+  ## state first, which has the hihgest rank. If the block number of the
+  ## selected does not exceed the argument `ignoreLe`, it is discarded.
   ##
   ## If the argument `startWith` is set, the corresponding records are yielded
   ## first, followed by the rest of the database entries without the
@@ -493,14 +495,14 @@ iterator items*(
   var seenItems: HashSet[BlockNumber]
   for w in startWith.items:
     db.byRoot.withValue(w,value):
-      if value.blockNumber notin seenItems:
+      if value.blockNumber notin seenItems and ignoreLe < value.blockNumber:
         seenItems.incl value.blockNumber
         yield value[]
 
   var rc = db.byRank.ge(low StateRankIndex)
   while rc.isOk:
     let (key, data) = (rc.value.key, rc.value.data)
-    if data.blockNumber notin seenItems:
+    if data.blockNumber notin seenItems and ignoreLe < data.blockNumber:
       yield data
     rc = db.byRank.gt(key)
 
