@@ -130,20 +130,20 @@ func encodeLeafAccount(pfx: NibblesBuf, acc: Account): HashKey =
   let balanceLen = rlpUInt256EncodedLen(acc.balance)
   const sRootLen = 33  # Hash32 always: 0xa0 prefix + 32 bytes
   const cHashLen = 33
-  let accContent = nonceLen + balanceLen + sRootLen + cHashLen
-  let accListLen = rlpListEncodedLen(accContent)
+  let accContentLen = nonceLen + balanceLen + sRootLen + cHashLen
+  let accTotalLen = rlpListEncodedLen(accContentLen)
 
   # wrapped encoding (rlp encoding a rlp encoded item is now ))))
-  let wrapLen = rlpBlobEncodedLen(accListLen)  # blob-wrap the account list
-  let outerContent = hexPfxBlobLen + wrapLen
-  let outerListLen = rlpListEncodedLen(outerContent)
+  let wrapLen = rlpBlobEncodedLen(accTotalLen)  # blob-wrap the account list
+  let outerContentLen = hexPfxBlobLen + wrapLen
+  let outerTotalLen = rlpListEncodedLen(outerContentLen)
 
   # account leaf nodes are always > 32 bytes encoded, so always use keccak path
   var ctx = Keccak256.init()
-  ctx.rlpHashListHeader(outerContent)
+  ctx.rlpHashListHeader(outerContentLen)
   ctx.rlpHashBlob(hexPfxBuf.data())
-  ctx.rlpHashBlobHeader(accListLen)  # wrap prefix
-  ctx.rlpHashListHeader(accContent)
+  ctx.rlpHashBlobHeader(accTotalLen)  # wrap prefix
+  ctx.rlpHashListHeader(accContentLen)
   ctx.rlpHashInt(acc.nonce)
   ctx.rlpHashUInt256(acc.balance)
   ctx.rlpHashBlobHeader(32); ctx.update(acc.storageRoot.data)
@@ -162,13 +162,13 @@ func encodeLeafStorage(pfx: NibblesBuf, stoData: UInt256): HashKey =
       if isStoSelfEncoding: stoRlpLen  # no wrap prefix: just the raw byte
       else: rlpBlobEncodedLen(stoRlpLen)
 
-    outerContent = hexPfxBlobLen + wrapLen
-    outerListLen = rlpListEncodedLen(outerContent)
+    outerContentLen = hexPfxBlobLen + wrapLen
+    outerTotalLen = rlpListEncodedLen(outerContentLen)
 
-  if outerListLen < 32:
+  if outerTotalLen < 32:
     var output: array[32, byte]
     var pos = 0
-    rlpWriteListHeader(output, pos, outerContent)
+    rlpWriteListHeader(output, pos, outerContentLen)
     rlpWriteBlob(output, pos, hexPfxBuf.data())
     if not isStoSelfEncoding:
       rlpWriteBlobHeader(output, pos, stoRlpLen)
@@ -176,7 +176,7 @@ func encodeLeafStorage(pfx: NibblesBuf, stoData: UInt256): HashKey =
     output.toOpenArray(0, pos - 1).digestTo(HashKey)
   else:
     var ctx = Keccak256.init()
-    ctx.rlpHashListHeader(outerContent)
+    ctx.rlpHashListHeader(outerContentLen)
     ctx.rlpHashBlob(hexPfxBuf.data())
     if not isStoSelfEncoding:
       ctx.rlpHashBlobHeader(stoRlpLen)
@@ -184,15 +184,15 @@ func encodeLeafStorage(pfx: NibblesBuf, stoData: UInt256): HashKey =
     ctx.finish().to(Hash32).to(HashKey)
 
 func encodeBranchStatic(hashKeys: array[16, HashKey]): HashKey =
-  var content = 1  # trailing empty blob (0x80)
+  var contentLen = 1  # trailing empty blob (0x80)
   for key in hashKeys:
-    content += hashKeyEncodedLen(key)
-  let totalLen = rlpListEncodedLen(content)
+    contentLen += hashKeyEncodedLen(key)
+  let totalLen = rlpListEncodedLen(contentLen)
 
   if totalLen < 32:
     var output: array[32, byte]
     var pos = 0
-    rlpWriteListHeader(output, pos, content)
+    rlpWriteListHeader(output, pos, contentLen)
     for key in hashKeys:
       writeHashKey(output, pos, key)
     output[pos] = 0x80
@@ -200,7 +200,7 @@ func encodeBranchStatic(hashKeys: array[16, HashKey]): HashKey =
     output.toOpenArray(0, pos - 1).digestTo(HashKey)
   else:
     var ctx = Keccak256.init()
-    ctx.rlpHashListHeader(content)
+    ctx.rlpHashListHeader(contentLen)
     for key in hashKeys:
       ctx.hashHashKey(key)
     ctx.rlpHashByte(0x80)
@@ -211,19 +211,19 @@ func encodeExtStatic(pfx: NibblesBuf, branchKey: HashKey): HashKey =
 
   let hexPfxBlobLen = rlpBlobEncodedLen(hexPfxBuf.data())
   let branchKeyLen = hashKeyEncodedLen(branchKey)
-  let outerContent = hexPfxBlobLen + branchKeyLen
-  let outerListLen = rlpListEncodedLen(outerContent)
+  let outerContentLen = hexPfxBlobLen + branchKeyLen
+  let outerTotalLen = rlpListEncodedLen(outerContentLen)
 
-  if outerListLen < 32:
+  if outerTotalLen < 32:
     var output: array[32, byte]
     var pos = 0
-    rlpWriteListHeader(output, pos, outerContent)
+    rlpWriteListHeader(output, pos, outerContentLen)
     rlpWriteBlob(output, pos, hexPfxBuf.data())
     writeHashKey(output, pos, branchKey)
     output.toOpenArray(0, pos - 1).digestTo(HashKey)
   else:
     var ctx = Keccak256.init()
-    ctx.rlpHashListHeader(outerContent)
+    ctx.rlpHashListHeader(outerContentLen)
     ctx.rlpHashBlob(hexPfxBuf.data())
     ctx.hashHashKey(branchKey)
     ctx.finish().to(Hash32).to(HashKey)
