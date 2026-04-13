@@ -168,7 +168,7 @@ proc computeKeyImpl(
     case vtx.vType
     of AccLeaf:
       let vtx = AccLeafRef(vtx)
-      var writer = RlpArrayBufWriter[MAX_RLP_SIZE_ACCOUNT_LEAF_NODE]()
+      var writer = RlpArrayBufWriter[MAX_RLP_SIZE_ACCOUNT_LEAF_NODE, 1]()
       writer.encodeLeaf(vtx.pfx):
         let
           stoID = vtx.stoID
@@ -192,7 +192,7 @@ proc computeKeyImpl(
             else:
               VOID_HASH_KEY
 
-        var w = RlpArrayBufWriter[MAX_RLP_SIZE_ACCOUNT_LEAF]()
+        var w = RlpArrayBufWriter[MAX_RLP_SIZE_ACCOUNT_LEAF, 1]()
         w.append(Account(
           nonce: vtx.account.nonce,
           balance: vtx.account.balance,
@@ -202,9 +202,9 @@ proc computeKeyImpl(
         w.finish(asOpenArray = true)
     of StoLeaf:
       let vtx = StoLeafRef(vtx)
-      var writer = RlpArrayBufWriter[MAX_RLP_SIZE_STORAGE_LEAF_NODE]()
+      var writer = RlpArrayBufWriter[MAX_RLP_SIZE_STORAGE_LEAF_NODE, 1]()
       writer.encodeLeaf(vtx.pfx):
-        var w = RlpArrayBufWriter[MAX_RLP_SIZE_STORAGE_LEAF]()
+        var w = RlpArrayBufWriter[MAX_RLP_SIZE_STORAGE_LEAF, 1]()
         w.append(vtx.stoData)
         w.finish(asOpenArray = true)
     of Branches:
@@ -275,12 +275,12 @@ proc computeKeyImpl(
 
       if vtx.vType == ExtBranch:
         let vtx = ExtBranchRef(vtx)
-        var writer = RlpArrayBufWriter[MAX_RLP_SIZE_EXTENSION_NODE]()
+        var writer = RlpArrayBufWriter[MAX_RLP_SIZE_EXTENSION_NODE, 1]()
         writer.encodeExt(vtx.pfx):
-          var bwriter = RlpArrayBufWriter[MAX_RLP_SIZE_BRANCH_NODE]()
+          var bwriter = RlpArrayBufWriter[MAX_RLP_SIZE_BRANCH_NODE, 1]()
           bwriter.writeBranch(vtx)
       else:
-        var writer = RlpArrayBufWriter[MAX_RLP_SIZE_BRANCH_NODE]()
+        var writer = RlpArrayBufWriter[MAX_RLP_SIZE_BRANCH_NODE, 1]()
         writer.writeBranch(vtx)
 
   # Cache the hash into the same storage layer as the the top-most value that it
