@@ -49,31 +49,29 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
     buddy.updateTarget info                         # manual target set up?
     buddy.updateFcuRoot info                        # FCU header => state
 
-    if sdb.len == 0:
+    let pivot = sdb.pivot.valueOr:
       trace info & ": no state records", peer
       break body                                    # return err()
 
     # Fetch for state DB items, start with pivot root
     var theseFirst: seq[StateRoot]
-    sdb.pivot.isErrOr:                              # the one with most done yet
-      theseFirst.add value.stateRoot
+    theseFirst.add pivot.stateRoot
     buddy.only.finRoot.isErrOr:
       theseFirst.add value
 
     # Run `download()` for available states, the order of which is
     # determined by the following criteria with deacening priority
     #
-    # * the state that has already the most accounts downloaded
     # * the pivot state for this `peer`
-    # * other states with decreasing block number (i.e. most recent first)
-    #   + not older than the first two states (if any),
-    #   + and no more than `nWorkingStateRoots`
+    # * the best state for this peer (sort of)
+    # * other states with decreasing rank
     #
     var
       nStatesOk {.inject.} = 0
       nStatesIdle {.inject.} = 0
     block downloadLoop:
-      for state in sdb.items(startWith=theseFirst, truncate=true):
+      for state in sdb.items(startWith=theseFirst,
+                             ignoreLe=buddy.only.notAvailMax):
         var didSomething = false
         let state {.inject.} = state                # logging only, sub-template
         while true:
@@ -83,11 +81,6 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
             rc = buddy.accountDownload(state, info)
             acc = if rc.isOk:
                     rc.value
-                  elif rc.error == ENoDataAvailable: # not serving this one
-                    buddy.only.finRoot.isErrOr:
-                      if state.stateRoot == value:  # reset local pivot
-                        buddy.only.finRoot = Opt.none(StateRoot)
-                    break                           # done this state, try next
                   elif rc.error == ECompleted:
                     @[]                             # try left over storage/code
                   else:
@@ -101,8 +94,6 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
 
         if didSomething:
           nStatesOk.inc
-          if nWorkingStateRootsMax <= nStatesOk:
-            break downloadLoop                      # all done for now
         else:
           nStatesIdle.inc
         # End `for` a list of state
@@ -113,9 +104,9 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
        nStatesOk == 0 and 0 < nStatesIdle:
       buddy.ctrl.stopped = true
 
-    trace info & ": downloaded states", peer, syncState=buddy.syncState,
-      nStatesOk, nStatesIdle, nSyncPeers=ctx.nSyncPeers(),
-      state=($buddy.syncState)
+    trace info & ": downloaded states", peer,
+      notAvailMax=buddy.only.notAvailMax, syncState=buddy.syncState,
+      nStatesOk, nStatesIdle, nSyncPeers=ctx.nSyncPeers()
 
   discard                                           # visual alignment
 

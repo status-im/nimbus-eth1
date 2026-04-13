@@ -91,6 +91,7 @@ type
   SnapPeerData* = object
     ## Local descriptor data extension
     finRoot*: Opt[StateRoot]         ## Some finalised state root (if any)
+    notAvailMax*: BlockNumber        ## Max block number of rejected states
     nErrors*: PeerErrors             ## Error register
     peerType*: string                ## Self declared peer type
     failedReq*: PeerFirstFetchReq    ## Don't send the same failed request twice
@@ -106,7 +107,6 @@ type
     # Preloading/manual state update
     target*: Opt[BlockHash]          ## Optional for setting up a sync target
     stateUpdateChecked*: string      ## Last update value (avoids log spamming)
-    lockedHeader*: HashSet[BlockHash] ## Currently fetched headers
 
     # Info, debugging, and error handling stuff
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one
