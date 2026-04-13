@@ -13,19 +13,14 @@
 import
   std/strformat,
   chronicles,
-  eth/rlp,
   eth/common/[accounts_rlp, base_rlp, hashes_rlp],
+  eth/rlp/static_encoder,
   results,
   "."/[aristo_desc, aristo_get, aristo_layers],
   ./aristo_desc/desc_backend
 
 type
   WriteBatch = tuple[writer: PutHdlRef, count: int, depth: int, prefix: uint64]
-
-  AristoTrieWriter = object
-    tracker: DynamicRlpLengthTracker
-    twoPassWriter: RlpTwoPassWriter
-    hashWriter: RlpHashWriter
 
 # Keep write batch size _around_ 1mb, give or take some overhead - this is a
 # tradeoff between efficiency and memory usage with diminishing returns the
@@ -102,86 +97,136 @@ proc putKeyAtLevel(
 
   ok()
 
-func init(T: type AristoTrieWriter): T =
-  var trk = DynamicRlpLengthTracker()
-  trk.initLengthTracker()
+func hashKeyEncodedLen(key: HashKey): int {.inline.} =
+  if key.len == 0: 1
+  elif key.len < 32: key.len
+  else: 33
 
-  AristoTrieWriter(
-    tracker: trk,
-    twoPassWriter: initTwoPassWriter(trk),
-    hashWriter: initHashWriter(trk)
-  )
-
-func clear(self: var AristoTrieWriter) =
-  self.tracker.clear()
-  self.twoPassWriter.clear()
-  self.hashWriter.clear()
-
-template appendLeaf(w: var RlpWriter, pfx: NibblesBuf, leafData: Account | UInt256) =
-  w.startList(2)
-  w.append(pfx.toHexPrefix(isLeaf = true).data())
-  w.wrapEncoding(1)
-  w.append(leafData)
-
-func encodeLeaf(w: var AristoTrieWriter, pfx: NibblesBuf, leafData: Account | UInt256): HashKey =
-  w.clear()
-  w.tracker.appendLeaf(pfx, leafData)
-
-  if w.tracker.totalLength < 32:
-    w.twoPassWriter.reInit(w.tracker)
-    w.twoPassWriter.appendLeaf(pfx, leafData)
-    let buf = HashKey.fromBytes(w.twoPassWriter.finish)
-    buf.value
+func writeHashKey(output: var openArray[byte], pos: var int, key: HashKey) {.inline.} =
+  if key.len == 0:
+    output[pos] = 0x80
+    pos += 1
+  elif key.len < 32:
+    rlpWriteRawBytes(output, pos, key.data)
   else:
-    w.hashWriter.reInit(w.tracker)
-    w.hashWriter.appendLeaf(pfx, leafData)
-    let buf = w.hashWriter.finish()
-    buf.to(HashKey)
+    rlpWriteBlobHeader(output, pos, 32)
+    rlpWriteRawBytes(output, pos, key.data)
 
-template appendBranch(w: var RlpWriter, vtx: VertexRef, hashKeys: array[16, HashKey]) =
-  w.startList(17)
+func hashHashKey(ctx: var Keccak256, key: HashKey) {.inline.} =
+  if key.len == 0:
+    ctx.rlpHashByte(0x80)
+  elif key.len < 32:
+    ctx.update(key.data)
+  else:
+    ctx.rlpHashBlobHeader(32)
+    ctx.update(key.data)
+
+func encodeLeafAccount(pfx: NibblesBuf, acc: Account): HashKey =
+  let hexPfxBuf = pfx.toHexPrefix(isLeaf = true)
+
+  # store all lenghts on the stack as local variables (instead of using the length writer)
+  let hexPfxBlobLen = rlpBlobEncodedLen(hexPfxBuf.data())
+  let nonceLen = rlpIntEncodedLen(acc.nonce)
+  let balanceLen = rlpUInt256EncodedLen(acc.balance)
+  const sRootLen = 33  # Hash32 always: 0xa0 prefix + 32 bytes
+  const cHashLen = 33
+  let accContent = nonceLen + balanceLen + sRootLen + cHashLen
+  let accListLen = rlpListEncodedLen(accContent)
+
+  # wrapped encoding (rlp encoding a rlp encoded item is now ))))
+  let wrapLen = rlpBlobEncodedLen(accListLen)  # blob-wrap the account list
+  let outerContent = hexPfxBlobLen + wrapLen
+  let outerListLen = rlpListEncodedLen(outerContent)
+
+  # account leaf nodes are always > 32 bytes encoded, so always use keccak path
+  var ctx = Keccak256.init()
+  ctx.rlpHashListHeader(outerContent)
+  ctx.rlpHashBlob(hexPfxBuf.data())
+  ctx.rlpHashBlobHeader(accListLen)  # wrap prefix
+  ctx.rlpHashListHeader(accContent)
+  ctx.rlpHashInt(acc.nonce)
+  ctx.rlpHashUInt256(acc.balance)
+  ctx.rlpHashBlobHeader(32); ctx.update(acc.storageRoot.data)
+  ctx.rlpHashBlobHeader(32); ctx.update(acc.codeHash.data)
+  ctx.finish().to(Hash32).to(HashKey)
+
+func encodeLeafStorage(pfx: NibblesBuf, stoData: UInt256): HashKey =
+  let
+    hexPfxBuf = pfx.toHexPrefix(isLeaf = true) 
+    hexPfxBlobLen = rlpBlobEncodedLen(hexPfxBuf.data())
+    stoRlpLen = rlpUInt256EncodedLen(stoData)
+
+    # wrapEncoding omits the blob prefix when the inner value is self-encoding
+    isStoSelfEncoding = stoData > 0 and stoData < 128 
+    wrapLen =
+      if isStoSelfEncoding: stoRlpLen  # no wrap prefix: just the raw byte
+      else: rlpBlobEncodedLen(stoRlpLen)
+
+    outerContent = hexPfxBlobLen + wrapLen
+    outerListLen = rlpListEncodedLen(outerContent)
+
+  if outerListLen < 32:
+    var output: array[32, byte]
+    var pos = 0
+    rlpWriteListHeader(output, pos, outerContent)
+    rlpWriteBlob(output, pos, hexPfxBuf.data())
+    if not isStoSelfEncoding:
+      rlpWriteBlobHeader(output, pos, stoRlpLen)
+    rlpWriteUInt256(output, pos, stoData)
+    output.toOpenArray(0, pos - 1).digestTo(HashKey)
+  else:
+    var ctx = Keccak256.init()
+    ctx.rlpHashListHeader(outerContent)
+    ctx.rlpHashBlob(hexPfxBuf.data())
+    if not isStoSelfEncoding:
+      ctx.rlpHashBlobHeader(stoRlpLen)
+    ctx.rlpHashUInt256(stoData)
+    ctx.finish().to(Hash32).to(HashKey)
+
+func encodeBranchStatic(hashKeys: array[16, HashKey]): HashKey =
+  var content = 1  # trailing empty blob (0x80)
   for key in hashKeys:
-    w.append(key)
-  w.append EmptyBlob
+    content += hashKeyEncodedLen(key)
+  let totalLen = rlpListEncodedLen(content)
 
-template encodeBranch(w: var AristoTrieWriter, rvtx: VertexRef, subKeyForN: untyped): HashKey =
-  var hashKeys {.noinit.}: array[16, HashKey]
-  for (n {.inject.}, subvid {.inject.}) in vtx.allPairs():
-    hashKeys[n] = subKeyForN
-
-  w.clear()
-  w.tracker.appendBranch(vtx, hashKeys)
-
-  if w.tracker.totalLength < 32:
-    w.twoPassWriter.reInit(w.tracker)
-    w.twoPassWriter.appendBranch(vtx, hashKeys)
-    let buf = HashKey.fromBytes(w.twoPassWriter.finish)
-    buf.value
+  if totalLen < 32:
+    var output: array[32, byte]
+    var pos = 0
+    rlpWriteListHeader(output, pos, content)
+    for key in hashKeys:
+      writeHashKey(output, pos, key)
+    output[pos] = 0x80
+    pos += 1
+    output.toOpenArray(0, pos - 1).digestTo(HashKey)
   else:
-    w.hashWriter.reInit(w.tracker)
-    w.hashWriter.appendBranch(vtx, hashKeys)
-    let buf = w.hashWriter.finish()
-    buf.to(HashKey)
+    var ctx = Keccak256.init()
+    ctx.rlpHashListHeader(content)
+    for key in hashKeys:
+      ctx.hashHashKey(key)
+    ctx.rlpHashByte(0x80)
+    ctx.finish().to(Hash32).to(HashKey)
 
-template appendExt(w: var RlpWriter, pfx: NibblesBuf, branchKey: HashKey) =
-  w.startList(2)
-  w.append(pfx.toHexPrefix(isLeaf = false).data())
-  w.append(branchKey)
+func encodeExtStatic(pfx: NibblesBuf, branchKey: HashKey): HashKey =
+  let hexPfxBuf = pfx.toHexPrefix(isLeaf = false)
 
-func encodeExt(w: var AristoTrieWriter, pfx: NibblesBuf, branchKey: HashKey): HashKey =
-  w.clear()
-  w.tracker.appendExt(pfx, branchKey)
+  let hexPfxBlobLen = rlpBlobEncodedLen(hexPfxBuf.data())
+  let branchKeyLen = hashKeyEncodedLen(branchKey)
+  let outerContent = hexPfxBlobLen + branchKeyLen
+  let outerListLen = rlpListEncodedLen(outerContent)
 
-  if w.tracker.totalLength < 32:
-    w.twoPassWriter.reInit(w.tracker)
-    w.twoPassWriter.appendExt(pfx, branchKey)
-    let buf = HashKey.fromBytes(w.twoPassWriter.finish)
-    buf.value
+  if outerListLen < 32:
+    var output: array[32, byte]
+    var pos = 0
+    rlpWriteListHeader(output, pos, outerContent)
+    rlpWriteBlob(output, pos, hexPfxBuf.data())
+    writeHashKey(output, pos, branchKey)
+    output.toOpenArray(0, pos - 1).digestTo(HashKey)
   else:
-    w.hashWriter.reInit(w.tracker)
-    w.hashWriter.appendExt(pfx, branchKey)
-    let buf = w.hashWriter.finish()
-    buf.to(HashKey)
+    var ctx = Keccak256.init()
+    ctx.rlpHashListHeader(outerContent)
+    ctx.rlpHashBlob(hexPfxBuf.data())
+    ctx.hashHashKey(branchKey)
+    ctx.finish().to(Hash32).to(HashKey)
 
 proc getKey(
     db: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool
@@ -219,9 +264,7 @@ proc computeKeyImpl(
   # empty state
 
   # Top-most level of all the verticies this hash computation depends on
-  var
-    level = level
-    writer = AristoTrieWriter.init()
+  var level = level
 
   let key =
     case vtx.vType
@@ -249,7 +292,7 @@ proc computeKeyImpl(
           else:
             VOID_HASH_KEY
 
-      writer.encodeLeaf(vtx.pfx,
+      encodeLeafAccount(vtx.pfx,
         Account(
           nonce: vtx.account.nonce,
           balance: vtx.account.balance,
@@ -259,7 +302,7 @@ proc computeKeyImpl(
       )
     of StoLeaf:
       let vtx = StoLeafRef(vtx)
-      writer.encodeLeaf(vtx.pfx, vtx.stoData)
+      encodeLeafStorage(vtx.pfx, vtx.stoData)
     of Branches:
       # For branches, we need to load the vertices before recursing into them
       # to exploit their on-disk order
@@ -318,20 +361,19 @@ proc computeKeyImpl(
             )
           batch.leave(n)
 
-      template writeBranch(w: var AristoTrieWriter, vtx: BranchRef): HashKey =
-        w.encodeBranch(vtx):
-          if subvid.isValid:
-            level = max(level, keyvtxs[n][1])
-            keyvtxs[n][0][0]
-          else:
-            VOID_HASH_KEY
+      var hashKeys {.noinit.}: array[16, HashKey]
+      for (n, subvid) in vtx.allPairs():
+        if subvid.isValid:
+          level = max(level, keyvtxs[n][1])
+          hashKeys[n] = keyvtxs[n][0][0]
+        else:
+          hashKeys[n] = VOID_HASH_KEY
 
       if vtx.vType == ExtBranch:
-        let vtx = ExtBranchRef(vtx)
-        var bwriter = AristoTrieWriter.init()
-        writer.encodeExt(vtx.pfx, bwriter.writeBranch(vtx))
+        let extVtx = ExtBranchRef(vtx)
+        encodeExtStatic(extVtx.pfx, encodeBranchStatic(hashKeys))
       else:
-        writer.writeBranch(vtx)
+        encodeBranchStatic(hashKeys)
 
   # Cache the hash into the same storage layer as the the top-most value that it
   # depends on (recursively) - this could be an ephemeral in-memory layer or the
