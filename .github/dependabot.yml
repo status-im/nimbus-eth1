@@ -16,5 +16,6 @@ updates:
         versions: ["<= 0.0.0"]
       - dependency-name: vendor/nimbus-eth2
         versions: ["<= 0.0.0"]
+      - dependency-name: vendor/nim-rocksdb
     schedule:
       interval: daily
