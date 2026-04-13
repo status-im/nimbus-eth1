@@ -132,10 +132,8 @@ pipeline {
   }
 
   post {
-    success { script { github.notifyPR(true) } }
     failure {
       script {
-        github.notifyPR(true)
         if (!env.CHANGE_ID) { return }
         withCredentials([string(credentialsId: 'discord-hive-webhook', variable: 'DISCORD_WEBHOOK_URL')]) {
           withEnv([
