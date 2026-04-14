@@ -21,7 +21,6 @@ import
   ../../utils/utils,
   ../../transaction
 
-from ../eip4844 import getTotalBlobGas
 from eth/common/hashes import hash
 
 type
@@ -132,7 +131,7 @@ func wrapperVersion*(item: TxItemRef): Opt[WrapperVersion] =
 
 func calculatePrice*(item: TxItemRef; baseFee: GasInt) =
   ## Profit calculator
-  item.price = item.tx.gasLimit * item.tx.tip(baseFee) + item.tx.getTotalBlobGas
+  item.price = item.tx.tip(baseFee)
 
 func validateTxGasBump*(current: TxItemRef, added: TxItemRef): Result[void, TxError] =
   func txGasPrice(item: TxItemRef): TxGasPrice =

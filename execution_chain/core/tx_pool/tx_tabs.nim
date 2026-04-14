@@ -57,6 +57,11 @@ func removeLookup*(blobTab: var BlobLookupTab, item: TxItemRef) =
   for v in item.tx.versionedHashes:
     blobTab.del(v)
 
+# HeapQueue needs `<` to be overloaded for custom object
+# and in this case, we want to pop highest price first.
+# That's why we use '>' instead of '<' in the implementation.
+func `<`(a, b: TxItemRef): bool = a.price > b.price
+
 proc validBlobItem(item: TxItemRef;
                    fork: EVMFork;
                    sn: TxSenderNonceRef;
@@ -123,10 +128,6 @@ iterator byPriceAndNonce*(senderTab: TxSenderTab,
         item.calculatePrice(baseFee)
         byPrice.push(item)
 
-  # HeapQueue needs `<` to be overloaded for custom object
-  # and in this case, we want to pop highest price first.
-  # That's why we use '>' instead of '<' in the implementation.
-  func `<`(a, b: TxItemRef): bool {.used.} = a.price > b.price
   var byPrice = initHeapQueue[TxItemRef]()
 
   # Fill byPrice with `head item` from each account.
