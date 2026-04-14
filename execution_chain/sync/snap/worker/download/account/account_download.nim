@@ -40,22 +40,16 @@ template accountDownload*(
       root {.inject,used.} = state.rootStr          # logging only
 
       ivReq = sdb.fetchAccountRange(state).valueOr:
-        trace info & ": no more unpocessed", peer, root,
+        trace info & ": No more unpocessed", peer, `state`=state.toStr(sdb),
           notAvailMax=buddy.only.notAvailMax, syncState=buddy.syncState
         bodyRc = typeof(bodyRc).err(ECompleted)
         break body                                  # return err()
 
       iv {.inject,used.} = ivReq.flStr              # logging only
 
-    trace info & ": requesting account range", peer, root,
-      notAvailMax=buddy.only.notAvailMax, iv, syncState=buddy.syncState
-
     let
       data = buddy.fetchAccounts(state.stateRoot, ivReq).valueOr:
         sdb.rollbackAccountRange(state, ivReq)      # registry roll back
-        trace info & ": account download failed", peer, root,
-          notAvailMax=buddy.only.notAvailMax, iv, syncState=buddy.syncState,
-          `error`=error
         bodyRc = typeof(bodyRc).err(error)
         if error == ENoDataAvailable and            # not serving this state
            buddy.only.notAvailMax < state.blockNumber:

@@ -59,8 +59,6 @@ template downloadImpl(
       # Fetch from network
       let data = buddy.fetchCodes(state.stateRoot, codeHashes).valueOr:
         state.register accLeft                      # stash data and return
-        trace info & ": fetching codes failed", peer, root,
-          start, nAccLeft=accLeft.len
         break body                                  # error => return
 
       if not state.isOperable():                    # evicted => return
@@ -72,13 +70,12 @@ template downloadImpl(
         state.stateRoot, accLeft[0][0], accLeft[^1][0],
         codeHashes.zip data.codes, peerID).isOkOr:
           state.register(accLeft)                   # stash data and return
-          trace info & ": storing codes failed", peer, root,
+          debug info & ": Storing codes failed", peer, root,
             start, nAccLeft=accLeft.len
           break body                                # error => return
 
       start += data.codes.len
       bodyRc = true                                 # did something
-
       # End `while`
 
   bodyRc
@@ -97,9 +94,6 @@ template downloadFromQueue(
   ##
   var bodyRc = false
   block body:
-    let
-      peer {.inject,used.} = $buddy.peer            # logging only
-      root {.inject,used.} = state.rootStr          # logging only
     var
       accQueue: seq[(ItemKey,CodeHash)]
 
@@ -108,8 +102,6 @@ template downloadFromQueue(
       state.delCode w.key
 
     if 0 < accQueue.len:
-      trace info & ": processing from codes queue", peer, root,
-        nAccQueue=accQueue.len
       bodyRc = buddy.downloadImpl(state, accQueue, info)
 
   bodyRc
@@ -136,13 +128,17 @@ template codeDownload*(
                   it.accBody.codeHash.to(Hash32).to(CodeHash)) )
 
       if state.hasCodeOrStorage:
-        trace info & ": code download", peer, root=state.rootStr,
-          `state`=($buddy.syncState), stateDB=buddy.ctx.pool.stateDB.toStr
+        let sdb {.used.} = buddy.ctx.pool.stateDB   # logging only
+        trace info & ": code download", peer, `state`=state.toStr(sdb),
+          syncState=buddy.syncState
 
         while not buddy.ctrl.stopped and
               state.hasCodeOrStorage and
               buddy.downloadFromQueue(state, info):
           continue
+
+        trace info & ": Byte code done", peer, `state`=state.toStr(sdb),
+          todo=state.hasCodeOrStorage, syncState=buddy.syncState
 
   discard                                           # visual alignment
 

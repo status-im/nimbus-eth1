@@ -51,7 +51,7 @@ proc mkStoTrie(
         continue
 
       # Store `(key,node)` list on trie
-      adb.putStoTrie(mpt.pairs()).isOkOr:
+      adb.putStoTrie(mpt.kvPairs()).isOkOr:
         debug info & ": cannot store slot on trie", stoRoot=stoRoot.toStr,
           iv=(w.start,w.limit).to(float).toStr, nSlot=w.slot.len,
           nProof=w.proof.len,`error`=error, stateDB=sdb.toStr
@@ -142,7 +142,7 @@ proc mkTrieImpl(
         break accListRollBack
 
       # Store `(key,node)` list on trie
-      adb.putAccTrie(mpt.pairs()).isOkOr:
+      adb.putAccTrie(mpt.kvPairs()).isOkOr:
         debug info & ": cannot store accounts on trie", root=root.toStr,
           iv=(start,limit).to(float).toStr, nAccounts=accounts.len,
           nProof=proof.len,`error`=error, stateDB=sdb.toStr

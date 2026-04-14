@@ -59,6 +59,10 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
     buddy.only.finRoot.isErrOr:
       theseFirst.add value
 
+    trace info & ": start downloading", peer,
+      notAvailMax=buddy.only.notAvailMax,
+      syncState=buddy.syncState, nSyncPeers=ctx.nSyncPeers()
+
     # Run `download()` for available states, the order of which is
     # determined by the following criteria with deacening priority
     #

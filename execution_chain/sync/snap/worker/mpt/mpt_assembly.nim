@@ -454,7 +454,10 @@ template putAtMost33(
     key: seq[byte];
     data: openArray[byte];
       ): untyped =
-  db.adb.rPut(col.keyAtMost33 key, data)
+  if key.len == 0:
+    PutResult.err("zero key not allowed")
+  else:
+    db.adb.rPut(col.keyAtMost33 key, data)
 
 template delAtMost33(db: MptAsmRef; col: MptAsmCol; key: seq[byte]): untyped =
   db.adb.rDel(col.keyAtMost33 key)
@@ -937,8 +940,8 @@ proc getAccTrie*(db: MptAsmRef; key: seq[byte]): seq[byte] =
   # @[]
 
 proc putAccTrie*(db: MptAsmRef; nodes: seq[(seq[byte],seq[byte])]): PutResult =
-  for w in nodes:
-    db.putAtMost33(AccTrie, w[0], w[1]).isOkOr:
+  for (key,val) in nodes:
+    db.putAtMost33(AccTrie, key, val).isOkOr:
       return err(error)
   ok()
 
@@ -953,8 +956,8 @@ proc getStoTrie*(db: MptAsmRef; key: seq[byte]): seq[byte] =
   # @[]
 
 proc putStoTrie*(db: MptAsmRef; nodes: seq[(seq[byte],seq[byte])]): PutResult =
-  for w in nodes:
-    db.putAtMost33(StoTrie, w[0], w[1]).isOkOr:
+  for (key,val) in nodes:
+    db.putAtMost33(StoTrie, key, val).isOkOr:
       return err(error)
   ok()
 

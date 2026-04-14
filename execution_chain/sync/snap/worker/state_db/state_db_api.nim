@@ -97,7 +97,7 @@ proc toStr(state: StateDataRef, db: StateDbRef, stateRootOk: bool): string =
   result &=
     "^" & $(db.topNum - state.blockNumber) &
     "@" & (state.touch - db.start).toStr &
-    ":" & (if cov == 0f: "0" else: cov.toPC(6)) &
+    ":" & (if cov == 0f: "0" else: cov.pcStr) &
     "+" & $state.byAccount.len
 
 # ------------------------------------------------------------------------------
@@ -238,7 +238,7 @@ proc register*(
   if stateDbCapacity <= db.byRoot.len:
     # Make space for a new record.
     #
-    # * If there most idle state was last updated before
+    # * If the most idle state was last updated before
     # `stateIdleTimeBeforeEviction`, then remove this one.
     #
     # * Otherwise, if there lowest rank record is completely untouched (i.e.
@@ -612,8 +612,8 @@ proc toStr*(db: StateDbRef): string =
     result &= state.toStr(db, stateRootOk=false) & ","
   result[^1] = '}'
   result &=
-    ":" & db.accountsCoverage.toPC(6) &
-    ":" & db.archived.toPC(6)
+    ":" & db.accountsCoverage.pcStr &
+    ":" & db.archived.pcStr
 
 # ------------------------------------------------------------------------------
 # End

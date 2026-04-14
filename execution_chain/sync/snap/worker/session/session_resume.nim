@@ -163,8 +163,8 @@ template sessionResume*(ctx: SnapCtxRef; info: static[string]): bool =
             napAt = Moment.now() + threadSwitchRunLimit
 
       debug info & ": Download session restored",
-        coverage=sdb.accountsCoverage.toPC(6),
-        archived=sdb.archivedCoverage.toPC(6)
+        coverage=sdb.accountsCoverage.pcStr,
+        archived=sdb.archivedCoverage.pcStr
 
       bodyRc = true
       break body

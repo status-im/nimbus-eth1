@@ -30,7 +30,7 @@ func toStr*(inx: StateRankIndex): string =
   elif inx.unprocTotal == high(UInt256):
     s &= "1"
   else:
-    s &= inx.unprocTotal.per256.toPC(6)
+    s &= inx.unprocTotal.per256.pcStr
   s & "," & $inx.blockNumber & ")"
 
 # ------------------------------------------------------------------------------
