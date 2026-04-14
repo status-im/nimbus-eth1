@@ -22,7 +22,7 @@ import
 
 proc importBlock*(
     buddy: BeaconPeerRef;
-    blk: EthBlock;
+    blk: sink EthBlock;
     effPeerID: Hash;
       ): Future[Result[Duration,BeaconError]]
       {.async: (raises: []).} =

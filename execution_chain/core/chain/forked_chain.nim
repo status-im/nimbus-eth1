@@ -469,7 +469,7 @@ proc queueUpdateBase(c: ForkedChainRef, base: BlockRef)
 proc validateBlock(
     c: ForkedChainRef,
     parent: BlockRef,
-    blk: Block,
+    blk: sink Block,
     blockAccessList: Opt[BlockAccessListRef],
     finalized: bool
   ): Future[Result[BlockRef, string]] {.async: (raises: [CancelledError]).} =
@@ -531,6 +531,12 @@ proc validateBlock(
 
   for i, tx in blk.transactions:
     c.txRecords[computeRlpHash(tx)] = (blkHash, uint64(i))
+
+  # Free block body - transactions are persisted to txFrame, header kept in BlockRef.
+  # This prevents seq[Transaction] from lingering in the async frame.
+  reset(blk.transactions)
+  reset(blk.uncles)
+  blk.withdrawals = Opt.none(seq[Withdrawal])
 
   # Entering base auto forward mode while avoiding forkChoice
   # handled region(head - baseDistance)
@@ -601,9 +607,11 @@ proc processQueue(c: ForkedChainRef) {.async: (raises: [CancelledError]).} =
       idleTimeout = 10.milliseconds
 
     discard await idleAsync().withTimeout(idleTimeout)
-    let
-      item = await c.queue.popFirst()
-      res = await item.handler()
+    var item = await c.queue.popFirst()
+    let res = await item.handler()
+
+    # Release closure to free captured Block data immediately
+    item.handler = nil
 
     if item.responseFut.isNil:
       continue
@@ -685,7 +693,7 @@ proc init*(
 
 proc importBlock*(
     c: ForkedChainRef,
-    blk: Block,
+    blk: sink Block,
     blockAccessList = Opt.none(BlockAccessListRef),
     finalized = false
   ): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =

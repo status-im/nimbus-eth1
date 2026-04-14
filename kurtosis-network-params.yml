@@ -18,6 +18,7 @@ participants:
     use_separate_vc: false
 additional_services:
   - assertoor
+  - spamoor
 mev_type: null
 assertoor_params:
   image: "ethpandaops/assertoor"
