@@ -144,9 +144,11 @@ proc getKey*(
         return ok((VOID_HASH_KEY, vtx))
 
   # Otherwise fetch from backend database
-  var vtxBuf {.noinit.}: VertexBuf
+  var 
+    vtxBuf {.noinit.}: VertexBuf
+    dataLen: int
 
-  let gotData = rdb.vtxCol.get(rvid.blobify().data(), vtxBuf.buf, cast[var int](vtxBuf.n)).valueOr:
+  let gotData = rdb.vtxCol.get(rvid.blobify().data(), vtxBuf.buf, dataLen).valueOr:
     const errSym = RdbBeDriverGetKeyError
     when extraTraceMessages:
       trace logTxt "getKey", rvid, error = errSym, info = error
@@ -154,6 +156,8 @@ proc getKey*(
 
   if not gotData:
     return ok((VOID_HASH_KEY, nil))
+  
+  vtxBuf.n = typeof(vtxBuf.n)(dataLen)
 
   let res = vtxBuf.data().deblobify(HashKey)
 
@@ -204,9 +208,11 @@ proc getVtx*(
       return ok(vtx)
 
   # Otherwise fetch from backend database
-  var vtxBuf {.noinit.}: VertexBuf
+  var 
+    vtxBuf {.noinit.}: VertexBuf
+    dataLen: int
 
-  let gotData = rdb.vtxCol.get(rvid.blobify().data(), vtxBuf.buf, cast[var int](vtxBuf.n)).valueOr:
+  let gotData = rdb.vtxCol.get(rvid.blobify().data(), vtxBuf.buf, dataLen).valueOr:
     const errSym = RdbBeDriverGetVtxError
     when extraTraceMessages:
       trace logTxt "getVtx", vid, error = errSym, info = error
@@ -215,6 +221,8 @@ proc getVtx*(
   if not gotData:
     rdbVtxLruStats[rvid.to(RdbStateType)][RdbVertexType.Empty].inc(false)
     return ok(VertexRef(nil))
+  
+  vtxBuf.n = typeof(vtxBuf.n)(dataLen)
 
   let res = vtxBuf.data().deblobify(VertexRef)
 
