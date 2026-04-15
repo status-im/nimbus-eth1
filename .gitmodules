@@ -233,7 +233,7 @@
 	path = vendor/nim-bncurve
 	url = https://github.com/status-im/nim-bncurve.git
 	ignore = dirty
-	branch = untracked
+	branch = master
 [submodule "vendor/nim-rocksdb"]
 	path = vendor/nim-rocksdb
 	url = https://github.com/status-im/nim-rocksdb.git
