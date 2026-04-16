@@ -30,16 +30,25 @@ type
     tasks*: SinglyLinkedList[Task]
     taskLen*: int
     stop*: bool
-    frontend*: EthApiFrontend
+    frontend*: ExecutionApiFrontend
 
   CallBackProc* = proc(ctx: ptr Context, status: cint, res: cstring, userData: pointer) {.
     cdecl, gcsafe, raises: []
   .}
 
-  TransportProc* = proc(
+  ExecutionTransportProc* = proc(
     ctx: ptr Context,
     url: cstring,
     name: cstring,
+    params: cstring,
+    cb: CallBackProc,
+    userData: pointer,
+  ) {.cdecl, gcsafe, raises: [].}
+
+  BeaconTransportProc* = proc(
+    ctx: ptr Context,
+    url: cstring,
+    endpoint: cstring,
     params: cstring,
     cb: CallBackProc,
     userData: pointer,
