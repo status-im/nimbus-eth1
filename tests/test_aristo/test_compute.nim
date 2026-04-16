@@ -219,6 +219,11 @@ suite "Aristo compute":
     ## RLP serialization through the RlpArrayBufWriter code paths. If any buffer
     ## is undersized the test will fail with an overflow/assertion.
 
+    let
+      db = AristoDbRef.init()
+      txFrame = db.txRef
+      root = STATE_ROOT_VID
+
     # Maximum-size account payload: max nonce, max balance, non-empty codeHash.
     # The storageRoot will be filled in by attaching storage to this account.
     let maxAccount = AristoAccount(
