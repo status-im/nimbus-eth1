@@ -213,8 +213,19 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
     res
 
   # https://ethereum.github.io/execution-apis/api/methods/debug_getRawTransaction
-  server.rpc("debug_getRawTransaction") do(txHash: Hash32) -> seq[byte]:
+  server.rpc("debug_getRawTransaction") do(txHashHex: string) -> seq[byte]:
     ## Returns an EIP-2718 binary-encoded transaction.
+    # TODO: remove manual validation when upstream parsing decoding reports strict
+    # hex input failures .
+    if not txHashHex.startsWith("0x"):
+      raise invalidParams("invalid argument 0: hex string without 0x prefix")
+
+    let txHash =
+      try:
+        Hash32.fromHex(txHashHex)
+      except ValueError as exc:
+        raise invalidParams("invalid argument 0: " & exc.msg)
+
     let res = txPool.getItem(txHash)
     if res.isOk:
       return rlp.encode(res.get().tx)
