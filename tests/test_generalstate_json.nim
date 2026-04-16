@@ -120,8 +120,7 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
     ledger.persist()
 
   let
-    rc = vmState.processTransaction(
-                ctx.tx, sender, ctx.header)
+    rc = vmState.processTransaction(ctx.tx, sender)
     callResult = if rc.isOk:
                    rc.value
                  else:
