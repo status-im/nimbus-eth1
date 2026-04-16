@@ -103,15 +103,14 @@ template downloadFromQueue(
     var
       accQueue: seq[(ItemKey,CodeHash)]
 
-    for w in state.stoItems:
+    for w in state.codeItems(nFetchByteCodesMax):
       accQueue.add (w.key, w.data.code)
       state.delCode w.key
 
     if 0 < accQueue.len:
       trace info & ": processing from codes queue", peer, root,
         nAccQueue=accQueue.len
-      if buddy.downloadImpl(state, accQueue, info):
-        bodyRc = true
+      bodyRc = buddy.downloadImpl(state, accQueue, info)
 
   bodyRc
 
@@ -128,26 +127,22 @@ template codeDownload*(
   ## Async/template
   ##
   block body:
-    if not state.isOperable():                      # evicted => return
-      break body
+    if state.isOperable():                          # evicted => return
 
-    let acc = accounts
-       .filterIt(not it.accBody.codeHash.isEmpty)
-       .mapIt( (it.accHash.to(ItemKey),
-                it.accBody.codeHash.to(Hash32).to(CodeHash)) )
+      # Register downloads for peer synchronisateion
+      state.register accounts
+         .filterIt(not it.accBody.codeHash.isEmpty)
+         .mapIt( (it.accHash.to(ItemKey),
+                  it.accBody.codeHash.to(Hash32).to(CodeHash)) )
 
-    if buddy.ctrl.stopped:
-      state.register acc                            # stash data and return
-      break body                                    # all done
+      if state.hasCodeOrStorage:
+        trace info & ": code download", peer, root=state.rootStr,
+          `state`=($buddy.syncState), stateDB=buddy.ctx.pool.stateDB.toStr
 
-    if not buddy.downloadImpl(state, acc, info) and
-       not state.isOperable():                      # evicted => return
-      break body                                    # all done
-
-    while not buddy.ctrl.stopped and
-          state.hasCodeOrStorage and
-          buddy.downloadFromQueue(state, info):
-      continue
+        while not buddy.ctrl.stopped and
+              state.hasCodeOrStorage and
+              buddy.downloadFromQueue(state, info):
+          continue
 
   discard                                           # visual alignment
 

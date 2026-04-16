@@ -90,7 +90,7 @@ template unpackEngineResult[T](res: EngineResult[T]): T =
   res.valueOr:
     raise newException(ValueError, $error.errType & " -> " & error.errMsg)
 
-proc injectEngineFrontend*(server: JsonRpcServer, frontend: EthApiFrontend) =
+proc injectEngineFrontend*(server: JsonRpcServer, frontend: ExecutionApiFrontend) =
   server.getServer().rpc("eth_blockNumber") do() -> uint64:
     unpackEngineResult(await frontend.eth_blockNumber())
 

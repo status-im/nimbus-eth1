@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  # std/json,
+  std/[json, times],
   json_rpc/rpcserver,
   web3/[eth_api_types, conversions],
   ./rpc_utils,
@@ -21,7 +21,8 @@ import
   ../beacon/web3_eth_conv,
   ../core/tx_pool,
   ../core/chain/forked_chain,
-  ../stateless/witness_types
+  ../stateless/witness_types,
+  ../transaction
 
 type
   BadBlock = object
@@ -214,6 +215,8 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
     res
 
   # https://ethereum.github.io/execution-apis/api/methods/debug_getRawTransaction
+  # we take a string input instead of a hex as in that manner we can preverse the raw json input 
+  # which later allows us to check for the existence of 0x,which the spec expects in a valid input
   server.rpc("debug_getRawTransaction") do(txHashHex: string) -> seq[byte]:
     ## Returns an EIP-2718 binary-encoded transaction.
     # TODO: remove manual validation when upstream parsing decoding reports strict
@@ -256,3 +259,50 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
     ## Returns an execution witness for the given block hash.
     chain.getExecutionWitness(blockHash).valueOr:
       raise newException(ValueError, error)
+
+  ## Custom debug endpoints - not specified in the Execution API
+
+  server.rpc("debug_txPoolDump") do() -> JsonNode:
+    ## Returns a dump of the transaction pool state including per-sender
+    ## transaction details sorted by effective tip.
+    let
+      poolBaseFee = txPool.baseFee
+      now = getTime().utc.toTime
+
+    var senders = newJObject()
+
+    for item in txPool.allItems:
+      let
+        senderHex = $item.sender
+        tip = item.tx.effectiveGasTip(Opt.some(poolBaseFee.u256))
+        age = now - item.time
+        accountNonce = txPool.getNonce(item.sender)
+
+      var txNode = newJObject()
+      txNode["hash"] = newJString($item.id)
+      txNode["nonce"] = newJInt(item.nonce.int64)
+      txNode["accountNonce"] = newJInt(accountNonce.int64)
+      txNode["type"] = newJString($item.tx.txType)
+      txNode["gasLimit"] = newJInt(item.tx.gasLimit.int64)
+      txNode["maxFeePerGas"] = newJInt(item.tx.maxFeePerGasNorm.int64)
+      txNode["maxPriorityFeePerGas"] = newJInt(item.tx.maxPriorityFeePerGasNorm.int64)
+      txNode["effectiveTip"] = newJInt(tip.int64)
+      txNode["value"] = newJString($item.tx.value)
+      txNode["age"] = newJString($age)
+
+      let wv = item.wrapperVersion
+      if wv.isSome:
+        txNode["wrapperVersion"] = newJString($wv.get)
+        txNode["numBlobs"] = newJInt(item.tx.versionedHashes.len.int64)
+        txNode["maxFeePerBlobGas"] = newJString($item.tx.maxFeePerBlobGas)
+
+      if not senders.hasKey(senderHex):
+        senders[senderHex] = newJArray()
+      senders[senderHex].add(txNode)
+
+    var res = newJObject()
+    res["totalTxs"] = newJInt(txPool.len.int64)
+    res["senderCount"] = newJInt(txPool.senderCount.int64)
+    res["baseFee"] = newJInt(poolBaseFee.int64)
+    res["senders"] = senders
+    res

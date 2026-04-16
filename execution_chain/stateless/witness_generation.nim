@@ -9,9 +9,15 @@
 
 {.push raises: [], gcsafe.}
 
-import std/[tables, sets], minilru, eth/common, ../db/[ledger, core_db], ./witness_types
+import
+  std/[tables, sets, algorithm],
+  stew/byteutils,
+  minilru,
+  eth/common,
+  ../db/[ledger, core_db],
+  ./witness_types
 
-export common, ledger, witness_types
+export common, ledger, witness_types, byteutils
 
 proc build*(T: type Witness, witnessKeys: WitnessTable, preStateLedger: LedgerRef): T =
   var
@@ -55,6 +61,10 @@ proc build*(T: type Witness, witnessKeys: WitnessTable, preStateLedger: LedgerRe
   var multiProof: seq[seq[byte]]
   preStateLedger.txFrame.multiProof(proofPaths, multiProof).isOkOr:
     raiseAssert "Failed to get multiproof: " & $$error
+
+  # Sort the proof nodes lexicographically as is done in execution-specs:
+  # https://github.com/ethereum/execution-specs/blob/33aa038697162a3ba0aedbadf177c4c59ee5b007/src/ethereum/forks/amsterdam/stateless_host_exec_witness.py#L230
+  multiProof.sort()
   witness.state = move(multiProof)
 
   for accPath, stoPaths in proofPaths:
@@ -93,7 +103,7 @@ proc build*(
     earliestBlockNumber = getEarliestCachedBlockNumber(blockHashes)
 
   if earliestBlockNumber.isSome():
-    # Add headers in ascending block number order
+    # Add headers in ascending block number order:
     # https://github.com/ethereum/execution-specs/blob/33aa038697162a3ba0aedbadf177c4c59ee5b007/src/ethereum/forks/amsterdam/stateless_host_exec_witness.py#L175-L176
     for n in earliestBlockNumber.get() ..< parent.number:
       let blockHash = ledger.getBlockHash(BlockNumber(n))
@@ -112,6 +122,10 @@ proc build*(
     let code = ledger.txFrame.getCodeByHash(codeHash).valueOr:
       raiseAssert "Code not found"
     codes.add(code)
+
+  # Sort codes lexicographically as is done in execution-specs:
+  # https://github.com/ethereum/execution-specs/blob/33aa038697162a3ba0aedbadf177c4c59ee5b007/src/ethereum/forks/amsterdam/stateless_host_exec_witness.py#L268
+  codes.sort()
 
   var headers: seq[seq[byte]]
   for headerHash in witness.headerHashes:

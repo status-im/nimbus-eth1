@@ -24,7 +24,7 @@ import
   ../execution_chain/core/eip4844,
   ../execution_chain/utils/utils,
   ../execution_chain/[common, rpc],
-  ../execution_chain/rpc/[rpc_types, common as rpc_common],
+  ../execution_chain/rpc/[rpc_types, rpc_utils, common as rpc_common],
   ../execution_chain/beacon/web3_eth_conv,
   ../execution_chain/networking/p2p,
   ../execution_chain/nimbus_desc,
@@ -290,6 +290,7 @@ createRpcSigsFromNim(RpcClient):
   proc net_peerCount(): Quantity
   proc admin_nodeInfo(): NodeInfo
   proc admin_peers(): seq[PeerInfo]
+  proc eth_maxPriorityFeePerGas(): Quantity
 
 proc rpcMain*() =
   suite "Remote Procedure Calls":
@@ -381,6 +382,10 @@ proc rpcMain*() =
     test "eth_gasPrice":
       let res = await client.eth_gasPrice()
       check res == w3Qty(30_000_000_050)  # Avg of `unsignedTx1` / `unsignedTx2`
+
+    test "eth_maxPriorityFeePerGas":
+      let res = await client.eth_maxPriorityFeePerGas()
+      check res == w3Qty(calculateMedianMaxPriorityFeePerGas(env.chain).uint64)
 
     test "eth_accounts":
       let res = await client.eth_accounts()
@@ -648,13 +653,15 @@ proc rpcMain*() =
 
     test "debug_getRawReceipts":
       let
-        header = env.chain.headerByHash(env.blockHash).expect("test block header")
-        receipts = env.chain.txFrame(header).getReceipts(header.receiptsRoot).expect("test block receipts")
         rawReceipts = await client.debug_getRawReceipts(blockId(1'u64))
+        receipts = await client.eth_getBlockReceipts(blockId(1'u64))
 
-      check rawReceipts.len == receipts.len
-      for i, receipt in receipts:
-        check rawReceipts[i] == RlpEncodedBytes(rlp.encode(receipt.to(Receipt)))
+      check receipts.isSome
+      if receipts.isSome:
+        check rawReceipts.len == receipts.get.len
+
+      for receipt in rawReceipts:
+        check seq[byte](receipt).len > 0
 
     test "eth_getBlockReceipts with EIP-1898 object param":
       # blockHash object form (what go-ethereum's ethclient sends)

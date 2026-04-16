@@ -103,7 +103,7 @@ template fetchAccounts*(
       nReqAcc {.inject,used.} = ivReq.len.flStr     # logging only
 
     trace sendInfo, peer, root, reqAcc, nReqAcc,
-      state=($buddy.syncState), nErrors=buddy.nErrors.fetch.acc
+      syncState=buddy.syncState, nErrors=buddy.nErrors.fetch.acc
 
     let rc = await buddy.getAccounts(fetchReq)
     var elapsed: Duration
@@ -118,7 +118,7 @@ template fetchAccounts*(
           break evalError
         of EAlreadyTriedAndFailed:
           trace recvInfo & " error", peer, root, reqAcc, nReqAcc,
-            ela=elapsed.toStr, state=($buddy.syncState), error=rc.errStr,
+            ela=elapsed.toStr, syncState=buddy.syncState, error=rc.errStr,
             nErrors=buddy.nErrors.fetch.acc
           break body                                # return err()
         of EPeerDisconnected, ECancelledError:
@@ -133,19 +133,19 @@ template fetchAccounts*(
 
         # Debug message for other errors
         debug recvInfo & " error", peer, root, reqAcc, nReqAcc,
-          ela=elapsed.toStr, state=($buddy.syncState), error=rc.errStr,
+          ela=elapsed.toStr, syncState=buddy.syncState, error=rc.errStr,
           nErrors=buddy.nErrors.fetch.acc
         break body                                  # return err()
 
     let
       ela {.inject,used.} = elapsed.toStr           # logging only
-      state {.inject,used.} = $buddy.syncState      # logging only
+      syncState {.inject,used.} = $buddy.syncState  # logging only
 
     # Evaluate error result (if any)
     if rc.isErr or buddy.ctrl.stopped:
       buddy.maybeSlowPeerError(elapsed, stateRoot)
       trace recvInfo & " error", peer, root, reqAcc, nReqAcc,
-        ela, state, error=rc.errStr, nErrors=buddy.nErrors.fetch.acc
+        ela, syncState, error=rc.errStr, nErrors=buddy.nErrors.fetch.acc
       break body                                    # return err()
 
     # Check against obvious protocol violations
@@ -164,7 +164,7 @@ template fetchAccounts*(
 
       if accMin < ivReq.minPt:
         trace recvInfo & " min account too low", peer, root, reqAcc, nReqAcc,
-          respAcc, nRespAcc, nRespProof, ela, state,
+          respAcc, nRespAcc, nRespProof, ela, syncState,
           nErrors=buddy.nErrors.fetch.acc
         break body                                  # return err()
 
@@ -180,7 +180,7 @@ template fetchAccounts*(
           buddy.accFetchRegisterError(forceZombie=true)
           trace recvInfo & " excess accounts", peer, root, reqAcc, nReqAcc,
             respAcc, nRespAcc, respAccPreMax=respPreMax.flStr,
-            nRespProof, ela, state, nErrors=buddy.nErrors.fetch.acc
+            nRespProof, ela, syncState, nErrors=buddy.nErrors.fetch.acc
           break body                                # return err()
 
       # An empty proof can only happen if the accounts cover all of the
@@ -195,7 +195,7 @@ template fetchAccounts*(
       #
       buddy.registerPeerError(stateRoot)
       trace recvInfo & " not available", peer, root, reqAcc, nReqAcc,
-        ela, state, nErrors=buddy.nErrors.fetch.acc
+        ela, syncState, nErrors=buddy.nErrors.fetch.acc
       bodyRc = FetchAccountsResult.err(ENoDataAvailable)
       break body                                    # return err()
 
@@ -207,7 +207,7 @@ template fetchAccounts*(
       buddy.ctx.pool.lastSlowPeer = Opt.none(Hash)  # not last one/error
 
     trace recvInfo, peer, root, reqAcc, nReqAcc, respAcc, nRespAcc,
-      nRespProof, ela, state, nErrors=buddy.nErrors.fetch.acc
+      nRespProof, ela, syncState, nErrors=buddy.nErrors.fetch.acc
 
     bodyRc = FetchAccountsResult.ok(rc.value.packet)
 

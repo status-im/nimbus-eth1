@@ -117,7 +117,7 @@ template fetchStorage*(
         ", nAccounts=" & $accounts.len
 
     trace sendInfo, peer, root, nReqAcc, reqSto, nReqSto,
-      state=($buddy.syncState), nErrors=buddy.nErrors.fetch.sto
+      syncState=buddy.syncState, nErrors=buddy.nErrors.fetch.sto
 
     let rc = await buddy.getStorage(fetchReq)
     var elapsed: Duration
@@ -132,7 +132,7 @@ template fetchStorage*(
           break evalError
         of EAlreadyTriedAndFailed:
           trace recvInfo & " error", peer, root, nReqAcc, reqSto, nReqSto,
-            ela=elapsed.toStr, state=($buddy.syncState), error=rc.errStr,
+            ela=elapsed.toStr, syncState=buddy.syncState, error=rc.errStr,
             nErrors=buddy.nErrors.fetch.sto
           break body                                # return err()
         of EPeerDisconnected, ECancelledError:
@@ -147,19 +147,19 @@ template fetchStorage*(
 
         # Debug message for other errors
         debug recvInfo & " error", peer, root, nReqAcc, reqSto, nReqSto,
-          ela=elapsed.toStr, state=($buddy.syncState), error=rc.errStr,
+          ela=elapsed.toStr, syncState=buddy.syncState, error=rc.errStr,
           nErrors=buddy.nErrors.fetch.sto
         break body                                  # return err()
 
     let
       ela {.inject,used.} = elapsed.toStr           # logging only
-      state {.inject,used.} = $buddy.syncState      # logging only
+      syncState {.inject,used.} = $buddy.syncState  # logging only
 
     # Evaluate error result (if any)
     if rc.isErr or buddy.ctrl.stopped:
       buddy.maybeSlowPeerError(elapsed, stateRoot)
       trace recvInfo & " error", peer, root, nReqAcc, reqSto, nReqSto,
-        ela, state, error=rc.errStr, nErrors=buddy.nErrors.fetch.sto
+        ela, syncState, error=rc.errStr, nErrors=buddy.nErrors.fetch.sto
       break body                                    # return err()
 
     # Check against obvious protocol violations
@@ -173,7 +173,7 @@ template fetchStorage*(
         buddy.registerPeerError(stateRoot)
         trace recvInfo & " more slots than requested", peer, root, nReqAcc,
           reqSto, nReqSto, nRespSlots, nRespProof,
-          ela, state, nErrors=buddy.nErrors.fetch.sto
+          ela, syncState, nErrors=buddy.nErrors.fetch.sto
         break body                                  # return err()
 
       let
@@ -189,7 +189,7 @@ template fetchStorage*(
           buddy.registerPeerError(stateRoot)
           trace recvInfo & " error empty slot", peer, root, nReqAcc,
             reqSto, inx=n, nReqSto, nRespSlots=($nRespSlots & "+1"), nRespProof,
-            ela, state, nErrors=buddy.nErrors.fetch.sto
+            ela, syncState, nErrors=buddy.nErrors.fetch.sto
           break body                                # return err()
         stoData.slots[n] = rc.value.packet.slots[n]
 
@@ -205,7 +205,7 @@ template fetchStorage*(
           if slMin < ivReq.minPt:
             trace recvInfo & " min slot item too low", peer, root, nReqAcc,
               reqSto, nReqSto, nRespSlots="0+1", nRespProof,
-              ela, state, nErrors=buddy.nErrors.fetch.sto
+              ela, syncState, nErrors=buddy.nErrors.fetch.sto
             break body                            # return err()
 
           # According to specs, the peer must respond with at least one slot
@@ -221,7 +221,7 @@ template fetchStorage*(
               trace recvInfo & " excess slots", peer, root, nReqAcc,
                 reqSto, nReqSto, nRespSlots="0+1", respSlot,
                 respSlotPreMax=respPreMax.flStr, nRespProof,
-                ela, state, nErrors=buddy.nErrors.fetch.sto
+                ela, syncState, nErrors=buddy.nErrors.fetch.sto
               break body                          # return err()
 
         elif nRespProof == 0:
@@ -231,7 +231,7 @@ template fetchStorage*(
           buddy.registerPeerError(stateRoot)
           trace recvInfo & " error empty slot & proof", peer, root, nReqAcc,
             reqSto, nReqSto, nRespSlots, nRespProof,
-            ela, state, nErrors=buddy.nErrors.fetch.sto
+            ela, syncState, nErrors=buddy.nErrors.fetch.sto
           break body                              # return err()
 
       # Add last item and proof
@@ -246,7 +246,7 @@ template fetchStorage*(
       # data available for this state root.
       buddy.registerPeerError(stateRoot)
       trace recvInfo & " not available", peer, root, nReqAcc, reqSto,
-        nReqSto, ela, state, nErrors=buddy.nErrors.fetch.sto
+        nReqSto, ela, syncState, nErrors=buddy.nErrors.fetch.sto
       bodyRc = FetchStorageResult.err(ENoDataAvailable)
       break body                                  # return err()
 
@@ -273,7 +273,7 @@ template fetchStorage*(
       buddy.registerPeerError(stateRoot)
       trace recvInfo & " protocol violation", peer, root, nReqAcc,
         reqSto, nReqSto, nRespSlots, nRespProof,
-        ela, state, nErrors=buddy.nErrors.fetch.sto
+        ela, syncState, nErrors=buddy.nErrors.fetch.sto
       break body                                  # return err()
 
     # Ban an overly slow peer for a while when observed consecutively.
@@ -285,7 +285,7 @@ template fetchStorage*(
 
     trace recvInfo, peer, root, nReqAcc, reqSto, nReqSto,
       nRespSlots=($stoData.slots.len & "+" & $(0 < stoData.slot.len).ord),
-      nRespProof, ela, state, nErrors=buddy.nErrors.fetch.sto
+      nRespProof, ela, syncState, nErrors=buddy.nErrors.fetch.sto
 
     bodyRc = FetchStorageResult.ok(stoData)
 

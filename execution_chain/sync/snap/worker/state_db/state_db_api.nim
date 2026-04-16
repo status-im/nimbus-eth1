@@ -11,36 +11,37 @@
 {.push raises:[].}
 
 import
-  std/[hashes, sequtils, sets, strformat, strutils, tables],
+  std/[hashes, sequtils, sets, strutils, tables],
   pkg/[chronicles, eth/common, metrics],
   pkg/stew/[interval_set, sorted_set],
   ../[helpers, worker_const],
-  ./[state_identifiers, state_item_key, state_unproc_item_keys]
+  ./[state_identifiers, state_item_key, state_rank_index,
+     state_unproc_item_keys]
 
 logScope:
   topics = "snap sync"
 
-declareGauge nec_snap_accumulated_state_coverage, "" &
-  "Factor of accumulated accounts covered over all state root records"
+declareGauge nec_snap_accumulated_states_coverage, "" &
+  "Factor of accumulated account ranges covered over all state root records"
 
 declareGauge nec_snap_pivot_state_coverage, "" &
-  "Max factor of accounts covered related to a single state root"
+  "Max factor of account ranges covered related to a single state root"
+
+declareGauge nec_snap_archived_states_coverage, "" &
+  "Factor of archived account ranges covered"
 
 declareGauge nec_snap_active_states, "" &
   "Number of active state root indexed caches to download to"
 
 type
-  StateByNumber = SortedSet[BlockNumber,StateDataRef]
+  StateByRank = SortedSet[StateRankIndex,StateDataRef]
     ## List of incomplete states downloaded from the `snap` network
 
-  WalkByNumber = SortedSetWalkRef[BlockNumber,StateDataRef]
-    ## Quick traversal descriptor (internal descriptor)
+  WalkByRank = SortedSetWalkRef[StateRankIndex,StateDataRef]
+    ## Quick traversal descriptor
 
   StateByRoot = Table[StateRoot,StateDataRef]
-    ## Same list as above, LRU, indexed by state root
-
-  StateByHash = Table[BlockHash,StateDataRef]
-    ## Same list as above, no LRU features used, indexed by block hashes
+    ## Same list as above, indexed by state root
 
   DataByAccount = SortedSet[ItemKey,AccDataRef]
     ## For storage slots book keeping
@@ -67,150 +68,72 @@ type
 
   StateDbRef* = ref object
     ## Download states db
-    unproc: ItemKeyRangeSet             ## Globally unprocessed accounts
-    carryOver: float                    ## Number of `unproc` resets/re-inits
-    pivot: StateDataRef                 ## Least unproc data
-    byNumber: StateByNumber             ## States indexed by block number
-    byHash: StateByHash                 ## States indexed by block hash
+    allUnproc: ItemKeyRangeSet          ## Globally unprocessed accounts
+    carryOver: float                    ## Overflow coverage
+    archived: float                     ## Evicted states coverage
+    topNum: BlockNumber                 ## Latest observed block number
+    byRank: StateByRank                 ## States indexed by some ranking
     byRoot: StateByRoot                 ## States indexed by state root
 
-func rootStr*(state: StateDataRef): string
 func accountsCoverage*(db: StateDbRef): float
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc evictableState(db: StateDbRef; info: static[string]): StateDataRef =
-  ## If the state list is empty, `nil` is returned.
+func rankIndex(state: StateDataRef): StateRankIndex =
+  (state.unproc.total(), state.blockNumber).to(StateRankIndex)
+
+proc updateRank(
+    db: StateDbRef;
+    oldInx: StateRankIndex;
+    state: StateDataRef) =
+  ## Update DB ranking index. The argument `oldInx` is the index of
+  ## argument `state` (i.e. `state.rankIndex` prior to any change.
+  let newInx = state.rankIndex
+  if oldInx != newInx:
+    discard db.byRank.delete oldInx
+    db.byRank.findOrInsert(newInx).value.data = state
+
+proc evict(db: StateDbRef, state: StateDataRef, info: static[string]) =
+  ## Remove state from database and update range accounting. This may
+  ## reset the `db.pivot` state to `nil`.
   ##
-  ## If there are some state which are not even partially completed (i.e.
-  ## all accounts are unprocessed), the one with the least block number is
-  ## returned.
-  ##
-  ## Otherwise, if the pivot state is not completed (i.e. has unprocessed
-  ## data) and has the least block number and there is another state in the
-  ## list which is minimally completed when compared to the pivot state (see
-  ## constant `relativeCoverageEvictionThreshold`), off all such pivot
-  ## states the one with the least block number is selected.
-  ##
-  ## Otherwise, if the pivot state is not completed, this function searches
-  ## for the state with the maximal size of the unprocessed accounts data
-  ## range with block number not exceeding the one of the pivot state. The
-  ## resulting state will be returned which might include the pivot state
-  ## itself.
-  ##
-  ## Otherwise, if the pivot is completed (i.e. no unprocessed data), it will
-  ## never be returned but the full state list without the pivot state is
-  ## searched for the state with maximal unprocessed accounts data interval.
-  ## The result might be `nil`.
-  ##
-  if db.byNumber.len == 0:                          # fringe condition
-    return StateDataRef(nil)                        # done (that was easy)
-  let
-    maxBlock = (if db.pivot.isNil: high BlockNumber else: db.pivot.blockNumber)
-  var
-    walk = WalkByNumber.init(db.byNumber)
-    rc = walk.first                                 # increasing block height
-  defer: walk.destroy
+  discard db.byRank.delete state.rankIndex          # ditto
+  db.byRoot.del state.stateRoot                     # ..
+  state.deadState = true                            # mark it evicted
 
-  result = StateDataRef(nil)                        # empty => `nil`
-  var unprocData = low(UInt256)                     # min value for maximiser
+  # Roll back global `allUnproc`/`carryOver` registers. The acoounting goes as
+  # follows:
+  #
+  # * Processed intervals are not turned back as intervals, but the total
+  #   ratio is removed from the `carryOver` register.
+  #
+  # * The same total ratio is added to the archived register.
+  #
+  var processedRatio = 1f - state.unproc.totalRatio()
+  db.carryOver -= processedRatio                    # roll back
+  db.archived += processedRatio                     # roll forward
 
-  while rc.isOk:
-    let state = rc.value.data
-    if maxBlock < state.blockNumber:
-      break                                         # end of list (first pass)
-    rc = walk.next                                  # set next state
-
-    state.unproc.total.isErrOr:                     # otherwise see below
-      if value == 0:                                # `0 => 2^256` => empty
-        return state
-      if unprocData < value:
-        (result, unprocData) = (state, value)       # maximise stepwise
-      continue
-    if result.isNil:                                # prv `err()` => empty state
-      (result, unprocData) = (state, 0.u256)        # maximise stepwise
-    # End `while`
-
-  if result == db.pivot and rc.isOk:
-    # Initialise a new maximiser and continue searching for the least
-    # completed state.
-    var otherData = low UInt256                     # keep `unprocData` safe
-    result= StateDataRef(nil)
-    while rc.isOk:
-      let state = rc.value.data
-      rc = walk.next                                # set next state
-
-      state.unproc.total.isErrOr:                   # `err()` => `0` => ignore
-        if value == 0:                              # `0 => 2^256` => empty
-          return state                              # done
-        if otherData < value:
-          (result, otherData) = (state, value)      # maximise stepwise
-        continue
-      if result.isNil:                              # prv `err()` => empty state
-        result = state                              # initialise
-      # End `while`
-
-    # Now, all state are at least partially completed. Check whether the pivot
-    # was not fully completed in which case it can be deleted (unless there
-    # is a minimally completed state found.)
-    if unprocData != 0 or                           # not all accounts done with
-       db.pivot.byAccount.len != 0:                 # more slots or code to do
-      let ratio = (1f - otherData.per256) / (1f - unprocData.per256)
-      if relativeCoverageEvictionThreshold < ratio: # check unprocessed ratio
-        debug info & ": selecting pivot for eviction", root=db.pivot.rootStr,
-          hash=db.pivot.blockHash.toStr, otherState=result.rootStr,
-          covRatio=ratio.toPC(4)
-        result = db.pivot
-
-  # result
-
-func findMinUnproc(db: StateDbRef): StateDataRef =
-  ## Find the state with the least nprocessed interval range. If there are
-  ## more items with the same# range, the one with the greater block number
-  ## is returned.
-  ##
-  var
-    walk = WalkByNumber.init(db.byNumber)
-    rc = walk.last                                  # decreasing block height
-  defer: walk.destroy
-
-  result = StateDataRef(nil)                        # empty => `nil`
-  var unprocData = high(UInt256)                    # max value for minimiser
-
-  while rc.isOk:
-    let state = rc.value.data
-    rc = walk.prev                                  # set previous state
-
-    let stateUnproc = state.unproc.total.valueOr:   # `err()` => `0` => all done
-      return state
-    if stateUnproc != 0 and                         # `0` => `2^256`
-       stateUnproc < unprocData:
-      (result, unprocData) = (state, stateUnproc)   # minimise stepwise
-    # End `while`
-
-  # result
-
-proc rollBackAccounts(db: StateDbRef, state: StateDataRef) =
-  ## Roll back global unproc register (as best as possible)
-  var carry = 0.u256
-  for iv in state.unproc.unprocessed.complement.increasing:
-    carry += (iv.len - db.unproc.merge iv)        # hand back processed ranges
-  db.carryOver -= carry.per256                    # adjust by carry over field
-  let totalRatio = db.unproc.totalRatio
-  if db.carryOver < totalRatio - 1f:              # maybe some rounding errors?
-    db.carryOver = totalRatio - 1f
+proc allUnprocRollOverIfEmpty(db: StateDbRef) =
+  ## Roll over empty register and re-initialise
+  if db.allUnproc.chunks == 0:
+    db.carryOver += 1f
+    db.allUnproc = ItemKeyRangeSet.init ItemKeyRangeMax
 
 proc resetMetrics(db: StateDbRef) =
-  metrics.set(nec_snap_accumulated_state_coverage, 0f)
-  metrics.set(nec_snap_pivot_state_coverage, 0f)
+  metrics.set(nec_snap_archived_states_coverage, 0f)
+  metrics.set(nec_snap_accumulated_states_coverage, 0f)
   metrics.set(nec_snap_active_states, 0)
+  metrics.set(nec_snap_pivot_state_coverage, 0f)
 
 proc updateMetrics(db: StateDbRef) =
-  metrics.set(nec_snap_accumulated_state_coverage, db.accountsCoverage())
-  metrics.set(nec_snap_pivot_state_coverage, (1f - db.pivot.unproc.totalRatio))
+  metrics.set(nec_snap_archived_states_coverage, db.archived)
+  metrics.set(nec_snap_accumulated_states_coverage, db.accountsCoverage())
   metrics.set(nec_snap_active_states, db.byRoot.len)
+  db.byRank.ge(low StateRankIndex).isErrOr():
+    metrics.set(nec_snap_pivot_state_coverage,
+                (1f - value.data.unproc.totalRatio))
 
 # ------------------------------------------------------------------------------
 # Public constructor
@@ -218,18 +141,17 @@ proc updateMetrics(db: StateDbRef) =
 
 proc init*(T: type StateDbRef): T =
   let db = T(
-    unproc:   ItemKeyRangeSet.init ItemKeyRangeMax,
-    byNumber: StateByNumber.init())
+    allUnproc: ItemKeyRangeSet.init ItemKeyRangeMax,
+    byRank:    StateByRank.init state_rank_index.cmp)
   db.resetMetrics()
   db
 
 proc clear*(db: StateDbRef) =
   db.carryOver = 0f
-  db.pivot = StateDataRef(nil)
-  db.unproc.clear
-  db.byNumber.clear
-  db.byNumber.clear
-  db.byHash.clear
+  db.archived = 0f
+  db.topNum = BlockNumber(0)
+  db.allUnproc.clear
+  db.byRank.clear
   db.byRoot.clear
   db.resetMetrics()
 
@@ -247,27 +169,11 @@ proc register*(
   ## Update or register new account state record on database. The result is
   ## the current state record, or the new one created (not `nil`.)
   ##
-  proc del(db: StateDbRef, state: StateDataRef) =
-    doAssert not state.isNil
-    discard db.byNumber.delete state.blockNumber    # delete index
-    db.byHash.del state.blockHash                   # ditto
-    db.byRoot.del state.stateRoot                   # ...
-    if db.pivot == state:
-      db.pivot = StateDataRef(nil)
-    db.rollBackAccounts state
-    state.deadState = true                          # mark it evicted
+  db.byRoot.withValue(root, value):
+      return value[]                                # nothing to do
 
-  db.byNumber.eq(number).isErrOr:
-    let blockHash = value.data.blockHash
-    if blockHash == hash:
-      return value.data                             # already registered
-    # Otherwise, the entry will be replaced, below
-    if db.pivot == value.data:
-      debug info & ": replacing pivot", root=value.data.rootStr,
-        hash=blockHash.toStr, newRoot=root.Hash32.short,
-        newHash=hash.Hash32.short
-      discard                                       # in case `debug` is empty
-    db.del value.data                               # remove index columns
+  if db.topNum < number:                            # largest known block num
+    db.topNum = number
 
   # New state record
   var newState = StateDataRef(
@@ -278,75 +184,46 @@ proc register*(
   newState.unproc.init ItemKeyRangeMax
 
   # Move block height window when necessary.
-  if stateDbCapacity <= db.byNumber.len:
+  if stateDbCapacity <= db.byRoot.len:
     # Clear item with the largest unprocessed data range
-    db.del db.evictableState(info)                  # remove index columns
-    if db.pivot.isNil:                              # update pivot if evicted
-      db.pivot = db.findMinUnproc()                 # night be `nil`
+    let lowest = db.byRank.le(high StateRankIndex).value.data
+    db.evict(lowest, info)                          # remove index columns
 
   # Add `newState` to database
-  db.byNumber.findOrInsert(number).value.data = newState
-  db.byHash[hash] = newState
+  db.byRank.findOrInsert(newState.rankIndex).value.data = newState
   db.byRoot[root] = newState
-
-  # Set pivot as needed
-  if db.pivot.isNil:
-    db.pivot = newState
-  else:
-    db.pivot.unproc.total.isErrOr:
-      if value == 0:                                # nothing done yet?
-        db.pivot = newState                         # use the latest one
 
   newState                                          # return state record
 
 
-func hasKey*(db: StateDbRef; bn: BlockNumber): bool =
-  db.byNumber.eq(bn).isOk()
-
-func hasKey*(db: StateDbRef ; hash: BlockHash): bool =
-  db.byHash.hasKey(hash)
-
 func hasKey*(db: StateDbRef; root: StateRoot): bool =
   db.byRoot.hasKey(root)
-
-func get*(db: StateDbRef; bn: BlockNumber): Opt[StateDataRef] =
-  db.byNumber.eq(bn).isErrOr:
-    return ok(value.data)
-  err()
-
-func next*(db: StateDbRef, bn: BlockNumber): Opt[StateDataRef] =
-  ## Retrieve the state data record which has the least higher block
-  ## number than the argument `bn`.
-  db.byNumber.gt(bn).isErrOr:
-    return ok value.data
-  err()
-
-func get*(db: StateDbRef; hash: BlockHash): Opt[StateDataRef] =
-  db.byHash.withValue(hash, value):
-    return ok value[]
-  err()
 
 func get*(db: StateDbRef; root: StateRoot): Opt[StateDataRef] =
   db.byRoot.withValue(root, value):
     return ok value[]
   err()
 
-
-func len*(db: StateDbRef): int =
-  db.byNumber.len
-
 func pivot*(db: StateDbRef): Opt[StateDataRef] =
   ## Retrieve the state data record with a minimal unprocessed interval range.
-  if db.pivot.isNil:
-    err()
-  else:
-    ok db.pivot
-
-func top*(db: StateDbRef): Opt[StateDataRef] =
-  ## Retrieve the state data record with the highest block number.
-  db.byNumber.le(high BlockNumber).isErrOr:
+  db.byRank.ge(low StateRankIndex).isErrOr():
     return ok value.data
   err()
+
+func lowest*(db: StateDbRef): Opt[StateDataRef] =
+  ## Return lowest ranked state, ot `nil` if the DB is empty
+  db.byRank.le(high StateRankIndex).isErrOr():
+    return ok value.data
+  err()
+
+func top*(db: StateDbRef): BlockNumber =
+  ## If positive, the function returns the largest block number known to the
+  ## DB. This number will not refer to a retrievable state from the DB if the
+  ## state was evicted.
+  db.topNum
+
+func len*(db: StateDbRef): int =
+  db.byRoot.len
 
 
 proc setHealingReady*(state: StateDataRef) =
@@ -370,7 +247,7 @@ proc isComplete*(state: StateDataRef): bool =
 
 func accountsCoverage*(db: StateDbRef): float =
   ## Coverage of accounts over all states
-  max(0f, 1f - db.unproc.totalRatio + db.carryOver)
+  max(0f, 1f - db.allUnproc.totalRatio + db.carryOver)
 
 func accountsCoverage*(state: StateDataRef): float =
   ## Coverage of accounts for a particular state
@@ -397,37 +274,34 @@ proc fetchAccountRange*(
      state.unproc.avail().isErr():                  # all done this state
     return err()
 
-  # Carry over empty register and re-initialise
-  if db.unproc.chunks == 0:
-    db.carryOver += 1f
-    db.unproc = ItemKeyRangeSet.init ItemKeyRangeMax
-
   # Fetch interval from state, coordinated by the global register. This results
   # in minimal overlap of processed intervals over all active states.
   var
     restore: seq[ItemKeyRange]                      # temp. blocked items
     iRange: ItemKeyRange                            # return value
   while true:
-    let giv = db.unproc.fetchLeast(unprocAccountsRangeMax).valueOr:
+    let giv = db.allUnproc.fetchLeast(unprocAccountsRangeMax).valueOr:
       # No overlapping data, fetch directly from `state`
       iRange = state.unproc.fetchLeast(unprocAccountsRangeMax)
                            .expect "Valid state range"
+      db.carryOver += iRange.len.per256             # register as overflow
       break
     # Fetch this interval from local range set
     state.unproc.fetchSubRange(giv).isErrOr:
       iRange = value
       # Unused ranges, subsets of `giv`
       if giv.minPt < value.minPt:
-        discard db.unproc.merge(giv.minPt, value.minPt-1)
+        discard db.allUnproc.merge(giv.minPt, value.minPt-1)
       if value.maxPt < giv.maxPt:
-        discard db.unproc.merge(value.maxPt+1, giv.maxPt)
+        discard db.allUnproc.merge(value.maxPt+1, giv.maxPt)
       break
     restore.add giv
 
   # Restore temporarily locked intervals
   for iv in restore:
-    discard db.unproc.merge iv                      # restore global range
+    discard db.allUnproc.merge iv                   # restore global range
 
+  db.allUnprocRollOverIfEmpty()                     # global register roll over
   ok iRange
 
 proc rollbackAccountRange*(
@@ -440,7 +314,7 @@ proc rollbackAccountRange*(
   ##
   if not state.deadState:
     state.unproc.commit(iv, iv)
-    discard db.unproc.merge(iv)
+    db.carryOver -= (iv.len - db.allUnproc.merge(iv)).per256
 
 proc commitAccountRange*(
     db: StateDbRef;
@@ -451,25 +325,26 @@ proc commitAccountRange*(
   ## Remove the completed interval `iv.minPt..limit`, and restore non-completed
   ## parts `limit+1..iv.maxPt` on the registry managing unprocessed ranges.
   ##
+  ## This function also updates the ranking.
+  ##`
   if not state.deadState:
+    let oldInx = state.rankIndex
     if limit < iv.maxPt:
       state.unproc.commit(iv, limit + 1, iv.maxPt)
-      discard db.unproc.merge(limit + 1, iv.maxPt)
+      db.carryOver -= (iv.maxPt - limit -
+                       db.allUnproc.merge(limit + 1, iv.maxPt)).per256
 
     elif iv.maxPt < limit:
       state.unproc.commit(iv)
       state.unproc.overCommit(iv.maxPt + 1, limit)
-      discard db.unproc.reduce(iv.maxPt + 1, limit)
+      db.carryOver += (limit - iv.maxPt -
+                       db.allUnproc.reduce(iv.maxPt + 1, limit)).per256
 
     else: # iv.maxPt == limit
       state.unproc.commit(iv)
 
-    # Updates state record with the most account ranges processed, i.e. the
-    # least unpprocessed account ranges left.
-    db.pivot.unproc.total.isErrOr:                # otherwise all done
-      if value == 0 or state.unproc.total.value < value:
-        db.pivot = state
-
+    db.updateRank(oldInx, state)                    # update ranking
+    db.allUnprocRollOverIfEmpty()                   # global register roll over
     db.updateMetrics()
 
 proc setAccountRange*(
@@ -481,20 +356,13 @@ proc setAccountRange*(
   ## The function sets an account range and commits it immediately.
   ##
   if not state.deadState:
+    let oldInx = state.rankIndex
     state.unproc.overCommit(start, limit)
-    db.carryOver += (limit - start + 1 - db.unproc.reduce(start, limit)).per256
+    db.carryOver += (limit - start + 1 -
+                     db.allUnproc.reduce(start, limit)).per256
 
-    # Updates state record with the most account ranges processed, i.e. the
-    # least unpprocessed account ranges left.
-    db.pivot.unproc.total.isErrOr:                  # otherwise all done
-      if value == 0 or state.unproc.total.value < value:
-        db.pivot = state
-
-    # Carry over empty register and re-initialise
-    if db.unproc.chunks == 0:
-      db.carryOver += 1f
-      db.unproc = ItemKeyRangeSet.init ItemKeyRangeMax
-
+    db.updateRank(oldInx, state)                    # update ranking
+    db.allUnprocRollOverIfEmpty()                   # global register roll over
     db.updateMetrics()
 
 # ------------------------------------------------------------------------------
@@ -573,95 +441,69 @@ func hasCodeOrStorage*(state: StateDataRef): bool =
 # Public iterator(s)
 # ------------------------------------------------------------------------------
 
-iterator stoItems*(state: StateDataRef): tuple[key: ItemKey, data: AccDataRef] =
+iterator stoItems*(
+    state: StateDataRef;
+    maxItems = high(int);
+      ): tuple[key: ItemKey, data: AccDataRef] =
   ## Iterate over all account entries with increasing `ItemKey` keys and
   ## return non-empty storage tree information.
-  var rc = state.byAccount.ge(low ItemKey)
-  while rc.isOk:
+  ##
+  ## This iterator is resilient against changes of the code base. Yet, after
+  ## adding entries with keys smaller than the last returned `key`, these
+  ## entries will be missed through the current cycle.
+  ##
+  var
+    count = 0
+    rc = state.byAccount.ge(low ItemKey)
+  while rc.isOk and count < maxItems:
+    count.inc
     let (key, data) = (rc.value.key, rc.value.data)
     if data.stoRoot != StoreRoot(EMPTY_ROOT_HASH):
+      yield (key, data)
+    rc = state.byAccount.gt(key)
+
+iterator codeItems*(
+    state: StateDataRef;
+    maxItems = high(int);
+      ): tuple[key: ItemKey, data: AccDataRef] =
+  ## Similar to `stoItems()` but for codes.
+  ##
+  var
+    count = 0
+    rc = state.byAccount.ge(low ItemKey)
+  while rc.isOk and count < maxItems:
+    count.inc
+    let (key, data) = (rc.value.key, rc.value.data)
+    if data.code != CodeHash(EMPTY_CODE_HASH):
       yield (key, data)
     rc = state.byAccount.gt(key)
 
 iterator items*(
     db: StateDbRef;
     startWith = seq[StateRoot].default;
-    truncate: static[bool] = false;
-    ascending: static[bool] = false;
+    ignoreLe = BlockNumber(0);
       ): StateDataRef =
-  ## Iterate over all `db` entries with increasing block numbers.
+  ## Iterate over all `db` entries with decreasing rank selecting the pivot
+  ## state first, which has the hihgest rank. If the block number of the
+  ## selected does not exceed the argument `ignoreLe`, it is discarded.
   ##
   ## If the argument `startWith` is set, the corresponding records are yielded
   ## first, followed by the rest of the database entries without the
   ## `startWith` entries.
   ##
-  ## By default, the argument `ascending` is set `true` and the rest of the
-  ## database entries (after `startWith`) are yielded with increasing block
-  ## numbers. If  `ascending` is set `false`, the rest of the database entries
-  ## are yelded with decreasing block numbers.
-  ##
-  ## If the argument `truncate` is set `true`, the iterator yields the rest
-  ## of the database up to, exluding the `startWith` entries. Otherwise, when
-  ## `truncate` is set `false` (which is the default), the rest of the
-  ## database is listed without the `startWith` entry.
-  ##
   var seenItems: HashSet[BlockNumber]
   for w in startWith.items:
     db.byRoot.withValue(w,value):
-      if value.blockNumber notin seenItems:
+      if value.blockNumber notin seenItems and ignoreLe < value.blockNumber:
         seenItems.incl value.blockNumber
         yield value[]
 
-  when ascending:
-    var rc = db.byNumber.ge(0)
-    when truncate:
-
-      # Iterate ascending, stop after seenItems
-      while rc.isOk:
-        let (key, data) = (rc.value.key, rc.value.data)
-        if data.blockNumber notin seenItems:
-          yield data
-        elif 1 < seenItems.len:                     # check whether to continue
-          seenItems.excl data.blockNumber           # remove seen item
-        else:
-          break                                     # stop after last seen item
-        rc = db.byNumber.gt(key)
-    else:
-
-      # Iterate ascending over full list
-      while rc.isOk:
-        let (key, data) = (rc.value.key, rc.value.data)
-        if data.blockNumber notin seenItems:
-          yield data
-        rc = db.byNumber.gt(key)
-  else:
-    var rc = db.byNumber.le(high(BlockNumber))
-    when truncate:
-
-      # Iterate descending, stop after seenItems
-      while rc.isOk:
-        let (key, data) = (rc.value.key, rc.value.data)
-        if data.blockNumber notin seenItems:
-          yield data
-        elif 1 < seenItems.len:                     # check whether to continue
-          seenItems.excl data.blockNumber           # remove seen item
-        else:
-          break                                     # stop after last seen item
-        rc = db.byNumber.lt(key)
-    else:
-
-      # Iterate descending over full list
-      while rc.isOk:
-        let (key, data) = (rc.value.key, rc.value.data)
-        if data.blockNumber notin seenItems:
-          yield data
-        rc = db.byNumber.lt(key)
-
-func states*(db: StateDbRef): seq[StateDataRef] =
-  ## Variant of the `items` iterator returning a sequence where the states have
-  ## descending block height.
-  for state in db.items(truncate = false, ascending=false):
-    result.add state
+  var rc = db.byRank.ge(low StateRankIndex)
+  while rc.isOk:
+    let (key, data) = (rc.value.key, rc.value.data)
+    if data.blockNumber notin seenItems and ignoreLe < data.blockNumber:
+      yield data
+    rc = db.byRank.gt(key)
 
 # ------------------------------------------------------------------------------
 # Public debugging helpers
@@ -676,37 +518,33 @@ func bnStr*(rc: Opt[StateDataRef]): string =
 func rootStr*(state: StateDataRef): string =
   state.stateRoot.Hash32.short & "(" & $state.blockNumber & ")"
 
-func toStr*(db: seq[StateDataRef]): string =
-  ## Print a list of processed ranges for the argument stats.
-  "{" & db.mapIt(
+func toStr*(states: seq[StateDataRef]): string =
+  ## Print a list of processed ranges for the argument `states`.
+  "{" & states.mapIt(
     $it.blockNumber & "^" &
     it.unproc.unprocessed.complement.toStr).join(",") & "}"
 
 func toStr*(db: StateDbRef): string =
-  let
-    top = db.top.valueOr:
-      return "n/a"
-    base2 = (top.blockNumber div 100) * 100
-    base3 = (top.blockNumber div 1000) * 1000
-    base4 = (top.blockNumber div 10000) * 10000
+  if db.byRoot.len == 0:
+    return "n/a"
+  var walk = WalkByRank.init(db.byRank)
+  defer: walk.destroy()
 
-  result = $top.blockNumber & "->{"
-  for state in db.items(ascending=false):
-    if 0 < base2 and base2 <= state.blockNumber:
-      result &= &"{(state.blockNumber - base2):02}"
-    elif 0 < base3 and base3 <= state.blockNumber:
-      result &= &"{(state.blockNumber - base3):03}"
-    elif 0 < base4 and base4 <= state.blockNumber:
-      result &= &"{(state.blockNumber - base4):04}"
-    else:
-      result &= $state.blockNumber
-    if db.pivot == state:
-      result &= "*"
-    result &= ":" & state.accountsCoverage.toPC(6)
-    result &= "+" & $state.byAccount.len
-    result &= ","
+  result = $db.topNum & "->{"
+  var rc = walk.first
+  while rc.isOk:
+    let state = rc.value.data
+    rc = walk.next
+    result &=
+      $state.blockNumber &
+      "^" & $(db.topNum - state.blockNumber) &
+      ":" & state.accountsCoverage.toPC(6) &
+      "+" & $state.byAccount.len &
+      ","
   result[^1] = '}'
-  result &= ":" & db.accountsCoverage.toPC(6)
+  result &=
+    ":" & db.accountsCoverage.toPC(6) &
+    ":" & db.archived.toPC(6)
 
 # ------------------------------------------------------------------------------
 # End
