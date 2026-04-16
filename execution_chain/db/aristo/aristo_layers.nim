@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -141,11 +141,24 @@ func layersPutKey*(
   ## Store a (potentally void) hash key on the top layer - we don't store keys
   ## for leaves since these are trivial to compute
   let vtx = db.layersPrepareUpdate(rvid, vtx)
-
   db.kMap[rvid] = key
 
   if db.snapshot.level.isSome():
     db.snapshot.vtx[rvid] = (VertexRef(vtx), key, db.level)
+
+func layersMergeKey*(
+    db: AristoTxRef;
+    rvid: RootedVertexID;
+    key: HashKey;
+      ) =
+  ## Store a (potentally void) hash key on the top layer - we don't store keys
+  ## for leaves since these are trivial to compute
+  # Precondition: the vertex for the given rvid should exist
+  db.kMap[rvid] = key
+
+  if db.snapshot.level.isSome():
+    db.snapshot.vtx.withValue(rvid, value):
+      value[1] = key
 
 func layersResKey*(db: AristoTxRef; rvid: RootedVertexID, vtx: BranchRef) =
   ## Shortcut for `db.layersPutKey(vid, VOID_HASH_KEY)` which resets the hash
