@@ -12,7 +12,7 @@
 
 import
   std/math,
-  eth/common/keys,
+  eth/common/[keys, transaction_utils],
   results,
   unittest2,
   chronos,
@@ -964,3 +964,45 @@ suite "TxPool test suite":
       tip0 = txs[0].effectiveGasTip(baseFee)
       tip1 = txs[1].effectiveGasTip(baseFee)
     check tip0 >= tip1
+
+  test "Tip ordering: equal tips use FIFO tiebreaker":
+    let
+      env = initEnv(Cancun)
+      xp = env.xp
+      mx = env.sender
+
+    xp.prevRandao = prevRandao
+    xp.feeRecipient = feeRecipient
+    xp.timestamp = EthTime.now()
+
+    let
+      accFirst = mx.getAccount(0)
+      accSecond = mx.getAccount(1)
+      # Identical tip and fee for both
+      tc = BaseTx(
+        txType: Opt.some(TxEip1559),
+        gasLimit: 75000,
+        gasTip: 5.gwei,
+        gasFee: 30.gwei,
+        recipient: Opt.some(recipient),
+        amount: 1.u256,
+      )
+      ptxFirst = mx.makeTx(tc, accFirst, 0)
+      ptxSecond = mx.makeTx(tc, accSecond, 0)
+
+    # Add first, then second — FIFO should preserve this order
+    xp.checkAddTx(ptxFirst)
+    xp.checkAddTx(ptxSecond)
+
+    let bundle = xp.checkAssembleBlock(2)
+    let txs = bundle.blk.transactions
+    let baseFee = bundle.blk.header.baseFeePerGas
+
+    # Both should have identical tips
+    let
+      tip0 = txs[0].effectiveGasTip(baseFee)
+      tip1 = txs[1].effectiveGasTip(baseFee)
+    check tip0 == tip1
+
+    # First-added tx should come first (FIFO)
+    check txs[0].recoverSender().expect("valid sig") == accFirst.address
