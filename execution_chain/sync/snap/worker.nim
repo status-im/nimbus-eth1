@@ -66,7 +66,7 @@ proc start*(buddy: SnapPeerRef; info: static[string]): bool =
 proc stop*(buddy: SnapPeerRef; info: static[string]) =
   ## Clean up this peer
   debug info & ": release peer", peer=buddy.peer,
-    nSyncPeers=(buddy.ctx.nSyncPeers()-1), state=($buddy.syncState)
+    nSyncPeers=(buddy.ctx.nSyncPeers()-1), syncState=buddy.syncState
   buddy.stopSyncPeer()
 
 # ------------------------------------------------------------------------------
@@ -101,7 +101,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
     case ctx.pool.syncState:
     of SnapReady:
       chronicles.info info & ": waiting for CL to send updates",
-        state=($ctx.syncState), nSyncPeers=ctx.nSyncPeers()
+        syncState=ctx.syncState, nSyncPeers=ctx.nSyncPeers()
       bodyRc = daemonWaitReadyInterval              # take a nap
 
     of SnapDownload:
@@ -112,13 +112,13 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
         pvt = ctx.pool.stateDB.pivot.expect "valid pivot"
         ela {.used.} = ctx.sessionMkTrie(pvt, info).valueOr:
           debug info & ": mkTrie error", root=pvt.rootStr,
-            state=($ctx.syncState), ela=error.elapsed.toStr,
+            syncState=ctx.syncState, ela=error.elapsed.toStr,
             `error`=error.toStr
           break body
 
       block:
         debug info & ": mkTrie imported", root=pvt.rootStr,
-          state=($ctx.syncState), ela=ela.toStr
+          syncState=ctx.syncState, ela=ela.toStr
 
     of SnapHealing:                                 # TBD ..
       warn info & ": healing not yet implemented"

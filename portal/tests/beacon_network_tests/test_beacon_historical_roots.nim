@@ -19,11 +19,11 @@ import
 
 suite "Beacon Chain Historical Roots":
   let
-    cfg = genesisTestRuntimeConfig(ConsensusFork.Bellatrix)
+    cfg = genesisTestRuntimeConfig(ConsensusFork.Electra)
     state = newClone(initGenesisState(cfg = cfg))
   var cache = StateCache()
 
-  var blocks: seq[bellatrix.SignedBeaconBlock]
+  var blocks: seq[electra.SignedBeaconBlock]
   # Note:
   # Adding 8192 blocks. First block is genesis block and not one of these.
   # Then one extra block is needed to get the historical roots, block
@@ -32,7 +32,7 @@ suite "Beacon Chain Historical Roots":
   # index i = 8190 is 8192th block and last one that is part of the first
   # historical root
   for i in 0 ..< SLOTS_PER_HISTORICAL_ROOT:
-    blocks.add(addTestBlock(state[], cache, cfg = cfg).bellatrixData)
+    blocks.add(addTestBlock(state[], cache, cfg = cfg).electraData)
 
   test "Historical Roots Proof":
     let historical_roots = state[].historical_roots

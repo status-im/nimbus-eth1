@@ -144,17 +144,11 @@ proc getKey*(
         return ok((VOID_HASH_KEY, vtx))
 
   # Otherwise fetch from backend database
-  # A threadvar is used to avoid allocating an environment for onData
-  var res {.threadvar.}: Opt[HashKey]
-  var vtxBuf {.threadvar.}: VertexBuf
-  
-  let onData = proc(data: openArray[byte]) {.nimcall.} =
-    res = data.deblobify(HashKey)
-    if res.isNone():
-      reset(vtxBuf)
-      vtxBuf.add(data)
+  var 
+    vtxBuf {.noinit.}: VertexBuf
+    dataLen: int
 
-  let gotData = rdb.vtxCol.get(rvid.blobify().data(), onData).valueOr:
+  let gotData = rdb.vtxCol.get(rvid.blobify().data(), vtxBuf.buf, dataLen).valueOr:
     const errSym = RdbBeDriverGetKeyError
     when extraTraceMessages:
       trace logTxt "getKey", rvid, error = errSym, info = error
@@ -162,6 +156,10 @@ proc getKey*(
 
   if not gotData:
     return ok((VOID_HASH_KEY, nil))
+  
+  vtxBuf.n = typeof(vtxBuf.n)(dataLen)
+
+  let res = vtxBuf.data().deblobify(HashKey)
 
   # Update cache and return - in peek mode, avoid evicting cache items
   if res.isSome() and GetVtxFlag.NoPutCache notin flags and
@@ -210,17 +208,11 @@ proc getVtx*(
       return ok(vtx)
 
   # Otherwise fetch from backend database
-  # A threadvar is used to avoid allocating an environment for onData
-  var res {.threadvar.}: Result[VertexRef, AristoError]
-  var vtxBuf {.threadvar.}: VertexBuf
-  
-  let onData = proc(data: openArray[byte]) {.nimcall.} =
-    res = data.deblobify(VertexRef)
-    if res.isOk() and res[].vType != Branch:
-      reset(vtxBuf)
-      vtxBuf.add(data)
+  var 
+    vtxBuf {.noinit.}: VertexBuf
+    dataLen: int
 
-  let gotData = rdb.vtxCol.get(rvid.blobify().data(), onData).valueOr:
+  let gotData = rdb.vtxCol.get(rvid.blobify().data(), vtxBuf.buf, dataLen).valueOr:
     const errSym = RdbBeDriverGetVtxError
     when extraTraceMessages:
       trace logTxt "getVtx", vid, error = errSym, info = error
@@ -229,6 +221,10 @@ proc getVtx*(
   if not gotData:
     rdbVtxLruStats[rvid.to(RdbStateType)][RdbVertexType.Empty].inc(false)
     return ok(VertexRef(nil))
+  
+  vtxBuf.n = typeof(vtxBuf.n)(dataLen)
+
+  let res = vtxBuf.data().deblobify(VertexRef)
 
   if res.isErr():
     return err((res.error(), "Parsing failed")) # Parsing failed

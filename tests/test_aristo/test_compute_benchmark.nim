@@ -32,7 +32,6 @@ suite "Aristo compute benchmark":
     var txFrame = db.txRef
     db.taskpool = Taskpool.new(numThreads = NUM_THREADS)
 
-
     for i in 0 ..< NUM_ACCOUNTS_PER_FRAME:
       check:
         txFrame.mergeAccount(
@@ -61,7 +60,6 @@ suite "Aristo compute benchmark":
       
       txFrame.checkpoint(1, skipSnapshot = false)
 
-
   test "Serial benchmark - skipLayers = false":
     db.parallelStateRootComputation = false
     debugEcho "\nSerial benchmark (skipLayers = false) running..."
@@ -81,3 +79,4 @@ suite "Aristo compute benchmark":
     let elapsed = cpuTime() - before
     
     debugEcho "Parallel benchmark (skipLayers = false) cpu time: ", elapsed
+

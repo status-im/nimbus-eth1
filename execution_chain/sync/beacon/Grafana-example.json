@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 26,
+  "id": 36,
   "links": [],
   "liveNow": true,
   "panels": [
@@ -1026,7 +1026,7 @@
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
-            "fillOpacity": 30,
+            "fillOpacity": 20,
             "gradientMode": "opacity",
             "hideFrom": {
               "legend": false,
@@ -1066,13 +1066,13 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "accumulated_state_coverage"
+              "options": "pivot_state"
             },
             "properties": [
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "dark-yellow",
+                  "fixedColor": "orange",
                   "mode": "fixed"
                 }
               }
@@ -1081,13 +1081,28 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "pivot_state_coverage"
+              "options": "archived_states"
             },
             "properties": [
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "light-orange",
+                  "fixedColor": "light-green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "accumulated_states"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-yellow",
                   "mode": "fixed"
                 }
               }
@@ -1124,10 +1139,27 @@
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "nec_snap_accumulated_state_coverage{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+          "expr": "nec_snap_archived_states_coverage{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+          "fullMetaSearch": false,
+          "hide": false,
+          "includeNullMetadata": true,
+          "instant": false,
+          "legendFormat": "archived_states",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bdvimuocv3fggc"
+          },
+          "disableTextWrap": false,
+          "editorMode": "builder",
+          "expr": "nec_snap_accumulated_states_coverage{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
-          "legendFormat": "accumulated_state_coverage",
+          "legendFormat": "accumulated_states",
           "range": true,
           "refId": "B",
           "useBackend": false
@@ -1143,9 +1175,9 @@
           "fullMetaSearch": false,
           "hide": false,
           "includeNullMetadata": true,
-          "legendFormat": "pivot_state_coverage",
+          "legendFormat": "pivot_state",
           "range": true,
-          "refId": "A",
+          "refId": "C",
           "useBackend": false
         }
       ],
@@ -1457,5 +1489,5 @@
   "timezone": "Europe/London",
   "title": "Mainnet Sync",
   "uid": "00000000000003",
-  "version": 3
+  "version": 2
 }

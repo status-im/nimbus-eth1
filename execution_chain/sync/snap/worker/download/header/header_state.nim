@@ -43,31 +43,7 @@ template headerStateRegister*(
       ctx = buddy.ctx
       sdb = ctx.pool.stateDB
 
-    if hash in ctx.pool.lockedHeader:
-      # Wait for the lock to be released, then take state from registry
-      const timeout = fetchHeaderRlpxTimeout + chronos.seconds(2)
-      let start = Moment.now()
-      while true:
-        try:
-          await sleepAsync lockWaitPollingTime
-          if hash notin ctx.pool.lockedHeader:      # lock was released
-            sdb.get(hash).isErrOr:                  # get from registry (if any)
-              bodyRc = Result[StateDataRef,ErrorType].ok(value)
-            break body
-          if timeout < Moment.now() - start:        # check for timeout
-            break                                   # => break while
-        except CancelledError:
-          break                                     # => break while
-        # End while
-
-      break body                                    # come back later
-      # End `if locked`
-
-    # Lock item and fetch (via `async` template)
-    ctx.pool.lockedHeader.incl hash                 # lock it for downloading
     let rc = buddy.headerFetch(hash)                # fetch header
-    ctx.pool.lockedHeader.excl hash                 # unlock
-
     if rc.isErr:
       bodyRc = Result[StateDataRef,ErrorType].err(rc.error)
       break body                                    # come back later

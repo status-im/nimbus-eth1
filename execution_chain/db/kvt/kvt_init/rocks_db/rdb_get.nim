@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -37,8 +37,8 @@ proc get*(
     rdb: RdbInst;
     key: openArray[byte],
     cf: static[KvtCFs]): Result[seq[byte],(KvtError,string)] =
-  var res: seq[byte]
-  let onData: DataProc = proc(data: openArray[byte]) =
+  var res {.threadvar.}: seq[byte]
+  let onData = proc(data: openArray[byte]) {.nimcall.} =
     res = @data
 
   let gotData = rdb.store[cf].get(key, onData).valueOr:
@@ -55,8 +55,8 @@ proc len*(
     rdb: RdbInst;
     key: openArray[byte],
     cf: static[KvtCFs]): Result[int,(KvtError,string)] =
-  var res: int
-  let onData: DataProc = proc(data: openArray[byte]) =
+  var res {.threadvar.}: int
+  let onData = proc(data: openArray[byte]) {.nimcall.} =
     res = data.len
 
   let gotData = rdb.store[cf].get(key, onData).valueOr:

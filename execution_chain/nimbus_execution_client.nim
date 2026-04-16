@@ -62,7 +62,6 @@ proc basicServices(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonR
     eagerStateRoot = config.eagerStateRootCheck,
     persistBatchSize = config.persistBatchSize,
     dynamicBatchSize = config.dynamicBatchSize,
-    maxBlobs = config.maxBlobs,
     enableQueue = true)
   if config.deserializeFcState:
     fc.deserialize().isOkOr:
@@ -237,6 +236,17 @@ proc init*(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
     nimbus.snapSyncRef = SnapSyncRef(nil)
 
+  if config.backgroundPruning:
+    nimbus.backgroundPruner = BackgroundPrunerRef.init(com)
+    nimbus.backgroundPruner.start()
+  else:
+    let state = com.db.kvt.loadPrunerStateBe()
+    if state.active:
+      fatal "Node was previously started with background pruning enabled (--prune). " &
+        "Historical block data may have been deleted, and might cause inconsistent DB " &
+        "Restart with --prune=true or use a fresh data directory."
+      quit(QuitFailure)
+
 proc init*(T: type NimbusNode, config: ExecutionClientConf, com: CommonRef): T =
   let nimbus = T()
   nimbus.init(config, com)
@@ -297,6 +307,7 @@ proc setupCommonRef*(config: ExecutionClientConf): (CommonRef, bool) =
 
   com.extraData = config.extraData
   com.gasLimit = config.gasLimit
+  com.maxBlobs = config.maxBlobs
 
   (com, dbOpts.rdbKeyCacheSize > 0)
 

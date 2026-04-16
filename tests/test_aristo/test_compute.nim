@@ -170,7 +170,7 @@ suite "Aristo compute":
 
     let w = txFrame.computeKey((root, root)).value.to(Hash32)
     check w == samples[^1][^1][2]
-  
+
   test "Parallel - pre-computed key":
     # TODO use mainnet genesis in this test?
     let
@@ -193,6 +193,123 @@ suite "Aristo compute":
 
     let w = txFrame.computeKey((root, root)).value.to(Hash32)
     check w == samples[^1][^1][2]
+  
+  test "Max size RLP encoding of all MPT node types":
+    ## This test exercises the RlpArrayBufWriter stack-allocated buffer paths in
+    ## aristo_compute.nim by constructing a trie that produces the largest
+    ## possible RLP encoding for each MPT node type:
+    ##
+    ## - Account leaf node (MAX_RLP_SIZE_ACCOUNT_LEAF_NODE = 148):
+    ##   Maximised by using max nonce (uint64.high), max balance (UInt256.high),
+    ##   a non-empty codeHash, and a valid storageRoot (from attached storage).
+    ##
+    ## - Storage leaf node (MAX_RLP_SIZE_STORAGE_LEAF_NODE = 70):
+    ##   Maximised by storing UInt256.high as the storage value.
+    ##
+    ## - Branch node (MAX_RLP_SIZE_BRANCH_NODE = 532):
+    ##   Maximised by having all 16 child slots occupied at a branch, each with
+    ##   a full 32-byte hash key (RLP encoded nodes >= 32 bytes).
+    ##
+    ## - Extension node (MAX_RLP_SIZE_EXTENSION_NODE = 68):
+    ##   Created when multiple paths share a common prefix before diverging,
+    ##   producing a hex-prefix-encoded shared nibble path + a branch key child.
+    ##
+    ## The test inserts enough accounts (with carefully chosen paths) to produce
+    ## all four node types, then calls computeKey on the state root to force
+    ## RLP serialization through the RlpArrayBufWriter code paths. If any buffer
+    ## is undersized the test will fail with an overflow/assertion.
+
+    # Maximum-size account payload: max nonce, max balance, non-empty codeHash.
+    # The storageRoot will be filled in by attaching storage to this account.
+    let maxAccount = AristoAccount(
+      nonce: uint64.high,
+      balance: UInt256.high,
+      codeHash: hash32"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    )
+
+    # A large account (with storage) to maximise account leaf RLP.
+    # This account will also get a storage slot with max value to maximise
+    # storage leaf RLP.
+    let accPathWithStorage =
+      hash32"1000000000000000000000000000000000000000000000000000000000000001"
+    check:
+      txFrame.mergeAccount(accPathWithStorage, maxAccount) ==
+        Result[bool, AristoError].ok(true)
+
+    # Attach a storage slot with the largest possible UInt256 value.
+    # This maximises the storage leaf node RLP encoding.
+    let
+      stoPath = hash32"2000000000000000000000000000000000000000000000000000000000000001"
+      maxStoData = UInt256.high
+    check:
+      txFrame.mergeSlot(accPathWithStorage, stoPath, maxStoData).isOk
+
+    # Insert 16 more accounts at paths chosen so that their keccak hashes
+    # spread across all 16 nibble values at the root branch level. This is
+    # not guaranteed by arbitrary paths, but inserting enough distinct accounts
+    # with varied first nibbles will populate many branch children. We use 16
+    # accounts with different leading bytes to maximise the chance of filling
+    # the root branch.
+    #
+    # All use max-size payloads (large nonce, balance, codeHash) to ensure
+    # each child's RLP node is >= 32 bytes (so branch stores full 32-byte
+    # hash keys rather than inline RLP).
+    for i in 0'u8 .. 15'u8:
+      var pathBytes: array[32, byte]
+      pathBytes[0] = (i * 16) + i  # e.g. 0x00, 0x11, 0x22 ... 0xFF
+      pathBytes[1] = 0xFF
+      pathBytes[2] = byte(i)
+      # Fill remaining bytes to make each path unique
+      for j in 3 .. 31:
+        pathBytes[j] = byte(i)
+      let accPath = Hash32(pathBytes)
+      let acc = AristoAccount(
+        nonce: uint64.high,
+        balance: UInt256.high,
+        codeHash: hash32"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      )
+      check:
+        txFrame.mergeAccount(accPath, acc) == Result[bool, AristoError].ok(true)
+
+    # Insert two more accounts that share a long common prefix to force the
+    # creation of an extension node. When two paths share leading nibbles but
+    # diverge later, the trie creates an extension node encoding the shared
+    # prefix followed by a branch.
+    # block:
+    let extAcc = AristoAccount(
+      nonce: uint64.high,
+      balance: UInt256.high,
+      codeHash: hash32"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    )
+    # These two paths share the first 8 bytes (16 nibbles) then diverge,
+    # which should produce an extension node with a long shared prefix.
+    let extPath1 =
+      hash32"ABCDEF0123456789000000000000000000000000000000000000000000000001"
+    let extPath2 =
+      hash32"ABCDEF0123456789000000000000000000000000000000000000000000000002"
+    
+    check txFrame.mergeAccount(extPath1, extAcc) == Result[bool, AristoError].ok(true)
+    check txFrame.mergeAccount(extPath2, extAcc) == Result[bool, AristoError].ok(true)
+
+    # Now compute the state root key. This forces RLP serialization of every
+    # node in the trie through the RlpArrayBufWriter code paths.
+    # If any ArrayBuf is too small, this will fail with an assertion/overflow.
+    let stateRoot = txFrame.computeKey((root, root))
+    check stateRoot.isOk
+
+    # Verify the root hash is a valid 32-byte hash
+    let rootHash = stateRoot.value.to(Hash32)
+    check rootHash != default(Hash32)
+
+    # Run structural integrity checks on the trie
+    let rc = txFrame.check
+    check rc == typeof(rc).ok()
+
+    # Verify the computation is stable (computing again gives the same result)
+    let stateRoot2 = txFrame.computeKey((root, root))
+    check stateRoot2.isOk
+    check stateRoot2.value == stateRoot.value
+
 
 suite "Aristo compute short benchmark":
   const 

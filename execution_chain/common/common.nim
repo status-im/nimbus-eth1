@@ -89,6 +89,9 @@ type
     gasLimit: uint64
       ## Desired gas limit when building a block
 
+    maxBlobs: Opt[uint8]
+      ## For EIP-7872; allows constraining of max blobs packed into each payload
+
     when compileOption("threads"):
       taskpool*: Taskpool
         ## Shared task pool for offloading computation to other threads
@@ -475,6 +478,9 @@ func extraData*(com: CommonRef): string =
 func gasLimit*(com: CommonRef): uint64 =
   com.gasLimit
 
+func maxBlobs*(com: CommonRef): Opt[uint8] =
+  com.maxBlobs
+
 func maxBlobsPerBlock*(com: CommonRef, fork: HardFork): uint64 =
   doAssert(fork >= Cancun)
   com.config.blobSchedule[fork].expect("blobSchedule initialized").max
@@ -525,6 +531,13 @@ func `gasLimit=`*(com: CommonRef, val: uint64) =
     com.gasLimit = GAS_LIMIT_MAXIMUM
   else:
     com.gasLimit = val
+
+func `maxBlobs=`*(com: CommonRef, val: Opt[uint8]) =
+  com.maxBlobs = val
+
+func `maxBlobs=`*(com: CommonRef, val: Option[uint8]) =
+  if val.isSome:
+    com.maxBlobs = Opt.some(val.get)
 
 # ------------------------------------------------------------------------------
 # End
