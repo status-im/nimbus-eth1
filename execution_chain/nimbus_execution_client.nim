@@ -61,7 +61,6 @@ proc basicServices(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonR
     eagerStateRoot = config.eagerStateRootCheck,
     persistBatchSize = config.persistBatchSize,
     dynamicBatchSize = config.dynamicBatchSize,
-    maxBlobs = config.maxBlobs,
     enableQueue = true)
   if config.deserializeFcState:
     fc.deserialize().isOkOr:
@@ -306,6 +305,7 @@ proc setupCommonRef*(config: ExecutionClientConf): CommonRef =
 
   com.extraData = config.extraData
   com.gasLimit = config.gasLimit
+  com.maxBlobs = config.maxBlobs
 
   com
 
