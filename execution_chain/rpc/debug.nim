@@ -206,9 +206,10 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
     ## Returns an array of EIP-2718 binary-encoded receipts.
     let header = chain.headerFromTag(blockTag).valueOr:
       raise invalidParams(error)
+    let txFrame = chain.txFrame(header)
     var res: seq[seq[byte]]
-    for receipt in chain.baseTxFrame.getReceipts(header.receiptsRoot):
-      res.add rlp.encode(receipt)
+    for receipt in txFrame.getReceipts(header.receiptsRoot):
+      res.add rlp.encode(receipt.to(Receipt))
 
     res
 

@@ -646,6 +646,16 @@ proc rpcMain*() =
           check receipts[0].transactionIndex == 0.Quantity
           check receipts[1].transactionIndex == 1.Quantity
 
+    test "debug_getRawReceipts":
+      let
+        header = env.chain.headerByHash(env.blockHash).expect("test block header")
+        receipts = env.chain.txFrame(header).getReceipts(header.receiptsRoot).expect("test block receipts")
+        rawReceipts = await client.debug_getRawReceipts(blockId(1'u64))
+
+      check rawReceipts.len == receipts.len
+      for i, receipt in receipts:
+        check rawReceipts[i] == RlpEncodedBytes(rlp.encode(receipt.to(Receipt)))
+
     test "eth_getBlockReceipts with EIP-1898 object param":
       # blockHash object form (what go-ethereum's ethclient sends)
       let r1 = await client.call("eth_getBlockReceipts",
