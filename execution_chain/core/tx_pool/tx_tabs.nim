@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[tables, heapqueue, times],
+  std/[tables, heapqueue],
   eth/common/base,
   eth/common/addresses,
   eth/common/hashes,
@@ -60,11 +60,7 @@ func removeLookup*(blobTab: var BlobLookupTab, item: TxItemRef) =
 # HeapQueue needs `<` to be overloaded for custom object
 # and in this case, we want to pop highest price first.
 # That's why we use '>' instead of '<' in the implementation.
-# Tiebreaker: earliest arrival first (FIFO), matching geth/reth.
-func `<`(a, b: TxItemRef): bool =
-  if a.price != b.price:
-    return a.price > b.price
-  a.time < b.time
+func `<`(a, b: TxItemRef): bool = a.price > b.price
 
 proc validBlobItem(item: TxItemRef;
                    fork: EVMFork;
