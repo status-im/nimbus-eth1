@@ -15,7 +15,7 @@ import
   chronicles,
   eth/common/[accounts_rlp, base_rlp, hashes_rlp],
   results,
-  "."/[aristo_desc, aristo_get, aristo_layers, aristo_blobify],
+  ./[aristo_desc, aristo_get, aristo_layers, aristo_blobify],
   ./aristo_desc/desc_backend,
   ../../concurrency/queue
 
@@ -122,7 +122,7 @@ proc putKeyAtLevel(
 
   if level >= txRef.db.baseTxFrame().level:
     let frame = txRef.deltaAtLevel(level)
-    frame.layersPutKey(rvid, vtx, key)
+    frame.layersMergeKey(rvid, key)
   
   elif level == dbLevel:
     ?batch.putVtx(txRef.db, rvid, vtx, key)
@@ -276,7 +276,6 @@ proc computeKeyImpl(
 
   # TODO this is the same code as when serializing NodeRef, without the NodeRef
   
-
   let key =
     case vtx.vType
     of AccLeaf:
