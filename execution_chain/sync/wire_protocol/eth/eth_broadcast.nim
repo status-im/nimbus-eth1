@@ -115,6 +115,11 @@ proc handleTransactionsBroadcast*(wire: EthWireRef,
   debug "Received new transactions",
     number = packet.transactions.len
 
+  if wire.actionQueue.full:
+    debug "Action queue full, dropping transaction broadcast",
+      number = packet.transactions.len
+    return
+
   wire.reqisterAction("TxPool consume incoming transactions"):
     for tx in packet.transactions:
       if tx.txType == TxEip4844:
@@ -148,6 +153,11 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
       sizes  = packet.txSizes.len,
       types  = packet.txTypes.len
     await peer.disconnect(BreachOfProtocol)
+    return
+
+  if wire.actionQueue.full:
+    debug "Action queue full, dropping tx hash announcement",
+      hashes = packet.txHashes.len
     return
 
   wire.reqisterAction("Handle broadcast transactions hashes"):
@@ -186,6 +196,9 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
         awaitQuota(wire, hashLookupCost, "check transaction exists in pool")
         inc i
 
+      if msg.txHashes.len == 0:
+        continue
+
       try:
         res = await peer.getPooledTransactions(msg)
       except EthP2PError as exc:
@@ -195,7 +208,7 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
 
       if res.isNone:
         debug "Request pooled transactions get nothing"
-        return
+        continue
 
       let
         ptx = res.get()
