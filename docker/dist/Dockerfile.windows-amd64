@@ -11,7 +11,7 @@
 # syntax=docker/dockerfile:1
 
 # The build is reproducible only if this base image stays the same.
-FROM statusim/nimbus-eth1:dist_base_eth1_v2_windows_amd64@sha256:5435b26795909f915d14a58f5202b0bcef035dc2d943c8855b81a64b094363b0
+FROM statusim/nimbus-eth1:dist_base_eth1_v2_windows_amd64@sha256:773f6b57d48f79dc39c2d2599cc523b7c468784cc7afa2acadf23b0505a28918
 
 SHELL ["/bin/bash", "-c"]
 
