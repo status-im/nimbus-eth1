@@ -490,6 +490,14 @@ type
         defaultValue: false
         name: "debug-snap-sync" .}: bool
 
+      snapSyncResume* {.
+        hidden
+        desc: "Use the cached data from a previous session if there is any." &
+              " Otherwise, data from a previous snap session will be moved" &
+              " to a backup directory, the name ending with ~"
+        defaultValue: false
+        name: "debug-snap-sync-resume" .}: bool
+
       snapSyncTarget* {.
         desc: "Manually set the initial block hash to derive the target" &
               " state root from. The block hash is specified by its 32" &

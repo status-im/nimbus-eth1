@@ -196,6 +196,9 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
     # Configure snap syncer.
     nimbus.snapSyncRef.config(nimbus.ethNode, config.dataDir, config.maxPeers)
 
+    if config.snapSyncResume:
+      nimbus.snapSyncRef.configResume()
+
     if config.snapSyncTarget.isSome():
       let hex = config.snapSyncTarget.unsafeGet
       if not nimbus.snapSyncRef.configTarget(hex):
