@@ -122,7 +122,7 @@ template sessionResume*(ctx: SnapCtxRef; info: static[string]): bool =
         resumedOk = true
 
         # Register seen accounts in state record
-        sdb.setAccountRange(state, w.start, w.limit)
+        sdb.setAccountRange(state, w.start, w.limit, Moment.now())
 
         # Register unprocessed storages per account
         for acc in w.accounts:

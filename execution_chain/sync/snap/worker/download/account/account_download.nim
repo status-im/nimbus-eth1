@@ -65,10 +65,12 @@ template accountDownload*(
       limit = if data.accounts.len == 0: high(ItemKey)
               else: data.accounts[^1].accHash.to(ItemKey)
 
+      now = Moment.now()
+
       nAccounts {.inject,used.} = data.accounts.len # logging only
       nProof {.inject,used.} = data.proof.len       # logging only
 
-    # Stash accounts data packet to be processed later
+    # Stash accounts data packet on DB to be processed later
     adb.putAccounts(
       state.stateRoot, ivReq.minPt, limit, data.accounts, data.proof,
       buddy.peerID).isOkOr:
@@ -79,7 +81,17 @@ template accountDownload*(
         bodyRc = typeof(bodyRc).err(ECacheError)
         break body                                  # return err()
 
-    sdb.commitAccountRange(state, ivReq, limit)     # update registry
+    # Update state details on DB for recovery, in particular time stamp
+    adb.putStateData(
+      state.stateRoot, state.blockHash, state.blockNumber,
+      now, onTrie=false, coverage=state.accountsCov256).isOkOr:
+        sdb.rollbackAccountRange(state, ivReq)      # registry roll back
+        debug info & ": updating state failed", peer, root,
+          syncState=buddy.syncState
+        bodyRc = typeof(bodyRc).err(ECacheError)
+        break body                                  # return err()
+
+    sdb.commitAccountRange(state, ivReq, limit, now) # update registry
     bodyRc = typeof(bodyRc).ok(data.accounts)       # return code
 
     debug info & ": accounts downloaded and cached", peer, root,

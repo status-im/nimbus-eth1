@@ -159,7 +159,7 @@ proc mkTrieImpl(
       # End block: `accListRollBack`
 
     # Roll back/re-register unprocessed data
-    sdb.setAccountRange(state, start, limit)        # re-add to state db
+    sdb.setAccountRange(state, start, limit, low Moment) # re-add to state db
     # End block: `doAccList`
 
   # Delete accounts record

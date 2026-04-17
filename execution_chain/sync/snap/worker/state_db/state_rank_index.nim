@@ -31,7 +31,7 @@ func toStr*(inx: StateRankIndex): string =
     s &= "1"
   else:
     s &= inx.unprocTotal.per256.toPC(6)
-  s &= "," & $inx.blockNumber & ")"
+  s & "," & $inx.blockNumber & ")"
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -69,6 +69,10 @@ func cmp*(x, y: StateRankIndex): int =
   if a == 0:
     a = cmp(y.blockNumber, x.blockNumber)
   a
+
+func total*(w: StateRankIndex): UInt256 =
+  ## Getter
+  w.unprocTotal
 
 # ------------------------------------------------------------------------------
 # End

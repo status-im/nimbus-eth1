@@ -12,7 +12,7 @@
 
 import
   std/[hashes, sequtils, sets, strutils, tables],
-  pkg/[chronicles, eth/common, metrics],
+  pkg/[chronicles, chronos, eth/common, metrics],
   pkg/stew/[interval_set, sorted_set],
   ../[helpers, worker_const],
   ./[state_identifiers, state_item_key, state_rank_index,
@@ -41,7 +41,10 @@ type
     ## Quick traversal descriptor
 
   StateByRoot = Table[StateRoot,StateDataRef]
-    ## Same list as above, indexed by state root
+    ## Similar list as above, indexed by state root
+
+  StateByTouch = SortedSet[Moment,StateDataRef]
+    ## Similar list as above, indexed by state root
 
   DataByAccount = SortedSet[ItemKey,AccDataRef]
     ## For storage slots book keeping
@@ -61,6 +64,7 @@ type
     stateRoot*: StateRoot               ## Dedicated sub-type for `Hash32`
     blockHash*: BlockHash               ## Corresponds to `stateRoot`
     blockNumber*: BlockNumber           ## Corresponds to `stateRoot`
+    touch*: Moment                      ## Last time the record was changed
     unproc: UnprocItemKeys              ## Unprocessed accounts
     byAccount: DataByAccount            ## List of storage/code states to fetch
     healingReady: bool                  ## Ready for healing if `true`
@@ -71,11 +75,31 @@ type
     allUnproc: ItemKeyRangeSet          ## Globally unprocessed accounts
     carryOver: float                    ## Overflow coverage
     archived: float                     ## Evicted states coverage
+    start: Moment                       ## Initalisation time
     topNum: BlockNumber                 ## Latest observed block number
     byRank: StateByRank                 ## States indexed by some ranking
     byRoot: StateByRoot                 ## States indexed by state root
+    byTouch: StateByTouch               ## States indexed by last update
 
+func rootStr*(state: StateDataRef): string
 func accountsCoverage*(db: StateDbRef): float
+func accountsCoverage*(state: StateDataRef): float
+
+# ------------------------------------------------------------------------------
+# Private debugging helpers
+# ------------------------------------------------------------------------------
+
+proc toStr(state: StateDataRef, db: StateDbRef, stateRootOk: bool): string =
+  let cov = state.accountsCoverage
+  if stateRootOk:
+    result = state.rootStr
+  else:
+    result = $state.blockNumber
+  result &=
+    "^" & $(db.topNum - state.blockNumber) &
+    "@" & (state.touch - db.start).toStr &
+    ":" & (if cov == 0f: "0" else: cov.toPC(6)) &
+    "+" & $state.byAccount.len
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -84,24 +108,52 @@ func accountsCoverage*(db: StateDbRef): float
 func rankIndex(state: StateDataRef): StateRankIndex =
   (state.unproc.total(), state.blockNumber).to(StateRankIndex)
 
-proc updateRank(
+proc insert(
+    db: StateDbRef;
+    state: StateDataRef;
+    ignoreRoot: static[bool] = false;
+      ) =
+  ## Savely a new state to the DB. If the argument `ignoreRoot` is passed as
+  ## `false`, the root table `byRoot[]` will be ignored and not be saved.
+  ##
+  when not ignoreRoot:
+    db.byRoot[state.stateRoot] = state
+
+  # An index collision of rank keys is avoided by having the block number as
+  # part of the `rankIndex` key.
+  db.byRank.insert(state.rankIndex).value.data = state
+
+  block safeInsert:
+    while true:
+      # Make sure that the time stamp is not used, yet.
+      db.byTouch.insert(state.touch).isErrOr:
+        value.data = state
+        break safeInsert
+      state.touch += chronos.nanoseconds(1)
+
+proc updateRankAndTouch(
     db: StateDbRef;
     oldInx: StateRankIndex;
-    state: StateDataRef) =
+    state: StateDataRef;
+    touch: Moment;
+      ) =
   ## Update DB ranking index. The argument `oldInx` is the index of
   ## argument `state` (i.e. `state.rankIndex` prior to any change.
+  ##
   let newInx = state.rankIndex
   if oldInx != newInx:
     discard db.byRank.delete oldInx
-    db.byRank.findOrInsert(newInx).value.data = state
+    discard db.byTouch.delete state.touch
+    state.touch = touch
+    db.insert(state, ignoreRoot=true)
 
 proc evict(db: StateDbRef, state: StateDataRef, info: static[string]) =
   ## Remove state from database and update range accounting. This may
   ## reset the `db.pivot` state to `nil`.
   ##
+  discard db.byTouch.delete state.touch             # remove state index
   discard db.byRank.delete state.rankIndex          # ditto
   db.byRoot.del state.stateRoot                     # ..
-  state.deadState = true                            # mark it evicted
 
   # Roll back global `allUnproc`/`carryOver` registers. The acoounting goes as
   # follows:
@@ -114,6 +166,8 @@ proc evict(db: StateDbRef, state: StateDataRef, info: static[string]) =
   var processedRatio = 1f - state.unproc.totalRatio()
   db.carryOver -= processedRatio                    # roll back
   db.archived += processedRatio                     # roll forward
+  state.deadState = true                            # mark state evicted
+
 
 proc allUnprocRollOverIfEmpty(db: StateDbRef) =
   ## Roll over empty register and re-initialise
@@ -141,18 +195,22 @@ proc updateMetrics(db: StateDbRef) =
 
 proc init*(T: type StateDbRef): T =
   let db = T(
+    start:     Moment.now(),
     allUnproc: ItemKeyRangeSet.init ItemKeyRangeMax,
+    byTouch:   StateByTouch.init(),
     byRank:    StateByRank.init state_rank_index.cmp)
   db.resetMetrics()
   db
 
 proc clear*(db: StateDbRef) =
+  db.start = Moment.now()
   db.carryOver = 0f
   db.archived = 0f
   db.topNum = BlockNumber(0)
   db.allUnproc.clear
   db.byRank.clear
   db.byRoot.clear
+  db.byTouch.clear
   db.resetMetrics()
 
 # ------------------------------------------------------------------------------
@@ -170,34 +228,49 @@ proc register*(
   ## the current state record, or the new one created (not `nil`.)
   ##
   db.byRoot.withValue(root, value):
-      return value[]                                # nothing to do
+    return value[]                                  # nothing to do
 
   if db.topNum < number:                            # largest known block num
     db.topNum = number
 
-  # New state record
+  let now = Moment.now()
+
+  # Make certain that there is space on the DB
+  if stateDbCapacity <= db.byRoot.len:
+    # Make space for a new record.
+    #
+    # * If there most idle state was last updated before
+    # `stateIdleTimeBeforeEviction`, then remove this one.
+    #
+    # * Otherwise, if there lowest rank record is completely untouched (i.e.
+    #   no account ranges processed, yet), then remove this one.
+    #
+    # * Oterwise remove the most idle state (even if it was not idle for
+    #   the time of `stateIdleTimeBeforeEviction`.)
+    #
+    var state = db.byTouch.ge(low Moment).value.data
+    if now <= state.touch + stateIdleTimeBeforeEviction:
+      # Try whether there is some low rank unused record
+      let leastRank = db.byRank.le(high StateRankIndex).value
+      if leastRank.key.total ==  high(UInt256):     # all unprocessed?
+        state = leastRank.data
+    db.evict(state, info)                           # remove index columns
+
+  # Add new state record to database
   var newState = StateDataRef(
+    touch:       now,
     stateRoot:   root,
     blockHash:   hash,
     blockNumber: number,
     byAccount:   DataByAccount.init())
   newState.unproc.init ItemKeyRangeMax
-
-  # Move block height window when necessary.
-  if stateDbCapacity <= db.byRoot.len:
-    # Clear item with the largest unprocessed data range
-    let lowest = db.byRank.le(high StateRankIndex).value.data
-    db.evict(lowest, info)                          # remove index columns
-
-  # Add `newState` to database
-  db.byRank.findOrInsert(newState.rankIndex).value.data = newState
-  db.byRoot[root] = newState
+  db.insert newState
 
   newState                                          # return state record
 
 
 func hasKey*(db: StateDbRef; root: StateRoot): bool =
-  db.byRoot.hasKey(root)
+  db.byRoot.hasKey root
 
 func get*(db: StateDbRef; root: StateRoot): Opt[StateDataRef] =
   db.byRoot.withValue(root, value):
@@ -207,12 +280,6 @@ func get*(db: StateDbRef; root: StateRoot): Opt[StateDataRef] =
 func pivot*(db: StateDbRef): Opt[StateDataRef] =
   ## Retrieve the state data record with a minimal unprocessed interval range.
   db.byRank.ge(low StateRankIndex).isErrOr():
-    return ok value.data
-  err()
-
-func lowest*(db: StateDbRef): Opt[StateDataRef] =
-  ## Return lowest ranked state, ot `nil` if the DB is empty
-  db.byRank.le(high StateRankIndex).isErrOr():
     return ok value.data
   err()
 
@@ -245,19 +312,31 @@ proc isComplete*(state: StateDataRef): bool =
     return true
   # false
 
+func archivedCoverage*(db: StateDbRef): float =
+  ## Coverage of accounts over all states stored on disk
+  db.archived
+
 func accountsCoverage*(db: StateDbRef): float =
-  ## Coverage of accounts over all states
+  ## Coverage of cached accounts over all states
   max(0f, 1f - db.allUnproc.totalRatio + db.carryOver)
 
 func accountsCoverage*(state: StateDataRef): float =
-  ## Coverage of accounts for a particular state
+  ## Coverage of cached accounts for a particular state
   if not state.deadState:
     return 1f - state.unproc.unprocessed.totalRatio # ignores `borrowed` items
   # 0f
 
+func accountsCov256*(state: StateDataRef): UInt256 =
+  ## Variant of `accountsCoverage()`
+  let unproc = state.unproc.unprocessed.total
+  if unproc == 0:
+    # Here `chunks==0` => `2^256-0` is mapped to `2^256 - 1` == `high(u256)`
+    return (if state.unproc.unprocessed.chunks == 0: high(UInt256) else: 0.u256)
+  (high(UInt256) - unproc) + 1
+
 # ------------------------------------------------------------------------------
 # Public unprocessed account ranges administration
-# -----------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 proc fetchAccountRange*(
     db: StateDbRef;
@@ -321,6 +400,7 @@ proc commitAccountRange*(
     state: StateDataRef;                            # current state record
     iv: ItemKeyRange;                               # from `fetchAccountRange()`
     limit: ItemKey;                                 # greatst account fetched
+    touch: Moment;
       ) =
   ## Remove the completed interval `iv.minPt..limit`, and restore non-completed
   ## parts `limit+1..iv.maxPt` on the registry managing unprocessed ranges.
@@ -343,7 +423,7 @@ proc commitAccountRange*(
     else: # iv.maxPt == limit
       state.unproc.commit(iv)
 
-    db.updateRank(oldInx, state)                    # update ranking
+    db.updateRankAndTouch(oldInx, state, touch)     # update ranking
     db.allUnprocRollOverIfEmpty()                   # global register roll over
     db.updateMetrics()
 
@@ -352,6 +432,7 @@ proc setAccountRange*(
     state: StateDataRef;
     start: ItemKey;
     limit: ItemKey;
+    touch: Moment;
       ) =
   ## The function sets an account range and commits it immediately.
   ##
@@ -361,7 +442,7 @@ proc setAccountRange*(
     db.carryOver += (limit - start + 1 -
                      db.allUnproc.reduce(start, limit)).per256
 
-    db.updateRank(oldInx, state)                    # update ranking
+    db.updateRankAndTouch(oldInx, state, touch)     # update ranking
     db.allUnprocRollOverIfEmpty()                   # global register roll over
     db.updateMetrics()
 
@@ -509,22 +590,16 @@ iterator items*(
 # Public debugging helpers
 # ------------------------------------------------------------------------------
 
-func bnStr*(state: StateDataRef): string =
-  $state.blockNumber
-
 func bnStr*(rc: Opt[StateDataRef]): string =
   if rc.isErr: "n/a" else: $rc.value.blockNumber
 
 func rootStr*(state: StateDataRef): string =
   state.stateRoot.Hash32.short & "(" & $state.blockNumber & ")"
 
-func toStr*(states: seq[StateDataRef]): string =
-  ## Print a list of processed ranges for the argument `states`.
-  "{" & states.mapIt(
-    $it.blockNumber & "^" &
-    it.unproc.unprocessed.complement.toStr).join(",") & "}"
+proc toStr*(state: StateDataRef, db: StateDbRef): string =
+  state.toStr(db, stateRootOk = true)
 
-func toStr*(db: StateDbRef): string =
+proc toStr*(db: StateDbRef): string =
   if db.byRoot.len == 0:
     return "n/a"
   var walk = WalkByRank.init(db.byRank)
@@ -535,12 +610,7 @@ func toStr*(db: StateDbRef): string =
   while rc.isOk:
     let state = rc.value.data
     rc = walk.next
-    result &=
-      $state.blockNumber &
-      "^" & $(db.topNum - state.blockNumber) &
-      ":" & state.accountsCoverage.toPC(6) &
-      "+" & $state.byAccount.len &
-      ","
+    result &= state.toStr(db, stateRootOk=false) & ","
   result[^1] = '}'
   result &=
     ":" & db.accountsCoverage.toPC(6) &

@@ -80,13 +80,17 @@ const
     ## pivot must also have reached the factor `accuPivotCovMin` in order to
     ## start trie assembly and healing.
 
+  stateIdleTimeBeforeEviction* = chronos.minutes(30)
+    ## Minimum time a state is cached before eviction unless other criteria
+    ## apply (e.g. fully unprocessed account range.)
+
   # ----------------------
 
   unprocAccountsRangeMax* = (1.u256 shl 240) # ~65k intervals
     ## Soft bytes limit to request accounts. This is used for parallelisation
     ## so that different peers can start with different intervals. Typically,
     ## these intervals are sparsely filled and there will be returned not
-    ## more than  ~1k accounts.
+    ## more than ~1k accounts.
 
   stateDbCapacity* = 8
     ## Maximal numbers of simultanously incomplete states. Note that the
