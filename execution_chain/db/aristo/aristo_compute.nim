@@ -13,21 +13,12 @@
 import
   std/strformat,
   chronicles,
-  eth/common/[accounts_rlp, base_rlp, hashes_rlp],
   results,
-  ./[aristo_desc, aristo_get, aristo_layers, aristo_blobify],
+  ./[aristo_desc, aristo_get, aristo_layers, aristo_blobify, aristo_serialise],
   ./aristo_desc/desc_backend,
   ../../concurrency/queue
 
 export aristo_desc, chronicles
-
-const
-  MAX_RLP_SIZE_ACCOUNT_LEAF = 111
-  MAX_RLP_SIZE_STORAGE_LEAF = 34
-  MAX_RLP_SIZE_ACCOUNT_LEAF_NODE = 149
-  MAX_RLP_SIZE_STORAGE_LEAF_NODE = 71
-  MAX_RLP_SIZE_BRANCH_NODE = 533
-  MAX_RLP_SIZE_EXTENSION_NODE = 69
 
 type
   WriteBatch* = object
@@ -161,25 +152,6 @@ proc putVtxBlob(
 
   ok()
 
-template encodeLeaf(w: var RlpWriter, pfx: NibblesBuf, leafData: untyped): HashKey =
-  w.startList(2)
-  w.append(pfx.toHexPrefix(isLeaf = true).data())
-  w.append(leafData)
-  w.finish(asOpenArray = true).digestTo(HashKey)
-
-template encodeBranch(w: var RlpWriter, vtx: VertexRef, subKeyForN: untyped): HashKey =
-  w.startList(17)
-  for (n {.inject.}, subvid {.inject.}) in vtx.allPairs():
-    w.append(subKeyForN)
-  w.append EmptyBlob
-  w.finish(asOpenArray = true).digestTo(HashKey)
-
-template encodeExt(w: var RlpWriter, pfx: NibblesBuf, branchKey: HashKey): HashKey =
-  w.startList(2)
-  w.append(pfx.toHexPrefix(isLeaf = false).data())
-  w.append(branchKey)
-  w.finish(asOpenArray = true).digestTo(HashKey)
-
 func layersGetKeyOrVtx*(
     db: AristoTxRef,
     rvid: RootedVertexID,
@@ -274,55 +246,37 @@ proc computeKeyImpl(
   # Top-most level of all the verticies this hash computation depends on
   var level = level
 
-  # TODO this is the same code as when serializing NodeRef, without the NodeRef
-  
   let key =
     case vtx.vType
     of AccLeaf:
       let vtx = AccLeafRef(vtx)
-      var writer = RlpArrayBufWriter[MAX_RLP_SIZE_ACCOUNT_LEAF_NODE, 1]()
-      writer.encodeLeaf(vtx.pfx):
-        let
-          stoID = vtx.stoID
-          skey =
-            if stoID.isValid:
-              let
-                keyvtxl = ?txRef.getKey((stoID.vid, stoID.vid), skipLayers, parallel)
-                (skey, sl) =
-                  if keyvtxl[0][0].isValid:
-                    (keyvtxl[0][0], keyvtxl[1])
-                  else:
-                    ?txRef.computeKeyImpl(
-                      (stoID.vid, stoID.vid),
-                      batch,
-                      keyvtxl[0][1],
-                      keyvtxl[1],
-                      skipLayers = skipLayers,
-                      spawnTpTasks = false,
-                      parallel,
-                      keyQueue,
-                      vtxBufQueue
-                    )
-              level = max(level, sl)
-              skey
-            else:
-              VOID_HASH_KEY
-
-        var w = RlpArrayBufWriter[MAX_RLP_SIZE_ACCOUNT_LEAF, 1]()
-        w.append(Account(
-          nonce: vtx.account.nonce,
-          balance: vtx.account.balance,
-          storageRoot: skey.to(Hash32),
-          codeHash: vtx.account.codeHash
-        ))
-        w.finish(asOpenArray = true)
+      let skey =
+        if vtx.stoID.isValid:
+          let
+            keyvtxl = ?txRef.getKey((vtx.stoID.vid, vtx.stoID.vid), skipLayers, parallel)
+            (skey, sl) =
+              if keyvtxl[0][0].isValid:
+                (keyvtxl[0][0], keyvtxl[1])
+              else:
+                ?txRef.computeKeyImpl(
+                  (vtx.stoID.vid, vtx.stoID.vid),
+                  batch,
+                  keyvtxl[0][1],
+                  keyvtxl[1],
+                  skipLayers = skipLayers,
+                  spawnTpTasks = false,
+                  parallel,
+                  keyQueue,
+                  vtxBufQueue
+                )
+          level = max(level, sl)
+          skey
+        else:
+          VOID_HASH_KEY
+      rlpEncodeAccLeaf(vtx.pfx, vtx.account, skey).digestTo(HashKey)
     of StoLeaf:
       let vtx = StoLeafRef(vtx)
-      var writer = RlpArrayBufWriter[MAX_RLP_SIZE_STORAGE_LEAF_NODE, 1]()
-      writer.encodeLeaf(vtx.pfx):
-        var w = RlpArrayBufWriter[MAX_RLP_SIZE_STORAGE_LEAF, 1]()
-        w.append(vtx.stoData)
-        w.finish(asOpenArray = true)
+      rlpEncodeStoLeaf(vtx.pfx, vtx.stoData).digestTo(HashKey)
     of Branches:
       # For branches, we need to load the vertices before recursing into them
       # to exploit their on-disk order
@@ -465,23 +419,18 @@ proc computeKeyImpl(
             keyQueues[i].dispose()
             vtxBufQueues[i].dispose()
 
-      template writeBranch(w: var RlpWriter, vtx: BranchRef): HashKey =
-        w.encodeBranch(vtx):
-          if subvid.isValid:
-            level = max(level, keyvtxs[n][1])
-            keyvtxs[n][0][0]
-          else:
-            VOID_HASH_KEY
+      template branchSubKey(): untyped =
+        if subvid.isValid:
+          level = max(level, keyvtxs[n][1])
+          keyvtxs[n][0][0]
+        else:
+          VOID_HASH_KEY
 
       if vtx.vType == ExtBranch:
-        let vtx = ExtBranchRef(vtx)
-        var writer = RlpArrayBufWriter[MAX_RLP_SIZE_EXTENSION_NODE, 1]()
-        writer.encodeExt(vtx.pfx):
-          var bwriter = RlpArrayBufWriter[MAX_RLP_SIZE_BRANCH_NODE, 1]()
-          bwriter.writeBranch(vtx)
+        let brKey = rlpEncodeBranch(vtx, branchSubKey()).digestTo(HashKey)
+        rlpEncodeExt(ExtBranchRef(vtx).pfx, brKey).digestTo(HashKey)
       else:
-        var writer = RlpArrayBufWriter[MAX_RLP_SIZE_BRANCH_NODE, 1]()
-        writer.writeBranch(vtx)
+        rlpEncodeBranch(vtx, branchSubKey()).digestTo(HashKey)
 
   # Cache the hash into the same storage layer as the the top-most value that it
   # depends on (recursively) - this could be an ephemeral in-memory layer or the
