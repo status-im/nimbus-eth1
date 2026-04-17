@@ -235,12 +235,6 @@ template updateFcuRoot*(buddy: SnapPeerRef, info: static[string]) =
     trace info & ": assigning FCU hash from CL", peer,
       hash=hash.toStr, blockNumber, nSyncPeers=ctx.nSyncPeers()
 
-    # Store root -> block data mapping
-    ctx.pool.mptAsm.putBlockData(root, hash, blockNumber).isOkOr:
-      trace info & ": Cannot store state root map", peer,
-        stateRoot=root.toStr, blockHash=hash.toStr, blockNumber
-      break body                                    # done, storage error
-
     discard sdb.register(root, hash, blockNumber, info)
     buddy.only.finRoot = Opt.some(root)
     # End `block body`

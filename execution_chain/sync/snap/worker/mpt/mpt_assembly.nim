@@ -24,14 +24,17 @@
 ##
 ## Key/value storage formats by column type:
 ##
-## * BlockData:
+## * StateData:
 ##   + key33: <col, root>
-##   + value: <hash, number>
+##   + value: <hash, number, touch, onTrie, coverage>
 ##   where
 ##   + col:      `Accounts`
 ##   + root:     `StateRoot`
 ##   + hash:     `BlockHash`
 ##   + number:   `BlockNumber`
+##   + touch:    `Moment`
+##   + onTrie:   `bool`
+##   * coverage: `UInt256`
 ##
 ## * Accounts:
 ##   + key65: <col, root, start>
@@ -111,7 +114,7 @@ type
   MptAsmCol = enum
     AdminCol = 0                                    # currently unused
 
-    BlockData                                       # root -> block hash/number
+    StateData                                       # root -> block hash/number
     Accounts                                        # as fetched from network
     StoSlot                                         # ditto
     ByteCode                                        # ditto
@@ -121,9 +124,12 @@ type
     StoTrie                                         # hash -> node mapping
     CodeList                                        # hash -> code mapping
 
-  DecodedBlockData* = tuple
+  DecodedStateData* = tuple
     hash: BlockHash
     number: BlockNumber
+    touch: Moment                                   # last data change
+    onTrie: bool                                    # state root also on trie
+    coverage: UInt256                               # account range coverage
 
   DecodedAccounts* = tuple
     limit: ItemKey
@@ -143,10 +149,13 @@ type
     peerID: Hash
 
 
-  WalkBlockData* = tuple
+  WalkStateData* = tuple
     root: StateRoot
     hash: BlockHash
     number: BlockNumber
+    touch: Moment                                   # last data change
+    onTrie: bool                                    # state root also on trie
+    coverage: UInt256                               # account range coverage
     error: string
 
   WalkAccounts* = tuple
@@ -183,15 +192,18 @@ type
 when sizeof(Hash) != sizeof(uint):
   {.error: "Hash type must have size of uint".}
 
-func decodeBlockData(data: seq[byte]): Result[DecodedBlockData,string] =
-  const info = "decodeBlockData"
+proc decodeStateData(data: seq[byte]): Result[DecodedStateData,string] =
+  const info = "decodeStateData"
   var
     rd = data.rlpFromBytes
-    res: DecodedBlockData
+    res: DecodedStateData
   try:
     rd.tryEnterList()
     res.hash = rd.read(Hash32).to(BlockHash)
     res.number = rd.read(BlockNumber)
+    res.touch = Moment.fromNow(rd.read(uint64).int64.nanoseconds)
+    res.onTrie = rd.read(bool)
+    res.coverage = rd.read(UInt256)
   except RlpError as e:
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(move res)
@@ -241,13 +253,19 @@ func decodeByteCode(data: seq[byte]): Result[DecodedByteCode,string] =
   ok(move res)
 
 
-template encodeBlockData(
+template encodeStateData(
     hash: BlockHash;
     number: BlockNumber;
+    touch: Moment;
+    onTrie: bool;
+    coverage: UInt256;
       ): untyped =
-  var wrt = initRlpList 2
+  var wrt = initRlpList 4
   wrt.append hash.to(Hash32)
   wrt.append number
+  wrt.append max(touch.epochNanoSeconds(),0).uint64
+  wrt.append onTrie
+  wrt.append coverage
   wrt.finish()
 
 template encodeAccounts(
@@ -686,34 +704,38 @@ proc init*(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc getBlockData*(
+proc getStateData*(
     db: MptAsmRef;
     root: StateRoot;
-      ): Result[(BlockHash,BlockNumber),string] =
-  let data = db.get33(BlockData, root).valueOr:
+      ): Result[(BlockHash,BlockNumber,Moment,bool,UInt256),string] =
+  let data = db.get33(StateData, root).valueOr:
     return err(error)
-  data.decodeBlockData()
+  data.decodeStateData()
 
-proc putBlockData*(
+proc putStateData*(
     db: MptAsmRef;
     root: StateRoot;
     hash: BlockHash;
     number: BlockNumber;
+    touch: Moment;
+    onTrie: bool;
+    coverage: UInt256;
       ): PutResult =
-  db.put33(BlockData, root, encodeBlockData(hash, number))
+  db.put33(StateData, root,
+           encodeStateData(hash, number, touch, onTrie, coverage))
 
-proc delBlockData*(db: MptAsmRef; root: StateRoot): DelResult =
-  db.del33(BlockData, root)
+proc delStateData*(db: MptAsmRef; root: StateRoot): DelResult =
+  db.del33(StateData, root)
 
-iterator walkBlockData*(db: MptAsmRef): WalkBlockData =
-  for (key,value) in db.adb.colWalk33 BlockData.key33():
-    let w = value.decodeBlockData().valueOr:
-        var oops: WalkBlockData
+iterator walkStateData*(db: MptAsmRef): WalkStateData =
+  for (key,value) in db.adb.colWalk33 StateData.key33():
+    let w = value.decodeStateData().valueOr:
+        var oops: WalkStateData
         oops.root = StateRoot(key)
         oops.error = error
         yield oops
         continue
-    yield (StateRoot(key), w.hash, w.number, "")
+    yield (StateRoot(key), w.hash, w.number, w.touch, w.onTrie, w.coverage, "")
 
 # -------------
 

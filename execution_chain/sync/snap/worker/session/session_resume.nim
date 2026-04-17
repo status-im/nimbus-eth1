@@ -31,7 +31,7 @@ proc getOrMakeState(
   let sdb = ctx.pool.stateDB
   sdb.get(root).isErrOr:
     return ok value
-  let (hash,number) = ctx.pool.mptAsm.getBlockData(root).valueOr:
+  let (hash,number,_,_,_) = ctx.pool.mptAsm.getStateData(root).valueOr:
     return err()
   ok sdb.register(root, hash, number, info)
 
