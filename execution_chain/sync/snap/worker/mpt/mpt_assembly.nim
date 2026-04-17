@@ -350,9 +350,9 @@ proc rDel(adb: RocksDbReadWriteRef; key: openArray[byte]): DelResult =
   ok()
 
 proc kvPair(rit: RocksIteratorRef): (seq[byte],seq[byte]) =
-  ## This helper must be provided as a separate function outside of the below
-  ## iterator. Otherwise the NIM compiler (version 2.2.4) might abort with an
-  ## error
+  ## This helper must be provided as a separate function outside of any walk
+  ## iterator, below. Otherwise the NIM compiler (version 2.2.4) might abort
+  ## with an error
   ## ::
   ##   internal error: inconsistent environment type
   ##
@@ -364,13 +364,14 @@ proc kvPair(rit: RocksIteratorRef): (seq[byte],seq[byte]) =
   rit.next()
   kv
 
-iterator rWalk(
+iterator colWalk33(
     adb: RocksDbRef;
     pfx: openArray[byte];
-      ): tuple[key: seq[byte], data: seq[byte]] =
-  ## Walk over key-value pairs of the database.
+      ): tuple[key: Hash32, data: seq[byte]] =
+  ## Walk over key-value pairs of the database for keys of length 33 where
+  ## the search head is postioned at `pfx[0]`.
   ##
-  const info = "mpt/walk: "
+  const info = "mpt/colWalk63: "
   block walkBody:
     let rit = adb.openIterator().valueOr:
       when extraTraceMessages:
@@ -378,63 +379,72 @@ iterator rWalk(
       break walkBody
     defer: rit.close()
 
-    if pfx.len == 0:
-      rit.seekToFirst()
-    else:
-      rit.seekToKey(pfx)
+    let col = pfx[0]
+    var key1: Hash32
 
+    rit.seekToKey(pfx)
     while rit.isValid():
-      yield rit.kvPair()
-
-# --------------
-
-iterator colWalk33(
-    adb: RocksDbRef;
-    pfx: openArray[byte];
-      ): tuple[key: Hash32, data: seq[byte]] =
-  ## Variant of `rWalk()` for 33 byte keys staying at column `pfc[0]`
-  ##
-  let col = pfx[0]
-  var key1: Hash32
-  for (key,value) in adb.rWalk(pfx):
-    if 0 < key.len and col.ord.byte != key[0]:
-      break
-    if key.len == 33:
-      (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
-      yield (key1, value)
+      let (key,value) = rit.kvPair()
+      if 0 < key.len and col.ord.byte != key[0]:
+        break
+      if key.len == 33:
+        (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
+        yield (key1, value)
 
 iterator colWalk65(
     adb: RocksDbRef;
     pfx: openArray[byte];
       ): tuple[key1, key2: Hash32, data: seq[byte]] =
-  ## Variant of `rWalk()` for 65 byte keys staying at column `pfc[0]`
+  ## Variant of `colWalk33` for 65 byte keys, staying at column `pfx[0]`
   ##
-  let col = pfx[0]
-  var key1, key2: Hash32
-  for (key,value) in adb.rWalk(pfx):
-    if 0 < key.len and col.ord.byte != key[0]:
-      break
-    if key.len == 65:
-      (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
-      (addr (key2.distinctBase)[0]).copyMem(addr key[33], 32)
-      yield (key1, key2, value)
+  const info = "mpt/colWalk65: "
+  block walkBody:
+    let rit = adb.openIterator().valueOr:
+      when extraTraceMessages:
+        trace info & "Open error", error
+      break walkBody
+    defer: rit.close()
+
+    let col = pfx[0]
+    var key1, key2: Hash32
+
+    rit.seekToKey(pfx)
+    while rit.isValid():
+      let (key,value) = rit.kvPair()
+      if 0 < key.len and col.ord.byte != key[0]:
+        break
+      if key.len == 65:
+        (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
+        (addr (key2.distinctBase)[0]).copyMem(addr key[33], 32)
+        yield (key1, key2, value)
 
 iterator colWalk97(
     adb: RocksDbRef;
     pfx: openArray[byte];
       ): tuple[key1, key2, key3: Hash32, data: seq[byte]] =
-  ## Variant of `rWalk()` for 97 byte keys staying at column `pfc[0]`
+  ## Variant of `colWalk33` for 97 byte keys, staying at column `pfx[0]`
   ##
-  let col = pfx[0]
-  var key1, key2, key3: Hash32
-  for (key,value) in adb.rWalk(pfx):
-    if 0 < key.len and col.ord.byte != key[0]:
-      break
-    if key.len == 97:
-      (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
-      (addr (key2.distinctBase)[0]).copyMem(addr key[33], 32)
-      (addr (key3.distinctBase)[0]).copyMem(addr key[65], 32)
-      yield (key1, key2, key3, value)
+  const info = "mpt/colWalk97: "
+  block walkBody:
+    let rit = adb.openIterator().valueOr:
+      when extraTraceMessages:
+        trace info & "Open error", error
+      break walkBody
+    defer: rit.close()
+
+    let col = pfx[0]
+    var key1, key2, key3: Hash32
+
+    rit.seekToKey(pfx)
+    while rit.isValid():
+      let (key,value) = rit.kvPair()
+      if 0 < key.len and col.ord.byte != key[0]:
+        break
+      if key.len == 97:
+        (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
+        (addr (key2.distinctBase)[0]).copyMem(addr key[33], 32)
+        (addr (key3.distinctBase)[0]).copyMem(addr key[65], 32)
+        yield (key1, key2, key3, value)
 
 # --------------
 
