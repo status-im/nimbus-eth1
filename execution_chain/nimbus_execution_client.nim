@@ -198,13 +198,6 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
 
     if config.snapSyncResume:
       nimbus.snapSyncRef.configResume()
-
-    if config.snapSyncTarget.isSome():
-      let hex = config.snapSyncTarget.unsafeGet
-      if not nimbus.snapSyncRef.configTarget(hex):
-        fatal "Error parsing hash32 argument for --debug-snap-sync-target",
-          hash32=hex
-        quit QuitFailure
   else:
     # Disable any external setup unless explicitely activated
     nimbus.snapSyncRef = SnapSyncRef(nil)
