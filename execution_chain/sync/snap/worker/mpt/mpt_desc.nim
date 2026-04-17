@@ -31,6 +31,32 @@ type
     selfKey*: HashKey                  ## Own node key (mostly a hash)
 
   BranchNodeRef* = ref object of NodeRef
+    ## Branch and/or extension node.
+    ##
+    ## * Pure extension node
+    ##   + `xtData`  == `rlp(extension-node-data)`
+    ##   + `xtPfx` != `""`, set to path extension segment
+    ##   + `selfKey` == `hash32(xtData)`
+    ##   + `brData` is unset
+    ##   + `brKey` is unset
+    ##   + `brLinks[]` entry `0` is set, all others are `nil`
+    ##
+    ## * Pure branch node
+    ##   + `xtData` is unset
+    ##   + `xtPfx` is nunset
+    ##   + `brData` == `rlp(branch-node-data)`
+    ##   + `brKey` is unset
+    ##   + `selfKey` == `hash32(brData)`
+    ##   + `brLinks[]` has at least two non-`nil` entries
+    ##
+    ## * Combined branch and extension node.
+    ##   + `xtData`  == `rlp(extension-node-data)`
+    ##   + `xtPfx`  != `""`, set to path extension segment
+    ##   + `selfKey` == `hash32(xtData)`
+    ##   + `brData` == `rlp(branch-node-data)`
+    ##   + `brKey` == `hash32(brData)`
+    ##   + `brLinks[]` has at least two non-`nil` entries
+    ##
     xtPfx*: NibblesBuf                 ## Portion of path segment
     xtData*: seq[byte]                 ## Rlp encoded extension node
     brKey*: HashKey                    ## Only if `xtPfx` is non-empty

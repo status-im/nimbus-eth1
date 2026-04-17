@@ -34,11 +34,11 @@ proc append(w: var RlpWriter, val: AccBody) =
 # ------------------------------------------------------------------------------
 
 proc nodeStash*(
-    db: NodeTrieRef;                       # Needed for root node
-    rootKey: HashKey;                      # State root key
-    proofNode: ProofNode;                  # Node to add
-    nodes: var Table[HashKey,NodeRef];     # Collect nodes
-    links: var Table[HashKey,StopNodeRef]; # Collect open links
+    db: NodeTrieRef;                                # Needed for root node
+    rootKey: HashKey;                               # State root key
+    proofNode: ProofNode;                           # Node to add
+    nodes: var Table[HashKey,NodeRef];              # Collect nodes
+    links: var Table[HashKey,StopNodeRef];          # Collect open links
       ): bool =
   ## Decode a trusted rlp-encoded node and add it to the node list.
   ##
@@ -54,8 +54,8 @@ proc nodeStash*(
 
   var
     rlp = proofNode.distinctBase.rlpFromBytes
-    list: array[17,seq[byte]]              # list of node entries
-    top = 0                                # count entries, i.e. `list[]` len
+    list: array[17,seq[byte]]                       # list of node entries
+    top = 0                                         # count `list[]` entries
     node: NodeRef
 
   # Collect lists of either 2 or 17 blob entries.
@@ -131,9 +131,9 @@ proc nodeStash*(
   true
 
 proc updateProofTree(
-    node: NodeRef;                         # Current node, start node
-    path: NibblesBuf;                      # Current path, recursively updated
-    last: var ItemKey;                     # Path of last leaf, visited
+    node: NodeRef;                                  # current node, start node
+    path: NibblesBuf;                               # cur path, recurs. updated
+    last: var ItemKey;                              # path of last leaf, visited
       ) =
   ## Recursively label path prefixes, resolve extensions, and return the
   ## right boundary leaf path (if any).
@@ -144,6 +144,10 @@ proc updateProofTree(
     if 0 < w.xtPfx.len:
       # Join child node into this extension node
       let chld = w.brLinks[0]
+      if chld.kind == Stop:                         # pure extension node?
+        StopNodeRef(chld).parent = w                # just to make sure
+        chld.updateProofTree(path & w.xtPfx, last)
+        return
       if chld.kind == Branch and BranchNodeRef(chld).xtPfx.len == 0:
         w.brLinks = BranchNodeRef(chld).brLinks
         w.brData = BranchNodeRef(chld).brData
@@ -185,17 +189,23 @@ proc findSubTree(
         return err(pfx)
 
       let w = BranchNodeRef(node)
-      if 0 < w.xtPfx.len:
-        let n = pfx.sharedPrefixLen(w.xtPfx)
-        if n < w.xtPfx.len or                   # must be all of the ext pfx
-           n == pfx.len:                        # must *not* be the last node
-          return err(pfx)
-        pfx = pfx.slice(n)
+      block extOrCombined:
+        if 0 < w.xtPfx.len:                         # ext. or combined branch
+          let n = pfx.sharedPrefixLen(w.xtPfx)
+          if n < w.xtPfx.len or                     # must be all of the ext pfx
+             n == pfx.len:                          # must NOT be the last node
+            return err(pfx)
 
-      node = w.brLinks[pfx[0]]
+          pfx = pfx.slice(n)                        # cut off `xtPfx`
+          if w.brData.len == 0:                     # `0` => pure extension
+            node = w.brLinks[0]                     # extension on index `0`
+            break extOrCombined
+
+        node = w.brLinks[pfx[0]]                    # otherwise use nibble
+        pfx = pfx.slice(1)
+
       if node.isNil:
         return err(pfx)
-      pfx = pfx.slice(1)
       # continue
 
     of Leaf:
@@ -229,7 +239,7 @@ proc mergeSubTree(
       let
         w = BranchNodeRef(node)
         n = pfx.sharedPrefixLen(w.xtPfx)
-      doAssert n < pfx.len                        # at least pfx + nibble
+      doAssert n < pfx.len                          # at least pfx + nibble
 
       let i = pfx[n]
       if n < w.xtPfx.len:
@@ -261,9 +271,9 @@ proc mergeSubTree(
 
     of Leaf:
       let w = LeafNodeRef(node)
-      if w.lfPfx == pfx:                          # leaf node merged, already
+      if w.lfPfx == pfx:                            # leaf node merged, already
         return ok(w)
-      doAssert w.lfPfx.len == pfx.len             # due to fixed path length 64
+      doAssert w.lfPfx.len == pfx.len               # due to fixed path len 64
 
       # parent->Leaf0 => parent->Branch(new)->(Leaf1(new),Leaf0(mod),..)
       let
@@ -371,7 +381,12 @@ proc exportTrie(
   of Branch:
     var w = BranchNodeRef(node)
     if w.brData.len == 0:
-      ok = false
+      if 0 < w.xtData.len and
+         not w.brLinks[0].isNil:                    # pure extension node
+        data.add (@(w.selfKey.data), w.xtData)
+        w.brLinks[0].exportTrie(data, ok)
+      else:
+        ok = false                                  # error
       return
 
     if 0 < w.xtPfx.len:
@@ -398,8 +413,6 @@ proc exportTrie(
 
   of Stop:
     ok = false
-
-  # NOTREACHED
 
 # ------------------------------------------------------------------------------
 # Public constructor
@@ -452,7 +465,7 @@ proc init*(
   tmpNodes.del db.root.selfKey
 
   # Build partial tree
-  let stopPairs = tmpLinks.pairs.toSeq
+  let stopPairs = tmpLinks.pairs.toSeq              # table is to be modified
   for (stopKey,stopNode) in stopPairs:
     # Try to resolve the stop node on a `node` table entry
     tmpNodes.withValue(stopKey, node):
