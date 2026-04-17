@@ -30,12 +30,12 @@ type
     Leaf
     Stop
 
-  NodeRef* = ref object of RootRef
+  NodeRef* {.acyclic.} = ref object of RootRef
     ## Base node object for building a temporary, partial hexary MPT.
     kind*: NodeType                                 ## sub-type (see below)
     selfKey*: HashKey                               ## owned node key
 
-  BranchNodeRef* = ref object of NodeRef
+  BranchNodeRef* {.acyclic.} = ref object of NodeRef
     ## Branch and/or extension node.
     ##
     ## * Pure extension node
@@ -92,15 +92,12 @@ template to*(h: StateRoot|StoreRoot|BlockHash; _: type HashKey): HashKey =
   ## Variant of `desc_identifiers.to()`
   h.Hash32.to(HashKey)
 
-template digestTo*(
-    node: ProofNode;
-    _: type HashKey;
-    force32: static[bool] = false): HashKey =
+func digestTo*(node: ProofNode, _: type HashKey, rootKey: HashKey): HashKey =
   ## Variant of `desc_identifiers.digestTo()`
-  when force32:
-    HashKey.fromBytes(node.distinctBase.keccak256.data).expect "Valid HashKey"
-  else:
-    node.distinctBase.digestTo(HashKey)
+  let key32 = HashKey.fromBytes(node.distinctBase.keccak256.data).value
+  if 32 <= node.distinctBase.len or key32 == rootKey:
+    return key32
+  HashKey.fromBytes(node.distinctBase).value
 
 # ------------------------------------------------------------------------------
 # End
