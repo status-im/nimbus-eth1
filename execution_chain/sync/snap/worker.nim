@@ -107,6 +107,9 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
     of SnapDownload:
       bodyRc = daemonWaitDownloadInterval           # take a nap
 
+    of SnapDownloadFinish:
+      bodyRc = daemonWaitDownloadFinishInterval     # take a nap
+
     of SnapMkTrie:
       let
         pvt = ctx.pool.stateDB.pivot.expect "valid pivot"

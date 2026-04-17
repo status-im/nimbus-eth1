@@ -67,7 +67,6 @@ type
     touch*: Moment                      ## Last time the record was changed
     unproc: UnprocItemKeys              ## Unprocessed accounts
     byAccount: DataByAccount            ## List of storage/code states to fetch
-    healingReady: bool                  ## Ready for healing if `true`
     deadState: bool                     ## State was evicted from database
 
   StateDbRef* = ref object
@@ -293,23 +292,18 @@ func len*(db: StateDbRef): int =
   db.byRoot.len
 
 
-proc setHealingReady*(state: StateDataRef) =
-  state.healingReady = true
-
-proc getHealingReady*(state: StateDataRef): bool =
-  state.healingReady
-
-
 proc isOperable*(state: StateDataRef): bool =
   ## Check whether the state has not been evicted
   not state.deadState
 
-proc isComplete*(state: StateDataRef): bool =
+proc isComplete*(db: StateDbRef): bool =
   ## Check whether the state is complete
-  if not state.deadState and
-     state.unproc.unprocessed.chunks() == 0 and     # all accounts done with
-     0 < state.byAccount.len:                       # no more slots or code
-    return true
+  db.byRank.ge(low StateRankIndex).isErrOr():
+    let state = value.data
+    if not state.deadState and
+       state.unproc.unprocessed.chunks() == 0 and   # all accounts done with
+       0 < state.byAccount.len:                     # no more slots or code
+      return true
   # false
 
 func archivedCoverage*(db: StateDbRef): float =

@@ -219,7 +219,7 @@ template sessionMkTrie*(
 
       start = Moment.now()
 
-    state.setHealingReady()
+    ctx.updateSyncHealing()
     bodyRc = MkTrieResult.ok(ela)
     # End block `body`
 
