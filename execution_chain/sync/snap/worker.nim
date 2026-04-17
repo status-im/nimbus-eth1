@@ -114,17 +114,9 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       bodyRc = daemonWaitDownloadFinishInterval     # take a nap
 
     of SnapMkTrie:
-      let
-        pvt = ctx.pool.stateDB.pivot.expect "valid pivot"
-        ela {.used.} = ctx.sessionMkTrie(pvt, info).valueOr:
-          debug info & ": mkTrie error", root=pvt.rootStr,
-            syncState=ctx.syncState, ela=error.elapsed.toStr,
-            `error`=error.toStr
-          break body
-
-      block:
-        debug info & ": mkTrie imported", root=pvt.rootStr,
-          syncState=ctx.syncState, ela=ela.toStr
+      let ela {.used.} = ctx.sessionMkTrie(info)
+      debug info & ": mkTrie imported",
+        ela=ela.toStr, syncState=ctx.syncState
 
     of SnapHealing:                                 # TBD ..
       warn info & ": Healing not yet implemented"

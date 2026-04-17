@@ -119,7 +119,6 @@ type
     StoSlot                                         # ditto
     ByteCode                                        # ditto
 
-    RootList                                        # active `AccTrie` roots
     AccTrie                                         # hash -> node mapping
     StoTrie                                         # hash -> node mapping
     CodeList                                        # hash -> code mapping
@@ -918,29 +917,6 @@ iterator walkByteCode*(
         yield oops
         continue
     yield (root, start2, w.limit, w.codes, w.peerID, "")
-
-# -------------
-
-proc getAccRoot*(
-    db: MptAsmRef;
-    root: StateRoot;
-      ): Result[byte,string] =
-  let data = db.get33(RootList, root).valueOr:
-    return err(error)
-  if data.len != 1:
-    return err("value size mismatch")
-  ok data[0]
-
-proc putAccRoot*(db: MptAsmRef; root: StateRoot; flag: byte): PutResult =
-  db.put33(RootList, root, @[flag])
-
-proc delAccRoot*(db: MptAsmRef; root: StateRoot): DelResult =
-  db.del33(RootList, root)
-
-iterator walkAccRoot*(db: MptAsmRef): (StateRoot,byte) =
-  for (key,value) in db.adb.colWalk33 RootList.key33():
-    if value.len == 1:
-      yield (StateRoot(key),value[0])
 
 # -------------
 
