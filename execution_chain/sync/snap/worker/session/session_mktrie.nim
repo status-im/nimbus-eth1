@@ -35,10 +35,8 @@ func dist(a, b: WalkStateData): uint64 =
     a.number - b.number
 
 func maxCoverage(w: seq[WalkStateData]): WalkStateData =
-  ## Get state with maximal coverage.
-  ##
-  ## Note that `NIM 2.2.10` provides a `max()` function with generic `cmp`
-  ## argument that could be used, here. Cuurent `NIM` version is `2.2.4`.
+  ## Get state with maximal coverage, either by label (from an earlier
+  ## session) or by calculating it.
   ##
   for state in w:
     if state.error.len == 0:
