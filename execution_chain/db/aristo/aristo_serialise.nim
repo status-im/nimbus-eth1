@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -41,17 +41,18 @@ template rlpEncodeAccLeaf*(
   accLeafW.append(pfx.toHexPrefix(isLeaf = true).data())
   block:
     var accW = RlpArrayBufWriter[MAX_RLP_SIZE_ACCOUNT_LEAF, 1]()
-    accW.append(Account(
-      nonce: account.nonce,
-      balance: account.balance,
-      storageRoot: storageKey.to(Hash32),
-      codeHash: account.codeHash))
+    accW.append(
+      Account(
+        nonce: account.nonce,
+        balance: account.balance,
+        storageRoot: storageKey.to(Hash32),
+        codeHash: account.codeHash,
+      )
+    )
     accLeafW.append(accW.finish(asOpenArray = true))
   accLeafW.finish(asOpenArray = true)
 
-template rlpEncodeStoLeaf*(
-    pfx: NibblesBuf, stoData: UInt256
-): openArray[byte] =
+template rlpEncodeStoLeaf*(pfx: NibblesBuf, stoData: UInt256): openArray[byte] =
   var stoLeafW = RlpArrayBufWriter[MAX_RLP_SIZE_STORAGE_LEAF_NODE, 1]()
   stoLeafW.startList(2)
   stoLeafW.append(pfx.toHexPrefix(isLeaf = true).data())
@@ -69,9 +70,7 @@ template rlpEncodeBranch*(vtx: VertexRef, subKeyForN: untyped): openArray[byte] 
   branchW.append EmptyBlob
   branchW.finish(asOpenArray = true)
 
-template rlpEncodeExt*(
-    pfx: NibblesBuf, branchKey: HashKey
-): openArray[byte] =
+template rlpEncodeExt*(pfx: NibblesBuf, branchKey: HashKey): openArray[byte] =
   var extW = RlpArrayBufWriter[MAX_RLP_SIZE_EXTENSION_NODE, 1]()
   extW.startList(2)
   extW.append(pfx.toHexPrefix(isLeaf = false).data())
@@ -102,7 +101,7 @@ proc to*(node: NodeRef, T: type array[2, seq[byte]]): T =
     let vtx = StoLeafRef(node.vtx)
     [@(rlpEncodeStoLeaf(vtx.pfx, vtx.stoData)), @[]]
 
-proc digestTo*(node: NodeRef; T: type HashKey): T =
+proc digestTo*(node: NodeRef, T: type HashKey): T =
   ## Convert the argument `node` to the corresponding Merkle hash key. Note
   ## that a `Dummy` node is encoded as as a `Leaf`.
   ##
