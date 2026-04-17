@@ -17,6 +17,9 @@ import
   ../state_db,
   ./mpt_desc
 
+const
+  ffffHash = high(ItemKey).to(Hash32)
+
 # ------------------------------------------------------------------------------
 # Private RLP helpers
 # ------------------------------------------------------------------------------
@@ -153,7 +156,6 @@ proc nodeStash*(
 proc updateProofTree(
     node: NodeRef;                                  # current node, start node
     path: NibblesBuf;                               # cur path, recurs. updated
-    last: var ItemKey;                              # path of last leaf, visited
       ) =
   ## Recursively label path prefixes, resolve extensions, and return the
   ## right boundary leaf path (if any).
@@ -166,7 +168,7 @@ proc updateProofTree(
       let chld = w.brLinks[0]
       if chld.kind == Stop:                         # pure extension node?
         StopNodeRef(chld).parent = w                # just to make sure
-        chld.updateProofTree(path & w.xtPfx, last)
+        chld.updateProofTree(path & w.xtPfx)
         return
       if chld.kind == Branch and BranchNodeRef(chld).xtPfx.len == 0:
         w.brLinks = BranchNodeRef(chld).brLinks
@@ -180,10 +182,10 @@ proc updateProofTree(
         if down.kind == Stop:
           # Might be dangling now due to the extension merge, above
           StopNodeRef(down).parent = w
-        down.updateProofTree(path & NibblesBuf.nibble(byte n), last)
+        down.updateProofTree(path & NibblesBuf.nibble(byte n))
 
   of Leaf:
-    last = getBytes(path & LeafNodeRef(node).lfPfx).to(ItemKey)
+    discard
 
   of Stop:
     StopNodeRef(node).path = path
@@ -453,6 +455,7 @@ proc init*(
     root: StateRoot|StoreRoot;
     start: ItemKey;
     nodes: openArray[ProofNode];
+    maxPath: Hash32;
       ): T =
   ## Create a partial MPT from a list of rlp encoded nodes. Some conditions
   ## on the argument list `nodes` are:
@@ -492,13 +495,15 @@ proc init*(
       tmpLinks.del stopKey
 
   # Label path prefixes and join Extensions
-  var limit = high(ItemKey)
-  db.root.updateProofTree(NibblesBuf(), limit)
+  db.root.updateProofTree(NibblesBuf())
+
+  # Assemble right limit
+  let limit = maxPath.to(ItemKey)
 
   # Select sub-roots, links within min/max bounds
   for (key,stopNode) in tmpLinks.pairs:
-    let path = stopNode.path.getBytes.to(ItemKey)
-    if start <= path and path < limit:
+    let path = ItemKey.fromNibbles(stopNode.path, padMin)
+    if start <= path and path <= limit:
       db.stops[key] = stopNode
     else:
       # Remove stop node from parent
@@ -556,8 +561,7 @@ proc init*(
       db.stops.del stopKey
 
   # Label path prefixes and join Extensions
-  var limit = high(ItemKey)
-  db.root.updateProofTree(NibblesBuf(), limit)
+  db.root.updateProofTree(NibblesBuf())
   db
 
 proc init*(
@@ -668,7 +672,16 @@ proc validate*[T: SnapAccount|StorageItem](
   elif root is StoreRoot and T isnot StorageItem:
     {.error: "Leafs item must be of type StorageItem for root type StoreRoot".}
 
-  let db = NodeTrieRef.init(root, start, proof)
+  var limit = ffffHash
+  if 0 < leafs.len:
+    when T is SnapAccount:
+      limit = leafs[^1].accHash
+    elif T is StorageItem:
+      limit = leafs[^1].slotHash
+    else:
+      {.error: "Unexpedted type for leafs[]".}      # `T` type was extended?
+
+  let db = NodeTrieRef.init(root, start, proof, limit)
   if not db.isNil:
     for leaf in leafs:
       if not db.merge(leaf):
