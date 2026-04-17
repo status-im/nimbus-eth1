@@ -12,11 +12,13 @@
 import
   std/[tables, typetraits],
   pkg/eth/trie/nibbles,
-  ../../../../db/aristo/aristo_desc/desc_identifiers,
+  ../../../../db/aristo/[aristo_constants, aristo_desc/desc_identifiers],
   ../../../wire_protocol/snap/snap_types,
   ../state_db
 
 export
+  EmptyBlob,
+  VOiD_HASH_KEY,
   desc_identifiers # `HashKey` and friends
 
 type
