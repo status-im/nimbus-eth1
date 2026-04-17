@@ -41,9 +41,11 @@ func maxCoverage(w: seq[WalkStateData]): WalkStateData =
   ## argument that could be used, here. Cuurent `NIM` version is `2.2.4`.
   ##
   for state in w:
-    if state.error.len == 0 and
-       result.coverage < state.coverage:
-      result = state
+    if state.error.len == 0:
+      if state.tag == PivotOnTrie:
+        return state                                # previously set, already
+      if result.coverage < state.coverage:
+        result = state
 
 # -------------------
 
@@ -275,8 +277,9 @@ template sessionMkTrie*(
         chronicles.info info & ": Bad state record ignored", stateInx, nStates
         continue
 
-      if p.onTrie:
-        trace info & ": State processed, already", stateInx, nStates, root
+      if p.tag != Untagged:
+        trace info & ": State processed, already", stateInx, nStates, root,
+          distance, tag=p.tag
         continue
 
       # Walk account for the current state root
@@ -299,8 +302,9 @@ template sessionMkTrie*(
             break body                              # otherwise ignore for now
         # End `for walkAccounts()`
 
+      let tag = (if p == pivot: PivotOnTrie else: OnTrie)
       discard adb.putStateData(                     # Register updated state
-        p.root, p.hash, p.number, p.touch, onTrie=true, p.coverage)
+        p.root, p.hash, p.number, p.touch, tag, p.coverage)
 
       trace info & ": Done this state", stateInx, nStates, root,
         covered=cov.totalRatio.pcStr, elapsed=(Moment.now() - start).toStr

@@ -138,7 +138,7 @@ template sessionResume*(
         chronicles.info info & ": Resuming download session",
           nStates=status.nStates
 
-      if p.onTrie:                                # ignore assembled data
+      if p.tag != Untagged:                       # ignore assembled data
         sdb.addAccountArchive p.coverage.per256() # set archived coverage
       else:
         tchInx.add n                              # collect, re-process below
