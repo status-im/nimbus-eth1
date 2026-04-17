@@ -14,9 +14,6 @@ import
   pkg/[chronos, eth/common],
   ../[mpt, worker_desc]
 
-const
-  EmptyPath* = NibblesBuf()
-
 type
   AttType* = enum
     ## Something to pay attantion, to.

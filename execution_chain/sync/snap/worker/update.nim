@@ -106,19 +106,19 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]) =
   #      | `--> ready
   #      |        |
   #      |        v
-  #      |     download <--.
-  #      |        |        |
-  #      |        v        |
-  #      |  downloadFinish |
-  #      |        |        |
-  #      |        v        |
-  #      `----> mkTrie     |
-  #               |        |
-  #               v        |
-  #      `     analyse ----'
+  #      |     download
+  #      |        |
+  #      |        v
+  #      |  downloadFinish
+  #      |        |
+  #      |        v
+  #      `----> mkTrie
   #               |
   #               v
-  #            healing
+  #      `     analyse <---.
+  #               |        |
+  #               v        |
+  #            healing ----'
   #               |
   #               v
   #              TBD ..

@@ -21,6 +21,9 @@ export
   VOiD_HASH_KEY,
   desc_identifiers # `HashKey` and friends
 
+const
+  EmptyPath* = NibblesBuf()
+
 type
   NodeType* = enum
     Branch
@@ -28,9 +31,9 @@ type
     Stop
 
   NodeRef* = ref object of RootRef
-    ## Base node object for building a temporary hexary trie.
-    kind*: NodeType                    ## Sub-type (see below)
-    selfKey*: HashKey                  ## Own node key (mostly a hash)
+    ## Base node object for building a temporary, partial hexary MPT.
+    kind*: NodeType                                 ## sub-type (see below)
+    selfKey*: HashKey                               ## owned node key
 
   BranchNodeRef* = ref object of NodeRef
     ## Branch and/or extension node.
@@ -59,26 +62,26 @@ type
     ##   + `brKey` == `hash32(brData)`
     ##   + `brLinks[]` has at least two non-`nil` entries
     ##
-    xtPfx*: NibblesBuf                 ## Portion of path segment
-    xtData*: seq[byte]                 ## Rlp encoded extension node
-    brKey*: HashKey                    ## Only if `xtPfx` is non-empty
-    brLinks*: array[16,NodeRef]        ## Down links
-    brData*: seq[byte]                 ## Rlp encoded branch node
+    xtPfx*: NibblesBuf                              ## portion of path segment
+    xtData*: seq[byte]                              ## rlp encoded extension
+    brKey*: HashKey                                 ## if `xtPfx` is non-empty
+    brLinks*: array[16,NodeRef]                     ## down links
+    brData*: seq[byte]                              ## rlp encoded branch node
 
   LeafNodeRef* = ref object of NodeRef
-    lfPfx*: NibblesBuf                 ## Portion of path segment
-    lfData*: seq[byte]                 ## Rlp encoded leaf node
-    lfPayload*: seq[byte]              ## Leaf data
+    lfPfx*: NibblesBuf                              ## portion of path segment
+    lfData*: seq[byte]                              ## rlp encoded leaf node
+    lfPayload*: seq[byte]                           ## leaf data
 
   StopNodeRef* = ref object of NodeRef
-    path*: NibblesBuf                  ## Partial path
-    parent*: NodeRef                   ## Unique parent node
-    inx*: byte                         ## Index (for branch parent)
-    sub*: NodeRef                      ## Optional start of a sub-tree
+    path*: NibblesBuf                               ## partial path
+    parent*: NodeRef                                ## unique parent node
+    inx*: byte                                      ## index (for branch parent)
+    sub*: NodeRef                                   ## start of a sub-MPT
 
   NodeTrieRef* = ref object of RootRef
-    root*: NodeRef                     ## Start of in-memory tree
-    stops*: Table[HashKey,StopNodeRef] ## Dangling sub-tries
+    root*: NodeRef                                  ## start of in-memory MPT
+    stops*: Table[HashKey,StopNodeRef]              ## sub-MPT to complete
 
 # ------------------------------------------------------------------------------
 # Public helpers
