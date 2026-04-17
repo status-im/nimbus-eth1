@@ -24,12 +24,13 @@ import
 suite "Aristo compute benchmark":
   const 
     NUM_THREADS = 16
-    NUM_FRAMES = 10
-    NUM_ACCOUNTS_PER_FRAME = 400000
+    NUM_FRAMES = 1000
+    NUM_ACCOUNTS_PER_FRAME = 10000
 
   setup:
     let db = AristoDbRef.init()
     var txFrame = db.txRef
+    db.taskpool = Taskpool.new(numThreads = NUM_THREADS)
 
     for i in 0 ..< NUM_ACCOUNTS_PER_FRAME:
       check:
@@ -59,12 +60,23 @@ suite "Aristo compute benchmark":
       
       txFrame.checkpoint(1, skipSnapshot = false)
 
-
   test "Serial benchmark - skipLayers = false":
+    db.parallelStateRootComputation = false
     debugEcho "\nSerial benchmark (skipLayers = false) running..."
 
     let before = cpuTime()
-    check txFrame.computeKey((STATE_ROOT_VID, STATE_ROOT_VID)).isOk()
+    check txFrame.computeStateRoot(skipLayers = false).isOk()
     let elapsed = cpuTime() - before
     
     debugEcho "Serial benchmark (skipLayers = false) cpu time: ", elapsed
+
+  test "Parallel benchmark - skipLayers = false":
+    db.parallelStateRootComputation = true
+    debugEcho "\nParallel benchmark (skipLayers = false) running..."
+
+    let before = cpuTime()
+    check txFrame.computeStateRoot(skipLayers = false).isOk()
+    let elapsed = cpuTime() - before
+    
+    debugEcho "Parallel benchmark (skipLayers = false) cpu time: ", elapsed
+

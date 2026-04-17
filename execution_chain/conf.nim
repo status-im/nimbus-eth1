@@ -126,6 +126,11 @@ type
       defaultValue: DEFAULT_GAS_LIMIT
       name: "gas-limit" .}: uint64
 
+    # https://eips.ethereum.org/EIPS/eip-7872
+    maxBlobs* {.
+      desc: "EIP-7872 maximum blobs used when building a local payload"
+      name: "max-blobs" .}: Option[uint8]
+
     # https://ethereum.org/developers/docs/networks/#ethereum-testnets
     network {.
       desc: "Name or id number of Ethereum network"
@@ -342,6 +347,12 @@ type
       defaultValue: defaultMaxSnapshots
       name: "debug-aristo-db-max-snapshots" .}: int
 
+    parallelStateRootComputation* {.
+      hidden
+      defaultValue: false
+      desc: "Compute state root in parallel using multiple threads"
+      name: "debug-parallel-state-root".}: bool
+
     eagerStateRootCheck* {.
       hidden
       desc: "Eagerly check state roots when syncing finalized blocks"
@@ -451,11 +462,6 @@ type
         desc: "Enable background pruning of expired block bodies and receipts"
         defaultValue: false
         name: "prune" .}: bool
-
-      # https://eips.ethereum.org/EIPS/eip-7872
-      maxBlobs* {.
-        desc: "EIP-7872 maximum blobs used when building a local payload"
-        name: "max-blobs" .}: Option[uint8]
 
       # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/authentication.md#key-distribution
       jwtSecret* {.
@@ -805,6 +811,7 @@ func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
       else: config.rdbBranchCacheSize,
     rdbPrintStats = config.rdbPrintStats,
     maxSnapshots = config.aristoDbMaxSnapshots,
+    parallelStateRootComputation = config.parallelStateRootComputation
   )
 
 func jwtSecretOpt*(config: ExecutionClientConf): Opt[InputFile] =

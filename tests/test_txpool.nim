@@ -872,3 +872,95 @@ suite "TxPool test suite":
 
     # restore blobSchedule
     cc.blobSchedule[Prague] = bs
+
+  test "Tip ordering: higher per-gas tip is prioritized":
+    let
+      env = initEnv(Cancun)
+      xp = env.xp
+      mx = env.sender
+
+    xp.prevRandao = prevRandao
+    xp.feeRecipient = feeRecipient
+    xp.timestamp = EthTime.now()
+
+    let
+      accLow = mx.getAccount(0)
+      accHigh = mx.getAccount(1)
+      tcLow = BaseTx(
+        txType: Opt.some(TxEip1559),
+        gasLimit: 75000,
+        gasTip: 2.gwei,
+        gasFee: 30.gwei,
+        recipient: Opt.some(recipient),
+        amount: 1.u256,
+      )
+      tcHigh = BaseTx(
+        txType: Opt.some(TxEip1559),
+        gasLimit: 75000,
+        gasTip: 10.gwei,
+        gasFee: 30.gwei,
+        recipient: Opt.some(recipient),
+        amount: 1.u256,
+      )
+      ptxLow = mx.makeTx(tcLow, accLow, 0)
+      ptxHigh = mx.makeTx(tcHigh, accHigh, 0)
+
+    xp.checkAddTx(ptxLow)
+    xp.checkAddTx(ptxHigh)
+
+    let bundle = xp.checkAssembleBlock(2)
+    let txs = bundle.blk.transactions
+
+    # Higher tip tx should come first
+    let
+      baseFee = bundle.blk.header.baseFeePerGas
+      tip0 = txs[0].effectiveGasTip(baseFee)
+      tip1 = txs[1].effectiveGasTip(baseFee)
+    check tip0 >= tip1
+
+  test "Tip ordering: gasLimit does not affect priority":
+    let
+      env = initEnv(Cancun)
+      xp = env.xp
+      mx = env.sender
+
+    xp.prevRandao = prevRandao
+    xp.feeRecipient = feeRecipient
+    xp.timestamp = EthTime.now()
+
+    let
+      accHighGas = mx.getAccount(0)
+      accHighTip = mx.getAccount(1)
+      # High gasLimit, low tip
+      tcHighGas = BaseTx(
+        txType: Opt.some(TxEip1559),
+        gasLimit: 500000,
+        gasTip: 2.gwei,
+        gasFee: 30.gwei,
+        recipient: Opt.some(recipient),
+        amount: 1.u256,
+      )
+      # Low gasLimit, high tip
+      tcHighTip = BaseTx(
+        txType: Opt.some(TxEip1559),
+        gasLimit: 75000,
+        gasTip: 10.gwei,
+        gasFee: 30.gwei,
+        recipient: Opt.some(recipient),
+        amount: 1.u256,
+      )
+      ptxHighGas = mx.makeTx(tcHighGas, accHighGas, 0)
+      ptxHighTip = mx.makeTx(tcHighTip, accHighTip, 0)
+
+    xp.checkAddTx(ptxHighGas)
+    xp.checkAddTx(ptxHighTip)
+
+    let bundle = xp.checkAssembleBlock(2)
+    let txs = bundle.blk.transactions
+
+    # Higher per-gas tip tx should come first, regardless of gasLimit
+    let
+      baseFee = bundle.blk.header.baseFeePerGas
+      tip0 = txs[0].effectiveGasTip(baseFee)
+      tip1 = txs[1].effectiveGasTip(baseFee)
+    check tip0 >= tip1
