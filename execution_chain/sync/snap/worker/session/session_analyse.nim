@@ -290,7 +290,7 @@ template accNotify(
             traversingStorageMsg(stats, info)
 
         if rc.isErr and rc.error != ENoRoot:
-          debug info & ": failed traversing storage slots",
+          debug info & ": Failed traversing storage slots",
             root=acc.storageRoot.toStr, nErr=stats.nStoErr, `error`=rc.error
 
         stats.nStoNodes += stats.nNodes           # collect storage stats
@@ -344,13 +344,13 @@ template sessionAnalyseTrie*(
       stateRoot = pivot.root.Hash32
 
     template stats(): auto = trd.stats
-    debug info & ": start analysing MPT"
+    debug info & ": Start analysing MPT"
 
     let rc = traverseMpt(trd, stateRoot, getAccTrie, accNotify, info):
       traversingAccountsMsg(stats, info)
 
     if rc.isErr:
-      debug info & ": failed analysing MPT", `error`=rc.error
+      debug info & ": Failed analysing MPT", `error`=rc.error
       break body
 
     stats.nAccNodes += stats.nNodes
