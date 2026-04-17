@@ -630,7 +630,6 @@ proc init*(
     persistBatchSize = PersistBatchSize;
     dynamicBatchSize = false;
     eagerStateRoot = false;
-    maxBlobs = none(uint8);
     enableQueue = false;
       ): T =
   ## Constructor that uses the current database ledger state for initialising.
@@ -672,7 +671,6 @@ proc init*(
       baseDistance:     baseDistance,
       persistBatchSize: persistBatchSize,
       dynamicBatchSize: dynamicBatchSize,
-      maxBlobs:         maxBlobs,
       quarantine:       Quarantine.init(),
       fcuHead:          fcuHead,
       fcuSafe:          fcuSafe,
@@ -1025,7 +1023,7 @@ proc payloadBodyV2ByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Executio
       var blockBodyPortal = ?c.portal.getBlockBodyByHeader(header)
       # Same as above
       return ok(toPayloadBodyV2(
-        EthBlock.init(move(header), move(blockBodyPortal)), 
+        EthBlock.init(move(header), move(blockBodyPortal)),
           ?c.baseTxFrame.getBlockAccessList(header.computeRlpHash())))
 
   move(blk)
@@ -1068,7 +1066,7 @@ proc payloadBodyV2ByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Exec
         var blockBodyPortal = ?c.portal.getBlockBodyByHeader(header)
         # same as above
         return ok(toPayloadBodyV2(
-          EthBlock.init(move(header), move(blockBodyPortal)), 
+          EthBlock.init(move(header), move(blockBodyPortal)),
             ?c.baseTxFrame.getBlockAccessList(header.computeRlpHash())))
 
     return blk

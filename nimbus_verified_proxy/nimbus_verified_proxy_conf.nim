@@ -95,6 +95,20 @@ type VerifiedProxyConf* = object
     name: "debug-parallel-downloads"
   .}: uint64
 
+  syncHeaderStore* {.
+    hidden,
+    desc: "Write LC optimistic/finalized headers to the header store",
+    defaultValue: true,
+    name: "debug-sync-header-store"
+  .}: bool
+
+  freezeAtSlot* {.
+    hidden,
+    desc: "Freeze beacon time at this slot (0 = real clock). For testing only.",
+    defaultValue: 0'u64,
+    name: "debug-freeze-at-slot"
+  .}: uint64
+
   # Consensus light sync
   # No default - Needs to be provided by the user
   trustedBlockRoot* {.

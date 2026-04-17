@@ -184,12 +184,13 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
       return ContinueWithNextAccount
 
     let
+      maxBlobs = vmState.com.maxBlobs
       maxForkBlobsPerBlock = getMaxBlobsPerBlock(vmState.com, vmState.fork)
       maxBlobsPerBlock =
-        if xp.chain.maxBlobs.isSome:
+        if maxBlobs.isSome:
           # https://eips.ethereum.org/EIPS/eip-7872#specification
           # "If the minimum is zero, set the minimum to one."
-          min(max(xp.chain.maxBlobs.get, 1).uint64, maxForkBlobsPerBlock)
+          min(max(maxBlobs.get, 1).uint64, maxForkBlobsPerBlock)
         else:
           maxForkBlobsPerBlock
     if (pst.numBlobPerBlock + item.tx.versionedHashes.len).uint64 > maxBlobsPerBlock:

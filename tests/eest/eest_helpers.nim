@@ -253,7 +253,7 @@ proc prepareEnv*(
     let
       com = CommonRef.new(memDB, config,
         statelessProviderEnabled = statelessEnabled,
-        statelessWitnessValidation = statelessEnabled)
+        statelessWitnessValidation = false) # Running stateless execution separately in test runner
       chain = ForkedChainRef.init(com, enableQueue = true, persistBatchSize = 1)
 
     testEnv.chain = chain

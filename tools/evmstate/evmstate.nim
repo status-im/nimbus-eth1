@@ -145,8 +145,7 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
       writeRootHashToStderr(stateRoot)
 
   try:
-    let res = vmState.processTransaction(
-                   ctx.tx, sender, ctx.header)
+    let res = vmState.processTransaction(ctx.tx, sender)
     if res.isOk:
       callResult = res.value
     coinbaseStateClearing(vmState, ctx.header.coinbase)

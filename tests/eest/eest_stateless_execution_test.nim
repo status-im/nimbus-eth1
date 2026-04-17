@@ -84,19 +84,7 @@ const skipFiles = [
   "wallet_change_requirement_remove_pending_transaction.json", # persistStorage assert
   "callcode_to_precompile_from_called_contract.json", # stateRoot mismatch
   "validation_codes_missing_delegated_code_on_insufficient_balance_call.json", # blockAccessListHash mismatch
-  # This test vector specifically puts codes in unsorted order to test that stateless
-  # execution still works. But of course the witness will not match exactly.
-  "validation_codes_unsorted_but_complete.json",
-  # This test vector specifically adds unused butecode preimage to test that stateless
-  # execution still works. But of course the witness will not match exactly.
-  "validation_codes_extra_unused_bytecode.json",
-  # This test vector specifically puts state nodes in unsorted order to test that stateless
-  # execution still works. But of course the witness will not match exactly.
-  "validation_state_unsorted_but_complete.json",
   "validation_state_missing_delete_auxiliary_node.json", # persistStorage assert
-  # This test vector specifically adds unused trie nodes to test that stateless
-  # execution still works. But of course the witness will not match exactly.
-  "validation_state_extra_unused_trie_node.json",
 ]
 
 runEESTSuite(

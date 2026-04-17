@@ -57,6 +57,11 @@ type
         ## Generic backend database bulk storage function, `VertexRef(nil)`
         ## values indicate that records should be deleted.
 
+  PutVtxBlobFn* =
+    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: openArray[byte])
+      {.gcsafe, raises: [].}
+        ## Generic backend database bulk storage function. Doesn't support delete.
+
   PutLstFn* =
     proc(hdl: PutHdlRef; lst: SavedState)
       {.gcsafe, raises: [].}

@@ -275,7 +275,7 @@ proc exec(ctx: TransContext,
     if conf.traceEnabled.isSome:
       closeStream = setupTrace(conf, txIndex, computeRlpHash(tx), vmState)
 
-    let rc = vmState.processTransaction(tx, sender, header)
+    let rc = vmState.processTransaction(tx, sender)
 
     if conf.traceEnabled.isSome:
       closeTrace(vmState, closeStream)
