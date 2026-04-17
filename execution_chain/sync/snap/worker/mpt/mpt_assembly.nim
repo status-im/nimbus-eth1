@@ -767,6 +767,14 @@ proc putStateData*(
       ): PutResult =
   db.put33(StateData, root, encodeStateData(hash, number, touch, tag, coverage))
 
+proc putStateData*(
+    db: MptAsmRef;
+    state: WalkStateData;
+      ): PutResult =
+  db.put33(StateData, state.root,
+    encodeStateData(
+      state.hash, state.number, state.touch, state.tag, state.coverage))
+
 proc delStateData*(db: MptAsmRef; root: StateRoot): DelResult =
   db.del33(StateData, root)
 
