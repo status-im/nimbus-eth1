@@ -45,14 +45,6 @@ type
       defaultValue: false
       name: "disable-sync-ticker" .}: bool
 
-    snapSyncResume {.
-      desc: "Use the cached data from a previous session if there is any." &
-            " Otherwise, data from a previous snap session will be moved" &
-            " to a backup directory, the name ending with ~"
-      defaultValue: false
-      name: "snap-sync-resume" .}: bool
-
-
   SplitCmdLine = tuple
     leftArgs: seq[string]  # split command line: left to "--" marker (nimbus)
     rightArgs: seq[string] # split command line: right to "--" marker (tool)
@@ -100,9 +92,7 @@ proc beaconSyncConfig(conf: ToolConfig): BeaconSyncConfigHook =
       quit(QuitFailure)
 
 proc snapSyncConfig(conf: ToolConfig, defaultDir: string): SnapSyncConfigHook =
-  return proc(desc: SnapSyncRef) =
-    if conf.snapSyncResume:
-      desc.configResume()
+  discard
 
 # ------------------------------------------------------------------------------
 # Main
