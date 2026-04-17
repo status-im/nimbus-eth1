@@ -33,36 +33,38 @@ const
 # RLP encoding templates for MPT nodes
 # ------------------------------------------------------------------------------
 
+template rlpEncodeAccLeafValue*(account: Account): openArray[byte] =
+  var accW = RlpArrayBufWriter[MAX_RLP_SIZE_ACCOUNT_LEAF, 1]()
+  accW.append(account)
+  accW.finish(asOpenArray = true)
+
 template rlpEncodeAccLeaf*(
     pfx: NibblesBuf, account: AristoAccount, storageKey: HashKey
 ): openArray[byte] =
   var accLeafW = RlpArrayBufWriter[MAX_RLP_SIZE_ACCOUNT_LEAF_NODE, 1]()
   accLeafW.startList(2)
   accLeafW.append(pfx.toHexPrefix(isLeaf = true).data())
-  block:
-    var accW = RlpArrayBufWriter[MAX_RLP_SIZE_ACCOUNT_LEAF, 1]()
-    accW.append(
-      Account(
-        nonce: account.nonce,
-        balance: account.balance,
-        storageRoot: storageKey.to(Hash32),
-        codeHash: account.codeHash,
-      )
-    )
-    accLeafW.append(accW.finish(asOpenArray = true))
+  accLeafW.append(rlpEncodeAccLeafValue(Account(
+      nonce: account.nonce,
+      balance: account.balance,
+      storageRoot: storageKey.to(Hash32),
+      codeHash: account.codeHash,
+  )))
   accLeafW.finish(asOpenArray = true)
+
+template rlpEncodeStoLeafValue*(stoData: UInt256): openArray[byte] =
+  var stoW = RlpArrayBufWriter[MAX_RLP_SIZE_STORAGE_LEAF, 1]()
+  stoW.append(stoData)
+  stoW.finish(asOpenArray = true)
 
 template rlpEncodeStoLeaf*(pfx: NibblesBuf, stoData: UInt256): openArray[byte] =
   var stoLeafW = RlpArrayBufWriter[MAX_RLP_SIZE_STORAGE_LEAF_NODE, 1]()
   stoLeafW.startList(2)
   stoLeafW.append(pfx.toHexPrefix(isLeaf = true).data())
-  block:
-    var stoW = RlpArrayBufWriter[MAX_RLP_SIZE_STORAGE_LEAF, 1]()
-    stoW.append(stoData)
-    stoLeafW.append(stoW.finish(asOpenArray = true))
+  stoLeafW.append(rlpEncodeStoLeafValue(stoData))
   stoLeafW.finish(asOpenArray = true)
 
-template rlpEncodeBranch*(vtx: VertexRef, subKeyForN: untyped): openArray[byte] =
+template rlpEncodeBranch*(vtx: BranchRef, subKeyForN: untyped): openArray[byte] =
   var branchW = RlpArrayBufWriter[MAX_RLP_SIZE_BRANCH_NODE, 1]()
   branchW.startList(17)
   for (n {.inject.}, subvid {.inject.}) in vtx.allPairs():
@@ -88,7 +90,7 @@ proc to*(node: NodeRef, T: type array[2, seq[byte]]): T =
   ##
   case node.vtx.vType
   of Branches:
-    let brData = @(rlpEncodeBranch(node.vtx, node.key[n]))
+    let brData = @(rlpEncodeBranch(BranchRef(node.vtx), node.key[n]))
     if node.vtx.vType == ExtBranch:
       let brHash = brData.digestTo(HashKey)
       [@(rlpEncodeExt(ExtBranchRef(node.vtx).pfx, brHash)), brData]
@@ -107,7 +109,7 @@ proc digestTo*(node: NodeRef, T: type HashKey): T =
   ##
   case node.vtx.vType
   of Branches:
-    let brKey = rlpEncodeBranch(node.vtx, node.key[n]).digestTo(HashKey)
+    let brKey = rlpEncodeBranch(BranchRef(node.vtx), node.key[n]).digestTo(HashKey)
     if node.vtx.vType == ExtBranch:
       rlpEncodeExt(ExtBranchRef(node.vtx).pfx, brKey).digestTo(HashKey)
     else:

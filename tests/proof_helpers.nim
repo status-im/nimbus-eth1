@@ -8,7 +8,7 @@
 import
   stew/byteutils,
   eth/rlp,
-  eth/common/keys,
+  eth/common/[keys, hashes_rlp],
   web3/eth_api,
   ../execution_chain/db/aristo/aristo_proof
 
