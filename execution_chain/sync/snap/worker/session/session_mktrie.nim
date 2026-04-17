@@ -212,7 +212,7 @@ template sessionMkTrie*(
       ela += Moment.now() - start
 
       try:
-        await sleepAsync mktrieThreadSwitchTimeSlot
+        await sleepAsync threadSwitchTimeSlot
       except CancelledError as e:
         bodyRc = MkTrieResult.err((ECancelledError,$e.name,e.msg,ela))
         break body

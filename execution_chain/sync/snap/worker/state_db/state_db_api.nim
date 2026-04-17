@@ -446,6 +446,11 @@ proc setAccountRange*(
     db.allUnprocRollOverIfEmpty()                   # global register roll over
     db.updateMetrics()
 
+proc addAccountArchive*(db: StateDbRef; processedRatio: float) =
+  ## Add `processedRatio` to archive metrics. This function a helper for
+  ## restoring the state DB when recovering from a previous session.
+  db.archived += processedRatio
+
 # ------------------------------------------------------------------------------
 # Public storage slots and code database function(s)
 # ------------------------------------------------------------------------------
