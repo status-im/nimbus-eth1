@@ -12,7 +12,6 @@
 import
   std/[sequtils, strutils, tables, typetraits],
   pkg/[eth/common, eth/trie/nibbles, stew/byteutils],
-  pkg/eth/rlp as eth_rlp,
   ../../../wire_protocol/snap/snap_types,
   ../state_db,
   ./mpt_desc
@@ -35,8 +34,9 @@ proc append(w: var RlpWriter, val: AccBody) =
 
 proc decodeByteList(rawData: openArray[byte]): Opt[seq[byte]] =
   try:
-    return ok eth_rlp.decode(rawData, seq[byte])
-  except:
+    var rlp = rawData.rlpFromBytes
+    return ok rlp.read seq[byte]
+  except RlpError:
     discard
   err()
 

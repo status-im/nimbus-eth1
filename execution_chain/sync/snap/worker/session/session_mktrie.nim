@@ -11,17 +11,10 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, sets, sequtils, strutils, typetraits],
+  std/[algorithm, sets, sequtils, typetraits],
   pkg/[chronicles, chronos, stew/interval_set],
   ../[helpers, mpt, state_db, worker_desc],
   ./session_helpers
-
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-func toStr(pid: Hash): string =
-  pid.toHex.toLowerAscii
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -48,7 +41,7 @@ template mkStoTrie(
       root {.inject,used.} = wAcc.root.toStr        # logging only
       accKey {.inject,used.} = acc.accHash.to(ItemKey).flStr
       stoRoot {.inject,used.} = storageRoot.toStr   # logging only
-      peerID {.inject,used.} = wAcc.peerID.toStr    # logging only
+      peerID {.inject,used.} = wAcc.peerID.short    # logging only
 
     # Loop over storage slots for particular account
     for w in ctx.pool.mptAsm.walkStoSlot(wAcc.root, acc.accHash.to(ItemKey)):
@@ -164,7 +157,7 @@ template mkTrieImpl(
     # Validate packet, get a list of `(key,node)` pairs
     let mpt = wAcc.root.validate(wAcc.start, wAcc.accounts, wAcc.proof).valueOr:
       error info & ": Accounts validation failed", stateInx=status.stateInx,
-        nStates=status.nStates, peerID=wAcc.peerID.toStr, root, blockNumber,
+        nStates=status.nStates, peerID=wAcc.peerID.short, root, blockNumber,
         iv, nAccounts, nProof
       bodyRc = Opt.some(ETrieError)
       break body
@@ -180,7 +173,7 @@ template mkTrieImpl(
     let adb = ctx.pool.mptAsm
     adb.putAccTrie(mpt.kvPairs()).isOkOr:
       error info & ": Cannot store accounts on trie", stateInx=status.stateInx,
-        nStates=status.nStates, peerID=wAcc.peerID.toStr, root, blockNumber,
+        nStates=status.nStates, peerID=wAcc.peerID.short, root, blockNumber,
         iv, nAccounts, nProof, `error`=error
       bodyRc = Opt.some(ETrieError)
       break body
