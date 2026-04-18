@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -121,7 +121,7 @@ func getWithdrawals*(x: seq[capella.Withdrawal]): seq[blocks.Withdrawal] =
 func getEthBlock*(blck: ForkyTrustedBeaconBlock, res: var EthBlock): bool =
   ## Convert a beacon block to an eth1 block.
   const consensusFork = typeof(blck).kind
-  when consensusFork >= ConsensusFork.Bellatrix and consensusFork != ConsensusFork.Gloas:
+  when consensusFork >= ConsensusFork.Bellatrix and consensusFork < ConsensusFork.Gloas:
     var
       payload = blck.body.execution_payload
       txs = getTxs(payload.transactions.asSeq())

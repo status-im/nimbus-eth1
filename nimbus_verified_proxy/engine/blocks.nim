@@ -122,7 +122,7 @@ proc walkBlocks(
     downloadedHeaders.clear()
 
     # select one backend for batch requests
-    let (backend, backendIdx) = ?(engine.backendFor(GetBlockByNumber))
+    let (backend, backendIdx) = ?(engine.executionBackendFor(GetBlockByNumber))
 
     while nextNum > targetNum and uint64(futs.len) < engine.parallelBlockDownloads:
       if not engine.headerStore.contains(nextNum):
@@ -286,7 +286,7 @@ proc getBlock*(
 ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
   # get the target block
   let
-    (backend, backendIdx) = ?(engine.backendFor(GetBlockByHash))
+    (backend, backendIdx) = ?(engine.executionBackendFor(GetBlockByHash))
     blk = ?(
       (await backend.eth_getBlockByHash(blockHash, fullTransactions)).tagBackend(
         backendIdx
@@ -314,7 +314,7 @@ proc getBlock*(
 
   # get the target block
   let
-    (backend, backendIdx) = ?(engine.backendFor(GetBlockByNumber))
+    (backend, backendIdx) = ?(engine.executionBackendFor(GetBlockByNumber))
     blk = ?(
       (await backend.eth_getBlockByNumber(numberTag, fullTransactions)).tagBackend(
         backendIdx
@@ -347,7 +347,7 @@ proc getHeader*(
 
   # get the target block
   let
-    (backend, backendIdx) = ?(engine.backendFor(GetBlockByHash))
+    (backend, backendIdx) = ?(engine.executionBackendFor(GetBlockByHash))
     blk = ?((await backend.eth_getBlockByHash(blockHash, false)).tagBackend(backendIdx))
 
   let header = convHeader(blk)
@@ -379,7 +379,7 @@ proc getHeader*(
 
   # get the target block
   let
-    (backend, backendIdx) = ?(engine.backendFor(GetBlockByNumber))
+    (backend, backendIdx) = ?(engine.executionBackendFor(GetBlockByNumber))
     blk =
       ?((await backend.eth_getBlockByNumber(numberTag, false)).tagBackend(backendIdx))
 

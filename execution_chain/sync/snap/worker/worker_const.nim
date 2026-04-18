@@ -80,14 +80,6 @@ const
     ## pivot must also have reached the factor `accuPivotCovMin` in order to
     ## start trie assembly and healing.
 
-  relativeCoverageEvictionThreshold* = 0.1
-    ## If the ratio
-    ## ::
-    ##   minimal-state-coverage / pivot-acccounts-coverage
-    ##
-    ## is not small enough, then the pivot state may be evicted from the
-    ## states list to make space for a new state.
-
   # ----------------------
 
   unprocAccountsRangeMax* = (1.u256 shl 240) # ~65k intervals
@@ -102,11 +94,6 @@ const
     ## state roots corresponding to consecutibe block numbers.
     ##
     ## Note that there are about 400k accounts on `mainnet` (as of early 2026.)
-
-  nWorkingStateRootsMax* = 3
-    ## Stop the current session after accounts could be downloaded for this
-    ## many different state roots. The session will then be released and a
-    ## new one started.
 
   # -----------
 
@@ -145,6 +132,9 @@ const
   nProcStorageErrThreshold* = 4
     ## Similar to `nProcAccountErrThreshold`
 
+  nFetchStorageSlotsMax* = 1024
+    ## Maximal size of storage slots downloaded in a single message.
+
   # -----------
 
   fetchCodesSnapTimeout* = chronos.seconds(120)
@@ -158,5 +148,8 @@ const
 
   nProcCodesErrThreshold* = 4
     ## Similar to `nProcAccountErrThreshold`
+
+  nFetchByteCodesMax* = 1024
+    ## Maximal sise of byte codes downloaded in a single message.
 
 # End

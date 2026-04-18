@@ -8,153 +8,109 @@
 {.push raises: [], gcsafe.}
 
 import
-  stint,
   chronos,
   chronicles,
   presto/client,
   beacon_chain/spec/eth2_apis/rest_light_client_calls,
   beacon_chain/spec/presets,
   beacon_chain/spec/forks,
-  ./lc/lc_manager,
-  ./nimbus_verified_proxy_conf
+  ./engine/types
 
 logScope:
-  topics = "LCRestClientPool"
+  topics = "BeaconApiRestClient"
 
 const
   MaxMessageBodyBytes* = 128 * 1024 * 1024 # 128 MB (JSON encoded)
   BASE_URL = "/eth/v1/beacon/light_client"
 
-type
-  LCRestClient = ref object
-    score: int
-    restClient: RestClientRef
+type BeaconApiRestClient* = ref object
+  cfg: RuntimeConfig
+  forkDigests: ref ForkDigests
+  client: RestClientRef
+  url: string
 
-  LCRestClientPool* = ref object
-    cfg: RuntimeConfig
-    forkDigests: ref ForkDigests
-    clients: seq[LCRestClient]
-    idMap: Table[uint64, LCRestClient]
-    urls: seq[string]
+func init*(
+    T: type BeaconApiRestClient,
+    cfg: RuntimeConfig,
+    forkDigests: ref ForkDigests,
+    url: string,
+): BeaconApiRestClient =
+  BeaconApiRestClient(cfg: cfg, forkDigests: forkDigests, url: url)
 
-func new*(
-    T: type LCRestClientPool, cfg: RuntimeConfig, forkDigests: ref ForkDigests
-): LCRestClientPool =
-  LCRestClientPool(cfg: cfg, forkDigests: forkDigests, clients: @[])
-
-proc addEndpoints*(pool: LCRestClientPool, urlList: UrlList): Result[void, string] =
-  for endpoint in urlList:
-    if endpoint in pool.urls:
-      continue
-
-    let restClient = RestClientRef.new(endpoint).valueOr:
-      return err($error)
-
-    pool.clients.add(LCRestClient(score: 0, restClient: restClient))
-    pool.urls.add(endpoint)
+proc start*(backend: BeaconApiRestClient): EngineResult[void] =
+  backend.client = RestClientRef.new(backend.url).valueOr:
+    return err((BackendError, $error, UNTAGGED))
 
   ok()
 
-proc closeAll*(pool: LCRestClientPool) {.async: (raises: []).} =
-  for client in pool.clients:
-    await client.restClient.closeWait()
+proc stop*(backend: BeaconApiRestClient) {.async: (raises: []).} =
+  await backend.client.closeWait()
 
-  pool.clients.setLen(0)
-  pool.urls.setLen(0)
-
-proc getClientForReqId(pool: LCRestClientPool, reqId: uint64): LCRestClient =
-  if pool.idMap.contains(reqId):
-    return pool.idMap.getOrDefault(reqId)
-
-  let client = pool.clients[reqId mod pool.clients.lenu64]
-  pool.idMap[reqId] = client
-
-  client
-
-proc getEthLCBackend*(pool: LCRestClientPool): EthLCBackend =
+proc getBeaconApiBackend*(backend: BeaconApiRestClient): BeaconApiBackend =
   let
     getLCBootstrapProc = proc(
-        reqId: uint64, blockRoot: Eth2Digest
-    ): Future[NetRes[ForkedLightClientBootstrap]] {.async: (raises: [CancelledError]).} =
-      let
-        client = pool.getClientForReqId(reqId)
-        res =
-          try:
-            await client.restClient.getLightClientBootstrap(
-              blockRoot, pool.cfg, pool.forkDigests
-            )
-          except CancelledError as e:
-            raise e
-          except CatchableError as e:
-            return err()
-
-      ok(res)
+        blockRoot: Eth2Digest
+    ): Future[EngineResult[ForkedLightClientBootstrap]] {.
+        async: (raises: [CancelledError])
+    .} =
+      try:
+        ok(
+          await backend.client.getLightClientBootstrap(
+            blockRoot, backend.cfg, backend.forkDigests
+          )
+        )
+      except CancelledError as e:
+        raise e
+      except CatchableError as e:
+        err((BackendFetchError, e.msg, UNTAGGED))
 
     getLCUpdatesProc = proc(
-        reqId: uint64, startPeriod: SyncCommitteePeriod, count: uint64
-    ): Future[LightClientUpdatesByRangeResponse] {.async: (raises: [CancelledError]).} =
-      let
-        client = pool.getClientForReqId(reqId)
-        res =
-          try:
-            await client.restClient.getLightClientUpdatesByRange(
-              startPeriod, count, pool.cfg, pool.forkDigests
-            )
-          except CancelledError as e:
-            raise e
-          except CatchableError as e:
-            return err()
-
-      ok(res)
-
-    getLCFinalityProc = proc(
-        reqId: uint64
-    ): Future[NetRes[ForkedLightClientFinalityUpdate]] {.
+        startPeriod: SyncCommitteePeriod, count: uint64
+    ): Future[EngineResult[seq[ForkedLightClientUpdate]]] {.
         async: (raises: [CancelledError])
     .} =
-      let
-        client = pool.getClientForReqId(reqId)
-        res =
-          try:
-            await client.restClient.getLightClientFinalityUpdate(
-              pool.cfg, pool.forkDigests
-            )
-          except CancelledError as e:
-            raise e
-          except CatchableError as e:
-            return err()
+      try:
+        ok(
+          await backend.client.getLightClientUpdatesByRange(
+            startPeriod, count, backend.cfg, backend.forkDigests
+          )
+        )
+      except CancelledError as e:
+        raise e
+      except CatchableError as e:
+        err((BackendFetchError, e.msg, UNTAGGED))
 
-      ok(res)
-
-    getLCOptimisticProc = proc(
-        reqId: uint64
-    ): Future[NetRes[ForkedLightClientOptimisticUpdate]] {.
+    getLCFinalityProc = proc(): Future[EngineResult[ForkedLightClientFinalityUpdate]] {.
         async: (raises: [CancelledError])
     .} =
-      let
-        client = pool.getClientForReqId(reqId)
-        res =
-          try:
-            await client.restClient.getLightClientOptimisticUpdate(
-              pool.cfg, pool.forkDigests
-            )
-          except CancelledError as e:
-            raise e
-          except CatchableError as e:
-            return err()
+      try:
+        ok(
+          await backend.client.getLightClientFinalityUpdate(
+            backend.cfg, backend.forkDigests
+          )
+        )
+      except CancelledError as e:
+        raise e
+      except CatchableError as e:
+        err((BackendFetchError, e.msg, UNTAGGED))
 
-      ok(res)
+    getLCOptimisticProc = proc(): Future[
+        EngineResult[ForkedLightClientOptimisticUpdate]
+    ] {.async: (raises: [CancelledError]).} =
+      try:
+        ok(
+          await backend.client.getLightClientOptimisticUpdate(
+            backend.cfg, backend.forkDigests
+          )
+        )
+      except CancelledError as e:
+        raise e
+      except CatchableError as e:
+        err((BackendFetchError, e.msg, UNTAGGED))
 
-    updateScoreProc = proc(reqId: uint64, value: int) =
-      let client = pool.getClientForReqId(reqId)
-      client.score += value
-
-      pool.idMap.del(reqId)
-
-  EthLCBackend(
+  BeaconApiBackend(
     getLightClientBootstrap: getLCBootstrapProc,
     getLightClientUpdatesByRange: getLCUpdatesProc,
     getLightClientFinalityUpdate: getLCFinalityProc,
     getLightClientOptimisticUpdate: getLCOptimisticProc,
-    updateScore: updateScoreProc,
   )
