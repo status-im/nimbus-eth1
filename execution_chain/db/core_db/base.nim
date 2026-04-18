@@ -60,6 +60,9 @@ template computeAccPath*(address: Address): Hash32 =
 template computeSlotKey*(slot: UInt256): Hash32 =
   keccak256(slot.toBytesBE())
 
+template computeSlotKey*(slot: Bytes32): Hash32 =
+  keccak256(slot.data)
+
 # ------------------------------------------------------------------------------
 # Public context constructors and administration
 # ------------------------------------------------------------------------------
