@@ -155,13 +155,54 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
     await peer.disconnect(BreachOfProtocol)
     return
 
+  # Cross-peer dedupe: drop hashes already in the pool or being fetched by
+  # another in-flight action. The remaining (novel) hashes are the ones we
+  # actually need to schedule a fetch for.
+  let
+    nowTime = getTime()
+    peerId = peer.id
+  var
+    novelTypes: seq[byte]
+    novelSizes: seq[uint64]
+    novelHashes: seq[Hash32]
+  for i in 0 ..< packet.txHashes.len:
+    let h = packet.txHashes[i]
+    if h in wire.txPool:
+      continue
+    wire.seenTransactions.withValue(h, seen):
+      seen[].lastSeen = nowTime
+      seen[].peers.incl(peerId)
+      continue
+    do:
+      var peers = initHashSet[NodeId]()
+      peers.incl(peerId)
+      wire.seenTransactions[h] =
+        SeenObject(lastSeen: nowTime, peers: peers)
+      novelTypes.add packet.txTypes[i]
+      novelSizes.add packet.txSizes[i]
+      novelHashes.add h
+
+  if novelHashes.len == 0:
+    return
+
   if wire.actionQueue.full:
     debug "Action queue full, dropping tx hash announcement",
-      hashes = packet.txHashes.len
+      hashes = novelHashes.len
+    # Release dedupe slots so a later retry can proceed.
+    for h in novelHashes:
+      wire.seenTransactions.del(h)
     return
+
+  let novelPacket = NewPooledTransactionHashesPacket(
+    txTypes: novelTypes,
+    txSizes: novelSizes,
+    txHashes: novelHashes,
+  )
 
   wire.reqisterAction("Handle broadcast transactions hashes"):
     if peer.connectionState != ConnectionState.Connected:
+      for h in novelPacket.txHashes:
+        wire.seenTransactions.del(h)
       return
 
     type
@@ -170,7 +211,7 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
         txType: byte
 
     let
-      numTx = packet.txHashes.len
+      numTx = novelPacket.txHashes.len
 
     var
       i = 0
@@ -183,17 +224,17 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
         sumSize = 0'u64
 
       while i < numTx:
-        let size = packet.txSizes[i]
+        let size = novelPacket.txSizes[i]
         if sumSize + size > SOFT_RESPONSE_LIMIT.uint64:
           break
 
-        let txHash = packet.txHashes[i]
+        let txHash = novelPacket.txHashes[i]
         if txHash notin wire.txPool:
           msg.txHashes.add txHash
           sumSize += size
           map[txHash] = SizeType(
             size: size,
-            txType: packet.txTypes[i],
+            txType: novelPacket.txTypes[i],
           )
 
         awaitQuota(wire, hashLookupCost, "check transaction exists in pool")
@@ -203,6 +244,8 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
         continue
 
       if peer.connectionState != ConnectionState.Connected:
+        for h in msg.txHashes:
+          wire.seenTransactions.del(h)
         return
 
       try:
@@ -210,10 +253,14 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
       except EthP2PError as exc:
         debug "Request pooled transactions failed",
           msg=exc.msg
+        for h in msg.txHashes:
+          wire.seenTransactions.del(h)
         return
 
       if res.isNone:
         debug "Request pooled transactions get nothing"
+        for h in msg.txHashes:
+          wire.seenTransactions.del(h)
         continue
 
       let
