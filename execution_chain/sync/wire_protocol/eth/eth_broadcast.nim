@@ -13,8 +13,6 @@ import
   pkg/chronos/ratelimit,
   pkg/eth/common/[hashes, times],
   ../../../core/chain/forked_chain,
-  ../../../core/eip4844,
-  ../../../core/eip7594,
   ../../../core/pooled_txs_rlp,
   ../../../core/tx_pool,
   ../../../networking/p2p,
@@ -130,8 +128,10 @@ proc handleTransactionsBroadcast*(wire: EthWireRef,
         return
 
       wire.txPool.addTx(tx).isOkOr:
+        await sleepAsync(ZeroDuration)
         continue
 
+      await sleepAsync(ZeroDuration)
       awaitQuota(wire, txPoolProcessCost, "adding into txpool")
 
 proc handleTxHashesBroadcast*(wire: EthWireRef,
@@ -291,30 +291,26 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
           await peer.disconnect(BreachOfProtocol)
           return
 
-        if tx.tx.txType == TxEip4844:
-          if tx.blobsBundle.isNil:
-            debug "Protocol Breach: Received sidecar-less blob transaction",
+        if tx.tx.txType == TxEip4844 and tx.blobsBundle.isNil:
+          debug "Protocol Breach: Received sidecar-less blob transaction",
+            remote=peer.remote, clientId=peer.clientId
+          await peer.disconnect(BreachOfProtocol)
+          return
+
+        # addTx performs the expensive KZG verification itself; on
+        # InvalidBlob we treat it as a protocol breach. Yield to the
+        # event loop afterwards so RPC and peer dispatch aren't starved
+        # during a large batch.
+        wire.txPool.addTx(tx).isOkOr:
+          if error == txErrorInvalidBlob:
+            debug "Protocol Breach: Invalid blob transaction",
               remote=peer.remote, clientId=peer.clientId
             await peer.disconnect(BreachOfProtocol)
             return
-
-          if tx.blobsBundle.wrapperVersion == WrapperVersionEIP4844:
-            validateBlobTransactionWrapper4844(tx).isOkOr:
-              debug "Protocol Breach: EIP-4844 sidecar validation error", msg=error,
-                remote=peer.remote, clientId=peer.clientId
-              await peer.disconnect(BreachOfProtocol)
-              return
-
-          if tx.blobsBundle.wrapperVersion == WrapperVersionEIP7594:
-            validateBlobTransactionWrapper7594(tx).isOkOr:
-              debug "Protocol Breach: EIP-7594 sidecar validation error", msg=error,
-                remote=peer.remote, clientId=peer.clientId
-              await peer.disconnect(BreachOfProtocol)
-              return
-
-        wire.txPool.addTx(tx).isOkOr:
+          await sleepAsync(ZeroDuration)
           continue
 
+        await sleepAsync(ZeroDuration)
         awaitQuota(wire, txPoolProcessCost, "broadcast transactions hashes")
 
 proc tickerLoop*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
