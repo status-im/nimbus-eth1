@@ -61,8 +61,8 @@ func allowedOpsPerSecondCost(n: int): float =
   (replenishRate * 1000000000'f / n.float)
 
 const
-  txPoolProcessCost = allowedOpsPerSecondCost(1000)
-  hashLookupCost = allowedOpsPerSecondCost(2000)
+  txPoolProcessCost = allowedOpsPerSecondCost(50_000)
+  hashLookupCost = allowedOpsPerSecondCost(200_000)
   blockRangeUpdateCost = allowedOpsPerSecondCost(20)
 
 iterator peers69OrLater(wire: EthWireRef, random: bool = false): Peer =
