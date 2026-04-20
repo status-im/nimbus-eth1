@@ -46,6 +46,7 @@ proc commitOrRollbackDependingOnGasUsed(
     callResult: var LogResult;
     priorityFee: GasInt;
     blobGasUsed: GasInt;
+    rollbackReads: bool;
       ): Result[void, string] =
   # Make sure that the tx does not exceed the maximum cumulative limit as
   # set in the vmState.blockCtx. Again, the EIP-1559 reference does not mention
@@ -60,14 +61,14 @@ proc commitOrRollbackDependingOnGasUsed(
       vmState.blockStateGasUsed + callResult.blockStateGasUsed)
     if vmState.blockCtx.gasLimit < limit2d:
       if vmState.balTrackerEnabled:
-        vmState.balTracker.rollbackCallFrame()
+        vmState.balTracker.rollbackCallFrame(rollbackReads)
       vmState.ledger.rollback(savePoint)
       return err(&"invalid tx: block gas limit reached (2D). gasLimit={vmState.blockCtx.gasLimit}, regularGas={vmState.blockRegularGasUsed}+{callResult.blockRegularGasUsed}, stateGas={vmState.blockStateGasUsed}+{callResult.blockStateGasUsed}")
   else:
     let limit = vmState.cumulativeGasUsed + gasUsed
     if vmState.blockCtx.gasLimit < limit:
       if vmState.balTrackerEnabled:
-        vmState.balTracker.rollbackCallFrame()
+        vmState.balTracker.rollbackCallFrame(rollbackReads)
       vmState.ledger.rollback(savePoint)
       return err(&"invalid tx: block gasLimit reached. gasLimit={vmState.blockCtx.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasUsed}")
 
@@ -76,8 +77,9 @@ proc commitOrRollbackDependingOnGasUsed(
   if vmState.balTrackerEnabled:
     vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), txFee)
     vmState.balTracker.commitCallFrame()
-  vmState.ledger.commit(savePoint)
+
   vmState.ledger.addBalance(vmState.coinbase(), txFee)
+  vmState.ledger.commit(savePoint)
   vmState.cumulativeGasUsed += gasUsed
   vmState.blockRegularGasUsed += callResult.blockRegularGasUsed
   vmState.blockStateGasUsed += callResult.blockStateGasUsed
@@ -88,10 +90,15 @@ proc commitOrRollbackDependingOnGasUsed(
     emitClosureLogs(vmState, callResult.logEntries)
   ok()
 
-proc processTransactionImpl(
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+proc processTransaction*(
     vmState: BaseVMState; ## Parent accounts environment for transaction
     tx:      Transaction; ## Transaction to validate
     sender:  Address;  ## tx.recoverSender
+    rollbackReads: bool = false;
       ): Result[LogResult, string] =
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
   ## which provides a backward compatible framwork for EIP1559.
@@ -141,7 +148,7 @@ proc processTransactionImpl(
       vmState.captureTxEnd(tx.gasLimit - callResult.gasUsed)
 
       let tmp = commitOrRollbackDependingOnGasUsed(
-        vmState, savePoint, tx, callResult, priorityFee, blobGasUsed)
+        vmState, savePoint, tx, callResult, priorityFee, blobGasUsed, rollbackReads)
 
       if tmp.isErr():
         err(tmp.error)
@@ -153,10 +160,6 @@ proc processTransactionImpl(
   vmState.ledger.persist(clearEmptyAccount = fork >= FkSpurious)
 
   res
-
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
 
 proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32):
                               Result[void, string] =
@@ -250,13 +253,6 @@ proc processDequeueConsolidationRequests*(vmState: BaseVMState): Result[seq[byte
     return err("processDequeueConsolidationRequests: " & res.error)
   ledger.persist(clearEmptyAccount = true)
   ok(res.output)
-
-proc processTransaction*(
-    vmState: BaseVMState; ## Parent accounts environment for transaction
-    tx:      Transaction; ## Transaction to validate
-    sender:  Address;  ## tx.recoverSender
-      ): Result[LogResult, string] =
-  vmState.processTransactionImpl(tx, sender)
 
 # ------------------------------------------------------------------------------
 # End

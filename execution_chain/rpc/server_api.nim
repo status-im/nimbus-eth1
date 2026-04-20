@@ -757,3 +757,20 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
   server.rpc("eth_maxPriorityFeePerGas") do() -> Quantity:
     w3Qty(calculateMedianMaxPriorityFeePerGas(api.chain).uint64)
+
+  server.rpc("eth_getStorageValues") do(request: StorageValuesRequest, blockTag: BlockTag) -> StorageValuesResponse:
+    let
+      txFrame = api.frameFromTag(blockTag).valueOr:
+        raise newException(ValueError, error)
+
+    var res: StorageObject
+    for req in request.list:
+      let accPath = req.address.computeAccPath
+      res.address = req.address
+      res.data.setLen(req.data.len)
+      for i, slot in req.data:
+        let
+          slotKey = computeSlotKey(slot)
+          value = txFrame.fetchSlot(accPath, slotKey).valueOr(0.u256)
+        res.data[i] = value.to(Bytes32)
+      result.list.add(move(res))
