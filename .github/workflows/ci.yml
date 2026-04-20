@@ -13,7 +13,6 @@ on:
   push:
     branches:
       - master
-      - nim-2210
     paths-ignore:
       - 'doc/**'
       - 'portal/docs/**'
