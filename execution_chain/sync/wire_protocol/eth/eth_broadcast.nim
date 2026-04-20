@@ -161,6 +161,9 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
     return
 
   wire.reqisterAction("Handle broadcast transactions hashes"):
+    if peer.connectionState != ConnectionState.Connected:
+      return
+
     type
       SizeType = object
         size: uint64
@@ -198,6 +201,9 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
 
       if msg.txHashes.len == 0:
         continue
+
+      if peer.connectionState != ConnectionState.Connected:
+        return
 
       try:
         res = await peer.getPooledTransactions(msg)
@@ -314,10 +320,9 @@ proc actionLoop*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
     await action()
 
 proc stop*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
-  var waitedFutures = @[
-    wire.tickerHeartbeat.cancelAndWait(),
-    wire.actionHeartbeat.cancelAndWait(),
-  ]
+  var waitedFutures = @[wire.tickerHeartbeat.cancelAndWait()]
+  for fut in wire.actionHeartbeat:
+    waitedFutures.add fut.cancelAndWait()
 
   let
     timeout = chronos.seconds(5)

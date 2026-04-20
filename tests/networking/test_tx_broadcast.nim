@@ -102,7 +102,7 @@ proc close(env: BroadcastTestEnv) =
   waitFor env.chain.stopProcessingQueue()
 
 const
-  MAX_ACTION_HANDLER = 128
+  MAX_ACTION_HANDLER = 512
 
 suite "Tx broadcast queue":
 
@@ -181,7 +181,8 @@ suite "Tx broadcast queue":
       check not env1.wire.syncerRunning()
 
       # Stop the action loop so it doesn't consume items from the queue
-      await env1.wire.actionHeartbeat.cancelAndWait()
+      for fut in env1.wire.actionHeartbeat:
+        await fut.cancelAndWait()
 
       # Fill the action queue to capacity
       for i in 0 ..< MAX_ACTION_HANDLER:
@@ -230,7 +231,8 @@ suite "Tx broadcast queue":
       check not env1.wire.syncerRunning()
 
       # Stop the action loop so it doesn't consume items from the queue
-      await env1.wire.actionHeartbeat.cancelAndWait()
+      for fut in env1.wire.actionHeartbeat:
+        await fut.cancelAndWait()
 
       for i in 0 ..< MAX_ACTION_HANDLER:
         proc blockingHandler(): Future[void] {.async: (raises: [CancelledError]).} =
@@ -260,5 +262,74 @@ suite "Tx broadcast queue":
 
       env2.close()
       env1.close()
+
+    waitFor runTest()
+
+  test "tx hashes action exits early when peer is disconnecting":
+    ## Fix: the queued action checks peer.connectionState at the start
+    ## of its body. If the peer moved to Disconnecting before the action
+    ## ran (stale work for a dying peer), we must not call
+    ## getPooledTransactions — return immediately instead of burning the
+    ## 10s request timeout.
+    proc runTest() {.async.} =
+      var env1 = newBroadcastTestEnv()
+      var env2 = newBroadcastTestEnv()
+
+      env2.node.startListening()
+      let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+      check connRes.isOk()
+      let peer = connRes.get()
+
+      check not env1.wire.syncerRunning()
+
+      # Stop the action loop so we can inspect the queued action ourselves.
+      for fut in env1.wire.actionHeartbeat:
+        await fut.cancelAndWait()
+
+      let packet = NewPooledTransactionHashesPacket(
+        txTypes: @[2.byte],
+        txSizes: @[100.uint64],
+        txHashes: @[default(Hash32)],
+      )
+
+      # Handler enqueues an action while peer is Connected.
+      await env1.wire.handleTxHashesBroadcast(packet, peer)
+      check env1.wire.actionQueue.len == 1
+
+      # Simulate the peer dying before the action runs.
+      peer.connectionState = Disconnecting
+
+      # Run the queued action. Without Fix 4 it would call
+      # peer.getPooledTransactions on a dying peer and wait up to 10s.
+      let action = await env1.wire.actionQueue.popFirst()
+      let completed = await withTimeout(action(), chronos.seconds(2))
+      check completed
+
+      env2.close()
+      env1.close()
+
+    waitFor runTest()
+
+  test "multiple action workers drain queue in parallel":
+    ## Fix 5: NUM_ACTION_WORKERS > 1 means one slow action cannot starve
+    ## subsequent actions. With a single worker, the fast action would
+    ## wait for the slow one to complete.
+    proc runTest() {.async.} =
+      let env = newBroadcastTestEnv()
+
+      var fastDone = false
+
+      proc slow(): Future[void] {.async: (raises: [CancelledError]).} =
+        await sleepAsync(chronos.seconds(2))
+      proc fast(): Future[void] {.async: (raises: [CancelledError]).} =
+        fastDone = true
+
+      await env.wire.actionQueue.addLast(slow)
+      await env.wire.actionQueue.addLast(fast)
+
+      await sleepAsync(chronos.milliseconds(200))
+      check fastDone
+
+      env.close()
 
     waitFor runTest()
