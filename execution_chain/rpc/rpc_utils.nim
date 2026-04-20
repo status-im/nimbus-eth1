@@ -13,7 +13,7 @@ import
   std/[sequtils, algorithm, strutils],
   ./rpc_types,
   ./params,
-  ../db/ledger,
+  ../db/[ledger, core_db, storage_types],
   ../constants, stint,
   ../utils/utils,
   ../transaction,
@@ -415,47 +415,79 @@ proc getTotalDifficulty*(chain: ForkedChainRef, blockHash: Hash32, header: Heade
     # Note: It's ok to use baseTxFrame for TD as this is for historical blocks
     chain.baseTxFrame().getScore(blockHash)
 
-proc headerFromTag*(chain: ForkedChainRef, blockTag: BlockTag): Result[Header, string] =
-  case blockTag.kind
-  of bidAlias:
-    let tag = blockTag.alias.toLowerAscii
-    case tag
-    of "latest":
-      ok(chain.latestHeader)
-    of "finalized":
-      ok(chain.finalizedHeader)
-    of "safe":
-      ok(chain.safeHeader)
-    of "earliest":
-      chain.headerByNumber(base.BlockNumber(0))
-    else:
-      err("Unsupported block tag " & tag)
-  of bidNumber:
-    let blockNum = base.BlockNumber blockTag.number
-    chain.headerByNumber(blockNum)
-  of bidHash:
-    chain.headerByHash(blockTag.hash)
+proc baseHasBlockNumber(chain: ForkedChainRef, number: base.BlockNumber): bool =
+  chain.baseTxFrame().hasKey(blockNumberToHashKey(number).toOpenArray)
 
-proc blockFromTag*(chain: ForkedChainRef, blockTag: BlockTag, noHash: bool = false): Result[Block, string] =
+proc baseHasBlockHash(chain: ForkedChainRef, blockHash: Hash32): bool =
+  chain.baseTxFrame().hasKey(genericHashKey(blockHash).toOpenArray)
+
+proc earliestBlockNumber(chain: ForkedChainRef): base.BlockNumber =
+  chain.baseTxFrame().getChainTail()
+
+proc headerFromTag*(chain: ForkedChainRef, blockTag: BlockTag): Result[Opt[Header], string] =
   case blockTag.kind
   of bidAlias:
     let tag = blockTag.alias.toLowerAscii
     case tag
     of "latest":
-      ok(chain.latestBlock)
+      ok(Opt.some(chain.latestHeader))
     of "finalized":
-      ok(chain.finalizedBlock)
+      ok(Opt.some(chain.finalizedHeader))
     of "safe":
-      ok(chain.safeBlock)
-    # wait till pruner pr is merged for tail semantics to be available, which is the appropriate way to resolve this tag
+      ok(Opt.some(chain.safeHeader))
     of "earliest":
-      chain.blockByNumber(base.BlockNumber(0))
+      let header = chain.headerByNumber(chain.earliestBlockNumber()).valueOr:
+        return err(error)
+      ok(Opt.some(header))
     else:
       err("Unsupported block tag " & tag)
   of bidNumber:
     let blockNum = base.BlockNumber blockTag.number
-    chain.blockByNumber(blockNum)
+    if blockNum > chain.latestNumber:
+      return ok(Opt.none(Header))
+    if blockNum < chain.baseNumber and not chain.baseHasBlockNumber(blockNum):
+      return ok(Opt.none(Header))
+    let header = chain.headerByNumber(blockNum).valueOr:
+      return err(error)
+    ok(Opt.some(header))
+  of bidHash:
+    if not chain.isInMemory(blockTag.hash) and not chain.baseHasBlockHash(blockTag.hash):
+      return ok(Opt.none(Header))
+    let header = chain.headerByHash(blockTag.hash).valueOr:
+      return err(error)
+    ok(Opt.some(header))
+
+proc blockFromTag*(chain: ForkedChainRef, blockTag: BlockTag, noHash: bool = false): Result[Opt[Block], string] =
+  case blockTag.kind
+  of bidAlias:
+    let tag = blockTag.alias.toLowerAscii
+    case tag
+    of "latest":
+      ok(Opt.some(chain.latestBlock))
+    of "finalized":
+      ok(Opt.some(chain.finalizedBlock))
+    of "safe":
+      ok(Opt.some(chain.safeBlock))
+    of "earliest":
+      let blk = chain.blockByNumber(chain.earliestBlockNumber()).valueOr:
+        return err(error)
+      ok(Opt.some(blk))
+    else:
+      err("Unsupported block tag " & tag)
+  of bidNumber:
+    let blockNum = base.BlockNumber blockTag.number
+    if blockNum > chain.latestNumber:
+      return ok(Opt.none(Block))
+    if blockNum < chain.baseNumber and not chain.baseHasBlockNumber(blockNum):
+      return ok(Opt.none(Block))
+    let blk = chain.blockByNumber(blockNum).valueOr:
+      return err(error)
+    ok(Opt.some(blk))
   of bidHash:
     if noHash:
       return err("query by hash not supported for this function")
-    chain.blockByHash(blockTag.hash)
+    if not chain.isInMemory(blockTag.hash) and not chain.baseHasBlockHash(blockTag.hash):
+      return ok(Opt.none(Block))
+    let blk = chain.blockByHash(blockTag.hash).valueOr:
+      return err(error)
+    ok(Opt.some(blk))
