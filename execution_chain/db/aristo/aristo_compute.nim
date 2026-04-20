@@ -106,6 +106,34 @@ proc putVtx(
 
   ok()
 
+proc mergeKeyAtLevel(
+    txRef: AristoTxRef, rvid: RootedVertexID, key: HashKey, level: int, parallel: static bool
+) =
+  assert level >= txRef.db.baseTxFrame().level
+
+  # Update the hashkey in the layer kMap
+  block:
+    let frame = txRef.deltaAtLevel(level)
+
+    when parallel:
+      frame.lock.lockWrite()
+      defer:
+        frame.lock.unlockWrite()
+    frame.kMap[rvid] = key
+
+  # Update the hashkey in the top snapshot
+  block:
+    if txRef.db.snapshots.len() > 0:
+      let frame = txRef.db.snapshots[txRef.db.snapshots.len() - 1]
+      assert frame.snapshot.level.isSome()
+
+      when parallel:
+        frame.lock.lockWrite()
+        defer:
+          frame.lock.unlockWrite()
+      frame.snapshot.vtx.withValue(rvid, v):
+        v[1] = key
+
 proc putKeyAtLevel(
     txRef: AristoTxRef,
     rvid: RootedVertexID,
@@ -120,8 +148,7 @@ proc putKeyAtLevel(
   ## corresponding hash!)
 
   if level >= txRef.db.baseTxFrame().level:
-    let frame = txRef.deltaAtLevel(level)
-    frame.layersMergeKey(rvid, key)
+    txRef.mergeKeyAtLevel(rvid, key, level, parallel = false)
   elif level == dbLevel:
     ?batch.putVtx(txRef.db, rvid, vtx, key)
   else: # level > dbLevel but less than baseTxFrame level
@@ -133,15 +160,6 @@ proc putKeyAtLevel(
     )
 
   ok()
-
-proc mergeKeyAtLevel(
-    txRef: AristoTxRef, rvid: RootedVertexID, key: HashKey, level: int
-) =
-  doAssert level >= txRef.db.baseTxFrame().level
-
-  let frame = txRef.deltaAtLevel(level)
-  withWriteLock(frame.lock):
-    frame.layersMergeKey(rvid, key)
 
 proc putVtxBlob(
     batch: var WriteBatch, db: AristoDbRef, rvid: RootedVertexID, vtx: openArray[byte]
@@ -399,7 +417,7 @@ proc computeKeyImpl(
               if not keyQueues[i].isEmpty():
                 var k: (RootedVertexID, HashKey, int)
                 if keyQueues[i].tryPop(k):
-                  txRef.mergeKeyAtLevel(k[0], k[1], k[2])
+                  txRef.mergeKeyAtLevel(k[0], k[1], k[2], parallel = true)
 
             if not vtxBufQueues[i].isEmpty():
               var v: (RootedVertexID, VertexBuf)
@@ -417,7 +435,7 @@ proc computeKeyImpl(
               if not keyQueues[i].isEmpty():
                 var k: (RootedVertexID, HashKey, int)
                 while keyQueues[i].tryPop(k):
-                  txRef.mergeKeyAtLevel(k[0], k[1], k[2])
+                  txRef.mergeKeyAtLevel(k[0], k[1], k[2], parallel = true)
 
             if not vtxBufQueues[i].isEmpty():
               var v: (RootedVertexID, VertexBuf)
