@@ -74,7 +74,8 @@ func isError*(cr: CallResult): bool =
   cr.error.len > 0
 
 const
-  TOTAL_COST_FLOOR_PER_TOKEN = 10
+  TOTAL_COST_FLOOR_PER_TOKEN_EIP7623 = 10
+  TOTAL_COST_FLOOR_PER_TOKEN_EIP7976 = 16
 
 func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork, gasLimit: GasInt): IntrinsicGas =
   # Compute the baseline gas cost for this transaction.  This is the amount
@@ -101,14 +102,22 @@ func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork, gasLimit: GasI
   # Input data cost, reduced in EIP-2028 (Istanbul).
   let gasZero    = gasFees[fork][GasTXDataZero]
   let gasNonZero = gasFees[fork][GasTXDataNonZero]
-  for b in call.input:
-    if b == 0:
-      regularGas += gasZero
-      tokens += 1
-    else:
-      regularGas += gasNonZero
-      tokens += 4
-
+  if fork >= FkAmsterdam:
+    for b in call.input:
+      if b == 0:
+        regularGas += gasZero
+        tokens += 4
+      else:
+        regularGas += gasNonZero
+        tokens += 4
+  else:
+    for b in call.input:
+      if b == 0:
+        regularGas += gasZero
+        tokens += 1
+      else:
+        regularGas += gasNonZero
+        tokens += 4
 
   # EIP-2930 (Berlin) intrinsic gas for transaction access list.
   if fork >= FkBerlin:
@@ -120,9 +129,10 @@ func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork, gasLimit: GasI
     if fork >= FkAmsterdam:
       regularGas += REGULAR_PER_AUTH_BASE_COST * call.authorizationList.len
       stateGas += (STATE_BYTES_PER_NEW_ACCOUNT + STATE_BYTES_PER_AUTH_BASE) * costPerStateByte * GasInt(call.authorizationList.len)
+      floorDataGas += tokens * TOTAL_COST_FLOOR_PER_TOKEN_EIP7976
     else:
       regularGas += call.authorizationList.len * PER_EMPTY_ACCOUNT_COST
-    floorDataGas += tokens * TOTAL_COST_FLOOR_PER_TOKEN
+      floorDataGas += tokens * TOTAL_COST_FLOOR_PER_TOKEN_EIP7623
 
   IntrinsicGas(
     regular: regularGas.GasInt,
