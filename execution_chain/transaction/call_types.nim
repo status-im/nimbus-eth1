@@ -90,6 +90,7 @@ func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork, gasLimit: GasI
     stateGas = 0.GasInt
     floorDataGas = regularGas
     tokens = 0
+    accessListBytes = 0
 
   # EIP-2 (Homestead) extra intrinsic gas for contract creations.
   if call.isCreate:
@@ -101,34 +102,34 @@ func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork, gasLimit: GasI
       regularGas += (gasFees[fork][GasInitcodeWord] * call.input.len.wordCount)
 
   # Input data cost, reduced in EIP-2028 (Istanbul).
-  let gasZero    = gasFees[fork][GasTXDataZero]
-  let gasNonZero = gasFees[fork][GasTXDataNonZero]
-  if fork >= FkAmsterdam:
-    for b in call.input:
-      if b == 0:
-        regularGas += gasZero
-        tokens += 4
-      else:
-        regularGas += gasNonZero
-        tokens += 4
-  else:
-    for b in call.input:
-      if b == 0:
-        regularGas += gasZero
-        tokens += 1
-      else:
-        regularGas += gasNonZero
-        tokens += 4
+  let
+    gasZero    = gasFees[fork][GasTXDataZero]
+    gasNonZero = gasFees[fork][GasTXDataNonZero]
+    byteZeroToken = if fork >= FkAmsterdam: 4 else: 1
+
+  for b in call.input:
+    if b == 0:
+      regularGas += gasZero
+      tokens += byteZeroToken
+    else:
+      regularGas += gasNonZero
+      tokens += 4
 
   # EIP-2930 (Berlin) intrinsic gas for transaction access list.
   if fork >= FkBerlin:
     for account in call.accessList:
       regularGas += ACCESS_LIST_ADDRESS_COST
       regularGas += account.storageKeys.len * ACCESS_LIST_STORAGE_KEY_COST
+      # Total byte count of addresses(20 bytes each) and storage keys (32 bytes each) in the access list.
+      accessListBytes += 20 + account.storageKeys.len * 32
 
   if fork >= FkPrague:
     if fork >= FkAmsterdam:
       regularGas += REGULAR_PER_AUTH_BASE_COST * call.authorizationList.len
+      # EIP-7981: Increase Access List Cost
+      let floorTokensInAccessList = accessListBytes * 4
+      tokens += floorTokensInAccessList
+      regularGas += TOTAL_COST_FLOOR_PER_TOKEN_EIP7976 * floorTokensInAccessList
       stateGas += (STATE_BYTES_PER_NEW_ACCOUNT + STATE_BYTES_PER_AUTH_BASE) * costPerStateByte * GasInt(call.authorizationList.len)
       floorDataGas += tokens * TOTAL_COST_FLOOR_PER_TOKEN_EIP7976
     else:
