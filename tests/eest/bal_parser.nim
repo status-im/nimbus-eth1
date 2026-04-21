@@ -36,30 +36,30 @@ proc fromJson(T: type Bytes, n: JsonNode): T =
 template fromJson(T: type uint64, n: JsonNode): uint64 =
   fromHex[AccountNonce](n.getStr)
 
-template fromJson(T: type uint16, n: JsonNode): uint16 =
-  fromHex[uint16](n.getStr)
+template fromJson(T: type uint32, n: JsonNode): uint32 =
+  fromHex[uint32](n.getStr)
 
 proc fromJson(T: type NonceChange, n: JsonNode): NonceChange =
   (
-    required(uint16, "blockAccessIndex"),
+    required(uint32, "blockAccessIndex"),
     required(AccountNonce, "postNonce")
   )
 
 proc fromJson(T: type BalanceChange, n: JsonNode): BalanceChange =
   (
-    required(uint16, "blockAccessIndex"),
+    required(uint32, "blockAccessIndex"),
     required(UInt256, "postBalance")
   )
 
 proc fromJson(T: type CodeChange, n: JsonNode): CodeChange =
   (
-    required(uint16, "blockAccessIndex"),
+    required(uint32, "blockAccessIndex"),
     required(Bytes, "newCode")
   )
 
 proc fromJson(T: type StorageChange, n: JsonNode): StorageChange =
   (
-    required(uint16, "blockAccessIndex"),
+    required(uint32, "blockAccessIndex"),
     required(UInt256, "postValue")
   )
 
