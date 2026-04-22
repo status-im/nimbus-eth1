@@ -37,6 +37,7 @@ type
     versionedHashes*: seq[VersionedHash]   # EIP-4844 (Cancun) blob versioned hashes
     authorizationList*: seq[Authorization] # EIP-7702 (Prague) authorization list
     sysCall*:      bool                 # System call or ordinary call
+    intrinsic*:    IntrinsicGas
 
   # Standard call result.
   CallResult* = object of RootObj
