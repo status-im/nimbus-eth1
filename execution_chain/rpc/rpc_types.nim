@@ -22,6 +22,16 @@ type
   BlockTag* = eth_api_types.RtBlockIdentifier
 
 
+proc writeValue*(
+    w: var JsonWriter[JrpcConv], val: BlockAccessIndex
+) {.raises: [IOError].} =
+  w.writeValue(val.uint64) 
+
+proc readValue*(
+    r: var JsonReader[JrpcConv], val: var BlockAccessIndex
+) {.raises: [SerializationError, IOError, JsonReaderError].} =
+  val = BlockAccessIndex(r.readValue(uint64))
+
 # Block access list json serialization
 AccountChanges.useDefaultSerializationIn JrpcConv
 SlotChanges.useDefaultSerializationIn JrpcConv
