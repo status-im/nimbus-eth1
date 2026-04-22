@@ -588,19 +588,26 @@ proc processOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false): Futu
   c.queueOrphan(parent, finalized)
 
 proc processQueue(c: ForkedChainRef) {.async: (raises: [CancelledError]).} =
-  while true:
-    # Cooperative concurrency: one block per loop iteration - because
-    # we run both networking and CPU-heavy things like block processing
-    # on the same thread, we need to make sure that there is steady progress
-    # on the networking side or we get long lockups that lead to timeouts.
-    const
-      # We cap waiting for an idle slot in case there's a lot of network traffic
-      # taking up all CPU - we don't want to _completely_ stop processing blocks
-      # in this case - doing so also allows us to benefit from more batching /
-      # larger network reads when under load.
-      idleTimeout = 10.milliseconds
+  # Cooperative concurrency: we run both networking and CPU-heavy things like
+  # block processing on the same thread, so we must make sure the networking
+  # side makes steady progress. Yielding unconditionally on every iteration
+  # however adds unnecessary latency per queue item when the system is lightly
+  # loaded - and with a backed-up queue this directly bloats engine_api p95.
+  # Yield only when we have been running without a yield for `minYieldInterval`.
+  const
+    # Minimum wall-clock time between cooperative yields in the queue loop.
+    minYieldInterval = 20.milliseconds
+    # We cap waiting for an idle slot in case there's a lot of network traffic
+    # taking up all CPU - we don't want to _completely_ stop processing blocks
+    # in this case - doing so also allows us to benefit from more batching /
+    # larger network reads when under load.
+    idleTimeout = 10.milliseconds
 
-    discard await idleAsync().withTimeout(idleTimeout)
+  var lastYield = Moment.now()
+  while true:
+    if Moment.now() - lastYield >= minYieldInterval:
+      discard await idleAsync().withTimeout(idleTimeout)
+      lastYield = Moment.now()
     let
       item = await c.queue.popFirst()
       res = await item.handler()
