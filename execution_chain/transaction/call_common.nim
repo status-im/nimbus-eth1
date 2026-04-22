@@ -162,9 +162,6 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
     executionGas = if call.gasLimit < intrinsicGas: 0.GasInt else: call.gasLimit - intrinsicGas
     regularGasBudget = TX_GAS_LIMIT - intrinsic.regular
 
-  #debugEcho "executionGas: ", executionGas
-  #debugEcho "regularGasBudget: ", regularGasBudget
-
   var
     gasLeft = executionGas
     intrinsicStateGas = 0.GasInt
@@ -278,19 +275,6 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
       # https://github.com/ethereum/execution-specs/pull/2689/changes
       c.gasMeter.returnAllStateGas()
 
-  #debugEcho "gasLimit: ", call.gasLimit
-  #debugEcho "regular GAS: ", c.msg.gas
-  #debugEcho "state GAS: ", c.msg.stateGas
-  #debugEcho "gasRemaining: ", c.gasMeter.gasRemaining
-  #debugEcho "stateGasLeft: ", c.gasMeter.stateGasLeft
-  #debugEcho "gasRefund: ", c.getGasRefund()
-  #debugEcho "floorDataGas: ", host.floorDataGas
-  #debugEcho "intrinsic regular gas: ", host.intrinsicRegularGas
-  #debugEcho "regular gas used: ", c.gasMeter.regularGasUsed
-  #debugEcho "intrinsic state gas: ", host.intrinsicStateGas
-  #debugEcho "state gas used: ", c.gasMeter.stateGasUsed
-  #debugEcho "self destruct refund total: ", 0
-
   # Calculated gas used, taking into account refund rules.
   let
     txGasUsedBeforeRefund = call.gasLimit - c.gasMeter.gasRemaining - c.gasMeter.stateGasLeft
@@ -332,9 +316,6 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
       vmState.balTracker.trackAddBalanceChange(call.sender, gasRefundAmount)
     vmState.mutateLedger:
       ledger.addBalance(call.sender, gasRefundAmount)
-
-  #debugEcho "block gas used: ", blockRegularGasUsed
-  #debugEcho "block state gas used: ", blockStateGasUsed
 
   GasUsed(
     evmGasUsed: c.msg.gas - txGasLeft,

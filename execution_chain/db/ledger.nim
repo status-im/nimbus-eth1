@@ -65,7 +65,6 @@ type
     code: CodeBytesRef
     originalStorage: TableRef[UInt256, UInt256]
     overlayStorage: Table[UInt256, UInt256]
-    storageWrites: HashSet[UInt256]
 
   LedgerRef* = ref object
     txFrame*: CoreDbTxRef
@@ -316,7 +315,6 @@ proc persistStorage(acc: AccountRef, ledger: LedgerRef) =
       if rc.isErr:
         warn logTxt "persistStorage()", slot, error=($$rc.error)
 
-  acc.storageWrites.clear()
   acc.overlayStorage.clear()
 
 proc makeDirty(ledger: LedgerRef, address: Address, cloneStorage = true): AccountRef =
@@ -356,11 +354,8 @@ proc getCodeSize(ledger: LedgerRef, acc: AccountRef): int =
   getCodeSizeImpl(ledger, acc)
 
 proc calcCreatedSlots(ledger: LedgerRef, acc: AccountRef): int =
-  var res = 0
-  for slot in acc.storageWrites:
-    if acc.storageValue(slot, ledger).isZero.not:
-      inc res
-  res
+  for _, val in acc.overlayStorage:
+    inc(result, val.isZero.not.int)
 
 # ------------------------------------------------------------------------------
 # Public methods
@@ -603,7 +598,6 @@ proc setStorage*(ledger: LedgerRef, address: Address, slot, value: UInt256) =
     if not ledger.witnessKeys.contains(lookupKey):
       ledger.witnessKeys[lookupKey] = false
 
-  acc.storageWrites.incl slot
   let oldValue = acc.storageValue(slot, ledger)
   if oldValue != value:
     var acc = ledger.makeDirty(address)
