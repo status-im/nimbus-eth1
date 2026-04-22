@@ -25,11 +25,11 @@ type
 proc writeValue*(
     w: var JsonWriter[JrpcConv], val: BlockAccessIndex
 ) {.raises: [IOError].} =
-  w.writeValue(val.uint64) 
+  w.writeValue(val.uint64)
 
 proc readValue*(
     r: var JsonReader[JrpcConv], val: var BlockAccessIndex
-) {.raises: [SerializationError, IOError, JsonReaderError].} =
+) {.raises: [SerializationError, IOError].} =
   val = BlockAccessIndex(r.readValue(uint64))
 
 # Block access list json serialization
