@@ -70,8 +70,8 @@ proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256, coldAcces
   ? c.opcodeGasCost(Sstore, res.gasCost + coldAccess, "SSTORE")
 
   if stateGas and res.stateGas > 0:
-    # https://github.com/ethereum/execution-specs/pull/2698/changes
-    c.gasMeter.refundStateGas(res.stateGas)
+    # https://github.com/ethereum/execution-specs/pull/2733/changes
+    c.gasMeter.creditStateGasRefund(res.stateGas)
 
   c.gasMeter.refundGas(res.gasRefund)
 

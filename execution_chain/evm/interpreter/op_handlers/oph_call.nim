@@ -198,6 +198,8 @@ proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) =
       c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
       c.gasMeter.appendStateGasUsed(child.gasMeter.stateGasUsed)
       c.gasMeter.appendStateGasRefund(child.gasMeter.stateGasRefund)
+      # https://github.com/ethereum/execution-specs/pull/2733/changes
+      c.gasMeter.creditStateGasRefund(child.gasMeter.stateGasRefundPending)
       c.merge(child)
       c.stack.lsTop(1)
     else:

@@ -95,10 +95,13 @@ func returnAllStateGas*(gasMeter: var GasMeter) =
   gasMeter.stateGasLeft += gasMeter.stateGasUsed
   gasMeter.stateGasUsed = 0
 
-func refundStateGas*(gasMeter: var GasMeter; amount: GasInt) =
-  gasMeter.stateGasLeft += amount
-  gasMeter.stateGasUsed -= amount
-  gasMeter.stateGasRefund += amount
+# https://github.com/ethereum/execution-specs/pull/2733/changes
+func creditStateGasRefund*(gasMeter: var GasMeter; amount: GasInt) =
+  let applied = min(amount, gasMeter.stateGasUsed)
+  gasMeter.stateGasLeft += applied
+  gasMeter.stateGasUsed -= applied
+  gasMeter.stateGasRefund += applied
+  gasMeter.stateGasRefundPending += amount - applied
 
 func appendStateGasRefund*(gasMeter: var GasMeter; amount: GasInt) =
   gasMeter.stateGasRefund += amount
