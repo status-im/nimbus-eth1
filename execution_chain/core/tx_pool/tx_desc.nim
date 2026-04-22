@@ -23,6 +23,7 @@ import
   ../../db/ledger,
   ../../constants,
   ../../transaction,
+  ../../transaction/call_types,
   ../../core/eip8037,
   ../../transaction/call_types,
   ../chain/forked_chain,
