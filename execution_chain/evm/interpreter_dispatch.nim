@@ -93,11 +93,6 @@ proc afterExecCall(c: Computation) =
       # Special case to account for geth+parity bug
       c.vmState.ledger.ripemdSpecial()
 
-  if c.isSuccess:
-    c.commit()
-  else:
-    c.rollback()
-
 proc beforeExecCreate(c: Computation): bool =
   c.vmState.mutateLedger:
     let nonce = ledger.getNonce(c.msg.sender)
@@ -168,11 +163,6 @@ proc afterExecCreate(c: Computation) =
     # right cases, particularly important with EVMC where it must be cleared.
     c.output.reset()
 
-  if c.isSuccess:
-    c.commit()
-  else:
-    c.rollback()
-
 const MsgKindToOp: array[CallKind, Op] =
   [Call, DelegateCall, CallCode, Create, Create2]
 
@@ -204,6 +194,13 @@ proc afterExec(c: Computation) =
     c.afterExecCall()
   else:
     c.afterExecCreate()
+
+  if c.isSuccess:
+    c.commit()
+  else:
+    # https://github.com/ethereum/execution-specs/pull/2689/changes
+    c.gasMeter.returnAllStateGas()
+    c.rollback()
 
   if c.msg.depth > 0:
     let gasUsed = c.msg.gas - c.gasMeter.gasRemaining
