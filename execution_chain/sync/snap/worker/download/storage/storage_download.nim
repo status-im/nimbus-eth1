@@ -92,8 +92,6 @@ template downloadImpl(
         # Fetch from network
         data = buddy.fetchStorage(sRoot, accHashes, ivReq).valueOr:
           state.register accLeft                    # stash data and return
-          trace info & ": fetching slots failed", peer, root,
-            start, nAccLeft=accLeft.len
           break body                                # error => return
 
         if not state.isOperable():                  # evicted => return
@@ -104,7 +102,7 @@ template downloadImpl(
         for n in 0 ..< data.slots.len:
           adb.putStoSlot(sRoot, accLeft[n][0], data.slots[n], peerID).isOkOr:
             state.register(accLeft[n .. ^1])   # stash data and return
-            trace info & ": storing slots failed", peer, root, nStored=n,
+            debug info & ": Storing slots failed", peer, root, nStored=n,
               start=(start+n), nAccLeft=(accLeft.len - n)
             break body                              # error => return
           bodyRc = true                             # did something => ret code
@@ -120,7 +118,7 @@ template downloadImpl(
           sRoot, thisAcc[0], low(ItemKey), limit, data, peerID).isOkOr:
             state.register(thisAcc)                 # stash this trie fully
             state.register(accLeft)                 # stash rest and return
-            trace info & ": storing partial slots failed", peer, root,
+            debug info & ": Storing partial slots failed", peer, root,
               start, nAccLeft=accLeft.len
             break body                              # error => return
         bodyRc = true                               # did something => ret code
@@ -133,8 +131,9 @@ template downloadImpl(
           let ivData = buddy.fetchStorage(sRoot, @[thisAcc[0]], iv).valueOr:
             state.register(thisAcc, iv)           # stash part. trie
             state.register(accLeft)               # stash rest and return
-            trace info & ": fetching partial slots failed", peer, root, start,
-              nAccLeft=accLeft.len, iv=iv.flStr, `error`=error
+            trace info & ": Fetching partial slots failed", peer,
+              `state`=state.toStr(sdb), start,nAccLeft=accLeft.len,
+              iv=iv.flStr, `error`=error
             break body                            # error => return
 
           if not state.isOperable():              # evicted => return
@@ -148,7 +147,7 @@ template downloadImpl(
             sRoot, thisAcc[0], iv.minPt, limit, ivData, peerID).isOkOr:
               state.register(thisAcc, iv)           # stash part. trie
               state.register(accLeft)               # stash rest and return
-              trace info & ": storing partial slots failed", peer, root, start,
+              debug info & ": Storing partial slots failed", peer, root, start,
                 nAccLeft=accLeft.len, iv=iv.flStr, limit=limit.flStr
               break body                            # error => return
 
@@ -208,8 +207,9 @@ template downloadFromQueue(
     while partStart < partTries.len:
       if buddy.ctrl.stopped:                        # roll back `partTries[]`
         buddy.rollBackPartTries(state, partTries, partStart)
-        trace info & ": rolled back to slots queue", peer, root,
-          partStart, nTriesLeft=(partTries.len - partStart)
+        trace info & ": rolled back to slots queue", peer,
+          `state`=state.toStr(sdb), partStart,
+          nTriesLeft=(partTries.len - partStart)
         bodyRc = false
         break body
 
@@ -252,13 +252,14 @@ template storageDownload*(
                   it.accBody.storageRoot.to(Hash32).to(StoreRoot)) )
 
       if state.hasCodeOrStorage:
-        trace info & ": storage download", peer, root=state.rootStr,
-          `state`=($buddy.syncState)
 
         while not buddy.ctrl.stopped and
               state.hasCodeOrStorage and
               buddy.downloadFromQueue(state, info):
           continue
+
+        trace info & ": storage done", peer, root=state.rootStr,
+          todo=state.hasCodeOrStorage, syncState=buddy.syncState
 
   discard                                           # visual alignment
 
