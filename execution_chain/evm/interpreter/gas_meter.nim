@@ -90,3 +90,7 @@ func checkGas*(gasMeter: GasMeter, cost, amount: GasInt): EvmResultVoid =
   if amount > gasMeter.stateGasLeft + gasMeter.gasRemaining - cost:
     return err(gasErr(OutOfGas))
   ok()
+
+func returnAllStateGas*(gasMeter: var GasMeter) =
+  gasMeter.stateGasLeft += gasMeter.stateGasUsed
+  gasMeter.stateGasUsed = 0
