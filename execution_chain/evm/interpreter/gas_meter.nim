@@ -98,3 +98,7 @@ func returnAllStateGas*(gasMeter: var GasMeter) =
 func refundStateGas*(gasMeter: var GasMeter; amount: GasInt) =
   gasMeter.stateGasLeft += amount
   gasMeter.stateGasUsed -= amount
+  gasMeter.stateGasRefund += amount
+
+func appendStateGasRefund*(gasMeter: var GasMeter; amount: GasInt) =
+  gasMeter.stateGasRefund += amount
