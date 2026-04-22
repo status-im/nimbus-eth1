@@ -94,3 +94,7 @@ func checkGas*(gasMeter: GasMeter, cost, amount: GasInt): EvmResultVoid =
 func returnAllStateGas*(gasMeter: var GasMeter) =
   gasMeter.stateGasLeft += gasMeter.stateGasUsed
   gasMeter.stateGasUsed = 0
+
+func refundStateGas*(gasMeter: var GasMeter; amount: GasInt) =
+  gasMeter.stateGasLeft += amount
+  gasMeter.stateGasUsed -= amount
