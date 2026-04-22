@@ -170,7 +170,7 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
 
   if isAmsterdamOrLater:
     gasLeft = min(regularGasBudget, executionGas)
-    intrinsicStateGas = intrinsic.state - gasRefund.GasInt
+    intrinsicStateGas = intrinsic.state
     stateGas = executionGas - gasLeft + gasRefund.GasInt
 
   let
