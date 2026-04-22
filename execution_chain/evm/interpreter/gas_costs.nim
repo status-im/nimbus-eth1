@@ -71,7 +71,7 @@ type
     nonZeroVal*: bool
     gasCost1*: GasInt
     isNewAccount*: proc(): bool {.gcsafe, raises: [].}
-    gasLeft*: GasInt    
+    gasLeft*: GasInt
     gasCallDelegate*: GasProc
     contractGas*: UInt256
 
@@ -329,7 +329,8 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
       if params.originalValue == value:
         if params.originalValue.isZero: # reset to original inexistent slot (2.2.2.1)
           when fork >= FkAmsterdam:
-            res.gasRefund += params.stateGasStorageSet.int64 + CleanRefund
+            # https://github.com/ethereum/execution-specs/pull/2698/changes
+            res.gasRefund += CleanRefund
           else:
             res.gasRefund += InitRefund
         else: # reset to original existing slot (2.2.2.2)
