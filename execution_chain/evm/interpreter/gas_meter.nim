@@ -105,3 +105,8 @@ func creditStateGasRefund*(gasMeter: var GasMeter; amount: GasInt) =
 
 func appendStateGasRefund*(gasMeter: var GasMeter; amount: GasInt) =
   gasMeter.stateGasRefund += amount
+
+func selfDestructRefundStateGas*(gasMeter: var GasMeter; amount: GasInt) =
+  let applied = min(amount, gasMeter.stateGasUsed)
+  gasMeter.stateGasLeft += applied
+  gasMeter.stateGasUsed -= applied
