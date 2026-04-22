@@ -260,6 +260,11 @@ proc newPayload*(ben: BeaconEngineRef,
 
   let vres = await chain.queueImportBlock(blk, blockAccessList)
   if vres.isErr:
+    if vres.error == EngineQueueSaturatedError:
+      debug "Engine queue saturated, returning SYNCING",
+        number = header.number,
+        hash = blockHash.short
+      return syncingStatus()
     warn "Error importing block",
       number = header.number,
       hash = blockHash.short,

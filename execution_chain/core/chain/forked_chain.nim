@@ -43,7 +43,12 @@ export
 const
   BaseDistance = 128'u64
   PersistBatchSize = 4'u64
-  MaxQueueSize = 128
+  MaxQueueSize = 256
+
+  # Returned by `queueImportBlock` / `queueForkChoice` when the action queue is
+  # full. Callers (engine_api handlers) convert this into a `SYNCING` response
+  # so the CL retries rather than marking the block as invalid.
+  EngineQueueSaturatedError* = "engine queue saturated"
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -471,7 +476,8 @@ proc validateBlock(
     parent: BlockRef,
     blk: Block,
     blockAccessList: Opt[BlockAccessListRef],
-    finalized: bool
+    finalized: bool,
+    txHashes: Opt[seq[Hash32]] = Opt.none(seq[Hash32])
   ): Future[Result[BlockRef, string]] {.async: (raises: [CancelledError]).} =
 
   let
@@ -529,8 +535,16 @@ proc validateBlock(
 
   let newBlock = c.appendBlock(parent, blk, blkHash, txFrame)
 
-  for i, tx in blk.transactions:
-    c.txRecords[computeRlpHash(tx)] = (blkHash, uint64(i))
+  # Prefer tx hashes computed at RLP-decode time by the caller (newPayload path)
+  # to avoid re-encoding each transaction here. Fall back to `computeRlpHash`
+  # for callers that don't have them (sync, tests).
+  if txHashes.isSome and txHashes.get.len == blk.transactions.len:
+    let hashes = txHashes.get
+    for i in 0 ..< blk.transactions.len:
+      c.txRecords[hashes[i]] = (blkHash, uint64(i))
+  else:
+    for i, tx in blk.transactions:
+      c.txRecords[computeRlpHash(tx)] = (blkHash, uint64(i))
 
   # Entering base auto forward mode while avoiding forkChoice
   # handled region(head - baseDistance)
@@ -692,7 +706,8 @@ proc importBlock*(
     c: ForkedChainRef,
     blk: Block,
     blockAccessList = Opt.none(BlockAccessListRef),
-    finalized = false
+    finalized = false,
+    txHashes = Opt.none(seq[Hash32])
   ): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   ## Try to import block to canonical or side chain.
   ## return error if the block is invalid
@@ -717,7 +732,7 @@ proc importBlock*(
     # stateroot check for performance reasons.
     let
       isFinalized = finalized or blk.header.number <= c.latestFinalized.number
-      parent = ?(await c.validateBlock(parent, blk, blockAccessList, isFinalized))
+      parent = ?(await c.validateBlock(parent, blk, blockAccessList, isFinalized, txHashes))
     if c.quarantine.hasOrphans():
       c.queueOrphan(parent, isFinalized)
 
@@ -794,16 +809,23 @@ template queueImportBlock*(
     c: ForkedChainRef,
     blk: Block,
     blockAccessList = Opt.none(BlockAccessListRef),
-    finalized = false): auto =
+    finalized = false,
+    txHashes = Opt.none(seq[Hash32])): auto =
 
   proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError], raw: true).} =
-    c.importBlock(blk, blockAccessList, finalized)
+    c.importBlock(blk, blockAccessList, finalized, txHashes)
 
   let item = QueueItem(
     responseFut: Future[Result[void, string]].Raising([CancelledError]).init(),
     handler: asyncHandler
   )
-  await c.queue.addLast(item)
+  if c.queue.full:
+    debug "Engine action queue saturated, rejecting importBlock",
+      queueLen = c.queue.len, maxSize = MaxQueueSize
+    item.responseFut.complete(
+      Result[void, string].err(EngineQueueSaturatedError))
+  else:
+    await c.queue.addLast(item)
   item.responseFut
 
 template queueForkChoice*(c: ForkedChainRef,
@@ -817,7 +839,13 @@ template queueForkChoice*(c: ForkedChainRef,
     responseFut: Future[Result[void, string]].Raising([CancelledError]).init(),
     handler: asyncHandler
   )
-  await c.queue.addLast(item)
+  if c.queue.full:
+    debug "Engine action queue saturated, rejecting forkChoice",
+      queueLen = c.queue.len, maxSize = MaxQueueSize
+    item.responseFut.complete(
+      Result[void, string].err(EngineQueueSaturatedError))
+  else:
+    await c.queue.addLast(item)
   item.responseFut
 
 func resolvedFinHash*(c: ForkedChainRef): Hash32 =

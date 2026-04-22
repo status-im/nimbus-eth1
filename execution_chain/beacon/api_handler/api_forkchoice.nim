@@ -200,6 +200,10 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     # similar to headHash, safeBlockHash is saved by FC module
 
   (await chain.queueForkChoice(headHash, finalizedBlockHash, safeBlockHash)).isOkOr:
+    if error == EngineQueueSaturatedError:
+      debug "Engine queue saturated, returning SYNCING for FCU",
+        head = headHash.short
+      return simpleFCU(PayloadExecutionStatus.syncing)
     return invalidFCU(error, chain, header)
 
   # If payload generation was requested, create a new block to be potentially
