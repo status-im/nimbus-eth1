@@ -139,7 +139,7 @@ type
     quota* : TokenBucket
     seenTransactions*: Table[Hash32, SeenObject]
     tickerHeartbeat*: Future[void].Raising([CancelledError])
-    actionHeartbeat*: Future[void].Raising([CancelledError])
+    actionHeartbeat*: seq[Future[void].Raising([CancelledError])]
     actionQueue*: AsyncQueue[ActionHandler]
     gossipEnabled*: bool
     cleanupTimer*: Future[void].Raising([CancelledError])

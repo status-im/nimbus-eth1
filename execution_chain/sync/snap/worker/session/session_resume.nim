@@ -11,10 +11,10 @@
 {.push raises:[].}
 
 import
-  std/sets,
+  std/[algorithm, sets, sequtils],
   pkg/[chronicles, chronos, stew/interval_set],
   ../../../wire_protocol,
-  ../[mpt, state_db, worker_desc]
+  ../[helpers, mpt, state_db, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -22,18 +22,6 @@ logScope:
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
-
-proc getOrMakeState(
-    ctx: SnapCtxRef;
-    root: StateRoot;
-    info: static[string];
-      ): Opt[StateDataRef] =
-  let sdb = ctx.pool.stateDB
-  sdb.get(root).isErrOr:
-    return ok value
-  let (hash,number) = ctx.pool.mptAsm.getBlockData(root).valueOr:
-    return err()
-  ok sdb.register(root, hash, number, info)
 
 proc storageRecover(
     ctx: SnapCtxRef;
@@ -99,50 +87,90 @@ template sessionResume*(ctx: SnapCtxRef; info: static[string]): bool =
 
     block recoverStates:
       var
-        resumedOk = false
-        ignRoot = StateRoot(zeroHash32)             # some error mitigation
+        napAt = Moment.now() + threadSwitchRunLimit # allow for thread switch
+        msgAt = Moment.now() + threadLogTimeLimit   # message while looping
 
-      for w in adb.walkAccounts():                  # walk accounts
-        if 0 < w.error.len:
-          error info & ": Corrupt data, resetting session", error=w.error
-          break recoverStates
+        # Get list of sorted states available, the most recent ones first.
+        byTouch = adb.walkStateData().toSeq()       # list to be sorted, below
+        tchInx: seq[int]                            # index list into `byTouch`
 
-        # Some failed state root records
-        if ignRoot == w.root:
+      # Sort states, latest time stamp first
+      byTouch.sort proc(x,y: WalkStateData): int = cmp(y.touch,x.touch)
+
+      # Walk over states, latest time stamp first. Collect the lastest some
+      # non-empty states (see `stateDbCapacity`) for import into the state
+      # DB cache.
+      for n in 0 ..< byTouch.len:
+        let p = byTouch[n]
+
+        if p.coverage == 0:
           continue
 
-        # Get state record (with all accounts unprocessed when created)
-        var state = ctx.getOrMakeState(w.root, info).valueOr:
-          # Cannot resolve, ignore this state root
-          ignRoot = w.root
+        if stateDbCapacity <= tchInx.len:           # index list complete?
+          sdb.addAccountArchive p.coverage.per256() # set archived coverage
           continue
 
-        if not resumedOk:
-          chronicles.info info & ": resuming download session"
-        resumedOk = true
+        if tchInx.len == 0:                         # print message once, only
+          chronicles.info info & ": Resuming download session",
+            nStates=byTouch.len
 
-        # Register seen accounts in state record
-        sdb.setAccountRange(state, w.start, w.limit)
+        if not p.onTrie:                            # ignore assembled data
+          tchInx.add n                              # collect, re-process below
 
-        # Register unprocessed storages per account
-        for acc in w.accounts:
-          ctx.storageRecover(state, acc, info)
+      if tchInx.len == 0:                           # nothing to do?
+        break body
 
-        # Register unprocessed codes for the current account list
-        ctx.codesRecover(state, w.accounts, info)
+      # Loop over states with time stamp in oldest-first order. Processing in
+      # that order, current time stamps (aka `Moment.now()`) can be used when
+      # importing into the state DB cache. This way, the oldest-first order
+      # will be preserved on the cache.
+      for n in (tchInx.len - 1).countdown(0):
+        let p = byTouch[tchInx[n]]
 
-        try:
-          await sleepAsync mktrieThreadSwitchTimeSlot
-        except CancelledError as e:
-          chronicles.error info & ": resuming session cancelled",
-            error=($e.name & "(" & e.msg & ")")
-          break recoverStates
+        # Create record on state DB cache
+        let state = sdb.register(p.root, p.hash, p.number, info)
 
-      bodyRc = resumedOk
+        # Walk account for the current state root
+        for w in adb.walkAccounts(p.root):
+          if 0 < w.error.len:
+            error info & ": Corrupt data, resetting session", error=w.error
+            break recoverStates
+
+          # Occasionally some text to show this loop is active
+          if msgAt < Moment.now():
+            debug info & ": Recovering states cache..", root=state.rootStr,
+              n=(tchInx.len - 1 - n), nMax=tchInx.len
+            msgAt = Moment.now() + threadLogTimeLimit
+
+          # Register seen accounts in state record
+          sdb.setAccountRange(state, w.start, w.limit, Moment.now())
+
+          # Register unprocessed storages per account
+          for acc in w.accounts:
+            ctx.storageRecover(state, acc, info)
+
+          # Register unprocessed codes for the current account list
+          ctx.codesRecover(state, w.accounts, info)
+
+          # Occasionally allow thread switch
+          if napAt < Moment.now():
+            try:
+              await sleepAsync threadSwitchTimeSlot
+            except CancelledError as e:
+              chronicles.error info & ": Resuming session cancelled",
+                error=($e.name & "(" & e.msg & ")")
+              break recoverStates
+            napAt = Moment.now() + threadSwitchRunLimit
+
+      debug info & ": Download session restored",
+        coverage=sdb.accountsCoverage.pcStr,
+        archived=sdb.archivedCoverage.pcStr
+
+      bodyRc = true
       break body
 
     # Any reset must take place outside the assembly DB iterator.
-    chronicles.info info & ": previous session abandoned"
+    chronicles.info info & ": Previous session abandoned"
     sdb.clear()                                     # flush/reset state DB
     if not adb.clear(info):                         # ditto for assembly DB
       raiseAssert info & ": Cannot clear session DB"
