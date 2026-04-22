@@ -128,7 +128,9 @@ func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork, gasLimit: GasI
     if fork >= FkAmsterdam:
       regularGas += REGULAR_PER_AUTH_BASE_COST * call.authorizationList.len
       # EIP-7981: Increase Access List Cost
-      regularGas += TOTAL_COST_FLOOR_PER_TOKEN_EIP7976 * accessListBytes * 4
+      let floorTokensInAccessList = accessListBytes * 4
+      tokens += floorTokensInAccessList
+      regularGas += TOTAL_COST_FLOOR_PER_TOKEN_EIP7976 * floorTokensInAccessList
       stateGas += (STATE_BYTES_PER_NEW_ACCOUNT + STATE_BYTES_PER_AUTH_BASE) * costPerStateByte * GasInt(call.authorizationList.len)
       floorDataGas += tokens * TOTAL_COST_FLOOR_PER_TOKEN_EIP7976
     else:
