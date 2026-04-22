@@ -202,10 +202,7 @@ proc afterExec(c: Computation) =
 
   if c.isSuccess:
     c.commit()
-  else:
-    if c.fork >= FkAmsterdam:
-      # https://github.com/ethereum/execution-specs/pull/2689/changes
-      c.gasMeter.returnAllStateGas()
+  else:    
     c.rollback()
 
   if c.msg.depth > 0:
