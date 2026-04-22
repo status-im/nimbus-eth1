@@ -23,6 +23,7 @@ import
   ../../db/ledger,
   ../../constants,
   ../../transaction,
+  ../../transaction/call_types,
   ../../core/eip8037,
   ../chain/forked_chain,
   ../pow/header,
@@ -365,10 +366,13 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     debug "Transaction already known", txHash = id
     return err(txErrorAlreadyKnown)
 
+  let
+    intrinsic = ptx.tx.intrinsicGas(xp.nextFork, xp.gasLimit)
+
   validateTxBasic(
     xp.com,
     ptx.tx,
-    xp.gasLimit,
+    intrinsic,
     xp.nextFork,
     validateFork = true).isOkOr:
     debug "Invalid transaction: Basic validation failed",

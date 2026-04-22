@@ -17,6 +17,7 @@ import
   ../../db/ledger,
   ../../transaction/call_evm,
   ../../transaction/call_common,
+  ../../transaction/call_types,
   ../../transaction,
   ../../evm/state,
   ../../evm/types,
@@ -111,13 +112,30 @@ proc processTransaction*(
     priorityFee = min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFee)
     excessBlobGas = vmState.blockCtx.excessBlobGas
     regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
+    stateGasAvailable = vmState.blockCtx.gasLimit - vmState.blockStateGasUsed
+    intrinsic = tx.intrinsicGas(fork, vmState.blockCtx.gasLimit)
+    com = vmState.com
 
-  # Regular gas is capped at TX_MAX_GAS_LIMIT per EIP-7825.
-  # State gas is not checked per-tx; block-end validation enforces
-  # max(block_regular_gas_used, block_state_gas_used) <= gas_limit.
-  if min(TX_GAS_LIMIT.GasInt, tx.gasLimit) > regularGasAvailable:
+  # Per-tx 2D gas inclusion check: for each dimension the worst-case
+  # contribution must fit in the remaining budget.  Block-end
+  # validation still enforces
+  if fork < FkAmsterdam:
     let want = min(TX_GAS_LIMIT.GasInt, tx.gasLimit)
-    return err("regular gas used exceeds limit want: " & $want & ", available: " & $regularGasAvailable)
+    if want > regularGasAvailable:
+      return err("regular gas used exceeds limit, want: " & $want & ", available: " & $regularGasAvailable)
+  else:
+    # https://github.com/ethereum/execution-specs/pull/2703/changes
+    # Worst-case regular contribution: tx.gasLimit minus the portion that
+    # must go to intrinsic state gas, capped at TX_MAX_GAS_LIMIT.
+    let want = min(TX_GAS_LIMIT.GasInt, tx.gasLimit - intrinsic.state)
+    if want > regularGasAvailable:
+      return err("regular gas used exceeds limit, want: " & $want & ", available: " & $regularGasAvailable)
+
+    # Worst-case state contribution: tx.gasLimit minus the portion that
+    # must go to intrinsic regular gas.
+    let stateGas = tx.gasLimit - intrinsic.regular
+    if stateGas > stateGasAvailable:
+      return err("state gas used exceeds limit, want: " & $stateGas & ", available: " & $stateGasAvailable)
 
   # blobGasUsed will be added to vmState.blobGasUsed if the tx is ok.
   let
@@ -127,6 +145,8 @@ proc processTransaction*(
     return err("blobGasUsed " & $blobGasUsed &
       " exceeds maximum allowance " & $maxBlobGasPerBlock)
 
+  ? validateTxBasic(com, tx, intrinsic, fork)
+
   # Actually, the EIP-1559 reference does not mention an early exit.
   #
   # Even though database was not changed yet but, a `persist()` directive
@@ -134,7 +154,6 @@ proc processTransaction*(
   # of the `processTransaction()` function. So there is no `return err()`
   # statement, here.
   let
-    com = vmState.com
     txRes = roDB.validateTransaction(tx, sender, vmState.blockCtx.gasLimit, baseFee256, excessBlobGas, com, fork)
     res = if txRes.isOk:
       # Execute the transaction.
@@ -144,7 +163,7 @@ proc processTransaction*(
         vmState.balTracker.beginCallFrame()
       let savePoint = vmState.ledger.beginSavePoint()
 
-      var callResult = tx.txCallEvm(sender, vmState, baseFee)
+      var callResult = tx.txCallEvm(sender, vmState, baseFee, intrinsic)
       vmState.captureTxEnd(tx.gasLimit - callResult.gasUsed)
 
       let tmp = commitOrRollbackDependingOnGasUsed(
