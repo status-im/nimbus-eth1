@@ -57,6 +57,8 @@ proc execSubCreate(c: Computation; childMsg: Message;
       c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
       c.gasMeter.appendStateGasUsed(child.gasMeter.stateGasUsed)
       c.gasMeter.appendStateGasRefund(child.gasMeter.stateGasRefund)
+      # https://github.com/ethereum/execution-specs/pull/2733/changes
+      c.gasMeter.creditStateGasRefund(child.gasMeter.stateGasRefundPending)
       c.merge(child)
       c.stack.lsTop child.msg.contractAddress
     else:
@@ -66,10 +68,10 @@ proc execSubCreate(c: Computation; childMsg: Message;
       # the child's `state_gas_used` is not accumulated.
       c.gasMeter.returnStateGas(child.gasMeter.stateGasUsed + child.gasMeter.stateGasLeft - child.gasMeter.stateGasRefund)
 
-      # https://github.com/ethereum/execution-specs/pull/2704/changes
+      # https://github.com/ethereum/execution-specs/pull/2733/changes
       if c.fork >= FkAmsterdam:
         let createAccountStateGas = STATE_BYTES_PER_NEW_ACCOUNT * c.getCostPerStateByte
-        c.gasMeter.refundStateGas(createAccountStateGas)
+        c.gasMeter.creditStateGasRefund(createAccountStateGas)
 
       if not child.error.burnsGas: # Means return was `REVERT`.
         # From create, only use `outputData` if child returned with `REVERT`.
@@ -137,9 +139,9 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
       reason = "Stack too deep",
       maxDepth = MaxCallDepth,
       depth = cpt.msg.depth
-    # https://github.com/ethereum/execution-specs/pull/2704/changes
+    # https://github.com/ethereum/execution-specs/pull/2733/changes
     if cpt.fork >= FkAmsterdam:
-      cpt.gasMeter.refundStateGas(createAccountStateGas)
+      cpt.gasMeter.creditStateGasRefund(createAccountStateGas)
     return ok()
 
   if endowment != 0:
@@ -149,9 +151,9 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
         reason = "Insufficient funds available to transfer",
         required = endowment,
         balance = senderBalance
-      # https://github.com/ethereum/execution-specs/pull/2704/changes
+      # https://github.com/ethereum/execution-specs/pull/2733/changes
       if cpt.fork >= FkAmsterdam:
-        cpt.gasMeter.refundStateGas(createAccountStateGas)
+        cpt.gasMeter.creditStateGasRefund(createAccountStateGas)
       return ok()
 
   var createMsgGas = cpt.gasMeter.gasRemaining
@@ -239,9 +241,9 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
       reason = "Stack too deep",
       maxDepth = MaxCallDepth,
       depth = cpt.msg.depth
-    # https://github.com/ethereum/execution-specs/pull/2704/changes
+    # https://github.com/ethereum/execution-specs/pull/2733/changes
     if cpt.fork >= FkAmsterdam:
-      cpt.gasMeter.refundStateGas(createAccountStateGas)
+      cpt.gasMeter.creditStateGasRefund(createAccountStateGas)
     return ok()
 
   if endowment != 0:
@@ -251,9 +253,9 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
         reason = "Insufficient funds available to transfer",
         required = endowment,
         balance = senderBalance
-      # https://github.com/ethereum/execution-specs/pull/2704/changes
+      # https://github.com/ethereum/execution-specs/pull/2733/changes
       if cpt.fork >= FkAmsterdam:
-        cpt.gasMeter.refundStateGas(createAccountStateGas)
+        cpt.gasMeter.creditStateGasRefund(createAccountStateGas)
       return ok()
 
   var createMsgGas = cpt.gasMeter.gasRemaining

@@ -252,6 +252,13 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
   if c.shouldBurnGas:
     c.gasMeter.burnGas()
 
+  if c.fork >= FkAmsterdam:
+    if c.isSuccess:
+      discard
+    else:
+      # https://github.com/ethereum/execution-specs/pull/2689/changes
+      c.gasMeter.returnAllStateGas()
+
   # Calculated gas used, taking into account refund rules.
   let
     txGasUsedBeforeRefund = call.gasLimit - c.gasMeter.gasRemaining - c.gasMeter.stateGasLeft

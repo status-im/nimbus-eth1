@@ -125,9 +125,9 @@ proc beforeExecCreate(c: Computation): bool =
     if c.msg.depth == 0:
       c.gasMeter.gasRemaining = 0
     elif c.fork >= FkAmsterdam:
-      # https://github.com/ethereum/execution-specs/pull/2704/changes
+      # https://github.com/ethereum/execution-specs/pull/2733/changes
       let createAccountStateGas = STATE_BYTES_PER_NEW_ACCOUNT * c.getCostPerStateByte
-      c.gasMeter.refundStateGas(createAccountStateGas)
+      c.gasMeter.creditStateGasRefund(createAccountStateGas)
     let blurb = c.msg.contractAddress.toHex
     c.setError("Address collision when creating contract address=" & blurb, true)
     return true
@@ -202,9 +202,7 @@ proc afterExec(c: Computation) =
 
   if c.isSuccess:
     c.commit()
-  else:
-    # https://github.com/ethereum/execution-specs/pull/2689/changes
-    c.gasMeter.returnAllStateGas()
+  else:    
     c.rollback()
 
   if c.msg.depth > 0:
