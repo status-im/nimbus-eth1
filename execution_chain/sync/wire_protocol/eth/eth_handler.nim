@@ -26,7 +26,8 @@ const
   # https://github.com/ethereum/devp2p/blob/master/caps/eth.md#getpooledtransactions-0x09
   MAX_TXS_SERVE       = 256
   MAX_BALS_SERVE      = 256
-  MAX_ACTION_HANDLER  = 128
+  MAX_ACTION_HANDLER  = 512
+  NUM_ACTION_WORKERS  = 4
 
 # ------------------------------------------------------------------------------
 # Public constructor/destructor
@@ -43,7 +44,8 @@ proc new*(_: type EthWireRef,
     actionQueue : newAsyncQueue[ActionHandler](maxsize = MAX_ACTION_HANDLER),
   )
   wire.tickerHeartbeat = tickerLoop(wire)
-  wire.actionHeartbeat = actionLoop(wire)
+  for _ in 0 ..< NUM_ACTION_WORKERS:
+    wire.actionHeartbeat.add actionLoop(wire)
   wire.gossipEnabled   = not syncerRunning(wire)
   wire
 

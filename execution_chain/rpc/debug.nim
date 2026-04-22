@@ -31,7 +31,13 @@ type
     hash: Hash32
     rlp: seq[byte]
 
+  TestBlockSummary = object
+    txCount: int
+    blobCount: int
+
 BadBlock.useDefaultSerializationIn JrpcConv
+
+TestBlockSummary.useDefaultSerializationIn JrpcConv
 
 ExecutionWitness.useDefaultSerializationIn JrpcConv
 
@@ -306,3 +312,17 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
     res["baseFee"] = newJInt(poolBaseFee.int64)
     res["senders"] = senders
     res
+
+  server.rpc("debug_buildTestBlock") do() -> TestBlockSummary:
+    ## Assembles a block from the current transaction pool using the
+    ## production block-building path (TxPoolRef.assembleBlock).
+    ## Returns the number of transactions and blobs that were packed.
+    let bundle = txPool.assembleBlock().valueOr:
+      raise newException(ValueError, error)
+    let blobCount =
+      if bundle.blobsBundle.isNil: 0
+      else: bundle.blobsBundle.blobs.len
+    TestBlockSummary(
+      txCount: bundle.blk.transactions.len,
+      blobCount: blobCount,
+    )
