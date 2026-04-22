@@ -155,24 +155,24 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
     gasRefund = if call.sysCall: 0
                 else: preExecComputation(vmState, call)
     intrinsicGas = intrinsic.regular + intrinsic.state
-    
+
     # Prevent underflow which can occur when gasLimit is less than intrinsicGas.
     # Note that this is only a short term fix. In the longer term we need to
     # implement validation on all fields in the Message before executing in the EVM.
-    # TODO: Implement full validation on all fields. See related issue: https://github.com/status-im/nimbus-eth1/issues/1524    
+    # TODO: Implement full validation on all fields. See related issue: https://github.com/status-im/nimbus-eth1/issues/1524
     executionGas = if call.gasLimit < intrinsicGas: 0.GasInt else: call.gasLimit - intrinsicGas
     regularGasBudget = TX_GAS_LIMIT - intrinsic.regular
-    
+
   var
     gasLeft = executionGas
     intrinsicStateGas = 0.GasInt
     stateGas = 0.GasInt
-              
-  if isAmsterdamOrLater: 
-    gasLeft = min(regularGasBudget, executionGas)              
-    intrinsicStateGas = intrinsic.state - gasRefund.GasInt
+
+  if isAmsterdamOrLater:
+    gasLeft = min(regularGasBudget, executionGas)
+    intrinsicStateGas = intrinsic.state
     stateGas = executionGas - gasLeft + gasRefund.GasInt
-    
+
   let
     host = TransactionHost(
       vmState: vmState,
