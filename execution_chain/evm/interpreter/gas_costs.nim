@@ -101,6 +101,7 @@ type
     gasCost*: GasInt
     gasRefund*: int64
     stateGas*: GasInt
+    creditStateGas*: GasInt
 
   CallGasResult = tuple[gasCost, childGasLimit: GasInt]
 
@@ -330,6 +331,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
         if params.originalValue.isZero: # reset to original inexistent slot (2.2.2.1)
           when fork >= FkAmsterdam:
             # https://github.com/ethereum/execution-specs/pull/2698/changes
+            res.creditStateGas = params.stateGasStorageSet
             res.gasRefund += CleanRefund
           else:
             res.gasRefund += InitRefund
