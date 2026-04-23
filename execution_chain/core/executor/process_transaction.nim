@@ -172,7 +172,7 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32):
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
-      gasLimit : DEFAULT_GAS_LIMIT.GasInt,
+      gasLimit : 30_000_000.GasInt,
       gasPrice : 0.GasInt,
       to       : BEACON_ROOTS_ADDRESS,
       input    : @(beaconRoot.data),
@@ -180,10 +180,8 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32):
     )
 
   # runComputation a.k.a syscall/evm.call
-  let res = call.runComputation(string)
-  if res.len > 0:
-    return err("processBeaconBlockRoot: " & res)
-
+  # EIP-4788: fail silently
+  call.runComputation(void)
   ledger.persist(clearEmptyAccount = true)
   ok()
 
@@ -196,7 +194,7 @@ proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32):
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
-      gasLimit : DEFAULT_GAS_LIMIT.GasInt,
+      gasLimit : 30_000_000.GasInt,
       gasPrice : 0.GasInt,
       to       : HISTORY_STORAGE_ADDRESS,
       input    : @(prevHash.data),
@@ -204,10 +202,8 @@ proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32):
     )
 
   # runComputation a.k.a syscall/evm.call
-  let res = call.runComputation(string)
-  if res.len > 0:
-    return err("processParentBlockHash: " & res)
-
+  # EIP-2923: fail silently
+  call.runComputation(void)
   ledger.persist(clearEmptyAccount = true)
   ok()
 
@@ -229,7 +225,6 @@ proc processDequeueWithdrawalRequests*(vmState: BaseVMState): Result[seq[byte], 
   let res = call.runComputation(OutputResult)
   if res.error.len > 0:
     return err("processDequeueWithdrawalRequests: " & res.error)
-
   ledger.persist(clearEmptyAccount = true)
   ok(res.output)
 
