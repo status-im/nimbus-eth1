@@ -82,7 +82,7 @@ suite "Snap Data Validator":
           db = p.root.validate(p.start, p.pck.accounts, p.pck.proof).valueOr:
             skip()
             break needDb
-        let proof = db.pairs.mapIt(ProofNode it[1])
+        let proof = db.kvPairs.mapIt(ProofNode it[1])
         check p.root.validate(p.start, p.pck.accounts, proof).isOk
 
     test name & ", curbed tree dump as proof nodes must fail":
@@ -91,7 +91,7 @@ suite "Snap Data Validator":
           db = p.root.validate(p.start, p.pck.accounts, p.pck.proof).valueOr:
             skip()
             break needDb
-        var proof = db.pairs.mapIt(ProofNode it[1])
+        var proof = db.kvPairs.mapIt(ProofNode it[1])
         proof.setLen(p.pck.proof.len - 1)
         check p.root.validate(p.start, p.pck.accounts, proof).isErr
 

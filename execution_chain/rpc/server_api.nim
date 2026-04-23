@@ -109,8 +109,7 @@ proc headerFromTag(api: ServerAPIRef, blockTag: Opt[BlockTag]): Result[Opt[Heade
 proc frameFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[CoreDbTxRef, string] =
   # TODO avoid loading full header if hash is given
 
-  let headerOpt = api.headerFromTag(blockTag).valueOr:
-    return err(error)
+  let headerOpt = ?api.headerFromTag(blockTag)
 
   if headerOpt.isNone:
     return err("Block not found")
@@ -463,7 +462,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
     let
       txFrame = api.frameFromTag(blockId("latest")).valueOr:
-        raise newException(ValueError, error)
+        raise newException(ValueError, "Latest Block not found")
       accRec = txFrame.fetchAccount(address.computeAccPath).valueOr(emptyDbAccount)
       tx = unsignedTx(data, api.chain, accRec.nonce + 1, api.com.chainId)
       eip155 = api.com.isEIP155(api.chain.latestNumber)
@@ -485,7 +484,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
     let
       txFrame = api.frameFromTag(blockId("latest")).valueOr:
-        raise newException(ValueError, error)
+        raise newException(ValueError, "Latest Block not found")
       accRec = txFrame.fetchAccount(address.computeAccPath).valueOr(emptyDbAccount)
 
       tx = unsignedTx(data, api.chain, accRec.nonce + 1, api.com.chainId)

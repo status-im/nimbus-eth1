@@ -147,7 +147,7 @@ proc updateProofTree(
       if chld.kind == Branch and BranchNodeRef(chld).xtPfx.len == 0:
         w.brLinks = BranchNodeRef(chld).brLinks
         w.brData = BranchNodeRef(chld).brData
-        w.brKey = BranchNodeRef(chld).brKey
+        w.brKey = BranchNodeRef(chld).selfKey
 
     let path = path & w.xtPfx
     for n in 0 .. 15:
@@ -568,7 +568,7 @@ proc validate*[T: SnapAccount|StorageItem](
       return ok(db)
   err()
 
-proc pairs*(db: NodeTrieRef): seq[(seq[byte],seq[byte])] =
+proc kvPairs*(db: NodeTrieRef): seq[(seq[byte],seq[byte])] =
   ## Export partial MPT. If an error occurs, no data is exported.
   ##
   if db.isComplete():
