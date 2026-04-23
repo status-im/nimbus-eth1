@@ -72,7 +72,7 @@ proc initialAccessListEIP2929(call: CallParams) =
         ledger.accessList(account.address, key.to(UInt256))
 
 proc preExecComputation(vmState: BaseVMState, call: CallParams): int64 =
-  var gasRefund = 0
+  var gasRefund = 0'i64
   let ledger = vmState.ledger
 
   if not call.isCreate:
@@ -152,7 +152,7 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
     isAmsterdamOrLater = fork >= FkAmsterdam
     intrinsic = if call.sysCall: IntrinsicGas()
                 else: intrinsicGas(call, fork, vmState.blockCtx.gasLimit)
-    gasRefund = if call.sysCall: 0
+    gasRefund = if call.sysCall: 0'i64
                 else: preExecComputation(vmState, call)
     intrinsicGas = intrinsic.regular + intrinsic.state
 
@@ -196,6 +196,7 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
       sender:          call.sender,
       value:           call.value,
     )
+
     code = if call.isCreate:
              msg.contractAddress = generateContractAddress(call.vmState, CallKind.Create, call.sender)
              CodeBytesRef.init(call.input)

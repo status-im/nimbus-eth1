@@ -7,7 +7,7 @@
  * at your option. This file may not be copied, modified, or distributed except according to those terms.
  */
 
-#include "./verifproxy.h"
+#include "verifproxy.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -40,12 +40,6 @@ static void collect_error_cb(Context *ctx, int status, char *res, void *userData
     if (status != RET_SUCCESS)
         fprintf(stderr, "  [cb] status=%d  res=%s\n", status, res ? res : "(null)");
 
-    freeNimAllocatedString(res);
-}
-
-static void proxy_start_cb(Context *ctx, int status, char *res, void *userData) {
-    (void)ctx; (void)status; (void)userData;
-    /* Always free even for error responses. */
     freeNimAllocatedString(res);
 }
 
@@ -146,73 +140,73 @@ void check_deser_errors(Context *ctx) {
     TEST("eth_feeHistory invalid percentiles JSON: error returned", s.called && s.status == RET_DESER_ERROR);
 }
 
-// nvp_call routes by deserializing json array of params and passing them to the
+// proxyCall routes by deserializing json array of params and passing them to the
 // above tested methods
-static void check_nvp_call_errors(Context *ctx) {
-    printf("\n nvp_call validation\n");
+static void check_proxyCall_errors(Context *ctx) {
+    printf("\n proxyCall validation\n");
     CbState s;
 
     s = (CbState){0};
-    nvp_call(ctx, "eth_unknownMethod", "[]", collect_error_cb, &s);
-    TEST("nvp_call unknown method: error returned", s.called && s.status == RET_DESER_ERROR);
+    proxyCall(ctx, "eth_unknownMethod", "[]", collect_error_cb, &s);
+    TEST("proxyCall unknown method: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    nvp_call(ctx, "eth_blockNumber", "!!!not json!!!", collect_error_cb, &s);
-    TEST("nvp_call invalid JSON params: error returned", s.called && s.status == RET_DESER_ERROR);
+    proxyCall(ctx, "eth_blockNumber", "!!!not json!!!", collect_error_cb, &s);
+    TEST("proxyCall invalid JSON params: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    nvp_call(ctx, "eth_getBalance", "[]", collect_error_cb, &s);
-    TEST("nvp_call eth_getBalance 0 params: error returned", s.called && s.status == RET_DESER_ERROR);
+    proxyCall(ctx, "eth_getBalance", "[]", collect_error_cb, &s);
+    TEST("proxyCall eth_getBalance 0 params: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    nvp_call(ctx, "eth_getBalance",
+    proxyCall(ctx, "eth_getBalance",
              "[\"0x954a86C613fd1fBaC9C7A43a071A68254C75E4AC\"]",
              collect_error_cb, &s);
-    TEST("nvp_call eth_getBalance 1 param: error returned", s.called && s.status == RET_DESER_ERROR);
+    TEST("proxyCall eth_getBalance 1 param: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    nvp_call(ctx, "eth_getBalance",
+    proxyCall(ctx, "eth_getBalance",
              "[\"not-an-address\", \"latest\"]",
              collect_error_cb, &s);
-    TEST("nvp_call eth_getBalance bad address: error returned", s.called && s.status == RET_DESER_ERROR);
+    TEST("proxyCall eth_getBalance bad address: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    nvp_call(ctx, "eth_getStorageAt",
+    proxyCall(ctx, "eth_getStorageAt",
              "[\"0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\", \"0x0\"]",
              collect_error_cb, &s);
-    TEST("nvp_call eth_getStorageAt 2 params: error returned", s.called && s.status == RET_DESER_ERROR);
+    TEST("proxyCall eth_getStorageAt 2 params: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    nvp_call(ctx, "eth_getBlockByHash",
+    proxyCall(ctx, "eth_getBlockByHash",
              "[\"0x56a9bb0302da44b8c0b3df540781424684c3af04d0b7a38d72842b762076a664\"]",
              collect_error_cb, &s);
-    TEST("nvp_call eth_getBlockByHash 1 param: error returned", s.called && s.status == RET_DESER_ERROR);
+    TEST("proxyCall eth_getBlockByHash 1 param: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    nvp_call(ctx, "eth_getBlockByHash", "[\"not-a-hash\", false]", collect_error_cb, &s);
-    TEST("nvp_call eth_getBlockByHash bad hash: error returned", s.called && s.status == RET_DESER_ERROR);
+    proxyCall(ctx, "eth_getBlockByHash", "[\"not-a-hash\", false]", collect_error_cb, &s);
+    TEST("proxyCall eth_getBlockByHash bad hash: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    nvp_call(ctx, "eth_getTransactionByHash", "[\"not-a-hash\"]", collect_error_cb, &s);
-    TEST("nvp_call eth_getTransactionByHash bad hash: error returned", s.called && s.status == RET_DESER_ERROR);
+    proxyCall(ctx, "eth_getTransactionByHash", "[\"not-a-hash\"]", collect_error_cb, &s);
+    TEST("proxyCall eth_getTransactionByHash bad hash: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    nvp_call(ctx, "eth_call",
+    proxyCall(ctx, "eth_call",
              "[{\"to\":\"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2\"}, \"latest\"]",
              collect_error_cb, &s);
-    TEST("nvp_call eth_call 2 params: error returned", s.called && s.status == RET_DESER_ERROR);
+    TEST("proxyCall eth_call 2 params: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    nvp_call(ctx, "eth_feeHistory", "[4, \"latest\"]", collect_error_cb, &s);
-    TEST("nvp_call eth_feeHistory 2 params: error returned", s.called && s.status == RET_DESER_ERROR);
+    proxyCall(ctx, "eth_feeHistory", "[4, \"latest\"]", collect_error_cb, &s);
+    TEST("proxyCall eth_feeHistory 2 params: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    nvp_call(ctx, "eth_getLogs", "[]", collect_error_cb, &s);
-    TEST("nvp_call eth_getLogs 0 params: error returned", s.called && s.status == RET_DESER_ERROR);
+    proxyCall(ctx, "eth_getLogs", "[]", collect_error_cb, &s);
+    TEST("proxyCall eth_getLogs 0 params: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    nvp_call(ctx, "eth_sendRawTransaction", "[\"not-hex-bytes\"]", collect_error_cb, &s);
-    TEST("nvp_call eth_sendRawTransaction non-hex: error returned", s.called && s.status == RET_DESER_ERROR);
+    proxyCall(ctx, "eth_sendRawTransaction", "[\"not-hex-bytes\"]", collect_error_cb, &s);
+    TEST("proxyCall eth_sendRawTransaction non-hex: error returned", s.called && s.status == RET_DESER_ERROR);
 }
 
 static char *read_file(const char *path) {
@@ -230,12 +224,10 @@ static char *read_file(const char *path) {
 }
 
 static void execution_transport(
-    Context *ctx, char *url, char *name, char *params,
-    CallBackProc cb, void *userData)
+    Context *ctx, TransportDeliveryCallback cb, void *userData)
 {
-    (void)url;
-    fprintf(stderr, "  [exec] %s  params=%s\n", name, params ? params : "(null)");
-    freeNimAllocatedString(params);
+    const char *name = execCtxName(userData);
+    fprintf(stderr, "  [exec] %s  params=%s\n", name, execCtxParams(userData));
 
     const char *file = NULL;
     if (strcmp(name, "eth_getBlockByNumber") == 0 ||
@@ -245,23 +237,21 @@ static void execution_transport(
     if (file) {
         char *data = read_file(file);
         if (data) {
-            cb(ctx, RET_SUCCESS, data, userData);
+            cb(RET_SUCCESS, data, userData);
             free(data);
             return;
         }
     }
 
-    cb(ctx, RET_ERROR, "execution_transport: no response for method", userData);
+    cb(RET_ERROR, "execution_transport: no response for method", userData);
 }
 
 static void beacon_transport(
-    Context *ctx, char *url, char *endpoint, char *params,
-    CallBackProc cb, void *userData)
+    Context *ctx, TransportDeliveryCallback cb, void *userData)
 {
-    (void)url;
-    freeNimAllocatedString(params);
-
-    printf("LC Transport Called: url: %s, endpoint: %s, params: %s\n", url, endpoint, params);
+    const char *endpoint = beaconCtxEndpoint(userData);
+    printf("LC Transport Called: url: %s, endpoint: %s, params: %s\n",
+           beaconCtxUrl(userData), endpoint, beaconCtxParams(userData));
 
     const char *file = NULL;
     if (strcmp(endpoint, "getLightClientBootstrap") == 0)
@@ -276,13 +266,13 @@ static void beacon_transport(
     if (file) {
         char *data = read_file(file);
         if (data) {
-            cb(ctx, RET_SUCCESS, data, userData);
+            cb(RET_SUCCESS, data, userData);
             free(data);
             return;
         }
     }
 
-    cb(ctx, RET_ERROR, "beacon_transport: no response for endpoint", userData);
+    cb(RET_ERROR, "beacon_transport: no response for endpoint", userData);
 }
 
 static void drain(Context *ctx, int max_iters) {
@@ -324,9 +314,7 @@ int main(void) {
     Context *ctx = startVerifProxy(
         (char *)TEST_CONFIG,
         execution_transport,
-        beacon_transport,
-        proxy_start_cb,
-        NULL
+        beacon_transport
     );
 
     if (!ctx) {
@@ -335,7 +323,7 @@ int main(void) {
     }
 
     check_deser_errors(ctx);
-    check_nvp_call_errors(ctx);
+    check_proxyCall_errors(ctx);
     check_event_loop(ctx);
 
     stopVerifProxy(ctx);

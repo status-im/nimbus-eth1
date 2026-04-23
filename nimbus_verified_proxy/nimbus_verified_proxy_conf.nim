@@ -8,9 +8,10 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[strutils],
+  std/[strutils, uri],
   json_serialization/std/net,
-  beacon_chain/conf_light_client,
+  confutils/toml/defs as confTomlDefs,
+  beacon_chain/spec/digest,
   beacon_chain/nimbus_binary_common
 
 export net
@@ -38,13 +39,6 @@ type VerifiedProxyConf* = object
     defaultValue: StdoutLogKind.Auto,
     name: "log-format"
   .}: StdoutLogKind
-
-  # Storage
-  dataDirFlag* {.
-    desc: "The directory where nimbus will store all blockchain data",
-    abbr: "d",
-    name: "data-dir"
-  .}: Option[OutDir]
 
   # Network
   eth2Network* {.
@@ -93,6 +87,13 @@ type VerifiedProxyConf* = object
     desc: "Number of blocks downloaded parallely. Affects memory usage",
     defaultValue: 10,
     name: "debug-parallel-downloads"
+  .}: uint64
+
+  maxLightClientUpdates* {.
+    hidden,
+    desc: "Maximum number of light client updates fetched per sync round. Lower values reduce peak memory usage at the cost of slower initial sync.",
+    defaultValue: 128,
+    name: "debug-max-lc-updates"
   .}: uint64
 
   syncHeaderStore* {.
@@ -160,6 +161,12 @@ proc parseCmdArg*(T: type UrlList, p: string): T {.raises: [ValueError].} =
         newException(ValueError, "URL should have a valid scheme (http/https/ws/wss)")
 
   UrlList(urls)
+
+# NOTE: this is overridden here instead of importing from beacon_chain/conf.nim to
+# avoid importing miniupnpc because of the dependency chain below 
+# nim-libp2p -> nim-nat-traversal -> miniupnpc
+func parseCmdArg*(T: type Eth2Digest, input: string): T {.raises: [ValueError].} =
+  Eth2Digest.fromHex(input)
 
 proc completeCmdArg*(T: type UrlList, val: string): seq[string] =
   @[]

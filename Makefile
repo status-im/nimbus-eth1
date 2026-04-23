@@ -184,6 +184,8 @@ all: | $(TOOLS) nimbus nimbus_execution_client
 # must be included after the default target
 -include $(BUILD_SYSTEM_DIR)/makefiles/targets.mk
 
+include nimbus_verified_proxy/bindings/wasm/build_wasm.mk
+
 # "-d:release" cannot be added to config.nims
 
 NIM_PARAMS += -d:release
@@ -365,15 +367,15 @@ libverifproxy: | build deps
 	+ echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim --version && \
 		echo $(NIM_PARAMS) && \
-		$(ENV_SCRIPT) nim c --app:staticlib -d:"libp2p_pki_schemes=secp256k1" --noMain:on -d:disable_libbacktrace --out:$(VERIF_PROXY_OUT_PATH)/$@.$(STATICLIBEXT) $(NIM_PARAMS) nimbus_verified_proxy/libverifproxy/verifproxy.nim
-	cp nimbus_verified_proxy/libverifproxy/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
+		$(ENV_SCRIPT) nim c --app:staticlib --mm:orc -d:"libp2p_pki_schemes=secp256k1" --noMain:on -d:disable_libbacktrace --out:$(VERIF_PROXY_OUT_PATH)/$@.$(STATICLIBEXT) $(NIM_PARAMS) nimbus_verified_proxy/bindings/c/setup.nim
+	cp nimbus_verified_proxy/bindings/c/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
 	echo -e $(BUILD_END_MSG) "build/$@"
 
-libverifproxy-test: | libverifproxy
+libverifproxy-test: $(VERIF_PROXY_OUT_PATH)/libverifproxy.$(STATICLIBEXT)
 	$(CC) -I$(VERIF_PROXY_OUT_PATH) -L$(VERIF_PROXY_OUT_PATH) \
 		-Wno-incompatible-pointer-types \
 		-o build/libverifproxy-test \
-		nimbus_verified_proxy/libverifproxy/test_api.c \
+		tests/bindings/c/test_api.c \
 		-lverifproxy -lstdc++ $(VERIFPROXY_LDFLAGS)
 	./build/libverifproxy-test
 

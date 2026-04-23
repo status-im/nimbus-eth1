@@ -293,6 +293,8 @@ proc getBlock*(
       )
     )
 
+  info "2:  block downloaded, verifying" 
+
   # verify requested hash with the downloaded hash
   if blockHash != blk.hash:
     return err(
@@ -302,6 +304,8 @@ proc getBlock*(
       )
     )
 
+  info "3: verified block hash, verifying other fields"
+
   # verify the block
   ?((await engine.verifyBlock(blk, fullTransactions)).tagBackend(backendIdx))
 
@@ -310,8 +314,10 @@ proc getBlock*(
 proc getBlock*(
     engine: RpcVerificationEngine, blockTag: BlockTag, fullTransactions: bool
 ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
+  info "0: resolving tag"
   let numberTag = ?engine.resolveBlockTag(blockTag)
 
+  info "1: downloading block"
   # get the target block
   let
     (backend, backendIdx) = ?(engine.executionBackendFor(GetBlockByNumber))
@@ -320,6 +326,8 @@ proc getBlock*(
         backendIdx
       )
     )
+
+  info "2: verfying the block number"
 
   if numberTag.number != blk.number:
     return err(
@@ -330,8 +338,12 @@ proc getBlock*(
       )
     )
 
+  info "3: verifying block fields"
+
   # verify the block
   ?((await engine.verifyBlock(blk, fullTransactions)).tagBackend(backendIdx))
+
+  info "4: all ok"
 
   ok(blk)
 
