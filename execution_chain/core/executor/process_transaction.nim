@@ -201,7 +201,6 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32):
   # runComputation a.k.a syscall/evm.call
   # EIP-4788: fail silently
   call.runComputation(void)
-
   ledger.persist(clearEmptyAccount = true)
   ok()
 
