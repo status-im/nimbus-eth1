@@ -14,6 +14,10 @@ import results
 
 export results
 
+type RocksDbBlockCacheType* = enum
+  lruCache = "lru"
+  hyperClockCache = "hyperclock"
+
 const
   # https://github.com/facebook/rocksdb/wiki/Setup-Options-and-Basic-Tuning
   defaultMaxOpenFiles* = 2048
@@ -41,6 +45,8 @@ const
     ## Cache of branches and leaves in the state MPTs (world and account)
   defaultMaxSnapshots* = 5
     ## The max number of snapshots to store in the aristo database.
+  defaultBlockCacheType* = hyperClockCache
+    ## The default RocksDb block cache.
 
 type DbOptions* = object # Options that are transported to the database layer
   maxOpenFiles*: int
@@ -53,6 +59,7 @@ type DbOptions* = object # Options that are transported to the database layer
   rdbPrintStats*: bool
   maxSnapshots*: int
   parallelStateRootComputation*: bool
+  blockCacheType*: RocksDbBlockCacheType
 
 func init*(
     T: type DbOptions,
@@ -65,7 +72,8 @@ func init*(
     rdbBranchCacheSize = defaultRdbBranchCacheSize,
     rdbPrintStats = false,
     maxSnapshots = defaultMaxSnapshots,
-    parallelStateRootComputation = false
+    parallelStateRootComputation = false,
+    blockCacheType = defaultBlockCacheType,
 ): T =
   T(
     maxOpenFiles: maxOpenFiles,
@@ -77,5 +85,6 @@ func init*(
     rdbBranchCacheSize: rdbBranchCacheSize,
     rdbPrintStats: rdbPrintStats,
     maxSnapshots: maxSnapshots,
-    parallelStateRootComputation: parallelStateRootComputation
+    parallelStateRootComputation: parallelStateRootComputation,
+    blockCacheType: blockCacheType
   )
