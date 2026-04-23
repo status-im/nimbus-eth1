@@ -89,6 +89,7 @@ proc init*(rdb: var RdbInst, opts: DbOptions, baseDb: RocksDbInstanceRef) =
   # bytes -> entries based on overhead estimates
   rdb.rdKeySize =
     opts.rdbKeyCacheSize div (sizeof(VertexID) + sizeof(HashKey) + lruOverhead)
+
   rdb.rdVtxSize =
     opts.rdbVtxCacheSize div
     (sizeof(VertexID) + sizeof(VertexBuf) + lruOverhead)

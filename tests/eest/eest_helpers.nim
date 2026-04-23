@@ -31,6 +31,7 @@ import
   ../../execution_chain/beacon/beacon_engine,
   ../../execution_chain/common/common,
   ../../execution_chain/stateless/witness_types,
+  ../../execution_chain/stateless/stateless_types,
   ../../hive_integration/engine_client
 
 import ../../tools/common/helpers as chp except HardFork
@@ -69,6 +70,7 @@ type
     badBlock*: bool
     bal*: Opt[BlockAccessListRef]
     witness*: Opt[ExecutionWitness]
+    statelessValidationResult*: Opt[StatelessValidationResult]
 
   Numero* = distinct uint64
 
@@ -251,7 +253,7 @@ proc prepareEnv*(
     let
       com = CommonRef.new(memDB, config,
         statelessProviderEnabled = statelessEnabled,
-        statelessWitnessValidation = statelessEnabled)
+        statelessWitnessValidation = false) # Running stateless execution separately in test runner
       chain = ForkedChainRef.init(com, enableQueue = true, persistBatchSize = 1)
 
     testEnv.chain = chain

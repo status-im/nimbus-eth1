@@ -103,11 +103,6 @@ const
     ##
     ## Note that there are about 400k accounts on `mainnet` (as of early 2026.)
 
-  nWorkingStateRootsMax* = 3
-    ## Stop the current session after accounts could be downloaded for this
-    ## many different state roots. The session will then be released and a
-    ## new one started.
-
   # -----------
 
   nFetchHeaderPeersMax* = 5
@@ -145,6 +140,9 @@ const
   nProcStorageErrThreshold* = 4
     ## Similar to `nProcAccountErrThreshold`
 
+  nFetchStorageSlotsMax* = 1024
+    ## Maximal size of storage slots downloaded in a single message.
+
   # -----------
 
   fetchCodesSnapTimeout* = chronos.seconds(120)
@@ -158,5 +156,8 @@ const
 
   nProcCodesErrThreshold* = 4
     ## Similar to `nProcAccountErrThreshold`
+
+  nFetchByteCodesMax* = 1024
+    ## Maximal sise of byte codes downloaded in a single message.
 
 # End

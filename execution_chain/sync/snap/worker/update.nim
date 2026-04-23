@@ -22,24 +22,11 @@ logScope:
 # Private helpers
 # ------------------------------------------------------------------------------
 
-func pivotIsComplete(ctx: SnapCtxRef): bool =
-  ## State transition helper
-  ctx.pool.stateDB.pivot().isErrOr:
-    if value.isComplete():
-      return true
-  # false
-
-func pivotIsSufficient(ctx: SnapCtxRef): bool =
+func readyForMptAssembly(ctx: SnapCtxRef): bool =
   ## State transition helper
   let sdb = ctx.pool.stateDB
-  # Check acummulated coverage
-  if sdb.accountsCoverage() < accuAccountsCovMin:
-    return false                                    # not enough yet => fail
-  # Check pivot state
-  sdb.pivot().isErrOr:
-    if accuPivotCovMin <= value.accountsCoverage(): # check pivot coverage
-      return true                                   # enough => OK
-  false
+  sdb.isComplete or
+    accuAccountsCovMin < sdb.archivedCoverage() + sdb.accountsCoverage()
 
 # ------------------------------------------------------------------------------
 # Private FSA transition functions
@@ -53,8 +40,7 @@ proc idleNext(ctx: SnapCtxRef; info: static[string]): SyncState =
 
 proc resumeNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
-  # Recover session (if any)
-  if ctx.pivotIsComplete():
+  if ctx.readyForMptAssembly():
     return SnapMkTrie
   SnapReady
 
@@ -67,17 +53,20 @@ func readyNext(ctx: SnapCtxRef; info: static[string]): SyncState =
 
 func downloadNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
-  if ctx.pivotIsComplete() or
-     ctx.pivotIsSufficient():
-    return SnapMkTrie
+  if ctx.readyForMptAssembly():
+    ctx.poolMode = true                             # sync peers
+    return SnapDownloadFinish
   SnapDownload
+
+proc downloadFinishNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+  ## State transition handler
+  if ctx.poolMode:                                  # wait for peers to sync
+    return SnapDownloadFinish
+  SnapMkTrie
 
 func mkTrieNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
-  ctx.pool.stateDB.pivot.isErrOr:
-    if value.getHealingReady():
-      return SnapHealing
-  SnapDownload
+  SnapMkTrie
 
 func healingNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
@@ -96,6 +85,10 @@ proc updateSyncResume*(ctx: SnapCtxRef) =
   ## Set explicit `resume` syncer state
   ctx.pool.syncState = SnapResume
 
+proc updateSyncHealing*(ctx: SnapCtxRef) =
+  ## Set explicit `healinh` syncer state
+  ctx.pool.syncState = SnapHealing
+
 
 proc updateSyncState*(ctx: SnapCtxRef; info: static[string]) =
   ## Update internal state when needed
@@ -112,6 +105,9 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]) =
   #      |        |
   #      |        v
   #      |     download <--.
+  #      |        |        |
+  #      |        v        |
+  #      |  downloadFinish |
   #      |        |        |
   #      |        v        |
   #      `----> mkTrie ----'
@@ -132,6 +128,8 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]) =
       ctx.readyNext info
     of SnapDownload:
       ctx.downloadNext info
+    of SnapDownloadFinish:
+      ctx.downloadFinishNext info
     of SnapMkTrie:
       ctx.mkTrieNext info
     of SnapHealing:
@@ -145,9 +143,9 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]) =
 
   ctx.pool.syncState = newState
   case newState:
-  of SnapDownload, SnapMkTrie, SnapHealing:
+  of SnapDownload, SnapDownloadFinish, SnapMkTrie, SnapHealing:
     chronicles.info info & ": State changed", prevState, newState,
-      top=sdb.top.bnStr, pivot=sdb.pivot.bnStr, nSyncPeers=ctx.nSyncPeers()
+      top=sdb.top, pivot=sdb.pivot.bnStr, nSyncPeers=ctx.nSyncPeers()
   of SnapIdle, SnapResume, SnapReady:
     debug "State changed", prevState, newState
 
@@ -170,8 +168,9 @@ template updateTarget*(buddy: SnapPeerRef, info: static[string]) =
     trace info & ": assigning manual target state", peer=buddy.peer,
       hash=hash.toStr, nSyncPeers=ctx.nSyncPeers()
 
-    buddy.headerStateRegister(hash, info).isErrOr:
-      ctx.pool.target = Opt.none(BlockHash)         # fetch only once
+    ctx.pool.target = Opt.none(BlockHash)           # fetch only once
+    buddy.headerStateRegister(hash, info).isOkOr:
+      ctx.pool.target = Opt.some(hash)              # error => restore
     # End `block body`
 
   discard                                           # visual alignment
@@ -192,34 +191,49 @@ template updateFcuRoot*(buddy: SnapPeerRef, info: static[string]) =
   ##   would be an extra efford not deemed worth while.
   ##
   block body:
-    if buddy.only.finRoot.isSome():
-      break body                                    # done, nothing to do
-
     let
       ctx = buddy.ctx
+      sdb = ctx.pool.stateDB
+      peer {.inject,used.} = $buddy.peer            # logging only
+
+    buddy.only.finRoot.isErrOr:                     # already set?
+      # Check whether this state root still applies. If so, then
+      # do nothing and return. Otherwise reset and find a new one.
+      #
+      # The underlying assumption is, that a `snap` peer serves a list of
+      # states with consecutive, increasing block numbers ending up near or
+      # at the latest block number of the FCU finalised hash.
+      #
+      let rc = sdb.get(value)
+      if rc.isErr:
+        buddy.only.finRoot = Opt.none(StateRoot)
+      elif buddy.only.notAvailMax <= rc.value.blockNumber:
+        buddy.only.finRoot = Opt.none(StateRoot)
+        trace info & ":fin root too old, disbanding", peer,
+          root=rc.value.rootStr, notAvailMax=buddy.only.notAvailMax,
+          syncState=buddy.syncState, nSyncPeers=ctx.nSyncPeers()
+      else:
+        break body                                  # done, nothing to do
+
+    let
       hdr = ctx.hdrCache.latestConsHead()
       blockNumber {.inject.} = BlockNumber(hdr.number)
     if blockNumber == 0:
       break body                                    # no FCU request yet
 
-    let hash = BlockHash(hdr.computeBlockHash())
-    ctx.pool.stateDB.get(hash).isErrOr:
-      trace info & ": using fin root from registry", peer=buddy.peer,
+    let
+      hash = BlockHash(hdr.computeBlockHash())
+      root = StateRoot(hdr.stateRoot)
+    ctx.pool.stateDB.get(root).isErrOr:
+      trace info & ": using fin root from registry", peer,
         blockHash=hash.toStr, blockNumber, nSyncPeers=ctx.nSyncPeers()
-      buddy.only.finRoot = Opt.some(value.stateRoot)
+      buddy.only.finRoot = Opt.some(root)
       break body                                    # already registered
 
-    trace info & ": assigning FCU hash from CL", peer=buddy.peer,
+    trace info & ": assigning FCU hash from CL", peer,
       hash=hash.toStr, blockNumber, nSyncPeers=ctx.nSyncPeers()
 
-    # Store root -> block data mapping
-    let root = StateRoot(hdr.stateRoot)
-    ctx.pool.mptAsm.putBlockData(root, hash, blockNumber).isOkOr:
-      trace info & ": Cannot store state root map", peer=buddy.peer,
-        stateRoot=root.toStr, blockHash=hash.toStr, blockNumber
-      break body                                    # done, storage error
-
-    discard ctx.pool.stateDB.register(root, hash, blockNumber, info)
+    discard sdb.register(root, hash, blockNumber, info)
     buddy.only.finRoot = Opt.some(root)
     # End `block body`
 

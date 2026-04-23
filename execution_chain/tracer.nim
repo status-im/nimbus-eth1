@@ -164,7 +164,7 @@ proc traceTransactionImpl(
       stateDiff["beforeRoot"] = %(ledger.getStateRoot().toHex)
       stateCtx = CaptCtxRef.init(com, ledger.getStateRoot())
 
-    let rc = vmState.processTransaction(tx, sender, header)
+    let rc = vmState.processTransaction(tx, sender)
     gasUsed = if rc.isOk: rc.value.gasUsed else: 0
 
     if idx.uint64 == txIndex:
@@ -279,7 +279,7 @@ proc traceBlockImpl(
   for tx in blk.transactions:
     let
       sender = tx.recoverSender().expect("valid signature")
-      rc = vmState.processTransaction(tx, sender, header)
+      rc = vmState.processTransaction(tx, sender)
     if rc.isOk:
       gasUsed = gasUsed + rc.value.gasUsed
 

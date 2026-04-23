@@ -40,45 +40,57 @@ template accountDownload*(
       root {.inject,used.} = state.rootStr          # logging only
 
       ivReq = sdb.fetchAccountRange(state).valueOr:
-        trace info & ": no more unpocessed", peer, root,
-          state=($buddy.syncState)
+        trace info & ": No more unpocessed", peer, `state`=state.toStr(sdb),
+          notAvailMax=buddy.only.notAvailMax, syncState=buddy.syncState
         bodyRc = typeof(bodyRc).err(ECompleted)
         break body                                  # return err()
 
       iv {.inject,used.} = ivReq.flStr              # logging only
 
-    trace info & ": requesting account range", peer, root, iv,
-      state=($buddy.syncState)
-
     let
       data = buddy.fetchAccounts(state.stateRoot, ivReq).valueOr:
         sdb.rollbackAccountRange(state, ivReq)      # registry roll back
-        trace info & ": account download failed", peer, root, iv,
-          state=($buddy.syncState), `error`=error
         bodyRc = typeof(bodyRc).err(error)
+        if error == ENoDataAvailable and            # not serving this state
+           buddy.only.notAvailMax < state.blockNumber:
+          buddy.only.notAvailMax = state.blockNumber
         break body                                  # return err()
 
       limit = if data.accounts.len == 0: high(ItemKey)
               else: data.accounts[^1].accHash.to(ItemKey)
 
+      now = Moment.now()
+
       nAccounts {.inject,used.} = data.accounts.len # logging only
       nProof {.inject,used.} = data.proof.len       # logging only
 
-    # Stash accounts data packet to be processed later
+    # Stash accounts data packet on DB to be processed later
     adb.putAccounts(
       state.stateRoot, ivReq.minPt, limit, data.accounts, data.proof,
       buddy.peerID).isOkOr:
         sdb.rollbackAccountRange(state, ivReq)      # registry roll back
-        debug info & ": caching accounts failed", peer, root, iv,
-          nAccounts, nProof, state=($buddy.syncState)
+        debug info & ": caching accounts failed", peer, root,
+          notAvailMax=buddy.only.notAvailMax, iv, nAccounts, nProof,
+          syncState=buddy.syncState
         bodyRc = typeof(bodyRc).err(ECacheError)
         break body                                  # return err()
 
-    sdb.commitAccountRange(state, ivReq, limit)     # update registry
+    # Update state details on DB for recovery, in particular time stamp
+    adb.putStateData(
+      state.stateRoot, state.blockHash, state.blockNumber,
+      now, onTrie=false, coverage=state.accountsCov256).isOkOr:
+        sdb.rollbackAccountRange(state, ivReq)      # registry roll back
+        debug info & ": updating state failed", peer, root,
+          syncState=buddy.syncState
+        bodyRc = typeof(bodyRc).err(ECacheError)
+        break body                                  # return err()
+
+    sdb.commitAccountRange(state, ivReq, limit, now) # update registry
     bodyRc = typeof(bodyRc).ok(data.accounts)       # return code
 
-    debug info & ": accounts downloaded and cached", peer, root, iv,
-      nAccounts, nProof, state=($buddy.syncState)
+    debug info & ": accounts downloaded and cached", peer, root,
+      notAvailMax=buddy.only.notAvailMax, iv, nAccounts, nProof,
+      syncState=buddy.syncState
 
   bodyRc
 

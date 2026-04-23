@@ -8,26 +8,7 @@
 {.used.}
 {.push raises: [], gcsafe.}
 
-import
-  unittest2,
-  chronos,
-  stint/endians2,
-  eth/common/headers_rlp,
-  ../engine/header_store,
-  beacon_chain/spec/[forks, digest, helpers]
-
-func headerGenerator(number: int): ForkedLightClientHeader =
-  ForkedLightClientHeader(
-    kind: LightClientDataFork.Capella,
-    capellaData: capella.LightClientHeader(
-      beacon: default(capella.BeaconBlockHeader),
-      execution: capella.ExecutionPayloadHeader(
-        block_number: uint64(number),
-        block_hash: Eth2Digest(data: toBytesBE(u256(number))),
-      ),
-      execution_branch: default(capella.ExecutionBranch),
-    ),
-  )
+import unittest2, eth/rlp, eth/common/[hashes, headers], ../engine/header_store
 
 suite "test proxy header store":
   test "get from empty store":
@@ -42,7 +23,8 @@ suite "test proxy header store":
   test "get from a non-pruned semi-filled store":
     let store = HeaderStore.new(10)
     for i in 0 ..< 5:
-      discard store.add(headerGenerator(i))
+      let h = Header(number: BlockNumber(i))
+      discard store.add(h, h.computeRlpHash)
 
     check store.len == 5
     check store.get(BlockNumber(0)).isSome()
@@ -54,11 +36,13 @@ suite "test proxy header store":
   test "header store auto pruning":
     let store = HeaderStore.new(10)
     for i in 0 ..< 10:
-      discard store.add(headerGenerator(i))
+      let h = Header(number: BlockNumber(i))
+      discard store.add(h, h.computeRlpHash)
 
     check store.get(BlockNumber(0)).isSome()
 
-    discard store.add(headerGenerator(10))
+    let h10 = Header(number: BlockNumber(10))
+    discard store.add(h10, h10.computeRlpHash)
 
     check store.latest.isSome()
     check store.latest.get().number == 10
@@ -67,15 +51,18 @@ suite "test proxy header store":
   test "duplicate addition should not work":
     let store = HeaderStore.new(10)
     for i in 0 ..< 11:
-      discard store.add(headerGenerator(i))
+      let h = Header(number: BlockNumber(i))
+      discard store.add(h, h.computeRlpHash)
 
-    discard store.add(headerGenerator(10))
+    let h10 = Header(number: BlockNumber(10))
+    discard store.add(h10, h10.computeRlpHash)
 
     check store.latest.isSome()
     check store.latest.get.number == 10
     check store.get(BlockNumber(1)).isSome()
 
-    discard store.add(headerGenerator(11))
+    let h11 = Header(number: BlockNumber(11))
+    discard store.add(h11, h11.computeRlpHash)
 
     check store.latest.isSome()
     check store.latest.get.number == 11
@@ -84,7 +71,8 @@ suite "test proxy header store":
   test "earliest":
     let store = HeaderStore.new(10)
     for i in 0 ..< 15:
-      discard store.add(headerGenerator(i))
+      let h = Header(number: BlockNumber(i))
+      discard store.add(h, h.computeRlpHash)
 
       check:
         store.earliest.isSome()
@@ -95,9 +83,11 @@ suite "test proxy header store":
   test "update finalized":
     let store = HeaderStore.new(10)
     for i in 0 ..< 10:
-      discard store.add(headerGenerator(i))
+      let h = Header(number: BlockNumber(i))
+      discard store.add(h, h.computeRlpHash)
 
-    discard store.updateFinalized(headerGenerator(0))
+    let hf0 = Header(number: BlockNumber(0))
+    discard store.updateFinalized(hf0, hf0.computeRlpHash)
 
     check store.len == 10
     check store.get(BlockNumber(0)).isSome()
@@ -108,32 +98,9 @@ suite "test proxy header store":
     check store.earliestHash.get() == store.finalizedHash.get()
     check store.earliest.get() == store.finalized.get()
 
-    discard store.updateFinalized(headerGenerator(1))
+    let hf1 = Header(number: BlockNumber(1))
+    discard store.updateFinalized(hf1, hf1.computeRlpHash)
 
     check store.earliest.get() != store.finalized.get()
     check store.earliestHash.get() != store.finalizedHash.get()
     check store.finalized.get().number == 1
-
-  test "add altair header":
-    let store = HeaderStore.new(5)
-    let altairHeader = ForkedLightClientHeader(
-      kind: LightClientDataFork.Altair,
-      altairData: altair.LightClientHeader(beacon: default(altair.BeaconBlockHeader)),
-    )
-    let res = store.add(altairHeader)
-
-    check res.isErr()
-
-  test "add electra header":
-    let store = HeaderStore.new(5)
-    let electraHeader = ForkedLightClientHeader(
-      kind: LightClientDataFork.Electra,
-      electraData: electra.LightClientHeader(
-        beacon: default(electra.BeaconBlockHeader),
-        execution: deneb.ExecutionPayloadHeader(block_number: uint64(232)),
-        execution_branch: default(capella.ExecutionBranch),
-      ),
-    )
-    let res = store.add(electraHeader)
-
-    check res.isOk()

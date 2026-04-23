@@ -27,6 +27,7 @@ import
   ../evm/evm_errors,
   ../core/eip4844,
   ../core/pooled_txs_rlp,
+  ./oracle,
   ./rpc_types,
   ./rpc_utils,
   ./filters
@@ -36,6 +37,7 @@ logScope:
 
 type ServerAPIRef* = ref object
   txPool: TxPoolRef
+  oracle: Oracle
 
 const defaultTag = blockId("latest")
 
@@ -46,7 +48,10 @@ template chain(api: ServerAPIRef): ForkedChainRef =
   api.txPool.chain
 
 func newServerAPI*(txPool: TxPoolRef): ServerAPIRef =
-  ServerAPIRef(txPool: txPool)
+  ServerAPIRef(
+    txPool: txPool,
+    oracle: Oracle.new(txPool.chain),
+  )
 
 proc getTotalDifficulty*(api: ServerAPIRef, blockHash: Hash32, header: Header): Opt[UInt256] =
   api.txPool.chain.getTotalDifficulty(blockHash, header)
@@ -539,6 +544,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       blk.transactions[txId],
       Opt.some(blockHash),
       Opt.some(blk.header.number),
+      Opt.some(blk.header.timestamp),
       Opt.some(txId),
     )
 
@@ -558,7 +564,11 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       return nil
 
     populateTransactionObject(
-      blk.transactions[index], Opt.some(data), Opt.some(blk.header.number), Opt.some(index)
+      blk.transactions[index],
+      Opt.some(data),
+      Opt.some(blk.header.number),
+      Opt.some(blk.header.timestamp),
+      Opt.some(index),
     )
 
   server.rpc("eth_getTransactionByBlockNumberAndIndex") do(
@@ -577,7 +587,11 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       return nil
 
     populateTransactionObject(
-      blk.transactions[index], Opt.some(blk.header.computeBlockHash), Opt.some(blk.header.number), Opt.some(index)
+      blk.transactions[index],
+      Opt.some(blk.header.computeBlockHash),
+      Opt.some(blk.header.number),
+      Opt.some(blk.header.timestamp),
+      Opt.some(index),
     )
 
   server.rpc("eth_getProof") do(
@@ -604,12 +618,16 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     if quantityTag.kind == bidHash and quantityTag.requireCanonical:
       raise newException(ValueError,
         "requireCanonical is a pre-merge concept and is not supported")
+
     let
       blk = api.blockFromTag(quantityTag).valueOr:
-        raise newException(ValueError, "Block not found: " & error)
+        return Opt.none(seq[ReceiptObject])
       blkHash = blk.header.computeBlockHash
       receipts = api.chain.receiptsByBlockHash(blkHash).valueOr:
         return Opt.none(seq[ReceiptObject])
+
+    if blk.transactions.len == 0:
+      return Opt.some(newSeq[ReceiptObject]())
 
     var
       prevGasUsed = GasInt(0)
@@ -730,3 +748,29 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         return Opt.none(BlockAccessList)
 
     Opt.some(bal)
+
+  server.rpc("eth_feeHistory") do(
+    blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: Opt[seq[float64]]
+  ) -> FeeHistoryResult:
+    api.oracle.feeHistory(blockCount.uint64, newestBlock, rewardPercentiles.get(@[])).valueOr:
+      raise newException(ValueError, error)
+
+  server.rpc("eth_maxPriorityFeePerGas") do() -> Quantity:
+    w3Qty(calculateMedianMaxPriorityFeePerGas(api.chain).uint64)
+
+  server.rpc("eth_getStorageValues") do(request: StorageValuesRequest, blockTag: BlockTag) -> StorageValuesResponse:
+    let
+      txFrame = api.frameFromTag(blockTag).valueOr:
+        raise newException(ValueError, error)
+
+    var res: StorageObject
+    for req in request.list:
+      let accPath = req.address.computeAccPath
+      res.address = req.address
+      res.data.setLen(req.data.len)
+      for i, slot in req.data:
+        let
+          slotKey = computeSlotKey(slot)
+          value = txFrame.fetchSlot(accPath, slotKey).valueOr(0.u256)
+        res.data[i] = value.to(Bytes32)
+      result.list.add(move(res))
