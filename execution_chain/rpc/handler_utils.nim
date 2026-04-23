@@ -16,7 +16,7 @@ import
 proc invalidParams*(msg: string) {.raises: [ref ApplicationError].} =
   raise (ref ApplicationError)(code: -32602, msg: msg)
 
-template lookupOr*[T](res: Result[Opt[T], string], onMissing: untyped): T =
+template getOrInvalidParam*[T](res: Result[Opt[T], string], onMissing: untyped): T =
   let resolved = res
   if resolved.isErr:
     let errMsg = resolved.error
@@ -26,6 +26,6 @@ template lookupOr*[T](res: Result[Opt[T], string], onMissing: untyped): T =
     onMissing
   found.get()
 
-template requireFound*[T](res: Result[Opt[T], string], msg: string): T =
-  lookupOr(res):
+template getOrRaise*[T](res: Result[Opt[T], string], msg: string): T =
+  getOrInvalidParam(res):
     raise newException(ValueError, msg)

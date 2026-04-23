@@ -191,20 +191,20 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
   # https://ethereum.github.io/execution-apis/api/methods/debug_getRawBlock
   server.rpc("debug_getRawBlock") do(blockTag: BlockTag) -> seq[byte]:
     ## Returns an RLP-encoded block.
-    let blockFromTag = requireFound(chain.blockFromTag(blockTag), "Block not found")
+    let blockFromTag = getOrRaise(chain.blockFromTag(blockTag), "Block not found")
 
     rlp.encode(blockFromTag)
 
   # https://ethereum.github.io/execution-apis/api/methods/debug_getRawHeader
   server.rpc("debug_getRawHeader") do(blockTag: BlockTag) -> seq[byte]:
     ## Returns an RLP-encoded header.
-    let header = requireFound(chain.headerFromTag(blockTag), "Header not found")
+    let header = getOrRaise(chain.headerFromTag(blockTag), "Header not found")
     rlp.encode(header)
 
   # https://ethereum.github.io/execution-apis/api/methods/debug_getRawReceipts
   server.rpc("debug_getRawReceipts") do(blockTag: BlockTag) -> seq[seq[byte]]:
     ## Returns an array of EIP-2718 binary-encoded receipts.
-    let header = requireFound(chain.headerFromTag(blockTag), "Header not found")
+    let header = getOrRaise(chain.headerFromTag(blockTag), "Header not found")
     var res: seq[seq[byte]]
     for receipt in chain.baseTxFrame.getReceipts(header.receiptsRoot):
       res.add rlp.encode(receipt)
@@ -233,7 +233,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
 
   server.rpc("debug_executionWitness") do(quantityTag: BlockTag) -> ExecutionWitness:
     ## Returns an execution witness for the given block number.
-    let header = requireFound(chain.headerFromTag(quantityTag), "Header not found")
+    let header = getOrRaise(chain.headerFromTag(quantityTag), "Header not found")
 
     chain.getExecutionWitness(header.computeBlockHash()).valueOr:
       raise newException(ValueError, error)

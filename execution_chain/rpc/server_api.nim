@@ -130,7 +130,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
   server.rpc("eth_getBalance") do(data: Address, blockTag: BlockTag) -> UInt256:
     ## Returns the balance of the account of given address.
     let
-      txFrame = requireFound(api.frameFromTag(blockTag), "Block not found")
+      txFrame = getOrRaise(api.frameFromTag(blockTag), "Block not found")
       address = data
       acc = txFrame.fetchAccount(address.computeAccPath).valueOr(emptyDbAccount)
     acc.balance
@@ -140,7 +140,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
   ) -> FixedBytes[32]:
     ## Returns the value from a storage position at a given address.
     let
-      txFrame = requireFound(api.frameFromTag(blockTag), "Block not found")
+      txFrame = getOrRaise(api.frameFromTag(blockTag), "Block not found")
       address = data
       accPath = address.computeAccPath
       slotKey = computeSlotKey(slot)
@@ -152,7 +152,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
   ) -> Quantity:
     ## Returns the number of transactions ak.s. nonce sent from an address.
     let
-      txFrame = requireFound(api.frameFromTag(blockTag), "Block not found")
+      txFrame = getOrRaise(api.frameFromTag(blockTag), "Block not found")
       address = data
       accPath = address.computeAccPath
       acc = txFrame.fetchAccount(accPath).valueOr(emptyDbAccount)
@@ -173,7 +173,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ## blockTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns the code from the given address.
     let
-      txFrame = requireFound(api.frameFromTag(blockTag), "Block not found")
+      txFrame = getOrRaise(api.frameFromTag(blockTag), "Block not found")
       address = data
       accPath = address.computeAccPath
       acc = txFrame.fetchAccount(accPath).valueOr(emptyDbAccount)
@@ -205,7 +205,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ## blockTag: integer of a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
     ## fullTransactions: If true it returns the full transaction objects, if false only the hashes of the transactions.
     ## Returns BlockObject or nil when no block was found.
-    let blk = lookupOr(api.blockFromTag(blockTag, noHash = true)):
+    let blk = getOrInvalidParam(api.blockFromTag(blockTag, noHash = true)):
       return nil
     let blockHash = blk.header.computeBlockHash
     return populateBlockObject(
@@ -294,8 +294,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       # would operate on this enum instead of raw strings. This change would need
       # to be done on every endpoint to be consistent.
       let
-        blockFrom = requireFound(api.headerFromTag(filterOptions.fromBlock), "Block not found")
-        blockTo = requireFound(api.headerFromTag(filterOptions.toBlock), "Block not found")
+        blockFrom = getOrRaise(api.headerFromTag(filterOptions.fromBlock), "Block not found")
+        blockTo = getOrRaise(api.headerFromTag(filterOptions.toBlock), "Block not found")
 
       # Note: if fromHeader.number > toHeader.number, no logs will be
       # returned. This is consistent with, what other ethereum clients return
@@ -324,7 +324,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ## quantityTag:  integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns the return value of executed contract.
     let
-      header = requireFound(api.headerFromTag(blockTag), "Block not found")
+      header = getOrRaise(api.headerFromTag(blockTag), "Block not found")
       headerHash = header.computeBlockHash
       txFrame = api.chain.txFrame(headerHash)
       res = rpcCallEvm(args, header, headerHash, api.com, txFrame).valueOr:
@@ -362,7 +362,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ## quantityTag:  integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns the amount of gas used.
     let
-      header = requireFound(api.headerFromTag(blockId("latest")), "Block not found")
+      header = getOrRaise(api.headerFromTag(blockId("latest")), "Block not found")
       headerHash = header.computeBlockHash
       txFrame = api.chain.txFrame(headerHash)
       # TODO: change 0 to configureable gas cap
@@ -402,7 +402,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ##
     ## blockTag: integer of a block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns integer of the number of transactions in this block.
-    let blk = requireFound(api.blockFromTag(blockTag, noHash = true), "Block not found")
+    let blk = getOrRaise(api.blockFromTag(blockTag, noHash = true), "Block not found")
 
     Quantity(blk.transactions.len)
 
@@ -421,7 +421,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ##
     ## blockTag: integer of a block number, or the string "latest", see the default block parameter.
     ## Returns integer of the number of uncles in this block.
-    let blk = requireFound(api.blockFromTag(blockTag, noHash = true), "Block not found")
+    let blk = getOrRaise(api.blockFromTag(blockTag, noHash = true), "Block not found")
 
     Quantity(blk.uncles.len)
 
@@ -458,7 +458,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       raise newException(ValueError, "Account locked, please unlock it first")
 
     let
-      txFrame = requireFound(api.frameFromTag(blockId("latest")), "Latest Block not found")
+      txFrame = getOrRaise(api.frameFromTag(blockId("latest")), "Latest Block not found")
       accRec = txFrame.fetchAccount(address.computeAccPath).valueOr(emptyDbAccount)
       tx = unsignedTx(data, api.chain, accRec.nonce + 1, api.com.chainId)
       eip155 = api.com.isEIP155(api.chain.latestNumber)
@@ -479,7 +479,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       raise newException(ValueError, "Account locked, please unlock it first")
 
     let
-      txFrame = requireFound(api.frameFromTag(blockId("latest")), "Latest Block not found")
+      txFrame = getOrRaise(api.frameFromTag(blockId("latest")), "Latest Block not found")
       accRec = txFrame.fetchAccount(address.computeAccPath).valueOr(emptyDbAccount)
 
       tx = unsignedTx(data, api.chain, accRec.nonce + 1, api.com.chainId)
@@ -573,7 +573,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ## quantity: the transaction index position.
     ## NOTE : "pending" blockTag is not supported.
     let index = uint64(quantity)
-    let blk = lookupOr(api.blockFromTag(quantityTag, noHash = true)):
+    let blk = getOrInvalidParam(api.blockFromTag(quantityTag, noHash = true)):
       return nil
 
     if index >= uint64(blk.transactions.len):
@@ -600,7 +600,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns: the proof response containing the account, account proof and storage proof
     let
-      txFrame = requireFound(api.frameFromTag(quantityTag), "Block not found")
+      txFrame = getOrRaise(api.frameFromTag(quantityTag), "Block not found")
     getProof(txFrame, data, slots)
 
   server.rpc("eth_getBlockReceipts") do(
@@ -611,7 +611,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       raise newException(ValueError,
         "requireCanonical is a pre-merge concept and is not supported")
 
-    let blk = lookupOr(api.blockFromTag(quantityTag)):
+    let blk = getOrInvalidParam(api.blockFromTag(quantityTag)):
       return Opt.none(seq[ReceiptObject])
 
     let
@@ -641,7 +641,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     args: TransactionArgs, quantityTag: BlockTag
   ) -> AccessListResult:
     ## Generates an access list for a transaction.
-    let header = requireFound(api.headerFromTag(quantityTag), "Block not found")
+    let header = getOrRaise(api.headerFromTag(quantityTag), "Block not found")
     try:
       return createAccessList(header, api.com, api.chain, args)
     except CatchableError as exc:
@@ -649,7 +649,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
   server.rpc("eth_blobBaseFee") do() -> Quantity:
     ## Returns the base fee per blob gas in wei.
-    let header = requireFound(api.headerFromTag(blockId("latest")), "Block not found")
+    let header = getOrRaise(api.headerFromTag(blockId("latest")), "Block not found")
     if header.excessBlobGas.isNone:
       raise newException(ValueError, "excessBlobGas missing from latest header")
     let blobBaseFee =
@@ -691,7 +691,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ## quantity: the uncle's index position.
     ## Returns BlockObject or nil when no block was found.
     let index = uint64(quantity)
-    let blk = lookupOr(api.blockFromTag(quantityTag)):
+    let blk = getOrInvalidParam(api.blockFromTag(quantityTag)):
       return nil
 
     if index < 0 or index >= blk.uncles.len.uint64:
@@ -725,7 +725,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ## Returns the block access list by block number, tag or block hash.
     ##
 
-    let header = lookupOr(api.headerFromTag(quantityTag)):
+    let header = getOrInvalidParam(api.headerFromTag(quantityTag)):
       return Opt.none(BlockAccessList)
 
     if not api.com.isAmsterdamOrLater(header.timestamp):
@@ -751,7 +751,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
   server.rpc("eth_getStorageValues") do(request: StorageValuesRequest, blockTag: BlockTag) -> StorageValuesResponse:
     let
-      txFrame = requireFound(api.frameFromTag(blockTag), "Block not found")
+      txFrame = getOrRaise(api.frameFromTag(blockTag), "Block not found")
 
     var res: StorageObject
     for req in request.list:
