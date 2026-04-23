@@ -10,7 +10,7 @@
 import
   results,
   stew/byteutils,
-  nimcrypto/sysrand,
+  ../bindings/wasm/shims/nimcrypto/sysrand,
   json_rpc/[rpcserver, rpcclient],
   eth/common/accounts,
   web3/[eth_api, eth_api_types],
@@ -24,13 +24,22 @@ import
   ./evm,
   ./transactions,
   ./receipts,
-  ./fees
-
-import ./engine
+  ./fees,
+  ./engine
 
 template beaconSync(engine: RpcVerificationEngine) =
-  if not engine.isSynced():
-    ?(await engine.syncOnce())
+  block:
+    await engine.syncLock.acquire()
+
+    defer:
+      try:
+        engine.syncLock.release()
+      except AsyncLockError:
+        # FIXME: is this dangerous
+        discard
+
+    if not engine.isSynced():
+      ?(await engine.syncOnce())
 
 proc applyPenalty(engine: RpcVerificationEngine, e: ErrorTuple) =
   if e.backendIdx < 0:
@@ -419,7 +428,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
       let logObjs =
         engine.penaltyOr(await engine.getLogs(engine.filterStore[filterId].filter))
       ok(logObjs)
-    except KeyError as e:
+    except KeyError:
       err((FrontendError, "Filter doesn't exist", UNTAGGED))
 
   engine.frontend.eth_getFilterChanges = proc(
@@ -430,7 +439,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     let filterItem =
       try:
         engine.filterStore[filterId]
-      except KeyError as e:
+      except KeyError:
         return err((FrontendError, "Filter doesn't exist", UNTAGGED))
 
     let
@@ -467,7 +476,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     # all logs verified so we can update blockMarker
     try:
       engine.filterStore[filterId].blockMarker = Opt.some(toBlock)
-    except KeyError as e:
+    except KeyError:
       return err((FrontendError, "Filter doesn't exist", UNTAGGED))
 
     ok(logObjs)

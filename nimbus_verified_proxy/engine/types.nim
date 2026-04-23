@@ -297,6 +297,7 @@ type
     trustedBlockRoot*: Option[Eth2Digest]
     getBeaconTime*: GetBeaconTimeFn
     timeParams*: TimeParams
+    syncLock*: AsyncLock
 
     # beacon metadata (stored for use by beacon backend factories)
     cfg*: RuntimeConfig
@@ -306,6 +307,7 @@ type
     chainId*: UInt256
     maxBlockWalk*: uint64
     parallelBlockDownloads*: uint64
+    maxLightClientUpdates*: uint64
 
   RpcVerificationEngineConf* = ref object
     chainId*: UInt256
@@ -316,6 +318,7 @@ type
     codeCacheLen*: int
     storageCacheLen*: int
     parallelBlockDownloads*: uint64
+    maxLightClientUpdates*: uint64
     trustedBlockRoot*: Eth2Digest
     syncHeaderStore*: bool
     freezeAtSlot*: Slot

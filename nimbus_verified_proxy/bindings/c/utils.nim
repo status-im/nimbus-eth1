@@ -8,66 +8,12 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[lists, strutils],
+  std/[strutils],
   stint,
   stew/byteutils,
-  chronos,
   json_rpc/[jsonmarshal],
   web3/[conversions, eth_api_types],
-  ../engine/types
-
-type
-  Task* = ref object
-    status*: cint
-    userData*: pointer
-    response*: string
-    finished*: bool
-    cb*: CallBackProc
-    fut*: FutureBase
-
-  Context* = object
-    config*: string
-    tasks*: SinglyLinkedList[Task]
-    taskLen*: int
-    stop*: bool
-    frontend*: ExecutionApiFrontend
-
-  CallBackProc* = proc(ctx: ptr Context, status: cint, res: cstring, userData: pointer) {.
-    cdecl, gcsafe, raises: []
-  .}
-
-  ExecutionTransportProc* = proc(
-    ctx: ptr Context,
-    url: cstring,
-    name: cstring,
-    params: cstring,
-    cb: CallBackProc,
-    userData: pointer,
-  ) {.cdecl, gcsafe, raises: [].}
-
-  BeaconTransportProc* = proc(
-    ctx: ptr Context,
-    url: cstring,
-    endpoint: cstring,
-    params: cstring,
-    cb: CallBackProc,
-    userData: pointer,
-  ) {.cdecl, gcsafe, raises: [].}
-
-  CallBackData*[T] = object
-    fut*: Future[EngineResult[T]]
-
-const RET_SUCCESS*: cint = 0 # when the call to eth api frontend is successful
-const RET_ERROR*: cint = -1 # when the call to eth api frontend failed with an error
-const RET_CANCELLED*: cint = -2 # when the call to the eth api frontend was cancelled
-# when an error occured while deserializing arguments from C to Nim
-const RET_DESER_ERROR*: cint = -3
-
-proc createCbData*[T](fut: Future[EngineResult[T]]): pointer =
-  let data = CallBackData[T].new()
-  data.fut = fut
-
-  cast[pointer](data)
+  beacon_chain/spec/eth2_apis/eth2_rest_json_serialization
 
 # taken from nim-json-rpc and adapted
 func unpackArg*(
@@ -84,7 +30,6 @@ func unpackArg*(
   try:
     ok(BlockTag(kind: bidNumber, number: Quantity(fromHex[uint64](arg))))
   except ValueError:
-    # if it is an invalid alias it verification engine will throw an error
     ok(BlockTag(kind: bidAlias, alias: arg))
 
 func unpackArg*(
@@ -103,14 +48,12 @@ func unpackArg*(
   except ValueError as e:
     err("Parameter of type " & $argType & " coudldn't be decoded: " & e.msg)
 
-# generalized overloading
 func unpackArg*(arg: string, argType: type): Result[argType, string] {.raises: [].} =
   try:
     ok(JrpcConv.decode(arg, argType))
   except CatchableError as e:
     err("Parameter of type " & $argType & " coudln't be decoded: " & e.msg)
 
-# generalized overloading
 func packArg*[T](arg: T): Result[string, string] {.raises: [].} =
   try:
     ok(JrpcConv.encode(arg))
@@ -119,6 +62,7 @@ func packArg*[T](arg: T): Result[string, string] {.raises: [].} =
 
 proc alloc*(str: string): cstring =
   var ret = cast[cstring](allocShared(str.len + 1))
+  doAssert(ret != nil)
   copyMem(ret, str.cstring, str.len)
   ret[str.len] = '\0'
   return ret

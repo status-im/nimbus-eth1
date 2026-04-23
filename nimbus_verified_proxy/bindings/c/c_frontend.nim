@@ -8,174 +8,42 @@
 import
   chronos,
   stew/byteutils,
-  std/[atomics, json, net, lists],
+  std/[json],
   beacon_chain/spec/[digest, network],
   beacon_chain/nimbus_binary_common,
   json_rpc/[jsonmarshal],
   web3/[eth_api_types, conversions],
-  ../engine/types,
-  ../nimbus_verified_proxy_conf,
+  ../../engine/types,
+  ../../nimbus_verified_proxy_conf,
   ./types,
-  ./setup
+  ./utils
 
-# for short hand convenience
-{.pragma: exported, cdecl, exportc, dynlib, raises: [].}
-{.pragma: exportedConst, exportc, dynlib.}
-
-proc NimMain() {.importc, exportc, dynlib.}
-
-proc freeNimAllocatedString(res: cstring) {.exported.} =
-  deallocShared(res)
-
-proc toUnmanagedPtr[T](x: ref T): ptr T =
-  GC_ref(x)
-  addr x[]
-
-func asRef[T](x: ptr T): ref T =
-  cast[ref T](x)
-
-proc destroy[T](x: ptr T) =
-  x[].reset()
-  GC_unref(asRef(x))
-
-proc freeContext(ctx: ptr Context) {.exported.} =
-  ctx.destroy()
-
-proc processVerifProxyTasks(ctx: ptr Context): cint {.exported.} =
-  var delList: seq[int] = @[]
-
-  # cancel all tasks if stopped
-  if ctx.stop:
-    for task in ctx.tasks:
-      waitFor task.fut.cancelAndWait()
-    return RET_CANCELLED
-
-  for taskNode in ctx.tasks.nodes:
-    let task = taskNode.value
-    if task.finished:
-      task.cb(ctx, task.status, alloc(task.response), task.userData)
-      ctx.tasks.remove(taskNode)
-      ctx.taskLen -= 1
-
-  if ctx.taskLen > 0:
-    poll()
-
-  return RET_SUCCESS
-
-proc createTask(cb: CallBackProc, userData: pointer): Task =
-  let task = Task()
-  task.finished = false
-  task.cb = cb
-  task.userData = userData
-  task
-
-# adding a watchdog loop tricks the chronos event loop to think that the
-# timer to be checked is sooner. This is relevant for one specific edge case
-# When the first async task is dispatched with a long timer (ex. sleepAsync(10s))
-# and `poll` is called to advance the event loop, chronos will wait. Because it
-# sees only one timer event to be checked. This will stop new async tasks from
-# being dispatched in time. If the async event loop has two async tasks dispatched
-# with one not having long timers this edge case wouldn't arise. Also this specific
-# edge case only exists in the way the C library is structured.
-proc watchDogLoop(wdTimeout: int) {.async: (raises: [CancelledError]).} =
-  while true:
-    await sleepAsync(milliseconds(wdTimeout))
-
-proc startVerifProxy(
-    configJson: cstring,
-    executionTransportProc: ExecutionTransportProc,
-    beaconTransportProc: BeaconTransportProc,
-    cb: CallBackProc,
-    userData: pointer,
-): ptr Context {.exported.} =
-  let ctx = Context.new().toUnmanagedPtr()
-  ctx.stop = false
-
-  when defined(setupForeignThreadGc):
-    setupForeignThreadGc()
-
-  let
-    task = createTask(cb, userData)
-    wdTask = createTask(nil, nil)
-    wdFut = watchDogLoop(1)
-    fut = run(ctx, $configJson, executionTransportProc, beaconTransportProc)
-
-  proc processFuture(fut: Future[void], task: Task) {.gcsafe.} =
-    if fut.cancelled():
-      task.response = Json.encode(fut.error())
-      task.finished = true
-      task.status = RET_CANCELLED
-    elif fut.failed():
-      task.response = Json.encode(fut.error())
-      task.finished = true
-      task.status = RET_ERROR
-    else:
-      task.response = "success" # since return type is void
-      task.finished = true
-      task.status = RET_SUCCESS
-
-  if not fut.finished:
-    fut.addCallback proc(_: pointer) {.gcsafe.} =
-      processFuture(fut, task)
-  else: # when the future errors or is cancelled before awaiting on something
-    processFuture(fut, task)
-
-  if not wdFut.finished:
-    wdFut.addCallback proc(_: pointer) {.gcsafe.} =
-      processFuture(wdFut, task)
-  else: # when the future errors or is cancelled before awaiting on something
-    processFuture(wdFut, task)
-
-  task.fut = fut
-  wdTask.fut = wdFut
-  ctx.tasks.add(task)
-  ctx.tasks.add(wdTask)
-  ctx.taskLen += 2
-
-  return ctx
-
-proc stopVerifProxy(ctx: ptr Context) {.exported.} =
-  when defined(setupForeignThreadGc):
-    tearDownForeignThreadGc()
-  ctx.stop = true
-
-# NOTE: this is not the C callback. This is just a callback for the future
 template callbackToC(
     ctx: ptr Context, cb: CallBackProc, userData: pointer, asyncCall: untyped
 ) =
-  let
-    task = createTask(cb, userData)
-    fut = asyncCall
+  inc ctx.pendingCalls
+  let fut = asyncCall
 
-  proc processFuture[T](fut: Future[T], task: Task) {.gcsafe.} =
-    if fut.cancelled():
-      task.response = Json.encode(fut.error().msg)
-      task.finished = true
-      task.status = RET_CANCELLED
-    elif fut.failed():
-      task.response = Json.encode(fut.error().msg)
-      task.finished = true
-      task.status = RET_ERROR
-    else:
-      let res = fut.value()
-      if res.isErr():
-        task.response = $res.error.errType & ": " & res.error.errMsg
-        task.finished = true
-        task.status = RET_ERROR
+  proc sendResult(_: pointer) {.gcsafe.} =
+    dec ctx.pendingCalls
+    let (status, response) =
+      if fut.cancelled():
+        (RET_CANCELLED, Json.encode(fut.error().msg))
+      elif fut.failed():
+        (RET_ERROR, Json.encode(fut.error().msg))
       else:
-        task.response = Json.encode(res.get())
-        task.finished = true
-        task.status = RET_SUCCESS
+        let res = fut.value()
+        if res.isErr():
+          (RET_ERROR, $res.error.errType & ": " & res.error.errMsg)
+        else:
+          (RET_SUCCESS, Json.encode(res.get()))
 
-  if not fut.finished:
-    fut.addCallback proc(_: pointer) {.gcsafe.} =
-      processFuture(fut, task)
+    cb(ctx, status, alloc(response), userData)
+
+  if fut.finished:
+    sendResult(nil)
   else:
-    processFuture(fut, task)
-
-  task.fut = fut
-  ctx.tasks.add(task)
-  ctx.taskLen += 1
+    fut.addCallback sendResult
 
 proc eth_blockNumber(
     ctx: ptr Context, cb: CallBackProc, userData: pointer
@@ -546,7 +414,7 @@ proc eth_sendRawTransaction(
   callbackToC(ctx, cb, userData):
     ctx.frontend.eth_sendRawTransaction(txBytes)
 
-proc nvp_call(
+proc proxyCall(
     ctx: ptr Context,
     name: cstring,
     params: cstring,
@@ -563,7 +431,6 @@ proc nvp_call(
 
   template requireParams(n: int) =
     if parsedParams.len < n:
-      # we use alloc for static strings because the C will try to free the string
       cb(ctx, RET_DESER_ERROR, alloc("parameters missing"), userData)
       return
 
@@ -729,5 +596,4 @@ proc nvp_call(
     requireParams(1)
     eth_sendRawTransaction(ctx, parsedParams[0].getStr().cstring, cb, userData)
   else:
-    # we use alloc for static strings because the C will try to free the string
     cb(ctx, RET_DESER_ERROR, alloc("unknown method"), userData)
