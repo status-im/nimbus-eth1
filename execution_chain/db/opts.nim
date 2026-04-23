@@ -45,7 +45,7 @@ const
     ## Cache of branches and leaves in the state MPTs (world and account)
   defaultMaxSnapshots* = 5
     ## The max number of snapshots to store in the aristo database.
-  defaultBlockCacheType* = lruCache
+  defaultBlockCacheType* = hyperClockCache
     ## The default RocksDb block cache.
 
 type DbOptions* = object # Options that are transported to the database layer
