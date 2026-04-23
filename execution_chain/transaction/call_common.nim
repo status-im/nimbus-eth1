@@ -376,6 +376,8 @@ proc finishRunningComputation(
     if c.isError:
       result.error = c.error.info
     result.output = move(c.output)
+  elif T is void:
+    discard
   else:
     {.error: "Unknown computation output".}
 
@@ -387,7 +389,11 @@ proc runComputation*(call: CallParams, T: type): T =
   # Pre-execution sanity checks
   host.computation.preExecComputation()
   if host.computation.isError:
-    return finishRunningComputation(host, call, T)
+    when T is void:
+      finishRunningComputation(host, call, T)
+      return
+    else:
+      return finishRunningComputation(host, call, T)
 
   host.computation.execCallOrCreate()
   if not call.sysCall:
