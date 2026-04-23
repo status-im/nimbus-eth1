@@ -106,14 +106,14 @@ proc headerFromTag(api: ServerAPIRef, blockTag: Opt[BlockTag]): Result[Opt[Heade
   let blockId = blockTag.get(defaultTag)
   api.headerFromTag(blockId)
 
-proc frameFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[Opt[CoreDbTxRef], string] =
+proc frameFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[CoreDbTxRef, string] =
   # TODO avoid loading full header if hash is given
 
   let headerOpt = api.headerFromTag(blockTag).valueOr:
     return err(error)
 
   if headerOpt.isNone:
-    return ok(Opt.none(CoreDbTxRef))
+    return err("Block not found")
 
   let header = headerOpt.get()
 
@@ -121,7 +121,7 @@ proc frameFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[Opt[CoreDbTxRef
     return err("Historical data not available")
 
   # TODO maybe use a new frame derived from txFrame, to protect against abuse?
-  ok Opt.some(api.chain.txFrame(header))
+  ok api.chain.txFrame(header)
 
 proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag, noHash: bool = false): Result[Opt[Block], string] =
   api.chain.blockFromTag(blockTag, noHash)
@@ -130,7 +130,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
   server.rpc("eth_getBalance") do(data: Address, blockTag: BlockTag) -> UInt256:
     ## Returns the balance of the account of given address.
     let
-      txFrame = getOrRaise(api.frameFromTag(blockTag), "Block not found")
+      txFrame = api.frameFromTag(blockTag).valueOr:
+        raise newException(ValueError, error)
       address = data
       acc = txFrame.fetchAccount(address.computeAccPath).valueOr(emptyDbAccount)
     acc.balance
@@ -140,7 +141,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
   ) -> FixedBytes[32]:
     ## Returns the value from a storage position at a given address.
     let
-      txFrame = getOrRaise(api.frameFromTag(blockTag), "Block not found")
+      txFrame = api.frameFromTag(blockTag).valueOr:
+        raise newException(ValueError, error)
       address = data
       accPath = address.computeAccPath
       slotKey = computeSlotKey(slot)
@@ -152,7 +154,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
   ) -> Quantity:
     ## Returns the number of transactions ak.s. nonce sent from an address.
     let
-      txFrame = getOrRaise(api.frameFromTag(blockTag), "Block not found")
+      txFrame = api.frameFromTag(blockTag).valueOr:
+        raise newException(ValueError, error)
       address = data
       accPath = address.computeAccPath
       acc = txFrame.fetchAccount(accPath).valueOr(emptyDbAccount)
@@ -173,7 +176,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ## blockTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns the code from the given address.
     let
-      txFrame = getOrRaise(api.frameFromTag(blockTag), "Block not found")
+      txFrame = api.frameFromTag(blockTag).valueOr:
+        raise newException(ValueError, error)
       address = data
       accPath = address.computeAccPath
       acc = txFrame.fetchAccount(accPath).valueOr(emptyDbAccount)
@@ -458,7 +462,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       raise newException(ValueError, "Account locked, please unlock it first")
 
     let
-      txFrame = getOrRaise(api.frameFromTag(blockId("latest")), "Latest Block not found")
+      txFrame = api.frameFromTag(blockId("latest")).valueOr:
+        raise newException(ValueError, error)
       accRec = txFrame.fetchAccount(address.computeAccPath).valueOr(emptyDbAccount)
       tx = unsignedTx(data, api.chain, accRec.nonce + 1, api.com.chainId)
       eip155 = api.com.isEIP155(api.chain.latestNumber)
@@ -479,7 +484,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       raise newException(ValueError, "Account locked, please unlock it first")
 
     let
-      txFrame = getOrRaise(api.frameFromTag(blockId("latest")), "Latest Block not found")
+      txFrame = api.frameFromTag(blockId("latest")).valueOr:
+        raise newException(ValueError, error)
       accRec = txFrame.fetchAccount(address.computeAccPath).valueOr(emptyDbAccount)
 
       tx = unsignedTx(data, api.chain, accRec.nonce + 1, api.com.chainId)
@@ -600,7 +606,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns: the proof response containing the account, account proof and storage proof
     let
-      txFrame = getOrRaise(api.frameFromTag(quantityTag), "Block not found")
+      txFrame = api.frameFromTag(quantityTag).valueOr:
+        raise newException(ValueError, error)
     getProof(txFrame, data, slots)
 
   server.rpc("eth_getBlockReceipts") do(
@@ -751,7 +758,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
   server.rpc("eth_getStorageValues") do(request: StorageValuesRequest, blockTag: BlockTag) -> StorageValuesResponse:
     let
-      txFrame = getOrRaise(api.frameFromTag(blockTag), "Block not found")
+      txFrame = api.frameFromTag(blockTag).valueOr:
+        raise newException(ValueError, error)
 
     var res: StorageObject
     for req in request.list:
