@@ -92,6 +92,15 @@ func toStr*(w: float, precision: static[int] = 7): string =
     else:
       {.error: "Unsupported precision".}
 
+func pcStr*(w: float): string =
+  ## Shortcut for `toPC(6)`
+  if w == 0f:
+    "0.0"
+  elif w == 1f:
+    "1.0"
+  else:
+    w.toPC(6)
+
 func toStr*(w: (float,float), precision: static[int] = 4): string =
   if w[0] < w[1]: w[0].toStr(precision) & ".." & w[1].toStr(precision)
   elif w[0] == w[1]: w[0].toStr(precision)
@@ -133,6 +142,9 @@ func toStr*(a: chronos.Duration): string =
   var s = a.toString 2
   if s.len == 0: s="0"
   s
+
+func toStr*(a: chronos.Moment): string =
+  (a - low(Moment)).toStr
 
 # -----------
 
