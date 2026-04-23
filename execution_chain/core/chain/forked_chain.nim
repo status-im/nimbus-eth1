@@ -295,7 +295,8 @@ func updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
     doAssert(candidate.isNil.not)
     c.latest = candidate
 
-proc updateBase(c: ForkedChainRef, base: BlockRef): uint =
+proc updateBase(c: ForkedChainRef, base: BlockRef): Future[uint]
+     {.async: (raises: [CancelledError]).} =
   ##
   ##     A1 - A2 - A3          D5 - D6
   ##    /                     /
@@ -338,20 +339,45 @@ with --debug-eager-state-root."""
   # and prevent other modules accessing expired baseTxFrame.
   c.baseTxFrame = base.txFrame
 
-  # Cleanup in-memory blocks starting from base backward
-  # e.g. B2 backward.
-  var count = 0'u
+  let postPersistTime = Moment.now()
 
-  for it in ancestors(base.parent):
-    c.removeBlockFromCache(it)
-    inc count
-
-  # Update base branch
+  # The disk-flush burst is done. Commit the new base pointer now, *before*
+  # the in-memory cleanup burst, so ForkedChain invariants (c.base,
+  # c.baseTxFrame) stay coherent even if cleanup is interrupted by shutdown
+  # cancellation. Capture `oldFrontier` first because `c.base.parent = nil`
+  # mutates `base.parent`, which the cleanup iterator walks.
+  let oldFrontier = base.parent
   c.base = base
   c.base.parent = nil
-
-  # Base block always have finalized marker
   c.base.finalize()
+
+  # Hand the chronos loop a chance to service pending RPC / networking before
+  # we enter the cleanup burst, which with a full persistBatchSize=256 can
+  # iterate hundreds of blocks scanning txRecords.
+  await sleepAsync(0.milliseconds)
+
+  # Cleanup in-memory blocks starting from the previous base backward
+  # e.g. B2 backward. Yield every `cleanupYieldChunk` ancestors so a single
+  # updateBase can't hog the event loop for the full cleanup duration.
+  const cleanupYieldChunk = 16
+  var
+    count = 0'u
+    sinceYield = 0
+
+  for it in ancestors(oldFrontier):
+    c.removeBlockFromCache(it)
+    inc count
+    inc sinceYield
+    if sinceYield >= cleanupYieldChunk:
+      sinceYield = 0
+      await sleepAsync(0.milliseconds)
+
+  let finishTime = Moment.now()
+
+  # Aggregate split timings for the "Finalized blocks persisted" log so we
+  # can see at a glance which phase is eating the budget.
+  c.persistMs += (postPersistTime - startTime).milliseconds
+  c.cleanupMs += (finishTime - postPersistTime).milliseconds
 
   if c.dynamicBatchSize:
     # Dynamicly adjust the persistBatchSize based on the recorded run time.
@@ -367,9 +393,7 @@ with --debug-eager-state-root."""
       batchSizeLowerBound = 4
       batchSizeUpperBound = 256
 
-    let
-      finishTime = Moment.now()
-      runTime = (finishTime - startTime).milliseconds
+    let runTime = (finishTime - startTime).milliseconds
 
     if runTime < targetTimeLowerBound and c.persistBatchSize < batchSizeUpperBound:
       c.persistBatchSize = min(c.persistBatchSize + 4, batchSizeUpperBound)
@@ -385,7 +409,7 @@ with --debug-eager-state-root."""
 proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   if c.baseQueue.len > 0:
     let base = c.baseQueue.popFirst()
-    c.persistedCount += c.updateBase(base)
+    c.persistedCount += await c.updateBase(base)
 
   const
     minLogInterval = 5
@@ -406,7 +430,9 @@ proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async:
           pendingFCU = c.pendingFCU.short,
           resolvedFinNum = c.latestFinalized.number,
           resolvedFinHash = c.latestFinalized.hash.short,
-          dbSnapshotsCount = c.baseTxFrame.aTx.db.snapshots.len()
+          dbSnapshotsCount = c.baseTxFrame.aTx.db.snapshots.len(),
+          persistMs = c.persistMs,
+          cleanupMs = c.cleanupMs
       else:
         debug "Finalized blocks persisted",
           nBlocks = c.persistedCount,
@@ -416,9 +442,13 @@ proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async:
           pendingFCU = c.pendingFCU.short,
           resolvedFinNum = c.latestFinalized.number,
           resolvedFinHash = c.latestFinalized.hash.short,
-          dbSnapshotsCount = c.baseTxFrame.aTx.db.snapshots.len()
+          dbSnapshotsCount = c.baseTxFrame.aTx.db.snapshots.len(),
+          persistMs = c.persistMs,
+          cleanupMs = c.cleanupMs
       c.lastBaseLogTime = time
       c.persistedCount = 0
+      c.persistMs = 0
+      c.cleanupMs = 0
     return ok()
 
   if c.queue.isNil:
