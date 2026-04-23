@@ -19,6 +19,7 @@ type
     SnapResume                     ## Resume from previous session
     SnapReady                      ## Wait for download state
     SnapDownload                   ## Downloading and caching data
+    SnapDownloadFinish             ## Wait for sync before proceeding
     SnapMkTrie                     ## Assembling downloaded data
     SnapHealing                    ## Complete missing trie nodes
 
@@ -43,13 +44,16 @@ const
   twoHundredYears* = chronos.days(365 * 200 + 48)
     ## Large Duration constant considered sort of infinite.
 
-  daemonWaitReadyInterval* = chronos.seconds(20)
+  daemonWaitReadyInterval* = chronos.seconds(30)
     ## Some polling interval time waiting until the system gets into download
     ## state when the the FCU modue hash  a finalised header.
 
   daemonWaitDownloadInterval* = chronos.seconds(10)
     ## Some waiting time at the end of the daemon task which always lingers
     ## in the background. This one is for `SnapDownload` state.
+
+  daemonWaitDownloadFinishInterval* = chronos.seconds(5)
+    ## Poll waiting for all downloading peers to have stopped
 
   daemonWaitElseInterval* = chronos.seconds(10)
     ## Ditto for other states than `SnapMkTrie` or `SnapHealing`.
@@ -58,27 +62,26 @@ const
     ## Some waiting time at the end of the daemon task which always lingers
     ## in the background. This one is for non-`SnapDownload` states.
 
-  mktrieThreadSwitchTimeSlot* = chronos.nanoseconds(1)
+  threadLogTimeLimit* = chronos.seconds(25)
+    ## Print intermediate messages when running a time consuming task
+
+  threadSwitchTimeSlot* = chronos.nanoseconds(1)
     ## Nano-sleep to allows pseudo/async thread switch
+
+  threadSwitchRunLimit* = chronos.seconds(10)
+    ## Force a thread switch after that time running continuously
 
   lockWaitPollingTime* = chronos.milliseconds(500)
     ## Polling for a lock to be released
 
-  accuAccountsCovMin* = 2.0
+  accuAccountsCovMin* = 4.0
     ## In absence of a completed pivot state, the syncer will stop downloading
     ## if all accounts are covered at least by this factor. Then trie-assembly
-    ## and healing can take place if the pivot state is also sufficiently
-    ## covered (see  `accuPivotCovMin` below.)
-    ##
-    ## The reasoning for getting away without a completed pivot is that state
-    ## changes between consecutive trie states are small. There is a fair
-    ## chance that the pivot state will also have valid accounts identical
-    ## with other states.
+    ## and healing can take place.
 
-  accuPivotCovMin* = 0.7
-    ## If the total coverage has reached the factor `accuAccountsCovMin`, the
-    ## pivot must also have reached the factor `accuPivotCovMin` in order to
-    ## start trie assembly and healing.
+  stateIdleTimeBeforeEviction* = chronos.minutes(30)
+    ## Minimum time a state is cached before eviction unless other criteria
+    ## apply (e.g. fully unprocessed account range.)
 
   relativeCoverageEvictionThreshold* = 0.1
     ## If the ratio
@@ -94,7 +97,7 @@ const
     ## Soft bytes limit to request accounts. This is used for parallelisation
     ## so that different peers can start with different intervals. Typically,
     ## these intervals are sparsely filled and there will be returned not
-    ## more than  ~1k accounts.
+    ## more than ~1k accounts.
 
   stateDbCapacity* = 8
     ## Maximal numbers of simultanously incomplete states. Note that the
