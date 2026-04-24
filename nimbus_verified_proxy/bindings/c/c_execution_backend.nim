@@ -7,24 +7,22 @@
 
 {.push raises: [], gcsafe.}
 
-import
-  chronos,
-  web3/[eth_api_types, conversions],
-  ../../engine/types,
-  ./types,
-  ./utils
+import chronos, web3/[eth_api_types, conversions], ../../engine/types, ./types, ./utils
 
 proc newExecTransportCtx*(url, name, params: string): TransportExecutionContext =
   TransportExecutionContext(
-    url: url, name: name, params: params,
-    fut: newFuture[string](),
+    url: url, name: name, params: params, fut: newFuture[string]()
   )
 
 proc deliverExecutionTransport*(
     status: cint, res: cstring, userData: pointer
 ) {.cdecl, exportc, gcsafe, raises: [].} =
   let tctx = cast[TransportExecutionContext](userData)
-  let response = if res != nil: $res else: ""
+  let response =
+    if res != nil:
+      $res
+    else:
+      ""
   if status == RET_CANCELLED:
     tctx.fut.cancelSoon()
   elif status == RET_SUCCESS:
@@ -51,11 +49,15 @@ proc getExecutionApiBackend*(
       let tctx = newExecTransportCtx(url, "eth_chainId", "[]")
       transportProc(ctx, deliverExecutionTransport, cast[pointer](tctx))
       let raw =
-        try: await tctx.fut
-        except CancelledError as e: raise e
-        except CatchableError as e: return err((BackendError, e.msg, UNTAGGED))
+        try:
+          await tctx.fut
+        except CancelledError as e:
+          raise e
+        except CatchableError as e:
+          return err((BackendError, e.msg, UNTAGGED))
       let r = unpackArg(raw, UInt256)
-      if r.isErr(): return err((BackendDecodingError, r.error, UNTAGGED))
+      if r.isErr():
+        return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
 
     getBlockByHashProc = proc(
@@ -64,15 +66,20 @@ proc getExecutionApiBackend*(
       let
         blkHashSer = packArg(blkHash).valueOr:
           return err((BackendEncodingError, error, UNTAGGED))
-        params = "[" & blkHashSer & ", " & (if fullTransactions: "true" else: "false") & "]"
+        params =
+          "[" & blkHashSer & ", " & (if fullTransactions: "true" else: "false") & "]"
         tctx = newExecTransportCtx(url, "eth_getBlockByHash", params)
       transportProc(ctx, deliverExecutionTransport, cast[pointer](tctx))
       let raw =
-        try: await tctx.fut
-        except CancelledError as e: raise e
-        except CatchableError as e: return err((BackendError, e.msg, UNTAGGED))
+        try:
+          await tctx.fut
+        except CancelledError as e:
+          raise e
+        except CatchableError as e:
+          return err((BackendError, e.msg, UNTAGGED))
       let r = unpackArg(raw, BlockObject)
-      if r.isErr(): return err((BackendDecodingError, r.error, UNTAGGED))
+      if r.isErr():
+        return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
 
     getBlockByNumberProc = proc(
@@ -81,15 +88,20 @@ proc getExecutionApiBackend*(
       let
         blkNumSer = packArg(blkNum).valueOr:
           return err((BackendEncodingError, error, UNTAGGED))
-        params = "[" & blkNumSer & ", " & (if fullTransactions: "true" else: "false") & "]"
+        params =
+          "[" & blkNumSer & ", " & (if fullTransactions: "true" else: "false") & "]"
         tctx = newExecTransportCtx(url, "eth_getBlockByNumber", params)
       transportProc(ctx, deliverExecutionTransport, cast[pointer](tctx))
       let raw =
-        try: await tctx.fut
-        except CancelledError as e: raise e
-        except CatchableError as e: return err((BackendError, e.msg, UNTAGGED))
+        try:
+          await tctx.fut
+        except CancelledError as e:
+          raise e
+        except CatchableError as e:
+          return err((BackendError, e.msg, UNTAGGED))
       let r = unpackArg(raw, BlockObject)
-      if r.isErr(): return err((BackendDecodingError, r.error, UNTAGGED))
+      if r.isErr():
+        return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
 
     getProofProc = proc(
@@ -103,16 +115,21 @@ proc getExecutionApiBackend*(
         blockIdSer = packArg(blockId).valueOr:
           return err((BackendEncodingError, error, UNTAGGED))
         tctx = newExecTransportCtx(
-          url, "eth_getProof",
-          "[" & addressSer & ", " & slotsSer & ", " & blockIdSer & "]"
+          url,
+          "eth_getProof",
+          "[" & addressSer & ", " & slotsSer & ", " & blockIdSer & "]",
         )
       transportProc(ctx, deliverExecutionTransport, cast[pointer](tctx))
       let raw =
-        try: await tctx.fut
-        except CancelledError as e: raise e
-        except CatchableError as e: return err((BackendError, e.msg, UNTAGGED))
+        try:
+          await tctx.fut
+        except CancelledError as e:
+          raise e
+        except CatchableError as e:
+          return err((BackendError, e.msg, UNTAGGED))
       let r = unpackArg(raw, ProofResponse)
-      if r.isErr(): return err((BackendDecodingError, r.error, UNTAGGED))
+      if r.isErr():
+        return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
 
     createAccessListProc = proc(
@@ -128,11 +145,15 @@ proc getExecutionApiBackend*(
         )
       transportProc(ctx, deliverExecutionTransport, cast[pointer](tctx))
       let raw =
-        try: await tctx.fut
-        except CancelledError as e: raise e
-        except CatchableError as e: return err((BackendError, e.msg, UNTAGGED))
+        try:
+          await tctx.fut
+        except CancelledError as e:
+          raise e
+        except CatchableError as e:
+          return err((BackendError, e.msg, UNTAGGED))
       let r = unpackArg(raw, AccessListResult)
-      if r.isErr(): return err((BackendDecodingError, r.error, UNTAGGED))
+      if r.isErr():
+        return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
 
     getCodeProc = proc(
@@ -148,11 +169,15 @@ proc getExecutionApiBackend*(
         )
       transportProc(ctx, deliverExecutionTransport, cast[pointer](tctx))
       let raw =
-        try: await tctx.fut
-        except CancelledError as e: raise e
-        except CatchableError as e: return err((BackendError, e.msg, UNTAGGED))
+        try:
+          await tctx.fut
+        except CancelledError as e:
+          raise e
+        except CatchableError as e:
+          return err((BackendError, e.msg, UNTAGGED))
       let r = unpackArg(raw, seq[byte])
-      if r.isErr(): return err((BackendDecodingError, r.error, UNTAGGED))
+      if r.isErr():
+        return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
 
     getTransactionByHashProc = proc(
@@ -161,14 +186,19 @@ proc getExecutionApiBackend*(
       let
         txHashSer = packArg(txHash).valueOr:
           return err((BackendEncodingError, error, UNTAGGED))
-        tctx = newExecTransportCtx(url, "eth_getTransactionByHash", "[" & txHashSer & "]")
+        tctx =
+          newExecTransportCtx(url, "eth_getTransactionByHash", "[" & txHashSer & "]")
       transportProc(ctx, deliverExecutionTransport, cast[pointer](tctx))
       let raw =
-        try: await tctx.fut
-        except CancelledError as e: raise e
-        except CatchableError as e: return err((BackendError, e.msg, UNTAGGED))
+        try:
+          await tctx.fut
+        except CancelledError as e:
+          raise e
+        except CatchableError as e:
+          return err((BackendError, e.msg, UNTAGGED))
       let r = unpackArg(raw, TransactionObject)
-      if r.isErr(): return err((BackendDecodingError, r.error, UNTAGGED))
+      if r.isErr():
+        return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
 
     getTransactionReceiptProc = proc(
@@ -177,14 +207,19 @@ proc getExecutionApiBackend*(
       let
         txHashSer = packArg(txHash).valueOr:
           return err((BackendEncodingError, error, UNTAGGED))
-        tctx = newExecTransportCtx(url, "eth_getTransactionReceipt", "[" & txHashSer & "]")
+        tctx =
+          newExecTransportCtx(url, "eth_getTransactionReceipt", "[" & txHashSer & "]")
       transportProc(ctx, deliverExecutionTransport, cast[pointer](tctx))
       let raw =
-        try: await tctx.fut
-        except CancelledError as e: raise e
-        except CatchableError as e: return err((BackendError, e.msg, UNTAGGED))
+        try:
+          await tctx.fut
+        except CancelledError as e:
+          raise e
+        except CatchableError as e:
+          return err((BackendError, e.msg, UNTAGGED))
       let r = unpackArg(raw, ReceiptObject)
-      if r.isErr(): return err((BackendDecodingError, r.error, UNTAGGED))
+      if r.isErr():
+        return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
 
     getBlockReceiptsProc = proc(
@@ -198,11 +233,15 @@ proc getExecutionApiBackend*(
         tctx = newExecTransportCtx(url, "eth_getBlockReceipts", "[" & blockIdSer & "]")
       transportProc(ctx, deliverExecutionTransport, cast[pointer](tctx))
       let raw =
-        try: await tctx.fut
-        except CancelledError as e: raise e
-        except CatchableError as e: return err((BackendError, e.msg, UNTAGGED))
+        try:
+          await tctx.fut
+        except CancelledError as e:
+          raise e
+        except CatchableError as e:
+          return err((BackendError, e.msg, UNTAGGED))
       let r = unpackArg(raw, Opt[seq[ReceiptObject]])
-      if r.isErr(): return err((BackendDecodingError, r.error, UNTAGGED))
+      if r.isErr():
+        return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
 
     getLogsProc = proc(
@@ -214,11 +253,15 @@ proc getExecutionApiBackend*(
         tctx = newExecTransportCtx(url, "eth_getLogs", "[" & filterOptionsSer & "]")
       transportProc(ctx, deliverExecutionTransport, cast[pointer](tctx))
       let raw =
-        try: await tctx.fut
-        except CancelledError as e: raise e
-        except CatchableError as e: return err((BackendError, e.msg, UNTAGGED))
+        try:
+          await tctx.fut
+        except CancelledError as e:
+          raise e
+        except CatchableError as e:
+          return err((BackendError, e.msg, UNTAGGED))
       let r = unpackArg(raw, seq[LogObject])
-      if r.isErr(): return err((BackendDecodingError, r.error, UNTAGGED))
+      if r.isErr():
+        return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
 
     feeHistoryProc = proc(
@@ -232,16 +275,21 @@ proc getExecutionApiBackend*(
         rewardPercentilesSer = packArg(rewardPercentiles).valueOr:
           return err((BackendEncodingError, error, UNTAGGED))
         tctx = newExecTransportCtx(
-          url, "eth_feeHistory",
-          "[" & blockCountSer & ", " & newestBlockSer & ", " & rewardPercentilesSer & "]"
+          url,
+          "eth_feeHistory",
+          "[" & blockCountSer & ", " & newestBlockSer & ", " & rewardPercentilesSer & "]",
         )
       transportProc(ctx, deliverExecutionTransport, cast[pointer](tctx))
       let raw =
-        try: await tctx.fut
-        except CancelledError as e: raise e
-        except CatchableError as e: return err((BackendError, e.msg, UNTAGGED))
+        try:
+          await tctx.fut
+        except CancelledError as e:
+          raise e
+        except CatchableError as e:
+          return err((BackendError, e.msg, UNTAGGED))
       let r = unpackArg(raw, FeeHistoryResult)
-      if r.isErr(): return err((BackendDecodingError, r.error, UNTAGGED))
+      if r.isErr():
+        return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
 
     sendRawTxProc = proc(
@@ -250,14 +298,19 @@ proc getExecutionApiBackend*(
       let
         txBytesSer = packArg(txBytes).valueOr:
           return err((BackendEncodingError, error, UNTAGGED))
-        tctx = newExecTransportCtx(url, "eth_sendRawTransaction", "[" & txBytesSer & "]")
+        tctx =
+          newExecTransportCtx(url, "eth_sendRawTransaction", "[" & txBytesSer & "]")
       transportProc(ctx, deliverExecutionTransport, cast[pointer](tctx))
       let raw =
-        try: await tctx.fut
-        except CancelledError as e: raise e
-        except CatchableError as e: return err((BackendError, e.msg, UNTAGGED))
+        try:
+          await tctx.fut
+        except CancelledError as e:
+          raise e
+        except CatchableError as e:
+          return err((BackendError, e.msg, UNTAGGED))
       let r = unpackArg(raw, Hash32)
-      if r.isErr(): return err((BackendDecodingError, r.error, UNTAGGED))
+      if r.isErr():
+        return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
 
   ExecutionApiBackend(
