@@ -13,8 +13,6 @@ import
   pkg/chronos/ratelimit,
   pkg/eth/common/[hashes, times],
   ../../../core/chain/forked_chain,
-  ../../../core/eip4844,
-  ../../../core/eip7594,
   ../../../core/pooled_txs_rlp,
   ../../../core/tx_pool,
   ../../../networking/p2p,
@@ -62,8 +60,8 @@ func allowedOpsPerSecondCost(n: int): float =
   (replenishRate * 1000000000'f / n.float)
 
 const
-  txPoolProcessCost = allowedOpsPerSecondCost(1000)
-  hashLookupCost = allowedOpsPerSecondCost(2000)
+  txPoolProcessCost = allowedOpsPerSecondCost(50_000)
+  hashLookupCost = allowedOpsPerSecondCost(200_000)
   hashingCost = allowedOpsPerSecondCost(5000)
   blockRangeUpdateCost = allowedOpsPerSecondCost(20)
 
@@ -238,6 +236,11 @@ proc handleTransactionsBroadcast*(wire: EthWireRef,
   debug "Received new transactions",
     number = packet.transactions.len
 
+  if wire.actionQueue.full:
+    debug "Action queue full, dropping transaction broadcast",
+      number = packet.transactions.len
+    return
+
   # Don't rebroadcast invalid transactions
   let newPacket = TransactionsPacket(
     transactions: newSeqOfCap[Transaction](packet.transactions.len)
@@ -253,10 +256,12 @@ proc handleTransactionsBroadcast*(wire: EthWireRef,
         return
 
       wire.txPool.addTx(tx).isOkOr:
+        await sleepAsync(ZeroDuration)
         continue
 
       # Only rebroadcast good transactions
       newPacket.transactions.add tx
+      await sleepAsync(ZeroDuration)
       awaitQuota(wire, txPoolProcessCost, "adding into txpool")
 
   wire.reqisterAction("Broadcast transactions or hashes"):
@@ -296,7 +301,56 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
     await peer.disconnect(BreachOfProtocol)
     return
 
+  # Cross-peer dedupe: drop hashes already in the pool or being fetched by
+  # another in-flight action. The remaining (novel) hashes are the ones we
+  # actually need to schedule a fetch for.
+  let
+    nowTime = getTime()
+    peerId = peer.id
+  var
+    novelTypes: seq[byte]
+    novelSizes: seq[uint64]
+    novelHashes: seq[Hash32]
+  for i in 0 ..< packet.txHashes.len:
+    let h = packet.txHashes[i]
+    if h in wire.txPool:
+      continue
+    wire.seenTransactions.withValue(h, seen):
+      seen[].lastSeen = nowTime
+      seen[].peers.incl(peerId)
+      continue
+    do:
+      var peers = initHashSet[NodeId]()
+      peers.incl(peerId)
+      wire.seenTransactions[h] =
+        SeenObject(lastSeen: nowTime, peers: peers)
+      novelTypes.add packet.txTypes[i]
+      novelSizes.add packet.txSizes[i]
+      novelHashes.add h
+
+  if novelHashes.len == 0:
+    return
+
+  if wire.actionQueue.full:
+    debug "Action queue full, dropping tx hash announcement",
+      hashes = novelHashes.len
+    # Release dedupe slots so a later retry can proceed.
+    for h in novelHashes:
+      wire.seenTransactions.del(h)
+    return
+
+  let novelPacket = NewPooledTransactionHashesPacket(
+    txTypes: novelTypes,
+    txSizes: novelSizes,
+    txHashes: novelHashes,
+  )
+
   wire.reqisterAction("Handle broadcast transactions hashes"):
+    if peer.connectionState != ConnectionState.Connected:
+      for h in novelPacket.txHashes:
+        wire.seenTransactions.del(h)
+      return
+
     type
       SizeType = object
         size: uint64
@@ -305,7 +359,7 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
     await wire.seenByPeer(packet, peer)
 
     let
-      numTx = packet.txHashes.len
+      numTx = novelPacket.txHashes.len
 
     var
       i = 0
@@ -323,17 +377,17 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
         sumSize = 0'u64
 
       while i < numTx:
-        let size = packet.txSizes[i]
+        let size = novelPacket.txSizes[i]
         if sumSize + size > SOFT_RESPONSE_LIMIT.uint64:
           break
 
-        let txHash = packet.txHashes[i]
+        let txHash = novelPacket.txHashes[i]
         if txHash notin wire.txPool:
           msg.txHashes.add txHash
           sumSize += size
           map[txHash] = SizeType(
             size: size,
-            txType: packet.txTypes[i],
+            txType: novelPacket.txTypes[i],
           )
         else:
           hashes.txTypes.add packet.txTypes[i]
@@ -343,16 +397,28 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
         awaitQuota(wire, hashLookupCost, "check transaction exists in pool")
         inc i
 
+      if msg.txHashes.len == 0:
+        continue
+
+      if peer.connectionState != ConnectionState.Connected:
+        for h in msg.txHashes:
+          wire.seenTransactions.del(h)
+        return
+
       try:
         res = await peer.getPooledTransactions(msg)
       except EthP2PError as exc:
         debug "Request pooled transactions failed",
           msg=exc.msg
+        for h in msg.txHashes:
+          wire.seenTransactions.del(h)
         return
 
       if res.isNone:
         debug "Request pooled transactions get nothing"
-        return
+        for h in msg.txHashes:
+          wire.seenTransactions.del(h)
+        continue
 
       let
         ptx = res.get()
@@ -382,34 +448,29 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
           await peer.disconnect(BreachOfProtocol)
           return
 
-        if tx.tx.txType == TxEip4844:
-          if tx.blobsBundle.isNil:
-            debug "Protocol Breach: Received sidecar-less blob transaction",
+        if tx.tx.txType == TxEip4844 and tx.blobsBundle.isNil:
+          debug "Protocol Breach: Received sidecar-less blob transaction",
+            remote=peer.remote, clientId=peer.clientId
+          await peer.disconnect(BreachOfProtocol)
+          return
+
+        # addTx performs the expensive KZG verification itself; on
+        # InvalidBlob we treat it as a protocol breach. Yield to the
+        # event loop afterwards so RPC and peer dispatch aren't starved
+        # during a large batch.
+        wire.txPool.addTx(tx).isOkOr:
+          if error == txErrorInvalidBlob:
+            debug "Protocol Breach: Invalid blob transaction",
               remote=peer.remote, clientId=peer.clientId
             await peer.disconnect(BreachOfProtocol)
             return
-
-          if tx.blobsBundle.wrapperVersion == WrapperVersionEIP4844:
-            validateBlobTransactionWrapper4844(tx).isOkOr:
-              debug "Protocol Breach: EIP-4844 sidecar validation error", msg=error,
-                remote=peer.remote, clientId=peer.clientId
-              await peer.disconnect(BreachOfProtocol)
-              return
-
-          if tx.blobsBundle.wrapperVersion == WrapperVersionEIP7594:
-            validateBlobTransactionWrapper7594(tx).isOkOr:
-              debug "Protocol Breach: EIP-7594 sidecar validation error", msg=error,
-                remote=peer.remote, clientId=peer.clientId
-              await peer.disconnect(BreachOfProtocol)
-              return
-
-        wire.txPool.addTx(tx).isOkOr:
+          await sleepAsync(ZeroDuration)
           continue
 
         hashes.txTypes.add tx.tx.txType.byte
         hashes.txSizes.add size.uint64
         hashes.txHashes.add hash
-
+        await sleepAsync(ZeroDuration)
         awaitQuota(wire, txPoolProcessCost, "broadcast transactions hashes")
 
     for peer in wire.peers:
@@ -465,10 +526,9 @@ proc actionLoop*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
     await action()
 
 proc stop*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
-  var waitedFutures = @[
-    wire.tickerHeartbeat.cancelAndWait(),
-    wire.actionHeartbeat.cancelAndWait(),
-  ]
+  var waitedFutures = @[wire.tickerHeartbeat.cancelAndWait()]
+  for fut in wire.actionHeartbeat:
+    waitedFutures.add fut.cancelAndWait()
 
   let
     timeout = chronos.seconds(5)

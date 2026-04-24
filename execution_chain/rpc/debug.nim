@@ -21,7 +21,7 @@ import
   ../beacon/web3_eth_conv,
   ../core/tx_pool,
   ../core/chain/forked_chain,
-  ../stateless/witness_types,
+  ../stateless/[witness_types, witness_generation],
   ../transaction
 
 type
@@ -31,7 +31,13 @@ type
     hash: Hash32
     rlp: seq[byte]
 
+  TestBlockSummary = object
+    txCount: int
+    blobCount: int
+
 BadBlock.useDefaultSerializationIn JrpcConv
+
+TestBlockSummary.useDefaultSerializationIn JrpcConv
 
 ExecutionWitness.useDefaultSerializationIn JrpcConv
 
@@ -65,18 +71,7 @@ proc getExecutionWitness*(chain: ForkedChainRef, blockHash: Hash32): Result[Exec
   let witness = txFrame.getWitness(blockHash).valueOr:
     return err("Witness not found")
 
-  var executionWitness = ExecutionWitness.init(state = witness.state, keys = witness.keys)
-  for codeHash in witness.codeHashes:
-    let code = txFrame.getCodeByHash(codeHash).valueOr:
-      return err("Code not found")
-    executionWitness.addCode(code)
-
-  for headerHash in witness.headerHashes:
-    let header = txFrame.getBlockHeader(headerHash).valueOr:
-      return err("Header not found")
-    executionWitness.addHeader(rlp.encode(header))
-
-  ok(executionWitness)
+  ok(ExecutionWitness.build(witness, txFrame))
 
 proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
   let
@@ -292,3 +287,17 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
     res["baseFee"] = newJInt(poolBaseFee.int64)
     res["senders"] = senders
     res
+
+  server.rpc("debug_buildTestBlock") do() -> TestBlockSummary:
+    ## Assembles a block from the current transaction pool using the
+    ## production block-building path (TxPoolRef.assembleBlock).
+    ## Returns the number of transactions and blobs that were packed.
+    let bundle = txPool.assembleBlock().valueOr:
+      raise newException(ValueError, error)
+    let blobCount =
+      if bundle.blobsBundle.isNil: 0
+      else: bundle.blobsBundle.blobs.len
+    TestBlockSummary(
+      txCount: bundle.blk.transactions.len,
+      blobCount: blobCount,
+    )

@@ -48,19 +48,9 @@ template headerStateRegister*(
       bodyRc = Result[StateDataRef,ErrorType].err(rc.error)
       break body                                    # come back later
 
-    let
-      root = StateRoot(rc.value.stateRoot)
-      blockNumber {.inject.} = rc.value.number
-
-    # Store root -> block data mapping
-    ctx.pool.mptAsm.putBlockData(root, hash, blockNumber).isOkOr:
-      trace info & ": Cannot store state root map", peer=buddy.peer,
-        stateRoot=root.toStr, blockHash=hash.toStr, blockNumber
-      bodyRc = Result[StateDataRef,ErrorType].err(ETrieError)
-      break body                                    # error
-
+    let root = StateRoot(rc.value.stateRoot)
     bodyRc = Result[StateDataRef,ErrorType].ok(
-      sdb.register(root, hash, blockNumber, info))
+      sdb.register(root, hash, rc.value.number, info))
 
   bodyRc                                            # return
 
