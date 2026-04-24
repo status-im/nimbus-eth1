@@ -20,14 +20,14 @@ logScope:
   topics = "eth-wire"
 
 const
-  MAX_RECEIPTS_SERVE*  = 1024
-  MAX_HEADERS_SERVE*   = 1024
-  MAX_BODIES_SERVE*    = 256
+  MAX_RECEIPTS_SERVE  = 1024
+  MAX_HEADERS_SERVE   = 1024
+  MAX_BODIES_SERVE    = 256
   # https://github.com/ethereum/devp2p/blob/master/caps/eth.md#getpooledtransactions-0x09
-  MAX_TXS_SERVE*       = 256
-  MAX_BALS_SERVE*      = 256
-  MAX_ACTION_HANDLER*  = 512
-  NUM_ACTION_WORKERS*  = 4
+  MAX_TXS_SERVE       = 256
+  MAX_BALS_SERVE      = 256
+  MAX_ACTION_HANDLER  = 512
+  NUM_ACTION_WORKERS  = 4
 
 # ------------------------------------------------------------------------------
 # Public constructor/destructor

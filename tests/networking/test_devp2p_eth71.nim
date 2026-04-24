@@ -18,7 +18,7 @@ import
   stew/endians2,
   ../../execution_chain/networking/p2p,
   ../../execution_chain/sync/wire_protocol,
-  ../../execution_chain/sync/wire_protocol/eth/eth_handler,
+  ../../execution_chain/sync/wire_protocol/eth/eth_handler {.all.},
   ../../execution_chain/core/chain/forked_chain,
   ../../execution_chain/db/core_db,
   ../../execution_chain/db/core_db/core_apps,
