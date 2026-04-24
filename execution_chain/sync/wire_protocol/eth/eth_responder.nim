@@ -335,8 +335,9 @@ proc getBlockAccessListsUserHandler[PROTO](response: Responder; req: BlockAccess
   
 proc getBlockAccessListsThunk[PROTO](peer: Peer; data: Rlp) {.
     async: (raises: [CancelledError, EthP2PError]).} =
-  PROTO.rlpxWithPacketResponder(BlockAccessListsRequest, peer, data):
-    await getBlockAccessListsUserHandler[PROTO](response, packet)
+  PROTO.rlpxWithPacketResponder(seq[Hash32], peer, data):
+    await getBlockAccessListsUserHandler[PROTO](response,
+      BlockAccessListsRequest(blockHashes: packet))
 
 proc blockAccessListsThunk[PROTO](peer: Peer; data: Rlp) {.
     async: (raises: [CancelledError, EthP2PError]).} =

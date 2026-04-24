@@ -14,4 +14,5 @@ import
   ./networking/test_ecies,
   ./networking/test_bootnodes,
   ./networking/test_rlpx_thunk,
-  ./networking/test_rlpxtransport
+  ./networking/test_rlpxtransport,
+  ./networking/test_devp2p_eth71,
