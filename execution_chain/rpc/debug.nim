@@ -21,7 +21,7 @@ import
   ../beacon/web3_eth_conv,
   ../core/tx_pool,
   ../core/chain/forked_chain,
-  ../stateless/witness_types,
+  ../stateless/[witness_types, witness_generation],
   ../transaction
 
 type
@@ -71,18 +71,7 @@ proc getExecutionWitness*(chain: ForkedChainRef, blockHash: Hash32): Result[Exec
   let witness = txFrame.getWitness(blockHash).valueOr:
     return err("Witness not found")
 
-  var executionWitness = ExecutionWitness.init(state = witness.state, keys = witness.keys)
-  for codeHash in witness.codeHashes:
-    let code = txFrame.getCodeByHash(codeHash).valueOr:
-      return err("Code not found")
-    executionWitness.addCode(code)
-
-  for headerHash in witness.headerHashes:
-    let header = txFrame.getBlockHeader(headerHash).valueOr:
-      return err("Header not found")
-    executionWitness.addHeader(rlp.encode(header))
-
-  ok(executionWitness)
+  ok(ExecutionWitness.build(witness, txFrame))
 
 proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
   let
