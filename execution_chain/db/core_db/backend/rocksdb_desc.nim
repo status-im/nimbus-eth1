@@ -22,6 +22,7 @@ type
   RocksDbInstanceRef* = ref object ## Shared handle to a single rocksdb instance
     db*: RocksDbReadWriteRef
     baseDir*: string
+    blockCache*: CacheRef
 
     sharedBatch*: SharedWriteBatchRef
 

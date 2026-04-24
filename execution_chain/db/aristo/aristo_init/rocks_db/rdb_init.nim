@@ -86,6 +86,9 @@ proc init*(rdb: var RdbInst, opts: DbOptions, baseDb: RocksDbInstanceRef) =
   ## Database backend constructor
   rdb.baseDb = baseDb
 
+  {.gcsafe.}:
+    rdbMemoryDb = baseDb
+
   # bytes -> entries based on overhead estimates
   rdb.rdKeySize =
     opts.rdbKeyCacheSize div (sizeof(VertexID) + sizeof(HashKey) + lruOverhead)

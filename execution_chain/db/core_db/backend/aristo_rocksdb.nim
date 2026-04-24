@@ -202,6 +202,9 @@ proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions, wipe = false): Core
       raiseAssert "Could not initialize aristo: " & $error
     kdb = KvtDbRef.init(baseDb)
 
+  if cache != nil:
+    baseDb.blockCache = cache
+
   CoreDbRef(kvt: kdb, mpt: adb)
 
 # ------------------------------------------------------------------------------

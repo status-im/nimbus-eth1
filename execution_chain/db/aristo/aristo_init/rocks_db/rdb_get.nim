@@ -30,11 +30,13 @@ when extraTraceMessages:
 
 when defined(metrics):
   import metrics
+  import rocksdb/memoryusage
 
   type
     RdbVtxLruCounter = ref object of Counter
     RdbKeyLruCounter = ref object of Counter
     RdbBranchLruCounter = ref object of Counter
+    RdbMemUsageGauge = ref object of Gauge
 
   var
     rdbVtxLruStatsMetric {.used.} = RdbVtxLruCounter.newCollector(
@@ -54,6 +56,12 @@ when defined(metrics):
       "Branch LRU lookup",
       labels = ["state", "hit"],
       standardType = "counter",
+    )
+    rdbMemUsageMetric {.used.} = RdbMemUsageGauge.newCollector(
+      "aristo_rdb_memory_bytes",
+      "RocksDB approximate memory usage in bytes",
+      labels = ["type"],
+      standardType = "gauge",
     )
 
   method collect*(collector: RdbVtxLruCounter, output: MetricHandler) =
@@ -97,6 +105,55 @@ when defined(metrics):
           labelValues = [$state, $ord(hit)],
           timestamp = timestamp,
         )
+
+  method collect*(collector: RdbMemUsageGauge, output: MetricHandler) =
+    let timestamp = collector.now()
+
+    let dbInst = rdbMemoryDb
+    if dbInst.isNil() or dbInst.db.isNil() or dbInst.db.isClosed():
+      return
+
+    let consumers = createMemoryConsumers()
+    defer: consumers.close()
+
+    consumers.addDb(dbInst.db)
+
+    if not dbInst.blockCache.isNil() and not dbInst.blockCache.isClosed():
+      consumers.addCache(dbInst.blockCache)
+
+    let usage = consumers.getApproximateMemoryUsage().valueOr:
+      return 
+
+    defer: usage.close()
+
+    output(
+      name = "aristo_rdb_memory_bytes_memtable_total",
+      value = float64(usage.memTableTotal()),
+      labels = ["type"],
+      labelValues = ["memory"],
+      timestamp = timestamp,
+    )
+    output(
+      name = "aristo_rdb_memory_bytes_memtable_unflushed",
+      value = float64(usage.memTableUnflushed()),
+      labels = ["type"],
+      labelValues = ["memory"],
+      timestamp = timestamp,
+    )
+    output(
+      name = "aristo_rdb_memory_bytes_memtable_readers_total",
+      value = float64(usage.memTableReadersTotal()),
+      labels = ["type"],
+      labelValues = ["memory"],
+      timestamp = timestamp,
+    )
+    output(
+      name = "aristo_rdb_memory_bytes_cache_total",
+      value = float64(usage.cacheTotal()),
+      labels = ["type"],
+      labelValues = ["memory"],
+      timestamp = timestamp,
+    )
 
 # ------------------------------------------------------------------------------
 # Public functions

@@ -91,6 +91,8 @@ var
   rdbVtxLruStats*: array[RdbStateType, array[RdbVertexType, RdbLruCounter]]
   rdbKeyLruStats*: array[RdbStateType, RdbLruCounter]
 
+  rdbMemoryDb*: RocksDbInstanceRef
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
