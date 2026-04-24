@@ -18,7 +18,9 @@ const
   eestType = "blockchain_tests"
   eestReleases = [
     "eest_develop",
-    "eest_zkevm"
+    # TODO: zkevm@v0.3.3 is not compatible with bal@v5.7.0
+    # enable this when they become compatible again
+    # "eest_zkevm"
   ]
 
 const skipFiles = [
