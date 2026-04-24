@@ -137,7 +137,6 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
 
   if vmState.balTrackerEnabled:
     vmState.balTracker.setBlockAccessIndex(pst.packedTxs.len() + 1)
-    vmState.balTracker.beginCallFrame()
 
   # Find out what to do next: accepting this tx or trying the next account
   let rc = processTransaction(vmState, item.tx, item.sender, rollbackReads = true)
