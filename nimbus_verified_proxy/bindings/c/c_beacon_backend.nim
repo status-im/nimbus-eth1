@@ -18,15 +18,18 @@ import
 
 proc newBeaconTransportCtx*(url, endpoint, params: string): TransportBeaconContext =
   TransportBeaconContext(
-    url: url, endpoint: endpoint, params: params,
-    fut: newFuture[string](),
+    url: url, endpoint: endpoint, params: params, fut: newFuture[string]()
   )
 
 proc deliverBeaconTransport*(
     status: cint, res: cstring, userData: pointer
 ) {.cdecl, exportc, gcsafe, raises: [].} =
   let tctx = cast[TransportBeaconContext](userData)
-  let response = if res != nil: $res else: ""
+  let response =
+    if res != nil:
+      $res
+    else:
+      ""
   if status == RET_CANCELLED:
     tctx.fut.cancelSoon()
   elif status == RET_SUCCESS:
@@ -37,10 +40,14 @@ proc deliverBeaconTransport*(
 proc beaconCtxUrl*(userData: pointer): cstring {.cdecl, exportc, gcsafe, raises: [].} =
   cast[TransportBeaconContext](userData).url.cstring
 
-proc beaconCtxEndpoint*(userData: pointer): cstring {.cdecl, exportc, gcsafe, raises: [].} =
+proc beaconCtxEndpoint*(
+    userData: pointer
+): cstring {.cdecl, exportc, gcsafe, raises: [].} =
   cast[TransportBeaconContext](userData).endpoint.cstring
 
-proc beaconCtxParams*(userData: pointer): cstring {.cdecl, exportc, gcsafe, raises: [].} =
+proc beaconCtxParams*(
+    userData: pointer
+): cstring {.cdecl, exportc, gcsafe, raises: [].} =
   cast[TransportBeaconContext](userData).params.cstring
 
 proc getBeaconApiBackend*(
@@ -53,16 +60,20 @@ proc getBeaconApiBackend*(
         async: (raises: [CancelledError])
     .} =
       let tctx = newBeaconTransportCtx(
-        url, "getLightClientBootstrap",
-        "{\"block_root\": \"" & $blockRoot & "\"}"
+        url, "getLightClientBootstrap", "{\"block_root\": \"" & $blockRoot & "\"}"
       )
       transportProc(ctx, deliverBeaconTransport, cast[pointer](tctx))
       let raw =
-        try: await tctx.fut
-        except CancelledError as e: raise e
-        except CatchableError as e: return err((BackendFetchError, e.msg, UNTAGGED))
+        try:
+          await tctx.fut
+        except CancelledError as e:
+          raise e
+        except CatchableError as e:
+          return err((BackendFetchError, e.msg, UNTAGGED))
       try:
-        return ok(RestJson.decode(raw, ForkedLightClientBootstrap, allowUnknownFields = true))
+        return ok(
+          RestJson.decode(raw, ForkedLightClientBootstrap, allowUnknownFields = true)
+        )
       except SerializationError as e:
         return err((BackendDecodingError, e.msg, UNTAGGED))
 
@@ -72,16 +83,22 @@ proc getBeaconApiBackend*(
         async: (raises: [CancelledError])
     .} =
       let tctx = newBeaconTransportCtx(
-        url, "getLightClientUpdatesByRange",
-        "{\"start_period\": " & $startPeriod.uint64 & ", \"count\": " & $count & "}"
+        url,
+        "getLightClientUpdatesByRange",
+        "{\"start_period\": " & $startPeriod.uint64 & ", \"count\": " & $count & "}",
       )
       transportProc(ctx, deliverBeaconTransport, cast[pointer](tctx))
       let raw =
-        try: await tctx.fut
-        except CancelledError as e: raise e
-        except CatchableError as e: return err((BackendFetchError, e.msg, UNTAGGED))
+        try:
+          await tctx.fut
+        except CancelledError as e:
+          raise e
+        except CatchableError as e:
+          return err((BackendFetchError, e.msg, UNTAGGED))
       try:
-        return ok(RestJson.decode(raw, seq[ForkedLightClientUpdate], allowUnknownFields = true))
+        return ok(
+          RestJson.decode(raw, seq[ForkedLightClientUpdate], allowUnknownFields = true)
+        )
       except SerializationError as e:
         return err((BackendDecodingError, e.msg, UNTAGGED))
 
@@ -91,11 +108,18 @@ proc getBeaconApiBackend*(
       let tctx = newBeaconTransportCtx(url, "getLightClientOptimisticUpdate", "{}")
       transportProc(ctx, deliverBeaconTransport, cast[pointer](tctx))
       let raw =
-        try: await tctx.fut
-        except CancelledError as e: raise e
-        except CatchableError as e: return err((BackendFetchError, e.msg, UNTAGGED))
+        try:
+          await tctx.fut
+        except CancelledError as e:
+          raise e
+        except CatchableError as e:
+          return err((BackendFetchError, e.msg, UNTAGGED))
       try:
-        return ok(RestJson.decode(raw, ForkedLightClientOptimisticUpdate, allowUnknownFields = true))
+        return ok(
+          RestJson.decode(
+            raw, ForkedLightClientOptimisticUpdate, allowUnknownFields = true
+          )
+        )
       except SerializationError as e:
         return err((BackendDecodingError, e.msg, UNTAGGED))
 
@@ -105,11 +129,18 @@ proc getBeaconApiBackend*(
       let tctx = newBeaconTransportCtx(url, "getLightClientFinalityUpdate", "{}")
       transportProc(ctx, deliverBeaconTransport, cast[pointer](tctx))
       let raw =
-        try: await tctx.fut
-        except CancelledError as e: raise e
-        except CatchableError as e: return err((BackendFetchError, e.msg, UNTAGGED))
+        try:
+          await tctx.fut
+        except CancelledError as e:
+          raise e
+        except CatchableError as e:
+          return err((BackendFetchError, e.msg, UNTAGGED))
       try:
-        return ok(RestJson.decode(raw, ForkedLightClientFinalityUpdate, allowUnknownFields = true))
+        return ok(
+          RestJson.decode(
+            raw, ForkedLightClientFinalityUpdate, allowUnknownFields = true
+          )
+        )
       except SerializationError as e:
         return err((BackendDecodingError, e.msg, UNTAGGED))
 

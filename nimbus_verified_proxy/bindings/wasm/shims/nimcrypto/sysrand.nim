@@ -34,7 +34,7 @@ when defined(posix) or defined(emscripten):
     let fd = posix.open("/dev/urandom", posix.O_RDONLY)
     if fd == -1:
       return -1
-    if posix.fstat(fd, st) == -1 or not(S_ISCHR(st.st_mode)):
+    if posix.fstat(fd, st) == -1 or not (S_ISCHR(st.st_mode)):
       discard posix.close(fd)
       return -1
 
@@ -61,8 +61,9 @@ when defined(emscripten) or defined(openbsd):
   # bytes per call per POSIX spec, so we loop in chunks.
   # https://github.com/emscripten-core/emscripten/pull/12240
   # openbsd provides getentropy by default
-  proc getentropy(pbytes: pointer, nbytes: csize_t): cint
-       {.importc: "getentropy", header: "<unistd.h>".}
+  proc getentropy(
+    pbytes: pointer, nbytes: csize_t
+  ): cint {.importc: "getentropy", header: "<unistd.h>".}
 
   proc randomBytes*(pbytes: pointer, nbytes: int): int =
     const maxChunk = 256
@@ -104,16 +105,20 @@ elif defined(linux):
       const SYS_getrandom = 4000 + 353
   else:
     const SYS_getrandom = 0
-  const
-    GRND_NONBLOCK = 1
+  const GRND_NONBLOCK = 1
 
-  type
-    SystemRng = ref object of RootRef
-      getRandomPresent: bool
+  type SystemRng = ref object of RootRef
+    getRandomPresent: bool
 
-  proc syscall(number: clong): clong {.importc: "syscall",
-       header: """#include <unistd.h>
-                  #include <sys/syscall.h>""", varargs, discardable.}
+  proc syscall(
+    number: clong
+  ): clong {.
+    importc: "syscall",
+    header: """#include <unistd.h>
+                  #include <sys/syscall.h>""",
+    varargs,
+    discardable
+  .}
 
   var gSystemRng {.threadvar.}: SystemRng ## System thread global RNG
 
@@ -192,13 +197,16 @@ elif defined(windows):
 
     HCRYPTPROV = uint
 
-    BCGRMPROC = proc(hAlgorithm: pointer, pBuffer: pointer, cBuffer: ULONG,
-                     dwFlags: ULONG): LONG {.stdcall, gcsafe, raises:[].}
+    BCGRMPROC = proc(
+      hAlgorithm: pointer, pBuffer: pointer, cBuffer: ULONG, dwFlags: ULONG
+    ): LONG {.stdcall, gcsafe, raises: [].}
     QPCPROC = proc(hProcess: Handle, cycleTime: var uint64): WINBOOL {.
-              stdcall, gcsafe, raises:[].}
-    QUITPROC = proc(itime: var uint64) {.stdcall, gcsafe, raises:[].}
+      stdcall, gcsafe, raises: []
+    .}
+    QUITPROC = proc(itime: var uint64) {.stdcall, gcsafe, raises: [].}
     QIPCPROC = proc(bufferLength: var uint32, idleTime: ptr uint64): WINBOOL {.
-               stdcall, gcsafe, raises:[].}
+      stdcall, gcsafe, raises: []
+    .}
 
     SystemRng = ref object of RootRef
       bCryptGenRandom: BCGRMPROC
@@ -210,23 +218,33 @@ elif defined(windows):
 
   var gSystemRng {.threadvar.}: SystemRng ## System thread global RNG
 
-  proc verifyVersionInfo(lpVerInfo: ptr OSVERSIONINFOEXW, dwTypeMask: DWORD,
-                         dwlConditionMask: uint64): WINBOOL
-       {.importc: "VerifyVersionInfoW", stdcall, dynlib: "kernel32.dll".}
-  proc verSetConditionMask(conditionMask: uint64, dwTypeMask: DWORD,
-                           condition: byte): uint64
-       {.importc: "VerSetConditionMask", stdcall, dynlib: "kernel32.dll".}
-  proc cryptAcquireContext(phProv: ptr HCRYPTPROV, pszContainer: WideCString,
-                           pszProvider: WideCString, dwProvType: DWORD,
-                           dwFlags: DWORD): WINBOOL
-       {.importc: "CryptAcquireContextW", stdcall, dynlib: "advapi32.dll".}
-  proc cryptReleaseContext(phProv: HCRYPTPROV, dwFlags: DWORD): WINBOOL
-       {.importc: "CryptReleaseContext", stdcall, dynlib: "advapi32.dll".}
-  proc cryptGenRandom(phProv: HCRYPTPROV, dwLen: DWORD,
-                      pBuffer: pointer): WINBOOL
-       {.importc: "CryptGenRandom", stdcall, dynlib: "advapi32.dll".}
-  proc rtlGenRandom(bufptr: pointer, buflen: ULONG): WINBOOL
-       {.importc: "SystemFunction036", stdcall, dynlib: "advapi32.dll".}
+  proc verifyVersionInfo(
+    lpVerInfo: ptr OSVERSIONINFOEXW, dwTypeMask: DWORD, dwlConditionMask: uint64
+  ): WINBOOL {.importc: "VerifyVersionInfoW", stdcall, dynlib: "kernel32.dll".}
+
+  proc verSetConditionMask(
+    conditionMask: uint64, dwTypeMask: DWORD, condition: byte
+  ): uint64 {.importc: "VerSetConditionMask", stdcall, dynlib: "kernel32.dll".}
+
+  proc cryptAcquireContext(
+    phProv: ptr HCRYPTPROV,
+    pszContainer: WideCString,
+    pszProvider: WideCString,
+    dwProvType: DWORD,
+    dwFlags: DWORD,
+  ): WINBOOL {.importc: "CryptAcquireContextW", stdcall, dynlib: "advapi32.dll".}
+
+  proc cryptReleaseContext(
+    phProv: HCRYPTPROV, dwFlags: DWORD
+  ): WINBOOL {.importc: "CryptReleaseContext", stdcall, dynlib: "advapi32.dll".}
+
+  proc cryptGenRandom(
+    phProv: HCRYPTPROV, dwLen: DWORD, pBuffer: pointer
+  ): WINBOOL {.importc: "CryptGenRandom", stdcall, dynlib: "advapi32.dll".}
+
+  proc rtlGenRandom(
+    bufptr: pointer, buflen: ULONG
+  ): WINBOOL {.importc: "SystemFunction036", stdcall, dynlib: "advapi32.dll".}
 
   proc isEqualOrHigher(major: int, minor: int, servicePack: int): bool =
     var mask = 0'u64
@@ -235,11 +253,12 @@ elif defined(windows):
       dwMajorVersion: DWORD(major),
       dwMinorVersion: DWORD(minor),
       wServicePackMajor: uint16(servicePack),
-      wServicePackMinor: 0
+      wServicePackMinor: 0,
     )
-    let typeMask =
-      DWORD(VER_MAJORVERSION or VER_MINORVERSION or
-            VER_SERVICEPACKMAJOR or VER_SERVICEPACKMINOR)
+    let typeMask = DWORD(
+      VER_MAJORVERSION or VER_MINORVERSION or VER_SERVICEPACKMAJOR or
+        VER_SERVICEPACKMINOR
+    )
     mask = verSetConditionMask(mask, VER_MAJORVERSION, VER_GREATER_EQUAL)
     mask = verSetConditionMask(mask, VER_MINORVERSION, VER_GREATER_EQUAL)
     mask = verSetConditionMask(mask, VER_SERVICEPACKMAJOR, VER_GREATER_EQUAL)
@@ -257,8 +276,9 @@ elif defined(windows):
             rng.bCryptGenRandom = lProc
     var hp: HCRYPTPROV = 0
     let intelDef = newWideCString(INTEL_DEF_PROV)
-    let res = cryptAcquireContext(addr hp, nil, intelDef, PROV_INTEL_SEC,
-                                  CRYPT_VERIFYCONTEXT or CRYPT_SILENT).bool
+    let res = cryptAcquireContext(
+      addr hp, nil, intelDef, PROV_INTEL_SEC, CRYPT_VERIFYCONTEXT or CRYPT_SILENT
+    ).bool
     if res:
       rng.hIntel = hp
     rng
@@ -272,8 +292,9 @@ elif defined(windows):
     let srng = getSystemRng()
 
     if not isNil(srng.bCryptGenRandom):
-      if srng.bCryptGenRandom(nil, pbytes, ULONG(nbytes),
-                              BCRYPT_USE_SYSTEM_PREFERRED_RNG) == 0:
+      if srng.bCryptGenRandom(
+        nil, pbytes, ULONG(nbytes), BCRYPT_USE_SYSTEM_PREFERRED_RNG
+      ) == 0:
         return nbytes
     if srng.hIntel != 0:
       if cryptGenRandom(srng.hIntel, DWORD(nbytes), pbytes) != 0:

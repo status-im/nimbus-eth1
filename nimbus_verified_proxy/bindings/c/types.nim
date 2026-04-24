@@ -9,24 +9,21 @@
 
 {.pragma: exported, cdecl, exportc, dynlib, raises: [].}
 
-import
-  chronos,
-  ../../engine/types
+import chronos, ../../engine/types
 
 type
   Context* = object
-    config*:       string
-    stop*:         bool
+    config*: string
+    stop*: bool
     pendingCalls*: int
-    frontend*:     ExecutionApiFrontend
+    frontend*: ExecutionApiFrontend
 
   CallBackProc* = proc(ctx: ptr Context, status: cint, res: cstring, userData: pointer) {.
     cdecl, gcsafe, raises: []
   .}
 
-  TransportDeliveryCallback* = proc(status: cint, res: cstring, userData: pointer) {.
-    cdecl, gcsafe, raises: []
-  .}
+  TransportDeliveryCallback* =
+    proc(status: cint, res: cstring, userData: pointer) {.cdecl, gcsafe, raises: [].}
 
   ExecutionTransportProc* = proc(
     ctx: ptr Context, cb: TransportDeliveryCallback, userData: pointer
@@ -37,16 +34,16 @@ type
   ) {.cdecl, gcsafe, raises: [].}
 
   TransportExecutionContext* = ref object
-    url*:    string
-    name*:   string
+    url*: string
+    name*: string
     params*: string
-    fut*:    Future[string]
+    fut*: Future[string]
 
   TransportBeaconContext* = ref object
-    url*:      string
+    url*: string
     endpoint*: string
-    params*:   string
-    fut*:      Future[string]
+    params*: string
+    fut*: Future[string]
 
 const RET_SUCCESS*: cint = 0
 const RET_ERROR*: cint = -1

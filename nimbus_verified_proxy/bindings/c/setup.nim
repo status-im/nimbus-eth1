@@ -59,7 +59,8 @@ proc freeContext(ctx: ptr Context) {.exported.} =
   ctx.destroy()
 
 proc processVerifProxyTasks(ctx: ptr Context): cint {.exported.} =
-  if ctx.stop: return RET_CANCELLED
+  if ctx.stop:
+    return RET_CANCELLED
   if ctx.pendingCalls > 0:
     poll()
   return RET_SUCCESS

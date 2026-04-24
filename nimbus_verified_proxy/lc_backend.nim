@@ -19,8 +19,7 @@ import
 logScope:
   topics = "BeaconApiRestClient"
 
-const
-  MaxMessageBodyBytes* = 128 * 1024 * 1024 # 128 MB (JSON encoded)
+const MaxMessageBodyBytes* = 128 * 1024 * 1024 # 128 MB (JSON encoded)
 
 type BeaconApiRestClient* = ref object
   cfg: RuntimeConfig

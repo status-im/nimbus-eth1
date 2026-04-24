@@ -78,7 +78,7 @@ proc init*(
 
   let metadata = getMetadataForNetwork(config.eth2Network.get("mainnet"))
 
-  let 
+  let
     genesisHeader =
       try:
         template genesisData(): auto =
@@ -86,11 +86,14 @@ proc init*(
 
         # this is a hack to avoid a huge blow up in memory for the wasm target
         SSZ.decode(
-          genesisData.toOpenArray(genesisData.low, genesisData.low + sizeof(BeaconStateHeader) - 1),
-          BeaconStateHeader
+          genesisData.toOpenArray(
+            genesisData.low, genesisData.low + sizeof(BeaconStateHeader) - 1
+          ),
+          BeaconStateHeader,
         )
       except CatchableError as err:
-        return err((UnavailableDataError, "Invalid baked-in state: " & err.msg, UNTAGGED))
+        return
+          err((UnavailableDataError, "Invalid baked-in state: " & err.msg, UNTAGGED))
     genesisTime = genesisHeader.genesis_time
     beaconClock = BeaconClock.init(metadata.cfg.timeParams, genesisTime).valueOr:
       error "Invalid genesis time in state", genesisTime
