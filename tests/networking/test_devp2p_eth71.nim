@@ -33,7 +33,7 @@ proc seedBal(env: TestEnv, hash: Hash32, bal: BlockAccessList) =
   let balToStore: BlockAccessListRef = new BlockAccessList
   balToStore[] = bal
 
-  env.chain.latestTxFrame.persistBlockAccessList(hash, balToStore) #.expect("persistBlockAccessList should succeed")
+  env.chain.latestTxFrame.persistBlockAccessList(hash, balToStore)
 
 func makeHash(i: int): Hash32 =
   keccak256(i.uint64.toBytesLE)
@@ -264,3 +264,135 @@ procSuite "devp2p eth/71 Tests":
     env2.close()
     env1.close()
 
+  asyncTest "getBlockHeaders":
+    var
+      env1 = newTestEnv()
+      env2 = newTestEnv()
+
+    env2.node.startListening()
+
+    let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+    check connRes.isOk()
+
+    let peer = connRes.get()
+    check peer.supports(eth71)
+
+    let
+      req = BlockHeadersRequest(
+        startBlock: BlockHashOrNumber(isHash: false, number: 0),
+        maxResults: 1,
+        skip: 0,
+        reverse: false)
+      respOpt = await peer.getBlockHeaders(req, timeout = chronos.seconds(3))
+    check respOpt.isSome()
+
+    let resp = respOpt.get()
+    check:
+      resp.headers.len() == 1
+      resp.headers[0].number == 0
+
+    env2.close()
+    env1.close()
+
+  asyncTest "getBlockBodies":
+    var
+      env1 = newTestEnv()
+      env2 = newTestEnv()
+
+    env2.node.startListening()
+
+    let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+    check connRes.isOk()
+
+    let peer = connRes.get()
+    check peer.supports(eth71)
+
+    let
+      req = BlockBodiesRequest(blockHashes: @[env2.chain.latestHash])
+      respOpt = await peer.getBlockBodies(req, timeout = chronos.seconds(3))
+    check respOpt.isSome()
+
+    let resp = respOpt.get()
+    check:
+      resp.bodies.len() == 1
+
+    env2.close()
+    env1.close()
+
+  asyncTest "getPooledTransactions":
+    var
+      env1 = newTestEnv()
+      env2 = newTestEnv()
+
+    env2.node.startListening()
+
+    let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+    check connRes.isOk()
+
+    let peer = connRes.get()
+    check peer.supports(eth71)
+
+    let
+      req = PooledTransactionsRequest(txHashes: @[makeHash(777)])
+      respOpt = await peer.getPooledTransactions(req, timeout = chronos.seconds(3))
+    check respOpt.isSome()
+
+    let resp = respOpt.get()
+    check resp.transactions.len() == 0
+
+    env2.close()
+    env1.close()
+
+  asyncTest "blockRangeUpdate":
+    var
+      env1 = newTestEnv()
+      env2 = newTestEnv()
+
+    env2.node.startListening()
+
+    let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+    check connRes.isOk()
+
+    let peer = connRes.get()
+    check peer.supports(eth71)
+
+    await peer.blockRangeUpdate(
+      BlockRangeUpdatePacket(
+        earliest: 0,
+        latest: 0,
+        latestHash: default(Hash32)))
+
+    # Verify the connection remains usable after sending BlockRangeUpdate.
+    let
+      req = BlockAccessListsRequest(blockHashes: @[default(Hash32)])
+      respOpt = await peer.getBlockAccessLists(req, timeout = chronos.seconds(3))
+    check respOpt.isSome()
+
+    env2.close()
+    env1.close()
+
+  asyncTest "getReceipts (eth70+ format)":
+    var
+      env1 = newTestEnv()
+      env2 = newTestEnv()
+
+    env2.node.startListening()
+
+    let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+    check connRes.isOk()
+
+    let peer = connRes.get()
+    check peer.supports(eth71)
+
+    let
+      req = ReceiptsRequest(blockHashes: @[makeHash(888)])
+      respOpt = await peer.getReceipts(0'u64, req, timeout = chronos.seconds(3))
+    check respOpt.isSome()
+
+    let resp = respOpt.get()
+    check:
+      resp.receipts.len() == 0
+      resp.lastBlockIncomplete
+
+    env2.close()
+    env1.close()
