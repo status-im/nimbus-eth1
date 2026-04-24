@@ -280,6 +280,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     ## Both of those changes require improvements to the way how we keep our data
     ## in Nimbus.
     if filterOptions.blockHash.isSome():
+      if filterOptions.fromBlock.isSome() or filterOptions.toBlock.isSome():
+        raise (ref ApplicationError)(code: -32602, msg: "invalid argument 0: cannot specify both BlockHash and FromBlock/ToBlock, choose one or the other",)
       let
         hash = filterOptions.blockHash.expect("blockHash")
         header = api.chain.headerByHash(hash).valueOr:
@@ -292,14 +294,20 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       # tag would be an enum (Earliest, Latest, Pending, Number), and all operations
       # would operate on this enum instead of raw strings. This change would need
       # to be done on every endpoint to be consistent.
+      if filterOptions.toBlock.isSome() and
+          filterOptions.toBlock.get().kind == bidNumber and
+          base.BlockNumber(filterOptions.toBlock.get().number) > api.chain.latestHeader.number:
+        raise (ref ApplicationError)(code: -32602,msg: "block range extends beyond current head block",)
+
       let
-        blockFrom = api.headerFromTag(filterOptions.fromBlock).valueOr:
+        blockFrom = api.headerFromTag(filterOptions.fromBlock.get(defaultTag)).valueOr:
           raise newException(ValueError, "Block not found")
-        blockTo = api.headerFromTag(filterOptions.toBlock).valueOr:
+        blockTo = api.headerFromTag(filterOptions.toBlock.get(defaultTag)).valueOr:
           raise newException(ValueError, "Block not found")
 
-      # Note: if fromHeader.number > toHeader.number, no logs will be
-      # returned. This is consistent with, what other ethereum clients return
+      if blockFrom.number > blockTo.number:
+        raise (ref ApplicationError)(code: -32602, msg: "invalid block range params")
+
       return api.chain.getLogsForRange(blockFrom.number, blockTo.number, filterOptions)
 
   server.rpc("eth_sendRawTransaction") do(txBytes: seq[byte]) -> Hash32:
