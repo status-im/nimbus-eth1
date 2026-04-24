@@ -115,11 +115,11 @@ proc build*(
   witness
 
 proc build*(
-    T: type ExecutionWitness, witness: Witness, ledger: LedgerRef
+    T: type ExecutionWitness, witness: Witness, txFrame: CoreDbTxRef
 ): ExecutionWitness =
   var codes: seq[seq[byte]]
   for codeHash in witness.codeHashes:
-    let code = ledger.txFrame.getCodeByHash(codeHash).valueOr:
+    let code = txFrame.getCodeByHash(codeHash).valueOr:
       raiseAssert "Code not found"
     codes.add(code)
 
@@ -129,7 +129,7 @@ proc build*(
 
   var headers: seq[seq[byte]]
   for headerHash in witness.headerHashes:
-    let header = ledger.txFrame.getBlockHeader(headerHash).valueOr:
+    let header = txFrame.getBlockHeader(headerHash).valueOr:
       raiseAssert "Header not found"
     headers.add(rlp.encode(header))
 
@@ -139,3 +139,8 @@ proc build*(
     keys = witness.keys,
     headers = move(headers),
   )
+
+template build*(
+    T: type ExecutionWitness, witness: Witness, ledger: LedgerRef
+): ExecutionWitness =
+  T.build(witness, ledger.txFrame)
