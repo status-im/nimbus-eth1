@@ -151,10 +151,11 @@ proc deleteAccount*(
   db.layersPutAccLeaf(accPath, nil)
 
   if otherLeaf.isValid:
-    db.layersPutAccLeaf(
-      Hash32(getBytes(NibblesBuf.fromBytes(accPath.data).replaceSuffix(otherLeaf.pfx))),
-      AccLeafRef(otherLeaf),
-    )
+    let sibAccPath =
+      Hash32(getBytes(NibblesBuf.fromBytes(accPath.data).replaceSuffix(otherLeaf.pfx)))
+    db.layersPutAccLeaf(sibAccPath, AccLeafRef(otherLeaf))
+    if db.collectWitness:
+      db.collapsedSiblings.add((sibAccPath, Opt.none(Hash32)))
 
   ok()
 
@@ -206,9 +207,12 @@ proc deleteSlot*(
   db.layersPutStoLeaf(mixPath, nil)
 
   if otherLeaf.isValid:
-    let leafMixPath =
-      mixUp(accPath, Hash32(getBytes(stoNibbles.replaceSuffix(otherLeaf.pfx))))
+    let
+      sibStoPath = Hash32(getBytes(stoNibbles.replaceSuffix(otherLeaf.pfx)))
+      leafMixPath = mixUp(accPath, sibStoPath)
     db.layersPutStoLeaf(leafMixPath, StoLeafRef(otherLeaf))
+    if db.collectWitness:
+      db.collapsedSiblings.add((accPath, Opt.some(sibStoPath)))
 
   # If there was only one item (that got deleted), update the account as well
   if stoHike.legs.len == 1:
