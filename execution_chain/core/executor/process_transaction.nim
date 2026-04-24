@@ -244,7 +244,6 @@ proc processDequeueWithdrawalRequests*(vmState: BaseVMState): Result[seq[byte], 
   let res = call.runComputation(OutputResult)
   if res.error.len > 0:
     return err("processDequeueWithdrawalRequests: " & res.error)
-
   ledger.persist(clearEmptyAccount = true)
   ok(res.output)
 

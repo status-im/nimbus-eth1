@@ -164,12 +164,10 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
 
   var
     gasLeft = executionGas
-    intrinsicStateGas = 0.GasInt
     stateGas = 0.GasInt
 
   if isAmsterdamOrLater:
     gasLeft = min(regularGasBudget, executionGas)
-    intrinsicStateGas = intrinsic.state
     stateGas = executionGas - gasLeft + gasRefund.GasInt
 
   let
@@ -177,7 +175,7 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
       vmState: vmState,
       floorDataGas: intrinsic.floorDataGas,
       intrinsicRegularGas: intrinsic.regular,
-      intrinsicStateGas: intrinsicStateGas,
+      intrinsicStateGas: intrinsic.state,
       # All other defaults in `TransactionHost` are fine.
     )
 
