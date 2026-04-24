@@ -492,3 +492,32 @@ proc putSubtrie*(
     return err(PartTrkRlpError)
 
   ok()
+
+proc addDeleteAuxProofs*(
+    db: AristoTxRef;
+    collapsedSiblings: seq[tuple[root, sibVid: VertexID]];
+    state: var seq[seq[byte]];
+      ): Result[void, AristoError] =
+  ## For each collapsed sibling recorded in `collapsedSiblings` during block
+  ## execution, the sibling its own RLP-encoded trie node gets added to the
+  ## state for the witness.
+  ##
+  ## The parent branch node (which held both the deleted leaf and the sibling)
+  ## is already on the delete path and thus should already be present in the
+  ## witness. The sibling node however is not, but the stateless execution needs
+  ## it to do the branch collapse and compute the state root.
+  var existingNodes: HashSet[seq[byte]]
+  for node in state:
+    existingNodes.incl(node)
+
+  for (root, sibVid) in collapsedSiblings:
+    let (vtx, _) = db.getVtxRc((root, sibVid)).valueOr:
+      continue  # Not in pre-state (e.g. created in this block); skip
+    let node = vtx.toNode(root, db).valueOr:
+      continue
+    for rlpNode in node.to(array[2, seq[byte]]):
+      if rlpNode.len > 0 and rlpNode notin existingNodes:
+        state.add(rlpNode)
+        existingNodes.incl(rlpNode)
+
+  ok()

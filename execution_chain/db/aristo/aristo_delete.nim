@@ -88,6 +88,10 @@ proc deleteImpl(
     if not nxt.isValid:
       return err(DelVidStaleVtx)
 
+    # Record the surviving sibling for witness generation.
+    if db.collectWitness:
+      db.collapsedSiblings.add((hike.root, vid))
+
     db.layersResVtx((hike.root, vid))
     let
       pfx =
