@@ -7,9 +7,7 @@
 
 {.push raises: [], gcsafe.}
 
-{.pragma: exported, cdecl, exportc, dynlib, raises: [].}
-
-import chronos, ../../engine/types
+import chronos, ../engine/types
 
 type
   Context* = object

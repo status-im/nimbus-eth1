@@ -7,7 +7,7 @@
 
 {.push raises: [], gcsafe.}
 
-import chronos, web3/[eth_api_types, conversions], ../../engine/types, ./types, ./utils
+import chronos, web3/[eth_api_types, conversions], ../engine/types, ./types, ./utils
 
 proc newExecTransportCtx*(url, name, params: string): TransportExecutionContext =
   TransportExecutionContext(

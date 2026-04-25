@@ -10,7 +10,7 @@
 import
   results,
   stew/byteutils,
-  ../bindings/wasm/shims/nimcrypto/sysrand,
+  nimcrypto/sysrand,
   json_rpc/[rpcserver, rpcclient],
   eth/common/accounts,
   web3/[eth_api, eth_api_types],

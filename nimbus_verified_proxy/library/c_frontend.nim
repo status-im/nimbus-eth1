@@ -13,10 +13,12 @@ import
   beacon_chain/nimbus_binary_common,
   json_rpc/[jsonmarshal],
   web3/[eth_api_types, conversions],
-  ../../engine/types,
-  ../../nimbus_verified_proxy_conf,
+  ../engine/types,
+  ../nimbus_verified_proxy_conf,
   ./types,
   ./utils
+
+{.pragma: exported, cdecl, exportc, dynlib, raises: [].}
 
 template callbackToC(
     ctx: ptr Context, cb: CallBackProc, userData: pointer, asyncCall: untyped

@@ -10,7 +10,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <emscripten.h>
-#include "../c/verifproxy.h"
+#include "../../verifproxy.h"
 
 static Context *g_ctx = NULL;
 

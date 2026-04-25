@@ -169,7 +169,7 @@ proc callFetchingState(
     vmState.ledger.rollback(savePoint) # all state changes from the call are reverted
 
     # Collect the keys after executing the transaction
-    when defined(nimArc) or defined(nimOrc):
+    when defined(gcArc):
       lastWitnessKeys = witnessKeys
     else:
       lastWitnessKeys = ensureMove(witnessKeys)
@@ -317,7 +317,7 @@ func validateSetDefaults(tx: TransactionArgs): Result[TransactionArgs, string] =
   if tx.gas.isNone():
     tx.gas = Opt.some(EVM_CALL_GAS_CAP.Quantity)
 
-  when defined(nimArc) or defined(nimOrc):
+  when defined(gcArc):
     ok(tx)
   else:
     ok(ensureMove(tx))
@@ -372,7 +372,7 @@ proc createAccessList*(
       al.add(adr)
 
   var txWithAl =
-    when defined(nimArc) or defined(nimOrc):
+    when defined(gcArc):
       tx
     else:
       ensureMove(tx)

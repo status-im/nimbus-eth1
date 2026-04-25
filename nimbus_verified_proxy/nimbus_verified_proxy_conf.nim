@@ -12,6 +12,7 @@ import
   json_serialization/std/net,
   confutils/toml/defs as confTomlDefs,
   beacon_chain/spec/digest,
+  beacon_chain/conf,
   beacon_chain/nimbus_binary_common
 
 export net
@@ -161,12 +162,6 @@ proc parseCmdArg*(T: type UrlList, p: string): T {.raises: [ValueError].} =
         newException(ValueError, "URL should have a valid scheme (http/https/ws/wss)")
 
   UrlList(urls)
-
-# NOTE: this is overridden here instead of importing from beacon_chain/conf.nim to
-# avoid importing miniupnpc because of the dependency chain below 
-# nim-libp2p -> nim-nat-traversal -> miniupnpc
-func parseCmdArg*(T: type Eth2Digest, input: string): T {.raises: [ValueError].} =
-  Eth2Digest.fromHex(input)
 
 proc completeCmdArg*(T: type UrlList, val: string): seq[string] =
   @[]

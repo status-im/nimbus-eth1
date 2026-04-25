@@ -16,18 +16,20 @@ import
   beacon_chain/beacon_clock,
   beacon_chain/networking/network_metadata,
   beacon_chain/nimbus_binary_common,
-  ../../engine/types,
-  ../../engine/engine,
-  ../../engine/rpc_frontend,
-  ../../lc_backend,
-  ../../json_rpc_backend,
-  ../../nimbus_verified_proxy_conf,
+  ../engine/types,
+  ../engine/engine,
+  ../engine/rpc_frontend,
+  ../lc_backend,
+  ../json_rpc_backend,
+  ../nimbus_verified_proxy_conf,
   ./types,
   ./c_execution_backend,
   ./c_beacon_backend
 
 import ./c_frontend
 export c_frontend
+
+{.pragma: exported, cdecl, exportc, dynlib, raises: [].}
 
 proc NimMain() {.importc, exportc, dynlib.}
 
