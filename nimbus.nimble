@@ -118,14 +118,6 @@ task utp_test, "Run uTP integration tests":
 task test_portal_testnet, "Build test_portal_testnet":
   buildBinary "test_portal_testnet", "portal/scripts/", "-d:chronicles_log_level=DEBUG -d:unittest2DisableParamFiltering"
 
-## Nimbus Verified Proxy tasks
-
-task nimbus_verified_proxy, "Build Nimbus verified proxy":
-  buildBinary "nimbus_verified_proxy", "nimbus_verified_proxy/", "-d:chronicles_log_level=TRACE"
-
-task nimbus_verified_proxy_test, "Run Nimbus verified proxy tests":
-  test "nimbus_verified_proxy/tests", "all_proxy_tests", "-d:chronicles_log_level=ERROR"
-
 task build_fuzzers, "Build fuzzer test cases":
   # This file is there to be able to quickly build the fuzzer test cases in
   # order to avoid bit rot (e.g. for CI). Not for actual fuzzing.

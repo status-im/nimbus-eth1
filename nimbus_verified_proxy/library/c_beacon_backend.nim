@@ -13,7 +13,7 @@ import
   beacon_chain/spec/beaconstate,
   beacon_chain/spec/forks,
   beacon_chain/spec/eth2_apis/eth2_rest_json_serialization,
-  ../../engine/types,
+  ../engine/types,
   ./types
 
 proc newBeaconTransportCtx*(url, endpoint, params: string): TransportBeaconContext =

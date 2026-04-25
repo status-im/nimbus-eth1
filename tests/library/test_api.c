@@ -38,7 +38,7 @@ static void collect_error_cb(Context *ctx, int status, char *res, void *userData
     s->status   = status;
 
     if (status != RET_SUCCESS)
-        fprintf(stderr, "  [cb] status=%d  res=%s\n", status, res ? res : "(null)");
+        fprintf(stdout, "  [cb] status=%d  res=%s\n", status, res ? res : "(null)");
 
     freeNimAllocatedString(res);
 }
@@ -227,7 +227,7 @@ static void execution_transport(
     Context *ctx, TransportDeliveryCallback cb, void *userData)
 {
     const char *name = execCtxName(userData);
-    fprintf(stderr, "  [exec] %s  params=%s\n", name, execCtxParams(userData));
+    fprintf(stdout, "  [exec] %s  params=%s\n", name, execCtxParams(userData));
 
     const char *file = NULL;
     if (strcmp(name, "eth_getBlockByNumber") == 0 ||
@@ -250,7 +250,7 @@ static void beacon_transport(
     Context *ctx, TransportDeliveryCallback cb, void *userData)
 {
     const char *endpoint = beaconCtxEndpoint(userData);
-    printf("LC Transport Called: url: %s, endpoint: %s, params: %s\n",
+    fprintf(stdout, "  [beacon] url: %s, endpoint: %s, params: %s\n",
            beaconCtxUrl(userData), endpoint, beaconCtxParams(userData));
 
     const char *file = NULL;

@@ -13,7 +13,8 @@ import
   stew/byteutils,
   json_rpc/[jsonmarshal],
   web3/[conversions, eth_api_types],
-  beacon_chain/spec/eth2_apis/eth2_rest_json_serialization
+  beacon_chain/spec/eth2_apis/eth2_rest_json_serialization,
+  ../engine/types
 
 # taken from nim-json-rpc and adapted
 func unpackArg*(

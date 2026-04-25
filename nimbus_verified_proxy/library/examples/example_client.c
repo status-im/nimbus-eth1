@@ -5,7 +5,7 @@
  *
  * Compile (after building libverifproxy):
  *   gcc -I build/libverifproxy -L build/libverifproxy \
- *       -o example_client nimbus_verified_proxy/bindings/c/examples/example_client.c \
+ *       -o example_client nimbus_verified_proxy/library/examples/example_client.c \
  *       -lverifproxy -lstdc++ -lm
  */
 
