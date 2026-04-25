@@ -387,7 +387,6 @@ nimbus_verified_proxy_wasm: | build deps
 		$(ENV_SCRIPT) nim c \
 		-d:emscripten \
 		-d:release \
-		-d:disableMarchNative \
 		-d:disable_libbacktrace \
 		-o:"$(CURDIR)/build/$@/verifproxy_wasm.js" \
 		nimbus_verified_proxy/library/bindings/wasm/verifproxy_wasm.nim
@@ -399,7 +398,6 @@ nimbus_verified_proxy_wasm_debug: | build deps
 		$(ENV_SCRIPT) nim c \
 		-d:emscripten \
 		-d:debug \
-		-d:disableMarchNative \
 		-d:disable_libbacktrace \
 		-o:"$(CURDIR)/build/$@/verifproxy_wasm.js" \
 		nimbus_verified_proxy/library/bindings/wasm/verifproxy_wasm.nim
