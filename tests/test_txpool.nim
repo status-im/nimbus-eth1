@@ -90,6 +90,9 @@ proc initConf(envFork: HardFork): ExecutionClientConf =
   if envFork >= Osaka:
     cc.osakaTime = Opt.some(0.EthTime)
 
+  if envFork >= Amsterdam:
+    cc.amsterdamTime = Opt.some(0.EthTime)
+
   config.networkParams.genesis.alloc[recipient] = GenesisAccount(code: contractCode)
   config
 
@@ -964,3 +967,62 @@ suite "TxPool test suite":
       tip0 = txs[0].effectiveGasTip(baseFee)
       tip1 = txs[1].effectiveGasTip(baseFee)
     check tip0 >= tip1
+
+suite "TxPool BAL post-Amsterdam":
+  # Regression test for PR #4148: tx_packer left an outer beginCallFrame in
+  # vmExecGrabItem with no matching commit/rollback, so per-tx BAL changes
+  # never reached the builder. Build-side BAL diverged from the validate-side
+  # BAL, peers (and our own validator) rejected the produced block.
+
+  let
+    env = initEnv(Amsterdam)
+    xp = env.xp
+    mx = env.sender
+    chain = env.chain
+
+  xp.prevRandao = prevRandao
+  xp.feeRecipient = feeRecipient
+  xp.timestamp = EthTime.now()
+  xp.slotNumber = 1
+
+  test "produced block validates: BAL hash from build matches validate":
+    let tc = BaseTx(gasLimit: 500000)  # post-Amsterdam intrinsic includes state gas
+
+    # Need >= 1 successful tx to trigger the bug. Use three different senders
+    # so each leaves its own per-tx BAL entries.
+    xp.checkAddTx(mx.makeTx(tc, mx.getAccount(1), 0))
+    xp.checkAddTx(mx.makeTx(tc, mx.getAccount(2), 0))
+    xp.checkAddTx(mx.makeTx(tc, mx.getAccount(3), 0))
+
+    let bundle = xp.checkAssembleBlock(3)
+
+    # Sanity: build path produced a non-empty BAL.
+    check bundle.blockAccessList.isSome
+    let buildBal = bundle.blockAccessList.get
+    check bundle.blk.header.blockAccessListHash.isSome
+    check bundle.blk.header.blockAccessListHash.get ==
+          buildBal[].computeBlockAccessListHash
+
+    # The actual regression check. With the bug, importBlock fails the
+    # BAL-hash check inside procBlkEpilogue ("wrong blockAccessListHash...")
+    # because the validate path computes a different BAL than what build
+    # stamped into the header.
+    xp.checkImportBlock(bundle, 0)
+
+  test "BAL contains the four post-Amsterdam system contracts":
+    let tc = BaseTx(gasLimit: 500000)  # post-Amsterdam intrinsic includes state gas
+    xp.checkAddTx(mx.makeNextTx(tc))
+
+    let bundle = xp.checkAssembleBlock(1)
+    check bundle.blockAccessList.isSome
+    let bal = bundle.blockAccessList.get
+
+    # With the bug, only the pre-execution system calls (BEACON_ROOTS_ADDRESS,
+    # HISTORY_STORAGE_ADDRESS) reach the builder — the post-execution system
+    # calls (WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
+    # CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS) get stuck in a dangling per-tx
+    # frame. So a buggy build produces 2 entries; a correct one produces at
+    # least 4 (the system contracts) plus per-tx touched accounts.
+    check bal[].len >= 4
+
+    xp.checkImportBlock(bundle, 0)
