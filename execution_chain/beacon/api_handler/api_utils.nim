@@ -132,6 +132,11 @@ proc acceptedStatus*(): PayloadStatusV1 =
     status: PayloadExecutionStatus.accepted
   )
 
+proc syncingStatus*(): PayloadStatusV1 =
+  PayloadStatusV1(
+    status: PayloadExecutionStatus.syncing
+  )
+
 proc validStatus*(validHash: common.Hash32): PayloadStatusV1 =
   PayloadStatusV1(
     status: PayloadExecutionStatus.valid,

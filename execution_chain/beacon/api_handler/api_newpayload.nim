@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -25,20 +25,19 @@ import
 logScope:
   topics = "beacon engine"
 
-func validateVersionedHashed(payload: ExecutionPayload,
-                              expected: openArray[Hash32]): bool {.raises: [RlpError].} =
-  var versionedHashes: seq[VersionedHash]
-  for x in payload.transactions:
-    let tx = rlp.decode(distinctBase(x), Transaction)
-    versionedHashes.add tx.versionedHashes
-
-  if versionedHashes.len != expected.len:
-    return false
-
-  for i, x in expected:
-    if distinctBase(x) != versionedHashes[i].data:
-      return false
-  true
+func validateVersionedHashed(txs: openArray[Transaction],
+                              expected: openArray[Hash32]): bool =
+  # `ethBlock(payload, ...)` in the caller has already decoded the transactions,
+  # so walk the decoded list rather than paying to re-RLP-decode every tx here.
+  var i = 0
+  for tx in txs:
+    for vh in tx.versionedHashes:
+      if i >= expected.len:
+        return false
+      if expected[i] != vh:
+        return false
+      inc i
+  i == expected.len
 
 template validateVersion(com, timestamp, payloadVersion, apiVersion) =
   if apiVersion == Version.V5:
@@ -194,7 +193,7 @@ proc newPayload*(ben: BeaconEngineRef,
     if versionedHashes.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         " expect blobVersionedHashes but got none")
-    if not validateVersionedHashed(payload, versionedHashes.value):
+    if not validateVersionedHashed(blk.transactions, versionedHashes.value):
       return invalidStatus(header.parentHash, "invalid blob versionedHashes")
 
   let blockHash = payload.blockHash
@@ -261,6 +260,11 @@ proc newPayload*(ben: BeaconEngineRef,
 
   let vres = await chain.queueImportBlock(blk, blockAccessList)
   if vres.isErr:
+    if vres.error == EngineQueueSaturatedError:
+      debug "Engine queue saturated, returning SYNCING",
+        number = header.number,
+        hash = blockHash.short
+      return syncingStatus()
     warn "Error importing block",
       number = header.number,
       hash = blockHash.short,
