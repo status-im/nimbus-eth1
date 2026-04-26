@@ -46,6 +46,42 @@ jobs:
   matrix_config:
     uses: ./.github/workflows/matrix_config.yml
 
+  build-wasm:
+    defaults:
+      run:
+        shell: bash
+
+    name: 'wasm'
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            cpu: amd64
+
+    steps:
+      - name: Checkout nimbus-eth1
+        uses: actions/checkout@v6
+
+      - id: shared-action
+        uses: ./.github/actions/shared
+        with:
+          llvm-mingw: false
+          nim-cache: true
+          rocksdb-cache: false
+          eest-cache: false
+
+      - name: Setup emsdk
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: '3.1.73'
+          actions-cache-folder: 'emsdk-cache'
+
+      - name: Build WASM
+        run: |
+          DEFAULT_MAKE_FLAGS="-j${ncpu}"
+          make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy_wasm
+
   build:
     needs: matrix_config
 
@@ -75,7 +111,7 @@ jobs:
         run: |
           gcc --version
           DEFAULT_MAKE_FLAGS="-j${ncpu}"
-          make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy libverifproxy
+          make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy
           build/nimbus_verified_proxy --help
           # "-static" option will not work for osx unless static system libraries are provided
-          make ${DEFAULT_MAKE_FLAGS} nimbus-verified-proxy-test libverifproxy-test
+          make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy_test libverifproxy_test
