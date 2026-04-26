@@ -31,6 +31,12 @@ from std/sequtils import mapIt
 from std/heapqueue import len
 from web3/engine_api_types import ExecutionPayloadBodyV1, ExecutionPayloadBodyV2
 
+when defined(linux):
+  # Return freed heap chunks to the OS. glibc's malloc holds freed memory in
+  # per-arena free-lists by default; without this, RSS doesn't shrink after
+  # disposed frames are reclaimed.
+  proc mallocTrim(pad: csize_t): cint {.importc: "malloc_trim", header: "<malloc.h>".}
+
 logScope:
   topics = "forked chain"
 
@@ -391,6 +397,20 @@ proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async:
     minLogInterval = 5
 
   if c.baseQueue.len == 0:
+    # Under --mm:refc, cycles in the disposed Aristo/KVT frame graph wait for
+    # the next mark-and-sweep pass, so RSS shows a large sawtooth. Force
+    # collection here — the queue just drained, so any cycles involving
+    # just-disposed frames are guaranteed unreachable and this is the natural
+    # idle point to pay the pause cost.
+    var memBefore = 0
+    var memAfter = 0
+    if c.persistedCount > 0:
+      memBefore = getOccupiedMem()
+      GC_fullCollect()
+      when defined(linux):
+        discard mallocTrim(0.csize_t)
+      memAfter = getOccupiedMem()
+
     let time = EthTime.now()
     if time - c.lastBaseLogTime > minLogInterval:
       # Log only if more than one block persisted
@@ -406,7 +426,9 @@ proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async:
           pendingFCU = c.pendingFCU.short,
           resolvedFinNum = c.latestFinalized.number,
           resolvedFinHash = c.latestFinalized.hash.short,
-          dbSnapshotsCount = c.baseTxFrame.aTx.db.snapshots.len()
+          dbSnapshotsCount = c.baseTxFrame.aTx.db.snapshots.len(),
+          occupiedMemKb = memAfter div 1024,
+          gcFreedKb = (memBefore - memAfter) div 1024
       else:
         debug "Finalized blocks persisted",
           nBlocks = c.persistedCount,
@@ -416,7 +438,9 @@ proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async:
           pendingFCU = c.pendingFCU.short,
           resolvedFinNum = c.latestFinalized.number,
           resolvedFinHash = c.latestFinalized.hash.short,
-          dbSnapshotsCount = c.baseTxFrame.aTx.db.snapshots.len()
+          dbSnapshotsCount = c.baseTxFrame.aTx.db.snapshots.len(),
+          occupiedMemKb = memAfter div 1024,
+          gcFreedKb = (memBefore - memAfter) div 1024
       c.lastBaseLogTime = time
       c.persistedCount = 0
     return ok()
@@ -469,7 +493,7 @@ proc queueUpdateBase(c: ForkedChainRef, base: BlockRef)
 proc validateBlock(
     c: ForkedChainRef,
     parent: BlockRef,
-    blk: Block,
+    blk: sink Block,
     blockAccessList: Opt[BlockAccessListRef],
     finalized: bool
   ): Future[Result[BlockRef, string]] {.async: (raises: [CancelledError]).} =
@@ -531,6 +555,12 @@ proc validateBlock(
 
   for i, tx in blk.transactions:
     c.txRecords[computeRlpHash(tx)] = (blkHash, uint64(i))
+
+  # Free block body - transactions are persisted to txFrame, header kept in BlockRef.
+  # This prevents seq[Transaction] from lingering in the async frame.
+  reset(blk.transactions)
+  reset(blk.uncles)
+  blk.withdrawals = Opt.none(seq[Withdrawal])
 
   # Entering base auto forward mode while avoiding forkChoice
   # handled region(head - baseDistance)
@@ -601,9 +631,11 @@ proc processQueue(c: ForkedChainRef) {.async: (raises: [CancelledError]).} =
       idleTimeout = 10.milliseconds
 
     discard await idleAsync().withTimeout(idleTimeout)
-    let
-      item = await c.queue.popFirst()
-      res = await item.handler()
+    var item = await c.queue.popFirst()
+    let res = await item.handler()
+
+    # Release closure to free captured Block data immediately
+    item.handler = nil
 
     if item.responseFut.isNil:
       continue
@@ -683,7 +715,7 @@ proc init*(
 
 proc importBlock*(
     c: ForkedChainRef,
-    blk: Block,
+    blk: sink Block,
     blockAccessList = Opt.none(BlockAccessListRef),
     finalized = false
   ): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =

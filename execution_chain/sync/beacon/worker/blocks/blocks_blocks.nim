@@ -208,7 +208,7 @@ template blocksImport*(
 
       for n in 0 ..< blocks.len:
         let nthBn = blocks[n].header.number
-        discard (await buddy.importBlock(blocks[n], peerID)).valueOr:
+        discard (await buddy.importBlock(move blocks[n], peerID)).valueOr:
           if error.excp != ECancelledError:
             isError = true
 
@@ -262,9 +262,7 @@ template blocksImport*(
         ctx.updateLastBlockImported nthBn          # block imported OK
         ctx.updateEtaBlocks()                      # metrics, eta estimate
 
-        # Free block body immediately - ForkedChain only retains the header.
-        # Transactions are already persisted as RLP bytes in the txFrame.
-        blocks[n].reset()
+        # `move` above already cleared blocks[n]
         
         # End block: `loop`
 

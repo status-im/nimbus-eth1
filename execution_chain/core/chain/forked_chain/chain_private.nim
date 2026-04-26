@@ -57,7 +57,7 @@ proc processBlock*(
     c: ForkedChainRef,
     parentBlk: BlockRef,
     txFrame: CoreDbTxRef,
-    blk: Block,
+    blk: sink Block,
     blockAccessList: Opt[BlockAccessListRef],
     blkHash: Hash32,
     finalized: bool,
