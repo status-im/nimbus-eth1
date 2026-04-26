@@ -379,6 +379,18 @@ proc multiProof*(
 
   ok()
 
+proc addDeleteAuxProofs*(
+    db: CoreDbTxRef;
+    collapsedSiblings: seq[tuple[root, sibVid: VertexID]];
+    state: var seq[seq[byte]];
+      ): CoreDbRc[void] =
+  ## Adds to `state` the trie nodes needed for stateless re-execution when
+  ## branch collapses occurred during block execution.
+  db.aTx.addDeleteAuxProofs(collapsedSiblings, state).isOkOr:
+    return err(error.toError("", ProofCreate))
+
+  ok()
+
 # ------------ storage ---------------
 
 proc slotProofs*(

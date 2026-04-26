@@ -15,11 +15,12 @@ import
   minilru,
   eth/common,
   ../db/[ledger, core_db],
+  ../db/aristo/aristo_desc,
   ./witness_types
 
 export common, ledger, witness_types, byteutils
 
-proc build*(T: type Witness, witnessKeys: WitnessTable, preStateLedger: LedgerRef): T =
+proc build*(T: type Witness, witnessKeys: WitnessTable, collapsedSiblings: seq[tuple[root, sibVid: VertexID]], preStateLedger: LedgerRef): T =
   var
     proofPaths: Table[Hash32, seq[Hash32]]
     addedCodeHashes: HashSet[Hash32]
@@ -62,6 +63,10 @@ proc build*(T: type Witness, witnessKeys: WitnessTable, preStateLedger: LedgerRe
   preStateLedger.txFrame.multiProof(proofPaths, multiProof).isOkOr:
     raiseAssert "Failed to get multiproof: " & $$error
 
+  # Add trie nodes for branch collapses that occurred during deletion.
+  preStateLedger.txFrame.addDeleteAuxProofs(collapsedSiblings, multiProof).isOkOr:
+    raiseAssert "Failed to add delete aux proofs: " & $$error
+
   # Sort the proof nodes lexicographically as is done in execution-specs:
   # https://github.com/ethereum/execution-specs/blob/33aa038697162a3ba0aedbadf177c4c59ee5b007/src/ethereum/forks/amsterdam/stateless_host_exec_witness.py#L230
   multiProof.sort()
@@ -96,7 +101,7 @@ proc build*(
   if validateStateRoot and parent.number > 0:
     doAssert preStateLedger.getStateRoot() == parent.stateRoot
 
-  var witness = Witness.build(ledger.getWitnessKeys(), preStateLedger)
+  var witness = Witness.build(ledger.getWitnessKeys(), ledger.getCollapsedSiblings(), preStateLedger)
 
   let
     blockHashes = ledger.getBlockHashesCache()

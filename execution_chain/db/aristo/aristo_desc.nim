@@ -76,6 +76,14 @@ type
 
     blockNumber*: Opt[uint64]               ## Block number set when checkpointing the frame
 
+    collectWitness*: bool
+      ## When true, records collapsed siblings during deletion for witness
+      ## generation.
+
+    collapsedSiblings*: seq[tuple[root, sibVid: VertexID]]
+      ## Records (root, sibVid) for each surviving sibling when a branch
+      ## collapses during deletion. Only populated when collectWitness is true.
+
     snapshot*: Snapshot
       ## Optional snapshot containing the cumulative changes from ancestors and
       ## the current frame

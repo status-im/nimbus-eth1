@@ -390,6 +390,7 @@ proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool, collect
   result.code = typeof(result.code).init(codeLruSize)
   result.slots = typeof(result.slots).init(slotsLruSize)
   result.collectWitness = collectWitness
+  result.txFrame.aTx.collectWitness = collectWitness
   result.blockHashes = typeof(result.blockHashes).init(MAX_PREV_HEADER_DEPTH.int)
   discard result.beginSavePoint
 
@@ -660,8 +661,14 @@ proc clearEmptyAccounts(ledger: LedgerRef) =
 template getWitnessKeys*(ledger: LedgerRef): WitnessTable =
   ledger.witnessKeys
 
+template getCollapsedSiblings*(ledger: LedgerRef): seq[tuple[root, sibVid: VertexID]] =
+  ledger.txFrame.aTx.collapsedSiblings
+
 template clearWitnessKeys*(ledger: LedgerRef) =
   ledger.witnessKeys.clear()
+
+template clearCollapsedSiblings*(ledger: LedgerRef) =
+  ledger.txFrame.aTx.collapsedSiblings.setLen(0)
 
 proc getBlockHash*(ledger: LedgerRef, blockNumber: BlockNumber): Hash32 =
   ledger.blockHashes.get(blockNumber).valueOr:
@@ -742,6 +749,7 @@ proc persist*(ledger: LedgerRef,
 
   if clearWitness:
     ledger.clearWitnessKeys()
+    ledger.clearCollapsedSiblings()
     ledger.clearBlockHashesCache()
 
 iterator addresses*(ledger: LedgerRef): Address =
