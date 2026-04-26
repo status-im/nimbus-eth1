@@ -20,7 +20,9 @@ import
 export
   call_common
 
-proc callParamsForTx(tx: Transaction, sender: Address, vmState: BaseVMState, baseFee: GasInt): CallParams =
+proc callParamsForTx(tx: Transaction, sender: Address,
+                     vmState: BaseVMState, baseFee: GasInt,
+                     intrinsic: IntrinsicGas): CallParams =
   # Is there a nice idiom for this kind of thing? Should I
   # just be writing this as a bunch of assignment statements?
   result = CallParams(
@@ -31,7 +33,8 @@ proc callParamsForTx(tx: Transaction, sender: Address, vmState: BaseVMState, bas
     to:           tx.destination,
     isCreate:     tx.contractCreation,
     value:        tx.value,
-    input:        tx.payload
+    input:        tx.payload,
+    intrinsic:    intrinsic
   )
   if tx.txType > TxLegacy:
     assign(result.accessList, tx.accessList)
@@ -65,9 +68,11 @@ proc callParamsForTest(tx: Transaction, sender: Address, vmState: BaseVMState): 
 
 proc txCallEvm*(tx: Transaction,
                 sender: Address,
-                vmState: BaseVMState, baseFee: GasInt): LogResult =
+                vmState: BaseVMState,
+                baseFee: GasInt,
+                intrinsic: IntrinsicGas): LogResult =
   let
-    call = callParamsForTx(tx, sender, vmState, baseFee)
+    call = callParamsForTx(tx, sender, vmState, baseFee, intrinsic)
   runComputation(call, LogResult)
 
 proc testCallEvm*(tx: Transaction,

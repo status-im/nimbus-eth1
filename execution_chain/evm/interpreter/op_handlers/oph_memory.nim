@@ -69,8 +69,12 @@ proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256, coldAcces
   # reservoir on frame failure.
   ? c.opcodeGasCost(Sstore, res.gasCost + coldAccess, "SSTORE")
 
-  if stateGas and res.stateGas > 0:
-    ? c.gasMeter.chargeStateGas(res.stateGas, reason = "SSTORE state gas")
+  if stateGas:
+    # https://github.com/ethereum/execution-specs/pull/2733/changes
+    if res.creditStateGas > 0:
+      c.gasMeter.creditStateGasRefund(res.creditStateGas)
+    if res.stateGas > 0:
+      ? c.gasMeter.chargeStateGas(res.stateGas, reason = "SSTORE state gas")
 
   c.gasMeter.refundGas(res.gasRefund)
 
