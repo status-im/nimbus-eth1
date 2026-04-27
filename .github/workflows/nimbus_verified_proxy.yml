@@ -53,12 +53,6 @@ jobs:
 
     name: 'wasm'
     runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        include:
-          - os: linux
-            cpu: amd64
-
     steps:
       - name: Checkout nimbus-eth1
         uses: actions/checkout@v6
@@ -71,14 +65,12 @@ jobs:
           rocksdb-cache: false
           eest-cache: false
 
-      - name: Setup emsdk
-        uses: mymindstorm/setup-emsdk@v14
-        with:
-          version: '3.1.73'
-          actions-cache-folder: 'emsdk-cache'
-
       - name: Build WASM
         run: |
+          git clone https://github.com/emscripten-core/emsdk.git
+          cd emsdk && ./emsdk install 3.1.73 && ./emsdk activate 3.1.73
+          source emsdk_env.sh
+          cd ..
           DEFAULT_MAKE_FLAGS="-j${ncpu}"
           make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy_wasm
 
