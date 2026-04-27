@@ -21,7 +21,7 @@ import
   ../beacon/web3_eth_conv,
   ../core/tx_pool,
   ../core/chain/forked_chain,
-  ../stateless/witness_types,
+  ../stateless/[witness_types, witness_generation],
   ../transaction
 
 type
@@ -71,18 +71,7 @@ proc getExecutionWitness*(chain: ForkedChainRef, blockHash: Hash32): Result[Exec
   let witness = txFrame.getWitness(blockHash).valueOr:
     return err("Witness not found")
 
-  var executionWitness = ExecutionWitness.init(state = witness.state, keys = witness.keys)
-  for codeHash in witness.codeHashes:
-    let code = txFrame.getCodeByHash(codeHash).valueOr:
-      return err("Code not found")
-    executionWitness.addCode(code)
-
-  for headerHash in witness.headerHashes:
-    let header = txFrame.getBlockHeader(headerHash).valueOr:
-      return err("Header not found")
-    executionWitness.addHeader(rlp.encode(header))
-
-  ok(executionWitness)
+  ok(ExecutionWitness.build(witness, txFrame))
 
 proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
   let
@@ -197,7 +186,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
   server.rpc("debug_getRawBlock") do(blockTag: BlockTag) -> seq[byte]:
     ## Returns an RLP-encoded block.
     let blockFromTag = chain.blockFromTag(blockTag).valueOr:
-      raise newException(ValueError, error)
+      raise invalidParams(error)
 
     rlp.encode(blockFromTag)
 
@@ -205,23 +194,37 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
   server.rpc("debug_getRawHeader") do(blockTag: BlockTag) -> seq[byte]:
     ## Returns an RLP-encoded header.
     let header = chain.headerFromTag(blockTag).valueOr:
-      raise newException(ValueError, error)
+      raise invalidParams(error)
     rlp.encode(header)
 
   # https://ethereum.github.io/execution-apis/api/methods/debug_getRawReceipts
   server.rpc("debug_getRawReceipts") do(blockTag: BlockTag) -> seq[seq[byte]]:
     ## Returns an array of EIP-2718 binary-encoded receipts.
     let header = chain.headerFromTag(blockTag).valueOr:
-      raise newException(ValueError, error)
+      raise invalidParams(error)
+    let txFrame = chain.txFrame(header)
     var res: seq[seq[byte]]
-    for receipt in chain.baseTxFrame.getReceipts(header.receiptsRoot):
-      res.add rlp.encode(receipt)
+    for receipt in txFrame.getReceipts(header.receiptsRoot):
+      res.add rlp.encode(receipt.to(Receipt))
 
     res
 
   # https://ethereum.github.io/execution-apis/api/methods/debug_getRawTransaction
-  server.rpc("debug_getRawTransaction") do(txHash: Hash32) -> seq[byte]:
+  # we take a string input instead of a hex as in that manner we can preverse the raw json input 
+  # which later allows us to check for the existence of 0x,which the spec expects in a valid input
+  server.rpc("debug_getRawTransaction") do(txHashHex: string) -> seq[byte]:
     ## Returns an EIP-2718 binary-encoded transaction.
+    # TODO: remove manual validation when upstream parsing decoding reports strict
+    # hex input failures .
+    if not txHashHex.startsWith("0x"):
+      raise invalidParams("invalid argument 0: hex string without 0x prefix")
+
+    let txHash =
+      try:
+        Hash32.fromHex(txHashHex)
+      except ValueError as exc:
+        raise invalidParams("invalid argument 0: " & exc.msg)
+
     let res = txPool.getItem(txHash)
     if res.isOk:
       return rlp.encode(res.get().tx)
