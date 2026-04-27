@@ -177,6 +177,13 @@ proc makeMultiProof*(
     paths: Table[Hash32, seq[Hash32]], # maps each account path to a list of storage paths
     multiProof: var seq[seq[byte]]
       ): Result[void, AristoError] =
+  # Short path for empty pre-state trie, no nodes exist
+  # Also, without the check the makeProof will fail when trying to get the root
+  # vertex as it is empty.
+  let stateRoot = ?db.fetchStateRoot()
+  if stateRoot == emptyRoot:
+    return ok()
+
   var
     nodesCache: NodesCache
     proofNodes: HashSet[seq[byte]]
@@ -478,6 +485,13 @@ proc putSubtrie*(
     db: AristoTxRef,
     stateRoot: Hash32,
     nodes: Table[Hash32, seq[byte]]): Result[void, AristoError] =
+  if stateRoot == emptyRoot:
+    # Short path for empty pre-state: fetchStateRoot returns emptyRoot when
+    # GetVtxNotFound, so nothing needed to store here.
+    # And HashKey.fromBytes(emptyRoot.data) would create an invalid 32-byte key
+    # as isValid has a emptyRoot check
+    return ok()
+
   let key = HashKey.fromBytes(stateRoot.data).valueOr:
     return err(PartTrkLinkExpected)
 
