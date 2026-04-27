@@ -210,10 +210,16 @@ proc packerVmExec*(xp: TxPoolRef): Result[TxPacker, string] =
   var pst = xp.vmExecInit.valueOr:
     return err(error)
 
-  for item in xp.byPriceAndNonce:
-    let rc = pst.vmExecGrabItem(item, xp)
-    if rc == StopCollecting:
-      break
+  if xp.isOrdered:
+    for item in xp.byOrder:
+      let rc = pst.vmExecGrabItem(item, xp)
+      if rc == StopCollecting:
+        break
+  else:
+    for item in xp.byPriceAndNonce:
+      let rc = pst.vmExecGrabItem(item, xp)
+      if rc == StopCollecting:
+        break
 
   ?pst.vmExecCommit(xp)
   ok(pst)

@@ -47,6 +47,11 @@ type
     beaconRoot  : Hash32 ## EIP-4788
     slotNumber  : uint64 ## EIP-7843
 
+  TxPoolFlags* = enum
+    XP_ORDERED
+    XP_SKIP_BLOB_WRAPPER_VALIDATION
+    XP_SKIP_SIZE_VALIDATION
+
   TxPoolRef* = ref object
     vmState  : BaseVMState
     chain    : ForkedChainRef
@@ -55,12 +60,15 @@ type
     rmHash   : Hash32
     pos      : PosPayloadAttr
     blobTab  : BlobLookupTab
+    orderedList: seq[TxItemRef]
+    flags    : set[TxPoolFlags]
 
 const
   MAX_POOL_SIZE = 8000
   MAX_TXS_PER_ACCOUNT = 500
   TX_ITEM_LIFETIME = initDuration(minutes = 10)
   TX_MAX_SIZE* = 128 * 1024
+  TX7702_MAX_SIZE = 512 * 1024
   # BLOB_TX_MAX_SIZE is the maximum size a single transaction can have, outside
   # the included blobs. Since blob transactions are pulled instead of pushed,
   # and only a small metadata is kept in ram, there is no critical limit that
@@ -89,6 +97,7 @@ proc setupVMState(com: CommonRef;
                   parentHash: Hash32,
                   pos: PosPayloadAttr,
                   parentFrame: CoreDbTxRef): BaseVMState =
+
   let
     fork = com.toHardFork(pos.timestamp)
     gasLimit = getGasLimit(com, parent)
@@ -177,13 +186,6 @@ proc getNonce*(xp: TxPoolRef; account: Address): AccountNonce =
   xp.vmState.ledger.getNonce(account)
 
 proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
-
-  if tx.gasLimit > TX_GAS_LIMIT:
-    debug "Invalid transaction: Gas limit too high",
-      txGasLimit = tx.gasLimit,
-      gasLimit = TX_GAS_LIMIT
-    return false
-
   if tx.txType == TxEip4844:
     let
       excessBlobGas = xp.excessBlobGas
@@ -194,33 +196,12 @@ proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
         blobGasPrice = blobGasPrice
       return false
 
-  # Check whether the worst case expense is covered by the price budget,
-  let
-    balance = xp.getBalance(sender)
-    gasCost = tx.gasCost
-  if balance < gasCost:
-    debug "Invalid transaction: Insufficient balance for gas cost",
-      balance = balance,
-      gasCost = gasCost
-    return false
-  let balanceOffGasCost = balance - gasCost
-  if balanceOffGasCost < tx.value:
-    debug "Invalid transaction: Insufficient balance for tx value",
-      balanceOffGasCost = balanceOffGasCost,
-      txValue = tx.value
-    return false
-
   # For legacy transactions check whether minimum gas price and tip are
   # high enough. These checks are optional.
   if tx.txType < TxEip1559:
     if tx.gasPrice < 0:
       debug "Invalid transaction: Legacy transaction with invalid gas price",
         gasPrice = tx.gasPrice
-      return false
-
-    # Fall back transaction selector scheme
-    if tx.tip(xp.baseFee) < 1.GasInt:
-      debug "Invalid transaction: Legacy transaction with tip lower than 1"
       return false
 
   if tx.txType >= TxEip1559:
@@ -261,7 +242,7 @@ proc validateBlobTransactionWrapper(tx: PooledTransaction, fork: EVMFork):
 # Public functions, constructor
 # ------------------------------------------------------------------------------
 
-proc init*(xp: TxPoolRef; chain: ForkedChainRef) =
+proc init*(xp: TxPoolRef; chain: ForkedChainRef, flags: set[TxPoolFlags] = {}) =
   ## Constructor, returns new tx-pool descriptor.
   xp.pos.timestamp = chain.latestHeader.timestamp
   xp.vmState = setupVMState(chain.com,
@@ -269,6 +250,7 @@ proc init*(xp: TxPoolRef; chain: ForkedChainRef) =
     xp.pos, chain.txFrame(chain.latestHash))
   xp.chain = chain
   xp.rmHash = chain.latestHash
+  xp.flags = flags
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
@@ -339,26 +321,33 @@ proc removeExpiredTxs*(xp: TxPoolRef, lifeTime: Duration = TX_ITEM_LIFETIME) =
     xp.removeTx(txHash)
 
 proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
+  if xp.pos.timestamp != xp.vmState.blockCtx.timestamp:
+    xp.updateVmState()
+
   if not ptx.tx.validateChainId(xp.chain.com.chainId):
     debug "Transaction chain id mismatch",
       txChainId = ptx.tx.chainId,
       chainId = xp.chain.com.chainId
     return err(txErrorChainIdMismatch)
 
-  let (size, id) = getEncodedLengthAndHash(ptx.tx)
-
-  if ptx.tx.txType == TxEip4844:
-    if size > BLOB_TX_MAX_SIZE:
-      return err(txErrorOversized)
-
+  if ptx.tx.txType == TxEip4844 and XP_SKIP_BLOB_WRAPPER_VALIDATION notin xp.flags:
     ptx.validateBlobTransactionWrapper(xp.nextFork).isOkOr:
       debug "Invalid transaction: Blob transaction wrapper validation failed",
         tx = ptx.tx,
         error = error
       return err(txErrorInvalidBlob)
-  else:
-    if size > TX_MAX_SIZE:
-      return err(txErrorOversized)
+
+  let (size, id) = getEncodedLengthAndHash(ptx.tx)
+  if XP_SKIP_SIZE_VALIDATION notin xp.flags:
+    if ptx.tx.txType == TxEip4844:
+      if size > BLOB_TX_MAX_SIZE:
+        return err(txErrorOversized)
+    elif ptx.tx.txType == TxEip7702:
+      if size > TX7702_MAX_SIZE:
+        return err(txErrorOversized)
+    else:
+      if size > TX_MAX_SIZE:
+        return err(txErrorOversized)
 
   if xp.alreadyKnown(id):
     debug "Transaction already known", txHash = id
@@ -383,19 +372,6 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
       return err(txErrorInvalidSignature)
     nonce = xp.getNonce(sender)
 
-  # The downside of this arrangement is the ledger is not
-  # always up to date. The comparison below
-  # does not always filter out transactions with lower nonce.
-  # But it will not affect the correctness of the subsequent
-  # algorithm. In `byPriceAndNonce`, once again transactions
-  # with lower nonce are filtered out, for different reason.
-  # But the end result is same, transactions packed in a block only
-  # have consecutive nonces >= than current account's nonce.
-  #
-  # Calling something like:
-  # if xp.chain.latestHash != xp.parentHash:
-  #   xp.updateVmState()
-  # maybe can solve the accuracy but it is quite expensive.
   if ptx.tx.nonce < nonce:
     debug "Transaction rejected: Nonce too small",
       txNonce = ptx.tx.nonce,
@@ -414,7 +390,10 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     return err(txErrorPoolIsFull)
 
   let item = TxItemRef.new(ptx, id, sender)
-  ?xp.insertToSenderTab(item)
+  if XP_ORDERED in xp.flags:
+    xp.orderedList.add(item)
+  else:
+    ?xp.insertToSenderTab(item)
   xp.idTab[item.id] = item
   xp.blobTab.addLookup(item)
 
@@ -445,6 +424,13 @@ iterator byPriceAndNonce*(xp: TxPoolRef): TxItemRef =
 iterator allItems*(xp: TxPoolRef): TxItemRef =
   for _, item in xp.idTab:
     yield item
+
+iterator byOrder*(xp: TxPoolRef): TxItemRef =
+  for item in xp.orderedList:
+    yield item
+
+func isOrdered*(xp: TxPoolRef): bool =
+  XP_ORDERED in xp.flags
 
 func senderCount*(xp: TxPoolRef): int =
   xp.senderTab.len
