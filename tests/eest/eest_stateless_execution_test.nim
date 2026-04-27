@@ -33,12 +33,10 @@ const skipFiles = [
   "test_precompile_warming.json", # stateRoot mismatch
   "gasPriceDiffPlaces.json", # stateRoot mismatch
   "baseFeeDiffPlaces.json", # stateRoot mismatch
-  "test_genesis_hash_available.json", # witness.validateKeys assert
   "test_scenarios.json", # stateRoot mismatch + persist assert
   "test_gas_limit_below_minimum.json", # multiproof assert
   "test_multiple_withdrawals_same_address.json", # multiproof assert
   "test_large_amount.json", # multiproof assert
-  "test_withdrawals_root.json", # witness.validateKeys assert
   "CallcodeToPrecompileFromCalledContract.json", # stateRoot mismatch
   "DelegatecallToPrecompileFromCalledContract.json", # stateRoot mismatch
   "CallWithNOTZeroValueToPrecompileFromCalledContract.json", # stateRoot mismatch
