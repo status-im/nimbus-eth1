@@ -89,7 +89,8 @@ int main(void) {
             eth_blockNumber(ctx, on_result, &r);
         }
         //keep polling
-        processVerifProxyTasks(ctx);
+        if (processVerifProxyTasks(ctx) == RET_CANCELLED)
+            break;
     }
 
     stopVerifProxy(ctx);
