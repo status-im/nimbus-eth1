@@ -978,7 +978,6 @@ suite "TxPool BAL post-Amsterdam":
     env = initEnv(Amsterdam)
     xp = env.xp
     mx = env.sender
-    chain = env.chain
 
   xp.prevRandao = prevRandao
   xp.feeRecipient = feeRecipient

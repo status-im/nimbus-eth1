@@ -187,8 +187,10 @@ proc getKey(
     skipLayers: static bool,
     parallel: static bool,
 ): Result[((HashKey, VertexRef), int), AristoError] =
+  when not parallel and not skipLayers:
+    const
+      emptyFlags: set[GetVtxFlag] = {}
   const
-    emptyFlags: set[GetVtxFlag] = {}
     flags =
       when parallel:
         {GetVtxFlag.PeekCache, GetVtxFlag.NoPutCache}

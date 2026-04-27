@@ -103,7 +103,7 @@ suite "Aristo proof verification":
         indexBytes = getBytes(i)
         key = keccak256(indexBytes)
         value = indexBytes
-      
+
       block:
         let leafValue = verifyProof(nodes, root, key).expect("valid proof")
         check:
@@ -166,7 +166,6 @@ suite "Aristo proof verification":
 
     let
       nonExistingKey = toSeq(toBytesBE(u256(numValues + 1))).keccak256()
-      proof = trie.getBranch(nonExistingKey.data)
 
     let leafValue = verifyProof(nodes, root, nonExistingKey).expect("valid proof")
     check:
@@ -184,14 +183,12 @@ suite "Aristo proof verification":
       let
         indexBytes = getBytes(i)
         key = keccak256(indexBytes)
-        value = indexBytes
       trie.put(key.data, leaf)
 
     for i in 1..iterations:
       let
         indexBytes = getBytes(i)
         key = keccak256(indexBytes)
-        value = indexBytes
         root = trie.rootHash()
         proof = trie.getBranch(key.data)
 

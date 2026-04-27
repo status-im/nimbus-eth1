@@ -103,7 +103,7 @@ template sessionResume*(ctx: SnapCtxRef; info: static[string]): bool =
       for n in 0 ..< byTouch.len:
         let p = byTouch[n]
 
-        if p.coverage == 0:
+        if p.coverage.isZero:
           continue
 
         if stateDbCapacity <= tchInx.len:           # index list complete?

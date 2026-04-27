@@ -164,7 +164,7 @@ proc fetchLeast*(ikrs: ItemKeyRangeSet; maxLen: UInt256): Opt[ItemKeyRange] =
     jv = ikrs.ge().valueOr:
       return err()
     kv = block:
-      if maxLen == 0 or (jv.len != 0 and jv.len <= maxLen):
+      if maxLen.isZero or (jv.len.isZero.not and jv.len <= maxLen):
         jv
       else:
         ItemKeyRange.new(jv.minPt, jv.minPt + (maxLen - 1.u256))
@@ -177,7 +177,7 @@ func totalRatio*(ikrs: ItemKeyRangeSet): float =
   ## (w/o the `borrowed` part.)
   ##
   let total = ikrs.total()
-  if total == 0:
+  if total.isZero:
     return (if ikrs.chunks() == 0: 0f else: 1f)
   total.per256()
 
