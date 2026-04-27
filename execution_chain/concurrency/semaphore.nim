@@ -9,13 +9,14 @@
 
 {.push raises: [], gcsafe.}
 
-import std/locks
+import std/[locks, atomics]
 
 type
   Semaphore* = object
+    count: Atomic[int]
+    waiters: Atomic[int]
     lock: Lock
     cond: Cond
-    count: int
 
 proc `=copy`(dst: var Semaphore, src: Semaphore) {.error.}
 proc `=dup`(src: Semaphore): Semaphore {.error.}
@@ -23,29 +24,37 @@ proc `=dup`(src: Semaphore): Semaphore {.error.}
 proc init*(s: var Semaphore, count: int = 0) =
   initLock(s.lock)
   initCond(s.cond)
-  s.count = count
+  s.count.store(count)
+  s.waiters.store(0)
 
 proc dispose*(s: var Semaphore) =
-  # Precondition: No other thread is using the semaphone when dispose is called.
+  # Precondition: No other threads should be using the semaphore when dispose is called.
   deinitCond(s.cond)
   deinitLock(s.lock)
-  s.count = 0
+  s.count.store(0)
+  s.waiters.store(0)
 
 proc tryWait*(s: var Semaphore): bool =
-  withLock(s.lock):
-    if s.count > 0:
-      dec s.count
+  var c = s.count.load()
+  while c > 0:
+    if s.count.compareExchangeWeak(c, c - 1):
       return true
-    else:
-      return false
+  false
 
 proc wait*(s: var Semaphore) =
+  for _ in 0 ..< 64:
+    if tryWait(s): 
+      return
+    cpuRelax()
+
   withLock(s.lock):
-    while s.count == 0:
+    s.waiters.atomicInc()
+    while not tryWait(s):
       s.cond.wait(s.lock)
-    dec s.count
+    s.waiters.atomicDec()
 
 proc signal*(s: var Semaphore) =
-  withLock(s.lock):
-    inc s.count
-    s.cond.signal()
+  s.count.atomicInc()
+  if s.waiters.load() > 0:
+    withLock(s.lock):
+      s.cond.signal()
