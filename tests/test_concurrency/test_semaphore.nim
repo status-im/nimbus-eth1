@@ -32,18 +32,6 @@ suite "Semaphore Tests":
     check s.tryWait() == false
     s.dispose()
 
-  test "type init constructor":
-    var s = Semaphore.init(3)
-    for _ in 0 ..< 3:
-      check s.tryWait() == true
-    check s.tryWait() == false
-    s.dispose()
-
-  test "type init constructor defaults to 0":
-    var s = Semaphore.init()
-    check s.tryWait() == false
-    s.dispose()
-
   test "signal increments count":
     var s: Semaphore
     s.init(0)

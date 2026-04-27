@@ -17,20 +17,18 @@ type
     cond: Cond
     count: int
 
+proc `=copy`(dst: var Semaphore, src: Semaphore) {.error.}
+proc `=dup`(src: Semaphore): Semaphore {.error.}
+
 proc init*(s: var Semaphore, count: int = 0) =
   initLock(s.lock)
   initCond(s.cond)
   s.count = count
 
-func init*(T: type Semaphore, count: int = 0): T =
-  var s = Semaphore()
-  s.init(count)
-  s
-
 proc dispose*(s: var Semaphore) =
-  s.cond.broadcast() # unblock waiters
-  deinitLock(s.lock)
+  # Precondition: No other thread is using the semaphone when dispose is called.
   deinitCond(s.cond)
+  deinitLock(s.lock)
   s.count = 0
 
 proc tryWait*(s: var Semaphore): bool =
