@@ -14,34 +14,36 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <time.h>
 
-/* ── Transport stubs ──────────────────────────────────────────────── */
-
-/* Replace these with real HTTP calls in a production client. */
 static void execution_transport(
     Context *ctx, TransportDeliveryCallback cb, void *userData
 ) {
     const char *name   = execCtxName(userData);
     const char *params = execCtxParams(userData);
-    printf("[exec] %s %s\n", name, params);
+    const char *url = execCtxUrl(userData);
+    printf("[exec] url: %s, name: %s, params: %s\n", url, name, params);
 
-    /* Return a minimal valid response so the proxy does not hang. */
-    const char *stub = "\"0x0\"";
-    cb(RET_SUCCESS, (char *)stub, userData);
+    cb(RET_ERROR, "not implemented", userData);
 }
 
 static void beacon_transport(
     Context *ctx, TransportDeliveryCallback cb, void *userData
 ) {
+    const char *params = beaconCtxParams(userData);
     const char *endpoint = beaconCtxEndpoint(userData);
-    printf("[beacon] %s\n", endpoint);
-    cb(RET_ERROR, "stub — no real beacon transport", userData);
+    const char *url = beaconCtxUrl(userData);
+    printf("[beacon] url: %s, endpoint: %s, params: %s\n", url, endpoint, params);
+    cb(RET_ERROR, "not implemented", userData);
 }
 
-/* ── Callback ─────────────────────────────────────────────────────── */
-
+// This type collects the result after the callback is fired
+// A pointer to this can be passed as userData for any call
+// It would be passed back via the callback.
 typedef struct { bool fired; int status; char *body; } Result;
 
+// Callback:
+// Collects the response in the userData that was passed back
 static void on_result(Context *ctx, int status, char *result, void *userData) {
     Result *r  = (Result *)userData;
     r->fired   = true;
@@ -49,8 +51,6 @@ static void on_result(Context *ctx, int status, char *result, void *userData) {
     r->body    = result ? strdup(result) : NULL;
     freeNimAllocatedString(result);
 }
-
-/* ── Main ─────────────────────────────────────────────────────────── */
 
 int main(void) {
     NimMain();
@@ -71,19 +71,25 @@ int main(void) {
     }
 
     Result r = {0};
-    eth_blockNumber(ctx, on_result, &r);
+    time_t now = time(NULL);
 
-    /* Drain the event loop until the callback fires. */
-    for (int i = 0; i < 1000 && !r.fired; i++) {
+    while (true) {
+        if ((time(NULL) - now) > 12) {
+            now = time(NULL);
+            // check if the previous callback fired?
+            if (r.fired) {
+                printf("eth_blockNumber: status=%d body=%s\n", r.status, r.body ? r.body : "(null)");
+                free(r.body);
+                r = (Result){0};
+            } else {
+                fprintf(stderr, "callback did not fire\n");
+            }
+
+            //launch new request
+            eth_blockNumber(ctx, on_result, &r);
+        }
+        //keep polling
         processVerifProxyTasks(ctx);
-    }
-
-    if (r.fired) {
-        printf("eth_blockNumber → status=%d body=%s\n",
-               r.status, r.body ? r.body : "(null)");
-        free(r.body);
-    } else {
-        fprintf(stderr, "callback did not fire\n");
     }
 
     stopVerifProxy(ctx);
