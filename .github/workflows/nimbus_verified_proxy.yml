@@ -47,32 +47,35 @@ jobs:
     uses: ./.github/workflows/matrix_config.yml
 
   build-wasm:
+    name: 'wasm'
+    runs-on: ubuntu-22.04
+
     defaults:
       run:
         shell: bash
 
-    name: 'wasm'
-    runs-on: ubuntu-22.04
     steps:
       - name: Checkout nimbus-eth1
         uses: actions/checkout@v6
 
-      - id: shared-action
-        uses: ./.github/actions/shared
-        with:
-          llvm-mingw: false
-          nim-cache: true
-          rocksdb-cache: false
-          eest-cache: false
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git llvm
+
+      - name: Install emsdk
+        run: |
+          git clone https://github.com/emscripten-core/emsdk.git
+          emsdk/emsdk install 3.1.73
+          emsdk/emsdk activate 3.1.73
+
+      - name: Build Nim and dependencies
+        run: make -j$(nproc) init
 
       - name: Build WASM
         run: |
-          git clone https://github.com/emscripten-core/emsdk.git
-          cd emsdk && ./emsdk install 3.1.73 && ./emsdk activate 3.1.73
-          source emsdk_env.sh
-          cd ..
-          DEFAULT_MAKE_FLAGS="-j${ncpu}"
-          make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy_wasm
+          source emsdk/emsdk_env.sh
+          make -j$(nproc) nimbus_verified_proxy_wasm
 
   build:
     needs: matrix_config
@@ -99,7 +102,7 @@ jobs:
           rocksdb-cache: false
           eest-cache: false
 
-      - name: Run verified proxy tests
+      - name: Build and Run tests
         run: |
           gcc --version
           DEFAULT_MAKE_FLAGS="-j${ncpu}"
