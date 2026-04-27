@@ -179,7 +179,11 @@ proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions, wipe = false): Core
         # significant portion of the inner trie nodes!
         # This code sets up a single block cache to be shared, a strategy that
         # plausibly can be refined in the future.
-        cacheCreateLRU(opts.blockCacheSize, autoClose = true)
+        case opts.blockCacheType
+        of lruCache:
+          cacheCreateLRU(opts.blockCacheSize, autoClose = true)
+        of hyperClockCache:
+          cacheCreateHyperClock(opts.blockCacheSize, autoClose = true)
       else:
         nil
     dbOpts = opts.toDbOpts()

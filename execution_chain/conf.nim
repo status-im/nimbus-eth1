@@ -317,6 +317,11 @@ type
       defaultValue: defaultBlockCacheSize
       name: "debug-rocksdb-block-cache-size".}: int
 
+    rocksdbBlockCacheType {.
+      hidden
+      defaultValue: defaultBlockCacheType
+      name: "debug-rocksdb-block-cache-type" .}: RocksDbBlockCacheType
+
     rdbVtxCacheSize {.
       hidden
       defaultValue: defaultRdbVtxCacheSize
@@ -811,7 +816,8 @@ func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
       else: config.rdbBranchCacheSize,
     rdbPrintStats = config.rdbPrintStats,
     maxSnapshots = config.aristoDbMaxSnapshots,
-    parallelStateRootComputation = config.parallelStateRootComputation
+    parallelStateRootComputation = config.parallelStateRootComputation,
+    blockCacheType = config.rocksdbBlockCacheType,
   )
 
 func jwtSecretOpt*(config: ExecutionClientConf): Opt[InputFile] =
