@@ -71,6 +71,8 @@ procSuite "Stateless Execution Tests":
       initializeDb = false
     )
     check statelessProcessBlockJsonFiles(witnessJsonFile, com2, blkJsonFile).isOk()
+    discard era0
+    discard fc
 
   asyncTest "Stateless process block json files - mainnet block 73141":
     let
@@ -85,3 +87,5 @@ procSuite "Stateless Execution Tests":
       initializeDb = false
     )
     check statelessProcessBlockJsonFiles(witnessJsonFile, com2, blkJsonFile).isOk()
+    discard era0
+    discard fc
