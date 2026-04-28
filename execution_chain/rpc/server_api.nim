@@ -311,7 +311,6 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     let
       pooledTx = decodePooledTx(txBytes)
       txHash = computeRlpHash(pooledTx.tx)
-      sender = pooledTx.tx.recoverSender().get()
 
     api.txPool.addTx(pooledTx).isOkOr:
       raise newException(ValueError, $error)

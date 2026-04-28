@@ -122,19 +122,17 @@ func getHexadecimalInt*(j: JsonNode): int64 =
 proc setupEthNode*(
     config: ExecutionClientConf, rng: var HmacDrbgContext,
     capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode =
-  let keypair = getNetKeys(rng, config.netKey).tryGet()
-  let srvAddress = enode.Address(
-    ip: config.listenAddress, tcpPort: config.tcpPort, udpPort: config.udpPort)
-
-  var node = newEthereumNode(
-    keypair,
-    Opt.some(config.listenAddress),
-    Opt.some(config.tcpPort),
-    Opt.some(config.udpPort),
-    config.networkId,
-    config.agentString,
-    bindUdpPort = config.udpPort,
-    bindTcpPort = config.tcpPort)
+  let 
+    keypair = getNetKeys(rng, config.netKey).tryGet()
+    node = newEthereumNode(
+      keypair,
+      Opt.some(config.listenAddress),
+      Opt.some(config.tcpPort),
+      Opt.some(config.udpPort),
+      config.networkId,
+      config.agentString,
+      bindUdpPort = config.udpPort,
+      bindTcpPort = config.tcpPort)
 
   for capability in capabilities:
     node.addCapability capability
