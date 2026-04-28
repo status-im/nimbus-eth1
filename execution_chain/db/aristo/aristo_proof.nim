@@ -478,11 +478,15 @@ proc putSubtrie*(
     db: AristoTxRef,
     stateRoot: Hash32,
     nodes: Table[Hash32, seq[byte]]): Result[void, AristoError] =
-  if nodes.len() == 0:
-    return err(PartTrkEmptyProof)
-
   let key = HashKey.fromBytes(stateRoot.data).valueOr:
     return err(PartTrkLinkExpected)
+
+  if nodes.len() == 0:
+    # Valid case: no state was accessed (e.g. a block with no transactions).
+    # Still need to store the known state root so that fetchStateRoot returns
+    # the correct pre-state root.
+    db.layersPutKey((STATE_ROOT_VID, STATE_ROOT_VID), BranchRef(nil), key)
+    return ok()
 
   try:
     var convertedNodes: Table[HashKey, NodeRef]
