@@ -114,7 +114,9 @@ template sessionResume*(ctx: SnapCtxRef; info: static[string]): bool =
           chronicles.info info & ": Resuming download session",
             nStates=byTouch.len
 
-        if not p.onTrie:                            # ignore assembled data
+        if p.onTrie:                                # ignore assembled data
+          sdb.addAccountArchive p.coverage.per256() # set archived coverage
+        else:
           tchInx.add n                              # collect, re-process below
 
       if tchInx.len == 0:                           # nothing to do?

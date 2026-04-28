@@ -62,7 +62,7 @@ const
     ## Some waiting time at the end of the daemon task which always lingers
     ## in the background. This one is for non-`SnapDownload` states.
 
-  threadLogTimeLimit* = chronos.seconds(25)
+  threadLogTimeLimit* = chronos.seconds(40)
     ## Print intermediate messages when running a time consuming task
 
   threadSwitchTimeSlot* = chronos.nanoseconds(1)
@@ -71,10 +71,7 @@ const
   threadSwitchRunLimit* = chronos.seconds(10)
     ## Force a thread switch after that time running continuously
 
-  lockWaitPollingTime* = chronos.milliseconds(500)
-    ## Polling for a lock to be released
-
-  accuAccountsCovMin* = 4.0
+  accuAccountsCovMin* = 3.0
     ## In absence of a completed pivot state, the syncer will stop downloading
     ## if all accounts are covered at least by this factor. Then trie-assembly
     ## and healing can take place.
