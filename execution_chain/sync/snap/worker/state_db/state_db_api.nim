@@ -184,9 +184,11 @@ proc updateMetrics(db: StateDbRef) =
   metrics.set(nec_snap_archived_states_coverage, db.archived)
   metrics.set(nec_snap_accumulated_states_coverage, db.accountsCoverage())
   metrics.set(nec_snap_active_states, db.byRoot.len)
-  db.byRank.ge(low StateRankIndex).isErrOr():
-    metrics.set(nec_snap_pivot_state_coverage,
-                (1f - value.data.unproc.totalRatio))
+
+  var stateCoverage = 0f
+  db.byRank.ge(low StateRankIndex).isErrOr:
+    stateCoverage = 1f - value.data.unproc.totalRatio
+  metrics.set(nec_snap_pivot_state_coverage, stateCoverage)
 
 # ------------------------------------------------------------------------------
 # Public constructor
@@ -206,11 +208,19 @@ proc clear*(db: StateDbRef) =
   db.carryOver = 0f
   db.archived = 0f
   db.topNum = BlockNumber(0)
-  db.allUnproc.clear
+  db.allUnproc = ItemKeyRangeSet.init ItemKeyRangeMax
   db.byRank.clear
   db.byRoot.clear
   db.byTouch.clear
   db.resetMetrics()
+
+proc flush*(db: StateDbRef; info: static[string]) =
+  let states = db.byRoot.values.toSeq()
+  for state in states:
+    db.evict(state, info)
+  db.allUnproc = ItemKeyRangeSet.init ItemKeyRangeMax
+  db.carryOver = 0f
+  db.updateMetrics()
 
 # ------------------------------------------------------------------------------
 # Public database root state functions

@@ -114,6 +114,8 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       bodyRc = daemonWaitDownloadFinishInterval     # take a nap
 
     of SnapMkTrie:
+      ctx.pool.stateDB.flush info                   # archive/clear cache
+
       let ela {.used.} = ctx.sessionMkTrie(info)
       debug info & ": mkTrie imported",
         ela=ela.toStr, syncState=ctx.syncState
