@@ -184,20 +184,35 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
     badBlocks
 
   # https://ethereum.github.io/execution-apis/api/methods/debug_getRawBlock
-  server.rpc("debug_getRawBlock") do(blockTag: BlockTag) -> seq[byte]:
+  server.rpc("debug_getRawBlock") do(blockTagJson: JsonNode) -> seq[byte]:
     ## Returns an RLP-encoded block.
+    let blockTag =
+      try:
+        JrpcConv.decode($blockTagJson, BlockTag)
+      except SerializationError as exc:
+        invalidParams(exc.msg)
     let blockFromTag = getOrRaise(chain.blockFromTag(blockTag), "Block not found")
     rlp.encode(blockFromTag)
 
   # https://ethereum.github.io/execution-apis/api/methods/debug_getRawHeader
-  server.rpc("debug_getRawHeader") do(blockTag: BlockTag) -> seq[byte]:
+  server.rpc("debug_getRawHeader") do(blockTagJson: JsonNode) -> seq[byte]:
     ## Returns an RLP-encoded header.
+    let blockTag =
+      try:
+        JrpcConv.decode($blockTagJson, BlockTag)
+      except SerializationError as exc:
+        invalidParams(exc.msg)
     let header = getOrRaise(chain.headerFromTag(blockTag), "Header not found")
     rlp.encode(header)
 
   # https://ethereum.github.io/execution-apis/api/methods/debug_getRawReceipts
-  server.rpc("debug_getRawReceipts") do(blockTag: BlockTag) -> seq[seq[byte]]:
+  server.rpc("debug_getRawReceipts") do(blockTagJson: JsonNode) -> seq[seq[byte]]:
     ## Returns an array of EIP-2718 binary-encoded receipts.
+    let blockTag =
+      try:
+        JrpcConv.decode($blockTagJson, BlockTag)
+      except SerializationError as exc:
+        invalidParams(exc.msg)
     let
       header = getOrRaise(chain.headerFromTag(blockTag), "Header not found")
       frame = chain.txFrame(header)
