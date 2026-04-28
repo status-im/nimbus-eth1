@@ -323,7 +323,7 @@ func accountsCoverage*(state: StateDataRef): float =
 func accountsCov256*(state: StateDataRef): UInt256 =
   ## Variant of `accountsCoverage()`
   let unproc = state.unproc.unprocessed.total
-  if unproc == 0:
+  if unproc.isZero:
     # Here `chunks==0` => `2^256-0` is mapped to `2^256 - 1` == `high(u256)`
     return (if state.unproc.unprocessed.chunks == 0: high(UInt256) else: 0.u256)
   (high(UInt256) - unproc) + 1

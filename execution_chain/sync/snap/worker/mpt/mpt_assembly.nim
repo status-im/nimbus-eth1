@@ -93,8 +93,6 @@ logScope:
   topics = "snap sync"
 
 const
-  EmptyBlob = seq[byte].default
-
   EmptyProof = seq[ProofNode].default
 
   extraTraceMessages = true
