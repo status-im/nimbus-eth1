@@ -341,18 +341,22 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       txHash = data
       (blockHash, txid) = api.chain.txDetailsByTxHash(txHash).valueOr:
         return nil
-      blk = api.chain.blockByHash(blockHash).valueOr:
+      header = api.chain.headerByHash(blockHash).valueOr:
         return nil
-      receipts = api.chain.receiptsByBlockHash(blockHash).valueOr:
+      tx = api.chain.txByBlockHashAndIndex(blockHash, txid).valueOr:
         return nil
+      receipt = api.chain.receiptByBlockHashAndIndex(blockHash, txid).valueOr:
+        return nil
+      prevGasUsed =
+        if txid == 0:
+          0'u64
+        else:
+          let prev = api.chain.receiptByBlockHashAndIndex(blockHash, txid - 1).valueOr:
+            return nil
+          prev.cumulativeGasUsed
 
-    var prevGasUsed = 0'u64
-    for idx, receipt in receipts:
-      let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
-      prevGasUsed = receipt.cumulativeGasUsed
-
-      if txid == uint64(idx):
-        return populateReceipt(receipt, gasUsed, blk.transactions[txid], txid, blk.header, api.com)
+    return populateReceipt(receipt, receipt.cumulativeGasUsed - prevGasUsed,
+                           tx, txid, header, api.com)
 
   server.rpc("eth_estimateGas") do(args: TransactionArgs) -> Quantity:
     ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
