@@ -9,7 +9,7 @@ import
   math, eth/common/eth_types,
   ./utils/[macros_gen_opcodes, utils_numeric],
   ./op_codes, ../../common/evmforks,
-  ../evm_errors
+  ../evm_errors, ../../core/eip8037
 
 # Gas Fee Schedule
 # Yellow Paper Appendix G - https://ethereum.github.io/yellowpaper/paper.pdf
@@ -78,7 +78,6 @@ type
   GasParamsSs* = object
     currentValue*: UInt256
     originalValue*: UInt256
-    stateGasStorageSet*: GasInt
 
   GasParamsCr* = object
     currentMemSize*: GasNatural
@@ -302,7 +301,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
           res.gasCost = CleanGas # write existing slot (2.1.2)
 
           if params.originalValue.isZero: # create slot (2.1.1)
-            res.stateGas = params.stateGasStorageSet
+            res.stateGas = STATE_GAS_STORAGE_SET
             return res
 
           if value.isZero: # delete slot (2.1.2b)
@@ -331,7 +330,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
         if params.originalValue.isZero: # reset to original inexistent slot (2.2.2.1)
           when fork >= FkAmsterdam:
             # https://github.com/ethereum/execution-specs/pull/2698/changes
-            res.creditStateGas = params.stateGasStorageSet
+            res.creditStateGas = STATE_GAS_STORAGE_SET
             res.gasRefund += CleanRefund
           else:
             res.gasRefund += InitRefund

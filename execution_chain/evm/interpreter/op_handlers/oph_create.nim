@@ -70,8 +70,7 @@ proc execSubCreate(c: Computation; childMsg: Message;
 
       # https://github.com/ethereum/execution-specs/pull/2733/changes
       if c.fork >= FkAmsterdam:
-        let createAccountStateGas = STATE_BYTES_PER_NEW_ACCOUNT * c.getCostPerStateByte
-        c.gasMeter.creditStateGasRefund(createAccountStateGas)
+        c.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
 
       if not child.error.burnsGas: # Means return was `REVERT`.
         # From create, only use `outputData` if child returned with `REVERT`.
@@ -107,7 +106,6 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
       memOffset:      memPos,
       memLength:      memLen)
     gasCost = cpt.gasCosts[Create].cr_handler(false, gasParams)
-    createAccountStateGas = STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte
 
   ? cpt.opcodeGasCost(Create,
     gasCost, reason = "CREATE: GasCreate + memLen * memory expansion")
@@ -124,7 +122,7 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
 
       # Charge state gas after initcode size validation
       # https://github.com/ethereum/execution-specs/commit/b9f0afa931a773cdb764310035d0ff383ebecf9e
-      ? cpt.gasMeter.chargeStateGas(createAccountStateGas,
+      ? cpt.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS,
         reason = "CREATE: State gas new account")
     elif memLen > EIP3860_MAX_INITCODE_SIZE:
       # EIP-3860
@@ -141,7 +139,7 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
       depth = cpt.msg.depth
     # https://github.com/ethereum/execution-specs/pull/2733/changes
     if cpt.fork >= FkAmsterdam:
-      cpt.gasMeter.creditStateGasRefund(createAccountStateGas)
+      cpt.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
     return ok()
 
   if endowment != 0:
@@ -153,7 +151,7 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
         balance = senderBalance
       # https://github.com/ethereum/execution-specs/pull/2733/changes
       if cpt.fork >= FkAmsterdam:
-        cpt.gasMeter.creditStateGasRefund(createAccountStateGas)
+        cpt.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
       return ok()
 
   var createMsgGas = cpt.gasMeter.gasRemaining
@@ -206,7 +204,6 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
       currentMemSize: cpt.memory.len,
       memOffset:      memPos,
       memLength:      memLen)
-    createAccountStateGas = STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte
 
   var gasCost = cpt.gasCosts[Create].cr_handler(false, gasParams)
   gasCost = gasCost + cpt.gasCosts[Create2].m_handler(0, 0, memLen)
@@ -226,7 +223,7 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
 
       # Charge state gas after initcode size validation
       # https://github.com/ethereum/execution-specs/commit/b9f0afa931a773cdb764310035d0ff383ebecf9e
-      ? cpt.gasMeter.chargeStateGas(createAccountStateGas,
+      ? cpt.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS,
         reason = "CREATE2: State gas new account")
     elif memLen > EIP3860_MAX_INITCODE_SIZE:
       # EIP-3860
@@ -243,7 +240,7 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
       depth = cpt.msg.depth
     # https://github.com/ethereum/execution-specs/pull/2733/changes
     if cpt.fork >= FkAmsterdam:
-      cpt.gasMeter.creditStateGasRefund(createAccountStateGas)
+      cpt.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
     return ok()
 
   if endowment != 0:
@@ -255,7 +252,7 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
         balance = senderBalance
       # https://github.com/ethereum/execution-specs/pull/2733/changes
       if cpt.fork >= FkAmsterdam:
-        cpt.gasMeter.creditStateGasRefund(createAccountStateGas)
+        cpt.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
       return ok()
 
   var createMsgGas = cpt.gasMeter.gasRemaining
