@@ -68,20 +68,20 @@ type
 
   CachedAccLeaf* = object
     case empty*: bool
+    of true:
+      discard
     of false:
       pfx*: NibblesBuf
       account*: AristoAccount
       stoID*: StorageID
-    of true:
-      discard
 
   CachedStoLeaf* = object
     case empty*: bool
+    of true:
+      discard
     of false:
       pfx*: NibblesBuf
       stoData*: UInt256
-    of true:
-      discard
 
   NodeRef* = ref object of RootRef
     ## Combined record for a *traditional* ``Merkle Patricia Tree` node merged

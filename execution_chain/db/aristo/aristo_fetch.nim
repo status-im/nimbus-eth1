@@ -166,7 +166,6 @@ proc retrieveAccLeaf(
   let accLeaf = AccLeafRef(leafVtx)
   db.db.accLeaves.put(accPath, CachedAccLeaf(
     empty: false, pfx: accLeaf.pfx, account: accLeaf.account, stoID: accLeaf.stoID))
-  db.layersPutAccLeaf(accPath, accLeaf)
 
   ok accLeaf
 
@@ -303,7 +302,6 @@ proc fetchSlot*(
   if leafVtx.isValid():
     db.db.stoLeaves.put(mixPath, CachedStoLeaf(
       empty: false, pfx: leafVtx.pfx, stoData: leafVtx.stoData))
-    db.layersPutStoLeaf(mixPath, leafVtx)
   else:
     db.db.stoLeaves.put(mixPath, CachedStoLeaf(empty: true))
 
