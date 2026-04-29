@@ -62,13 +62,13 @@ const
     ## Some waiting time at the end of the daemon task which always lingers
     ## in the background. This one is for non-`SnapDownload` states.
 
-  threadLogTimeLimit* = chronos.seconds(40)
+  threadLogTimeLimit* = chronos.seconds(35)
     ## Print intermediate messages when running a time consuming task
 
   threadSwitchTimeSlot* = chronos.nanoseconds(1)
     ## Nano-sleep to allows pseudo/async thread switch
 
-  threadSwitchRunLimit* = chronos.seconds(10)
+  threadSwitchRunLimit* = chronos.seconds(15)
     ## Force a thread switch after that time running continuously
 
   accuAccountsCovMin* = 3.0

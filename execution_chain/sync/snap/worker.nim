@@ -98,7 +98,8 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
   block body:
     # Check initial state before transition
     if ctx.pool.syncState == SnapResume:
-      discard ctx.sessionResume(info)
+      ctx.sessionResume(info).isOkOr:
+        break body                                  # shutdown?
 
     ctx.updateSyncState info                        # set next state
     case ctx.pool.syncState:
@@ -116,7 +117,9 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
     of SnapMkTrie:
       ctx.pool.stateDB.flush info                   # archive/clear cache
 
-      let ela {.used.} = ctx.sessionMkTrie(info)
+      let ela {.used.} = ctx.sessionMkTrie(info).valueOr:
+        break body                                  # shutdown?
+
       debug info & ": mkTrie imported",
         ela=ela.toStr, syncState=ctx.syncState
 

@@ -11,17 +11,10 @@
 {.push raises: [].}
 
 import
-  std/[sets, sequtils, strutils, typetraits],
+  std/[algorithm, sets, sequtils, strutils, typetraits],
   pkg/[chronicles, chronos, stew/interval_set],
-  ../[helpers, mpt, state_db, worker_desc]
-
-type
-  MkTrieStatus = tuple
-    stateInx: int
-    nStates: int
-    msgAt: Moment                                   # message while looping
-    napAt: Moment                                   # allow for thread switch
-    error: Opt[ErrorType]
+  ../[helpers, mpt, state_db, worker_desc],
+  ./session_helpers
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -29,23 +22,6 @@ type
 
 func toStr(pid: Hash): string =
   pid.toHex.toLowerAscii
-
-template allowThreadSwitch(
-    napAt: Moment;
-    info: static[string];
-      ): Opt[Moment] =
-  var bodyRc: Opt[Moment] = Opt.some(napAt)
-  block body:
-    if napAt < Moment.now():
-      try:
-        await sleepAsync threadSwitchTimeSlot
-      except CancelledError as e:
-        chronicles.error info & ": Resuming session cancelled",
-          error=($e.name & "(" & e.msg & ")")
-        bodyRc = Opt.none(Moment)
-        break body
-      bodyRc = Opt.some(Moment.now() + threadSwitchRunLimit)
-  bodyRc
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -55,18 +31,16 @@ template mkStoTrie(
     ctx: SnapCtxRef;
     wAcc: WalkAccounts;
     accInx: int;
-    status: MkTrieStatus;
+    status: SessionTicker;                          # used as var parameter
     info: static[string];
-      ): MkTrieStatus =
+      ): Opt[ErrorType] =
   ## Async/template
   ##
-  var bodyRc = status
+  var bodyRc = Opt.none(ErrorType)
   block body:
-    let acc = wAcc.accounts[accInx]
-    if acc.accBody.storageRoot.isEmpty:
-      break body
     let
       adb = ctx.pool.mptAsm
+      acc = wAcc.accounts[accInx]
       storageRoot = acc.accBody.storageRoot.to(StoreRoot)
 
       stateInx {.inject,used.} = status.stateInx    # logging only
@@ -79,13 +53,11 @@ template mkStoTrie(
     # Loop over storage slots for particular account
     for w in ctx.pool.mptAsm.walkStoSlot(wAcc.root, acc.accHash.to(ItemKey)):
 
-      # Print keep alive messages and possible thread switch
-      if bodyRc.msgAt < Moment.now():
-        debug info & ": Processing storage slots..", stateInx, nStates, root,
-          blockNumber, accKey, stoRoot, nSlot=w.slot.len
-        bodyRc.msgAt = Moment.now() + threadLogTimeLimit
-      bodyRc.napAt = bodyRc.napAt.allowThreadSwitch(info).valueOr:
-        bodyRc.error = Opt.some(ECancelledError)
+      # Print keep alive messages and allow thread switch
+      bodyRc = status.sessionTicker(info):
+        debug info & ": Processing storage slots..", stateInx, nStates,
+          root, blockNumber, accKey, stoRoot, nSlot=w.slot.len
+      if bodyRc.isSome():
         break body
 
       let mpt = storageRoot.validate(w.start, w.slot, w.proof).valueOr:
@@ -95,13 +67,11 @@ template mkStoTrie(
           nProof=w.proof.len
         continue
 
-      # Print keep alive messages and possible thread switch
-      if bodyRc.msgAt < Moment.now():
+      # Print keep alive messages and allow thread switch
+      bodyRc = status.sessionTicker(info):
         debug info & ": Processing storage slots..", stateInx, nStates, root,
           blockNumber, accKey, stoRoot, nSlot=w.slot.len
-        bodyRc.msgAt = Moment.now() + threadLogTimeLimit
-      bodyRc.napAt = bodyRc.napAt.allowThreadSwitch(info).valueOr:
-        bodyRc.error = Opt.some(ECancelledError)
+      if bodyRc.isSome():
         break body
 
       # Store `(key,node)` list on trie
@@ -120,12 +90,12 @@ template mkCodesList(
     stateRoot: StateRoot;
     number: BlockNumber;
     lst: openArray[SnapAccount];
-    status: MkTrieStatus;
+    status: SessionTicker;                          # used as var parameter
     info: static[string];
-      ): MkTrieStatus =
+      ): Opt[ErrorType] =
   ## Async/template
   ##
-  var bodyRc = status
+  var bodyRc = Opt.none(ErrorType)
   block body:
     if lst.len == 0:
       break body
@@ -143,13 +113,11 @@ template mkCodesList(
       if accMax < w.limit:
         break
 
-      # Print keep alive messages and possible thread switch
-      if bodyRc.msgAt < Moment.now():
+      # Print keep alive messages and allow thread switch
+      bodyRc = status.sessionTicker(info):
         debug info & ": Processing code lists ..", stateInx=status.stateInx,
           nStates=status.nStates, root, blockNumber
-        bodyRc.msgAt = Moment.now() + threadLogTimeLimit
-      bodyRc.napAt = bodyRc.napAt.allowThreadSwitch(info).valueOr:
-        bodyRc.error = Opt.some(ECancelledError)
+      if bodyRc.isSome():
         break body
 
       for (key,val) in w.codes:
@@ -173,9 +141,9 @@ template mkTrieImpl(
     wAcc: WalkAccounts;
     number: BlockNumber;
     covered: ItemKeyRangeSet;
-    status: MkTrieStatus;
+    status: SessionTicker;                          # used as var parameter
     info: static[string];
-      ): MkTrieStatus =
+      ): Opt[ErrorType] =
   ## Async/template
   ##
   ## Process accounts range. Validate raw packet and store it as a
@@ -184,7 +152,7 @@ template mkTrieImpl(
   ## The function returns `(xx,xx,Opt.none ErrorType)` if some accounts coud be
   ## re-queued,# successfully or not.
   ##
-  var bodyRc = status
+  var bodyRc = Opt.none(ErrorType)
   block body:
     let
       root {.inject,used.} = wAcc.root.toStr        # logging only
@@ -198,16 +166,14 @@ template mkTrieImpl(
       error info & ": Accounts validation failed", stateInx=status.stateInx,
         nStates=status.nStates, peerID=wAcc.peerID.toStr, root, blockNumber,
         iv, nAccounts, nProof
-      bodyRc.error = Opt.some(ETrieError)
+      bodyRc = Opt.some(ETrieError)
       break body
 
-    # Print keep alive messages and possible thread switch
-    if bodyRc.msgAt < Moment.now():
+    # Print keep alive messages and allow thread switch
+    bodyRc = status.sessionTicker(info):
       debug info & ": Processing accounts..", stateInx=status.stateInx,
         nStates=status.nStates, root, blockNumber, nAccounts, nProof
-      bodyRc.msgAt = Moment.now() + threadLogTimeLimit
-    bodyRc.napAt = bodyRc.napAt.allowThreadSwitch(info).valueOr:
-      bodyRc.error = Opt.some(ECancelledError)
+    if bodyRc.isSome():
       break body
 
     # Store `(key,node)` list on trie
@@ -216,23 +182,30 @@ template mkTrieImpl(
       error info & ": Cannot store accounts on trie", stateInx=status.stateInx,
         nStates=status.nStates, peerID=wAcc.peerID.toStr, root, blockNumber,
         iv, nAccounts, nProof, `error`=error
-      bodyRc.error = Opt.some(ETrieError)
+      bodyRc = Opt.some(ETrieError)
       break body
 
     discard covered.merge(wAcc.start, wAcc.limit)   # completed range accounting
 
     # Process storage slots
     for n in 0 ..< wAcc.accounts.len:
-      bodyRc = ctx.mkStoTrie(wAcc, n, bodyRc, info)
+      if not wAcc.accounts[n].accBody.storageRoot.isEmpty:
+        ctx.mkStoTrie(wAcc, n, status, info).isErrOr():
+          if value == ECancelledError:              # check for shutdown..
+            bodyRc = Opt.some(value)                # ..otherwise ignore for now
+            break body
 
     # Process code list
-    bodyRc = ctx.mkCodesList(wAcc.root, number, wAcc.accounts,  bodyRc, info)
+    ctx.mkCodesList(wAcc.root, number, wAcc.accounts,  status, info).isErrOr():
+      if value == ECancelledError:                  # check for shutdown..
+        bodyRc = Opt.some(value)                    # ..otherwise ignore for now
+        break body
 
-    bodyRc.error = Opt.none(ErrorType)
+    bodyRc = Opt.none(ErrorType)
     # End block `body`
 
   bodyRc
-    
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -240,30 +213,31 @@ template mkTrieImpl(
 template sessionMkTrie*(
     ctx: SnapCtxRef;
     info: static[string];
-      ): Duration =
+      ): Opt[Duration] =
   ## Async/template
   ##
-  var bodyRc = ZeroDuration
+  var bodyRc = Opt[Duration].err()
   block body:
     let
       adb = ctx.pool.mptAsm
-    var
       start = Moment.now()
-      status: MkTrieStatus
-      pivot = StateRoot(zeroHash32)                 # max accounts range state
-      pvNumber = BlockNumber(0)
-      pvCoverage = low(UInt256)                     # for coverage maximising
+    var
+      byCov = adb.walkStateData().toSeq()           # list to be sorted, below
+      status = SessionTicker.init(byCov.len)        # for logging/thread switch
 
-    status.msgAt = Moment.now() + threadLogTimeLimit
-    status.napAt = Moment.now() + threadSwitchRunLimit
-    status.nStates = adb.walkStateData().toSeq().len
-
-    chronicles.info info & ": Assembing MPT from archived data",
+    chronicles.info info & ": Assembling MPT from archived data",
       nStates=status.nStates
 
-    for p in adb.walkStateData():
-      status.stateInx.inc
-      status.error = Opt.none(ErrorType)
+    # Process states by its coverage size, greates first
+    byCov.sort proc(x,y: WalkStateData): int = cmp(y.coverage,x.coverage)
+    for n in 0 ..< byCov.len:
+      let p = byCov[n]
+      status.stateInx = n + 1                       # for logging
+
+      if 0 < p.error.len:
+        chronicles.info info & ": Bad state record ignored",
+          stateInx=status.stateInx, nStates=status.nStates
+        continue
 
       if p.onTrie:
         trace info & ": State fully assembled, already",
@@ -276,44 +250,38 @@ template sessionMkTrie*(
       for w in adb.walkAccounts(p.root):
 
         if 0 < w.error.len:
-          debug info & ": Accounts walk error", stateInx=status.stateInx,
-            nStates=status.nStates, root=p.root.toStr, number=p.number,
-            error=w.error
+          chronicles.info info & ": Bad accounts record ignored",
+            stateInx=status.stateInx, nStates=status.nStates,
+            root=p.root.toStr, number=p.number, error=w.error
           continue
 
-        status = ctx.mkTrieImpl(w, p.number, covered, status, info)
-        if status.error.isSome():                   # FIXME: bound to change
-          break body
+        ctx.mkTrieImpl(w, p.number, covered, status, info).isErrOr:
+          if value == ECancelledError:              # check for shutdown
+            break body                              # otherwise ignore for now
+        # End `for walkAccounts()`
 
       # Find state with largest accounts coverage. For states with the same
       # maximal coverage, use the one related to the gratest block number.
-      var covSize = covered.total()
-      if covSize == 0 and                           # => range is `0` or `2^256
+      byCov[n].coverage = covered.total()
+      if byCov[n].coverage == 0 and                 # => range is `0` or `2^256
          0 < covered.chunks():                      # => `2^256`
-        covSize = high(UInt256)                     # collapse with `2^256-1`
-      if pvCoverage <= covSize or                   # maximise `pvCoverage`
-         pvNumber == 0:                             # safe initialisation
-        pivot = p.root
-        pvNumber = p.number
-        pvCoverage = covSize
-      # End `for walkAccounts()`
+        byCov[n].coverage = high(UInt256)           # collapse with `2^256-1`
 
       # Update
-      if status.error.isNone():
-        discard adb.putStateData(                 # Register updated trie
-          p.root, p.hash, p.number, p.touch, onTrie=true, covSize)
+      discard adb.putStateData(                     # Register updated trie
+        p.root, p.hash, p.number, p.touch, onTrie=true, byCov[n].coverage)
 
       trace info & ": Done this state", stateInx=status.stateInx,
         nStates=status.nStates, root=p.root.toStr, number=p.number,
         elapsed=(Moment.now() - start).toStr
-
       # End `for walkStateData()`
 
     ctx.updateSyncHealing()
-    bodyRc = Moment.now() - start
+    bodyRc = typeof(bodyRc).ok(Moment.now() - start)
 
-    debug info & ": Done all states", pivot=pivot.toStr, pvNumber,
-      coverage=pvCoverage.flStr, nStates=status.nStates, elapsed=bodyRc.toStr
+    debug info & ": Done all states", pivot=byCov[0].root.toStr,
+      pvNumber=byCov[0].number, coverage=byCov[0].coverage.flStr,
+      nStates=status.nStates, elapsed=bodyRc.value.toStr
     # End block `body`
 
   bodyRc
