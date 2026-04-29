@@ -28,16 +28,7 @@ const skipFiles = [
   #
   # --- eest_develop files with failures ---
   #
-  "underflowTest.json", # stateRoot mismatch
-  "CREATE2_HighNonceDelegatecall.json", # stateRoot mismatch
-  "test_precompile_warming.json", # stateRoot mismatch
-  "gasPriceDiffPlaces.json", # stateRoot mismatch
-  "baseFeeDiffPlaces.json", # stateRoot mismatch
-  "test_scenarios.json", # stateRoot mismatch + persist assert
-  "CallcodeToPrecompileFromCalledContract.json", # stateRoot mismatch
-  "DelegatecallToPrecompileFromCalledContract.json", # stateRoot mismatch
-  "CallWithNOTZeroValueToPrecompileFromCalledContract.json", # stateRoot mismatch
-  "CallWithZeroValueToPrecompileFromCalledContract.json", # stateRoot mismatch
+  "test_scenarios.json", # persist assert
   #
   # --- eest_zkevm files with failures ---
   #
@@ -52,14 +43,7 @@ const skipFiles = [
   "withdrawal_requests.json", # persistStorage assert + Witness state mismatch
   "consolidation_requests.json", # Witness state mismatch
   "multiple_withdrawals_same_address.json", # Witness state mismatch
-  "precompile_warming.json", # stateRoot mismatch
   "return_bounds.json", # Witness state mismatch
-  "underflow_test.json", # stateRoot mismatch
-  "create2_high_nonce_delegatecall.json", # stateRoot mismatch
-  "gas_price_diff_places.json", # stateRoot mismatch
-  "base_fee_diff_places.json", # stateRoot mismatch
-  "delegatecall_to_precompile_from_called_contract.json", # stateRoot mismatch
-  "callcode_to_precompile_from_called_contract.json", # stateRoot mismatch
   "validation_codes_missing_delegated_code_on_insufficient_balance_call.json", # blockAccessListHash mismatch
 ]
 

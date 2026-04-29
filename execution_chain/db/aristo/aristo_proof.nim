@@ -477,7 +477,13 @@ proc putSubtrie(
           # Write the known hash key setting the vtx to nil
           db.layersPutKey(r, BranchRef(nil), k)
 
-  db.layersPutVtx(rvid, node.vtx)
+  # When writing into a storage trie, duplicate vertices before putting in
+  # the database to avoid sharing mutable NodeRef instances between different
+  # accounts that happen to share the same storage root hash in the witness.
+  if rvid.root != STATE_ROOT_VID:
+    db.layersPutVtx(rvid, node.vtx.dup())
+  else:
+    db.layersPutVtx(rvid, node.vtx)
 
   ok()
 
