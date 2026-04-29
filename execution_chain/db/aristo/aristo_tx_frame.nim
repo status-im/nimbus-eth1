@@ -267,26 +267,26 @@ proc persist*(db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
     if v[0] == nil:
       db.accLeaves.del(accPath)
     else:
-      discard db.accLeaves.update(accPath, v[0])
+      discard db.accLeaves.update(accPath, Opt.some((v[0].account, v[0].stoID, v[0].pfx)))
 
   for mixPath, v in txFrame.snapshot.sto:
     if v[0] == nil:
       db.stoLeaves.del(mixPath)
     else:
-      discard db.stoLeaves.update(mixPath, v[0])
+      discard db.stoLeaves.update(mixPath, Opt.some((v[0].stoData, v[0].pfx)))
 
   # Copy cached values from the txFrame
   for accPath, vtx in txFrame.accLeaves:
     if vtx == nil:
       db.accLeaves.del(accPath)
     else:
-      discard db.accLeaves.update(accPath, vtx)
+      discard db.accLeaves.update(accPath, Opt.some((vtx.account, vtx.stoID, vtx.pfx)))
 
   for mixPath, vtx in txFrame.stoLeaves:
     if vtx == nil:
       db.stoLeaves.del(mixPath)
     else:
-      discard db.stoLeaves.update(mixPath, vtx)
+      discard db.stoLeaves.update(mixPath, Opt.some((vtx.stoData, vtx.pfx)))
 
   # Remove snapshot data that has been persisted to disk to save memory.
   # All snapshot records with a level lower than the current base level

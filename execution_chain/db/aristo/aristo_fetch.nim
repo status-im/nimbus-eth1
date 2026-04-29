@@ -40,19 +40,57 @@ proc retrieveLeaf(
 
   return err(FetchPathNotFound)
 
-proc cachedAccLeaf*(db: AristoTxRef; accPath: Hash32): Opt[AccLeafRef] =
+proc cachedAccLeaf*(db: AristoTxRef, accPath: Hash32): Opt[AccLeafRef] =
   # Return vertex from layers or cache, `nil` if it's known to not exist and
   # none otherwise
-  db.layersGetAccLeaf(accPath) or
-    db.db.accLeaves.get(accPath) or
-    Opt.none(AccLeafRef)
+  let fromLayers = db.layersGetAccLeaf(accPath)
+  if fromLayers.isSome():
+    return fromLayers
+  
+  let cached = db.db.accLeaves.get(accPath).valueOr:
+    return Opt.none(AccLeafRef)
+  let v = cached.valueOr:
+    return Opt.some(AccLeafRef(nil))
 
-proc cachedStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[StoLeafRef] =
+  Opt.some(AccLeafRef.init(v[2], v[0], v[1]))  
+
+proc cachedStoLeaf*(db: AristoTxRef, mixPath: Hash32): Opt[StoLeafRef] =
   # Return vertex from layers or cache, `nil` if it's known to not exist and
   # none otherwise
-  db.layersGetStoLeaf(mixPath) or
-    db.db.stoLeaves.get(mixPath) or
-    Opt.none(StoLeafRef)
+  let fromLayers = db.layersGetStoLeaf(mixPath)
+  if fromLayers.isSome():
+    return fromLayers
+
+  let cached = db.db.stoLeaves.get(mixPath).valueOr:
+    return Opt.none(StoLeafRef)
+  let v = cached.valueOr:
+    return Opt.some(StoLeafRef(nil))
+
+  Opt.some(StoLeafRef.init(v[1], v[0]))
+
+proc cachedAccLeafData(
+    db: AristoTxRef, 
+    accPath: Hash32): Opt[Opt[(AristoAccount, StorageID, NibblesBuf)]] =
+
+  let v = db.layersGetAccLeaf(accPath).valueOr:
+    return db.db.accLeaves.get(accPath)
+  
+  if v.isNil():
+    Opt.some(Opt.none((AristoAccount, StorageID, NibblesBuf)))
+  else:
+    Opt.some(Opt.some((v.account, v.stoID, v.pfx)))
+
+proc cachedStoLeafData(
+    db: AristoTxRef, 
+    mixPath: Hash32): Opt[Opt[(UInt256, NibblesBuf)]] =
+    
+  let v = db.layersGetStoLeaf(mixPath).valueOr:
+    return db.db.stoLeaves.get(mixPath)
+
+  if v.isNil():
+    Opt.some(Opt.none((UInt256, NibblesBuf)))
+  else:
+    Opt.some(Opt.some((v.stoData, v.pfx)))
 
 proc retrieveAccStatic(
     db: AristoTxRef;
@@ -128,23 +166,24 @@ proc retrieveAccStatic(
   # We end up here when we have to continue the search down a branch
   ok (nil, path, next)
 
-proc retrieveAccLeaf(
+proc retrieveAccLeafData(
     db: AristoTxRef;
     accPath: Hash32;
-      ): Result[AccLeafRef,AristoError] =
-  if (let leafVtx = db.cachedAccLeaf(accPath); leafVtx.isSome()):
-    if not leafVtx[].isValid():
-      return err(FetchPathNotFound)
-    return ok leafVtx[]
+      ): Result[(AristoAccount, StorageID, NibblesBuf), AristoError] =
+  if (let cached = db.cachedAccLeafData(accPath); cached.isSome()):
+    let v = cached[].valueOr:
+      return err(FetchPathNotFound)      
+    return ok v
 
   let (staticVtx, path, next) = db.retrieveAccStatic(accPath).valueOr:
     if error == FetchPathNotFound:
-      db.db.accLeaves.put(accPath, nil)
+      db.db.accLeaves.put(accPath, Opt.none((AristoAccount, StorageID, NibblesBuf)))
     return err(error)
 
   if staticVtx.isValid():
-    db.db.accLeaves.put(accPath, staticVtx)
-    return ok staticVtx
+    let accData = (staticVtx.account, staticVtx.stoID, staticVtx.pfx)
+    db.db.accLeaves.put(accPath, Opt.some(accData))
+    return ok accData
 
   # Updated payloads are stored in the layers so if we didn't find them there,
   # it must have been in the database
@@ -155,14 +194,16 @@ proc retrieveAccLeaf(
         # meaning that it was a hit - else searches for non-existing paths would
         # skew the results towards more depth than exists in the MPT
         db.db.lookups.hits += 1
-        db.db.accLeaves.put(accPath, nil)
+        db.db.accLeaves.put(accPath, Opt.none((AristoAccount, StorageID, NibblesBuf)))
       return err(error)
+    accLeaf = AccLeafRef(leafVtx)
+    accData = (accLeaf.account, accLeaf.stoID, accLeaf.pfx)
 
   db.db.lookups.higher += 1
 
-  db.db.accLeaves.put(accPath, AccLeafRef(leafVtx))
+  db.db.accLeaves.put(accPath, Opt.some(accData))
 
-  ok AccLeafRef(leafVtx)
+  ok accData
 
 proc retrieveMerkleHash(
     db: AristoTxRef;
@@ -210,8 +251,8 @@ proc fetchStorageID*(
   ## Returns `VertexID()` if the account has no storage and `err(FetchPathNotFound)`
   ## if the account does not exist.
   let
-    leafVtx = ?db.retrieveAccLeaf(accPath)
-    stoID = leafVtx[].stoID
+    leafData = ?db.retrieveAccLeafData(accPath)
+    stoID = leafData[1]
 
   ok if stoID.isValid:
     stoID.vid
@@ -240,9 +281,9 @@ proc fetchAccount*(
       ): Result[AristoAccount,AristoError] =
   ## Fetch an account record from the database indexed by `accPath`.
   ##
-  let leafVtx = ? db.retrieveAccLeaf(accPath)
+  let leafData = ?db.retrieveAccLeafData(accPath)
 
-  ok leafVtx.account
+  ok leafData[0]
 
 proc fetchStateRoot*(
     db: AristoTxRef;
@@ -263,7 +304,7 @@ proc hasAccount*(
   ## For an account record indexed by `accPath` query whether this record exists
   ## on the database.
   ##
-  let error = db.retrieveAccLeaf(accPath).errorOr:
+  let error = db.retrieveAccLeafData(accPath).errorOr:
     return ok(true)
 
   if error == FetchPathNotFound:
@@ -282,22 +323,25 @@ proc fetchSlot*(
   ##
   let mixPath = mixUp(accPath, stoPath)
 
-  let leafVtx = db.cachedStoLeaf(mixPath).valueOr:
+  let leafData = db.cachedStoLeafData(mixPath).valueOr:
     # Updated payloads are stored in the layers so if we didn't find them there,
     # it must have been in the database
-    let
-      stoID = ?db.fetchStorageID(accPath)
+    let stoID = ?db.fetchStorageID(accPath)
 
     if not stoID.isValid():
-      db.db.stoLeaves.put(mixPath, nil)
+      db.db.stoLeaves.put(mixPath, Opt.none((UInt256, NibblesBuf)))
       return ok 0'u256
 
-    StoLeafRef(db.retrieveLeaf(stoID, NibblesBuf.fromBytes(stoPath.data)).valueOr(nil))
+    let leafVtx = StoLeafRef(db.retrieveLeaf(stoID, NibblesBuf.fromBytes(stoPath.data)).valueOr(nil))
+    if leafVtx.isValid:
+      Opt.some((leafVtx.stoData, leafVtx.pfx))
+    else:
+      Opt.none((UInt256, NibblesBuf))
 
-  db.db.stoLeaves.put(mixPath, leafVtx)
-
-  ok if leafVtx.isValid:
-    leafVtx.stoData
+  db.db.stoLeaves.put(mixPath, leafData)
+  
+  ok if leafData.isSome():
+    leafData[][0]
   else:
     0'u256
 
