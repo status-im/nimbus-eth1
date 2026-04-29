@@ -83,9 +83,6 @@ func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork, gasLimit: GasI
   # Compute the baseline gas cost for this transaction.  This is the amount
   # of gas needed to send this transaction (but that is not actually used
   # for computation).
-  let
-    costPerStateByte = stateGasPerByte(gasLimit)
-
   var
     regularGas = TX_BASE_COST
     stateGas = 0.GasInt
@@ -96,7 +93,7 @@ func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork, gasLimit: GasI
   # EIP-2 (Homestead) extra intrinsic gas for contract creations.
   if call.isCreate:
     if fork >= FkAmsterdam:
-      stateGas += STATE_BYTES_PER_NEW_ACCOUNT * costPerStateByte
+      stateGas += CREATE_ACCOUNT_STATE_GAS
 
     regularGas += gasFees[fork][GasTXCreate]
     if fork >= FkShanghai:
@@ -131,7 +128,7 @@ func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork, gasLimit: GasI
       let floorTokensInAccessList = accessListBytes * 4
       tokens += floorTokensInAccessList
       regularGas += TOTAL_COST_FLOOR_PER_TOKEN_EIP7976 * floorTokensInAccessList
-      stateGas += (STATE_BYTES_PER_NEW_ACCOUNT + STATE_BYTES_PER_AUTH_BASE) * costPerStateByte * GasInt(call.authorizationList.len)
+      stateGas += (STATE_BYTES_PER_NEW_ACCOUNT + STATE_BYTES_PER_AUTH_BASE) * COST_PER_STATE_BYTE * GasInt(call.authorizationList.len)
       floorDataGas += tokens * TOTAL_COST_FLOOR_PER_TOKEN_EIP7976
     else:
       regularGas += call.authorizationList.len * PER_EMPTY_ACCOUNT_COST

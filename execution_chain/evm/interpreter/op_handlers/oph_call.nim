@@ -247,13 +247,12 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
   # into regular gas, it must reduce the gas available for childGasLimit.
   if cpt.fork >= FkAmsterdam:
     if isNewAccount() and params1.nonZeroVal:
-      let newAcccountStateGas = STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte
       # eels reviewer think there is an issue with the design to charge regular gas multiple times.
       # https://github.com/ethereum/execution-specs/pull/2526/changes#diff-28a1b575fd7c3d82832c0826cf58a881101643543d35c123c78ca65202152c23R456
       # And it also make EVM tracer produce two traces of call or weird result.
       # So we check it here before actually charging state gas and keep the tracer produce single trace of call.
-      ? cpt.gasMeter.checkGas(gasCost1, newAcccountStateGas)
-      ? cpt.gasMeter.chargeStateGas(newAcccountStateGas,
+      ? cpt.gasMeter.checkGas(gasCost1, CREATE_ACCOUNT_STATE_GAS)
+      ? cpt.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS,
         reason = "CALL: State gas new account")
 
   let
