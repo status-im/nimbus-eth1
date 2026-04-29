@@ -44,14 +44,16 @@ proc cachedAccLeaf*(db: AristoTxRef; accPath: Hash32): Opt[AccLeafRef] =
   # Return vertex from layers or cache, `nil` if it's known to not exist and
   # none otherwise
   db.layersGetAccLeaf(accPath) or
-    db.db.accLeaves.get(accPath) or
+    db.db.accLeaves.get(accPath).map(proc(c: CachedAccLeaf): AccLeafRef =
+      if c.empty: AccLeafRef(nil) else: AccLeafRef.init(c.pfx, c.account, c.stoID)) or
     Opt.none(AccLeafRef)
 
 proc cachedStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[StoLeafRef] =
   # Return vertex from layers or cache, `nil` if it's known to not exist and
   # none otherwise
   db.layersGetStoLeaf(mixPath) or
-    db.db.stoLeaves.get(mixPath) or
+    db.db.stoLeaves.get(mixPath).map(proc(c: CachedStoLeaf): StoLeafRef =
+      if c.empty: StoLeafRef(nil) else: StoLeafRef.init(c.pfx, c.stoData)) or
     Opt.none(StoLeafRef)
 
 proc retrieveAccStatic(
@@ -139,11 +141,12 @@ proc retrieveAccLeaf(
 
   let (staticVtx, path, next) = db.retrieveAccStatic(accPath).valueOr:
     if error == FetchPathNotFound:
-      db.db.accLeaves.put(accPath, nil)
+      db.db.accLeaves.put(accPath, CachedAccLeaf(empty: true))
     return err(error)
 
   if staticVtx.isValid():
-    db.db.accLeaves.put(accPath, staticVtx)
+    db.db.accLeaves.put(accPath, CachedAccLeaf(
+      empty: false, pfx: staticVtx.pfx, account: staticVtx.account, stoID: staticVtx.stoID))
     return ok staticVtx
 
   # Updated payloads are stored in the layers so if we didn't find them there,
@@ -155,14 +158,17 @@ proc retrieveAccLeaf(
         # meaning that it was a hit - else searches for non-existing paths would
         # skew the results towards more depth than exists in the MPT
         db.db.lookups.hits += 1
-        db.db.accLeaves.put(accPath, nil)
+        db.db.accLeaves.put(accPath, CachedAccLeaf(empty: true))
       return err(error)
 
   db.db.lookups.higher += 1
 
-  db.db.accLeaves.put(accPath, AccLeafRef(leafVtx))
+  let accLeaf = AccLeafRef(leafVtx)
+  db.db.accLeaves.put(accPath, CachedAccLeaf(
+    empty: false, pfx: accLeaf.pfx, account: accLeaf.account, stoID: accLeaf.stoID))
+  db.layersPutAccLeaf(accPath, accLeaf)
 
-  ok AccLeafRef(leafVtx)
+  ok accLeaf
 
 proc retrieveMerkleHash(
     db: AristoTxRef;
@@ -289,12 +295,17 @@ proc fetchSlot*(
       stoID = ?db.fetchStorageID(accPath)
 
     if not stoID.isValid():
-      db.db.stoLeaves.put(mixPath, nil)
+      db.db.stoLeaves.put(mixPath, CachedStoLeaf(empty: true))
       return ok 0'u256
 
     StoLeafRef(db.retrieveLeaf(stoID, NibblesBuf.fromBytes(stoPath.data)).valueOr(nil))
 
-  db.db.stoLeaves.put(mixPath, leafVtx)
+  if leafVtx.isValid():
+    db.db.stoLeaves.put(mixPath, CachedStoLeaf(
+      empty: false, pfx: leafVtx.pfx, stoData: leafVtx.stoData))
+    db.layersPutStoLeaf(mixPath, leafVtx)
+  else:
+    db.db.stoLeaves.put(mixPath, CachedStoLeaf(empty: true))
 
   ok if leafVtx.isValid:
     leafVtx.stoData
