@@ -13,7 +13,7 @@
 ## Extracted helpers from `worker_desc` (avoids circular import)
 
 import
-  std/[fenv, math, strformat],
+  std/[fenv, hashes, math, strformat, strutils],
   pkg/[chronos, stew/interval_set],
   ../../../core/chain,
   ../../../networking/p2p,
@@ -24,6 +24,10 @@ import
 export
   prettify, short, `$`
 
+
+func short*(peerID: Hash): string =
+  let s = peerID.toHex
+  s.substr(s.len-8).toLowerAscii
 
 func toStr*(h: Hash32): string =
   if h == emptyRoot: "empty"
