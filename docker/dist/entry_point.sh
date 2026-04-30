@@ -50,7 +50,7 @@ if [[ "${PLATFORM}" == "windows_amd64" ]]; then
     -j$(nproc) \
     USE_LIBBACKTRACE=0 \
     QUICK_AND_DIRTY_COMPILER=1 \
-    USE_SYSTEM_ROCKSDB=0 \
+    USE_CACHED_ROCKSDB=1 \
     deps-common
 
   make \
@@ -92,7 +92,7 @@ if [[ "${PLATFORM}" == "windows_amd64" ]]; then
     CXXFLAGS="${CXXFLAGS} -D__STDC_FORMAT_MACROS -D_WIN32_WINNT=0x0600" \
     USE_VENDORED_LIBUNWIND=1 \
     LOG_LEVEL="TRACE" \
-    USE_SYSTEM_ROCKSDB=0 \
+    USE_CACHED_ROCKSDB=1 \
     NIMFLAGS="${NIMFLAGS_COMMON} -d:PREFER_HASHTREE_SHA256:false --os:windows --gcc.exe=${CC} --gcc.linkerexe=${CXX} --passL:-static --passL:-lshlwapi --passL:-lrpcrt4 -d:BLSTuseSSSE3=1" \
     ${BINARIES}
 
@@ -110,7 +110,7 @@ elif [[ "${PLATFORM}" == "linux_arm64" ]]; then
     -j$(nproc) \
     USE_LIBBACKTRACE=0 \
     QUICK_AND_DIRTY_COMPILER=1 \
-    USE_SYSTEM_ROCKSDB=0 \
+    USE_CACHED_ROCKSDB=1 \
     deps-common
 
   # -j1 will disable parallel build and prevent OOM in github CI
@@ -121,7 +121,7 @@ elif [[ "${PLATFORM}" == "linux_arm64" ]]; then
     CXX="${CXX}" \
     NIMFLAGS="${NIMFLAGS_COMMON} --cpu:arm64 --arm64.linux.gcc.exe=${CC} --arm64.linux.gcc.linkerexe=${CXX} --passL:'-static-libstdc++'" \
     PARTIAL_STATIC_LINKING=1 \
-    USE_SYSTEM_ROCKSDB=0 \
+    USE_CACHED_ROCKSDB=1 \
     ${BINARIES}
 
 elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
@@ -145,7 +145,7 @@ elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
     -j$(nproc) \
     USE_LIBBACKTRACE=0 \
     QUICK_AND_DIRTY_COMPILER=1 \
-    USE_SYSTEM_ROCKSDB=0 \
+    USE_CACHED_ROCKSDB=1 \
     deps-common
 
   make \
@@ -154,7 +154,7 @@ elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
     LIBTOOL="aarch64-apple-darwin${DARWIN_VER}-libtool" \
     OS="darwin" \
     NIMFLAGS="${NIMFLAGS_COMMON} --os:macosx --cpu:arm64 --passC:'-mcpu=apple-a14' --clang.exe=${CC}" \
-    USE_SYSTEM_ROCKSDB=0 \
+    USE_CACHED_ROCKSDB=1 \
     nat-libs
 
   # -j1 will disable parallel build and prevent OOM in github CI
@@ -169,7 +169,7 @@ elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
     DSYMUTIL="${DSYMUTIL}" \
     FORCE_DSYMUTIL=1 \
     USE_VENDORED_LIBUNWIND=1 \
-    USE_SYSTEM_ROCKSDB=0 \
+    USE_CACHED_ROCKSDB=1 \
     NIMFLAGS="${NIMFLAGS_COMMON} --os:macosx --cpu:arm64 --passC:'-mcpu=apple-a14' --passL:-mcpu=apple-a14 --passL:-static-libstdc++ --clang.exe=${CC} --clang.linkerexe=${CXX}" \
     ${BINARIES}
 
@@ -187,7 +187,7 @@ else # linux_amd64
     NIMFLAGS="${NIMFLAGS_COMMON} --gcc.linkerexe=g++ --passL:'-static-libstdc++'" \
     PARTIAL_STATIC_LINKING=1 \
     QUICK_AND_DIRTY_COMPILER=1 \
-    USE_SYSTEM_ROCKSDB=0 \
+    USE_CACHED_ROCKSDB=1 \
     ${BINARIES}
 fi
 

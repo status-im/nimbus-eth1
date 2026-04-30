@@ -103,7 +103,7 @@ template sessionResume*(ctx: SnapCtxRef; info: static[string]): bool =
       for n in 0 ..< byTouch.len:
         let p = byTouch[n]
 
-        if p.coverage == 0:
+        if p.coverage.isZero:
           continue
 
         if stateDbCapacity <= tchInx.len:           # index list complete?
@@ -114,7 +114,9 @@ template sessionResume*(ctx: SnapCtxRef; info: static[string]): bool =
           chronicles.info info & ": Resuming download session",
             nStates=byTouch.len
 
-        if not p.onTrie:                            # ignore assembled data
+        if p.onTrie:                                # ignore assembled data
+          sdb.addAccountArchive p.coverage.per256() # set archived coverage
+        else:
           tchInx.add n                              # collect, re-process below
 
       if tchInx.len == 0:                           # nothing to do?

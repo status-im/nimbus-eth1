@@ -1151,6 +1151,27 @@ proc receiptsByBlockHash*(c: ForkedChainRef, blockHash: Hash32): Result[seq[Stor
 
   c.baseTxFrame.getReceipts(header.receiptsRoot)
 
+proc receiptByBlockHashAndIndex*(c: ForkedChainRef, blockHash: Hash32, index: uint64): Result[StoredReceipt, string] =
+  if blockHash != c.base.hash:
+    c.hashToBlock.withValue(blockHash, loc):
+      let header = ?loc[].txFrame.getBlockHeader(loc[].hash)
+      return loc[].txFrame.getReceiptByIndex(header.receiptsRoot, index.uint16)
+
+  let header = c.baseTxFrame.getBlockHeader(blockHash).valueOr:
+    return err("Block header not found")
+
+  c.baseTxFrame.getReceiptByIndex(header.receiptsRoot, index.uint16)
+
+proc txByBlockHashAndIndex*(c: ForkedChainRef, blockHash: Hash32, index: uint64): Result[Transaction, string] =
+  if blockHash != c.base.hash:
+    c.hashToBlock.withValue(blockHash, loc):
+      return loc[].txFrame.getTransactionByIndex(loc[].header.txRoot, index.uint16)
+
+  let header = c.baseTxFrame.getBlockHeader(blockHash).valueOr:
+    return err("Block header not found")
+
+  c.baseTxFrame.getTransactionByIndex(header.txRoot, index.uint16)
+
 proc payloadBodyV1InMemory*(c: ForkedChainRef,
                             first: BlockNumber,
                             last: BlockNumber,

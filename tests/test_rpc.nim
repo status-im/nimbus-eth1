@@ -615,7 +615,7 @@ proc rpcMain*() =
       check res.hash == env.blockHash
 
       expect JsonRpcError:
-        let res2 = await client.eth_getBlockByNumber($1, true)
+        discard await client.eth_getBlockByNumber($1, true)
 
     test "eth_getTransactionByHash":
       let res = await client.eth_getTransactionByHash(env.txHash)

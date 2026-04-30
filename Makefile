@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2025 Status Research & Development GmbH. Licensed under
+# Copyright (c) 2018-2026 Status Research & Development GmbH. Licensed under
 # either of:
 # - Apache License, version 2.0
 # - MIT license
@@ -205,6 +205,12 @@ ifeq ($(USE_LIBBACKTRACE), 0)
   NIM_PARAMS += -d:disable_libbacktrace
 endif
 
+# Used in docker/dist/entry_point.sh
+# To avoid confusion with USE_SYSTEM_ROCKSDB
+ifeq ($(USE_CACHED_ROCKSDB), 1)
+  USE_SYSTEM_ROCKSDB = 1
+endif
+
 deps: | deps-common nat-libs nimbus.nims
 
 # eth protocol settings, rules from "execution_chain/sync/protocol/eth/variables.mk"
@@ -251,7 +257,11 @@ ifneq ($(USE_SYSTEM_ROCKSDB), 1)
 	+ MAKE="$(MAKE)" \
 		scripts/rocksdb_ci_cache.sh $(ROCKSDB_CI_CACHE)
 else
+ifeq ($(USE_CACHED_ROCKSDB), 1)
+	@echo "Using cached RocksDB"
+else
 	@echo "Using system RocksDB"
+endif
 endif
 
 eest:
