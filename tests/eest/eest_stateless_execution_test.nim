@@ -36,7 +36,6 @@ const skipFiles = [
   "witness_codes_delegated_eoa_insufficient_balance.json", # blockAccessListHash mismatch
   "witness_codes_create_same_hash_then_read.json", # Witness codes mismatch
   "witness_headers_blockhash_boundary.json", # Witness state mismatch
-  "witness_headers_extra_unused_older_ancestor.json", # Witness headers mismatch
   "witness_state_block_diff_delete_insert_before_delete_order.json", # persistStorage assert
   "genesis_hash_available.json", # Witness state mismatch
   "scenarios.json", # Witness state mismatch + stateRoot mismatch
