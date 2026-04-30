@@ -66,6 +66,9 @@ type
   StoLeafRef* = ref object of LeafRef
     stoData*: UInt256
 
+  ## NOTE: Leaf cache values are stored as value types so the cache can be safely 
+  ## written from background pre-fetch threads under refc (which uses thread-local heaps).
+  
   CachedAccLeaf* = object
     case empty*: bool
     of true:
@@ -132,6 +135,48 @@ template init*(
     _: type ExtBranchRef, pfxp: NibblesBuf, startVidp: VertexID, usedp: uint16
 ): ExtBranchRef =
   ExtBranchRef(vType: ExtBranch, pfx: pfxp, startVid: startVidp, used: usedp)
+
+template init*(
+    T: type CachedAccLeaf, pfxp: NibblesBuf, accountp: AristoAccount, stoIDp: StorageID): T =
+  T(empty: false, pfx: pfxp, account: accountp, stoID: stoIDp)
+
+template init*(
+    T: type CachedStoLeaf, pfxp: NibblesBuf, stoDatap: UInt256): T =
+  T(empty: false, pfx: pfxp, stoData: stoDatap)
+
+template initEmpty(T: type CachedAccLeaf): T =
+  T(empty: true)
+
+template initEmpty(T: type CachedStoLeaf): T =
+  T(empty: true)
+
+const
+  emptyCachedAccLeaf* = CachedAccLeaf.initEmpty()
+  emptyCachedStoLeaf* = CachedStoLeaf.initEmpty()
+
+func toCached*(v: AccLeafRef): CachedAccLeaf =
+  if v.isNil: 
+    emptyCachedAccLeaf
+  else: 
+    CachedAccLeaf.init(v.pfx, v.account, v.stoID)
+
+func toCached*(v: StoLeafRef): CachedStoLeaf =
+  if v.isNil: 
+    emptyCachedStoLeaf
+  else: 
+    CachedStoLeaf.init(v.pfx, v.stoData)
+
+func toLeaf*(c: CachedAccLeaf): AccLeafRef =
+  if c.empty: 
+    AccLeafRef(nil) 
+  else: 
+    AccLeafRef.init(c.pfx, c.account, c.stoID)
+
+func toLeaf*(c: CachedStoLeaf): StoLeafRef =
+  if c.empty: 
+    StoLeafRef(nil) 
+  else: 
+    StoLeafRef.init(c.pfx, c.stoData)
 
 const emptyNibbles = NibblesBuf()
 
