@@ -207,11 +207,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     return invalidFCU(error, chain, header)
 
   # Enqueue the actual forkchoice apply. For ack-only fCUs we don't await
-  # the result: by spec the CL only needs us to confirm validation, and the
-  # head/finalized application can run after we respond. This avoids the
-  # response getting blocked behind the shared queue worker (which also
-  # serializes `validateBlock` and `processUpdateBase`, the latter occasionally
-  # stalling for hundreds of ms during RocksDB compactions).
+  # the result. This avoids the response getting blocked behind the shared queue worker
   let fcuFut = chain.queueForkChoice(headHash, finalizedBlockHash, safeBlockHash)
 
   # If payload generation was requested, create a new block to be potentially
