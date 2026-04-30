@@ -120,6 +120,78 @@ proc frameFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[CoreDbTxRef, st
 proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag, noHash: bool = false): Result[Block, string] =
   api.chain.blockFromTag(blockTag, noHash)
 
+proc getLogsForBlock*(
+    chain: ForkedChainRef, header: Header, opts: FilterOptions
+): Opt[seq[FilterLog]] =
+  if not headerBloomFilter(header, opts.address, opts.topics):
+    return Opt.some(newSeq[FilterLog](0))
+
+  let
+    blkHash = header.computeBlockHash
+    receipts = chain.receiptsByBlockHash(blkHash).valueOr:
+      return Opt.none(seq[FilterLog])
+
+  var
+    resLogs = newSeq[FilterLog]()
+    logIndex = 0'u64
+    cachedHashes: Opt[seq[Hash32]]
+    cacheResolved = false
+
+  for i, receipt in receipts:
+    let logs =
+      receipt.logs.filterIt(it.match(opts.address, opts.topics))
+    if logs.len == 0:
+      continue
+
+    if not cacheResolved:
+      cachedHashes = chain.memoryTxHashesForBlock(blkHash)
+      cacheResolved = true
+
+    let txHash =
+      if cachedHashes.isSome and i < cachedHashes.get.len:
+        cachedHashes.get[i]
+      else:
+        let tx = chain.txByBlockHashAndIndex(blkHash, i.uint64).valueOr:
+          return Opt.none(seq[FilterLog])
+        tx.computeRlpHash
+
+    for log in logs:
+      resLogs.add(FilterLog(
+        removed: false,
+        logIndex: Opt.some(Quantity(logIndex)),
+        transactionIndex: Opt.some(Quantity(i)),
+        transactionHash: Opt.some(txHash),
+        blockHash: Opt.some(blkHash),
+        blockNumber: Opt.some(Quantity(header.number)),
+        blockTimestamp: Opt.some(Quantity(header.timestamp)),
+        address: log.address,
+        data: log.data,
+        topics: log.topics,
+      ))
+      inc logIndex
+
+  return Opt.some(resLogs)
+
+proc getLogsForRange*(
+    chain: ForkedChainRef,
+    start: base.BlockNumber,
+    finish: base.BlockNumber,
+    opts: FilterOptions,
+): seq[FilterLog] =
+  var
+    logs = newSeq[FilterLog]()
+    blockNum = start
+
+  while blockNum <= finish:
+    let
+      header = chain.headerByNumber(blockNum).valueOr:
+        return logs
+      filtered = chain.getLogsForBlock(header, opts).valueOr:
+        return logs
+    logs.add(filtered)
+    blockNum = blockNum + 1
+  return logs
+
 proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManager) =
   server.rpc("eth_getBalance") do(data: Address, blockTag: BlockTag) -> UInt256:
     ## Returns the balance of the account of given address.
@@ -223,51 +295,6 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         highestBlock: Quantity(target),
       )
       return SyncingStatus(syncing: true, syncObject: sync)
-
-  proc getLogsForBlock(
-      chain: ForkedChainRef, header: Header, opts: FilterOptions
-  ): Opt[seq[FilterLog]] =
-    if headerBloomFilter(header, opts.address, opts.topics):
-      let
-        blkHash = header.computeBlockHash
-        blockBody = chain.blockBodyByHash(blkHash).valueOr:
-          return Opt.none(seq[FilterLog])
-        receipts = chain.receiptsByBlockHash(blkHash).valueOr:
-          return Opt.none(seq[FilterLog])
-        cachedHashes = chain.memoryTxHashesForBlock(blkHash)
-      # Note: this will hit assertion error if number of block transactions
-      # do not match block receipts.
-      # Although this is fine as number of receipts should always match number
-      # of transactions
-      if blockBody.transactions.len != receipts.len:
-        warn "Transactions and receipts length mismatch",
-          number = header.number, hash = blkHash.short,
-          txs = blockBody.transactions.len, receipts = receipts.len
-        return Opt.none(seq[FilterLog])
-      let logs = deriveLogs(header, blockBody.transactions, receipts, opts, cachedHashes)
-      return Opt.some(logs)
-    else:
-      return Opt.some(newSeq[FilterLog](0))
-
-  proc getLogsForRange(
-      chain: ForkedChainRef,
-      start: base.BlockNumber,
-      finish: base.BlockNumber,
-      opts: FilterOptions,
-  ): seq[FilterLog] =
-    var
-      logs = newSeq[FilterLog]()
-      blockNum = start
-
-    while blockNum <= finish:
-      let
-        header = chain.headerByNumber(blockNum).valueOr:
-          return logs
-        filtered = chain.getLogsForBlock(header, opts).valueOr:
-          return logs
-      logs.add(filtered)
-      blockNum = blockNum + 1
-    return logs
 
   server.rpc("eth_getLogs") do(filterOptions: FilterOptions) -> seq[FilterLog]:
     ## filterOptions: settings for this filter.
