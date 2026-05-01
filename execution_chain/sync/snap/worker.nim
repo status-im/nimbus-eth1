@@ -120,6 +120,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       let ela {.used.} = ctx.sessionMkTrie(info).valueOr:
         break body                                  # shutdown?
 
+      ctx.updateSyncHealing()                       # set next state
       debug info & ": mkTrie imported",
         ela=ela.toStr, syncState=ctx.syncState
 
