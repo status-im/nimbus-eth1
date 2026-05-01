@@ -113,7 +113,7 @@ proc startBeaconBackends(
   clients
 
 proc startFrontends(
-    engine: RpcVerificationEngine, urls: seq[string]
+    frontend: ExecutionApiFrontend, urls: seq[string]
 ): seq[JsonRpcServer] {.raises: [ProxyError].} =
   var servers: seq[JsonRpcServer] = @[]
 
@@ -123,7 +123,7 @@ proc startFrontends(
       continue
 
     # inject frontend
-    server.injectEngineFrontend(engine.frontend)
+    server.injectEngineFrontend(frontend)
 
     let status = server.start()
     if status.isErr():
@@ -183,9 +183,8 @@ proc run(
   let execBackendClients =
     await startExecutionBackends(engine, config.executionApiUrls, regularCaps)
   let beaconBackendClients = await startBeaconBackends(engine, config.beaconApiUrls)
-  let frontendServers = engine.startFrontends(config.frontendUrls)
-
-  engine.registerDefaultFrontend()
+  let frontend = engine.getExecutionApiFrontend()
+  let frontendServers = startFrontends(frontend, config.frontendUrls)
 
   try:
     while true:

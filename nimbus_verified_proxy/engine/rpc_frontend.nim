@@ -70,13 +70,15 @@ template penaltyOr[T](engine: RpcVerificationEngine, r: EngineResult[T]): T =
     return
   penaltyOrResult.unsafeGet()
 
-proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
-  engine.frontend.eth_chainId = proc(): Future[EngineResult[UInt256]] {.
+proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFrontend =
+  var frontend: ExecutionApiFrontend
+
+  frontend.eth_chainId = proc(): Future[EngineResult[UInt256]] {.
       async: (raises: [CancelledError])
   .} =
     ok(engine.chainId)
 
-  engine.frontend.eth_blockNumber = proc(): Future[EngineResult[uint64]] {.
+  frontend.eth_blockNumber = proc(): Future[EngineResult[uint64]] {.
       async: (raises: [CancelledError])
   .} =
     engine.beaconSync()
@@ -93,7 +95,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     ok(latest.number.uint64)
 
-  engine.frontend.eth_getBalance = proc(
+  frontend.eth_getBalance = proc(
       address: Address, quantityTag: BlockTag
   ): Future[EngineResult[UInt256]] {.async: (raises: [CancelledError]).} =
     engine.beaconSync()
@@ -104,7 +106,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     )
     ok(account.balance)
 
-  engine.frontend.eth_getStorageAt = proc(
+  frontend.eth_getStorageAt = proc(
       address: Address, slot: UInt256, quantityTag: BlockTag
   ): Future[EngineResult[FixedBytes[32]]] {.async: (raises: [CancelledError]).} =
     engine.beaconSync()
@@ -115,7 +117,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     )
     ok(storage.to(Bytes32))
 
-  engine.frontend.eth_getTransactionCount = proc(
+  frontend.eth_getTransactionCount = proc(
       address: Address, quantityTag: BlockTag
   ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).} =
     engine.beaconSync()
@@ -126,7 +128,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     )
     ok(Quantity(account.nonce))
 
-  engine.frontend.eth_getCode = proc(
+  frontend.eth_getCode = proc(
       address: Address, quantityTag: BlockTag
   ): Future[EngineResult[seq[byte]]] {.async: (raises: [CancelledError]).} =
     engine.beaconSync()
@@ -136,7 +138,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
       engine.penaltyOr(await engine.getCode(address, header.number, header.stateRoot))
     ok(code)
 
-  engine.frontend.eth_getBlockByHash = proc(
+  frontend.eth_getBlockByHash = proc(
       blockHash: Hash32, fullTransactions: bool
   ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
     engine.beaconSync()
@@ -144,7 +146,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     let blk = engine.penaltyOr(await engine.getBlock(blockHash, fullTransactions))
     ok(blk)
 
-  engine.frontend.eth_getBlockByNumber = proc(
+  frontend.eth_getBlockByNumber = proc(
       blockTag: BlockTag, fullTransactions: bool
   ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
     engine.beaconSync()
@@ -152,7 +154,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     let blk = engine.penaltyOr(await engine.getBlock(blockTag, fullTransactions))
     ok(blk)
 
-  engine.frontend.eth_getUncleCountByBlockNumber = proc(
+  frontend.eth_getUncleCountByBlockNumber = proc(
       blockTag: BlockTag
   ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).} =
     engine.beaconSync()
@@ -160,7 +162,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     let blk = engine.penaltyOr(await engine.getBlock(blockTag, false))
     ok(Quantity(blk.uncles.len()))
 
-  engine.frontend.eth_getUncleCountByBlockHash = proc(
+  frontend.eth_getUncleCountByBlockHash = proc(
       blockHash: Hash32
   ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).} =
     engine.beaconSync()
@@ -168,7 +170,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     let blk = engine.penaltyOr(await engine.getBlock(blockHash, false))
     ok(Quantity(blk.uncles.len()))
 
-  engine.frontend.eth_getBlockTransactionCountByNumber = proc(
+  frontend.eth_getBlockTransactionCountByNumber = proc(
       blockTag: BlockTag
   ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).} =
     engine.beaconSync()
@@ -176,7 +178,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     let blk = engine.penaltyOr(await engine.getBlock(blockTag, true))
     ok(Quantity(blk.transactions.len))
 
-  engine.frontend.eth_getBlockTransactionCountByHash = proc(
+  frontend.eth_getBlockTransactionCountByHash = proc(
       blockHash: Hash32
   ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).} =
     engine.beaconSync()
@@ -184,7 +186,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     let blk = engine.penaltyOr(await engine.getBlock(blockHash, true))
     ok(Quantity(blk.transactions.len))
 
-  engine.frontend.eth_getTransactionByBlockNumberAndIndex = proc(
+  frontend.eth_getTransactionByBlockNumberAndIndex = proc(
       blockTag: BlockTag, index: Quantity
   ): Future[EngineResult[TransactionObject]] {.async: (raises: [CancelledError]).} =
     engine.beaconSync()
@@ -199,7 +201,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     ok(x.tx)
 
-  engine.frontend.eth_getTransactionByBlockHashAndIndex = proc(
+  frontend.eth_getTransactionByBlockHashAndIndex = proc(
       blockHash: Hash32, index: Quantity
   ): Future[EngineResult[TransactionObject]] {.async: (raises: [CancelledError]).} =
     engine.beaconSync()
@@ -214,7 +216,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     ok(x.tx)
 
-  engine.frontend.eth_call = proc(
+  frontend.eth_call = proc(
       tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: bool = true
   ): Future[EngineResult[seq[byte]]] {.async: (raises: [CancelledError]).} =
     engine.beaconSync()
@@ -246,7 +248,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     ok(callResult.output)
 
-  engine.frontend.eth_createAccessList = proc(
+  frontend.eth_createAccessList = proc(
       tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: bool = true
   ): Future[EngineResult[AccessListResult]] {.async: (raises: [CancelledError]).} =
     engine.beaconSync()
@@ -278,7 +280,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
       AccessListResult(accessList: accessList, error: error, gasUsed: gasUsed.Quantity)
     )
 
-  engine.frontend.eth_estimateGas = proc(
+  frontend.eth_estimateGas = proc(
       tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: bool = true
   ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).} =
     engine.beaconSync()
@@ -307,7 +309,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     ok(Quantity(gasEstimate))
 
-  engine.frontend.eth_getTransactionByHash = proc(
+  frontend.eth_getTransactionByHash = proc(
       txHash: Hash32
   ): Future[EngineResult[TransactionObject]] {.async: (raises: [CancelledError]).} =
     engine.beaconSync()
@@ -336,7 +338,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     ok(tx)
 
-  engine.frontend.eth_getBlockReceipts = proc(
+  frontend.eth_getBlockReceipts = proc(
       blockTag: BlockTag
   ): Future[EngineResult[Opt[seq[ReceiptObject]]]] {.async: (raises: [CancelledError]).} =
     engine.beaconSync()
@@ -344,7 +346,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     let rxs = engine.penaltyOr(await engine.getReceipts(blockTag))
     ok(Opt.some(rxs))
 
-  engine.frontend.eth_getTransactionReceipt = proc(
+  frontend.eth_getTransactionReceipt = proc(
       txHash: Hash32
   ): Future[EngineResult[ReceiptObject]] {.async: (raises: [CancelledError]).} =
     engine.beaconSync()
@@ -361,7 +363,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     return err((VerificationError, "receipt couldn't be verified", backendIdx))
 
-  engine.frontend.eth_getLogs = proc(
+  frontend.eth_getLogs = proc(
       filterOptions: FilterOptions
   ): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).} =
     engine.beaconSync()
@@ -369,7 +371,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     let logObjs = engine.penaltyOr(await engine.getLogs(filterOptions))
     ok(logObjs)
 
-  engine.frontend.eth_newFilter = proc(
+  frontend.eth_newFilter = proc(
       filterOptions: FilterOptions
   ): Future[EngineResult[string]] {.async: (raises: [CancelledError]).} =
     engine.beaconSync()
@@ -408,7 +410,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     ok(strId)
 
-  engine.frontend.eth_uninstallFilter = proc(
+  frontend.eth_uninstallFilter = proc(
       filterId: string
   ): Future[EngineResult[bool]] {.async: (raises: [CancelledError]).} =
     engine.beaconSync()
@@ -419,7 +421,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     ok(false)
 
-  engine.frontend.eth_getFilterLogs = proc(
+  frontend.eth_getFilterLogs = proc(
       filterId: string
   ): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).} =
     engine.beaconSync()
@@ -431,7 +433,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     except KeyError:
       err((FrontendError, "Filter doesn't exist", UNTAGGED))
 
-  engine.frontend.eth_getFilterChanges = proc(
+  frontend.eth_getFilterChanges = proc(
       filterId: string
   ): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).} =
     engine.beaconSync()
@@ -481,7 +483,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     ok(logObjs)
 
-  engine.frontend.eth_blobBaseFee = proc(): Future[EngineResult[UInt256]] {.
+  frontend.eth_blobBaseFee = proc(): Future[EngineResult[UInt256]] {.
       async: (raises: [CancelledError])
   .} =
     engine.beaconSync()
@@ -508,7 +510,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     ok(blobBaseFee)
 
-  engine.frontend.eth_gasPrice = proc(): Future[EngineResult[Quantity]] {.
+  frontend.eth_gasPrice = proc(): Future[EngineResult[Quantity]] {.
       async: (raises: [CancelledError])
   .} =
     engine.beaconSync()
@@ -516,7 +518,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     let suggestedPrice = engine.penaltyOr(await engine.suggestGasPrice())
     ok(Quantity(suggestedPrice.uint64))
 
-  engine.frontend.eth_maxPriorityFeePerGas = proc(): Future[EngineResult[Quantity]] {.
+  frontend.eth_maxPriorityFeePerGas = proc(): Future[EngineResult[Quantity]] {.
       async: (raises: [CancelledError])
   .} =
     engine.beaconSync()
@@ -525,7 +527,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     ok(Quantity(suggestedPrice.uint64))
 
   # pass-forward
-  engine.frontend.eth_getProof = proc(
+  frontend.eth_getProof = proc(
       address: Address, slots: seq[UInt256], blockId: BlockTag
   ): Future[EngineResult[ProofResponse]] {.async: (raises: [CancelledError]).} =
     engine.beaconSync()
@@ -536,7 +538,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     )
     ok(proof)
 
-  engine.frontend.eth_feeHistory = proc(
+  frontend.eth_feeHistory = proc(
       blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[int]
   ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).} =
     engine.beaconSync()
@@ -549,7 +551,7 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     )
     ok(feeHistory)
 
-  engine.frontend.eth_sendRawTransaction = proc(
+  frontend.eth_sendRawTransaction = proc(
       txBytes: seq[byte]
   ): Future[EngineResult[Hash32]] {.async: (raises: [CancelledError]).} =
     engine.beaconSync()
@@ -559,3 +561,5 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
       (await backend.eth_sendRawTransaction(txBytes)).tagBackend(backendIdx)
     )
     ok(txHash)
+
+  frontend

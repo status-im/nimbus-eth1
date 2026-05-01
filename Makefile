@@ -372,6 +372,7 @@ nimbus_verified_proxy: | build deps
 nimbus_verified_proxy_test: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) nimbus_verified_proxy/tests/all_proxy_tests.nim
+		rm nimbus_verified_proxy/tests/all_proxy_tests
 
 # Shared library for verified proxy
 

@@ -286,7 +286,6 @@ type
     beaconBackends: Table[int, BeaconApiBackend]
     scores*: Table[int, BackendScore]
     capabilityIndex: array[BackendCapability, seq[int]]
-    frontend*: ExecutionApiFrontend
 
     # scoring
     availabilityScoreFunc*: ScoreFunc

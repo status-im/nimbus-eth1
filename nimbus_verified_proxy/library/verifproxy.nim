@@ -247,8 +247,7 @@ proc run*(
           client.getExecutionApiBackend(), BackendCapabilities({SendRawTransaction})
         )
 
-  engine.registerDefaultFrontend()
-  ctx.frontend = engine.frontend
+  ctx.frontend = engine.getExecutionApiFrontend()
 
 proc startVerifProxy(
     configJson: cstring,

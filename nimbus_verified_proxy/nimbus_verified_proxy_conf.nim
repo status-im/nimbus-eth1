@@ -12,7 +12,6 @@ import
   json_serialization/std/net,
   confutils/toml/defs as confTomlDefs,
   beacon_chain/spec/digest,
-  beacon_chain/conf,
   beacon_chain/nimbus_binary_common
 
 export net
