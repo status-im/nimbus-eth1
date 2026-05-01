@@ -199,6 +199,9 @@ proc afterExec(c: Computation) =
   else:
     c.afterExecCreate()
 
+  if c.fork >= FkAmsterdam and c.shouldBurnGas:
+    c.gasMeter.restoreStateGasReservoir(c.msg.stateGas)
+
   if c.isSuccess:
     c.commit()
   else:

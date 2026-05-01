@@ -110,3 +110,13 @@ func selfDestructRefundStateGas*(gasMeter: var GasMeter; amount: GasInt) =
   let applied = min(amount, gasMeter.stateGasUsed)
   gasMeter.stateGasLeft += applied
   gasMeter.stateGasUsed -= applied
+
+func restoreStateGasReservoir*(gasMeter: var GasMeter, reservoir: GasInt) =
+  let totalState = gasMeter.stateGasUsed + gasMeter.stateGasLeft
+  if totalState > reservoir:
+    gasMeter.regularGasUsed += totalState - reservoir
+  gasMeter.stateGasLeft = reservoir
+  gasMeter.stateGasUsed = 0
+  gasMeter.stateGasRefund = 0
+  gasMeter.stateGasRefundPending = 0
+  
