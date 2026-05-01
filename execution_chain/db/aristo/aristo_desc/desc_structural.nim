@@ -154,17 +154,8 @@ const
   emptyCachedAccLeaf* = CachedAccLeaf.initEmpty()
   emptyCachedStoLeaf* = CachedStoLeaf.initEmpty()
 
-func toCached*(v: AccLeafRef): CachedAccLeaf =
-  if v.isNil: 
-    emptyCachedAccLeaf
-  else: 
-    CachedAccLeaf.init(v.pfx, v.account, v.stoID)
-
-func toCached*(v: StoLeafRef): CachedStoLeaf =
-  if v.isNil: 
-    emptyCachedStoLeaf
-  else: 
-    CachedStoLeaf.init(v.pfx, v.stoData)
+template isEmpty*(c: CachedAccLeaf | CachedStoLeaf): bool =
+  c.empty
 
 func toLeaf*(c: CachedAccLeaf): AccLeafRef =
   if c.empty: 
@@ -177,6 +168,18 @@ func toLeaf*(c: CachedStoLeaf): StoLeafRef =
     StoLeafRef(nil) 
   else: 
     StoLeafRef.init(c.pfx, c.stoData)
+
+func toStoData*(c: CachedStoLeaf): UInt256 =
+  if c.empty: 
+    0'u256
+  else:
+    c.stoData
+
+func toStoData*(v: StoLeafRef): UInt256 =
+  if v.isNil():
+    0'u256
+  else:
+    v.stoData
 
 const emptyNibbles = NibblesBuf()
 
