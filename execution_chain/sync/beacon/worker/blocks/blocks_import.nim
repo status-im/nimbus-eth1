@@ -18,8 +18,7 @@ import
 
 template clearBlock(blk: EthBlock) =
   # chronos closure iterators copy `blk` into the closure environment
-  # (vendor/nim-chronos/chronos/config.nim:132). Clear the env copy after
-  # last use to release seq[Transaction] before subsequent awaits.
+  # Clear the env copy after last use to release seq[Transaction] before subsequent awaits.
   reset(cast[ptr EthBlock](unsafeAddr blk)[])
 
 # ------------------------------------------------------------------------------
