@@ -12,9 +12,12 @@
 
 import
   std/[algorithm, sets, sequtils, typetraits],
-  pkg/[chronicles, chronos, stew/interval_set, stint],
+  pkg/[chronicles, chronos, metrics, stew/interval_set, stint],
   ../[helpers, mpt, state_db, worker_desc],
   ./session_helpers
+
+declareGauge nec_snap_merged_mpt_coverage, "" &
+  "Factor of accumulated account ranges covered when assembling MPT"
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -202,6 +205,9 @@ template mkTrieImpl(
 
     discard cov.merge(wAcc.start, wAcc.limit)       # completed range accounting
 
+    # Update metrics
+    metrics.set(nec_snap_merged_mpt_coverage, cov.totalRatio)
+
     # Process storage slots
     for n in 0 ..< wAcc.accounts.len:
       if not wAcc.accounts[n].accBody.storageRoot.isEmpty:
@@ -225,6 +231,10 @@ template mkTrieImpl(
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
+
+proc sessionMkTrieInit*( ctx: SnapCtxRef) =
+  # Reset metrics
+  metrics.set(nec_snap_merged_mpt_coverage, 0f)
 
 template sessionMkTrie*(
     ctx: SnapCtxRef;
