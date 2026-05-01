@@ -20,6 +20,16 @@ import
 # Private helpers
 # ------------------------------------------------------------------------------
 
+proc rollBackPartTries(
+    buddy: SnapPeerRef;
+    state: StateDataRef;
+    part: openArray[(ItemKey,StoreRoot,ItemKeyRange)];
+    start: int;
+      ) =
+  ## helper
+  for n in start ..< part.len:
+    state.register(part[n][0], part[n][1], part[n][2])
+
 proc putStoAndProof(
     adb: MptAsmRef;
     root: StateRoot;
@@ -82,8 +92,6 @@ template downloadImpl(
         # Fetch from network
         data = buddy.fetchStorage(sRoot, accHashes, ivReq).valueOr:
           state.register accLeft                    # stash data and return
-          trace info & ": fetching slots failed", peer, root,
-            start, nAccLeft=accLeft.len
           break body                                # error => return
 
         if not state.isOperable():                  # evicted => return
@@ -94,7 +102,7 @@ template downloadImpl(
         for n in 0 ..< data.slots.len:
           adb.putStoSlot(sRoot, accLeft[n][0], data.slots[n], peerID).isOkOr:
             state.register(accLeft[n .. ^1])   # stash data and return
-            trace info & ": storing slots failed", peer, root, nStored=n,
+            debug info & ": Storing slots failed", peer, root, nStored=n,
               start=(start+n), nAccLeft=(accLeft.len - n)
             break body                              # error => return
           bodyRc = true                             # did something => ret code
@@ -110,7 +118,7 @@ template downloadImpl(
           sRoot, thisAcc[0], low(ItemKey), limit, data, peerID).isOkOr:
             state.register(thisAcc)                 # stash this trie fully
             state.register(accLeft)                 # stash rest and return
-            trace info & ": storing partial slots failed", peer, root,
+            debug info & ": Storing partial slots failed", peer, root,
               start, nAccLeft=accLeft.len
             break body                              # error => return
         bodyRc = true                               # did something => ret code
@@ -123,8 +131,9 @@ template downloadImpl(
           let ivData = buddy.fetchStorage(sRoot, @[thisAcc[0]], iv).valueOr:
             state.register(thisAcc, iv)           # stash part. trie
             state.register(accLeft)               # stash rest and return
-            trace info & ": fetching partial slots failed", peer, root, start,
-              nAccLeft=accLeft.len, iv=iv.flStr, `error`=error
+            trace info & ": Fetching partial slots failed", peer,
+              `state`=state.toStr(sdb), start,nAccLeft=accLeft.len,
+              iv=iv.flStr, `error`=error
             break body                            # error => return
 
           if not state.isOperable():              # evicted => return
@@ -138,7 +147,7 @@ template downloadImpl(
             sRoot, thisAcc[0], iv.minPt, limit, ivData, peerID).isOkOr:
               state.register(thisAcc, iv)           # stash part. trie
               state.register(accLeft)               # stash rest and return
-              trace info & ": storing partial slots failed", peer, root, start,
+              debug info & ": Storing partial slots failed", peer, root, start,
                 nAccLeft=accLeft.len, iv=iv.flStr, limit=limit.flStr
               break body                            # error => return
 
@@ -176,7 +185,7 @@ template downloadFromQueue(
       partTries: seq[(ItemKey,StoreRoot,ItemKeyRange)]
       partStart = 0                                 # start inx of `partTries[]`
 
-    for w in state.stoItems:
+    for w in state.stoItems(nFetchStorageSlotsMax):
       if w.data.stoLeft.len == 0:                   # `0` => `2^256``
         fullTries.add (w.key, w.data.stoRoot)
       else:
@@ -188,32 +197,36 @@ template downloadFromQueue(
 
     # Process full tries (all at once)
     if 0 < fullTries.len:
-      if buddy.downloadImpl(state, fullTries, ItemKeyRangeMax, info):
-        bodyRc = true
-      elif not state.isOperable():                  # evicted => return
-        bodyRc = false                              # ignore downloaded data
+      if not buddy.downloadImpl(state, fullTries, ItemKeyRangeMax, info) or
+         not state.isOperable():                    # evicted => return
+        bodyRc = false
         break body
+      bodyRc = true
 
     # Process partial tries (one by one)
     while partStart < partTries.len:
       if buddy.ctrl.stopped:                        # roll back `partTries[]`
-        for n in partStart ..< partTries.len:
-          state.register(partTries[n][0], partTries[n][1], partTries[n][2])
-        trace info & ": rolled back to slots queue", peer, root,
-          partStart, nTriesLeft=(partTries.len - partStart)
-        break
+        buddy.rollBackPartTries(state, partTries, partStart)
+        trace info & ": rolled back to slots queue", peer,
+          `state`=state.toStr(sdb), partStart,
+          nTriesLeft=(partTries.len - partStart)
+        bodyRc = false
+        break body
 
       let
         acc = @[(partTries[partStart][0], partTries[partStart][1])]
         iv = partTries[partStart][2]
       partStart.inc
 
-      if buddy.downloadImpl(state, acc, iv, info):
-        bodyRc = true
-      elif not state.isOperable():                  # evicted => return
-        bodyRc = false                              # ignore downloaded data
+      if not buddy.downloadImpl(state, acc, iv, info) or
+         not state.isOperable():                    # evicted => return
+        bodyRc = false
         break body
-      # End `while`
+      bodyRc = true
+      # End `while
+
+    # Reaching here, `bodyRc` is `true` if all the previous `downloadImpl()`
+    # directives returned `true` (and there was no system request to stop.)
 
   bodyRc                                            # return code
 
@@ -230,26 +243,23 @@ template storageDownload*(
   ## Async/template
   ##
   block body:
-    if not state.isOperable():                      # evicted => return
-      break body
+    if state.isOperable():                          # evicted => return
 
-    let acc = accounts
-       .filterIt(not it.accBody.storageRoot.isEmpty)
-       .mapIt( (it.accHash.to(ItemKey),
-                it.accBody.storageRoot.to(Hash32).to(StoreRoot)) )
+      # Register downloads for peer synchronisateion
+      state.register accounts
+         .filterIt(not it.accBody.storageRoot.isEmpty)
+         .mapIt( (it.accHash.to(ItemKey),
+                  it.accBody.storageRoot.to(Hash32).to(StoreRoot)) )
 
-    if buddy.ctrl.stopped:
-      state.register acc                            # stash data and return
-      break body                                    # all done
+      if state.hasCodeOrStorage:
 
-    if not buddy.downloadImpl(state, acc, ItemKeyRangeMax, info) and
-       not state.isOperable():                      # evicted => return
-      break body                                    # all done
+        while not buddy.ctrl.stopped and
+              state.hasCodeOrStorage and
+              buddy.downloadFromQueue(state, info):
+          continue
 
-    while not buddy.ctrl.stopped and
-          state.hasCodeOrStorage and
-          buddy.downloadFromQueue(state, info):
-      continue
+        trace info & ": storage done", peer, root=state.rootStr,
+          todo=state.hasCodeOrStorage, syncState=buddy.syncState
 
   discard                                           # visual alignment
 

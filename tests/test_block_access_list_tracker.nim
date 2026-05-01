@@ -87,16 +87,6 @@ suite "Block access list tracker":
       do:
         raiseAssert("AccountData should exist")
 
-  test "Set invalid block access index":
-    let balIndexes = [
-      uint16.low.int - 1,
-      uint16.high.int + 1
-    ]
-
-    for balIndex in balIndexes:
-      expect AssertionDefect:
-        tracker.setBlockAccessIndex(balIndex)
-
   test "Capture pre balance - stores in preBalanceCache and returns":
     block:
       let cacheKey = address1

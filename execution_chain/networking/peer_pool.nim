@@ -19,7 +19,7 @@ import
   ./p2p_metrics,
   ./[eth1_discovery, p2p_peers]
 
-export sets, tables, CompatibleForkIdProc, base
+export sets, tables, CompatibleForkIdProc, base, eth1_discovery
 
 logScope:
   topics = "p2p peer_pool"
@@ -241,6 +241,8 @@ func delObserver*(p: PeerPoolRef, observerId: ref) =
 
 template addProtocol*(observer: PeerObserverRef, Protocol: type) =
   observer.protocols.add Protocol.protocolInfo
+
+func eth1Discovery*(p: PeerPoolRef): Eth1Discovery = p.discovery
 
 func len*(p: PeerPoolRef): int = p.connectedNodes.len
 

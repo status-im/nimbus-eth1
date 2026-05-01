@@ -42,7 +42,7 @@ proc testTxByFork(tx: Transaction, forkData: JsonNode, forkName: string, testSta
     memDB  = newCoreDbRef DefaultDbMemory
     com    = CommonRef.new(memDB, config)
 
-  validateTxBasic(com, tx, nameToFork[forkName]).isOkOr:
+  validateTxBasic(com, tx, 10_000_000, nameToFork[forkName]).isOkOr:
     return
 
   if forkData.len > 0 and "sender" in forkData:

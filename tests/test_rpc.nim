@@ -24,7 +24,7 @@ import
   ../execution_chain/core/eip4844,
   ../execution_chain/utils/utils,
   ../execution_chain/[common, rpc],
-  ../execution_chain/rpc/[rpc_types, common as rpc_common],
+  ../execution_chain/rpc/[rpc_types, rpc_utils, common as rpc_common],
   ../execution_chain/beacon/web3_eth_conv,
   ../execution_chain/networking/p2p,
   ../execution_chain/nimbus_desc,
@@ -228,6 +228,7 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
   setupServerAPI(serverApi, server, am)
   setupCommonRpc(node, conf, server)
   setupAdminRpc(nimbus, conf, server)
+  setupDebugRpc(com, txPool, server)
   server.start()
 
   TestEnv(
@@ -289,6 +290,7 @@ createRpcSigsFromNim(RpcClient):
   proc net_peerCount(): Quantity
   proc admin_nodeInfo(): NodeInfo
   proc admin_peers(): seq[PeerInfo]
+  proc eth_maxPriorityFeePerGas(): Quantity
 
 proc rpcMain*() =
   suite "Remote Procedure Calls":
@@ -329,6 +331,8 @@ proc rpcMain*() =
         res.id.len > 0
         res.name == env.conf.agentString
         res.enode.startsWith("enode://")
+        res.enr.isSome
+        res.enr.get().startsWith("enr:")
         res.ip.len > 0
         res.ports.discovery > 0
         res.ports.listener > 0
@@ -378,6 +382,10 @@ proc rpcMain*() =
     test "eth_gasPrice":
       let res = await client.eth_gasPrice()
       check res == w3Qty(30_000_000_050)  # Avg of `unsignedTx1` / `unsignedTx2`
+
+    test "eth_maxPriorityFeePerGas":
+      let res = await client.eth_maxPriorityFeePerGas()
+      check res == w3Qty(calculateMedianMaxPriorityFeePerGas(env.chain).uint64)
 
     test "eth_accounts":
       let res = await client.eth_accounts()
@@ -605,8 +613,9 @@ proc rpcMain*() =
       let res = await client.eth_getBlockByNumber("latest", true)
       check res.isNil.not
       check res.hash == env.blockHash
-      let res2 = await client.eth_getBlockByNumber($1, true)
-      check res2.isNil
+
+      expect JsonRpcError:
+        discard await client.eth_getBlockByNumber($1, true)
 
     test "eth_getTransactionByHash":
       let res = await client.eth_getTransactionByHash(env.txHash)
@@ -642,6 +651,45 @@ proc rpcMain*() =
           check receipts.len == 2
           check receipts[0].transactionIndex == 0.Quantity
           check receipts[1].transactionIndex == 1.Quantity
+
+    test "debug_getRawReceipts":
+      let
+        rawReceipts = await client.debug_getRawReceipts(blockId(1'u64))
+        receipts = await client.eth_getBlockReceipts(blockId(1'u64))
+
+      check receipts.isSome
+      if receipts.isSome:
+        check rawReceipts.len == receipts.get.len
+
+      for receipt in rawReceipts:
+        check seq[byte](receipt).len > 0
+
+    test "eth_getBlockReceipts with EIP-1898 object param":
+      # blockHash object form (what go-ethereum's ethclient sends)
+      let r1 = await client.call("eth_getBlockReceipts",
+        %[%*{"blockHash": $env.blockHash}])
+      let recs1 = JrpcConv.decode(r1.string, Opt[seq[ReceiptObject]])
+      check recs1.isSome
+      check recs1.get.len == 2
+
+      # blockHash with requireCanonical=false
+      let r2 = await client.call("eth_getBlockReceipts",
+        %[%*{"blockHash": $env.blockHash, "requireCanonical": false}])
+      let recs2 = JrpcConv.decode(r2.string, Opt[seq[ReceiptObject]])
+      check recs2.isSome
+      check recs2.get.len == 2
+
+      # blockNumber object form
+      let r3 = await client.call("eth_getBlockReceipts",
+        %[%*{"blockNumber": "0x1"}])
+      let recs3 = JrpcConv.decode(r3.string, Opt[seq[ReceiptObject]])
+      check recs3.isSome
+      check recs3.get.len == 2
+
+      # requireCanonical=true should fail
+      expect JsonRpcError:
+        discard await client.call("eth_getBlockReceipts",
+          %[%*{"blockHash": $env.blockHash, "requireCanonical": true}])
 
     test "eth_getTransactionReceipt":
       let res = await client.eth_getTransactionReceipt(env.txHash)

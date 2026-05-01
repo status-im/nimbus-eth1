@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  # std/json,
+  std/[json, times],
   json_rpc/rpcserver,
   web3/[eth_api_types, conversions],
   ./rpc_utils,
@@ -21,7 +21,8 @@ import
   ../beacon/web3_eth_conv,
   ../core/tx_pool,
   ../core/chain/forked_chain,
-  ../stateless/witness_types
+  ../stateless/[witness_types, witness_generation],
+  ../transaction
 
 type
   BadBlock = object
@@ -30,7 +31,13 @@ type
     hash: Hash32
     rlp: seq[byte]
 
+  TestBlockSummary = object
+    txCount: int
+    blobCount: int
+
 BadBlock.useDefaultSerializationIn JrpcConv
+
+TestBlockSummary.useDefaultSerializationIn JrpcConv
 
 ExecutionWitness.useDefaultSerializationIn JrpcConv
 
@@ -64,18 +71,7 @@ proc getExecutionWitness*(chain: ForkedChainRef, blockHash: Hash32): Result[Exec
   let witness = txFrame.getWitness(blockHash).valueOr:
     return err("Witness not found")
 
-  var executionWitness = ExecutionWitness.init(state = witness.state, keys = witness.keys)
-  for codeHash in witness.codeHashes:
-    let code = txFrame.getCodeByHash(codeHash).valueOr:
-      return err("Code not found")
-    executionWitness.addCode(code)
-
-  for headerHash in witness.headerHashes:
-    let header = txFrame.getBlockHeader(headerHash).valueOr:
-      return err("Header not found")
-    executionWitness.addHeader(rlp.encode(header))
-
-  ok(executionWitness)
+  ok(ExecutionWitness.build(witness, txFrame))
 
 proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
   let
@@ -190,7 +186,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
   server.rpc("debug_getRawBlock") do(blockTag: BlockTag) -> seq[byte]:
     ## Returns an RLP-encoded block.
     let blockFromTag = chain.blockFromTag(blockTag).valueOr:
-      raise newException(ValueError, error)
+      raise invalidParams(error)
 
     rlp.encode(blockFromTag)
 
@@ -198,23 +194,37 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
   server.rpc("debug_getRawHeader") do(blockTag: BlockTag) -> seq[byte]:
     ## Returns an RLP-encoded header.
     let header = chain.headerFromTag(blockTag).valueOr:
-      raise newException(ValueError, error)
+      raise invalidParams(error)
     rlp.encode(header)
 
   # https://ethereum.github.io/execution-apis/api/methods/debug_getRawReceipts
   server.rpc("debug_getRawReceipts") do(blockTag: BlockTag) -> seq[seq[byte]]:
     ## Returns an array of EIP-2718 binary-encoded receipts.
     let header = chain.headerFromTag(blockTag).valueOr:
-      raise newException(ValueError, error)
+      raise invalidParams(error)
+    let txFrame = chain.txFrame(header)
     var res: seq[seq[byte]]
-    for receipt in chain.baseTxFrame.getReceipts(header.receiptsRoot):
-      res.add rlp.encode(receipt)
+    for receipt in txFrame.getReceipts(header.receiptsRoot):
+      res.add rlp.encode(receipt.to(Receipt))
 
     res
 
   # https://ethereum.github.io/execution-apis/api/methods/debug_getRawTransaction
-  server.rpc("debug_getRawTransaction") do(txHash: Hash32) -> seq[byte]:
+  # we take a string input instead of a hex as in that manner we can preverse the raw json input 
+  # which later allows us to check for the existence of 0x,which the spec expects in a valid input
+  server.rpc("debug_getRawTransaction") do(txHashHex: string) -> seq[byte]:
     ## Returns an EIP-2718 binary-encoded transaction.
+    # TODO: remove manual validation when upstream parsing decoding reports strict
+    # hex input failures .
+    if not txHashHex.startsWith("0x"):
+      raise invalidParams("invalid argument 0: hex string without 0x prefix")
+
+    let txHash =
+      try:
+        Hash32.fromHex(txHashHex)
+      except ValueError as exc:
+        raise invalidParams("invalid argument 0: " & exc.msg)
+
     let res = txPool.getItem(txHash)
     if res.isOk:
       return rlp.encode(res.get().tx)
@@ -244,3 +254,64 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
     ## Returns an execution witness for the given block hash.
     chain.getExecutionWitness(blockHash).valueOr:
       raise newException(ValueError, error)
+
+  ## Custom debug endpoints - not specified in the Execution API
+
+  server.rpc("debug_txPoolDump") do() -> JsonNode:
+    ## Returns a dump of the transaction pool state including per-sender
+    ## transaction details sorted by effective tip.
+    let
+      poolBaseFee = txPool.baseFee
+      now = getTime().utc.toTime
+
+    var senders = newJObject()
+
+    for item in txPool.allItems:
+      let
+        senderHex = $item.sender
+        tip = item.tx.effectiveGasTip(Opt.some(poolBaseFee.u256))
+        age = now - item.time
+        accountNonce = txPool.getNonce(item.sender)
+
+      var txNode = newJObject()
+      txNode["hash"] = newJString($item.id)
+      txNode["nonce"] = newJInt(item.nonce.int64)
+      txNode["accountNonce"] = newJInt(accountNonce.int64)
+      txNode["type"] = newJString($item.tx.txType)
+      txNode["gasLimit"] = newJInt(item.tx.gasLimit.int64)
+      txNode["maxFeePerGas"] = newJInt(item.tx.maxFeePerGasNorm.int64)
+      txNode["maxPriorityFeePerGas"] = newJInt(item.tx.maxPriorityFeePerGasNorm.int64)
+      txNode["effectiveTip"] = newJInt(tip.int64)
+      txNode["value"] = newJString($item.tx.value)
+      txNode["age"] = newJString($age)
+
+      let wv = item.wrapperVersion
+      if wv.isSome:
+        txNode["wrapperVersion"] = newJString($wv.get)
+        txNode["numBlobs"] = newJInt(item.tx.versionedHashes.len.int64)
+        txNode["maxFeePerBlobGas"] = newJString($item.tx.maxFeePerBlobGas)
+
+      if not senders.hasKey(senderHex):
+        senders[senderHex] = newJArray()
+      senders[senderHex].add(txNode)
+
+    var res = newJObject()
+    res["totalTxs"] = newJInt(txPool.len.int64)
+    res["senderCount"] = newJInt(txPool.senderCount.int64)
+    res["baseFee"] = newJInt(poolBaseFee.int64)
+    res["senders"] = senders
+    res
+
+  server.rpc("debug_buildTestBlock") do() -> TestBlockSummary:
+    ## Assembles a block from the current transaction pool using the
+    ## production block-building path (TxPoolRef.assembleBlock).
+    ## Returns the number of transactions and blobs that were packed.
+    let bundle = txPool.assembleBlock().valueOr:
+      raise newException(ValueError, error)
+    let blobCount =
+      if bundle.blobsBundle.isNil: 0
+      else: bundle.blobsBundle.blobs.len
+    TestBlockSummary(
+      txCount: bundle.blk.transactions.len,
+      blobCount: blobCount,
+    )

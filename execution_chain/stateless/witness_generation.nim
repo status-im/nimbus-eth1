@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -9,11 +9,22 @@
 
 {.push raises: [], gcsafe.}
 
-import std/[tables, sets], minilru, eth/common, ../db/[ledger, core_db], ./witness_types
+import
+  std/[tables, sets, algorithm],
+  stew/byteutils,
+  minilru,
+  eth/common,
+  ../db/[ledger, core_db],
+  ./witness_types
 
-export common, ledger, witness_types
+export common, ledger, witness_types, byteutils
 
-proc build*(T: type Witness, witnessKeys: WitnessTable, preStateLedger: LedgerRef): T =
+proc build*(
+    T: type Witness,
+    witnessKeys: WitnessTable,
+    collapsedSiblings: seq[tuple[sibAccPath: Hash32, sibStoPath: Opt[Hash32]]],
+    preStateLedger: LedgerRef,
+): T =
   var
     proofPaths: Table[Hash32, seq[Hash32]]
     addedCodeHashes: HashSet[Hash32]
@@ -52,15 +63,34 @@ proc build*(T: type Witness, witnessKeys: WitnessTable, preStateLedger: LedgerRe
         paths.add(slotPath)
         proofPaths[accPath] = paths
 
-  var multiProof: seq[seq[byte]]
-  preStateLedger.txFrame.multiProof(proofPaths, multiProof).isOkOr:
-    raiseAssert "Failed to get multiproof: " & $$error
-  witness.state = move(multiProof)
-
   for accPath, stoPaths in proofPaths:
     witness.addKey(accPreimages.getOrDefault(accPath))
     for stoPath in stoPaths:
       witness.addKey(stoPreimages.getOrDefault(stoPath))
+
+  # Merge collapsed sibling paths from branch collapses during deletion.
+  # For account-trie collapses sibStoPath is none. For storage-trie collapses
+  # sibAccPath is the account and sibStoPath is the storage path to prove.
+  for (sibAccPath, sibStoPath) in collapsedSiblings:
+    if sibStoPath.isNone():
+      # Account-trie collapse: ensure the account path has a proof entry
+      if sibAccPath notin proofPaths:
+        proofPaths[sibAccPath] = @[]
+    else:
+      # Storage-trie collapse: add storage path under its account
+      proofPaths.withValue(sibAccPath, v):
+        v[].add(sibStoPath.get())
+      do:
+        proofPaths[sibAccPath] = @[sibStoPath.get()]
+
+  var multiProof: seq[seq[byte]]
+  preStateLedger.txFrame.multiProof(proofPaths, multiProof).isOkOr:
+    raiseAssert "Failed to get multiproof: " & $$error
+
+  # Sort the proof nodes lexicographically as is done in execution-specs:
+  # https://github.com/ethereum/execution-specs/blob/33aa038697162a3ba0aedbadf177c4c59ee5b007/src/ethereum/forks/amsterdam/stateless_host_exec_witness.py#L230
+  multiProof.sort()
+  witness.state = move(multiProof)
 
   witness
 
@@ -86,35 +116,42 @@ proc build*(
   if validateStateRoot and parent.number > 0:
     doAssert preStateLedger.getStateRoot() == parent.stateRoot
 
-  var witness = Witness.build(ledger.getWitnessKeys(), preStateLedger)
-  witness.addHeaderHash(header.parentHash)
+  var witness = Witness.build(
+    ledger.getWitnessKeys(), ledger.getCollapsedSiblings(), preStateLedger
+  )
 
   let
     blockHashes = ledger.getBlockHashesCache()
     earliestBlockNumber = getEarliestCachedBlockNumber(blockHashes)
 
   if earliestBlockNumber.isSome():
-    var n = parent.number
-    while n >= earliestBlockNumber.get():
-      dec n
+    # Add headers in ascending block number order:
+    # https://github.com/ethereum/execution-specs/blob/33aa038697162a3ba0aedbadf177c4c59ee5b007/src/ethereum/forks/amsterdam/stateless_host_exec_witness.py#L175-L176
+    for n in earliestBlockNumber.get() ..< parent.number:
       let blockHash = ledger.getBlockHash(BlockNumber(n))
       doAssert(blockHash != default(Hash32))
       witness.addHeaderHash(blockHash)
 
+  witness.addHeaderHash(header.parentHash)
+
   witness
 
 proc build*(
-    T: type ExecutionWitness, witness: Witness, ledger: LedgerRef
+    T: type ExecutionWitness, witness: Witness, txFrame: CoreDbTxRef
 ): ExecutionWitness =
   var codes: seq[seq[byte]]
   for codeHash in witness.codeHashes:
-    let code = ledger.txFrame.getCodeByHash(codeHash).valueOr:
+    let code = txFrame.getCodeByHash(codeHash).valueOr:
       raiseAssert "Code not found"
     codes.add(code)
 
+  # Sort codes lexicographically as is done in execution-specs:
+  # https://github.com/ethereum/execution-specs/blob/33aa038697162a3ba0aedbadf177c4c59ee5b007/src/ethereum/forks/amsterdam/stateless_host_exec_witness.py#L268
+  codes.sort()
+
   var headers: seq[seq[byte]]
   for headerHash in witness.headerHashes:
-    let header = ledger.txFrame.getBlockHeader(headerHash).valueOr:
+    let header = txFrame.getBlockHeader(headerHash).valueOr:
       raiseAssert "Header not found"
     headers.add(rlp.encode(header))
 
@@ -124,3 +161,8 @@ proc build*(
     keys = witness.keys,
     headers = move(headers),
   )
+
+template build*(
+    T: type ExecutionWitness, witness: Witness, ledger: LedgerRef
+): ExecutionWitness =
+  T.build(witness, ledger.txFrame)

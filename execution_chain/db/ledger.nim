@@ -390,6 +390,7 @@ proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool, collect
   result.code = typeof(result.code).init(codeLruSize)
   result.slots = typeof(result.slots).init(slotsLruSize)
   result.collectWitness = collectWitness
+  result.txFrame.aTx.collectWitness = collectWitness
   result.blockHashes = typeof(result.blockHashes).init(MAX_PREV_HEADER_DEPTH.int)
   discard result.beginSavePoint
 
@@ -445,6 +446,12 @@ proc getCode*(ledger: LedgerRef,
     acc.code
 
 proc getCodeSize*(ledger: LedgerRef, address: Address): int =
+  if ledger.collectWitness:
+    let lookupKey = (address, Opt.none(UInt256))
+    # We overwrite any existing record here so that codeTouched is always set to
+    # true even if an account was previously accessed without touching the code
+    ledger.witnessKeys[lookupKey] = true
+
   let acc = ledger.getAccount(address, false)
   if acc.isNil:
     return 0
@@ -654,8 +661,16 @@ proc clearEmptyAccounts(ledger: LedgerRef) =
 template getWitnessKeys*(ledger: LedgerRef): WitnessTable =
   ledger.witnessKeys
 
+template getCollapsedSiblings*(
+    ledger: LedgerRef
+): seq[tuple[sibAccPath: Hash32, sibStoPath: Opt[Hash32]]] =
+  ledger.txFrame.aTx.collapsedSiblings
+
 template clearWitnessKeys*(ledger: LedgerRef) =
   ledger.witnessKeys.clear()
+
+template clearCollapsedSiblings*(ledger: LedgerRef) =
+  ledger.txFrame.aTx.collapsedSiblings.setLen(0)
 
 proc getBlockHash*(ledger: LedgerRef, blockNumber: BlockNumber): Hash32 =
   ledger.blockHashes.get(blockNumber).valueOr:
@@ -736,6 +751,7 @@ proc persist*(ledger: LedgerRef,
 
   if clearWitness:
     ledger.clearWitnessKeys()
+    ledger.clearCollapsedSiblings()
     ledger.clearBlockHashesCache()
 
 iterator addresses*(ledger: LedgerRef): Address =

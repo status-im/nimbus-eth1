@@ -179,7 +179,11 @@ proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions, wipe = false): Core
         # significant portion of the inner trie nodes!
         # This code sets up a single block cache to be shared, a strategy that
         # plausibly can be refined in the future.
-        cacheCreateLRU(opts.blockCacheSize, autoClose = true)
+        case opts.blockCacheType
+        of lruCache:
+          cacheCreateLRU(opts.blockCacheSize, autoClose = true)
+        of hyperClockCache:
+          cacheCreateHyperClock(opts.blockCacheSize, autoClose = true)
       else:
         nil
     dbOpts = opts.toDbOpts()
@@ -197,12 +201,6 @@ proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions, wipe = false): Core
     adb = AristoDbRef.init(opts, baseDb).valueOr:
       raiseAssert "Could not initialize aristo: " & $error
     kdb = KvtDbRef.init(baseDb)
-
-  if opts.rdbKeyCacheSize > 0:
-    # Make sure key cache isn't empty
-    adb.txRef.computeKeys(STATE_ROOT_VID).isOkOr:
-      fatal "Cannot compute root keys", msg = error
-      quit(QuitFailure)
 
   CoreDbRef(kvt: kdb, mpt: adb)
 

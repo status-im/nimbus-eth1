@@ -205,10 +205,13 @@ ifeq ($(USE_LIBBACKTRACE), 0)
   NIM_PARAMS += -d:disable_libbacktrace
 endif
 
-deps: | deps-common nat-libs nimbus.nims
-ifneq ($(USE_LIBBACKTRACE), 0)
-deps: | libbacktrace
+# Used in docker/dist/entry_point.sh
+# To avoid confusion with USE_SYSTEM_ROCKSDB
+ifeq ($(USE_CACHED_ROCKSDB), 1)
+  USE_SYSTEM_ROCKSDB = 1
 endif
+
+deps: | deps-common nat-libs nimbus.nims
 
 # eth protocol settings, rules from "execution_chain/sync/protocol/eth/variables.mk"
 NIM_PARAMS := $(NIM_PARAMS) $(NIM_ETH_PARAMS)
@@ -229,6 +232,8 @@ $(TOOLS): | build deps rocksdb
 		echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "$${TOOL_DIR}/$@.nim"
 
+tools: | $(TOOLS)
+
 nimbus_execution_client: | build deps rocksdb
 	echo -e $(BUILD_MSG) "build/nimbus_execution_client" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/nimbus_execution_client "execution_chain/nimbus_execution_client.nim"
@@ -244,19 +249,19 @@ nimbus: | build deps rocksdb
 nimbus.nims:
 	ln -s nimbus.nimble $@
 
-# nim-libbacktrace
-libbacktrace:
-	+ $(MAKE) -C vendor/nim-libbacktrace --no-print-directory BUILD_CXX_LIB=0
-
 # nim-rocksdb
 ROCKSDB_CI_CACHE := build/rocksdb
 
-ifneq ($(USE_SYSTEM_ROCKSDB), 0)
 rocksdb:
+ifneq ($(USE_SYSTEM_ROCKSDB), 1)
 	+ MAKE="$(MAKE)" \
 		scripts/rocksdb_ci_cache.sh $(ROCKSDB_CI_CACHE)
 else
-rocksdb:
+ifeq ($(USE_CACHED_ROCKSDB), 1)
+	@echo "Using cached RocksDB"
+else
+	@echo "Using system RocksDB"
+endif
 endif
 
 eest:
@@ -408,10 +413,8 @@ eest_blockchain_test: | build deps eest
 eest_stateless_execution_test: | build deps eest
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
 
-eest_full_test:
-	$(MAKE) eest_engine_test
-	$(MAKE) eest_blockchain_test
-	$(MAKE) eest_stateless_execution_test
+eest_full_test: | build deps eest
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/all_eest_tests.nim"
 
 # builds transition tool
 t8n: | build deps
@@ -450,9 +453,6 @@ clean: | clean-common syncer-tools-clean
 	rm -rf tools/t8n/{t8n,t8n_test}
 	rm -rf tools/evmstate/{evmstate,evmstate_test}
 	rm -rf tests/fixtures/eest
-ifneq ($(USE_LIBBACKTRACE), 0)
-	+ $(MAKE) -C vendor/nim-libbacktrace clean $(HANDLE_OUTPUT)
-endif
 
 # Note about building Nimbus as a library:
 #

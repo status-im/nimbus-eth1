@@ -120,8 +120,7 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
     ledger.persist()
 
   let
-    rc = vmState.processTransaction(
-                ctx.tx, sender, ctx.header)
+    rc = vmState.processTransaction(ctx.tx, sender)
     callResult = if rc.isOk:
                    rc.value
                  else:
@@ -218,7 +217,7 @@ proc generalStateJsonMain*(debugMode = false) =
   if config.testSubject == "" or not debugMode:
     # run all test fixtures
     suite "new generalstate json tests: eest_develop":
-      jsonTest("eest_develop/state_tests", "GeneralStateTestsStatic", testFixture, slowGSTTests)
+      jsonTest("eest_develop/state_tests", "GeneralStateTestsDevelop", testFixture, slowGSTTests)
 
     suite "new generalstate json tests: eest_bal":
       jsonTest("eest_bal/state_tests", "GeneralStateTestsBal", testFixture)

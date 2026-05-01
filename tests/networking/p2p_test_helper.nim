@@ -25,7 +25,7 @@ type
     com    : CommonRef
     node*  : EthereumNode
     txPool : TxPoolRef
-    chain  : ForkedChainRef
+    chain* : ForkedChainRef
     wire   : EthWireRef
 
 const

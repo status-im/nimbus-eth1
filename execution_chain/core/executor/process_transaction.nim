@@ -33,66 +33,72 @@ export results, call_common
 # Private functions
 # ------------------------------------------------------------------------------
 
-func eip1559BaseFee(header: Header; fork: EVMFork): UInt256 =
+func eip1559BaseFee(vmState: BaseVMState; fork: EVMFork): UInt256 =
   ## Actually, `baseFee` should be 0 for pre-London headers already. But this
-  ## function just plays safe. In particular, the `test_general_state_json.nim`
-  ## module modifies this block header `baseFee` field unconditionally :(.
+  ## function just plays safe.
   if FkLondon <= fork:
-    result = header.baseFeePerGas.get(0.u256)
+    result = vmState.blockCtx.baseFeePerGas.get(0.u256)
 
 proc commitOrRollbackDependingOnGasUsed(
     vmState: BaseVMState;
     savePoint: LedgerSpRef;
-    header: Header;
     tx: Transaction;
     callResult: var LogResult;
     priorityFee: GasInt;
     blobGasUsed: GasInt;
+    rollbackReads: bool;
       ): Result[void, string] =
   # Make sure that the tx does not exceed the maximum cumulative limit as
-  # set in the block header. Again, the EIP-1559 reference does not mention
+  # set in the vmState.blockCtx. Again, the EIP-1559 reference does not mention
   # an early stop. It would rather detect differing values for the  block
   # header `gasUsed` and the `vmState.cumulativeGasUsed` at a later stage.
-  let
-    gasUsed = callResult.gasUsed
-    blockGasUsed = callResult.blockGasUsed
+  let gasUsed = callResult.gasUsed
 
-  let limit = if vmState.fork >= FkAmsterdam:
-                vmState.blockGasUsed + blockGasUsed
-              else:
-                vmState.cumulativeGasUsed + gasUsed
-
-  if header.gasLimit < limit:
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.rollbackCallFrame()
-    vmState.ledger.rollback(savePoint)
-    err(&"invalid tx: block header gasLimit reached. gasLimit={header.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasUsed}")
+  # EIP-8037: block validity is max(blockRegularGas, blockStateGas) <= gasLimit
+  if vmState.fork >= FkAmsterdam:
+    let limit2d = max(
+      vmState.blockRegularGasUsed + callResult.blockRegularGasUsed,
+      vmState.blockStateGasUsed + callResult.blockStateGasUsed)
+    if vmState.blockCtx.gasLimit < limit2d:
+      if vmState.balTrackerEnabled:
+        vmState.balTracker.rollbackCallFrame(rollbackReads)
+      vmState.ledger.rollback(savePoint)
+      return err(&"invalid tx: block gas limit reached (2D). gasLimit={vmState.blockCtx.gasLimit}, regularGas={vmState.blockRegularGasUsed}+{callResult.blockRegularGasUsed}, stateGas={vmState.blockStateGasUsed}+{callResult.blockStateGasUsed}")
   else:
-    # Accept transaction and collect mining fee.
-    let txFee = gasUsed.u256 * priorityFee.u256
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), txFee)
-      vmState.balTracker.commitCallFrame()
-    vmState.ledger.commit(savePoint)
-    vmState.ledger.addBalance(vmState.coinbase(), txFee)
-    vmState.cumulativeGasUsed += gasUsed
-    vmState.blockGasUsed += blockGasUsed
+    let limit = vmState.cumulativeGasUsed + gasUsed
+    if vmState.blockCtx.gasLimit < limit:
+      if vmState.balTrackerEnabled:
+        vmState.balTracker.rollbackCallFrame(rollbackReads)
+      vmState.ledger.rollback(savePoint)
+      return err(&"invalid tx: block gasLimit reached. gasLimit={vmState.blockCtx.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasUsed}")
 
-    # EIP-7708: Emit closure logs for accounts with remaining balance before deletion
-    if vmState.fork >= FkAmsterdam:
-      emitClosureLogs(vmState, callResult.logEntries)
+  # Accept transaction and collect mining fee.
+  let txFee = gasUsed.u256 * priorityFee.u256
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), txFee)
+    vmState.balTracker.commitCallFrame()
 
-    # Return remaining gas to the block gas counter so it is
-    # available for the next transaction.
-    vmState.gasPool += tx.gasLimit - blockGasUsed
-    vmState.blobGasUsed += blobGasUsed
-    ok()
+  vmState.ledger.addBalance(vmState.coinbase(), txFee)
+  vmState.ledger.commit(savePoint)
+  vmState.cumulativeGasUsed += gasUsed
+  vmState.blockRegularGasUsed += callResult.blockRegularGasUsed
+  vmState.blockStateGasUsed += callResult.blockStateGasUsed
+  vmState.blobGasUsed += blobGasUsed
 
-proc processTransactionImpl(
+  # EIP-7708: Emit closure logs for accounts with remaining balance before deletion
+  if vmState.fork >= FkAmsterdam:
+    emitClosureLogs(vmState, callResult.logEntries)
+  ok()
+
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+proc processTransaction*(
     vmState: BaseVMState; ## Parent accounts environment for transaction
     tx:      Transaction; ## Transaction to validate
     sender:  Address;  ## tx.recoverSender
-    header:  Header; ## Header for the block containing the current tx
+    rollbackReads: bool = false;
       ): Result[LogResult, string] =
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
   ## which provides a backward compatible framwork for EIP1559.
@@ -100,17 +106,18 @@ proc processTransactionImpl(
   let
     fork = vmState.fork
     roDB = vmState.readOnlyLedger
-    baseFee256 = header.eip1559BaseFee(fork)
+    baseFee256 = vmState.eip1559BaseFee(fork)
     baseFee = baseFee256.truncate(GasInt)
     priorityFee = min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFee)
-    excessBlobGas = header.excessBlobGas.get(0'u64)
+    excessBlobGas = vmState.blockCtx.excessBlobGas
+    regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
 
-  # buy gas, then the gas goes into gasMeter
-  if vmState.gasPool < tx.gasLimit:
-    return err("gas limit reached. gasLimit=" & $vmState.gasPool &
-      ", gasNeeded=" & $tx.gasLimit)
-
-  vmState.gasPool -= tx.gasLimit
+  # Regular gas is capped at TX_MAX_GAS_LIMIT per EIP-7825.
+  # State gas is not checked per-tx; block-end validation enforces
+  # max(block_regular_gas_used, block_state_gas_used) <= gas_limit.
+  if min(TX_GAS_LIMIT.GasInt, tx.gasLimit) > regularGasAvailable:
+    let want = min(TX_GAS_LIMIT.GasInt, tx.gasLimit)
+    return err("regular gas used exceeds limit want: " & $want & ", available: " & $regularGasAvailable)
 
   # blobGasUsed will be added to vmState.blobGasUsed if the tx is ok.
   let
@@ -128,7 +135,7 @@ proc processTransactionImpl(
   # statement, here.
   let
     com = vmState.com
-    txRes = roDB.validateTransaction(tx, sender, header.gasLimit, baseFee256, excessBlobGas, com, fork)
+    txRes = roDB.validateTransaction(tx, sender, vmState.blockCtx.gasLimit, baseFee256, excessBlobGas, com, fork)
     res = if txRes.isOk:
       # Execute the transaction.
       vmState.captureTxStart(tx.gasLimit)
@@ -141,7 +148,7 @@ proc processTransactionImpl(
       vmState.captureTxEnd(tx.gasLimit - callResult.gasUsed)
 
       let tmp = commitOrRollbackDependingOnGasUsed(
-        vmState, savePoint, header, tx, callResult, priorityFee, blobGasUsed)
+        vmState, savePoint, tx, callResult, priorityFee, blobGasUsed, rollbackReads)
 
       if tmp.isErr():
         err(tmp.error)
@@ -154,10 +161,6 @@ proc processTransactionImpl(
 
   res
 
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
-
 proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32):
                               Result[void, string] =
   ## processBeaconBlockRoot applies the EIP-4788 system call to the
@@ -169,7 +172,7 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32):
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
-      gasLimit : DEFAULT_GAS_LIMIT.GasInt,
+      gasLimit : 30_000_000.GasInt,
       gasPrice : 0.GasInt,
       to       : BEACON_ROOTS_ADDRESS,
       input    : @(beaconRoot.data),
@@ -177,10 +180,8 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32):
     )
 
   # runComputation a.k.a syscall/evm.call
-  let res = call.runComputation(string)
-  if res.len > 0:
-    return err("processBeaconBlockRoot: " & res)
-
+  # EIP-4788: fail silently
+  call.runComputation(void)
   ledger.persist(clearEmptyAccount = true)
   ok()
 
@@ -193,7 +194,7 @@ proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32):
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
-      gasLimit : DEFAULT_GAS_LIMIT.GasInt,
+      gasLimit : 30_000_000.GasInt,
       gasPrice : 0.GasInt,
       to       : HISTORY_STORAGE_ADDRESS,
       input    : @(prevHash.data),
@@ -201,10 +202,8 @@ proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32):
     )
 
   # runComputation a.k.a syscall/evm.call
-  let res = call.runComputation(string)
-  if res.len > 0:
-    return err("processParentBlockHash: " & res)
-
+  # EIP-2923: fail silently
+  call.runComputation(void)
   ledger.persist(clearEmptyAccount = true)
   ok()
 
@@ -226,7 +225,6 @@ proc processDequeueWithdrawalRequests*(vmState: BaseVMState): Result[seq[byte], 
   let res = call.runComputation(OutputResult)
   if res.error.len > 0:
     return err("processDequeueWithdrawalRequests: " & res.error)
-
   ledger.persist(clearEmptyAccount = true)
   ok(res.output)
 
@@ -250,14 +248,6 @@ proc processDequeueConsolidationRequests*(vmState: BaseVMState): Result[seq[byte
     return err("processDequeueConsolidationRequests: " & res.error)
   ledger.persist(clearEmptyAccount = true)
   ok(res.output)
-
-proc processTransaction*(
-    vmState: BaseVMState; ## Parent accounts environment for transaction
-    tx:      Transaction; ## Transaction to validate
-    sender:  Address;  ## tx.recoverSender
-    header:  Header; ## Header for the block containing the current tx
-      ): Result[LogResult, string] =
-  vmState.processTransactionImpl(tx, sender, header)
 
 # ------------------------------------------------------------------------------
 # End

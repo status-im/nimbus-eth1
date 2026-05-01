@@ -86,10 +86,15 @@ jobs:
           #export ZERO_AR_DATE=1 # avoid timestamps in binaries
           DEFAULT_MAKE_FLAGS="-j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache"
           if [ '${{ matrix.os }}' == 'linux' ] && [ '${{ matrix.cpu }}' == 'arm64' ]; then
+            # Parallel jobs exeution only on systems different from linux-arm64
             # To reduce memory usage on arm linux we build rocksdb separately
             make ${DEFAULT_MAKE_FLAGS} rocksdb
           fi
-          make ${DEFAULT_MAKE_FLAGS} all test_import build_fuzzers check_revision
+          make ${DEFAULT_MAKE_FLAGS} nimbus
+          make ${DEFAULT_MAKE_FLAGS} tools build_fuzzers
+          # check_revision and test_import depend on nimbus_execution_client,
+          # best to run them together to avoid double builds
+          make ${DEFAULT_MAKE_FLAGS} nimbus_execution_client check_revision test_import
           # clear some space
           find . -type d -name "nimcache" -exec rm -rf {} +
           # "-static" option will not work for osx unless static system libraries are provided

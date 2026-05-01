@@ -21,6 +21,7 @@ import
   json_rpc/rpcclient,
   json_rpc/rpcserver,
   ./chain_config_wrapper,
+  ./path_handler,
   ../../execution_chain/rpc,
   ../../execution_chain/common/hardforks,
   ../../execution_chain/db/core_db/memory_only,
@@ -29,6 +30,8 @@ import
   ../../execution_chain/core/tx_pool,
   ../../execution_chain/beacon/beacon_engine,
   ../../execution_chain/common/common,
+  ../../execution_chain/stateless/witness_types,
+  ../../execution_chain/stateless/stateless_types,
   ../../hive_integration/engine_client
 
 import ../../tools/common/helpers as chp except HardFork
@@ -65,6 +68,9 @@ type
   BlockDesc* = object
     blk*: EthBlock
     badBlock*: bool
+    bal*: Opt[BlockAccessListRef]
+    witness*: Opt[ExecutionWitness]
+    statelessValidationResult*: Opt[StatelessValidationResult]
 
   Numero* = distinct uint64
 
@@ -247,7 +253,7 @@ proc prepareEnv*(
     let
       com = CommonRef.new(memDB, config,
         statelessProviderEnabled = statelessEnabled,
-        statelessWitnessValidation = statelessEnabled)
+        statelessWitnessValidation = false) # Running stateless execution separately in test runner
       chain = ForkedChainRef.init(com, enableQueue = true, persistBatchSize = 1)
 
     testEnv.chain = chain
@@ -318,4 +324,4 @@ template runEESTSuite*(
   for eest in eestReleases:
     suite eest & ": " & eestType:
       for filePath in walkDirRec(baseFolder / eest / eestType):
-        processFile(filePath, statelessEnabled, @skipFiles)
+        processFile(handleLongPath(filePath), statelessEnabled, @skipFiles)

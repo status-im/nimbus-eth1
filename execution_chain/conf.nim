@@ -126,6 +126,11 @@ type
       defaultValue: DEFAULT_GAS_LIMIT
       name: "gas-limit" .}: uint64
 
+    # https://eips.ethereum.org/EIPS/eip-7872
+    maxBlobs* {.
+      desc: "EIP-7872 maximum blobs used when building a local payload"
+      name: "max-blobs" .}: Option[uint8]
+
     # https://ethereum.org/developers/docs/networks/#ethereum-testnets
     network {.
       desc: "Name or id number of Ethereum network"
@@ -312,6 +317,11 @@ type
       defaultValue: defaultBlockCacheSize
       name: "debug-rocksdb-block-cache-size".}: int
 
+    rocksdbBlockCacheType {.
+      hidden
+      defaultValue: defaultBlockCacheType
+      name: "debug-rocksdb-block-cache-type" .}: RocksDbBlockCacheType
+
     rdbVtxCacheSize {.
       hidden
       defaultValue: defaultRdbVtxCacheSize
@@ -341,6 +351,12 @@ type
       hidden
       defaultValue: defaultMaxSnapshots
       name: "debug-aristo-db-max-snapshots" .}: int
+
+    parallelStateRootComputation* {.
+      hidden
+      defaultValue: false
+      desc: "Compute state root in parallel using multiple threads"
+      name: "debug-parallel-state-root".}: bool
 
     eagerStateRootCheck* {.
       hidden
@@ -447,10 +463,10 @@ type
         defaultValueDesc: "*"
         name: "allowed-origins" .}: seq[string]
 
-      # https://eips.ethereum.org/EIPS/eip-7872
-      maxBlobs* {.
-        desc: "EIP-7872 maximum blobs used when building a local payload"
-        name: "max-blobs" .}: Option[uint8]
+      backgroundPruning* {.
+        desc: "Enable background pruning of expired block bodies and receipts"
+        defaultValue: false
+        name: "prune" .}: bool
 
       # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/authentication.md#key-distribution
       jwtSecret* {.
@@ -474,12 +490,13 @@ type
         defaultValue: false
         name: "debug-snap-sync" .}: bool
 
-      snapSyncTarget* {.
-        desc: "Manually set the initial block hash to derive the target" &
-              " state root from. The block hash is specified by its 32" &
-              " byte hash represented by a hex string. This block hash must" &
-              " refer to a finalised block."
-        name: "debug-snap-sync-target" .}: Option[string]
+      snapSyncResume* {.
+        hidden
+        desc: "Use the cached data from a previous session if there is any." &
+              " Otherwise, data from a previous snap session will be moved" &
+              " to a backup directory, the name ending with ~"
+        defaultValue: false
+        name: "debug-snap-sync-resume" .}: bool
 
       snapServerEnabled* {.
         hidden
@@ -800,6 +817,8 @@ func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
       else: config.rdbBranchCacheSize,
     rdbPrintStats = config.rdbPrintStats,
     maxSnapshots = config.aristoDbMaxSnapshots,
+    parallelStateRootComputation = config.parallelStateRootComputation,
+    blockCacheType = config.rocksdbBlockCacheType,
   )
 
 func jwtSecretOpt*(config: ExecutionClientConf): Opt[InputFile] =

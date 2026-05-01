@@ -52,21 +52,24 @@ proc start*(buddy: SnapPeerRef; info: static[string]): bool =
     ctx = buddy.ctx
 
   if not ctx.pool.seenData and buddy.peerID in ctx.pool.failedPeers:
-    debug info & ": useless peer already tried", peer
+    debug info & ": Useless peer already tried", peer
     return false
 
   if not buddy.startSyncPeer():
-    debug info & ": failed", peer
+    debug info & ": Failed", peer
     return false
 
-  debug info & ": new peer", peer, nSyncPeers=ctx.nSyncPeers(),
-    peerType=buddy.only.peerType, clientId=buddy.peer.clientId
+  if SnapReady < ctx.pool.syncState:
+    debug info & ": New peer", peer, nSyncPeers=ctx.nSyncPeers(),
+      peerType=buddy.only.peerType, clientId=buddy.peer.clientId
   true
 
 proc stop*(buddy: SnapPeerRef; info: static[string]) =
   ## Clean up this peer
-  debug info & ": release peer", peer=buddy.peer,
-    nSyncPeers=(buddy.ctx.nSyncPeers()-1), state=($buddy.syncState)
+  let ctx = buddy.ctx
+  if SnapReady < ctx.pool.syncState:
+    debug info & ": Release peer", peer=buddy.peer,
+      nSyncPeers=(ctx.nSyncPeers()-1), syncState=buddy.syncState
   buddy.stopSyncPeer()
 
 # ------------------------------------------------------------------------------
@@ -91,28 +94,38 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
   ##
   ## The template returns a suggested idle time for waiting after this task.
   ##
-  var bodyRc = chronos.nanoseconds(0)               # to be re-invoked, soon?
+  var bodyRc = ZeroDuration                         # to be re-invoked, soon?
   block body:
-    ctx.updateSyncState info
+    # Check initial state before transition
+    if ctx.pool.syncState == SnapResume:
+      ctx.sessionResume(info).isOkOr:
+        break body                                  # shutdown?
+
+    ctx.updateSyncState info                        # set next state
     case ctx.pool.syncState:
+    of SnapReady:
+      chronicles.info info & ": Waiting for CL to send updates",
+        syncState=ctx.syncState, nSyncPeers=ctx.nSyncPeers()
+      bodyRc = daemonWaitReadyInterval              # take a nap
+
     of SnapDownload:
       bodyRc = daemonWaitDownloadInterval           # take a nap
 
-    of SnapMkTrie:
-      let
-        pvt = ctx.pool.stateDB.pivot.expect "valid pivot"
-        ela {.used.} = ctx.sessionMkTrie(pvt, info).valueOr:
-          debug info & ": mkTrie error", root=pvt.rootStr,
-            state=($ctx.syncState), ela=error.elapsed.toStr,
-            `error`=error.toStr
-          break body
+    of SnapDownloadFinish:
+      bodyRc = daemonWaitDownloadFinishInterval     # take a nap
 
-      block:
-        debug info & ": mkTrie imported", root=pvt.rootStr,
-          state=($ctx.syncState), ela=ela.toStr
+    of SnapMkTrie:
+      ctx.pool.stateDB.flush info                   # archive/clear cache
+
+      let ela {.used.} = ctx.sessionMkTrie(info).valueOr:
+        break body                                  # shutdown?
+
+      ctx.updateSyncHealing()                       # set next state
+      debug info & ": mkTrie imported",
+        ela=ela.toStr, syncState=ctx.syncState
 
     of SnapHealing:                                 # TBD ..
-      warn info & ": healing not yet implemented"
+      warn info & ": Healing not yet implemented"
       bodyRc = chronos.seconds(30)
 
     else:
@@ -155,12 +168,12 @@ template runPeer*(
   ##
   ## The template returns a suggested idle time for after this task.
   ##
-  var bodyRc = chronos.nanoseconds(0)
+  var bodyRc = ZeroDuration
   block body:
     case buddy.ctx.pool.syncState:
     of SnapDownload:
 
-      # Download and chace accounts, storage slots, contracts
+      # Download and cache accounts, storage slots, contracts
       buddy.download info
 
     else:

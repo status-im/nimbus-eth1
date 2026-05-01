@@ -130,6 +130,18 @@ proc putVtxFn(db: RdbBackendRef): PutVtxFn =
             code: error[1],
             info: error[2])
 
+proc putVtxBlobFn(db: RdbBackendRef): PutVtxBlobFn =
+  result =
+    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: openArray[byte]) =
+      let hdl = hdl.getSession db
+      if hdl.error.isNil:
+        db.rdb.putVtxBlob(hdl.session, rvid, vtx).isOkOr:
+          hdl.error = TypedPutHdlErrRef(
+            pfx:  VtxPfx,
+            vid:  error[0],
+            code: error[1],
+            info: error[2])
+
 proc putLstFn(db: RdbBackendRef): PutLstFn =
   result =
     proc(hdl: PutHdlRef; lst: SavedState) =
@@ -192,6 +204,7 @@ proc rocksDbBackend*(
 
   db.putBegFn = putBegFn be
   db.putVtxFn = putVtxFn be
+  db.putVtxBlobFn = putVtxBlobFn be
   db.putLstFn = putLstFn be
   db.putEndFn = putEndFn be
 

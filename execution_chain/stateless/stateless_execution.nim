@@ -24,7 +24,7 @@ import
 export witness_types, common, headers, blocks, results
 
 proc statelessProcessBlock*(
-    witness: ExecutionWitness, com: CommonRef, blk: Block
+    witness: ExecutionWitness, com: CommonRef, blk: Block, verifyState = false
 ): Result[void, string] =
   let
     verifiedHeaders = ?witness.verifyHeaders(blk.header)
@@ -32,9 +32,10 @@ proc statelessProcessBlock*(
     parent = verifiedHeaders[^1] # The last header is the parent
     preStateRoot = parent.stateRoot
 
-  # Verify the witness against the parent header stateroot.
-  # This validates the state against the keys, the code and headers in the witness.
-  ?witness.verifyState(preStateRoot)
+  if verifyState:
+    # Verify the witness against the parent header stateroot.
+    # This validates the state against the keys, the code and headers in the witness.
+    ?witness.verifyState(preStateRoot)
 
   # Convert the list of trie nodes into a table keyed by node hash.
   var nodes: Table[Hash32, seq[byte]]
@@ -65,7 +66,9 @@ proc statelessProcessBlock*(
 
   # Create evm instance using the in memory database.
   let memoryVmState = BaseVMState()
-  memoryVmState.init(parent, blk.header, com, memoryTxFrame, storeSlotHash = false)
+  memoryVmState.init(
+    parent, blk.header, com, memoryTxFrame, storeSlotHash = false,
+    enableBalTracker = com.isAmsterdamOrLater(blk.header.timestamp))
 
   # Execute the block with all validations enabled
   ?memoryVmState.processBlock(
@@ -73,7 +76,8 @@ proc statelessProcessBlock*(
     skipValidation = false,
     skipReceipts = false,
     skipUncles = true,
-    skipStateRootCheck = false
+    skipStateRootCheck = false,
+    skipPostExecBalCheck = not memoryVmState.balTrackerEnabled
   )
   doAssert memoryVmState.ledger.getStateRoot() == blk.header.stateRoot
 

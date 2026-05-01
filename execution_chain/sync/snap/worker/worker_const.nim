@@ -19,20 +19,23 @@ type
     SnapResume                     ## Resume from previous session
     SnapReady                      ## Wait for download state
     SnapDownload                   ## Downloading and caching data
+    SnapDownloadFinish             ## Wait for sync before proceeding
     SnapMkTrie                     ## Assembling downloaded data
     SnapHealing                    ## Complete missing trie nodes
 
   ErrorType* = enum
     ## For `FetchError` return code object/tuple
     EGeneric = 0                   ## Not further specified error
-    ENoDataAvailable               ## Out of scope
+    ENoDataAvailable               ## Out of scope, unsuuported state
     EMissingEthContext             ## Cannot retrieve `eth` peer descriptor
     EAlreadyTriedAndFailed         ## The same action failed before
     EPeerDisconnected              ## Exception
     ECatchableError                ## Exception
     ECancelledError                ## Exception
-    ETrieError                     ## Database error
     ELockError                     ## Locked by some other peer
+    ETrieError                     ## Trie/mpt database error
+    ECacheError                    ## Database cache error
+    ECompleted                     ## Nothing to do, here
 
 const
   snapAsmFolder* = "snap"
@@ -41,9 +44,16 @@ const
   twoHundredYears* = chronos.days(365 * 200 + 48)
     ## Large Duration constant considered sort of infinite.
 
+  daemonWaitReadyInterval* = chronos.seconds(30)
+    ## Some polling interval time waiting until the system gets into download
+    ## state when the the FCU modue hash  a finalised header.
+
   daemonWaitDownloadInterval* = chronos.seconds(10)
     ## Some waiting time at the end of the daemon task which always lingers
     ## in the background. This one is for `SnapDownload` state.
+
+  daemonWaitDownloadFinishInterval* = chronos.seconds(5)
+    ## Poll waiting for all downloading peers to have stopped
 
   daemonWaitElseInterval* = chronos.seconds(10)
     ## Ditto for other states than `SnapMkTrie` or `SnapHealing`.
@@ -52,11 +62,23 @@ const
     ## Some waiting time at the end of the daemon task which always lingers
     ## in the background. This one is for non-`SnapDownload` states.
 
-  mktrieThreadSwitchTimeSlot* = chronos.nanoseconds(1)
+  threadLogTimeLimit* = chronos.seconds(35)
+    ## Print intermediate messages when running a time consuming task
+
+  threadSwitchTimeSlot* = chronos.nanoseconds(1)
     ## Nano-sleep to allows pseudo/async thread switch
 
-  lockWaitPollingTime* = chronos.milliseconds(500)
-    ## Polling for a lock to be released
+  threadSwitchRunLimit* = chronos.seconds(15)
+    ## Force a thread switch after that time running continuously
+
+  accuAccountsCovMin* = 3.0
+    ## In absence of a completed pivot state, the syncer will stop downloading
+    ## if all accounts are covered at least by this factor. Then trie-assembly
+    ## and healing can take place.
+
+  stateIdleTimeBeforeEviction* = chronos.minutes(30)
+    ## Minimum time a state is cached before eviction unless other criteria
+    ## apply (e.g. fully unprocessed account range.)
 
   # ----------------------
 
@@ -64,7 +86,7 @@ const
     ## Soft bytes limit to request accounts. This is used for parallelisation
     ## so that different peers can start with different intervals. Typically,
     ## these intervals are sparsely filled and there will be returned not
-    ## more than  ~1k accounts.
+    ## more than ~1k accounts.
 
   stateDbCapacity* = 8
     ## Maximal numbers of simultanously incomplete states. Note that the
@@ -72,11 +94,6 @@ const
     ## state roots corresponding to consecutibe block numbers.
     ##
     ## Note that there are about 400k accounts on `mainnet` (as of early 2026.)
-
-  nWorkingStateRootsMax* = 3
-    ## Stop the current session after accounts could be downloaded for this
-    ## many different state roots. The session will then be released and a
-    ## new one started.
 
   # -----------
 
@@ -115,6 +132,9 @@ const
   nProcStorageErrThreshold* = 4
     ## Similar to `nProcAccountErrThreshold`
 
+  nFetchStorageSlotsMax* = 1024
+    ## Maximal size of storage slots downloaded in a single message.
+
   # -----------
 
   fetchCodesSnapTimeout* = chronos.seconds(120)
@@ -128,5 +148,8 @@ const
 
   nProcCodesErrThreshold* = 4
     ## Similar to `nProcAccountErrThreshold`
+
+  nFetchByteCodesMax* = 1024
+    ## Maximal sise of byte codes downloaded in a single message.
 
 # End

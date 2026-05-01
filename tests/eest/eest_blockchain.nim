@@ -13,6 +13,8 @@
 import
   std/[json, os],
   unittest2,
+  chronos,
+  stew/byteutils,
   eth/common/headers_rlp,
   web3/eth_api_types,
   web3/engine_api_types,
@@ -25,10 +27,69 @@ import
   ../../execution_chain/core/chain/forked_chain,
   ../../execution_chain/beacon/beacon_engine,
   ../../execution_chain/common/common,
+  ../../execution_chain/stateless/witness_types,
+  ../../execution_chain/stateless/stateless_types,
+  ../../execution_chain/stateless/stateless_execution,
   ../../hive_integration/engine_client,
   ./eest_helpers,
-  stew/byteutils,
-  chronos
+  ./bal_parser
+
+from ../../execution_chain/rpc/debug import getExecutionWitness
+
+proc hexListToSeqByteList(n: JsonNode, field: string): seq[seq[byte]] =
+  var res: seq[seq[byte]]
+  for item in n[field]:
+    res.add hexToSeqByte(item.getStr)
+
+  res
+
+proc fromJson(T: type ExecutionWitness, n: JsonNode): ExecutionWitness =
+  ExecutionWitness(
+    state: hexListToSeqByteList(n, "state"),
+    codes: hexListToSeqByteList(n, "codes"),
+    keys: if "keys" in n: hexListToSeqByteList(n, "keys") else: @[],
+    headers: hexListToSeqByteList(n, "headers")
+  )
+
+proc parseWitness(node: JsonNode): Opt[ExecutionWitness] =
+  if "executionWitness" in node:
+    Opt.some(ExecutionWitness.fromJson(node["executionWitness"]))
+  else:
+    Opt.none(ExecutionWitness)
+
+proc parseStatelessOutput(node: JsonNode): Opt[StatelessValidationResult] =
+  if "statelessOutputBytes" in node:
+    let sszBytes = hexToSeqByte(node["statelessOutputBytes"].getStr)
+    try:
+      Opt.some(SSZ.decode(sszBytes, StatelessValidationResult))
+    except SerializationError as e:
+      raiseAssert("Failed to deserialize StatelessValidationResult: " & e.msg)
+  else:
+    Opt.none(StatelessValidationResult)
+
+proc parseBAL(node: JsonNode): Opt[BlockAccessListRef] =
+  const
+    deepValidationExceptions = [
+      "INVALID_BAL_MISSING_ACCOUNT",
+      "INVALID_BLOCK_ACCESS_LIST"
+    ]
+
+  func doNotParseBAL(x: string): bool =
+    for y in deepValidationExceptions:
+      if y in x: return true
+    false
+
+  if "expectException" in node:
+    if doNotParseBAL(node["expectException"].getStr):
+      return Opt.none(BlockAccessListRef)
+
+  if "rlp_decoded" in node:
+    # Only need shallow validation
+    let inner = node["rlp_decoded"]
+    if "blockAccessList" in inner:
+      let bal = new(BlockAccessListRef)
+      bal[] = balFromJson(inner["blockAccessList"])
+      return Opt.some(bal)
 
 proc parseBlocks*(node: JsonNode): seq[BlockDesc] =
   for x in node:
@@ -37,7 +98,10 @@ proc parseBlocks*(node: JsonNode): seq[BlockDesc] =
       let blk = rlp.decode(blockRLP, EthBlock)
       result.add BlockDesc(
         blk: blk,
+        bal: parseBAL(x),
         badBlock: "expectException" in x,
+        witness: parseWitness(x),
+        statelessValidationResult: parseStatelessOutput(x)
       )
     except RlpError:
       # invalid rlp will not participate in block validation
@@ -49,31 +113,119 @@ proc rootExists(db: CoreDbTxRef; root: Hash32): bool =
     return false
   state == root
 
+proc shortLog(witness: ExecutionWitness): string =
+  var res = "ExecutionWitness:\n"
+  res.add "State:\n"
+  for stateNode in witness.state:
+    res.add stateNode.to0xHex() & "\n"
+  res.add "Codes:\n"
+  for codeNode in witness.codes:
+    res.add codeNode.to0xHex() & "\n"
+  res.add "Headers:\n"
+  for headerNode in witness.headers:
+    res.add headerNode.to0xHex() & "\n"
+  res
+
+proc compare(
+    generated, expected: ExecutionWitness, strict = false
+): Result[void, string] =
+  ## Compare witness state, nodes and headers, not comparing keys as these
+  ## are not included in the test vectors.
+  ## When strict is false, allow generated witness state, codes and headers to
+  ## be a subset of expected. This is because some test vectors include extra
+  ## unused state nodes, code and headers in the witness to test that stateless
+  ## execution still works. Same counts for the lexicographical order.
+
+  if strict:
+    # when strict enabled, also compare state and codes to be identical
+    if generated.state != expected.state:
+      return err(
+        "Witness state mismatch, got: " & $generated.shortLog & " expected: " &
+          $expected.shortLog
+      )
+    if generated.codes != expected.codes:
+      return err(
+        "Witness codes mismatch, got: " & $generated.shortLog & " expected: " &
+          $expected.shortLog
+      )
+    if generated.headers != expected.headers:
+      return err(
+        "Witness headers mismatch, got: " & $generated.shortLog & " expected: " &
+          $expected.shortLog
+      )
+  else:
+    # else allow them just to be a subset of expected
+    for node in generated.state:
+      if node notin expected.state:
+        return err(
+          "Witness state node missing from expected, got: " & $generated.shortLog &
+            " expected: " & $expected.shortLog
+        )
+
+    for code in generated.codes:
+      if code notin expected.codes:
+        return err(
+          "Witness code missing from expected, got: " & $generated.shortLog &
+            " expected: " & $expected.shortLog
+        )
+
+    for header in generated.headers:
+      if header notin expected.headers:
+        return err(
+          "Witness header missing from expected, got: " & $generated.shortLog &
+            " expected: " & $expected.shortLog
+        )
+
+  ok()
+
 proc runTest(env: TestEnv, unit: BlockchainUnitEnv, statelessEnabled = false): Future[Result[void, string]] {.async.} =
   let blocks = parseBlocks(unit.blocks)
-  var lastStateRoot = unit.genesisBlockHeader.stateRoot
+  var latestStateRoot = unit.genesisBlockHeader.stateRoot
 
   for blk in blocks:
-    let res = await env.chain.importBlock(blk.blk, finalized = true)
+    let res = await env.chain.importBlock(blk.blk, blk.bal, finalized = true)
     if res.isOk:
       if unit.lastblockhash == blk.blk.header.computeBlockHash:
-        lastStateRoot = blk.blk.header.stateRoot
+        latestStateRoot = blk.blk.header.stateRoot
       if blk.badBlock:
-        return err("A bug? bad block imported")
+        return err("Bad block got imported succesfully")
+      else:
+        if statelessEnabled:
+          # Get witness that should have been generated when importing the block
+          var witness = env.chain.getExecutionWitness(blk.blk.header.computeRlpHash).valueOr:
+            return err("Execution witness was not found in the database")
+
+          # process block stateless with generated witness
+          ?witness.statelessProcessBlock(env.chain.com, blk.blk, verifyState = true)
+
+          let successful_validation =
+            if blk.statelessValidationResult.isSome():
+              blk.statelessValidationResult.get().successful_validation
+            else:
+              true
+
+          if blk.witness.isSome() and successful_validation:
+            # If block witness in test vector and validation is successful,
+            # process block stateless with test vector witness
+            let expectedWitness = blk.witness.value()
+            ?expectedWitness.statelessProcessBlock(env.chain.com, blk.blk)
+
+            # compare both witnesses
+            ?compare(witness, expectedWitness)
     else:
       if not blk.badBlock:
-        return err("A bug? good block rejected: " & res.error)
+        return err("Good block was rejected at import: " & res.error)
 
   (await env.chain.forkChoice(unit.lastblockhash, unit.lastblockhash)).isOkOr:
-    return err("A bug? fork choice failed")
+    return err("Fork choice failed")
 
   let headHash = env.chain.latestHash
   if headHash != unit.lastblockhash:
-    return err("lastestBlockHash mismatch, get: " & $headHash &
-      " expect: " & $unit.lastblockhash)
+    return err("Latest block hash mismatch, got: " & $headHash &
+      " expected: " & $unit.lastblockhash)
 
-  if not env.chain.txFrame(headHash).rootExists(lastStateRoot):
-    return err("Last stateRoot not exists")
+  if not env.chain.txFrame(headHash).rootExists(latestStateRoot):
+    return err("Latest stateRoot does not exist in the database")
 
   ok()
 
@@ -106,4 +258,4 @@ when isMainModule:
     echo "Usage: " & testFile & " vector.json"
     quit(QuitFailure)
 
-  processFile(paramStr(1))
+  processFile(paramStr(1), true)

@@ -236,7 +236,8 @@ proc exec(ctx: TransContext,
 
   vmState.receipts = newSeqOfCap[StoredReceipt](ctx.txList.len)
   vmState.cumulativeGasUsed = 0
-  vmState.blockGasUsed = 0
+  vmState.blockRegularGasUsed = 0
+  vmState.blockStateGasUsed = 0
 
   if ctx.env.parentBeaconBlockRoot.isSome:
     vmState.processBeaconBlockRoot(ctx.env.parentBeaconBlockRoot.get).isOkOr:
@@ -274,7 +275,7 @@ proc exec(ctx: TransContext,
     if conf.traceEnabled.isSome:
       closeStream = setupTrace(conf, txIndex, computeRlpHash(tx), vmState)
 
-    let rc = vmState.processTransaction(tx, sender, header)
+    let rc = vmState.processTransaction(tx, sender)
 
     if conf.traceEnabled.isSome:
       closeTrace(vmState, closeStream)

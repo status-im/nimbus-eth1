@@ -25,11 +25,14 @@ import
   std/[hashes, sequtils, sets, tables, heapqueue],
   eth/common/hashes, eth/trie/nibbles,
   results,
+  minilru,
   ./aristo_constants,
   ./aristo_desc/[desc_error, desc_identifiers, desc_structural],
-  ./aristo_desc/desc_backend,
-  minilru
+  ./aristo_desc/desc_backend
 
+when compileOption("threads"):
+  import taskpools, ../../concurrency/readwritelock
+  export taskpools, readwritelock
 
 # Not auto-exporting backend
 export
@@ -73,6 +76,18 @@ type
 
     blockNumber*: Opt[uint64]               ## Block number set when checkpointing the frame
 
+    collectWitness*: bool
+      ## When true, records collapsed siblings during deletion for witness
+      ## generation.
+
+    collapsedSiblings*: seq[tuple[sibAccPath: Hash32, sibStoPath: Opt[Hash32]]]
+      ## Records path pairs for each surviving sibling when a branch collapses
+      ## during deletion. `sibAccPath` is the account path (used to look up the
+      ## storage trie root); `sibStoPath` is the sibling's own path hash. For
+      ## account-trie collapses, sibStoPath is none. Used by witness
+      ## generation to include the sibling node in the witness for stateless
+      ## execution. Only populated when collectWitness is true.
+
     snapshot*: Snapshot
       ## Optional snapshot containing the cumulative changes from ancestors and
       ## the current frame
@@ -82,6 +97,11 @@ type
       ## used to order data by age when working with layers.
       ## -1 = stored in database, where relevant though typically should be
       ## compared with the base layer level instead.
+
+    when compileOption("threads"):
+      lock*: ReadWriteLock
+        ## A read-write lock used to support thread safe reads and writes to the
+        ## database from multiple threads.
 
   Snapshot* = object
     vtx*: Table[RootedVertexID, VtxSnapshot]
@@ -101,6 +121,7 @@ type
 
     putBegFn*: PutBegFn              ## Start bulk store session
     putVtxFn*: PutVtxFn              ## Bulk store vertex records
+    putVtxBlobFn*: PutVtxBlobFn      ## Bulk store vertex records
     putLstFn*: PutLstFn              ## Store saved state
     putEndFn*: PutEndFn              ## Commit bulk store session
 
@@ -108,7 +129,7 @@ type
 
     txRef*: AristoTxRef              ## Bottom-most in-memory frame
 
-    accLeaves*: LruCache[Hash32, AccLeafRef]
+    accLeaves*: LruCache[Hash32, CachedAccLeaf]
       ## Account path to payload cache - accounts are frequently accessed by
       ## account path when contracts interact with them - this cache ensures
       ## that we don't have to re-traverse the storage trie for every such
@@ -116,7 +137,7 @@ type
       ## TODO a better solution would probably be to cache this in a type
       ## exposed to the high-level API
 
-    stoLeaves*: LruCache[Hash32, StoLeafRef]
+    stoLeaves*: LruCache[Hash32, CachedStoLeaf]
       ## Mixed account/storage path to payload cache - same as above but caches
       ## the full lookup of storage slots
 
@@ -134,6 +155,13 @@ type
       ## The maximum number of snapshots to hold in the snapshots queue. When the queue
       ## is full (queue.len == maxSnapshots) then the oldest snapshot is removed from
       ## the queue and cleaned up.
+
+    parallelStateRootComputation*: bool
+      ## Enables parallel state root computation.
+
+    when compileOption("threads"):
+      taskpool*: Taskpool
+        ## Shared task pool for offloading computation to other threads.
 
   Leg* = object
     ## For constructing a `VertexPath`

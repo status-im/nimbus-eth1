@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -66,6 +66,26 @@ type
   StoLeafRef* = ref object of LeafRef
     stoData*: UInt256
 
+  ## NOTE: Leaf cache values are stored as value types so the cache can be safely 
+  ## written from background pre-fetch threads under refc (which uses thread-local heaps).
+  
+  CachedAccLeaf* = object
+    case empty*: bool
+    of true:
+      discard
+    of false:
+      pfx*: NibblesBuf
+      account*: AristoAccount
+      stoID*: StorageID
+
+  CachedStoLeaf* = object
+    case empty*: bool
+    of true:
+      discard
+    of false:
+      pfx*: NibblesBuf
+      stoData*: UInt256
+
   NodeRef* = ref object of RootRef
     ## Combined record for a *traditional* ``Merkle Patricia Tree` node merged
     ## with a structural `VertexRef` type object.
@@ -88,6 +108,8 @@ type
     PeekCache
       ## Peek into, but don't update cache - useful on work loads that are
       ## unfriendly to caches
+    NoPutCache
+      ## Don't put values in the cache after fetching from the database.
 
 const
   Leaves* = {VertexType.AccLeaf, VertexType.StoLeaf}
@@ -113,6 +135,51 @@ template init*(
     _: type ExtBranchRef, pfxp: NibblesBuf, startVidp: VertexID, usedp: uint16
 ): ExtBranchRef =
   ExtBranchRef(vType: ExtBranch, pfx: pfxp, startVid: startVidp, used: usedp)
+
+template init*(
+    T: type CachedAccLeaf, pfxp: NibblesBuf, accountp: AristoAccount, stoIDp: StorageID): T =
+  T(empty: false, pfx: pfxp, account: accountp, stoID: stoIDp)
+
+template init*(
+    T: type CachedStoLeaf, pfxp: NibblesBuf, stoDatap: UInt256): T =
+  T(empty: false, pfx: pfxp, stoData: stoDatap)
+
+template initEmpty(T: type CachedAccLeaf): T =
+  T(empty: true)
+
+template initEmpty(T: type CachedStoLeaf): T =
+  T(empty: true)
+
+const
+  emptyCachedAccLeaf* = CachedAccLeaf.initEmpty()
+  emptyCachedStoLeaf* = CachedStoLeaf.initEmpty()
+
+template isEmpty*(c: CachedAccLeaf | CachedStoLeaf): bool =
+  c.empty
+
+func toLeaf*(c: CachedAccLeaf): AccLeafRef =
+  if c.empty: 
+    AccLeafRef(nil) 
+  else: 
+    AccLeafRef.init(c.pfx, c.account, c.stoID)
+
+func toLeaf*(c: CachedStoLeaf): StoLeafRef =
+  if c.empty: 
+    StoLeafRef(nil) 
+  else: 
+    StoLeafRef.init(c.pfx, c.stoData)
+
+func toStoData*(c: CachedStoLeaf): UInt256 =
+  if c.empty: 
+    0'u256
+  else:
+    c.stoData
+
+func toStoData*(v: StoLeafRef): UInt256 =
+  if v.isNil():
+    0'u256
+  else:
+    v.stoData
 
 const emptyNibbles = NibblesBuf()
 

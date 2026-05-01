@@ -186,24 +186,52 @@ proc opMiscMain*() =
 
     assembler:
       title: "DUPN"
-      code: "60016000808080808080808080808080808080e600"
+      code: "60016000808080808080808080808080808080e680"
       fork: Amsterdam
       stack:
         [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
 
     assembler:
       title: "SWAPN"
-      code: "600160008080808080808080808080808080806002e700"
+      code: "600160008080808080808080808080808080806002e780"
       fork: Amsterdam
       stack:
         [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
 
     assembler:
+      title: "1711020"
+      code: "600260008080808080600160008080808080808080e8"
+      fork: Amsterdam
+      stack:
+        [1, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+    assembler:
       title: "EXCHANGE"
-      code: "600060016002e801"
+      code: "600060016002e88e"
       fork: Amsterdam
       stack:
         [1, 0, 2]
+
+    assembler:
+      title: "30 stack items"
+      code: "600080808080808080808080808080808080808080808080808080808060016002e88f"
+      fork: Amsterdam
+      stack:
+        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2]
+
+    assembler:
+      title: "reverts"
+      code: "e852"
+      fork: Amsterdam
+      success: false
+
+    assembler:
+      title: "exceptional halt"
+      code: "6000808080808080808080808080808080e680"
+      fork: Amsterdam
+      success: false
+      stack:
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
     assembler:
       title: "INVALID_SWAPN_LOW"
@@ -291,7 +319,7 @@ proc opMiscMain*() =
 
     assembler:
       title:  "PC_INCREMENT"
-      code:  "600060006000e80115"
+      code:  "60008080e88e15"
       fork: Amsterdam
       stack:
         [0, 0, 1]

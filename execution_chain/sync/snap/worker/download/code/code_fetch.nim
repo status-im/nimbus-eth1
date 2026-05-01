@@ -104,7 +104,7 @@ template fetchCodes*(
       first {.inject,used.} = codesReq[0].toStr     # logging only
 
     trace sendInfo, peer, root, first, nReqCodes,
-      state=($buddy.syncState), nErrors=buddy.nErrors.fetch.cde
+      syncState=buddy.syncState, nErrors=buddy.nErrors.fetch.cde
 
     let rc = await buddy.getCodes(stateRoot, fetchReq)
     var elapsed: Duration
@@ -119,7 +119,7 @@ template fetchCodes*(
           break evalError
         of EAlreadyTriedAndFailed:
           trace recvInfo & " error", peer, root, first, nReqCodes,
-            ela=elapsed.toStr, state=($buddy.syncState), error=rc.errStr,
+            ela=elapsed.toStr, syncState=buddy.syncState, error=rc.errStr,
             nErrors=buddy.nErrors.fetch.cde
           break body                                # return err()
         of EPeerDisconnected, ECancelledError:
@@ -127,25 +127,26 @@ template fetchCodes*(
           buddy.ctrl.zombie = true
         of ECatchableError:
           buddy.cdeFetchRegisterError()
-        of ENoDataAvailable, EMissingEthContext, ETrieError, ELockError:
+        of ENoDataAvailable, EMissingEthContext, ETrieError, ELockError,
+           ECacheError, ECompleted:
           # Not allowed here -- internal error
           raiseAssert "Unexpected error " & $rc.error.excp
 
         # Debug message for other errors
         debug recvInfo & " error", peer, root, first, nReqCodes,
-          ela=elapsed.toStr, state=($buddy.syncState), error=rc.errStr,
+          ela=elapsed.toStr, syncState=buddy.syncState, error=rc.errStr,
           nErrors=buddy.nErrors.fetch.cde
         break body                                  # return err()
 
     let
       ela {.inject,used.} = elapsed.toStr           # logging only
-      state {.inject,used.} = $buddy.syncState      # logging only
+      syncState {.inject,used.} = $buddy.syncState  # logging only
 
     # Evaluate error result (if any)
     if rc.isErr or buddy.ctrl.stopped:
       buddy.maybeSlowPeerError(elapsed, stateRoot)
       trace recvInfo & " error", peer, root, first, nReqCodes,
-        ela, state, error=rc.errStr, nErrors=buddy.nErrors.fetch.cde
+        ela, syncState, error=rc.errStr, nErrors=buddy.nErrors.fetch.cde
       break body                                    # return err()
 
     # Check against obvious protocol violations
@@ -156,7 +157,7 @@ template fetchCodes*(
       # codes data available for this state root.
       buddy.registerPeerError(stateRoot)
       trace recvInfo & " not available", peer, root, first, nReqCodes,
-        nRespCodes, ela, state, nErrors=buddy.nErrors.fetch.cde
+        nRespCodes, ela, syncState, nErrors=buddy.nErrors.fetch.cde
       bodyRc = FetchCodesResult.err(ENoDataAvailable)
       break body                                  # return err()
 
@@ -168,7 +169,7 @@ template fetchCodes*(
       buddy.ctx.pool.lastSlowPeer = Opt.none(Hash)  # not last one/error
 
     trace recvInfo, peer, root, first, nReqCodes, nRespCodes,
-      ela, state, nErrors=buddy.nErrors.fetch.cde
+      ela, syncState, nErrors=buddy.nErrors.fetch.cde
 
     bodyRc = FetchCodesResult.ok(rc.value.packet)
 

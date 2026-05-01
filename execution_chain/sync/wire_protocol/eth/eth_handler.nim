@@ -26,7 +26,8 @@ const
   # https://github.com/ethereum/devp2p/blob/master/caps/eth.md#getpooledtransactions-0x09
   MAX_TXS_SERVE       = 256
   MAX_BALS_SERVE      = 256
-  MAX_ACTION_HANDLER  = 128
+  MAX_ACTION_HANDLER  = 512
+  NUM_ACTION_WORKERS  = 4
 
 # ------------------------------------------------------------------------------
 # Public constructor/destructor
@@ -43,7 +44,8 @@ proc new*(_: type EthWireRef,
     actionQueue : newAsyncQueue[ActionHandler](maxsize = MAX_ACTION_HANDLER),
   )
   wire.tickerHeartbeat = tickerLoop(wire)
-  wire.actionHeartbeat = actionLoop(wire)
+  for _ in 0 ..< NUM_ACTION_WORKERS:
+    wire.actionHeartbeat.add actionLoop(wire)
   wire.gossipEnabled   = not syncerRunning(wire)
   wire
 
@@ -247,8 +249,6 @@ proc getBlockHeaders*(ctx: EthWireRef,
 
 proc getBlockAccessLists*(
     ctx: EthWireRef, req: BlockAccessListsRequest): BlockAccessListsPacket =
-  const emptyBal = default(BlockAccessList)
-
   var blockHashes = req.blockHashes
   blockHashes.setLen(min(req.blockHashes.len(), MAX_BALS_SERVE))
 
@@ -260,17 +260,18 @@ proc getBlockAccessLists*(
     totalBytes = 0
     i = 0
     res = BlockAccessListsPacket(
-      accessLists: newSeqOfCap[BlockAccessList](balValues.len())
+      accessLists: newSeqOfCap[RawBlockAccessList](balValues.len())
     )
 
   while totalBytes <= SOFT_RESPONSE_LIMIT and i <= balValues.high:
     if balValues[i].isSome():
-      res.accessLists.add BlockAccessList.decode(balValues[i].get())
-          .expect("BALs from the db should decode successfully")
-      totalBytes += balValues[i].get().len()
+      let bal = balValues[i].get()
+      res.accessLists.add RawBlockAccessList(bal)
+      assert bal.len() > 0 # The empty list is encoded as 0xC0 (a single byte)
+      totalBytes += bal.len()
     else:
-      res.accessLists.add(emptyBal)
-      inc totalBytes # the empty rlp list takes only a single byte
+      res.accessLists.add RawBlockAccessList(@[0x80'u8])
+      inc totalBytes # 0x80 is a single byte
 
     inc i
   
