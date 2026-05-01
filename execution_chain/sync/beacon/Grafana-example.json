@@ -1066,7 +1066,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "pivot_state"
+              "options": "mpt_coverage"
             },
             "properties": [
               {
@@ -1171,11 +1171,11 @@
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "nec_snap_pivot_state_coverage{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+          "expr": "nec_snap_merged_mpt_coverage{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
           "fullMetaSearch": false,
           "hide": false,
           "includeNullMetadata": true,
-          "legendFormat": "pivot_state",
+          "legendFormat": "mpt_coverage",
           "range": true,
           "refId": "C",
           "useBackend": false
@@ -1488,6 +1488,6 @@
   "timepicker": {},
   "timezone": "Europe/London",
   "title": "Mainnet Sync",
-  "uid": "00000000000003",
-  "version": 2
+  "uid": "00000000000004",
+  "version": 3
 }
