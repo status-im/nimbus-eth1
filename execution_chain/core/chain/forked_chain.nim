@@ -222,6 +222,10 @@ func updateHead(c: ForkedChainRef, head: BlockRef) =
     head.number)
 
 func updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) =
+  # Invariant: must only be called from inside a queue handler (currently
+  # `validateBlock` and `forkChoice`). `preflightForkChoice` runs synchronously
+  # in the RPC handler and relies on this proc — and `updateBase` — never
+  # mutating `c.heads`/`hashToBlock` outside the single-consumer worker.
   # Pruning
   # ::
   #                       - B5 - B6 - B7 - B8
@@ -296,6 +300,11 @@ func updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
     c.latest = candidate
 
 proc updateBase(c: ForkedChainRef, base: BlockRef): uint =
+  ## Invariant: must only be called from inside a queue handler (currently
+  ## `processUpdateBase`, enqueued via `queueUpdateBase`). `preflightForkChoice`
+  ## runs synchronously in the RPC handler and relies on this proc — and
+  ## `updateFinalized` — never mutating `c.heads`/`hashToBlock` outside the
+  ## single-consumer worker.
   ##
   ##     A1 - A2 - A3          D5 - D6
   ##    /                     /
