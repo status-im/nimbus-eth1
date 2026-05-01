@@ -49,6 +49,12 @@ const
 # Private functions
 # ------------------------------------------------------------------------------
 
+template clearBlock(blk: Block) =
+  # chronos closure iterators copy `blk` into the closure environment
+  # (vendor/nim-chronos/chronos/config.nim:132). Clear the env copy after
+  # last use to release seq[Transaction] before subsequent awaits.
+  reset(cast[ptr Block](unsafeAddr blk)[])
+
 func appendBlock(c: ForkedChainRef,
          parent: BlockRef,
          blk: Block,
@@ -532,6 +538,8 @@ proc validateBlock(
   for i, tx in blk.transactions:
     c.txRecords[computeRlpHash(tx)] = (blkHash, uint64(i))
 
+  clearBlock(blk)
+
   # Entering base auto forward mode while avoiding forkChoice
   # handled region(head - baseDistance)
   # e.g. live syncing with the tip very far from from our latest head
@@ -711,6 +719,7 @@ proc importBlock*(
     let
       isFinalized = finalized or blk.header.number <= c.latestFinalized.number
       parent = ?(await c.validateBlock(parent, blk, blockAccessList, isFinalized))
+    clearBlock(blk)
     if c.quarantine.hasOrphans():
       c.queueOrphan(parent, isFinalized)
 

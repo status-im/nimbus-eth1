@@ -16,6 +16,12 @@ import
   ../../../wire_protocol,
   ../worker_desc
 
+template clearBlock(blk: EthBlock) =
+  # chronos closure iterators copy `blk` into the closure environment
+  # (vendor/nim-chronos/chronos/config.nim:132). Clear the env copy after
+  # last use to release seq[Transaction] before subsequent awaits.
+  reset(cast[ptr EthBlock](unsafeAddr blk)[])
+
 # ------------------------------------------------------------------------------
 # Public function
 # ------------------------------------------------------------------------------
@@ -39,7 +45,9 @@ proc importBlock*(
     try:
       # TODO: The block access list needs to be passed in when available over devp2p
       # and when the block falls within the BAL retention period.
-      (await ctx.chain.queueImportBlock(blk, Opt.none(BlockAccessListRef))).isOkOr:
+      let importRes = await ctx.chain.queueImportBlock(blk, Opt.none(BlockAccessListRef))
+      clearBlock(blk)
+      importRes.isOkOr:
         return err((ENoException, "", error, Moment.now() - start))
     except CancelledError as e:
       return err((ECancelledError,$e.name,e.msg,Moment.now()-start))
