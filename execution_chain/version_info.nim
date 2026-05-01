@@ -37,3 +37,10 @@ const
   ClientId* = &"{NimbusName}/{FullVersionStr}/{CpuInfo}"
 
   ShortClientId* = NimbusName & "/" & FullVersionStr
+
+when not defined(nimscript):
+  import metrics
+  declareGauge nec_version,
+    "Nimbus execution client version info (as metric labels)",
+    ["version", "commit"], name = "nec_version"
+  nec_version.set(1, labelValues = [FullVersionStr, GitRevision])
