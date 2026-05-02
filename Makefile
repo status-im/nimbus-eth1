@@ -89,26 +89,14 @@ PORTAL_TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(FLUFFY_TOOLS))
 
 # Namespaced variables to avoid conflicts with other makefiles
 OS_PLATFORM = $(shell $(CC) -dumpmachine)
-ifneq (, $(findstring darwin, $(OS_PLATFORM)))
-  SHAREDLIBEXT = dylib
-  STATICLIBEXT = a
-else
-ifneq (, $(findstring mingw, $(OS_PLATFORM))$(findstring cygwin, $(OS_PLATFORM))$(findstring msys, $(OS_PLATFORM)))
-  SHAREDLIBEXT = dll
-  STATICLIBEXT = lib
-else
-  SHAREDLIBEXT = so
-  STATICLIBEXT = a
-endif
-endif
 
 VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 ifneq (, $(findstring darwin, $(OS_PLATFORM)))
-  VERIFPROXY_LDFLAGS = -framework Security
-else ifneq (, $(findstring mingw, $(OS_PLATFORM))$(findstring windows-gnu, $(OS_PLATFORM)))
-  VERIFPROXY_LDFLAGS = -lbcrypt -lpthread -lws2_32
+  VERIFPROXY_LDFLAGS = -lc++ -framework Security
+else ifneq (, $(findstring mingw, $(OS_PLATFORM)))
+  VERIFPROXY_LDFLAGS = -lc++ -lbcrypt -lpthread -lws2_32
 else
-  VERIFPROXY_LDFLAGS = -lm
+  VERIFPROXY_LDFLAGS = -lstdc++ -lm
 endif
 
 .PHONY: \
@@ -125,6 +113,7 @@ endif
 	nimbus_verified_proxy_test \
 	libverifproxy \
 	libverifproxy_test \
+	nimbus_verified_proxy_go_test \
 	nimbus_verified_proxy_wasm \
 	nimbus_verified_proxy_wasm_debug \
 	external_sync \
@@ -363,34 +352,46 @@ portal_bridge: | build deps
 
 # Nimbus Verified Proxy related targets
 
-# Builds the nimbus_verified_proxy
 nimbus_verified_proxy: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim c -o:build/$@ $(NIM_PARAMS) nimbus_verified_proxy/nimbus_verified_proxy.nim
 
-# builds and runs the nimbus_verified_proxy test suite
 nimbus_verified_proxy_test: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) nimbus_verified_proxy/tests/all_proxy_tests.nim
 		rm nimbus_verified_proxy/tests/all_proxy_tests
 
-# Shared library for verified proxy
-
-libverifproxy: | build deps
-	echo -e $(BUILD_MSG) "build/$@" && \
+$(VERIF_PROXY_OUT_PATH)/libverifproxy.a:
+	echo -e $(BUILD_MSG) "build/libverifproxy" && \
 		$(ENV_SCRIPT) nim c \
-		--out:$(VERIF_PROXY_OUT_PATH)/$@.$(STATICLIBEXT) \
+		--out:$@ \
 		$(NIM_PARAMS) \
 		nimbus_verified_proxy/library/verifproxy.nim
 	cp nimbus_verified_proxy/library/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
 
-libverifproxy_test: libverifproxy
+libverifproxy: | build deps
+libverifproxy: $(VERIF_PROXY_OUT_PATH)/libverifproxy.a
+
+libverifproxy_test: $(VERIF_PROXY_OUT_PATH)/libverifproxy.a
 	$(CC) -I$(VERIF_PROXY_OUT_PATH) -L$(VERIF_PROXY_OUT_PATH) \
 		-Wno-incompatible-pointer-types \
 		-o build/$@ \
 		tests/library/test_api.c \
-		-lverifproxy -lstdc++ $(VERIFPROXY_LDFLAGS)
+		-lverifproxy $(VERIFPROXY_LDFLAGS)
 	./build/$@
+
+GO_BINDINGS_DIR  := nimbus_verified_proxy/library/bindings/go
+GO_LIB_DIR       := $(GO_BINDINGS_DIR)/verifproxy/lib
+
+nimbus_verified_proxy_go_test: $(VERIF_PROXY_OUT_PATH)/libverifproxy.a
+	echo -e $(BUILD_MSG) "go test $(GO_BINDINGS_DIR)" && \
+		mkdir -p "$(GO_LIB_DIR)" && \
+		cp "$(VERIF_PROXY_OUT_PATH)/libverifproxy.$(STATICLIBEXT)" \
+		   "$(GO_LIB_DIR)/libverifproxy.$(STATICLIBEXT)" && \
+		cp nimbus_verified_proxy/library/verifproxy.h \
+		   "$(GO_LIB_DIR)/verifproxy.h" && \
+		cd "$(GO_BINDINGS_DIR)" && \
+		go test ./...
 
 nimbus_verified_proxy_wasm: | build deps
 	@mkdir -p $(CURDIR)/build/$@
