@@ -125,6 +125,7 @@ endif
 	nimbus_verified_proxy_test \
 	libverifproxy \
 	libverifproxy_test \
+	nimbus_verified_proxy_go_test \
 	nimbus_verified_proxy_wasm \
 	nimbus_verified_proxy_wasm_debug \
 	external_sync \
@@ -383,6 +384,19 @@ libverifproxy: | build deps
 		$(NIM_PARAMS) \
 		nimbus_verified_proxy/library/verifproxy.nim
 	cp nimbus_verified_proxy/library/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
+
+GO_BINDINGS_DIR  := nimbus_verified_proxy/library/bindings/go
+GO_LIB_DIR       := $(GO_BINDINGS_DIR)/verifproxy/lib
+
+nimbus_verified_proxy_go_test: libverifproxy
+	echo -e $(BUILD_MSG) "go test $(GO_BINDINGS_DIR)" && \
+		mkdir -p "$(GO_LIB_DIR)" && \
+		cp "$(VERIF_PROXY_OUT_PATH)/libverifproxy.$(STATICLIBEXT)" \
+		   "$(GO_LIB_DIR)/libverifproxy.$(STATICLIBEXT)" && \
+		cp nimbus_verified_proxy/library/verifproxy.h \
+		   "$(GO_BINDINGS_DIR)/verifproxy/verifproxy.h" && \
+		cd "$(GO_BINDINGS_DIR)" && \
+		go test ./...
 
 libverifproxy_test: libverifproxy
 	$(CC) -I$(VERIF_PROXY_OUT_PATH) -L$(VERIF_PROXY_OUT_PATH) \
