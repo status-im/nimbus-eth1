@@ -9,11 +9,12 @@ package verifproxy
 
 /*
 #cgo CFLAGS: -I${SRCDIR}
-#cgo linux LDFLAGS: ${SRCDIR}/lib/libverifproxy.a -lm -lpthread -lstdc++
-#cgo darwin LDFLAGS: ${SRCDIR}/lib/libverifproxy.a -framework Security -lc++
-#cgo windows LDFLAGS: ${SRCDIR}/lib/libverifproxy.lib -lbcrypt -lpthread -lws2_32 -lstdc++
+#cgo linux LDFLAGS: -L${SRCDIR}/lib -lverifproxy -lm -lpthread -lstdc++
+#cgo darwin LDFLAGS: -L${SRCDIR}/lib -lverifproxy -framework Security -lc++
+#cgo windows LDFLAGS: -L${SRCDIR}/lib -lverifproxy -lbcrypt -lpthread -lws2_32 -lstdc++
 
 #include "verifproxy.h"
+#include <stdint.h>
 #include <stdlib.h>
 
 extern void goCallbackWrapper(Context *ctx, int status, char *result, void *userData);

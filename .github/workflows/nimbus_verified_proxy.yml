@@ -94,6 +94,11 @@ jobs:
       - name: Checkout nimbus-eth1
         uses: actions/checkout@v6
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
       - id: shared-action
         uses: ./.github/actions/shared
         with:
