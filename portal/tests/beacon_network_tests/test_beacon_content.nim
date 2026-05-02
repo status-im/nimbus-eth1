@@ -231,7 +231,7 @@ suite "Beacon Content Keys and Values":
         kind: LightClientDataFork.Altair, altairData: altairData
       )
       updateList = ForkedLightClientUpdateList.init(@[update, update])
-      cfg = loadNetworkData("mainnet").metadata.cfg
+      cfg = loadNetworkMetaData("mainnet").cfg
 
       encoded = encodeLightClientUpdatesForked(updateList, forkDigests, cfg)
       decoded = decodeLightClientUpdatesByRange(forkDigests, encoded)
