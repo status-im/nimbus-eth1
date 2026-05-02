@@ -17,9 +17,15 @@ package verifproxy
 #include <stdint.h>
 #include <stdlib.h>
 
-extern void goCallbackWrapper(Context *ctx, int status, char *result, void *userData);
-extern void goExecTransportWrapper(Context *ctx, TransportDeliveryCallback cb, void *ud);
-extern void goBeaconTransportWrapper(Context *ctx, TransportDeliveryCallback cb, void *ud);
+#ifdef _WIN32
+#define GO_EXPORT __declspec(dllexport)
+#else
+#define GO_EXPORT
+#endif
+
+extern GO_EXPORT void goCallbackWrapper(Context *ctx, int status, char *result, void *userData);
+extern GO_EXPORT void goExecTransportWrapper(Context *ctx, TransportDeliveryCallback cb, void *ud);
+extern GO_EXPORT void goBeaconTransportWrapper(Context *ctx, TransportDeliveryCallback cb, void *ud);
 
 __attribute__((weak)) void cGoCallback(Context *ctx, int status, char *result, void *userData) {
     goCallbackWrapper(ctx, status, result, userData);
