@@ -112,7 +112,7 @@ proc preExecComputation(vmState: BaseVMState, call: CallParams): int64 =
     # 7. Add PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST gas to the global refund counter if authority exists in the trie.
     if ledger.accountExists(authority):
       if vmState.fork >= FkAmsterdam:
-        gasRefund += int64(STATE_BYTES_PER_NEW_ACCOUNT * vmState.blockCtx.costPerStateByte)
+        gasRefund += int64(CREATE_ACCOUNT_STATE_GAS)
       else:
         gasRefund += PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST
 
@@ -150,8 +150,7 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
 
   let
     isAmsterdamOrLater = fork >= FkAmsterdam
-    intrinsic = if call.sysCall: IntrinsicGas()
-                else: intrinsicGas(call, fork, vmState.blockCtx.gasLimit)
+    intrinsic = call.intrinsic
     gasRefund = if call.sysCall: 0
                 else: preExecComputation(vmState, call)
     intrinsicGas = intrinsic.regular + intrinsic.state
@@ -170,7 +169,7 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
 
   if isAmsterdamOrLater:
     gasLeft = min(regularGasBudget, executionGas)
-    intrinsicStateGas = intrinsic.state - gasRefund.GasInt
+    intrinsicStateGas = intrinsic.state
     stateGas = executionGas - gasLeft + gasRefund.GasInt
 
   let
@@ -239,6 +238,20 @@ proc prepareToRunComputation(host: TransactionHost, call: CallParams) =
         vmState.balTracker.trackSubBalanceChange(call.sender, blobFee)
       ledger.subBalance(call.sender, blobFee)
 
+proc calcSelfDestructRefundStateGas(c: Computation) =
+  let
+    ledger = c.vmState.ledger
+
+  var
+    refundSum = 0
+
+  for refund in newlyCreatedSelfDestructRefund(ledger):
+    refundSum += CREATE_ACCOUNT_STATE_GAS
+    refundSum += STATE_GAS_STORAGE_SET * refund.createdSlots
+    refundSum += COST_PER_STATE_BYTE * refund.codeLen
+
+  c.gasMeter.selfDestructRefundStateGas(refundSum.GasInt)
+
 proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): GasUsed =
   let
     c = host.computation
@@ -252,6 +265,14 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
                             2.GasInt
   if c.shouldBurnGas:
     c.gasMeter.burnGas()
+
+  if c.fork >= FkAmsterdam:
+    if c.isSuccess:
+      # https://github.com/ethereum/execution-specs/pull/2707/changes
+      c.calcSelfDestructRefundStateGas()
+    else:
+      # https://github.com/ethereum/execution-specs/pull/2689/changes
+      c.gasMeter.returnAllStateGas()
 
   # Calculated gas used, taking into account refund rules.
   let

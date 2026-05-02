@@ -23,7 +23,7 @@ import
   ../../db/ledger,
   ../../constants,
   ../../transaction,
-  ../../core/eip8037,
+  ../../transaction/call_types,
   ../chain/forked_chain,
   ../pow/header,
   ../eip4844,
@@ -105,7 +105,6 @@ proc setupVMState(com: CommonRef;
       excessBlobGas: com.calcExcessBlobGas(parent, fork),
       parentHash   : parentHash,
       slotNumber   : pos.slotNumber,
-      costPerStateByte: stateGasPerByte(gasLimit),
     ),
     txFrame = parentFrame.txFrameBegin(),
     com     = com,
@@ -365,10 +364,13 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     debug "Transaction already known", txHash = id
     return err(txErrorAlreadyKnown)
 
+  let
+    intrinsic = ptx.tx.intrinsicGas(xp.nextFork, xp.gasLimit)
+
   validateTxBasic(
     xp.com,
     ptx.tx,
-    xp.gasLimit,
+    intrinsic,
     xp.nextFork,
     validateFork = true).isOkOr:
     debug "Invalid transaction: Basic validation failed",

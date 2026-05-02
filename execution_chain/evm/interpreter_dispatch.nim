@@ -14,6 +14,7 @@ import
   std/[macros, strformat],
   chronicles,
   stew/byteutils,
+  ../core/eip8037,
   ../constants,
   ../db/ledger,
   ./interpreter/op_dispatcher,
@@ -93,11 +94,6 @@ proc afterExecCall(c: Computation) =
       # Special case to account for geth+parity bug
       c.vmState.ledger.ripemdSpecial()
 
-  if c.isSuccess:
-    c.commit()
-  else:
-    c.rollback()
-
 proc beforeExecCreate(c: Computation): bool =
   c.vmState.mutateLedger:
     let nonce = ledger.getNonce(c.msg.sender)
@@ -128,6 +124,9 @@ proc beforeExecCreate(c: Computation): bool =
     # regularGasUsed.
     if c.msg.depth == 0:
       c.gasMeter.gasRemaining = 0
+    elif c.fork >= FkAmsterdam:
+      # https://github.com/ethereum/execution-specs/pull/2733/changes
+      c.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
     let blurb = c.msg.contractAddress.toHex
     c.setError("Address collision when creating contract address=" & blurb, true)
     return true
@@ -168,11 +167,6 @@ proc afterExecCreate(c: Computation) =
     # right cases, particularly important with EVMC where it must be cleared.
     c.output.reset()
 
-  if c.isSuccess:
-    c.commit()
-  else:
-    c.rollback()
-
 const MsgKindToOp: array[CallKind, Op] =
   [Call, DelegateCall, CallCode, Create, Create2]
 
@@ -204,6 +198,14 @@ proc afterExec(c: Computation) =
     c.afterExecCall()
   else:
     c.afterExecCreate()
+
+  if c.fork >= FkAmsterdam and c.shouldBurnGas:
+    c.gasMeter.restoreStateGasReservoir(c.msg.stateGas)
+
+  if c.isSuccess:
+    c.commit()
+  else:
+    c.rollback()
 
   if c.msg.depth > 0:
     let gasUsed = c.msg.gas - c.gasMeter.gasRemaining
