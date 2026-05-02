@@ -51,9 +51,8 @@ const
 
 template clearBlock(blk: Block) =
   # chronos closure iterators copy `blk` into the closure environment
-  # (vendor/nim-chronos/chronos/config.nim:132). Clear the env copy after
-  # last use to release seq[Transaction] before subsequent awaits.
-  # Cast around parameter immutability: chronos rejects `var Block` params in
+  # Clear the env copy after last use to release seq[Transaction] before subsequent
+  # awaits. Cast around parameter immutability: chronos rejects `var Block` params in
   # `{.async.}` (borrowed refs can't be captured into the closure env).
   reset(cast[ptr Block](unsafeAddr blk)[])
 
