@@ -111,6 +111,10 @@ type
     selfDestruct: HashSet[Address]
     accessList: ac_access_list.AccessList
 
+  SelfDestructRefund* = object
+    createdSlots*: int
+    codeLen*: int
+
 const
   resetFlags = {
     Dirty,
@@ -328,6 +332,31 @@ proc makeDirty(ledger: LedgerRef, address: Address, cloneStorage = true): Accoun
   ledger.savePoint.cache[address] = result
   ledger.savePoint.dirty[address] = result
 
+template getCodeSizeImpl(ledger: LedgerRef, acc: AccountRef): int =
+  if acc.code == nil:
+    if acc.statement.codeHash == EMPTY_CODE_HASH:
+      return 0
+    acc.code = ledger.code.get(acc.statement.codeHash).valueOr:
+      # On a cache miss, we don't fetch the code - instead, we fetch just the
+      # length - should the code itself be needed, it will typically remain
+      # cached and easily accessible in the database layer - this is to prevent
+      # EXTCODESIZE calls from messing up the code cache and thus causing
+      # recomputation of the jump destination table
+      var rc = ledger.txFrame.len(contractHashKey(acc.statement.codeHash).toOpenArray)
+
+      return rc.valueOr:
+        warn logTxt "getCodeSize()", codeHash=acc.statement.codeHash, error=($$rc.error)
+        0
+
+  acc.code.len()
+
+proc getCodeSize(ledger: LedgerRef, acc: AccountRef): int =
+  getCodeSizeImpl(ledger, acc)
+
+proc calcCreatedSlots(ledger: LedgerRef, acc: AccountRef): int =
+  for _, val in acc.overlayStorage:
+    inc(result, val.isZero.not.int)
+
 # ------------------------------------------------------------------------------
 # Public methods
 # ------------------------------------------------------------------------------
@@ -455,23 +484,7 @@ proc getCodeSize*(ledger: LedgerRef, address: Address): int =
   let acc = ledger.getAccount(address, false)
   if acc.isNil:
     return 0
-
-  if acc.code == nil:
-    if acc.statement.codeHash == EMPTY_CODE_HASH:
-      return 0
-    acc.code = ledger.code.get(acc.statement.codeHash).valueOr:
-      # On a cache miss, we don't fetch the code - instead, we fetch just the
-      # length - should the code itself be needed, it will typically remain
-      # cached and easily accessible in the database layer - this is to prevent
-      # EXTCODESIZE calls from messing up the code cache and thus causing
-      # recomputation of the jump destination table
-      var rc = ledger.txFrame.len(contractHashKey(acc.statement.codeHash).toOpenArray)
-
-      return rc.valueOr:
-        warn logTxt "getCodeSize()", codeHash=acc.statement.codeHash, error=($$rc.error)
-        0
-
-  acc.code.len()
+  getCodeSizeImpl(ledger, acc)
 
 proc resolveCode*(ledger: LedgerRef, address: Address): CodeBytesRef =
   let code = ledger.getCode(address)
@@ -638,6 +651,17 @@ iterator nonZeroSelfDestructAccounts*(ledger: LedgerRef): (Address, UInt256) =
     if value.isZero:
       continue
     yield (address, value)
+
+iterator newlyCreatedSelfDestructRefund*(ledger: LedgerRef): SelfDestructRefund =
+  for address in ledger.savePoint.selfDestruct:
+    let acc = ledger.getAccount(address, false)
+    doAssert(acc.isNil.not)
+    if NewlyCreated notin acc.flags:
+      continue
+    yield SelfDestructRefund(
+      createdSlots: calcCreatedSlots(ledger, acc),
+      codeLen: getCodeSize(ledger, acc),
+    )
 
 proc ripemdSpecial*(ledger: LedgerRef) =
   ledger.ripemdSpecial = true
