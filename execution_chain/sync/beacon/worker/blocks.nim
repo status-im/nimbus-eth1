@@ -147,22 +147,21 @@ template blocksCollect*(
 
         # Fetch blocks and verify result
         ctx.blk.reserveStaged.inc                   # Book a slot on `staged`
-        let rc = buddy.blocksFetch(nFetchBodiesRequest, info)
-        ctx.blk.reserveStaged.dec                   # Free that slot again
-
-        if rc.isErr:
+        var fetched = buddy.blocksFetch(nFetchBodiesRequest, info).valueOr:
+          ctx.blk.reserveStaged.dec                 # Free that slot again
           break fetchBlocksBody                     # done, exit this block
+        ctx.blk.reserveStaged.dec                   # Free that slot again
 
         let
           # Insert blocks list on the `staged` queue
-          key = rc.value[0].header.number
+          key = fetched[0].header.number
           qItem = ctx.blocksStagedQueueInsert(key).valueOr:
             raiseAssert info & ": duplicate key on staged queue iv=" &
-              (key, rc.value[^1].header.number).toStr
+              (key, fetched[^1].header.number).toStr
 
-        qItem.data.blocks = rc.value                # store `blocks[]` list
+        nQueued += fetched.len                      # statistics
+        qItem.data.blocks = move fetched            # store `blocks[]` list
         qItem.data.peerID = buddy.peerID
-        nQueued += rc.value.len                     # statistics
         # End if
 
       # End block: `fetchBlocksBody`

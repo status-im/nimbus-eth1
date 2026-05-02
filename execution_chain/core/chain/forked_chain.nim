@@ -51,7 +51,10 @@ const
 
 template clearBlock(blk: Block) =
   # chronos closure iterators copy `blk` into the closure environment
-  # Clear the env copy after last use to release seq[Transaction] before subsequent awaits.
+  # (vendor/nim-chronos/chronos/config.nim:132). Clear the env copy after
+  # last use to release seq[Transaction] before subsequent awaits.
+  # Cast around parameter immutability: chronos rejects `var Block` params in
+  # `{.async.}` (borrowed refs can't be captured into the closure env).
   reset(cast[ptr Block](unsafeAddr blk)[])
 
 func appendBlock(c: ForkedChainRef,
@@ -583,15 +586,15 @@ proc processOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false): Futu
     # https://github.com/status-im/nimbus-eth1/issues/3526
     return ok()
 
-  let
-    orphan = c.quarantine.popOrphan(parent.hash).valueOr:
-      # No more orphaned block
-      return ok()
-    parent = (await c.validateBlock(parent, orphan[0], orphan[1], finalized)).valueOr:
-      # Silent?
-      # We don't return error here because the import is still ok()
-      # but the quarantined blocks may not linked
-      return ok()
+  var orphan = c.quarantine.popOrphan(parent.hash).valueOr:
+    # No more orphaned block
+    return ok()
+  let parent = (await c.validateBlock(parent, orphan[0], orphan[1], finalized)).valueOr:
+    # Silent?
+    # We don't return error here because the import is still ok()
+    # but the quarantined blocks may not linked
+    return ok()
+  orphan[0].reset()
   c.queueOrphan(parent, finalized)
 
 proc processQueue(c: ForkedChainRef) {.async: (raises: [CancelledError]).} =
