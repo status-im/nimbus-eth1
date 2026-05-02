@@ -2,7 +2,7 @@ module github.com/status-im/nimbus-eth1/nimbus_verified_proxy/library/bindings/g
 
 go 1.24
 
-tool github.com/status-im/nimbus-eth1/nimbus_verified_proxy/library/bindings/go/cmd/setup-libs
+tool github.com/status-im/nimbus-eth1/nimbus_verified_proxy/library/bindings/go/cmd/verifproxy-setup-libs
 
 require github.com/stretchr/testify v1.11.1
 

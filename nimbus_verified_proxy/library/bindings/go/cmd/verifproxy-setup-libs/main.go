@@ -114,17 +114,18 @@ func resolveLibDir() (string, error) {
 // ensureWritable creates destDir, making the parent writable first if needed
 // (module cache directories are typically 0555).
 func ensureWritable(destDir string) error {
-	err := os.MkdirAll(destDir, 0755)
-	if err == nil {
-		return nil
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		if !os.IsPermission(err) {
+			return err
+		}
+		if err := os.Chmod(filepath.Dir(destDir), 0755); err != nil {
+			return err
+		}
+		if err := os.MkdirAll(destDir, 0755); err != nil {
+			return err
+		}
 	}
-	if !os.IsPermission(err) {
-		return err
-	}
-	if chmodErr := os.Chmod(filepath.Dir(destDir), 0755); chmodErr != nil {
-		return err
-	}
-	return os.MkdirAll(destDir, 0755)
+	return os.Chmod(destDir, 0755)
 }
 
 func downloadArchive(url string) (io.ReadCloser, error) {
