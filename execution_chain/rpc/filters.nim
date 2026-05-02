@@ -81,17 +81,20 @@ proc deriveLogs*(
   var logIndex = 0'u64
 
   for i, receipt in receipts:
-    let logs =
-      receipt.logs.filterIt(it.match(filterOptions.address, filterOptions.topics))
-    if logs.len > 0:
-      # TODO avoid recomputing entirely - we should have this cached somewhere
-      let txHash =
-        if txHashes.isSome:
-          txHashes.get[i] # cached txHashes
-        else:
-          transactions[i].computeRlpHash
+    var txHash = default(Hash32)
+    var txHashReady = false
 
-      for log in logs:
+    for log in receipt.logs:
+      if log.match(filterOptions.address, filterOptions.topics):
+        if not txHashReady:
+          # TODO avoid recomputing entirely - we should have this cached somewhere
+          txHash =
+            if txHashes.isSome:
+              txHashes.get[i] # cached txHashes
+            else:
+              transactions[i].computeRlpHash
+          txHashReady = true
+
         let filterLog = FilterLog(
           # TODO investigate how to handle this field
           # - in nimbus info about log removel would need to be kept at synchronization
@@ -109,8 +112,9 @@ proc deriveLogs*(
           topics: log.topics,
         )
 
-        inc logIndex
         resLogs.add(filterLog)
+
+      inc logIndex
 
   return resLogs
 

@@ -18,6 +18,7 @@ import
     test_evm_support,
     test_evm_errors,
     test_async_evm,
+    test_eth_getlogs_log_index,
     test_filters,
     test_forked_chain,
     test_forkid,
