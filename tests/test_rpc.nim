@@ -228,6 +228,7 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
   setupServerAPI(serverApi, server, am)
   setupCommonRpc(node, conf, server)
   setupAdminRpc(nimbus, conf, server)
+  setupDebugRpc(com, txPool, server)
   server.start()
 
   TestEnv(
@@ -614,7 +615,7 @@ proc rpcMain*() =
       check res.hash == env.blockHash
 
       expect JsonRpcError:
-        let res2 = await client.eth_getBlockByNumber($1, true)
+        discard await client.eth_getBlockByNumber($1, true)
 
     test "eth_getTransactionByHash":
       let res = await client.eth_getTransactionByHash(env.txHash)
@@ -650,6 +651,18 @@ proc rpcMain*() =
           check receipts.len == 2
           check receipts[0].transactionIndex == 0.Quantity
           check receipts[1].transactionIndex == 1.Quantity
+
+    test "debug_getRawReceipts":
+      let
+        rawReceipts = await client.debug_getRawReceipts(blockId(1'u64))
+        receipts = await client.eth_getBlockReceipts(blockId(1'u64))
+
+      check receipts.isSome
+      if receipts.isSome:
+        check rawReceipts.len == receipts.get.len
+
+      for receipt in rawReceipts:
+        check seq[byte](receipt).len > 0
 
     test "eth_getBlockReceipts with EIP-1898 object param":
       # blockHash object form (what go-ethereum's ethclient sends)

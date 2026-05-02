@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2025 Status Research & Development GmbH. Licensed under
+# Copyright (c) 2018-2026 Status Research & Development GmbH. Licensed under
 # either of:
 # - Apache License, version 2.0
 # - MIT license
@@ -122,8 +122,11 @@ endif
 	nimbus_portal_client \
 	fluffy \
 	nimbus_verified_proxy \
+	nimbus_verified_proxy_test \
 	libverifproxy \
-	libverifproxy-test \
+	libverifproxy_test \
+	nimbus_verified_proxy_wasm \
+	nimbus_verified_proxy_wasm_debug \
 	external_sync \
 	test \
 	test-reproducibility \
@@ -205,6 +208,12 @@ ifeq ($(USE_LIBBACKTRACE), 0)
   NIM_PARAMS += -d:disable_libbacktrace
 endif
 
+# Used in docker/dist/entry_point.sh
+# To avoid confusion with USE_SYSTEM_ROCKSDB
+ifeq ($(USE_CACHED_ROCKSDB), 1)
+  USE_SYSTEM_ROCKSDB = 1
+endif
+
 deps: | deps-common nat-libs nimbus.nims
 
 # eth protocol settings, rules from "execution_chain/sync/protocol/eth/variables.mk"
@@ -251,7 +260,11 @@ ifneq ($(USE_SYSTEM_ROCKSDB), 1)
 	+ MAKE="$(MAKE)" \
 		scripts/rocksdb_ci_cache.sh $(ROCKSDB_CI_CACHE)
 else
+ifeq ($(USE_CACHED_ROCKSDB), 1)
+	@echo "Using cached RocksDB"
+else
 	@echo "Using system RocksDB"
+endif
 endif
 
 eest:
@@ -353,29 +366,53 @@ portal_bridge: | build deps
 # Builds the nimbus_verified_proxy
 nimbus_verified_proxy: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim nimbus_verified_proxy $(NIM_PARAMS) nimbus.nims
+		$(ENV_SCRIPT) nim c -o:build/$@ $(NIM_PARAMS) nimbus_verified_proxy/nimbus_verified_proxy.nim
 
 # builds and runs the nimbus_verified_proxy test suite
-nimbus-verified-proxy-test: | build deps
-	$(ENV_SCRIPT) nim nimbus_verified_proxy_test $(NIM_PARAMS) nimbus.nims
+nimbus_verified_proxy_test: | build deps
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) nimbus_verified_proxy/tests/all_proxy_tests.nim
+		rm nimbus_verified_proxy/tests/all_proxy_tests
 
 # Shared library for verified proxy
 
 libverifproxy: | build deps
-	+ echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim --version && \
-		echo $(NIM_PARAMS) && \
-		$(ENV_SCRIPT) nim c --app:staticlib -d:"libp2p_pki_schemes=secp256k1" --noMain:on -d:disable_libbacktrace --out:$(VERIF_PROXY_OUT_PATH)/$@.$(STATICLIBEXT) $(NIM_PARAMS) nimbus_verified_proxy/libverifproxy/verifproxy.nim
-	cp nimbus_verified_proxy/libverifproxy/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
-	echo -e $(BUILD_END_MSG) "build/$@"
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim c \
+		--out:$(VERIF_PROXY_OUT_PATH)/$@.$(STATICLIBEXT) \
+		$(NIM_PARAMS) \
+		nimbus_verified_proxy/library/verifproxy.nim
+	cp nimbus_verified_proxy/library/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
 
-libverifproxy-test: | libverifproxy
+libverifproxy_test: libverifproxy
 	$(CC) -I$(VERIF_PROXY_OUT_PATH) -L$(VERIF_PROXY_OUT_PATH) \
 		-Wno-incompatible-pointer-types \
-		-o build/libverifproxy-test \
-		nimbus_verified_proxy/libverifproxy/test_api.c \
+		-o build/$@ \
+		tests/library/test_api.c \
 		-lverifproxy -lstdc++ $(VERIFPROXY_LDFLAGS)
-	./build/libverifproxy-test
+	./build/$@
+
+nimbus_verified_proxy_wasm: | build deps
+	@mkdir -p $(CURDIR)/build/$@
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim c \
+		-d:emscripten \
+		-d:release \
+		-d:disable_libbacktrace \
+		-o:"$(CURDIR)/build/$@/verifproxy_wasm.js" \
+		nimbus_verified_proxy/library/bindings/wasm/verifproxy_wasm.nim
+	cp nimbus_verified_proxy/library/bindings/wasm/wasm_glue.js $(CURDIR)/build/$@/
+
+nimbus_verified_proxy_wasm_debug: | build deps
+	@mkdir -p $(CURDIR)/build/$@
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim c \
+		-d:emscripten \
+		-d:debug \
+		-d:disable_libbacktrace \
+		-o:"$(CURDIR)/build/$@/verifproxy_wasm.js" \
+		nimbus_verified_proxy/library/bindings/wasm/verifproxy_wasm.nim
+	cp nimbus_verified_proxy/library/bindings/wasm/wasm_glue.js $(CURDIR)/build/$@/
 
 # Stateless related targets
 

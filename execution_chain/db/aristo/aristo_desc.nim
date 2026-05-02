@@ -76,6 +76,18 @@ type
 
     blockNumber*: Opt[uint64]               ## Block number set when checkpointing the frame
 
+    collectWitness*: bool
+      ## When true, records collapsed siblings during deletion for witness
+      ## generation.
+
+    collapsedSiblings*: seq[tuple[sibAccPath: Hash32, sibStoPath: Opt[Hash32]]]
+      ## Records path pairs for each surviving sibling when a branch collapses
+      ## during deletion. `sibAccPath` is the account path (used to look up the
+      ## storage trie root); `sibStoPath` is the sibling's own path hash. For
+      ## account-trie collapses, sibStoPath is none. Used by witness
+      ## generation to include the sibling node in the witness for stateless
+      ## execution. Only populated when collectWitness is true.
+
     snapshot*: Snapshot
       ## Optional snapshot containing the cumulative changes from ancestors and
       ## the current frame
@@ -86,9 +98,9 @@ type
       ## -1 = stored in database, where relevant though typically should be
       ## compared with the base layer level instead.
 
-    when compileOption("threads"):      
+    when compileOption("threads"):
       lock*: ReadWriteLock
-        ## A read-write lock used to support thread safe reads and writes to the 
+        ## A read-write lock used to support thread safe reads and writes to the
         ## database from multiple threads.
 
   Snapshot* = object
@@ -117,7 +129,7 @@ type
 
     txRef*: AristoTxRef              ## Bottom-most in-memory frame
 
-    accLeaves*: LruCache[Hash32, AccLeafRef]
+    accLeaves*: LruCache[Hash32, CachedAccLeaf]
       ## Account path to payload cache - accounts are frequently accessed by
       ## account path when contracts interact with them - this cache ensures
       ## that we don't have to re-traverse the storage trie for every such
@@ -125,7 +137,7 @@ type
       ## TODO a better solution would probably be to cache this in a type
       ## exposed to the high-level API
 
-    stoLeaves*: LruCache[Hash32, StoLeafRef]
+    stoLeaves*: LruCache[Hash32, CachedStoLeaf]
       ## Mixed account/storage path to payload cache - same as above but caches
       ## the full lookup of storage slots
 

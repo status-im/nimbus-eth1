@@ -791,7 +791,7 @@ procSuite "ForkedChain mainnet replay":
     let
       era0 = Era1DbRef.init(sourcePath / "replay", "mainnet", 15537394'u64).expect("Era files present")
       com = CommonRef.new(AristoDbMemory.newCoreDbRef())
-      fc = ForkedChainRef.init(com, enableQueue = true)
+      fc {.used.}= ForkedChainRef.init(com, enableQueue = true)
 
   asyncTest "Replay mainnet era, single FCU":
     var blk: EthBlock
