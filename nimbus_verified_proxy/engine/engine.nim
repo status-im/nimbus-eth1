@@ -139,7 +139,10 @@ proc init*(
     if not config.syncHeaderStore:
       return
     withForkyStore(engine.lcStore[]):
-      when lcDataFork > LightClientDataFork.Altair:
+      when lcDataFork > LightClientDataFork.Electra:
+        {.warning: "Please add implementation here for: " & $lcDataFork.}
+        error "post-electra onFinalizedHeader has no implementation"
+      elif lcDataFork > LightClientDataFork.Altair and lcDataFork <= LightClientDataFork.Electra:
         info "New LC finalized header",
           finalized_header = shortLog(forkyStore.finalized_header)
         let header = convLCHeader(forkyStore.finalized_header).valueOr:
@@ -157,7 +160,10 @@ proc init*(
     if not config.syncHeaderStore:
       return
     withForkyStore(engine.lcStore[]):
-      when lcDataFork > LightClientDataFork.Altair:
+      when lcDataFork > LightClientDataFork.Electra:
+        {.warning: "Please add implementation here for: " & $lcDataFork.}
+        error "post-electra onOptimisticHeader has no implementation"
+      elif lcDataFork > LightClientDataFork.Altair and lcDataFork <= LightClientDataFork.Electra:
         info "New LC optimistic header",
           optimistic_header = shortLog(forkyStore.optimistic_header)
         let header = convLCHeader(forkyStore.optimistic_header).valueOr:
