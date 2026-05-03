@@ -119,7 +119,7 @@ proc setupTestBeacon*(engine: RpcVerificationEngine, testState: TestApiState) =
 
 proc initTestEngine*(
     testState: TestApiState, headerCacheLen: int, maxBlockWalk: uint64
-): EngineResult[RpcVerificationEngine] =
+): EngineResult[(RpcVerificationEngine, ExecutionApiFrontend)] =
   let
     engineConf = RpcVerificationEngineConf(
       chainId: 1.u256,
@@ -138,6 +138,5 @@ proc initTestEngine*(
 
   engine.registerBackend(initTestExecutionBackend(testState), fullExecutionCapabilities)
   engine.setupTestBeacon(testState)
-  engine.registerDefaultFrontend()
 
-  ok(engine)
+  ok((engine, engine.getExecutionApiFrontend()))

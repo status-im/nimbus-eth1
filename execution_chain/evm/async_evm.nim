@@ -169,7 +169,10 @@ proc callFetchingState(
     vmState.ledger.rollback(savePoint) # all state changes from the call are reverted
 
     # Collect the keys after executing the transaction
-    lastWitnessKeys = ensureMove(witnessKeys)
+    when defined(gcArc):
+      lastWitnessKeys = witnessKeys
+    else:
+      lastWitnessKeys = ensureMove(witnessKeys)
     witnessKeys = vmState.ledger.getWitnessKeys()
 
     try:
@@ -314,7 +317,10 @@ func validateSetDefaults(tx: TransactionArgs): Result[TransactionArgs, string] =
   if tx.gas.isNone():
     tx.gas = Opt.some(EVM_CALL_GAS_CAP.Quantity)
 
-  ok(ensureMove(tx))
+  when defined(gcArc):
+    ok(tx)
+  else:
+    ok(ensureMove(tx))
 
 proc call*(
     evm: AsyncEvm, header: Header, tx: TransactionArgs, optimisticStateFetch = true
@@ -365,7 +371,11 @@ proc createAccessList*(
     else:
       al.add(adr)
 
-  var txWithAl = ensureMove(tx)
+  var txWithAl =
+    when defined(gcArc):
+      tx
+    else:
+      ensureMove(tx)
   txWithAl.accessList = Opt.some(al.getAccessList())
     # converts to transactions.AccessList
 
