@@ -8,7 +8,7 @@
 package verifproxy
 
 /*
-#cgo CFLAGS: -I${SRCDIR}
+#cgo CFLAGS: -I${SRCDIR}/lib
 #cgo linux LDFLAGS: -L${SRCDIR}/lib -lverifproxy -lm -lpthread -lstdc++
 #cgo darwin LDFLAGS: -L${SRCDIR}/lib -lverifproxy -framework Security -lc++
 #cgo windows LDFLAGS: -L${SRCDIR}/lib -lverifproxy -lbcrypt -lpthread -lws2_32 -lstdc++

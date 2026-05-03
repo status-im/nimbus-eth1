@@ -50,10 +50,6 @@ func main() {
 	if goos == "darwin" {
 		osName = "macos"
 	}
-	ext := "a"
-	if goos == "windows" {
-		ext = "lib"
-	}
 
 	assetPrefix := fmt.Sprintf("libverifproxy-%s-%s-", osName, goarch)
 	downloadURL, err := fetchLatestAssetURL(assetPrefix)
@@ -70,19 +66,15 @@ func main() {
 	}
 	defer body.Close()
 
-	libInTar := fmt.Sprintf("build/libverifproxy/libverifproxy.%s", ext)
-	dest := filepath.Join(destDir, fmt.Sprintf("libverifproxy.%s", ext))
-
 	if err := ensureWritable(destDir); err != nil {
 		fmt.Fprintln(os.Stderr, "mkdir:", err)
 		os.Exit(1)
 	}
 
-	if err := extractFromTar(body, libInTar, dest); err != nil {
+	if err := extractFromTar(body, destDir); err != nil {
 		fmt.Fprintln(os.Stderr, "extract:", err)
 		os.Exit(1)
 	}
-	fmt.Printf("Wrote %s\n", dest)
 }
 
 // resolveLibDir returns the lib/ directory inside the verifproxy package.
@@ -171,12 +163,14 @@ func fetchLatestAssetURL(assetPrefix string) (string, error) {
 	return "", fmt.Errorf("no asset with prefix %q found in recent releases", assetPrefix)
 }
 
-func extractFromTar(r io.Reader, target, dest string) error {
+func extractFromTar(r io.Reader, destDir string) error {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
 		return err
 	}
 	defer gz.Close()
+
+	const tarPrefix = "build/libverifproxy/"
 
 	tr := tar.NewReader(gz)
 	for {
@@ -187,16 +181,26 @@ func extractFromTar(r io.Reader, target, dest string) error {
 		if err != nil {
 			return err
 		}
+		if hdr.Typeflag != tar.TypeReg {
+			continue
+		}
 
-		if hdr.Name == target || strings.HasSuffix(hdr.Name, "/"+target) {
-			out, err := os.Create(dest)
-			if err != nil {
-				return err
-			}
-			defer out.Close()
-			_, err = io.Copy(out, tr)
+		rel := strings.TrimPrefix(hdr.Name, tarPrefix)
+		if rel == hdr.Name || rel == "" {
+			continue
+		}
+
+		dest := filepath.Join(destDir, filepath.Base(rel))
+		out, err := os.Create(dest)
+		if err != nil {
 			return err
 		}
+		if _, err := io.Copy(out, tr); err != nil {
+			out.Close()
+			return err
+		}
+		out.Close()
+		fmt.Printf("Wrote %s\n", dest)
 	}
-	return fmt.Errorf("%s not found in archive", target)
+	return nil
 }
