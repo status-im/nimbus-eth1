@@ -394,7 +394,7 @@ nimbus_verified_proxy_go_test: libverifproxy
 		cp "$(VERIF_PROXY_OUT_PATH)/libverifproxy.$(STATICLIBEXT)" \
 		   "$(GO_LIB_DIR)/libverifproxy.$(STATICLIBEXT)" && \
 		cp nimbus_verified_proxy/library/verifproxy.h \
-		   "$(GO_BINDINGS_DIR)/verifproxy/verifproxy.h" && \
+		   "$(GO_LIB_DIR)/verifproxy.h" && \
 		cd "$(GO_BINDINGS_DIR)" && \
 		go test ./...
 
