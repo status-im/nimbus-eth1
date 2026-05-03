@@ -43,10 +43,8 @@ static void callDeliveryCb(TransportDeliveryCallback cb, int status, char *res, 
     cb(status, res, ud);
 }
 
-static inline Context *callStartVerifProxy(char *configJson) {
-    return startVerifProxy(configJson,
-        (ExecutionTransportProc)cGoExecTransport,
-        (BeaconTransportProc)cGoBeaconTransport);
+static inline Context *callStartVerifProxy(char *configJson, ExecutionTransportProc exec, BeaconTransportProc beacon) {
+    return startVerifProxy(configJson, exec, beacon);
 }
 
 static inline void callNvp(Context *ctx, char *method, char *params, CallBackProc cb, uintptr_t userData) {
@@ -197,8 +195,6 @@ func Start(configJson string, execTransport ExecTransportFunc, beaconTransport B
 		beaconTransport: beaconTransport,
 	}
 
-	startOnce.Do(func() { C.NimMain() })
-
 	cConfigJson := C.CString(configJson)
 	defer C.free(unsafe.Pointer(cConfigJson))
 
@@ -209,10 +205,10 @@ func Start(configJson string, execTransport ExecTransportFunc, beaconTransport B
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
 
-		h := cgo.NewHandle(goCtx.stopChan)
-		defer h.Delete()
+		startOnce.Do(func() { C.NimMain() })
 
-		ctxPtr := C.callStartVerifProxy(cConfigJson)
+		ctxPtr := C.callStartVerifProxy(cConfigJson, C.ExecutionTransportProc(C.cGoExecTransport), C.BeaconTransportProc(C.cGoBeaconTransport))
+
 		if ctxPtr == nil {
 			wg.Done()
 			return
