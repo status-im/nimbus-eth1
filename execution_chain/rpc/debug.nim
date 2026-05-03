@@ -13,6 +13,7 @@ import
   std/[json, times],
   json_rpc/rpcserver,
   web3/[eth_api_types, conversions],
+  ./handler_utils,
   ./rpc_utils,
   ./rpc_types,
   #../tracer,
@@ -183,28 +184,40 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
     badBlocks
 
   # https://ethereum.github.io/execution-apis/api/methods/debug_getRawBlock
-  server.rpc("debug_getRawBlock") do(blockTag: BlockTag) -> seq[byte]:
+  server.rpc("debug_getRawBlock") do(blockTagJson: JsonNode) -> seq[byte]:
     ## Returns an RLP-encoded block.
-    let blockFromTag = chain.blockFromTag(blockTag).valueOr:
-      raise invalidParams(error)
-
+    var blockTag: BlockTag
+    try:
+      blockTag = JrpcConv.decode($blockTagJson, BlockTag)
+    except SerializationError as exc:
+      invalidParams(exc.msg)
+    let blockFromTag = getOrRaise(chain.blockFromTag(blockTag), "Block not found")
     rlp.encode(blockFromTag)
 
   # https://ethereum.github.io/execution-apis/api/methods/debug_getRawHeader
-  server.rpc("debug_getRawHeader") do(blockTag: BlockTag) -> seq[byte]:
+  server.rpc("debug_getRawHeader") do(blockTagJson: JsonNode) -> seq[byte]:
     ## Returns an RLP-encoded header.
-    let header = chain.headerFromTag(blockTag).valueOr:
-      raise invalidParams(error)
+    var blockTag: BlockTag
+    try:
+      blockTag = JrpcConv.decode($blockTagJson, BlockTag)
+    except SerializationError as exc:
+      invalidParams(exc.msg)
+    let header = getOrRaise(chain.headerFromTag(blockTag), "Header not found")
     rlp.encode(header)
 
   # https://ethereum.github.io/execution-apis/api/methods/debug_getRawReceipts
-  server.rpc("debug_getRawReceipts") do(blockTag: BlockTag) -> seq[seq[byte]]:
+  server.rpc("debug_getRawReceipts") do(blockTagJson: JsonNode) -> seq[seq[byte]]:
     ## Returns an array of EIP-2718 binary-encoded receipts.
-    let header = chain.headerFromTag(blockTag).valueOr:
-      raise invalidParams(error)
-    let txFrame = chain.txFrame(header)
+    var blockTag: BlockTag
+    try:
+      blockTag = JrpcConv.decode($blockTagJson, BlockTag)
+    except SerializationError as exc:
+      invalidParams(exc.msg)
+    let
+      header = getOrRaise(chain.headerFromTag(blockTag), "Header not found")
+      frame = chain.txFrame(header)
     var res: seq[seq[byte]]
-    for receipt in txFrame.getReceipts(header.receiptsRoot):
+    for receipt in frame.getReceipts(header.receiptsRoot):
       res.add rlp.encode(receipt.to(Receipt))
 
     res
@@ -217,13 +230,13 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
     # TODO: remove manual validation when upstream parsing decoding reports strict
     # hex input failures .
     if not txHashHex.startsWith("0x"):
-      raise invalidParams("invalid argument 0: hex string without 0x prefix")
+      invalidParams("invalid argument 0: hex string without 0x prefix")
 
-    let txHash =
-      try:
-        Hash32.fromHex(txHashHex)
-      except ValueError as exc:
-        raise invalidParams("invalid argument 0: " & exc.msg)
+    var txHash: Hash32
+    try:
+      txHash = Hash32.fromHex(txHashHex)
+    except ValueError as exc:
+      invalidParams("invalid argument 0: " & exc.msg)
 
     let res = txPool.getItem(txHash)
     if res.isOk:
@@ -244,8 +257,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
 
   server.rpc("debug_executionWitness") do(quantityTag: BlockTag) -> ExecutionWitness:
     ## Returns an execution witness for the given block number.
-    let header = chain.headerFromTag(quantityTag).valueOr:
-      raise newException(ValueError, "Header not found")
+    let header = getOrRaise(chain.headerFromTag(quantityTag), "Header not found")
 
     chain.getExecutionWitness(header.computeBlockHash()).valueOr:
       raise newException(ValueError, error)
