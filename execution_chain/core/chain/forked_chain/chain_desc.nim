@@ -49,6 +49,14 @@ type
       # Count how many blocks persisted when `baseQueue`
       # consumed.
 
+    persistMs*: int64
+    cleanupMs*: int64
+      # Aggregated split timing across the same batch as `persistedCount`.
+      # `persistMs` covers state-root check + checkpoint + db.persist; `cleanupMs`
+      # covers the in-memory ancestors/removeBlockFromCache loop. Used to surface
+      # where the `updateBase` budget is going in the "Finalized blocks persisted"
+      # log so event-loop stalls can be diagnosed without a new metrics pipeline.
+
     latest*      : BlockRef
       # Every time a new block added,
       # that block automatically become the latest block.
