@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -162,10 +162,16 @@ proc cmdExportEra1(config: ExporterConf) =
         warn "Failed to clean up incomplete era1 file", tmpName, error = e.error
 
 proc cmdVerifyEra1(config: ExporterConf) =
-  # TODO: Implement this for different networks, but perhaps we need first clean-up of
-  # ChainConfig mergeNetsplitBlock vs posBlock.
+  # TODO: Implement this for different networks.
   let cfg = chainConfigForNetwork(MainNet)
-  let f = Era1File.open(config.era1FileName, cfg.posBlock.value()).valueOr:
+  let mergeBlockNumber =
+    if cfg.posBlock.isSome:
+      cfg.posBlock.value()
+    elif cfg.mergeNetsplitBlock.isSome:
+      cfg.mergeNetsplitBlock.value()
+    else:
+      0
+  let f = Era1File.open(config.era1FileName, mergeBlockNumber).valueOr:
     warn "Failed to open era file", error = error
     quit QuitFailure
   defer:
