@@ -176,7 +176,6 @@ type
     standByMode*: bool               ## Do not activate if `true`
     subState*: SyncSubState          ## Additional state variables
     nextMetricsUpdate*: Moment       ## For updating metrics
-    nextAsyncNanoSleep*: Moment      ## Use nano-sleeps for task switch
 
     chain*: ForkedChainRef           ## Core database, FCU support
     hdrCache*: HeaderChainRef        ## Currently in tandem with `chain`
