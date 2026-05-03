@@ -156,6 +156,10 @@ if canEnableDebuggingSymbols:
 
 switch("warningAsError", "BareExcept:on")
 switch("warningAsError", "CaseTransition:on")
+switch("warningAsError", "CycleCreated:on")
+switch("warningAsError", "ImplicitDefaultValue:on")
+switch("warningAsError", "ImplicitTemplateRedefinition:on")
+switch("warningAsError", "LongLiterals:on")
 switch("warningAsError", "UnusedImport:on")
 switch("hintAsError", "ConvFromXtoItselfNotNeeded:on")
 switch("hintAsError", "DuplicateModuleImport:on")
