@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -15,6 +15,11 @@ import
   pkg/eth/common,
   ../../../wire_protocol,
   ../worker_desc
+
+template clearBlock(blk: EthBlock) =
+  # chronos closure iterators copy `blk` into the closure environment
+  # Clear the env copy after last use to release seq[Transaction] before subsequent awaits.
+  reset(cast[ptr EthBlock](unsafeAddr blk)[])
 
 # ------------------------------------------------------------------------------
 # Public function
@@ -39,7 +44,9 @@ proc importBlock*(
     try:
       # TODO: The block access list needs to be passed in when available over devp2p
       # and when the block falls within the BAL retention period.
-      (await ctx.chain.queueImportBlock(blk, Opt.none(BlockAccessListRef))).isOkOr:
+      let importRes = await ctx.chain.queueImportBlock(blk, Opt.none(BlockAccessListRef))
+      clearBlock(blk)
+      importRes.isOkOr:
         return err((ENoException, "", error, Moment.now() - start))
     except CancelledError as e:
       return err((ECancelledError,$e.name,e.msg,Moment.now()-start))

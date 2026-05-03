@@ -82,7 +82,7 @@ template blocksFetchCheckImpl(
     request.blockHashes[^1] = blocks[^1].header.computeBlockHash
 
     # Fetch bodies
-    let bodies = buddy.fetchBodies(request).valueOr:
+    var bodies = buddy.fetchBodies(request).valueOr:
       break body                                           # return err()
     if buddy.ctrl.stopped:
       break body                                           # return err()
@@ -118,9 +118,9 @@ template blocksFetchCheckImpl(
         # is also what will happen here if an error is detected (see above for
         # erroneously empty `transactions[]`.)
         #
-        blocks[n].transactions = bodies[n].transactions
-        blocks[n].uncles = bodies[n].uncles
-        blocks[n].withdrawals = bodies[n].withdrawals
+        blocks[n].transactions = move bodies[n].transactions
+        blocks[n].uncles = move bodies[n].uncles
+        blocks[n].withdrawals = move bodies[n].withdrawals
 
     if 0 < blocks.len.uint64:
       bodyRc = Opt[seq[EthBlock]].ok(blocks)               # return ok()

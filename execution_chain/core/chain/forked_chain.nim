@@ -49,6 +49,13 @@ const
 # Private functions
 # ------------------------------------------------------------------------------
 
+template clearBlock(blk: Block) =
+  # chronos closure iterators copy `blk` into the closure environment
+  # Clear the env copy after last use to release seq[Transaction] before subsequent
+  # awaits. Cast around parameter immutability: chronos rejects `var Block` params in
+  # `{.async.}` (borrowed refs can't be captured into the closure env).
+  reset(cast[ptr Block](unsafeAddr blk)[])
+
 func appendBlock(c: ForkedChainRef,
          parent: BlockRef,
          blk: Block,
@@ -532,6 +539,8 @@ proc validateBlock(
   for i, tx in blk.transactions:
     c.txRecords[computeRlpHash(tx)] = (blkHash, uint64(i))
 
+  clearBlock(blk)
+
   # Entering base auto forward mode while avoiding forkChoice
   # handled region(head - baseDistance)
   # e.g. live syncing with the tip very far from from our latest head
@@ -576,15 +585,15 @@ proc processOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false): Futu
     # https://github.com/status-im/nimbus-eth1/issues/3526
     return ok()
 
-  let
-    orphan = c.quarantine.popOrphan(parent.hash).valueOr:
-      # No more orphaned block
-      return ok()
-    parent = (await c.validateBlock(parent, orphan[0], orphan[1], finalized)).valueOr:
-      # Silent?
-      # We don't return error here because the import is still ok()
-      # but the quarantined blocks may not linked
-      return ok()
+  var orphan = c.quarantine.popOrphan(parent.hash).valueOr:
+    # No more orphaned block
+    return ok()
+  let parent = (await c.validateBlock(parent, orphan[0], orphan[1], finalized)).valueOr:
+    # Silent?
+    # We don't return error here because the import is still ok()
+    # but the quarantined blocks may not linked
+    return ok()
+  orphan[0].reset()
   c.queueOrphan(parent, finalized)
 
 proc processQueue(c: ForkedChainRef) {.async: (raises: [CancelledError]).} =
@@ -711,6 +720,7 @@ proc importBlock*(
     let
       isFinalized = finalized or blk.header.number <= c.latestFinalized.number
       parent = ?(await c.validateBlock(parent, blk, blockAccessList, isFinalized))
+    clearBlock(blk)
     if c.quarantine.hasOrphans():
       c.queueOrphan(parent, isFinalized)
 
