@@ -11,6 +11,8 @@ import
   std/[typetraits, sequtils, sets],
   json_rpc/rpcserver,
   web3/[conversions, execution_types],
+  metrics,
+  chronos/timer,
   ../beacon/api_handler,
   ../beacon/beacon_engine,
   ../version_info
@@ -18,6 +20,18 @@ import
 from ../beacon/web3_eth_conv import Hash32
 
 {.push raises: [].}
+
+declareGauge nec_engine_api_request_duration_ms,
+  "Engine API RPC request processing time in milliseconds",
+  labels = ["method"]
+
+template apiTiming(meth: static string, body: untyped): untyped =
+  let start = Moment.now()
+  let res = body
+  nec_engine_api_request_duration_ms.set(
+    (Moment.now() - start).milliseconds(),
+    labelValues = [meth])
+  res
 
 const supportedMethods: HashSet[string] =
   toHashSet([
@@ -55,79 +69,98 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
     return methods.filterIt(supportedMethods.contains(it))
 
   server.rpc("engine_newPayloadV1") do(payload: ExecutionPayloadV1) -> PayloadStatusV1:
-    await engine.newPayload(Version.V1, payload.executionPayload)
+    apiTiming("engine_newPayloadV1"):
+      await engine.newPayload(Version.V1, payload.executionPayload)
 
   server.rpc("engine_newPayloadV2") do(payload: ExecutionPayload) -> PayloadStatusV1:
-    await engine.newPayload(Version.V2, payload)
+    apiTiming("engine_newPayloadV2"):
+      await engine.newPayload(Version.V2, payload)
 
   server.rpc("engine_newPayloadV3") do(payload: ExecutionPayload,
                                        expectedBlobVersionedHashes: Opt[seq[Hash32]],
                                        parentBeaconBlockRoot: Opt[Hash32]) -> PayloadStatusV1:
-    await engine.newPayload(Version.V3, payload, expectedBlobVersionedHashes, parentBeaconBlockRoot)
+    apiTiming("engine_newPayloadV3"):
+      await engine.newPayload(Version.V3, payload, expectedBlobVersionedHashes, parentBeaconBlockRoot)
 
   server.rpc("engine_newPayloadV4") do(payload: ExecutionPayload,
                                        expectedBlobVersionedHashes: Opt[seq[Hash32]],
                                        parentBeaconBlockRoot: Opt[Hash32],
                                        executionRequests: Opt[seq[seq[byte]]]) -> PayloadStatusV1:
-    await engine.newPayload(Version.V4, payload,
-      expectedBlobVersionedHashes, parentBeaconBlockRoot, executionRequests)
+    apiTiming("engine_newPayloadV4"):
+      await engine.newPayload(Version.V4, payload,
+        expectedBlobVersionedHashes, parentBeaconBlockRoot, executionRequests)
 
   server.rpc("engine_newPayloadV5") do(payload: ExecutionPayload,
                                        expectedBlobVersionedHashes: Opt[seq[Hash32]],
                                        parentBeaconBlockRoot: Opt[Hash32],
                                        executionRequests: Opt[seq[seq[byte]]]) -> PayloadStatusV1:
-    await engine.newPayload(Version.V5, payload,
-      expectedBlobVersionedHashes, parentBeaconBlockRoot, executionRequests)
+    apiTiming("engine_newPayloadV5"):
+      await engine.newPayload(Version.V5, payload,
+        expectedBlobVersionedHashes, parentBeaconBlockRoot, executionRequests)
 
   server.rpc("engine_getPayloadV1") do(payloadId: Bytes8) -> ExecutionPayloadV1:
-    return engine.getPayload(Version.V1, payloadId).executionPayload.V1
+    apiTiming("engine_getPayloadV1"):
+      engine.getPayload(Version.V1, payloadId).executionPayload.V1
 
   server.rpc("engine_getPayloadV2") do(payloadId: Bytes8) -> GetPayloadV2Response:
-    return engine.getPayload(Version.V2, payloadId)
+    apiTiming("engine_getPayloadV2"):
+      engine.getPayload(Version.V2, payloadId)
 
   server.rpc("engine_getPayloadV3") do(payloadId: Bytes8) -> GetPayloadV3Response:
-    return engine.getPayloadV3(payloadId)
+    apiTiming("engine_getPayloadV3"):
+      engine.getPayloadV3(payloadId)
 
   server.rpc("engine_getPayloadV4") do(payloadId: Bytes8) -> GetPayloadV4Response:
-    return engine.getPayloadV4(payloadId)
+    apiTiming("engine_getPayloadV4"):
+      engine.getPayloadV4(payloadId)
 
   server.rpc("engine_getPayloadV5") do(payloadId: Bytes8) -> GetPayloadV5Response:
-    return engine.getPayloadV5(payloadId)
+    apiTiming("engine_getPayloadV5"):
+      engine.getPayloadV5(payloadId)
 
   server.rpc("engine_getPayloadV6") do(payloadId: Bytes8) -> GetPayloadV6Response:
-    return engine.getPayloadV6(payloadId)
+    apiTiming("engine_getPayloadV6"):
+      engine.getPayloadV6(payloadId)
 
   server.rpc("engine_forkchoiceUpdatedV1") do(update: ForkchoiceStateV1,
                     attrs: Opt[PayloadAttributesV1]) -> ForkchoiceUpdatedResponse:
-    await engine.forkchoiceUpdated(Version.V1, update, attrs.payloadAttributes)
+    apiTiming("engine_forkchoiceUpdatedV1"):
+      await engine.forkchoiceUpdated(Version.V1, update, attrs.payloadAttributes)
 
   server.rpc("engine_forkchoiceUpdatedV2") do(update: ForkchoiceStateV1,
                     attrs: Opt[PayloadAttributes]) -> ForkchoiceUpdatedResponse:
-    await engine.forkchoiceUpdated(Version.V2, update, attrs)
+    apiTiming("engine_forkchoiceUpdatedV2"):
+      await engine.forkchoiceUpdated(Version.V2, update, attrs)
 
   server.rpc("engine_forkchoiceUpdatedV3") do(update: ForkchoiceStateV1,
                     attrs: Opt[PayloadAttributes]) -> ForkchoiceUpdatedResponse:
-    await engine.forkchoiceUpdated(Version.V3, update, attrs)
+    apiTiming("engine_forkchoiceUpdatedV3"):
+      await engine.forkchoiceUpdated(Version.V3, update, attrs)
 
   server.rpc("engine_forkchoiceUpdatedV4") do(update: ForkchoiceStateV1,
                     attrs: Opt[PayloadAttributes]) -> ForkchoiceUpdatedResponse:
-    await engine.forkchoiceUpdated(Version.V4, update, attrs)
+    apiTiming("engine_forkchoiceUpdatedV4"):
+      await engine.forkchoiceUpdated(Version.V4, update, attrs)
 
   server.rpc("engine_getPayloadBodiesByHashV1") do(hashes: seq[Hash32]) ->
                                                seq[Opt[ExecutionPayloadBodyV1]]:
-    return engine.getPayloadBodiesByHashV1(hashes)
+    apiTiming("engine_getPayloadBodiesByHashV1"):
+      engine.getPayloadBodiesByHashV1(hashes)
 
   server.rpc("engine_getPayloadBodiesByHashV2") do(hashes: seq[Hash32]) ->
                                                seq[Opt[ExecutionPayloadBodyV2]]:
-    return engine.getPayloadBodiesByHashV2(hashes)
+    apiTiming("engine_getPayloadBodiesByHashV2"):
+      engine.getPayloadBodiesByHashV2(hashes)
 
   server.rpc("engine_getPayloadBodiesByRangeV1") do(
       start: Quantity, count: Quantity) -> seq[Opt[ExecutionPayloadBodyV1]]:
-    return engine.getPayloadBodiesByRangeV1(start.uint64, count.uint64)
+    apiTiming("engine_getPayloadBodiesByRangeV1"):
+      engine.getPayloadBodiesByRangeV1(start.uint64, count.uint64)
 
   server.rpc("engine_getPayloadBodiesByRangeV2") do(
       start: Quantity, count: Quantity) -> seq[Opt[ExecutionPayloadBodyV2]]:
-    return engine.getPayloadBodiesByRangeV2(start.uint64, count.uint64)
+    apiTiming("engine_getPayloadBodiesByRangeV2"):
+      engine.getPayloadBodiesByRangeV2(start.uint64, count.uint64)
 
   server.rpc("engine_getClientVersionV1") do(version: ClientVersionV1) ->
                                          seq[ClientVersionV1]:
@@ -141,12 +174,15 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
 
   server.rpc("engine_getBlobsV1") do(versionedHashes: seq[VersionedHash]) ->
                                          seq[Opt[BlobAndProofV1]]:
-    return engine.getBlobsV1(versionedHashes)
+    apiTiming("engine_getBlobsV1"):
+      engine.getBlobsV1(versionedHashes)
 
   server.rpc("engine_getBlobsV2") do(versionedHashes: seq[VersionedHash]) ->
                                          Opt[seq[BlobAndProofV2]]:
-    return engine.getBlobsV2(versionedHashes)
+    apiTiming("engine_getBlobsV2"):
+      engine.getBlobsV2(versionedHashes)
 
   server.rpc("engine_getBlobsV3") do(versionedHashes: seq[VersionedHash]) ->
                                          seq[Opt[BlobAndProofV2]]:
-    return engine.getBlobsV3(versionedHashes)
+    apiTiming("engine_getBlobsV3"):
+      engine.getBlobsV3(versionedHashes)
