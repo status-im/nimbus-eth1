@@ -18,6 +18,7 @@ type
   SessionTicker* = object
     stateInx*: int                                  # 1 .. `nStates`
     nStates*: int
+    distance*: uint64
     msgAt*: Moment                                  # message while looping
     napAt*: Moment                                  # allow for thread switch
 

@@ -12,7 +12,6 @@
 
 import
   pkg/chronicles,
-  ./download/header,
   ./[mpt, worker_const, worker_desc]
 
 logScope:
@@ -46,8 +45,7 @@ proc resumeNext(ctx: SnapCtxRef; info: static[string]): SyncState =
 
 func readyNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
-  if ctx.pool.target.isSome() or
-     ctx.hdrCache.latestConsHeadNumber() != 0:
+  if ctx.hdrCache.latestConsHeadNumber() != 0:
     return SnapDownload
   SnapReady
 
@@ -152,28 +150,6 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]) =
 # ------------------------------------------------------------------------------
 # Other public functions
 # ------------------------------------------------------------------------------
-
-template updateTarget*(buddy: SnapPeerRef, info: static[string]) =
-  ## Async/template
-  ##
-  ## Check for manually set sync target (e.g. set by a command line option)
-  ##
-  block body:
-    # Check whether explicit target setup is configured
-    let
-      ctx = buddy.ctx
-      hash = ctx.pool.target.valueOr:
-        break body                                  # nothing to do
-
-    trace info & ": assigning manual target state", peer=buddy.peer,
-      hash=hash.toStr, nSyncPeers=ctx.nSyncPeers()
-
-    ctx.pool.target = Opt.none(BlockHash)           # fetch only once
-    buddy.headerStateRegister(hash, info).isOkOr:
-      ctx.pool.target = Opt.some(hash)              # error => restore
-    # End `block body`
-
-  discard                                           # visual alignment
 
 template updateFcuRoot*(buddy: SnapPeerRef, info: static[string]) =
   ## Async/template

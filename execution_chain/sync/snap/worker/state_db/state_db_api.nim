@@ -24,9 +24,6 @@ logScope:
 declareGauge nec_snap_accumulated_states_coverage, "" &
   "Factor of accumulated account ranges covered over all state root records"
 
-declareGauge nec_snap_pivot_state_coverage, "" &
-  "Max factor of account ranges covered related to a single state root"
-
 declareGauge nec_snap_archived_states_coverage, "" &
   "Factor of archived account ranges covered"
 
@@ -82,11 +79,17 @@ type
 
 func rootStr*(state: StateDataRef): string
 func accountsCoverage*(db: StateDbRef): float
-func accountsCoverage*(state: StateDataRef): float
+func accountsCoverage(state: StateDataRef): float
 
 # ------------------------------------------------------------------------------
 # Private debugging helpers
 # ------------------------------------------------------------------------------
+
+func accountsCoverage(state: StateDataRef): float =
+  ## Coverage of cached accounts for a particular state
+  if not state.deadState:
+    return 1f - state.unproc.unprocessed.totalRatio # ignores `borrowed` items
+  # 0f
 
 proc toStr(state: StateDataRef, db: StateDbRef, stateRootOk: bool): string =
   let cov = state.accountsCoverage
@@ -178,17 +181,11 @@ proc resetMetrics(db: StateDbRef) =
   metrics.set(nec_snap_archived_states_coverage, 0f)
   metrics.set(nec_snap_accumulated_states_coverage, 0f)
   metrics.set(nec_snap_active_states, 0)
-  metrics.set(nec_snap_pivot_state_coverage, 0f)
 
 proc updateMetrics(db: StateDbRef) =
   metrics.set(nec_snap_archived_states_coverage, db.archived)
   metrics.set(nec_snap_accumulated_states_coverage, db.accountsCoverage())
   metrics.set(nec_snap_active_states, db.byRoot.len)
-
-  var stateCoverage = 0f
-  db.byRank.ge(low StateRankIndex).isErrOr:
-    stateCoverage = 1f - value.data.unproc.totalRatio
-  metrics.set(nec_snap_pivot_state_coverage, stateCoverage)
 
 # ------------------------------------------------------------------------------
 # Public constructor
@@ -324,14 +321,9 @@ func accountsCoverage*(db: StateDbRef): float =
   ## Coverage of cached accounts over all states
   max(0f, 1f - db.allUnproc.totalRatio + db.carryOver)
 
-func accountsCoverage*(state: StateDataRef): float =
-  ## Coverage of cached accounts for a particular state
-  if not state.deadState:
-    return 1f - state.unproc.unprocessed.totalRatio # ignores `borrowed` items
-  # 0f
-
 func accountsCov256*(state: StateDataRef): UInt256 =
-  ## Variant of `accountsCoverage()`
+  ## Variant of `accountsCoverage()` taling care of the fact that `2^256` is
+  ## not in the scalar range of `UInt256`.
   let unproc = state.unproc.unprocessed.total
   if unproc.isZero:
     # Here `chunks==0` => `2^256-0` is mapped to `2^256 - 1` == `high(u256)`
