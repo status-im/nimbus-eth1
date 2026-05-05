@@ -33,7 +33,6 @@ const skipFiles = [
   # --- eest_zkevm files with failures ---
   #
   "varying_calldata_costs.json", # Witness state mismatch
-  "witness_codes_delegated_eoa_insufficient_balance.json", # blockAccessListHash mismatch
   "witness_codes_create_same_hash_then_read.json", # Witness codes mismatch
   "witness_headers_blockhash_boundary.json", # Witness state mismatch
   "witness_state_block_diff_delete_insert_before_delete_order.json", # persistStorage assert
@@ -43,7 +42,6 @@ const skipFiles = [
   "consolidation_requests.json", # Witness state mismatch
   "multiple_withdrawals_same_address.json", # Witness state mismatch
   "return_bounds.json", # Witness state mismatch
-  "validation_codes_missing_delegated_code_on_insufficient_balance_call.json", # blockAccessListHash mismatch
 ]
 
 runEESTSuite(

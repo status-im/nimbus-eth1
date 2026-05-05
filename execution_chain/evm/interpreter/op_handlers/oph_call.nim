@@ -264,6 +264,8 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
         gasCallDelegate: cpt.gasCallDelegate(p.codeAddress),
         contractGas:     p.gas))
 
+  if cpt.balTrackerEnabled:
+    cpt.vmState.balTracker.trackDelegationTarget(p.codeAddress)
   ? cpt.opcodeGasCost(Call, gasCost, reason = $Call)
   cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
 
@@ -335,6 +337,8 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
         gasCallDelegate: cpt.gasCallDelegate(p.codeAddress),
         contractGas:     p.gas))
 
+  if cpt.balTrackerEnabled:
+    cpt.vmState.balTracker.trackDelegationTarget(p.codeAddress)
   ? cpt.opcodeGasCost(CallCode, gasCost, reason = $CallCode)
   cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
 
@@ -406,6 +410,8 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
         gasCallDelegate: cpt.gasCallDelegate(p.codeAddress),
         contractGas:     p.gas))
 
+  if cpt.balTrackerEnabled:
+    cpt.vmState.balTracker.trackDelegationTarget(p.codeAddress)
   ? cpt.opcodeGasCost(DelegateCall, gasCost, reason = $DelegateCall)
   cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
 
@@ -470,6 +476,8 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
         gasCallDelegate: cpt.gasCallDelegate(p.codeAddress),
         contractGas:     p.gas))
 
+  if cpt.balTrackerEnabled:
+    cpt.vmState.balTracker.trackDelegationTarget(p.codeAddress)
   ? cpt.opcodeGasCost(StaticCall, gasCost, reason = $StaticCall)
   cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
 

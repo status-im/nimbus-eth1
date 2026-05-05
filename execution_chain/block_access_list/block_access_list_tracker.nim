@@ -14,6 +14,7 @@ import
   eth/common/addresses,
   stint,
   ../db/ledger,
+  ../core/eip7702,
   ./block_access_list_builder
 
 export addresses, block_access_list_builder, ledger, stint
@@ -388,6 +389,16 @@ proc trackCodeChange*(
   tracker.trackAddressAccess(address)
   tracker.capturePreCode(address)
   tracker.pendingCallFrame.codeChanges[address] = newCode
+
+proc trackDelegationTarget*(tracker: BlockAccessListTrackerRef, codeAddress: Address) =
+  ## Track the delegation target address for a call to a delegated EOA.
+  ## Called after gas has been successfully charged (i.e. after the access_cost check)
+  ## but before the sub-call executes in order to cover the case where the sub-call
+  ## is aborted (i.e. depth exceeded and insufficient balance) and getCallCode never
+  ## runs to track the target itself.
+  let delegateTo = parseDelegationAddress(tracker.ledger.getCode(codeAddress))
+  if delegateTo.isSome():
+    tracker.trackAddressAccess(delegateTo.get())
 
 proc trackSelfDestruct*(tracker: BlockAccessListTrackerRef, address: Address) =
   tracker.trackBalanceChange(address, 0.u256)
