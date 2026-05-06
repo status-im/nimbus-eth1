@@ -151,7 +151,7 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
   let
     isAmsterdamOrLater = fork >= FkAmsterdam
     intrinsic = call.intrinsic
-    gasRefund = if call.sysCall: 0
+    gasRefund = if call.sysCall: 0'i64
                 else: preExecComputation(vmState, call)
     intrinsicGas = intrinsic.regular + intrinsic.state
 
