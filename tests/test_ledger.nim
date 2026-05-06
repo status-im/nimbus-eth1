@@ -515,6 +515,8 @@ proc runLedgerBasicOperationsTests() =
       let addrCode = initAddr(102)
       ledger1.setCode(addrCode, code)
       ledger1.persist()
+      ledger1.txFrame.checkpoint(0, skipSnapshot = true)
+      memDB.persist(ledger1.txFrame)
 
       let codeHash = keccak256(code)
 
