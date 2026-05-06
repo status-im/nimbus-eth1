@@ -218,6 +218,7 @@ proc rocksDbKvtBackend*(baseDb: RocksDbInstanceRef, cf: static[KvtCFs]): KvtDbRe
 
   db.closeFn = closeFn be
   db.getBackendFn = getBackendFn be
+  db.codeSizeCache = typeof(db.codeSizeCache).init(codeSizeLruSize)
   db
 
 proc getBaseDb*(db: RdbBackendRef): RocksDbInstanceRef =

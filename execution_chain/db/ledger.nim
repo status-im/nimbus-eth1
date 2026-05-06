@@ -465,7 +465,7 @@ proc getCodeSize*(ledger: LedgerRef, address: Address): int =
       # cached and easily accessible in the database layer - this is to prevent
       # EXTCODESIZE calls from messing up the code cache and thus causing
       # recomputation of the jump destination table
-      var rc = ledger.txFrame.len(contractHashKey(acc.statement.codeHash).toOpenArray)
+      var rc = ledger.txFrame.getCodeSize(acc.statement.codeHash)
 
       return rc.valueOr:
         warn logTxt "getCodeSize()", codeHash=acc.statement.codeHash, error=($$rc.error)

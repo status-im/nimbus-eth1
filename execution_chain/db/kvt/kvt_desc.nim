@@ -16,12 +16,16 @@
 import
   std/[hashes, tables],
   results,
+  minilru,
+  eth/common/hashes,
   ./kvt_init/init_common,
   ./kvt_constants,
   ./kvt_desc/desc_error
 
 # Not auto-exporting backend
-export hashes, tables, kvt_constants, desc_error
+export hashes, tables, minilru, kvt_constants, desc_error
+
+const codeSizeLruSize* = 1_000_000
 
 type
   GetKvpFn* =
@@ -94,6 +98,9 @@ type
     txRef*: KvtTxRef
       ## Tx holding data scheduled to be written to disk during the next
       ## `persist` call
+
+    codeSizeCache*: LruCache[Hash32, int]
+      ## LRU cache for contract code sizes by code hash.
 
 # ------------------------------------------------------------------------------
 # Public helpers

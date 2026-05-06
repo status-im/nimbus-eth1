@@ -248,6 +248,16 @@ proc hasKey*(kvt: CoreDbTxRef; key: openArray[byte]): bool =
   ##
   kvt.kTx.hasKeyRc(key).valueOr(false)
 
+proc getCodeSize*(kvt: CoreDbTxRef; codeHash: Hash32): CoreDbRc[int] =
+  ## This function returns the size of the code associated with `codeHash`.
+  let rc = kvt.kTx.getCodeSize(codeHash)
+  if rc.isOk:
+    ok(rc.value)
+  elif rc.error == GetNotFound:
+    err(rc.error.toError("", KvtNotFound))
+  else:
+    err(rc.error.toError(""))
+
 # ------------------------------------------------------------------------------
 # Public methods for accounts
 # ------------------------------------------------------------------------------
