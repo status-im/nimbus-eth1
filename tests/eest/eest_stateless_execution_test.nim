@@ -28,22 +28,36 @@ const skipFiles = [
   #
   # --- eest_develop files with failures ---
   #
-  "test_scenarios.json", # persist assert
+  # persist(): Unspecified(Aristo, ctx=, error=DelVidStaleVtx) [AssertionDefect]
+  # -> on execution with generated witness
+  "test_scenarios.json",
   #
   # --- eest_zkevm files with failures ---
   #
-  "varying_calldata_costs.json", # Witness state mismatch
-  "witness_codes_delegated_eoa_insufficient_balance.json", # blockAccessListHash mismatch
-  "witness_codes_create_same_hash_then_read.json", # Witness codes mismatch
-  "witness_headers_blockhash_boundary.json", # Witness state mismatch
-  "witness_state_block_diff_delete_insert_before_delete_order.json", # persistStorage assert
-  "genesis_hash_available.json", # Witness state mismatch
-  "scenarios.json", # Witness state mismatch + stateRoot mismatch
-  "withdrawal_requests.json", # persistStorage assert + Witness state mismatch
-  "consolidation_requests.json", # Witness state mismatch
-  "multiple_withdrawals_same_address.json", # Witness state mismatch
-  "return_bounds.json", # Witness state mismatch
-  "validation_codes_missing_delegated_code_on_insufficient_balance_call.json", # blockAccessListHash mismatch
+  # `dst.contains(k)`  [AssertionDefect] -> on execution of test vector witness
+  #  generated witness has an extra state node, stateless execution works with it
+  "varying_calldata_costs.json",
+  "witness_headers_blockhash_boundary.json",
+  "genesis_hash_available.json",
+  "scenarios.json",
+  "withdrawal_requests.json",
+  "consolidation_requests.json",
+  "multiple_withdrawals_same_address.json",
+  "return_bounds.json",
+  #
+  # persistStorage(): Unspecified(Aristo, ctx=, error=DelVidStaleVtx) [AssertionDefect]
+  # -> on execution with test vector witness
+  # generated witness has an extra state node, stateless execution works with it
+  "witness_state_block_diff_delete_insert_before_delete_order.json",
+  #
+  # Witness codes mismatch -> codes optimisation: implemented in
+  # https://github.com/status-im/nimbus-eth1/pull/4099
+  "witness_codes_create_same_hash_then_read.json",
+  #
+  # blockAccessListHash mismatch, not an stateless execution failure.
+  # Likely an issue on reference implementation side
+  "witness_codes_delegated_eoa_insufficient_balance.json",
+  "validation_codes_missing_delegated_code_on_insufficient_balance_call.json",
 ]
 
 runEESTSuite(
