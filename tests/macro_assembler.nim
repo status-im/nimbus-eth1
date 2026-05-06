@@ -294,7 +294,8 @@ proc initVMEnv*(network: string): BaseVMState =
       coinbase: coinbase,
       timestamp: EthTime(0x1234),
       difficulty: 1003.u256,
-      gasLimit: 100_000
+      gasLimit: 100_000,
+      baseFeePerGas: Opt.some(1.u256),
     )
 
   BaseVMState.new(parent, header, com, com.db.baseTxFrame())
@@ -407,6 +408,7 @@ proc createSignedTx(payload: seq[byte], chainId: ChainId): Transaction =
     nonce: 0,
     gasPrice: 1.GasInt,
     gasLimit: 500_000_000.GasInt,
+    maxFeePerGas: 1.GasInt,
     to: Opt.some codeAddress,
     value: 500.u256,
     payload: payload,
