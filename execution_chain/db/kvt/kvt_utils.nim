@@ -118,7 +118,6 @@ proc len*(
       ): Result[int,KvtError] =
   ## For the argument `key` return the length of the associated value,
   ## preferably from the top layer, or the database otherwise.
-  ##
   if key.len == 0:
     return err(KeyInvalid)
 
@@ -130,11 +129,12 @@ proc getCodeSize*(
     txRef: KvtTxRef;
     codeHash: Hash32;
       ): Result[int, KvtError] =
-  let size = txRef.db.codeSizeCache.get(codeHash).valueOr:
+  let key = contractHashKey(codeHash)
 
-    let size = ?txRef.len(contractHashKey(codeHash).toOpenArray)
-    txRef.db.codeSizeCache.put(codeHash, size)
-    size
+  let size = txRef.layersLen(key.toOpenArray).valueOr:
+    let s = txRef.db.codeSizeCache.get(codeHash).valueOr:
+      return txRef.db.getBeLen(key.toOpenArray)
+    s
 
   ok(size)
 
