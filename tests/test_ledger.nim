@@ -21,6 +21,7 @@ import
   ../execution_chain/core/chain,
   ../execution_chain/core/tx_pool,
   ../execution_chain/db/core_db/memory_only,
+  ../execution_chain/db/kvt/kvt_desc,
   ../execution_chain/transaction,
   ../execution_chain/constants,
   ../execution_chain/db/ledger {.all.}, # import all private symbols
@@ -495,6 +496,49 @@ proc runLedgerBasicOperationsTests() =
         key = contractHashKey(keccak256(code))
         val = memDB.baseTxFrame().get(key.toOpenArray).valueOr: EmptyBlob
       check val == code
+
+    test "getCodeSize - no account":
+      var ledger = LedgerRef.init(memDB.baseTxFrame())
+      let addrNoAcc = initAddr(100)
+
+      check ledger.getCodeSize(addrNoAcc) == 0
+
+    test "getCodeSize - empty code":
+      var ledger = LedgerRef.init(memDB.baseTxFrame())
+      let addrEmpty = initAddr(101)
+      ledger.setBalance(addrEmpty, 1.u256)
+
+      check ledger.getCodeSize(addrEmpty) == 0
+
+    test "getCodeSize - cache miss then cache hit":
+      var ledger1 = LedgerRef.init(memDB.baseTxFrame())
+      let addrCode = initAddr(102)
+      ledger1.setCode(addrCode, code)
+      ledger1.persist()
+
+      let codeHash = keccak256(code)
+
+      var ledger2 = LedgerRef.init(memDB.baseTxFrame())
+
+      check: 
+        ledger2.txFrame.kTx.db.codeSizeCache.get(codeHash).isNone()
+        ledger2.getCodeSize(addrCode) == code.len
+
+      let cached = ledger2.txFrame.kTx.db.codeSizeCache.get(codeHash)
+      check: 
+        cached.isSome()
+        cached.get() == code.len
+        ledger2.getCodeSize(addrCode) == code.len
+
+    test "getCodeSize - code loaded in account cache":
+      var ledger = LedgerRef.init(memDB.baseTxFrame())
+      let addrCode = initAddr(103)
+      ledger.setCode(addrCode, code)
+      ledger.persist()
+
+      discard ledger.getCode(addrCode)
+
+      check ledger.getCodeSize(addrCode) == code.len
 
     test "accessList operations":
       proc verifyAddrs(ledger: LedgerRef, addrs: varargs[int]): bool =
