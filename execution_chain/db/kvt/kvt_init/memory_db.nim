@@ -198,7 +198,7 @@ proc memoryBackend*: KvtDbRef =
 
   db.closeFn = closeFn be
   db.getBackendFn = getBackendFn be
-  db.codeSizeCache = typeof(db.codeSizeCache).init(codeSizeLruSize)
+  db.codeSizeCache = typeof(db.codeSizeCache).init(CODE_SIZE_LRU_SIZE)
   db
 
 # ------------------------------------------------------------------------------

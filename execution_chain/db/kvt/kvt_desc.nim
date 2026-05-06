@@ -25,7 +25,7 @@ import
 # Not auto-exporting backend
 export hashes, tables, minilru, kvt_constants, desc_error
 
-const codeSizeLruSize* = 1_000_000
+const CODE_SIZE_LRU_SIZE* = 1_000_000
 
 type
   GetKvpFn* =
