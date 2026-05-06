@@ -68,7 +68,7 @@ proc delRangeBe*(
 # ------------
 
 proc put*(
-    txRef: KvtTxRef;                     # Database
+    txRef: KvtTxRef;                  # Database
     key: openArray[byte];             # Key of database record to store
     data: openArray[byte];            # Value of database record to store
       ): Result[void,KvtError] =
@@ -84,7 +84,7 @@ proc put*(
 
 
 proc del*(
-    txRef: KvtTxRef;                     # Database
+    txRef: KvtTxRef;                  # Database
     key: openArray[byte];             # Key of database record to delete
       ): Result[void,KvtError] =
   ## For the argument `key` delete the associated value (which will be marked
@@ -98,7 +98,7 @@ proc del*(
 # ------------
 
 proc get*(
-    txRef: KvtTxRef;                     # Database
+    txRef: KvtTxRef;                  # Database
     key: openArray[byte];             # Key of database record
       ): Result[seq[byte],KvtError] =
   ## For the argument `key` return the associated value preferably from the
@@ -113,7 +113,7 @@ proc get*(
   return ok(move(data))
 
 proc len*(
-    txRef: KvtTxRef;                     # Database
+    txRef: KvtTxRef;                  # Database
     key: openArray[byte];             # Key of database record
       ): Result[int,KvtError] =
   ## For the argument `key` return the length of the associated value,
@@ -170,7 +170,7 @@ proc multiGet*(
   ok()
 
 proc hasKeyRc*(
-    txRef: KvtTxRef;                     # Database
+    txRef: KvtTxRef;                  # Database
     key: openArray[byte];             # Key of database record
       ): Result[bool,KvtError] =
   ## For the argument `key` return `true` if `get()` returned a value on
@@ -191,7 +191,7 @@ proc hasKeyRc*(
   err(rc.error)
 
 proc hasKey*(
-    txRef: KvtTxRef;                     # Database
+    txRef: KvtTxRef;                  # Database
     key: openArray[byte];             # Key of database record
       ): bool =
   ## Simplified version of `hasKeyRc` where `false` is returned instead of
