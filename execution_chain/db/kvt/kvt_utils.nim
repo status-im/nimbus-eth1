@@ -131,10 +131,13 @@ proc getCodeSize*(
       ): Result[int, KvtError] =
   let key = contractHashKey(codeHash)
 
-  let size = txRef.layersLen(key.toOpenArray).valueOr:
-    let s = txRef.db.codeSizeCache.get(codeHash).valueOr:
-      return txRef.db.getBeLen(key.toOpenArray)
-    s
+  txRef.layersLen(key.toOpenArray).isErrOr:
+    return ok(value)
+  txRef.db.codeSizeCache.get(codeHash).isErrOr:
+    return ok(value)
+  
+  let size = ?txRef.db.getBeLen(key.toOpenArray)
+  txRef.db.codeSizeCache.put(codeHash, size)
 
   ok(size)
 
