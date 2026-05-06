@@ -99,16 +99,6 @@ proc configResume*(desc: SnapSyncRef; resume = true) =
   if resume: desc.ctx.updateSyncResume()
   else: desc.ctx.updateSyncReset()
 
-proc configTarget*(desc: SnapSyncRef; hex: string): bool =
-  ## Set up inital target root (if any, mainly for debugging)
-  doAssert not desc.ctx.isNil
-  try:
-    desc.ctx.pool.target = Opt.some(BlockHash Hash32.fromHex(hex))
-    return true
-  except ValueError:
-    discard
-  # false
-
 proc start*(desc: SnapSyncRef; bcSyncRef: BeaconSyncRef): bool =
   ## Starting beacon sync in stand-by mode and then snap sync.
   doAssert not desc.ctx.isNil

@@ -72,7 +72,7 @@ proc initialAccessListEIP2929(call: CallParams) =
         ledger.accessList(account.address, key.to(UInt256))
 
 proc preExecComputation(vmState: BaseVMState, call: CallParams): int64 =
-  var gasRefund = 0
+  var gasRefund = 0'i64
   let ledger = vmState.ledger
 
   if not call.isCreate:
@@ -195,6 +195,7 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
       sender:          call.sender,
       value:           call.value,
     )
+
     code = if call.isCreate:
              msg.contractAddress = generateContractAddress(call.vmState, CallKind.Create, call.sender)
              CodeBytesRef.init(call.input)
