@@ -228,6 +228,20 @@ proc deleteSlot*(
       db.layersPutStoLeaf(leafMixPath, StoLeafRef(otherVtx))
       if db.collectWitness:
         db.collapsedSiblings.add((accPath, Opt.some(sibStoPath)))
+    elif db.collectWitness:
+      # Branch collapse with non-leaf sibling: the witness must include the
+      # sibling branch node so stateless execution can read it. This builds a
+      # proof path for it: root prefix + extBranch.pfx (rest is arbitrary).
+      let
+        branchDepth =
+          64 - (
+            BranchRef(stoHike.legs[^2].wp.vtx).pfx.len + 1 +
+            StoLeafRef(stoHike.legs[^1].wp.vtx).pfx.len
+          )
+        sibStoPath = Hash32(
+          getBytes(stoNibbles.slice(0, branchDepth) & ExtBranchRef(otherVtx).pfx)
+        )
+      db.collapsedSiblings.add((accPath, Opt.some(sibStoPath)))
 
   # If there was only one item (that got deleted), update the account as well
   if stoHike.legs.len == 1:
