@@ -93,6 +93,12 @@ proc init*(
   ##
   T(lazyConfigHook: configCB)
 
+proc setSyncTarget*(desc: BeaconSyncRef; hash: Hash32; isFinal: bool) =
+  ## Manually request a syncer target by hash. Activated asynchronously by
+  ## the worker loop (peers fetch the header and bootstrap the session).
+  doAssert not desc.ctx.isNil
+  desc.ctx.headersTargetRequest(hash, isFinal, "fcu")
+
 proc config*(
     desc: BeaconSyncRef;
     ethNode: EthereumNode;
@@ -124,15 +130,21 @@ proc config*(
 
   desc.ctx.pool.chain = chain
 
+  # Install engine API forkchoice hook so that an FCU for an unknown head
+  # hash bootstraps a sync via the same hash-only path used by
+  # `--debug-beacon-sync-target`.
+  chain.com.requestSyncTarget = proc(hash: Hash32, isFinal: bool)
+      {.gcsafe, raises: [].} =
+    desc.setSyncTarget(hash, isFinal)
+
   if not desc.lazyConfigHook.isNil:
     desc.lazyConfigHook(desc)
     desc.lazyConfigHook = nil
 
 proc configTarget*(desc: BeaconSyncRef; hex: string; isFinal: bool): bool =
   ## Set up inital target sprint (if any, mainly for debugging)
-  doAssert not desc.ctx.isNil
   try:
-    desc.ctx.headersTargetRequest(Hash32.fromHex(hex), isFinal, "init")
+    desc.setSyncTarget(Hash32.fromHex(hex), isFinal)
     return true
   except ValueError:
     discard

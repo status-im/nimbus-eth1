@@ -44,6 +44,10 @@ type
 
   ResolveFinHashCB* = proc(fin: Hash32) {.gcsafe, raises: [].}
 
+  RequestSyncTargetCB* = proc(hash: Hash32, isFinal: bool) {.gcsafe, raises: [].}
+    ## Hand off a head hash to the beacon syncer so it can fetch the header
+    ## from `eth` peers and bootstrap a sync session.
+
   CommonRef* = ref object
     # all purpose storage
     db: CoreDbRef
@@ -77,6 +81,10 @@ type
       ## progress
 
     resolveFinHash: ResolveFinHashCB
+
+    requestSyncTargetCB: RequestSyncTargetCB
+      ## Engine API forkchoice handler hook to request a sync target by hash
+      ## when the head block is unknown to the EL.
 
     startOfHistory: Hash32
       ## This setting is needed for resuming blockwise syncying after
@@ -422,6 +430,11 @@ proc resolveFinHash*(com: CommonRef; fin: Hash32) =
   if not com.resolveFinHash.isNil:
     com.resolveFinHash(fin)
 
+proc requestSyncTarget*(com: CommonRef; hash: Hash32; isFinal: bool) =
+  ## Used by the engine API forkchoice handler when the head hash is unknown.
+  if not com.requestSyncTargetCB.isNil:
+    com.requestSyncTargetCB(hash, isFinal)
+
 # ------------------------------------------------------------------------------
 # Getters
 # ------------------------------------------------------------------------------
@@ -520,6 +533,10 @@ func `notifyBadBlock=`*(com: CommonRef; cb: NotifyBadBlockCB) =
 
 func `resolveFinHash=`*(com: CommonRef; cb: ResolveFinHashCB) =
   com.resolveFinHash = cb
+
+func `requestSyncTarget=`*(com: CommonRef; cb: RequestSyncTargetCB) =
+  ## Activate or reset the engine API hook for unknown-head sync targets.
+  com.requestSyncTargetCB = cb
 
 func `extraData=`*(com: CommonRef, val: string) =
   com.extraData = val
