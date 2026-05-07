@@ -4,32 +4,6 @@
 
 ---
 
-## Motivation
-
-After a clean shutdown the node must re-establish the in-memory frame for the canonical chain head before it can accept new blocks. Without serialization this requires replaying every block since the last persisted checkpoint. By serializing the frame delta alongside the block data, startup becomes a single database read.
-
-This mirrors the existing `fcState` pattern (`fcStateKey` / `fcu_db.nim`) but stores the full trie and KVT delta rather than just the forkchoice pointer.
-
----
-
-## Storage Key
-
-Frames are stored in the KVT database under a typed key defined in `storage_types.nim`:
-
-```
-DBKeyKind.txFrame = 16
-```
-
-Key layout (33 bytes total):
-
-```
-[0x10][block_hash: 32 bytes]
-```
-
-Key constructor: `txFrameKey(blockHash: Hash32): DbKey`
-
----
-
 ## Combined Value Layout
 
 The value stored under `txFrameKey(blockHash)` is the concatenation of two blobs:
