@@ -28,8 +28,10 @@ func sender*(args: TransactionArgs): Address =
 func destination*(args: TransactionArgs): Address =
   args.to.get(ZeroAddr)
 
-proc toCallParams*(vmState: BaseVMState, args: TransactionArgs,
-                   globalGasCap: GasInt, baseFee: Opt[UInt256]): EvmResult[CallParams] =
+proc toCallParams*(vmState: BaseVMState,
+                   args: TransactionArgs,
+                   globalGasCap: GasInt,
+                   header: Header): EvmResult[CallParams] =
 
   # Reject invalid combinations of pre- and post-1559 fee styles
   if args.gasPrice.isSome and
@@ -51,7 +53,7 @@ proc toCallParams*(vmState: BaseVMState, args: TransactionArgs,
       gasLimit = globalGasCap
 
   var gasPrice = GasInt args.gasPrice.get(0.Quantity)
-  if baseFee.isSome:
+  if header.baseFeePerGas.isSome:
     # A basefee is provided, necessitating EIP-1559-type execution
     let
         feeNormTx = Transaction(
@@ -69,7 +71,7 @@ proc toCallParams*(vmState: BaseVMState, args: TransactionArgs,
 
     # Backfill the legacy gasPrice for EVM execution, unless we're all zeroes
     if maxPriorityFee > 0 or maxFee > 0:
-      let baseFee = baseFee.get().truncate(GasInt)
+      let baseFee = header.baseFeePerGas.value.truncate(GasInt)
       let priorityFee = min(maxPriorityFee, maxFee - baseFee)
       gasPrice = priorityFee + baseFee
 
@@ -79,7 +81,7 @@ proc toCallParams*(vmState: BaseVMState, args: TransactionArgs,
     else:
       @[]
 
-  ok(CallParams(
+  var res = CallParams(
     vmState:         vmState,
     sender:          args.sender,
     to:              args.destination,
@@ -91,6 +93,9 @@ proc toCallParams*(vmState: BaseVMState, args: TransactionArgs,
     accessList:      args.accessList.get(@[]),
     versionedHashes: args.versionedHashes,
     authorizationList: args.authorizationList.get(@[]),
-  ))
+  )
+  
+  res.intrinsic = res.intrinsicGas(vmState.fork, header.gasLimit)
+  ok(move(res))
 
 {.pop.}

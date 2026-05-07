@@ -16,7 +16,8 @@ import
   ../../common/common,
   ../../db/ledger,
   ../../transaction/call_evm,
-  ../../transaction/call_common,
+  ../../transaction/system_call,
+  ../../transaction/call_types,
   ../../transaction,
   ../../evm/state,
   ../../evm/types,
@@ -27,7 +28,7 @@ import
   ../validate
 
 
-export results, call_common
+export results, call_types
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -111,6 +112,8 @@ proc processTransaction*(
     priorityFee = min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFee)
     excessBlobGas = vmState.blockCtx.excessBlobGas
     regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
+    intrinsic = tx.intrinsicGas(fork, vmState.blockCtx.gasLimit)
+    com = vmState.com
 
   # Regular gas is capped at TX_MAX_GAS_LIMIT per EIP-7825.
   # State gas is not checked per-tx; block-end validation enforces
@@ -127,6 +130,8 @@ proc processTransaction*(
     return err("blobGasUsed " & $blobGasUsed &
       " exceeds maximum allowance " & $maxBlobGasPerBlock)
 
+  ? validateTxBasic(com, tx, intrinsic, fork)
+
   # Actually, the EIP-1559 reference does not mention an early exit.
   #
   # Even though database was not changed yet but, a `persist()` directive
@@ -134,7 +139,6 @@ proc processTransaction*(
   # of the `processTransaction()` function. So there is no `return err()`
   # statement, here.
   let
-    com = vmState.com
     txRes = roDB.validateTransaction(tx, sender, vmState.blockCtx.gasLimit, baseFee256, excessBlobGas, com, fork)
     res = if txRes.isOk:
       # Execute the transaction.
@@ -144,7 +148,7 @@ proc processTransaction*(
         vmState.balTracker.beginCallFrame()
       let savePoint = vmState.ledger.beginSavePoint()
 
-      var callResult = tx.txCallEvm(sender, vmState, baseFee)
+      var callResult = tx.txCallEvm(sender, vmState, baseFee, intrinsic)
       vmState.captureTxEnd(tx.gasLimit - callResult.gasUsed)
 
       let tmp = commitOrRollbackDependingOnGasUsed(
@@ -176,12 +180,10 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32):
       gasPrice : 0.GasInt,
       to       : BEACON_ROOTS_ADDRESS,
       input    : @(beaconRoot.data),
-      sysCall  : true,
     )
 
-  # runComputation a.k.a syscall/evm.call
   # EIP-4788: fail silently
-  call.runComputation(void)
+  call.systemCall(void)
   ledger.persist(clearEmptyAccount = true)
   ok()
 
@@ -198,12 +200,10 @@ proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32):
       gasPrice : 0.GasInt,
       to       : HISTORY_STORAGE_ADDRESS,
       input    : @(prevHash.data),
-      sysCall  : true,
     )
 
-  # runComputation a.k.a syscall/evm.call
   # EIP-2923: fail silently
-  call.runComputation(void)
+  call.systemCall(void)
   ledger.persist(clearEmptyAccount = true)
   ok()
 
@@ -218,15 +218,13 @@ proc processDequeueWithdrawalRequests*(vmState: BaseVMState): Result[seq[byte], 
       gasLimit : 30_000_000.GasInt,
       gasPrice : 0.GasInt,
       to       : WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
-      sysCall  : true,
     )
 
-  # runComputation a.k.a syscall/evm.call
-  let res = call.runComputation(OutputResult)
+  var res = call.systemCall(OutputResult)
   if res.error.len > 0:
     return err("processDequeueWithdrawalRequests: " & res.error)
   ledger.persist(clearEmptyAccount = true)
-  ok(res.output)
+  ok(move(res.output))
 
 proc processDequeueConsolidationRequests*(vmState: BaseVMState): Result[seq[byte], string] =
   ## processDequeueConsolidationRequests applies the EIP-7251 system call
@@ -239,15 +237,13 @@ proc processDequeueConsolidationRequests*(vmState: BaseVMState): Result[seq[byte
       gasLimit : 30_000_000.GasInt,
       gasPrice : 0.GasInt,
       to       : CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
-      sysCall  : true,
     )
 
-  # runComputation a.k.a syscall/evm.call
-  let res = call.runComputation(OutputResult)
+  var res = call.systemCall(OutputResult)
   if res.error.len > 0:
     return err("processDequeueConsolidationRequests: " & res.error)
   ledger.persist(clearEmptyAccount = true)
-  ok(res.output)
+  ok(move(res.output))
 
 # ------------------------------------------------------------------------------
 # End
