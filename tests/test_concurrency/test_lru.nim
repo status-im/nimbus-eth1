@@ -10,7 +10,7 @@
 
 {.used.}
 
-import std/sequtils, unittest2, ../../execution_chain/concurrency/lru {.all.}
+import std/sequtils, unittest2, ../../execution_chain/concurrency/lru
 
 type
   A = object

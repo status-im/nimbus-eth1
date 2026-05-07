@@ -25,7 +25,7 @@ type
 
   LruBucket = tuple[subhash: uint32, index: uint32]
 
-  LruCache[K, V] = object
+  LruCache*[K, V] = object
     ## Efficient implementation of classic LRU cache with a tightly packed
     ## doubly-linked list and robin-hood style hash table.
     ##
