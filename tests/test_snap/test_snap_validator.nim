@@ -64,17 +64,20 @@ suite "Snap Data Validator":
       if validated.isOk:
         db = validated.value
 
-    test name & ", last proof node chopped must fail":
+    test name & ", proof node chopped in the middle must fail":
+      # This test assumes that the proof nodes have a certain sort order.
+      # Sometimes, there are some redundant nodes on the list wich wold
+      # rightly not produce an error.
       var proof = p.pck.proof
-      proof.setLen(p.pck.proof.len-1)
+      proof.delete(proof.len div 2)
       check p.root.validate(p.start, p.pck.accounts, proof).isErr
 
-    test name & ", last two accounts chopped must fail":
+    test name & ", last two accounts chopped must also work":
       # The last account is typically part of the proof, as well. So chopping
       # it would not change anything.
       var accounts = p.pck.accounts
       accounts.setLen(p.pck.accounts.len-2)
-      check p.root.validate(p.start, accounts, p.pck.proof).isErr
+      check p.root.validate(p.start, accounts, p.pck.proof).isOk
 
     test name & ", full tree dump as proof nodes":
       block needDb:

@@ -76,35 +76,36 @@ if defined(windows):
 # given its near-ubiquity in the x86 installed base, it renders a distribution
 # build more viable on an overall broader range of hardware.
 #
-if defined(disableMarchNative):
-  if defined(i386) or defined(amd64):
-    if defined(marchOptimized):
-      # https://github.com/status-im/nimbus-eth2/blob/stable/docs/cpu_features.md#bmi2--adx
-      switch("passC", "-march=broadwell -mtune=generic")
-      switch("passL", "-march=broadwell -mtune=generic")
-    else:
-      switch("passC", "-mssse3")
-      switch("passL", "-mssse3")
-elif defined(riscv64):
-  # riscv64 needs specification of ISA with extensions. 'gc' is widely supported
-  # and seems to be the minimum extensions needed to build.
-  switch("passC", "-march=rv64gc")
-  switch("passL", "-march=rv64gc")
-elif defined(linux) and defined(arm64):
-  # clang can't handle "-march=native"
-  switch("passC", "-march=armv8-a")
-  switch("passL", "-march=armv8-a")
-elif not(defined(macosx) and defined(arm64)):
-  # Apple's Clang can't handle "-march=native" on M1: https://github.com/status-im/nimbus-eth2/issues/2758
-  switch("passC", "-march=native")
-  switch("passL", "-march=native")
-  if defined(i386) or defined(amd64):
-    # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=65782
-    # ("-fno-asynchronous-unwind-tables" breaks Nim's exception raising, sometimes)
-    # For non-Windows targets, https://github.com/bitcoin-core/secp256k1/issues/1623
-    # also suggests disabling the same flag to address Ubuntu 22.04/recent AMD CPUs.
-    switch("passC", "-mno-avx512f")
-    switch("passL", "-mno-avx512f")
+if not defined(emscripten):
+  if defined(disableMarchNative):
+    if defined(i386) or defined(amd64):
+      if defined(marchOptimized):
+        # https://github.com/status-im/nimbus-eth2/blob/stable/docs/cpu_features.md#bmi2--adx
+        switch("passC", "-march=broadwell -mtune=generic")
+        switch("passL", "-march=broadwell -mtune=generic")
+      else:
+        switch("passC", "-mssse3")
+        switch("passL", "-mssse3")
+  elif defined(riscv64):
+    # riscv64 needs specification of ISA with extensions. 'gc' is widely supported
+    # and seems to be the minimum extensions needed to build.
+    switch("passC", "-march=rv64gc")
+    switch("passL", "-march=rv64gc")
+  elif defined(linux) and defined(arm64):
+    # clang can't handle "-march=native"
+    switch("passC", "-march=armv8-a")
+    switch("passL", "-march=armv8-a")
+  elif not(defined(macosx) and defined(arm64)):
+    # Apple's Clang can't handle "-march=native" on M1: https://github.com/status-im/nimbus-eth2/issues/2758
+    switch("passC", "-march=native")
+    switch("passL", "-march=native")
+    if defined(i386) or defined(amd64):
+      # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=65782
+      # ("-fno-asynchronous-unwind-tables" breaks Nim's exception raising, sometimes)
+      # For non-Windows targets, https://github.com/bitcoin-core/secp256k1/issues/1623
+      # also suggests disabling the same flag to address Ubuntu 22.04/recent AMD CPUs.
+      switch("passC", "-mno-avx512f")
+      switch("passL", "-mno-avx512f")
 
 # omitting frame pointers in nim breaks the GC
 # https://github.com/nim-lang/Nim/issues/10625
@@ -155,6 +156,9 @@ if canEnableDebuggingSymbols:
 
 switch("warningAsError", "BareExcept:on")
 switch("warningAsError", "CaseTransition:on")
+switch("warningAsError", "ImplicitDefaultValue:on")
+switch("warningAsError", "ImplicitTemplateRedefinition:on")
+switch("warningAsError", "LongLiterals:on")
 switch("warningAsError", "UnusedImport:on")
 switch("hintAsError", "ConvFromXtoItselfNotNeeded:on")
 switch("hintAsError", "DuplicateModuleImport:on")

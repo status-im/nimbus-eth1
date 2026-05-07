@@ -20,10 +20,14 @@
 
 import
   std/[hashes, sequtils],
-  pkg/[eth/common, stint, stew/interval_set],
+  pkg/[eth/common, eth/trie/nibbles, stint, stew/interval_set],
   ../helpers
 
 type
+  PadMode* = enum
+    padMin = 0u8
+    padMax = 255u8
+
   ItemKey* = distinct UInt256
     ## Account trie item key, hash etc. as a scalar (allows arithmetic)
 
@@ -66,6 +70,20 @@ template to*[T: Hash32](w: seq[ItemKey], _: type seq[T]): seq[T] =
 template to*[T: ItemKey](w: seq[Hash32], _: type seq[T]): seq[T] =
   ## Dito
   w.mapIt(it.to(T))
+
+template fromNibbles*[T: ItemKey](_: type T, pfx: NibblesBuf, pad: PadMode): T =
+  ## The function extend nibbles argument `pfx` to an `ItemKey`. It returns
+  ## the eqivalent of `pfx & padding` where padding is an all zero nibbles
+  ## sequence if the argument `pad` is `padMin`, and all `f` if `pad` is
+  ## `padMax`.
+  ##
+  case pad:
+  of padMin:
+    pfx.getBytes.to(ItemKey)
+  of padMax:
+    const ffff = NibblesBuf.fromBytes 255u8.repeat(32)
+    # Nibbles buf is 32 bytes, excess values will be ignored
+    (pfx & ffff).getBytes.to(ItemKey)
 
 # ------------------------------------------------------------------------------
 # Public `ItemKey` base arithmetic
@@ -164,7 +182,7 @@ proc fetchLeast*(ikrs: ItemKeyRangeSet; maxLen: UInt256): Opt[ItemKeyRange] =
     jv = ikrs.ge().valueOr:
       return err()
     kv = block:
-      if maxLen == 0 or (jv.len != 0 and jv.len <= maxLen):
+      if maxLen.isZero or (jv.len.isZero.not and jv.len <= maxLen):
         jv
       else:
         ItemKeyRange.new(jv.minPt, jv.minPt + (maxLen - 1.u256))
@@ -177,7 +195,7 @@ func totalRatio*(ikrs: ItemKeyRangeSet): float =
   ## (w/o the `borrowed` part.)
   ##
   let total = ikrs.total()
-  if total == 0:
+  if total.isZero:
     return (if ikrs.chunks() == 0: 0f else: 1f)
   total.per256()
 

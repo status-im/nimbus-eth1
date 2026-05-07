@@ -72,7 +72,7 @@ proc initialAccessListEIP2929(call: CallParams) =
         ledger.accessList(account.address, key.to(UInt256))
 
 proc preExecComputation(vmState: BaseVMState, call: CallParams): int64 =
-  var gasRefund = 0
+  var gasRefund = 0'i64
   let ledger = vmState.ledger
 
   if not call.isCreate:
@@ -152,27 +152,27 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
     isAmsterdamOrLater = fork >= FkAmsterdam
     intrinsic = if call.sysCall: IntrinsicGas()
                 else: intrinsicGas(call, fork, vmState.blockCtx.gasLimit)
-    gasRefund = if call.sysCall: 0
+    gasRefund = if call.sysCall: 0'i64
                 else: preExecComputation(vmState, call)
     intrinsicGas = intrinsic.regular + intrinsic.state
-    
+
     # Prevent underflow which can occur when gasLimit is less than intrinsicGas.
     # Note that this is only a short term fix. In the longer term we need to
     # implement validation on all fields in the Message before executing in the EVM.
-    # TODO: Implement full validation on all fields. See related issue: https://github.com/status-im/nimbus-eth1/issues/1524    
+    # TODO: Implement full validation on all fields. See related issue: https://github.com/status-im/nimbus-eth1/issues/1524
     executionGas = if call.gasLimit < intrinsicGas: 0.GasInt else: call.gasLimit - intrinsicGas
     regularGasBudget = TX_GAS_LIMIT - intrinsic.regular
-    
+
   var
     gasLeft = executionGas
     intrinsicStateGas = 0.GasInt
     stateGas = 0.GasInt
-              
-  if isAmsterdamOrLater: 
-    gasLeft = min(regularGasBudget, executionGas)              
+
+  if isAmsterdamOrLater:
+    gasLeft = min(regularGasBudget, executionGas)
     intrinsicStateGas = intrinsic.state - gasRefund.GasInt
     stateGas = executionGas - gasLeft + gasRefund.GasInt
-    
+
   let
     host = TransactionHost(
       vmState: vmState,
@@ -196,6 +196,7 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
       sender:          call.sender,
       value:           call.value,
     )
+
     code = if call.isCreate:
              msg.contractAddress = generateContractAddress(call.vmState, CallKind.Create, call.sender)
              CodeBytesRef.init(call.input)
@@ -354,6 +355,8 @@ proc finishRunningComputation(
     if c.isError:
       result.error = c.error.info
     result.output = move(c.output)
+  elif T is void:
+    discard
   else:
     {.error: "Unknown computation output".}
 
@@ -365,7 +368,11 @@ proc runComputation*(call: CallParams, T: type): T =
   # Pre-execution sanity checks
   host.computation.preExecComputation()
   if host.computation.isError:
-    return finishRunningComputation(host, call, T)
+    when T is void:
+      finishRunningComputation(host, call, T)
+      return
+    else:
+      return finishRunningComputation(host, call, T)
 
   host.computation.execCallOrCreate()
   if not call.sysCall:

@@ -317,6 +317,11 @@ type
       defaultValue: defaultBlockCacheSize
       name: "debug-rocksdb-block-cache-size".}: int
 
+    rocksdbBlockCacheType {.
+      hidden
+      defaultValue: defaultBlockCacheType
+      name: "debug-rocksdb-block-cache-type" .}: RocksDbBlockCacheType
+
     rdbVtxCacheSize {.
       hidden
       defaultValue: defaultRdbVtxCacheSize
@@ -485,12 +490,13 @@ type
         defaultValue: false
         name: "debug-snap-sync" .}: bool
 
-      snapSyncTarget* {.
-        desc: "Manually set the initial block hash to derive the target" &
-              " state root from. The block hash is specified by its 32" &
-              " byte hash represented by a hex string. This block hash must" &
-              " refer to a finalised block."
-        name: "debug-snap-sync-target" .}: Option[string]
+      snapSyncResume* {.
+        hidden
+        desc: "Use the cached data from a previous session if there is any." &
+              " Otherwise, data from a previous snap session will be moved" &
+              " to a backup directory, the name ending with ~"
+        defaultValue: false
+        name: "debug-snap-sync-resume" .}: bool
 
       snapServerEnabled* {.
         hidden
@@ -811,7 +817,8 @@ func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
       else: config.rdbBranchCacheSize,
     rdbPrintStats = config.rdbPrintStats,
     maxSnapshots = config.aristoDbMaxSnapshots,
-    parallelStateRootComputation = config.parallelStateRootComputation
+    parallelStateRootComputation = config.parallelStateRootComputation,
+    blockCacheType = config.rocksdbBlockCacheType,
   )
 
 func jwtSecretOpt*(config: ExecutionClientConf): Opt[InputFile] =
