@@ -61,18 +61,6 @@ const TX_FRAME_VERSION = 0x01'u8
 # Helpers
 # ------------------------------------------------------------------------------
 
-template writeU8(buf: var seq[byte]; v: byte) =
-  buf.add v
-
-template writeU16BE(buf: var seq[byte]; v: uint16) =
-  buf.add v.toBytesBE
-
-template writeU32BE(buf: var seq[byte]; v: uint32) =
-  buf.add v.toBytesBE
-
-template writeU64BE(buf: var seq[byte]; v: uint64) =
-  buf.add v.toBytesBE
-
 template readU8(data: openArray[byte]; pos: var int): byte =
   if pos >= data.len: return err(DeblobTxFrameTruncated)
   let v = data[pos]
@@ -104,54 +92,54 @@ template readU64BE(data: openArray[byte]; pos: var int): uint64 =
 proc blobifyTxFrame*(tx: AristoTxRef): seq[byte] =
   var buf: seq[byte]
 
-  buf.writeU8 TX_FRAME_VERSION
-  buf.writeU64BE tx.vTop.uint64
+  buf.add TX_FRAME_VERSION
+  buf.add tx.vTop.uint64.toBytesBE
 
   if tx.blockNumber.isSome:
-    buf.writeU8 0x01'u8
-    buf.writeU64BE tx.blockNumber.unsafeGet
+    buf.add 0x01'u8
+    buf.add tx.blockNumber.unsafeGet.toBytesBE
   else:
-    buf.writeU8 0x00'u8
-    buf.writeU64BE 0'u64
+    buf.add 0x00'u8
+    buf.add 0'u64.toBytesBE
 
-  buf.writeU32BE tx.sTab.len.uint32
+  buf.add tx.sTab.len.uint32.toBytesBE
   for rvid, vtx in tx.sTab:
     let rvidb = blobify(rvid)
-    buf.writeU8 rvidb.len
+    buf.add rvidb.len.byte
     buf.add rvidb.data()
 
     if vtx.isNil:
-      buf.writeU8 0x00'u8
+      buf.add 0x00'u8
     else:
-      buf.writeU8 0x01'u8
+      buf.add 0x01'u8
       let key = tx.kMap.getOrDefault(rvid, VOID_HASH_KEY)
       var vtxBuf: VertexBuf
       vtx.blobifyTo(key, vtxBuf)
-      buf.writeU16BE vtxBuf.len.uint16
+      buf.add vtxBuf.len.uint16.toBytesBE
       buf.add vtxBuf.data()
 
-  buf.writeU32BE tx.accLeaves.len.uint32
+  buf.add tx.accLeaves.len.uint32.toBytesBE
   for accPath, leaf in tx.accLeaves:
     buf.add accPath.data
     if leaf.isNil:
-      buf.writeU8 0x00'u8
+      buf.add 0x00'u8
     else:
-      buf.writeU8 0x01'u8
+      buf.add 0x01'u8
       var vtxBuf: VertexBuf
       VertexRef(leaf).blobifyTo(VOID_HASH_KEY, vtxBuf)
-      buf.writeU16BE vtxBuf.len.uint16
+      buf.add vtxBuf.len.uint16.toBytesBE
       buf.add vtxBuf.data()
 
-  buf.writeU32BE tx.stoLeaves.len.uint32
+  buf.add tx.stoLeaves.len.uint32.toBytesBE
   for stoPath, leaf in tx.stoLeaves:
     buf.add stoPath.data
     if leaf.isNil:
-      buf.writeU8 0x00'u8
+      buf.add 0x00'u8
     else:
-      buf.writeU8 0x01'u8
+      buf.add 0x01'u8
       var vtxBuf: VertexBuf
       VertexRef(leaf).blobifyTo(VOID_HASH_KEY, vtxBuf)
-      buf.writeU16BE vtxBuf.len.uint16
+      buf.add vtxBuf.len.uint16.toBytesBE
       buf.add vtxBuf.data()
 
   buf
