@@ -12,7 +12,7 @@
 import
   chronicles,
   stew/[io2, byteutils],
-  ../portal/eth_history/erae,
+  ../portal/eth_history/ere,
   ../portal/database/era1_db,
   ../portal/eth_history/block_proofs/historical_hashes_accumulator,
   ../portal/eth_history/block_proofs/block_proof_historical_hashes_accumulator,
@@ -22,8 +22,8 @@ import
 
 from ../portal/network/network_metadata import loadAccumulator, loadHistoricalRoots
 
-# Premerge eraE export
-proc exportEraEFile(era: EraE, db: Era1DB, networkName: string, mergeBlockNumber: uint64) =
+# Premerge ere file export
+proc exportEreFile(era: Era, db: Era1DB, networkName: string, mergeBlockNumber: uint64) =
   let startNumber = era.startNumber()
 
   let endNumber = era.endNumber()
@@ -32,8 +32,8 @@ proc exportEraEFile(era: EraE, db: Era1DB, networkName: string, mergeBlockNumber
     fatal "Error getting block header", era=era, blockNumber=endNumber, msg=error
     quit(QuitFailure)
 
-  # Note: using block hash as shortened hash in filename of erae
-  let filename = eraeFileName(networkName, EraE(era), header.computeRlpHash())
+  # Note: using block hash as shortened hash in filename of ere
+  let filename = eraeFileName(networkName, Era(era), header.computeRlpHash())
   let e2 =
     openFile(filename, {OpenFlags.Write, OpenFlags.Create, OpenFlags.Truncate}).valueOr:
       fatal "Cannot open file for writing", filename, msg=error
@@ -41,7 +41,7 @@ proc exportEraEFile(era: EraE, db: Era1DB, networkName: string, mergeBlockNumber
   defer:
     discard closeFile(e2)
 
-  var group = EraEGroup.init(e2, startNumber, mergeBlockNumber).get()
+  var group = EreGroup.init(e2, startNumber, mergeBlockNumber).get()
 
   # First iterate to get all headers to be able to construct HeaderRecord List, epochRecord
   # and accumulatorRoot, and write headers to area file
@@ -66,14 +66,14 @@ proc exportEraEFile(era: EraE, db: Era1DB, networkName: string, mergeBlockNumber
     headerList.add(header)
 
     group.update(e2, blockNumber, header).isOkOr:
-      fatal "Error writing header to erae", era=era, blockNumber=blockNumber, msg=error
+      fatal "Error writing header to ere", era=era, blockNumber=blockNumber, msg=error
       quit(QuitFailure)
 
   let accumulatorRoot = getEpochRecordRoot(headerRecords)
   let epochRecord = EpochRecord.init(@headerRecords)
 
   # Next iterate to get bodies, receipts, proofs and total difficulties
-  # and write them to erae file
+  # and write them to ere file
   for blockNumber in startNumber..endNumber:
     var body: BlockBody
     db.getBlockBody(blockNumber, body).isOkOr:
@@ -81,7 +81,7 @@ proc exportEraEFile(era: EraE, db: Era1DB, networkName: string, mergeBlockNumber
       quit(QuitFailure)
 
     group.update(e2, blockNumber, body).isOkOr:
-      fatal "Error writing body to erae", era=era, blockNumber=blockNumber, msg=error
+      fatal "Error writing body to ere", era=era, blockNumber=blockNumber, msg=error
       quit(QuitFailure)
 
   for blockNumber in startNumber..endNumber:
@@ -91,7 +91,7 @@ proc exportEraEFile(era: EraE, db: Era1DB, networkName: string, mergeBlockNumber
       quit(QuitFailure)
 
     group.update(e2, blockNumber, receipts.to(seq[StoredReceipt])).isOkOr:
-      fatal "Error writing receipts to erae", era=era, blockNumber=blockNumber, msg=error
+      fatal "Error writing receipts to ere", era=era, blockNumber=blockNumber, msg=error
       quit(QuitFailure)
 
   for blockNumber in startNumber..endNumber:
@@ -100,7 +100,7 @@ proc exportEraEFile(era: EraE, db: Era1DB, networkName: string, mergeBlockNumber
       quit(QuitFailure)
 
     group.update(e2, blockNumber, proof).isOkOr:
-      fatal "Error writing proof to erae", era=era, blockNumber=blockNumber, msg=error
+      fatal "Error writing proof to ere", era=era, blockNumber=blockNumber, msg=error
       quit(QuitFailure)
 
   for blockNumber in startNumber..endNumber:
@@ -109,14 +109,14 @@ proc exportEraEFile(era: EraE, db: Era1DB, networkName: string, mergeBlockNumber
       quit(QuitFailure)
 
     group.update(e2, blockNumber, td).isOkOr:
-      fatal "Error writing total difficulty to erae", era=era, blockNumber=blockNumber, msg=error
+      fatal "Error writing total difficulty to ere", era=era, blockNumber=blockNumber, msg=error
       quit(QuitFailure)
 
   group.finish(e2, Opt.some(accumulatorRoot), era.endNumber()).isOkOr:
-    fatal "Error finishing erae file", era=era, msg=error
+    fatal "Error finishing ere file", era=era, msg=error
     quit(QuitFailure)
 
-proc exportEraE*(config: ExecutionClientConf, com: CommonRef) =
+proc exportEre*(config: ExecutionClientConf, com: CommonRef) =
   # Data sources:
   # - Pre-merge: era1 or EL db
   # - Merge era: era1 + era + EL db for receipts?
@@ -145,14 +145,14 @@ proc exportEraE*(config: ExecutionClientConf, com: CommonRef) =
     networkData = loadNetworkData(networkName)
     # eraDB = EraDB.new(networkData.metadata.cfg, conf.eraDir, networkData.genesis_validators_root)
 
-    mergeEra = erae.era(mergeBlockNumber)
-    preMergeEndEra = min(EraE(config.endEra), EraE(mergeEra - 1))
+    mergeEra = ere.era(mergeBlockNumber)
+    preMergeEndEra = min(Era(config.endEra), Era(mergeEra - 1))
 
-  for era in EraE(config.startEra) .. preMergeEndEra:
-    exportEraEFile(era, era1DB, networkName, mergeBlockNumber)
+  for era in Era(config.startEra) .. preMergeEndEra:
+    exportEreFile(era, era1DB, networkName, mergeBlockNumber)
 
-# TODO: Adjust into version that verifies a full erae directory
-proc verifyEraEFile*(config: ExecutionClientConf, eraeFilename: string) =
+# TODO: Adjust into version that verifies a full ere directory
+proc verifyEreFile*(config: ExecutionClientConf, eraeFilename: string) =
   let cfg = chainConfigForNetwork(config.networkId)
   let mergeBlockNumber =
     if cfg.posBlock.isSome:
@@ -162,7 +162,7 @@ proc verifyEraEFile*(config: ExecutionClientConf, eraeFilename: string) =
     else:
       BlockNumber(0)
   let networkData = loadNetworkData("mainnet")
-  let f = EraEFile.open(eraeFilename, mergeBlockNumber, config.hasProofs).valueOr:
+  let f = EreFile.open(eraeFilename, mergeBlockNumber, config.noProofs).valueOr:
     warn "Failed to open era file", error = error
     quit QuitFailure
   defer:
@@ -174,9 +174,9 @@ proc verifyEraEFile*(config: ExecutionClientConf, eraeFilename: string) =
     # TODO: historicalSummaries from state in latest era file
   )
   let root = f.verify(v, networkData.metadata.cfg).valueOr:
-    warn "Verification of era file failed", error = error
+    warn "Verification of ere file failed", error = error
     quit QuitFailure
 
   let accumulatorRoot = if root.isSome: root.value().data.to0xHex() else: "none"
-  notice "EraE file succesfully verified",
+  notice "ere file succesfully verified",
     accumulatorRoot, file = eraeFilename

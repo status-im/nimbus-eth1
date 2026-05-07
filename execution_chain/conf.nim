@@ -598,10 +598,10 @@ type
       eraFile* {.
         desc: "Path to the erae file to be verified", name: "era-file"
       .}: InputFile
-      hasProofs* {.
-        desc: "Define if the eraE file to verify has proofs included"
-        defaultValue: true
-        name: "has-proofs".}: bool
+      noProofs* {.
+        desc: "Define if the eraE file to verify has no proofs included"
+        defaultValue: false
+        name: "no-proofs".}: bool
 
 func parseHexOrDec256(p: string): UInt256 {.raises: [ValueError].} =
   if startsWith(p, "0x"):

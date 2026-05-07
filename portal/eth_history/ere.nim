@@ -29,23 +29,8 @@ from ../common/common_types import decodeSsz
 
 export e2store.readRecord
 
-# Implementation of erae file format as current described in:
-# https://github.com/eth-clients/e2store-format-specs/pull/16
-
-# The format can be summarized with the following expression:
-
-# eraE := Version | CompressedHeader+ | CompressedBody+ | CompressedReceipts+ | Proofs+ | TotalDifficulty* | other-entries* | Accumulator? | BlockIndex
-
-# Each basic element is its own e2store entry:
-
-# Version            = { type: 0x6532, data: nil }
-# CompressedHeader   = { type: 0x03,   data: snappyFramed(rlp(header)) }
-# CompressedBody     = { type: 0x04,   data: snappyFramed(rlp(body)) }
-# CompressedSlimReceipts = { type: 0x0a,   data: snappyFramed(rlp([tx-type, post-state-or-status, cumulative-gas, logs])) }
-# TotalDifficulty    = { type: 0x06,   data: uint256(header.total_difficulty) }
-# Proof              = { type: 0x0b    data: snappyFramed(rlp([proof-type, ssz(BlockProofHistoricalHashesAccumulator) | ssz(BlockProofHistoricalRoots) | ssz(BlockProofHistoricalSummaries)]))}
-# AccumulatorRoot    = { type: 0x07,   data: hash_tree_root(List(HeaderRecord, 8192)) }
-# Index              = { type: 0x6732, data: index }
+# Implementation of ere file format as per spec:
+# https://github.com/eth-clients/e2store-format-specs/blob/ca2523a6420d64336000f5607c0b59df1a08c83b/formats/ere.md
 
 const
   E2CompressedHeader* = [byte 0x03, 0x00]
@@ -54,32 +39,32 @@ const
   E2TotalDifficulty* = [byte 0x06, 0x00]
   E2Proof* = [byte 0x0b, 0x00]
   E2AccumulatorRoot* = [byte 0x07, 0x00]
-  E2BlockIndex* = [byte 0x67, 0x32]
+  E2DynamicBlockIndex* = [byte 0x67, 0x32]
 
-  MaxEraESize* = 8192
+  MaxEreSize* = 8192
 
 type
   Indexes* = seq[int] # Absolute positions in file
 
-  BlockIndex* = object
+  DynamicBlockIndex* = object
     startNumber*: uint64
     indexesList*: seq[Indexes] # sequence of indexes per block
     componentCount*: uint64
-    hasReceipts*: bool
-    hasProofs*: bool
+    noReceipts*: bool
+    noProofs*: bool
 
-  EraE* = distinct uint64 # Period of 8192 blocks (not an exact time unit)
+  Era* = distinct uint64 # Period of 8192 blocks (not an exact time unit)
 
-  EraEGroup* = object
-    blockIndex*: BlockIndex
+  EreGroup* = object
+    blockIndex*: DynamicBlockIndex
 
 # As stated, not really a time unit but nevertheless, need the borrows
-ethTimeUnit EraE
+ethTimeUnit Era
 
 template lenu64(x: untyped): untyped =
   uint64(len(x))
 
-proc findBlockIndexStartOffset(f: IoHandle): Result[int64, string] =
+proc findDynamicBlockIndexStartOffset(f: IoHandle): Result[int64, string] =
   ?f.setFilePos(-16, SeekPosition.SeekCurrent).mapErr(toString)
 
   let
@@ -89,7 +74,7 @@ proc findBlockIndexStartOffset(f: IoHandle): Result[int64, string] =
 
   ok(-bytes)
 
-proc appendIndex*(
+proc appendIndex(
     f: IoHandle,
     startNumber: uint64,
     indexesList: openArray[Indexes],
@@ -97,7 +82,7 @@ proc appendIndex*(
 ): Result[int64, string] =
   let
     len = indexesList.len() * componentCount.int * sizeof(int64) + 24
-    pos = ?f.appendHeader(E2BlockIndex, len)
+    pos = ?f.appendHeader(E2DynamicBlockIndex, len)
 
   ?f.append(startNumber.uint64.toBytesLE())
 
@@ -110,10 +95,12 @@ proc appendIndex*(
 
   ok(pos)
 
-proc appendRecord(f: IoHandle, index: BlockIndex): Result[int64, string] =
+proc appendRecord(f: IoHandle, index: DynamicBlockIndex): Result[int64, string] =
   f.appendIndex(index.startNumber, index.indexesList, index.componentCount)
 
-proc readBlockIndex*(f: IoHandle, hasProofs: bool): Result[BlockIndex, string] =
+proc readDynamicBlockIndex*(
+    f: IoHandle, noProofs: bool
+): Result[DynamicBlockIndex, string] =
   var
     buf: seq[byte]
     pos: int
@@ -123,7 +110,7 @@ proc readBlockIndex*(f: IoHandle, hasProofs: bool): Result[BlockIndex, string] =
     fileSize = ?f.getFileSize().mapErr(toString)
     header = ?f.readRecord(buf)
 
-  if header.typ != E2BlockIndex:
+  if header.typ != E2DynamicBlockIndex:
     return err("not an index")
   if buf.len < 16:
     return err("index entry too small")
@@ -169,13 +156,13 @@ proc readBlockIndex*(f: IoHandle, hasProofs: bool): Result[BlockIndex, string] =
     return err("invalid count")
 
   ok(
-    BlockIndex(
+    DynamicBlockIndex(
       startNumber: blockNumber,
       indexesList: indexesList,
       componentCount: componentCount,
-      hasReceipts: true,
-        # TODO: hardcoded for now, leaving no option for reading EraE without receipts
-      hasProofs: hasProofs,
+      noReceipts: false,
+        # TODO: hardcoded for now, leaving no option for reading ere files without receipts
+      noProofs: noProofs,
     )
   )
 
@@ -186,17 +173,17 @@ proc skipRecord*(f: IoHandle): Result[void, string] =
 
   ok()
 
-func startNumber*(era: EraE): uint64 =
-  era * MaxEraESize
+func startNumber*(era: Era): uint64 =
+  era * MaxEreSize
 
-func endNumber*(era: EraE): uint64 =
-  (era + 1) * MaxEraESize - 1'u64
+func endNumber*(era: Era): uint64 =
+  (era + 1) * MaxEreSize - 1'u64
 
-func endNumber*(blockIdx: BlockIndex): uint64 =
+func endNumber*(blockIdx: DynamicBlockIndex): uint64 =
   blockIdx.startNumber + blockIdx.indexesList.lenu64() - 1
 
-func era*(blockNumber: uint64): EraE =
-  EraE(blockNumber div MaxEraESize)
+func era*(blockNumber: uint64): Era =
+  Era(blockNumber div MaxEreSize)
 
 # TODO: move to some era helpers file
 proc toCompressedRlpBytes(item: auto): seq[byte] =
@@ -215,63 +202,65 @@ type Proof* = object
   proofData*: seq[byte]
 
 proc init*(
-    T: type EraEGroup,
+    T: type EreGroup,
     f: IoHandle,
     startNumber: uint64,
     mergeBlockNumber: uint64,
-    hasReceipts = true,
-    hasProofs = true,
+    noReceipts = false,
+    noProofs = false,
 ): Result[T, string] =
   discard ?f.appendHeader(E2Version, 0)
 
   let componentCount =
     2 + # header + body
-    (if hasReceipts: 1 else: 0) + (if hasProofs: 1 else: 0) +
+    (if noReceipts: 0 else: 1) + (if noProofs: 0 else: 1) +
     (if era(startNumber) <= era(mergeBlockNumber): 1 else: 0) # td pre-merge + merge era
 
   # TODO: Not great ... Perhaps just make one big sequence and play with indexes.
-  var indexesList = newSeq[Indexes](MaxEraESize)
-  for i in 0 ..< MaxEraESize:
+  var indexesList = newSeq[Indexes](MaxEreSize)
+  for i in 0 ..< MaxEreSize:
     indexesList[i] = newSeqUninit[int](componentCount)
 
   ok(
-    EraEGroup(
-      blockIndex: BlockIndex(
+    EreGroup(
+      blockIndex: DynamicBlockIndex(
         startNumber: startNumber,
         indexesList: indexesList,
         componentCount: componentCount.uint64,
-        hasReceipts: hasReceipts,
-        hasProofs: hasProofs,
+        noReceipts: noReceipts,
+        noProofs: noProofs,
       )
     )
   )
 
-proc getIndexesPos(index: BlockIndex, headerType: array[2, byte]): Result[int, string] =
+proc getIndexesPos(
+    index: DynamicBlockIndex, headerType: array[2, byte]
+): Result[int, string] =
   if headerType == E2CompressedHeader:
     ok(0)
   elif headerType == E2CompressedBody:
     ok(1)
   elif headerType == E2CompressedSlimReceipts:
-    if index.hasReceipts:
-      ok(2)
-    else:
+    if index.noReceipts:
       err("Index doesn't have receipts")
-  elif headerType == E2Proof:
-    if index.hasProofs:
-      ok(2 + (if index.hasReceipts: 1 else: 0))
     else:
+      ok(2)
+  elif headerType == E2Proof:
+    if index.noProofs:
       err("Index doesn't have proofs")
+    else:
+      ok(2 + (if index.noReceipts: 0 else: 1))
   elif headerType == E2TotalDifficulty:
-    if (2 + (if index.hasReceipts: 1 else: 0) + (if index.hasProofs: 1 else: 0) + 1) ==
+    if (2 + (if index.noReceipts: 0 else: 1) + (if index.noProofs: 0 else: 1) + 1) ==
         index.componentCount.int:
-      ok(2 + (if index.hasReceipts: 1 else: 0) + (if index.hasProofs: 1 else: 0))
+      ok(2 + (if index.noReceipts: 0 else: 1) + (if index.noProofs: 0 else: 1))
     else:
       err("Index doesn't have total difficulty")
   else:
     raiseAssert "Invalid header type"
 
 proc update*(
-    g: var EraEGroup,
+    g: var EreGroup,
     f: IoHandle,
     blockNumber: uint64,
     data: openArray[byte],
@@ -300,23 +289,23 @@ proc update*(
   ok()
 
 proc update*(
-    g: var EraEGroup, f: IoHandle, blockNumber: uint64, header: headers.Header
+    g: var EreGroup, f: IoHandle, blockNumber: uint64, header: headers.Header
 ): Result[void, string] =
   g.update(f, blockNumber, toCompressedRlpBytes(header), E2CompressedHeader)
 
 proc update*(
-    g: var EraEGroup, f: IoHandle, blockNumber: uint64, body: BlockBody
+    g: var EreGroup, f: IoHandle, blockNumber: uint64, body: BlockBody
 ): Result[void, string] =
   g.update(f, blockNumber, toCompressedRlpBytes(body), E2CompressedBody)
 
 proc update*(
-    g: var EraEGroup, f: IoHandle, blockNumber: uint64, receipts: seq[StoredReceipt]
+    g: var EreGroup, f: IoHandle, blockNumber: uint64, receipts: seq[StoredReceipt]
 ): Result[void, string] =
-  # doAssert(g.blockIndex.hasReceipts)
+  # doAssert(not g.blockIndex.noReceipts)
   g.update(f, blockNumber, toCompressedRlpBytes(receipts), E2CompressedSlimReceipts)
 
 proc update*(
-    g: var EraEGroup,
+    g: var EreGroup,
     f: IoHandle,
     blockNumber: uint64,
     proof:
@@ -337,12 +326,12 @@ proc update*(
   g.update(f, blockNumber, encodedProof, E2Proof)
 
 proc update*(
-    g: var EraEGroup, f: IoHandle, blockNumber: uint64, totalDifficulty: UInt256
+    g: var EreGroup, f: IoHandle, blockNumber: uint64, totalDifficulty: UInt256
 ): Result[void, string] =
   g.update(f, blockNumber, totalDifficulty.toBytesLE(), E2TotalDifficulty)
 
 proc finish*(
-    g: var EraEGroup, f: IoHandle, accumulatorRoot: Opt[Digest], lastBlockNumber: uint64
+    g: var EreGroup, f: IoHandle, accumulatorRoot: Opt[Digest], lastBlockNumber: uint64
 ): Result[void, string] =
   if accumulatorRoot.isSome():
     discard ?f.appendRecord(E2AccumulatorRoot, accumulatorRoot.value().data)
@@ -355,7 +344,7 @@ proc finish*(
 func shortLog*(x: Hash32): string =
   x.data.toOpenArray(0, 3).toHex()
 
-func eraeFileName*(network: string, era: EraE, eraRoot: Hash32): string =
+func eraeFileName*(network: string, era: Era, eraRoot: Hash32): string =
   try:
     &"{network}-{era.uint64:05}-{shortLog(eraRoot)}.erae"
   except ValueError as exc:
@@ -365,9 +354,9 @@ func eraeFileName*(network: string, era: EraE, eraRoot: Hash32): string =
 # TODO: Might want to var parameters to avoid copying as is done for era files.
 
 type
-  EraEFile* = ref object
+  EreFile* = ref object
     handle: Opt[IoHandle]
-    blockIdx*: BlockIndex
+    blockIdx*: DynamicBlockIndex
     mergeBlockNumber*: uint64
 
   # BlockTuple* =
@@ -380,8 +369,8 @@ type
   #   ]
 
 proc open*(
-    _: type EraEFile, name: string, mergeBlockNumber: uint64, hasProofs: bool
-): Result[EraEFile, string] =
+    _: type EreFile, name: string, mergeBlockNumber: uint64, noProofs: bool
+): Result[EreFile, string] =
   var f = Opt[IoHandle].ok(?openFile(name, {OpenFlags.Read}).mapErr(ioErrorMsg))
 
   defer:
@@ -393,31 +382,31 @@ proc open*(
   ?f[].setFilePos(0, SeekPosition.SeekEnd).mapErr(ioErrorMsg)
 
   # Last in the file is the block index
-  let blockIdxPos = ?f[].findBlockIndexStartOffset()
+  let blockIdxPos = ?f[].findDynamicBlockIndexStartOffset()
   ?f[].setFilePos(blockIdxPos, SeekPosition.SeekCurrent).mapErr(ioErrorMsg)
 
-  let blockIdx = ?f[].readBlockIndex(hasProofs)
-  if blockIdx.indexesList.len() != MaxEraESize:
+  let blockIdx = ?f[].readDynamicBlockIndex(noProofs)
+  if blockIdx.indexesList.len() != MaxEreSize:
     return err(
       "Block indexes list length invalid: " & $blockIdx.indexesList.len() &
-        " vs expected " & $MaxEraESize
+        " vs expected " & $MaxEreSize
     )
 
-  let res = EraEFile(handle: f, blockIdx: blockIdx, mergeBlockNumber: mergeBlockNumber)
+  let res = EreFile(handle: f, blockIdx: blockIdx, mergeBlockNumber: mergeBlockNumber)
   reset(f)
   ok res
 
-proc close*(f: EraEFile) =
+proc close*(f: EreFile) =
   if f.handle.isSome():
     discard closeFile(f.handle.get())
     reset(f.handle)
 
-proc skipRecord*(f: EraEFile): Result[void, string] =
+proc skipRecord*(f: EreFile): Result[void, string] =
   doAssert f[].handle.isSome()
 
   f[].handle.get().skipRecord()
 
-proc getNextBlockHeader(f: EraEFile, res: var headers.Header): Result[void, string] =
+proc getNextBlockHeader(f: EreFile, res: var headers.Header): Result[void, string] =
   var bytes: seq[byte]
 
   let header = ?f[].handle.get().readRecord(bytes)
@@ -426,7 +415,7 @@ proc getNextBlockHeader(f: EraEFile, res: var headers.Header): Result[void, stri
 
   fromCompressedRlpBytes(bytes, res)
 
-proc getNextBlockBody(f: EraEFile, res: var BlockBody): Result[void, string] =
+proc getNextBlockBody(f: EreFile, res: var BlockBody): Result[void, string] =
   var bytes: seq[byte]
 
   let header = ?f[].handle.get().readRecord(bytes)
@@ -435,7 +424,7 @@ proc getNextBlockBody(f: EraEFile, res: var BlockBody): Result[void, string] =
 
   fromCompressedRlpBytes(bytes, res)
 
-proc getNextReceipts(f: EraEFile, res: var seq[StoredReceipt]): Result[void, string] =
+proc getNextReceipts(f: EreFile, res: var seq[StoredReceipt]): Result[void, string] =
   var bytes: seq[byte]
 
   let header = ?f[].handle.get().readRecord(bytes)
@@ -444,7 +433,7 @@ proc getNextReceipts(f: EraEFile, res: var seq[StoredReceipt]): Result[void, str
 
   fromCompressedRlpBytes(bytes, res)
 
-proc getNextProof(f: EraEFile, res: var Proof): Result[void, string] =
+proc getNextProof(f: EreFile, res: var Proof): Result[void, string] =
   var bytes: seq[byte]
 
   let header = ?f[].handle.get().readRecord(bytes)
@@ -453,7 +442,7 @@ proc getNextProof(f: EraEFile, res: var Proof): Result[void, string] =
 
   fromCompressedRlpBytes(bytes, res)
 
-proc getNextTotalDifficulty(f: EraEFile): Result[UInt256, string] =
+proc getNextTotalDifficulty(f: EreFile): Result[UInt256, string] =
   var bytes: seq[byte]
 
   let header = ?f[].handle.get().readRecord(bytes)
@@ -465,7 +454,7 @@ proc getNextTotalDifficulty(f: EraEFile): Result[UInt256, string] =
 
   ok(UInt256.fromBytesLE(bytes))
 
-proc getBlockHeader*(f: EraEFile, blockNumber: uint64): Result[headers.Header, string] =
+proc getBlockHeader*(f: EreFile, blockNumber: uint64): Result[headers.Header, string] =
   doAssert not isNil(f) and f[].handle.isSome
   doAssert(
     blockNumber >= f[].blockIdx.startNumber and blockNumber <= f[].blockIdx.endNumber,
@@ -481,7 +470,7 @@ proc getBlockHeader*(f: EraEFile, blockNumber: uint64): Result[headers.Header, s
   ?getNextBlockHeader(f, res)
   ok(move(res))
 
-proc getBlockBody*(f: EraEFile, blockNumber: uint64): Result[BlockBody, string] =
+proc getBlockBody*(f: EreFile, blockNumber: uint64): Result[BlockBody, string] =
   doAssert not isNil(f) and f[].handle.isSome
   doAssert(
     blockNumber >= f[].blockIdx.startNumber and blockNumber <= f[].blockIdx.endNumber,
@@ -497,9 +486,7 @@ proc getBlockBody*(f: EraEFile, blockNumber: uint64): Result[BlockBody, string] 
   ?getNextBlockBody(f, res)
   ok(move(res))
 
-proc getReceipts*(
-    f: EraEFile, blockNumber: uint64
-): Result[seq[StoredReceipt], string] =
+proc getReceipts*(f: EreFile, blockNumber: uint64): Result[seq[StoredReceipt], string] =
   doAssert not isNil(f) and f[].handle.isSome
   doAssert(
     blockNumber >= f[].blockIdx.startNumber and blockNumber <= f[].blockIdx.endNumber,
@@ -515,7 +502,7 @@ proc getReceipts*(
   ?getNextReceipts(f, res)
   ok(move(res))
 
-proc getProof*(f: EraEFile, blockNumber: uint64): Result[Proof, string] =
+proc getProof*(f: EreFile, blockNumber: uint64): Result[Proof, string] =
   doAssert not isNil(f) and f[].handle.isSome
   doAssert(
     blockNumber >= f[].blockIdx.startNumber and blockNumber <= f[].blockIdx.endNumber,
@@ -531,7 +518,7 @@ proc getProof*(f: EraEFile, blockNumber: uint64): Result[Proof, string] =
   ?getNextProof(f, res)
   ok(move(res))
 
-proc getTotalDifficulty*(f: EraEFile, blockNumber: uint64): Result[UInt256, string] =
+proc getTotalDifficulty*(f: EreFile, blockNumber: uint64): Result[UInt256, string] =
   doAssert not isNil(f) and f[].handle.isSome
   doAssert(
     blockNumber >= f[].blockIdx.startNumber and blockNumber <= f[].blockIdx.endNumber,
@@ -545,7 +532,7 @@ proc getTotalDifficulty*(f: EraEFile, blockNumber: uint64): Result[UInt256, stri
 
   getNextTotalDifficulty(f)
 
-proc getEthBlock*(f: EraEFile, blockNumber: uint64): Result[Block, string] =
+proc getEthBlock*(f: EreFile, blockNumber: uint64): Result[Block, string] =
   var res: Block
   # var body: BlockBody
   res.header = ?getBlockHeader(f, blockNumber)
@@ -558,7 +545,7 @@ proc getEthBlock*(f: EraEFile, blockNumber: uint64): Result[Block, string] =
   ok(move(res))
 
 # proc getBlockTuple*(
-#     f: EraEFile, blockNumber: uint64, res: var BlockTuple
+#     f: EreFile, blockNumber: uint64, res: var BlockTuple
 # ): Result[void, string] =
 #   ?getBlockHeader(f, res.header)
 #   ?getBlockBody(f, res.body)
@@ -568,13 +555,13 @@ proc getEthBlock*(f: EraEFile, blockNumber: uint64): Result[Block, string] =
 
 #   ok()
 
-proc getAccumulatorRoot*(f: EraEFile): Result[Digest, string] =
+proc getAccumulatorRoot*(f: EreFile): Result[Digest, string] =
   ## Only for pre merge eras and actual merge era
-  # Get position of BlockIndex
+  # Get position of DynamicBlockIndex
   ?f[].handle.get().setFilePos(0, SeekPosition.SeekEnd).mapErr(ioErrorMsg)
-  let blockIdxPos = ?f[].handle.get().findBlockIndexStartOffset()
+  let blockIdxPos = ?f[].handle.get().findDynamicBlockIndexStartOffset()
 
-  # Accumulator root is 40 bytes before the BlockIndex
+  # Accumulator root is 40 bytes before the DynamicBlockIndex
   let accumulatorRootPos = blockIdxPos - 40 # 8 + 32
   ?f[].handle.get().setFilePos(accumulatorRootPos, SeekPosition.SeekCurrent).mapErr(
     ioErrorMsg
@@ -591,7 +578,7 @@ proc getAccumulatorRoot*(f: EraEFile): Result[Digest, string] =
 
   ok(Digest(data: array[32, byte].initCopyFrom(bytes)))
 
-proc buildAccumulator*(f: EraEFile): Result[EpochRecordCached, string] =
+proc buildAccumulator*(f: EreFile): Result[EpochRecordCached, string] =
   ## Only for pre merge eras and actual merge era.
   let
     startNumber = f.blockIdx.startNumber
@@ -648,7 +635,7 @@ proc verifyProof*(
   ok()
 
 proc verify*(
-    f: EraEFile, v: HeaderVerifier, cfg: RuntimeConfig
+    f: EreFile, v: HeaderVerifier, cfg: RuntimeConfig
 ): Result[Opt[Digest], string] =
   let
     startNumber = f.blockIdx.startNumber
@@ -680,7 +667,7 @@ proc verify*(
     if header.receiptsRoot != calcReceiptsRoot(receipts):
       return err("Invalid receipts root")
 
-    if f.blockIdx.hasProofs:
+    if not f.blockIdx.noProofs:
       let proof = ?getProof(f, blockNumber)
       ?verifyProof(proof, header, v, cfg)
 
@@ -702,7 +689,7 @@ proc verify*(
 
   ok(Opt.none(Digest))
 
-iterator era1BlockHeaders*(f: EraEFile): headers.Header =
+iterator era1BlockHeaders*(f: EreFile): headers.Header =
   let
     startNumber = f.blockIdx.startNumber
     endNumber = f.blockIdx.endNumber()
@@ -710,7 +697,7 @@ iterator era1BlockHeaders*(f: EraEFile): headers.Header =
   for blockNumber in startNumber .. endNumber:
     yield f.getBlockHeader(blockNumber).expect("Header can be read")
 
-# iterator era1BlockTuples*(f: EraEFile): BlockTuple =
+# iterator era1BlockTuples*(f: EreFile): BlockTuple =
 #   let
 #     startNumber = f.blockIdx.startNumber
 #     endNumber = f.blockIdx.endNumber()
