@@ -46,9 +46,12 @@ type
 # ------------------------------------------------------------------------------
 
 proc append(w: var RlpWriter, b: BlockRef) =
-  let fullBlk = b.txFrame.getEthBlock(b.hash).expect("block body must be in txFrame during serialize")
+  # Only the header is persisted in the block-index entry.  The full block
+  # body lives in the per-block txFrame blob (written separately under
+  # txFrameKey(b.hash)) and is no longer needed at deserialize time since
+  # we restore the txFrame directly instead of re-executing the block.
   w.startList(3)
-  w.append(fullBlk)
+  w.append(b.header)
   w.append(b.hash)
   let parentIndex = if b.parent.isNil: 0'u
                     else: b.parent.index + 1'u
@@ -80,9 +83,7 @@ proc append(w: var RlpWriter, fc: ForkedChainRef) =
 proc read(rlp: var Rlp, T: type BlockRef): T {.raises: [RlpError].} =
   rlp.tryEnterList()
   result = T()
-  var blk: Block
-  rlp.read(blk)           # Parse full block from RLP (old format)
-  result.header = blk.header  # Store only header in BlockRef
+  rlp.read(result.header)
   rlp.read(result.hash)
   rlp.read(result.index)
 
