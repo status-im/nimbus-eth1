@@ -352,8 +352,6 @@ func len*(s: var LruCache): int =
 func capacity*(s: var LruCache): int =
   result = s.capacity
 
-# TODO: use atomics for used and capacity
-
 func `capacity=`*(s: var LruCache, c: int) =
   ## Update the capacity (but don't reallocate the currenty cache). If the
   ## capacity is smaller than the currently allocated size, it will be ignored.
@@ -482,4 +480,13 @@ func put*(s: var LruCache, key: auto, value: auto) =
     for _ in s.putWithEvicted(key, value):
       discard
 
-# TODO: free memory on shutdown
+proc dispose*(s: var LruCache) =
+  if s.nodesLen > 0:
+    deallocShared(s.nodes)
+    s.nodes = nil
+    s.nodesLen = 0
+
+  if s.bucketsLen > 0:
+    deallocShared(s.buckets)
+    s.buckets = nil
+    s.bucketsLen = 0

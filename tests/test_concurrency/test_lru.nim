@@ -270,3 +270,14 @@ suite "LruCache Tests":
 
     check:
       toSeq(lru.keys()) == @[5, 4, 3, 2, 1]
+
+  test "dispose":
+    block:
+      var lru = LruCache[int, int].init(2)
+      lru.dispose()
+
+    block:
+      var lru = LruCache[int, int].init(2)
+      lru.put(10, 10)
+      lru.put(20, 20)
+      lru.dispose()
