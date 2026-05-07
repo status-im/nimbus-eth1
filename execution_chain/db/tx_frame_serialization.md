@@ -194,16 +194,3 @@ Practical range:
 - Dense DeFi block: 1–3 MB
 
 A cache window of 64 recent frames requires roughly **40 MB** total KVT storage.
-
----
-
-## Relevant Source Files
-
-| File | Role |
-|------|------|
-| `execution_chain/db/storage_types.nim` | `DBKeyKind.txFrame`, `txFrameKey()` |
-| `execution_chain/db/aristo/aristo_tx_blobify.nim` | `blobifyTxFrame`, `deblobifyTxFrame`, `TxFrameData` |
-| `execution_chain/db/kvt/kvt_tx_blobify.nim` | `blobifyKvtTxFrame`, `deblobifyKvtTxFrame` |
-| `execution_chain/db/tx_frame_db.nim` | `storeTxFrame`, `loadTxFrame`, `deleteTxFrame` |
-| `execution_chain/db/aristo/aristo_blobify.nim` | Underlying vertex/key codec (reused) |
-| `tests/test_tx_frame_blobify.nim` | Round-trip and error-path tests |
