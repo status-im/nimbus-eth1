@@ -239,7 +239,7 @@ func gasCost*(tx: Transaction): UInt256 =
 func validateTxBasic*(
     com:      CommonRef,
     tx:       Transaction;     ## tx to validate
-    gasLimit: GasInt;
+    intrinsic:IntrinsicGas;
     fork:     EVMFork,
     validateFork: bool = true): Result[void, string] =
 
@@ -269,7 +269,6 @@ func validateTxBasic*(
 
   if fork >= FkAmsterdam:
     let
-      intrinsic = tx.intrinsicGas(fork, gasLimit)
       intrinsicGas = intrinsic.regular + intrinsic.state
       minGasLimit = max(intrinsicGas, intrinsic.floorDataGas)
       minRegularGasLimit = max(intrinsic.regular, intrinsic.floorDataGas)
@@ -285,7 +284,6 @@ func validateTxBasic*(
       return err("tx.gasLimit " & $tx.gasLimit & " exceeds maximum " & $TX_GAS_LIMIT)
 
     let
-      intrinsic = tx.intrinsicGas(fork, gasLimit)
       minGasLimit = max(intrinsic.regular, intrinsic.floorDataGas)
 
     if tx.gasLimit < minGasLimit:
@@ -354,8 +352,6 @@ proc validateTransaction*(
     excessBlobGas: uint64;     ## excessBlobGas from parent block header
     com:      CommonRef,
     fork:     EVMFork): Result[void, string] =
-
-  ? validateTxBasic(com, tx, gasLimit, fork)
 
   let
     balance = ledger.getBalance(sender)

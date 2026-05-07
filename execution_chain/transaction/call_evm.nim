@@ -20,7 +20,9 @@ import
 export
   call_common
 
-proc callParamsForTx(tx: Transaction, sender: Address, vmState: BaseVMState, baseFee: GasInt): CallParams =
+proc callParamsForTx(tx: Transaction, sender: Address,
+                     vmState: BaseVMState, baseFee: GasInt,
+                     intrinsic: IntrinsicGas): CallParams =
   # Is there a nice idiom for this kind of thing? Should I
   # just be writing this as a bunch of assignment statements?
   result = CallParams(
@@ -31,28 +33,8 @@ proc callParamsForTx(tx: Transaction, sender: Address, vmState: BaseVMState, bas
     to:           tx.destination,
     isCreate:     tx.contractCreation,
     value:        tx.value,
-    input:        tx.payload
-  )
-  if tx.txType > TxLegacy:
-    assign(result.accessList, tx.accessList)
-
-  if tx.txType == TxEip4844:
-    assign(result.versionedHashes, tx.versionedHashes)
-
-  if tx.txType == TxEip7702:
-    assign(result.authorizationList, tx.authorizationList)
-
-proc callParamsForTest(tx: Transaction, sender: Address, vmState: BaseVMState): CallParams =
-  result = CallParams(
-    vmState:      vmState,
-    gasPrice:     tx.gasPrice,
-    gasLimit:     tx.gasLimit,
-    sender:       sender,
-    to:           tx.destination,
-    isCreate:     tx.contractCreation,
-    value:        tx.value,
     input:        tx.payload,
-    sysCall:      true,
+    intrinsic:    intrinsic
   )
   if tx.txType > TxLegacy:
     assign(result.accessList, tx.accessList)
@@ -65,13 +47,17 @@ proc callParamsForTest(tx: Transaction, sender: Address, vmState: BaseVMState): 
 
 proc txCallEvm*(tx: Transaction,
                 sender: Address,
-                vmState: BaseVMState, baseFee: GasInt): LogResult =
+                vmState: BaseVMState,
+                baseFee: GasInt,
+                intrinsic: IntrinsicGas): LogResult =
   let
-    call = callParamsForTx(tx, sender, vmState, baseFee)
+    call = callParamsForTx(tx, sender, vmState, baseFee, intrinsic)
   runComputation(call, LogResult)
 
 proc testCallEvm*(tx: Transaction,
                   sender: Address,
                   vmState: BaseVMState): DebugCallResult =
-  let call = callParamsForTest(tx, sender, vmState)
+  let 
+    baseFee = vmState.blockCtx.baseFeePerGas.get(0.u256).truncate(GasInt)
+    call = callParamsForTx(tx, sender, vmState, baseFee, IntrinsicGas())
   runComputation(call, DebugCallResult)
