@@ -79,12 +79,8 @@ type
       stoID*: StorageID
 
   CachedStoLeaf* = object
-    case empty*: bool
-    of true:
-      discard
-    of false:
-      pfx*: NibblesBuf
-      stoData*: UInt256
+    pfx*: NibblesBuf
+    stoData*: UInt256
 
   NodeRef* = ref object of RootRef
     ## Combined record for a *traditional* ``Merkle Patricia Tree` node merged
@@ -142,38 +138,32 @@ template init*(
 
 template init*(
     T: type CachedStoLeaf, pfxp: NibblesBuf, stoDatap: UInt256): T =
-  T(empty: false, pfx: pfxp, stoData: stoDatap)
-
-template initEmpty(T: type CachedAccLeaf): T =
-  T(empty: true)
-
-template initEmpty(T: type CachedStoLeaf): T =
-  T(empty: true)
+  T(pfx: pfxp, stoData: stoDatap)
 
 const
-  emptyCachedAccLeaf* = CachedAccLeaf.initEmpty()
-  emptyCachedStoLeaf* = CachedStoLeaf.initEmpty()
+  emptyCachedAccLeaf* = CachedAccLeaf(empty: true)
+  emptyCachedStoLeaf* = CachedStoLeaf(stoData: 0.u256)
 
-template isEmpty*(c: CachedAccLeaf | CachedStoLeaf): bool =
+template isEmpty*(c: CachedAccLeaf): bool =
   c.empty
 
+template isEmpty*(c: CachedStoLeaf): bool =
+  c.stoData.isZero()
+
 func toLeaf*(c: CachedAccLeaf): AccLeafRef =
-  if c.empty: 
+  if c.isEmpty(): 
     AccLeafRef(nil) 
   else: 
     AccLeafRef.init(c.pfx, c.account, c.stoID)
 
 func toLeaf*(c: CachedStoLeaf): StoLeafRef =
-  if c.empty: 
+  if c.isEmpty(): 
     StoLeafRef(nil) 
   else: 
     StoLeafRef.init(c.pfx, c.stoData)
 
 func toStoData*(c: CachedStoLeaf): UInt256 =
-  if c.empty: 
-    0'u256
-  else:
-    c.stoData
+  c.stoData
 
 func toStoData*(v: StoLeafRef): UInt256 =
   if v.isNil():

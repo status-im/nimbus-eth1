@@ -45,27 +45,6 @@ proc callParamsForTx(tx: Transaction, sender: Address,
   if tx.txType == TxEip7702:
     assign(result.authorizationList, tx.authorizationList)
 
-proc callParamsForTest(tx: Transaction, sender: Address, vmState: BaseVMState): CallParams =
-  result = CallParams(
-    vmState:      vmState,
-    gasPrice:     tx.gasPrice,
-    gasLimit:     tx.gasLimit,
-    sender:       sender,
-    to:           tx.destination,
-    isCreate:     tx.contractCreation,
-    value:        tx.value,
-    input:        tx.payload,
-    sysCall:      true,
-  )
-  if tx.txType > TxLegacy:
-    assign(result.accessList, tx.accessList)
-
-  if tx.txType == TxEip4844:
-    assign(result.versionedHashes, tx.versionedHashes)
-
-  if tx.txType == TxEip7702:
-    assign(result.authorizationList, tx.authorizationList)
-
 proc txCallEvm*(tx: Transaction,
                 sender: Address,
                 vmState: BaseVMState,
@@ -78,5 +57,7 @@ proc txCallEvm*(tx: Transaction,
 proc testCallEvm*(tx: Transaction,
                   sender: Address,
                   vmState: BaseVMState): DebugCallResult =
-  let call = callParamsForTest(tx, sender, vmState)
+  let
+    baseFee = vmState.blockCtx.baseFeePerGas.get(0.u256).truncate(GasInt)
+    call = callParamsForTx(tx, sender, vmState, baseFee, IntrinsicGas())
   runComputation(call, DebugCallResult)

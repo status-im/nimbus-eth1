@@ -297,9 +297,8 @@ func preExecComputation*(c: Computation) =
     c.msg.contractAddress == CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS
   ):
     # EIP-7002 and EIP-7215 dicates that the code must be present, or else block is invalid
-    if c.code.bytes.len <= 0:
+    if c.code.len <= 0:
       c.setError("No code found for withdrawal or consolidation requests contract")
-
 
 # ------------------------------------------------------------------------------
 # End

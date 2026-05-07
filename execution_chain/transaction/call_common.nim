@@ -25,13 +25,6 @@ export
   call_types
 
 type
-  TransactionHost = ref object
-    vmState:         BaseVMState
-    computation:     Computation
-    floorDataGas:    GasInt
-    intrinsicRegularGas: GasInt
-    intrinsicStateGas: GasInt
-
   GasUsed = object
     evmGasUsed: GasInt
     txGasUsed: GasInt
@@ -71,9 +64,11 @@ proc initialAccessListEIP2929(call: CallParams) =
       for key in account.storageKeys:
         ledger.accessList(account.address, key.to(UInt256))
 
-proc preExecComputation(vmState: BaseVMState, call: CallParams): int64 =
+proc preExecComputation(call: CallParams): int64 =
   var gasRefund = 0'i64
-  let ledger = vmState.ledger
+  let
+    vmState = call.vmState
+    ledger = vmState.ledger
 
   if not call.isCreate:
     if vmState.balTrackerEnabled:
@@ -133,7 +128,7 @@ proc preExecComputation(vmState: BaseVMState, call: CallParams): int64 =
 
   gasRefund
 
-proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
+proc setupComputation*(call: CallParams, gasRefund: int64, keepStack: bool): Computation =
   let
     vmState = call.vmState
     fork = vmState.fork
@@ -150,37 +145,24 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
 
   let
     isAmsterdamOrLater = fork >= FkAmsterdam
-    intrinsic = call.intrinsic
-    gasRefund = if call.sysCall: 0'i64
-                else: preExecComputation(vmState, call)
-    intrinsicGas = intrinsic.regular + intrinsic.state
+    intrinsicGas = call.intrinsic.regular + call.intrinsic.state
 
     # Prevent underflow which can occur when gasLimit is less than intrinsicGas.
     # Note that this is only a short term fix. In the longer term we need to
     # implement validation on all fields in the Message before executing in the EVM.
     # TODO: Implement full validation on all fields. See related issue: https://github.com/status-im/nimbus-eth1/issues/1524
     executionGas = if call.gasLimit < intrinsicGas: 0.GasInt else: call.gasLimit - intrinsicGas
-    regularGasBudget = TX_GAS_LIMIT - intrinsic.regular
+    regularGasBudget = TX_GAS_LIMIT - call.intrinsic.regular
 
   var
     gasLeft = executionGas
-    intrinsicStateGas = 0.GasInt
     stateGas = 0.GasInt
 
   if isAmsterdamOrLater:
     gasLeft = min(regularGasBudget, executionGas)
-    intrinsicStateGas = intrinsic.state
     stateGas = executionGas - gasLeft + gasRefund.GasInt
 
   let
-    host = TransactionHost(
-      vmState: vmState,
-      floorDataGas: intrinsic.floorDataGas,
-      intrinsicRegularGas: intrinsic.regular,
-      intrinsicStateGas: intrinsicStateGas,
-      # All other defaults in `TransactionHost` are fine.
-    )
-
     msg = Message(
       kind:            if call.isCreate:
                          CallKind.Create
@@ -197,39 +179,41 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
     )
 
     code = if call.isCreate:
-             msg.contractAddress = generateContractAddress(call.vmState, CallKind.Create, call.sender)
+             msg.contractAddress = generateContractAddress(vmState, CallKind.Create, call.sender)
              CodeBytesRef.init(call.input)
            else:
              msg.data = call.input
-             getCallCode(host.vmState, msg.codeAddress)
+             getCallCode(vmState, msg.codeAddress)
 
-  host.computation = newComputation(vmState, keepStack, msg, code)
+    computation = newComputation(vmState, keepStack, msg, code)
+
   if not isAmsterdamOrLater:
-    host.computation.addRefund(gasRefund)
-  vmState.captureStart(host.computation, call.sender, call.to,
+    computation.addRefund(gasRefund)
+  vmState.captureStart(computation, call.sender, call.to,
                        call.isCreate, call.input,
                        call.gasLimit, call.value)
 
-  return host
+  return computation
 
 # FIXME-awkwardFactoring: the factoring out of the pre and
 # post parts feels awkward to me, but for now I'd really like
 # not to have too much duplicated code between sync and async.
 # --Adam
 
-proc prepareToRunComputation(host: TransactionHost, call: CallParams) =
-  # Must come after `setupHost` for correct fork.
+proc prepareToRunComputation(c: Computation, call: CallParams) =
+  # Must come after `setupComputation` for correct fork.
   initialAccessListEIP2929(call)
 
   # Charge for gas.
   let
-    vmState = host.vmState
+    vmState = c.vmState
     fork = vmState.fork
 
   vmState.mutateLedger:
+    let gasFee = call.gasLimit.u256 * call.gasPrice.u256
     if vmState.balTrackerEnabled:
-      vmState.balTracker.trackSubBalanceChange(call.sender, call.gasLimit.u256 * call.gasPrice.u256)
-    ledger.subBalance(call.sender, call.gasLimit.u256 * call.gasPrice.u256)
+      vmState.balTracker.trackSubBalanceChange(call.sender, gasFee)
+    ledger.subBalance(call.sender, gasFee)
 
     # EIP-4844
     if fork >= FkCancun:
@@ -253,11 +237,10 @@ proc calcSelfDestructRefundStateGas(c: Computation) =
 
   c.gasMeter.selfDestructRefundStateGas(refundSum.GasInt)
 
-proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): GasUsed =
+proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams): GasUsed =
   let
-    c = host.computation
-    vmState = host.vmState
-    fork = host.vmState.fork
+    vmState = c.vmState
+    fork = c.vmState.fork
 
   # EIP-3529: Reduction in refunds
   let MaxRefundQuotient = if fork >= FkLondon:
@@ -288,13 +271,15 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
     blockStateGasUsed = 0.GasInt
 
   if fork >= FkAmsterdam:
-    txGasUsed = max(txGasUsedAfterRefund, host.floorDataGas)
-    let txRegularGas = host.intrinsicRegularGas + c.gasMeter.regularGasUsed
-    blockRegularGasUsed = max(txRegularGas, host.floorDataGas)
-    blockStateGasUsed = host.intrinsicStateGas + c.gasMeter.stateGasUsed
+    txGasUsed = max(txGasUsedAfterRefund, call.intrinsic.floorDataGas)
+    let
+      txRegularGas = call.intrinsic.regular + c.gasMeter.regularGasUsed
+      intrinsicStateGas = call.intrinsic.state
+    blockRegularGasUsed = max(txRegularGas, call.intrinsic.floorDataGas)
+    blockStateGasUsed = intrinsicStateGas + c.gasMeter.stateGasUsed
     debug "EIP-8037 gas accounting",
-      intrinsicRegular = host.intrinsicRegularGas,
-      intrinsicState = host.intrinsicStateGas,
+      intrinsicRegular = call.intrinsic.regular,
+      intrinsicState = intrinsicStateGas,
       regularGasUsed = c.gasMeter.regularGasUsed,
       stateGasUsed = c.gasMeter.stateGasUsed,
       gasRemaining = c.gasMeter.gasRemaining,
@@ -303,9 +288,9 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
       blockRegularGasUsed = blockRegularGasUsed,
       blockStateGasUsed = blockStateGasUsed,
       txGasUsed = txGasUsed,
-      floorDataGas = host.floorDataGas
+      floorDataGas = call.intrinsic.floorDataGas
   elif fork >= FkPrague:
-    txGasUsed = max(txGasUsedAfterRefund, host.floorDataGas)
+    txGasUsed = max(txGasUsedAfterRefund, call.intrinsic.floorDataGas)
     blockRegularGasUsed = txGasUsed
 
   # Refund for unused gas.
@@ -324,25 +309,13 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
     blockStateGasUsed: blockStateGasUsed,
   )
 
-proc sysCallGasUsed(host: TransactionHost, call: CallParams): GasUsed =
-  let
-    c = host.computation
-    txGasUsed = call.gasLimit - c.gasMeter.gasRemaining - c.gasMeter.stateGasLeft
-  GasUsed(
-    evmGasUsed: c.msg.gas - c.gasMeter.gasRemaining - c.gasMeter.stateGasLeft,
-    txGasUsed: txGasUsed,
-    blockRegularGasUsed: txGasUsed,
-  )
-
 proc finishRunningComputation(
-    host: TransactionHost, call: CallParams, T: type): T =
+    c: Computation, call: CallParams, T: type): T =
   let
-    c = host.computation
-    gasUsed = if call.sysCall: sysCallGasUsed(host, call)
-              else: calculateAndPossiblyRefundGas(host, call)
+    gasUsed = calculateAndPossiblyRefundGas(c, call)
 
   # evm gas used without intrinsic gas
-  host.vmState.captureEnd(c, c.output, gasUsed.evmGasUsed, c.errorOpt)
+  c.vmState.captureEnd(c, c.output, gasUsed.evmGasUsed, c.errorOpt)
 
   when T is CallResult|DebugCallResult:
     # Collecting the result can be unnecessarily expensive when (re)-processing
@@ -359,44 +332,24 @@ proc finishRunningComputation(
       result.memory = move(c.memory)
       if c.isSuccess:
         result.logEntries = move(c.logEntries)
-  elif T is GasInt:
-    result = gasUsed.txGasUsed
   elif T is LogResult:
     result.gasUsed = gasUsed.txGasUsed
     result.blockRegularGasUsed = gasUsed.blockRegularGasUsed
     result.blockStateGasUsed = gasUsed.blockStateGasUsed
     if c.isSuccess:
       result.logEntries = move(c.logEntries)
-  elif T is string:
-    if c.isError:
-      result = c.error.info
-  elif T is seq[byte]:
-    result = move(c.output)
-  elif T is OutputResult:
-    if c.isError:
-      result.error = c.error.info
-    result.output = move(c.output)
-  elif T is void:
-    discard
   else:
     {.error: "Unknown computation output".}
 
 proc runComputation*(call: CallParams, T: type): T =
-  let host = setupHost(call, keepStack = T is DebugCallResult)
-  if not call.sysCall:
-    prepareToRunComputation(host, call)
+  let
+    gasRefund = preExecComputation(call)
+    c = setupComputation(call, gasRefund, keepStack = T is DebugCallResult)
 
+  prepareToRunComputation(c, call)
   # Pre-execution sanity checks
-  host.computation.preExecComputation()
-  if host.computation.isError:
-    when T is void:
-      finishRunningComputation(host, call, T)
-      return
-    else:
-      return finishRunningComputation(host, call, T)
-
-  host.computation.execCallOrCreate()
-  if not call.sysCall:
-    host.computation.postExecComputation()
-
-  finishRunningComputation(host, call, T)
+  c.preExecComputation()
+  if c.isSuccess:
+    c.execCallOrCreate()
+    c.postExecComputation()
+  finishRunningComputation(c, call, T)
