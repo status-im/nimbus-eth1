@@ -16,6 +16,7 @@ import
   ../execution_chain/common,
   ../execution_chain/conf,
   ../execution_chain/core/chain/forked_chain,
+  ../execution_chain/core/chain/forked_chain/chain_serialize,
   ../execution_chain/core/tx_pool,
   ../execution_chain/core/pooled_txs,
   ../execution_chain/transaction,
@@ -246,6 +247,134 @@ suite "TxFrame blobify round-trip":
     check txFrame2.aTx.accLeaves.len > 0
 
     restored.dispose()
+
+  test "forked-chain serialize/deserialize uses txFrame blobs":
+    let env = setupEnv()
+    let
+      com   = env.com
+      chain = env.chain
+      xp    = env.xp
+      mx    = env.sender
+      acc   = mx.getAccount(0)
+
+    xp.feeRecipient = feeRecipient
+    xp.prevRandao   = default(Bytes32)
+    xp.timestamp    = EthTime.now()
+
+    # --- blk1: 3 transactions ---
+    for i in 0..<3:
+      let ptx = mx.makeTx(
+        BaseTx(
+          gasLimit : 75000,
+          recipient: Opt.some(recipient),
+          amount   : 100.u256),
+        acc, i.AccountNonce)
+      check xp.addTx(ptx).isOk
+
+    let bundle1 = xp.assembleBlock().get
+    let blk1 = bundle1.blk
+    check blk1.transactions.len == 3
+    check (waitFor chain.importBlock(blk1)).isOk
+    xp.removeNewBlockTxs(blk1)
+
+    # --- blk2: 2 more transactions ---
+    for i in 3..<5:
+      let ptx = mx.makeTx(
+        BaseTx(
+          gasLimit : 75000,
+          recipient: Opt.some(recipient),
+          amount   : 100.u256),
+        acc, i.AccountNonce)
+      check xp.addTx(ptx).isOk
+
+    xp.timestamp = xp.timestamp + 1
+    let bundle2 = xp.assembleBlock().get
+    let blk2 = bundle2.blk
+    check blk2.transactions.len == 2
+    check (waitFor chain.importBlock(blk2)).isOk
+    xp.removeNewBlockTxs(blk2)
+
+    let
+      blk1Hash = blk1.header.computeBlockHash
+      blk2Hash = blk2.header.computeBlockHash
+
+    # --- Capture pre-state from the chain's per-block txFrames ---
+    let
+      txFrame1 = chain.txFrame(blk1Hash)
+      txFrame2 = chain.txFrame(blk2Hash)
+    let
+      preBlk1STabLen      = txFrame1.aTx.sTab.len
+      preBlk1AccLeavesLen = txFrame1.aTx.accLeaves.len
+      preBlk1VTop         = txFrame1.aTx.vTop
+      preBlk1KvtLen       = txFrame1.kTx.sTab.len
+      preBlk1Recipient    = LedgerRef.init(txFrame1).getBalance(recipient)
+      preBlk1Sender       = LedgerRef.init(txFrame1).getBalance(acc.address)
+      preBlk2Recipient    = LedgerRef.init(txFrame2).getBalance(recipient)
+      preChainBlocks      = chain.hashToBlock.len
+      preChainHeads       = chain.heads.len
+    check preBlk1Recipient == 300.u256
+    check preBlk2Recipient == 500.u256
+    check preBlk1STabLen > 0
+    check preBlk1KvtLen   > 0
+
+    # --- Serialize + persist ---
+    let serializeFrame = chain.baseTxFrame
+    check chain.serialize(serializeFrame).isOk
+    serializeFrame.checkpoint(chain.base.header.number, skipSnapshot = true)
+    com.db.persist(serializeFrame)
+
+    # --- New ForkedChainRef on the same com; deserialize from disk ---
+    var fc = ForkedChainRef.init(com)
+    let dRc = fc.deserialize()
+    check dRc.isOk
+
+    # --- High-level shape matches ---
+    check fc.hashToBlock.len == preChainBlocks
+    check fc.heads.len       == preChainHeads
+
+    # --- Per-block field equality proves no-replay path ---
+    # If replay() were still being used, freshly-built deltas would yield
+    # different sTab/vTop than the originals. Byte-for-byte equality here
+    # is only achievable by restoring the persisted blob.
+    let restoredBlk1 = fc.txFrame(blk1Hash)
+    check restoredBlk1.aTx.sTab.len      == preBlk1STabLen
+    check restoredBlk1.aTx.accLeaves.len == preBlk1AccLeavesLen
+    check restoredBlk1.aTx.vTop          == preBlk1VTop
+    check restoredBlk1.kTx.sTab.len      == preBlk1KvtLen
+
+    # --- Functional reads on the restored chain ---
+    check LedgerRef.init(restoredBlk1).getBalance(recipient) == preBlk1Recipient
+    check LedgerRef.init(restoredBlk1).getBalance(acc.address) == preBlk1Sender
+    check restoredBlk1.getBlockHeader(blk1Hash).isOk
+
+    let restoredBlk2 = fc.txFrame(blk2Hash)
+    check LedgerRef.init(restoredBlk2).getBalance(recipient) == preBlk2Recipient
+    check restoredBlk2.getBlockHeader(blk2Hash).isOk
+
+    # --- Continuation: import blk3 with two more txs onto the
+    # deserialized chain. Proves the restored frames remain writable. ---
+    let xp2 = TxPoolRef.new(fc)
+    xp2.feeRecipient = feeRecipient
+    xp2.prevRandao   = default(Bytes32)
+    xp2.timestamp    = xp.timestamp + 1
+    for i in 5..<7:
+      let ptx = mx.makeTx(
+        BaseTx(
+          gasLimit : 75000,
+          recipient: Opt.some(recipient),
+          amount   : 100.u256),
+        acc, i.AccountNonce)
+      check xp2.addTx(ptx).isOk
+
+    let bundle3 = xp2.assembleBlock().get
+    let blk3 = bundle3.blk
+    check blk3.transactions.len == 2
+    check (waitFor fc.importBlock(blk3)).isOk
+
+    let blk3Hash = blk3.header.computeBlockHash
+    let restoredBlk3 = fc.txFrame(blk3Hash)
+    check LedgerRef.init(restoredBlk3).getBalance(recipient) ==
+      preBlk2Recipient + 200.u256
 
 when isMainModule:
   discard

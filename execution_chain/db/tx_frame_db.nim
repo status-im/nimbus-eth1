@@ -40,15 +40,16 @@ export base, base_desc, results
 # ------------------------------------------------------------------------------
 
 proc storeTxFrame*(
-    db: CoreDbTxRef;
+    target: CoreDbTxRef;
+    src: CoreDbTxRef;
     blockHash: Hash32;
       ): CoreDbRc[void] =
-  ## Serialise both the Aristo and KVT deltas of `db` and write the result
-  ## to KVT under `txFrameKey(blockHash)`.  The entry is written into the
-  ## same frame so it is persisted together with the block data.
+  ## Serialise the Aristo and KVT deltas of `src` and write the result to
+  ## KVT under `txFrameKey(blockHash)` into `target`.  Used by the chain
+  ## persistence layer to write each block's frame into the base frame.
   let
-    aristoBlob = blobifyTxFrame(db.aTx)
-    kvtBlob    = blobifyKvtTxFrame(db.kTx)
+    aristoBlob = blobifyTxFrame(src.aTx)
+    kvtBlob    = blobifyKvtTxFrame(src.kTx)
 
   var blob = newSeqOfCap[byte](8 + aristoBlob.len + kvtBlob.len)
   blob.add aristoBlob.len.uint32.toBytesBE
@@ -56,7 +57,16 @@ proc storeTxFrame*(
   blob.add kvtBlob.len.uint32.toBytesBE
   blob.add kvtBlob
 
-  db.put(txFrameKey(blockHash).toOpenArray, blob)
+  target.put(txFrameKey(blockHash).toOpenArray, blob)
+
+proc storeTxFrame*(
+    db: CoreDbTxRef;
+    blockHash: Hash32;
+      ): CoreDbRc[void] =
+  ## Serialise both the Aristo and KVT deltas of `db` and write the result
+  ## to KVT under `txFrameKey(blockHash)`.  The entry is written into the
+  ## same frame so it is persisted together with the block data.
+  storeTxFrame(db, db, blockHash)
 
 proc loadTxFrame*(
     db: CoreDbRef;
@@ -98,6 +108,53 @@ proc loadTxFrame*(
   let kData = kRc.value
 
   let frame  = db.txFrameBegin()
+  frame.aTx.sTab        = aData.sTab
+  frame.aTx.kMap        = aData.kMap
+  frame.aTx.accLeaves   = aData.accLeaves
+  frame.aTx.stoLeaves   = aData.stoLeaves
+  frame.aTx.vTop        = aData.vTop
+  frame.aTx.blockNumber = aData.blockNumber
+  frame.kTx.sTab        = kData
+
+  ok frame
+
+proc loadTxFrameAsChild*(
+    srcBase: CoreDbTxRef;
+    parent: CoreDbTxRef;
+    blockHash: Hash32;
+      ): CoreDbRc[CoreDbTxRef] =
+  ## Read the stored delta for `blockHash` from `srcBase`'s KVT and return
+  ## a new `CoreDbTxRef` rooted as a child of `parent`, with the stored
+  ## delta applied.  Used by the chain persistence layer to materialise
+  ## per-block frames in the chain hierarchy without re-executing blocks.
+  let blob = block:
+    let rc = srcBase.get(txFrameKey(blockHash).toOpenArray)
+    if rc.isErr:
+      return err(rc.error)
+    rc.value
+
+  if blob.len < 8:
+    return err(DataInvalid.toError("loadTxFrameAsChild: blob too short"))
+
+  let aLen = int(uint32.fromBytesBE(blob.toOpenArray(0, 3)))
+  if blob.len < 4 + aLen + 4:
+    return err(DataInvalid.toError("loadTxFrameAsChild: aristo region truncated"))
+  let kOff = 4 + aLen
+  let kLen = int(uint32.fromBytesBE(blob.toOpenArray(kOff, kOff + 3)))
+  if blob.len < kOff + 4 + kLen:
+    return err(DataInvalid.toError("loadTxFrameAsChild: kvt region truncated"))
+
+  let aRc = deblobifyTxFrame(blob.toOpenArray(4, 4 + aLen - 1))
+  if aRc.isErr:
+    return err(aRc.error.toError("loadTxFrameAsChild aristo"))
+  let aData = aRc.value
+
+  let kRc = deblobifyKvtTxFrame(blob.toOpenArray(kOff + 4, kOff + 4 + kLen - 1))
+  if kRc.isErr:
+    return err(kRc.error.toError("loadTxFrameAsChild kvt"))
+  let kData = kRc.value
+
+  let frame = parent.txFrameBegin()
   frame.aTx.sTab        = aData.sTab
   frame.aTx.kMap        = aData.kMap
   frame.aTx.accLeaves   = aData.accLeaves

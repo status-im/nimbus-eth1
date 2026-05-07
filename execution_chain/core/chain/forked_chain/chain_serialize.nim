@@ -15,10 +15,10 @@ import
   eth/common/blocks_rlp,
   ./chain_desc,
   ./chain_branch,
-  ./chain_private,
   ../../../db/core_db,
   ../../../db/fcu_db,
   ../../../db/storage_types,
+  ../../../db/tx_frame_db,
   ../../../utils/utils
 
 logScope:
@@ -122,49 +122,12 @@ proc getState(db: CoreDbTxRef): Opt[FcState] =
 
   err()
 
-proc replayBlock(fc: ForkedChainRef;
-                 parent: BlockRef,
-                 blk: BlockRef,
-                 fullBlk: Block): Result[void, string] =
-  let
-    parentFrame = parent.txFrame
-    txFrame = parentFrame.txFrameBegin()
-    blockAccessList = ?fc.baseTxFrame.getBlockAccessList(blk.hash)
-
-  # Set finalized to true in order to skip the stateroot check when replaying the
-  # block because the blocks should have already been checked previously during
-  # the initial block execution.
-  fc.processBlock(
-    parent,
-    txFrame,
-    fullBlk,
-    blockAccessList,
-    blk.hash,
-    finalized = true
-  ).isOkOr:
-    txFrame.dispose()
-    return err(error)
-
-  # After processing the block the BAL should now be stored in the txFrame in
-  # memory so we can delete the copy on disk
-  if blockAccessList.isSome():
-    fc.baseTxFrame.deleteBlockAccessList(blk.hash)
-
-  # Checkpoint creates a snapshot of ancestor changes in txFrame - it is an
-  # expensive operation, specially when creating a new branch (ie when blk
-  # is being applied to a block that is currently not a head).
-  txFrame.checkpoint(blk.header.number, skipSnapshot = false)
-
-  blk.txFrame = txFrame
-
-  ok()
-
-proc replayBranch(fc: ForkedChainRef;
-    parent: BlockRef;
-    head: BlockRef;
-    bodies: Table[Hash32, Block];
-    ): Result[void, string] =
-
+proc loadBranchTxFrames(parent: BlockRef;
+                       head: BlockRef;
+                       srcBase: CoreDbTxRef): Result[void, string] =
+  ## Walk the branch from `parent` (exclusive, txFrame already set) up to
+  ## `head` (inclusive), materialising each block's txFrame from its
+  ## persisted blob as a child of the previous frame.
   var blocks = newSeqOfCap[BlockRef](head.number - parent.number)
   for it in ancestors(head):
     if it.number > parent.number:
@@ -172,22 +135,21 @@ proc replayBranch(fc: ForkedChainRef;
     else:
       break
 
-  var parent = parent
+  var p = parent
   for i in countdown(blocks.len-1, 0):
-    bodies.withValue(blocks[i].hash, fullBlk):
-      ?fc.replayBlock(parent, blocks[i], fullBlk)
-    do:
-      return err("block body not found for hash: " & $blocks[i].hash)
-    parent = blocks[i]
+    let b = blocks[i]
+    let frame = srcBase.loadTxFrameAsChild(p.txFrame, b.hash).valueOr:
+      return err($error)
+    b.txFrame = frame
+    p = b
 
   ok()
 
-proc replay(fc: ForkedChainRef; bodies: Table[Hash32, Block]): Result[void, string] =
+proc loadAllTxFrames(fc: ForkedChainRef): Result[void, string] =
   # Should have no parent
   doAssert fc.base.parent.isNil
 
-  # Receipts for base block are loaded from database
-  # see `receiptsByBlockHash`
+  # Base block shares its txFrame with the on-disk base
   fc.base.txFrame = fc.baseTxFrame
 
   # Base block always have finalized marker
@@ -196,7 +158,7 @@ proc replay(fc: ForkedChainRef; bodies: Table[Hash32, Block]): Result[void, stri
   for head in fc.heads:
     for it in ancestors(head):
       if it.txFrame.isNil.not:
-        ?fc.replayBranch(it, head, bodies)
+        ?loadBranchTxFrames(it, head, fc.baseTxFrame)
         break
 
   ok()
@@ -234,11 +196,11 @@ proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbEr
 
   for b in fc.hashToBlock.values:
     ?txFrame.put(blockIndexKey(b.index), rlp.encode(b))
-    # Move the BAL from the block txFrame into the target (base) txFrame
-    let bal = b.txFrame.getBlockAccessList(b.hash).valueOr:
-      Opt.none(BlockAccessListRef)
-    if bal.isSome():
-      txFrame.persistBlockAccessList(b.hash, bal.get())
+    # Persist the per-block txFrame delta (Aristo + KVT) so deserialize can
+    # restore the in-memory frame without re-executing the block.  The base
+    # block shares its frame with the on-disk base and needs no blob.
+    if b != fc.base:
+      ?txFrame.storeTxFrame(b.txFrame, b.hash)
 
   info "Blocks DAG written to database",
     base=fc.base.number,
@@ -259,9 +221,7 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
     return err("Cannot find previous FC state in database")
 
   let prevBase = fc.base
-  var
-    bodies: Table[Hash32, Block]
-    blocks = newSeq[BlockRef](state.numBlocks)
+  var blocks = newSeq[BlockRef](state.numBlocks)
 
   # Sanity Checks for the FC state
   if state.latest > state.numBlocks or
@@ -281,15 +241,7 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
     for i in 0..<state.numBlocks:
       let data = fc.baseTxFrame.get(blockIndexKey(i)).valueOr:
         return err("Cannot find branch data")
-      # Single pass: parse full block for replay and keep only header in BlockRef
-      var r = rlpFromBytes(data)
-      r.tryEnterList()
-      var fullBlk: Block
-      r.read(fullBlk)
-      blocks[i] = BlockRef(header: fullBlk.header)
-      r.read(blocks[i].hash)
-      r.read(blocks[i].index)
-      bodies[blocks[i].hash] = move(fullBlk)
+      blocks[i] = rlp.decode(data, BlockRef)
   except RlpError as exc:
     return err(exc.msg)
 
@@ -315,9 +267,6 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
     numBlocks=state.numBlocks,
     heads=fc.heads.toString
 
-  if state.numBlocks > 64:
-    info "Please wait until DAG finish loading..."
-
   if fc.base.hash != prevBase.hash:
     fc.reset(prevBase)
     return err("loaded baseHash != baseHash")
@@ -336,11 +285,11 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
       b.parent = parentCandidate
     fc.hashToBlock[b.hash] = b
 
-  fc.replay(bodies).isOkOr:
+  fc.loadAllTxFrames().isOkOr:
     fc.reset(prevBase)
     return err(error)
 
-  # All blocks should have replayed
+  # All blocks should have their txFrame loaded
   for b in blocks:
     if b.txFrame.isNil:
       fc.reset(prevBase)
