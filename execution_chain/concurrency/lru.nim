@@ -482,9 +482,13 @@ func put*(s: var LruCache, key: auto, value: auto) =
 
 proc dispose*(s: var LruCache) =
   if s.nodesLen > 0:
+    for index in s.mruIndices:
+      resetPayload(s.nodes[index])
     deallocShared(s.nodes)
     s.nodes = nil
     s.nodesLen = 0
+    s.nodesAllocatedLen = 0
+    s.used = 0
 
   if s.bucketsLen > 0:
     deallocShared(s.buckets)
@@ -509,7 +513,7 @@ const
   NUM_SHARDS = 1 shl 6 # 64 shards, must be a power of two
 
 type
-  Shard[K, V]  = object
+  Shard[K, V] = object
     lock {.align: CACHE_LINE_SIZE.}: Lock
     cache: LruCache[K, V]
     padding: array[CACHE_LINE_SIZE, byte]
@@ -518,19 +522,18 @@ type
     shards: array[NUM_SHARDS, Shard[K, V]]
     mask: uint64 
 
-proc init*[K, V](lru: var ConcurrentLruCache[K, V], capacity: int) =
+proc init*[K, V](lru: var ConcurrentLruCache[K, V], shardCapacity: int) =
   const shardCount = NUM_SHARDS
   static:
     doAssert shardCount > 1
     doAssert isPowerOfTwo(shardCount)
-  
-  let perShard = max(1, capacity div shardCount)
+  doAssert shardCapacity > 0
 
   lru.mask = uint64(shardCount - 1)
 
   for i in 0 ..< shardCount:
     lru.shards[i].lock.initLock()
-    lru.shards[i].cache = LruCache[K, V].init(perShard)
+    lru.shards[i].cache = LruCache[K, V].init(shardCapacity)
 
 proc dispose*[K, V](lru: var ConcurrentLruCache[K, V]) =
   for i in 0 ..< lru.shards.len():
@@ -551,7 +554,7 @@ template numShards*[K, V](lru: ConcurrentLruCache[K, V]): int =
 template shardCapacity*[K, V](lru: var ConcurrentLruCache[K, V]): int =
   lru.shards[0].cache.capacity
   
-func shardLen*[K, V](lru: var ConcurrentLruCache[K, V], key: K): int =
+func shardLenForKey*[K, V](lru: var ConcurrentLruCache[K, V], key: K): int =
   withShard(lru, key):
     s.cache.len()
 

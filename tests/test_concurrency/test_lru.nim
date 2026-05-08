@@ -395,7 +395,7 @@ suite "ConcurrentLruCache Tests":
 
   test "len and capacity":
     var lru: ConcurrentLruCache[int, int]
-    lru.init(640) # 10 per shard
+    lru.init(10) # 10 per shard
     defer: lru.dispose()
 
     check:
@@ -414,7 +414,7 @@ suite "ConcurrentLruCache Tests":
 
   test "shard info":
     var lru: ConcurrentLruCache[int, int]
-    lru.init(640) # 10 per shard
+    lru.init(10) # 10 per shard
     defer: lru.dispose()
 
     check:
@@ -423,7 +423,7 @@ suite "ConcurrentLruCache Tests":
       lru.capacity() == 640
     
     for i in 0 ..< 64:
-      check lru.shardLen(i) == 0
+      check lru.shardLenForKey(i) == 0
 
   test "concurrent put, get, peek, del":
     const
