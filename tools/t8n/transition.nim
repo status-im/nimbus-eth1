@@ -240,8 +240,7 @@ proc exec(ctx: TransContext,
   vmState.blockStateGasUsed = 0
 
   if ctx.env.parentBeaconBlockRoot.isSome:
-    vmState.processBeaconBlockRoot(ctx.env.parentBeaconBlockRoot.get).isOkOr:
-      raise newError(ErrorConfig, error)
+    vmState.processBeaconBlockRoot(ctx.env.parentBeaconBlockRoot.value)
 
   if vmState.com.isPragueOrLater(ctx.env.currentTimestamp) and
      ctx.env.blockHashes.len > 0:
@@ -252,8 +251,7 @@ proc exec(ctx: TransContext,
     if prevHash == static(default(Hash32)):
       raise newError(ErrorConfig, "previous block hash not found for block number: " & $prevNumber)
 
-    vmState.processParentBlockHash(prevHash).isOkOr:
-      raise newError(ErrorConfig, error)
+    vmState.processParentBlockHash(prevHash)
 
   for txIndex, txRes in ctx.txList:
     if txRes.isErr:

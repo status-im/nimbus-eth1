@@ -43,8 +43,8 @@ template getCoinbase*(c: Computation): Address =
 template getTimestamp*(c: Computation): uint64 =
   c.vmState.blockCtx.timestamp.uint64
 
-template getBlockNumber*(c: Computation): UInt256 =
-  c.vmState.blockNumber.u256
+template getBlockNumber*(c: Computation): uint64 =
+  c.vmState.blockNumber
 
 template getDifficulty*(c: Computation): DifficultyInt =
   c.vmState.difficultyOrPrevRandao
@@ -52,8 +52,8 @@ template getDifficulty*(c: Computation): DifficultyInt =
 template getGasLimit*(c: Computation): GasInt =
   c.vmState.blockCtx.gasLimit
 
-template getBaseFee*(c: Computation): UInt256 =
-  c.vmState.blockCtx.baseFeePerGas.get(0.u256)
+template getBaseFee*(c: Computation): GasInt =
+  c.vmState.blockCtx.baseFeePerGas
 
 template getSlotNum*(c: Computation): UInt256 =
   c.vmState.blockCtx.slotNumber.u256
