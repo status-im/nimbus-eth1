@@ -13,7 +13,7 @@
 import
   std/[strformat, strutils, times],
   unittest2,
-  ../../execution_chain/concurrency/concurrent_lru
+  ../../execution_chain/concurrency/lru
 
 const
   benchNameWidth = 32
