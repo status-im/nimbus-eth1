@@ -12,6 +12,7 @@
 
 import
   std/[strformat, strutils, times],
+  minilru,
   unittest2,
   ../../execution_chain/concurrency/lru
 
@@ -113,6 +114,36 @@ proc runSingleThreadedPeek(
       checksum += uint64(v.unsafeGet()) + 1
   BenchmarkStats(elapsed: epochTime() - started, operations: count, checksum: checksum)
 
+proc runLruPut(
+    cache: ptr LruCache[int, int], count: int
+): BenchmarkStats =
+  let started = epochTime()
+  for i in 0 ..< count:
+    cache[].put(i mod cacheCapacity, i)
+  BenchmarkStats(elapsed: epochTime() - started, operations: count)
+
+proc runLruGet(
+    cache: ptr LruCache[int, int], count: int
+): BenchmarkStats =
+  var checksum: uint64
+  let started = epochTime()
+  for i in 0 ..< count:
+    let v = cache[].get(i mod cacheCapacity)
+    if v.isOk():
+      checksum += uint64(v.unsafeGet()) + 1
+  BenchmarkStats(elapsed: epochTime() - started, operations: count, checksum: checksum)
+
+proc runLruPeek(
+    cache: ptr LruCache[int, int], count: int
+): BenchmarkStats =
+  var checksum: uint64
+  let started = epochTime()
+  for i in 0 ..< count:
+    let v = cache[].peek(i mod cacheCapacity)
+    if v.isOk():
+      checksum += uint64(v.unsafeGet()) + 1
+  BenchmarkStats(elapsed: epochTime() - started, operations: count, checksum: checksum)
+
 proc runBench(
     n: static int,
     threadProc: proc(ctx: ptr ThreadCtx) {.thread.},
@@ -137,6 +168,53 @@ proc runBench(
 proc refillCache(cache: ptr ConcurrentLruCache[int, int]) =
   for i in 0 ..< cacheCapacity:
     cache[].put(i, i + 1) # value = key+1 so key 0 also has a non-zero value
+
+proc refillLru(cache: ptr LruCache[int, int]) =
+  for i in 0 ..< cacheCapacity:
+    cache[].put(i, i + 1)
+
+suite "LruCache vs ConcurrentLruCache single-threaded comparison":
+  test "Single-threaded throughput comparison":
+    var lru = LruCache[int, int].init(cacheCapacity)
+    # defer:
+    #   lru.dispose()
+
+    var concLru: ConcurrentLruCache[int, int]
+    concLru.init(cacheCapacity)
+    defer:
+      concLru.dispose()
+
+    let lruPtr = addr lru
+    let concPtr = addr concLru
+
+    refillLru(lruPtr)
+    refillCache(concPtr)
+
+    let
+      lruPut = runLruPut(lruPtr, singleThreadOps)
+      lruGet = runLruGet(lruPtr, singleThreadOps)
+      lruPeek = runLruPeek(lruPtr, singleThreadOps)
+      concPut = runSingleThreadedPut(concPtr, singleThreadOps)
+      concGet = runSingleThreadedGet(concPtr, singleThreadOps)
+      concPeek = runSingleThreadedPeek(concPtr, singleThreadOps)
+
+    debugEcho ""
+    debugEcho "  capacity=", cacheCapacity, ", ops=", singleThreadOps
+    debugEcho benchmarkHeader()
+    debugEcho benchmarkLine("LruCache put", lruPut)
+    debugEcho benchmarkLine("ConcurrentLruCache put", concPut)
+    debugEcho benchmarkLine("LruCache get", lruGet)
+    debugEcho benchmarkLine("ConcurrentLruCache get", concGet)
+    debugEcho benchmarkLine("LruCache peek", lruPeek)
+    debugEcho benchmarkLine("ConcurrentLruCache peek", concPeek)
+
+    check:
+      lruPut.elapsed > 0
+      lruGet.checksum != 0
+      lruPeek.checksum != 0
+      concPut.elapsed > 0
+      concGet.checksum != 0
+      concPeek.checksum != 0
 
 suite "ConcurrentLruCache Benchmark":
   test "Single and multi-threaded throughput":
