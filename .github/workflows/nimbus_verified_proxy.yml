@@ -46,6 +46,37 @@ jobs:
   matrix_config:
     uses: ./.github/workflows/matrix_config.yml
 
+  build-wasm:
+    name: 'wasm'
+    runs-on: ubuntu-22.04
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout nimbus-eth1
+        uses: actions/checkout@v6
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git llvm
+
+      - name: Install emsdk
+        run: |
+          git clone https://github.com/emscripten-core/emsdk.git
+          emsdk/emsdk install 3.1.73
+          emsdk/emsdk activate 3.1.73
+
+      - name: Build Nim and dependencies
+        run: make -j$(nproc) init
+
+      - name: Build WASM
+        run: |
+          source emsdk/emsdk_env.sh
+          make -j$(nproc) nimbus_verified_proxy_wasm
+
   build:
     needs: matrix_config
 
@@ -63,6 +94,11 @@ jobs:
       - name: Checkout nimbus-eth1
         uses: actions/checkout@v6
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
       - id: shared-action
         uses: ./.github/actions/shared
         with:
@@ -71,11 +107,13 @@ jobs:
           rocksdb-cache: false
           eest-cache: false
 
-      - name: Run verified proxy tests
+      - name: Build and Run tests
         run: |
           gcc --version
           DEFAULT_MAKE_FLAGS="-j${ncpu}"
-          make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy libverifproxy
+          make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy
           build/nimbus_verified_proxy --help
           # "-static" option will not work for osx unless static system libraries are provided
-          make ${DEFAULT_MAKE_FLAGS} nimbus-verified-proxy-test libverifproxy-test
+          make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy_test
+          make ${DEFAULT_MAKE_FLAGS} libverifproxy_test
+          make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy_go_test

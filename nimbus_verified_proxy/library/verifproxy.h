@@ -35,7 +35,7 @@ void NimMain(void);
 /** Opaque execution context managed on the Nim side. */
 typedef struct Context Context;
 
-#define RET_SUCCESS     0 // when the call to eth api frontend is successful
+#define RET_SUCCESS     0  // when the call to eth api frontend is successful
 #define RET_ERROR       -1 // when the call to eth api frontend failed with an error
 #define RET_CANCELLED   -2 // when the call to the eth api frontend was cancelled
 #define RET_DESER_ERROR -3 // when an error occured while deserializing arguments from C to Nim
@@ -52,57 +52,81 @@ typedef struct Context Context;
 typedef void (*CallBackProc)(Context *ctx, int status, char *result, void *userData);
 
 /**
+ * Delivery callback passed to transport functions. Implementations must call this
+ * exactly once when the transport completes (success or error).
+ *
+ * @param status    RET_SUCCESS, RET_ERROR, or RET_CANCELLED.
+ * @param res       Response body (C-owned). Nim copies it internally — do NOT free it
+ *                  from the transport; free your own buffer after calling this.
+ * @param userData  Opaque transport context pointer originally passed to the transport.
+ */
+typedef void (*TransportDeliveryCallback)(int status, char *res, void *userData);
+
+/**
  * Transport function used to dispatch JSON RPC requests to execution endpoints.
  * (Must be implemented in the application using the verified proxy library)
  *
- * @param ctx       Execution context passed to the original request.
- * @param url       URL of the provider to forward this request to
- * @param name      name of the RPC method
- * @param params    JSON serialized params required for the RPC method.(allocated by Nim -
- *                  must be freed using freeNimAllocatedString)
- * @param cb        Callback to be called with userData passed (see below)
- * @param userData  pointer to user data. Used to link multiple response callbacks
- *                  back to their queries. Implementation of transport functions
- *                  must appropriately relay back the userData via the transport
- *                  callback function (see above)
+ * Use execCtxUrl / execCtxName / execCtxParams to read request
+ * data from userData. Call cb(userData, status, result) when done.
+ *
+ * @param ctx       Execution context.
+ * @param cb        Delivery callback — must be called exactly once.
+ * @param userData  Opaque transport context. Read via execCtx* accessors.
  */
-typedef void (*ExecutionTransportProc)(Context *ctx, char *url, char *name, char *params, CallBackProc cb, void *userData);
+typedef void (*ExecutionTransportProc)(Context *ctx, TransportDeliveryCallback cb, void *userData);
 
 /**
  * Transport function used to dispatch beacon light client requests.
  * (Must be implemented in the application using the verified proxy library)
  *
- * @param ctx       Execution context passed to the original request.
- * @param url       URL of the provider to forward this request to
- * @param endpoint  Name of the beacon LC endpoint:
- *                    "getLightClientBootstrap"       — params: {"block_root": "0x..."}
- *                    "getLightClientUpdatesByRange"  — params: {"start_period": N, "count": N}
- *                    "getLightClientOptimisticUpdate" — params: {}
- *                    "getLightClientFinalityUpdate"  — params: {}
- * @param params    JSON serialized params (allocated by Nim -
- *                  must be freed using freeNimAllocatedString)
- * @param cb        Callback to invoke with the JSON response body
- *                  ({"version":"deneb","data":{...}} for single objects;
- *                   [{"version":"deneb","data":{...}},...] for updates)
- * @param userData  pointer to user data
+ * Endpoint names passed via beaconCtxEndpoint:
+ *   "getLightClientBootstrap"        — params: {"block_root": "0x..."}
+ *   "getLightClientUpdatesByRange"   — params: {"start_period": N, "count": N}
+ *   "getLightClientOptimisticUpdate" — params: {}
+ *   "getLightClientFinalityUpdate"   — params: {}
+ *
+ * @param ctx       Execution context.
+ * @param cb        Delivery callback — must be called exactly once.
+ * @param userData  Opaque transport context. Read via beaconCtx* accessors.
  */
-typedef void (*BeaconTransportProc)(Context *ctx, char *url, char *endpoint, char *params, CallBackProc cb, void *userData);
+typedef void (*BeaconTransportProc)(Context *ctx, TransportDeliveryCallback cb, void *userData);
+
+/**
+ * Deliver an execution-transport response back into Nim.
+ * Must be called by the ExecutionTransportProc implementation when done.
+ */
+void deliverExecutionTransport(int status, char *result, void *userData);
+
+/**
+ * Deliver a beacon-transport response back into Nim.
+ * Must be called by the BeaconTransportProc implementation when done.
+ */
+void deliverBeaconTransport(int status, char *result, void *userData);
+
+/* Transport context accessors — return pointers into Nim-managed memory.
+ * Valid until cb is called. Do NOT free the returned strings. */
+const char *execCtxUrl(void *userData);
+const char *execCtxName(void *userData);
+const char *execCtxParams(void *userData);
+const char *beaconCtxUrl(void *userData);
+const char *beaconCtxEndpoint(void *userData);
+const char *beaconCtxParams(void *userData);
 
 /**
  * Start the verification proxy with a given configuration.
  *
+ * Blocks until the proxy has finished initialising (i.e. config has been parsed,
+ * the engine created, and all backends registered).
+ *
  * @param configJson            JSON string describing the configuration for the verification proxy.
- * @param onStart               Callback invoked once the proxy has started. NOTE: The callback is invoked
- *                              only on error otherwise the proxy runs indefinitely
  * @param executionTransport    Function pointer of the function that implements the transport for
  *                              JSON-RPC calls
- * @param beaconTransport       Function pointer of the function that implements the tranport for
+ * @param beaconTransport       Function pointer of the function that implements the transport for
  *                              Beacon API calls
- * @param userData              pointer to user data
- * @return                      Pointer to a new Context object representing the running proxy.
- *                              Must be freed using freeContext() when no longer needed.
+ * @return                      Pointer to a new Context object representing the running proxy,
+ *                              or NULL on failure. Must be freed using freeContext() when no longer needed.
  */
-ETH_RESULT_USE_CHECK Context *startVerifProxy(char* configJson, ExecutionTransportProc executionTransport, BeaconTransportProc beaconTransport, CallBackProc onStart, void *userData);
+ETH_RESULT_USE_CHECK Context *startVerifProxy(char* configJson, ExecutionTransportProc executionTransport, BeaconTransportProc beaconTransport);
 
 /**
  * Free strings allocated by Nim. This currently include the JSON encoded result 
@@ -135,8 +159,7 @@ void stopVerifProxy(Context *ctx);
  * queued tasks, callbacks, and events. It is non-blocking.
  *
  * @param   ctx     Context pointer representing the running proxy.
- * @return  status  if the proxy was stopped this would return an error code RET_ERROR
- *                  else it would return RET_SUCCESS
+ * @return  RET_CANCELLED if the proxy was stopped, RET_SUCCESS otherwise.
  */
 ETH_RESULT_USE_CHECK int processVerifProxyTasks(Context *ctx);
 
@@ -149,7 +172,7 @@ ETH_RESULT_USE_CHECK int processVerifProxyTasks(Context *ctx);
  * @param cb        Callback invoked with a hex block number.
  * @param userData  pointer to user data
  */
-void nvp_call(Context *ctx, char* name, char* params, CallBackProc cb, void *userData);
+void proxyCall(Context *ctx, char* name, char* params, CallBackProc cb, void *userData);
 
 /* ========================================================================== */
 /*                               BASIC CHAIN DATA                              */

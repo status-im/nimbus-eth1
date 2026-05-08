@@ -93,11 +93,6 @@ proc afterExecCall(c: Computation) =
       # Special case to account for geth+parity bug
       c.vmState.ledger.ripemdSpecial()
 
-  if c.isSuccess:
-    c.commit()
-  else:
-    c.rollback()
-
 proc beforeExecCreate(c: Computation): bool =
   c.vmState.mutateLedger:
     let nonce = ledger.getNonce(c.msg.sender)
@@ -168,11 +163,6 @@ proc afterExecCreate(c: Computation) =
     # right cases, particularly important with EVMC where it must be cleared.
     c.output.reset()
 
-  if c.isSuccess:
-    c.commit()
-  else:
-    c.rollback()
-
 const MsgKindToOp: array[CallKind, Op] =
   [Call, DelegateCall, CallCode, Create, Create2]
 
@@ -204,6 +194,11 @@ proc afterExec(c: Computation) =
     c.afterExecCall()
   else:
     c.afterExecCreate()
+
+  if c.isSuccess:
+    c.commit()
+  else:
+    c.rollback()
 
   if c.msg.depth > 0:
     let gasUsed = c.msg.gas - c.gasMeter.gasRemaining
@@ -295,9 +290,8 @@ func preExecComputation*(c: Computation) =
     c.msg.contractAddress == CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS
   ):
     # EIP-7002 and EIP-7215 dicates that the code must be present, or else block is invalid
-    if c.code.bytes.len <= 0:
+    if c.code.len <= 0:
       c.setError("No code found for withdrawal or consolidation requests contract")
-
 
 # ------------------------------------------------------------------------------
 # End

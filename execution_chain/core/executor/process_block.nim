@@ -146,7 +146,7 @@ proc procBlkPreamble(
     if header.requestsHash.isNone:
       return err("Post-Prague block header must have requestsHash")
 
-    ?vmState.processParentBlockHash(header.parentHash)
+    vmState.processParentBlockHash(header.parentHash)
   else:
     if header.requestsHash.isSome:
       return err("Pre-Prague block header must not have requestsHash")
@@ -155,7 +155,7 @@ proc procBlkPreamble(
     if header.parentBeaconBlockRoot.isNone:
       return err("Post-Cancun block header must have parentBeaconBlockRoot")
 
-    ?vmState.processBeaconBlockRoot(header.parentBeaconBlockRoot.get)
+    vmState.processBeaconBlockRoot(header.parentBeaconBlockRoot.value)
   else:
     if header.parentBeaconBlockRoot.isSome:
       return err("Pre-Cancun block header must not have parentBeaconBlockRoot")

@@ -21,7 +21,7 @@ import
 suite "test verified blocks":
   let
     ts = TestApiState.init(1.u256)
-    engine = initTestEngine(ts, 1, 9).valueOr:
+    (engine, frontend) = initTestEngine(ts, 1, 9).valueOr:
       raise newException(TestProxyError, error.errMsg)
 
   test "check fetching blocks on every fork":
@@ -38,7 +38,7 @@ suite "test verified blocks":
       ts.loadBlock(blk)
       check engine.headerStore.add(convHeader(blk), blk.hash).isOk()
 
-      let verifiedBlk = waitFor engine.frontend.eth_getBlockByHash(blk.hash, true)
+      let verifiedBlk = waitFor frontend.eth_getBlockByHash(blk.hash, true)
 
       check:
         verifiedBlk.isOk()
@@ -64,22 +64,22 @@ suite "test verified blocks":
       engine.headerStore.add(convHeader(blk), blk.hash).isOk()
       engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
 
-    var verifiedBlk = waitFor engine.frontend.eth_getBlockByNumber(numberTag, true)
+    var verifiedBlk = waitFor frontend.eth_getBlockByNumber(numberTag, true)
     check:
       verifiedBlk.isOk()
       blk == verifiedBlk.get()
 
-    verifiedBlk = waitFor engine.frontend.eth_getBlockByNumber(finalTag, true)
+    verifiedBlk = waitFor frontend.eth_getBlockByNumber(finalTag, true)
     check:
       verifiedBlk.isOk()
       blk == verifiedBlk.get()
 
-    verifiedBlk = waitFor engine.frontend.eth_getBlockByNumber(earliestTag, true)
+    verifiedBlk = waitFor frontend.eth_getBlockByNumber(earliestTag, true)
     check:
       verifiedBlk.isOk()
       blk == verifiedBlk.get()
 
-    verifiedBlk = waitFor engine.frontend.eth_getBlockByNumber(latestTag, true)
+    verifiedBlk = waitFor frontend.eth_getBlockByNumber(latestTag, true)
     check:
       verifiedBlk.isOk()
       blk == verifiedBlk.get()
@@ -110,14 +110,14 @@ suite "test verified blocks":
       )
 
     let verifiedBlkUnreachable =
-      waitFor engine.frontend.eth_getBlockByNumber(unreachableTargetTag, true)
+      waitFor frontend.eth_getBlockByNumber(unreachableTargetTag, true)
 
     check:
       verifiedBlkUnreachable.isErr()
       verifiedBlkUnreachable.error.errType == FrontendError
 
     let verifiedBlkReachable =
-      waitFor engine.frontend.eth_getBlockByNumber(reachableTargetTag, true)
+      waitFor frontend.eth_getBlockByNumber(reachableTargetTag, true)
 
     check:
       verifiedBlkReachable.isOk()
@@ -135,17 +135,14 @@ suite "test verified blocks":
     check engine.headerStore.add(convHeader(blk), blk.hash).isOk()
 
     let
-      uncleCountByHash = waitFor engine.frontend.eth_getUncleCountByBlockHash(hash)
-      uncleCountByNum =
-        waitFor engine.frontend.eth_getUncleCountByBlockNumber(numberTag)
-      txCountByHash = waitFor engine.frontend.eth_getBlockTransactionCountByHash(hash)
-      txCountByNum =
-        waitFor engine.frontend.eth_getBlockTransactionCountByNumber(numberTag)
+      uncleCountByHash = waitFor frontend.eth_getUncleCountByBlockHash(hash)
+      uncleCountByNum = waitFor frontend.eth_getUncleCountByBlockNumber(numberTag)
+      txCountByHash = waitFor frontend.eth_getBlockTransactionCountByHash(hash)
+      txCountByNum = waitFor frontend.eth_getBlockTransactionCountByNumber(numberTag)
       txByHash =
-        waitFor engine.frontend.eth_getTransactionByBlockHashAndIndex(hash, Quantity(0))
-      txByNum = waitFor engine.frontend.eth_getTransactionByBlockNumberAndIndex(
-        numberTag, Quantity(0)
-      )
+        waitFor frontend.eth_getTransactionByBlockHashAndIndex(hash, Quantity(0))
+      txByNum =
+        waitFor frontend.eth_getTransactionByBlockNumberAndIndex(numberTag, Quantity(0))
 
     check:
       uncleCountByHash.isOk()

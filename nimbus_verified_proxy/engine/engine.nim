@@ -11,24 +11,20 @@ import
   std/[options, random],
   chronicles,
   chronos,
-  stew/byteutils,
   eth/common/[hashes, headers, addresses],
   beacon_chain/spec/forks,
-  beacon_chain/spec/beaconstate,
   beacon_chain/gossip_processing/light_client_processor,
   beacon_chain/beacon_clock,
   beacon_chain/sync/light_client_sync_helpers,
   beacon_chain/networking/network_metadata,
   beacon_chain/el/engine_api_conversions,
-  beacon_chain/conf,
   ./types,
   ./utils,
+  ./genesis_params,
   ./header_store,
   ./evm
 
 from eth/common/blocks import EMPTY_UNCLE_HASH
-
-const MAX_REQUEST_LIGHT_CLIENT_UPDATES* = 128
 
 func convLCHeader*(lcHeader: ForkyLightClientHeader): Result[Header, string] =
   when lcHeader is altair.LightClientHeader:
@@ -79,22 +75,12 @@ proc init*(
 ): EngineResult[T] =
   randomize()
 
-  let metadata = loadEth2Network(config.eth2Network)
-
   let
-    genesisState =
-      try:
-        template genesisData(): auto =
-          metadata.genesis.bakedBytes
-
-        newClone(
-          readSszForkedHashedBeaconState(
-            metadata.cfg, genesisData.toOpenArray(genesisData.low, genesisData.high)
-          )
-        )
-      except CatchableError as err:
-        raiseAssert "Invalid baked-in state: " & err.msg
-    genesisTime = genesisState[].genesis_time
+    networkName = config.eth2Network.get("mainnet")
+    metadata = getMetadataForNetwork(networkName)
+    genesis = genesisParamsForNetwork(networkName)
+    genesisTime = genesis.genesisTime
+    genesis_validators_root = genesis.genesisValidatorsRoot
     beaconClock = BeaconClock.init(metadata.cfg.timeParams, genesisTime).valueOr:
       error "Invalid genesis time in state", genesisTime
       quit QuitFailure
@@ -104,7 +90,6 @@ proc init*(
       else:
         proc(): BeaconTime {.gcsafe, raises: [].} =
           config.freezeAtSlot.start_beacon_time(metadata.cfg.timeParams)
-    genesis_validators_root = genesisState[].genesis_validators_root
     forkDigests = newClone ForkDigests.init(metadata.cfg, genesis_validators_root)
 
   let engine = RpcVerificationEngine(
@@ -119,6 +104,7 @@ proc init*(
     codeCache: CodeCache.init(config.codeCacheLen),
     storageCache: StorageCache.init(config.storageCacheLen),
     parallelBlockDownloads: config.parallelBlockDownloads,
+    maxLightClientUpdates: config.maxLightClientUpdates,
     availabilityScoreFunc: defaultAvailabilityScoreFunc,
     qualityScoreFunc: defaultQualityScoreFunc,
     cfg: metadata.cfg,
@@ -138,7 +124,11 @@ proc init*(
     if not config.syncHeaderStore:
       return
     withForkyStore(engine.lcStore[]):
-      when lcDataFork > LightClientDataFork.Altair:
+      when lcDataFork > LightClientDataFork.Electra:
+        {.warning: "Please add implementation here for: " & $lcDataFork.}
+        error "post-electra onFinalizedHeader has no implementation"
+      elif lcDataFork > LightClientDataFork.Altair and
+          lcDataFork <= LightClientDataFork.Electra:
         info "New LC finalized header",
           finalized_header = shortLog(forkyStore.finalized_header)
         let header = convLCHeader(forkyStore.finalized_header).valueOr:
@@ -156,13 +146,17 @@ proc init*(
     if not config.syncHeaderStore:
       return
     withForkyStore(engine.lcStore[]):
-      when lcDataFork > LightClientDataFork.Altair:
+      when lcDataFork > LightClientDataFork.Electra:
+        {.warning: "Please add implementation here for: " & $lcDataFork.}
+        error "post-electra onOptimisticHeader has no implementation"
+      elif lcDataFork > LightClientDataFork.Altair and
+          lcDataFork <= LightClientDataFork.Electra:
         info "New LC optimistic header",
           optimistic_header = shortLog(forkyStore.optimistic_header)
         let header = convLCHeader(forkyStore.optimistic_header).valueOr:
           error "optimistic header conversion error", error = error
           return
-        let res = engine.headerStore.updateFinalized(
+        let res = engine.headerStore.add(
           header, forkyStore.optimistic_header.execution.block_hash.asBlockHash
         )
         if res.isErr():
@@ -185,6 +179,8 @@ proc init*(
     onFinalizedHeader,
     onOptimisticHeader,
   )
+
+  engine.syncLock = newAsyncLock()
 
   ok(engine)
 
@@ -241,7 +237,8 @@ proc processObject[T: SomeForkedLightClientObject](
     debug "LC object requires missing parent", endpoint = endpoint
     return err((UnavailableDataError, "missing parent", UNTAGGED))
   of LightClientVerifierError.Duplicate:
-    return err((UnavailableDataError, "duplicate", UNTAGGED))
+    # we don't care about duplicates
+    return ok()
   of LightClientVerifierError.UnviableFork:
     notice "Received LC value from an unviable fork", endpoint = endpoint
     return err((VerificationError, "unviable fork", UNTAGGED))
@@ -283,7 +280,7 @@ proc syncOnce*(
       else:
         min(
           current.sync_committee_period - finalized.sync_committee_period,
-          MAX_REQUEST_LIGHT_CLIENT_UPDATES,
+          engine.maxLightClientUpdates,
         )
 
     let
