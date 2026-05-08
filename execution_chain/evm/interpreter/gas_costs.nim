@@ -71,7 +71,7 @@ type
     nonZeroVal*: bool
     gasCost1*: GasInt
     isNewAccount*: proc(): bool {.gcsafe, raises: [].}
-    gasLeft*: GasInt    
+    gasLeft*: GasInt
     gasCallDelegate*: GasProc
     contractGas*: UInt256
 

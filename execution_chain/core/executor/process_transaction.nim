@@ -16,7 +16,8 @@ import
   ../../common/common,
   ../../db/ledger,
   ../../transaction/call_evm,
-  ../../transaction/call_common,
+  ../../transaction/system_call,
+  ../../transaction/call_types,
   ../../transaction,
   ../../evm/state,
   ../../evm/types,
@@ -27,24 +28,17 @@ import
   ../validate
 
 
-export results, call_common
+export results, call_types
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
-
-func eip1559BaseFee(vmState: BaseVMState; fork: EVMFork): UInt256 =
-  ## Actually, `baseFee` should be 0 for pre-London headers already. But this
-  ## function just plays safe.
-  if FkLondon <= fork:
-    result = vmState.blockCtx.baseFeePerGas.get(0.u256)
 
 proc commitOrRollbackDependingOnGasUsed(
     vmState: BaseVMState;
     savePoint: LedgerSpRef;
     tx: Transaction;
     callResult: var LogResult;
-    priorityFee: GasInt;
     blobGasUsed: GasInt;
     rollbackReads: bool;
       ): Result[void, string] =
@@ -73,7 +67,11 @@ proc commitOrRollbackDependingOnGasUsed(
       return err(&"invalid tx: block gasLimit reached. gasLimit={vmState.blockCtx.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasUsed}")
 
   # Accept transaction and collect mining fee.
-  let txFee = gasUsed.u256 * priorityFee.u256
+  let
+    baseFee = vmState.blockCtx.baseFeePerGas
+    priorityFee = min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFee)
+    txFee = gasUsed.u256 * priorityFee.u256
+
   if vmState.balTrackerEnabled:
     vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), txFee)
     vmState.balTracker.commitCallFrame()
@@ -104,13 +102,10 @@ proc processTransaction*(
   ## which provides a backward compatible framwork for EIP1559.
 
   let
+    com = vmState.com
     fork = vmState.fork
-    roDB = vmState.readOnlyLedger
-    baseFee256 = vmState.eip1559BaseFee(fork)
-    baseFee = baseFee256.truncate(GasInt)
-    priorityFee = min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFee)
-    excessBlobGas = vmState.blockCtx.excessBlobGas
     regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
+    intrinsic = tx.intrinsicGas(fork, vmState.blockCtx.gasLimit)
 
   # Regular gas is capped at TX_MAX_GAS_LIMIT per EIP-7825.
   # State gas is not checked per-tx; block-end validation enforces
@@ -122,53 +117,44 @@ proc processTransaction*(
   # blobGasUsed will be added to vmState.blobGasUsed if the tx is ok.
   let
     blobGasUsed = tx.getTotalBlobGas
-    maxBlobGasPerBlock = getMaxBlobGasPerBlock(vmState.com, vmState.fork)
+    maxBlobGasPerBlock = getMaxBlobGasPerBlock(com, fork)
   if vmState.blobGasUsed + blobGasUsed > maxBlobGasPerBlock:
     return err("blobGasUsed " & $blobGasUsed &
       " exceeds maximum allowance " & $maxBlobGasPerBlock)
 
-  # Actually, the EIP-1559 reference does not mention an early exit.
-  #
-  # Even though database was not changed yet but, a `persist()` directive
-  # before leaving is crucial for some unit tests that us a direct/deep call
-  # of the `processTransaction()` function. So there is no `return err()`
-  # statement, here.
+  ? validateTxBasic(com, tx, intrinsic, fork)
+
+  vmState.validateTransaction(tx, sender).isOkOr:
+    return err(error)
+
+  # Execute the transaction.
+  vmState.captureTxStart(tx.gasLimit)
+
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.beginCallFrame()
+  let savePoint = vmState.ledger.beginSavePoint()
+
+  var callResult = tx.txCallEvm(sender, vmState, intrinsic)
+  vmState.captureTxEnd(tx.gasLimit - callResult.gasUsed)
+
   let
-    com = vmState.com
-    txRes = roDB.validateTransaction(tx, sender, vmState.blockCtx.gasLimit, baseFee256, excessBlobGas, com, fork)
-    res = if txRes.isOk:
-      # Execute the transaction.
-      vmState.captureTxStart(tx.gasLimit)
-
-      if vmState.balTrackerEnabled:
-        vmState.balTracker.beginCallFrame()
-      let savePoint = vmState.ledger.beginSavePoint()
-
-      var callResult = tx.txCallEvm(sender, vmState, baseFee)
-      vmState.captureTxEnd(tx.gasLimit - callResult.gasUsed)
-
-      let tmp = commitOrRollbackDependingOnGasUsed(
-        vmState, savePoint, tx, callResult, priorityFee, blobGasUsed, rollbackReads)
-
-      if tmp.isErr():
-        err(tmp.error)
-      else:
-        ok(move(callResult))
+    tmp = commitOrRollbackDependingOnGasUsed(
+      vmState, savePoint, tx, callResult, blobGasUsed, rollbackReads)
+    res = if tmp.isErr:
+      err(tmp.error)
     else:
-      err(txRes.error)
+      ok(move(callResult))
 
   vmState.ledger.persist(clearEmptyAccount = fork >= FkSpurious)
 
   res
 
-proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32):
-                              Result[void, string] =
+proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32) =
   ## processBeaconBlockRoot applies the EIP-4788 system call to the
   ## beacon block root contract. This method is exported to be used in tests.
   ## If EIP-4788 is enabled, we need to invoke the beaconroot storage
   ## contract with the new root.
   let
-    ledger = vmState.ledger
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
@@ -176,21 +162,15 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32):
       gasPrice : 0.GasInt,
       to       : BEACON_ROOTS_ADDRESS,
       input    : @(beaconRoot.data),
-      sysCall  : true,
     )
 
-  # runComputation a.k.a syscall/evm.call
   # EIP-4788: fail silently
-  call.runComputation(void)
-  ledger.persist(clearEmptyAccount = true)
-  ok()
+  call.systemCall(void)
 
-proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32):
-                              Result[void, string] =
+proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32) =
   ## processParentBlockHash stores the parent block hash in the
   ## history storage contract as per EIP-2935.
   let
-    ledger = vmState.ledger
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
@@ -198,56 +178,44 @@ proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32):
       gasPrice : 0.GasInt,
       to       : HISTORY_STORAGE_ADDRESS,
       input    : @(prevHash.data),
-      sysCall  : true,
     )
 
-  # runComputation a.k.a syscall/evm.call
   # EIP-2923: fail silently
-  call.runComputation(void)
-  ledger.persist(clearEmptyAccount = true)
-  ok()
+  call.systemCall(void)
 
 proc processDequeueWithdrawalRequests*(vmState: BaseVMState): Result[seq[byte], string] =
   ## processDequeueWithdrawalRequests applies the EIP-7002 system call
   ## to the withdrawal requests contract.
   let
-    ledger = vmState.ledger
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
       gasLimit : 30_000_000.GasInt,
       gasPrice : 0.GasInt,
       to       : WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
-      sysCall  : true,
     )
 
-  # runComputation a.k.a syscall/evm.call
-  let res = call.runComputation(OutputResult)
+  var res = call.systemCall(OutputResult)
   if res.error.len > 0:
     return err("processDequeueWithdrawalRequests: " & res.error)
-  ledger.persist(clearEmptyAccount = true)
-  ok(res.output)
+  ok(move(res.output))
 
 proc processDequeueConsolidationRequests*(vmState: BaseVMState): Result[seq[byte], string] =
   ## processDequeueConsolidationRequests applies the EIP-7251 system call
   ## to the consolidation requests contract.
   let
-    ledger = vmState.ledger
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
       gasLimit : 30_000_000.GasInt,
       gasPrice : 0.GasInt,
       to       : CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
-      sysCall  : true,
     )
 
-  # runComputation a.k.a syscall/evm.call
-  let res = call.runComputation(OutputResult)
+  var res = call.systemCall(OutputResult)
   if res.error.len > 0:
     return err("processDequeueConsolidationRequests: " & res.error)
-  ledger.persist(clearEmptyAccount = true)
-  ok(res.output)
+  ok(move(res.output))
 
 # ------------------------------------------------------------------------------
 # End

@@ -94,6 +94,11 @@ jobs:
       - name: Checkout nimbus-eth1
         uses: actions/checkout@v6
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
       - id: shared-action
         uses: ./.github/actions/shared
         with:
@@ -109,4 +114,6 @@ jobs:
           make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy
           build/nimbus_verified_proxy --help
           # "-static" option will not work for osx unless static system libraries are provided
-          make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy_test libverifproxy_test
+          make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy_test
+          make ${DEFAULT_MAKE_FLAGS} libverifproxy_test
+          make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy_go_test

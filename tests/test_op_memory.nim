@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2025 Status Research & Development GmbH
+# Copyright (c) 2019-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -544,7 +544,13 @@ proc opMemoryMain*() =
       title: "Sstore_NET_3"
       code: "60016000556000600055"
       fork: Constantinople
-      gasUsed: 20212
+      gasUsed: 10106           # 20212 div 2 = 10106, got 50% refund
+      # [0]     Push1   0x01   # gas: 3
+      # [2]     Push1   0x00   # gas: 3
+      # [4]     Sstore         # gas: 20000 (create slot)
+      # [5]     Push1   0x00   # gas: 3
+      # [7]     Push1   0x00   # gas: 3
+      # [9]     Sstore         # gas: 200 (constantinople no op)
 
     assembler: # Sstore EIP1283
       title: "Sstore_NET_4"
@@ -557,15 +563,6 @@ proc opMemoryMain*() =
       code: "60016000556001600055"
       fork: Constantinople
       gasUsed: 20212
-
-    # Sets Storage row on "cow" address:
-    # 0: 1
-    # private void setStorageToOne(VM vm) {
-    #       # Sets storage value to 1 and commits
-    #           code: "60006000556001600055"
-    #           fork: Constantinople
-    #       invoke.getRepository().commit()
-    #       invoke.setOrigRepository(invoke.getRepository())
 
     assembler: # Sstore EIP1283
       title: "Sstore_NET_6"
@@ -589,7 +586,13 @@ proc opMemoryMain*() =
       title: "Sstore_NET_9"
       code: "60026000556000600055"
       fork: Constantinople
-      gasUsed: 20212
+      gasUsed: 10106          # 20212 div 2 = 10106, got 50% refund
+      # [0]     Push1   0x02  # gas: 3
+      # [2]     Push1   0x00  # gas: 3
+      # [4]     Sstore        # gas: 20000 (create slot)
+      # [5]     Push1   0x00  # gas: 3
+      # [7]     Push1   0x00  # gas: 3
+      # [9]     Sstore        # gas: 200 (constantinople no op)
 
     assembler: # Sstore EIP1283
       title: "Sstore_NET_10"
@@ -609,11 +612,17 @@ proc opMemoryMain*() =
       fork: Constantinople
       gasUsed: 20212
 
-    assembler: # Sstore EIP1283
+    assembler: # Sstore EIP2929
       title: "Sstore_NET_13"
-      code: "60016000556000600055"
-      fork: Constantinople
-      gasUsed: 20212
+      code:
+        Push1 "0x01" # gas: 3
+        Push1 "0x00" # gas: 3
+        Sstore       # gas: 22100 = 20000 (create slot) + 2100 (cold access)
+        Push1 "0x00" # gas: 3
+        Push1 "0x00" # gas: 3
+        Sstore       # gas: 100 (berlin no op)
+      fork: Berlin
+      gasUsed: 11106
 
     assembler: # Sstore EIP1283
       title: "Sstore_NET_14"
@@ -628,16 +637,34 @@ proc opMemoryMain*() =
       gasUsed: 20212
 
     assembler: # Sstore EIP1283
-      title: "Sstore_NET_16"
+      title: "Sstore_NET_16 refund smaller than 50%"
       code: "600160005560006000556001600055"
       fork: Constantinople
-      gasUsed: 40218
+      gasUsed: 20418          # 40218 - min(refund, 50%): 40218 - 19800
+      # [0]     Push1   0x01  # gas: 3
+      # [2]     Push1   0x00  # gas: 3
+      # [4]     Sstore        # gas: 20000 (create slot)
+      # [5]     Push1   0x00  # gas: 3
+      # [7]     Push1   0x00  # gas: 3
+      # [9]     Sstore        # gas: 200 (constantinople no op) + refund 19800 (reset to original inexistent slot)
+      # [10]    Push1   0x01  # gas: 3
+      # [12]    Push1   0x00  # gas: 3
+      # [14]    Sstore        # gas: 20000 (create slot)
 
     assembler: # Sstore EIP1283
-      title: "Sstore_NET_17"
+      title: "Sstore_NET_17 refund bigger than 50%"
       code: "600060005560016000556000600055"
       fork: Constantinople
-      gasUsed: 20418
+      gasUsed: 10209          # 20418 - min(refund, 50%): 20418 - (50%) 10209
+      # [0]     Push1   0x00  # gas: 3
+      # [2]     Push1   0x00  # gas: 3
+      # [4]     Sstore        # gas: 200 (no op)
+      # [5]     Push1   0x01  # gas: 3
+      # [7]     Push1   0x00  # gas: 3
+      # [9]     Sstore        # gas: 20000 (create slot)
+      # [10]    Push1   0x00  # gas: 3
+      # [12]    Push1   0x00  # gas: 3
+      # [14]    Sstore        # gas: 200 (no op) + refund 19800 (reset to original inexistent slot)
 
     assembler: # Sload OP
       title: "Sload_1"

@@ -138,24 +138,29 @@ proc getLogsForBlock*(
     cacheResolved = false
 
   for i, receipt in receipts:
-    let logs =
-      receipt.logs.filterIt(it.match(opts.address, opts.topics))
-    if logs.len == 0:
-      continue
+    var
+      txHash = default(Hash32)
+      txHashReady = false
 
-    if not cacheResolved:
-      cachedHashes = chain.memoryTxHashesForBlock(blkHash)
-      cacheResolved = true
+    for log in receipt.logs:
+      if not log.match(opts.address, opts.topics):
+        inc logIndex
+        continue
 
-    let txHash =
-      if cachedHashes.isSome and i < cachedHashes.get.len:
-        cachedHashes.get[i]
-      else:
-        let tx = chain.txByBlockHashAndIndex(blkHash, i.uint64).valueOr:
-          return Opt.none(seq[FilterLog])
-        tx.computeRlpHash
+      if not txHashReady:
+        if not cacheResolved:
+          cachedHashes = chain.memoryTxHashesForBlock(blkHash)
+          cacheResolved = true
 
-    for log in logs:
+        txHash =
+          if cachedHashes.isSome and i < cachedHashes.get.len:
+            cachedHashes.get[i]
+          else:
+            let tx = chain.txByBlockHashAndIndex(blkHash, i.uint64).valueOr:
+              return Opt.none(seq[FilterLog])
+            tx.computeRlpHash
+        txHashReady = true
+
       resLogs.add(FilterLog(
         removed: false,
         logIndex: Opt.some(Quantity(logIndex)),
@@ -192,623 +197,625 @@ proc getLogsForRange*(
     blockNum = blockNum + 1
   return logs
 
+template sign(privateKey: PrivateKey, message: string): seq[byte] =
+  # message length encoded as ASCII representation of decimal
+  let msgData = "\x19Ethereum Signed Message:\n" & $message.len & message
+  @(sign(privateKey, msgData.toBytes()).toRaw())
+
 proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManager) =
-  server.rpc("eth_getBalance") do(data: Address, blockTag: BlockTag) -> UInt256:
-    ## Returns the balance of the account of given address.
-    let
-      txFrame = api.frameFromTag(blockTag).valueOr:
-        raise newException(ValueError, error)
-      address = data
-      acc = txFrame.fetchAccount(address.computeAccPath).valueOr(emptyDbAccount)
-    acc.balance
+  server.rpc(EthJson):
+    proc eth_getBalance(data: Address, blockTag: BlockTag): UInt256 {.raises: [ValueError].} =
+      ## Returns the balance of the account of given address.
+      let
+        txFrame = api.frameFromTag(blockTag).valueOr:
+          raise newException(ValueError, error)
+        address = data
+        acc = txFrame.fetchAccount(address.computeAccPath).valueOr(emptyDbAccount)
+      acc.balance
 
-  server.rpc("eth_getStorageAt") do(
-    data: Address, slot: UInt256, blockTag: BlockTag
-  ) -> FixedBytes[32]:
-    ## Returns the value from a storage position at a given address.
-    let
-      txFrame = api.frameFromTag(blockTag).valueOr:
-        raise newException(ValueError, error)
-      address = data
-      accPath = address.computeAccPath
-      slotKey = computeSlotKey(slot)
-      value = txFrame.fetchSlot(accPath, slotKey).valueOr(0.u256)
-    value.to(Bytes32)
+    proc eth_getStorageAt(
+      data: Address, slot: UInt256, blockTag: BlockTag
+    ): FixedBytes[32] {.raises: [ValueError].} =
+      ## Returns the value from a storage position at a given address.
+      let
+        txFrame = api.frameFromTag(blockTag).valueOr:
+          raise newException(ValueError, error)
+        address = data
+        accPath = address.computeAccPath
+        slotKey = computeSlotKey(slot)
+        value = txFrame.fetchSlot(accPath, slotKey).valueOr(0.u256)
+      value.to(Bytes32)
 
-  server.rpc("eth_getTransactionCount") do(
-    data: Address, blockTag: BlockTag
-  ) -> Quantity:
-    ## Returns the number of transactions ak.s. nonce sent from an address.
-    let
-      txFrame = api.frameFromTag(blockTag).valueOr:
-        raise newException(ValueError, error)
-      address = data
-      accPath = address.computeAccPath
-      acc = txFrame.fetchAccount(accPath).valueOr(emptyDbAccount)
-      nonce = acc.nonce
-    Quantity(nonce)
+    proc eth_getTransactionCount(
+      data: Address, blockTag: BlockTag
+    ): Quantity {.raises: [ValueError].} =
+      ## Returns the number of transactions ak.s. nonce sent from an address.
+      let
+        txFrame = api.frameFromTag(blockTag).valueOr:
+          raise newException(ValueError, error)
+        address = data
+        accPath = address.computeAccPath
+        acc = txFrame.fetchAccount(accPath).valueOr(emptyDbAccount)
+        nonce = acc.nonce
+      Quantity(nonce)
 
-  server.rpc("eth_blockNumber") do() -> Quantity:
-    ## Returns integer of the current block number the client is on.
-    Quantity(api.chain.latestNumber)
+    proc eth_blockNumber(): Quantity =
+      ## Returns integer of the current block number the client is on.
+      Quantity(api.chain.latestNumber)
 
-  server.rpc("eth_chainId") do() -> UInt256:
-    return api.com.chainId
+    proc eth_chainId(): UInt256 =
+      return api.com.chainId
 
-  server.rpc("eth_getCode") do(data: Address, blockTag: BlockTag) -> seq[byte]:
-    ## Returns code at a given address.
-    ##
-    ## data: address
-    ## blockTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
-    ## Returns the code from the given address.
-    let
-      txFrame = api.frameFromTag(blockTag).valueOr:
-        raise newException(ValueError, error)
-      address = data
-      accPath = address.computeAccPath
-      acc = txFrame.fetchAccount(accPath).valueOr(emptyDbAccount)
+    proc eth_getCode(data: Address, blockTag: BlockTag): seq[byte] {.raises: [ValueError].} =
+      ## Returns code at a given address.
+      ##
+      ## data: address
+      ## blockTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+      ## Returns the code from the given address.
+      let
+        txFrame = api.frameFromTag(blockTag).valueOr:
+          raise newException(ValueError, error)
+        address = data
+        accPath = address.computeAccPath
+        acc = txFrame.fetchAccount(accPath).valueOr(emptyDbAccount)
 
-    txFrame.getCodeByHash(acc.codeHash).valueOr(@[])
+      txFrame.getCodeByHash(acc.codeHash).valueOr(@[])
 
-  server.rpc("eth_getBlockByHash") do(
-    data: Hash32, fullTransactions: bool
-  ) -> BlockObject:
-    ## Returns information about a block by hash.
-    ##
-    ## data: Hash of a block.
-    ## fullTransactions: If true it returns the full transaction objects, if false only the hashes of the transactions.
-    ## Returns BlockObject or nil when no block was found.
-    let blockHash = data
+    proc eth_getBlockByHash(
+      data: Hash32, fullTransactions: bool
+    ): BlockObject =
+      ## Returns information about a block by hash.
+      ##
+      ## data: Hash of a block.
+      ## fullTransactions: If true it returns the full transaction objects, if false only the hashes of the transactions.
+      ## Returns BlockObject or nil when no block was found.
+      let blockHash = data
 
-    let blk = api.chain.blockByHash(blockHash).valueOr:
-      return nil
+      let blk = api.chain.blockByHash(blockHash).valueOr:
+        return nil
 
-    return populateBlockObject(
-      blockHash, blk, api.getTotalDifficulty(blockHash, blk.header), fullTransactions
-    )
-
-  server.rpc("eth_getBlockByNumber") do(
-    blockTag: BlockTag, fullTransactions: bool
-  ) -> BlockObject:
-    ## Returns information about a block by block number.
-    ##
-    ## blockTag: integer of a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
-    ## fullTransactions: If true it returns the full transaction objects, if false only the hashes of the transactions.
-    ## Returns BlockObject or nil when no block was found.
-    let blk = api.blockFromTag(blockTag, noHash = true).valueOr:
-      return nil
-
-    let blockHash = blk.header.computeBlockHash
-    return populateBlockObject(
-      blockHash, blk, api.getTotalDifficulty(blockHash, blk.header), fullTransactions
-    )
-
-  server.rpc("eth_syncing") do() -> SyncingStatus:
-    ## Returns SyncObject or false when not syncing.
-    let (start, current, target) = api.com.beaconSyncerProgress()
-    if start == 0 and current == 0 and target == 0:
-      return SyncingStatus(syncing: false)
-    else:
-      let sync = SyncObject(
-        startingBlock: Quantity(start),
-        currentBlock: Quantity(current),
-        highestBlock: Quantity(target),
+      return populateBlockObject(
+        blockHash, blk, api.getTotalDifficulty(blockHash, blk.header), fullTransactions
       )
-      return SyncingStatus(syncing: true, syncObject: sync)
 
-  server.rpc("eth_getLogs") do(filterOptions: FilterOptions) -> seq[FilterLog]:
-    ## filterOptions: settings for this filter.
-    ## Returns a list of all logs matching a given filter object.
-    ## TODO: Current implementation is pretty naive and not efficient
-    ## as it requires to fetch all transactions and all receipts from database.
-    ## Other clients (Geth):
-    ## - Store logs related data in receipts.
-    ## - Have separate indexes for Logs in given block
-    ## Both of those changes require improvements to the way how we keep our data
-    ## in Nimbus.
-    if filterOptions.blockHash.isSome():
-      if filterOptions.fromBlock.isSome() or filterOptions.toBlock.isSome():
-        raise (ref ApplicationError)(code: -32602, msg: "invalid argument 0: cannot specify both BlockHash and FromBlock/ToBlock, choose one or the other",)
-      let
-        hash = filterOptions.blockHash.expect("blockHash")
-        header = api.chain.headerByHash(hash).valueOr:
-          raise newException(ValueError, "Block not found")
-        logs = getLogsForBlock(api.chain, header, filterOptions).valueOr:
-          raise newException(ValueError, "getLogsForBlock error")
-      return logs
-    else:
-      # TODO: do something smarter with tags. It would be the best if
-      # tag would be an enum (Earliest, Latest, Pending, Number), and all operations
-      # would operate on this enum instead of raw strings. This change would need
-      # to be done on every endpoint to be consistent.
-      if filterOptions.toBlock.isSome() and
-          filterOptions.toBlock.get().kind == bidNumber and
-          base.BlockNumber(filterOptions.toBlock.get().number) > api.chain.latestHeader.number:
-        raise (ref ApplicationError)(code: -32602,msg: "block range extends beyond current head block",)
-
-      let
-        blockFrom = api.headerFromTag(filterOptions.fromBlock.get(defaultTag)).valueOr:
-          raise newException(ValueError, "Block not found")
-        blockTo = api.headerFromTag(filterOptions.toBlock.get(defaultTag)).valueOr:
-          raise newException(ValueError, "Block not found")
-
-      if blockFrom.number > blockTo.number:
-        raise (ref ApplicationError)(code: -32602, msg: "invalid block range params")
-
-      return api.chain.getLogsForRange(blockFrom.number, blockTo.number, filterOptions)
-
-  server.rpc("eth_sendRawTransaction") do(txBytes: seq[byte]) -> Hash32:
-    ## Creates new message call transaction or a contract creation for signed transactions.
-    ##
-    ## data: the signed transaction data.
-    ## Returns the transaction hash, or the zero hash if the transaction is not yet available.
-    ## Note: Use eth_getTransactionReceipt to get the contract address, after the transaction was mined, when you created a contract.
-    let
-      pooledTx = decodePooledTx(txBytes)
-      txHash = computeRlpHash(pooledTx.tx)
-
-    api.txPool.addTx(pooledTx).isOkOr:
-      raise newException(ValueError, $error)
-
-    txHash
-
-  server.rpc("eth_call") do(args: TransactionArgs, blockTag: BlockTag) -> seq[byte]:
-    ## Executes a new message call immediately without creating a transaction on the block chain.
-    ##
-    ## call: the transaction call object.
-    ## quantityTag:  integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
-    ## Returns the return value of executed contract.
-    let
-      header = api.headerFromTag(blockTag).valueOr:
-        raise newException(ValueError, "Block not found")
-      headerHash = header.computeBlockHash
-      txFrame = api.chain.txFrame(headerHash)
-      res = rpcCallEvm(args, header, headerHash, api.com, txFrame).valueOr:
-        raise newException(ValueError, "rpcCallEvm error: " & $error.code)
-    res.output
-
-  server.rpc("eth_getTransactionReceipt") do(data: Hash32) -> ReceiptObject:
-    ## Returns the receipt of a transaction by transaction hash.
-    ##
-    ## data: Hash of a transaction.
-    ## Returns ReceiptObject or nil when no receipt was found.
-    let
-      txHash = data
-      (blockHash, txid) = api.chain.txDetailsByTxHash(txHash).valueOr:
-        return nil
-      header = api.chain.headerByHash(blockHash).valueOr:
-        return nil
-      tx = api.chain.txByBlockHashAndIndex(blockHash, txid).valueOr:
-        return nil
-      receipt = api.chain.receiptByBlockHashAndIndex(blockHash, txid).valueOr:
-        return nil
-      prevGasUsed =
-        if txid == 0:
-          0'u64
-        else:
-          let prev = api.chain.receiptByBlockHashAndIndex(blockHash, txid - 1).valueOr:
-            return nil
-          prev.cumulativeGasUsed
-
-    return populateReceipt(receipt, receipt.cumulativeGasUsed - prevGasUsed,
-                           tx, txid, header, api.com)
-
-  server.rpc("eth_estimateGas") do(args: TransactionArgs) -> Quantity:
-    ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
-    ## The transaction will not be added to the blockchain. Note that the estimate may be significantly more than
-    ## the amount of gas actually used by the transaction, for a variety of reasons including EVM mechanics and node performance.
-    ##
-    ## args: the transaction call object.
-    ## quantityTag:  integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
-    ## Returns the amount of gas used.
-    let
-      header = api.headerFromTag(blockId("latest")).valueOr:
-        raise newException(ValueError, "Block not found")
-      headerHash = header.computeBlockHash
-      txFrame = api.chain.txFrame(headerHash)
-      # TODO: change 0 to configureable gas cap
-      gasUsed = rpcEstimateGas(args, header, headerHash, api.com, txFrame, DEFAULT_RPC_GAS_CAP).valueOr:
-        let data = Opt.some(JrpcConv.encode(error[1].output.to0xHex()).JsonString)
-        raise (ref ApplicationError)(
-          code: 3,
-          msg: $error[1].error,
-          data: data,
-        )
-    Quantity(gasUsed)
-
-  server.rpc("eth_gasPrice") do() -> Quantity:
-    ## Returns an integer of the current gas price in wei.
-    w3Qty(calculateMedianGasPrice(api.chain).uint64)
-
-  server.rpc("eth_accounts") do() -> seq[Address]:
-    ## Returns a list of addresses owned by client.
-    result = newSeqOfCap[Address](am[].numAccounts)
-    for k in am[].addresses:
-      result.add k
-
-  server.rpc("eth_getBlockTransactionCountByHash") do(data: Hash32) -> Quantity:
-    ## Returns the number of transactions in a block from a block matching the given block hash.
-    ##
-    ## data: hash of a block
-    ## Returns integer of the number of transactions in this block.
-    let blk = api.chain.blockByHash(data).valueOr:
-      raise newException(ValueError, "Block not found")
-
-    Quantity(blk.transactions.len)
-
-  server.rpc("eth_getBlockTransactionCountByNumber") do(
-    blockTag: BlockTag
-  ) -> Quantity:
-    ## Returns the number of transactions in a block from a block matching the given block number.
-    ##
-    ## blockTag: integer of a block number, or the string "latest", "earliest" or "pending", see the default block parameter.
-    ## Returns integer of the number of transactions in this block.
-    let blk = api.blockFromTag(blockTag, noHash = true).valueOr:
-      raise newException(ValueError, "Block not found: " & error)
-
-    Quantity(blk.transactions.len)
-
-  server.rpc("eth_getUncleCountByBlockHash") do(data: Hash32) -> Quantity:
-    ## Returns the number of uncles in a block from a block matching the given block hash.
-    ##
-    ## data: hash of a block.
-    ## Returns integer of the number of uncles in this block.
-    let blk = api.chain.blockByHash(data).valueOr:
-      raise newException(ValueError, "Block not found")
-
-    Quantity(blk.uncles.len)
-
-  server.rpc("eth_getUncleCountByBlockNumber") do(blockTag: BlockTag) -> Quantity:
-    ## Returns the number of uncles in a block from a block matching the given block number.
-    ##
-    ## blockTag: integer of a block number, or the string "latest", see the default block parameter.
-    ## Returns integer of the number of uncles in this block.
-    let blk = api.blockFromTag(blockTag, noHash = true).valueOr:
-      raise newException(ValueError, "Block not found: " & error)
-
-    Quantity(blk.uncles.len)
-
-  template sign(privateKey: PrivateKey, message: string): seq[byte] =
-    # message length encoded as ASCII representation of decimal
-    let msgData = "\x19Ethereum Signed Message:\n" & $message.len & message
-    @(sign(privateKey, msgData.toBytes()).toRaw())
-
-  server.rpc("eth_sign") do(data: Address, message: seq[byte]) -> seq[byte]:
-    ## The sign method calculates an Ethereum specific signature with: sign(keccak256("\x19Ethereum Signed Message:\n" + len(message) + message))).
-    ## By adding a prefix to the message makes the calculated signature recognisable as an Ethereum specific signature.
-    ## This prevents misuse where a malicious DApp can sign arbitrary data (e.g. transaction) and use the signature to impersonate the victim.
-    ## Note the address to sign with must be unlocked.
-    ##
-    ## data: address.
-    ## message: message to sign.
-    ## Returns signature.
-    let
-      address = data
-      acc = am[].getAccount(address).tryGet()
-
-    if not acc.unlocked:
-      raise newException(ValueError, "Account locked, please unlock it first")
-    sign(acc.privateKey, cast[string](message))
-
-  server.rpc("eth_signTransaction") do(data: TransactionArgs) -> seq[byte]:
-    ## Signs a transaction that can be submitted to the network at a later time using with
-    ## eth_sendRawTransaction
-    let
-      address = data.`from`.get()
-      acc = am[].getAccount(address).tryGet()
-
-    if not acc.unlocked:
-      raise newException(ValueError, "Account locked, please unlock it first")
-
-    let
-      txFrame = api.frameFromTag(blockId("latest")).valueOr:
-        raise newException(ValueError, "Latest Block not found")
-      accRec = txFrame.fetchAccount(address.computeAccPath).valueOr(emptyDbAccount)
-      tx = unsignedTx(data, api.chain, accRec.nonce + 1, api.com.chainId)
-      eip155 = api.com.isEIP155(api.chain.latestNumber)
-      signedTx = signTransaction(tx, acc.privateKey, eip155)
-    return rlp.encode(signedTx)
-
-  server.rpc("eth_sendTransaction") do(data: TransactionArgs) -> Hash32:
-    ## Creates new message call transaction or a contract creation, if the data field contains code.
-    ##
-    ## obj: the transaction object.
-    ## Returns the transaction hash, or the zero hash if the transaction is not yet available.
-    ## Note: Use eth_getTransactionReceipt to get the contract address, after the transaction was mined, when you created a contract.
-    let
-      address = data.`from`.get()
-      acc = am[].getAccount(address).tryGet()
-
-    if not acc.unlocked:
-      raise newException(ValueError, "Account locked, please unlock it first")
-
-    let
-      txFrame = api.frameFromTag(blockId("latest")).valueOr:
-        raise newException(ValueError, "Latest Block not found")
-      accRec = txFrame.fetchAccount(address.computeAccPath).valueOr(emptyDbAccount)
-
-      tx = unsignedTx(data, api.chain, accRec.nonce + 1, api.com.chainId)
-      eip155 = api.com.isEIP155(api.chain.latestNumber)
-      signedTx = signTransaction(tx, acc.privateKey, eip155)
-      blobsBundle =
-        if signedTx.txType == TxEip4844:
-          if data.blobs.isNone or data.commitments.isNone or data.proofs.isNone:
-            raise newException(ValueError, "EIP-4844 transaction needs blobs")
-          if data.blobs.get.len != signedTx.versionedHashes.len:
-            raise newException(ValueError, "Incorrect number of blobs")
-          if data.commitments.get.len != signedTx.versionedHashes.len:
-            raise newException(ValueError, "Incorrect number of commitments")
-          if data.proofs.get.len != signedTx.versionedHashes.len:
-            raise newException(ValueError, "Incorrect number of proofs")
-          BlobsBundle(
-            blobs: data.blobs.get,
-            commitments: data.commitments.get,
-            proofs: data.proofs.get,
-          )
-        else:
-          if data.blobs.isSome or data.commitments.isSome or data.proofs.isSome:
-            raise newException(ValueError, "Blobs require EIP-4844 transaction")
-          nil
-      pooledTx = PooledTransaction(tx: signedTx, blobsBundle: blobsBundle)
-
-    api.txPool.addTx(pooledTx).isOkOr:
-      raise newException(ValueError, $error)
-
-    let txHash = computeRlpHash(signedTx)
-
-    txHash
-
-  server.rpc("eth_getTransactionByHash") do(data: Hash32) -> TransactionObject:
-    ## Returns the information about a transaction requested by transaction hash.
-    ##
-    ## data: hash of a transaction.
-    ## Returns requested transaction information.
-    let
-      txHash = data
-      res = api.txPool.getItem(txHash)
-    if res.isOk:
-      return populateTransactionObject(res.get().tx, Opt.none(Hash32), Opt.none(uint64))
-
-    let
-      (blockHash, txId) = api.chain.txDetailsByTxHash(txHash).valueOr:
-        return nil
-      blk = api.chain.blockByHash(blockHash).valueOr:
+    proc eth_getBlockByNumber(
+      blockTag: BlockTag, fullTransactions: bool
+    ): BlockObject =
+      ## Returns information about a block by block number.
+      ##
+      ## blockTag: integer of a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
+      ## fullTransactions: If true it returns the full transaction objects, if false only the hashes of the transactions.
+      ## Returns BlockObject or nil when no block was found.
+      let blk = api.blockFromTag(blockTag, noHash = true).valueOr:
         return nil
 
-    if blk.transactions.len <= int(txId):
-      return nil
+      let blockHash = blk.header.computeBlockHash
+      return populateBlockObject(
+        blockHash, blk, api.getTotalDifficulty(blockHash, blk.header), fullTransactions
+      )
 
-    return populateTransactionObject(
-      blk.transactions[txId],
-      Opt.some(blockHash),
-      Opt.some(blk.header.number),
-      Opt.some(blk.header.timestamp),
-      Opt.some(txId),
-    )
-
-  server.rpc("eth_getTransactionByBlockHashAndIndex") do(
-    data: Hash32, quantity: Quantity
-  ) -> TransactionObject:
-    ## Returns information about a transaction by block hash and transaction index position.
-    ##
-    ## data: hash of a block.
-    ## quantity: integer of the transaction index position.
-    ## Returns  requested transaction information.
-    let index = uint64(quantity)
-    let blk = api.chain.blockByHash(data).valueOr:
-      return nil
-
-    if index >= uint64(blk.transactions.len):
-      return nil
-
-    populateTransactionObject(
-      blk.transactions[index],
-      Opt.some(data),
-      Opt.some(blk.header.number),
-      Opt.some(blk.header.timestamp),
-      Opt.some(index),
-    )
-
-  server.rpc("eth_getTransactionByBlockNumberAndIndex") do(
-    quantityTag: BlockTag, quantity: Quantity
-  ) -> TransactionObject:
-    ## Returns information about a transaction by block number and transaction index position.
-    ##
-    ## quantityTag: a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
-    ## quantity: the transaction index position.
-    ## NOTE : "pending" blockTag is not supported.
-    let index = uint64(quantity)
-    let blk = api.blockFromTag(quantityTag, noHash = true).valueOr:
-      return nil
-
-    if index >= uint64(blk.transactions.len):
-      return nil
-
-    populateTransactionObject(
-      blk.transactions[index],
-      Opt.some(blk.header.computeBlockHash),
-      Opt.some(blk.header.number),
-      Opt.some(blk.header.timestamp),
-      Opt.some(index),
-    )
-
-  server.rpc("eth_getProof") do(
-    data: Address, slots: seq[UInt256], quantityTag: BlockTag
-  ) -> ProofResponse:
-    ## Returns information about an account and storage slots (if the account is a contract
-    ## and the slots are requested) along with account and storage proofs which prove the
-    ## existence of the values in the state.
-    ## See spec here: https://eips.ethereum.org/EIPS/eip-1186
-    ##
-    ## data: address of the account.
-    ## slots: integers of the positions in the storage to return with storage proofs.
-    ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
-    ## Returns: the proof response containing the account, account proof and storage proof
-    let
-      txFrame = api.frameFromTag(quantityTag).valueOr:
-        raise newException(ValueError, error)
-    getProof(txFrame, data, slots)
-
-  server.rpc("eth_getBlockReceipts") do(
-    quantityTag: BlockTag
-  ) -> Opt[seq[ReceiptObject]]:
-    ## Returns the receipts of a block.
-    if quantityTag.kind == bidHash and quantityTag.requireCanonical:
-      raise newException(ValueError,
-        "requireCanonical is a pre-merge concept and is not supported")
-
-    let
-      blk = api.blockFromTag(quantityTag).valueOr:
-        return Opt.none(seq[ReceiptObject])
-      blkHash = blk.header.computeBlockHash
-      receipts = api.chain.receiptsByBlockHash(blkHash).valueOr:
-        return Opt.none(seq[ReceiptObject])
-
-    if blk.transactions.len == 0:
-      return Opt.some(newSeq[ReceiptObject]())
-
-    var
-      prevGasUsed = GasInt(0)
-      recs: seq[ReceiptObject]
-      index = 0'u64
-
-    try:
-      for receipt in receipts:
-        let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
-        prevGasUsed = receipt.cumulativeGasUsed
-        recs.add populateReceipt(receipt, gasUsed, blk.transactions[index], index, blk.header, api.com)
-        inc index
-      return Opt.some(recs)
-    except CatchableError:
-      return Opt.none(seq[ReceiptObject])
-
-  server.rpc("eth_createAccessList") do(
-    args: TransactionArgs, quantityTag: BlockTag
-  ) -> AccessListResult:
-    ## Generates an access list for a transaction.
-    try:
-      let header = api.headerFromTag(quantityTag).valueOr:
-        raise newException(ValueError, "Block not found")
-      return createAccessList(header, api.com, api.chain, args)
-    except CatchableError as exc:
-      return AccessListResult(error: Opt.some("createAccessList error: " & exc.msg))
-
-  server.rpc("eth_blobBaseFee") do() -> Quantity:
-    ## Returns the base fee per blob gas in wei.
-    let header = api.headerFromTag(blockId("latest")).valueOr:
-      raise newException(ValueError, "Block not found")
-    if header.excessBlobGas.isNone:
-      raise newException(ValueError, "excessBlobGas missing from latest header")
-    let blobBaseFee =
-      getBlobBaseFee(header.excessBlobGas.get, api.com, api.com.toEVMFork(header))
-    if blobBaseFee > high(uint64).u256:
-      raise newException(ValueError, "blobBaseFee is bigger than uint64.max")
-    return w3Qty blobBaseFee.truncate(uint64)
-
-  server.rpc("eth_getUncleByBlockHashAndIndex") do(
-    data: Hash32, quantity: Quantity
-  ) -> BlockObject:
-    ## Returns information about a uncle of a block by hash and uncle index position.
-    ##
-    ## data: hash of block.
-    ## quantity: the uncle's index position.
-    ## Returns BlockObject or nil when no block was found.
-    let index = uint64(quantity)
-    let blk = api.chain.blockByHash(data).valueOr:
-      return nil
-
-    if index < 0 or index >= blk.uncles.len.uint64:
-      return nil
-
-    let
-      uncle = api.chain.blockByHash(blk.uncles[index].computeBlockHash).valueOr:
-        return nil
-      uncleHash = uncle.header.computeBlockHash
-
-    return populateBlockObject(
-      uncleHash, uncle, api.getTotalDifficulty(uncleHash, uncle.header), false, true
-    )
-
-  server.rpc("eth_getUncleByBlockNumberAndIndex") do(
-    quantityTag: BlockTag, quantity: Quantity
-  ) -> BlockObject:
-    # Returns information about a uncle of a block by number and uncle index position.
-    ##
-    ## quantityTag: a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
-    ## quantity: the uncle's index position.
-    ## Returns BlockObject or nil when no block was found.
-    let index = uint64(quantity)
-    let blk = api.blockFromTag(quantityTag).valueOr:
-      return nil
-
-    if index < 0 or index >= blk.uncles.len.uint64:
-      return nil
-
-    let
-      uncle = api.chain.blockByHash(blk.uncles[index].computeBlockHash).valueOr:
-        return nil
-      uncleHash = uncle.header.computeBlockHash
-
-    return populateBlockObject(
-      uncleHash, uncle, api.getTotalDifficulty(uncleHash, uncle.header), false, true
-    )
-
-  server.rpc("eth_config") do() -> EthConfigObject:
-    ## Returns the current, next and last configuration
-    ## Doesn't work pre-shangai
-    ## https://eips.ethereum.org/EIPS/eip-7910
-    let currentFork = api.com.toHardFork(api.chain.latestHeader.forkDeterminationInfo)
-
-    if currentFork < Shanghai:
-      return nil
-
-    let
-      nextFork = api.com.nextFork(currentFork)
-      lastFork = api.com.lastFork(currentFork)
-
-    return api.com.getEthConfigObject(api.chain, currentFork, nextFork, lastFork)
-
-  server.rpc("eth_getBlockAccessList") do(quantityTag: BlockTag) -> Opt[BlockAccessList]:
-    ## Returns the block access list by block number, tag or block hash.
-    ##
-
-    let header = api.chain.headerFromTag(quantityTag).valueOr:
-      raise newException(ValueError, error)
-
-    if not api.com.isAmsterdamOrLater(header.timestamp):
-      raise newException(ValueError, "Block access list not available for pre-Amsterdam blocks")
-
-    let bal = api.chain.getBlockAccessList(header.computeRlpHash()).valueOr:
-      if header.number <= api.chain.resolvedFinNumber:
-        # This block is finalized so if the bal is missing it means it was pruned.
-        raise newException(ValueError, "Pruned history unavailable")
+    proc eth_syncing(): SyncingStatus =
+      ## Returns SyncObject or false when not syncing.
+      let (start, current, target) = api.com.beaconSyncerProgress()
+      if start == 0 and current == 0 and target == 0:
+        return SyncingStatus(syncing: false)
       else:
-        return Opt.none(BlockAccessList)
+        let sync = SyncObject(
+          startingBlock: Quantity(start),
+          currentBlock: Quantity(current),
+          highestBlock: Quantity(target),
+        )
+        return SyncingStatus(syncing: true, syncObject: sync)
 
-    Opt.some(bal)
+    proc eth_getLogs(filterOptions: FilterOptions): seq[FilterLog] {.raises: [ApplicationError, ValueError].} =
+      ## filterOptions: settings for this filter.
+      ## Returns a list of all logs matching a given filter object.
+      ## TODO: Current implementation is pretty naive and not efficient
+      ## as it requires to fetch all transactions and all receipts from database.
+      ## Other clients (Geth):
+      ## - Store logs related data in receipts.
+      ## - Have separate indexes for Logs in given block
+      ## Both of those changes require improvements to the way how we keep our data
+      ## in Nimbus.
+      if filterOptions.blockHash.isSome():
+        if filterOptions.fromBlock.isSome() or filterOptions.toBlock.isSome():
+          raise invalidParams(
+            "invalid argument 0: cannot specify both BlockHash and FromBlock/ToBlock, choose one or the other")
+        let
+          hash = filterOptions.blockHash.expect("blockHash")
+          header = api.chain.headerByHash(hash).valueOr:
+            raise newException(ValueError, "Block not found")
+          logs = getLogsForBlock(api.chain, header, filterOptions).valueOr:
+            raise newException(ValueError, "getLogsForBlock error")
+        return logs
+      else:
+        # TODO: do something smarter with tags. It would be the best if
+        # tag would be an enum (Earliest, Latest, Pending, Number), and all operations
+        # would operate on this enum instead of raw strings. This change would need
+        # to be done on every endpoint to be consistent.
+        if filterOptions.toBlock.isSome() and
+            filterOptions.toBlock.get().kind == bidNumber and
+            base.BlockNumber(filterOptions.toBlock.get().number) > api.chain.latestHeader.number:
+          raise invalidParams("block range extends beyond current head block")
 
-  server.rpc("eth_feeHistory") do(
-    blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: Opt[seq[float64]]
-  ) -> FeeHistoryResult:
-    api.oracle.feeHistory(blockCount.uint64, newestBlock, rewardPercentiles.get(@[])).valueOr:
-      raise newException(ValueError, error)
+        let
+          blockFrom = api.headerFromTag(filterOptions.fromBlock.get(defaultTag)).valueOr:
+            raise newException(ValueError, "Block not found")
+          blockTo = api.headerFromTag(filterOptions.toBlock.get(defaultTag)).valueOr:
+            raise newException(ValueError, "Block not found")
 
-  server.rpc("eth_maxPriorityFeePerGas") do() -> Quantity:
-    w3Qty(calculateMedianMaxPriorityFeePerGas(api.chain).uint64)
+        if blockFrom.number > blockTo.number:
+          raise invalidParams("invalid block range params")
 
-  server.rpc("eth_getStorageValues") do(request: StorageValuesRequest, blockTag: BlockTag) -> StorageValuesResponse:
-    let
-      txFrame = api.frameFromTag(blockTag).valueOr:
+        return api.chain.getLogsForRange(blockFrom.number, blockTo.number, filterOptions)
+
+    proc eth_sendRawTransaction(txBytes: seq[byte]): Hash32 {.raises: [ValueError, RlpError].} =
+      ## Creates new message call transaction or a contract creation for signed transactions.
+      ##
+      ## data: the signed transaction data.
+      ## Returns the transaction hash, or the zero hash if the transaction is not yet available.
+      ## Note: Use eth_getTransactionReceipt to get the contract address, after the transaction was mined, when you created a contract.
+      let
+        pooledTx = decodePooledTx(txBytes)
+        txHash = computeRlpHash(pooledTx.tx)
+
+      api.txPool.addTx(pooledTx).isOkOr:
+        raise newException(ValueError, $error)
+
+      txHash
+
+    proc eth_call(args: TransactionArgs, blockTag: BlockTag): seq[byte] {.raises: [ValueError].} =
+      ## Executes a new message call immediately without creating a transaction on the block chain.
+      ##
+      ## call: the transaction call object.
+      ## quantityTag:  integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+      ## Returns the return value of executed contract.
+      let
+        header = api.headerFromTag(blockTag).valueOr:
+          raise newException(ValueError, "Block not found")
+        headerHash = header.computeBlockHash
+        txFrame = api.chain.txFrame(headerHash)
+        res = rpcCallEvm(args, header, headerHash, api.com, txFrame).valueOr:
+          raise newException(ValueError, "rpcCallEvm error: " & $error.code)
+      res.output
+
+    proc eth_getTransactionReceipt(data: Hash32): ReceiptObject =
+      ## Returns the receipt of a transaction by transaction hash.
+      ##
+      ## data: Hash of a transaction.
+      ## Returns ReceiptObject or nil when no receipt was found.
+      let
+        txHash = data
+        (blockHash, txid) = api.chain.txDetailsByTxHash(txHash).valueOr:
+          return nil
+        header = api.chain.headerByHash(blockHash).valueOr:
+          return nil
+        tx = api.chain.txByBlockHashAndIndex(blockHash, txid).valueOr:
+          return nil
+        receipt = api.chain.receiptByBlockHashAndIndex(blockHash, txid).valueOr:
+          return nil
+        prevGasUsed =
+          if txid == 0:
+            0'u64
+          else:
+            let prev = api.chain.receiptByBlockHashAndIndex(blockHash, txid - 1).valueOr:
+              return nil
+            prev.cumulativeGasUsed
+
+      return populateReceipt(receipt, receipt.cumulativeGasUsed - prevGasUsed,
+                            tx, txid, header, api.com)
+
+    proc eth_estimateGas(args: TransactionArgs): Quantity {.raises: [ApplicationError, ValueError].} =
+      ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
+      ## The transaction will not be added to the blockchain. Note that the estimate may be significantly more than
+      ## the amount of gas actually used by the transaction, for a variety of reasons including EVM mechanics and node performance.
+      ##
+      ## args: the transaction call object.
+      ## quantityTag:  integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+      ## Returns the amount of gas used.
+      let
+        header = api.headerFromTag(blockId("latest")).valueOr:
+          raise newException(ValueError, "Block not found")
+        headerHash = header.computeBlockHash
+        txFrame = api.chain.txFrame(headerHash)
+        # TODO: change 0 to configureable gas cap
+        gasUsed = rpcEstimateGas(args, header, headerHash, api.com, txFrame, DEFAULT_RPC_GAS_CAP).valueOr:
+          let data = Opt.some(EthJson.encode(error[1].output.to0xHex()).JsonString)
+          raise (ref ApplicationError)(
+            code: 3,
+            msg: $error[1].error,
+            data: data,
+          )
+      Quantity(gasUsed)
+
+    proc eth_gasPrice(): Quantity =
+      ## Returns an integer of the current gas price in wei.
+      w3Qty(calculateMedianGasPrice(api.chain).uint64)
+
+    proc eth_accounts(): seq[Address] =
+      ## Returns a list of addresses owned by client.
+      result = newSeqOfCap[Address](am[].numAccounts)
+      for k in am[].addresses:
+        result.add k
+
+    proc eth_getBlockTransactionCountByHash(data: Hash32): Quantity {.raises: [ValueError].} =
+      ## Returns the number of transactions in a block from a block matching the given block hash.
+      ##
+      ## data: hash of a block
+      ## Returns integer of the number of transactions in this block.
+      let blk = api.chain.blockByHash(data).valueOr:
+        raise newException(ValueError, "Block not found")
+
+      Quantity(blk.transactions.len)
+
+    proc eth_getBlockTransactionCountByNumber(
+      blockTag: BlockTag
+    ): Quantity {.raises: [ValueError].} =
+      ## Returns the number of transactions in a block from a block matching the given block number.
+      ##
+      ## blockTag: integer of a block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+      ## Returns integer of the number of transactions in this block.
+      let blk = api.blockFromTag(blockTag, noHash = true).valueOr:
+        raise newException(ValueError, "Block not found: " & error)
+
+      Quantity(blk.transactions.len)
+
+    proc eth_getUncleCountByBlockHash(data: Hash32): Quantity {.raises: [ValueError].} =
+      ## Returns the number of uncles in a block from a block matching the given block hash.
+      ##
+      ## data: hash of a block.
+      ## Returns integer of the number of uncles in this block.
+      let blk = api.chain.blockByHash(data).valueOr:
+        raise newException(ValueError, "Block not found")
+
+      Quantity(blk.uncles.len)
+
+    proc eth_getUncleCountByBlockNumber(blockTag: BlockTag): Quantity {.raises: [ValueError].} =
+      ## Returns the number of uncles in a block from a block matching the given block number.
+      ##
+      ## blockTag: integer of a block number, or the string "latest", see the default block parameter.
+      ## Returns integer of the number of uncles in this block.
+      let blk = api.blockFromTag(blockTag, noHash = true).valueOr:
+        raise newException(ValueError, "Block not found: " & error)
+
+      Quantity(blk.uncles.len)
+
+    proc eth_sign(data: Address, message: seq[byte]): seq[byte] {.raises: [ValueError].} =
+      ## The sign method calculates an Ethereum specific signature with: sign(keccak256("\x19Ethereum Signed Message:\n" + len(message) + message))).
+      ## By adding a prefix to the message makes the calculated signature recognisable as an Ethereum specific signature.
+      ## This prevents misuse where a malicious DApp can sign arbitrary data (e.g. transaction) and use the signature to impersonate the victim.
+      ## Note the address to sign with must be unlocked.
+      ##
+      ## data: address.
+      ## message: message to sign.
+      ## Returns signature.
+      let
+        address = data
+        acc = am[].getAccount(address).tryGet()
+
+      if not acc.unlocked:
+        raise newException(ValueError, "Account locked, please unlock it first")
+      sign(acc.privateKey, cast[string](message))
+
+    proc eth_signTransaction(data: TransactionArgs): seq[byte] {.raises: [ValueError].} =
+      ## Signs a transaction that can be submitted to the network at a later time using with
+      ## eth_sendRawTransaction
+      let
+        address = data.`from`.get()
+        acc = am[].getAccount(address).tryGet()
+
+      if not acc.unlocked:
+        raise newException(ValueError, "Account locked, please unlock it first")
+
+      let
+        txFrame = api.frameFromTag(blockId("latest")).valueOr:
+          raise newException(ValueError, "Latest Block not found")
+        accRec = txFrame.fetchAccount(address.computeAccPath).valueOr(emptyDbAccount)
+        tx = unsignedTx(data, api.chain, accRec.nonce + 1, api.com.chainId)
+        eip155 = api.com.isEIP155(api.chain.latestNumber)
+        signedTx = signTransaction(tx, acc.privateKey, eip155)
+      return rlp.encode(signedTx)
+
+    proc eth_sendTransaction(data: TransactionArgs): Hash32 {.raises: [ValueError].} =
+      ## Creates new message call transaction or a contract creation, if the data field contains code.
+      ##
+      ## obj: the transaction object.
+      ## Returns the transaction hash, or the zero hash if the transaction is not yet available.
+      ## Note: Use eth_getTransactionReceipt to get the contract address, after the transaction was mined, when you created a contract.
+      let
+        address = data.`from`.get()
+        acc = am[].getAccount(address).tryGet()
+
+      if not acc.unlocked:
+        raise newException(ValueError, "Account locked, please unlock it first")
+
+      let
+        txFrame = api.frameFromTag(blockId("latest")).valueOr:
+          raise newException(ValueError, "Latest Block not found")
+        accRec = txFrame.fetchAccount(address.computeAccPath).valueOr(emptyDbAccount)
+
+        tx = unsignedTx(data, api.chain, accRec.nonce + 1, api.com.chainId)
+        eip155 = api.com.isEIP155(api.chain.latestNumber)
+        signedTx = signTransaction(tx, acc.privateKey, eip155)
+        blobsBundle =
+          if signedTx.txType == TxEip4844:
+            if data.blobs.isNone or data.commitments.isNone or data.proofs.isNone:
+              raise newException(ValueError, "EIP-4844 transaction needs blobs")
+            if data.blobs.get.len != signedTx.versionedHashes.len:
+              raise newException(ValueError, "Incorrect number of blobs")
+            if data.commitments.get.len != signedTx.versionedHashes.len:
+              raise newException(ValueError, "Incorrect number of commitments")
+            if data.proofs.get.len != signedTx.versionedHashes.len:
+              raise newException(ValueError, "Incorrect number of proofs")
+            BlobsBundle(
+              blobs: data.blobs.get,
+              commitments: data.commitments.get,
+              proofs: data.proofs.get,
+            )
+          else:
+            if data.blobs.isSome or data.commitments.isSome or data.proofs.isSome:
+              raise newException(ValueError, "Blobs require EIP-4844 transaction")
+            nil
+        pooledTx = PooledTransaction(tx: signedTx, blobsBundle: blobsBundle)
+
+      api.txPool.addTx(pooledTx).isOkOr:
+        raise newException(ValueError, $error)
+
+      let txHash = computeRlpHash(signedTx)
+
+      txHash
+
+    proc eth_getTransactionByHash(data: Hash32): TransactionObject =
+      ## Returns the information about a transaction requested by transaction hash.
+      ##
+      ## data: hash of a transaction.
+      ## Returns requested transaction information.
+      let
+        txHash = data
+        res = api.txPool.getItem(txHash)
+      if res.isOk:
+        return populateTransactionObject(res.get().tx, Opt.none(Hash32), Opt.none(uint64))
+
+      let
+        (blockHash, txId) = api.chain.txDetailsByTxHash(txHash).valueOr:
+          return nil
+        blk = api.chain.blockByHash(blockHash).valueOr:
+          return nil
+
+      if blk.transactions.len <= int(txId):
+        return nil
+
+      return populateTransactionObject(
+        blk.transactions[txId],
+        Opt.some(blockHash),
+        Opt.some(blk.header.number),
+        Opt.some(blk.header.timestamp),
+        Opt.some(txId),
+      )
+
+    proc eth_getTransactionByBlockHashAndIndex(
+      data: Hash32, quantity: Quantity
+    ): TransactionObject =
+      ## Returns information about a transaction by block hash and transaction index position.
+      ##
+      ## data: hash of a block.
+      ## quantity: integer of the transaction index position.
+      ## Returns  requested transaction information.
+      let index = uint64(quantity)
+      let blk = api.chain.blockByHash(data).valueOr:
+        return nil
+
+      if index >= uint64(blk.transactions.len):
+        return nil
+
+      populateTransactionObject(
+        blk.transactions[index],
+        Opt.some(data),
+        Opt.some(blk.header.number),
+        Opt.some(blk.header.timestamp),
+        Opt.some(index),
+      )
+
+    proc eth_getTransactionByBlockNumberAndIndex(
+      quantityTag: BlockTag, quantity: Quantity
+    ): TransactionObject =
+      ## Returns information about a transaction by block number and transaction index position.
+      ##
+      ## quantityTag: a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
+      ## quantity: the transaction index position.
+      ## NOTE : "pending" blockTag is not supported.
+      let index = uint64(quantity)
+      let blk = api.blockFromTag(quantityTag, noHash = true).valueOr:
+        return nil
+
+      if index >= uint64(blk.transactions.len):
+        return nil
+
+      populateTransactionObject(
+        blk.transactions[index],
+        Opt.some(blk.header.computeBlockHash),
+        Opt.some(blk.header.number),
+        Opt.some(blk.header.timestamp),
+        Opt.some(index),
+      )
+
+    proc eth_getProof(
+      data: Address, slots: seq[UInt256], quantityTag: BlockTag
+    ): ProofResponse {.raises: [ValueError].} =
+      ## Returns information about an account and storage slots (if the account is a contract
+      ## and the slots are requested) along with account and storage proofs which prove the
+      ## existence of the values in the state.
+      ## See spec here: https://eips.ethereum.org/EIPS/eip-1186
+      ##
+      ## data: address of the account.
+      ## slots: integers of the positions in the storage to return with storage proofs.
+      ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+      ## Returns: the proof response containing the account, account proof and storage proof
+      let
+        txFrame = api.frameFromTag(quantityTag).valueOr:
+          raise newException(ValueError, error)
+      getProof(txFrame, data, slots)
+
+    proc eth_getBlockReceipts(
+      quantityTag: BlockTag
+    ): Opt[seq[ReceiptObject]] {.raises: [ValueError].} =
+      ## Returns the receipts of a block.
+      if quantityTag.kind == bidHash and quantityTag.requireCanonical:
+        raise newException(ValueError,
+          "requireCanonical is a pre-merge concept and is not supported")
+
+      let
+        blk = api.blockFromTag(quantityTag).valueOr:
+          return Opt.none(seq[ReceiptObject])
+        blkHash = blk.header.computeBlockHash
+        receipts = api.chain.receiptsByBlockHash(blkHash).valueOr:
+          return Opt.none(seq[ReceiptObject])
+
+      if blk.transactions.len == 0:
+        return Opt.some(newSeq[ReceiptObject]())
+
+      var
+        prevGasUsed = GasInt(0)
+        recs: seq[ReceiptObject]
+        index = 0'u64
+
+      try:
+        for receipt in receipts:
+          let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
+          prevGasUsed = receipt.cumulativeGasUsed
+          recs.add populateReceipt(receipt, gasUsed, blk.transactions[index], index, blk.header, api.com)
+          inc index
+        return Opt.some(recs)
+      except CatchableError:
+        return Opt.none(seq[ReceiptObject])
+
+    proc eth_createAccessList(
+      args: TransactionArgs, quantityTag: BlockTag
+    ): AccessListResult {.raises: [ValueError].} =
+      ## Generates an access list for a transaction.
+      try:
+        let header = api.headerFromTag(quantityTag).valueOr:
+          raise newException(ValueError, "Block not found")
+        return createAccessList(header, api.com, api.chain, args)
+      except CatchableError as exc:
+        return AccessListResult(error: Opt.some("createAccessList error: " & exc.msg))
+
+    proc eth_blobBaseFee(): Quantity {.raises: [ValueError].} =
+      ## Returns the base fee per blob gas in wei.
+      let header = api.headerFromTag(blockId("latest")).valueOr:
+        raise newException(ValueError, "Block not found")
+      if header.excessBlobGas.isNone:
+        raise newException(ValueError, "excessBlobGas missing from latest header")
+      let blobBaseFee =
+        getBlobBaseFee(header.excessBlobGas.get, api.com, api.com.toEVMFork(header))
+      if blobBaseFee > high(uint64).u256:
+        raise newException(ValueError, "blobBaseFee is bigger than uint64.max")
+      return w3Qty blobBaseFee.truncate(uint64)
+
+    proc eth_getUncleByBlockHashAndIndex(
+      data: Hash32, quantity: Quantity
+    ): BlockObject =
+      ## Returns information about a uncle of a block by hash and uncle index position.
+      ##
+      ## data: hash of block.
+      ## quantity: the uncle's index position.
+      ## Returns BlockObject or nil when no block was found.
+      let index = uint64(quantity)
+      let blk = api.chain.blockByHash(data).valueOr:
+        return nil
+
+      if index < 0 or index >= blk.uncles.len.uint64:
+        return nil
+
+      let
+        uncle = api.chain.blockByHash(blk.uncles[index].computeBlockHash).valueOr:
+          return nil
+        uncleHash = uncle.header.computeBlockHash
+
+      return populateBlockObject(
+        uncleHash, uncle, api.getTotalDifficulty(uncleHash, uncle.header), false, true
+      )
+
+    proc eth_getUncleByBlockNumberAndIndex(
+      quantityTag: BlockTag, quantity: Quantity
+    ): BlockObject =
+      # Returns information about a uncle of a block by number and uncle index position.
+      ##
+      ## quantityTag: a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
+      ## quantity: the uncle's index position.
+      ## Returns BlockObject or nil when no block was found.
+      let index = uint64(quantity)
+      let blk = api.blockFromTag(quantityTag).valueOr:
+        return nil
+
+      if index < 0 or index >= blk.uncles.len.uint64:
+        return nil
+
+      let
+        uncle = api.chain.blockByHash(blk.uncles[index].computeBlockHash).valueOr:
+          return nil
+        uncleHash = uncle.header.computeBlockHash
+
+      return populateBlockObject(
+        uncleHash, uncle, api.getTotalDifficulty(uncleHash, uncle.header), false, true
+      )
+
+    proc eth_config(): EthConfigObject =
+      ## Returns the current, next and last configuration
+      ## Doesn't work pre-shangai
+      ## https://eips.ethereum.org/EIPS/eip-7910
+      let currentFork = api.com.toHardFork(api.chain.latestHeader.forkDeterminationInfo)
+
+      if currentFork < Shanghai:
+        return nil
+
+      let
+        nextFork = api.com.nextFork(currentFork)
+        lastFork = api.com.lastFork(currentFork)
+
+      return api.com.getEthConfigObject(api.chain, currentFork, nextFork, lastFork)
+
+    proc eth_getBlockAccessList(quantityTag: BlockTag): Opt[BlockAccessList] {.raises: [ValueError].} =
+      ## Returns the block access list by block number, tag or block hash.
+      ##
+
+      let header = api.chain.headerFromTag(quantityTag).valueOr:
         raise newException(ValueError, error)
 
-    var res: StorageObject
-    for req in request.list:
-      let accPath = req.address.computeAccPath
-      res.address = req.address
-      res.data.setLen(req.data.len)
-      for i, slot in req.data:
-        let
-          slotKey = computeSlotKey(slot)
-          value = txFrame.fetchSlot(accPath, slotKey).valueOr(0.u256)
-        res.data[i] = value.to(Bytes32)
-      result.list.add(move(res))
+      if not api.com.isAmsterdamOrLater(header.timestamp):
+        raise newException(ValueError, "Block access list not available for pre-Amsterdam blocks")
+
+      let bal = api.chain.getBlockAccessList(header.computeRlpHash()).valueOr:
+        if header.number <= api.chain.resolvedFinNumber:
+          # This block is finalized so if the bal is missing it means it was pruned.
+          raise newException(ValueError, "Pruned history unavailable")
+        else:
+          return Opt.none(BlockAccessList)
+
+      Opt.some(bal)
+
+    proc eth_feeHistory(
+      blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: Opt[seq[float64]]
+    ): FeeHistoryResult {.raises: [ValueError].} =
+      api.oracle.feeHistory(blockCount.uint64, newestBlock, rewardPercentiles.get(@[])).valueOr:
+        raise newException(ValueError, error)
+
+    proc eth_maxPriorityFeePerGas(): Quantity =
+      w3Qty(calculateMedianMaxPriorityFeePerGas(api.chain).uint64)
+
+    proc eth_getStorageValues(request: StorageValuesRequest, blockTag: BlockTag): StorageValuesResponse {.raises: [ValueError].} =
+      let
+        txFrame = api.frameFromTag(blockTag).valueOr:
+          raise newException(ValueError, error)
+
+      var res: StorageObject
+      for req in request.list:
+        let accPath = req.address.computeAccPath
+        res.address = req.address
+        res.data.setLen(req.data.len)
+        for i, slot in req.data:
+          let
+            slotKey = computeSlotKey(slot)
+            value = txFrame.fetchSlot(accPath, slotKey).valueOr(0.u256)
+          res.data[i] = value.to(Bytes32)
+        result.list.add(move(res))
