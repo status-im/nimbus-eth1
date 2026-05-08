@@ -90,3 +90,33 @@ func checkGas*(gasMeter: GasMeter, cost, amount: GasInt): EvmResultVoid =
   if amount > gasMeter.stateGasLeft + gasMeter.gasRemaining - cost:
     return err(gasErr(OutOfGas))
   ok()
+
+func returnAllStateGas*(gasMeter: var GasMeter) =
+  gasMeter.stateGasLeft += gasMeter.stateGasUsed
+  gasMeter.stateGasUsed = 0
+
+# https://github.com/ethereum/execution-specs/pull/2733/changes
+func creditStateGasRefund*(gasMeter: var GasMeter; amount: GasInt) =
+  let applied = min(amount, gasMeter.stateGasUsed)
+  gasMeter.stateGasLeft += applied
+  gasMeter.stateGasUsed -= applied
+  gasMeter.stateGasRefund += applied
+  gasMeter.stateGasRefundPending += amount - applied
+
+func appendStateGasRefund*(gasMeter: var GasMeter; amount: GasInt) =
+  gasMeter.stateGasRefund += amount
+
+func selfDestructRefundStateGas*(gasMeter: var GasMeter; amount: GasInt) =
+  let applied = min(amount, gasMeter.stateGasUsed)
+  gasMeter.stateGasLeft += applied
+  gasMeter.stateGasUsed -= applied
+
+func restoreStateGasReservoir*(gasMeter: var GasMeter, reservoir: GasInt) =
+  let totalState = gasMeter.stateGasUsed + gasMeter.stateGasLeft
+  if totalState > reservoir:
+    gasMeter.regularGasUsed += totalState - reservoir
+  gasMeter.stateGasLeft = reservoir
+  gasMeter.stateGasUsed = 0
+  gasMeter.stateGasRefund = 0
+  gasMeter.stateGasRefundPending = 0
+  

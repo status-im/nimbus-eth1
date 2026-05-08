@@ -57,7 +57,7 @@ proc txCallEvm*(tx: Transaction,
 proc testCallEvm*(tx: Transaction,
                   sender: Address,
                   vmState: BaseVMState): DebugCallResult =
-  let 
+  let
     baseFee = vmState.blockCtx.baseFeePerGas.get(0.u256).truncate(GasInt)
     call = callParamsForTx(tx, sender, vmState, baseFee, IntrinsicGas())
   runComputation(call, DebugCallResult)

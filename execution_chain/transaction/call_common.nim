@@ -107,7 +107,7 @@ proc preExecComputation(call: CallParams): int64 =
     # 7. Add PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST gas to the global refund counter if authority exists in the trie.
     if ledger.accountExists(authority):
       if vmState.fork >= FkAmsterdam:
-        gasRefund += int64(STATE_BYTES_PER_NEW_ACCOUNT * vmState.blockCtx.costPerStateByte)
+        gasRefund += int64(CREATE_ACCOUNT_STATE_GAS)
       else:
         gasRefund += PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST
 
@@ -223,7 +223,21 @@ proc prepareToRunComputation(c: Computation, call: CallParams) =
         vmState.balTracker.trackSubBalanceChange(call.sender, blobFee)
       ledger.subBalance(call.sender, blobFee)
 
-proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: int64): GasUsed =
+proc calcSelfDestructRefundStateGas(c: Computation) =
+  let
+    ledger = c.vmState.ledger
+
+  var
+    refundSum = 0
+
+  for refund in newlyCreatedSelfDestructRefund(ledger):
+    refundSum += CREATE_ACCOUNT_STATE_GAS
+    refundSum += STATE_GAS_STORAGE_SET * refund.createdSlots
+    refundSum += COST_PER_STATE_BYTE * refund.codeLen
+
+  c.gasMeter.selfDestructRefundStateGas(refundSum.GasInt)
+
+proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams): GasUsed =
   let
     vmState = c.vmState
     fork = c.vmState.fork
@@ -235,6 +249,14 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: 
                             2.GasInt
   if c.shouldBurnGas:
     c.gasMeter.burnGas()
+
+  if c.fork >= FkAmsterdam:
+    if c.isSuccess:
+      # https://github.com/ethereum/execution-specs/pull/2707/changes
+      c.calcSelfDestructRefundStateGas()
+    else:
+      # https://github.com/ethereum/execution-specs/pull/2689/changes
+      c.gasMeter.returnAllStateGas()
 
   # Calculated gas used, taking into account refund rules.
   let
@@ -252,7 +274,7 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: 
     txGasUsed = max(txGasUsedAfterRefund, call.intrinsic.floorDataGas)
     let
       txRegularGas = call.intrinsic.regular + c.gasMeter.regularGasUsed
-      intrinsicStateGas = call.intrinsic.state - gasRefund.GasInt
+      intrinsicStateGas = call.intrinsic.state
     blockRegularGasUsed = max(txRegularGas, call.intrinsic.floorDataGas)
     blockStateGasUsed = intrinsicStateGas + c.gasMeter.stateGasUsed
     debug "EIP-8037 gas accounting",
@@ -288,9 +310,9 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: 
   )
 
 proc finishRunningComputation(
-    c: Computation, call: CallParams, gasRefund: int64, T: type): T =
+    c: Computation, call: CallParams, T: type): T =
   let
-    gasUsed = calculateAndPossiblyRefundGas(c, call, gasRefund)
+    gasUsed = calculateAndPossiblyRefundGas(c, call)
 
   # evm gas used without intrinsic gas
   c.vmState.captureEnd(c, c.output, gasUsed.evmGasUsed, c.errorOpt)
@@ -330,4 +352,4 @@ proc runComputation*(call: CallParams, T: type): T =
   if c.isSuccess:
     c.execCallOrCreate()
     c.postExecComputation()
-  finishRunningComputation(c, call, gasRefund, T)
+  finishRunningComputation(c, call, T)

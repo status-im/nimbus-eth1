@@ -197,6 +197,9 @@ proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) =
     if child.isSuccess:
       c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
       c.gasMeter.appendStateGasUsed(child.gasMeter.stateGasUsed)
+      c.gasMeter.appendStateGasRefund(child.gasMeter.stateGasRefund)
+      # https://github.com/ethereum/execution-specs/pull/2733/changes
+      c.gasMeter.creditStateGasRefund(child.gasMeter.stateGasRefundPending)
       c.merge(child)
       c.stack.lsTop(1)
     else:
@@ -204,7 +207,7 @@ proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) =
       # so no state was actually grown.  All state gas, both reservoir and any
       # that spilled into `gas_left`, is restored to the parent's reservoir and
       # the child's `state_gas_used` is not accumulated.
-      c.gasMeter.returnStateGas(child.gasMeter.stateGasUsed + child.gasMeter.stateGasLeft)
+      c.gasMeter.returnStateGas(child.gasMeter.stateGasUsed + child.gasMeter.stateGasLeft - child.gasMeter.stateGasRefund)
 
     let actualOutputSize = min(memLen, child.output.len)
     if actualOutputSize > 0:
@@ -244,13 +247,12 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
   # into regular gas, it must reduce the gas available for childGasLimit.
   if cpt.fork >= FkAmsterdam:
     if isNewAccount() and params1.nonZeroVal:
-      let newAcccountStateGas = STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte
       # eels reviewer think there is an issue with the design to charge regular gas multiple times.
       # https://github.com/ethereum/execution-specs/pull/2526/changes#diff-28a1b575fd7c3d82832c0826cf58a881101643543d35c123c78ca65202152c23R456
       # And it also make EVM tracer produce two traces of call or weird result.
       # So we check it here before actually charging state gas and keep the tracer produce single trace of call.
-      ? cpt.gasMeter.checkGas(gasCost1, newAcccountStateGas)
-      ? cpt.gasMeter.chargeStateGas(newAcccountStateGas,
+      ? cpt.gasMeter.checkGas(gasCost1, CREATE_ACCOUNT_STATE_GAS)
+      ? cpt.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS,
         reason = "CALL: State gas new account")
 
   let

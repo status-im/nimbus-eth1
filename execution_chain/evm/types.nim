@@ -34,7 +34,6 @@ type
     excessBlobGas*    : uint64
     parentHash*       : Hash32
     slotNumber*       : uint64
-    costPerStateByte* : GasInt
 
   TxContext* = object
     origin*         : Address
@@ -102,6 +101,8 @@ type
     stateGasLeft*: GasInt
     stateGasUsed*: GasInt
     regularGasUsed*: GasInt
+    stateGasRefund*: GasInt
+    stateGasRefundPending*: GasInt
 
   CallKind* {.pure.} = enum
     Call          # Request CALL.

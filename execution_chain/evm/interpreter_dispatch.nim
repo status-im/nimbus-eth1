@@ -14,6 +14,7 @@ import
   std/[macros, strformat],
   chronicles,
   stew/byteutils,
+  ../core/eip8037,
   ../constants,
   ../db/ledger,
   ./interpreter/op_dispatcher,
@@ -123,6 +124,9 @@ proc beforeExecCreate(c: Computation): bool =
     # regularGasUsed.
     if c.msg.depth == 0:
       c.gasMeter.gasRemaining = 0
+    elif c.fork >= FkAmsterdam:
+      # https://github.com/ethereum/execution-specs/pull/2733/changes
+      c.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
     let blurb = c.msg.contractAddress.toHex
     c.setError("Address collision when creating contract address=" & blurb, true)
     return true
@@ -194,6 +198,9 @@ proc afterExec(c: Computation) =
     c.afterExecCall()
   else:
     c.afterExecCreate()
+
+  if c.fork >= FkAmsterdam and c.shouldBurnGas:
+    c.gasMeter.restoreStateGasReservoir(c.msg.stateGas)
 
   if c.isSuccess:
     c.commit()
