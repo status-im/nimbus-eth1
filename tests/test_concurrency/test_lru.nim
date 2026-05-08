@@ -421,6 +421,9 @@ suite "ConcurrentLruCache Tests":
       lru.numShards() == 64
       lru.shardCapacity() == 10
       lru.capacity() == 640
+    
+    for i in 0 ..< 64:
+      check lru.shardLen(i) == 0
 
   test "concurrent put, get, peek, del":
     const

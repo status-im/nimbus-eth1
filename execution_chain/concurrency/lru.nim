@@ -500,12 +500,19 @@ proc dispose*(s: var LruCache) =
 # and taking the modulus with the number of shards. This allows for concurrent
 # access to different shards with lower contention.
 
-const NUM_SHARDS = 1 shl 6 # 64 shards, must be a power of two
+const 
+  CACHE_LINE_SIZE = 
+    when defined(macosx) and defined(arm64): 
+      128
+    else: 
+      64
+  NUM_SHARDS = 1 shl 6 # 64 shards, must be a power of two
 
 type
-  Shard[K, V] = object
-    lock: Lock
+  Shard[K, V]  = object
+    lock {.align: CACHE_LINE_SIZE.}: Lock
     cache: LruCache[K, V]
+    padding: array[CACHE_LINE_SIZE, byte]
 
   ConcurrentLruCache*[K, V] = object
     shards: array[NUM_SHARDS, Shard[K, V]]
@@ -546,17 +553,17 @@ template shardCapacity*[K, V](lru: var ConcurrentLruCache[K, V]): int =
   
 func shardLen*[K, V](lru: var ConcurrentLruCache[K, V], key: K): int =
   withShard(lru, key):
-    s.cache.len(key)
+    s.cache.len()
 
 func capacity*[K, V](lru: var ConcurrentLruCache[K, V]): int =
   lru.shardCapacity() * lru.numShards()
   
 func len*[K, V](lru: var ConcurrentLruCache[K, V]): int =
-  var len = 0
+  var total = 0
   for shard in lru.shards.mitems():
     withLock(shard.lock):
-      len += shard.cache.len
-  len
+      total += shard.cache.len
+  total
 
 func contains*[K, V](lru: var ConcurrentLruCache[K, V], key: K): bool =
   withShard(lru, key):
