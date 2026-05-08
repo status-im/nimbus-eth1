@@ -21,6 +21,7 @@ type
     SnapDownload                   ## Downloading and caching data
     SnapDownloadFinish             ## Wait for sync before proceeding
     SnapMkTrie                     ## Assembling downloaded data
+    SnapAnalyse                    ## Analyse for missing MPT nodes
     SnapHealing                    ## Complete missing trie nodes
 
   ErrorType* = enum

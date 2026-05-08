@@ -23,7 +23,7 @@ type
     napAt*: Moment                                  # allow for thread switch
 
 # ------------------------------------------------------------------------------
-# Public helpers
+# Public helpers, session ticker related
 # ------------------------------------------------------------------------------
 
 proc init*(_: type SessionTicker, nStates = 0): SessionTicker =

@@ -78,7 +78,7 @@ template accountDownload*(
     # Update state details on DB for recovery, in particular time stamp
     adb.putStateData(
       state.stateRoot, state.blockHash, state.blockNumber,
-      now, onTrie=false, coverage=state.accountsCov256).isOkOr:
+      now, Untagged, coverage=state.accountsCov256).isOkOr:
         sdb.rollbackAccountRange(state, ivReq)      # registry roll back
         debug info & ": updating state failed", peer, root,
           syncState=buddy.syncState
