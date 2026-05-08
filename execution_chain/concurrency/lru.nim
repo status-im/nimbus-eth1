@@ -25,7 +25,7 @@ type
 
   LruBucket = tuple[subhash: uint32, index: uint32]
 
-  LruCache*[K, V] = object
+  LruCache[K, V] = object
     ## Efficient implementation of classic LRU cache with a tightly packed
     ## doubly-linked list and robin-hood style hash table.
     ##
@@ -511,13 +511,13 @@ type
     shards: array[NUM_SHARDS, Shard[K, V]]
     mask: uint64 
 
-proc init*[K, V](lru: var ConcurrentLruCache[K, V], totalCapacity: int) =
+proc init*[K, V](lru: var ConcurrentLruCache[K, V], capacity: int) =
   const shardCount = NUM_SHARDS
   static:
     doAssert shardCount > 1
     doAssert isPowerOfTwo(shardCount)
   
-  let perShard = max(1, totalCapacity div shardCount)
+  let perShard = max(1, capacity div shardCount)
 
   lru.mask = uint64(shardCount - 1)
 

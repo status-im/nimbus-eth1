@@ -10,7 +10,11 @@
 
 {.used.}
 
-import std/sequtils, unittest2, ../../execution_chain/concurrency/lru {.all.}
+import
+  std/sequtils,
+  unittest2,
+  taskpools,
+  ../../execution_chain/concurrency/lru {.all.}
 
 type
   A = object
@@ -281,3 +285,224 @@ suite "LruCache Tests":
       lru.put(10, 10)
       lru.put(20, 20)
       lru.dispose()
+
+
+suite "ConcurrentLruCache Tests":
+
+  test "init and dispose":
+    block:
+      var lru: ConcurrentLruCache[int, int]
+      lru.init(1000)
+      lru.dispose()
+
+    block:
+      var lru: ConcurrentLruCache[int, int]
+      lru.init(1000)
+      lru.put(1, 1)
+      lru.put(2, 2)
+      lru.dispose()
+
+  test "put and get":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000)
+    defer: lru.dispose()
+
+    lru.put(1, 10)
+    lru.put(2, 20)
+    lru.put(3, 30)
+
+    check:
+      lru.get(1) == Opt.some(10)
+      lru.get(2) == Opt.some(20)
+      lru.get(3) == Opt.some(30)
+      lru.get(99) == Opt.none(int)
+
+  test "put overwrites existing key":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000)
+    defer: lru.dispose()
+
+    lru.put(1, 10)
+    lru.put(1, 20)
+
+    check:
+      lru.get(1) == Opt.some(20)
+      lru.len() == 1
+
+  test "contains":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000)
+    defer: lru.dispose()
+
+    lru.put(1, 10)
+
+    check:
+      lru.contains(1)
+      not lru.contains(2)
+
+  test "peek":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000)
+    defer: lru.dispose()
+
+    lru.put(1, 10)
+
+    check:
+      lru.peek(1) == Opt.some(10)
+      lru.peek(99) == Opt.none(int)
+
+  test "del":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000)
+    defer: lru.dispose()
+
+    lru.put(1, 10)
+    lru.put(2, 20)
+    lru.del(1)
+
+    check:
+      not lru.contains(1)
+      lru.get(1) == Opt.none(int)
+      lru.contains(2)
+
+    # del of missing key is a no-op
+    lru.del(99)
+    check lru.contains(2)
+
+  test "update":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000)
+    defer: lru.dispose()
+
+    check not lru.update(1, 100)
+
+    lru.put(1, 10)
+
+    check lru.update(1, 100)
+    check lru.get(1) == Opt.some(100)
+
+  test "refresh":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000)
+    defer: lru.dispose()
+
+    check not lru.refresh(1, 100)
+
+    lru.put(1, 10)
+
+    check lru.refresh(1, 100)
+    check lru.peek(1) == Opt.some(100)
+
+  test "len and capacity":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(640) # 10 per shard
+    defer: lru.dispose()
+
+    check:
+      lru.len() == 0
+      lru.capacity() == 640
+
+    for i in 0 ..< 100:
+      lru.put(i, i)
+
+    check lru.len() == 100
+
+    for i in 0 ..< 100:
+      lru.del(i)
+
+    check lru.len() == 0
+
+  test "shard info":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(640) # 10 per shard
+    defer: lru.dispose()
+
+    check:
+      lru.numShards() == 64
+      lru.shardCapacity() == 10
+      lru.capacity() == 640
+
+  test "concurrent put, get, peek, del":
+    const
+      numThreads = 4
+      keysPerThread = 500
+      totalKeys = numThreads * keysPerThread
+
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(totalKeys * 2) # headroom so eviction doesn't interfere
+    defer: lru.dispose()
+    let cachePtr = addr lru
+
+    var  tp = Taskpool.new(numThreads = numThreads)
+    defer: tp.shutdown()
+
+    proc tpPut(cache: ptr ConcurrentLruCache[int, int], base, count: int) =
+      for i in 0 ..< count:
+        cache[].put(base + i, base + i + 1) # value = key + 1
+
+    proc tpGet(cache: ptr ConcurrentLruCache[int, int], base, count: int) =
+      for i in 0 ..< count:
+        discard cache[].get(base + i)
+
+    proc tpPeek(cache: ptr ConcurrentLruCache[int, int], base, count: int) =
+      for i in 0 ..< count:
+        discard cache[].peek(base + i)
+
+    proc tpDel(cache: ptr ConcurrentLruCache[int, int], base, count: int) =
+      for i in 0 ..< count:
+        cache[].del(base + i)
+
+    # concurrent puts over disjoint key ranges
+    for t in 0 ..< numThreads:
+      tp.spawn tpPut(cachePtr, t * keysPerThread, keysPerThread)
+    tp.syncAll()
+
+    for i in 0 ..< totalKeys:
+      check lru.get(i) == Opt.some(i + 1)
+
+    # concurrent gets over disjoint key ranges
+    for t in 0 ..< numThreads:
+      tp.spawn tpGet(cachePtr, t * keysPerThread, keysPerThread)
+    tp.syncAll()
+
+    for i in 0 ..< totalKeys:
+      check lru.peek(i) == Opt.some(i + 1)
+
+    # concurrent peeks over disjoint key ranges
+    for t in 0 ..< numThreads:
+      tp.spawn tpPeek(cachePtr, t * keysPerThread, keysPerThread)
+    tp.syncAll()
+
+    for i in 0 ..< totalKeys:
+      check lru.get(i) == Opt.some(i + 1)
+
+    # mixed contention - writers and readers on the same full range
+    for t in 0 ..< numThreads div 2:
+      tp.spawn tpPut(cachePtr, 0, totalKeys)
+    for t in 0 ..< numThreads div 2:
+      tp.spawn tpGet(cachePtr, 0, totalKeys)
+    tp.syncAll()
+
+    # puts only update existing keys so all must still be present
+    for i in 0 ..< totalKeys:
+      check lru.contains(i)
+
+    # concurrent peeks and puts on the same full range
+    for t in 0 ..< numThreads div 2:
+      tp.spawn tpPeek(cachePtr, 0, totalKeys)
+    for t in 0 ..< numThreads div 2:
+      tp.spawn tpPut(cachePtr, 0, totalKeys)
+    tp.syncAll()
+
+    for i in 0 ..< totalKeys:
+      check lru.contains(i)
+
+    # concurrent dels over disjoint key ranges
+    for t in 0 ..< numThreads:
+      tp.spawn tpDel(cachePtr, t * keysPerThread, keysPerThread)
+    tp.syncAll()
+
+    for i in 0 ..< totalKeys:
+      check lru.get(i) == Opt.none(int)
+
+    check lru.len() == 0
