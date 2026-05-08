@@ -8,4 +8,4 @@
 # at your option. This file may not be copied, modified, or
 # distributed except according to those terms.
 
-import ./test_concurrency/[test_lru, test_queue, test_readwritelock, test_semaphore]
+import ./test_concurrency/[test_hashmap, test_lru, test_queue, test_readwritelock, test_semaphore]
