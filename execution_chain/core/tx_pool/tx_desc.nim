@@ -72,14 +72,14 @@ const
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc getBaseFee(com: CommonRef; parent: Header): Opt[UInt256] =
+proc getBaseFee(com: CommonRef; parent: Header): GasInt =
   ## Calculates the `baseFee` of the head assuming this is the parent of a
   ## new block header to generate.
   ## Post Merge rule
-  Opt.some calcEip1599BaseFee(
+  calcEip1599BaseFee(
     parent.gasLimit,
     parent.gasUsed,
-    parent.baseFeePerGas.get(0.u256))
+    parent.baseFeePerGas.get(0.u256)).truncate(GasInt)
 
 func getGasLimit(com: CommonRef; parent: Header): GasInt =
   ## Post Merge rule
@@ -164,10 +164,7 @@ proc insertToSenderTab(xp: TxPoolRef; item: TxItemRef): Result[void, TxError] =
 func baseFee*(xp: TxPoolRef): GasInt =
   ## Getter, baseFee for the next bock header. This value is auto-generated
   ## when a new insertion point is set via `head=`.
-  if xp.vmState.blockCtx.baseFeePerGas.isSome:
-    xp.vmState.blockCtx.baseFeePerGas.get.truncate(GasInt)
-  else:
-    0.GasInt
+  xp.vmState.blockCtx.baseFeePerGas
 
 func gasLimit(xp: TxPoolRef): GasInt =
   xp.vmState.blockCtx.gasLimit

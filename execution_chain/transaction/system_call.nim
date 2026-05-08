@@ -37,10 +37,13 @@ proc finishRunningComputation(c: Computation, T: type): T =
     {.error: "Unknown systemCall output".}
 
 proc systemCall*(call: CallParams, T: type): T =
-  let c = setupComputation(call, 0, false)
+  let
+    ledger = call.vmState.ledger
+    c = setupComputation(call, 0, false)
 
   # Pre-execution sanity checks
   c.preExecComputation()
   if c.isSuccess:
     c.execCallOrCreate()
+    ledger.persist(clearEmptyAccount = true)
   finishRunningComputation(c, T)

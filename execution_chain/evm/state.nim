@@ -61,7 +61,7 @@ func blockCtx(header: Header): BlockContext =
   BlockContext(
     timestamp    : header.timestamp,
     gasLimit     : header.gasLimit,
-    baseFeePerGas: header.baseFeePerGas,
+    baseFeePerGas: header.baseFeePerGas.get(0.u256).truncate(GasInt),
     prevRandao   : header.prevRandao,
     difficulty   : header.difficulty,
     coinbase     : header.coinbase,
@@ -243,9 +243,6 @@ proc difficultyOrPrevRandao*(vmState: BaseVMState): UInt256 =
     UInt256.fromBytesBE(vmState.blockCtx.prevRandao.data)
   else:
     vmState.blockCtx.difficulty
-
-func baseFeePerGas*(vmState: BaseVMState): UInt256 =
-  vmState.blockCtx.baseFeePerGas.get(0.u256)
 
 method getAncestorHash*(
     vmState: BaseVMState, blockNumber: BlockNumber): Hash32 {.gcsafe, base.} =

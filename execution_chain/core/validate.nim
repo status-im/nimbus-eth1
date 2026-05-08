@@ -344,16 +344,14 @@ func validateTxBasic*(
   ok()
 
 proc validateTransaction*(
-    ledger:   ReadOnlyLedger; ## Parent accounts environment for transaction
-    tx:       Transaction;     ## tx to validate
-    sender:   Address;         ## tx.recoverSender
-    gasLimit: GasInt;          ## gasLimit from block header
-    baseFee:  UInt256;         ## baseFee from block header
-    excessBlobGas: uint64;     ## excessBlobGas from parent block header
-    com:      CommonRef,
-    fork:     EVMFork): Result[void, string] =
+    vmState: BaseVMState;
+    tx:      Transaction;     ## tx to validate
+    sender:  Address;         ## tx.recoverSender
+    ): Result[void, string] =
 
   let
+    ledger  = vmState.ledger
+    baseFee = vmState.blockCtx.baseFeePerGas
     balance = ledger.getBalance(sender)
     nonce = ledger.getNonce(sender)
 
@@ -370,11 +368,11 @@ proc validateTransaction*(
   #
   # The parallel lowGasLimit.json test never triggers the case checked below
   # as the paricular transaction is omitted (the txs list is just set empty.)
-  if gasLimit < tx.gasLimit:
-    return err(&"invalid tx: block header gasLimit exceeded. maxLimit={gasLimit}, gasLimit={tx.gasLimit}")
+  if vmState.blockCtx.gasLimit < tx.gasLimit:
+    return err(&"invalid tx: block header gasLimit exceeded. maxLimit={vmState.blockCtx.gasLimit}, gasLimit={tx.gasLimit}")
 
   # ensure that the user was willing to at least pay the base fee
-  if tx.maxFeePerGasNorm < baseFee.truncate(GasInt):
+  if tx.maxFeePerGasNorm < baseFee:
     return err(&"invalid tx: maxFee is smaller than baseFee. maxFee={tx.maxFeePerGas}, baseFee={baseFee}")
 
   # the signer must be able to fully afford the transaction
@@ -405,7 +403,9 @@ proc validateTransaction*(
 
   if tx.txType == TxEip4844:
     # ensure that the user was willing to at least pay the current data gasprice
-    let blobGasPrice = getBlobBaseFee(excessBlobGas, com, fork)
+    let
+      excessBlobGas = vmState.blockCtx.excessBlobGas
+      blobGasPrice = getBlobBaseFee(excessBlobGas, vmState.com, vmState.fork)
     if tx.maxFeePerBlobGas < blobGasPrice:
       return err("invalid tx: maxFeePerBlobGas smaller than blobGasPrice. " &
         &"maxFeePerBlobGas={tx.maxFeePerBlobGas}, blobGasPrice={blobGasPrice}")
