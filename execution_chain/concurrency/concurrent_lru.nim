@@ -12,7 +12,7 @@ import std/[locks, hashes], results, ./lru
 
 export results
 
-const SHARD_COUNT = 1 shl 6 # 64 shards, must be a power of two
+const NUM_SHARDS* = 1 shl 6 # 64 shards, must be a power of two
 
 type
   Shard[K, V] = object
@@ -20,14 +20,14 @@ type
     cache: LruCache[K, V]
 
   ConcurrentLruCache*[K, V] = object
-    shards: array[SHARD_COUNT, Shard[K, V]]
+    shards: array[NUM_SHARDS, Shard[K, V]]
     mask: uint64 
 
 func isPowerOfTwo(n: static int): bool =
   n > 0 and (n and (n - 1)) == 0
 
 proc init*[K, V](lru: var ConcurrentLruCache[K, V], totalCapacity: int) =
-  const shardCount = SHARD_COUNT
+  const shardCount = NUM_SHARDS
   static:
     doAssert shardCount > 1
     doAssert isPowerOfTwo(shardCount)
@@ -53,9 +53,33 @@ template withShard[K, V](lru: ConcurrentLruCache[K, V], key: K, body: untyped): 
   finally:
     release(s.lock)
 
-proc peek*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
-  let s = addr lru.shards[int(uint64(hash(key)) and lru.mask)]
-  s.cache.peek(key)
+template numShards*[K, V](lru: ConcurrentLruCache[K, V]): int =
+  NUM_SHARDS
+
+template shardCapacity*[K, V](lru: var ConcurrentLruCache[K, V]): int =
+  lru.shards[0].cache.capacity
+  
+func shardLen*[K, V](lru: var ConcurrentLruCache[K, V], key: K): int =
+  withShard(lru, key):
+    s.cache.len(key)
+
+func capacity*[K, V](lru: var ConcurrentLruCache[K, V]): int =
+  lru.shardCapacity() * lru.numShards()
+  
+func len*[K, V](lru: var ConcurrentLruCache[K, V]): int =
+  var len = 0
+  for shard in lru.shards.mitems():
+    withLock(shard.lock):
+      len += shard.cache.len
+  len
+
+func contains*[K, V](lru: var ConcurrentLruCache[K, V], key: K): bool =
+  withShard(lru, key):
+    s.cache.contains(key)
+
+func peek*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
+  withShard(lru, key):
+    s.cache.peek(key)
 
 proc get*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
   withShard(lru, key):
@@ -65,21 +89,15 @@ proc put*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V) =
   withShard(lru, key):
     s.cache.put(key, val)
 
+proc update*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V): bool =
+  withShard(lru, key):
+    s.cache.update(key, val)
+
+proc refresh*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V): bool =
+  withShard(lru, key):
+    s.cache.refresh(key, val)
+
 proc del*[K, V](lru: var ConcurrentLruCache[K, V], key: K) =
   withShard(lru, key):
     s.cache.del(key)
-
-when isMainModule:
-  var test: ConcurrentLruCache[int, int]
-  test.init(1000)
-
-  test.put(1, 1)
-
-  test.put(2, 2)
-
-  test.put(3, 3)
-  test.del(3)
-  echo test.get(1)
-  echo test.peek(2)
-  test.dispose()
 

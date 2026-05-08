@@ -62,6 +62,14 @@ proc getThreadProc(ctx: ptr ThreadCtx) {.thread.} =
       checksum += uint64(v.unsafeGet()) + 1
   ctx.checksum = checksum
 
+proc peekThreadProc(ctx: ptr ThreadCtx) {.thread.} =
+  var checksum: uint64
+  for i in 0 ..< ctx.opsCount:
+    let v = ctx.cache[].peek(i mod cacheCapacity)
+    if v.isOk():
+      checksum += uint64(v.unsafeGet()) + 1
+  ctx.checksum = checksum
+
 proc mixedThreadProc(ctx: ptr ThreadCtx) {.thread.} =
   # 25% writes, 75% reads - write to keys in cache range to stay hot
   var checksum: uint64
@@ -94,98 +102,36 @@ proc runSingleThreadedGet(
       checksum += uint64(v.unsafeGet()) + 1
   BenchmarkStats(elapsed: epochTime() - started, operations: count, checksum: checksum)
 
-proc runPutBench2(cache: ptr ConcurrentLruCache[int, int]): BenchmarkStats =
-  var
-    threads: array[2, Thread[ptr ThreadCtx]]
-    ctxs: array[2, ThreadCtx]
-  for i in 0 ..< 2:
-    ctxs[i] = ThreadCtx(cache: cache, threadId: i, opsCount: opsPerThread)
-  let started = epochTime()
-  for i in 0 ..< 2:
-    createThread(threads[i], putThreadProc, addr ctxs[i])
-  for i in 0 ..< 2:
-    joinThread(threads[i])
-  BenchmarkStats(elapsed: epochTime() - started, operations: 2 * opsPerThread)
-
-proc runGetBench2(cache: ptr ConcurrentLruCache[int, int]): BenchmarkStats =
-  var
-    threads: array[2, Thread[ptr ThreadCtx]]
-    ctxs: array[2, ThreadCtx]
-  for i in 0 ..< 2:
-    ctxs[i] = ThreadCtx(cache: cache, threadId: i, opsCount: opsPerThread)
-  let started = epochTime()
-  for i in 0 ..< 2:
-    createThread(threads[i], getThreadProc, addr ctxs[i])
+proc runSingleThreadedPeek(
+    cache: ptr ConcurrentLruCache[int, int], count: int
+): BenchmarkStats =
   var checksum: uint64
-  for i in 0 ..< 2:
+  let started = epochTime()
+  for i in 0 ..< count:
+    let v = cache[].peek(i mod cacheCapacity)
+    if v.isOk():
+      checksum += uint64(v.unsafeGet()) + 1
+  BenchmarkStats(elapsed: epochTime() - started, operations: count, checksum: checksum)
+
+proc runBench(
+    n: static int,
+    threadProc: proc(ctx: ptr ThreadCtx) {.thread.},
+    cache: ptr ConcurrentLruCache[int, int],
+): BenchmarkStats =
+  var
+    threads: array[n, Thread[ptr ThreadCtx]]
+    ctxs: array[n, ThreadCtx]
+  for i in 0 ..< n:
+    ctxs[i] = ThreadCtx(cache: cache, threadId: i, opsCount: opsPerThread)
+  let started = epochTime()
+  for i in 0 ..< n:
+    createThread(threads[i], threadProc, addr ctxs[i])
+  var checksum: uint64
+  for i in 0 ..< n:
     joinThread(threads[i])
     checksum += ctxs[i].checksum
   BenchmarkStats(
-    elapsed: epochTime() - started, operations: 2 * opsPerThread, checksum: checksum
-  )
-
-proc runMixedBench2(cache: ptr ConcurrentLruCache[int, int]): BenchmarkStats =
-  var
-    threads: array[2, Thread[ptr ThreadCtx]]
-    ctxs: array[2, ThreadCtx]
-  for i in 0 ..< 2:
-    ctxs[i] = ThreadCtx(cache: cache, threadId: i, opsCount: opsPerThread)
-  let started = epochTime()
-  for i in 0 ..< 2:
-    createThread(threads[i], mixedThreadProc, addr ctxs[i])
-  var checksum: uint64
-  for i in 0 ..< 2:
-    joinThread(threads[i])
-    checksum += ctxs[i].checksum
-  BenchmarkStats(
-    elapsed: epochTime() - started, operations: 2 * opsPerThread, checksum: checksum
-  )
-
-proc runPutBench8(cache: ptr ConcurrentLruCache[int, int]): BenchmarkStats =
-  var
-    threads: array[8, Thread[ptr ThreadCtx]]
-    ctxs: array[8, ThreadCtx]
-  for i in 0 ..< 8:
-    ctxs[i] = ThreadCtx(cache: cache, threadId: i, opsCount: opsPerThread)
-  let started = epochTime()
-  for i in 0 ..< 8:
-    createThread(threads[i], putThreadProc, addr ctxs[i])
-  for i in 0 ..< 8:
-    joinThread(threads[i])
-  BenchmarkStats(elapsed: epochTime() - started, operations: 8 * opsPerThread)
-
-proc runGetBench8(cache: ptr ConcurrentLruCache[int, int]): BenchmarkStats =
-  var
-    threads: array[8, Thread[ptr ThreadCtx]]
-    ctxs: array[8, ThreadCtx]
-  for i in 0 ..< 8:
-    ctxs[i] = ThreadCtx(cache: cache, threadId: i, opsCount: opsPerThread)
-  let started = epochTime()
-  for i in 0 ..< 8:
-    createThread(threads[i], getThreadProc, addr ctxs[i])
-  var checksum: uint64
-  for i in 0 ..< 8:
-    joinThread(threads[i])
-    checksum += ctxs[i].checksum
-  BenchmarkStats(
-    elapsed: epochTime() - started, operations: 8 * opsPerThread, checksum: checksum
-  )
-
-proc runMixedBench8(cache: ptr ConcurrentLruCache[int, int]): BenchmarkStats =
-  var
-    threads: array[8, Thread[ptr ThreadCtx]]
-    ctxs: array[8, ThreadCtx]
-  for i in 0 ..< 8:
-    ctxs[i] = ThreadCtx(cache: cache, threadId: i, opsCount: opsPerThread)
-  let started = epochTime()
-  for i in 0 ..< 8:
-    createThread(threads[i], mixedThreadProc, addr ctxs[i])
-  var checksum: uint64
-  for i in 0 ..< 8:
-    joinThread(threads[i])
-    checksum += ctxs[i].checksum
-  BenchmarkStats(
-    elapsed: epochTime() - started, operations: 8 * opsPerThread, checksum: checksum
+    elapsed: epochTime() - started, operations: n * opsPerThread, checksum: checksum
   )
 
 proc refillCache(cache: ptr ConcurrentLruCache[int, int]) =
@@ -205,33 +151,63 @@ suite "ConcurrentLruCache Benchmark":
 
     let singlePut = runSingleThreadedPut(cachePtr, singleThreadOps)
     let singleGet = runSingleThreadedGet(cachePtr, singleThreadOps)
-    let put2 = runPutBench2(cachePtr)
+    let singlePeek = runSingleThreadedPeek(cachePtr, singleThreadOps)
+    let put2 = runBench(2, putThreadProc, cachePtr)
     refillCache(cachePtr)
-    let get2 = runGetBench2(cachePtr)
-    let mixed2 = runMixedBench2(cachePtr)
-    let put8 = runPutBench8(cachePtr)
+    let get2 = runBench(2, getThreadProc, cachePtr)
+    let peek2 = runBench(2, peekThreadProc, cachePtr)
+    let mixed2 = runBench(2, mixedThreadProc, cachePtr)
+    let put4 = runBench(4, putThreadProc, cachePtr)
     refillCache(cachePtr)
-    let get8 = runGetBench8(cachePtr)
-    let mixed8 = runMixedBench8(cachePtr)
+    let get4 = runBench(4, getThreadProc, cachePtr)
+    let peek4 = runBench(4, peekThreadProc, cachePtr)
+    let mixed4 = runBench(4, mixedThreadProc, cachePtr)
+    let put8 = runBench(8, putThreadProc, cachePtr)
+    refillCache(cachePtr)
+    let get8 = runBench(8, getThreadProc, cachePtr)
+    let peek8 = runBench(8, peekThreadProc, cachePtr)
+    let mixed8 = runBench(8, mixedThreadProc, cachePtr)
+    let put16 = runBench(16, putThreadProc, cachePtr)
+    refillCache(cachePtr)
+    let get16 = runBench(16, getThreadProc, cachePtr)
+    let peek16 = runBench(16, peekThreadProc, cachePtr)
+    let mixed16 = runBench(16, mixedThreadProc, cachePtr)
 
     debugEcho ""
-    debugEcho "ConcurrentLruCache benchmark"
     debugEcho "  capacity=", cacheCapacity,
       ", single-thread ops=", singleThreadOps,
       ", ops/thread (mt)=", opsPerThread
     debugEcho benchmarkHeader()
     debugEcho benchmarkLine("1-thread put", singlePut)
     debugEcho benchmarkLine("1-thread get (hot)", singleGet)
+    debugEcho benchmarkLine("1-thread peek (hot)", singlePeek)
     debugEcho benchmarkLine("2-thread put", put2)
     debugEcho benchmarkLine("2-thread get", get2)
+    debugEcho benchmarkLine("2-thread peek", peek2)
     debugEcho benchmarkLine("2-thread mixed (75% read)", mixed2)
+    debugEcho benchmarkLine("4-thread put", put4)
+    debugEcho benchmarkLine("4-thread get", get4)
+    debugEcho benchmarkLine("4-thread peek", peek4)
+    debugEcho benchmarkLine("4-thread mixed (75% read)", mixed4)
     debugEcho benchmarkLine("8-thread put", put8)
     debugEcho benchmarkLine("8-thread get", get8)
+    debugEcho benchmarkLine("8-thread peek", peek8)
     debugEcho benchmarkLine("8-thread mixed (75% read)", mixed8)
+    debugEcho benchmarkLine("16-thread put", put16)
+    debugEcho benchmarkLine("16-thread get", get16)
+    debugEcho benchmarkLine("16-thread peek", peek16)
+    debugEcho benchmarkLine("16-thread mixed (75% read)", mixed16)
 
     check:
       singlePut.elapsed > 0
       singleGet.elapsed > 0
       singleGet.checksum != 0
+      singlePeek.checksum != 0
       get2.checksum != 0
+      peek2.checksum != 0
+      get4.checksum != 0
+      peek4.checksum != 0
       get8.checksum != 0
+      peek8.checksum != 0
+      get16.checksum != 0
+      peek16.checksum != 0
