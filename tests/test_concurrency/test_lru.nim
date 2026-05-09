@@ -329,6 +329,22 @@ suite "ConcurrentLruCache Tests":
       lru.get(1) == Opt.some(20)
       lru.len() == 1
 
+  test "pop":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000)
+    defer: lru.dispose()
+
+    lru.put(1, 10)
+    lru.put(2, 20)
+
+    let val = lru.pop(1)
+
+    check:
+      val == Opt.some(10)
+      not lru.contains(1)
+      lru.get(1) == Opt.none(int)
+      lru.contains(2)
+
   test "contains":
     var lru: ConcurrentLruCache[int, int]
     lru.init(1000)
