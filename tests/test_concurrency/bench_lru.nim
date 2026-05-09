@@ -12,9 +12,8 @@
 
 import
   std/[strformat, strutils, times],
-  minilru,
   unittest2,
-  ../../execution_chain/concurrency/lru
+  ../../execution_chain/concurrency/lru {.all.}
 
 const
   benchNameWidth = 32
@@ -115,7 +114,7 @@ proc runSingleThreadedPeek(
   BenchmarkStats(elapsed: epochTime() - started, operations: count, checksum: checksum)
 
 proc runLruPut(
-    cache: ptr LruCache[int, int], count: int
+    cache: ptr lru.LruCache[int, int], count: int
 ): BenchmarkStats =
   let started = epochTime()
   for i in 0 ..< count:
@@ -123,7 +122,7 @@ proc runLruPut(
   BenchmarkStats(elapsed: epochTime() - started, operations: count)
 
 proc runLruGet(
-    cache: ptr LruCache[int, int], count: int
+    cache: ptr lru.LruCache[int, int], count: int
 ): BenchmarkStats =
   var checksum: uint64
   let started = epochTime()
@@ -176,8 +175,8 @@ proc refillLru(cache: ptr LruCache[int, int]) =
 suite "LruCache vs ConcurrentLruCache single-threaded comparison":
   test "Single-threaded throughput comparison":
     var lru = LruCache[int, int].init(cacheCapacity)
-    # defer:
-    #   lru.dispose()
+    defer:
+      lru.dispose()
 
     var concLru: ConcurrentLruCache[int, int]
     concLru.init(cacheCapacity)

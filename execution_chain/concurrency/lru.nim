@@ -210,13 +210,16 @@ func tableBucket(s: LruCache, subhash: uint32, key: auto): Opt[uint32] =
 func tableBucket(s: LruCache, key: auto): Opt[uint32] =
   s.tableBucket(subhash(key), key)
 
-func tableGet(s: LruCache, key: auto): Opt[uint32] =
+func tableGet(s: LruCache, subhash: uint32, key: auto): Opt[uint32] =
   if s.used == 0:
     Opt.none(uint32)
   else:
-    let bucket = ?s.tableBucket(key)
+    let bucket = ?s.tableBucket(subhash, key)
 
     Opt.some(s.buckets[bucket].index)
+
+func tableGet(s: LruCache, key: auto): Opt[uint32] =
+  s.tableGet(subhash(key), key)
 
 func tableDel(s: var openArray[LruBucket], idx: uint32) =
   let mask = s.lenu32 - 1
@@ -239,14 +242,17 @@ func tableDel(s: var openArray[LruBucket], idx: uint32) =
 
     b = next[]
 
-func tableDel(s: var LruCache, key: auto): Opt[uint32] =
+func tableDel(s: var LruCache, subhash: uint32, key: auto): Opt[uint32] =
   # Find bucket with item-to-delete
   let
-    bucket = ?s.tableBucket(key)
+    bucket = ?s.tableBucket(subhash, key)
     idx = s.buckets[bucket].index
 
   toOpenArray(s.buckets, 0, s.bucketsLen - 1).tableDel(bucket)
   ok(idx)
+
+func tableDel(s: var LruCache, key: auto): Opt[uint32] =
+  s.tableDel(subhash(key), key)
 
 proc grow[K, V](v: var LruCache[K, V], newSize: uint32) =
   let oldSize = v.nodesLen.uint32
@@ -304,7 +310,7 @@ func resetPayload(n: var LruNode) =
   when not supportsCopyMem(n.V):
     reset(n.value)
 
-func init*[K, V](T: type LruCache[K, V], capacity: int): T =
+func init[K, V](T: type LruCache[K, V], capacity: int): T =
   ## Create a cache with the given initial capacity
   static:
     doAssert supportsCopyMem(K), $K & " must be a non-GC type"
@@ -318,25 +324,25 @@ iterator mruIndices(s: LruCache): uint32 =
       yield pos
       pos = s.nodes[pos].next
 
-iterator keys*(s: var LruCache): lent LruCache.K =
+iterator keys(s: var LruCache): lent LruCache.K =
   ## Keys in MRU order - starting from the front with the item that was most
   ## recently added or accessed.
   for index in s.mruIndices:
     yield s.nodes[index].key
 
-iterator values*(s: var LruCache, mru: static bool = false): lent LruCache.V =
+iterator values(s: var LruCache, mru: static bool = false): lent LruCache.V =
   ## Values in MRU order - starting from the front with the item that was most
   ## recently added or accessed.
   for index in s.mruIndices:
     yield s.nodes[index].value
 
-iterator mvalues*(s: var LruCache, mru: static bool = false): var LruCache.V =
+iterator mvalues(s: var LruCache, mru: static bool = false): var LruCache.V =
   ## Values in MRU order - starting from the front with the item that was most
   ## recently added or accessed.
   for index in s.mruIndices:
     yield s.nodes[index].value
 
-iterator pairs*(
+iterator pairs(
     s: var LruCache, mru: static bool = false
 ): (lent LruCache.K, lent LruCache.V) =
   ## Key/value pairs in MRU order - starting from the front with the item that
@@ -344,7 +350,7 @@ iterator pairs*(
   for index in s.mruIndices:
     yield (s.nodes[index].key, s.nodes[index].value)
 
-iterator mpairs*(
+iterator mpairs(
     s: var LruCache, mru: static bool = false
 ): (lent LruCache.K, var LruCache.V) =
   ## Key/value pairs in MRU order - starting from the front with the item that
@@ -352,27 +358,29 @@ iterator mpairs*(
   for index in s.mruIndices:
     yield (s.nodes[index].key, s.nodes[index].value)
 
-func len*(s: var LruCache): int =
+func len(s: var LruCache): int =
   result = int(s.used)
 
-func capacity*(s: var LruCache): int =
+func capacity(s: var LruCache): int =
   result = s.capacity
 
-func `capacity=`*(s: var LruCache, c: int) =
+func `capacity=`(s: var LruCache, c: int) =
   ## Update the capacity (but don't reallocate the currenty cache). If the
   ## capacity is smaller than the currently allocated size, it will be ignored.
   s.capacity = c
 
-func contains*(s: var LruCache, key: auto): bool =
-  ## Return true iff key can be found in cache - does not update item position
-  result = s.used > 0 and s.tableBucket(key).isSome()
+func contains(s: var LruCache, subhash: uint32, key: auto): bool =
+  result = s.used > 0 and s.tableBucket(subhash, key).isSome()
 
-func del*(s: var LruCache, key: auto) =
-  ## Remove item from cache, if present - does nothing if it was missing
+func contains(s: var LruCache, key: auto): bool =
+  ## Return true iff key can be found in cache - does not update item position
+  s.contains(subhash(key), key)
+
+func del(s: var LruCache, subhash: uint32, key: auto) =
   if s.used == 0:
     return
 
-  let index = s.tableDel(key).valueOr:
+  let index = s.tableDel(subhash, key).valueOr:
     return
 
   resetPayload(s.nodes[index])
@@ -380,12 +388,15 @@ func del*(s: var LruCache, key: auto) =
   s.moveToBack(index)
   s.used -= 1
 
-func pop*[K, V](s: var LruCache[K, V], key: auto): Opt[V] =
-  ## Retrieve item and remove it from LRU cache
+func del(s: var LruCache, key: auto) =
+  ## Remove item from cache, if present - does nothing if it was missing
+  s.del(subhash(key), key)
+
+func pop[K, V](s: var LruCache[K, V], subhash: uint32, key: auto): Opt[V] =
   if s.used == 0:
     return Opt.none(V)
 
-  let index = s.tableDel(key).valueOr:
+  let index = s.tableDel(subhash, key).valueOr:
     return Opt.none(V)
 
   result = Opt.some(move(s.nodes[index].value))
@@ -394,52 +405,60 @@ func pop*[K, V](s: var LruCache[K, V], key: auto): Opt[V] =
   s.moveToBack(index)
   s.used -= 1
 
-func get*[K, V](s: var LruCache[K, V], key: auto): Opt[V] =
-  ## Retrieve item and move it to the front of the LRU cache
-  let index = ?s.tableGet(key)
+func pop[K, V](s: var LruCache[K, V], key: auto): Opt[V] =
+  ## Retrieve item and remove it from LRU cache
+  s.pop(subhash(key), key)
+
+func get[K, V](s: var LruCache[K, V], subhash: uint32, key: auto): Opt[V] =
+  let index = ?s.tableGet(subhash, key)
   s.moveToFront(index)
   result = Opt.some(s.nodes[index].value)
 
-func peek*[K, V](s: var LruCache[K, V], key: auto): Opt[V] =
-  ## Retrieve item without moving it to the front
-  let index = ?s.tableGet(key)
+func get[K, V](s: var LruCache[K, V], key: auto): Opt[V] =
+  ## Retrieve item and move it to the front of the LRU cache
+  s.get(subhash(key), key)
+
+func peek[K, V](s: var LruCache[K, V], subhash: uint32, key: auto): Opt[V] =
+  let index = ?s.tableGet(subhash, key)
   result = Opt.some(s.nodes[index].value)
 
-func update*(s: var LruCache, key: auto, value: auto): bool =
+func peek[K, V](s: var LruCache[K, V], key: auto): Opt[V] =
+  ## Retrieve item without moving it to the front
+  s.peek(subhash(key), key)
+
+func update(s: var LruCache, subhash: uint32, key: auto, value: auto): bool =
+  let index = s.tableGet(subhash, key).valueOr:
+    return false
+
+  s.nodes[index].value = value
+  s.moveToFront(index)
+  result = true
+
+func update(s: var LruCache, key: auto, value: auto): bool =
   ## Update and move an existing item to the front of the LRU cache - returns
   ## true if the item was updated, false if it was not in the cache
-  let index = s.tableGet(key).valueOr:
+  s.update(subhash(key), key, value)
+
+func refresh(s: var LruCache, subhash: uint32, key: auto, value: auto): bool =
+  let index = s.tableGet(subhash, key).valueOr:
     return false
 
   s.nodes[index].value = value
-  s.moveToFront(index)
   result = true
 
-func refresh*(s: var LruCache, key: auto, value: auto): bool =
+func refresh(s: var LruCache, key: auto, value: auto): bool =
   ## Update existing item without moving it to the front of the LRU cache -
   ## returns true if the item was refreshed, false if it was not in the cache
-  let index = s.tableGet(key).valueOr:
-    return false
+  s.refresh(subhash(key), key, value)
 
-  s.nodes[index].value = value
-  result = true
-
-iterator putWithEvicted*[K, V](
-    s: var LruCache, key: K, value: V
+iterator putWithEvicted[K, V](
+    s: var LruCache, subhash: uint32, key: K, value: V
 ): tuple[evicted: bool, key: LruCache.K, value: LruCache.V] =
-  ## Insert a new item in the cache, replacing the least recently used one and
-  ## yielding the updated or evicted item(s), if any, with their pre-put value.
-  ##
-  ## Note: Although the API supports evicting more than one item, currently this
-  ## cannot cannot happen - future versions may include options for evaluating
-  ## the cost of each item at which point several "cheap" items may get evicted
-  ## when an expensive item is added.
   if s.used + 1 >= s.nodesLen:
     s.grow(uint32(min(s.capacity, targetLen(s.used)) + 1))
 
   if s.nodesLen > 0: # if capacity was 0, there will be no growth
     let
-      subhash = subhash(key)
       bucket = s.tableBucket(subhash, key)
 
       index =
@@ -478,15 +497,31 @@ iterator putWithEvicted*[K, V](
           last
 
     s.moveToFront(index)
-  
-func put*(s: var LruCache, key: auto, value: auto) =
-  ## Insert or update an item in the cache, replacing the least recently used
-  ## one if inserting the item would exceed capacity.
+
+iterator putWithEvicted[K, V](
+    s: var LruCache, key: K, value: V
+): tuple[evicted: bool, key: LruCache.K, value: LruCache.V] =
+  ## Insert a new item in the cache, replacing the least recently used one and
+  ## yielding the updated or evicted item(s), if any, with their pre-put value.
+  ##
+  ## Note: Although the API supports evicting more than one item, currently this
+  ## cannot cannot happen - future versions may include options for evaluating
+  ## the cost of each item at which point several "cheap" items may get evicted
+  ## when an expensive item is added.
+  for v in s.putWithEvicted(subhash(key), key, value):
+    yield v
+
+func put(s: var LruCache, subhash: uint32, key: auto, value: auto) =
   {.cast(noSideEffect).}:
-    for _ in s.putWithEvicted(key, value):
+    for _ in s.putWithEvicted(subhash, key, value):
       discard
 
-proc dispose*(s: var LruCache) =
+func put(s: var LruCache, key: auto, value: auto) =
+  ## Insert or update an item in the cache, replacing the least recently used
+  ## one if inserting the item would exceed capacity.
+  s.put(subhash(key), key, value)
+
+proc dispose(s: var LruCache) =
   if s.nodesLen > 0:
     for index in s.mruIndices:
       resetPayload(s.nodes[index])
@@ -566,7 +601,10 @@ proc `=copy`[K, V](
   discard
 
 template withShard[K, V](lru: ConcurrentLruCache[K, V], key: K, body: untyped): auto =
-  let s {.inject.} = addr lru.shards[int(uint64(hash(key)) and SHARD_MASK)]
+  let
+    h = hash(key)
+    sh {.inject.} = h.toSubhash()
+    s {.inject.} = addr lru.shards[int(uint64(h) and SHARD_MASK)]
   acquire(s.lock)
   try:
     body
@@ -595,33 +633,33 @@ func len*[K, V](lru: var ConcurrentLruCache[K, V]): int =
 
 func contains*[K, V](lru: var ConcurrentLruCache[K, V], key: K): bool =
   withShard(lru, key):
-    s.cache.contains(key)
+    s.cache.contains(sh, key)
 
 func peek*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
   withShard(lru, key):
-    s.cache.peek(key)
+    s.cache.peek(sh, key)
 
 proc get*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
   withShard(lru, key):
-    s.cache.get(key)
+    s.cache.get(sh, key)
 
 proc put*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V) =
   withShard(lru, key):
-    s.cache.put(key, val)
+    s.cache.put(sh, key, val)
 
 proc pop*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
   withShard(lru, key):
-    s.cache.pop(key)
+    s.cache.pop(sh, key)
 
 proc update*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V): bool =
   withShard(lru, key):
-    s.cache.update(key, val)
+    s.cache.update(sh, key, val)
 
 proc refresh*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V): bool =
   withShard(lru, key):
-    s.cache.refresh(key, val)
+    s.cache.refresh(sh, key, val)
 
 proc del*[K, V](lru: var ConcurrentLruCache[K, V], key: K) =
   withShard(lru, key):
-    s.cache.del(key)
+    s.cache.del(sh, key)
 
