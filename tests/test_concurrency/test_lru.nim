@@ -395,7 +395,7 @@ suite "ConcurrentLruCache Tests":
 
   test "len and capacity":
     var lru: ConcurrentLruCache[int, int]
-    lru.init(10) # 10 per shard
+    lru.init(640) # 10 per shard
     defer: lru.dispose()
 
     check:
@@ -405,16 +405,58 @@ suite "ConcurrentLruCache Tests":
     for i in 0 ..< 100:
       lru.put(i, i)
 
-    check lru.len() == 100
+    check:
+      lru.len() == 100
+      lru.capacity() == 640
 
     for i in 0 ..< 100:
       lru.del(i)
 
-    check lru.len() == 0
+    check:
+      lru.len() == 0
+      lru.capacity() == 640
+
+  test "capacity calculation":
+    var lru: ConcurrentLruCache[int, int]
+
+    block:
+      lru.init(0)
+      defer: lru.dispose()
+      check lru.capacity() == 0
+
+    block:
+      lru.init(63)
+      defer: lru.dispose()
+      check lru.capacity() == 64
+
+    block:
+      lru.init(64)
+      defer: lru.dispose()
+      check lru.capacity() == 64
+
+    block:
+      lru.init(65)
+      defer: lru.dispose()
+      check lru.capacity() == 128
+
+    block:
+      lru.init(127)
+      defer: lru.dispose()
+      check lru.capacity() == 128
+
+    block:
+      lru.init(128)
+      defer: lru.dispose()
+      check lru.capacity() == 128
+
+    block:
+      lru.init(129)
+      defer: lru.dispose()
+      check lru.capacity() == 192
 
   test "shard info":
     var lru: ConcurrentLruCache[int, int]
-    lru.init(10) # 10 per shard
+    lru.init(640) # 10 per shard
     defer: lru.dispose()
 
     check:

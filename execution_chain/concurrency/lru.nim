@@ -256,8 +256,11 @@ proc grow[K, V](v: var LruCache[K, V], newSize: uint32) =
 
   if newSize.int > v.nodesAllocatedLen:
     let nextPower = nextPowerOfTwo(newSize.int)
-    v.nodes =
-      cast[ptr UncheckedArray[LruNode[K, V]]](resizeShared(v.nodes[0].addr, nextPower))
+    if v.nodes.isNil():
+      v.nodes = cast[ptr UncheckedArray[LruNode[K, V]]](createShared(LruNode[K, V], nextPower))
+    else:
+      v.nodes =
+        cast[ptr UncheckedArray[LruNode[K, V]]](resizeShared(v.nodes[0].addr, nextPower))
     v.nodesLen = newSize.int
     v.nodesAllocatedLen = nextPower
   else:
@@ -303,6 +306,9 @@ func resetPayload(n: var LruNode) =
 
 func init*[K, V](T: type LruCache[K, V], capacity: int): T =
   ## Create a cache with the given initial capacity
+  static:
+    doAssert supportsCopyMem(K), $K & " must be a non-GC type"
+    doAssert supportsCopyMem(V), $V & " must be a non-GC type"
   result.capacity = capacity
 
 iterator mruIndices(s: LruCache): uint32 =
@@ -511,8 +517,12 @@ const
     else: 
       64
   NUM_SHARDS = 1 shl 6 # 64 shards, must be a power of two
+  SHARD_MASK = uint64(NUM_SHARDS - 1)
 
 type
+  State {.pure.} = enum 
+    UNINITIALISED, INITIALISED, DISPOSED
+
   Shard[K, V] = object
     lock {.align: CACHE_LINE_SIZE.}: Lock
     cache: LruCache[K, V]
@@ -520,28 +530,43 @@ type
 
   ConcurrentLruCache*[K, V] = object
     shards: array[NUM_SHARDS, Shard[K, V]]
-    mask: uint64 
+    state: State
 
-proc init*[K, V](lru: var ConcurrentLruCache[K, V], shardCapacity: int) =
+proc init*[K, V](lru: var ConcurrentLruCache[K, V], capacity: int) =
   const shardCount = NUM_SHARDS
   static:
+    doAssert supportsCopyMem(K), $K & " must be a non-GC type"
+    doAssert supportsCopyMem(V), $V & " must be a non-GC type"
     doAssert shardCount > 1
     doAssert isPowerOfTwo(shardCount)
-  doAssert shardCapacity > 0
-
-  lru.mask = uint64(shardCount - 1)
+  doAssert lru.state != State.INITIALISED
+  
+  # round capacity up to nearest multiple of 64
+  let shardCapacity = (capacity + shardCount - 1) div shardCount 
 
   for i in 0 ..< shardCount:
     lru.shards[i].lock.initLock()
     lru.shards[i].cache = LruCache[K, V].init(shardCapacity)
+  
+  lru.state = State.INITIALISED
 
 proc dispose*[K, V](lru: var ConcurrentLruCache[K, V]) =
-  for i in 0 ..< lru.shards.len():
-    lru.shards[i].lock.deinitLock()
-    lru.shards[i].cache.dispose()
+  if lru.state == State.INITIALISED:
+    for i in 0 ..< lru.shards.len():
+      lru.shards[i].lock.deinitLock()
+      lru.shards[i].cache.dispose()
+    lru.state = State.DISPOSED
+
+proc `=copy`[K, V](
+    dest: var Shard[K, V], src: Shard[K, V]) {.error: "Copying Shard is forbidden".} =
+  discard
+
+proc `=copy`[K, V](
+    dest: var ConcurrentLruCache[K, V], src: ConcurrentLruCache[K, V]) {.error: "Copying ConcurrentLruCache is forbidden".} =
+  discard
 
 template withShard[K, V](lru: ConcurrentLruCache[K, V], key: K, body: untyped): auto =
-  let s {.inject.} = addr lru.shards[int(uint64(hash(key)) and lru.mask)]
+  let s {.inject.} = addr lru.shards[int(uint64(hash(key)) and SHARD_MASK)]
   acquire(s.lock)
   try:
     body
@@ -583,6 +608,10 @@ proc get*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
 proc put*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V) =
   withShard(lru, key):
     s.cache.put(key, val)
+
+proc pop*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
+  withShard(lru, key):
+    s.cache.pop(key)
 
 proc update*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V): bool =
   withShard(lru, key):
