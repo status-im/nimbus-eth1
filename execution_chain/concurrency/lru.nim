@@ -541,18 +541,19 @@ proc dispose(s: var LruCache) =
 # throughput concurrent reads and writes from multiple threads. It uses a
 # sharded design in order to mitigate contention and internally uses a
 # LRU cache (not thread-safe) in each shard. Each shard has a dedicated lock
-# to allow for concurrent access. The shards are indexed by hashing the key
-# and taking the modulus with the number of shards. This allows for concurrent
-# access to different shards with lower contention.
+# to allow for concurrent access. Shards are picked using the high bits of the
+# key's hash while the LruCache inside each shard picks buckets from the low
+# bits of the (folded) hash - keeping the two bit ranges disjoint avoids any
+# correlation between shard and bucket placement.
 
-const 
-  CACHE_LINE_SIZE = 
-    when defined(macosx) and defined(arm64): 
+const
+  CACHE_LINE_SIZE =
+    when defined(macosx) and defined(arm64):
       128
-    else: 
+    else:
       64
-  NUM_SHARDS = 1 shl 6 # 64 shards, must be a power of two
-  SHARD_MASK = uint64(NUM_SHARDS - 1)
+  SHARD_BITS = 6
+  NUM_SHARDS = 1 shl SHARD_BITS # 64 shards, must be a power of two
 
 type
   State {.pure.} = enum 
@@ -600,11 +601,22 @@ proc `=copy`[K, V](
     dest: var ConcurrentLruCache[K, V], src: ConcurrentLruCache[K, V]) {.error: "Copying ConcurrentLruCache is forbidden".} =
   discard
 
+template toShardIdx(h: Hash): int =
+  # Pick the shard from the top SHARD_BITS bits of the hash so that the shard
+  # selection bits do not overlap with the low bits that the LruCache uses for
+  # bucket selection inside the shard.
+  when sizeof(h) == sizeof(uint32):
+    int(cast[uint32](h) shr (32 - SHARD_BITS))
+  else:
+    static:
+      assert sizeof(h) == sizeof(uint64)
+    int(cast[uint64](h) shr (64 - SHARD_BITS))
+
 template withShard[K, V](lru: ConcurrentLruCache[K, V], key: K, body: untyped): auto =
   let
     h = hash(key)
     sh {.inject.} = h.toSubhash()
-    s {.inject.} = addr lru.shards[int(uint64(h) and SHARD_MASK)]
+    s {.inject.} = addr lru.shards[h.toShardIdx()]
   acquire(s.lock)
   try:
     body
