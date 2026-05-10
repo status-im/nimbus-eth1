@@ -26,12 +26,6 @@ const skipFiles = [
   # Once all of these pass we could simply run eest_blockchain_test.nim
   # with statelessEnabled = true and remove this test file.
   #
-  # --- eest_develop files with failures ---
-  #
-  # persist(): Unspecified(Aristo, ctx=, error=DelVidStaleVtx) [AssertionDefect]
-  # -> on execution with generated witness
-  "test_scenarios.json",
-  #
   # --- eest_zkevm files with failures ---
   #
   # `dst.contains(k)`  [AssertionDefect] -> on execution of test vector witness

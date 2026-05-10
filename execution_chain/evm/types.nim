@@ -27,7 +27,7 @@ type
   BlockContext* = object
     timestamp*        : EthTime
     gasLimit*         : GasInt
-    baseFeePerGas*    : Opt[UInt256]
+    baseFeePerGas*    : GasInt
     prevRandao*       : Bytes32
     difficulty*       : UInt256
     coinbase*         : Address

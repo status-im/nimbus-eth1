@@ -64,7 +64,11 @@ proc downloadFinishNext(ctx: SnapCtxRef; info: static[string]): SyncState =
 
 func mkTrieNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
-  SnapMkTrie
+  SnapAnalyse
+
+func analyseNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+  ## State transition handler
+  SnapHealing
 
 func healingNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
@@ -108,7 +112,10 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]) =
   #      |  downloadFinish |
   #      |        |        |
   #      |        v        |
-  #      `----> mkTrie ----'
+  #      `----> mkTrie     |
+  #               |        |
+  #               v        |
+  #      `     analyse ----'
   #               |
   #               v
   #            healing
@@ -130,6 +137,8 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]) =
       ctx.downloadFinishNext info
     of SnapMkTrie:
       ctx.mkTrieNext info
+    of SnapAnalyse:
+      ctx.analyseNext info
     of SnapHealing:
       ctx.healingNext info
   if ctx.pool.syncState == newState:
@@ -141,7 +150,7 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]) =
 
   ctx.pool.syncState = newState
   case newState:
-  of SnapDownload, SnapDownloadFinish, SnapMkTrie, SnapHealing:
+  of SnapDownload, SnapDownloadFinish, SnapMkTrie,SnapAnalyse,  SnapHealing:
     chronicles.info info & ": State changed", prevState, newState,
       top=sdb.top, pivot=sdb.pivot.bnStr, nSyncPeers=ctx.nSyncPeers()
   of SnapIdle, SnapResume, SnapReady:
