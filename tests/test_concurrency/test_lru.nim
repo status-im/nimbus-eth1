@@ -10,11 +10,7 @@
 
 {.used.}
 
-import
-  std/sequtils,
-  unittest2,
-  taskpools,
-  ../../execution_chain/concurrency/lru {.all.}
+import std/sequtils, unittest2, taskpools, ../../execution_chain/concurrency/lru {.all.}
 
 type
   A = object
@@ -31,7 +27,6 @@ func `==`(a: A, b: B): bool =
   a.v == b.v
 
 suite "LruCache Tests":
-
   test "small":
     var lru = LruCache[int, int].init(0)
 
@@ -87,7 +82,7 @@ suite "LruCache Tests":
 
   test "simple ops":
     var lru = LruCache[int, int].init(10)
-    
+
     for i in 0 ..< 10:
       for (evicted, _, _) in lru.putWithEvicted(i, i):
         check false # All are new items so we shouldn't be iterating over
@@ -286,9 +281,7 @@ suite "LruCache Tests":
       lru.put(20, 20)
       lru.dispose()
 
-
 suite "ConcurrentLruCache Tests":
-
   test "init and dispose":
     block:
       var lru: ConcurrentLruCache[int, int]
@@ -305,7 +298,8 @@ suite "ConcurrentLruCache Tests":
   test "put and get":
     var lru: ConcurrentLruCache[int, int]
     lru.init(1000)
-    defer: lru.dispose()
+    defer:
+      lru.dispose()
 
     lru.put(1, 10)
     lru.put(2, 20)
@@ -320,7 +314,8 @@ suite "ConcurrentLruCache Tests":
   test "put overwrites existing key":
     var lru: ConcurrentLruCache[int, int]
     lru.init(1000)
-    defer: lru.dispose()
+    defer:
+      lru.dispose()
 
     lru.put(1, 10)
     lru.put(1, 20)
@@ -332,7 +327,8 @@ suite "ConcurrentLruCache Tests":
   test "pop":
     var lru: ConcurrentLruCache[int, int]
     lru.init(1000)
-    defer: lru.dispose()
+    defer:
+      lru.dispose()
 
     lru.put(1, 10)
     lru.put(2, 20)
@@ -348,7 +344,8 @@ suite "ConcurrentLruCache Tests":
   test "contains":
     var lru: ConcurrentLruCache[int, int]
     lru.init(1000)
-    defer: lru.dispose()
+    defer:
+      lru.dispose()
 
     lru.put(1, 10)
 
@@ -359,7 +356,8 @@ suite "ConcurrentLruCache Tests":
   test "peek":
     var lru: ConcurrentLruCache[int, int]
     lru.init(1000)
-    defer: lru.dispose()
+    defer:
+      lru.dispose()
 
     lru.put(1, 10)
 
@@ -370,7 +368,8 @@ suite "ConcurrentLruCache Tests":
   test "del":
     var lru: ConcurrentLruCache[int, int]
     lru.init(1000)
-    defer: lru.dispose()
+    defer:
+      lru.dispose()
 
     lru.put(1, 10)
     lru.put(2, 20)
@@ -388,7 +387,8 @@ suite "ConcurrentLruCache Tests":
   test "update":
     var lru: ConcurrentLruCache[int, int]
     lru.init(1000)
-    defer: lru.dispose()
+    defer:
+      lru.dispose()
 
     check not lru.update(1, 100)
 
@@ -400,7 +400,8 @@ suite "ConcurrentLruCache Tests":
   test "refresh":
     var lru: ConcurrentLruCache[int, int]
     lru.init(1000)
-    defer: lru.dispose()
+    defer:
+      lru.dispose()
 
     check not lru.refresh(1, 100)
 
@@ -412,7 +413,8 @@ suite "ConcurrentLruCache Tests":
   test "len and capacity":
     var lru: ConcurrentLruCache[int, int]
     lru.init(640) # 10 per shard
-    defer: lru.dispose()
+    defer:
+      lru.dispose()
 
     check:
       lru.len() == 0
@@ -436,55 +438,63 @@ suite "ConcurrentLruCache Tests":
     block:
       var lru: ConcurrentLruCache[int, int]
       lru.init(0)
-      defer: lru.dispose()
+      defer:
+        lru.dispose()
       check lru.capacity() == 0
 
     block:
       var lru: ConcurrentLruCache[int, int]
       lru.init(63)
-      defer: lru.dispose()
+      defer:
+        lru.dispose()
       check lru.capacity() == 64
 
     block:
       var lru: ConcurrentLruCache[int, int]
       lru.init(64)
-      defer: lru.dispose()
+      defer:
+        lru.dispose()
       check lru.capacity() == 64
 
     block:
       var lru: ConcurrentLruCache[int, int]
       lru.init(65)
-      defer: lru.dispose()
+      defer:
+        lru.dispose()
       check lru.capacity() == 128
 
     block:
       var lru: ConcurrentLruCache[int, int]
       lru.init(127)
-      defer: lru.dispose()
+      defer:
+        lru.dispose()
       check lru.capacity() == 128
 
     block:
       var lru: ConcurrentLruCache[int, int]
       lru.init(128)
-      defer: lru.dispose()
+      defer:
+        lru.dispose()
       check lru.capacity() == 128
 
     block:
       var lru: ConcurrentLruCache[int, int]
       lru.init(129)
-      defer: lru.dispose()
+      defer:
+        lru.dispose()
       check lru.capacity() == 192
 
   test "shard info":
     var lru: ConcurrentLruCache[int, int]
     lru.init(640) # 10 per shard
-    defer: lru.dispose()
+    defer:
+      lru.dispose()
 
     check:
       lru.numShards() == 64
       lru.shardCapacity() == 10
       lru.capacity() == 640
-    
+
     for i in 0 ..< 64:
       check lru.shardLenForKey(i) == 0
 
@@ -496,11 +506,13 @@ suite "ConcurrentLruCache Tests":
 
     var lru: ConcurrentLruCache[int, int]
     lru.init(totalKeys * 2) # headroom so eviction doesn't interfere
-    defer: lru.dispose()
+    defer:
+      lru.dispose()
     let cachePtr = addr lru
 
-    var  tp = Taskpool.new(numThreads = numThreads)
-    defer: tp.shutdown()
+    var tp = Taskpool.new(numThreads = numThreads)
+    defer:
+      tp.shutdown()
 
     proc tpPut(cache: ptr ConcurrentLruCache[int, int], base, count: int) =
       for i in 0 ..< count:

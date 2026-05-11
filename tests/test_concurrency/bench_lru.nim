@@ -34,18 +34,15 @@ type
     checksum: uint64
 
 proc benchmarkHeader(): string =
-  "  " & alignLeft("benchmark", benchNameWidth) & " " &
-    align("elapsed(s)", 10) & " " & align("ops/s", 14) & " " &
-    align("ns/op", 10)
+  "  " & alignLeft("benchmark", benchNameWidth) & " " & align("elapsed(s)", 10) & " " &
+    align("ops/s", 14) & " " & align("ns/op", 10)
 
 proc benchmarkLine(name: string, stats: BenchmarkStats): string =
   let
     opsPerSec = stats.operations.float / stats.elapsed
     nsPerOp = (stats.elapsed * 1_000_000_000.0) / stats.operations.float
-  "  " & alignLeft(name, benchNameWidth) & " " &
-    align(fmt"{stats.elapsed:.4f}", 10) & " " &
-    align(fmt"{opsPerSec:.0f}", 14) & " " &
-    align(fmt"{nsPerOp:.1f}", 10)
+  "  " & alignLeft(name, benchNameWidth) & " " & align(fmt"{stats.elapsed:.4f}", 10) &
+    " " & align(fmt"{opsPerSec:.0f}", 14) & " " & align(fmt"{nsPerOp:.1f}", 10)
 
 # Thread procs must be defined at module level with {.thread.}
 
@@ -113,17 +110,13 @@ proc runSingleThreadedPeek(
       checksum += uint64(v.unsafeGet()) + 1
   BenchmarkStats(elapsed: epochTime() - started, operations: count, checksum: checksum)
 
-proc runLruPut(
-    cache: ptr lru.LruCache[int, int], count: int
-): BenchmarkStats =
+proc runLruPut(cache: ptr lru.LruCache[int, int], count: int): BenchmarkStats =
   let started = epochTime()
   for i in 0 ..< count:
     cache[].put(i mod cacheCapacity, i)
   BenchmarkStats(elapsed: epochTime() - started, operations: count)
 
-proc runLruGet(
-    cache: ptr lru.LruCache[int, int], count: int
-): BenchmarkStats =
+proc runLruGet(cache: ptr lru.LruCache[int, int], count: int): BenchmarkStats =
   var checksum: uint64
   let started = epochTime()
   for i in 0 ..< count:
@@ -132,9 +125,7 @@ proc runLruGet(
       checksum += uint64(v.unsafeGet()) + 1
   BenchmarkStats(elapsed: epochTime() - started, operations: count, checksum: checksum)
 
-proc runLruPeek(
-    cache: ptr LruCache[int, int], count: int
-): BenchmarkStats =
+proc runLruPeek(cache: ptr LruCache[int, int], count: int): BenchmarkStats =
   var checksum: uint64
   let started = epochTime()
   for i in 0 ..< count:
@@ -251,9 +242,9 @@ suite "ConcurrentLruCache Benchmark":
     let mixed16 = runBench(16, mixedThreadProc, cachePtr)
 
     debugEcho ""
-    debugEcho "  capacity=", cacheCapacity,
-      ", single-thread ops=", singleThreadOps,
-      ", ops/thread (mt)=", opsPerThread
+    debugEcho "  capacity=",
+      cacheCapacity, ", single-thread ops=", singleThreadOps, ", ops/thread (mt)=",
+      opsPerThread
     debugEcho benchmarkHeader()
     debugEcho benchmarkLine("1-thread put", singlePut)
     debugEcho benchmarkLine("1-thread get (hot)", singleGet)
