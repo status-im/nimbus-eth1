@@ -240,12 +240,13 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: 
   let
     vmState = c.vmState
     fork = c.vmState.fork
+    # EIP-3529: Reduction in refunds
+    MaxRefundQuotient = if fork >= FkLondon: 5.GasInt
+                        else: 2.GasInt
 
-  # EIP-3529: Reduction in refunds
-  let MaxRefundQuotient = if fork >= FkLondon:
-                            5.GasInt
-                          else:
-                            2.GasInt
+  var
+    stateGasRefund = gasRefund.GasInt
+
   if c.shouldBurnGas:
     c.gasMeter.burnGas()
 
@@ -256,6 +257,10 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: 
     else:
       # https://github.com/ethereum/execution-specs/pull/2689/changes
       c.gasMeter.returnAllStateGas()
+      # https://github.com/ethereum/execution-specs/commit/eb80b438a39d188fddf372ef5632123ca3ee238e
+      if call.isCreate:
+        c.gasMeter.returnStateGas(CREATE_ACCOUNT_STATE_GAS)
+        stateGasRefund += CREATE_ACCOUNT_STATE_GAS
 
   # Calculated gas used, taking into account refund rules.
   let
@@ -274,7 +279,7 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: 
     let
       txRegularGas = call.intrinsic.regular + c.gasMeter.regularGasUsed
     blockRegularGasUsed = max(txRegularGas, call.intrinsic.floorDataGas)
-    blockStateGasUsed = call.intrinsic.state - gasRefund.GasInt + c.gasMeter.stateGasUsed
+    blockStateGasUsed = call.intrinsic.state - stateGasRefund + c.gasMeter.stateGasUsed
     debug "EIP-8037 gas accounting",
       intrinsicRegular = call.intrinsic.regular,
       intrinsicState = call.intrinsic.state,

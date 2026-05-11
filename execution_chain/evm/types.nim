@@ -101,7 +101,6 @@ type
     stateGasLeft*: GasInt
     stateGasUsed*: GasInt
     regularGasUsed*: GasInt
-    stateGasRefund*: GasInt
     stateGasRefundPending*: GasInt
 
   CallKind* {.pure.} = enum

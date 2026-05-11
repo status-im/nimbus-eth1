@@ -197,7 +197,6 @@ proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) =
     if child.isSuccess:
       c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
       c.gasMeter.appendStateGasUsed(child.gasMeter.stateGasUsed)
-      c.gasMeter.appendStateGasRefund(child.gasMeter.stateGasRefund)
       # https://github.com/ethereum/execution-specs/pull/2733/changes
       c.gasMeter.creditStateGasRefund(child.gasMeter.stateGasRefundPending)
       c.merge(child)
@@ -207,7 +206,7 @@ proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) =
       # so no state was actually grown.  All state gas, both reservoir and any
       # that spilled into `gas_left`, is restored to the parent's reservoir and
       # the child's `state_gas_used` is not accumulated.
-      c.gasMeter.returnStateGas(child.gasMeter.stateGasUsed + child.gasMeter.stateGasLeft - child.gasMeter.stateGasRefund)
+      c.gasMeter.returnStateGas(child.gasMeter.stateGasUsed + child.gasMeter.stateGasLeft)
 
     let actualOutputSize = min(memLen, child.output.len)
     if actualOutputSize > 0:
