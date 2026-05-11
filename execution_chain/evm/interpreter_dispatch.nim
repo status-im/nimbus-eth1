@@ -122,9 +122,7 @@ proc beforeExecCreate(c: Computation): bool =
     # burned and added to regularGasUsed.
     # But contract creation tx collision does not add the burned gas to
     # regularGasUsed.
-    if c.msg.depth == 0:
-      c.gasMeter.gasRemaining = 0
-    elif c.fork >= FkAmsterdam:
+    if c.fork >= FkAmsterdam and c.msg.depth > 0:
       # https://github.com/ethereum/execution-specs/pull/2733/changes
       c.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
     let blurb = c.msg.contractAddress.toHex
