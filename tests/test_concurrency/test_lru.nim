@@ -433,39 +433,44 @@ suite "ConcurrentLruCache Tests":
       lru.capacity() == 640
 
   test "capacity calculation":
-    var lru: ConcurrentLruCache[int, int]
-
     block:
+      var lru: ConcurrentLruCache[int, int]
       lru.init(0)
       defer: lru.dispose()
       check lru.capacity() == 0
 
     block:
+      var lru: ConcurrentLruCache[int, int]
       lru.init(63)
       defer: lru.dispose()
       check lru.capacity() == 64
 
     block:
+      var lru: ConcurrentLruCache[int, int]
       lru.init(64)
       defer: lru.dispose()
       check lru.capacity() == 64
 
     block:
+      var lru: ConcurrentLruCache[int, int]
       lru.init(65)
       defer: lru.dispose()
       check lru.capacity() == 128
 
     block:
+      var lru: ConcurrentLruCache[int, int]
       lru.init(127)
       defer: lru.dispose()
       check lru.capacity() == 128
 
     block:
+      var lru: ConcurrentLruCache[int, int]
       lru.init(128)
       defer: lru.dispose()
       check lru.capacity() == 128
 
     block:
+      var lru: ConcurrentLruCache[int, int]
       lru.init(129)
       defer: lru.dispose()
       check lru.capacity() == 192

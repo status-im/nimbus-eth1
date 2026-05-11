@@ -557,41 +557,46 @@ const
 
 type
   State {.pure.} = enum 
-    UNINITIALISED, INITIALISED, DISPOSED
+    UNINITIALIZED, INITIALIZED, DISPOSED
 
   Shard[K, V] = object
     lock {.align: CACHE_LINE_SIZE.}: Lock
     cache: LruCache[K, V]
-    padding: array[CACHE_LINE_SIZE, byte]
 
   ConcurrentLruCache*[K, V] = object
     shards: array[NUM_SHARDS, Shard[K, V]]
     state: State
 
 proc init*[K, V](lru: var ConcurrentLruCache[K, V], capacity: int) =
+  # init is not thread safe and so the caller must ensure that no other threads
+  # are using the cache while initialising it.
   const shardCount = NUM_SHARDS
   static:
     doAssert supportsCopyMem(K), $K & " must be a non-GC type"
     doAssert supportsCopyMem(V), $V & " must be a non-GC type"
     doAssert shardCount > 1
     doAssert isPowerOfTwo(shardCount)
-  doAssert lru.state != State.INITIALISED
+  doAssert lru.state == State.UNINITIALIZED
   
-  # round capacity up to nearest multiple of 64
+  # per-shard capacity (ceiling div); total effective capacity is shardCapacity * shardCount
   let shardCapacity = (capacity + shardCount - 1) div shardCount 
 
   for i in 0 ..< shardCount:
     lru.shards[i].lock.initLock()
     lru.shards[i].cache = LruCache[K, V].init(shardCapacity)
   
-  lru.state = State.INITIALISED
+  lru.state = State.INITIALIZED
 
 proc dispose*[K, V](lru: var ConcurrentLruCache[K, V]) =
-  if lru.state == State.INITIALISED:
-    for i in 0 ..< lru.shards.len():
-      lru.shards[i].lock.deinitLock()
-      lru.shards[i].cache.dispose()
-    lru.state = State.DISPOSED
+  # dispose is not thread safe and so the caller must ensure that no other threads
+  # are using the cache while disposing it.
+  doAssert lru.state == State.INITIALIZED
+
+  for i in 0 ..< lru.shards.len():
+    lru.shards[i].lock.deinitLock()
+    lru.shards[i].cache.dispose()
+
+  lru.state = State.DISPOSED
 
 proc `=copy`[K, V](
     dest: var Shard[K, V], src: Shard[K, V]) {.error: "Copying Shard is forbidden".} =
@@ -627,6 +632,9 @@ template numShards*[K, V](lru: ConcurrentLruCache[K, V]): int =
   NUM_SHARDS
 
 template shardCapacity*[K, V](lru: var ConcurrentLruCache[K, V]): int =
+  # No locking here because capacity is immutable for the ConcurrentLruCache type
+  # and the internal LruCache type which does support updating the capacity, is 
+  # not exported.
   lru.shards[0].cache.capacity
   
 func shardLenForKey*[K, V](lru: var ConcurrentLruCache[K, V], key: K): int =
