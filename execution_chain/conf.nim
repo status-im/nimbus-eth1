@@ -62,8 +62,8 @@ type
   NimbusCmd* {.pure.} = enum
     executionClient
     `import`
-    exportEraE
-    verifyEraE
+    exportEre
+    verifyEre
 
   RpcFlag* {.pure.} = enum
     ## RPC flags
@@ -587,21 +587,25 @@ type
         desc: "Store reverse slot hashes in database"
         defaultValue: false
         name: "debug-store-slot-hashes".}: bool
-    of NimbusCmd.exportEraE:
+    of NimbusCmd.exportEre:
       startEra* {.
-        desc: "Number of the first erae to be exported", name: "start-era"
+        desc: "Number of the first era to be exported", name: "start-era"
       .}: uint64
       endEra* {.
-        desc: "Number of the last erae to be exported", name: "end-era"
+        desc: "Number of the last era to be exported", name: "end-era"
       .}: uint64
-    of NimbusCmd.verifyEraE:
-      eraFile* {.
-        desc: "Path to the erae file to be verified", name: "era-file"
-      .}: InputFile
       noProofs* {.
-        desc: "Define if the eraE file to verify has no proofs included"
+        desc: "Omit proof entries from the ere file (produces a noproofs profile)"
         defaultValue: false
         name: "no-proofs".}: bool
+      noReceipts* {.
+        desc: "Omit receipt entries from the ere file (produces a noreceipts profile)"
+        defaultValue: false
+        name: "no-receipts".}: bool
+    of NimbusCmd.verifyEre:
+      ereFile* {.
+        desc: "Path to the ere file to be verified", name: "ere-file"
+      .}: InputFile
 
 func parseHexOrDec256(p: string): UInt256 {.raises: [ValueError].} =
   if startsWith(p, "0x"):

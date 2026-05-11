@@ -419,10 +419,10 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   case config.cmd
   of NimbusCmd.`import`:
     importBlocks(config, com)
-  of NimbusCmd.exportEraE:
+  of NimbusCmd.exportEre:
     exportEre(config, com)
-  of NimbusCmd.verifyEraE:
-    verifyEreFile(config, config.eraFile.string)
+  of NimbusCmd.verifyEre:
+    verifyEreFile(config, config.ereFile.string)
   else:
     runExeClient(config, com, nil, nimbus=nimbus)
 

@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/[strformat, typetraits],
+  std/[strformat, strutils, typetraits],
   results,
   stew/[endians2, io2, byteutils, arrayops],
   stint,
@@ -99,7 +99,7 @@ proc appendRecord(f: IoHandle, index: DynamicBlockIndex): Result[int64, string] 
   f.appendIndex(index.startNumber, index.indexesList, index.componentCount)
 
 proc readDynamicBlockIndex*(
-    f: IoHandle, noProofs: bool
+    f: IoHandle, noProofs: bool = false, noReceipts: bool = false
 ): Result[DynamicBlockIndex, string] =
   var
     buf: seq[byte]
@@ -160,8 +160,7 @@ proc readDynamicBlockIndex*(
       startNumber: blockNumber,
       indexesList: indexesList,
       componentCount: componentCount,
-      noReceipts: false,
-        # TODO: hardcoded for now, leaving no option for reading ere files without receipts
+      noReceipts: noReceipts,
       noProofs: noProofs,
     )
   )
@@ -344,32 +343,38 @@ proc finish*(
 func shortLog*(x: Hash32): string =
   x.data.toOpenArray(0, 3).toHex()
 
-func eraeFileName*(network: string, era: Era, eraRoot: Hash32): string =
+func ereFileName*(
+    network: string, era: Era, eraRoot: Hash32, noProofs = false, noReceipts = false
+): string =
+  let profile =
+    if noProofs and noReceipts:
+      "-noproofs-noreceipts"
+    elif noProofs:
+      "-noproofs"
+    elif noReceipts:
+      "-noreceipts"
+    else:
+      ""
   try:
-    &"{network}-{era.uint64:05}-{shortLog(eraRoot)}.erae"
+    &"{network}-{era.uint64:05}-{shortLog(eraRoot)}{profile}.ere"
   except ValueError as exc:
     raiseAssert exc.msg
 
-# Helpers to directly read objects from erae files
-# TODO: Might want to var parameters to avoid copying as is done for era files.
+func parseEreFileProfile*(path: string): tuple[noProofs: bool, noReceipts: bool] =
+  let name = path.toLowerAscii()
+  (noProofs: "noproofs" in name, noReceipts: "noreceipts" in name)
 
-type
-  EreFile* = ref object
-    handle: Opt[IoHandle]
-    blockIdx*: DynamicBlockIndex
-    mergeBlockNumber*: uint64
-
-  # BlockTuple* =
-  #   tuple[
-  #     header: headers.Header,
-  #     body: BlockBody,
-  #     receipts: seq[StoredReceipt],
-  #     proof: Proof,
-  #     td: UInt256,
-  #   ]
+type EreFile* = ref object
+  handle: Opt[IoHandle]
+  blockIdx*: DynamicBlockIndex
+  mergeBlockNumber*: uint64
 
 proc open*(
-    _: type EreFile, name: string, mergeBlockNumber: uint64, noProofs: bool
+    _: type EreFile,
+    name: string,
+    mergeBlockNumber: uint64,
+    noProofs: bool = false,
+    noReceipts: bool = false,
 ): Result[EreFile, string] =
   var f = Opt[IoHandle].ok(?openFile(name, {OpenFlags.Read}).mapErr(ioErrorMsg))
 
@@ -385,7 +390,7 @@ proc open*(
   let blockIdxPos = ?f[].findDynamicBlockIndexStartOffset()
   ?f[].setFilePos(blockIdxPos, SeekPosition.SeekCurrent).mapErr(ioErrorMsg)
 
-  let blockIdx = ?f[].readDynamicBlockIndex(noProofs)
+  let blockIdx = ?f[].readDynamicBlockIndex(noProofs, noReceipts)
   if blockIdx.indexesList.len() != MaxEreSize:
     return err(
       "Block indexes list length invalid: " & $blockIdx.indexesList.len() &
@@ -534,7 +539,6 @@ proc getTotalDifficulty*(f: EreFile, blockNumber: uint64): Result[UInt256, strin
 
 proc getEthBlock*(f: EreFile, blockNumber: uint64): Result[Block, string] =
   var res: Block
-  # var body: BlockBody
   res.header = ?getBlockHeader(f, blockNumber)
   var body = ?getBlockBody(f, blockNumber)
 
@@ -543,17 +547,6 @@ proc getEthBlock*(f: EreFile, blockNumber: uint64): Result[Block, string] =
   res.withdrawals = move(body.withdrawals)
 
   ok(move(res))
-
-# proc getBlockTuple*(
-#     f: EreFile, blockNumber: uint64, res: var BlockTuple
-# ): Result[void, string] =
-#   ?getBlockHeader(f, res.header)
-#   ?getBlockBody(f, res.body)
-#   ?getReceipts(f, res.receipts)
-#   ?getProof(f, res.proof)
-#   res.td = ?getTotalDifficulty(f)
-
-#   ok()
 
 proc getAccumulatorRoot*(f: EreFile): Result[Digest, string] =
   ## Only for pre merge eras and actual merge era
@@ -649,12 +642,9 @@ proc verify*(
     td: UInt256
     headerRecords: seq[HeaderRecord]
   for blockNumber in startNumber .. endNumber:
-    let header = ?getBlockHeader(f, blockNumber)
-    let body = ?getBlockBody(f, blockNumber)
-    # Note: currently not allowing for failure on receipts
-    let receipts = ?getReceipts(f, blockNumber)
-
     let
+      header = ?getBlockHeader(f, blockNumber)
+      body = ?getBlockBody(f, blockNumber)
       txRoot = calcTxRoot(body.transactions)
       ommershHash = computeRlpHash(body.uncles)
 
@@ -664,8 +654,10 @@ proc verify*(
     if header.ommersHash != ommershHash:
       return err("Invalid ommers hash")
 
-    if header.receiptsRoot != calcReceiptsRoot(receipts):
-      return err("Invalid receipts root")
+    if not f.blockIdx.noReceipts:
+      let receipts = ?getReceipts(f, blockNumber)
+      if header.receiptsRoot != calcReceiptsRoot(receipts):
+        return err("Invalid receipts root")
 
     if not f.blockIdx.noProofs:
       let proof = ?getProof(f, blockNumber)
@@ -679,8 +671,9 @@ proc verify*(
       )
 
   if era(startNumber) <= era(f.mergeBlockNumber):
-    let expectedRoot = ?f.getAccumulatorRoot()
-    let accumulatorRoot = getEpochRecordRoot(headerRecords)
+    let
+      expectedRoot = ?f.getAccumulatorRoot()
+      accumulatorRoot = getEpochRecordRoot(headerRecords)
 
     if accumulatorRoot != expectedRoot:
       return err("Invalid accumulator root")
@@ -696,13 +689,3 @@ iterator era1BlockHeaders*(f: EreFile): headers.Header =
 
   for blockNumber in startNumber .. endNumber:
     yield f.getBlockHeader(blockNumber).expect("Header can be read")
-
-# iterator era1BlockTuples*(f: EreFile): BlockTuple =
-#   let
-#     startNumber = f.blockIdx.startNumber
-#     endNumber = f.blockIdx.endNumber()
-
-#   var blockTuple: BlockTuple
-#   for blockNumber in startNumber .. endNumber:
-#     f.getBlockTuple(blockNumber, blockTuple).expect("Block tuple can be read")
-#     yield blockTuple
