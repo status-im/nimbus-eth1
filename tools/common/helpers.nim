@@ -165,6 +165,8 @@ func getChainConfig*(network: string, c: ChainConfig) =
   of $TestFork.BPO2ToAmsterdamAtTime15k:
     let excludes = [HardFork.Bpo3, HardFork.Bpo4, HardFork.Bpo5]
     c.assignTime(HardFork.Amsterdam, EthTime(15000), excludes)
+  of $TestFork.Bogota:
+    c.assignTime(HardFork.Bogota, TimeZero)
   else:
     raise newException(ValueError, "unsupported network " & network)
 
