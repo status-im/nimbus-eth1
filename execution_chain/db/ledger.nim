@@ -112,6 +112,7 @@ type
     accessList: ac_access_list.AccessList
 
   SelfDestructRefund* = object
+    address*: Address
     createdSlots*: int
     codeLen*: int
 
@@ -659,6 +660,7 @@ iterator newlyCreatedSelfDestructRefund*(ledger: LedgerRef): SelfDestructRefund 
     if NewlyCreated notin acc.flags:
       continue
     yield SelfDestructRefund(
+      address: address,
       createdSlots: calcCreatedSlots(ledger, acc),
       codeLen: getCodeSize(ledger, acc),
     )
