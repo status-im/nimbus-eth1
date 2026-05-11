@@ -18,7 +18,7 @@ if [[ -z "${1}" ]]; then
 fi
 
 PLATFORM="${1}"
-BINARIES="nimbus nimbus_verified_proxy libverifproxy"
+BINARIES="nimbus nimbus_verified_proxy"
 ROCKSDB_DIR=/usr/rocksdb
 
 echo -e "\nPLATFORM=${PLATFORM}"
@@ -208,15 +208,12 @@ mkdir "${DIST_PATH}/build"
 
 # copy and checksum binaries, copy docs
 EXT=""
-LIBEXT="a"
 if [[ "${PLATFORM}" == "windows_amd64" ]]; then
   cp -a vendor/nim-rocksdb/build/librocksdb.dll "${DIST_PATH}/build/"
   EXT=".exe"
-  LIBEXT="lib"
 fi
 
 for BINARY in ${BINARIES}; do
-  if [[ "${BINARY}" == "libverifproxy" ]]; then continue; fi
   cp "./build/${BINARY}${EXT}" "${DIST_PATH}/build/"
   if [[ "${PLATFORM}" =~ macOS ]]; then
     # Collect debugging info and filter out warnings.
@@ -235,12 +232,6 @@ for BINARY in ${BINARIES}; do
   sha512sum "${BINARY}${EXT}" >"${BINARY}.sha512sum"
   cd - >/dev/null
 done
-
-# copy libverifproxy static library and header
-mkdir -p "${DIST_PATH}/build/libverifproxy"
-cp "build/libverifproxy/libverifproxy.${LIBEXT}" "${DIST_PATH}/build/libverifproxy/"
-cp "build/libverifproxy/verifproxy.h" "${DIST_PATH}/build/libverifproxy/"
-
 sed -e "s/GIT_COMMIT/${GIT_COMMIT}/" docker/dist/README.md.tpl >"${DIST_PATH}/README.md"
 
 if [[ "${PLATFORM}" == "linux_amd64" ]]; then
