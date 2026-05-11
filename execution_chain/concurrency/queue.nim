@@ -18,7 +18,7 @@
 
 {.push raises: [], gcsafe.}
 
-import std/[atomics, locks, math], results
+import std/[atomics, locks, math, typetraits], results
 
 type ConcurrentQueue*[E: static int, T] = object
   data: array[1 shl E, T]
@@ -36,8 +36,9 @@ template capacity*(q: ConcurrentQueue): int =
 func isPowerOfTwo(n: static int): bool =
   n > 0 and (n and (n - 1)) == 0
 
-func init*(q: var ConcurrentQueue) =
+func init*[E, T](q: var ConcurrentQueue[E, T]) =
   static:
+    doAssert supportsCopyMem(T), $T & " must be a non-GC type"
     doAssert q.data.len() > 1
     doAssert isPowerOfTwo(q.data.len())
   q.exp = log2(q.data.len().float).int
