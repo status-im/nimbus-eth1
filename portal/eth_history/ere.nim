@@ -61,6 +61,18 @@ type
 # As stated, not really a time unit but nevertheless, need the borrows
 ethTimeUnit Era
 
+func startNumber*(era: Era): uint64 =
+  era * MaxEreSize
+
+func endNumber*(era: Era): uint64 =
+  (era + 1) * MaxEreSize - 1'u64
+
+func endNumber*(blockIdx: DynamicBlockIndex): uint64 =
+  blockIdx.startNumber + blockIdx.indexesList.lenu64() - 1
+
+func era*(blockNumber: uint64): Era =
+  Era(blockNumber div MaxEreSize)
+
 template lenu64(x: untyped): untyped =
   uint64(len(x))
 
@@ -99,7 +111,10 @@ proc appendRecord(f: IoHandle, index: DynamicBlockIndex): Result[int64, string] 
   f.appendIndex(index.startNumber, index.indexesList, index.componentCount)
 
 proc readDynamicBlockIndex*(
-    f: IoHandle, noProofs: bool = false, noReceipts: bool = false
+    f: IoHandle,
+    mergeBlockNumber: uint64,
+    noProofs: bool = false,
+    noReceipts: bool = false,
 ): Result[DynamicBlockIndex, string] =
   var
     buf: seq[byte]
@@ -120,11 +135,16 @@ proc readDynamicBlockIndex*(
   let
     blockNumber = uint64.fromBytesLE(buf.toOpenArray(pos, pos + 7))
     componentCount = uint64.fromBytesLE(buf.toOpenArray(buf.len - 16, buf.len - 8 - 1))
-    countTest = uint64.fromBytesLE(buf.toOpenArray(buf.len - 8, buf.len - 1))
     count = (buf.len - 3 * 8) div 8 div componentCount.int
 
-  if componentCount < 3 or componentCount > 5:
-    return err("component-count should be in the range of 3 - 5")
+  let expectedComponentCount =
+    2 + (if noReceipts: 0 else: 1) + (if noProofs: 0 else: 1) +
+    (if era(blockNumber) <= era(mergeBlockNumber): 1 else: 0)
+  if componentCount.int != expectedComponentCount:
+    return err(
+      "component-count mismatch: expected " & $expectedComponentCount & ", got " &
+        $componentCount
+    )
 
   pos += 8 # at first indexes
 
@@ -165,24 +185,12 @@ proc readDynamicBlockIndex*(
     )
   )
 
-proc skipRecord*(f: IoHandle): Result[void, string] =
+proc skipRecord(f: IoHandle): Result[void, string] =
   let header = ?readHeader(f)
   if header.len > 0:
     ?f.setFilePos(header.len, SeekPosition.SeekCurrent).mapErr(ioErrorMsg)
 
   ok()
-
-func startNumber*(era: Era): uint64 =
-  era * MaxEreSize
-
-func endNumber*(era: Era): uint64 =
-  (era + 1) * MaxEreSize - 1'u64
-
-func endNumber*(blockIdx: DynamicBlockIndex): uint64 =
-  blockIdx.startNumber + blockIdx.indexesList.lenu64() - 1
-
-func era*(blockNumber: uint64): Era =
-  Era(blockNumber div MaxEreSize)
 
 # TODO: move to some era helpers file
 proc toCompressedRlpBytes(item: auto): seq[byte] =
@@ -390,7 +398,7 @@ proc open*(
   let blockIdxPos = ?f[].findDynamicBlockIndexStartOffset()
   ?f[].setFilePos(blockIdxPos, SeekPosition.SeekCurrent).mapErr(ioErrorMsg)
 
-  let blockIdx = ?f[].readDynamicBlockIndex(noProofs, noReceipts)
+  let blockIdx = ?f[].readDynamicBlockIndex(mergeBlockNumber, noProofs, noReceipts)
   if blockIdx.indexesList.len() != MaxEreSize:
     return err(
       "Block indexes list length invalid: " & $blockIdx.indexesList.len() &
@@ -548,7 +556,7 @@ proc getEthBlock*(f: EreFile, blockNumber: uint64): Result[Block, string] =
 
   ok(move(res))
 
-proc getAccumulatorRoot*(f: EreFile): Result[Digest, string] =
+proc getAccumulatorRoot(f: EreFile): Result[Digest, string] =
   ## Only for pre merge eras and actual merge era
   # Get position of DynamicBlockIndex
   ?f[].handle.get().setFilePos(0, SeekPosition.SeekEnd).mapErr(ioErrorMsg)
@@ -593,7 +601,7 @@ type HeaderVerifier* = object
   historicalRoots*: HistoricalRoots
   historicalSummaries*: HistoricalSummaries
 
-proc verifyProof*(
+proc verifyProof(
     proof: Proof, header: headers.Header, v: HeaderVerifier, cfg: RuntimeConfig
 ): Result[void, string] =
   if proof.proofType == 0x00:
@@ -634,13 +642,7 @@ proc verify*(
     startNumber = f.blockIdx.startNumber
     endNumber = f.blockIdx.endNumber()
 
-  var
-    header: headers.Header
-    body: BlockBody
-    receipts: seq[StoredReceipt]
-    proof: Proof
-    td: UInt256
-    headerRecords: seq[HeaderRecord]
+  var headerRecords: seq[HeaderRecord]
   for blockNumber in startNumber .. endNumber:
     let
       header = ?getBlockHeader(f, blockNumber)
@@ -681,11 +683,3 @@ proc verify*(
       return ok(Opt.some(accumulatorRoot))
 
   ok(Opt.none(Digest))
-
-iterator era1BlockHeaders*(f: EreFile): headers.Header =
-  let
-    startNumber = f.blockIdx.startNumber
-    endNumber = f.blockIdx.endNumber()
-
-  for blockNumber in startNumber .. endNumber:
-    yield f.getBlockHeader(blockNumber).expect("Header can be read")

@@ -91,12 +91,8 @@ func verifyProof*(
   verify_merkle_multiproof(@[leave], proof, @[gIndex], epochRecordHash)
 
 func buildProof*(
-    # chainConfig: ChainConfig,
-    header: Header,
-    epochRecord: EpochRecord | EpochRecordCached,
+    header: Header, epochRecord: EpochRecord | EpochRecordCached
 ): Result[HistoricalHashesAccumulatorProof, string] =
-  # doAssert(not chainConfig.isPoSBlock(header), "Must be pre merge header")
-
   let
     epochIndex = getEpochIndex(header)
     headerRecordIndex = getHeaderRecordIndex(header, epochIndex)

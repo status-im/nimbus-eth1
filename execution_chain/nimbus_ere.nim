@@ -39,7 +39,7 @@ proc exportEreFile(
   ? db.getBlockHeader(endNumber, header)
 
   let
-    filename = ereFileName(networkName, Era(era), header.computeRlpHash(), noProofs, noReceipts)
+    filename = ereFileName(networkName, era, header.computeRlpHash(), noProofs, noReceipts)
     e2 =
       openFile(filename, {OpenFlags.Write, OpenFlags.Create, OpenFlags.Truncate}).valueOr:
         return err(ioErrorMsg(error))
@@ -133,7 +133,7 @@ proc exportEre*(config: ExecutionClientConf, com: CommonRef) =
     # eraDB = EraDB.new(networkData.metadata.cfg, conf.eraDir, networkData.genesis_validators_root)
 
     mergeEra = ere.era(mergeBlockNumber)
-    preMergeEndEra = min(Era(config.endEra), Era(mergeEra - 1))
+    preMergeEndEra = min(Era(config.endEra), mergeEra - 1)
 
   for era in Era(config.startEra) .. preMergeEndEra:
     exportEreFile(era, era1DB, networkName, mergeBlockNumber, config.noProofs, config.noReceipts).isOkOr:
