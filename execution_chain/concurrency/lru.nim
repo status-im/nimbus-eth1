@@ -552,42 +552,42 @@ const
       128
     else:
       64
-  SHARD_BITS = 6
-  NUM_SHARDS = 1 shl SHARD_BITS # 64 shards, must be a power of two
 
 type
-  State {.pure.} = enum 
+  State {.pure.} = enum
     UNINITIALIZED, INITIALIZED, DISPOSED
 
   Shard[K, V] = object
     lock {.align: CACHE_LINE_SIZE.}: Lock
     cache: LruCache[K, V]
 
-  ConcurrentLruCache*[K, V] = object
-    shards: array[NUM_SHARDS, Shard[K, V]]
+  ConcurrentLruCache*[K, V; SHARD_BITS: static int = 6] = object
+    shards: array[1 shl SHARD_BITS, Shard[K, V]] # 64 shards, number of shards is a power of two
     state: State
 
-proc init*[K, V](lru: var ConcurrentLruCache[K, V], capacity: int) =
+proc init*[K, V, SHARD_BITS](
+    lru: var ConcurrentLruCache[K, V, SHARD_BITS], capacity: int) =
   # init is not thread safe and so the caller must ensure that no other threads
   # are using the cache while initialising it.
-  const shardCount = NUM_SHARDS
+  const shardCount = lru.shards.len()
   static:
     doAssert supportsCopyMem(K), $K & " must be a non-GC type"
     doAssert supportsCopyMem(V), $V & " must be a non-GC type"
     doAssert shardCount > 1
     doAssert isPowerOfTwo(shardCount)
   doAssert lru.state == State.UNINITIALIZED
-  
+
   # per-shard capacity (ceiling div); total effective capacity is shardCapacity * shardCount
-  let shardCapacity = (capacity + shardCount - 1) div shardCount 
+  let shardCapacity = (capacity + shardCount - 1) div shardCount
 
   for i in 0 ..< shardCount:
     lru.shards[i].lock.initLock()
     lru.shards[i].cache = LruCache[K, V].init(shardCapacity)
-  
+
   lru.state = State.INITIALIZED
 
-proc dispose*[K, V](lru: var ConcurrentLruCache[K, V]) =
+proc dispose*[K, V; SHARD_BITS](
+    lru: var ConcurrentLruCache[K, V, SHARD_BITS]) =
   # dispose is not thread safe and so the caller must ensure that no other threads
   # are using the cache while disposing it.
   doAssert lru.state == State.INITIALIZED
@@ -602,84 +602,99 @@ proc `=copy`[K, V](
     dest: var Shard[K, V], src: Shard[K, V]) {.error: "Copying Shard is forbidden".} =
   discard
 
-proc `=copy`[K, V](
-    dest: var ConcurrentLruCache[K, V], src: ConcurrentLruCache[K, V]) {.error: "Copying ConcurrentLruCache is forbidden".} =
+proc `=copy`[K, V; SHARD_BITS](
+    dest: var ConcurrentLruCache[K, V, SHARD_BITS],
+    src: ConcurrentLruCache[K, V, SHARD_BITS]) {.error: "Copying ConcurrentLruCache is forbidden".} =
   discard
 
-template toShardIdx(h: Hash): int =
+template toShardIdx(h: Hash, shardBits: static int): int =
   # Pick the shard from the top SHARD_BITS bits of the hash so that the shard
   # selection bits do not overlap with the low bits that the LruCache uses for
   # bucket selection inside the shard.
   when sizeof(h) == sizeof(uint32):
-    int(cast[uint32](h) shr (32 - SHARD_BITS))
+    int(cast[uint32](h) shr (32 - shardBits))
   else:
     static:
       assert sizeof(h) == sizeof(uint64)
-    int(cast[uint64](h) shr (64 - SHARD_BITS))
+    int(cast[uint64](h) shr (64 - shardBits))
 
-template withShard[K, V](lru: ConcurrentLruCache[K, V], key: K, body: untyped): auto =
+template withShard[K, V; SHARD_BITS](
+    lru: ConcurrentLruCache[K, V, SHARD_BITS], key: K, body: untyped): auto =
   let
     h = hash(key)
     sh {.inject.} = h.toSubhash()
-    s {.inject.} = addr lru.shards[h.toShardIdx()]
+    s {.inject.} = addr lru.shards[h.toShardIdx(SHARD_BITS)]
   acquire(s.lock)
   try:
     body
   finally:
     release(s.lock)
 
-template numShards*[K, V](lru: ConcurrentLruCache[K, V]): int =
-  NUM_SHARDS
+template numShards*[K, V; SHARD_BITS](
+    lru: ConcurrentLruCache[K, V, SHARD_BITS]): int =
+  lru.shards.len()
 
-template shardCapacity*[K, V](lru: var ConcurrentLruCache[K, V]): int =
+template shardCapacity*[K, V; SHARD_BITS](
+    lru: var ConcurrentLruCache[K, V, SHARD_BITS]): int =
   # No locking here because capacity is immutable for the ConcurrentLruCache type
-  # and the internal LruCache type which does support updating the capacity, is 
+  # and the internal LruCache type which does support updating the capacity, is
   # not exported.
   lru.shards[0].cache.capacity
-  
-func shardLenForKey*[K, V](lru: var ConcurrentLruCache[K, V], key: K): int =
+
+func shardLenForKey*[K, V; SHARD_BITS](
+    lru: var ConcurrentLruCache[K, V, SHARD_BITS], key: K): int =
   withShard(lru, key):
     s.cache.len()
 
-func capacity*[K, V](lru: var ConcurrentLruCache[K, V]): int =
+func capacity*[K, V; SHARD_BITS](
+    lru: var ConcurrentLruCache[K, V, SHARD_BITS]): int =
   lru.shardCapacity() * lru.numShards()
-  
-func len*[K, V](lru: var ConcurrentLruCache[K, V]): int =
+
+func len*[K, V; SHARD_BITS](
+    lru: var ConcurrentLruCache[K, V, SHARD_BITS]): int =
   var total = 0
   for shard in lru.shards.mitems():
     withLock(shard.lock):
       total += shard.cache.len
   total
 
-func contains*[K, V](lru: var ConcurrentLruCache[K, V], key: K): bool =
+func contains*[K, V; SHARD_BITS](
+    lru: var ConcurrentLruCache[K, V, SHARD_BITS], key: K): bool =
   withShard(lru, key):
     s.cache.contains(sh, key)
 
-func peek*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
+func peek*[K, V; SHARD_BITS](
+    lru: var ConcurrentLruCache[K, V, SHARD_BITS], key: K): Opt[V] =
   withShard(lru, key):
     s.cache.peek(sh, key)
 
-proc get*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
+proc get*[K, V; SHARD_BITS](
+    lru: var ConcurrentLruCache[K, V, SHARD_BITS], key: K): Opt[V] =
   withShard(lru, key):
     s.cache.get(sh, key)
 
-proc put*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V) =
+proc put*[K, V; SHARD_BITS](
+    lru: var ConcurrentLruCache[K, V, SHARD_BITS], key: K, val: V) =
   withShard(lru, key):
     s.cache.put(sh, key, val)
 
-proc pop*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
+proc pop*[K, V; SHARD_BITS: static int](
+    lru: var ConcurrentLruCache[K, V, SHARD_BITS], key: K): Opt[V] =
   withShard(lru, key):
     s.cache.pop(sh, key)
 
-proc update*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V): bool =
+proc update*[K, V; SHARD_BITS](
+    lru: var ConcurrentLruCache[K, V, SHARD_BITS], key: K, val: V): bool =
   withShard(lru, key):
     s.cache.update(sh, key, val)
 
-proc refresh*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V): bool =
+proc refresh*[K, V; SHARD_BITS](
+    lru: var ConcurrentLruCache[K, V, SHARD_BITS], key: K, val: V): bool =
   withShard(lru, key):
     s.cache.refresh(sh, key, val)
 
-proc del*[K, V](lru: var ConcurrentLruCache[K, V], key: K) =
+proc del*[K, V; SHARD_BITS](
+    lru: var ConcurrentLruCache[K, V, SHARD_BITS], key: K) =
   withShard(lru, key):
     s.cache.del(sh, key)
 
