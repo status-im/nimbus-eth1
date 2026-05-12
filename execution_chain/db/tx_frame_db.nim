@@ -89,20 +89,24 @@ proc loadTxFrame*(
   if blob.len < 8:
     return err(DataInvalid.toError("loadTxFrame: blob too short"))
 
-  let aLen = int(uint32.fromBytesBE(blob.toOpenArray(0, 3)))
-  if blob.len < 4 + aLen + 4:
+  # Length fields are read as uint32 and all size arithmetic is performed in
+  # uint64 to avoid truncation or signed overflow on 32-bit platforms.
+  let
+    blobLen = uint64(blob.len)
+    aLen    = uint64(uint32.fromBytesBE(blob.toOpenArray(0, 3)))
+  if blobLen < 4'u64 + aLen + 4'u64:
     return err(DataInvalid.toError("loadTxFrame: aristo region truncated"))
-  let kOff = 4 + aLen
-  let kLen = int(uint32.fromBytesBE(blob.toOpenArray(kOff, kOff + 3)))
-  if blob.len < kOff + 4 + kLen:
+  let kOff = 4'u64 + aLen
+  let kLen = uint64(uint32.fromBytesBE(blob.toOpenArray(int(kOff), int(kOff) + 3)))
+  if blobLen < kOff + 4'u64 + kLen:
     return err(DataInvalid.toError("loadTxFrame: kvt region truncated"))
 
-  let aRc = deblobifyTxFrame(blob.toOpenArray(4, 4 + aLen - 1))
+  let aRc = deblobifyTxFrame(blob.toOpenArray(4, int(4'u64 + aLen) - 1))
   if aRc.isErr:
     return err(aRc.error.toError("loadTxFrame aristo"))
   let aData = aRc.value
 
-  let kRc = deblobifyKvtTxFrame(blob.toOpenArray(kOff + 4, kOff + 4 + kLen - 1))
+  let kRc = deblobifyKvtTxFrame(blob.toOpenArray(int(kOff + 4'u64), int(kOff + 4'u64 + kLen) - 1))
   if kRc.isErr:
     return err(kRc.error.toError("loadTxFrame kvt"))
   let kData = kRc.value
@@ -136,20 +140,24 @@ proc loadTxFrameAsChild*(
   if blob.len < 8:
     return err(DataInvalid.toError("loadTxFrameAsChild: blob too short"))
 
-  let aLen = int(uint32.fromBytesBE(blob.toOpenArray(0, 3)))
-  if blob.len < 4 + aLen + 4:
+  # Length fields are read as uint32 and all size arithmetic is performed in
+  # uint64 to avoid truncation or signed overflow on 32-bit platforms.
+  let
+    blobLen = uint64(blob.len)
+    aLen    = uint64(uint32.fromBytesBE(blob.toOpenArray(0, 3)))
+  if blobLen < 4'u64 + aLen + 4'u64:
     return err(DataInvalid.toError("loadTxFrameAsChild: aristo region truncated"))
-  let kOff = 4 + aLen
-  let kLen = int(uint32.fromBytesBE(blob.toOpenArray(kOff, kOff + 3)))
-  if blob.len < kOff + 4 + kLen:
+  let kOff = 4'u64 + aLen
+  let kLen = uint64(uint32.fromBytesBE(blob.toOpenArray(int(kOff), int(kOff) + 3)))
+  if blobLen < kOff + 4'u64 + kLen:
     return err(DataInvalid.toError("loadTxFrameAsChild: kvt region truncated"))
 
-  let aRc = deblobifyTxFrame(blob.toOpenArray(4, 4 + aLen - 1))
+  let aRc = deblobifyTxFrame(blob.toOpenArray(4, int(4'u64 + aLen) - 1))
   if aRc.isErr:
     return err(aRc.error.toError("loadTxFrameAsChild aristo"))
   let aData = aRc.value
 
-  let kRc = deblobifyKvtTxFrame(blob.toOpenArray(kOff + 4, kOff + 4 + kLen - 1))
+  let kRc = deblobifyKvtTxFrame(blob.toOpenArray(int(kOff + 4'u64), int(kOff + 4'u64 + kLen) - 1))
   if kRc.isErr:
     return err(kRc.error.toError("loadTxFrameAsChild kvt"))
   let kData = kRc.value
