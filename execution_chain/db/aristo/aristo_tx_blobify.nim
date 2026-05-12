@@ -95,12 +95,8 @@ proc blobifyTxFrame*(tx: AristoTxRef): seq[byte] =
   buf.add TX_FRAME_VERSION
   buf.add tx.vTop.uint64.toBytesBE
 
-  if tx.blockNumber.isSome:
-    buf.add 0x01'u8
-    buf.add tx.blockNumber.unsafeGet.toBytesBE
-  else:
-    buf.add 0x00'u8
-    buf.add 0'u64.toBytesBE
+  buf.add (if tx.blockNumber.isSome: 0x01'u8 else: 0x00'u8)
+  buf.add tx.blockNumber.valueOr(0'u64).toBytesBE
 
   buf.add tx.sTab.len.uint32.toBytesBE
   for rvid, vtx in tx.sTab:
@@ -193,8 +189,8 @@ proc deblobifyTxFrame*(
       let key = deblobify(data.toOpenArray(pos, blobEnd), HashKey)
       pos += blobLen
       res.sTab[rvid] = vtx
-      if key.isSome:
-        res.kMap[rvid] = key.unsafeGet
+      key.isErrOr:
+        res.kMap[rvid] = value
 
   let accCount = readU32BE(data, pos)
   res.accLeaves = initTable[Hash32, AccLeafRef](int(accCount))
