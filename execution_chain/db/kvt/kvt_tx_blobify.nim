@@ -34,7 +34,22 @@ import
 
 export results
 
-const KVT_TX_FRAME_VERSION = 0x01'u8
+const
+  KVT_TX_FRAME_VERSION = 0x01'u8
+
+  MaxInitTableHint = 1 shl 16
+    ## Cap for untrusted-count → `initTable` capacity hints.  See `tableHint`.
+
+template tableHint(count: uint32): int =
+  ## Bound the capacity passed to `initTable` when `count` is read from an
+  ## untrusted blob.  Avoids the `int(uint32)` sign-flip on 32-bit platforms
+  ## (which would feed a negative `Natural` to `initTable` and raise
+  ## `RangeDefect`) and prevents a hostile blob from forcing a multi-billion
+  ## bucket pre-allocation on any platform.  Realistic per-frame deltas are
+  ## a few thousand entries — orders of magnitude below the cap.  The
+  ## per-entry parse loop catches any actual data truncation, so
+  ## under-allocating buckets is purely a performance hint.
+  int(min(count, MaxInitTableHint.uint32))
 
 # ------------------------------------------------------------------------------
 # Public: serialise
@@ -67,7 +82,7 @@ proc deblobifyKvtTxFrame*(
   let count = uint32.fromBytesBE(data.toOpenArray(1, 4))
   pos = 5
 
-  var sTab = initTable[seq[byte], seq[byte]](int(count))
+  var sTab = initTable[seq[byte], seq[byte]](tableHint(count))
 
   for _ in 0 ..< count:
     if pos + 1 >= data.len:

@@ -85,6 +85,20 @@ template readU64BE(data: openArray[byte]; pos: var int): uint64 =
   pos += 8
   v
 
+const MaxInitTableHint = 1 shl 16
+  ## Cap for untrusted-count → `initTable` capacity hints.  See `tableHint`.
+
+template tableHint(count: uint32): int =
+  ## Bound the capacity passed to `initTable` when `count` is read from an
+  ## untrusted blob.  Avoids the `int(uint32)` sign-flip on 32-bit platforms
+  ## (which would feed a negative `Natural` to `initTable` and raise
+  ## `RangeDefect`) and prevents a hostile blob from forcing a multi-billion
+  ## bucket pre-allocation on any platform.  Realistic per-frame deltas are
+  ## a few thousand entries — orders of magnitude below the cap.  The
+  ## per-entry parse loop catches any actual data truncation, so
+  ## under-allocating buckets is purely a performance hint.
+  int(min(count, MaxInitTableHint.uint32))
+
 # ------------------------------------------------------------------------------
 # Public: serialise
 # ------------------------------------------------------------------------------
@@ -169,8 +183,8 @@ proc deblobifyTxFrame*(
   res.blockNumber = if bnFlag != 0: Opt.some(bnVal) else: Opt.none(uint64)
 
   let sTabCount = readU32BE(data, pos)
-  res.sTab = initTable[RootedVertexID, VertexRef](int(sTabCount))
-  res.kMap = initTable[RootedVertexID, HashKey](int(sTabCount))
+  res.sTab = initTable[RootedVertexID, VertexRef](tableHint(sTabCount))
+  res.kMap = initTable[RootedVertexID, HashKey](tableHint(sTabCount))
   for _ in 0 ..< sTabCount:
     let rvidLen = int(readU8(data, pos))
     if pos + rvidLen - 1 >= data.len:
@@ -193,7 +207,7 @@ proc deblobifyTxFrame*(
         res.kMap[rvid] = value
 
   let accCount = readU32BE(data, pos)
-  res.accLeaves = initTable[Hash32, AccLeafRef](int(accCount))
+  res.accLeaves = initTable[Hash32, AccLeafRef](tableHint(accCount))
   for _ in 0 ..< accCount:
     if pos + 31 >= data.len:
       return err(DeblobTxFrameTruncated)
@@ -212,7 +226,7 @@ proc deblobifyTxFrame*(
       res.accLeaves[h] = AccLeafRef(vtx)
 
   let stoCount = readU32BE(data, pos)
-  res.stoLeaves = initTable[Hash32, StoLeafRef](int(stoCount))
+  res.stoLeaves = initTable[Hash32, StoLeafRef](tableHint(stoCount))
   for _ in 0 ..< stoCount:
     if pos + 31 >= data.len:
       return err(DeblobTxFrameTruncated)
