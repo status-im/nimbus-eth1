@@ -64,10 +64,12 @@ EXCLUDED_NIM_PACKAGES := 	\
 
 # debugging tools + testing tools
 TOOLS := \
-	test_tools_build \
-	nrpc
+	nrpc \
+	nimbus_history_exporter \
+	test_tools_build
 TOOLS_DIRS := \
 	nrpc \
+	tools/nimbus_history_exporter \
 	tests
 # comma-separated values for the "clean" target
 TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
@@ -85,7 +87,7 @@ PORTAL_TOOLS_DIRS := \
 	portal/bridge/history \
 	portal/tools
 # comma-separated values for the "clean" target
-PORTAL_TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(FLUFFY_TOOLS))
+PORTAL_TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(PORTAL_TOOLS))
 
 # Namespaced variables to avoid conflicts with other makefiles
 OS_PLATFORM = $(shell $(CC) -dumpmachine)
@@ -229,6 +231,10 @@ tools: | $(TOOLS)
 nimbus_execution_client: | build deps rocksdb
 	echo -e $(BUILD_MSG) "build/nimbus_execution_client" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/nimbus_execution_client "execution_chain/nimbus_execution_client.nim"
+
+nimbus_history_exporter: | build deps rocksdb
+	echo -e $(BUILD_MSG) "build/nimbus_history_exporter" && \
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/nimbus_history_exporter "tools/nimbus_history_exporter/nimbus_history_exporter.nim"
 
 check_revision: nimbus_execution_client
 	scripts/check_revision.sh
