@@ -142,6 +142,12 @@ proc loadBranchTxFrames(parent: BlockRef;
     let frame = srcBase.loadTxFrameAsChild(p.txFrame, b.hash).valueOr:
       return err($error)
     b.txFrame = frame
+    # The blob has been materialised into memory; drop the on-disk copy so
+    # it doesn't accumulate across restart/prune cycles.  The delete sits in
+    # srcBase's in-memory delta and commits on the next baseTxFrame persist
+    # during normal chain operation.
+    srcBase.deleteTxFrame(b.hash).isOkOr:
+      return err($error)
     p = b
 
   ok()

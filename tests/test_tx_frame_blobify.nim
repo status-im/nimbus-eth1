@@ -332,6 +332,15 @@ suite "TxFrame blobify round-trip":
     check fc.hashToBlock.len == preChainBlocks
     check fc.heads.len       == preChainHeads
 
+    # --- Loaded blobs are deleted from the base frame so they don't
+    # accumulate across restart/prune cycles.  KVT marks deletions with an
+    # empty-value tombstone in the delta layer, which shadows the on-disk
+    # blob: a read through baseTxFrame returns ok with an empty seq. ---
+    let blk1Probe = fc.baseTxFrame.get(txFrameKey(blk1Hash).toOpenArray)
+    let blk2Probe = fc.baseTxFrame.get(txFrameKey(blk2Hash).toOpenArray)
+    check blk1Probe.isOk and blk1Probe.value.len == 0
+    check blk2Probe.isOk and blk2Probe.value.len == 0
+
     # --- Per-block field equality proves no-replay path ---
     # If replay() were still being used, freshly-built deltas would yield
     # different sTab/vTop than the originals. Byte-for-byte equality here
