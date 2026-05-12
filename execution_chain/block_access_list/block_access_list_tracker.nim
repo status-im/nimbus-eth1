@@ -488,7 +488,6 @@ proc getBlockAccessList*(
     tracker: BlockAccessListTrackerRef, rebuild = false
 ): lent Opt[BlockAccessListRef] =
   if rebuild or tracker.blockAccessList.isNone():
-    doAssert not tracker.hasPendingCallFrame()
     tracker.blockAccessList = Opt.some(tracker.builder.buildBlockAccessList())
 
   tracker.blockAccessList
