@@ -73,11 +73,12 @@ suite "Semaphore Tests":
     check s.tryWait() == false
     s.dispose()
 
-  test "dispose resets count":
+  test "dispose and re-init":
     var s: Semaphore
     s.init(5)
     s.dispose()
-    # Reinitialize to verify it's cleanly reset
+    
+    reset(s)
     s.init(0)
     check s.tryWait() == false
     s.dispose()

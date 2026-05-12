@@ -12,24 +12,35 @@
 import std/[locks, atomics]
 
 type
+  State {.pure.} = enum
+    UNINITIALIZED
+    INITIALIZED
+    DISPOSED
+
   Semaphore* = object
     count: Atomic[int]
     waiters: Atomic[int]
     lock: Lock
     cond: Cond
+    state: State
 
 proc init*(s: var Semaphore, count: int = 0) =
+  doAssert s.state == State.UNINITIALIZED
+
   initLock(s.lock)
   initCond(s.cond)
   s.count.store(count)
   s.waiters.store(0)
+  s.state = State.INITIALIZED
 
 proc dispose*(s: var Semaphore) =
-  # Precondition: No other threads should be using the semaphore when dispose is called.
+  doAssert s.state == State.INITIALIZED
+
   deinitCond(s.cond)
   deinitLock(s.lock)
   s.count.store(0)
   s.waiters.store(0)
+  s.state = State.DISPOSED
 
 proc `=copy`*(
     dest: var Semaphore, src: Semaphore

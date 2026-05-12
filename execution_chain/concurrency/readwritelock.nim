@@ -18,24 +18,36 @@ import std/[atomics, locks], ./semaphore
 const MAX_READERS: int32 = 1 shl 30
 
 type
+  State {.pure.} = enum
+    UNINITIALIZED
+    INITIALIZED
+    DISPOSED
+
   ReadWriteLock* = object
     lock: Lock                         
     writerWait: Semaphore     
     readerWait: Semaphore   
     numPending: Atomic[int32]     
     readersDeparting: Atomic[int32]
+    state: State
 
 proc init*(l: var ReadWriteLock) =
+  doAssert l.state == State.UNINITIALIZED
+
   initLock(l.lock)
   l.writerWait.init()
   l.readerWait.init()
   l.numPending.store(0)
   l.readersDeparting.store(0)
+  l.state = State.INITIALIZED
 
 proc dispose*(l: var ReadWriteLock) =
+  doAssert l.state == State.INITIALIZED
+
   deinitLock(l.lock)
   l.writerWait.dispose()
   l.readerWait.dispose()
+  l.state = State.DISPOSED
 
 proc `=copy`*(
     dest: var ReadWriteLock, src: ReadWriteLock

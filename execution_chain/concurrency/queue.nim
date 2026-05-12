@@ -23,6 +23,11 @@ import std/[atomics, locks, typetraits], results
 const CACHE_LINE_SIZE = when defined(macosx) and defined(arm64): 128 else: 64
  
 type
+  State {.pure.} = enum
+    UNINITIALIZED
+    INITIALIZED
+    DISPOSED
+
   ConcurrentQueue*[E: static int, T] = object
     head {.align: CACHE_LINE_SIZE.}: Atomic[uint32]
     cachedTail: uint32
@@ -34,15 +39,15 @@ type
     waitingPush: Atomic[bool]
     waitingPop: Atomic[bool]
     data {.align: CACHE_LINE_SIZE.}: array[1 shl E, T]
- 
-template capacity*(q: ConcurrentQueue): int =
-  q.data.len() - 1
+    state: State
  
 func init*[E, T](q: var ConcurrentQueue[E, T]) =
   static:
     doAssert supportsCopyMem(T), "T must be a non-GC type"
     doAssert E >= 1, "queue exponent must be >= 1 (capacity >= 1)"
     doAssert E <= 30, "queue exponent too large for uint32 indices"
+  doAssert q.state == State.UNINITIALIZED
+
   q.head.store(0'u32)
   q.tail.store(0'u32)
   q.cachedHead = 0
@@ -52,16 +57,23 @@ func init*[E, T](q: var ConcurrentQueue[E, T]) =
   q.lock.initLock()
   q.condFull.initCond()
   q.condEmpty.initCond()
+  q.state = State.INITIALIZED
  
 func dispose*[E, T](q: var ConcurrentQueue[E, T]) =
+  doAssert q.state == State.INITIALIZED
+
   q.lock.deinitLock()
   q.condFull.deinitCond()
   q.condEmpty.deinitCond()
+  q.state = State.DISPOSED
 
 proc `=copy`*[E, T](
     dest: var ConcurrentQueue[E, T], src: ConcurrentQueue[E, T]
 ) {.error: "Copying ConcurrentQueue is forbidden".} =
   discard
+
+template capacity*(q: ConcurrentQueue): int =
+  q.data.len() - 1
 
 template maskOf(E: static int): uint32 = uint32((1 shl E) - 1)
  
