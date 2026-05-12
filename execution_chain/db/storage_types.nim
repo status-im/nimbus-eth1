@@ -81,7 +81,7 @@ func prunerStateKey*(): DbKey {.inline.} =
 func txFrameKey*(h: Hash32): DbKey {.inline.} =
   result.data[0] = byte ord(txFrame)
   result.data[1 .. 32] = h.data
-  result.dataEndPos = uint8 32
+  result.dataEndPos = 32
 
 func slotHashToSlotKey*(h: Hash32): DbKey {.inline.} =
   result.data[0] = byte ord(slotHashToSlot)
