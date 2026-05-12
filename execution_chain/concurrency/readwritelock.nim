@@ -24,10 +24,10 @@ type
     DISPOSED
 
   ReadWriteLock* = object
-    lock: Lock                         
-    writerWait: Semaphore     
-    readerWait: Semaphore   
-    numPending: Atomic[int32]     
+    lock: Lock
+    writerWait: Semaphore
+    readerWait: Semaphore
+    numPending: Atomic[int32]
     readersDeparting: Atomic[int32]
     state: State
 
@@ -93,5 +93,3 @@ template withWriteLock*(l: var ReadWriteLock, body: untyped) =
     body
   finally:
     l.unlockWrite()
-
-

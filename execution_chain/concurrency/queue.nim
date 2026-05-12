@@ -19,9 +19,9 @@
 {.push raises: [], gcsafe.}
 
 import std/[atomics, locks, typetraits], results
- 
+
 const CACHE_LINE_SIZE = when defined(macosx) and defined(arm64): 128 else: 64
- 
+
 type
   State {.pure.} = enum
     UNINITIALIZED
@@ -42,8 +42,8 @@ type
     condEmpty: Cond
     state: State
 
-    data {.align: CACHE_LINE_SIZE.}: array[1 shl E, T]  
- 
+    data {.align: CACHE_LINE_SIZE.}: array[1 shl E, T]
+
 func init*[E, T](q: var ConcurrentQueue[E, T]) =
   static:
     doAssert supportsCopyMem(T), "T must be a non-GC type"
@@ -61,7 +61,7 @@ func init*[E, T](q: var ConcurrentQueue[E, T]) =
   q.condFull.initCond()
   q.condEmpty.initCond()
   q.state = State.INITIALIZED
- 
+
 func dispose*[E, T](q: var ConcurrentQueue[E, T]) =
   doAssert q.state == State.INITIALIZED
 
@@ -78,61 +78,62 @@ proc `=copy`*[E, T](
 template capacity*(q: ConcurrentQueue): int =
   q.data.len() - 1
 
-template maskOf(E: static int): uint32 = uint32((1 shl E) - 1)
- 
+template maskOf(E: static int): uint32 =
+  uint32((1 shl E) - 1)
+
 template isEmpty*[E, T](q: var ConcurrentQueue[E, T]): bool =
   q.tail.load() == q.head.load()
- 
+
 template isFull*[E, T](q: var ConcurrentQueue[E, T]): bool =
   let h = q.head.load()
   ((h + 1) and maskOf(E)) == q.tail.load()
- 
+
 func tryPush*[E, T](q: var ConcurrentQueue[E, T], value: sink T): bool =
   const m = maskOf(E)
-  let h = q.head.load()    
+  let h = q.head.load()
   let next = (h + 1) and m
- 
+
   if next == q.cachedTail:
     q.cachedTail = q.tail.load()
     if next == q.cachedTail:
-      return false                    
- 
+      return false
+
   q.data[h] = value
-  q.head.store(next)        
- 
+  q.head.store(next)
+
   if q.waitingPop.load():
     withLock(q.lock):
       q.condEmpty.signal()
   true
- 
+
 func tryPop*[E, T](q: var ConcurrentQueue[E, T], value: var T): bool =
   const m = maskOf(E)
   let t = q.tail.load()
- 
+
   if t == q.cachedHead:
     q.cachedHead = q.head.load()
     if t == q.cachedHead:
       return false
- 
+
   value = move(q.data[t])
   q.tail.store((t + 1) and m)
- 
+
   if q.waitingPush.load():
     withLock(q.lock):
       q.condFull.signal()
   true
- 
+
 template tryPop*[E, T](q: var ConcurrentQueue[E, T]): Opt[T] =
   var value: T
   if q.tryPop(value):
     Opt.some(value)
   else:
     Opt.none(T)
- 
+
 func push*[E, T](q: var ConcurrentQueue[E, T], value: sink T) =
   if q.tryPush(value):
     return
- 
+
   const m = maskOf(E)
   withLock(q.lock):
     q.waitingPush.store(true)
@@ -147,11 +148,11 @@ func push*[E, T](q: var ConcurrentQueue[E, T], value: sink T) =
         q.condEmpty.signal()
         return
       q.condFull.wait(q.lock)
- 
+
 func pop*[E, T](q: var ConcurrentQueue[E, T], value: var T) =
   if q.tryPop(value):
     return
- 
+
   const m = maskOf(E)
   withLock(q.lock):
     q.waitingPop.store(true)
@@ -165,7 +166,7 @@ func pop*[E, T](q: var ConcurrentQueue[E, T], value: var T) =
         q.condFull.signal()
         return
       q.condEmpty.wait(q.lock)
- 
+
 template pop*[E, T](q: var ConcurrentQueue[E, T]): T =
   var value: T
   q.pop(value)

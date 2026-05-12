@@ -36,7 +36,7 @@ proc init*(s: var Semaphore, count: int = 0) =
 proc dispose*(s: var Semaphore) =
   doAssert s.state == State.INITIALIZED
   doAssert s.waiters.load() == 0
-  
+
   deinitCond(s.cond)
   deinitLock(s.lock)
   s.count.store(0)
@@ -57,7 +57,7 @@ proc tryWait*(s: var Semaphore): bool =
 
 proc wait*(s: var Semaphore) =
   for _ in 0 ..< 64:
-    if tryWait(s): 
+    if tryWait(s):
       return
     cpuRelax()
 
