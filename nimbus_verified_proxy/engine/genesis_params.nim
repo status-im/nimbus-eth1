@@ -30,12 +30,17 @@ const
   )
   mainnetGenesisBlockRoot = Eth2Digest(
     data: hexToByteArray[32](
-      "4d611d5b93fdab69013a7f0a2f961caca0c853f87cfe9595fe50038163079360"
+      "d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
     )
   )
   sepoliaGenesisBlockRoot = Eth2Digest(
     data: hexToByteArray[32](
-      "fb9b64fe445f76696407e1e3cc390371edff147bf712db86db6197d4b31ede43"
+      "25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9"
+    )
+  )
+  hoodiGenesisBlockRoot = Eth2Digest(
+    data: hexToByteArray[32](
+      "bbe312868b376a3001692a646dd2d7d1e4406380dfd86b98aa8a34d1557c971b"
     )
   )
 
@@ -51,7 +56,7 @@ func genesisParamsForNetwork*(network: string): GenesisParams {.raises: [].} =
     GenesisParams(
       genesisTime: 1742213400'u64,
       genesisValidatorsRoot: hoodiGenesisValidatorsRoot,
-      genesisBlockRoot: default(Eth2Digest),
+      genesisBlockRoot: hoodiGenesisBlockRoot,
     )
   else: # mainnet
     GenesisParams(

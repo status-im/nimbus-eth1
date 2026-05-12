@@ -150,36 +150,42 @@ type VerifiedProxyConf* = object
   p2pEnabled* {.
     desc: "Enable P2P light client data backend",
     defaultValue: false,
+    defaultValueDesc: "false"
     name: "p2p"
   .}: bool
 
   p2pTcpPort* {.
     desc: "Listening TCP port for the P2P light client backend",
     defaultValue: 9000,
+    defaultValueDesc: "9000"
     name: "p2p-tcp-port"
   .}: uint16
 
   p2pUdpPort* {.
     desc: "Listening UDP port for the P2P light client backend",
     defaultValue: 9000,
+    defaultValueDesc: "9000"
     name: "p2p-udp-port"
   .}: uint16
 
   p2pMaxPeers* {.
     desc: "Target number of peers for the P2P light client backend",
     defaultValue: 160,
+    defaultValueDesc: "160"
     name: "p2p-max-peers"
   .}: int
 
   p2pBootstrapNodesFile* {.
     desc: "Path to a file containing bootstrap node ENRs (one per line) for the P2P light client backend",
     defaultValue: "",
+    defaultValueDesc: ""
     name: "p2p-bootstrap-nodes-file"
   .}: string
 
   p2pNat* {.
     desc: "NAT traversal for the P2P backend. One of: any, none, upnp, pmp, extip:<IP>",
     defaultValue: "any",
+    defaultValueDesc: "any"
     name: "p2p-nat"
   .}: string
 

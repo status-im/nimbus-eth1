@@ -1,5 +1,5 @@
 # nimbus_verified_proxy
-# Copyright (c) 2025-2026 Status Research & Development GmbH
+# Copyright (c) 2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -41,7 +41,6 @@ type
   P2PLightClientBackend* = ref object
     network: Eth2Node
 
-# FIXME: Weird, because this doesn't work if directly called from within init
 proc registerPeerSyncProtocol(
     node: Eth2Node,
     cfg: RuntimeConfig,
@@ -93,7 +92,8 @@ proc init*(T: type P2PLightClientBackend, conf: P2PBackendConf): EngineResult[T]
     eth2Node, conf.cfg, conf.forkDigests, conf.genesisBlockRoot, conf.getBeaconTime
   )
 
-  # FIXME: This is weird, should be automatically defined to default
+  # discovered nodes are filtered out if no columns overlap. Hence we define a all one column mao
+  # This is not an ideal fix
   eth2Node.loadCgcnetMetadataAndEnr(
     CgcCount(conf.cfg.CUSTODY_REQUIREMENT), not (default(ColumnMap))
   )
