@@ -11,6 +11,7 @@
 
 import
   ../evm/[types, state, computation, message, interpreter_dispatch],
+  ../core/eip8037,
   ./call_types
 
 export
@@ -19,7 +20,8 @@ export
 proc setupComputation(call: CallParams): Computation =
   let
     vmState = call.vmState
-    stateGas = 0.GasInt
+    stateGas = if vmState.fork >= FkAmsterdam: SYSTEM_STATE_GAS_RESERVOIR.GasInt
+               else: 0.GasInt
     msg = Message(
       kind:            CallKind.Call,
       gas:             call.gasLimit,
