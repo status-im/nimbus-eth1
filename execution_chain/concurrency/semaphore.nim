@@ -35,7 +35,8 @@ proc init*(s: var Semaphore, count: int = 0) =
 
 proc dispose*(s: var Semaphore) =
   doAssert s.state == State.INITIALIZED
-
+  doAssert s.waiters.load() == 0
+  
   deinitCond(s.cond)
   deinitLock(s.lock)
   s.count.store(0)

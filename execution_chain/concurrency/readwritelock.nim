@@ -42,12 +42,11 @@ proc init*(l: var ReadWriteLock) =
   l.state = State.INITIALIZED
 
 proc dispose*(l: var ReadWriteLock) =
-  doAssert l.state == State.INITIALIZED
-
-  deinitLock(l.lock)
-  l.writerWait.dispose()
-  l.readerWait.dispose()
-  l.state = State.DISPOSED
+  if l.state == State.INITIALIZED:
+    deinitLock(l.lock)
+    l.writerWait.dispose()
+    l.readerWait.dispose()
+    l.state = State.DISPOSED
 
 proc `=copy`*(
     dest: var ReadWriteLock, src: ReadWriteLock
