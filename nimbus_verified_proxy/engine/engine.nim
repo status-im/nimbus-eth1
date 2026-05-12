@@ -11,8 +11,10 @@ import
   std/[options, random],
   chronicles,
   chronos,
+  stew/byteutils,
   eth/common/[hashes, headers, addresses],
   beacon_chain/spec/forks,
+  beacon_chain/spec/beaconstate,
   beacon_chain/gossip_processing/light_client_processor,
   beacon_chain/beacon_clock,
   beacon_chain/sync/light_client_sync_helpers,
@@ -20,7 +22,6 @@ import
   beacon_chain/el/engine_api_conversions,
   ./types,
   ./utils,
-  ./genesis_params,
   ./header_store,
   ./evm
 
@@ -75,12 +76,25 @@ proc init*(
 ): EngineResult[T] =
   randomize()
 
+  let metadata = getMetadataForNetwork(config.eth2Network.get("mainnet"))
+
   let
-    networkName = config.eth2Network.get("mainnet")
-    metadata = getMetadataForNetwork(networkName)
-    genesis = genesisParamsForNetwork(networkName)
-    genesisTime = genesis.genesisTime
-    genesis_validators_root = genesis.genesisValidatorsRoot
+    genesisHeader =
+      try:
+        template genesisData(): auto =
+          metadata.genesis.bakedBytes
+
+        # this is a hack to avoid a huge blow up in memory for the wasm target
+        SSZ.decode(
+          genesisData.toOpenArray(
+            genesisData.low, genesisData.low + sizeof(BeaconStateHeader) - 1
+          ),
+          BeaconStateHeader,
+        )
+      except CatchableError as err:
+        return
+          err((UnavailableDataError, "Invalid baked-in state: " & err.msg, UNTAGGED))
+    genesisTime = genesisHeader.genesis_time
     beaconClock = BeaconClock.init(metadata.cfg.timeParams, genesisTime).valueOr:
       error "Invalid genesis time in state", genesisTime
       quit QuitFailure
@@ -90,6 +104,7 @@ proc init*(
       else:
         proc(): BeaconTime {.gcsafe, raises: [].} =
           config.freezeAtSlot.start_beacon_time(metadata.cfg.timeParams)
+    genesis_validators_root = genesisHeader.genesis_validators_root
     forkDigests = newClone ForkDigests.init(metadata.cfg, genesis_validators_root)
 
   let engine = RpcVerificationEngine(
