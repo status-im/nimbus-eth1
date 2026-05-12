@@ -315,9 +315,29 @@ func resetPayload(n: var LruNode) =
 func init[K, V](T: type LruCache[K, V], capacity: int): T =
   ## Create a cache with the given initial capacity
   static:
-    doAssert supportsCopyMem(K), $K & " must be a non-GC type"
-    doAssert supportsCopyMem(V), $V & " must be a non-GC type"
+    doAssert supportsCopyMem(K), "K must be a non-GC type"
+    doAssert supportsCopyMem(V), "V must be a non-GC type"
   result.capacity = capacity
+
+proc dispose(s: var LruCache) =
+  if s.nodesLen > 0:
+    for index in s.mruIndices:
+      resetPayload(s.nodes[index])
+    deallocShared(s.nodes)
+    s.nodes = nil
+    s.nodesLen = 0
+    s.nodesAllocatedLen = 0
+    s.used = 0
+
+  if s.bucketsLen > 0:
+    deallocShared(s.buckets)
+    s.buckets = nil
+    s.bucketsLen = 0
+
+proc `=copy`[K, V](
+    dest: var LruCache[K, V], src: LruCache[K, V]
+) {.error: "Copying LruCache is forbidden".} =
+  discard
 
 iterator mruIndices(s: LruCache): uint32 =
   if s.nodesLen > 0:
@@ -523,21 +543,6 @@ func put(s: var LruCache, key: auto, value: auto) =
   ## one if inserting the item would exceed capacity.
   s.put(subhash(key), key, value)
 
-proc dispose(s: var LruCache) =
-  if s.nodesLen > 0:
-    for index in s.mruIndices:
-      resetPayload(s.nodes[index])
-    deallocShared(s.nodes)
-    s.nodes = nil
-    s.nodesLen = 0
-    s.nodesAllocatedLen = 0
-    s.used = 0
-
-  if s.bucketsLen > 0:
-    deallocShared(s.buckets)
-    s.buckets = nil
-    s.bucketsLen = 0
-
 # ConcurrentLruCache is a thread safe LRU cache designed to handle high
 # throughput concurrent reads and writes from multiple threads. It uses a
 # sharded design in order to mitigate contention and internally uses a
@@ -571,8 +576,8 @@ proc init*[K, V, SHARD_BITS](
   # are using the cache while initialising it.
   const shardCount = lru.shards.len()
   static:
-    doAssert supportsCopyMem(K), $K & " must be a non-GC type"
-    doAssert supportsCopyMem(V), $V & " must be a non-GC type"
+    doAssert supportsCopyMem(K), "K must be a non-GC type"
+    doAssert supportsCopyMem(V), "V must be a non-GC type"
     doAssert shardCount > 1
     doAssert isPowerOfTwo(shardCount)
   doAssert lru.state == State.UNINITIALIZED
@@ -602,7 +607,7 @@ proc `=copy`[K, V](
 ) {.error: "Copying Shard is forbidden".} =
   discard
 
-proc `=copy`[K, V; SHARD_BITS](
+proc `=copy`*[K, V; SHARD_BITS](
     dest: var ConcurrentLruCache[K, V, SHARD_BITS],
     src: ConcurrentLruCache[K, V, SHARD_BITS],
 ) {.error: "Copying ConcurrentLruCache is forbidden".} =

@@ -32,15 +32,15 @@ proc init*(l: var ReadWriteLock) =
   l.numPending.store(0)
   l.readersDeparting.store(0)
 
-func init*(T: type ReadWriteLock): T =
-  var l = ReadWriteLock()
-  l.init()
-  l
-
 proc dispose*(l: var ReadWriteLock) =
   deinitLock(l.lock)
   l.writerWait.dispose()
   l.readerWait.dispose()
+
+proc `=copy`*(
+    dest: var ReadWriteLock, src: ReadWriteLock
+) {.error: "Copying ReadWriteLock is forbidden".} =
+  discard
 
 template atomicAdd(a: var Atomic[int32], delta: int32): int32 =
   a.fetchAdd(delta) + delta

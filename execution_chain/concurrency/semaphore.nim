@@ -18,9 +18,6 @@ type
     lock: Lock
     cond: Cond
 
-proc `=copy`(dst: var Semaphore, src: Semaphore) {.error.}
-proc `=dup`(src: Semaphore): Semaphore {.error.}
-
 proc init*(s: var Semaphore, count: int = 0) =
   initLock(s.lock)
   initCond(s.cond)
@@ -33,6 +30,11 @@ proc dispose*(s: var Semaphore) =
   deinitLock(s.lock)
   s.count.store(0)
   s.waiters.store(0)
+
+proc `=copy`*(
+    dest: var Semaphore, src: Semaphore
+) {.error: "Copying Semaphore is forbidden".} =
+  discard
 
 proc tryWait*(s: var Semaphore): bool =
   var c = s.count.load()

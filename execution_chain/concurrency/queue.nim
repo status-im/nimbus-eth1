@@ -20,27 +20,27 @@
 
 import std/[atomics, locks, typetraits], results
  
-const CacheLineSize = 64
+const CACHE_LINE_SIZE = when defined(macosx) and defined(arm64): 128 else: 64
  
 type
   ConcurrentQueue*[E: static int, T] = object
-    head {.align: CacheLineSize.}: Atomic[uint32]
+    head {.align: CACHE_LINE_SIZE.}: Atomic[uint32]
     cachedTail: uint32
-    tail {.align: CacheLineSize.}: Atomic[uint32]
+    tail {.align: CACHE_LINE_SIZE.}: Atomic[uint32]
     cachedHead: uint32
-    lock {.align: CacheLineSize.}: Lock
+    lock {.align: CACHE_LINE_SIZE.}: Lock
     condFull: Cond
     condEmpty: Cond
     waitingPush: Atomic[bool]
     waitingPop: Atomic[bool]
-    data {.align: CacheLineSize.}: array[1 shl E, T]
+    data {.align: CACHE_LINE_SIZE.}: array[1 shl E, T]
  
 template capacity*(q: ConcurrentQueue): int =
   q.data.len() - 1
  
 func init*[E, T](q: var ConcurrentQueue[E, T]) =
   static:
-    doAssert supportsCopyMem(T), $T & " must be a non-GC type"
+    doAssert supportsCopyMem(T), "T must be a non-GC type"
     doAssert E >= 1, "queue exponent must be >= 1 (capacity >= 1)"
     doAssert E <= 30, "queue exponent too large for uint32 indices"
   q.head.store(0'u32)
@@ -57,7 +57,12 @@ func dispose*[E, T](q: var ConcurrentQueue[E, T]) =
   q.lock.deinitLock()
   q.condFull.deinitCond()
   q.condEmpty.deinitCond()
- 
+
+proc `=copy`*[E, T](
+    dest: var ConcurrentQueue[E, T], src: ConcurrentQueue[E, T]
+) {.error: "Copying ConcurrentQueue is forbidden".} =
+  discard
+
 template maskOf(E: static int): uint32 = uint32((1 shl E) - 1)
  
 template isEmpty*[E, T](q: var ConcurrentQueue[E, T]): bool =
