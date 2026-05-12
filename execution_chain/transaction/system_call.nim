@@ -10,14 +10,42 @@
 {.push raises: [].}
 
 import
-  ../evm/[types, state, computation, code_stream, interpreter_dispatch],
-  ./call_common,
+  ../evm/[types, state, computation, message, interpreter_dispatch],
   ./call_types
 
 export
   call_types
 
-proc sysCallGasUsed(c: Computation): GasInt =
+proc setupComputation(call: CallParams): Computation =
+  let
+    vmState = call.vmState
+    stateGas = 0.GasInt
+    msg = Message(
+      kind:            CallKind.Call,
+      gas:             call.gasLimit,
+      stateGas:        stateGas,
+      contractAddress: call.to,
+      codeAddress:     call.to,
+      sender:          call.sender,
+      value:           call.value,
+      data:            call.input,
+    )
+    code = getCallCode(vmState, msg.codeAddress)
+    computation = newComputation(vmState, false, msg, code)
+
+  vmState.txCtx = TxContext(
+    origin: call.sender,
+  )
+
+  # reset global gasRefunded counter each time
+  # EVM called for a new transaction
+  vmState.gasRefunded = 0
+  vmState.captureStart(computation, call.sender, call.to,
+                       call.isCreate, call.input,
+                       call.gasLimit, call.value)
+  computation
+
+func sysCallGasUsed(c: Computation): GasInt =
   c.msg.gas - c.gasMeter.gasRemaining - c.gasMeter.stateGasLeft
 
 proc finishRunningComputation(c: Computation, T: type): T =
@@ -39,7 +67,7 @@ proc finishRunningComputation(c: Computation, T: type): T =
 proc systemCall*(call: CallParams, T: type): T =
   let
     ledger = call.vmState.ledger
-    c = setupComputation(call, 0, false)
+    c = setupComputation(call)
 
   # Pre-execution sanity checks
   c.preExecComputation()

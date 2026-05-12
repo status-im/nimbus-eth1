@@ -128,18 +128,18 @@ proc preExecComputation(call: CallParams): int64 =
 
   gasRefund
 
-proc setupComputation*(call: CallParams, gasRefund: int64, keepStack: bool): Computation =
+proc setupComputation(call: CallParams, gasRefund: int64, keepStack: bool): Computation =
   let
     vmState = call.vmState
     fork = vmState.fork
   vmState.txCtx = TxContext(
-    origin         : call.origin.get(call.sender),
+    origin         : call.sender,
     gasPrice       : call.gasPrice,
     versionedHashes: call.versionedHashes,
     blobBaseFee    : getBlobBaseFee(vmState.blockCtx.excessBlobGas, vmState.com, fork),
   )
 
-  # reset global gasRefund counter each time
+  # reset global gasRefunded counter each time
   # EVM called for a new transaction
   vmState.gasRefunded = 0
 
@@ -192,8 +192,7 @@ proc setupComputation*(call: CallParams, gasRefund: int64, keepStack: bool): Com
   vmState.captureStart(computation, call.sender, call.to,
                        call.isCreate, call.input,
                        call.gasLimit, call.value)
-
-  return computation
+  computation
 
 # FIXME-awkwardFactoring: the factoring out of the pre and
 # post parts feels awkward to me, but for now I'd really like
