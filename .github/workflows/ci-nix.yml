@@ -1,0 +1,44 @@
+name: Nimbus Nix CI
+permissions:
+  contents: read
+  pull-requests: read
+  checks: write
+on:
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        system:
+          - aarch64-darwin
+          - x86_64-linux
+        nixpkg:
+          - nimbus_execution_client
+          - nimbus_verified_proxy
+
+        include:
+          - system: aarch64-darwin
+            runs_on: [self-hosted, macOS, ARM64]
+
+          - system: x86_64-linux
+            runs_on: [self-hosted, Linux, X64]
+
+    name: '${{ matrix.system }} / ${{ matrix.nixpkg }}'
+    runs-on: ${{ matrix.runs_on }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          show-progress: false
+          submodules: recursive
+          lfs: false
+
+      - name: 'Run Nix build for ${{ matrix.nixpkg }}'
+        shell: bash
+        run: nix build -L '.?submodules=1#${{ matrix.nixpkg }}'
+
+      - name: 'Show result contents'
+        shell: bash
+        run: find result/ -type f

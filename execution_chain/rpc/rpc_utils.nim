@@ -11,6 +11,7 @@
 
 import
   std/[sequtils, algorithm, strutils],
+  json_rpc/errors,
   ./rpc_types,
   ./params,
   ../db/ledger,
@@ -42,6 +43,12 @@ func median(prices: var openArray[GasInt]): GasInt =
     return (a div 2 + b div 2 + ((a mod 2 + b mod 2) div 2)).GasInt
 
   prices[middle]
+
+proc invalidParams*(msg: string): ref ApplicationError =
+  (ref ApplicationError)(
+    code: -32602,
+    msg: msg,
+  )
 
 proc calculateMedianGasPrice*(chain: ForkedChainRef): GasInt =
   const minGasPrice = 30_000_000_000.GasInt

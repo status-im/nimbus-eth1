@@ -228,6 +228,7 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
   setupServerAPI(serverApi, server, am)
   setupCommonRpc(node, conf, server)
   setupAdminRpc(nimbus, conf, server)
+  setupDebugRpc(com, txPool, server)
   server.start()
 
   TestEnv(
@@ -281,7 +282,7 @@ proc generateBlock(env: var TestEnv) =
   env.txHash = tx1.computeRlpHash
   env.blockHash = blk.header.computeBlockHash
 
-createRpcSigsFromNim(RpcClient):
+createRpcSigsFromNim(RpcClient, EthJson):
   proc web3_clientVersion(): string
   proc web3_sha3(data: seq[byte]): Hash32
   proc net_version(): string
@@ -614,7 +615,7 @@ proc rpcMain*() =
       check res.hash == env.blockHash
 
       expect JsonRpcError:
-        let res2 = await client.eth_getBlockByNumber($1, true)
+        discard await client.eth_getBlockByNumber($1, true)
 
     test "eth_getTransactionByHash":
       let res = await client.eth_getTransactionByHash(env.txHash)
@@ -651,32 +652,44 @@ proc rpcMain*() =
           check receipts[0].transactionIndex == 0.Quantity
           check receipts[1].transactionIndex == 1.Quantity
 
+    test "debug_getRawReceipts":
+      let
+        rawReceipts = await client.debug_getRawReceipts(blockId(1'u64))
+        receipts = await client.eth_getBlockReceipts(blockId(1'u64))
+
+      check receipts.isSome
+      if receipts.isSome:
+        check rawReceipts.len == receipts.get.len
+
+      for receipt in rawReceipts:
+        check seq[byte](receipt).len > 0
+
     test "eth_getBlockReceipts with EIP-1898 object param":
       # blockHash object form (what go-ethereum's ethclient sends)
       let r1 = await client.call("eth_getBlockReceipts",
-        %[%*{"blockHash": $env.blockHash}])
-      let recs1 = JrpcConv.decode(r1.string, Opt[seq[ReceiptObject]])
+        %[%*{"blockHash": $env.blockHash}], EthJson)
+      let recs1 = EthJson.decode(r1.string, Opt[seq[ReceiptObject]])
       check recs1.isSome
       check recs1.get.len == 2
 
       # blockHash with requireCanonical=false
       let r2 = await client.call("eth_getBlockReceipts",
-        %[%*{"blockHash": $env.blockHash, "requireCanonical": false}])
-      let recs2 = JrpcConv.decode(r2.string, Opt[seq[ReceiptObject]])
+        %[%*{"blockHash": $env.blockHash, "requireCanonical": false}], EthJson)
+      let recs2 = EthJson.decode(r2.string, Opt[seq[ReceiptObject]])
       check recs2.isSome
       check recs2.get.len == 2
 
       # blockNumber object form
       let r3 = await client.call("eth_getBlockReceipts",
-        %[%*{"blockNumber": "0x1"}])
-      let recs3 = JrpcConv.decode(r3.string, Opt[seq[ReceiptObject]])
+        %[%*{"blockNumber": "0x1"}], EthJson)
+      let recs3 = EthJson.decode(r3.string, Opt[seq[ReceiptObject]])
       check recs3.isSome
       check recs3.get.len == 2
 
       # requireCanonical=true should fail
       expect JsonRpcError:
         discard await client.call("eth_getBlockReceipts",
-          %[%*{"blockHash": $env.blockHash, "requireCanonical": true}])
+          %[%*{"blockHash": $env.blockHash, "requireCanonical": true}], EthJson)
 
     test "eth_getTransactionReceipt":
       let res = await client.eth_getTransactionReceipt(env.txHash)

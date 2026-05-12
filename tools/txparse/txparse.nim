@@ -15,6 +15,7 @@ import
   ../common/helpers,
   ../../execution_chain/db/core_db/memory_only,
   ../../execution_chain/transaction,
+  ../../execution_chain/transaction/call_types,
   ../../execution_chain/core/validate,
   ../../execution_chain/common/evmforks,
   ../../execution_chain/common/common
@@ -25,8 +26,10 @@ proc parseTx(com: CommonRef, hexLine: string) =
       bytes = hexToSeqByte(hexLine)
       tx = decodeTx(bytes)
       address = tx.recoverSender().expect("valid signature")
+      fork = FkPrague
+      intrinsic = tx.intrinsicGas(fork, 10_000_000)
 
-    validateTxBasic(com, tx, 10_000_000, FkPrague).isOkOr:
+    validateTxBasic(com, tx, intrinsic, fork).isOkOr:
       echo "err: ", error
 
     # everything ok

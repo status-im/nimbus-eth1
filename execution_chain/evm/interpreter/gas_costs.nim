@@ -71,7 +71,7 @@ type
     nonZeroVal*: bool
     gasCost1*: GasInt
     isNewAccount*: proc(): bool {.gcsafe, raises: [].}
-    gasLeft*: GasInt    
+    gasLeft*: GasInt
     gasCallDelegate*: GasProc
     contractGas*: UInt256
 
@@ -821,6 +821,7 @@ const
     FkBpo4: ShanghaiGasFees,
     FkBpo5: ShanghaiGasFees,
     FkAmsterdam: AmsterdamGasFees,
+    FkBogota: AmsterdamGasFees,
   ]
 
 gasCosts(FkFrontier, base, BaseGasCosts)

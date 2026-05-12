@@ -19,9 +19,12 @@ import
   ../[helpers, state_db],
   ./mpt_desc
 
+export
+  GUnzipRef
+
 type
   DebugTrieRef* = ref object of NodeTrieRef
-    nodeId*: Table[NodeRef,uint]     ## `HashKey` display map
+    nodeId*: Table[NodeRef,uint]                    # `HashKey` display map
 
   AccountRangeData* = tuple
     root: StateRoot
@@ -33,7 +36,7 @@ type
   StoreSlotRangeData* = tuple
     root: StoreRoot
     start: ItemKey
-    pck: StorageRangesPacket
+    pck: StorageRangesPacket                        # always has `pkg.len == 1`
     error: string
     lnr: int
 
@@ -141,7 +144,7 @@ proc nodeStr(node: NodeRef, db: DebugTrieRef): string =
   case node.kind:
   of Branch:
     let w = BranchNodeRef(node)
-    var q = newSeq[string](16)
+    var q: array[16,string]
     var nLinks = 0
     for n in 0 .. 15:
       if not w.brLinks[n].isNil:
@@ -158,6 +161,11 @@ proc nodeStr(node: NodeRef, db: DebugTrieRef): string =
         result &= w.xtPfx.pfxStr
       result &= "," & (if 0 < node.selfKey.len: "b(" else: "B(")
       result &= q.join(",")
+    result &= ")"
+    if 0 < w.xtPfx.len and w.brData.len <= 32:
+      result &= "#" & $w.xtData.len & "+" & $w.brData.len
+    elif w.brData.len <= 32:
+      result &= "#" & $w.brData .len
 
   of Leaf:
     let w = LeafNodeRef(node)
@@ -165,6 +173,9 @@ proc nodeStr(node: NodeRef, db: DebugTrieRef): string =
     result &= w.lfPfx.pfxStr & ","
     #result &= w.lfPayload.toHex
     result &= "[" & $w.lfPayload.len & "]"
+    result &= ")"
+    if w.lfData.len <= 32:
+      result &= "#" & $w.lfData.len
 
   of Stop:
     let w = StopNodeRef(node)
@@ -182,8 +193,9 @@ proc nodeStr(node: NodeRef, db: DebugTrieRef): string =
     result &= ","
     if not w.sub.isNil:
       result &= w.sub.nodeIdStr(db)
+    result &= ")"
 
-  result &= "))"
+  result &= ")"
 
 proc nodesStr[T: NodeRef|StopNodeRef](
     nodes: openArray[T];
@@ -191,12 +203,7 @@ proc nodesStr[T: NodeRef|StopNodeRef](
     prefix: string;
     postfix: string;
       ): string =
-  var n = 0
-  for node in nodes:
-    result &= prefix & node.nodeStr(db)
-    n.inc
-    if n < nodes.len:
-      result &= postfix
+  nodes.sorted(db).mapIt(it.nodeStr(db)).join(postfix & prefix)
 
 # --------------
 
@@ -316,29 +323,29 @@ template rangeFromUnzip[T: AccountRangePacket|StorageRangesPacket](
       while line.len == 0 or line[0] == '#':
         if gz.atEnd:
           blockRc.error = "End of file"
-          return
+          break body
         blockRc.lnr.inc
         line = gz.nextLine.valueOr:
           blockRc.error = "Read error: " & $error
-          return
+          break body
       blockRc.root = U(Hash32.fromHex line)
 
       blockRc.lnr.inc
       line = gz.nextLine.valueOr:
         blockRc.error = "Read error: " & $error
-        return
+        break body
       if line.len == 0:
         blockRc.error = "Missing line: Hash32 value"
-        return
+        break body
       blockRc.start = (Hash32.fromHex line).to(ItemKey)
 
       blockRc.lnr.inc
       line =  gz.nextLine.valueOr:
         blockRc.error = "Read error: " & $error
-        return
+        break body
       if line.len == 0:
         blockRc.error = "Missing line:data packet value"
-        return
+        break body
       blockRc.pck = rlp.decode(line.hexToSeqByte, T)
 
     except OSError as e:
@@ -393,6 +400,12 @@ func toStr*(key: HashKey): string =
 proc toStr*(node: NodeRef; db: DebugTrieRef): string =
   node.nodeStr(db)
 
+proc toStr*(nodes: openArray[NodeRef|StopNodeRef]; db: DebugTrieRef; indent=1): string =
+  let
+    prefix = indStr(indent)
+    postfix = (if indent < 0: "" else: "\n")
+  nodes.nodesStr(db, prefix, postfix)
+
 proc dbStr*(node: NodeRef; db: DebugTrieRef; indent=1, stopsOk=false): string =
   let
     prefix = indStr(indent)
@@ -403,12 +416,12 @@ proc dbStr*(node: NodeRef; db: DebugTrieRef; indent=1, stopsOk=false): string =
   result = "(tree(" & node.nodeIdStr(db) & ")"
 
   if not node.isNil:
-    result &= ":" & postfix & node.tree(db).nodesStr(db, prefix2, postfix)
+    result &= ":" & postfix & prefix2 & node.tree(db).nodesStr(db, prefix2, postfix)
 
   if 0 < db.stops.len and stopsOk:
     result &= "," & postfix
     result &= prefix1 & "stops:" & postfix
-    result &= db.stops.values.toSeq.sorted(db).nodesStr(db, prefix2, postfix)
+    result &= prefix2 & db.stops.values.toSeq.nodesStr(db, prefix2, postfix)
 
   result &= ")"
 

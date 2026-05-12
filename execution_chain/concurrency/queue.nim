@@ -18,7 +18,7 @@
 
 {.push raises: [], gcsafe.}
 
-import std/[atomics, locks], results
+import std/[atomics, locks, typetraits], results
  
 const CacheLineSize = 64
  
@@ -26,16 +26,13 @@ type
   ConcurrentQueue*[E: static int, T] = object
     head {.align: CacheLineSize.}: Atomic[uint32]
     cachedTail: uint32
-
     tail {.align: CacheLineSize.}: Atomic[uint32]
     cachedHead: uint32
- 
     lock {.align: CacheLineSize.}: Lock
     condFull: Cond
     condEmpty: Cond
     waitingPush: Atomic[bool]
     waitingPop: Atomic[bool]
- 
     data {.align: CacheLineSize.}: array[1 shl E, T]
  
 template capacity*(q: ConcurrentQueue): int =
@@ -43,6 +40,7 @@ template capacity*(q: ConcurrentQueue): int =
  
 func init*[E, T](q: var ConcurrentQueue[E, T]) =
   static:
+    doAssert supportsCopyMem(T), $T & " must be a non-GC type"
     doAssert E >= 1, "queue exponent must be >= 1 (capacity >= 1)"
     doAssert E <= 30, "queue exponent too large for uint32 indices"
   q.head.store(0'u32)

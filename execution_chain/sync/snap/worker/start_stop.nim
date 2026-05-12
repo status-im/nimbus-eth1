@@ -15,7 +15,7 @@ import
   pkg/[chronicles, metrics, minilru],
   ../../../networking/p2p,
   ../../wire_protocol,
-  ./[mpt, state_db, worker_desc]
+  ./[mpt, state_db, session, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -49,6 +49,9 @@ proc setupServices*(ctx: SnapCtxRef; info: static[string]): bool =
   # Set up ticker, disabled by default
   if ctx.pool.ticker.isNil:
     ctx.pool.ticker = proc(ctx: SnapCtxRef) = discard
+
+  # Initalise MPT bulder
+  ctx.sessionMkTrieInit()
 
   ctx.daemon = true                                 # disabled by default
   true

@@ -10,11 +10,14 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, tables, typetraits],
+  std/[sequtils, strutils, tables, typetraits],
   pkg/[eth/common, eth/trie/nibbles, stew/byteutils],
   ../../../wire_protocol/snap/snap_types,
   ../state_db,
   ./mpt_desc
+
+const
+  ffffHash = high(ItemKey).to(Hash32)
 
 # ------------------------------------------------------------------------------
 # Private RLP helpers
@@ -29,16 +32,36 @@ proc append(w: var RlpWriter, val: AccBody) =
   w.append val.storageRoot.Hash32
   w.append val.codeHash.Hash32
 
+proc decodeByteList(rawData: openArray[byte]): Opt[seq[byte]] =
+  try:
+    var rlp = rawData.rlpFromBytes
+    return ok rlp.read seq[byte]
+  except RlpError:
+    discard
+  err()
+
+proc decodeHashKey(rawData: openArray[byte]): Opt[HashKey] =
+  var key: HashKey
+  if rawData.len < 32:
+    key = HashKey.fromBytes(rawData).valueOr:
+      return err()
+  else:
+    let keyData = rawData.decodeByteList().valueOr:
+      return err()
+    key = HashKey.fromBytes(keyData).valueOr:
+      return err()
+  ok(move key)
+
 # ------------------------------------------------------------------------------
 # Private functions: constructor helpers
 # ------------------------------------------------------------------------------
 
 proc nodeStash*(
-    db: NodeTrieRef;                       # Needed for root node
-    rootKey: HashKey;                      # State root key
-    proofNode: ProofNode;                  # Node to add
-    nodes: var Table[HashKey,NodeRef];     # Collect nodes
-    links: var Table[HashKey,StopNodeRef]; # Collect open links
+    db: NodeTrieRef;                                # Needed for root node
+    rootKey: HashKey;                               # State root key
+    proofNode: ProofNode;                           # Node to add
+    nodes: var Table[HashKey,NodeRef];              # Collect nodes
+    links: var Table[HashKey,StopNodeRef];          # Collect open links
       ): bool =
   ## Decode a trusted rlp-encoded node and add it to the node list.
   ##
@@ -54,8 +77,8 @@ proc nodeStash*(
 
   var
     rlp = proofNode.distinctBase.rlpFromBytes
-    list: array[17,seq[byte]]              # list of node entries
-    top = 0                                # count entries, i.e. `list[]` len
+    list: array[17,seq[byte]]                       # list of node entries
+    top = 0                                         # count `list[]` entries
     node: NodeRef
 
   # Collect lists of either 2 or 17 blob entries.
@@ -63,9 +86,10 @@ proc nodeStash*(
     for w in rlp.items:
       case top
       of 0 .. 15:
-        list[top] = rlp.read(seq[byte])
+        if not w.isEmpty:
+          list[top] = @(w.rawData)
       of 16:
-        if 0 < rlp.read(seq[byte]).len:
+        if not w.isEmpty:
           return false
       else:
         return false
@@ -78,19 +102,20 @@ proc nodeStash*(
   of 2:
     if list[0].len == 0:
       return false
-    let (isLeaf, nibbles) = NibblesBuf.fromHexPrefix list[0]
-    if nibbles.len == 0:
-      return false
+    let
+      path = list[0].decodeByteList().valueOr:
+        return false
+      (isLeaf, nibbles) = NibblesBuf.fromHexPrefix path
     if isLeaf:
       node = LeafNodeRef(
         kind:      Leaf,
         lfData:    proofNode.distinctBase,
         lfPfx:     nibbles,
         lfPayload: list[1])
+    elif nibbles.len == 0:
+      return false
     else:
-      let stopKey = HashKey.fromBytes(list[1]).valueOr:
-        return false
-      if links.hasKey stopKey:
+      let stopKey = list[1].decodeHashKey().valueOr:
         return false
       node = BranchNodeRef(
         kind:    Branch,
@@ -109,9 +134,7 @@ proc nodeStash*(
       brData: proofNode.distinctBase)
     for n in 0u8 .. 15u8:
       if 0 < list[n].len:
-        let stopKey = HashKey.fromBytes(list[n]).valueOr:
-          return false
-        if links.hasKey stopKey:
+        let stopKey = list[n].decodeHashKey().valueOr:
           return false
         let stopLink = StopNodeRef(
           kind:    Stop,
@@ -131,9 +154,8 @@ proc nodeStash*(
   true
 
 proc updateProofTree(
-    node: NodeRef;                         # Current node, start node
-    path: NibblesBuf;                      # Current path, recursively updated
-    last: var ItemKey;                     # Path of last leaf, visited
+    node: NodeRef;                                  # current node, start node
+    path: NibblesBuf;                               # cur path, recurs. updated
       ) =
   ## Recursively label path prefixes, resolve extensions, and return the
   ## right boundary leaf path (if any).
@@ -144,6 +166,10 @@ proc updateProofTree(
     if 0 < w.xtPfx.len:
       # Join child node into this extension node
       let chld = w.brLinks[0]
+      if chld.kind == Stop:                         # pure extension node?
+        StopNodeRef(chld).parent = w                # just to make sure
+        chld.updateProofTree(path & w.xtPfx)
+        return
       if chld.kind == Branch and BranchNodeRef(chld).xtPfx.len == 0:
         w.brLinks = BranchNodeRef(chld).brLinks
         w.brData = BranchNodeRef(chld).brData
@@ -156,10 +182,10 @@ proc updateProofTree(
         if down.kind == Stop:
           # Might be dangling now due to the extension merge, above
           StopNodeRef(down).parent = w
-        down.updateProofTree(path & NibblesBuf.nibble(byte n), last)
+        down.updateProofTree(path & NibblesBuf.nibble(byte n))
 
   of Leaf:
-    last = getBytes(path & LeafNodeRef(node).lfPfx).to(ItemKey)
+    discard
 
   of Stop:
     StopNodeRef(node).path = path
@@ -185,17 +211,23 @@ proc findSubTree(
         return err(pfx)
 
       let w = BranchNodeRef(node)
-      if 0 < w.xtPfx.len:
-        let n = pfx.sharedPrefixLen(w.xtPfx)
-        if n < w.xtPfx.len or                   # must be all of the ext pfx
-           n == pfx.len:                        # must *not* be the last node
-          return err(pfx)
-        pfx = pfx.slice(n)
+      block extOrCombined:
+        if 0 < w.xtPfx.len:                         # ext. or combined branch
+          let n = pfx.sharedPrefixLen(w.xtPfx)
+          if n < w.xtPfx.len or                     # must be all of the ext pfx
+             n == pfx.len:                          # must NOT be the last node
+            return err(pfx)
 
-      node = w.brLinks[pfx[0]]
+          pfx = pfx.slice(n)                        # cut off `xtPfx`
+          if w.brData.len == 0:                     # `0` => pure extension
+            node = w.brLinks[0]                     # extension on index `0`
+            break extOrCombined
+
+        node = w.brLinks[pfx[0]]                    # otherwise use nibble
+        pfx = pfx.slice(1)
+
       if node.isNil:
         return err(pfx)
-      pfx = pfx.slice(1)
       # continue
 
     of Leaf:
@@ -229,7 +261,7 @@ proc mergeSubTree(
       let
         w = BranchNodeRef(node)
         n = pfx.sharedPrefixLen(w.xtPfx)
-      doAssert n < pfx.len                        # at least pfx + nibble
+      doAssert n < pfx.len                          # at least pfx + nibble
 
       let i = pfx[n]
       if n < w.xtPfx.len:
@@ -261,9 +293,9 @@ proc mergeSubTree(
 
     of Leaf:
       let w = LeafNodeRef(node)
-      if w.lfPfx == pfx:                          # leaf node merged, already
+      if w.lfPfx == pfx:                            # leaf node merged, already
         return ok(w)
-      doAssert w.lfPfx.len == pfx.len             # due to fixed path length 64
+      doAssert w.lfPfx.len == pfx.len               # due to fixed path len 64
 
       # parent->Leaf0 => parent->Branch(new)->(Leaf1(new),Leaf0(mod),..)
       let
@@ -332,7 +364,7 @@ proc reKeyWalker(node: NodeRef) =
         # Note that the recursion is exhaustive as the sub-tree
         # is always a complete MPT (i.e. no dead links)
         br.brLinks[n].reKeyWalker()
-        wrt.append @(br.brLinks[n].selfKey.data)
+        wrt.append br.brLinks[n].selfKey
     wrt.append ""
     br.brData = wrt.finish()
     br.selfKey = br.brData.digestTo(HashKey)
@@ -341,7 +373,7 @@ proc reKeyWalker(node: NodeRef) =
       br.selfKey.swap br.brKey
       wrt = initRlpList 2
       wrt.append br.xtPfx.toHexPrefix(false).toSeq
-      wrt.append @(br.brKey.data)
+      wrt.append br.brKey
       br.xtData = wrt.finish()
       br.selfKey = br.xtData.digestTo(HashKey)
 
@@ -358,8 +390,6 @@ proc reKeyWalker(node: NodeRef) =
     if not w.sub.isNil:
       w.sub.reKeyWalker()
 
-  # NOTREACHED
-
 proc exportTrie(
     node: NodeRef;
     data: var seq[(seq[byte],seq[byte])];
@@ -371,7 +401,12 @@ proc exportTrie(
   of Branch:
     var w = BranchNodeRef(node)
     if w.brData.len == 0:
-      ok = false
+      if 0 < w.xtData.len and
+         not w.brLinks[0].isNil:                    # pure extension node
+        data.add (@(w.selfKey.data), w.xtData)
+        w.brLinks[0].exportTrie(data, ok)
+      else:
+        ok = false                                  # error
       return
 
     if 0 < w.xtPfx.len:
@@ -399,8 +434,6 @@ proc exportTrie(
   of Stop:
     ok = false
 
-  # NOTREACHED
-
 # ------------------------------------------------------------------------------
 # Public constructor
 # ------------------------------------------------------------------------------
@@ -422,6 +455,7 @@ proc init*(
     root: StateRoot|StoreRoot;
     start: ItemKey;
     nodes: openArray[ProofNode];
+    maxPath: Hash32;
       ): T =
   ## Create a partial MPT from a list of rlp encoded nodes. Some conditions
   ## on the argument list `nodes` are:
@@ -452,7 +486,7 @@ proc init*(
   tmpNodes.del db.root.selfKey
 
   # Build partial tree
-  let stopPairs = tmpLinks.pairs.toSeq
+  let stopPairs = tmpLinks.pairs.toSeq              # table is to be modified
   for (stopKey,stopNode) in stopPairs:
     # Try to resolve the stop node on a `node` table entry
     tmpNodes.withValue(stopKey, node):
@@ -461,19 +495,82 @@ proc init*(
       tmpLinks.del stopKey
 
   # Label path prefixes and join Extensions
-  var limit = high(ItemKey)
-  db.root.updateProofTree(NibblesBuf(), limit)
+  db.root.updateProofTree(NibblesBuf())
+
+  # Assemble right limit
+  let limit = maxPath.to(ItemKey)
 
   # Select sub-roots, links within min/max bounds
   for (key,stopNode) in tmpLinks.pairs:
-    let path = stopNode.path.getBytes.to(ItemKey)
-    if start <= path and path < limit:
+    let path = ItemKey.fromNibbles(stopNode.path, padMin)
+    if start <= path and path <= limit:
       db.stops[key] = stopNode
     else:
       # Remove stop node from parent
       BranchNodeRef(stopNode.parent).brLinks[stopNode.inx] = nil
 
   db
+
+proc init*(
+    T: type NodeTrieRef;
+    root: Hash32;
+    nodes: seq[seq[byte]];
+    keyBytes = 32;
+      ): T =
+  ## Create a generic MPT.
+  ##
+  ## The `nodes` argument is a list of rlp encoded nodes, just as with
+  ## the list of proof nodes with the previous verions of `init()`.
+  ##
+  ## The argument `keyBytes` allows for a trie where all
+  ## keys have a length smaller than 32 bytes.
+  ##
+  ## This function is provided mainly for testing.
+  ##
+  let
+    db = T()
+    root = root.to(HashKey)
+
+  if nodes.len == 0:
+    db.root = StopNodeRef(
+      kind:    Stop,
+      path:    NibblesBuf.fromBytes byte(0).repeat(max(0, 32 - keyBytes)),
+      selfKey: root)
+    db.stops[db.root.selfKey] = StopNodeRef(db.root)
+    return db
+
+  var tmpNodes: Table[HashKey,NodeRef]
+  for n in 0 ..< nodes.len:
+    if not db.nodeStash(root, ProofNode(nodes[n]), tmpNodes, db.stops):
+      return T(nil)
+
+  # Verify that there is a root from stashed data
+  if db.root.isNil:
+    return T(nil)
+
+  # Root is not needed in the list, anymore
+  tmpNodes.del db.root.selfKey
+
+  # Build partial tree
+  let stopPairs = db.stops.pairs.toSeq              # table is to be modified
+  for (stopKey,stopNode) in stopPairs:
+    # Try to resolve the stop node on a `node` table entry
+    tmpNodes.withValue(stopKey, node):
+      let parent = stopNode.parent
+      BranchNodeRef(parent).brLinks[stopNode.inx] = node[]
+      db.stops.del stopKey
+
+  # Label path prefixes and join Extensions
+  db.root.updateProofTree(NibblesBuf())
+  db
+
+proc init*(
+    T: type NodeTrieRef;
+    root: Hash32;
+    keyBytes = 32;
+      ): T =
+  ## Shortcut for `NodeTrieRef.init(root,@[],keyBytes)`
+  NodeTrieRef.init(root,seq[seq[byte]].default,keyBytes)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -502,6 +599,24 @@ proc merge*(db: NodeTrieRef, sto: StorageItem): bool =
     leaf.lfPayload = sto.slotData
   true
 
+proc merge*(db: NodeTrieRef, key: openArray[byte], pyl: openArray[byte]): bool =
+  ## Variant of `merge()` for generic `key` and `payload` leaf argument for
+  ## a generic trie which was initialised via `NodeTrieRef.init(root)`
+  ## without proof data.
+  ##
+  ## This function is provided mainly for testing.
+  ##
+  if db.root.kind == Stop:
+    let tree = StopNodeRef(db.root)
+    if 2*key.len + tree.path.len == 64:
+      let
+        pfx = NibblesBuf.fromBytes(key)
+        leaf = tree.mergeSubTree(pfx).valueOr:
+          return false
+
+      leaf.lfPayload = @pyl
+      return true
+  # false
 
 proc finalise*(db: NodeTrieRef): uint =
   ## Finalise an MPT.
@@ -557,7 +672,16 @@ proc validate*[T: SnapAccount|StorageItem](
   elif root is StoreRoot and T isnot StorageItem:
     {.error: "Leafs item must be of type StorageItem for root type StoreRoot".}
 
-  let db = NodeTrieRef.init(root, start, proof)
+  var limit = ffffHash
+  if 0 < leafs.len:
+    when T is SnapAccount:
+      limit = leafs[^1].accHash
+    elif T is StorageItem:
+      limit = leafs[^1].slotHash
+    else:
+      {.error: "Unexpedted type for leafs[]".}      # `T` type was extended?
+
+  let db = NodeTrieRef.init(root, start, proof, limit)
   if not db.isNil:
     for leaf in leafs:
       if not db.merge(leaf):

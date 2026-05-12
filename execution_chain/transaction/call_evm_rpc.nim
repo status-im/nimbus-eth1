@@ -43,8 +43,9 @@ proc rpcCallEvm*(
   defer:
     txFrame.dispose() # always dispose state changes
 
-  let vmState = BaseVMState.new(header, topHeader, com, txFrame)
-  let params = ?toCallParams(vmState, args, globalGasCap, header.baseFeePerGas)
+  let
+    vmState = BaseVMState.new(header, topHeader, com, txFrame)
+    params = ?toCallParams(vmState, args, globalGasCap, header)
 
   ok(runComputation(params, CallResult))
 
@@ -52,7 +53,8 @@ proc rpcCallEvm*(
     args: TransactionArgs, header: Header, vmState: BaseVMState, globalGasCap = 0.GasInt
 ): EvmResult[CallResult] =
   # TODO: globalGasCap should configurable by user
-  let params = ?toCallParams(vmState, args, globalGasCap, header.baseFeePerGas)
+  let
+    params = ?toCallParams(vmState, args, globalGasCap, header)
   ok(runComputation(params, CallResult))
 
 proc rpcEstimateGas*(
@@ -60,7 +62,7 @@ proc rpcEstimateGas*(
 ): Result[GasInt, (EvmErrorObj, OutputResult)] =
   # Binary search the gas requirement, as it may be higher than the amount used
   let fork = vmState.fork
-  var params = toCallParams(vmState, args, gasCap, header.baseFeePerGas).valueOr:
+  var params = toCallParams(vmState, args, gasCap, header).valueOr:
     return err((evmErr(EvmInvalidParam), OutputResult()))
 
   var

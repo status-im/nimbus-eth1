@@ -63,7 +63,7 @@ suite "Stateless: Witness Verification":
     let witnessKeys = ledger.getWitnessKeys()
     check witnessKeys.len() == 8
 
-    var witness = Witness.build(witnessKeys, ledger)
+    var witness = Witness.build(witnessKeys, @[], ledger)
     witness.addHeaderHash(header1.computeRlpHash())
     witness.addHeaderHash(header2.computeRlpHash())
     witness.addHeaderHash(header3.computeRlpHash())
