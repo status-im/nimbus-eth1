@@ -31,15 +31,18 @@ type
   ConcurrentQueue*[E: static int, T] = object
     head {.align: CACHE_LINE_SIZE.}: Atomic[uint32]
     cachedTail: uint32
+    waitingPop: Atomic[bool]
+
     tail {.align: CACHE_LINE_SIZE.}: Atomic[uint32]
     cachedHead: uint32
+    waitingPush: Atomic[bool]
+
     lock {.align: CACHE_LINE_SIZE.}: Lock
     condFull: Cond
     condEmpty: Cond
-    waitingPush: Atomic[bool]
-    waitingPop: Atomic[bool]
-    data {.align: CACHE_LINE_SIZE.}: array[1 shl E, T]
     state: State
+
+    data {.align: CACHE_LINE_SIZE.}: array[1 shl E, T]  
  
 func init*[E, T](q: var ConcurrentQueue[E, T]) =
   static:
