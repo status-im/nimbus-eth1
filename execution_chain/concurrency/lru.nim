@@ -593,14 +593,13 @@ proc init*[K, V, SHARD_BITS](
 
 proc dispose*[K, V; SHARD_BITS](lru: var ConcurrentLruCache[K, V, SHARD_BITS]) =
   # dispose is not thread safe and so the caller must ensure that no other threads
-  # are using the cache while disposing it.
-  doAssert lru.state == State.INITIALIZED
+  # are using the cache while disposing it.  
+  if lru.state == State.INITIALIZED:
+    for i in 0 ..< lru.shards.len():
+      lru.shards[i].lock.deinitLock()
+      lru.shards[i].cache.dispose()
 
-  for i in 0 ..< lru.shards.len():
-    lru.shards[i].lock.deinitLock()
-    lru.shards[i].cache.dispose()
-
-  lru.state = State.DISPOSED
+    lru.state = State.DISPOSED
 
 proc `=copy`[K, V](
     dest: var Shard[K, V], src: Shard[K, V]

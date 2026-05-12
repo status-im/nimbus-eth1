@@ -34,14 +34,13 @@ proc init*(s: var Semaphore, count: int = 0) =
   s.state = State.INITIALIZED
 
 proc dispose*(s: var Semaphore) =
-  doAssert s.state == State.INITIALIZED
-  doAssert s.waiters.load() == 0
-
-  deinitCond(s.cond)
-  deinitLock(s.lock)
-  s.count.store(0)
-  s.waiters.store(0)
-  s.state = State.DISPOSED
+  if s.state == State.INITIALIZED:
+    doAssert s.waiters.load() == 0
+    deinitCond(s.cond)
+    deinitLock(s.lock)
+    s.count.store(0)
+    s.waiters.store(0)
+    s.state = State.DISPOSED
 
 proc `=copy`*(
     dest: var Semaphore, src: Semaphore

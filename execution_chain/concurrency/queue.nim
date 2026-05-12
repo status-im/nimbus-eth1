@@ -44,7 +44,7 @@ type
 
     data {.align: CACHE_LINE_SIZE.}: array[1 shl E, T]
 
-func init*[E, T](q: var ConcurrentQueue[E, T]) =
+proc init*[E, T](q: var ConcurrentQueue[E, T]) =
   static:
     doAssert supportsCopyMem(T), "T must be a non-GC type"
     doAssert E >= 1, "queue exponent must be >= 1 (capacity >= 1)"
@@ -62,13 +62,12 @@ func init*[E, T](q: var ConcurrentQueue[E, T]) =
   q.condEmpty.initCond()
   q.state = State.INITIALIZED
 
-func dispose*[E, T](q: var ConcurrentQueue[E, T]) =
-  doAssert q.state == State.INITIALIZED
-
-  q.lock.deinitLock()
-  q.condFull.deinitCond()
-  q.condEmpty.deinitCond()
-  q.state = State.DISPOSED
+proc dispose*[E, T](q: var ConcurrentQueue[E, T]) =  
+  if q.state == State.INITIALIZED:
+    q.lock.deinitLock()
+    q.condFull.deinitCond()
+    q.condEmpty.deinitCond()
+    q.state = State.DISPOSED
 
 proc `=copy`*[E, T](
     dest: var ConcurrentQueue[E, T], src: ConcurrentQueue[E, T]
@@ -88,7 +87,7 @@ template isFull*[E, T](q: var ConcurrentQueue[E, T]): bool =
   let h = q.head.load()
   ((h + 1) and maskOf(E)) == q.tail.load()
 
-func tryPush*[E, T](q: var ConcurrentQueue[E, T], value: sink T): bool =
+proc tryPush*[E, T](q: var ConcurrentQueue[E, T], value: sink T): bool =
   const m = maskOf(E)
   let h = q.head.load()
   let next = (h + 1) and m
@@ -106,7 +105,7 @@ func tryPush*[E, T](q: var ConcurrentQueue[E, T], value: sink T): bool =
       q.condEmpty.signal()
   true
 
-func tryPop*[E, T](q: var ConcurrentQueue[E, T], value: var T): bool =
+proc tryPop*[E, T](q: var ConcurrentQueue[E, T], value: var T): bool =
   const m = maskOf(E)
   let t = q.tail.load()
 
@@ -130,7 +129,7 @@ template tryPop*[E, T](q: var ConcurrentQueue[E, T]): Opt[T] =
   else:
     Opt.none(T)
 
-func push*[E, T](q: var ConcurrentQueue[E, T], value: sink T) =
+proc push*[E, T](q: var ConcurrentQueue[E, T], value: sink T) =
   if q.tryPush(value):
     return
 
@@ -149,7 +148,7 @@ func push*[E, T](q: var ConcurrentQueue[E, T], value: sink T) =
         return
       q.condFull.wait(q.lock)
 
-func pop*[E, T](q: var ConcurrentQueue[E, T], value: var T) =
+proc pop*[E, T](q: var ConcurrentQueue[E, T], value: var T) =
   if q.tryPop(value):
     return
 
