@@ -182,8 +182,7 @@ proc deblobifyTxFrame*(
     let rvid = ?deblobify(data.toOpenArray(pos, pos + rvidLen - 1), RootedVertexID)
     pos += rvidLen
 
-    let isNil = readU8(data, pos)
-    if isNil == 0x00:
+    if readU8(data, pos) == 0x00:
       res.sTab[rvid] = nil
     else:
       let blobLen = int(readU16BE(data, pos))
@@ -204,8 +203,7 @@ proc deblobifyTxFrame*(
       return err(DeblobTxFrameTruncated)
     let h = Hash32.copyFrom(data.toOpenArray(pos, pos + 31))
     pos += 32
-    let isNil = readU8(data, pos)
-    if isNil == 0x00:
+    if readU8(data, pos) == 0x00:
       res.accLeaves[h] = nil
     else:
       let blobLen = int(readU16BE(data, pos))
@@ -224,8 +222,7 @@ proc deblobifyTxFrame*(
       return err(DeblobTxFrameTruncated)
     let h = Hash32.copyFrom(data.toOpenArray(pos, pos + 31))
     pos += 32
-    let isNil = readU8(data, pos)
-    if isNil == 0x00:
+    if readU8(data, pos) == 0x00:
       res.stoLeaves[h] = nil
     else:
       let blobLen = int(readU16BE(data, pos))
