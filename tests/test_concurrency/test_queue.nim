@@ -134,10 +134,10 @@ suite "ConcurrentQueue Tests":
   
   test "Single producer task, single consumer task, multiple threads":
     const 
-      queueExp = 2
+      queueExp = 4
       numThreads = 4
-      numItems = 10000
-
+      numItems = 1000000
+    
     let taskpool = Taskpool.new(numThreads)
     var queue: ConcurrentQueue[queueExp, int]
     queue.init()
