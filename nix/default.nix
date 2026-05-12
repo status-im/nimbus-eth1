@@ -1,7 +1,7 @@
 {
   pkgs ? import <nixpkgs> { },
-  # Source code of this repo.
-  src ? ../.,
+  # Flake source info.
+  self ? {},
   # Nimbus-build-system package.
   nim ? null,
   # Options: nimbus, nimbus_execution_client, nimbus_portal_client, nimbus_portal_bridge, nimbus_verified_proxy
@@ -18,20 +18,28 @@
   ],
 }:
 
-# The 'or' is to handle src fallback to ../. which lack submodules attribue.
-assert pkgs.lib.assertMsg ((src.submodules or true) == true)
+# The 'or' is to handle self fallback to ../. which lack submodules attribue.
+assert pkgs.lib.assertMsg ((self.submodules or true) == true)
   "Unable to build without submodules. Append '?submodules=1#' to the URI.";
 
 let
   inherit (pkgs) stdenv lib writeScriptBin callPackage;
   inherit (lib) substring optionals optionalString makeLibraryPath;
 
-  revision = substring 0 8 (src.rev or src.dirtyRev or "00000000");
+  revision = substring 0 8 (self.rev or self.dirtyRev or "00000000");
 in stdenv.mkDerivation rec {
   pname = "nimbus-eth1";
   version = "${callPackage ./version.nix {}}-${revision}";
 
-  inherit src;
+  src = lib.fileset.toSource {
+    root = ./..;
+    fileset = lib.fileset.unions [
+      ./../Makefile ./../nimbus.nimble ./../config.nims
+      ./../execution_chain ./../nimbus_verified_proxy
+      ./../portal ./../hive_integration
+      ./../vendor ./../scripts ./../tools
+    ];
+  };
 
   enableParallelBuilding = false;
 
@@ -102,7 +110,13 @@ in stdenv.mkDerivation rec {
 
   doInstallCheck = true;
   installCheckPhase = ''
-    for BINARY in $out/bin/*; do $BINARY --version; done
+    for BINARY in $out/bin/*; do
+      case "$(basename "$BINARY")" in
+        # No support for --version.
+        portal_bridge) $BINARY --help > /dev/null 2>&1;;
+        *)             $BINARY --version ;;
+      esac
+    done
   '';
 
   meta = with lib; {
