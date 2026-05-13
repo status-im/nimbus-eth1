@@ -97,9 +97,9 @@ proc init*(rdb: var RdbInst, opts: DbOptions, baseDb: RocksDbInstanceRef) =
   rdb.rdBranchSize =
     opts.rdbBranchCacheSize div (sizeof(typeof(rdb.rdBranchLru).V) + lruOverhead)
 
-  rdb.rdKeyLru = typeof(rdb.rdKeyLru).init(rdb.rdKeySize)
-  rdb.rdVtxLru = typeof(rdb.rdVtxLru).init(rdb.rdVtxSize)
-  rdb.rdBranchLru = typeof(rdb.rdBranchLru).init(rdb.rdBranchSize)
+  rdb.rdKeyLru.init(rdb.rdKeySize)
+  rdb.rdVtxLru.init(rdb.rdVtxSize)
+  rdb.rdBranchLru.init(rdb.rdBranchSize)
   rdb.rdbPrintStats =  opts.rdbPrintStats
 
   rdb.vtxCol = baseDb.db.getColFamily($VtxCF).valueOr:
@@ -107,6 +107,13 @@ proc init*(rdb: var RdbInst, opts: DbOptions, baseDb: RocksDbInstanceRef) =
 
 proc close*(rdb: var RdbInst, wipe: bool) =
   ## Destructor
+  rdb.rdKeyLru.dispose()
+  rdb.rdVtxLru.dispose()
+  rdb.rdBranchLru.dispose()
+  rdb.rdKeyLru.reset()
+  rdb.rdVtxLru.reset()
+  rdb.rdBranchLru.reset()
+
   let
     ks = rdb.rdKeySize
     vs = rdb.rdVtxSize

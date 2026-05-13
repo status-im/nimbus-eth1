@@ -16,12 +16,13 @@
 import
   std/concurrency/atomics,
   stew/endians2,
+  ../../../../concurrency/lru,
   ../../../core_db/backend/rocksdb_desc,
   ../../[aristo_blobify, aristo_desc],
-  ../init_common,
-  minilru
+  ../init_common
 
-export minilru, rocksdb_desc
+
+export lru, rocksdb_desc
 
 const AdmKey* = default(seq[byte])
 
@@ -54,13 +55,13 @@ type
     # is less memory and time efficient (the latter one due to internal LRU
     # handling of the longer key.)
     #
-    rdKeyLru*: LruCache[VertexID,HashKey] ## Read cache
+    rdKeyLru*: ConcurrentLruCache[VertexID,HashKey] ## Read cache
     rdKeySize*: int
 
-    rdVtxLru*: LruCache[VertexID,VertexBuf] ## Read cache
+    rdVtxLru*: ConcurrentLruCache[VertexID,VertexBuf] ## Read cache
     rdVtxSize*: int
 
-    rdBranchLru*: LruCache[VertexID, (VertexID, uint16)]
+    rdBranchLru*: ConcurrentLruCache[VertexID, (VertexID, uint16)]
     rdBranchSize*: int
 
     rdbPrintStats*: bool               ## Print statistics on closure

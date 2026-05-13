@@ -90,8 +90,8 @@ proc initInstance*(
   when compileOption("threads"):
     db.txRef.lock.init()
 
-  db.accLeaves = LruCache[Hash32, CachedAccLeaf].init(ACC_LRU_SIZE)
-  db.stoLeaves = LruCache[Hash32, CachedStoLeaf].init(ACC_LRU_SIZE)
+  db.accLeaves.init(ACC_LRU_SIZE)
+  db.stoLeaves.init(ACC_LRU_SIZE)
   db.maxSnapshots = maxSnapshots
   db.parallelStateRootComputation = parallelStateRootComputation
   
@@ -108,6 +108,11 @@ proc close*(db: AristoDbRef; wipe = false) =
   ##
   ## This distructor may be used on already *destructed* descriptors.
   ##
+  db.accLeaves.dispose()
+  db.stoLeaves.dispose()
+  db.accLeaves.reset()
+  db.stoLeaves.reset()
+
   db.closeFn wipe
 
 # ------------------------------------------------------------------------------

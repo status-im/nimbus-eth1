@@ -25,7 +25,7 @@ import
   std/[hashes, sequtils, sets, tables, heapqueue],
   eth/common/hashes, eth/trie/nibbles,
   results,
-  minilru,
+  ../../concurrency/lru,
   ./aristo_constants,
   ./aristo_desc/[desc_error, desc_identifiers, desc_structural],
   ./aristo_desc/desc_backend
@@ -37,7 +37,7 @@ when compileOption("threads"):
 # Not auto-exporting backend
 export
   tables, aristo_constants, desc_error, desc_identifiers, nibbles,
-  desc_structural, minilru, hashes, heapqueue, PutHdlRef
+  desc_structural, lru, hashes, heapqueue, PutHdlRef
 
 type
   AristoTxRef* = ref object
@@ -129,7 +129,7 @@ type
 
     txRef*: AristoTxRef              ## Bottom-most in-memory frame
 
-    accLeaves*: LruCache[Hash32, CachedAccLeaf]
+    accLeaves*: ConcurrentLruCache[Hash32, CachedAccLeaf]
       ## Account path to payload cache - accounts are frequently accessed by
       ## account path when contracts interact with them - this cache ensures
       ## that we don't have to re-traverse the storage trie for every such
@@ -137,7 +137,7 @@ type
       ## TODO a better solution would probably be to cache this in a type
       ## exposed to the high-level API
 
-    stoLeaves*: LruCache[Hash32, CachedStoLeaf]
+    stoLeaves*: ConcurrentLruCache[Hash32, CachedStoLeaf]
       ## Mixed account/storage path to payload cache - same as above but caches
       ## the full lookup of storage slots
 
