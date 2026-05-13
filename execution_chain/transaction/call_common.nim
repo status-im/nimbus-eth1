@@ -227,30 +227,6 @@ proc prepareToRunComputation(c: Computation, call: CallParams) =
         vmState.balTracker.trackSubBalanceChange(call.sender, blobFee)
       ledger.subBalance(call.sender, blobFee)
 
-proc calcSelfDestructRefundStateGas(c: Computation, call: CallParams, currentTarget: Address): GasInt =
-  let
-    ledger = c.vmState.ledger
-
-  var
-    stateGasRefund = 0.GasInt
-    nonAccountRefundSum = 0
-
-  for refund in newlyCreatedSelfDestructRefund(ledger):
-    let
-      nonAccountRefund = STATE_GAS_STORAGE_SET * refund.createdSlots +
-                           COST_PER_STATE_BYTE * refund.codeLen
-      txCreatedTarget = call.isCreate and refund.address == currentTarget
-
-    if txCreatedTarget:
-      stateGasRefund += CREATE_ACCOUNT_STATE_GAS
-    else:
-      nonAccountRefundSum += CREATE_ACCOUNT_STATE_GAS
-
-    nonAccountRefundSum += nonAccountRefund
-
-  c.gasMeter.selfDestructRefundStateGas(nonAccountRefundSum.GasInt)
-  stateGasRefund
-
 proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: int64): GasUsed =
   let
     vmState = c.vmState
@@ -266,10 +242,7 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: 
     c.gasMeter.burnGas()
 
   if c.fork >= FkAmsterdam:
-    if c.isSuccess:
-      # https://github.com/ethereum/execution-specs/pull/2707/changes
-      stateGasRefund += c.calcSelfDestructRefundStateGas(call, c.msg.contractAddress)
-    else:
+    if c.isError:
       # https://github.com/ethereum/execution-specs/pull/2689/changes
       c.gasMeter.returnAllStateGas()
       # https://github.com/ethereum/execution-specs/commit/eb80b438a39d188fddf372ef5632123ca3ee238e
