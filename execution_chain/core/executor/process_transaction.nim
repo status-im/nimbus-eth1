@@ -159,7 +159,6 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32) =
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
       gasLimit : 30_000_000.GasInt,
-      gasPrice : 0.GasInt,
       to       : BEACON_ROOTS_ADDRESS,
       input    : @(beaconRoot.data),
     )
@@ -175,7 +174,6 @@ proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32) =
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
       gasLimit : 30_000_000.GasInt,
-      gasPrice : 0.GasInt,
       to       : HISTORY_STORAGE_ADDRESS,
       input    : @(prevHash.data),
     )
@@ -191,7 +189,6 @@ proc processDequeueWithdrawalRequests*(vmState: BaseVMState): Result[seq[byte], 
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
       gasLimit : 30_000_000.GasInt,
-      gasPrice : 0.GasInt,
       to       : WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
     )
 
@@ -208,7 +205,6 @@ proc processDequeueConsolidationRequests*(vmState: BaseVMState): Result[seq[byte
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
       gasLimit : 30_000_000.GasInt,
-      gasPrice : 0.GasInt,
       to       : CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
     )
 
