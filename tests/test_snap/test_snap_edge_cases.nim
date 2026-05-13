@@ -12,9 +12,8 @@
 
 import
   std/sequtils,
-  pkg/[eth/common, eth/trie/nibbles, stew/byteutils],
-  pkg/unittest2,
-  ../../execution_chain/sync/snap/worker/[mpt, mpt/mpt_debug, worker_desc]
+  pkg/[eth/common, eth/trie/nibbles, stew/byteutils, unittest2],
+  ../../execution_chain/sync/snap/worker/[mpt, worker_desc]
 
 ## Check for some pathological cases
 func x(s: string): seq[byte] =

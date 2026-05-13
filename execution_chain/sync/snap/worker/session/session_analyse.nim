@@ -8,60 +8,28 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+## Non-recursively implemented session analyser
+## ============================================
+##
+## This method keeps the system responsive while running by allowing
+## `async` pseudo-thread switching.
+##
+
 {.push raises:[].}
 
 import
-  std/[tables, typetraits],
+  std/tables, # typetraits],
   pkg/[chronicles, chronos, eth/common],
-  ../[mpt, worker_desc]
+  ../[mpt, worker_desc],
+  ./session_analyse_desc
+
+export
+  AttType
 
 logScope:
   topics = "snap sync"
 
 type
-  AttType* = enum
-    ## Something to pay attantion, to.
-    Dangling = 1                                    # w/parent key and node
-    Leaf                                            # with key and payload
-
-    ERlpExcept                                      # rlp exception error
-    ERlpList                                        # no list with 2 or 17 items
-    ENoRoot                                         # dangling root key
-    ENoBranch                                       # missing branches
-    ENoPivot                                        # no pivot state
-    ECancelled                                      # shutdown?
-    EGeneric                                        # any other error
-
-  TravNotifyCB* = proc(
-    att: AttType, path: NibblesBuf, key, data: seq[byte], depth: int
-      ) {.gcsafe, raises: [].}
-    ## Closure function used as call back when analysing an MPT. This
-    ## function is involved whenever there is something *interesting*
-    ## found (e.g. dangling link, leaf node.)
-
-  # ----------------
-
-  WalkTrieGetCB = proc(
-    db: MptAsmRef, key: seq[byte]
-      ): seq[byte] {.gcsafe, raises: [].}
-
-  WalkStatsRef = ref WalkStatsObj
-  WalkStatsObj = object                             # MPT traversal statistics
-    accDepth: int                                   # accounts MPT depth max
-    nAccDangl: uint                                 # accounts MPT dangling link
-    nAccLeaf: uint                                  # accounts visited
-    nAccSto: uint                                   # valid storage roots
-    nAccCode: uint                                  # valid code hashes
-
-    stoDepth: int                                   # stprage MPT depth max
-    nStoDangl: uint                                 # storage MPT dangling link
-    nStoLeaf: uint                                  # storage slots visited
-
-    nErr: uint                                      # accumulated error count
-    ela: Duration                                   # total time spent analysing
-    msgAt: Moment                                   # for logging
-    spill: Duration                                 # thred switch elapsed time
-
   WalkParent = tuple
     path: NibblesBuf                                # parent path
     key: seq[byte]                                  # parent key
@@ -112,36 +80,22 @@ template push(st: WalkStack, item: WalkState) =
 
 # ------------------
 
-func decodeAccount(pyl: seq[byte]): Opt[Account] =
-  try:
-    var acc = rlp.decode(pyl, Account)
-    return ok(move acc)
-  except RlpError:
-    discard
-  err()
-
-proc findPivot(db: MptAsmRef): Opt[WalkStateData] =
-  for state in db.walkStateData():
-    if state.error.len == 0 and state.tag == PivotOnTrie:
-      return ok state
-  err()
-
-template toKey(rlp: Rlp): seq[byte] =
-  ## Convert to hask key or node data if it is a list (=> length smaller 32)
-  if rlp.isList: @(rlp.rawData) else: rlp.toBytes
-
-template walkTrieTicker(
-    ctx: SnapCtxRef;
-    napAt: Moment;
-    spill: Duration;
+template runErrand(
+    trd: TravDescRef;
     info: static[string];
+    code: untyped;
       ): auto =
   ## Async template, helper template
   ##
   var bodyRc = Opt[void].ok()
   block body:
     let start = Moment.now()
-    if napAt < start:
+
+    if trd.msgAt < start:
+      code
+      trd.msgAt = Moment.now() + threadLogTimeLimit
+
+    if trd.napAt < start:
       try:
         await sleepAsync threadSwitchTimeSlot
       except CancelledError as e:
@@ -149,15 +103,16 @@ template walkTrieTicker(
           error=($e.name & "(" & e.msg & ")")
         bodyRc = typeof(bodyRc).err()
         break body
+
       # Check for scheduler shutdown after thread switch
-      if not ctx.daemon:
+      if not trd.ctx.daemon:
         chronicles.error info & ": Daemon session terminated"
         bodyRc = typeof(bodyRc).err()
         break body
-      let now = Moment.now()
-      napAt = now + threadSwitchRunLimit            # next thread switch time
-      spill += now - start
-      # End  `block body`
+      trd.napAt = Moment.now() + threadSwitchRunLimit # next thread switch time
+
+    # End  `block body`
+
   bodyRc
 
 # ------------------------------------------------------------------------------
@@ -165,27 +120,20 @@ template walkTrieTicker(
 # ------------------------------------------------------------------------------
 
 template traverseMpt(
-    db: MptAsmRef;
-    root: seq[byte];                                # root key
+    trd: TravDescRef;                               # traversal descriptor
+    root: Hash32;                                   # root key
     get: WalkTrieGetCB;                             # fetch function
-    notify: TravNotifyCB;                           # tell node position
-    ctx: SnapCtxRef;                                # not `nil` or no `info`
-    info: static[string];                           # unset => ignore `ctx`
+    notify: untyped;                                # tell node position
+    info: static[string];                           # unset => no thread switch
+    code: untyped;                                  # e.g. logging
       ): auto =
   ## Async template
   ##
-  ## Iteratively walk trie, depth first. Returns the time spent when
-  ## switching threads
+  ## Iteratively walk trie, depth first.
   ##
-  var bodyRc = Result[Duration,AttType].err(EGeneric)
+  var bodyRc = Result[void,AttType].err(EOtherError)
   block body:
-    var
-      stack = WalkStack.init root                   # stack avoids recursion
-      spill: Duration                               # time spent somewhere else
-
-    # Helper setting to allow thread switch when enabled
-    when 0 < info.len:
-      var napAt = Moment.now()+threadSwitchRunLimit # allow thread switch below
+    var stack = WalkStack.init @(root.data)         # stack avoids recursion
 
     while 0 < stack.len:
       var
@@ -209,27 +157,28 @@ template traverseMpt(
         depth = stack.len - 2                       # info for call backs
         path = parent.path & links[inx].pfx         # path from stack
         key = links[inx].key                        # key from stack
-        node = get(db, key)                         # node from DB
+        node = get(trd.db, key)                     # node from DB
 
         if node.len == 0:                           # dangling link?
           if parent.node.len == 0:                  # fail to resolve `root`?
-            doAssert key == root
-            notify(ENoRoot, NibblesBuf(), root, EmptyBlob, depth)
+            doAssert key == @(root.data)
+            notify(ENoRoot, trd, EmptyPath, key, EmptyBlob, depth, info)
             bodyRc = typeof(bodyRc).err(ENoRoot)    # => missing root, error
             break body
-          notify(Dangling, path, parent.key, parent.node, depth)
+          notify(AttDangling, trd, path, parent.key, parent.node, depth, info)
           continue
 
         # Allow thread switch when enabled
         when 0 < info.len:
-          walkTrieTicker(ctx, napAt, spill, info).isOkOr:
-            notify(ECancelled, path, parent.key, parent.node, depth)
+          runErrand(trd, info, code).isOkOr:
+            notify(ECancelled, trd, path, parent.key, parent.node, depth, info)
             bodyRc = typeof(bodyRc).err(ECancelled) # => cancel, error
             break body
 
         # Stub to be completed, below
         newTop.last = -1
         newTop.parent = (path, key, node)
+        trd.stats.nNodes.inc                        # statistics collector
         # End `block hideSomeSettings`
 
       # Evaluate node and calculate next links
@@ -241,7 +190,8 @@ template traverseMpt(
           var pyl = rlp.listElem(1)                 # Rlp type, payload or link
 
           if isLeaf:                                # notify about leaf
-            notify(Leaf, path & pfx, key, pyl.read seq[byte], depth+1)
+            let data = pyl.read seq[byte]
+            notify(AttLeaf, trd, path & pfx, key, data, depth+1, info)
             continue
 
           # Initialse `link[]` data on `newTop` and push on stack
@@ -259,18 +209,18 @@ template traverseMpt(
 
           # Push on stack (or error)
           if nLnk == 0:
-            notify(ENoBranch, path, key, node, depth)
+            notify(ENoBranch, trd, path, key, node, depth, info)
           else:
             stack.push newTop
 
         else:
-          notify(ERlpList, path, key, node, depth)
+          notify(ERlpList, trd, path, key, node, depth, info)
 
       except RlpError:
-        notify(ERlpExcept, path, key, node, depth)
+        notify(ERlpExcept, trd, path, key, node, depth, info)
+      # End `while()`
 
-      bodyRc = typeof(bodyRc).ok(spill)
-      # End while
+    bodyRc = typeof(bodyRc).ok()
 
   bodyRc                                            # return code
 
@@ -278,73 +228,92 @@ template traverseMpt(
 # Private functions, traversal notifier functions
 # ------------------------------------------------------------------------------
 
-proc accountsNotifier(info: static[string]): (TravNotifyCB, WalkStatsRef) =
-  let
-    stats = WalkStatsRef(msgAt: Moment.now() + threadLogTimeLimit)
-    notify = proc(
-      att: AttType, path: NibblesBuf, key, data: seq[byte], depth: int) =
-        if stats.accDepth < depth:
-          stats.accDepth = depth
-
-        case att:
-        of Leaf:
-          stats.nAccLeaf.inc
-          block forAccount:
-            let acc = data.decodeAccount().valueOr:
-              stats.nErr.inc
-              break forAccount
-            if acc.storageRoot != EMPTY_ROOT_HASH:
-              stats.nAccSto.inc
-            if acc.codeHash != EMPTY_CODE_HASH:
-              stats.nAccCode.inc
-
-        of Dangling:
-          stats.nAccDangl.inc
-
-        else:
-          stats.nErr.inc
-
-        if stats.msgAt < Moment.now():
-          trace info & ": traversing accounts..", nDangl=stats.nAccDangl,
-            nAccount=stats.nAccLeaf, nStorage=stats.nAccSto,
-            nCode=stats.nAccCode, nErr=stats.nErr, depthMax=stats.accDepth
-          stats.msgAt = Moment.now() + threadLogTimeLimit
-
-  (notify, stats)
-
-# ------------------------------------------------------------------------------
-# Private functions, MPT analysers
-# ------------------------------------------------------------------------------
-
-template analyseAccountsTrie(
-    ctx: SnapCtxRef;
+template stoNotify(
+    att: static[AttType];
+    trd: TravDescRef;
+    path: NibblesBuf;
+    key: seq[byte];
+    data: seq[byte];
+    depth: int;
     info: static[string];
-      ): auto =
-  ## Async template
-  ##
-  ## Variant of `analyse()` running on the snap accounts table.
-  ##
-  var bodyRc = Result[WalkStatsRef,AttType].err(EGeneric)
+      ) =
   block body:
-    let
-      db = ctx.pool.mptAsm
-      pivot = db.findPivot().valueOr:
-        debug info & ": accounts MPT traversal pivot missing"
-        bodyRc = typeof(bodyRc).err(ENoPivot)       # => missing pivot, error
+    template stats(): auto = trd.stats
+
+    if stats.nStoDepth < depth:
+      stats.nStoDepth = depth
+
+    when att == AttLeaf:
+      stats.nStoLeaf.inc
+
+    elif att == AttDangling:
+      stats.nStoDangl.inc
+
+    elif att == ENoRoot:
+      stats.nStoMissing.inc
+
+    else:
+      stats.nStoErr.inc
+
+template accNotify(
+    att: static[AttType];
+    trd: TravDescRef;
+    path: NibblesBuf;
+    key: seq[byte];
+    data: seq[byte];
+    depth: int;
+    info: static[string];
+      ) =
+  block body:
+    template stats(): auto = trd.stats
+
+    stats.nAccNodes += stats.nNodes                 # collect account stats
+    stats.nNodes = 0
+
+    if stats.nAccDepth < depth:
+      stats.nAccDepth = depth
+
+    when att == AttLeaf:
+      stats.nAccLeaf.inc
+
+      let acc = data.decodeAccount().valueOr:
+        stats.nAccErr.inc
         break body
-      (notify, stats) = accountsNotifier(info)
 
-      start = Moment.now()
-      spill = traverseMpt(
-        db, @(pivot.root.Hash32.data), getAccTrie, notify, ctx, info).valueOr:
-          bodyRc = typeof(bodyRc).err(error)
-          break body
+      if acc.storageRoot != EMPTY_ROOT_HASH:
+        stats.nAccSto.inc
 
-    stats.spill = spill
-    stats.ela = (Moment.now() - start) - spill
-    bodyRc = typeof(bodyRc).ok(stats)               # => ok, statistics
+        # Analyse MPT for storage slots
+        let
+          start = Moment.now()
+          rc = traverseMpt(trd, acc.storageRoot, getStoTrie, stoNotify, info):
+            traversingStorageMsg(stats, info)
 
-  bodyRc                                            # return code
+        if rc.isErr and rc.error != ENoRoot:
+          debug info & ": failed traversing storage slots",
+            root=acc.storageRoot.toStr, nErr=stats.nStoErr, `error`=rc.error
+
+        stats.nStoNodes += stats.nNodes           # collect storage stats
+        stats.nNodes = 0
+        stats.stoEla += (Moment.now() - start)
+
+      if acc.codeHash != EMPTY_CODE_HASH:
+        stats.nAccCode.inc
+
+        # Check whether the code has an entry on the codes list
+        if trd.db.getCodeList(acc.codeHash).len == 0:
+          stats.nCodeMissing.inc
+
+        occasionalMsg(trd.msgAt):
+          traversingCodeMsg(stats, info)
+
+    elif att == AttDangling:
+      stats.nAccDangl.inc
+
+    else:
+      stats.nAccErr.inc
+
+  discard                                           # visual alignment
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -356,45 +325,43 @@ template sessionAnalyseTrie*(
       ): auto =
   ## Async template
   ##
-  ## Traverse (depth first) the accounts MPT and invoke the closure
-  ## function argument `notify` when
-  ## * a leaf node is found
-  ## * a dangling link is found
-  ## * an error is encountered
+  ## Traverse (depth first) the accounts MPT.
   ##
   var bodyRc = Opt[Duration].err()
   block body:
-    debug info & ": start traversing accounts MPT.."
+    let
+      start = Moment.now()
+      trd = TravDescRef(
+        ctx:   ctx,
+        db:    ctx.pool.mptAsm,
+        msgAt: start + threadLogTimeLimit,
+        napAt: start + threadSwitchRunLimit)
 
-    let stats = ctx.analyseAccountsTrie(info).valueOr:
-      debug info & ": failed traversing accounts MPT", `error`=error
+      pivot = trd.db.findPivot().valueOr:
+        debug info & ": MPT analysis failed, pivot missing"
+        break body
+
+      stateRoot = pivot.root.Hash32
+
+    template stats(): auto = trd.stats
+    debug info & ": start analysing MPT"
+
+    let rc = traverseMpt(trd, stateRoot, getAccTrie, accNotify, info):
+      traversingAccountsMsg(stats, info)
+
+    if rc.isErr:
+      debug info & ": failed analysing MPT", `error`=rc.error
       break body
 
-    debug info & ": done traversing accounts MPT", nDangl=stats.nAccDangl,
-      nAccount=stats.nAccLeaf, nStorage=stats.nAccSto, nCode=stats.nAccCode,
-      nErr=stats.nErr, depthMax=stats.accDepth, ela=stats.ela.toStr,
-      spill=stats.spill.toStr
+    stats.nAccNodes += stats.nNodes
+    stats.nNodes = stats.nAccNodes + stats.nStoNodes
+    stats.ela = (Moment.now() - start)
+    allDoneMsg(stats, info)
 
-    bodyRc = typeof(bodyRc).ok(stats.ela)
+    bodyRc = typeof(bodyRc).ok(stats.ela)           # done, ok
+    # End `block body`
 
   bodyRc                                            # return code
-
-proc analyseTable*(
-    tab: Table[seq[byte],seq[byte]];
-    root: Hash32;
-    notify: TravNotifyCB;
-      ) {.async: (raises: []).} =
-  ## Variant of `sessionAnalyseTrie()` for a memory table instead of a kvt
-  ## from `MptAsmRef`.
-  ##
-  ## This function is intended mainly for traversal debugging and testing.
-  ##
-  proc getFromTable(_: MptAsmRef, k: seq[byte]): seq[byte] =
-    tab.withValue(k, val):
-      return val
-    # @[]
-  discard traverseMpt(
-    MptAsmRef(nil), @(root.data), getFromTable, notify, nil, "")
 
 # ------------------------------------------------------------------------------
 # End

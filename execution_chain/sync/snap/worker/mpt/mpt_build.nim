@@ -234,7 +234,7 @@ proc findSubTree(
       let w = LeafNodeRef(node)
       if w.lfPfx != pfx:
         return err(pfx)
-      return ok((nil,NibblesBuf()))
+      return ok((nil,EmptyPath))
 
     of Stop:
       return ok((StopNodeRef(node),pfx))
@@ -495,7 +495,7 @@ proc init*(
       tmpLinks.del stopKey
 
   # Label path prefixes and join Extensions
-  db.root.updateProofTree(NibblesBuf())
+  db.root.updateProofTree(EmptyPath)
 
   # Assemble right limit
   let limit = maxPath.to(ItemKey)
@@ -561,7 +561,7 @@ proc init*(
       db.stops.del stopKey
 
   # Label path prefixes and join Extensions
-  db.root.updateProofTree(NibblesBuf())
+  db.root.updateProofTree(EmptyPath)
   db
 
 proc init*(
