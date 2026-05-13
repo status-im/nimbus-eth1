@@ -43,6 +43,7 @@ const
     "Bpo4",                 # FkBpo4
     "Bpo5",                 # FkBpo5
     "Amsterdam",            # FkAmsterdam
+    "Bogota",               # FkBogota
   ]
 
   nameToFork* = ForkToName.revTable
@@ -122,7 +123,7 @@ func getHexadecimalInt*(j: JsonNode): int64 =
 proc setupEthNode*(
     config: ExecutionClientConf, rng: var HmacDrbgContext,
     capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode =
-  let 
+  let
     keypair = getNetKeys(rng, config.netKey).tryGet()
     node = newEthereumNode(
       keypair,

@@ -110,6 +110,7 @@ template sessionResume*(
       tchInx: seq[int]                            # index list into `byTouch`
 
       status = SessionTicker.init()               # for logging/thread switch
+      intro = false                               # introductory message
 
     # Sort states, order by latest time stamp first
     byTouch.sort proc(x,y: WalkStateData): int = cmp(y.touch,x.touch)
@@ -134,11 +135,12 @@ template sessionResume*(
         sdb.addAccountArchive p.coverage.per256() # set archived coverage
         continue
 
-      if tchInx.len == 0:                         # print message once, only
+      if not intro:                               # print message once, only
         chronicles.info info & ": Resuming download session",
           nStates=status.nStates
+        intro = true
 
-      if p.onTrie:                                # ignore assembled data
+      if p.tag != Untagged:                       # ignore assembled data
         sdb.addAccountArchive p.coverage.per256() # set archived coverage
       else:
         tchInx.add n                              # collect, re-process below

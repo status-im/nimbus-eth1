@@ -25,7 +25,6 @@ type
   # Standard call parameters.
   CallParams* = object
     vmState*:      BaseVMState          # Chain, database, state, block, fork.
-    origin*:       Opt[addresses.Address] # Default origin is `sender`.
     gasPrice*:     GasInt               # Gas price for this call.
     gasLimit*:     GasInt               # Maximum gas available for this call.
     sender*:       addresses.Address    # Sender account.

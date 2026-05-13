@@ -821,6 +821,7 @@ const
     FkBpo4: ShanghaiGasFees,
     FkBpo5: ShanghaiGasFees,
     FkAmsterdam: AmsterdamGasFees,
+    FkBogota: AmsterdamGasFees,
   ]
 
 gasCosts(FkFrontier, base, BaseGasCosts)

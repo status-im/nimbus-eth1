@@ -74,22 +74,18 @@ jobs:
 
           NEC_TAR="nimbus-${OS}-${CPU}-${TAG}-$(git rev-parse --short=8 HEAD).tar.gz"
           NVP_TAR="nimbus_verified_proxy-${OS}-${CPU}-${TAG}-$(git rev-parse --short=8 HEAD).tar.gz"
-          LVP_TAR="libverifproxy-${OS}-${CPU}-${TAG}-$(git rev-parse --short=8 HEAD).tar.gz"
 
           # Pack only the relevant binaries (and their checksums) from build/
           # Add additional files (LICENSE, README, configs) if desired with extra -C args.
-          tar -czf "${NEC_TAR}" --exclude="build/nimbus_verified_proxy*" --exclude="build/libverifproxy" -C "${ARCHIVE_DIR}" .
-          tar -czf "${NVP_TAR}" --exclude="build/nimbus*" --exclude="build/librocksdb.dll" --exclude="build/libverifproxy" -C "${ARCHIVE_DIR}" .
-          tar -czf "${LVP_TAR}" -C "${ARCHIVE_DIR}" build/libverifproxy
+          tar -czf "${NEC_TAR}" --exclude="build/nimbus_verified_proxy*" -C "${ARCHIVE_DIR}" .
+          tar -czf "${NVP_TAR}" --exclude="build/nimbus*" --exclude="build/librocksdb.dll" -C "${ARCHIVE_DIR}" .
 
           # Generate sha512 for the tarballs themselves
           sha512sum "${NEC_TAR}" > "${NEC_TAR}.sha512sum"
           sha512sum "${NVP_TAR}" > "${NVP_TAR}.sha512sum"
-          sha512sum "${LVP_TAR}" > "${LVP_TAR}.sha512sum"
 
           echo "nec_tar=${NEC_TAR}" >> $GITHUB_OUTPUT
           echo "nvp_tar=${NVP_TAR}" >> $GITHUB_OUTPUT
-          echo "lvp_tar=${LVP_TAR}" >> $GITHUB_OUTPUT
 
       - name: Upload execution client tarball artefact
         uses: actions/upload-artifact@v4
@@ -117,20 +113,6 @@ jobs:
         with:
           name: ${{ matrix.os }}-${{ matrix.cpu }}-proxy-checksum
           path: ./dist/${{ steps.make_dist.outputs.nvp_tar }}.sha512sum
-          retention-days: 2
-
-      - name: Upload libverifproxy tarball artefact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.os }}-${{ matrix.cpu }}-libverifproxy
-          path: ./dist/${{ steps.make_dist.outputs.lvp_tar }}
-          retention-days: 2
-
-      - name: Upload libverifproxy checksum artefact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.os }}-${{ matrix.cpu }}-libverifproxy-checksum
-          path: ./dist/${{ steps.make_dist.outputs.lvp_tar }}.sha512sum
           retention-days: 2
 
       - name: Login to Docker Hub
@@ -228,19 +210,6 @@ jobs:
           echo '# macOS ARM64' >> release_notes.md
           cat macos-arm64-proxy-checksum/* >> release_notes.md
           echo '```' >> release_notes.md
-          echo '' >> release_notes.md
-          echo '### libverifproxy' >> release_notes.md
-          echo '' >> release_notes.md
-          echo '```' >> release_notes.md
-          echo '# Linux AMD64' >> release_notes.md
-          cat linux-amd64-libverifproxy-checksum/* >> release_notes.md
-          echo '# Linux ARM64' >> release_notes.md
-          cat linux-arm64-libverifproxy-checksum/* >> release_notes.md
-          echo '# Windows AMD64' >> release_notes.md
-          cat windows-amd64-libverifproxy-checksum/* >> release_notes.md
-          echo '# macOS ARM64' >> release_notes.md
-          cat macos-arm64-libverifproxy-checksum/* >> release_notes.md
-          echo '```' >> release_notes.md
 
       - name: Create release
         id: create_release
@@ -255,16 +224,12 @@ jobs:
           files: |
             linux-amd64-execution/*
             linux-amd64-proxy/*
-            linux-amd64-libverifproxy/*
             linux-arm64-execution/*
             linux-arm64-proxy/*
-            linux-arm64-libverifproxy/*
             windows-amd64-execution/*
             windows-amd64-proxy/*
-            windows-amd64-libverifproxy/*
             macos-arm64-execution/*
             macos-arm64-proxy/*
-            macos-arm64-libverifproxy/*
 
       - name: Delete artefacts
         uses: geekyeggo/delete-artifact@v5
@@ -273,13 +238,9 @@ jobs:
           name: |
             linux-amd64-execution
             linux-amd64-proxy
-            linux-amd64-libverifproxy
             linux-arm64-execution
             linux-arm64-proxy
-            linux-arm64-libverifproxy
             windows-amd64-execution
             windows-amd64-proxy
-            windows-amd64-libverifproxy
             macos-arm64-execution
             macos-arm64-proxy
-            macos-arm64-libverifproxy

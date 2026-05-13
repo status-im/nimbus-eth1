@@ -26,14 +26,14 @@
 ##
 ## * StateData:
 ##   + key33: <col, root>
-##   + value: <hash, number, touch, onTrie, coverage>
+##   + value: <hash, number, touch, tag, coverage>
 ##   where
 ##   + col:      `Accounts`
 ##   + root:     `StateRoot`
 ##   + hash:     `BlockHash`
 ##   + number:   `BlockNumber`
 ##   + touch:    `Moment`
-##   + onTrie:   `bool`
+##   + tag:      `StateDataTag`
 ##   * coverage: `UInt256`
 ##
 ## * Accounts:
@@ -121,11 +121,16 @@ type
     StoTrie                                         # hash -> node mapping
     CodeList                                        # hash -> code mapping
 
+  StateDataTag* = enum
+    Untagged= 0                                     # well, still a tag :)
+    OnTrie                                          # assembled and merged
+    PivotOnTrie                                     # ditto, state root here
+
   DecodedStateData* = tuple
     hash: BlockHash
     number: BlockNumber
     touch: Moment                                   # last data change
-    onTrie: bool                                    # state root also on trie
+    tag: StateDataTag                               # state root also on trie
     coverage: UInt256                               # account range coverage
 
   DecodedAccounts* = tuple
@@ -151,7 +156,7 @@ type
     hash: BlockHash
     number: BlockNumber
     touch: Moment                                   # last data change
-    onTrie: bool                                    # state root also on trie
+    tag: StateDataTag                               # how this record is used
     coverage: UInt256                               # account range coverage
     error: string
 
@@ -199,7 +204,7 @@ proc decodeStateData(data: seq[byte]): Result[DecodedStateData,string] =
     res.hash = rd.read(Hash32).to(BlockHash)
     res.number = rd.read(BlockNumber)
     res.touch = Moment.fromNow(rd.read(uint64).int64.nanoseconds)
-    res.onTrie = rd.read(bool)
+    res.tag = StateDataTag(rd.read uint8)
     res.coverage = rd.read(UInt256)
   except RlpError as e:
     return err(info & ": " & $e.name & "(" & e.msg & ")")
@@ -254,14 +259,14 @@ template encodeStateData(
     hash: BlockHash;
     number: BlockNumber;
     touch: Moment;
-    onTrie: bool;
+    tag: StateDataTag;
     coverage: UInt256;
       ): untyped =
   var wrt = initRlpList 4
   wrt.append hash.to(Hash32)
   wrt.append number
   wrt.append max(touch.epochNanoSeconds(),0).uint64
-  wrt.append onTrie
+  wrt.append tag.uint8
   wrt.append coverage
   wrt.finish()
 
@@ -717,7 +722,7 @@ proc init*(
 proc getStateData*(
     db: MptAsmRef;
     root: StateRoot;
-      ): Result[(BlockHash,BlockNumber,Moment,bool,UInt256),string] =
+      ): Result[(BlockHash,BlockNumber,Moment,StateDataTag,UInt256),string] =
   let data = db.get33(StateData, root).valueOr:
     return err(error)
   data.decodeStateData()
@@ -728,11 +733,10 @@ proc putStateData*(
     hash: BlockHash;
     number: BlockNumber;
     touch: Moment;
-    onTrie: bool;
+    tag: StateDataTag;
     coverage: UInt256;
       ): PutResult =
-  db.put33(StateData, root,
-           encodeStateData(hash, number, touch, onTrie, coverage))
+  db.put33(StateData, root, encodeStateData(hash, number, touch, tag, coverage))
 
 proc delStateData*(db: MptAsmRef; root: StateRoot): DelResult =
   db.del33(StateData, root)
@@ -745,7 +749,7 @@ iterator walkStateData*(db: MptAsmRef): WalkStateData =
         oops.error = error
         yield oops
         continue
-    yield (StateRoot(key), w.hash, w.number, w.touch, w.onTrie, w.coverage, "")
+    yield (StateRoot(key), w.hash, w.number, w.touch, w.tag, w.coverage, "")
 
 # -------------
 

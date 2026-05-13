@@ -35,15 +35,19 @@ func dist(a, b: WalkStateData): uint64 =
     a.number - b.number
 
 func maxCoverage(w: seq[WalkStateData]): WalkStateData =
-  ## Get state with maximal coverage.
-  ##
-  ## Note that `NIM 2.2.10` provides a `max()` function with generic `cmp`
-  ## argument that could be used, here. Cuurent `NIM` version is `2.2.4`.
+  ## Get state with maximal coverage, either by label (from an earlier
+  ## session) or by calculating it.
   ##
   for state in w:
-    if state.error.len == 0 and
-       result.coverage < state.coverage:
-      result = state
+    if state.error.len == 0:
+      if state.tag == PivotOnTrie:
+        return state                                # previously set, already
+      if result.coverage < state.coverage:
+        result = state
+
+proc updateCoverage(cov: ItemKeyRangeSet; start, limit: ItemKey) =
+  discard cov.merge(start, limit)                   # completed range accounting
+  metrics.set(nec_snap_merged_mpt_coverage, cov.totalRatio)
 
 # -------------------
 
@@ -203,10 +207,7 @@ template mkTrieImpl(
       bodyRc = Opt.some(ETrieError)
       break body
 
-    discard cov.merge(wAcc.start, wAcc.limit)       # completed range accounting
-
-    # Update metrics
-    metrics.set(nec_snap_merged_mpt_coverage, cov.totalRatio)
+    cov.updateCoverage(wAcc.start, wAcc.limit)      # completed range accounting
 
     # Process storage slots
     for n in 0 ..< wAcc.accounts.len:
@@ -275,16 +276,16 @@ template sessionMkTrie*(
         chronicles.info info & ": Bad state record ignored", stateInx, nStates
         continue
 
-      if p.onTrie:
-        trace info & ": State processed, already", stateInx, nStates, root
-        continue
-
       # Walk account for the current state root
       for w in adb.walkAccounts(p.root):
 
         if 0 < w.error.len:
           chronicles.info info & ": Bad accounts record ignored",
             stateInx, nStates, root, distance, error=w.error
+          continue
+
+        if p.tag != Untagged:
+          cov.updateCoverage(w.start, w.limit)      # completed range accounting
           continue
 
         # Check whether the account range was fully covered, already
@@ -299,10 +300,13 @@ template sessionMkTrie*(
             break body                              # otherwise ignore for now
         # End `for walkAccounts()`
 
-      discard adb.putStateData(                     # Register updated state
-        p.root, p.hash, p.number, p.touch, onTrie=true, p.coverage)
+      if p.tag == Untagged:                         # otherwise recovery mode
+        let tag = (if p == pivot: PivotOnTrie else: OnTrie)
+        discard adb.putStateData(                   # Register updated state
+          p.root, p.hash, p.number, p.touch, tag, p.coverage)
 
       trace info & ": Done this state", stateInx, nStates, root,
+        distance, tag=p.tag,
         covered=cov.totalRatio.pcStr, elapsed=(Moment.now() - start).toStr
       # End `for walkStateData()`
 
