@@ -105,10 +105,15 @@ proc preExecComputation(call: CallParams): int64 =
       continue
 
     # 7. Add PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST gas to the global refund counter if authority exists in the trie.
-    if ledger.accountExists(authority):
-      if vmState.fork >= FkAmsterdam:
-        gasRefund += int64(CREATE_ACCOUNT_STATE_GAS)
-      else:
+    if vmState.fork >= FkAmsterdam:
+      if ledger.accountExists(authority):
+        gasRefund += CREATE_ACCOUNT_STATE_GAS
+      if code.len > 0:
+        # https://github.com/ethereum/execution-specs/commit/a0a1ed10f32bd60d4837566aabc9ee2cd2a8b88a
+        # Existing delegation indicator: overwrite in place, no new state bytes added.
+        gasRefund += STATE_BYTES_PER_AUTH_BASE * COST_PER_STATE_BYTE
+    else:
+      if ledger.accountExists(authority):
         gasRefund += PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST
 
     # 8. Set the code of authority to be 0xef0100 || address. This is a delegation designation.
