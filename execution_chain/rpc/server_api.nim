@@ -143,36 +143,35 @@ proc getLogsForBlock*(
       txHashReady = false
 
     for log in receipt.logs:
-      if not log.match(opts.address, opts.topics):
-        inc logIndex
-        continue
+      if log.match(opts.address, opts.topics):
+        if not txHashReady:
+          # Resolve the transaction hash lazily: only matching logs need it, and
+          # all logs in the same receipt share the same transaction hash.
+          if not cacheResolved:
+            cachedHashes = chain.memoryTxHashesForBlock(blkHash)
+            cacheResolved = true
 
-      if not txHashReady:
-        if not cacheResolved:
-          cachedHashes = chain.memoryTxHashesForBlock(blkHash)
-          cacheResolved = true
+          txHash =
+            if cachedHashes.isSome and i < cachedHashes.get.len:
+              cachedHashes.get[i]
+            else:
+              let tx = chain.txByBlockHashAndIndex(blkHash, i.uint64).valueOr:
+                return Opt.none(seq[FilterLog])
+              tx.computeRlpHash
+          txHashReady = true
 
-        txHash =
-          if cachedHashes.isSome and i < cachedHashes.get.len:
-            cachedHashes.get[i]
-          else:
-            let tx = chain.txByBlockHashAndIndex(blkHash, i.uint64).valueOr:
-              return Opt.none(seq[FilterLog])
-            tx.computeRlpHash
-        txHashReady = true
-
-      resLogs.add(FilterLog(
-        removed: false,
-        logIndex: Opt.some(Quantity(logIndex)),
-        transactionIndex: Opt.some(Quantity(i)),
-        transactionHash: Opt.some(txHash),
-        blockHash: Opt.some(blkHash),
-        blockNumber: Opt.some(Quantity(header.number)),
-        blockTimestamp: Opt.some(Quantity(header.timestamp)),
-        address: log.address,
-        data: log.data,
-        topics: log.topics,
-      ))
+        resLogs.add(FilterLog(
+          removed: false,
+          logIndex: Opt.some(Quantity(logIndex)),
+          transactionIndex: Opt.some(Quantity(i)),
+          transactionHash: Opt.some(txHash),
+          blockHash: Opt.some(blkHash),
+          blockNumber: Opt.some(Quantity(header.number)),
+          blockTimestamp: Opt.some(Quantity(header.timestamp)),
+          address: log.address,
+          data: log.data,
+          topics: log.topics,
+        ))
       inc logIndex
 
   return Opt.some(resLogs)

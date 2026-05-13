@@ -87,7 +87,8 @@ proc deriveLogs*(
     for log in receipt.logs:
       if log.match(filterOptions.address, filterOptions.topics):
         if not txHashReady:
-          # TODO avoid recomputing entirely - we should have this cached somewhere
+          # Resolve the transaction hash lazily: only matching logs need it, and
+          # all logs in the same receipt share the same transaction hash.
           txHash =
             if txHashes.isSome:
               txHashes.get[i] # cached txHashes
