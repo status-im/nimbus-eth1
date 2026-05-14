@@ -24,7 +24,9 @@ import
   ./calculate_reward,
   ./executor_helpers,
   ./process_transaction,
+  stew/assign2,
   eth/common/[keys, transaction_utils],
+  minilru,
   chronicles,
   results
 
@@ -46,6 +48,17 @@ when compileOption("threads"):
       senderReady: Atomic[bool]
       fv: Flowvar[bool]
 
+  # proc getRefcount(p: pointer): int {.importc: "getRefcount".}
+
+  # template rc(x: ref): int = getRefcount(cast[pointer](x))
+
+  template borrowRef[T](dest, src: ref T) =
+    copyMem(addr dest, addr src, sizeof(pointer))
+
+  template unborrowRef[T](dest: ref T) =
+    var nilRef: T
+    copyMem(addr dest, addr nilRef, sizeof(pointer))
+
   proc recoverAndPrefetchTask(
       e: ptr PrefetchEntry, tx: ptr Transaction, ctx: ptr PrefetchCtx
   ): bool {.nimcall, gcsafe.} =
@@ -62,16 +75,42 @@ when compileOption("threads"):
     if e[].sender == default(Address):
       return
 
-    let pvm = BaseVMState.new(
-      parent = ctx[].parent,
-      blockCtx = ctx[].blockCtx,
-      com = ctx[].com,
-      txFrame = ctx[].txFrame,
-      tracer = nil,
-      storeSlotHash = false,
-      enableBalTracker = false)
-    pvm.prefetchTransaction(tx[], e[].sender)
-    
+    # Create ledger
+    let ledger = LedgerRef() 
+    ledger.code = typeof(ledger.code).init(0)
+    ledger.slots = typeof(ledger.slots).init(0)
+    ledger.blockHashes = typeof(ledger.blockHashes).init(0)
+    ledger.txFrame.borrowRef(ctx[].txFrame) # to avoid the ref count which is not thread safe
+    defer: 
+      ledger.txFrame.unborrowRef()
+    discard ledger.beginSavePoint()
+
+    # Create EVM
+    let vmState = BaseVMState()
+    vmState.com.borrowRef(ctx[].com)
+    defer: 
+      vmState.com.unborrowRef()
+    vmState.ledger = ledger
+    assign(vmState.parent, ctx[].parent)
+    assign(vmState.blockCtx, ctx[].blockCtx)
+    const txCtx = default(TxContext)
+    assign(vmState.txCtx, txCtx)
+    # vmState.flags = flags
+    vmState.fork = vmState.determineFork
+    # vmState.tracer = nil
+    # vmState.receipts.setLen(0)
+    # vmState.cumulativeGasUsed = 0
+    # vmState.blockRegularGasUsed = 0
+    # vmState.blockStateGasUsed = 0
+    vmState.gasCosts = vmState.fork.forkToSchedule
+    # vmState.blobGasUsed = 0'u64
+    # vmState.allLogs.setLen(0)
+    # vmState.gasRefunded = 0
+    # vmState.balTracker = nil
+
+    # Prefetch transaction
+    vmState.prefetchTransaction(tx[], e[].sender)
+
     true
 
   template withSenderParallel(
@@ -81,7 +120,8 @@ when compileOption("threads"):
       parent: vmState.parent,
       blockCtx: vmState.blockCtx,
       com: vmState.com,
-      txFrame: vmState.com.db.baseTxFrame())
+      txFrame: vmState.com.db.baseTxFrame()
+    )
     ctx.cancel.store(false, moRelease)
     let ctxPtr =
       if vmState.com.optimisticStatePrefetch: addr ctx

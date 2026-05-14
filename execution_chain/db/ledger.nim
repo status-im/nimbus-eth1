@@ -27,14 +27,14 @@ export
   code_bytes, core_db.computeAccPath, core_Db.computeSlotKey
 
 const
-  codeLruSize = 16*1024
+  codeLruSize* = 16*1024
     # An LRU cache of 16K items gives roughly 90% hit rate anecdotally on a
     # small range of test blocks - this number could be studied in more detail
     # Per EIP-170, a the code of a contract can be up to `MAX_CODE_SIZE` = 24kb,
     # which would cause a worst case of 386MB memory usage though in reality
     # code sizes are much smaller - it would make sense to study these numbers
     # in greater detail.
-  slotsLruSize = 16 * 1024
+  slotsLruSize* = 16 * 1024
 
 type
   WitnessKey* = tuple[
@@ -76,7 +76,7 @@ type
     cache: Table[Address, AccountRef]
       # Second-level cache for the ledger save point, which is cleared on every
       # persist
-    code: LruCache[Hash32, CodeBytesRef]
+    code*: LruCache[Hash32, CodeBytesRef]
       ## The code cache provides two main benefits:
       ##
       ## * duplicate code is shared in memory beween accounts
@@ -87,7 +87,7 @@ type
       ## when underpriced code opcodes are being run en masse - both advantages
       ## help performance broadly as well.
 
-    slots: LruCache[UInt256, Hash32]
+    slots*: LruCache[UInt256, Hash32]
       ## Because the same slots often reappear, we want to avoid writing them
       ## over and over again to the database to avoid the WAL and compation
       ## write amplification that ensues
@@ -97,7 +97,7 @@ type
       ## Used to collect the keys of all read accounts, code and storage slots.
       ## Maps a tuple of address and slot (optional) to the codeTouched flag.
 
-    blockHashes: BlockHashesCache
+    blockHashes*: BlockHashesCache
       ## Caches the block hashes fetched by the BLOCKHASH opcode in the EVM.
       ## Also used when building the execution witness to determine the
       ## block numbers fetched by the BLOCKHASH opcode for any given block.
