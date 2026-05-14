@@ -12,6 +12,7 @@ import
   eth/common/eth_types, stint,
   results,
   chronicles,
+  stew/assign2,
   ../evm/[types, state],
   ../evm/[message, precompiles, internals, interpreter_dispatch],
   ../db/ledger,
@@ -182,7 +183,7 @@ proc setupComputation(call: CallParams, gasRefund: int64, keepStack: bool): Comp
              msg.contractAddress = generateContractAddress(vmState, CallKind.Create, call.sender)
              CodeBytesRef.init(call.input)
            else:
-             msg.data = call.input
+             assign(msg.data, call.input)
              getCallCode(vmState, msg.codeAddress)
 
     computation = newComputation(vmState, keepStack, msg, code)
