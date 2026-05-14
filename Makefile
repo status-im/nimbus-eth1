@@ -89,18 +89,6 @@ PORTAL_TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(FLUFFY_TOOLS))
 
 # Namespaced variables to avoid conflicts with other makefiles
 OS_PLATFORM = $(shell $(CC) -dumpmachine)
-ifneq (, $(findstring darwin, $(OS_PLATFORM)))
-  SHAREDLIBEXT = dylib
-  STATICLIBEXT = a
-else
-ifneq (, $(findstring mingw, $(OS_PLATFORM))$(findstring cygwin, $(OS_PLATFORM))$(findstring msys, $(OS_PLATFORM)))
-  SHAREDLIBEXT = dll
-  STATICLIBEXT = lib
-else
-  SHAREDLIBEXT = so
-  STATICLIBEXT = a
-endif
-endif
 
 VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 ifneq (, $(findstring darwin, $(OS_PLATFORM)))
@@ -379,7 +367,7 @@ nimbus_verified_proxy_test: | build deps
 libverifproxy: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim c \
-		--out:$(VERIF_PROXY_OUT_PATH)/$@.$(STATICLIBEXT) \
+		--out:$(VERIF_PROXY_OUT_PATH)/$@.a \
 		$(NIM_PARAMS) \
 		nimbus_verified_proxy/library/verifproxy.nim
 	cp nimbus_verified_proxy/library/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
