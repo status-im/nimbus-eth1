@@ -358,6 +358,13 @@ type
       desc: "Compute state root in parallel using multiple threads"
       name: "debug-parallel-state-root".}: bool
 
+    optimisticStatePrefetch* {.
+      hidden
+      defaultValue: false
+      desc: "Optimistically pre-execute block transactions on background " &
+        "threads to warm DB caches"
+      name: "debug-optimistic-state-prefetch".}: bool
+
     eagerStateRootCheck* {.
       hidden
       desc: "Eagerly check state roots when syncing finalized blocks"

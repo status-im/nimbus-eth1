@@ -149,6 +149,41 @@ proc processTransaction*(
 
   res
 
+proc prefetchTransaction*(
+    vmState: BaseVMState; ## Throwaway accounts environment for prefetching
+    tx:      Transaction; ## Transaction to speculatively execute
+    sender:  Address;     ## Pre-recovered sender
+      ) =
+
+  let
+    com = vmState.com
+    fork = vmState.fork
+    regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
+    intrinsic = tx.intrinsicGas(fork, vmState.blockCtx.gasLimit)
+
+  # Regular gas is capped at TX_MAX_GAS_LIMIT per EIP-7825.
+  # State gas is not checked per-tx; block-end validation enforces
+  # max(block_regular_gas_used, block_state_gas_used) <= gas_limit.
+  if min(TX_GAS_LIMIT.GasInt, tx.gasLimit) > regularGasAvailable:
+    let want = min(TX_GAS_LIMIT.GasInt, tx.gasLimit)
+    return
+
+  # blobGasUsed will be added to vmState.blobGasUsed if the tx is ok.
+  let
+    blobGasUsed = tx.getTotalBlobGas
+    maxBlobGasPerBlock = getMaxBlobGasPerBlock(com, fork)
+  if vmState.blobGasUsed + blobGasUsed > maxBlobGasPerBlock:
+    return
+
+  validateTxBasic(com, tx, intrinsic, fork).isOkOr:
+    return
+  vmState.validateTransaction(tx, sender).isOkOr:
+    return
+
+  let savePoint = vmState.ledger.beginSavePoint()
+  discard tx.txCallEvm(sender, vmState, intrinsic)
+  vmState.ledger.rollback(savePoint)
+
 proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32) =
   ## processBeaconBlockRoot applies the EIP-4788 system call to the
   ## beacon block root contract. This method is exported to be used in tests.

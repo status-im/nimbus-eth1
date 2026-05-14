@@ -347,8 +347,9 @@ proc validateTransaction*(
     vmState: BaseVMState;
     tx:      Transaction;     ## tx to validate
     sender:  Address;         ## tx.recoverSender
+    skipNonceCheck = false
     ): Result[void, string] =
-
+    
   let
     ledger  = vmState.ledger
     baseFee = vmState.blockCtx.baseFeePerGas
@@ -384,11 +385,12 @@ proc validateTransaction*(
   if balance - gasCost < tx.value:
     return err(&"invalid tx: not enough cash to send. avail={balance}, availMinusGas={balance-gasCost}, require={tx.value}")
 
-  if tx.nonce != nonce:
-    return err(&"invalid tx: account nonce mismatch. txNonce={tx.nonce}, accNonce={nonce}")
+  if not skipNonceCheck:
+    if tx.nonce != nonce:
+      return err(&"invalid tx: account nonce mismatch. txNonce={tx.nonce}, accNonce={nonce}")
 
-  if tx.nonce == high(uint64):
-    return err(&"invalid tx: nonce at maximum")
+    if tx.nonce == high(uint64):
+      return err(&"invalid tx: nonce at maximum")
 
   # EIP-3607 Reject transactions from senders with deployed code
   # The EIP spec claims this attack never happened before

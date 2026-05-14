@@ -29,40 +29,89 @@ import
   results
 
 when compileOption("threads"):
-  import taskpools
+  import std/atomics, taskpools
 
-  template withSenderParallel(txs: openArray[Transaction], body: untyped, taskpool: Taskpool) =
-    type Entry = (Signature, Hash32, Flowvar[Address])
+  type
+    PrefetchCtx = object
+      cancel: Atomic[bool]
+      parent: Header
+      blockCtx: BlockContext
+      com: CommonRef
+      txFrame: CoreDbTxRef
 
-    proc recoverTask(e: ptr Entry): Address {.nimcall.} =
-      let pk = recover(e[][0], SkMessage(e[][1].data))
-      if pk.isOk():
-        pk[].to(Address)
-      else:
-        default(Address)
+    PrefetchEntry = object
+      sig: Signature
+      hash: Hash32
+      sender: Address
+      senderReady: Atomic[bool]
+      fv: Flowvar[bool]
 
-    var entries = newSeq[Entry](txs.len)
+  proc recoverAndPrefetchTask(
+      e: ptr PrefetchEntry, tx: ptr Transaction, ctx: ptr PrefetchCtx
+  ): bool {.nimcall, gcsafe.} =
+    let pk = recover(e[].sig, SkMessage(e[].hash.data))
+    e[].sender =
+      if pk.isOk(): pk[].to(Address)
+      else: default(Address)
+    e[].senderReady.store(true, moRelease)
 
-    # Prepare signature recovery tasks for each transaction - for simplicity,
-    # we use `default(Address)` to signal sig check failure
+    if ctx == nil:
+      return
+    if ctx[].cancel.load(moAcquire):
+      return
+    if e[].sender == default(Address):
+      return
+
+    {.cast(gcsafe).}:
+      let pvm = BaseVMState.new(
+        parent = ctx[].parent,
+        blockCtx = ctx[].blockCtx,
+        com = ctx[].com,
+        txFrame = ctx[].txFrame,
+        tracer = nil,
+        storeSlotHash = false,
+        enableBalTracker = false)
+      pvm.prefetchTransaction(tx[], e[].sender)
+    
+    true
+
+  template withSenderParallel(
+      vmState: BaseVMState, txs: openArray[Transaction], body: untyped,
+      taskpool: Taskpool) =
+    var ctx = PrefetchCtx(
+      parent: vmState.parent,
+      blockCtx: vmState.blockCtx,
+      com: vmState.com,
+      txFrame: vmState.ledger.txFrame)
+    ctx.cancel.store(false, moRelease)
+    let ctxPtr =
+      if vmState.com.optimisticStatePrefetch: addr ctx
+      else: nil
+
+    var entries = newSeq[PrefetchEntry](txs.len)
+
     for i, e in entries.mpairs():
-      e[0] = txs[i].signature().valueOr(default(Signature))
-      e[1] = txs[i].rlpHashForSigning(txs[i].isEip155)
-      let a = addr e
-      # Spawning the task here allows it to start early, while we still haven't
-      # hashed subsequent txs
-      e[2] = taskpool.spawn recoverTask(a)
+      e.sig = txs[i].signature().valueOr(default(Signature))
+      e.hash = txs[i].rlpHashForSigning(txs[i].isEip155)
+      e.senderReady.store(false, moRelease)
+      let entryPtr = addr e
+      let txPtr = unsafeAddr txs[i]
+      e.fv = taskpool.spawn recoverAndPrefetchTask(entryPtr, txPtr, ctxPtr)
 
-    for txIndex {.inject.}, e in entries.mpairs():
-      template tx(): untyped =
-        txs[txIndex]
+    try:
+      for txIndex {.inject.}, e in entries.mpairs():
+        template tx(): untyped =
+          txs[txIndex]
 
-      # Sync blocks until the sender is available from the task pool - as soon
-      # as we have it, we can process this transaction while the senders of the
-      # other transactions are being computed
-      let sender {.inject.} = sync(e[2])
+        while not e.senderReady.load(moAcquire):
+          cpuRelax()
+        let sender {.inject.} = e.sender
 
-      body
+        body
+    finally:
+      ctx.cancel.store(true, moRelease)
+      for e in entries.mitems():
+        discard sync(e.fv)
 
 template withSenderSerial(txs: openArray[Transaction], body: untyped) =
   for txIndex {.inject.}, tx {.inject.} in txs:
@@ -76,7 +125,7 @@ template withSender(vmState: BaseVMState, txs: openArray[Transaction], body: unt
     if vmState.com.taskpool == nil:
       withSenderSerial(txs, body)
     else:
-      withSenderParallel(txs, body, vmState.com.taskpool)
+      withSenderParallel(vmState, txs, body, vmState.com.taskpool)
   else:
     withSenderSerial(txs, body)
 
