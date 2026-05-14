@@ -187,6 +187,10 @@ type
     peerID: Hash
     error: string
 
+  WalkKvt* = tuple
+    key: seq[byte]
+    value: seq[byte]
+
 # ------------------------------------------------------------------------------
 # Private RLP helpers
 # ------------------------------------------------------------------------------
@@ -365,6 +369,31 @@ proc kvPair(rit: RocksIteratorRef): (seq[byte],seq[byte]) =
   rit.value(proc(w: openArray[byte]) {.gcsafe, raises: [].} = kv[1] = @w)
   rit.next()
   kv
+
+iterator colWalkKvt(
+    adb: RocksDbRef;
+    pfx: openArray[byte];
+      ): tuple[key, data: seq[byte]] =
+  ## Walk over key-value pairs of the database for keys of length 33 where
+  ## the search head is postioned at `pfx[0]`.
+  ##
+  const info = "mpt/colWalk63: "
+  block walkBody:
+    let rit = adb.openIterator().valueOr:
+      when extraTraceMessages:
+        trace info & "Open error", error
+      break walkBody
+    defer: rit.close()
+
+    let col = pfx[0]
+
+    rit.seekToKey(pfx)
+    while rit.isValid():
+      let (key,value) = rit.kvPair()
+      if 0 < key.len and col.ord.byte != key[0]:
+        break
+      if 1 < key.len:
+        yield (key[1..^1], value)
 
 iterator colWalk33(
     adb: RocksDbRef;
@@ -936,6 +965,10 @@ proc putAccTrie*(db: MptAsmRef; nodes: seq[(seq[byte],seq[byte])]): PutResult =
 proc delAccTrie*(db: MptAsmRef, key: seq[byte]): DelResult =
   db.delAtMost33(AccTrie, key)
 
+iterator walkAccTrie*(db: MptAsmRef): WalkKvt =
+  for (key,value) in db.adb.colWalkKvt @[byte AccTrie]:
+    yield (key,value)
+
 # -------------
 
 proc getStoTrie*(db: MptAsmRef; key: seq[byte]): seq[byte] =
@@ -952,6 +985,10 @@ proc putStoTrie*(db: MptAsmRef; nodes: seq[(seq[byte],seq[byte])]): PutResult =
 proc delStoTrie*(db: MptAsmRef, key: seq[byte]): DelResult =
   db.delAtMost33(StoTrie, key)
 
+iterator walkStoTrie*(db: MptAsmRef): WalkKvt =
+  for (key,value) in db.adb.colWalkKvt @[byte StoTrie]:
+    yield (key,value)
+
 # -------------
 
 proc getCodeList*(db: MptAsmRef; hash: Hash32): seq[byte] =
@@ -964,6 +1001,10 @@ proc putCodeList*(db: MptAsmRef; cdHash: CodeHash; data: CodeItem): PutResult =
 
 proc delCodeList*(db: MptAsmRef, hash: Hash32): DelResult =
   db.del33(CodeList, hash)
+
+iterator walkCodeList*(db: MptAsmRef): WalkKvt =
+  for (key,value) in db.adb.colWalkKvt @[byte CodeList]:
+    yield (key,value)
 
 # ------------------------------------------------------------------------------
 # End

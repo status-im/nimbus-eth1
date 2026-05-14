@@ -88,7 +88,7 @@ proc initInstance*(
 
   db.txRef = AristoTxRef(db: db, vTop: vTop, snapshot: Snapshot(level: Opt.some(0)))
   when compileOption("threads"):
-    db.txRef.lock = ReadWriteLock.init()
+    db.txRef.lock.init()
 
   db.accLeaves = LruCache[Hash32, CachedAccLeaf].init(ACC_LRU_SIZE)
   db.stoLeaves = LruCache[Hash32, CachedStoLeaf].init(ACC_LRU_SIZE)
