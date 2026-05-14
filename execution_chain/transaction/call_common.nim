@@ -108,7 +108,7 @@ proc preExecComputation(call: CallParams): int64 =
     if vmState.fork >= FkAmsterdam:
       if ledger.accountExists(authority):
         gasRefund += CREATE_ACCOUNT_STATE_GAS
-      if code.len > 0:
+      if auth.address == zeroAddress or ledger.getCodeHash(authority) != EMPTY_CODE_HASH:
         # https://github.com/ethereum/execution-specs/commit/a0a1ed10f32bd60d4837566aabc9ee2cd2a8b88a
         # Existing delegation indicator: overwrite in place, no new state bytes added.
         gasRefund += STATE_BYTES_PER_AUTH_BASE * COST_PER_STATE_BYTE
