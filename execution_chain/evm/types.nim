@@ -81,6 +81,7 @@ type
     keepStack*:             bool
     finalStack*:            seq[UInt256]
     balTrackerEnabled*:     bool
+    delegateTo*:            Address
 
   StatusCode* {.pure.} = enum
     None

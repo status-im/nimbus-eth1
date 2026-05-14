@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -34,21 +34,21 @@ proc generateContractAddress*(vmState: BaseVMState,
   else:
     generateSafeAddress(sender, salt, code.bytes)
 
-proc getCallCode*(vmState: BaseVMState, codeAddress: Address): CodeBytesRef =
+proc getCallCode*(vmState: BaseVMState, codeAddress: Address, trackDelegated = false): CodeBytesRef =
   let isPrecompile = getPrecompile(vmState.fork, codeAddress).isSome()
   if isPrecompile:
     return CodeBytesRef(nil)
 
+  # `codeAddress` is not BAL tracked here but in `gasCallDelegate`
+  # before check for balance. See the comment there.
+  # And delegateTo need tracking for a message call.
   if vmState.fork >= FkPrague:
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.trackAddressAccess(codeAddress)
+    if vmState.balTrackerEnabled and trackDelegated:
       let
         code = vmState.readOnlyLedger.getCode(codeAddress)
         delegateTo = parseDelegationAddress(code)
       if delegateTo.isSome():
-        vmState.balTracker.trackAddressAccess(delegateTo.get())
+        vmState.balTracker.trackAddressAccess(delegateTo.value)
     vmState.readOnlyLedger.resolveCode(codeAddress)
   else:
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.trackAddressAccess(codeAddress)
     vmState.readOnlyLedger.getCode(codeAddress)

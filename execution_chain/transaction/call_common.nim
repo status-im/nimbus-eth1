@@ -188,7 +188,7 @@ proc setupComputation(call: CallParams, gasRefund: int64, keepStack: bool): Comp
              CodeBytesRef.init(call.input)
            else:
              msg.data = call.input
-             getCallCode(vmState, msg.codeAddress)
+             getCallCode(vmState, msg.codeAddress, true)
 
     computation = newComputation(vmState, keepStack, msg, code)
 
