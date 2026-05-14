@@ -56,5 +56,16 @@
           inherit (nimbusBuildSystem.packages.${system}) nim;
         };
       });
+
+      nixosModules = rec {
+        execution-client = import ./nix/services/execution-client.nix { inherit (self) packages; };
+        default = execution-client;
+      };
+
+      checks = forAllSystems (system: let
+        inherit (nixpkgs.legacyPackages.${system}) callPackage;
+      in {
+        execution-client = callPackage ./nix/services/checks/execution-client.nix { inherit self; };
+      });
     };
 }
