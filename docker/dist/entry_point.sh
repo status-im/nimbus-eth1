@@ -137,10 +137,6 @@ elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
   DSYMUTIL="aarch64-apple-darwin${DARWIN_VER}-dsymutil"
   ${CXX} --version
 
-  mkdir -p /tmp/nim-tools
-  ln -sf "/osxcross/bin/aarch64-apple-darwin${DARWIN_VER}-ar" /tmp/nim-tools/llvm-ar
-  export PATH="/tmp/nim-tools:${PATH}"
-
   copy_rocksdb
 
   make -j$(nproc) init
@@ -175,7 +171,17 @@ elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
     USE_VENDORED_LIBUNWIND=1 \
     USE_CACHED_ROCKSDB=1 \
     NIMFLAGS="${NIMFLAGS_COMMON} --os:macosx --cpu:arm64 --passC:'-mcpu=apple-a14' --passL:-mcpu=apple-a14 --passL:-static-libstdc++ --clang.exe=${CC} --clang.linkerexe=${CXX}" \
-    ${BINARIES}
+    nimbus nimbus_verified_proxy
+
+  make \
+    -j1 \
+    LOG_LEVEL="TRACE" \
+    CC="${CC}" \
+    AR="${AR}" \
+    RANLIB="${RANLIB}" \
+    USE_CACHED_ROCKSDB=1 \
+    NIMFLAGS="${NIMFLAGS_COMMON} --cc:gcc --os:macosx --cpu:arm64 --passC:'-mcpu=apple-a14' --passL:-mcpu=apple-a14 --passL:-static-libstdc++ --gcc.exe=${CC} --gcc.linkerexe=${CXX}" \
+    libverifproxy
 
 else # linux_amd64
   g++ --version
