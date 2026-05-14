@@ -18,7 +18,7 @@ if [[ -z "${1}" ]]; then
 fi
 
 PLATFORM="${1}"
-BINARIES="nimbus nimbus_verified_proxy"
+BINARIES="nimbus nimbus_verified_proxy libverifproxy"
 ROCKSDB_DIR=/usr/rocksdb
 
 echo -e "\nPLATFORM=${PLATFORM}"
@@ -170,7 +170,7 @@ elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
     FORCE_DSYMUTIL=1 \
     USE_VENDORED_LIBUNWIND=1 \
     USE_CACHED_ROCKSDB=1 \
-    NIMFLAGS="${NIMFLAGS_COMMON} --os:macosx --cpu:arm64 --passC:'-mcpu=apple-a14' --passL:-mcpu=apple-a14 --passL:-static-libstdc++ --clang.exe=${CC} --clang.linkerexe=${CXX}" \
+    NIMFLAGS="${NIMFLAGS_COMMON} --os:macosx --cpu:arm64 --passC:'-mcpu=apple-a14' --passL:-mcpu=apple-a14 --passL:-static-libstdc++ --clang.exe=${CC} --clang.linkerexe=${CXX} --ar:${AR}" \
     ${BINARIES}
 
 else # linux_amd64
@@ -214,6 +214,7 @@ if [[ "${PLATFORM}" == "windows_amd64" ]]; then
 fi
 
 for BINARY in ${BINARIES}; do
+  if [[ "${BINARY}" == "libverifproxy" ]]; then continue; fi
   cp "./build/${BINARY}${EXT}" "${DIST_PATH}/build/"
   if [[ "${PLATFORM}" =~ macOS ]]; then
     # Collect debugging info and filter out warnings.
@@ -232,6 +233,11 @@ for BINARY in ${BINARIES}; do
   sha512sum "${BINARY}${EXT}" >"${BINARY}.sha512sum"
   cd - >/dev/null
 done
+
+mkdir -p "${DIST_PATH}/build/libverifproxy"
+cp "build/libverifproxy/libverifproxy.a" "${DIST_PATH}/build/libverifproxy/"
+cp "build/libverifproxy/verifproxy.h" "${DIST_PATH}/build/libverifproxy/"
+
 sed -e "s/GIT_COMMIT/${GIT_COMMIT}/" docker/dist/README.md.tpl >"${DIST_PATH}/README.md"
 
 if [[ "${PLATFORM}" == "linux_amd64" ]]; then
