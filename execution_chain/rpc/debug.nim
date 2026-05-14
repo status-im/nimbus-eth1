@@ -13,6 +13,7 @@ import
   std/[json, times],
   json_rpc/rpcserver,
   web3/[eth_api_types, conversions],
+  ./handler_utils,
   ./rpc_utils,
   ./rpc_types,
   #../tracer,
@@ -184,25 +185,22 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
       badBlocks
 
     # https://ethereum.github.io/execution-apis/api/methods/debug_getRawBlock
-    proc debug_getRawBlock(blockTag: BlockTag): seq[byte] {.raises: [ApplicationError].} =
+    proc debug_getRawBlock(blockTag: BlockTag): seq[byte] {.raises: [ApplicationError, ValueError].} =
       ## Returns an RLP-encoded block.
-      let blockFromTag = chain.blockFromTag(blockTag).valueOr:
-        raise invalidParams(error)
+      let blockFromTag = getOrRaise(chain.blockFromTag(blockTag), "Block not found")
 
       rlp.encode(blockFromTag)
 
     # https://ethereum.github.io/execution-apis/api/methods/debug_getRawHeader
-    proc debug_getRawHeader(blockTag: BlockTag): seq[byte] {.raises: [ApplicationError, RlpError].} =
+    proc debug_getRawHeader(blockTag: BlockTag): seq[byte] {.raises: [ApplicationError, ValueError, RlpError].} =
       ## Returns an RLP-encoded header.
-      let header = chain.headerFromTag(blockTag).valueOr:
-        raise invalidParams(error)
+      let header = getOrRaise(chain.headerFromTag(blockTag), "Header not found")
       rlp.encode(header)
 
     # https://ethereum.github.io/execution-apis/api/methods/debug_getRawReceipts
-    proc debug_getRawReceipts(blockTag: BlockTag): seq[seq[byte]] {.raises: [ApplicationError, RlpError].} =
+    proc debug_getRawReceipts(blockTag: BlockTag): seq[seq[byte]] {.raises: [ApplicationError, ValueError, RlpError].} =
       ## Returns an array of EIP-2718 binary-encoded receipts.
-      let header = chain.headerFromTag(blockTag).valueOr:
-        raise invalidParams(error)
+      let header = getOrRaise(chain.headerFromTag(blockTag), "Header not found")
       let txFrame = chain.txFrame(header)
       var res: seq[seq[byte]]
       for receipt in txFrame.getReceipts(header.receiptsRoot):
@@ -218,13 +216,13 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
       # TODO: remove manual validation when upstream parsing decoding reports strict
       # hex input failures .
       if not txHashHex.startsWith("0x"):
-        raise invalidParams("invalid argument 0: hex string without 0x prefix")
+        invalidParams("invalid argument 0: hex string without 0x prefix")
 
-      let txHash =
-        try:
-          Hash32.fromHex(txHashHex)
-        except ValueError as exc:
-          raise invalidParams("invalid argument 0: " & exc.msg)
+      var txHash: Hash32
+      try:
+        txHash = Hash32.fromHex(txHashHex)
+      except ValueError as exc:
+        invalidParams("invalid argument 0: " & exc.msg)
 
       let res = txPool.getItem(txHash)
       if res.isOk:
@@ -243,10 +241,9 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
 
     # Execution Witness endpoints - not specified in the Execution API
 
-    proc debug_executionWitness(quantityTag: BlockTag): ExecutionWitness {.raises: [ValueError].} =
+    proc debug_executionWitness(quantityTag: BlockTag): ExecutionWitness {.raises: [ApplicationError, ValueError].} =
       ## Returns an execution witness for the given block number.
-      let header = chain.headerFromTag(quantityTag).valueOr:
-        raise newException(ValueError, "Header not found")
+      let header = getOrRaise(chain.headerFromTag(quantityTag), "Header not found")
 
       chain.getExecutionWitness(header.computeBlockHash()).valueOr:
         raise newException(ValueError, error)

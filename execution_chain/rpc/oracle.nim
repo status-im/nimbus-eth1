@@ -179,11 +179,14 @@ proc resolveBlockRange(oracle: Oracle, blockId: BlockTag, numBlocks: uint64): Re
     if head < reqEnd:
       return err("RequestBeyondHead: requested " & $reqEnd & ", head " & $head)
   else:
-    let resolved = oracle.chain.headerFromTag(blockId).valueOr:
+    let resolvedOpt = oracle.chain.headerFromTag(blockId).valueOr:
       return err(error)
 
+    if resolvedOpt.isNone:
+      return err("Block not found")
+
     # Absolute number resolved.
-    reqEnd = resolved.number
+    reqEnd = resolvedOpt.get().number
 
   # If there are no blocks to return, short circuit.
   if blocks == 0:
