@@ -34,7 +34,6 @@ import
   stew/assign2,
   stint,
   ../../state,
-  ../../message,
   ../../../db/ledger
 
 # ------------------------------------------------------------------------------
@@ -95,24 +94,20 @@ proc gasCallEIP2929(c: Computation, codeAddress: Address): GasProc =
 
 proc gasCallDelegate(c: Computation, codeAddress: Address): GasProc =
   if FkPrague <= c.fork:
-    if c.balTrackerEnabled:
+    GasProc proc(): GasInt =
       # When the target is a 7702-delegated EOA both target and
       # delegation target appear in the BAL even though sender has insufficient funds.
       # But in OOG case, only `codeAddress` appear in BAL.
-      GasProc proc(): GasInt =
+      if c.balTrackerEnabled:
         c.vmState.balTracker.trackAddressAccess(codeAddress)
-        let delegateTo = parseDelegationAddress(c.getCode(codeAddress)).valueOr:
-          c.delegateTo = codeAddress
-          return 0.GasInt
-        c.delegateTo = delegateTo
-        delegateResolutionCost(c, delegateTo)
-    else:
-      GasProc proc(): GasInt =
-        let delegateTo = parseDelegationAddress(c.getCode(codeAddress)).valueOr:
-          return 0.GasInt
-        delegateResolutionCost(c, delegateTo)
+      let delegateTo = parseDelegationAddress(c.getCode(codeAddress)).valueOr:
+        c.delegateTo = codeAddress
+        return 0.GasInt
+      c.delegateTo = delegateTo
+      delegateResolutionCost(c, delegateTo)
   else:
     GasProc proc(): GasInt =
+      c.delegateTo = codeAddress
       0.GasInt
 
 
@@ -195,7 +190,7 @@ proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) =
   # need to provide explicit <c> and <child> for capturing in chainTo proc()
   # <memPos> and <memLen> are provided by value and need not be captured
   var
-    code = getCallCode(c.vmState, childMsg.codeAddress)
+    code = c.vmState.readOnlyLedger.getCode(c.delegateTo)
     child = newComputation(
       c.vmState, keepStack = false, childMsg, code)
 

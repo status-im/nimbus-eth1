@@ -34,7 +34,7 @@ proc generateContractAddress*(vmState: BaseVMState,
   else:
     generateSafeAddress(sender, salt, code.bytes)
 
-proc getCallCode*(vmState: BaseVMState, codeAddress: Address, trackDelegated = false): CodeBytesRef =
+proc getCallCode*(vmState: BaseVMState, codeAddress: Address): CodeBytesRef =
   let isPrecompile = getPrecompile(vmState.fork, codeAddress).isSome()
   if isPrecompile:
     return CodeBytesRef(nil)
@@ -42,13 +42,13 @@ proc getCallCode*(vmState: BaseVMState, codeAddress: Address, trackDelegated = f
   # `codeAddress` is not BAL tracked here but in `gasCallDelegate`
   # before check for balance. See the comment there.
   # And delegateTo need tracking for a message call.
+  var resolvedAddress = codeAddress
   if vmState.fork >= FkPrague:
-    if vmState.balTrackerEnabled and trackDelegated:
-      let
-        code = vmState.readOnlyLedger.getCode(codeAddress)
-        delegateTo = parseDelegationAddress(code)
-      if delegateTo.isSome():
+    let
+      code = vmState.readOnlyLedger.getCode(codeAddress)
+      delegateTo = parseDelegationAddress(code)
+    if delegateTo.isSome():
+      if vmState.balTrackerEnabled:
         vmState.balTracker.trackAddressAccess(delegateTo.value)
-    vmState.readOnlyLedger.resolveCode(codeAddress)
-  else:
-    vmState.readOnlyLedger.getCode(codeAddress)
+      resolvedAddress = delegateTo.value
+  vmState.readOnlyLedger.getCode(resolvedAddress)

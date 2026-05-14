@@ -18,7 +18,6 @@ import
   eth/common/[addresses, hashes],
   ../utils/[mergeutils, utils],
   ../evm/code_bytes,
-  ../core/eip7702,
   ../constants,
   ./[access_list as ac_access_list, core_db, storage_types],
   ./aristo/aristo_blobify
@@ -487,12 +486,6 @@ proc getCodeSize*(ledger: LedgerRef, address: Address): int =
     return 0
   getCodeSizeImpl(ledger, acc)
 
-proc resolveCode*(ledger: LedgerRef, address: Address): CodeBytesRef =
-  let code = ledger.getCode(address)
-  let delegateTo = parseDelegationAddress(code).valueOr:
-    return code
-  ledger.getCode(delegateTo)
-
 proc getCommittedStorage*(ledger: LedgerRef, address: Address, slot: UInt256): UInt256 =
   let acc = ledger.getAccount(address, false)
 
@@ -863,7 +856,6 @@ proc isEmptyAccount*(ledger: ReadOnlyLedger, address: Address): bool = isEmptyAc
 proc getCommittedStorage*(ledger: ReadOnlyLedger, address: Address, slot: UInt256): UInt256 = getCommittedStorage(distinctBase ledger, address, slot)
 proc inAccessList*(ledger: ReadOnlyLedger, address: Address): bool = inAccessList(distinctBase ledger, address)
 proc inAccessList*(ledger: ReadOnlyLedger, address: Address, slot: UInt256): bool = inAccessList(distinctBase ledger, address)
-proc resolveCode*(ledger: ReadOnlyLedger, address: Address): CodeBytesRef = resolveCode(distinctBase ledger, address)
 
 # ------------------------------------------------------------------------------
 # End
