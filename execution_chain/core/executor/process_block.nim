@@ -62,16 +62,15 @@ when compileOption("threads"):
     if e[].sender == default(Address):
       return
 
-    {.cast(gcsafe).}:
-      let pvm = BaseVMState.new(
-        parent = ctx[].parent,
-        blockCtx = ctx[].blockCtx,
-        com = ctx[].com,
-        txFrame = ctx[].txFrame,
-        tracer = nil,
-        storeSlotHash = false,
-        enableBalTracker = false)
-      pvm.prefetchTransaction(tx[], e[].sender)
+    let pvm = BaseVMState.new(
+      parent = ctx[].parent,
+      blockCtx = ctx[].blockCtx,
+      com = ctx[].com,
+      txFrame = ctx[].txFrame,
+      tracer = nil,
+      storeSlotHash = false,
+      enableBalTracker = false)
+    pvm.prefetchTransaction(tx[], e[].sender)
     
     true
 
@@ -82,7 +81,7 @@ when compileOption("threads"):
       parent: vmState.parent,
       blockCtx: vmState.blockCtx,
       com: vmState.com,
-      txFrame: vmState.ledger.txFrame)
+      txFrame: vmState.com.db.baseTxFrame())
     ctx.cancel.store(false, moRelease)
     let ctxPtr =
       if vmState.com.optimisticStatePrefetch: addr ctx

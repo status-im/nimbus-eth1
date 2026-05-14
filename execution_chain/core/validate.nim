@@ -389,8 +389,8 @@ proc validateTransaction*(
     if tx.nonce != nonce:
       return err(&"invalid tx: account nonce mismatch. txNonce={tx.nonce}, accNonce={nonce}")
 
-    if tx.nonce == high(uint64):
-      return err(&"invalid tx: nonce at maximum")
+  if tx.nonce == high(uint64):
+    return err(&"invalid tx: nonce at maximum")
 
   # EIP-3607 Reject transactions from senders with deployed code
   # The EIP spec claims this attack never happened before

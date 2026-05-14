@@ -165,7 +165,6 @@ proc prefetchTransaction*(
   # State gas is not checked per-tx; block-end validation enforces
   # max(block_regular_gas_used, block_state_gas_used) <= gas_limit.
   if min(TX_GAS_LIMIT.GasInt, tx.gasLimit) > regularGasAvailable:
-    let want = min(TX_GAS_LIMIT.GasInt, tx.gasLimit)
     return
 
   # blobGasUsed will be added to vmState.blobGasUsed if the tx is ok.
@@ -177,7 +176,7 @@ proc prefetchTransaction*(
 
   validateTxBasic(com, tx, intrinsic, fork).isOkOr:
     return
-  vmState.validateTransaction(tx, sender).isOkOr:
+  vmState.validateTransaction(tx, sender, skipNonceCheck = true).isOkOr:
     return
 
   let savePoint = vmState.ledger.beginSavePoint()
