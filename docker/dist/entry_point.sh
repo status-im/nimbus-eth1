@@ -137,6 +137,10 @@ elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
   DSYMUTIL="aarch64-apple-darwin${DARWIN_VER}-dsymutil"
   ${CXX} --version
 
+  mkdir -p /tmp/nim-tools
+  ln -sf "/osxcross/bin/aarch64-apple-darwin${DARWIN_VER}-ar" /tmp/nim-tools/llvm-ar
+  export PATH="/tmp/nim-tools:${PATH}"
+
   copy_rocksdb
 
   make -j$(nproc) init
@@ -170,7 +174,7 @@ elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
     FORCE_DSYMUTIL=1 \
     USE_VENDORED_LIBUNWIND=1 \
     USE_CACHED_ROCKSDB=1 \
-    NIMFLAGS="${NIMFLAGS_COMMON} --os:macosx --cpu:arm64 --passC:'-mcpu=apple-a14' --passL:-mcpu=apple-a14 --passL:-static-libstdc++ --clang.exe=${CC} --clang.linkerexe=${CXX} --ar:${AR}" \
+    NIMFLAGS="${NIMFLAGS_COMMON} --os:macosx --cpu:arm64 --passC:'-mcpu=apple-a14' --passL:-mcpu=apple-a14 --passL:-static-libstdc++ --clang.exe=${CC} --clang.linkerexe=${CXX}" \
     ${BINARIES}
 
 else # linux_amd64
