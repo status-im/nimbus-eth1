@@ -138,12 +138,11 @@ type
         "- mainnet/1       : Ethereum main network\n" &
         "- sepolia/11155111: Testnet for smart contract testing\n" &
         "- hoodi/560048    : Testnet for staking and hard forks\n" &
-        "- custom/path     : /path/to/genesis-or-network-configuration.json\n" &
-        "Both --network: name/path --network:id can be set at the same time to override network id number"
-      defaultValue: @[] # the default value is set in makeConfig
+        "- custom/path     : /path/to/genesis-or-network-configuration.json"
+      defaultValue: none(string) # the default value is set in makeConfig
       defaultValueDesc: "mainnet(1)"
       abbr: "i"
-      name: "network" .}: seq[string]
+      name: "network" .}: Option[string]
 
     customNetwork {.
       ignore
@@ -663,7 +662,7 @@ proc parseNetworkParams(network: string): (NetworkParams, bool) =
     (params, true)
 
 proc processNetworkParamsAndNetworkId(config: var ExecutionClientConf) =
-  if config.network.len == 0 and config.customNetwork.isNone:
+  if config.network.isNone and config.customNetwork.isNone:
     # Default value if none is set
     config.networkId = MainNet
     config.networkParams = networkParams(MainNet)
@@ -674,16 +673,11 @@ proc processNetworkParamsAndNetworkId(config: var ExecutionClientConf) =
     id: Opt[NetworkId]
     simulatedCustomNetwork = false
 
-  for network in config.network:
+  if config.network.isSome:
+    let network = config.network.get
     if decOrHex(network):
-      if id.isSome:
-        warn "Network ID already set, ignore new value", id=network
-        continue
       id = Opt.some parseNetworkId(network)
     else:
-      if params.isSome:
-        warn "Network configuration already set, ignore new value", network
-        continue
       let (parsedParams, custom) = parseNetworkParams(network)
       params = Opt.some parsedParams
       # Simulate --custom-network while it is still not disabled.
