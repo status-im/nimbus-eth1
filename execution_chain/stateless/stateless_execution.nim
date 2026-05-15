@@ -46,6 +46,8 @@ proc statelessProcessBlock*(
   let
     memoryDb = newCoreDbRef(DefaultDbMemory)
     memoryTxFrame = memoryDb.baseTxFrame()
+  defer: 
+    memoryDb.close()
 
   # Load the subtrie of trie nodes (both account and storage tries) into the
   # in memory database.
