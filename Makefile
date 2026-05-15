@@ -364,15 +364,17 @@ nimbus_verified_proxy_test: | build deps
 
 # Shared library for verified proxy
 
-libverifproxy: | build deps
-	echo -e $(BUILD_MSG) "build/$@" && \
+$(VERIF_PROXY_OUT_PATH)/libverifproxy.a: | build deps
+	echo -e $(BUILD_MSG) "build/libverifproxy" && \
 		$(ENV_SCRIPT) nim c \
-		--out:$(VERIF_PROXY_OUT_PATH)/$@.a \
+		--out:$@ \
 		$(NIM_PARAMS) \
 		nimbus_verified_proxy/library/verifproxy.nim
 	cp nimbus_verified_proxy/library/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
 
-libverifproxy_test: libverifproxy
+libverifproxy: $(VERIF_PROXY_OUT_PATH)/libverifproxy.a
+
+libverifproxy_test: $(VERIF_PROXY_OUT_PATH)/libverifproxy.a
 	$(CC) -I$(VERIF_PROXY_OUT_PATH) -L$(VERIF_PROXY_OUT_PATH) \
 		-Wno-incompatible-pointer-types \
 		-o build/$@ \
