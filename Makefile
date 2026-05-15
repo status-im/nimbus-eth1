@@ -364,7 +364,7 @@ nimbus_verified_proxy_test: | build deps
 
 # Shared library for verified proxy
 
-$(VERIF_PROXY_OUT_PATH)/libverifproxy.a: | build deps
+$(VERIF_PROXY_OUT_PATH)/libverifproxy.a:
 	echo -e $(BUILD_MSG) "build/libverifproxy" && \
 		$(ENV_SCRIPT) nim c \
 		--out:$@ \
@@ -372,6 +372,7 @@ $(VERIF_PROXY_OUT_PATH)/libverifproxy.a: | build deps
 		nimbus_verified_proxy/library/verifproxy.nim
 	cp nimbus_verified_proxy/library/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
 
+libverifproxy: | build deps
 libverifproxy: $(VERIF_PROXY_OUT_PATH)/libverifproxy.a
 
 libverifproxy_test: $(VERIF_PROXY_OUT_PATH)/libverifproxy.a
