@@ -73,7 +73,7 @@ const
     ## Force a thread switch after that time running continuously. This
     ## applies mainly for DB building and analysing sessions.
 
-  accuAccountsCovMin* = 3.0
+  accuAccountsCovMin* = 1.05
     ## In absence of a completed pivot state, the syncer will stop downloading
     ## if all accounts are covered at least by this factor. Then trie-assembly
     ## and healing can take place.

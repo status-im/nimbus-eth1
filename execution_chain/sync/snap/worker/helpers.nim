@@ -144,7 +144,7 @@ func toStr*(a: chronos.Duration): string =
   if twoHundredYears <= a:
     return "n/a"
   var s = a.toString 2
-  if s.len == 0: s="0"
+  if s.len == 0: s="0s"
   s
 
 func toStr*(a: chronos.Moment): string =
