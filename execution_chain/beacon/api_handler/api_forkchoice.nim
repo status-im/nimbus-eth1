@@ -199,13 +199,26 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       raise invalidForkChoiceState("safe block not in canonical tree")
     # similar to headHash, safeBlockHash is saved by FC module
 
-  (await chain.queueForkChoice(headHash, finalizedBlockHash, safeBlockHash)).isOkOr:
+  # Pre-validate that the forkchoice update will succeed in the queue worker.
+  # We do this synchronously so we can surface a per-call error here; once the
+  # worker has been kicked off (below), errors can no longer be reported back
+  # to this fCU response.
+  chain.preflightForkChoice(headHash, finalizedBlockHash, safeBlockHash).isOkOr:
     return invalidFCU(error, chain, header)
+
+  # Enqueue the actual forkchoice apply. For ack-only fCUs we don't await
+  # the result. This avoids the response getting blocked behind the shared queue worker
+  let fcuFut = chain.queueForkChoice(headHash, finalizedBlockHash, safeBlockHash)
 
   # If payload generation was requested, create a new block to be potentially
   # sealed by the beacon client. The payload will be requested later, and we
   # might replace it arbitrarilly many times in between.
   if attrsOpt.isSome:
+    # Payload generation reads `chain.latestHeader`, so we must wait for the
+    # apply to complete before assembling the block.
+    (await fcuFut).isOkOr:
+      return invalidFCU(error, chain, header)
+
     let attrs = attrsOpt.value
     validateVersion(attrs, com, apiVersion)
 
