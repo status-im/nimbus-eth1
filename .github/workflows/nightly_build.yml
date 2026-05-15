@@ -56,6 +56,9 @@ jobs:
           echo "archive=${NEW_ARCHIVE_DIR}.tar.gz" >> $GITHUB_OUTPUT
           echo "archive_dir=${NEW_ARCHIVE_DIR}" >> $GITHUB_OUTPUT
 
+      - name: Test libverifproxy
+        run: make libverifproxy_test
+
       - name: Upload archive artefact
         uses: actions/upload-artifact@v4
         with:
@@ -87,9 +90,6 @@ jobs:
     runs-on: ${{ matrix.builder }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
       - name: Download artefacts
         uses: actions/download-artifact@v5
         with:
@@ -101,8 +101,6 @@ jobs:
           build/nimbus --help
           build/nimbus_verified_proxy --help
 
-      - name: Test libverifproxy
-        run: make libverifproxy_test
 
   nightly-build-release:
     name: Nightly build release
