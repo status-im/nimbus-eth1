@@ -815,11 +815,6 @@ const
     FkCancun: ShanghaiGasFees,
     FkPrague: ShanghaiGasFees,
     FkOsaka: ShanghaiGasFees,
-    FkBpo1: ShanghaiGasFees,
-    FkBpo2: ShanghaiGasFees,
-    FkBpo3: ShanghaiGasFees,
-    FkBpo4: ShanghaiGasFees,
-    FkBpo5: ShanghaiGasFees,
     FkAmsterdam: AmsterdamGasFees,
     FkBogota: AmsterdamGasFees,
   ]

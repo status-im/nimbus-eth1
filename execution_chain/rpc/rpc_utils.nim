@@ -261,7 +261,7 @@ proc populateReceipt*(rec: StoredReceipt, gasUsed: GasInt, tx: Transaction,
 
   if tx.txType == TxEip4844:
     res.blobGasUsed = Opt.some(Quantity(tx.versionedHashes.len.uint64 * GAS_PER_BLOB.uint64))
-    res.blobGasPrice = Opt.some(getBlobBaseFee(header.excessBlobGas.get(0'u64), com, com.toEVMFork(header)))
+    res.blobGasPrice = Opt.some(getBlobBaseFee(header.excessBlobGas.get(0'u64), com, com.toHardFork(header)))
 
   return res
 

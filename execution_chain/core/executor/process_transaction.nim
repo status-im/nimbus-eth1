@@ -104,6 +104,7 @@ proc processTransaction*(
   let
     com = vmState.com
     fork = vmState.fork
+    hardFork = vmState.hardFork
     regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
     intrinsic = tx.intrinsicGas(fork, vmState.blockCtx.gasLimit)
 
@@ -117,12 +118,12 @@ proc processTransaction*(
   # blobGasUsed will be added to vmState.blobGasUsed if the tx is ok.
   let
     blobGasUsed = tx.getTotalBlobGas
-    maxBlobGasPerBlock = getMaxBlobGasPerBlock(com, fork)
+    maxBlobGasPerBlock = getMaxBlobGasPerBlock(com, hardFork)
   if vmState.blobGasUsed + blobGasUsed > maxBlobGasPerBlock:
     return err("blobGasUsed " & $blobGasUsed &
       " exceeds maximum allowance " & $maxBlobGasPerBlock)
 
-  ? validateTxBasic(com, tx, intrinsic, fork)
+  ? validateTxBasic(com, tx, intrinsic, hardFork)
 
   vmState.validateTransaction(tx, sender).isOkOr:
     return err(error)

@@ -97,7 +97,7 @@ func calcBaseFee(com: CommonRef, bc: BlockContent): UInt256 =
 proc processBlock(oracle: Oracle, bc: BlockContent, percentiles: openArray[float64]): ProcessedFees =
   let
     com = oracle.com
-    fork = com.toEVMFork(bc.header)
+    fork = com.toHardFork(bc.header)
     maxBlobGasPerBlock = getMaxBlobGasPerBlock(com, fork)
   result = ProcessedFees(
     baseFee: bc.header.baseFeePerGas.get(0.u256),

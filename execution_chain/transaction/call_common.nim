@@ -131,7 +131,7 @@ proc preExecComputation(call: CallParams): int64 =
 proc setupComputation(call: CallParams, gasRefund: int64, keepStack: bool): Computation =
   let
     vmState = call.vmState
-    fork = vmState.fork
+    fork = vmState.hardFork
   vmState.txCtx = TxContext(
     origin         : call.sender,
     gasPrice       : call.gasPrice,
@@ -144,7 +144,7 @@ proc setupComputation(call: CallParams, gasRefund: int64, keepStack: bool): Comp
   vmState.gasRefunded = 0
 
   let
-    isAmsterdamOrLater = fork >= FkAmsterdam
+    isAmsterdamOrLater = fork >= Amsterdam
     intrinsicGas = call.intrinsic.regular + call.intrinsic.state
 
     # Prevent underflow which can occur when gasLimit is less than intrinsicGas.
@@ -206,7 +206,7 @@ proc prepareToRunComputation(c: Computation, call: CallParams) =
   # Charge for gas.
   let
     vmState = c.vmState
-    fork = vmState.fork
+    fork = vmState.hardFork
 
   vmState.mutateLedger:
     let gasFee = call.gasLimit.u256 * call.gasPrice.u256
@@ -215,7 +215,7 @@ proc prepareToRunComputation(c: Computation, call: CallParams) =
     ledger.subBalance(call.sender, gasFee)
 
     # EIP-4844
-    if fork >= FkCancun:
+    if fork >= Cancun:
       let blobFee = calcDataFee(call.versionedHashes.len,
         vmState.blockCtx.excessBlobGas, vmState.com, fork)
       if vmState.balTrackerEnabled:

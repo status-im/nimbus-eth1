@@ -25,11 +25,6 @@ type
     FkCancun
     FkPrague
     FkOsaka
-    FkBpo1
-    FkBpo2
-    FkBpo3
-    FkBpo4
-    FkBpo5
     FkAmsterdam
     FkBogota
 
