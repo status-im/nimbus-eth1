@@ -107,6 +107,6 @@ jobs:
           gcc --version
           DEFAULT_MAKE_FLAGS="-j${ncpu}"
           make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy
-          build/nimbus_verified_proxy --help
-          # "-static" option will not work for osx unless static system libraries are provided
-          make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy_test libverifproxy_test
+          make ${DEFAULT_MAKE_FLAGS} libverifproxy
+          make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy_test
+          make ${DEFAULT_MAKE_FLAGS} libverifproxy_test

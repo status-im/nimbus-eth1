@@ -87,6 +87,9 @@ jobs:
     runs-on: ${{ matrix.builder }}
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
       - name: Download artefacts
         uses: actions/download-artifact@v5
         with:
@@ -97,6 +100,9 @@ jobs:
           tar -xvzf nimbus-eth1-${{ matrix.os }}-${{ matrix.cpu }}-nightly-latest.tar.gz --strip-components=1
           build/nimbus --help
           build/nimbus_verified_proxy --help
+
+      - name: Test libverifproxy
+        run: make libverifproxy_test
 
   nightly-build-release:
     name: Nightly build release
