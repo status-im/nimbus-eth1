@@ -69,8 +69,9 @@ const
   threadSwitchTimeSlot* = chronos.nanoseconds(1)
     ## Nano-sleep to allows pseudo/async thread switch
 
-  threadSwitchRunLimit* = chronos.seconds(15)
-    ## Force a thread switch after that time running continuously
+  threadSwitchRunLimit* = chronos.seconds(25)
+    ## Force a thread switch after that time running continuously. This
+    ## applies mainly for DB building and analysing sessions.
 
   accuAccountsCovMin* = 3.0
     ## In absence of a completed pivot state, the syncer will stop downloading

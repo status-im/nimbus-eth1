@@ -12,7 +12,7 @@
 
 import
   pkg/[chronicles, chronos],
-  ../worker_desc
+  ../[mpt, worker_desc]
 
 type
   SessionTicker* = object
@@ -67,6 +67,21 @@ template sessionTicker*(
       status.napAt = Moment.now() + threadSwitchRunLimit
 
   bodyRc
+
+# ----------------
+
+proc countTrieNodes*(
+    ctx: SnapCtxRef;
+      ): tuple[nAccNodes, nStoNodes: uint64, ela: Duration] =
+  ## Simple stored nodes counter
+  let
+    db = ctx.pool.mptAsm
+    start = Moment.now()
+  for _ in db.walkAccTrie():
+    result.nAccNodes.inc
+  for _ in db.walkStoTrie():
+    result.nStoNodes.inc
+  result.ela = Moment.now() - start
 
 # ------------------------------------------------------------------------------
 # End
