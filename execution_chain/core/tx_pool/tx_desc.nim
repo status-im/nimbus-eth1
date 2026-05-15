@@ -367,7 +367,7 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     return err(txErrorAlreadyKnown)
 
   let
-    intrinsic = ptx.tx.intrinsicGas(xp.nextFork, xp.gasLimit)
+    intrinsic = ptx.tx.intrinsicGas(xp.hardFork, xp.gasLimit)
 
   validateTxBasic(
     xp.com,

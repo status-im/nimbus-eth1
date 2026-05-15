@@ -14,7 +14,7 @@ import
   eth/common/transactions,
   eth/common/addresses,
   eth/common/receipts,
-  ../common/evmforks,
+  ../common/hardforks,
   ../evm/types,
   ../evm/internals,
   ../core/[eip7702, eip8037]
@@ -76,12 +76,13 @@ func isError*(cr: CallResult): bool =
 const
   TOTAL_COST_FLOOR_PER_TOKEN = 10
 
-func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork, gasLimit: GasInt): IntrinsicGas =
+func intrinsicGas*(call: CallParams | Transaction, hardFork: HardFork, gasLimit: GasInt): IntrinsicGas =
   # Compute the baseline gas cost for this transaction.  This is the amount
   # of gas needed to send this transaction (but that is not actually used
   # for computation).
   let
     costPerStateByte = stateGasPerByte(gasLimit)
+    fork = ToEVMFork[hardFork]
 
   var
     regularGas = TX_BASE_COST
@@ -91,11 +92,11 @@ func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork, gasLimit: GasI
 
   # EIP-2 (Homestead) extra intrinsic gas for contract creations.
   if call.isCreate:
-    if fork >= FkAmsterdam:
+    if hardFork >= Amsterdam:
       stateGas += STATE_BYTES_PER_NEW_ACCOUNT * costPerStateByte
 
     regularGas += gasFees[fork][GasTXCreate]
-    if fork >= FkShanghai:
+    if hardFork >= Shanghai:
       regularGas += (gasFees[fork][GasInitcodeWord] * call.input.len.wordCount)
 
   # Input data cost, reduced in EIP-2028 (Istanbul).
@@ -111,13 +112,13 @@ func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork, gasLimit: GasI
 
 
   # EIP-2930 (Berlin) intrinsic gas for transaction access list.
-  if fork >= FkBerlin:
+  if hardFork >= Berlin:
     for account in call.accessList:
       regularGas += ACCESS_LIST_ADDRESS_COST
       regularGas += account.storageKeys.len * ACCESS_LIST_STORAGE_KEY_COST
 
-  if fork >= FkPrague:
-    if fork >= FkAmsterdam:
+  if hardFork >= Prague:
+    if hardFork >= Amsterdam:
       regularGas += REGULAR_PER_AUTH_BASE_COST * call.authorizationList.len
       stateGas += (STATE_BYTES_PER_NEW_ACCOUNT + STATE_BYTES_PER_AUTH_BASE) * costPerStateByte * GasInt(call.authorizationList.len)
     else:

@@ -505,7 +505,7 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
         (UnavailableDataError, "excessBlobGas missing from latest header", UNTAGGED)
       )
     let blobBaseFee =
-      getBlobBaseFee(header.excessBlobGas.get, com, com.toEVMFork(header)) *
+      getBlobBaseFee(header.excessBlobGas.get, com, com.toHardFork(header)) *
       header.blobGasUsed.get.u256
 
     ok(blobBaseFee)

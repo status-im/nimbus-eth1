@@ -15,33 +15,26 @@ import
   ../execution_chain/networking/[netkeys, p2p],
   ./eest/path_handler
 
-func revTable(list: array[FkFrontier..FkLatest, string]): Table[string, EVMFork] =
-  for k, v in list:
-    result[v] = k
-
 const
-  # from https://ethereum-tests.readthedocs.io/en/latest/test_types/state_tests.html
-  ForkToName: array[FkFrontier..FkLatest, string] = [
-    "Frontier",             # FkFrontier
-    "Homestead",            # FkHomestead
-    "EIP150",               # FkTangerine
-    "EIP158",               # FkSpurious
-    "Byzantium",            # FkByzantium
-    "Constantinople",       # FkConstantinople
-    "ConstantinopleFix",    # FkPetersburg
-    "Istanbul",             # FkIstanbul
-    "Berlin",               # FkBerlin
-    "London",               # FkLondon
-    "Merge",                # FkParis
-    "Shanghai",             # FkShanghai
-    "Cancun",               # FkCancun
-    "Prague",               # FkPrague
-    "Osaka",                # FkOsaka
-    "Amsterdam",            # FkAmsterdam
-    "Bogota",               # FkBogota
-  ]
-
-  nameToFork* = ForkToName.revTable
+  nameToFork* = {
+    "Frontier"         : Frontier,
+    "Homestead"        : Homestead,
+    "EIP150"           : Tangerine,
+    "EIP158"           : Spurious,
+    "Byzantium"        : Byzantium,
+    "Constantinople"   : Constantinople,
+    "ConstantinopleFix": Petersburg,
+    "Istanbul"         : Istanbul,
+    "Berlin"           : Berlin,
+    "London"           : London,
+    "Merge"            : MergeFork,
+    "Shanghai"         : Shanghai,
+    "Cancun"           : Cancun,
+    "Prague"           : Prague,
+    "Osaka"            : Osaka,
+    "Amsterdam"        : Amsterdam,
+    "Bogota"           : Bogota,
+  }.toTable
 
 func skipNothing*(folder: string, name: string): bool = false
 

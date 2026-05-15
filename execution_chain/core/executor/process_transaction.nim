@@ -103,8 +103,7 @@ proc processTransaction*(
 
   let
     com = vmState.com
-    fork = vmState.fork
-    hardFork = vmState.hardFork
+    fork = vmState.hardFork
     regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
     intrinsic = tx.intrinsicGas(fork, vmState.blockCtx.gasLimit)
 
@@ -118,12 +117,12 @@ proc processTransaction*(
   # blobGasUsed will be added to vmState.blobGasUsed if the tx is ok.
   let
     blobGasUsed = tx.getTotalBlobGas
-    maxBlobGasPerBlock = getMaxBlobGasPerBlock(com, hardFork)
+    maxBlobGasPerBlock = getMaxBlobGasPerBlock(com, fork)
   if vmState.blobGasUsed + blobGasUsed > maxBlobGasPerBlock:
     return err("blobGasUsed " & $blobGasUsed &
       " exceeds maximum allowance " & $maxBlobGasPerBlock)
 
-  ? validateTxBasic(com, tx, intrinsic, hardFork)
+  ? validateTxBasic(com, tx, intrinsic, fork)
 
   vmState.validateTransaction(tx, sender).isOkOr:
     return err(error)
@@ -146,7 +145,7 @@ proc processTransaction*(
     else:
       ok(move(callResult))
 
-  vmState.ledger.persist(clearEmptyAccount = fork >= FkSpurious)
+  vmState.ledger.persist(clearEmptyAccount = fork >= Spurious)
 
   res
 
