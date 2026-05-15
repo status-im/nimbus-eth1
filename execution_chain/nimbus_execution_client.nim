@@ -287,7 +287,8 @@ proc setupCommonRef*(config: ExecutionClientConf): (CommonRef, bool) =
     networkId = config.networkId,
     params = config.networkParams,
     statelessProviderEnabled = config.statelessProviderEnabled,
-    statelessWitnessValidation = config.statelessWitnessValidation)
+    statelessWitnessValidation = config.statelessWitnessValidation,
+    optimisticStatePrefetch = config.optimisticStatePrefetch)
 
   if config.extraData.len > 32:
     warn "ExtraData exceeds 32 bytes limit, truncate",

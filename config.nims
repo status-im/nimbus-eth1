@@ -123,6 +123,8 @@ switch("passL", "-fno-omit-frame-pointer")
 --styleCheck:usages
 --styleCheck:error
 
+switch("passC", "-Wno-psabi")
+
 switch("define", "nim_compiler_path=" & currentDir & "env.sh nim")
 
 when not defined(disable_libbacktrace):

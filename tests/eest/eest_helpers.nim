@@ -291,6 +291,7 @@ proc close*(env: TestEnv) =
     if env.server.isSome:
       waitFor env.server.get().closeWait()
     waitFor env.chain.stopProcessingQueue()
+    env.chain.com.db.close()
   except CatchableError as exc:
     debugEcho "Close error: ", exc.msg
     quit(QuitFailure)

@@ -21,10 +21,12 @@ import
   ./types,
   ./evm_errors
 
-func forkDeterminationInfoForVMState(vmState: BaseVMState): ForkDeterminationInfo =
+export gas_costs
+
+func forkDeterminationInfoForVMState*(vmState: BaseVMState): ForkDeterminationInfo =
   forkDeterminationInfo(vmState.parent.number + 1, vmState.blockCtx.timestamp)
 
-func determineFork(vmState: BaseVMState): EVMFork =
+func determineFork*(vmState: BaseVMState): EVMFork =
   vmState.com.toEVMFork(vmState.forkDeterminationInfoForVMState)
 
 proc init(

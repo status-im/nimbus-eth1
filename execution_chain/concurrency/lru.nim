@@ -303,15 +303,6 @@ proc grow[K, V](v: var LruCache[K, V], newSize: uint32) =
 
   v.bucketsLen = newTableSize
 
-func resetPayload(n: var LruNode) =
-  # Resetting the payload is not needed for the cache itself (it will happily
-  # overwrite existing values when the time comes) but for good memory usage
-  # hygiene, it's prudent to reset payloads eagerly when they are not trivial
-  when not supportsCopyMem(n.K):
-    reset(n.key)
-  when not supportsCopyMem(n.V):
-    reset(n.value)
-
 func init[K, V](T: type LruCache[K, V], capacity: int): T =
   ## Create a cache with the given initial capacity
   static:
@@ -321,8 +312,6 @@ func init[K, V](T: type LruCache[K, V], capacity: int): T =
 
 proc dispose(s: var LruCache) =
   if s.nodesLen > 0:
-    for index in s.mruIndices:
-      resetPayload(s.nodes[index])
     deallocShared(s.nodes)
     s.nodes = nil
     s.nodesLen = 0
@@ -338,6 +327,9 @@ proc `=copy`[K, V](
     dest: var LruCache[K, V], src: LruCache[K, V]
 ) {.error: "Copying LruCache is forbidden".} =
   discard
+
+proc `=destroy`[K, V](s: var LruCache[K, V]) =
+  dispose(s)
 
 iterator mruIndices(s: LruCache): uint32 =
   if s.nodesLen > 0:
@@ -405,8 +397,6 @@ func del(s: var LruCache, subhash: uint32, key: auto) =
   let index = s.tableDel(subhash, key).valueOr:
     return
 
-  resetPayload(s.nodes[index])
-
   s.moveToBack(index)
   s.used -= 1
 
@@ -422,7 +412,6 @@ func pop[K, V](s: var LruCache[K, V], subhash: uint32, key: auto): Opt[V] =
     return Opt.none(V)
 
   result = Opt.some(move(s.nodes[index].value))
-  resetPayload(s.nodes[index])
 
   s.moveToBack(index)
   s.used -= 1
@@ -611,6 +600,9 @@ proc `=copy`*[K, V; SHARD_BITS](
     src: ConcurrentLruCache[K, V, SHARD_BITS],
 ) {.error: "Copying ConcurrentLruCache is forbidden".} =
   discard
+
+proc `=destroy`*[K, V; SHARD_BITS](lru: var ConcurrentLruCache[K, V, SHARD_BITS]) =
+  dispose(lru)
 
 template toShardIdx(h: Hash, shardBits: static int): int =
   # Pick the shard from the top SHARD_BITS bits of the hash so that the shard

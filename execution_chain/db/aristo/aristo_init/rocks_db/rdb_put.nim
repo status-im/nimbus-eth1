@@ -38,9 +38,15 @@ proc begin*(rdb: var RdbInst): SharedWriteBatchRef =
 
 proc rollback*(rdb: var RdbInst, session: SharedWriteBatchRef) =
   if not session.isClosed():
-    rdb.rdKeyLru = typeof(rdb.rdKeyLru).init(rdb.rdKeySize)
-    rdb.rdVtxLru = typeof(rdb.rdVtxLru).init(rdb.rdVtxSize)
-    rdb.rdBranchLru = typeof(rdb.rdBranchLru).init(rdb.rdBranchSize)
+    rdb.rdKeyLru.dispose()
+    rdb.rdVtxLru.dispose()
+    rdb.rdBranchLru.dispose()
+    rdb.rdKeyLru.reset()
+    rdb.rdVtxLru.reset()
+    rdb.rdBranchLru.reset()
+    rdb.rdKeyLru.init(rdb.rdKeySize)
+    rdb.rdVtxLru.init(rdb.rdVtxSize)
+    rdb.rdBranchLru.init(rdb.rdBranchSize)
     session.close()
 
 proc commit*(rdb: var RdbInst, session: SharedWriteBatchRef): Result[void,(AristoError,string)] =
