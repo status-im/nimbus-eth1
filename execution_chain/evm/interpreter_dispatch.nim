@@ -136,10 +136,9 @@ proc beforeExecCreate(c: Computation): bool =
       c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
       ledger.addBalance(c.msg.contractAddress, c.msg.value)
       ledger.clearStorage(c.msg.contractAddress)
-      if c.fork >= FkSpurious:
-        # EIP161 nonce incrementation
-        c.vmState.balTracker.trackIncNonceChange(c.msg.contractAddress)
-        ledger.incNonce(c.msg.contractAddress)
+      # no need to check c.fork >= FkSpurious, it's FkAmsterdam
+      c.vmState.balTracker.trackIncNonceChange(c.msg.contractAddress)
+      ledger.incNonce(c.msg.contractAddress)
     else:
       ledger.subBalance(c.msg.sender, c.msg.value)
       ledger.addBalance(c.msg.contractAddress, c.msg.value)

@@ -22,26 +22,17 @@ proc isCreate*(message: Message): bool =
   message.kind in {CallKind.Create, CallKind.Create2}
 
 proc generateContractAddress*(vmState: BaseVMState,
-                              kind: CallKind,
-                              sender: Address,
-                              salt = ZERO_CONTRACTSALT,
-                              code = CodeBytesRef(nil)): Address =
-  if kind == CallKind.Create:
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.trackAddressAccess(sender)
-    let creationNonce = vmState.readOnlyLedger().getNonce(sender)
-    generateAddress(sender, creationNonce)
-  else:
-    generateSafeAddress(sender, salt, code.bytes)
+                              sender: Address): Address =
+  # `sender` is BAL tracked in `prepareToRunComputation`
+  let creationNonce = vmState.readOnlyLedger().getNonce(sender)
+  generateAddress(sender, creationNonce)
 
 proc getCallCode*(vmState: BaseVMState, codeAddress: Address): CodeBytesRef =
   let isPrecompile = getPrecompile(vmState.fork, codeAddress).isSome()
   if isPrecompile:
     return CodeBytesRef(nil)
 
-  # `codeAddress` is not BAL tracked here but in `gasCallDelegate`
-  # before check for balance. See the comment there.
-  # And delegateTo need tracking for a message call.
+  # `codeAddress` is BAL tracked in `initialAccessListEIP2929`
   var resolvedAddress = codeAddress
   if vmState.fork >= FkPrague:
     let
