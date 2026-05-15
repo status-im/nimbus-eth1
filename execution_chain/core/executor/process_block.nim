@@ -120,8 +120,12 @@ when compileOption("threads"):
       parent: vmState.parent,
       blockCtx: vmState.blockCtx,
       com: vmState.com,
-      txFrame: vmState.com.db.baseTxFrame()
+      txFrame: CoreDbTxRef(
+        kTx: vmState.ledger.txFrame.kTx.parent, 
+        aTx: vmState.ledger.txFrame.aTx.parent
+      )
     )
+
     ctx.cancel.store(false, moRelease)
     let ctxPtr =
       if vmState.com.optimisticStatePrefetch: addr ctx
