@@ -185,7 +185,7 @@ proc setupComputation(call: CallParams, gasRefund: int64, keepStack: bool): Comp
     )
 
     code = if call.isCreate:
-             msg.contractAddress = generateContractAddress(vmState, CallKind.Create, call.sender)
+             msg.contractAddress = generateContractAddress(vmState, call.sender)
              CodeBytesRef.init(call.input)
            else:
              assign(msg.data, call.input)
@@ -215,18 +215,15 @@ proc prepareToRunComputation(c: Computation, call: CallParams) =
     fork = vmState.fork
 
   vmState.mutateLedger:
-    let gasFee = call.gasLimit.u256 * call.gasPrice.u256
+    var gasFee = call.gasLimit.u256 * call.gasPrice.u256
+    # EIP-4844
+    if fork >= FkCancun:
+      gasFee += calcDataFee(call.versionedHashes.len,
+        vmState.blockCtx.excessBlobGas, vmState.com, fork)
+
     if vmState.balTrackerEnabled:
       vmState.balTracker.trackSubBalanceChange(call.sender, gasFee)
     ledger.subBalance(call.sender, gasFee)
-
-    # EIP-4844
-    if fork >= FkCancun:
-      let blobFee = calcDataFee(call.versionedHashes.len,
-        vmState.blockCtx.excessBlobGas, vmState.com, fork)
-      if vmState.balTrackerEnabled:
-        vmState.balTracker.trackSubBalanceChange(call.sender, blobFee)
-      ledger.subBalance(call.sender, blobFee)
 
 proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: int64): GasUsed =
   let
