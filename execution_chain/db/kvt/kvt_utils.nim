@@ -15,6 +15,7 @@
 
 import
   results,
+  ../storage_types,
   "."/[kvt_desc, kvt_layers]
 
 export results
@@ -67,7 +68,7 @@ proc delRangeBe*(
 # ------------
 
 proc put*(
-    db: KvtTxRef;                     # Database
+    txRef: KvtTxRef;                  # Database
     key: openArray[byte];             # Key of database record to store
     data: openArray[byte];            # Value of database record to store
       ): Result[void,KvtError] =
@@ -78,12 +79,12 @@ proc put*(
   if data.len == 0:
     return err(DataInvalid)
 
-  db.layersPut(key, data)
+  txRef.layersPut(key, data)
   ok()
 
 
 proc del*(
-    db: KvtTxRef;                     # Database
+    txRef: KvtTxRef;                  # Database
     key: openArray[byte];             # Key of database record to delete
       ): Result[void,KvtError] =
   ## For the argument `key` delete the associated value (which will be marked
@@ -91,13 +92,13 @@ proc del*(
   if key.len == 0:
     return err(KeyInvalid)
 
-  db.layersPut(key, EmptyBlob)
+  txRef.layersPut(key, EmptyBlob)
   ok()
 
 # ------------
 
 proc get*(
-    db: KvtTxRef;                     # Database
+    txRef: KvtTxRef;                  # Database
     key: openArray[byte];             # Key of database record
       ): Result[seq[byte],KvtError] =
   ## For the argument `key` return the associated value preferably from the
@@ -106,27 +107,42 @@ proc get*(
   if key.len == 0:
     return err(KeyInvalid)
 
-  var data = db.layersGet(key).valueOr:
-    return db.db.getBe key
+  var data = txRef.layersGet(key).valueOr:
+    return txRef.db.getBe key
 
   return ok(move(data))
 
 proc len*(
-    db: KvtTxRef;                     # Database
+    txRef: KvtTxRef;                  # Database
     key: openArray[byte];             # Key of database record
       ): Result[int,KvtError] =
   ## For the argument `key` return the length of the associated value,
   ## preferably from the top layer, or the database otherwise.
-  ##
   if key.len == 0:
     return err(KeyInvalid)
 
-  let len = db.layersLen(key).valueOr:
-    return db.db.getBeLen key
+  let len = txRef.layersLen(key).valueOr:
+    return txRef.db.getBeLen key
   ok(len)
 
+proc getCodeSize*(
+    txRef: KvtTxRef;
+    codeHash: Hash32;
+      ): Result[int, KvtError] =
+  let key = contractHashKey(codeHash)
+
+  txRef.layersLen(key.toOpenArray).isErrOr:
+    return ok(value)
+  txRef.db.codeSizeCache.get(codeHash).isErrOr:
+    return ok(value)
+  
+  let size = ?txRef.db.getBeLen(key.toOpenArray)
+  txRef.db.codeSizeCache.put(codeHash, size)
+
+  ok(size)
+
 proc multiGet*(
-    db: KvtTxRef,
+    txRef: KvtTxRef,
     keys: openArray[seq[byte]],
     values: var openArray[Opt[seq[byte]]],
     sortedInput = false,
@@ -138,7 +154,7 @@ proc multiGet*(
 
   # First fetch each key from the in memory layers
   for i, k in keys:
-    let value = db.layersGet(k)
+    let value = txRef.layersGet(k)
     if value.isSome():
       values[i] = value
     else:
@@ -148,7 +164,7 @@ proc multiGet*(
   # Fetch the remaining keys from the db backend
   if remainingKeys.len() > 0:
     var remainingValues = newSeq[Opt[seq[byte]]](remainingKeys.len())
-    ?db.db.multiGetBe(remainingKeys, remainingValues)
+    ?txRef.db.multiGetBe(remainingKeys, remainingValues)
 
     for i, v in remainingValues:
       let index = keyIndexes[i]
@@ -157,7 +173,7 @@ proc multiGet*(
   ok()
 
 proc hasKeyRc*(
-    db: KvtTxRef;                     # Database
+    txRef: KvtTxRef;                  # Database
     key: openArray[byte];             # Key of database record
       ): Result[bool,KvtError] =
   ## For the argument `key` return `true` if `get()` returned a value on
@@ -167,10 +183,10 @@ proc hasKeyRc*(
   if key.len == 0:
     return err(KeyInvalid)
 
-  if db.layersHasKey key:
+  if txRef.layersHasKey key:
     return ok(true)
 
-  let rc = db.db.getBe key
+  let rc = txRef.db.getBe key
   if rc.isOk:
     return ok(true)
   if rc.error == GetNotFound:
@@ -178,12 +194,12 @@ proc hasKeyRc*(
   err(rc.error)
 
 proc hasKey*(
-    db: KvtTxRef;                     # Database
+    txRef: KvtTxRef;                  # Database
     key: openArray[byte];             # Key of database record
       ): bool =
   ## Simplified version of `hasKeyRc` where `false` is returned instead of
   ## an error.
-  db.hasKeyRc(key).valueOr: false
+  txRef.hasKeyRc(key).valueOr: false
 
 proc close*(db: KvtDbRef; wipe = false) =
   ## Backend destructor. The argument `wipe` indicates that a full
