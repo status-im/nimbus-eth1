@@ -34,7 +34,6 @@ import
   stew/assign2,
   stint,
   ../../state,
-  ../../message,
   ../../../db/ledger
 
 # ------------------------------------------------------------------------------
@@ -96,11 +95,19 @@ proc gasCallEIP2929(c: Computation, codeAddress: Address): GasProc =
 proc gasCallDelegate(c: Computation, codeAddress: Address): GasProc =
   if FkPrague <= c.fork:
     GasProc proc(): GasInt =
+      # When the target is a 7702-delegated EOA both target and
+      # delegation target appear in the BAL even though sender has insufficient funds.
+      # But in OOG case, only `codeAddress` appear in BAL.
+      if c.balTrackerEnabled:
+        c.vmState.balTracker.trackAddressAccess(codeAddress)
       let delegateTo = parseDelegationAddress(c.getCode(codeAddress)).valueOr:
+        c.delegateTo = codeAddress
         return 0.GasInt
+      c.delegateTo = delegateTo
       delegateResolutionCost(c, delegateTo)
   else:
     GasProc proc(): GasInt =
+      c.delegateTo = codeAddress
       0.GasInt
 
 
@@ -183,7 +190,7 @@ proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) =
   # need to provide explicit <c> and <child> for capturing in chainTo proc()
   # <memPos> and <memLen> are provided by value and need not be captured
   var
-    code = getCallCode(c.vmState, childMsg.codeAddress)
+    code = c.vmState.readOnlyLedger.getCode(c.delegateTo)
     child = newComputation(
       c.vmState, keepStack = false, childMsg, code)
 
@@ -267,6 +274,10 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
   ? cpt.opcodeGasCost(Call, gasCost, reason = $Call)
   cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
 
+  if cpt.balTrackerEnabled:
+    # If OOG, `delegateTo` is not added to BAL
+    cpt.vmState.balTracker.trackAddressAccess(cpt.delegateTo)
+
   cpt.returnData.setLen(0)
 
   if cpt.msg.depth >= MaxCallDepth:
@@ -337,6 +348,10 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
 
   ? cpt.opcodeGasCost(CallCode, gasCost, reason = $CallCode)
   cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
+
+  if cpt.balTrackerEnabled:
+    # If OOG, `delegateTo` is not added to BAL
+    cpt.vmState.balTracker.trackAddressAccess(cpt.delegateTo)
 
   cpt.returnData.setLen(0)
 
@@ -409,6 +424,10 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
   ? cpt.opcodeGasCost(DelegateCall, gasCost, reason = $DelegateCall)
   cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
 
+  if cpt.balTrackerEnabled:
+    # If OOG, `delegateTo` is not added to BAL
+    cpt.vmState.balTracker.trackAddressAccess(cpt.delegateTo)
+
   cpt.returnData.setLen(0)
   if cpt.msg.depth >= MaxCallDepth:
     debug "Computation Failure",
@@ -472,6 +491,10 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
 
   ? cpt.opcodeGasCost(StaticCall, gasCost, reason = $StaticCall)
   cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
+
+  if cpt.balTrackerEnabled:
+    # If OOG, `delegateTo` is not added to BAL
+    cpt.vmState.balTracker.trackAddressAccess(cpt.delegateTo)
 
   cpt.returnData.setLen(0)
 
