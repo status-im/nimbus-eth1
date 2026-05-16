@@ -56,6 +56,9 @@ jobs:
           echo "archive=${NEW_ARCHIVE_DIR}.tar.gz" >> $GITHUB_OUTPUT
           echo "archive_dir=${NEW_ARCHIVE_DIR}" >> $GITHUB_OUTPUT
 
+      - name: Test libverifproxy
+        run: make libverifproxy_test
+
       - name: Upload archive artefact
         uses: actions/upload-artifact@v4
         with:
@@ -97,6 +100,7 @@ jobs:
           tar -xvzf nimbus-eth1-${{ matrix.os }}-${{ matrix.cpu }}-nightly-latest.tar.gz --strip-components=1
           build/nimbus --help
           build/nimbus_verified_proxy --help
+
 
   nightly-build-release:
     name: Nightly build release
