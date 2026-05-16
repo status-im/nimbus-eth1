@@ -122,7 +122,7 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
 
     let
       maxBlobs = vmState.com.maxBlobs
-      maxForkBlobsPerBlock = getMaxBlobsPerBlock(vmState.com, vmState.fork)
+      maxForkBlobsPerBlock = getMaxBlobsPerBlock(vmState.com, vmState.hardFork)
       maxBlobsPerBlock =
         if maxBlobs.isSome:
           # https://eips.ethereum.org/EIPS/eip-7872#specification

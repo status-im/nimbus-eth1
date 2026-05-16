@@ -14,7 +14,7 @@ import
   eth/common/transactions,
   eth/common/addresses,
   eth/common/receipts,
-  ../common/evmforks,
+  ../common/hardforks,
   ../evm/types,
   ../evm/internals,
   ../core/[eip7702, eip8037]
@@ -77,10 +77,13 @@ const
   TOTAL_COST_FLOOR_PER_TOKEN_EIP7623 = 10
   TOTAL_COST_FLOOR_PER_TOKEN_EIP7976 = 16
 
-func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork, gasLimit: GasInt): IntrinsicGas =
+func intrinsicGas*(call: CallParams | Transaction, hardFork: HardFork, gasLimit: GasInt): IntrinsicGas =
   # Compute the baseline gas cost for this transaction.  This is the amount
   # of gas needed to send this transaction (but that is not actually used
   # for computation).
+  let
+    fork = ToEVMFork[hardFork]
+
   var
     regularGas = TX_BASE_COST
     stateGas = 0.GasInt
@@ -90,18 +93,18 @@ func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork, gasLimit: GasI
 
   # EIP-2 (Homestead) extra intrinsic gas for contract creations.
   if call.isCreate:
-    if fork >= FkAmsterdam:
+    if hardFork >= Amsterdam:
       stateGas += CREATE_ACCOUNT_STATE_GAS
 
     regularGas += gasFees[fork][GasTXCreate]
-    if fork >= FkShanghai:
+    if hardFork >= Shanghai:
       regularGas += (gasFees[fork][GasInitcodeWord] * call.input.len.wordCount)
 
   # Input data cost, reduced in EIP-2028 (Istanbul).
   let
     gasZero    = gasFees[fork][GasTXDataZero]
     gasNonZero = gasFees[fork][GasTXDataNonZero]
-    byteZeroToken = if fork >= FkAmsterdam: 4 else: 1
+    byteZeroToken = if hardFork >= Amsterdam: 4 else: 1
 
   for b in call.input:
     if b == 0:
@@ -112,15 +115,15 @@ func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork, gasLimit: GasI
       tokens += 4
 
   # EIP-2930 (Berlin) intrinsic gas for transaction access list.
-  if fork >= FkBerlin:
+  if hardFork >= Berlin:
     for account in call.accessList:
       regularGas += ACCESS_LIST_ADDRESS_COST
       regularGas += account.storageKeys.len * ACCESS_LIST_STORAGE_KEY_COST
       # Total byte count of addresses(20 bytes each) and storage keys (32 bytes each) in the access list.
       accessListBytes += 20 + account.storageKeys.len * 32
 
-  if fork >= FkPrague:
-    if fork >= FkAmsterdam:
+  if hardFork >= Prague:
+    if hardFork >= Amsterdam:
       regularGas += REGULAR_PER_AUTH_BASE_COST * call.authorizationList.len
       # EIP-7981: Increase Access List Cost
       let floorTokensInAccessList = accessListBytes * 4

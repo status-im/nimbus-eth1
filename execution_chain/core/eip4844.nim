@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -106,8 +106,8 @@ proc getTotalBlobGas*(versionedHashesLen: int): uint64 =
   GAS_PER_BLOB * versionedHashesLen.uint64
 
 # getBlobBaseFee implements get_data_gas_price from EIP-4844
-func getBlobBaseFee*(excessBlobGas: uint64, com: CommonRef, fork: EVMFork): UInt256 =
-  if fork >= FkCancun:
+func getBlobBaseFee*(excessBlobGas: uint64, com: CommonRef, fork: HardFork): UInt256 =
+  if fork >= Cancun:
     let blobBaseFeeUpdateFraction = com.getBlobBaseFeeUpdateFraction(fork).u256
     fakeExponential(
       MIN_BLOB_GASPRICE.u256,
@@ -119,7 +119,7 @@ func getBlobBaseFee*(excessBlobGas: uint64, com: CommonRef, fork: EVMFork): UInt
 
 proc calcDataFee*(versionedHashesLen: int,
                   excessBlobGas: uint64,
-                  com: CommonRef, fork: EVMFork): UInt256 =
+                  com: CommonRef, fork: HardFork): UInt256 =
   getTotalBlobGas(versionedHashesLen).u256 *
     getBlobBaseFee(excessBlobGas, com, fork)
 
@@ -128,7 +128,7 @@ func blobGasUsed(txs: openArray[Transaction]): uint64 =
     result += tx.getTotalBlobGas
 
 # calcExcessBlobGas implements calc_excess_data_gas from EIP-4844
-proc calcExcessBlobGas*(com: CommonRef, parent: Header, fork: EVMFork): uint64 =
+proc calcExcessBlobGas*(com: CommonRef, parent: Header, fork: HardFork): uint64 =
   let
     excessBlobGas = parent.excessBlobGas.get(0'u64)
     blobGasUsed = parent.blobGasUsed.get(0'u64)
@@ -139,7 +139,7 @@ proc calcExcessBlobGas*(com: CommonRef, parent: Header, fork: EVMFork): uint64 =
     return 0'u64
 
   # https://eips.ethereum.org/EIPS/eip-7918
-  if fork >= FkOsaka and (BLOB_BASE_COST.u256 * parent.baseFeePerGas.get(0.u256)) > GAS_PER_BLOB.u256 * getBlobBaseFee(excessBlobGas, com, fork):
+  if fork >= Osaka and (BLOB_BASE_COST.u256 * parent.baseFeePerGas.get(0.u256)) > GAS_PER_BLOB.u256 * getBlobBaseFee(excessBlobGas, com, fork):
     return excessBlobGas + blobGasUsed * (maxBlobsPerBlock - targetBlobsPerBlock) div maxBlobsPerBlock
 
   return excessBlobGas + blobGasUsed - targetBlobGasPerBlock
@@ -165,7 +165,7 @@ func validateEip4844Header*(
     return err("expect EIP-4844 excessBlobGas in block header")
 
   let
-    fork = com.toEVMFork(header)
+    fork = com.toHardFork(header)
     headerBlobGasUsed = header.blobGasUsed.get()
     blobGasUsed = blobGasUsed(txs)
     headerExcessBlobGas = header.excessBlobGas.get

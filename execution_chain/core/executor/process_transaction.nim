@@ -103,7 +103,7 @@ proc processTransaction*(
 
   let
     com = vmState.com
-    fork = vmState.fork
+    fork = vmState.hardFork
     regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
     stateGasAvailable = vmState.blockCtx.gasLimit - vmState.blockStateGasUsed
     intrinsic = tx.intrinsicGas(fork, vmState.blockCtx.gasLimit)
@@ -111,7 +111,7 @@ proc processTransaction*(
   # Per-tx 2D gas inclusion check: for each dimension the worst-case
   # contribution must fit in the remaining budget.  Block-end
   # validation still enforces
-  if fork < FkAmsterdam:
+  if fork < Amsterdam:
     let want = min(TX_GAS_LIMIT.GasInt, tx.gasLimit)
     if want > regularGasAvailable:
       return err("regular gas used exceeds limit, want: " & $want & ", available: " & $regularGasAvailable)
@@ -160,7 +160,7 @@ proc processTransaction*(
     else:
       ok(move(callResult))
 
-  vmState.ledger.persist(clearEmptyAccount = fork >= FkSpurious)
+  vmState.ledger.persist(clearEmptyAccount = fork >= Spurious)
 
   res
 

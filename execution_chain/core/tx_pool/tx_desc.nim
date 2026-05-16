@@ -90,7 +90,7 @@ proc setupVMState(com: CommonRef;
                   pos: PosPayloadAttr,
                   parentFrame: CoreDbTxRef): BaseVMState =
   let
-    fork = com.toEVMFork(pos.timestamp)
+    fork = com.toHardFork(pos.timestamp)
     gasLimit = getGasLimit(com, parent)
 
   BaseVMState.new(
@@ -187,7 +187,7 @@ proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
   if tx.txType == TxEip4844:
     let
       excessBlobGas = xp.excessBlobGas
-      blobGasPrice = getBlobBaseFee(excessBlobGas, xp.vmState.com, xp.vmState.fork)
+      blobGasPrice = getBlobBaseFee(excessBlobGas, xp.vmState.com, xp.vmState.hardFork)
     if tx.maxFeePerBlobGas < blobGasPrice:
       debug "Invalid transaction: maxFeePerBlobGas lower than blobGasPrice",
         maxFeePerBlobGas = tx.maxFeePerBlobGas,
@@ -280,6 +280,9 @@ func vmState*(xp: TxPoolRef): BaseVMState =
 func nextFork*(xp: TxPoolRef): EVMFork =
   xp.vmState.fork
 
+func hardFork*(xp: TxPoolRef): HardFork =
+  xp.vmState.hardFork
+
 template chain*(xp: TxPoolRef): ForkedChainRef =
   xp.chain
 
@@ -362,13 +365,13 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     return err(txErrorAlreadyKnown)
 
   let
-    intrinsic = ptx.tx.intrinsicGas(xp.nextFork, xp.gasLimit)
+    intrinsic = ptx.tx.intrinsicGas(xp.hardFork, xp.gasLimit)
 
   validateTxBasic(
     xp.com,
     ptx.tx,
     intrinsic,
-    xp.nextFork,
+    xp.hardFork,
     validateFork = true).isOkOr:
     debug "Invalid transaction: Basic validation failed",
       txHash = id,
