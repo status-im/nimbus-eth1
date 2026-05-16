@@ -106,10 +106,15 @@ proc preExecComputation(call: CallParams): int64 =
       continue
 
     # 7. Add PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST gas to the global refund counter if authority exists in the trie.
-    if ledger.accountExists(authority):
-      if vmState.fork >= FkAmsterdam:
-        gasRefund += int64(STATE_BYTES_PER_NEW_ACCOUNT * vmState.blockCtx.costPerStateByte)
-      else:
+    if vmState.fork >= FkAmsterdam:
+      if ledger.accountExists(authority):
+        gasRefund += CREATE_ACCOUNT_STATE_GAS
+      if auth.address == zeroAddress or ledger.getCodeHash(authority) != EMPTY_CODE_HASH:
+        # https://github.com/ethereum/execution-specs/commit/a0a1ed10f32bd60d4837566aabc9ee2cd2a8b88a
+        # Existing delegation indicator: overwrite in place, no new state bytes added.
+        gasRefund += STATE_BYTES_PER_AUTH_BASE * COST_PER_STATE_BYTE
+    else:
+      if ledger.accountExists(authority):
         gasRefund += PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST
 
     # 8. Set the code of authority to be 0xef0100 || address. This is a delegation designation.
@@ -224,14 +229,24 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: 
   let
     vmState = c.vmState
     fork = c.vmState.fork
+    # EIP-3529: Reduction in refunds
+    MaxRefundQuotient = if fork >= FkLondon: 5.GasInt
+                        else: 2.GasInt
 
-  # EIP-3529: Reduction in refunds
-  let MaxRefundQuotient = if fork >= FkLondon:
-                            5.GasInt
-                          else:
-                            2.GasInt
+  var
+    stateGasRefund = gasRefund.GasInt
+
   if c.shouldBurnGas:
     c.gasMeter.burnGas()
+
+  if c.fork >= FkAmsterdam:
+    if c.isError:
+      # https://github.com/ethereum/execution-specs/pull/2689/changes
+      c.gasMeter.returnAllStateGas()
+      # https://github.com/ethereum/execution-specs/commit/eb80b438a39d188fddf372ef5632123ca3ee238e
+      if call.isCreate:
+        c.gasMeter.returnStateGas(CREATE_ACCOUNT_STATE_GAS)
+        stateGasRefund += CREATE_ACCOUNT_STATE_GAS
 
   # Calculated gas used, taking into account refund rules.
   let
@@ -249,12 +264,11 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: 
     txGasUsed = max(txGasUsedAfterRefund, call.intrinsic.floorDataGas)
     let
       txRegularGas = call.intrinsic.regular + c.gasMeter.regularGasUsed
-      intrinsicStateGas = call.intrinsic.state - gasRefund.GasInt
     blockRegularGasUsed = max(txRegularGas, call.intrinsic.floorDataGas)
-    blockStateGasUsed = intrinsicStateGas + c.gasMeter.stateGasUsed
+    blockStateGasUsed = call.intrinsic.state - stateGasRefund + c.gasMeter.stateGasUsed
     debug "EIP-8037 gas accounting",
       intrinsicRegular = call.intrinsic.regular,
-      intrinsicState = intrinsicStateGas,
+      intrinsicState = call.intrinsic.state,
       regularGasUsed = c.gasMeter.regularGasUsed,
       stateGasUsed = c.gasMeter.stateGasUsed,
       gasRemaining = c.gasMeter.gasRemaining,
