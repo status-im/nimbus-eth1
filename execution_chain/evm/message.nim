@@ -12,7 +12,6 @@ import
   ./types,
   ./state,
   ./code_bytes,
-  ./precompiles,
   ../common/evmforks,
   ../utils/utils,
   ../db/ledger,
@@ -28,18 +27,14 @@ proc generateContractAddress*(vmState: BaseVMState,
   generateAddress(sender, creationNonce)
 
 proc getCallCode*(vmState: BaseVMState, codeAddress: Address): CodeBytesRef =
-  let isPrecompile = getPrecompile(vmState.fork, codeAddress).isSome()
-  if isPrecompile:
-    return CodeBytesRef(nil)
-
   # `codeAddress` is BAL tracked in `initialAccessListEIP2929`
-  var resolvedAddress = codeAddress
-  if vmState.fork >= FkPrague:
-    let
-      code = vmState.readOnlyLedger.getCode(codeAddress)
-      delegateTo = parseDelegationAddress(code)
-    if delegateTo.isSome():
-      if vmState.balTrackerEnabled:
-        vmState.balTracker.trackAddressAccess(delegateTo.value)
-      resolvedAddress = delegateTo.value
-  vmState.readOnlyLedger.getCode(resolvedAddress)
+  let code = vmState.readOnlyLedger.getCode(codeAddress)
+  if vmState.fork < FkPrague:
+    return code
+
+  let delegateTo = parseDelegationAddress(code).valueOr:
+    return code
+
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.trackAddressAccess(delegateTo)
+  vmState.readOnlyLedger.getCode(delegateTo)
