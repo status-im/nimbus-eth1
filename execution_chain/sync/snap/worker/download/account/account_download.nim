@@ -69,7 +69,7 @@ template accountDownload*(
       state.stateRoot, ivReq.minPt, limit, data.accounts, data.proof,
       buddy.peerID).isOkOr:
         sdb.rollbackAccountRange(state, ivReq)      # registry roll back
-        debug info & ": caching accounts failed", peer, root,
+        debug info & ": Caching accounts failed", peer, root,
           notAvailMax=buddy.only.notAvailMax, iv, nAccounts, nProof,
           syncState=buddy.syncState
         bodyRc = typeof(bodyRc).err(ECacheError)
@@ -80,7 +80,7 @@ template accountDownload*(
       state.stateRoot, state.blockHash, state.blockNumber,
       now, Untagged, coverage=state.accountsCov256).isOkOr:
         sdb.rollbackAccountRange(state, ivReq)      # registry roll back
-        debug info & ": updating state failed", peer, root,
+        debug info & ": Updating state failed", peer, root,
           syncState=buddy.syncState
         bodyRc = typeof(bodyRc).err(ECacheError)
         break body                                  # return err()
@@ -88,7 +88,7 @@ template accountDownload*(
     sdb.commitAccountRange(state, ivReq, limit, now) # update registry
     bodyRc = typeof(bodyRc).ok(data.accounts)       # return code
 
-    debug info & ": accounts downloaded and cached", peer, root,
+    debug info & ": Accounts downloaded and cached", peer, root,
       notAvailMax=buddy.only.notAvailMax, iv, nAccounts, nProof,
       syncState=buddy.syncState
 

@@ -10,7 +10,8 @@
 {.push raises: [].}
 
 import
-  ../evm/[types, state, computation, message, interpreter_dispatch],
+  ../evm/[types, state, computation, interpreter_dispatch],
+  ../db/ledger,
   ./call_types
 
 export
@@ -30,7 +31,7 @@ proc setupComputation(call: CallParams): Computation =
       value:           call.value,
       data:            call.input,
     )
-    code = getCallCode(vmState, msg.codeAddress)
+    code = vmState.ledger.getCode(msg.codeAddress)
     computation = newComputation(vmState, false, msg, code)
 
   vmState.txCtx = TxContext(

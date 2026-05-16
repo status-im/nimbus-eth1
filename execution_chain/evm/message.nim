@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -22,33 +22,24 @@ proc isCreate*(message: Message): bool =
   message.kind in {CallKind.Create, CallKind.Create2}
 
 proc generateContractAddress*(vmState: BaseVMState,
-                              kind: CallKind,
-                              sender: Address,
-                              salt = ZERO_CONTRACTSALT,
-                              code = CodeBytesRef(nil)): Address =
-  if kind == CallKind.Create:
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.trackAddressAccess(sender)
-    let creationNonce = vmState.readOnlyLedger().getNonce(sender)
-    generateAddress(sender, creationNonce)
-  else:
-    generateSafeAddress(sender, salt, code.bytes)
+                              sender: Address): Address =
+  # `sender` is BAL tracked in `prepareToRunComputation`
+  let creationNonce = vmState.readOnlyLedger().getNonce(sender)
+  generateAddress(sender, creationNonce)
 
 proc getCallCode*(vmState: BaseVMState, codeAddress: Address): CodeBytesRef =
   let isPrecompile = getPrecompile(vmState.fork, codeAddress).isSome()
   if isPrecompile:
     return CodeBytesRef(nil)
 
+  # `codeAddress` is BAL tracked in `initialAccessListEIP2929`
+  var resolvedAddress = codeAddress
   if vmState.fork >= FkPrague:
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.trackAddressAccess(codeAddress)
-      let
-        code = vmState.readOnlyLedger.getCode(codeAddress)
-        delegateTo = parseDelegationAddress(code)
-      if delegateTo.isSome():
-        vmState.balTracker.trackAddressAccess(delegateTo.get())
-    vmState.readOnlyLedger.resolveCode(codeAddress)
-  else:
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.trackAddressAccess(codeAddress)
-    vmState.readOnlyLedger.getCode(codeAddress)
+    let
+      code = vmState.readOnlyLedger.getCode(codeAddress)
+      delegateTo = parseDelegationAddress(code)
+    if delegateTo.isSome():
+      if vmState.balTrackerEnabled:
+        vmState.balTracker.trackAddressAccess(delegateTo.value)
+      resolvedAddress = delegateTo.value
+  vmState.readOnlyLedger.getCode(resolvedAddress)
