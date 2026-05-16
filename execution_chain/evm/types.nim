@@ -18,6 +18,8 @@ import
   ../common/[common, evmforks],
   ../block_access_list/block_access_list_tracker
 
+from ../common/hardforks import HardFork
+
 export stack, memory, transient_storage, block_access_list_tracker
 
 type
@@ -50,6 +52,7 @@ type
     txCtx*            : TxContext
     flags*            : set[VMFlag]
     fork*             : EVMFork
+    hardFork*         : HardFork
     tracer*           : TracerRef
     receipts*         : seq[StoredReceipt]
     cumulativeGasUsed*: GasInt

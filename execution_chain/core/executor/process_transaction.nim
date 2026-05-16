@@ -103,7 +103,7 @@ proc processTransaction*(
 
   let
     com = vmState.com
-    fork = vmState.fork
+    fork = vmState.hardFork
     regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
     intrinsic = tx.intrinsicGas(fork, vmState.blockCtx.gasLimit)
 
@@ -145,7 +145,7 @@ proc processTransaction*(
     else:
       ok(move(callResult))
 
-  vmState.ledger.persist(clearEmptyAccount = fork >= FkSpurious)
+  vmState.ledger.persist(clearEmptyAccount = fork >= Spurious)
 
   res
 
