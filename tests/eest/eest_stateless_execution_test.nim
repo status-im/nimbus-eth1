@@ -18,9 +18,7 @@ const
   eestType = "blockchain_tests"
   eestReleases = [
     "eest_develop",
-    # TODO: zkevm@v0.3.3 is not compatible with bal@v5.7.0
-    # enable this when they become compatible again
-    # "eest_zkevm"
+    "eest_zkevm"
   ]
 
 const skipFiles = [
@@ -49,11 +47,19 @@ const skipFiles = [
   # Witness codes mismatch -> codes optimisation: implemented in
   # https://github.com/status-im/nimbus-eth1/pull/4099
   "witness_codes_create_same_hash_then_read.json",
-  #
-  # blockAccessListHash mismatch, not an stateless execution failure.
-  # Likely an issue on reference implementation side
-  "witness_codes_delegated_eoa_insufficient_balance.json",
-  "validation_codes_missing_delegated_code_on_insufficient_balance_call.json",
+
+  # Failing cases from zkevm@v0.4.0 -- gasUsed mismatch, likely because of missing
+  # https://github.com/ethereum/execution-specs/commit/bcb8dc5f8934f6d03e09413309a63740fff22e71
+  # zkevm@v0.4.0 is based on bal@v7.1.0 and not on bal@v7.1.1
+  "double_auth.json",
+  "delegation_clearing.json",
+  "delegation_clearing_and_set.json",
+  "delegation_clearing_tx_to.json",
+  "valid_tx_invalid_auth_signature.json",
+  "blobhash_opcode_contexts_tx_types.json",
+  "blobhash_gas_cost.json",
+  "tx_to_beacon_root_contract.json",
+  "bal_7702_null_address_delegation_no_code_change.json",
 ]
 
 runEESTSuite(
