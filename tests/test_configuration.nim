@@ -360,8 +360,8 @@ proc configurationMain*() =
       check config.rdbBranchCacheSize == 39
       check config.rdbPrintStats == true
       check config.rewriteDatadirId == true
-      check config.eagerStateRootCheck ==  false
-      check config.parallelStateRootComputation ==  false
+      check config.eagerStateRootCheck == false
+      check config.parallelStateRootComputation == true
       check config.statelessProviderEnabled == true
       check config.statelessWitnessValidation == true
 
