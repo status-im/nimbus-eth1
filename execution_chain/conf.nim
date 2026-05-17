@@ -360,7 +360,7 @@ type
 
     optimisticStatePrefetch* {.
       hidden
-      defaultValue: false
+      defaultValue: true
       desc: "Optimistically pre-execute block transactions on background " &
         "threads to warm DB caches"
       name: "debug-optimistic-state-prefetch".}: bool
