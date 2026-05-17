@@ -40,16 +40,6 @@ proc initialAccessListEIP2929(call: CallParams) =
 
   vmState.mutateLedger:
     ledger.accessList(call.sender)
-    # For contract creations the EVM will add the contract address to the
-    # access list itself, after calculating the new contract address.
-    if not call.isCreate:
-      ledger.accessList(call.to)
-      # If the `call.to` has a delegation, also warm its target.
-      if vmState.balTrackerEnabled:
-        vmState.balTracker.trackAddressAccess(call.to)
-      let target = parseDelegationAddress(ledger.getCode(call.to))
-      if target.isSome:
-        ledger.accessList(target[])
 
     # EIP3651 adds coinbase to the list of addresses that should start warm.
     if vmState.fork >= FkShanghai:
@@ -65,16 +55,11 @@ proc initialAccessListEIP2929(call: CallParams) =
       for key in account.storageKeys:
         ledger.accessList(account.address, key.to(UInt256))
 
-proc preExecComputation(call: CallParams): int64 =
+proc setDelegation(call: CallParams): int64 =
   var gasRefund = 0'i64
   let
     vmState = call.vmState
     ledger = vmState.ledger
-
-  if not call.isCreate:
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.trackIncNonceChange(call.sender)
-    ledger.incNonce(call.sender)
 
   # EIP-7702
   for auth in call.authorizationList:
@@ -205,19 +190,21 @@ proc setupComputation(call: CallParams, gasRefund: int64, keepStack: bool): Comp
 # not to have too much duplicated code between sync and async.
 # --Adam
 
-proc prepareToRunComputation(c: Computation, call: CallParams) =
-  # Must come after `setupComputation` for correct fork.
-  initialAccessListEIP2929(call)
-
-  # Charge for gas.
+proc prepareToRunComputation(call: CallParams) =
   let
-    vmState = c.vmState
+    vmState = call.vmState
     fork = vmState.hardFork
 
   vmState.mutateLedger:
+    if not call.isCreate:
+      if vmState.balTrackerEnabled:
+        vmState.balTracker.trackIncNonceChange(call.sender)
+      ledger.incNonce(call.sender)
+
+    # Charge for gas.
     var gasFee = call.gasLimit.u256 * call.gasPrice.u256
-    # EIP-4844
     if fork >= Cancun:
+      # EIP-4844
       gasFee += calcDataFee(call.versionedHashes.len,
         vmState.blockCtx.excessBlobGas, vmState.com, fork)
 
@@ -331,11 +318,13 @@ proc finishRunningComputation(
     {.error: "Unknown computation output".}
 
 proc runComputation*(call: CallParams, T: type): T =
+  prepareToRunComputation(call)
+  initialAccessListEIP2929(call)
+
   let
-    gasRefund = preExecComputation(call)
+    gasRefund = setDelegation(call)
     c = setupComputation(call, gasRefund, keepStack = T is DebugCallResult)
 
-  prepareToRunComputation(c, call)
   # Pre-execution sanity checks
   c.preExecComputation()
   if c.isSuccess:
