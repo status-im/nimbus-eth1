@@ -12,6 +12,7 @@ import
   ./types,
   ./state,
   ./code_bytes,
+  ./precompiles,
   ../common/evmforks,
   ../utils/utils,
   ../db/ledger,
@@ -27,6 +28,10 @@ proc generateContractAddress*(vmState: BaseVMState,
   generateAddress(sender, creationNonce)
 
 proc getCallCode*(vmState: BaseVMState, codeAddress: Address): CodeBytesRef =
+  # Avoid accessing ledger if it's a precompile address
+  if getPrecompile(vmState.fork, codeAddress).isSome:
+    return CodeBytesRef(nil)
+
   # For contract creations the EVM will add the contract address to the
   # access list itself, after calculating the new contract address.
   if vmState.fork >= FkBerlin:

@@ -15,14 +15,17 @@
 {.push raises: [].}
 
 import
+  ../../../db/ledger,
   ../../../constants,
-  ../../evm_errors,
   ../../../common/evmforks,
   ../../../core/[eip7702, eip8037],
   ../../computation,
+  ../../precompiles,
+  ../../evm_errors,
   ../../memory,
   ../../stack,
   ../../types,
+  ../../state,
   ../gas_costs,
   ../gas_meter,
   ../op_codes,
@@ -32,9 +35,7 @@ import
   chronicles,
   eth/common/addresses,
   stew/assign2,
-  stint,
-  ../../state,
-  ../../../db/ledger
+  stint
 
 # ------------------------------------------------------------------------------
 # Private
@@ -184,13 +185,19 @@ proc staticCallParams(c: Computation, res: var LocalParams): EvmResult[void] =
   res.updateStackAndParams(c)
   ok()
 
+proc getCallCode(c: Computation): CodeBytesRef =
+  # Avoid accessing ledger if it's a precompile address
+  if getPrecompile(c.vmState.fork, c.msg.codeAddress).isSome:
+    return CodeBytesRef(nil)
+  c.vmState.readOnlyLedger.getCode(c.delegateTo)
+
 proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) =
   ## Call new VM -- helper for `Call`-like operations
 
   # need to provide explicit <c> and <child> for capturing in chainTo proc()
   # <memPos> and <memLen> are provided by value and need not be captured
   var
-    code = c.vmState.readOnlyLedger.getCode(c.delegateTo)
+    code = c.getCallCode()
     child = newComputation(
       c.vmState, keepStack = false, childMsg, code)
 
