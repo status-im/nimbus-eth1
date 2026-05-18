@@ -131,16 +131,10 @@ proc compare(
 ): Result[void, string] =
   ## Compare witness state, nodes and headers, not comparing keys as these
   ## are not included in the test vectors.
-  ## When strict is false, allow generated witness state and codes to be a
-  ## subset of expected. This is because some test vectors include extra unused
-  ## state nodes and code in the witness to test that stateless execution still
-  ## works. Same counts for the lexicographical order.
-  # Always comparing headers to be identical, including order
-  if generated.headers != expected.headers:
-    return err(
-      "Witness headers mismatch, got: " & $generated.shortLog & " expected: " &
-        $expected.shortLog
-    )
+  ## When strict is false, allow generated witness state, codes and headers to
+  ## be a subset of expected. This is because some test vectors include extra
+  ## unused state nodes, code and headers in the witness to test that stateless
+  ## execution still works. Same counts for the lexicographical order.
 
   if strict:
     # when strict enabled, also compare state and codes to be identical
@@ -152,6 +146,11 @@ proc compare(
     if generated.codes != expected.codes:
       return err(
         "Witness codes mismatch, got: " & $generated.shortLog & " expected: " &
+          $expected.shortLog
+      )
+    if generated.headers != expected.headers:
+      return err(
+        "Witness headers mismatch, got: " & $generated.shortLog & " expected: " &
           $expected.shortLog
       )
   else:
@@ -167,6 +166,13 @@ proc compare(
       if code notin expected.codes:
         return err(
           "Witness code missing from expected, got: " & $generated.shortLog &
+            " expected: " & $expected.shortLog
+        )
+
+    for header in generated.headers:
+      if header notin expected.headers:
+        return err(
+          "Witness header missing from expected, got: " & $generated.shortLog &
             " expected: " & $expected.shortLog
         )
 

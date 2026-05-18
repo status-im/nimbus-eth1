@@ -89,9 +89,14 @@ template downloadImpl(
           accLeft = if start == 0: accounts else: accounts[start .. ^1]
           accHashes = accLeft.mapIt(it[0])
 
+        trace info & ": Requesting storage slots", peer,
+          `state`=state.toStr(sdb), start, nAccLeft=accLeft.len
+
         # Fetch from network
         data = buddy.fetchStorage(sRoot, accHashes, ivReq).valueOr:
           state.register accLeft                    # stash data and return
+          trace info & ": Fetching slots failed", peer,
+            `state`=state.toStr(sdb), start, nAccLeft=accLeft.len
           break body                                # error => return
 
         if not state.isOperable():                  # evicted => return
@@ -108,6 +113,9 @@ template downloadImpl(
           bodyRc = true                             # did something => ret code
         start += data.slots.len
 
+        trace info & ": Stored slots", peer, `state`=state.toStr(sdb),
+          nStored=data.slots.len, start, nAccLeft=(accounts.len - start)
+
       # Store partial slot on database
       if 0 < data.slot.len:
         let thisAcc = accounts[start]               # this account
@@ -123,9 +131,15 @@ template downloadImpl(
             break body                              # error => return
         bodyRc = true                               # did something => ret code
 
+        trace info & ": Stored partial slot", peer, `state`=state.toStr(sdb),
+          start, nAccLeft=accLeft.len, iv=(low(ItemKey),limit).flStr
+
         # Download the rest of the sub-trie
         while limit < high(ItemKey):
           let iv = ItemKeyRange.new(limit + 1, high(ItemKey))
+
+          trace info & ": Requesting partial slot", peer,
+            `state`=state.toStr(sdb), start, nAccLeft=accLeft.len, iv=iv.flStr
 
           # Fetch from network
           let ivData = buddy.fetchStorage(sRoot, @[thisAcc[0]], iv).valueOr:
@@ -150,6 +164,9 @@ template downloadImpl(
               debug info & ": Storing partial slots failed", peer, root, start,
                 nAccLeft=accLeft.len, iv=iv.flStr, limit=limit.flStr
               break body                            # error => return
+
+          trace info & ": Stored partial slot", peer, `state`=state.toStr(sdb),
+            start, nAccLeft=accLeft.len, iv=(iv.minPt,limit).flStr
 
           # End `while` range left
         # End non-empty slot with partial range
@@ -195,8 +212,13 @@ template downloadFromQueue(
       # re-queued automatically by `downloadImpl()`.
       state.delStorage w.key
 
+    trace info & ": Processing from slots queue", peer,
+      `state`=state.toStr(sdb), nTries=($fullTries.len & "/" & $partTries.len)
+
     # Process full tries (all at once)
     if 0 < fullTries.len:
+      trace info & ": Requesting from slots queue", peer,
+        `state`=state.toStr(sdb), nTries=fullTries.len
       if not buddy.downloadImpl(state, fullTries, ItemKeyRangeMax, info) or
          not state.isOperable():                    # evicted => return
         bodyRc = false
@@ -207,7 +229,7 @@ template downloadFromQueue(
     while partStart < partTries.len:
       if buddy.ctrl.stopped:                        # roll back `partTries[]`
         buddy.rollBackPartTries(state, partTries, partStart)
-        trace info & ": rolled back to slots queue", peer,
+        trace info & ": Rolled back to slots queue", peer,
           `state`=state.toStr(sdb), partStart,
           nTriesLeft=(partTries.len - partStart)
         bodyRc = false
@@ -218,6 +240,8 @@ template downloadFromQueue(
         iv = partTries[partStart][2]
       partStart.inc
 
+      trace info & ": Requesting from slots queue", peer,
+        `state`=state.toStr(sdb), nTrieLen=partTries.len, iv=iv.flStr
       if not buddy.downloadImpl(state, acc, iv, info) or
          not state.isOperable():                    # evicted => return
         bodyRc = false
@@ -252,13 +276,15 @@ template storageDownload*(
                   it.accBody.storageRoot.to(Hash32).to(StoreRoot)) )
 
       if state.hasCodeOrStorage:
+        trace info & ": Storage download", peer,
+          `state`=state.toStr(buddy.ctx.pool.stateDB), syncState=buddy.syncState
 
         while not buddy.ctrl.stopped and
               state.hasCodeOrStorage and
               buddy.downloadFromQueue(state, info):
           continue
 
-        trace info & ": storage done", peer, root=state.rootStr,
+        trace info & ": Storage done", peer, root=state.rootStr,
           todo=state.hasCodeOrStorage, syncState=buddy.syncState
 
   discard                                           # visual alignment

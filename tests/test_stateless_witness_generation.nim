@@ -44,7 +44,7 @@ suite "Stateless: Witness Generation":
     let witnessKeys = ledger.getWitnessKeys()
     check witnessKeys.len() == 1
 
-    let witness = Witness.build(witnessKeys, ledger)
+    let witness = Witness.build(witnessKeys, @[], ledger)
 
     check:
       witness.state.len() > 0
@@ -59,7 +59,7 @@ suite "Stateless: Witness Generation":
     let witnessKeys = ledger.getWitnessKeys()
     check witnessKeys.len() == 1
 
-    let witness = Witness.build(witnessKeys, ledger)
+    let witness = Witness.build(witnessKeys, @[], ledger)
 
     check:
       witness.state.len() > 0
@@ -75,7 +75,7 @@ suite "Stateless: Witness Generation":
     let witnessKeys = ledger.getWitnessKeys()
     check witnessKeys.len() == 2
 
-    let witness = Witness.build(witnessKeys, ledger)
+    let witness = Witness.build(witnessKeys, @[], ledger)
 
     check:
       witness.state.len() > 0
@@ -91,7 +91,7 @@ suite "Stateless: Witness Generation":
     let witnessKeys = ledger.getWitnessKeys()
     check witnessKeys.len() == 2
 
-    let witness = Witness.build(witnessKeys, ledger)
+    let witness = Witness.build(witnessKeys, @[], ledger)
 
     check:
       witness.state.len() > 0
@@ -107,7 +107,7 @@ suite "Stateless: Witness Generation":
     let witnessKeys = ledger.getWitnessKeys()
     check witnessKeys.len() == 2
 
-    let witness = Witness.build(witnessKeys, ledger)
+    let witness = Witness.build(witnessKeys, @[], ledger)
 
     check:
       witness.state.len() > 0
@@ -126,7 +126,7 @@ suite "Stateless: Witness Generation":
     let witnessKeys = ledger.getWitnessKeys()
     check witnessKeys.len() == 4
 
-    let witness = Witness.build(witnessKeys, ledger)
+    let witness = Witness.build(witnessKeys, @[], ledger)
 
     check:
       witness.state.len() > 0
@@ -147,7 +147,7 @@ suite "Stateless: Witness Generation":
     witnessKeys[(addr1, Opt.some(slot3))] = false
     check witnessKeys.len() == 5
 
-    let witness = Witness.build(witnessKeys, ledger)
+    let witness = Witness.build(witnessKeys, @[], ledger)
 
     check:
       witness.keys.len() == 5

@@ -18,7 +18,7 @@ Implemented Algorithm
 The general algorithm looks like
 
 1. Download data via *snap* ptotocol and cache it
-2. Verify downloaded data from statge 1. and assemble partial MPTs
+2. Verify downloaded data from stage 1. and assemble partial MPTs
 3. Download the missing data for stage 2.
 4. Verify downloaded data from statge 3. and complete MPTs to provide a complete state.
 
@@ -73,7 +73,17 @@ that these *state* can *borrow* parts when assembling MPTs.
 
 ### ad 2.
 
-TBD
+* Find a pivot state which has maximal accounts coverage.
+
+* Process states by increasing height distance from the pivot state.
+
+* While processing, account ranges are merged if they overlap with already
+  merged ranges.
+
+  **TODO**: This has some inefficiency as overlapping account ranges ready to
+  be merged could be curbed to only the range needed. As account ranges are
+  bundled and verified en-block, this is would need to involve some extra MPT
+  operations on an active partial trie.
 
 ### ad 3.
 
@@ -96,12 +106,13 @@ TODO
 Metrics
 -------
 
-| *Variable*                      | *Logic type* | *Short description*        |
-|:--------------------------------|:------------:|:---------------------------|
-|                                 |              |                            |
-| nec_snap_max_acc_state_coverage | hash range   | pivot range coverage       |
-| nec_snap_acc_coverage           | hash range   | accumulated range coverage |
-|                                 |              |                            |
+| *Variable*                           | *Logic type*    | *Short description*     |
+|:-------------------------------------|:---------------:|:------------------------|
+|                                      |                 |                         |
+| nec_snap_accumulated_states_coverage | factor of 2^256 | active account ranges   |
+| nec_snap_archived_states_coverage    | factor of 2^256 | archived account ranges |
+| nec_snap_active_states               | number          | number of active states |
+| nec_snap_merged_mpt_coverage         | factor of 2^256 | MPT bulder completeness |
 
 ###  Graphana example
 

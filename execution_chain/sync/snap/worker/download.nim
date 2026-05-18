@@ -12,11 +12,11 @@
 
 import
   pkg/[chronicles, chronos],
-  ./download/[account, code, header, storage],
+  ./download/[account, code, storage],
   ./[helpers, mpt, state_db, update, worker_desc]
 
 export
-  account, code, header, storage
+  account, code, storage
 
 # ------------------------------------------------------------------------------
 # Public function(s)
@@ -46,7 +46,6 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
       sdb = ctx.pool.stateDB
       peer {.inject,used.} = $buddy.peer            # logging only
 
-    buddy.updateTarget info                         # manual target set up?
     buddy.updateFcuRoot info                        # FCU header => state
 
     let pivot = sdb.pivot.valueOr:

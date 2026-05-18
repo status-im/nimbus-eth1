@@ -53,7 +53,7 @@ proc fetchLeast*(udb: UnprocItemKeys; maxLen: UInt256): Opt[ItemKeyRange] =
 
     # Curb interval to maximal length (note `0` => `2^256`)
     iv = block:
-      if maxLen == 0 or (jv.len != 0 and jv.len <= maxLen):
+      if maxLen.isZero or (jv.len.isZero.not and jv.len <= maxLen):
         jv
       else:
         # Curb interval `jv` to length `maxLen`
@@ -81,7 +81,7 @@ proc fetchSubRange*(
     # Note that `iv.len` is a represented by the residue class mod `2^256`.
     # So `iv.len == 0` indicates that the size is 2^256 as interval cannot
     # be empty by definition.
-    if iv.len == 0:                                 # => 2^256, largest interval
+    if iv.len.isZero:                               # => 2^256, largest interval
       kv = udb.unprocessed.ge().valueOr:
         return err()                                # no data
       break body
@@ -89,7 +89,7 @@ proc fetchSubRange*(
     if covered == iv.len:
       kv = iv                                       # total overlap
       break body
-    if covered == 0:
+    if covered.isZero:
       return err()                                  # no overlap, at all
 
     # Now, there us a partial overlap of `iv` with the `unprocessed`
@@ -183,7 +183,7 @@ proc append*(udb: UnprocItemKeys; minKey, maxKey: ItemKey) =
       # Must Reduce by currenty borrowed block numbers
       for key in minKey.to(UInt256) .. maxKey.to(UInt256):
         # So this is piecmeal adding to unprocessed numbers
-        if udb.borrowed.covered(ItemKey(key), ItemKey(key)) == 0:
+        if udb.borrowed.covered(ItemKey(key), ItemKey(key)).isZero:
           discard udb.unprocessed.merge(ItemKey(key), ItemKey(key))
     else:
       discard udb.unprocessed.merge(minKey, maxKey)

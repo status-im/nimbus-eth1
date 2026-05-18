@@ -201,7 +201,7 @@ suite "Aristo TxFrame":
       tx0.kMap.len() == 0
       tx1.kMap.len() == 1
 
-    let tx2 = db.txFrameBegin(tx1, moveParentHashKeys = true)
+    discard db.txFrameBegin(tx1, moveParentHashKeys = true)
 
     # Check that we can still persist the moved from txFrame
     tx1.checkpoint(1, skipSnapshot = true)

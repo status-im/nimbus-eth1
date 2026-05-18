@@ -18,6 +18,8 @@ import
   ../common/[common, evmforks],
   ../block_access_list/block_access_list_tracker
 
+from ../common/hardforks import HardFork
+
 export stack, memory, transient_storage, block_access_list_tracker
 
 type
@@ -27,14 +29,13 @@ type
   BlockContext* = object
     timestamp*        : EthTime
     gasLimit*         : GasInt
-    baseFeePerGas*    : Opt[UInt256]
+    baseFeePerGas*    : GasInt
     prevRandao*       : Bytes32
     difficulty*       : UInt256
     coinbase*         : Address
     excessBlobGas*    : uint64
     parentHash*       : Hash32
     slotNumber*       : uint64
-    costPerStateByte* : GasInt
 
   TxContext* = object
     origin*         : Address
@@ -50,6 +51,7 @@ type
     txCtx*            : TxContext
     flags*            : set[VMFlag]
     fork*             : EVMFork
+    hardFork*         : HardFork
     tracer*           : TracerRef
     receipts*         : seq[StoredReceipt]
     cumulativeGasUsed*: GasInt
@@ -82,6 +84,7 @@ type
     keepStack*:             bool
     finalStack*:            seq[UInt256]
     balTrackerEnabled*:     bool
+    delegateTo*:            Address
 
   StatusCode* {.pure.} = enum
     None
@@ -102,6 +105,7 @@ type
     stateGasLeft*: GasInt
     stateGasUsed*: GasInt
     regularGasUsed*: GasInt
+    stateGasRefundPending*: GasInt
 
   CallKind* {.pure.} = enum
     Call          # Request CALL.

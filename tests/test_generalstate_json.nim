@@ -228,7 +228,7 @@ proc generalStateJsonMain*(debugMode = false) =
       echo "missing test subject"
       quit(QuitFailure)
 
-    let path = "tests/fixtures/eest_devnet/state_tests"
+    let path = "tests/fixtures/eest_bal/state_tests"
     let n = json.parseFile(path / config.testSubject)
     var testStatusIMPL: TestStatus
     testFixture(n, testStatusIMPL, config.trace, true)

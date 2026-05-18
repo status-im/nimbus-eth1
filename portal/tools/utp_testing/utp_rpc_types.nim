@@ -1,4 +1,4 @@
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -8,25 +8,25 @@
 
 import
   std/[hashes, json],
-  json_rpc/jsonmarshal,
   stew/[byteutils, endians2],
   eth/p2p/discoveryv5/node,
-  eth/utp/[utp_discv5_protocol, utp_router]
+  eth/utp/[utp_discv5_protocol, utp_router],
+  web3/eth_json_marshal
 
-export jsonmarshal, json
+export eth_json_marshal, json
 
 type SKey* = object
   id*: uint16
   nodeId*: NodeId
 
-proc writeValue*(w: var JsonWriter[JrpcConv], v: SKey) {.gcsafe, raises: [IOError].} =
+proc writeValue*(w: var JsonWriter[EthJson], v: SKey) {.gcsafe, raises: [IOError].} =
   let hex = v.nodeId.toBytesBE().toHex()
   let numId = v.id.toBytesBE().toHex()
   let finalStr = hex & numId
   w.writeValue(finalStr)
 
 proc readValue*(
-    r: var JsonReader[JrpcConv], val: var SKey
+    r: var JsonReader[EthJson], val: var SKey
 ) {.gcsafe, raises: [IOError, JsonReaderError].} =
   let str = r.parseString()
   if str.len < 64:

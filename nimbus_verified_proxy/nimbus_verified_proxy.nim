@@ -16,10 +16,8 @@ import
   json_rpc/rpcproxy,
   beacon_chain/gossip_processing/light_client_processor,
   beacon_chain/networking/network_metadata,
-  beacon_chain/spec/beaconstate,
-  beacon_chain/conf,
-  beacon_chain/[beacon_clock, buildinfo, nimbus_binary_common, process_state],
-  beacon_chain/spec/forks,
+  beacon_chain/spec/[forks, beaconstate],
+  beacon_chain/[conf, beacon_clock, buildinfo, nimbus_binary_common, process_state],
   ../execution_chain/common/common,
   ./nimbus_verified_proxy_conf,
   ./engine/engine,
@@ -115,7 +113,7 @@ proc startBeaconBackends(
   clients
 
 proc startFrontends(
-    engine: RpcVerificationEngine, urls: seq[string]
+    frontend: ExecutionApiFrontend, urls: seq[string]
 ): seq[JsonRpcServer] {.raises: [ProxyError].} =
   var servers: seq[JsonRpcServer] = @[]
 
@@ -125,7 +123,7 @@ proc startFrontends(
       continue
 
     # inject frontend
-    server.injectEngineFrontend(engine.frontend)
+    server.injectEngineFrontend(frontend)
 
     let status = server.start()
     if status.isErr():
@@ -161,6 +159,7 @@ proc run(
       codeCacheLen: config.codeCacheLen,
       storageCacheLen: config.storageCacheLen,
       parallelBlockDownloads: config.parallelBlockDownloads,
+      maxLightClientUpdates: config.maxLightClientUpdates,
       trustedBlockRoot: config.trustedBlockRoot,
       syncHeaderStore: config.syncHeaderStore,
     )
@@ -184,9 +183,8 @@ proc run(
   let execBackendClients =
     await startExecutionBackends(engine, config.executionApiUrls, regularCaps)
   let beaconBackendClients = await startBeaconBackends(engine, config.beaconApiUrls)
-  let frontendServers = engine.startFrontends(config.frontendUrls)
-
-  engine.registerDefaultFrontend()
+  let frontend = engine.getExecutionApiFrontend()
+  let frontendServers = startFrontends(frontend, config.frontendUrls)
 
   try:
     while true:
@@ -206,7 +204,7 @@ proc run(
       await c.stop()
     raise e
 
-proc main() {.raises: [].} =
+when isMainModule:
   const
     banner = "Nimbus Verified Proxy " & FullVersionStr
     copyright =
@@ -244,5 +242,4 @@ proc main() {.raises: [].} =
     fatal "Unexpected error", error = e.msg
     quit QuitFailure
 
-when isMainModule:
-  main()
+  waitFor run(config)

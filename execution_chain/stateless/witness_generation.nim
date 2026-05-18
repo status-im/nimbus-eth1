@@ -19,7 +19,12 @@ import
 
 export common, ledger, witness_types, byteutils
 
-proc build*(T: type Witness, witnessKeys: WitnessTable, preStateLedger: LedgerRef): T =
+proc build*(
+    T: type Witness,
+    witnessKeys: WitnessTable,
+    collapsedSiblings: seq[tuple[sibAccPath: Hash32, sibStoPath: Opt[Hash32]]],
+    preStateLedger: LedgerRef,
+): T =
   var
     proofPaths: Table[Hash32, seq[Hash32]]
     addedCodeHashes: HashSet[Hash32]
@@ -58,6 +63,26 @@ proc build*(T: type Witness, witnessKeys: WitnessTable, preStateLedger: LedgerRe
         paths.add(slotPath)
         proofPaths[accPath] = paths
 
+  for accPath, stoPaths in proofPaths:
+    witness.addKey(accPreimages.getOrDefault(accPath))
+    for stoPath in stoPaths:
+      witness.addKey(stoPreimages.getOrDefault(stoPath))
+
+  # Merge collapsed sibling paths from branch collapses during deletion.
+  # For account-trie collapses sibStoPath is none. For storage-trie collapses
+  # sibAccPath is the account and sibStoPath is the storage path to prove.
+  for (sibAccPath, sibStoPath) in collapsedSiblings:
+    if sibStoPath.isNone():
+      # Account-trie collapse: ensure the account path has a proof entry
+      if sibAccPath notin proofPaths:
+        proofPaths[sibAccPath] = @[]
+    else:
+      # Storage-trie collapse: add storage path under its account
+      proofPaths.withValue(sibAccPath, v):
+        v[].add(sibStoPath.get())
+      do:
+        proofPaths[sibAccPath] = @[sibStoPath.get()]
+
   var multiProof: seq[seq[byte]]
   preStateLedger.txFrame.multiProof(proofPaths, multiProof).isOkOr:
     raiseAssert "Failed to get multiproof: " & $$error
@@ -66,11 +91,6 @@ proc build*(T: type Witness, witnessKeys: WitnessTable, preStateLedger: LedgerRe
   # https://github.com/ethereum/execution-specs/blob/33aa038697162a3ba0aedbadf177c4c59ee5b007/src/ethereum/forks/amsterdam/stateless_host_exec_witness.py#L230
   multiProof.sort()
   witness.state = move(multiProof)
-
-  for accPath, stoPaths in proofPaths:
-    witness.addKey(accPreimages.getOrDefault(accPath))
-    for stoPath in stoPaths:
-      witness.addKey(stoPreimages.getOrDefault(stoPath))
 
   witness
 
@@ -96,7 +116,9 @@ proc build*(
   if validateStateRoot and parent.number > 0:
     doAssert preStateLedger.getStateRoot() == parent.stateRoot
 
-  var witness = Witness.build(ledger.getWitnessKeys(), preStateLedger)
+  var witness = Witness.build(
+    ledger.getWitnessKeys(), ledger.getCollapsedSiblings(), preStateLedger
+  )
 
   let
     blockHashes = ledger.getBlockHashesCache()

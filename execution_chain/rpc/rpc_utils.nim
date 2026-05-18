@@ -11,6 +11,7 @@
 
 import
   std/[sequtils, algorithm, strutils],
+  json_rpc/errors,
   ./rpc_types,
   ./params,
   ../db/ledger,
@@ -42,6 +43,12 @@ func median(prices: var openArray[GasInt]): GasInt =
     return (a div 2 + b div 2 + ((a mod 2 + b mod 2) div 2)).GasInt
 
   prices[middle]
+
+proc invalidParams*(msg: string): ref ApplicationError =
+  (ref ApplicationError)(
+    code: -32602,
+    msg: msg,
+  )
 
 proc calculateMedianGasPrice*(chain: ForkedChainRef): GasInt =
   const minGasPrice = 30_000_000_000.GasInt
@@ -254,7 +261,7 @@ proc populateReceipt*(rec: StoredReceipt, gasUsed: GasInt, tx: Transaction,
 
   if tx.txType == TxEip4844:
     res.blobGasUsed = Opt.some(Quantity(tx.versionedHashes.len.uint64 * GAS_PER_BLOB.uint64))
-    res.blobGasPrice = Opt.some(getBlobBaseFee(header.excessBlobGas.get(0'u64), com, com.toEVMFork(header)))
+    res.blobGasPrice = Opt.some(getBlobBaseFee(header.excessBlobGas.get(0'u64), com, com.toHardFork(header)))
 
   return res
 

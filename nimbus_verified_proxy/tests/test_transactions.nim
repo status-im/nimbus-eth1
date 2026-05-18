@@ -34,7 +34,7 @@ suite "test transaction verification":
   test "check eth api methods":
     let
       ts = TestApiState.init(1.u256)
-      engine = initTestEngine(ts, 1, 1).valueOr:
+      (engine, frontend) = initTestEngine(ts, 1, 1).valueOr:
         raise newException(TestProxyError, error.errMsg)
 
         # defining port 8888 is a hack for addr in use errors
@@ -43,7 +43,7 @@ suite "test transaction verification":
     for tx in blk.transactions:
       if tx.kind == tohTx:
         ts.loadTransaction(tx.tx.hash, tx.tx)
-        let verifiedTx = waitFor engine.frontend.eth_getTransactionByHash(tx.tx.hash)
+        let verifiedTx = waitFor frontend.eth_getTransactionByHash(tx.tx.hash)
         check:
           verifiedTx.isOk()
           verifiedTx.get() == tx.tx

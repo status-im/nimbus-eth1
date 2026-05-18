@@ -17,7 +17,7 @@ import
   ../../../../networking/p2p,
   ../../../wire_protocol/types,
   ../[helpers, update, worker_desc],
-  ./[blocks_fetch, blocks_helpers, blocks_import, blocks_unproc]
+  ./[blocks_fetch, blocks_helpers, blocks_unproc]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -207,8 +207,40 @@ template blocksImport*(
         base=ctx.chain.baseNumber, head=ctx.chain.latestNumber
 
       for n in 0 ..< blocks.len:
-        let nthBn = blocks[n].header.number
-        discard (await buddy.importBlock(blocks[n], peerID)).valueOr:
+        let
+          nthBn = blocks[n].header.number
+          blkStart = Moment.now()
+
+        # Skip blocks at or below the current base — `FC` would otherwise
+        # quarantine them as orphans and abort the batch.
+        if nthBn <= ctx.chain.baseNumber:
+          trace "Ignoring block less eq. base", peer, blk=nthBn,
+            B=ctx.chain.baseNumber, L=ctx.chain.latestNumber
+          blocks[n].reset()
+          continue
+
+        # `processQueue` already yields per-item via `idleAsync().withTimeout`,
+        # so no extra throttle is needed here.
+        let importErr: BeaconError =
+          try:
+            let res = await ctx.chain.queueImportBlock(
+              blocks[n], Opt.none(BlockAccessListRef))
+            if res.isOk:
+              default(BeaconError)
+            else:
+              (ENoException, "", res.error, Moment.now() - blkStart)
+          except CancelledError as e:
+            (ECancelledError, $e.name, e.msg, Moment.now() - blkStart)
+
+        let error: BeaconError =
+          if importErr.excp != ENoException:
+            importErr
+          elif not ctx.daemon:
+            (ESyncerTermination, "", "", Moment.now() - blkStart)
+          else:
+            default(BeaconError)
+
+        if error.excp != ENoException:
           if error.excp != ECancelledError:
             isError = true
 
@@ -265,7 +297,7 @@ template blocksImport*(
         # Free block body immediately - ForkedChain only retains the header.
         # Transactions are already persisted as RLP bytes in the txFrame.
         blocks[n].reset()
-        
+
         # End block: `loop`
 
     if not isError:

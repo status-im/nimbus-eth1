@@ -1,4 +1,4 @@
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -10,7 +10,7 @@ import json_rpc/rpcclient, ../../rpc/rpc_types, ./utp_rpc_types
 
 export utp_rpc_types
 
-createRpcSigsFromNim(RpcClient):
+createRpcSigsFromNim(RpcClient, EthJson):
   proc utp_connect(enr: Record): SKey
   proc utp_write(k: SKey, b: string): bool
   proc utp_read(k: SKey, n: int): string

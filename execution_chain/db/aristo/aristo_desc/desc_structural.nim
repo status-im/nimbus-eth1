@@ -66,6 +66,22 @@ type
   StoLeafRef* = ref object of LeafRef
     stoData*: UInt256
 
+  ## NOTE: Leaf cache values are stored as value types so the cache can be safely 
+  ## written from background pre-fetch threads under refc (which uses thread-local heaps).
+  
+  CachedAccLeaf* = object
+    case empty*: bool
+    of true:
+      discard
+    of false:
+      pfx*: NibblesBuf
+      account*: AristoAccount
+      stoID*: StorageID
+
+  CachedStoLeaf* = object
+    pfx*: NibblesBuf
+    stoData*: UInt256
+
   NodeRef* = ref object of RootRef
     ## Combined record for a *traditional* ``Merkle Patricia Tree` node merged
     ## with a structural `VertexRef` type object.
@@ -115,6 +131,45 @@ template init*(
     _: type ExtBranchRef, pfxp: NibblesBuf, startVidp: VertexID, usedp: uint16
 ): ExtBranchRef =
   ExtBranchRef(vType: ExtBranch, pfx: pfxp, startVid: startVidp, used: usedp)
+
+template init*(
+    T: type CachedAccLeaf, pfxp: NibblesBuf, accountp: AristoAccount, stoIDp: StorageID): T =
+  T(empty: false, pfx: pfxp, account: accountp, stoID: stoIDp)
+
+template init*(
+    T: type CachedStoLeaf, pfxp: NibblesBuf, stoDatap: UInt256): T =
+  T(pfx: pfxp, stoData: stoDatap)
+
+const
+  emptyCachedAccLeaf* = CachedAccLeaf(empty: true)
+  emptyCachedStoLeaf* = CachedStoLeaf(stoData: 0.u256)
+
+template isEmpty*(c: CachedAccLeaf): bool =
+  c.empty
+
+template isEmpty*(c: CachedStoLeaf): bool =
+  c.stoData.isZero()
+
+func toLeaf*(c: CachedAccLeaf): AccLeafRef =
+  if c.isEmpty(): 
+    AccLeafRef(nil) 
+  else: 
+    AccLeafRef.init(c.pfx, c.account, c.stoID)
+
+func toLeaf*(c: CachedStoLeaf): StoLeafRef =
+  if c.isEmpty(): 
+    StoLeafRef(nil) 
+  else: 
+    StoLeafRef.init(c.pfx, c.stoData)
+
+func toStoData*(c: CachedStoLeaf): UInt256 =
+  c.stoData
+
+func toStoData*(v: StoLeafRef): UInt256 =
+  if v.isNil():
+    0'u256
+  else:
+    v.stoData
 
 const emptyNibbles = NibblesBuf()
 

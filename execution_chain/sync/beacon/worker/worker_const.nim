@@ -61,14 +61,6 @@ const
     ## Sleep some time in multi-mode (i.e. concurrently running peers) if
     ## there is nothing else to do
 
-  asyncThreadSwitchTimeSlot* = chronos.nanoseconds(1)
-    ## Nano-sleep to allows pseudo/async thread switch
-
-  asyncThreadSwitchGap* = chronos.milliseconds(300)
-    ## Controls nano-sleep tart switch density when using this in a loop (e.g.
-    ## for processing lists.) The constant requires a minimum time gap when
-    ## invoking a nano-sleep utility.
-
   # ----------------------
 
   nFetchTargetFailedPeersThreshold* = 7

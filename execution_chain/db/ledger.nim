@@ -18,7 +18,6 @@ import
   eth/common/[addresses, hashes],
   ../utils/[mergeutils, utils],
   ../evm/code_bytes,
-  ../core/eip7702,
   ../constants,
   ./[access_list as ac_access_list, core_db, storage_types],
   ./aristo/aristo_blobify
@@ -328,6 +327,24 @@ proc makeDirty(ledger: LedgerRef, address: Address, cloneStorage = true): Accoun
   ledger.savePoint.cache[address] = result
   ledger.savePoint.dirty[address] = result
 
+template getCodeSizeImpl(ledger: LedgerRef, acc: AccountRef): int =
+  if acc.code == nil:
+    if acc.statement.codeHash == EMPTY_CODE_HASH:
+      return 0
+    acc.code = ledger.code.get(acc.statement.codeHash).valueOr:
+      # On a cache miss, we don't fetch the code - instead, we fetch just the
+      # length - should the code itself be needed, it will typically remain
+      # cached and easily accessible in the database layer - this is to prevent
+      # EXTCODESIZE calls from messing up the code cache and thus causing
+      # recomputation of the jump destination table
+      var rc = ledger.txFrame.len(contractHashKey(acc.statement.codeHash).toOpenArray)
+
+      return rc.valueOr:
+        warn logTxt "getCodeSize()", codeHash=acc.statement.codeHash, error=($$rc.error)
+        0
+
+  acc.code.len()
+
 # ------------------------------------------------------------------------------
 # Public methods
 # ------------------------------------------------------------------------------
@@ -390,6 +407,7 @@ proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool, collect
   result.code = typeof(result.code).init(codeLruSize)
   result.slots = typeof(result.slots).init(slotsLruSize)
   result.collectWitness = collectWitness
+  result.txFrame.aTx.collectWitness = collectWitness
   result.blockHashes = typeof(result.blockHashes).init(MAX_PREV_HEADER_DEPTH.int)
   discard result.beginSavePoint
 
@@ -454,29 +472,7 @@ proc getCodeSize*(ledger: LedgerRef, address: Address): int =
   let acc = ledger.getAccount(address, false)
   if acc.isNil:
     return 0
-
-  if acc.code == nil:
-    if acc.statement.codeHash == EMPTY_CODE_HASH:
-      return 0
-    acc.code = ledger.code.get(acc.statement.codeHash).valueOr:
-      # On a cache miss, we don't fetch the code - instead, we fetch just the
-      # length - should the code itself be needed, it will typically remain
-      # cached and easily accessible in the database layer - this is to prevent
-      # EXTCODESIZE calls from messing up the code cache and thus causing
-      # recomputation of the jump destination table
-      var rc = ledger.txFrame.len(contractHashKey(acc.statement.codeHash).toOpenArray)
-
-      return rc.valueOr:
-        warn logTxt "getCodeSize()", codeHash=acc.statement.codeHash, error=($$rc.error)
-        0
-
-  acc.code.len()
-
-proc resolveCode*(ledger: LedgerRef, address: Address): CodeBytesRef =
-  let code = ledger.getCode(address)
-  let delegateTo = parseDelegationAddress(code).valueOr:
-    return code
-  ledger.getCode(delegateTo)
+  getCodeSizeImpl(ledger, acc)
 
 proc getCommittedStorage*(ledger: LedgerRef, address: Address, slot: UInt256): UInt256 =
   let acc = ledger.getAccount(address, false)
@@ -660,8 +656,16 @@ proc clearEmptyAccounts(ledger: LedgerRef) =
 template getWitnessKeys*(ledger: LedgerRef): WitnessTable =
   ledger.witnessKeys
 
+template getCollapsedSiblings*(
+    ledger: LedgerRef
+): seq[tuple[sibAccPath: Hash32, sibStoPath: Opt[Hash32]]] =
+  ledger.txFrame.aTx.collapsedSiblings
+
 template clearWitnessKeys*(ledger: LedgerRef) =
   ledger.witnessKeys.clear()
+
+template clearCollapsedSiblings*(ledger: LedgerRef) =
+  ledger.txFrame.aTx.collapsedSiblings.setLen(0)
 
 proc getBlockHash*(ledger: LedgerRef, blockNumber: BlockNumber): Hash32 =
   ledger.blockHashes.get(blockNumber).valueOr:
@@ -742,6 +746,7 @@ proc persist*(ledger: LedgerRef,
 
   if clearWitness:
     ledger.clearWitnessKeys()
+    ledger.clearCollapsedSiblings()
     ledger.clearBlockHashesCache()
 
 iterator addresses*(ledger: LedgerRef): Address =
@@ -827,7 +832,6 @@ proc isEmptyAccount*(ledger: ReadOnlyLedger, address: Address): bool = isEmptyAc
 proc getCommittedStorage*(ledger: ReadOnlyLedger, address: Address, slot: UInt256): UInt256 = getCommittedStorage(distinctBase ledger, address, slot)
 proc inAccessList*(ledger: ReadOnlyLedger, address: Address): bool = inAccessList(distinctBase ledger, address)
 proc inAccessList*(ledger: ReadOnlyLedger, address: Address, slot: UInt256): bool = inAccessList(distinctBase ledger, address)
-proc resolveCode*(ledger: ReadOnlyLedger, address: Address): CodeBytesRef = resolveCode(distinctBase ledger, address)
 
 # ------------------------------------------------------------------------------
 # End

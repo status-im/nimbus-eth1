@@ -48,9 +48,9 @@ proc init*(
   var state = com.db.kvt.loadPrunerStateBe()
   state.active = true
   T(
-    com: com, 
-    batchSize: batchSize, 
-    loopDelay: loopDelay, 
+    com: com,
+    batchSize: batchSize,
+    loopDelay: loopDelay,
     state: state
   )
 
@@ -58,7 +58,7 @@ proc pruneLoop(pruner: BackgroundPrunerRef) {.async: (raises: [CancelledError]).
   info "Starting pruner"
   let
     kvt = pruner.com.db.kvt
-    oldState = kvt.loadPrunerStateBe()
+    _ = kvt.loadPrunerStateBe()
 
   while true:
     let

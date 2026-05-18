@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -43,7 +43,10 @@ proc updateEtaInit*(ctx: BeaconCtxRef) =
   ctx.pool.syncEta.reset
   ctx.pool.syncEta.headerTime = etaHeaderTimeDefault
   ctx.pool.syncEta.blockTime = etaBlockTimeDefault
-  metrics.set(nec_sync_eta_secs, -1)
+  if ctx.pool.standByMode:
+    metrics.set(nec_sync_eta_secs, 0f)              # currently all done
+  else:
+    metrics.set(nec_sync_eta_secs, -1)
 
 # --------------
 
@@ -51,7 +54,10 @@ proc updateEtaIdle*(ctx: BeaconCtxRef) =
   ## Metrics update while system state is idle so it can be run on a ticker.
   ## Othewise, ETA updates are done with the syncer state handler.
   ##
-  if ctx.pool.syncState == SyncState.idle and
+  if ctx.pool.standByMode:
+    metrics.set(nec_sync_eta_secs, 0f)              # currently all done
+
+  elif ctx.pool.syncState == SyncState.idle and
      low(Moment) < ctx.pool.syncEta.lastUpdate and
      ctx.pool.syncEta.lastUpdate + etaIdleMaxDensity <= Moment.now():
 

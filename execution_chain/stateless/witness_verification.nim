@@ -115,6 +115,12 @@ func verifyHeaders*(
 func verifyState*(
     witness: ExecutionWitness, preStateRoot: Hash32
 ): Result[void, string] =
+  # Short path for emptyRoot -> empty trie: no accounts exist in the pre-state,
+  # nothing to verify.
+  # Without this check verifyProof will return an error.
+  if preStateRoot == emptyRoot:
+    return ok()
+
   # Verify state against keys in witness
   var keysTable: Table[Address, HashSet[UInt256]]
   ?keysTable.putAll(witness.keys)
