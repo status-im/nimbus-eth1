@@ -110,11 +110,6 @@ type
     selfDestruct: HashSet[Address]
     accessList: ac_access_list.AccessList
 
-  SelfDestructRefund* = object
-    address*: Address
-    createdSlots*: int
-    codeLen*: int
-
 const
   resetFlags = {
     Dirty,
@@ -349,13 +344,6 @@ template getCodeSizeImpl(ledger: LedgerRef, acc: AccountRef): int =
         0
 
   acc.code.len()
-
-proc getCodeSize(ledger: LedgerRef, acc: AccountRef): int =
-  getCodeSizeImpl(ledger, acc)
-
-proc calcCreatedSlots(ledger: LedgerRef, acc: AccountRef): int =
-  for _, val in acc.overlayStorage:
-    inc(result, val.isZero.not.int)
 
 # ------------------------------------------------------------------------------
 # Public methods
@@ -645,18 +633,6 @@ iterator nonZeroSelfDestructAccounts*(ledger: LedgerRef): (Address, UInt256) =
     if value.isZero:
       continue
     yield (address, value)
-
-iterator newlyCreatedSelfDestructRefund*(ledger: LedgerRef): SelfDestructRefund =
-  for address in ledger.savePoint.selfDestruct:
-    let acc = ledger.getAccount(address, false)
-    doAssert(acc.isNil.not)
-    if NewlyCreated notin acc.flags:
-      continue
-    yield SelfDestructRefund(
-      address: address,
-      createdSlots: calcCreatedSlots(ledger, acc),
-      codeLen: getCodeSize(ledger, acc),
-    )
 
 proc ripemdSpecial*(ledger: LedgerRef) =
   ledger.ripemdSpecial = true
