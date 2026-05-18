@@ -47,6 +47,9 @@ proc `=copy`*(
 ) {.error: "Copying Semaphore is forbidden".} =
   discard
 
+proc `=destroy`*(s: var Semaphore) =
+  s.dispose()
+
 proc tryWait*(s: var Semaphore): bool =
   var c = s.count.load()
   while c > 0:
