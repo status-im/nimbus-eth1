@@ -28,18 +28,27 @@ proc generateContractAddress*(vmState: BaseVMState,
   generateAddress(sender, creationNonce)
 
 proc getCallCode*(vmState: BaseVMState, codeAddress: Address): CodeBytesRef =
-  let isPrecompile = getPrecompile(vmState.fork, codeAddress).isSome()
-  if isPrecompile:
+  # Avoid accessing ledger if it's a precompile address
+  if getPrecompile(vmState.fork, codeAddress).isSome:
     return CodeBytesRef(nil)
 
+  # For contract creations the EVM will add the contract address to the
+  # access list itself, after calculating the new contract address.
+  if vmState.fork >= FkBerlin:
+    vmState.ledger.accessList(codeAddress)
+    if vmState.balTrackerEnabled:
+      vmState.balTracker.trackAddressAccess(codeAddress)
+
   # `codeAddress` is BAL tracked in `initialAccessListEIP2929`
-  var resolvedAddress = codeAddress
-  if vmState.fork >= FkPrague:
-    let
-      code = vmState.readOnlyLedger.getCode(codeAddress)
-      delegateTo = parseDelegationAddress(code)
-    if delegateTo.isSome():
-      if vmState.balTrackerEnabled:
-        vmState.balTracker.trackAddressAccess(delegateTo.value)
-      resolvedAddress = delegateTo.value
-  vmState.readOnlyLedger.getCode(resolvedAddress)
+  let code = vmState.readOnlyLedger.getCode(codeAddress)
+  if vmState.fork < FkPrague:
+    return code
+
+  let delegateTo = parseDelegationAddress(code).valueOr:
+    return code
+
+  # If the `call.to` has a delegation, also warm its target.
+  vmState.ledger.accessList(delegateTo)
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.trackAddressAccess(delegateTo)
+  vmState.readOnlyLedger.getCode(delegateTo)

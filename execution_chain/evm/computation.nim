@@ -19,6 +19,7 @@ import
   ./evm_errors,
   ./code_bytes,
   ./eip7708,
+  ../core/eip8037,
   ../common/[evmforks],
   ../utils/[utils, mergeutils],
   ../common/common,
@@ -119,9 +120,6 @@ template getCodeHash*(c: Computation, address: Address): Hash32 =
     default(Hash32)
   else:
     db.getCodeHash(address)
-
-template getCostPerStateByte*(c: Computation): GasInt =
-  c.vmState.blockCtx.costPerStateByte
 
 template selfDestruct*(c: Computation, address: Address) =
   c.execSelfDestruct(address)
@@ -259,7 +257,7 @@ proc writeContract*(c: Computation) =
         break writeContractCode
 
       let
-        codeDepositStateGas = len.GasInt * c.vmState.blockCtx.costPerStateByte
+        codeDepositStateGas = len.GasInt * COST_PER_STATE_BYTE
         codeHashGas = (6 * wordCount(len)).GasInt
 
       c.gasMeter.consumeGas(codeHashGas, reason = "Code hash gas").isOkOr:

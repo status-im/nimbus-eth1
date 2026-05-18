@@ -15,14 +15,17 @@
 {.push raises: [].}
 
 import
+  ../../../db/ledger,
   ../../../constants,
-  ../../evm_errors,
   ../../../common/evmforks,
   ../../../core/[eip7702, eip8037],
   ../../computation,
+  ../../precompiles,
+  ../../evm_errors,
   ../../memory,
   ../../stack,
   ../../types,
+  ../../state,
   ../gas_costs,
   ../gas_meter,
   ../op_codes,
@@ -32,9 +35,7 @@ import
   chronicles,
   eth/common/addresses,
   stew/assign2,
-  stint,
-  ../../state,
-  ../../../db/ledger
+  stint
 
 # ------------------------------------------------------------------------------
 # Private
@@ -184,13 +185,19 @@ proc staticCallParams(c: Computation, res: var LocalParams): EvmResult[void] =
   res.updateStackAndParams(c)
   ok()
 
+proc getCallCode(c: Computation): CodeBytesRef =
+  # Avoid accessing ledger if it's a precompile address
+  if getPrecompile(c.vmState.fork, c.msg.codeAddress).isSome:
+    return CodeBytesRef(nil)
+  c.vmState.readOnlyLedger.getCode(c.delegateTo)
+
 proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) =
   ## Call new VM -- helper for `Call`-like operations
 
   # need to provide explicit <c> and <child> for capturing in chainTo proc()
   # <memPos> and <memLen> are provided by value and need not be captured
   var
-    code = c.vmState.readOnlyLedger.getCode(c.delegateTo)
+    code = c.getCallCode()
     child = newComputation(
       c.vmState, keepStack = false, childMsg, code)
 
@@ -202,16 +209,20 @@ proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) =
       c.gasMeter.appendRegularGasUsed(child.gasMeter.regularGasUsed)
 
     if child.isSuccess:
-      c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
-      c.gasMeter.appendStateGasUsed(child.gasMeter.stateGasUsed)
+      if c.fork >= FkAmsterdam:
+        c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
+        c.gasMeter.appendStateGasUsed(child.gasMeter.stateGasUsed)
+        # https://github.com/ethereum/execution-specs/pull/2733/changes
+        c.gasMeter.creditStateGasRefund(child.gasMeter.stateGasRefundPending)
       c.merge(child)
       c.stack.lsTop(1)
     else:
-      # On failure (revert or exceptional halt) state changes are rolled back,
-      # so no state was actually grown.  All state gas, both reservoir and any
-      # that spilled into `gas_left`, is restored to the parent's reservoir and
-      # the child's `state_gas_used` is not accumulated.
-      c.gasMeter.returnStateGas(child.gasMeter.stateGasUsed + child.gasMeter.stateGasLeft)
+      if c.fork >= FkAmsterdam:
+        # On failure (revert or exceptional halt) state changes are rolled back,
+        # so no state was actually grown.  All state gas, both reservoir and any
+        # that spilled into `gas_left`, is restored to the parent's reservoir and
+        # the child's `state_gas_used` is not accumulated.
+        c.gasMeter.returnStateGas(child.gasMeter.stateGasUsed + child.gasMeter.stateGasLeft)
 
     let actualOutputSize = min(memLen, child.output.len)
     if actualOutputSize > 0:
@@ -251,13 +262,12 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
   # into regular gas, it must reduce the gas available for childGasLimit.
   if cpt.fork >= FkAmsterdam:
     if isNewAccount() and params1.nonZeroVal:
-      let newAcccountStateGas = STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte
       # eels reviewer think there is an issue with the design to charge regular gas multiple times.
       # https://github.com/ethereum/execution-specs/pull/2526/changes#diff-28a1b575fd7c3d82832c0826cf58a881101643543d35c123c78ca65202152c23R456
       # And it also make EVM tracer produce two traces of call or weird result.
       # So we check it here before actually charging state gas and keep the tracer produce single trace of call.
-      ? cpt.gasMeter.checkGas(gasCost1, newAcccountStateGas)
-      ? cpt.gasMeter.chargeStateGas(newAcccountStateGas,
+      ? cpt.gasMeter.checkGas(gasCost1, CREATE_ACCOUNT_STATE_GAS)
+      ? cpt.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS,
         reason = "CALL: State gas new account")
 
   let
