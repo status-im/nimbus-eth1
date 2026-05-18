@@ -181,7 +181,7 @@ proc accNotifyRecur(
               start = Moment.now()
               notify = stoNotifyRecur info
 
-            trd.walkTrieRec(acc.storageRoot, getStoTrie, notify).isOkOr:
+            trd.walkTrieRec(acc.storageRoot, getStoKvt, notify).isOkOr:
               if error != ENoRoot:
                 debug info & ": Failed traversing storage slots",
                   root=acc.storageRoot.toStr, nErr=stats.nStoErr, `error`=error
@@ -192,7 +192,7 @@ proc accNotifyRecur(
           else:
             # Check whether the storage root has an entry on the database
             block checkStoRoot:
-              let rc = trd.db.hasStoTrie(acc.storageRoot.data)
+              let rc = trd.db.hasStoKvt(acc.storageRoot.data)
               if rc.isErr:
                 debug info & ": Failed accessing storage root",
                   root=acc.storageRoot.toStr, nErr=stats.nStoErr, error=rc.error
@@ -206,7 +206,7 @@ proc accNotifyRecur(
 
           # Check whether the code has an entry on the codes list
           block checkCodeHash:
-            let rc = trd.db.hasCodeList(acc.codeHash)
+            let rc = trd.db.hasCodeKvt(acc.codeHash)
             if rc.isErr:
               debug info & ": Failed accessing byte code",
                 root=acc.codeHash.toStr, nErr=stats.nStoErr, error=rc.error
@@ -268,7 +268,7 @@ proc sessionAnalyseTrieRecur*(
   template stats(): auto = trd.stats
   debug info & ": Start recursively analysing MPT"
 
-  trd.walkTrieRec(root, getAccTrie, notify).isOkOr:
+  trd.walkTrieRec(root, getAccKvt, notify).isOkOr:
     debug info & ": Failed analysing MPT", `error`=error
     return err(error)                               # => missing root node
 

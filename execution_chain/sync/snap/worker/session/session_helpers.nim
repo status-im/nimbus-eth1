@@ -73,9 +73,9 @@ proc countTrieNodes*(
   let
     db = ctx.pool.mptAsm
     start = Moment.now()
-  for _ in db.walkAccTrie():
+  for _ in db.walkAccKvt():
     result.nAccNodes.inc
-  for _ in db.walkStoTrie():
+  for _ in db.walkStoKvt():
     result.nStoNodes.inc
   result.ela = Moment.now() - start
 

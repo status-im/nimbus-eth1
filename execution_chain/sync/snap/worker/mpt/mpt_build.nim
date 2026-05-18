@@ -324,7 +324,7 @@ proc makeOrGetLeaf(db: NodeTrieRef; path: Hash32): Opt[LeafNodeRef] =
 
 template reKeyWalkerLeaf(node: LeafNodeRef) =
   var wrt = initRlpList 2
-  wrt.append node.lfPfx.toHexPrefix(true).toSeq
+  wrt.append @(node.lfPfx.toHexPrefix(true).data())
   wrt.append node.lfPayload
   node.lfData = wrt.finish()
   node.selfKey = node.lfData.digestTo(HashKey)
@@ -349,7 +349,7 @@ proc reKeyWalkerBranch(node: var BranchNodeRef) =
   if 0 < node.xtPfx.len:
     node.selfKey.swap node.brKey
     wrt = initRlpList 2
-    wrt.append node.xtPfx.toHexPrefix(false).toSeq
+    wrt.append @(node.xtPfx.toHexPrefix(false).data())
     wrt.append node.brKey
     node.xtData = wrt.finish()
     node.selfKey = node.xtData.digestTo(HashKey)

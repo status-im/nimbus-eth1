@@ -48,7 +48,7 @@ template sessionAnalyseAccounts*(
   var bodyRc = Result[(Duration,int),(AttType,int)].err((EOtherError,0))
   block body:
     let db = ctx.pool.mptAsm
-    db.clearAccDanglingKvt().isOkOr:
+    db.clearAccDnglKvt().isOkOr:
       chronicles.`error` info & ": Cannot reset dangling cache", `error`=error
       bodyRc = typeof(bodyRc).err((EClearError,0))
       break body
@@ -56,7 +56,7 @@ template sessionAnalyseAccounts*(
     var (nDangl, nErrors) = (0, 0)
     proc onDanglingCB(key: seq[byte], path: NibblesBuf) =
       nDangl.inc
-      db.putAccDanglingKvt(key, path.toHexPrefix(false).data()).isOkOr:
+      db.putAccDnglKvt(key, path.toHexPrefix(false).data()).isOkOr:
         chronicles.error info & ": Error caching dangling pivot links",
           `error`=error
         nErrors.inc

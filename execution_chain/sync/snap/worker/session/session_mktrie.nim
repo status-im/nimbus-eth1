@@ -92,7 +92,7 @@ proc matchDanglingLink(
   ## list of dangling links.
   ##
   for w in keys:
-    let ok = session.db.hasAccDanglingKvt(w).valueOr:
+    let ok = session.db.hasAccDnglKvt(w).valueOr:
       return err(error)
     if ok:
       return ok(true)
@@ -165,7 +165,7 @@ template mkStoTrie(
         break body
 
       # Store `(key,node)` list on trie
-      session.db.putStoTrie(mpt.kvPairs()).isOkOr:
+      session.db.putStoKvt(mpt.kvPairs()).isOkOr:
         error info & ": cannot store slot on trie", stateInx, nStates, root,
           distance, peerID, accKey, stoRoot, nProof=w.proof.len,
           iv=(w.start,w.limit).to(float).toStr, nSlot=w.slot.len, `error`=error
@@ -215,7 +215,7 @@ template mkCodesList(
             distance, key=key.toStr, expected=hash.toStr,
             nData=val.to(seq[byte]).len
 
-        session.db.putCodeList(key,val).isOkOr:
+        session.db.putCodeKvt(key,val).isOkOr:
           error info & ": Cannot store on DB code table", stateInx, nStates,
             root, distance, key=key.toStr, nData=val.to(seq[byte]).len,
             `error`=error
@@ -287,7 +287,7 @@ template mkTrieImpl(
         break body                                  # not doing anything
 
     # Store `(key,node)` list on trie
-    session.db.putAccTrie(kvPairs).isOkOr:
+    session.db.putAccKvt(kvPairs).isOkOr:
       error info & ": Cannot store accounts on trie", stateInx, nStates, root,
         distance, peerID, nAccounts, nProof, iv, `error`=error
       bodyRc = Opt.some(ETrieError)
@@ -410,7 +410,7 @@ template sessionMkTrie*(
         session.updateDanglingPivotLinks(info).isOkOr:
           error info & ": Accounts dangling links for pivot failed",
             stateInx, nStates, root, nErrors=error
-          break body                              # makes no sense to proceed
+          break body                                # makes no sense to proceed
 
       debug info & ": Done this state", stateInx, nStates, root, distance,
         tag=state.tag, covered=session.fullCov.totalRatio.pcStr, mergedOk

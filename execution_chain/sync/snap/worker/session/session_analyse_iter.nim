@@ -292,7 +292,7 @@ template accAndStoNotify(
         # Analyse MPT for storage slots
         let
           start = Moment.now()
-          rc = traverseMpt(trd, acc.storageRoot, getStoTrie, stoNotify, info):
+          rc = traverseMpt(trd, acc.storageRoot, getStoKvt, stoNotify, info):
             traversingStorageMsg(stats, info)
 
         if rc.isErr and rc.error != ENoRoot:
@@ -308,7 +308,7 @@ template accAndStoNotify(
 
         # Check whether the code has an entry on the database
         block checkCodeHash:
-          let rc = trd.db.hasCodeList(acc.codeHash)
+          let rc = trd.db.hasCodeKvt(acc.codeHash)
           if rc.isErr:
             debug info & ": Failed accessing byte code",
               root=acc.codeHash.toStr, nErr=stats.nStoErr, error=rc.error
@@ -359,7 +359,7 @@ template accOnlyNotify(
 
         # Check whether the storage root has an entry on the database
         block checkStoRoot:
-          let rc = trd.db.hasStoTrie(acc.storageRoot.data)
+          let rc = trd.db.hasStoKvt(acc.storageRoot.data)
           if rc.isErr:
             debug info & ": Failed accessing storage root",
               root=acc.storageRoot.toStr, nErr=stats.nStoErr, error=rc.error
@@ -373,7 +373,7 @@ template accOnlyNotify(
 
         # Check whether the code has an entry on the database
         block checkCodeHash:
-          let rc = trd.db.hasCodeList(acc.codeHash)
+          let rc = trd.db.hasCodeKvt(acc.codeHash)
           if rc.isErr:
             debug info & ": Failed accessing byte code",
               root=acc.codeHash.toStr, nErr=stats.nStoErr, error=rc.error
@@ -434,10 +434,10 @@ template sessionAnalyseTrieIter*(
     debug info & ": Start analysing MPT"
 
     when accAndStoOk:
-      let rc = traverseMpt(trd, stateRoot, getAccTrie, accAndStoNotify, info):
+      let rc = traverseMpt(trd, stateRoot, getAccKvt, accAndStoNotify, info):
         traversingAccountsMsg(stats, info)
     else:
-      let rc = traverseMpt(trd, stateRoot, getAccTrie, accOnlyNotify, info):
+      let rc = traverseMpt(trd, stateRoot, getAccKvt, accOnlyNotify, info):
         traversingAccountsMsg(stats, info)
 
     if rc.isErr:
