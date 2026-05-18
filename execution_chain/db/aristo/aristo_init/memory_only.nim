@@ -26,7 +26,7 @@ proc init*(T: type AristoDbRef): T =
   ## Memory backend constructor.
   ##
   let db = memoryBackend()
-  db.initInstance()[]
+  db.initInstance(accLeavesLruSize = 0, stoLeavesLruSize = 0)[]
   db
 
 # --+----------------------------------------------------------------------------

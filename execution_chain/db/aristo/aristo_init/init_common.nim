@@ -81,7 +81,9 @@ proc finishSession*(hdl: TypedPutHdlRef; db: TypedBackendRef) =
 proc initInstance*(
     db: AristoDbRef,
     maxSnapshots = defaultMaxSnapshots,
-    parallelStateRootComputation = false
+    parallelStateRootComputation = false,
+    accLeavesLruSize = 0,
+    stoLeavesLruSize = 0
 ): Result[void, AristoError] =
   doAssert maxSnapshots > 0
   let vTop = (?db.getLstFn()).vTop
@@ -90,8 +92,8 @@ proc initInstance*(
   when compileOption("threads"):
     db.txRef.lock.init()
 
-  db.accLeaves.init(ACC_LRU_SIZE)
-  db.stoLeaves.init(ACC_LRU_SIZE)
+  db.accLeaves.init(accLeavesLruSize)
+  db.stoLeaves.init(stoLeavesLruSize)
   db.maxSnapshots = maxSnapshots
   db.parallelStateRootComputation = parallelStateRootComputation
   

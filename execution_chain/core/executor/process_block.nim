@@ -48,9 +48,6 @@ when compileOption("threads"):
       senderReady: Atomic[bool]
       fv: Flowvar[bool]
 
-  # proc getRefcount(p: pointer): int {.importc: "getRefcount".}
-
-  # template rc(x: ref): int = getRefcount(cast[pointer](x))
 
   template borrowRef[T](dest, src: ref T) =
     copyMem(addr dest, addr src, sizeof(pointer))
@@ -96,7 +93,8 @@ when compileOption("threads"):
     const txCtx = default(TxContext)
     assign(vmState.txCtx, txCtx)
     # vmState.flags = flags
-    vmState.fork = vmState.determineFork
+    vmState.hardFork = vmState.determineFork
+    vmState.fork = ToEVMFork[vmState.hardFork]
     # vmState.tracer = nil
     # vmState.receipts.setLen(0)
     # vmState.cumulativeGasUsed = 0

@@ -328,9 +328,6 @@ proc `=copy`[K, V](
 ) {.error: "Copying LruCache is forbidden".} =
   discard
 
-proc `=destroy`[K, V](s: var LruCache[K, V]) =
-  dispose(s)
-
 iterator mruIndices(s: LruCache): uint32 =
   if s.nodesLen > 0:
     var pos = s.nodes[0].next
@@ -600,9 +597,6 @@ proc `=copy`*[K, V; SHARD_BITS](
     src: ConcurrentLruCache[K, V, SHARD_BITS],
 ) {.error: "Copying ConcurrentLruCache is forbidden".} =
   discard
-
-proc `=destroy`*[K, V; SHARD_BITS](lru: var ConcurrentLruCache[K, V, SHARD_BITS]) =
-  dispose(lru)
 
 template toShardIdx(h: Hash, shardBits: static int): int =
   # Pick the shard from the top SHARD_BITS bits of the hash so that the shard
