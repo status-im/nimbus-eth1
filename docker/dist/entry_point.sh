@@ -119,7 +119,7 @@ elif [[ "${PLATFORM}" == "linux_arm64" ]]; then
     LOG_LEVEL="TRACE" \
     CC="${CC}" \
     CXX="${CXX}" \
-    NIMFLAGS="${NIMFLAGS_COMMON} --cpu:arm64 --arm64.linux.gcc.exe=${CC} --arm64.linux.gcc.linkerexe=${CXX} --passL:'-static-libstdc++'" \
+    NIMFLAGS="${NIMFLAGS_COMMON} --cpu:arm64 --passC:-fPIC --arm64.linux.gcc.exe=${CC} --arm64.linux.gcc.linkerexe=${CXX} --passL:'-static-libstdc++'" \
     PARTIAL_STATIC_LINKING=1 \
     USE_CACHED_ROCKSDB=1 \
     ${BINARIES}
@@ -173,6 +173,27 @@ elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
     NIMFLAGS="${NIMFLAGS_COMMON} --os:macosx --cpu:arm64 --passC:'-mcpu=apple-a14' --passL:-mcpu=apple-a14 --passL:-static-libstdc++ --clang.exe=${CC} --clang.linkerexe=${CXX}" \
     nimbus nimbus_verified_proxy
 
+  # the AR provided by oscxross doesn't support `llvm-ar  @verifproxy_linkerArgs.txt` syntax
+  # for the libverifproxy we just alias the osxcross AR as llvm-ar. So we create a shim that
+  # expands the arguments from the response file and then executes the AR
+  AR_SHIM_DIR="$(mktemp -d)"
+  cat > "${AR_SHIM_DIR}/llvm-ar" <<EOF
+#!/bin/bash
+ARGS=()
+for arg in "\$@"; do
+  if [[ "\${arg}" == @* ]]; then
+    while IFS= read -r line; do
+      [[ -n "\${line}" ]] && ARGS+=("\${line}")
+    done < "\${arg#@}"
+  else
+    ARGS+=("\${arg}")
+  fi
+done
+exec "/osxcross/bin/aarch64-apple-darwin${DARWIN_VER}-ar" "\${ARGS[@]}"
+EOF
+  chmod +x "${AR_SHIM_DIR}/llvm-ar"
+  export PATH="${AR_SHIM_DIR}:${PATH}"
+
   make \
     -j1 \
     LOG_LEVEL="TRACE" \
@@ -180,7 +201,7 @@ elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
     AR="${AR}" \
     RANLIB="${RANLIB}" \
     USE_CACHED_ROCKSDB=1 \
-    NIMFLAGS="${NIMFLAGS_COMMON} --cc:gcc --os:macosx --cpu:arm64 --passC:'-mcpu=apple-a14' --passL:-mcpu=apple-a14 --passL:-static-libstdc++ --gcc.exe=${CC} --gcc.linkerexe=${CXX}" \
+    NIMFLAGS="${NIMFLAGS_COMMON} --os:macosx --cpu:arm64 --passC:'-mcpu=apple-a14' --passL:-mcpu=apple-a14 --passL:-static-libstdc++ --clang.exe=${CC} --clang.linkerexe=${CXX}" \
     libverifproxy
 
 else # linux_amd64

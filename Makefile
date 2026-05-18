@@ -92,11 +92,11 @@ OS_PLATFORM = $(shell $(CC) -dumpmachine)
 
 VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 ifneq (, $(findstring darwin, $(OS_PLATFORM)))
-  VERIFPROXY_LDFLAGS = -framework Security
-else ifneq (, $(findstring mingw, $(OS_PLATFORM))$(findstring windows-gnu, $(OS_PLATFORM)))
-  VERIFPROXY_LDFLAGS = -lbcrypt -lpthread -lws2_32
+  VERIFPROXY_LDFLAGS = -lc++ -framework Security
+else ifneq (, $(findstring mingw, $(OS_PLATFORM)))
+  VERIFPROXY_LDFLAGS = -lc++ -lbcrypt -lpthread -lws2_32
 else
-  VERIFPROXY_LDFLAGS = -lm
+  VERIFPROXY_LDFLAGS = -lstdc++ -lm
 endif
 
 .PHONY: \
@@ -380,7 +380,7 @@ libverifproxy_test: $(VERIF_PROXY_OUT_PATH)/libverifproxy.a
 		-Wno-incompatible-pointer-types \
 		-o build/$@ \
 		tests/library/test_api.c \
-		-lverifproxy -lstdc++ $(VERIFPROXY_LDFLAGS)
+		-lverifproxy $(VERIFPROXY_LDFLAGS)
 	./build/$@
 
 nimbus_verified_proxy_wasm: | build deps
