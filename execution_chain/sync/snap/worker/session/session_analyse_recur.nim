@@ -171,7 +171,7 @@ proc accNotifyRecur(info: static[string]): WalkTrieRecCB =
 
           trd.walkTrieRec(acc.storageRoot, getStoTrie, notify).isOkOr:
             if error != ENoRoot:
-              debug info & ": failed traversing storage slots",
+              debug info & ": Failed traversing storage slots",
                 root=acc.storageRoot.toStr, nErr=stats.nStoErr, `error`=error
 
           stats.nStoNodes += stats.nNodes           # collect storage stats
@@ -225,10 +225,10 @@ proc sessionAnalyseTrieRecur*(
     notify = accNotifyRecur info
 
   template stats(): auto = trd.stats
-  debug info & ": start recursively analysing MPT"
+  debug info & ": Start recursively analysing MPT"
 
   trd.walkTrieRec(root, getAccTrie, notify).isOkOr:
-    debug info & ": failed analysing MPT", `error`=error
+    debug info & ": Failed analysing MPT", `error`=error
     return err()                                    # => missing root node
 
   stats.nAccNodes += stats.nNodes

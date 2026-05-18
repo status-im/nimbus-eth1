@@ -21,15 +21,15 @@ EEST_DEVELOP_ARCHIVE="fixtures_develop.tar.gz"
 EEST_DEVELOP_URL="https://github.com/ethereum/execution-spec-tests/releases/download/${EEST_DEVELOP_VERSION}/${EEST_DEVELOP_ARCHIVE}"
 
 # --- BAL Release ---
-EEST_BAL_NAME="bal"
-EEST_BAL_VERSION="v5.6.1"
+EEST_BAL_NAME="tests-bal"
+EEST_BAL_VERSION="v7.1.1"
 EEST_BAL_DIR="${FIXTURES_DIR}/eest_bal"
 EEST_BAL_ARCHIVE="fixtures_bal.tar.gz"
-EEST_BAL_URL="https://github.com/ethereum/execution-spec-tests/releases/download/${EEST_BAL_NAME}%40${EEST_BAL_VERSION}/${EEST_BAL_ARCHIVE}"
+EEST_BAL_URL="https://github.com/ethereum/execution-specs/releases/download/${EEST_BAL_NAME}%40${EEST_BAL_VERSION}/${EEST_BAL_ARCHIVE}"
 
 # --- zkevm Release ---
 EEST_ZKEVM_NAME="zkevm"
-EEST_ZKEVM_VERSION="v0.3.4"
+EEST_ZKEVM_VERSION="v0.4.0"
 EEST_ZKEVM_DIR="${FIXTURES_DIR}/eest_zkevm"
 EEST_ZKEVM_ARCHIVE="fixtures_zkevm.tar.gz"
 EEST_ZKEVM_URL="https://github.com/ethereum/execution-spec-tests/releases/download/${EEST_ZKEVM_NAME}%40${EEST_ZKEVM_VERSION}/${EEST_ZKEVM_ARCHIVE}"

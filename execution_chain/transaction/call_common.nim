@@ -12,6 +12,7 @@ import
   eth/common/eth_types, stint,
   results,
   chronicles,
+  stew/assign2,
   ../evm/[types, state],
   ../evm/[message, precompiles, internals, interpreter_dispatch],
   ../db/ledger,
@@ -39,16 +40,6 @@ proc initialAccessListEIP2929(call: CallParams) =
 
   vmState.mutateLedger:
     ledger.accessList(call.sender)
-    # For contract creations the EVM will add the contract address to the
-    # access list itself, after calculating the new contract address.
-    if not call.isCreate:
-      ledger.accessList(call.to)
-      # If the `call.to` has a delegation, also warm its target.
-      if vmState.balTrackerEnabled:
-        vmState.balTracker.trackAddressAccess(call.to)
-      let target = parseDelegationAddress(ledger.getCode(call.to))
-      if target.isSome:
-        ledger.accessList(target[])
 
     # EIP3651 adds coinbase to the list of addresses that should start warm.
     if vmState.fork >= FkShanghai:
@@ -64,16 +55,11 @@ proc initialAccessListEIP2929(call: CallParams) =
       for key in account.storageKeys:
         ledger.accessList(account.address, key.to(UInt256))
 
-proc preExecComputation(call: CallParams): int64 =
+proc setDelegation(call: CallParams): int64 =
   var gasRefund = 0'i64
   let
     vmState = call.vmState
     ledger = vmState.ledger
-
-  if not call.isCreate:
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.trackIncNonceChange(call.sender)
-    ledger.incNonce(call.sender)
 
   # EIP-7702
   for auth in call.authorizationList:
@@ -105,10 +91,15 @@ proc preExecComputation(call: CallParams): int64 =
       continue
 
     # 7. Add PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST gas to the global refund counter if authority exists in the trie.
-    if ledger.accountExists(authority):
-      if vmState.fork >= FkAmsterdam:
-        gasRefund += int64(STATE_BYTES_PER_NEW_ACCOUNT * vmState.blockCtx.costPerStateByte)
-      else:
+    if vmState.fork >= FkAmsterdam:
+      if ledger.accountExists(authority):
+        gasRefund += CREATE_ACCOUNT_STATE_GAS
+      if auth.address == zeroAddress or ledger.getCodeHash(authority) != EMPTY_CODE_HASH:
+        # https://github.com/ethereum/execution-specs/commit/a0a1ed10f32bd60d4837566aabc9ee2cd2a8b88a
+        # Existing delegation indicator: overwrite in place, no new state bytes added.
+        gasRefund += STATE_BYTES_PER_AUTH_BASE * COST_PER_STATE_BYTE
+    else:
+      if ledger.accountExists(authority):
         gasRefund += PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST
 
     # 8. Set the code of authority to be 0xef0100 || address. This is a delegation designation.
@@ -131,7 +122,7 @@ proc preExecComputation(call: CallParams): int64 =
 proc setupComputation(call: CallParams, gasRefund: int64, keepStack: bool): Computation =
   let
     vmState = call.vmState
-    fork = vmState.fork
+    fork = vmState.hardFork
   vmState.txCtx = TxContext(
     origin         : call.sender,
     gasPrice       : call.gasPrice,
@@ -144,7 +135,7 @@ proc setupComputation(call: CallParams, gasRefund: int64, keepStack: bool): Comp
   vmState.gasRefunded = 0
 
   let
-    isAmsterdamOrLater = fork >= FkAmsterdam
+    isAmsterdamOrLater = fork >= Amsterdam
     intrinsicGas = call.intrinsic.regular + call.intrinsic.state
 
     # Prevent underflow which can occur when gasLimit is less than intrinsicGas.
@@ -179,10 +170,10 @@ proc setupComputation(call: CallParams, gasRefund: int64, keepStack: bool): Comp
     )
 
     code = if call.isCreate:
-             msg.contractAddress = generateContractAddress(vmState, CallKind.Create, call.sender)
+             msg.contractAddress = generateContractAddress(vmState, call.sender)
              CodeBytesRef.init(call.input)
            else:
-             msg.data = call.input
+             assign(msg.data, call.input)
              getCallCode(vmState, msg.codeAddress)
 
     computation = newComputation(vmState, keepStack, msg, code)
@@ -199,41 +190,50 @@ proc setupComputation(call: CallParams, gasRefund: int64, keepStack: bool): Comp
 # not to have too much duplicated code between sync and async.
 # --Adam
 
-proc prepareToRunComputation(c: Computation, call: CallParams) =
-  # Must come after `setupComputation` for correct fork.
-  initialAccessListEIP2929(call)
-
-  # Charge for gas.
+proc prepareToRunComputation(call: CallParams) =
   let
-    vmState = c.vmState
-    fork = vmState.fork
+    vmState = call.vmState
+    fork = vmState.hardFork
 
   vmState.mutateLedger:
-    let gasFee = call.gasLimit.u256 * call.gasPrice.u256
+    if not call.isCreate:
+      if vmState.balTrackerEnabled:
+        vmState.balTracker.trackIncNonceChange(call.sender)
+      ledger.incNonce(call.sender)
+
+    # Charge for gas.
+    var gasFee = call.gasLimit.u256 * call.gasPrice.u256
+    if fork >= Cancun:
+      # EIP-4844
+      gasFee += calcDataFee(call.versionedHashes.len,
+        vmState.blockCtx.excessBlobGas, vmState.com, fork)
+
     if vmState.balTrackerEnabled:
       vmState.balTracker.trackSubBalanceChange(call.sender, gasFee)
     ledger.subBalance(call.sender, gasFee)
-
-    # EIP-4844
-    if fork >= FkCancun:
-      let blobFee = calcDataFee(call.versionedHashes.len,
-        vmState.blockCtx.excessBlobGas, vmState.com, fork)
-      if vmState.balTrackerEnabled:
-        vmState.balTracker.trackSubBalanceChange(call.sender, blobFee)
-      ledger.subBalance(call.sender, blobFee)
 
 proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: int64): GasUsed =
   let
     vmState = c.vmState
     fork = c.vmState.fork
+    # EIP-3529: Reduction in refunds
+    MaxRefundQuotient = if fork >= FkLondon: 5.GasInt
+                        else: 2.GasInt
 
-  # EIP-3529: Reduction in refunds
-  let MaxRefundQuotient = if fork >= FkLondon:
-                            5.GasInt
-                          else:
-                            2.GasInt
+  var
+    stateGasRefund = gasRefund.GasInt
+
   if c.shouldBurnGas:
     c.gasMeter.burnGas()
+
+  if c.fork >= FkAmsterdam:
+    if c.isError:
+      # https://github.com/ethereum/execution-specs/pull/2689/changes
+      c.gasMeter.returnAllStateGas()
+      # https://github.com/ethereum/execution-specs/commit/eb80b438a39d188fddf372ef5632123ca3ee238e
+      if call.isCreate:
+        c.gasMeter.returnStateGas(CREATE_ACCOUNT_STATE_GAS)
+        stateGasRefund += CREATE_ACCOUNT_STATE_GAS
 
   # Calculated gas used, taking into account refund rules.
   let
@@ -251,12 +251,11 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: 
     txGasUsed = max(txGasUsedAfterRefund, call.intrinsic.floorDataGas)
     let
       txRegularGas = call.intrinsic.regular + c.gasMeter.regularGasUsed
-      intrinsicStateGas = call.intrinsic.state - gasRefund.GasInt
     blockRegularGasUsed = max(txRegularGas, call.intrinsic.floorDataGas)
-    blockStateGasUsed = intrinsicStateGas + c.gasMeter.stateGasUsed
+    blockStateGasUsed = call.intrinsic.state - stateGasRefund + c.gasMeter.stateGasUsed
     debug "EIP-8037 gas accounting",
       intrinsicRegular = call.intrinsic.regular,
-      intrinsicState = intrinsicStateGas,
+      intrinsicState = call.intrinsic.state,
       regularGasUsed = c.gasMeter.regularGasUsed,
       stateGasUsed = c.gasMeter.stateGasUsed,
       gasRemaining = c.gasMeter.gasRemaining,
@@ -319,11 +318,13 @@ proc finishRunningComputation(
     {.error: "Unknown computation output".}
 
 proc runComputation*(call: CallParams, T: type): T =
+  prepareToRunComputation(call)
+  initialAccessListEIP2929(call)
+
   let
-    gasRefund = preExecComputation(call)
+    gasRefund = setDelegation(call)
     c = setupComputation(call, gasRefund, keepStack = T is DebugCallResult)
 
-  prepareToRunComputation(c, call)
   # Pre-execution sanity checks
   c.preExecComputation()
   if c.isSuccess:

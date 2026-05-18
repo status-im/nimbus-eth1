@@ -19,9 +19,37 @@ import
 declareGauge nec_snap_merged_mpt_coverage, "" &
   "Factor of accumulated account ranges covered when assembling MPT"
 
+type
+  MkTrieSession = object of SessionTicker
+    ctx: SnapCtxRef
+    db: MptAsmRef
+
+    nStates: int                                    # total of available states
+    stateInx: int                                   # index of current state
+    state: WalkStateData                            # current state data
+    distance: uint64                                # distance to pivot state
+
+    keys: HashSet[seq[byte]]                        # from pivot proofs
+    nKeys: uint                                     # num mergend into `keys[]`
+
+    accData: WalkAccounts                           # accounts range from cache
+    accRange: ItemKeyRange                          # avoid repeated calculation
+
+    elapsed: array[6,Duration]                      # collected times
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
+
+proc init(
+    w: var MkTrieSession;
+    ctx: SnapCtxRef;
+    nStates: int;
+      ) =
+  procCall init(SessionTicker(w))                   # base method initialiser
+  w.ctx = ctx
+  w.db = ctx.pool.mptAsm
+  w.nStates = nStates
 
 func toStr(state: WalkStateData): string =
   state.root.toStr & "(" & $state.number & ")"
@@ -45,18 +73,15 @@ func maxCoverage(w: seq[WalkStateData]): WalkStateData =
       if result.coverage < state.coverage:
         result = state
 
-proc updateCoverage(cov: ItemKeyRangeSet; start, limit: ItemKey) =
-  discard cov.merge(start, limit)                   # completed range accounting
+proc updateCoverage(cov: ItemKeyRangeSet; iv: ItemKeyRange) =
+  discard cov.merge iv                              # completed ranges
   metrics.set(nec_snap_merged_mpt_coverage, cov.totalRatio)
 
 # -------------------
 
 template mkStoTrie(
-    ctx: SnapCtxRef;
-    state: WalkStateData;                           # used for logging, only
-    wAcc: WalkAccounts;
+    session: MkTrieSession;                         # used as var parameter
     accInx: int;                                    # inx of account to process
-    status: SessionTicker;                          # used as var parameter
     info: static[string];
       ): Opt[ErrorType] =
   ## Async/template
@@ -64,23 +89,23 @@ template mkStoTrie(
   var bodyRc = Opt.none(ErrorType)
   block body:
     let
-      adb = ctx.pool.mptAsm
-      acc = wAcc.accounts[accInx]
+      acc = session.accData.accounts[accInx]
       storageRoot = acc.accBody.storageRoot.to(StoreRoot)
 
-      stateInx {.inject,used.} = $status.stateInx   # logging only
-      nStates {.inject,used.} = $status.nStates     # logging only
-      distance {.inject,used} = $status.distance    # logging only
-      root {.inject,used.} = state.toStr            # logging only
+      stateInx {.inject,used.} = $session.stateInx  # logging only
+      nStates {.inject,used.} = $session.nStates    # logging only
+      distance {.inject,used} = $session.distance   # logging only
+      root {.inject,used.} = session.state.toStr    # logging only
       accKey {.inject,used.} = acc.accHash.to(ItemKey).flStr
       stoRoot {.inject,used.} = storageRoot.toStr   # logging only
-      peerID {.inject,used.} = wAcc.peerID.short    # logging only
+      peerID {.inject,used.} = session.accData.peerID.short
 
     # Loop over storage slots for particular account
-    for w in ctx.pool.mptAsm.walkStoSlot(wAcc.root, acc.accHash.to(ItemKey)):
+    for w in session.db.walkStoSlot(
+                             session.accData.root, acc.accHash.to(ItemKey)):
 
       # Print keep alive messages and allow thread switch
-      bodyRc = status.sessionTicker(info):
+      bodyRc = session.sessionTicker(info):
         debug info & ": Processing storage slots..", stateInx, nStates, root,
           distance, accKey, stoRoot, nSlot=w.slot.len
       if bodyRc.isSome():
@@ -93,14 +118,14 @@ template mkStoTrie(
         continue
 
       # Print keep alive messages and allow thread switch
-      bodyRc = status.sessionTicker(info):
+      bodyRc = session.sessionTicker(info):
         debug info & ": Processing storage slots..", stateInx, nStates, root,
           distance, accKey, stoRoot, nSlot=w.slot.len
       if bodyRc.isSome():
         break body
 
       # Store `(key,node)` list on trie
-      adb.putStoTrie(mpt.kvPairs()).isOkOr:
+      session.db.putStoTrie(mpt.kvPairs()).isOkOr:
         error info & ": cannot store slot on trie", stateInx, nStates, root,
           distance, peerID, accKey, stoRoot, nProof=w.proof.len,
           iv=(w.start,w.limit).to(float).toStr, nSlot=w.slot.len, `error`=error
@@ -110,10 +135,7 @@ template mkStoTrie(
   bodyRc
 
 template mkCodesList(
-    ctx: SnapCtxRef;
-    state: WalkStateData;                           # used for logging, only
-    wAcc: WalkAccounts;
-    status: SessionTicker;                          # used as var parameter
+    session: MkTrieSession;                         # used as var parameter
     info: static[string];
       ): Opt[ErrorType] =
   ## Async/template
@@ -121,23 +143,22 @@ template mkCodesList(
   var bodyRc = Opt.none(ErrorType)
   block body:
     let
-      adb = ctx.pool.mptAsm
-      accMin = wAcc.accounts[0].accHash.to(ItemKey)
-      accMax =  wAcc.accounts[^1].accHash.to(ItemKey)
+      accMin = session.accData.accounts[0].accHash.to(ItemKey)
+      accMax = session.accData.accounts[^1].accHash.to(ItemKey)
 
-      stateInx {.inject,used.} = $status.stateInx   # logging only
-      nStates {.inject,used.} = $status.nStates     # logging only
-      distance {.inject,used} = $status.distance    # logging only
-      root {.inject,used.} = state.toStr            # logging only
+      stateInx {.inject,used.} = $session.stateInx  # logging only
+      nStates {.inject,used.} = $session.nStates    # logging only
+      distance {.inject,used} = $session.distance   # logging only
+      root {.inject,used.} = session.state.toStr    # logging only
 
     # Find all available `CodeHash` keys
     var found: HashSet[CodeHash]
-    for w in ctx.pool.mptAsm.walkByteCode(wAcc.root, accMin):
+    for w in session.db.walkByteCode(session.accData.root, accMin):
       if accMax < w.limit:
         break
 
       # Print keep alive messages and allow thread switch
-      bodyRc = status.sessionTicker(info):
+      bodyRc = session.sessionTicker(info):
         debug info & ": Processing code lists ..", stateInx, nStates, root,
           distance
       if bodyRc.isSome():
@@ -149,7 +170,8 @@ template mkCodesList(
           error info & ": Code key mismatch", stateInx, nStates, root,
             distance, key=key.toStr, expected=hash.toStr,
             nData=val.to(seq[byte]).len
-        adb.putCodeList(key,val).isOkOr:
+
+        session.db.putCodeList(key,val).isOkOr:
           error info & ": Cannot store on DB code table", stateInx, nStates,
             root, distance, key=key.toStr, nData=val.to(seq[byte]).len,
             `error`=error
@@ -159,11 +181,8 @@ template mkCodesList(
   bodyRc
 
 template mkTrieImpl(
-    ctx: SnapCtxRef;
-    state: WalkStateData;
-    wAcc: WalkAccounts;
+    session: MkTrieSession;                         # used as var parameter
     cov: ItemKeyRangeSet;
-    status: SessionTicker;                          # used as var parameter
     info: static[string];
       ): Opt[ErrorType] =
   ## Async/template
@@ -177,49 +196,58 @@ template mkTrieImpl(
   var bodyRc = Opt.none(ErrorType)
   block body:
     let
-      stateInx {.inject,used.} = $status.stateInx   # logging only
-      nStates {.inject,used.} = $status.nStates     # logging only
-      distance {.inject,used} = $status.distance    # logging only
-      root {.inject,used.} = state.toStr            # logging only
-      nAccounts {.inject,used.} = wAcc.accounts.len # logging only
-      nProof {.inject,used.} = wAcc.proof.len       # logging only
-      iv {.inject,used.} = (wAcc.start,wAcc.limit).to(float).toStr
+      stateInx {.inject,used.} = $session.stateInx  # logging only
+      nStates {.inject,used.} = $session.nStates    # logging only
+      distance {.inject,used} = $session.distance   # logging only
+      root {.inject,used.} = session.state.toStr    # logging only
+      peerID {.inject,used.} = session.accData.peerID.short
+      nAccounts {.inject,used.} = session.accData.accounts.len
+      nProof {.inject,used.} = session.accData.proof.len
+      iv {.inject,used.} = session.accRange.flStr   # logging only
 
     # Validate packet, get a list of `(key,node)` pairs
-    let mpt = wAcc.root.validate(wAcc.start, wAcc.accounts, wAcc.proof).valueOr:
+    let mpt = session.accData.root.validate(
+         session.accData.start, session.accData.accounts,
+         session.accData.proof).valueOr:
       error info & ": Accounts validation failed", stateInx, nStates, root,
-        distance, peerID=wAcc.peerID.short, iv, nAccounts, nProof
+        distance, peerID, nAccounts, nProof, iv
       bodyRc = Opt.some(ETrieError)
       break body
 
+    # Merge proof node keys for pivot state
+    if session.stateInx == 1:                       # pivot state has index 1
+      for w in mpt.proofKeys:
+        session.nKeys.inc
+        session.keys.incl w
+
     # Print keep alive messages and allow thread switch
-    bodyRc = status.sessionTicker(info):
+    bodyRc = session.sessionTicker(info):
       debug info & ": Processing accounts..", stateInx, nStates, root,
         distance, nAccounts, nProof, covered=cov.totalRatio.pcStr
     if bodyRc.isSome():
       break body
 
     # Store `(key,node)` list on trie
-    let adb = ctx.pool.mptAsm
-    adb.putAccTrie(mpt.kvPairs()).isOkOr:
+    session.db.putAccTrie(mpt.kvPairs()).isOkOr:
       error info & ": Cannot store accounts on trie", stateInx, nStates, root,
-        distance, peerID=wAcc.peerID.short, iv, nAccounts, nProof, `error`=error
+        distance, peerID, nAccounts, nProof, iv, `error`=error
       bodyRc = Opt.some(ETrieError)
       break body
 
-    cov.updateCoverage(wAcc.start, wAcc.limit)      # completed range accounting
+    # Some accounting, register completed range
+    cov.updateCoverage session.accRange
 
     # Process storage slots
-    for n in 0 ..< wAcc.accounts.len:
-      if not wAcc.accounts[n].accBody.storageRoot.isEmpty:
-        ctx.mkStoTrie(state, wAcc, n, status, info).isErrOr():
+    for n in 0 ..< session.accData.accounts.len:
+      if not session.accData.accounts[n].accBody.storageRoot.isEmpty:
+        session.mkStoTrie(n, info).isErrOr():
           if value == ECancelledError:              # check for shutdown..
             bodyRc = Opt.some(value)                # ..otherwise ignore for now
             break body
 
     # Process code list
-    if 0 < wAcc.accounts.len:
-      ctx.mkCodesList(state, wAcc, status, info).isErrOr():
+    if 0 < session.accData.accounts.len:
+      session.mkCodesList(info).isErrOr():
         if value == ECancelledError:                # check for shutdown..
           bodyRc = Opt.some(value)                  # ..otherwise ignore for now
           break body
@@ -246,67 +274,70 @@ template sessionMkTrie*(
   var bodyRc = Opt[Duration].err()
   block body:
     let
-      adb = ctx.pool.mptAsm
       start = Moment.now()
     var
-      byDist = adb.walkStateData().toSeq()           # list to be sorted, below
+      byDist = ctx.pool.mptAsm.walkStateData().toSeq()
       pivot = byDist.maxCoverage()                   # assign pivot state
       cov = ItemKeyRangeSet.init()                   # collect account ranges
-      status = SessionTicker.init(byDist.len)        # for logging/thread switch
+      session = MkTrieSession()                      # session environment
 
-      nStates {.inject.} = $status.nStates           # logging only
+      nStates {.inject.} = $byDist.len               # logging only
 
     chronicles.info info & ": Assembling MPT from archived data", nStates
+
+    # Initialise session environment
+    session.init(ctx, byDist.len)
 
     # Sort states by its distance from pivot, smallest distance first
     byDist.sort proc(x,y: WalkStateData): int = cmp(x.dist pivot,y.dist pivot)
 
     # Process states: pivot first, then states with increasing distances
     for n in 0 ..< byDist.len:
-      let p = byDist[n]
-      status.stateInx = n + 1                       # for logging
-      status.distance = p.dist(pivot)               # for logging
+      session.state = byDist[n]                      # update descriptor
+      session.stateInx = n + 1                       # ditto
+      session.distance = session.state.dist(pivot)   # ..
 
       let
-        stateInx {.inject,used.} = $status.stateInx # logging only
-        distance {.inject,used} = $status.distance  # logging only
-        root {.inject,used} = p.toStr               # logging only
+        stateInx {.inject,used.} = $session.stateInx # logging only
+        distance {.inject,used} = $session.distance  # logging only
+        root {.inject,used} = session.state.toStr    # logging only
 
-      if 0 < p.error.len:
+      if 0 < session.state.error.len:
         chronicles.info info & ": Bad state record ignored", stateInx, nStates
         continue
 
       # Walk account for the current state root
-      for w in adb.walkAccounts(p.root):
+      for accData in session.db.walkAccounts(session.state.root):
+        session.accData = accData                   # update descriptor
+        session.accRange = ItemKeyRange.new(        # ditto
+          accData.start, accData.limit)             # ..
 
-        if 0 < w.error.len:
+        if 0 < accData.error.len:
           chronicles.info info & ": Bad accounts record ignored",
-            stateInx, nStates, root, distance, error=w.error
+            stateInx, nStates, root, distance, error=accData.error
           continue
 
-        if p.tag != Untagged:
-          cov.updateCoverage(w.start, w.limit)      # completed range accounting
+        if session.state.tag != Untagged:
+          cov.updateCoverage session.accRange       # completed range accounting
           continue
 
         # Check whether the account range was fully covered, already
-        if cov.covered(w.start, w.limit) == w.limit - w.start + 1:
-          debug info & ": Accounts range fully covered, already",
-            stateInx, nStates, root, distance,
-            nAccounts=(w.limit - w.start + 1).per256.pcStr
+        if cov.covered(session.accRange) == session.accRange.len:
+          debug info & ": Accounts range fully covered, already", stateInx,
+            nStates, root, distance, accRange=session.accRange.flStr
           continue
 
-        ctx.mkTrieImpl(p, w, cov, status, info).isErrOr:
+        session.mkTrieImpl(cov, info).isErrOr:
           if value == ECancelledError:              # check for shutdown
             break body                              # otherwise ignore for now
         # End `for walkAccounts()`
 
-      if p.tag == Untagged:                         # otherwise recovery mode
-        let tag = (if p == pivot: PivotOnTrie else: OnTrie)
-        discard adb.putStateData(                   # Register updated state
-          p.root, p.hash, p.number, p.touch, tag, p.coverage)
+      if session.state.tag == Untagged:             # Register updated state
+        session.state.tag = (if session.state==pivot: PivotOnTrie else: OnTrie)
+        discard session.db.putStateData(session.state)
 
       trace info & ": Done this state", stateInx, nStates, root,
-        distance, tag=p.tag,
+        distance, tag=session.state.tag,
         covered=cov.totalRatio.pcStr, elapsed=(Moment.now() - start).toStr
       # End `for walkStateData()`
 

@@ -82,6 +82,7 @@ type
   NodeTrieRef* = ref object of RootRef
     root*: NodeRef                                  ## start of in-memory MPT
     stops*: Table[HashKey,StopNodeRef]              ## sub-MPT to complete
+    proof*: seq[HashKey]                            ## hash links to proof nodes
 
 # ------------------------------------------------------------------------------
 # Public helpers
