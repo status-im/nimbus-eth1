@@ -22,7 +22,8 @@ import
   nimcrypto/[utils],
   unittest2,
   websock/websock,
-  json_rpc/[rpcserver, rpcclient]
+  json_rpc/[rpcserver, rpcclient],
+  web3/eth_json_marshal
 
 from std/os import DirSep, fileExists, removeFile, splitFile, splitPath, `/`
 from std/times import getTime, toUnix
@@ -92,7 +93,7 @@ func getHttpAuthReqHeader(secret: JwtSharedKey; time: uint64): HttpTable =
 # ------------------------------------------------------------------------------
 
 func installRPC(server: RpcServer) =
-  server.rpc("rpc_echo") do(input: int) -> string:
+  server.rpc("rpc_echo", EthJson) do(input: int) -> string:
     "hello: " & $input
 
 proc setupComboServer(hooks: sink seq[RpcAuthHook]): HttpResult[NimbusHttpServerRef] =
@@ -109,7 +110,7 @@ proc setupComboServer(hooks: sink seq[RpcAuthHook]): HttpResult[NimbusHttpServer
   let address = initTAddress("127.0.0.1:0")
   newHttpServerWithParams(address, hooks, handlers)
 
-createRpcSigsFromNim(RpcClient):
+createRpcSigsFromNim(RpcClient, EthJson):
   proc rpc_echo(input: int): string
 
 # ------------------------------------------------------------------------------

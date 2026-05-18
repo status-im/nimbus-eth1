@@ -296,7 +296,7 @@ proc setupVmState(evm: AsyncEvm, txFrame: CoreDbTxRef, header: Header): BaseVMSt
   let blockContext = BlockContext(
     timestamp: header.timestamp,
     gasLimit: header.gasLimit,
-    baseFeePerGas: header.baseFeePerGas,
+    baseFeePerGas: header.baseFeePerGas.get(0.u256).truncate(GasInt),
     prevRandao: header.prevRandao,
     difficulty: header.difficulty,
     coinbase: header.coinbase,

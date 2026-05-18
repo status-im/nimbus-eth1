@@ -23,7 +23,7 @@ import
   ../../db/ledger,
   ../../constants,
   ../../transaction,
-  ../../core/eip8037,
+  ../../transaction/call_types,
   ../chain/forked_chain,
   ../pow/header,
   ../eip4844,
@@ -71,14 +71,14 @@ const
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc getBaseFee(com: CommonRef; parent: Header): Opt[UInt256] =
+proc getBaseFee(com: CommonRef; parent: Header): GasInt =
   ## Calculates the `baseFee` of the head assuming this is the parent of a
   ## new block header to generate.
   ## Post Merge rule
-  Opt.some calcEip1599BaseFee(
+  calcEip1599BaseFee(
     parent.gasLimit,
     parent.gasUsed,
-    parent.baseFeePerGas.get(0.u256))
+    parent.baseFeePerGas.get(0.u256)).truncate(GasInt)
 
 func getGasLimit(com: CommonRef; parent: Header): GasInt =
   ## Post Merge rule
@@ -90,7 +90,7 @@ proc setupVMState(com: CommonRef;
                   pos: PosPayloadAttr,
                   parentFrame: CoreDbTxRef): BaseVMState =
   let
-    fork = com.toEVMFork(pos.timestamp)
+    fork = com.toHardFork(pos.timestamp)
     gasLimit = getGasLimit(com, parent)
 
   BaseVMState.new(
@@ -105,7 +105,6 @@ proc setupVMState(com: CommonRef;
       excessBlobGas: com.calcExcessBlobGas(parent, fork),
       parentHash   : parentHash,
       slotNumber   : pos.slotNumber,
-      costPerStateByte: stateGasPerByte(gasLimit),
     ),
     txFrame = parentFrame.txFrameBegin(),
     com     = com,
@@ -163,10 +162,7 @@ proc insertToSenderTab(xp: TxPoolRef; item: TxItemRef): Result[void, TxError] =
 func baseFee*(xp: TxPoolRef): GasInt =
   ## Getter, baseFee for the next bock header. This value is auto-generated
   ## when a new insertion point is set via `head=`.
-  if xp.vmState.blockCtx.baseFeePerGas.isSome:
-    xp.vmState.blockCtx.baseFeePerGas.get.truncate(GasInt)
-  else:
-    0.GasInt
+  xp.vmState.blockCtx.baseFeePerGas
 
 func gasLimit(xp: TxPoolRef): GasInt =
   xp.vmState.blockCtx.gasLimit
@@ -191,7 +187,7 @@ proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
   if tx.txType == TxEip4844:
     let
       excessBlobGas = xp.excessBlobGas
-      blobGasPrice = getBlobBaseFee(excessBlobGas, xp.vmState.com, xp.vmState.fork)
+      blobGasPrice = getBlobBaseFee(excessBlobGas, xp.vmState.com, xp.vmState.hardFork)
     if tx.maxFeePerBlobGas < blobGasPrice:
       debug "Invalid transaction: maxFeePerBlobGas lower than blobGasPrice",
         maxFeePerBlobGas = tx.maxFeePerBlobGas,
@@ -284,6 +280,9 @@ func vmState*(xp: TxPoolRef): BaseVMState =
 func nextFork*(xp: TxPoolRef): EVMFork =
   xp.vmState.fork
 
+func hardFork*(xp: TxPoolRef): HardFork =
+  xp.vmState.hardFork
+
 template chain*(xp: TxPoolRef): ForkedChainRef =
   xp.chain
 
@@ -365,11 +364,14 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     debug "Transaction already known", txHash = id
     return err(txErrorAlreadyKnown)
 
+  let
+    intrinsic = ptx.tx.intrinsicGas(xp.hardFork, xp.gasLimit)
+
   validateTxBasic(
     xp.com,
     ptx.tx,
-    xp.gasLimit,
-    xp.nextFork,
+    intrinsic,
+    xp.hardFork,
     validateFork = true).isOkOr:
     debug "Invalid transaction: Basic validation failed",
       txHash = id,

@@ -240,8 +240,7 @@ proc exec(ctx: TransContext,
   vmState.blockStateGasUsed = 0
 
   if ctx.env.parentBeaconBlockRoot.isSome:
-    vmState.processBeaconBlockRoot(ctx.env.parentBeaconBlockRoot.get).isOkOr:
-      raise newError(ErrorConfig, error)
+    vmState.processBeaconBlockRoot(ctx.env.parentBeaconBlockRoot.value)
 
   if vmState.com.isPragueOrLater(ctx.env.currentTimestamp) and
      ctx.env.blockHashes.len > 0:
@@ -252,8 +251,7 @@ proc exec(ctx: TransContext,
     if prevHash == static(default(Hash32)):
       raise newError(ErrorConfig, "previous block hash not found for block number: " & $prevNumber)
 
-    vmState.processParentBlockHash(prevHash).isOkOr:
-      raise newError(ErrorConfig, error)
+    vmState.processParentBlockHash(prevHash)
 
   for txIndex, txRes in ctx.txList:
     if txRes.isErr:
@@ -354,7 +352,7 @@ proc exec(ctx: TransContext,
   if ctx.env.currentExcessBlobGas.isSome:
     excessBlobGas = ctx.env.currentExcessBlobGas
   elif ctx.env.parentExcessBlobGas.isSome and ctx.env.parentBlobGasUsed.isSome:
-    excessBlobGas = Opt.some calcExcessBlobGas(vmState.com, vmState.parent, vmState.fork)
+    excessBlobGas = Opt.some calcExcessBlobGas(vmState.com, vmState.parent, vmState.hardFork)
 
   if excessBlobGas.isSome:
     result.result.blobGasUsed = Opt.some vmState.blobGasUsed
@@ -539,7 +537,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       # If it is not explicitly defined, but we have the parent values, we try
       # to calculate it ourselves.
       if parent.excessBlobGas.isSome and parent.blobGasUsed.isSome:
-        ctx.env.currentExcessBlobGas = Opt.some com.calcExcessBlobGas(parent, com.toEVMFork(ctx.env.currentTimestamp))
+        ctx.env.currentExcessBlobGas = Opt.some com.calcExcessBlobGas(parent, com.toHardFork(ctx.env.currentTimestamp))
 
     let header  = envToHeader(ctx.env)
 

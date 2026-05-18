@@ -190,7 +190,7 @@ proc selfDestructEIP8037Op(cpt: VmCpt): EvmResultVoid =
     gasCost, reason = "SELFDESTRUCT EIP-8037")
 
   if condition:
-    ? cpt.gasMeter.chargeStateGas(STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte,
+    ? cpt.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS,
       reason = "SELFDESTRUCT EIP-8037: State gas new account")
 
   cpt.selfDestruct(beneficiary)

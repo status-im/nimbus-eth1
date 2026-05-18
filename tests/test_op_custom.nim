@@ -201,22 +201,27 @@ proc opCustomMain*() =
       title: "EIP2929 BALANCE_1 WARM"
       setup:
         vmState.mutateLedger:
+          # make `codeAddress` WARM
           ledger.accessList(codeAddress)
       code:
-        Address
-        Balance
+        Address  # gas: 2
+        Balance  # gas: 100 (WARM)
       stack: "0x00000000000000000000000000000000000000000000000000000000000f4434"
       fork: Berlin
       gasused: 102
 
     assembler:
       title: "EIP2929 BALANCE_1 COLD"
+      setup:
+        vmState.mutateLedger:
+          # introduce a new COLD address not in access list
+          ledger.setBalance(address"0x0000000000000000000000000000000000889911", 0xabcd.u256)
       code:
-        Address
-        Balance
-      stack: "0x00000000000000000000000000000000000000000000000000000000000f4434"
+        Push20 "0x0000000000000000000000000000000000889911" # gas: 3
+        Balance                                             # gas: 2600 (COLD)
+      stack: "0x000000000000000000000000000000000000000000000000000000000000abcd"
       fork: Berlin
-      gasused: 2602
+      gasused: 2603
 
     assembler: # ORIGIN OP
       title: "ORIGIN_1"

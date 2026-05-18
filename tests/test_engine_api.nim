@@ -47,7 +47,7 @@ type
     genesisFile: string
     testProc: proc(env: TestEnv): Result[void, string]
 
-NewPayloadV4Params.useDefaultSerializationIn JrpcConv
+NewPayloadV4Params.useDefaultSerializationIn EthJson
 
 const
   defaultGenesisFile = "tests/customgenesis/engine_api_genesis.json"
@@ -191,7 +191,7 @@ proc newPayloadV4ParamsTest(env: TestEnv): Result[void, string] =
   for paramsFile in paramsFiles:
     let
       client = env.client
-      params = JrpcConv.loadFile(paramsFile, NewPayloadV4Params)
+      params = EthJson.loadFile(paramsFile, NewPayloadV4Params)
       res = ?client.newPayloadV4(
         params.payload,
         params.expectedBlobVersionedHashes,
@@ -215,7 +215,7 @@ proc genesisShouldCanonicalTest(env: TestEnv): Result[void, string] =
 
   let
     client = env.client
-    params = JrpcConv.loadFile(paramsFile, NewPayloadV4Params)
+    params = EthJson.loadFile(paramsFile, NewPayloadV4Params)
     res = ? client.newPayloadV3(
       params.payload,
       params.expectedBlobVersionedHashes,
@@ -251,7 +251,7 @@ proc newPayloadV4InvalidRequests(env: TestEnv): Result[void, string] =
   for paramsFile in paramsFiles:
     let
       client = env.client
-      params = JrpcConv.loadFile(paramsFile, NewPayloadV4Params)
+      params = EthJson.loadFile(paramsFile, NewPayloadV4Params)
       res = client.newPayloadV4(
         params.payload,
         params.expectedBlobVersionedHashes,
@@ -275,7 +275,7 @@ proc newPayloadV4InvalidRequestType(env: TestEnv): Result[void, string] =
 
   let
     client = env.client
-    params = JrpcConv.loadFile(paramsFile, NewPayloadV4Params)
+    params = EthJson.loadFile(paramsFile, NewPayloadV4Params)
     res = client.newPayloadV4(
       params.payload,
       params.expectedBlobVersionedHashes,

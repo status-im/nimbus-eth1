@@ -21,6 +21,7 @@ type
     SnapDownload                   ## Downloading and caching data
     SnapDownloadFinish             ## Wait for sync before proceeding
     SnapMkTrie                     ## Assembling downloaded data
+    SnapAnalyse                    ## Analyse for missing MPT nodes
     SnapHealing                    ## Complete missing trie nodes
 
   ErrorType* = enum
@@ -68,10 +69,11 @@ const
   threadSwitchTimeSlot* = chronos.nanoseconds(1)
     ## Nano-sleep to allows pseudo/async thread switch
 
-  threadSwitchRunLimit* = chronos.seconds(15)
-    ## Force a thread switch after that time running continuously
+  threadSwitchRunLimit* = chronos.seconds(25)
+    ## Force a thread switch after that time running continuously. This
+    ## applies mainly for DB building and analysing sessions.
 
-  accuAccountsCovMin* = 3.0
+  accuAccountsCovMin* = 1.05
     ## In absence of a completed pivot state, the syncer will stop downloading
     ## if all accounts are covered at least by this factor. Then trie-assembly
     ## and healing can take place.

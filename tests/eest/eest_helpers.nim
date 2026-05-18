@@ -126,12 +126,12 @@ type
   EngineFixture* = object
     units*: seq[EngineUnitDesc]
 
-GenesisHeader.useDefaultReaderIn JrpcConv
-PayloadItem.useDefaultReaderIn JrpcConv
-EngineUnitEnv.useDefaultReaderIn JrpcConv
-BlockchainUnitEnv.useDefaultReaderIn JrpcConv
-EnvConfig.useDefaultReaderIn JrpcConv
-BlobSchedule.useDefaultReaderIn JrpcConv
+GenesisHeader.useDefaultReaderIn EthJson
+PayloadItem.useDefaultReaderIn EthJson
+EngineUnitEnv.useDefaultReaderIn EthJson
+BlockchainUnitEnv.useDefaultReaderIn EthJson
+EnvConfig.useDefaultReaderIn EthJson
+BlobSchedule.useDefaultReaderIn EthJson
 
 template wrapValueError(body: untyped) =
   try:
@@ -140,13 +140,13 @@ template wrapValueError(body: untyped) =
     r.raiseUnexpectedValue(exc.msg)
 
 proc readValue*(
-    r: var JsonReader[JrpcConv], val: var Numero
+    r: var JsonReader[EthJson], val: var Numero
 ) {.gcsafe, raises: [IOError, SerializationError].} =
   wrapValueError:
     val = fromHex[uint64](r.readValue(string)).Numero
 
 proc readValue*(
-    r: var JsonReader[JrpcConv],
+    r: var JsonReader[EthJson],
     value: var array[HardFork.Cancun .. HardFork.high, Opt[BlobSchedule]],
 ) {.gcsafe, raises: [SerializationError, IOError].} =
   wrapValueError:
@@ -154,7 +154,7 @@ proc readValue*(
       blobScheduleParser(r, key, value)
 
 proc readValue*(
-    r: var JsonReader[JrpcConv], val: var PayloadParam
+    r: var JsonReader[EthJson], val: var PayloadParam
 ) {.gcsafe, raises: [IOError, SerializationError].} =
   wrapValueError:
     r.parseArray(i):
@@ -171,14 +171,14 @@ proc readValue*(
         r.raiseUnexpectedValue("Unexpected element")
 
 proc readValue*(
-    r: var JsonReader[JrpcConv], val: var EngineFixture
+    r: var JsonReader[EthJson], val: var EngineFixture
 ) {.gcsafe, raises: [IOError, SerializationError].} =
   wrapValueError:
     parseObject(r, key):
       val.units.add EngineUnitDesc(name: key, unit: r.readValue(EngineUnitEnv))
 
 proc readValue*(
-    r: var JsonReader[JrpcConv], val: var BlockchainFixture
+    r: var JsonReader[EthJson], val: var BlockchainFixture
 ) {.gcsafe, raises: [IOError, SerializationError].} =
   wrapValueError:
     parseObject(r, key):
@@ -297,7 +297,7 @@ proc close*(env: TestEnv) =
 
 template parseAnyFixture(fileName: string, T: typedesc) =
   try:
-    result = JrpcConv.loadFile(fileName, T)
+    result = EthJson.loadFile(fileName, T)
   except JsonReaderError as exc:
     debugEcho exc.formatMsg(fileName)
     quit(QuitFailure)

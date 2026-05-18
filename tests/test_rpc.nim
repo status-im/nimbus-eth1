@@ -282,7 +282,7 @@ proc generateBlock(env: var TestEnv) =
   env.txHash = tx1.computeRlpHash
   env.blockHash = blk.header.computeBlockHash
 
-createRpcSigsFromNim(RpcClient):
+createRpcSigsFromNim(RpcClient, EthJson):
   proc web3_clientVersion(): string
   proc web3_sha3(data: seq[byte]): Hash32
   proc net_version(): string
@@ -667,29 +667,29 @@ proc rpcMain*() =
     test "eth_getBlockReceipts with EIP-1898 object param":
       # blockHash object form (what go-ethereum's ethclient sends)
       let r1 = await client.call("eth_getBlockReceipts",
-        %[%*{"blockHash": $env.blockHash}])
-      let recs1 = JrpcConv.decode(r1.string, Opt[seq[ReceiptObject]])
+        %[%*{"blockHash": $env.blockHash}], EthJson)
+      let recs1 = EthJson.decode(r1.string, Opt[seq[ReceiptObject]])
       check recs1.isSome
       check recs1.get.len == 2
 
       # blockHash with requireCanonical=false
       let r2 = await client.call("eth_getBlockReceipts",
-        %[%*{"blockHash": $env.blockHash, "requireCanonical": false}])
-      let recs2 = JrpcConv.decode(r2.string, Opt[seq[ReceiptObject]])
+        %[%*{"blockHash": $env.blockHash, "requireCanonical": false}], EthJson)
+      let recs2 = EthJson.decode(r2.string, Opt[seq[ReceiptObject]])
       check recs2.isSome
       check recs2.get.len == 2
 
       # blockNumber object form
       let r3 = await client.call("eth_getBlockReceipts",
-        %[%*{"blockNumber": "0x1"}])
-      let recs3 = JrpcConv.decode(r3.string, Opt[seq[ReceiptObject]])
+        %[%*{"blockNumber": "0x1"}], EthJson)
+      let recs3 = EthJson.decode(r3.string, Opt[seq[ReceiptObject]])
       check recs3.isSome
       check recs3.get.len == 2
 
       # requireCanonical=true should fail
       expect JsonRpcError:
         discard await client.call("eth_getBlockReceipts",
-          %[%*{"blockHash": $env.blockHash, "requireCanonical": true}])
+          %[%*{"blockHash": $env.blockHash, "requireCanonical": true}], EthJson)
 
     test "eth_getTransactionReceipt":
       let res = await client.eth_getTransactionReceipt(env.txHash)

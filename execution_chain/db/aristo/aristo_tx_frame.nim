@@ -140,7 +140,7 @@ proc txFrameBegin*(
     level: parent.level + 1)
 
   when compileOption("threads"):
-    txRef.lock = ReadWriteLock.init()
+    txRef.lock.init()
   
   txRef
 

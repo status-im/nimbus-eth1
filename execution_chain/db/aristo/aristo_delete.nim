@@ -48,8 +48,8 @@ proc branchStillNeeded(vtx: BranchRef, removed: int8): Result[int8,void] =
 proc deleteImpl(
     db: AristoTxRef;                   # Database, top layer
     hike: Hike;                        # Fully expanded path
-      ): Result[LeafRef, AristoError] =
-  ## Removes the last node in the hike and returns the updated leaf in case
+      ): Result[VertexRef, AristoError] =
+  ## Removes the last node in the hike and returns the updated node in case
   ## a branch collapsed
 
   # Remove leaf entry
@@ -113,10 +113,7 @@ proc deleteImpl(
     # Put the new vertex at the id of the obsolete branch
     db.layersPutVtx((hike.root, br.vid), vtx)
 
-    if vtx.vType in Leaves:
-      ok(LeafRef(vtx))
-    else:
-      ok(nil)
+    ok(vtx)
   else:
     # Clear the removed leaf from the branch (that still contains other children)
     let brDup = db.layersUpdate((hike.root, br.vid), brVtx)
@@ -146,15 +143,32 @@ proc deleteAccount*(
   if stoID.isValid:
     ?db.delStoTreeImpl(stoID.vid, accPath)
 
-  let otherLeaf = ?db.deleteImpl(accHike)
+  let otherVtx = ?db.deleteImpl(accHike)
 
   db.layersPutAccLeaf(accPath, nil)
 
-  if otherLeaf.isValid:
-    let sibAccPath =
-      Hash32(getBytes(NibblesBuf.fromBytes(accPath.data).replaceSuffix(otherLeaf.pfx)))
-    db.layersPutAccLeaf(sibAccPath, AccLeafRef(otherLeaf))
-    if db.collectWitness:
+  if otherVtx.isValid:
+    if otherVtx.vType == AccLeaf:
+      let sibAccPath =
+        Hash32(getBytes(NibblesBuf.fromBytes(accPath.data).replaceSuffix(AccLeafRef(otherVtx).pfx)))
+      db.layersPutAccLeaf(sibAccPath, AccLeafRef(otherVtx))
+      if db.collectWitness:
+        db.collapsedSiblings.add((sibAccPath, Opt.none(Hash32)))
+    elif db.collectWitness:
+      # Branch collapse with non-leaf sibling: the witness must include the
+      # sibling branch node so stateless execution can read it. This builds a
+      # proof path for it: root prefix + extBranch.pfx (rest is arbitrary).
+      let
+        accNibbles = NibblesBuf.fromBytes(accPath.data)
+        # position of branch vid in the nibble path
+        branchDepth =
+          64 - (
+            BranchRef(accHike.legs[^2].wp.vtx).pfx.len + 1 +
+            AccLeafRef(accHike.legs[^1].wp.vtx).pfx.len
+          )
+        sibAccPath = Hash32(
+          getBytes(accNibbles.slice(0, branchDepth) & ExtBranchRef(otherVtx).pfx)
+        )
       db.collapsedSiblings.add((sibAccPath, Opt.none(Hash32)))
 
   ok()
@@ -203,15 +217,30 @@ proc deleteSlot*(
   # need to mark it
   db.layersResKeys(accHike, skip = 1)
 
-  let otherLeaf = ?db.deleteImpl(stoHike)
+  let otherVtx = ?db.deleteImpl(stoHike)
   db.layersPutStoLeaf(mixPath, nil)
 
-  if otherLeaf.isValid:
-    let
-      sibStoPath = Hash32(getBytes(stoNibbles.replaceSuffix(otherLeaf.pfx)))
-      leafMixPath = mixUp(accPath, sibStoPath)
-    db.layersPutStoLeaf(leafMixPath, StoLeafRef(otherLeaf))
-    if db.collectWitness:
+  if otherVtx.isValid:
+    if otherVtx.vType == StoLeaf:
+      let
+        sibStoPath = Hash32(getBytes(stoNibbles.replaceSuffix(StoLeafRef(otherVtx).pfx)))
+        leafMixPath = mixUp(accPath, sibStoPath)
+      db.layersPutStoLeaf(leafMixPath, StoLeafRef(otherVtx))
+      if db.collectWitness:
+        db.collapsedSiblings.add((accPath, Opt.some(sibStoPath)))
+    elif db.collectWitness:
+      # Branch collapse with non-leaf sibling: the witness must include the
+      # sibling branch node so stateless execution can read it. This builds a
+      # proof path for it: root prefix + extBranch.pfx (rest is arbitrary).
+      let
+        branchDepth =
+          64 - (
+            BranchRef(stoHike.legs[^2].wp.vtx).pfx.len + 1 +
+            StoLeafRef(stoHike.legs[^1].wp.vtx).pfx.len
+          )
+        sibStoPath = Hash32(
+          getBytes(stoNibbles.slice(0, branchDepth) & ExtBranchRef(otherVtx).pfx)
+        )
       db.collapsedSiblings.add((accPath, Opt.some(sibStoPath)))
 
   # If there was only one item (that got deleted), update the account as well
