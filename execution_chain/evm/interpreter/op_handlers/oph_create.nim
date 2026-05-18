@@ -54,21 +54,22 @@ proc execSubCreate(c: Computation; childMsg: Message;
       c.gasMeter.appendRegularGasUsed(child.gasMeter.regularGasUsed)
 
     if child.isSuccess:
-      c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
-      c.gasMeter.appendStateGasUsed(child.gasMeter.stateGasUsed)
-      # https://github.com/ethereum/execution-specs/pull/2733/changes
-      c.gasMeter.creditStateGasRefund(child.gasMeter.stateGasRefundPending)
+      if c.fork >= FkAmsterdam:
+        c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
+        c.gasMeter.appendStateGasUsed(child.gasMeter.stateGasUsed)
+        # https://github.com/ethereum/execution-specs/pull/2733/changes
+        c.gasMeter.creditStateGasRefund(child.gasMeter.stateGasRefundPending)
       c.merge(child)
       c.stack.lsTop child.msg.contractAddress
     else:
-      # On failure (revert or exceptional halt) state changes are rolled back,
-      # so no state was actually grown.  All state gas, both reservoir and any
-      # that spilled into `gas_left`, is restored to the parent's reservoir and
-      # the child's `state_gas_used` is not accumulated.
-      c.gasMeter.returnStateGas(child.gasMeter.stateGasUsed + child.gasMeter.stateGasLeft)
-
-      # https://github.com/ethereum/execution-specs/pull/2733/changes
       if c.fork >= FkAmsterdam:
+        # On failure (revert or exceptional halt) state changes are rolled back,
+        # so no state was actually grown.  All state gas, both reservoir and any
+        # that spilled into `gas_left`, is restored to the parent's reservoir and
+        # the child's `state_gas_used` is not accumulated.
+        c.gasMeter.returnStateGas(child.gasMeter.stateGasUsed + child.gasMeter.stateGasLeft)
+
+        # https://github.com/ethereum/execution-specs/pull/2733/changes
         c.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
 
       if not child.error.burnsGas: # Means return was `REVERT`.
