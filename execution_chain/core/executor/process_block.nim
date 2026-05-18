@@ -19,14 +19,13 @@ import
   ../../evm/state,
   ../../evm/types,
   ../../block_access_list/block_access_list_validation,
+  ../../concurrency/utils,
   ../dao,
   ../eip6110,
   ./calculate_reward,
   ./executor_helpers,
   ./process_transaction,
-  stew/assign2,
   eth/common/[keys, transaction_utils],
-  minilru,
   chronicles,
   results
 
@@ -72,41 +71,11 @@ when compileOption("threads"):
     if e[].sender == default(Address):
       return
 
-    # Create ledger
-    let ledger = LedgerRef() 
-    ledger.code = typeof(ledger.code).init(0)
-    ledger.slots = typeof(ledger.slots).init(0)
-    ledger.blockHashes = typeof(ledger.blockHashes).init(0)
-    ledger.txFrame.borrowRef(ctx[].txFrame) # to avoid the ref count which is not thread safe
-    defer: 
-      ledger.txFrame.unborrowRef()
-    discard ledger.beginSavePoint()
+    let 
+      ledger = LedgerRef.initAndBorrowTxFrame(ctx[].txFrame)
+      vmState = BaseVMState.initAndBorrowCommon(
+        ledger, ctx[].parent, ctx[].blockCtx, ctx[].com)
 
-    # Create EVM
-    let vmState = BaseVMState()
-    vmState.com.borrowRef(ctx[].com)
-    defer: 
-      vmState.com.unborrowRef()
-    vmState.ledger = ledger
-    assign(vmState.parent, ctx[].parent)
-    assign(vmState.blockCtx, ctx[].blockCtx)
-    const txCtx = default(TxContext)
-    assign(vmState.txCtx, txCtx)
-    # vmState.flags = flags
-    vmState.hardFork = vmState.determineFork
-    vmState.fork = ToEVMFork[vmState.hardFork]
-    # vmState.tracer = nil
-    # vmState.receipts.setLen(0)
-    # vmState.cumulativeGasUsed = 0
-    # vmState.blockRegularGasUsed = 0
-    # vmState.blockStateGasUsed = 0
-    vmState.gasCosts = vmState.fork.forkToSchedule
-    # vmState.blobGasUsed = 0'u64
-    # vmState.allLogs.setLen(0)
-    # vmState.gasRefunded = 0
-    # vmState.balTracker = nil
-
-    # Prefetch transaction
     vmState.prefetchTransaction(tx[], e[].sender)
 
     true

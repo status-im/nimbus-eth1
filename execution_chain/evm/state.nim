@@ -22,13 +22,13 @@ import
 
 export gas_costs
 
-func forkDeterminationInfoForVMState*(vmState: BaseVMState): ForkDeterminationInfo =
+func forkDeterminationInfoForVMState(vmState: BaseVMState): ForkDeterminationInfo =
   forkDeterminationInfo(vmState.parent.number + 1, vmState.blockCtx.timestamp)
 
-func determineFork*(vmState: BaseVMState): HardFork =
+func determineFork(vmState: BaseVMState): HardFork =
   vmState.com.toHardFork(vmState.forkDeterminationInfoForVMState)
 
-proc init(
+proc init*(
       self:         BaseVMState;
       ledger:       LedgerRef,
       parent:       Header;
