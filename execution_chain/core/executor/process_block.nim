@@ -47,14 +47,6 @@ when compileOption("threads"):
       senderReady: Atomic[bool]
       fv: Flowvar[bool]
 
-
-  template borrowRef[T](dest, src: ref T) =
-    copyMem(addr dest, addr src, sizeof(pointer))
-
-  template unborrowRef[T](dest: ref T) =
-    var nilRef: T
-    copyMem(addr dest, addr nilRef, sizeof(pointer))
-
   proc recoverAndPrefetchTask(
       e: ptr PrefetchEntry, tx: ptr Transaction, ctx: ptr PrefetchCtx
   ): bool {.nimcall, gcsafe.} =
@@ -81,32 +73,31 @@ when compileOption("threads"):
     true
 
   template withSenderParallel(
-      vmState: BaseVMState, txs: openArray[Transaction], body: untyped,
-      taskpool: Taskpool) =
+      vmState: BaseVMState, txs: openArray[Transaction], body: untyped) =
+    doAssert not vmState.com.taskpool.isNil()
+
     var ctx = PrefetchCtx(
       parent: vmState.parent,
       blockCtx: vmState.blockCtx,
       com: vmState.com,
-      txFrame: CoreDbTxRef(
-        kTx: vmState.ledger.txFrame.kTx.parent, 
-        aTx: vmState.ledger.txFrame.aTx.parent
-      )
+      txFrame: vmState.ledger.txFrame.parent()
     )
-
     ctx.cancel.store(false, moRelease)
+
     let ctxPtr =
-      if vmState.com.optimisticStatePrefetch: addr ctx
-      else: nil
+      if vmState.com.optimisticStatePrefetch: 
+        addr ctx
+      else: 
+        nil
 
     var entries = newSeq[PrefetchEntry](txs.len)
-
     for i, e in entries.mpairs():
       e.sig = txs[i].signature().valueOr(default(Signature))
       e.hash = txs[i].rlpHashForSigning(txs[i].isEip155)
       e.senderReady.store(false, moRelease)
       let entryPtr = addr e
       let txPtr = unsafeAddr txs[i]
-      e.fv = taskpool.spawn recoverAndPrefetchTask(entryPtr, txPtr, ctxPtr)
+      e.fv = vmState.com.taskpool.spawn recoverAndPrefetchTask(entryPtr, txPtr, ctxPtr)
 
     try:
       for txIndex {.inject.}, e in entries.mpairs():
@@ -135,7 +126,7 @@ template withSender(vmState: BaseVMState, txs: openArray[Transaction], body: unt
     if vmState.com.taskpool == nil:
       withSenderSerial(txs, body)
     else:
-      withSenderParallel(vmState, txs, body, vmState.com.taskpool)
+      withSenderParallel(vmState, txs, body)
   else:
     withSenderSerial(txs, body)
 

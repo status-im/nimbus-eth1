@@ -498,6 +498,9 @@ proc txFrameBegin*(
 
   CoreDbTxRef(kTx: kTx, aTx: aTx)
 
+proc parent*(tx: CoreDbTxRef): CoreDbTxRef =
+  CoreDbTxRef(kTx: tx.kTx.parent, aTx: tx.aTx.parent)
+
 proc checkpoint*(tx: CoreDbTxRef, blockNumber: BlockNumber, skipSnapshot = false) =
   tx.aTx.checkpoint(blockNumber, skipSnapshot)
 
