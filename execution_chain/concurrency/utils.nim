@@ -7,12 +7,6 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-# import
-#   eth/common/headers,
-#   ../common/common,
-#   ../db/[ledger, core_db],
-#   ../evm/[state, types]
-
 # These borrow functions are a workaround to avoid updating the ref count
 # of a ref type when assigning it into another ref type or heap object.
 # This is needed because refc doesn't support atomic reference counts
@@ -32,44 +26,3 @@ template unborrowRef*[T](dest: ref T) =
   # Sets the ref type back to nil without updating the ref count.
   var nilRef: T
   copyMem(addr dest, addr nilRef, sizeof(pointer))
-
-# template initAndBorrowTxFrame*(T: type LedgerRef, frame: CoreDbTxRef): LedgerRef =
-#   # The borrowed frame is set back to nil at the end of the current scope.
-#   let ledger = LedgerRef()
-#   ledger.txFrame.borrowRef(frame)
-#   # defer:
-#   #   ledger.txFrame.unborrowRef()
-#   discard ledger.beginSavePoint()
-
-#   ledger
-
-# template initAndBorrowCommon*(
-#     T: type BaseVMState,
-#     ledgerp: LedgerRef,
-#     parentp: Header,
-#     blockCtxp: BlockContext,
-#     common: CommonRef,
-# ): BaseVMState =
-#   # The borrowed common object is set back to nil at the end of the current scope.
-#   let vmState = BaseVMState()
-
-#   vmState.com.borrowRef(common)
-#   defer:
-#     vmState.com.unborrowRef()
-
-#   #vmState.init(ledger, parent, blockCtx, nil, nil, nil)
-
-#   vmState.ledger = ledgerp
-#   assign(vmState.parent, parentp)
-#   assign(vmState.blockCtx, blockCtxp)
-#   const txCtx = default(TxContext)
-#   assign(vmState.txCtx, txCtx)
-  
-#   vmState.hardFork = vmState.determineFork
-#   vmState.fork = ToEVMFork[vmState.hardFork]
-#   vmState.gasCosts = vmState.fork.forkToSchedule
-  
-
-
-
-#   vmState

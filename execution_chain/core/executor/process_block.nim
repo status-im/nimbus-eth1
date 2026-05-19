@@ -43,13 +43,6 @@ when compileOption("threads"):
       com: CommonRef
       txFrame: CoreDbTxRef
 
-    # PrefetchEntry = object
-    #   sig: Signature
-    #   hash: Hash32
-    #   sender: Address
-    #   senderReady: Atomic[bool]
-    #   fv: Flowvar[bool]
-
   proc recoverTask(e: ptr Entry): Address {.nimcall.} =
     let pk = recover(e[][0], SkMessage(e[][1].data))
     if pk.isOk():
@@ -123,7 +116,6 @@ when compileOption("threads"):
 
     if vmState.com.optimisticStatePrefetch: 
       # Process the transactions with prefetch enabled
-
       var ctx = PrefetchCtx(
           parent: vmState.parent,
           blockCtx: vmState.blockCtx,
@@ -160,7 +152,6 @@ when compileOption("threads"):
 
     else:
       # Process the transactions with prefetch disabled
-
       for txIndex {.inject.}, e in entries.mpairs():
         template tx(): untyped =
           txs[txIndex]
@@ -171,30 +162,6 @@ when compileOption("threads"):
         let sender {.inject.} = sync(e[2])
 
         body
-
-    # var entries = newSeq[PrefetchEntry](txs.len)
-    # for i, e in entries.mpairs():
-    #   e.sig = txs[i].signature().valueOr(default(Signature))
-    #   e.hash = txs[i].rlpHashForSigning(txs[i].isEip155)
-    #   e.senderReady.store(false, moRelease)
-    #   let entryPtr = addr e
-    #   let txPtr = unsafeAddr txs[i]
-    #   e.fv = vmState.com.taskpool.spawn recoverAndPrefetchTask(entryPtr, txPtr, ctxPtr)
-
-    # try:
-    #   for txIndex {.inject.}, e in entries.mpairs():
-    #     template tx(): untyped =
-    #       txs[txIndex]
-
-    #     while not e.senderReady.load(moAcquire):
-    #       cpuRelax()
-    #     let sender {.inject.} = e.sender
-
-    #     body
-    # finally:
-    #   ctx.cancel.store(true, moRelease)
-    #   for e in entries.mitems():
-    #     discard sync(e.fv)
 
 template withSenderSerial(txs: openArray[Transaction], body: untyped) =
   for txIndex {.inject.}, tx {.inject.} in txs:
