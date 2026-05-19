@@ -189,6 +189,8 @@ for arg in "\$@"; do
     ARGS+=("\${arg}")
   fi
 done
+echo "llvm-ar wrapper called with: \$@" >&2
+echo "expanded ARGS: \${ARGS[@]}" >&2
 exec "/osxcross/bin/aarch64-apple-darwin${DARWIN_VER}-ar" "\${ARGS[@]}"
 EOF
   chmod +x "${AR_SHIM_DIR}/llvm-ar"
