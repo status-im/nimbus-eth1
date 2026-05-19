@@ -72,7 +72,7 @@ jobs:
           path: |
             ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus.sha512sum
             ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus_verified_proxy.sha512sum
-            ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/libverifproxy/libverifproxy.a.sha512sum
+            ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/libverifproxy.a.sha512sum
           retention-days: 2
 
   build-wasm:
