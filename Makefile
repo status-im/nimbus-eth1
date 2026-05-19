@@ -386,8 +386,8 @@ GO_LIB_DIR       := $(GO_BINDINGS_DIR)/verifproxy/lib
 nimbus_verified_proxy_go_test: $(VERIF_PROXY_OUT_PATH)/libverifproxy.a
 	echo -e $(BUILD_MSG) "go test $(GO_BINDINGS_DIR)" && \
 		mkdir -p "$(GO_LIB_DIR)" && \
-		cp "$(VERIF_PROXY_OUT_PATH)/libverifproxy.$(STATICLIBEXT)" \
-		   "$(GO_LIB_DIR)/libverifproxy.$(STATICLIBEXT)" && \
+		cp "$(VERIF_PROXY_OUT_PATH)/libverifproxy.a" \
+		   "$(GO_LIB_DIR)/libverifproxy.a" && \
 		cp nimbus_verified_proxy/library/verifproxy.h \
 		   "$(GO_LIB_DIR)/verifproxy.h" && \
 		cd "$(GO_BINDINGS_DIR)" && \
