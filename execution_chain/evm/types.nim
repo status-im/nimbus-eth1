@@ -103,9 +103,8 @@ type
     gasRefunded*: int64
     gasRemaining*: GasInt
     stateGasLeft*: GasInt
-    stateGasUsed*: GasInt
+    stateGasUsed*: int64
     regularGasUsed*: GasInt
-    stateGasRefundPending*: GasInt
 
   CallKind* {.pure.} = enum
     Call          # Request CALL.
