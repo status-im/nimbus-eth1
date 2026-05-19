@@ -57,17 +57,19 @@ proc execSubCreate(c: Computation; childMsg: Message;
       if c.fork >= FkAmsterdam:
         c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
         c.gasMeter.appendStateGasUsed(child.gasMeter.stateGasUsed)
-        # https://github.com/ethereum/execution-specs/pull/2733/changes
-        c.gasMeter.creditStateGasRefund(child.gasMeter.stateGasRefundPending)
       c.merge(child)
       c.stack.lsTop child.msg.contractAddress
     else:
       if c.fork >= FkAmsterdam:
-        # On failure (revert or exceptional halt) state changes are rolled back,
-        # so no state was actually grown.  All state gas, both reservoir and any
-        # that spilled into `gas_left`, is restored to the parent's reservoir and
-        # the child's `state_gas_used` is not accumulated.
-        c.gasMeter.returnStateGas(child.gasMeter.stateGasUsed + child.gasMeter.stateGasLeft)
+        # State is rolled back, so all state gas is restored to the parent's
+        # reservoir via the `state_gas_left + state_gas_used` invariant. Any
+        # inline refunds the child credited net out automatically — their
+        # matching charges are rolled back too.
+        c.gasMeter.returnStateGas(GasInt(
+          c.gasMeter.stateGasLeft.int64 +
+          child.gasMeter.stateGasUsed +
+          child.gasMeter.stateGasLeft.int64)
+        )
 
         # https://github.com/ethereum/execution-specs/pull/2733/changes
         c.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
