@@ -18,7 +18,7 @@ if [[ -z "${1}" ]]; then
 fi
 
 PLATFORM="${1}"
-BINARIES="nimbus nimbus_verified_proxy"
+BINARIES="nimbus nimbus_verified_proxy libverifproxy"
 ROCKSDB_DIR=/usr/rocksdb
 
 echo -e "\nPLATFORM=${PLATFORM}"
@@ -119,7 +119,7 @@ elif [[ "${PLATFORM}" == "linux_arm64" ]]; then
     LOG_LEVEL="TRACE" \
     CC="${CC}" \
     CXX="${CXX}" \
-    NIMFLAGS="${NIMFLAGS_COMMON} --cpu:arm64 --arm64.linux.gcc.exe=${CC} --arm64.linux.gcc.linkerexe=${CXX} --passL:'-static-libstdc++'" \
+    NIMFLAGS="${NIMFLAGS_COMMON} --cpu:arm64 --passC:-fPIC --arm64.linux.gcc.exe=${CC} --arm64.linux.gcc.linkerexe=${CXX} --passL:'-static-libstdc++'" \
     PARTIAL_STATIC_LINKING=1 \
     USE_CACHED_ROCKSDB=1 \
     ${BINARIES}
@@ -171,7 +171,40 @@ elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
     USE_VENDORED_LIBUNWIND=1 \
     USE_CACHED_ROCKSDB=1 \
     NIMFLAGS="${NIMFLAGS_COMMON} --os:macosx --cpu:arm64 --passC:'-mcpu=apple-a14' --passL:-mcpu=apple-a14 --passL:-static-libstdc++ --clang.exe=${CC} --clang.linkerexe=${CXX}" \
-    ${BINARIES}
+    nimbus nimbus_verified_proxy
+
+  # the AR provided by oscxross doesn't support `llvm-ar  @verifproxy_linkerArgs.txt` syntax
+  # for the libverifproxy we just alias the osxcross AR as llvm-ar. So we create a shim that
+  # expands the arguments from the response file and then executes the AR
+  AR_SHIM_DIR="$(mktemp -d)"
+  cat > "${AR_SHIM_DIR}/llvm-ar" <<EOF
+#!/bin/bash
+ARGS=()
+for arg in "\$@"; do
+  if [[ "\${arg}" == @* ]]; then
+    while read -r -a words || [[ \${#words[@]} -gt 0 ]]; do
+      ARGS+=("\${words[@]}")
+    done < "\${arg#@}"
+  else
+    ARGS+=("\${arg}")
+  fi
+done
+echo "llvm-ar wrapper called with: \$@" >&2
+echo "expanded ARGS: \${ARGS[@]}" >&2
+exec "/osxcross/bin/aarch64-apple-darwin${DARWIN_VER}-ar" "\${ARGS[@]}"
+EOF
+  chmod +x "${AR_SHIM_DIR}/llvm-ar"
+  export PATH="${AR_SHIM_DIR}:${PATH}"
+
+  make \
+    -j1 \
+    LOG_LEVEL="TRACE" \
+    CC="${CC}" \
+    AR="${AR}" \
+    RANLIB="${RANLIB}" \
+    USE_CACHED_ROCKSDB=1 \
+    NIMFLAGS="${NIMFLAGS_COMMON} --os:macosx --cpu:arm64 --passC:'-mcpu=apple-a14' --passL:-mcpu=apple-a14 --passL:-static-libstdc++ --clang.exe=${CC} --clang.linkerexe=${CXX}" \
+    libverifproxy
 
 else # linux_amd64
   g++ --version
@@ -214,6 +247,7 @@ if [[ "${PLATFORM}" == "windows_amd64" ]]; then
 fi
 
 for BINARY in ${BINARIES}; do
+  if [[ "${BINARY}" == "libverifproxy" ]]; then continue; fi
   cp "./build/${BINARY}${EXT}" "${DIST_PATH}/build/"
   if [[ "${PLATFORM}" =~ macOS ]]; then
     # Collect debugging info and filter out warnings.
@@ -232,6 +266,11 @@ for BINARY in ${BINARIES}; do
   sha512sum "${BINARY}${EXT}" >"${BINARY}.sha512sum"
   cd - >/dev/null
 done
+
+mkdir -p "${DIST_PATH}/build/libverifproxy"
+cp "build/libverifproxy/libverifproxy.a" "${DIST_PATH}/build/libverifproxy/"
+cp "build/libverifproxy/verifproxy.h" "${DIST_PATH}/build/libverifproxy/"
+
 sed -e "s/GIT_COMMIT/${GIT_COMMIT}/" docker/dist/README.md.tpl >"${DIST_PATH}/README.md"
 
 if [[ "${PLATFORM}" == "linux_amd64" ]]; then
