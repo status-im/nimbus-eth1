@@ -20,8 +20,6 @@ import
   ./types,
   ./evm_errors
 
-export gas_costs
-
 func forkDeterminationInfoForVMState(vmState: BaseVMState): ForkDeterminationInfo =
   forkDeterminationInfo(vmState.parent.number + 1, vmState.blockCtx.timestamp)
 

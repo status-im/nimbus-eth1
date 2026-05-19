@@ -18,6 +18,7 @@ import
   ../../transaction,
   ../../evm/state,
   ../../evm/types,
+  ../../evm/interpreter/gas_costs,
   ../../block_access_list/block_access_list_validation,
   ../../concurrency/utils,
   ../dao,
@@ -63,14 +64,16 @@ when compileOption("threads"):
     if sender == default(Address):
       return
     
-    # Create the ledger without triggering a ref count increment on the txFrame.
+    # Create the ledger without triggering a ref count increment on the txFrame
+    # which is owned by the main/parent thread. 
     let ledger = LedgerRef()
     ledger.txFrame.borrowRef(ctx[].txFrame)
     defer:
       ledger.txFrame.unborrowRef()
     discard ledger.beginSavePoint()
     
-    # Create the vmState without triggering a ref count increment on the common object.
+    # Create the vmState without triggering a ref count increment on the common object
+    # which is owned by the main/parent thread. 
     let vmState = BaseVMState()
     vmState.com.borrowRef(ctx[].com)
     defer:
