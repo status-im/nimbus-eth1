@@ -27,12 +27,15 @@ import
   ./process_transaction,
   eth/common/[keys, transaction_utils],
   chronicles,
-  results
+  results,
+  stew/assign2
 
 when compileOption("threads"):
   import std/atomics, taskpools
 
   type
+    Entry = (Signature, Hash32, Flowvar[Address])
+
     PrefetchCtx = object
       cancel: Atomic[bool]
       parent: Header
@@ -40,79 +43,158 @@ when compileOption("threads"):
       com: CommonRef
       txFrame: CoreDbTxRef
 
-    PrefetchEntry = object
-      sig: Signature
-      hash: Hash32
-      sender: Address
-      senderReady: Atomic[bool]
-      fv: Flowvar[bool]
+    # PrefetchEntry = object
+    #   sig: Signature
+    #   hash: Hash32
+    #   sender: Address
+    #   senderReady: Atomic[bool]
+    #   fv: Flowvar[bool]
 
-  proc recoverAndPrefetchTask(
-      e: ptr PrefetchEntry, tx: ptr Transaction, ctx: ptr PrefetchCtx
-  ): bool {.nimcall, gcsafe.} =
-    let pk = recover(e[].sig, SkMessage(e[].hash.data))
-    e[].sender =
-      if pk.isOk(): pk[].to(Address)
-      else: default(Address)
-    e[].senderReady.store(true, moRelease)
+  proc recoverTask(e: ptr Entry): Address {.nimcall.} =
+    let pk = recover(e[][0], SkMessage(e[][1].data))
+    if pk.isOk():
+      pk[].to(Address)
+    else:
+      default(Address)
 
-    if ctx == nil:
-      return
+  proc prefetchTask(
+      ctx: ptr PrefetchCtx, tx: ptr Transaction, sender: Address
+  ): bool {.nimcall.} =
+    assert not ctx.isNil()
+    assert not tx.isNil()
+    
+    # When block processing is completed in the main thread the cancel flag will 
+    # be set and so here we stop the prefetch task to prevent doing unneeded work.
     if ctx[].cancel.load(moAcquire):
       return
-    if e[].sender == default(Address):
+    if sender == default(Address):
       return
+    
+    # Create the ledger without triggering a ref count increment on the txFrame.
+    let ledger = LedgerRef()
+    ledger.txFrame.borrowRef(ctx[].txFrame)
+    defer:
+      ledger.txFrame.unborrowRef()
+    discard ledger.beginSavePoint()
+    
+    # Create the vmState without triggering a ref count increment on the common object.
+    let vmState = BaseVMState()
+    vmState.com.borrowRef(ctx[].com)
+    defer:
+      vmState.com.unborrowRef()
+    vmState.ledger = ledger
+    assign(vmState.parent, ctx[].parent)
+    assign(vmState.blockCtx, ctx[].blockCtx)
+    const txCtx = default(TxContext)
+    assign(vmState.txCtx, txCtx)
+    vmState.hardFork = vmState.determineFork
+    vmState.fork = ToEVMFork[vmState.hardFork]
+    vmState.gasCosts = vmState.fork.forkToSchedule
+    vmState.tracer = nil
+    vmState.receipts.setLen(0)
+    vmState.cumulativeGasUsed = 0
+    vmState.blockRegularGasUsed = 0
+    vmState.blockStateGasUsed = 0
+    vmState.blobGasUsed = 0'u64
+    vmState.allLogs.setLen(0)
+    vmState.gasRefunded = 0
+    vmState.balTracker = nil
 
-    let 
-      ledger = LedgerRef.initAndBorrowTxFrame(ctx[].txFrame)
-      vmState = BaseVMState.initAndBorrowCommon(
-        ledger, ctx[].parent, ctx[].blockCtx, ctx[].com)
-
-    vmState.prefetchTransaction(tx[], e[].sender)
-
-    true
+    # Execute the transaction discarding the results in order to fill the in memory caches.
+    vmState.prefetchTransaction(tx[], sender)
+    
+    true # return a bool so that we can sync on the task
 
   template withSenderParallel(
       vmState: BaseVMState, txs: openArray[Transaction], body: untyped) =
     doAssert not vmState.com.taskpool.isNil()
 
-    var ctx = PrefetchCtx(
-      parent: vmState.parent,
-      blockCtx: vmState.blockCtx,
-      com: vmState.com,
-      txFrame: vmState.ledger.txFrame.parent()
-    )
-    ctx.cancel.store(false, moRelease)
+    var entries = newSeq[Entry](txs.len)
 
-    let ctxPtr =
-      if vmState.com.optimisticStatePrefetch: 
-        addr ctx
-      else: 
-        nil
-
-    var entries = newSeq[PrefetchEntry](txs.len)
+    # Prepare signature recovery tasks for each transaction - for simplicity,
+    # we use `default(Address)` to signal sig check failure
     for i, e in entries.mpairs():
-      e.sig = txs[i].signature().valueOr(default(Signature))
-      e.hash = txs[i].rlpHashForSigning(txs[i].isEip155)
-      e.senderReady.store(false, moRelease)
-      let entryPtr = addr e
-      let txPtr = unsafeAddr txs[i]
-      e.fv = vmState.com.taskpool.spawn recoverAndPrefetchTask(entryPtr, txPtr, ctxPtr)
+      e[0] = txs[i].signature().valueOr(default(Signature))
+      e[1] = txs[i].rlpHashForSigning(txs[i].isEip155)
+      let a = addr e
+      # Spawning the task here allows it to start early, while we still haven't
+      # hashed subsequent txs
+      e[2] = vmState.com.taskpool.spawn recoverTask(a)
 
-    try:
+    if vmState.com.optimisticStatePrefetch: 
+      # Process the transactions with prefetch enabled
+
+      var ctx = PrefetchCtx(
+          parent: vmState.parent,
+          blockCtx: vmState.blockCtx,
+          com: vmState.com,
+          # Run the prefetch on the parent frame because the current frame will
+          # be writen to during block execution and this way we avoid having to
+          # use locking on the frame data structures.
+          txFrame: vmState.ledger.txFrame.parent() 
+        )
+      ctx.cancel.store(false, moRelease)
+       
+      var prefetchFuts = newSeq[Flowvar[bool]](txs.len)
+      try:
+        for txIndex {.inject.}, e in entries.mpairs():
+          template tx(): untyped =
+            txs[txIndex]
+
+          # Sync blocks until the sender is available from the task pool - as soon
+          # as we have it, we can process this transaction while the senders of the
+          # other transactions are being computed
+          let sender {.inject.} = sync(e[2])
+  
+          # Run optimistic state prefetch for this transaction in a background thread
+          prefetchFuts[txIndex] = vmState.com.taskpool.spawn prefetchTask(
+            ctx.addr, txs[txIndex].addr, sender)
+
+          body
+      finally:
+        # Once we finish processing all transactions, we cancel any remaining prefetch tasks.
+        ctx.cancel.store(true, moRelease)
+        # Wait for remaining prefetch tasks to complete
+        for f in prefetchFuts.mitems():
+          discard sync(f)
+
+    else:
+      # Process the transactions with prefetch disabled
+
       for txIndex {.inject.}, e in entries.mpairs():
         template tx(): untyped =
           txs[txIndex]
 
-        while not e.senderReady.load(moAcquire):
-          cpuRelax()
-        let sender {.inject.} = e.sender
+        # Sync blocks until the sender is available from the task pool - as soon
+        # as we have it, we can process this transaction while the senders of the
+        # other transactions are being computed
+        let sender {.inject.} = sync(e[2])
 
         body
-    finally:
-      ctx.cancel.store(true, moRelease)
-      for e in entries.mitems():
-        discard sync(e.fv)
+
+    # var entries = newSeq[PrefetchEntry](txs.len)
+    # for i, e in entries.mpairs():
+    #   e.sig = txs[i].signature().valueOr(default(Signature))
+    #   e.hash = txs[i].rlpHashForSigning(txs[i].isEip155)
+    #   e.senderReady.store(false, moRelease)
+    #   let entryPtr = addr e
+    #   let txPtr = unsafeAddr txs[i]
+    #   e.fv = vmState.com.taskpool.spawn recoverAndPrefetchTask(entryPtr, txPtr, ctxPtr)
+
+    # try:
+    #   for txIndex {.inject.}, e in entries.mpairs():
+    #     template tx(): untyped =
+    #       txs[txIndex]
+
+    #     while not e.senderReady.load(moAcquire):
+    #       cpuRelax()
+    #     let sender {.inject.} = e.sender
+
+    #     body
+    # finally:
+    #   ctx.cancel.store(true, moRelease)
+    #   for e in entries.mitems():
+    #     discard sync(e.fv)
 
 template withSenderSerial(txs: openArray[Transaction], body: untyped) =
   for txIndex {.inject.}, tx {.inject.} in txs:
