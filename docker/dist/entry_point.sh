@@ -182,8 +182,8 @@ elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
 ARGS=()
 for arg in "\$@"; do
   if [[ "\${arg}" == @* ]]; then
-    while IFS= read -r line; do
-      [[ -n "\${line}" ]] && ARGS+=("\${line}")
+    while read -r -a words || [[ \${#words[@]} -gt 0 ]]; do
+      ARGS+=("\${words[@]}")
     done < "\${arg#@}"
   else
     ARGS+=("\${arg}")
