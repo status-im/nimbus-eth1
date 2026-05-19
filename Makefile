@@ -402,7 +402,7 @@ nimbus_verified_proxy_wasm: | build deps
 		-d:disable_libbacktrace \
 		-o:"$(CURDIR)/build/$@/verifproxy_wasm.js" \
 		nimbus_verified_proxy/library/bindings/wasm/verifproxy_wasm.nim
-	cp nimbus_verified_proxy/library/bindings/wasm/wasm_glue.js $(CURDIR)/build/$@/
+	cp nimbus_verified_proxy/library/bindings/wasm/verifproxy.js $(CURDIR)/build/$@/
 
 nimbus_verified_proxy_wasm_debug: | build deps
 	@mkdir -p $(CURDIR)/build/$@
@@ -413,7 +413,7 @@ nimbus_verified_proxy_wasm_debug: | build deps
 		-d:disable_libbacktrace \
 		-o:"$(CURDIR)/build/$@/verifproxy_wasm.js" \
 		nimbus_verified_proxy/library/bindings/wasm/verifproxy_wasm.nim
-	cp nimbus_verified_proxy/library/bindings/wasm/wasm_glue.js $(CURDIR)/build/$@/
+	cp nimbus_verified_proxy/library/bindings/wasm/verifproxy.js $(CURDIR)/build/$@/
 
 # Stateless related targets
 

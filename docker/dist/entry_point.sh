@@ -247,29 +247,33 @@ if [[ "${PLATFORM}" == "windows_amd64" ]]; then
 fi
 
 for BINARY in ${BINARIES}; do
-  if [[ "${BINARY}" == "libverifproxy" ]]; then continue; fi
-  cp "./build/${BINARY}${EXT}" "${DIST_PATH}/build/"
-  if [[ "${PLATFORM}" =~ macOS ]]; then
-    # Collect debugging info and filter out warnings.
-    #
-    # First two also happen with a native "dsymutil", while the next two only
-    # with the "llvm-dsymutil" we use when cross-compiling.
-    "${DSYMUTIL}" build/${BINARY} 2>&1 |
-      grep -v "failed to insert symbol" |
-      grep -v "could not find object file symbol for symbol" |
-      grep -v "while processing" |
-      grep -v "warning: line table parameters mismatch. Cannot emit." ||
-      true
-    cp "./build/${BINARY}.dSYM" "${DIST_PATH}/build/"
+  if [[ "${BINARY}" == "libverifproxy" ]]; then
+    mkdir -p "${DIST_PATH}/build/libverifproxy"
+    cp "build/libverifproxy/libverifproxy.a" "${DIST_PATH}/build/libverifproxy/"
+    cp "build/libverifproxy/verifproxy.h" "${DIST_PATH}/build/libverifproxy/"
+    cd "${DIST_PATH}/build/libverifproxy"
+    sha512sum "libverifproxy.a" > "libverifproxy.a.sha512sum"
+    cd - >/dev/null
+  else
+    cp "./build/${BINARY}${EXT}" "${DIST_PATH}/build/"
+    if [[ "${PLATFORM}" =~ macOS ]]; then
+      # Collect debugging info and filter out warnings.
+      #
+      # First two also happen with a native "dsymutil", while the next two only
+      # with the "llvm-dsymutil" we use when cross-compiling.
+      "${DSYMUTIL}" build/${BINARY} 2>&1 |
+        grep -v "failed to insert symbol" |
+        grep -v "could not find object file symbol for symbol" |
+        grep -v "while processing" |
+        grep -v "warning: line table parameters mismatch. Cannot emit." ||
+        true
+      cp "./build/${BINARY}.dSYM" "${DIST_PATH}/build/"
+    fi
+    cd "${DIST_PATH}/build"
+    sha512sum "${BINARY}${EXT}" >"${BINARY}.sha512sum"
+    cd - >/dev/null
   fi
-  cd "${DIST_PATH}/build"
-  sha512sum "${BINARY}${EXT}" >"${BINARY}.sha512sum"
-  cd - >/dev/null
 done
-
-mkdir -p "${DIST_PATH}/build/libverifproxy"
-cp "build/libverifproxy/libverifproxy.a" "${DIST_PATH}/build/libverifproxy/"
-cp "build/libverifproxy/verifproxy.h" "${DIST_PATH}/build/libverifproxy/"
 
 sed -e "s/GIT_COMMIT/${GIT_COMMIT}/" docker/dist/README.md.tpl >"${DIST_PATH}/README.md"
 

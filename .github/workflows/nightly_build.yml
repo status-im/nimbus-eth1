@@ -69,7 +69,54 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os }}-${{ matrix.cpu }}-checksum
-          path: ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus.sha512sum
+          path: |
+            ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus.sha512sum
+            ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus_verified_proxy.sha512sum
+            ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/libverifproxy/libverifproxy.a.sha512sum
+          retention-days: 2
+
+  build-wasm:
+    name: 'wasm'
+    runs-on: ubuntu-22.04
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git llvm
+
+      - name: Install emsdk
+        run: |
+          git clone https://github.com/emscripten-core/emsdk.git
+          emsdk/emsdk install 3.1.73
+          emsdk/emsdk activate 3.1.73
+
+      - name: Build Nim and dependencies
+        run: make -j$(nproc) init
+
+      - name: Build WASM
+        run: |
+          source emsdk/emsdk_env.sh
+          make -j$(nproc) nimbus_verified_proxy_wasm
+
+      - name: Generate sha512sums for WASM files
+        run: |
+          cd build/nimbus_verified_proxy_wasm
+          sha512sum verifproxy_wasm.js verifproxy_wasm.wasm verifproxy.js > wasm.sha512sum
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wasm
+          path: build/nimbus_verified_proxy_wasm/
           retention-days: 2
 
   run-binary:
@@ -108,7 +155,7 @@ jobs:
 
   nightly-build-release:
     name: Nightly build release
-    needs: build
+    needs: [build, build-wasm]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -130,14 +177,35 @@ jobs:
 
           \`\`\`text
           EOF
-          echo '# Linux AMD64' >> release_notes.md
-          cat linux-amd64-checksum/* >> release_notes.md
-          echo '# Linux ARM64' >> release_notes.md
-          cat linux-arm64-checksum/* >> release_notes.md
-          echo '# Windows AMD64' >> release_notes.md
-          cat windows-amd64-checksum/* >> release_notes.md
-          echo '# macOS ARM64' >> release_notes.md
-          cat macos-arm64-checksum/* >> release_notes.md
+          echo '# Nimbus' >> release_notes.md
+          echo '## Linux AMD64' >> release_notes.md
+          cat linux-amd64-checksum/nimbus.sha512sum >> release_notes.md
+          echo '## Linux ARM64' >> release_notes.md
+          cat linux-arm64-checksum/nimbus.sha512sum >> release_notes.md
+          echo '## Windows AMD64' >> release_notes.md
+          cat windows-amd64-checksum/nimbus.sha512sum >> release_notes.md
+          echo '## macOS ARM64' >> release_notes.md
+          cat macos-arm64-checksum/nimbus.sha512sum >> release_notes.md
+          echo '# Nimbus Verified Proxy' >> release_notes.md
+          echo '## Linux AMD64' >> release_notes.md
+          cat linux-amd64-checksum/nimbus_verified_proxy.sha512sum >> release_notes.md
+          echo '## Linux ARM64' >> release_notes.md
+          cat linux-arm64-checksum/nimbus_verified_proxy.sha512sum >> release_notes.md
+          echo '## Windows AMD64' >> release_notes.md
+          cat windows-amd64-checksum/nimbus_verified_proxy.sha512sum >> release_notes.md
+          echo '## macOS ARM64' >> release_notes.md
+          cat macos-arm64-checksum/nimbus_verified_proxy.sha512sum >> release_notes.md
+          echo '# libverifproxy' >> release_notes.md
+          echo '## Linux AMD64' >> release_notes.md
+          cat linux-amd64-checksum/libverifproxy.a.sha512sum >> release_notes.md
+          echo '## Linux ARM64' >> release_notes.md
+          cat linux-arm64-checksum/libverifproxy.a.sha512sum >> release_notes.md
+          echo '## Windows AMD64' >> release_notes.md
+          cat windows-amd64-checksum/libverifproxy.a.sha512sum >> release_notes.md
+          echo '## macOS ARM64' >> release_notes.md
+          cat macos-arm64-checksum/libverifproxy.a.sha512sum >> release_notes.md
+          echo '# Nimbus Verified Proxy - WASM' >> release_notes.md
+          cat wasm/wasm.sha512sum >> release_notes.md
           echo '```' >> release_notes.md
 
       - name: Delete tag
@@ -159,6 +227,7 @@ jobs:
             linux-arm64-archive/*
             windows-amd64-archive/*
             macos-arm64-archive/*
+            wasm/*
 
       - name: Delete artefacts
         uses: geekyeggo/delete-artifact@v5
@@ -173,3 +242,4 @@ jobs:
             windows-amd64-checksum
             macos-arm64-archive
             macos-arm64-checksum
+            wasm
