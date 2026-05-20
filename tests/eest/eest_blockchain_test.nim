@@ -22,7 +22,10 @@ const
   ]
 
 const skipFiles = [
-  ""
+  "",
+
+  # TODO: remove this entry after we have EEST new release for glamsterdam-devnet-5
+  "bal_call_revert_insufficient_funds.json",
 ]
 
 runEESTSuite(
