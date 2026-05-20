@@ -155,6 +155,50 @@ jobs:
           docker push statusim/nimbus-eth1:${{ matrix.os }}-${{ matrix.cpu }}-${TAG}
           docker push statusim/nimbus-eth1:${{ matrix.os }}-${{ matrix.cpu }}-latest
 
+  build-wasm:
+    name: 'wasm'
+    runs-on: ubuntu-22.04
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git llvm
+
+      - name: Install emsdk
+        run: |
+          git clone https://github.com/emscripten-core/emsdk.git
+          emsdk/emsdk install 3.1.73
+          emsdk/emsdk activate 3.1.73
+
+      - name: Build Nim and dependencies
+        run: make -j$(nproc) init
+
+      - name: Build WASM
+        run: |
+          source emsdk/emsdk_env.sh
+          make -j$(nproc) nimbus_verified_proxy_wasm
+
+      - name: Generate sha512sums for WASM files
+        run: |
+          cd build/nimbus_verified_proxy_wasm
+          sha512sum verifproxy_wasm.js verifproxy_wasm.wasm verifproxy.js > wasm.sha512sum
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wasm
+          path: build/nimbus_verified_proxy_wasm/
+          retention-days: 2
+
   docker-multiarch:
     name: Create multi-arch Docker manifest
     needs: build
@@ -182,6 +226,39 @@ jobs:
           docker buildx imagetools create -t statusim/nimbus-eth1:latest \
             statusim/nimbus-eth1:linux-amd64-latest \
             statusim/nimbus-eth1:linux-arm64-latest
+
+  deploy-wasm:
+    name: Deploy WASM
+    needs: [build-wasm]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Extract tag name
+        id: extract_tag
+        run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Checkout wasm-deploy branch
+        uses: actions/checkout@v6
+        with:
+          ref: wasm-deploy
+          path: wasm-deploy/
+        continue-on-error: true
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm
+          path: wasm-deploy/${{ steps.extract_tag.outputs.tag }}/
+
+      - name: Force-push to wasm-deploy
+        run: |
+          cd wasm-deploy
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || git commit -m "chore: update ${{ steps.extract_tag.outputs.tag }}"
+          git push origin HEAD:wasm-deploy --force
 
   prepare-release:
     name: Prepare release draft
@@ -241,6 +318,7 @@ jobs:
           echo '# macOS ARM64' >> release_notes.md
           cat macos-arm64-libverifproxy-checksum/* >> release_notes.md
           echo '```' >> release_notes.md
+          echo '' >> release_notes.md
 
       - name: Create release
         id: create_release
@@ -283,3 +361,43 @@ jobs:
             macos-arm64-execution
             macos-arm64-proxy
             macos-arm64-libverifproxy
+
+  publish-npm:
+    name: Publish WASM to GitHub Packages
+    needs: [build-wasm]
+    runs-on: ubuntu-22.04
+
+    permissions:
+      packages: write
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Download WASM artefact
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm
+          path: nimbus_verified_proxy/library/bindings/wasm/
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@status-im'
+
+      - name: Set version from tag
+        run: |
+          cd nimbus_verified_proxy/library/bindings/wasm
+          npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version
+
+      - name: Publish
+        run: npm publish
+        working-directory: nimbus_verified_proxy/library/bindings/wasm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
