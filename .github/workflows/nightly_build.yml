@@ -218,6 +218,7 @@ jobs:
 
       - name: Delete existing nightly package version
         uses: actions/delete-package-versions@v5
+        continue-on-error: true
         with:
           package-name: '@status-im/nimbus-verified-proxy'
           package-type: npm
