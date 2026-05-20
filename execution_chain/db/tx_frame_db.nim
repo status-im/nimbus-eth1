@@ -80,11 +80,8 @@ proc loadTxFrame*(
   ## direct child of the base; the caller should attach it to the processing
   ## pipeline (checkpoint, snapshot, etc.) as needed.
   let base = db.baseTxFrame()
-  let blob = block:
-    let rc = base.get(txFrameKey(blockHash).toOpenArray)
-    if rc.isErr:
-      return err(rc.error)
-    rc.value
+  let blob = base.get(txFrameKey(blockHash).toOpenArray).valueOr:
+    return err(error)
 
   if blob.len < 8:
     return err(DataInvalid.toError("loadTxFrame: blob too short"))
@@ -131,11 +128,8 @@ proc loadTxFrameAsChild*(
   ## a new `CoreDbTxRef` rooted as a child of `parent`, with the stored
   ## delta applied.  Used by the chain persistence layer to materialise
   ## per-block frames in the chain hierarchy without re-executing blocks.
-  let blob = block:
-    let rc = srcBase.get(txFrameKey(blockHash).toOpenArray)
-    if rc.isErr:
-      return err(rc.error)
-    rc.value
+  let blob = srcBase.get(txFrameKey(blockHash).toOpenArray).valueOr:
+    return err(error)
 
   if blob.len < 8:
     return err(DataInvalid.toError("loadTxFrameAsChild: blob too short"))
