@@ -244,7 +244,7 @@ proc prepareEnv*(
 
   try:
     let
-      memDB = newCoreDbRef DefaultDbMemory
+      memDB = newCoreDbRef(DefaultDbMemory, enableCaches = true)
       ledger = LedgerRef.init(memDB.baseTxFrame())
       config = getChainConfig(unit.network)
 

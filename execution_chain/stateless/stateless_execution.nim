@@ -45,8 +45,8 @@ proc statelessProcessBlock*(
   # Create an empty in memory database.
   let
     memoryDb = newCoreDbRef(DefaultDbMemory)
-    memoryTxFrame = memoryDb.baseTxFrame.txFrameBegin()
-  defer: 
+    memoryTxFrame = memoryDb.baseTxFrame()
+  defer:
     memoryDb.close()
 
   # Load the subtrie of trie nodes (both account and storage tries) into the

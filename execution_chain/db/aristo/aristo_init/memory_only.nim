@@ -22,11 +22,14 @@ import
 # Public database constuctors, destructor
 # ------------------------------------------------------------------------------
 
-proc init*(T: type AristoDbRef): T =
+proc init*(T: type AristoDbRef, enableCaches: static bool = false): T =
   ## Memory backend constructor.
   ##
   let db = memoryBackend()
-  db.initInstance(accLeavesLruSize = 0, stoLeavesLruSize = 0)[]
+  when enableCaches:
+    db.initInstance(accLeavesLruSize = ACC_LRU_SIZE, stoLeavesLruSize = ACC_LRU_SIZE)[]
+  else:
+    db.initInstance(accLeavesLruSize = 0, stoLeavesLruSize = 0)[]
   db
 
 # --+----------------------------------------------------------------------------
