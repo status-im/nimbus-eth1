@@ -46,6 +46,7 @@ type
     withdrawals : seq[Withdrawal] ## EIP-4895
     beaconRoot  : Hash32 ## EIP-4788
     slotNumber  : uint64 ## EIP-7843
+    targetGasLimit: Opt[uint64]
 
   TxPoolFlags* = enum
     XP_ORDERED
@@ -86,9 +87,10 @@ proc getBaseFee(com: CommonRef; parent: Header): GasInt =
     parent.gasUsed,
     parent.baseFeePerGas.get(0.u256)).truncate(GasInt)
 
-func getGasLimit(com: CommonRef; parent: Header): GasInt =
+func getGasLimit(com: CommonRef; parent: Header, targetGasLimit: Opt[uint64]): GasInt =
   ## Post Merge rule
-  calcGasLimit1559(parent.gasLimit, desiredLimit = com.gasLimit)
+  let desiredLimit = targetGasLimit.get(com.gasLimit)
+  calcGasLimit1559(parent.gasLimit, desiredLimit = desiredLimit)
 
 proc setupVMState(com: CommonRef;
                   parent: Header,
@@ -98,7 +100,7 @@ proc setupVMState(com: CommonRef;
 
   let
     fork = com.toHardFork(pos.timestamp)
-    gasLimit = getGasLimit(com, parent)
+    gasLimit = getGasLimit(com, parent, pos.targetGasLimit)
 
   BaseVMState.new(
     parent   = parent,
@@ -499,3 +501,6 @@ proc `parentBeaconBlockRoot=`*(xp: TxPoolRef, val: Hash32) =
 
 proc `slotNumber=`*(xp: TxPoolRef, val: uint64) =
   xp.pos.slotNumber = val
+
+proc `targetGasLimit=`*(xp: TxPoolRef, val: Opt[uint64]) =
+  xp.pos.targetGasLimit = val
