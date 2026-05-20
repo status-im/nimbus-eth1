@@ -227,9 +227,45 @@ jobs:
             statusim/nimbus-eth1:linux-amd64-latest \
             statusim/nimbus-eth1:linux-arm64-latest
 
+  deploy-wasm-pages:
+    name: Deploy WASM to GitHub Pages
+    needs: [build-wasm]
+    runs-on: ubuntu-latest
+    concurrency:
+      group: gh-pages
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - name: Extract tag name
+        id: extract_tag
+        run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Checkout gh-pages branch
+        uses: actions/checkout@v6
+        with:
+          ref: gh-pages
+          path: site/
+        continue-on-error: true
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm
+          path: site/wasm/${{ steps.extract_tag.outputs.tag }}/
+
+      - name: Force-push to gh-pages
+        run: |
+          cd site
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || git commit -m "chore: update wasm/${{ steps.extract_tag.outputs.tag }} [skip ci]"
+          git push origin HEAD:gh-pages --force
+
   prepare-release:
     name: Prepare release draft
-    needs: [build, docker-multiarch, build-wasm]
+    needs: [build, docker-multiarch]
     runs-on: ubuntu-latest
     steps:
       - name: Download artefacts
@@ -286,11 +322,6 @@ jobs:
           cat macos-arm64-libverifproxy-checksum/* >> release_notes.md
           echo '```' >> release_notes.md
           echo '' >> release_notes.md
-          echo '### Nimbus Verified Proxy — WASM' >> release_notes.md
-          echo '' >> release_notes.md
-          echo '```text' >> release_notes.md
-          cat wasm/wasm.sha512sum >> release_notes.md
-          echo '```' >> release_notes.md
 
       - name: Create release
         id: create_release
@@ -315,7 +346,6 @@ jobs:
             macos-arm64-execution/*
             macos-arm64-proxy/*
             macos-arm64-libverifproxy/*
-            wasm/*
 
       - name: Delete artefacts
         uses: geekyeggo/delete-artifact@v5
@@ -334,7 +364,6 @@ jobs:
             macos-arm64-execution
             macos-arm64-proxy
             macos-arm64-libverifproxy
-            wasm
 
   publish-npm:
     name: Publish WASM to GitHub Packages

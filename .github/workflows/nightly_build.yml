@@ -153,9 +153,41 @@ jobs:
         if: matrix.os != 'windows'
         run: make libverifproxy_test
 
+  deploy-wasm-pages:
+    name: Deploy WASM to GitHub Pages
+    needs: [build-wasm]
+    runs-on: ubuntu-latest
+    concurrency:
+      group: gh-pages
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout gh-pages branch
+        uses: actions/checkout@v6
+        with:
+          ref: gh-pages
+          path: site/
+        continue-on-error: true
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm
+          path: site/wasm/nightly/
+
+      - name: Force-push to gh-pages
+        run: |
+          cd site
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || git commit -m "chore: update wasm/nightly [skip ci]"
+          git push origin HEAD:gh-pages --force
+
   nightly-build-release:
     name: Nightly build release
-    needs: [build, build-wasm]
+    needs: [build]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -217,14 +249,6 @@ jobs:
           cat windows-amd64-checksum/libverifproxy.a.sha512sum >> release_notes.md
           echo '# macOS ARM64' >> release_notes.md
           cat macos-arm64-checksum/libverifproxy.a.sha512sum >> release_notes.md
-          cat > release_notes.md <<EOF
-          \`\`\`text
-
-          ### Nimbus Verified Proxy - WASM
-
-          \`\`\`text
-          EOF
-          cat wasm/wasm.sha512sum >> release_notes.md
           echo '```' >> release_notes.md
 
       - name: Delete tag
@@ -246,7 +270,6 @@ jobs:
             linux-arm64-archive/*
             windows-amd64-archive/*
             macos-arm64-archive/*
-            wasm/*
 
       - name: Delete artefacts
         uses: geekyeggo/delete-artifact@v5
@@ -261,4 +284,3 @@ jobs:
             windows-amd64-checksum
             macos-arm64-archive
             macos-arm64-checksum
-            wasm
