@@ -10,6 +10,7 @@
 import
   chronos,
   chronicles,
+  libp2p/crypto/crypto as lp_crypto,
   eth/common/keys,
   eth/net/nat,
   eth/enr/enr,
@@ -23,6 +24,8 @@ import
 
 logScope:
   topics = "P2PLightClientBackend"
+
+chronicles.formatIt(lp_crypto.PublicKey): $it.scheme
 
 type
   P2PBackendConf* = object
