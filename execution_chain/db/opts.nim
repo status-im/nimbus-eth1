@@ -72,7 +72,7 @@ func init*(
     rdbBranchCacheSize = defaultRdbBranchCacheSize,
     rdbPrintStats = false,
     maxSnapshots = defaultMaxSnapshots,
-    parallelStateRootComputation = false,
+    parallelStateRootComputation = true,
     blockCacheType = defaultBlockCacheType,
 ): T =
   T(

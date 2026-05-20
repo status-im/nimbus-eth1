@@ -81,7 +81,7 @@ proc finishSession*(hdl: TypedPutHdlRef; db: TypedBackendRef) =
 proc initInstance*(
     db: AristoDbRef,
     maxSnapshots = defaultMaxSnapshots,
-    parallelStateRootComputation = false,
+    parallelStateRootComputation = true,
     accLeavesLruSize = 0,
     stoLeavesLruSize = 0
 ): Result[void, AristoError] =
