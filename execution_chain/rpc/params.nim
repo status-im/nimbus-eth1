@@ -94,8 +94,8 @@ proc toCallParams*(vmState: BaseVMState,
     versionedHashes: args.versionedHashes,
     authorizationList: args.authorizationList.get(@[]),
   )
-  
-  res.intrinsic = res.intrinsicGas(vmState.fork, header.gasLimit)
+
+  res.intrinsic = res.intrinsicGas(vmState.hardFork, header.gasLimit)
   ok(move(res))
 
 {.pop.}

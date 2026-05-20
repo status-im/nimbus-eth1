@@ -138,36 +138,40 @@ proc getLogsForBlock*(
     cacheResolved = false
 
   for i, receipt in receipts:
-    let logs =
-      receipt.logs.filterIt(it.match(opts.address, opts.topics))
-    if logs.len == 0:
-      continue
+    var
+      txHash = default(Hash32)
+      txHashReady = false
 
-    if not cacheResolved:
-      cachedHashes = chain.memoryTxHashesForBlock(blkHash)
-      cacheResolved = true
+    for log in receipt.logs:
+      if log.match(opts.address, opts.topics):
+        if not txHashReady:
+          # Resolve the transaction hash lazily: only matching logs need it, and
+          # all logs in the same receipt share the same transaction hash.
+          if not cacheResolved:
+            cachedHashes = chain.memoryTxHashesForBlock(blkHash)
+            cacheResolved = true
 
-    let txHash =
-      if cachedHashes.isSome and i < cachedHashes.get.len:
-        cachedHashes.get[i]
-      else:
-        let tx = chain.txByBlockHashAndIndex(blkHash, i.uint64).valueOr:
-          return Opt.none(seq[FilterLog])
-        tx.computeRlpHash
+          txHash =
+            if cachedHashes.isSome and i < cachedHashes.get.len:
+              cachedHashes.get[i]
+            else:
+              let tx = chain.txByBlockHashAndIndex(blkHash, i.uint64).valueOr:
+                return Opt.none(seq[FilterLog])
+              tx.computeRlpHash
+          txHashReady = true
 
-    for log in logs:
-      resLogs.add(FilterLog(
-        removed: false,
-        logIndex: Opt.some(Quantity(logIndex)),
-        transactionIndex: Opt.some(Quantity(i)),
-        transactionHash: Opt.some(txHash),
-        blockHash: Opt.some(blkHash),
-        blockNumber: Opt.some(Quantity(header.number)),
-        blockTimestamp: Opt.some(Quantity(header.timestamp)),
-        address: log.address,
-        data: log.data,
-        topics: log.topics,
-      ))
+        resLogs.add(FilterLog(
+          removed: false,
+          logIndex: Opt.some(Quantity(logIndex)),
+          transactionIndex: Opt.some(Quantity(i)),
+          transactionHash: Opt.some(txHash),
+          blockHash: Opt.some(blkHash),
+          blockNumber: Opt.some(Quantity(header.number)),
+          blockTimestamp: Opt.some(Quantity(header.timestamp)),
+          address: log.address,
+          data: log.data,
+          topics: log.topics,
+        ))
       inc logIndex
 
   return Opt.some(resLogs)
@@ -302,7 +306,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         )
         return SyncingStatus(syncing: true, syncObject: sync)
 
-    proc eth_getLogs(filterOptions: FilterOptions): seq[FilterLog] {.raises: [ValueError].} =
+    proc eth_getLogs(filterOptions: FilterOptions): seq[FilterLog] {.raises: [ApplicationError, ValueError].} =
       ## filterOptions: settings for this filter.
       ## Returns a list of all logs matching a given filter object.
       ## TODO: Current implementation is pretty naive and not efficient
@@ -313,6 +317,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       ## Both of those changes require improvements to the way how we keep our data
       ## in Nimbus.
       if filterOptions.blockHash.isSome():
+        if filterOptions.fromBlock.isSome() or filterOptions.toBlock.isSome():
+          raise invalidParams(
+            "invalid argument 0: cannot specify both BlockHash and FromBlock/ToBlock, choose one or the other")
         let
           hash = filterOptions.blockHash.expect("blockHash")
           header = api.chain.headerByHash(hash).valueOr:
@@ -325,14 +332,20 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         # tag would be an enum (Earliest, Latest, Pending, Number), and all operations
         # would operate on this enum instead of raw strings. This change would need
         # to be done on every endpoint to be consistent.
+        if filterOptions.toBlock.isSome() and
+            filterOptions.toBlock.get().kind == bidNumber and
+            base.BlockNumber(filterOptions.toBlock.get().number) > api.chain.latestHeader.number:
+          raise invalidParams("block range extends beyond current head block")
+
         let
-          blockFrom = api.headerFromTag(filterOptions.fromBlock).valueOr:
+          blockFrom = api.headerFromTag(filterOptions.fromBlock.get(defaultTag)).valueOr:
             raise newException(ValueError, "Block not found")
-          blockTo = api.headerFromTag(filterOptions.toBlock).valueOr:
+          blockTo = api.headerFromTag(filterOptions.toBlock.get(defaultTag)).valueOr:
             raise newException(ValueError, "Block not found")
 
-        # Note: if fromHeader.number > toHeader.number, no logs will be
-        # returned. This is consistent with, what other ethereum clients return
+        if blockFrom.number > blockTo.number:
+          raise invalidParams("invalid block range params")
+
         return api.chain.getLogsForRange(blockFrom.number, blockTo.number, filterOptions)
 
     proc eth_sendRawTransaction(txBytes: seq[byte]): Hash32 {.raises: [ValueError, RlpError].} =
@@ -693,7 +706,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       if header.excessBlobGas.isNone:
         raise newException(ValueError, "excessBlobGas missing from latest header")
       let blobBaseFee =
-        getBlobBaseFee(header.excessBlobGas.get, api.com, api.com.toEVMFork(header))
+        getBlobBaseFee(header.excessBlobGas.get, api.com, api.com.toHardFork(header))
       if blobBaseFee > high(uint64).u256:
         raise newException(ValueError, "blobBaseFee is bigger than uint64.max")
       return w3Qty blobBaseFee.truncate(uint64)

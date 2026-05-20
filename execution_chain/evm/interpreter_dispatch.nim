@@ -14,6 +14,7 @@ import
   std/[macros, strformat],
   chronicles,
   stew/byteutils,
+  ../core/eip8037,
   ../constants,
   ../db/ledger,
   ./interpreter/op_dispatcher,
@@ -121,8 +122,9 @@ proc beforeExecCreate(c: Computation): bool =
     # burned and added to regularGasUsed.
     # But contract creation tx collision does not add the burned gas to
     # regularGasUsed.
-    if c.msg.depth == 0:
-      c.gasMeter.gasRemaining = 0
+    if c.fork >= FkAmsterdam and c.msg.depth > 0:
+      # https://github.com/ethereum/execution-specs/pull/2733/changes
+      c.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
     let blurb = c.msg.contractAddress.toHex
     c.setError("Address collision when creating contract address=" & blurb, true)
     return true
@@ -136,10 +138,9 @@ proc beforeExecCreate(c: Computation): bool =
       c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
       ledger.addBalance(c.msg.contractAddress, c.msg.value)
       ledger.clearStorage(c.msg.contractAddress)
-      if c.fork >= FkSpurious:
-        # EIP161 nonce incrementation
-        c.vmState.balTracker.trackIncNonceChange(c.msg.contractAddress)
-        ledger.incNonce(c.msg.contractAddress)
+      # no need to check c.fork >= FkSpurious, it's FkAmsterdam
+      c.vmState.balTracker.trackIncNonceChange(c.msg.contractAddress)
+      ledger.incNonce(c.msg.contractAddress)
     else:
       ledger.subBalance(c.msg.sender, c.msg.value)
       ledger.addBalance(c.msg.contractAddress, c.msg.value)

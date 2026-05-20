@@ -287,9 +287,17 @@ suite "ConcurrentLruCache Tests":
       var lru: ConcurrentLruCache[int, int]
       lru.init(1000)
       lru.dispose()
+      lru.reset()
+      lru.init(1000)
+      lru.dispose()
 
     block:
       var lru: ConcurrentLruCache[int, int]
+      lru.init(1000)
+      lru.put(1, 1)
+      lru.put(2, 2)
+      lru.dispose()
+      lru.reset()
       lru.init(1000)
       lru.put(1, 1)
       lru.put(2, 2)

@@ -199,7 +199,7 @@ proc validateUncles(com: CommonRef; header: Header; txFrame: CoreDbTxRef,
 # Public function, extracted from executor
 # ------------------------------------------------------------------------------
 
-func validateLegacySignatureForm(tx: Transaction, fork: EVMFork): bool =
+func validateLegacySignatureForm(tx: Transaction, fork: HardFork): bool =
   var
     vMin = 27'u64
     vMax = 28'u64
@@ -216,7 +216,7 @@ func validateLegacySignatureForm(tx: Transaction, fork: EVMFork): bool =
   isValid = isValid and tx.S < SECPK1_N
   isValid = isValid and tx.R < SECPK1_N
 
-  if fork >= FkHomestead:
+  if fork >= Homestead:
     isValid = isValid and tx.S < SECPK1_N div 2
 
   isValid
@@ -240,24 +240,24 @@ func validateTxBasic*(
     com:      CommonRef,
     tx:       Transaction;     ## tx to validate
     intrinsic:IntrinsicGas;
-    fork:     EVMFork,
+    fork:     HardFork,
     validateFork: bool = true): Result[void, string] =
 
   if validateFork:
-    if tx.txType == TxEip2930 and fork < FkBerlin:
+    if tx.txType == TxEip2930 and fork < Berlin:
       return err("invalid tx: EIP-2930 Tx type detected before Berlin")
 
-    if tx.txType == TxEip1559 and fork < FkLondon:
+    if tx.txType == TxEip1559 and fork < London:
       return err("invalid tx: EIP-1559 Tx type detected before London")
 
-    if tx.txType == TxEip4844 and fork < FkCancun:
+    if tx.txType == TxEip4844 and fork < Cancun:
       return err("invalid tx: EIP-4844 Tx type detected before Cancun")
 
-    if tx.txType == TxEip7702 and fork < FkPrague:
+    if tx.txType == TxEip7702 and fork < Prague:
       return err("invalid tx: EIP-7702 Tx type detected before Prague")
 
-  if fork >= FkShanghai and tx.contractCreation:
-    if fork >= FkAmsterdam:
+  if fork >= Shanghai and tx.contractCreation:
+    if fork >= Amsterdam:
       if tx.payload.len > EIP7954_MAX_INITCODE_SIZE:
         return err("invalid tx: initcode size exceeds EIP-7954 maximum")
     elif tx.payload.len > EIP3860_MAX_INITCODE_SIZE:
@@ -267,7 +267,7 @@ func validateTxBasic*(
   if tx.maxFeePerGasNorm < tx.maxPriorityFeePerGasNorm:
     return err(&"invalid tx: maxFee is smaller than maxPriorityFee. maxFee={tx.maxFeePerGas}, maxPriorityFee={tx.maxPriorityFeePerGasNorm}")
 
-  if fork >= FkAmsterdam:
+  if fork >= Amsterdam:
     let
       intrinsicGas = intrinsic.regular + intrinsic.state
       minGasLimit = max(intrinsicGas, intrinsic.floorDataGas)
@@ -280,7 +280,7 @@ func validateTxBasic*(
       return err(&"invalid tx: Intrinsic regular or calldata floor exceeds TX_GAS_LIMIT={TX_GAS_LIMIT}, require={minRegularGasLimit}")
   else:
     # https://eips.ethereum.org/EIPS/eip-7825
-    if fork >= FkOsaka and tx.gasLimit > TX_GAS_LIMIT:
+    if fork >= Osaka and tx.gasLimit > TX_GAS_LIMIT:
       return err("tx.gasLimit " & $tx.gasLimit & " exceeds maximum " & $TX_GAS_LIMIT)
 
     let
@@ -289,7 +289,7 @@ func validateTxBasic*(
     if tx.gasLimit < minGasLimit:
       return err(&"invalid tx: not enough gas to perform calculation. avail={tx.gasLimit}, require={minGasLimit}")
 
-  if fork >= FkCancun:
+  if fork >= Cancun:
     if tx.payload.len > MAX_CALLDATA_SIZE:
       return err(&"invalid tx: payload len exceeds MAX_CALLDATA_SIZE. len={tx.payload.len}")
 
@@ -320,7 +320,7 @@ func validateTxBasic*(
     # After Osaka the blob counts per block is increased with BPO, but
     # the blobs per transaction is capped at MAX_BLOBS_PER_TX=6.
     let maxBlobsPerTx =
-      if fork >= FkOsaka:
+      if fork >= Osaka:
         MAX_BLOBS_PER_TX
       else:
         getMaxBlobsPerBlock(com, fork)
@@ -405,7 +405,7 @@ proc validateTransaction*(
     # ensure that the user was willing to at least pay the current data gasprice
     let
       excessBlobGas = vmState.blockCtx.excessBlobGas
-      blobGasPrice = getBlobBaseFee(excessBlobGas, vmState.com, vmState.fork)
+      blobGasPrice = getBlobBaseFee(excessBlobGas, vmState.com, vmState.hardFork)
     if tx.maxFeePerBlobGas < blobGasPrice:
       return err("invalid tx: maxFeePerBlobGas smaller than blobGasPrice. " &
         &"maxFeePerBlobGas={tx.maxFeePerBlobGas}, blobGasPrice={blobGasPrice}")

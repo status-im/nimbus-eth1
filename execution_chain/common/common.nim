@@ -306,6 +306,9 @@ func toHardFork*(com: CommonRef, timestamp: EthTime): HardFork =
     if com.forkTransitionTable.timeThresholds[fork].isSome and timestamp >= com.forkTransitionTable.timeThresholds[fork].get:
       return fork
 
+func toHardFork*(com: CommonRef, header: Header): HardFork =
+  com.toHardFork(forkDeterminationInfo(header))
+
 func toEVMFork*(com: CommonRef, timestamp: EthTime): EVMFork =
   ## similar to toHardFork, but produce EVMFork
   let fork = com.toHardFork(timestamp)
@@ -315,6 +318,9 @@ func toEVMFork*(com: CommonRef, forkDeterminer: ForkDeterminationInfo): EVMFork 
   ## similar to toFork, but produce EVMFork
   let fork = com.toHardFork(forkDeterminer)
   ToEVMFork[fork]
+
+func toEVMFork*(com: CommonRef, header: Header): EVMFork =
+  com.toEVMFork(forkDeterminationInfo(header))
 
 func nextFork*(com: CommonRef, currentFork: HardFork): Opt[HardFork] =
   ## Returns the next hard fork after the given one
@@ -336,9 +342,6 @@ func lastFork*(com: CommonRef, currentFork: HardFork): Opt[HardFork] =
 func activationTime*(com: CommonRef, fork: HardFork): Opt[EthTime] =
   ## Returns the activation time of the given hard fork
   com.forkTransitionTable.timeThresholds[fork]
-
-func toEVMFork*(com: CommonRef, header: Header): EVMFork =
-  com.toEVMFork(forkDeterminationInfo(header))
 
 func isSpuriousOrLater*(com: CommonRef, number: BlockNumber, time: EthTime): bool =
   com.toHardFork(forkDeterminationInfo(number, time)) >= Spurious

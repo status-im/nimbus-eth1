@@ -123,6 +123,10 @@ switch("passL", "-fno-omit-frame-pointer")
 --styleCheck:usages
 --styleCheck:error
 
+# Disable ABI warning: 
+# 'the ABI for passing parameters with 64-byte alignment has changed in GCC 4.6'
+switch("passC", "-Wno-psabi")
+
 switch("define", "nim_compiler_path=" & currentDir & "env.sh nim")
 
 when not defined(disable_libbacktrace):

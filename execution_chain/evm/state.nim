@@ -14,9 +14,8 @@ import
   std/[options, sets, strformat],
   stew/assign2,
   ../db/ledger,
-  ../common/[common, evmforks],
+  ../common/common,
   ../block_access_list/block_access_list_tracker,
-  ../core/eip8037,
   ./interpreter/[op_codes, gas_costs],
   ./types,
   ./evm_errors
@@ -24,8 +23,8 @@ import
 func forkDeterminationInfoForVMState(vmState: BaseVMState): ForkDeterminationInfo =
   forkDeterminationInfo(vmState.parent.number + 1, vmState.blockCtx.timestamp)
 
-func determineFork(vmState: BaseVMState): EVMFork =
-  vmState.com.toEVMFork(vmState.forkDeterminationInfoForVMState)
+func determineFork(vmState: BaseVMState): HardFork =
+  vmState.com.toHardFork(vmState.forkDeterminationInfoForVMState)
 
 proc init(
       self:         BaseVMState;
@@ -45,7 +44,8 @@ proc init(
   const txCtx = default(TxContext)
   assign(self.txCtx, txCtx)
   self.flags = flags
-  self.fork = self.determineFork
+  self.hardFork = self.determineFork
+  self.fork = ToEVMFork[self.hardFork]
   self.tracer = tracer
   self.receipts.setLen(0)
   self.cumulativeGasUsed = 0
@@ -68,7 +68,6 @@ func blockCtx(header: Header): BlockContext =
     excessBlobGas: header.excessBlobGas.get(0'u64),
     parentHash   : header.parentHash,
     slotNumber   : header.slotNumber.get(0'u64),
-    costPerStateByte: stateGasPerByte(header.gasLimit),
   )
 
 # --------------

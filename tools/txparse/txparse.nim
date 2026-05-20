@@ -17,7 +17,7 @@ import
   ../../execution_chain/transaction,
   ../../execution_chain/transaction/call_types,
   ../../execution_chain/core/validate,
-  ../../execution_chain/common/evmforks,
+  ../../execution_chain/common/hardforks,
   ../../execution_chain/common/common
 
 proc parseTx(com: CommonRef, hexLine: string) =
@@ -26,7 +26,7 @@ proc parseTx(com: CommonRef, hexLine: string) =
       bytes = hexToSeqByte(hexLine)
       tx = decodeTx(bytes)
       address = tx.recoverSender().expect("valid signature")
-      fork = FkPrague
+      fork = HardFork.Prague
       intrinsic = tx.intrinsicGas(fork, 10_000_000)
 
     validateTxBasic(com, tx, intrinsic, fork).isOkOr:

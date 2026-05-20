@@ -54,16 +54,26 @@ proc execSubCreate(c: Computation; childMsg: Message;
       c.gasMeter.appendRegularGasUsed(child.gasMeter.regularGasUsed)
 
     if child.isSuccess:
-      c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
-      c.gasMeter.appendStateGasUsed(child.gasMeter.stateGasUsed)
+      if c.fork >= FkAmsterdam:
+        c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
+        c.gasMeter.appendStateGasUsed(child.gasMeter.stateGasUsed)
       c.merge(child)
       c.stack.lsTop child.msg.contractAddress
     else:
-      # On failure (revert or exceptional halt) state changes are rolled back,
-      # so no state was actually grown.  All state gas, both reservoir and any
-      # that spilled into `gas_left`, is restored to the parent's reservoir and
-      # the child's `state_gas_used` is not accumulated.
-      c.gasMeter.returnStateGas(child.gasMeter.stateGasUsed + child.gasMeter.stateGasLeft)
+      if c.fork >= FkAmsterdam:
+        # State is rolled back, so all state gas is restored to the parent's
+        # reservoir via the `state_gas_left + state_gas_used` invariant. Any
+        # inline refunds the child credited net out automatically — their
+        # matching charges are rolled back too.
+        c.gasMeter.returnStateGas(GasInt(
+          c.gasMeter.stateGasLeft.int64 +
+          child.gasMeter.stateGasUsed +
+          child.gasMeter.stateGasLeft.int64)
+        )
+
+        # https://github.com/ethereum/execution-specs/pull/2733/changes
+        c.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
+
       if not child.error.burnsGas: # Means return was `REVERT`.
         # From create, only use `outputData` if child returned with `REVERT`.
         c.returnData = move(child.output)
@@ -114,7 +124,7 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
 
       # Charge state gas after initcode size validation
       # https://github.com/ethereum/execution-specs/commit/b9f0afa931a773cdb764310035d0ff383ebecf9e
-      ? cpt.gasMeter.chargeStateGas(STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte,
+      ? cpt.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS,
         reason = "CREATE: State gas new account")
     elif memLen > EIP3860_MAX_INITCODE_SIZE:
       # EIP-3860
@@ -129,6 +139,9 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
       reason = "Stack too deep",
       maxDepth = MaxCallDepth,
       depth = cpt.msg.depth
+    # https://github.com/ethereum/execution-specs/pull/2733/changes
+    if cpt.fork >= FkAmsterdam:
+      cpt.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
     return ok()
 
   if endowment != 0:
@@ -138,6 +151,9 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
         reason = "Insufficient funds available to transfer",
         required = endowment,
         balance = senderBalance
+      # https://github.com/ethereum/execution-specs/pull/2733/changes
+      if cpt.fork >= FkAmsterdam:
+        cpt.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
       return ok()
 
   var createMsgGas = cpt.gasMeter.gasRemaining
@@ -157,7 +173,6 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
       sender: cpt.msg.contractAddress,
       contractAddress: generateContractAddress(
         cpt.vmState,
-        CallKind.Create,
         cpt.msg.contractAddress),
       value:  endowment)
     code = CodeBytesRef.init(cpt.memory.read(memPos, memLen))
@@ -209,7 +224,7 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
 
       # Charge state gas after initcode size validation
       # https://github.com/ethereum/execution-specs/commit/b9f0afa931a773cdb764310035d0ff383ebecf9e
-      ? cpt.gasMeter.chargeStateGas(STATE_BYTES_PER_NEW_ACCOUNT * cpt.getCostPerStateByte,
+      ? cpt.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS,
         reason = "CREATE2: State gas new account")
     elif memLen > EIP3860_MAX_INITCODE_SIZE:
       # EIP-3860
@@ -224,6 +239,9 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
       reason = "Stack too deep",
       maxDepth = MaxCallDepth,
       depth = cpt.msg.depth
+    # https://github.com/ethereum/execution-specs/pull/2733/changes
+    if cpt.fork >= FkAmsterdam:
+      cpt.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
     return ok()
 
   if endowment != 0:
@@ -233,6 +251,9 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
         reason = "Insufficient funds available to transfer",
         required = endowment,
         balance = senderBalance
+      # https://github.com/ethereum/execution-specs/pull/2733/changes
+      if cpt.fork >= FkAmsterdam:
+        cpt.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
       return ok()
 
   var createMsgGas = cpt.gasMeter.gasRemaining
@@ -251,12 +272,10 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
       gas:    createMsgGas,
       stateGas: stateGas,
       sender: cpt.msg.contractAddress,
-      contractAddress: generateContractAddress(
-        cpt.vmState,
-        CallKind.Create2,
+      contractAddress: generateSafeAddress(
         cpt.msg.contractAddress,
         salt,
-        code),
+        code.bytes),
       value:  endowment)
   cpt.execSubCreate(childMsg, code)
   ok()
