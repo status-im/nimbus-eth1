@@ -231,9 +231,6 @@ jobs:
     name: Deploy WASM to GitHub Pages
     needs: [build-wasm]
     runs-on: ubuntu-latest
-    concurrency:
-      group: gh-pages
-      cancel-in-progress: false
     permissions:
       contents: write
     steps:
@@ -241,27 +238,27 @@ jobs:
         id: extract_tag
         run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
-      - name: Checkout gh-pages branch
+      - name: Checkout wasm-deploy branch
         uses: actions/checkout@v6
         with:
-          ref: gh-pages
-          path: site/
+          ref: wasm-deploy
+          path: wasm-deploy/
         continue-on-error: true
 
       - name: Download WASM artifact
         uses: actions/download-artifact@v4
         with:
           name: wasm
-          path: site/wasm/${{ steps.extract_tag.outputs.tag }}/
+          path: wasm-deploy/${{ steps.extract_tag.outputs.tag }}/
 
-      - name: Force-push to gh-pages
+      - name: Force-push to wasm-deploy
         run: |
-          cd site
+          cd wasm-deploy
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-          git diff --cached --quiet || git commit -m "chore: update wasm/${{ steps.extract_tag.outputs.tag }} [skip ci]"
-          git push origin HEAD:gh-pages --force
+          git diff --cached --quiet || git commit -m "chore: update ${{ steps.extract_tag.outputs.tag }}"
+          git push origin HEAD:wasm-deploy --force
 
   prepare-release:
     name: Prepare release draft
