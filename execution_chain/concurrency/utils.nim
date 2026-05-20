@@ -24,5 +24,5 @@ template borrowRef*[T](dest, src: ref T) =
 
 template unborrowRef*[T](dest: ref T) =
   # Sets the ref type back to nil without updating the ref count.
-  var nilRef: T
-  copyMem(addr dest, addr nilRef, sizeof(pointer))
+  var p: pointer = nil
+  copyMem(addr dest, addr p, sizeof(pointer))

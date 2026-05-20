@@ -112,7 +112,7 @@ when compileOption("threads"):
       ctx: PrefetchCtx
       ctxPtr: ptr PrefetchCtx = nil
 
-    if vmState.com.optimisticStatePrefetch:
+    if vmState.com.optimisticStatePrefetch and vmState.com.taskpool.numThreads > 1:
       ctx.parent = vmState.parent
       ctx.blockCtx = vmState.blockCtx
       ctx.com = vmState.com
