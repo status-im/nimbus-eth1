@@ -25,7 +25,8 @@ import
 logScope:
   topics = "P2PLightClientBackend"
 
-chronicles.formatIt(lp_crypto.PublicKey): $it.scheme
+chronicles.formatIt(lp_crypto.PublicKey):
+  $it.scheme
 
 type
   P2PBackendConf* = object
