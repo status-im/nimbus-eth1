@@ -135,7 +135,10 @@ proc stoNotifyRecur(info: static[string]): WalkTrieRecCB =
     occasionalMsg(trd.msgAt):
       traversingStorageMsg(stats, info)
 
-proc accNotifyRecur(info: static[string]): WalkTrieRecCB =
+proc accNotifyRecur(
+    accAndStoOk: static[bool];
+    info: static[string];
+      ): WalkTrieRecCB =
   return proc(
       trd: TravDescRef;
       att: AttType;
@@ -165,28 +168,30 @@ proc accNotifyRecur(info: static[string]): WalkTrieRecCB =
           stats.nAccSto.inc
 
           # Analyse MPT for storage slots
-          let
-            start = Moment.now()
-            notify = stoNotifyRecur info
+          when accAndStoOk:
+            let
+              start = Moment.now()
+              notify = stoNotifyRecur info
 
-          trd.walkTrieRec(acc.storageRoot, getStoTrie, notify).isOkOr:
-            if error != ENoRoot:
-              debug info & ": Failed traversing storage slots",
-                root=acc.storageRoot.toStr, nErr=stats.nStoErr, `error`=error
+            trd.walkTrieRec(acc.storageRoot, getStoTrie, notify).isOkOr:
+              if error != ENoRoot:
+                debug info & ": Failed traversing storage slots",
+                  root=acc.storageRoot.toStr, nErr=stats.nStoErr, `error`=error
 
-          stats.nStoNodes += stats.nNodes           # collect storage stats
-          stats.nNodes = 0
-          stats.stoEla += (Moment.now() - start)
+            stats.nStoNodes += stats.nNodes         # collect storage stats
+            stats.nNodes = 0
+            stats.stoEla += (Moment.now() - start)
 
         if acc.codeHash != EMPTY_CODE_HASH:
           stats.nAccCode.inc
 
           # Check whether the code has an entry on the codes list
-          if trd.db.getCodeList(acc.codeHash).len == 0:
-            stats.nCodeMissing.inc
+          when accAndStoOk:
+            if trd.db.getCodeList(acc.codeHash).len == 0:
+              stats.nCodeMissing.inc
 
-          occasionalMsg(trd.msgAt):
-            traversingCodeMsg(stats, info)
+            occasionalMsg(trd.msgAt):
+              traversingCodeMsg(stats, info)
 
     of AttDangling:
       stats.nAccDangl.inc
@@ -203,6 +208,7 @@ proc accNotifyRecur(info: static[string]): WalkTrieRecCB =
 
 proc sessionAnalyseTrieRecur*(
     ctx: SnapCtxRef;
+    accAndStoOk: static[bool];
     info: static[string];
       ): Opt[Duration]
       {.deprecated: "Use sessionAnalyseTrie()".} =
@@ -222,7 +228,7 @@ proc sessionAnalyseTrieRecur*(
       return err()                                  # => missing pivot, error
 
     root = pivot.root.Hash32
-    notify = accNotifyRecur info
+    notify = accNotifyRecur(accAndStoOk, info)
 
   template stats(): auto = trd.stats
   debug info & ": Start recursively analysing MPT"
