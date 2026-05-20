@@ -214,7 +214,16 @@ jobs:
       - name: Set nightly version
         run: |
           cd nimbus_verified_proxy/library/bindings/wasm
-          npm version "0.0.0-nightly.$(date -u +%Y%m%d)" --no-git-tag-version
+          npm version "0.0.0-nightly" --no-git-tag-version
+
+      - name: Delete existing nightly package version
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: '@status-im/nimbus-verified-proxy'
+          package-type: npm
+          token: ${{ secrets.GITHUB_TOKEN }}
+          min-versions-to-keep: 0
+          ignore-versions: '^(?!0\.0\.0-nightly$).*'
 
       - name: Publish
         run: npm publish --tag nightly
