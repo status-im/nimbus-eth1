@@ -297,15 +297,20 @@ proc setupCommonRef*(config: ExecutionClientConf): (CommonRef, bool) =
       extraData=config.extraData,
       len=config.extraData.len
 
-  if config.gasLimit > GAS_LIMIT_MAXIMUM or
-     config.gasLimit < GAS_LIMIT_MINIMUM:
-    warn "GasLimit not in expected range, truncate",
-      min=GAS_LIMIT_MINIMUM,
-      max=GAS_LIMIT_MAXIMUM,
-      get=config.gasLimit
+  if config.gasLimit.isSome:
+    let gasLimit = config.gasLimit.get()
+    if gasLimit > GAS_LIMIT_MAXIMUM or
+      gasLimit < GAS_LIMIT_MINIMUM:
+      warn "GasLimit not in expected range, truncate",
+        min=GAS_LIMIT_MINIMUM,
+        max=GAS_LIMIT_MAXIMUM,
+        get=gasLimit
+    warn "`--gas-limit` is deprecated, please use `targetGasLimit` field of PayloadAttributesV4"
+    com.gasLimit = gasLimit
+  else:
+    com.gasLimit = DEFAULT_GAS_LIMIT
 
   com.extraData = config.extraData
-  com.gasLimit = config.gasLimit
   com.maxBlobs = config.maxBlobs
 
   (com, dbOpts.rdbKeyCacheSize > 0)
