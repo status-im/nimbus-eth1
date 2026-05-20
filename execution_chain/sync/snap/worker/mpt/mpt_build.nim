@@ -476,12 +476,6 @@ proc init*(
   if db.root.isNil:
     return T(nil)
 
-  # Register proof node hash links now. Due to merging sub-tries below,
-  # some nodes (and its hashes) will vanish from `tmpNodes[]`.
-  for (key,node) in tmpNodes.pairs:
-    if node.kind == Branch:
-      db.proof.add key
-
   # Root is not needed in the list, anymore
   tmpNodes.del db.root.selfKey
 
@@ -666,7 +660,7 @@ proc validate*[T: SnapAccount|StorageItem](
     root: StateRoot|StoreRoot;
     start: ItemKey;
     leafs: openArray[T];
-    proof: openArray[ProofNode]
+    proof: openArray[ProofNode];
       ): Opt[NodeTrieRef] =
   ## Validate snap accounts or storage slot data package.
   ##
@@ -703,10 +697,6 @@ proc kvPairs*(db: NodeTrieRef): seq[(seq[byte],seq[byte])] =
     if db.root.exportTrie(data):
       return data
   # @[]
-
-proc proofKeys*(db: NodeTrieRef): seq[seq[byte]] =
-  ## Returns a list of the keys of proof nodes.
-  db.proof.mapIt(@(it.data))
 
 # ------------------------------------------------------------------------------
 # End

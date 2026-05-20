@@ -29,9 +29,6 @@ type
     state: WalkStateData                            # current state data
     distance: uint64                                # distance to pivot state
 
-    keys: HashSet[seq[byte]]                        # from pivot proofs
-    nKeys: uint                                     # num mergend into `keys[]`
-
     accData: WalkAccounts                           # accounts range from cache
     accRange: ItemKeyRange                          # avoid repeated calculation
 
@@ -213,12 +210,6 @@ template mkTrieImpl(
         distance, peerID, nAccounts, nProof, iv
       bodyRc = Opt.some(ETrieError)
       break body
-
-    # Merge proof node keys for pivot state
-    if session.stateInx == 1:                       # pivot state has index 1
-      for w in mpt.proofKeys:
-        session.nKeys.inc
-        session.keys.incl w
 
     # Print keep alive messages and allow thread switch
     bodyRc = session.sessionTicker(info):
