@@ -10,6 +10,7 @@ import stew/byteutils, beacon_chain/spec/digest
 type GenesisParams* = object
   genesisTime*: uint64
   genesisValidatorsRoot*: Eth2Digest
+  genesisBlockRoot*: Eth2Digest
 
 const
   mainnetGenesisValidatorsRoot = Eth2Digest(
@@ -27,18 +28,39 @@ const
       "212f13fc4df078b6cb7db228f1c8307566dcecf900867401a92023d7ba99cb5f"
     )
   )
+  mainnetGenesisBlockRoot = Eth2Digest(
+    data: hexToByteArray[32](
+      "d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
+    )
+  )
+  sepoliaGenesisBlockRoot = Eth2Digest(
+    data: hexToByteArray[32](
+      "25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9"
+    )
+  )
+  hoodiGenesisBlockRoot = Eth2Digest(
+    data: hexToByteArray[32](
+      "bbe312868b376a3001692a646dd2d7d1e4406380dfd86b98aa8a34d1557c971b"
+    )
+  )
 
 func genesisParamsForNetwork*(network: string): GenesisParams {.raises: [].} =
   case network
   of "sepolia":
     GenesisParams(
-      genesisTime: 1655733600'u64, genesisValidatorsRoot: sepoliaGenesisValidatorsRoot
+      genesisTime: 1655733600'u64,
+      genesisValidatorsRoot: sepoliaGenesisValidatorsRoot,
+      genesisBlockRoot: sepoliaGenesisBlockRoot,
     )
   of "hoodi":
     GenesisParams(
-      genesisTime: 1742213400'u64, genesisValidatorsRoot: hoodiGenesisValidatorsRoot
+      genesisTime: 1742213400'u64,
+      genesisValidatorsRoot: hoodiGenesisValidatorsRoot,
+      genesisBlockRoot: hoodiGenesisBlockRoot,
     )
   else: # mainnet
     GenesisParams(
-      genesisTime: 1606824023'u64, genesisValidatorsRoot: mainnetGenesisValidatorsRoot
+      genesisTime: 1606824023'u64,
+      genesisValidatorsRoot: mainnetGenesisValidatorsRoot,
+      genesisBlockRoot: mainnetGenesisBlockRoot,
     )
