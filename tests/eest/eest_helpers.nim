@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  std/[json, strutils],
+  std/[json, strutils, cpuinfo],
   unittest2,
   eth/common/headers_rlp,
   web3/eth_api_types,
@@ -20,6 +20,7 @@ import
   web3/execution_types,
   json_rpc/rpcclient,
   json_rpc/rpcserver,
+  taskpools,
   ./chain_config_wrapper,
   ./path_handler,
   ../../execution_chain/rpc,
@@ -103,6 +104,7 @@ type
     chain*: ForkedChainRef
     server*: Opt[RpcHttpServer]
     client*: Opt[RpcHttpClient]
+    taskpool*: Taskpool
 
   ## Blockchain Test Types
   BlockchainUnitEnv* = object of UnitEnv
@@ -230,7 +232,8 @@ proc prepareEnv*(
     unit: UnitEnv,
     genesis: Header,
     rpcEnabled = false,
-    statelessEnabled = false): TestEnv =
+    statelessEnabled = false,
+    parallelEnabled = false): TestEnv =
 
   try:
     let
@@ -253,8 +256,21 @@ proc prepareEnv*(
     let
       com = CommonRef.new(memDB, config,
         statelessProviderEnabled = statelessEnabled,
-        statelessWitnessValidation = false) # Running stateless execution separately in test runner
-      chain = ForkedChainRef.init(com, enableQueue = true, persistBatchSize = 1)
+        statelessWitnessValidation = false, # Running stateless execution separately in test runner
+        optimisticStatePrefetch = parallelEnabled)
+
+    if parallelEnabled:
+      let taskpool =
+        try:
+          Taskpool.new(numThreads = min(countProcessors(), 16))
+        except CatchableError as exc:
+          debugEcho "Failed to start taskpool: ", exc.msg
+          quit(QuitFailure)
+      com.taskpool = taskpool
+      com.db.mpt.taskpool = taskpool
+      testEnv.taskpool = taskpool
+
+    let chain = ForkedChainRef.init(com, enableQueue = true, persistBatchSize = 1)
 
     testEnv.chain = chain
     testEnv.client = Opt.none(RpcHttpClient)
@@ -292,6 +308,8 @@ proc close*(env: TestEnv) =
       waitFor env.server.get().closeWait()
     waitFor env.chain.stopProcessingQueue()
     env.chain.com.db.close()
+    if env.taskpool != nil:
+      env.taskpool.shutdown()
   except CatchableError as exc:
     debugEcho "Close error: ", exc.msg
     quit(QuitFailure)
@@ -320,9 +338,10 @@ template runEESTSuite*(
     skipFiles: openArray[string],
     baseFolder: string,
     eestType: string,
-    statelessEnabled = false
+    statelessEnabled = false,
+    parallelEnabled = false
 ) =
   for eest in eestReleases:
     suite eest & ": " & eestType:
       for filePath in walkDirRec(baseFolder / eest / eestType):
-        processFile(handleLongPath(filePath), statelessEnabled, @skipFiles)
+        processFile(handleLongPath(filePath), statelessEnabled, parallelEnabled, @skipFiles)

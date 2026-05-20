@@ -499,6 +499,8 @@ proc txFrameBegin*(
   CoreDbTxRef(kTx: kTx, aTx: aTx)
 
 proc parent*(tx: CoreDbTxRef): CoreDbTxRef =
+  assert not tx.kTx.parent.isNil()
+  assert not tx.aTx.parent.isNil()
   CoreDbTxRef(kTx: tx.kTx.parent, aTx: tx.aTx.parent)
 
 proc checkpoint*(tx: CoreDbTxRef, blockNumber: BlockNumber, skipSnapshot = false) =

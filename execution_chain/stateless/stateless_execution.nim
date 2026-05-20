@@ -45,7 +45,7 @@ proc statelessProcessBlock*(
   # Create an empty in memory database.
   let
     memoryDb = newCoreDbRef(DefaultDbMemory)
-    memoryTxFrame = memoryDb.baseTxFrame()
+    memoryTxFrame = memoryDb.baseTxFrame.txFrameBegin()
   defer: 
     memoryDb.close()
 
