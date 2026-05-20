@@ -59,6 +59,8 @@ type
     error*:   string
     output*:  seq[byte]
 
+  VoidResult* = object
+
   IntrinsicGas* = object
     regular*: GasInt
     state*: GasInt

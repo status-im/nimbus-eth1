@@ -93,8 +93,15 @@ template validateForInclusion(
     tx: Transaction;
     sender: Address;
     skipNonceCheck: bool;
-    intrinsicVar, blobGasUsedVar, fail: untyped) =
-    
+    buildError: static bool;
+    intrinsicVar, blobGasUsedVar: untyped) =
+
+  template fail(msg: untyped): untyped =
+    when buildError:
+      return err(msg)
+    else:
+      return
+
   let
     com = vmState.com
     fork = vmState.hardFork
@@ -149,9 +156,7 @@ proc processTransaction*(
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
   ## which provides a backward compatible framwork for EIP1559.
 
-  template fail(msg: string) =
-    return err(msg)
-  validateForInclusion(vmState, tx, sender, false, intrinsic, blobGasUsed, fail)
+  validateForInclusion(vmState, tx, sender, false, true, intrinsic, blobGasUsed)
 
   # Execute the transaction.
   vmState.captureTxStart(tx.gasLimit)
@@ -181,13 +186,10 @@ proc prefetchTransaction*(
     sender:  Address;     ## Pre-recovered sender
       ) =
 
-  template fail(msg: string) =
-    discard msg
-    return
-  validateForInclusion(vmState, tx, sender, true, intrinsic, blobGasUsed, fail)
+  validateForInclusion(vmState, tx, sender, true, false, intrinsic, blobGasUsed)
 
   let savePoint = vmState.ledger.beginSavePoint()
-  discard tx.txCallEvm(sender, vmState, intrinsic)
+  tx.txCallEvm(sender, vmState, intrinsic, discardResult = true)
   vmState.ledger.rollback(savePoint)
 
 proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32) =
