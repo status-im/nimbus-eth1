@@ -182,6 +182,46 @@ jobs:
           git diff --cached --quiet || git commit -m "chore: update nightly"
           git push origin HEAD:wasm-deploy --force
 
+  publish-npm:
+    name: Publish WASM to GitHub Packages
+    needs: [build-wasm]
+    runs-on: ubuntu-22.04
+
+    permissions:
+      packages: write
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Download WASM artefact
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm
+          path: nimbus_verified_proxy/library/bindings/wasm/
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@status-im'
+
+      - name: Set nightly version
+        run: |
+          cd nimbus_verified_proxy/library/bindings/wasm
+          npm version "0.0.0-nightly.$(date -u +%Y%m%d)" --no-git-tag-version
+
+      - name: Publish
+        run: npm publish --tag nightly
+        working-directory: nimbus_verified_proxy/library/bindings/wasm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   nightly-build-release:
     name: Nightly build release
     needs: [build]
