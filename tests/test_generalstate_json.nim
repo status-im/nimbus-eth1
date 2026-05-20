@@ -20,10 +20,17 @@ import
   ../tools/evmstate/helpers,
   ../tools/common/state_clearing,
   eth/common/transaction_utils,
+  kzg4844/kzg,
   taskpools,
   unittest2,
   stew/byteutils,
   results
+
+# Load eagerly to avoid race conditions - lazy kzg loading is not thread safe
+# and would race with parallel optimistic state prefetch workers.
+loadTrustedSetupFromString(kzg.trustedSetup, 0).expect(
+  "Baked-in KZG setup is correct"
+)
 
 let taskpool =
   try:
