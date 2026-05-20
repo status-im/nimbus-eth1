@@ -153,8 +153,8 @@ jobs:
         if: matrix.os != 'windows'
         run: make libverifproxy_test
 
-  deploy-wasm-pages:
-    name: Deploy WASM to GitHub Pages
+  deploy-wasm:
+    name: Deploy WASM
     needs: [build-wasm]
     runs-on: ubuntu-latest
     permissions:
