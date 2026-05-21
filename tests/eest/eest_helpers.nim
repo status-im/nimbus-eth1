@@ -37,6 +37,9 @@ import
 import ../../tools/common/helpers as chp except HardFork
 import ../../tools/evmstate/helpers except HardFork
 
+# Load eagerly to avoid race conditions - lazy kzg loading is not thread safe
+discard loadTrustedSetupFromString(kzg.trustedSetup, 8)
+
 # Common Type Definitions
 type
   GenesisHeader* = object

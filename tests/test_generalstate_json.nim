@@ -24,6 +24,17 @@ import
   stew/byteutils,
   results
 
+# Load eagerly to avoid race conditions - lazy kzg loading is not thread safe
+proc loadKzgSetup() {.thread.} =
+  discard loadTrustedSetupFromString(kzg.trustedSetup, 8)
+
+# Loading on a dedicated thread because parsing the trusted setup uses ~400 KB 
+# of stack which exceeds the 1 MB ulimit set for `make test`.
+block:
+  var t: Thread[void]
+  createThread(t, loadKzgSetup)
+  joinThread(t)
+
 type
   TestCtx = object
     name: string
