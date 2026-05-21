@@ -342,17 +342,17 @@ suite "TxFrame blobify round-trip":
 
     # --- Loaded blobs are deleted from the base frame so they don't
     # accumulate across restart/prune cycles.  KVT marks deletions with an
-    # empty-value tombstone in the delta layer, which shadows the on-disk
-    # --- The empty (tombstoned) payload must be caught by loadTxFrame's
-    # `blob.len < 8` size check, NOT slip through into deblobifyTxFrame.
-    # `.valueOr` does not fire here because `get` returns Ok(empty seq). ---
-    let blk1Load = loadTxFrame(com.db, blk1Hash)
-    let blk2Load = loadTxFrame(com.db, blk2Hash)
+    # empty-value tombstone in the delta layer: a read through baseTxFrame
+    # returns Ok with an empty seq, which `loadTxFrameAsChild` must then
+    # catch via the `blob.len < 8` size check (NOT slip through into
+    # deblobifyTxFrame).  `.valueOr` does not fire here because `get`
+    # returns Ok(empty seq). ---
+    let blk1Load =
+      loadTxFrameAsChild(fc.baseTxFrame, fc.baseTxFrame, blk1Hash)
+    let blk2Load =
+      loadTxFrameAsChild(fc.baseTxFrame, fc.baseTxFrame, blk2Hash)
     check blk1Load.isErr and "blob too short" in blk1Load.error.ctx
     check blk2Load.isErr and "blob too short" in blk2Load.error.ctx
-    let blk1LoadChild =
-      loadTxFrameAsChild(fc.baseTxFrame, fc.baseTxFrame, blk1Hash)
-    check blk1LoadChild.isErr and "blob too short" in blk1LoadChild.error.ctx
 
     # --- Per-block field equality proves no-replay path ---
     # If replay() were still being used, freshly-built deltas would yield
@@ -397,98 +397,6 @@ suite "TxFrame blobify round-trip":
     let restoredBlk3 = fc.txFrame(blk3Hash)
     check LedgerRef.init(restoredBlk3).getBalance(recipient) ==
       preBlk2Recipient + 200.u256
-
-  test "loadTxFrame: missing key returns Err":
-    let coreDb = newCoreDbRef(AristoDbMemory)
-    let h = Hash32.fromHex("0x" & "11".repeat(32))
-    let rc = loadTxFrame(coreDb, h)
-    check rc.isErr
-
-  test "loadTxFrame: blob shorter than 8 bytes returns DataInvalid":
-    let coreDb = newCoreDbRef(AristoDbMemory)
-    let h = Hash32.fromHex("0x" & "12".repeat(32))
-    check coreDb.baseTxFrame.put(
-      txFrameKey(h).toOpenArray, @[1'u8, 2, 3]).isOk
-    let rc = loadTxFrame(coreDb, h)
-    check rc.isErr
-    check "blob too short" in rc.error.ctx
-
-  test "loadTxFrame: aristo region truncated returns Err":
-    let coreDb = newCoreDbRef(AristoDbMemory)
-    let h = Hash32.fromHex("0x" & "13".repeat(32))
-    # Claim 1000 bytes of aristo, but body is empty.
-    var blob = newSeq[byte]()
-    blob.add uint32(1000).toBytesBE
-    blob.add uint32(0).toBytesBE
-    check coreDb.baseTxFrame.put(txFrameKey(h).toOpenArray, blob).isOk
-    let rc = loadTxFrame(coreDb, h)
-    check rc.isErr
-    check "aristo region truncated" in rc.error.ctx
-
-  test "loadTxFrame: kvt region truncated returns Err":
-    let coreDb = newCoreDbRef(AristoDbMemory)
-    let frame = coreDb.txFrameBegin()
-    let aBlob = blobifyTxFrame(frame.aTx)
-    frame.dispose()
-
-    let h = Hash32.fromHex("0x" & "14".repeat(32))
-    var blob = newSeqOfCap[byte](8 + aBlob.len)
-    blob.add aBlob.len.uint32.toBytesBE
-    for b in aBlob: blob.add b
-    blob.add uint32(1000).toBytesBE  # claims 1000 bytes of kvt, none follow
-    check coreDb.baseTxFrame.put(txFrameKey(h).toOpenArray, blob).isOk
-    let rc = loadTxFrame(coreDb, h)
-    check rc.isErr
-    check "kvt region truncated" in rc.error.ctx
-
-  test "loadTxFrame: corrupted aristo blob returns Err":
-    let coreDb = newCoreDbRef(AristoDbMemory)
-    let frame = coreDb.txFrameBegin()
-    var aBlob = blobifyTxFrame(frame.aTx)
-    aBlob[0] = 0xFF'u8  # bad version byte
-    let kBlob = blobifyKvtTxFrame(frame.kTx)
-    frame.dispose()
-
-    let h = Hash32.fromHex("0x" & "15".repeat(32))
-    let blob = buildTxFrameBlob(aBlob, kBlob)
-    check coreDb.baseTxFrame.put(txFrameKey(h).toOpenArray, blob).isOk
-    let rc = loadTxFrame(coreDb, h)
-    check rc.isErr
-    check "aristo deblobify" in rc.error.ctx
-
-  test "loadTxFrame: corrupted kvt blob returns Err":
-    let coreDb = newCoreDbRef(AristoDbMemory)
-    let frame = coreDb.txFrameBegin()
-    let aBlob = blobifyTxFrame(frame.aTx)
-    var kBlob = blobifyKvtTxFrame(frame.kTx)
-    kBlob[0] = 0xFF'u8  # bad version byte
-    frame.dispose()
-
-    let h = Hash32.fromHex("0x" & "16".repeat(32))
-    let blob = buildTxFrameBlob(aBlob, kBlob)
-    check coreDb.baseTxFrame.put(txFrameKey(h).toOpenArray, blob).isOk
-    let rc = loadTxFrame(coreDb, h)
-    check rc.isErr
-    check "kvt deblobify" in rc.error.ctx
-
-  test "loadTxFrame: stored frame round-trips":
-    let coreDb = newCoreDbRef(AristoDbMemory)
-    let src = coreDb.txFrameBegin()
-    src.aTx.blockNumber = Opt.some(7'u64)
-    src.kTx.sTab[@[0xAA'u8, 0xBB]] = @[0xCC'u8, 0xDD, 0xEE]
-
-    let h = Hash32.fromHex("0x" & "17".repeat(32))
-    check coreDb.baseTxFrame.storeTxFrame(src, h).isOk
-
-    let rc = loadTxFrame(coreDb, h)
-    check rc.isOk
-    let loaded = rc.value
-    check loaded.aTx.blockNumber == Opt.some(7'u64)
-    check loaded.kTx.sTab.len == 1
-    check loaded.kTx.sTab[@[0xAA'u8, 0xBB]] == @[0xCC'u8, 0xDD, 0xEE]
-
-    loaded.dispose()
-    src.dispose()
 
   test "loadTxFrameAsChild: missing key returns Err":
     let coreDb = newCoreDbRef(AristoDbMemory)
@@ -567,31 +475,6 @@ suite "TxFrame blobify round-trip":
     let rc = loadTxFrameAsChild(base, base, h)
     check rc.isErr
     check "kvt deblobify" in rc.error.ctx
-
-  test "loadTxFrame: deleted (tombstone) hash returns 'blob too short'":
-    let coreDb = newCoreDbRef(AristoDbMemory)
-    let src    = coreDb.txFrameBegin()
-    let h      = Hash32.fromHex("0x" & "31".repeat(32))
-    check coreDb.baseTxFrame.storeTxFrame(src, h).isOk
-    src.dispose()
-
-    # Sanity: stored blob is loadable before deletion.
-    let pre = loadTxFrame(coreDb, h)
-    check pre.isOk
-    pre.value.dispose()
-
-    # Delete writes an EmptyBlob tombstone into the KVT delta layer.
-    check coreDb.baseTxFrame.deleteTxFrame(h).isOk
-
-    # Reading via get returns Ok with empty seq -- mirrors the assertion
-    # made by the existing "forked-chain serialize/deserialize" test.
-    let probe = coreDb.baseTxFrame.get(txFrameKey(h).toOpenArray)
-    check probe.isOk and probe.value.len == 0
-
-    # loadTxFrame must catch this empty payload via `blob.len < 8`.
-    let rc = loadTxFrame(coreDb, h)
-    check rc.isErr
-    check "blob too short" in rc.error.ctx
 
   test "loadTxFrameAsChild: deleted (tombstone) hash returns 'blob too short'":
     let coreDb = newCoreDbRef(AristoDbMemory)

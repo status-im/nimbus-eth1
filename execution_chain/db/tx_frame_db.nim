@@ -25,28 +25,32 @@
 ## Serialization Process
 ## =====================
 ##
-## 1. After a block is finalized and checkpointed, call `storeTxFrame(frame, blockHash)`.
+## 1. After a block is finalized and checkpointed, call
+##    `storeTxFrame(target, src, blockHash)` where `src` is the block's
+##    per-frame delta and `target` is the shared staging frame that will be
+##    persisted.
 ## 2. Internally:
-##    - `blobifyTxFrame(frame.aTx)` walks `sTab`, `kMap`, `accLeaves`, `stoLeaves` and produces the Aristo blob.
-##    - `blobifyKvtTxFrame(frame.kTx)` walks `sTab` and produces the KVT blob.
+##    - `blobifyTxFrame(src.aTx)` walks `sTab`, `kMap`, `accLeaves`, `stoLeaves` and produces the Aristo blob.
+##    - `blobifyKvtTxFrame(src.kTx)` walks `sTab` and produces the KVT blob.
 ##    - The two blobs are length-prefixed and concatenated.
-##    - The result is written to KVT via `frame.put(txFrameKey(blockHash), combinedBlob)`.
+##    - The result is written to KVT via `target.put(txFrameKey(blockHash), combinedBlob)`.
 ## 3. On the next `persist` call the entry is flushed to RocksDB alongside the block's trie changes.
 ##
 ## Deserialization Process (startup restore)
 ## =========================================
 ##
-## 1. On startup, after opening the database, call `loadTxFrame(coreDb, blockHash)` where `blockHash` is 
-##    the canonical head hash.
+## 1. On startup, the chain walks each branch block-by-block and calls
+##    `loadTxFrameAsChild(srcBase, parent, blockHash)` to materialise the
+##    per-block frame as a child of the previous frame in the branch.
 ## 2. Internally:
-##    - Read the combined blob from the base KVT frame (which reads from the persisted database).
+##    - Read the combined blob from `srcBase`'s KVT.
 ##    - Parse the 4-byte Aristo length, decode the Aristo blob via `deblobifyTxFrame`.
 ##    - Parse the 4-byte KVT length, decode the KVT blob via `deblobifyKvtTxFrame`.
-##    - Create a new `CoreDbTxRef` via `coreDb.txFrameBegin()` (rooted at the current base).
-##    - Populate `aTx.sTab`, `aTx.kMap`, `aTx.accLeaves`, `aTx.stoLeaves`, `aTx.vTop`, `aTx.blockNumber` from 
+##    - Create a new `CoreDbTxRef` via `parent.txFrameBegin()`.
+##    - Populate `aTx.sTab`, `aTx.kMap`, `aTx.accLeaves`, `aTx.stoLeaves`, `aTx.vTop`, `aTx.blockNumber` from
 ##        the decoded Aristo data.
 ##    - Populate `kTx.sTab` from the decoded KVT data.
-## 3. Return the populated frame. The caller attaches it to the processing pipeline (checkpoint, snapshot, etc.) as 
+## 3. Return the populated frame. The caller attaches it to the processing pipeline (checkpoint, snapshot, etc.) as
 ##      the warm frame for the next block.
 ##
 ## Practical range:
@@ -92,15 +96,6 @@ proc storeTxFrame*(
 
   target.put(txFrameKey(blockHash).toOpenArray, blob)
 
-proc storeTxFrame*(
-    db: CoreDbTxRef;
-    blockHash: Hash32;
-      ): CoreDbRc[void] =
-  ## Serialise both the Aristo and KVT deltas of `db` and write the result
-  ## to KVT under `txFrameKey(blockHash)`.  The entry is written into the
-  ## same frame so it is persisted together with the block data.
-  storeTxFrame(db, db, blockHash)
-
 proc loadTxFrameAsChild*(
     srcBase: CoreDbTxRef;
     parent: CoreDbTxRef;
@@ -145,20 +140,6 @@ proc loadTxFrameAsChild*(
   frame.kTx.sTab        = kData
 
   ok frame
-
-proc loadTxFrame*(
-    db: CoreDbRef;
-    blockHash: Hash32;
-      ): CoreDbRc[CoreDbTxRef] =
-  ## Read the stored delta for `blockHash` and return a new `CoreDbTxRef`
-  ## rooted at the current database base, with the stored delta applied.
-  ##
-  ## Intended for startup: call this instead of replaying blocks to warm up
-  ## the in-memory frame for the canonical head.  The returned frame is a
-  ## direct child of the base; the caller should attach it to the processing
-  ## pipeline (checkpoint, snapshot, etc.) as needed.
-  let base = db.baseTxFrame()
-  loadTxFrameAsChild(base, base, blockHash)
 
 proc deleteTxFrame*(
     db: CoreDbTxRef;
