@@ -200,6 +200,14 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     conf.networkParams.config.bpo1Time = Opt.some(3805701325.EthTime)
     conf.networkParams.config.bpo2Time = Opt.some(3805801325.EthTime)
 
+  if envFork >= Osaka:
+    conf.networkParams.config.osakaTime = Opt.some(0.EthTime)
+    conf.networkParams.config.bpo1Time = Opt.some(0.EthTime)
+    conf.networkParams.config.bpo2Time = Opt.some(0.EthTime)
+
+  if envFork >= Amsterdam:
+    conf.networkParams.config.amsterdamTime = Opt.some(0.EthTime)
+
   let
     com   = setupCom(conf)
     chain = ForkedChainRef.init(com)
@@ -664,6 +672,19 @@ proc rpcMain*() =
       for receipt in rawReceipts:
         check seq[byte](receipt).len > 0
 
+    test "debug_getRawBlockAccessList":
+      try:
+        discard await client.call("debug_getRawBlockAccessList",
+          %[%"latest"], EthJson)
+        check false
+      except JsonRpcError as exc:
+        check "pre-Amsterdam" in exc.msg
+
+      # Unknown block tag must raise an error.
+      expect JsonRpcError:
+        discard await client.call("debug_getRawBlockAccessList",
+          %[%"0xabcdabcd"], EthJson)
+
     test "eth_getBlockReceipts with EIP-1898 object param":
       # blockHash object form (what go-ethereum's ethclient sends)
       let r1 = await client.call("eth_getBlockReceipts",
@@ -916,6 +937,22 @@ proc rpcMain*() =
           proofResponse.storageHash == hash32"0x2ed06ec37dad4cd8c8fc1a1172d633a8973987fa6995b14a7c0a50c0e8d1a9c3"
           storageProof.len() == 1
           verifySlotLeafExists(proofResponse.storageHash, storageProof[0])
+
+    env.close()
+
+  suite "Remote Procedure Calls - Amsterdam":
+    var env = setupEnv(Amsterdam)
+    env.generateBlock()
+    let client = env.client
+
+    test "debug_getRawBlockAccessList - happy path":
+      let r = await client.call("debug_getRawBlockAccessList",
+        %[%"latest"], EthJson)
+      let raw = EthJson.decode(r.string, seq[byte])
+      check raw.len > 0
+
+      let bal = ethBlockAccessList(raw)
+      check rlp.encode(bal[]) == raw
 
     env.close()
 
