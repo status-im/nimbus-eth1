@@ -20,6 +20,7 @@ import
   web3/execution_types,
   json_rpc/rpcclient,
   json_rpc/rpcserver,
+  kzg4844/kzg,
   ./chain_config_wrapper,
   ./path_handler,
   ../../execution_chain/rpc,
@@ -36,6 +37,9 @@ import
 
 import ../../tools/common/helpers as chp except HardFork
 import ../../tools/evmstate/helpers except HardFork
+
+# Load eagerly to avoid race conditions - lazy kzg loading is not thread safe
+discard loadTrustedSetupFromString(kzg.trustedSetup, 8)
 
 # Common Type Definitions
 type
