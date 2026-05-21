@@ -454,7 +454,7 @@ suite "TxFrame blobify round-trip":
     check coreDb.baseTxFrame.put(txFrameKey(h).toOpenArray, blob).isOk
     let rc = loadTxFrame(coreDb, h)
     check rc.isErr
-    check "loadTxFrame aristo" in rc.error.ctx
+    check "aristo deblobify" in rc.error.ctx
 
   test "loadTxFrame: corrupted kvt blob returns Err":
     let coreDb = newCoreDbRef(AristoDbMemory)
@@ -469,7 +469,7 @@ suite "TxFrame blobify round-trip":
     check coreDb.baseTxFrame.put(txFrameKey(h).toOpenArray, blob).isOk
     let rc = loadTxFrame(coreDb, h)
     check rc.isErr
-    check "loadTxFrame kvt" in rc.error.ctx
+    check "kvt deblobify" in rc.error.ctx
 
   test "loadTxFrame: stored frame round-trips":
     let coreDb = newCoreDbRef(AristoDbMemory)
@@ -550,7 +550,7 @@ suite "TxFrame blobify round-trip":
     let base = coreDb.baseTxFrame
     let rc = loadTxFrameAsChild(base, base, h)
     check rc.isErr
-    check "loadTxFrameAsChild aristo" in rc.error.ctx
+    check "aristo deblobify" in rc.error.ctx
 
   test "loadTxFrameAsChild: corrupted kvt blob returns Err":
     let coreDb = newCoreDbRef(AristoDbMemory)
@@ -566,7 +566,7 @@ suite "TxFrame blobify round-trip":
     let base = coreDb.baseTxFrame
     let rc = loadTxFrameAsChild(base, base, h)
     check rc.isErr
-    check "loadTxFrameAsChild kvt" in rc.error.ctx
+    check "kvt deblobify" in rc.error.ctx
 
   test "loadTxFrame: deleted (tombstone) hash returns 'blob too short'":
     let coreDb = newCoreDbRef(AristoDbMemory)

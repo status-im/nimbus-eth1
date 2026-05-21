@@ -101,57 +101,6 @@ proc storeTxFrame*(
   ## same frame so it is persisted together with the block data.
   storeTxFrame(db, db, blockHash)
 
-proc loadTxFrame*(
-    db: CoreDbRef;
-    blockHash: Hash32;
-      ): CoreDbRc[CoreDbTxRef] =
-  ## Read the stored delta for `blockHash` and return a new `CoreDbTxRef`
-  ## rooted at the current database base, with the stored delta applied.
-  ##
-  ## Intended for startup: call this instead of replaying blocks to warm up
-  ## the in-memory frame for the canonical head.  The returned frame is a
-  ## direct child of the base; the caller should attach it to the processing
-  ## pipeline (checkpoint, snapshot, etc.) as needed.
-  let base = db.baseTxFrame()
-  let blob = base.get(txFrameKey(blockHash).toOpenArray).valueOr:
-    return err(error)
-
-  if blob.len < 8:
-    return err(DataInvalid.toError("loadTxFrame: blob too short"))
-
-  # Length fields are read as uint32 and all size arithmetic is performed in
-  # uint64 to avoid truncation or signed overflow on 32-bit platforms.
-  let
-    blobLen = uint64(blob.len)
-    aLen    = uint64(uint32.fromBytesBE(blob.toOpenArray(0, 3)))
-  if blobLen < 4'u64 + aLen + 4'u64:
-    return err(DataInvalid.toError("loadTxFrame: aristo region truncated"))
-  let kOff = 4'u64 + aLen
-  let kLen = uint64(uint32.fromBytesBE(blob.toOpenArray(int(kOff), int(kOff) + 3)))
-  if blobLen < kOff + 4'u64 + kLen:
-    return err(DataInvalid.toError("loadTxFrame: kvt region truncated"))
-
-  let aRc = deblobifyTxFrame(blob.toOpenArray(4, int(4'u64 + aLen) - 1))
-  if aRc.isErr:
-    return err(aRc.error.toError("loadTxFrame aristo"))
-  let aData = aRc.value
-
-  let kRc = deblobifyKvtTxFrame(blob.toOpenArray(int(kOff + 4'u64), int(kOff + 4'u64 + kLen) - 1))
-  if kRc.isErr:
-    return err(kRc.error.toError("loadTxFrame kvt"))
-  let kData = kRc.value
-
-  let frame  = db.txFrameBegin()
-  frame.aTx.sTab        = aData.sTab
-  frame.aTx.kMap        = aData.kMap
-  frame.aTx.accLeaves   = aData.accLeaves
-  frame.aTx.stoLeaves   = aData.stoLeaves
-  frame.aTx.vTop        = aData.vTop
-  frame.aTx.blockNumber = aData.blockNumber
-  frame.kTx.sTab        = kData
-
-  ok frame
-
 proc loadTxFrameAsChild*(
     srcBase: CoreDbTxRef;
     parent: CoreDbTxRef;
@@ -165,7 +114,7 @@ proc loadTxFrameAsChild*(
     return err(error)
 
   if blob.len < 8:
-    return err(DataInvalid.toError("loadTxFrameAsChild: blob too short"))
+    return err(DataInvalid.toError("blob too short"))
 
   # Length fields are read as uint32 and all size arithmetic is performed in
   # uint64 to avoid truncation or signed overflow on 32-bit platforms.
@@ -173,21 +122,18 @@ proc loadTxFrameAsChild*(
     blobLen = uint64(blob.len)
     aLen    = uint64(uint32.fromBytesBE(blob.toOpenArray(0, 3)))
   if blobLen < 4'u64 + aLen + 4'u64:
-    return err(DataInvalid.toError("loadTxFrameAsChild: aristo region truncated"))
+    return err(DataInvalid.toError("aristo region truncated"))
   let kOff = 4'u64 + aLen
   let kLen = uint64(uint32.fromBytesBE(blob.toOpenArray(int(kOff), int(kOff) + 3)))
   if blobLen < kOff + 4'u64 + kLen:
-    return err(DataInvalid.toError("loadTxFrameAsChild: kvt region truncated"))
+    return err(DataInvalid.toError("kvt region truncated"))
 
-  let aRc = deblobifyTxFrame(blob.toOpenArray(4, int(4'u64 + aLen) - 1))
-  if aRc.isErr:
-    return err(aRc.error.toError("loadTxFrameAsChild aristo"))
-  let aData = aRc.value
+  let aData = deblobifyTxFrame(blob.toOpenArray(4, int(4'u64 + aLen) - 1)).valueOr:
+    return err(error.toError("aristo deblobify"))
 
-  let kRc = deblobifyKvtTxFrame(blob.toOpenArray(int(kOff + 4'u64), int(kOff + 4'u64 + kLen) - 1))
-  if kRc.isErr:
-    return err(kRc.error.toError("loadTxFrameAsChild kvt"))
-  let kData = kRc.value
+  let kData = deblobifyKvtTxFrame(
+      blob.toOpenArray(int(kOff + 4'u64), int(kOff + 4'u64 + kLen) - 1)).valueOr:
+    return err(error.toError("kvt deblobify"))
 
   let frame = parent.txFrameBegin()
   frame.aTx.sTab        = aData.sTab
@@ -199,6 +145,20 @@ proc loadTxFrameAsChild*(
   frame.kTx.sTab        = kData
 
   ok frame
+
+proc loadTxFrame*(
+    db: CoreDbRef;
+    blockHash: Hash32;
+      ): CoreDbRc[CoreDbTxRef] =
+  ## Read the stored delta for `blockHash` and return a new `CoreDbTxRef`
+  ## rooted at the current database base, with the stored delta applied.
+  ##
+  ## Intended for startup: call this instead of replaying blocks to warm up
+  ## the in-memory frame for the canonical head.  The returned frame is a
+  ## direct child of the base; the caller should attach it to the processing
+  ## pipeline (checkpoint, snapshot, etc.) as needed.
+  let base = db.baseTxFrame()
+  loadTxFrameAsChild(base, base, blockHash)
 
 proc deleteTxFrame*(
     db: CoreDbTxRef;
