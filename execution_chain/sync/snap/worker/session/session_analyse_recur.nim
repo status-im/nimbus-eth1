@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.used.}
+
 ## Recursively implemented session analyser
 ## ========================================
 ##
@@ -19,7 +21,7 @@
 import
   std/tables,
   pkg/[chronicles, chronos, eth/common],
-  ../[mpt, worker_desc],
+  ../[helpers, mpt, worker_desc],
   ./session_analyse_desc
 
 logScope:
@@ -50,18 +52,20 @@ proc walkTrieRecImpl(
   trd.stats.nNodes.inc                              # statistics
 
   template recurseOrNotify(pfx: NibblesBuf, link: Rlp) =
-    if link.isList:                                 # no Hash32 but node data
-      let data = @(link.rawData)
-      trd.walkTrieRecImpl(pfx, data, data, get, notify, depth+1)
-    else:
-      let
-        newKey = link.toBytes                       # get link
-        newNode = trd.db.get newKey                 # get node from DB
-      if newNode.len == 0:
-        trd.notify(AttDangling, pfx, newKey, EmptyBlob, depth)
+    block body:
+      if link.isList:                                 # no Hash32 but node data
+        let data = @(link.rawData)
+        trd.walkTrieRecImpl(pfx, data, data, get, notify, depth+1)
       else:
-        trd.walkTrieRecImpl(pfx, newKey, newNode, get, notify, depth+1)
-
+        let
+          newKey = link.toBytes                       # get link
+          newNode = trd.db.get(newKey).valueOr:       # get node from DB
+            trd.notify(EGetError, EmptyPath, newKey, EmptyBlob, depth)
+            break body
+        if newNode.len == 0:
+          trd.notify(AttDangling, pfx, newKey, EmptyBlob, depth)
+        else:
+          trd.walkTrieRecImpl(pfx, newKey, newNode, get, notify, depth+1)
   try:
     var rlp = node.rlpFromBytes()
     case rlp.listLen
@@ -97,9 +101,11 @@ proc walkTrieRec(
   ## Starter
   let
     root = @(root.data)
-    node = trd.db.get(root)
+    node = trd.db.get(root).valueOr:
+      trd.notify(EGetError, EmptyPath, root, EmptyBlob, 0)
+      return err(EGetError)
   if node.len == 0:
-    trd.notify(ENoRoot, NibblesBuf(), root, node, 0)
+    trd.notify(ENoRoot, EmptyPath, root, EmptyBlob, 0)
     return err(ENoRoot)
 
   trd.walkTrieRecImpl(EmptyPath, root, node, get, notify, 0)
@@ -127,8 +133,10 @@ proc stoNotifyRecur(info: static[string]): WalkTrieRecCB =
       stats.nStoLeaf.inc
     of AttDangling:
       stats.nStoDangl.inc
+      trd.onStoDangl(key, path)
     of ENoRoot:
       stats.nStoMissing.inc
+      trd.onStoMissing(key, path)
     else:
       stats.nStoErr.inc
 
@@ -181,20 +189,38 @@ proc accNotifyRecur(
             stats.nStoNodes += stats.nNodes         # collect storage stats
             stats.nNodes = 0
             stats.stoEla += (Moment.now() - start)
+          else:
+            # Check whether the storage root has an entry on the database
+            block checkStoRoot:
+              let rc = trd.db.hasStoTrie(acc.storageRoot.data)
+              if rc.isErr:
+                debug info & ": Failed accessing storage root",
+                  root=acc.storageRoot.toStr, nErr=stats.nStoErr, error=rc.error
+              elif not rc.value:
+                break checkStoRoot
+              stats.nStoMissing.inc
+              trd.onStoMissing(key, path)           # (key,path) of account data
 
         if acc.codeHash != EMPTY_CODE_HASH:
           stats.nAccCode.inc
 
           # Check whether the code has an entry on the codes list
-          when accAndStoOk:
-            if trd.db.getCodeList(acc.codeHash).len == 0:
-              stats.nCodeMissing.inc
+          block checkCodeHash:
+            let rc = trd.db.hasCodeList(acc.codeHash)
+            if rc.isErr:
+              debug info & ": Failed accessing byte code",
+                root=acc.codeHash.toStr, nErr=stats.nStoErr, error=rc.error
+            elif rc.value:
+              break checkCodeHash
+            stats.nCodeMissing.inc
+            trd.onCodeMissing(key, path)            # (key,path) of account data
 
-            occasionalMsg(trd.msgAt):
-              traversingCodeMsg(stats, info)
+          occasionalMsg(trd.msgAt):
+            traversingCodeMsg(stats, info)
 
     of AttDangling:
       stats.nAccDangl.inc
+      trd.onAccDangl(key, path)
 
     else:
       stats.nAccErr.inc
@@ -208,9 +234,13 @@ proc accNotifyRecur(
 
 proc sessionAnalyseTrieRecur*(
     ctx: SnapCtxRef;
+    onDnglAcc: OnDanglingCB;
+    onDnglSto: OnDanglingCB;
+    onMissSto: OnDanglingCB;
+    onMissCode: OnDanglingCB;
     accAndStoOk: static[bool];
     info: static[string];
-      ): Opt[Duration]
+      ): Result[Duration,AttType]
       {.deprecated: "Use sessionAnalyseTrie()".} =
   ## Async template (but not running async)
   ##
@@ -218,14 +248,19 @@ proc sessionAnalyseTrieRecur*(
   ##
   let
     start = Moment.now()
+    blindCB = proc(key: seq[byte], path: NibblesBuf) = discard
     trd = TravDescRef(
-      ctx:   ctx,
-      db:    ctx.pool.mptAsm,
-      msgAt: start + threadLogTimeLimit)
+      ctx:           ctx,
+      db:            ctx.pool.mptAsm,
+      onAccDangl:    (if onDnglAcc.isNil: blindCB else: onDnglAcc),
+      onStoDangl:    (if onDnglSto.isNil: blindCB else: onDnglSto),
+      onStoMissing:  (if onMissSto.isNil: blindCB else: onMissSto),
+      onCodeMissing: (if onMissCode.isNil: blindCB else: onMissCode),
+      msgAt:         start + threadLogTimeLimit)
 
     pivot = trd.db.findPivot().valueOr:
       debug info & ": MPT analysis failed, pivot missing"
-      return err()                                  # => missing pivot, error
+      return err(ENoPivot)                          # => missing pivot, error
 
     root = pivot.root.Hash32
     notify = accNotifyRecur(accAndStoOk, info)
@@ -235,7 +270,7 @@ proc sessionAnalyseTrieRecur*(
 
   trd.walkTrieRec(root, getAccTrie, notify).isOkOr:
     debug info & ": Failed analysing MPT", `error`=error
-    return err()                                    # => missing root node
+    return err(error)                               # => missing root node
 
   stats.nAccNodes += stats.nNodes
   stats.nNodes = stats.nAccNodes + stats.nStoNodes

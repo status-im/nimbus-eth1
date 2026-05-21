@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+{.used.}
+
 ## Non-recursively implemented session analyser
 ## ============================================
 ##
@@ -20,7 +22,7 @@
 import
   std/tables, # typetraits],
   pkg/[chronicles, chronos, eth/common],
-  ../[mpt, worker_desc],
+  ../[helpers, mpt, worker_desc],
   ./session_analyse_desc
 
 export
@@ -157,7 +159,9 @@ template traverseMpt(
         depth = stack.len - 2                       # info for call backs
         path = parent.path & links[inx].pfx         # path from stack
         key = links[inx].key                        # key from stack
-        node = get(trd.db, key)                     # node from DB
+        node = get(trd.db, key).valueOr:             # node from DB
+          notify(EGetError, trd, EmptyPath, key, EmptyBlob, depth, info)
+          continue
 
         if node.len == 0:                           # dangling link?
           if parent.node.len == 0:                  # fail to resolve `root`?
@@ -165,13 +169,13 @@ template traverseMpt(
             notify(ENoRoot, trd, EmptyPath, key, EmptyBlob, depth, info)
             bodyRc = typeof(bodyRc).err(ENoRoot)    # => missing root, error
             break body
-          notify(AttDangling, trd, path, parent.key, parent.node, depth, info)
+          notify(AttDangling, trd, path, key, EmptyBlob, depth, info)
           continue
 
         # Allow thread switch when enabled
         when 0 < info.len:
           runErrand(trd, info, code).isOkOr:
-            notify(ECancelled, trd, path, parent.key, parent.node, depth, info)
+            notify(ECancelled, trd, path, key, node, depth, info)
             bodyRc = typeof(bodyRc).err(ECancelled) # => cancel, error
             break body
 
@@ -248,9 +252,11 @@ template stoNotify(
 
     elif att == AttDangling:
       stats.nStoDangl.inc
+      trd.onStoDangl(key, path)
 
     elif att == ENoRoot:
       stats.nStoMissing.inc
+      trd.onStoMissing(key, path)
 
     else:
       stats.nStoErr.inc
@@ -300,15 +306,23 @@ template accAndStoNotify(
       if acc.codeHash != EMPTY_CODE_HASH:
         stats.nAccCode.inc
 
-        # Check whether the code has an entry on the codes list
-        if trd.db.getCodeList(acc.codeHash).len == 0:
+        # Check whether the code has an entry on the database
+        block checkCodeHash:
+          let rc = trd.db.hasCodeList(acc.codeHash)
+          if rc.isErr:
+            debug info & ": Failed accessing byte code",
+              root=acc.codeHash.toStr, nErr=stats.nStoErr, error=rc.error
+          elif rc.value:
+            break checkCodeHash
           stats.nCodeMissing.inc
+          trd.onCodeMissing(key, path)              # (key,path) of account data
 
         occasionalMsg(trd.msgAt):
           traversingCodeMsg(stats, info)
 
     elif att == AttDangling:
       stats.nAccDangl.inc
+      trd.onAccDangl(key, path)
 
     else:
       stats.nAccErr.inc
@@ -320,7 +334,7 @@ template accOnlyNotify(
     trd: TravDescRef;
     path: NibblesBuf;
     key: seq[byte];
-    data: seq[byte];
+    payload: seq[byte];                             # node or payload
     depth: int;
     info: static[string];
       ) =
@@ -336,18 +350,41 @@ template accOnlyNotify(
     when att == AttLeaf:
       stats.nAccLeaf.inc
 
-      let acc = data.decodeAccount().valueOr:
+      let acc = payload.decodeAccount().valueOr:
         stats.nAccErr.inc
         break body
 
       if acc.storageRoot != EMPTY_ROOT_HASH:
         stats.nAccSto.inc
 
+        # Check whether the storage root has an entry on the database
+        block checkStoRoot:
+          let rc = trd.db.hasStoTrie(acc.storageRoot.data)
+          if rc.isErr:
+            debug info & ": Failed accessing storage root",
+              root=acc.storageRoot.toStr, nErr=stats.nStoErr, error=rc.error
+          elif not rc.value:
+            break checkStoRoot
+          stats.nStoMissing.inc
+          trd.onStoMissing(key, path)               # (key,path) of account data
+
       if acc.codeHash != EMPTY_CODE_HASH:
         stats.nAccCode.inc
 
+        # Check whether the code has an entry on the database
+        block checkCodeHash:
+          let rc = trd.db.hasCodeList(acc.codeHash)
+          if rc.isErr:
+            debug info & ": Failed accessing byte code",
+              root=acc.codeHash.toStr, nErr=stats.nStoErr, error=rc.error
+          elif rc.value:
+            break checkCodeHash
+          stats.nCodeMissing.inc
+          trd.onCodeMissing(key, path)              # (key,path) of account data
+
     elif att == AttDangling:
       stats.nAccDangl.inc
+      trd.onAccDangl(key, path)
 
     else:
       stats.nAccErr.inc
@@ -359,26 +396,36 @@ template accOnlyNotify(
 # ------------------------------------------------------------------------------
 
 template sessionAnalyseTrieIter*(
-    ctx: SnapCtxRef;
+    cty: SnapCtxRef;
+    onDnglAcc: OnDanglingCB;
+    onDnglSto: OnDanglingCB;
+    onMissSto: OnDanglingCB;
+    onMissCode: OnDanglingCB;
     accAndStoOk: static[bool];
     info: static[string];
       ): auto =
   ## Async template
   ##
-  ## Traverse (depth first) the accounts MPT.
+  ## Traverse (depth first) an MPT.
   ##
-  var bodyRc = Opt[Duration].err()
+  var bodyRc = Result[Duration,AttType].err(EOtherError)
   block body:
     let
       start = Moment.now()
+      blindCB = proc(key: seq[byte], path: NibblesBuf) = discard
       trd = TravDescRef(
-        ctx:   ctx,
-        db:    ctx.pool.mptAsm,
-        msgAt: start + threadLogTimeLimit,
-        napAt: start + threadSwitchRunLimit)
+        ctx:           cty,
+        db:            cty.pool.mptAsm,
+        onAccDangl:    (if onDnglAcc.isNil: blindCB else: onDnglAcc),
+        onStoDangl:    (if onDnglSto.isNil: blindCB else: onDnglSto),
+        onStoMissing:  (if onMissSto.isNil: blindCB else: onMissSto),
+        onCodeMissing: (if onMissCode.isNil: blindCB else: onMissCode),
+        msgAt:         start + threadLogTimeLimit,
+        napAt:         start + threadSwitchRunLimit)
 
       pivot = trd.db.findPivot().valueOr:
         debug info & ": MPT analysis failed, pivot missing"
+        bodyRc = typeof(bodyRc).err(ENoPivot)
         break body
 
       stateRoot = pivot.root.Hash32
@@ -395,6 +442,7 @@ template sessionAnalyseTrieIter*(
 
     if rc.isErr:
       debug info & ": Failed analysing MPT", `error`=rc.error
+      bodyRc = typeof(bodyRc).err(rc.error)
       break body
 
     stats.nAccNodes += stats.nNodes

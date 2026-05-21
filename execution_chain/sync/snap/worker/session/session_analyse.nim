@@ -9,17 +9,73 @@
 # except according to those terms.
 
 import
-  ./[session_analyse_iter, session_analyse_recur],
-  ../worker_desc
+  pkg/[chronos, chronicles, eth/trie/nibbles],
+  ./[session_analyse_desc, session_analyse_iter, session_analyse_recur],
+  ../[mpt, worker_desc]
 
-export
-  session_analyse_iter,
-  session_analyse_recur
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
 
-template sessionAnalyseFullTrie*(ctx: SnapCtxRef, info: static[string]): auto =
-  sessionAnalyseTrieIter(ctx, accAndStoOk=true, info)
+template sessionAnalyseFullTrie*(
+    ctx: SnapCtxRef;
+    info: static[string];
+      ): auto =
+  ## Async template
+  ##
+  var bodyRc = Opt[Duration].err()
+  block body:
+    var ela = ctx.sessionAnalyseTrieIter(
+                onDnglAcc = OnDanglingCB(nil),
+                onDnglSto = OnDanglingCB(nil),
+                onMissSto = OnDanglingCB(nil),
+                onMissCode = OnDanglingCB(nil),
+                accAndStoOk = true,
+                info).valueOr:
+      break body
+    bodyRc = typeof(bodyRc).ok(move ela)
+  bodyRc
 
-template sessionAnalyseAccTrie*(ctx: SnapCtxRef, info: static[string]): auto =
-  sessionAnalyseTrieIter(ctx, accAndStoOk=false, info)
+template sessionAnalyseAccounts*(
+    ctx: SnapCtxRef;
+    info: static[string];
+      ): auto =
+  ## Async template
+  ##
+  ## Traverse the accounting MPT and register dangling links in the
+  ## `AccDangling` table.
+  ##
+  var bodyRc = Result[(Duration,int),(AttType,int)].err((EOtherError,0))
+  block body:
+    let db = ctx.pool.mptAsm
+    db.clearAccDanglingKvt().isOkOr:
+      chronicles.`error` info & ": Cannot reset dangling cache", `error`=error
+      bodyRc = typeof(bodyRc).err((EClearError,0))
+      break body
 
+    var (nDangl, nErrors) = (0, 0)
+    proc onDanglingCB(key: seq[byte], path: NibblesBuf) =
+      nDangl.inc
+      db.putAccDanglingKvt(key, path.toHexPrefix(false).data()).isOkOr:
+        chronicles.error info & ": Error caching dangling pivot links",
+          `error`=error
+        nErrors.inc
+
+    var ela = ctx.sessionAnalyseTrieIter(
+                onDnglAcc = onDanglingCB,
+                onDnglSto = OnDanglingCB(nil),
+                onMissSto = onDanglingCB,
+                onMissCode = onDanglingCB,
+                accAndStoOk = false,
+                info).valueOr:
+      if 0 < nErrors:
+        bodyRc = typeof(bodyRc).err((EPutError,nErrors))
+      else:
+        bodyRc = typeof(bodyRc).err((error,nErrors))
+      break body
+    bodyRc = typeof(bodyRc).ok((move ela, nDangl))
+  bodyRc
+
+# ------------------------------------------------------------------------------
 # End
+# ------------------------------------------------------------------------------
