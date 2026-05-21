@@ -21,6 +21,39 @@
 ##   aristo_blob     : aristo_blob_len bytes
 ##   kvt_blob_len    : 4 bytes
 ##   kvt_blob        : kvt_blob_len bytes
+##
+## Serialization Process
+## =====================
+##
+## 1. After a block is finalized and checkpointed, call `storeTxFrame(frame, blockHash)`.
+## 2. Internally:
+##    - `blobifyTxFrame(frame.aTx)` walks `sTab`, `kMap`, `accLeaves`, `stoLeaves` and produces the Aristo blob.
+##    - `blobifyKvtTxFrame(frame.kTx)` walks `sTab` and produces the KVT blob.
+##    - The two blobs are length-prefixed and concatenated.
+##    - The result is written to KVT via `frame.put(txFrameKey(blockHash), combinedBlob)`.
+## 3. On the next `persist` call the entry is flushed to RocksDB alongside the block's trie changes.
+##
+## Deserialization Process (startup restore)
+## =========================================
+##
+## 1. On startup, after opening the database, call `loadTxFrame(coreDb, blockHash)` where `blockHash` is 
+##    the canonical head hash.
+## 2. Internally:
+##    - Read the combined blob from the base KVT frame (which reads from the persisted database).
+##    - Parse the 4-byte Aristo length, decode the Aristo blob via `deblobifyTxFrame`.
+##    - Parse the 4-byte KVT length, decode the KVT blob via `deblobifyKvtTxFrame`.
+##    - Create a new `CoreDbTxRef` via `coreDb.txFrameBegin()` (rooted at the current base).
+##    - Populate `aTx.sTab`, `aTx.kMap`, `aTx.accLeaves`, `aTx.stoLeaves`, `aTx.vTop`, `aTx.blockNumber` from 
+##        the decoded Aristo data.
+##    - Populate `kTx.sTab` from the decoded KVT data.
+## 3. Return the populated frame. The caller attaches it to the processing pipeline (checkpoint, snapshot, etc.) as 
+##      the warm frame for the next block.
+##
+## Practical range:
+## ================
+##  - Empty block: < 5 KB
+##  - Average mainnet block: 500–700 KB
+##  - Dense DeFi block: 1–3 MB
 
 {.push raises: [].}
 

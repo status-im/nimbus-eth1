@@ -43,6 +43,59 @@
 ## The kMap is implicitly embedded: `blobifyTo(vtx, key, data)` encodes the
 ## HashKey inside the blob when it is valid; `deblobify(record, HashKey)`
 ## recovers it.  No separate kMap section is needed.
+##
+##  ### rvid_blob
+## 
+##  `RootedVertexID` is encoded using the existing `blobify(rvid: RootedVertexID): RVidBuf` 
+##  from `aristo_blobify.nim`. It is a compact variable-length big-endian encoding:
+## 
+##  ```
+##  root_len   : 1 byte     (number of significant bytes in root VertexID)
+##  root       : root_len bytes
+##  [vid]      : remaining bytes, omitted when root == vid
+##  ```
+## 
+##  Maximum size: 17 bytes. `rvid_len` records the actual length.
+## 
+##  ### vtx_blob
+## 
+##  Vertices are encoded using the existing `blobifyTo(vtx: VertexRef, key: HashKey, data: var VertexBuf)` 
+##  from `aristo_blobify.nim`. This format is shared with the Aristo RocksDB backend.
+## 
+##  The `HashKey` for a vertex is looked up in `kMap`; if absent, `VOID_HASH_KEY` is used. 
+##  The key is embedded inside `vtx_blob` for branch nodes (indicated by a bit in the last byte), 
+##  so **no separate `kMap` section is needed** — `kMap` is implicitly reconstructed on decode 
+##  via `deblobify(blob, HashKey)`.
+## 
+##  Vertex type encoding (last byte of vtx_blob):
+## 
+##  ```
+##  bits [7:6]  meaning
+##    00        Branch — no embedded hash key
+##    10        Branch — 32-byte hash key prepended
+##    01        Leaf   (AccLeaf or StoLeaf, distinguished by payload mask)
+##  ```
+## 
+##  AccLeaf and StoLeaf blobs are produced by `blobifyTo(AccLeafRef, ...)` and `blobifyTo(StoLeafRef, ...)` 
+##  respectively. The path prefix (`pfx: NibblesBuf`) is encoded as a hex-prefix byte sequence appended 
+##  before the type byte.
+## 
+##  Maximum vtx_blob size: 117 bytes (`MAX_VERTEX_BLOB_SIZE`).
+## 
+##  ### leaf_blob (accLeaves / stoLeaves)
+## 
+##  Account and storage leaves stored in the `accLeaves` / `stoLeaves` caches are serialized 
+##  as full `VertexRef` values using the same `blobifyTo(vtx, VOID_HASH_KEY, data)` call 
+##  (no embedded hash key since these are cache entries, not trie nodes requiring a key). 
+##  On decode, `deblobify(blob, VertexRef)` reconstructs the `AccLeafRef` or `StoLeafRef` 
+##  including the `pfx` (path prefix) field.
+## 
+##  ### nil entries
+## 
+##  A `nil` value in `sTab`, `accLeaves`, or `stoLeaves` is a deletion marker 
+##  (the key was explicitly set to nil in this frame to shadow a non-nil value in a parent frame). 
+##  These are serialized with `is_nil = 0x00` and no following blob, and restored as `nil` on decode.
+## 
 
 {.push raises: [].}
 
