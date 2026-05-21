@@ -23,7 +23,7 @@ import
   ./aristo/aristo_blobify
 
 export
-  code_bytes, core_db.computeAccPath, core_Db.computeSlotKey
+  code_bytes, core_db.computeAccPath, core_db.computeSlotKey
 
 const
   codeLruSize = 16*1024
@@ -57,12 +57,17 @@ type
 
   AccountFlags = set[AccountFlag]
 
+  # Store original value from the database
+  OriginalValueRef = ref object
+    statement: CoreDbAccount
+    storage:   Table[UInt256, UInt256]
+
   AccountRef = ref object
     statement: CoreDbAccount
     accPath: Hash32
     flags: AccountFlags
     code: CodeBytesRef
-    originalStorage: TableRef[UInt256, UInt256]
+    original: OriginalValueRef
     overlayStorage: Table[UInt256, UInt256]
 
   LedgerRef* = ref object
@@ -101,6 +106,10 @@ type
       ## Also used when building the execution witness to determine the
       ## block numbers fetched by the BLOCKHASH opcode for any given block.
 
+    accountRead: Table[Address, HashSet[UInt256]]
+    enableBalTracker: bool
+      ## Support BAL tracking
+
   ReadOnlyLedger* = distinct LedgerRef
 
   LedgerSpRef* = ref object
@@ -119,6 +128,12 @@ const
     StorageChanged,
     NewlyCreated
     }
+
+  EMPTY_STATEMENT = CoreDbAccount(
+    nonce:    EMPTY_ACCOUNT.nonce,
+    balance:  EMPTY_ACCOUNT.balance,
+    codeHash: EMPTY_ACCOUNT.codeHash,
+  )
 
 template logTxt(info: static[string]): static[string] =
   "LedgerRef " & info
@@ -146,6 +161,10 @@ proc getAccount(
     ledger.savePoint.cache[address] = result
     return
 
+  if ledger.enableBalTracker:
+    if address notin ledger.accountRead:
+      ledger.accountRead[address] = HashSet[UInt256]()
+
   # not found in cache, look into state trie
   let
     accPath = address.computeAccPath
@@ -154,15 +173,20 @@ proc getAccount(
     result = AccountRef(
       statement: rc.value,
       accPath:   accPath,
-      flags:     {Alive})
+      flags:     {Alive},
+      original: OriginalValueRef(
+        statement: rc.value,
+      )
+    )
   elif shouldCreate:
     result = AccountRef(
-      statement: CoreDbAccount(
-        nonce:    EMPTY_ACCOUNT.nonce,
-        balance:  EMPTY_ACCOUNT.balance,
-        codeHash: EMPTY_ACCOUNT.codeHash),
+      statement: EMPTY_STATEMENT,
       accPath:    accPath,
-      flags:      {Alive, IsNew})
+      flags:      {Alive, IsNew},
+      original: OriginalValueRef(
+        statement: EMPTY_STATEMENT,
+      )
+    )
   else:
     return # ignore, don't cache
 
@@ -175,10 +199,11 @@ proc clone(acc: AccountRef, cloneStorage: bool): AccountRef =
     statement: acc.statement,
     accPath:   acc.accPath,
     flags:     acc.flags,
-    code:      acc.code)
+    code:      acc.code,
+    original:  acc.original,
+  )
 
   if cloneStorage:
-    result.originalStorage = acc.originalStorage
     # it's ok to clone a table this way
     result.overlayStorage = acc.overlayStorage
 
@@ -197,10 +222,7 @@ proc originalStorageValue(
       ): UInt256 =
   # share the same original storage between multiple
   # versions of account
-  if acc.originalStorage.isNil:
-    acc.originalStorage = newTable[UInt256, UInt256]()
-  else:
-    acc.originalStorage[].withValue(slot, val) do:
+  acc.original.storage.withValue(slot, val) do:
       return val[]
 
   # Not in the original values cache - go to the DB unless it's a new account
@@ -210,7 +232,7 @@ proc originalStorageValue(
         computeSlotKey(slot)
     result = ledger.txFrame.fetchSlot(acc.accPath, slotKey).valueOr(0'u256)
 
-  acc.originalStorage[slot] = result
+  acc.original.storage[slot] = result
 
 proc storageValue(
     acc: AccountRef;
@@ -225,11 +247,8 @@ proc storageValue(
 proc kill(ledger: LedgerRef, acc: AccountRef) =
   acc.flags.excl Alive
   acc.overlayStorage.clear()
-  acc.originalStorage = nil
-
-  acc.statement.nonce = EMPTY_ACCOUNT.nonce
-  acc.statement.balance = EMPTY_ACCOUNT.balance
-  acc.statement.codeHash = EMPTY_ACCOUNT.codeHash
+  acc.original.storage.clear()
+  acc.statement = EMPTY_STATEMENT
   acc.code.reset()
 
 type
@@ -267,9 +286,6 @@ proc persistStorage(acc: AccountRef, ledger: LedgerRef) =
     # how to create 'virtual' storage room for each account
     return
 
-  if acc.originalStorage.isNil:
-    acc.originalStorage = newTable[UInt256, UInt256]()
-
   # Make sure that there is an account entry on the database. This is needed by
   # `Aristo` for updating the account's storage area reference. As a side effect,
   # this action also updates the latest statement data.
@@ -277,8 +293,9 @@ proc persistStorage(acc: AccountRef, ledger: LedgerRef) =
     raiseAssert info & $$error
 
   # Save `overlayStorage[]` on database
+  let original = acc.original
   for slot, value in acc.overlayStorage:
-    acc.originalStorage[].withValue(slot, v):
+    original.storage.withValue(slot, v):
       if v[] == value:
         continue # Avoid writing A-B-A updates
 
@@ -294,12 +311,12 @@ proc persistStorage(acc: AccountRef, ledger: LedgerRef) =
         raiseAssert info & $$error
 
       # move the overlayStorage to originalStorage, related to EIP2200, EIP1283
-      acc.originalStorage[slot] = value
+      original.storage[slot] = value
 
     else:
       ledger.txFrame.deleteSlot(acc.accPath, slotKey).isOkOr:
         raiseAssert info & $$error
-      acc.originalStorage.del(slot)
+      original.storage.del(slot)
 
     if ledger.storeSlotHash and not cached:
       # Write only if it was not cached to avoid writing the same data over and
@@ -379,7 +396,6 @@ proc rollback*(ledger: LedgerRef, savePoint: LedgerSpRef) =
   # its parent transactions:
   doAssert ledger.savePoint == savePoint and not savePoint.parentSavePoint.isNil
   ledger.savePoint = savePoint.parentSavePoint
-
   reset(savePoint[]) # Release memory
 
 proc commit*(ledger: LedgerRef, savePoint: LedgerSpRef) =
@@ -400,7 +416,11 @@ proc dispose*(ledger: LedgerRef, savePoint: LedgerSpRef) =
   if savePoint.parentSavePoint != nil:
     ledger.rollback(savePoint)
 
-proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool, collectWitness = false): LedgerRef =
+proc init*(x: typedesc[LedgerRef],
+           db: CoreDbTxRef,
+           storeSlotHash: bool,
+           collectWitness = false,
+           enableBalTracker = false): LedgerRef =
   new result
   result.txFrame = db
   result.storeSlotHash = storeSlotHash
@@ -409,6 +429,7 @@ proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool, collect
   result.collectWitness = collectWitness
   result.txFrame.aTx.collectWitness = collectWitness
   result.blockHashes = typeof(result.blockHashes).init(MAX_PREV_HEADER_DEPTH.int)
+  result.enableBalTracker = enableBalTracker
   discard result.beginSavePoint
 
 proc getCodeHash*(ledger: LedgerRef, address: Address): Hash32 =
@@ -493,6 +514,10 @@ proc getStorage*(ledger: LedgerRef, address: Address, slot: UInt256): UInt256 =
     let lookupKey = (address, Opt.some(slot))
     if not ledger.witnessKeys.contains(lookupKey):
       ledger.witnessKeys[lookupKey] = false
+
+  if ledger.enableBalTracker:
+    ledger.accountRead.withValue(address, val):
+      val[].incl(slot)
 
   if acc.isNil:
     return
@@ -581,6 +606,10 @@ proc setStorage*(ledger: LedgerRef, address: Address, slot, value: UInt256) =
     if not ledger.witnessKeys.contains(lookupKey):
       ledger.witnessKeys[lookupKey] = false
 
+  if ledger.enableBalTracker:
+    ledger.accountRead.withValue(address, val):
+      val[].incl(slot)
+
   let oldValue = acc.storageValue(slot, ledger)
   if oldValue != value:
     var acc = ledger.makeDirty(address)
@@ -595,12 +624,10 @@ proc clearStorage*(ledger: LedgerRef, address: Address) =
   if ledger.txFrame.hasStorage(acc.accPath).valueOr(false):
     # need to clear the storage from the database first
     let acc = ledger.makeDirty(address, cloneStorage = false)
-    # update caches
-    if acc.originalStorage.isNil.not:
-      # also clear originalStorage cache, otherwise
-      # both getStorage and getCommittedStorage will
-      # return wrong value
-      acc.originalStorage.clear()
+    # also clear originalStorage cache, otherwise
+    # both getStorage and getCommittedStorage will
+    # return wrong value
+    acc.original.storage.clear()
 
 proc deleteAccount(ledger: LedgerRef, address: Address) =
   # make sure all savePoints already committed
@@ -716,11 +743,14 @@ proc persist*(ledger: LedgerRef,
         # to `merge()` the latest statement as well.
         ledger.txFrame.mergeAccount(acc.accPath, acc.statement).isOkOr:
           raiseAssert info & $$error
+
+      acc.original.statement = acc.statement
     of Remove:
       ledger.txFrame.deleteAccount(acc.accPath).isOkOr:
         if error.error != AccNotFound:
           raiseAssert info & $$error
       ledger.savePoint.cache.del address
+      acc.original.statement = EMPTY_STATEMENT
     of DoNothing:
       # dead man tell no tales
       # remove touched dead account from cache
@@ -775,9 +805,8 @@ iterator storage*(
 iterator cachedStorage*(ledger: LedgerRef, address: Address): (UInt256, UInt256) =
   let acc = ledger.getAccount(address, false)
   if not acc.isNil:
-    if not acc.originalStorage.isNil:
-      for k, v in acc.originalStorage:
-        yield (k, v)
+    for k, v in acc.original.storage:
+      yield (k, v)
 
 proc getStorageRoot*(ledger: LedgerRef, address: Address): Hash32 =
   # beware that if the account not persisted,
