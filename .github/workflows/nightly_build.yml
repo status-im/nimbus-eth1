@@ -217,14 +217,17 @@ jobs:
           npm version "0.0.0-nightly" --no-git-tag-version
 
       - name: Delete existing nightly package version
-        uses: actions/delete-package-versions@v5
-        continue-on-error: true
-        with:
-          package-name: '@status-im/nimbus-verified-proxy'
-          package-type: npm
-          token: ${{ secrets.GITHUB_TOKEN }}
-          min-versions-to-keep: 0
-          ignore-versions: '^(?!0\.0\.0-nightly$).*'
+        run: |
+          VERSION_ID=$(gh api /orgs/status-im/packages/npm/nimbus-verified-proxy/versions \
+            --jq '.[] | select(.name == "0.0.0-nightly") | .id' 2>/dev/null || true)
+          if [ -n "$VERSION_ID" ]; then
+            gh api --method DELETE /orgs/status-im/packages/npm/nimbus-verified-proxy/versions/$VERSION_ID
+            echo "Deleted version ID $VERSION_ID"
+          else
+            echo "No existing nightly version found, skipping"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish
         run: npm publish --tag nightly
@@ -266,13 +269,11 @@ jobs:
           cat windows-amd64-checksum/nimbus.sha512sum >> release_notes.md
           echo '# macOS ARM64' >> release_notes.md
           cat macos-arm64-checksum/nimbus.sha512sum >> release_notes.md
-          cat > release_notes.md <<EOF
-          \`\`\`text
-
-          ### Nimbus Verified Proxy
-
-          \`\`\`text
-          EOF
+          echo '```' >> release_notes.md
+          echo '' >> release_notes.md
+          echo '### Nimbus Verified Proxy' >> release_notes.md
+          echo '' >> release_notes.md
+          echo '```' >> release_notes.md
           echo '# Linux AMD64' >> release_notes.md
           cat linux-amd64-checksum/nimbus_verified_proxy.sha512sum >> release_notes.md
           echo '# Linux ARM64' >> release_notes.md
@@ -281,13 +282,11 @@ jobs:
           cat windows-amd64-checksum/nimbus_verified_proxy.sha512sum >> release_notes.md
           echo '# macOS ARM64' >> release_notes.md
           cat macos-arm64-checksum/nimbus_verified_proxy.sha512sum >> release_notes.md
-          cat > release_notes.md <<EOF
-          \`\`\`text
-
-          ### libverifproxy
-
-          \`\`\`text
-          EOF
+          echo '```' >> release_notes.md
+          echo '' >> release_notes.md
+          echo '### libverifproxy' >> release_notes.md
+          echo '' >> release_notes.md
+          echo '```' >> release_notes.md
           echo '# Linux AMD64' >> release_notes.md
           cat linux-amd64-checksum/libverifproxy.a.sha512sum >> release_notes.md
           echo '# Linux ARM64' >> release_notes.md
