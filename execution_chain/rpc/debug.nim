@@ -247,13 +247,13 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
         raise newException(ValueError, error)
 
       if not com.isAmsterdamOrLater(header.timestamp):
-        raise newException(ValueError, "Block access list not available for pre-Amsterdam blocks")
+        raise newException(ValueError, "Resource not found")
 
       let bal = chain.getBlockAccessList(header.computeRlpHash()).valueOr:
         if header.number <= chain.resolvedFinNumber:
           raise newException(ValueError, "Pruned history unavailable")
         else:
-          raise newException(ValueError, "Block access list not available")
+          raise newException(ValueError, "Resource not found")
 
       rlp.encode(bal)
 

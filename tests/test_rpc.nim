@@ -678,7 +678,7 @@ proc rpcMain*() =
           %[%"latest"], EthJson)
         check false
       except JsonRpcError as exc:
-        check "pre-Amsterdam" in exc.msg
+        check "Resource not found" in exc.msg
 
       # Unknown block tag must raise an error.
       expect JsonRpcError:
