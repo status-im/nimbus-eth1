@@ -20,6 +20,7 @@ import
   web3/execution_types,
   json_rpc/rpcclient,
   json_rpc/rpcserver,
+  kzg4844/kzg,
   ./chain_config_wrapper,
   ./path_handler,
   ../../execution_chain/rpc,

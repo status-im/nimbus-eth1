@@ -20,6 +20,7 @@ import
   ../tools/evmstate/helpers,
   ../tools/common/state_clearing,
   eth/common/transaction_utils,
+  kzg4844/kzg,
   unittest2,
   stew/byteutils,
   results
