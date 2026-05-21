@@ -27,12 +27,11 @@ import
   results
 
 # Load eagerly to avoid race conditions - lazy kzg loading is not thread safe
-# and would race with parallel optimistic state prefetch workers. Loading on a
-# dedicated thread because parsing the trusted setup uses ~400 KB of stack
-# which exceeds the 1 MB ulimit set for `make test`.
 proc loadKzgSetup() {.thread.} =
-  discard loadTrustedSetupFromString(kzg.trustedSetup, 0)
+  discard loadTrustedSetupFromString(kzg.trustedSetup, 8)
 
+# Loading on a dedicated thread because parsing the trusted setup uses ~400 KB 
+# of stack which exceeds the 1 MB ulimit set for `make test`.
 block:
   var t: Thread[void]
   createThread(t, loadKzgSetup)

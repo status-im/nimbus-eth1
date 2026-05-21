@@ -383,12 +383,12 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   # so it needs to be initalized from the main thread before anything else tries
   # to use it
   if config.trustedSetupFile.isSome:
-    kzg.loadTrustedSetup(config.trustedSetupFile.get(), 0).isOkOr:
+    kzg.loadTrustedSetup(config.trustedSetupFile.get(), 8).isOkOr:
       fatal "Cannot load KZG trusted setup from file", msg = error
       quit(QuitFailure)
   else:
     # Load eagerly to avoid race conditions - lazy kzg loading is not thread safe
-    loadTrustedSetupFromString(kzg.trustedSetup, 0).expect(
+    loadTrustedSetupFromString(kzg.trustedSetup, 8).expect(
       "Baked-in KZG setup is correct"
     )
 

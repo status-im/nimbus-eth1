@@ -36,14 +36,11 @@ import
   ../../execution_chain/stateless/stateless_types,
   ../../hive_integration/engine_client
 
-# Load eagerly to avoid race conditions - lazy kzg loading is not thread safe
-# and would race with parallel optimistic state prefetch workers.
-loadTrustedSetupFromString(kzg.trustedSetup, 0).expect(
-  "Baked-in KZG setup is correct"
-)
-
 import ../../tools/common/helpers as chp except HardFork
 import ../../tools/evmstate/helpers except HardFork
+
+# Load eagerly to avoid race conditions - lazy kzg loading is not thread safe
+discard loadTrustedSetupFromString(kzg.trustedSetup, 8)
 
 # Common Type Definitions
 type
