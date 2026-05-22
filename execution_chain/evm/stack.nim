@@ -118,7 +118,8 @@ func popAux(stack: EvmStack, T: type): EvmResult[T] =
 # ------------------------------------------------------------------------------
 
 func push*(stack: EvmStack,
-           value: EvmStackElement | EvmStackInts | UInt256 | Address | Hash32): EvmResultVoid =
+           value: EvmStackElement | EvmStackInts | UInt256 | Address | Hash32): 
+          EvmResultVoid {.inline.} =
   let len = stack.len
   if len > 1023:
     return err(stackErr(StackFull))
