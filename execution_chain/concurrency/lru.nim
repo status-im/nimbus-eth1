@@ -255,22 +255,26 @@ func tableDel(s: var LruCache, key: auto): Opt[uint32] =
   s.tableDel(subhash(key), key)
 
 proc grow[K, V](v: var LruCache[K, V], newSize: uint32) =
+  doAssert newSize.int <= v.capacity + 1
+
   let oldSize = v.nodesLen.uint32
 
   if oldSize >= newSize or newSize <= 1:
     return
 
   if newSize.int > v.nodesAllocatedLen:
-    let nextPower = nextPowerOfTwo(newSize.int)
+    # Grow by powers of two, but cap at capacity + 1 so the allocation never 
+    # exceeds what the cache can actually use.
+    let allocSize = min(nextPowerOfTwo(newSize.int), v.capacity + 1)
     if v.nodes.isNil():
       v.nodes =
-        cast[ptr UncheckedArray[LruNode[K, V]]](createShared(LruNode[K, V], nextPower))
+        cast[ptr UncheckedArray[LruNode[K, V]]](createShared(LruNode[K, V], allocSize))
     else:
       v.nodes = cast[ptr UncheckedArray[LruNode[K, V]]](resizeShared(
-        v.nodes[0].addr, nextPower
+        v.nodes[0].addr, allocSize
       ))
     v.nodesLen = newSize.int
-    v.nodesAllocatedLen = nextPower
+    v.nodesAllocatedLen = allocSize
   else:
     v.nodesLen = newSize.int
 
@@ -550,7 +554,7 @@ type
     lock {.align: CACHE_LINE_SIZE.}: Lock
     cache: LruCache[K, V]
 
-  ConcurrentLruCache*[K, V; SHARD_BITS: static int = 6] = object
+  ConcurrentLruCache*[K, V; SHARD_BITS: static int = 5] = object
     shards: array[1 shl SHARD_BITS, Shard[K, V]]
       # 64 shards, number of shards is a power of two
     state: State
