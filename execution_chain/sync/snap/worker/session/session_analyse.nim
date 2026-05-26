@@ -54,12 +54,13 @@ template sessionAnalyseAccounts*(
       break body
 
     var (nDangl, nErrors) = (0, 0)
-    proc onDanglingCB(key: seq[byte], path: NibblesBuf) =
-      nDangl.inc
-      db.putAccDnglKvt(key, path.toHexPrefix(false).data()).isOkOr:
-        chronicles.error info & ": Error caching dangling pivot links",
-          `error`=error
-        nErrors.inc
+    let onDanglingCB: OnDanglingCB =
+      proc(key: seq[byte], path: NibblesBuf) =
+        nDangl.inc
+        db.putAccDnglKvt(key, path.toHexPrefix(false).data()).isOkOr:
+          chronicles.error info & ": Error caching dangling pivot links",
+            `error`=error
+          nErrors.inc
 
     var ela = ctx.sessionAnalyseTrieIter(
                 onDnglAcc = onDanglingCB,
