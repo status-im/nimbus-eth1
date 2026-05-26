@@ -16,7 +16,7 @@
 
 {.push raises: [].}
 
-import std/[hashes, math, typetraits], results, ./readwritelock
+import std/[atomics, hashes, math, typetraits], results, ./readwritelock
 
 export hashes, results
 
@@ -544,16 +544,8 @@ func put(s: var LruCache, key: auto, value: auto) =
 
 const
   CACHE_LINE_SIZE = when defined(macosx) and defined(arm64): 128 else: 64
-  # Probabilistic LRU promotion: on a successful `get`, only acquire the write
-  # lock to call `moveToFront` 1-in-(SAMPLE_MASK+1) times. The lookup itself
-  # runs under a shared read lock so concurrent gets do not serialize. LRU
-  # order becomes approximate, but at this sample rate hit-rate degradation vs
-  # strict LRU is empirically well under 1% for typical workloads.
   SAMPLE_MASK = 15'u32
 
-# Thread-local counter that drives the sample gate. A `threadvar` avoids the
-# cache-line ping-pong an atomic shared counter would introduce, which would
-# defeat the point of avoiding the shard lock on the read path.
 var tlsLruGetCounter {.threadvar.}: uint32
 
 type
@@ -565,10 +557,11 @@ type
   Shard[K, V] = object
     lock {.align: CACHE_LINE_SIZE.}: ReadWriteLock
     cache: LruCache[K, V]
+    usedCount: Atomic[int]
 
   ConcurrentLruCache*[K, V; SHARD_BITS: static int = 5] = object
     shards: array[1 shl SHARD_BITS, Shard[K, V]]
-      # 64 shards, number of shards is a power of two
+      # 2 ^ SHARD_BITS shards, number of shards is a power of two
     state: State
 
 proc init*[K, V, SHARD_BITS](
@@ -590,6 +583,7 @@ proc init*[K, V, SHARD_BITS](
   for i in 0 ..< shardCount:
     lru.shards[i].lock.init()
     lru.shards[i].cache = LruCache[K, V].init(shardCapacity)
+    lru.shards[i].usedCount.store(0, moRelaxed)
 
   lru.state = State.INITIALIZED
 
@@ -665,8 +659,10 @@ template shardCapacity*[K, V; SHARD_BITS](
 func shardLenForKey*[K, V; SHARD_BITS](
     lru: var ConcurrentLruCache[K, V, SHARD_BITS], key: K
 ): int =
-  withShardRead(lru, key):
-    s.cache.len()
+  let
+    h = hash(key)
+    s = addr lru.shards[h.toShardIdx(SHARD_BITS)]
+  s.usedCount.load(moRelaxed)
 
 func capacity*[K, V; SHARD_BITS](lru: var ConcurrentLruCache[K, V, SHARD_BITS]): int =
   lru.shardCapacity() * lru.numShards()
@@ -674,8 +670,7 @@ func capacity*[K, V; SHARD_BITS](lru: var ConcurrentLruCache[K, V, SHARD_BITS]):
 func len*[K, V; SHARD_BITS](lru: var ConcurrentLruCache[K, V, SHARD_BITS]): int =
   var total = 0
   for shard in lru.shards.mitems():
-    withReadLock(shard.lock):
-      total += shard.cache.len
+    total += shard.usedCount.load(moRelaxed)
   total
 
 func contains*[K, V; SHARD_BITS](
@@ -693,43 +688,59 @@ func peek*[K, V; SHARD_BITS](
 proc get*[K, V; SHARD_BITS](
     lru: var ConcurrentLruCache[K, V, SHARD_BITS], key: K
 ): Opt[V] =
-  # Hot path: look up under the read lock so concurrent gets do not serialize.
-  # Only sample 1-in-(SAMPLE_MASK+1) hits to acquire the write lock for the
-  # LRU promotion - moveToFront would otherwise force every get to be a writer
-  # and defeat the read-side concurrency.
   let
     h = hash(key)
     sh = h.toSubhash()
     s = addr lru.shards[h.toShardIdx(SHARD_BITS)]
 
-  s.lock.lockRead()
-  try:
-    result = s.cache.peek(sh, key)
-  finally:
-    s.lock.unlockRead()
+  var value: Opt[V]
+  s.lock.withReadLock:
+    value = s.cache.peek(sh, key)
 
-  if result.isSome():
+  if value.isSome():
     inc tlsLruGetCounter
     if (tlsLruGetCounter and SAMPLE_MASK) == 0'u32:
-      s.lock.lockWrite()
-      try:
-        # Re-lookup under the write lock since the entry may have been evicted
-        # between the read and write critical sections. `get` is a no-op if so.
+      s.lock.withWriteLock:
         discard s.cache.get(sh, key)
-      finally:
-        s.lock.unlockWrite()
+
+  value
 
 proc put*[K, V; SHARD_BITS](
     lru: var ConcurrentLruCache[K, V, SHARD_BITS], key: K, val: V
 ) =
-  withShardWrite(lru, key):
-    s.cache.put(sh, key, val)
+  let
+    h = hash(key)
+    sh = h.toSubhash()
+    s = addr lru.shards[h.toShardIdx(SHARD_BITS)]
+
+  var existing: Opt[V]
+  s.lock.withReadLock:
+    existing = s.cache.peek(sh, key)
+
+  if existing.isSome() and existing[] == val:
+    return
+
+  let doPromote =
+    if existing.isSome():
+      inc tlsLruGetCounter
+      (tlsLruGetCounter and SAMPLE_MASK) == 0'u32
+    else:
+      true
+
+  s.lock.withWriteLock:
+    if doPromote:
+      s.cache.put(sh, key, val)
+    elif not s.cache.refresh(sh, key, val):
+      s.cache.put(sh, key, val)
+    s.usedCount.store(s.cache.len, moRelaxed)
 
 proc pop*[K, V; SHARD_BITS: static int](
     lru: var ConcurrentLruCache[K, V, SHARD_BITS], key: K
 ): Opt[V] =
   withShardWrite(lru, key):
-    s.cache.pop(sh, key)
+    let r = s.cache.pop(sh, key)
+    s.usedCount.store(s.cache.len, moRelaxed)
+    r
 
 proc update*[K, V; SHARD_BITS](
     lru: var ConcurrentLruCache[K, V, SHARD_BITS], key: K, val: V
@@ -746,3 +757,4 @@ proc refresh*[K, V; SHARD_BITS](
 proc del*[K, V; SHARD_BITS](lru: var ConcurrentLruCache[K, V, SHARD_BITS], key: K) =
   withShardWrite(lru, key):
     s.cache.del(sh, key)
+    s.usedCount.store(s.cache.len, moRelaxed)
