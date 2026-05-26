@@ -176,7 +176,10 @@ proc processTransaction*(
     else:
       ok(move(callResult))
 
-  vmState.ledger.persist(clearEmptyAccount = vmState.hardFork >= Spurious)
+  if vmState.balTrackerEnabled:
+    vmState.balLedger.writeToTxFrameAndBAL(vmState.ledger)
+  else:
+    vmState.ledger.persist(clearEmptyAccount = vmState.hardFork >= Spurious)
 
   res
 

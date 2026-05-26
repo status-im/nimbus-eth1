@@ -34,6 +34,7 @@ proc init(
       com:          CommonRef;
       tracer:       TracerRef,
       tracker:      BlockAccessListTrackerRef,
+      bal:          BalLedgerRef,
       flags:        set[VMFlag] = self.flags) =
   ## Initialisation helper
   # Take care to (re)set all fields since the VMState might be recycled
@@ -56,6 +57,7 @@ proc init(
   self.allLogs.setLen(0)
   self.gasRefunded = 0
   self.balTracker = tracker
+  self.balLedger = bal
 
 func blockCtx(header: Header): BlockContext =
   BlockContext(
@@ -96,12 +98,12 @@ proc new*(
   ## `BaseVMState` environment where the account state cache is synchronised
   ## with the `parent` block header.
   let
-    ledger = LedgerRef.init(txFrame, storeSlotHash, com.statelessProviderEnabled)
-    tracker =
+    ledger = LedgerRef.init(txFrame, storeSlotHash, com.statelessProviderEnabled, enableBalTracker)
+    (tracker, bal) =
       if enableBalTracker:
-        BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger)
+        (BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger), BalLedgerRef.init())
       else:
-        nil
+        (nil, nil)
 
   new result
   result.init(
@@ -110,7 +112,8 @@ proc new*(
     blockCtx = blockCtx,
     com      = com,
     tracer   = tracer,
-    tracker  = tracker
+    tracker  = tracker,
+    bal      = bal
   )
 
 proc reinit*(self:     BaseVMState;     ## Object descriptor
@@ -129,16 +132,18 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
 
   if not self.balTracker.isNil():
     self.balTracker = BlockAccessListTrackerRef.init(self.ledger.ReadOnlyLedger)
+    self.balLedger = BalLedgerRef.init()
 
   if not self.ledger.isTopLevelClean:
     return false
 
   let
-    tracer = self.tracer
+    tracer  = self.tracer
     tracker = self.balTracker
-    com    = self.com
-    ledger     = self.ledger
-    flags  = self.flags
+    bal     = self.balLedger
+    com     = self.com
+    ledger  = self.ledger
+    flags   = self.flags
   self.init(
     ledger       = ledger,
     parent   = parent,
@@ -146,6 +151,7 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
     com      = com,
     tracer   = tracer,
     tracker  = tracker,
+    bal      = bal,
     flags    = flags)
   true
 
@@ -181,12 +187,12 @@ proc init*(
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
   let
-    ledger = LedgerRef.init(txFrame, storeSlotHash, com.statelessProviderEnabled)
-    tracker =
+    ledger = LedgerRef.init(txFrame, storeSlotHash, com.statelessProviderEnabled, enableBalTracker)
+    (tracker, bal) =
       if enableBalTracker:
-        BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger)
+        (BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger), BalLedgerRef.init())
       else:
-        nil
+        (nil, nil)
 
   self.init(
     ledger       = ledger,
@@ -194,7 +200,8 @@ proc init*(
     blockCtx = blockCtx(header),
     com      = com,
     tracer   = tracer,
-    tracker  = tracker)
+    tracker  = tracker,
+    bal      = bal)
 
 proc new*(
       T: type BaseVMState;

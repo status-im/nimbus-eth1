@@ -92,6 +92,7 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string] =
   if vmState.balTrackerEnabled:
     vmState.balTracker.setBlockAccessIndex(0)
     vmState.balTracker.beginCallFrame()
+    vmState.balLedger.setBlockAccessIndex(0)
 
   # EIP-4788
   if xp.nextFork >= FkCancun:
@@ -135,6 +136,7 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
 
   if vmState.balTrackerEnabled:
     vmState.balTracker.setBlockAccessIndex(pst.packedTxs.len() + 1)
+    vmState.balLedger.setBlockAccessIndex(pst.packedTxs.len() + 1)
 
   # Find out what to do next: accepting this tx or trying the next account
   let rc = processTransaction(vmState, item.tx, item.sender, rollbackReads = true)
@@ -167,6 +169,7 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
   if vmState.balTrackerEnabled:
     vmState.balTracker.setBlockAccessIndex(pst.packedTxs.len() + 1)
     vmState.balTracker.beginCallFrame()
+    vmState.balLedger.setBlockAccessIndex(pst.packedTxs.len() + 1)
 
   # EIP-4895
   if vmState.fork >= FkShanghai:
@@ -185,7 +188,10 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
     pst.depositReqs = ?parseDepositLogs(vmState.allLogs, vmState.com.depositContractAddress)
 
   # Finish up, then vmState.ledger.stateRoot may be accessed
-  ledger.persist(clearEmptyAccount = vmState.fork >= FkSpurious)
+  if vmState.balTrackerEnabled:
+    vmState.balLedger.writeToTxFrameAndBAL(ledger, trackTouchedAddress = true)
+  else:
+    ledger.persist(clearEmptyAccount = vmState.fork >= FkSpurious)
 
   # Update flexi-array, set proper length
   vmState.receipts.setLen(pst.packedTxs.len)

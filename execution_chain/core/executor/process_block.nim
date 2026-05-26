@@ -190,6 +190,7 @@ proc processTransactions*(
 
     if vmState.balTrackerEnabled:
       vmState.balTracker.setBlockAccessIndex(txIndex + 1)
+      vmState.balLedger.setBlockAccessIndex(txIndex + 1)
 
     let rc = vmState.processTransaction(tx, sender)
     if rc.isErr:
@@ -217,6 +218,7 @@ proc procBlkPreamble(
   if vmState.balTrackerEnabled:
     vmState.balTracker.setBlockAccessIndex(0)
     vmState.balTracker.beginCallFrame()
+    vmState.balLedger.setBlockAccessIndex(0)
 
   let com = vmState.com
   if com.daoForkSupport and com.daoForkBlock.get == header.number:
@@ -275,6 +277,7 @@ proc procBlkPreamble(
   if vmState.balTrackerEnabled:
     vmState.balTracker.setBlockAccessIndex(blk.transactions.len() + 1)
     vmState.balTracker.beginCallFrame()
+    vmState.balLedger.setBlockAccessIndex(blk.transactions.len() + 1)
 
   if com.isShanghaiOrLater(header.timestamp):
     if header.withdrawalsRoot.isNone:
@@ -334,15 +337,6 @@ proc procBlkEpilogue(
   template header(): Header =
     blk.header
 
-  # Reward beneficiary
-  vmState.mutateLedger:
-    # Clearing the account cache here helps manage its size when replaying
-    # large ranges of blocks, implicitly limiting its size using the gas limit
-    ledger.persist(
-      clearEmptyAccount = vmState.com.isSpuriousOrLater(header.number, header.timestamp),
-      clearCache = true
-    )
-
   var
     withdrawalReqs: seq[byte]
     consolidationReqs: seq[byte]
@@ -352,6 +346,21 @@ proc procBlkEpilogue(
     # because they will alter the state
     withdrawalReqs = ?processDequeueWithdrawalRequests(vmState)
     consolidationReqs = ?processDequeueConsolidationRequests(vmState)
+
+  vmState.mutateLedger:
+    # Clearing the account cache here helps manage its size when replaying
+    # large ranges of blocks, implicitly limiting its size using the gas limit
+    if vmState.balTrackerEnabled:
+      vmState.balLedger.writeToTxFrameAndBAL(
+        ledger,
+        trackTouchedAddress = true,
+        clearCache = true
+      )
+    else:
+      ledger.persist(
+        clearEmptyAccount = vmState.com.isSpuriousOrLater(header.number, header.timestamp),
+        clearCache = true
+      )
 
   if not skipValidation:
     if not skipPostExecBalCheck and vmState.com.isAmsterdamOrLater(header.timestamp):
@@ -373,6 +382,13 @@ proc procBlkEpilogue(
           blockAccessList = $(bal[])
         return err("blockAccessListHash mismatch, expect: " &
           $header.blockAccessListHash.get & ", got: " & $balHash)
+
+      let
+        balx = vmState.balLedger.getBlockAccessList().get()
+        balHashx = balx[].computeBlockAccessListHash()
+      if header.blockAccessListHash.get != balHashx:
+        return err("blockAccessListHash X mismatch, expect: " &
+          $header.blockAccessListHash.get & ", got: " & $balHashx)
 
     if not skipStateRootCheck:
       let stateRoot = vmState.ledger.getStateRoot()

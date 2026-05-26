@@ -709,12 +709,7 @@ proc clearBlockHashesCache*(ledger: LedgerRef) =
   if ledger.blockHashes.len() > 0:
     ledger.blockHashes = BlockHashesCache.init(MAX_PREV_HEADER_DEPTH.int)
 
-proc persist*(ledger: LedgerRef,
-              clearEmptyAccount: bool = false,
-              clearCache = false,
-              clearWitness = false) =
-  const info = "persist(): "
-
+template persistPreambleImpl(ledger: LedgerRef, clearEmptyAccount: bool) =
   # make sure all savePoint already committed
   doAssert(ledger.savePoint.parentSavePoint.isNil)
   if clearEmptyAccount:
@@ -722,6 +717,9 @@ proc persist*(ledger: LedgerRef,
 
   for address in ledger.savePoint.selfDestruct:
     ledger.deleteAccount(address)
+
+template persistEpilogueImpl(ledger: LedgerRef, clearCache: bool, clearWitness: bool) =
+  const info = "persist(): "
 
   for (address, acc) in ledger.savePoint.dirty.pairs(): # This is a hotspot in block processing
     case acc.persistMode()
@@ -758,7 +756,6 @@ proc persist*(ledger: LedgerRef,
         ledger.savePoint.cache.del address
 
     acc.flags = acc.flags - resetFlags
-  ledger.savePoint.dirty.clear()
 
   if clearCache:
     # This overwrites the cache from the previous persist, providing a crude LRU
@@ -767,10 +764,9 @@ proc persist*(ledger: LedgerRef,
     swap(ledger.cache, ledger.savePoint.cache)
     ledger.savePoint.cache.reset()
 
+  ledger.savePoint.dirty.clear()
   ledger.savePoint.selfDestruct.clear()
-
-  # EIP2929
-  ledger.savePoint.accessList.clear()
+  ledger.savePoint.accessList.clear() # EIP2929
 
   ledger.isDirty = false
 
@@ -778,6 +774,13 @@ proc persist*(ledger: LedgerRef,
     ledger.clearWitnessKeys()
     ledger.clearCollapsedSiblings()
     ledger.clearBlockHashesCache()
+
+proc persist*(ledger: LedgerRef,
+              clearEmptyAccount: bool = false,
+              clearCache = false,
+              clearWitness = false) =
+  persistPreambleImpl(ledger, clearEmptyAccount)
+  persistEpilogueImpl(ledger, clearCache, clearWitness)
 
 iterator addresses*(ledger: LedgerRef): Address =
   # make sure all savePoint already committed
