@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -37,6 +37,20 @@ func ecdbDir(baseDir: string): string =
 
 func ecdbDir(rdb: RocksDbInstanceRef): string =
   rdb.baseDir.ecdbDir
+
+proc wipeDir(baseDir: string) =
+  try:
+    baseDir.ecdbDir.removeDir
+
+    # Remove the base folder if it is empty
+    block done:
+      for w in baseDir.walkDirRec:
+        # Ignore backup files
+        if 0 < w.len and w[^1] != '~':
+          break done
+      baseDir.removeDir
+  except CatchableError as exc:
+    warn "Could not wipe database directory", baseDir, err = exc.msg
 
 proc isClosed*(session: SharedWriteBatchRef): bool =
   session == nil or session.batch.isClosed()
@@ -87,6 +101,7 @@ proc open*(
     baseDir: string,
     dbOpts: DbOptionsRef,
     cfs: openArray[(string, ColFamilyOptionsRef)],
+    wipe: bool,
 ): Result[RocksDbInstanceRef, string] =
   let ecdbDir = baseDir.ecdbDir
 
@@ -97,6 +112,9 @@ proc open*(
         moveDir(legacyDir, ecdbDir)
       except CatchableError as exc:
         return err ("Found legacy database directory but cannot move it: " & exc.msg)
+
+  if wipe:
+    baseDir.wipeDir()
 
   try:
     ecdbDir.createDir
@@ -122,21 +140,10 @@ proc open*(
     db: ?openRocksDb(ecdbDir, dbOpts, columnFamilies = descs), baseDir: baseDir
   )
 
-proc close*(rdb: RocksDbInstanceRef, eradicate = false) =
+proc close*(rdb: RocksDbInstanceRef, wipe = false) =
   if rdb.db != nil:
     rdb.db.close()
     rdb.db = nil
 
-  if eradicate:
-    try:
-      rdb.ecdbDir.removeDir
-
-      # Remove the base folder if it is empty
-      block done:
-        for w in rdb.baseDir.walkDirRec:
-          # Ignore backup files
-          if 0 < w.len and w[^1] != '~':
-            break done
-        rdb.baseDir.removeDir
-    except CatchableError:
-      discard
+  if wipe:
+    rdb.baseDir.wipeDir()

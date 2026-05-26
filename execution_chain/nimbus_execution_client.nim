@@ -21,6 +21,7 @@ import
   ./[conf, constants, nimbus_desc, nimbus_import, rpc, version_info],
   ./core/block_import,
   ./core/chain/forked_chain/chain_serialize,
+  ./db/aristo/aristo_compute,
   ./db/core_db/persistent,
   ./db/storage_types,
   ./sync/wire_protocol,
@@ -61,7 +62,6 @@ proc basicServices(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonR
     eagerStateRoot = config.eagerStateRootCheck,
     persistBatchSize = config.persistBatchSize,
     dynamicBatchSize = config.dynamicBatchSize,
-    maxBlobs = config.maxBlobs,
     enableQueue = true)
   if config.deserializeFcState:
     fc.deserialize().isOkOr:
@@ -194,7 +194,10 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
       syncerShouldRun = true
 
     # Configure snap syncer.
-    nimbus.snapSyncRef.config(nimbus.ethNode, config.maxPeers)
+    nimbus.snapSyncRef.config(nimbus.ethNode, config.dataDir, config.maxPeers)
+
+    if config.snapSyncResume:
+      nimbus.snapSyncRef.configResume()
   else:
     # Disable any external setup unless explicitely activated
     nimbus.snapSyncRef = SnapSyncRef(nil)
@@ -229,6 +232,17 @@ proc init*(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
     nimbus.snapSyncRef = SnapSyncRef(nil)
 
+  if config.backgroundPruning:
+    nimbus.backgroundPruner = BackgroundPrunerRef.init(com)
+    nimbus.backgroundPruner.start()
+  else:
+    let state = com.db.kvt.loadPrunerStateBe()
+    if state.active:
+      fatal "Node was previously started with background pruning enabled (--prune). " &
+        "Historical block data may have been deleted, and might cause inconsistent DB " &
+        "Restart with --prune=true or use a fresh data directory."
+      quit(QuitFailure)
+
 proc init*(T: type NimbusNode, config: ExecutionClientConf, com: CommonRef): T =
   let nimbus = T()
   nimbus.init(config, com)
@@ -261,10 +275,10 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionCli
     quit(QuitFailure)
 
 
-proc setupCommonRef*(config: ExecutionClientConf): CommonRef =
-  let coreDB = AristoDbRocks.newCoreDbRef(
-      config.dataDir,
-      config.dbOptions(noKeyCache = config.cmd == NimbusCmd.`import`))
+proc setupCommonRef*(config: ExecutionClientConf): (CommonRef, bool) =
+  let
+    dbOpts = config.dbOptions(noKeyCache = config.cmd == NimbusCmd.`import`)
+    coreDB = AristoDbRocks.newCoreDbRef(config.dataDir, dbOpts)
 
   preventLoadingDataDirForTheWrongNetwork(coreDB, config)
 
@@ -289,8 +303,9 @@ proc setupCommonRef*(config: ExecutionClientConf): CommonRef =
 
   com.extraData = config.extraData
   com.gasLimit = config.gasLimit
+  com.maxBlobs = config.maxBlobs
 
-  com
+  (com, dbOpts.rdbKeyCacheSize > 0)
 
 # ------------------------------------------------------------------------------
 # Public functions, `main()` API
@@ -367,9 +382,14 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   # so it needs to be initalized from the main thread before anything else tries
   # to use it
   if config.trustedSetupFile.isSome:
-    kzg.loadTrustedSetup(config.trustedSetupFile.get(), 0).isOkOr:
+    kzg.loadTrustedSetup(config.trustedSetupFile.get(), 8).isOkOr:
       fatal "Cannot load KZG trusted setup from file", msg = error
       quit(QuitFailure)
+  else:
+    # Load eagerly to avoid race conditions - lazy kzg loading is not thread safe
+    loadTrustedSetupFromString(kzg.trustedSetup, 8).expect(
+      "Baked-in KZG setup is correct"
+    )
 
   # Metrics are useful not just when running node but also during import
   let metricsServer =
@@ -385,13 +405,20 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   when compileOption("threads"):
     let
       taskpool = setupTaskpool(config.numThreads)
-      com = setupCommonRef(config)
+      (com, keyCacheEnabled) = setupCommonRef(config)
     com.taskpool = taskpool
+    com.db.mpt.taskpool = taskpool
   else:
-    let com = setupCommonRef(config)
+    let (com, keyCacheEnabled) = setupCommonRef(config)
+
+  if keyCacheEnabled:
+    # Make sure key cache isn't empty
+    discard com.db.mpt.txRef.computeStateRoot(skipLayers = true).valueOr:
+      fatal "Cannot compute root keys", msg = error
+      quit(QuitFailure)
 
   defer:
-    com.db.finish()
+    com.db.close()
 
   case config.cmd
   of NimbusCmd.`import`:

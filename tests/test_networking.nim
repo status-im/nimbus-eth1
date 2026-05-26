@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -14,4 +14,5 @@ import
   ./networking/test_ecies,
   ./networking/test_bootnodes,
   ./networking/test_rlpx_thunk,
-  ./networking/test_rlpxtransport
+  ./networking/test_rlpxtransport,
+  ./networking/test_devp2p_eth71

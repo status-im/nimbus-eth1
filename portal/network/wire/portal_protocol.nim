@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2025 Status Research & Development GmbH
+# Copyright (c) 2021-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -935,14 +935,13 @@ proc findContent*(
       # This should not happen as it comes a after succesfull talkreq/talkresp
       return err("Trying to connect to node with unknown address: " & $dst.id)
 
-    let socket =
-      ?(
-        await p.stream.connectTo(
-          # uTP protocol uses BE for all values in the header, incl. connection id
-          nodeAddress,
-          uint16.fromBytesBE(response.connectionId),
-        )
+    let socket = ?(
+      await p.stream.connectTo(
+        # uTP protocol uses BE for all values in the header, incl. connection id
+        nodeAddress,
+        uint16.fromBytesBE(response.connectionId),
       )
+    )
 
     try:
       # Read one content item from the socket, fails on invalid length prefix

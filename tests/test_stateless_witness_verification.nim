@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,6 +13,7 @@
 import
   stew/byteutils,
   unittest2,
+  ../execution_chain/db/core_db/memory_only,
   ../execution_chain/common/common,
   ../execution_chain/stateless/[witness_generation, witness_verification]
 
@@ -62,7 +63,7 @@ suite "Stateless: Witness Verification":
     let witnessKeys = ledger.getWitnessKeys()
     check witnessKeys.len() == 8
 
-    var witness = Witness.build(witnessKeys, ledger)
+    var witness = Witness.build(witnessKeys, @[], ledger)
     witness.addHeaderHash(header1.computeRlpHash())
     witness.addHeaderHash(header2.computeRlpHash())
     witness.addHeaderHash(header3.computeRlpHash())

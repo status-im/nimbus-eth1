@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -22,6 +22,7 @@ import
   ../execution_chain/core/chain/forked_chain/chain_serialize,
   ../execution_chain/core/chain/forked_chain/chain_branch,
   ../execution_chain/db/ledger,
+  ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/era1_db,
   ../execution_chain/db/fcu_db,
   ./test_forked_chain/chain_debug
@@ -790,7 +791,7 @@ procSuite "ForkedChain mainnet replay":
     let
       era0 = Era1DbRef.init(sourcePath / "replay", "mainnet", 15537394'u64).expect("Era files present")
       com = CommonRef.new(AristoDbMemory.newCoreDbRef())
-      fc = ForkedChainRef.init(com, enableQueue = true)
+      fc {.used.}= ForkedChainRef.init(com, enableQueue = true)
 
   asyncTest "Replay mainnet era, single FCU":
     var blk: EthBlock

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2025 Status Research & Development GmbH
+# Copyright (c) 2021-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -101,7 +101,8 @@ proc size*(db: ContentDB): int64 =
   var size: int64 = 0
   discard (
     db.sizeStmt.exec do(res: int64):
-      size = res).expectDb()
+      size = res
+  ).expectDb()
   return size
 
 proc unusedSize(db: ContentDB): int64 =
@@ -110,7 +111,8 @@ proc unusedSize(db: ContentDB): int64 =
   var size: int64 = 0
   discard (
     db.unusedSizeStmt.exec do(res: int64):
-      size = res).expectDb()
+      size = res
+  ).expectDb()
   return size
 
 proc usedSize*(db: ContentDB): int64 =
@@ -123,14 +125,16 @@ proc contentSize*(db: ContentDB): int64 =
   var size: int64 = 0
   discard (
     db.contentSizeStmt.exec do(res: int64):
-      size = res).expectDb()
+      size = res
+  ).expectDb()
   return size
 
 proc contentCount*(db: ContentDB): int64 =
   var count: int64 = 0
   discard (
     db.contentCountStmt.exec do(res: int64):
-      count = res).expectDb()
+      count = res
+  ).expectDb()
   return count
 
 ## Radius estimation and initialization related calls
@@ -213,8 +217,8 @@ proc new*(
         )
       else:
         SqStoreRef
-        .init(fullPath, "contentdb_" & subnetworkName, manualCheckpoint = false)
-        .expectDb()
+          .init(fullPath, "contentdb_" & subnetworkName, manualCheckpoint = false)
+          .expectDb()
 
   db.createCustomFunction("xorDistance", 2, xorDistance).expect(
     "Custom function xorDistance creation OK"

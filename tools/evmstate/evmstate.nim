@@ -17,6 +17,7 @@ import
   results,
   stint,
   ../../execution_chain/[evm/types, evm/state],
+  ../../execution_chain/db/core_db/memory_only,
   ../../execution_chain/db/ledger,
   ../../execution_chain/transaction,
   ../../execution_chain/core/executor,
@@ -144,8 +145,7 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
       writeRootHashToStderr(stateRoot)
 
   try:
-    let res = vmState.processTransaction(
-                   ctx.tx, sender, ctx.header)
+    let res = vmState.processTransaction(ctx.tx, sender)
     if res.isOk:
       callResult = res.value
     coinbaseStateClearing(vmState, ctx.header.coinbase)

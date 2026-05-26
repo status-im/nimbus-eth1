@@ -9,4 +9,4 @@
 # distributed except according to those terms.
 
 import
-  ./test_snap/[test_snap_validator]
+  ./test_snap/[test_snap_validator, test_snap_edge_cases]

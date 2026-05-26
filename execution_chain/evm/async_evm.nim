@@ -17,6 +17,7 @@ import
   minilru,
   eth/common/[base, addresses, accounts, headers, transactions],
   ../db/[ledger, access_list],
+  ../db/core_db/memory_only,
   ../common/common,
   ../transaction/call_evm_rpc,
   ../evm/[types, state, evm_errors],
@@ -168,7 +169,10 @@ proc callFetchingState(
     vmState.ledger.rollback(savePoint) # all state changes from the call are reverted
 
     # Collect the keys after executing the transaction
-    lastWitnessKeys = ensureMove(witnessKeys)
+    when defined(gcArc):
+      lastWitnessKeys = witnessKeys
+    else:
+      lastWitnessKeys = ensureMove(witnessKeys)
     witnessKeys = vmState.ledger.getWitnessKeys()
 
     try:
@@ -292,7 +296,7 @@ proc setupVmState(evm: AsyncEvm, txFrame: CoreDbTxRef, header: Header): BaseVMSt
   let blockContext = BlockContext(
     timestamp: header.timestamp,
     gasLimit: header.gasLimit,
-    baseFeePerGas: header.baseFeePerGas,
+    baseFeePerGas: header.baseFeePerGas.get(0.u256).truncate(GasInt),
     prevRandao: header.prevRandao,
     difficulty: header.difficulty,
     coinbase: header.coinbase,
@@ -313,7 +317,10 @@ func validateSetDefaults(tx: TransactionArgs): Result[TransactionArgs, string] =
   if tx.gas.isNone():
     tx.gas = Opt.some(EVM_CALL_GAS_CAP.Quantity)
 
-  ok(ensureMove(tx))
+  when defined(gcArc):
+    ok(tx)
+  else:
+    ok(ensureMove(tx))
 
 proc call*(
     evm: AsyncEvm, header: Header, tx: TransactionArgs, optimisticStateFetch = true
@@ -364,7 +371,11 @@ proc createAccessList*(
     else:
       al.add(adr)
 
-  var txWithAl = ensureMove(tx)
+  var txWithAl =
+    when defined(gcArc):
+      tx
+    else:
+      ensureMove(tx)
   txWithAl.accessList = Opt.some(al.getAccessList())
     # converts to transactions.AccessList
 

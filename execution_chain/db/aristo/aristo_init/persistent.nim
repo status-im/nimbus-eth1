@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -43,9 +43,11 @@ proc init*(
     baseDb: RocksDbInstanceRef;
       ): Result[T, AristoError] =
   let db = rocksDbBackend(opts, baseDb)
-  db.initInstance(opts.maxSnapshots).isOkOr:
-    db.closeFn(eradicate = false)
+
+  db.initInstance(opts.maxSnapshots, opts.parallelStateRootComputation).isOkOr:
+    db.closeFn(wipe = false)
     return err(error)
+  
   ok db
 
 # ------------------------------------------------------------------------------

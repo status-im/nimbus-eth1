@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -11,9 +11,11 @@ import
   std/os,
   stew/io2,
   results,
-  eth/common/blocks,
+  eth/common/[blocks, receipts],
   ../eth_history/block_proofs/historical_hashes_accumulator,
   ../eth_history/era1
+
+export era1
 
 type Era1DB* = ref object
   ## The Era1 database manages a collection of era files that together make up
@@ -66,6 +68,32 @@ proc new*(
     accumulator: accumulator,
     mergeBlockNumber: mergeBlockNumber,
   )
+
+proc getBlockHeader*(
+    db: Era1DB, blockNumber: uint64, res: var Header
+): Result[void, string] =
+  let f = ?db.getEra1File(blockNumber.era)
+
+  f.getBlockHeader(blockNumber, res)
+
+proc getBlockBody*(
+    db: Era1DB, blockNumber: uint64, res: var BlockBody
+): Result[void, string] =
+  let f = ?db.getEra1File(blockNumber.era)
+
+  f.getBlockBody(blockNumber, res)
+
+proc getReceipts*(
+    db: Era1DB, blockNumber: uint64, res: var seq[Receipt]
+): Result[void, string] =
+  let f = ?db.getEra1File(blockNumber.era)
+
+  f.getReceipts(blockNumber, res)
+
+proc getTotalDifficulty*(db: Era1DB, blockNumber: uint64): Result[UInt256, string] =
+  let f = ?db.getEra1File(blockNumber.era)
+
+  f.getTotalDifficulty(blockNumber)
 
 proc getEthBlock*(
     db: Era1DB, blockNumber: uint64, res: var Block

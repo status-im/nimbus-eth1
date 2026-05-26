@@ -23,7 +23,7 @@ suite "test fees verification":
   test "check api methods":
     let
       ts = TestApiState.init(1.u256)
-      engine = initTestEngine(ts, 1, 1).valueOr:
+      (engine, frontend) = initTestEngine(ts, 1, 1).valueOr:
         raise newException(TestProxyError, error.errMsg)
       blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Paris.json")
 
@@ -31,8 +31,8 @@ suite "test fees verification":
     check engine.headerStore.add(convHeader(blk), blk.hash).isOk()
 
     let
-      gasPrice = waitFor engine.frontend.eth_gasPrice()
-      priorityFee = waitFor engine.frontend.eth_maxPriorityFeePerGas()
+      gasPrice = waitFor frontend.eth_gasPrice()
+      priorityFee = waitFor frontend.eth_maxPriorityFeePerGas()
 
     # we are only checking the API interface atm
     check:
@@ -41,7 +41,7 @@ suite "test fees verification":
       gasPrice.get() > Quantity(0)
       priorityFee.get() > Quantity(0)
 
-    let blobFee = waitFor engine.frontend.eth_blobBaseFee()
+    let blobFee = waitFor frontend.eth_blobBaseFee()
 
     # blobs weren't enabled on paris
     check blobFee.isErr()
@@ -54,7 +54,7 @@ suite "test fees verification":
     ts.loadBlock(blk2)
     check engine.headerStore.add(convHeader(blk2), blk2.hash).isOk()
 
-    let blobFeePrague = waitFor engine.frontend.eth_blobBaseFee()
+    let blobFeePrague = waitFor frontend.eth_blobBaseFee()
 
     check:
       blobFeePrague.isOk()
@@ -68,7 +68,7 @@ suite "test fees verification":
   test "eth_feeHistory accepts integer percentiles":
     let
       ts = TestApiState.init(1.u256)
-      engine = initTestEngine(ts, 1, 1).valueOr:
+      (engine, frontend) = initTestEngine(ts, 1, 1).valueOr:
         raise newException(TestProxyError, error.errMsg)
       blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Paris.json")
       blockCount = Quantity(4) # arbitrary number
@@ -86,8 +86,7 @@ suite "test fees verification":
     ts.loadBlock(blk)
     ts.loadFeeHistory(blockCount, newestBlock, expectedFeeHistory)
 
-    let history =
-      waitFor engine.frontend.eth_feeHistory(blockCount, newestBlock, percentiles)
+    let history = waitFor frontend.eth_feeHistory(blockCount, newestBlock, percentiles)
 
     check:
       history.isOk()
@@ -99,7 +98,7 @@ suite "test fees verification":
   test "eth_feeHistory with empty percentiles":
     let
       ts = TestApiState.init(1.u256)
-      engine = initTestEngine(ts, 1, 1).valueOr:
+      (engine, frontend) = initTestEngine(ts, 1, 1).valueOr:
         raise newException(TestProxyError, error.errMsg)
       blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Paris.json")
       blockCount = Quantity(1) # arbitrary number
@@ -114,7 +113,7 @@ suite "test fees verification":
     ts.loadBlock(blk)
     ts.loadFeeHistory(blockCount, newestBlock, expectedFeeHistory)
 
-    let history = waitFor engine.frontend.eth_feeHistory(blockCount, newestBlock, @[])
+    let history = waitFor frontend.eth_feeHistory(blockCount, newestBlock, @[])
 
     check:
       history.isOk()

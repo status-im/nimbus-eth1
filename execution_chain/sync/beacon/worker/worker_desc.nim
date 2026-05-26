@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -176,7 +176,6 @@ type
     standByMode*: bool               ## Do not activate if `true`
     subState*: SyncSubState          ## Additional state variables
     nextMetricsUpdate*: Moment       ## For updating metrics
-    nextAsyncNanoSleep*: Moment      ## Use nano-sleeps for task switch
 
     chain*: ForkedChainRef           ## Core database, FCU support
     hdrCache*: HeaderChainRef        ## Currently in tandem with `chain`

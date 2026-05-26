@@ -17,7 +17,7 @@ import
   std/[sequtils],
   chronicles,
   eth/[common, rlp],
-  stew/byteutils,
+  stew/[byteutils, endians2],
   results,
   "../.."/[constants],
   "../.."/stateless/witness_types,
@@ -31,33 +31,6 @@ type
   TransactionKey* = object
     blockNumber*: BlockNumber
     index*: uint
-
-# ------------------------------------------------------------------------------
-# Forward declarations
-# ------------------------------------------------------------------------------
-
-proc getBlockHeader*(
-    db: CoreDbTxRef;
-    n: BlockNumber;
-      ): Result[Header, string]
-
-proc getBlockHeader*(
-    db: CoreDbTxRef,
-    blockHash: Hash32;
-      ): Result[Header, string]
-
-proc getBlockHash*(
-    db: CoreDbTxRef;
-    n: BlockNumber;
-      ): Result[Hash32, string]
-
-proc addBlockNumberToHashLookup*(
-    db: CoreDbTxRef;
-    blockNumber: BlockNumber;
-    blockHash: Hash32;
-      )
-
-proc getCanonicalHeaderHash*(db: CoreDbTxRef): Result[Hash32, string]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -100,15 +73,6 @@ iterator getBlockTransactions*(
     except RlpError as e:
       warn "getBlockTransactions(): Cannot decode tx",
         data = toHex(encodedTx), err=e.msg, errName=e.name
-
-iterator getBlockTransactionHashes*(
-    db: CoreDbTxRef;
-    blockHeader: Header;
-      ): Hash32 =
-  ## Returns an iterable of the transaction hashes from th block specified
-  ## by the given block header.
-  for encodedTx in db.getBlockTransactionData(blockHeader.txRoot):
-    yield keccak256(encodedTx)
 
 iterator getWithdrawals*(
     db: CoreDbTxRef;
@@ -158,6 +122,26 @@ proc getSavedStateBlockNumber*(
   ##
   db.stateBlockNumber()
 
+proc getHash(
+    db: CoreDbTxRef;
+    key: DbKey;
+      ): Result[Hash32, string] =
+  const info = "getHash()"
+  let data = db.get(key.toOpenArray).valueOr:
+    if error.error != KvtNotFound:
+      warn info, key, error=($$error)
+    return err($$error)
+
+  wrapRlpException info:
+    return ok(rlp.decode(data, Hash32))
+
+proc getBlockHash*(
+    db: CoreDbTxRef;
+    n: BlockNumber;
+      ): Result[Hash32, string] =
+  ## Return the block hash for the given block number.
+  db.getHash(blockNumberToHashKey(n))
+
 proc getBlockHeader*(
     db: CoreDbTxRef;
     blockHash: Hash32;
@@ -179,19 +163,6 @@ proc getBlockHeader*(
   let blockHash = ?db.getBlockHash(n)
   db.getBlockHeader(blockHash)
 
-proc getHash(
-    db: CoreDbTxRef;
-    key: DbKey;
-      ): Result[Hash32, string] =
-  const info = "getHash()"
-  let data = db.get(key.toOpenArray).valueOr:
-    if error.error != KvtNotFound:
-      warn info, key, error=($$error)
-    return err($$error)
-
-  wrapRlpException info:
-    return ok(rlp.decode(data, Hash32))
-
 proc getCanonicalHeaderHash*(db: CoreDbTxRef): Result[Hash32, string] =
   db.getHash(canonicalHeadHashKey())
 
@@ -200,13 +171,6 @@ proc getCanonicalHead*(
       ): Result[Header, string] =
   let headHash = ?db.getCanonicalHeaderHash()
   db.getBlockHeader(headHash)
-
-proc getBlockHash*(
-    db: CoreDbTxRef;
-    n: BlockNumber;
-      ): Result[Hash32, string] =
-  ## Return the block hash for the given block number.
-  db.getHash(blockNumberToHashKey(n))
 
 proc getScore*(
     db: CoreDbTxRef;
@@ -294,43 +258,6 @@ proc getTransactionByIndex*(
 
   wrapRlpException info:
     return ok(rlp.decode(txData, Transaction))
-
-proc getTransactionCount*(
-    db: CoreDbTxRef;
-    txRoot: Hash32;
-      ): int =
-  const
-    info = "getTransactionCount()"
-
-  var txCount = 0'u16
-  while true:
-    let key = hashIndexKey(txRoot, txCount)
-    let yes = db.hasKeyRc(key).valueOr:
-      warn info, txRoot, key, error=($$error)
-      return 0
-    if yes:
-      inc txCount
-    else:
-      return txCount.int
-
-  doAssert(false, "unreachable")
-
-proc getUnclesCount*(
-    db: CoreDbTxRef;
-    ommersHash: Hash32;
-      ): Result[int, string] =
-  const info = "getUnclesCount()"
-  if ommersHash == EMPTY_UNCLE_HASH:
-    return ok(0)
-
-  wrapRlpException info:
-    let encodedUncles = block:
-      let key = genericHashKey(ommersHash)
-      db.get(key.toOpenArray).valueOr:
-        if error.error != KvtNotFound:
-          warn info, ommersHash, error=($$error)
-        return ok(0)
-    return ok(rlpFromBytes(encodedUncles).listLen)
 
 proc getUncles*(
     db: CoreDbTxRef;
@@ -603,6 +530,23 @@ proc getReceipts*(
       receipts.add(r)
     return ok(receipts)
 
+proc getReceiptByIndex*(
+    db: CoreDbTxRef;
+    receiptsRoot: Hash32;
+    index: uint16;
+      ): Result[StoredReceipt, string] =
+  const
+    info = "getReceiptByIndex()"
+
+  let key = hashIndexKey(receiptsRoot, index)
+  let data = db.getOrEmpty(key).valueOr:
+    return err($$error)
+  if data.len == 0:
+    return err("receipt data is empty for root=" & $receiptsRoot & " and index=" & $index)
+
+  wrapRlpException info:
+    return ok(rlp.decode(data, StoredReceipt))
+
 proc persistScore(
     db: CoreDbTxRef;
     blockHash: Hash32;
@@ -690,12 +634,19 @@ proc persistUncles*(db: CoreDbTxRef, uncles: openArray[Header]): Hash32 =
     warn "persistUncles()", unclesHash=result, error=($$error)
     return EMPTY_ROOT_HASH
 
-proc persistWitness*(db: CoreDbTxRef, blockHash: Hash32, witness: Witness): Result[void, string] =
+proc persistWitness*(
+    db: CoreDbTxRef;
+    blockHash: Hash32;
+    witness: Witness;
+      ): Result[void, string] =
   db.put(blockHashToWitnessKey(blockHash).toOpenArray, witness.encode()).isOkOr:
     return err("persistWitness: " & $$error)
   ok()
 
-proc getWitness*(db: CoreDbTxRef, blockHash: Hash32): Result[Witness, string] =
+proc getWitness*(
+    db: CoreDbTxRef;
+    blockHash: Hash32;
+      ): Result[Witness, string] =
   let witnessBytes = db.get(blockHashToWitnessKey(blockHash).toOpenArray).valueOr:
     return err("getWitness: " & $$error)
 
@@ -712,6 +663,25 @@ proc getCodeByHash*(db: CoreDbTxRef, codeHash: Hash32): Result[seq[byte], string
     return err("getCodeByHash: " & $$error)
 
   ok(code)
+
+proc setChainTail*(
+    db: CoreDbTxRef;
+    blockNumber: BlockNumber;
+      ) =
+  const info = "setChainTail()"
+  let value = blockNumber.toBytesLE()
+  db.put(tailIdKey().toOpenArray, value).isOkOr:
+    warn info, blockNumber, error=($$error)
+
+proc getChainTail*(
+    db: CoreDbTxRef;
+      ): BlockNumber =
+  let
+    key = tailIdKey()
+    blkNum = db.get(key.toOpenArray).valueOr:
+      return BlockNumber(0)
+    
+  BlockNumber(uint64.fromBytesLE(blkNum))
 
 # ------------------------------------------------------------------------------
 # End

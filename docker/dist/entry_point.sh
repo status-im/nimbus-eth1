@@ -18,7 +18,7 @@ if [[ -z "${1}" ]]; then
 fi
 
 PLATFORM="${1}"
-BINARIES="nimbus nimbus_verified_proxy"
+BINARIES="nimbus nimbus_verified_proxy libverifproxy"
 ROCKSDB_DIR=/usr/rocksdb
 
 echo -e "\nPLATFORM=${PLATFORM}"
@@ -50,7 +50,7 @@ if [[ "${PLATFORM}" == "windows_amd64" ]]; then
     -j$(nproc) \
     USE_LIBBACKTRACE=0 \
     QUICK_AND_DIRTY_COMPILER=1 \
-    USE_SYSTEM_ROCKSDB=0 \
+    USE_CACHED_ROCKSDB=1 \
     deps-common
 
   make \
@@ -83,15 +83,16 @@ if [[ "${PLATFORM}" == "windows_amd64" ]]; then
   # so we enable it here.
 
   # -d:PREFER_HASHTREE_SHA256:false, does not works with llvm mingw compiler
+  # -j1 will disable parallel build and prevent OOM in github CI
   make \
-    -j$(nproc) \
+    -j1 \
     CC="${CC}" \
     CXX="${CXX}" \
     OS=Windows_NT \
     CXXFLAGS="${CXXFLAGS} -D__STDC_FORMAT_MACROS -D_WIN32_WINNT=0x0600" \
     USE_VENDORED_LIBUNWIND=1 \
     LOG_LEVEL="TRACE" \
-    USE_SYSTEM_ROCKSDB=0 \
+    USE_CACHED_ROCKSDB=1 \
     NIMFLAGS="${NIMFLAGS_COMMON} -d:PREFER_HASHTREE_SHA256:false --os:windows --gcc.exe=${CC} --gcc.linkerexe=${CXX} --passL:-static --passL:-lshlwapi --passL:-lrpcrt4 -d:BLSTuseSSSE3=1" \
     ${BINARIES}
 
@@ -109,17 +110,18 @@ elif [[ "${PLATFORM}" == "linux_arm64" ]]; then
     -j$(nproc) \
     USE_LIBBACKTRACE=0 \
     QUICK_AND_DIRTY_COMPILER=1 \
-    USE_SYSTEM_ROCKSDB=0 \
+    USE_CACHED_ROCKSDB=1 \
     deps-common
 
+  # -j1 will disable parallel build and prevent OOM in github CI
   make \
-    -j$(nproc) \
+    -j1 \
     LOG_LEVEL="TRACE" \
     CC="${CC}" \
     CXX="${CXX}" \
-    NIMFLAGS="${NIMFLAGS_COMMON} --cpu:arm64 --arm64.linux.gcc.exe=${CC} --arm64.linux.gcc.linkerexe=${CXX} --passL:'-static-libstdc++'" \
+    NIMFLAGS="${NIMFLAGS_COMMON} --cpu:arm64 --passC:-fPIC --arm64.linux.gcc.exe=${CC} --arm64.linux.gcc.linkerexe=${CXX} --passL:'-static-libstdc++'" \
     PARTIAL_STATIC_LINKING=1 \
-    USE_SYSTEM_ROCKSDB=0 \
+    USE_CACHED_ROCKSDB=1 \
     ${BINARIES}
 
 elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
@@ -143,7 +145,7 @@ elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
     -j$(nproc) \
     USE_LIBBACKTRACE=0 \
     QUICK_AND_DIRTY_COMPILER=1 \
-    USE_SYSTEM_ROCKSDB=0 \
+    USE_CACHED_ROCKSDB=1 \
     deps-common
 
   make \
@@ -152,11 +154,12 @@ elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
     LIBTOOL="aarch64-apple-darwin${DARWIN_VER}-libtool" \
     OS="darwin" \
     NIMFLAGS="${NIMFLAGS_COMMON} --os:macosx --cpu:arm64 --passC:'-mcpu=apple-a14' --clang.exe=${CC}" \
-    USE_SYSTEM_ROCKSDB=0 \
+    USE_CACHED_ROCKSDB=1 \
     nat-libs
 
+  # -j1 will disable parallel build and prevent OOM in github CI
   make \
-    -j$(nproc) \
+    -j1 \
     LOG_LEVEL="TRACE" \
     CC="${CC}" \
     AR="${AR}" \
@@ -166,9 +169,42 @@ elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
     DSYMUTIL="${DSYMUTIL}" \
     FORCE_DSYMUTIL=1 \
     USE_VENDORED_LIBUNWIND=1 \
-    USE_SYSTEM_ROCKSDB=0 \
+    USE_CACHED_ROCKSDB=1 \
     NIMFLAGS="${NIMFLAGS_COMMON} --os:macosx --cpu:arm64 --passC:'-mcpu=apple-a14' --passL:-mcpu=apple-a14 --passL:-static-libstdc++ --clang.exe=${CC} --clang.linkerexe=${CXX}" \
-    ${BINARIES}
+    nimbus nimbus_verified_proxy
+
+  # the AR provided by oscxross doesn't support `llvm-ar  @verifproxy_linkerArgs.txt` syntax
+  # for the libverifproxy we just alias the osxcross AR as llvm-ar. So we create a shim that
+  # expands the arguments from the response file and then executes the AR
+  AR_SHIM_DIR="$(mktemp -d)"
+  cat > "${AR_SHIM_DIR}/llvm-ar" <<EOF
+#!/bin/bash
+ARGS=()
+for arg in "\$@"; do
+  if [[ "\${arg}" == @* ]]; then
+    while read -r -a words || [[ \${#words[@]} -gt 0 ]]; do
+      ARGS+=("\${words[@]}")
+    done < "\${arg#@}"
+  else
+    ARGS+=("\${arg}")
+  fi
+done
+echo "llvm-ar wrapper called with: \$@" >&2
+echo "expanded ARGS: \${ARGS[@]}" >&2
+exec "/osxcross/bin/aarch64-apple-darwin${DARWIN_VER}-ar" "\${ARGS[@]}"
+EOF
+  chmod +x "${AR_SHIM_DIR}/llvm-ar"
+  export PATH="${AR_SHIM_DIR}:${PATH}"
+
+  make \
+    -j1 \
+    LOG_LEVEL="TRACE" \
+    CC="${CC}" \
+    AR="${AR}" \
+    RANLIB="${RANLIB}" \
+    USE_CACHED_ROCKSDB=1 \
+    NIMFLAGS="${NIMFLAGS_COMMON} --os:macosx --cpu:arm64 --passC:'-mcpu=apple-a14' --passL:-mcpu=apple-a14 --passL:-static-libstdc++ --clang.exe=${CC} --clang.linkerexe=${CXX}" \
+    libverifproxy
 
 else # linux_amd64
   g++ --version
@@ -177,13 +213,14 @@ else # linux_amd64
 
   make -j$(nproc) init
 
+  # -j1 will disable parallel build and prevent OOM in github CI
   make \
-    -j$(nproc) \
+    -j1 \
     LOG_LEVEL="TRACE" \
     NIMFLAGS="${NIMFLAGS_COMMON} --gcc.linkerexe=g++ --passL:'-static-libstdc++'" \
     PARTIAL_STATIC_LINKING=1 \
     QUICK_AND_DIRTY_COMPILER=1 \
-    USE_SYSTEM_ROCKSDB=0 \
+    USE_CACHED_ROCKSDB=1 \
     ${BINARIES}
 fi
 
@@ -210,24 +247,34 @@ if [[ "${PLATFORM}" == "windows_amd64" ]]; then
 fi
 
 for BINARY in ${BINARIES}; do
-  cp "./build/${BINARY}${EXT}" "${DIST_PATH}/build/"
-  if [[ "${PLATFORM}" =~ macOS ]]; then
-    # Collect debugging info and filter out warnings.
-    #
-    # First two also happen with a native "dsymutil", while the next two only
-    # with the "llvm-dsymutil" we use when cross-compiling.
-    "${DSYMUTIL}" build/${BINARY} 2>&1 |
-      grep -v "failed to insert symbol" |
-      grep -v "could not find object file symbol for symbol" |
-      grep -v "while processing" |
-      grep -v "warning: line table parameters mismatch. Cannot emit." ||
-      true
-    cp "./build/${BINARY}.dSYM" "${DIST_PATH}/build/"
+  if [[ "${BINARY}" == "libverifproxy" ]]; then
+    mkdir -p "${DIST_PATH}/build/libverifproxy"
+    cp "build/libverifproxy/libverifproxy.a" "${DIST_PATH}/build/libverifproxy/"
+    cp "build/libverifproxy/verifproxy.h" "${DIST_PATH}/build/libverifproxy/"
+    cd "${DIST_PATH}/build"
+    sha512sum "libverifproxy/libverifproxy.a" > "libverifproxy.a.sha512sum"
+    cd - >/dev/null
+  else
+    cp "./build/${BINARY}${EXT}" "${DIST_PATH}/build/"
+    if [[ "${PLATFORM}" =~ macOS ]]; then
+      # Collect debugging info and filter out warnings.
+      #
+      # First two also happen with a native "dsymutil", while the next two only
+      # with the "llvm-dsymutil" we use when cross-compiling.
+      "${DSYMUTIL}" build/${BINARY} 2>&1 |
+        grep -v "failed to insert symbol" |
+        grep -v "could not find object file symbol for symbol" |
+        grep -v "while processing" |
+        grep -v "warning: line table parameters mismatch. Cannot emit." ||
+        true
+      cp "./build/${BINARY}.dSYM" "${DIST_PATH}/build/"
+    fi
+    cd "${DIST_PATH}/build"
+    sha512sum "${BINARY}${EXT}" >"${BINARY}.sha512sum"
+    cd - >/dev/null
   fi
-  cd "${DIST_PATH}/build"
-  sha512sum "${BINARY}${EXT}" >"${BINARY}.sha512sum"
-  cd - >/dev/null
 done
+
 sed -e "s/GIT_COMMIT/${GIT_COMMIT}/" docker/dist/README.md.tpl >"${DIST_PATH}/README.md"
 
 if [[ "${PLATFORM}" == "linux_amd64" ]]; then

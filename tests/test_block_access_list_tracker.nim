@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,6 +14,7 @@ import
   std/[tables, sets],
   stew/byteutils,
   unittest2,
+  ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/core_db,
   ../execution_chain/block_access_list/block_access_list_tracker
 
@@ -85,16 +86,6 @@ suite "Block access list tracker":
         check accData[].balanceChanges.contains(balIndex)
       do:
         raiseAssert("AccountData should exist")
-
-  test "Set invalid block access index":
-    let balIndexes = [
-      uint16.low.int - 1,
-      uint16.high.int + 1
-    ]
-
-    for balIndex in balIndexes:
-      expect AssertionDefect:
-        tracker.setBlockAccessIndex(balIndex)
 
   test "Capture pre balance - stores in preBalanceCache and returns":
     block:

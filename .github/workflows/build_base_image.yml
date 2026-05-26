@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -31,20 +31,17 @@ jobs:
 
     steps:
       - name: Checkout nimbus-eth1
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Get latest nim-rocksdb commit hash
         id: rocksdb-versions
         run: |
-          getHash() {
-            git ls-remote "https://github.com/$1" "${2:-HEAD}" | cut -f 1
-          }
-          rocksHash=$(getHash status-im/nim-rocksdb)
+          rocksHash=$(git rev-parse HEAD:vendor/nim-rocksdb)
           echo "nim_rocksdb=$rocksHash" >> $GITHUB_OUTPUT
 
       - name: Restore prebuilt rocksdb from cache
         id: rocksdb-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: RocksBinCache
           key: 'rocks-${{ matrix.os }}-${{ matrix.cpu }}-${{ steps.rocksdb-versions.outputs.nim_rocksdb }}'
@@ -80,7 +77,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Download artefacts
         uses: actions/download-artifact@v4

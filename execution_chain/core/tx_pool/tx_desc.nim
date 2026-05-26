@@ -23,6 +23,7 @@ import
   ../../db/ledger,
   ../../constants,
   ../../transaction,
+  ../../transaction/call_types,
   ../chain/forked_chain,
   ../pow/header,
   ../eip4844,
@@ -70,14 +71,14 @@ const
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc getBaseFee(com: CommonRef; parent: Header): Opt[UInt256] =
+proc getBaseFee(com: CommonRef; parent: Header): GasInt =
   ## Calculates the `baseFee` of the head assuming this is the parent of a
   ## new block header to generate.
   ## Post Merge rule
-  Opt.some calcEip1599BaseFee(
+  calcEip1599BaseFee(
     parent.gasLimit,
     parent.gasUsed,
-    parent.baseFeePerGas.get(0.u256))
+    parent.baseFeePerGas.get(0.u256)).truncate(GasInt)
 
 func getGasLimit(com: CommonRef; parent: Header): GasInt =
   ## Post Merge rule
@@ -88,13 +89,15 @@ proc setupVMState(com: CommonRef;
                   parentHash: Hash32,
                   pos: PosPayloadAttr,
                   parentFrame: CoreDbTxRef): BaseVMState =
-  let fork = com.toEVMFork(pos.timestamp)
+  let
+    fork = com.toHardFork(pos.timestamp)
+    gasLimit = getGasLimit(com, parent)
 
   BaseVMState.new(
     parent   = parent,
     blockCtx = BlockContext(
       timestamp    : pos.timestamp,
-      gasLimit     : getGasLimit(com, parent),
+      gasLimit     : gasLimit,
       baseFeePerGas: getBaseFee(com, parent),
       prevRandao   : pos.prevRandao,
       difficulty   : UInt256.zero(),
@@ -156,13 +159,13 @@ proc insertToSenderTab(xp: TxPoolRef; item: TxItemRef): Result[void, TxError] =
   sn.insertOrReplace(item)
   ok()
 
-func baseFee(xp: TxPoolRef): GasInt =
+func baseFee*(xp: TxPoolRef): GasInt =
   ## Getter, baseFee for the next bock header. This value is auto-generated
   ## when a new insertion point is set via `head=`.
-  if xp.vmState.blockCtx.baseFeePerGas.isSome:
-    xp.vmState.blockCtx.baseFeePerGas.get.truncate(GasInt)
-  else:
-    0.GasInt
+  xp.vmState.blockCtx.baseFeePerGas
+
+func gasLimit(xp: TxPoolRef): GasInt =
+  xp.vmState.blockCtx.gasLimit
 
 func excessBlobGas(xp: TxPoolRef): GasInt =
   xp.vmState.blockCtx.excessBlobGas
@@ -170,7 +173,7 @@ func excessBlobGas(xp: TxPoolRef): GasInt =
 proc getBalance(xp: TxPoolRef; account: Address): UInt256 =
   xp.vmState.ledger.getBalance(account)
 
-proc getNonce(xp: TxPoolRef; account: Address): AccountNonce =
+proc getNonce*(xp: TxPoolRef; account: Address): AccountNonce =
   xp.vmState.ledger.getNonce(account)
 
 proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
@@ -184,7 +187,7 @@ proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
   if tx.txType == TxEip4844:
     let
       excessBlobGas = xp.excessBlobGas
-      blobGasPrice = getBlobBaseFee(excessBlobGas, xp.vmState.com, xp.vmState.fork)
+      blobGasPrice = getBlobBaseFee(excessBlobGas, xp.vmState.com, xp.vmState.hardFork)
     if tx.maxFeePerBlobGas < blobGasPrice:
       debug "Invalid transaction: maxFeePerBlobGas lower than blobGasPrice",
         maxFeePerBlobGas = tx.maxFeePerBlobGas,
@@ -277,6 +280,9 @@ func vmState*(xp: TxPoolRef): BaseVMState =
 func nextFork*(xp: TxPoolRef): EVMFork =
   xp.vmState.fork
 
+func hardFork*(xp: TxPoolRef): HardFork =
+  xp.vmState.hardFork
+
 template chain*(xp: TxPoolRef): ForkedChainRef =
   xp.chain
 
@@ -358,10 +364,14 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     debug "Transaction already known", txHash = id
     return err(txErrorAlreadyKnown)
 
+  let
+    intrinsic = ptx.tx.intrinsicGas(xp.hardFork, xp.gasLimit)
+
   validateTxBasic(
     xp.com,
     ptx.tx,
-    xp.nextFork,
+    intrinsic,
+    xp.hardFork,
     validateFork = true).isOkOr:
     debug "Invalid transaction: Basic validation failed",
       txHash = id,
@@ -431,6 +441,13 @@ iterator byPriceAndNonce*(xp: TxPoolRef): TxItemRef =
   for item in byPriceAndNonce(xp.senderTab, xp.idTab,
       xp.blobTab, xp.vmState.ledger, xp.baseFee, xp.nextFork):
     yield item
+
+iterator allItems*(xp: TxPoolRef): TxItemRef =
+  for _, item in xp.idTab:
+    yield item
+
+func senderCount*(xp: TxPoolRef): int =
+  xp.senderTab.len
 
 func getBlobAndProofV1*(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV1] =
   xp.blobTab.withValue(v, val):

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -23,17 +23,16 @@
 
 import
   ../aristo,
-  ./memory_only,
   ./backend/aristo_rocksdb,
-  ../opts
+  ../opts, ./base_desc
 
-export
-  memory_only
+export base_desc
 
 proc newCoreDbRef*(
     dbType: static[CoreDbType];      # Database type symbol
     path: string;                    # Storage path for database
     opts: DbOptions;
+    wipe: bool = false
       ): CoreDbRef =
   ## Constructor for persistent type DB
   ##
@@ -41,7 +40,7 @@ proc newCoreDbRef*(
   ## `RocksDb` backend for both, `Aristo` and `KVT`.
   ##
   when dbType == AristoDbRocks:
-    newRocksDbCoreDbRef path, opts
+    newRocksDbCoreDbRef path, opts, wipe
 
   else:
     {.error: "Unsupported dbType for persistent newCoreDbRef()".}

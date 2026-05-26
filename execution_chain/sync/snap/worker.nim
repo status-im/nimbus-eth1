@@ -13,7 +13,7 @@
 import
   std/os,
   pkg/[chronicles, chronos, minilru, results],
-  ./worker/[download, helpers, start_stop, state_db, worker_desc]
+  ./worker/[download, helpers, session, start_stop, state_db, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -22,38 +22,12 @@ logScope:
 # Private helpers
 # ------------------------------------------------------------------------------
 
-template updateTarget(
-    buddy: SnapPeerRef;
-    info: static[string];
-      ) =
-  ## Async/template
-  ##
-  block body:
-    # Check whether explicit target setup is configured
-    if buddy.ctx.pool.target.isSome():
-      let
-        peer {.inject,used.} = $buddy.peer          # logging only
-        ctx = buddy.ctx
-
-      # Single target block hash
-      let hash = ctx.pool.target.value.blockHash
-      if hash != BlockHash(zeroHash32):
-        let rc = buddy.headerStateRegister(hash, info)
-        if rc.isErr and rc.error:                   # real error
-          trace info & ": failed fetching pivot hash", peer, hash=hash.toStr
-        elif 0 < ctx.pool.target.value.updateFile.len:
-          var target = ctx.pool.target.value
-          target.blockHash = BlockHash(zeroHash32)
-          ctx.pool.target = Opt.some(target)
-        else:
-          ctx.pool.target = Opt.none(SnapTarget)    # No more target entries
-          break body                                # noting more to do here
-
-      # Check whether a file target setup is configured
-      if 0 < ctx.pool.target.value.updateFile.len:
-        discard buddy.headerStateLoad(ctx.pool.target.value.updateFile, info)
-
-  discard # visual alignment
+func toStr(error: SnapError): string =
+  result = $error.excp
+  if 0 < error.name.len:
+    result &= "(" & error.name & ")"
+  if 0 < error.msg.len:
+    result &= "[" & error.msg & "]"
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
@@ -78,21 +52,24 @@ proc start*(buddy: SnapPeerRef; info: static[string]): bool =
     ctx = buddy.ctx
 
   if not ctx.pool.seenData and buddy.peerID in ctx.pool.failedPeers:
-    debug info & ": useless peer already tried", peer
+    debug info & ": Useless peer already tried", peer
     return false
 
   if not buddy.startSyncPeer():
-    debug info & ": failed", peer
+    debug info & ": Failed", peer
     return false
 
-  debug info & ": new peer", peer, nSyncPeers=ctx.nSyncPeers(),
-    peerType=buddy.only.peerType, clientId=buddy.peer.clientId
+  if SnapReady < ctx.pool.syncState:
+    debug info & ": New peer", peer, nSyncPeers=ctx.nSyncPeers(),
+      peerType=buddy.only.peerType, clientId=buddy.peer.clientId
   true
 
 proc stop*(buddy: SnapPeerRef; info: static[string]) =
   ## Clean up this peer
-  debug info & ": release peer", peer=buddy.peer,
-    nSyncPeers=(buddy.ctx.nSyncPeers()-1), state=($buddy.syncState)
+  let ctx = buddy.ctx
+  if SnapReady < ctx.pool.syncState:
+    debug info & ": Release peer", peer=buddy.peer,
+      nSyncPeers=(ctx.nSyncPeers()-1), syncState=buddy.syncState
   buddy.stopSyncPeer()
 
 # ------------------------------------------------------------------------------
@@ -115,12 +92,53 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
   ## On a fresh start, the flag `ctx.daemon` will not be set `true` before the
   ## first usable request from the CL (via RPC) stumbles in.
   ##
-  ## The template returns a suggested idle time for after this task.
+  ## The template returns a suggested idle time for waiting after this task.
   ##
-  var bodyRc = chronos.nanoseconds(0)               # to be re-invoked, soon?
+  var bodyRc = ZeroDuration                         # to be re-invoked, soon?
   block body:
+    # Check initial state before transition
+    if ctx.pool.syncState == SnapResume:
+      ctx.sessionResume(info).isOkOr:
+        break body                                  # shutdown?
 
-    bodyRc = daemonWaitInterval                     # take a short nap
+    ctx.updateSyncState info                        # set next state
+    case ctx.pool.syncState:
+    of SnapReady:
+      chronicles.info info & ": Waiting for CL to send updates",
+        syncState=ctx.syncState, nSyncPeers=ctx.nSyncPeers()
+      bodyRc = daemonWaitReadyInterval              # take a nap
+
+    of SnapDownload:
+      bodyRc = daemonWaitDownloadInterval           # take a nap
+
+    of SnapDownloadFinish:
+      bodyRc = daemonWaitDownloadFinishInterval     # wait for sync
+
+    of SnapMkTrie:
+      ctx.pool.stateDB.flush info                   # archive/clear cache
+
+      let ela {.used.} = ctx.sessionMkTrie(info).valueOr:
+        break body                                  # shutdown?
+
+      debug info & ": partial MPT assembled",
+        ela=ela.toStr, syncState=ctx.syncState
+
+    of SnapAnalyse:
+      # TBD                                         # clear analytics cache
+
+      let ela {.used.} = ctx.sessionAnalyseTrie(info).valueOr:
+        break body                                  # shutdown?
+
+      debug info & ": partial MPT analysed",
+        ela=ela.toStr, syncState=ctx.syncState
+
+    of SnapHealing:                                 # TBD ..
+      warn info & ": Healing not yet implemented"
+      bodyRc = chronos.seconds(30)
+
+    else:
+      bodyRc = daemonWaitElseInterval               # take a nap
+
     # End block: `body`
 
   bodyRc
@@ -158,15 +176,17 @@ template runPeer*(
   ##
   ## The template returns a suggested idle time for after this task.
   ##
-  var bodyRc = chronos.nanoseconds(0)
+  var bodyRc = ZeroDuration
   block body:
-    # Check for manual target settings
-    buddy.updateTarget info
+    case buddy.ctx.pool.syncState:
+    of SnapDownload:
 
-    # Download and chace accounts, storage slots, contracts
-    buddy.download info
+      # Download and cache accounts, storage slots, contracts
+      buddy.download info
 
-    bodyRc = chronos.seconds(10)
+    else:
+      bodyRc = peerWaitElseInterval
+
     # End block: `body`
 
   bodyRc

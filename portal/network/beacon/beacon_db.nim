@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -89,8 +89,7 @@ template disposeSafe(s: untyped): untyped =
 proc initBootstrapStore(backend: SqStoreRef, name: string): KvResult[BootstrapStore] =
   ?backend.exec(
     """
-    CREATE TABLE IF NOT EXISTS `""" & name &
-      """` (
+    CREATE TABLE IF NOT EXISTS `""" & name & """` (
       `contentId` BLOB PRIMARY KEY, -- `ContentId`
       `bootstrap` BLOB,             -- `LightClientBootstrap` (SSZ)
       `slot` INTEGER UNIQUE         -- `Slot`
@@ -103,8 +102,7 @@ proc initBootstrapStore(backend: SqStoreRef, name: string): KvResult[BootstrapSt
       .prepareStmt(
         """
         SELECT `bootstrap`
-        FROM `""" & name &
-          """`
+        FROM `""" & name & """`
         WHERE `contentId` = ?;
       """,
         array[32, byte],
@@ -116,10 +114,9 @@ proc initBootstrapStore(backend: SqStoreRef, name: string): KvResult[BootstrapSt
       .prepareStmt(
         """
         SELECT `bootstrap`
-        FROM `""" & name &
-          """`
-        WHERE `slot` = (SELECT MAX(slot) FROM `""" & name &
-          """`);
+        FROM `""" & name & """`
+        WHERE `slot` = (SELECT MAX(slot) FROM `""" &
+          name & """`);
       """,
         NoParams,
         seq[byte],
@@ -129,8 +126,7 @@ proc initBootstrapStore(backend: SqStoreRef, name: string): KvResult[BootstrapSt
     putStmt = backend
       .prepareStmt(
         """
-        REPLACE INTO `""" & name &
-          """` (
+        REPLACE INTO `""" & name & """` (
         `contentId`, `bootstrap`, `slot`
         ) VALUES (?, ?, ?);
       """,
@@ -142,8 +138,7 @@ proc initBootstrapStore(backend: SqStoreRef, name: string): KvResult[BootstrapSt
     keepFromStmt = backend
       .prepareStmt(
         """
-        DELETE FROM `""" & name &
-          """`
+        DELETE FROM `""" & name & """`
         WHERE `slot` < ?;
       """,
         int64,
@@ -164,8 +159,7 @@ proc initBestUpdateStore(
 ): KvResult[BestLightClientUpdateStore] =
   ?backend.exec(
     """
-    CREATE TABLE IF NOT EXISTS `""" & name &
-      """` (
+    CREATE TABLE IF NOT EXISTS `""" & name & """` (
       `period` INTEGER PRIMARY KEY,  -- `SyncCommitteePeriod`
       `update` BLOB                  -- `LightClientUpdate` (SSZ)
     );
@@ -177,8 +171,7 @@ proc initBestUpdateStore(
       .prepareStmt(
         """
         SELECT `update`
-        FROM `""" & name &
-          """`
+        FROM `""" & name & """`
         WHERE `period` = ?;
       """,
         int64,
@@ -190,8 +183,7 @@ proc initBestUpdateStore(
       .prepareStmt(
         """
         SELECT `update`
-        FROM `""" & name &
-          """`
+        FROM `""" & name & """`
         WHERE `period` >= ? AND `period` < ?;
       """,
         (int64, int64),
@@ -202,8 +194,7 @@ proc initBestUpdateStore(
     putStmt = backend
       .prepareStmt(
         """
-        REPLACE INTO `""" & name &
-          """` (
+        REPLACE INTO `""" & name & """` (
           `period`, `update`
         ) VALUES (?, ?);
       """,
@@ -215,8 +206,7 @@ proc initBestUpdateStore(
     delStmt = backend
       .prepareStmt(
         """
-        DELETE FROM `""" & name &
-          """`
+        DELETE FROM `""" & name & """`
         WHERE `period` = ?;
       """,
         int64,
@@ -227,8 +217,7 @@ proc initBestUpdateStore(
     keepFromStmt = backend
       .prepareStmt(
         """
-        DELETE FROM `""" & name &
-          """`
+        DELETE FROM `""" & name & """`
         WHERE `period` < ?;
       """,
         int64,
@@ -250,8 +239,7 @@ proc initHistoricalSummariesStore(
 ): KvResult[HistoricalSummariesStore] =
   ?backend.exec(
     """
-    CREATE TABLE IF NOT EXISTS `""" & name &
-      """` (
+    CREATE TABLE IF NOT EXISTS `""" & name & """` (
       `epoch` INTEGER PRIMARY KEY,   -- `historical_summaries` epoch
       `summaries` BLOB               -- `HistoricalSummariesWithProof` (SSZ)
     );
@@ -263,8 +251,7 @@ proc initHistoricalSummariesStore(
       .prepareStmt(
         """
         SELECT `summaries`
-        FROM `""" & name &
-          """`
+        FROM `""" & name & """`
         WHERE `epoch` = ?;
       """,
         int64,
@@ -276,10 +263,9 @@ proc initHistoricalSummariesStore(
       .prepareStmt(
         """
         SELECT `summaries`
-        FROM `""" & name &
-          """`
-        WHERE `epoch` = (SELECT MAX(epoch) FROM `""" & name &
-          """`);
+        FROM `""" & name & """`
+        WHERE `epoch` = (SELECT MAX(epoch) FROM `""" &
+          name & """`);
       """,
         NoParams,
         seq[byte],
@@ -289,8 +275,7 @@ proc initHistoricalSummariesStore(
     putStmt = backend
       .prepareStmt(
         """
-        REPLACE INTO `""" & name &
-          """` (
+        REPLACE INTO `""" & name & """` (
           `epoch`, `summaries`
         ) VALUES (?, ?);
       """,
@@ -302,8 +287,7 @@ proc initHistoricalSummariesStore(
     keepFromStmt = backend
       .prepareStmt(
         """
-        DELETE FROM `""" & name &
-          """`
+        DELETE FROM `""" & name & """`
         WHERE `epoch` < ?;
       """,
         int64,
@@ -323,7 +307,8 @@ proc size*(db: BeaconDb): int64 =
   var size: int64 = 0
   discard (
     db.sizeStmt.exec do(res: int64):
-      size = res).expectDb()
+      size = res
+  ).expectDb()
   return size
 
 func close(store: var BestLightClientUpdateStore) =

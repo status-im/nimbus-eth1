@@ -11,6 +11,7 @@
 
 import
   std/[json, strutils],
+  unittest2,
   eth/common/headers_rlp,
   web3/eth_api_types,
   web3/engine_api_types,
@@ -19,18 +20,26 @@ import
   web3/execution_types,
   json_rpc/rpcclient,
   json_rpc/rpcserver,
+  kzg4844/kzg,
   ./chain_config_wrapper,
+  ./path_handler,
   ../../execution_chain/rpc,
   ../../execution_chain/common/hardforks,
+  ../../execution_chain/db/core_db/memory_only,
   ../../execution_chain/db/ledger,
   ../../execution_chain/core/chain/forked_chain,
   ../../execution_chain/core/tx_pool,
   ../../execution_chain/beacon/beacon_engine,
   ../../execution_chain/common/common,
+  ../../execution_chain/stateless/witness_types,
+  ../../execution_chain/stateless/stateless_types,
   ../../hive_integration/engine_client
 
 import ../../tools/common/helpers as chp except HardFork
 import ../../tools/evmstate/helpers except HardFork
+
+# Load eagerly to avoid race conditions - lazy kzg loading is not thread safe
+discard loadTrustedSetupFromString(kzg.trustedSetup, 8)
 
 # Common Type Definitions
 type
@@ -63,6 +72,9 @@ type
   BlockDesc* = object
     blk*: EthBlock
     badBlock*: bool
+    bal*: Opt[BlockAccessListRef]
+    witness*: Opt[ExecutionWitness]
+    statelessValidationResult*: Opt[StatelessValidationResult]
 
   Numero* = distinct uint64
 
@@ -118,12 +130,12 @@ type
   EngineFixture* = object
     units*: seq[EngineUnitDesc]
 
-GenesisHeader.useDefaultReaderIn JrpcConv
-PayloadItem.useDefaultReaderIn JrpcConv
-EngineUnitEnv.useDefaultReaderIn JrpcConv
-BlockchainUnitEnv.useDefaultReaderIn JrpcConv
-EnvConfig.useDefaultReaderIn JrpcConv
-BlobSchedule.useDefaultReaderIn JrpcConv
+GenesisHeader.useDefaultReaderIn EthJson
+PayloadItem.useDefaultReaderIn EthJson
+EngineUnitEnv.useDefaultReaderIn EthJson
+BlockchainUnitEnv.useDefaultReaderIn EthJson
+EnvConfig.useDefaultReaderIn EthJson
+BlobSchedule.useDefaultReaderIn EthJson
 
 template wrapValueError(body: untyped) =
   try:
@@ -132,13 +144,13 @@ template wrapValueError(body: untyped) =
     r.raiseUnexpectedValue(exc.msg)
 
 proc readValue*(
-    r: var JsonReader[JrpcConv], val: var Numero
+    r: var JsonReader[EthJson], val: var Numero
 ) {.gcsafe, raises: [IOError, SerializationError].} =
   wrapValueError:
     val = fromHex[uint64](r.readValue(string)).Numero
 
 proc readValue*(
-    r: var JsonReader[JrpcConv],
+    r: var JsonReader[EthJson],
     value: var array[HardFork.Cancun .. HardFork.high, Opt[BlobSchedule]],
 ) {.gcsafe, raises: [SerializationError, IOError].} =
   wrapValueError:
@@ -146,7 +158,7 @@ proc readValue*(
       blobScheduleParser(r, key, value)
 
 proc readValue*(
-    r: var JsonReader[JrpcConv], val: var PayloadParam
+    r: var JsonReader[EthJson], val: var PayloadParam
 ) {.gcsafe, raises: [IOError, SerializationError].} =
   wrapValueError:
     r.parseArray(i):
@@ -163,14 +175,14 @@ proc readValue*(
         r.raiseUnexpectedValue("Unexpected element")
 
 proc readValue*(
-    r: var JsonReader[JrpcConv], val: var EngineFixture
+    r: var JsonReader[EthJson], val: var EngineFixture
 ) {.gcsafe, raises: [IOError, SerializationError].} =
   wrapValueError:
     parseObject(r, key):
       val.units.add EngineUnitDesc(name: key, unit: r.readValue(EngineUnitEnv))
 
 proc readValue*(
-    r: var JsonReader[JrpcConv], val: var BlockchainFixture
+    r: var JsonReader[EthJson], val: var BlockchainFixture
 ) {.gcsafe, raises: [IOError, SerializationError].} =
   wrapValueError:
     parseObject(r, key):
@@ -245,7 +257,7 @@ proc prepareEnv*(
     let
       com = CommonRef.new(memDB, config,
         statelessProviderEnabled = statelessEnabled,
-        statelessWitnessValidation = statelessEnabled)
+        statelessWitnessValidation = false) # Running stateless execution separately in test runner
       chain = ForkedChainRef.init(com, enableQueue = true, persistBatchSize = 1)
 
     testEnv.chain = chain
@@ -289,7 +301,7 @@ proc close*(env: TestEnv) =
 
 template parseAnyFixture(fileName: string, T: typedesc) =
   try:
-    result = JrpcConv.loadFile(fileName, T)
+    result = EthJson.loadFile(fileName, T)
   except JsonReaderError as exc:
     debugEcho exc.formatMsg(fileName)
     quit(QuitFailure)
@@ -315,12 +327,5 @@ template runEESTSuite*(
 ) =
   for eest in eestReleases:
     suite eest & ": " & eestType:
-      for fileName in walkDirRec(baseFolder / eest / eestType):
-        let last = fileName.splitPath().tail
-        if last in skipFiles:
-          continue
-        test last:
-          let res = processFile(fileName, statelessEnabled)
-          if not res:
-            debugEcho fileName.splitPath().tail
-          check res
+      for filePath in walkDirRec(baseFolder / eest / eestType):
+        processFile(handleLongPath(filePath), statelessEnabled, @skipFiles)

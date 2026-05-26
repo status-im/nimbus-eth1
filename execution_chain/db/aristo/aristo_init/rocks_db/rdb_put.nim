@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -78,8 +78,11 @@ proc putVtx*(
       ): Result[void,(VertexID,AristoError,string)] =
   let dsc = session.batch
   if vtx.isValid:
-    dsc.put(rvid.blobify().data(), vtx.blobify(key), rdb.vtxCol.handle()).isOkOr:
-      # Caller must `rollback()` which will flush the `rdVtxLru` cache
+    var vtxBuf: VertexBuf
+    vtx.blobifyTo(key, vtxBuf)
+
+    dsc.put(rvid.blobify().data(), vtxBuf.data(), rdb.vtxCol.handle()).isOkOr:
+      # Caller must `rollback()` which will clear the `rdVtxLru` cache
       const errSym = RdbBeDriverPutVtxError
       when extraTraceMessages:
         trace logTxt "putVtx()", vid, error=errSym, info=error
@@ -98,10 +101,12 @@ proc putVtx*(
         discard rdb.rdBranchLru.update(rvid.vid, (vtx.startVid, vtx.used))
     else:
       rdb.rdBranchLru.del(rvid.vid)
+      
       if rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
-        rdb.rdVtxLru.put(rvid.vid, vtx)
+        rdb.rdVtxLru.put(rvid.vid, vtxBuf)
       else:
-        discard rdb.rdVtxLru.update(rvid.vid, vtx)
+        discard rdb.rdVtxLru.update(rvid.vid, vtxBuf)
+
 
     if key.isValid:
       if rdb.rdKeyLru.len < rdb.rdKeyLru.capacity:
@@ -110,10 +115,9 @@ proc putVtx*(
         discard rdb.rdKeyLru.update(rvid.vid, key)
     else:
       rdb.rdKeyLru.del rvid.vid
-
   else:
     dsc.delete(rvid.blobify().data(), rdb.vtxCol.handle()).isOkOr:
-      # Caller must `rollback()` which will flush the `rdVtxLru` cache
+      # Caller must `rollback()` which will clear the `rdVtxLru` cache
       const errSym = RdbBeDriverDelVtxError
       when extraTraceMessages:
         trace logTxt "putVtx()", vid, error=errSym, info=error
@@ -123,6 +127,21 @@ proc putVtx*(
     rdb.rdBranchLru.del rvid.vid
     rdb.rdVtxLru.del rvid.vid
     rdb.rdKeyLru.del rvid.vid
+
+  ok()
+
+proc putVtxBlob*(
+    rdb: var RdbInst; session: SharedWriteBatchRef,
+    rvid: RootedVertexID; vtx: openArray[byte]
+      ): Result[void,(VertexID,AristoError,string)] =
+  let dsc = session.batch
+
+  dsc.put(rvid.blobify().data(), vtx, rdb.vtxCol.handle()).isOkOr:
+    # Caller must `rollback()` which will clear the `rdVtxLru` cache
+    const errSym = RdbBeDriverPutVtxError
+    when extraTraceMessages:
+      trace logTxt "putVtxBlob()", vid, error=errSym, info=error
+    return err((rvid.vid,errSym,error))
 
   ok()
 

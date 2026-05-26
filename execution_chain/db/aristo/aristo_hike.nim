@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -51,23 +51,15 @@ func to*(rc: Result[Hike,(VertexID,AristoError,Hike)]; T: type Hike): T =
   ## Extract `Hike` from either ok ot error part of argument `rc`.
   if rc.isOk: rc.value else: rc.error[2]
 
-func to*(hike: Hike; T: type NibblesBuf): T =
-  ## Convert back
-  hike.getNibblesImpl() & hike.tail
-
 func legsTo*(hike: Hike; T: type NibblesBuf): T =
   ## Convert back
   hike.getNibblesImpl()
-
-func legsTo*(hike: Hike; numLegs: int; T: type NibblesBuf): T =
-  ## variant of `legsTo()`
-  hike.getNibblesImpl(0, numLegs)
 
 # --------
 
 proc step*(
     path: NibblesBuf, rvid: RootedVertexID, db: AristoTxRef
-      ): Result[(VertexRef, NibblesBuf, VertexID), AristoError] =
+      ): Result[(VertexRef, int, VertexID), AristoError] =
   # Fetch next vertex
   let (vtx, _) = db.getVtxRc(rvid).valueOr:
     if error != GetVtxNotFound:
@@ -87,7 +79,7 @@ proc step*(
     if path.len != path.sharedPrefixLen(vtx.pfx):
       return err(HikeLeafUnexpected)
 
-    ok (vtx, NibblesBuf(), VertexID(0))
+    ok (vtx, 0, VertexID(0))
 
   of Branch:
     # There must be some more data (aka `tail`) after a `Branch` vertex.
@@ -102,7 +94,7 @@ proc step*(
     if not nextVid.isValid:
       return err(HikeBranchMissingEdge)
 
-    ok (vtx, path.slice(1), nextVid)
+    ok (vtx, 1, nextVid)
 
   of ExtBranch:
     # There must be some more data (aka `tail`) after a `Branch` vertex.
@@ -117,7 +109,7 @@ proc step*(
     if not nextVid.isValid:
       return err(HikeBranchMissingEdge)
 
-    ok (vtx, path.slice(vtx.pfx.len + 1), nextVid)
+    ok (vtx, vtx.pfx.len + 1, nextVid)
 
 
 iterator stepUp*(
@@ -132,16 +124,19 @@ iterator stepUp*(
     path = path
     next = if next == VertexID(0): root else: next
     vtx = VertexRef(nil)
+    common = 0
   block iter:
     while true:
-      (vtx, path, next) = step(path, (root, next), db).valueOr:
+      (vtx, common, next) = step(path, (root, next), db).valueOr:
         yield Result[VertexRef, AristoError].err(error)
         break iter
 
       yield Result[VertexRef, AristoError].ok(vtx)
 
-      if path.len == 0:
+      if common == 0:
         break
+      path = path.slice(common)
+
 
 proc hikeUp*[LeafType](
     path: NibblesBuf;                            # Partial path
@@ -156,9 +151,9 @@ proc hikeUp*[LeafType](
   ##
   ## If a leaf is given, it gets used for the "last" leg of the hike.
   hike.root = root
-  hike.tail = path
   hike.legs.setLen(0)
 
+  var path = path
   if not root.isValid:
     return err((VertexID(0),HikeRootMissing))
   if path.len == 0:
@@ -168,29 +163,27 @@ proc hikeUp*[LeafType](
   while true:
     if leaf.isSome() and leaf[].isValid and path == leaf[].pfx:
       hike.legs.add Leg(wp: VidVtxPair(vid: vid, vtx: leaf[]), nibble: -1)
-      reset(hike.tail)
+      #reset(hike.tail)
       break
 
-    let (vtx, path, next) = step(hike.tail, (root, vid), db).valueOr:
-      return err((vid,error))
-
-    let wp = VidVtxPair(vid:vid, vtx:vtx)
+    let
+      (vtx, common, next) = step(path, (root, vid), db).valueOr:
+        return err((vid,error))
+      wp = VidVtxPair(vid:vid, vtx:vtx)
 
     case vtx.vType
     of Leaves:
       hike.legs.add Leg(wp: wp, nibble: -1)
-      hike.tail = path
-
       break
 
     of Branch:
-      hike.legs.add Leg(wp: wp, nibble: int8 hike.tail[0])
+      hike.legs.add Leg(wp: wp, nibble: int8 path[0])
 
     of ExtBranch:
       let vtx = ExtBranchRef(vtx)
-      hike.legs.add Leg(wp: wp, nibble: int8 hike.tail[vtx.pfx.len])
+      hike.legs.add Leg(wp: wp, nibble: int8 path[vtx.pfx.len])
 
-    hike.tail = path
+    path = path.slice(common)
     vid = next
 
   ok()

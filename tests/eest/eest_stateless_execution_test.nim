@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -17,11 +17,36 @@ const
   baseFolder = "tests/fixtures"
   eestType = "blockchain_tests"
   eestReleases = [
-    "eest_develop"
+    "eest_develop",
+    "eest_zkevm"
   ]
 
 const skipFiles = [
-    ""
+  # Currently skipped as still failing with statelessEnabled = true
+  # Once all of these pass we could simply run eest_blockchain_test.nim
+  # with statelessEnabled = true and remove this test file.
+  #
+  # --- eest_zkevm files with failures ---
+  #
+  # `dst.contains(k)`  [AssertionDefect] -> on execution of test vector witness
+  #  generated witness has an extra state node, stateless execution works with it
+  "varying_calldata_costs.json",
+  "witness_headers_blockhash_boundary.json",
+  "genesis_hash_available.json",
+  "scenarios.json",
+  "withdrawal_requests.json",
+  "consolidation_requests.json",
+  "multiple_withdrawals_same_address.json",
+  "return_bounds.json",
+  #
+  # persistStorage(): Unspecified(Aristo, ctx=, error=DelVidStaleVtx) [AssertionDefect]
+  # -> on execution with test vector witness
+  # generated witness has an extra state node, stateless execution works with it
+  "witness_state_block_diff_delete_insert_before_delete_order.json",
+  #
+  # Witness codes mismatch -> codes optimisation: implemented in
+  # https://github.com/status-im/nimbus-eth1/pull/4099
+  "witness_codes_create_same_hash_then_read.json",
 ]
 
 runEESTSuite(

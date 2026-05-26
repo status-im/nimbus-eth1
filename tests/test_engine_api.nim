@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -23,6 +23,7 @@ import
   ../execution_chain/conf,
   ../execution_chain/core/chain,
   ../execution_chain/core/tx_pool,
+  ../execution_chain/db/core_db/memory_only,
   ../execution_chain/beacon/beacon_engine,
   ../execution_chain/beacon/web3_eth_conv,
   ../hive_integration/engine_client
@@ -46,7 +47,7 @@ type
     genesisFile: string
     testProc: proc(env: TestEnv): Result[void, string]
 
-NewPayloadV4Params.useDefaultSerializationIn JrpcConv
+NewPayloadV4Params.useDefaultSerializationIn EthJson
 
 const
   defaultGenesisFile = "tests/customgenesis/engine_api_genesis.json"
@@ -190,7 +191,7 @@ proc newPayloadV4ParamsTest(env: TestEnv): Result[void, string] =
   for paramsFile in paramsFiles:
     let
       client = env.client
-      params = JrpcConv.loadFile(paramsFile, NewPayloadV4Params)
+      params = EthJson.loadFile(paramsFile, NewPayloadV4Params)
       res = ?client.newPayloadV4(
         params.payload,
         params.expectedBlobVersionedHashes,
@@ -214,7 +215,7 @@ proc genesisShouldCanonicalTest(env: TestEnv): Result[void, string] =
 
   let
     client = env.client
-    params = JrpcConv.loadFile(paramsFile, NewPayloadV4Params)
+    params = EthJson.loadFile(paramsFile, NewPayloadV4Params)
     res = ? client.newPayloadV3(
       params.payload,
       params.expectedBlobVersionedHashes,
@@ -250,7 +251,7 @@ proc newPayloadV4InvalidRequests(env: TestEnv): Result[void, string] =
   for paramsFile in paramsFiles:
     let
       client = env.client
-      params = JrpcConv.loadFile(paramsFile, NewPayloadV4Params)
+      params = EthJson.loadFile(paramsFile, NewPayloadV4Params)
       res = client.newPayloadV4(
         params.payload,
         params.expectedBlobVersionedHashes,
@@ -274,7 +275,7 @@ proc newPayloadV4InvalidRequestType(env: TestEnv): Result[void, string] =
 
   let
     client = env.client
-    params = JrpcConv.loadFile(paramsFile, NewPayloadV4Params)
+    params = EthJson.loadFile(paramsFile, NewPayloadV4Params)
     res = client.newPayloadV4(
       params.payload,
       params.expectedBlobVersionedHashes,

@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,16 +13,7 @@
 ##
 ## The iterators provided here are currently available only by direct
 ## backend access
-## ::
-##   import
-##     aristo/aristo_init/aristo_rocksdb
-##
-##   let rc = AristoDb.init(BackendRocksDB, "/var/tmp")
-##   if rc.isOk:
-##     let be = rc.value.to(RdbBackendRef)
-##     for (n, key, vtx) in be.walkVtx:
-##       ...
-##
+
 {.push raises: [].}
 
 import
@@ -139,6 +130,18 @@ proc putVtxFn(db: RdbBackendRef): PutVtxFn =
             code: error[1],
             info: error[2])
 
+proc putVtxBlobFn(db: RdbBackendRef): PutVtxBlobFn =
+  result =
+    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: openArray[byte]) =
+      let hdl = hdl.getSession db
+      if hdl.error.isNil:
+        db.rdb.putVtxBlob(hdl.session, rvid, vtx).isOkOr:
+          hdl.error = TypedPutHdlErrRef(
+            pfx:  VtxPfx,
+            vid:  error[0],
+            code: error[1],
+            info: error[2])
+
 proc putLstFn(db: RdbBackendRef): PutLstFn =
   result =
     proc(hdl: PutHdlRef; lst: SavedState) =
@@ -177,8 +180,8 @@ proc putEndFn(db: RdbBackendRef): PutEndFn =
 
 proc closeFn(db: RdbBackendRef): CloseFn =
   result =
-    proc(eradicate: bool) =
-      db.rdb.destroy(eradicate)
+    proc(wipe: bool) =
+      db.rdb.close(wipe)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -189,7 +192,7 @@ proc rocksDbBackend*(
     baseDb: RocksDbInstanceRef;
       ): AristoDbRef =
   let
-    be = RdbBackendRef(beKind: BackendRocksDB)
+    be = RdbBackendRef()
     db = AristoDbRef()
 
   # Initialise RocksDB
@@ -201,6 +204,7 @@ proc rocksDbBackend*(
 
   db.putBegFn = putBegFn be
   db.putVtxFn = putVtxFn be
+  db.putVtxBlobFn = putVtxBlobFn be
   db.putLstFn = putLstFn be
   db.putEndFn = putEndFn be
 

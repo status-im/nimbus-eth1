@@ -15,10 +15,11 @@ import
   ".."/[db/ledger, constants],
   ./[code_stream, memory, stack, state],
   ./[types],
-  ./interpreter/[gas_meter, gas_costs, op_codes],
+  ./interpreter/[gas_meter, gas_costs, op_codes, utils/utils_numeric],
   ./evm_errors,
   ./code_bytes,
   ./eip7708,
+  ../core/eip8037,
   ../common/[evmforks],
   ../utils/[utils, mergeutils],
   ../common/common,
@@ -43,8 +44,8 @@ template getCoinbase*(c: Computation): Address =
 template getTimestamp*(c: Computation): uint64 =
   c.vmState.blockCtx.timestamp.uint64
 
-template getBlockNumber*(c: Computation): UInt256 =
-  c.vmState.blockNumber.u256
+template getBlockNumber*(c: Computation): uint64 =
+  c.vmState.blockNumber
 
 template getDifficulty*(c: Computation): DifficultyInt =
   c.vmState.difficultyOrPrevRandao
@@ -52,8 +53,8 @@ template getDifficulty*(c: Computation): DifficultyInt =
 template getGasLimit*(c: Computation): GasInt =
   c.vmState.blockCtx.gasLimit
 
-template getBaseFee*(c: Computation): UInt256 =
-  c.vmState.blockCtx.baseFeePerGas.get(0.u256)
+template getBaseFee*(c: Computation): GasInt =
+  c.vmState.blockCtx.baseFeePerGas
 
 template getSlotNum*(c: Computation): UInt256 =
   c.vmState.blockCtx.slotNumber.u256
@@ -87,7 +88,7 @@ proc getBlockHash*(c: Computation, number: BlockNumber): Hash32 =
   c.vmState.getAncestorHash(number)
 
 template accountExists*(c: Computation, address: Address): bool =
-  if c.vmState.balTrackerEnabled:
+  if c.balTrackerEnabled:
     c.vmState.balTracker.trackAddressAccess(address)
 
   if c.fork >= FkSpurious:
@@ -96,22 +97,22 @@ template accountExists*(c: Computation, address: Address): bool =
     c.vmState.readOnlyLedger.accountExists(address)
 
 template getStorage*(c: Computation, slot: UInt256): UInt256 =
-  if c.vmState.balTrackerEnabled:
+  if c.balTrackerEnabled:
     c.vmState.balTracker.trackStorageRead(c.msg.contractAddress, slot)
   c.vmState.readOnlyLedger.getStorage(c.msg.contractAddress, slot)
 
 template getBalance*(c: Computation, address: Address): UInt256 =
-  if c.vmState.balTrackerEnabled:
+  if c.balTrackerEnabled:
     c.vmState.balTracker.trackAddressAccess(address)
   c.vmState.readOnlyLedger.getBalance(address)
 
 template getCodeSize*(c: Computation, address: Address): uint =
-  if c.vmState.balTrackerEnabled:
+  if c.balTrackerEnabled:
     c.vmState.balTracker.trackAddressAccess(address)
   uint(c.vmState.readOnlyLedger.getCodeSize(address))
 
 template getCodeHash*(c: Computation, address: Address): Hash32 =
-  if c.vmState.balTrackerEnabled:
+  if c.balTrackerEnabled:
     c.vmState.balTracker.trackAddressAccess(address)
 
   let db = c.vmState.readOnlyLedger
@@ -124,7 +125,7 @@ template selfDestruct*(c: Computation, address: Address) =
   c.execSelfDestruct(address)
 
 template getCode*(c: Computation, address: Address): CodeBytesRef =
-  if c.vmState.balTrackerEnabled:
+  if c.balTrackerEnabled:
     c.vmState.balTracker.trackAddressAccess(address)
   c.vmState.readOnlyLedger.getCode(address)
 
@@ -146,8 +147,9 @@ func newComputation*(vmState: BaseVMState,
   new result
   result.vmState = vmState
   result.msg = message
-  result.gasMeter.init(message.gas)
+  result.gasMeter.init(message.gas, message.stateGas)
   result.keepStack = keepStack
+  result.balTrackerEnabled = vmState.balTrackerEnabled
 
   if not code.isNil:
     result.code = CodeStream.init(code)
@@ -170,12 +172,12 @@ func shouldBurnGas*(c: Computation): bool =
   c.isError and c.error.burnsGas
 
 proc beginSavePoint*(c: Computation) =
-  if c.vmState.balTrackerEnabled:
+  if c.balTrackerEnabled:
     c.vmState.balTracker.beginCallFrame()
   c.savePoint = c.vmState.ledger.beginSavePoint()
 
 proc commit*(c: Computation) =
-  if c.vmState.balTrackerEnabled:
+  if c.balTrackerEnabled:
     c.vmState.balTracker.commitCallFrame()
   c.vmState.ledger.commit(c.savePoint)
   c.savePoint = nil
@@ -193,7 +195,7 @@ proc dispose*(c: Computation) =
     c.stack = nil
 
 proc rollback*(c: Computation) =
-  if c.vmState.balTrackerEnabled:
+  if c.balTrackerEnabled:
     c.vmState.balTracker.rollbackCallFrame()
   c.vmState.ledger.rollback(c.savePoint)
   c.savePoint = nil
@@ -234,20 +236,6 @@ proc writeContract*(c: Computation) =
     c.setError(StatusCode.ContractValidationFailure, true)
     return
 
-  # EIP-7954 constraint (https://eips.ethereum.org/EIPS/eip-7954).
-  if fork >= FkAmsterdam and len > EIP7954_MAX_CODE_SIZE:
-    withExtra trace, "New contract code exceeds EIP-7954 limit",
-      codeSize=len, maxSize=EIP7954_MAX_CODE_SIZE
-    c.setError(StatusCode.OutOfGas, true)
-    return
-
-  # EIP-170 constraint (https://eips.ethereum.org/EIPS/eip-3541).
-  if fork >= FkSpurious and len > EIP170_MAX_CODE_SIZE:
-    withExtra trace, "New contract code exceeds EIP-170 limit",
-      codeSize=len, maxSize=EIP170_MAX_CODE_SIZE
-    c.setError(StatusCode.OutOfGas, true)
-    return
-
   # Charge gas and write the code even if the code address is self-destructed.
   # Non-empty code in a newly created, self-destructed account is possible if
   # the init code calls `DELEGATECALL` or `CALLCODE` to other code which uses
@@ -255,16 +243,45 @@ proc writeContract*(c: Computation) =
   # gas difference matters.  The new code can be called later in the
   # transaction too, before self-destruction wipes the account at the end.
 
-  let
-    gasParams = GasParamsCr(memLength: len)
-    codeCost = c.gasCosts[Create].cr_handler(0.u256, gasParams)
+  block writeContractCode:
+    if fork >= FkAmsterdam:
+      # The order here is:
+      # 1. Check code size
+      # 2. Charge regular gas
+      # #. Charge state gas
+      # https://github.com/ethereum/execution-specs/commit/0c7d32c13bbd3fc91ea44ff56a32ca766d59f1d5
+      if len > EIP7954_MAX_CODE_SIZE:
+        # EIP-7954 constraint (https://eips.ethereum.org/EIPS/eip-7954).
+        withExtra trace, "New contract code exceeds EIP-7954 limit",
+          codeSize=len, maxSize=EIP7954_MAX_CODE_SIZE
+        break writeContractCode
 
-  if codeCost <= c.gasMeter.gasRemaining:
-    c.gasMeter.consumeGas(codeCost,
-      reason = "Write new contract code").
-        expect("enough gas since we checked against gasRemaining")
+      let
+        codeDepositStateGas = len.GasInt * COST_PER_STATE_BYTE
+        codeHashGas = (6 * wordCount(len)).GasInt
+
+      c.gasMeter.consumeGas(codeHashGas, reason = "Code hash gas").isOkOr:
+        break writeContractCode
+
+      c.gasMeter.chargeStateGas(codeDepositStateGas, reason = "Deposit state gas").isOkOr:
+        break writeContractCode
+    else:
+      let
+        gasParams = GasParamsCr(memLength: len)
+        codeCost = c.gasCosts[Create].cr_handler(true, gasParams)
+
+      c.gasMeter.consumeGas(codeCost, reason = "Write new contract code").isOkOr:
+        break writeContractCode
+
+      if fork >= FkSpurious and len > EIP170_MAX_CODE_SIZE:
+        # EIP-170 constraint (https://eips.ethereum.org/EIPS/eip-3541).
+        withExtra trace, "New contract code exceeds EIP-170 limit",
+          codeSize=len, maxSize=EIP170_MAX_CODE_SIZE
+        c.setError(StatusCode.OutOfGas, true)
+        return
+
     c.vmState.mutateLedger:
-      if c.vmState.balTrackerEnabled:
+      if c.balTrackerEnabled:
         c.vmState.balTracker.trackCodeChange(c.msg.contractAddress, c.output)
       ledger.setCode(c.msg.contractAddress, c.output)
     withExtra trace, "Writing new contract code"
@@ -297,7 +314,7 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
 
     # Register the account to be deleted
     if c.fork >= FkCancun:
-      if c.vmState.balTrackerEnabled:
+      if c.balTrackerEnabled:
         # Zeroing contract balance except beneficiary is the same address
         c.vmState.balTracker.trackSubBalanceChange(c.msg.contractAddress, localBalance)
         ledger.subBalance(c.msg.contractAddress, localBalance)
@@ -317,16 +334,9 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
       if c.fork >= FkAmsterdam:
         c.emitSelfDestructLog(beneficiary, localBalance, newContract)
     else:
-      if c.vmState.balTrackerEnabled:
-        # Transfer to beneficiary
-        c.vmState.balTracker.trackAddBalanceChange(beneficiary, localBalance)
-        ledger.addBalance(beneficiary, localBalance)
-        c.vmState.balTracker.trackSelfDestruct(c.msg.contractAddress)
-        ledger.selfDestruct(c.msg.contractAddress)
-      else:
-        # Transfer to beneficiary
-        ledger.addBalance(beneficiary, localBalance)
-        ledger.selfDestruct(c.msg.contractAddress)
+      # Transfer to beneficiary
+      ledger.addBalance(beneficiary, localBalance)
+      ledger.selfDestruct(c.msg.contractAddress)
 
     trace "SELFDESTRUCT",
       contractAddress = c.msg.contractAddress.toHex,

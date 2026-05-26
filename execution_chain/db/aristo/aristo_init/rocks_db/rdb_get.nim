@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -139,22 +139,16 @@ proc getKey*(
     # We don't store keys for leaves, no need to hit the database
     let rc = rdb.rdVtxLru.peek(rvid.vid)
     if rc.isOk():
-      if rc.value().vType in Leaves:
-        return ok((VOID_HASH_KEY, rc.value()))
+      let vtx = rc[].data().deblobify(VertexRef).expect("valid data in db")
+      if vtx.vType in Leaves:
+        return ok((VOID_HASH_KEY, vtx))
 
   # Otherwise fetch from backend database
-  # A threadvar is used to avoid allocating an environment for onData
-  var res {.threadvar.}: Opt[HashKey]
-  var vtx {.threadvar.}: Result[VertexRef, AristoError]
+  var 
+    vtxBuf {.noinit.}: VertexBuf
+    dataLen: int
 
-  let onData = proc(data: openArray[byte]) =
-    res = data.deblobify(HashKey)
-    if res.isSome():
-      reset(vtx)
-    else:
-      vtx = data.deblobify(VertexRef)
-
-  let gotData = rdb.vtxCol.get(rvid.blobify().data(), onData).valueOr:
+  let gotData = rdb.vtxCol.get(rvid.blobify().data(), vtxBuf.buf, dataLen).valueOr:
     const errSym = RdbBeDriverGetKeyError
     when extraTraceMessages:
       trace logTxt "getKey", rvid, error = errSym, info = error
@@ -162,18 +156,28 @@ proc getKey*(
 
   if not gotData:
     return ok((VOID_HASH_KEY, nil))
+  
+  vtxBuf.n = typeof(vtxBuf.n)(dataLen)
+
+  let res = vtxBuf.data().deblobify(HashKey)
 
   # Update cache and return - in peek mode, avoid evicting cache items
-  if res.isSome() and
+  if res.isSome() and GetVtxFlag.NoPutCache notin flags and
       (GetVtxFlag.PeekCache notin flags or rdb.rdKeyLru.len < rdb.rdKeyLru.capacity):
     rdb.rdKeyLru.put(rvid.vid, res.value())
 
-  if vtx.isOk() and rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
+  if res.isNone() and GetVtxFlag.NoPutCache notin flags and rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
     # Don't invalidate vertex cache entries because of key reads - the latter
     # follow a different access pattern!
-    rdb.rdVtxLru.put(rvid.vid, vtx.value())
+    rdb.rdVtxLru.put(rvid.vid, vtxBuf)
 
-  ok (res.valueOr(VOID_HASH_KEY), vtx.valueOr(nil))
+  let vtx = 
+    if res.isNone():
+      vtxBuf.data().deblobify(VertexRef).expect("valid data in db")
+    else:
+      nil
+
+  ok (res.valueOr(VOID_HASH_KEY), vtx)
 
 proc getVtx*(
     rdb: var RdbInst, rvid: RootedVertexID, flags: set[GetVtxFlag]
@@ -197,18 +201,18 @@ proc getVtx*(
         rdb.rdVtxLru.get(rvid.vid)
 
     if rc.isOk:
-      rdbVtxLruStats[rvid.to(RdbStateType)][rc.value().vType.to(RdbVertexType)].inc(
+      let vtx = rc[].data().deblobify(VertexRef).expect("valid data in db")
+      rdbVtxLruStats[rvid.to(RdbStateType)][vtx.vType.to(RdbVertexType)].inc(
         true
       )
-      return ok(move(rc.value))
+      return ok(vtx)
 
   # Otherwise fetch from backend database
-  # A threadvar is used to avoid allocating an environment for onData
-  var res {.threadvar.}: Result[VertexRef, AristoError]
-  let onData = proc(data: openArray[byte]) =
-    res = data.deblobify(VertexRef)
+  var 
+    vtxBuf {.noinit.}: VertexBuf
+    dataLen: int
 
-  let gotData = rdb.vtxCol.get(rvid.blobify().data(), onData).valueOr:
+  let gotData = rdb.vtxCol.get(rvid.blobify().data(), vtxBuf.buf, dataLen).valueOr:
     const errSym = RdbBeDriverGetVtxError
     when extraTraceMessages:
       trace logTxt "getVtx", vid, error = errSym, info = error
@@ -217,6 +221,10 @@ proc getVtx*(
   if not gotData:
     rdbVtxLruStats[rvid.to(RdbStateType)][RdbVertexType.Empty].inc(false)
     return ok(VertexRef(nil))
+  
+  vtxBuf.n = typeof(vtxBuf.n)(dataLen)
+
+  let res = vtxBuf.data().deblobify(VertexRef)
 
   if res.isErr():
     return err((res.error(), "Parsing failed")) # Parsing failed
@@ -234,7 +242,7 @@ proc getVtx*(
       let vtx = BranchRef(res.value())
       rdb.rdBranchLru.put(rvid.vid, (vtx.startVid, vtx.used))
     else:
-      rdb.rdVtxLru.put(rvid.vid, res.value())
+      rdb.rdVtxLru.put(rvid.vid, vtxBuf)
 
   ok res.value()
 

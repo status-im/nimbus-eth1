@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -12,16 +12,12 @@
 
 import
   ../aristo,
-  ./backend/aristo_db,
-  "."/[base_iterators, core_apps]
-
-import
-  ./base except bless
+  ./backend/aristo_memory,
+  ./[base, core_apps]
 
 export
   EmptyBlob,
   base,
-  base_iterators,
   core_apps
 
 # ------------------------------------------------------------------------------

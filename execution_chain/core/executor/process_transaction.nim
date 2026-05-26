@@ -16,7 +16,8 @@ import
   ../../common/common,
   ../../db/ledger,
   ../../transaction/call_evm,
-  ../../transaction/call_common,
+  ../../transaction/system_call,
+  ../../transaction/call_types,
   ../../transaction,
   ../../evm/state,
   ../../evm/types,
@@ -27,237 +28,205 @@ import
   ../validate
 
 
-export results, call_common
+export results, call_types
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-func eip1559BaseFee(header: Header; fork: EVMFork): UInt256 =
-  ## Actually, `baseFee` should be 0 for pre-London headers already. But this
-  ## function just plays safe. In particular, the `test_general_state_json.nim`
-  ## module modifies this block header `baseFee` field unconditionally :(.
-  if FkLondon <= fork:
-    result = header.baseFeePerGas.get(0.u256)
-
 proc commitOrRollbackDependingOnGasUsed(
     vmState: BaseVMState;
     savePoint: LedgerSpRef;
-    header: Header;
     tx: Transaction;
     callResult: var LogResult;
-    priorityFee: GasInt;
     blobGasUsed: GasInt;
+    rollbackReads: bool;
       ): Result[void, string] =
   # Make sure that the tx does not exceed the maximum cumulative limit as
-  # set in the block header. Again, the EIP-1559 reference does not mention
+  # set in the vmState.blockCtx. Again, the EIP-1559 reference does not mention
   # an early stop. It would rather detect differing values for the  block
   # header `gasUsed` and the `vmState.cumulativeGasUsed` at a later stage.
-  let
-    gasUsed = callResult.gasUsed
-    blockGasUsed = callResult.blockGasUsed
+  let gasUsed = callResult.gasUsed
 
-  let limit = if vmState.fork >= FkAmsterdam:
-                vmState.blockGasUsed + blockGasUsed
-              else:
-                vmState.cumulativeGasUsed + gasUsed
-
-  if header.gasLimit < limit:
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.rollbackCallFrame()
-    vmState.ledger.rollback(savePoint)
-    err(&"invalid tx: block header gasLimit reached. gasLimit={header.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasUsed}")
-  else:
-    # Accept transaction and collect mining fee.
-    let txFee = gasUsed.u256 * priorityFee.u256
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), txFee)
-      vmState.balTracker.commitCallFrame()
-    vmState.ledger.commit(savePoint)
-    vmState.ledger.addBalance(vmState.coinbase(), txFee)
-    vmState.cumulativeGasUsed += gasUsed
-    vmState.blockGasUsed += blockGasUsed
-
-    # EIP-7708: Emit closure logs for accounts with remaining balance before deletion
-    if vmState.fork >= FkAmsterdam:
-      emitClosureLogs(vmState, callResult.logEntries)
-
-    # Return remaining gas to the block gas counter so it is
-    # available for the next transaction.
-    vmState.gasPool += tx.gasLimit - blockGasUsed
-    vmState.blobGasUsed += blobGasUsed
-    ok()
-
-proc processTransactionImpl(
-    vmState: BaseVMState; ## Parent accounts environment for transaction
-    tx:      Transaction; ## Transaction to validate
-    sender:  Address;  ## tx.recoverSender
-    header:  Header; ## Header for the block containing the current tx
-      ): Result[LogResult, string] =
-  ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
-  ## which provides a backward compatible framwork for EIP1559.
-
-  let
-    fork = vmState.fork
-    roDB = vmState.readOnlyLedger
-    baseFee256 = header.eip1559BaseFee(fork)
-    baseFee = baseFee256.truncate(GasInt)
-    priorityFee = min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFee)
-    excessBlobGas = header.excessBlobGas.get(0'u64)
-
-  # buy gas, then the gas goes into gasMeter
-  if vmState.gasPool < tx.gasLimit:
-    return err("gas limit reached. gasLimit=" & $vmState.gasPool &
-      ", gasNeeded=" & $tx.gasLimit)
-
-  vmState.gasPool -= tx.gasLimit
-
-  # blobGasUsed will be added to vmState.blobGasUsed if the tx is ok.
-  let
-    blobGasUsed = tx.getTotalBlobGas
-    maxBlobGasPerBlock = getMaxBlobGasPerBlock(vmState.com, vmState.fork)
-  if vmState.blobGasUsed + blobGasUsed > maxBlobGasPerBlock:
-    return err("blobGasUsed " & $blobGasUsed &
-      " exceeds maximum allowance " & $maxBlobGasPerBlock)
-
-  # Actually, the EIP-1559 reference does not mention an early exit.
-  #
-  # Even though database was not changed yet but, a `persist()` directive
-  # before leaving is crucial for some unit tests that us a direct/deep call
-  # of the `processTransaction()` function. So there is no `return err()`
-  # statement, here.
-  let
-    com = vmState.com
-    txRes = roDB.validateTransaction(tx, sender, header.gasLimit, baseFee256, excessBlobGas, com, fork)
-    res = if txRes.isOk:
-      # Execute the transaction.
-      vmState.captureTxStart(tx.gasLimit)
-
+  # EIP-8037: block validity is max(blockRegularGas, blockStateGas) <= gasLimit
+  if vmState.fork >= FkAmsterdam:
+    let limit2d = max(
+      vmState.blockRegularGasUsed + callResult.blockRegularGasUsed,
+      vmState.blockStateGasUsed + callResult.blockStateGasUsed)
+    if vmState.blockCtx.gasLimit < limit2d:
       if vmState.balTrackerEnabled:
-        vmState.balTracker.beginCallFrame()
-      let savePoint = vmState.ledger.beginSavePoint()
+        vmState.balTracker.rollbackCallFrame(rollbackReads)
+      vmState.ledger.rollback(savePoint)
+      return err(&"invalid tx: block gas limit reached (2D). gasLimit={vmState.blockCtx.gasLimit}, regularGas={vmState.blockRegularGasUsed}+{callResult.blockRegularGasUsed}, stateGas={vmState.blockStateGasUsed}+{callResult.blockStateGasUsed}")
+  else:
+    let limit = vmState.cumulativeGasUsed + gasUsed
+    if vmState.blockCtx.gasLimit < limit:
+      if vmState.balTrackerEnabled:
+        vmState.balTracker.rollbackCallFrame(rollbackReads)
+      vmState.ledger.rollback(savePoint)
+      return err(&"invalid tx: block gasLimit reached. gasLimit={vmState.blockCtx.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasUsed}")
 
-      var callResult = tx.txCallEvm(sender, vmState, baseFee)
-      vmState.captureTxEnd(tx.gasLimit - callResult.gasUsed)
+  # Accept transaction and collect mining fee.
+  let
+    baseFee = vmState.blockCtx.baseFeePerGas
+    priorityFee = min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFee)
+    txFee = gasUsed.u256 * priorityFee.u256
 
-      let tmp = commitOrRollbackDependingOnGasUsed(
-        vmState, savePoint, header, tx, callResult, priorityFee, blobGasUsed)
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), txFee)
+    vmState.balTracker.commitCallFrame()
 
-      if tmp.isErr():
-        err(tmp.error)
-      else:
-        ok(move(callResult))
-    else:
-      err(txRes.error)
+  vmState.ledger.addBalance(vmState.coinbase(), txFee)
+  vmState.ledger.commit(savePoint)
+  vmState.cumulativeGasUsed += gasUsed
+  vmState.blockRegularGasUsed += callResult.blockRegularGasUsed
+  vmState.blockStateGasUsed += callResult.blockStateGasUsed
+  vmState.blobGasUsed += blobGasUsed
 
-  vmState.ledger.persist(clearEmptyAccount = fork >= FkSpurious)
-
-  res
+  # EIP-7708: Emit closure logs for accounts with remaining balance before deletion
+  if vmState.fork >= FkAmsterdam:
+    emitClosureLogs(vmState, callResult.logEntries)
+  ok()
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32):
-                              Result[void, string] =
+proc processTransaction*(
+    vmState: BaseVMState; ## Parent accounts environment for transaction
+    tx:      Transaction; ## Transaction to validate
+    sender:  Address;  ## tx.recoverSender
+    rollbackReads: bool = false;
+      ): Result[LogResult, string] =
+  ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
+  ## which provides a backward compatible framwork for EIP1559.
+
+  let
+    com = vmState.com
+    fork = vmState.hardFork
+    regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
+    stateGasAvailable = vmState.blockCtx.gasLimit - vmState.blockStateGasUsed
+    intrinsic = tx.intrinsicGas(fork, vmState.blockCtx.gasLimit)
+
+  # Per-tx 2D gas inclusion check: for each dimension the worst-case
+  # contribution must fit in the remaining budget.  Block-end
+  # validation still enforces
+  if fork < Amsterdam:
+    let want = min(TX_GAS_LIMIT.GasInt, tx.gasLimit)
+    if want > regularGasAvailable:
+      return err("regular gas used exceeds limit, want: " & $want & ", available: " & $regularGasAvailable)
+  else:
+    # https://github.com/ethereum/execution-specs/pull/2703/changes
+    # Worst-case regular contribution: tx.gasLimit minus the portion that
+    # must go to intrinsic state gas, capped at TX_MAX_GAS_LIMIT.
+    let want = min(TX_GAS_LIMIT.GasInt, tx.gasLimit - intrinsic.state)
+    if want > regularGasAvailable:
+      return err("regular gas used exceeds limit, want: " & $want & ", available: " & $regularGasAvailable)
+
+    # Worst-case state contribution: tx.gasLimit minus the portion that
+    # must go to intrinsic regular gas.
+    let stateGas = tx.gasLimit - intrinsic.regular
+    if stateGas > stateGasAvailable:
+      return err("state gas used exceeds limit, want: " & $stateGas & ", available: " & $stateGasAvailable)
+
+  # blobGasUsed will be added to vmState.blobGasUsed if the tx is ok.
+  let
+    blobGasUsed = tx.getTotalBlobGas
+    maxBlobGasPerBlock = getMaxBlobGasPerBlock(com, fork)
+  if vmState.blobGasUsed + blobGasUsed > maxBlobGasPerBlock:
+    return err("blobGasUsed " & $blobGasUsed &
+      " exceeds maximum allowance " & $maxBlobGasPerBlock)
+
+  ? validateTxBasic(com, tx, intrinsic, fork)
+
+  vmState.validateTransaction(tx, sender).isOkOr:
+    return err(error)
+
+  # Execute the transaction.
+  vmState.captureTxStart(tx.gasLimit)
+
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.beginCallFrame()
+  let savePoint = vmState.ledger.beginSavePoint()
+
+  var callResult = tx.txCallEvm(sender, vmState, intrinsic)
+  vmState.captureTxEnd(tx.gasLimit - callResult.gasUsed)
+
+  let
+    tmp = commitOrRollbackDependingOnGasUsed(
+      vmState, savePoint, tx, callResult, blobGasUsed, rollbackReads)
+    res = if tmp.isErr:
+      err(tmp.error)
+    else:
+      ok(move(callResult))
+
+  vmState.ledger.persist(clearEmptyAccount = fork >= Spurious)
+
+  res
+
+proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32) =
   ## processBeaconBlockRoot applies the EIP-4788 system call to the
   ## beacon block root contract. This method is exported to be used in tests.
   ## If EIP-4788 is enabled, we need to invoke the beaconroot storage
   ## contract with the new root.
   let
-    ledger = vmState.ledger
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
-      gasLimit : DEFAULT_GAS_LIMIT.GasInt,
-      gasPrice : 0.GasInt,
+      gasLimit : 30_000_000.GasInt,
       to       : BEACON_ROOTS_ADDRESS,
       input    : @(beaconRoot.data),
-      sysCall  : true,
     )
 
-  # runComputation a.k.a syscall/evm.call
-  let res = call.runComputation(string)
-  if res.len > 0:
-    return err("processBeaconBlockRoot: " & res)
+  # EIP-4788: fail silently
+  call.systemCall(void)
 
-  ledger.persist(clearEmptyAccount = true)
-  ok()
-
-proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32):
-                              Result[void, string] =
+proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32) =
   ## processParentBlockHash stores the parent block hash in the
   ## history storage contract as per EIP-2935.
   let
-    ledger = vmState.ledger
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
-      gasLimit : DEFAULT_GAS_LIMIT.GasInt,
-      gasPrice : 0.GasInt,
+      gasLimit : 30_000_000.GasInt,
       to       : HISTORY_STORAGE_ADDRESS,
       input    : @(prevHash.data),
-      sysCall  : true,
     )
 
-  # runComputation a.k.a syscall/evm.call
-  let res = call.runComputation(string)
-  if res.len > 0:
-    return err("processParentBlockHash: " & res)
-
-  ledger.persist(clearEmptyAccount = true)
-  ok()
+  # EIP-2923: fail silently
+  call.systemCall(void)
 
 proc processDequeueWithdrawalRequests*(vmState: BaseVMState): Result[seq[byte], string] =
   ## processDequeueWithdrawalRequests applies the EIP-7002 system call
   ## to the withdrawal requests contract.
   let
-    ledger = vmState.ledger
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
       gasLimit : 30_000_000.GasInt,
-      gasPrice : 0.GasInt,
       to       : WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
-      sysCall  : true,
     )
 
-  # runComputation a.k.a syscall/evm.call
-  let res = call.runComputation(OutputResult)
+  var res = call.systemCall(OutputResult)
   if res.error.len > 0:
     return err("processDequeueWithdrawalRequests: " & res.error)
-
-  ledger.persist(clearEmptyAccount = true)
-  ok(res.output)
+  ok(move(res.output))
 
 proc processDequeueConsolidationRequests*(vmState: BaseVMState): Result[seq[byte], string] =
   ## processDequeueConsolidationRequests applies the EIP-7251 system call
   ## to the consolidation requests contract.
   let
-    ledger = vmState.ledger
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
       gasLimit : 30_000_000.GasInt,
-      gasPrice : 0.GasInt,
       to       : CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
-      sysCall  : true,
     )
 
-  # runComputation a.k.a syscall/evm.call
-  let res = call.runComputation(OutputResult)
+  var res = call.systemCall(OutputResult)
   if res.error.len > 0:
     return err("processDequeueConsolidationRequests: " & res.error)
-  ledger.persist(clearEmptyAccount = true)
-  ok(res.output)
-
-proc processTransaction*(
-    vmState: BaseVMState; ## Parent accounts environment for transaction
-    tx:      Transaction; ## Transaction to validate
-    sender:  Address;  ## tx.recoverSender
-    header:  Header; ## Header for the block containing the current tx
-      ): Result[LogResult, string] =
-  vmState.processTransactionImpl(tx, sender, header)
+  ok(move(res.output))
 
 # ------------------------------------------------------------------------------
 # End

@@ -52,9 +52,11 @@ const
   defaultAdminListenAddressDesc = $defaultAdminListenAddress & ", meaning local host only"
   logLevelDesc = getLogLevels()
 
-let
-  defaultListenAddress      = getAutoAddress(Port(0)).toIpAddress()
-  defaultListenAddressDesc  = $defaultListenAddress & ", meaning all network interfaces"
+template defaultListenAddress(): IpAddress =
+  getAutoAddress(Port(0)).toIpAddress()
+
+template defaultListenAddressDesc(): string =
+  $defaultListenAddress() & ", meaning all network interfaces"
 
 type
   NimbusCmd* {.pure.} = enum
@@ -117,14 +119,17 @@ type
       separator: "\pPAYLOAD BUILDING OPTIONS:"
       desc: "Value of extraData field when building an execution payload(max 32 bytes)"
       defaultValue: ShortClientId
-      defaultValueDesc: $ShortClientId
       name: "extra-data" .}: string
 
     gasLimit* {.
       desc: "Desired gas limit when building an execution payload"
       defaultValue: DEFAULT_GAS_LIMIT
-      defaultValueDesc: $DEFAULT_GAS_LIMIT
       name: "gas-limit" .}: uint64
+
+    # https://eips.ethereum.org/EIPS/eip-7872
+    maxBlobs* {.
+      desc: "EIP-7872 maximum blobs used when building a local payload"
+      name: "max-blobs" .}: Option[uint8]
 
     # https://ethereum.org/developers/docs/networks/#ethereum-testnets
     network {.
@@ -178,13 +183,12 @@ type
     metricsPort* {.
       desc: "Listening port of the built-in metrics HTTP server"
       defaultValue: defaultMetricsServerPort
-      defaultValueDesc: $defaultMetricsServerPort
       name: "metrics-port" .}: Port
 
     metricsAddress* {.
       desc: "Listening IP address of the built-in metrics HTTP server"
       defaultValue: defaultAdminListenAddress
-      defaultValueDesc: $defaultAdminListenAddressDesc
+      defaultValueDesc: defaultAdminListenAddressDesc
       name: "metrics-address" .}: IpAddress
 
     bootstrapNodes {.
@@ -227,13 +231,12 @@ type
     listenAddress* {.
       desc: "Listening IP address for Ethereum P2P and Discovery traffic"
       defaultValue: defaultListenAddress
-      defaultValueDesc: $defaultListenAddressDesc
+      defaultValueDesc: defaultListenAddressDesc
       name: "listen-address" .}: IpAddress
 
     tcpPort* {.
       desc: "Ethereum P2P network listening TCP port"
       defaultValue: defaultExecutionPort
-      defaultValueDesc: $defaultExecutionPort
       name: "tcp-port" .}: Port
 
     udpPortFlag* {.
@@ -276,7 +279,6 @@ type
     agentString* {.
       desc: "Node agent string which is used as identifier in network"
       defaultValue: ClientId
-      defaultValueDesc: $ClientId
       name: "agent-string" .}: string
 
     numThreads* {.
@@ -298,43 +300,41 @@ type
     rocksdbMaxOpenFiles {.
       hidden
       defaultValue: defaultMaxOpenFiles
-      defaultValueDesc: $defaultMaxOpenFiles
       name: "debug-rocksdb-max-open-files".}: int
 
     rocksdbWriteBufferSize {.
       hidden
       defaultValue: defaultWriteBufferSize
-      defaultValueDesc: $defaultWriteBufferSize
       name: "debug-rocksdb-write-buffer-size".}: int
 
     rocksdbRowCacheSize {.
       hidden
       defaultValue: defaultRowCacheSize
-      defaultValueDesc: $defaultRowCacheSize
       name: "debug-rocksdb-row-cache-size".}: int
 
     rocksdbBlockCacheSize {.
       hidden
       defaultValue: defaultBlockCacheSize
-      defaultValueDesc: $defaultBlockCacheSize
       name: "debug-rocksdb-block-cache-size".}: int
+
+    rocksdbBlockCacheType {.
+      hidden
+      defaultValue: defaultBlockCacheType
+      name: "debug-rocksdb-block-cache-type" .}: RocksDbBlockCacheType
 
     rdbVtxCacheSize {.
       hidden
       defaultValue: defaultRdbVtxCacheSize
-      defaultValueDesc: $defaultRdbVtxCacheSize
       name: "debug-rdb-vtx-cache-size".}: int
 
     rdbKeyCacheSize {.
       hidden
       defaultValue: defaultRdbKeyCacheSize
-      defaultValueDesc: $defaultRdbKeyCacheSize
       name: "debug-rdb-key-cache-size".}: int
 
     rdbBranchCacheSize {.
       hidden
       defaultValue: defaultRdbBranchCacheSize
-      defaultValueDesc: $defaultRdbBranchCacheSize
       name: "debug-rdb-branch-cache-size".}: int
 
     rdbPrintStats {.
@@ -350,8 +350,13 @@ type
     aristoDbMaxSnapshots* {.
       hidden
       defaultValue: defaultMaxSnapshots
-      defaultValueDesc: $defaultMaxSnapshots
       name: "debug-aristo-db-max-snapshots" .}: int
+
+    parallelStateRootComputation* {.
+      hidden
+      defaultValue: true
+      desc: "Compute state root in parallel using multiple threads"
+      name: "debug-parallel-state-root".}: bool
 
     eagerStateRootCheck* {.
       hidden
@@ -386,7 +391,6 @@ type
         separator: "\pLOCAL SERVICES OPTIONS:"
         desc: "Listening port of the HTTP server(rpc, ws)"
         defaultValue: defaultHttpPort
-        defaultValueDesc: $defaultHttpPort
         name: "http-port" .}: Port
 
       httpAddress* {.
@@ -440,7 +444,6 @@ type
       engineApiPort* {.
         desc: "Listening port for the Engine API(http and ws)"
         defaultValue: defaultEngineApiPort
-        defaultValueDesc: $defaultEngineApiPort
         name: "engine-api-port" .}: Port
 
       engineApiAddress* {.
@@ -460,10 +463,10 @@ type
         defaultValueDesc: "*"
         name: "allowed-origins" .}: seq[string]
 
-      # https://eips.ethereum.org/EIPS/eip-7872
-      maxBlobs* {.
-        desc: "EIP-7872 maximum blobs used when building a local payload"
-        name: "max-blobs" .}: Option[uint8]
+      backgroundPruning* {.
+        desc: "Enable background pruning of expired block bodies and receipts"
+        defaultValue: false
+        name: "prune" .}: bool
 
       # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/authentication.md#key-distribution
       jwtSecret* {.
@@ -486,6 +489,14 @@ type
               " sync immediately"
         defaultValue: false
         name: "debug-snap-sync" .}: bool
+
+      snapSyncResume* {.
+        hidden
+        desc: "Use the cached data from a previous session if there is any." &
+              " Otherwise, data from a previous snap session will be moved" &
+              " to a backup directory, the name ending with ~"
+        defaultValue: false
+        name: "debug-snap-sync-resume" .}: bool
 
       snapServerEnabled* {.
         hidden
@@ -806,6 +817,8 @@ func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
       else: config.rdbBranchCacheSize,
     rdbPrintStats = config.rdbPrintStats,
     maxSnapshots = config.aristoDbMaxSnapshots,
+    parallelStateRootComputation = config.parallelStateRootComputation,
+    blockCacheType = config.rocksdbBlockCacheType,
   )
 
 func jwtSecretOpt*(config: ExecutionClientConf): Opt[InputFile] =

@@ -22,12 +22,6 @@ template isAddress(bytes: openArray[byte]): bool =
 template isSlot(bytes: openArray[byte]): bool =
   bytes.len() == 32
 
-template computeAccPath(address: Address): Hash32 =
-  keccak256(address.data)
-
-template computeSlotKey(slot: UInt256): Hash32 =
-  keccak256(slot.toBytesBE())
-
 func putAll(
     keys: var Table[Address, HashSet[UInt256]], keysToAdd: openArray[seq[byte]]
 ): Result[void, string] =
@@ -121,6 +115,12 @@ func verifyHeaders*(
 func verifyState*(
     witness: ExecutionWitness, preStateRoot: Hash32
 ): Result[void, string] =
+  # Short path for emptyRoot -> empty trie: no accounts exist in the pre-state,
+  # nothing to verify.
+  # Without this check verifyProof will return an error.
+  if preStateRoot == emptyRoot:
+    return ok()
+
   # Verify state against keys in witness
   var keysTable: Table[Address, HashSet[UInt256]]
   ?keysTable.putAll(witness.keys)

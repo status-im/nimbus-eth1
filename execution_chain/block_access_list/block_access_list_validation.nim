@@ -62,8 +62,7 @@ func validate*(
 
   # Check the size of the BAL to protect against DOS attacks. Do this first
   # because it is more efficient than the rest of the validations below.
-  # TODO: enable this once the tests have been updated
-  #?bal.checkBalSize(blockGasLimit)
+  ?bal.checkBalSize(blockGasLimit)
 
   # The custom cmpTreatEqualAsGreater compare functions below enable validating
   # that each list contains no duplicates in each call to isSorted.

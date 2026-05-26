@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -17,7 +17,8 @@ import
   results,
   ../../aristo/aristo_init/[rocks_db as use_ari, persistent],
   ../../kvt/kvt_init/[rocks_db as use_kvt, persistent],
-  ./[aristo_db, rocksdb_desc],
+  ../base_desc,
+  ./rocksdb_desc,
   ../../aristo/aristo_compute,
   ../../opts
 
@@ -160,7 +161,7 @@ proc toCfOpts*(opts: DbOptions, cache: CacheRef, bulk: bool): ColFamilyOptionsRe
 # Public constructor
 # ------------------------------------------------------------------------------
 
-proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions): CoreDbRef =
+proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions, wipe = false): CoreDbRef =
   # Single rocksdb database with separate column families for mpt/kvt
 
   # The same column family options are used for all column families meaning that
@@ -178,7 +179,11 @@ proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions): CoreDbRef =
         # significant portion of the inner trie nodes!
         # This code sets up a single block cache to be shared, a strategy that
         # plausibly can be refined in the future.
-        cacheCreateLRU(opts.blockCacheSize, autoClose = true)
+        case opts.blockCacheType
+        of lruCache:
+          cacheCreateLRU(opts.blockCacheSize, autoClose = true)
+        of hyperClockCache:
+          cacheCreateHyperClock(opts.blockCacheSize, autoClose = true)
       else:
         nil
     dbOpts = opts.toDbOpts()
@@ -189,7 +194,7 @@ proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions): CoreDbRef =
 
     cfDescs =
       @[($AristoCFs.VtxCF, acfOpts)] & KvtCFs.items().toSeq().mapIt(($it, kcfOpts))
-    baseDb = RocksDbInstanceRef.open(basePath, dbOpts, cfDescs).expect(
+    baseDb = RocksDbInstanceRef.open(basePath, dbOpts, cfDescs, wipe).expect(
         "Open database from " & basePath
       )
 
@@ -197,13 +202,7 @@ proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions): CoreDbRef =
       raiseAssert "Could not initialize aristo: " & $error
     kdb = KvtDbRef.init(baseDb)
 
-  if opts.rdbKeyCacheSize > 0:
-    # Make sure key cache isn't empty
-    adb.txRef.computeKeys(STATE_ROOT_VID).isOkOr:
-      fatal "Cannot compute root keys", msg = error
-      quit(QuitFailure)
-
-  AristoDbRocks.create(kdb, adb)
+  CoreDbRef(kvt: kdb, mpt: adb)
 
 # ------------------------------------------------------------------------------
 # End

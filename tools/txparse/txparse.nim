@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,9 +13,11 @@ import
   stew/byteutils,
   eth/common/transaction_utils,
   ../common/helpers,
+  ../../execution_chain/db/core_db/memory_only,
   ../../execution_chain/transaction,
+  ../../execution_chain/transaction/call_types,
   ../../execution_chain/core/validate,
-  ../../execution_chain/common/evmforks,
+  ../../execution_chain/common/hardforks,
   ../../execution_chain/common/common
 
 proc parseTx(com: CommonRef, hexLine: string) =
@@ -24,8 +26,10 @@ proc parseTx(com: CommonRef, hexLine: string) =
       bytes = hexToSeqByte(hexLine)
       tx = decodeTx(bytes)
       address = tx.recoverSender().expect("valid signature")
+      fork = HardFork.Prague
+      intrinsic = tx.intrinsicGas(fork, 10_000_000)
 
-    validateTxBasic(com, tx, FkPrague).isOkOr:
+    validateTxBasic(com, tx, intrinsic, fork).isOkOr:
       echo "err: ", error
 
     # everything ok

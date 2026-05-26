@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -129,6 +129,10 @@ func w3Qty*(x: Web3Quantity, y: uint64): Web3Quantity =
   Web3Quantity(x.uint64 + y)
 
 func w3Qty*(x: Opt[uint64]): Opt[Web3Quantity] =
+  if x.isNone: Opt.none(Web3Quantity)
+  else: Opt.some(Web3Quantity x.get)
+
+func w3Qty*(x: Opt[EthTime]): Opt[Web3Quantity] =
   if x.isNone: Opt.none(Web3Quantity)
   else: Opt.some(Web3Quantity x.get)
 

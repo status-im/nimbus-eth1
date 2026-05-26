@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2025 Status Research & Development GmbH. Licensed under
+# Copyright (c) 2018-2026 Status Research & Development GmbH. Licensed under
 # either of:
 # - Apache License, version 2.0
 # - MIT license
@@ -33,8 +33,7 @@ EXCLUDED_NIM_PACKAGES := 	\
   vendor/nimbus-eth2/vendor/nim-libbacktrace          \
   vendor/nimbus-eth2/vendor/nim-metrics               \
   vendor/nimbus-eth2/vendor/nim-nat-traversal         \
-  vendor/nimbus-eth2/vendor/nim-ngtcp2                \
-  vendor/nimbus-eth2/vendor/nim-quic                  \
+  vendor/nimbus-eth2/vendor/nim-lsquic                \
   vendor/nimbus-eth2/vendor/nim-results               \
   vendor/nimbus-eth2/vendor/nim-secp256k1             \
   vendor/nimbus-eth2/vendor/nim-serialization         \
@@ -90,20 +89,15 @@ PORTAL_TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(FLUFFY_TOOLS))
 
 # Namespaced variables to avoid conflicts with other makefiles
 OS_PLATFORM = $(shell $(CC) -dumpmachine)
-ifneq (, $(findstring darwin, $(OS_PLATFORM)))
-  SHAREDLIBEXT = dylib
-  STATICLIBEXT = a
-else
-ifneq (, $(findstring mingw, $(OS_PLATFORM))$(findstring cygwin, $(OS_PLATFORM))$(findstring msys, $(OS_PLATFORM)))
-  SHAREDLIBEXT = dll
-  STATICLIBEXT = lib
-else
-  SHAREDLIBEXT = so
-  STATICLIBEXT = a
-endif
-endif
 
 VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
+ifneq (, $(findstring darwin, $(OS_PLATFORM)))
+  VERIFPROXY_LDFLAGS = -lc++ -framework Security
+else ifneq (, $(findstring mingw, $(OS_PLATFORM)))
+  VERIFPROXY_LDFLAGS = -lc++ -lbcrypt -lpthread -lws2_32
+else
+  VERIFPROXY_LDFLAGS = -lstdc++ -lm
+endif
 
 .PHONY: \
 	all \
@@ -116,7 +110,12 @@ VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 	nimbus_portal_client \
 	fluffy \
 	nimbus_verified_proxy \
+	nimbus_verified_proxy_test \
 	libverifproxy \
+	libverifproxy_test \
+	nimbus_verified_proxy_go_test \
+	nimbus_verified_proxy_wasm \
+	nimbus_verified_proxy_wasm_debug \
 	external_sync \
 	test \
 	test-reproducibility \
@@ -131,6 +130,12 @@ VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 	dist-macos-arm64 \
 	dist \
 	eest \
+	eest_engine \
+	eest_engine_test \
+	eest_blockchain \
+	eest_blockchain_test \
+	eest_stateless_execution_test \
+	eest_full_test \
 	t8n \
 	t8n_test \
 	evmstate \
@@ -192,10 +197,13 @@ ifeq ($(USE_LIBBACKTRACE), 0)
   NIM_PARAMS += -d:disable_libbacktrace
 endif
 
-deps: | deps-common nat-libs nimbus.nims
-ifneq ($(USE_LIBBACKTRACE), 0)
-deps: | libbacktrace
+# Used in docker/dist/entry_point.sh
+# To avoid confusion with USE_SYSTEM_ROCKSDB
+ifeq ($(USE_CACHED_ROCKSDB), 1)
+  USE_SYSTEM_ROCKSDB = 1
 endif
+
+deps: | deps-common nat-libs nimbus.nims
 
 # eth protocol settings, rules from "execution_chain/sync/protocol/eth/variables.mk"
 NIM_PARAMS := $(NIM_PARAMS) $(NIM_ETH_PARAMS)
@@ -216,6 +224,8 @@ $(TOOLS): | build deps rocksdb
 		echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "$${TOOL_DIR}/$@.nim"
 
+tools: | $(TOOLS)
+
 nimbus_execution_client: | build deps rocksdb
 	echo -e $(BUILD_MSG) "build/nimbus_execution_client" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/nimbus_execution_client "execution_chain/nimbus_execution_client.nim"
@@ -231,19 +241,19 @@ nimbus: | build deps rocksdb
 nimbus.nims:
 	ln -s nimbus.nimble $@
 
-# nim-libbacktrace
-libbacktrace:
-	+ $(MAKE) -C vendor/nim-libbacktrace --no-print-directory BUILD_CXX_LIB=0
-
 # nim-rocksdb
 ROCKSDB_CI_CACHE := build/rocksdb
 
-ifneq ($(USE_SYSTEM_ROCKSDB), 0)
 rocksdb:
+ifneq ($(USE_SYSTEM_ROCKSDB), 1)
 	+ MAKE="$(MAKE)" \
 		scripts/rocksdb_ci_cache.sh $(ROCKSDB_CI_CACHE)
 else
-rocksdb:
+ifeq ($(USE_CACHED_ROCKSDB), 1)
+	@echo "Using cached RocksDB"
+else
+	@echo "Using system RocksDB"
+endif
 endif
 
 eest:
@@ -342,24 +352,68 @@ portal_bridge: | build deps
 
 # Nimbus Verified Proxy related targets
 
-# Builds the nimbus_verified_proxy
 nimbus_verified_proxy: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim nimbus_verified_proxy $(NIM_PARAMS) nimbus.nims
+		$(ENV_SCRIPT) nim c -o:build/$@ $(NIM_PARAMS) nimbus_verified_proxy/nimbus_verified_proxy.nim
 
-# builds and runs the nimbus_verified_proxy test suite
-nimbus-verified-proxy-test: | build deps
-	$(ENV_SCRIPT) nim nimbus_verified_proxy_test $(NIM_PARAMS) nimbus.nims
+nimbus_verified_proxy_test: | build deps
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) nimbus_verified_proxy/tests/all_proxy_tests.nim
+		rm nimbus_verified_proxy/tests/all_proxy_tests
 
-# Shared library for verified proxy
+$(VERIF_PROXY_OUT_PATH)/libverifproxy.a:
+	echo -e $(BUILD_MSG) "build/libverifproxy" && \
+		$(ENV_SCRIPT) nim c \
+		--out:$@ \
+		$(NIM_PARAMS) \
+		nimbus_verified_proxy/library/verifproxy.nim
+	cp nimbus_verified_proxy/library/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
 
 libverifproxy: | build deps
-	+ echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim --version && \
-		echo $(NIM_PARAMS) && \
-		$(ENV_SCRIPT) nim c --app:staticlib -d:"libp2p_pki_schemes=secp256k1" --noMain:on --out:$(VERIF_PROXY_OUT_PATH)/$@.$(STATICLIBEXT) $(NIM_PARAMS) nimbus_verified_proxy/libverifproxy/verifproxy.nim
-	cp nimbus_verified_proxy/libverifproxy/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
-	echo -e $(BUILD_END_MSG) "build/$@"
+libverifproxy: $(VERIF_PROXY_OUT_PATH)/libverifproxy.a
+
+libverifproxy_test: $(VERIF_PROXY_OUT_PATH)/libverifproxy.a
+	$(CC) -I$(VERIF_PROXY_OUT_PATH) -L$(VERIF_PROXY_OUT_PATH) \
+		-Wno-incompatible-pointer-types \
+		-o build/$@ \
+		tests/library/test_api.c \
+		-lverifproxy $(VERIFPROXY_LDFLAGS)
+	./build/$@
+
+GO_BINDINGS_DIR  := nimbus_verified_proxy/library/bindings/go
+GO_LIB_DIR       := $(GO_BINDINGS_DIR)/verifproxy/lib
+
+nimbus_verified_proxy_go_test: $(VERIF_PROXY_OUT_PATH)/libverifproxy.a
+	echo -e $(BUILD_MSG) "go test $(GO_BINDINGS_DIR)" && \
+		mkdir -p "$(GO_LIB_DIR)" && \
+		cp "$(VERIF_PROXY_OUT_PATH)/libverifproxy.a" \
+		   "$(GO_LIB_DIR)/libverifproxy.a" && \
+		cp nimbus_verified_proxy/library/verifproxy.h \
+		   "$(GO_LIB_DIR)/verifproxy.h" && \
+		cd "$(GO_BINDINGS_DIR)" && \
+		go test ./...
+
+nimbus_verified_proxy_wasm: | build deps
+	@mkdir -p $(CURDIR)/build/$@
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim c \
+		-d:emscripten \
+		-d:release \
+		-d:disable_libbacktrace \
+		-o:"$(CURDIR)/build/$@/verifproxy_wasm.js" \
+		nimbus_verified_proxy/library/bindings/wasm/verifproxy_wasm.nim
+	cp nimbus_verified_proxy/library/bindings/wasm/verifproxy.js $(CURDIR)/build/$@/
+
+nimbus_verified_proxy_wasm_debug: | build deps
+	@mkdir -p $(CURDIR)/build/$@
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim c \
+		-d:emscripten \
+		-d:debug \
+		-d:disable_libbacktrace \
+		-o:"$(CURDIR)/build/$@/verifproxy_wasm.js" \
+		nimbus_verified_proxy/library/bindings/wasm/verifproxy_wasm.nim
+	cp nimbus_verified_proxy/library/bindings/wasm/verifproxy.js $(CURDIR)/build/$@/
 
 # Stateless related targets
 
@@ -370,24 +424,25 @@ stateless_execution_test: | build deps
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -o:build/$@ "tests/test_stateless_execution.nim"
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) --mm:arc -d:useMalloc -d:chronicles_log_level=ERROR -o:build/$@ "tests/test_stateless_execution.nim"
 
+# EEST standalone targets - binary to run individual test vector files
 eest_engine: | build deps
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
-
-eest_engine_test: | build deps eest eest_engine
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
 
 eest_blockchain: | build deps
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
 
-eest_blockchain_test: | build deps eest eest_blockchain
+# EEST test suite targets - to run the whole test suite for each category
+eest_engine_test: | build deps eest
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
 
-eest_stateless_execution_test: | build deps eest eest_blockchain
+eest_blockchain_test: | build deps eest
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
 
-eest_full_test: | build deps eest_blockchain eest_engine
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/eest_blockchain_test.nim"
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/eest_engine_test.nim"
+eest_stateless_execution_test: | build deps eest
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+
+eest_full_test: | build deps eest
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/all_eest_tests.nim"
 
 # builds transition tool
 t8n: | build deps
@@ -415,9 +470,6 @@ clean: | clean-common
 	rm -rf tools/t8n/{t8n,t8n_test}
 	rm -rf tools/evmstate/{evmstate,evmstate_test}
 	rm -rf tests/fixtures/eest
-ifneq ($(USE_LIBBACKTRACE), 0)
-	+ $(MAKE) -C vendor/nim-libbacktrace clean $(HANDLE_OUTPUT)
-endif
 
 # Note about building Nimbus as a library:
 #

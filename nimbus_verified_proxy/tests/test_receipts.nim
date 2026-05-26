@@ -22,7 +22,7 @@ import
 suite "test receipts verification":
   let
     ts = TestApiState.init(1.u256)
-    engine = initTestEngine(ts, 1, 1).valueOr:
+    (engine, frontend) = initTestEngine(ts, 1, 1).valueOr:
       raise newException(TestProxyError, error.errMsg)
 
   test "get receipts using block tags":
@@ -40,28 +40,28 @@ suite "test receipts verification":
       engine.headerStore.add(convHeader(blk), blk.hash).isOk()
       engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
 
-    var verified = waitFor engine.frontend.eth_getBlockReceipts(numberTag)
+    var verified = waitFor frontend.eth_getBlockReceipts(numberTag)
     check:
       verified.isOk()
       verified.get().get() == rxs
 
-    verified = waitFor engine.frontend.eth_getBlockReceipts(finalTag)
+    verified = waitFor frontend.eth_getBlockReceipts(finalTag)
     check:
       verified.isOk()
       verified.get().get() == rxs
 
-    verified = waitFor engine.frontend.eth_getBlockReceipts(earliestTag)
+    verified = waitFor frontend.eth_getBlockReceipts(earliestTag)
     check:
       verified.isOk()
       verified.get().get() == rxs
 
-    verified = waitFor engine.frontend.eth_getBlockReceipts(latestTag)
+    verified = waitFor frontend.eth_getBlockReceipts(latestTag)
     check:
       verified.isOk()
       verified.get().get() == rxs
 
     let verifiedReceipt =
-      waitFor engine.frontend.eth_getTransactionReceipt(rxs[0].transactionHash)
+      waitFor frontend.eth_getTransactionReceipt(rxs[0].transactionHash)
     check:
       verifiedReceipt.isOk()
       verifiedReceipt.get() == rxs[0]
@@ -91,19 +91,18 @@ suite "test receipts verification":
         fromBlock: Opt.some(tag),
         toBlock: Opt.some(tag),
           # same tag because we load only one block into the backend
-        topics:
-          @[
-            TopicOrList(
-              kind: SingleOrListKind.slkSingle,
-              single:
-                bytes32"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
-            )
-          ],
+        topics: @[
+          TopicOrList(
+            kind: SingleOrListKind.slkSingle,
+            single:
+              bytes32"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+          )
+        ],
         blockHash: Opt.none(Hash32),
       )
 
       ts.loadLogs(filterOptions, logs)
-      let verifiedLogs = waitFor engine.frontend.eth_getLogs(filterOptions)
+      let verifiedLogs = waitFor frontend.eth_getLogs(filterOptions)
       check:
         verifiedLogs.isOk()
         verifiedLogs.get().len == logs.len
@@ -114,22 +113,21 @@ suite "test receipts verification":
   test "create filters and uninstall filters":
     # filter options without any tags would test resolving default "latest"
     let filterOptions = FilterOptions(
-      topics:
-        @[
-          TopicOrList(
-            kind: SingleOrListKind.slkSingle,
-            single:
-              bytes32"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
-          )
-        ],
+      topics: @[
+        TopicOrList(
+          kind: SingleOrListKind.slkSingle,
+          single:
+            bytes32"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+        )
+      ],
       blockHash: Opt.none(Hash32),
     ) # create a filter
-    let newFilter = waitFor engine.frontend.eth_newFilter(filterOptions)
+    let newFilter = waitFor frontend.eth_newFilter(filterOptions)
 
     check newFilter.isOk()
 
     # deleting will prove if the filter was created
-    let delStatus = waitFor engine.frontend.eth_uninstallFilter(newFilter.get())
+    let delStatus = waitFor frontend.eth_uninstallFilter(newFilter.get())
 
     check:
       delStatus.isOk()
@@ -137,7 +135,7 @@ suite "test receipts verification":
 
     let
       unknownFilterId = "thisisacorrectfilterid"
-      delStatus2 = waitFor engine.frontend.eth_uninstallFilter(newFilter.get())
+      delStatus2 = waitFor frontend.eth_uninstallFilter(newFilter.get())
 
     check:
       delStatus.isOk()
@@ -158,26 +156,25 @@ suite "test receipts verification":
 
     # filter options without any tags would test resolving default "latest"
     let filterOptions = FilterOptions(
-      topics:
-        @[
-          TopicOrList(
-            kind: SingleOrListKind.slkSingle,
-            single:
-              bytes32"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
-          )
-        ],
+      topics: @[
+        TopicOrList(
+          kind: SingleOrListKind.slkSingle,
+          single:
+            bytes32"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+        )
+      ],
       blockHash: Opt.none(Hash32),
     )
 
     ts.loadLogs(filterOptions, logs)
 
-    let newFilter = waitFor engine.frontend.eth_newFilter(filterOptions)
+    let newFilter = waitFor frontend.eth_newFilter(filterOptions)
 
     check newFilter.isOk()
 
     let
-      filterLogs = waitFor engine.frontend.eth_getFilterLogs(newFilter.get())
-      filterChanges = waitFor engine.frontend.eth_getFilterChanges(newFilter.get())
+      filterLogs = waitFor frontend.eth_getFilterLogs(newFilter.get())
+      filterChanges = waitFor frontend.eth_getFilterChanges(newFilter.get())
 
     check:
       filterLogs.isOk()
@@ -185,8 +182,7 @@ suite "test receipts verification":
       filterChanges.isOk()
       filterChanges.get().len == logs.len
 
-    let againFilterChanges =
-      waitFor engine.frontend.eth_getFilterChanges(newFilter.get())
+    let againFilterChanges = waitFor frontend.eth_getFilterChanges(newFilter.get())
 
     check:
       againFilterChanges.isErr()

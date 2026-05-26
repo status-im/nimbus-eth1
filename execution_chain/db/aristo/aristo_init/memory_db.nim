@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -117,9 +117,19 @@ func putVtxFn(db: MemBackendRef): PutVtxFn =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
         if vtx.isValid:
-          hdl.sTab[rvid] = vtx.blobify(key)
+          var vtxBuf: VertexBuf
+          vtx.blobifyTo(key, vtxBuf)
+          
+          hdl.sTab[rvid] = @(vtxBuf.data())
         else:
           hdl.sTab[rvid] = EmptyBlob
+
+func putVtxBlobFn(db: MemBackendRef): PutVtxBlobFn =
+  result =
+    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: openArray[byte]) =
+      let hdl = hdl.getSession db
+      if hdl.error.isNil:
+        hdl.sTab[rvid] = @vtx
 
 func putLstFn(db: MemBackendRef): PutLstFn =
   result =
@@ -166,8 +176,8 @@ func closeFn(db: MemBackendRef): CloseFn =
 # ------------------------------------------------------------------------------
 
 func memoryBackend*(): AristoDbRef =
-  let 
-    be = MemBackendRef(beKind: BackendMemory)
+  let
+    be = MemBackendRef()
     db = AristoDbRef()
 
   db.getVtxFn = getVtxFn be
@@ -176,6 +186,7 @@ func memoryBackend*(): AristoDbRef =
 
   db.putBegFn = putBegFn be
   db.putVtxFn = putVtxFn be
+  db.putVtxBlobFn = putVtxBlobFn be
   db.putLstFn = putLstFn be
   db.putEndFn = putEndFn be
 

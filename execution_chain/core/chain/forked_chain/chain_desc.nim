@@ -90,9 +90,6 @@ type
       # Enable adjusting the persistBatchSize dynamically based on the
       # time it takes to update base.
 
-    maxBlobs*: Option[uint8]
-      # For EIP-7872; allows constraining of max blobs packed into each payload
-
     portal*: HistoryExpiryRef
       # History Expiry tracker and portal access entry point
 

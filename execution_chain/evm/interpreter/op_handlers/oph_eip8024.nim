@@ -18,20 +18,13 @@ import
   ./oph_defs
 
 func decodeSingle(x: int): int =
-  if x <= 90:
-    x + 17
-  else:
-    x - 20
+  (x + 145) mod 256
 
 func decodePair(x: int): (int, int) =
-  var k: int
-  if x <= 79:
-    k = x
-  else:
-    k = x - 48
-
-  let q = k div 16
-  let r = k mod 16
+  let
+    k = x xor 143
+    q = k div 16
+    r = k mod 16
   if q < r:
     (q + 1, r + 1)
   else:
@@ -69,7 +62,7 @@ func exchangeOp(cpt: VmCpt): EvmResultVoid =
 
   # This range is excluded both to preserve compatibility with existing opcodes
   # and to keep decode_pair’s 16-aligned arithmetic mapping valid (0–79, 128–255).
-  if x > 79 and x < 128:
+  if x > 81 and x < 128:
     return err(opErr(InvalidInstruction))
 
   let (n, m) = decodePair(x)

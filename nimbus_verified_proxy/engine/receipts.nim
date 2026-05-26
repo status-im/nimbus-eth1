@@ -46,7 +46,7 @@ proc getReceipts(
     engine: RpcVerificationEngine, header: Header, blockTag: types.BlockTag
 ): Future[EngineResult[seq[ReceiptObject]]] {.async: (raises: [CancelledError]).} =
   let
-    (backend, backendIdx) = ?(engine.backendFor(GetBlockReceipts))
+    (backend, backendIdx) = ?(engine.executionBackendFor(GetBlockReceipts))
     rxs = ?((await backend.eth_getBlockReceipts(blockTag)).tagBackend(backendIdx))
 
   if rxs.isSome():
@@ -145,7 +145,7 @@ proc getLogs*(
 ): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).} =
   let
     resolvedFilter = ?engine.resolveFilterTags(filter)
-    (backend, backendIdx) = ?(engine.backendFor(GetLogs))
+    (backend, backendIdx) = ?(engine.executionBackendFor(GetLogs))
     logObjs = ?((await backend.eth_getLogs(resolvedFilter)).tagBackend(backendIdx))
 
   ?((await engine.verifyLogs(resolvedFilter, logObjs)).tagBackend(backendIdx))

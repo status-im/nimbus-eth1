@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -62,9 +62,9 @@ suite "History Network":
       (await node1.portalProtocol().offer(node2.localNode(), @[contentKV])).isOk()
 
       node2
-      .portalProtocol()
-      .getLocalContent(contentKey.encode(), contentKey.toContentId())
-      .isSome()
+        .portalProtocol()
+        .getLocalContent(contentKey.encode(), contentKey.toContentId())
+        .isSome()
 
     await node1.stop()
     await node2.stop()
@@ -150,9 +150,9 @@ suite "History Network":
     for contentKV in contentKVList:
       let contentId = contentKV.contentKey.toContentId().expect("Valid content key")
       check node2
-      .portalProtocol()
-      .getLocalContent(contentKV.contentKey, contentId)
-      .isSome()
+        .portalProtocol()
+        .getLocalContent(contentKV.contentKey, contentId)
+        .isSome()
 
     await node1.stop()
     await node2.stop()

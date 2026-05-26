@@ -90,15 +90,11 @@ type
 
   SnapPeerData* = object
     ## Local descriptor data extension
-    pivotRoot*: Opt[StateRoot]       ## Derived from peer best/latest hash
+    finRoot*: Opt[StateRoot]         ## Some finalised state root (if any)
+    notAvailMax*: BlockNumber        ## Max block number of rejected states
     nErrors*: PeerErrors             ## Error register
     peerType*: string                ## Self declared peer type
     failedReq*: PeerFirstFetchReq    ## Don't send the same failed request twice
-
-  SnapTarget* = tuple
-    ## Bundled target settings
-    blockHash: BlockHash
-    updateFile: string
 
   SnapCtxData* = object
     ## Globally shared data extension
@@ -106,13 +102,7 @@ type
     beaconSync*: BeaconSyncRef       ## Beacon syncer to resume after snap sync
     stateDB*: StateDbRef             ## Incomplete states DB
     baseDir*: string                 ## Path for assembly database
-    resume*: bool                    ## Resume last session (if any)
     mptAsm*: MptAsmRef               ## Assembly cache database
-    mptEla*: chronos.Duration        ## Accumulated MPT proof processing time
-
-    # Preloading/manual state update
-    target*: Opt[SnapTarget]         ## Optional for setting up a sync target
-    stateUpdateChecked*: string      ## Last update value (avoids log spamming)
 
     # Info, debugging, and error handling stuff
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one
@@ -130,6 +120,10 @@ type
 func chain*(ctx: SnapCtxRef): ForkedChainRef =
   ## Getter
   ctx.pool.beaconSync.ctx.pool.chain
+
+func hdrCache*(ctx: SnapCtxRef): HeaderChainRef =
+  ## Getter
+  ctx.pool.beaconSync.ctx.pool.hdrCache
 
 func nErrors*(buddy: SnapPeerRef): var PeerErrors =
   ## Shortcut
@@ -156,6 +150,10 @@ proc getEthPeer*(buddy: SnapPeerRef): BeaconPeerRef =
   ## Get the `eth` peer context for the current peer. This context is needed
   ## for running `eth` protocol requests.
   buddy.ctx.pool.beaconSync.ctx.getSyncPeer buddy.peerID
+
+proc getEthPeers*(buddy: SnapPeerRef): seq[BeaconPeerRef] =
+  ##  Get all `eth` peer contexts available at the current time
+  buddy.ctx.pool.beaconSync.ctx.getSyncPeers()
 
 # ------------------------------------------------------------------------------
 # End

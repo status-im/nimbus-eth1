@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -19,6 +19,7 @@ import
   ../execution_chain/utils/utils,
   ../execution_chain/core/chain/forked_chain,
   ../execution_chain/core/chain/forked_chain/chain_desc,
+  ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/ledger,
   ../execution_chain/db/era1_db,
   ../execution_chain/rpc/debug,
@@ -70,6 +71,8 @@ procSuite "Stateless Execution Tests":
       initializeDb = false
     )
     check statelessProcessBlockJsonFiles(witnessJsonFile, com2, blkJsonFile).isOk()
+    discard era0
+    discard fc
 
   asyncTest "Stateless process block json files - mainnet block 73141":
     let
@@ -84,3 +87,5 @@ procSuite "Stateless Execution Tests":
       initializeDb = false
     )
     check statelessProcessBlockJsonFiles(witnessJsonFile, com2, blkJsonFile).isOk()
+    discard era0
+    discard fc

@@ -14,7 +14,7 @@ import
   std/[options, sets, strformat],
   stew/assign2,
   ../db/ledger,
-  ../common/[common, evmforks],
+  ../common/common,
   ../block_access_list/block_access_list_tracker,
   ./interpreter/[op_codes, gas_costs],
   ./types,
@@ -23,8 +23,8 @@ import
 func forkDeterminationInfoForVMState(vmState: BaseVMState): ForkDeterminationInfo =
   forkDeterminationInfo(vmState.parent.number + 1, vmState.blockCtx.timestamp)
 
-func determineFork(vmState: BaseVMState): EVMFork =
-  vmState.com.toEVMFork(vmState.forkDeterminationInfoForVMState)
+func determineFork(vmState: BaseVMState): HardFork =
+  vmState.com.toHardFork(vmState.forkDeterminationInfoForVMState)
 
 proc init(
       self:         BaseVMState;
@@ -39,17 +39,18 @@ proc init(
   # Take care to (re)set all fields since the VMState might be recycled
   self.com = com
   self.ledger = ledger
-  self.gasPool = blockCtx.gasLimit
   assign(self.parent, parent)
   assign(self.blockCtx, blockCtx)
   const txCtx = default(TxContext)
   assign(self.txCtx, txCtx)
   self.flags = flags
-  self.fork = self.determineFork
+  self.hardFork = self.determineFork
+  self.fork = ToEVMFork[self.hardFork]
   self.tracer = tracer
   self.receipts.setLen(0)
   self.cumulativeGasUsed = 0
-  self.blockGasUsed = 0
+  self.blockRegularGasUsed = 0
+  self.blockStateGasUsed = 0
   self.gasCosts = self.fork.forkToSchedule
   self.blobGasUsed = 0'u64
   self.allLogs.setLen(0)
@@ -60,7 +61,7 @@ func blockCtx(header: Header): BlockContext =
   BlockContext(
     timestamp    : header.timestamp,
     gasLimit     : header.gasLimit,
-    baseFeePerGas: header.baseFeePerGas,
+    baseFeePerGas: header.baseFeePerGas.get(0.u256).truncate(GasInt),
     prevRandao   : header.prevRandao,
     difficulty   : header.difficulty,
     coinbase     : header.coinbase,
@@ -241,9 +242,6 @@ proc difficultyOrPrevRandao*(vmState: BaseVMState): UInt256 =
     UInt256.fromBytesBE(vmState.blockCtx.prevRandao.data)
   else:
     vmState.blockCtx.difficulty
-
-func baseFeePerGas*(vmState: BaseVMState): UInt256 =
-  vmState.blockCtx.baseFeePerGas.get(0.u256)
 
 method getAncestorHash*(
     vmState: BaseVMState, blockNumber: BlockNumber): Hash32 {.gcsafe, base.} =

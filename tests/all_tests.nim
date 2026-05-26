@@ -10,6 +10,7 @@
 import
   ./[
     test_aristo,
+    test_concurrency,
     test_configuration,
     test_coredb,
     test_difficulty,
@@ -39,6 +40,7 @@ import
     test_snap,
     test_transaction_json,
     test_txpool,
+    test_tx_frame_blobify,
     test_networking,
     test_pooled_tx,
     test_stateless_witness_types,
@@ -48,6 +50,7 @@ import
     test_block_access_list_builder,
     test_block_access_list_validation,
     test_block_access_list_tracker,
+    test_pruner,
     # These suites below are much slower than all the rest, so run them last
     test_generalstate_json,
 ]

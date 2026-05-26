@@ -9,10 +9,12 @@
 
 import
   std/tables,
-  web3/[eth_api, eth_api_types],
+  chronos,
   stint,
-  ../engine/types,
-  json_rpc/[rpcserver, rpcclient]
+  beacon_chain/spec/forks,
+  web3/[eth_api, eth_api_types],
+  json_rpc/[rpcserver, rpcclient],
+  ../engine/types
 
 type
   ProofQuery = (Address, seq[UInt256], Hash32)
@@ -35,6 +37,10 @@ type
     transactions: Table[Hash32, TransactionObject]
     logs: Table[FilterOptions, seq[LogObject]]
     feeHistories: Table[FeeHistoryQuery, FeeHistoryResult]
+    bootstraps: Table[Eth2Digest, ForkedLightClientBootstrap]
+    updates: Table[uint64, ForkedLightClientUpdate]
+    optimistic: Opt[ForkedLightClientOptimisticUpdate]
+    finality: Opt[ForkedLightClientFinalityUpdate]
 
 func init*(T: type TestApiState, chainId: UInt256): T =
   TestApiState(chainId: chainId)
@@ -110,6 +116,22 @@ template loadFeeHistory*(
     feeHistory: FeeHistoryResult,
 ) =
   t.feeHistories[(blockCount, newestBlock)] = feeHistory
+
+template loadBootstrap*(
+    t: TestApiState, obj: ForkedLightClientBootstrap, tbr: Eth2Digest
+) =
+  t.bootstraps[tbr] = obj
+
+template loadUpdate*(
+    t: TestApiState, update: ForkedLightClientUpdate, startPeriod: SyncCommitteePeriod
+) =
+  t.updates[startPeriod.uint64] = update
+
+template loadOptimistic*(t: TestApiState, obj: ForkedLightClientOptimisticUpdate) =
+  t.optimistic = Opt.some(obj)
+
+template loadFinality*(t: TestApiState, obj: ForkedLightClientFinalityUpdate) =
+  t.finality = Opt.some(obj)
 
 func hash*(x: BlockTag): Hash =
   if x.kind == BlockIdentifierKind.bidAlias:
@@ -193,7 +215,7 @@ func convToPartialBlock(blk: BlockObject): BlockObject =
     transactions: txHashes,
     uncles: @[],
     baseFeePerGas: blk.baseFeePerGas,
-    withdrawals: Opt.none(seq[Withdrawal]),
+    withdrawals: Opt.none(seq[blocks.Withdrawal]),
     withdrawalsRoot: blk.withdrawalsRoot,
     blobGasUsed: blk.blobGasUsed,
     excessBlobGas: blk.excessBlobGas,
@@ -201,7 +223,7 @@ func convToPartialBlock(blk: BlockObject): BlockObject =
     requestsHash: blk.requestsHash,
   )
 
-proc initTestApiBackend*(t: TestApiState): EthApiBackend =
+proc initTestExecutionBackend*(t: TestApiState): ExecutionApiBackend =
   let
     ethChainIdProc = proc(): Future[EngineResult[UInt256]] {.
         async: (raises: [CancelledError])
@@ -319,7 +341,7 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
       except KeyError as e:
         err((BackendFetchError, e.msg, UNTAGGED))
 
-  EthApiBackend(
+  ExecutionApiBackend(
     eth_chainId: ethChainIdProc,
     eth_getBlockByHash: getBlockByHashProc,
     eth_getBlockByNumber: getBlockByNumberProc,
@@ -331,4 +353,50 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
     eth_getLogs: getLogsProc,
     eth_getBlockReceipts: getBlockReceiptsProc,
     eth_feeHistory: feeHistoryProc,
+  )
+
+proc initTestBeaconBackend*(t: TestApiState): BeaconApiBackend =
+  BeaconApiBackend(
+    getLightClientBootstrap: proc(
+        blockRoot: Eth2Digest
+    ): Future[EngineResult[ForkedLightClientBootstrap]] {.
+        async: (raises: [CancelledError])
+    .} =
+      try:
+        ok(t.bootstraps[blockRoot])
+      except KeyError:
+        err((BackendFetchError, "bootstrap not found for " & $blockRoot, UNTAGGED)),
+    getLightClientUpdatesByRange: proc(
+        startPeriod: SyncCommitteePeriod, count: uint64
+    ): Future[EngineResult[seq[ForkedLightClientUpdate]]] {.
+        async: (raises: [CancelledError])
+    .} =
+      try:
+        var updates: seq[ForkedLightClientUpdate]
+        for i in 0 ..< count:
+          updates.add(t.updates[startPeriod.uint64 + i])
+
+        ok(updates)
+      except KeyError:
+        err(
+          (
+            BackendFetchError,
+            "no mock updates for period " & $startPeriod & " count " & $count,
+            UNTAGGED,
+          )
+        ),
+    getLightClientOptimisticUpdate: proc(): Future[
+        EngineResult[ForkedLightClientOptimisticUpdate]
+    ] {.async: (raises: [CancelledError]).} =
+      if t.optimistic.isSome():
+        ok(t.optimistic.get())
+      else:
+        err((BackendFetchError, "no mock optimistic update", UNTAGGED)),
+    getLightClientFinalityUpdate: proc(): Future[
+        EngineResult[ForkedLightClientFinalityUpdate]
+    ] {.async: (raises: [CancelledError]).} =
+      if t.finality.isSome():
+        ok(t.finality.get())
+      else:
+        err((BackendFetchError, "no mock finality update", UNTAGGED)),
   )

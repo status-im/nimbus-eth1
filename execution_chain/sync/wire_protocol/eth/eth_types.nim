@@ -123,8 +123,14 @@ type
   BlockAccessListsRequest* = object
     blockHashes*: seq[Hash32]
 
+  # A raw RLP-encoded block access list for a single block. Used instead of
+  # BlockAccessList to allow encoding unavailable entries as the RLP empty
+  # string (0x80) rather than the empty list (0xC0). Available entries are
+  # stored as their RLP-encoded bytes and unavailable entries are @[0x80'u8].
+  RawBlockAccessList* = distinct seq[byte]
+
   BlockAccessListsPacket* = object
-    accessLists*: seq[BlockAccessList]
+    accessLists*: seq[RawBlockAccessList]
 
   SeenObject* = ref object
     lastSeen*: Time
@@ -139,8 +145,16 @@ type
     quota* : TokenBucket
     seenTransactions*: Table[Hash32, SeenObject]
     tickerHeartbeat*: Future[void].Raising([CancelledError])
-    actionHeartbeat*: Future[void].Raising([CancelledError])
+    actionHeartbeat*: seq[Future[void].Raising([CancelledError])]
     actionQueue*: AsyncQueue[ActionHandler]
     gossipEnabled*: bool
     cleanupTimer*: Future[void].Raising([CancelledError])
     brUpdateTimer*: Future[void].Raising([CancelledError])
+
+proc append*(w: var RlpWriter, x: RawBlockAccessList) =
+  w.appendRawBytes(distinctBase(x))
+
+proc read*(rlp: var Rlp, T: type RawBlockAccessList): T {.raises: [RlpError].} =
+  let rawBytes = @(rlp.rawData)
+  rlp.skipElem()
+  RawBlockAccessList(rawBytes)

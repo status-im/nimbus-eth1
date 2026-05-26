@@ -18,6 +18,8 @@ import
   ../common/[common, evmforks],
   ../block_access_list/block_access_list_tracker
 
+from ../common/hardforks import HardFork
+
 export stack, memory, transient_storage, block_access_list_tracker
 
 type
@@ -27,7 +29,7 @@ type
   BlockContext* = object
     timestamp*        : EthTime
     gasLimit*         : GasInt
-    baseFeePerGas*    : Opt[UInt256]
+    baseFeePerGas*    : GasInt
     prevRandao*       : Bytes32
     difficulty*       : UInt256
     coinbase*         : Address
@@ -44,16 +46,17 @@ type
   BaseVMState* = ref object of RootObj
     com*              : CommonRef
     ledger*           : LedgerRef
-    gasPool*          : GasInt
     parent*           : Header
     blockCtx*         : BlockContext
     txCtx*            : TxContext
     flags*            : set[VMFlag]
     fork*             : EVMFork
+    hardFork*         : HardFork
     tracer*           : TracerRef
     receipts*         : seq[StoredReceipt]
     cumulativeGasUsed*: GasInt
-    blockGasUsed*     : GasInt
+    blockRegularGasUsed*: GasInt
+    blockStateGasUsed*: GasInt
     gasCosts*         : GasCosts
     blobGasUsed*      : uint64
     allLogs*          : seq[Log] # EIP-6110
@@ -80,6 +83,8 @@ type
     continuation*:          proc(): EvmResultVoid {.gcsafe, raises: [].}
     keepStack*:             bool
     finalStack*:            seq[UInt256]
+    balTrackerEnabled*:     bool
+    delegateTo*:            Address
 
   StatusCode* {.pure.} = enum
     None
@@ -97,6 +102,9 @@ type
   GasMeter* = object
     gasRefunded*: int64
     gasRemaining*: GasInt
+    stateGasLeft*: GasInt
+    stateGasUsed*: int64
+    regularGasUsed*: GasInt
 
   CallKind* {.pure.} = enum
     Call          # Request CALL.
@@ -113,6 +121,7 @@ type
     kind*:             CallKind
     depth*:            int
     gas*:              GasInt
+    stateGas*:         GasInt
     sender*:           Address
     contractAddress*:  Address
     codeAddress*:      Address

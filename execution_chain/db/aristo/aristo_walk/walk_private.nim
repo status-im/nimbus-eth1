@@ -1,6 +1,6 @@
 # Nimbus - Types, data structures and shared utilities used in network sync
 #
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -12,7 +12,7 @@
 import
   std/[algorithm, sequtils, sets, tables],
   results,
-  ".."/[aristo_desc, aristo_layers]
+  ../aristo_desc
 
 # ------------------------------------------------------------------------------
 # Public generic iterators
@@ -70,20 +70,6 @@ iterator walkKeyBeImpl*[T](
     if key.isValid:
       yield (rvid,key)
 
-
-iterator walkPairsImpl*[T](
-   db: AristoDbRef;                   # Database with top layer & backend filter
-     ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
-  ## Walk over all `(VertexID,VertexRef)` in the database. Note that entries
-  ## are unsorted.
-  var seen: HashSet[VertexID]
-  for (rvid,vtx) in db.layersWalkVtx seen:
-    if vtx.isValid:
-      yield (rvid,vtx)
-
-  for (rvid,vtx) in walkVtxBeImpl[T](db):
-    if rvid.vid notin seen:
-      yield (rvid,vtx)
 
 # ------------------------------------------------------------------------------
 # End

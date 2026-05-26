@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -18,6 +18,8 @@ import
 
 export aristo_desc, results
 
+const MAX_VERTEX_BLOB_SIZE = 117
+
 # Allocation-free version short big-endian encoding that skips the leading
 # zeroes
 type
@@ -28,6 +30,11 @@ type
   RVidBuf* = object
     buf*: array[sizeof(SbeBuf[VertexID]) * 2, byte]
     len*: byte
+  
+  VertexBuf* = ArrayBuf[MAX_VERTEX_BLOB_SIZE, byte]
+
+template `&=`*(x: var VertexBuf, y: VertexBuf) =
+  x.add(y.data)
 
 func significantBytesBE(val: openArray[byte]): byte =
   for i in 0 ..< val.len:
@@ -46,7 +53,6 @@ func blobify*(v: StUint): SbeBuf[typeof(v)] =
 template data*(v: SbeBuf): openArray[byte] =
   let vv = v
   vv.buf.toOpenArray(vv.buf.len - int(vv.len), vv.buf.high)
-
 
 func blobify*(rvid: RootedVertexID): RVidBuf =
   # Length-prefixed root encoding creates a unique and common prefix for all
@@ -125,7 +131,7 @@ proc load256(data: openArray[byte]; start: var int, len: int): Result[UInt256,Ar
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc blobifyTo*(pyl: AccLeafRef, data: var seq[byte]) =
+proc blobifyTo*(pyl: AccLeafRef, data: var VertexBuf) =
   # `lens` holds `len-1` since `mask` filters out the zero-length case (which
   # allows saving 1 bit per length)
   var lens: uint16
@@ -155,11 +161,11 @@ proc blobifyTo*(pyl: AccLeafRef, data: var seq[byte]) =
   data &= lens.toBytesBE()
   data &= [mask]
 
-proc blobifyTo*(pyl: StoLeafRef, data: var seq[byte]) =
+proc blobifyTo*(pyl: StoLeafRef, data: var VertexBuf) =
   data &= pyl.stoData.blobify().data
   data &= [0x20.byte]
 
-proc blobifyTo*(vtx: VertexRef, key: HashKey, data: var seq[byte]) =
+proc blobifyTo*(vtx: VertexRef, key: HashKey, data: var VertexBuf) =
   ## This function serialises the vertex argument to a database record.
   ## Contrary to RLP based serialisation, these records aim to align on
   ## fixed byte boundaries.
@@ -217,10 +223,10 @@ proc blobifyTo*(vtx: VertexRef, key: HashKey, data: var seq[byte]) =
 
   data &= [bits]
 
-proc blobify*(vtx: VertexRef, key: HashKey): seq[byte] =
-  ## Variant of `blobify()`
-  result = newSeqOfCap[byte](128)
-  vtx.blobifyTo(key, result)
+template blobify*(vtx: VertexRef, key: HashKey): openArray[byte] =
+  var vtxBuf: VertexBuf
+  vtx.blobifyTo(key, vtxBuf)
+  vtxBuf.data()
 
 proc blobifyTo*(lSst: SavedState; data: var seq[byte]) =
   ## Serialise a last saved state record
@@ -345,7 +351,6 @@ proc deblobify*(
   ## De-serialise the last saved state data record previously encoded with
   ## `blobify()`.
   if data.len != 17:
-    debugEcho "data ", data.len
     return err(DeblobWrongSize)
   if data[^1] != 0x7f:
     return err(DeblobWrongType)

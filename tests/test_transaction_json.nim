@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2025 Status Research & Development GmbH
+# Copyright (c) 2019-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -15,9 +15,11 @@ import
   ./test_helpers,
   eth/common/transaction_utils,
   ../tools/common/helpers as chp,
+  ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/core_db,
   ../execution_chain/common/common,
   ../execution_chain/transaction,
+  ../execution_chain/transaction/call_types,
   ../execution_chain/core/validate,
   ../execution_chain/utils/utils
 
@@ -40,8 +42,10 @@ proc testTxByFork(tx: Transaction, forkData: JsonNode, forkName: string, testSta
     config = getChainConfig(forkName)
     memDB  = newCoreDbRef DefaultDbMemory
     com    = CommonRef.new(memDB, config)
+    fork   = nameToFork[forkName]
+    intrinsic = tx.intrinsicGas(fork, 10_000_000)
 
-  validateTxBasic(com, tx, nameToFork[forkName]).isOkOr:
+  validateTxBasic(com, tx, intrinsic, fork).isOkOr:
     return
 
   if forkData.len > 0 and "sender" in forkData:

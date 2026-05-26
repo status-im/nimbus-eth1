@@ -100,8 +100,6 @@ proc setBlockAccessIndex*(tracker: BlockAccessListTrackerRef, blockAccessIndex: 
   ##   - 0: Pre-execution (system contracts like beacon roots, block hashes)
   ##   - 1..n: Transactions (tx at index i gets block_access_index i+1)
   ##   - n+1: Post-execution (withdrawals, requests)
-  doAssert blockAccessIndex >= int(uint16.low) and blockAccessIndex <= int(uint16.high)
-
   tracker.preStorageCache.clear()
   tracker.preBalanceCache.clear()
   tracker.preNonceCache.clear()

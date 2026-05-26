@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -122,10 +122,11 @@ proc makeStorageProof*(
       ): Result[(seq[seq[byte]], bool), AristoError] =
   ## Note that the function returns an error unless
   ## the argument `accPath` is valid.
-  let vid = db.fetchStorageID(accPath).valueOr:
-    if error == FetchPathStoRootMissing:
-      return ok((@[],false))
-    return err(error)
+  let vid = ?db.fetchStorageID(accPath)
+
+  if not vid.isValid():
+    return ok((@[],false))
+
   var
     nodesCache: NodesCache
     proof: seq[seq[byte]]
@@ -139,19 +140,15 @@ proc makeStorageProofs*(
       ): Result[seq[seq[seq[byte]]], AristoError] =
   ## Note that the function returns an error unless
   ## the argument `accPath` is valid.
-  let vid = db.fetchStorageID(accPath).valueOr:
-    if error == FetchPathStoRootMissing:
-      let emptyProofs = newSeq[seq[seq[byte]]](stoPaths.len())
-      return ok(emptyProofs)
-    return err(error)
+  let vid = ?db.fetchStorageID(accPath)
 
-  var
-    nodesCache: NodesCache
-    proofs = newSeqOfCap[seq[seq[byte]]](stoPaths.len())
-  for stoPath in stoPaths:
-    var proof: seq[seq[byte]]
-    discard ?db.makeProof(vid, NibblesBuf.fromBytes stoPath.data, nodesCache, proof)
-    proofs.add(proof)
+  var proofs = newSeq[seq[seq[byte]]](stoPaths.len())
+
+  if vid.isValid():
+    var nodesCache: NodesCache
+    for i, stoPath in stoPaths:
+      discard
+        ?db.makeProof(vid, NibblesBuf.fromBytes stoPath.data, nodesCache, proofs[i])
 
   ok(proofs)
 
@@ -164,16 +161,14 @@ proc makeStorageMultiProof(
       ): Result[void, AristoError] =
   ## Note that the function returns an error unless
   ## the argument `accPath` is valid.
-  let vid = db.fetchStorageID(accPath).valueOr:
-    if error == FetchPathStoRootMissing:
-      return ok()
-    return err(error)
+  let vid = ?db.fetchStorageID(accPath)
 
-  for stoPath in stoPaths:
-    var proof: seq[seq[byte]]
-    discard ?db.makeProof(vid, NibblesBuf.fromBytes stoPath.data, nodesCache, proof)
-    for node in proof:
-      multiProof.incl(node)
+  if vid.isValid():
+    for stoPath in stoPaths:
+      var proof: seq[seq[byte]]
+      discard ?db.makeProof(vid, NibblesBuf.fromBytes stoPath.data, nodesCache, proof)
+      for node in proof:
+        multiProof.incl(node)
 
   ok()
 
@@ -182,6 +177,13 @@ proc makeMultiProof*(
     paths: Table[Hash32, seq[Hash32]], # maps each account path to a list of storage paths
     multiProof: var seq[seq[byte]]
       ): Result[void, AristoError] =
+  # Short path for empty pre-state trie, no nodes exist
+  # Also, without the check the makeProof will fail when trying to get the root
+  # vertex as it is empty.
+  let stateRoot = ?db.fetchStateRoot()
+  if stateRoot == emptyRoot:
+    return ok()
+
   var
     nodesCache: NodesCache
     proofNodes: HashSet[seq[byte]]
@@ -475,7 +477,13 @@ proc putSubtrie(
           # Write the known hash key setting the vtx to nil
           db.layersPutKey(r, BranchRef(nil), k)
 
-  db.layersPutVtx(rvid, node.vtx)
+  # When writing into a storage trie, duplicate vertices before putting in
+  # the database to avoid sharing mutable NodeRef instances between different
+  # accounts that happen to share the same storage root hash in the witness.
+  if rvid.root != STATE_ROOT_VID:
+    db.layersPutVtx(rvid, node.vtx.dup())
+  else:
+    db.layersPutVtx(rvid, node.vtx)
 
   ok()
 
@@ -483,11 +491,22 @@ proc putSubtrie*(
     db: AristoTxRef,
     stateRoot: Hash32,
     nodes: Table[Hash32, seq[byte]]): Result[void, AristoError] =
-  if nodes.len() == 0:
-    return err(PartTrkEmptyProof)
+  if stateRoot == emptyRoot:
+    # Short path for empty pre-state: fetchStateRoot returns emptyRoot when
+    # GetVtxNotFound, so nothing needed to store here.
+    # And HashKey.fromBytes(emptyRoot.data) would create an invalid 32-byte key
+    # as isValid has a emptyRoot check
+    return ok()
 
   let key = HashKey.fromBytes(stateRoot.data).valueOr:
     return err(PartTrkLinkExpected)
+
+  if nodes.len() == 0:
+    # Valid case: no state was accessed (e.g. a block with no transactions).
+    # Still need to store the known state root so that fetchStateRoot returns
+    # the correct pre-state root.
+    db.layersPutKey((STATE_ROOT_VID, STATE_ROOT_VID), BranchRef(nil), key)
+    return ok()
 
   try:
     var convertedNodes: Table[HashKey, NodeRef]

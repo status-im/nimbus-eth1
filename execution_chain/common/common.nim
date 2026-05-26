@@ -89,6 +89,9 @@ type
     gasLimit: uint64
       ## Desired gas limit when building a block
 
+    maxBlobs: Opt[uint8]
+      ## For EIP-7872; allows constraining of max blobs packed into each payload
+
     when compileOption("threads"):
       taskpool*: Taskpool
         ## Shared task pool for offloading computation to other threads
@@ -200,7 +203,7 @@ proc init(com         : CommonRef,
     # Must not overwrite the global state on the single state DB
 
     com.genesisHeader = txFrame.getBlockHeader(0.BlockNumber).valueOr:
-      toGenesisHeader(genesis, fork, txFrame)
+      writeGenesis(genesis, txFrame, fork)
 
     com.setForkId(com.genesisHeader)
 
@@ -303,6 +306,9 @@ func toHardFork*(com: CommonRef, timestamp: EthTime): HardFork =
     if com.forkTransitionTable.timeThresholds[fork].isSome and timestamp >= com.forkTransitionTable.timeThresholds[fork].get:
       return fork
 
+func toHardFork*(com: CommonRef, header: Header): HardFork =
+  com.toHardFork(forkDeterminationInfo(header))
+
 func toEVMFork*(com: CommonRef, timestamp: EthTime): EVMFork =
   ## similar to toHardFork, but produce EVMFork
   let fork = com.toHardFork(timestamp)
@@ -312,6 +318,9 @@ func toEVMFork*(com: CommonRef, forkDeterminer: ForkDeterminationInfo): EVMFork 
   ## similar to toFork, but produce EVMFork
   let fork = com.toHardFork(forkDeterminer)
   ToEVMFork[fork]
+
+func toEVMFork*(com: CommonRef, header: Header): EVMFork =
+  com.toEVMFork(forkDeterminationInfo(header))
 
 func nextFork*(com: CommonRef, currentFork: HardFork): Opt[HardFork] =
   ## Returns the next hard fork after the given one
@@ -333,9 +342,6 @@ func lastFork*(com: CommonRef, currentFork: HardFork): Opt[HardFork] =
 func activationTime*(com: CommonRef, fork: HardFork): Opt[EthTime] =
   ## Returns the activation time of the given hard fork
   com.forkTransitionTable.timeThresholds[fork]
-
-func toEVMFork*(com: CommonRef, header: Header): EVMFork =
-  com.toEVMFork(forkDeterminationInfo(header))
 
 func isSpuriousOrLater*(com: CommonRef, number: BlockNumber, time: EthTime): bool =
   com.toHardFork(forkDeterminationInfo(number, time)) >= Spurious
@@ -384,6 +390,9 @@ func isOsakaOrLater*(com: CommonRef, t: EthTime): bool =
 
 func isAmsterdamOrLater*(com: CommonRef, t: EthTime): bool =
   com.config.amsterdamTime.isSome and t >= com.config.amsterdamTime.value
+
+func isBogotaOrLater*(com: CommonRef, t: EthTime): bool =
+  com.config.bogotaTime.isSome and t >= com.config.bogotaTime.value
 
 proc proofOfStake*(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
   if com.config.posBlock.isSome:
@@ -475,6 +484,9 @@ func extraData*(com: CommonRef): string =
 func gasLimit*(com: CommonRef): uint64 =
   com.gasLimit
 
+func maxBlobs*(com: CommonRef): Opt[uint8] =
+  com.maxBlobs
+
 func maxBlobsPerBlock*(com: CommonRef, fork: HardFork): uint64 =
   doAssert(fork >= Cancun)
   com.config.blobSchedule[fork].expect("blobSchedule initialized").max
@@ -525,6 +537,13 @@ func `gasLimit=`*(com: CommonRef, val: uint64) =
     com.gasLimit = GAS_LIMIT_MAXIMUM
   else:
     com.gasLimit = val
+
+func `maxBlobs=`*(com: CommonRef, val: Opt[uint8]) =
+  com.maxBlobs = val
+
+func `maxBlobs=`*(com: CommonRef, val: Option[uint8]) =
+  if val.isSome:
+    com.maxBlobs = Opt.some(val.get)
 
 # ------------------------------------------------------------------------------
 # End

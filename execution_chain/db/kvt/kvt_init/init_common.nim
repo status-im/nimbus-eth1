@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -18,13 +18,8 @@ const
     ## Enforce session tracking
 
 type
-  BackendType* = enum
-    BackendMemory                    ## Same as Aristo
-    BackendRocksDB                   ## Same as Aristo
-
   TypedBackendRef* = ref TypedBackendObj
   TypedBackendObj* = object of RootObj
-    beKind*: BackendType             ## Backend type identifier
     when verifyIxId:
       txGen: uint                    ## Transaction ID generator (for debugging)
       txId: uint                     ## Active transaction ID (for debugging)

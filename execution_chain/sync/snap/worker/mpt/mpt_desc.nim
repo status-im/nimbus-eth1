@@ -11,97 +11,96 @@
 
 import
   std/[tables, typetraits],
-  pkg/eth/[common/base, common/hashes, trie/nibbles],
+  pkg/eth/trie/nibbles,
+  ../../../../db/aristo/[aristo_constants, aristo_desc/desc_identifiers],
   ../../../wire_protocol/snap/snap_types,
   ../state_db
 
-type
-  NodeKey* = object
-    data: array[32, byte] # Either Hash32 or blob data, depending on `len`
-    len: int8 # length in the case of blobs, or 32 when it's a hash
+export
+  EmptyBlob,
+  VOiD_HASH_KEY,
+  desc_identifiers # `HashKey` and friends
 
+const
+  EmptyPath* = NibblesBuf()
+
+type
   NodeType* = enum
     Branch
     Leaf
     Stop
 
   NodeRef* = ref object of RootRef
-    ## Base node object for building a temporary hexary trie.
-    kind*: NodeType                    ## Sub-type (see below)
-    selfKey*: NodeKey                  ## Own node key (mostly a hash)
+    ## Base node object for building a temporary, partial hexary MPT.
+    kind*: NodeType                                 ## sub-type (see below)
+    selfKey*: HashKey                               ## owned node key
 
   BranchNodeRef* = ref object of NodeRef
-    xtPfx*: NibblesBuf                 ## Portion of path segment
-    xtData*: seq[byte]                 ## Rlp encoded extension node
-    brKey*: NodeKey                    ## Only if `xtPfx` is non-empty
-    brLinks*: array[16,NodeRef]        ## Down links
-    brData*: seq[byte]                 ## Rlp encoded branch node
+    ## Branch and/or extension node.
+    ##
+    ## * Pure extension node
+    ##   + `xtData`  == `rlp(extension-node-data)`
+    ##   + `xtPfx` != `""`, set to path extension segment
+    ##   + `selfKey` == `hash32(xtData)`
+    ##   + `brData` is unset
+    ##   + `brKey` is unset
+    ##   + `brLinks[]` entry `0` is set, all others are `nil`
+    ##
+    ## * Pure branch node
+    ##   + `xtData` is unset
+    ##   + `xtPfx` is nunset
+    ##   + `brData` == `rlp(branch-node-data)`
+    ##   + `brKey` is unset
+    ##   + `selfKey` == `hash32(brData)`
+    ##   + `brLinks[]` has at least two non-`nil` entries
+    ##
+    ## * Combined branch and extension node.
+    ##   + `xtData`  == `rlp(extension-node-data)`
+    ##   + `xtPfx`  != `""`, set to path extension segment
+    ##   + `selfKey` == `hash32(xtData)`
+    ##   + `brData` == `rlp(branch-node-data)`
+    ##   + `brKey` == `hash32(brData)`
+    ##   + `brLinks[]` has at least two non-`nil` entries
+    ##
+    xtPfx*: NibblesBuf                              ## portion of path segment
+    xtData*: seq[byte]                              ## rlp encoded extension
+    brKey*: HashKey                                 ## if `xtPfx` is non-empty
+    brLinks*: array[16,NodeRef]                     ## down links
+    brData*: seq[byte]                              ## rlp encoded branch node
 
   LeafNodeRef* = ref object of NodeRef
-    lfPfx*: NibblesBuf                 ## Portion of path segment
-    lfData*: seq[byte]                 ## Rlp encoded leaf node
-    lfPayload*: seq[byte]              ## Leaf data
+    lfPfx*: NibblesBuf                              ## portion of path segment
+    lfData*: seq[byte]                              ## rlp encoded leaf node
+    lfPayload*: seq[byte]                           ## leaf data
 
   StopNodeRef* = ref object of NodeRef
-    path*: NibblesBuf                  ## Partial path
-    parent*: NodeRef                   ## Unique parent node
-    inx*: byte                         ## Index (for branch parent)
-    sub*: NodeRef                      ## Optional start of a sub-tree
-
+    path*: NibblesBuf                               ## partial path
+    parent*: NodeRef                                ## unique parent node
+    inx*: byte                                      ## index (for branch parent)
+    sub*: NodeRef                                   ## start of a sub-MPT
 
   NodeTrieRef* = ref object of RootRef
-    root*: NodeRef                     ## Start of in-memory tree
-    stops*: Table[NodeKey,StopNodeRef] ## Dangling sub-tries
+    root*: NodeRef                                  ## start of in-memory MPT
+    stops*: Table[HashKey,StopNodeRef]              ## sub-MPT to complete
+    proof*: seq[HashKey]                            ## hash links to proof nodes
 
 # ------------------------------------------------------------------------------
 # Public helpers
 # ------------------------------------------------------------------------------
 
-func digestTo*(data: openArray[byte], T: type NodeKey, force32 = false): T =
-  ## Expensive call, hashes rlp encoded node record.
-  ##
-  if data.len < 32:
-    result.len = data.len.int8
-    if 0 < data.len:
-      (addr result.data[0]).copyMem(addr data[0], data.len)
+template to*(h: StateRoot|StoreRoot|BlockHash; _: type HashKey): HashKey =
+  ## Variant of `desc_identifiers.to()`
+  h.Hash32.to(HashKey)
+
+template digestTo*(
+    node: ProofNode;
+    _: type HashKey;
+    force32: static[bool] = false): HashKey =
+  ## Variant of `desc_identifiers.digestTo()`
+  when force32:
+    HashKey.fromBytes(node.distinctBase.keccak256.data).expect "Valid HashKey"
   else:
-    result.len = 32
-    result.data = data.keccak256.distinctBase
-
-func digestTo*(node: ProofNode, T: type NodeKey, force32 = false): T =
-  ## Variant of the former `digestTo()`
-  node.distinctBase.digestTo(T,force32)
-
-
-func to*(k: NodeKey; T: type Hash32): T =
-  if k.len == 32: k.data.T else: zeroHash32
-
-func to*(k: NodeKey; T: type seq[byte]): T =
-  if 0 < k.len:
-    result.setLen k.len
-    (addr result[0]).copyMem(addr k.data[0], k.len)
-
-func len*(k: NodeKey): int =
-  k.len.int
-
-proc clear*(k: var NodeKey) =
-  k.len = 0
-
-func to*(blob: openArray[byte]; T: type NodeKey): T =
-  ## Conversion of serialised node key to `NodeKey`. If applied to a an
-  ## argument `blob` with length larger than 32, only the first 32 bytes are
-  ## used.
-  ##
-  result.len = min(blob.len.int8,32)
-  (addr result.data[0]).copyMem(addr blob[0], result.len)
-
-func to*(h: Hash32|StateRoot|StoreRoot|BlockHash; T: type NodeKey): T =
-  ## Vaiiant of the former `to()`
-  h.distinctBase.to(T)
-
-
-func `==`*(a, b: NodeKey): bool =
-  a.len == b.len and a.data == b.data
+    node.distinctBase.digestTo(HashKey)
 
 # ------------------------------------------------------------------------------
 # End

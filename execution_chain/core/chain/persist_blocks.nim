@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -188,6 +188,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     # witness keys and block hashes when processing the block as these will be used
     # when building the witness.
     vmState.ledger.clearWitnessKeys()
+    vmState.ledger.clearCollapsedSiblings()
     vmState.ledger.clearBlockHashesCache()
 
     processBlock()
@@ -221,6 +222,9 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
       blk.withdrawals.get,
     )
 
+  if p.flags * {PersistTransactions, PersistReceipts, PersistWithdrawals} == {}:
+    txFrame.setChainTail(header.number)
+    
   p.stats.blocks += 1
   p.stats.txs += blk.transactions.len
   p.stats.gas += blk.header.gasUsed

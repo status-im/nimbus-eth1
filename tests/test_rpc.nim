@@ -16,6 +16,7 @@ import
   eth/common/[transaction_utils, addresses],
   ../hive_integration/engine_client,
   ../execution_chain/[constants, transaction, conf, version_info],
+  ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/[ledger, storage_types],
   ../execution_chain/sync/wire_protocol,
   ../execution_chain/core/[tx_pool, chain, pow/difficulty],
@@ -23,7 +24,7 @@ import
   ../execution_chain/core/eip4844,
   ../execution_chain/utils/utils,
   ../execution_chain/[common, rpc],
-  ../execution_chain/rpc/[rpc_types, common as rpc_common],
+  ../execution_chain/rpc/[rpc_types, rpc_utils, common as rpc_common],
   ../execution_chain/beacon/web3_eth_conv,
   ../execution_chain/networking/p2p,
   ../execution_chain/nimbus_desc,
@@ -199,6 +200,14 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     conf.networkParams.config.bpo1Time = Opt.some(3805701325.EthTime)
     conf.networkParams.config.bpo2Time = Opt.some(3805801325.EthTime)
 
+  if envFork >= Osaka:
+    conf.networkParams.config.osakaTime = Opt.some(0.EthTime)
+    conf.networkParams.config.bpo1Time = Opt.some(0.EthTime)
+    conf.networkParams.config.bpo2Time = Opt.some(0.EthTime)
+
+  if envFork >= Amsterdam:
+    conf.networkParams.config.amsterdamTime = Opt.some(0.EthTime)
+
   let
     com   = setupCom(conf)
     chain = ForkedChainRef.init(com)
@@ -227,6 +236,7 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
   setupServerAPI(serverApi, server, am)
   setupCommonRpc(node, conf, server)
   setupAdminRpc(nimbus, conf, server)
+  setupDebugRpc(com, txPool, server)
   server.start()
 
   TestEnv(
@@ -280,7 +290,7 @@ proc generateBlock(env: var TestEnv) =
   env.txHash = tx1.computeRlpHash
   env.blockHash = blk.header.computeBlockHash
 
-createRpcSigsFromNim(RpcClient):
+createRpcSigsFromNim(RpcClient, EthJson):
   proc web3_clientVersion(): string
   proc web3_sha3(data: seq[byte]): Hash32
   proc net_version(): string
@@ -288,6 +298,7 @@ createRpcSigsFromNim(RpcClient):
   proc net_peerCount(): Quantity
   proc admin_nodeInfo(): NodeInfo
   proc admin_peers(): seq[PeerInfo]
+  proc eth_maxPriorityFeePerGas(): Quantity
 
 proc rpcMain*() =
   suite "Remote Procedure Calls":
@@ -328,6 +339,8 @@ proc rpcMain*() =
         res.id.len > 0
         res.name == env.conf.agentString
         res.enode.startsWith("enode://")
+        res.enr.isSome
+        res.enr.get().startsWith("enr:")
         res.ip.len > 0
         res.ports.discovery > 0
         res.ports.listener > 0
@@ -377,6 +390,10 @@ proc rpcMain*() =
     test "eth_gasPrice":
       let res = await client.eth_gasPrice()
       check res == w3Qty(30_000_000_050)  # Avg of `unsignedTx1` / `unsignedTx2`
+
+    test "eth_maxPriorityFeePerGas":
+      let res = await client.eth_maxPriorityFeePerGas()
+      check res == w3Qty(calculateMedianMaxPriorityFeePerGas(env.chain).uint64)
 
     test "eth_accounts":
       let res = await client.eth_accounts()
@@ -604,8 +621,9 @@ proc rpcMain*() =
       let res = await client.eth_getBlockByNumber("latest", true)
       check res.isNil.not
       check res.hash == env.blockHash
-      let res2 = await client.eth_getBlockByNumber($1, true)
-      check res2.isNil
+
+      expect JsonRpcError:
+        discard await client.eth_getBlockByNumber($1, true)
 
     test "eth_getTransactionByHash":
       let res = await client.eth_getTransactionByHash(env.txHash)
@@ -641,6 +659,58 @@ proc rpcMain*() =
           check receipts.len == 2
           check receipts[0].transactionIndex == 0.Quantity
           check receipts[1].transactionIndex == 1.Quantity
+
+    test "debug_getRawReceipts":
+      let
+        rawReceipts = await client.debug_getRawReceipts(blockId(1'u64))
+        receipts = await client.eth_getBlockReceipts(blockId(1'u64))
+
+      check receipts.isSome
+      if receipts.isSome:
+        check rawReceipts.len == receipts.get.len
+
+      for receipt in rawReceipts:
+        check seq[byte](receipt).len > 0
+
+    test "debug_getRawBlockAccessList":
+      try:
+        discard await client.call("debug_getRawBlockAccessList",
+          %[%"latest"], EthJson)
+        check false
+      except JsonRpcError as exc:
+        check "Resource not found" in exc.msg
+
+      # Unknown block tag must raise an error.
+      expect JsonRpcError:
+        discard await client.call("debug_getRawBlockAccessList",
+          %[%"0xabcdabcd"], EthJson)
+
+    test "eth_getBlockReceipts with EIP-1898 object param":
+      # blockHash object form (what go-ethereum's ethclient sends)
+      let r1 = await client.call("eth_getBlockReceipts",
+        %[%*{"blockHash": $env.blockHash}], EthJson)
+      let recs1 = EthJson.decode(r1.string, Opt[seq[ReceiptObject]])
+      check recs1.isSome
+      check recs1.get.len == 2
+
+      # blockHash with requireCanonical=false
+      let r2 = await client.call("eth_getBlockReceipts",
+        %[%*{"blockHash": $env.blockHash, "requireCanonical": false}], EthJson)
+      let recs2 = EthJson.decode(r2.string, Opt[seq[ReceiptObject]])
+      check recs2.isSome
+      check recs2.get.len == 2
+
+      # blockNumber object form
+      let r3 = await client.call("eth_getBlockReceipts",
+        %[%*{"blockNumber": "0x1"}], EthJson)
+      let recs3 = EthJson.decode(r3.string, Opt[seq[ReceiptObject]])
+      check recs3.isSome
+      check recs3.get.len == 2
+
+      # requireCanonical=true should fail
+      expect JsonRpcError:
+        discard await client.call("eth_getBlockReceipts",
+          %[%*{"blockHash": $env.blockHash, "requireCanonical": true}], EthJson)
 
     test "eth_getTransactionReceipt":
       let res = await client.eth_getTransactionReceipt(env.txHash)
@@ -867,6 +937,22 @@ proc rpcMain*() =
           proofResponse.storageHash == hash32"0x2ed06ec37dad4cd8c8fc1a1172d633a8973987fa6995b14a7c0a50c0e8d1a9c3"
           storageProof.len() == 1
           verifySlotLeafExists(proofResponse.storageHash, storageProof[0])
+
+    env.close()
+
+  suite "Remote Procedure Calls - Amsterdam":
+    var env = setupEnv(Amsterdam)
+    env.generateBlock()
+    let client = env.client
+
+    test "debug_getRawBlockAccessList - happy path":
+      let r = await client.call("debug_getRawBlockAccessList",
+        %[%"latest"], EthJson)
+      let raw = EthJson.decode(r.string, seq[byte])
+      check raw.len > 0
+
+      let bal = ethBlockAccessList(raw)
+      check rlp.encode(bal[]) == raw
 
     env.close()
 

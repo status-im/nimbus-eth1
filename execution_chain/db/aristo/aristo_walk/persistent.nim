@@ -1,6 +1,6 @@
-# Nimbus - Types, data structures and shared utilities used in network sync
+# nimbus-eth1
 #
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -20,11 +20,10 @@
 import
   ../aristo_init/[rocks_db, persistent],
   ../aristo_desc,
-  "."/[walk_private, memory_only]
+  ./walk_private
 
 export
   rocks_db,
-  memory_only,
   persistent
 
 # ------------------------------------------------------------------------------
@@ -48,17 +47,6 @@ iterator walkKeyBe*[T: RdbBackendRef](
   ## Similar to `walkVtxBe()` but for keys.
   for (rvid,key) in walkKeyBeImpl[T](db):
     yield (rvid,key)
-
-# -----------
-
-iterator walkPairs*[T: RdbBackendRef](
-   _: type T;
-   db: AristoDbRef;
-     ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
-  ## Walk over all `(VertexID,VertexRef)` in the database. Note that entries
-  ## are unsorted.
-  for (rvid,vtx) in walkPairsImpl[T](db):
-    yield (rvid,vtx)
 
 # ------------------------------------------------------------------------------
 # End

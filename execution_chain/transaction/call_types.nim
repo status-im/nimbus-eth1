@@ -14,10 +14,10 @@ import
   eth/common/transactions,
   eth/common/addresses,
   eth/common/receipts,
-  ../common/evmforks,
+  ../common/hardforks,
   ../evm/types,
   ../evm/internals,
-  ../core/eip7702
+  ../core/[eip7702, eip8037]
 
 export types
 
@@ -25,7 +25,6 @@ type
   # Standard call parameters.
   CallParams* = object
     vmState*:      BaseVMState          # Chain, database, state, block, fork.
-    origin*:       Opt[addresses.Address] # Default origin is `sender`.
     gasPrice*:     GasInt               # Gas price for this call.
     gasLimit*:     GasInt               # Maximum gas available for this call.
     sender*:       addresses.Address    # Sender account.
@@ -36,7 +35,7 @@ type
     accessList*:   AccessList           # EIP-2930 (Berlin) tx access list.
     versionedHashes*: seq[VersionedHash]   # EIP-4844 (Cancun) blob versioned hashes
     authorizationList*: seq[Authorization] # EIP-7702 (Prague) authorization list
-    sysCall*:      bool                 # System call or ordinary call
+    intrinsic*:    IntrinsicGas
 
   # Standard call result.
   CallResult* = object of RootObj
@@ -53,11 +52,17 @@ type
   LogResult* = object
     logEntries*: seq[Log]
     gasUsed*: GasInt
-    blockGasUsed*: GasInt
+    blockRegularGasUsed*: GasInt
+    blockStateGasUsed*: GasInt
 
   OutputResult* = object
     error*:   string
     output*:  seq[byte]
+
+  IntrinsicGas* = object
+    regular*: GasInt
+    state*: GasInt
+    floorDataGas*: GasInt
 
 template isCreate(tx: Transaction): bool =
   tx.contractCreation
@@ -69,43 +74,69 @@ func isError*(cr: CallResult): bool =
   cr.error.len > 0
 
 const
-  TOTAL_COST_FLOOR_PER_TOKEN = 10
+  TOTAL_COST_FLOOR_PER_TOKEN_EIP7623 = 10
+  TOTAL_COST_FLOOR_PER_TOKEN_EIP7976 = 16
 
-func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork): (GasInt, GasInt) =
+func intrinsicGas*(call: CallParams | Transaction, hardFork: HardFork, gasLimit: GasInt): IntrinsicGas =
   # Compute the baseline gas cost for this transaction.  This is the amount
   # of gas needed to send this transaction (but that is not actually used
   # for computation).
+  let
+    fork = ToEVMFork[hardFork]
+
   var
-    intrinsicGas = TX_BASE_COST
-    floorDataGas = intrinsicGas
+    regularGas = TX_BASE_COST
+    stateGas = 0.GasInt
+    floorDataGas = regularGas
     tokens = 0
+    accessListBytes = 0
 
   # EIP-2 (Homestead) extra intrinsic gas for contract creations.
   if call.isCreate:
-    intrinsicGas += gasFees[fork][GasTXCreate]
-    if fork >= FkShanghai:
-      intrinsicGas += (gasFees[fork][GasInitcodeWord] * call.input.len.wordCount)
+    if hardFork >= Amsterdam:
+      stateGas += CREATE_ACCOUNT_STATE_GAS
+
+    regularGas += gasFees[fork][GasTXCreate]
+    if hardFork >= Shanghai:
+      regularGas += (gasFees[fork][GasInitcodeWord] * call.input.len.wordCount)
 
   # Input data cost, reduced in EIP-2028 (Istanbul).
-  let gasZero    = gasFees[fork][GasTXDataZero]
-  let gasNonZero = gasFees[fork][GasTXDataNonZero]
+  let
+    gasZero    = gasFees[fork][GasTXDataZero]
+    gasNonZero = gasFees[fork][GasTXDataNonZero]
+    byteZeroToken = if hardFork >= Amsterdam: 4 else: 1
+
   for b in call.input:
     if b == 0:
-      intrinsicGas += gasZero
-      tokens += 1
+      regularGas += gasZero
+      tokens += byteZeroToken
     else:
-      intrinsicGas += gasNonZero
+      regularGas += gasNonZero
       tokens += 4
 
-
   # EIP-2930 (Berlin) intrinsic gas for transaction access list.
-  if fork >= FkBerlin:
+  if hardFork >= Berlin:
     for account in call.accessList:
-      intrinsicGas += ACCESS_LIST_ADDRESS_COST
-      intrinsicGas += account.storageKeys.len * ACCESS_LIST_STORAGE_KEY_COST
+      regularGas += ACCESS_LIST_ADDRESS_COST
+      regularGas += account.storageKeys.len * ACCESS_LIST_STORAGE_KEY_COST
+      # Total byte count of addresses(20 bytes each) and storage keys (32 bytes each) in the access list.
+      accessListBytes += 20 + account.storageKeys.len * 32
 
-  if fork >= FkPrague:
-    intrinsicGas += call.authorizationList.len * PER_EMPTY_ACCOUNT_COST
-    floorDataGas += tokens * TOTAL_COST_FLOOR_PER_TOKEN
+  if hardFork >= Prague:
+    if hardFork >= Amsterdam:
+      regularGas += REGULAR_PER_AUTH_BASE_COST * call.authorizationList.len
+      # EIP-7981: Increase Access List Cost
+      let floorTokensInAccessList = accessListBytes * 4
+      tokens += floorTokensInAccessList
+      regularGas += TOTAL_COST_FLOOR_PER_TOKEN_EIP7976 * floorTokensInAccessList
+      stateGas += (STATE_BYTES_PER_NEW_ACCOUNT + STATE_BYTES_PER_AUTH_BASE) * COST_PER_STATE_BYTE * GasInt(call.authorizationList.len)
+      floorDataGas += tokens * TOTAL_COST_FLOOR_PER_TOKEN_EIP7976
+    else:
+      regularGas += call.authorizationList.len * PER_EMPTY_ACCOUNT_COST
+      floorDataGas += tokens * TOTAL_COST_FLOOR_PER_TOKEN_EIP7623
 
-  return (intrinsicGas.GasInt, floorDataGas.GasInt)
+  IntrinsicGas(
+    regular: regularGas.GasInt,
+    state: stateGas,
+    floorDataGas: floorDataGas.GasInt,
+  )

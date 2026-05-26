@@ -1,6 +1,6 @@
 # Nimbus - Types, data structures and shared utilities used in network sync
 #
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -46,15 +46,6 @@ iterator walkKeyBe*[T: MemBackendRef](
     yield (rvid,key)
 
 # -----------
-
-iterator walkPairs*[T: MemBackendRef](
-   _: type T;
-   db: AristoDbRef;
-     ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
-  ## Walk over all `(VertexID,VertexRef)` in the database. Note that entries
-  ## are unsorted.
-  for (rvid,vtx) in walkPairsImpl[T](db):
-    yield (rvid,vtx)
 
 # ------------------------------------------------------------------------------
 # End

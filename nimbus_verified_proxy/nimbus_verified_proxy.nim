@@ -8,7 +8,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[os, strutils],
+  std/[options, os, strutils],
   chronicles,
   chronos,
   confutils,
@@ -16,17 +16,18 @@ import
   json_rpc/rpcproxy,
   beacon_chain/gossip_processing/light_client_processor,
   beacon_chain/networking/network_metadata,
-  beacon_chain/spec/beaconstate,
-  beacon_chain/conf,
-  beacon_chain/[beacon_clock, buildinfo, nimbus_binary_common, process_state],
+  beacon_chain/spec/[forks, beaconstate],
+  beacon_chain/[conf, beacon_clock, buildinfo, nimbus_binary_common, process_state],
   ../execution_chain/common/common,
   ./nimbus_verified_proxy_conf,
   ./engine/engine,
+  ./engine/genesis_params,
+  ./engine/rpc_frontend,
   ./engine/header_store,
   ./engine/utils,
   ./engine/types,
-  ./lc/lc,
   ./lc_backend,
+  ./p2p_lc_backend,
   ./json_rpc_backend,
   ./json_rpc_frontend,
   ../execution_chain/version_info
@@ -45,37 +46,7 @@ func getConfiguredChainId*(chain: Option[string]): UInt256 =
   of "hoodi": 560048.u256
   else: 1.u256
 
-proc connectLCToEngine*(lightClient: LightClient, engine: RpcVerificationEngine) =
-  proc onFinalizedHeader(
-      lightClient: LightClient, finalizedHeader: ForkedLightClientHeader
-  ) =
-    withForkyHeader(finalizedHeader):
-      when lcDataFork > LightClientDataFork.Altair:
-        info "New LC finalized header", finalized_header = shortLog(forkyHeader)
-        let res = engine.headerStore.updateFinalized(finalizedHeader)
-
-        if res.isErr():
-          error "finalized header update error", error = res.error()
-      else:
-        error "pre-bellatrix light client headers do not have the execution payload header"
-
-  proc onOptimisticHeader(
-      lightClient: LightClient, optimisticHeader: ForkedLightClientHeader
-  ) =
-    withForkyHeader(optimisticHeader):
-      when lcDataFork > LightClientDataFork.Altair:
-        info "New LC optimistic header", optimistic_header = shortLog(forkyHeader)
-        let res = engine.headerStore.add(optimisticHeader)
-
-        if res.isErr():
-          error "header store add error", error = res.error()
-      else:
-        error "pre-bellatrix light client headers do not have the execution payload header"
-
-  lightClient.onFinalizedHeader = onFinalizedHeader
-  lightClient.onOptimisticHeader = onOptimisticHeader
-
-proc startBackends(
+proc startExecutionBackends(
     engine: RpcVerificationEngine, urls: seq[string], caps: BackendCapabilities
 ): Future[seq[JsonRpcClient]] {.async: (raises: [ProxyError, CancelledError]).} =
   var clients: seq[JsonRpcClient] = @[]
@@ -90,7 +61,7 @@ proc startBackends(
       error "Error connecting to backend", url = url, error = startRes.error.errMsg
       continue
 
-    engine.registerBackend(client.getEthApiBackend(), caps)
+    engine.registerBackend(client.getExecutionApiBackend(), caps)
     clients.add(client)
 
   if clients.len == 0:
@@ -115,17 +86,68 @@ proc startPrivateTxBackends(
       continue
 
     engine.registerBackend(
-      client.getEthApiBackend(), BackendCapabilities({SendRawTransaction})
+      client.getExecutionApiBackend(), BackendCapabilities({SendRawTransaction})
     )
     clients.add(client)
 
   if clients.len == 0:
     raise newException(ProxyError, "Couldn't connect to any private mempool backend")
 
+proc startBeaconBackends(
+    engine: RpcVerificationEngine, urls: UrlList
+): Future[seq[BeaconApiRestClient]] {.async: (raises: [ProxyError, CancelledError]).} =
+  var clients: seq[BeaconApiRestClient] = @[]
+
+  for url in urls:
+    let client = BeaconApiRestClient.init(engine.cfg, engine.forkDigests, url)
+
+    let startRes = client.start()
+    if startRes.isErr():
+      error "Error connecting to backend", url = url, error = startRes.error.errMsg
+      continue
+
+    engine.registerBackend(client.getBeaconApiBackend(), fullBeaconCapabilities)
+    clients.add(client)
+
+  if clients.len == 0:
+    raise newException(ProxyError, "Couldn't connect to any beacon API backend")
+
   clients
 
+proc startP2PBeaconBackend(
+    engine: RpcVerificationEngine, config: VerifiedProxyConf
+): Future[Option[P2PLightClientBackend]] {.async: (raises: [CancelledError]).} =
+  let
+    networkName = config.eth2Network.get("mainnet")
+    genesis = genesisParamsForNetwork(networkName)
+    p2pConf = P2PBackendConf(
+      cfg: engine.cfg,
+      forkDigests: engine.forkDigests,
+      getBeaconTime: engine.getBeaconTime,
+      genesisValidatorsRoot: genesis.genesisValidatorsRoot,
+      genesisBlockRoot: genesis.genesisBlockRoot,
+      tcpPort: Port(config.p2pTcpPort),
+      udpPort: Port(config.p2pUdpPort),
+      maxPeers: config.p2pMaxPeers,
+      bootstrapNodesFile: config.p2pBootstrapNodesFile,
+      nat: config.p2pNat,
+      network: networkName,
+    )
+    backend = P2PLightClientBackend.init(p2pConf).valueOr:
+      error "Failed to create P2P light client node", err = error.errMsg
+      return none(P2PLightClientBackend)
+
+  let startRes = await backend.start()
+  if startRes.isErr():
+    error "Failed to start P2P light client backend", err = startRes.error.errMsg
+    return none(P2PLightClientBackend)
+
+  engine.registerBackend(backend.getBeaconApiBackend(), fullBeaconCapabilities)
+  info "P2P light client backend started"
+  some(backend)
+
 proc startFrontends(
-    engine: RpcVerificationEngine, urls: seq[string]
+    frontend: ExecutionApiFrontend, urls: seq[string]
 ): seq[JsonRpcServer] {.raises: [ProxyError].} =
   var servers: seq[JsonRpcServer] = @[]
 
@@ -135,7 +157,7 @@ proc startFrontends(
       continue
 
     # inject frontend
-    server.injectEngineFrontend(engine.frontend)
+    server.injectEngineFrontend(frontend)
 
     let status = server.start()
     if status.isErr():
@@ -164,29 +186,34 @@ proc run(
   let
     engineConf = RpcVerificationEngineConf(
       chainId: getConfiguredChainId(config.eth2Network),
+      eth2Network: config.eth2Network,
       maxBlockWalk: config.maxBlockWalk,
       headerStoreLen: config.headerStoreLen,
       accountCacheLen: config.accountCacheLen,
       codeCacheLen: config.codeCacheLen,
       storageCacheLen: config.storageCacheLen,
       parallelBlockDownloads: config.parallelBlockDownloads,
+      maxLightClientUpdates: config.maxLightClientUpdates,
+      trustedBlockRoot: config.trustedBlockRoot,
+      syncHeaderStore: config.syncHeaderStore,
     )
     engine = RpcVerificationEngine.init(engineConf).valueOr:
       raise newException(ProxyError, "Couldn't initialize verification engine")
-    lc = LightClient.new(config.eth2Network, some config.trustedBlockRoot)
 
-    # initialize backend for light client updates
-    lcRestClientPool = LCRestClientPool.new(lc.cfg, lc.forkDigests)
+  # sanity check
+  if config.executionApiUrls.len <= 0:
+    raise newException(ProxyError, "Need atleast one execution api url to be specified")
+
+  if (config.beaconApiUrls.len <= 0) and (not config.p2pEnabled):
+    raise newException(ProxyError, "Need atleast one beacon url or p2p enabled")
 
   let usePrivateTx = config.privateTxUrls.len > 0
 
   let regularCaps =
     if usePrivateTx:
-      fullCapabilities - {SendRawTransaction}
+      fullExecutionCapabilities - {SendRawTransaction}
     else:
-      fullCapabilities
-
-  let backendClients = await startBackends(engine, config.executionApiUrls, regularCaps)
+      fullExecutionCapabilities
 
   let privateTxClients =
     if usePrivateTx:
@@ -194,36 +221,44 @@ proc run(
     else:
       @[]
 
-  # connect light client to LC by registering on header methods
-  # to use engine header store
-  connectLCToEngine(lc, engine)
-  lc.trustedBlockRoot = some config.trustedBlockRoot
+  let execBackendClients =
+    await startExecutionBackends(engine, config.executionApiUrls, regularCaps)
+  let beaconBackendClients =
+    if config.beaconApiUrls.len > 0:
+      await startBeaconBackends(engine, config.beaconApiUrls)
+    else:
+      @[]
 
-  # add light client backend
-  lc.setBackend(lcRestClientPool.getEthLCBackend())
+  let p2pBackend =
+    if config.p2pEnabled:
+      await startP2PBeaconBackend(engine, config)
+    else:
+      none(P2PLightClientBackend)
 
-  let frontendServers = engine.startFrontends(config.frontendUrls)
+  let frontend = engine.getExecutionApiFrontend()
+  let frontendServers = startFrontends(frontend, config.frontendUrls)
 
-  # adding endpoints will also start the backend
-  if lcRestClientPool.addEndpoints(config.beaconApiUrls).isErr():
-    raise newException(ProxyError, "Couldn't add endpoints for light client queries")
-
-  # this starts the light client manager which is
-  # an endless loop
   try:
-    await lc.start()
+    while true:
+      await sleepAsync(engine.timeParams.SLOT_DURATION)
+      let syncRes = await engine.syncOnce()
+      if syncRes.isErr():
+        debug "LC sync failed", error = syncRes.error.errMsg
   except CancelledError as e:
-    debug "light client cancelled"
+    debug "proxy loop cancelled"
     for s in frontendServers:
       await s.stop()
-    for c in backendClients:
+    for c in execBackendClients:
+      await c.stop()
+    for c in beaconBackendClients:
       await c.stop()
     for c in privateTxClients:
       await c.stop()
-    await lcRestClientPool.closeAll()
+    if p2pBackend.isSome():
+      await p2pBackend.get().stop()
     raise e
 
-proc main() {.raises: [].} =
+when isMainModule:
   const
     banner = "Nimbus Verified Proxy " & FullVersionStr
     copyright =
@@ -260,6 +295,3 @@ proc main() {.raises: [].} =
   except CatchableError as e:
     fatal "Unexpected error", error = e.msg
     quit QuitFailure
-
-when isMainModule:
-  main()

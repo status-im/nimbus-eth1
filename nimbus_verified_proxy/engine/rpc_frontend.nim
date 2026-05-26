@@ -15,6 +15,7 @@ import
   eth/common/accounts,
   web3/[eth_api, eth_api_types],
   ../../execution_chain/core/eip4844,
+  ../../execution_chain/db/core_db/memory_only,
   ../../execution_chain/common/common,
   ./types,
   ./header_store,
@@ -23,22 +24,40 @@ import
   ./evm,
   ./transactions,
   ./receipts,
-  ./fees
+  ./fees,
+  ./engine
+
+template beaconSync(engine: RpcVerificationEngine) =
+  block:
+    await engine.syncLock.acquire()
+
+    defer:
+      try:
+        engine.syncLock.release()
+      except AsyncLockError:
+        # FIXME: is this dangerous
+        discard
+
+    if not engine.isSynced():
+      ?(await engine.syncOnce())
 
 proc applyPenalty(engine: RpcVerificationEngine, e: ErrorTuple) =
   if e.backendIdx < 0:
     return
   let idx = e.backendIdx
-  case e.errType
-  of BackendFetchError, BackendDecodingError:
-    engine.scores[idx].availability =
-      engine.availabilityScoreFunc(engine.scores[idx].availability, Penalty)
-    engine.scores[idx].quality =
-      engine.qualityScoreFunc(engine.scores[idx].quality, UndoReward)
-  of VerificationError:
-    engine.scores[idx].quality =
-      engine.qualityScoreFunc(engine.scores[idx].quality, Penalty)
-  else:
+  try:
+    case e.errType
+    of BackendFetchError, BackendDecodingError:
+      engine.scores[idx].availability =
+        engine.availabilityScoreFunc(engine.scores[idx].availability, Penalty)
+      engine.scores[idx].quality =
+        engine.qualityScoreFunc(engine.scores[idx].quality, UndoReward)
+    of VerificationError:
+      engine.scores[idx].quality =
+        engine.qualityScoreFunc(engine.scores[idx].quality, Penalty)
+    else:
+      discard
+  except KeyError:
     discard
 
 template penaltyOr[T](engine: RpcVerificationEngine, r: EngineResult[T]): T =
@@ -51,15 +70,19 @@ template penaltyOr[T](engine: RpcVerificationEngine, r: EngineResult[T]): T =
     return
   penaltyOrResult.unsafeGet()
 
-proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
-  engine.frontend.eth_chainId = proc(): Future[EngineResult[UInt256]] {.
+proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFrontend =
+  var frontend: ExecutionApiFrontend
+
+  frontend.eth_chainId = proc(): Future[EngineResult[UInt256]] {.
       async: (raises: [CancelledError])
   .} =
     ok(engine.chainId)
 
-  engine.frontend.eth_blockNumber = proc(): Future[EngineResult[uint64]] {.
+  frontend.eth_blockNumber = proc(): Future[EngineResult[uint64]] {.
       async: (raises: [CancelledError])
   .} =
+    engine.beaconSync()
+
     # Returns the number of the most recent block.
     let latest = engine.headerStore.latest.valueOr:
       # untagged(-1) because the error cannot be linked to any backend
@@ -72,80 +95,102 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     ok(latest.number.uint64)
 
-  engine.frontend.eth_getBalance = proc(
+  frontend.eth_getBalance = proc(
       address: Address, quantityTag: BlockTag
   ): Future[EngineResult[UInt256]] {.async: (raises: [CancelledError]).} =
+    engine.beaconSync()
+
     let header = engine.penaltyOr(await engine.getHeader(quantityTag))
     let account = engine.penaltyOr(
       await engine.getAccount(address, header.number, header.stateRoot)
     )
     ok(account.balance)
 
-  engine.frontend.eth_getStorageAt = proc(
+  frontend.eth_getStorageAt = proc(
       address: Address, slot: UInt256, quantityTag: BlockTag
   ): Future[EngineResult[FixedBytes[32]]] {.async: (raises: [CancelledError]).} =
+    engine.beaconSync()
+
     let header = engine.penaltyOr(await engine.getHeader(quantityTag))
     let storage = engine.penaltyOr(
       await engine.getStorageAt(address, slot, header.number, header.stateRoot)
     )
     ok(storage.to(Bytes32))
 
-  engine.frontend.eth_getTransactionCount = proc(
+  frontend.eth_getTransactionCount = proc(
       address: Address, quantityTag: BlockTag
   ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).} =
+    engine.beaconSync()
+
     let header = engine.penaltyOr(await engine.getHeader(quantityTag))
     let account = engine.penaltyOr(
       await engine.getAccount(address, header.number, header.stateRoot)
     )
     ok(Quantity(account.nonce))
 
-  engine.frontend.eth_getCode = proc(
+  frontend.eth_getCode = proc(
       address: Address, quantityTag: BlockTag
   ): Future[EngineResult[seq[byte]]] {.async: (raises: [CancelledError]).} =
+    engine.beaconSync()
+
     let header = engine.penaltyOr(await engine.getHeader(quantityTag))
     let code =
       engine.penaltyOr(await engine.getCode(address, header.number, header.stateRoot))
     ok(code)
 
-  engine.frontend.eth_getBlockByHash = proc(
+  frontend.eth_getBlockByHash = proc(
       blockHash: Hash32, fullTransactions: bool
   ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
+    engine.beaconSync()
+
     let blk = engine.penaltyOr(await engine.getBlock(blockHash, fullTransactions))
     ok(blk)
 
-  engine.frontend.eth_getBlockByNumber = proc(
+  frontend.eth_getBlockByNumber = proc(
       blockTag: BlockTag, fullTransactions: bool
   ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
+    engine.beaconSync()
+
     let blk = engine.penaltyOr(await engine.getBlock(blockTag, fullTransactions))
     ok(blk)
 
-  engine.frontend.eth_getUncleCountByBlockNumber = proc(
+  frontend.eth_getUncleCountByBlockNumber = proc(
       blockTag: BlockTag
   ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).} =
+    engine.beaconSync()
+
     let blk = engine.penaltyOr(await engine.getBlock(blockTag, false))
     ok(Quantity(blk.uncles.len()))
 
-  engine.frontend.eth_getUncleCountByBlockHash = proc(
+  frontend.eth_getUncleCountByBlockHash = proc(
       blockHash: Hash32
   ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).} =
+    engine.beaconSync()
+
     let blk = engine.penaltyOr(await engine.getBlock(blockHash, false))
     ok(Quantity(blk.uncles.len()))
 
-  engine.frontend.eth_getBlockTransactionCountByNumber = proc(
+  frontend.eth_getBlockTransactionCountByNumber = proc(
       blockTag: BlockTag
   ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).} =
+    engine.beaconSync()
+
     let blk = engine.penaltyOr(await engine.getBlock(blockTag, true))
     ok(Quantity(blk.transactions.len))
 
-  engine.frontend.eth_getBlockTransactionCountByHash = proc(
+  frontend.eth_getBlockTransactionCountByHash = proc(
       blockHash: Hash32
   ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).} =
+    engine.beaconSync()
+
     let blk = engine.penaltyOr(await engine.getBlock(blockHash, true))
     ok(Quantity(blk.transactions.len))
 
-  engine.frontend.eth_getTransactionByBlockNumberAndIndex = proc(
+  frontend.eth_getTransactionByBlockNumberAndIndex = proc(
       blockTag: BlockTag, index: Quantity
   ): Future[EngineResult[TransactionObject]] {.async: (raises: [CancelledError]).} =
+    engine.beaconSync()
+
     let blk = engine.penaltyOr(await engine.getBlock(blockTag, true))
 
     if distinctBase(index) >= uint64(blk.transactions.len):
@@ -156,9 +201,11 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     ok(x.tx)
 
-  engine.frontend.eth_getTransactionByBlockHashAndIndex = proc(
+  frontend.eth_getTransactionByBlockHashAndIndex = proc(
       blockHash: Hash32, index: Quantity
   ): Future[EngineResult[TransactionObject]] {.async: (raises: [CancelledError]).} =
+    engine.beaconSync()
+
     let blk = engine.penaltyOr(await engine.getBlock(blockHash, true))
 
     if distinctBase(index) >= uint64(blk.transactions.len):
@@ -169,9 +216,11 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     ok(x.tx)
 
-  engine.frontend.eth_call = proc(
+  frontend.eth_call = proc(
       tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: bool = true
   ): Future[EngineResult[seq[byte]]] {.async: (raises: [CancelledError]).} =
+    engine.beaconSync()
+
     if tx.to.isNone():
       return err((FrontendError, "to address is required", UNTAGGED))
 
@@ -199,9 +248,11 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     ok(callResult.output)
 
-  engine.frontend.eth_createAccessList = proc(
+  frontend.eth_createAccessList = proc(
       tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: bool = true
   ): Future[EngineResult[AccessListResult]] {.async: (raises: [CancelledError]).} =
+    engine.beaconSync()
+
     if tx.to.isNone():
       return err((FrontendError, "to address is required", UNTAGGED))
 
@@ -229,9 +280,11 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
       AccessListResult(accessList: accessList, error: error, gasUsed: gasUsed.Quantity)
     )
 
-  engine.frontend.eth_estimateGas = proc(
+  frontend.eth_estimateGas = proc(
       tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: bool = true
   ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).} =
+    engine.beaconSync()
+
     if tx.to.isNone():
       return err((FrontendError, "to address is required", UNTAGGED))
 
@@ -256,10 +309,12 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     ok(Quantity(gasEstimate))
 
-  engine.frontend.eth_getTransactionByHash = proc(
+  frontend.eth_getTransactionByHash = proc(
       txHash: Hash32
   ): Future[EngineResult[TransactionObject]] {.async: (raises: [CancelledError]).} =
-    let (backend, backendIdx) = ?(engine.backendFor(GetTransactionByHash))
+    engine.beaconSync()
+
+    let (backend, backendIdx) = ?(engine.executionBackendFor(GetTransactionByHash))
     let tx = engine.penaltyOr(
       (await backend.eth_getTransactionByHash(txHash)).tagBackend(backendIdx)
     )
@@ -283,16 +338,20 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     ok(tx)
 
-  engine.frontend.eth_getBlockReceipts = proc(
+  frontend.eth_getBlockReceipts = proc(
       blockTag: BlockTag
   ): Future[EngineResult[Opt[seq[ReceiptObject]]]] {.async: (raises: [CancelledError]).} =
+    engine.beaconSync()
+
     let rxs = engine.penaltyOr(await engine.getReceipts(blockTag))
     ok(Opt.some(rxs))
 
-  engine.frontend.eth_getTransactionReceipt = proc(
+  frontend.eth_getTransactionReceipt = proc(
       txHash: Hash32
   ): Future[EngineResult[ReceiptObject]] {.async: (raises: [CancelledError]).} =
-    let (backend, backendIdx) = ?(engine.backendFor(GetTransactionReceipt))
+    engine.beaconSync()
+
+    let (backend, backendIdx) = ?(engine.executionBackendFor(GetTransactionReceipt))
     let rx = engine.penaltyOr(
       (await backend.eth_getTransactionReceipt(txHash)).tagBackend(backendIdx)
     )
@@ -304,15 +363,19 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     return err((VerificationError, "receipt couldn't be verified", backendIdx))
 
-  engine.frontend.eth_getLogs = proc(
+  frontend.eth_getLogs = proc(
       filterOptions: FilterOptions
   ): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).} =
+    engine.beaconSync()
+
     let logObjs = engine.penaltyOr(await engine.getLogs(filterOptions))
     ok(logObjs)
 
-  engine.frontend.eth_newFilter = proc(
+  frontend.eth_newFilter = proc(
       filterOptions: FilterOptions
   ): Future[EngineResult[string]] {.async: (raises: [CancelledError]).} =
+    engine.beaconSync()
+
     if engine.filterStore.len >= MAX_FILTERS:
       return err((UnavailableDataError, "FilterStore already full", UNTAGGED))
 
@@ -347,32 +410,38 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     ok(strId)
 
-  engine.frontend.eth_uninstallFilter = proc(
+  frontend.eth_uninstallFilter = proc(
       filterId: string
   ): Future[EngineResult[bool]] {.async: (raises: [CancelledError]).} =
+    engine.beaconSync()
+
     if filterId in engine.filterStore:
       engine.filterStore.del(filterId)
       return ok(true)
 
     ok(false)
 
-  engine.frontend.eth_getFilterLogs = proc(
+  frontend.eth_getFilterLogs = proc(
       filterId: string
   ): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).} =
+    engine.beaconSync()
+
     try:
       let logObjs =
         engine.penaltyOr(await engine.getLogs(engine.filterStore[filterId].filter))
       ok(logObjs)
-    except KeyError as e:
+    except KeyError:
       err((FrontendError, "Filter doesn't exist", UNTAGGED))
 
-  engine.frontend.eth_getFilterChanges = proc(
+  frontend.eth_getFilterChanges = proc(
       filterId: string
   ): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).} =
+    engine.beaconSync()
+
     let filterItem =
       try:
         engine.filterStore[filterId]
-      except KeyError as e:
+      except KeyError:
         return err((FrontendError, "Filter doesn't exist", UNTAGGED))
 
     let
@@ -409,14 +478,16 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     # all logs verified so we can update blockMarker
     try:
       engine.filterStore[filterId].blockMarker = Opt.some(toBlock)
-    except KeyError as e:
+    except KeyError:
       return err((FrontendError, "Filter doesn't exist", UNTAGGED))
 
     ok(logObjs)
 
-  engine.frontend.eth_blobBaseFee = proc(): Future[EngineResult[UInt256]] {.
+  frontend.eth_blobBaseFee = proc(): Future[EngineResult[UInt256]] {.
       async: (raises: [CancelledError])
   .} =
+    engine.beaconSync()
+
     let com = CommonRef.new(
       DefaultDbMemory.newCoreDbRef(),
       config = chainConfigForNetwork(engine.chainId),
@@ -434,37 +505,45 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
         (UnavailableDataError, "excessBlobGas missing from latest header", UNTAGGED)
       )
     let blobBaseFee =
-      getBlobBaseFee(header.excessBlobGas.get, com, com.toEVMFork(header)) *
+      getBlobBaseFee(header.excessBlobGas.get, com, com.toHardFork(header)) *
       header.blobGasUsed.get.u256
 
     ok(blobBaseFee)
 
-  engine.frontend.eth_gasPrice = proc(): Future[EngineResult[Quantity]] {.
+  frontend.eth_gasPrice = proc(): Future[EngineResult[Quantity]] {.
       async: (raises: [CancelledError])
   .} =
+    engine.beaconSync()
+
     let suggestedPrice = engine.penaltyOr(await engine.suggestGasPrice())
     ok(Quantity(suggestedPrice.uint64))
 
-  engine.frontend.eth_maxPriorityFeePerGas = proc(): Future[EngineResult[Quantity]] {.
+  frontend.eth_maxPriorityFeePerGas = proc(): Future[EngineResult[Quantity]] {.
       async: (raises: [CancelledError])
   .} =
+    engine.beaconSync()
+
     let suggestedPrice = engine.penaltyOr(await engine.suggestMaxPriorityGasPrice())
     ok(Quantity(suggestedPrice.uint64))
 
   # pass-forward
-  engine.frontend.eth_getProof = proc(
+  frontend.eth_getProof = proc(
       address: Address, slots: seq[UInt256], blockId: BlockTag
   ): Future[EngineResult[ProofResponse]] {.async: (raises: [CancelledError]).} =
-    let (backend, backendIdx) = ?(engine.backendFor(GetProof))
+    engine.beaconSync()
+
+    let (backend, backendIdx) = ?(engine.executionBackendFor(GetProof))
     let proof = engine.penaltyOr(
       (await backend.eth_getProof(address, slots, blockId)).tagBackend(backendIdx)
     )
     ok(proof)
 
-  engine.frontend.eth_feeHistory = proc(
+  frontend.eth_feeHistory = proc(
       blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[int]
   ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).} =
-    let (backend, backendIdx) = ?(engine.backendFor(FeeHistory))
+    engine.beaconSync()
+
+    let (backend, backendIdx) = ?(engine.executionBackendFor(FeeHistory))
     let feeHistory = engine.penaltyOr(
       (await backend.eth_feeHistory(blockCount, newestBlock, rewardPercentiles)).tagBackend(
         backendIdx
@@ -472,11 +551,15 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     )
     ok(feeHistory)
 
-  engine.frontend.eth_sendRawTransaction = proc(
+  frontend.eth_sendRawTransaction = proc(
       txBytes: seq[byte]
   ): Future[EngineResult[Hash32]] {.async: (raises: [CancelledError]).} =
-    let (backend, backendIdx) = ?(engine.backendFor(SendRawTransaction))
+    engine.beaconSync()
+
+    let (backend, backendIdx) = ?(engine.executionBackendFor(SendRawTransaction))
     let txHash = engine.penaltyOr(
       (await backend.eth_sendRawTransaction(txBytes)).tagBackend(backendIdx)
     )
     ok(txHash)
+
+  frontend

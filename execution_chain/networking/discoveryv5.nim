@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -17,9 +17,35 @@ import
   eth/p2p/discoveryv5/sessions,
   eth/p2p/discoveryv5/protocol {.all.}
 
+from std/net import IpAddress, Port
+
 export
-  Protocol, Node, Address, enr, newProtocol, open, seedTable, start, queryRandom, closeWait,
-  updateRecord
+  Protocol, Node, Address, enr, open, seedTable, start, queryRandom, closeWait,
+  updateRecord, getRecord
+
+# One of the `newProtocol` is deprecated.
+# This wrapper here is to silence the warning.
+proc newDiscoveryV5*(privKey: PrivateKey,
+                       enrIp: Opt[IpAddress],
+                       enrTcpPort: Opt[Port],
+                       enrUdpPort: Opt[Port],
+                       bootstrapRecords: openArray[Record],
+                       bindPort: Port,
+                       bindIp: Opt[IpAddress],
+                       enrAutoUpdate: bool,
+                       rng: ref HmacDrbgContext): auto =
+  protocol.newProtocol(
+    privKey = privKey,
+    enrIp = enrIp,
+    enrTcpPort = enrTcpPort,
+    enrUdpPort = enrUdpPort,
+    enrQuicPort = Opt.none(Port),
+    bootstrapRecords = bootstrapRecords,
+    bindPort = bindPort,
+    bindIp = bindIp,
+    enrAutoUpdate = enrAutoUpdate,
+    rng = rng
+  )
 
 proc receiveV5*(d: Protocol, a: Address, packet: openArray[byte]): Result[void, cstring] =
   privateAccess(Protocol)

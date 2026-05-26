@@ -16,6 +16,7 @@ import
   eth/common/[base, eth_types_rlp],
   ../engine/blocks,
   ../engine/engine,
+  ../engine/rpc_frontend,
   ../engine/header_store,
   ../engine/types,
   ./test_utils,
@@ -23,12 +24,14 @@ import
 
 let scoringEngineConf = RpcVerificationEngineConf(
   chainId: 1.u256,
+  trustedBlockRoot: TEST_TBR,
   maxBlockWalk: 1,
   headerStoreLen: 16,
   accountCacheLen: 1,
   codeCacheLen: 1,
   storageCacheLen: 1,
   parallelBlockDownloads: 2,
+  freezeAtSlot: TEST_LC_SLOT,
 )
 
 suite "backend scoring":
@@ -39,7 +42,7 @@ suite "backend scoring":
 
   test "availability penalty on transport failure":
     let ts = TestApiState.init(1.u256)
-    var backend = initTestApiBackend(ts)
+    var backend = initTestExecutionBackend(ts)
     backend.eth_getProof = proc(
         address: Address, slots: seq[UInt256], blkNum: BlockTag
     ): Future[EngineResult[ProofResponse]] {.async: (raises: [CancelledError]).} =
@@ -47,11 +50,13 @@ suite "backend scoring":
 
     let engine = RpcVerificationEngine.init(scoringEngineConf).valueOr:
       raise newException(TestProxyError, error.errMsg)
-    engine.registerBackend(backend, fullCapabilities)
+    engine.registerBackend(backend, fullExecutionCapabilities)
+    engine.setupTestBeacon(ts)
+    let frontend1 = engine.getExecutionApiFrontend()
 
     check engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
 
-    let res = waitFor engine.frontend.eth_getBalance(address, latestTag)
+    let res = waitFor frontend1.eth_getBalance(address, latestTag)
 
     check:
       res.isErr()
@@ -60,7 +65,7 @@ suite "backend scoring":
 
   test "quality penalty on verification failure":
     let ts = TestApiState.init(1.u256)
-    var backend = initTestApiBackend(ts)
+    var backend = initTestExecutionBackend(ts)
     backend.eth_getProof = proc(
         address: Address, slots: seq[UInt256], blkNum: BlockTag
     ): Future[EngineResult[ProofResponse]] {.async: (raises: [CancelledError]).} =
@@ -80,11 +85,13 @@ suite "backend scoring":
 
     let engine = RpcVerificationEngine.init(scoringEngineConf).valueOr:
       raise newException(TestProxyError, error.errMsg)
-    engine.registerBackend(backend, fullCapabilities)
+    engine.registerBackend(backend, fullExecutionCapabilities)
+    engine.setupTestBeacon(ts)
+    let frontend2 = engine.getExecutionApiFrontend()
 
     check engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
 
-    let res = waitFor engine.frontend.eth_getBalance(address, latestTag)
+    let res = waitFor frontend2.eth_getBalance(address, latestTag)
 
     check:
       res.isErr()
@@ -95,21 +102,21 @@ suite "backend scoring":
     let ts = TestApiState.init(1.u256)
     let engine = RpcVerificationEngine.init(scoringEngineConf).valueOr:
       raise newException(TestProxyError, error.errMsg)
-    engine.registerBackend(initTestApiBackend(ts), fullCapabilities)
+    engine.registerBackend(initTestExecutionBackend(ts), fullExecutionCapabilities)
 
     engine.scores[0].quality = -10
 
-    check engine.backendFor(GetProof).isErr()
+    check engine.executionBackendFor(GetProof).isErr()
 
   test "excluded backend recovers after enough requests":
     let ts = TestApiState.init(1.u256)
     let engine = RpcVerificationEngine.init(scoringEngineConf).valueOr:
       raise newException(TestProxyError, error.errMsg)
-    engine.registerBackend(initTestApiBackend(ts), fullCapabilities)
+    engine.registerBackend(initTestExecutionBackend(ts), fullExecutionCapabilities)
 
     engine.scores[0].quality = -4
 
     for _ in 0 ..< 3:
-      check engine.backendFor(GetProof).isErr()
+      check engine.executionBackendFor(GetProof).isErr()
 
-    check engine.backendFor(GetProof).isOk()
+    check engine.executionBackendFor(GetProof).isOk()

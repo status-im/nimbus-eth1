@@ -18,6 +18,7 @@ import
   stint
 
 import
+  ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/ledger,
   ../execution_chain/evm/types,
   ../execution_chain/evm/interpreter/op_codes,
@@ -293,7 +294,8 @@ proc initVMEnv*(network: string): BaseVMState =
       coinbase: coinbase,
       timestamp: EthTime(0x1234),
       difficulty: 1003.u256,
-      gasLimit: 100_000
+      gasLimit: 100_000,
+      baseFeePerGas: Opt.some(1.u256),
     )
 
   BaseVMState.new(parent, header, com, com.db.baseTxFrame())
@@ -357,7 +359,7 @@ proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: DebugCallR
     let key = kv[0].toHex()
     let val = kv[1].toHex()
     let slotKey = UInt256.fromBytesBE(kv[0]).toBytesBE.keccak256
-    let data = al.slotFetch(accPath, slotKey).valueOr: default(UInt256)
+    let data = al.fetchSlot(accPath, slotKey).valueOr(0'u256)
     let actual = data.toBytesBE().toHex
     if val != actual:
       error "storage has different value", key=key, expected=val, actual
@@ -406,6 +408,7 @@ proc createSignedTx(payload: seq[byte], chainId: ChainId): Transaction =
     nonce: 0,
     gasPrice: 1.GasInt,
     gasLimit: 500_000_000.GasInt,
+    maxFeePerGas: 1.GasInt,
     to: Opt.some codeAddress,
     value: 500.u256,
     payload: payload,

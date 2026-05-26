@@ -239,7 +239,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
             Opt.none(PayloadAttributesV1)
           elif consensusFork == ConsensusFork.Capella:
             Opt.none(PayloadAttributesV2)
-          elif consensusFork in ConsensusFork.Deneb .. ConsensusFork.Gloas:
+          elif consensusFork in ConsensusFork.Deneb .. ConsensusFork.Heze:
             Opt.none(PayloadAttributesV3)
           else:
             static:
@@ -272,7 +272,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
     withBlck(curBlck):
       # Don't include blocks before bellatrix, as it doesn't have payload
       when consensusFork >= ConsensusFork.Bellatrix and
-           consensusFork != ConsensusFork.Gloas:
+           consensusFork < ConsensusFork.Gloas:
         # Load the execution payload for all blocks after the bellatrix upgrade
         let payload =
           forkyBlck.message.body.execution_payload.asEngineExecutionPayload()
@@ -384,7 +384,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
       if isAvailable:
         withBlck(headClBlck.asTrusted()):
           when consensusFork >= ConsensusFork.Bellatrix and
-               consensusFork != ConsensusFork.Gloas:
+               consensusFork < ConsensusFork.Gloas:
             importedSlot = forkyBlck.message.slot.uint64 + 1
             currentBlockNumber = forkyBlck.message.body.execution_payload.block_number
 

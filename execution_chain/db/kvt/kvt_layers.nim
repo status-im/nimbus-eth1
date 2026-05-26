@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -64,35 +64,6 @@ func layersPut*(db: KvtTxRef; key: openArray[byte]; data: openArray[byte]) =
 
 proc mergeAndReset*(trg, src: KvtTxRef) =
   mergeAndReset(trg.sTab, src.sTab)
-
-# ------------------------------------------------------------------------------
-# Public iterators
-# ------------------------------------------------------------------------------
-
-iterator layersWalk*(
-    db: KvtTxRef;
-    seen: var HashSet[seq[byte]];
-      ): tuple[key: seq[byte], data: seq[byte]] =
-  ## Walk over all key-value pairs on the cache layers. Note that
-  ## entries are unsorted.
-  ##
-  ## The argument `seen` collects a set of all visited vertex IDs including
-  ## the one with a zero vertex which are othewise skipped by the iterator.
-  ## The `seen` argument must not be modified while the iterator is active.
-  ##
-  for w in db.rstack:
-    for (key,val) in w.sTab.pairs:
-      if key notin seen:
-        yield (key,val)
-        seen.incl key
-
-iterator layersWalk*(
-    db: KvtTxRef;
-      ): tuple[key: seq[byte], data: seq[byte]] =
-  ## Variant of `layersWalk()`.
-  var seen: HashSet[seq[byte]]
-  for (key,val) in db.layersWalk seen:
-    yield (key,val)
 
 # ------------------------------------------------------------------------------
 # End

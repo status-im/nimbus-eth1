@@ -13,7 +13,8 @@
 import
   unittest2,
   results,
-  ../execution_chain/db/kvt, ../execution_chain/db/kvt/[kvt_tx_frame, kvt_utils]
+  ../execution_chain/db/kvt,
+  ../execution_chain/db/kvt/[kvt_init/memory_only, kvt_tx_frame, kvt_utils]
 
 suite "Kvt TxFrame":
   setup:
@@ -43,7 +44,7 @@ suite "Kvt TxFrame":
       check:
         tx.get([byte 0, 1, 2]).expect("entry") == @[byte 0, 1, 3]
 
-    db.finish()
+    db.close()
 
   test "Delete - delBe":
     let
@@ -69,7 +70,7 @@ suite "Kvt TxFrame":
         not tx.hasKey([byte 0, 1, 2])
         tx.get([byte 0, 1, 3]).expect("entry") == @[byte 0, 1, 6]
 
-    db.finish()
+    db.close()
 
   test "Delete range - delRangeBe":
     let
@@ -95,7 +96,7 @@ suite "Kvt TxFrame":
         not tx.hasKey([byte 0, 1, 2])
         tx.get([byte 0, 1, 3]).expect("entry") == @[byte 0, 1, 6]
 
-    db.finish()
+    db.close()
 
   test "MultiGet - multiGetBe":
     let
@@ -143,7 +144,7 @@ suite "Kvt TxFrame":
         values[1] == Opt.some(@[byte 0, 1, 5])
         values[2] == Opt.none(seq[byte])
 
-    db.finish()
+    db.close()
 
   test "MultiGet - multiGet":
     let
@@ -193,4 +194,4 @@ suite "Kvt TxFrame":
         values[1] == Opt.some(@[byte 0, 1, 6])
         values[2] == Opt.none(seq[byte])
 
-    db.finish()
+    db.close()

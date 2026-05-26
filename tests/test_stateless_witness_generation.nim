@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,6 +13,7 @@
 import
   stew/byteutils,
   unittest2,
+  ../execution_chain/db/core_db/memory_only,
   ../execution_chain/common/common,
   ../execution_chain/stateless/[witness_generation, witness_verification]
 
@@ -43,7 +44,7 @@ suite "Stateless: Witness Generation":
     let witnessKeys = ledger.getWitnessKeys()
     check witnessKeys.len() == 1
 
-    let witness = Witness.build(witnessKeys, ledger)
+    let witness = Witness.build(witnessKeys, @[], ledger)
 
     check:
       witness.state.len() > 0
@@ -58,7 +59,7 @@ suite "Stateless: Witness Generation":
     let witnessKeys = ledger.getWitnessKeys()
     check witnessKeys.len() == 1
 
-    let witness = Witness.build(witnessKeys, ledger)
+    let witness = Witness.build(witnessKeys, @[], ledger)
 
     check:
       witness.state.len() > 0
@@ -74,7 +75,7 @@ suite "Stateless: Witness Generation":
     let witnessKeys = ledger.getWitnessKeys()
     check witnessKeys.len() == 2
 
-    let witness = Witness.build(witnessKeys, ledger)
+    let witness = Witness.build(witnessKeys, @[], ledger)
 
     check:
       witness.state.len() > 0
@@ -90,7 +91,7 @@ suite "Stateless: Witness Generation":
     let witnessKeys = ledger.getWitnessKeys()
     check witnessKeys.len() == 2
 
-    let witness = Witness.build(witnessKeys, ledger)
+    let witness = Witness.build(witnessKeys, @[], ledger)
 
     check:
       witness.state.len() > 0
@@ -106,7 +107,7 @@ suite "Stateless: Witness Generation":
     let witnessKeys = ledger.getWitnessKeys()
     check witnessKeys.len() == 2
 
-    let witness = Witness.build(witnessKeys, ledger)
+    let witness = Witness.build(witnessKeys, @[], ledger)
 
     check:
       witness.state.len() > 0
@@ -125,7 +126,7 @@ suite "Stateless: Witness Generation":
     let witnessKeys = ledger.getWitnessKeys()
     check witnessKeys.len() == 4
 
-    let witness = Witness.build(witnessKeys, ledger)
+    let witness = Witness.build(witnessKeys, @[], ledger)
 
     check:
       witness.state.len() > 0
@@ -146,7 +147,7 @@ suite "Stateless: Witness Generation":
     witnessKeys[(addr1, Opt.some(slot3))] = false
     check witnessKeys.len() == 5
 
-    let witness = Witness.build(witnessKeys, ledger)
+    let witness = Witness.build(witnessKeys, @[], ledger)
 
     check:
       witness.keys.len() == 5

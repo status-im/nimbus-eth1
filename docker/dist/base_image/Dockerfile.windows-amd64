@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -27,7 +27,7 @@ SHELL ["/bin/bash", "-c"]
 
 ENV DEBIAN_FRONTEND=noninteractive TZ="Etc/UTC"
 RUN apt-get -qq update \
-  && apt-get -qq -y install build-essential git curl &>/dev/null \
+  && apt-get -qq -y install build-essential git curl nasm &>/dev/null \
   && apt-get -qq clean \
   && rm -rf /var/lib/at/lists/* /tmp/* /var/tmp/* \
   && curl -L "${MINGW_URL}" -o "${ARCHIVE}.tar.xz" \

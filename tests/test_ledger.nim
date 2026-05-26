@@ -20,6 +20,7 @@ import
   ../execution_chain/common/common,
   ../execution_chain/core/chain,
   ../execution_chain/core/tx_pool,
+  ../execution_chain/db/core_db/memory_only,
   ../execution_chain/transaction,
   ../execution_chain/constants,
   ../execution_chain/db/ledger {.all.}, # import all private symbols

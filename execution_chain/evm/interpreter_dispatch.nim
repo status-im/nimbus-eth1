@@ -14,6 +14,7 @@ import
   std/[macros, strformat],
   chronicles,
   stew/byteutils,
+  ../core/eip8037,
   ../constants,
   ../db/ledger,
   ./interpreter/op_dispatcher,
@@ -70,7 +71,7 @@ proc beforeExecCall(c: Computation) =
   c.beginSavePoint()
   if c.msg.kind == CallKind.Call:
     c.vmState.mutateLedger:
-      if c.vmState.balTrackerEnabled:
+      if c.balTrackerEnabled:
         c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
         ledger.subBalance(c.msg.sender, c.msg.value)
         c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
@@ -93,11 +94,6 @@ proc afterExecCall(c: Computation) =
       # Special case to account for geth+parity bug
       c.vmState.ledger.ripemdSpecial()
 
-  if c.isSuccess:
-    c.commit()
-  else:
-    c.rollback()
-
 proc beforeExecCreate(c: Computation): bool =
   c.vmState.mutateLedger:
     let nonce = ledger.getNonce(c.msg.sender)
@@ -107,7 +103,7 @@ proc beforeExecCreate(c: Computation): bool =
         "Nonce overflow when sender=" & sender & " wants to create contract", false
       )
       return true
-    if c.vmState.balTrackerEnabled:
+    if c.balTrackerEnabled:
       c.vmState.balTracker.trackNonceChange(c.msg.sender, nonce + 1)
     ledger.setNonce(c.msg.sender, nonce + 1)
 
@@ -117,27 +113,34 @@ proc beforeExecCreate(c: Computation): bool =
     if c.fork >= FkBerlin:
       ledger.accessList(c.msg.contractAddress)
 
-  c.beginSavePoint()
-
-  if c.vmState.balTrackerEnabled:
+  if c.balTrackerEnabled:
     c.vmState.balTracker.trackAddressAccess(c.msg.contractAddress)
   if c.vmState.readOnlyLedger().contractCollision(c.msg.contractAddress):
+    # Per EIP-684 collision behaves as an immediate exceptional halt,
+    # so the burned gas belongs in the regular dimension.
+    # On CREATE/CREATE2 address collision the 63/64 gas allocation is
+    # burned and added to regularGasUsed.
+    # But contract creation tx collision does not add the burned gas to
+    # regularGasUsed.
+    if c.fork >= FkAmsterdam and c.msg.depth > 0:
+      # https://github.com/ethereum/execution-specs/pull/2733/changes
+      c.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
     let blurb = c.msg.contractAddress.toHex
     c.setError("Address collision when creating contract address=" & blurb, true)
-    c.rollback()
     return true
 
+  c.beginSavePoint()
+
   c.vmState.mutateLedger:
-    if c.vmState.balTrackerEnabled:
+    if c.balTrackerEnabled:
       c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
       ledger.subBalance(c.msg.sender, c.msg.value)
       c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
       ledger.addBalance(c.msg.contractAddress, c.msg.value)
       ledger.clearStorage(c.msg.contractAddress)
-      if c.fork >= FkSpurious:
-        # EIP161 nonce incrementation
-        c.vmState.balTracker.trackIncNonceChange(c.msg.contractAddress)
-        ledger.incNonce(c.msg.contractAddress)
+      # no need to check c.fork >= FkSpurious, it's FkAmsterdam
+      c.vmState.balTracker.trackIncNonceChange(c.msg.contractAddress)
+      ledger.incNonce(c.msg.contractAddress)
     else:
       ledger.subBalance(c.msg.sender, c.msg.value)
       ledger.addBalance(c.msg.contractAddress, c.msg.value)
@@ -160,11 +163,6 @@ proc afterExecCreate(c: Computation) =
     # `REVERT` is returned after a create.  Clearing in this branch covers the
     # right cases, particularly important with EVMC where it must be cleared.
     c.output.reset()
-
-  if c.isSuccess:
-    c.commit()
-  else:
-    c.rollback()
 
 const MsgKindToOp: array[CallKind, Op] =
   [Call, DelegateCall, CallCode, Create, Create2]
@@ -197,6 +195,11 @@ proc afterExec(c: Computation) =
     c.afterExecCall()
   else:
     c.afterExecCreate()
+
+  if c.isSuccess:
+    c.commit()
+  else:
+    c.rollback()
 
   if c.msg.depth > 0:
     let gasUsed = c.msg.gas - c.gasMeter.gasRemaining
@@ -288,9 +291,8 @@ func preExecComputation*(c: Computation) =
     c.msg.contractAddress == CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS
   ):
     # EIP-7002 and EIP-7215 dicates that the code must be present, or else block is invalid
-    if c.code.bytes.len <= 0:
+    if c.code.len <= 0:
       c.setError("No code found for withdrawal or consolidation requests contract")
-
 
 # ------------------------------------------------------------------------------
 # End

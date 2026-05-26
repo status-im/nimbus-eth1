@@ -61,10 +61,13 @@ export
 # ------------------------------------------------------------------------------
 
 export
-  tx,        # : Transaction
-  pooledTx,  # : PooledTransaction
-  id,        # : Hash32
-  sender     # : Address
+  tx,             # : Transaction
+  pooledTx,       # : PooledTransaction
+  id,             # : Hash32
+  sender,         # : Address
+  nonce,          # : AccountNonce
+  time,           # : Time
+  wrapperVersion  # : Opt[WrapperVersion]
 
 # ------------------------------------------------------------------------------
 # TxPoolRef constructor
@@ -82,7 +85,10 @@ proc new*(T: type TxPoolRef; chain: ForkedChainRef): T =
 export
   chain,
   com,
-  len
+  len,
+  baseFee,
+  senderCount,
+  allItems
 
 # chain(xp: TxPoolRef): ForkedChainRef
 # com(xp: TxPoolRef): CommonRef
@@ -95,6 +101,7 @@ export
 export
   addTx,
   getItem,
+  getNonce,
   contains,
   removeTx,
   removeExpiredTxs,

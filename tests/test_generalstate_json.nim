@@ -11,6 +11,7 @@ import
   ../execution_chain/core/executor, test_config,
   ../execution_chain/transaction,
   ../execution_chain/[evm/state, evm/types],
+  ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/ledger,
   ../execution_chain/common/common,
   ../execution_chain/utils/[utils, debug],
@@ -19,9 +20,21 @@ import
   ../tools/evmstate/helpers,
   ../tools/common/state_clearing,
   eth/common/transaction_utils,
+  kzg4844/kzg,
   unittest2,
   stew/byteutils,
   results
+
+# Load eagerly to avoid race conditions - lazy kzg loading is not thread safe
+proc loadKzgSetup() {.thread.} =
+  discard loadTrustedSetupFromString(kzg.trustedSetup, 8)
+
+# Loading on a dedicated thread because parsing the trusted setup uses ~400 KB 
+# of stack which exceeds the 1 MB ulimit set for `make test`.
+block:
+  var t: Thread[void]
+  createThread(t, loadKzgSetup)
+  joinThread(t)
 
 type
   TestCtx = object
@@ -119,8 +132,7 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
     ledger.persist()
 
   let
-    rc = vmState.processTransaction(
-                ctx.tx, sender, ctx.header)
+    rc = vmState.processTransaction(ctx.tx, sender)
     callResult = if rc.isOk:
                    rc.value
                  else:
@@ -217,10 +229,7 @@ proc generalStateJsonMain*(debugMode = false) =
   if config.testSubject == "" or not debugMode:
     # run all test fixtures
     suite "new generalstate json tests: eest_develop":
-      jsonTest("eest_develop/state_tests", "GeneralStateTestsStatic", testFixture, slowGSTTests)
-
-    suite "new generalstate json tests: eest_devnet":
-      jsonTest("eest_devnet/state_tests", "GeneralStateTestsDevnet", testFixture)
+      jsonTest("eest_develop/state_tests", "GeneralStateTestsDevelop", testFixture, slowGSTTests)
 
     suite "new generalstate json tests: eest_bal":
       jsonTest("eest_bal/state_tests", "GeneralStateTestsBal", testFixture)
@@ -231,7 +240,7 @@ proc generalStateJsonMain*(debugMode = false) =
       echo "missing test subject"
       quit(QuitFailure)
 
-    let path = "tests/fixtures/eest_devnet/state_tests"
+    let path = "tests/fixtures/eest_bal/state_tests"
     let n = json.parseFile(path / config.testSubject)
     var testStatusIMPL: TestStatus
     testFixture(n, testStatusIMPL, config.trace, true)

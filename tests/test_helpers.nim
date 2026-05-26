@@ -12,39 +12,29 @@ import
   ../execution_chain/[constants, conf, transaction],
   ../execution_chain/db/ledger,
   ../execution_chain/common,
-  ../execution_chain/networking/[netkeys, p2p]
-
-func revTable(list: array[FkFrontier..FkLatest, string]): Table[string, EVMFork] =
-  for k, v in list:
-    result[v] = k
+  ../execution_chain/networking/[netkeys, p2p],
+  ./eest/path_handler
 
 const
-  # from https://ethereum-tests.readthedocs.io/en/latest/test_types/state_tests.html
-  ForkToName: array[FkFrontier..FkLatest, string] = [
-    "Frontier",             # FkFrontier
-    "Homestead",            # FkHomestead
-    "EIP150",               # FkTangerine
-    "EIP158",               # FkSpurious
-    "Byzantium",            # FkByzantium
-    "Constantinople",       # FkConstantinople
-    "ConstantinopleFix",    # FkPetersburg
-    "Istanbul",             # FkIstanbul
-    "Berlin",               # FkBerlin
-    "London",               # FkLondon
-    "Merge",                # FkParis
-    "Shanghai",             # FkShanghai
-    "Cancun",               # FkCancun
-    "Prague",               # FkPrague
-    "Osaka",                # FkOsaka
-    "Bpo1",                 # FkBpo1
-    "Bpo2",                 # FkBpo2
-    "Bpo3",                 # FkBpo3
-    "Bpo4",                 # FkBpo4
-    "Bpo5",                 # FkBpo5
-    "Amsterdam",            # FkAmsterdam
-  ]
-
-  nameToFork* = ForkToName.revTable
+  nameToFork* = {
+    "Frontier"         : Frontier,
+    "Homestead"        : Homestead,
+    "EIP150"           : Tangerine,
+    "EIP158"           : Spurious,
+    "Byzantium"        : Byzantium,
+    "Constantinople"   : Constantinople,
+    "ConstantinopleFix": Petersburg,
+    "Istanbul"         : Istanbul,
+    "Berlin"           : Berlin,
+    "London"           : London,
+    "Merge"            : MergeFork,
+    "Shanghai"         : Shanghai,
+    "Cancun"           : Cancun,
+    "Prague"           : Prague,
+    "Osaka"            : Osaka,
+    "Amsterdam"        : Amsterdam,
+    "Bogota"           : Bogota,
+  }.toTable
 
 func skipNothing*(folder: string, name: string): bool = false
 
@@ -75,6 +65,7 @@ proc jsonTestImpl*(inputFolder, outputName: string, handler, skipTest: NimNode):
       filenames.add(filename)
 
     doAssert(filenames.len > 0)
+
     for fname in filenames:
       let filename = fname
       test fname.substr(inputPath.len + 1):
@@ -84,7 +75,8 @@ proc jsonTestImpl*(inputFolder, outputName: string, handler, skipTest: NimNode):
             last = folder.splitPath().tail
           # we set this here because exceptions might be raised in the handler:
           status[last][name] = Status.Fail
-          let fixtures = parseJson(readFile(filename))
+
+          let fixtures = parseJson(readFile(handleLongPath(filename)))
           `handler`(fixtures, `testStatusIMPL`)
           if `testStatusIMPL` == OK:
             status[last][name] = Status.OK
@@ -119,19 +111,17 @@ func getHexadecimalInt*(j: JsonNode): int64 =
 proc setupEthNode*(
     config: ExecutionClientConf, rng: var HmacDrbgContext,
     capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode =
-  let keypair = getNetKeys(rng, config.netKey).tryGet()
-  let srvAddress = enode.Address(
-    ip: config.listenAddress, tcpPort: config.tcpPort, udpPort: config.udpPort)
-
-  var node = newEthereumNode(
-    keypair,
-    Opt.some(config.listenAddress),
-    Opt.some(config.tcpPort),
-    Opt.some(config.udpPort),
-    config.networkId,
-    config.agentString,
-    bindUdpPort = config.udpPort,
-    bindTcpPort = config.tcpPort)
+  let
+    keypair = getNetKeys(rng, config.netKey).tryGet()
+    node = newEthereumNode(
+      keypair,
+      Opt.some(config.listenAddress),
+      Opt.some(config.tcpPort),
+      Opt.some(config.udpPort),
+      config.networkId,
+      config.agentString,
+      bindUdpPort = config.udpPort,
+      bindTcpPort = config.tcpPort)
 
   for capability in capabilities:
     node.addCapability capability

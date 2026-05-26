@@ -3,6 +3,12 @@
 # Executables shall be put in an ignored build/ directory
 /build
 
+# Nix
+/result
+
+# Direnv
+/.direnv/
+
 # Nimble packages
 /vendor/.nimble
 
@@ -47,10 +53,10 @@ nimbus-build-system.paths
 .vscode
 
 # EEST test vectors
-tests/fixtures/eest_static
-tests/fixtures/eest_stable
 tests/fixtures/eest_develop
-tests/fixtures/eest_devnet
 tests/fixtures/eest_bal
+tests/fixtures/eest_zkevm
 
 execution_chain/nimbus
+GeneralStateTestsBal.md
+GeneralStateTestsDevelop.md

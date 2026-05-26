@@ -44,7 +44,7 @@ jobs:
           sudo apt-get -qq -y install binfmt-support qemu-user-static
 
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.ref }}
 
@@ -74,18 +74,22 @@ jobs:
 
           NEC_TAR="nimbus-${OS}-${CPU}-${TAG}-$(git rev-parse --short=8 HEAD).tar.gz"
           NVP_TAR="nimbus_verified_proxy-${OS}-${CPU}-${TAG}-$(git rev-parse --short=8 HEAD).tar.gz"
+          LVP_TAR="libverifproxy-${OS}-${CPU}-${TAG}-$(git rev-parse --short=8 HEAD).tar.gz"
 
           # Pack only the relevant binaries (and their checksums) from build/
           # Add additional files (LICENSE, README, configs) if desired with extra -C args.
-          tar -czf "${NEC_TAR}" --exclude="build/nimbus_verified_proxy*" -C "${ARCHIVE_DIR}" .
-          tar -czf "${NVP_TAR}" --exclude="build/nimbus*" --exclude="build/librocksdb.dll" -C "${ARCHIVE_DIR}" .
+          tar -czf "${NEC_TAR}" --exclude="build/nimbus_verified_proxy*" --exclude="build/libverifproxy" -C "${ARCHIVE_DIR}" .
+          tar -czf "${NVP_TAR}" --exclude="build/nimbus*" --exclude="build/librocksdb.dll" --exclude="build/libverifproxy" -C "${ARCHIVE_DIR}" .
+          tar -czf "${LVP_TAR}" --exclude="build/nimbus*" --exclude="build/nimbus_verified_proxy*" --exclude="build/librocksdb.dll" -C "${ARCHIVE_DIR}" .
 
           # Generate sha512 for the tarballs themselves
           sha512sum "${NEC_TAR}" > "${NEC_TAR}.sha512sum"
           sha512sum "${NVP_TAR}" > "${NVP_TAR}.sha512sum"
+          sha512sum "${LVP_TAR}" > "${LVP_TAR}.sha512sum"
 
           echo "nec_tar=${NEC_TAR}" >> $GITHUB_OUTPUT
           echo "nvp_tar=${NVP_TAR}" >> $GITHUB_OUTPUT
+          echo "lvp_tar=${LVP_TAR}" >> $GITHUB_OUTPUT
 
       - name: Upload execution client tarball artefact
         uses: actions/upload-artifact@v4
@@ -113,6 +117,20 @@ jobs:
         with:
           name: ${{ matrix.os }}-${{ matrix.cpu }}-proxy-checksum
           path: ./dist/${{ steps.make_dist.outputs.nvp_tar }}.sha512sum
+          retention-days: 2
+
+      - name: Upload libverifproxy tarball artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}-${{ matrix.cpu }}-libverifproxy
+          path: ./dist/${{ steps.make_dist.outputs.lvp_tar }}
+          retention-days: 2
+
+      - name: Upload libverifproxy checksum artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}-${{ matrix.cpu }}-libverifproxy-checksum
+          path: ./dist/${{ steps.make_dist.outputs.lvp_tar }}.sha512sum
           retention-days: 2
 
       - name: Login to Docker Hub
@@ -147,6 +165,50 @@ jobs:
           DOCKER_BUILDKIT=1 docker build -f Dockerfile.proxy.${{ matrix.os }}-${{ matrix.cpu }} -t statusim/nimbus-verified-proxy:${{ matrix.os }}-${{ matrix.cpu }}-${TAG} -t statusim/nimbus-verified-proxy:${{ matrix.os }}-${{ matrix.cpu }}-latest .
           docker push statusim/nimbus-verified-proxy:${{ matrix.os }}-${{ matrix.cpu }}-${TAG}
           docker push statusim/nimbus-verified-proxy:${{ matrix.os }}-${{ matrix.cpu }}-latest
+  
+  build-wasm:
+    name: 'wasm'
+    runs-on: ubuntu-22.04
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git llvm
+
+      - name: Install emsdk
+        run: |
+          git clone https://github.com/emscripten-core/emsdk.git
+          emsdk/emsdk install 3.1.73
+          emsdk/emsdk activate 3.1.73
+
+      - name: Build Nim and dependencies
+        run: make -j$(nproc) init
+
+      - name: Build WASM
+        run: |
+          source emsdk/emsdk_env.sh
+          make -j$(nproc) nimbus_verified_proxy_wasm
+
+      - name: Generate sha512sums for WASM files
+        run: |
+          cd build/nimbus_verified_proxy_wasm
+          sha512sum verifproxy_wasm.js verifproxy_wasm.wasm verifproxy.js > wasm.sha512sum
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wasm
+          path: build/nimbus_verified_proxy_wasm/
+          retention-days: 2
 
   docker-multiarch:
     name: Create multi-arch Docker manifest
@@ -188,6 +250,39 @@ jobs:
           docker buildx imagetools create -t statusim/nimbus-verified-proxy:latest \
             statusim/nimbus-verified-proxy:linux-amd64-latest \
             statusim/nimbus-verified-proxy:linux-arm64-latest
+            
+  deploy-wasm:
+    name: Deploy WASM
+    needs: [build-wasm]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Extract tag name
+        id: extract_tag
+        run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Checkout wasm-deploy branch
+        uses: actions/checkout@v6
+        with:
+          ref: wasm-deploy
+          path: wasm-deploy/
+        continue-on-error: true
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm
+          path: wasm-deploy/${{ steps.extract_tag.outputs.tag }}/
+
+      - name: Force-push to wasm-deploy
+        run: |
+          cd wasm-deploy
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || git commit -m "chore: update ${{ steps.extract_tag.outputs.tag }}"
+          git push origin HEAD:wasm-deploy --force
 
   prepare-release:
     name: Prepare release draft
@@ -234,6 +329,20 @@ jobs:
           echo '# macOS ARM64' >> release_notes.md
           cat macos-arm64-proxy-checksum/* >> release_notes.md
           echo '```' >> release_notes.md
+          echo '' >> release_notes.md
+          echo '### libverifproxy' >> release_notes.md
+          echo '' >> release_notes.md
+          echo '```' >> release_notes.md
+          echo '# Linux AMD64' >> release_notes.md
+          cat linux-amd64-libverifproxy-checksum/* >> release_notes.md
+          echo '# Linux ARM64' >> release_notes.md
+          cat linux-arm64-libverifproxy-checksum/* >> release_notes.md
+          echo '# Windows AMD64' >> release_notes.md
+          cat windows-amd64-libverifproxy-checksum/* >> release_notes.md
+          echo '# macOS ARM64' >> release_notes.md
+          cat macos-arm64-libverifproxy-checksum/* >> release_notes.md
+          echo '```' >> release_notes.md
+          echo '' >> release_notes.md
 
       - name: Create release
         id: create_release
@@ -248,12 +357,16 @@ jobs:
           files: |
             linux-amd64-execution/*
             linux-amd64-proxy/*
+            linux-amd64-libverifproxy/*
             linux-arm64-execution/*
             linux-arm64-proxy/*
+            linux-arm64-libverifproxy/*
             windows-amd64-execution/*
             windows-amd64-proxy/*
+            windows-amd64-libverifproxy/*
             macos-arm64-execution/*
             macos-arm64-proxy/*
+            macos-arm64-libverifproxy/*
 
       - name: Delete artefacts
         uses: geekyeggo/delete-artifact@v5
@@ -262,9 +375,53 @@ jobs:
           name: |
             linux-amd64-execution
             linux-amd64-proxy
+            linux-amd64-libverifproxy
             linux-arm64-execution
             linux-arm64-proxy
+            linux-arm64-libverifproxy
             windows-amd64-execution
             windows-amd64-proxy
+            windows-amd64-libverifproxy
             macos-arm64-execution
             macos-arm64-proxy
+            macos-arm64-libverifproxy
+
+  publish-npm:
+    name: Publish WASM to GitHub Packages
+    needs: [build-wasm]
+    runs-on: ubuntu-22.04
+
+    permissions:
+      packages: write
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Download WASM artefact
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm
+          path: nimbus_verified_proxy/library/bindings/wasm/
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@status-im'
+
+      - name: Set version from tag
+        run: |
+          cd nimbus_verified_proxy/library/bindings/wasm
+          npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version
+
+      - name: Publish
+        run: npm publish
+        working-directory: nimbus_verified_proxy/library/bindings/wasm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
