@@ -32,31 +32,19 @@ proc append(w: var RlpWriter, val: AccBody) =
   w.append val.storageRoot.Hash32
   w.append val.codeHash.Hash32
 
-proc decodeByteList(rawData: openArray[byte]): Opt[seq[byte]] =
-  try:
-    var rlp = rawData.rlpFromBytes
-    return ok rlp.read seq[byte]
-  except RlpError:
-    discard
-  err()
-
-proc decodeHashKey(rawData: openArray[byte]): Opt[HashKey] =
-  var key: HashKey
-  if rawData.len < 32:
-    key = HashKey.fromBytes(rawData).valueOr:
-      return err()
+proc read(r: var Rlp, T: type HashKey): T {.gcsafe, raises: [RlpError]} =
+  if r.isList:
+    HashKey.fromBytes(r.rawData).value
   else:
-    let keyData = rawData.decodeByteList().valueOr:
-      return err()
-    key = HashKey.fromBytes(keyData).valueOr:
-      return err()
-  ok(move key)
+    HashKey.fromBytes(r.toBytes).value
 
 # ------------------------------------------------------------------------------
-# Private functions: constructor helpers
+# Private functions: ppartial proof MPT constructor helpers
 # ------------------------------------------------------------------------------
 
-proc nodeStash*(
+{.push checks: off, optimization: speed, raises: [].}
+
+proc nodeStash(
     db: NodeTrieRef;                                # Needed for root node
     rootKey: HashKey;                               # State root key
     proofNode: ProofNode;                           # Node to add
@@ -65,134 +53,115 @@ proc nodeStash*(
       ): bool =
   ## Decode a trusted rlp-encoded node and add it to the node list.
   ##
-  var selfKey = proofNode.digestTo(HashKey)
-  if selfKey.len < 32:
-    let forcedKey = proofNode.digestTo(HashKey, force32=true)
-    if forcedKey == rootKey:
-      selfKey = forcedKey
-
-  # Already listed?
-  if nodes.hasKey selfKey:
+  let selfKey = proofNode.digestTo(HashKey, rootKey)
+  if nodes.hasKey selfKey:                          # Already seen and listed?
     return true
 
   var
-    rlp = proofNode.distinctBase.rlpFromBytes
-    list: array[17,seq[byte]]                       # list of node entries
-    top = 0                                         # count `list[]` entries
     node: NodeRef
-
-  # Collect lists of either 2 or 17 blob entries.
+    rlp = proofNode.distinctBase.rlpFromBytes()
   try:
-    for w in rlp.items:
-      case top
-      of 0 .. 15:
-        if not w.isEmpty:
-          list[top] = @(w.rawData)
-      of 16:
-        if not w.isEmpty:
-          return false
-      else:
-        return false
-      top.inc
-  except RlpError:
-    return false
+    case rlp.listLen
+    of 2:
+      let (isLeaf, pfx) = NibblesBuf.fromHexPrefix rlp.listElem(0).toBytes
+      var pyl = rlp.listElem(1)                     # Rlp type, payload or link
+      if isLeaf:
+        node = LeafNodeRef(
+          kind:      Leaf,
+          lfData:    proofNode.distinctBase,
+          lfPfx:     pfx,
+          lfPayload: pyl.read seq[byte])
 
-  # Assemble node records
-  case top
-  of 2:
-    if list[0].len == 0:
-      return false
-    let
-      path = list[0].decodeByteList().valueOr:
+      elif pfx.len == 0:
         return false
-      (isLeaf, nibbles) = NibblesBuf.fromHexPrefix path
-    if isLeaf:
-      node = LeafNodeRef(
-        kind:      Leaf,
-        lfData:    proofNode.distinctBase,
-        lfPfx:     nibbles,
-        lfPayload: list[1])
-    elif nibbles.len == 0:
-      return false
-    else:
-      let stopKey = list[1].decodeHashKey().valueOr:
-        return false
-      node = BranchNodeRef(
-        kind:    Branch,
-        xtData:  proofNode.distinctBase,
-        xtPfx:   nibbles)
-      let stopLink = StopNodeRef(
-        kind:    Stop,
-        selfKey: stopKey,
-        parent:  node,
-        inx:     0)
-      links[stopKey] = stopLink
-      BranchNodeRef(node).brLinks[0] = stopLink
-  of 17:
-    node = BranchNodeRef(
-      kind:   Branch,
-      brData: proofNode.distinctBase)
-    for n in 0u8 .. 15u8:
-      if 0 < list[n].len:
-        let stopKey = list[n].decodeHashKey().valueOr:
-          return false
+
+      else:
+        let stopKey = pyl.read HashKey
+        node = BranchNodeRef(
+          kind:    Branch,
+          xtData:  proofNode.distinctBase,
+          xtPfx:   pfx)
         let stopLink = StopNodeRef(
           kind:    Stop,
           selfKey: stopKey,
           parent:  node,
-          inx:     n)
+          inx:     0)
         links[stopKey] = stopLink
-        BranchNodeRef(node).brLinks[n] = stopLink
-  else:
+        BranchNodeRef(node).brLinks[0] = stopLink
+
+    of 17:
+      node = BranchNodeRef(
+        kind:   Branch,
+        brData: proofNode.distinctBase)
+      var n = 0u8
+      for w in rlp.items:
+        if not w.isEmpty:
+          let stopKey = w.read HashKey
+          let stopLink = StopNodeRef(
+            kind:    Stop,
+            selfKey: stopKey,
+            parent:  node,
+            inx:     n)
+          links[stopKey] = stopLink
+          BranchNodeRef(node).brLinks[n] = stopLink
+        n.inc
+
+    else:
+      return false
+  except RlpError:
     return false
 
   if selfKey == rootKey:
     db.root = node
-
   node.selfKey = selfKey
   nodes[selfKey] = node
   true
 
-proc updateProofTree(
-    node: NodeRef;                                  # current node, start node
-    path: NibblesBuf;                               # cur path, recurs. updated
-      ) =
-  ## Recursively label path prefixes, resolve extensions, and return the
-  ## right boundary leaf path (if any).
+# ---------------
+
+proc updateProofTrieBranch(node: BranchNodeRef, path: NibblesBuf) =
+  if 0 < node.xtPfx.len:
+    # Join child node into this extension node
+    let chld = node.brLinks[0]
+    if chld.kind == Stop:                         # pure extension node?
+      StopNodeRef(chld).parent = node             # just to make sure
+      StopNodeRef(chld).path = path & node.xtPfx
+      return
+    if chld.kind == Branch and BranchNodeRef(chld).xtPfx.len == 0:
+      node.brLinks = BranchNodeRef(chld).brLinks
+      node.brData = BranchNodeRef(chld).brData
+      node.brKey = BranchNodeRef(chld).selfKey
+
+  let path = path & node.xtPfx
+  for n in 0u8 .. 15u8:
+    let down = node.brLinks[n]
+    if not down.isNil:
+      case down.kind:
+      of Stop:
+        # Parent link might be dangling now due to the extension merge, above
+        StopNodeRef(down).parent = node
+        StopNodeRef(down).path = path & NibblesBuf.nibble(n)
+      of Branch:
+        BranchNodeRef(down).updateProofTrieBranch(path & NibblesBuf.nibble(n))
+      of Leaf:
+        discard
+
+template updateProofTrie(root: NodeRef) =
+  ## Recursively traverse partial proof MPT and label path prefixes so they
+  ## are available on the `Stop` nodes. Also dissolve extensions inuo the
+  ## child `Branch` node (if possible.)
   ##
-  case node.kind:
-  of Branch:
-    let w = BranchNodeRef(node)
-    if 0 < w.xtPfx.len:
-      # Join child node into this extension node
-      let chld = w.brLinks[0]
-      if chld.kind == Stop:                         # pure extension node?
-        StopNodeRef(chld).parent = w                # just to make sure
-        chld.updateProofTree(path & w.xtPfx)
-        return
-      if chld.kind == Branch and BranchNodeRef(chld).xtPfx.len == 0:
-        w.brLinks = BranchNodeRef(chld).brLinks
-        w.brData = BranchNodeRef(chld).brData
-        w.brKey = BranchNodeRef(chld).selfKey
+  if root.kind == Branch:                           # includes extension node
+    BranchNodeRef(root).updateProofTrieBranch EmptyPath
+  # Otherwise there is nothing to do
 
-    let path = path & w.xtPfx
-    for n in 0 .. 15:
-      let down = w.brLinks[n]
-      if not down.isNil:
-        if down.kind == Stop:
-          # Might be dangling now due to the extension merge, above
-          StopNodeRef(down).parent = w
-        down.updateProofTree(path & NibblesBuf.nibble(byte n))
-
-  of Leaf:
-    discard
-
-  of Stop:
-    StopNodeRef(node).path = path
+{.pop.}
 
 # ------------------------------------------------------------------------------
-# Private functions: merge helpers
+# Private functions: non-recursive merge helpers
 # ------------------------------------------------------------------------------
+
+{.push checks: off, optimization: speed, raises: [].}
 
 proc findSubTree(
     db: NodeTrieRef;
@@ -345,13 +314,17 @@ proc makeOrGetLeaf(db: NodeTrieRef; path: Hash32): Opt[LeafNodeRef] =
 
   ok(leaf)
 
+{.pop.}
+
 # ------------------------------------------------------------------------------
-# Private functions, finalisation and export helpers
+# Private functions, recursive finalisation and export helpers
 # ------------------------------------------------------------------------------
+
+{.push checks: off, optimization: speed, raises: [].}
 
 template reKeyWalkerLeaf(node: LeafNodeRef) =
   var wrt = initRlpList 2
-  wrt.append node.lfPfx.toHexPrefix(true).toSeq
+  wrt.append @(node.lfPfx.toHexPrefix(true).data())
   wrt.append node.lfPayload
   node.lfData = wrt.finish()
   node.selfKey = node.lfData.digestTo(HashKey)
@@ -376,7 +349,7 @@ proc reKeyWalkerBranch(node: var BranchNodeRef) =
   if 0 < node.xtPfx.len:
     node.selfKey.swap node.brKey
     wrt = initRlpList 2
-    wrt.append node.xtPfx.toHexPrefix(false).toSeq
+    wrt.append @(node.xtPfx.toHexPrefix(false).data())
     wrt.append node.brKey
     node.xtData = wrt.finish()
     node.selfKey = node.xtData.digestTo(HashKey)
@@ -384,56 +357,76 @@ proc reKeyWalkerBranch(node: var BranchNodeRef) =
 template reKeyWalkerSub(stop: StopNodeRef) =
   ## Recursively calculate and stote rlp-data and node keys for sub-MPT
   doAssert not stop.isNil
-  if stop.sub.kind == Leaf:
-    LeafNodeRef(stop.sub).reKeyWalkerLeaf()
-  else:
+  if stop.sub.kind == Branch:
     BranchNodeRef(stop.sub).reKeyWalkerBranch()
+  else:
+    LeafNodeRef(stop.sub).reKeyWalkerLeaf()
 
 # ---------
 
-proc exportTrie(
-    node: NodeRef;
-    data: var seq[(seq[byte],seq[byte])];
-    ok: var bool;
-      ) =
+template exportTrieLeaf(
+    node: LeafNodeRef;
+    queue: seq[(seq[byte],seq[byte])];              # used as `var` parameter
+      ): bool =
+  let ok =
+    if node.lfData.len == 0:
+      false
+    else:
+      queue.add (@(node.selfKey.data), node.lfData)
+      true
+  ok
+
+proc exportTrieBranch(
+    node: BranchNodeRef;
+    queue: var seq[(seq[byte],seq[byte])];
+      ): bool =
   ## Recursively export rlp encodings
   ##
-  case node.kind:
-  of Branch:
-    var w = BranchNodeRef(node)
-    if w.brData.len == 0:
-      if 0 < w.xtData.len and
-         not w.brLinks[0].isNil:                    # pure extension node
-        data.add (@(w.selfKey.data), w.xtData)
-        w.brLinks[0].exportTrie(data, ok)
-      else:
-        ok = false                                  # error
-      return
-
-    if 0 < w.xtPfx.len:
-      if w.xtData.len == 0:
-        ok = false
-        return
-      data.add (@(w.selfKey.data), w.xtData)
-      data.add (@(w.brKey.data), w.brData)
+  if node.brData.len == 0:                          # pure extenson node?
+    let link = node.brLinks[0]
+    if node.xtData.len == 0 or link.isNil:          # check validity
+      return false                                  # oops => error
+    queue.add (@(node.selfKey.data), node.xtData)   # add extension `(key,node)`
+    if link.kind == Branch:
+      if BranchNodeRef(link).exportTrieBranch(queue):
+        return true
     else:
-      data.add (@(w.selfKey.data), w.brData)
+      if LeafNodeRef(link).exportTrieLeaf(queue):
+        return true
+    return false
 
-    for n in 0 .. 15:
-      if not w.brLinks[n].isNil:
-        w.brLinks[n].exportTrie(data, ok)
-        if not ok:
-          return
+  if 0 < node.xtPfx.len:                            # combined ext/branch node?
+    if node.xtData.len == 0:                        # check validity
+      return false                                  # oops => error
+    queue.add (@(node.selfKey.data), node.xtData)   # add extension `(key,node)`
+    queue.add (@(node.brKey.data), node.brData)     # add branch `(key,node)`
 
-  of Leaf:
-    var w = LeafNodeRef(node)
-    if w.lfData.len == 0:
-      ok = false
-      return
-    data.add (@(w.selfKey.data), w.lfData)
+  else:
+    queue.add (@(node.selfKey.data), node.brData)   # only branch `(key,node)`
 
-  of Stop:
-    ok = false
+  for n in 0 .. 15:                                 # export linked sub-MPTs
+    let link = node.brLinks[n]
+    if not link.isNil:
+      if link.kind == Branch:
+        if BranchNodeRef(link).exportTrieBranch(queue):
+          continue
+      else:
+        if LeafNodeRef(link).exportTrieLeaf(queue):
+          continue
+      return false
+  true
+
+template exportTrie(
+    node: NodeRef;
+    queue: var seq[(seq[byte],seq[byte])];
+      ): bool =
+  ## Recursively export rlp encodings
+  let ok =
+    if node.kind == Branch: BranchNodeRef(node).exportTrieBranch(queue)
+    else: LeafNodeRef(node).exportTrieLeaf(queue)
+  ok
+
+{.pop.}
 
 # ------------------------------------------------------------------------------
 # Public constructor
@@ -483,12 +476,6 @@ proc init*(
   if db.root.isNil:
     return T(nil)
 
-  # Register proof node hash links now. Due to merging sub-tries below,
-  # some nodes (and its hashes) will vanish from `tmpNodes[]`.
-  for (key,node) in tmpNodes.pairs:
-    if node.kind == Branch:
-      db.proof.add key
-
   # Root is not needed in the list, anymore
   tmpNodes.del db.root.selfKey
 
@@ -502,7 +489,7 @@ proc init*(
       tmpLinks.del stopKey                          # remove from sub-MPT list
 
   # Label path prefixes and join Extensions
-  db.root.updateProofTree(EmptyPath)
+  db.root.updateProofTrie()
 
   # Assemble right limit
   let limit = maxPath.to(ItemKey)
@@ -568,7 +555,7 @@ proc init*(
       db.stops.del stopKey                          # remove from sub-MPT list
 
   # Label path prefixes and join Extensions
-  db.root.updateProofTree(EmptyPath)
+  db.root.updateProofTrie()
   db
 
 proc init*(
@@ -673,7 +660,7 @@ proc validate*[T: SnapAccount|StorageItem](
     root: StateRoot|StoreRoot;
     start: ItemKey;
     leafs: openArray[T];
-    proof: openArray[ProofNode]
+    proof: openArray[ProofNode];
       ): Opt[NodeTrieRef] =
   ## Validate snap accounts or storage slot data package.
   ##
@@ -706,15 +693,10 @@ proc kvPairs*(db: NodeTrieRef): seq[(seq[byte],seq[byte])] =
   ## Export partial MPT. If an error occurs, no data is exported.
   ##
   if db.isComplete():
-    var (ok, data) = (true, seq[(seq[byte],seq[byte])].default)
-    db.root.exportTrie(data, ok)
-    if ok:
+    var data = seq[(seq[byte],seq[byte])].default
+    if db.root.exportTrie(data):
       return data
   # @[]
-
-proc proofKeys*(db: NodeTrieRef): seq[seq[byte]] =
-  ## Returns a list of the keys of proof nodes.
-  db.proof.mapIt(@(it.data))
 
 # ------------------------------------------------------------------------------
 # End

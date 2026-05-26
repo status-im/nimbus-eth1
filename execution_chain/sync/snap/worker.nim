@@ -126,7 +126,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
     of SnapAnalyse:
       # TBD                                         # clear analytics cache
 
-      let ela {.used.} = ctx.sessionAnalyseTrie(info).valueOr:
+      let ela {.used.} = ctx.sessionAnalyseFullTrie(info).valueOr:
         break body                                  # shutdown?
 
       debug info & ": partial MPT analysed",

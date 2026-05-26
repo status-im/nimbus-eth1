@@ -26,7 +26,14 @@ type
     ENoBranch                                       # missing branches
     ENoPivot                                        # no pivot state
     ECancelled                                      # shutdown?
+    EGetError                                       # serious database problem?
+    EClearError                                     # ..
+    EPutError
     EOtherError                                     # any other error
+
+  OnDanglingCB* = proc(key: seq[byte], path: NibblesBuf) {.gcsafe, raises:[].}
+    ## Closure function to perform bespoke actions when a dangling link or
+    ## a completely missing sub-MPT is found.
 
   TravNotifyCB* = proc(
     att: AttType, path: NibblesBuf, key, data: seq[byte], depth: int
@@ -40,8 +47,8 @@ type
   # ----------
 
   WalkTrieGetCB* = proc(
-    db: MptAsmRef, key: seq[byte]
-      ): seq[byte] {.gcsafe, raises: [].}
+    db: MptAsmRef, key: openArray[byte]
+      ): BlobResult {.gcsafe, raises: [].}
 
   WalkStats* = tuple                                # MPT traversal statistics
     ## Statistics collector
@@ -69,6 +76,10 @@ type
   TravDescRef* = ref object                         # MPT traversal descriptor
     ctx*: SnapCtxRef                                # snap context
     db*: MptAsmRef                                  # database
+    onAccDangl*: OnDanglingCB                       # configurable actions
+    onStoDangl*: OnDanglingCB                       # ditto
+    onStoMissing*: OnDanglingCB                     # ..
+    onCodeMissing*: OnDanglingCB
     msgAt*: Moment                                  # occasional logging
     napAt*: Moment                                  # occasional thread switch
     stats*: WalkStats                               # MPT traversal statistics

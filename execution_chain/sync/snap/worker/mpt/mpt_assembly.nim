@@ -99,6 +99,12 @@ const
     ## Enable additional logging noise
 
 type
+  BoolResult* = Result[bool,string]
+    ## Shortcut
+
+  BlobResult* = Result[seq[byte],string]
+    ## Shortcut
+
   PutResult* = Result[void,string]
     ## Shortcut
 
@@ -117,12 +123,16 @@ type
     StoSlot                                         # ditto
     ByteCode                                        # ditto
 
-    AccTrie                                         # hash -> node mapping
-    StoTrie                                         # hash -> node mapping
-    CodeList                                        # hash -> code mapping
+    AccKvt                                          # hash -> node mapping
+    StoKvt                                          # hash -> node mapping
+    CodeKvt                                         # hash -> code mapping
+
+    AccDnglKvt                                      # dangling nodes lists
+    StoDnglKvt                                      # ..
+    CodeDnglKvt
 
   StateDataTag* = enum
-    Untagged= 0                                     # well, still a tag :)
+    Untagged = 0                                    # well, still a tag :)
     OnTrie                                          # assembled and merged
     PivotOnTrie                                     # ditto, state root here
 
@@ -479,20 +489,24 @@ iterator colWalk97(
 
 # --------------
 
-template keyAtMost33(col: MptAsmCol; key: seq[byte]): openArray[byte] =
+template keyAtMost33(col: MptAsmCol; key: openArray[byte]): openArray[byte] =
   doAssert key.len < 33
   var keyData: array[33,byte]
   keyData[0] = col.ord
   (addr keyData[1]).copyMem(addr key[0], key.len)
   keyData.toOpenArray(0,key.len)
 
-template getAtMost33(db: MptAsmRef; col: MptAsmCol; key: seq[byte]): untyped =
+template getAtMost33(
+    db: MptAsmRef;
+    col: MptAsmCol;
+    key: openArray[byte];
+      ): untyped =
   db.adb.rGet(col.keyAtMost33 key)
 
 template putAtMost33(
     db: MptAsmRef;
     col: MptAsmCol;
-    key: seq[byte];
+    key: openArray[byte];
     data: openArray[byte];
       ): untyped =
   if key.len == 0:
@@ -500,7 +514,11 @@ template putAtMost33(
   else:
     db.adb.rPut(col.keyAtMost33 key, data)
 
-template delAtMost33(db: MptAsmRef; col: MptAsmCol; key: seq[byte]): untyped =
+template delAtMost33(
+    db: MptAsmRef;
+    col: MptAsmCol;
+    key: openArray[byte];
+      ): untyped =
   db.adb.rDel(col.keyAtMost33 key)
 
 # --------------
@@ -959,60 +977,216 @@ iterator walkByteCode*(
 
 # -------------
 
-proc getAccTrie*(db: MptAsmRef; key: seq[byte]): seq[byte] =
-  db.getAtMost33(AccTrie, key).isErrOr:
-    return value
-  # @[]
+proc hasAccKvt*(db: MptAsmRef; key: openArray[byte]): BoolResult =
+  var data = db.getAtMost33(AccKvt, key).valueOr:
+    return err(error)
+  ok(0 < data.len)
 
-proc putAccTrie*(db: MptAsmRef; nodes: seq[(seq[byte],seq[byte])]): PutResult =
+proc getAccKvt*(db: MptAsmRef; key: openArray[byte]): BlobResult =
+  var data = db.getAtMost33(AccKvt, key).valueOr:
+    return err(error)
+  ok(move data)
+
+proc putAccKvt*(
+    db: MptAsmRef;
+    nodes: openArray[(seq[byte],seq[byte])];
+      ): PutResult =
   for (key,val) in nodes:
-    db.putAtMost33(AccTrie, key, val).isOkOr:
+    db.putAtMost33(AccKvt, key, val).isOkOr:
       return err(error)
   ok()
 
-proc delAccTrie*(db: MptAsmRef, key: seq[byte]): DelResult =
-  db.delAtMost33(AccTrie, key)
+proc delAccKvt*(db: MptAsmRef, key: openArray[byte]): DelResult =
+  db.delAtMost33(AccKvt, key)
 
-iterator walkAccTrie*(db: MptAsmRef): WalkKvt =
-  for (key,value) in db.adb.colWalkKvt @[byte AccTrie]:
+proc clearAccKvt*(db: MptAsmRef): DelResult =
+  for (key,_) in db.adb.colWalkKvt @[byte AccKvt]:
+    db.delAtMost33(AccKvt, key).isOkOr:
+      return err(error)
+  ok()
+
+iterator walkAccKvt*(db: MptAsmRef): WalkKvt =
+  for (key,value) in db.adb.colWalkKvt @[byte AccKvt]:
     yield (key,value)
 
 # -------------
 
-proc getStoTrie*(db: MptAsmRef; key: seq[byte]): seq[byte] =
-  db.getAtMost33(StoTrie, key).isErrOr:
-    return value
-  # @[]
+proc hasStoKvt*(db: MptAsmRef; key: openArray[byte]): BoolResult =
+  let data = db.getAtMost33(StoKvt, key).valueOr:
+    return err(error)
+  ok(0 < data.len)
 
-proc putStoTrie*(db: MptAsmRef; nodes: seq[(seq[byte],seq[byte])]): PutResult =
+proc getStoKvt*(db: MptAsmRef; key: openArray[byte]): BlobResult =
+  var data = db.getAtMost33(StoKvt, key).valueOr:
+    return err(error)
+  ok(move data)
+
+proc putStoKvt*(
+    db: MptAsmRef;
+    nodes: openArray[(seq[byte],seq[byte])];
+      ): PutResult =
   for (key,val) in nodes:
-    db.putAtMost33(StoTrie, key, val).isOkOr:
+    db.putAtMost33(StoKvt, key, val).isOkOr:
       return err(error)
   ok()
 
-proc delStoTrie*(db: MptAsmRef, key: seq[byte]): DelResult =
-  db.delAtMost33(StoTrie, key)
+proc delStoKvt*(db: MptAsmRef, key: openArray[byte]): DelResult =
+  db.delAtMost33(StoKvt, key)
 
-iterator walkStoTrie*(db: MptAsmRef): WalkKvt =
-  for (key,value) in db.adb.colWalkKvt @[byte StoTrie]:
+iterator walkStoKvt*(db: MptAsmRef): WalkKvt =
+  for (key,value) in db.adb.colWalkKvt @[byte StoKvt]:
     yield (key,value)
 
 # -------------
 
-proc getCodeList*(db: MptAsmRef; hash: Hash32): seq[byte] =
-  db.get33(CodeList, hash).isErrOr:
-    return value
-  # @[]
+proc hasCodeKvt*(db: MptAsmRef; hash: Hash32): BoolResult =
+  let data = db.get33(CodeKvt, hash).valueOr:
+    return err(error)
+  ok(0 < data.len)
 
-proc putCodeList*(db: MptAsmRef; cdHash: CodeHash; data: CodeItem): PutResult =
-  db.put33(CodeList, cdHash.to(Hash32), data.to(seq[byte]))
+proc getCodeKvt*(db: MptAsmRef; hash: Hash32): BlobResult =
+  var data = db.get33(CodeKvt, hash).valueOr:
+    return err(error)
+  ok(move data)
 
-proc delCodeList*(db: MptAsmRef, hash: Hash32): DelResult =
-  db.del33(CodeList, hash)
+proc putCodeKvt*(db: MptAsmRef; cdHash: CodeHash; data: CodeItem): PutResult =
+  db.put33(CodeKvt, cdHash.to(Hash32), data.to(seq[byte]))
 
-iterator walkCodeList*(db: MptAsmRef): WalkKvt =
-  for (key,value) in db.adb.colWalkKvt @[byte CodeList]:
+proc delCodeKvt*(db: MptAsmRef, hash: Hash32): DelResult =
+  db.del33(CodeKvt, hash)
+
+iterator walkCodeKvt*(db: MptAsmRef): WalkKvt =
+  for (key,value) in db.adb.colWalkKvt @[byte CodeKvt]:
     yield (key,value)
+
+# -------------
+
+proc hasAccDnglKvt*(db: MptAsmRef; key: openArray[byte]): BoolResult =
+  let data = db.getAtMost33(AccDnglKvt, key).valueOr:
+    return err(error)
+  ok(0 < data.len)
+
+proc getAccDnglKvt*(db: MptAsmRef; key: openArray[byte]): BlobResult =
+  var data = db.getAtMost33(AccDnglKvt, key).valueOr:
+    return err(error)
+  ok(move data)
+
+proc putAccDnglKvt*(db: MptAsmRef; key, data: openArray[byte]): PutResult =
+  db.putAtMost33(AccDnglKvt, key, data)
+
+proc putAccDnglKvt*(
+    db: MptAsmRef;
+    kvp: seq[(seq[byte],seq[byte])];
+      ): PutResult =
+  for (key,data) in kvp:
+    db.putAtMost33(AccDnglKvt, key, data).isOkOr:
+      return err(error)
+  ok()
+
+proc delAccDnglKvt*(db: MptAsmRef, key: openArray[byte]): DelResult =
+  db.delAtMost33(AccDnglKvt, key)
+
+proc delAccDnglKvt*(db: MptAsmRef, keys: openArray[seq[byte]]): DelResult =
+  for key in keys:
+    db.delAtMost33(AccDnglKvt, key).isOkOr:
+      return err(error)
+  ok()
+
+proc clearAccDnglKvt*(db: MptAsmRef): DelResult =
+  for (key,_) in db.adb.colWalkKvt @[byte AccDnglKvt]:
+    db.delAtMost33(AccDnglKvt, key).isOkOr:
+      return err(error)
+  ok()
+
+iterator walkAccDnglKvt*(db: MptAsmRef): tuple[key, data: seq[byte]] =
+  for (key,data) in db.adb.colWalkKvt @[byte AccDnglKvt]:
+    yield (key,data)
+
+# -------------
+
+proc hasStoDnglKvt*(db: MptAsmRef; key: openArray[byte]): BoolResult =
+  let data = db.getAtMost33(StoDnglKvt, key).valueOr:
+    return err(error)
+  ok(0 < data.len)
+
+proc getStoDnglKvt*(db: MptAsmRef; key: openArray[byte]): BlobResult =
+  var data = db.getAtMost33(StoDnglKvt, key).valueOr:
+    return err(error)
+  ok(move data)
+
+proc putStoDnglKvt*(db: MptAsmRef; key, data: openArray[byte]): PutResult =
+  db.putAtMost33(StoDnglKvt, key, data)
+
+proc putStoDnglKvt*(
+    db: MptAsmRef;
+    kvp: seq[(seq[byte],seq[byte])];
+      ): PutResult =
+  for (key,data) in kvp:
+    db.putAtMost33(StoDnglKvt, key, data).isOkOr:
+      return err(error)
+  ok()
+
+proc delStoDnglKvt*(db: MptAsmRef, key: openArray[byte]): DelResult =
+  db.delAtMost33(StoDnglKvt, key)
+
+proc delStoDnglKvt*(db: MptAsmRef, keys: openArray[seq[byte]]): DelResult =
+  for key in keys:
+    db.delAtMost33(StoDnglKvt, key).isOkOr:
+      return err(error)
+  ok()
+
+proc clearStoDnglKvt*(db: MptAsmRef): DelResult =
+  for (key,_) in db.adb.colWalkKvt @[byte StoDnglKvt]:
+    db.delAtMost33(StoDnglKvt, key).isOkOr:
+      return err(error)
+  ok()
+
+iterator walkStoDnglKvt*(db: MptAsmRef): tuple[key, data: seq[byte]] =
+  for (key,data) in db.adb.colWalkKvt @[byte StoDnglKvt]:
+    yield (key,data)
+
+# -------------
+
+proc hasCodeDnglKvt*(db: MptAsmRef; key: openArray[byte]): BoolResult =
+  let data = db.getAtMost33(CodeDnglKvt, key).valueOr:
+    return err(error)
+  ok(0 < data.len)
+
+proc getCodeDnglKvt*(db: MptAsmRef; key: openArray[byte]): BlobResult =
+  var data = db.getAtMost33(CodeDnglKvt, key).valueOr:
+    return err(error)
+  ok(move data)
+
+proc putCodeDnglKvt*(db: MptAsmRef; key, data: openArray[byte]): PutResult =
+  db.putAtMost33(CodeDnglKvt, key, data)
+
+proc putCodeDnglKvt*(
+    db: MptAsmRef;
+    kvp: seq[(seq[byte],seq[byte])];
+      ): PutResult =
+  for (key,data) in kvp:
+    db.putAtMost33(CodeDnglKvt, key, data).isOkOr:
+      return err(error)
+  ok()
+
+proc delCodeDnglKvt*(db: MptAsmRef, key: openArray[byte]): DelResult =
+  db.delAtMost33(CodeDnglKvt, key)
+
+proc delCodeDnglKvt*(db: MptAsmRef, keys: openArray[seq[byte]]): DelResult =
+  for key in keys:
+    db.delAtMost33(CodeDnglKvt, key).isOkOr:
+      return err(error)
+  ok()
+
+proc clearCodeDnglKvt*(db: MptAsmRef): DelResult =
+  for (key,_) in db.adb.colWalkKvt @[byte CodeDnglKvt]:
+    db.delAtMost33(CodeDnglKvt, key).isOkOr:
+      return err(error)
+  ok()
+
+iterator walkCodeDnglKvt*(db: MptAsmRef): tuple[key, data: seq[byte]] =
+  for (key,data) in db.adb.colWalkKvt @[byte CodeDnglKvt]:
+    yield (key,data)
 
 # ------------------------------------------------------------------------------
 # End
