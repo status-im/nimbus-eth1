@@ -26,14 +26,14 @@
 ##
 ## * StateData:
 ##   + key33: <col, root>
-##   + value: <hash, number, touch, onTrie, coverage>
+##   + value: <hash, number, touch, tag, coverage>
 ##   where
 ##   + col:      `Accounts`
 ##   + root:     `StateRoot`
 ##   + hash:     `BlockHash`
 ##   + number:   `BlockNumber`
 ##   + touch:    `Moment`
-##   + onTrie:   `bool`
+##   + tag:      `StateDataTag`
 ##   * coverage: `UInt256`
 ##
 ## * Accounts:
@@ -121,11 +121,16 @@ type
     StoTrie                                         # hash -> node mapping
     CodeList                                        # hash -> code mapping
 
+  StateDataTag* = enum
+    Untagged= 0                                     # well, still a tag :)
+    OnTrie                                          # assembled and merged
+    PivotOnTrie                                     # ditto, state root here
+
   DecodedStateData* = tuple
     hash: BlockHash
     number: BlockNumber
     touch: Moment                                   # last data change
-    onTrie: bool                                    # state root also on trie
+    tag: StateDataTag                               # state root also on trie
     coverage: UInt256                               # account range coverage
 
   DecodedAccounts* = tuple
@@ -151,7 +156,7 @@ type
     hash: BlockHash
     number: BlockNumber
     touch: Moment                                   # last data change
-    onTrie: bool                                    # state root also on trie
+    tag: StateDataTag                               # how this record is used
     coverage: UInt256                               # account range coverage
     error: string
 
@@ -182,6 +187,10 @@ type
     peerID: Hash
     error: string
 
+  WalkKvt* = tuple
+    key: seq[byte]
+    value: seq[byte]
+
 # ------------------------------------------------------------------------------
 # Private RLP helpers
 # ------------------------------------------------------------------------------
@@ -199,7 +208,7 @@ proc decodeStateData(data: seq[byte]): Result[DecodedStateData,string] =
     res.hash = rd.read(Hash32).to(BlockHash)
     res.number = rd.read(BlockNumber)
     res.touch = Moment.fromNow(rd.read(uint64).int64.nanoseconds)
-    res.onTrie = rd.read(bool)
+    res.tag = StateDataTag(rd.read uint8)
     res.coverage = rd.read(UInt256)
   except RlpError as e:
     return err(info & ": " & $e.name & "(" & e.msg & ")")
@@ -254,14 +263,14 @@ template encodeStateData(
     hash: BlockHash;
     number: BlockNumber;
     touch: Moment;
-    onTrie: bool;
+    tag: StateDataTag;
     coverage: UInt256;
       ): untyped =
   var wrt = initRlpList 4
   wrt.append hash.to(Hash32)
   wrt.append number
   wrt.append max(touch.epochNanoSeconds(),0).uint64
-  wrt.append onTrie
+  wrt.append tag.uint8
   wrt.append coverage
   wrt.finish()
 
@@ -360,6 +369,31 @@ proc kvPair(rit: RocksIteratorRef): (seq[byte],seq[byte]) =
   rit.value(proc(w: openArray[byte]) {.gcsafe, raises: [].} = kv[1] = @w)
   rit.next()
   kv
+
+iterator colWalkKvt(
+    adb: RocksDbRef;
+    pfx: openArray[byte];
+      ): tuple[key, data: seq[byte]] =
+  ## Walk over key-value pairs of the database for keys of length 33 where
+  ## the search head is postioned at `pfx[0]`.
+  ##
+  const info = "mpt/colWalk63: "
+  block walkBody:
+    let rit = adb.openIterator().valueOr:
+      when extraTraceMessages:
+        trace info & "Open error", error
+      break walkBody
+    defer: rit.close()
+
+    let col = pfx[0]
+
+    rit.seekToKey(pfx)
+    while rit.isValid():
+      let (key,value) = rit.kvPair()
+      if 0 < key.len and col.ord.byte != key[0]:
+        break
+      if 1 < key.len:
+        yield (key[1..^1], value)
 
 iterator colWalk33(
     adb: RocksDbRef;
@@ -717,7 +751,7 @@ proc init*(
 proc getStateData*(
     db: MptAsmRef;
     root: StateRoot;
-      ): Result[(BlockHash,BlockNumber,Moment,bool,UInt256),string] =
+      ): Result[(BlockHash,BlockNumber,Moment,StateDataTag,UInt256),string] =
   let data = db.get33(StateData, root).valueOr:
     return err(error)
   data.decodeStateData()
@@ -728,11 +762,18 @@ proc putStateData*(
     hash: BlockHash;
     number: BlockNumber;
     touch: Moment;
-    onTrie: bool;
+    tag: StateDataTag;
     coverage: UInt256;
       ): PutResult =
-  db.put33(StateData, root,
-           encodeStateData(hash, number, touch, onTrie, coverage))
+  db.put33(StateData, root, encodeStateData(hash, number, touch, tag, coverage))
+
+proc putStateData*(
+    db: MptAsmRef;
+    state: WalkStateData;
+      ): PutResult =
+  db.put33(StateData, state.root,
+    encodeStateData(
+      state.hash, state.number, state.touch, state.tag, state.coverage))
 
 proc delStateData*(db: MptAsmRef; root: StateRoot): DelResult =
   db.del33(StateData, root)
@@ -745,7 +786,7 @@ iterator walkStateData*(db: MptAsmRef): WalkStateData =
         oops.error = error
         yield oops
         continue
-    yield (StateRoot(key), w.hash, w.number, w.touch, w.onTrie, w.coverage, "")
+    yield (StateRoot(key), w.hash, w.number, w.touch, w.tag, w.coverage, "")
 
 # -------------
 
@@ -932,6 +973,10 @@ proc putAccTrie*(db: MptAsmRef; nodes: seq[(seq[byte],seq[byte])]): PutResult =
 proc delAccTrie*(db: MptAsmRef, key: seq[byte]): DelResult =
   db.delAtMost33(AccTrie, key)
 
+iterator walkAccTrie*(db: MptAsmRef): WalkKvt =
+  for (key,value) in db.adb.colWalkKvt @[byte AccTrie]:
+    yield (key,value)
+
 # -------------
 
 proc getStoTrie*(db: MptAsmRef; key: seq[byte]): seq[byte] =
@@ -948,6 +993,10 @@ proc putStoTrie*(db: MptAsmRef; nodes: seq[(seq[byte],seq[byte])]): PutResult =
 proc delStoTrie*(db: MptAsmRef, key: seq[byte]): DelResult =
   db.delAtMost33(StoTrie, key)
 
+iterator walkStoTrie*(db: MptAsmRef): WalkKvt =
+  for (key,value) in db.adb.colWalkKvt @[byte StoTrie]:
+    yield (key,value)
+
 # -------------
 
 proc getCodeList*(db: MptAsmRef; hash: Hash32): seq[byte] =
@@ -960,6 +1009,10 @@ proc putCodeList*(db: MptAsmRef; cdHash: CodeHash; data: CodeItem): PutResult =
 
 proc delCodeList*(db: MptAsmRef, hash: Hash32): DelResult =
   db.del33(CodeList, hash)
+
+iterator walkCodeList*(db: MptAsmRef): WalkKvt =
+  for (key,value) in db.adb.colWalkKvt @[byte CodeList]:
+    yield (key,value)
 
 # ------------------------------------------------------------------------------
 # End

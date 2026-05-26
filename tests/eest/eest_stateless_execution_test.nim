@@ -26,12 +26,6 @@ const skipFiles = [
   # Once all of these pass we could simply run eest_blockchain_test.nim
   # with statelessEnabled = true and remove this test file.
   #
-  # --- eest_develop files with failures ---
-  #
-  # persist(): Unspecified(Aristo, ctx=, error=DelVidStaleVtx) [AssertionDefect]
-  # -> on execution with generated witness
-  "test_scenarios.json",
-  #
   # --- eest_zkevm files with failures ---
   #
   # `dst.contains(k)`  [AssertionDefect] -> on execution of test vector witness
@@ -53,11 +47,6 @@ const skipFiles = [
   # Witness codes mismatch -> codes optimisation: implemented in
   # https://github.com/status-im/nimbus-eth1/pull/4099
   "witness_codes_create_same_hash_then_read.json",
-  #
-  # blockAccessListHash mismatch, not an stateless execution failure.
-  # Likely an issue on reference implementation side
-  "witness_codes_delegated_eoa_insufficient_balance.json",
-  "validation_codes_missing_delegated_code_on_insufficient_balance_call.json",
 ]
 
 runEESTSuite(

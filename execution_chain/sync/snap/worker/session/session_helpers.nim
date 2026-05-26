@@ -12,30 +12,26 @@
 
 import
   pkg/[chronicles, chronos],
-  ../worker_desc
+  ../[mpt, worker_desc]
 
 type
-  SessionTicker* = object
-    stateInx*: int                                  # 1 .. `nStates`
-    nStates*: int
-    distance*: uint64
+  SessionTicker* = object of RootObj
     msgAt*: Moment                                  # message while looping
     napAt*: Moment                                  # allow for thread switch
 
 # ------------------------------------------------------------------------------
-# Public helpers
+# Public helpers, session ticker related
 # ------------------------------------------------------------------------------
 
-proc init*(_: type SessionTicker, nStates = 0): SessionTicker =
-  SessionTicker(
-    nStates: nStates,
-    msgAt: Moment.now() + threadLogTimeLimit,       # message while looping
-    napAt: Moment.now() + threadSwitchRunLimit)     # allow for thread switch
+method init*(status: var SessionTicker) {.base, gcsafe, raises: [].} =
+  let now = Moment.now()
+  status.msgAt = now + threadLogTimeLimit           # message while looping
+  status.napAt = now + threadSwitchRunLimit         # allow for thread switch
 
 template sessionTicker*(
-   status: SessionTicker;                          # used as var parameter
+   status: SessionTicker;                           # used as var parameter
    info: static[string];
-   code: untyped;                                  # e.g. logging directive
+   code: untyped;                                   # e.g. logging directive
      ): Opt[ErrorType] =
   ## Async/template
   ##
@@ -67,6 +63,21 @@ template sessionTicker*(
       status.napAt = Moment.now() + threadSwitchRunLimit
 
   bodyRc
+
+# ----------------
+
+proc countTrieNodes*(
+    ctx: SnapCtxRef;
+      ): tuple[nAccNodes, nStoNodes: uint64, ela: Duration] =
+  ## Simple stored nodes counter
+  let
+    db = ctx.pool.mptAsm
+    start = Moment.now()
+  for _ in db.walkAccTrie():
+    result.nAccNodes.inc
+  for _ in db.walkStoTrie():
+    result.nStoNodes.inc
+  result.ela = Moment.now() - start
 
 # ------------------------------------------------------------------------------
 # End

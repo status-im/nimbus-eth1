@@ -112,7 +112,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       bodyRc = daemonWaitDownloadInterval           # take a nap
 
     of SnapDownloadFinish:
-      bodyRc = daemonWaitDownloadFinishInterval     # take a nap
+      bodyRc = daemonWaitDownloadFinishInterval     # wait for sync
 
     of SnapMkTrie:
       ctx.pool.stateDB.flush info                   # archive/clear cache
@@ -120,8 +120,16 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       let ela {.used.} = ctx.sessionMkTrie(info).valueOr:
         break body                                  # shutdown?
 
-      ctx.updateSyncHealing()                       # set next state
-      debug info & ": mkTrie imported",
+      debug info & ": partial MPT assembled",
+        ela=ela.toStr, syncState=ctx.syncState
+
+    of SnapAnalyse:
+      # TBD                                         # clear analytics cache
+
+      let ela {.used.} = ctx.sessionAnalyseTrie(info).valueOr:
+        break body                                  # shutdown?
+
+      debug info & ": partial MPT analysed",
         ela=ela.toStr, syncState=ctx.syncState
 
     of SnapHealing:                                 # TBD ..

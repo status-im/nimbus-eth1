@@ -69,7 +69,54 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os }}-${{ matrix.cpu }}-checksum
-          path: ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus.sha512sum
+          path: |
+            ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus.sha512sum
+            ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus_verified_proxy.sha512sum
+            ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/libverifproxy.a.sha512sum
+          retention-days: 2
+
+  build-wasm:
+    name: 'wasm'
+    runs-on: ubuntu-22.04
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git llvm
+
+      - name: Install emsdk
+        run: |
+          git clone https://github.com/emscripten-core/emsdk.git
+          emsdk/emsdk install 3.1.73
+          emsdk/emsdk activate 3.1.73
+
+      - name: Build Nim and dependencies
+        run: make -j$(nproc) init
+
+      - name: Build WASM
+        run: |
+          source emsdk/emsdk_env.sh
+          make -j$(nproc) nimbus_verified_proxy_wasm
+
+      - name: Generate sha512sums for WASM files
+        run: |
+          cd build/nimbus_verified_proxy_wasm
+          sha512sum verifproxy_wasm.js verifproxy_wasm.wasm verifproxy.js > wasm.sha512sum
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wasm
+          path: build/nimbus_verified_proxy_wasm/
           retention-days: 2
 
   run-binary:
@@ -87,6 +134,9 @@ jobs:
     runs-on: ${{ matrix.builder }}
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
       - name: Download artefacts
         uses: actions/download-artifact@v5
         with:
@@ -98,9 +148,96 @@ jobs:
           build/nimbus --help
           build/nimbus_verified_proxy --help
 
+      - name: Test libverifproxy
+        # Windows runner uses MinGW (libstdc++) but the library is built with llvm-mingw (libc++)
+        if: matrix.os != 'windows'
+        run: make libverifproxy_test
+
+  deploy-wasm:
+    name: Deploy WASM
+    needs: [build-wasm]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout wasm-deploy branch
+        uses: actions/checkout@v6
+        with:
+          ref: wasm-deploy
+          path: wasm-deploy/
+        continue-on-error: true
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm
+          path: wasm-deploy/nightly/
+
+      - name: Force-push to wasm-deploy
+        run: |
+          cd wasm-deploy
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || git commit -m "chore: update nightly"
+          git push origin HEAD:wasm-deploy --force
+
+  publish-npm:
+    name: Publish WASM to GitHub Packages
+    needs: [build-wasm]
+    runs-on: ubuntu-22.04
+
+    permissions:
+      packages: write
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Download WASM artefact
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm
+          path: nimbus_verified_proxy/library/bindings/wasm/
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@status-im'
+
+      - name: Set nightly version
+        run: |
+          cd nimbus_verified_proxy/library/bindings/wasm
+          npm version "0.0.0-nightly" --no-git-tag-version
+
+      - name: Delete existing nightly package version
+        run: |
+          VERSION_ID=$(gh api /orgs/status-im/packages/npm/nimbus-verified-proxy/versions \
+            --jq '.[] | select(.name == "0.0.0-nightly") | .id' 2>/dev/null || true)
+          if [ -n "$VERSION_ID" ]; then
+            gh api --method DELETE /orgs/status-im/packages/npm/nimbus-verified-proxy/versions/$VERSION_ID
+            echo "Deleted version ID $VERSION_ID"
+          else
+            echo "No existing nightly version found, skipping"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish
+        run: npm publish --tag nightly
+        working-directory: nimbus_verified_proxy/library/bindings/wasm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   nightly-build-release:
     name: Nightly build release
-    needs: build
+    needs: [build]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -120,16 +257,44 @@ jobs:
           cat > release_notes.md <<EOF
           ## SHA512 checksums
 
+          ### Nimbus
+
           \`\`\`text
           EOF
           echo '# Linux AMD64' >> release_notes.md
-          cat linux-amd64-checksum/* >> release_notes.md
+          cat linux-amd64-checksum/nimbus.sha512sum >> release_notes.md
           echo '# Linux ARM64' >> release_notes.md
-          cat linux-arm64-checksum/* >> release_notes.md
+          cat linux-arm64-checksum/nimbus.sha512sum >> release_notes.md
           echo '# Windows AMD64' >> release_notes.md
-          cat windows-amd64-checksum/* >> release_notes.md
+          cat windows-amd64-checksum/nimbus.sha512sum >> release_notes.md
           echo '# macOS ARM64' >> release_notes.md
-          cat macos-arm64-checksum/* >> release_notes.md
+          cat macos-arm64-checksum/nimbus.sha512sum >> release_notes.md
+          echo '```' >> release_notes.md
+          echo '' >> release_notes.md
+          echo '### Nimbus Verified Proxy' >> release_notes.md
+          echo '' >> release_notes.md
+          echo '```' >> release_notes.md
+          echo '# Linux AMD64' >> release_notes.md
+          cat linux-amd64-checksum/nimbus_verified_proxy.sha512sum >> release_notes.md
+          echo '# Linux ARM64' >> release_notes.md
+          cat linux-arm64-checksum/nimbus_verified_proxy.sha512sum >> release_notes.md
+          echo '# Windows AMD64' >> release_notes.md
+          cat windows-amd64-checksum/nimbus_verified_proxy.sha512sum >> release_notes.md
+          echo '# macOS ARM64' >> release_notes.md
+          cat macos-arm64-checksum/nimbus_verified_proxy.sha512sum >> release_notes.md
+          echo '```' >> release_notes.md
+          echo '' >> release_notes.md
+          echo '### libverifproxy' >> release_notes.md
+          echo '' >> release_notes.md
+          echo '```' >> release_notes.md
+          echo '# Linux AMD64' >> release_notes.md
+          cat linux-amd64-checksum/libverifproxy.a.sha512sum >> release_notes.md
+          echo '# Linux ARM64' >> release_notes.md
+          cat linux-arm64-checksum/libverifproxy.a.sha512sum >> release_notes.md
+          echo '# Windows AMD64' >> release_notes.md
+          cat windows-amd64-checksum/libverifproxy.a.sha512sum >> release_notes.md
+          echo '# macOS ARM64' >> release_notes.md
+          cat macos-arm64-checksum/libverifproxy.a.sha512sum >> release_notes.md
           echo '```' >> release_notes.md
 
       - name: Delete tag

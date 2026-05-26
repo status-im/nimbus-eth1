@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -51,7 +51,7 @@ suite "Historical Hashes Accumulator":
     block: # Test valid headers
       for i in headersToTest:
         let header = headers[i]
-        let proof = buildProof(chainConfig, header, epochRecords)
+        let proof = buildProof(header, epochRecords)
         check:
           proof.isOk()
           verifyProof(accumulator, header, proof.get())
@@ -64,7 +64,7 @@ suite "Historical Hashes Accumulator":
 
       # Test altered block headers by altering the difficulty
       for i in headersToTest:
-        let proof = buildProof(chainConfig, headers[i], epochRecords)
+        let proof = buildProof(headers[i], epochRecords)
         check:
           proof.isOk()
         # Alter the block header so the proof no longer matches

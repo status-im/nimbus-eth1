@@ -96,13 +96,11 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string] =
   # EIP-4788
   if xp.nextFork >= FkCancun:
     let beaconRoot = xp.parentBeaconBlockRoot
-    vmState.processBeaconBlockRoot(beaconRoot).isOkOr:
-      return err(error)
+    vmState.processBeaconBlockRoot(beaconRoot)
 
   # EIP-2935
   if xp.nextFork >= FkPrague:
-    vmState.processParentBlockHash(vmState.blockCtx.parentHash).isOkOr:
-      return err(error)
+    vmState.processParentBlockHash(vmState.blockCtx.parentHash)
 
   # Commit block access list tracker changes for pre‑execution system calls
   if vmState.balTrackerEnabled:
@@ -124,7 +122,7 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
 
     let
       maxBlobs = vmState.com.maxBlobs
-      maxForkBlobsPerBlock = getMaxBlobsPerBlock(vmState.com, vmState.fork)
+      maxForkBlobsPerBlock = getMaxBlobsPerBlock(vmState.com, vmState.hardFork)
       maxBlobsPerBlock =
         if maxBlobs.isSome:
           # https://eips.ethereum.org/EIPS/eip-7872#specification
@@ -247,7 +245,7 @@ func assembleHeader*(pst: TxPacker, xp: TxPoolRef): Header =
     extraData:     getExtraData(com),
     mixHash:       xp.prevRandao,
     nonce:         default(Bytes8),
-    baseFeePerGas: vmState.blockCtx.baseFeePerGas,
+    baseFeePerGas: Opt.some(xp.baseFee.u256),
     )
 
   if com.isShanghaiOrLater(xp.timestamp):
