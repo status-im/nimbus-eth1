@@ -276,7 +276,7 @@ template mkTrieImpl(
     # Check whether the `dangling[]` cache is up to date. If so, then
     # check current MPT accounts package against current dangling cache.
     let kvPairs = mpt.kvPairs()
-    block:
+    if not session.isPivot:
       let rc = session.matchDanglingLink kvPairs.mapIt(it[0])
       if rc.isErr:
         chronicles.`error` info & ": Error accessing dangling pivot links",
