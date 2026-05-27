@@ -330,7 +330,7 @@ proc sessionAnalyseTrieRecur*(
     let notify = accOnlyNotifyRecur info
 
   template stats(): auto = trd.stats
-  debug info & ": Start recursively analysing MPT"
+  startTraversingMsg(info)
 
   trd.walkTrieRec(root, getAccKvt, notify).isOkOr:
     debug info & ": Failed analysing MPT", `error`=error

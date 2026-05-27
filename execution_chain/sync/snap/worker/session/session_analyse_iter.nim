@@ -443,7 +443,7 @@ template sessionAnalyseTrieIter*(
       stateRoot = pivot.root.Hash32
 
     template stats(): auto = trd.stats
-    debug info & ": Start analysing MPT"
+    startTraversingMsg(info)
 
     when accAndStoOk:
       let rc = traverseMpt(trd, stateRoot, getAccKvt, accAndStoNotify, info):

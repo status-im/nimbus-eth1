@@ -122,7 +122,7 @@ template traversingStorageMsg*(
     stats: WalkStats;
     info: static[string];
       ): untyped =
-  trace info & ": Traversing storage slots..",
+  trace info & ": Collecting storage slots..",
     nMissing=stats.nStoMissing, nDangl=stats.nStoDangl, nSlots=stats.nStoLeaf,
     nDepth=stats.nStoDepth, nErr=stats.nStoErr
 
@@ -130,16 +130,21 @@ template traversingCodeMsg*(
     stats: WalkStats;
     info: static[string];
       ): untyped =
-  trace info & ": Handling codes..",
+  trace info & ": Collecting codes..",
     nMissing=stats.nCodeMissing, nCodes=stats.nAccCode
 
 template traversingAccountsMsg*(
     stats: WalkStats;
     info: static[string];
       ): untyped =
-  trace info & ": Traversing accounts..",
+  trace info & ": Collecting accounts..",
     nDangl=stats.nAccDangl, nAccount=stats.nAccLeaf, nDepth=stats.nAccDepth,
     nStorage=stats.nAccSto, nCode=stats.nAccCode, nErr=stats.nAccErr
+
+template startTraversingMsg*(
+    info: static[string];
+      ): untyped =
+  trace info & ": Analysing MPT.."
 
 template allDoneMsg*(
     stats: WalkStats;

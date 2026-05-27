@@ -209,8 +209,8 @@ template mkCodesList(
         break body
 
       for (key,val) in w.codes:
-        let hash = CodeHash(val.distinctBase.keccak256.data)
-        if hash != key:
+        let hash = val.distinctBase.keccak256
+        if hash != Hash32(key):
           error info & ": Code key mismatch", stateInx, nStates, root,
             distance, key=key.toStr, expected=hash.toStr,
             nData=val.to(seq[byte]).len
@@ -362,10 +362,10 @@ template sessionMkTrie*(
     # Sort states by its distance from pivot, smallest distance first
     byDist.sort proc(x,y: WalkStateData): int = cmp(x.dist pivot,y.dist pivot)
 
-    # Reset MPT data cache if download sample tagging has changed
-    if byDist[0].tag != PivotOnTrie:
-      if byDist[0].tag != Untagged:                 # job might take some time
-        chronicles.info info & ": Clearing state accounts cache", nStates
+    # If necessary, update state data record pretending the cache is empty if
+    # the pivot state tag has changed. Otherwise proceed with an interrupted
+    # session with the `Untagged` states.
+    if byDist[0].tag == OnTrie:                     # stored pivot has changed?
       for n in 0 ..< byDist.len:
         byDist[n].tag = Untagged
 
