@@ -708,30 +708,8 @@ proc get*[K, V; SHARD_BITS](
 proc put*[K, V; SHARD_BITS](
     lru: var ConcurrentLruCache[K, V, SHARD_BITS], key: K, val: V
 ) =
-  let
-    h = hash(key)
-    sh = h.toSubhash()
-    s = addr lru.shards[h.toShardIdx(SHARD_BITS)]
-
-  var existing: Opt[V]
-  s.lock.withReadLock:
-    existing = s.cache.peek(sh, key)
-
-  if existing.isSome() and existing[] == val:
-    return
-
-  let doPromote =
-    if existing.isSome():
-      inc tlsLruGetCounter
-      (tlsLruGetCounter and SAMPLE_MASK) == 0'u32
-    else:
-      true
-
-  s.lock.withWriteLock:
-    if doPromote:
-      s.cache.put(sh, key, val)
-    elif not s.cache.refresh(sh, key, val):
-      s.cache.put(sh, key, val)
+  withShardWrite(lru, key):
+    s.cache.put(sh, key, val)
     s.usedCount.store(s.cache.len, moRelaxed)
 
 proc pop*[K, V; SHARD_BITS: static int](
