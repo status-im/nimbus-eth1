@@ -354,6 +354,7 @@ template accOnlyNotify(
         stats.nAccErr.inc
         break body
 
+      var treatAccAsDangling = false
       if acc.storageRoot != EMPTY_ROOT_HASH:
         stats.nAccSto.inc
 
@@ -365,6 +366,7 @@ template accOnlyNotify(
               root=acc.storageRoot.toStr, nErr=stats.nStoErr, error=rc.error
           elif not rc.value:
             break checkStoRoot
+          treatAccAsDangling = true
           stats.nStoMissing.inc
           trd.onStoMissing(key, path)               # (key,path) of account data
 
@@ -379,8 +381,12 @@ template accOnlyNotify(
               root=acc.codeHash.toStr, nErr=stats.nStoErr, error=rc.error
           elif rc.value:
             break checkCodeHash
+          treatAccAsDangling = true
           stats.nCodeMissing.inc
           trd.onCodeMissing(key, path)              # (key,path) of account data
+
+      if treatAccAsDangling:                        # count as dangling leaf
+        stats.nAccDangl.inc
 
     elif att == AttDangling:
       stats.nAccDangl.inc
@@ -408,7 +414,7 @@ template sessionAnalyseTrieIter*(
   ##
   ## Traverse (depth first) an MPT.
   ##
-  var bodyRc = Result[Duration,AttType].err(EOtherError)
+  var bodyRc = Result[WalkStats,AttType].err(EOtherError)
   block body:
     let
       start = Moment.now()
@@ -450,7 +456,7 @@ template sessionAnalyseTrieIter*(
     stats.ela = (Moment.now() - start)
     allDoneMsg(stats, info)
 
-    bodyRc = typeof(bodyRc).ok(stats.ela)           # done, ok
+    bodyRc = typeof(bodyRc).ok(stats)               # done, ok
     # End `block body`
 
   bodyRc                                            # return code

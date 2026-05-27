@@ -143,10 +143,7 @@ proc stoNotifyRecur(info: static[string]): WalkTrieRecCB =
     occasionalMsg(trd.msgAt):
       traversingStorageMsg(stats, info)
 
-proc accNotifyRecur(
-    accAndStoOk: static[bool];
-    info: static[string];
-      ): WalkTrieRecCB =
+proc accAndStoNotifyRecur(info: static[string]): WalkTrieRecCB =
   return proc(
       trd: TravDescRef;
       att: AttType;
@@ -176,30 +173,18 @@ proc accNotifyRecur(
           stats.nAccSto.inc
 
           # Analyse MPT for storage slots
-          when accAndStoOk:
-            let
-              start = Moment.now()
-              notify = stoNotifyRecur info
+          let
+            start = Moment.now()
+            notify = stoNotifyRecur info
 
-            trd.walkTrieRec(acc.storageRoot, getStoKvt, notify).isOkOr:
-              if error != ENoRoot:
-                debug info & ": Failed traversing storage slots",
-                  root=acc.storageRoot.toStr, nErr=stats.nStoErr, `error`=error
+          trd.walkTrieRec(acc.storageRoot, getStoKvt, notify).isOkOr:
+            if error != ENoRoot:
+              debug info & ": Failed traversing storage slots",
+                root=acc.storageRoot.toStr, nErr=stats.nStoErr, `error`=error
 
-            stats.nStoNodes += stats.nNodes         # collect storage stats
-            stats.nNodes = 0
-            stats.stoEla += (Moment.now() - start)
-          else:
-            # Check whether the storage root has an entry on the database
-            block checkStoRoot:
-              let rc = trd.db.hasStoKvt(acc.storageRoot.data)
-              if rc.isErr:
-                debug info & ": Failed accessing storage root",
-                  root=acc.storageRoot.toStr, nErr=stats.nStoErr, error=rc.error
-              elif not rc.value:
-                break checkStoRoot
-              stats.nStoMissing.inc
-              trd.onStoMissing(key, path)           # (key,path) of account data
+          stats.nStoNodes += stats.nNodes           # collect storage stats
+          stats.nNodes = 0
+          stats.stoEla += (Moment.now() - start)
 
         if acc.codeHash != EMPTY_CODE_HASH:
           stats.nAccCode.inc
@@ -228,6 +213,79 @@ proc accNotifyRecur(
     occasionalMsg(trd.msgAt):
       traversingAccountsMsg(stats, info)
 
+proc accOnlyNotifyRecur(info: static[string]): WalkTrieRecCB =
+  return proc(
+      trd: TravDescRef;
+      att: AttType;
+      path: NibblesBuf;
+      key: seq[byte];
+      data: seq[byte];
+      depth: int;
+        ) =
+    template stats(): auto = trd.stats
+
+    stats.nAccNodes += stats.nNodes                 # collect account stats
+    stats.nNodes = 0
+
+    if stats.nAccDepth < depth:
+      stats.nAccDepth = depth
+
+    case att:
+    of AttLeaf:
+      stats.nAccLeaf.inc
+
+      block forAccount:
+        let acc = data.decodeAccount().valueOr:
+          stats.nAccErr.inc
+          break forAccount
+
+        var treatAccAsDangling = false
+        if acc.storageRoot != EMPTY_ROOT_HASH:
+          stats.nAccSto.inc
+
+          # Check whether the storage root has an entry on the database
+          block checkStoRoot:
+            let rc = trd.db.hasStoKvt(acc.storageRoot.data)
+            if rc.isErr:
+              debug info & ": Failed accessing storage root",
+                root=acc.storageRoot.toStr, nErr=stats.nStoErr, error=rc.error
+            elif not rc.value:
+              break checkStoRoot
+            treatAccAsDangling = true
+            stats.nStoMissing.inc
+            trd.onStoMissing(key, path)             # (key,path) of account data
+
+        if acc.codeHash != EMPTY_CODE_HASH:
+          stats.nAccCode.inc
+
+          # Check whether the code has an entry on the codes list
+          block checkCodeHash:
+            let rc = trd.db.hasCodeKvt(acc.codeHash)
+            if rc.isErr:
+              debug info & ": Failed accessing byte code",
+                root=acc.codeHash.toStr, nErr=stats.nStoErr, error=rc.error
+            elif rc.value:
+              break checkCodeHash
+            stats.nCodeMissing.inc
+            trd.onCodeMissing(key, path)            # (key,path) of account data
+            treatAccAsDangling = true
+
+          occasionalMsg(trd.msgAt):
+            traversingCodeMsg(stats, info)
+
+        if treatAccAsDangling:                      # count as dangling leaf
+          stats.nAccDangl.inc
+
+    of AttDangling:
+      stats.nAccDangl.inc
+      trd.onAccDangl(key, path)
+
+    else:
+      stats.nAccErr.inc
+
+    occasionalMsg(trd.msgAt):
+      traversingAccountsMsg(stats, info)
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -240,7 +298,7 @@ proc sessionAnalyseTrieRecur*(
     onMissCode: OnDanglingCB;
     accAndStoOk: static[bool];
     info: static[string];
-      ): Result[Duration,AttType]
+      ): Result[WalkStats,AttType]
       {.deprecated: "Use sessionAnalyseTrie()".} =
   ## Async template (but not running async)
   ##
@@ -263,7 +321,11 @@ proc sessionAnalyseTrieRecur*(
       return err(ENoPivot)                          # => missing pivot, error
 
     root = pivot.root.Hash32
-    notify = accNotifyRecur(accAndStoOk, info)
+
+  when accAndStoOk:
+    let notify = accAndStoNotifyRecur info
+  else:
+    let notify = accOnlyNotifyRecur info
 
   template stats(): auto = trd.stats
   debug info & ": Start recursively analysing MPT"
@@ -277,7 +339,7 @@ proc sessionAnalyseTrieRecur*(
   stats.ela = Moment.now() - start
   allDoneMsg(stats, info)
 
-  ok(stats.ela)                                     # => ok, statistics
+  ok(stats)                                         # => ok, statistics
 
 # ------------------------------------------------------------------------------
 # End

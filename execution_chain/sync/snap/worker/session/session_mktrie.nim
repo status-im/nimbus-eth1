@@ -98,16 +98,16 @@ proc matchDanglingLink(
       return ok(true)
   ok(false)
 
-template updateDanglingPivotLinks(
+template updateDanglingLinks(
     session: MkTrieSession;
     info: static[string];
       ): auto =
   ## Async template
   ##
-  var bodyRc = Result[void,int].err(0)
+  var bodyRc = Result[void,AttType].err(EOtherError)
   block body:
     session.ctx.sessionAnalyseAccounts(info).isOkOr:
-      bodyRc = typeof(bodyRc).err((error[1]))
+      bodyRc = typeof(bodyRc).err(error)
       break body
     bodyRc = typeof(bodyRc).ok()
   bodyRc
@@ -407,8 +407,8 @@ template sessionMkTrie*(
         discard session.db.putStateData(state)
 
       if stateInx < nStates-1 and mergedOk:         # did something at all?
-        session.updateDanglingPivotLinks(info).isOkOr:
-          error info & ": Accounts dangling links for pivot failed",
+        session.updateDanglingLinks(info).isOkOr:
+          error info & ": Failed calculating dangling account links",
             stateInx, nStates, root, nErrors=error
           break body                                # makes no sense to proceed
 
