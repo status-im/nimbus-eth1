@@ -391,15 +391,17 @@ template contains(s: var LruCache, key: auto): bool =
   ## Return true iff key can be found in cache - does not update item position
   s.contains(subhash(key), key)
 
-proc del(s: var LruCache, subhash: uint32, key: auto) =
+proc del(s: var LruCache, subhash: uint32, key: auto): bool {.discardable.} =
+  ## Returns true if an item was actually removed from the cache.
   if s.used == 0:
-    return
+    return false
 
   let index = s.tableDel(subhash, key).valueOr:
-    return
+    return false
 
   s.moveToBack(index)
   s.used -= 1
+  true
 
 template del(s: var LruCache, key: auto) =
   ## Remove item from cache, if present - does nothing if it was missing
@@ -523,12 +525,16 @@ iterator putWithEvicted[K, V](
   for v in s.putWithEvicted(subhash(key), key, value):
     yield v
 
-proc put(s: var LruCache, subhash: uint32, key: auto, value: auto) =
+proc put(
+    s: var LruCache, subhash: uint32, key: auto, value: auto
+): bool {.discardable.} =
+  ## Returns true if `s.len` increased (a new entry occupied a free slot), false
+  ## if the put replaced an existing entry or evicted the LRU item.
   if s.used + 1 >= s.nodesLen:
     s.grow(uint32(min(s.capacity, targetLen(s.used)) + 1))
 
   if s.nodesLen == 0:
-    return # capacity was 0, nothing to do
+    return false # capacity was 0, nothing to do
 
   let bucket = s.tableBucket(subhash, key)
   if bucket.isSome():
@@ -536,7 +542,7 @@ proc put(s: var LruCache, subhash: uint32, key: auto, value: auto) =
     let index = s.buckets[bucket[]].index
     s.nodes[index].value = value
     s.moveToFront(index)
-    return
+    return false
 
   # Inserting a new item, reusing the tail slot
   let last = s.nodes[0].prev
@@ -544,13 +550,16 @@ proc put(s: var LruCache, subhash: uint32, key: auto, value: auto) =
     # Below capacity - tail is a free slot (freshly grown or previously
     # deleted), no eviction needed.
     s.used += 1
+    result = true
   else:
     # At capacity - tail holds the LRU item; evict it from the lookup table.
     let evicted = s.tableBucket(s.nodes[last].key)
     if evicted.isSome() and s.buckets[evicted[]].index == last:
       toOpenArray(s.buckets, 0, s.bucketsLen - 1).tableDel(evicted[])
+      # result stays false: one evicted, one inserted, net length unchanged
     else:
       s.used += 1
+      result = true
 
   let node = addr s.nodes[last]
   node[].key = key
@@ -588,7 +597,7 @@ type
   Shard[K, V] = object
     lock {.align: CACHE_LINE_SIZE.}: ReadWriteLock
     cache: LruCache[K, V]
-    usedCount: Atomic[int]
+    usedCount {.align: CACHE_LINE_SIZE.}: Atomic[int]
 
   ConcurrentLruCache*[K, V] = object
     shards: ptr UncheckedArray[Shard[K, V]] # 2 ^ shardBits shards
@@ -744,9 +753,7 @@ proc get*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
 
 proc put*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V) =
   withShardWrite(lru, key):
-    let oldLen = s.cache.len
-    s.cache.put(sh, key, val)
-    if s.cache.len != oldLen:
+    if s.cache.put(sh, key, val):
       s.usedCount.store(s.cache.len, moRelaxed)
 
 proc pop*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
@@ -766,7 +773,5 @@ proc refresh*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V): bool =
 
 proc del*[K, V](lru: var ConcurrentLruCache[K, V], key: K) =
   withShardWrite(lru, key):
-    let oldLen = s.cache.len
-    s.cache.del(sh, key)
-    if s.cache.len != oldLen:
+    if s.cache.del(sh, key):
       s.usedCount.store(s.cache.len, moRelaxed)
