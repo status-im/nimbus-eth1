@@ -71,7 +71,7 @@ template storageRecover(
 
         # Print keep alive messages and allow thread switch
         let rc = session.sessionTicker(info):
-          debug info & ": Recovering states cache..", stateInx, nStates,
+          debug info & ": Recovering storage slots..", stateInx, nStates,
             root=state.rootStr
         if rc.isSome():
           break body
@@ -197,7 +197,7 @@ template sessionResume*(
 
         # Print keep alive messages and allow thread switch
         let rc = session.sessionTicker(info):
-          debug info & ": Recovering states cache..", stateInx, nStates,
+          debug info & ": Recovering accounts..", stateInx, nStates,
             root=state.rootStr
         if rc.isSome():
           break body                                # system termination?

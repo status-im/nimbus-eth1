@@ -31,15 +31,15 @@ type
     EPutError
     EOtherError                                     # any other error
 
-  OnDanglingCB* = proc(key: seq[byte], path: NibblesBuf) {.gcsafe, raises:[].}
+  OnDanglingCB* = proc(key, path: openArray[byte]) {.gcsafe, raises:[].}
     ## Closure function to perform bespoke actions when a dangling link or
     ## a completely missing sub-MPT is found.
 
-  TravNotifyCB* = proc(
-    att: AttType, path: NibblesBuf, key, data: seq[byte], depth: int
-      ) {.gcsafe, raises: [].}
-    ## Closure function used as call back when analysing an MPT. This
-    ## function is involved whenever there is something *interesting*
+  TravNotifyCB* =
+      proc(att: AttType, path, key, data: openArray[byte], depth: int
+        ) {.gcsafe, raises: [].}
+    ## Internal closure function used as call back when analysing an MPT.
+    ## This function is involved whenever there is something *interesting*
     ## found (e.g. dangling link, leaf node.)
     ##
     ## Intended for debugging, mainly
@@ -88,7 +88,7 @@ type
 # Public helpers
 # ------------------------------------------------------------------------------
 
-func decodeAccount*(pyl: seq[byte]): Opt[Account] =
+func decodeAccount*(pyl: openArray[byte]): Opt[Account] =
   try:
     var acc = rlp.decode(pyl, Account)
     return ok(move acc)
@@ -122,7 +122,7 @@ template traversingStorageMsg*(
     stats: WalkStats;
     info: static[string];
       ): untyped =
-  trace info & ": Traversing storage slots..",
+  trace info & ": Collecting storage slots..",
     nMissing=stats.nStoMissing, nDangl=stats.nStoDangl, nSlots=stats.nStoLeaf,
     nDepth=stats.nStoDepth, nErr=stats.nStoErr
 
@@ -130,16 +130,21 @@ template traversingCodeMsg*(
     stats: WalkStats;
     info: static[string];
       ): untyped =
-  trace info & ": Handling codes..",
+  trace info & ": Collecting codes..",
     nMissing=stats.nCodeMissing, nCodes=stats.nAccCode
 
 template traversingAccountsMsg*(
     stats: WalkStats;
     info: static[string];
       ): untyped =
-  trace info & ": Traversing accounts..",
+  trace info & ": Collecting accounts..",
     nDangl=stats.nAccDangl, nAccount=stats.nAccLeaf, nDepth=stats.nAccDepth,
     nStorage=stats.nAccSto, nCode=stats.nAccCode, nErr=stats.nAccErr
+
+template startTraversingMsg*(
+    info: static[string];
+      ): untyped =
+  trace info & ": Analysing MPT.."
 
 template allDoneMsg*(
     stats: WalkStats;

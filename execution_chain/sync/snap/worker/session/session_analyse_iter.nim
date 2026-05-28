@@ -146,36 +146,39 @@ template traverseMpt(
         node: seq[byte]                             # node from DB
 
       block hideSomeSettings:
-        template inx(): auto = stack.top.last       # top entry field
-        template links(): auto = stack.top.links    # ditto
-        template parent(): auto = stack.top.parent  # ..
+        template topInx(): auto = stack.top.last    # top entry field
+        template topLinks(): auto = stack.top.links # ditto
+        template topParent(): auto = stack.top.parent
 
         # Check whether there is a new link available
-        inx.inc                                     # set to next item index
-        if 15 < inx or links[inx].key.len == 0:     # no more links?
+        topInx.inc                                  # set to next item index
+        if 15 < topInx or
+           topLinks[topInx].key.len == 0:           # no more links?
           stack.pop()                               # pop from stack
           continue
 
         depth = stack.len - 2                       # info for call backs
-        path = parent.path & links[inx].pfx         # path from stack
-        key = links[inx].key                        # key from stack
-        node = get(trd.db, key).valueOr:             # node from DB
-          notify(EGetError, trd, EmptyPath, key, EmptyBlob, depth, info)
+        path = topParent.path & topLinks[topInx].pfx # path from stack
+        key = topLinks[topInx].key                  # key from stack
+        node = get(trd.db, key).valueOr:            # node from DB
+          notify(EGetError, trd, EmptyBlob, key, EmptyBlob, depth, info)
           continue
 
         if node.len == 0:                           # dangling link?
-          if parent.node.len == 0:                  # fail to resolve `root`?
+          if topParent.node.len == 0:               # fail to resolve `root`?
             doAssert key == @(root.data)
-            notify(ENoRoot, trd, EmptyPath, key, EmptyBlob, depth, info)
+            notify(ENoRoot, trd, EmptyBlob, key, EmptyBlob, depth, info)
             bodyRc = typeof(bodyRc).err(ENoRoot)    # => missing root, error
             break body
-          notify(AttDangling, trd, path, key, EmptyBlob, depth, info)
+          notify(AttDangling, trd,
+            path.toHexPrefix(false).data(), key, EmptyBlob, depth, info)
           continue
 
         # Allow thread switch when enabled
         when 0 < info.len:
           runErrand(trd, info, code).isOkOr:
-            notify(ECancelled, trd, path, key, node, depth, info)
+            notify(ECancelled, trd,
+              path.toHexPrefix(false).data(), key, node, depth, info)
             bodyRc = typeof(bodyRc).err(ECancelled) # => cancel, error
             break body
 
@@ -195,7 +198,8 @@ template traverseMpt(
 
           if isLeaf:                                # notify about leaf
             let data = pyl.read seq[byte]
-            notify(AttLeaf, trd, path & pfx, key, data, depth+1, info)
+            notify(AttLeaf, trd,
+              (path & pfx).getBytes(), key, data, depth+1, info)
             continue
 
           # Initialse `link[]` data on `newTop` and push on stack
@@ -213,15 +217,18 @@ template traverseMpt(
 
           # Push on stack (or error)
           if nLnk == 0:
-            notify(ENoBranch, trd, path, key, node, depth, info)
+            notify(ENoBranch, trd,
+              path.toHexPrefix(false).data(), key, node, depth, info)
           else:
             stack.push newTop
 
         else:
-          notify(ERlpList, trd, path, key, node, depth, info)
+          notify(ERlpList, trd,
+            path.toHexPrefix(false).data(), key, node, depth, info)
 
       except RlpError:
-        notify(ERlpExcept, trd, path, key, node, depth, info)
+        notify(ERlpExcept, trd,
+          path.toHexPrefix(false).data(), key, node, depth, info)
       # End `while()`
 
     bodyRc = typeof(bodyRc).ok()
@@ -235,9 +242,9 @@ template traverseMpt(
 template stoNotify(
     att: static[AttType];
     trd: TravDescRef;
-    path: NibblesBuf;
-    key: seq[byte];
-    data: seq[byte];
+    path: openArray[byte];
+    key: openArray[byte];
+    data: openArray[byte];
     depth: int;
     info: static[string];
       ) =
@@ -264,9 +271,9 @@ template stoNotify(
 template accAndStoNotify(
     att: static[AttType];
     trd: TravDescRef;
-    path: NibblesBuf;
-    key: seq[byte];
-    data: seq[byte];
+    path: openArray[byte];
+    key: openArray[byte];
+    payload: openArray[byte];                       # node or payload
     depth: int;
     info: static[string];
       ) =
@@ -282,7 +289,7 @@ template accAndStoNotify(
     when att == AttLeaf:
       stats.nAccLeaf.inc
 
-      let acc = data.decodeAccount().valueOr:
+      let acc = payload.decodeAccount().valueOr:
         stats.nAccErr.inc
         break body
 
@@ -332,9 +339,9 @@ template accAndStoNotify(
 template accOnlyNotify(
     att: static[AttType];
     trd: TravDescRef;
-    path: NibblesBuf;
-    key: seq[byte];
-    payload: seq[byte];                             # node or payload
+    path: openArray[byte];
+    key: openArray[byte];
+    payload: openArray[byte];                       # node or payload
     depth: int;
     info: static[string];
       ) =
@@ -354,6 +361,7 @@ template accOnlyNotify(
         stats.nAccErr.inc
         break body
 
+      var treatAccAsDangling = false
       if acc.storageRoot != EMPTY_ROOT_HASH:
         stats.nAccSto.inc
 
@@ -365,6 +373,7 @@ template accOnlyNotify(
               root=acc.storageRoot.toStr, nErr=stats.nStoErr, error=rc.error
           elif not rc.value:
             break checkStoRoot
+          treatAccAsDangling = true
           stats.nStoMissing.inc
           trd.onStoMissing(key, path)               # (key,path) of account data
 
@@ -379,8 +388,12 @@ template accOnlyNotify(
               root=acc.codeHash.toStr, nErr=stats.nStoErr, error=rc.error
           elif rc.value:
             break checkCodeHash
+          treatAccAsDangling = true
           stats.nCodeMissing.inc
           trd.onCodeMissing(key, path)              # (key,path) of account data
+
+      if treatAccAsDangling:                        # count as dangling leaf
+        stats.nAccDangl.inc
 
     elif att == AttDangling:
       stats.nAccDangl.inc
@@ -408,11 +421,11 @@ template sessionAnalyseTrieIter*(
   ##
   ## Traverse (depth first) an MPT.
   ##
-  var bodyRc = Result[Duration,AttType].err(EOtherError)
+  var bodyRc = Result[WalkStats,AttType].err(EOtherError)
   block body:
     let
       start = Moment.now()
-      blindCB = proc(key: seq[byte], path: NibblesBuf) = discard
+      blindCB = proc(key, path: openArray[byte]) = discard
       trd = TravDescRef(
         ctx:           cty,
         db:            cty.pool.mptAsm,
@@ -431,7 +444,7 @@ template sessionAnalyseTrieIter*(
       stateRoot = pivot.root.Hash32
 
     template stats(): auto = trd.stats
-    debug info & ": Start analysing MPT"
+    startTraversingMsg(info)
 
     when accAndStoOk:
       let rc = traverseMpt(trd, stateRoot, getAccKvt, accAndStoNotify, info):
@@ -450,7 +463,7 @@ template sessionAnalyseTrieIter*(
     stats.ela = (Moment.now() - start)
     allDoneMsg(stats, info)
 
-    bodyRc = typeof(bodyRc).ok(stats.ela)           # done, ok
+    bodyRc = typeof(bodyRc).ok(stats)               # done, ok
     # End `block body`
 
   bodyRc                                            # return code

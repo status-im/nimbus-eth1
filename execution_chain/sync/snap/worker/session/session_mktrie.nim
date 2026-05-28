@@ -98,16 +98,16 @@ proc matchDanglingLink(
       return ok(true)
   ok(false)
 
-template updateDanglingPivotLinks(
+template updateDanglingLinks(
     session: MkTrieSession;
     info: static[string];
       ): auto =
   ## Async template
   ##
-  var bodyRc = Result[void,int].err(0)
+  var bodyRc = Result[void,AttType].err(EOtherError)
   block body:
     session.ctx.sessionAnalyseAccounts(info).isOkOr:
-      bodyRc = typeof(bodyRc).err((error[1]))
+      bodyRc = typeof(bodyRc).err(error)
       break body
     bodyRc = typeof(bodyRc).ok()
   bodyRc
@@ -209,8 +209,8 @@ template mkCodesList(
         break body
 
       for (key,val) in w.codes:
-        let hash = CodeHash(val.distinctBase.keccak256.data)
-        if hash != key:
+        let hash = val.distinctBase.keccak256
+        if hash != Hash32(key):
           error info & ": Code key mismatch", stateInx, nStates, root,
             distance, key=key.toStr, expected=hash.toStr,
             nData=val.to(seq[byte]).len
@@ -276,7 +276,7 @@ template mkTrieImpl(
     # Check whether the `dangling[]` cache is up to date. If so, then
     # check current MPT accounts package against current dangling cache.
     let kvPairs = mpt.kvPairs()
-    block:
+    if not session.isPivot:
       let rc = session.matchDanglingLink kvPairs.mapIt(it[0])
       if rc.isErr:
         chronicles.`error` info & ": Error accessing dangling pivot links",
@@ -362,10 +362,10 @@ template sessionMkTrie*(
     # Sort states by its distance from pivot, smallest distance first
     byDist.sort proc(x,y: WalkStateData): int = cmp(x.dist pivot,y.dist pivot)
 
-    # Reset MPT data cache if download sample tagging has changed
-    if byDist[0].tag != PivotOnTrie:
-      if byDist[0].tag != Untagged:                 # job might take some time
-        chronicles.info info & ": Clearing state accounts cache", nStates
+    # If necessary, update state data record pretending the cache is empty if
+    # the pivot state tag has changed. Otherwise proceed with an interrupted
+    # session with the `Untagged` states.
+    if byDist[0].tag == OnTrie:                     # stored pivot has changed?
       for n in 0 ..< byDist.len:
         byDist[n].tag = Untagged
 
@@ -407,8 +407,8 @@ template sessionMkTrie*(
         discard session.db.putStateData(state)
 
       if stateInx < nStates-1 and mergedOk:         # did something at all?
-        session.updateDanglingPivotLinks(info).isOkOr:
-          error info & ": Accounts dangling links for pivot failed",
+        session.updateDanglingLinks(info).isOkOr:
+          error info & ": Failed calculating dangling account links",
             stateInx, nStates, root, nErrors=error
           break body                                # makes no sense to proceed
 

@@ -126,11 +126,11 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
     of SnapAnalyse:
       # TBD                                         # clear analytics cache
 
-      let ela {.used.} = ctx.sessionAnalyseFullTrie(info).valueOr:
+      let stats {.used.} = ctx.sessionAnalyseFullTrie(info).valueOr:
         break body                                  # shutdown?
 
       debug info & ": partial MPT analysed",
-        ela=ela.toStr, syncState=ctx.syncState
+        ela=stats.ela.toStr, syncState=ctx.syncState
 
     of SnapHealing:                                 # TBD ..
       warn info & ": Healing not yet implemented"

@@ -1033,6 +1033,12 @@ proc putStoKvt*(
 proc delStoKvt*(db: MptAsmRef, key: openArray[byte]): DelResult =
   db.delAtMost33(StoKvt, key)
 
+proc clearStoKvt*(db: MptAsmRef): DelResult =
+  for (key,_) in db.adb.colWalkKvt @[byte StoKvt]:
+    db.delAtMost33(StoKvt, key).isOkOr:
+      return err(error)
+  ok()
+
 iterator walkStoKvt*(db: MptAsmRef): WalkKvt =
   for (key,value) in db.adb.colWalkKvt @[byte StoKvt]:
     yield (key,value)
@@ -1054,6 +1060,12 @@ proc putCodeKvt*(db: MptAsmRef; cdHash: CodeHash; data: CodeItem): PutResult =
 
 proc delCodeKvt*(db: MptAsmRef, hash: Hash32): DelResult =
   db.del33(CodeKvt, hash)
+
+proc clearCodeKvt*(db: MptAsmRef): DelResult =
+  for (key,_) in db.adb.colWalkKvt @[byte CodeKvt]:
+    db.delAtMost33(CodeKvt, key).isOkOr:
+      return err(error)
+  ok()
 
 iterator walkCodeKvt*(db: MptAsmRef): WalkKvt =
   for (key,value) in db.adb.colWalkKvt @[byte CodeKvt]:
