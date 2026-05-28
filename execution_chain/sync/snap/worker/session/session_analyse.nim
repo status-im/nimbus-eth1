@@ -9,7 +9,7 @@
 # except according to those terms.
 
 import
-  pkg/[chronos, chronicles, eth/trie/nibbles],
+  pkg/[chronos, chronicles, eth/trie/nibbles, stew/byteutils],
   ./[session_analyse_desc, session_analyse_iter, session_analyse_recur],
   ../[mpt, worker_desc]
 
@@ -46,9 +46,10 @@ proc getDnglAccCB(
     err: ptr int;
     info: static[string];
       ): OnDanglingCB =
-  proc(key: seq[byte], path: NibblesBuf) =
-    db.putAccDnglKvt(key, path.toHexPrefix(false).data()).isOkOr:
-      error info & ": Error caching dangling account links", `error`=error
+  proc(key, path: openArray[byte]) =
+    db.putAccDnglKvt(key, path).isOkOr:
+      error info & ": Error caching dangling account links",
+        key=key.toHex, path=path.toHex, `error`=error
       err[].inc
 
 proc getDnglStoCB(
@@ -56,9 +57,10 @@ proc getDnglStoCB(
     err: ptr int;
     info: static[string];
       ): OnDanglingCB =
-  proc(key: seq[byte], path: NibblesBuf) =
-    db.putStoDnglKvt(key, path.toHexPrefix(false).data()).isOkOr:
-      error info & ": Error caching dangling slot links",`error`=error
+  proc(key, path: openArray[byte]) =
+    db.putStoDnglKvt(key, path).isOkOr:
+      error info & ": Error caching dangling slot links",
+        key=key.toHex, path=path.toHex, `error`=error
       err[].inc
 
 proc getDnglCodeCB(
@@ -66,9 +68,10 @@ proc getDnglCodeCB(
     err: ptr int;
     info: static[string];
       ): OnDanglingCB =
-  proc(key: seq[byte], path: NibblesBuf) =
-    db.putCodeDnglKvt(key, path.toHexPrefix(false).data()).isOkOr:
-      error info & ": Error caching dangling slot links", `error`=error
+  proc(key, path: openArray[byte]) =
+    db.putCodeDnglKvt(key, path).isOkOr:
+      error info & ": Error caching dangling slot links",
+        key=key.toHex, path=path.toHex, `error`=error
       err[].inc
 
 # ------------------------------------------------------------------------------
