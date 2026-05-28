@@ -45,13 +45,13 @@ proc rollback*(rdb: var RdbInst, session: SharedWriteBatchRef) =
     rdb.rdVtxLru.reset()
     rdb.rdBranchLru.reset()
     if rdb.threadSafeCaches:
-      rdb.rdKeyLru.init(rdb.rdKeySize)
-      rdb.rdVtxLru.init(rdb.rdVtxSize)
-      rdb.rdBranchLru.init(rdb.rdBranchSize)
+      rdb.rdKeyLru.init(rdb.rdKeySize, initialSize = 0)
+      rdb.rdVtxLru.init(rdb.rdVtxSize, initialSize = 0)
+      rdb.rdBranchLru.init(rdb.rdBranchSize, initialSize = 0)
     else:
-      rdb.rdKeyLru.init(rdb.rdKeySize, shardBits = 0, threadSafe = false)
-      rdb.rdVtxLru.init(rdb.rdVtxSize, shardBits = 0, threadSafe = false)
-      rdb.rdBranchLru.init(rdb.rdBranchSize, shardBits = 0, threadSafe = false)
+      rdb.rdKeyLru.init(rdb.rdKeySize, initialSize = 0, shardBits = 0, threadSafe = false)
+      rdb.rdVtxLru.init(rdb.rdVtxSize, initialSize = 0, shardBits = 0, threadSafe = false)
+      rdb.rdBranchLru.init(rdb.rdBranchSize, initialSize = 0, shardBits = 0, threadSafe = false)
     session.close()
 
 proc commit*(rdb: var RdbInst, session: SharedWriteBatchRef): Result[void,(AristoError,string)] =

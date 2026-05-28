@@ -94,11 +94,11 @@ proc initInstance*(
     db.txRef.lock.init()
 
   if threadSafeCaches:
-    db.accLeaves.init(accLeavesLruSize)
-    db.stoLeaves.init(stoLeavesLruSize)
+    db.accLeaves.init(accLeavesLruSize, initialSize = 0)
+    db.stoLeaves.init(stoLeavesLruSize, initialSize = 0)
   else:
-    db.accLeaves.init(accLeavesLruSize, shardBits = 0, threadSafe = false)
-    db.stoLeaves.init(stoLeavesLruSize, shardBits = 0, threadSafe = false)
+    db.accLeaves.init(accLeavesLruSize, initialSize = 0, shardBits = 0, threadSafe = false)
+    db.stoLeaves.init(stoLeavesLruSize, initialSize = 0, shardBits = 0, threadSafe = false)
   db.maxSnapshots = maxSnapshots
   db.parallelStateRootComputation = parallelStateRootComputation
 
