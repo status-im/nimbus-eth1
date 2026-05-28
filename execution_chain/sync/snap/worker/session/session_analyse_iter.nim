@@ -146,25 +146,26 @@ template traverseMpt(
         node: seq[byte]                             # node from DB
 
       block hideSomeSettings:
-        template inx(): auto = stack.top.last       # top entry field
-        template links(): auto = stack.top.links    # ditto
-        template parent(): auto = stack.top.parent  # ..
+        template topInx(): auto = stack.top.last    # top entry field
+        template topLinks(): auto = stack.top.links # ditto
+        template topParent(): auto = stack.top.parent
 
         # Check whether there is a new link available
-        inx.inc                                     # set to next item index
-        if 15 < inx or links[inx].key.len == 0:     # no more links?
+        topInx.inc                                  # set to next item index
+        if 15 < topInx or
+           topLinks[topInx].key.len == 0:           # no more links?
           stack.pop()                               # pop from stack
           continue
 
         depth = stack.len - 2                       # info for call backs
-        path = parent.path & links[inx].pfx         # path from stack
-        key = links[inx].key                        # key from stack
-        node = get(trd.db, key).valueOr:             # node from DB
+        path = topParent.path & topLinks[topInx].pfx # path from stack
+        key = topLinks[topInx].key                  # key from stack
+        node = get(trd.db, key).valueOr:            # node from DB
           notify(EGetError, trd, EmptyBlob, key, EmptyBlob, depth, info)
           continue
 
         if node.len == 0:                           # dangling link?
-          if parent.node.len == 0:                  # fail to resolve `root`?
+          if topParent.node.len == 0:               # fail to resolve `root`?
             doAssert key == @(root.data)
             notify(ENoRoot, trd, EmptyBlob, key, EmptyBlob, depth, info)
             bodyRc = typeof(bodyRc).err(ENoRoot)    # => missing root, error
