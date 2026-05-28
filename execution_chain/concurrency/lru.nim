@@ -602,6 +602,7 @@ type
   ConcurrentLruCache*[K, V] = object
     shards: ptr UncheckedArray[Shard[K, V]] # 2 ^ shardBits shards
     shardBits: int
+    threadSafe: bool
     state: State
 
 func defaultShardBits*(cpuCount: int): int =
@@ -613,10 +614,17 @@ func defaultShardBits*(cpuCount: int): int =
     inc bits
   bits
 
+template numShards(shardBits: int): int =
+  1 shl shardBits
+
+template numShards*[K, V](lru: ConcurrentLruCache[K, V]): int =
+  numShards(lru.shardBits)
+
 proc init*[K, V](
     lru: var ConcurrentLruCache[K, V],
     capacity: int,
     shardBits: int = defaultShardBits(countProcessors()),
+    threadSafe: bool = true,
 ) =
   # init is not thread safe and so the caller must ensure that no other threads
   # are using the cache while initialising it.
@@ -624,20 +632,24 @@ proc init*[K, V](
     doAssert supportsCopyMem(K), "K must be a non-GC type"
     doAssert supportsCopyMem(V), "V must be a non-GC type"
   doAssert lru.state == State.UNINITIALIZED
-  doAssert shardBits >= 1 and shardBits <= 30
+  doAssert shardBits >= 0 and shardBits <= 30
+  if not threadSafe:
+    doAssert shardBits == 0 # Enforce single shard for single threaded mode
 
-  let shardCount = 1 shl shardBits
+  let shardCount = numShards(shardBits)
   # per-shard capacity (ceiling div); total effective capacity is shardCapacity * shardCount
   let shardCapacity = (capacity + shardCount - 1) div shardCount
 
   lru.shards =
     cast[ptr UncheckedArray[Shard[K, V]]](createShared(Shard[K, V], shardCount))
   lru.shardBits = shardBits
+  lru.threadSafe = threadSafe
 
   for i in 0 ..< shardCount:
-    lru.shards[i].lock.init()
     lru.shards[i].cache = LruCache[K, V].init(shardCapacity)
-    lru.shards[i].usedCount.store(0, moRelaxed)
+    if threadSafe:
+      lru.shards[i].lock.init()
+      lru.shards[i].usedCount.store(0, moRelaxed)
 
   lru.state = State.INITIALIZED
 
@@ -645,11 +657,11 @@ proc dispose*[K, V](lru: var ConcurrentLruCache[K, V]) =
   # dispose is not thread safe and so the caller must ensure that no other threads
   # are using the cache while disposing it.
   if lru.state == State.INITIALIZED:
-    let shardCount = 1 shl lru.shardBits
-    for i in 0 ..< shardCount:
-      lru.shards[i].lock.dispose()
+    for i in 0 ..< lru.numShards():
       lru.shards[i].cache.dispose()
-
+      if lru.threadSafe:
+        lru.shards[i].lock.dispose()
+      
     deallocShared(lru.shards)
     lru.shards = nil
     lru.state = State.DISPOSED
@@ -668,12 +680,15 @@ template toShardIdx(h: Hash, shardBits: int): int =
   # Pick the shard from the top shardBits bits of the hash so that the shard
   # selection bits do not overlap with the low bits that the LruCache uses for
   # bucket selection inside the shard.
-  when sizeof(h) == sizeof(uint32):
-    int(cast[uint32](h) shr (32 - shardBits))
+  if shardBits == 0:
+    0
   else:
-    static:
-      assert sizeof(h) == sizeof(uint64)
-    int(cast[uint64](h) shr (64 - shardBits))
+    when sizeof(h) == sizeof(uint32):
+      int(cast[uint32](h) shr (32 - shardBits))
+    else:
+      static:
+        assert sizeof(h) == sizeof(uint64)
+      int(cast[uint64](h) shr (64 - shardBits))
 
 template withShardRead[K, V](
     lru: ConcurrentLruCache[K, V], key: K, body: untyped
@@ -682,11 +697,14 @@ template withShardRead[K, V](
     h = hash(key)
     sh {.inject.} = h.toSubhash()
     s {.inject.} = addr lru.shards[h.toShardIdx(lru.shardBits)]
-  s.lock.lockRead()
-  try:
+  if lru.threadSafe:
+    s.lock.lockRead()
+    try:
+      body
+    finally:
+      s.lock.unlockRead()
+  else:
     body
-  finally:
-    s.lock.unlockRead()
 
 template withShardWrite[K, V](
     lru: ConcurrentLruCache[K, V], key: K, body: untyped
@@ -695,14 +713,14 @@ template withShardWrite[K, V](
     h = hash(key)
     sh {.inject.} = h.toSubhash()
     s {.inject.} = addr lru.shards[h.toShardIdx(lru.shardBits)]
-  s.lock.lockWrite()
-  try:
+  if lru.threadSafe:
+    s.lock.lockWrite()
+    try:
+      body
+    finally:
+      s.lock.unlockWrite()
+  else:
     body
-  finally:
-    s.lock.unlockWrite()
-
-template numShards*[K, V](lru: ConcurrentLruCache[K, V]): int =
-  1 shl lru.shardBits
 
 template shardCapacity*[K, V](lru: var ConcurrentLruCache[K, V]): int =
   # No locking here because capacity is immutable for the ConcurrentLruCache type
@@ -714,15 +732,22 @@ func shardLenForKey*[K, V](lru: var ConcurrentLruCache[K, V], key: K): int =
   let
     h = hash(key)
     s = addr lru.shards[h.toShardIdx(lru.shardBits)]
-  s.usedCount.load(moRelaxed)
+  if lru.threadSafe:
+    s.usedCount.load(moRelaxed)
+  else:
+    s.cache.len
 
 template capacity*[K, V](lru: var ConcurrentLruCache[K, V]): int =
   lru.shardCapacity() * lru.numShards()
 
 func len*[K, V](lru: var ConcurrentLruCache[K, V]): int =
   var total = 0
-  for i in 0 ..< lru.numShards():
-    total += lru.shards[i].usedCount.load(moRelaxed)
+  if lru.threadSafe:
+    for i in 0 ..< lru.numShards():
+      total += lru.shards[i].usedCount.load(moRelaxed)
+  else:
+    for i in 0 ..< lru.numShards():
+      total += lru.shards[i].cache.len
   total
 
 func contains*[K, V](lru: var ConcurrentLruCache[K, V], key: K): bool =
@@ -739,6 +764,9 @@ proc get*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
     sh = h.toSubhash()
     s = addr lru.shards[h.toShardIdx(lru.shardBits)]
 
+  if not lru.threadSafe:
+    return s.cache.get(sh, key)
+
   var value: Opt[V]
   s.lock.withReadLock:
     value = s.cache.peek(sh, key)
@@ -753,13 +781,13 @@ proc get*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
 
 proc put*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V) =
   withShardWrite(lru, key):
-    if s.cache.put(sh, key, val):
+    if s.cache.put(sh, key, val) and lru.threadSafe:
       s.usedCount.store(s.cache.len, moRelaxed)
 
 proc pop*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
   withShardWrite(lru, key):
     let r = s.cache.pop(sh, key)
-    if r.isSome():
+    if r.isSome() and lru.threadSafe:
       s.usedCount.store(s.cache.len, moRelaxed)
     r
 
@@ -773,5 +801,5 @@ proc refresh*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V): bool =
 
 proc del*[K, V](lru: var ConcurrentLruCache[K, V], key: K) =
   withShardWrite(lru, key):
-    if s.cache.del(sh, key):
+    if s.cache.del(sh, key) and lru.threadSafe:
       s.usedCount.store(s.cache.len, moRelaxed)

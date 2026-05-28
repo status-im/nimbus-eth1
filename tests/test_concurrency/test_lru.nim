@@ -506,6 +506,37 @@ suite "ConcurrentLruCache Tests":
         lru.dispose()
       check lru.capacity() == 192
 
+  test "single shard":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(10, 0)
+    defer:
+      lru.dispose()
+
+    check:
+      lru.numShards() == 1
+      lru.shardCapacity() == 10
+      lru.capacity() == 10
+
+    for i in 0 ..< 10:
+      lru.put(i, i * 10)
+
+    check lru.len() == 10
+    for i in 0 ..< 10:
+      check lru.peek(i) == Opt.some(i * 10)
+      # all entries land in the only shard regardless of hash
+      check lru.shardLenForKey(i) == 10
+
+    # exceeding capacity evicts one item; total size stays at capacity
+    lru.put(100, 1000)
+    check:
+      lru.len() == 10
+      lru.contains(100)
+
+    lru.del(100)
+    check:
+      not lru.contains(100)
+      lru.len() == 9
+
   test "shard info":
     var lru: ConcurrentLruCache[int, int]
     lru.init(640, 6) # 10 per shard
@@ -606,3 +637,213 @@ suite "ConcurrentLruCache Tests":
       check lru.get(i) == Opt.none(int)
 
     check lru.len() == 0
+
+suite "ConcurrentLruCache Tests (threadSafe = false)":
+  test "init and dispose":
+    block:
+      var lru: ConcurrentLruCache[int, int]
+      lru.init(1000, shardBits = 0, threadSafe = false)
+      lru.dispose()
+      lru.reset()
+      lru.init(1000, shardBits = 0, threadSafe = false)
+      lru.dispose()
+
+    block:
+      var lru: ConcurrentLruCache[int, int]
+      lru.init(1000, shardBits = 0, threadSafe = false)
+      lru.put(1, 1)
+      lru.put(2, 2)
+      lru.dispose()
+      lru.reset()
+      lru.init(1000, shardBits = 0, threadSafe = false)
+      lru.put(1, 1)
+      lru.put(2, 2)
+      lru.dispose()
+
+  test "put and get":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000, shardBits = 0, threadSafe = false)
+    defer:
+      lru.dispose()
+
+    lru.put(1, 10)
+    lru.put(2, 20)
+    lru.put(3, 30)
+
+    check:
+      lru.get(1) == Opt.some(10)
+      lru.get(2) == Opt.some(20)
+      lru.get(3) == Opt.some(30)
+      lru.get(99) == Opt.none(int)
+
+  test "put overwrites existing key":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000, shardBits = 0, threadSafe = false)
+    defer:
+      lru.dispose()
+
+    lru.put(1, 10)
+    lru.put(1, 20)
+
+    check:
+      lru.get(1) == Opt.some(20)
+      lru.len() == 1
+
+  test "pop":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000, shardBits = 0, threadSafe = false)
+    defer:
+      lru.dispose()
+
+    lru.put(1, 10)
+    lru.put(2, 20)
+
+    let val = lru.pop(1)
+
+    check:
+      val == Opt.some(10)
+      not lru.contains(1)
+      lru.get(1) == Opt.none(int)
+      lru.contains(2)
+      lru.len() == 1
+
+  test "contains":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000, shardBits = 0, threadSafe = false)
+    defer:
+      lru.dispose()
+
+    lru.put(1, 10)
+
+    check:
+      lru.contains(1)
+      not lru.contains(2)
+
+  test "peek":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000, shardBits = 0, threadSafe = false)
+    defer:
+      lru.dispose()
+
+    lru.put(1, 10)
+
+    check:
+      lru.peek(1) == Opt.some(10)
+      lru.peek(99) == Opt.none(int)
+
+  test "del":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000, shardBits = 0, threadSafe = false)
+    defer:
+      lru.dispose()
+
+    lru.put(1, 10)
+    lru.put(2, 20)
+    lru.del(1)
+
+    check:
+      not lru.contains(1)
+      lru.get(1) == Opt.none(int)
+      lru.contains(2)
+      lru.len() == 1
+
+    lru.del(99)
+    check lru.contains(2)
+
+  test "update":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000, shardBits = 0, threadSafe = false)
+    defer:
+      lru.dispose()
+
+    check not lru.update(1, 100)
+
+    lru.put(1, 10)
+
+    check lru.update(1, 100)
+    check lru.get(1) == Opt.some(100)
+
+  test "refresh":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000, shardBits = 0, threadSafe = false)
+    defer:
+      lru.dispose()
+
+    check not lru.refresh(1, 100)
+
+    lru.put(1, 10)
+
+    check lru.refresh(1, 100)
+    check lru.peek(1) == Opt.some(100)
+
+  test "len and capacity track internal cache":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(640, shardBits = 0, threadSafe = false)
+    defer:
+      lru.dispose()
+
+    check:
+      lru.len() == 0
+      lru.capacity() == 640
+
+    for i in 0 ..< 100:
+      lru.put(i, i)
+
+    check:
+      lru.len() == 100
+      lru.capacity() == 640
+
+    for i in 0 ..< 100:
+      lru.del(i)
+
+    check:
+      lru.len() == 0
+      lru.capacity() == 640
+
+  test "single shard eviction":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(10, 0, threadSafe = false)
+    defer:
+      lru.dispose()
+
+    check:
+      lru.numShards() == 1
+      lru.shardCapacity() == 10
+      lru.capacity() == 10
+
+    for i in 0 ..< 10:
+      lru.put(i, i * 10)
+
+    check lru.len() == 10
+    for i in 0 ..< 10:
+      check lru.peek(i) == Opt.some(i * 10)
+      check lru.shardLenForKey(i) == 10
+
+    # exceeding capacity evicts the LRU item; total size stays at capacity
+    lru.put(100, 1000)
+    check:
+      lru.len() == 10
+      lru.contains(100)
+      not lru.contains(0) # 0 was the LRU item
+
+  test "get promotes on every access":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(3, 0, threadSafe = false)
+    defer:
+      lru.dispose()
+
+    lru.put(1, 10)
+    lru.put(2, 20)
+    lru.put(3, 30)
+
+    # promote 1 to MRU on every get - inserting a new key must evict 2
+    # (the actual LRU), not 1
+    for _ in 0 ..< 5:
+      check lru.get(1) == Opt.some(10)
+
+    lru.put(4, 40)
+    check:
+      lru.contains(1)
+      not lru.contains(2)
+      lru.contains(3)
+      lru.contains(4)
