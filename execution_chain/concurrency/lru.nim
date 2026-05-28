@@ -696,14 +696,16 @@ template withShardRead[K, V](
   let
     h = hash(key)
     sh {.inject.} = h.toSubhash()
-    s {.inject.} = addr lru.shards[h.toShardIdx(lru.shardBits)]
+    
   if lru.threadSafe:
+    let s {.inject.} = addr lru.shards[h.toShardIdx(lru.shardBits)]
     s.lock.lockRead()
     try:
       body
     finally:
       s.lock.unlockRead()
   else:
+    let s {.inject.} = addr lru.shards[0]
     body
 
 template withShardWrite[K, V](
@@ -712,14 +714,16 @@ template withShardWrite[K, V](
   let
     h = hash(key)
     sh {.inject.} = h.toSubhash()
-    s {.inject.} = addr lru.shards[h.toShardIdx(lru.shardBits)]
+    
   if lru.threadSafe:
+    let s {.inject.} = addr lru.shards[h.toShardIdx(lru.shardBits)]
     s.lock.lockWrite()
     try:
       body
     finally:
       s.lock.unlockWrite()
   else:
+    let s {.inject.} = addr lru.shards[0]
     body
 
 template shardCapacity*[K, V](lru: var ConcurrentLruCache[K, V]): int =
@@ -741,14 +745,13 @@ template capacity*[K, V](lru: var ConcurrentLruCache[K, V]): int =
   lru.shardCapacity() * lru.numShards()
 
 func len*[K, V](lru: var ConcurrentLruCache[K, V]): int =
-  var total = 0
   if lru.threadSafe:
+    var total = 0
     for i in 0 ..< lru.numShards():
       total += lru.shards[i].usedCount.load(moRelaxed)
+    total  
   else:
-    for i in 0 ..< lru.numShards():
-      total += lru.shards[i].cache.len
-  total
+    lru.shards[0].cache.len
 
 func contains*[K, V](lru: var ConcurrentLruCache[K, V], key: K): bool =
   withShardRead(lru, key):
@@ -762,19 +765,26 @@ proc get*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
   let
     h = hash(key)
     sh = h.toSubhash()
-    s = addr lru.shards[h.toShardIdx(lru.shardBits)]
-
-  if not lru.threadSafe:
-    return s.cache.get(sh, key)
-
+    
   var value: Opt[V]
-  s.lock.withReadLock:
+
+  if lru.threadSafe:
+    let s = addr lru.shards[h.toShardIdx(lru.shardBits)]
+    s.lock.withReadLock:
+      value = s.cache.peek(sh, key)
+
+    if value.isSome():
+      inc tlsLruGetCounter
+      if (tlsLruGetCounter and SAMPLE_MASK) == 0'u32:
+        s.lock.withWriteLock:
+          discard s.cache.get(sh, key)
+  else:
+    let s = addr lru.shards[0]
     value = s.cache.peek(sh, key)
 
-  if value.isSome():
-    inc tlsLruGetCounter
-    if (tlsLruGetCounter and SAMPLE_MASK) == 0'u32:
-      s.lock.withWriteLock:
+    if value.isSome():
+      inc tlsLruGetCounter
+      if (tlsLruGetCounter and SAMPLE_MASK) == 0'u32:
         discard s.cache.get(sh, key)
 
   value
