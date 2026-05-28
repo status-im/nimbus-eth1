@@ -39,6 +39,7 @@ import
     test_rpc,
     test_snap,
     test_transaction_json,
+    test_transactions_receipts_storage,
     test_txpool,
     test_tx_frame_blobify,
     test_networking,
