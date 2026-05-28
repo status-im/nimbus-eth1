@@ -10,7 +10,33 @@
 
 {.used.}
 
-import std/sequtils, unittest2, taskpools, ../../execution_chain/concurrency/lru {.all.}
+import
+  std/[importutils, sequtils],
+  unittest2,
+  taskpools,
+  ../../execution_chain/concurrency/lru {.all.}
+
+privateAccess(LruCache)
+privateAccess(ConcurrentLruCache)
+privateAccess(Shard)
+
+func allocatedNodes[K, V](s: LruCache[K, V]): int =
+  s.nodesAllocatedLen
+
+func allocatedBuckets[K, V](s: LruCache[K, V]): int =
+  s.bucketsLen
+
+func shardAllocatedNodes[K, V](lru: ConcurrentLruCache[K, V], i: int): int =
+  if lru.threadSafe:
+    lru.shards[i].cache.allocatedNodes
+  else:
+    lru.cache.allocatedNodes
+
+func shardAllocatedBuckets[K, V](lru: ConcurrentLruCache[K, V], i: int): int =
+  if lru.threadSafe:
+    lru.shards[i].cache.allocatedBuckets
+  else:
+    lru.cache.allocatedBuckets
 
 type
   A = object
@@ -198,6 +224,70 @@ suite "LruCache Tests":
     check:
       not lru.contains(0)
       lru.contains(1)
+
+  test "initialSize preallocates":
+    block: # initialSize == capacity: allocation is capped at capacity+1
+      var lru = LruCache[int, int].init(1000, initialSize = 1000)
+      defer:
+        lru.dispose()
+
+      check:
+        lru.allocatedNodes == 1001
+        lru.allocatedBuckets == 2048
+
+      let nodesBefore = lru.allocatedNodes
+      let bucketsBefore = lru.allocatedBuckets
+
+      for i in 0 ..< 1000:
+        lru.put(i, i)
+      for i in 0 ..< 1000:
+        check lru.contains(i)
+
+      # No further grow during fill since initialSize == capacity
+      check:
+        lru.allocatedNodes == nodesBefore
+        lru.allocatedBuckets == bucketsBefore
+
+      lru.put(1000, 1000) # forces eviction of LRU (key 0)
+      check:
+        lru.len == 1000
+        not lru.contains(0)
+        lru.contains(1000)
+
+    block: # initialSize < capacity: allocation rounded up to power of two
+      var lru = LruCache[int, int].init(1000, initialSize = 100)
+      defer:
+        lru.dispose()
+
+      check:
+        lru.allocatedNodes == 128 # nextPowerOfTwo(101)
+        lru.allocatedBuckets == 128 # nextPowerOfTwo(ceil(101/0.8))
+
+      for i in 0 ..< 1000:
+        lru.put(i, i)
+      for i in 0 ..< 1000:
+        check lru.contains(i)
+
+      # Filling past initialSize forced reallocation up to the cap
+      check lru.allocatedNodes == 1001
+
+    block: # initialSize == 0 is the original lazy-allocation behaviour
+      var lru = LruCache[int, int].init(1000)
+      defer:
+        lru.dispose()
+      check:
+        lru.allocatedNodes == 0
+        lru.allocatedBuckets == 0
+
+    block: # initialSize == 0 with capacity == 0 is a no-op
+      var lru = LruCache[int, int].init(0, initialSize = 0)
+      defer:
+        lru.dispose()
+      check lru.allocatedNodes == 0
+
+  test "initialSize > capacity raises":
+    expect Defect:
+      discard LruCache[int, int].init(10, initialSize = 11)
 
   test "heterogenous lookup":
     var lru = LruCache[A, int].init(10)
@@ -459,56 +549,56 @@ suite "ConcurrentLruCache Tests":
   test "capacity calculation":
     block:
       var lru: ConcurrentLruCache[int, int]
-      lru.init(0, 6)
+      lru.init(0, shardBits = 6)
       defer:
         lru.dispose()
       check lru.capacity() == 0
 
     block:
       var lru: ConcurrentLruCache[int, int]
-      lru.init(63, 6)
+      lru.init(63, shardBits = 6)
       defer:
         lru.dispose()
       check lru.capacity() == 64
 
     block:
       var lru: ConcurrentLruCache[int, int]
-      lru.init(64, 6)
+      lru.init(64, shardBits = 6)
       defer:
         lru.dispose()
       check lru.capacity() == 64
 
     block:
       var lru: ConcurrentLruCache[int, int]
-      lru.init(65, 6)
+      lru.init(65, shardBits = 6)
       defer:
         lru.dispose()
       check lru.capacity() == 128
 
     block:
       var lru: ConcurrentLruCache[int, int]
-      lru.init(127, 6)
+      lru.init(127, shardBits = 6)
       defer:
         lru.dispose()
       check lru.capacity() == 128
 
     block:
       var lru: ConcurrentLruCache[int, int]
-      lru.init(128, 6)
+      lru.init(128, shardBits = 6)
       defer:
         lru.dispose()
       check lru.capacity() == 128
 
     block:
       var lru: ConcurrentLruCache[int, int]
-      lru.init(129, 6)
+      lru.init(129, shardBits = 6)
       defer:
         lru.dispose()
       check lru.capacity() == 192
 
   test "single shard":
     var lru: ConcurrentLruCache[int, int]
-    lru.init(10, 0)
+    lru.init(10, shardBits = 0)
     defer:
       lru.dispose()
 
@@ -539,7 +629,7 @@ suite "ConcurrentLruCache Tests":
 
   test "shard info":
     var lru: ConcurrentLruCache[int, int]
-    lru.init(640, 6) # 10 per shard
+    lru.init(640, shardBits = 6) # 10 per shard
     defer:
       lru.dispose()
 
@@ -550,6 +640,45 @@ suite "ConcurrentLruCache Tests":
 
     for i in 0 ..< 64:
       check lru.shardLenForKey(i) == 0
+
+  test "initialSize preallocates each shard":
+    block: # initialSize == capacity: every shard preallocated to shardCapacity+1
+      var lru: ConcurrentLruCache[int, int]
+      lru.init(800, initialSize = 800, shardBits = 3) # 100 per shard
+      defer:
+        lru.dispose()
+
+      for i in 0 ..< lru.numShards():
+        check:
+          lru.shardAllocatedNodes(i) == 101 # min(nextPowerOfTwo(101), 101)
+          lru.shardAllocatedBuckets(i) == 128
+
+    block: # initialSize < capacity: ceiling-divides per shard, rounded up
+      var lru: ConcurrentLruCache[int, int]
+      lru.init(800, initialSize = 80, shardBits = 3) # 10 per shard
+      defer:
+        lru.dispose()
+
+      for i in 0 ..< lru.numShards():
+        check:
+          lru.shardAllocatedNodes(i) == 16 # nextPowerOfTwo(11)
+          lru.shardAllocatedBuckets(i) == 16
+
+    block: # initialSize == 0 leaves shards unallocated
+      var lru: ConcurrentLruCache[int, int]
+      lru.init(800, shardBits = 3)
+      defer:
+        lru.dispose()
+
+      for i in 0 ..< lru.numShards():
+        check:
+          lru.shardAllocatedNodes(i) == 0
+          lru.shardAllocatedBuckets(i) == 0
+
+  test "initialSize > capacity raises":
+    var lru: ConcurrentLruCache[int, int]
+    expect Defect:
+      lru.init(640, initialSize = 641, shardBits = 6)
 
   test "concurrent put, get, peek, del":
     const
@@ -800,9 +929,42 @@ suite "ConcurrentLruCache Tests (threadSafe = false)":
       lru.len() == 0
       lru.capacity() == 640
 
+  test "initialSize preallocates":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000, initialSize = 1000, shardBits = 0, threadSafe = false)
+    defer:
+      lru.dispose()
+
+    check:
+      lru.shardAllocatedNodes(0) == 1001
+      lru.shardAllocatedBuckets(0) == 2048
+
+    let nodesBefore = lru.shardAllocatedNodes(0)
+    let bucketsBefore = lru.shardAllocatedBuckets(0)
+
+    for i in 0 ..< 1000:
+      lru.put(i, i)
+    for i in 0 ..< 1000:
+      check lru.contains(i)
+
+    check:
+      lru.shardAllocatedNodes(0) == nodesBefore
+      lru.shardAllocatedBuckets(0) == bucketsBefore
+
+    lru.put(1000, 1000)
+    check:
+      lru.len() == 1000
+      not lru.contains(0)
+      lru.contains(1000)
+
+  test "initialSize > capacity raises":
+    var lru: ConcurrentLruCache[int, int]
+    expect Defect:
+      lru.init(1000, initialSize = 1001, shardBits = 0, threadSafe = false)
+
   test "single shard eviction":
     var lru: ConcurrentLruCache[int, int]
-    lru.init(10, 0, threadSafe = false)
+    lru.init(10, shardBits = 0, threadSafe = false)
     defer:
       lru.dispose()
 
@@ -828,7 +990,7 @@ suite "ConcurrentLruCache Tests (threadSafe = false)":
 
   test "get promotes on every access":
     var lru: ConcurrentLruCache[int, int]
-    lru.init(3, 0, threadSafe = false)
+    lru.init(3, shardBits = 0, threadSafe = false)
     defer:
       lru.dispose()
 
