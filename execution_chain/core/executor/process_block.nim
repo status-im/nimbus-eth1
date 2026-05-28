@@ -18,7 +18,9 @@ import
   ../../transaction,
   ../../evm/state,
   ../../evm/types,
+  ../../evm/interpreter/gas_costs,
   ../../block_access_list/block_access_list_validation,
+  ../../concurrency/utils,
   ../dao,
   ../eip6110,
   ./calculate_reward,
@@ -26,43 +28,130 @@ import
   ./process_transaction,
   eth/common/[keys, transaction_utils],
   chronicles,
-  results
+  results,
+  stew/assign2
 
 when compileOption("threads"):
-  import taskpools
+  import std/atomics, taskpools
 
-  template withSenderParallel(txs: openArray[Transaction], body: untyped, taskpool: Taskpool) =
-    type Entry = (Signature, Hash32, Flowvar[Address])
+  type
+    Entry = object
+      sig: Signature
+      hash: Hash32
+      sender: Address
+      senderReady: Atomic[bool]
+      fut: Flowvar[bool]
 
-    proc recoverTask(e: ptr Entry): Address {.nimcall.} =
-      let pk = recover(e[][0], SkMessage(e[][1].data))
-      if pk.isOk():
-        pk[].to(Address)
-      else:
-        default(Address)
+    PrefetchCtx = object
+      cancel: Atomic[bool]
+      parent: Header
+      blockCtx: BlockContext
+      com: CommonRef
+      txFrame: CoreDbTxRef
 
-    var entries = newSeq[Entry](txs.len)
+  proc recoverAndPrefetchTask(
+      e: ptr Entry, ctx: ptr PrefetchCtx, tx: ptr Transaction): bool {.nimcall.} =
 
-    # Prepare signature recovery tasks for each transaction - for simplicity,
-    # we use `default(Address)` to signal sig check failure
+    # Recover the sender from the signature. `default(Address)` signals sig
+    # check failure.
+    let
+      pk = recover(e[].sig, SkMessage(e[].hash.data))
+      sender =
+        if pk.isOk(): pk[].to(Address)
+        else: default(Address)
+    e[].sender = sender
+    e[].senderReady.store(true, moRelease)
+
+    # When ctx is non-nil, optimistic state prefetch is enabled
+    if ctx.isNil() or sender == default(Address) or ctx[].cancel.load(moAcquire):
+      return true
+
+    # Create the ledger without triggering a ref count increment on the txFrame
+    # which is owned by the main/parent thread.
+    let ledger = LedgerRef()
+    ledger.txFrame.borrowRef(ctx[].txFrame)
+    defer:
+      ledger.txFrame.unborrowRef()
+    discard ledger.beginSavePoint()
+
+    # Create the vmState without triggering a ref count increment on the common object
+    # which is owned by the main/parent thread.
+    let vmState = BaseVMState()
+    vmState.com.borrowRef(ctx[].com)
+    defer:
+      vmState.com.unborrowRef()
+    vmState.ledger = ledger
+    assign(vmState.parent, ctx[].parent)
+    assign(vmState.blockCtx, ctx[].blockCtx)
+    const txCtx = default(TxContext)
+    assign(vmState.txCtx, txCtx)
+    vmState.hardFork = vmState.determineFork
+    vmState.fork = ToEVMFork[vmState.hardFork]
+    vmState.gasCosts = vmState.fork.forkToSchedule
+    vmState.tracer = nil
+    vmState.receipts.setLen(0)
+    vmState.cumulativeGasUsed = 0
+    vmState.blockRegularGasUsed = 0
+    vmState.blockStateGasUsed = 0
+    vmState.blobGasUsed = 0'u64
+    vmState.allLogs.setLen(0)
+    vmState.gasRefunded = 0
+    vmState.balTracker = nil
+
+    # Execute the transaction discarding the results in order to fill the in memory caches.
+    vmState.prefetchTransaction(tx[], sender)
+
+    true
+
+  template withSenderParallel(
+      vmState: BaseVMState, txs: openArray[Transaction], body: untyped) =
+    doAssert not vmState.com.taskpool.isNil()
+
+    var
+      entries = newSeq[Entry](txs.len)
+      ctx: PrefetchCtx
+      ctxPtr: ptr PrefetchCtx = nil
+
+    if vmState.com.optimisticStatePrefetch and vmState.com.taskpool.numThreads > 1:
+      ctx.parent = vmState.parent
+      ctx.blockCtx = vmState.blockCtx
+      ctx.com = vmState.com
+      # Run the prefetch on the parent frame because the current frame will
+      # be writen to during block execution and this way we avoid having to
+      # use locking on the frame data structures.
+      ctx.txFrame = vmState.ledger.txFrame.parent()
+      ctx.cancel.store(false, moRelease)
+      ctxPtr = ctx.addr
+
+    # Spawn one task per transaction that recovers the sender and, when ctxPtr
+    # is non-nil, also performs an optimistic state prefetch. Spawning here
+    # allows the task to start early, while we still haven't hashed subsequent txs.
     for i, e in entries.mpairs():
-      e[0] = txs[i].signature().valueOr(default(Signature))
-      e[1] = txs[i].rlpHashForSigning(txs[i].isEip155)
-      let a = addr e
-      # Spawning the task here allows it to start early, while we still haven't
-      # hashed subsequent txs
-      e[2] = taskpool.spawn recoverTask(a)
+      e.sig = txs[i].signature().valueOr(default(Signature))
+      e.hash = txs[i].rlpHashForSigning(txs[i].isEip155)
+      let entryPtr = e.addr
+      e.fut = vmState.com.taskpool.spawn recoverAndPrefetchTask(
+        entryPtr, ctxPtr, txs[i].addr)
 
-    for txIndex {.inject.}, e in entries.mpairs():
-      template tx(): untyped =
-        txs[txIndex]
+    try:
+      for txIndex {.inject.}, e in entries.mpairs():
+        template tx(): untyped =
+          txs[txIndex]
 
-      # Sync blocks until the sender is available from the task pool - as soon
-      # as we have it, we can process this transaction while the senders of the
-      # other transactions are being computed
-      let sender {.inject.} = sync(e[2])
+        # Wait until the worker has published the sender.
+        while not e.senderReady.load(moAcquire):
+          cpuRelax()
+        let sender {.inject.} = e.sender
 
-      body
+        body
+    finally:
+      if not ctxPtr.isNil():
+        # Cancel any in-flight prefetch tasks so that they bail out quickly.
+        ctxPtr[].cancel.store(true, moRelease)
+      # Wait for all tasks to complete before returning so that no task
+      # outlives the local data it references.
+      for e in entries.mitems():
+        discard sync(e.fut)
 
 template withSenderSerial(txs: openArray[Transaction], body: untyped) =
   for txIndex {.inject.}, tx {.inject.} in txs:
@@ -76,7 +165,7 @@ template withSender(vmState: BaseVMState, txs: openArray[Transaction], body: unt
     if vmState.com.taskpool == nil:
       withSenderSerial(txs, body)
     else:
-      withSenderParallel(txs, body, vmState.com.taskpool)
+      withSenderParallel(vmState, txs, body)
   else:
     withSenderSerial(txs, body)
 

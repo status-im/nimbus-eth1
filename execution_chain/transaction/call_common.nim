@@ -313,6 +313,8 @@ proc finishRunningComputation(
     result.blockStateGasUsed = gasUsed.blockStateGasUsed
     if c.isSuccess:
       result.logEntries = move(c.logEntries)
+  elif T is VoidResult:
+    discard
   else:
     {.error: "Unknown computation output".}
 

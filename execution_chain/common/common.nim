@@ -104,6 +104,10 @@ type
     statelessWitnessValidation*: bool
       ## Enable full validation of execution witnesses.
 
+    optimisticStatePrefetch*: bool
+      ## Optimistically pre-execute the transactions of a block on background
+      ## threads to warm database caches before the main thread executes them.
+
 # ------------------------------------------------------------------------------
 # Private helper functions
 # ------------------------------------------------------------------------------
@@ -176,7 +180,8 @@ proc init(com         : CommonRef,
           genesis     : Genesis,
           initializeDb: bool,
           statelessProviderEnabled: bool,
-          statelessWitnessValidation: bool) =
+          statelessWitnessValidation: bool,
+          optimisticStatePrefetch: bool) =
 
 
   config.daoCheck()
@@ -215,6 +220,7 @@ proc init(com         : CommonRef,
 
   com.statelessProviderEnabled = statelessProviderEnabled
   com.statelessWitnessValidation = statelessWitnessValidation
+  com.optimisticStatePrefetch = optimisticStatePrefetch
 
 proc isBlockAfterTtd(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
   if com.config.terminalTotalDifficulty.isNone:
@@ -239,6 +245,7 @@ proc new*(
     initializeDb = true;
     statelessProviderEnabled = false;
     statelessWitnessValidation = false;
+    optimisticStatePrefetch = false;
       ): CommonRef =
 
   ## If genesis data is present, the forkIds will be initialized
@@ -251,7 +258,8 @@ proc new*(
     params.genesis,
     initializeDb,
     statelessProviderEnabled,
-    statelessWitnessValidation)
+    statelessWitnessValidation,
+    optimisticStatePrefetch)
 
 proc new*(
     _: type CommonRef;
@@ -260,7 +268,8 @@ proc new*(
     networkId: NetworkId = MainNet;
     initializeDb = true;
     statelessProviderEnabled = false;
-    statelessWitnessValidation = false
+    statelessWitnessValidation = false;
+    optimisticStatePrefetch = false;
       ): CommonRef =
 
   ## There is no genesis data present
@@ -273,7 +282,8 @@ proc new*(
     nil,
     initializeDb,
     statelessProviderEnabled,
-    statelessWitnessValidation)
+    statelessWitnessValidation,
+    optimisticStatePrefetch)
 
 func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
   ## clone but replace the db
@@ -287,7 +297,8 @@ func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
     genesisHeader: com.genesisHeader,
     networkId    : com.networkId,
     statelessProviderEnabled: com.statelessProviderEnabled,
-    statelessWitnessValidation: com.statelessWitnessValidation
+    statelessWitnessValidation: com.statelessWitnessValidation,
+    optimisticStatePrefetch: com.optimisticStatePrefetch
   )
 
 func clone*(com: CommonRef): CommonRef =

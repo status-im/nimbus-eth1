@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[strutils, tables, json, os, sets],
+  std/[strutils, tables, json, os, sets, cpuinfo],
   ./test_helpers, ./test_allowed_to_fail,
   ../execution_chain/core/executor, test_config,
   ../execution_chain/transaction,
@@ -14,6 +14,7 @@ import
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/ledger,
   ../execution_chain/common/common,
+  ../execution_chain/conf,
   ../execution_chain/utils/[utils, debug],
   ../execution_chain/evm/tracer/legacy_tracer,
   ../tools/common/helpers as chp,
@@ -21,6 +22,7 @@ import
   ../tools/common/state_clearing,
   eth/common/transaction_utils,
   kzg4844/kzg,
+  taskpools,
   unittest2,
   stew/byteutils,
   results
@@ -35,6 +37,13 @@ block:
   var t: Thread[void]
   createThread(t, loadKzgSetup)
   joinThread(t)
+
+let taskpool =
+  try:
+    Taskpool.new(numThreads = min(countProcessors(), 16))
+  except CatchableError as exc:
+    echo "Failed to start taskpool: ", exc.msg
+    quit(QuitFailure)
 
 type
   TestCtx = object
@@ -105,7 +114,12 @@ proc dumpDebugData(ctx: TestCtx, vmState: BaseVMState, gasUsed: GasInt, logs: op
 
 proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
   let
-    com    = CommonRef.new(newCoreDbRef DefaultDbMemory, ctx.chainConfig)
+    com = CommonRef.new(newCoreDbRef DefaultDbMemory, ctx.chainConfig,
+                           optimisticStatePrefetch = defaultOptimisticStatePrefetch)
+  com.taskpool = taskpool
+  com.db.mpt.taskpool = taskpool
+  
+  let
     parent = Header(stateRoot: emptyRoot)
     tracer = if ctx.trace:
                newLegacyTracer({})

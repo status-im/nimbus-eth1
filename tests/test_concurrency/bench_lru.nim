@@ -16,9 +16,9 @@ import
   ../../execution_chain/concurrency/lru {.all.}
 
 const
-  benchNameWidth = 32
+  benchNameWidth = 36
   cacheCapacity = 100_000
-  singleThreadOps = 4_000_000
+  singleThreadOps = 8_000_000
   opsPerThread = 2_000_000
 
 type
@@ -174,11 +174,18 @@ suite "LruCache vs ConcurrentLruCache single-threaded comparison":
     defer:
       concLru.dispose()
 
+    var concLruNoLock: ConcurrentLruCache[int, int]
+    concLruNoLock.init(cacheCapacity, shardBits = 0, threadSafe = false)
+    defer:
+      concLruNoLock.dispose()
+
     let lruPtr = addr lru
     let concPtr = addr concLru
+    let concNoLockPtr = addr concLruNoLock
 
     refillLru(lruPtr)
     refillCache(concPtr)
+    refillCache(concNoLockPtr)
 
     let
       lruPut = runLruPut(lruPtr, singleThreadOps)
@@ -187,15 +194,21 @@ suite "LruCache vs ConcurrentLruCache single-threaded comparison":
       concPut = runSingleThreadedPut(concPtr, singleThreadOps)
       concGet = runSingleThreadedGet(concPtr, singleThreadOps)
       concPeek = runSingleThreadedPeek(concPtr, singleThreadOps)
+      concNoLockPut = runSingleThreadedPut(concNoLockPtr, singleThreadOps)
+      concNoLockGet = runSingleThreadedGet(concNoLockPtr, singleThreadOps)
+      concNoLockPeek = runSingleThreadedPeek(concNoLockPtr, singleThreadOps)
 
     debugEcho ""
     debugEcho "  capacity=", cacheCapacity, ", ops=", singleThreadOps
     debugEcho benchmarkHeader()
     debugEcho benchmarkLine("LruCache put", lruPut)
+    debugEcho benchmarkLine("ConcurrentLruCache put (no lock)", concNoLockPut)
     debugEcho benchmarkLine("ConcurrentLruCache put", concPut)
     debugEcho benchmarkLine("LruCache get", lruGet)
+    debugEcho benchmarkLine("ConcurrentLruCache get (no lock)", concNoLockGet)
     debugEcho benchmarkLine("ConcurrentLruCache get", concGet)
     debugEcho benchmarkLine("LruCache peek", lruPeek)
+    debugEcho benchmarkLine("ConcurrentLruCache peek (no lock)", concNoLockPeek)
     debugEcho benchmarkLine("ConcurrentLruCache peek", concPeek)
 
     check:
@@ -205,6 +218,9 @@ suite "LruCache vs ConcurrentLruCache single-threaded comparison":
       concPut.elapsed > 0
       concGet.checksum != 0
       concPeek.checksum != 0
+      concNoLockPut.elapsed > 0
+      concNoLockGet.checksum != 0
+      concNoLockPeek.checksum != 0
 
 suite "ConcurrentLruCache Benchmark":
   test "Single and multi-threaded throughput":

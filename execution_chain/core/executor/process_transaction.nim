@@ -88,6 +88,61 @@ proc commitOrRollbackDependingOnGasUsed(
     emitClosureLogs(vmState, callResult.logEntries)
   ok()
 
+template validateForInclusion(
+    vmState: BaseVMState;
+    tx: Transaction;
+    sender: Address;
+    skipNonceCheck: bool;
+    buildError: static bool;
+    intrinsicVar, blobGasUsedVar: untyped) =
+
+  template fail(msg: untyped): untyped =
+    when buildError:
+      return err(msg)
+    else:
+      return
+
+  let
+    com = vmState.com
+    fork = vmState.hardFork
+    regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
+    stateGasAvailable = vmState.blockCtx.gasLimit - vmState.blockStateGasUsed
+    intrinsicVar = tx.intrinsicGas(fork, vmState.blockCtx.gasLimit)
+
+  # Per-tx 2D gas inclusion check: for each dimension the worst-case
+  # contribution must fit in the remaining budget.  Block-end
+  # validation still enforces
+  if fork < Amsterdam:
+    let want = min(TX_GAS_LIMIT.GasInt, tx.gasLimit)
+    if want > regularGasAvailable:
+      fail("regular gas used exceeds limit, want: " & $want & ", available: " & $regularGasAvailable)
+  else:
+    # https://github.com/ethereum/execution-specs/pull/2703/changes
+    # Worst-case regular contribution: tx.gasLimit minus the portion that
+    # must go to intrinsic state gas, capped at TX_MAX_GAS_LIMIT.
+    let want = min(TX_GAS_LIMIT.GasInt, tx.gasLimit - intrinsicVar.state)
+    if want > regularGasAvailable:
+      fail("regular gas used exceeds limit, want: " & $want & ", available: " & $regularGasAvailable)
+
+    # Worst-case state contribution: tx.gasLimit minus the portion that
+    # must go to intrinsic regular gas.
+    let stateGas = tx.gasLimit - intrinsicVar.regular
+    if stateGas > stateGasAvailable:
+      fail("state gas used exceeds limit, want: " & $stateGas & ", available: " & $stateGasAvailable)
+
+  # blobGasUsed will be added to vmState.blobGasUsed if the tx is ok.
+  let
+    blobGasUsedVar = tx.getTotalBlobGas
+    maxBlobGasPerBlock = getMaxBlobGasPerBlock(com, fork)
+  if vmState.blobGasUsed + blobGasUsedVar > maxBlobGasPerBlock:
+    fail("blobGasUsed " & $blobGasUsedVar &
+      " exceeds maximum allowance " & $maxBlobGasPerBlock)
+
+  validateTxBasic(com, tx, intrinsicVar, fork).isOkOr:
+    fail(error)
+  vmState.validateTransaction(tx, sender, skipNonceCheck).isOkOr:
+    fail(error)
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -101,46 +156,7 @@ proc processTransaction*(
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
   ## which provides a backward compatible framwork for EIP1559.
 
-  let
-    com = vmState.com
-    fork = vmState.hardFork
-    regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
-    stateGasAvailable = vmState.blockCtx.gasLimit - vmState.blockStateGasUsed
-    intrinsic = tx.intrinsicGas(fork, vmState.blockCtx.gasLimit)
-
-  # Per-tx 2D gas inclusion check: for each dimension the worst-case
-  # contribution must fit in the remaining budget.  Block-end
-  # validation still enforces
-  if fork < Amsterdam:
-    let want = min(TX_GAS_LIMIT.GasInt, tx.gasLimit)
-    if want > regularGasAvailable:
-      return err("regular gas used exceeds limit, want: " & $want & ", available: " & $regularGasAvailable)
-  else:
-    # https://github.com/ethereum/execution-specs/pull/2703/changes
-    # Worst-case regular contribution: tx.gasLimit minus the portion that
-    # must go to intrinsic state gas, capped at TX_MAX_GAS_LIMIT.
-    let want = min(TX_GAS_LIMIT.GasInt, tx.gasLimit - intrinsic.state)
-    if want > regularGasAvailable:
-      return err("regular gas used exceeds limit, want: " & $want & ", available: " & $regularGasAvailable)
-
-    # Worst-case state contribution: tx.gasLimit minus the portion that
-    # must go to intrinsic regular gas.
-    let stateGas = tx.gasLimit - intrinsic.regular
-    if stateGas > stateGasAvailable:
-      return err("state gas used exceeds limit, want: " & $stateGas & ", available: " & $stateGasAvailable)
-
-  # blobGasUsed will be added to vmState.blobGasUsed if the tx is ok.
-  let
-    blobGasUsed = tx.getTotalBlobGas
-    maxBlobGasPerBlock = getMaxBlobGasPerBlock(com, fork)
-  if vmState.blobGasUsed + blobGasUsed > maxBlobGasPerBlock:
-    return err("blobGasUsed " & $blobGasUsed &
-      " exceeds maximum allowance " & $maxBlobGasPerBlock)
-
-  ? validateTxBasic(com, tx, intrinsic, fork)
-
-  vmState.validateTransaction(tx, sender).isOkOr:
-    return err(error)
+  validateForInclusion(vmState, tx, sender, false, true, intrinsic, blobGasUsed)
 
   # Execute the transaction.
   vmState.captureTxStart(tx.gasLimit)
@@ -160,9 +176,21 @@ proc processTransaction*(
     else:
       ok(move(callResult))
 
-  vmState.ledger.persist(clearEmptyAccount = fork >= Spurious)
+  vmState.ledger.persist(clearEmptyAccount = vmState.hardFork >= Spurious)
 
   res
+
+proc prefetchTransaction*(
+    vmState: BaseVMState; ## Throwaway accounts environment for prefetching
+    tx:      Transaction; ## Transaction to speculatively execute
+    sender:  Address;     ## Pre-recovered sender
+      ) =
+
+  validateForInclusion(vmState, tx, sender, true, false, intrinsic, blobGasUsed)
+
+  let savePoint = vmState.ledger.beginSavePoint()
+  tx.txCallEvm(sender, vmState, intrinsic, discardResult = true)
+  vmState.ledger.rollback(savePoint)
 
 proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32) =
   ## processBeaconBlockRoot applies the EIP-4788 system call to the

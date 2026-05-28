@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  std/[json, strutils],
+  std/[json, strutils, cpuinfo],
   unittest2,
   eth/common/headers_rlp,
   web3/eth_api_types,
@@ -21,6 +21,7 @@ import
   json_rpc/rpcclient,
   json_rpc/rpcserver,
   kzg4844/kzg,
+  taskpools,
   ./chain_config_wrapper,
   ./path_handler,
   ../../execution_chain/rpc,
@@ -31,6 +32,7 @@ import
   ../../execution_chain/core/tx_pool,
   ../../execution_chain/beacon/beacon_engine,
   ../../execution_chain/common/common,
+  ../../execution_chain/conf,
   ../../execution_chain/stateless/witness_types,
   ../../execution_chain/stateless/stateless_types,
   ../../hive_integration/engine_client
@@ -107,6 +109,7 @@ type
     chain*: ForkedChainRef
     server*: Opt[RpcHttpServer]
     client*: Opt[RpcHttpClient]
+    taskpool*: Taskpool
 
   ## Blockchain Test Types
   BlockchainUnitEnv* = object of UnitEnv
@@ -234,11 +237,12 @@ proc prepareEnv*(
     unit: UnitEnv,
     genesis: Header,
     rpcEnabled = false,
-    statelessEnabled = false): TestEnv =
+    statelessEnabled = false,
+    parallelEnabled = false): TestEnv =
 
   try:
     let
-      memDB = newCoreDbRef DefaultDbMemory
+      memDB = newCoreDbRef(DefaultDbMemory, enableCaches = true)
       ledger = LedgerRef.init(memDB.baseTxFrame())
       config = getChainConfig(unit.network)
 
@@ -257,8 +261,21 @@ proc prepareEnv*(
     let
       com = CommonRef.new(memDB, config,
         statelessProviderEnabled = statelessEnabled,
-        statelessWitnessValidation = false) # Running stateless execution separately in test runner
-      chain = ForkedChainRef.init(com, enableQueue = true, persistBatchSize = 1)
+        statelessWitnessValidation = false, # Running stateless execution separately in test runner
+        optimisticStatePrefetch = defaultOptimisticStatePrefetch)
+
+    if parallelEnabled:
+      let taskpool =
+        try:
+          Taskpool.new(numThreads = min(countProcessors(), 16))
+        except CatchableError as exc:
+          debugEcho "Failed to start taskpool: ", exc.msg
+          quit(QuitFailure)
+      com.taskpool = taskpool
+      com.db.mpt.taskpool = taskpool
+      testEnv.taskpool = taskpool
+
+    let chain = ForkedChainRef.init(com, enableQueue = true, persistBatchSize = 1)
 
     testEnv.chain = chain
     testEnv.client = Opt.none(RpcHttpClient)
@@ -295,6 +312,9 @@ proc close*(env: TestEnv) =
     if env.server.isSome:
       waitFor env.server.get().closeWait()
     waitFor env.chain.stopProcessingQueue()
+    env.chain.com.db.close()
+    if env.taskpool != nil:
+      env.taskpool.shutdown()
   except CatchableError as exc:
     debugEcho "Close error: ", exc.msg
     quit(QuitFailure)
@@ -323,9 +343,10 @@ template runEESTSuite*(
     skipFiles: openArray[string],
     baseFolder: string,
     eestType: string,
-    statelessEnabled = false
+    statelessEnabled = false,
+    parallelEnabled = false
 ) =
   for eest in eestReleases:
     suite eest & ": " & eestType:
       for filePath in walkDirRec(baseFolder / eest / eestType):
-        processFile(handleLongPath(filePath), statelessEnabled, @skipFiles)
+        processFile(handleLongPath(filePath), statelessEnabled, parallelEnabled, @skipFiles)

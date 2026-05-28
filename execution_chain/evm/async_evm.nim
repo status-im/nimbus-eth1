@@ -111,6 +111,9 @@ proc init*(
 
   AsyncEvm(com: com, backend: backend)
 
+proc dispose*(evm: AsyncEvm) =
+  evm.com.db.close()
+
 template toCallResult(evmResult: EvmResult[CallResult]): Result[CallResult, string] =
   let callResult =
     ?evmResult.mapErr(

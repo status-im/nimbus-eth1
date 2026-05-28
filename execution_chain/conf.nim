@@ -51,6 +51,7 @@ const
   defaultAdminListenAddress = (static parseIpAddress("127.0.0.1"))
   defaultAdminListenAddressDesc = $defaultAdminListenAddress & ", meaning local host only"
   logLevelDesc = getLogLevels()
+  defaultOptimisticStatePrefetch* = false
 
 template defaultListenAddress(): IpAddress =
   getAutoAddress(Port(0)).toIpAddress()
@@ -357,6 +358,13 @@ type
       defaultValue: true
       desc: "Compute state root in parallel using multiple threads"
       name: "debug-parallel-state-root".}: bool
+
+    optimisticStatePrefetch* {.
+      hidden
+      defaultValue: defaultOptimisticStatePrefetch
+      desc: "Optimistically pre-execute block transactions on background " &
+        "threads to warm DB caches"
+      name: "debug-optimistic-state-prefetch".}: bool
 
     eagerStateRootCheck* {.
       hidden
@@ -818,6 +826,7 @@ func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
     rdbPrintStats = config.rdbPrintStats,
     maxSnapshots = config.aristoDbMaxSnapshots,
     parallelStateRootComputation = config.parallelStateRootComputation,
+    threadSafeCaches = config.optimisticStatePrefetch,
     blockCacheType = config.rocksdbBlockCacheType,
   )
 

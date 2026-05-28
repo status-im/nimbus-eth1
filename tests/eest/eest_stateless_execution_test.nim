@@ -54,5 +54,6 @@ runEESTSuite(
   skipFiles,
   baseFolder,
   eestType,
-  statelessEnabled = true
+  statelessEnabled = true,
+  parallelEnabled = false
 )
