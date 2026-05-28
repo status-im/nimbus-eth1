@@ -32,6 +32,7 @@ import
   ../../execution_chain/core/tx_pool,
   ../../execution_chain/beacon/beacon_engine,
   ../../execution_chain/common/common,
+  ../../execution_chain/conf,
   ../../execution_chain/stateless/witness_types,
   ../../execution_chain/stateless/stateless_types,
   ../../hive_integration/engine_client
@@ -261,7 +262,7 @@ proc prepareEnv*(
       com = CommonRef.new(memDB, config,
         statelessProviderEnabled = statelessEnabled,
         statelessWitnessValidation = false, # Running stateless execution separately in test runner
-        optimisticStatePrefetch = parallelEnabled)
+        optimisticStatePrefetch = defaultOptimisticStatePrefetch)
 
     if parallelEnabled:
       let taskpool =

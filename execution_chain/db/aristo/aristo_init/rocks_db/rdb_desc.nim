@@ -65,6 +65,8 @@ type
     rdBranchSize*: int
 
     rdbPrintStats*: bool               ## Print statistics on closure
+    threadSafeCaches*: bool
+      ## Controls whether the LRU caches are initialized for concurrent access
 
   AristoCFs* = enum
     ## Column family symbols/handles and names used on the database

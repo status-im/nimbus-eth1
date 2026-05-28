@@ -97,10 +97,16 @@ proc init*(rdb: var RdbInst, opts: DbOptions, baseDb: RocksDbInstanceRef) =
   rdb.rdBranchSize =
     opts.rdbBranchCacheSize div (sizeof(typeof(rdb.rdBranchLru).V) + lruOverhead)
 
-  rdb.rdKeyLru.init(rdb.rdKeySize)
-  rdb.rdVtxLru.init(rdb.rdVtxSize)
-  rdb.rdBranchLru.init(rdb.rdBranchSize)
-  rdb.rdbPrintStats =  opts.rdbPrintStats
+  if opts.threadSafeCaches:
+    rdb.rdKeyLru.init(rdb.rdKeySize)
+    rdb.rdVtxLru.init(rdb.rdVtxSize)
+    rdb.rdBranchLru.init(rdb.rdBranchSize)
+  else:
+    rdb.rdKeyLru.init(rdb.rdKeySize, shardBits = 0, threadSafe = false)
+    rdb.rdVtxLru.init(rdb.rdVtxSize, shardBits = 0, threadSafe = false)
+    rdb.rdBranchLru.init(rdb.rdBranchSize, shardBits = 0, threadSafe = false)
+  rdb.rdbPrintStats = opts.rdbPrintStats
+  rdb.threadSafeCaches = opts.threadSafeCaches
 
   rdb.vtxCol = baseDb.db.getColFamily($VtxCF).valueOr:
     raiseAssert "Cannot initialise VtxCF descriptor: " & error

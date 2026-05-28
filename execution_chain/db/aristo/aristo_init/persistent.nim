@@ -44,8 +44,9 @@ proc init*(
       ): Result[T, AristoError] =
   let db = rocksDbBackend(opts, baseDb)
 
-  db.initInstance(opts.maxSnapshots, opts.parallelStateRootComputation, 
-      accLeavesLruSize = ACC_LRU_SIZE, 
+  db.initInstance(opts.maxSnapshots, opts.parallelStateRootComputation,
+      threadSafeCaches = opts.threadSafeCaches,
+      accLeavesLruSize = ACC_LRU_SIZE,
       stoLeavesLruSize = ACC_LRU_SIZE).isOkOr:
     db.closeFn(wipe = false)
     return err(error)

@@ -82,6 +82,7 @@ proc initInstance*(
     db: AristoDbRef,
     maxSnapshots = defaultMaxSnapshots,
     parallelStateRootComputation = true,
+    threadSafeCaches = true,
     accLeavesLruSize = 0,
     stoLeavesLruSize = 0
 ): Result[void, AristoError] =
@@ -92,11 +93,15 @@ proc initInstance*(
   when compileOption("threads"):
     db.txRef.lock.init()
 
-  db.accLeaves.init(accLeavesLruSize)
-  db.stoLeaves.init(stoLeavesLruSize)
+  if threadSafeCaches:
+    db.accLeaves.init(accLeavesLruSize)
+    db.stoLeaves.init(stoLeavesLruSize)
+  else:
+    db.accLeaves.init(accLeavesLruSize, shardBits = 0, threadSafe = false)
+    db.stoLeaves.init(stoLeavesLruSize, shardBits = 0, threadSafe = false)
   db.maxSnapshots = maxSnapshots
   db.parallelStateRootComputation = parallelStateRootComputation
-  
+
   ok()
 
 proc close*(db: AristoDbRef; wipe = false) =

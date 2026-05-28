@@ -14,6 +14,7 @@ import
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/ledger,
   ../execution_chain/common/common,
+  ../execution_chain/conf,
   ../execution_chain/utils/[utils, debug],
   ../execution_chain/evm/tracer/legacy_tracer,
   ../tools/common/helpers as chp,
@@ -114,7 +115,7 @@ proc dumpDebugData(ctx: TestCtx, vmState: BaseVMState, gasUsed: GasInt, logs: op
 proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
   let
     com = CommonRef.new(newCoreDbRef DefaultDbMemory, ctx.chainConfig,
-                           optimisticStatePrefetch = true)
+                           optimisticStatePrefetch = defaultOptimisticStatePrefetch)
   com.taskpool = taskpool
   com.db.mpt.taskpool = taskpool
   
