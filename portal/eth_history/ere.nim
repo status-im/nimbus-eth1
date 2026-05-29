@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/[strformat, strutils, typetraits],
+  std/[strformat, strutils, typetraits, os],
   results,
   stew/[endians2, io2, byteutils, arrayops],
   stint,
@@ -208,6 +208,24 @@ type Proof* = object
   proofType*: uint64
   proofData*: seq[byte]
 
+const
+  ProofTypeHistoricalHashesAccumulator* = 0x00'u64
+  ProofTypeHistoricalRoots* = 0x01'u64
+  ProofTypeHistoricalSummaries* = 0x02'u64
+  ProofTypeHistoricalSummariesDeneb* = 0x03'u64
+
+func init*(_: type Proof, proof: HistoricalHashesAccumulatorProof): Proof =
+  Proof(proofType: ProofTypeHistoricalHashesAccumulator, proofData: SSZ.encode(proof))
+
+func init*(_: type Proof, proof: BlockProofHistoricalRoots): Proof =
+  Proof(proofType: ProofTypeHistoricalRoots, proofData: SSZ.encode(proof))
+
+func init*(_: type Proof, proof: BlockProofHistoricalSummaries): Proof =
+  Proof(proofType: ProofTypeHistoricalSummaries, proofData: SSZ.encode(proof))
+
+func init*(_: type Proof, proof: BlockProofHistoricalSummariesDeneb): Proof =
+  Proof(proofType: ProofTypeHistoricalSummariesDeneb, proofData: SSZ.encode(proof))
+
 proc init*(
     T: type EreGroup,
     f: IoHandle,
@@ -312,25 +330,9 @@ proc update*(
   g.update(f, blockNumber, toCompressedRlpBytes(receipts), E2CompressedSlimReceipts)
 
 proc update*(
-    g: var EreGroup,
-    f: IoHandle,
-    blockNumber: uint64,
-    proof:
-      HistoricalHashesAccumulatorProof | BlockProofHistoricalRoots |
-      BlockProofHistoricalSummaries | BlockProofHistoricalSummariesDeneb,
+    g: var EreGroup, f: IoHandle, blockNumber: uint64, proof: Proof
 ): Result[void, string] =
-  let encodedProof =
-    when proof is HistoricalHashesAccumulatorProof:
-      toCompressedRlpBytes(Proof(proofType: 0x00, proofData: SSZ.encode(proof)))
-    elif proof is BlockProofHistoricalRoots:
-      toCompressedRlpBytes(Proof(proofType: 0x01, proofData: SSZ.encode(proof)))
-    elif proof is BlockProofHistoricalSummaries:
-      toCompressedRlpBytes(Proof(proofType: 0x02, proofData: SSZ.encode(proof)))
-    elif proof is BlockProofHistoricalSummariesDeneb:
-      toCompressedRlpBytes(Proof(proofType: 0x03, proofData: SSZ.encode(proof)))
-    else:
-      raiseAssert "Invalid proof type"
-  g.update(f, blockNumber, encodedProof, E2Proof)
+  g.update(f, blockNumber, toCompressedRlpBytes(proof), E2Proof)
 
 proc update*(
     g: var EreGroup, f: IoHandle, blockNumber: uint64, totalDifficulty: UInt256
@@ -368,9 +370,22 @@ func ereFileName*(
   except ValueError as exc:
     raiseAssert exc.msg
 
-func parseEreFileProfile*(path: string): tuple[noProofs: bool, noReceipts: bool] =
-  let name = path.toLowerAscii()
-  (noProofs: "noproofs" in name, noReceipts: "noreceipts" in name)
+func parseEreFileName*(
+    path: string
+): Result[tuple[network: string, noProofs: bool, noReceipts: bool], string] =
+  ## Parses the network name and profile flags from an ere filename.
+  ## Format: {network}-{era:05}-{hash}[-noproofs][-noreceipts].ere
+  let name = splitFile(path).name.toLowerAscii()
+  let dashPos = name.find('-')
+  if dashPos <= 0:
+    return err("Cannot parse network name from filename: " & path)
+  ok(
+    (
+      network: name[0 ..< dashPos],
+      noProofs: "noproofs" in name,
+      noReceipts: "noreceipts" in name,
+    )
+  )
 
 type EreFile* = ref object
   handle: Opt[IoHandle]
@@ -604,26 +619,26 @@ type HeaderVerifier* = object
 proc verifyProof(
     proof: Proof, header: headers.Header, v: HeaderVerifier, cfg: RuntimeConfig
 ): Result[void, string] =
-  if proof.proofType == 0x00:
+  if proof.proofType == ProofTypeHistoricalHashesAccumulator:
     let decodedProof = decodeSsz(proof.proofData, HistoricalHashesAccumulatorProof).valueOr:
       return err("Invalid HistoricalHashesAccumulatorProof: $error")
     if not v.historicalHashes.verifyProof(header, decodedProof):
       return err("Invalid HistoricalHashesAccumulatorProof: verification failed")
-  elif proof.proofType == 0x01:
+  elif proof.proofType == ProofTypeHistoricalRoots:
     let decodedProof = decodeSsz(proof.proofData, BlockProofHistoricalRoots).valueOr:
       return err("Invalid BlockProofHistoricalRoots: $error")
     if not v.historicalRoots.verifyProof(
       decodedProof, Digest(data: header.computeRlpHash().data)
     ):
       return err("Invalid BlockProofHistoricalRoots: verification failed")
-  elif proof.proofType == 0x02:
+  elif proof.proofType == ProofTypeHistoricalSummaries:
     let decodedProof = decodeSsz(proof.proofData, BlockProofHistoricalSummaries).valueOr:
       return err("Invalid BlockProofHistoricalSummaries: $error")
     if not v.historicalSummaries.verifyProof(
       decodedProof, Digest(data: header.computeRlpHash().data), cfg
     ):
       return err("Invalid BlockProofHistoricalSummaries: verification failed")
-  elif proof.proofType == 0x03:
+  elif proof.proofType == ProofTypeHistoricalSummariesDeneb:
     let decodedProof = decodeSsz(proof.proofData, BlockProofHistoricalSummariesDeneb).valueOr:
       return err("Invalid BlockProofHistoricalSummariesDeneb: $error")
     if not v.historicalSummaries.verifyProof(
@@ -651,15 +666,15 @@ proc verify*(
       ommershHash = computeRlpHash(body.uncles)
 
     if header.txRoot != txRoot:
-      return err("Invalid transactions root")
+      return err("Invalid transactions root: blocknumber " & $blockNumber)
 
     if header.ommersHash != ommershHash:
-      return err("Invalid ommers hash")
+      return err("Invalid ommers hash: blocknumber " & $blockNumber)
 
     if not f.blockIdx.noReceipts:
       let receipts = ?getReceipts(f, blockNumber)
       if header.receiptsRoot != calcReceiptsRoot(receipts):
-        return err("Invalid receipts root")
+        return err("Invalid receipts root: blocknumber " & $blockNumber)
 
     if not f.blockIdx.noProofs:
       let proof = ?getProof(f, blockNumber)
