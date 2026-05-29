@@ -50,7 +50,6 @@ import
     test_stateless_execution,
     test_block_access_list_builder,
     test_block_access_list_validation,
-    test_block_access_list_tracker,
     test_pruner,
     # These suites below are much slower than all the rest, so run them last
     test_generalstate_json,
