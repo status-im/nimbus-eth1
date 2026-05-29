@@ -143,7 +143,7 @@ template allDoneMsg*(
     info: static[string];
       ): untyped =
   debug info & ": Done analysing MPT",
-    nAccDangl=stats.nAccDangl, nAccount=stats.nAccLeaf,
+    nAccDangl=stats.nAccDangl, nAccounts=stats.nAccLeaf,
     nAccNodes=stats.nAccNodes, nAccDepth=stats.nAccDepth,
     accEla=(stats.ela - stats.stoEla).toStr,
 

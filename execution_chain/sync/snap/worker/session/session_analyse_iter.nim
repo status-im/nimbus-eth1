@@ -371,7 +371,7 @@ template accOnlyNotify(
           if rc.isErr:
             debug info & ": Failed accessing storage root",
               root=acc.storageRoot.toStr, nErr=stats.nStoErr, error=rc.error
-          elif not rc.value:
+          elif rc.value:
             break checkStoRoot
           treatAccAsDangling = true
           stats.nStoMissing.inc
@@ -410,10 +410,10 @@ template accOnlyNotify(
 
 template sessionAnalyseTrieIter*(
     cty: SnapCtxRef;
-    onDnglAcc: OnDanglingCB;
-    onDnglSto: OnDanglingCB;
-    onMissSto: OnDanglingCB;
-    onMissCode: OnDanglingCB;
+    onDnglAcc: OnDanglingCB;                        # not `Nil`
+    onDnglSto: OnDanglingCB;                        # not `Nil`
+    onMissSto: OnDanglingCB;                        # not `Nil`
+    onMissCode: OnDanglingCB;                       # not `Nil`
     accAndStoOk: static[bool];
     info: static[string];
       ): auto =
@@ -425,14 +425,13 @@ template sessionAnalyseTrieIter*(
   block body:
     let
       start = Moment.now()
-      blindCB = proc(key, path: openArray[byte]) = discard
       trd = TravDescRef(
         ctx:           cty,
         db:            cty.pool.mptAsm,
-        onAccDangl:    (if onDnglAcc.isNil: blindCB else: onDnglAcc),
-        onStoDangl:    (if onDnglSto.isNil: blindCB else: onDnglSto),
-        onStoMissing:  (if onMissSto.isNil: blindCB else: onMissSto),
-        onCodeMissing: (if onMissCode.isNil: blindCB else: onMissCode),
+        onAccDangl:    onDnglAcc,
+        onStoDangl:    onDnglSto,
+        onStoMissing:  onMissSto,
+        onCodeMissing: onMissCode,
         msgAt:         start + threadLogTimeLimit,
         napAt:         start + threadSwitchRunLimit)
 

@@ -41,6 +41,9 @@ proc clearDnglCode(db: MptAsmRef, info: static[string]): Opt[void] =
 
 # -----------------
 
+proc blindDnglCB(key, path: openArray[byte]) =
+  discard
+
 proc getDnglAccCB(
     db: MptAsmRef;
     err: ptr int;
@@ -143,7 +146,7 @@ template sessionAnalyseAccounts*(
     bodyRc = typeof(bodyRc).err(EPutError)
     var stats = ctx.sessionAnalyseTrieIter(
                   onDnglAcc = onDanglingCB,
-                  onDnglSto = OnDanglingCB(nil),
+                  onDnglSto = blindDnglCB,
                   onMissSto = onDanglingCB,
                   onMissCode = onDanglingCB,
                   accAndStoOk = false,
