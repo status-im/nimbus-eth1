@@ -90,8 +90,6 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string] =
 
   # Setup block access list tracker for pre‑execution system calls
   if vmState.balTrackerEnabled:
-    vmState.balTracker.setBlockAccessIndex(0)
-    vmState.balTracker.beginCallFrame()
     vmState.balLedger.setBlockAccessIndex(0)
 
   # EIP-4788
@@ -102,10 +100,6 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string] =
   # EIP-2935
   if xp.nextFork >= FkPrague:
     vmState.processParentBlockHash(vmState.blockCtx.parentHash)
-
-  # Commit block access list tracker changes for pre‑execution system calls
-  if vmState.balTrackerEnabled:
-    vmState.balTracker.commitCallFrame()
 
   ok(packer)
 
@@ -135,11 +129,10 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
       return ContinueWithNextAccount
 
   if vmState.balTrackerEnabled:
-    vmState.balTracker.setBlockAccessIndex(pst.packedTxs.len() + 1)
     vmState.balLedger.setBlockAccessIndex(pst.packedTxs.len() + 1)
 
   # Find out what to do next: accepting this tx or trying the next account
-  let rc = processTransaction(vmState, item.tx, item.sender, rollbackReads = true)
+  let rc = processTransaction(vmState, item.tx, item.sender)
   if rc.isErr:
     if vmState.classifyPackedNext():
       return ContinueWithNextAccount
@@ -167,19 +160,12 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
 
   # Setup block access list tracker for post‑execution system calls
   if vmState.balTrackerEnabled:
-    vmState.balTracker.setBlockAccessIndex(pst.packedTxs.len() + 1)
-    vmState.balTracker.beginCallFrame()
     vmState.balLedger.setBlockAccessIndex(pst.packedTxs.len() + 1)
 
   # EIP-4895
   if vmState.fork >= FkShanghai:
-    if vmState.balTrackerEnabled:
-      for withdrawal in xp.withdrawals:
-        vmState.balTracker.trackAddBalanceChange(withdrawal.address, withdrawal.weiAmount)
-        ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
-    else:
-      for withdrawal in xp.withdrawals:
-        ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
+    for withdrawal in xp.withdrawals:
+      ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
 
   # EIP-6110, EIP-7002, EIP-7251
   if vmState.fork >= FkPrague:
@@ -200,10 +186,6 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
   pst.receiptsRoot = vmState.receipts.calcReceiptsRoot
   pst.logsBloom = vmState.receipts.createBloom
   pst.stateRoot = vmState.ledger.getStateRoot()
-
-  # Commit block access list tracker changes for post‑execution system calls
-  if vmState.balTrackerEnabled:
-    vmState.balTracker.commitCallFrame()
 
   ok()
 

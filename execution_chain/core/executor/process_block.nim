@@ -96,7 +96,6 @@ when compileOption("threads"):
     vmState.blobGasUsed = 0'u64
     vmState.allLogs.setLen(0)
     vmState.gasRefunded = 0
-    vmState.balTracker = nil
 
     # Execute the transaction discarding the results in order to fill the in memory caches.
     vmState.prefetchTransaction(tx[], sender)
@@ -189,7 +188,6 @@ proc processTransactions*(
       return err("Could not get sender for tx with index " & $(txIndex))
 
     if vmState.balTrackerEnabled:
-      vmState.balTracker.setBlockAccessIndex(txIndex + 1)
       vmState.balLedger.setBlockAccessIndex(txIndex + 1)
 
     let rc = vmState.processTransaction(tx, sender)
@@ -216,8 +214,6 @@ proc procBlkPreamble(
 
   # Setup block access list tracker for pre‑execution system calls
   if vmState.balTrackerEnabled:
-    vmState.balTracker.setBlockAccessIndex(0)
-    vmState.balTracker.beginCallFrame()
     vmState.balLedger.setBlockAccessIndex(0)
 
   let com = vmState.com
@@ -258,10 +254,6 @@ proc procBlkPreamble(
     if header.blockAccessListHash.isSome:
       return err("Pre-Amsterdam block header must not have blockAccessListHash")
 
-  # Commit block access list tracker changes for pre‑execution system calls
-  if vmState.balTrackerEnabled:
-    vmState.balTracker.commitCallFrame()
-
   if header.txRoot != EMPTY_ROOT_HASH:
     if blk.transactions.len == 0:
       return err("Transactions missing from body")
@@ -275,8 +267,6 @@ proc procBlkPreamble(
 
   # Setup block access list tracker for post‑execution system calls
   if vmState.balTrackerEnabled:
-    vmState.balTracker.setBlockAccessIndex(blk.transactions.len() + 1)
-    vmState.balTracker.beginCallFrame()
     vmState.balLedger.setBlockAccessIndex(blk.transactions.len() + 1)
 
   if com.isShanghaiOrLater(header.timestamp):
@@ -285,13 +275,8 @@ proc procBlkPreamble(
     if blk.withdrawals.isNone:
       return err("Post-Shanghai block body must have withdrawals")
 
-    if vmState.balTrackerEnabled:
-      for withdrawal in blk.withdrawals.get:
-        vmState.balTracker.trackAddBalanceChange(withdrawal.address, withdrawal.weiAmount)
-        vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
-    else:
-      for withdrawal in blk.withdrawals.get:
-        vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
+    for withdrawal in blk.withdrawals.get:
+      vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
   else:
     if header.withdrawalsRoot.isSome:
       return err("Pre-Shanghai block header must not have withdrawalsRoot")
@@ -365,11 +350,8 @@ proc procBlkEpilogue(
   if not skipValidation:
     if not skipPostExecBalCheck and vmState.com.isAmsterdamOrLater(header.timestamp):
       doAssert vmState.balTrackerEnabled
-      # Commit block access list tracker changes for post‑execution system calls
-      vmState.balTracker.commitCallFrame()
-
       let
-        bal = vmState.balTracker.getBlockAccessList().get()
+        bal = vmState.balLedger.getBlockAccessList().get()
         balHash = bal[].computeBlockAccessListHash()
       if header.blockAccessListHash.get != balHash:
         debug "wrong blockAccessListHash, generated block access list does not " &
@@ -382,13 +364,6 @@ proc procBlkEpilogue(
           blockAccessList = $(bal[])
         return err("blockAccessListHash mismatch, expect: " &
           $header.blockAccessListHash.get & ", got: " & $balHash)
-
-      let
-        balx = vmState.balLedger.getBlockAccessList().get()
-        balHashx = balx[].computeBlockAccessListHash()
-      if header.blockAccessListHash.get != balHashx:
-        return err("blockAccessListHash X mismatch, expect: " &
-          $header.blockAccessListHash.get & ", got: " & $balHashx)
 
     if not skipStateRootCheck:
       let stateRoot = vmState.ledger.getStateRoot()

@@ -73,9 +73,6 @@ proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256, coldAcces
       ? c.gasMeter.chargeStateGas(res.stateGas, reason = "SSTORE state gas")
 
   c.gasMeter.refundGas(res.gasRefund)
-
-  if c.balTrackerEnabled:
-    c.vmState.balTracker.trackStorageWrite(c.msg.contractAddress, slot, newValue)
   c.vmState.mutateLedger:
     ledger.setStorage(c.msg.contractAddress, slot, newValue)
   ok()

@@ -16,11 +16,11 @@ import
   ./transient_storage,
   ../db/ledger,
   ../common/[common, evmforks],
-  ../block_access_list/[block_access_list_tracker, bal_ledger]
+  ../block_access_list/[block_access_list_tracker]
 
 from ../common/hardforks import HardFork
 
-export stack, memory, transient_storage, block_access_list_tracker, bal_ledger
+export stack, memory, transient_storage, block_access_list_tracker
 
 type
   VMFlag* = enum
@@ -61,7 +61,6 @@ type
     blobGasUsed*      : uint64
     allLogs*          : seq[Log] # EIP-6110
     gasRefunded*      : int64    # Global gasRefunded counter
-    balTracker*       : BlockAccessListTrackerRef
     balLedger*        : BalLedgerRef
 
   Computation* = ref object
