@@ -258,24 +258,25 @@ proc computeKeyImpl(
       let vtx = AccLeafRef(vtx)
       let skey =
         if vtx.stoID.isValid:
-          let
-            keyvtxl =
-              ?txRef.getKey((vtx.stoID.vid, vtx.stoID.vid), skipLayers, parallel)
-            (skey, sl) =
-              if keyvtxl[0][0].isValid:
-                (keyvtxl[0][0], keyvtxl[1])
-              else:
-                ?txRef.computeKeyImpl(
-                  (vtx.stoID.vid, vtx.stoID.vid),
-                  batch,
-                  keyvtxl[0][1],
-                  keyvtxl[1],
-                  skipLayers = skipLayers,
-                  spawnTpTasks = false,
-                  parallel,
-                  keyQueue,
-                  vtxBufQueue,
-                )
+          var keyvtxl =
+            ?txRef.getKey((vtx.stoID.vid, vtx.stoID.vid), skipLayers, parallel)
+          let (skey, sl) =
+            if keyvtxl[0][0].isValid:
+              (keyvtxl[0][0], keyvtxl[1])
+            else:
+              let res = ?txRef.computeKeyImpl(
+                (vtx.stoID.vid, vtx.stoID.vid),
+                batch,
+                keyvtxl[0][1],
+                keyvtxl[1],
+                skipLayers = skipLayers,
+                spawnTpTasks = false,
+                parallel,
+                keyQueue,
+                vtxBufQueue,
+              )
+              keyvtxl[0][1] = nil
+              res
           level = max(level, sl)
           skey
         else:
@@ -318,6 +319,7 @@ proc computeKeyImpl(
 
             let subvid = vtx.bVid(uint8 nibble)
             if (not subvid.isValid) or keyvtx[0][0].isValid:
+              keyvtx[0][1] = nil
               n += 1 # no need to compute key
               continue
 
@@ -335,6 +337,7 @@ proc computeKeyImpl(
                 keyQueue,
                 vtxBufQueue,
               )
+              keyvtx[0][1] = nil
               n += 1
               continue
 
@@ -379,6 +382,7 @@ proc computeKeyImpl(
               keyQueue,
               vtxBufQueue,
             )
+            keyvtxs[minIdx][0][1] = nil
             when not parallel:
               batch.leave(n)
 
@@ -427,6 +431,7 @@ proc computeKeyImpl(
                 ?batch.putVtxBlob(txRef.db, v[0], v[1].data())
 
             (keyvtxs[i][0][0], keyvtxs[i][1]) = ?sync(f)
+            keyvtxs[i][0][1] = nil
             keyQueues[i].dispose()
             vtxBufQueues[i].dispose()
 
