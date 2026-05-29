@@ -26,6 +26,7 @@ export defs, tomldefs, nimbus_binary_common, options, version_info
 type
   HistoryExportCmd* {.pure.} = enum
     exportEre
+    exportEreFromEra1
     verifyEre
     verifyEreFile
 
@@ -56,24 +57,16 @@ type
 
     eraDir* {.
       desc:
-        "Directory containing beacon chain era files (.era) for building post-merge block proofs",
+        "Directory containing beacon chain era files (.era) for post-merge proof building or post-merge block verification",
       name: "era-dir"
-    .}: Option[InputDir]
-
-    elDataDir* {.
-      desc:
-        "Nimbus execution client data directory for reading EL block data (default source; supports full history including post-merge)",
-      name: "el-data-dir"
-    .}: Option[InputDir]
-
-    era1Dir* {.
-      desc:
-        "Directory for era1 archive files (alternative to el-data-dir; only works for pre-merge history)",
-      name: "era1-dir"
     .}: Option[InputDir]
 
     case cmd* {.command.}: HistoryExportCmd
     of HistoryExportCmd.exportEre:
+      elDataDir* {.
+        desc: "Nimbus execution client data directory for reading EL block data",
+        name: "el-data-dir"
+      .}: InputDir
       startEra* {.desc: "Number of the first era to be exported", name: "start-era".}:
         uint64
       endEra* {.desc: "Number of the last era to be exported", name: "end-era".}: uint64
@@ -89,8 +82,32 @@ type
       .}: bool
       ereOutputDirFlag* {.
         desc: "Directory to write .ere files to",
-        defaultValueDesc:
-          "<el-data-dir>/ere, or current directory when using --era1-dir",
+        defaultValueDesc: "<el-data-dir>/ere",
+        name: "ere-dir"
+      .}: Option[OutDir]
+    of HistoryExportCmd.exportEreFromEra1:
+      era1Dir* {.
+        desc: "Directory containing era1 archive files (only covers pre-merge history)",
+        name: "era1-dir"
+      .}: InputDir
+      startEraEra1* {.
+        desc: "Number of the first era to be exported", name: "start-era"
+      .}: uint64
+      endEraEra1* {.desc: "Number of the last era to be exported", name: "end-era".}:
+        uint64
+      noProofsEra1* {.
+        desc: "Omit proof entries from the ere file (produces a noproofs profile)",
+        defaultValue: false,
+        name: "no-proofs"
+      .}: bool
+      noReceiptsEra1* {.
+        desc: "Omit receipt entries from the ere file (produces a noreceipts profile)",
+        defaultValue: false,
+        name: "no-receipts"
+      .}: bool
+      ereOutputDirFlagEra1* {.
+        desc: "Directory to write .ere files to",
+        defaultValueDesc: "current directory",
         name: "ere-dir"
       .}: Option[OutDir]
     of HistoryExportCmd.verifyEre:
@@ -102,13 +119,19 @@ type
         InputFile
 
 proc ereOutputDir*(config: HistoryExportConf): string =
-  doAssert config.cmd == HistoryExportCmd.exportEre
-  if config.ereOutputDirFlag.isSome:
-    string config.ereOutputDirFlag.get()
-  elif config.elDataDir.isSome:
-    config.elDataDir.get().string / "ere"
+  case config.cmd
+  of HistoryExportCmd.exportEre:
+    if config.ereOutputDirFlag.isSome:
+      string config.ereOutputDirFlag.get()
+    else:
+      config.elDataDir.string / "ere"
+  of HistoryExportCmd.exportEreFromEra1:
+    if config.ereOutputDirFlagEra1.isSome:
+      string config.ereOutputDirFlagEra1.get()
+    else:
+      "."
   else:
-    "."
+    raiseAssert "ereOutputDir called for wrong command"
 
 proc networkId*(config: HistoryExportConf): NetworkId =
   case config.network.toLowerAscii()
@@ -118,6 +141,7 @@ proc networkId*(config: HistoryExportConf): NetworkId =
     SepoliaNet
   else:
     raiseAssert "Unsupported network: " & config.network
+
 const
   NimbusCopyright* =
     "Copyright (c) 2026-" & compileYear & " Status Research & Development GmbH"
@@ -132,7 +156,7 @@ proc checkConfig*(cfg: HistoryExportConf) =
     fatal "Unsupported network", network = cfg.network
     quit QuitFailure
 
-  if cfg.cmd == HistoryExportCmd.exportEre and cfg.era1Dir.isNone and
-      cfg.elDataDir.isNone:
-    fatal "At least one of --era1-dir or --el-data-dir must be provided for exportEre"
+  if cfg.cmd in {HistoryExportCmd.verifyEre, HistoryExportCmd.verifyEreFile} and
+      cfg.eraDir.isNone:
+    fatal "--era-dir is required for ere verification (needed for post-merge block verification)"
     quit QuitFailure

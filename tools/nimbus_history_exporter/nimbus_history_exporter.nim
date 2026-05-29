@@ -32,6 +32,8 @@ proc main() =
   case config.cmd
   of HistoryExportCmd.exportEre:
     exportEre(config)
+  of HistoryExportCmd.exportEreFromEra1:
+    exportEreFromEra1(config)
   of HistoryExportCmd.verifyEre:
     verifyEreDir(config, config.ereVerifyDir.string)
   of HistoryExportCmd.verifyEreFile:

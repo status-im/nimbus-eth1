@@ -232,10 +232,6 @@ nimbus_execution_client: | build deps rocksdb
 	echo -e $(BUILD_MSG) "build/nimbus_execution_client" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/nimbus_execution_client "execution_chain/nimbus_execution_client.nim"
 
-nimbus_history_exporter: | build deps rocksdb
-	echo -e $(BUILD_MSG) "build/nimbus_history_exporter" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/nimbus_history_exporter "tools/nimbus_history_exporter/nimbus_history_exporter.nim"
-
 check_revision: nimbus_execution_client
 	scripts/check_revision.sh
 

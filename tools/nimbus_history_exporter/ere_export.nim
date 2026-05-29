@@ -248,78 +248,86 @@ proc exportEreFile(
 
   ok()
 
+func mergeBlockNumber(networkId: NetworkId): BlockNumber =
+  let cfg = chainConfigForNetwork(networkId)
+  if cfg.posBlock.isSome:
+    cfg.posBlock.value()
+  elif cfg.mergeNetsplitBlock.isSome:
+    cfg.mergeNetsplitBlock.value()
+  else:
+    BlockNumber(0)
+
 proc exportEre*(config: HistoryExportConf) =
+  ## Export ere files from the Nimbus EL database.
+  ## Covers pre-merge, merge, and post-merge eras.
   let
-    cfg = chainConfigForNetwork(config.networkId)
-    mergeBlockNumber =
-      if cfg.posBlock.isSome:
-        cfg.posBlock.value()
-      elif cfg.mergeNetsplitBlock.isSome:
-        cfg.mergeNetsplitBlock.value()
-      else:
-        BlockNumber(0)
+    mergeBlockNumber = mergeBlockNumber(config.networkId())
     networkName = config.network
     mergeEra = ere.era(mergeBlockNumber)
-    preMergeEndEra = min(ere.Era(config.endEra), mergeEra - 1)
     requestedEndEra = ere.Era(config.endEra)
     ereOutputDir = config.ereOutputDir()
 
-  createPath(ereOutputDir).isOkOr:
-    fatal "Failed to create ere output directory", ereOutputDir, error
+  if not config.noProofs and config.eraDir.isNone and requestedEndEra >= mergeEra:
+    fatal "--era-dir is required for proof building when exporting merge or post-merge eras"
     quit(QuitFailure)
 
-  if config.elDataDir.isSome:
-    # EL DB path: covers pre-merge, merge, and post-merge eras.
-    # Beacon era files (--era-dir) are required for proofs on merge + post-merge eras.
-    if not config.noProofs and config.eraDir.isNone and requestedEndEra >= mergeEra:
-      fatal "--era-dir is required for proof building when exporting merge or post-merge eras"
+  createPath(ereOutputDir).isOkOr:
+    fatal "Failed to create ere output directory",
+      ereOutputDir, error = ioErrorMsg(error)
+    quit(QuitFailure)
+
+  var beaconBuilder = Opt.none(BeaconProofBuilder)
+  if config.eraDir.isSome:
+    let builder = BeaconProofBuilder.init(config.eraDir.get().string, networkName).valueOr:
+      fatal "Failed to initialise BeaconProofBuilder", error = error
+      quit(QuitFailure)
+    beaconBuilder = Opt.some(builder)
+
+  let coreDb = AristoDbRocks.newCoreDbRef(config.elDataDir.string, DbOptions.init())
+  defer:
+    coreDb.close()
+  let txFrame = coreDb.baseTxFrame()
+  for era in ere.Era(config.startEra) .. requestedEndEra:
+    exportEreFile(
+      era, txFrame, networkName, mergeBlockNumber, beaconBuilder, ereOutputDir,
+      config.noProofs, config.noReceipts,
+    ).isOkOr:
+      fatal "Error exporting ere file", era = era, msg = error
       quit(QuitFailure)
 
-    var beaconBuilder = Opt.none(BeaconProofBuilder)
-    if config.eraDir.isSome:
-      let builder = BeaconProofBuilder.init(config.eraDir.get().string, networkName).valueOr:
-        fatal "Failed to initialise BeaconProofBuilder", error = error
-        quit(QuitFailure)
-      beaconBuilder = Opt.some(builder)
+proc exportEreFromEra1*(config: HistoryExportConf) =
+  ## Export ere files from era1 archive files.
+  ## Only covers pre-merge history; eras beyond the merge block are skipped.
+  # TODO: Need to make loadAccumulator configurable to load per network.
+  # Currently incorrect for Sepolia
+  let
+    mergeBlockNumber = mergeBlockNumber(config.networkId())
+    networkName = config.network
+    mergeEra = ere.era(mergeBlockNumber)
+    preMergeEndEra = min(ere.Era(config.endEraEra1), mergeEra - 1)
+    ereOutputDir = config.ereOutputDir()
 
-    let coreDb =
-      AristoDbRocks.newCoreDbRef(config.elDataDir.get().string, DbOptions.init())
-    defer:
-      coreDb.close()
-    let txFrame = coreDb.baseTxFrame()
-    for era in ere.Era(config.startEra) .. requestedEndEra:
-      exportEreFile(
-        era, txFrame, networkName, mergeBlockNumber, beaconBuilder, ereOutputDir,
-        config.noProofs, config.noReceipts,
-      ).isOkOr:
-        fatal "Error exporting ere file", era = era, msg = error
-        quit(QuitFailure)
-  else:
-    # era1 path: only covers pre-merge eras.
-    # TODO: Need to make loadAccumulator configurable to load per network.
-    let era1DB = Era1DB.new(
-      config.era1Dir.get().string, networkName, loadAccumulator(), mergeBlockNumber
-    )
-    for era in ere.Era(config.startEra) .. preMergeEndEra:
-      exportEreFileFromEra1(
-        era, era1DB, networkName, mergeBlockNumber, ereOutputDir, config.noProofs,
-        config.noReceipts,
-      ).isOkOr:
-        fatal "Error exporting ere file", era = era, msg = error
-        quit(QuitFailure)
+  createPath(ereOutputDir).isOkOr:
+    fatal "Failed to create ere output directory",
+      ereOutputDir, error = ioErrorMsg(error)
+    quit(QuitFailure)
+
+  let era1DB =
+    Era1DB.new(config.era1Dir.string, networkName, loadAccumulator(), mergeBlockNumber)
+
+  for era in ere.Era(config.startEraEra1) .. preMergeEndEra:
+    exportEreFileFromEra1(
+      era, era1DB, networkName, mergeBlockNumber, ereOutputDir, config.noProofsEra1,
+      config.noReceiptsEra1,
+    ).isOkOr:
+      fatal "Error exporting ere file", era = era, msg = error
+      quit(QuitFailure)
 
 proc verifyEreFile*(
     config: HistoryExportConf, ereFilename: string
 ): Result[void, string] =
   let
-    cfg = chainConfigForNetwork(config.networkId)
-    mergeBlockNumber =
-      if cfg.posBlock.isSome:
-        cfg.posBlock.value()
-      elif cfg.mergeNetsplitBlock.isSome:
-        cfg.mergeNetsplitBlock.value()
-      else:
-        BlockNumber(0)
+    mergeBlockNumber = mergeBlockNumber(config.networkId())
     networkMetadata = getMetadataForNetwork(config.network)
     (noProofs, noReceipts) = parseEreFileProfile(ereFilename)
     f = EreFile.open(ereFilename, mergeBlockNumber, noProofs, noReceipts).valueOr:
@@ -329,13 +337,10 @@ proc verifyEreFile*(
 
   let
     v = block:
-      let (historicalRoots, historicalSummaries) =
-        if config.eraDir.isSome:
-          loadHistoricalDataFromEraDir(networkMetadata.cfg, config.eraDir.get().string).valueOr:
-            warn "Cannot load historical data from era files", error = error
-            (default(HistoricalRoots), default(HistoricalSummaries))
-        else:
-          (default(HistoricalRoots), default(HistoricalSummaries))
+      let (historicalRoots, historicalSummaries) = loadHistoricalDataFromEraDir(
+        networkMetadata.cfg, config.eraDir.get().string
+      ).valueOr:
+        return err("Failed to load historical data from era files: " & error)
       HeaderVerifier(
         historicalHashes: loadAccumulator(), # TODO: network specific
         historicalRoots: historicalRoots,
