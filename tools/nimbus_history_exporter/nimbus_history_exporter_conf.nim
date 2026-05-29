@@ -58,6 +58,7 @@ type
     eraDir* {.
       desc:
         "Directory containing beacon chain era files (.era) for post-merge proof building or post-merge block verification",
+      defaultValueDesc: "<data-dir>/era",
       name: "era-dir"
     .}: Option[InputDir]
 
@@ -65,8 +66,9 @@ type
     of HistoryExportCmd.exportEre:
       elDataDir* {.
         desc: "Nimbus execution client data directory for reading EL block data",
+        defaultValueDesc: "<data-dir>",
         name: "el-data-dir"
-      .}: InputDir
+      .}: Option[InputDir]
       startEra* {.desc: "Number of the first era to be exported", name: "start-era".}:
         uint64
       endEra* {.desc: "Number of the last era to be exported", name: "end-era".}: uint64
@@ -88,8 +90,9 @@ type
     of HistoryExportCmd.exportEreFromEra1:
       era1Dir* {.
         desc: "Directory containing era1 archive files (only covers pre-merge history)",
+        defaultValueDesc: "<data-dir>/era1",
         name: "era1-dir"
-      .}: InputDir
+      .}: Option[InputDir]
       startEraEra1* {.
         desc: "Number of the first era to be exported", name: "start-era"
       .}: uint64
@@ -107,7 +110,7 @@ type
       .}: bool
       ereOutputDirFlagEra1* {.
         desc: "Directory to write .ere files to",
-        defaultValueDesc: "current directory",
+        defaultValueDesc: "<era1-dir>/../ere",
         name: "ere-dir"
       .}: Option[OutDir]
     of HistoryExportCmd.verifyEre:
@@ -118,29 +121,53 @@ type
       ereFile* {.desc: "Path to the ere file to be verified", name: "ere-file".}:
         InputFile
 
+proc eraDirPath*(config: HistoryExportConf): string =
+  if config.eraDir.isSome:
+    config.eraDir.get().string
+  else:
+    defaultDataDir("", config.network) / "era"
+
+proc elDataDirPath*(config: HistoryExportConf): string =
+  doAssert config.cmd == HistoryExportCmd.exportEre
+  if config.elDataDir.isSome:
+    config.elDataDir.get().string
+  else:
+    defaultDataDir("", config.network)
+
+proc era1DirPath*(config: HistoryExportConf): string =
+  doAssert config.cmd == HistoryExportCmd.exportEreFromEra1
+  if config.era1Dir.isSome:
+    config.era1Dir.get().string
+  else:
+    defaultDataDir("", config.network) / "era1"
+
 proc ereOutputDir*(config: HistoryExportConf): string =
   case config.cmd
   of HistoryExportCmd.exportEre:
     if config.ereOutputDirFlag.isSome:
       string config.ereOutputDirFlag.get()
     else:
-      config.elDataDir.string / "ere"
+      config.elDataDirPath() / "ere"
   of HistoryExportCmd.exportEreFromEra1:
     if config.ereOutputDirFlagEra1.isSome:
       string config.ereOutputDirFlagEra1.get()
     else:
-      "."
+      parentDir(config.era1DirPath()) / "ere"
   else:
     raiseAssert "ereOutputDir called for wrong command"
 
-proc networkId*(config: HistoryExportConf): NetworkId =
-  case config.network.toLowerAscii()
-  of "mainnet":
-    MainNet
-  of "sepolia":
-    SepoliaNet
-  else:
-    raiseAssert "Unsupported network: " & config.network
+const supportedNetworks* = [("mainnet", MainNet), ("sepolia", SepoliaNet)]
+
+func parseNetworkId*(networkName: string): Result[NetworkId, string] =
+  let networkLower = networkName.toLowerAscii()
+  for (name, id) in supportedNetworks:
+    if name == networkLower:
+      return ok(id)
+  err("Unsupported network: " & networkName)
+
+func networkId*(config: HistoryExportConf): NetworkId =
+  parseNetworkId(config.network).valueOr:
+    raiseAssert error
 
 const
   NimbusCopyright* =
@@ -149,14 +176,9 @@ const
   ClientVersion* = &"{ExporterName}/{FullVersionStr}/{CpuInfo}"
 
 proc checkConfig*(cfg: HistoryExportConf) =
-  case cfg.network.toLowerAscii()
-  of "mainnet", "sepolia":
-    discard
-  else:
-    fatal "Unsupported network", network = cfg.network
-    quit QuitFailure
-
-  if cfg.cmd in {HistoryExportCmd.verifyEre, HistoryExportCmd.verifyEreFile} and
-      cfg.eraDir.isNone:
-    fatal "--era-dir is required for ere verification (needed for post-merge block verification)"
-    quit QuitFailure
+  let networkLower = cfg.network.toLowerAscii()
+  for (name, _) in supportedNetworks:
+    if name == networkLower:
+      return
+  fatal "Unsupported network", network = cfg.network
+  quit QuitFailure

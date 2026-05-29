@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/[strformat, strutils, typetraits],
+  std/[strformat, strutils, typetraits, os],
   results,
   stew/[endians2, io2, byteutils, arrayops],
   stint,
@@ -370,9 +370,22 @@ func ereFileName*(
   except ValueError as exc:
     raiseAssert exc.msg
 
-func parseEreFileProfile*(path: string): tuple[noProofs: bool, noReceipts: bool] =
-  let name = path.toLowerAscii()
-  (noProofs: "noproofs" in name, noReceipts: "noreceipts" in name)
+func parseEreFileName*(
+    path: string
+): Result[tuple[network: string, noProofs: bool, noReceipts: bool], string] =
+  ## Parses the network name and profile flags from an ere filename.
+  ## Format: {network}-{era:05}-{hash}[-noproofs][-noreceipts].ere
+  let name = splitFile(path).name.toLowerAscii()
+  let dashPos = name.find('-')
+  if dashPos <= 0:
+    return err("Cannot parse network name from filename: " & path)
+  ok(
+    (
+      network: name[0 ..< dashPos],
+      noProofs: "noproofs" in name,
+      noReceipts: "noreceipts" in name,
+    )
+  )
 
 type EreFile* = ref object
   handle: Opt[IoHandle]

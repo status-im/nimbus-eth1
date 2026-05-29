@@ -267,23 +267,19 @@ proc exportEre*(config: HistoryExportConf) =
     requestedEndEra = ere.Era(config.endEra)
     ereOutputDir = config.ereOutputDir()
 
-  if not config.noProofs and config.eraDir.isNone and requestedEndEra >= mergeEra:
-    fatal "--era-dir is required for proof building when exporting merge or post-merge eras"
-    quit(QuitFailure)
-
   createPath(ereOutputDir).isOkOr:
     fatal "Failed to create ere output directory",
       ereOutputDir, error = ioErrorMsg(error)
     quit(QuitFailure)
 
   var beaconBuilder = Opt.none(BeaconProofBuilder)
-  if config.eraDir.isSome:
-    let builder = BeaconProofBuilder.init(config.eraDir.get().string, networkName).valueOr:
+  if not config.noProofs and requestedEndEra >= mergeEra:
+    let builder = BeaconProofBuilder.init(config.eraDirPath(), networkName).valueOr:
       fatal "Failed to initialise BeaconProofBuilder", error = error
       quit(QuitFailure)
     beaconBuilder = Opt.some(builder)
 
-  let coreDb = AristoDbRocks.newCoreDbRef(config.elDataDir.string, DbOptions.init())
+  let coreDb = AristoDbRocks.newCoreDbRef(config.elDataDirPath(), DbOptions.init())
   defer:
     coreDb.close()
   let txFrame = coreDb.baseTxFrame()
@@ -298,7 +294,8 @@ proc exportEre*(config: HistoryExportConf) =
 proc exportEreFromEra1*(config: HistoryExportConf) =
   ## Export ere files from era1 archive files.
   ## Only covers pre-merge history; eras beyond the merge block are skipped.
-  # TODO: Need to make loadAccumulator configurable to load per network.
+  # TODO:
+  # Need to make loadAccumulator configurable to load per network.
   # Currently incorrect for Sepolia
   let
     mergeBlockNumber = mergeBlockNumber(config.networkId())
@@ -313,7 +310,7 @@ proc exportEreFromEra1*(config: HistoryExportConf) =
     quit(QuitFailure)
 
   let era1DB =
-    Era1DB.new(config.era1Dir.string, networkName, loadAccumulator(), mergeBlockNumber)
+    Era1DB.new(config.era1DirPath(), networkName, loadAccumulator(), mergeBlockNumber)
 
   for era in ere.Era(config.startEraEra1) .. preMergeEndEra:
     exportEreFileFromEra1(
@@ -327,9 +324,19 @@ proc verifyEreFile*(
     config: HistoryExportConf, ereFilename: string
 ): Result[void, string] =
   let
-    mergeBlockNumber = mergeBlockNumber(config.networkId())
-    networkMetadata = getMetadataForNetwork(config.network)
-    (noProofs, noReceipts) = parseEreFileProfile(ereFilename)
+    (network, noProofs, noReceipts) = parseEreFileName(ereFilename).valueOr:
+      return err(error)
+
+    nid = parseNetworkId(network).valueOr:
+      return err("Unsupported network in filename '" & ereFilename & "': " & error)
+
+    mergeBlockNumber = mergeBlockNumber(nid)
+    networkMetadata = getMetadataForNetwork(network)
+    eraDirPath =
+      if config.eraDir.isSome:
+        config.eraDir.get().string
+      else:
+        defaultDataDir("", network) / "era"
     f = EreFile.open(ereFilename, mergeBlockNumber, noProofs, noReceipts).valueOr:
       return err("Failed to open ere file: " & error)
   defer:
@@ -338,7 +345,7 @@ proc verifyEreFile*(
   let
     v = block:
       let (historicalRoots, historicalSummaries) = loadHistoricalDataFromEraDir(
-        networkMetadata.cfg, config.eraDir.get().string
+        networkMetadata.cfg, eraDirPath
       ).valueOr:
         return err("Failed to load historical data from era files: " & error)
       HeaderVerifier(

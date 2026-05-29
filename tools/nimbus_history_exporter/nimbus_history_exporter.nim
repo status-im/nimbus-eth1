@@ -11,7 +11,6 @@
 
 import
   chronicles,
-  beacon_chain/nimbus_binary_common,
   ../../execution_chain/compile_info,
   ./nimbus_history_exporter_conf,
   ./ere_export
