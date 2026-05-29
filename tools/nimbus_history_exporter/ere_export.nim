@@ -283,12 +283,15 @@ proc exportEre*(config: HistoryExportConf) =
   defer:
     coreDb.close()
   let txFrame = coreDb.baseTxFrame()
+
   for era in ere.Era(config.startEra) .. requestedEndEra:
     exportEreFile(
       era, txFrame, networkName, mergeBlockNumber, beaconBuilder, ereOutputDir,
       config.noProofs, config.noReceipts,
     ).isOkOr:
-      fatal "Error exporting ere file", era = era, msg = error
+      fatal "Error exporting ere file",
+        era = era, msg = error, elDir = config.elDataDirPath(),
+        hint = "Ensure the nimbus execution client is fully synced to cover the requested era range"
       quit(QuitFailure)
 
 proc exportEreFromEra1*(config: HistoryExportConf) =
@@ -320,42 +323,22 @@ proc exportEreFromEra1*(config: HistoryExportConf) =
       fatal "Error exporting ere file", era = era, msg = error
       quit(QuitFailure)
 
-proc verifyEreFile*(
-    config: HistoryExportConf, ereFilename: string
+proc verifyEreFile(
+    ereFilename: string, v: HeaderVerifier
 ): Result[void, string] =
+  ## Verify a single ere file using a pre-loaded HeaderVerifier.
   let
-    (network, noProofs, noReceipts) = parseEreFileName(ereFilename).valueOr:
-      return err(error)
-
+    (network, noProofs, noReceipts) = ?parseEreFileName(ereFilename)
     nid = parseNetworkId(network).valueOr:
       return err("Unsupported network in filename '" & ereFilename & "': " & error)
-
-    mergeBlockNumber = mergeBlockNumber(nid)
     networkMetadata = getMetadataForNetwork(network)
-    eraDirPath =
-      if config.eraDir.isSome:
-        config.eraDir.get().string
-      else:
-        defaultDataDir("", network) / "era"
-    f = EreFile.open(ereFilename, mergeBlockNumber, noProofs, noReceipts).valueOr:
+    f = EreFile.open(ereFilename, mergeBlockNumber(nid), noProofs, noReceipts).valueOr:
       return err("Failed to open ere file: " & error)
   defer:
     close(f)
 
   let
-    v = block:
-      let (historicalRoots, historicalSummaries) = loadHistoricalDataFromEraDir(
-        networkMetadata.cfg, eraDirPath
-      ).valueOr:
-        return err("Failed to load historical data from era files: " & error)
-      HeaderVerifier(
-        historicalHashes: loadAccumulator(), # TODO: network specific
-        historicalRoots: historicalRoots,
-        historicalSummaries: historicalSummaries,
-      )
-
     root = ?f.verify(v, networkMetadata.cfg)
-
     accumulatorRoot =
       if root.isSome:
         root.value().data.to0xHex()
@@ -365,21 +348,63 @@ proc verifyEreFile*(
     accumulatorRoot, noReceipts, noProofs, file = ereFilename
   ok()
 
+proc buildHeaderVerifier(
+    config: HistoryExportConf, network: string
+): Result[HeaderVerifier, string] =
+  let
+    networkMetadata = getMetadataForNetwork(network)
+    eraDirPath =
+      if config.eraDir.isSome:
+        config.eraDir.get().string
+      else:
+        defaultDataDir("", network) / "era"
+    (historicalRoots, historicalSummaries) = ?loadHistoricalDataFromEraDir(
+      networkMetadata.cfg, eraDirPath
+    )
+  ok(
+    HeaderVerifier(
+      historicalHashes: loadAccumulator(), # TODO: network specific
+      historicalRoots: historicalRoots,
+      historicalSummaries: historicalSummaries,
+    )
+  )
+
+proc verifyEreFile*(
+    config: HistoryExportConf, ereFilename: string
+): Result[void, string] =
+  let
+    (network, _, _) = ?parseEreFileName(ereFilename)
+    v = ?buildHeaderVerifier(config, network)
+  verifyEreFile(ereFilename, v)
+
 proc verifyEreDir*(config: HistoryExportConf, dirPath: string) =
-  var count = 0
-  var failed = 0
+  var
+    v: HeaderVerifier
+    verifierReady = false
+    count, failed = 0
   try:
     for kind, path in walkDir(dirPath):
       if kind == pcFile and path.splitFile.ext == ".ere":
         inc count
-        verifyEreFile(config, path).isOkOr:
+        if not verifierReady:
+          let (network, _, _) = parseEreFileName(path).valueOr:
+            fatal "Cannot parse ere filename", file = path, error = error
+            quit(QuitFailure)
+          v = buildHeaderVerifier(config, network).valueOr:
+            fatal "Failed to load historical data from era files", error = error
+            quit(QuitFailure)
+          verifierReady = true
+        verifyEreFile(path, v).isOkOr:
           warn "Verification failed", file = path, error = error
           inc failed
   except OSError as e:
     fatal "Failed to read directory", dir = dirPath, error = e.msg
     quit(QuitFailure)
+
   if failed > 0:
     fatal "Verification completed with failures", total = count, failed
     quit(QuitFailure)
+  elif count == 0:
+    notice "No ere files found to verify", dir = dirPath
   else:
     notice "All ere files verified successfully", total = count, dir = dirPath
