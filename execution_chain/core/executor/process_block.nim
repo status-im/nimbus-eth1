@@ -15,6 +15,7 @@ import
   ../../constants,
   ../../utils/utils,
   ../../db/ledger,
+  ../../db/core_db,
   ../../transaction,
   ../../evm/state,
   ../../evm/types,
@@ -112,7 +113,8 @@ when compileOption("threads"):
       ctx: PrefetchCtx
       ctxPtr: ptr PrefetchCtx = nil
 
-    if vmState.com.optimisticStatePrefetch and vmState.com.taskpool.numThreads > 1:
+    if vmState.com.optimisticStatePrefetch and vmState.com.taskpool.numThreads > 1 and
+        not vmState.balPrefetchActive:
       ctx.parent = vmState.parent
       ctx.blockCtx = vmState.blockCtx
       ctx.com = vmState.com
@@ -153,6 +155,92 @@ when compileOption("threads"):
       for e in entries.mitems():
         discard sync(e.fut)
 
+  type
+    BalPrefetchCtx = object
+      finished: Atomic[bool]     ## set true when block processing completes
+      nextIndex: Atomic[int]     ## lock-free work cursor into accs[]
+      accs: ptr BlockAccessList  ## caller-owned, read-only seq[AccountChanges]
+      txFrame: CoreDbTxRef       ## parent frame; used as a borrowed proc arg only
+
+  proc balPrefetchWorker(ctx: ptr BalPrefetchCtx): bool {.nimcall.} =
+    # Read straight through the parent frame. The txFrame is only ever used as a
+    # borrowed proc argument (no refcount change) and is never bound to a ref
+    # local or stored in a heap object, so there is no cross-thread refcount race
+    # and no need for borrowRef.
+    let len = ctx[].accs[].len
+    while true:
+      # Stop between items if block processing has already finished.
+      if ctx[].finished.load(moAcquire):
+        break
+      # Claim the next accountChanges without locking.
+      let i = ctx[].nextIndex.fetchAdd(1, moRelaxed)
+      if i >= len:
+        break
+
+      let
+        acc = addr ctx[].accs[][i]
+        accPath = acc[].address.computeAccPath
+
+      # No storage to prefetch: just warm the account and continue.
+      if acc[].storageChanges.len == 0 and acc[].storageReads.len == 0:
+        discard ctx[].txFrame.fetchAccount(accPath)
+        continue
+
+      # First the storage writes, in seq order (lowest index to highest). Index
+      # access avoids copying each slot's inner changes seq (only the slot key is
+      # needed here).
+      for j in 0 ..< acc[].storageChanges.len:
+        discard ctx[].txFrame.fetchSlot(
+          accPath, computeSlotKey(acc[].storageChanges[j].slot))
+      # ...then the storage reads.
+      for j in 0 ..< acc[].storageReads.len:
+        discard ctx[].txFrame.fetchSlot(accPath, computeSlotKey(acc[].storageReads[j]))
+
+    true
+
+  template withBalPrefetchParallel(
+      vmState: BaseVMState, bal: Opt[BlockAccessListRef], body: untyped) =
+    var
+      ctx: BalPrefetchCtx
+      ctxPtr: ptr BalPrefetchCtx = nil
+      futs: seq[Flowvar[bool]]
+
+    if vmState.com.balStatePrefetch and bal.isSome() and
+        not vmState.com.taskpool.isNil() and
+        vmState.com.isAmsterdamOrLater(vmState.blockCtx.timestamp):
+      # The BAL describes exactly what the block accesses, so disable the per-tx
+      # optimistic prefetch (sender recovery still runs in parallel).
+      vmState.balPrefetchActive = true
+
+      let balRef = bal.get()
+      ctx.accs = balRef[].addr
+      # Read through the parent frame because the current frame is written to
+      # during block execution; this avoids locking on the frame data structures.
+      ctx.txFrame = vmState.ledger.txFrame.parent()
+      ctx.nextIndex.store(0, moRelease)
+      ctx.finished.store(false, moRelease)
+      ctxPtr = ctx.addr
+
+      let
+        n = vmState.com.taskpool.numThreads
+        configured = vmState.com.balStatePrefetchWorkers
+        numWorkers = if configured <= 0: n else: min(configured, n)
+      futs = newSeq[Flowvar[bool]](numWorkers)
+      # Submit a configurable number of workers (1..numThreads) that each pull
+      # accountChanges objects from the shared work cursor until none remain.
+      for i in 0 ..< numWorkers:
+        futs[i] = vmState.com.taskpool.spawn balPrefetchWorker(ctxPtr)
+
+    try:
+      body
+    finally:
+      if not ctxPtr.isNil():
+        # Signal completion so workers stop claiming new items, then collect all
+        # so that no worker outlives the data it references.
+        ctxPtr[].finished.store(true, moRelease)
+        for f in futs.mitems():
+          discard sync(f)
+
 template withSenderSerial(txs: openArray[Transaction], body: untyped) =
   for txIndex {.inject.}, tx {.inject.} in txs:
     let sender {.inject.} = tx.recoverSender().valueOr(default(Address))
@@ -168,6 +256,16 @@ template withSender(vmState: BaseVMState, txs: openArray[Transaction], body: unt
       withSenderParallel(vmState, txs, body)
   else:
     withSenderSerial(txs, body)
+
+template withBalPrefetch(
+    vmState: BaseVMState, bal: Opt[BlockAccessListRef], body: untyped) =
+  ## Run `body` (block processing) while background workers prefetch the state
+  ## described by the supplied block access list. Collects all prefetch tasks
+  ## before returning, including on the error/early-return path.
+  when compileOption("threads"):
+    withBalPrefetchParallel(vmState, bal, body)
+  else:
+    body
 
 # Factored this out of procBlkPreamble so that it can be used directly for
 # stateless execution of specific transactions.
@@ -437,6 +535,7 @@ proc procBlkEpilogue(
 proc processBlock*(
     vmState: BaseVMState, ## Parent environment of header/body block
     blk: Block, ## Header/body block to add to the blockchain
+    blockAccessList = Opt.none(BlockAccessListRef), ## Validated BAL, when supplied, used for state prefetching
     skipValidation = false,
     skipReceipts = false,
     skipUncles = false,
@@ -444,13 +543,14 @@ proc processBlock*(
     skipPostExecBalCheck = false,
 ): Result[void, string] =
   ## Generalised function to processes `blk` for any network.
-  ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles)
+  vmState.withBalPrefetch(blockAccessList):
+    ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles)
 
-  # EIP-3675: no reward for miner in POA/POS
-  if not vmState.com.proofOfStake(blk.header, vmState.ledger.txFrame):
-    vmState.calculateReward(blk.header, blk.uncles)
+    # EIP-3675: no reward for miner in POA/POS
+    if not vmState.com.proofOfStake(blk.header, vmState.ledger.txFrame):
+      vmState.calculateReward(blk.header, blk.uncles)
 
-  ?vmState.procBlkEpilogue(blk, skipValidation, skipReceipts, skipStateRootCheck, skipPostExecBalCheck)
+    ?vmState.procBlkEpilogue(blk, skipValidation, skipReceipts, skipStateRootCheck, skipPostExecBalCheck)
 
   ok()
 

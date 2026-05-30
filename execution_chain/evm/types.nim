@@ -62,6 +62,9 @@ type
     allLogs*          : seq[Log] # EIP-6110
     gasRefunded*      : int64    # Global gasRefunded counter
     balTracker*       : BlockAccessListTrackerRef
+    balPrefetchActive*: bool
+      # Set while block access list state prefetching is running for this block,
+      # in which case the per-tx optimistic prefetch is suppressed.
 
   Computation* = ref object
     # The execution computation

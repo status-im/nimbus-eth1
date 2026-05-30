@@ -52,6 +52,10 @@ const
   defaultAdminListenAddressDesc = $defaultAdminListenAddress & ", meaning local host only"
   logLevelDesc = getLogLevels()
   defaultOptimisticStatePrefetch* = false
+  defaultBalStatePrefetch* = false
+  defaultBalStatePrefetchWorkers* = 0
+    ## Number of background worker tasks used for block access list state
+    ## prefetching. 0 means use all available taskpool threads.
 
 template defaultListenAddress(): IpAddress =
   getAutoAddress(Port(0)).toIpAddress()
@@ -365,6 +369,20 @@ type
       desc: "Optimistically pre-execute block transactions on background " &
         "threads to warm DB caches"
       name: "debug-optimistic-state-prefetch".}: bool
+
+    balStatePrefetch* {.
+      hidden
+      defaultValue: defaultBalStatePrefetch
+      desc: "Use the supplied block access list to prefetch state on " &
+        "background threads to warm DB caches"
+      name: "debug-bal-state-prefetch".}: bool
+
+    balStatePrefetchWorkers* {.
+      hidden
+      defaultValue: defaultBalStatePrefetchWorkers
+      desc: "Number of background worker tasks used for block access list " &
+        "state prefetching (0 = use all taskpool threads)"
+      name: "debug-bal-state-prefetch-workers".}: int
 
     eagerStateRootCheck* {.
       hidden
@@ -826,7 +844,7 @@ func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
     rdbPrintStats = config.rdbPrintStats,
     maxSnapshots = config.aristoDbMaxSnapshots,
     parallelStateRootComputation = config.parallelStateRootComputation,
-    threadSafeCaches = config.optimisticStatePrefetch,
+    threadSafeCaches = config.optimisticStatePrefetch or config.balStatePrefetch,
     blockCacheType = config.rocksdbBlockCacheType,
   )
 
