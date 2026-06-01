@@ -297,9 +297,6 @@ proc exportEre*(config: HistoryExportConf) =
 proc exportEreFromEra1*(config: HistoryExportConf) =
   ## Export ere files from era1 archive files.
   ## Only covers pre-merge history; eras beyond the merge block are skipped.
-  # TODO:
-  # Need to make loadAccumulator configurable to load per network.
-  # Currently incorrect for Sepolia
   let
     mergeBlockNumber = mergeBlockNumber(config.networkId())
     networkName = config.network
@@ -313,7 +310,7 @@ proc exportEreFromEra1*(config: HistoryExportConf) =
     quit(QuitFailure)
 
   let era1DB =
-    Era1DB.new(config.era1DirPath(), networkName, loadAccumulator(), mergeBlockNumber)
+    Era1DB.new(config.era1DirPath(), networkName, loadAccumulator(networkName), mergeBlockNumber)
 
   for era in ere.Era(config.startEraEra1) .. preMergeEndEra:
     exportEreFileFromEra1(
@@ -363,7 +360,7 @@ proc buildHeaderVerifier(
     )
   ok(
     HeaderVerifier(
-      historicalHashes: loadAccumulator(), # TODO: network specific
+      historicalHashes: loadAccumulator(network),
       historicalRoots: historicalRoots,
       historicalSummaries: historicalSummaries,
     )
