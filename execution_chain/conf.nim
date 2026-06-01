@@ -355,7 +355,7 @@ type
 
     parallelStateRootComputation* {.
       hidden
-      defaultValue: true
+      defaultValue: false
       desc: "Compute state root in parallel using multiple threads"
       name: "debug-parallel-state-root".}: bool
 
