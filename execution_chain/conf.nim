@@ -54,8 +54,6 @@ const
   defaultOptimisticStatePrefetch* = false
   defaultBalStatePrefetch* = false
   defaultBalStatePrefetchWorkers* = 0
-    ## Number of background worker tasks used for block access list state
-    ## prefetching. 0 means use all available taskpool threads.
 
 template defaultListenAddress(): IpAddress =
   getAutoAddress(Port(0)).toIpAddress()
@@ -381,7 +379,7 @@ type
       hidden
       defaultValue: defaultBalStatePrefetchWorkers
       desc: "Number of background worker tasks used for block access list " &
-        "state prefetching (0 = use all taskpool threads)"
+        "state prefetching (0 = use number equal to the taskpool threads count)"
       name: "debug-bal-state-prefetch-workers".}: int
 
     eagerStateRootCheck* {.

@@ -110,12 +110,12 @@ type
 
     balStatePrefetch*: bool
       ## Use the supplied block access list to prefetch the accounts and storage
-      ## slots of a block on background threads to warm database caches before
-      ## the main thread executes the block.
+      ## slots of a block on background threads.
 
     balStatePrefetchWorkers*: int
       ## Number of background worker tasks used for block access list state
-      ## prefetching. 0 means use all available taskpool threads.
+      ## prefetching. 0 means use the same number of workers as the number of
+      ## available taskpool threads.
 
 # ------------------------------------------------------------------------------
 # Private helper functions
