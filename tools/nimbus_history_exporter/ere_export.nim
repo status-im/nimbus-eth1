@@ -248,15 +248,6 @@ proc exportEreFile(
 
   ok()
 
-func mergeBlockNumber(networkId: NetworkId): BlockNumber =
-  let cfg = chainConfigForNetwork(networkId)
-  if cfg.posBlock.isSome:
-    cfg.posBlock.value()
-  elif cfg.mergeNetsplitBlock.isSome:
-    cfg.mergeNetsplitBlock.value()
-  else:
-    BlockNumber(0)
-
 proc exportEre*(config: HistoryExportConf) =
   ## Export ere files from the Nimbus EL database.
   ## Covers pre-merge, merge, and post-merge eras.
@@ -290,8 +281,11 @@ proc exportEre*(config: HistoryExportConf) =
       config.noProofs, config.noReceipts,
     ).isOkOr:
       fatal "Error exporting ere file",
-        era = era, msg = error, elDir = config.elDataDirPath(),
-        hint = "Ensure the nimbus execution client is fully synced to cover the requested era range"
+        era = era,
+        msg = error,
+        elDir = config.elDataDirPath(),
+        hint =
+          "Ensure the nimbus execution client is fully synced to cover the requested era range"
       quit(QuitFailure)
 
 proc exportEreFromEra1*(config: HistoryExportConf) =
@@ -323,9 +317,7 @@ proc exportEreFromEra1*(config: HistoryExportConf) =
       fatal "Error exporting ere file", era = era, msg = error
       quit(QuitFailure)
 
-proc verifyEreFile(
-    ereFilename: string, v: HeaderVerifier
-): Result[void, string] =
+proc verifyEreFile(ereFilename: string, v: HeaderVerifier): Result[void, string] =
   ## Verify a single ere file using a pre-loaded HeaderVerifier.
   let
     (network, noProofs, noReceipts) = ?parseEreFileName(ereFilename)
@@ -358,9 +350,8 @@ proc buildHeaderVerifier(
         config.eraDir.get().string
       else:
         defaultDataDir("", network) / "era"
-    (historicalRoots, historicalSummaries) = ?loadHistoricalDataFromEraDir(
-      networkMetadata.cfg, eraDirPath
-    )
+    (historicalRoots, historicalSummaries) =
+      ?loadHistoricalDataFromEraDir(networkMetadata.cfg, eraDirPath)
   ok(
     HeaderVerifier(
       historicalHashes: loadAccumulator(), # TODO: network specific
