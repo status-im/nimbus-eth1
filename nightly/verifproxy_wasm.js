@@ -6719,9 +6719,9 @@ var dynCall_ijiii = Module["dynCall_ijiii"] = (a0, a1, a2, a3, a4, a5) => (dynCa
 
 var dynCall_ijji = Module["dynCall_ijji"] = (a0, a1, a2, a3, a4, a5) => (dynCall_ijji = Module["dynCall_ijji"] = wasmExports["dynCall_ijji"])(a0, a1, a2, a3, a4, a5);
 
-var dynCall_jiji = Module["dynCall_jiji"] = (a0, a1, a2, a3, a4) => (dynCall_jiji = Module["dynCall_jiji"] = wasmExports["dynCall_jiji"])(a0, a1, a2, a3, a4);
-
 var dynCall_viij = Module["dynCall_viij"] = (a0, a1, a2, a3, a4) => (dynCall_viij = Module["dynCall_viij"] = wasmExports["dynCall_viij"])(a0, a1, a2, a3, a4);
+
+var dynCall_jiji = Module["dynCall_jiji"] = (a0, a1, a2, a3, a4) => (dynCall_jiji = Module["dynCall_jiji"] = wasmExports["dynCall_jiji"])(a0, a1, a2, a3, a4);
 
 // include: postamble.js
 // === Auto-generated postamble setup entry stuff ===
