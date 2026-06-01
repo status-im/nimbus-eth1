@@ -67,13 +67,12 @@ const
   MAX_POOL_SIZE = 8000
   MAX_TXS_PER_ACCOUNT = 500
   TX_ITEM_LIFETIME = initDuration(minutes = 10)
-  TX_MAX_SIZE* = 128 * 1024
-  TX7702_MAX_SIZE = 512 * 1024
+  TX_MAX_SIZE = 128 * 1024
   # BLOB_TX_MAX_SIZE is the maximum size a single transaction can have, outside
   # the included blobs. Since blob transactions are pulled instead of pushed,
   # and only a small metadata is kept in ram, there is no critical limit that
   # should be enforced. Still, capping it to some sane limit can never hurt.
-  BLOB_TX_MAX_SIZE* = 1024 * 1024 * 2
+  BLOB_TX_MAX_SIZE = 1024 * 1024 * 2
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -178,9 +177,6 @@ func gasLimit(xp: TxPoolRef): GasInt =
 
 func excessBlobGas(xp: TxPoolRef): GasInt =
   xp.vmState.blockCtx.excessBlobGas
-
-proc getBalance(xp: TxPoolRef; account: Address): UInt256 =
-  xp.vmState.ledger.getBalance(account)
 
 proc getNonce*(xp: TxPoolRef; account: Address): AccountNonce =
   xp.vmState.ledger.getNonce(account)
@@ -341,9 +337,6 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
   if XP_SKIP_SIZE_VALIDATION notin xp.flags:
     if ptx.tx.txType == TxEip4844:
       if size > BLOB_TX_MAX_SIZE:
-        return err(txErrorOversized)
-    elif ptx.tx.txType == TxEip7702:
-      if size > TX7702_MAX_SIZE:
         return err(txErrorOversized)
     else:
       if size > TX_MAX_SIZE:
