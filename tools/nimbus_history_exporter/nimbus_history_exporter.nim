@@ -13,7 +13,9 @@ import
   chronicles,
   ../../execution_chain/compile_info,
   ./nimbus_history_exporter_conf,
-  ./ere_export
+  ./ere_export,
+  ./era1_export,
+  ./accumulator_export
 
 proc main() =
   let config = HistoryExportConf.loadWithBanners(
@@ -39,6 +41,14 @@ proc main() =
     verifyEreFile(config, config.ereFile.string).isOkOr:
       fatal "Verification of ere file failed", error = error
       quit(QuitFailure)
+  of HistoryExportCmd.exportEra1:
+    exportEra1(config)
+  of HistoryExportCmd.verifyEra1:
+    verifyEra1(config)
+  of HistoryExportCmd.exportAccumulator:
+    exportAccumulator(config)
+  of HistoryExportCmd.printAccumulator:
+    printAccumulator(config)
 
 when isMainModule:
   main()

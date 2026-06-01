@@ -29,6 +29,10 @@ type
     exportEreFromEra1
     verifyEre
     verifyEreFile
+    exportEra1
+    verifyEra1
+    exportAccumulator
+    printAccumulator
 
   HistoryExportConf* = object
     configFile* {.
@@ -55,6 +59,12 @@ type
       name: "network"
     .}: string
 
+    elDataDir* {.
+      desc: "Nimbus execution client data directory for reading EL block data",
+      defaultValueDesc: "<data-dir>",
+      name: "el-data-dir"
+    .}: Option[InputDir]
+
     eraDir* {.
       desc:
         "Directory containing beacon chain era files (.era) for post-merge proof building or post-merge block verification",
@@ -64,11 +74,6 @@ type
 
     case cmd* {.command.}: HistoryExportCmd
     of HistoryExportCmd.exportEre:
-      elDataDir* {.
-        desc: "Nimbus execution client data directory for reading EL block data",
-        defaultValueDesc: "<data-dir>",
-        name: "el-data-dir"
-      .}: Option[InputDir]
       startEra* {.desc: "Number of the first era to be exported", name: "start-era".}:
         uint64
       endEra* {.desc: "Number of the last era to be exported", name: "end-era".}: uint64
@@ -120,6 +125,36 @@ type
     of HistoryExportCmd.verifyEreFile:
       ereFile* {.desc: "Path to the ere file to be verified", name: "ere-file".}:
         InputFile
+    of HistoryExportCmd.exportEra1:
+      startEraEra1Export* {.
+        desc: "Number of the first era to be exported", name: "start-era"
+      .}: uint64
+      endEraEra1Export* {.
+        desc: "Number of the last era to be exported", name: "end-era"
+      .}: uint64
+      era1OutputDir* {.
+        desc: "Directory to write .era1 files to",
+        defaultValueDesc: "<data-dir>/era1",
+        name: "era1-dir"
+      .}: Option[OutDir]
+    of HistoryExportCmd.verifyEra1:
+      era1VerifyDir* {.
+        desc: "Directory containing .era1 files to verify", name: "era1-dir"
+      .}: InputDir
+    of HistoryExportCmd.exportAccumulator:
+      accumulatorOutputDir* {.
+        desc: "Directory to write the accumulator SSZ file and epoch records to",
+        name: "accumulator-dir"
+      .}: OutDir
+      writeEpochRecords* {.
+        desc: "Also write individual epoch record SSZ files",
+        defaultValue: false,
+        name: "write-epoch-records"
+      .}: bool
+    of HistoryExportCmd.printAccumulator:
+      accumulatorFile* {.
+        desc: "Path to the accumulator SSZ file to print", name: "accumulator-file"
+      .}: InputFile
 
 proc eraDirPath*(config: HistoryExportConf): string =
   if config.eraDir.isSome:
@@ -128,7 +163,6 @@ proc eraDirPath*(config: HistoryExportConf): string =
     defaultDataDir("", config.network) / "era"
 
 proc elDataDirPath*(config: HistoryExportConf): string =
-  doAssert config.cmd == HistoryExportCmd.exportEre
   if config.elDataDir.isSome:
     config.elDataDir.get().string
   else:
@@ -138,6 +172,13 @@ proc era1DirPath*(config: HistoryExportConf): string =
   doAssert config.cmd == HistoryExportCmd.exportEreFromEra1
   if config.era1Dir.isSome:
     config.era1Dir.get().string
+  else:
+    defaultDataDir("", config.network) / "era1"
+
+proc era1OutputDirPath*(config: HistoryExportConf): string =
+  doAssert config.cmd == HistoryExportCmd.exportEra1
+  if config.era1OutputDir.isSome:
+    string config.era1OutputDir.get()
   else:
     defaultDataDir("", config.network) / "era1"
 
@@ -174,6 +215,15 @@ const
     "Copyright (c) 2026-" & compileYear & " Status Research & Development GmbH"
   ExporterName = "nimbus_history_exporter"
   ClientVersion* = &"{ExporterName}/{FullVersionStr}/{CpuInfo}"
+
+func mergeBlockNumber*(networkId: NetworkId): BlockNumber =
+  let cfg = chainConfigForNetwork(networkId)
+  if cfg.posBlock.isSome:
+    cfg.posBlock.value()
+  elif cfg.mergeNetsplitBlock.isSome:
+    cfg.mergeNetsplitBlock.value()
+  else:
+    BlockNumber(0)
 
 proc checkConfig*(cfg: HistoryExportConf) =
   let networkLower = cfg.network.toLowerAscii()
