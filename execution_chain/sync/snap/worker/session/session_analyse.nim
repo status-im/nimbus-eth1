@@ -41,6 +41,9 @@ proc clearDnglCode(db: MptAsmRef, info: static[string]): Opt[void] =
 
 # -----------------
 
+proc blindDnglCB(key, path: openArray[byte]) =
+  discard
+
 proc getDnglAccCB(
     db: MptAsmRef;
     err: ptr int;
@@ -127,6 +130,10 @@ template sessionAnalyseAccounts*(
   ## Traverse the accounting MPT and register dangling links in the
   ## `AccDnglKvt` table.
   ##
+  ## This function is used for debugging or testing, only. It can be used
+  ## as a *slow* alternative and control function to the incremental dangling
+  ## links bookkeeping approach of the `session_mktrie` module.
+  ##
   var bodyRc = Result[WalkStats,AttType].err(EClearError)
   block body:
     let db = ctx.pool.mptAsm
@@ -139,7 +146,7 @@ template sessionAnalyseAccounts*(
     bodyRc = typeof(bodyRc).err(EPutError)
     var stats = ctx.sessionAnalyseTrieIter(
                   onDnglAcc = onDanglingCB,
-                  onDnglSto = OnDanglingCB(nil),
+                  onDnglSto = blindDnglCB,
                   onMissSto = onDanglingCB,
                   onMissCode = onDanglingCB,
                   accAndStoOk = false,
