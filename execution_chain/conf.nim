@@ -97,6 +97,11 @@ type
       defaultValueDesc: "<data-dir>/era"
       name: "era-dir" .}: Option[OutDir]
 
+    ereDirFlag* {.
+      desc: "Directory for ere archive (full execution history)"
+      defaultValueDesc: "<data-dir>/ere"
+      name: "ere-dir" .}: Option[OutDir]
+
     keyStoreDirFlag* {.
       desc: "Load one or more keystore files from this directory"
       defaultValueDesc: "inside datadir"
@@ -806,6 +811,9 @@ proc era1Dir*(config: ExecutionClientConf): string =
 
 proc eraDir*(config: ExecutionClientConf): string =
   string config.eraDirFlag.get(OutDir config.dataDir / "era")
+
+proc ereDir*(config: ExecutionClientConf): string =
+  string config.ereDirFlag.get(OutDir config.dataDir / "ere")
 
 func udpPort*(config: ExecutionClientConf): Port =
   config.udpPortFlag.get(config.tcpPort)

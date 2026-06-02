@@ -15,13 +15,11 @@ import
   chronos/timer,
   std/[strformat, strutils],
   stew/io2,
-  beacon_chain/[era_db, process_state],
-  beacon_chain/networking/network_metadata,
+  beacon_chain/process_state,
   ./conf,
   ./common/common,
   ./core/chain,
-  ./db/era1_db,
-  ./utils/era_helpers
+  ../portal/database/ere_db
 
 declareGauge nec_import_block_number, "Latest imported block number"
 
@@ -36,44 +34,19 @@ proc openCsv(name: string): File =
     let f = open(name, fmAppend)
     let pos = f.getFileSize()
     if pos == 0:
-      f.writeLine("block_number,blocks,slot,txs,gas,time")
+      f.writeLine("block_number,blocks,txs,gas,time")
     f
   except IOError as exc:
     fatal "Could not open statistics output file", file = name, err = exc.msg
     quit(QuitFailure)
 
-proc getMetadata(networkId: NetworkId): auto =
-  # Network Specific Configurations
-  # TODO: the merge block number could be fetched from the era1 file instead,
-  #       specially if the accumulator is added to the chain metadata
+proc getMetadata(networkId: NetworkId): tuple[networkName: string, mergeBlockNumber: uint64] =
   if networkId == MainNet:
-    (
-      getMetadataForNetwork("mainnet").cfg,
-      # Mainnet Validators Root
-      Eth2Digest.fromHex(
-        "0x4b363db94e286120d76eb905340fdd4e54bfe9f06bf33ff6cf5ad27f511bfe95"
-      ),
-      15537393'u64, # Last pre-merge block
-      4700013'u64, # First post-merge slot
-    )
+    ("mainnet", 15537394'u64)
   elif networkId == SepoliaNet:
-    (
-      getMetadataForNetwork("sepolia").cfg,
-      Eth2Digest.fromHex(
-        "0xd8ea171f3c94aea21ebc42a1ed61052acf3f9209c00e4efbaaddac09ed9b8078"
-      ),
-      1450408'u64, # Last pre-merge block number
-      115193'u64, # First post-merge slot
-    )
+    ("sepolia", 1450409'u64)
   elif networkId == HoodiNet:
-    (
-      getMetadataForNetwork("hoodi").cfg,
-      Eth2Digest.fromHex(
-        "0x212f13fc4df078b6cb7db228f1c8307566dcecf900867401a92023d7ba99cb5f"
-      ),
-      0'u64, # Last pre-merge block number
-      0'u64, # First post-merge slot
-    )
+    ("hoodi", 1'u64)
   else:
     fatal "Unsupported network", network = networkId
     quit(QuitFailure)
@@ -90,14 +63,12 @@ proc running(): bool =
 proc importBlocks*(config: ExecutionClientConf, com: CommonRef) =
   let
     start = com.db.baseTxFrame().getSavedStateBlockNumber() + 1
-    (cfg, genesis_validators_root, lastEra1Block, firstSlotAfterMerge) =
-      getMetadata(config.networkId)
+    (networkName, mergeBlockNumber) = getMetadata(config.networkId)
     time0 = Moment.now()
 
   # These variables are used from closures on purpose, so as to place them on
   # the heap rather than the stack
   var
-    slot = 1'u64
     time1 = Moment.now() # time at start of chunk
     csv =
       if config.csvStats.isSome:
@@ -164,7 +135,6 @@ proc importBlocks*(config: ExecutionClientConf, com: CommonRef) =
 
     info "Imported blocks",
       blockNumber,
-      slot,
       blocks,
       txs,
       mgas = f(gas.float / 1000000),
@@ -182,14 +152,9 @@ proc importBlocks*(config: ExecutionClientConf, com: CommonRef) =
     nec_imported_gas.inc(int64 cgas)
 
     if csv != nil:
-      # In the CSV, we store a line for every chunk of blocks processed so
-      # that the file can meaningfully be appended to when restarting the
-      # process - this way, each sample is independent
       try:
         csv.writeLine(
-          [$blockNumber, $cblocks, $slot, $ctxs, $cgas, $(time2 - time1).nanoseconds()].join(
-            ","
-          )
+          [$blockNumber, $cblocks, $ctxs, $cgas, $(time2 - time1).nanoseconds()].join(",")
         )
         csv.flushFile()
       except IOError as exc:
@@ -197,159 +162,28 @@ proc importBlocks*(config: ExecutionClientConf, com: CommonRef) =
 
     time1 = time2
 
-  # Finds the slot number to resume the import process
-  # First it sets the initial lower bound to `firstSlotAfterMerge` + number of blocks after Era1
-  # Then it iterates over the slots to find the current slot number, along with reducing the
-  # search space by calculating the difference between the `blockNumber` and the `block_number` from the executionPayload
-  # of the slot, then adding the difference to the importedSlot. This pushes the lower bound more,
-  # making the search way smaller
-  proc updateLastImportedSlot(
-      era: EraDB,
-      historical_roots: openArray[Eth2Digest],
-      historical_summaries: openArray[HistoricalSummary],
-      endSlot: Slot,
-  ): bool =
-    # Checks if the Nimbus block number is ahead the era block number
-    # First we load the last era number, and get the fist slot number
-    # Since the slot emptiness cannot be predicted, we iterate over to find the block and check
-    # if the block number is greater than the current block number
-    var
-      lastEra = era(endSlot - 1)
-      startSlot = start_slot(lastEra) - 8192
-    debug "Finding slot number to resume import", startSlot, endSlot
+  let db = EreDB.init(config.ereDir, networkName, mergeBlockNumber).valueOr:
+    fatal "Could not open ere database",
+      ereDir = config.ereDir, networkName, error = error
+    quit(QuitFailure)
+  defer:
+    db.dispose()
 
-    while startSlot < endSlot:
-      if not getEthBlockFromEra(
-        era, historical_roots, historical_summaries, startSlot, cfg, blk
-      ):
-        startSlot += 1
-        if startSlot == endSlot - 1:
-          error "No blocks found in the last era file"
-          return false
+  notice "Importing ere archive",
+    start, dataDir = config.dataDir, ereDir = config.ereDir
 
-        continue
+  proc loadEreBlock(blockNumber: uint64): bool =
+    db.getEthBlock(blockNumber, blk).isOkOr:
+      debug "Era block not found", blockNumber, msg = error
+      return false
+    true
 
-      startSlot += 1
-      if blk.header.number < blockNumber:
-        notice "Available `era` files are already imported",
-          stateBlockNumber = blockNumber, eraBlockNumber = blk.header.number
-        return false
+  while running() and persister.stats.blocks.uint64 < config.maxBlocks:
+    if not loadEreBlock(blockNumber):
+      notice "No more `ere` blocks to import", blockNumber
       break
-
-    if blockNumber > 1:
-      # Setting the initial lower bound
-      slot = (blockNumber - lastEra1Block) + firstSlotAfterMerge
-      debug "Finding slot number after resuming import", slot
-
-      # BlockNumber based slot finding
-      var clNum = 0'u64
-
-      while clNum < blockNumber:
-        if not getEthBlockFromEra(
-          era, historical_roots, historical_summaries, Slot(slot), cfg, blk
-        ):
-          slot += 1
-          continue
-
-        clNum = blk.header.number
-        # decreasing the lower bound with each iteration
-        slot += blockNumber - clNum
-
-      notice "Matched block to slot number", blockNumber, slot
-    return true
-
-  if lastEra1Block > 0 and start <= lastEra1Block:
-    let
-      era1Name =
-        if config.networkId == MainNet:
-          "mainnet"
-        elif config.networkId == SepoliaNet:
-          "sepolia"
-        else:
-          raiseAssert "Other networks are unsupported or do not have an era1"
-      db = Era1DbRef.init(config.era1Dir, era1Name, lastEra1Block + 1).valueOr:
-        fatal "Could not open era1 database",
-          era1Dir = config.era1Dir, era1Name = era1Name, error = error
-        quit(QuitFailure)
-
-    notice "Importing era1 archive",
-      start, dataDir = config.dataDir, era1Dir = config.era1Dir
-
-    defer:
-      db.dispose()
-
-    proc loadEraBlock(blockNumber: uint64): bool =
-      db.getEthBlock(blockNumber, blk).isOkOr:
-        chronicles.error "Error when loading era block", blockNumber, msg = error
-        return false
-      true
-
-    while running() and persister.stats.blocks.uint64 < config.maxBlocks and
-        blockNumber <= lastEra1Block:
-      if not loadEraBlock(blockNumber):
-        notice "No more `era1` blocks to import", blockNumber, slot
-        break
-      persistBlock()
-      checkpoint()
-
-  block era1Import:
-    if blockNumber > lastEra1Block:
-      if not isDir(config.eraDir):
-        if blockNumber == 0:
-          fatal "`era` directory not found, cannot start import",
-            blockNumber, eraDir = config.eraDir
-          quit(QuitFailure)
-        else:
-          notice "`era` directory not found, stopping import at merge boundary",
-            blockNumber, eraDir = config.eraDir
-          break era1Import
-
-      notice "Importing era archive",
-        blockNumber, dataDir = config.dataDir, eraDir = config.eraDir
-
-      let
-        eraDB = EraDB.new(cfg, config.eraDir, genesis_validators_root)
-        (historical_roots, historical_summaries, endSlot) = loadHistoricalRootsFromEra(
-          config.eraDir, cfg
-        ).valueOr:
-          fatal "Could not load historical summaries",
-            eraDir = config.eraDir, error
-          quit(QuitFailure)
-
-      # Load the last slot number
-      var moreEraAvailable = true
-      if blockNumber > lastEra1Block + 1:
-        moreEraAvailable = updateLastImportedSlot(
-          eraDB, historical_roots.asSeq(), historical_summaries.asSeq(), endSlot
-        )
-
-      if slot < firstSlotAfterMerge and firstSlotAfterMerge != 0:
-        # if resuming import we do not update the slot
-        slot = firstSlotAfterMerge
-
-      proc loadEra1Block(): bool =
-        # Separate proc to reduce stack usage of blk
-        if not getEthBlockFromEra(
-          eraDB,
-          historical_roots.asSeq(),
-          historical_summaries.asSeq(),
-          Slot(slot),
-          cfg,
-          blk,
-        ):
-          return false
-
-        true
-
-      while running() and moreEraAvailable and
-          persister.stats.blocks.uint64 < config.maxBlocks and slot < endSlot:
-        if not loadEra1Block():
-          slot += 1
-          continue
-        slot += 1
-
-        persistBlock()
-        checkpoint()
+    persistBlock()
+    checkpoint()
 
   # If there were no blocks written, we will not have loaded the block number
   # and therefore should not call checkpoint().
@@ -358,7 +192,6 @@ proc importBlocks*(config: ExecutionClientConf, com: CommonRef) =
 
   notice "Import complete",
     blockNumber,
-    slot,
     blocks = persister.stats.blocks,
     txs = persister.stats.txs,
     mgas = f(persister.stats.gas.float / 1000000)
