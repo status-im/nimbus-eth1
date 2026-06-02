@@ -89,10 +89,10 @@ task test_import, "Run block import test":
     quit(QuitFailure)
 
   # Test that we can resume import
-  exec "build/nimbus_execution_client import --data-dir:" & tmp & " --era1-dir:tests/replay --max-blocks:1"
-  exec "build/nimbus_execution_client import --data-dir:" & tmp & " --era1-dir:tests/replay --max-blocks:1023"
+  exec "build/nimbus_execution_client import --data-dir:" & tmp & " --ere-dir:tests/replay --max-blocks:1"
+  exec "build/nimbus_execution_client import --data-dir:" & tmp & " --ere-dir:tests/replay --max-blocks:1023"
   # There should only be 8k blocks
-  exec "build/nimbus_execution_client import --data-dir:" & tmp & " --era1-dir:tests/replay --max-blocks:10000"
+  exec "build/nimbus_execution_client import --data-dir:" & tmp & " --ere-dir:tests/replay --max-blocks:10000"
 
 task test_evm, "Run EVM tests":
   test "tests", "evm_tests", "-d:chronicles_log_level=ERROR -d:unittest2DisableParamFiltering"

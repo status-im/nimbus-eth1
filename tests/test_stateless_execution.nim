@@ -21,7 +21,7 @@ import
   ../execution_chain/core/chain/forked_chain/chain_desc,
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/ledger,
-  ../execution_chain/db/era1_db,
+  ../portal/database/ere_db,
   ../execution_chain/rpc/debug,
   ../execution_chain/stateless/[stateless_execution, stateless_execution_helpers]
 
@@ -34,13 +34,13 @@ procSuite "Stateless Execution Tests":
   setup:
     let
       db = AristoDbMemory.newCoreDbRef()
-      era0 = Era1DbRef.init(sourcePath / "replay", "mainnet", 15537394'u64).expect("Era files present")
+      era0 = EreDB.init(sourcePath / "replay", "mainnet", 15537394'u64).expect("Ere files present")
       # Stateless provider is enabled so that witnesses will be generated
       # and stored in the database
       com = CommonRef.new(db, statelessProviderEnabled = true)
       fc = ForkedChainRef.init(com, enableQueue = false)
 
-  asyncTest "Stateless process block - replay mainnet era1":
+  asyncTest "Stateless process block - replay mainnet ere":
     var blk: EthBlock
     for i in 1..<1000:
       era0.getEthBlock(i.BlockNumber, blk).expect("block in test database")

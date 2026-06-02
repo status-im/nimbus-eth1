@@ -23,7 +23,7 @@ import
   ../execution_chain/core/chain/forked_chain/chain_branch,
   ../execution_chain/db/ledger,
   ../execution_chain/db/core_db/memory_only,
-  ../execution_chain/db/era1_db,
+  ../portal/database/ere_db,
   ../execution_chain/db/fcu_db,
   ./test_forked_chain/chain_debug
 
@@ -789,7 +789,7 @@ procSuite "ForkedChain mainnet replay":
   # smoke test
   setup:
     let
-      era0 = Era1DbRef.init(sourcePath / "replay", "mainnet", 15537394'u64).expect("Era files present")
+      era0 = EreDB.init(sourcePath / "replay", "mainnet", 15537394'u64).expect("Ere files present")
       com = CommonRef.new(AristoDbMemory.newCoreDbRef())
       fc {.used.}= ForkedChainRef.init(com, enableQueue = true)
 
