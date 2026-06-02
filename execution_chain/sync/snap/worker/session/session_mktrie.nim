@@ -15,7 +15,7 @@ import
   pkg/[chronicles, chronos, metrics, stew/interval_set, stint],
   pkg/stew/byteutils,
   ../[helpers, mpt, state_db, worker_desc],
-  ./[session_analyse, session_helpers]
+  ./session_helpers
 
 declareGauge nec_snap_merged_mpt_coverage, "" &
   "Factor of accumulated account ranges covered when assembling MPT"
@@ -29,7 +29,6 @@ type
     stateInx: int                                   # index of current state
     state: WalkStateData                            # current state data
     distance: uint64                                # distance to pivot state
-    mergedOk: bool                                  # per state, merged accounts
 
     accData: WalkAccounts                           # accounts range from cache
     accRange: ItemKeyRange                          # avoid repeated calculation
@@ -84,33 +83,82 @@ proc updateCoverageMetrics(session: var MkTrieSession) =
 
 # -----------
 
-proc matchDanglingLink(
+proc incompleteAccounts(
+    session: MkTrieSession;
+    accList: openArray[KppTriple];
+      ): seq[KpPair] =
+  var kpRc: seq[KpPair]
+  for (key,path,pyl) in accList:
+    block checkAccount:
+      let a = pyl.decodeAccount().valueOr:
+        break checkAccount
+
+      if a.storageRoot != EMPTY_ROOT_HASH:
+        let ok = session.db.hasStoKvt(a.storageRoot.data).valueOr:
+          break checkAccount
+        if not ok:
+          break checkAccount
+
+      if a.codeHash != EMPTY_CODE_HASH:
+        let ok = session.db.hasCodeKvt(a.codeHash).valueOr:
+          break checkAccount
+        if not ok:
+          break checkAccount
+      continue                                      # all checks successful
+    kpRc.add (key,path)                             # some check unsuccessful
+    # End `for()`
+
+  move kpRc
+
+proc matchDnglAccLinks(
     session: MkTrieSession;
     keys: openArray[seq[byte]];
-      ): Result[bool,string] =
+      ): Result[seq[seq[byte]],string] =
   ## Find all keys from the argument list `keys` that are also cached in the
   ## list of dangling links.
   ##
-  for w in keys:
-    let ok = session.db.hasAccDnglKvt(w).valueOr:
+  var matches: seq[seq[byte]]
+  for key in keys:
+    let ok = session.db.hasAccDnglKvt(key).valueOr:
       return err(error)
     if ok:
-      return ok(true)
-  ok(false)
+      matches.add key
+  ok(move matches)
 
-template updateDanglingLinks(
+proc updatehDnglAccLinks(
     session: MkTrieSession;
-    info: static[string];
-      ): auto =
-  ## Async template
+    resolved: openArray[seq[byte]];                 # remove from dngl cache
+    incomplete: openArray[(seq[byte],seq[byte])];   # always store on dngl cache
+    dangling: openArray[(seq[byte],seq[byte])];     # store when needed
+      ): Result[uint,string] =
+  ## Remove keys from argument `resolved` from the list of dangling links. And
+  ## add  keys from argument `dangling` to the list of dangling links if they
+  ## are not in the accounts KVT.
   ##
-  var bodyRc = Result[void,AttType].err(EOtherError)
-  block body:
-    session.ctx.sessionAnalyseAccounts(info).isOkOr:
-      bodyRc = typeof(bodyRc).err(error)
-      break body
-    bodyRc = typeof(bodyRc).ok()
-  bodyRc
+  ## The function returns the dangling links from the `dangling` argument
+  ## that were already resolved.
+  ##
+  # Clear already `resolved` links
+  session.db.delAccDnglKvt(resolved).isOkOr:
+    return err(error)
+
+  # Unconditionally store `incomplete` links
+  for (key,path) in incomplete:
+    session.db.putAccDnglKvt(key,path).isOkOr:
+      return err(error)
+
+  # Store `dangling` links if they are not on merged MPT cache
+  var resolved = 0u
+  for (key,path) in dangling:
+    let ok = session.db.hasAccKvt(key).valueOr:
+      return err(error)
+    if ok:
+      resolved.inc
+    else:
+      session.db.putAccDnglKvt(key,path).isOkOr:
+        return err(error)
+
+  ok(move resolved)
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -169,7 +217,6 @@ template mkStoTrie(
         error info & ": cannot store slot on trie", stateInx, nStates, root,
           distance, peerID, accKey, stoRoot, nProof=w.proof.len,
           iv=(w.start,w.limit).to(float).toStr, nSlot=w.slot.len, `error`=error
-
       # End `for()`
 
   bodyRc
@@ -242,7 +289,6 @@ template mkTrieImpl(
     template state: auto = session.state
     template stateInx: auto = session.stateInx
     template nStates: auto = session.nStates
-    template mergedOk: auto = session.mergedOk
     template distance: auto = session.distance
     template accData: auto = session.accData
     template accRange: auto = session.accRange
@@ -273,29 +319,30 @@ template mkTrieImpl(
 
     start = Moment.now()
 
-    # Check whether the `dangling[]` cache is up to date. If so, then
-    # check current MPT accounts package against current dangling cache.
-    let kvPairs = mpt.kvPairs()
-    if not session.isPivot:
-      let rc = session.matchDanglingLink kvPairs.mapIt(it[0])
-      if rc.isErr:
-        chronicles.`error` info & ": Error accessing dangling pivot links",
-          stateInx, nStates, distance, root, error=rc.error
-        # Stay, and import partial MPT
-      elif not rc.value:
-        # Data package would not resolve any dangling links
-        break body                                  # not doing anything
+    # Match the validated partial accounts MPT against cache of dangling links
+    # of the merged accounts MPT on disk. The result is a list of dangling
+    # links that will be resolved by merging the validated package.
+    let
+      kvPairs = mpt.kvPairs()                       # list of `(key,node)` pairs
+      matches = block:                              # resolved dngl link keys
+        let rc = session.matchDnglAccLinks kvPairs.mapIt(it[0])
+        if rc.isErr:
+          error info & ": Error accessing dangling links",
+            stateInx, nStates, distance, root, error=rc.error
+          # Stay, and import partial MPT
+          seq[seq[byte]].default                    # empty key list
+        elif rc.value.len == 0 and not session.isPivot:
+          # Data package would not resolve any dangling links on pivot MPT
+          break body                                # not doing anything
+        else:
+          rc.value
 
-    # Store `(key,node)` list on trie
+    # Merge `(key,node)` list on the accounts MPT on disk.
     session.db.putAccKvt(kvPairs).isOkOr:
       error info & ": Cannot store accounts on trie", stateInx, nStates, root,
         distance, peerID, nAccounts, nProof, iv, `error`=error
       bodyRc = Opt.some(ETrieError)
       break body
-
-    # Some accounting for merged accounts ranges
-    mergedOk = true                                 # mark current state used
-    session.updateCoverageMetrics()                 # full coverage metrics
 
     if 0 < nAccounts:
       # Process storage slots
@@ -312,7 +359,28 @@ template mkTrieImpl(
           bodyRc = Opt.some(value)                  # ..otherwise ignore for now
           break body
 
-    bodyRc = Opt.none(ErrorType)
+    # Some accounting for merged accounts ranges
+    session.updateCoverageMetrics()                 # full coverage metrics
+
+    # There is not much one can do with accounting errors, below
+    bodyRc = Opt.none(ErrorType)                    # all clean so far
+
+    # Collect lists of `(key,path)` pairs needed to update the dangling
+    # links cache.
+    let
+      leafs = mpt.leafKpp()
+      incomplete = session.incompleteAccounts(leafs)
+      danglings = mpt.danglingKp()
+
+    # Update cache of dangling links:
+    # * remove links from `matches[]`
+    # * add links from `incomplete[]` list of account leafs
+    # * add links from `danglings[]` list if they are also dangling on the
+    #   merged accounts MPT on disk
+    session.updatehDnglAccLinks(matches, incomplete, danglings).isOkOr:
+      error info & ": Error updating dangling links",
+        stateInx, nStates, distance, root, `error`=error
+
     # End block `body`
 
   bodyRc
@@ -352,7 +420,6 @@ template sessionMkTrie*(
     template state: auto = session.state
     template stateInx: auto = session.stateInx
     template nStates: auto = session.nStates
-    template mergedOk: auto = session.mergedOk
     template distance: auto = session.distance
     template accData: auto = session.accData
     template accRange: auto = session.accRange
@@ -373,7 +440,6 @@ template sessionMkTrie*(
     for n in 0 ..< nStates:
       state = byDist[n]                             # update descriptor fields
       stateInx = n                                  # ditto
-      mergedOk = false                              # ..
       distance = state.dist(pivot)
 
       if 0 < state.error.len:
@@ -406,14 +472,8 @@ template sessionMkTrie*(
         state.tag = (if session.isPivot: PivotOnTrie else: OnTrie)
         discard session.db.putStateData(state)
 
-      if stateInx < nStates-1 and mergedOk:         # did something at all?
-        session.updateDanglingLinks(info).isOkOr:
-          error info & ": Failed calculating dangling account links",
-            stateInx, nStates, root, nErrors=error
-          break body                                # makes no sense to proceed
-
       debug info & ": Done this state", stateInx, nStates, root, distance,
-        tag=state.tag, covered=session.fullCov.totalRatio.pcStr, mergedOk
+        covered=session.fullCov.totalRatio.pcStr
       # End `for walkStateData()`
 
     let elapsed = Moment.now() - start

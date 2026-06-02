@@ -88,14 +88,6 @@ type
 # Public helpers
 # ------------------------------------------------------------------------------
 
-func decodeAccount*(pyl: openArray[byte]): Opt[Account] =
-  try:
-    var acc = rlp.decode(pyl, Account)
-    return ok(move acc)
-  except RlpError:
-    discard
-  err()
-
 proc findPivot*(db: MptAsmRef): Opt[WalkStateData] =
   for state in db.walkStateData():
     if state.error.len == 0 and state.tag == PivotOnTrie:

@@ -23,7 +23,7 @@ import
   std/tables, # typetraits],
   pkg/[chronicles, chronos, eth/common],
   ../[helpers, mpt, worker_desc],
-  ./session_analyse_desc
+  ./[session_analyse_desc, session_helpers]
 
 export
   AttType
