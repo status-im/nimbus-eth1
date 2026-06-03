@@ -55,10 +55,10 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc init[T: WalkStack](_: type T, root: seq[byte]): T =
+proc init[T: WalkStack](_: type T, root: openArray[byte]): T =
   var st = T(size: 1)                               # initialise first entry
   st.data[0].last = -1                              # base entry (sort of dummy)
-  st.data[0].links[0] = (NibblesBuf(),root)         # initialise root link
+  st.data[0].links[0] = (NibblesBuf(),@root)        # initialise root link
   st
 
 template len(st: WalkStack): auto =
@@ -121,9 +121,18 @@ template runErrand(
 # Private functions, MPT traversal core function
 # ------------------------------------------------------------------------------
 
+proc getAccKvtWrap(
+    db: MptAsmRef;
+    _: Hash32;
+    key: openArray[byte];
+      ): BlobResult =
+  ## Ignore state root for `get()` on accounts KVT
+  db.getAccKvt key
+
 template traverseMpt(
     trd: TravDescRef;                               # traversal descriptor
-    root: Hash32;                                   # root key
+    base: Hash32;                                   # zero or account path
+    root: openArray[byte];                          # root key
     get: WalkTrieGetCB;                             # fetch function
     notify: untyped;                                # tell node position
     info: static[string];                           # unset => no thread switch
@@ -135,7 +144,7 @@ template traverseMpt(
   ##
   var bodyRc = Result[void,AttType].err(EOtherError)
   block body:
-    var stack = WalkStack.init @(root.data)         # stack avoids recursion
+    var stack = WalkStack.init root                 # stack avoids recursion
 
     while 0 < stack.len:
       var
@@ -160,13 +169,13 @@ template traverseMpt(
         depth = stack.len - 2                       # info for call backs
         path = topParent.path & topLinks[topInx].pfx # path from stack
         key = topLinks[topInx].key                  # key from stack
-        node = get(trd.db, key).valueOr:            # node from DB
+        node = get(trd.db, base, key).valueOr:      # node from DB
           notify(EGetError, trd, EmptyBlob, key, EmptyBlob, depth, info)
           continue
 
         if node.len == 0:                           # dangling link?
           if topParent.node.len == 0:               # fail to resolve `root`?
-            doAssert key == @(root.data)
+            doAssert key == @root
             notify(ENoRoot, trd, EmptyBlob, key, EmptyBlob, depth, info)
             bodyRc = typeof(bodyRc).err(ENoRoot)    # => missing root, error
             break body
@@ -299,8 +308,10 @@ template accAndStoNotify(
         # Analyse MPT for storage slots
         let
           start = Moment.now()
-          rc = traverseMpt(trd, acc.storageRoot, getStoKvt, stoNotify, info):
-            traversingStorageMsg(stats, info)
+          base = Hash32.fromBytes path
+          rc = traverseMpt(
+            trd, base, acc.storageRoot.data, getStoKvt, stoNotify, info):
+              traversingStorageMsg(stats, info)
 
         if rc.isErr and rc.error != ENoRoot:
           debug info & ": Failed traversing storage slots",
@@ -440,17 +451,19 @@ template sessionAnalyseTrieIter*(
         bodyRc = typeof(bodyRc).err(ENoPivot)
         break body
 
-      stateRoot = pivot.root.Hash32
-
     template stats(): auto = trd.stats
     startTraversingMsg(info)
 
     when accAndStoOk:
-      let rc = traverseMpt(trd, stateRoot, getAccKvt, accAndStoNotify, info):
-        traversingAccountsMsg(stats, info)
+      let rc = traverseMpt(
+        trd, zeroHash32, pivot.root.Hash32.data,
+        getAccKvtWrap, accAndStoNotify, info):
+          traversingAccountsMsg(stats, info)
     else:
-      let rc = traverseMpt(trd, stateRoot, getAccKvt, accOnlyNotify, info):
-        traversingAccountsMsg(stats, info)
+      let rc = traverseMpt(
+        trd, zeroHash32, pivot.root.Hash32.data,
+        getAccKvtWrap, accOnlyNotify, info):
+          traversingAccountsMsg(stats, info)
 
     if rc.isErr:
       debug info & ": Failed analysing MPT", `error`=rc.error

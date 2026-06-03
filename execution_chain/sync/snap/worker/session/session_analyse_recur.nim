@@ -37,8 +37,17 @@ type
 # Private functions, MPT traversal core function
 # ------------------------------------------------------------------------------
 
+proc getAccKvtWrap(
+    db: MptAsmRef;
+    _: Hash32;
+    key: openArray[byte];
+      ): BlobResult =
+  db.getAccKvt key
+
 proc walkTrieRecImpl(
     trd: TravDescRef,
+    base: Hash32;                                   # zero or account path
+    root: openArray[byte];                          # current dub-MPT root
     path: NibblesBuf;                               # node path
     key: openArray[byte];                           # node key
     node: openArray[byte];                          # rlp encoded node data
@@ -55,18 +64,19 @@ proc walkTrieRecImpl(
     block body:
       if link.isList:                                 # no Hash32 but node data
         trd.walkTrieRecImpl(
-          pfx, link.rawData, link.rawData, get, notify, depth+1)
+          base, root, pfx, link.rawData, link.rawData, get, notify, depth+1)
       else:
         let
           newKey = link.toBytes                       # get link
-          newNode = trd.db.get(newKey).valueOr:       # get node from DB
+          newNode = trd.db.get(base, newKey).valueOr: # get node from DB
             trd.notify(EGetError, EmptyBlob, newKey, EmptyBlob, depth)
             break body
         if newNode.len == 0:
           trd.notify(AttDangling,
             pfx.toHexPrefix(false).data(), newKey, EmptyBlob, depth)
         else:
-          trd.walkTrieRecImpl(pfx, newKey, newNode, get, notify, depth+1)
+          trd.walkTrieRecImpl(
+            base, root, pfx, newKey, newNode, get, notify, depth+1)
   try:
     var rlp = node.rlpFromBytes()
     case rlp.listLen
@@ -96,21 +106,20 @@ proc walkTrieRecImpl(
 
 proc walkTrieRec(
     trd: TravDescRef;
-    root: Hash32;                                   # root key
+    base: Hash32;                                   # zero or account path
+    root: openArray[byte];                          # state root
     get: WalkTrieGetCB;                             # fetch function
     notify: WalkTrieRecCB;                          # node event notifier
       ): Result[void,AttType] =
   ## Starter
-  let
-    root = @(root.data)
-    node = trd.db.get(root).valueOr:
-      trd.notify(EGetError, EmptyBlob, root, EmptyBlob, 0)
-      return err(EGetError)
+  let node = trd.db.get(base, root).valueOr:
+    trd.notify(EGetError, EmptyBlob, root, EmptyBlob, 0)
+    return err(EGetError)
   if node.len == 0:
     trd.notify(ENoRoot, EmptyBlob, root, EmptyBlob, 0)
     return err(ENoRoot)
 
-  trd.walkTrieRecImpl(EmptyPath, root, node, get, notify, 0)
+  trd.walkTrieRecImpl(base, root, EmptyPath, root, node, get, notify, 0)
   return ok()
 
 # ------------------------------------------------------------------------------
@@ -178,8 +187,9 @@ proc accAndStoNotifyRecur(info: static[string]): WalkTrieRecCB =
           let
             start = Moment.now()
             notify = stoNotifyRecur info
+            base = Hash32.fromBytes path
 
-          trd.walkTrieRec(acc.storageRoot, getStoKvt, notify).isOkOr:
+          trd.walkTrieRec(base, acc.storageRoot.data, getStoKvt, notify).isOkOr:
             if error != ENoRoot:
               debug info & ": Failed traversing storage slots",
                 root=acc.storageRoot.toStr, nErr=stats.nStoErr, `error`=error
@@ -308,7 +318,6 @@ proc sessionAnalyseTrieRecur*(
   ##
   let
     start = Moment.now()
-    blindCB = proc(key, path: openArray[byte]) = discard
     trd = TravDescRef(
       ctx:           ctx,
       db:            ctx.pool.mptAsm,
@@ -322,8 +331,6 @@ proc sessionAnalyseTrieRecur*(
       debug info & ": MPT analysis failed, pivot missing"
       return err(ENoPivot)                          # => missing pivot, error
 
-    root = pivot.root.Hash32
-
   when accAndStoOk:
     let notify = accAndStoNotifyRecur info
   else:
@@ -332,9 +339,10 @@ proc sessionAnalyseTrieRecur*(
   template stats(): auto = trd.stats
   startTraversingMsg(info)
 
-  trd.walkTrieRec(root, getAccKvt, notify).isOkOr:
-    debug info & ": Failed analysing MPT", `error`=error
-    return err(error)                               # => missing root node
+  trd.walkTrieRec(
+    zeroHash32, pivot.root.Hash32.data, getAccKvtWrap, notify).isOkOr:
+      debug info & ": Failed analysing MPT", `error`=error
+      return err(error)                             # => missing root node
 
   stats.nAccNodes += stats.nNodes
   stats.nNodes = stats.nAccNodes + stats.nStoNodes

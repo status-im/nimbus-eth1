@@ -94,7 +94,7 @@ proc incompleteAccounts(
         break checkAccount
 
       if a.storageRoot != EMPTY_ROOT_HASH:
-        let ok = session.db.hasStoKvt(a.storageRoot.data).valueOr:
+        let ok = session.db.hasStoKvt(path, a.storageRoot.data).valueOr:
           break checkAccount
         if not ok:
           break checkAccount
@@ -213,7 +213,7 @@ template mkStoTrie(
         break body
 
       # Store `(key,node)` list on trie
-      session.db.putStoKvt(mpt.kvPairs()).isOkOr:
+      session.db.putStoKvt(acc.accHash, mpt.kvPairs()).isOkOr:
         error info & ": cannot store slot on trie", stateInx, nStates, root,
           distance, peerID, accKey, stoRoot, nProof=w.proof.len,
           iv=(w.start,w.limit).to(float).toStr, nSlot=w.slot.len, `error`=error

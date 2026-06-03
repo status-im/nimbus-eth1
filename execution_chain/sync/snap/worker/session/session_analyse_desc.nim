@@ -47,7 +47,7 @@ type
   # ----------
 
   WalkTrieGetCB* = proc(
-    db: MptAsmRef, key: openArray[byte]
+    db: MptAsmRef, base: Hash32, key: openArray[byte]
       ): BlobResult {.gcsafe, raises: [].}
 
   WalkStats* = tuple                                # MPT traversal statistics
@@ -97,6 +97,11 @@ proc findPivot*(db: MptAsmRef): Opt[WalkStateData] =
 template toKey*(rlp: Rlp): seq[byte] =
   ## Convert to hask key or node data if it is a list (=> length smaller 32)
   if rlp.isList: @(rlp.rawData) else: rlp.toBytes
+
+func fromBytes*(_: type Hash32, path: openArray[byte]): Hash32 =
+  doAssert path.len < 33
+  let path = @path
+  (addr distinctBase(result)[0]).copyMem(unsafeAddr path[0], path.len)
 
 # ------------------------------------------------------------------------------
 # Public trie analysis logging helpers
