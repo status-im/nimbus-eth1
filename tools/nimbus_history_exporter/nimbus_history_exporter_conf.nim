@@ -74,9 +74,11 @@ type
 
     case cmd* {.command.}: HistoryExportCmd
     of HistoryExportCmd.exportEre:
-      startEra* {.desc: "Number of the first era to be exported", name: "start-era".}:
+      era* {.desc: "Number of first era to export", defaultValue: 0, name: "era".}:
         uint64
-      endEra* {.desc: "Number of the last era to be exported", name: "end-era".}: uint64
+      eraCount* {.
+        desc: "Number of eras to export (0 = all)", defaultValue: 0, name: "era-count"
+      .}: uint64
       noProofs* {.
         desc: "Omit proof entries from the ere file (produces a noproofs profile)",
         defaultValue: false,
@@ -98,11 +100,14 @@ type
         defaultValueDesc: "<data-dir>/era1",
         name: "era1-dir"
       .}: Option[InputDir]
-      startEraEra1* {.
-        desc: "Number of the first era to be exported", name: "start-era"
-      .}: uint64
-      endEraEra1* {.desc: "Number of the last era to be exported", name: "end-era".}:
+      eraEra1* {.desc: "Number of first era to export", defaultValue: 0, name: "era".}:
         uint64
+      eraCountEra1* {.
+        desc:
+          "Number of eras to export (0 = all pre-merge eras, excluding the merge era)",
+        defaultValue: 0,
+        name: "era-count"
+      .}: uint64
       noProofsEra1* {.
         desc: "Omit proof entries from the ere file (produces a noproofs profile)",
         defaultValue: false,
@@ -126,11 +131,14 @@ type
       ereFile* {.desc: "Path to the ere file to be verified", name: "ere-file".}:
         InputFile
     of HistoryExportCmd.exportEra1:
-      startEraEra1Export* {.
-        desc: "Number of the first era to be exported", name: "start-era"
+      eraEra1Export* {.
+        desc: "Number of first era to export", defaultValue: 0, name: "era"
       .}: uint64
-      endEraEra1Export* {.
-        desc: "Number of the last era to be exported", name: "end-era"
+      eraCountEra1Export* {.
+        desc:
+          "Number of eras to export (0 = all pre-merge eras, including the merge era)",
+        defaultValue: 0,
+        name: "era-count"
       .}: uint64
       era1OutputDir* {.
         desc: "Directory to write .era1 files to",

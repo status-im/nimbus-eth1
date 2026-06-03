@@ -87,7 +87,12 @@ proc exportEra1*(config: HistoryExportConf) =
     mergeBlockNumber = mergeBlockNumber(config.networkId())
     networkName = config.network
     mergeEra = era1.era(mergeBlockNumber)
-    preMergeEndEra = min(Era1(config.endEraEra1Export), mergeEra - 1)
+    startEra1 = Era1(config.eraEra1Export)
+    endEra1 =
+      if config.eraCountEra1Export == 0:
+        mergeEra
+      else:
+        min(Era1(config.eraEra1Export + config.eraCountEra1Export - 1), mergeEra)
     outputDir = config.era1OutputDirPath()
 
   createPath(outputDir).isOkOr:
@@ -99,7 +104,7 @@ proc exportEra1*(config: HistoryExportConf) =
     coreDb.close()
   let db = coreDb.baseTxFrame()
 
-  for era in Era1(config.startEraEra1Export) .. preMergeEndEra:
+  for era in startEra1 .. endEra1:
     exportEra1File(era, db, networkName, mergeBlockNumber, outputDir).isOkOr:
       fatal "Error exporting era1 file",
         era = era.uint64,

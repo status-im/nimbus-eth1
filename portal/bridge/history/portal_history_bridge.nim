@@ -168,6 +168,8 @@ proc runBackfillLoopSyncMode(
     blockLowerBound = startEra * EPOCH_SIZE # inclusive
     blockUpperBound = ((endEra + 1) * EPOCH_SIZE) - 1 # inclusive
     blockNumberQueue = newAsyncQueue[uint64](50)
+  defer:
+    db.dispose()
 
   proc blockWorker() {.async: (raises: [CancelledError]).} =
     while true:
@@ -224,6 +226,8 @@ proc runBackfillLoopAuditMode(
     blockLowerBound = startEra * EPOCH_SIZE # inclusive
     blockUpperBound = ((endEra + 1) * EPOCH_SIZE) - 1 # inclusive
     blockRange = blockUpperBound - blockLowerBound
+  defer:
+    db.dispose()
 
   var blockTuple: BlockTuple
   while true:
