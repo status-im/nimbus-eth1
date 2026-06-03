@@ -262,7 +262,8 @@ proc prepareEnv*(
       com = CommonRef.new(memDB, config,
         statelessProviderEnabled = statelessEnabled,
         statelessWitnessValidation = false, # Running stateless execution separately in test runner
-        optimisticStatePrefetch = defaultOptimisticStatePrefetch)
+        optimisticStatePrefetch = parallelEnabled,
+        balStatePrefetch = parallelEnabled)
 
     if parallelEnabled:
       let taskpool =

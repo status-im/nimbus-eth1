@@ -108,6 +108,15 @@ type
       ## Optimistically pre-execute the transactions of a block on background
       ## threads to warm database caches before the main thread executes them.
 
+    balStatePrefetch*: bool
+      ## Use the supplied block access list to prefetch the accounts and storage
+      ## slots of a block on background threads.
+
+    balStatePrefetchWorkers*: int
+      ## Number of background worker tasks used for block access list state
+      ## prefetching. 0 means use the same number of workers as the number of
+      ## available taskpool threads.
+
 # ------------------------------------------------------------------------------
 # Private helper functions
 # ------------------------------------------------------------------------------
@@ -181,7 +190,9 @@ proc init(com         : CommonRef,
           initializeDb: bool,
           statelessProviderEnabled: bool,
           statelessWitnessValidation: bool,
-          optimisticStatePrefetch: bool) =
+          optimisticStatePrefetch: bool,
+          balStatePrefetch: bool,
+          balStatePrefetchWorkers: int) =
 
 
   config.daoCheck()
@@ -221,6 +232,8 @@ proc init(com         : CommonRef,
   com.statelessProviderEnabled = statelessProviderEnabled
   com.statelessWitnessValidation = statelessWitnessValidation
   com.optimisticStatePrefetch = optimisticStatePrefetch
+  com.balStatePrefetch = balStatePrefetch
+  com.balStatePrefetchWorkers = balStatePrefetchWorkers
 
 proc isBlockAfterTtd(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
   if com.config.terminalTotalDifficulty.isNone:
@@ -246,6 +259,8 @@ proc new*(
     statelessProviderEnabled = false;
     statelessWitnessValidation = false;
     optimisticStatePrefetch = false;
+    balStatePrefetch = false;
+    balStatePrefetchWorkers = 0;
       ): CommonRef =
 
   ## If genesis data is present, the forkIds will be initialized
@@ -259,7 +274,9 @@ proc new*(
     initializeDb,
     statelessProviderEnabled,
     statelessWitnessValidation,
-    optimisticStatePrefetch)
+    optimisticStatePrefetch,
+    balStatePrefetch,
+    balStatePrefetchWorkers)
 
 proc new*(
     _: type CommonRef;
@@ -270,6 +287,8 @@ proc new*(
     statelessProviderEnabled = false;
     statelessWitnessValidation = false;
     optimisticStatePrefetch = false;
+    balStatePrefetch = false;
+    balStatePrefetchWorkers = 0;
       ): CommonRef =
 
   ## There is no genesis data present
@@ -283,7 +302,9 @@ proc new*(
     initializeDb,
     statelessProviderEnabled,
     statelessWitnessValidation,
-    optimisticStatePrefetch)
+    optimisticStatePrefetch,
+    balStatePrefetch,
+    balStatePrefetchWorkers)
 
 func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
   ## clone but replace the db
@@ -298,7 +319,9 @@ func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
     networkId    : com.networkId,
     statelessProviderEnabled: com.statelessProviderEnabled,
     statelessWitnessValidation: com.statelessWitnessValidation,
-    optimisticStatePrefetch: com.optimisticStatePrefetch
+    optimisticStatePrefetch: com.optimisticStatePrefetch,
+    balStatePrefetch: com.balStatePrefetch,
+    balStatePrefetchWorkers: com.balStatePrefetchWorkers
   )
 
 func clone*(com: CommonRef): CommonRef =
