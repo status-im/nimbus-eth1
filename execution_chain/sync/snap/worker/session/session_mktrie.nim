@@ -105,7 +105,7 @@ proc incompleteAccounts(
         if not ok:
           break checkAccount
       continue                                      # all checks successful
-    kpRc.add (key,path)                             # some check unsuccessful
+    kpRc.add (key,@(path.data))                     # some check unsuccessful
     # End `for()`
 
   move kpRc

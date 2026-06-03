@@ -126,7 +126,7 @@ proc nodeStash(
 proc updateProofTrieBranch(
     node: BranchNodeRef;
     path: NibblesBuf;
-    leafs: var seq[(seq[byte],LeafNodeRef)];
+    leafs: var seq[(Hash32,LeafNodeRef)];
       ) =
   if 0 < node.xtPfx.len:
     # Join child node into this extension node
@@ -154,11 +154,11 @@ proc updateProofTrieBranch(
         BranchNodeRef(down).updateProofTrieBranch(path, leafs)
       of Leaf:
         let down = LeafNodeRef(down)
-        leafs.add (@((path & down.lfPfx).getBytes), down)
+        leafs.add (Hash32((path & down.lfPfx).getBytes), down)
 
 template updateProofTrie(
     root: NodeRef;
-    leafs: var seq[(seq[byte],LeafNodeRef)];
+    leafs: var seq[(Hash32,LeafNodeRef)];
       ) =
   ## Recursively traverse partial proof MPT and label path prefixes so they
   ## are available on the `Stop` nodes. Also dissolve extensions inuo the
@@ -327,7 +327,7 @@ proc makeOrGetLeaf(db: NodeTrieRef; path: Hash32): Opt[LeafNodeRef] =
   let leaf = tree.mergeSubTree(pfx).valueOr:
     return err()
 
-  db.leafs.add (@(path.data), leaf)
+  db.leafs.add (path, leaf)
   ok(leaf)
 
 {.pop.}
@@ -609,7 +609,6 @@ proc merge*(db: NodeTrieRef, sto: StorageItem): bool =
   let leaf = db.makeOrGetLeaf(sto.slotHash).valueOr:
     return false
   if not leaf.isNil:
-    db.leafs.add (@(sto.slotHash.data), leaf)
     leaf.lfPayload = sto.slotData
   true
 
