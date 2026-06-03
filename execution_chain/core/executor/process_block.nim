@@ -197,42 +197,35 @@ when compileOption("threads"):
 
   template withBalPrefetchParallel(
       vmState: BaseVMState, bal: Opt[BlockAccessListRef], body: untyped) =
-    var
-      ctx: BalPrefetchCtx
-      ctxPtr: ptr BalPrefetchCtx = nil
-      futs: seq[Flowvar[bool]]
+      
+    let balRef = bal.get()
 
-    if (vmState.com.balStatePrefetch and bal.isSome() and vmState.com.isAmsterdamOrLater(vmState.blockCtx.timestamp)) or
-      (vmState.com.balStatePrefetchForce and bal.isSome()):
-      vmState.balPrefetchActive = true
+    var ctx: BalPrefetchCtx
+    ctx.balPtr = balRef[].addr
+    # Read through the parent frame because the current frame is written to
+    # during block execution; this avoids locking on the frame data structures.
+    ctx.txFrame = vmState.ledger.txFrame.parent()
+    ctx.nextIndex.store(0, moRelease)
+    ctx.finished.store(false, moRelease)
 
-      let balRef = bal.get()
-      ctx.balPtr = balRef[].addr
-      # Read through the parent frame because the current frame is written to
-      # during block execution; this avoids locking on the frame data structures.
-      ctx.txFrame = vmState.ledger.txFrame.parent()
-      ctx.nextIndex.store(0, moRelease)
-      ctx.finished.store(false, moRelease)
+    let 
       ctxPtr = ctx.addr
-
-      let
-        n = vmState.com.taskpool.numThreads
-        configured = vmState.com.balStatePrefetchWorkers
-        numWorkers = if configured <= 0: n else: min(configured, n)
-      futs = newSeq[Flowvar[bool]](numWorkers)
-
-      for i in 0 ..< numWorkers:
-        futs[i] = vmState.com.taskpool.spawn balPrefetchWorker(ctxPtr)
+      n = vmState.com.taskpool.numThreads
+      configured = vmState.com.balStatePrefetchWorkers
+      numWorkers = if configured <= 0: n else: min(configured, n)
+    
+    var futs = newSeq[Flowvar[bool]](numWorkers)
+    for i in 0 ..< numWorkers:
+      futs[i] = vmState.com.taskpool.spawn balPrefetchWorker(ctxPtr)
 
     try:
       body
     finally:
-      if not ctxPtr.isNil():
-        # Signal completion so workers stop claiming new items, then collect all
-        # so that no worker outlives the data it references.
-        ctxPtr[].finished.store(true, moRelease)
-        for f in futs.mitems():
-          discard sync(f)
+      # Signal completion so workers stop claiming new items, then collect all
+      # so that no worker outlives the data it references.
+      ctxPtr[].finished.store(true, moRelease)
+      for f in futs.mitems():
+        discard sync(f)
 
 template withSenderSerial(txs: openArray[Transaction], body: untyped) =
   for txIndex {.inject.}, tx {.inject.} in txs:
@@ -251,7 +244,10 @@ template withSender(vmState: BaseVMState, txs: openArray[Transaction], body: unt
 template withBalPrefetch(
     vmState: BaseVMState, bal: Opt[BlockAccessListRef], body: untyped) =
   when compileOption("threads"):
-    if not vmState.com.taskpool.isNil() and vmState.com.taskpool.numThreads > 1:
+    if ((bal.isSome() and vmState.com.balStatePrefetch and vmState.com.isAmsterdamOrLater(vmState.blockCtx.timestamp)) or
+      (bal.isSome() and vmState.com.balStatePrefetchForce)) and
+        not vmState.com.taskpool.isNil() and vmState.com.taskpool.numThreads > 1:
+      vmState.balPrefetchActive = true
       withBalPrefetchParallel(vmState, bal, body)
     else:
       body
