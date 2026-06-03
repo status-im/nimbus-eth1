@@ -202,9 +202,8 @@ when compileOption("threads"):
       ctxPtr: ptr BalPrefetchCtx = nil
       futs: seq[Flowvar[bool]]
 
-    if vmState.com.balStatePrefetch and bal.isSome() and
-        (vmState.com.balStatePrefetchForce or
-         vmState.com.isAmsterdamOrLater(vmState.blockCtx.timestamp)):
+    if (vmState.com.balStatePrefetch and bal.isSome() and vmState.com.isAmsterdamOrLater(vmState.blockCtx.timestamp)) or
+      (vmState.com.balStatePrefetchForce and bal.isSome()):
       vmState.balPrefetchActive = true
 
       let balRef = bal.get()
