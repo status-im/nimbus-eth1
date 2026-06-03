@@ -9,7 +9,7 @@
 # except according to those terms.
 
 import
-  pkg/[chronos, chronicles, eth/trie/nibbles, stew/byteutils],
+  pkg/[chronicles, eth/trie/nibbles, stew/byteutils],
   ./[session_analyse_desc, session_analyse_iter, session_analyse_recur],
   ../[mpt, worker_desc]
 
@@ -49,7 +49,7 @@ proc getDnglAccCB(
     err: ptr int;
     info: static[string];
       ): OnDanglingCB =
-  proc(key, path: openArray[byte]) =
+  proc(root: Hash32, key, path: openArray[byte]) =
     db.putAccDnglKvt(key, path).isOkOr:
       error info & ": Error caching dangling account links",
         key=key.toHex, path=path.toHex, `error`=error
@@ -60,8 +60,8 @@ proc getDnglStoCB(
     err: ptr int;
     info: static[string];
       ): OnDanglingCB =
-  proc(key, path: openArray[byte]) =
-    db.putStoDnglKvt(key, path).isOkOr:
+  proc(root: Hash32, key, path: openArray[byte]) =
+    db.putStoDnglKvt(root, key, path).isOkOr:
       error info & ": Error caching dangling slot links",
         key=key.toHex, path=path.toHex, `error`=error
       err[].inc
@@ -71,7 +71,7 @@ proc getDnglCodeCB(
     err: ptr int;
     info: static[string];
       ): OnDanglingCB =
-  proc(key, path: openArray[byte]) =
+  proc(root: Hash32, key, path: openArray[byte]) =
     db.putCodeDnglKvt(key, path).isOkOr:
       error info & ": Error caching dangling slot links",
         key=key.toHex, path=path.toHex, `error`=error
@@ -133,6 +133,8 @@ template sessionAnalyseAccounts*(
   ## This function is used for debugging or testing, only. It can be used
   ## as a *slow* alternative and control function to the incremental dangling
   ## links bookkeeping approach of the `session_mktrie` module.
+  ##
+  ## It will go away, evenually..
   ##
   var bodyRc = Result[WalkStats,AttType].err(EClearError)
   block body:

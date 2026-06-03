@@ -20,7 +20,7 @@
 {.push raises:[].}
 
 import
-  std/tables, # typetraits],
+  std/[tables, typetraits],
   pkg/[chronicles, chronos, eth/common],
   ../[helpers, mpt, worker_desc],
   ./[session_analyse_desc, session_helpers]
@@ -121,7 +121,7 @@ template runErrand(
 # Private functions, MPT traversal core function
 # ------------------------------------------------------------------------------
 
-proc getAccKvtWrap(
+template getAccKvtWrap(
     db: MptAsmRef;
     _: Hash32;
     key: openArray[byte];
@@ -133,7 +133,7 @@ template traverseMpt(
     trd: TravDescRef;                               # traversal descriptor
     base: Hash32;                                   # zero or account path
     root: openArray[byte];                          # root key
-    get: WalkTrieGetCB;                             # fetch function
+    get: untyped;                                   # fetch function
     notify: untyped;                                # tell node position
     info: static[string];                           # unset => no thread switch
     code: untyped;                                  # e.g. logging
@@ -170,24 +170,24 @@ template traverseMpt(
         path = topParent.path & topLinks[topInx].pfx # path from stack
         key = topLinks[topInx].key                  # key from stack
         node = get(trd.db, base, key).valueOr:      # node from DB
-          notify(EGetError, trd, EmptyBlob, key, EmptyBlob, depth, info)
+          notify(EGetError, trd, base, EmptyBlob, key, EmptyBlob, depth, info)
           continue
 
         if node.len == 0:                           # dangling link?
           if topParent.node.len == 0:               # fail to resolve `root`?
             doAssert key == @root
-            notify(ENoRoot, trd, EmptyBlob, key, EmptyBlob, depth, info)
+            notify(ENoRoot, trd, base, EmptyBlob, key, EmptyBlob, depth, info)
             bodyRc = typeof(bodyRc).err(ENoRoot)    # => missing root, error
             break body
           notify(AttDangling, trd,
-            path.toHexPrefix(false).data(), key, EmptyBlob, depth, info)
+            base, path.toHexPrefix(false).data(), key, EmptyBlob, depth, info)
           continue
 
         # Allow thread switch when enabled
         when 0 < info.len:
           runErrand(trd, info, code).isOkOr:
             notify(ECancelled, trd,
-              path.toHexPrefix(false).data(), key, node, depth, info)
+              base, path.toHexPrefix(false).data(), key, node, depth, info)
             bodyRc = typeof(bodyRc).err(ECancelled) # => cancel, error
             break body
 
@@ -208,7 +208,7 @@ template traverseMpt(
           if isLeaf:                                # notify about leaf
             let data = pyl.read seq[byte]
             notify(AttLeaf, trd,
-              (path & pfx).getBytes(), key, data, depth+1, info)
+              base, (path & pfx).getBytes(), key, data, depth+1, info)
             continue
 
           # Initialse `link[]` data on `newTop` and push on stack
@@ -227,17 +227,17 @@ template traverseMpt(
           # Push on stack (or error)
           if nLnk == 0:
             notify(ENoBranch, trd,
-              path.toHexPrefix(false).data(), key, node, depth, info)
+              base, path.toHexPrefix(false).data(), key, node, depth, info)
           else:
             stack.push newTop
 
         else:
           notify(ERlpList, trd,
-            path.toHexPrefix(false).data(), key, node, depth, info)
+            base, path.toHexPrefix(false).data(), key, node, depth, info)
 
       except RlpError:
         notify(ERlpExcept, trd,
-          path.toHexPrefix(false).data(), key, node, depth, info)
+          base, path.toHexPrefix(false).data(), key, node, depth, info)
       # End `while()`
 
     bodyRc = typeof(bodyRc).ok()
@@ -251,6 +251,7 @@ template traverseMpt(
 template stoNotify(
     att: static[AttType];
     trd: TravDescRef;
+    base: Hash32;
     path: openArray[byte];
     key: openArray[byte];
     data: openArray[byte];
@@ -268,11 +269,11 @@ template stoNotify(
 
     elif att == AttDangling:
       stats.nStoDangl.inc
-      trd.onStoDangl(key, path)
+      trd.onStoDangl(base, key, path)
 
     elif att == ENoRoot:
       stats.nStoMissing.inc
-      trd.onStoMissing(key, path)
+      trd.onStoMissing(base, key, path)
 
     else:
       stats.nStoErr.inc
@@ -280,6 +281,7 @@ template stoNotify(
 template accAndStoNotify(
     att: static[AttType];
     trd: TravDescRef;
+    _: Hash32;
     path: openArray[byte];
     key: openArray[byte];
     payload: openArray[byte];                       # node or payload
@@ -311,7 +313,7 @@ template accAndStoNotify(
           base = Hash32.fromBytes path
           rc = traverseMpt(
             trd, base, acc.storageRoot.data, getStoKvt, stoNotify, info):
-              traversingStorageMsg(stats, info)
+              traversingStorageMsg(stats, info)   # keep alive message
 
         if rc.isErr and rc.error != ENoRoot:
           debug info & ": Failed traversing storage slots",
@@ -333,14 +335,14 @@ template accAndStoNotify(
           elif rc.value:
             break checkCodeHash
           stats.nCodeMissing.inc
-          trd.onCodeMissing(key, path)              # (key,path) of account data
+          trd.onCodeMissing(zeroHash32, key, path)  # (key,path) of account data
 
         occasionalMsg(trd.msgAt):
           traversingCodeMsg(stats, info)
 
     elif att == AttDangling:
       stats.nAccDangl.inc
-      trd.onAccDangl(key, path)
+      trd.onAccDangl(zeroHash32, key, path)
 
     else:
       stats.nAccErr.inc
@@ -350,6 +352,7 @@ template accAndStoNotify(
 template accOnlyNotify(
     att: static[AttType];
     trd: TravDescRef;
+    _: Hash32;
     path: openArray[byte];
     key: openArray[byte];
     payload: openArray[byte];                       # node or payload
@@ -378,7 +381,9 @@ template accOnlyNotify(
 
         # Check whether the storage root has an entry on the database
         block checkStoRoot:
-          let rc = trd.db.hasStoKvt(acc.storageRoot.data)
+          let
+            base = path.to(Hash32)
+            rc = trd.db.hasStoKvt(base, acc.storageRoot.data)
           if rc.isErr:
             debug info & ": Failed accessing storage root",
               root=acc.storageRoot.toStr, nErr=stats.nStoErr, error=rc.error
@@ -386,7 +391,7 @@ template accOnlyNotify(
             break checkStoRoot
           treatAccAsDangling = true
           stats.nStoMissing.inc
-          trd.onStoMissing(key, path)               # (key,path) of account data
+          trd.onStoMissing(zeroHash, key, path)     # (key,path) of account data
 
       if acc.codeHash != EMPTY_CODE_HASH:
         stats.nAccCode.inc
@@ -401,14 +406,14 @@ template accOnlyNotify(
             break checkCodeHash
           treatAccAsDangling = true
           stats.nCodeMissing.inc
-          trd.onCodeMissing(key, path)              # (key,path) of account data
+          trd.onCodeMissing(zeroHash32, key, path)  # (key,path) of account data
 
       if treatAccAsDangling:                        # count as dangling leaf
         stats.nAccDangl.inc
 
     elif att == AttDangling:
       stats.nAccDangl.inc
-      trd.onAccDangl(key, path)
+      trd.onAccDangl(zeroHash32, key, path)
 
     else:
       stats.nAccErr.inc
@@ -425,12 +430,13 @@ template sessionAnalyseTrieIter*(
     onDnglSto: OnDanglingCB;                        # not `Nil`
     onMissSto: OnDanglingCB;                        # not `Nil`
     onMissCode: OnDanglingCB;                       # not `Nil`
-    accAndStoOk: static[bool];
+    accAndStoOk: static[bool];                      # FIXME -- will go away
     info: static[string];
       ): auto =
   ## Async template
   ##
-  ## Traverse (depth first) an MPT.
+  ## Traverse (depth first) an MPT and store missing or dangling node links
+  ## on the dangling links KVT tables.
   ##
   var bodyRc = Result[WalkStats,AttType].err(EOtherError)
   block body:
@@ -439,10 +445,10 @@ template sessionAnalyseTrieIter*(
       trd = TravDescRef(
         ctx:           cty,
         db:            cty.pool.mptAsm,
-        onAccDangl:    onDnglAcc,
-        onStoDangl:    onDnglSto,
-        onStoMissing:  onMissSto,
-        onCodeMissing: onMissCode,
+        onAccDangl:    onDnglAcc,                   # FIXME -- will go away
+        onStoDangl:    onDnglSto,                   # FIXME -- will go away
+        onStoMissing:  onMissSto,                   # FIXME -- will go away
+        onCodeMissing: onMissCode,                  # FIXME -- will go away
         msgAt:         start + threadLogTimeLimit,
         napAt:         start + threadSwitchRunLimit)
 

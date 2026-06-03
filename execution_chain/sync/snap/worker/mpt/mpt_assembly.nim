@@ -1228,46 +1228,79 @@ iterator walkAccDnglKvt*(db: MptAsmRef): WalkKvt =
 
 # -------------
 
-proc hasStoDnglKvt*(db: MptAsmRef; key: openArray[byte]): BoolResult =
-  let data = db.getAtMost33(StoDnglKvt, key).valueOr:
+proc hasStoDnglKvt*(
+    db: MptAsmRef;
+    acc: Hash32;
+    key: openArray[byte];
+      ): BoolResult =
+  let data = db.getAtMost65(StoDnglKvt, acc, key).valueOr:
     return err(error)
   ok(0 < data.len)
 
-proc getStoDnglKvt*(db: MptAsmRef; key: openArray[byte]): BlobResult =
-  var data = db.getAtMost33(StoDnglKvt, key).valueOr:
+proc getStoDnglKvt*(
+    db: MptAsmRef;
+    acc: Hash32;
+    key: openArray[byte];
+      ): BlobResult =
+  var data = db.getAtMost65(StoDnglKvt, acc, key).valueOr:
     return err(error)
   ok(move data)
 
-proc putStoDnglKvt*(db: MptAsmRef; key, data: openArray[byte]): PutResult =
-  db.putAtMost33(StoDnglKvt, key, data)
+proc putStoDnglKvt*(
+    db: MptAsmRef;
+    acc: Hash32;
+    key: openArray[byte];
+    data: openArray[byte];
+      ): PutResult =
+  db.putAtMost65(StoDnglKvt, acc, key, data)
 
 proc putStoDnglKvt*(
     db: MptAsmRef;
+    acc: Hash32;
     kvp: openArray[(seq[byte],seq[byte])];
       ): PutResult =
   for (key,data) in kvp:
-    db.putAtMost33(StoDnglKvt, key, data).isOkOr:
+    db.putAtMost65(StoDnglKvt, acc, key, data).isOkOr:
       return err(error)
   ok()
 
-proc delStoDnglKvt*(db: MptAsmRef, key: openArray[byte]): DelResult =
-  db.delAtMost33(StoDnglKvt, key)
+proc delStoDnglKvt*(
+    db: MptAsmRef,
+    acc: Hash32;
+    key: openArray[byte];
+      ): DelResult =
+  db.delAtMost65(StoDnglKvt, acc, key)
 
-proc delStoDnglKvt*(db: MptAsmRef, keys: openArray[seq[byte]]): DelResult =
+proc delStoDnglKvt*(
+    db: MptAsmRef,
+    acc: Hash32;
+    keys: openArray[seq[byte]];
+      ): DelResult =
   for key in keys:
-    db.delAtMost33(StoDnglKvt, key).isOkOr:
+    db.delAtMost65(StoDnglKvt, acc, key).isOkOr:
+      return err(error)
+  ok()
+
+proc clearStoDnglKvt*(db: MptAsmRef, acc: Hash32): DelResult =
+  for (key1, key2,_) in db.adb.colWalkAtLeast33 key33(StoDnglKvt, acc):
+    db.delAtMost65(StoDnglKvt, key1, key2).isOkOr:
       return err(error)
   ok()
 
 proc clearStoDnglKvt*(db: MptAsmRef): DelResult =
   for (key,_) in db.adb.colWalkAtLeast1 @[byte StoDnglKvt]:
-    db.delAtMost33(StoDnglKvt, key).isOkOr:
+    db.adb.rDel(@[byte StoDnglKvt] & key).isOkOr:
       return err(error)
   ok()
 
-iterator walkStoDnglKvt*(db: MptAsmRef): WalkKvt =
+iterator walkStoDnglKvt*(db: MptAsmRef, acc: Hash32): WalkKkvt =
+  for (key1, key2, data) in db.adb.colWalkAtLeast33 key33(StoDnglKvt, acc):
+    yield (key1, key2, data)
+
+iterator walkStoDnglKvt*(db: MptAsmRef): WalkKkvt =
   for (key,data) in db.adb.colWalkAtLeast1 @[byte StoDnglKvt]:
-    yield (key,data)
+    if 32 < key.len:
+      yield (key[0..31], key[32..^1], data)
 
 # -------------
 
