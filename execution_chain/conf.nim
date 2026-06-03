@@ -862,7 +862,7 @@ func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
     rdbPrintStats = config.rdbPrintStats,
     maxSnapshots = config.aristoDbMaxSnapshots,
     parallelStateRootComputation = config.parallelStateRootComputation,
-    threadSafeCaches = config.optimisticStatePrefetch or config.balStatePrefetch,
+    threadSafeCaches = config.optimisticStatePrefetch or config.balStatePrefetch or config.balStatePrefetchForce,
     blockCacheType = config.rocksdbBlockCacheType,
   )
 
