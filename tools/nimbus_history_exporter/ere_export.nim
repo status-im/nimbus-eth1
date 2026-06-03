@@ -48,12 +48,16 @@ proc exportEreFileFromEra1(
   var header: headers.Header
   ?db.getBlockHeader(endNumber, header)
 
-  let
-    filename =
-      outputDir /
-      ereFileName(networkName, era, header.computeRlpHash(), noProofs, noReceipts)
-    e2 = openFile(filename, {OpenFlags.Write, OpenFlags.Create, OpenFlags.Truncate}).valueOr:
-      return err(ioErrorMsg(error))
+  let filename =
+    outputDir /
+    ereFileName(networkName, era, header.computeRlpHash(), noProofs, noReceipts)
+
+  if isFile(filename):
+    debug "Ere file already exists", era, file = filename
+    return ok()
+
+  let e2 = openFile(filename, {OpenFlags.Write, OpenFlags.Create, OpenFlags.Truncate}).valueOr:
+    return err(ioErrorMsg(error))
   defer:
     discard closeFile(e2)
 
@@ -151,9 +155,12 @@ proc exportEreFile(
     filename =
       outputDir / ereFileName(networkName, era, endHeaderHash, noProofs, noReceipts)
 
-    e2 = openFile(filename, {OpenFlags.Write, OpenFlags.Create, OpenFlags.Truncate}).valueOr:
-      return err(ioErrorMsg(error))
+  if isFile(filename):
+    debug "Ere file already exists", era, file = filename
+    return ok()
 
+  let e2 = openFile(filename, {OpenFlags.Write, OpenFlags.Create, OpenFlags.Truncate}).valueOr:
+    return err(ioErrorMsg(error))
   defer:
     discard closeFile(e2)
 
@@ -255,7 +262,12 @@ proc exportEre*(config: HistoryExportConf) =
     mergeBlockNumber = mergeBlockNumber(config.networkId())
     networkName = config.network
     mergeEra = ere.era(mergeBlockNumber)
-    requestedEndEra = ere.Era(config.endEra)
+    startEra = ere.Era(config.era)
+    endEra =
+      if config.eraCount == 0:
+        ere.Era(high(uint64))
+      else:
+        ere.Era(config.era + config.eraCount - 1)
     ereOutputDir = config.ereOutputDir()
 
   createPath(ereOutputDir).isOkOr:
@@ -264,7 +276,7 @@ proc exportEre*(config: HistoryExportConf) =
     quit(QuitFailure)
 
   var beaconBuilder = Opt.none(BeaconProofBuilder)
-  if not config.noProofs and requestedEndEra >= mergeEra:
+  if not config.noProofs and endEra >= mergeEra:
     let builder = BeaconProofBuilder.init(config.eraDirPath(), networkName).valueOr:
       fatal "Failed to initialise BeaconProofBuilder", error = error
       quit(QuitFailure)
@@ -274,8 +286,13 @@ proc exportEre*(config: HistoryExportConf) =
   defer:
     coreDb.close()
   let txFrame = coreDb.baseTxFrame()
+  let highestBlock = txFrame.stateBlockNumber()
 
-  for era in ere.Era(config.startEra) .. requestedEndEra:
+  for era in startEra .. endEra:
+    if era.endNumber() > highestBlock:
+      notice "Written all complete eras", era, highestBlock
+      break
+
     exportEreFile(
       era, txFrame, networkName, mergeBlockNumber, beaconBuilder, ereOutputDir,
       config.noProofs, config.noReceipts,
@@ -295,7 +312,12 @@ proc exportEreFromEra1*(config: HistoryExportConf) =
     mergeBlockNumber = mergeBlockNumber(config.networkId())
     networkName = config.network
     mergeEra = ere.era(mergeBlockNumber)
-    preMergeEndEra = min(ere.Era(config.endEraEra1), mergeEra - 1)
+    startEraFromEra1 = ere.Era(config.eraEra1)
+    endEraFromEra1 =
+      if config.eraCountEra1 == 0:
+        mergeEra - 1
+      else:
+        min(ere.Era(config.eraEra1 + config.eraCountEra1 - 1), mergeEra - 1)
     ereOutputDir = config.ereOutputDir()
 
   createPath(ereOutputDir).isOkOr:
@@ -303,10 +325,13 @@ proc exportEreFromEra1*(config: HistoryExportConf) =
       ereOutputDir, error = ioErrorMsg(error)
     quit(QuitFailure)
 
-  let era1DB =
-    Era1DB.new(config.era1DirPath(), networkName, loadAccumulator(networkName), mergeBlockNumber)
+  let era1DB = Era1DB.new(
+    config.era1DirPath(), networkName, loadAccumulator(networkName), mergeBlockNumber
+  )
+  defer:
+    era1DB.dispose()
 
-  for era in ere.Era(config.startEraEra1) .. preMergeEndEra:
+  for era in startEraFromEra1 .. endEraFromEra1:
     exportEreFileFromEra1(
       era, era1DB, networkName, mergeBlockNumber, ereOutputDir, config.noProofsEra1,
       config.noReceiptsEra1,

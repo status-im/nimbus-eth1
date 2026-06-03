@@ -39,12 +39,22 @@ Without `--debug-store-bodies` and `--debug-store-receipts`, the database will b
 
 `exportEre` reads block data directly from the Nimbus execution client's data directory to produce `ere` files.
 
+Export all available eras (default behaviour):
+
+```sh
+nimbus_history_exporter exportEre \
+  --el-data-dir:/path/to/nimbus/mainnet \
+  --era-dir:/path/to/nimbus/mainnet/era
+```
+
+Export a specific range:
+
 ```sh
 nimbus_history_exporter exportEre \
   --el-data-dir:/path/to/nimbus/mainnet \
   --era-dir:/path/to/nimbus/mainnet/era \
-  --start-era:0 \
-  --end-era:2400
+  --era:100 \
+  --era-count:500
 ```
 
 `ere` files are written to `<el-data-dir>/ere/` by default.
@@ -78,9 +88,7 @@ If the EL database is not available, pre-merge `ere` files can be produced from 
 
 ```sh
 nimbus_history_exporter exportEreFromEra1 \
-  --era1-dir:/path/to/era1 \
-  --start-era:0 \
-  --end-era:1896
+  --era1-dir:/path/to/era1
 ```
 
 `ere` files are written to `<era1-dir>/../ere/` by default, or to `--ere-dir` if specified.
@@ -95,8 +103,6 @@ nimbus_history_exporter exportEreFromEra1 \
 ```sh
 nimbus_history_exporter exportEra1 \
   --el-data-dir:/path/to/nimbus/mainnet \
-  --start-era:0 \
-  --end-era:1896 \
   --era1-dir:/path/to/output/era1
 ```
 

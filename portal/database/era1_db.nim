@@ -69,6 +69,12 @@ proc new*(
     mergeBlockNumber: mergeBlockNumber,
   )
 
+proc dispose*(db: Era1DB) =
+  for f in db.files:
+    if f != nil:
+      f.close()
+  db.files.reset()
+
 proc getBlockHeader*(
     db: Era1DB, blockNumber: uint64, res: var Header
 ): Result[void, string] =
