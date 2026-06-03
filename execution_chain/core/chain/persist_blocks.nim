@@ -16,9 +16,11 @@ import
   ../../evm/[state, types],
   ../../common,
   ../../db/ledger,
+  ../../block_access_list/block_access_list_tracker,
   ../../stateless/[witness_generation, witness_verification, stateless_execution],
   ../../db/storage_types,
   ../[executor, validate],
+  ./bal_sidecar,
   chronicles,
   stint
 
@@ -48,6 +50,14 @@ type
     vmState: BaseVMState
     stats*: PersistStats
     parent: Header
+    # Debug/benchmark only: block access list sidecar (see bal_sidecar). When
+    # generating, the BAL tracker is forced on and each block's generated BAL is
+    # written out. When supplying, BALs are read back and fed into processBlock
+    # so the state prefetch can be benchmarked against historical import data.
+    genBal: bool
+    supplyBal: bool
+    balSidecarWriter: BalSidecarWriter
+    balSidecarReader: BalSidecarReader
 
   PersistStats* = tuple[blocks: int, txs: int, gas: GasInt]
 
@@ -71,8 +81,8 @@ proc getVmState(
     doAssert txFrame.getSavedStateBlockNumber() == parent.number
 
     vmState.init(parent, header, p.com, txFrame, storeSlotHash = storeSlotHash,
-      enableBalTracker = FullValidation in p.flags and
-          p.com.isAmsterdamOrLater(header.timestamp))
+      enableBalTracker = p.genBal or (FullValidation in p.flags and
+          p.com.isAmsterdamOrLater(header.timestamp)))
 
     p.vmState = vmState
     assign(p.parent, parent)
@@ -92,6 +102,24 @@ func dispose*(p: var Persister) =
 
 func init*(T: type Persister, com: CommonRef, flags: PersistBlockFlags): T =
   T(com: com, flags: flags)
+
+proc enableBalSidecarWrite*(p: var Persister, path: string): Result[void, string] =
+  ## Benchmark only: force the BAL tracker on and write generated BALs to `path`.
+  p.balSidecarWriter = ?openBalSidecarWriter(path)
+  p.genBal = true
+  ok()
+
+proc enableBalSidecarRead*(p: var Persister, path: string): Result[void, string] =
+  ## Benchmark only: supply BALs read from `path` to block processing.
+  p.balSidecarReader = ?openBalSidecarReader(path)
+  p.supplyBal = true
+  ok()
+
+proc closeBalSidecars*(p: var Persister) =
+  if p.genBal:
+    p.balSidecarWriter.close()
+  if p.supplyBal:
+    p.balSidecarReader.close()
 
 proc checkpoint*(p: var Persister): Result[void, string] =
   if Validation in p.flags:
@@ -145,6 +173,12 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     skipValidation = FullValidation notin p.flags
     vmState = ?p.getVmState(header, storeSlotHash = PersistSlotHashes in p.flags)
     txFrame = vmState.ledger.txFrame
+    # Benchmark only: BAL supplied out of band, used solely by the state prefetch.
+    suppliedBal =
+      if p.supplyBal:
+        ?p.balSidecarReader.readBal(header.number)
+      else:
+        Opt.none(BlockAccessListRef)
 
   # TODO even if we're skipping validation, we should perform basic sanity
   #      checks on the block and header - that fields are sanely set for the
@@ -164,6 +198,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     # Generate receipts for storage or validation but skip them otherwise
     ?vmState.processBlock(
       blk,
+      blockAccessList = suppliedBal,
       skipValidation = skipValidation,
       skipReceipts = skipValidation and PersistReceipts notin p.flags,
       skipUncles = PersistUncles notin p.flags,
@@ -205,6 +240,15 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
 
     ?vmState.ledger.txFrame.persistWitness(header.computeBlockHash(), witness)
 
+  if p.genBal:
+    # Finalise the post-execution call frame (withdrawals/system calls): for
+    # pre-Amsterdam blocks processBlock leaves it pending since the BAL hash is
+    # only committed and checked from Amsterdam onwards.
+    if vmState.balTracker.hasPendingCallFrame():
+      vmState.balTracker.commitCallFrame()
+    let generatedBal = vmState.balTracker.getBlockAccessList(rebuild = true)
+    doAssert generatedBal.isSome()
+    ?p.balSidecarWriter.writeBal(header.number, generatedBal.get())
 
   if PersistHeaders in p.flags:
     let blockHash = header.computeBlockHash()

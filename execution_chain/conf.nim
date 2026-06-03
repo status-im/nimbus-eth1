@@ -54,6 +54,7 @@ const
   defaultOptimisticStatePrefetch* = false
   defaultBalStatePrefetch* = false
   defaultBalStatePrefetchWorkers* = 0
+  defaultBalStatePrefetchForce* = false
 
 template defaultListenAddress(): IpAddress =
   getAutoAddress(Port(0)).toIpAddress()
@@ -382,6 +383,13 @@ type
         "state prefetching (0 = use number equal to the taskpool threads count)"
       name: "debug-bal-state-prefetch-workers".}: int
 
+    balStatePrefetchForce* {.
+      hidden
+      defaultValue: defaultBalStatePrefetchForce
+      desc: "Benchmark only: activate block access list state prefetching even " &
+        "for pre-Amsterdam blocks (requires BALs supplied out of band)"
+      name: "debug-bal-state-prefetch-force".}: bool
+
     eagerStateRootCheck* {.
       hidden
       desc: "Eagerly check state roots when syncing finalized blocks"
@@ -574,6 +582,18 @@ type
         hidden
         desc: "Save performance statistics to CSV"
         name: "debug-csv-stats".}: Option[string]
+
+      balSidecarWrite* {.
+        hidden
+        desc: "Benchmark only: generate block access lists during import and " &
+          "write them to this sidecar file (keyed by block number)"
+        name: "debug-bal-sidecar-write".}: Option[string]
+
+      balSidecarRead* {.
+        hidden
+        desc: "Benchmark only: read block access lists from this sidecar file " &
+          "and supply them to block processing (enables the prefetch)"
+        name: "debug-bal-sidecar-read".}: Option[string]
 
       # TODO validation and storage options should be made non-hidden when the
       #      UX has stabilised and era1 storage is in the app

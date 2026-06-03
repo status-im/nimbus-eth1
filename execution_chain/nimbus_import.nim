@@ -115,7 +115,19 @@ proc importBlocks*(config: ExecutionClientConf, com: CommonRef) =
     persister = Persister.init(com, flags)
     cstats: PersistStats # stats at start of chunk
 
+  # Benchmark only: block access list sidecar. Generation (write) and supply
+  # (read) are mutually exclusive within a single run.
+  if config.balSidecarWrite.isSome:
+    persister.enableBalSidecarWrite(config.balSidecarWrite.get()).isOkOr:
+      fatal "Could not open BAL sidecar for writing", error
+      quit(QuitFailure)
+  if config.balSidecarRead.isSome:
+    persister.enableBalSidecarRead(config.balSidecarRead.get()).isOkOr:
+      fatal "Could not open BAL sidecar for reading", error
+      quit(QuitFailure)
+
   defer:
+    persister.closeBalSidecars()
     if csv != nil:
       close(csv)
 

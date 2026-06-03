@@ -290,7 +290,8 @@ proc setupCommonRef*(config: ExecutionClientConf): (CommonRef, bool) =
     statelessWitnessValidation = config.statelessWitnessValidation,
     optimisticStatePrefetch = config.optimisticStatePrefetch,
     balStatePrefetch = config.balStatePrefetch,
-    balStatePrefetchWorkers = config.balStatePrefetchWorkers)
+    balStatePrefetchWorkers = config.balStatePrefetchWorkers,
+    balStatePrefetchForce = config.balStatePrefetchForce)
 
   if config.extraData.len > 32:
     warn "ExtraData exceeds 32 bytes limit, truncate",
