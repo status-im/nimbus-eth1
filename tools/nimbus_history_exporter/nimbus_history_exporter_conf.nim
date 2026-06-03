@@ -53,7 +53,7 @@ type
     .}: StdoutLogKind
 
     network* {.
-      desc: "Name of Ethereum network (mainnet, sepolia)",
+      desc: "Name of Ethereum network (mainnet, sepolia, hoodi)",
       defaultValue: "mainnet",
       defaultValueDesc: "mainnet",
       name: "network"
@@ -205,7 +205,8 @@ proc ereOutputDir*(config: HistoryExportConf): string =
   else:
     raiseAssert "ereOutputDir called for wrong command"
 
-const supportedNetworks* = [("mainnet", MainNet), ("sepolia", SepoliaNet)]
+const supportedNetworks* =
+  [("mainnet", MainNet), ("sepolia", SepoliaNet), ("hoodi", HoodiNet)]
 
 func parseNetworkId*(networkName: string): Result[NetworkId, string] =
   let networkLower = networkName.toLowerAscii()
