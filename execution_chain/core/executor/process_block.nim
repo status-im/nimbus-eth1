@@ -439,11 +439,13 @@ proc procBlkEpilogue(
     withdrawalReqs = ?processDequeueWithdrawalRequests(vmState)
     consolidationReqs = ?processDequeueConsolidationRequests(vmState)
 
+  # Commit block access list tracker changes for post‑execution system calls
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.commitCallFrame()
+
   if not skipValidation:
     if not skipPostExecBalCheck and vmState.com.isAmsterdamOrLater(header.timestamp):
       doAssert vmState.balTrackerEnabled
-      # Commit block access list tracker changes for post‑execution system calls
-      vmState.balTracker.commitCallFrame()
 
       let
         bal = vmState.balTracker.getBlockAccessList().get()
