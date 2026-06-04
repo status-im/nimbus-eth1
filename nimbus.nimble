@@ -74,10 +74,14 @@ task test, "Run tests":
   test "tests", "all_tests", "-d:chronicles_log_level=ERROR"
 
 task test_import, "Run block import test":
-  let tmp = getTempDir() / "nimbus-eth1-block-import"
-  if dirExists(tmp):
-    echo "Remove directory before running test: " & tmp
-    quit(QuitFailure)
+  let
+    tmpEre = getTempDir() / "nimbus-eth1-block-import-ere"
+    tmpEra1 = getTempDir() / "nimbus-eth1-block-import-era1"
+
+  for tmp in [tmpEre, tmpEra1]:
+    if dirExists(tmp):
+      echo "Remove directory before running test: " & tmp
+      quit(QuitFailure)
 
   const nimbus_exec_client = when defined(windows):
     "build/nimbus_execution_client.exe"
@@ -88,11 +92,17 @@ task test_import, "Run block import test":
     echo "Build nimbus execution client before running this test"
     quit(QuitFailure)
 
-  # Test that we can resume import
-  exec "build/nimbus_execution_client import --data-dir:" & tmp & " --ere-dir:tests/replay --max-blocks:1"
-  exec "build/nimbus_execution_client import --data-dir:" & tmp & " --ere-dir:tests/replay --max-blocks:1023"
+  # Test ere import, verifying that we can resume import
+  exec "build/nimbus_execution_client import --data-dir:" & tmpEre & " --ere-dir:tests/replay --max-blocks:1"
+  exec "build/nimbus_execution_client import --data-dir:" & tmpEre & " --ere-dir:tests/replay --max-blocks:1023"
   # There should only be 8k blocks
-  exec "build/nimbus_execution_client import --data-dir:" & tmp & " --ere-dir:tests/replay --max-blocks:10000"
+  exec "build/nimbus_execution_client import --data-dir:" & tmpEre & " --ere-dir:tests/replay --max-blocks:10000"
+
+  # Test era1 import, verifying that we can resume import
+  exec "build/nimbus_execution_client import --data-dir:" & tmpEra1 & " --era1-dir:tests/replay --max-blocks:1"
+  exec "build/nimbus_execution_client import --data-dir:" & tmpEra1 & " --era1-dir:tests/replay --max-blocks:1023"
+  # There should only be 8k blocks
+  exec "build/nimbus_execution_client import --data-dir:" & tmpEra1 & " --era1-dir:tests/replay --max-blocks:10000"
 
 task test_evm, "Run EVM tests":
   test "tests", "evm_tests", "-d:chronicles_log_level=ERROR -d:unittest2DisableParamFiltering"
