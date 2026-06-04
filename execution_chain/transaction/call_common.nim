@@ -275,7 +275,7 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: 
     if vmState.balTrackerEnabled:
       vmState.balTracker.trackAddBalanceChange(call.sender, gasRefundAmount)
     vmState.mutateLedger:
-      ledger.addBalance(call.sender, gasRefundAmount)
+      ledger.addBalance(call.sender, gasRefundAmount, checkEmptyAccount = fork < FkParis)
 
   GasUsed(
     evmGasUsed: c.msg.gas - txGasLeft,

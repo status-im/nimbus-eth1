@@ -371,10 +371,10 @@ proc procBlkPreamble(
     if vmState.balTrackerEnabled:
       for withdrawal in blk.withdrawals.get:
         vmState.balTracker.trackAddBalanceChange(withdrawal.address, withdrawal.weiAmount)
-        vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
+        vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount, checkEmptyAccount = false)
     else:
       for withdrawal in blk.withdrawals.get:
-        vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
+        vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount, checkEmptyAccount = false)
   else:
     if header.withdrawalsRoot.isSome:
       return err("Pre-Shanghai block header must not have withdrawalsRoot")

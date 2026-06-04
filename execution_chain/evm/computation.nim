@@ -320,7 +320,7 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
         ledger.subBalance(c.msg.contractAddress, localBalance)
         # Transfer to beneficiary
         c.vmState.balTracker.trackAddBalanceChange(beneficiary, localBalance)
-        ledger.addBalance(beneficiary, localBalance)
+        ledger.addBalance(beneficiary, localBalance, checkEmptyAccount = c.fork < FkParis)
         if ledger.selfDestruct6780(c.msg.contractAddress):
           c.vmState.balTracker.trackInTransactionSelfDestruct(c.msg.contractAddress)
           newContract = true
@@ -328,14 +328,14 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
         # Zeroing contract balance except beneficiary is the same address
         ledger.subBalance(c.msg.contractAddress, localBalance)
         # Transfer to beneficiary
-        ledger.addBalance(beneficiary, localBalance)
+        ledger.addBalance(beneficiary, localBalance, checkEmptyAccount = c.fork < FkParis)
         newContract = ledger.selfDestruct6780(c.msg.contractAddress)
 
       if c.fork >= FkAmsterdam:
         c.emitSelfDestructLog(beneficiary, localBalance, newContract)
     else:
       # Transfer to beneficiary
-      ledger.addBalance(beneficiary, localBalance)
+      ledger.addBalance(beneficiary, localBalance, checkEmptyAccount = c.fork < FkParis)
       ledger.selfDestruct(c.msg.contractAddress)
 
     trace "SELFDESTRUCT",
