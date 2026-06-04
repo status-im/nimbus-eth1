@@ -66,7 +66,7 @@ func dist(a, b: WalkStateData): uint64 =
 func isPivot(session: MkTrieSession): bool =
   session.stateInx == 0
 
-func maxCoverage(w: seq[WalkStateData]): WalkStateData =
+func maxCoverage(w: openArray[WalkStateData]): WalkStateData =
   ## Get state with maximal coverage, either by label (from an earlier
   ## session) or by calculating it.
   ##
@@ -76,6 +76,17 @@ func maxCoverage(w: seq[WalkStateData]): WalkStateData =
         return state                                # previously set, already
       if result.coverage < state.coverage:
         result = state
+
+func clearCacheNeeded(w: openArray[WalkStateData]): bool =
+  ## Check whether the cache structure needs to be bcleaned up from a
+  ## previos session.
+  ##
+  if w[0].tag != PivotOnTrie:                       # stored pivot has changed?
+    return true
+  for n in 1 ..< w.len:
+    if w[n].tag != OnTrie:
+      return true                                   # partially compiled MPT
+  # false
 
 proc updateCoverageMetrics(session: var MkTrieSession) =
   discard session.fullCov.merge session.accRange    # completed ranges
@@ -424,23 +435,34 @@ template sessionMkTrie*(
     template accData: auto = session.accData
     template accRange: auto = session.accRange
 
-    chronicles.info info & ": Assembling MPT from archived data", nStates
-
     # Sort states by its distance from pivot, smallest distance first
     byDist.sort proc(x,y: WalkStateData): int = cmp(x.dist pivot,y.dist pivot)
 
     # If necessary, update state data record pretending the cache is empty if
     # the pivot state tag has changed. Otherwise proceed with an interrupted
     # session with the `Untagged` states.
-    if byDist[0].tag == OnTrie:                     # stored pivot has changed?
+    #
+    # Not implemented:
+    #   One could use `sessionAnalyseAccounts()` for restoring the dangling
+    #   links cache so that one can continue at an arbitrary state, referably
+    #   the last one fully processed.
+    #
+    if byDist.clearCacheNeeded:
+      chronicles.info info & ": Clear MPT and dangling links", nStates
       for n in 0 ..< byDist.len:
-        byDist[n].tag = Untagged
+        byDist[n].tag = Untagged                    # reset all states
+      discard ctx.pool.mptAsm.clearAccDnglKvt()     # clean up dangling links
+      discard ctx.pool.mptAsm.clearAccKvt()         # rebuild MPT cache
+      discard ctx.pool.mptAsm.clearStoKvt()         # ditto
+      discard ctx.pool.mptAsm.clearCodeKvt()        # ..
+
+    chronicles.info info & ": Assembling MPT from archived data", nStates
 
     # Process states: pivot first, then states with increasing distances
     for n in 0 ..< nStates:
       state = byDist[n]                             # update descriptor fields
       stateInx = n                                  # ditto
-      distance = state.dist(pivot)
+      distance = state.dist(pivot)                  # ..
 
       if 0 < state.error.len:
         chronicles.info info & ": Bad state record ignored", stateInx, nStates
