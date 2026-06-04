@@ -148,10 +148,10 @@ proc stoNotifyRecur(info: static[string]): WalkTrieRecCB =
       stats.nStoLeaf.inc
     of AttDangling:
       stats.nStoDangl.inc
-      trd.onStoDangl(base, key, path)
+      trd.putDanglSto(base, key, path, info)
     of ENoRoot:
       stats.nStoMissing.inc
-      trd.onStoMissing(base, key, path)
+      trd.putMissSto(base, key, path, info)
     else:
       stats.nStoErr.inc
 
@@ -215,14 +215,14 @@ proc accAndStoNotifyRecur(info: static[string]): WalkTrieRecCB =
             elif rc.value:
               break checkCodeHash
             stats.nCodeMissing.inc                  # (key,path) of account data
-            trd.onCodeMissing(zeroHash32, key, path)
+            trd.putMissCode(key, path, info)
 
           occasionalMsg(trd.msgAt):
             traversingCodeMsg(stats, info)
 
     of AttDangling:
       stats.nAccDangl.inc
-      trd.onAccDangl(zeroHash32, key, path)
+      trd.putDanglAcc(key, path, info)
 
     else:
       stats.nAccErr.inc
@@ -273,7 +273,6 @@ proc accOnlyNotifyRecur(info: static[string]): WalkTrieRecCB =
               break checkStoRoot
             treatAccAsDangling = true
             stats.nStoMissing.inc
-            trd.onStoMissing(acc.storageRoot, key, path)
 
         if acc.codeHash != EMPTY_CODE_HASH:
           stats.nAccCode.inc
@@ -287,18 +286,18 @@ proc accOnlyNotifyRecur(info: static[string]): WalkTrieRecCB =
             elif rc.value:
               break checkCodeHash
             stats.nCodeMissing.inc
-            trd.onCodeMissing(zeroHash32, key, path)
             treatAccAsDangling = true
 
           occasionalMsg(trd.msgAt):
             traversingCodeMsg(stats, info)
 
         if treatAccAsDangling:                      # count as dangling leaf
+          trd.putDanglAcc(key, path, info)
           stats.nAccDangl.inc
 
     of AttDangling:
       stats.nAccDangl.inc
-      trd.onAccDangl(zeroHash32, key, path)
+      trd.putDanglAcc(key, path, info)
 
     else:
       stats.nAccErr.inc
@@ -312,10 +311,6 @@ proc accOnlyNotifyRecur(info: static[string]): WalkTrieRecCB =
 
 proc sessionAnalyseTrieRecur*(
     ctx: SnapCtxRef;
-    onDnglAcc: OnDanglingCB;                        # not `Nil`
-    onDnglSto: OnDanglingCB;                        # not `Nil`
-    onMissSto: OnDanglingCB;                        # not `Nil`
-    onMissCode: OnDanglingCB;                       # not `Nil`
     accAndStoOk: static[bool];                      # FIXME -- will go away
     info: static[string];
       ): Result[WalkStats,AttType]
@@ -330,30 +325,40 @@ proc sessionAnalyseTrieRecur*(
   let
     start = Moment.now()
     trd = TravDescRef(
-      ctx:           ctx,
-      db:            ctx.pool.mptAsm,
-      onAccDangl:    onDnglAcc,                     # FIXME -- will go away
-      onStoDangl:    onDnglSto,                     # FIXME -- will go away
-      onStoMissing:  onMissSto,                     # FIXME -- will go away
-      onCodeMissing: onMissCode,                    # FIXME -- will go away
-      msgAt:         start + threadLogTimeLimit)
+      ctx:   ctx,
+      db:    ctx.pool.mptAsm,
+      msgAt: start + threadLogTimeLimit)
 
     pivot = trd.db.findPivot().valueOr:
       debug info & ": MPT analysis failed, pivot missing"
       return err(ENoPivot)                          # => missing pivot, error
 
-  when accAndStoOk:
-    let notify = accAndStoNotifyRecur info
-  else:
-    let notify = accOnlyNotifyRecur info
-
   template stats(): auto = trd.stats
   startTraversingMsg(info)
 
-  trd.walkTrieRec(
-    zeroHash32, pivot.root.Hash32.data, getAccKvtWrap, notify).isOkOr:
-      debug info & ": Failed analysing MPT", `error`=error
-      return err(error)                             # => missing root node
+  trd.clearDanglAcc(info).isOkOr:
+    return err(EClearError)
+
+  when accAndStoOk:                                 # FIXME -- will go away
+    trd.clearDanglSto(info).isOkOr:
+      return err(EClearError)
+    trd.clearDanglCode(info).isOkOr:
+      return err(EClearError)
+
+    trd.walkTrieRec(
+      zeroHash32, pivot.root.Hash32.data, getAccKvtWrap,
+      accAndStoNotifyRecur info).isOkOr:
+        debug info & ": Failed analysing MPT", `error`=error
+        return err(error)
+  else:                                             # FIXME -- will go away
+    trd.walkTrieRec(                                # FIXME -- will go away
+      zeroHash32, pivot.root.Hash32.data, getAccKvtWrap,
+      accOnlyNotifyRecur info).isOkOr:              # FIXME -- will go away
+        debug info & ": Failed analysing MPT", `error`=error
+        return err(error)                           # FIXME -- will go away
+
+  if 0 < trd.cacheErr:
+    return err(EPutError)
 
   stats.nAccNodes += stats.nNodes
   stats.nNodes = stats.nAccNodes + stats.nStoNodes

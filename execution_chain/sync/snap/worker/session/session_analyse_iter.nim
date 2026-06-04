@@ -20,7 +20,7 @@
 {.push raises:[].}
 
 import
-  std/[tables, typetraits],
+  std/[tables], # typetraits],
   pkg/[chronicles, chronos, eth/common],
   ../[helpers, mpt, worker_desc],
   ./[session_analyse_desc, session_helpers]
@@ -269,11 +269,11 @@ template stoNotify(
 
     elif att == AttDangling:
       stats.nStoDangl.inc
-      trd.onStoDangl(base, key, path)
+      trd.putDanglSto(base, key, path, info)
 
     elif att == ENoRoot:
       stats.nStoMissing.inc
-      trd.onStoMissing(base, key, path)
+      trd.putMissSto(base, key, path, info)
 
     else:
       stats.nStoErr.inc
@@ -335,14 +335,14 @@ template accAndStoNotify(
           elif rc.value:
             break checkCodeHash
           stats.nCodeMissing.inc
-          trd.onCodeMissing(zeroHash32, key, path)  # (key,path) of account data
+          trd.putMissCode(key, path, info)          # (key,path) of account data
 
         occasionalMsg(trd.msgAt):
           traversingCodeMsg(stats, info)
 
     elif att == AttDangling:
       stats.nAccDangl.inc
-      trd.onAccDangl(zeroHash32, key, path)
+      trd.putDanglAcc(key, path, info)
 
     else:
       stats.nAccErr.inc
@@ -391,7 +391,6 @@ template accOnlyNotify(
             break checkStoRoot
           treatAccAsDangling = true
           stats.nStoMissing.inc
-          trd.onStoMissing(zeroHash, key, path)     # (key,path) of account data
 
       if acc.codeHash != EMPTY_CODE_HASH:
         stats.nAccCode.inc
@@ -406,14 +405,14 @@ template accOnlyNotify(
             break checkCodeHash
           treatAccAsDangling = true
           stats.nCodeMissing.inc
-          trd.onCodeMissing(zeroHash32, key, path)  # (key,path) of account data
 
       if treatAccAsDangling:                        # count as dangling leaf
+        trd.putDanglAcc(key, path, info)
         stats.nAccDangl.inc
 
     elif att == AttDangling:
       stats.nAccDangl.inc
-      trd.onAccDangl(zeroHash32, key, path)
+      trd.onAccDangl(key, path, info)
 
     else:
       stats.nAccErr.inc
@@ -426,10 +425,6 @@ template accOnlyNotify(
 
 template sessionAnalyseTrieIter*(
     cty: SnapCtxRef;
-    onDnglAcc: OnDanglingCB;                        # not `Nil`
-    onDnglSto: OnDanglingCB;                        # not `Nil`
-    onMissSto: OnDanglingCB;                        # not `Nil`
-    onMissCode: OnDanglingCB;                       # not `Nil`
     accAndStoOk: static[bool];                      # FIXME -- will go away
     info: static[string];
       ): auto =
@@ -443,14 +438,10 @@ template sessionAnalyseTrieIter*(
     let
       start = Moment.now()
       trd = TravDescRef(
-        ctx:           cty,
-        db:            cty.pool.mptAsm,
-        onAccDangl:    onDnglAcc,                   # FIXME -- will go away
-        onStoDangl:    onDnglSto,                   # FIXME -- will go away
-        onStoMissing:  onMissSto,                   # FIXME -- will go away
-        onCodeMissing: onMissCode,                  # FIXME -- will go away
-        msgAt:         start + threadLogTimeLimit,
-        napAt:         start + threadSwitchRunLimit)
+        ctx:   cty,
+        db:    cty.pool.mptAsm,
+        msgAt: start + threadLogTimeLimit,
+        napAt: start + threadSwitchRunLimit)
 
       pivot = trd.db.findPivot().valueOr:
         debug info & ": MPT analysis failed, pivot missing"
@@ -460,22 +451,37 @@ template sessionAnalyseTrieIter*(
     template stats(): auto = trd.stats
     startTraversingMsg(info)
 
-    when accAndStoOk:
+    trd.clearDanglAcc(info).isOkOr:
+      bodyRc = typeof(bodyRc).err(EClearError)
+      break body
+
+    when accAndStoOk:                               # FIXME -- will go away
+      trd.clearDanglSto(info).isOkOr:
+        bodyRc = typeof(bodyRc).err(EClearError)
+        break body
+      trd.clearDanglCode(info).isOkOr:
+        bodyRc = typeof(bodyRc).err(EClearError)
+        break body
+
       let rc = traverseMpt(
         trd, zeroHash32, pivot.root.Hash32.data,
         getAccKvtWrap, accAndStoNotify, info):
           traversingAccountsMsg(stats, info)
-    else:
-      let rc = traverseMpt(
-        trd, zeroHash32, pivot.root.Hash32.data,
-        getAccKvtWrap, accOnlyNotify, info):
-          traversingAccountsMsg(stats, info)
+    else:                                           # FIXME -- will go away
+      let rc = traverseMpt(                         # FIXME -- will go away
+        trd, zeroHash32, pivot.root.Hash32.data,    # FIXME -- will go away
+        getAccKvtWrap, accOnlyNotify, info):        # FIXME -- will go away
+          traversingAccountsMsg(stats, info)        # FIXME -- will go away
+
+    if 0 < trd.cacheErr:
+      bodyRc = typeof(bodyRc).err(EPutError)
+      break body
 
     if rc.isErr:
       debug info & ": Failed analysing MPT", `error`=rc.error
       bodyRc = typeof(bodyRc).err(rc.error)
       break body
-
+    
     stats.nAccNodes += stats.nNodes
     stats.nNodes = stats.nAccNodes + stats.nStoNodes
     stats.ela = (Moment.now() - start)

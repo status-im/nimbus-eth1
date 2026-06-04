@@ -11,7 +11,7 @@
 {.push raises:[].}
 
 import
-  pkg/[chronos, eth/common],
+  pkg/[chronicles, chronos, eth/common, stew/byteutils],
   ../[mpt, worker_desc]
 
 type
@@ -78,13 +78,10 @@ type
   TravDescRef* = ref object                         # MPT traversal descriptor
     ctx*: SnapCtxRef                                # snap context
     db*: MptAsmRef                                  # database
-    onAccDangl*: OnDanglingCB                       # configurable actions
-    onStoDangl*: OnDanglingCB                       # ditto
-    onStoMissing*: OnDanglingCB                     # ..
-    onCodeMissing*: OnDanglingCB
     msgAt*: Moment                                  # occasional logging
     napAt*: Moment                                  # occasional thread switch
     stats*: WalkStats                               # MPT traversal statistics
+    cacheErr*: uint                                 # persistent cache errors
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -104,6 +101,75 @@ func fromBytes*(_: type Hash32, path: openArray[byte]): Hash32 =
   doAssert path.len < 33
   let path = @path
   (addr distinctBase(result)[0]).copyMem(unsafeAddr path[0], path.len)
+
+# ----------
+
+proc clearDanglAcc*(trd: TravDescRef, info: static[string]): Opt[void] =
+  trace info & ": Clearing dangling accounts cache"
+  trd.db.clearAccDnglKvt().isOkOr:
+    error info & ": Cannot reset dangling cache", `error`=error
+    return err()
+  ok()
+
+proc clearDanglSto*(trd: TravDescRef, info: static[string]): Opt[void] =
+  trace info & ": Clearing dangling slots cache"
+  trd.db.clearStoDnglKvt().isOkOr:
+    error info & ": Cannot reset slots cache", `error`=error
+    return err()
+  ok()
+
+proc clearDanglCode*(trd: TravDescRef, info: static[string]): Opt[void] =
+  trace info & ": Clearing missing contracts cache"
+  trd.db.clearCodeDnglKvt().isOkOr:
+    error info & ": Cannot reset receipts cache", `error`=error
+    return err()
+  ok()
+
+proc putDanglAcc*(
+    trd: TravDescRef;
+    key: openArray[byte];
+    path: openArray[byte];
+    info: static[string];
+      ) =
+  trd.db.putAccDnglKvt(key, path).isOkOr:
+    error info & ": Error caching dangling account links",
+      key=key.toHex, path=path.toHex, `error`=error
+    trd.cacheErr.inc
+
+proc putDanglSto*(
+    trd: TravDescRef;
+    base: Hash32;
+    key: openArray[byte];
+    path: openArray[byte];
+    info: static[string];
+      )=
+  trd.db.putStoDnglKvt(base, key, path).isOkOr:
+    error info & ": Error caching dangling slot links",
+      key=key.toHex, path=path.toHex, `error`=error
+    trd.cacheErr.inc
+
+proc putMissSto*(
+    trd: TravDescRef;
+    base: Hash32;
+    key: openArray[byte];
+    path: openArray[byte];
+    info: static[string];
+      )=
+  trd.db.putStoDnglKvt(base, key, path).isOkOr:     # similar to `putDnglSto()`
+    error info & ": Error caching missing slot links",
+      key=key.toHex, path=path.toHex, `error`=error
+    trd.cacheErr.inc
+
+proc putMissCode*(
+    trd: TravDescRef;
+    key: openArray[byte];
+    path: openArray[byte];
+    info: static[string];
+      ) =
+  trd.db.putCodeDnglKvt(key, path).isOkOr:
+    error info & ": Error caching dangling slot links",
+      key=key.toHex, path=path.toHex, `error`=error
+    trd.cacheErr.inc
 
 # ------------------------------------------------------------------------------
 # Public trie analysis logging helpers
