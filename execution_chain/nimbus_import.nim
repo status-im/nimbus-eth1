@@ -43,24 +43,14 @@ proc openCsv(name: string): File =
     fatal "Could not open statistics output file", file = name, err = exc.msg
     quit(QuitFailure)
 
-proc getMetadata(networkId: NetworkId): tuple[networkName: string, mergeBlockNumber: uint64] =
-  if networkId == MainNet:
-    ("mainnet", 15537394'u64)
-  elif networkId == SepoliaNet:
-    ("sepolia", 1450409'u64)
-  elif networkId == HoodiNet:
-    ("hoodi", 1'u64)
-  else:
-    fatal "Unsupported network", network = networkId
-    quit(QuitFailure)
-
 proc getMetadataLegacy(networkId: NetworkId): auto =
   # Network Specific Configurations
   # TODO: the merge block number could be fetched from the era1 file instead,
   #       specially if the accumulator is added to the chain metadata
+  let cfg = getMetadataForNetwork(networkId.name).cfg
   if networkId == MainNet:
     (
-      getMetadataForNetwork("mainnet").cfg,
+      cfg,
       # Mainnet Validators Root
       Eth2Digest.fromHex(
         "0x4b363db94e286120d76eb905340fdd4e54bfe9f06bf33ff6cf5ad27f511bfe95"
@@ -70,7 +60,7 @@ proc getMetadataLegacy(networkId: NetworkId): auto =
     )
   elif networkId == SepoliaNet:
     (
-      getMetadataForNetwork("sepolia").cfg,
+      cfg,
       Eth2Digest.fromHex(
         "0xd8ea171f3c94aea21ebc42a1ed61052acf3f9209c00e4efbaaddac09ed9b8078"
       ),
@@ -79,7 +69,7 @@ proc getMetadataLegacy(networkId: NetworkId): auto =
     )
   elif networkId == HoodiNet:
     (
-      getMetadataForNetwork("hoodi").cfg,
+      cfg,
       Eth2Digest.fromHex(
         "0x212f13fc4df078b6cb7db228f1c8307566dcecf900867401a92023d7ba99cb5f"
       ),
@@ -209,8 +199,8 @@ proc importBlocks*(config: ExecutionClientConf, com: CommonRef) =
 
   # ere takes priority: use it if files are present in the ere directory
   # (either the explicit --ere-dir or the default <data-dir>/ere).
-  let (networkName, mergeBlockNumber) = getMetadata(config.networkId)
-  let ereResult = EreDB.init(config.ereDir, networkName, mergeBlockNumber)
+  let networkName = config.networkId.name
+  let ereResult = EreDB.init(config.ereDir, networkName, mergeBlockNumber(config.networkId))
   if ereResult.isOk():
     let db = ereResult.get()
     defer:
@@ -302,13 +292,7 @@ proc importBlocks*(config: ExecutionClientConf, com: CommonRef) =
 
     if lastEra1Block > 0 and start <= lastEra1Block:
       let
-        era1Name =
-          if config.networkId == MainNet:
-            "mainnet"
-          elif config.networkId == SepoliaNet:
-            "sepolia"
-          else:
-            raiseAssert "Other networks are unsupported or do not have an era1"
+        era1Name = config.networkId.name
         db = Era1DB.new(config.era1Dir, era1Name, lastEra1Block + 1).valueOr:
           fatal "Could not open era1 database",
             era1Dir = config.era1Dir, era1Name = era1Name, error = error
