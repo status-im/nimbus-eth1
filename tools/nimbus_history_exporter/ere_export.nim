@@ -311,6 +311,13 @@ proc exportEreFromEra1*(config: HistoryExportConf) =
   let
     mergeBlockNumber = mergeBlockNumber(config.networkId())
     networkName = config.network
+
+  if mergeBlockNumber == 0:
+    fatal "exportEreFromEra1 is not supported for post-merge-only networks",
+      network = networkName
+    quit(QuitFailure)
+
+  let
     mergeEra = ere.era(mergeBlockNumber)
     startEraFromEra1 = ere.Era(config.eraEra1)
     endEraFromEra1 =
