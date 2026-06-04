@@ -239,3 +239,8 @@
 	url = https://github.com/status-im/nim-rocksdb.git
 	ignore = dirty
 	branch = master
+[submodule "vendor/portal-sepolia"]
+	path = vendor/portal-sepolia
+	url = https://github.com/status-im/portal-sepolia
+	ignore = untracked
+	branch = master
