@@ -101,6 +101,14 @@ proc gasCallDelegate(c: Computation, codeAddress: Address): GasProc =
       # But in OOG case, only `codeAddress` appear in BAL.
       if c.balTrackerEnabled:
         c.vmState.balTracker.trackAddressAccess(codeAddress)
+
+      # Code does not need to be loaded for precompile addresses because the
+      # precompile doesn't exist in the state trie and can never be a 7702
+      # delegation, so resolving the delegation target is a no-op.
+      if getPrecompile(c.vmState.fork, codeAddress).isSome:
+        c.delegateTo = codeAddress
+        return 0.GasInt
+
       let delegateTo = parseDelegationAddress(c.getCode(codeAddress)).valueOr:
         c.delegateTo = codeAddress
         return 0.GasInt
