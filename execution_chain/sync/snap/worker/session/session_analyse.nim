@@ -9,7 +9,7 @@
 # except according to those terms.
 
 import
-  ./[session_analyse_desc, session_analyse_iter, session_analyse_recur],
+  ./session_analyse/[analyse_desc, analyse_iter, analyse_recur],
   ../worker_desc
 
 export

@@ -20,10 +20,11 @@
 {.push raises:[].}
 
 import
-  std/[tables], # typetraits],
+  std/tables,
   pkg/[chronicles, chronos, eth/common],
-  ../[helpers, mpt, worker_desc],
-  ./[session_analyse_desc, session_helpers]
+  ../../[helpers, mpt, worker_desc],
+  ../session_helpers,
+  ./analyse_desc
 
 export
   AttType

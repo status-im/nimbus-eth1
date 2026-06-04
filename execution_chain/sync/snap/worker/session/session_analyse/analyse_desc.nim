@@ -12,7 +12,7 @@
 
 import
   pkg/[chronicles, chronos, eth/common, stew/byteutils],
-  ../[mpt, worker_desc]
+  ../../[mpt, worker_desc]
 
 type
   AttType* = enum
