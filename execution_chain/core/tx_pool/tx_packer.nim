@@ -138,6 +138,8 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
       return ContinueWithNextAccount
     return StopCollecting
 
+  xp.updateNonce(item)
+
   # Finish book-keeping
   let inx = pst.packedTxs.len
 

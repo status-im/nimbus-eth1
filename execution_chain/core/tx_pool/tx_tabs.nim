@@ -16,10 +16,10 @@ import
   eth/common/addresses,
   eth/common/hashes,
   stew/sorted_set,
-  ../../db/ledger,
   ../../common/evmforks,
   ../pooled_txs,
-  ./tx_item
+  ./tx_item,
+  ./tx_state
 
 type
   SenderNonceList* = SortedSet[AccountNonce, TxItemRef]
@@ -95,7 +95,7 @@ proc validBlobItem(item: TxItemRef;
 iterator byPriceAndNonce*(senderTab: TxSenderTab,
                           idTab: var TxIdTab,
                           blobTab: var BlobLookupTab,
-                          ledger: LedgerRef,
+                          state: var TxState,
                           baseFee: GasInt,
                           fork: EVMFork): TxItemRef =
 
@@ -133,7 +133,7 @@ iterator byPriceAndNonce*(senderTab: TxSenderTab,
   # Fill byPrice with `head item` from each account.
   # The `head item` is the lowest allowed nonce.
   for address, sn in senderTab:
-    let nonce = ledger.getNonce(address)
+    let nonce = state.getNonce(address)
 
     # Remove item with nonce lower than current account's nonce.
     # Happen when proposed block rejected.
