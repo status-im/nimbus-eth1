@@ -15,7 +15,7 @@ import
   stew/[byteutils, io2],
   ssz_serialization,
   ../../portal/eth_history/block_proofs/historical_hashes_accumulator,
-  ../../portal/eth_history/history_data_ssz_e2s, # readAccumulator, TODO: Move?
+  ../../execution_chain/common/chain_config,
   ../../execution_chain/db/core_db,
   ../../execution_chain/db/core_db/persistent,
   ../../execution_chain/db/opts,
