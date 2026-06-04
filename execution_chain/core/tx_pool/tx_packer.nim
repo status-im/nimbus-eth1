@@ -173,10 +173,10 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
     if vmState.balTrackerEnabled:
       for withdrawal in xp.withdrawals:
         vmState.balTracker.trackAddBalanceChange(withdrawal.address, withdrawal.weiAmount)
-        ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
+        ledger.addBalance(withdrawal.address, withdrawal.weiAmount, checkEmptyAccount = false)
     else:
       for withdrawal in xp.withdrawals:
-        ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
+        ledger.addBalance(withdrawal.address, withdrawal.weiAmount, checkEmptyAccount = false)
 
   # EIP-6110, EIP-7002, EIP-7251
   if vmState.fork >= FkPrague:
