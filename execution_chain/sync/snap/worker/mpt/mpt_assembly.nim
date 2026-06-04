@@ -1088,7 +1088,7 @@ proc putAccDnglKvt*(db: MptAsmRef; key, data: openArray[byte]): PutResult =
 
 proc putAccDnglKvt*(
     db: MptAsmRef;
-    kvp: seq[(seq[byte],seq[byte])];
+    kvp: openArray[(seq[byte],seq[byte])];
       ): PutResult =
   for (key,data) in kvp:
     db.putAtMost33(AccDnglKvt, key, data).isOkOr:
@@ -1131,7 +1131,7 @@ proc putStoDnglKvt*(db: MptAsmRef; key, data: openArray[byte]): PutResult =
 
 proc putStoDnglKvt*(
     db: MptAsmRef;
-    kvp: seq[(seq[byte],seq[byte])];
+    kvp: openArray[(seq[byte],seq[byte])];
       ): PutResult =
   for (key,data) in kvp:
     db.putAtMost33(StoDnglKvt, key, data).isOkOr:
@@ -1174,7 +1174,7 @@ proc putCodeDnglKvt*(db: MptAsmRef; key, data: openArray[byte]): PutResult =
 
 proc putCodeDnglKvt*(
     db: MptAsmRef;
-    kvp: seq[(seq[byte],seq[byte])];
+    kvp: openArray[(seq[byte],seq[byte])];
       ): PutResult =
   for (key,data) in kvp:
     db.putAtMost33(CodeDnglKvt, key, data).isOkOr:

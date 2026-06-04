@@ -135,7 +135,7 @@ proc runBackfillLoop(
     endEra: uint64,
     loop: bool,
 ) {.async: (raises: [CancelledError]).} =
-  let accumulator = loadAccumulator()
+  let accumulator = loadAccumulator("mainnet")
 
   while true:
     for era in startEra .. endEra:
@@ -162,10 +162,14 @@ proc runBackfillLoopSyncMode(
 ) {.async: (raises: [CancelledError]).} =
   let
     rng = newRng()
-    db = Era1DB.new(era1Dir, "mainnet", loadAccumulator(), bridge.cfg.posBlock.get())
+    db = Era1DB.new(
+      era1Dir, "mainnet", loadAccumulator("mainnet"), bridge.cfg.posBlock.get()
+    )
     blockLowerBound = startEra * EPOCH_SIZE # inclusive
     blockUpperBound = ((endEra + 1) * EPOCH_SIZE) - 1 # inclusive
     blockNumberQueue = newAsyncQueue[uint64](50)
+  defer:
+    db.dispose()
 
   proc blockWorker() {.async: (raises: [CancelledError]).} =
     while true:
@@ -216,10 +220,14 @@ proc runBackfillLoopAuditMode(
 ) {.async: (raises: [CancelledError]).} =
   let
     rng = newRng()
-    db = Era1DB.new(era1Dir, "mainnet", loadAccumulator(), bridge.cfg.posBlock.get())
+    db = Era1DB.new(
+      era1Dir, "mainnet", loadAccumulator("mainnet"), bridge.cfg.posBlock.get()
+    )
     blockLowerBound = startEra * EPOCH_SIZE # inclusive
     blockUpperBound = ((endEra + 1) * EPOCH_SIZE) - 1 # inclusive
     blockRange = blockUpperBound - blockLowerBound
+  defer:
+    db.dispose()
 
   var blockTuple: BlockTuple
   while true:

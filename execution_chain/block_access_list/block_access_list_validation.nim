@@ -81,6 +81,8 @@ func validate*(
     var changedSlots: HashSet[StorageKey]
     for slotChanges in accountChanges.storageChanges:
       changedSlots.incl(slotChanges.slot)
+      if slotChanges.changes.len == 0:
+        return err("Each slot in storage changes must have at least one change")
       if not slotChanges.changes.isSorted(balIndexCmpTreatEqualAsGreater):
         return err("Slot changes should be unique and sorted by blockAccessIndex")
 

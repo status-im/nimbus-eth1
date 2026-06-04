@@ -19,18 +19,24 @@ import
   ./utils,
   ./state_dump
 
-proc `$`(bloom: Bloom): string =
+func `$`(bloom: Bloom): string =
   bloom.toHex
 
-proc `$`(nonce: Bytes8): string =
+func `$`(nonce: Bytes8): string =
   nonce.toHex
 
-proc `$`(data: seq[byte]): string =
+func `$`(data: seq[byte]): string =
   if data.len == 0:
     return "zero length"
   data.toHex
 
-proc debug*(h: Header): string =
+func `$`[T](x: Opt[T]): string =
+  if x.isSome:
+    $x.value
+  else:
+    "none"
+
+func debug*(h: Header): string =
   result.add "parentHash     : " & $h.parentHash   & "\n"
   result.add "ommersHash     : " & $h.ommersHash   & "\n"
   result.add "coinbase       : " & $h.coinbase     & "\n"
@@ -39,26 +45,21 @@ proc debug*(h: Header): string =
   result.add "receiptsRoot   : " & $h.receiptsRoot & "\n"
   result.add "logsBloom      : " & $h.logsBloom    & "\n"
   result.add "difficulty     : " & $h.difficulty   & "\n"
-  result.add "blockNumber    : " & $h.number       & "\n"
+  result.add "number         : " & $h.number       & "\n"
   result.add "gasLimit       : " & $h.gasLimit     & "\n"
   result.add "gasUsed        : " & $h.gasUsed      & "\n"
   result.add "timestamp      : " & $h.timestamp    & "\n"
   result.add "extraData      : " & $h.extraData    & "\n"
   result.add "mixHash        : " & $h.mixHash      & "\n"
   result.add "nonce          : " & $h.nonce        & "\n"
-  result.add "baseFeePerGas.isSome: " & $h.baseFeePerGas.isSome  & "\n"
-  if h.baseFeePerGas.isSome:
-    result.add "baseFeePerGas  : " & $h.baseFeePerGas.get()   & "\n"
-  if h.withdrawalsRoot.isSome:
-    result.add "withdrawalsRoot: " & $h.withdrawalsRoot.get() & "\n"
-  if h.blobGasUsed.isSome:
-    result.add "blobGasUsed    : " & $h.blobGasUsed.get() & "\n"
-  if h.excessBlobGas.isSome:
-    result.add "excessBlobGas  : " & $h.excessBlobGas.get() & "\n"
-  if h.parentBeaconBlockRoot.isSome:
-    result.add "beaconRoot     : " & $h.parentBeaconBlockRoot.get() & "\n"
-  if h.requestsHash.isSome:
-    result.add "requestsHash   : " & $h.requestsHash.get() & "\n"
+  result.add "baseFeePerGas  : " & $h.baseFeePerGas   & "\n"
+  result.add "withdrawalsRoot: " & $h.withdrawalsRoot & "\n"
+  result.add "blobGasUsed    : " & $h.blobGasUsed     & "\n"
+  result.add "excessBlobGas  : " & $h.excessBlobGas   & "\n"
+  result.add "beaconRoot     : " & $h.parentBeaconBlockRoot & "\n"
+  result.add "requestsHash   : " & $h.requestsHash    & "\n"
+  result.add "blockAccessListHash:" & $h.blockAccessListHash & "\n"
+  result.add "slotNumber     : " & $h.slotNumber      & "\n"
   result.add "blockHash      : " & $computeBlockHash(h) & "\n"
 
 proc dumpAccounts*(vmState: BaseVMState): JsonNode =

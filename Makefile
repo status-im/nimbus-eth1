@@ -64,10 +64,12 @@ EXCLUDED_NIM_PACKAGES := 	\
 
 # debugging tools + testing tools
 TOOLS := \
-	test_tools_build \
-	nrpc
+	nrpc \
+	nimbus_history_exporter \
+	test_tools_build
 TOOLS_DIRS := \
 	nrpc \
+	tools/nimbus_history_exporter \
 	tests
 # comma-separated values for the "clean" target
 TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
@@ -85,7 +87,7 @@ PORTAL_TOOLS_DIRS := \
 	portal/bridge/history \
 	portal/tools
 # comma-separated values for the "clean" target
-PORTAL_TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(FLUFFY_TOOLS))
+PORTAL_TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(PORTAL_TOOLS))
 
 # Namespaced variables to avoid conflicts with other makefiles
 OS_PLATFORM = $(shell $(CC) -dumpmachine)

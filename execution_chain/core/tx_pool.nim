@@ -73,10 +73,12 @@ export
 # TxPoolRef constructor
 # ------------------------------------------------------------------------------
 
-proc new*(T: type TxPoolRef; chain: ForkedChainRef): T =
+proc new*(T: type TxPoolRef;
+          chain: ForkedChainRef,
+          flags: set[TxPoolFlags] = {}): T =
   ## Constructor, returns a new tx-pool descriptor.
   new result
-  result.init(chain)
+  result.init(chain, flags)
 
 # ------------------------------------------------------------------------------
 # TxPoolRef public getters
@@ -153,11 +155,17 @@ func getWrapperVersion(com: CommonRef, timestamp: EthTime): WrapperVersion =
 
 proc assembleBlock*(
     xp: TxPoolRef,
-    someBaseFee: bool = false
+    someBaseFee: bool = false,
+    gasLimit: Opt[GasInt] = Opt.none(GasInt)
 ): Result[AssembledBlock, string] =
-  xp.updateVmState()
+  if xp.timestamp != xp.vmState.blockCtx.timestamp:
+    xp.updateVmState()
 
   let com = xp.vmState.com
+
+  if gasLimit.isSome:
+    # Overrride gasLimit
+    xp.vmState.blockCtx.gasLimit = gasLimit.value
 
   # Run EVM with most profitable transactions
   var

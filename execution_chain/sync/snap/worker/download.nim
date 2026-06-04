@@ -53,10 +53,9 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
       break body                                    # return err()
 
     # Fetch for state DB items, start with pivot root
-    var theseFirst: seq[StateRoot]
-    theseFirst.add pivot.stateRoot
+    var theseFirst = @[pivot.stateRoot]
     buddy.only.finRoot.isErrOr:
-      theseFirst.add value
+      theseFirst.add value                          # add finalised state root
 
     trace info & ": start downloading", peer,
       notAvailMax=buddy.only.notAvailMax,

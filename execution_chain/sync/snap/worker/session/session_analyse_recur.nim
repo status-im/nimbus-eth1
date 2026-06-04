@@ -22,7 +22,7 @@ import
   std/tables,
   pkg/[chronicles, chronos, eth/common],
   ../[helpers, mpt, worker_desc],
-  ./session_analyse_desc
+  ./[session_analyse_desc, session_helpers]
 
 logScope:
   topics = "snap sync"
@@ -251,7 +251,7 @@ proc accOnlyNotifyRecur(info: static[string]): WalkTrieRecCB =
             if rc.isErr:
               debug info & ": Failed accessing storage root",
                 root=acc.storageRoot.toStr, nErr=stats.nStoErr, error=rc.error
-            elif not rc.value:
+            elif rc.value:
               break checkStoRoot
             treatAccAsDangling = true
             stats.nStoMissing.inc
@@ -294,10 +294,10 @@ proc accOnlyNotifyRecur(info: static[string]): WalkTrieRecCB =
 
 proc sessionAnalyseTrieRecur*(
     ctx: SnapCtxRef;
-    onDnglAcc: OnDanglingCB;
-    onDnglSto: OnDanglingCB;
-    onMissSto: OnDanglingCB;
-    onMissCode: OnDanglingCB;
+    onDnglAcc: OnDanglingCB;                        # not `Nil`
+    onDnglSto: OnDanglingCB;                        # not `Nil`
+    onMissSto: OnDanglingCB;                        # not `Nil`
+    onMissCode: OnDanglingCB;                       # not `Nil`
     accAndStoOk: static[bool];
     info: static[string];
       ): Result[WalkStats,AttType]
@@ -312,10 +312,10 @@ proc sessionAnalyseTrieRecur*(
     trd = TravDescRef(
       ctx:           ctx,
       db:            ctx.pool.mptAsm,
-      onAccDangl:    (if onDnglAcc.isNil: blindCB else: onDnglAcc),
-      onStoDangl:    (if onDnglSto.isNil: blindCB else: onDnglSto),
-      onStoMissing:  (if onMissSto.isNil: blindCB else: onMissSto),
-      onCodeMissing: (if onMissCode.isNil: blindCB else: onMissCode),
+      onAccDangl:    onDnglAcc,
+      onStoDangl:    onDnglSto,
+      onStoMissing:  onMissSto,
+      onCodeMissing: onMissCode,
       msgAt:         start + threadLogTimeLimit)
 
     pivot = trd.db.findPivot().valueOr:

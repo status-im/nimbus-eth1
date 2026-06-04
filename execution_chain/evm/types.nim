@@ -62,6 +62,7 @@ type
     allLogs*          : seq[Log] # EIP-6110
     gasRefunded*      : int64    # Global gasRefunded counter
     balLedger*        : BalLedgerRef
+    balPrefetchActive*: bool
 
   Computation* = ref object
     # The execution computation

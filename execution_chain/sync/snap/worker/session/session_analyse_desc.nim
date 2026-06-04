@@ -88,14 +88,6 @@ type
 # Public helpers
 # ------------------------------------------------------------------------------
 
-func decodeAccount*(pyl: openArray[byte]): Opt[Account] =
-  try:
-    var acc = rlp.decode(pyl, Account)
-    return ok(move acc)
-  except RlpError:
-    discard
-  err()
-
 proc findPivot*(db: MptAsmRef): Opt[WalkStateData] =
   for state in db.walkStateData():
     if state.error.len == 0 and state.tag == PivotOnTrie:
@@ -151,7 +143,7 @@ template allDoneMsg*(
     info: static[string];
       ): untyped =
   debug info & ": Done analysing MPT",
-    nAccDangl=stats.nAccDangl, nAccount=stats.nAccLeaf,
+    nAccDangl=stats.nAccDangl, nAccounts=stats.nAccLeaf,
     nAccNodes=stats.nAccNodes, nAccDepth=stats.nAccDepth,
     accEla=(stats.ela - stats.stoEla).toStr,
 

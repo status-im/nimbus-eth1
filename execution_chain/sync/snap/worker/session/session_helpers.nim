@@ -79,6 +79,15 @@ proc countTrieNodes*(
     result.nStoNodes.inc
   result.ela = Moment.now() - start
 
+func decodeAccount*(pyl: openArray[byte]): Opt[Account] =
+  ## Decode RLP encoded `Account`
+  try:
+    var acc = rlp.decode(pyl, Account)
+    return ok(move acc)
+  except RlpError:
+    discard
+  err()
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
