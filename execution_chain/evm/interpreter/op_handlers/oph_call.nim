@@ -105,7 +105,7 @@ proc gasCallDelegate(c: Computation, codeAddress: Address): GasProc =
       # Code does not need to be loaded for precompile addresses because the
       # precompile doesn't exist in the state trie and can never be a 7702
       # delegation, so resolving the delegation target is a no-op.
-      if getPrecompile(c.vmState.fork, codeAddress).isSome:
+      if isPrecompile(c.vmState.fork, codeAddress):
         c.delegateTo = codeAddress
         return 0.GasInt
 
@@ -195,7 +195,7 @@ proc staticCallParams(c: Computation, res: var LocalParams): EvmResult[void] =
 
 proc getCallCode(c: Computation): CodeBytesRef =
   # Avoid accessing ledger if it's a precompile address
-  if getPrecompile(c.vmState.fork, c.msg.codeAddress).isSome:
+  if isPrecompile(c.vmState.fork, c.msg.codeAddress):
     return CodeBytesRef(nil)
   c.vmState.readOnlyLedger.getCode(c.delegateTo)
 

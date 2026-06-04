@@ -29,7 +29,7 @@ proc generateContractAddress*(vmState: BaseVMState,
 
 proc getCallCode*(vmState: BaseVMState, codeAddress: Address): CodeBytesRef =
   # Avoid accessing ledger if it's a precompile address
-  if getPrecompile(vmState.fork, codeAddress).isSome:
+  if isPrecompile(vmState.fork, codeAddress):
     return CodeBytesRef(nil)
 
   # For contract creations the EVM will add the contract address to the

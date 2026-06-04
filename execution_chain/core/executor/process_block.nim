@@ -20,6 +20,7 @@ import
   ../../transaction,
   ../../evm/state,
   ../../evm/types,
+  ../../evm/precompiles,
   ../../evm/interpreter/gas_costs,
   ../../block_access_list/block_access_list_validation,
   ../../concurrency/utils,
@@ -56,6 +57,7 @@ when compileOption("threads"):
       nextIndex: Atomic[int]
       balPtr: ptr BlockAccessList
       txFrame: CoreDbTxRef
+      fork: EVMFork
 
   proc recoverAndPrefetchTask(
       e: ptr Entry, ctx: ptr PrefetchCtx, tx: ptr Transaction): bool {.nimcall.} =
@@ -175,9 +177,18 @@ when compileOption("threads"):
       if i >= len:
         break
 
-      let
-        accChanges = addr ctx[].balPtr[][i]
-        accPath = accChanges[].address.computeAccPath
+      let accChanges = addr ctx[].balPtr[][i]
+
+      # Precompile contracts don't exist in the state trie and don't get loaded
+      # when called so we don't prefetch them. The BAL can contain precompile addresses 
+      # but in most cases the state trie account is not actually fetched. The edge
+      # case here is when a precompile contract receives a value transfer which will
+      # load the account to update the balance but unfortunately we can't determine
+      # if this was the case or not from the information in the BAL so we ignore this.
+      if isPrecompile(ctx[].fork, accChanges[].address):
+        continue
+
+      let accPath = accChanges[].address.computeAccPath
 
       if accChanges[].storageChanges.len == 0 and accChanges[].storageReads.len == 0:
         discard ctx[].txFrame.fetchAccount(accPath)
@@ -205,6 +216,7 @@ when compileOption("threads"):
     # Read through the parent frame because the current frame is written to
     # during block execution; this avoids locking on the frame data structures.
     ctx.txFrame = vmState.ledger.txFrame.parent()
+    ctx.fork = vmState.fork
     ctx.nextIndex.store(0, moRelease)
     ctx.finished.store(false, moRelease)
 
