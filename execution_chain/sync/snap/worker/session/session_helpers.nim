@@ -66,9 +66,9 @@ template sessionTicker*(
 
 # ----------------
 
-proc countTrieNodes*(
+proc countKvtNodes*(
     ctx: SnapCtxRef;
-      ): tuple[nAccNodes, nStoNodes: uint64, ela: Duration] =
+      ): tuple[nAccNodes, nStoNodes, nCodes: uint64, ela: Duration] =
   ## Simple stored nodes counter
   let
     db = ctx.pool.mptAsm
@@ -77,6 +77,23 @@ proc countTrieNodes*(
     result.nAccNodes.inc
   for _ in db.walkStoKvt():
     result.nStoNodes.inc
+  for _ in db.walkCodeKvt():
+    result.nCodes.inc
+  result.ela = Moment.now() - start
+
+proc countDnglLinks*(
+    ctx: SnapCtxRef;
+      ): tuple[nAccDngl, nStoDngl, nCodeMiss: uint64, ela: Duration] =
+  ## Simple stored nodes counter
+  let
+    db = ctx.pool.mptAsm
+    start = Moment.now()
+  for _ in db.walkAccDnglKvt():
+    result.nAccDngl.inc
+  for _ in db.walkStoDnglKvt():
+    result.nStoDngl.inc
+  for _ in db.walkCodeDnglKvt():
+    result.nCodeMiss.inc
   result.ela = Moment.now() - start
 
 func decodeAccount*(pyl: openArray[byte]): Opt[Account] =

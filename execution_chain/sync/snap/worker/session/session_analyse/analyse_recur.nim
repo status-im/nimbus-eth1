@@ -88,9 +88,8 @@ proc walkTrieRecImpl(
       var
         pyl = rlp.listElem(1)                       # Rlp type, payload or link
       if isLeaf:
-        trd.notify(AttLeaf,
-          base, newPath.toHexPrefix(false).data(), key,
-          pyl.read seq[byte], depth)
+        trd.notify(AttLeaf,                         # full path => 32 bytes
+          base, newPath.getBytes(), key, pyl.read seq[byte], depth)
       else:
         newPath.recurseOrNotify(pyl)
     of 17:
@@ -324,19 +323,18 @@ proc sessionAnalyseTrieRecur*(
   ## Testing/debugging only (for the moment.)
   ##
   let
-    start = Moment.now()
     trd = TravDescRef(
       ctx:   ctx,
       db:    ctx.pool.mptAsm,
-      msgAt: start + threadLogTimeLimit)
+      msgAt: Moment.now() + threadLogTimeLimit)
 
     pivot = trd.db.findPivot().valueOr:
       debug info & ": MPT analysis failed, pivot missing"
       return err(ENoPivot)                          # => missing pivot, error
 
   template stats(): auto = trd.stats
-  startTraversingMsg(info)
 
+  trace info & ": Clearing dangling links caches"
   trd.clearDanglAcc(info).isOkOr:
     return err(EClearError)
 
@@ -346,12 +344,16 @@ proc sessionAnalyseTrieRecur*(
     trd.clearDanglCode(info).isOkOr:
       return err(EClearError)
 
+    let start = Moment.now()
+    startTraversingMsg(info)
     trd.walkTrieRec(
       zeroHash32, pivot.root.Hash32.data, getAccKvtWrap,
       accAndStoNotifyRecur info).isOkOr:
         debug info & ": Failed analysing MPT", `error`=error
         return err(error)
   else:                                             # FIXME -- will go away
+    let start = Moment.now()                        # FIXME -- will go away
+    startTraversingMsg(info)                        # FIXME -- will go away
     trd.walkTrieRec(                                # FIXME -- will go away
       zeroHash32, pivot.root.Hash32.data, getAccKvtWrap,
       accOnlyNotifyRecur info).isOkOr:              # FIXME -- will go away
