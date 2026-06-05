@@ -14,6 +14,9 @@ import
   pkg/[chronicles, chronos, eth/common, stew/byteutils],
   ../../[mpt, worker_desc]
 
+logScope:
+  topics = "snap sync"
+
 type
   AttType* = enum
     ## Something to pay attantion, to.
@@ -98,28 +101,25 @@ template toKey*(rlp: Rlp): seq[byte] =
   if rlp.isList: @(rlp.rawData) else: rlp.toBytes
 
 func fromBytes*(_: type Hash32, path: openArray[byte]): Hash32 =
-  doAssert path.len < 33
+  doAssert path.len == 32
   let path = @path
   (addr distinctBase(result)[0]).copyMem(unsafeAddr path[0], path.len)
 
 # ----------
 
 proc clearDanglAcc*(trd: TravDescRef, info: static[string]): Opt[void] =
-  trace info & ": Clearing dangling accounts cache"
   trd.db.clearAccDnglKvt().isOkOr:
     error info & ": Cannot reset dangling cache", `error`=error
     return err()
   ok()
 
 proc clearDanglSto*(trd: TravDescRef, info: static[string]): Opt[void] =
-  trace info & ": Clearing dangling slots cache"
   trd.db.clearStoDnglKvt().isOkOr:
     error info & ": Cannot reset slots cache", `error`=error
     return err()
   ok()
 
 proc clearDanglCode*(trd: TravDescRef, info: static[string]): Opt[void] =
-  trace info & ": Clearing missing contracts cache"
   trd.db.clearCodeDnglKvt().isOkOr:
     error info & ": Cannot reset receipts cache", `error`=error
     return err()

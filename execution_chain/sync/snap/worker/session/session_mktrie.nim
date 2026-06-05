@@ -21,6 +21,11 @@ declareGauge nec_snap_merged_mpt_coverage, "" &
   "Factor of accumulated account ranges covered when assembling MPT"
 
 type
+  RecoveryStatus = enum
+    NewAssembly
+    PartiallyAssembled
+    AllAssembled
+
   MkTrieSession = object of SessionTicker
     ctx: SnapCtxRef
     db: MptAsmRef
@@ -77,16 +82,24 @@ func maxCoverage(w: openArray[WalkStateData]): WalkStateData =
       if result.coverage < state.coverage:
         result = state
 
-func clearCacheNeeded(w: openArray[WalkStateData]): bool =
-  ## Check whether the cache structure needs to be bcleaned up from a
+func getRecoveryStatus(w: openArray[WalkStateData]): RecoveryStatus =
+  ## Check whether/how the cache structure needs to be cleaned up from a
   ## previos session.
   ##
-  if w[0].tag != PivotOnTrie:                       # stored pivot has changed?
-    return true
-  for n in 1 ..< w.len:
-    if w[n].tag != OnTrie:
-      return true                                   # partially compiled MPT
-  # false
+  case w[0].tag:
+  of Untagged:
+    for n in 1 ..< w.len:
+      if w[n].tag != Untagged:
+        return PartiallyAssembled
+    return NewAssembly                              # all tags `Untagged`
+  of PivotOnTrie:
+    for n in 1 ..< w.len:
+      if w[n].tag != OnTrie:
+        return PartiallyAssembled
+    return AllAssembled                             # partial MPT done
+  of OnTrie:
+    discard
+  PartiallyAssembled
 
 proc updateCoverageMetrics(session: var MkTrieSession) =
   discard session.fullCov.merge session.accRange    # completed ranges
@@ -447,7 +460,11 @@ template sessionMkTrie*(
     #   links cache so that one can continue at an arbitrary state, referably
     #   the last one fully processed.
     #
-    if byDist.clearCacheNeeded:
+    case byDist.getRecoveryStatus():
+    of AllAssembled:
+      bodyRc = typeof(bodyRc).ok(ZeroDuration)
+      break body
+    of PartiallyAssembled:
       chronicles.info info & ": Clear MPT and dangling links", nStates
       for n in 0 ..< byDist.len:
         byDist[n].tag = Untagged                    # reset all states
@@ -455,6 +472,8 @@ template sessionMkTrie*(
       discard ctx.pool.mptAsm.clearAccKvt()         # rebuild MPT cache
       discard ctx.pool.mptAsm.clearStoKvt()         # ditto
       discard ctx.pool.mptAsm.clearCodeKvt()        # ..
+    of NewAssembly:
+      discard
 
     chronicles.info info & ": Assembling MPT from archived data", nStates
 

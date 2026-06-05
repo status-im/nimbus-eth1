@@ -88,9 +88,8 @@ proc walkTrieRecImpl(
       var
         pyl = rlp.listElem(1)                       # Rlp type, payload or link
       if isLeaf:
-        trd.notify(AttLeaf,
-          base, newPath.toHexPrefix(false).data(), key,
-          pyl.read seq[byte], depth)
+        trd.notify(AttLeaf,                         # full path => 32 bytes
+          base, newPath.getBytes(), key, pyl.read seq[byte], depth)
       else:
         newPath.recurseOrNotify(pyl)
     of 17:
@@ -231,88 +230,12 @@ proc accAndStoNotifyRecur(info: static[string]): WalkTrieRecCB =
     occasionalMsg(trd.msgAt):
       traversingAccountsMsg(stats, info)
 
-proc accOnlyNotifyRecur(info: static[string]): WalkTrieRecCB =
-  return proc(
-      trd: TravDescRef;
-      att: AttType;
-      _: Hash32;
-      path: openArray[byte];
-      key: openArray[byte];
-      payload: openArray[byte];                     # node or payload
-      depth: int;
-        ) =
-    template stats(): auto = trd.stats
-
-    stats.nAccNodes += stats.nNodes                 # collect account stats
-    stats.nNodes = 0
-
-    if stats.nAccDepth < depth:
-      stats.nAccDepth = depth
-
-    case att:
-    of AttLeaf:
-      stats.nAccLeaf.inc
-
-      block forAccount:
-        let acc = payload.decodeAccount().valueOr:
-          stats.nAccErr.inc
-          break forAccount
-
-        var treatAccAsDangling = false
-        if acc.storageRoot != EMPTY_ROOT_HASH:
-          stats.nAccSto.inc
-
-          # Check whether the storage root has an entry on the database
-          block checkStoRoot:
-            let
-              base = Hash32.fromBytes path
-              rc = trd.db.hasStoKvt(base, acc.storageRoot.data)
-            if rc.isErr:
-              debug info & ": Failed accessing storage root",
-                root=acc.storageRoot.toStr, nErr=stats.nStoErr, error=rc.error
-            elif rc.value:
-              break checkStoRoot
-            treatAccAsDangling = true
-            stats.nStoMissing.inc
-
-        if acc.codeHash != EMPTY_CODE_HASH:
-          stats.nAccCode.inc
-
-          # Check whether the code has an entry on the codes list
-          block checkCodeHash:
-            let rc = trd.db.hasCodeKvt(acc.codeHash)
-            if rc.isErr:
-              debug info & ": Failed accessing byte code",
-                root=acc.codeHash.toStr, nErr=stats.nStoErr, error=rc.error
-            elif rc.value:
-              break checkCodeHash
-            stats.nCodeMissing.inc
-            treatAccAsDangling = true
-
-          occasionalMsg(trd.msgAt):
-            traversingCodeMsg(stats, info)
-
-        if treatAccAsDangling:                      # count as dangling leaf
-          trd.putDanglAcc(key, path, info)
-          stats.nAccDangl.inc
-
-    of AttDangling:
-      stats.nAccDangl.inc
-      trd.putDanglAcc(key, path, info)
-
-    else:
-      stats.nAccErr.inc
-
-    occasionalMsg(trd.msgAt):
-      traversingAccountsMsg(stats, info)
-
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 proc sessionAnalyseTrieRecur*(
     ctx: SnapCtxRef;
-    accAndStoOk: static[bool];                      # FIXME -- will go away
     info: static[string];
       ): Result[WalkStats,AttType]
       {.deprecated: "Use sessionAnalyseTrie()".} =
@@ -324,39 +247,33 @@ proc sessionAnalyseTrieRecur*(
   ## Testing/debugging only (for the moment.)
   ##
   let
-    start = Moment.now()
     trd = TravDescRef(
       ctx:   ctx,
       db:    ctx.pool.mptAsm,
-      msgAt: start + threadLogTimeLimit)
+      msgAt: Moment.now() + threadLogTimeLimit)
 
     pivot = trd.db.findPivot().valueOr:
       debug info & ": MPT analysis failed, pivot missing"
       return err(ENoPivot)                          # => missing pivot, error
 
   template stats(): auto = trd.stats
-  startTraversingMsg(info)
 
+  trace info & ": Clearing dangling links caches"
   trd.clearDanglAcc(info).isOkOr:
     return err(EClearError)
+  trd.clearDanglSto(info).isOkOr:
+    return err(EClearError)
+  trd.clearDanglCode(info).isOkOr:
+    return err(EClearError)
 
-  when accAndStoOk:                                 # FIXME -- will go away
-    trd.clearDanglSto(info).isOkOr:
-      return err(EClearError)
-    trd.clearDanglCode(info).isOkOr:
-      return err(EClearError)
+  let start = Moment.now()
+  startTraversingMsg(info)
 
-    trd.walkTrieRec(
-      zeroHash32, pivot.root.Hash32.data, getAccKvtWrap,
-      accAndStoNotifyRecur info).isOkOr:
-        debug info & ": Failed analysing MPT", `error`=error
-        return err(error)
-  else:                                             # FIXME -- will go away
-    trd.walkTrieRec(                                # FIXME -- will go away
-      zeroHash32, pivot.root.Hash32.data, getAccKvtWrap,
-      accOnlyNotifyRecur info).isOkOr:              # FIXME -- will go away
-        debug info & ": Failed analysing MPT", `error`=error
-        return err(error)                           # FIXME -- will go away
+  trd.walkTrieRec(
+    zeroHash32, pivot.root.Hash32.data, getAccKvtWrap,
+    accAndStoNotifyRecur info).isOkOr:
+      debug info & ": Failed analysing MPT", `error`=error
+      return err(error)
 
   if 0 < trd.cacheErr:
     return err(EPutError)

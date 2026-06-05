@@ -32,6 +32,10 @@ export
 logScope:
   topics = "snap sync"
 
+const
+  AllowTreadSwitch = true
+    ## Set `true` for allowing thread switch in `traverseMpt()` node walker.
+
 type
   WalkParent = tuple
     path: NibblesBuf                                # parent path
@@ -98,21 +102,22 @@ template runErrand(
       code
       trd.msgAt = Moment.now() + threadLogTimeLimit
 
-    if trd.napAt < start:
-      try:
-        await sleepAsync threadSwitchTimeSlot
-      except CancelledError as e:
-        chronicles.error info & ": Async wait cancelled",
-          error=($e.name & "(" & e.msg & ")")
-        bodyRc = typeof(bodyRc).err()
-        break body
+    when AllowTreadSwitch:
+      if trd.napAt < start:
+        try:
+          await sleepAsync ZeroDuration
+        except CancelledError as e:
+          chronicles.error info & ": Async wait cancelled",
+            error=($e.name & "(" & e.msg & ")")
+          bodyRc = typeof(bodyRc).err()
+          break body
 
-      # Check for scheduler shutdown after thread switch
-      if not trd.ctx.daemon:
-        chronicles.error info & ": Daemon session terminated"
-        bodyRc = typeof(bodyRc).err()
-        break body
-      trd.napAt = Moment.now() + threadSwitchRunLimit # next thread switch time
+        # Check for scheduler shutdown after thread switch
+        if not trd.ctx.daemon:
+          chronicles.error info & ": Daemon session terminated"
+          bodyRc = typeof(bodyRc).err()
+          break body
+        trd.napAt = Moment.now() + threadSwitchRunLimit # next thread switch time
 
     # End  `block body`
 
@@ -272,6 +277,9 @@ template stoNotify(
       stats.nStoDangl.inc
       trd.putDanglSto(base, key, path, info)
 
+      occasionalMsg(trd.msgAt):
+        traversingCodeMsg(stats, info)
+
     elif att == ENoRoot:
       stats.nStoMissing.inc
       trd.putMissSto(base, key, path, info)
@@ -338,82 +346,15 @@ template accAndStoNotify(
           stats.nCodeMissing.inc
           trd.putMissCode(key, path, info)          # (key,path) of account data
 
-        occasionalMsg(trd.msgAt):
-          traversingCodeMsg(stats, info)
+      occasionalMsg(trd.msgAt):
+        traversingCodeMsg(stats, info)
 
     elif att == AttDangling:
       stats.nAccDangl.inc
       trd.putDanglAcc(key, path, info)
 
-    else:
-      stats.nAccErr.inc
-
-  discard                                           # visual alignment
-
-template accOnlyNotify(
-    att: static[AttType];
-    trd: TravDescRef;
-    _: Hash32;
-    path: openArray[byte];
-    key: openArray[byte];
-    payload: openArray[byte];                       # node or payload
-    depth: int;
-    info: static[string];
-      ) =
-  block body:
-    template stats(): auto = trd.stats
-
-    stats.nAccNodes += stats.nNodes                 # collect account stats
-    stats.nNodes = 0
-
-    if stats.nAccDepth < depth:
-      stats.nAccDepth = depth
-
-    when att == AttLeaf:
-      stats.nAccLeaf.inc
-
-      let acc = payload.decodeAccount().valueOr:
-        stats.nAccErr.inc
-        break body
-
-      var treatAccAsDangling = false
-      if acc.storageRoot != EMPTY_ROOT_HASH:
-        stats.nAccSto.inc
-
-        # Check whether the storage root has an entry on the database
-        block checkStoRoot:
-          let
-            base = path.to(Hash32)
-            rc = trd.db.hasStoKvt(base, acc.storageRoot.data)
-          if rc.isErr:
-            debug info & ": Failed accessing storage root",
-              root=acc.storageRoot.toStr, nErr=stats.nStoErr, error=rc.error
-          elif rc.value:
-            break checkStoRoot
-          treatAccAsDangling = true
-          stats.nStoMissing.inc
-
-      if acc.codeHash != EMPTY_CODE_HASH:
-        stats.nAccCode.inc
-
-        # Check whether the code has an entry on the database
-        block checkCodeHash:
-          let rc = trd.db.hasCodeKvt(acc.codeHash)
-          if rc.isErr:
-            debug info & ": Failed accessing byte code",
-              root=acc.codeHash.toStr, nErr=stats.nStoErr, error=rc.error
-          elif rc.value:
-            break checkCodeHash
-          treatAccAsDangling = true
-          stats.nCodeMissing.inc
-
-      if treatAccAsDangling:                        # count as dangling leaf
-        trd.putDanglAcc(key, path, info)
-        stats.nAccDangl.inc
-
-    elif att == AttDangling:
-      stats.nAccDangl.inc
-      trd.onAccDangl(key, path, info)
+      occasionalMsg(trd.msgAt):
+        traversingCodeMsg(stats, info)
 
     else:
       stats.nAccErr.inc
@@ -424,11 +365,7 @@ template accOnlyNotify(
 # Public functions
 # ------------------------------------------------------------------------------
 
-template sessionAnalyseTrieIter*(
-    cty: SnapCtxRef;
-    accAndStoOk: static[bool];                      # FIXME -- will go away
-    info: static[string];
-      ): auto =
+template sessionAnalyseTrieIter*(cty: SnapCtxRef, info: static[string]): auto =
   ## Async template
   ##
   ## Traverse (depth first) an MPT and store missing or dangling node links
@@ -437,12 +374,11 @@ template sessionAnalyseTrieIter*(
   var bodyRc = Result[WalkStats,AttType].err(EOtherError)
   block body:
     let
-      start = Moment.now()
       trd = TravDescRef(
         ctx:   cty,
         db:    cty.pool.mptAsm,
-        msgAt: start + threadLogTimeLimit,
-        napAt: start + threadSwitchRunLimit)
+        msgAt: Moment.now() + threadLogTimeLimit,
+        napAt: Moment.now() + threadSwitchRunLimit)
 
       pivot = trd.db.findPivot().valueOr:
         debug info & ": MPT analysis failed, pivot missing"
@@ -450,29 +386,25 @@ template sessionAnalyseTrieIter*(
         break body
 
     template stats(): auto = trd.stats
-    startTraversingMsg(info)
 
+    trace info & ": Clearing dangling links caches"
     trd.clearDanglAcc(info).isOkOr:
       bodyRc = typeof(bodyRc).err(EClearError)
       break body
+    trd.clearDanglSto(info).isOkOr:
+      bodyRc = typeof(bodyRc).err(EClearError)
+      break body
+    trd.clearDanglCode(info).isOkOr:
+      bodyRc = typeof(bodyRc).err(EClearError)
+      break body
 
-    when accAndStoOk:                               # FIXME -- will go away
-      trd.clearDanglSto(info).isOkOr:
-        bodyRc = typeof(bodyRc).err(EClearError)
-        break body
-      trd.clearDanglCode(info).isOkOr:
-        bodyRc = typeof(bodyRc).err(EClearError)
-        break body
+    let start = Moment.now()
+    startTraversingMsg(info)
 
-      let rc = traverseMpt(
-        trd, zeroHash32, pivot.root.Hash32.data,
-        getAccKvtWrap, accAndStoNotify, info):
-          traversingAccountsMsg(stats, info)
-    else:                                           # FIXME -- will go away
-      let rc = traverseMpt(                         # FIXME -- will go away
-        trd, zeroHash32, pivot.root.Hash32.data,    # FIXME -- will go away
-        getAccKvtWrap, accOnlyNotify, info):        # FIXME -- will go away
-          traversingAccountsMsg(stats, info)        # FIXME -- will go away
+    let rc = traverseMpt(
+      trd, zeroHash32, pivot.root.Hash32.data,
+      getAccKvtWrap, accAndStoNotify, info):
+        traversingAccountsMsg(stats, info)
 
     if 0 < trd.cacheErr:
       bodyRc = typeof(bodyRc).err(EPutError)
