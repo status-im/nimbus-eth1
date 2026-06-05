@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/os,
+  std/[os, parseutils, strutils, tables],
   stew/io2,
   results,
   eth/common/[blocks, receipts],
@@ -22,8 +22,9 @@ type Era1DB* = ref object
   ## a linear history of pre-merge execution chain data.
   path: string
   network: string
-  accumulator: FinishedHistoricalHashesAccumulator
+  accumulator: Opt[FinishedHistoricalHashesAccumulator]
   files: seq[Era1File]
+  filenames: Table[uint64, string]
   mergeBlockNumber: uint64
 
 proc getEra1File(db: Era1DB, era: Era1): Result[Era1File, string] =
@@ -34,10 +35,17 @@ proc getEra1File(db: Era1DB, era: Era1): Result[Era1File, string] =
   if era > db.mergeBlockNumber.era():
     return err("Selected era1 past pre-merge data")
 
-  let
-    root = db.accumulator.historicalEpochs[era.int]
-    name = era1FileName(db.network, era, Digest(data: root))
-    path = db.path / name
+  let name =
+    if db.accumulator.isSome:
+      let root = db.accumulator.value().historicalEpochs[era.int]
+      era1FileName(db.network, era, Digest(data: root))
+    else:
+      try:
+        db.filenames[uint64 era]
+      except KeyError:
+        return err("Era not covered by existing files: " & $era)
+
+  let path = db.path / name
 
   if not isFile(path):
     return err("No such era file")
@@ -61,11 +69,39 @@ proc new*(
     accumulator: FinishedHistoricalHashesAccumulator,
     mergeBlockNumber: uint64,
 ): Era1DB =
-  # TODO: Calculate mergeBlockNumber from accumulator instead.
   Era1DB(
     path: path,
     network: network,
-    accumulator: accumulator,
+    accumulator: Opt.some(accumulator),
+    mergeBlockNumber: mergeBlockNumber,
+  )
+
+proc new*(
+    T: type Era1DB, path: string, network: string, mergeBlockNumber: uint64
+): Result[Era1DB, string] =
+  ## Initialize Era1DB by scanning `path` for era1 files. Unlike the accumulator
+  ## overload, this discovers files by directory scan matched by network prefix
+  ## and era number.
+  var filenames: Table[uint64, string]
+  try:
+    for w in path.walkDir(relative = true):
+      if w.kind in {pcFile, pcLinkToFile}:
+        let (_, name, ext) = w.path.splitFile()
+        if name.startsWith(network & "-") and ext == ".era1":
+          var era: uint64
+          discard parseBiggestUInt(name, era, start = network.len + 1)
+          filenames[era] = w.path
+  except CatchableError as exc:
+    return err("Cannot open era database: " & exc.msg)
+
+  if filenames.len == 0:
+    return err("No era files found in " & path)
+
+  ok Era1DB(
+    path: path,
+    network: network,
+    accumulator: Opt.none(FinishedHistoricalHashesAccumulator),
+    filenames: filenames,
     mergeBlockNumber: mergeBlockNumber,
   )
 
@@ -74,6 +110,13 @@ proc dispose*(db: Era1DB) =
     if f != nil:
       f.close()
   db.files.reset()
+
+proc verifyEra*(db: Era1DB, era: Era1): Result[Digest, string] =
+  ## Verify all blocks in an era, including header/body/receipts consistency and
+  ## calculates the accumulator root and compares it with the root stored in the
+  ## era file. Returns the accumulator root.
+  let f = ?db.getEra1File(era)
+  f.verify()
 
 proc getBlockHeader*(
     db: Era1DB, blockNumber: uint64, res: var Header
@@ -114,13 +157,3 @@ proc getBlockTuple*(
   let f = ?db.getEra1File(blockNumber.era)
 
   f.getBlockTuple(blockNumber, res)
-
-proc getAccumulator*(
-    db: Era1DB, blockNumber: uint64
-): Result[EpochRecordCached, string] =
-  ## Get the Epoch Record that the block with `blockNumber` is part of.
-  # TODO: Probably want this `EpochRecordCached` also actually cached in
-  # the Era1File or EraDB object.
-  let f = ?db.getEra1File(blockNumber.era)
-
-  f.buildAccumulator()
