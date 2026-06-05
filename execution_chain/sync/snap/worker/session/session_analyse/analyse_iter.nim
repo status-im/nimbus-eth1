@@ -361,85 +361,11 @@ template accAndStoNotify(
 
   discard                                           # visual alignment
 
-template accOnlyNotify(
-    att: static[AttType];
-    trd: TravDescRef;
-    _: Hash32;
-    path: openArray[byte];
-    key: openArray[byte];
-    payload: openArray[byte];                       # node or payload
-    depth: int;
-    info: static[string];
-      ) =
-  block body:
-    template stats(): auto = trd.stats
-
-    stats.nAccNodes += stats.nNodes                 # collect account stats
-    stats.nNodes = 0
-
-    if stats.nAccDepth < depth:
-      stats.nAccDepth = depth
-
-    when att == AttLeaf:
-      stats.nAccLeaf.inc
-
-      let acc = payload.decodeAccount().valueOr:
-        stats.nAccErr.inc
-        break body
-
-      var treatAccAsDangling = false
-      if acc.storageRoot != EMPTY_ROOT_HASH:
-        stats.nAccSto.inc
-
-        # Check whether the storage root has an entry on the database
-        block checkStoRoot:
-          let
-            base = path.to(Hash32)
-            rc = trd.db.hasStoKvt(base, acc.storageRoot.data)
-          if rc.isErr:
-            debug info & ": Failed accessing storage root",
-              root=acc.storageRoot.toStr, nErr=stats.nStoErr, error=rc.error
-          elif rc.value:
-            break checkStoRoot
-          treatAccAsDangling = true
-          stats.nStoMissing.inc
-
-      if acc.codeHash != EMPTY_CODE_HASH:
-        stats.nAccCode.inc
-
-        # Check whether the code has an entry on the database
-        block checkCodeHash:
-          let rc = trd.db.hasCodeKvt(acc.codeHash)
-          if rc.isErr:
-            debug info & ": Failed accessing byte code",
-              root=acc.codeHash.toStr, nErr=stats.nStoErr, error=rc.error
-          elif rc.value:
-            break checkCodeHash
-          treatAccAsDangling = true
-          stats.nCodeMissing.inc
-
-      if treatAccAsDangling:                        # count as dangling leaf
-        trd.putDanglAcc(key, path, info)
-        stats.nAccDangl.inc
-
-    elif att == AttDangling:
-      stats.nAccDangl.inc
-      trd.onAccDangl(key, path, info)
-
-    else:
-      stats.nAccErr.inc
-
-  discard                                           # visual alignment
-
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-template sessionAnalyseTrieIter*(
-    cty: SnapCtxRef;
-    accAndStoOk: static[bool];                      # FIXME -- will go away
-    info: static[string];
-      ): auto =
+template sessionAnalyseTrieIter*(cty: SnapCtxRef, info: static[string]): auto =
   ## Async template
   ##
   ## Traverse (depth first) an MPT and store missing or dangling node links
@@ -465,28 +391,20 @@ template sessionAnalyseTrieIter*(
     trd.clearDanglAcc(info).isOkOr:
       bodyRc = typeof(bodyRc).err(EClearError)
       break body
+    trd.clearDanglSto(info).isOkOr:
+      bodyRc = typeof(bodyRc).err(EClearError)
+      break body
+    trd.clearDanglCode(info).isOkOr:
+      bodyRc = typeof(bodyRc).err(EClearError)
+      break body
 
-    when accAndStoOk:                               # FIXME -- will go away
-      trd.clearDanglSto(info).isOkOr:
-        bodyRc = typeof(bodyRc).err(EClearError)
-        break body
-      trd.clearDanglCode(info).isOkOr:
-        bodyRc = typeof(bodyRc).err(EClearError)
-        break body
+    let start = Moment.now()
+    startTraversingMsg(info)
 
-      let start = Moment.now()
-      startTraversingMsg(info)
-      let rc = traverseMpt(
-        trd, zeroHash32, pivot.root.Hash32.data,
-        getAccKvtWrap, accAndStoNotify, info):
-          traversingAccountsMsg(stats, info)
-    else:                                           # FIXME -- will go away
-      let start = Moment.now()                      # FIXME -- will go away
-      startTraversingMsg(info)                      # FIXME -- will go away
-      let rc = traverseMpt(                         # FIXME -- will go away
-        trd, zeroHash32, pivot.root.Hash32.data,    # FIXME -- will go away
-        getAccKvtWrap, accOnlyNotify, info):        # FIXME -- will go away
-          traversingAccountsMsg(stats, info)        # FIXME -- will go away
+    let rc = traverseMpt(
+      trd, zeroHash32, pivot.root.Hash32.data,
+      getAccKvtWrap, accAndStoNotify, info):
+        traversingAccountsMsg(stats, info)
 
     if 0 < trd.cacheErr:
       bodyRc = typeof(bodyRc).err(EPutError)

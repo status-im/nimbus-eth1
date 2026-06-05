@@ -29,24 +29,7 @@ template sessionAnalyseFullTrie*(
   ## Traverse the MPT and register all dangling links in the `*DanglKvt`
   ## tables.
   ##
-  ctx.sessionAnalyseTrieIter(accAndStoOk=true, info)
-
-template sessionAnalyseAccounts*(
-    ctx: SnapCtxRef;
-    info: static[string];
-      ): auto =
-  ## Async template
-  ##
-  ## Traverse the accounting MPT and register dangling links in the
-  ## `AccDnglKvt` table.
-  ##
-  ## This function is used for debugging or testing, only. It can be used
-  ## as a *slow* alternative and control function to the incremental dangling
-  ## links bookkeeping approach of the `session_mktrie` module.
-  ##
-  ## It will go away, evenually..
-  ##
-  ctx.sessionAnalyseTrieIter(accAndStoOk=false, info)
+  ctx.sessionAnalyseTrieIter(info)
 
 # ------------------------------------------------------------------------------
 # End
