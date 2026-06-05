@@ -47,7 +47,7 @@ template sessionTicker*(
     # And allow task switching, sometimes
     if status.napAt < Moment.now():
       try:
-        await sleepAsync threadSwitchTimeSlot
+        await sleepAsync ZeroDuration
       except CancelledError as e:
         chronicles.error info & ": Async wait cancelled",
           error=($e.name & "(" & e.msg & ")")

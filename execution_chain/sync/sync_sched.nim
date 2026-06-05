@@ -161,10 +161,6 @@ const
   zombieTimeToLinger = 20.seconds
     ## Maximum time a zombie is kept on the database.
 
-  execLoopTaskSwitcher = 1.nanoseconds
-    ## Asynchroneous waiting time at the end of an exec loop unless some sleep
-    ## seconds were added as decribed by `xxxExecLoopTimeElapsedMin`, above.
-
   execLoopPollingTime = 50.milliseconds
     ## Single asynchroneous time interval wait state for event polling
 
@@ -320,7 +316,7 @@ proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
       let
         elapsed = Moment.now() - startMoment
         suspend =
-          if daemonExecLoopTimeElapsedMin <= elapsed: execLoopTaskSwitcher
+          if daemonExecLoopTimeElapsedMin <= elapsed: ZeroDuration
           else: daemonExecLoopTimeElapsedMin - elapsed
       try:
         await sleepAsync max(suspend, idleTime)
@@ -458,7 +454,7 @@ proc workerLoop[S,W](buddy: RunnerPeerRef[S,W]) {.async: (raises: []).} =
       let
         elapsed = Moment.now() - startMoment
         suspend =
-          if workerExecLoopTimeElapsedMin <= elapsed: execLoopTaskSwitcher
+          if workerExecLoopTimeElapsedMin <= elapsed: ZeroDuration
           else: workerExecLoopTimeElapsedMin - elapsed
       try:
         await sleepAsync max(suspend, idleTime)

@@ -66,9 +66,6 @@ const
   threadLogTimeLimit* = chronos.seconds(45)
     ## Print intermediate messages when running a time consuming task
 
-  threadSwitchTimeSlot* = chronos.nanoseconds(1)
-    ## Nano-sleep to allows pseudo/async thread switch
-
   threadSwitchRunLimit* = chronos.seconds(25)
     ## Force a thread switch after that time running continuously. This
     ## applies mainly for DB building and analysing sessions.

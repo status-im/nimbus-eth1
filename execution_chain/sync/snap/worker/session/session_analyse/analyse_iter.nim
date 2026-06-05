@@ -100,7 +100,7 @@ template runErrand(
 
     if trd.napAt < start:
       try:
-        await sleepAsync threadSwitchTimeSlot
+        await sleepAsync ZeroDuration
       except CancelledError as e:
         chronicles.error info & ": Async wait cancelled",
           error=($e.name & "(" & e.msg & ")")
