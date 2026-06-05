@@ -22,7 +22,7 @@ iterator undumpBlocksEre*(
     stopAfter = high(uint64), # Last block to extract
     doAssertOk = false;
 ): seq[EthBlock] =
-  let db = EreDB.init(dir, "mainnet", 15537394'u64).expect("Ere files present")
+  let db = EreDB.new(dir, "mainnet", 15537394'u64).expect("Ere files present")
   defer:
     db.dispose()
 

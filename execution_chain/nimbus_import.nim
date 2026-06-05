@@ -200,7 +200,7 @@ proc importBlocks*(config: ExecutionClientConf, com: CommonRef) =
   # ere takes priority: use it if files are present in the ere directory
   # (either the explicit --ere-dir or the default <data-dir>/ere).
   let networkName = config.networkId.name
-  let ereResult = EreDB.init(config.ereDir, networkName, mergeBlockNumber(config.networkId))
+  let ereResult = EreDB.new(config.ereDir, networkName, mergeBlockNumber(config.networkId))
   if ereResult.isOk():
     let db = ereResult.get()
     defer:

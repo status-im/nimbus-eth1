@@ -34,7 +34,7 @@ procSuite "Stateless Execution Tests":
   setup:
     let
       db = AristoDbMemory.newCoreDbRef()
-      era0 = EreDB.init(sourcePath / "replay", "mainnet", 15537394'u64).expect("Ere files present")
+      era0 = EreDB.new(sourcePath / "replay", "mainnet", 15537394'u64).expect("Ere files present")
       # Stateless provider is enabled so that witnesses will be generated
       # and stored in the database
       com = CommonRef.new(db, statelessProviderEnabled = true)

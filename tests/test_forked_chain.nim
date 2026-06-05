@@ -789,7 +789,7 @@ procSuite "ForkedChain mainnet replay":
   # smoke test
   setup:
     let
-      era0 = EreDB.init(sourcePath / "replay", "mainnet", 15537394'u64).expect("Ere files present")
+      era0 = EreDB.new(sourcePath / "replay", "mainnet", 15537394'u64).expect("Ere files present")
       com = CommonRef.new(AristoDbMemory.newCoreDbRef())
       fc {.used.}= ForkedChainRef.init(com, enableQueue = true)
 
