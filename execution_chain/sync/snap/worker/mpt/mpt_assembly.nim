@@ -201,6 +201,11 @@ type
     key: seq[byte]
     value: seq[byte]
 
+  WalkKkvt* = tuple
+    key1: seq[byte]
+    key2: seq[byte]
+    value: seq[byte]
+
 # ------------------------------------------------------------------------------
 # Private RLP helpers
 # ------------------------------------------------------------------------------
@@ -325,10 +330,7 @@ template encodeByteCode(
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc rGet(
-    adb: RocksDbRef;
-    key: openArray[byte];
-      ): Result[seq[byte],string] =
+proc rGet(adb: RocksDbRef, key: openArray[byte]): BlobResult =
   const info = "mpt/get: "
 
   var res: seq[byte]
@@ -365,7 +367,7 @@ proc rDel(adb: RocksDbReadWriteRef; key: openArray[byte]): DelResult =
     return err(info & error)
   ok()
 
-proc kvPair(rit: RocksIteratorRef): (seq[byte],seq[byte]) =
+proc kvPair(rit: RocksIteratorRef): WalkKvt =
   ## This helper must be provided as a separate function outside of any walk
   ## iterator, below. Otherwise the NIM compiler (version 2.2.4) might abort
   ## with an error
@@ -380,14 +382,12 @@ proc kvPair(rit: RocksIteratorRef): (seq[byte],seq[byte]) =
   rit.next()
   kv
 
-iterator colWalkKvt(
-    adb: RocksDbRef;
-    pfx: openArray[byte];
-      ): tuple[key, data: seq[byte]] =
-  ## Walk over key-value pairs of the database for keys of length 33 where
-  ## the search head is postioned at `pfx[0]`.
+iterator colWalkAtLeast1(adb: RocksDbRef, pfx: openArray[byte]): WalkKvt =
+  ## Walk over key-value pairs of the database for keys with the search
+  ## head starting at postion `pfx[]`. The `pfx` argument must be length
+  ## at least 1.
   ##
-  const info = "mpt/colWalk63: "
+  const info = "mpt/colWalkKvt1: "
   block walkBody:
     let rit = adb.openIterator().valueOr:
       when extraTraceMessages:
@@ -400,10 +400,42 @@ iterator colWalkKvt(
     rit.seekToKey(pfx)
     while rit.isValid():
       let (key,value) = rit.kvPair()
-      if 0 < key.len and col.ord.byte != key[0]:
+      if key.len == 0:
+        continue
+      if col.ord.byte != key[0]:
         break
       if 1 < key.len:
         yield (key[1..^1], value)
+
+iterator colWalkAtLeast33(adb: RocksDbRef, pfx: openArray[byte]): WalkKkvt =
+  ## Walk over key-value pairs of the database for keys with the search
+  ## head starting at postion `pfx[]`. The `pfx` argument must be length
+  ## at least 33.
+  ##
+  const info = "mpt/colWalkKvt33: "
+  block walkBody:
+    let rit = adb.openIterator().valueOr:
+      when extraTraceMessages:
+        trace info & "Open error", error
+      break walkBody
+    defer: rit.close()
+
+    let
+      col = pfx[0]
+      pfx1 = pfx[1..32]
+
+    rit.seekToKey(pfx)
+    while rit.isValid():
+      let (key,value) = rit.kvPair()
+      if key.len == 0:
+        continue
+      if col.ord.byte != key[0]:
+        break
+      if 33 < key.len :
+        var key1 = key[1..32]
+        if key1 != pfx1:
+          break
+        yield (move key1, key[33..^1], value)
 
 iterator colWalk33(
     adb: RocksDbRef;
@@ -412,7 +444,7 @@ iterator colWalk33(
   ## Walk over key-value pairs of the database for keys of length 33 where
   ## the search head is postioned at `pfx[0]`.
   ##
-  const info = "mpt/colWalk63: "
+  const info = "mpt/colWalk33: "
   block walkBody:
     let rit = adb.openIterator().valueOr:
       when extraTraceMessages:
@@ -452,7 +484,9 @@ iterator colWalk65(
     rit.seekToKey(pfx)
     while rit.isValid():
       let (key,value) = rit.kvPair()
-      if 0 < key.len and col.ord.byte != key[0]:
+      if key.len == 0:
+        continue
+      if col.ord.byte != key[0]:
         break
       if key.len == 65:
         (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
@@ -479,7 +513,9 @@ iterator colWalk97(
     rit.seekToKey(pfx)
     while rit.isValid():
       let (key,value) = rit.kvPair()
-      if 0 < key.len and col.ord.byte != key[0]:
+      if key.len == 0:
+        continue
+      if col.ord.byte != key[0]:
         break
       if key.len == 97:
         (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
@@ -519,7 +555,7 @@ template delAtMost33(
     col: MptAsmCol;
     key: openArray[byte];
       ): untyped =
-  db.adb.rDel(col.keyAtMost33 key)
+  db.adb.rDel col.keyAtMost33(key)
 
 # --------------
 
@@ -550,6 +586,58 @@ template del33(db: MptAsmRef; col: MptAsmCol; key1: untyped): untyped =
 
 # --------------
 
+template keyAtMost65(
+    col: MptAsmCol;
+    key1: untyped;
+    key2: openArray[byte];
+      ): openArray[byte] =
+  doAssert key2.len < 33
+  var keyData: array[65,byte]
+  keyData[0] = col.ord
+  (addr keyData[1]).copyMem(addr (key1.distinctBase)[0], 32)
+  (addr keyData[33]).copyMem(addr key2[0], key2.len)
+  keyData.toOpenArray(0, 32 + key2.len)
+
+template keyAtMost65(
+    col: MptAsmCol;
+    key: openArray[byte];
+      ): openArray[byte] =
+  doAssert key.len < 65
+  var keyData: array[65,byte]
+  keyData[0] = col.ord
+  (addr key[1]).copyMem(addr key[0], key.len)
+  keyData.toOpenArray(0, key.len)
+
+template getAtMost65(
+    db: MptAsmRef;
+    col: MptAsmCol;
+    key1: untyped;
+    key2: openArray[byte];
+      ): untyped =
+  db.adb.rGet col.keyAtMost65(key1, key2)
+
+template putAtMost65(
+    db: MptAsmRef;
+    col: MptAsmCol;
+    key1: untyped;
+    key2: openArray[byte];
+    data: openArray[byte];
+      ): untyped =
+  if key2.len == 0:
+    PutResult.err("zero secondary key not allowed")
+  else:
+    db.adb.rPut(col.keyAtMost65(key1, key2), data)
+
+template delAtMost65(
+    db: MptAsmRef;
+    col: MptAsmCol;
+    key1: untyped;
+    key2: openArray[byte];
+      ): untyped =
+  db.adb.rDel col.keyAtMost65(key1, key2)
+
+# --------------
+
 template key65(col: MptAsmCol; key1, key2: untyped): openArray[byte] =
   var key: array[65,byte]
   key[0] = col.ord
@@ -575,7 +663,7 @@ template get65(
     start: ItemKey;
       ): untyped =
   let startHash = start.to(Hash32)
-  db.adb.rGet(col.key65(root, startHash))
+  db.adb.rGet col.key65(root, startHash)
 
 template put65(
     db: MptAsmRef;
@@ -594,7 +682,7 @@ template del65(
     start: ItemKey;
       ): untyped =
   let startHash = start.to(Hash32)
-  db.adb.rDel(col.key65(root, startHash))
+  db.adb.rDel col.key65(root, startHash)
 
 # --------------
 
@@ -1000,48 +1088,72 @@ proc delAccKvt*(db: MptAsmRef, key: openArray[byte]): DelResult =
   db.delAtMost33(AccKvt, key)
 
 proc clearAccKvt*(db: MptAsmRef): DelResult =
-  for (key,_) in db.adb.colWalkKvt @[byte AccKvt]:
+  for (key,_) in db.adb.colWalkAtLeast1 @[byte AccKvt]:
     db.delAtMost33(AccKvt, key).isOkOr:
       return err(error)
   ok()
 
 iterator walkAccKvt*(db: MptAsmRef): WalkKvt =
-  for (key,value) in db.adb.colWalkKvt @[byte AccKvt]:
+  for (key,value) in db.adb.colWalkAtLeast1 @[byte AccKvt]:
     yield (key,value)
 
 # -------------
 
-proc hasStoKvt*(db: MptAsmRef; key: openArray[byte]): BoolResult =
-  let data = db.getAtMost33(StoKvt, key).valueOr:
+proc hasStoKvt*(
+    db: MptAsmRef;
+    acc: Hash32;
+    key: openArray[byte];
+      ): BoolResult =
+  let data = db.getAtMost65(StoKvt, acc, key).valueOr:
     return err(error)
   ok(0 < data.len)
 
-proc getStoKvt*(db: MptAsmRef; key: openArray[byte]): BlobResult =
-  var data = db.getAtMost33(StoKvt, key).valueOr:
+proc getStoKvt*(
+    db: MptAsmRef;
+    acc: Hash32;
+    key: openArray[byte];
+      ): BlobResult =
+  var data = db.getAtMost65(StoKvt, acc, key).valueOr:
     return err(error)
   ok(move data)
 
 proc putStoKvt*(
     db: MptAsmRef;
+    acc: Hash32;
     nodes: openArray[(seq[byte],seq[byte])];
       ): PutResult =
   for (key,val) in nodes:
-    db.putAtMost33(StoKvt, key, val).isOkOr:
+    db.putAtMost65(StoKvt, acc, key, val).isOkOr:
       return err(error)
   ok()
 
-proc delStoKvt*(db: MptAsmRef, key: openArray[byte]): DelResult =
-  db.delAtMost33(StoKvt, key)
+proc delStoKvt*(
+    db: MptAsmRef;
+    acc: Hash32;
+    key: openArray[byte];
+      ): DelResult =
+  db.delAtMost65(StoKvt, acc, key)
+
+proc clearStoKvt*(db: MptAsmRef, acc: Hash32): DelResult =
+  for (key1, key2,_) in db.adb.colWalkAtLeast33 key33(StoKvt, acc):
+    db.delAtMost65(StoKvt, key1, key2).isOkOr:
+      return err(error)
+  ok()
 
 proc clearStoKvt*(db: MptAsmRef): DelResult =
-  for (key,_) in db.adb.colWalkKvt @[byte StoKvt]:
-    db.delAtMost33(StoKvt, key).isOkOr:
+  for (key,_) in db.adb.colWalkAtLeast1 @[byte StoKvt]:
+    db.adb.rDel(@[byte StoKvt] & key).isOkOr:
       return err(error)
   ok()
 
-iterator walkStoKvt*(db: MptAsmRef): WalkKvt =
-  for (key,value) in db.adb.colWalkKvt @[byte StoKvt]:
-    yield (key,value)
+iterator walkStoKvt*(db: MptAsmRef, acc: Hash32): WalkKkvt =
+  for (key1, key2, data) in db.adb.colWalkAtLeast33 key33(StoKvt, acc):
+    yield (key1, key2, data)
+
+iterator walkStoKvt*(db: MptAsmRef): WalkKkvt =
+  for (key,data) in db.adb.colWalkAtLeast1 @[byte StoKvt]:
+    if 32 < key.len:
+      yield (key[0..31], key[32..^1], data)
 
 # -------------
 
@@ -1062,13 +1174,13 @@ proc delCodeKvt*(db: MptAsmRef, hash: Hash32): DelResult =
   db.del33(CodeKvt, hash)
 
 proc clearCodeKvt*(db: MptAsmRef): DelResult =
-  for (key,_) in db.adb.colWalkKvt @[byte CodeKvt]:
+  for (key,_) in db.adb.colWalkAtLeast1 @[byte CodeKvt]:
     db.delAtMost33(CodeKvt, key).isOkOr:
       return err(error)
   ok()
 
 iterator walkCodeKvt*(db: MptAsmRef): WalkKvt =
-  for (key,value) in db.adb.colWalkKvt @[byte CodeKvt]:
+  for (key,value) in db.adb.colWalkAtLeast1 @[byte CodeKvt]:
     yield (key,value)
 
 # -------------
@@ -1105,57 +1217,90 @@ proc delAccDnglKvt*(db: MptAsmRef, keys: openArray[seq[byte]]): DelResult =
   ok()
 
 proc clearAccDnglKvt*(db: MptAsmRef): DelResult =
-  for (key,_) in db.adb.colWalkKvt @[byte AccDnglKvt]:
+  for (key,_) in db.adb.colWalkAtLeast1 @[byte AccDnglKvt]:
     db.delAtMost33(AccDnglKvt, key).isOkOr:
       return err(error)
   ok()
 
-iterator walkAccDnglKvt*(db: MptAsmRef): tuple[key, data: seq[byte]] =
-  for (key,data) in db.adb.colWalkKvt @[byte AccDnglKvt]:
+iterator walkAccDnglKvt*(db: MptAsmRef): WalkKvt =
+  for (key,data) in db.adb.colWalkAtLeast1 @[byte AccDnglKvt]:
     yield (key,data)
 
 # -------------
 
-proc hasStoDnglKvt*(db: MptAsmRef; key: openArray[byte]): BoolResult =
-  let data = db.getAtMost33(StoDnglKvt, key).valueOr:
+proc hasStoDnglKvt*(
+    db: MptAsmRef;
+    acc: Hash32;
+    key: openArray[byte];
+      ): BoolResult =
+  let data = db.getAtMost65(StoDnglKvt, acc, key).valueOr:
     return err(error)
   ok(0 < data.len)
 
-proc getStoDnglKvt*(db: MptAsmRef; key: openArray[byte]): BlobResult =
-  var data = db.getAtMost33(StoDnglKvt, key).valueOr:
+proc getStoDnglKvt*(
+    db: MptAsmRef;
+    acc: Hash32;
+    key: openArray[byte];
+      ): BlobResult =
+  var data = db.getAtMost65(StoDnglKvt, acc, key).valueOr:
     return err(error)
   ok(move data)
 
-proc putStoDnglKvt*(db: MptAsmRef; key, data: openArray[byte]): PutResult =
-  db.putAtMost33(StoDnglKvt, key, data)
+proc putStoDnglKvt*(
+    db: MptAsmRef;
+    acc: Hash32;
+    key: openArray[byte];
+    data: openArray[byte];
+      ): PutResult =
+  db.putAtMost65(StoDnglKvt, acc, key, data)
 
 proc putStoDnglKvt*(
     db: MptAsmRef;
+    acc: Hash32;
     kvp: openArray[(seq[byte],seq[byte])];
       ): PutResult =
   for (key,data) in kvp:
-    db.putAtMost33(StoDnglKvt, key, data).isOkOr:
+    db.putAtMost65(StoDnglKvt, acc, key, data).isOkOr:
       return err(error)
   ok()
 
-proc delStoDnglKvt*(db: MptAsmRef, key: openArray[byte]): DelResult =
-  db.delAtMost33(StoDnglKvt, key)
+proc delStoDnglKvt*(
+    db: MptAsmRef,
+    acc: Hash32;
+    key: openArray[byte];
+      ): DelResult =
+  db.delAtMost65(StoDnglKvt, acc, key)
 
-proc delStoDnglKvt*(db: MptAsmRef, keys: openArray[seq[byte]]): DelResult =
+proc delStoDnglKvt*(
+    db: MptAsmRef,
+    acc: Hash32;
+    keys: openArray[seq[byte]];
+      ): DelResult =
   for key in keys:
-    db.delAtMost33(StoDnglKvt, key).isOkOr:
+    db.delAtMost65(StoDnglKvt, acc, key).isOkOr:
+      return err(error)
+  ok()
+
+proc clearStoDnglKvt*(db: MptAsmRef, acc: Hash32): DelResult =
+  for (key1, key2,_) in db.adb.colWalkAtLeast33 key33(StoDnglKvt, acc):
+    db.delAtMost65(StoDnglKvt, key1, key2).isOkOr:
       return err(error)
   ok()
 
 proc clearStoDnglKvt*(db: MptAsmRef): DelResult =
-  for (key,_) in db.adb.colWalkKvt @[byte StoDnglKvt]:
-    db.delAtMost33(StoDnglKvt, key).isOkOr:
+  for (key,_) in db.adb.colWalkAtLeast1 @[byte StoDnglKvt]:
+    db.adb.rDel(@[byte StoDnglKvt] & key).isOkOr:
       return err(error)
   ok()
 
-iterator walkStoDnglKvt*(db: MptAsmRef): tuple[key, data: seq[byte]] =
-  for (key,data) in db.adb.colWalkKvt @[byte StoDnglKvt]:
-    yield (key,data)
+iterator walkStoDnglKvt*(db: MptAsmRef, acc: Hash32): WalkKkvt =
+  for (key1, key2, data) in db.adb.colWalkAtLeast33 key33(StoDnglKvt, acc):
+    yield (key1, key2, data)
+
+iterator walkStoDnglKvt*(db: MptAsmRef): WalkKkvt =
+  for (key,data) in db.adb.colWalkAtLeast1 @[byte StoDnglKvt]:
+    if 32 < key.len:
+      yield (key[0..31], key[32..^1], data)
 
 # -------------
 
@@ -1176,7 +1321,7 @@ proc putCodeDnglKvt*(
     db: MptAsmRef;
     kvp: openArray[(seq[byte],seq[byte])];
       ): PutResult =
-  for (key,data) in kvp:
+  for (key, data) in kvp:
     db.putAtMost33(CodeDnglKvt, key, data).isOkOr:
       return err(error)
   ok()
@@ -1191,14 +1336,14 @@ proc delCodeDnglKvt*(db: MptAsmRef, keys: openArray[seq[byte]]): DelResult =
   ok()
 
 proc clearCodeDnglKvt*(db: MptAsmRef): DelResult =
-  for (key,_) in db.adb.colWalkKvt @[byte CodeDnglKvt]:
+  for (key,_) in db.adb.colWalkAtLeast1 @[byte CodeDnglKvt]:
     db.delAtMost33(CodeDnglKvt, key).isOkOr:
       return err(error)
   ok()
 
-iterator walkCodeDnglKvt*(db: MptAsmRef): tuple[key, data: seq[byte]] =
-  for (key,data) in db.adb.colWalkKvt @[byte CodeDnglKvt]:
-    yield (key,data)
+iterator walkCodeDnglKvt*(db: MptAsmRef): WalkKvt =
+  for (key, data) in db.adb.colWalkAtLeast1 @[byte CodeDnglKvt]:
+    yield (key, data)
 
 # ------------------------------------------------------------------------------
 # End
