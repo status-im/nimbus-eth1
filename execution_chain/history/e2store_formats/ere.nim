@@ -17,17 +17,22 @@ import
   beacon_chain/spec/beacon_time,
   ssz_serialization,
   ncli/e2store,
-  ./block_proofs/historical_hashes_accumulator,
-  ./block_proofs/block_proof_historical_hashes_accumulator,
-  ./block_proofs/block_proof_historical_roots,
-  ./block_proofs/block_proof_historical_summaries
+  ../block_proofs/historical_hashes_accumulator,
+  ../block_proofs/block_proof_historical_hashes_accumulator,
+  ../block_proofs/block_proof_historical_roots,
+  ../block_proofs/block_proof_historical_summaries
 
 from eth/common/eth_types_rlp import computeRlpHash
 from nimcrypto/hash import fromHex
-from ../../execution_chain/utils/utils import calcTxRoot, calcReceiptsRoot
-from ../common/common_types import decodeSsz
+from ../../utils/utils import calcTxRoot, calcReceiptsRoot
 
 export e2store.readRecord
+
+func decodeSsz(input: openArray[byte], T: type): Result[T, string] =
+  try:
+    ok(SSZ.decode(input, T))
+  except SerializationError as e:
+    err(e.msg)
 
 # Implementation of ere file format as per spec:
 # https://github.com/eth-clients/e2store-format-specs/blob/ca2523a6420d64336000f5607c0b59df1a08c83b/formats/ere.md

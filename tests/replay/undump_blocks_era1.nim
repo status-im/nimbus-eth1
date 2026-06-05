@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2025 Status Research & Development GmbH
+# Copyright (c) 2021-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -8,7 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import results, eth/common, ../../execution_chain/db/era1_db
+import results, eth/common, ../../execution_chain/history/db/era1_db
 
 var noisy* = false
 
@@ -22,7 +22,7 @@ iterator undumpBlocksEra1*(
     stopAfter = high(uint64), # Last block to extract
     doAssertOk = false;
 ): seq[EthBlock] =
-  let db = Era1DbRef.init(dir, "mainnet", 15537394'u64,).expect("Era files present")
+  let db = Era1DB.new(dir, "mainnet", 15537394'u64).expect("Era files present")
   defer:
     db.dispose()
 

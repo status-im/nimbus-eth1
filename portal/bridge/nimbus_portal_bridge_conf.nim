@@ -13,7 +13,7 @@ import
   confutils/std/net,
   nimcrypto/hash,
   ../network/network_metadata,
-  ../eth_history/era1,
+  ../../execution_chain/history/e2store_formats/era1,
   ../logging,
   ./common/rpc_helpers
 

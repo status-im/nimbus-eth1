@@ -17,11 +17,11 @@ import
   beacon_chain/spec/beacon_time,
   ssz_serialization,
   ncli/e2store,
-  ./block_proofs/historical_hashes_accumulator
+  ../block_proofs/historical_hashes_accumulator
 
 from eth/common/eth_types_rlp import computeRlpHash
 from nimcrypto/hash import fromHex
-from ../../execution_chain/utils/utils import calcTxRoot, calcReceiptsRoot
+from ../../utils/utils import calcTxRoot, calcReceiptsRoot
 
 export e2store.readRecord
 

@@ -11,14 +11,11 @@ import
   results,
   stew/io2,
   eth/common/headers,
-  ../../network/history/history_content,
-  ../../network/network_metadata,
-  ../../eth_history/block_proofs/
+  ../../portal/network/network_metadata,
+  ../../execution_chain/history/block_proofs/
     [block_proof_historical_summaries, block_proof_historical_hashes_accumulator]
 
-from eth/rlp import computeRlpHash
-
-export results, block_proof_historical_hashes_accumulator, history_content
+export results, block_proof_historical_hashes_accumulator
 
 func buildAccumulator*(
     chainConfig: ChainConfig, headers: seq[Header]

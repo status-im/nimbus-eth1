@@ -16,9 +16,9 @@ import
   yaml,
   ssz_serialization,
   beacon_chain/spec/datatypes/capella,
-  ../../eth_history/block_proofs/block_proof_historical_summaries,
-  ../../network/beacon/beacon_init_loader,
-  ../../tools/[yaml_utils, yaml_eth_types],
+  ../../execution_chain/history/block_proofs/block_proof_historical_summaries,
+  ../../portal/network/beacon/beacon_init_loader,
+  ../../portal/tools/[yaml_utils, yaml_eth_types],
   ./test_history_util
 
 suite "History Block Proofs - Historical Summaries - Test Vectors":

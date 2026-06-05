@@ -24,10 +24,10 @@ import
   beacon_chain/networking/[network_metadata, network_metadata_downloads],
   beacon_chain/spec/[forks, eth2_ssz_serialization],
   beacon_chain/beacon_clock,
-  ../../portal/eth_history/block_proofs/block_proof_historical_roots,
-  ../../portal/eth_history/block_proofs/block_proof_historical_summaries
+  ../../execution_chain/history/block_proofs/block_proof_historical_roots,
+  ../../execution_chain/history/block_proofs/block_proof_historical_summaries
 
-from ../../portal/eth_history/ere import Proof, init
+from ../../execution_chain/history/e2store_formats/ere import Proof, init
 
 export results, era_db, network_metadata
 

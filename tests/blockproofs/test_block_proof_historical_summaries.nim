@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2026 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -14,16 +14,16 @@ import
   beacon_chain/spec/forks,
   # Mock helpers
   beacon_chain /../ tests/[testblockutil, teststateutil],
-  ../../eth_history/block_proofs/block_proof_historical_summaries
+  ../../execution_chain/history/block_proofs/block_proof_historical_summaries
 
-# Test suite for the chain of proofs BlockProofHistoricalSummariesDeneb:
+# Test suite for the chain of proofs BlockProofHistoricalSummaries:
 # -> BeaconBlockProofHistoricalSummaries
-# -> ExecutionBlockProofDeneb
+# -> ExecutionBlockProof
 #
 # Note: Only the full chain of proofs is tested here. The setup takes a lot of time
 # and testing the individual proofs is redundant.
 
-suite "History Block Proofs - Historical Summaries - Deneb":
+suite "History Block Proofs - Historical Summaries":
   setup:
     let
       cfg = block:
@@ -31,16 +31,14 @@ suite "History Block Proofs - Historical Summaries - Deneb":
         res.ALTAIR_FORK_EPOCH = GENESIS_EPOCH
         res.BELLATRIX_FORK_EPOCH = GENESIS_EPOCH
         res.CAPELLA_FORK_EPOCH = GENESIS_EPOCH
-        res.DENEB_FORK_EPOCH = GENESIS_EPOCH
         res
       state = newClone(initGenesisState(cfg = cfg))
     var cache = StateCache()
 
-    var blocks: seq[deneb.SignedBeaconBlock]
-
+    var blocks: seq[capella.SignedBeaconBlock]
     # Note:
     # Adding 8192 blocks. First block is genesis block and not one of these.
-    # Then one extra block is needed to get the historical summaries, block
+    # Then one extra block is needed to get the historical roots, block
     # roots and state roots processed.
     # index i = 0 is second block.
     # index i = 8190 is 8192th block and last one that is part of the first
@@ -48,7 +46,7 @@ suite "History Block Proofs - Historical Summaries - Deneb":
 
     # genesis + 8191 slots
     for i in 0 ..< SLOTS_PER_HISTORICAL_ROOT - 1:
-      blocks.add(addTestBlock(state[], cache, cfg = cfg).denebData)
+      blocks.add(addTestBlock(state[], cache, cfg = cfg).capellaData)
 
     # One more slot to hit second SLOTS_PER_HISTORICAL_ROOT, hitting first
     # historical_summary root.
@@ -65,7 +63,7 @@ suite "History Block Proofs - Historical Summaries - Deneb":
       SLOTS_PER_HISTORICAL_ROOT - 2,
     ]
 
-  test "BlockProofHistoricalSummariesDeneb for Execution BlockHeader":
+  test "BlockProofHistoricalSummaries for Execution BlockHeader":
     let blockRoots = state[].block_roots.data
 
     withState(state[]):

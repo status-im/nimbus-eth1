@@ -14,7 +14,7 @@ import
   beacon_chain/spec/presets,
   ssz_serialization,
   eth/common/[blocks, receipts],
-  ../eth_history/ere
+  ../e2store_formats/ere
 
 export ere
 
