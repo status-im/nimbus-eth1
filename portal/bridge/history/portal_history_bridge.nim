@@ -22,7 +22,7 @@ import
   ../../rpc/portal_rpc_client,
   ../../network/history/[history_content, history_validation],
   ../../eth_history/block_proofs/historical_hashes_accumulator,
-  ../../eth_history/[era1, history_data_ssz_e2s],
+  ../../eth_history/era1,
   ../../database/era1_db,
   ../../../execution_chain/common/[hardforks, chain_config],
   ../common/rpc_helpers,

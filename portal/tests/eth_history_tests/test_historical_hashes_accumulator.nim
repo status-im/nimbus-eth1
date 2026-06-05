@@ -13,7 +13,6 @@ import
   unittest2,
   stint,
   eth/common/headers,
-  ../../eth_history/history_data_json_store,
   ../../eth_history/block_proofs/block_proof_historical_hashes_accumulator,
   ./test_history_util
 
