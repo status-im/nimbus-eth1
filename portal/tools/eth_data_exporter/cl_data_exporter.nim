@@ -24,7 +24,7 @@ import
   ../../network/beacon/beacon_init_loader,
   ../../eth_history/block_proofs/block_proof_historical_roots,
   ../../eth_history/block_proofs/block_proof_historical_summaries,
-  ../../eth_history/[yaml_utils, yaml_eth_types],
+  ../[yaml_utils, yaml_eth_types],
   ../../network/network_metadata,
   ./exporter_common
 

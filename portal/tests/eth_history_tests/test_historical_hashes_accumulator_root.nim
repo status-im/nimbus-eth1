@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -12,10 +12,59 @@
 import
   unittest2,
   stint,
-  stew/byteutils,
-  eth/common/headers,
-  ../../eth_history/history_data_json_store,
+  json_serialization,
+  json_serialization/std/tables,
+  results,
+  stew/[byteutils, io2],
+  eth/common/[headers, headers_rlp],
+  ../../../execution_chain/common/[chain_config, genesis],
+  ../../../execution_chain/db/core_db/memory_only,
   ../../eth_history/block_proofs/historical_hashes_accumulator
+
+type
+  BlockData = object
+    header: string
+    body: string
+    receipts: string
+    number: int
+
+  BlockDataTable = Table[string, BlockData]
+
+func readBlockHeader(blockData: BlockData): Result[Header, string] =
+  var rlp =
+    try:
+      rlpFromHex(blockData.header)
+    except ValueError as e:
+      return err(
+        "Invalid hex for rlp block data, number " & $blockData.number & ": " & e.msg
+      )
+
+  try:
+    return ok(rlp.read(Header))
+  except RlpError as e:
+    return err("Invalid header, number " & $blockData.number & ": " & e.msg)
+
+proc getGenesisHeader(id: NetworkId = MainNet): Header =
+  let params =
+    try:
+      networkParams(id)
+    except ValueError, RlpError:
+      debugEcho getCurrentException()[]
+      raise (ref Defect)(msg: "Network parameters should be valid")
+
+  writeGenesis(params, AristoDbMemory.newCoreDbRef().txFrameBegin())
+
+proc readJsonType(dataFile: string, T: type): Result[T, string] =
+  let data = readAllFile(dataFile).valueOr:
+    return err(ioErrorMsg(error))
+
+  let decoded =
+    try:
+      Json.decode(data, T)
+    except SerializationError as e:
+      return err("Failed decoding json data-file: " & e.msg)
+
+  ok(decoded)
 
 suite "Historical Hashes Accumulator Root":
   test "Header Accumulator Update":
