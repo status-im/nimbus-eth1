@@ -17,9 +17,9 @@ import
   results,
   stew/[byteutils, io2],
   eth/common/[headers, headers_rlp],
-  ../../../execution_chain/common/[chain_config, genesis],
-  ../../../execution_chain/db/core_db/memory_only,
-  ../../eth_history/block_proofs/historical_hashes_accumulator
+  ../../execution_chain/common/[chain_config, genesis],
+  ../../execution_chain/db/core_db/memory_only,
+  ../../execution_chain/history/block_proofs/historical_hashes_accumulator
 
 type
   BlockData = object

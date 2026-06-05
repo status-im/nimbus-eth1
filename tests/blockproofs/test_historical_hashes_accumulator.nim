@@ -13,7 +13,8 @@ import
   unittest2,
   stint,
   eth/common/headers,
-  ../../eth_history/block_proofs/block_proof_historical_hashes_accumulator,
+  ../../portal/network/network_metadata,
+  ../../execution_chain/history/block_proofs/block_proof_historical_hashes_accumulator,
   ./test_history_util
 
 suite "Historical Hashes Accumulator":

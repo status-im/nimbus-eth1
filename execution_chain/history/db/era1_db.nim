@@ -12,8 +12,8 @@ import
   stew/io2,
   results,
   eth/common/[blocks, receipts],
-  ../eth_history/block_proofs/historical_hashes_accumulator,
-  ../eth_history/era1
+  ../block_proofs/historical_hashes_accumulator,
+  ../e2store_formats/era1
 
 export era1
 

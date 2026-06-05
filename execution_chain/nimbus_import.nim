@@ -20,7 +20,7 @@ import
   ./conf,
   ./common/common,
   ./core/chain,
-  ./db/era1_db,
+  ./history/db/era1_db,
   ./utils/era_helpers
 
 declareGauge nec_import_block_number, "Latest imported block number"
@@ -267,7 +267,7 @@ proc importBlocks*(config: ExecutionClientConf, com: CommonRef) =
           "sepolia"
         else:
           raiseAssert "Other networks are unsupported or do not have an era1"
-      db = Era1DbRef.init(config.era1Dir, era1Name, lastEra1Block + 1).valueOr:
+      db = Era1DB.new(config.era1Dir, era1Name, lastEra1Block + 1).valueOr:
         fatal "Could not open era1 database",
           era1Dir = config.era1Dir, era1Name = era1Name, error = error
         quit(QuitFailure)

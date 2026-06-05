@@ -14,7 +14,7 @@ import
   chronos/timer,
   eth/common/headers,
   beacon_chain/spec/forks,
-  ../eth_history/block_proofs/historical_hashes_accumulator
+  ../../execution_chain/history/block_proofs/historical_hashes_accumulator
 
 proc loadBootstrapNodes(path: string): seq[string] {.raises: [IOError].} =
   # Read a list of ENR URIs from a file containing a flat list of entries.

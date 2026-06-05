@@ -21,7 +21,7 @@ import
   ../execution_chain/core/chain/forked_chain/chain_desc,
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/ledger,
-  ../execution_chain/db/era1_db,
+  ../execution_chain/history/db/era1_db,
   ../execution_chain/rpc/debug,
   ../execution_chain/stateless/[stateless_execution, stateless_execution_helpers]
 
@@ -34,7 +34,7 @@ procSuite "Stateless Execution Tests":
   setup:
     let
       db = AristoDbMemory.newCoreDbRef()
-      era0 = Era1DbRef.init(sourcePath / "replay", "mainnet", 15537394'u64).expect("Era files present")
+      era0 = Era1DB.new(sourcePath / "replay", "mainnet", 15537394'u64).expect("Era files present")
       # Stateless provider is enabled so that witnesses will be generated
       # and stored in the database
       com = CommonRef.new(db, statelessProviderEnabled = true)

@@ -13,7 +13,7 @@ import
   eth/common/[headers_rlp],
   ssz_serialization,
   ssz_serialization/[proofs, merkleization],
-  ../../common/common_types
+  ../../../portal/common/common_types
 
 from eth/common/eth_types_rlp import rlpHash
 

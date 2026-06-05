@@ -14,9 +14,9 @@ import
   unittest2,
   yaml,
   beacon_chain/spec/datatypes/bellatrix,
-  ../../network/network_metadata,
-  ../../eth_history/block_proofs/block_proof_historical_roots,
-  ../../tools/[yaml_utils, yaml_eth_types]
+  ../../portal/network/network_metadata,
+  ../../execution_chain/history/block_proofs/block_proof_historical_roots,
+  ../../portal/tools/[yaml_utils, yaml_eth_types]
 
 suite "History Block Proofs - Historical Roots - Test Vectors":
   test "BlockProofHistoricalRoots for Execution BlockHeader":

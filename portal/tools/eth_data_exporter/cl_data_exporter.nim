@@ -22,8 +22,8 @@ import
   beacon_chain/beacon_clock,
   ../../network/beacon/beacon_content,
   ../../network/beacon/beacon_init_loader,
-  ../../eth_history/block_proofs/block_proof_historical_roots,
-  ../../eth_history/block_proofs/block_proof_historical_summaries,
+  ../../../execution_chain/history/block_proofs/block_proof_historical_roots,
+  ../../../execution_chain/history/block_proofs/block_proof_historical_summaries,
   ../[yaml_utils, yaml_eth_types],
   ../../network/network_metadata,
   ./exporter_common
