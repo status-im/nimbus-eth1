@@ -92,42 +92,42 @@ jobs:
           echo "lvp_tar=${LVP_TAR}" >> $GITHUB_OUTPUT
 
       - name: Upload execution client tarball artefact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.os }}-${{ matrix.cpu }}-execution
           path: ./dist/${{ steps.make_dist.outputs.nec_tar }}
           retention-days: 2
 
       - name: Upload execution client checksum artefact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.os }}-${{ matrix.cpu }}-execution-checksum
           path: ./dist/${{ steps.make_dist.outputs.nec_tar }}.sha512sum
           retention-days: 2
 
       - name: Upload verified proxy tarball artefact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.os }}-${{ matrix.cpu }}-proxy
           path: ./dist/${{ steps.make_dist.outputs.nvp_tar }}
           retention-days: 2
 
       - name: Upload verified proxy checksum artefact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.os }}-${{ matrix.cpu }}-proxy-checksum
           path: ./dist/${{ steps.make_dist.outputs.nvp_tar }}.sha512sum
           retention-days: 2
 
       - name: Upload libverifproxy tarball artefact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.os }}-${{ matrix.cpu }}-libverifproxy
           path: ./dist/${{ steps.make_dist.outputs.lvp_tar }}
           retention-days: 2
 
       - name: Upload libverifproxy checksum artefact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.os }}-${{ matrix.cpu }}-libverifproxy-checksum
           path: ./dist/${{ steps.make_dist.outputs.lvp_tar }}.sha512sum
@@ -193,7 +193,7 @@ jobs:
           cd build/nimbus_verified_proxy_wasm
           sha512sum verifproxy_wasm.js verifproxy_wasm.wasm verifproxy.js > wasm.sha512sum
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wasm
           path: build/nimbus_verified_proxy_wasm/
@@ -246,7 +246,7 @@ jobs:
         continue-on-error: true
 
       - name: Download WASM artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: wasm
           path: wasm-deploy/${{ steps.extract_tag.outputs.tag }}/
@@ -266,7 +266,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download artefacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
 
       - name: Extract branch name
         id: extract_branch
@@ -379,7 +379,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download WASM artefact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: wasm
           path: nimbus_verified_proxy/library/bindings/wasm/

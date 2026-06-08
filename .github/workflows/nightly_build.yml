@@ -57,7 +57,7 @@ jobs:
           echo "archive_dir=${NEW_ARCHIVE_DIR}" >> $GITHUB_OUTPUT
 
       - name: Upload archive artefact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.os }}-${{ matrix.cpu }}-archive
           path: |
@@ -66,7 +66,7 @@ jobs:
           retention-days: 2
 
       - name: Upload checksum artefact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.os }}-${{ matrix.cpu }}-checksum
           path: |
@@ -113,7 +113,7 @@ jobs:
           cd build/nimbus_verified_proxy_wasm
           sha512sum verifproxy_wasm.js verifproxy_wasm.wasm verifproxy.js > wasm.sha512sum
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wasm
           path: build/nimbus_verified_proxy_wasm/
@@ -137,8 +137,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - id: shared-action
+        uses: ./.github/actions/shared
+        with:
+          llvm-mingw: true
+          nim-cache: false
+          rocksdb-cache: false
+          eest-cache: false
+
       - name: Download artefacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: ${{ matrix.os }}-${{ matrix.cpu }}-archive
 
@@ -149,9 +157,9 @@ jobs:
           build/nimbus_verified_proxy --help
 
       - name: Test libverifproxy
-        # Windows runner uses MinGW (libstdc++) but the library is built with llvm-mingw (libc++)
-        if: matrix.os != 'windows'
-        run: make libverifproxy_test
+        run: |
+          make libverifproxy_test
+          build/libverifproxy_test
 
   deploy-wasm:
     name: Deploy WASM
@@ -168,7 +176,7 @@ jobs:
         continue-on-error: true
 
       - name: Download WASM artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: wasm
           path: wasm-deploy/nightly/
@@ -182,7 +190,7 @@ jobs:
           git diff --cached --quiet || git commit -m "chore: update nightly"
           git push origin HEAD:wasm-deploy --force
 
-  publish-npm:
+  publish-wasm-npm:
     name: Publish WASM to GitHub Packages
     needs: [build-wasm]
     runs-on: ubuntu-22.04
@@ -199,7 +207,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download WASM artefact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: wasm
           path: nimbus_verified_proxy/library/bindings/wasm/
@@ -235,6 +243,18 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  remove-wasm-artifact:
+    name: Remove WASM artifact
+    needs: [deploy-wasm, publish-wasm-npm]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete artefacts
+        uses: geekyeggo/delete-artifact@v5
+        with:
+          failOnError: false
+          name: |
+            wasm
+
   nightly-build-release:
     name: Nightly build release
     needs: [build]
@@ -250,7 +270,7 @@ jobs:
         run: echo "branch_name=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
 
       - name: Download artefacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
 
       - name: Create release notes
         run: |
@@ -330,3 +350,4 @@ jobs:
             windows-amd64-checksum
             macos-arm64-archive
             macos-arm64-checksum
+            wasm
