@@ -17,7 +17,7 @@ import
   json_rpc/rpcclient,
   beacon_chain/era_db,
   beacon_chain/spec/forks,
-  beacon_chain/networking/network_metadata,
+  beacon_chain/networking/[network_metadata, network_metadata_downloads],
   beacon_chain/spec/eth2_apis/rest_beacon_client,
   beacon_chain/beacon_clock,
   ../../network/beacon/beacon_content,
@@ -34,21 +34,14 @@ const
   largeRequestsTimeout = 120.seconds # For downloading large items such as states.
   restRequestsTimeout = 30.seconds
 
-proc getBeaconData*(): (RuntimeConfig, ref ForkDigests, BeaconClock) =
+proc getBeaconData*(network: string): (RuntimeConfig, ref ForkDigests, BeaconClock) =
   let
-    metadata = getMetadataForNetwork("mainnet")
+    metadata = getMetadataForNetwork(network)
     genesisState =
       try:
-        template genesisData(): auto =
-          metadata.genesis.bakedBytes
-
-        newClone(
-          readSszForkedHashedBeaconState(
-            metadata.cfg, genesisData.toOpenArray(genesisData.low, genesisData.high)
-          )
-        )
-      except SerializationError as err:
-        raiseAssert "Invalid baked-in state: " & err.msg
+        waitFor fetchGenesisState(metadata)
+      except CatchableError as err:
+        raiseAssert "Failed to fetch genesis state: " & err.msg
     genesis_validators_root = genesisState[].genesis_validators_root
     forkDigests = newClone ForkDigests.init(metadata.cfg, genesis_validators_root)
 
