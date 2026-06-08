@@ -21,7 +21,7 @@ import
   ../../execution_chain/common/chain_config,
   ../../execution_chain/version_info
 
-export defs, tomldefs, nimbus_binary_common, options, version_info
+export defs, tomldefs, nimbus_binary_common, options, version_info, chain_config
 
 type
   HistoryExportCmd* {.pure.} = enum
@@ -224,15 +224,6 @@ const
     "Copyright (c) 2026-" & compileYear & " Status Research & Development GmbH"
   ExporterName = "nimbus_history_exporter"
   ClientVersion* = &"{ExporterName}/{FullVersionStr}/{CpuInfo}"
-
-func mergeBlockNumber*(networkId: NetworkId): BlockNumber =
-  let cfg = chainConfigForNetwork(networkId)
-  if cfg.posBlock.isSome:
-    cfg.posBlock.value()
-  elif cfg.mergeNetsplitBlock.isSome:
-    cfg.mergeNetsplitBlock.value()
-  else:
-    BlockNumber(0)
 
 proc checkConfig*(cfg: HistoryExportConf) =
   let networkLower = cfg.network.toLowerAscii()
