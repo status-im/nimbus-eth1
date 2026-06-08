@@ -67,6 +67,7 @@ proc commitOrRollbackDependingOnGasUsed(
     priorityFee = min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFee)
     txFee = gasUsed.u256 * priorityFee.u256
 
+  callResult.txFee = txFee
   vmState.ledger.addBalance(vmState.coinbase(), txFee)
   vmState.ledger.commit(savePoint)
   vmState.cumulativeGasUsed += gasUsed
