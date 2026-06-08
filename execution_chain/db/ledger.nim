@@ -572,6 +572,9 @@ proc addBalance*(
       let acc = ledger.getAccount(address)
       if acc.isEmpty:
         ledger.makeDirty(address).flags.incl Touched
+    elif ledger.enableBalTracker:
+      if address notin ledger.accountRead:
+        ledger.accountRead[address] = HashSet[UInt256]()
     return
   ledger.setBalance(address, ledger.getBalance(address) + delta)
 
