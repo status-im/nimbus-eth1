@@ -53,4 +53,5 @@ import
     test_pruner,
     # These suites below are much slower than all the rest, so run them last
     test_generalstate_json,
-]
+  ],
+  ./blockproofs/all_blockproofs_tests

@@ -21,6 +21,11 @@ declareGauge nec_snap_merged_mpt_coverage, "" &
   "Factor of accumulated account ranges covered when assembling MPT"
 
 type
+  RecoveryStatus = enum
+    NewAssembly
+    PartiallyAssembled
+    AllAssembled
+
   MkTrieSession = object of SessionTicker
     ctx: SnapCtxRef
     db: MptAsmRef
@@ -66,7 +71,7 @@ func dist(a, b: WalkStateData): uint64 =
 func isPivot(session: MkTrieSession): bool =
   session.stateInx == 0
 
-func maxCoverage(w: seq[WalkStateData]): WalkStateData =
+func maxCoverage(w: openArray[WalkStateData]): WalkStateData =
   ## Get state with maximal coverage, either by label (from an earlier
   ## session) or by calculating it.
   ##
@@ -76,6 +81,25 @@ func maxCoverage(w: seq[WalkStateData]): WalkStateData =
         return state                                # previously set, already
       if result.coverage < state.coverage:
         result = state
+
+func getRecoveryStatus(w: openArray[WalkStateData]): RecoveryStatus =
+  ## Check whether/how the cache structure needs to be cleaned up from a
+  ## previos session.
+  ##
+  case w[0].tag:
+  of Untagged:
+    for n in 1 ..< w.len:
+      if w[n].tag != Untagged:
+        return PartiallyAssembled
+    return NewAssembly                              # all tags `Untagged`
+  of PivotOnTrie:
+    for n in 1 ..< w.len:
+      if w[n].tag != OnTrie:
+        return PartiallyAssembled
+    return AllAssembled                             # partial MPT done
+  of OnTrie:
+    discard
+  PartiallyAssembled
 
 proc updateCoverageMetrics(session: var MkTrieSession) =
   discard session.fullCov.merge session.accRange    # completed ranges
@@ -94,7 +118,7 @@ proc incompleteAccounts(
         break checkAccount
 
       if a.storageRoot != EMPTY_ROOT_HASH:
-        let ok = session.db.hasStoKvt(a.storageRoot.data).valueOr:
+        let ok = session.db.hasStoKvt(path, a.storageRoot.data).valueOr:
           break checkAccount
         if not ok:
           break checkAccount
@@ -105,7 +129,7 @@ proc incompleteAccounts(
         if not ok:
           break checkAccount
       continue                                      # all checks successful
-    kpRc.add (key,path)                             # some check unsuccessful
+    kpRc.add (key,@(path.data))                     # some check unsuccessful
     # End `for()`
 
   move kpRc
@@ -213,7 +237,7 @@ template mkStoTrie(
         break body
 
       # Store `(key,node)` list on trie
-      session.db.putStoKvt(mpt.kvPairs()).isOkOr:
+      session.db.putStoKvt(acc.accHash, mpt.kvPairs()).isOkOr:
         error info & ": cannot store slot on trie", stateInx, nStates, root,
           distance, peerID, accKey, stoRoot, nProof=w.proof.len,
           iv=(w.start,w.limit).to(float).toStr, nSlot=w.slot.len, `error`=error
@@ -424,23 +448,40 @@ template sessionMkTrie*(
     template accData: auto = session.accData
     template accRange: auto = session.accRange
 
-    chronicles.info info & ": Assembling MPT from archived data", nStates
-
     # Sort states by its distance from pivot, smallest distance first
     byDist.sort proc(x,y: WalkStateData): int = cmp(x.dist pivot,y.dist pivot)
 
     # If necessary, update state data record pretending the cache is empty if
     # the pivot state tag has changed. Otherwise proceed with an interrupted
     # session with the `Untagged` states.
-    if byDist[0].tag == OnTrie:                     # stored pivot has changed?
+    #
+    # Not implemented:
+    #   One could use `sessionAnalyseAccounts()` for restoring the dangling
+    #   links cache so that one can continue at an arbitrary state, referably
+    #   the last one fully processed.
+    #
+    case byDist.getRecoveryStatus():
+    of AllAssembled:
+      bodyRc = typeof(bodyRc).ok(ZeroDuration)
+      break body
+    of PartiallyAssembled:
+      chronicles.info info & ": Clear MPT and dangling links", nStates
       for n in 0 ..< byDist.len:
-        byDist[n].tag = Untagged
+        byDist[n].tag = Untagged                    # reset all states
+      discard ctx.pool.mptAsm.clearAccDnglKvt()     # clean up dangling links
+      discard ctx.pool.mptAsm.clearAccKvt()         # rebuild MPT cache
+      discard ctx.pool.mptAsm.clearStoKvt()         # ditto
+      discard ctx.pool.mptAsm.clearCodeKvt()        # ..
+    of NewAssembly:
+      discard
+
+    chronicles.info info & ": Assembling MPT from archived data", nStates
 
     # Process states: pivot first, then states with increasing distances
     for n in 0 ..< nStates:
       state = byDist[n]                             # update descriptor fields
       stateInx = n                                  # ditto
-      distance = state.dist(pivot)
+      distance = state.dist(pivot)                  # ..
 
       if 0 < state.error.len:
         chronicles.info info & ": Bad state record ignored", stateInx, nStates

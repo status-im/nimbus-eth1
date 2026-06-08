@@ -557,13 +557,21 @@ proc setBalance*(ledger: LedgerRef, address: Address, balance: UInt256) =
   if acc.statement.balance != balance:
     ledger.makeDirty(address).statement.balance = balance
 
-proc addBalance*(ledger: LedgerRef, address: Address, delta: UInt256) =
+proc addBalance*(
+    ledger: LedgerRef,
+    address: Address,
+    delta: UInt256,
+    checkEmptyAccount: bool = true,
+) =
   # EIP161: We must check emptiness for the objects such that the account
-  # clearing (0,0,0 objects) can take effect.
+  # clearing (0,0,0 objects) can take effect. This is not required for hardforks
+  # starting at the merge because by then no empty accounts remain in the state,
+  # so callers in that regime can skip the lookup via checkEmptyAccount = false.
   if delta.isZero:
-    let acc = ledger.getAccount(address)
-    if acc.isEmpty:
-      ledger.makeDirty(address).flags.incl Touched
+    if checkEmptyAccount:
+      let acc = ledger.getAccount(address)
+      if acc.isEmpty:
+        ledger.makeDirty(address).flags.incl Touched
     return
   ledger.setBalance(address, ledger.getBalance(address) + delta)
 

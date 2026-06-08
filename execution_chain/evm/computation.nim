@@ -296,12 +296,11 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
       # Transfer to beneficiary
       ledger.addBalance(beneficiary, localBalance)
       let newContract = ledger.selfDestruct6780(c.msg.contractAddress)
-
       if c.fork >= FkAmsterdam:
         c.emitSelfDestructLog(beneficiary, localBalance, newContract)
     else:
       # Transfer to beneficiary
-      ledger.addBalance(beneficiary, localBalance)
+      ledger.addBalance(beneficiary, localBalance, checkEmptyAccount = c.fork < FkParis)
       ledger.selfDestruct(c.msg.contractAddress)
 
     trace "SELFDESTRUCT",

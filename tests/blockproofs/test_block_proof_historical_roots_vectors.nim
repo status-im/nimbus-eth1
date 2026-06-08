@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -14,9 +14,9 @@ import
   unittest2,
   yaml,
   beacon_chain/spec/datatypes/bellatrix,
-  ../../network/network_metadata,
-  ../../eth_history/block_proofs/block_proof_historical_roots,
-  ../../eth_history/[yaml_utils, yaml_eth_types]
+  ../../portal/network/network_metadata,
+  ../../execution_chain/history/block_proofs/block_proof_historical_roots,
+  ../../portal/tools/[yaml_utils, yaml_eth_types]
 
 suite "History Block Proofs - Historical Roots - Test Vectors":
   test "BlockProofHistoricalRoots for Execution BlockHeader":

@@ -11,8 +11,11 @@
 {.push raises:[].}
 
 import
-  pkg/[chronos, eth/common],
-  ../[mpt, worker_desc]
+  pkg/[chronicles, chronos, eth/common, stew/byteutils],
+  ../../[mpt, worker_desc]
+
+logScope:
+  topics = "snap sync"
 
 type
   AttType* = enum
@@ -31,12 +34,14 @@ type
     EPutError
     EOtherError                                     # any other error
 
-  OnDanglingCB* = proc(key, path: openArray[byte]) {.gcsafe, raises:[].}
+  OnDanglingCB* =
+      proc(root: Hash32; key, path: openArray[byte]) {.gcsafe, raises:[].}
     ## Closure function to perform bespoke actions when a dangling link or
     ## a completely missing sub-MPT is found.
 
   TravNotifyCB* =
-      proc(att: AttType, path, key, data: openArray[byte], depth: int
+      proc(att: AttType,
+           root: Hash32, path, key, data: openArray[byte], depth: int
         ) {.gcsafe, raises: [].}
     ## Internal closure function used as call back when analysing an MPT.
     ## This function is involved whenever there is something *interesting*
@@ -47,7 +52,7 @@ type
   # ----------
 
   WalkTrieGetCB* = proc(
-    db: MptAsmRef, key: openArray[byte]
+    db: MptAsmRef, base: Hash32, key: openArray[byte]
       ): BlobResult {.gcsafe, raises: [].}
 
   WalkStats* = tuple                                # MPT traversal statistics
@@ -76,13 +81,10 @@ type
   TravDescRef* = ref object                         # MPT traversal descriptor
     ctx*: SnapCtxRef                                # snap context
     db*: MptAsmRef                                  # database
-    onAccDangl*: OnDanglingCB                       # configurable actions
-    onStoDangl*: OnDanglingCB                       # ditto
-    onStoMissing*: OnDanglingCB                     # ..
-    onCodeMissing*: OnDanglingCB
     msgAt*: Moment                                  # occasional logging
     napAt*: Moment                                  # occasional thread switch
     stats*: WalkStats                               # MPT traversal statistics
+    cacheErr*: uint                                 # persistent cache errors
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -97,6 +99,77 @@ proc findPivot*(db: MptAsmRef): Opt[WalkStateData] =
 template toKey*(rlp: Rlp): seq[byte] =
   ## Convert to hask key or node data if it is a list (=> length smaller 32)
   if rlp.isList: @(rlp.rawData) else: rlp.toBytes
+
+func fromBytes*(_: type Hash32, path: openArray[byte]): Hash32 =
+  doAssert path.len == 32
+  let path = @path
+  (addr distinctBase(result)[0]).copyMem(unsafeAddr path[0], path.len)
+
+# ----------
+
+proc clearDanglAcc*(trd: TravDescRef, info: static[string]): Opt[void] =
+  trd.db.clearAccDnglKvt().isOkOr:
+    error info & ": Cannot reset dangling cache", `error`=error
+    return err()
+  ok()
+
+proc clearDanglSto*(trd: TravDescRef, info: static[string]): Opt[void] =
+  trd.db.clearStoDnglKvt().isOkOr:
+    error info & ": Cannot reset slots cache", `error`=error
+    return err()
+  ok()
+
+proc clearDanglCode*(trd: TravDescRef, info: static[string]): Opt[void] =
+  trd.db.clearCodeDnglKvt().isOkOr:
+    error info & ": Cannot reset receipts cache", `error`=error
+    return err()
+  ok()
+
+proc putDanglAcc*(
+    trd: TravDescRef;
+    key: openArray[byte];
+    path: openArray[byte];
+    info: static[string];
+      ) =
+  trd.db.putAccDnglKvt(key, path).isOkOr:
+    error info & ": Error caching dangling account links",
+      key=key.toHex, path=path.toHex, `error`=error
+    trd.cacheErr.inc
+
+proc putDanglSto*(
+    trd: TravDescRef;
+    base: Hash32;
+    key: openArray[byte];
+    path: openArray[byte];
+    info: static[string];
+      )=
+  trd.db.putStoDnglKvt(base, key, path).isOkOr:
+    error info & ": Error caching dangling slot links",
+      key=key.toHex, path=path.toHex, `error`=error
+    trd.cacheErr.inc
+
+proc putMissSto*(
+    trd: TravDescRef;
+    base: Hash32;
+    key: openArray[byte];
+    path: openArray[byte];
+    info: static[string];
+      )=
+  trd.db.putStoDnglKvt(base, key, path).isOkOr:     # similar to `putDnglSto()`
+    error info & ": Error caching missing slot links",
+      key=key.toHex, path=path.toHex, `error`=error
+    trd.cacheErr.inc
+
+proc putMissCode*(
+    trd: TravDescRef;
+    key: openArray[byte];
+    path: openArray[byte];
+    info: static[string];
+      ) =
+  trd.db.putCodeDnglKvt(key, path).isOkOr:
+    error info & ": Error caching dangling slot links",
+      key=key.toHex, path=path.toHex, `error`=error
+    trd.cacheErr.inc
 
 # ------------------------------------------------------------------------------
 # Public trie analysis logging helpers

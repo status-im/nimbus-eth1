@@ -122,12 +122,31 @@ proc beforeExecCreate(c: Computation): bool =
   c.beginSavePoint()
 
   c.vmState.mutateLedger:
+<<<<<<< HEAD
     ledger.subBalance(c.msg.sender, c.msg.value)
     ledger.addBalance(c.msg.contractAddress, c.msg.value)
     ledger.clearStorage(c.msg.contractAddress)
     if c.fork >= FkSpurious:
       # EIP161 nonce incrementation
       ledger.incNonce(c.msg.contractAddress)
+=======
+    if c.balTrackerEnabled:
+      c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
+      ledger.subBalance(c.msg.sender, c.msg.value)
+      c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
+      ledger.addBalance(c.msg.contractAddress, c.msg.value, checkEmptyAccount = c.fork < FkParis)
+      ledger.clearStorage(c.msg.contractAddress)
+      if c.fork >= FkSpurious:
+        c.vmState.balTracker.trackIncNonceChange(c.msg.contractAddress)
+        ledger.incNonce(c.msg.contractAddress)
+    else:
+      ledger.subBalance(c.msg.sender, c.msg.value)
+      ledger.addBalance(c.msg.contractAddress, c.msg.value, checkEmptyAccount = c.fork < FkParis)
+      ledger.clearStorage(c.msg.contractAddress)
+      if c.fork >= FkSpurious:
+        # EIP161 nonce incrementation
+        ledger.incNonce(c.msg.contractAddress)
+>>>>>>> master
 
   if c.fork >= FkAmsterdam:
     # EIP-7708: Emit transfer log for contract creation and CREATE op code

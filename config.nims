@@ -28,7 +28,8 @@ switch("nimcache", nimCachePath)
 
 # `-flto` gives a significant improvement in processing speed, specially hash tree and state transition (basically any CPU-bound code implemented in nim)
 # With LTO enabled, optimization flags should be passed to both compiler and linker!
-if defined(release) and not defined(disableLTO):
+# Windows LTO seems to increase CI time to 4+ hours
+if defined(release) and not defined(disableLTO) and not defined(windows):
   # TODO https://github.com/nim-lang/Nim/issues/25847
   # https://github.com/nim-lang/Nim/blob/bfeb3146d1638b39f69007a4ae5a23e23ae4e5ef/config/nim.cfg#L331
   template extend(name, value) = put(name, get(name) & value)
@@ -174,6 +175,8 @@ switch("warningAsError", "CaseTransition:on")
 switch("warningAsError", "ImplicitDefaultValue:on")
 switch("warningAsError", "ImplicitTemplateRedefinition:on")
 switch("warningAsError", "LongLiterals:on")
+switch("warningAsError", "ProveField:on")
+switch("warningAsError", "UnreachableCode:on")
 switch("warningAsError", "UnusedImport:on")
 switch("hintAsError", "ConvFromXtoItselfNotNeeded:on")
 switch("hintAsError", "DuplicateModuleImport:on")

@@ -14,8 +14,8 @@ import
   chronicles,
   stew/[io2, byteutils],
   eth/common/[headers_rlp, blocks_rlp, receipts_rlp],
-  ../../portal/eth_history/era1,
-  ../../portal/eth_history/block_proofs/historical_hashes_accumulator,
+  ../../execution_chain/history/e2store_formats/era1,
+  ../../execution_chain/history/block_proofs/historical_hashes_accumulator,
   ../../execution_chain/db/core_db,
   ../../execution_chain/db/core_db/persistent,
   ../../execution_chain/db/opts,
@@ -86,6 +86,13 @@ proc exportEra1*(config: HistoryExportConf) =
   let
     mergeBlockNumber = mergeBlockNumber(config.networkId())
     networkName = config.network
+
+  if mergeBlockNumber == 0:
+    fatal "exportEra1 is not supported for post-merge-only networks",
+      network = networkName
+    quit(QuitFailure)
+
+  let
     mergeEra = era1.era(mergeBlockNumber)
     startEra1 = Era1(config.eraEra1Export)
     endEra1 =

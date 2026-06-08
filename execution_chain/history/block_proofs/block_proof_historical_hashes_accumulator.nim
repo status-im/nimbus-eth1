@@ -11,13 +11,9 @@ import
   eth/common/[headers_rlp],
   ssz_serialization,
   ssz_serialization/[proofs, merkleization],
-  ../../common/common_types,
-  ../../network/network_metadata,
   ./historical_hashes_accumulator
 
-export
-  ssz_serialization, merkleization, proofs, common_types, historical_hashes_accumulator,
-  network_metadata
+export ssz_serialization, merkleization, proofs, historical_hashes_accumulator
 
 #
 # Implementation of pre-merge block proofs by making use of the frozen HistoricalHashesAccumulator

@@ -14,7 +14,7 @@ import
   beacon_chain/spec/forks,
   # Mock helpers
   beacon_chain /../ tests/[testblockutil, teststateutil],
-  ../../eth_history/block_proofs/block_proof_historical_roots
+  ../../execution_chain/history/block_proofs/block_proof_historical_roots
 
 # Test suite for the chain of proofs BlockProofHistoricalRoots:
 # -> BeaconBlockProofHistoricalRoots

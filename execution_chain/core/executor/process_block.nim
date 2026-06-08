@@ -159,7 +159,7 @@ when compileOption("threads"):
         discard sync(e.fut)
 
   func firstBalIndex(sc: SlotChanges): BlockAccessIndex =
-    ## Earliest block access index at which the slot was written. 
+    ## Earliest block access index at which the slot was written.
     ## Block access list validation guarantees `changes` is non-empty.
     assert sc.changes.len > 0
     sc.changes[0].blockAccessIndex
@@ -196,7 +196,7 @@ when compileOption("threads"):
 
   template withBalPrefetchParallel(
       vmState: BaseVMState, bal: Opt[BlockAccessListRef], body: untyped) =
-      
+
     let balRef = bal.get()
 
     var ctx: BalPrefetchCtx
@@ -207,12 +207,12 @@ when compileOption("threads"):
     ctx.nextIndex.store(0, moRelease)
     ctx.finished.store(false, moRelease)
 
-    let 
+    let
       ctxPtr = ctx.addr
       n = vmState.com.taskpool.numThreads
       configured = vmState.com.balStatePrefetchWorkers
       numWorkers = if configured <= 0: n else: min(configured, n)
-    
+
     var futs = newSeq[Flowvar[bool]](numWorkers)
     for i in 0 ..< numWorkers:
       futs[i] = vmState.com.taskpool.spawn balPrefetchWorker(ctxPtr)

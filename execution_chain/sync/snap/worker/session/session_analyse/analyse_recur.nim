@@ -21,15 +21,16 @@
 import
   std/tables,
   pkg/[chronicles, chronos, eth/common],
-  ../[helpers, mpt, worker_desc],
-  ./[session_analyse_desc, session_helpers]
+  ../../[helpers, mpt, worker_desc],
+  ../session_helpers,
+  ./analyse_desc
 
 logScope:
   topics = "snap sync"
 
 type
   WalkTrieRecCB = proc(
-    trd: TravDescRef, att: AttType,
+    trd: TravDescRef, att: AttType, root: Hash32,
     path, key, data: openArray[byte], depth: int
       ) {.gcsafe, raises: [].}
 
@@ -37,8 +38,17 @@ type
 # Private functions, MPT traversal core function
 # ------------------------------------------------------------------------------
 
+proc getAccKvtWrap(
+    db: MptAsmRef;
+    _: Hash32;
+    key: openArray[byte];
+      ): BlobResult =
+  db.getAccKvt key
+
 proc walkTrieRecImpl(
     trd: TravDescRef,
+    base: Hash32;                                   # zero or account path
+    root: openArray[byte];                          # current dub-MPT root
     path: NibblesBuf;                               # node path
     key: openArray[byte];                           # node key
     node: openArray[byte];                          # rlp encoded node data
@@ -55,18 +65,19 @@ proc walkTrieRecImpl(
     block body:
       if link.isList:                                 # no Hash32 but node data
         trd.walkTrieRecImpl(
-          pfx, link.rawData, link.rawData, get, notify, depth+1)
+          base, root, pfx, link.rawData, link.rawData, get, notify, depth+1)
       else:
         let
           newKey = link.toBytes                       # get link
-          newNode = trd.db.get(newKey).valueOr:       # get node from DB
-            trd.notify(EGetError, EmptyBlob, newKey, EmptyBlob, depth)
+          newNode = trd.db.get(base, newKey).valueOr: # get node from DB
+            trd.notify(EGetError, base, EmptyBlob, newKey, EmptyBlob, depth)
             break body
         if newNode.len == 0:
           trd.notify(AttDangling,
-            pfx.toHexPrefix(false).data(), newKey, EmptyBlob, depth)
+            base, pfx.toHexPrefix(false).data(), newKey, EmptyBlob, depth)
         else:
-          trd.walkTrieRecImpl(pfx, newKey, newNode, get, notify, depth+1)
+          trd.walkTrieRecImpl(
+            base, root, pfx, newKey, newNode, get, notify, depth+1)
   try:
     var rlp = node.rlpFromBytes()
     case rlp.listLen
@@ -77,8 +88,8 @@ proc walkTrieRecImpl(
       var
         pyl = rlp.listElem(1)                       # Rlp type, payload or link
       if isLeaf:
-        trd.notify(AttLeaf,
-          newPath.toHexPrefix(false).data(), key, pyl.read seq[byte], depth)
+        trd.notify(AttLeaf,                         # full path => 32 bytes
+          base, newPath.getBytes(), key, pyl.read seq[byte], depth)
       else:
         newPath.recurseOrNotify(pyl)
     of 17:
@@ -88,29 +99,30 @@ proc walkTrieRecImpl(
           (path & NibblesBuf.nibble(n)).recurseOrNotify(w)
         n.inc
     else:
-      trd.notify(ERlpList, path.toHexPrefix(false).data(), key, node, depth)
+      trd.notify(ERlpList,
+        base, path.toHexPrefix(false).data(), key, node, depth)
   except RlpError:
-    trd.notify(ERlpExcept, path.toHexPrefix(false).data(), key, node, depth)
+    trd.notify(ERlpExcept,
+      base, path.toHexPrefix(false).data(), key, node, depth)
 
   discard                                           # visual alignment
 
 proc walkTrieRec(
     trd: TravDescRef;
-    root: Hash32;                                   # root key
+    base: Hash32;                                   # zero or account path
+    root: openArray[byte];                          # state root
     get: WalkTrieGetCB;                             # fetch function
     notify: WalkTrieRecCB;                          # node event notifier
       ): Result[void,AttType] =
   ## Starter
-  let
-    root = @(root.data)
-    node = trd.db.get(root).valueOr:
-      trd.notify(EGetError, EmptyBlob, root, EmptyBlob, 0)
-      return err(EGetError)
+  let node = trd.db.get(base, root).valueOr:
+    trd.notify(EGetError, base, EmptyBlob, root, EmptyBlob, 0)
+    return err(EGetError)
   if node.len == 0:
-    trd.notify(ENoRoot, EmptyBlob, root, EmptyBlob, 0)
+    trd.notify(ENoRoot, base, EmptyBlob, root, EmptyBlob, 0)
     return err(ENoRoot)
 
-  trd.walkTrieRecImpl(EmptyPath, root, node, get, notify, 0)
+  trd.walkTrieRecImpl(base, root, EmptyPath, root, node, get, notify, 0)
   return ok()
 
 # ------------------------------------------------------------------------------
@@ -121,6 +133,7 @@ proc stoNotifyRecur(info: static[string]): WalkTrieRecCB =
   return proc(
       trd: TravDescRef;
       att: AttType;
+      base: Hash32;
       path: openArray[byte];
       key: openArray[byte];
       data: openArray[byte];
@@ -135,10 +148,10 @@ proc stoNotifyRecur(info: static[string]): WalkTrieRecCB =
       stats.nStoLeaf.inc
     of AttDangling:
       stats.nStoDangl.inc
-      trd.onStoDangl(key, path)
+      trd.putDanglSto(base, key, path, info)
     of ENoRoot:
       stats.nStoMissing.inc
-      trd.onStoMissing(key, path)
+      trd.putMissSto(base, key, path, info)
     else:
       stats.nStoErr.inc
 
@@ -149,6 +162,7 @@ proc accAndStoNotifyRecur(info: static[string]): WalkTrieRecCB =
   return proc(
       trd: TravDescRef;
       att: AttType;
+      _: Hash32;
       path: openArray[byte];
       key: openArray[byte];
       payload: openArray[byte];                     # node or payload
@@ -178,8 +192,9 @@ proc accAndStoNotifyRecur(info: static[string]): WalkTrieRecCB =
           let
             start = Moment.now()
             notify = stoNotifyRecur info
+            base = Hash32.fromBytes path
 
-          trd.walkTrieRec(acc.storageRoot, getStoKvt, notify).isOkOr:
+          trd.walkTrieRec(base, acc.storageRoot.data, getStoKvt, notify).isOkOr:
             if error != ENoRoot:
               debug info & ": Failed traversing storage slots",
                 root=acc.storageRoot.toStr, nErr=stats.nStoErr, `error`=error
@@ -199,88 +214,15 @@ proc accAndStoNotifyRecur(info: static[string]): WalkTrieRecCB =
                 root=acc.codeHash.toStr, nErr=stats.nStoErr, error=rc.error
             elif rc.value:
               break checkCodeHash
-            stats.nCodeMissing.inc
-            trd.onCodeMissing(key, path)            # (key,path) of account data
+            stats.nCodeMissing.inc                  # (key,path) of account data
+            trd.putMissCode(key, path, info)
 
           occasionalMsg(trd.msgAt):
             traversingCodeMsg(stats, info)
 
     of AttDangling:
       stats.nAccDangl.inc
-      trd.onAccDangl(key, path)
-
-    else:
-      stats.nAccErr.inc
-
-    occasionalMsg(trd.msgAt):
-      traversingAccountsMsg(stats, info)
-
-proc accOnlyNotifyRecur(info: static[string]): WalkTrieRecCB =
-  return proc(
-      trd: TravDescRef;
-      att: AttType;
-      path: openArray[byte];
-      key: openArray[byte];
-      payload: openArray[byte];                     # node or payload
-      depth: int;
-        ) =
-    template stats(): auto = trd.stats
-
-    stats.nAccNodes += stats.nNodes                 # collect account stats
-    stats.nNodes = 0
-
-    if stats.nAccDepth < depth:
-      stats.nAccDepth = depth
-
-    case att:
-    of AttLeaf:
-      stats.nAccLeaf.inc
-
-      block forAccount:
-        let acc = payload.decodeAccount().valueOr:
-          stats.nAccErr.inc
-          break forAccount
-
-        var treatAccAsDangling = false
-        if acc.storageRoot != EMPTY_ROOT_HASH:
-          stats.nAccSto.inc
-
-          # Check whether the storage root has an entry on the database
-          block checkStoRoot:
-            let rc = trd.db.hasStoKvt(acc.storageRoot.data)
-            if rc.isErr:
-              debug info & ": Failed accessing storage root",
-                root=acc.storageRoot.toStr, nErr=stats.nStoErr, error=rc.error
-            elif rc.value:
-              break checkStoRoot
-            treatAccAsDangling = true
-            stats.nStoMissing.inc
-            trd.onStoMissing(key, path)             # (key,path) of account data
-
-        if acc.codeHash != EMPTY_CODE_HASH:
-          stats.nAccCode.inc
-
-          # Check whether the code has an entry on the codes list
-          block checkCodeHash:
-            let rc = trd.db.hasCodeKvt(acc.codeHash)
-            if rc.isErr:
-              debug info & ": Failed accessing byte code",
-                root=acc.codeHash.toStr, nErr=stats.nStoErr, error=rc.error
-            elif rc.value:
-              break checkCodeHash
-            stats.nCodeMissing.inc
-            trd.onCodeMissing(key, path)            # (key,path) of account data
-            treatAccAsDangling = true
-
-          occasionalMsg(trd.msgAt):
-            traversingCodeMsg(stats, info)
-
-        if treatAccAsDangling:                      # count as dangling leaf
-          stats.nAccDangl.inc
-
-    of AttDangling:
-      stats.nAccDangl.inc
-      trd.onAccDangl(key, path)
+      trd.putDanglAcc(key, path, info)
 
     else:
       stats.nAccErr.inc
@@ -294,47 +236,47 @@ proc accOnlyNotifyRecur(info: static[string]): WalkTrieRecCB =
 
 proc sessionAnalyseTrieRecur*(
     ctx: SnapCtxRef;
-    onDnglAcc: OnDanglingCB;                        # not `Nil`
-    onDnglSto: OnDanglingCB;                        # not `Nil`
-    onMissSto: OnDanglingCB;                        # not `Nil`
-    onMissCode: OnDanglingCB;                       # not `Nil`
-    accAndStoOk: static[bool];
     info: static[string];
       ): Result[WalkStats,AttType]
       {.deprecated: "Use sessionAnalyseTrie()".} =
   ## Async template (but not running async)
   ##
-  ## Testing/debugging only
+  ## Traverse (depth first) an MPT and store missing or dangling node links
+  ## on the dangling links KVT tables.
+  ##
+  ## Testing/debugging only (for the moment.)
   ##
   let
-    start = Moment.now()
-    blindCB = proc(key, path: openArray[byte]) = discard
     trd = TravDescRef(
-      ctx:           ctx,
-      db:            ctx.pool.mptAsm,
-      onAccDangl:    onDnglAcc,
-      onStoDangl:    onDnglSto,
-      onStoMissing:  onMissSto,
-      onCodeMissing: onMissCode,
-      msgAt:         start + threadLogTimeLimit)
+      ctx:   ctx,
+      db:    ctx.pool.mptAsm,
+      msgAt: Moment.now() + threadLogTimeLimit)
 
     pivot = trd.db.findPivot().valueOr:
       debug info & ": MPT analysis failed, pivot missing"
       return err(ENoPivot)                          # => missing pivot, error
 
-    root = pivot.root.Hash32
-
-  when accAndStoOk:
-    let notify = accAndStoNotifyRecur info
-  else:
-    let notify = accOnlyNotifyRecur info
-
   template stats(): auto = trd.stats
+
+  trace info & ": Clearing dangling links caches"
+  trd.clearDanglAcc(info).isOkOr:
+    return err(EClearError)
+  trd.clearDanglSto(info).isOkOr:
+    return err(EClearError)
+  trd.clearDanglCode(info).isOkOr:
+    return err(EClearError)
+
+  let start = Moment.now()
   startTraversingMsg(info)
 
-  trd.walkTrieRec(root, getAccKvt, notify).isOkOr:
-    debug info & ": Failed analysing MPT", `error`=error
-    return err(error)                               # => missing root node
+  trd.walkTrieRec(
+    zeroHash32, pivot.root.Hash32.data, getAccKvtWrap,
+    accAndStoNotifyRecur info).isOkOr:
+      debug info & ": Failed analysing MPT", `error`=error
+      return err(error)
+
+  if 0 < trd.cacheErr:
+    return err(EPutError)
 
   stats.nAccNodes += stats.nNodes
   stats.nNodes = stats.nAccNodes + stats.nStoNodes

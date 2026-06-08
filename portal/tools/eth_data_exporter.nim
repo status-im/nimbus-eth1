@@ -17,7 +17,7 @@ import
   chronos,
   json_rpc/rpcclient,
   ../bridge/common/rpc_helpers,
-  eth_data_exporter/[exporter_conf, exporter_common, cl_data_exporter, el_data_exporter]
+  eth_data_exporter/[exporter_conf, cl_data_exporter, el_data_exporter]
 
 chronicles.formatIt(IoErrorCode):
   $it

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -16,9 +16,9 @@ import
   yaml,
   ssz_serialization,
   beacon_chain/spec/datatypes/capella,
-  ../../eth_history/block_proofs/block_proof_historical_summaries,
-  ../../network/beacon/beacon_init_loader,
-  ../../eth_history/[yaml_utils, yaml_eth_types],
+  ../../execution_chain/history/block_proofs/block_proof_historical_summaries,
+  ../../portal/network/beacon/beacon_init_loader,
+  ../../portal/tools/[yaml_utils, yaml_eth_types],
   ./test_history_util
 
 suite "History Block Proofs - Historical Summaries - Test Vectors":

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -8,14 +8,16 @@
 {.push raises: [].}
 
 import
+  results,
+  stew/io2,
   eth/common/[headers_rlp],
   ssz_serialization,
   ssz_serialization/[proofs, merkleization],
-  ../../common/common_types
+  ../../../portal/common/common_types
 
 from eth/common/eth_types_rlp import rlpHash
 
-export ssz_serialization, merkleization, proofs, common_types
+export results, ssz_serialization, merkleization, proofs, common_types
 
 # HistoricalHashesAccumulator, as per specification:
 # https://github.com/ethereum/portal-network-specs/blob/31bc7e58e2e8acfba895d5a12a9ae3472894d398/history/history-network.md#the-historical-hashes-accumulator
@@ -106,3 +108,14 @@ func finishAccumulator*(
   doAssert(a.historicalEpochs.add(epochHash.data))
 
   FinishedHistoricalHashesAccumulator(historicalEpochs: a.historicalEpochs)
+
+proc readAccumulator*(
+    file: string
+): Result[FinishedHistoricalHashesAccumulator, string] =
+  let encodedAccumulator = readAllFile(file).valueOr:
+    return err(ioErrorMsg(error))
+
+  try:
+    ok(SSZ.decode(encodedAccumulator, FinishedHistoricalHashesAccumulator))
+  except SerializationError as e:
+    err("Failed decoding accumulator: " & e.msg)

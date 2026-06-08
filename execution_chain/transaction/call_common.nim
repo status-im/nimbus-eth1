@@ -263,7 +263,7 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: 
   if txGasLeft > 0:
     let gasRefundAmount = txGasLeft.u256 * call.gasPrice.u256
     vmState.mutateLedger:
-      ledger.addBalance(call.sender, gasRefundAmount)
+      ledger.addBalance(call.sender, gasRefundAmount, checkEmptyAccount = fork < FkParis)
 
   GasUsed(
     evmGasUsed: c.msg.gas - txGasLeft,

@@ -184,7 +184,7 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
 
   # Update flexi-array, set proper length
   vmState.receipts.setLen(pst.packedTxs.len)
-  
+
   pst.receiptsRoot = vmState.receipts.calcReceiptsRoot
   pst.logsBloom = vmState.receipts.createBloom
   pst.stateRoot = vmState.ledger.getStateRoot()

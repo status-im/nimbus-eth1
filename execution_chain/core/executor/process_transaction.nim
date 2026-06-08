@@ -69,6 +69,7 @@ proc commitOrRollbackDependingOnGasUsed(
 
   callResult.txFee = txFee
   vmState.ledger.addBalance(vmState.coinbase(), txFee)
+  vmState.ledger.addBalance(vmState.coinbase(), txFee, checkEmptyAccount = vmState.fork < FkParis)
   vmState.ledger.commit(savePoint)
   vmState.cumulativeGasUsed += gasUsed
   vmState.blockRegularGasUsed += callResult.blockRegularGasUsed
