@@ -8,32 +8,14 @@
 {.push raises: [].}
 
 import
-  std/[strutils, os],
+  std/strutils,
   confutils,
   confutils/std/net,
   nimcrypto/hash,
-  ../network/network_metadata,
-  ../../execution_chain/history/e2store_formats/era1,
   ../logging,
   ./common/rpc_helpers
 
 export net, rpc_helpers
-
-proc defaultEthDataDir*(): string =
-  let dataDir =
-    when defined(windows):
-      "AppData" / "Roaming" / "EthData"
-    elif defined(macosx):
-      "Library" / "Application Support" / "EthData"
-    else:
-      ".cache" / "eth-data"
-
-  getHomeDir() / dataDir
-
-proc defaultEra1DataDir*(): string =
-  defaultEthDataDir() / "era1"
-
-const defaultEndEra* = uint64(era(network_metadata.mergeBlockNumber - 1))
 
 type
   BackfillMode* = enum
@@ -110,10 +92,10 @@ type
 
       backfillMode* {.
         desc:
-          "Backfill mode to use for the history bridge. Requires access to era1 files.",
+          "Backfill mode to use for the history bridge. Requires access to era1 or ere files.",
         longDesc:
           "Valid values:\n" & "  none    — backfill disabled\n" &
-          "  regular — Gossip all block bodies and receipts from era1\n" &
+          "  regular — Gossip all block bodies and receipts from era1 or ere files\n" &
           "  sync    — Download all block bodies and receipts and gossip missing content\n" &
           "  audit   — Download randomly sampled block bodies and receipts and gossip missing content",
         defaultValue: BackfillMode.regular,
@@ -127,19 +109,27 @@ type
         name: "backfill-loop"
       .}: bool
 
-      startEra* {.desc: "The era to start from", defaultValue: 0, name: "start-era".}:
+      era* {.desc: "Number of first era to process", defaultValue: 0, name: "era".}:
         uint64
 
-      endEra* {.
-        desc: "The era to stop at", defaultValue: defaultEndEra, name: "end-era"
+      eraCount* {.
+        desc: "Number of eras to process (0 = all available)",
+        defaultValue: 0,
+        name: "era-count"
       .}: uint64
 
+      ereDir* {.
+        desc: "The directory where ere files are stored (preferred source)",
+        defaultValue: none(InputDir),
+        name: "ere-dir"
+      .}: Option[InputDir]
+
       era1Dir* {.
-        desc: "The directory where all era1 files are stored",
-        defaultValue: defaultEra1DataDir(),
-        defaultValueDesc: "",
+        desc:
+          "The directory where era1 files are stored (legacy fallback when --ere-dir is not set)",
+        defaultValue: none(InputDir),
         name: "era1-dir"
-      .}: InputDir
+      .}: Option[InputDir]
 
       gossipConcurrency* {.
         desc:

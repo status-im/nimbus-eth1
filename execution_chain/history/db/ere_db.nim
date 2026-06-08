@@ -78,6 +78,14 @@ proc init*(
     filenames: filenames,
   )
 
+proc lastEra*(db: EreDB): uint64 =
+  ## Returns the highest era number available in the database.
+  var last = 0'u64
+  for era in db.filenames.keys:
+    if era > last:
+      last = era
+  last
+
 proc dispose*(db: EreDB) =
   for f in db.files:
     if f != nil:
