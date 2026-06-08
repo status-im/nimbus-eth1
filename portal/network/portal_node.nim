@@ -68,13 +68,6 @@ proc new*(
     rng = newRng(),
 ): T =
   let
-    networkData =
-      case network
-      of PortalNetwork.mainnet:
-        loadNetworkData("mainnet")
-      of PortalNetwork.none:
-        loadNetworkData("mainnet")
-
     streamManager = StreamManager.new(discovery)
 
     historyNetwork =
@@ -106,9 +99,17 @@ proc new*(
       else:
         Opt.none(HistoryNetwork)
 
-    beaconNetwork =
+    (beaconNetwork, beaconLightClient) =
       if PortalSubnetwork.beacon in subnetworks:
         let
+          networkData =
+            case network
+            of PortalNetwork.mainnet, PortalNetwork.none:
+              loadNetworkData("mainnet")
+            of PortalNetwork.sepolia:
+              loadNetworkData("sepolia")
+            of PortalNetwork.hoodi:
+              loadNetworkData("hoodi")
           beaconDb = BeaconDb.new(networkData, config.dataDir / dbDir)
           beaconNetwork = BeaconNetwork.new(
             network,
@@ -124,27 +125,18 @@ proc new*(
             contentQueueWorkers = config.contentQueueWorkers,
             contentQueueSize = config.contentQueueSize,
           )
-        Opt.some(beaconNetwork)
-      else:
-        Opt.none(BeaconNetwork)
-
-    beaconLightClient =
-      if beaconNetwork.isSome():
-        let beaconLightClient = LightClient.new(
-          beaconNetwork.value, rng, networkData, LightClientFinalizationMode.Optimistic
-        )
-
+          beaconLightClient = LightClient.new(
+            beaconNetwork, rng, networkData, LightClientFinalizationMode.Optimistic
+          )
         beaconLightClient.onFinalizedHeader = onFinalizedHeader
         beaconLightClient.onOptimisticHeader = onOptimisticHeader
-
         # TODO:
         # Quite dirty. Use register validate callbacks instead. Or, revisit
         # the object relationships regarding the beacon light client.
-        beaconNetwork.value.processor = beaconLightClient.processor
-
-        Opt.some(beaconLightClient)
+        beaconNetwork.processor = beaconLightClient.processor
+        (Opt.some(beaconNetwork), Opt.some(beaconLightClient))
       else:
-        Opt.none(LightClient)
+        (Opt.none(BeaconNetwork), Opt.none(LightClient))
 
   PortalNode(
     discovery: discovery,

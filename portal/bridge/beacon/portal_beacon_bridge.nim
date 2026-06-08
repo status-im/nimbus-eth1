@@ -278,7 +278,7 @@ proc runBeacon*(config: PortalBridgeConf) {.raises: [CatchableError].} =
   notice "Launching Nimbus Portal beacon chain bridge", cmdParams = commandLineParams()
 
   let
-    (cfg, forkDigests, beaconClock) = getBeaconData()
+    (cfg, forkDigests, beaconClock) = getBeaconData("mainnet")
     getBeaconTime = beaconClock.getBeaconTimeFn()
     portalRpcClient = newRpcClientConnect(config.portalRpcUrl)
     restClient = RestClientRef.new(config.restUrl).valueOr:

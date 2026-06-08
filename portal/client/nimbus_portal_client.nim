@@ -134,6 +134,8 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
       let res = enr.Record.fromURI(enrURI)
       if res.isOk():
         bootstrapRecords.add(res.value)
+  of PortalNetwork.sepolia, PortalNetwork.hoodi:
+    discard # no baked-in bootstrap nodes available for these networks
 
   ## Discovery v5 protocol setup
   let
