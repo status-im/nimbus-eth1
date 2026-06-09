@@ -90,12 +90,6 @@ type
 # Public helpers
 # ------------------------------------------------------------------------------
 
-proc findPivot*(db: MptAsmRef): Opt[WalkStateData] =
-  for state in db.walkStateData():
-    if state.error.len == 0 and state.tag == PivotOnTrie:
-      return ok state
-  err()
-
 template toKey*(rlp: Rlp): seq[byte] =
   ## Convert to hask key or node data if it is a list (=> length smaller 32)
   if rlp.isList: @(rlp.rawData) else: rlp.toBytes

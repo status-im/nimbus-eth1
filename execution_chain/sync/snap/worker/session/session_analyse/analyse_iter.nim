@@ -35,6 +35,8 @@ logScope:
 const
   AllowTreadSwitch = true
     ## Set `true` for allowing thread switch in `traverseMpt()` node walker.
+    ##
+    ## Note: This setting is temporary and will go away.
 
 type
   WalkParent = tuple
@@ -117,7 +119,8 @@ template runErrand(
           chronicles.error info & ": Daemon session terminated"
           bodyRc = typeof(bodyRc).err()
           break body
-        trd.napAt = Moment.now() + threadSwitchRunLimit # next thread switch time
+        # Next thread switch time
+        trd.napAt = Moment.now() + threadSwitchRunLimit
 
     # End  `block body`
 
@@ -380,7 +383,7 @@ template sessionAnalyseTrieIter*(cty: SnapCtxRef, info: static[string]): auto =
         msgAt: Moment.now() + threadLogTimeLimit,
         napAt: Moment.now() + threadSwitchRunLimit)
 
-      pivot = trd.db.findPivot().valueOr:
+      pivot = ctx.pool.pivot.valueOr:
         debug info & ": MPT analysis failed, pivot missing"
         bodyRc = typeof(bodyRc).err(ENoPivot)
         break body
@@ -402,7 +405,7 @@ template sessionAnalyseTrieIter*(cty: SnapCtxRef, info: static[string]): auto =
     startTraversingMsg(info)
 
     let rc = traverseMpt(
-      trd, zeroHash32, pivot.root.Hash32.data,
+      trd, zeroHash32, pivot.Hash32.data,
       getAccKvtWrap, accAndStoNotify, info):
         traversingAccountsMsg(stats, info)
 

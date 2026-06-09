@@ -237,8 +237,7 @@ proc accAndStoNotifyRecur(info: static[string]): WalkTrieRecCB =
 proc sessionAnalyseTrieRecur*(
     ctx: SnapCtxRef;
     info: static[string];
-      ): Result[WalkStats,AttType]
-      {.deprecated: "Use sessionAnalyseTrie()".} =
+      ): Result[WalkStats,AttType] =
   ## Async template (but not running async)
   ##
   ## Traverse (depth first) an MPT and store missing or dangling node links
@@ -252,9 +251,9 @@ proc sessionAnalyseTrieRecur*(
       db:    ctx.pool.mptAsm,
       msgAt: Moment.now() + threadLogTimeLimit)
 
-    pivot = trd.db.findPivot().valueOr:
+    pivot = ctx.pool.pivot.valueOr:
       debug info & ": MPT analysis failed, pivot missing"
-      return err(ENoPivot)                          # => missing pivot, error
+      return err(ENoPivot)
 
   template stats(): auto = trd.stats
 
@@ -270,7 +269,7 @@ proc sessionAnalyseTrieRecur*(
   startTraversingMsg(info)
 
   trd.walkTrieRec(
-    zeroHash32, pivot.root.Hash32.data, getAccKvtWrap,
+    zeroHash32, pivot.Hash32.data, getAccKvtWrap,
     accAndStoNotifyRecur info).isOkOr:
       debug info & ": Failed analysing MPT", `error`=error
       return err(error)

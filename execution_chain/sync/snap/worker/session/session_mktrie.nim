@@ -413,15 +413,14 @@ template mkTrieImpl(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc sessionMkTrieInit*( ctx: SnapCtxRef) =
+proc sessionMkTrieInit*(ctx: SnapCtxRef) =
   # Reset metrics
   metrics.set(nec_snap_merged_mpt_coverage, 0f)
 
-template sessionMkTrie*(
-    ctx: SnapCtxRef;
-    info: static[string];
-      ): Opt[Duration] =
+template sessionMkTrie*(ctx: SnapCtxRef; info: static[string]): auto =
   ## Async/template
+  ##
+  ## Build patial MPT by merging downloaded snap packets.
   ##
   var bodyRc = Opt[Duration].err()
   block body:
@@ -462,10 +461,12 @@ template sessionMkTrie*(
     #
     case byDist.getRecoveryStatus():
     of AllAssembled:
+      ctx.pool.pivot = Opt.some(pivot.root)         # set pivot
       bodyRc = typeof(bodyRc).ok(ZeroDuration)
       break body
     of PartiallyAssembled:
       chronicles.info info & ": Clear MPT and dangling links", nStates
+      ctx.pool.pivot = Opt.none(StateRoot)          # clear
       for n in 0 ..< byDist.len:
         byDist[n].tag = Untagged                    # reset all states
       discard ctx.pool.mptAsm.clearAccDnglKvt()     # clean up dangling links
@@ -522,6 +523,9 @@ template sessionMkTrie*(
 
     chronicles.info info & ": Done all states", nStates, pivot=pivot.toStr,
       coverage=session.fullCov.totalRatio.pcStr, elapsed=elapsed.toStr
+
+    # Publish pivot for MPT analysis anf healing
+    ctx.pool.pivot = Opt.some(pivot.root)
     # End block `body`
 
   bodyRc

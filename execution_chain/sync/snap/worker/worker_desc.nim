@@ -103,6 +103,7 @@ type
     stateDB*: StateDbRef             ## Incomplete states DB
     baseDir*: string                 ## Path for assembly database
     mptAsm*: MptAsmRef               ## Assembly cache database
+    pivot*: Opt[StateRoot]           ## Pivot root for analysys, healing, etc.
 
     # Info, debugging, and error handling stuff
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one
