@@ -91,7 +91,7 @@ proc runBackfillLoop(
     endEra: uint64,
     loop: bool,
 ) {.async: (raises: [CancelledError]).} =
-  let db = EreDB.new(ereDir, "mainnet", mergeBlockNumber(MainNet)).valueOr:
+  let db = EreDB.new(ereDir, bridge.network, mergeBlockNumber(bridge.cfg.chainId)).valueOr:
     fatal "Could not open ere database", ereDir, error = error
     ProcessState.scheduleStop("ere_db_error")
     return
@@ -138,7 +138,7 @@ proc runBackfillLoopSyncMode(
     loop: bool,
 ) {.async: (raises: [CancelledError]).} =
   let
-    db = EreDB.new(ereDir, "mainnet", mergeBlockNumber(MainNet)).valueOr:
+    db = EreDB.new(ereDir, bridge.network, mergeBlockNumber(bridge.cfg.chainId)).valueOr:
       fatal "Could not open ere database", ereDir, error = error
       ProcessState.scheduleStop("ere_db_error")
       return
@@ -205,7 +205,7 @@ proc runBackfillLoopAuditMode(
 ) {.async: (raises: [CancelledError]).} =
   let
     rng = newRng()
-    db = EreDB.new(ereDir, "mainnet", mergeBlockNumber(MainNet)).valueOr:
+    db = EreDB.new(ereDir, bridge.network, mergeBlockNumber(bridge.cfg.chainId)).valueOr:
       fatal "Could not open ere database", ereDir, error = error
       ProcessState.scheduleStop("ere_db_error")
       return
@@ -255,7 +255,8 @@ proc runHistory*(config: PortalBridgeConf) =
     portalClient: PortalRpcClient.init(newRpcClientConnect(config.portalRpcUrl)),
     web3Client: newRpcClientConnect(config.web3Url),
     gossipQueue: newAsyncQueue[(seq[byte], seq[byte])](config.gossipConcurrency),
-    cfg: chainConfigForNetwork(MainNet),
+    cfg: chainConfigForNetwork(config.networkId()),
+    network: config.network,
   )
 
   proc gossipWorker(bridge: PortalHistoryBridge) {.async: (raises: []).} =

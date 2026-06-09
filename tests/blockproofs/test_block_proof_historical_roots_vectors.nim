@@ -23,7 +23,7 @@ suite "History Block Proofs - Historical Roots - Test Vectors":
     let
       testsPath =
         "./vendor/portal-spec-tests/tests/mainnet/history/headers_with_proof/block_proofs_bellatrix/"
-      historicalRoots = loadHistoricalRoots()
+      historicalRoots = loadHistoricalRoots("mainnet")
 
     for kind, path in walkDir(testsPath):
       if kind == pcFile and path.splitFile.ext == ".yaml":

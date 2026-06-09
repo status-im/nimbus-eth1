@@ -30,10 +30,10 @@ proc runBackfillLoopLegacy*(
     loop: bool,
 ) {.async: (raises: [CancelledError]).} =
   let
-    mergeBlockNumber = mergeBlockNumber(MainNet)
-    accumulator = loadAccumulator("mainnet")
+    mergeBlockNumber = mergeBlockNumber(bridge.cfg.chainId)
+    accumulator = loadAccumulator(bridge.network)
     lastEra = min(endEra, accumulator.historicalEpochs.len.uint64 - 1)
-    db = Era1DB.new(era1Dir, "mainnet", accumulator, mergeBlockNumber)
+    db = Era1DB.new(era1Dir, bridge.network, accumulator, mergeBlockNumber)
   defer:
     db.dispose()
 
@@ -70,11 +70,11 @@ proc runBackfillLoopSyncModeLegacy*(
     loop: bool,
 ) {.async: (raises: [CancelledError]).} =
   let
-    mergeBlockNumber = mergeBlockNumber(MainNet)
+    mergeBlockNumber = mergeBlockNumber(bridge.cfg.chainId)
     rng = newRng()
-    accumulator = loadAccumulator("mainnet")
+    accumulator = loadAccumulator(bridge.network)
     lastEra = min(endEra, accumulator.historicalEpochs.len.uint64 - 1)
-    db = Era1DB.new(era1Dir, "mainnet", accumulator, mergeBlockNumber)
+    db = Era1DB.new(era1Dir, bridge.network, accumulator, mergeBlockNumber)
     blockStart = Era1(startEra).startNumber()
     blockEnd = Era1(lastEra).endNumber(mergeBlockNumber)
     blockNumberQueue = newAsyncQueue[uint64](50)
@@ -129,11 +129,11 @@ proc runBackfillLoopAuditModeLegacy*(
     bridge: PortalHistoryBridge, era1Dir: string, startEra: uint64, endEra: uint64
 ) {.async: (raises: [CancelledError]).} =
   let
-    mergeBlockNumber = mergeBlockNumber(MainNet)
+    mergeBlockNumber = mergeBlockNumber(bridge.cfg.chainId)
     rng = newRng()
-    accumulator = loadAccumulator("mainnet")
+    accumulator = loadAccumulator(bridge.network)
     lastEra = min(endEra, accumulator.historicalEpochs.len.uint64 - 1)
-    db = Era1DB.new(era1Dir, "mainnet", accumulator, mergeBlockNumber)
+    db = Era1DB.new(era1Dir, bridge.network, accumulator, mergeBlockNumber)
     blockStart = Era1(startEra).startNumber()
     blockEnd = Era1(lastEra).endNumber(mergeBlockNumber)
     blockRange = blockEnd - blockStart
