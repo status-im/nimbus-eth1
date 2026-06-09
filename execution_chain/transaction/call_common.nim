@@ -79,8 +79,6 @@ proc setDelegation(call: CallParams): int64 =
     ledger.accessList(authority)
 
     # 5. Verify the code of authority is either empty or already delegated.
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.trackAddressAccess(authority)
     let code = ledger.getCode(authority)
     if code.len > 0:
       if not parseDelegation(code):
@@ -108,13 +106,9 @@ proc setDelegation(call: CallParams): int64 =
         @[]
       else:
         @(addressToDelegation(auth.address))
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.trackCodeChange(authority, authCode)
     ledger.setCode(authority, authCode)
 
     # 9. Increase the nonce of authority by one.
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.trackNonceChange(authority, auth.nonce + 1)
     ledger.setNonce(authority, auth.nonce + 1)
 
   gasRefund
@@ -197,8 +191,6 @@ proc prepareToRunComputation(call: CallParams) =
 
   vmState.mutateLedger:
     if not call.isCreate:
-      if vmState.balTrackerEnabled:
-        vmState.balTracker.trackIncNonceChange(call.sender)
       ledger.incNonce(call.sender)
 
     # Charge for gas.
@@ -208,8 +200,6 @@ proc prepareToRunComputation(call: CallParams) =
       gasFee += calcDataFee(call.versionedHashes.len,
         vmState.blockCtx.excessBlobGas, vmState.com, fork)
 
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.trackSubBalanceChange(call.sender, gasFee)
     ledger.subBalance(call.sender, gasFee)
 
 proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: int64): GasUsed =
@@ -272,8 +262,6 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: 
   let txGasLeft = call.gasLimit - txGasUsed
   if txGasLeft > 0:
     let gasRefundAmount = txGasLeft.u256 * call.gasPrice.u256
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.trackAddBalanceChange(call.sender, gasRefundAmount)
     vmState.mutateLedger:
       ledger.addBalance(call.sender, gasRefundAmount, checkEmptyAccount = fork < FkParis)
 

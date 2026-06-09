@@ -36,8 +36,6 @@ proc getCallCode*(vmState: BaseVMState, codeAddress: Address): CodeBytesRef =
   # access list itself, after calculating the new contract address.
   if vmState.fork >= FkBerlin:
     vmState.ledger.accessList(codeAddress)
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.trackAddressAccess(codeAddress)
 
   # `codeAddress` is BAL tracked in `initialAccessListEIP2929`
   let code = vmState.readOnlyLedger.getCode(codeAddress)
@@ -49,6 +47,4 @@ proc getCallCode*(vmState: BaseVMState, codeAddress: Address): CodeBytesRef =
 
   # If the `call.to` has a delegation, also warm its target.
   vmState.ledger.accessList(delegateTo)
-  if vmState.balTrackerEnabled:
-    vmState.balTracker.trackAddressAccess(delegateTo)
   vmState.readOnlyLedger.getCode(delegateTo)

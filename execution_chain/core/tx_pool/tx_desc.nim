@@ -31,7 +31,8 @@ import
   ../validate,
   ../pooled_txs,
   ./tx_tabs,
-  ./tx_item
+  ./tx_item,
+  ./tx_state
 
 from eth/common/eth_types_rlp import rlpHash
 
@@ -60,8 +61,8 @@ type
     rmHash   : Hash32
     pos      : PosPayloadAttr
     blobTab  : BlobLookupTab
-    orderedList: seq[TxItemRef]
     flags    : set[TxPoolFlags]
+    state    : TxState
 
 const
   MAX_POOL_SIZE = 8000
@@ -179,7 +180,7 @@ func excessBlobGas(xp: TxPoolRef): GasInt =
   xp.vmState.blockCtx.excessBlobGas
 
 proc getNonce*(xp: TxPoolRef; account: Address): AccountNonce =
-  xp.vmState.ledger.getNonce(account)
+  xp.state.getNonce(account)
 
 proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
   if tx.txType == TxEip4844:
@@ -240,10 +241,12 @@ proc validateBlobTransactionWrapper(tx: PooledTransaction, fork: EVMFork):
 
 proc init*(xp: TxPoolRef; chain: ForkedChainRef, flags: set[TxPoolFlags] = {}) =
   ## Constructor, returns new tx-pool descriptor.
+  let txFrame = chain.txFrame(chain.latestHash)
   xp.pos.timestamp = chain.latestHeader.timestamp
   xp.vmState = setupVMState(chain.com,
     chain.latestHeader, chain.latestHash,
-    xp.pos, chain.txFrame(chain.latestHash))
+    xp.pos, txFrame)
+  xp.state.init(txFrame)
   xp.chain = chain
   xp.rmHash = chain.latestHash
   xp.flags = flags
@@ -282,9 +285,14 @@ func `rmHash=`*(xp: TxPoolRef, val: Hash32) =
 
 proc updateVmState*(xp: TxPoolRef) =
   ## Reset transaction environment, e.g. before packing a new block
+  let txFrame = xp.chain.txFrame(xp.chain.latestHash)
   xp.vmState = setupVMState(xp.chain.com,
     xp.chain.latestHeader, xp.chain.latestHash,
-    xp.pos, xp.chain.txFrame(xp.chain.latestHash))
+    xp.pos, txFrame)
+  xp.state.init(txFrame)
+
+func updateNonce*(xp: TxPoolRef, item: TxItemRef) =
+  xp.state.update(item.sender, item.nonce + 1)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -301,7 +309,8 @@ proc getItem*(xp: TxPoolRef, id: Hash32): Result[TxItemRef, TxError] =
 proc removeTx*(xp: TxPoolRef, id: Hash32) =
   let item = xp.getItem(id).valueOr:
     return
-  xp.removeFromSenderTab(item)
+  if XP_ORDERED notin xp.flags:
+    xp.removeFromSenderTab(item)
   xp.idTab.del(id)
   xp.blobTab.removeLookup(item)
 
@@ -383,9 +392,7 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     return err(txErrorPoolIsFull)
 
   let item = TxItemRef.new(ptx, id, sender)
-  if XP_ORDERED in xp.flags:
-    xp.orderedList.add(item)
-  else:
+  if XP_ORDERED notin xp.flags:
     ?xp.insertToSenderTab(item)
   xp.idTab[item.id] = item
   xp.blobTab.addLookup(item)
@@ -411,7 +418,7 @@ proc addTx*(xp: TxPoolRef, tx: Transaction): Result[void, TxError] =
 
 iterator byPriceAndNonce*(xp: TxPoolRef): TxItemRef =
   for item in byPriceAndNonce(xp.senderTab, xp.idTab,
-      xp.blobTab, xp.vmState.ledger, xp.baseFee, xp.nextFork):
+      xp.blobTab, xp.state, xp.baseFee, xp.nextFork):
     yield item
 
 iterator allItems*(xp: TxPoolRef): TxItemRef =
@@ -419,7 +426,7 @@ iterator allItems*(xp: TxPoolRef): TxItemRef =
     yield item
 
 iterator byOrder*(xp: TxPoolRef): TxItemRef =
-  for item in xp.orderedList:
+  for _, item in xp.idTab:
     yield item
 
 func isOrdered*(xp: TxPoolRef): bool =

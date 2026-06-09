@@ -54,6 +54,7 @@ type
     gasUsed*: GasInt
     blockRegularGasUsed*: GasInt
     blockStateGasUsed*: GasInt
+    txFee*: UInt256
 
   OutputResult* = object
     error*:   string

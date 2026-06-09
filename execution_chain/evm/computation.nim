@@ -88,33 +88,21 @@ proc getBlockHash*(c: Computation, number: BlockNumber): Hash32 =
   c.vmState.getAncestorHash(number)
 
 template accountExists*(c: Computation, address: Address): bool =
-  if c.balTrackerEnabled:
-    c.vmState.balTracker.trackAddressAccess(address)
-
   if c.fork >= FkSpurious:
     not c.vmState.readOnlyLedger.isDeadAccount(address)
   else:
     c.vmState.readOnlyLedger.accountExists(address)
 
 template getStorage*(c: Computation, slot: UInt256): UInt256 =
-  if c.balTrackerEnabled:
-    c.vmState.balTracker.trackStorageRead(c.msg.contractAddress, slot)
   c.vmState.readOnlyLedger.getStorage(c.msg.contractAddress, slot)
 
 template getBalance*(c: Computation, address: Address): UInt256 =
-  if c.balTrackerEnabled:
-    c.vmState.balTracker.trackAddressAccess(address)
   c.vmState.readOnlyLedger.getBalance(address)
 
 template getCodeSize*(c: Computation, address: Address): uint =
-  if c.balTrackerEnabled:
-    c.vmState.balTracker.trackAddressAccess(address)
   uint(c.vmState.readOnlyLedger.getCodeSize(address))
 
 template getCodeHash*(c: Computation, address: Address): Hash32 =
-  if c.balTrackerEnabled:
-    c.vmState.balTracker.trackAddressAccess(address)
-
   let db = c.vmState.readOnlyLedger
   if not db.accountExists(address) or db.isEmptyAccount(address):
     default(Hash32)
@@ -125,8 +113,6 @@ template selfDestruct*(c: Computation, address: Address) =
   c.execSelfDestruct(address)
 
 template getCode*(c: Computation, address: Address): CodeBytesRef =
-  if c.balTrackerEnabled:
-    c.vmState.balTracker.trackAddressAccess(address)
   c.vmState.readOnlyLedger.getCode(address)
 
 template setTransientStorage*(c: Computation, slot, val: UInt256) =
@@ -172,13 +158,9 @@ func shouldBurnGas*(c: Computation): bool =
   c.isError and c.error.burnsGas
 
 proc beginSavePoint*(c: Computation) =
-  if c.balTrackerEnabled:
-    c.vmState.balTracker.beginCallFrame()
   c.savePoint = c.vmState.ledger.beginSavePoint()
 
 proc commit*(c: Computation) =
-  if c.balTrackerEnabled:
-    c.vmState.balTracker.commitCallFrame()
   c.vmState.ledger.commit(c.savePoint)
   c.savePoint = nil
 
@@ -195,8 +177,6 @@ proc dispose*(c: Computation) =
     c.stack = nil
 
 proc rollback*(c: Computation) =
-  if c.balTrackerEnabled:
-    c.vmState.balTracker.rollbackCallFrame()
   c.vmState.ledger.rollback(c.savePoint)
   c.savePoint = nil
 
@@ -281,8 +261,6 @@ proc writeContract*(c: Computation) =
         return
 
     c.vmState.mutateLedger:
-      if c.balTrackerEnabled:
-        c.vmState.balTracker.trackCodeChange(c.msg.contractAddress, c.output)
       ledger.setCode(c.msg.contractAddress, c.output)
     withExtra trace, "Writing new contract code"
     return
@@ -310,27 +288,14 @@ template chainTo*(c: Computation,
 proc execSelfDestruct*(c: Computation, beneficiary: Address) =
   c.vmState.mutateLedger:
     let localBalance = c.getBalance(c.msg.contractAddress)
-    var newContract = false
 
     # Register the account to be deleted
     if c.fork >= FkCancun:
-      if c.balTrackerEnabled:
-        # Zeroing contract balance except beneficiary is the same address
-        c.vmState.balTracker.trackSubBalanceChange(c.msg.contractAddress, localBalance)
-        ledger.subBalance(c.msg.contractAddress, localBalance)
-        # Transfer to beneficiary
-        c.vmState.balTracker.trackAddBalanceChange(beneficiary, localBalance)
-        ledger.addBalance(beneficiary, localBalance, checkEmptyAccount = c.fork < FkParis)
-        if ledger.selfDestruct6780(c.msg.contractAddress):
-          c.vmState.balTracker.trackInTransactionSelfDestruct(c.msg.contractAddress)
-          newContract = true
-      else:
-        # Zeroing contract balance except beneficiary is the same address
-        ledger.subBalance(c.msg.contractAddress, localBalance)
-        # Transfer to beneficiary
-        ledger.addBalance(beneficiary, localBalance, checkEmptyAccount = c.fork < FkParis)
-        newContract = ledger.selfDestruct6780(c.msg.contractAddress)
-
+      # Zeroing contract balance except beneficiary is the same address
+      ledger.subBalance(c.msg.contractAddress, localBalance)
+      # Transfer to beneficiary
+      ledger.addBalance(beneficiary, localBalance)
+      let newContract = ledger.selfDestruct6780(c.msg.contractAddress)
       if c.fork >= FkAmsterdam:
         c.emitSelfDestructLog(beneficiary, localBalance, newContract)
     else:

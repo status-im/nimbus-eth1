@@ -71,14 +71,8 @@ proc beforeExecCall(c: Computation) =
   c.beginSavePoint()
   if c.msg.kind == CallKind.Call:
     c.vmState.mutateLedger:
-      if c.balTrackerEnabled:
-        c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
-        ledger.subBalance(c.msg.sender, c.msg.value)
-        c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
-        ledger.addBalance(c.msg.contractAddress, c.msg.value, checkEmptyAccount = c.fork < FkParis)
-      else:
-        ledger.subBalance(c.msg.sender, c.msg.value)
-        ledger.addBalance(c.msg.contractAddress, c.msg.value, checkEmptyAccount = c.fork < FkParis)
+      ledger.subBalance(c.msg.sender, c.msg.value)
+      ledger.addBalance(c.msg.contractAddress, c.msg.value)
 
     if c.fork >= FkAmsterdam:
       # EIP-7708: Emit transfer log for ETH-tx or contract call and CALL op code
@@ -103,8 +97,6 @@ proc beforeExecCreate(c: Computation): bool =
         "Nonce overflow when sender=" & sender & " wants to create contract", false
       )
       return true
-    if c.balTrackerEnabled:
-      c.vmState.balTracker.trackNonceChange(c.msg.sender, nonce + 1)
     ledger.setNonce(c.msg.sender, nonce + 1)
 
     # We add this to the access list _before_ taking a snapshot.
@@ -113,8 +105,6 @@ proc beforeExecCreate(c: Computation): bool =
     if c.fork >= FkBerlin:
       ledger.accessList(c.msg.contractAddress)
 
-  if c.balTrackerEnabled:
-    c.vmState.balTracker.trackAddressAccess(c.msg.contractAddress)
   if c.vmState.readOnlyLedger().contractCollision(c.msg.contractAddress):
     # Per EIP-684 collision behaves as an immediate exceptional halt,
     # so the burned gas belongs in the regular dimension.
@@ -132,22 +122,12 @@ proc beforeExecCreate(c: Computation): bool =
   c.beginSavePoint()
 
   c.vmState.mutateLedger:
-    if c.balTrackerEnabled:
-      c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
-      ledger.subBalance(c.msg.sender, c.msg.value)
-      c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
-      ledger.addBalance(c.msg.contractAddress, c.msg.value, checkEmptyAccount = c.fork < FkParis)
-      ledger.clearStorage(c.msg.contractAddress)
-      if c.fork >= FkSpurious:
-        c.vmState.balTracker.trackIncNonceChange(c.msg.contractAddress)
-        ledger.incNonce(c.msg.contractAddress)
-    else:
-      ledger.subBalance(c.msg.sender, c.msg.value)
-      ledger.addBalance(c.msg.contractAddress, c.msg.value, checkEmptyAccount = c.fork < FkParis)
-      ledger.clearStorage(c.msg.contractAddress)
-      if c.fork >= FkSpurious:
-        # EIP161 nonce incrementation
-        ledger.incNonce(c.msg.contractAddress)
+    ledger.subBalance(c.msg.sender, c.msg.value)
+    ledger.addBalance(c.msg.contractAddress, c.msg.value)
+    ledger.clearStorage(c.msg.contractAddress)
+    if c.fork >= FkSpurious:
+      # EIP161 nonce incrementation
+      ledger.incNonce(c.msg.contractAddress)
 
   if c.fork >= FkAmsterdam:
     # EIP-7708: Emit transfer log for contract creation and CREATE op code

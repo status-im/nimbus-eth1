@@ -103,7 +103,6 @@ when compileOption("threads"):
     vmState.blobGasUsed = 0'u64
     vmState.allLogs.setLen(0)
     vmState.gasRefunded = 0
-    vmState.balTracker = nil
 
     # Execute the transaction discarding the results in order to fill the in memory caches.
     vmState.prefetchTransaction(tx[], sender)
@@ -160,7 +159,7 @@ when compileOption("threads"):
         discard sync(e.fut)
 
   func firstBalIndex(sc: SlotChanges): BlockAccessIndex =
-    ## Earliest block access index at which the slot was written. 
+    ## Earliest block access index at which the slot was written.
     ## Block access list validation guarantees `changes` is non-empty.
     assert sc.changes.len > 0
     sc.changes[0].blockAccessIndex
@@ -197,7 +196,7 @@ when compileOption("threads"):
 
   template withBalPrefetchParallel(
       vmState: BaseVMState, bal: Opt[BlockAccessListRef], body: untyped) =
-      
+
     let balRef = bal.get()
 
     var ctx: BalPrefetchCtx
@@ -208,12 +207,12 @@ when compileOption("threads"):
     ctx.nextIndex.store(0, moRelease)
     ctx.finished.store(false, moRelease)
 
-    let 
+    let
       ctxPtr = ctx.addr
       n = vmState.com.taskpool.numThreads
       configured = vmState.com.balStatePrefetchWorkers
       numWorkers = if configured <= 0: n else: min(configured, n)
-    
+
     var futs = newSeq[Flowvar[bool]](numWorkers)
     for i in 0 ..< numWorkers:
       futs[i] = vmState.com.taskpool.spawn balPrefetchWorker(ctxPtr)
@@ -275,7 +274,7 @@ proc processTransactions*(
       return err("Could not get sender for tx with index " & $(txIndex))
 
     if vmState.balTrackerEnabled:
-      vmState.balTracker.setBlockAccessIndex(txIndex + 1)
+      vmState.balLedger.setBlockAccessIndex(txIndex + 1)
 
     let rc = vmState.processTransaction(tx, sender)
     if rc.isErr:
@@ -301,8 +300,7 @@ proc procBlkPreamble(
 
   # Setup block access list tracker for pre‑execution system calls
   if vmState.balTrackerEnabled:
-    vmState.balTracker.setBlockAccessIndex(0)
-    vmState.balTracker.beginCallFrame()
+    vmState.balLedger.setBlockAccessIndex(0)
 
   let com = vmState.com
   if com.daoForkSupport and com.daoForkBlock.get == header.number:
@@ -342,10 +340,6 @@ proc procBlkPreamble(
     if header.blockAccessListHash.isSome:
       return err("Pre-Amsterdam block header must not have blockAccessListHash")
 
-  # Commit block access list tracker changes for pre‑execution system calls
-  if vmState.balTrackerEnabled:
-    vmState.balTracker.commitCallFrame()
-
   if header.txRoot != EMPTY_ROOT_HASH:
     if blk.transactions.len == 0:
       return err("Transactions missing from body")
@@ -359,8 +353,7 @@ proc procBlkPreamble(
 
   # Setup block access list tracker for post‑execution system calls
   if vmState.balTrackerEnabled:
-    vmState.balTracker.setBlockAccessIndex(blk.transactions.len() + 1)
-    vmState.balTracker.beginCallFrame()
+    vmState.balLedger.setBlockAccessIndex(blk.transactions.len() + 1)
 
   if com.isShanghaiOrLater(header.timestamp):
     if header.withdrawalsRoot.isNone:
@@ -368,13 +361,8 @@ proc procBlkPreamble(
     if blk.withdrawals.isNone:
       return err("Post-Shanghai block body must have withdrawals")
 
-    if vmState.balTrackerEnabled:
-      for withdrawal in blk.withdrawals.get:
-        vmState.balTracker.trackAddBalanceChange(withdrawal.address, withdrawal.weiAmount)
-        vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount, checkEmptyAccount = false)
-    else:
-      for withdrawal in blk.withdrawals.get:
-        vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount, checkEmptyAccount = false)
+    for withdrawal in blk.withdrawals.get:
+      vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
   else:
     if header.withdrawalsRoot.isSome:
       return err("Pre-Shanghai block header must not have withdrawalsRoot")
@@ -420,15 +408,6 @@ proc procBlkEpilogue(
   template header(): Header =
     blk.header
 
-  # Reward beneficiary
-  vmState.mutateLedger:
-    # Clearing the account cache here helps manage its size when replaying
-    # large ranges of blocks, implicitly limiting its size using the gas limit
-    ledger.persist(
-      clearEmptyAccount = vmState.com.isSpuriousOrLater(header.number, header.timestamp),
-      clearCache = true
-    )
-
   var
     withdrawalReqs: seq[byte]
     consolidationReqs: seq[byte]
@@ -439,16 +418,26 @@ proc procBlkEpilogue(
     withdrawalReqs = ?processDequeueWithdrawalRequests(vmState)
     consolidationReqs = ?processDequeueConsolidationRequests(vmState)
 
-  # Commit block access list tracker changes for post‑execution system calls
-  if vmState.balTrackerEnabled:
-    vmState.balTracker.commitCallFrame()
+  vmState.mutateLedger:
+    # Clearing the account cache here helps manage its size when replaying
+    # large ranges of blocks, implicitly limiting its size using the gas limit
+    if vmState.balTrackerEnabled:
+      vmState.balLedger.writeToTxFrameAndBAL(
+        ledger,
+        trackTouchedAddress = true,
+        clearCache = true
+      )
+    else:
+      ledger.persist(
+        clearEmptyAccount = vmState.com.isSpuriousOrLater(header.number, header.timestamp),
+        clearCache = true
+      )
 
   if not skipValidation:
     if not skipPostExecBalCheck and vmState.com.isAmsterdamOrLater(header.timestamp):
       doAssert vmState.balTrackerEnabled
-
       let
-        bal = vmState.balTracker.getBlockAccessList().get()
+        bal = vmState.balLedger.getBlockAccessList().get()
         balHash = bal[].computeBlockAccessListHash()
       if header.blockAccessListHash.get != balHash:
         debug "wrong blockAccessListHash, generated block access list does not " &

@@ -47,6 +47,11 @@ const skipFiles = [
   # Witness codes mismatch -> codes optimisation: implemented in
   # https://github.com/status-im/nimbus-eth1/pull/4099
   "witness_codes_create_same_hash_then_read.json",
+
+  # TODO: remove these 3 entries after we have EEST new release for glamsterdam-devnet-6
+  "witness_codes_delegated_eoa_insufficient_balance.json",
+  "validation_codes_missing_delegated_code_on_insufficient_balance_call.json",
+  "bal_call_revert_insufficient_funds.json",
 ]
 
 runEESTSuite(

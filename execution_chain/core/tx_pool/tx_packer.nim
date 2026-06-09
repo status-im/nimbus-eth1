@@ -84,14 +84,13 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string] =
     packer = TxPacker(
       vmState: vmState,
       numBlobPerBlock: 0,
-      blockValue: vmState.ledger.getBalance(xp.feeRecipient),
+      blockValue: 0.u256,
       stateRoot: vmState.parent.stateRoot,
     )
 
   # Setup block access list tracker for pre‑execution system calls
   if vmState.balTrackerEnabled:
-    vmState.balTracker.setBlockAccessIndex(0)
-    vmState.balTracker.beginCallFrame()
+    vmState.balLedger.setBlockAccessIndex(0)
 
   # EIP-4788
   if xp.nextFork >= FkCancun:
@@ -101,10 +100,6 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string] =
   # EIP-2935
   if xp.nextFork >= FkPrague:
     vmState.processParentBlockHash(vmState.blockCtx.parentHash)
-
-  # Commit block access list tracker changes for pre‑execution system calls
-  if vmState.balTrackerEnabled:
-    vmState.balTracker.commitCallFrame()
 
   ok(packer)
 
@@ -134,14 +129,16 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
       return ContinueWithNextAccount
 
   if vmState.balTrackerEnabled:
-    vmState.balTracker.setBlockAccessIndex(pst.packedTxs.len() + 1)
+    vmState.balLedger.setBlockAccessIndex(pst.packedTxs.len() + 1)
 
   # Find out what to do next: accepting this tx or trying the next account
-  let rc = processTransaction(vmState, item.tx, item.sender, rollbackReads = true)
+  let rc = processTransaction(vmState, item.tx, item.sender)
   if rc.isErr:
     if vmState.classifyPackedNext():
       return ContinueWithNextAccount
     return StopCollecting
+
+  xp.updateNonce(item)
 
   # Finish book-keeping
   let inx = pst.packedTxs.len
@@ -155,6 +152,7 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
 
   pst.packedTxs.add item
   pst.numBlobPerBlock += item.tx.versionedHashes.len
+  pst.blockValue += rc.value.txFee
 
   ContinueWithNextAccount
 
@@ -165,18 +163,12 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
 
   # Setup block access list tracker for post‑execution system calls
   if vmState.balTrackerEnabled:
-    vmState.balTracker.setBlockAccessIndex(pst.packedTxs.len() + 1)
-    vmState.balTracker.beginCallFrame()
+    vmState.balLedger.setBlockAccessIndex(pst.packedTxs.len() + 1)
 
   # EIP-4895
   if vmState.fork >= FkShanghai:
-    if vmState.balTrackerEnabled:
-      for withdrawal in xp.withdrawals:
-        vmState.balTracker.trackAddBalanceChange(withdrawal.address, withdrawal.weiAmount)
-        ledger.addBalance(withdrawal.address, withdrawal.weiAmount, checkEmptyAccount = false)
-    else:
-      for withdrawal in xp.withdrawals:
-        ledger.addBalance(withdrawal.address, withdrawal.weiAmount, checkEmptyAccount = false)
+    for withdrawal in xp.withdrawals:
+      ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
 
   # EIP-6110, EIP-7002, EIP-7251
   if vmState.fork >= FkPrague:
@@ -185,19 +177,17 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
     pst.depositReqs = ?parseDepositLogs(vmState.allLogs, vmState.com.depositContractAddress)
 
   # Finish up, then vmState.ledger.stateRoot may be accessed
-  ledger.persist(clearEmptyAccount = vmState.fork >= FkSpurious)
+  if vmState.balTrackerEnabled:
+    vmState.balLedger.writeToTxFrameAndBAL(ledger, trackTouchedAddress = true)
+  else:
+    ledger.persist(clearEmptyAccount = vmState.fork >= FkSpurious)
 
   # Update flexi-array, set proper length
   vmState.receipts.setLen(pst.packedTxs.len)
 
-  pst.blockValue = vmState.ledger.getBalance(xp.feeRecipient) - pst.blockValue
   pst.receiptsRoot = vmState.receipts.calcReceiptsRoot
   pst.logsBloom = vmState.receipts.createBloom
   pst.stateRoot = vmState.ledger.getStateRoot()
-
-  # Commit block access list tracker changes for post‑execution system calls
-  if vmState.balTrackerEnabled:
-    vmState.balTracker.commitCallFrame()
 
   ok()
 

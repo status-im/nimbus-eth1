@@ -33,7 +33,7 @@ proc init(
       blockCtx:     BlockContext;
       com:          CommonRef;
       tracer:       TracerRef,
-      tracker:      BlockAccessListTrackerRef,
+      bal:          BalLedgerRef,
       flags:        set[VMFlag] = self.flags) =
   ## Initialisation helper
   # Take care to (re)set all fields since the VMState might be recycled
@@ -55,7 +55,7 @@ proc init(
   self.blobGasUsed = 0'u64
   self.allLogs.setLen(0)
   self.gasRefunded = 0
-  self.balTracker = tracker
+  self.balLedger = bal
 
 func blockCtx(header: Header): BlockContext =
   BlockContext(
@@ -96,21 +96,21 @@ proc new*(
   ## `BaseVMState` environment where the account state cache is synchronised
   ## with the `parent` block header.
   let
-    ledger = LedgerRef.init(txFrame, storeSlotHash, com.statelessProviderEnabled)
-    tracker =
+    ledger = LedgerRef.init(txFrame, storeSlotHash, com.statelessProviderEnabled, enableBalTracker)
+    bal =
       if enableBalTracker:
-        BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger)
+        BalLedgerRef.init()
       else:
         nil
 
   new result
   result.init(
-    ledger = ledger,
+    ledger   = ledger,
     parent   = parent,
     blockCtx = blockCtx,
     com      = com,
     tracer   = tracer,
-    tracker  = tracker
+    bal      = bal
   )
 
 proc reinit*(self:     BaseVMState;     ## Object descriptor
@@ -127,25 +127,25 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
   ## this function returns `false`, the function argument `self` is left
   ## untouched.
 
-  if not self.balTracker.isNil():
-    self.balTracker = BlockAccessListTrackerRef.init(self.ledger.ReadOnlyLedger)
+  if not self.balLedger.isNil():
+    self.balLedger = BalLedgerRef.init()
 
   if not self.ledger.isTopLevelClean:
     return false
 
   let
-    tracer = self.tracer
-    tracker = self.balTracker
-    com    = self.com
-    ledger     = self.ledger
-    flags  = self.flags
+    tracer  = self.tracer
+    bal     = self.balLedger
+    com     = self.com
+    ledger  = self.ledger
+    flags   = self.flags
   self.init(
-    ledger       = ledger,
+    ledger   = ledger,
     parent   = parent,
     blockCtx = blockCtx,
     com      = com,
     tracer   = tracer,
-    tracker  = tracker,
+    bal      = bal,
     flags    = flags)
   true
 
@@ -165,12 +165,12 @@ proc reinit*(self:   BaseVMState; ## Object descriptor
     )
 
 proc init*(
-      self:   BaseVMState;     ## Object descriptor
-      parent: Header;     ## parent header, account sync position
-      header: Header;     ## header with tx environment data fields
-      com:    CommonRef;       ## block chain config
+      self   : BaseVMState;     ## Object descriptor
+      parent : Header;     ## parent header, account sync position
+      header : Header;     ## header with tx environment data fields
+      com    : CommonRef;       ## block chain config
       txFrame: CoreDbTxRef;
-      tracer: TracerRef = nil,
+      tracer : TracerRef = nil,
       storeSlotHash = false,
       enableBalTracker = false) =
   ## Variant of `new()` constructor above for in-place initalisation. The
@@ -181,20 +181,20 @@ proc init*(
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
   let
-    ledger = LedgerRef.init(txFrame, storeSlotHash, com.statelessProviderEnabled)
-    tracker =
+    ledger = LedgerRef.init(txFrame, storeSlotHash, com.statelessProviderEnabled, enableBalTracker)
+    bal =
       if enableBalTracker:
-        BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger)
+        BalLedgerRef.init()
       else:
         nil
 
   self.init(
-    ledger       = ledger,
+    ledger   = ledger,
     parent   = parent,
     blockCtx = blockCtx(header),
     com      = com,
     tracer   = tracer,
-    tracker  = tracker)
+    bal      = bal)
 
 proc new*(
       T: type BaseVMState;
@@ -213,11 +213,11 @@ proc new*(
   ## networks, the miner address is retrievable via `ecRecover()`.
   new result
   result.init(
-    parent = parent,
-    header = header,
-    com    = com,
+    parent  = parent,
+    header  = header,
+    com     = com,
     txFrame = txFrame,
-    tracer = tracer,
+    tracer  = tracer,
     storeSlotHash = storeSlotHash,
     enableBalTracker = enableBalTracker)
 
@@ -266,11 +266,11 @@ func tracingEnabled*(vmState: BaseVMState): bool =
   vmState.tracer.isNil.not
 
 template balTrackerEnabled*(vmState: BaseVMState): bool =
-  vmState.balTracker.isNil.not
+  vmState.balLedger.isNil.not
 
 template blockAccessList*(vmState: BaseVMState): Opt[BlockAccessListRef] =
   if vmState.balTrackerEnabled:
-    vmState.balTracker.getBlockAccessList()
+    vmState.balLedger.getBlockAccessList()
   else:
     Opt.none(BlockAccessListRef)
 

@@ -69,12 +69,16 @@ proc finishRunningComputation(c: Computation, T: type): T =
 
 proc systemCall*(call: CallParams, T: type): T =
   let
-    ledger = call.vmState.ledger
+    vmState = call.vmState
+    ledger = vmState.ledger
     c = setupComputation(call)
 
   # Pre-execution sanity checks
   c.preExecComputation()
   if c.isSuccess:
     c.execCallOrCreate()
-    ledger.persist(clearEmptyAccount = true)
+    if vmState.balTrackerEnabled:
+      vmState.balLedger.writeToTxFrameAndBAL(ledger)
+    else:
+      ledger.persist(clearEmptyAccount = true)
   finishRunningComputation(c, T)
