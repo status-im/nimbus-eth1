@@ -60,7 +60,6 @@ type
     rmHash   : Hash32
     pos      : PosPayloadAttr
     blobTab  : BlobLookupTab
-    orderedList: seq[TxItemRef]
     flags    : set[TxPoolFlags]
 
 const
@@ -301,7 +300,8 @@ proc getItem*(xp: TxPoolRef, id: Hash32): Result[TxItemRef, TxError] =
 proc removeTx*(xp: TxPoolRef, id: Hash32) =
   let item = xp.getItem(id).valueOr:
     return
-  xp.removeFromSenderTab(item)
+  if XP_ORDERED notin xp.flags:
+    xp.removeFromSenderTab(item)
   xp.idTab.del(id)
   xp.blobTab.removeLookup(item)
 
@@ -383,9 +383,7 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     return err(txErrorPoolIsFull)
 
   let item = TxItemRef.new(ptx, id, sender)
-  if XP_ORDERED in xp.flags:
-    xp.orderedList.add(item)
-  else:
+  if XP_ORDERED notin xp.flags:
     ?xp.insertToSenderTab(item)
   xp.idTab[item.id] = item
   xp.blobTab.addLookup(item)
@@ -419,7 +417,7 @@ iterator allItems*(xp: TxPoolRef): TxItemRef =
     yield item
 
 iterator byOrder*(xp: TxPoolRef): TxItemRef =
-  for item in xp.orderedList:
+  for _, item in xp.idTab:
     yield item
 
 func isOrdered*(xp: TxPoolRef): bool =
