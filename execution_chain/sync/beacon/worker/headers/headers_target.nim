@@ -11,7 +11,7 @@
 {.push raises:[].}
 
 import
-  pkg/[chronicles, chronos],
+  pkg/[chronicles, chronos, results],
   pkg/eth/common,
   pkg/stew/interval_set,
   ../../../../networking/p2p,
@@ -30,11 +30,17 @@ proc headersTargetRequest*(
     h: Hash32;
     isFinal: bool;
     info: static[string];
+    finHash: Opt[Hash32] = Opt.none(Hash32);
       ) =
   ## Request *manual* syncer target. It has to be activated by the
   ## `headersTargetActivate()` function below.
-  ctx.pool.initTarget = Opt.some((h,isFinal))
-  trace info & ": request syncer target", targetHash=h.short, isFinal
+  ##
+  ## When `finHash` is set, it will be used as the finalised hash passed
+  ## to the header chain cache on activation, overriding the default of
+  ## `chain.baseHash`.
+  ctx.pool.initTarget = Opt.some((h, isFinal, finHash))
+  trace info & ": request syncer target", targetHash=h.short, isFinal,
+    finHash=(if finHash.isSome: finHash.unsafeGet.short else: "n/a")
 
 proc headersTargetReset*(ctx: BeaconCtxRef) =
   ## Reset *manual* syncer target.
@@ -131,7 +137,10 @@ template headersTargetActivate*(
       targetHash=trg.hash.short, isFinal=trg.isFinal,
       nSyncPeers=ctx.nSyncPeers()
 
-    let finalised = if trg.isFinal: trg.hash else: ctx.chain.baseHash
+    let finalised =
+      if trg.finHash.isSome:        trg.finHash.unsafeGet
+      elif trg.isFinal:             trg.hash
+      else:                         ctx.chain.baseHash
     ctx.hdrCache.headTargetUpdate(hdr, finalised)
 
     bodyRc = true
