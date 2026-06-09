@@ -88,7 +88,7 @@ when isMainModule:
 
       info "Block data exported successfully", fileName = fileName
   of ExporterCmd.beacon:
-    let (cfg, forkDigests, _) = getBeaconData("mainnet")
+    let (cfg, forkDigests, _) = getBeaconData(config.network)
 
     case config.beaconCmd
     of BeaconCmd.exportLCBootstrap:
@@ -117,4 +117,6 @@ when isMainModule:
         config.restUrl, string config.dataDir, cfg, forkDigests
       )
     of BeaconCmd.exportBlockProof:
-      exportBlockProof(string config.dataDir, string config.eraDir, config.slotNumber)
+      exportBlockProof(
+        string config.dataDir, string config.eraDir, config.slotNumber, config.network
+      )

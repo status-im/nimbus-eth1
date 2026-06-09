@@ -22,6 +22,7 @@ type PortalHistoryBridge* = ref object
   web3Client*: RpcClient
   gossipQueue*: AsyncQueue[(seq[byte], seq[byte])]
   cfg*: ChainConfig
+  network*: string
 
 proc gossipBlockBody*(
     bridge: PortalHistoryBridge, blockNumber: uint64, body: BlockBody

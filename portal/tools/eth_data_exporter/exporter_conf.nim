@@ -59,6 +59,12 @@ type
       defaultValueDesc: $defaultDataDirDesc,
       name: "data-dir"
     .}: OutDir
+    network* {.
+      desc: "Name of Ethereum network (mainnet, sepolia, hoodi)",
+      defaultValue: "mainnet",
+      defaultValueDesc: "mainnet",
+      name: "network"
+    .}: string
     case cmd* {.command.}: ExporterCmd
     of ExporterCmd.history:
       web3Url* {.

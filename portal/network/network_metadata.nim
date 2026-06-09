@@ -50,9 +50,7 @@ const
 
   mainnetHistoricalRootsSSZ* = slurp(mainnetPortalConfigDir / "historical_roots.ssz")
 
-func loadAccumulator*(
-    network: string = "mainnet"
-): FinishedHistoricalHashesAccumulator =
+func loadAccumulator*(network: string): FinishedHistoricalHashesAccumulator =
   let ssz =
     case network
     of "mainnet":
@@ -66,11 +64,17 @@ func loadAccumulator*(
   except SerializationError as err:
     raiseAssert "Invalid baked-in accumulator: " & err.msg
 
-func loadHistoricalRoots*(): HashList[Eth2Digest, Limit HISTORICAL_ROOTS_LIMIT] =
+func loadHistoricalRoots*(
+    network: string
+): HashList[Eth2Digest, Limit HISTORICAL_ROOTS_LIMIT] =
+  let ssz =
+    case network
+    of "mainnet":
+      mainnetHistoricalRootsSSZ
+    else:
+      raiseAssert "No baked-in historical_roots for network: " & network
   try:
-    SSZ.decode(
-      mainnetHistoricalRootsSSZ, HashList[Eth2Digest, Limit HISTORICAL_ROOTS_LIMIT]
-    )
+    SSZ.decode(ssz, HashList[Eth2Digest, Limit HISTORICAL_ROOTS_LIMIT])
   except SerializationError as err:
     raiseAssert "Invalid baked-in historical_roots: " & err.msg
 
