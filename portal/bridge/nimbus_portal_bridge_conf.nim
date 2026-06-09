@@ -13,9 +13,13 @@ import
   confutils/std/net,
   nimcrypto/hash,
   ../logging,
-  ./common/rpc_helpers
+  ./common/rpc_helpers,
+  ../../execution_chain/common/chain_config
 
-export net, rpc_helpers
+export net, rpc_helpers, chain_config
+
+const supportedNetworks* =
+  [("mainnet", MainNet), ("sepolia", SepoliaNet), ("hoodi", HoodiNet)]
 
 type
   BackfillMode* = enum
@@ -46,6 +50,13 @@ type
       defaultValue: JsonRpcUrl(kind: HttpUrl, value: "http://127.0.0.1:8565"),
       name: "portal-rpc-url"
     .}: JsonRpcUrl
+
+    network* {.
+      desc: "Name of Ethereum network (mainnet, sepolia, hoodi)",
+      defaultValue: "mainnet",
+      defaultValueDesc: "mainnet",
+      name: "network"
+    .}: string
 
     case cmd* {.command, desc: "".}: PortalBridgeCmd
     of PortalBridgeCmd.beacon:
@@ -137,6 +148,13 @@ type
         defaultValue: 50,
         name: "gossip-concurrency"
       .}: int
+
+func networkId*(config: PortalBridgeConf): NetworkId =
+  let networkLower = config.network.toLowerAscii()
+  for (name, id) in supportedNetworks:
+    if name == networkLower:
+      return id
+  raiseAssert "Unsupported network: " & config.network
 
 func parseCmdArg*(T: type TrustedDigest, input: string): T {.raises: [ValueError].} =
   TrustedDigest.fromHex(input)
