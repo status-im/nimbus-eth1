@@ -384,32 +384,6 @@ proc kvPair(rit: RocksIteratorRef): KvPair =
   rit.next()
   kv
 
-proc splitKey65(key: openArray[byte]; key1, key2: var Hash32): bool =
-  ## Another helper kludge needed to avoid errors with the Debian NIM compiler
-  ## (version 2.2.10) errors like
-  ##
-  ## [..]/@msync@ssnap.nim.c:2809:46: error: duplicate member ‘key141’
-  ## 2809 |         tySequence__6H5Oh5UUvVCLiakt9aTwtUQ* key141;
-  ##      |                                              ^~~~~~
-  ## [..]/mpt/mpt_assembly.nim: In function \
-  ##           ‘_ZN9runDaemon26runDaemon__syncZsnap_\
-  ##            u1992E3refIN7futures26FutureBasecolonObjectType_EE’:
-  ## [..]/mpt/mpt_assembly.nim:487:89: error: request for member \
-  ##           ‘Sup’ in something not a structure or union
-  ##  487 |       if key.len == 0:
-  ##      |                                       ^
-  ## ..
-  ## Error: execution of an external compiler program 'gcc -c -w \
-  ##          -fmax-errors=3 -fno-strict-aliasing -flto=auto \
-  ##          -finline-limit=100000 -pthread -funwind-tables \
-  ##          [..]' failed with exit code:
-  ##
-  if key.len == 65:
-    (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
-    (addr (key2.distinctBase)[0]).copyMem(addr key[33], 32)
-    return true
-  # false
-
 iterator colWalkAtLeast1(adb: RocksDbRef, pfx: openArray[byte]): KvPair =
   ## Walk over key-value pairs of the database for keys with the search
   ## head starting at postion `pfx[]`. The `pfx` argument must be length
@@ -516,7 +490,9 @@ iterator colWalk65(
         continue
       if col.ord.byte != key[0]:
         break
-      if key.splitKey65(key1, key2):
+      if key.len == 65:
+        (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
+        (addr (key2.distinctBase)[0]).copyMem(addr key[33], 32)
         yield (move key1, move key2, value)
 
 iterator colWalk97(
