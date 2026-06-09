@@ -350,4 +350,3 @@ jobs:
             windows-amd64-checksum
             macos-arm64-archive
             macos-arm64-checksum
-            wasm
