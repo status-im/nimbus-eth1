@@ -643,6 +643,15 @@ func name*(id: NetworkId): string =
   else:
     $id
 
+func mergeBlockNumber*(id: NetworkId): BlockNumber =
+  let cfg = chainConfigForNetwork(id)
+  if cfg.posBlock.isSome:
+    cfg.posBlock.value()
+  elif cfg.mergeNetsplitBlock.isSome:
+    cfg.mergeNetsplitBlock.value()
+  else:
+    BlockNumber(0)
+
 func networkParams*(id: NetworkId): NetworkParams =
   try:
     NetworkParams(
@@ -659,17 +668,6 @@ func `==`*(a, b: Genesis): bool =
   if a.isNil and not b.isNil: return false
   if not a.isNil and b.isNil: return false
   a[] == b[]
-
-func mergeBlockNumber*(networkId: NetworkId): BlockNumber =
-  ## Returns the first PoS block number for networks with a known merge block,
-  ## or 0 for post-merge-only networks.
-  let cfg = chainConfigForNetwork(networkId)
-  if cfg.posBlock.isSome:
-    cfg.posBlock.value()
-  elif cfg.mergeNetsplitBlock.isSome:
-    cfg.mergeNetsplitBlock.value()
-  else:
-    BlockNumber(0)
 
 func `==`*(a, b: ChainConfig): bool =
   if a.isNil and b.isNil: return true
