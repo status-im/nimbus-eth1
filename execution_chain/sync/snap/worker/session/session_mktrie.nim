@@ -237,7 +237,7 @@ template mkStoTrie(
         break body
 
       # Store `(key,node)` list on trie
-      session.db.putStoKvt(acc.accHash, mpt.kvPairs()).isOkOr:
+      session.db.putStoKvt(acc.accHash, mpt.knPairs()).isOkOr:
         error info & ": cannot store slot on trie", stateInx, nStates, root,
           distance, peerID, accKey, stoRoot, nProof=w.proof.len,
           iv=(w.start,w.limit).to(float).toStr, nSlot=w.slot.len, `error`=error
@@ -347,9 +347,9 @@ template mkTrieImpl(
     # of the merged accounts MPT on disk. The result is a list of dangling
     # links that will be resolved by merging the validated package.
     let
-      kvPairs = mpt.kvPairs()                       # list of `(key,node)` pairs
+      knPairs = mpt.knPairs()                       # list of `(key,node)` pairs
       matches = block:                              # resolved dngl link keys
-        let rc = session.matchDnglAccLinks kvPairs.mapIt(it[0])
+        let rc = session.matchDnglAccLinks knPairs.mapIt(it[0])
         if rc.isErr:
           error info & ": Error accessing dangling links",
             stateInx, nStates, distance, root, error=rc.error
@@ -362,7 +362,7 @@ template mkTrieImpl(
           rc.value
 
     # Merge `(key,node)` list on the accounts MPT on disk.
-    session.db.putAccKvt(kvPairs).isOkOr:
+    session.db.putAccKvt(knPairs).isOkOr:
       error info & ": Cannot store accounts on trie", stateInx, nStates, root,
         distance, peerID, nAccounts, nProof, iv, `error`=error
       bodyRc = Opt.some(ETrieError)

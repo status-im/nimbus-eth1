@@ -85,7 +85,8 @@ type
     dangling*: seq[(HashKey,StopNodeRef)]           ## dangling link keys
     leafs*: seq[(Hash32,LeafNodeRef)]               ## leaf pairs `(path,node)`
 
-  KvPair* = tuple
+  KnPair* = tuple
+    ## Key-node pair
     key: seq[byte]
     node: seq[byte]
 
@@ -101,6 +102,12 @@ type
     key: seq[byte]
     path: Hash32
     payload: seq[byte]
+
+  KkpTriple* = tuple
+    ## Variant of `KppTripler`
+    key1: seq[byte]
+    key2: seq[byte]
+    path: seq[byte]
 
 # ------------------------------------------------------------------------------
 # Public helpers
