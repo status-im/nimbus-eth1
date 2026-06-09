@@ -101,10 +101,6 @@ proc getProof*(
 proc headerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[Header, string] =
   api.chain.headerFromTag(blockTag)
 
-proc headerFromTag(api: ServerAPIRef, blockTag: Opt[BlockTag]): Result[Header, string] =
-  let blockId = blockTag.get(defaultTag)
-  api.headerFromTag(blockId)
-
 proc frameFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[CoreDbTxRef, string] =
   # TODO avoid loading full header if hash is given
 

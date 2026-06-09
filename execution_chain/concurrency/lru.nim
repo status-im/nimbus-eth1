@@ -8,10 +8,10 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-# The LruCache type below is a modified copy of the minilru cache. It is not 
-# thread-safe but has been modified to remove the usage of the seq type and 
-# replaces the nodes and buckets lists with UncheckedArrays which are allocated 
-# on the shared heap. This is needed to support multi-threaded use cases when 
+# The LruCache type below is a modified copy of the minilru cache. It is not
+# thread-safe but has been modified to remove the usage of the seq type and
+# replaces the nodes and buckets lists with UncheckedArrays which are allocated
+# on the shared heap. This is needed to support multi-threaded use cases when
 # using refc.
 
 {.push raises: [].}
@@ -263,7 +263,7 @@ proc grow[K, V](v: var LruCache[K, V], newSize: uint32) =
     return
 
   if newSize.int > v.nodesAllocatedLen:
-    # Grow by powers of two, but cap at capacity + 1 so the allocation never 
+    # Grow by powers of two, but cap at capacity + 1 so the allocation never
     # exceeds what the cache can actually use.
     let allocSize = min(nextPowerOfTwo(newSize.int), v.capacity + 1)
     if v.nodes.isNil():
@@ -337,57 +337,58 @@ proc `=copy`[K, V](
 ) {.error: "Copying LruCache is forbidden".} =
   discard
 
-iterator mruIndices(s: LruCache): uint32 =
-  if s.nodesLen > 0:
-    var pos = s.nodes[0].next
-    for i in 0 ..< s.used:
-      yield pos
-      pos = s.nodes[pos].next
+when false:
+  iterator mruIndices(s: LruCache): uint32 =
+    if s.nodesLen > 0:
+      var pos = s.nodes[0].next
+      for i in 0 ..< s.used:
+        yield pos
+        pos = s.nodes[pos].next
+  
+  iterator keys(s: var LruCache): lent LruCache.K =
+    ## Keys in MRU order - starting from the front with the item that was most
+    ## recently added or accessed.
+    for index in s.mruIndices:
+      yield s.nodes[index].key
 
-iterator keys(s: var LruCache): lent LruCache.K =
-  ## Keys in MRU order - starting from the front with the item that was most
-  ## recently added or accessed.
-  for index in s.mruIndices:
-    yield s.nodes[index].key
+  iterator values(s: var LruCache, mru: static bool = false): lent LruCache.V =
+    ## Values in MRU order - starting from the front with the item that was most
+    ## recently added or accessed.
+    for index in s.mruIndices:
+      yield s.nodes[index].value
 
-iterator values(s: var LruCache, mru: static bool = false): lent LruCache.V =
-  ## Values in MRU order - starting from the front with the item that was most
-  ## recently added or accessed.
-  for index in s.mruIndices:
-    yield s.nodes[index].value
+  iterator mvalues(s: var LruCache, mru: static bool = false): var LruCache.V =
+    ## Values in MRU order - starting from the front with the item that was most
+    ## recently added or accessed.
+    for index in s.mruIndices:
+      yield s.nodes[index].value
 
-iterator mvalues(s: var LruCache, mru: static bool = false): var LruCache.V =
-  ## Values in MRU order - starting from the front with the item that was most
-  ## recently added or accessed.
-  for index in s.mruIndices:
-    yield s.nodes[index].value
+  iterator pairs(
+      s: var LruCache, mru: static bool = false
+  ): (lent LruCache.K, lent LruCache.V) =
+    ## Key/value pairs in MRU order - starting from the front with the item that
+    ## was most recently added or accessed.
+    for index in s.mruIndices:
+      yield (s.nodes[index].key, s.nodes[index].value)
 
-iterator pairs(
-    s: var LruCache, mru: static bool = false
-): (lent LruCache.K, lent LruCache.V) =
-  ## Key/value pairs in MRU order - starting from the front with the item that
-  ## was most recently added or accessed.
-  for index in s.mruIndices:
-    yield (s.nodes[index].key, s.nodes[index].value)
+  iterator mpairs(
+      s: var LruCache, mru: static bool = false
+  ): (lent LruCache.K, var LruCache.V) =
+    ## Key/value pairs in MRU order - starting from the front with the item that
+    ## was most recently added or accessed.
+    for index in s.mruIndices:
+      yield (s.nodes[index].key, s.nodes[index].value)
 
-iterator mpairs(
-    s: var LruCache, mru: static bool = false
-): (lent LruCache.K, var LruCache.V) =
-  ## Key/value pairs in MRU order - starting from the front with the item that
-  ## was most recently added or accessed.
-  for index in s.mruIndices:
-    yield (s.nodes[index].key, s.nodes[index].value)
-
-template len(s: var LruCache): int =
-  int(s.used)
-
+  template `capacity=`(s: var LruCache, c: int) =
+    ## Update the capacity (but don't reallocate the currenty cache). If the
+    ## capacity is smaller than the currently allocated size, it will be ignored.
+    s.capacity = c
+    
 template capacity(s: var LruCache): int =
   s.capacity
 
-template `capacity=`(s: var LruCache, c: int) =
-  ## Update the capacity (but don't reallocate the currenty cache). If the
-  ## capacity is smaller than the currently allocated size, it will be ignored.
-  s.capacity = c
+template len(s: var LruCache): int =
+  int(s.used)
 
 template contains(s: var LruCache, subhash: uint32, key: auto): bool =
   s.used > 0 and s.tableBucket(subhash, key).isSome()
@@ -588,9 +589,9 @@ template put(s: var LruCache, key: auto, value: auto) =
 # correlation between shard and bucket placement.
 #
 # This sharded implementation performs badly for the single threaded scenario
-# so as a temporary workaround we use a case object and based on the threadSafe 
-# flag, branch to using the non-thread safe LruCache (when threadSafe = false) 
-# without the locking. Eventually we will implement a more optimised ConcurrentLruCache 
+# so as a temporary workaround we use a case object and based on the threadSafe
+# flag, branch to using the non-thread safe LruCache (when threadSafe = false)
+# without the locking. Eventually we will implement a more optimised ConcurrentLruCache
 # that performs better for both scenarios using the same code paths.
 
 const

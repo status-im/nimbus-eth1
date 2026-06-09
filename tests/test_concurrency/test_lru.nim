@@ -20,6 +20,19 @@ privateAccess(LruCache)
 privateAccess(ConcurrentLruCache)
 privateAccess(Shard)
 
+iterator mruIndices(s: LruCache): uint32 =
+  if s.nodesLen > 0:
+    var pos = s.nodes[0].next
+    for i in 0 ..< s.used:
+      yield pos
+      pos = s.nodes[pos].next
+
+iterator keys(s: var LruCache): lent LruCache.K =
+  ## Keys in MRU order - starting from the front with the item that was most
+  ## recently added or accessed.
+  for index in s.mruIndices:
+    yield s.nodes[index].key
+
 func allocatedNodes[K, V](s: LruCache[K, V]): int =
   s.nodesAllocatedLen
 
