@@ -35,13 +35,13 @@ type
     EOtherError                                     # any other error
 
   OnDanglingCB* =
-      proc(root: Hash32; key, path: openArray[byte]) {.gcsafe, raises:[].}
+      proc(base: Hash32; key, path: openArray[byte]) {.gcsafe, raises:[].}
     ## Closure function to perform bespoke actions when a dangling link or
     ## a completely missing sub-MPT is found.
 
   TravNotifyCB* =
       proc(att: AttType,
-           root: Hash32, path, key, data: openArray[byte], depth: int
+           base: Hash32, path, key, data: openArray[byte], depth: int
         ) {.gcsafe, raises: [].}
     ## Internal closure function used as call back when analysing an MPT.
     ## This function is involved whenever there is something *interesting*

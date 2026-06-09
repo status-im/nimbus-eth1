@@ -30,7 +30,7 @@ logScope:
 
 type
   WalkTrieRecCB = proc(
-    trd: TravDescRef, att: AttType, root: Hash32,
+    trd: TravDescRef, att: AttType, base: Hash32,
     path, key, data: openArray[byte], depth: int
       ) {.gcsafe, raises: [].}
 

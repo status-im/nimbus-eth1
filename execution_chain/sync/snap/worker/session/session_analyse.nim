@@ -29,7 +29,7 @@ template sessionAnalyseFullTrie*(
   ## Traverse the MPT and register all dangling links in the `*DanglKvt`
   ## tables.
   ##
-  ctx.sessionAnalyseTrieIter(info)
+  ctx.sessionAnalyseTrieRecur(info)
 
 # ------------------------------------------------------------------------------
 # End

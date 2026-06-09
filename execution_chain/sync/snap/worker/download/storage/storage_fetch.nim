@@ -83,7 +83,7 @@ template fetchStorage*(
     stateRoot: StateRoot;                           # DB state
     accounts: seq[ItemKey];                         # List of accounts
     ivReq = ItemKeyRangeMax;                        # Range (if any)
-      ): FetchStorageResult =
+      ): auto =
   ## Async/template
   ##
   ## Fetch storage slots from the network.
@@ -125,7 +125,7 @@ template fetchStorage*(
       elapsed = rc.value.elapsed
     else:
       elapsed = rc.error.elapsed
-      bodyRc = FetchStorageResult.err(rc.error.excp)
+      bodyRc = typeof(bodyRc).err(rc.error.excp)
       block evalError:
         case rc.error.excp:
         of EGeneric:
@@ -247,7 +247,7 @@ template fetchStorage*(
       buddy.registerPeerError(stateRoot)
       trace recvInfo & " not available", peer, root, nReqAcc, reqSto,
         nReqSto, ela, syncState, nErrors=buddy.nErrors.fetch.sto
-      bodyRc = FetchStorageResult.err(ENoDataAvailable)
+      bodyRc = typeof(bodyRc).err(ENoDataAvailable)
       break body                                  # return err()
 
     elif ivReq != ItemKeyRangeMax:
@@ -287,7 +287,7 @@ template fetchStorage*(
       nRespSlots=($stoData.slots.len & "+" & $(0 < stoData.slot.len).ord),
       nRespProof, ela, syncState, nErrors=buddy.nErrors.fetch.sto
 
-    bodyRc = FetchStorageResult.ok(stoData)
+    bodyRc = typeof(bodyRc).ok(stoData)
 
   bodyRc
 

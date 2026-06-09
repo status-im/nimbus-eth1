@@ -51,10 +51,6 @@ proc start*(buddy: SnapPeerRef; info: static[string]): bool =
     peer {.inject,used.} = $buddy.peer              # logging only
     ctx = buddy.ctx
 
-  if not ctx.pool.seenData and buddy.peerID in ctx.pool.failedPeers:
-    debug info & ": Useless peer already tried", peer
-    return false
-
   if not buddy.startSyncPeer():
     debug info & ": Failed", peer
     return false
