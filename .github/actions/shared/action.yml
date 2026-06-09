@@ -37,14 +37,15 @@ runs:
     - name: Windows missing wmic workaround
       if: runner.os == 'Windows'
       shell: powershell
+      id: wmic
       run: |
         $freeSpace = Get-PSDrive C | Select-Object Name, @{Name="Used(GB)";Expression={"{0:N2}" -f ($_.Used/1GB)}}, @{Name="Free(GB)";Expression={"{0:N2}" -f ($_.Free/1GB)}}, @{Name="Total(GB)";Expression={"{0:N2}" -f (($_.Used+$_.Free)/1GB)}}
         $memory = Get-CimInstance Win32_OperatingSystem
         $totalMemoryGB = [Math]::Round($memory.TotalVisibleMemorySize / 1KB / 1024, 2)
         $freeMemoryGB = [Math]::Round($memory.FreePhysicalMemory / 1KB / 1024, 2)
-        "FREE_SPACE=$freeSpace" >> $env:GITHUB_ENV
-        "PHYSICAL_MEMORY=$totalMemoryGB" >> $env:GITHUB_ENV
-        "FREE_MEMORY=$freeMemoryGB" >> $env:GITHUB_ENV
+        "FREE_SPACE=$freeSpace" >> $env:GITHUB_OUTPUT
+        "PHYSICAL_MEMORY=$totalMemoryGB" >> $env:GITHUB_OUTPUT
+        "FREE_MEMORY=$freeMemoryGB" >> $env:GITHUB_OUTPUT
 
     - name: Derive environment variables
       shell: bash
@@ -78,9 +79,9 @@ runs:
           ncpu=${NUMBER_OF_PROCESSORS}
           CD=${PWD:1:1}
           echo "Number of cores: ${NUMBER_OF_PROCESSORS}"
-          echo "Physical memory: ${PHYSICAL_MEMORY} GB"
-          echo "Free memory: ${FREE_MEMORY} GB"
-          echo -e "Partition sizes: ${FREE_SPACE}"
+          echo "Physical memory: ${{ steps.wmic.outputs.PHYSICAL_MEMORY }} GB"
+          echo "Free memory: ${{ steps.wmic.outputs.FREE_MEMORY }} GB"
+          echo -e "Partition sizes:\n${{ steps.wmic.outputs.FREE_SPACE }}"
           ;;
         esac
         [[ -z "$ncpu" || $ncpu -le 0 ]] && ncpu=1
