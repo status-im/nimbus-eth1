@@ -197,11 +197,13 @@ type
     peerID: Hash
     error: string
 
-  WalkKvt* = tuple
+  KvPair = tuple
+    ## Local helper structure
     key: seq[byte]
     value: seq[byte]
 
-  WalkKkvt* = tuple
+  KkvTriple = tuple
+    ## Local helper structure
     key1: seq[byte]
     key2: seq[byte]
     value: seq[byte]
@@ -367,7 +369,7 @@ proc rDel(adb: RocksDbReadWriteRef; key: openArray[byte]): DelResult =
     return err(info & error)
   ok()
 
-proc kvPair(rit: RocksIteratorRef): WalkKvt =
+proc kvPair(rit: RocksIteratorRef): KvPair =
   ## This helper must be provided as a separate function outside of any walk
   ## iterator, below. Otherwise the NIM compiler (version 2.2.4) might abort
   ## with an error
@@ -382,37 +384,12 @@ proc kvPair(rit: RocksIteratorRef): WalkKvt =
   rit.next()
   kv
 
-proc splitKey65(key: openArray[byte]; key1, key2: var Hash32): bool =
-  ## Another helper kludge needed to avoid errors with the Debian NIM compiler
-  ## (version 2.2.10) errors like
-  ##
-  ## [..]/@msync@ssnap.nim.c:2809:46: error: duplicate member ‘key141’
-  ## 2809 |         tySequence__6H5Oh5UUvVCLiakt9aTwtUQ* key141;
-  ##      |                                              ^~~~~~
-  ## [..]/mpt/mpt_assembly.nim: In function \
-  ##           ‘_ZN9runDaemon26runDaemon__syncZsnap_\
-  ##            u1992E3refIN7futures26FutureBasecolonObjectType_EE’:
-  ## [..]/mpt/mpt_assembly.nim:487:89: error: request for member \
-  ##           ‘Sup’ in something not a structure or union
-  ##  487 |       if key.len == 0:
-  ##      |                                       ^
-  ## ..
-  ## Error: execution of an external compiler program 'gcc -c  -w -fmax-errors=3 \
-  ##          -fno-strict-aliasing -flto=auto -finline-limit=100000 -pthread \
-  ##          -funwind-tables [..]' failed with exit code:
-  ##
-  if key.len == 65:
-    (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
-    (addr (key2.distinctBase)[0]).copyMem(addr key[33], 32)
-    return true
-  # false
-
-iterator colWalkAtLeast1(adb: RocksDbRef, pfx: openArray[byte]): WalkKvt =
+iterator colWalkAtLeast1(adb: RocksDbRef, pfx: openArray[byte]): KvPair =
   ## Walk over key-value pairs of the database for keys with the search
   ## head starting at postion `pfx[]`. The `pfx` argument must be length
   ## at least 1.
   ##
-  const info = "mpt/colWalkKvt1: "
+  const info = "mpt/colWalkAtLeast1: "
   block walkBody:
     let rit = adb.openIterator().valueOr:
       when extraTraceMessages:
@@ -432,12 +409,12 @@ iterator colWalkAtLeast1(adb: RocksDbRef, pfx: openArray[byte]): WalkKvt =
       if 1 < key.len:
         yield (key[1..^1], value)
 
-iterator colWalkAtLeast33(adb: RocksDbRef, pfx: openArray[byte]): WalkKkvt =
+iterator colWalkAtLeast33(adb: RocksDbRef, pfx: openArray[byte]): KkvTriple =
   ## Walk over key-value pairs of the database for keys with the search
   ## head starting at postion `pfx[]`. The `pfx` argument must be length
   ## at least 33.
   ##
-  const info = "mpt/colWalkKvt33: "
+  const info = "mpt/colWalkAtLeast33: "
   block walkBody:
     let rit = adb.openIterator().valueOr:
       when extraTraceMessages:
@@ -513,7 +490,9 @@ iterator colWalk65(
         continue
       if col.ord.byte != key[0]:
         break
-      if key.splitKey65(key1, key2):
+      if key.len == 65:
+        (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
+        (addr (key2.distinctBase)[0]).copyMem(addr key[33], 32)
         yield (move key1, move key2, value)
 
 iterator colWalk97(
@@ -1086,7 +1065,7 @@ iterator walkByteCode*(
         continue
     yield (root, start2, w.limit, w.codes, w.peerID, "")
 
-# -------------
+# ========================
 
 proc hasAccKvt*(db: MptAsmRef; key: openArray[byte]): BoolResult =
   var data = db.getAtMost33(AccKvt, key).valueOr:
@@ -1098,12 +1077,9 @@ proc getAccKvt*(db: MptAsmRef; key: openArray[byte]): BlobResult =
     return err(error)
   ok(move data)
 
-proc putAccKvt*(
-    db: MptAsmRef;
-    nodes: openArray[(seq[byte],seq[byte])];
-      ): PutResult =
-  for (key,val) in nodes:
-    db.putAtMost33(AccKvt, key, val).isOkOr:
+proc putAccKvt*(db: MptAsmRef; nodes: openArray[KnPair]): PutResult =
+  for w in nodes:
+    db.putAtMost33(AccKvt, w.key, w.node).isOkOr:
       return err(error)
   ok()
 
@@ -1116,9 +1092,9 @@ proc clearAccKvt*(db: MptAsmRef): DelResult =
       return err(error)
   ok()
 
-iterator walkAccKvt*(db: MptAsmRef): WalkKvt =
-  for (key,value) in db.adb.colWalkAtLeast1 @[byte AccKvt]:
-    yield (key,value)
+iterator walkAccKvt*(db: MptAsmRef): KnPair =
+  for (key,node) in db.adb.colWalkAtLeast1 @[byte AccKvt]:
+    yield (key,node)
 
 # -------------
 
@@ -1143,10 +1119,10 @@ proc getStoKvt*(
 proc putStoKvt*(
     db: MptAsmRef;
     acc: Hash32;
-    nodes: openArray[(seq[byte],seq[byte])];
+    nodes: openArray[KnPair];
       ): PutResult =
-  for (key,val) in nodes:
-    db.putAtMost65(StoKvt, acc, key, val).isOkOr:
+  for w in nodes:
+    db.putAtMost65(StoKvt, acc, w.key, w.node).isOkOr:
       return err(error)
   ok()
 
@@ -1169,14 +1145,14 @@ proc clearStoKvt*(db: MptAsmRef): DelResult =
       return err(error)
   ok()
 
-iterator walkStoKvt*(db: MptAsmRef, acc: Hash32): WalkKkvt =
-  for (key1, key2, data) in db.adb.colWalkAtLeast33 key33(StoKvt, acc):
-    yield (key1, key2, data)
+iterator walkStoKvt*(db: MptAsmRef, acc: Hash32): KkpTriple =
+  for (key1, key2, path) in db.adb.colWalkAtLeast33 key33(StoKvt, acc):
+    yield (key1, key2, path)
 
-iterator walkStoKvt*(db: MptAsmRef): WalkKkvt =
-  for (key,data) in db.adb.colWalkAtLeast1 @[byte StoKvt]:
+iterator walkStoKvt*(db: MptAsmRef): KkpTriple =
+  for (key,path) in db.adb.colWalkAtLeast1 @[byte StoKvt]:
     if 32 < key.len:
-      yield (key[0..31], key[32..^1], data)
+      yield (key[0..31], key[32..^1], path)
 
 # -------------
 
@@ -1202,7 +1178,7 @@ proc clearCodeKvt*(db: MptAsmRef): DelResult =
       return err(error)
   ok()
 
-iterator walkCodeKvt*(db: MptAsmRef): WalkKvt =
+iterator walkCodeKvt*(db: MptAsmRef): KvPair =
   for (key,value) in db.adb.colWalkAtLeast1 @[byte CodeKvt]:
     yield (key,value)
 
@@ -1221,12 +1197,9 @@ proc getAccDnglKvt*(db: MptAsmRef; key: openArray[byte]): BlobResult =
 proc putAccDnglKvt*(db: MptAsmRef; key, data: openArray[byte]): PutResult =
   db.putAtMost33(AccDnglKvt, key, data)
 
-proc putAccDnglKvt*(
-    db: MptAsmRef;
-    kvp: openArray[(seq[byte],seq[byte])];
-      ): PutResult =
-  for (key,data) in kvp:
-    db.putAtMost33(AccDnglKvt, key, data).isOkOr:
+proc putAccDnglKvt*(db: MptAsmRef, kvp: openArray[KpPair]): PutResult =
+  for w in kvp:
+    db.putAtMost33(AccDnglKvt, w.key, w.path).isOkOr:
       return err(error)
   ok()
 
@@ -1245,9 +1218,9 @@ proc clearAccDnglKvt*(db: MptAsmRef): DelResult =
       return err(error)
   ok()
 
-iterator walkAccDnglKvt*(db: MptAsmRef): WalkKvt =
-  for (key,data) in db.adb.colWalkAtLeast1 @[byte AccDnglKvt]:
-    yield (key,data)
+iterator walkAccDnglKvt*(db: MptAsmRef): KpPair =
+  for (key,path) in db.adb.colWalkAtLeast1 @[byte AccDnglKvt]:
+    yield (key,path)
 
 # -------------
 
@@ -1280,10 +1253,10 @@ proc putStoDnglKvt*(
 proc putStoDnglKvt*(
     db: MptAsmRef;
     acc: Hash32;
-    kvp: openArray[(seq[byte],seq[byte])];
+    kvp: openArray[KpPair];
       ): PutResult =
-  for (key,data) in kvp:
-    db.putAtMost65(StoDnglKvt, acc, key, data).isOkOr:
+  for w in kvp:
+    db.putAtMost65(StoDnglKvt, acc, w.key, w.path).isOkOr:
       return err(error)
   ok()
 
@@ -1316,14 +1289,14 @@ proc clearStoDnglKvt*(db: MptAsmRef): DelResult =
       return err(error)
   ok()
 
-iterator walkStoDnglKvt*(db: MptAsmRef, acc: Hash32): WalkKkvt =
-  for (key1, key2, data) in db.adb.colWalkAtLeast33 key33(StoDnglKvt, acc):
-    yield (key1, key2, data)
+iterator walkStoDnglKvt*(db: MptAsmRef, acc: Hash32): KkpTriple =
+  for (key1, key2, path) in db.adb.colWalkAtLeast33 key33(StoDnglKvt, acc):
+    yield (key1, key2, path)
 
-iterator walkStoDnglKvt*(db: MptAsmRef): WalkKkvt =
-  for (key,data) in db.adb.colWalkAtLeast1 @[byte StoDnglKvt]:
+iterator walkStoDnglKvt*(db: MptAsmRef): KkpTriple =
+  for (key,path) in db.adb.colWalkAtLeast1 @[byte StoDnglKvt]:
     if 32 < key.len:
-      yield (key[0..31], key[32..^1], data)
+      yield (key[0..31], key[32..^1], path)
 
 # -------------
 
@@ -1342,10 +1315,10 @@ proc putCodeDnglKvt*(db: MptAsmRef; key, data: openArray[byte]): PutResult =
 
 proc putCodeDnglKvt*(
     db: MptAsmRef;
-    kvp: openArray[(seq[byte],seq[byte])];
+    kvp: openArray[KpPair];
       ): PutResult =
-  for (key, data) in kvp:
-    db.putAtMost33(CodeDnglKvt, key, data).isOkOr:
+  for w in kvp:
+    db.putAtMost33(CodeDnglKvt, w.key, w.path).isOkOr:
       return err(error)
   ok()
 
@@ -1364,9 +1337,9 @@ proc clearCodeDnglKvt*(db: MptAsmRef): DelResult =
       return err(error)
   ok()
 
-iterator walkCodeDnglKvt*(db: MptAsmRef): WalkKvt =
-  for (key, data) in db.adb.colWalkAtLeast1 @[byte CodeDnglKvt]:
-    yield (key, data)
+iterator walkCodeDnglKvt*(db: MptAsmRef): KpPair =
+  for (key, path) in db.adb.colWalkAtLeast1 @[byte CodeDnglKvt]:
+    yield (key, path)
 
 # ------------------------------------------------------------------------------
 # End

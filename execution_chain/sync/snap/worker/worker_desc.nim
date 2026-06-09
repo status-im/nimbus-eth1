@@ -11,7 +11,6 @@
 {.push raises:[].}
 
 import
-  std/sets,
   pkg/[chronos, eth/common, minilru, results],
   ../../../core/chain,
   ../../sync_desc,
@@ -103,11 +102,10 @@ type
     stateDB*: StateDbRef             ## Incomplete states DB
     baseDir*: string                 ## Path for assembly database
     mptAsm*: MptAsmRef               ## Assembly cache database
+    pivot*: Opt[StateRoot]           ## Pivot root for analysys, healing, etc.
 
     # Info, debugging, and error handling stuff
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one
-    failedPeers*: HashSet[Hash]      ## Detect dead end sync by collecting peers
-    seenData*: bool                  ## Set `true` if data were fetched, already
     lastPeerSeen*: chronos.Moment    ## Time when the last peer was abandoned
     lastNoPeersLog*: chronos.Moment  ## Control messages about missing peers
     lastSyncUpdLog*: chronos.Moment  ## Control update messages

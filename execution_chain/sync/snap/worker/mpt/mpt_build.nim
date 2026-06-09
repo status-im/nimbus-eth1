@@ -380,10 +380,7 @@ template reKeyWalkerSub(stop: StopNodeRef) =
 
 # ---------
 
-template exportTrieLeaf(
-    node: LeafNodeRef;
-    queue: seq[(seq[byte],seq[byte])];              # used as `var` parameter
-      ): bool =
+template exportTrieLeaf(node: LeafNodeRef, queue: seq[KnPair]): bool =
   let ok =
     if node.lfData.len == 0:
       false
@@ -392,10 +389,7 @@ template exportTrieLeaf(
       true
   ok
 
-proc exportTrieBranch(
-    node: BranchNodeRef;
-    queue: var seq[(seq[byte],seq[byte])];
-      ): bool =
+proc exportTrieBranch(node: BranchNodeRef, queue: var seq[KnPair]): bool =
   ## Recursively export rlp encodings
   ##
   if node.brData.len == 0:                          # pure extenson node?
@@ -432,10 +426,7 @@ proc exportTrieBranch(
       return false
   true
 
-template exportTrie(
-    node: NodeRef;
-    queue: var seq[(seq[byte],seq[byte])];
-      ): bool =
+template exportTrie(node: NodeRef, queue: var seq[KnPair]): bool =
   ## Recursively export rlp encodings
   let ok =
     if node.kind == Branch: BranchNodeRef(node).exportTrieBranch(queue)
@@ -714,11 +705,11 @@ proc validate*[T: SnapAccount|StorageItem](
       return ok(db)
   err()
 
-proc kvPairs*(db: NodeTrieRef): seq[KvPair] =
+proc knPairs*(db: NodeTrieRef): seq[KnPair] =
   ## Export partial MPT. If an error occurs, no data is exported.
   ##
   if db.isComplete():
-    var data = seq[KvPair].default
+    var data = seq[KnPair].default
     if db.root.exportTrie(data):
       return data
   # @[]
