@@ -16,6 +16,7 @@ import
   eth/common/[headers_rlp, blocks_rlp, receipts_rlp],
   ../../execution_chain/history/e2store_formats/era1,
   ../../execution_chain/history/block_proofs/historical_hashes_accumulator,
+  ../../execution_chain/common/chain_config,
   ../../execution_chain/db/core_db,
   ../../execution_chain/db/core_db/persistent,
   ../../execution_chain/db/opts,

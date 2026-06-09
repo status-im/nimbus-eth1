@@ -54,7 +54,7 @@ proc getEreFile(db: EreDB, era: Era): Result[EreFile, string] =
   db.files.add(f)
   ok(f)
 
-proc init*(
+proc new*(
     T: type EreDB, path: string, network: string, mergeBlockNumber: uint64
 ): Result[EreDB, string] =
   var filenames: Table[uint64, string]
