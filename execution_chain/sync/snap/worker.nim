@@ -54,7 +54,7 @@ proc stop*(buddy: SnapPeerRef; info: static[string]) =
   let ctx = buddy.ctx
   if SnapReady < ctx.pool.syncState:
     debug info & ": Release peer", peer=buddy.peer,
-      nSyncPeers=(ctx.nSyncPeers()-1), syncState=buddy.syncState
+      nSyncPeers=(ctx.nSyncPeers()-1), syncState=($buddy.syncState)
   buddy.stopSyncPeer()
 
 # ------------------------------------------------------------------------------
@@ -89,7 +89,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
     case ctx.updateSyncState(info):                 # set next state
     of SnapReady:
       chronicles.info info & ": Waiting for CL to send updates",
-        syncState=ctx.syncState, nSyncPeers=ctx.nSyncPeers()
+        syncState=($ctx.syncState), nSyncPeers=ctx.nSyncPeers()
       bodyRc = daemonWaitReadyInterval              # take a nap
 
     of SnapDownload:
@@ -104,14 +104,14 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
         break body                                  # shutdown?
 
       debug info & ": Partial MPT assembled",
-        ela=ela.toStr, syncState=ctx.syncState
+        ela=ela.toStr, syncState=($ctx.syncState)
 
     of SnapAnalyse:
       let stats {.used.} = ctx.sessionAnalyseFullTrie(info).valueOr:
         break body                                  # shutdown?
 
       debug info & ": Partial MPT analysed",
-        ela=stats.ela.toStr, syncState=ctx.syncState
+        ela=stats.ela.toStr, syncState=($ctx.syncState)
 
     of SnapHealing:
       bodyRc = daemonWaitHealingInterval            # healing is run by peers
@@ -125,7 +125,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
 
     of SnapStop:
       warn info & ": Stop snap sync not implemented yet, lingering",
-        syncState=ctx.syncState
+        syncState=($ctx.syncState)
       bodyRc = chronos.seconds(30)
 
     of SnapIdle, SnapResume:

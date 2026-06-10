@@ -59,7 +59,7 @@ template downloadAccountsAndStorage*(buddy: SnapPeerRef, info: static[string]) =
 
     trace info & ": start downloading", peer,
       notAvailMax=buddy.only.notAvailMax,
-      syncState=buddy.syncState, nSyncPeers=ctx.nSyncPeers()
+      syncState=($buddy.syncState), nSyncPeers=ctx.nSyncPeers()
 
     # Run `download()` for available states, the order of which is
     # determined by the following criteria with deacening priority
@@ -106,7 +106,7 @@ template downloadAccountsAndStorage*(buddy: SnapPeerRef, info: static[string]) =
       buddy.ctrl.stopped = true
 
     trace info & ": downloaded states", peer,
-      notAvailMax=buddy.only.notAvailMax, syncState=buddy.syncState,
+      notAvailMax=buddy.only.notAvailMax, syncState=($buddy.syncState),
       nStatesOk, nStatesIdle, nSyncPeers=ctx.nSyncPeers()
 
   discard                                           # visual alignment

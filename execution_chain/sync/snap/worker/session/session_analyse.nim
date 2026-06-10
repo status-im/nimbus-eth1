@@ -30,7 +30,7 @@ template sessionAnalyseFullTrie*(
     ctx: SnapCtxRef;
     info: static[string];
       ): auto =
-  ## Async template
+  ## Async template (when using iterative analyser)
   ##
   ## Traverse the MPT and register all dangling links in the `*DanglKvt`
   ## tables.

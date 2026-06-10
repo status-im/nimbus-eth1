@@ -41,7 +41,7 @@ template accountDownload*(
 
       ivReq = sdb.fetchAccountRange(state).valueOr:
         trace info & ": No more unpocessed", peer, `state`=state.toStr(sdb),
-          notAvailMax=buddy.only.notAvailMax, syncState=buddy.syncState
+          notAvailMax=buddy.only.notAvailMax, syncState=($buddy.syncState)
         bodyRc = typeof(bodyRc).err(ECompleted)
         break body                                  # return err()
 
@@ -71,7 +71,7 @@ template accountDownload*(
         sdb.rollbackAccountRange(state, ivReq)      # registry roll back
         debug info & ": Caching accounts failed", peer, root,
           notAvailMax=buddy.only.notAvailMax, iv, nAccounts, nProof,
-          syncState=buddy.syncState
+          syncState=($buddy.syncState)
         bodyRc = typeof(bodyRc).err(ECacheError)
         break body                                  # return err()
 
@@ -81,7 +81,7 @@ template accountDownload*(
       now, Untagged, coverage=state.accountsCov256).isOkOr:
         sdb.rollbackAccountRange(state, ivReq)      # registry roll back
         debug info & ": Updating state failed", peer, root,
-          syncState=buddy.syncState
+          syncState=($buddy.syncState)
         bodyRc = typeof(bodyRc).err(ECacheError)
         break body                                  # return err()
 
@@ -90,7 +90,7 @@ template accountDownload*(
 
     debug info & ": Accounts downloaded and cached", peer, root,
       notAvailMax=buddy.only.notAvailMax, iv, nAccounts, nProof,
-      syncState=buddy.syncState
+      syncState=($buddy.syncState)
 
   bodyRc
 

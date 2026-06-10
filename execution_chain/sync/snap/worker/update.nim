@@ -124,6 +124,7 @@ proc updateSyncContractsFinish*(ctx: SnapCtxRef) =
   ## Force `contracts-finish` syncer state
   ctx.pool.syncState = SnapContractsFinish
 
+
 proc updateSyncState*(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## Update internal state when needed
   ##
@@ -251,7 +252,7 @@ template updateFcuRoot*(buddy: SnapPeerRef, info: static[string]) =
         buddy.only.finRoot = Opt.none(StateRoot)
         trace info & ":fin root too old, disbanding", peer,
           root=rc.value.rootStr, notAvailMax=buddy.only.notAvailMax,
-          syncState=buddy.syncState, nSyncPeers=ctx.nSyncPeers()
+          syncState=($buddy.syncState), nSyncPeers=ctx.nSyncPeers()
       else:
         break body                                  # done, nothing to do
 

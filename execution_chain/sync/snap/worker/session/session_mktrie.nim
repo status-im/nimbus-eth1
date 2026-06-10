@@ -488,7 +488,7 @@ template sessionMkTrie*(ctx: SnapCtxRef; info: static[string]): auto =
     chronicles.info info & ": Done all states", nStates, pivot=pivot.toStr,
       coverage=session.fullCov.totalRatio.pcStr, elapsed=elapsed.toStr
 
-    # Publish pivot for MPT analysis anf healing
+    # Publish pivot for MPT analysis and healing
     ctx.pool.pivot = Opt.some(pivot.root)
     # End block `body`
 

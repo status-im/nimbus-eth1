@@ -277,7 +277,8 @@ template storageDownload*(
 
       if state.hasStorage:
         trace info & ": Storage download", peer,
-          `state`=state.toStr(buddy.ctx.pool.stateDB), syncState=buddy.syncState
+          `state`=state.toStr(buddy.ctx.pool.stateDB),
+          syncState=($buddy.syncState)
 
         while not buddy.ctrl.stopped and
               state.hasStorage and
