@@ -38,6 +38,9 @@ type
     ## structure is used as a self-cleaning hash set. The data argument is
     ## unused.
 
+  AccPathSet* = LruCache[seq[byte],uint8]
+    ## Ditto for account paths as used in the healing protocol.
+
   # -------------------
 
   SnapError* = tuple
@@ -69,6 +72,10 @@ type
     packet: ByteCodesPacket
     elapsed: Duration
 
+  FetchTrieNodesData* = tuple
+    packet: TrieNodesPacket
+    elapsed: Duration
+
   Ticker* =
     proc(ctx: SnapCtxRef) {.gcsafe, raises: [].}
       ## Some function that is invoked regularly
@@ -85,7 +92,8 @@ type
   PeerFirstFetchReq* = object
     ## Register fetch request. This is intended to avoid sending the same (or
     ## similar) fetch request again from the same peer that sent it previously.
-    stateRoot*: StateRootSet         ## Account fetch (per state root)
+    stateRoot*: StateRootSet         ## Accounts fetch (per state root)
+    accPath*: AccPathSet             ## Trie nodes fetch (per account path)
 
   SnapPeerData* = object
     ## Local descriptor data extension
