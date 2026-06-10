@@ -42,7 +42,8 @@ jobs:
               "^peer.*": 1,
               "^update.*": 1,
               "^rlp.*": 1,
-              "^dist.*": 1
+              "^dist.*": 1,
+              "^txpool.*": 1,
             }
           
 #jobs:
