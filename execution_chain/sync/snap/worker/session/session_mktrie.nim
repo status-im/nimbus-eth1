@@ -20,6 +20,9 @@ import
 declareGauge nec_snap_merged_mpt_coverage, "" &
   "Factor of accumulated account ranges covered when assembling MPT"
 
+const
+  UnconditionallyClearCache = false or true
+
 type
   RecoveryStatus = enum
     NewAssembly
@@ -258,56 +261,6 @@ template mkStoTrie(
 
   bodyRc
 
-template mkCodesList(
-    session: MkTrieSession;                         # used as var parameter
-    info: static[string];
-      ): Opt[ErrorType] =
-  ## Async/template
-  ##
-  var bodyRc = Opt.none(ErrorType)
-  block body:
-    # Some shortcuts
-    template state: auto = session.state
-    template stateInx: auto = session.stateInx
-    template nStates: auto = session.nStates
-    template distance: auto = session.distance
-    template accData: auto = session.accData
-
-    let
-      accMin = accData.accounts[0].accHash.to(ItemKey)
-      accMax = accData.accounts[^1].accHash.to(ItemKey)
-
-      root {.inject,used.} = state.toStr            # logging only
-
-    # Find all available `CodeHash` keys
-    var found: HashSet[CodeHash]
-    for w in session.db.walkByteCode(session.accData.root, accMin):
-      if accMax < w.limit:
-        break
-
-      # Print keep alive messages and allow thread switch
-      bodyRc = session.sessionTicker(info):
-        trace info & ": Processing code lists ..", stateInx, nStates, root,
-          distance
-      if bodyRc.isSome():
-        break body
-
-      for (key,val) in w.codes:
-        let hash = val.distinctBase.keccak256
-        if hash != Hash32(key):
-          error info & ": Code key mismatch", stateInx, nStates, root,
-            distance, key=key.toStr, expected=hash.toStr,
-            nData=val.to(seq[byte]).len
-
-        session.db.putCodeKvt(key,val).isOkOr:
-          error info & ": Cannot store on DB code table", stateInx, nStates,
-            root, distance, key=key.toStr, nData=val.to(seq[byte]).len,
-            `error`=error
-          continue
-        found.incl key
-
-  bodyRc
-
 template mkTrieImpl(
     session: MkTrieSession;                         # used as var parameter
     info: static[string];
@@ -390,12 +343,6 @@ template mkTrieImpl(
               bodyRc = Opt.some(value)              # ..otherwise ignore for now
               break body
 
-      # Process code list
-      session.mkCodesList(info).isErrOr():
-        if value == ECancelledError:                # check for shutdown..
-          bodyRc = Opt.some(value)                  # ..otherwise ignore for now
-          break body
-
     # Some accounting for merged accounts ranges
     session.updateCoverageMetrics()                 # full coverage metrics
 
@@ -462,6 +409,11 @@ template sessionMkTrie*(ctx: SnapCtxRef; info: static[string]): auto =
 
     # Sort states by its distance from pivot, smallest distance first
     byDist.sort proc(x,y: WalkStateData): int = cmp(x.dist pivot,y.dist pivot)
+
+    # FIXME -- begin (will go away) ------------------------------------------
+    when UnconditionallyClearCache:
+      byDist[0].tag = Untagged                      # => restart from scratch
+    # FIXME -- end (will go away) --------------------------------------------
 
     # If necessary, update state data record pretending the cache is empty if
     # the pivot state tag has changed. Otherwise proceed with an interrupted

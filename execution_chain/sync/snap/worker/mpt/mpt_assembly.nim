@@ -22,13 +22,14 @@
 ##
 ## No column families are used, here.
 ##
-## Key/value storage formats by column type:
+## Key/value download packet formats
+## ---------------------------------
 ##
-## * StateData:
+## * State context data:
 ##   + key33: <col, root>
 ##   + value: <hash, number, touch, tag, coverage>
 ##   where
-##   + col:      `Accounts`
+##   + col:      `StateData`
 ##   + root:     `StateRoot`
 ##   + hash:     `BlockHash`
 ##   + number:   `BlockNumber`
@@ -48,11 +49,11 @@
 ##   + proof:    `seq[ProofNode]`
 ##   + peerID:   `Hash`
 ##
-## * StoSlot:
+## * Storage slots:
 ##   + key97: <col, root, account, start>
 ##   + value: <limit, slot, proof, peerID>
 ##   where
-##   + col:      `Accounts`
+##   + col:      `StoSlot`
 ##   + root:     `StateRoot`
 ##   * account:  `ItemKey`
 ##   + start:    `ItemKey`
@@ -61,16 +62,58 @@
 ##   + proof:    `seq[ProofNode]`
 ##   + peerID:   `Hash`
 ##
-## * ByteCode:
-##   + key65: <col, root, start>
-##   + value: <limit, code, peerID>
+## Key/value MPT formats
+## ---------------------
+##
+## * Accounts MPT:
+##   + key33: <col, key>
+##   + value: node
 ##   where
-##   + col:      `ByteCodes`
-##   + root:     `StateRoot`
-##   * start:    `ItemKey`
-##   + limit:    `ItemKey`
-##   + codes:    `seq[(CodeHash,CodeItem)]`
-##   + peerID:   `Hash`
+##   + col:       `AccKvt`
+##   + key:       `seq[byte]`
+##   * node:      `seq[byte]`
+##
+## * Storage MPTs:
+##   + key65: <col, acc-path, key>
+##   + value: node
+##   where
+##   + col:       `StoKvt`
+##   + acc-path:  `Hash32`
+##   + key:       `seq[byte]`
+##   * node:      `seq[byte]`
+##
+## * Contract codes table:
+##   + key33: <col, key>
+##   + value: contract
+##   where
+##   + col:       `CodeKvt`
+##   + key:       `seq[byte]`
+##   * contract:  `seq[byte]`
+##
+## * Dangling account links table:
+##   + key33: <col, key>
+##   + value: dngl-path
+##   where
+##   + col:       `AccDnglKvt`
+##   + key:       `seq[byte]`
+##   * dngl-path: `seq[byte]`
+##
+## * Dangling storage slot links table:
+##   + key65: <col, acc-path, key>
+##   + value: dngl-path
+##   where
+##   + col:       `StoDnglKvt`
+##   + acc-path:  `Hash32`
+##   + key:       `seq[byte]`
+##   * dngl-path: `seq[byte]`
+##
+## * Missing contract codes table:
+##   + key33: <col, key>
+##   + value: path
+##   where
+##   + col:       `CodeMissKvt`
+##   + key:       `seq[byte]`
+##   * path:      `seq[byte]`
 ##
 ## Additional assumptions:
 ##
@@ -123,7 +166,6 @@ type
     StateData                                       # root -> block hash/number
     Accounts                                        # as fetched from network
     StoSlot                                         # ditto
-    ByteCode                                        # ditto
 
     AccKvt                                          # hash -> node mapping
     StoKvt                                          # hash -> node mapping
@@ -157,11 +199,6 @@ type
     proof: seq[ProofNode]
     peerID: Hash
 
-  DecodedByteCode* = tuple
-    limit: ItemKey
-    codes: seq[(CodeHash,CodeItem)]
-    peerID: Hash
-
 
   WalkStateData* = tuple
     root: StateRoot
@@ -191,21 +228,14 @@ type
     peerID: Hash
     error: string
 
-  WalkByteCode* = tuple
-    root: StateRoot
-    start: ItemKey                                  # account coverage
-    limit: ItemKey                                  # account coverage
-    codes: seq[(CodeHash,CodeItem)]
-    peerID: Hash
-    error: string
 
   KvPair = tuple
-    ## Local helper structure
+    ## Internal helper structure
     key: seq[byte]
     value: seq[byte]
 
   KkvTriple = tuple
-    ## Local helper structure
+    ## Internal helper structure
     key1: seq[byte]
     key2: seq[byte]
     value: seq[byte]
@@ -263,20 +293,6 @@ func decodeStoSlot(data: seq[byte]): Result[DecodedStoSlot,string] =
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(move res)
 
-func decodeByteCode(data: seq[byte]): Result[DecodedByteCode,string] =
-  const info = "decodeByteCode"
-  var
-    rd = data.rlpFromBytes
-    res: DecodedByteCode
-  try:
-    rd.tryEnterList()
-    res.limit = rd.read(UInt256).to(ItemKey)
-    res.codes = rd.read(seq[(CodeHash,CodeItem)])
-    res.peerID = cast[Hash](rd.read uint)
-  except RlpError as e:
-    return err(info & ": " & $e.name & "(" & e.msg & ")")
-  ok(move res)
-
 
 template encodeStateData(
     hash: BlockHash;
@@ -316,17 +332,6 @@ template encodeStoSlot(
   wrt.append limit.to(UInt256)
   wrt.append slot
   wrt.append proof
-  wrt.append cast[uint](peerID)
-  wrt.finish()
-
-template encodeByteCode(
-    limit: ItemKey;
-    codes: seq[(CodeHash,CodeItem)];
-    peerID: Hash;
-      ): untyped =
-  var wrt = initRlpList 3
-  wrt.append limit.to(UInt256)
-  wrt.append codes
   wrt.append cast[uint](peerID)
   wrt.finish()
 
@@ -1021,52 +1026,6 @@ iterator walkStoSlot*(
         continue
     yield (root, acc, start, w.limit, w.slot, w.proof, w.peerID, "")
 
-# -------------
-
-proc getByteCode*(
-    db: MptAsmRef;
-    root: StateRoot;
-    start: ItemKey;
-    limit: ItemKey;
-      ): Result[DecodedByteCode,string] =
-  let data = db.get65(ByteCode, root, start).valueOr:
-    return err(error)
-  data.decodeByteCode()
-
-proc putByteCode*(
-    db: MptAsmRef;
-    root: StateRoot;
-    start: ItemKey;
-    limit: ItemKey;
-    codes: seq[(CodeHash,CodeItem)];
-    peerID: Hash;
-      ): PutResult =
-  db.put65(ByteCode, root, start, encodeByteCode(limit, codes, peerID))
-
-proc delByteCode*(db: MptAsmRef; root: StateRoot; start: ItemKey): DelResult =
-  db.del65(Accounts, root, start)
-
-iterator walkByteCode*(
-    db: MptAsmRef;
-    root: StateRoot;
-    start: ItemKey;
-      ): WalkByteCode =
-  ## Variant of `walkAccounts()` for fixed `root` and `start` account
-  let startHash = start.to(Hash32)
-  for (key1,key2,value) in db.adb.colWalk65 ByteCode.key65(root,startHash):
-    if StateRoot(key1) != root:
-      break
-    let
-      start2 = key2.to(ItemKey)
-      w = value.decodeByteCode().valueOr:
-        var oops: WalkByteCode
-        oops.root = root
-        oops.start = start2
-        oops.error = error
-        yield oops
-        continue
-    yield (root, start2, w.limit, w.codes, w.peerID, "")
-
 # ========================
 
 proc hasAccKvt*(db: MptAsmRef; key: openArray[byte]): BoolResult =
@@ -1196,8 +1155,8 @@ proc getAccDnglKvt*(db: MptAsmRef; key: openArray[byte]): BlobResult =
     return err(error)
   ok(move data)
 
-proc putAccDnglKvt*(db: MptAsmRef; key, data: openArray[byte]): PutResult =
-  db.putAtMost33(AccDnglKvt, key, data)
+proc putAccDnglKvt*(db: MptAsmRef; key, path: openArray[byte]): PutResult =
+  db.putAtMost33(AccDnglKvt, key, path)
 
 proc putAccDnglKvt*(db: MptAsmRef, kvp: openArray[KpPair]): PutResult =
   for w in kvp:
@@ -1312,8 +1271,8 @@ proc getCodeMissKvt*(db: MptAsmRef; key: openArray[byte]): BlobResult =
     return err(error)
   ok(move data)
 
-proc putCodeMissKvt*(db: MptAsmRef; key, data: openArray[byte]): PutResult =
-  db.putAtMost33(CodeMissKvt, key, data)
+proc putCodeMissKvt*(db: MptAsmRef; key, path: openArray[byte]): PutResult =
+  db.putAtMost33(CodeMissKvt, key, path)
 
 proc putCodeMissKvt*(
     db: MptAsmRef;

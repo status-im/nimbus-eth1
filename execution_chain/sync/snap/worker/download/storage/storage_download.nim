@@ -275,17 +275,17 @@ template storageDownload*(
          .mapIt( (it.accHash.to(ItemKey),
                   it.accBody.storageRoot.to(Hash32).to(StoreRoot)) )
 
-      if state.hasCodeOrStorage:
+      if state.hasStorage:
         trace info & ": Storage download", peer,
           `state`=state.toStr(buddy.ctx.pool.stateDB), syncState=buddy.syncState
 
         while not buddy.ctrl.stopped and
-              state.hasCodeOrStorage and
+              state.hasStorage and
               buddy.downloadFromQueue(state, info):
           continue
 
-        trace info & ": Storage done", peer, root=state.rootStr,
-          todo=state.hasCodeOrStorage, syncState=buddy.syncState
+        trace info & ": Storage downloaded", peer, root=state.rootStr,
+          completed=(not state.hasStorage), syncState=($buddy.syncState)
 
   discard                                           # visual alignment
 
