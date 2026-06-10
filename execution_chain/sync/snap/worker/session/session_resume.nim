@@ -51,9 +51,14 @@ template storageRecover(
     session: ResumeSession;                         # used as var parameter
     acc: SnapAccount;
     info: static[string];
-      ): Opt[void] =
+      ): auto =
   var bodyRc = Opt[void].err()
   block body:
+    # Some shortcuts
+    template state: auto = session.state
+    template stateInx: auto = session.stateInx
+    template nStates: auto = session.nStates
+
     let storageRoot = acc.accBody.storageRoot
     if not storageRoot.isEmpty:
       let
@@ -61,21 +66,20 @@ template storageRecover(
         accKey = acc.accHash.to(ItemKey)
         left = ItemKeyRangeSet.init ItemKeyRangeMax
 
-      for w in session.db.walkStoSlot(session.state.stateRoot, accKey):
+      for w in session.db.walkStoSlot(state.stateRoot, accKey):
         discard left.reduce(w.start, w.limit)
 
         # Print keep alive messages and allow thread switch
         let rc = session.sessionTicker(info):
-          debug info & ": Recovering states cache..",
-            stateInx=session.stateInx, nStates=session.nStates,
-            root=session.state.rootStr
+          debug info & ": Recovering storage slots..", stateInx, nStates,
+            root=state.rootStr
         if rc.isSome():
           break body
 
       # Get the least point in the range it there is any. Unprocessed storage
       # was filled up consecutively with increasing min point entry.
       left.ge().isErrOr:
-        session.state.register(
+        state.register(
           accKey, stoRoot, ItemKeyRange.new(value.minPt, high(ItemKey)))
       # End `if storageRoot`
 
@@ -133,19 +137,23 @@ template sessionResume*(
 
     session.init(ctx, byTouch.len)                # init session environment
 
+    # Some shortcuts
+    template state: auto = session.state
+    template stateInx: auto = session.stateInx
+    template nStates: auto = session.nStates
+
     # Sort states, order by latest time stamp first
     byTouch.sort proc(x,y: WalkStateData): int = cmp(y.touch,x.touch)
 
     # Walk over states, latest time stamp first. Collect the lastest some
     # non-empty states (see `stateDbCapacity`) for import into the state
     # DB cache.
-    for n in 0 ..< byTouch.len:
+    for n in 0 ..< nStates:
       let p = byTouch[n]
-      session.stateInx = n + 1                      # ranges `1`..`byTouch.len`
+      stateInx = n                                  # ranges `0`..`nStates-1`
 
       if 0 < p.error.len:
-        chronicles.info info & ": Bad state record ignored",
-          stateInx=session.stateInx, nStates=session.nStates
+        chronicles.info info & ": Bad state record ignored", stateInx, nStates
         continue
 
       if p.coverage.isZero:
@@ -156,8 +164,7 @@ template sessionResume*(
         continue
 
       if not intro:                                 # print message once, only
-        chronicles.info info & ": Resuming download session",
-          nStates=session.nStates
+        chronicles.info info & ": Resuming download session", nStates
         intro = true
 
       if p.tag != Untagged:                         # ignore assembled data
@@ -173,30 +180,30 @@ template sessionResume*(
     # that order, current time stamps (aka `Moment.now()`) can be used when
     # importing into the state DB cache. This way, the oldest-first order
     # will be preserved on the cache.
-    session.nStates = tchInx.len
-    for n in (tchInx.len - 1).countdown(0):
+    nStates = tchInx.len                            # update index range
+    for n in (nStates - 1).countdown(0):
       let p = byTouch[tchInx[n]]
-      session.stateInx = tchInx.len - n             # ranges `1`..`tchInx.len`
+      stateInx = tchInx.len - n - 1                 # ranges `0`..`nStates-1`
 
       # Create record on state DB cache
-      session.state = sdb.register(p.root, p.hash, p.number, info)
+      state = sdb.register(p.root, p.hash, p.number, info)
 
       # Walk account for the current state root
       for w in adb.walkAccounts(p.root):
         if 0 < w.error.len:
           chronicles.info info & ": Bad accounts record ignored",
-            error=w.error, root=session.state.rootStr
+            error=w.error, root=state.rootStr
           continue
 
         # Print keep alive messages and allow thread switch
         let rc = session.sessionTicker(info):
-          debug info & ": Recovering states cache..", stateInx=session.stateInx,
-            nStates=session.nStates, root=session.state.rootStr
+          debug info & ": Recovering accounts..", stateInx, nStates,
+            root=state.rootStr
         if rc.isSome():
           break body                                # system termination?
 
         # Register seen accounts in state record
-        sdb.setAccountRange(session.state, w.start, w.limit, Moment.now())
+        sdb.setAccountRange(state, w.start, w.limit, Moment.now())
 
         # Register unprocessed storages per account
         for acc in w.accounts:

@@ -47,7 +47,7 @@ template sessionTicker*(
     # And allow task switching, sometimes
     if status.napAt < Moment.now():
       try:
-        await sleepAsync threadSwitchTimeSlot
+        await sleepAsync ZeroDuration
       except CancelledError as e:
         chronicles.error info & ": Async wait cancelled",
           error=($e.name & "(" & e.msg & ")")
@@ -66,18 +66,44 @@ template sessionTicker*(
 
 # ----------------
 
-proc countTrieNodes*(
+proc countKvtNodes*(
     ctx: SnapCtxRef;
-      ): tuple[nAccNodes, nStoNodes: uint64, ela: Duration] =
+      ): tuple[nAccNodes, nStoNodes, nCodes: uint64, ela: Duration] =
   ## Simple stored nodes counter
   let
     db = ctx.pool.mptAsm
     start = Moment.now()
-  for _ in db.walkAccTrie():
+  for _ in db.walkAccKvt():
     result.nAccNodes.inc
-  for _ in db.walkStoTrie():
+  for _ in db.walkStoKvt():
     result.nStoNodes.inc
+  for _ in db.walkCodeKvt():
+    result.nCodes.inc
   result.ela = Moment.now() - start
+
+proc countDnglLinks*(
+    ctx: SnapCtxRef;
+      ): tuple[nAccDngl, nStoDngl, nCodeMiss: uint64, ela: Duration] =
+  ## Simple stored nodes counter
+  let
+    db = ctx.pool.mptAsm
+    start = Moment.now()
+  for _ in db.walkAccDnglKvt():
+    result.nAccDngl.inc
+  for _ in db.walkStoDnglKvt():
+    result.nStoDngl.inc
+  for _ in db.walkCodeDnglKvt():
+    result.nCodeMiss.inc
+  result.ela = Moment.now() - start
+
+func decodeAccount*(pyl: openArray[byte]): Opt[Account] =
+  ## Decode RLP encoded `Account`
+  try:
+    var acc = rlp.decode(pyl, Account)
+    return ok(move acc)
+  except RlpError:
+    discard
+  err()
 
 # ------------------------------------------------------------------------------
 # End

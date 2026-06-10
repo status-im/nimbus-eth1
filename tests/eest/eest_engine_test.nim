@@ -31,5 +31,6 @@ runEESTSuite(
   eestReleases,
   skipFiles,
   baseFolder,
-  eestType
+  eestType,
+  parallelEnabled = true
 )

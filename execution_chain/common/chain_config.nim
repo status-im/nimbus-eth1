@@ -643,6 +643,15 @@ func name*(id: NetworkId): string =
   else:
     $id
 
+func mergeBlockNumber*(id: NetworkId): BlockNumber =
+  let cfg = chainConfigForNetwork(id)
+  if cfg.posBlock.isSome:
+    cfg.posBlock.value()
+  elif cfg.mergeNetsplitBlock.isSome:
+    cfg.mergeNetsplitBlock.value()
+  else:
+    BlockNumber(0)
+
 func networkParams*(id: NetworkId): NetworkParams =
   try:
     NetworkParams(

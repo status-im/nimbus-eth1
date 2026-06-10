@@ -47,19 +47,6 @@ const skipFiles = [
   # Witness codes mismatch -> codes optimisation: implemented in
   # https://github.com/status-im/nimbus-eth1/pull/4099
   "witness_codes_create_same_hash_then_read.json",
-
-  # Failing cases from zkevm@v0.4.0 -- gasUsed mismatch, likely because of missing
-  # https://github.com/ethereum/execution-specs/commit/bcb8dc5f8934f6d03e09413309a63740fff22e71
-  # zkevm@v0.4.0 is based on bal@v7.1.0 and not on bal@v7.1.1
-  "double_auth.json",
-  "delegation_clearing.json",
-  "delegation_clearing_and_set.json",
-  "delegation_clearing_tx_to.json",
-  "valid_tx_invalid_auth_signature.json",
-  "blobhash_opcode_contexts_tx_types.json",
-  "blobhash_gas_cost.json",
-  "tx_to_beacon_root_contract.json",
-  "bal_7702_null_address_delegation_no_code_change.json",
 ]
 
 runEESTSuite(
@@ -67,5 +54,6 @@ runEESTSuite(
   skipFiles,
   baseFolder,
   eestType,
-  statelessEnabled = true
+  statelessEnabled = true,
+  parallelEnabled = false
 )

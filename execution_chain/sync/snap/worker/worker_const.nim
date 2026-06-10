@@ -63,17 +63,14 @@ const
     ## Some waiting time at the end of the daemon task which always lingers
     ## in the background. This one is for non-`SnapDownload` states.
 
-  threadLogTimeLimit* = chronos.seconds(35)
+  threadLogTimeLimit* = chronos.seconds(45)
     ## Print intermediate messages when running a time consuming task
-
-  threadSwitchTimeSlot* = chronos.nanoseconds(1)
-    ## Nano-sleep to allows pseudo/async thread switch
 
   threadSwitchRunLimit* = chronos.seconds(25)
     ## Force a thread switch after that time running continuously. This
     ## applies mainly for DB building and analysing sessions.
 
-  accuAccountsCovMin* = 1.05
+  accuAccountsCovMin* = 5.0
     ## In absence of a completed pivot state, the syncer will stop downloading
     ## if all accounts are covered at least by this factor. Then trie-assembly
     ## and healing can take place.

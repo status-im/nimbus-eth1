@@ -83,7 +83,7 @@ template fetchCodes*(
     buddy: SnapPeerRef;
     stateRoot: StateRoot;                           # DB state (error handling)
     codesReq: seq[CodeHash];                        # List of code keys
-      ): FetchCodesResult =
+      ): auto =
   ## Async/template
   ##
   ## Fetch byte codes from the network.
@@ -112,7 +112,7 @@ template fetchCodes*(
       elapsed = rc.value.elapsed
     else:
       elapsed = rc.error.elapsed
-      bodyRc = FetchCodesResult.err(rc.error.excp)
+      bodyRc = typeof(bodyRc).err(rc.error.excp)
       block evalError:
         case rc.error.excp:
         of EGeneric:
@@ -158,7 +158,7 @@ template fetchCodes*(
       buddy.registerPeerError(stateRoot)
       trace recvInfo & " not available", peer, root, first, nReqCodes,
         nRespCodes, ela, syncState, nErrors=buddy.nErrors.fetch.cde
-      bodyRc = FetchCodesResult.err(ENoDataAvailable)
+      bodyRc = typeof(bodyRc).err(ENoDataAvailable)
       break body                                  # return err()
 
     # Ban an overly slow peer for a while when observed consecutively.
@@ -171,7 +171,7 @@ template fetchCodes*(
     trace recvInfo, peer, root, first, nReqCodes, nRespCodes,
       ela, syncState, nErrors=buddy.nErrors.fetch.cde
 
-    bodyRc = FetchCodesResult.ok(rc.value.packet)
+    bodyRc = typeof(bodyRc).ok(rc.value.packet)
 
   bodyRc
 

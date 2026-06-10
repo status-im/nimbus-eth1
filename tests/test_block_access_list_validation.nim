@@ -124,6 +124,16 @@ suite "Block access list validation":
     bal[0].storageChanges.insert bal[0].storageChanges[0] # duplicate the first item
     check bal.validate(bal[].computeBlockAccessListHash()).isErr()
 
+  test "Slot with no changes should fail validation":
+    builder.addStorageWrite(address1, slot1, 1, 1.u256)
+    builder.addStorageWrite(address1, slot2, 2, 2.u256)
+    builder.addStorageWrite(address1, slot3, 3, 3.u256)
+
+    var bal = builder.buildBlockAccessList()
+    check bal.validate(bal[].computeBlockAccessListHash()).isOk()
+    bal[0].storageChanges[0].changes.setLen(0) # remove all changes for the slot
+    check bal.validate(bal[].computeBlockAccessListHash()).isErr()
+
   test "Slot changes out of order should fail validation":
     builder.addStorageWrite(address1, slot1, 0, 0.u256)
     builder.addStorageWrite(address1, slot1, 1, 1.u256)

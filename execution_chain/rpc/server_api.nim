@@ -101,10 +101,6 @@ proc getProof*(
 proc headerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[Header, string] =
   api.chain.headerFromTag(blockTag)
 
-proc headerFromTag(api: ServerAPIRef, blockTag: Opt[BlockTag]): Result[Header, string] =
-  let blockId = blockTag.get(defaultTag)
-  api.headerFromTag(blockId)
-
 proc frameFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[CoreDbTxRef, string] =
   # TODO avoid loading full header if hash is given
 
@@ -774,7 +770,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
       return api.com.getEthConfigObject(api.chain, currentFork, nextFork, lastFork)
 
-    proc eth_getBlockAccessList(quantityTag: BlockTag): Opt[BlockAccessList] {.raises: [ValueError].} =
+    proc eth_getBlockAccessList(quantityTag: BlockTag): BlockAccessList {.raises: [ValueError].} =
       ## Returns the block access list by block number, tag or block hash.
       ##
 
@@ -782,16 +778,16 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         raise newException(ValueError, error)
 
       if not api.com.isAmsterdamOrLater(header.timestamp):
-        raise newException(ValueError, "Block access list not available for pre-Amsterdam blocks")
+        raise newException(ValueError, "Resource not found")
 
       let bal = api.chain.getBlockAccessList(header.computeRlpHash()).valueOr:
         if header.number <= api.chain.resolvedFinNumber:
           # This block is finalized so if the bal is missing it means it was pruned.
           raise newException(ValueError, "Pruned history unavailable")
         else:
-          return Opt.none(BlockAccessList)
+          raise newException(ValueError, "Resource not found")
 
-      Opt.some(bal)
+      bal
 
     proc eth_feeHistory(
       blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: Opt[seq[float64]]

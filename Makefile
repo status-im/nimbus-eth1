@@ -64,10 +64,12 @@ EXCLUDED_NIM_PACKAGES := 	\
 
 # debugging tools + testing tools
 TOOLS := \
-	test_tools_build \
-	nrpc
+	nrpc \
+	nimbus_history_exporter \
+	test_tools_build
 TOOLS_DIRS := \
 	nrpc \
+	tools/nimbus_history_exporter \
 	tests
 # comma-separated values for the "clean" target
 TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
@@ -85,30 +87,18 @@ PORTAL_TOOLS_DIRS := \
 	portal/bridge/history \
 	portal/tools
 # comma-separated values for the "clean" target
-PORTAL_TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(FLUFFY_TOOLS))
+PORTAL_TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(PORTAL_TOOLS))
 
 # Namespaced variables to avoid conflicts with other makefiles
 OS_PLATFORM = $(shell $(CC) -dumpmachine)
-ifneq (, $(findstring darwin, $(OS_PLATFORM)))
-  SHAREDLIBEXT = dylib
-  STATICLIBEXT = a
-else
-ifneq (, $(findstring mingw, $(OS_PLATFORM))$(findstring cygwin, $(OS_PLATFORM))$(findstring msys, $(OS_PLATFORM)))
-  SHAREDLIBEXT = dll
-  STATICLIBEXT = lib
-else
-  SHAREDLIBEXT = so
-  STATICLIBEXT = a
-endif
-endif
 
 VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 ifneq (, $(findstring darwin, $(OS_PLATFORM)))
-  VERIFPROXY_LDFLAGS = -framework Security
-else ifneq (, $(findstring mingw, $(OS_PLATFORM))$(findstring windows-gnu, $(OS_PLATFORM)))
-  VERIFPROXY_LDFLAGS = -lbcrypt -lpthread -lws2_32
+  VERIFPROXY_LDFLAGS = -lc++ -framework Security
+else ifneq (, $(findstring mingw, $(OS_PLATFORM)))
+  VERIFPROXY_LDFLAGS = -lc++ -lbcrypt -lpthread -lws2_32
 else
-  VERIFPROXY_LDFLAGS = -lm
+  VERIFPROXY_LDFLAGS = -lstdc++ -lm
 endif
 
 .PHONY: \
@@ -125,6 +115,7 @@ endif
 	nimbus_verified_proxy_test \
 	libverifproxy \
 	libverifproxy_test \
+	nimbus_verified_proxy_go_test \
 	nimbus_verified_proxy_wasm \
 	nimbus_verified_proxy_wasm_debug \
 	external_sync \
@@ -363,34 +354,46 @@ portal_bridge: | build deps
 
 # Nimbus Verified Proxy related targets
 
-# Builds the nimbus_verified_proxy
 nimbus_verified_proxy: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim c -o:build/$@ $(NIM_PARAMS) nimbus_verified_proxy/nimbus_verified_proxy.nim
 
-# builds and runs the nimbus_verified_proxy test suite
 nimbus_verified_proxy_test: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) nimbus_verified_proxy/tests/all_proxy_tests.nim
 		rm nimbus_verified_proxy/tests/all_proxy_tests
 
-# Shared library for verified proxy
-
-libverifproxy: | build deps
-	echo -e $(BUILD_MSG) "build/$@" && \
+$(VERIF_PROXY_OUT_PATH)/libverifproxy.a:
+	echo -e $(BUILD_MSG) "build/libverifproxy" && \
 		$(ENV_SCRIPT) nim c \
-		--out:$(VERIF_PROXY_OUT_PATH)/$@.$(STATICLIBEXT) \
+		--out:$@ \
 		$(NIM_PARAMS) \
 		nimbus_verified_proxy/library/verifproxy.nim
 	cp nimbus_verified_proxy/library/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
 
-libverifproxy_test: libverifproxy
+libverifproxy: | build deps
+libverifproxy: $(VERIF_PROXY_OUT_PATH)/libverifproxy.a
+
+libverifproxy_test: $(VERIF_PROXY_OUT_PATH)/libverifproxy.a
 	$(CC) -I$(VERIF_PROXY_OUT_PATH) -L$(VERIF_PROXY_OUT_PATH) \
 		-Wno-incompatible-pointer-types \
 		-o build/$@ \
 		tests/library/test_api.c \
-		-lverifproxy -lstdc++ $(VERIFPROXY_LDFLAGS)
+		-lverifproxy $(VERIFPROXY_LDFLAGS)
 	./build/$@
+
+GO_BINDINGS_DIR  := nimbus_verified_proxy/library/bindings/go
+GO_LIB_DIR       := $(GO_BINDINGS_DIR)/verifproxy/lib
+
+nimbus_verified_proxy_go_test: $(VERIF_PROXY_OUT_PATH)/libverifproxy.a
+	echo -e $(BUILD_MSG) "go test $(GO_BINDINGS_DIR)" && \
+		mkdir -p "$(GO_LIB_DIR)" && \
+		cp "$(VERIF_PROXY_OUT_PATH)/libverifproxy.a" \
+		   "$(GO_LIB_DIR)/libverifproxy.a" && \
+		cp nimbus_verified_proxy/library/verifproxy.h \
+		   "$(GO_LIB_DIR)/verifproxy.h" && \
+		cd "$(GO_BINDINGS_DIR)" && \
+		go test ./...
 
 nimbus_verified_proxy_wasm: | build deps
 	@mkdir -p $(CURDIR)/build/$@
@@ -401,7 +404,7 @@ nimbus_verified_proxy_wasm: | build deps
 		-d:disable_libbacktrace \
 		-o:"$(CURDIR)/build/$@/verifproxy_wasm.js" \
 		nimbus_verified_proxy/library/bindings/wasm/verifproxy_wasm.nim
-	cp nimbus_verified_proxy/library/bindings/wasm/wasm_glue.js $(CURDIR)/build/$@/
+	cp nimbus_verified_proxy/library/bindings/wasm/verifproxy.js $(CURDIR)/build/$@/
 
 nimbus_verified_proxy_wasm_debug: | build deps
 	@mkdir -p $(CURDIR)/build/$@
@@ -412,7 +415,7 @@ nimbus_verified_proxy_wasm_debug: | build deps
 		-d:disable_libbacktrace \
 		-o:"$(CURDIR)/build/$@/verifproxy_wasm.js" \
 		nimbus_verified_proxy/library/bindings/wasm/verifproxy_wasm.nim
-	cp nimbus_verified_proxy/library/bindings/wasm/wasm_glue.js $(CURDIR)/build/$@/
+	cp nimbus_verified_proxy/library/bindings/wasm/verifproxy.js $(CURDIR)/build/$@/
 
 # Stateless related targets
 

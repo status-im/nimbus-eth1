@@ -12,4 +12,5 @@ import
     eest_engine_test,
     eest_blockchain_test,
     eest_stateless_execution_test,
+    eest_txpool_test,
 ]

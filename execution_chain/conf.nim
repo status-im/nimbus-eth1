@@ -51,6 +51,9 @@ const
   defaultAdminListenAddress = (static parseIpAddress("127.0.0.1"))
   defaultAdminListenAddressDesc = $defaultAdminListenAddress & ", meaning local host only"
   logLevelDesc = getLogLevels()
+  defaultOptimisticStatePrefetch* = false
+  defaultBalStatePrefetch* = false
+  defaultBalStatePrefetchWorkers* = 0
 
 template defaultListenAddress(): IpAddress =
   getAutoAddress(Port(0)).toIpAddress()
@@ -95,6 +98,11 @@ type
       desc: "Directory for era archive (post-merge history)"
       defaultValueDesc: "<data-dir>/era"
       name: "era-dir" .}: Option[OutDir]
+
+    ereDirFlag* {.
+      desc: "Directory for ere archive (full execution history)"
+      defaultValueDesc: "<data-dir>/ere"
+      name: "ere-dir" .}: Option[OutDir]
 
     keyStoreDirFlag* {.
       desc: "Load one or more keystore files from this directory"
@@ -357,6 +365,27 @@ type
       defaultValue: false
       desc: "Compute state root in parallel using multiple threads"
       name: "debug-parallel-state-root".}: bool
+
+    optimisticStatePrefetch* {.
+      hidden
+      defaultValue: defaultOptimisticStatePrefetch
+      desc: "Optimistically pre-execute block transactions on background " &
+        "threads to warm DB caches"
+      name: "debug-optimistic-state-prefetch".}: bool
+
+    balStatePrefetch* {.
+      hidden
+      defaultValue: defaultBalStatePrefetch
+      desc: "Use the supplied block access list to prefetch state on " &
+        "background threads to warm DB caches"
+      name: "debug-bal-state-prefetch".}: bool
+
+    balStatePrefetchWorkers* {.
+      hidden
+      defaultValue: defaultBalStatePrefetchWorkers
+      desc: "Number of background worker tasks used for block access list " &
+        "state prefetching (0 = use number equal to the taskpool threads count)"
+      name: "debug-bal-state-prefetch-workers".}: int
 
     eagerStateRootCheck* {.
       hidden
@@ -799,6 +828,9 @@ proc era1Dir*(config: ExecutionClientConf): string =
 proc eraDir*(config: ExecutionClientConf): string =
   string config.eraDirFlag.get(OutDir config.dataDir / "era")
 
+proc ereDir*(config: ExecutionClientConf): string =
+  string config.ereDirFlag.get(OutDir config.dataDir / "ere")
+
 func udpPort*(config: ExecutionClientConf): Port =
   config.udpPortFlag.get(config.tcpPort)
 
@@ -818,6 +850,7 @@ func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
     rdbPrintStats = config.rdbPrintStats,
     maxSnapshots = config.aristoDbMaxSnapshots,
     parallelStateRootComputation = config.parallelStateRootComputation,
+    threadSafeCaches = config.optimisticStatePrefetch or config.balStatePrefetch,
     blockCacheType = config.rocksdbBlockCacheType,
   )
 

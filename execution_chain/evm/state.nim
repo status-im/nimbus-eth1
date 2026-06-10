@@ -23,7 +23,7 @@ import
 func forkDeterminationInfoForVMState(vmState: BaseVMState): ForkDeterminationInfo =
   forkDeterminationInfo(vmState.parent.number + 1, vmState.blockCtx.timestamp)
 
-func determineFork(vmState: BaseVMState): HardFork =
+func determineFork*(vmState: BaseVMState): HardFork =
   vmState.com.toHardFork(vmState.forkDeterminationInfoForVMState)
 
 proc init(

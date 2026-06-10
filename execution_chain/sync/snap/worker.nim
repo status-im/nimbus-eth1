@@ -51,10 +51,6 @@ proc start*(buddy: SnapPeerRef; info: static[string]): bool =
     peer {.inject,used.} = $buddy.peer              # logging only
     ctx = buddy.ctx
 
-  if not ctx.pool.seenData and buddy.peerID in ctx.pool.failedPeers:
-    debug info & ": Useless peer already tried", peer
-    return false
-
   if not buddy.startSyncPeer():
     debug info & ": Failed", peer
     return false
@@ -120,17 +116,15 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       let ela {.used.} = ctx.sessionMkTrie(info).valueOr:
         break body                                  # shutdown?
 
-      debug info & ": partial MPT assembled",
+      debug info & ": Partial MPT assembled",
         ela=ela.toStr, syncState=ctx.syncState
 
     of SnapAnalyse:
-      # TBD                                         # clear analytics cache
-
-      let ela {.used.} = ctx.sessionAnalyseTrie(info).valueOr:
+      let stats {.used.} = ctx.sessionAnalyseFullTrie(info).valueOr:
         break body                                  # shutdown?
 
-      debug info & ": partial MPT analysed",
-        ela=ela.toStr, syncState=ctx.syncState
+      debug info & ": Partial MPT analysed",
+        ela=stats.ela.toStr, syncState=ctx.syncState
 
     of SnapHealing:                                 # TBD ..
       warn info & ": Healing not yet implemented"

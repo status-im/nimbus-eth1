@@ -48,11 +48,15 @@ proc callParamsForTx(tx: Transaction, sender: Address,
 proc txCallEvm*(tx: Transaction,
                 sender: Address,
                 vmState: BaseVMState,
-                intrinsic: IntrinsicGas): LogResult =
+                intrinsic: IntrinsicGas,
+                discardResult: static bool = false): auto =
   let
     baseFee = vmState.blockCtx.baseFeePerGas
     call = callParamsForTx(tx, sender, vmState, baseFee, intrinsic)
-  runComputation(call, LogResult)
+  when discardResult:
+    discard runComputation(call, VoidResult)
+  else:
+    runComputation(call, LogResult)
 
 proc testCallEvm*(tx: Transaction,
                   sender: Address,

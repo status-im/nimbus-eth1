@@ -24,7 +24,7 @@ import
   ../execution_chain/core/eip4844,
   ../execution_chain/[conf, transaction, constants],
   ../execution_chain/core/tx_pool,
-  ../execution_chain/core/tx_pool/tx_desc,
+  ../execution_chain/core/tx_pool/tx_desc {.all.},
   ../execution_chain/core/pooled_txs,
   ../execution_chain/common/common,
   ../execution_chain/utils/utils,

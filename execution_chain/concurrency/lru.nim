@@ -8,15 +8,15 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-# The LruCache type below is a modified copy of the minilru cache. It is not 
-# thread-safe but has been modified to remove the usage of the seq type and 
-# replaces the nodes and buckets lists with UncheckedArrays which are allocated 
-# on the shared heap. This is needed to support multi-threaded use cases when 
+# The LruCache type below is a modified copy of the minilru cache. It is not
+# thread-safe but has been modified to remove the usage of the seq type and
+# replaces the nodes and buckets lists with UncheckedArrays which are allocated
+# on the shared heap. This is needed to support multi-threaded use cases when
 # using refc.
 
 {.push raises: [].}
 
-import std/[locks, hashes, math, typetraits], results
+import std/[atomics, cpuinfo, hashes, math, typetraits], results, ./readwritelock
 
 export hashes, results
 
@@ -108,7 +108,7 @@ template subhash(value: auto): uint32 =
   mixin hash
   hash(value).toSubhash()
 
-func moveToFront(s: var LruCache, i: uint32) =
+proc moveToFront(s: var LruCache, i: uint32) =
   let first = s.nodes[0].next
 
   if first == i:
@@ -125,7 +125,7 @@ func moveToFront(s: var LruCache, i: uint32) =
   s.nodes[0].next = i
   s.nodes[first].prev = i
 
-func moveToBack(s: var LruCache, i: uint32) =
+proc moveToBack(s: var LruCache, i: uint32) =
   let last = s.nodes[0].prev
 
   if last == i:
@@ -170,7 +170,7 @@ template psl(buckets, bucket, subhash: uint32): uint32 =
   # result is well defined
   (bucket - subhash) and mask
 
-func tablePut(s: var openArray[LruBucket], subhash, index: uint32) =
+proc tablePut(s: var openArray[LruBucket], subhash, index: uint32) =
   var
     subhash = subhash
     index = index
@@ -207,7 +207,7 @@ func tableBucket(s: LruCache, subhash: uint32, key: auto): Opt[uint32] =
       return Opt.some(bi)
     dist += 1
 
-func tableBucket(s: LruCache, key: auto): Opt[uint32] =
+template tableBucket(s: LruCache, key: auto): Opt[uint32] =
   s.tableBucket(subhash(key), key)
 
 func tableGet(s: LruCache, subhash: uint32, key: auto): Opt[uint32] =
@@ -218,10 +218,10 @@ func tableGet(s: LruCache, subhash: uint32, key: auto): Opt[uint32] =
 
     Opt.some(s.buckets[bucket].index)
 
-func tableGet(s: LruCache, key: auto): Opt[uint32] =
+template tableGet(s: LruCache, key: auto): Opt[uint32] =
   s.tableGet(subhash(key), key)
 
-func tableDel(s: var openArray[LruBucket], idx: uint32) =
+proc tableDel(s: var openArray[LruBucket], idx: uint32) =
   let mask = s.lenu32 - 1
   # Shift other items backward to fill the spot
   for bi, b in s.mpairsAt(idx):
@@ -242,7 +242,7 @@ func tableDel(s: var openArray[LruBucket], idx: uint32) =
 
     b = next[]
 
-func tableDel(s: var LruCache, subhash: uint32, key: auto): Opt[uint32] =
+proc tableDel(s: var LruCache, subhash: uint32, key: auto): Opt[uint32] =
   # Find bucket with item-to-delete
   let
     bucket = ?s.tableBucket(subhash, key)
@@ -251,26 +251,30 @@ func tableDel(s: var LruCache, subhash: uint32, key: auto): Opt[uint32] =
   toOpenArray(s.buckets, 0, s.bucketsLen - 1).tableDel(bucket)
   ok(idx)
 
-func tableDel(s: var LruCache, key: auto): Opt[uint32] =
+template tableDel(s: var LruCache, key: auto): Opt[uint32] =
   s.tableDel(subhash(key), key)
 
 proc grow[K, V](v: var LruCache[K, V], newSize: uint32) =
+  doAssert newSize.int <= v.capacity + 1
+
   let oldSize = v.nodesLen.uint32
 
   if oldSize >= newSize or newSize <= 1:
     return
 
   if newSize.int > v.nodesAllocatedLen:
-    let nextPower = nextPowerOfTwo(newSize.int)
+    # Grow by powers of two, but cap at capacity + 1 so the allocation never
+    # exceeds what the cache can actually use.
+    let allocSize = min(nextPowerOfTwo(newSize.int), v.capacity + 1)
     if v.nodes.isNil():
       v.nodes =
-        cast[ptr UncheckedArray[LruNode[K, V]]](createShared(LruNode[K, V], nextPower))
+        cast[ptr UncheckedArray[LruNode[K, V]]](createShared(LruNode[K, V], allocSize))
     else:
       v.nodes = cast[ptr UncheckedArray[LruNode[K, V]]](resizeShared(
-        v.nodes[0].addr, nextPower
+        v.nodes[0].addr, allocSize
       ))
     v.nodesLen = newSize.int
-    v.nodesAllocatedLen = nextPower
+    v.nodesAllocatedLen = allocSize
   else:
     v.nodesLen = newSize.int
 
@@ -303,12 +307,17 @@ proc grow[K, V](v: var LruCache[K, V], newSize: uint32) =
 
   v.bucketsLen = newTableSize
 
-func init[K, V](T: type LruCache[K, V], capacity: int): T =
-  ## Create a cache with the given initial capacity
+proc init[K, V](T: type LruCache[K, V], capacity: int, initialSize: int = 0): T =
+  ## Create a cache with the given capacity. If `initialSize` > 0, eagerly
+  ## allocate space for that many entries up front to reduce the number of
+  ## grow reallocations as the cache fills.
   static:
     doAssert supportsCopyMem(K), "K must be a non-GC type"
     doAssert supportsCopyMem(V), "V must be a non-GC type"
+  doAssert initialSize <= capacity, "initialSize must not exceed capacity"
   result.capacity = capacity
+  if initialSize > 0:
+    result.grow(uint32(initialSize + 1))
 
 proc dispose(s: var LruCache) =
   if s.nodesLen > 0:
@@ -328,80 +337,83 @@ proc `=copy`[K, V](
 ) {.error: "Copying LruCache is forbidden".} =
   discard
 
-iterator mruIndices(s: LruCache): uint32 =
-  if s.nodesLen > 0:
-    var pos = s.nodes[0].next
-    for i in 0 ..< s.used:
-      yield pos
-      pos = s.nodes[pos].next
+when false:
+  iterator mruIndices(s: LruCache): uint32 =
+    if s.nodesLen > 0:
+      var pos = s.nodes[0].next
+      for i in 0 ..< s.used:
+        yield pos
+        pos = s.nodes[pos].next
+  
+  iterator keys(s: var LruCache): lent LruCache.K =
+    ## Keys in MRU order - starting from the front with the item that was most
+    ## recently added or accessed.
+    for index in s.mruIndices:
+      yield s.nodes[index].key
 
-iterator keys(s: var LruCache): lent LruCache.K =
-  ## Keys in MRU order - starting from the front with the item that was most
-  ## recently added or accessed.
-  for index in s.mruIndices:
-    yield s.nodes[index].key
+  iterator values(s: var LruCache, mru: static bool = false): lent LruCache.V =
+    ## Values in MRU order - starting from the front with the item that was most
+    ## recently added or accessed.
+    for index in s.mruIndices:
+      yield s.nodes[index].value
 
-iterator values(s: var LruCache, mru: static bool = false): lent LruCache.V =
-  ## Values in MRU order - starting from the front with the item that was most
-  ## recently added or accessed.
-  for index in s.mruIndices:
-    yield s.nodes[index].value
+  iterator mvalues(s: var LruCache, mru: static bool = false): var LruCache.V =
+    ## Values in MRU order - starting from the front with the item that was most
+    ## recently added or accessed.
+    for index in s.mruIndices:
+      yield s.nodes[index].value
 
-iterator mvalues(s: var LruCache, mru: static bool = false): var LruCache.V =
-  ## Values in MRU order - starting from the front with the item that was most
-  ## recently added or accessed.
-  for index in s.mruIndices:
-    yield s.nodes[index].value
+  iterator pairs(
+      s: var LruCache, mru: static bool = false
+  ): (lent LruCache.K, lent LruCache.V) =
+    ## Key/value pairs in MRU order - starting from the front with the item that
+    ## was most recently added or accessed.
+    for index in s.mruIndices:
+      yield (s.nodes[index].key, s.nodes[index].value)
 
-iterator pairs(
-    s: var LruCache, mru: static bool = false
-): (lent LruCache.K, lent LruCache.V) =
-  ## Key/value pairs in MRU order - starting from the front with the item that
-  ## was most recently added or accessed.
-  for index in s.mruIndices:
-    yield (s.nodes[index].key, s.nodes[index].value)
+  iterator mpairs(
+      s: var LruCache, mru: static bool = false
+  ): (lent LruCache.K, var LruCache.V) =
+    ## Key/value pairs in MRU order - starting from the front with the item that
+    ## was most recently added or accessed.
+    for index in s.mruIndices:
+      yield (s.nodes[index].key, s.nodes[index].value)
 
-iterator mpairs(
-    s: var LruCache, mru: static bool = false
-): (lent LruCache.K, var LruCache.V) =
-  ## Key/value pairs in MRU order - starting from the front with the item that
-  ## was most recently added or accessed.
-  for index in s.mruIndices:
-    yield (s.nodes[index].key, s.nodes[index].value)
+  template `capacity=`(s: var LruCache, c: int) =
+    ## Update the capacity (but don't reallocate the currenty cache). If the
+    ## capacity is smaller than the currently allocated size, it will be ignored.
+    s.capacity = c
+    
+template capacity(s: var LruCache): int =
+  s.capacity
 
-func len(s: var LruCache): int =
-  result = int(s.used)
+template len(s: var LruCache): int =
+  int(s.used)
 
-func capacity(s: var LruCache): int =
-  result = s.capacity
+template contains(s: var LruCache, subhash: uint32, key: auto): bool =
+  s.used > 0 and s.tableBucket(subhash, key).isSome()
 
-func `capacity=`(s: var LruCache, c: int) =
-  ## Update the capacity (but don't reallocate the currenty cache). If the
-  ## capacity is smaller than the currently allocated size, it will be ignored.
-  s.capacity = c
-
-func contains(s: var LruCache, subhash: uint32, key: auto): bool =
-  result = s.used > 0 and s.tableBucket(subhash, key).isSome()
-
-func contains(s: var LruCache, key: auto): bool =
+template contains(s: var LruCache, key: auto): bool =
   ## Return true iff key can be found in cache - does not update item position
   s.contains(subhash(key), key)
 
-func del(s: var LruCache, subhash: uint32, key: auto) =
+proc del(s: var LruCache, subhash: uint32, key: auto): bool {.discardable.} =
+  ## Returns true if an item was actually removed from the cache.
   if s.used == 0:
-    return
+    return false
 
   let index = s.tableDel(subhash, key).valueOr:
-    return
+    return false
 
   s.moveToBack(index)
   s.used -= 1
+  true
 
-func del(s: var LruCache, key: auto) =
+template del(s: var LruCache, key: auto) =
   ## Remove item from cache, if present - does nothing if it was missing
   s.del(subhash(key), key)
 
-func pop[K, V](s: var LruCache[K, V], subhash: uint32, key: auto): Opt[V] =
+proc pop[K, V](s: var LruCache[K, V], subhash: uint32, key: auto): Opt[V] =
   if s.used == 0:
     return Opt.none(V)
 
@@ -413,16 +425,16 @@ func pop[K, V](s: var LruCache[K, V], subhash: uint32, key: auto): Opt[V] =
   s.moveToBack(index)
   s.used -= 1
 
-func pop[K, V](s: var LruCache[K, V], key: auto): Opt[V] =
+template pop[K, V](s: var LruCache[K, V], key: auto): Opt[V] =
   ## Retrieve item and remove it from LRU cache
   s.pop(subhash(key), key)
 
-func get[K, V](s: var LruCache[K, V], subhash: uint32, key: auto): Opt[V] =
+proc get[K, V](s: var LruCache[K, V], subhash: uint32, key: auto): Opt[V] =
   let index = ?s.tableGet(subhash, key)
   s.moveToFront(index)
   result = Opt.some(s.nodes[index].value)
 
-func get[K, V](s: var LruCache[K, V], key: auto): Opt[V] =
+template get[K, V](s: var LruCache[K, V], key: auto): Opt[V] =
   ## Retrieve item and move it to the front of the LRU cache
   s.get(subhash(key), key)
 
@@ -430,11 +442,11 @@ func peek[K, V](s: var LruCache[K, V], subhash: uint32, key: auto): Opt[V] =
   let index = ?s.tableGet(subhash, key)
   result = Opt.some(s.nodes[index].value)
 
-func peek[K, V](s: var LruCache[K, V], key: auto): Opt[V] =
+template peek[K, V](s: var LruCache[K, V], key: auto): Opt[V] =
   ## Retrieve item without moving it to the front
   s.peek(subhash(key), key)
 
-func update(s: var LruCache, subhash: uint32, key: auto, value: auto): bool =
+proc update(s: var LruCache, subhash: uint32, key: auto, value: auto): bool =
   let index = s.tableGet(subhash, key).valueOr:
     return false
 
@@ -442,19 +454,19 @@ func update(s: var LruCache, subhash: uint32, key: auto, value: auto): bool =
   s.moveToFront(index)
   result = true
 
-func update(s: var LruCache, key: auto, value: auto): bool =
+template update(s: var LruCache, key: auto, value: auto): bool =
   ## Update and move an existing item to the front of the LRU cache - returns
   ## true if the item was updated, false if it was not in the cache
   s.update(subhash(key), key, value)
 
-func refresh(s: var LruCache, subhash: uint32, key: auto, value: auto): bool =
+proc refresh(s: var LruCache, subhash: uint32, key: auto, value: auto): bool =
   let index = s.tableGet(subhash, key).valueOr:
     return false
 
   s.nodes[index].value = value
   result = true
 
-func refresh(s: var LruCache, key: auto, value: auto): bool =
+template refresh(s: var LruCache, key: auto, value: auto): bool =
   ## Update existing item without moving it to the front of the LRU cache -
   ## returns true if the item was refreshed, false if it was not in the cache
   s.refresh(subhash(key), key, value)
@@ -519,12 +531,50 @@ iterator putWithEvicted[K, V](
   for v in s.putWithEvicted(subhash(key), key, value):
     yield v
 
-func put(s: var LruCache, subhash: uint32, key: auto, value: auto) =
-  {.cast(noSideEffect).}:
-    for _ in s.putWithEvicted(subhash, key, value):
-      discard
+proc put(
+    s: var LruCache, subhash: uint32, key: auto, value: auto
+): bool {.discardable.} =
+  ## Returns true if `s.len` increased (a new entry occupied a free slot), false
+  ## if the put replaced an existing entry or evicted the LRU item.
+  if s.used + 1 >= s.nodesLen:
+    s.grow(uint32(min(s.capacity, targetLen(s.used)) + 1))
 
-func put(s: var LruCache, key: auto, value: auto) =
+  if s.nodesLen == 0:
+    return false # capacity was 0, nothing to do
+
+  let bucket = s.tableBucket(subhash, key)
+  if bucket.isSome():
+    # Replacing an existing item - no need to read old key/value
+    let index = s.buckets[bucket[]].index
+    s.nodes[index].value = value
+    s.moveToFront(index)
+    return false
+
+  # Inserting a new item, reusing the tail slot
+  let last = s.nodes[0].prev
+  if s.used + 1 < s.nodesLen:
+    # Below capacity - tail is a free slot (freshly grown or previously
+    # deleted), no eviction needed.
+    s.used += 1
+    result = true
+  else:
+    # At capacity - tail holds the LRU item; evict it from the lookup table.
+    let evicted = s.tableBucket(s.nodes[last].key)
+    if evicted.isSome() and s.buckets[evicted[]].index == last:
+      toOpenArray(s.buckets, 0, s.bucketsLen - 1).tableDel(evicted[])
+      # result stays false: one evicted, one inserted, net length unchanged
+    else:
+      s.used += 1
+      result = true
+
+  let node = addr s.nodes[last]
+  node[].key = key
+  node[].value = value
+
+  toOpenArray(s.buckets, 0, s.bucketsLen - 1).tablePut(subhash, last)
+  s.moveToFront(last)
+
+template put(s: var LruCache, key: auto, value: auto) =
   ## Insert or update an item in the cache, replacing the least recently used
   ## one if inserting the item would exceed capacity.
   s.put(subhash(key), key, value)
@@ -537,8 +587,18 @@ func put(s: var LruCache, key: auto, value: auto) =
 # key's hash while the LruCache inside each shard picks buckets from the low
 # bits of the (folded) hash - keeping the two bit ranges disjoint avoids any
 # correlation between shard and bucket placement.
+#
+# This sharded implementation performs badly for the single threaded scenario
+# so as a temporary workaround we use a case object and based on the threadSafe
+# flag, branch to using the non-thread safe LruCache (when threadSafe = false)
+# without the locking. Eventually we will implement a more optimised ConcurrentLruCache
+# that performs better for both scenarios using the same code paths.
 
-const CACHE_LINE_SIZE = when defined(macosx) and defined(arm64): 128 else: 64
+const
+  CACHE_LINE_SIZE = when defined(macosx) and defined(arm64): 128 else: 64
+  SAMPLE_MASK = 15'u32
+
+var tlsLruGetCounter {.threadvar.}: uint32
 
 type
   State {.pure.} = enum
@@ -547,44 +607,88 @@ type
     DISPOSED
 
   Shard[K, V] = object
-    lock {.align: CACHE_LINE_SIZE.}: Lock
+    lock {.align: CACHE_LINE_SIZE.}: ReadWriteLock
     cache: LruCache[K, V]
+    usedCount {.align: CACHE_LINE_SIZE.}: Atomic[int]
 
-  ConcurrentLruCache*[K, V; SHARD_BITS: static int = 6] = object
-    shards: array[1 shl SHARD_BITS, Shard[K, V]]
-      # 64 shards, number of shards is a power of two
+  ConcurrentLruCache*[K, V] = object
     state: State
+    case threadSafe: bool
+    of true:
+      shards: ptr UncheckedArray[Shard[K, V]]
+      shardBits: int
+    of false:
+      cache: LruCache[K, V]
 
-proc init*[K, V, SHARD_BITS](
-    lru: var ConcurrentLruCache[K, V, SHARD_BITS], capacity: int
+func defaultShardBits*(cpuCount: int): int =
+  # Default shard count of roughly 4 * cpuCount, rounded up to the nearest
+  # power of two. e.g. cpuCount = 16 -> 64 shards (shardBits = 6).
+  let target = min(max(cpuCount, 1), 16) * 4
+  var bits = 1
+  while (1 shl bits) < target:
+    inc bits
+  bits
+
+template numShards(shardBits: int): int =
+  1 shl shardBits
+
+template numShards*[K, V](lru: ConcurrentLruCache[K, V]): int =
+  if lru.threadSafe:
+    numShards(lru.shardBits)
+  else:
+    1
+
+proc init*[K, V](
+    lru: var ConcurrentLruCache[K, V],
+    capacity: int,
+    initialSize: int = 0,
+    shardBits: int = defaultShardBits(countProcessors()),
+    threadSafe: bool = true,
 ) =
   # init is not thread safe and so the caller must ensure that no other threads
   # are using the cache while initialising it.
-  const shardCount = lru.shards.len()
   static:
     doAssert supportsCopyMem(K), "K must be a non-GC type"
     doAssert supportsCopyMem(V), "V must be a non-GC type"
-    doAssert shardCount > 1
-    doAssert isPowerOfTwo(shardCount)
   doAssert lru.state == State.UNINITIALIZED
+  doAssert shardBits >= 0 and shardBits <= 30
+  doAssert initialSize <= capacity, "initialSize must not exceed capacity"
+  if not threadSafe:
+    doAssert shardBits == 0 # Enforce single shard for single threaded mode
 
-  # per-shard capacity (ceiling div); total effective capacity is shardCapacity * shardCount
-  let shardCapacity = (capacity + shardCount - 1) div shardCount
+  if threadSafe:
+    let shardCount = numShards(shardBits)
+    # per-shard capacity (ceiling div); total effective capacity is shardCapacity * shardCount
+    let shardCapacity = (capacity + shardCount - 1) div shardCount
+    let shardInitialSize = (initialSize + shardCount - 1) div shardCount
+    let shards =
+      cast[ptr UncheckedArray[Shard[K, V]]](createShared(Shard[K, V], shardCount))
+    for i in 0 ..< shardCount:
+      shards[i].cache = LruCache[K, V].init(shardCapacity, shardInitialSize)
+      shards[i].lock.init()
+      shards[i].usedCount.store(0, moRelaxed)
+    lru = ConcurrentLruCache[K, V](
+      state: State.INITIALIZED, threadSafe: true, shards: shards, shardBits: shardBits
+    )
+  else:
+    lru = ConcurrentLruCache[K, V](
+      state: State.INITIALIZED,
+      threadSafe: false,
+      cache: LruCache[K, V].init(capacity, initialSize),
+    )
 
-  for i in 0 ..< shardCount:
-    lru.shards[i].lock.initLock()
-    lru.shards[i].cache = LruCache[K, V].init(shardCapacity)
-
-  lru.state = State.INITIALIZED
-
-proc dispose*[K, V; SHARD_BITS](lru: var ConcurrentLruCache[K, V, SHARD_BITS]) =
+proc dispose*[K, V](lru: var ConcurrentLruCache[K, V]) =
   # dispose is not thread safe and so the caller must ensure that no other threads
-  # are using the cache while disposing it.  
+  # are using the cache while disposing it.
   if lru.state == State.INITIALIZED:
-    for i in 0 ..< lru.shards.len():
-      lru.shards[i].lock.deinitLock()
-      lru.shards[i].cache.dispose()
-
+    if lru.threadSafe:
+      for i in 0 ..< lru.numShards():
+        lru.shards[i].cache.dispose()
+        lru.shards[i].lock.dispose()
+      deallocShared(lru.shards)
+      lru.shards = nil
+    else:
+      lru.cache.dispose()
     lru.state = State.DISPOSED
 
 proc `=copy`[K, V](
@@ -592,105 +696,153 @@ proc `=copy`[K, V](
 ) {.error: "Copying Shard is forbidden".} =
   discard
 
-proc `=copy`*[K, V; SHARD_BITS](
-    dest: var ConcurrentLruCache[K, V, SHARD_BITS],
-    src: ConcurrentLruCache[K, V, SHARD_BITS],
+proc `=copy`*[K, V](
+    dest: var ConcurrentLruCache[K, V], src: ConcurrentLruCache[K, V]
 ) {.error: "Copying ConcurrentLruCache is forbidden".} =
   discard
 
-template toShardIdx(h: Hash, shardBits: static int): int =
-  # Pick the shard from the top SHARD_BITS bits of the hash so that the shard
+template toShardIdx(h: Hash, shardBits: int): int =
+  # Pick the shard from the top shardBits bits of the hash so that the shard
   # selection bits do not overlap with the low bits that the LruCache uses for
   # bucket selection inside the shard.
-  when sizeof(h) == sizeof(uint32):
-    int(cast[uint32](h) shr (32 - shardBits))
+  if shardBits == 0:
+    0
   else:
-    static:
-      assert sizeof(h) == sizeof(uint64)
-    int(cast[uint64](h) shr (64 - shardBits))
+    when sizeof(h) == sizeof(uint32):
+      int(cast[uint32](h) shr (32 - shardBits))
+    else:
+      static:
+        assert sizeof(h) == sizeof(uint64)
+      int(cast[uint64](h) shr (64 - shardBits))
 
-template withShard[K, V; SHARD_BITS](
-    lru: ConcurrentLruCache[K, V, SHARD_BITS], key: K, body: untyped
+template withShardRead[K, V](
+    lru: ConcurrentLruCache[K, V], key: K, body: untyped
 ): auto =
   let
     h = hash(key)
     sh {.inject.} = h.toSubhash()
-    s {.inject.} = addr lru.shards[h.toShardIdx(SHARD_BITS)]
-  acquire(s.lock)
+    s {.inject.} = addr lru.shards[h.toShardIdx(lru.shardBits)]
+
+  s.lock.lockRead()
   try:
     body
   finally:
-    release(s.lock)
+    s.lock.unlockRead()
 
-template numShards*[K, V; SHARD_BITS](lru: ConcurrentLruCache[K, V, SHARD_BITS]): int =
-  lru.shards.len()
+template withShardWrite[K, V](
+    lru: ConcurrentLruCache[K, V], key: K, body: untyped
+): auto =
+  let
+    h = hash(key)
+    sh {.inject.} = h.toSubhash()
+    s {.inject.} = addr lru.shards[h.toShardIdx(lru.shardBits)]
 
-template shardCapacity*[K, V; SHARD_BITS](
-    lru: var ConcurrentLruCache[K, V, SHARD_BITS]
-): int =
+  s.lock.lockWrite()
+  try:
+    body
+  finally:
+    s.lock.unlockWrite()
+
+template shardCapacity*[K, V](lru: var ConcurrentLruCache[K, V]): int =
   # No locking here because capacity is immutable for the ConcurrentLruCache type
   # and the internal LruCache type which does support updating the capacity, is
   # not exported.
-  lru.shards[0].cache.capacity
+  if lru.threadSafe:
+    lru.shards[0].cache.capacity
+  else:
+    lru.cache.capacity
 
-func shardLenForKey*[K, V; SHARD_BITS](
-    lru: var ConcurrentLruCache[K, V, SHARD_BITS], key: K
-): int =
-  withShard(lru, key):
-    s.cache.len()
+func shardLenForKey*[K, V](lru: var ConcurrentLruCache[K, V], key: K): int =
+  if lru.threadSafe:
+    let
+      h = hash(key)
+      s = addr lru.shards[h.toShardIdx(lru.shardBits)]
+    s.usedCount.load(moRelaxed)
+  else:
+    lru.cache.len
 
-func capacity*[K, V; SHARD_BITS](lru: var ConcurrentLruCache[K, V, SHARD_BITS]): int =
+template capacity*[K, V](lru: var ConcurrentLruCache[K, V]): int =
   lru.shardCapacity() * lru.numShards()
 
-func len*[K, V; SHARD_BITS](lru: var ConcurrentLruCache[K, V, SHARD_BITS]): int =
-  var total = 0
-  for shard in lru.shards.mitems():
-    withLock(shard.lock):
-      total += shard.cache.len
-  total
+func len*[K, V](lru: var ConcurrentLruCache[K, V]): int =
+  if lru.threadSafe:
+    var total = 0
+    for i in 0 ..< lru.numShards():
+      total += lru.shards[i].usedCount.load(moRelaxed)
+    total
+  else:
+    lru.cache.len
 
-func contains*[K, V; SHARD_BITS](
-    lru: var ConcurrentLruCache[K, V, SHARD_BITS], key: K
-): bool =
-  withShard(lru, key):
-    s.cache.contains(sh, key)
+func contains*[K, V](lru: var ConcurrentLruCache[K, V], key: K): bool =
+  if lru.threadSafe:
+    withShardRead(lru, key):
+      s.cache.contains(sh, key)
+  else:
+    lru.cache.contains(key)
 
-func peek*[K, V; SHARD_BITS](
-    lru: var ConcurrentLruCache[K, V, SHARD_BITS], key: K
-): Opt[V] =
-  withShard(lru, key):
-    s.cache.peek(sh, key)
+func peek*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
+  if lru.threadSafe:
+    withShardRead(lru, key):
+      s.cache.peek(sh, key)
+  else:
+    lru.cache.peek(key)
 
-proc get*[K, V; SHARD_BITS](
-    lru: var ConcurrentLruCache[K, V, SHARD_BITS], key: K
-): Opt[V] =
-  withShard(lru, key):
-    s.cache.get(sh, key)
+proc get*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
+  if lru.threadSafe:
+    let
+      h = hash(key)
+      sh = h.toSubhash()
+      s = addr lru.shards[h.toShardIdx(lru.shardBits)]
 
-proc put*[K, V; SHARD_BITS](
-    lru: var ConcurrentLruCache[K, V, SHARD_BITS], key: K, val: V
-) =
-  withShard(lru, key):
-    s.cache.put(sh, key, val)
+    var value: Opt[V]
+    s.lock.withReadLock:
+      value = s.cache.peek(sh, key)
 
-proc pop*[K, V; SHARD_BITS: static int](
-    lru: var ConcurrentLruCache[K, V, SHARD_BITS], key: K
-): Opt[V] =
-  withShard(lru, key):
-    s.cache.pop(sh, key)
+    if value.isSome():
+      inc tlsLruGetCounter
+      if (tlsLruGetCounter and SAMPLE_MASK) == 0'u32:
+        s.lock.withWriteLock:
+          discard s.cache.get(sh, key)
+    value
+  else:
+    lru.cache.get(key)
 
-proc update*[K, V; SHARD_BITS](
-    lru: var ConcurrentLruCache[K, V, SHARD_BITS], key: K, val: V
-): bool =
-  withShard(lru, key):
-    s.cache.update(sh, key, val)
+proc put*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V) =
+  if lru.threadSafe:
+    withShardWrite(lru, key):
+      if s.cache.put(sh, key, val):
+        s.usedCount.store(s.cache.len, moRelaxed)
+  else:
+    lru.cache.put(key, val)
 
-proc refresh*[K, V; SHARD_BITS](
-    lru: var ConcurrentLruCache[K, V, SHARD_BITS], key: K, val: V
-): bool =
-  withShard(lru, key):
-    s.cache.refresh(sh, key, val)
+proc pop*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
+  if lru.threadSafe:
+    withShardWrite(lru, key):
+      let r = s.cache.pop(sh, key)
+      if r.isSome():
+        s.usedCount.store(s.cache.len, moRelaxed)
+      r
+  else:
+    lru.cache.pop(key)
 
-proc del*[K, V; SHARD_BITS](lru: var ConcurrentLruCache[K, V, SHARD_BITS], key: K) =
-  withShard(lru, key):
-    s.cache.del(sh, key)
+proc update*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V): bool =
+  if lru.threadSafe:
+    withShardWrite(lru, key):
+      s.cache.update(sh, key, val)
+  else:
+    lru.cache.update(key, val)
+
+proc refresh*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V): bool =
+  if lru.threadSafe:
+    withShardWrite(lru, key):
+      s.cache.refresh(sh, key, val)
+  else:
+    lru.cache.refresh(key, val)
+
+proc del*[K, V](lru: var ConcurrentLruCache[K, V], key: K) =
+  if lru.threadSafe:
+    withShardWrite(lru, key):
+      if s.cache.del(sh, key):
+        s.usedCount.store(s.cache.len, moRelaxed)
+  else:
+    lru.cache.del(key)

@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2023-2025 Status Research & Development GmbH. Licensed under
+# Copyright (c) 2023-2026 Status Research & Development GmbH. Licensed under
 # either of:
 # - Apache License, version 2.0
 # - MIT license
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-excluded_files="config.yaml|.gitmodules|.gitignore|.gitattributes|Makefile"
+excluded_files="config.yaml|.gitmodules|.gitignore|.gitattributes|Makefile|go.mod|go.sum"
 excluded_paths="shims|examples"
-excluded_extensions="json|md|png|txt|toml|gz|key|rlp|era1|cfg|py|sh|in|patch|md.tpl|nix|lock|yml|jq"
+excluded_extensions="json|md|png|txt|toml|gz|key|rlp|era1|ere|cfg|py|sh|in|patch|md.tpl|nix|lock|yml|jq"
 
 current_year=$(date +"%Y")
 outdated_files=()

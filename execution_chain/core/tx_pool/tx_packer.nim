@@ -84,7 +84,7 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string] =
     packer = TxPacker(
       vmState: vmState,
       numBlobPerBlock: 0,
-      blockValue: vmState.ledger.getBalance(xp.feeRecipient),
+      blockValue: 0.u256,
       stateRoot: vmState.parent.stateRoot,
     )
 
@@ -155,6 +155,7 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
 
   pst.packedTxs.add item
   pst.numBlobPerBlock += item.tx.versionedHashes.len
+  pst.blockValue += rc.value.txFee
 
   ContinueWithNextAccount
 
@@ -173,10 +174,10 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
     if vmState.balTrackerEnabled:
       for withdrawal in xp.withdrawals:
         vmState.balTracker.trackAddBalanceChange(withdrawal.address, withdrawal.weiAmount)
-        ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
+        ledger.addBalance(withdrawal.address, withdrawal.weiAmount, checkEmptyAccount = false)
     else:
       for withdrawal in xp.withdrawals:
-        ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
+        ledger.addBalance(withdrawal.address, withdrawal.weiAmount, checkEmptyAccount = false)
 
   # EIP-6110, EIP-7002, EIP-7251
   if vmState.fork >= FkPrague:
@@ -189,8 +190,7 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
 
   # Update flexi-array, set proper length
   vmState.receipts.setLen(pst.packedTxs.len)
-
-  pst.blockValue = vmState.ledger.getBalance(xp.feeRecipient) - pst.blockValue
+  
   pst.receiptsRoot = vmState.receipts.calcReceiptsRoot
   pst.logsBloom = vmState.receipts.createBloom
   pst.stateRoot = vmState.ledger.getStateRoot()
@@ -210,10 +210,16 @@ proc packerVmExec*(xp: TxPoolRef): Result[TxPacker, string] =
   var pst = xp.vmExecInit.valueOr:
     return err(error)
 
-  for item in xp.byPriceAndNonce:
-    let rc = pst.vmExecGrabItem(item, xp)
-    if rc == StopCollecting:
-      break
+  if xp.isOrdered:
+    for item in xp.byOrder:
+      let rc = pst.vmExecGrabItem(item, xp)
+      if rc == StopCollecting:
+        break
+  else:
+    for item in xp.byPriceAndNonce:
+      let rc = pst.vmExecGrabItem(item, xp)
+      if rc == StopCollecting:
+        break
 
   ?pst.vmExecCommit(xp)
   ok(pst)

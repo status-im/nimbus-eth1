@@ -221,14 +221,13 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: 
                         else: 2.GasInt
 
   var
-    stateGasRefund = gasRefund.GasInt
+    stateGasRefund = gasRefund
 
   if c.shouldBurnGas:
     c.gasMeter.burnGas()
 
   if c.fork >= FkAmsterdam:
     if c.isError:
-      # https://github.com/ethereum/execution-specs/pull/2689/changes
       c.gasMeter.returnAllStateGas()
       # https://github.com/ethereum/execution-specs/commit/eb80b438a39d188fddf372ef5632123ca3ee238e
       if call.isCreate:
@@ -252,7 +251,7 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: 
     let
       txRegularGas = call.intrinsic.regular + c.gasMeter.regularGasUsed
     blockRegularGasUsed = max(txRegularGas, call.intrinsic.floorDataGas)
-    blockStateGasUsed = call.intrinsic.state - stateGasRefund + c.gasMeter.stateGasUsed
+    blockStateGasUsed = GasInt(max(0, call.intrinsic.state.int64 - stateGasRefund + c.gasMeter.stateGasUsed))
     debug "EIP-8037 gas accounting",
       intrinsicRegular = call.intrinsic.regular,
       intrinsicState = call.intrinsic.state,
@@ -276,7 +275,7 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: 
     if vmState.balTrackerEnabled:
       vmState.balTracker.trackAddBalanceChange(call.sender, gasRefundAmount)
     vmState.mutateLedger:
-      ledger.addBalance(call.sender, gasRefundAmount)
+      ledger.addBalance(call.sender, gasRefundAmount, checkEmptyAccount = fork < FkParis)
 
   GasUsed(
     evmGasUsed: c.msg.gas - txGasLeft,
@@ -314,6 +313,8 @@ proc finishRunningComputation(
     result.blockStateGasUsed = gasUsed.blockStateGasUsed
     if c.isSuccess:
       result.logEntries = move(c.logEntries)
+  elif T is VoidResult:
+    discard
   else:
     {.error: "Unknown computation output".}
 

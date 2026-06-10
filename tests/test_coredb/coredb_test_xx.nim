@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -84,7 +84,7 @@ const
     builtIn: true,
     name:    "main",
     network: MainNet,
-    files:  @["mainnet-00000-5ec1ffb8.era1"], # on local replay folder
+    files:  @["mainnet-00000-a6860fef.ere"], # on local replay folder
     numBlocks: high(int),
     dbType: AristoDbRocks)
 
@@ -93,7 +93,7 @@ const
     name:    "main",
     network: MainNet,
     # The extern repo is identified by a tag file
-    files:   @["mainnet-extern.era1"])        # on external repo
+    files:   @["mainnet-extern.ere"])          # on external repo
 
   # ------------------
 

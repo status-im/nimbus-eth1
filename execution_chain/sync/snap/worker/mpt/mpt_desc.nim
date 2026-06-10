@@ -30,12 +30,12 @@ type
     Leaf
     Stop
 
-  NodeRef* = ref object of RootRef
+  NodeRef* {.acyclic.} = ref object of RootRef
     ## Base node object for building a temporary, partial hexary MPT.
     kind*: NodeType                                 ## sub-type (see below)
     selfKey*: HashKey                               ## owned node key
 
-  BranchNodeRef* = ref object of NodeRef
+  BranchNodeRef* {.acyclic.} = ref object of NodeRef
     ## Branch and/or extension node.
     ##
     ## * Pure extension node
@@ -82,7 +82,32 @@ type
   NodeTrieRef* = ref object of RootRef
     root*: NodeRef                                  ## start of in-memory MPT
     stops*: Table[HashKey,StopNodeRef]              ## sub-MPT to complete
-    proof*: seq[HashKey]                            ## hash links to proof nodes
+    dangling*: seq[(HashKey,StopNodeRef)]           ## dangling link keys
+    leafs*: seq[(Hash32,LeafNodeRef)]               ## leaf pairs `(path,node)`
+
+  KnPair* = tuple
+    ## Key-node pair
+    key: seq[byte]
+    node: seq[byte]
+
+  KpPair* = tuple
+    ## Partial paths (<32 bytes) will be compact encoded per the Ethereum
+    ## wire protocol, full paths will be plain binary encoded.
+    key: seq[byte]
+    path: seq[byte]
+
+  KppTriple* = tuple
+    ## Partial paths (<32 bytes) will be compact encoded per the Ethereum
+    ## wire protocol, full paths will be plain binary encoded.
+    key: seq[byte]
+    path: Hash32
+    payload: seq[byte]
+
+  KkpTriple* = tuple
+    ## Variant of `KppTripler`
+    key1: seq[byte]
+    key2: seq[byte]
+    path: seq[byte]
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -92,15 +117,12 @@ template to*(h: StateRoot|StoreRoot|BlockHash; _: type HashKey): HashKey =
   ## Variant of `desc_identifiers.to()`
   h.Hash32.to(HashKey)
 
-template digestTo*(
-    node: ProofNode;
-    _: type HashKey;
-    force32: static[bool] = false): HashKey =
+func digestTo*(node: ProofNode, _: type HashKey, rootKey: HashKey): HashKey =
   ## Variant of `desc_identifiers.digestTo()`
-  when force32:
-    HashKey.fromBytes(node.distinctBase.keccak256.data).expect "Valid HashKey"
-  else:
-    node.distinctBase.digestTo(HashKey)
+  let key32 = HashKey.fromBytes(node.distinctBase.keccak256.data).value
+  if 32 <= node.distinctBase.len or key32 == rootKey:
+    return key32
+  HashKey.fromBytes(node.distinctBase).value
 
 # ------------------------------------------------------------------------------
 # End

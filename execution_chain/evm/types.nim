@@ -62,6 +62,7 @@ type
     allLogs*          : seq[Log] # EIP-6110
     gasRefunded*      : int64    # Global gasRefunded counter
     balTracker*       : BlockAccessListTrackerRef
+    balPrefetchActive*: bool
 
   Computation* = ref object
     # The execution computation
@@ -103,9 +104,8 @@ type
     gasRefunded*: int64
     gasRemaining*: GasInt
     stateGasLeft*: GasInt
-    stateGasUsed*: GasInt
+    stateGasUsed*: int64
     regularGasUsed*: GasInt
-    stateGasRefundPending*: GasInt
 
   CallKind* {.pure.} = enum
     Call          # Request CALL.

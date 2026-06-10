@@ -241,6 +241,22 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
 
       rlp.encode(blk.transactions[txId])
 
+    proc debug_getRawBlockAccessList(quantityTag: BlockTag): seq[byte] {.raises: [ValueError].} =
+      ## Returns an RLP-encoded block access list by block number, tag or block hash.
+      let header = chain.headerFromTag(quantityTag).valueOr:
+        raise newException(ValueError, error)
+
+      if not com.isAmsterdamOrLater(header.timestamp):
+        raise newException(ValueError, "Resource not found")
+
+      let bal = chain.getBlockAccessList(header.computeRlpHash()).valueOr:
+        if header.number <= chain.resolvedFinNumber:
+          raise newException(ValueError, "Pruned history unavailable")
+        else:
+          raise newException(ValueError, "Resource not found")
+
+      rlp.encode(bal)
+
     # Execution Witness endpoints - not specified in the Execution API
 
     proc debug_executionWitness(quantityTag: BlockTag): ExecutionWitness {.raises: [ValueError].} =
