@@ -27,20 +27,21 @@ proc generateContractAddress*(vmState: BaseVMState,
   let creationNonce = vmState.readOnlyLedger().getNonce(sender)
   generateAddress(sender, creationNonce)
 
-proc getCallCode*(vmState: BaseVMState, codeAddress: Address): CodeBytesRef =
+proc getCallCode*(vmState: BaseVMState, msg: Message): CodeBytesRef =
   # Avoid accessing ledger if it's a precompile address
-  if isPrecompile(vmState.fork, codeAddress):
+  if isPrecompile(vmState.fork, msg.codeAddress):
+    msg.flags.incl MsgFlags.Precompile
     return CodeBytesRef(nil)
 
   # For contract creations the EVM will add the contract address to the
   # access list itself, after calculating the new contract address.
   if vmState.fork >= FkBerlin:
-    vmState.ledger.accessList(codeAddress)
+    vmState.ledger.accessList(msg.codeAddress)
     if vmState.balTrackerEnabled:
-      vmState.balTracker.trackAddressAccess(codeAddress)
+      vmState.balTracker.trackAddressAccess(msg.codeAddress)
 
   # `codeAddress` is BAL tracked in `initialAccessListEIP2929`
-  let code = vmState.readOnlyLedger.getCode(codeAddress)
+  let code = vmState.readOnlyLedger.getCode(msg.codeAddress)
   if vmState.fork < FkPrague:
     return code
 

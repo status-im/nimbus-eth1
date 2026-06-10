@@ -221,8 +221,8 @@ proc executeOpcodes*(c: Computation) =
   block blockOne:
     let cont = c.continuation
     if cont.isNil:
-      let precompile = c.fork.getPrecompile(c.msg.codeAddress)
-      if precompile.isSome:
+      if MsgFlags.Precompile in c.msg.flags:
+        let precompile = c.fork.getPrecompile(c.msg.codeAddress)
         c.execPrecompile(precompile[])
         break blockOne
     else:

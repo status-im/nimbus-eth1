@@ -117,6 +117,7 @@ type
 
   MsgFlags* {.pure.} = enum
     Static
+    Precompile
 
   Message* = ref object
     kind*:             CallKind

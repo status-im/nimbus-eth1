@@ -174,7 +174,7 @@ proc setupComputation(call: CallParams, gasRefund: int64, keepStack: bool): Comp
              CodeBytesRef.init(call.input)
            else:
              assign(msg.data, call.input)
-             getCallCode(vmState, msg.codeAddress)
+             getCallCode(vmState, msg)
 
     computation = newComputation(vmState, keepStack, msg, code)
 
