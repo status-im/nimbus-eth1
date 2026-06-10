@@ -114,6 +114,8 @@ type
   MptAsmRef* = ref object
     adb: RocksDbReadWriteRef
     dir: Path
+    dnglLock: int                                   # advisory lock
+    cntrLock: int                                   # advisory lock
 
   MptAsmCol = enum
     AdminCol = 0                                    # currently unused
@@ -129,7 +131,7 @@ type
 
     AccDnglKvt                                      # dangling nodes lists
     StoDnglKvt                                      # ..
-    CodeDnglKvt
+    CodeMissKvt
 
   StateDataTag* = enum
     Untagged = 0                                    # well, still a tag :)
@@ -1300,46 +1302,91 @@ iterator walkStoDnglKvt*(db: MptAsmRef): KkpTriple =
 
 # -------------
 
-proc hasCodeDnglKvt*(db: MptAsmRef; key: openArray[byte]): BoolResult =
-  let data = db.getAtMost33(CodeDnglKvt, key).valueOr:
+proc hasCodeMissKvt*(db: MptAsmRef; key: openArray[byte]): BoolResult =
+  let data = db.getAtMost33(CodeMissKvt, key).valueOr:
     return err(error)
   ok(0 < data.len)
 
-proc getCodeDnglKvt*(db: MptAsmRef; key: openArray[byte]): BlobResult =
-  var data = db.getAtMost33(CodeDnglKvt, key).valueOr:
+proc getCodeMissKvt*(db: MptAsmRef; key: openArray[byte]): BlobResult =
+  var data = db.getAtMost33(CodeMissKvt, key).valueOr:
     return err(error)
   ok(move data)
 
-proc putCodeDnglKvt*(db: MptAsmRef; key, data: openArray[byte]): PutResult =
-  db.putAtMost33(CodeDnglKvt, key, data)
+proc putCodeMissKvt*(db: MptAsmRef; key, data: openArray[byte]): PutResult =
+  db.putAtMost33(CodeMissKvt, key, data)
 
-proc putCodeDnglKvt*(
+proc putCodeMissKvt*(
     db: MptAsmRef;
     kvp: openArray[KpPair];
       ): PutResult =
   for w in kvp:
-    db.putAtMost33(CodeDnglKvt, w.key, w.path).isOkOr:
+    db.putAtMost33(CodeMissKvt, w.key, w.path).isOkOr:
       return err(error)
   ok()
 
-proc delCodeDnglKvt*(db: MptAsmRef, key: openArray[byte]): DelResult =
-  db.delAtMost33(CodeDnglKvt, key)
+proc delCodeMissKvt*(db: MptAsmRef, key: openArray[byte]): DelResult =
+  db.delAtMost33(CodeMissKvt, key)
 
-proc delCodeDnglKvt*(db: MptAsmRef, keys: openArray[seq[byte]]): DelResult =
+proc delCodeMissKvt*(db: MptAsmRef, keys: openArray[seq[byte]]): DelResult =
   for key in keys:
-    db.delAtMost33(CodeDnglKvt, key).isOkOr:
+    db.delAtMost33(CodeMissKvt, key).isOkOr:
       return err(error)
   ok()
 
-proc clearCodeDnglKvt*(db: MptAsmRef): DelResult =
-  for (key,_) in db.adb.colWalkAtLeast1 @[byte CodeDnglKvt]:
-    db.delAtMost33(CodeDnglKvt, key).isOkOr:
+proc clearCodeMissKvt*(db: MptAsmRef): DelResult =
+  for (key,_) in db.adb.colWalkAtLeast1 @[byte CodeMissKvt]:
+    db.delAtMost33(CodeMissKvt, key).isOkOr:
       return err(error)
   ok()
 
-iterator walkCodeDnglKvt*(db: MptAsmRef): KpPair =
-  for (key, path) in db.adb.colWalkAtLeast1 @[byte CodeDnglKvt]:
+iterator walkCodeMissKvt*(db: MptAsmRef): KpPair =
+  for (key, path) in db.adb.colWalkAtLeast1 @[byte CodeMissKvt]:
     yield (key, path)
+
+# -------------
+
+template withDnglAccSto*(db: MptAsmRef, code: untyped): untyped =
+  ## Run `code` while advisory lock is set. The only use of this lock is
+  ## to make sure that the `hasDnglAccSto()` returns empty only if
+  ##
+  ## * there is no `withDnglAccSto()` code active, and
+  ## * the dangling `*AccDnglKvt` or `*StoDnglKvt` tables are empty.
+  ##
+  block:
+    db.dnglLock.inc
+    defer: db.dnglLock.dec
+    code
+
+proc hasDnglAccSto*(db: MptAsmRef): bool =
+  ## Return `true` if a lock was set or some of the `*DnglKvt` tables
+  ## contain data.
+  ##
+  if 0 < db.dnglLock:
+    return true
+  for _ in db.walkAccDnglKvt:
+    return true
+  for _ in db.walkStoDnglKvt:
+    return true
+  # false
+
+template withMissContracts*(db: MptAsmRef, code: untyped): untyped =
+  ## Run `code` while advisory lock is set. The only use of this lock is
+  ## to make sure that the `hasDangling()` returns empty only if
+  ##
+  ## * there is no `withDangling()` code active, and
+  ## * the dangling tables are empty.
+  ##
+  block:
+    db.cntrLock.inc
+    defer: db.cntrLock.dec
+    code
+
+proc hasMissContracts*(db: MptAsmRef): bool =
+  if 0 < db.cntrLock:
+    return true
+  for _ in db.walkCodeMissKvt:
+    return true
+  # false
 
 # ------------------------------------------------------------------------------
 # End

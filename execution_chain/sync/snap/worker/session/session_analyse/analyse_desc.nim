@@ -109,7 +109,7 @@ proc clearDanglTables*(ctx: SnapCtxRef, info: static[string]): Opt[void] =
   db.clearStoDnglKvt().isOkOr:
     error info & ": Cannot reset dangling slots", `error`=error
     return err()
-  db.clearCodeDnglKvt().isOkOr:
+  db.clearCodeMissKvt().isOkOr:
     error info & ": Cannot reset missing contracts", `error`=error
     return err()
   ok()
@@ -155,7 +155,7 @@ proc putMissCode*(
     path: openArray[byte];
     info: static[string];
       ) =
-  trd.db.putCodeDnglKvt(key, path).isOkOr:
+  trd.db.putCodeMissKvt(key, path).isOkOr:
     error info & ": Error caching dangling slot links",
       key=key.toHex, path=path.toHex, `error`=error
     trd.cacheErr.inc

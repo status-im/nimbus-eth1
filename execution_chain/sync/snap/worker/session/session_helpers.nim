@@ -92,7 +92,7 @@ proc countDnglLinks*(
     result.nAccDngl.inc
   for _ in db.walkStoDnglKvt():
     result.nStoDngl.inc
-  for _ in db.walkCodeDnglKvt():
+  for _ in db.walkCodeMissKvt():
     result.nCodeMiss.inc
   result.ela = Moment.now() - start
 
