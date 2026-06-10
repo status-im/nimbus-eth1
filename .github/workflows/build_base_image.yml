@@ -56,7 +56,7 @@ jobs:
               "^update.*": 1,
               "^rlp.*": 1,
               "^dist.*": 1,
-              "^txpool.*": 1,
+              "^txpool.*": 1
             }
           
 #jobs:
