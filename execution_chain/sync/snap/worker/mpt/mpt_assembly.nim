@@ -22,6 +22,7 @@
 ##
 ## No column families are used, here.
 ##
+##
 ## Key/value download packet formats
 ## ---------------------------------
 ##
@@ -62,8 +63,9 @@
 ##   + proof:    `seq[ProofNode]`
 ##   + peerID:   `Hash`
 ##
-## Key/value MPT formats
-## ---------------------
+##
+## Key/value KVT/MPT formats
+## -------------------------
 ##
 ## * Accounts MPT:
 ##   + key33: <col, key>
@@ -89,6 +91,7 @@
 ##   + col:       `CodeKvt`
 ##   + key:       `seq[byte]`
 ##   * contract:  `seq[byte]`
+##
 ##
 ## * Dangling account links table:
 ##   + key33: <col, key>
@@ -167,13 +170,13 @@ type
     Accounts                                        # as fetched from network
     StoSlot                                         # ditto
 
-    AccKvt                                          # hash -> node mapping
-    StoKvt                                          # hash -> node mapping
-    CodeKvt                                         # hash -> code mapping
+    AccKvt                                          # accounts MPT
+    StoKvt                                          # storage slots MPT
+    CodeKvt                                         # contract codes table
 
-    AccDnglKvt                                      # dangling nodes lists
-    StoDnglKvt                                      # ..
-    CodeMissKvt
+    AccDnglKvt                                      # dangling acc nodes links
+    StoDnglKvt                                      # dangling sto nodes links
+    CodeMissKvt                                     # missing contract links
 
   StateDataTag* = enum
     Untagged = 0                                    # well, still a tag :)
@@ -374,6 +377,46 @@ proc rDel(adb: RocksDbReadWriteRef; key: openArray[byte]): DelResult =
     return err(info & error)
   ok()
 
+proc rClear(
+    adb: RocksDbReadWriteRef;
+    col: MptAsmCol;
+    force = false;
+      ): DelResult =
+  const info = "mpt/clear: "
+  let rit = adb.openIterator().valueOr:
+    return err(info & "Iterator open error, col=" & $col & ", error=" & $error)
+  defer: rit.close()
+
+  var
+    nErrors = 0
+    key: seq[byte]
+
+  rit.seekToKey(@[col.ord.byte])
+  while rit.isValid():
+    key.setLen(0)
+    rit.key(proc(w: openArray[byte]) {.gcsafe, raises: [].} = key = @w)
+    rit.next()
+
+    if 0 < key.len:
+      if col.ord.byte != key[0]:
+        break
+
+      adb.delete(key).isOkOr:
+        if not force:
+          return err(info & "Deletion failed" &
+            ", col=" & $col & ", error=" & $error)
+        nErrors.inc
+
+  if 0 < nErrors:
+    err(info & "Some deletions failed" &
+      ", col=" & $col & ", nFailed=" & $nErrors)
+  else:
+    ok()
+
+# ------------------------------------------------------------------------------
+# Private generic iterators
+# ------------------------------------------------------------------------------
+
 proc kvPair(rit: RocksIteratorRef): KvPair =
   ## This helper must be provided as a separate function outside of any walk
   ## iterator, below. Otherwise the NIM compiler (version 2.2.4) might abort
@@ -544,7 +587,9 @@ iterator colWalk97(
       if key.splitKey97(key1, key2, key3):
         yield (key1, key2, key3, value)
 
-# --------------
+# ------------------------------------------------------------------------------
+# Private generic key/value helpers
+# ------------------------------------------------------------------------------
 
 template keyAtMost33(col: MptAsmCol; key: openArray[byte]): openArray[byte] =
   doAssert key.len < 33
@@ -941,6 +986,9 @@ proc putAccounts*(
 proc delAccounts*(db: MptAsmRef; root: StateRoot; start: ItemKey): DelResult =
   db.del65(Accounts, root, start)
 
+proc clearAccounts*(db: MptAsmRef): DelResult =
+  db.adb.rClear(Accounts)
+
 iterator walkAccounts*(db: MptAsmRef): WalkAccounts =
   for (key1,key2,value) in db.adb.colWalk65 Accounts.key65():
     let
@@ -1015,6 +1063,9 @@ proc delStoSlot*(
       ): DelResult =
   db.del97(StoSlot, root, acc, start)
 
+proc clearStoSlot*(db: MptAsmRef): DelResult =
+  db.adb.rClear(StoSlot)
+
 iterator walkStoSlot*(
     db: MptAsmRef;
     root: StateRoot;
@@ -1060,10 +1111,7 @@ proc delAccKvt*(db: MptAsmRef, key: openArray[byte]): DelResult =
   db.delAtMost33(AccKvt, key)
 
 proc clearAccKvt*(db: MptAsmRef): DelResult =
-  for (key,_) in db.adb.colWalkAtLeast1 @[byte AccKvt]:
-    db.delAtMost33(AccKvt, key).isOkOr:
-      return err(error)
-  ok()
+  db.adb.rClear(AccKvt)
 
 iterator walkAccKvt*(db: MptAsmRef): KnPair =
   for (key,node) in db.adb.colWalkAtLeast1 @[byte AccKvt]:
@@ -1113,10 +1161,7 @@ proc clearStoKvt*(db: MptAsmRef, acc: Hash32): DelResult =
   ok()
 
 proc clearStoKvt*(db: MptAsmRef): DelResult =
-  for (key,_) in db.adb.colWalkAtLeast1 @[byte StoKvt]:
-    db.adb.rDel(@[byte StoKvt] & key).isOkOr:
-      return err(error)
-  ok()
+  db.adb.rClear(StoKvt)
 
 iterator walkStoKvt*(db: MptAsmRef, acc: Hash32): KkpTriple =
   for (key1, key2, path) in db.adb.colWalkAtLeast33 key33(StoKvt, acc):
@@ -1152,10 +1197,7 @@ proc delCodeKvt*(db: MptAsmRef, hash: Hash32): DelResult =
   db.del33(CodeKvt, hash)
 
 proc clearCodeKvt*(db: MptAsmRef): DelResult =
-  for (key,_) in db.adb.colWalkAtLeast1 @[byte CodeKvt]:
-    db.delAtMost33(CodeKvt, key).isOkOr:
-      return err(error)
-  ok()
+  db.adb.rClear(CodeKvt)
 
 iterator walkCodeKvt*(db: MptAsmRef): KvPair =
   for (key,value) in db.adb.colWalkAtLeast1 @[byte CodeKvt]:
@@ -1192,10 +1234,7 @@ proc delAccDnglKvt*(db: MptAsmRef, keys: openArray[seq[byte]]): DelResult =
   ok()
 
 proc clearAccDnglKvt*(db: MptAsmRef): DelResult =
-  for (key,_) in db.adb.colWalkAtLeast1 @[byte AccDnglKvt]:
-    db.delAtMost33(AccDnglKvt, key).isOkOr:
-      return err(error)
-  ok()
+  db.adb.rClear(AccDnglKvt)
 
 iterator walkAccDnglKvt*(db: MptAsmRef): KpPair =
   for (key,path) in db.adb.colWalkAtLeast1 @[byte AccDnglKvt]:
@@ -1263,10 +1302,7 @@ proc clearStoDnglKvt*(db: MptAsmRef, acc: Hash32): DelResult =
   ok()
 
 proc clearStoDnglKvt*(db: MptAsmRef): DelResult =
-  for (key,_) in db.adb.colWalkAtLeast1 @[byte StoDnglKvt]:
-    db.adb.rDel(@[byte StoDnglKvt] & key).isOkOr:
-      return err(error)
-  ok()
+  db.adb.rClear(StoDnglKvt)
 
 iterator walkStoDnglKvt*(db: MptAsmRef, acc: Hash32): KkpTriple =
   for (key1, key2, path) in db.adb.colWalkAtLeast33 key33(StoDnglKvt, acc):
@@ -1314,10 +1350,7 @@ proc delCodeMissKvt*(db: MptAsmRef, keys: openArray[seq[byte]]): DelResult =
   ok()
 
 proc clearCodeMissKvt*(db: MptAsmRef): DelResult =
-  for (key,_) in db.adb.colWalkAtLeast1 @[byte CodeMissKvt]:
-    db.delAtMost33(CodeMissKvt, key).isOkOr:
-      return err(error)
-  ok()
+  db.adb.rClear(CodeMissKvt)
 
 iterator walkCodeMissKvt*(db: MptAsmRef): KpPair =
   for (key, path) in db.adb.colWalkAtLeast1 @[byte CodeMissKvt]:
