@@ -20,6 +20,12 @@ export
 # Public functions
 # ------------------------------------------------------------------------------
 
+template sessionAnalyseClear*(
+   ctx: SnapCtxRef;
+   info: static[string];
+      ): auto =
+  ctx.clearDanglTables(info)
+
 template sessionAnalyseFullTrie*(
     ctx: SnapCtxRef;
     info: static[string];

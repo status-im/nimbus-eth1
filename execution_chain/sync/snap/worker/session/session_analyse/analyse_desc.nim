@@ -101,21 +101,16 @@ func fromBytes*(_: type Hash32, path: openArray[byte]): Hash32 =
 
 # ----------
 
-proc clearDanglAcc*(trd: TravDescRef, info: static[string]): Opt[void] =
-  trd.db.clearAccDnglKvt().isOkOr:
-    error info & ": Cannot reset dangling cache", `error`=error
+proc clearDanglTables*(ctx: SnapCtxRef, info: static[string]): Opt[void] =
+  let db = ctx.pool.mptAsm
+  db.clearAccDnglKvt().isOkOr:
+    error info & ": Cannot reset dangling accounts", `error`=error
     return err()
-  ok()
-
-proc clearDanglSto*(trd: TravDescRef, info: static[string]): Opt[void] =
-  trd.db.clearStoDnglKvt().isOkOr:
-    error info & ": Cannot reset slots cache", `error`=error
+  db.clearStoDnglKvt().isOkOr:
+    error info & ": Cannot reset dangling slots", `error`=error
     return err()
-  ok()
-
-proc clearDanglCode*(trd: TravDescRef, info: static[string]): Opt[void] =
-  trd.db.clearCodeDnglKvt().isOkOr:
-    error info & ": Cannot reset receipts cache", `error`=error
+  db.clearCodeDnglKvt().isOkOr:
+    error info & ": Cannot reset missing contracts", `error`=error
     return err()
   ok()
 

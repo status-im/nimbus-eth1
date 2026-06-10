@@ -390,19 +390,12 @@ template sessionAnalyseTrieIter*(cty: SnapCtxRef, info: static[string]): auto =
 
     template stats(): auto = trd.stats
 
-    trace info & ": Clearing dangling links caches"
-    trd.clearDanglAcc(info).isOkOr:
-      bodyRc = typeof(bodyRc).err(EClearError)
-      break body
-    trd.clearDanglSto(info).isOkOr:
-      bodyRc = typeof(bodyRc).err(EClearError)
-      break body
-    trd.clearDanglCode(info).isOkOr:
-      bodyRc = typeof(bodyRc).err(EClearError)
-      break body
-
     let start = Moment.now()
     startTraversingMsg(info)
+
+    ctx.clearDanglTables(info).isOkOr:
+      bodyRc = typeof(bodyRc).err(EClearError)
+      break body
 
     let rc = traverseMpt(
       trd, zeroHash32, pivot.Hash32.data,
