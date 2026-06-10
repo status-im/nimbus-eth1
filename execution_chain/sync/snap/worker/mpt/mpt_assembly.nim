@@ -63,6 +63,17 @@
 ##   + proof:    `seq[ProofNode]`
 ##   + peerID:   `Hash`
 ##
+## * ByteCode:
+##   + key65: <col, root, start>
+##   + value: <limit, code, peerID>
+##   where
+##   + col:      `ByteCodes`
+##   + root:     `StateRoot`
+##   * start:    `ItemKey`
+##   + limit:    `ItemKey`
+##   + codes:    `seq[(CodeHash,CodeItem)]`
+##   + peerID:   `Hash`
+##
 ##
 ## Key/value KVT/MPT formats
 ## -------------------------
@@ -169,6 +180,7 @@ type
     StateData                                       # root -> block hash/number
     Accounts                                        # as fetched from network
     StoSlot                                         # ditto
+    ByteCode                                        # ditto
 
     AccKvt                                          # accounts MPT
     StoKvt                                          # storage slots MPT
@@ -201,6 +213,11 @@ type
     limit: ItemKey
     slot: seq[StorageItem]
     proof: seq[ProofNode]
+    peerID: Hash
+
+  DecodedByteCode* = tuple
+    limit: ItemKey
+    codes: seq[(CodeHash,CodeItem)]
     peerID: Hash
 
 
@@ -238,6 +255,19 @@ type
     proof: seq[ProofNode]                           # Prof for `slot` (if any)
     peerID: Hash
     error: string
+
+  WalkByteCode* = tuple
+    root: StateRoot
+    start: ItemKey                                  # account coverage
+    limit: ItemKey                                  # account coverage
+    codes: seq[(CodeHash,CodeItem)]
+    peerID: Hash
+    error: string
+
+  WalkHeader* = tuple
+    header: Header
+    error: string
+
 
   KvPair* = tuple
     key: seq[byte]
@@ -302,6 +332,20 @@ func decodeStoSlot(data: seq[byte]): Result[DecodedStoSlot,string] =
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(move res)
 
+func decodeByteCode(data: seq[byte]): Result[DecodedByteCode,string] =
+  const info = "decodeByteCode"
+  var
+    rd = data.rlpFromBytes
+    res: DecodedByteCode
+  try:
+    rd.tryEnterList()
+    res.limit = rd.read(UInt256).to(ItemKey)
+    res.codes = rd.read(seq[(CodeHash,CodeItem)])
+    res.peerID = cast[Hash](rd.read uint)
+  except RlpError as e:
+    return err(info & ": " & $e.name & "(" & e.msg & ")")
+  ok(move res)
+
 
 template encodeStateData(
     hash: BlockHash;
@@ -341,6 +385,17 @@ template encodeStoSlot(
   wrt.append limit.to(UInt256)
   wrt.append slot
   wrt.append proof
+  wrt.append cast[uint](peerID)
+  wrt.finish()
+
+template encodeByteCode(
+    limit: ItemKey;
+    codes: seq[(CodeHash,CodeItem)];
+    peerID: Hash;
+      ): untyped =
+  var wrt = initRlpList 3
+  wrt.append limit.to(UInt256)
+  wrt.append codes
   wrt.append cast[uint](peerID)
   wrt.finish()
 
@@ -1104,6 +1159,55 @@ iterator walkStoSlot*(
         yield oops
         continue
     yield (root, acc, start, w.limit, w.slot, w.proof, w.peerID, "")
+
+# -------------
+
+proc getByteCode*(
+    db: MptAsmRef;
+    root: StateRoot;
+    start: ItemKey;
+    limit: ItemKey;
+      ): Result[DecodedByteCode,string] =
+  let data = db.get65(ByteCode, root, start).valueOr:
+    return err(error)
+  data.decodeByteCode()
+
+proc putByteCode*(
+    db: MptAsmRef;
+    root: StateRoot;
+    start: ItemKey;
+    limit: ItemKey;
+    codes: seq[(CodeHash,CodeItem)];
+    peerID: Hash;
+      ): PutResult =
+  db.put65(ByteCode, root, start, encodeByteCode(limit, codes, peerID))
+
+proc delByteCode*(db: MptAsmRef; root: StateRoot; start: ItemKey): DelResult =
+  db.del65(ByteCode, root, start)
+
+proc clearByteCode*(db: MptAsmRef): DelResult =
+  db.adb.rClear(ByteCode)
+
+iterator walkByteCode*(
+    db: MptAsmRef;
+    root: StateRoot;
+    start: ItemKey;
+      ): WalkByteCode =
+  ## Variant of `walkAccounts()` for fixed `root` and `start` account
+  let startHash = start.to(Hash32)
+  for (key1,key2,value) in db.adb.colWalk65 ByteCode.key65(root,startHash):
+    if StateRoot(key1) != root:
+      break
+    let
+      start2 = key2.to(ItemKey)
+      w = value.decodeByteCode().valueOr:
+        var oops: WalkByteCode
+        oops.root = root
+        oops.start = start2
+        oops.error = error
+        yield oops
+        continue
+    yield (root, start2, w.limit, w.codes, w.peerID, "")
 
 # ========================
 

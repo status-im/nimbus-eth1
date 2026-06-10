@@ -183,7 +183,7 @@ template runPeer*(
 
     of SnapContracts:
       # Download persistent contract data
-      buddy.downloadCode(info).isOkOr:
+      buddy.downloadCodePersist(info).isOkOr:
         buddy.ctrl.zombie = true
 
     else:

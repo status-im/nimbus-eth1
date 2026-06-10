@@ -88,6 +88,7 @@ template downloadAccountsAndStorage*(buddy: SnapPeerRef, info: static[string]) =
                   else:
                     break                           # done this state, try next
           buddy.storageDownload(state, acc, info)   # fetch storage slots
+          buddy.downloadCodeCache(state, acc, info) # fetch byte codes
           if not state.isOperable():                # proceed unless evicted
             break
           didSomething = true                       # continue with this one
