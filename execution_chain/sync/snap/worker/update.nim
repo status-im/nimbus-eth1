@@ -12,7 +12,7 @@
 
 import
   pkg/chronicles,
-  ./[mpt, worker_const, worker_desc]
+  ./[helpers, mpt, worker_const, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -26,6 +26,9 @@ func readyForMptAssembly(ctx: SnapCtxRef): bool =
   let sdb = ctx.pool.stateDB
   sdb.isComplete or
     accuAccountsCovMin < sdb.archivedCoverage() + sdb.accountsCoverage()
+
+func toStr(root: Opt[StateRoot]): string =
+  if root.isNone: "n/a" else: root.unsafeGet.Hash32.short
 
 # ------------------------------------------------------------------------------
 # Private FSA transition functions
@@ -62,18 +65,41 @@ proc downloadFinishNext(ctx: SnapCtxRef; info: static[string]): SyncState =
     return SnapDownloadFinish
   SnapMkTrie
 
-func mkTrieNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+proc mkTrieNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
+  if ctx.pool.pivot.isNone():                       # enter unless pivot is set
+    return SnapMkTrie
   SnapAnalyse
 
 func analyseNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
   SnapHealing
 
-func healingNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+proc healingNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
-  # TBD ...
-  SnapHealing
+  if ctx.pool.mptAsm.hasDnglAccSto():
+    return SnapHealing
+  ctx.poolMode = true                               # sync peers
+  SnapHealingFinish
+
+func healingFinishNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+  if ctx.poolMode:                                  # wait for peers to sync
+    return SnapHealingFinish
+  SnapContracts
+
+proc contractsNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+  if ctx.pool.mptAsm.hasMissContracts():
+    return SnapContracts
+  ctx.poolMode = true                               # sync peers
+  SnapContractsFinish
+
+func contractsFinishNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+  if ctx.poolMode:                                  # wait for peers to sync
+    return SnapContractsFinish
+  SnapStop
+
+func stopNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+  SnapStop
 
 # ------------------------------------------------------------------------------
 # Public FSA related functions
@@ -84,15 +110,18 @@ proc updateSyncReset*(ctx: SnapCtxRef) =
   ctx.pool.syncState = SnapIdle
 
 proc updateSyncResume*(ctx: SnapCtxRef) =
-  ## Set explicit `resume` syncer state
+  ## Force `resume` syncer state
   ctx.pool.syncState = SnapResume
 
-proc updateSyncHealing*(ctx: SnapCtxRef) =
-  ## Set explicit `healinh` syncer state
-  ctx.pool.syncState = SnapHealing
+proc updateSyncHealingFinish*(ctx: SnapCtxRef) =
+  ## Force `healing-finish` syncer state
+  ctx.pool.syncState = SnapHealingFinish
 
+proc updateSyncContractsFinish*(ctx: SnapCtxRef) =
+  ## Force `contracts-finish` syncer state
+  ctx.pool.syncState = SnapContractsFinish
 
-proc updateSyncState*(ctx: SnapCtxRef; info: static[string]) =
+proc updateSyncState*(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## Update internal state when needed
   ##
   # State machine
@@ -112,16 +141,25 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]) =
   #      |  downloadFinish
   #      |        |
   #      |        v
-  #      `----> mkTrie
-  #               |
-  #               v
-  #      `     analyse <---.
+  #      `----> mkTrie ----.
   #               |        |
   #               v        |
-  #            healing ----'
+  #      .---> analyse     |
+  #      |        |        |
+  #      |        v        |
+  #      |     healing <---'
+  #      |        |
+  #      |        v
+  #      `-- healingFinish
   #               |
   #               v
-  #              TBD ..
+  #           contracts
+  #               |
+  #               v
+  #         contractsFinish
+  #               |
+  #               v
+  #             stop
   #
   let newState =
     case ctx.pool.syncState:
@@ -141,8 +179,16 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]) =
       ctx.analyseNext info
     of SnapHealing:
       ctx.healingNext info
+    of SnapHealingFinish:
+      ctx.healingFinishNext info
+    of SnapContracts:
+      ctx.contractsNext info
+    of SnapContractsFinish:
+      ctx.contractsFinishNext info
+    of SnapStop:
+      ctx.stopNext info
   if ctx.pool.syncState == newState:
-    return
+    return newState
 
   let
     prevState = ctx.pool.syncState
@@ -150,11 +196,17 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]) =
 
   ctx.pool.syncState = newState
   case newState:
-  of SnapDownload, SnapDownloadFinish, SnapMkTrie,SnapAnalyse,  SnapHealing:
+  of SnapDownload, SnapDownloadFinish, SnapMkTrie:
     chronicles.info info & ": State changed", prevState, newState,
       top=sdb.top, pivot=sdb.pivot.bnStr, nSyncPeers=ctx.nSyncPeers()
+  of SnapAnalyse, SnapHealing, SnapHealingFinish,
+     SnapContracts, SnapContractsFinish, SnapStop:
+    chronicles.info info & ": State changed", prevState, newState,
+      pivot=ctx.pool.pivot.toStr, nSyncPeers=ctx.nSyncPeers()
   of SnapIdle, SnapResume, SnapReady:
     debug "State changed", prevState, newState
+
+  newState
 
 # ------------------------------------------------------------------------------
 # Other public functions

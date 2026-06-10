@@ -97,16 +97,14 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       ctx.sessionResume(info).isOkOr:
         break body                                  # shutdown?
 
-    ctx.updateSyncState info                        # set next state
-    case ctx.pool.syncState:
+    case ctx.updateSyncState(info):                 # set next state
     of SnapReady:
       chronicles.info info & ": Waiting for CL to send updates",
         syncState=ctx.syncState, nSyncPeers=ctx.nSyncPeers()
       bodyRc = daemonWaitReadyInterval              # take a nap
 
     of SnapDownload:
-      bodyRc = daemonWaitDownloadInterval           # take a nap
-
+      bodyRc = daemonWaitDownloadInterval           # download handled by peers
     of SnapDownloadFinish:
       bodyRc = daemonWaitDownloadFinishInterval     # wait for sync
 
@@ -126,11 +124,22 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       debug info & ": Partial MPT analysed",
         ela=stats.ela.toStr, syncState=ctx.syncState
 
-    of SnapHealing:                                 # TBD ..
-      warn info & ": Healing not yet implemented"
+    of SnapHealing:
+      bodyRc = daemonWaitHealingInterval            # healing is run by peers
+    of SnapHealingFinish:
+      bodyRc = daemonWaitHealingFinishInterval      # wait for sync
+
+    of SnapContracts:
+      bodyRc = daemonWaitCodesInterval              # contracts handled by peers
+    of SnapContractsFinish:
+      bodyRc = daemonWaitCodesFinishInterval        # wait for sync
+
+    of SnapStop:
+      warn info & ": Stop snap sync not implemented yet, lingering",
+        syncState=ctx.syncState
       bodyRc = chronos.seconds(30)
 
-    else:
+    of SnapIdle, SnapResume:
       bodyRc = daemonWaitElseInterval               # take a nap
 
     # End block: `body`
@@ -174,9 +183,20 @@ template runPeer*(
   block body:
     case buddy.ctx.pool.syncState:
     of SnapDownload:
-
       # Download and cache accounts, storage slots, contracts
       buddy.download info
+
+    of SnapHealing:
+      # Download persistent healing data
+      buddy.ctx.updateSyncHealingFinish()
+      warn info & ": Skipped healing, not implemented yet",
+        syncState=($buddy.ctx.syncState)
+
+    of SnapContracts:
+      # Download persistent conttact data
+      buddy.ctx.updateSyncContractsFinish()
+      warn info & ": Skipped contracts download, not implemented yet",
+        syncState=($buddy.ctx.syncState)
 
     else:
       bodyRc = peerWaitElseInterval
