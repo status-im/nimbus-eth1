@@ -117,7 +117,7 @@ template fetchStorage*(
         ", nAccounts=" & $accounts.len
 
     trace sendInfo, peer, root, nReqAcc, reqSto, nReqSto,
-      syncState=buddy.syncState, nErrors=buddy.nErrors.fetch.sto
+      syncState=($buddy.syncState), nErrors=buddy.nErrors.fetch.sto
 
     let rc = await buddy.getStorage(fetchReq)
     var elapsed: Duration
@@ -132,7 +132,7 @@ template fetchStorage*(
           break evalError
         of EAlreadyTriedAndFailed:
           trace recvInfo & " error", peer, root, nReqAcc, reqSto, nReqSto,
-            ela=elapsed.toStr, syncState=buddy.syncState, error=rc.errStr,
+            ela=elapsed.toStr, syncState=($buddy.syncState), error=rc.errStr,
             nErrors=buddy.nErrors.fetch.sto
           break body                                # return err()
         of EPeerDisconnected, ECancelledError:
@@ -147,7 +147,7 @@ template fetchStorage*(
 
         # Debug message for other errors
         debug recvInfo & " error", peer, root, nReqAcc, reqSto, nReqSto,
-          ela=elapsed.toStr, syncState=buddy.syncState, error=rc.errStr,
+          ela=elapsed.toStr, syncState=($buddy.syncState), error=rc.errStr,
           nErrors=buddy.nErrors.fetch.sto
         break body                                  # return err()
 

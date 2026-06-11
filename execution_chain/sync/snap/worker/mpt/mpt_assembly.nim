@@ -22,13 +22,15 @@
 ##
 ## No column families are used, here.
 ##
-## Key/value storage formats by column type:
 ##
-## * StateData:
+## Key/value download packet formats
+## ---------------------------------
+##
+## * State context data:
 ##   + key33: <col, root>
 ##   + value: <hash, number, touch, tag, coverage>
 ##   where
-##   + col:      `Accounts`
+##   + col:      `StateData`
 ##   + root:     `StateRoot`
 ##   + hash:     `BlockHash`
 ##   + number:   `BlockNumber`
@@ -48,11 +50,11 @@
 ##   + proof:    `seq[ProofNode]`
 ##   + peerID:   `Hash`
 ##
-## * StoSlot:
+## * Storage slots:
 ##   + key97: <col, root, account, start>
 ##   + value: <limit, slot, proof, peerID>
 ##   where
-##   + col:      `Accounts`
+##   + col:      `StoSlot`
 ##   + root:     `StateRoot`
 ##   * account:  `ItemKey`
 ##   + start:    `ItemKey`
@@ -61,16 +63,60 @@
 ##   + proof:    `seq[ProofNode]`
 ##   + peerID:   `Hash`
 ##
-## * ByteCode:
-##   + key65: <col, root, start>
-##   + value: <limit, code, peerID>
+##
+## Key/value KVT/MPT formats
+## -------------------------
+##
+## * Accounts MPT:
+##   + key33: <col, key>
+##   + value: node
 ##   where
-##   + col:      `ByteCodes`
-##   + root:     `StateRoot`
-##   * start:    `ItemKey`
-##   + limit:    `ItemKey`
-##   + codes:    `seq[(CodeHash,CodeItem)]`
-##   + peerID:   `Hash`
+##   + col:       `AccKvt`
+##   + key:       `seq[byte]`
+##   * node:      `seq[byte]`
+##
+## * Storage MPTs:
+##   + key65: <col, acc-path, key>
+##   + value: node
+##   where
+##   + col:       `StoKvt`
+##   + acc-path:  `Hash32`
+##   + key:       `seq[byte]`
+##   * node:      `seq[byte]`
+##
+## * Contract codes table:
+##   + key33: <col, key>
+##   + value: contract
+##   where
+##   + col:       `CodeKvt`
+##   + key:       `seq[byte]`
+##   * contract:  `seq[byte]`
+##
+##
+## * Dangling account links table:
+##   + key33: <col, key>
+##   + value: dngl-path
+##   where
+##   + col:       `AccDnglKvt`
+##   + key:       `seq[byte]`
+##   * dngl-path: `seq[byte]`
+##
+## * Dangling storage slot links table:
+##   + key65: <col, acc-path, key>
+##   + value: dngl-path
+##   where
+##   + col:       `StoDnglKvt`
+##   + acc-path:  `Hash32`
+##   + key:       `seq[byte]`
+##   * dngl-path: `seq[byte]`
+##
+## * Missing contract codes table:
+##   + key33: <col, key>
+##   + value: path
+##   where
+##   + col:       `CodeMissKvt`
+##   + key:       `seq[byte]`
+##   * path:      `seq[byte]`
 ##
 ## Additional assumptions:
 ##
@@ -114,6 +160,8 @@ type
   MptAsmRef* = ref object
     adb: RocksDbReadWriteRef
     dir: Path
+    dnglLock: int                                   # advisory lock
+    cntrLock: int                                   # advisory lock
 
   MptAsmCol = enum
     AdminCol = 0                                    # currently unused
@@ -121,20 +169,20 @@ type
     StateData                                       # root -> block hash/number
     Accounts                                        # as fetched from network
     StoSlot                                         # ditto
-    ByteCode                                        # ditto
 
-    AccKvt                                          # hash -> node mapping
-    StoKvt                                          # hash -> node mapping
-    CodeKvt                                         # hash -> code mapping
+    AccKvt                                          # accounts MPT
+    StoKvt                                          # storage slots MPT
+    CodeKvt                                         # contract codes table
 
-    AccDnglKvt                                      # dangling nodes lists
-    StoDnglKvt                                      # ..
-    CodeDnglKvt
+    AccDnglKvt                                      # dangling acc nodes links
+    StoDnglKvt                                      # dangling sto nodes links
+    CodeMissKvt                                     # missing contract links
 
   StateDataTag* = enum
     Untagged = 0                                    # well, still a tag :)
     OnTrie                                          # assembled and merged
     PivotOnTrie                                     # ditto, state root here
+    PivotMptAnalysed
 
   DecodedStateData* = tuple
     hash: BlockHash
@@ -155,11 +203,13 @@ type
     proof: seq[ProofNode]
     peerID: Hash
 
-  DecodedByteCode* = tuple
-    limit: ItemKey
-    codes: seq[(CodeHash,CodeItem)]
-    peerID: Hash
 
+  CachedStateData* = tuple
+    hash: BlockHash
+    number: BlockNumber
+    touch: Moment                                   # last data change
+    tag: StateDataTag                               # how this record is used
+    coverage: UInt256                               # account range coverage
 
   WalkStateData* = tuple
     root: StateRoot
@@ -189,21 +239,12 @@ type
     peerID: Hash
     error: string
 
-  WalkByteCode* = tuple
-    root: StateRoot
-    start: ItemKey                                  # account coverage
-    limit: ItemKey                                  # account coverage
-    codes: seq[(CodeHash,CodeItem)]
-    peerID: Hash
-    error: string
-
-  KvPair = tuple
-    ## Local helper structure
+  KvPair* = tuple
     key: seq[byte]
     value: seq[byte]
 
   KkvTriple = tuple
-    ## Local helper structure
+    ## Internal helper structure
     key1: seq[byte]
     key2: seq[byte]
     value: seq[byte]
@@ -261,20 +302,6 @@ func decodeStoSlot(data: seq[byte]): Result[DecodedStoSlot,string] =
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(move res)
 
-func decodeByteCode(data: seq[byte]): Result[DecodedByteCode,string] =
-  const info = "decodeByteCode"
-  var
-    rd = data.rlpFromBytes
-    res: DecodedByteCode
-  try:
-    rd.tryEnterList()
-    res.limit = rd.read(UInt256).to(ItemKey)
-    res.codes = rd.read(seq[(CodeHash,CodeItem)])
-    res.peerID = cast[Hash](rd.read uint)
-  except RlpError as e:
-    return err(info & ": " & $e.name & "(" & e.msg & ")")
-  ok(move res)
-
 
 template encodeStateData(
     hash: BlockHash;
@@ -314,17 +341,6 @@ template encodeStoSlot(
   wrt.append limit.to(UInt256)
   wrt.append slot
   wrt.append proof
-  wrt.append cast[uint](peerID)
-  wrt.finish()
-
-template encodeByteCode(
-    limit: ItemKey;
-    codes: seq[(CodeHash,CodeItem)];
-    peerID: Hash;
-      ): untyped =
-  var wrt = initRlpList 3
-  wrt.append limit.to(UInt256)
-  wrt.append codes
   wrt.append cast[uint](peerID)
   wrt.finish()
 
@@ -369,6 +385,46 @@ proc rDel(adb: RocksDbReadWriteRef; key: openArray[byte]): DelResult =
     return err(info & error)
   ok()
 
+proc rClear(
+    adb: RocksDbReadWriteRef;
+    col: MptAsmCol;
+    force = false;
+      ): DelResult =
+  const info = "mpt/clear: "
+  let rit = adb.openIterator().valueOr:
+    return err(info & "Iterator open error, col=" & $col & ", error=" & $error)
+  defer: rit.close()
+
+  var
+    nErrors = 0
+    key: seq[byte]
+
+  rit.seekToKey(@[col.ord.byte])
+  while rit.isValid():
+    key.setLen(0)
+    rit.key(proc(w: openArray[byte]) {.gcsafe, raises: [].} = key = @w)
+    rit.next()
+
+    if 0 < key.len:
+      if col.ord.byte != key[0]:
+        break
+
+      adb.delete(key).isOkOr:
+        if not force:
+          return err(info & "Deletion failed" &
+            ", col=" & $col & ", error=" & $error)
+        nErrors.inc
+
+  if 0 < nErrors:
+    err(info & "Some deletions failed" &
+      ", col=" & $col & ", nFailed=" & $nErrors)
+  else:
+    ok()
+
+# ------------------------------------------------------------------------------
+# Private generic iterators
+# ------------------------------------------------------------------------------
+
 proc kvPair(rit: RocksIteratorRef): KvPair =
   ## This helper must be provided as a separate function outside of any walk
   ## iterator, below. Otherwise the NIM compiler (version 2.2.4) might abort
@@ -383,6 +439,25 @@ proc kvPair(rit: RocksIteratorRef): KvPair =
   rit.value(proc(w: openArray[byte]) {.gcsafe, raises: [].} = kv.value = @w)
   rit.next()
   kv
+
+proc splitKey65(key: openArray[byte]; key1, key2: var Hash32): bool =
+  ## As of NIM 2.2.10, this function is needed to reliably avoid internal
+  ## code generation errors.
+  if key.len == 65:
+    (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
+    (addr (key2.distinctBase)[0]).copyMem(addr key[33], 32)
+    return true
+  # false
+
+proc splitKey97(key: openArray[byte]; key1, key2, key3: var Hash32): bool =
+  ## As of NIM 2.2.10, this function is needed to reliably avoid internal
+  ## code generation errors.
+  if key.len == 97:
+    (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
+    (addr (key2.distinctBase)[0]).copyMem(addr key[33], 32)
+    (addr (key3.distinctBase)[0]).copyMem(addr key[65], 32)
+    return true
+  # false
 
 iterator colWalkAtLeast1(adb: RocksDbRef, pfx: openArray[byte]): KvPair =
   ## Walk over key-value pairs of the database for keys with the search
@@ -490,9 +565,7 @@ iterator colWalk65(
         continue
       if col.ord.byte != key[0]:
         break
-      if key.len == 65:
-        (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
-        (addr (key2.distinctBase)[0]).copyMem(addr key[33], 32)
+      if key.splitKey65(key1, key2):
         yield (move key1, move key2, value)
 
 iterator colWalk97(
@@ -519,13 +592,12 @@ iterator colWalk97(
         continue
       if col.ord.byte != key[0]:
         break
-      if key.len == 97:
-        (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
-        (addr (key2.distinctBase)[0]).copyMem(addr key[33], 32)
-        (addr (key3.distinctBase)[0]).copyMem(addr key[65], 32)
+      if key.splitKey97(key1, key2, key3):
         yield (key1, key2, key3, value)
 
-# --------------
+# ------------------------------------------------------------------------------
+# Private generic key/value helpers
+# ------------------------------------------------------------------------------
 
 template keyAtMost33(col: MptAsmCol; key: openArray[byte]): openArray[byte] =
   doAssert key.len < 33
@@ -859,10 +931,18 @@ proc init*(
 proc getStateData*(
     db: MptAsmRef;
     root: StateRoot;
-      ): Result[(BlockHash,BlockNumber,Moment,StateDataTag,UInt256),string] =
+      ): Result[CachedStateData,string] =
   let data = db.get33(StateData, root).valueOr:
     return err(error)
   data.decodeStateData()
+
+proc putStateData*(
+    db: MptAsmRef;
+    root: StateRoot;
+    data: CachedStateData;
+      ): PutResult =
+  db.put33(StateData, root, encodeStateData(
+    data.hash, data.number, data.touch, data.tag, data.coverage))
 
 proc putStateData*(
     db: MptAsmRef;
@@ -921,6 +1001,9 @@ proc putAccounts*(
 
 proc delAccounts*(db: MptAsmRef; root: StateRoot; start: ItemKey): DelResult =
   db.del65(Accounts, root, start)
+
+proc clearAccounts*(db: MptAsmRef): DelResult =
+  db.adb.rClear(Accounts)
 
 iterator walkAccounts*(db: MptAsmRef): WalkAccounts =
   for (key1,key2,value) in db.adb.colWalk65 Accounts.key65():
@@ -996,6 +1079,9 @@ proc delStoSlot*(
       ): DelResult =
   db.del97(StoSlot, root, acc, start)
 
+proc clearStoSlot*(db: MptAsmRef): DelResult =
+  db.adb.rClear(StoSlot)
+
 iterator walkStoSlot*(
     db: MptAsmRef;
     root: StateRoot;
@@ -1019,52 +1105,6 @@ iterator walkStoSlot*(
         continue
     yield (root, acc, start, w.limit, w.slot, w.proof, w.peerID, "")
 
-# -------------
-
-proc getByteCode*(
-    db: MptAsmRef;
-    root: StateRoot;
-    start: ItemKey;
-    limit: ItemKey;
-      ): Result[DecodedByteCode,string] =
-  let data = db.get65(ByteCode, root, start).valueOr:
-    return err(error)
-  data.decodeByteCode()
-
-proc putByteCode*(
-    db: MptAsmRef;
-    root: StateRoot;
-    start: ItemKey;
-    limit: ItemKey;
-    codes: seq[(CodeHash,CodeItem)];
-    peerID: Hash;
-      ): PutResult =
-  db.put65(ByteCode, root, start, encodeByteCode(limit, codes, peerID))
-
-proc delByteCode*(db: MptAsmRef; root: StateRoot; start: ItemKey): DelResult =
-  db.del65(Accounts, root, start)
-
-iterator walkByteCode*(
-    db: MptAsmRef;
-    root: StateRoot;
-    start: ItemKey;
-      ): WalkByteCode =
-  ## Variant of `walkAccounts()` for fixed `root` and `start` account
-  let startHash = start.to(Hash32)
-  for (key1,key2,value) in db.adb.colWalk65 ByteCode.key65(root,startHash):
-    if StateRoot(key1) != root:
-      break
-    let
-      start2 = key2.to(ItemKey)
-      w = value.decodeByteCode().valueOr:
-        var oops: WalkByteCode
-        oops.root = root
-        oops.start = start2
-        oops.error = error
-        yield oops
-        continue
-    yield (root, start2, w.limit, w.codes, w.peerID, "")
-
 # ========================
 
 proc hasAccKvt*(db: MptAsmRef; key: openArray[byte]): BoolResult =
@@ -1087,10 +1127,7 @@ proc delAccKvt*(db: MptAsmRef, key: openArray[byte]): DelResult =
   db.delAtMost33(AccKvt, key)
 
 proc clearAccKvt*(db: MptAsmRef): DelResult =
-  for (key,_) in db.adb.colWalkAtLeast1 @[byte AccKvt]:
-    db.delAtMost33(AccKvt, key).isOkOr:
-      return err(error)
-  ok()
+  db.adb.rClear(AccKvt)
 
 iterator walkAccKvt*(db: MptAsmRef): KnPair =
   for (key,node) in db.adb.colWalkAtLeast1 @[byte AccKvt]:
@@ -1140,10 +1177,7 @@ proc clearStoKvt*(db: MptAsmRef, acc: Hash32): DelResult =
   ok()
 
 proc clearStoKvt*(db: MptAsmRef): DelResult =
-  for (key,_) in db.adb.colWalkAtLeast1 @[byte StoKvt]:
-    db.adb.rDel(@[byte StoKvt] & key).isOkOr:
-      return err(error)
-  ok()
+  db.adb.rClear(StoKvt)
 
 iterator walkStoKvt*(db: MptAsmRef, acc: Hash32): KkpTriple =
   for (key1, key2, path) in db.adb.colWalkAtLeast33 key33(StoKvt, acc):
@@ -1169,14 +1203,17 @@ proc getCodeKvt*(db: MptAsmRef; hash: Hash32): BlobResult =
 proc putCodeKvt*(db: MptAsmRef; cdHash: CodeHash; data: CodeItem): PutResult =
   db.put33(CodeKvt, cdHash.to(Hash32), data.to(seq[byte]))
 
+proc putCodeKvt*(db: MptAsmRef; contracts: openArray[KvPair]): PutResult =
+  for w in contracts:
+    db.put33(CodeKvt, w.key, w.value).isOkOr:
+      return err(error)
+  ok()
+
 proc delCodeKvt*(db: MptAsmRef, hash: Hash32): DelResult =
   db.del33(CodeKvt, hash)
 
 proc clearCodeKvt*(db: MptAsmRef): DelResult =
-  for (key,_) in db.adb.colWalkAtLeast1 @[byte CodeKvt]:
-    db.delAtMost33(CodeKvt, key).isOkOr:
-      return err(error)
-  ok()
+  db.adb.rClear(CodeKvt)
 
 iterator walkCodeKvt*(db: MptAsmRef): KvPair =
   for (key,value) in db.adb.colWalkAtLeast1 @[byte CodeKvt]:
@@ -1194,8 +1231,8 @@ proc getAccDnglKvt*(db: MptAsmRef; key: openArray[byte]): BlobResult =
     return err(error)
   ok(move data)
 
-proc putAccDnglKvt*(db: MptAsmRef; key, data: openArray[byte]): PutResult =
-  db.putAtMost33(AccDnglKvt, key, data)
+proc putAccDnglKvt*(db: MptAsmRef; key, path: openArray[byte]): PutResult =
+  db.putAtMost33(AccDnglKvt, key, path)
 
 proc putAccDnglKvt*(db: MptAsmRef, kvp: openArray[KpPair]): PutResult =
   for w in kvp:
@@ -1213,10 +1250,7 @@ proc delAccDnglKvt*(db: MptAsmRef, keys: openArray[seq[byte]]): DelResult =
   ok()
 
 proc clearAccDnglKvt*(db: MptAsmRef): DelResult =
-  for (key,_) in db.adb.colWalkAtLeast1 @[byte AccDnglKvt]:
-    db.delAtMost33(AccDnglKvt, key).isOkOr:
-      return err(error)
-  ok()
+  db.adb.rClear(AccDnglKvt)
 
 iterator walkAccDnglKvt*(db: MptAsmRef): KpPair =
   for (key,path) in db.adb.colWalkAtLeast1 @[byte AccDnglKvt]:
@@ -1284,10 +1318,7 @@ proc clearStoDnglKvt*(db: MptAsmRef, acc: Hash32): DelResult =
   ok()
 
 proc clearStoDnglKvt*(db: MptAsmRef): DelResult =
-  for (key,_) in db.adb.colWalkAtLeast1 @[byte StoDnglKvt]:
-    db.adb.rDel(@[byte StoDnglKvt] & key).isOkOr:
-      return err(error)
-  ok()
+  db.adb.rClear(StoDnglKvt)
 
 iterator walkStoDnglKvt*(db: MptAsmRef, acc: Hash32): KkpTriple =
   for (key1, key2, path) in db.adb.colWalkAtLeast33 key33(StoDnglKvt, acc):
@@ -1300,46 +1331,91 @@ iterator walkStoDnglKvt*(db: MptAsmRef): KkpTriple =
 
 # -------------
 
-proc hasCodeDnglKvt*(db: MptAsmRef; key: openArray[byte]): BoolResult =
-  let data = db.getAtMost33(CodeDnglKvt, key).valueOr:
+proc hasCodeMissKvt*(db: MptAsmRef; key: openArray[byte]): BoolResult =
+  let data = db.getAtMost33(CodeMissKvt, key).valueOr:
     return err(error)
   ok(0 < data.len)
 
-proc getCodeDnglKvt*(db: MptAsmRef; key: openArray[byte]): BlobResult =
-  var data = db.getAtMost33(CodeDnglKvt, key).valueOr:
+proc getCodeMissKvt*(db: MptAsmRef; key: openArray[byte]): BlobResult =
+  var data = db.getAtMost33(CodeMissKvt, key).valueOr:
     return err(error)
   ok(move data)
 
-proc putCodeDnglKvt*(db: MptAsmRef; key, data: openArray[byte]): PutResult =
-  db.putAtMost33(CodeDnglKvt, key, data)
+proc putCodeMissKvt*(db: MptAsmRef; key, path: openArray[byte]): PutResult =
+  db.putAtMost33(CodeMissKvt, key, path)
 
-proc putCodeDnglKvt*(
+proc putCodeMissKvt*(db: MptAsmRef; w: KpPair): PutResult =
+  db.putAtMost33(CodeMissKvt, w.key, w.path)
+
+proc putCodeMissKvt*(
     db: MptAsmRef;
     kvp: openArray[KpPair];
       ): PutResult =
   for w in kvp:
-    db.putAtMost33(CodeDnglKvt, w.key, w.path).isOkOr:
+    db.putAtMost33(CodeMissKvt, w.key, w.path).isOkOr:
       return err(error)
   ok()
 
-proc delCodeDnglKvt*(db: MptAsmRef, key: openArray[byte]): DelResult =
-  db.delAtMost33(CodeDnglKvt, key)
+proc delCodeMissKvt*(db: MptAsmRef, key: openArray[byte]): DelResult =
+  db.delAtMost33(CodeMissKvt, key)
 
-proc delCodeDnglKvt*(db: MptAsmRef, keys: openArray[seq[byte]]): DelResult =
+proc delCodeMissKvt*(db: MptAsmRef, keys: openArray[seq[byte]]): DelResult =
   for key in keys:
-    db.delAtMost33(CodeDnglKvt, key).isOkOr:
+    db.delAtMost33(CodeMissKvt, key).isOkOr:
       return err(error)
   ok()
 
-proc clearCodeDnglKvt*(db: MptAsmRef): DelResult =
-  for (key,_) in db.adb.colWalkAtLeast1 @[byte CodeDnglKvt]:
-    db.delAtMost33(CodeDnglKvt, key).isOkOr:
-      return err(error)
-  ok()
+proc clearCodeMissKvt*(db: MptAsmRef): DelResult =
+  db.adb.rClear(CodeMissKvt)
 
-iterator walkCodeDnglKvt*(db: MptAsmRef): KpPair =
-  for (key, path) in db.adb.colWalkAtLeast1 @[byte CodeDnglKvt]:
+iterator walkCodeMissKvt*(db: MptAsmRef): KpPair =
+  for (key, path) in db.adb.colWalkAtLeast1 @[byte CodeMissKvt]:
     yield (key, path)
+
+# -------------
+
+template withDnglAccSto*(db: MptAsmRef, code: untyped): untyped =
+  ## Run `code` while advisory lock is set. The only use of this lock is
+  ## to make sure that the `hasDnglAccSto()` returns empty only if
+  ##
+  ## * there is no `withDnglAccSto()` code active, and
+  ## * the dangling `*AccDnglKvt` or `*StoDnglKvt` tables are empty.
+  ##
+  block:
+    db.dnglLock.inc
+    defer: db.dnglLock.dec
+    code
+
+proc hasDnglAccSto*(db: MptAsmRef): bool =
+  ## Return `true` if a lock was set or some of the `*DnglKvt` tables
+  ## contain data.
+  ##
+  if 0 < db.dnglLock:
+    return true
+  for _ in db.walkAccDnglKvt:
+    return true
+  for _ in db.walkStoDnglKvt:
+    return true
+  # false
+
+template withMissContracts*(db: MptAsmRef, code: untyped): untyped =
+  ## Run `code` while advisory lock is set. The only use of this lock is
+  ## to make sure that the `hasDangling()` returns empty only if
+  ##
+  ## * there is no `withDangling()` code active, and
+  ## * the dangling tables are empty.
+  ##
+  block:
+    db.cntrLock.inc
+    defer: db.cntrLock.dec
+    code
+
+proc hasMissContracts*(db: MptAsmRef): bool =
+  if 0 < db.cntrLock:
+    return true
+  for _ in db.walkCodeMissKvt:
+    return true
+  # false
 
 # ------------------------------------------------------------------------------
 # End

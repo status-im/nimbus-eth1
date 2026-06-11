@@ -94,28 +94,18 @@ template toKey*(rlp: Rlp): seq[byte] =
   ## Convert to hask key or node data if it is a list (=> length smaller 32)
   if rlp.isList: @(rlp.rawData) else: rlp.toBytes
 
-func fromBytes*(_: type Hash32, path: openArray[byte]): Hash32 =
-  doAssert path.len == 32
-  let path = @path
-  (addr distinctBase(result)[0]).copyMem(unsafeAddr path[0], path.len)
-
 # ----------
 
-proc clearDanglAcc*(trd: TravDescRef, info: static[string]): Opt[void] =
-  trd.db.clearAccDnglKvt().isOkOr:
-    error info & ": Cannot reset dangling cache", `error`=error
+proc clearDanglTables*(ctx: SnapCtxRef, info: static[string]): Opt[void] =
+  let db = ctx.pool.mptAsm
+  db.clearAccDnglKvt().isOkOr:
+    error info & ": Cannot reset dangling accounts", `error`=error
     return err()
-  ok()
-
-proc clearDanglSto*(trd: TravDescRef, info: static[string]): Opt[void] =
-  trd.db.clearStoDnglKvt().isOkOr:
-    error info & ": Cannot reset slots cache", `error`=error
+  db.clearStoDnglKvt().isOkOr:
+    error info & ": Cannot reset dangling slots", `error`=error
     return err()
-  ok()
-
-proc clearDanglCode*(trd: TravDescRef, info: static[string]): Opt[void] =
-  trd.db.clearCodeDnglKvt().isOkOr:
-    error info & ": Cannot reset receipts cache", `error`=error
+  db.clearCodeMissKvt().isOkOr:
+    error info & ": Cannot reset missing contracts", `error`=error
     return err()
   ok()
 
@@ -160,7 +150,7 @@ proc putMissCode*(
     path: openArray[byte];
     info: static[string];
       ) =
-  trd.db.putCodeDnglKvt(key, path).isOkOr:
+  trd.db.putCodeMissKvt(key, path).isOkOr:
     error info & ": Error caching dangling slot links",
       key=key.toHex, path=path.toHex, `error`=error
     trd.cacheErr.inc

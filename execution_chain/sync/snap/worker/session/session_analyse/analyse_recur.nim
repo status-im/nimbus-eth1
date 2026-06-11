@@ -257,16 +257,11 @@ proc sessionAnalyseTrieRecur*(
 
   template stats(): auto = trd.stats
 
-  trace info & ": Clearing dangling links caches"
-  trd.clearDanglAcc(info).isOkOr:
-    return err(EClearError)
-  trd.clearDanglSto(info).isOkOr:
-    return err(EClearError)
-  trd.clearDanglCode(info).isOkOr:
-    return err(EClearError)
-
   let start = Moment.now()
   startTraversingMsg(info)
+
+  ctx.clearDanglTables(info).isOkOr:
+    return err(EClearError)
 
   trd.walkTrieRec(
     zeroHash32, pivot.Hash32.data, getAccKvtWrap,
@@ -276,6 +271,8 @@ proc sessionAnalyseTrieRecur*(
 
   if 0 < trd.cacheErr:
     return err(EPutError)
+
+  discard ctx.setPivotTag(PivotMptAnalysed, info)
 
   stats.nAccNodes += stats.nNodes
   stats.nNodes = stats.nAccNodes + stats.nStoNodes

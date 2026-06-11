@@ -12,13 +12,16 @@
 
 import
   std/[algorithm, sets, sequtils, typetraits],
-  pkg/[chronicles, chronos, metrics, stew/interval_set, stint],
-  pkg/stew/byteutils,
+  pkg/[chronicles, chronos, metrics, stint],
+  pkg/stew/[byteutils, interval_set],
   ../[helpers, mpt, state_db, worker_desc],
-  ./session_helpers
+  ./[session_analyse, session_helpers]
 
 declareGauge nec_snap_merged_mpt_coverage, "" &
   "Factor of accumulated account ranges covered when assembling MPT"
+
+const
+  UnconditionallyClearCache = false or true
 
 type
   RecoveryStatus = enum
@@ -60,6 +63,19 @@ proc init(
   w.nStates = nStates
   w.fullCov = ItemKeyRangeSet.init()
 
+proc mptTablesClear(ctx: SnapCtxRef, info: static[string]): Opt[void] =
+  let db = ctx.pool.mptAsm
+  db.clearAccKvt().isOkOr:
+    error info & ": Cannot reset accounts MPT", `error`=error
+    return err()
+  db.clearStoKvt().isOkOr:
+    error info & ": Cannot reset slots MPT", `error`=error
+    return err()
+  db.clearCodeKvt().isOkOr:
+    error info & ": Cannot reset receipts table", `error`=error
+    return err()
+  ok()
+
 func dist(a, b: WalkStateData): uint64 =
   ## Block number distance between two states.
   ##
@@ -92,7 +108,7 @@ func getRecoveryStatus(w: openArray[WalkStateData]): RecoveryStatus =
       if w[n].tag != Untagged:
         return PartiallyAssembled
     return NewAssembly                              # all tags `Untagged`
-  of PivotOnTrie:
+  of PivotOnTrie, PivotMptAnalysed:
     for n in 1 ..< w.len:
       if w[n].tag != OnTrie:
         return PartiallyAssembled
@@ -245,56 +261,6 @@ template mkStoTrie(
 
   bodyRc
 
-template mkCodesList(
-    session: MkTrieSession;                         # used as var parameter
-    info: static[string];
-      ): Opt[ErrorType] =
-  ## Async/template
-  ##
-  var bodyRc = Opt.none(ErrorType)
-  block body:
-    # Some shortcuts
-    template state: auto = session.state
-    template stateInx: auto = session.stateInx
-    template nStates: auto = session.nStates
-    template distance: auto = session.distance
-    template accData: auto = session.accData
-
-    let
-      accMin = accData.accounts[0].accHash.to(ItemKey)
-      accMax = accData.accounts[^1].accHash.to(ItemKey)
-
-      root {.inject,used.} = state.toStr            # logging only
-
-    # Find all available `CodeHash` keys
-    var found: HashSet[CodeHash]
-    for w in session.db.walkByteCode(session.accData.root, accMin):
-      if accMax < w.limit:
-        break
-
-      # Print keep alive messages and allow thread switch
-      bodyRc = session.sessionTicker(info):
-        trace info & ": Processing code lists ..", stateInx, nStates, root,
-          distance
-      if bodyRc.isSome():
-        break body
-
-      for (key,val) in w.codes:
-        let hash = val.distinctBase.keccak256
-        if hash != Hash32(key):
-          error info & ": Code key mismatch", stateInx, nStates, root,
-            distance, key=key.toStr, expected=hash.toStr,
-            nData=val.to(seq[byte]).len
-
-        session.db.putCodeKvt(key,val).isOkOr:
-          error info & ": Cannot store on DB code table", stateInx, nStates,
-            root, distance, key=key.toStr, nData=val.to(seq[byte]).len,
-            `error`=error
-          continue
-        found.incl key
-
-  bodyRc
-
 template mkTrieImpl(
     session: MkTrieSession;                         # used as var parameter
     info: static[string];
@@ -377,12 +343,6 @@ template mkTrieImpl(
               bodyRc = Opt.some(value)              # ..otherwise ignore for now
               break body
 
-      # Process code list
-      session.mkCodesList(info).isErrOr():
-        if value == ECancelledError:                # check for shutdown..
-          bodyRc = Opt.some(value)                  # ..otherwise ignore for now
-          break body
-
     # Some accounting for merged accounts ranges
     session.updateCoverageMetrics()                 # full coverage metrics
 
@@ -450,6 +410,11 @@ template sessionMkTrie*(ctx: SnapCtxRef; info: static[string]): auto =
     # Sort states by its distance from pivot, smallest distance first
     byDist.sort proc(x,y: WalkStateData): int = cmp(x.dist pivot,y.dist pivot)
 
+    # FIXME -- begin (will go away) ------------------------------------------
+    when UnconditionallyClearCache:
+      byDist[0].tag = Untagged                      # => restart from scratch
+    # FIXME -- end (will go away) --------------------------------------------
+
     # If necessary, update state data record pretending the cache is empty if
     # the pivot state tag has changed. Otherwise proceed with an interrupted
     # session with the `Untagged` states.
@@ -469,12 +434,11 @@ template sessionMkTrie*(ctx: SnapCtxRef; info: static[string]): auto =
       ctx.pool.pivot = Opt.none(StateRoot)          # clear
       for n in 0 ..< byDist.len:
         byDist[n].tag = Untagged                    # reset all states
-      discard ctx.pool.mptAsm.clearAccDnglKvt()     # clean up dangling links
-      discard ctx.pool.mptAsm.clearAccKvt()         # rebuild MPT cache
-      discard ctx.pool.mptAsm.clearStoKvt()         # ditto
-      discard ctx.pool.mptAsm.clearCodeKvt()        # ..
+      discard ctx.mptTablesClear info               # rebuild MPT tables
+      discard ctx.sessionAnalyseClear info          # ..
     of NewAssembly:
-      discard
+      ctx.pool.pivot = Opt.none(StateRoot)          # clear (if any)
+      discard ctx.sessionAnalyseClear info
 
     chronicles.info info & ": Assembling MPT from archived data", nStates
 
@@ -524,7 +488,7 @@ template sessionMkTrie*(ctx: SnapCtxRef; info: static[string]): auto =
     chronicles.info info & ": Done all states", nStates, pivot=pivot.toStr,
       coverage=session.fullCov.totalRatio.pcStr, elapsed=elapsed.toStr
 
-    # Publish pivot for MPT analysis anf healing
+    # Publish pivot for MPT analysis and healing
     ctx.pool.pivot = Opt.some(pivot.root)
     # End block `body`
 

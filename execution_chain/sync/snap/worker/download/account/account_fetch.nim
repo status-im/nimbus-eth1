@@ -103,7 +103,7 @@ template fetchAccounts*(
       nReqAcc {.inject,used.} = ivReq.len.flStr     # logging only
 
     trace sendInfo, peer, root, reqAcc, nReqAcc,
-      syncState=buddy.syncState, nErrors=buddy.nErrors.fetch.acc
+      syncState=($buddy.syncState), nErrors=buddy.nErrors.fetch.acc
 
     let rc = await buddy.getAccounts(fetchReq)
     var elapsed: Duration
@@ -118,7 +118,7 @@ template fetchAccounts*(
           break evalError
         of EAlreadyTriedAndFailed:
           trace recvInfo & " error", peer, root, reqAcc, nReqAcc,
-            ela=elapsed.toStr, syncState=buddy.syncState, error=rc.errStr,
+            ela=elapsed.toStr, syncState=($buddy.syncState), error=rc.errStr,
             nErrors=buddy.nErrors.fetch.acc
           break body                                # return err()
         of EPeerDisconnected, ECancelledError:
@@ -133,7 +133,7 @@ template fetchAccounts*(
 
         # Debug message for other errors
         debug recvInfo & " error", peer, root, reqAcc, nReqAcc,
-          ela=elapsed.toStr, syncState=buddy.syncState, error=rc.errStr,
+          ela=elapsed.toStr, syncState=($buddy.syncState), error=rc.errStr,
           nErrors=buddy.nErrors.fetch.acc
         break body                                  # return err()
 
