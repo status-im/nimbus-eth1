@@ -213,7 +213,7 @@ jobs:
           path: nimbus_verified_proxy/library/bindings/wasm/
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           registry-url: 'https://npm.pkg.github.com'
@@ -337,6 +337,11 @@ jobs:
             windows-amd64-archive/*
             macos-arm64-archive/*
 
+  remove-archive-artifact:
+    name: Remove archive artifact
+    needs: [run-binary, nightly-build-release]
+    runs-on: ubuntu-latest
+    steps:
       - name: Delete artefacts
         uses: geekyeggo/delete-artifact@v5
         with:
