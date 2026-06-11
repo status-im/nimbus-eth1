@@ -94,11 +94,6 @@ template toKey*(rlp: Rlp): seq[byte] =
   ## Convert to hask key or node data if it is a list (=> length smaller 32)
   if rlp.isList: @(rlp.rawData) else: rlp.toBytes
 
-func fromBytes*(_: type Hash32, path: openArray[byte]): Hash32 =
-  doAssert path.len == 32
-  let path = @path
-  (addr distinctBase(result)[0]).copyMem(unsafeAddr path[0], path.len)
-
 # ----------
 
 proc clearDanglTables*(ctx: SnapCtxRef, info: static[string]): Opt[void] =

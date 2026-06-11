@@ -161,6 +161,20 @@ proc getEthPeers*(buddy: SnapPeerRef): seq[BeaconPeerRef] =
   ##  Get all `eth` peer contexts available at the current time
   buddy.ctx.pool.beaconSync.ctx.getSyncPeers()
 
+# ---------
+
+func fromBytes*(_: type Hash32, path: openArray[byte]): Hash32 =
+  doAssert path.len == 32
+  let path = @path
+  (addr distinctBase(result)[0]).copyMem(unsafeAddr path[0], path.len)
+
+func toStr*(error: SnapError): string =
+  result = $error.excp
+  if 0 < error.name.len:
+    result &= "(" & error.name & ")"
+  if 0 < error.msg.len:
+    result &= "[" & error.msg & "]"
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

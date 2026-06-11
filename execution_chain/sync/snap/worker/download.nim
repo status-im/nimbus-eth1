@@ -22,7 +22,7 @@ export
 # Public function(s)
 # ------------------------------------------------------------------------------
 
-template download*(buddy: SnapPeerRef, info: static[string]) =
+template downloadAccountsAndStorage*(buddy: SnapPeerRef, info: static[string]) =
   ## Async/template
   ##
   ## Fetch and stash account, storage, and code ranges for available state

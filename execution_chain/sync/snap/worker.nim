@@ -19,17 +19,6 @@ logScope:
   topics = "snap sync"
 
 # ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-func toStr(error: SnapError): string =
-  result = $error.excp
-  if 0 < error.name.len:
-    result &= "(" & error.name & ")"
-  if 0 < error.msg.len:
-    result &= "[" & error.msg & "]"
-
-# ------------------------------------------------------------------------------
 # Public start/stop and admin functions
 # ------------------------------------------------------------------------------
 
@@ -184,7 +173,7 @@ template runPeer*(
     case buddy.ctx.pool.syncState:
     of SnapDownload:
       # Download and cache accounts, storage slots, contracts
-      buddy.download info
+      buddy.downloadAccountsAndStorage info
 
     of SnapHealing:
       # Download persistent healing data
@@ -193,10 +182,9 @@ template runPeer*(
         syncState=($buddy.ctx.syncState)
 
     of SnapContracts:
-      # Download persistent conttact data
-      buddy.ctx.updateSyncContractsFinish()
-      warn info & ": Skipped contracts download, not implemented yet",
-        syncState=($buddy.ctx.syncState)
+      # Download persistent contract data
+      buddy.downloadCode(info).isOkOr:
+        buddy.ctrl.zombie = true
 
     else:
       bodyRc = peerWaitElseInterval
