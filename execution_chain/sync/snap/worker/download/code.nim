@@ -11,9 +11,9 @@
 {.push raises: [].}
 
 import
-  ./code/code_fetch
+  ./code/code_download
 
 export
-  code_fetch
+  code_download
 
 # End

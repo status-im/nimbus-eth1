@@ -228,9 +228,7 @@ type
     peerID: Hash
     error: string
 
-
-  KvPair = tuple
-    ## Internal helper structure
+  KvPair* = tuple
     key: seq[byte]
     value: seq[byte]
 
@@ -391,6 +389,25 @@ proc kvPair(rit: RocksIteratorRef): KvPair =
   rit.next()
   kv
 
+proc splitKey65(key: openArray[byte]; key1, key2: var Hash32): bool =
+  ## As of NIM 2.2.10, this function is needed to reliably avoid internal
+  ## code generation errors.
+  if key.len == 65:
+    (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
+    (addr (key2.distinctBase)[0]).copyMem(addr key[33], 32)
+    return true
+  # false
+
+proc splitKey97(key: openArray[byte]; key1, key2, key3: var Hash32): bool =
+  ## As of NIM 2.2.10, this function is needed to reliably avoid internal
+  ## code generation errors.
+  if key.len == 97:
+    (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
+    (addr (key2.distinctBase)[0]).copyMem(addr key[33], 32)
+    (addr (key3.distinctBase)[0]).copyMem(addr key[65], 32)
+    return true
+  # false
+
 iterator colWalkAtLeast1(adb: RocksDbRef, pfx: openArray[byte]): KvPair =
   ## Walk over key-value pairs of the database for keys with the search
   ## head starting at postion `pfx[]`. The `pfx` argument must be length
@@ -497,9 +514,7 @@ iterator colWalk65(
         continue
       if col.ord.byte != key[0]:
         break
-      if key.len == 65:
-        (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
-        (addr (key2.distinctBase)[0]).copyMem(addr key[33], 32)
+      if key.splitKey65(key1, key2):
         yield (move key1, move key2, value)
 
 iterator colWalk97(
@@ -526,10 +541,7 @@ iterator colWalk97(
         continue
       if col.ord.byte != key[0]:
         break
-      if key.len == 97:
-        (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
-        (addr (key2.distinctBase)[0]).copyMem(addr key[33], 32)
-        (addr (key3.distinctBase)[0]).copyMem(addr key[65], 32)
+      if key.splitKey97(key1, key2, key3):
         yield (key1, key2, key3, value)
 
 # --------------
@@ -1130,6 +1142,12 @@ proc getCodeKvt*(db: MptAsmRef; hash: Hash32): BlobResult =
 proc putCodeKvt*(db: MptAsmRef; cdHash: CodeHash; data: CodeItem): PutResult =
   db.put33(CodeKvt, cdHash.to(Hash32), data.to(seq[byte]))
 
+proc putCodeKvt*(db: MptAsmRef; contracts: openArray[KvPair]): PutResult =
+  for w in contracts:
+    db.put33(CodeKvt, w.key, w.value).isOkOr:
+      return err(error)
+  ok()
+
 proc delCodeKvt*(db: MptAsmRef, hash: Hash32): DelResult =
   db.del33(CodeKvt, hash)
 
@@ -1273,6 +1291,9 @@ proc getCodeMissKvt*(db: MptAsmRef; key: openArray[byte]): BlobResult =
 
 proc putCodeMissKvt*(db: MptAsmRef; key, path: openArray[byte]): PutResult =
   db.putAtMost33(CodeMissKvt, key, path)
+
+proc putCodeMissKvt*(db: MptAsmRef; w: KpPair): PutResult =
+  db.putAtMost33(CodeMissKvt, w.key, w.path)
 
 proc putCodeMissKvt*(
     db: MptAsmRef;
