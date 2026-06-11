@@ -157,6 +157,9 @@ type
   InitTarget* = tuple
     hash: Hash32                     ## Some block hash to sync towards to
     isFinal: bool                    ## The `hash` belongs to a finalised block
+    finHash: Opt[Hash32]             ## Optional finalised hash from FCU; when
+                                     ## set, overrides the default finalised
+                                     ## hash chosen during target activation.
 
   SyncEta* = tuple
     ## Eta calculator. The latest values of `headerTime` and `blockTime` are
