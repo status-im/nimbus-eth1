@@ -12,7 +12,7 @@
 
 import
   pkg/chronicles,
-  ./[helpers, mpt, worker_const, worker_desc]
+  ./[helpers, mpt, session, worker_const, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -69,6 +69,9 @@ proc mkTrieNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
   if ctx.pool.pivot.isNone():                       # enter unless pivot is set
     return SnapMkTrie
+  ctx.getPivotTag(info).isErrOr:
+    if PivotMptAnalysed <= value:
+      return SnapHealing
   SnapAnalyse
 
 func analyseNext(ctx: SnapCtxRef; info: static[string]): SyncState =

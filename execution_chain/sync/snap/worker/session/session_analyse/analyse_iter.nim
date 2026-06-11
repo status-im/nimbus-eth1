@@ -411,6 +411,8 @@ template sessionAnalyseTrieIter*(cty: SnapCtxRef, info: static[string]): auto =
       bodyRc = typeof(bodyRc).err(rc.error)
       break body
     
+    discard ctx.setPivotTag(PivotMptAnalysed, info)
+
     stats.nAccNodes += stats.nNodes
     stats.nNodes = stats.nAccNodes + stats.nStoNodes
     stats.ela = (Moment.now() - start)

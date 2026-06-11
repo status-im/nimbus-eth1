@@ -108,7 +108,7 @@ func getRecoveryStatus(w: openArray[WalkStateData]): RecoveryStatus =
       if w[n].tag != Untagged:
         return PartiallyAssembled
     return NewAssembly                              # all tags `Untagged`
-  of PivotOnTrie:
+  of PivotOnTrie, PivotMptAnalysed:
     for n in 1 ..< w.len:
       if w[n].tag != OnTrie:
         return PartiallyAssembled

@@ -14,6 +14,7 @@ import
   ./session/[session_analyse, session_helpers, session_mktrie, session_resume]
 
 export
+  getPivotTag,
   countKvtNodes,
   countDnglLinks,
   session_analyse,

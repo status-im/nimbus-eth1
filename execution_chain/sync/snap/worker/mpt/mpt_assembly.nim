@@ -182,6 +182,7 @@ type
     Untagged = 0                                    # well, still a tag :)
     OnTrie                                          # assembled and merged
     PivotOnTrie                                     # ditto, state root here
+    PivotMptAnalysed
 
   DecodedStateData* = tuple
     hash: BlockHash
@@ -202,6 +203,13 @@ type
     proof: seq[ProofNode]
     peerID: Hash
 
+
+  CachedStateData* = tuple
+    hash: BlockHash
+    number: BlockNumber
+    touch: Moment                                   # last data change
+    tag: StateDataTag                               # how this record is used
+    coverage: UInt256                               # account range coverage
 
   WalkStateData* = tuple
     root: StateRoot
@@ -923,10 +931,18 @@ proc init*(
 proc getStateData*(
     db: MptAsmRef;
     root: StateRoot;
-      ): Result[(BlockHash,BlockNumber,Moment,StateDataTag,UInt256),string] =
+      ): Result[CachedStateData,string] =
   let data = db.get33(StateData, root).valueOr:
     return err(error)
   data.decodeStateData()
+
+proc putStateData*(
+    db: MptAsmRef;
+    root: StateRoot;
+    data: CachedStateData;
+      ): PutResult =
+  db.put33(StateData, root, encodeStateData(
+    data.hash, data.number, data.touch, data.tag, data.coverage))
 
 proc putStateData*(
     db: MptAsmRef;
