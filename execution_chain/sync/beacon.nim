@@ -124,16 +124,6 @@ proc config*(
 
   desc.ctx.pool.chain = chain
 
-  # Allow the engine-API forkchoice path to ask the syncer to fetch an
-  # unknown head from peers (see `api_forkchoice.nim`). The mechanism reuses
-  # the same `initTarget` activation pipeline that the `--debug-beacon-sync-
-  # target` CLI flag drives.
-  chain.com.headerTargetRequest = proc(hash, finHash: Hash32) =
-    let fin =
-      if finHash == zeroHash32: Opt.none(Hash32)
-      else: Opt.some(finHash)
-    desc.ctx.headersTargetRequest(hash, isFinal = false, "fcu", finHash = fin)
-
   if not desc.lazyConfigHook.isNil:
     desc.lazyConfigHook(desc)
     desc.lazyConfigHook = nil

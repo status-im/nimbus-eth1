@@ -75,6 +75,16 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
   ctx.pool.chain.com.beaconSyncerProgress = proc(): SyncStateData =
     ctx.querySyncProgress()
 
+  # Allow the engine-API forkchoice path to ask the syncer to fetch an
+  # unknown head from peers (see `api_forkchoice.nim`). The mechanism reuses
+  # the same `initTarget` activation pipeline that the `--debug-beacon-sync-
+  # target` CLI flag drives.
+  ctx.pool.chain.com.headerTargetRequest = proc(hash, finHash: Hash32) =
+    let fin =
+      if finHash == zeroHash32: Opt.none(Hash32)
+      else: Opt.some(finHash)
+    ctx.headersTargetRequest(hash, isFinal = false, "fcu", finHash = fin)
+
   # Set up ticker
   if ctx.pool.syncTickerOk:
     ctx.pool.ticker = syncTicker()
@@ -85,6 +95,7 @@ proc destroyServices*(ctx: BeaconCtxRef) =
   ## Helper for `release()`
   ctx.hdrCache.destroy()
   ctx.pool.chain.com.beaconSyncerProgress = BeaconSyncerProgressCB(nil)
+  ctx.pool.chain.com.headerTargetRequest = HeaderTargetRequestCB(nil)
   ctx.pool.ticker = Ticker(nil)
 
 # ---------
