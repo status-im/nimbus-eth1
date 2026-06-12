@@ -20,6 +20,7 @@ on:
         description: 'Exclude matrix object contains field'
         required: false
         default: ''
+        type: string
 
 jobs:
   generate_matrix_json:
