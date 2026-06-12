@@ -399,7 +399,7 @@ proc validateTransaction*(
   # EOA = Externally Owned Account
   let
     code = ledger.getCode(sender)
-    delegated = code.parseDelegation()
+    delegated = code.isDelegation()
   if code.len > 0 and not delegated:
     return err(&"invalid tx: sender is not an EOA. sender={sender.toHex}, codeLen={code.len}")
 
