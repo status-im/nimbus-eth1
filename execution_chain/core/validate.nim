@@ -8,7 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   std/[sequtils, sets, strformat],
@@ -224,7 +224,8 @@ func validateLegacySignatureForm(tx: Transaction, fork: HardFork): bool =
 func validateEip2930SignatureForm(tx: Transaction): bool =
   var isValid = tx.V == 0'u64 or tx.V == 1'u64
   isValid = isValid and tx.S >= UInt256.one
-  isValid = isValid and tx.S < SECPK1_N
+  # https://eips.ethereum.org/EIPS/eip-2#specification
+  isValid = isValid and tx.S < SECPK1_N div 2
   isValid = isValid and tx.R < SECPK1_N
   isValid
 
