@@ -155,6 +155,7 @@ proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
       of headers: "h"
       of headersCancel: "x"
       of headersFinish: "f"
+      of linger: "l"
       of blocks: "b"
       of blocksCancel: "x"
       of blocksFinish: "f"
@@ -179,6 +180,10 @@ proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
 
     of headers, headersCancel, headersFinish:
       debug "Sync state headers", up, eta, nP, st, B, L,
+        C, D, H, T, F, hQ
+
+    of linger:
+      debug "Linger", up, eta, nP, st, B, L,
         C, D, H, T, F, hQ
 
     of blocks, blocksCancel, blocksFinish:

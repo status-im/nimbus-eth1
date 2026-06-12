@@ -131,22 +131,31 @@ proc updateEtaHeaders*(ctx: BeaconCtxRef) =
         ctx.pool.syncEta.headerTime =
           elapsed.nanoseconds.float / nProcessed.float
 
-        # Caclculate the duration to process all the headers and all
-        # blocks, i.e
-        # * headers to be stored for this sprint
-        # * blocks to be stored for this sprint
-        # * headers and blocks to be stored for the rest until known target
-        let
-          blocksToDo = dist(ctx.chain.baseNumber, ctx.subState.headNum)
-          restToDo = dist(ctx.subState.headNum,
-                          ctx.hdrCache.latestConsHeadNumber)
-          restTime = ctx.pool.syncEta.headerTime + ctx.pool.syncEta.blockTime
+        if ctx.pool.stopBase.isNone():
+          # Caclculate the duration to process all the headers and all
+          # blocks, i.e
+          # * headers to be stored for this sprint
+          # * blocks to be stored for this sprint
+          # * headers and blocks to be stored for the rest until known target
+          let
+            restToDo = dist(ctx.subState.headNum,
+                            ctx.hdrCache.latestConsHeadNumber)
 
-          hdrsNs = ctx.pool.syncEta.headerTime * headersToDo.float
-          blksNs = ctx.pool.syncEta.blockTime * blocksToDo.float
-          restNs = restTime * restToDo.float
+            blocksToDo = dist(ctx.chain.baseNumber, ctx.subState.headNum)
+            restTime = ctx.pool.syncEta.headerTime + ctx.pool.syncEta.blockTime
 
-        ctx.setEtaAndMetrics(hdrsNs + blksNs + restNs)
+            hdrsNs = ctx.pool.syncEta.headerTime * headersToDo.float
+            blksNs = ctx.pool.syncEta.blockTime * blocksToDo.float
+            restNs = restTime * restToDo.float
+
+          ctx.setEtaAndMetrics(hdrsNs + blksNs + restNs)
+
+        else:                                       # single run => headers only
+          ctx.setEtaAndMetrics(ctx.pool.syncEta.headerTime * headersToDo)
+
+proc updateEtaHeadersDone*(ctx: BeaconCtxRef) =
+  ## Eta and metrics while system is in `headers` state
+  metrics.set(nec_sync_eta_secs, 0f)                # songle run finished
 
 # ------------------------------------------------------------------------------
 # End

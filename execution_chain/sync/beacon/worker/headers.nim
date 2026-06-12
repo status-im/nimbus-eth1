@@ -114,7 +114,8 @@ template headersCollect*(buddy: BeaconPeerRef; info: static[string]) =
 
           # Fetch some headers
           rev = buddy.headersFetch(parent, nFetchHeadersRequest, info).valueOr:
-            trace info & ": fetch to disk error ***", peer
+            if 0 < ctx.headersUnprocAvail():
+              trace info & ": Header fetch error", peer
             break fetchHeadersBody                   # error => exit block
 
         ctx.pool.seenData = true                     # header data exist

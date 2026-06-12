@@ -18,7 +18,8 @@ import
 # ------------------------------------------------------------------------------
 
 func somethingToCollectOrUnstage*(buddy: BeaconPeerRef): bool =
-  if buddy.ctx.hibernate:                        # not activated yet?
+  if buddy.ctx.hibernate or                      # not activated yet?
+     buddy.ctx.pool.syncState == linger:         # wait for idle mode
     return false
   if buddy.headersCollectOk() or                 # something on TODO list
      buddy.headersUnstageOk() or

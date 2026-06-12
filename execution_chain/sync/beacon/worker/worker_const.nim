@@ -19,6 +19,7 @@ type
     headers                        ## see clauses *(5)*, *(9)* of `README.md`
     headersCancel                  ## stop this scrum
     headersFinish                  ## see clause *(10)* of `README.md`
+    linger                         ## wait for extrenal instructions
     blocks                         ## see clause *(11)* of `README.md`
     blocksCancel                   ## stop this syncer scrum
     blocksFinish                   ## get ready for `idle`
