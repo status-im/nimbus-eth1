@@ -221,6 +221,40 @@ func addCodeChange*(
     newCode: openArray[byte]) =
   builder[].addCodeChange(address, blockAccessIndex, @newCode)
 
+proc merge*(builder: BlockAccessListBuilderRef, other: BlockAccessListBuilderRef) =
+  for address, accData in other.accounts.mpairs():
+    builder.ensureAccount(address)
+
+    builder.accounts.withValue(address, destData):
+      for slot, changes in accData.storageChanges.mpairs():
+        if slot notin destData[].storageChanges:
+          destData[].storageChanges[slot] = default(Table[int, UInt256])
+        destData[].storageChanges.withValue(slot, slotChanges):
+          for balIndex, value in changes:
+            slotChanges[][balIndex] = value
+
+      destData[].storageReads.incl(accData.storageReads)
+
+      for balIndex, balance in accData.balanceChanges:
+        destData[].balanceChanges[balIndex] = balance
+
+      for balIndex, nonce in accData.nonceChanges:
+        destData[].nonceChanges[balIndex] = nonce
+
+      for balIndex, code in accData.codeChanges.mpairs():
+        destData[].codeChanges[balIndex] = code
+
+template merge*(
+    builder: ConcurrentBlockAccessListBuilderRef, other: BlockAccessListBuilderRef
+) =
+  withLock(builder.lock):
+    merge(builder.BlockAccessListBuilderRef, other)
+
+func merge*(
+    builder: ptr ConcurrentBlockAccessListBuilderRef, other: BlockAccessListBuilderRef
+) =
+  builder[].merge(other)
+
 func buildBlockAccessList*(builder: BlockAccessListBuilderRef): BlockAccessListRef =
   let blockAccessList: BlockAccessListRef = new BlockAccessList
 

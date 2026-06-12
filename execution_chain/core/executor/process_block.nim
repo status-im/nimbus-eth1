@@ -35,7 +35,12 @@ import
   stew/assign2
 
 when compileOption("threads"):
-  import std/atomics, taskpools
+  import
+    std/atomics,
+    taskpools,
+    stew/byteutils,
+    eth/common/receipts_rlp,
+    ../../block_access_list/[block_access_list_overlay, block_access_list_utils]
 
   type
     Entry = object
@@ -58,6 +63,30 @@ when compileOption("threads"):
       balPtr: ptr BlockAccessList
       txFrame: CoreDbTxRef
       fork: EVMFork
+      txExecutionFinished: ptr Atomic[bool]
+
+    TxExecCtx = object
+      finished: Atomic[bool]
+      parent: Header
+      blockCtx: BlockContext
+      com: CommonRef
+      txFrame: CoreDbTxRef
+      balPtr: ptr BlockAccessList
+      sharedBuilder: ptr ConcurrentBlockAccessListBuilderRef
+
+    TxExecEntry = object
+      sig: Signature
+      hash: Hash32
+      done: Atomic[bool]
+      failed: bool
+      error: SharedByteBlob
+      status: bool
+      gasUsed: GasInt
+      blockRegularGasUsed: GasInt
+      blockStateGasUsed: GasInt
+      intrinsicGas: IntrinsicGas
+      logs: SharedByteBlob
+      fut: Flowvar[bool]
 
   proc recoverAndPrefetchTask(
       e: ptr Entry, ctx: ptr PrefetchCtx, tx: ptr Transaction): bool {.nimcall.} =
@@ -173,6 +202,10 @@ when compileOption("threads"):
       if ctx[].finished.load(moAcquire):
         break
 
+      if not ctx[].txExecutionFinished.isNil() and
+          ctx[].txExecutionFinished[].load(moAcquire):
+        break
+
       let i = ctx[].nextIndex.fetchAdd(1, moRelaxed)
       if i >= len:
         break
@@ -217,6 +250,7 @@ when compileOption("threads"):
     # during block execution; this avoids locking on the frame data structures.
     ctx.txFrame = vmState.ledger.txFrame.parent()
     ctx.fork = vmState.fork
+    ctx.txExecutionFinished = vmState.txExecutionFinished.addr
     ctx.nextIndex.store(0, moRelease)
     ctx.finished.store(false, moRelease)
 
@@ -238,6 +272,183 @@ when compileOption("threads"):
       ctxPtr[].finished.store(true, moRelease)
       for f in futs.mitems():
         discard sync(f)
+
+  proc txExecTask(
+      e: ptr TxExecEntry, ctx: ptr TxExecCtx, tx: ptr Transaction, txIndex: int
+  ): bool {.nimcall.} =
+    template fail(msg: string): untyped =
+      e[].failed = true
+      e[].error = SharedByteBlob.init(msg.toOpenArrayByte(0, msg.high()))
+      e[].done.store(true, moRelease)
+      return true
+
+    if ctx[].finished.load(moAcquire):
+      return true
+
+    let pk = recover(e[].sig, SkMessage(e[].hash.data))
+    if pk.isErr():
+      fail("Could not get sender for tx with index " & $txIndex)
+    let sender = pk[].to(Address)
+
+    let balIndex = txIndex + 1
+
+    let ledger = LedgerRef()
+    ledger.txFrame.borrowRef(ctx[].txFrame)
+    defer:
+      ledger.txFrame.unborrowRef()
+    ledger.balOverlay = BlockAccessListOverlayRef.init(ctx[].balPtr, balIndex)
+    discard ledger.beginSavePoint()
+
+    let vmState = BaseVMState()
+    vmState.com.borrowRef(ctx[].com)
+    defer:
+      vmState.com.unborrowRef()
+    vmState.ledger = ledger
+    assign(vmState.parent, ctx[].parent)
+    assign(vmState.blockCtx, ctx[].blockCtx)
+    const txCtx = default(TxContext)
+    assign(vmState.txCtx, txCtx)
+    vmState.hardFork = vmState.determineFork
+    vmState.fork = ToEVMFork[vmState.hardFork]
+    vmState.gasCosts = vmState.fork.forkToSchedule
+    vmState.tracer = nil
+    vmState.receipts.setLen(0)
+    vmState.cumulativeGasUsed = 0
+    vmState.blockRegularGasUsed = 0
+    vmState.blockStateGasUsed = 0
+    vmState.blobGasUsed = 0'u64
+    vmState.allLogs.setLen(0)
+    vmState.gasRefunded = 0
+    vmState.balTracker = BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger)
+    vmState.balTracker.setBlockAccessIndex(balIndex)
+
+    e[].intrinsicGas = tx[].intrinsicGas(vmState.hardFork, vmState.blockCtx.gasLimit)
+
+    let res = vmState.processTransactionNoPersist(tx[], sender)
+    if res.isErr():
+      fail("Error processing tx with index " & $txIndex & ":" & res.error)
+
+    let partialBal = vmState.balTracker.getBlockAccessList().get()
+    verifyPartialBlockAccessList(partialBal[], ctx[].balPtr[], balIndex).isOkOr:
+      fail("Block access list verification failed for tx with index " &
+        $txIndex & ": " & error)
+
+    if not ctx[].sharedBuilder.isNil():
+      ctx[].sharedBuilder.merge(vmState.balTracker.builder)
+
+    e[].status = vmState.status
+    e[].gasUsed = res.value().gasUsed
+    e[].blockRegularGasUsed = res.value().blockRegularGasUsed
+    e[].blockStateGasUsed = res.value().blockStateGasUsed
+    e[].logs = SharedByteBlob.init(rlp.encode(res.value().logEntries))
+    e[].done.store(true, moRelease)
+
+    true
+
+  proc applyBlockAccessListWrites(
+      vmState: BaseVMState, bal: BlockAccessList, maxBalIndex: int
+  ) =
+    let ledger = vmState.ledger
+    for accChanges in bal:
+      template address(): Address =
+        accChanges.address
+
+      let balancePos =
+        accChanges.balanceChanges.findLastWriteBefore(maxBalIndex + 1)
+      if balancePos >= 0:
+        ledger.setBalance(address, accChanges.balanceChanges[balancePos].postBalance)
+
+      let noncePos = accChanges.nonceChanges.findLastWriteBefore(maxBalIndex + 1)
+      if noncePos >= 0:
+        ledger.setNonce(address, accChanges.nonceChanges[noncePos].newNonce)
+
+      let codePos = accChanges.codeChanges.findLastWriteBefore(maxBalIndex + 1)
+      if codePos >= 0:
+        ledger.setCode(address, accChanges.codeChanges[codePos].newCode)
+
+      for slotChanges in accChanges.storageChanges:
+        let pos = slotChanges.changes.findLastWriteBefore(maxBalIndex + 1)
+        if pos >= 0:
+          ledger.setStorage(address, slotChanges.slot, slotChanges.changes[pos].newValue)
+
+  proc processTransactionsParallel(
+      vmState: BaseVMState,
+      transactions: seq[Transaction],
+      bal: BlockAccessListRef,
+      skipReceipts: bool,
+      collectLogs: bool,
+  ): Result[void, string] =
+    var
+      entries = newSeq[TxExecEntry](transactions.len)
+      ctx: TxExecCtx
+      concurrentBuilder: ConcurrentBlockAccessListBuilderRef
+
+    ctx.parent = vmState.parent
+    ctx.blockCtx = vmState.blockCtx
+    ctx.com = vmState.com
+    ctx.txFrame = vmState.ledger.txFrame.parent()
+    ctx.balPtr = bal[].addr
+    ctx.finished.store(false, moRelease)
+
+    if vmState.balTrackerEnabled:
+      concurrentBuilder = ConcurrentBlockAccessListBuilderRef(vmState.balTracker.builder)
+      ctx.sharedBuilder = concurrentBuilder.addr
+
+    let ctxPtr = ctx.addr
+    for i, e in entries.mpairs():
+      e.sig = transactions[i].signature().valueOr(default(Signature))
+      e.hash = transactions[i].rlpHashForSigning(transactions[i].isEip155)
+      let entryPtr = e.addr
+      e.fut = vmState.com.taskpool.spawn txExecTask(
+        entryPtr, ctxPtr, transactions[i].addr, i)
+
+    try:
+      for txIndex in 0 ..< transactions.len:
+        template e(): TxExecEntry =
+          entries[txIndex]
+
+        while not e.done.load(moAcquire):
+          cpuRelax()
+
+        if e.failed:
+          return err(string.fromBytes(e.error.toBytes()))
+
+        let logs =
+          try:
+            rlp.decode(e.logs.toBytes(), seq[Log])
+          except RlpError as ex:
+            return err("Failed to decode logs of tx with index " & $txIndex &
+              ": " & ex.msg)
+
+        let callResult = LogResult(
+          logEntries: logs,
+          gasUsed: e.gasUsed,
+          blockRegularGasUsed: e.blockRegularGasUsed,
+          blockStateGasUsed: e.blockStateGasUsed)
+
+        ?vmState.commitParallelTxGas(
+          transactions[txIndex], e.intrinsicGas, callResult)
+
+        vmState.status = e.status
+        if skipReceipts:
+          if collectLogs:
+            vmState.allLogs.add callResult.logEntries
+        else:
+          vmState.receipts[txIndex] =
+            vmState.makeReceipt(transactions[txIndex].txType, callResult)
+          if collectLogs:
+            vmState.allLogs.add vmState.receipts[txIndex].logs
+
+      vmState.applyBlockAccessListWrites(bal[], transactions.len)
+
+      ok()
+    finally:
+      ctx.finished.store(true, moRelease)
+      vmState.txExecutionFinished.store(true, moRelease)
+      for e in entries.mitems():
+        discard sync(e.fut)
+        e.error.dispose()
+        e.logs.dispose()
 
 template withSenderSerial(txs: openArray[Transaction], body: untyped) =
   for txIndex {.inject.}, tx {.inject.} in txs:
@@ -274,13 +485,24 @@ proc processTransactions*(
     header: Header,
     transactions: seq[Transaction],
     skipReceipts = false,
-    collectLogs = false
+    collectLogs = false,
+    blockAccessList = Opt.none(BlockAccessListRef)
 ): Result[void, string] =
   vmState.receipts.setLen(if skipReceipts: 0 else: transactions.len)
   vmState.cumulativeGasUsed = 0
   vmState.blockRegularGasUsed = 0
   vmState.blockStateGasUsed = 0
   vmState.allLogs = @[]
+
+  when compileOption("threads"):
+    if blockAccessList.isSome() and vmState.com.balParallelExecution and
+        vmState.com.isAmsterdamOrLater(vmState.blockCtx.timestamp) and
+        not vmState.com.statelessProviderEnabled and
+        not vmState.com.taskpool.isNil() and vmState.com.taskpool.numThreads > 1 and
+        (not vmState.balTrackerEnabled or
+          vmState.balTracker.builder of ConcurrentBlockAccessListBuilderRef):
+      return processTransactionsParallel(
+        vmState, transactions, blockAccessList.get(), skipReceipts, collectLogs)
 
   vmState.withSender(transactions):
     if sender == default(Address):
@@ -306,6 +528,7 @@ proc processTransactions*(
 proc procBlkPreamble(
     vmState: BaseVMState,
     blk: Block,
+    blockAccessList: Opt[BlockAccessListRef],
     skipValidation, skipReceipts, skipUncles: bool
 ): Result[void, string] =
   template header(): Header =
@@ -364,7 +587,8 @@ proc procBlkPreamble(
 
     let collectLogs = header.requestsHash.isSome and not skipValidation
     ?processTransactions(
-      vmState, header, blk.transactions, skipReceipts, collectLogs
+      vmState, header, blk.transactions, skipReceipts, collectLogs,
+      blockAccessList
     )
   elif blk.transactions.len > 0:
     return err("Transactions in block with empty txRoot")
@@ -547,7 +771,8 @@ proc processBlock*(
   ## Generalised function to processes `blk` for any network.
 
   vmState.withBalPrefetch(blockAccessList):
-    ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles)
+    ?vmState.procBlkPreamble(
+      blk, blockAccessList, skipValidation, skipReceipts, skipUncles)
 
     # EIP-3675: no reward for miner in POA/POS
     if not vmState.com.proofOfStake(blk.header, vmState.ledger.txFrame):

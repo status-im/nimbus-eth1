@@ -20,6 +20,9 @@ import
   ./types,
   ./evm_errors
 
+when compileOption("threads"):
+  import std/atomics
+
 func forkDeterminationInfoForVMState(vmState: BaseVMState): ForkDeterminationInfo =
   forkDeterminationInfo(vmState.parent.number + 1, vmState.blockCtx.timestamp)
 
@@ -56,6 +59,15 @@ proc init(
   self.allLogs.setLen(0)
   self.gasRefunded = 0
   self.balTracker = tracker
+  when compileOption("threads"):
+    self.txExecutionFinished.store(false, moRelaxed)
+
+proc newBalTracker(ledger: LedgerRef, com: CommonRef): BlockAccessListTrackerRef =
+  when compileOption("threads"):
+    if com.balParallelExecution:
+      return BlockAccessListTrackerRef.init(
+        ledger.ReadOnlyLedger, ConcurrentBlockAccessListBuilderRef.init())
+  BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger)
 
 func blockCtx(header: Header): BlockContext =
   BlockContext(
@@ -99,7 +111,7 @@ proc new*(
     ledger = LedgerRef.init(txFrame, storeSlotHash, com.statelessProviderEnabled)
     tracker =
       if enableBalTracker:
-        BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger)
+        newBalTracker(ledger, com)
       else:
         nil
 
@@ -128,7 +140,7 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
   ## untouched.
 
   if not self.balTracker.isNil():
-    self.balTracker = BlockAccessListTrackerRef.init(self.ledger.ReadOnlyLedger)
+    self.balTracker = newBalTracker(self.ledger, self.com)
 
   if not self.ledger.isTopLevelClean:
     return false
@@ -184,7 +196,7 @@ proc init*(
     ledger = LedgerRef.init(txFrame, storeSlotHash, com.statelessProviderEnabled)
     tracker =
       if enableBalTracker:
-        BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger)
+        newBalTracker(ledger, com)
       else:
         nil
 

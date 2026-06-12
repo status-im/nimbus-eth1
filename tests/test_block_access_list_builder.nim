@@ -385,3 +385,77 @@ suite "Concurrent block access list builder":
       bal[2].storageReads == @[slot3]
       bal[2].balanceChanges == @[(3.BlockAccessIndex, 3.u256)]
       bal[2].nonceChanges == @[(1.BlockAccessIndex, 10.AccountNonce)]
+
+proc mergeTask(
+    dest: ptr ConcurrentBlockAccessListBuilderRef, src: ptr BlockAccessListBuilderRef
+): bool {.nimcall.} =
+  dest.merge(src[])
+  true
+
+suite "Block access list builder merge":
+  const
+    address1 = address"0x10007bc31cedb7bfb8a345f31e668033056b2728"
+    address2 = address"0x20007bc31cedb7bfb8a345f31e668033056b2728"
+    address3 = address"0x30007bc31cedb7bfb8a345f31e668033056b2728"
+    slot1 = 1.u256()
+    slot2 = 2.u256()
+    slot3 = 3.u256()
+
+  setup:
+    let
+      local1 = BlockAccessListBuilderRef.init()
+      local2 = BlockAccessListBuilderRef.init()
+      expected = BlockAccessListBuilderRef.init()
+
+    local1.addStorageWrite(address1, slot1, 1, 1.u256)
+    local1.addStorageRead(address1, slot2)
+    local1.addBalanceChange(address1, 1, 10.u256)
+    local1.addNonceChange(address1, 1, 1.AccountNonce)
+    local1.addCodeChange(address1, 1, @[0x1.byte])
+    local1.addTouchedAccount(address3)
+
+    local2.addStorageWrite(address1, slot1, 2, 2.u256)
+    local2.addStorageWrite(address1, slot3, 2, 3.u256)
+    local2.addBalanceChange(address1, 2, 20.u256)
+    local2.addStorageWrite(address2, slot1, 2, 1.u256)
+    local2.addStorageRead(address1, slot2)
+
+    expected.addStorageWrite(address1, slot1, 1, 1.u256)
+    expected.addStorageRead(address1, slot2)
+    expected.addBalanceChange(address1, 1, 10.u256)
+    expected.addNonceChange(address1, 1, 1.AccountNonce)
+    expected.addCodeChange(address1, 1, @[0x1.byte])
+    expected.addTouchedAccount(address3)
+    expected.addStorageWrite(address1, slot1, 2, 2.u256)
+    expected.addStorageWrite(address1, slot3, 2, 3.u256)
+    expected.addBalanceChange(address1, 2, 20.u256)
+    expected.addStorageWrite(address2, slot1, 2, 1.u256)
+
+  test "Merge local builders":
+    let builder = BlockAccessListBuilderRef.init()
+    builder.merge(local1)
+    builder.merge(local2)
+
+    check builder.buildBlockAccessList()[] == expected.buildBlockAccessList()[]
+
+  test "Merge local builders into a concurrent builder":
+    let builder = ConcurrentBlockAccessListBuilderRef.init()
+    builder.merge(local1)
+    builder.merge(local2)
+
+    check builder.buildBlockAccessList()[] == expected.buildBlockAccessList()[]
+
+  test "Merge local builders into a concurrent builder from tasks":
+    var taskpool = Taskpool.new()
+    let
+      builder = ConcurrentBlockAccessListBuilderRef.init()
+      builderPtr = builder.addr
+      local1Ptr = local1.addr
+      local2Ptr = local2.addr
+
+    discard taskpool.spawn mergeTask(builderPtr, local1Ptr)
+    discard taskpool.spawn mergeTask(builderPtr, local2Ptr)
+
+    taskpool.syncAll()
+
+    check builder.buildBlockAccessList()[] == expected.buildBlockAccessList()[]

@@ -263,7 +263,8 @@ proc prepareEnv*(
         statelessProviderEnabled = statelessEnabled,
         statelessWitnessValidation = false, # Running stateless execution separately in test runner
         optimisticStatePrefetch = parallelEnabled,
-        balStatePrefetch = parallelEnabled)
+        balStatePrefetch = parallelEnabled,
+        balParallelExecution = parallelEnabled)
 
     if parallelEnabled:
       let taskpool =

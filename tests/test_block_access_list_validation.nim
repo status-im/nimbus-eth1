@@ -234,6 +234,120 @@ suite "Block access list validation":
     bal[0].codeChanges.insert bal[0].codeChanges[0] # duplicate the first item
     check bal.validate(bal[].computeBlockAccessListHash()).isErr()
 
+suite "Partial block access list verification":
+  const
+    address1 = address"0x10007bc31cedb7bfb8a345f31e668033056b2728"
+    address2 = address"0x20007bc31cedb7bfb8a345f31e668033056b2728"
+    address3 = address"0x30007bc31cedb7bfb8a345f31e668033056b2728"
+    address4 = address"0x40007bc31cedb7bfb8a345f31e668033056b2728"
+    slot1 = 1.u256()
+    slot2 = 2.u256()
+    slot3 = 3.u256()
+
+  setup:
+    let suppliedBuilder = BlockAccessListBuilderRef.init()
+    suppliedBuilder.addStorageWrite(address1, slot1, 1, 111.u256)
+    suppliedBuilder.addStorageWrite(address1, slot1, 2, 222.u256)
+    suppliedBuilder.addStorageRead(address1, slot2)
+    suppliedBuilder.addBalanceChange(address1, 1, 11.u256)
+    suppliedBuilder.addNonceChange(address1, 1, 5.AccountNonce)
+    suppliedBuilder.addStorageWrite(address2, slot3, 2, 333.u256)
+    suppliedBuilder.addBalanceChange(address2, 2, 22.u256)
+    suppliedBuilder.addStorageRead(address3, slot3)
+
+    let
+      supplied = suppliedBuilder.buildBlockAccessList()
+      partialBuilder = BlockAccessListBuilderRef.init()
+
+  test "Valid partial BAL for the first transaction":
+    partialBuilder.addStorageWrite(address1, slot1, 1, 111.u256)
+    partialBuilder.addBalanceChange(address1, 1, 11.u256)
+    partialBuilder.addNonceChange(address1, 1, 5.AccountNonce)
+    partialBuilder.addStorageRead(address1, slot2)
+    partialBuilder.addStorageRead(address3, slot3)
+    partialBuilder.addStorageRead(address2, slot3)
+
+    let partial = partialBuilder.buildBlockAccessList()
+    check verifyPartialBlockAccessList(partial[], supplied[], 1).isOk()
+
+  test "Valid partial BAL for the second transaction":
+    partialBuilder.addStorageWrite(address1, slot1, 2, 222.u256)
+    partialBuilder.addStorageWrite(address2, slot3, 2, 333.u256)
+    partialBuilder.addBalanceChange(address2, 2, 22.u256)
+
+    let partial = partialBuilder.buildBlockAccessList()
+    check verifyPartialBlockAccessList(partial[], supplied[], 2).isOk()
+
+  test "Empty partial BAL is rejected when the supplied BAL has writes at the index":
+    let partial = partialBuilder.buildBlockAccessList()
+    check:
+      verifyPartialBlockAccessList(partial[], supplied[], 1).isErr()
+      verifyPartialBlockAccessList(partial[], supplied[], 2).isErr()
+      verifyPartialBlockAccessList(partial[], supplied[], 3).isOk()
+
+  test "Storage write value mismatch is rejected":
+    partialBuilder.addStorageWrite(address1, slot1, 1, 999.u256)
+    partialBuilder.addBalanceChange(address1, 1, 11.u256)
+    partialBuilder.addNonceChange(address1, 1, 5.AccountNonce)
+
+    let partial = partialBuilder.buildBlockAccessList()
+    check verifyPartialBlockAccessList(partial[], supplied[], 1).isErr()
+
+  test "Storage write not in the supplied BAL is rejected":
+    partialBuilder.addStorageWrite(address1, slot1, 1, 111.u256)
+    partialBuilder.addStorageWrite(address1, slot2, 1, 999.u256)
+    partialBuilder.addBalanceChange(address1, 1, 11.u256)
+    partialBuilder.addNonceChange(address1, 1, 5.AccountNonce)
+
+    let partial = partialBuilder.buildBlockAccessList()
+    check verifyPartialBlockAccessList(partial[], supplied[], 1).isErr()
+
+  test "Missing storage write at the index is rejected":
+    partialBuilder.addBalanceChange(address1, 1, 11.u256)
+    partialBuilder.addNonceChange(address1, 1, 5.AccountNonce)
+
+    let partial = partialBuilder.buildBlockAccessList()
+    check verifyPartialBlockAccessList(partial[], supplied[], 1).isErr()
+
+  test "Missing balance change is rejected":
+    partialBuilder.addStorageWrite(address1, slot1, 1, 111.u256)
+    partialBuilder.addNonceChange(address1, 1, 5.AccountNonce)
+
+    let partial = partialBuilder.buildBlockAccessList()
+    check verifyPartialBlockAccessList(partial[], supplied[], 1).isErr()
+
+  test "Balance change value mismatch is rejected":
+    partialBuilder.addStorageWrite(address1, slot1, 1, 111.u256)
+    partialBuilder.addBalanceChange(address1, 1, 999.u256)
+    partialBuilder.addNonceChange(address1, 1, 5.AccountNonce)
+
+    let partial = partialBuilder.buildBlockAccessList()
+    check verifyPartialBlockAccessList(partial[], supplied[], 1).isErr()
+
+  test "Touched account not in the supplied BAL is rejected":
+    partialBuilder.addStorageWrite(address1, slot1, 1, 111.u256)
+    partialBuilder.addBalanceChange(address1, 1, 11.u256)
+    partialBuilder.addNonceChange(address1, 1, 5.AccountNonce)
+    partialBuilder.addTouchedAccount(address4)
+
+    let partial = partialBuilder.buildBlockAccessList()
+    check verifyPartialBlockAccessList(partial[], supplied[], 1).isErr()
+
+  test "Storage read not in the supplied BAL is rejected":
+    partialBuilder.addStorageWrite(address1, slot1, 1, 111.u256)
+    partialBuilder.addBalanceChange(address1, 1, 11.u256)
+    partialBuilder.addNonceChange(address1, 1, 5.AccountNonce)
+    partialBuilder.addStorageRead(address1, slot3)
+
+    let partial = partialBuilder.buildBlockAccessList()
+    check verifyPartialBlockAccessList(partial[], supplied[], 1).isErr()
+
+  test "Untouched account with writes at the index in the supplied BAL is rejected":
+    partialBuilder.addStorageWrite(address1, slot1, 2, 222.u256)
+
+    let partial = partialBuilder.buildBlockAccessList()
+    check verifyPartialBlockAccessList(partial[], supplied[], 2).isErr()
+
 when ENABLE_BENCHMARKS:
   import std/times
 

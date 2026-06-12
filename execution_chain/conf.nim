@@ -54,6 +54,7 @@ const
   defaultOptimisticStatePrefetch* = false
   defaultBalStatePrefetch* = false
   defaultBalStatePrefetchWorkers* = 0
+  defaultBalParallelExecution* = false
 
 template defaultListenAddress(): IpAddress =
   getAutoAddress(Port(0)).toIpAddress()
@@ -386,6 +387,13 @@ type
       desc: "Number of background worker tasks used for block access list " &
         "state prefetching (0 = use number equal to the taskpool threads count)"
       name: "debug-bal-state-prefetch-workers".}: int
+
+    balParallelExecution* {.
+      hidden
+      defaultValue: defaultBalParallelExecution
+      desc: "Execute the transactions of a block in parallel on background " &
+        "threads using the writes in the supplied block access list"
+      name: "debug-bal-parallel-execution".}: bool
 
     eagerStateRootCheck* {.
       hidden
@@ -850,7 +858,8 @@ func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
     rdbPrintStats = config.rdbPrintStats,
     maxSnapshots = config.aristoDbMaxSnapshots,
     parallelStateRootComputation = config.parallelStateRootComputation,
-    threadSafeCaches = config.optimisticStatePrefetch or config.balStatePrefetch,
+    threadSafeCaches = config.optimisticStatePrefetch or config.balStatePrefetch or
+      config.balParallelExecution,
     blockCacheType = config.rocksdbBlockCacheType,
   )
 

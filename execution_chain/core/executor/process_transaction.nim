@@ -148,18 +148,14 @@ template validateForInclusion(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc processTransaction*(
-    vmState: BaseVMState; ## Parent accounts environment for transaction
-    tx:      Transaction; ## Transaction to validate
-    sender:  Address;  ## tx.recoverSender
+proc processTransactionNoPersist*(
+    vmState: BaseVMState;
+    tx:      Transaction;
+    sender:  Address;
     rollbackReads: bool = false;
       ): Result[LogResult, string] =
-  ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
-  ## which provides a backward compatible framwork for EIP1559.
-
   validateForInclusion(vmState, tx, sender, false, true, intrinsic, blobGasUsed)
 
-  # Execute the transaction.
   vmState.captureTxStart(tx.gasLimit)
 
   if vmState.balTrackerEnabled:
@@ -169,17 +165,63 @@ proc processTransaction*(
   var callResult = tx.txCallEvm(sender, vmState, intrinsic)
   vmState.captureTxEnd(tx.gasLimit - callResult.gasUsed)
 
-  let
-    tmp = commitOrRollbackDependingOnGasUsed(
-      vmState, savePoint, tx, callResult, blobGasUsed, rollbackReads)
-    res = if tmp.isErr:
-      err(tmp.error)
-    else:
-      ok(move(callResult))
+  let tmp = commitOrRollbackDependingOnGasUsed(
+    vmState, savePoint, tx, callResult, blobGasUsed, rollbackReads)
+  if tmp.isErr:
+    err(tmp.error)
+  else:
+    ok(move(callResult))
+
+proc processTransaction*(
+    vmState: BaseVMState;
+    tx:      Transaction;
+    sender:  Address;
+    rollbackReads: bool = false;
+      ): Result[LogResult, string] =
+  result = processTransactionNoPersist(vmState, tx, sender, rollbackReads)
 
   vmState.ledger.persist(clearEmptyAccount = vmState.hardFork >= Spurious)
 
-  res
+proc commitParallelTxGas*(
+    vmState: BaseVMState;
+    tx:      Transaction;
+    intrinsicGas: IntrinsicGas;
+    callResult: LogResult;
+      ): Result[void, string] =
+  doAssert vmState.fork >= FkAmsterdam
+
+  let
+    regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
+    stateGasAvailable = vmState.blockCtx.gasLimit - vmState.blockStateGasUsed
+    want = min(TX_GAS_LIMIT.GasInt, tx.gasLimit - intrinsicGas.state)
+  if want > regularGasAvailable:
+    return err("regular gas used exceeds limit, want: " & $want &
+      ", available: " & $regularGasAvailable)
+
+  let stateGas = tx.gasLimit - intrinsicGas.regular
+  if stateGas > stateGasAvailable:
+    return err("state gas used exceeds limit, want: " & $stateGas &
+      ", available: " & $stateGasAvailable)
+
+  let
+    blobGasUsed = tx.getTotalBlobGas
+    maxBlobGasPerBlock = getMaxBlobGasPerBlock(vmState.com, vmState.hardFork)
+  if vmState.blobGasUsed + blobGasUsed > maxBlobGasPerBlock:
+    return err("blobGasUsed " & $blobGasUsed &
+      " exceeds maximum allowance " & $maxBlobGasPerBlock)
+
+  let limit2d = max(
+    vmState.blockRegularGasUsed + callResult.blockRegularGasUsed,
+    vmState.blockStateGasUsed + callResult.blockStateGasUsed)
+  if vmState.blockCtx.gasLimit < limit2d:
+    return err(&"invalid tx: block gas limit reached (2D). gasLimit={vmState.blockCtx.gasLimit}, regularGas={vmState.blockRegularGasUsed}+{callResult.blockRegularGasUsed}, stateGas={vmState.blockStateGasUsed}+{callResult.blockStateGasUsed}")
+
+  vmState.cumulativeGasUsed += callResult.gasUsed
+  vmState.blockRegularGasUsed += callResult.blockRegularGasUsed
+  vmState.blockStateGasUsed += callResult.blockStateGasUsed
+  vmState.blobGasUsed += blobGasUsed
+
+  ok()
 
 proc prefetchTransaction*(
     vmState: BaseVMState; ## Throwaway accounts environment for prefetching

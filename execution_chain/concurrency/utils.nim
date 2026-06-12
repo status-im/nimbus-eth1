@@ -26,3 +26,27 @@ template unborrowRef*[T](dest: ref T) =
   # Sets the ref type back to nil without updating the ref count.
   var p: pointer = nil
   copyMem(addr dest, addr p, sizeof(pointer))
+
+type
+  SharedByteBlob* = object
+    data*: ptr UncheckedArray[byte]
+    len*: int
+
+proc init*(T: type SharedByteBlob, bytes: openArray[byte]): T {.gcsafe, raises: [].} =
+  if bytes.len() == 0:
+    return T()
+  result.data = cast[ptr UncheckedArray[byte]](allocShared(bytes.len()))
+  result.len = bytes.len()
+  copyMem(result.data, unsafeAddr bytes[0], bytes.len())
+
+proc toBytes*(blob: SharedByteBlob): seq[byte] {.gcsafe, raises: [].} =
+  if blob.len == 0:
+    return
+  result = newSeq[byte](blob.len)
+  copyMem(addr result[0], blob.data, blob.len)
+
+proc dispose*(blob: var SharedByteBlob) {.gcsafe, raises: [].} =
+  if not blob.data.isNil():
+    deallocShared(blob.data)
+  blob.data = nil
+  blob.len = 0

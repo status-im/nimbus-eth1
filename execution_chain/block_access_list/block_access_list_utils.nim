@@ -41,3 +41,80 @@ func balIndexCmpTreatEqualAsGreater*(
 
 func storageKeyCmpTreatEqualAsGreater*(x, y: StorageKey): int =
   cmpTreatEqualAsGreater(x, y)
+
+func findAccountChanges*(bal: BlockAccessList, address: Address): int =
+  var
+    lo = 0
+    hi = bal.len() - 1
+  while lo <= hi:
+    let
+      mid = (lo + hi) shr 1
+      c = cmp(bal[mid].address.data(), address.data())
+    if c == 0:
+      return mid
+    elif c < 0:
+      lo = mid + 1
+    else:
+      hi = mid - 1
+  -1
+
+func findSlotChanges*(storageChanges: openArray[SlotChanges], slot: StorageKey): int =
+  var
+    lo = 0
+    hi = storageChanges.len() - 1
+  while lo <= hi:
+    let mid = (lo + hi) shr 1
+    if storageChanges[mid].slot == slot:
+      return mid
+    elif storageChanges[mid].slot < slot:
+      lo = mid + 1
+    else:
+      hi = mid - 1
+  -1
+
+func findStorageRead*(storageReads: openArray[StorageKey], slot: StorageKey): int =
+  var
+    lo = 0
+    hi = storageReads.len() - 1
+  while lo <= hi:
+    let mid = (lo + hi) shr 1
+    if storageReads[mid] == slot:
+      return mid
+    elif storageReads[mid] < slot:
+      lo = mid + 1
+    else:
+      hi = mid - 1
+  -1
+
+func findLastWriteBefore*[T: StorageChange | BalanceChange | NonceChange | CodeChange](
+    changes: openArray[T], balIndex: int
+): int =
+  var
+    lo = 0
+    hi = changes.len() - 1
+  result = -1
+  while lo <= hi:
+    let mid = (lo + hi) shr 1
+    if changes[mid].blockAccessIndex.int < balIndex:
+      result = mid
+      lo = mid + 1
+    else:
+      hi = mid - 1
+
+func findWriteAt*[T: StorageChange | BalanceChange | NonceChange | CodeChange](
+    changes: openArray[T], balIndex: int
+): int =
+  var
+    lo = 0
+    hi = changes.len() - 1
+  while lo <= hi:
+    let
+      mid = (lo + hi) shr 1
+      c = cmp(changes[mid].blockAccessIndex.int, balIndex)
+    if c == 0:
+      return mid
+    elif c < 0:
+      lo = mid + 1
+    else:
+      hi = mid - 1
+  -1

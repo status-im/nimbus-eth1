@@ -18,6 +18,9 @@ import
   ../common/[common, evmforks],
   ../block_access_list/block_access_list_tracker
 
+when compileOption("threads"):
+  import std/atomics
+
 from ../common/hardforks import HardFork
 
 export stack, memory, transient_storage, block_access_list_tracker
@@ -63,6 +66,8 @@ type
     gasRefunded*      : int64    # Global gasRefunded counter
     balTracker*       : BlockAccessListTrackerRef
     balPrefetchActive*: bool
+    when compileOption("threads"):
+      txExecutionFinished*: Atomic[bool]
 
   Computation* = ref object
     # The execution computation
