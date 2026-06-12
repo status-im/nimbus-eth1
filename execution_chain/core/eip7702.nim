@@ -58,7 +58,7 @@ func isDelegation*(code: openArray[byte]): bool =
     code[1] == EIP7702_DELEGATION_PREFIX[1] and
     code[2] == EIP7702_DELEGATION_PREFIX[2]
 
-template parseDelegation*(code: CodeBytesRef): bool =
+template isDelegation*(code: CodeBytesRef): bool =
   isDelegation(code.bytes())
 
 func addressToDelegation*(auth: Address): array[EIP7702_DELEGATION_SIZE, byte] =
