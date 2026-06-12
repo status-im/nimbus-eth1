@@ -31,7 +31,7 @@ import
 proc loadKzgSetup() {.thread.} =
   discard loadTrustedSetupFromString(kzg.trustedSetup, 8)
 
-# Loading on a dedicated thread because parsing the trusted setup uses ~400 KB 
+# Loading on a dedicated thread because parsing the trusted setup uses ~400 KB
 # of stack which exceeds the 1 MB ulimit set for `make test`.
 block:
   var t: Thread[void]
@@ -61,11 +61,13 @@ type
     subFixture: int
     fork: string
 
+  TestVMState = ref object of BaseVMState
+
 proc toBytes(x: string): seq[byte] =
   result = newSeq[byte](x.len)
   for i in 0..<x.len: result[i] = x[i].byte
 
-method getAncestorHash*(vmState: BaseVMState; blockNumber: BlockNumber): Hash32 =
+method getAncestorHash*(vmState: TestVMState; blockNumber: BlockNumber): Hash32 =
   if blockNumber >= vmState.blockNumber:
     return default(Hash32)
   elif blockNumber < 0:
@@ -118,24 +120,24 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
                            optimisticStatePrefetch = defaultOptimisticStatePrefetch)
   com.taskpool = taskpool
   com.db.mpt.taskpool = taskpool
-  
+
   let
     parent = Header(stateRoot: emptyRoot)
     tracer = if ctx.trace:
                newLegacyTracer({})
              else:
                LegacyTracer(nil)
-
-    vmState = BaseVMState.new(
-      parent = parent,
-      header = ctx.header,
-      com    = com,
-      txFrame = com.db.baseTxFrame(),
-      tracer = tracer,
-      storeSlotHash = ctx.trace,
-    )
-
+    vmState = TestVMState()
     sender = ctx.tx.recoverSender().expect("valid signature")
+
+  vmState.init(
+    parent = parent,
+    header = ctx.header,
+    com    = com,
+    txFrame = com.db.baseTxFrame(),
+    tracer = tracer,
+    storeSlotHash = ctx.trace,
+  )
 
   vmState.mutateLedger:
     setupLedger(ctx.pre, ledger)
