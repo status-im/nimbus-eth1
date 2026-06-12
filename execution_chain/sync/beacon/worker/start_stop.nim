@@ -14,6 +14,7 @@ import
   pkg/[chronicles, chronos, eth/common, metrics],
   ../../../networking/p2p,
   ../../wire_protocol,
+  ./start_stop/sync_ticker,
   ./[blocks, headers, update, worker_desc]
 
 type
@@ -74,15 +75,17 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
   ctx.pool.chain.com.beaconSyncerProgress = proc(): SyncStateData =
     ctx.querySyncProgress()
 
-  # Set up ticker, disabled by default
-  if ctx.pool.ticker.isNil:
+  # Set up ticker
+  if ctx.pool.syncTickerOk:
+    ctx.pool.ticker = syncTicker()
+  elif ctx.pool.ticker.isNil:
     ctx.pool.ticker = proc(ctx: BeaconCtxRef) = discard
-
 
 proc destroyServices*(ctx: BeaconCtxRef) =
   ## Helper for `release()`
   ctx.hdrCache.destroy()
   ctx.pool.chain.com.beaconSyncerProgress = BeaconSyncerProgressCB(nil)
+  ctx.pool.ticker = Ticker(nil)
 
 # ---------
 

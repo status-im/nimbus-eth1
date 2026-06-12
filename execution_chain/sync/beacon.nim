@@ -148,6 +148,10 @@ proc configTarget*(desc: BeaconSyncRef; hex: string; isFinal: bool): bool =
     discard
   # false
 
+proc configTicker*(desc: BeaconSyncRef, enable: bool) =
+  doAssert not desc.ctx.isNil
+  desc.ctx.pool.syncTickerOk = enable
+
 # -----------------
 
 proc start*(desc: BeaconSyncRef; standBy = false): bool =
