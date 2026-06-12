@@ -13,6 +13,7 @@
 import
   unittest2,
   eth/common/block_access_lists_rlp,
+  ../execution_chain/constants,
   ../execution_chain/block_access_list/[block_access_list_builder, block_access_list_validation]
 
 const
@@ -232,6 +233,78 @@ suite "Block access list validation":
     var bal = builder.buildBlockAccessList()
     check bal.validate(bal[].computeBlockAccessListHash()).isOk()
     bal[0].codeChanges.insert bal[0].codeChanges[0] # duplicate the first item
+    check bal.validate(bal[].computeBlockAccessListHash()).isErr()
+
+  test "Code change with empty bytecode should validate":
+    builder.addCodeChange(address1, 0, newSeq[byte](0))
+
+    let bal = builder.buildBlockAccessList()
+    check bal.validate(bal[].computeBlockAccessListHash()).isOk()
+
+  test "Code change with bytecode at the max size should validate":
+    builder.addCodeChange(address1, 0, newSeq[byte](EIP7954_MAX_CODE_SIZE))
+
+    let bal = builder.buildBlockAccessList()
+    check bal.validate(bal[].computeBlockAccessListHash()).isOk()
+
+  test "Code change with bytecode exceeding the max size should fail validation":
+    builder.addCodeChange(address1, 0, newSeq[byte](EIP7954_MAX_CODE_SIZE + 1))
+
+    let bal = builder.buildBlockAccessList()
+    check bal.validate(bal[].computeBlockAccessListHash()).isErr()
+
+  test "Code change with a valid EIP-7702 delegation designator should validate":
+    # 0xef0100 prefix followed by a 20-byte address (23 bytes total).
+    let delegation = @[0xEF.byte, 0x01, 0x00] & newSeq[byte](20)
+    builder.addCodeChange(address1, 0, delegation)
+
+    let bal = builder.buildBlockAccessList()
+    check bal.validate(bal[].computeBlockAccessListHash()).isOk()
+
+  test "Code change starting with 0xEF that is not a delegation should fail (EIP-3541)":
+    builder.addCodeChange(address1, 0, @[0xEF.byte, 0x60, 0x00])
+
+    let bal = builder.buildBlockAccessList()
+    check bal.validate(bal[].computeBlockAccessListHash()).isErr()
+
+  test "Code change with a malformed EIP-7702 delegation should fail (EIP-3541)":
+    # Correct 0xef0100 prefix but the wrong total length (22 instead of 23 bytes).
+    let malformed = @[0xEF.byte, 0x01, 0x00] & newSeq[byte](19)
+    builder.addCodeChange(address1, 0, malformed)
+
+    let bal = builder.buildBlockAccessList()
+    check bal.validate(bal[].computeBlockAccessListHash()).isErr()
+
+  test "Code change with a wrong EIP-7702 version byte should fail (EIP-3541)":
+    # 23 bytes starting with 0xef01 but a non-zero version byte is not a valid
+    # delegation designator.
+    let badVersion = @[0xEF.byte, 0x01, 0x01] & newSeq[byte](20)
+    builder.addCodeChange(address1, 0, badVersion)
+
+    let bal = builder.buildBlockAccessList()
+    check bal.validate(bal[].computeBlockAccessListHash()).isErr()
+
+  test "Code change with a wrong EIP-7702 second prefix byte should fail (EIP-3541)":
+    # 23 bytes with the 0xEF prefix but a wrong second byte (0xef02..) is not a
+    # valid delegation designator.
+    let badPrefix = @[0xEF.byte, 0x02, 0x00] & newSeq[byte](20)
+    builder.addCodeChange(address1, 0, badPrefix)
+
+    let bal = builder.buildBlockAccessList()
+    check bal.validate(bal[].computeBlockAccessListHash()).isErr()
+
+  test "Code change with single 0xEF byte should fail (EIP-3541)":
+    # Too short to be a delegation designator; the length guard must short-circuit
+    # before the prefix bytes are indexed.
+    builder.addCodeChange(address1, 0, @[0xEF.byte])
+
+    let bal = builder.buildBlockAccessList()
+    check bal.validate(bal[].computeBlockAccessListHash()).isErr()
+
+  test "Code change with two byte 0xef01 should fail (EIP-3541)":
+    builder.addCodeChange(address1, 0, @[0xEF.byte, 0x01])
+
+    let bal = builder.buildBlockAccessList()
     check bal.validate(bal[].computeBlockAccessListHash()).isErr()
 
 when ENABLE_BENCHMARKS:

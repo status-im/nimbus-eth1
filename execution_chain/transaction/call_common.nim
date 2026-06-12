@@ -83,7 +83,7 @@ proc setDelegation(call: CallParams): int64 =
       vmState.balTracker.trackAddressAccess(authority)
     let code = ledger.getCode(authority)
     if code.len > 0:
-      if not parseDelegation(code):
+      if not isDelegation(code):
         continue
 
     # 6. Verify the nonce of authority is equal to nonce.
