@@ -20,7 +20,7 @@
     {
       "os": "windows",
       "cpu": "amd64",
-      "builder": "windows-latest"
+      "builder": "windows-2025-vs2026"
     },
     {
       "os": "macos",
