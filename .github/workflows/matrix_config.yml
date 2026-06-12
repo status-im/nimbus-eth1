@@ -15,6 +15,11 @@ on:
       matrix:
         description: "The matrix configuration from a JSON file"
         value: ${{ jobs.generate_matrix_json.outputs.matrix }}
+    inputs:
+      exclude_field:
+        description: 'Exclude matrix object contains field'
+        required: false
+        default: ''
 
 jobs:
   generate_matrix_json:
@@ -34,4 +39,14 @@ jobs:
       - name: Prepare matrix JSON object
         id: prepare
         run: |
-          echo "json=$(jq -c . < .github/workflows/matrix_config.json)" >> $GITHUB_OUTPUT
+          PREFIX='json={"include":'
+          SUFFIX='}'
+          CONF='.github/workflows/matrix_config.json'
+          PARAM='${{ inputs.exclude_field }}'
+
+          if [[ '$PARAM' == '' ]]; then
+            echo "$PREFIX$(jq -c . < $CONF)$SUFFIX" >> $GITHUB_OUTPUT
+          else
+            CMD="del(.[] | select(has(\"$PARAM\")))"
+            echo "$PREFIX$(jq -c "$CMD" $CONF)$SUFFIX" >> $GITHUB_OUTPUT
+          fi

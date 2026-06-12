@@ -17,6 +17,8 @@ on:
 jobs:
   matrix_config:
     uses: ./.github/workflows/matrix_config.yml
+    with:
+      exclude_field: "branch"
 
   build:
     needs: matrix_config
