@@ -1,31 +1,29 @@
-{
-  "include": [
-    {
-      "os": "linux",
-      "cpu": "amd64",
-      "builder": "ubuntu-22.04"
-    },
-    {
-      "os": "linux",
-      "cpu": "amd64",
-      "branch": "upstream/version-2-2",
-      "branch-short": "version-2-2",
-      "builder": "ubuntu-22.04"
-    },
-    {
-      "os": "linux",
-      "cpu": "arm64",
-      "builder": "ubuntu-22.04-arm"
-    },
-    {
-      "os": "windows",
-      "cpu": "amd64",
-      "builder": "windows-2025-vs2026"
-    },
-    {
-      "os": "macos",
-      "cpu": "arm64",
-      "builder": "macos-15"
-    }
-  ]
-}
+[
+  {
+    "os": "linux",
+    "cpu": "amd64",
+    "builder": "ubuntu-22.04"
+  },
+  {
+    "os": "linux",
+    "cpu": "amd64",
+    "branch": "upstream/version-2-2",
+    "branch-short": "version-2-2",
+    "builder": "ubuntu-22.04"
+  },
+  {
+    "os": "linux",
+    "cpu": "arm64",
+    "builder": "ubuntu-22.04-arm"
+  },
+  {
+    "os": "windows",
+    "cpu": "amd64",
+    "builder": "windows-2025-vs2026"
+  },
+  {
+    "os": "macos",
+    "cpu": "arm64",
+    "builder": "macos-15"
+  }
+]
