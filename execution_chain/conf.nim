@@ -860,6 +860,15 @@ func jwtSecretOpt*(config: ExecutionClientConf): Opt[InputFile] =
   else:
     Opt.none InputFile
 
+proc readValue*(r: var TomlReader, value: var seq[string]) {.raises: [IOError, SerializationError].} =
+  mixin readValue
+  case r.tokKind
+  of TomlTokKind.Array:
+    r.parseList():
+      value.add r.parseAsString()
+  else:
+    value.add r.parseAsString()
+
 {.pop.}
 
 #-------------------------------------------------------------------
