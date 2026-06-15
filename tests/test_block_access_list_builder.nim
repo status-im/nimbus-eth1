@@ -27,6 +27,9 @@ suite "Block access list builder":
   setup:
     let builder = BlockAccessListBuilderRef.init()
 
+  teardown:
+    builder.dispose()
+
   test "Add touched account":
     builder.addTouchedAccount(address3)
     builder.addTouchedAccount(address2)
@@ -210,6 +213,9 @@ suite "Concurrent block access list builder":
       taskpool = Taskpool.new()
       builder = ConcurrentBlockAccessListBuilderRef.init()
       builderPtr = builder.addr
+
+  teardown:
+    builder.dispose()
 
   test "Add touched account":
     taskpool.spawn builderPtr.addTouchedAccount(address3)

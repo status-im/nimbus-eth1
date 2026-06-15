@@ -13,9 +13,10 @@ import
   std/[tables, sets, algorithm, locks],
   eth/common/[block_access_lists, block_access_lists_rlp],
   stint,
-  ./block_access_list_utils
+  ./block_access_list_utils,
+  ../concurrency/utils
 
-export block_access_lists
+export block_access_lists, utils
 
 type
   # Account data stored in the builder during block execution. This type tracks
@@ -28,7 +29,7 @@ type
     storageReads*: HashSet[UInt256] ## Set of storage keys
     balanceChanges*: Table[int, UInt256] ## Maps block access index -> balance
     nonceChanges*: Table[int, AccountNonce] ## Maps block access index -> nonce
-    codeChanges*: Table[int, seq[byte]] ## Maps block access index -> code
+    codeChanges*: Table[int, SharedBytes] ## Maps block access index -> code
 
   # Builder for constructing a BlockAccessList efficiently during transaction
   # execution. The builder accumulates all account and storage accesses during
@@ -203,7 +204,7 @@ proc addCodeChange*(
   builder.ensureAccount(address)
 
   builder.accounts.withValue(address, accData):
-    accData[].codeChanges[blockAccessIndex] = @newCode
+    accData[].codeChanges[blockAccessIndex] = SharedBytes.init(newCode)
 
 template addCodeChange*(
     builder: ConcurrentBlockAccessListBuilderRef,
@@ -214,12 +215,12 @@ template addCodeChange*(
   withLock(builder.lock):
     addCodeChange(builder.BlockAccessListBuilderRef, address, blockAccessIndex, newCode)
 
-func addCodeChange*(
+proc addCodeChange*(
     builder: ptr ConcurrentBlockAccessListBuilderRef,
     address: Address,
     blockAccessIndex: int,
     newCode: openArray[byte]) =
-  builder[].addCodeChange(address, blockAccessIndex, @newCode)
+  builder[].addCodeChange(address, blockAccessIndex, newCode)
 
 func buildBlockAccessList*(builder: BlockAccessListBuilderRef): BlockAccessListRef =
   let blockAccessList: BlockAccessListRef = new BlockAccessList
@@ -258,8 +259,8 @@ func buildBlockAccessList*(builder: BlockAccessListBuilderRef): BlockAccessListR
 
     # Collect and sort codeChanges
     var codeChanges: seq[CodeChange]
-    for balIndex, code in accData.codeChanges:
-      codeChanges.add((BlockAccessIndex(balIndex), Bytecode(code)))
+    for balIndex, code in accData.codeChanges.mpairs():
+      codeChanges.add((BlockAccessIndex(balIndex), Bytecode(code.toSeq())))
     codeChanges.sort(balIndexCmp)
 
     blockAccessList[].add(
@@ -284,3 +285,17 @@ func buildBlockAccessList*(
   withLock(builder.lock):
     bal = buildBlockAccessList(builder.BlockAccessListBuilderRef)
   bal
+
+proc dispose(accData: var AccountData) =
+  accData.storageChanges.clear()
+  accData.storageReads.clear()
+  accData.balanceChanges.clear()
+  accData.nonceChanges.clear()
+  for code in accData.codeChanges.mvalues():
+    code.dispose()
+  accData.codeChanges.clear()
+
+proc dispose*(builder: BlockAccessListBuilderRef) =
+  for accData in builder.accounts.mvalues():
+    accData.dispose()
+  builder.accounts.clear()

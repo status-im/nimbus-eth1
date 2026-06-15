@@ -233,10 +233,17 @@ suite "Block access list tracker":
     tracker.commitCallFrame()
 
     check builder.accounts.contains(address2)
+    # codeChanges values are SharedBytes (shared heap), which cannot be copied
+    # out, so view them in place and compare the bytes via toSeq.
+    var hasCode = false
+    var codeBytes: seq[byte]
     tracker.builder.accounts.withValue(address2, accData):
-      check:
-        accData[].codeChanges.contains(balIndex)
-        accData[].codeChanges.getOrDefault(balIndex) == newCode
+      accData[].codeChanges.withValue(balIndex, sharedCode):
+        hasCode = true
+        codeBytes = sharedCode[].toSeq()
+    check:
+      hasCode
+      codeBytes == newCode
 
   test "Track storage read":
     block:
@@ -351,9 +358,12 @@ suite "Block access list tracker":
 
     check builder.accounts.contains(address1)
     tracker.builder.accounts.withValue(address1, accData):
+      # Compute codeChanges membership separately: a `notin` inside `check`
+      # would try to stringify the Table[int, SharedBytes], which is non-copyable.
+      let hasCodeChange = balIndex in accData[].codeChanges
       check:
         slot1 notin accData[].storageChanges
         slot1 in accData[].storageReads
         balIndex in accData[].balanceChanges
         balIndex notin accData[].nonceChanges
-        balIndex notin accData[].codeChanges
+        not hasCodeChange
