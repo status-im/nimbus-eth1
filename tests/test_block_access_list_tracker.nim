@@ -16,6 +16,7 @@ import
   unittest2,
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/core_db,
+  ../execution_chain/concurrency/utils,
   ../execution_chain/block_access_list/block_access_list_tracker
 
 

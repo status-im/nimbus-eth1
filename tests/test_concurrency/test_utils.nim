@@ -192,32 +192,32 @@ suite "Concurrency Utils Tests":
 
 suite "SharedBytes Tests":
 
-  test "init and toSeq round-trip non-empty bytes":
+  test "init and data round-trip non-empty bytes":
     let input = @[1'u8, 2, 3, 4, 5]
     var sb = SharedBytes.init(input)
-    check sb.toSeq() == input
+    check sb.data() == input
     dispose(sb)
 
   test "init from an array literal":
     var sb = SharedBytes.init([10'u8, 20, 30])
-    check sb.toSeq() == @[10'u8, 20, 30]
+    check sb.data() == @[10'u8, 20, 30]
     dispose(sb)
 
   test "init from an empty seq yields an empty SharedBytes":
     var sb = SharedBytes.init(newSeq[byte]())
     check:
-      sb.toSeq().len == 0
-      sb.data.len == 0
+      sb.data(asOpenArray = true).len == 0
+      sb.data(asOpenArray = false).len == 0
     dispose(sb)
 
-  test "data exposes a matching read-only view":
+  test "data (asOpenArray = true) exposes a matching read-only view":
     let input = @[7'u8, 8, 9, 10]
     var sb = SharedBytes.init(input)
     check:
-      sb.data.len == input.len
-      @(sb.data) == input
-      sb.data[0] == 7'u8
-      sb.data[3] == 10'u8
+      sb.data(asOpenArray = true).len == input.len
+      @(sb.data(asOpenArray = true)) == input
+      sb.data(asOpenArray = true)[0] == 7'u8
+      sb.data(asOpenArray = true)[3] == 10'u8
     dispose(sb)
 
   test "init copies the input, leaving SharedBytes independent of the source":
@@ -228,13 +228,13 @@ suite "SharedBytes Tests":
     input[0] = 99
     input.setLen(0)
 
-    check sb.toSeq() == @[1'u8, 2, 3]
+    check sb.data() == @[1'u8, 2, 3]
     dispose(sb)
 
   test "preserves embedded zero bytes":
     let input = @[0'u8, 1, 0, 2, 0, 0, 3, 0]
     var sb = SharedBytes.init(input)
-    check sb.toSeq() == input
+    check sb.data() == input
     dispose(sb)
 
   test "round-trips large binary data":
@@ -244,7 +244,7 @@ suite "SharedBytes Tests":
     var sb = SharedBytes.init(input)
     check:
       sb.data.len == input.len
-      sb.toSeq() == input
+      sb.data() == input
     dispose(sb)
 
   test "dispose frees, resets and is idempotent":
@@ -252,19 +252,19 @@ suite "SharedBytes Tests":
 
     dispose(sb)
     check:
-      sb.toSeq().len == 0
+      sb.data().len == 0
       sb.data.len == 0
 
     dispose(sb) # second dispose must be a safe no-op
-    check sb.toSeq().len == 0
+    check sb.data().len == 0
 
   test "move transfers ownership and clears the source":
     var a = SharedBytes.init(@[10'u8, 20, 30])
     var b = move(a)
 
     check:
-      b.toSeq() == @[10'u8, 20, 30]
-      a.toSeq().len == 0 # the moved-from value is reset
+      b.data() == @[10'u8, 20, 30]
+      a.data().len == 0 # the moved-from value is reset
 
     dispose(b)
     dispose(a) # safe no-op on the moved-from value

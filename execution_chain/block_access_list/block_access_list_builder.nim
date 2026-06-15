@@ -16,7 +16,7 @@ import
   ./block_access_list_utils,
   ../concurrency/utils
 
-export block_access_lists, utils
+export block_access_lists
 
 type
   # Account data stored in the builder during block execution. This type tracks

@@ -61,7 +61,10 @@ proc `=copy`*(
   # Only a single owner is supported for now.
   discard
 
-func toSeq*(sb: SharedBytes): seq[byte] =
+template toOpenArray(sb: SharedBytes): openArray[byte] =
+  sb.data.toOpenArray(0, sb.len - 1)
+
+func toSeq(sb: SharedBytes): seq[byte] =
   if sb.len == 0:
     return default(seq[byte])
 
@@ -69,5 +72,8 @@ func toSeq*(sb: SharedBytes): seq[byte] =
   copyMem(addr s[0], sb.data, sb.len)
   s
 
-template data*(sb: SharedBytes): openArray[byte] =
-  sb.data.toOpenArray(0, sb.len - 1)
+template data*(sb: SharedBytes, asOpenArray: static bool = false): auto =
+  when asOpenArray:
+    sb.toOpenArray()
+  else:
+    sb.toSeq()
