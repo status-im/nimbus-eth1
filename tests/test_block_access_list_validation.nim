@@ -28,7 +28,7 @@ const
 
 suite "Block access list validation":
   setup:
-    let builder = BlockAccessListBuilderRef.init()
+    let builder = BlockAccessListBuilder.init()
 
   test "Empty BAL should equal the EMPTY_BLOCK_ACCESS_LIST_HASH":
     let emptyBal = builder.buildBlockAccessList()
@@ -312,7 +312,7 @@ when ENABLE_BENCHMARKS:
 
   suite "Block access list validation benchmarks":
     setup:
-      let builder = BlockAccessListBuilderRef.init()
+      let builder = BlockAccessListBuilder.init()
 
       builder.addTouchedAccount(address3)
       builder.addTouchedAccount(address2)

@@ -50,7 +50,7 @@ type
   # writes) are recorded in the access list.
   BlockAccessListTrackerRef* = ref object
     ledger*: ReadOnlyLedger ## Used to fetch the pre-transaction values from the state.
-    builder*: BlockAccessListBuilderRef
+    builder*: BlockAccessListBuilder
       ## The builder instance that accumulates all tracked changes.
     preStorageCache*: Table[(Address, UInt256), UInt256]
       ## Cache of pre-transaction storage values, keyed by (address, slot) tuples.
@@ -89,7 +89,7 @@ proc `=copy`(
 proc init*(
     T: type BlockAccessListTrackerRef,
     ledger: ReadOnlyLedger,
-    builder = BlockAccessListBuilderRef.init(),
+    builder = BlockAccessListBuilder.init(),
 ): T =
   BlockAccessListTrackerRef(ledger: ledger, builder: builder)
 

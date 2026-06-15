@@ -44,7 +44,7 @@ suite "Block access list tracker":
     let
       coreDb = newCoreDbRef(DefaultDbMemory)
       ledger = LedgerRef.init(coreDb.baseTxFrame())
-      builder = BlockAccessListBuilderRef.init()
+      builder = BlockAccessListBuilder.init()
       tracker = BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger, builder)
 
     # Setup in test data in db
