@@ -14,7 +14,7 @@
 # on the shared heap. This is needed to support multi-threaded use cases when
 # using refc.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import std/[atomics, cpuinfo, hashes, math, typetraits], results, ./readwritelock
 

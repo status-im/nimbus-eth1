@@ -18,6 +18,8 @@
 # The unborrowRef function is needed to cleanup the borrowed ref after usage
 # and before the GC runs on the ref type containing the borrowed ref.
 
+{.push raises: [], gcsafe.}
+
 template borrowRef*[T](dest, src: ref T) =
   # Copies the ref type without updating the ref count.
   copyMem(addr dest, addr src, sizeof(pointer))
@@ -26,3 +28,46 @@ template unborrowRef*[T](dest: ref T) =
   # Sets the ref type back to nil without updating the ref count.
   var p: pointer = nil
   copyMem(addr dest, addr p, sizeof(pointer))
+
+# This SharedBytes type is needed in order to pass bytes (e.g. seq[byte]) between
+# threads safely when using refc. The type is not designed to be thread safe.
+
+type
+  SharedBytes* = object
+    data: ptr UncheckedArray[byte]
+    len: int
+
+proc init*(T: type SharedBytes, bytes: openArray[byte]): T =
+  if bytes.len() == 0:
+    return T()
+
+  let sb = T(
+    data: cast[ptr UncheckedArray[byte]](allocShared(bytes.len())),
+    len: bytes.len()
+  )  
+  copyMem(sb.data, unsafeAddr bytes[0], bytes.len())
+
+  sb
+
+proc dispose*(sb: var SharedBytes) =
+  if not sb.data.isNil():
+    deallocShared(sb.data)
+    sb.data = nil
+    sb.len = 0
+
+proc `=copy`*(
+    dest: var SharedBytes, src: SharedBytes
+) {.error: "Copying SharedBytes is forbidden".} =
+  # Only a single owner is supported for now.
+  discard
+
+func toSeq*(sb: SharedBytes): seq[byte] =
+  if sb.len == 0:
+    return default(seq[byte])
+
+  let s = newSeq[byte](sb.len)
+  copyMem(addr s[0], sb.data, sb.len)
+  s
+
+template data*(sb: SharedBytes): openArray[byte] =
+  sb.data.toOpenArray(0, sb.len - 1)
