@@ -71,6 +71,13 @@ template data*(sb: SharedBytes, asOpenArray: static bool = false): auto =
 # the robin-hood open addressing logic is adapted from the LruCache type in the
 # concurrency/lru.nim file, simplified for a plain table by storing the key and
 # value directly in each bucket and dropping the LRU linked list.
+#
+# Values are only ever moved (never copied) internally so the table can hold
+# move-only, non-GC value types such as SharedBytes or even a nested SharedTable.
+# As a consequence the table does not own the lifetime of its values: when the
+# value type owns manually allocated memory (e.g. SharedBytes), the caller is
+# responsible for disposing each value (via the `mvalues` iterator) before
+# disposing the table.
 
 type
   SharedTableEntry[K, V] = tuple[subhash: uint32, used: bool, key: K, value: V]
@@ -131,7 +138,7 @@ func findEntry[K, V](s: SharedTable[K, V], sh: uint32, key: K): Opt[uint32] =
     i = (i + 1) and mask
     dist += 1
 
-proc rawInsert[K, V](s: var SharedTable[K, V], sh: uint32, key: K, value: V) =
+proc rawInsert[K, V](s: var SharedTable[K, V], sh: uint32, key: K, value: sink V) =
   ## Insert a key/value pair known not to be present. The caller must ensure a
   ## free slot exists (i.e. the fill ratio is respected).
   let mask = uint32(s.allocated - 1)
@@ -143,7 +150,7 @@ proc rawInsert[K, V](s: var SharedTable[K, V], sh: uint32, key: K, value: V) =
   while true:
     let e = addr s.entries[i]
     if not e[].used:
-      e[] = cur
+      e[] = move(cur)
       return
 
     let bdist = psl(mask, i, e[].subhash)
@@ -169,7 +176,7 @@ proc grow[K, V](s: var SharedTable[K, V], newAllocated: int) =
 
   for i in 0 ..< oldAllocated:
     if old[i].used:
-      s.rawInsert(old[i].subhash, old[i].key, old[i].value)
+      s.rawInsert(old[i].subhash, old[i].key, move(old[i].value))
 
   if oldAllocated > 0:
     deallocShared(old)
@@ -179,7 +186,9 @@ proc init*[K, V](T: type SharedTable[K, V], initialSize: int = 0): T =
   ## to hold that many entries without growing.
   static:
     doAssert supportsCopyMem(K), "K must be a non-GC type"
-    doAssert supportsCopyMem(V), "V must be a non-GC type"
+    # V is intentionally not required to be `supportsCopyMem` so that move-only,
+    # non-GC value types (e.g. SharedBytes or a nested SharedTable) are allowed.
+    # V must still not contain any GC managed memory.
 
   if initialSize > 0:
     let allocated =
@@ -218,7 +227,7 @@ func get*[K, V](s: SharedTable[K, V], key: K): Opt[V] =
 template `[]`*[K, V](s: SharedTable[K, V], key: K): Opt[V] =
   s.get(key)
 
-proc put*[K, V](s: var SharedTable[K, V], key: K, value: V) =
+proc put*[K, V](s: var SharedTable[K, V], key: K, value: sink V) =
   ## Insert or update `key` with `value`, growing the table if needed.
   let sh = subhash(key)
 
@@ -235,7 +244,7 @@ proc put*[K, V](s: var SharedTable[K, V], key: K, value: V) =
   s.rawInsert(sh, key, value)
   s.used += 1
 
-template `[]=`*[K, V](s: var SharedTable[K, V], key: K, value: V) =
+template `[]=`*(s: var SharedTable, key, value: untyped) =
   s.put(key, value)
 
 proc del*[K, V](s: var SharedTable[K, V], key: K): bool {.discardable.} =
@@ -268,3 +277,49 @@ proc clear*[K, V](s: var SharedTable[K, V]) =
   if s.allocated > 0:
     zeroMem(s.entries, s.allocated * sizeof(SharedTableEntry[K, V]))
   s.used = 0
+
+template withValue*[K, V](
+    s: var SharedTable[K, V], key: K, val, body: untyped
+) =
+  ## If `key` is present, run `body` with `val` injected as a `ptr V` pointing
+  ## at the stored value. Does nothing if `key` is missing.
+  let idx = s.findEntry(subhash(key), key)
+  if idx.isSome():
+    let val {.inject.} = addr s.entries[idx[]].value
+    body
+
+iterator keys*[K, V](s: SharedTable[K, V]): lent K =
+  ## Iterate over the keys in the table in an unspecified order.
+  if s.allocated > 0:
+    for i in 0 ..< s.allocated:
+      if s.entries[i].used:
+        yield s.entries[i].key
+
+iterator values*[K, V](s: SharedTable[K, V]): lent V =
+  ## Iterate over the values in the table in an unspecified order.
+  if s.allocated > 0:
+    for i in 0 ..< s.allocated:
+      if s.entries[i].used:
+        yield s.entries[i].value
+
+iterator mvalues*[K, V](s: var SharedTable[K, V]): var V =
+  ## Iterate over mutable references to the values in an unspecified order.
+  if s.allocated > 0:
+    for i in 0 ..< s.allocated:
+      if s.entries[i].used:
+        yield s.entries[i].value
+
+iterator pairs*[K, V](s: SharedTable[K, V]): (lent K, lent V) =
+  ## Iterate over the key/value pairs in the table in an unspecified order.
+  if s.allocated > 0:
+    for i in 0 ..< s.allocated:
+      if s.entries[i].used:
+        yield (s.entries[i].key, s.entries[i].value)
+
+iterator mpairs*[K, V](s: var SharedTable[K, V]): (lent K, var V) =
+  ## Iterate over keys with mutable references to their values, in an
+  ## unspecified order.
+  if s.allocated > 0:
+    for i in 0 ..< s.allocated:
+      if s.entries[i].used:
+        yield (s.entries[i].key, s.entries[i].value)

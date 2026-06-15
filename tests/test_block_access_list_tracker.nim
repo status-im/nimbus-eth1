@@ -87,8 +87,6 @@ suite "Block access list tracker":
       check tracker.builder.accounts.contains(address1)
       tracker.builder.accounts.withValue(address1, accData):
         check accData[].balanceChanges.contains(balIndex)
-      do:
-        raiseAssert("AccountData should exist")
 
   test "Capture pre balance - stores in preBalanceCache and returns":
     block:
@@ -191,7 +189,7 @@ suite "Block access list tracker":
     tracker.builder.accounts.withValue(address2, accData):
       check:
         accData[].balanceChanges.contains(balIndex)
-        accData[].balanceChanges.getOrDefault(balIndex) == newBalance
+        accData[].balanceChanges.get(balIndex) == Opt.some(newBalance)
 
   test "Track nonce change":
     let
@@ -215,7 +213,7 @@ suite "Block access list tracker":
     tracker.builder.accounts.withValue(address2, accData):
       check:
         accData[].nonceChanges.contains(balIndex)
-        accData[].nonceChanges.getOrDefault(balIndex) == newNonce
+        accData[].nonceChanges.get(balIndex) == Opt.some(newNonce)
 
   test "Track code change":
     let
@@ -300,8 +298,9 @@ suite "Block access list tracker":
 
     tracker.builder.accounts.withValue(address1, accData):
       check accData[].storageChanges.contains(slot1)
-      accData[].storageChanges.getOrDefault(slot1).withValue(balIndex, slotValue):
-        check slotValue == postStateValue
+      accData[].storageChanges.withValue(slot1, slotChanges):
+        slotChanges[].withValue(balIndex, slotValue):
+          check slotValue[] == postStateValue
 
   test "Track storage write - pre-state value is equal to post state value":
     let

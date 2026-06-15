@@ -10,7 +10,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[tables, sets, algorithm, locks],
+  std/[algorithm, locks],
   eth/common/[block_access_lists, block_access_lists_rlp],
   stint,
   ./block_access_list_utils,
@@ -24,12 +24,15 @@ type
   # organized by the type of change and the block access list index where it
   # occurred.
   AccountData = object
-    storageChanges*: Table[UInt256, Table[int, UInt256]]
+    storageChanges*: SharedTable[UInt256, SharedTable[int, UInt256]]
       ## Maps storage key -> block access index -> storage value
-    storageReads*: HashSet[UInt256] ## Set of storage keys
-    balanceChanges*: Table[int, UInt256] ## Maps block access index -> balance
-    nonceChanges*: Table[int, AccountNonce] ## Maps block access index -> nonce
-    codeChanges*: Table[int, SharedBytes] ## Maps block access index -> code
+    storageReads*: SharedTable[UInt256, bool]
+      ## Set of storage keys (the value is always true when the key exists)
+    balanceChanges*: SharedTable[int, UInt256]
+      ## Maps block access index -> balance
+    nonceChanges*: SharedTable[int, AccountNonce]
+      ## Maps block access index -> nonce
+    codeChanges*: SharedTable[int, SharedBytes] ## Maps block access index -> code
 
   # Builder for constructing a BlockAccessList efficiently during transaction
   # execution. The builder accumulates all account and storage accesses during
@@ -37,13 +40,11 @@ type
   # tracked by address, field type, and block access list index to enable
   # efficient reconstruction of state changes.
   #
-  # Warning: This type is not yet safe to use with the refc memory manager
-  # across threads because it turns out that the Table type uses a seq internally
-  # which can re-allocate the internal buffer (when increasing the seq capacity)
-  # in a different thread local heap to the heap of the owning thread and this
-  # might cause a memory leak.
+  # All collections use the non-GC SharedTable type (rather than the standard
+  # library Table/HashSet which are backed by a GC managed seq) so that the
+  # builder can be used safely with the refc memory manager across threads.
   BlockAccessListBuilder* = object
-    accounts*: Table[Address, AccountData] ## Maps address -> account data
+    accounts*: SharedTable[Address, AccountData] ## Maps address -> account data
     threadSafe: bool
     lock: Lock
 
@@ -51,13 +52,15 @@ template init(T: type AccountData): T =
   AccountData()
 
 proc dispose(accData: var AccountData) =
-  accData.storageChanges.clear()
-  accData.storageReads.clear()
-  accData.balanceChanges.clear()
-  accData.nonceChanges.clear()
+  for slotChanges in accData.storageChanges.mvalues():
+    slotChanges.dispose()
+  accData.storageChanges.dispose()
+  accData.storageReads.dispose()
+  accData.balanceChanges.dispose()
+  accData.nonceChanges.dispose()
   for code in accData.codeChanges.mvalues():
     code.dispose()
-  accData.codeChanges.clear()
+  accData.codeChanges.dispose()
 
 proc `=copy`(
     dest: var AccountData, src: AccountData
@@ -77,7 +80,7 @@ template init*(T: type BlockAccessListBuilder, threadSafe = false): var T =
 proc dispose*(builder: var BlockAccessListBuilder) =
   for accData in builder.accounts.mvalues():
     accData.dispose()
-  builder.accounts.clear()
+  builder.accounts.dispose()
   if builder.threadSafe:
     deinitLock(builder.lock)
 
@@ -93,7 +96,7 @@ template withOptionalLock(builder: BlockAccessListBuilder, body: untyped) =
   else:
     body
 
-func ensureAccount(builder: var BlockAccessListBuilder, address: Address) =
+proc ensureAccount(builder: var BlockAccessListBuilder, address: Address) =
   if address notin builder.accounts:
     builder.accounts[address] = AccountData.init()
 
@@ -113,7 +116,7 @@ proc addStorageWrite*(
 
     builder.accounts.withValue(address, accData):
       if slot notin accData[].storageChanges:
-        accData[].storageChanges[slot] = default(Table[int, UInt256])
+        accData[].storageChanges[slot] = default(SharedTable[int, UInt256])
       accData[].storageChanges.withValue(slot, slotChanges):
         slotChanges[][blockAccessIndex] = newValue
 
@@ -124,7 +127,7 @@ proc addStorageRead*(
     builder.ensureAccount(address)
 
     builder.accounts.withValue(address, accData):
-      accData[].storageReads.incl(slot)
+      accData[].storageReads[slot] = true
 
 proc addBalanceChange*(
     builder: var BlockAccessListBuilder,
@@ -170,10 +173,10 @@ func buildBlockAccessListImpl(
   for address, accData in builder.accounts.mpairs():
     # Collect and sort storageChanges
     var storageChanges: seq[SlotChanges]
-    for slot, changes in accData.storageChanges:
+    for slot, changes in accData.storageChanges.mpairs():
       var slotChanges: seq[StorageChange]
 
-      for balIndex, value in changes:
+      for balIndex, value in changes.pairs():
         slotChanges.add((BlockAccessIndex(balIndex), StorageValue(value)))
       slotChanges.sort(balIndexCmp)
 
@@ -182,20 +185,20 @@ func buildBlockAccessListImpl(
 
     # Collect and sort storageReads
     var storageReads: seq[StorageKey]
-    for slot in accData.storageReads:
+    for slot in accData.storageReads.keys():
       if slot notin accData.storageChanges:
         storageReads.add(StorageKey(slot))
     storageReads.sort()
 
     # Collect and sort balanceChanges
     var balanceChanges: seq[BalanceChange]
-    for balIndex, balance in accData.balanceChanges:
+    for balIndex, balance in accData.balanceChanges.pairs():
       balanceChanges.add((BlockAccessIndex(balIndex), Balance(balance)))
     balanceChanges.sort(balIndexCmp)
 
     # Collect and sort nonceChanges
     var nonceChanges: seq[NonceChange]
-    for balIndex, nonce in accData.nonceChanges:
+    for balIndex, nonce in accData.nonceChanges.pairs():
       nonceChanges.add((BlockAccessIndex(balIndex), Nonce(nonce)))
     nonceChanges.sort(balIndexCmp)
 
