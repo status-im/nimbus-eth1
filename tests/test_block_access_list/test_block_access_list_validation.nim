@@ -13,8 +13,8 @@
 import
   unittest2,
   eth/common/block_access_lists_rlp,
-  ../execution_chain/constants,
-  ../execution_chain/block_access_list/[block_access_list_builder, block_access_list_validation]
+  ../../execution_chain/constants,
+  ../../execution_chain/block_access_list/[block_access_list_builder, block_access_list_validation]
 
 const
   ENABLE_BENCHMARKS = false

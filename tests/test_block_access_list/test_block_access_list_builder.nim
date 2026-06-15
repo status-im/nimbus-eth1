@@ -13,7 +13,7 @@
 import
   unittest2,
   taskpools,
-  ../execution_chain/block_access_list/block_access_list_builder
+  ../../execution_chain/block_access_list/block_access_list_builder
 
 suite "Block access list builder":
   const
