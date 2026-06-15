@@ -237,13 +237,13 @@ suite "Block access list tracker":
 
     check tracker.builder.accounts.contains(address2)
     # codeChanges values are SharedBytes (shared heap), which cannot be copied
-    # out, so view them in place and compare the bytes via toSeq.
+    # out, so view them in place and compare the bytes via data.
     var hasCode = false
     var codeBytes: seq[byte]
     tracker.builder.accounts.withValue(address2, accData):
       accData[].codeChanges.withValue(balIndex, sharedCode):
         hasCode = true
-        codeBytes = sharedCode[].toSeq()
+        codeBytes = sharedCode[].data()
     check:
       hasCode
       codeBytes == newCode

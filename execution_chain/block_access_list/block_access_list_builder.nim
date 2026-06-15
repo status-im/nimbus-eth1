@@ -202,7 +202,7 @@ func buildBlockAccessListImpl(
     # Collect and sort codeChanges
     var codeChanges: seq[CodeChange]
     for balIndex, code in accData.codeChanges.mpairs():
-      codeChanges.add((BlockAccessIndex(balIndex), Bytecode(code.toSeq())))
+      codeChanges.add((BlockAccessIndex(balIndex), Bytecode(code.data())))
     codeChanges.sort(balIndexCmp)
 
     blockAccessList[].add(

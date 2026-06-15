@@ -100,6 +100,9 @@ proc init*(
   var builder = BlockAccessListBuilder.init()
   BlockAccessListTrackerRef(ledger: ledger, builder: builder)
 
+proc dispose*(tracker: BlockAccessListTrackerRef) =
+  tracker.builder.dispose()
+
 proc setBlockAccessIndex*(tracker: BlockAccessListTrackerRef, blockAccessIndex: int) =
   ## Must be called before processing each transaction/system contract
   ## to ensure changes are associated with the correct block access index.
