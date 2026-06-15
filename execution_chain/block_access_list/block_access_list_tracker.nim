@@ -89,8 +89,15 @@ proc `=copy`(
 proc init*(
     T: type BlockAccessListTrackerRef,
     ledger: ReadOnlyLedger,
-    builder = BlockAccessListBuilder.init(),
+    builder: var BlockAccessListBuilder,
 ): T =
+  BlockAccessListTrackerRef(ledger: ledger, builder: builder)
+
+proc init*(
+    T: type BlockAccessListTrackerRef,
+    ledger: ReadOnlyLedger,
+): T =
+  var builder = BlockAccessListBuilder.init()
   BlockAccessListTrackerRef(ledger: ledger, builder: builder)
 
 proc setBlockAccessIndex*(tracker: BlockAccessListTrackerRef, blockAccessIndex: int) =

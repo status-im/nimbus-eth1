@@ -42,7 +42,7 @@ type
   # which can re-allocate the internal buffer (when increasing the seq capacity)
   # in a different thread local heap to the heap of the owning thread and this
   # might cause a memory leak.
-  BlockAccessListBuilder* = ref object
+  BlockAccessListBuilder* = object
     accounts*: Table[Address, AccountData] ## Maps address -> account data
     threadSafe: bool
     lock: Lock
@@ -59,22 +59,32 @@ proc dispose(accData: var AccountData) =
     code.dispose()
   accData.codeChanges.clear()
 
-# Disallow copying of AccountData
 proc `=copy`(
     dest: var AccountData, src: AccountData
 ) {.error: "Copying AccountData is forbidden".} =
   discard
 
-proc init*(T: type BlockAccessListBuilder, threadSafe = false): T =
-  result = BlockAccessListBuilder(threadSafe: threadSafe)
+proc init*(builder: var BlockAccessListBuilder, threadSafe = false) =
+  builder.threadSafe = threadSafe
   if threadSafe:
-    initLock(result.lock)
+    initLock(builder.lock)
 
-proc dispose*(builder: BlockAccessListBuilder) =
+template init*(T: type BlockAccessListBuilder, threadSafe = false): var T =
+  var builder = T()
+  builder.init(threadSafe)
+  builder
+
+proc dispose*(builder: var BlockAccessListBuilder) =
   for accData in builder.accounts.mvalues():
     accData.dispose()
   builder.accounts.clear()
+  if builder.threadSafe:
+    deinitLock(builder.lock)
 
+proc `=copy`(
+    dest: var BlockAccessListBuilder, src: BlockAccessListBuilder
+) {.error: "Copying BlockAccessListBuilder is forbidden".} =
+  discard
 
 template withOptionalLock(builder: BlockAccessListBuilder, body: untyped) =
   if builder.threadSafe:
@@ -83,11 +93,11 @@ template withOptionalLock(builder: BlockAccessListBuilder, body: untyped) =
   else:
     body
 
-func ensureAccount(builder: BlockAccessListBuilder, address: Address) =
+func ensureAccount(builder: var BlockAccessListBuilder, address: Address) =
   if address notin builder.accounts:
     builder.accounts[address] = AccountData.init()
 
-proc addTouchedAccount*(builder: BlockAccessListBuilder, address: Address) =
+proc addTouchedAccount*(builder: var BlockAccessListBuilder, address: Address) =
   withOptionalLock(builder):
     builder.ensureAccount(address)
 
@@ -95,7 +105,7 @@ proc addTouchedAccount*(builder: ptr BlockAccessListBuilder, address: Address) =
   builder[].addTouchedAccount(address)
 
 proc addStorageWrite*(
-    builder: BlockAccessListBuilder,
+    builder: var BlockAccessListBuilder,
     address: Address,
     slot: UInt256,
     blockAccessIndex: int,
@@ -120,7 +130,7 @@ proc addStorageWrite*(
   builder[].addStorageWrite(address, slot, blockAccessIndex, newValue)
 
 proc addStorageRead*(
-    builder: BlockAccessListBuilder, address: Address, slot: UInt256
+    builder: var BlockAccessListBuilder, address: Address, slot: UInt256
 ) =
   withOptionalLock(builder):
     builder.ensureAccount(address)
@@ -134,7 +144,7 @@ proc addStorageRead*(
   builder[].addStorageRead(address, slot)
 
 proc addBalanceChange*(
-    builder: BlockAccessListBuilder,
+    builder: var BlockAccessListBuilder,
     address: Address,
     blockAccessIndex: int,
     postBalance: UInt256,
@@ -154,7 +164,7 @@ proc addBalanceChange*(
   builder[].addBalanceChange(address, blockAccessIndex, postBalance)
 
 proc addNonceChange*(
-    builder: BlockAccessListBuilder,
+    builder: var BlockAccessListBuilder,
     address: Address,
     blockAccessIndex: int,
     newNonce: AccountNonce,
@@ -174,7 +184,7 @@ proc addNonceChange*(
   builder[].addNonceChange(address, blockAccessIndex, newNonce)
 
 proc addCodeChange*(
-    builder: BlockAccessListBuilder,
+    builder: var BlockAccessListBuilder,
     address: Address,
     blockAccessIndex: int,
     newCode: openArray[byte],
@@ -194,7 +204,7 @@ proc addCodeChange*(
   builder[].addCodeChange(address, blockAccessIndex, newCode)
 
 func buildBlockAccessListImpl(
-    builder: BlockAccessListBuilder
+    builder: var BlockAccessListBuilder
 ): BlockAccessListRef =
   let blockAccessList: BlockAccessListRef = new BlockAccessList
 
@@ -251,7 +261,7 @@ func buildBlockAccessListImpl(
 
   blockAccessList
 
-func buildBlockAccessList*(builder: BlockAccessListBuilder): BlockAccessListRef =
+func buildBlockAccessList*(builder: var BlockAccessListBuilder): BlockAccessListRef =
   withOptionalLock(builder):
     result = builder.buildBlockAccessListImpl()
 

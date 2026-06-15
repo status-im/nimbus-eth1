@@ -41,11 +41,12 @@ suite "Block access list tracker":
     code2 = @[0xaa.byte, 0xbb]
 
   setup:
+    #var builder = BlockAccessListBuilder.init()
+
     let
       coreDb = newCoreDbRef(DefaultDbMemory)
       ledger = LedgerRef.init(coreDb.baseTxFrame())
-      builder = BlockAccessListBuilder.init()
-      tracker = BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger, builder)
+      tracker = BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger)
 
     # Setup in test data in db
 
@@ -66,6 +67,9 @@ suite "Block access list tracker":
     ledger.setBalance(address3, balance3)
     ledger.setNonce(address3, nonce3)
 
+  teardown:
+    tracker.builder.dispose()
+
   test "Set valid block access index":
     let balIndexes = [
       uint16.low.int,
@@ -81,8 +85,8 @@ suite "Block access list tracker":
       tracker.trackBalanceChange(address1, balance1 + 1.u256)
       tracker.commitCallFrame()
 
-      check builder.accounts.contains(address1)
-      builder.accounts.withValue(address1, accData):
+      check tracker.builder.accounts.contains(address1)
+      tracker.builder.accounts.withValue(address1, accData):
         check accData[].balanceChanges.contains(balIndex)
       do:
         raiseAssert("AccountData should exist")
@@ -140,9 +144,9 @@ suite "Block access list tracker":
         cacheKey in tracker.preStorageCache
 
   test "Track address access":
-    check not builder.accounts.contains(address1)
-    check not builder.accounts.contains(address2)
-    check not builder.accounts.contains(address4)
+    check not tracker.builder.accounts.contains(address1)
+    check not tracker.builder.accounts.contains(address2)
+    check not tracker.builder.accounts.contains(address4)
 
     tracker.beginCallFrame()
     tracker.trackAddressAccess(address1)
@@ -150,9 +154,9 @@ suite "Block access list tracker":
     tracker.trackAddressAccess(address4)
     tracker.commitCallFrame()
 
-    check builder.accounts.contains(address1)
-    check builder.accounts.contains(address2)
-    check builder.accounts.contains(address4)
+    check tracker.builder.accounts.contains(address1)
+    check tracker.builder.accounts.contains(address2)
+    check tracker.builder.accounts.contains(address4)
 
   test "Begin, commit and rollback call frame":
     check tracker.callFrameSnapshots.len() == 0
@@ -175,7 +179,7 @@ suite "Block access list tracker":
     tracker.beginCallFrame()
     check tracker.callFrameSnapshots.len() == 1
 
-    check not builder.accounts.contains(address2)
+    check not tracker.builder.accounts.contains(address2)
     tracker.trackBalanceChange(address2, newBalance)
 
     check:
@@ -184,7 +188,7 @@ suite "Block access list tracker":
 
     tracker.commitCallFrame()
 
-    check builder.accounts.contains(address2)
+    check tracker.builder.accounts.contains(address2)
     tracker.builder.accounts.withValue(address2, accData):
       check:
         accData[].balanceChanges.contains(balIndex)
@@ -199,7 +203,7 @@ suite "Block access list tracker":
     tracker.beginCallFrame()
     check tracker.callFrameSnapshots.len() == 1
 
-    check not builder.accounts.contains(address2)
+    check not tracker.builder.accounts.contains(address2)
     tracker.trackNonceChange(address2, newNonce)
 
     check:
@@ -208,7 +212,7 @@ suite "Block access list tracker":
 
     tracker.commitCallFrame()
 
-    check builder.accounts.contains(address2)
+    check tracker.builder.accounts.contains(address2)
     tracker.builder.accounts.withValue(address2, accData):
       check:
         accData[].nonceChanges.contains(balIndex)
@@ -223,7 +227,7 @@ suite "Block access list tracker":
     tracker.beginCallFrame()
     check tracker.callFrameSnapshots.len() == 1
 
-    check not builder.accounts.contains(address2)
+    check not tracker.builder.accounts.contains(address2)
     tracker.trackCodeChange(address2, newCode)
 
     check:
@@ -232,7 +236,7 @@ suite "Block access list tracker":
 
     tracker.commitCallFrame()
 
-    check builder.accounts.contains(address2)
+    check tracker.builder.accounts.contains(address2)
     # codeChanges values are SharedBytes (shared heap), which cannot be copied
     # out, so view them in place and compare the bytes via toSeq.
     var hasCode = false
@@ -247,25 +251,25 @@ suite "Block access list tracker":
 
   test "Track storage read":
     block:
-      check not builder.accounts.contains(address1)
+      check not tracker.builder.accounts.contains(address1)
 
       tracker.beginCallFrame()
       tracker.trackStorageRead(address1, slot1)
       tracker.commitCallFrame()
 
-      check builder.accounts.contains(address1)
+      check tracker.builder.accounts.contains(address1)
       tracker.builder.accounts.withValue(address1, accData):
         check:
           accData[].storageReads.contains(slot1)
 
     block:
-      check not builder.accounts.contains(address2)
+      check not tracker.builder.accounts.contains(address2)
 
       tracker.beginCallFrame()
       tracker.trackStorageRead(address2, slot2)
       tracker.commitCallFrame()
 
-      check builder.accounts.contains(address2)
+      check tracker.builder.accounts.contains(address2)
       tracker.builder.accounts.withValue(address2, accData):
         check:
           accData[].storageReads.contains(slot2)
@@ -277,7 +281,7 @@ suite "Block access list tracker":
       postStateValue = 100_000.u256
 
     check:
-      not builder.accounts.contains(address1)
+      not tracker.builder.accounts.contains(address1)
       (address1, slot1) notin tracker.preStorageCache
 
     tracker.setBlockAccessIndex(balIndex)
@@ -291,7 +295,7 @@ suite "Block access list tracker":
     tracker.commitCallFrame()
 
     check:
-      builder.accounts.contains(address1)
+      tracker.builder.accounts.contains(address1)
       (address1, slot1) in tracker.preStorageCache
       tracker.preStorageCache.getOrDefault((address1, slot1)) == preStateValue
 
@@ -307,7 +311,7 @@ suite "Block access list tracker":
       postStateValue = 0.u256
 
     check:
-      not builder.accounts.contains(address2)
+      not tracker.builder.accounts.contains(address2)
       (address2, slot2) notin tracker.preStorageCache
 
     tracker.setBlockAccessIndex(balIndex)
@@ -319,7 +323,7 @@ suite "Block access list tracker":
     tracker.commitCallFrame()
 
     check:
-      builder.accounts.contains(address2)
+      tracker.builder.accounts.contains(address2)
       (address2, slot2) in tracker.preStorageCache
       tracker.preStorageCache.getOrDefault((address2, slot2)) == preStateValue
 
@@ -331,7 +335,7 @@ suite "Block access list tracker":
   test "Handle in transaction self destruct":
     let balIndex = 10
 
-    check not builder.accounts.contains(address1)
+    check not tracker.builder.accounts.contains(address1)
 
     tracker.setBlockAccessIndex(balIndex)
     tracker.beginCallFrame()
@@ -356,7 +360,7 @@ suite "Block access list tracker":
 
     tracker.commitCallFrame()
 
-    check builder.accounts.contains(address1)
+    check tracker.builder.accounts.contains(address1)
     tracker.builder.accounts.withValue(address1, accData):
       # Compute codeChanges membership separately: a `notin` inside `check`
       # would try to stringify the Table[int, SharedBytes], which is non-copyable.

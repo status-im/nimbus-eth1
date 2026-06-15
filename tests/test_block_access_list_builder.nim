@@ -25,7 +25,7 @@ suite "Block access list builder":
     slot3 = 3.u256()
 
   setup:
-    let builder = BlockAccessListBuilder.init()
+    var builder = BlockAccessListBuilder.init()
 
   teardown:
     builder.dispose()
@@ -211,8 +211,8 @@ suite "Concurrent block access list builder":
   setup:
     let
       taskpool = Taskpool.new()
-      builder = BlockAccessListBuilder.init(threadSafe = true)
-      builderPtr = builder.addr
+    var builder = BlockAccessListBuilder.init(threadSafe = true)
+    var builderPtr = builder.addr
 
   teardown:
     builder.dispose()
