@@ -199,6 +199,48 @@ suite "Block access list builder":
       bal[2].balanceChanges == @[(3.BlockAccessIndex, 3.u256)]
       bal[2].nonceChanges == @[(1.BlockAccessIndex, 10.AccountNonce)]
 
+
+proc addTouchedAccount(builder: ptr BlockAccessListBuilder, address: Address) =
+  builder[].addTouchedAccount(address)
+
+proc addStorageWrite(
+    builder: ptr BlockAccessListBuilder,
+    address: Address,
+    slot: UInt256,
+    blockAccessIndex: int,
+    newValue: UInt256,
+) =
+  builder[].addStorageWrite(address, slot, blockAccessIndex, newValue)
+
+proc addStorageRead(
+    builder: ptr BlockAccessListBuilder, address: Address, slot: UInt256
+) =
+  builder[].addStorageRead(address, slot)
+
+proc addBalanceChange(
+    builder: ptr BlockAccessListBuilder,
+    address: Address,
+    blockAccessIndex: int,
+    postBalance: UInt256,
+) =
+  builder[].addBalanceChange(address, blockAccessIndex, postBalance)
+
+proc addNonceChange(
+    builder: ptr BlockAccessListBuilder,
+    address: Address,
+    blockAccessIndex: int,
+    newNonce: AccountNonce,
+) =
+  builder[].addNonceChange(address, blockAccessIndex, newNonce)
+
+proc addCodeChange(
+    builder: ptr BlockAccessListBuilder,
+    address: Address,
+    blockAccessIndex: int,
+    newCode: openArray[byte],
+) =
+  builder[].addCodeChange(address, blockAccessIndex, newCode)
+
 suite "Concurrent block access list builder":
   const
     address1 = address"0x10007bc31cedb7bfb8a345f31e668033056b2728"
@@ -209,10 +251,9 @@ suite "Concurrent block access list builder":
     slot3 = 3.u256()
 
   setup:
-    let
-      taskpool = Taskpool.new()
+    let taskpool = Taskpool.new()
     var builder = BlockAccessListBuilder.init(threadSafe = true)
-    var builderPtr = builder.addr
+    let builderPtr = builder.addr
 
   teardown:
     builder.dispose()

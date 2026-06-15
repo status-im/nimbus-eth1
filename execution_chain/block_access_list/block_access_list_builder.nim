@@ -101,9 +101,6 @@ proc addTouchedAccount*(builder: var BlockAccessListBuilder, address: Address) =
   withOptionalLock(builder):
     builder.ensureAccount(address)
 
-proc addTouchedAccount*(builder: ptr BlockAccessListBuilder, address: Address) =
-  builder[].addTouchedAccount(address)
-
 proc addStorageWrite*(
     builder: var BlockAccessListBuilder,
     address: Address,
@@ -120,15 +117,6 @@ proc addStorageWrite*(
       accData[].storageChanges.withValue(slot, slotChanges):
         slotChanges[][blockAccessIndex] = newValue
 
-proc addStorageWrite*(
-    builder: ptr BlockAccessListBuilder,
-    address: Address,
-    slot: UInt256,
-    blockAccessIndex: int,
-    newValue: UInt256,
-) =
-  builder[].addStorageWrite(address, slot, blockAccessIndex, newValue)
-
 proc addStorageRead*(
     builder: var BlockAccessListBuilder, address: Address, slot: UInt256
 ) =
@@ -137,11 +125,6 @@ proc addStorageRead*(
 
     builder.accounts.withValue(address, accData):
       accData[].storageReads.incl(slot)
-
-proc addStorageRead*(
-    builder: ptr BlockAccessListBuilder, address: Address, slot: UInt256
-) =
-  builder[].addStorageRead(address, slot)
 
 proc addBalanceChange*(
     builder: var BlockAccessListBuilder,
@@ -155,14 +138,6 @@ proc addBalanceChange*(
     builder.accounts.withValue(address, accData):
       accData[].balanceChanges[blockAccessIndex] = postBalance
 
-proc addBalanceChange*(
-    builder: ptr BlockAccessListBuilder,
-    address: Address,
-    blockAccessIndex: int,
-    postBalance: UInt256,
-) =
-  builder[].addBalanceChange(address, blockAccessIndex, postBalance)
-
 proc addNonceChange*(
     builder: var BlockAccessListBuilder,
     address: Address,
@@ -175,14 +150,6 @@ proc addNonceChange*(
     builder.accounts.withValue(address, accData):
       accData[].nonceChanges[blockAccessIndex] = newNonce
 
-proc addNonceChange*(
-    builder: ptr BlockAccessListBuilder,
-    address: Address,
-    blockAccessIndex: int,
-    newNonce: AccountNonce,
-) =
-  builder[].addNonceChange(address, blockAccessIndex, newNonce)
-
 proc addCodeChange*(
     builder: var BlockAccessListBuilder,
     address: Address,
@@ -194,14 +161,6 @@ proc addCodeChange*(
 
     builder.accounts.withValue(address, accData):
       accData[].codeChanges[blockAccessIndex] = SharedBytes.init(newCode)
-
-proc addCodeChange*(
-    builder: ptr BlockAccessListBuilder,
-    address: Address,
-    blockAccessIndex: int,
-    newCode: openArray[byte],
-) =
-  builder[].addCodeChange(address, blockAccessIndex, newCode)
 
 func buildBlockAccessListImpl(
     builder: var BlockAccessListBuilder

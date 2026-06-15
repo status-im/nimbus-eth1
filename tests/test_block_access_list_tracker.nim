@@ -41,8 +41,6 @@ suite "Block access list tracker":
     code2 = @[0xaa.byte, 0xbb]
 
   setup:
-    #var builder = BlockAccessListBuilder.init()
-
     let
       coreDb = newCoreDbRef(DefaultDbMemory)
       ledger = LedgerRef.init(coreDb.baseTxFrame())
