@@ -197,12 +197,12 @@ proc staticCallParams(c: Computation, res: var LocalParams): EvmResult[void] =
   ok()
 
 proc getCallCode(c: Computation, childMsg: Message): CodeBytesRef =
+  if c.balTrackerEnabled:
+    c.vmState.balTracker.trackAddressAccess(c.delegateTo)
+    
   # Avoid accessing ledger if it's a precompile address
   if MsgFlags.Precompile in childMsg.flags:
     return CodeBytesRef(nil)
-
-  if c.balTrackerEnabled:
-    c.vmState.balTracker.trackAddressAccess(c.delegateTo)
 
   c.vmState.readOnlyLedger.getCode(c.delegateTo)
 
