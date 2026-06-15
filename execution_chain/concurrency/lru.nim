@@ -344,7 +344,7 @@ when false:
       for i in 0 ..< s.used:
         yield pos
         pos = s.nodes[pos].next
-  
+
   iterator keys(s: var LruCache): lent LruCache.K =
     ## Keys in MRU order - starting from the front with the item that was most
     ## recently added or accessed.
@@ -383,7 +383,7 @@ when false:
     ## Update the capacity (but don't reallocate the currenty cache). If the
     ## capacity is smaller than the currently allocated size, it will be ignored.
     s.capacity = c
-    
+
 template capacity(s: var LruCache): int =
   s.capacity
 

@@ -28,10 +28,8 @@ type
       ## Maps storage key -> block access index -> storage value
     storageReads*: SharedTable[UInt256, bool]
       ## Set of storage keys (the value is always true when the key exists)
-    balanceChanges*: SharedTable[int, UInt256]
-      ## Maps block access index -> balance
-    nonceChanges*: SharedTable[int, AccountNonce]
-      ## Maps block access index -> nonce
+    balanceChanges*: SharedTable[int, UInt256] ## Maps block access index -> balance
+    nonceChanges*: SharedTable[int, AccountNonce] ## Maps block access index -> nonce
     codeChanges*: SharedTable[int, SharedBytes] ## Maps block access index -> code
 
   # Builder for constructing a BlockAccessList efficiently during transaction
@@ -165,9 +163,7 @@ proc addCodeChange*(
     builder.accounts.withValue(address, accData):
       accData[].codeChanges[blockAccessIndex] = SharedBytes.init(newCode)
 
-func buildBlockAccessListImpl(
-    builder: var BlockAccessListBuilder
-): BlockAccessListRef =
+func buildBlockAccessListImpl(builder: var BlockAccessListBuilder): BlockAccessListRef =
   let blockAccessList: BlockAccessListRef = new BlockAccessList
 
   for address, accData in builder.accounts.mpairs():
@@ -226,4 +222,3 @@ func buildBlockAccessListImpl(
 func buildBlockAccessList*(builder: var BlockAccessListBuilder): BlockAccessListRef =
   withOptionalLock(builder):
     result = builder.buildBlockAccessListImpl()
-

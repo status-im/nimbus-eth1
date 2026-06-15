@@ -23,10 +23,9 @@ export hashes, results
 # SharedBytes is needed in order to pass bytes (e.g. seq[byte]) between threads
 # safely when using refc.
 
-type
-  SharedBytes* = object
-    data: ptr UncheckedArray[byte]
-    len: int
+type SharedBytes* = object
+  data: ptr UncheckedArray[byte]
+  len: int
 
 proc init*(T: type SharedBytes, bytes: openArray[byte]): T =
   if bytes.len() == 0:
@@ -169,9 +168,9 @@ proc grow[K, V](s: var SharedTable[K, V], newAllocated: int) =
     oldAllocated = s.allocated
 
   # createShared zero-initializes the memory so every slot starts out unused.
-  s.entries = cast[ptr UncheckedArray[SharedTableEntry[K, V]]](
-    createShared(SharedTableEntry[K, V], newAllocated)
-  )
+  s.entries = cast[ptr UncheckedArray[SharedTableEntry[K, V]]](createShared(
+    SharedTableEntry[K, V], newAllocated
+  ))
   s.allocated = newAllocated
 
   for i in 0 ..< oldAllocated:
@@ -193,9 +192,9 @@ proc init*[K, V](T: type SharedTable[K, V], initialSize: int = 0): T =
   if initialSize > 0:
     let allocated =
       max(initialCapacity, nextPowerOfTwo(int(ceil(initialSize.float / fillRatio))))
-    result.entries = cast[ptr UncheckedArray[SharedTableEntry[K, V]]](
-      createShared(SharedTableEntry[K, V], allocated)
-    )
+    result.entries = cast[ptr UncheckedArray[SharedTableEntry[K, V]]](createShared(
+      SharedTableEntry[K, V], allocated
+    ))
     result.allocated = allocated
 
 proc dispose*[K, V](s: var SharedTable[K, V]) =
@@ -278,9 +277,7 @@ proc clear*[K, V](s: var SharedTable[K, V]) =
     zeroMem(s.entries, s.allocated * sizeof(SharedTableEntry[K, V]))
   s.used = 0
 
-template withValue*[K, V](
-    s: var SharedTable[K, V], key: K, val, body: untyped
-) =
+template withValue*[K, V](s: var SharedTable[K, V], key: K, val, body: untyped) =
   ## If `key` is present, run `body` with `val` injected as a `ptr V` pointing
   ## at the stored value. Does nothing if `key` is missing.
   let idx = s.findEntry(subhash(key), key)

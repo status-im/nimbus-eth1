@@ -93,10 +93,7 @@ proc init*(
 ): T =
   BlockAccessListTrackerRef(ledger: ledger, builder: builder)
 
-proc init*(
-    T: type BlockAccessListTrackerRef,
-    ledger: ReadOnlyLedger,
-): T =
+proc init*(T: type BlockAccessListTrackerRef, ledger: ReadOnlyLedger): T =
   var builder = BlockAccessListBuilder.init()
   BlockAccessListTrackerRef(ledger: ledger, builder: builder)
 
