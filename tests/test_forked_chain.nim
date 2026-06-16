@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
   pkg/chronicles,
   pkg/chronos,
@@ -26,8 +28,6 @@ import
   ../execution_chain/history/db/ere_db,
   ../execution_chain/db/fcu_db,
   ./test_forked_chain/chain_debug
-
-{.push raises: [].}
 
 const
   genesisFile = "tests/customgenesis/cancun123.json"
@@ -80,7 +80,7 @@ proc makeBlk(txFrame: CoreDbTxRef, number: BlockNumber, parentBlk: Block): Block
   ledger.persist()
 
   let wdRoot = calcWithdrawalsRoot(wds)
-  var body = BlockBody(
+  let body = BlockBody(
     withdrawals: Opt.some(move(wds))
   )
 
@@ -823,7 +823,7 @@ suite "ForkedChainRef tests":
     check chain.validate info & " (1)"
     check chain.heads.len == 2
 
-    # blk8 and F8: two non-finalized heads descended from the finalized block.
+    # blk8 and F8: two non-finalized heads descended from the finalized block
     checkForkChoice(chain, blk8, blk7)
     check chain.tryUpdatePendingFCU(blk7.blockHash, 7'u64)
     check chain.validate info & " (2)"
