@@ -161,6 +161,8 @@ proc addCodeChange*(
     builder.ensureAccount(address)
 
     builder.accounts.withValue(address, accData):
+      accData[].codeChanges.withValue(blockAccessIndex, existing):
+        existing[].dispose()
       accData[].codeChanges[blockAccessIndex] = SharedBytes.init(newCode)
 
 func buildBlockAccessListImpl(builder: var BlockAccessListBuilder): BlockAccessListRef =

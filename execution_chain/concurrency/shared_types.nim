@@ -274,16 +274,14 @@ proc put*[K, V](s: var SharedTable[K, V], key: K, value: sink V) =
 template `[]=`*(s: var SharedTable, key, value: untyped) =
   s.put(key, value)
 
-proc del*[K, V](s: var SharedTable[K, V], key: K): bool {.discardable.} =
-  ## Remove `key` from the table, returning true if it was present.
-  let idx = s.findEntry(subhash(key), key).valueOr:
-    return false
-
+proc removeEntry[K, V](s: var SharedTable[K, V], idx: uint32) =
+  ## Close the hole left at `idx` with backward-shift deletion: pull following
+  ## entries back until an empty slot or an entry already in its ideal slot is
+  ## reached, then decrement the count. The value previously stored at `idx` is
+  ## abandoned; callers that need to reclaim it must move it out beforehand.
   let mask = uint32(s.allocated - 1)
   var i = idx
 
-  # Backward-shift deletion: pull following entries back to fill the hole until
-  # we reach an empty slot or an entry already sitting in its ideal slot.
   while true:
     let
       next = (i + 1) and mask
@@ -300,7 +298,28 @@ proc del*[K, V](s: var SharedTable[K, V], key: K): bool {.discardable.} =
     i = next
 
   s.used -= 1
+
+proc del*[K, V](s: var SharedTable[K, V], key: K): bool {.discardable.} =
+  ## Remove `key` from the table, returning true if it was present. The removed
+  ## value is discarded. If V owns manually allocated memory (e.g. SharedBytes
+  ## or a nested SharedTable), use `pop` instead and dispose the returned value,
+  ## otherwise that memory is leaked.
+  let idx = s.findEntry(subhash(key), key).valueOr:
+    return false
+
+  s.removeEntry(idx)
   true
+
+proc pop*[K, V](s: var SharedTable[K, V], key: K): Opt[V] =
+  ## Remove `key` from the table and return its value, transferring ownership to
+  ## the caller. Returns none if the key was absent. Prefer this over `del` when
+  ## V owns memory so the caller can dispose the returned value.
+  let idx = s.findEntry(subhash(key), key).valueOr:
+    return Opt.none(V)
+
+  # Move the value out before the backward-shift overwrites the slot.
+  result = Opt.some(move(s.entries[idx].value))
+  s.removeEntry(idx)
 
 proc clear*[K, V](s: var SharedTable[K, V]) =
   ## Remove all entries, keeping the allocated memory for reuse.

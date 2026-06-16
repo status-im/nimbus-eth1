@@ -136,6 +136,15 @@ suite "Block access list builder":
       bal[1].address == address2
       bal[1].codeChanges == @[(0.BlockAccessIndex, @[0x1.byte]), (1.BlockAccessIndex, @[0x2.byte])]
 
+  test "Overwriting a code change at the same index does not leak":
+    let before = getOccupiedSharedMem()
+    for _ in 0 ..< 100:
+      var b = BlockAccessListBuilder.init()
+      b.addCodeChange(address1, 3, @[0x1.byte, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8])
+      b.addCodeChange(address1, 3, @[0x9.byte]) # overwrites; old buffer must be freed
+      b.dispose()
+    check getOccupiedSharedMem() == before
+
   test "All changes and reads":
     builder.addTouchedAccount(address3)
     builder.addTouchedAccount(address2)

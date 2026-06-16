@@ -254,20 +254,24 @@ suite "SharedTable with move-only values Tests":
       dispose(v)
     t.dispose()
 
-  test "del backward-shifts move-only values without copying":
-    # All keys collide into one probe chain, so deleting a middle key forces
-    # `del` to move the following entries back. This is the regression test for
-    # the `=copy` bug that previously prevented `del` from compiling here.
+  test "pop backward-shifts move-only values and transfers ownership":
+    # All keys collide into one probe chain, so removing a middle key forces the
+    # backward-shift to move the following entries back. This guards the `=copy`
+    # fix that previously prevented removal from compiling for move-only values,
+    # and checks that pop hands the removed value to the caller to dispose.
     var t = SharedTable[CollKey, SharedBytes].init()
     for i in 0 ..< 20:
       t.put(CollKey(v: i), SharedBytes.init([byte(i)]))
     check t.len == 20
 
-    check t.del(CollKey(v: 5))
+    var removed = t.pop(CollKey(v: 5))
     check:
+      removed.isSome()
+      removed.unsafeGet().data() == @[byte(5)]
       t.len == 19
       not t.contains(CollKey(v: 5))
-      not t.del(CollKey(v: 5)) # already gone
+      t.pop(CollKey(v: 5)).isNone() # already gone
+    removed.unsafeGet().dispose() # the caller now owns the popped value
 
     # Every surviving entry kept its correct bytes through the shift.
     for i in 0 ..< 20:
@@ -283,6 +287,21 @@ suite "SharedTable with move-only values Tests":
     for v in t.mvalues():
       dispose(v)
     t.dispose()
+
+  test "pop does not leak move-only values":
+    # Removing an owning value via pop (and disposing the result) must return all
+    # shared memory; via del the value would be abandoned and leaked instead.
+    let before = getOccupiedSharedMem()
+    for _ in 0 ..< 100:
+      var t = SharedTable[int, SharedBytes].init()
+      t[1] = SharedBytes.init([1'u8, 2, 3, 4, 5, 6, 7, 8])
+      t[2] = SharedBytes.init([9'u8, 9])
+      var popped = t.pop(1)
+      popped.unsafeGet().dispose()
+      for v in t.mvalues():
+        v.dispose()
+      t.dispose()
+    check getOccupiedSharedMem() == before
 
   test "holds nested SharedTable values":
     var outer = SharedTable[CollKey, SharedTable[int, int]].init()
