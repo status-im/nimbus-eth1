@@ -87,7 +87,7 @@ type
     used: int
 
 const
-  fillRatio = 0.8
+  fillRatio = 2 / 3
   initialCapacity = 64
 
 template toSubhash(h: Hash): uint32 =
@@ -137,14 +137,18 @@ func findEntry[K, V](s: SharedTable[K, V], sh: uint32, key: K): Opt[uint32] =
     i = (i + 1) and mask
     dist += 1
 
-proc rawInsert[K, V](s: var SharedTable[K, V], sh: uint32, key: K, value: sink V) =
-  ## Insert a key/value pair known not to be present. The caller must ensure a
-  ## free slot exists (i.e. the fill ratio is respected).
+proc placeEntry[K, V](
+    s: var SharedTable[K, V], entry: sink SharedTableEntry[K, V], bucket, dist: uint32
+) =
+  ## Robin-hood placement: store `entry` (a key not already present), beginning
+  ## the probe at `bucket` with probe distance `dist` and displacing any richer
+  ## entry forward until an empty slot is reached. The caller must ensure a free
+  ## slot exists (i.e. the fill ratio is respected).
   let mask = uint32(s.allocated - 1)
   var
-    cur: SharedTableEntry[K, V] = (sh, true, key, value)
-    i = sh and mask
-    dist = 0'u32
+    cur = entry
+    i = bucket
+    d = dist
 
   while true:
     let e = addr s.entries[i]
@@ -153,14 +157,16 @@ proc rawInsert[K, V](s: var SharedTable[K, V], sh: uint32, key: K, value: sink V
       return
 
     let bdist = psl(mask, i, e[].subhash)
-    if dist > bdist:
-      # Robin-hood: steal the slot from the richer entry and keep displacing it
-      # forward, evening out the probe sequence lengths.
+    if d > bdist:
       swap(e[], cur)
-      dist = bdist
+      d = bdist
 
     i = (i + 1) and mask
-    dist += 1
+    d += 1
+
+proc rawInsert[K, V](s: var SharedTable[K, V], sh: uint32, key: K, value: sink V) =
+  ## Insert a key/value pair known not to be present.
+  s.placeEntry((sh, true, key, value), sh and uint32(s.allocated - 1), 0)
 
 proc grow[K, V](s: var SharedTable[K, V], newAllocated: int) =
   let
@@ -230,18 +236,40 @@ proc put*[K, V](s: var SharedTable[K, V], key: K, value: sink V) =
   ## Insert or update `key` with `value`, growing the table if needed.
   let sh = subhash(key)
 
-  let existing = s.findEntry(sh, key)
-  if existing.isSome():
-    s.entries[existing[]].value = value
-    return
-
   if s.allocated == 0:
     s.grow(initialCapacity)
-  elif (s.used + 1) * 5 > s.allocated * 4: # used + 1 > fillRatio * allocated
+  elif (s.used + 1) * 3 > s.allocated * 2: # used + 1 > fillRatio * allocated
     s.grow(s.allocated * 2)
 
-  s.rawInsert(sh, key, value)
-  s.used += 1
+  # Probe as a lookup would: the robin-hood invariant makes the slot where a
+  # failed lookup stops the same slot where a new key must be inserted.
+  let mask = uint32(s.allocated - 1)
+  var
+    entry: SharedTableEntry[K, V] = (sh, true, key, value)
+    i = sh and mask
+    dist = 0'u32
+
+  while true:
+    let e = addr s.entries[i]
+    if not e[].used:
+      e[] = move(entry)
+      s.used += 1
+      return
+
+    let bdist = psl(mask, i, e[].subhash)
+    if dist > bdist:
+      # Insert point: steal the slot and re-home the displaced entry.
+      swap(e[], entry)
+      s.used += 1
+      s.placeEntry(move(entry), (i + 1) and mask, bdist + 1)
+      return
+
+    if e[].subhash == sh and e[].key == key:
+      e[].value = move(entry.value)
+      return
+
+    i = (i + 1) and mask
+    dist += 1
 
 template `[]=`*(s: var SharedTable, key, value: untyped) =
   s.put(key, value)
@@ -265,7 +293,10 @@ proc del*[K, V](s: var SharedTable[K, V], key: K): bool {.discardable.} =
       s.entries[i].used = false
       break
 
-    s.entries[i] = e[]
+    # Move (never copy) so the table works with move-only value types such as
+    # SharedBytes or a nested SharedTable. `move` leaves the source slot in its
+    # default (unused) state, which is exactly the hole we shift into next.
+    s.entries[i] = move(e[])
     i = next
 
   s.used -= 1

@@ -25,8 +25,17 @@ type
   Key = object
     v: int
 
+  # Every CollKey hashes to the same bucket, so a sequence of inserts forms a
+  # single probe chain. Deleting from the middle of such a chain is what forces
+  # the backward-shift path in `del` to actually move following entries.
+  CollKey = object
+    v: int
+
 func hash(k: Key): Hash =
   Hash(k.v)
+
+func hash(k: CollKey): Hash =
+  Hash(0)
 
 suite "SharedTable Tests":
   test "empty table":
@@ -191,6 +200,129 @@ suite "SharedTable Tests":
       t.get(Key(v: 2)) == Opt.some(200)
       not t.contains(Key(v: 3))
     t.dispose()
+
+suite "SharedTable with move-only values Tests":
+  # These cover the documented purpose of SharedTable: holding move-only,
+  # non-GC value types (SharedBytes, nested SharedTable) whose `=copy` is
+  # forbidden. The table must move values internally and never copy them.
+
+  test "stores and retrieves SharedBytes values via withValue":
+    var t = SharedTable[int, SharedBytes].init()
+    t.put(1, SharedBytes.init([1'u8, 2, 3]))
+    t.put(2, SharedBytes.init([4'u8, 5, 6]))
+
+    check:
+      t.len == 2
+      t.contains(1)
+      t.contains(2)
+      not t.contains(3)
+
+    var seen1 = false
+    t.withValue(1, v):
+      check v[].data() == @[1'u8, 2, 3]
+      seen1 = true
+    check seen1
+
+    # withValue on a missing key must not run the body.
+    var ranMissing = false
+    t.withValue(99, v):
+      ranMissing = true
+    check not ranMissing
+
+    # Caller owns value lifetimes: dispose each value before the table.
+    for v in t.mvalues():
+      dispose(v)
+    t.dispose()
+
+  test "put updates a SharedBytes value in place":
+    var t = SharedTable[int, SharedBytes].init()
+    t.put(1, SharedBytes.init([1'u8, 2, 3]))
+
+    # Overwriting leaks the previous value unless the caller frees it first.
+    t.withValue(1, v):
+      dispose(v[])
+    t.put(1, SharedBytes.init([9'u8, 9]))
+
+    check t.len == 1
+    var ok = false
+    t.withValue(1, v):
+      check v[].data() == @[9'u8, 9]
+      ok = true
+    check ok
+
+    for v in t.mvalues():
+      dispose(v)
+    t.dispose()
+
+  test "del backward-shifts move-only values without copying":
+    # All keys collide into one probe chain, so deleting a middle key forces
+    # `del` to move the following entries back. This is the regression test for
+    # the `=copy` bug that previously prevented `del` from compiling here.
+    var t = SharedTable[CollKey, SharedBytes].init()
+    for i in 0 ..< 20:
+      t.put(CollKey(v: i), SharedBytes.init([byte(i)]))
+    check t.len == 20
+
+    check t.del(CollKey(v: 5))
+    check:
+      t.len == 19
+      not t.contains(CollKey(v: 5))
+      not t.del(CollKey(v: 5)) # already gone
+
+    # Every surviving entry kept its correct bytes through the shift.
+    for i in 0 ..< 20:
+      if i == 5:
+        check not t.contains(CollKey(v: i))
+      else:
+        var ok = false
+        t.withValue(CollKey(v: i), v):
+          check v[].data() == @[byte(i)]
+          ok = true
+        check ok
+
+    for v in t.mvalues():
+      dispose(v)
+    t.dispose()
+
+  test "holds nested SharedTable values":
+    var outer = SharedTable[CollKey, SharedTable[int, int]].init()
+
+    for i in 0 ..< 10:
+      var inner = SharedTable[int, int].init()
+      inner.put(i, i * 100)
+      inner.put(i + 1000, i)
+      outer.put(CollKey(v: i), move(inner))
+    check outer.len == 10
+
+    # Reach into a nested table through withValue.
+    var innerLen = 0
+    outer.withValue(CollKey(v: 3), inner):
+      check inner[].get(3) == Opt.some(300)
+      check inner[].get(1003) == Opt.some(3)
+      innerLen = inner[].len
+    check innerLen == 2
+
+    # Delete a middle key: the colliding chain forces nested tables to be moved
+    # by the backward-shift. Dispose the victim's memory first.
+    outer.withValue(CollKey(v: 4), inner):
+      inner[].dispose()
+    check outer.del(CollKey(v: 4))
+    check outer.len == 9
+
+    # Surviving nested tables are intact after the shift.
+    for i in 0 ..< 10:
+      if i == 4:
+        check not outer.contains(CollKey(v: i))
+      else:
+        var ok = false
+        outer.withValue(CollKey(v: i), inner):
+          check inner[].get(i) == Opt.some(i * 100)
+          ok = true
+        check ok
+
+    for inner in outer.mvalues():
+      inner.dispose()
+    outer.dispose()
 
 suite "SharedBytes Tests":
 
