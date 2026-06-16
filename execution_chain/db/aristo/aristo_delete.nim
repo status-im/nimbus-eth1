@@ -109,6 +109,9 @@ proc deleteImpl(
         of ExtBranch:
           let nxt = ExtBranchRef(nxt)
           ExtBranchRef.init(pfx & nxt.pfx, nxt.startVid, nxt.used)
+        of ExtNode:
+          let nxt = ExtNodeRef(nxt)
+          ExtNodeRef.init(pfx & nxt.pfx, nxt.childKey)
 
     # Put the new vertex at the id of the obsolete branch
     db.layersPutVtx((hike.root, br.vid), vtx)

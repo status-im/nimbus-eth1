@@ -89,6 +89,9 @@ proc to*(node: NodeRef, T: type array[2, seq[byte]]): T =
   ## and branch vertex argument, there will be a double item list result.
   ##
   case node.vtx.vType
+  of ExtNode:
+    let ev = ExtNodeRef(node.vtx)
+    [@(rlpEncodeExt(ev.pfx, ev.childKey)), @[]]
   of Branches:
     let brData = @(rlpEncodeBranch(BranchRef(node.vtx), node.key[n]))
     if node.vtx.vType == ExtBranch:
@@ -108,6 +111,9 @@ proc digestTo*(node: NodeRef, T: type HashKey): T =
   ## that a `Dummy` node is encoded as as a `Leaf`.
   ##
   case node.vtx.vType
+  of ExtNode:
+    let ev = ExtNodeRef(node.vtx)
+    rlpEncodeExt(ev.pfx, ev.childKey).digestTo(HashKey)
   of Branches:
     let brKey = rlpEncodeBranch(BranchRef(node.vtx), node.key[n]).digestTo(HashKey)
     if node.vtx.vType == ExtBranch:

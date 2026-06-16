@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -55,6 +55,11 @@ proc toNode*(
     # Need to resolve storage root for account leaf
     return ok node
 
+  of ExtNode:
+    # No child vids to resolve as the branch child is absent by design
+    let node = NodeRef(vtx: vtx.dup())
+    return ok node
+
   of Branch, ExtBranch:
     let node = NodeRef(vtx: vtx.dup())
     for n, subvid in vtx.pairs():
@@ -71,7 +76,7 @@ iterator subVids*(vtx: VertexRef): VertexID =
     if stoID.isValid:
       yield stoID.vid
 
-  of StoLeaf:
+  of StoLeaf, ExtNode:
     discard
   of Branches:
     for _, subvid in vtx.pairs():
@@ -84,7 +89,7 @@ iterator subVidKeys*(node: NodeRef): (VertexID,HashKey) =
     let stoID = AccLeafRef(node.vtx).stoID
     if stoID.isValid:
       yield (stoID.vid, node.key[0])
-  of StoLeaf:
+  of StoLeaf, ExtNode:
     discard
   of Branches:
     for n, subvid in node.vtx.pairs():
