@@ -51,7 +51,7 @@ if defined(release) and not defined(disableLTO) and not defined(windows):
   extend "gcc.options.linker", " -flto=auto -Wno-stringop-overflow -Wno-stringop-overread -finline-limit=100000"  # https://github.com/nim-lang/Nim/issues/21595
   extend "gcc.cpp.options.linker", " -flto=auto -Wno-stringop-overflow -Wno-stringop-overread -finline-limit=100000"
 
-  if defined(macosx):
+  if defined(macosx) and not defined(emscripten):
     # https://clang.llvm.org/docs/CommandGuide/clang.html#cmdoption-flto
     extend "clang.options.linker", " -Wl,-object_path_lto," & nimCachePath & "/lto"
     extend "clang.cpp.options.linker", " -Wl,-object_path_lto," & nimCachePath & "/lto"

@@ -227,7 +227,7 @@ proc executeOpcodes*(c: Computation) =
         break blockOne
     else:
       c.continuation = nil
-      cont().isOkOr:
+      cont(c).isOkOr:
         handleEvmError(error)
         break blockOne
 
@@ -264,19 +264,28 @@ proc execCallOrCreate*(cParam: Computation) =
         break
       c.executeOpcodes()
       if c.continuation.isNil:
+        c.child = nil
         c.afterExec()
         break
-      (before, c.child, c, c.parent) =
-        (true, nil.Computation, c.child, c)
+
+      # recurse into the child computation
+      let child = c.child
+      child.parent = c
+      before = true
+      c = child
     if c.parent.isNil:
       break
     c.dispose()
-    (before, c.parent, c) =
-      (false, nil.Computation, c.parent)
+
+    # recurse out: child is still owned by the parent
+    before = false
+    c = c.parent
 
   while not c.isNil:
+    let p = c.parent
     c.dispose()
-    (c.parent, c) = (nil.Computation, c.parent)
+    c.child = nil
+    c = p
 
 func postExecComputation*(c: Computation) =
   if c.isSuccess:
