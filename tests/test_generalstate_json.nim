@@ -72,7 +72,7 @@ method getAncestorHash*(vmState: TestVMState; blockNumber: BlockNumber): Hash32 
     return default(Hash32)
   elif blockNumber < 0:
     return default(Hash32)
-  elif blockNumber < vmState.blockNumber - 256:
+  elif (vmState.blockNumber > 256) and (blockNumber < vmState.blockNumber - 256):
     return default(Hash32)
   else:
     return keccak256(toBytes($blockNumber))
@@ -122,7 +122,6 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
   com.db.mpt.taskpool = taskpool
 
   let
-    parent = Header(stateRoot: emptyRoot)
     tracer = if ctx.trace:
                newLegacyTracer({})
              else:
@@ -131,7 +130,7 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
     sender = ctx.tx.recoverSender().expect("valid signature")
 
   vmState.init(
-    parent = parent,
+    parent = ctx.parent,
     header = ctx.header,
     com    = com,
     txFrame = com.db.baseTxFrame(),
