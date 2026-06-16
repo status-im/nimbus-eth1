@@ -13,7 +13,7 @@ import
   pkg/chronos,
   pkg/unittest2,
   testutils,
-  std/[os, strutils],
+  std/[os, sets, strutils],
   ../execution_chain/common,
   ../execution_chain/conf,
   ../execution_chain/utils/utils,
@@ -26,6 +26,8 @@ import
   ../execution_chain/history/db/ere_db,
   ../execution_chain/db/fcu_db,
   ./test_forked_chain/chain_debug
+
+{.push raises: [].}
 
 const
   genesisFile = "tests/customgenesis/cancun123.json"
@@ -137,6 +139,27 @@ proc wdWritten(c: ForkedChainRef, blk: Block): int =
   else:
     0
 
+func checkFinalizedMarkers(fc: ForkedChainRef, finalizedHash: Hash32): bool =
+  const finalizedMarker = 1'u  # chain_branch.DAG_NODE_FINALIZED
+  let finBlk =
+    try:
+      fc.hashToBlock[finalizedHash]
+    except KeyError:
+      return false
+
+  var expected: HashSet[Hash32]
+  for it in ancestors(finBlk):
+    expected.incl it.hash
+
+  for h, b in fc.hashToBlock:
+    let expectedIndex = if h in expected: finalizedMarker else: 0'u
+    if b.index != expectedIndex:
+      debugEcho "finalized marker mismatch: block ", b.number,
+        " index=", b.index, " expected=", expectedIndex
+      return false
+
+  true
+
 template checkImportBlock(chain, blk) =
   let res = waitFor chain.importBlock(blk)
   check res.isOk
@@ -202,12 +225,14 @@ suite "ForkedChainRef tests":
     C5 = txFrame.makeBlk(5, blk4, 1.byte)
     C6 = txFrame.makeBlk(6, C5)
     C7 = txFrame.makeBlk(7, C6)
+    F8 = txFrame.makeBlk(8, blk7, 2.byte) # height 8 blk8 branch/sibling
+
   txFrame.dispose()
 
   test "newBase == oldBase":
     const info = "newBase == oldBase"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com)
+    let chain = ForkedChainRef.init(com)
     # same header twice
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk1)
@@ -247,7 +272,7 @@ suite "ForkedChainRef tests":
   test "newBase on activeBranch":
     const info = "newBase on activeBranch"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
+    let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -280,7 +305,7 @@ suite "ForkedChainRef tests":
   test "newBase between oldBase and head":
     const info = "newBase between oldBase and head"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
+    let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -305,7 +330,7 @@ suite "ForkedChainRef tests":
   test "newBase == oldBase, fork and stay on that fork":
     const info = "newBase == oldBase, fork .."
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com)
+    let chain = ForkedChainRef.init(com)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -329,7 +354,7 @@ suite "ForkedChainRef tests":
   test "newBase move forward, fork and stay on that fork":
     const info = "newBase move forward, fork .."
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
+    let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -354,7 +379,7 @@ suite "ForkedChainRef tests":
   test "newBase on shorter canonical arc, remove oldBase branches":
     const info = "newBase on shorter canonical, remove oldBase branches"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
+    let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -378,7 +403,7 @@ suite "ForkedChainRef tests":
   test "newBase on curbed non-canonical arc":
     const info = "newBase on curbed non-canonical .."
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 5, persistBatchSize = 1)
+    let chain = ForkedChainRef.init(com, baseDistance = 5, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -403,7 +428,7 @@ suite "ForkedChainRef tests":
   test "newBase == oldBase, fork and return to old chain":
     const info = "newBase == oldBase, fork .."
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com)
+    let chain = ForkedChainRef.init(com)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -427,7 +452,7 @@ suite "ForkedChainRef tests":
   test "newBase on activeBranch, fork and return to old chain":
     const info = "newBase on activeBranch, fork .."
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3)
+    let chain = ForkedChainRef.init(com, baseDistance = 3)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -453,7 +478,7 @@ suite "ForkedChainRef tests":
        " (ign dup block)":
     const info = "newBase on shorter canonical .."
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
+    let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -478,7 +503,7 @@ suite "ForkedChainRef tests":
   test "newBase on longer canonical arc, discard new branch":
     const info = "newBase on longer canonical .."
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
+    let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -503,7 +528,7 @@ suite "ForkedChainRef tests":
   test "headerByNumber":
     const info = "headerByNumber"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3)
+    let chain = ForkedChainRef.init(com, baseDistance = 3)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -536,7 +561,7 @@ suite "ForkedChainRef tests":
   test "3 branches, alternating imports":
     const info = "3 branches, alternating imports"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3)
+    let chain = ForkedChainRef.init(com, baseDistance = 3)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -595,7 +620,7 @@ suite "ForkedChainRef tests":
   test "newBase move forward, greater than persistBatchSize":
     const info = "newBase move forward, greater than persistBatchSize"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 2)
+    let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 2)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -618,7 +643,7 @@ suite "ForkedChainRef tests":
   test "newBase move forward, equal persistBatchSize":
     const info = "newBase move forward, equal persistBatchSize"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 2)
+    let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 2)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -641,7 +666,7 @@ suite "ForkedChainRef tests":
   test "newBase move forward, lower than persistBatchSize":
     const info = "newBase move forward, lower than persistBatchSize"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 2)
+    let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 2)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -664,7 +689,7 @@ suite "ForkedChainRef tests":
   test "newBase move forward, auto mode":
     const info = "newBase move forward, auto mode"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 2)
+    let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 2)
     check (waitFor chain.forkChoice(blk7.blockHash, blk6.blockHash)).isErr
     check chain.tryUpdatePendingFCU(blk6.blockHash, blk6.header.number)
     checkImportBlock(chain, blk1)
@@ -687,7 +712,7 @@ suite "ForkedChainRef tests":
   test "newBase move forward, auto mode no forkChoice":
     const info = "newBase move forward, auto mode no forkChoice"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 2)
+    let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 2)
 
     check chain.tryUpdatePendingFCU(blk5.blockHash, blk5.header.number)
     checkImportBlock(chain, blk1)
@@ -710,7 +735,7 @@ suite "ForkedChainRef tests":
   test "newBase move forward, auto mode, base finalized marker needed":
     const info = "newBase move forward, auto mode, base finalized marker needed"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com,
+    let chain = ForkedChainRef.init(com,
       baseDistance = 2,
       persistBatchSize = 1,
       dynamicBatchSize = false)
@@ -740,7 +765,7 @@ suite "ForkedChainRef tests":
   test "serialize roundtrip":
     const info = "serialize roundtrip"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3)
+    let chain = ForkedChainRef.init(com, baseDistance = 3)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -768,7 +793,7 @@ suite "ForkedChainRef tests":
     check src.isOk
     com.db.persist(txFrame)
 
-    var fc = ForkedChainRef.init(com, baseDistance = 3)
+    let fc = ForkedChainRef.init(com, baseDistance = 3)
     let rc = fc.deserialize()
     if rc.isErr:
       echo "FAILED TO DESERIALIZE: ", rc.error
@@ -780,6 +805,44 @@ suite "ForkedChainRef tests":
     checkHeadHash fc, blk7.blockHash
     check fc.latestHash == chain.latestHash
     check fc.validate info & " (4)"
+
+  test "deserialize restores finalized markers":
+    const info = "deserialize finalized markers"
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com, baseDistance = 3)
+    checkImportBlock(chain, blk1)
+    checkImportBlock(chain, blk2)
+    checkImportBlock(chain, blk3)
+    checkImportBlock(chain, blk4)
+    checkImportBlock(chain, blk5)
+    checkImportBlock(chain, blk6)
+    checkImportBlock(chain, blk7)
+    checkImportBlock(chain, blk8)
+    checkImportBlock(chain, F8)
+    check chain.validate info & " (1)"
+    check chain.heads.len == 2
+
+    # blk8 and F8: two non-finalized heads descended from the finalized block.
+    checkForkChoice(chain, blk8, blk7)
+    check chain.tryUpdatePendingFCU(blk7.blockHash, 7'u64)
+    check chain.validate info & " (2)"
+    check chain.baseNumber == 5'u64
+    check chain.heads.len == 2
+    check chain.resolvedFinNumber == 7'u64
+    check checkFinalizedMarkers(chain, blk7.blockHash)
+
+    check chain.serialize(chain.baseTxFrame).isOk
+    com.db.persist(chain.baseTxFrame)
+
+    let fc = ForkedChainRef.init(com, baseDistance = 3)
+    check fc.deserialize().isOk
+
+    check fc.heads.len == 2
+    check fc.hashToBlock.len == chain.hashToBlock.len
+    check fc.resolvedFinNumber == 7'u64
+    check checkFinalizedMarkers(fc, blk7.blockHash)
+    check fc.validate info & " (3)"
 
 procSuite "ForkedChain mainnet replay":
   # A short mainnet replay test to check that the first few hundred blocks can
