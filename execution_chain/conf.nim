@@ -131,8 +131,8 @@ type
 
     gasLimit* {.
       desc: "Desired gas limit when building an execution payload"
-      defaultValue: DEFAULT_GAS_LIMIT
-      name: "gas-limit" .}: uint64
+      defaultValue: none(uint64)
+      name: "gas-limit" .}: Option[uint64]
 
     # https://eips.ethereum.org/EIPS/eip-7872
     maxBlobs* {.
