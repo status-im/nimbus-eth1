@@ -24,31 +24,26 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc registerPeerError(buddy: SnapPeerRef; root: StateRoot; slowPeer=false) =
+proc registerPeerError(buddy: SnapPeerRef; slowPeer=false) =
   ## Do not repeat the same time-consuming failed request for the same state
   ## root.
   buddy.cdeFetchRegisterError(slowPeer)
-  buddy.only.failedReq.stateRoot.put(root,0u8)
 
-proc maybeSlowPeerError(buddy: SnapPeerRef; ela: Duration; root: StateRoot) =
+proc maybeSlowPeerError(buddy: SnapPeerRef; ela: Duration) =
   ## Register slow response, definitely not fast enough
   if fetchCodesSnapTimeout <= ela:
-    buddy.registerPeerError(root, slowPeer=true)
+    buddy.registerPeerError(slowPeer=true)
   else:
     buddy.cdeFetchRegisterError()
 
 
 proc getCodes(
     buddy: SnapPeerRef;
-    stateRoot: StateRoot;                           # DB state (error handling)
     req: ByteCodesRequest;                          # fetch request
       ): Future[Result[FetchCodesData,SnapError]]
       {.async: (raises: []).} =
   ## Wrapper around `getByteCodes()`
   let start = Moment.now()
-
-  buddy.only.failedReq.stateRoot.peek(stateRoot).isErrOr:
-    return err((EAlreadyTriedAndFailed,"","",Moment.now()-start))
 
   var resp: ByteCodesPacket
   try:
@@ -81,9 +76,8 @@ func errStr(rc: Result[FetchCodesData,SnapError]): string =
 
 template fetchCodes*(
     buddy: SnapPeerRef;
-    stateRoot: StateRoot;                           # DB state (error handling)
-    codesReq: seq[CodeHash];                        # List of code keys
-      ): FetchCodesResult =
+    codesReq: openArray[Hash32];                    # List of code keys
+      ): auto =
   ## Async/template
   ##
   ## Fetch byte codes from the network.
@@ -97,29 +91,28 @@ template fetchCodes*(
     let
       nReqCodes {.inject.} = codesReq.len
       fetchReq = ByteCodesRequest(
-        hashes: codesReq.to(seq[Hash32]),
+        hashes: @codesReq,
         bytes:  fetchCodesSnapBytesLimit)
       peer {.inject,used.} = $buddy.peer            # logging only
-      root {.inject,used.} = stateRoot.toStr        # logging only
       first {.inject,used.} = codesReq[0].toStr     # logging only
 
-    trace sendInfo, peer, root, first, nReqCodes,
-      syncState=buddy.syncState, nErrors=buddy.nErrors.fetch.cde
+    trace sendInfo, peer, first, nReqCodes,
+      syncState=($buddy.syncState), nErrors=buddy.nErrors.fetch.cde
 
-    let rc = await buddy.getCodes(stateRoot, fetchReq)
+    let rc = await buddy.getCodes(fetchReq)
     var elapsed: Duration
     if rc.isOk:
       elapsed = rc.value.elapsed
     else:
       elapsed = rc.error.elapsed
-      bodyRc = FetchCodesResult.err(rc.error.excp)
+      bodyRc = typeof(bodyRc).err(rc.error.excp)
       block evalError:
         case rc.error.excp:
         of EGeneric:
           break evalError
         of EAlreadyTriedAndFailed:
-          trace recvInfo & " error", peer, root, first, nReqCodes,
-            ela=elapsed.toStr, syncState=buddy.syncState, error=rc.errStr,
+          trace recvInfo & " error", peer, first, nReqCodes,
+            ela=elapsed.toStr, syncState=($buddy.syncState), error=rc.errStr,
             nErrors=buddy.nErrors.fetch.cde
           break body                                # return err()
         of EPeerDisconnected, ECancelledError:
@@ -133,8 +126,8 @@ template fetchCodes*(
           raiseAssert "Unexpected error " & $rc.error.excp
 
         # Debug message for other errors
-        debug recvInfo & " error", peer, root, first, nReqCodes,
-          ela=elapsed.toStr, syncState=buddy.syncState, error=rc.errStr,
+        debug recvInfo & " error", peer, first, nReqCodes,
+          ela=elapsed.toStr, syncState=($buddy.syncState), error=rc.errStr,
           nErrors=buddy.nErrors.fetch.cde
         break body                                  # return err()
 
@@ -144,8 +137,8 @@ template fetchCodes*(
 
     # Evaluate error result (if any)
     if rc.isErr or buddy.ctrl.stopped:
-      buddy.maybeSlowPeerError(elapsed, stateRoot)
-      trace recvInfo & " error", peer, root, first, nReqCodes,
+      buddy.maybeSlowPeerError(elapsed)
+      trace recvInfo & " error", peer, first, nReqCodes,
         ela, syncState, error=rc.errStr, nErrors=buddy.nErrors.fetch.cde
       break body                                    # return err()
 
@@ -153,12 +146,11 @@ template fetchCodes*(
     let nRespCodes {.inject.} = rc.value.packet.codes.len
 
     if nRespCodes == 0:
-      # Both, proof + slots are empty. This means that there is no byte
-      # codes data available for this state root.
-      buddy.registerPeerError(stateRoot)
-      trace recvInfo & " not available", peer, root, first, nReqCodes,
+      # There is no byte codes data available.
+      buddy.registerPeerError()
+      trace recvInfo & " not available", peer, first, nReqCodes,
         nRespCodes, ela, syncState, nErrors=buddy.nErrors.fetch.cde
-      bodyRc = FetchCodesResult.err(ENoDataAvailable)
+      bodyRc = typeof(bodyRc).err(ENoDataAvailable)
       break body                                  # return err()
 
     # Ban an overly slow peer for a while when observed consecutively.
@@ -168,10 +160,10 @@ template fetchCodes*(
       buddy.nErrors.fetch.cde = 0                   # reset error count
       buddy.ctx.pool.lastSlowPeer = Opt.none(Hash)  # not last one/error
 
-    trace recvInfo, peer, root, first, nReqCodes, nRespCodes,
+    trace recvInfo, peer, first, nReqCodes, nRespCodes,
       ela, syncState, nErrors=buddy.nErrors.fetch.cde
 
-    bodyRc = FetchCodesResult.ok(rc.value.packet)
+    bodyRc = typeof(bodyRc).ok(rc.value.packet)
 
   bodyRc
 

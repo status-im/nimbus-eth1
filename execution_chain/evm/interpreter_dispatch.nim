@@ -75,10 +75,10 @@ proc beforeExecCall(c: Computation) =
         c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
         ledger.subBalance(c.msg.sender, c.msg.value)
         c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
-        ledger.addBalance(c.msg.contractAddress, c.msg.value)
+        ledger.addBalance(c.msg.contractAddress, c.msg.value, checkEmptyAccount = c.fork < FkParis)
       else:
         ledger.subBalance(c.msg.sender, c.msg.value)
-        ledger.addBalance(c.msg.contractAddress, c.msg.value)
+        ledger.addBalance(c.msg.contractAddress, c.msg.value, checkEmptyAccount = c.fork < FkParis)
 
     if c.fork >= FkAmsterdam:
       # EIP-7708: Emit transfer log for ETH-tx or contract call and CALL op code
@@ -136,14 +136,14 @@ proc beforeExecCreate(c: Computation): bool =
       c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
       ledger.subBalance(c.msg.sender, c.msg.value)
       c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
-      ledger.addBalance(c.msg.contractAddress, c.msg.value)
+      ledger.addBalance(c.msg.contractAddress, c.msg.value, checkEmptyAccount = c.fork < FkParis)
       ledger.clearStorage(c.msg.contractAddress)
       if c.fork >= FkSpurious:
         c.vmState.balTracker.trackIncNonceChange(c.msg.contractAddress)
         ledger.incNonce(c.msg.contractAddress)
     else:
       ledger.subBalance(c.msg.sender, c.msg.value)
-      ledger.addBalance(c.msg.contractAddress, c.msg.value)
+      ledger.addBalance(c.msg.contractAddress, c.msg.value, checkEmptyAccount = c.fork < FkParis)
       ledger.clearStorage(c.msg.contractAddress)
       if c.fork >= FkSpurious:
         # EIP161 nonce incrementation
@@ -221,8 +221,8 @@ proc executeOpcodes*(c: Computation) =
   block blockOne:
     let cont = c.continuation
     if cont.isNil:
-      let precompile = c.fork.getPrecompile(c.msg.codeAddress)
-      if precompile.isSome:
+      if MsgFlags.Precompile in c.msg.flags:
+        let precompile = c.fork.getPrecompile(c.msg.codeAddress)
         c.execPrecompile(precompile[])
         break blockOne
     else:

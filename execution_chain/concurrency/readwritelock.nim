@@ -55,9 +55,7 @@ proc `=copy`*(
 ) {.error: "Copying ReadWriteLock is forbidden".} =
   discard
 
-template atomicAdd(
-    a: var Atomic[int32], delta: int32, order: MemoryOrder
-): int32 =
+template atomicAdd(a: var Atomic[int32], delta: int32, order: MemoryOrder): int32 =
   a.fetchAdd(delta, order) + delta
 
 proc lockRead*(l: var ReadWriteLock) {.inline.} =
@@ -73,8 +71,7 @@ proc unlockRead*(l: var ReadWriteLock) {.inline.} =
 
 proc lockWrite*(l: var ReadWriteLock) =
   acquire(l.lock)
-  let r =
-    atomicAdd(l.numPending, -MAX_READERS, moAcquireRelease) + MAX_READERS
+  let r = atomicAdd(l.numPending, -MAX_READERS, moAcquireRelease) + MAX_READERS
   if r != 0 and atomicAdd(l.readersDeparting, r, moAcquireRelease) != 0:
     l.writerWait.wait()
 

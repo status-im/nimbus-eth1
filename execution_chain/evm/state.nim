@@ -113,6 +113,11 @@ proc new*(
     tracker  = tracker
   )
 
+proc dispose*(vmState: BaseVMState) =
+  if not vmState.balTracker.isNil():
+    vmState.balTracker.dispose()
+    vmState.balTracker = nil
+
 proc reinit*(self:     BaseVMState;     ## Object descriptor
              parent:   Header;     ## parent header, account sync pos.
              blockCtx: BlockContext;
@@ -128,6 +133,7 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
   ## untouched.
 
   if not self.balTracker.isNil():
+    self.balTracker.dispose()
     self.balTracker = BlockAccessListTrackerRef.init(self.ledger.ReadOnlyLedger)
 
   if not self.ledger.isTopLevelClean:

@@ -83,9 +83,10 @@ type
     root*: NodeRef                                  ## start of in-memory MPT
     stops*: Table[HashKey,StopNodeRef]              ## sub-MPT to complete
     dangling*: seq[(HashKey,StopNodeRef)]           ## dangling link keys
-    leafs*: seq[(seq[byte],LeafNodeRef)]            ## leaf pairs `(path,node)`
+    leafs*: seq[(Hash32,LeafNodeRef)]               ## leaf pairs `(path,node)`
 
-  KvPair* = tuple
+  KnPair* = tuple
+    ## Key-node pair
     key: seq[byte]
     node: seq[byte]
 
@@ -99,8 +100,14 @@ type
     ## Partial paths (<32 bytes) will be compact encoded per the Ethereum
     ## wire protocol, full paths will be plain binary encoded.
     key: seq[byte]
-    path: seq[byte]
+    path: Hash32
     payload: seq[byte]
+
+  KkpTriple* = tuple
+    ## Variant of `KppTripler`
+    key1: seq[byte]
+    key2: seq[byte]
+    path: seq[byte]
 
 # ------------------------------------------------------------------------------
 # Public helpers

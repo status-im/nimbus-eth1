@@ -21,37 +21,14 @@ import
   ../../../hive_integration/engine_client,
   ../../rpc/portal_rpc_client,
   ../../network/history/[history_content, history_validation],
-  ../../eth_history/block_proofs/historical_hashes_accumulator,
-  ../../eth_history/[era1, history_data_ssz_e2s],
-  ../../database/era1_db,
-  ../../../execution_chain/common/[hardforks, chain_config],
+  ../../../execution_chain/history/db/ere_db,
   ../common/rpc_helpers,
   ../nimbus_portal_bridge_conf,
-  beacon_chain/process_state
-
-from ../../network/network_metadata import loadAccumulator
+  beacon_chain/process_state,
+  ./portal_history_bridge_common,
+  ./portal_history_bridge_legacy
 
 const newHeadPollInterval = 6.seconds # Slot with potential block is every 12s
-
-type PortalHistoryBridge = ref object
-  portalClient: PortalRpcClient
-  web3Client: RpcClient
-  gossipQueue: AsyncQueue[(seq[byte], seq[byte])]
-  cfg*: ChainConfig
-
-proc gossipBlockBody(
-    bridge: PortalHistoryBridge, blockNumber: uint64, body: BlockBody
-): Future[void] {.async: (raises: [CancelledError]).} =
-  let contentKey = blockBodyContentKey(blockNumber)
-
-  await bridge.gossipQueue.addLast((contentKey.encode.asSeq(), rlp.encode(body)))
-
-proc gossipReceipts(
-    bridge: PortalHistoryBridge, blockNumber: uint64, receipts: StoredReceipts
-): Future[void] {.async: (raises: [CancelledError]).} =
-  let contentKey = receiptsContentKey(blockNumber)
-
-  await bridge.gossipQueue.addLast((contentKey.encode.asSeq(), rlp.encode(receipts)))
 
 proc runLatestLoop(
     bridge: PortalHistoryBridge, validate = false
@@ -107,45 +84,45 @@ proc runLatestLoop(
     elif elapsed > newHeadPollInterval * 2:
       warn "Block gossip took longer than slot interval"
 
-proc gossipBlockContent(
-    bridge: PortalHistoryBridge, era1File: string, verifyEra = false
-): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
-  let f = ?Era1File.open(era1File, bridge.cfg.posBlock.get())
-
-  if verifyEra:
-    let _ = ?f.verify()
-
-  info "Gossip bodies and receipts from era1 file", era1File
-
-  for (header, body, receipts, _) in f.era1BlockTuples:
-    let blockNumber = header.number
-
-    # gossip block body
-    await bridge.gossipBlockBody(blockNumber, body)
-    # gossip receipts
-    await bridge.gossipReceipts(blockNumber, receipts.to(StoredReceipts))
-
-  info "Succesfully put bodies and receipts from era1 file in gossip queue", era1File
-  ok()
-
 proc runBackfillLoop(
     bridge: PortalHistoryBridge,
-    era1Dir: string,
+    ereDir: string,
     startEra: uint64,
     endEra: uint64,
     loop: bool,
 ) {.async: (raises: [CancelledError]).} =
-  let accumulator = loadAccumulator("mainnet")
+  let db = EreDB.new(ereDir, bridge.network, mergeBlockNumber(bridge.cfg.chainId)).valueOr:
+    fatal "Could not open ere database", ereDir, error = error
+    ProcessState.scheduleStop("ere_db_error")
+    return
+  defer:
+    db.dispose()
+
+  let lastEra = min(endEra, db.lastEra())
 
   while true:
-    for era in startEra .. endEra:
+    for era in startEra .. lastEra:
       let
-        root = accumulator.historicalEpochs[era]
-        era1File = era1Dir / era1FileName("mainnet", Era1(era), Digest(data: root))
+        blockStart = Era(era).startNumber()
+        blockEnd = Era(era).endNumber()
 
-      (await bridge.gossipBlockContent(era1File)).isOkOr:
-        error "Failed to gossip block content from era1 file", error, era1File
-        continue
+      info "Gossiping bodies and receipts from ere", era, blockStart, blockEnd
+
+      for blockNumber in blockStart .. blockEnd:
+        var body: BlockBody
+        db.getBlockBody(blockNumber, body).isOkOr:
+          error "Failed to get block body from ere", blockNumber, error
+          continue
+
+        var receipts: seq[StoredReceipt]
+        db.getReceipts(blockNumber, receipts).isOkOr:
+          error "Failed to get receipts from ere", blockNumber, error
+          continue
+
+        await bridge.gossipBlockBody(blockNumber, body)
+        await bridge.gossipReceipts(blockNumber, receipts)
+
+      info "Completed gossiping from ere", era
 
     if not loop:
       ProcessState.scheduleStop("backfill_complete")
@@ -155,18 +132,19 @@ proc runBackfillLoop(
 
 proc runBackfillLoopSyncMode(
     bridge: PortalHistoryBridge,
-    era1Dir: string,
+    ereDir: string,
     startEra: uint64,
     endEra: uint64,
     loop: bool,
 ) {.async: (raises: [CancelledError]).} =
   let
-    rng = newRng()
-    db = Era1DB.new(
-      era1Dir, "mainnet", loadAccumulator("mainnet"), bridge.cfg.posBlock.get()
-    )
-    blockLowerBound = startEra * EPOCH_SIZE # inclusive
-    blockUpperBound = ((endEra + 1) * EPOCH_SIZE) - 1 # inclusive
+    db = EreDB.new(ereDir, bridge.network, mergeBlockNumber(bridge.cfg.chainId)).valueOr:
+      fatal "Could not open ere database", ereDir, error = error
+      ProcessState.scheduleStop("ere_db_error")
+      return
+    lastEra = min(endEra, db.lastEra())
+    blockStart = Era(startEra).startNumber()
+    blockEnd = Era(lastEra).endNumber()
     blockNumberQueue = newAsyncQueue[uint64](50)
   defer:
     db.dispose()
@@ -178,24 +156,31 @@ proc runBackfillLoopSyncMode(
       logScope:
         blockNumber = blockNumber
 
-      var blockTuple: BlockTuple
-      db.getBlockTuple(blockNumber, blockTuple).isOkOr:
-        error "Failed to get block tuple", error
+      var
+        header: Header
+        body: BlockBody
+        receipts: seq[StoredReceipt]
+      db.getBlockHeader(blockNumber, header).isOkOr:
+        error "Failed to get block header from ere", error
+        continue
+      db.getBlockBody(blockNumber, body).isOkOr:
+        error "Failed to get block body from ere", error
+        continue
+      db.getReceipts(blockNumber, receipts).isOkOr:
+        error "Failed to get receipts from ere", error
         continue
 
       block bodyBlock:
-        let _ = (await historyGetBlockBody(bridge.portalClient, blockTuple.header)).valueOr:
+        let _ = (await historyGetBlockBody(bridge.portalClient, header)).valueOr:
           debug "Failed to find block body content, gossiping..", error = $error.message
-          await bridge.gossipBlockBody(blockNumber, blockTuple.body)
+          await bridge.gossipBlockBody(blockNumber, body)
           break bodyBlock
 
       block receiptsBlock:
-        let _ = (await historyGetReceipts(bridge.portalClient, blockTuple.header)).valueOr:
+        let _ = (await historyGetReceipts(bridge.portalClient, header)).valueOr:
           debug "Failed to find block receipts content, gossiping..",
             error = $error.message
-          await bridge.gossipReceipts(
-            blockNumber, blockTuple.receipts.to(StoredReceipts)
-          )
+          await bridge.gossipReceipts(blockNumber, receipts)
           break receiptsBlock
 
   var workers: seq[Future[void]] = @[]
@@ -203,9 +188,9 @@ proc runBackfillLoopSyncMode(
     workers.add blockWorker()
 
   while true:
-    for blockNumber in blockLowerBound .. blockUpperBound:
-      if blockNumber mod EPOCH_SIZE == 0:
-        info "Backfilling task at block", blockNumber, era = blockNumber div EPOCH_SIZE
+    for blockNumber in blockStart .. blockEnd:
+      if blockNumber mod MaxEreSize == 0:
+        info "Backfilling task at block", blockNumber, era = blockNumber div MaxEreSize
 
       await blockNumberQueue.addLast(blockNumber)
 
@@ -216,41 +201,51 @@ proc runBackfillLoopSyncMode(
     info "Completed backfill loop, starting over"
 
 proc runBackfillLoopAuditMode(
-    bridge: PortalHistoryBridge, era1Dir: string, startEra: uint64, endEra: uint64
+    bridge: PortalHistoryBridge, ereDir: string, startEra: uint64, endEra: uint64
 ) {.async: (raises: [CancelledError]).} =
   let
     rng = newRng()
-    db = Era1DB.new(
-      era1Dir, "mainnet", loadAccumulator("mainnet"), bridge.cfg.posBlock.get()
-    )
-    blockLowerBound = startEra * EPOCH_SIZE # inclusive
-    blockUpperBound = ((endEra + 1) * EPOCH_SIZE) - 1 # inclusive
-    blockRange = blockUpperBound - blockLowerBound
+    db = EreDB.new(ereDir, bridge.network, mergeBlockNumber(bridge.cfg.chainId)).valueOr:
+      fatal "Could not open ere database", ereDir, error = error
+      ProcessState.scheduleStop("ere_db_error")
+      return
+    lastEra = min(endEra, db.lastEra())
+    blockStart = Era(startEra).startNumber()
+    blockEnd = Era(lastEra).endNumber()
+    blockRange = blockEnd - blockStart
   defer:
     db.dispose()
 
-  var blockTuple: BlockTuple
+  var
+    header: Header
+    body: BlockBody
+    receipts: seq[StoredReceipt]
   while true:
-    # Grab a random blockNumber to audit and potentially gossip
-    let blockNumber = blockLowerBound + rng[].rand(blockRange).uint64
+    let blockNumber = blockStart + rng[].rand(blockRange).uint64
 
     logScope:
       blockNumber = blockNumber
 
-    db.getBlockTuple(blockNumber, blockTuple).isOkOr:
-      error "Failed to get block tuple", error
+    db.getBlockHeader(blockNumber, header).isOkOr:
+      error "Failed to get block header from ere", error
+      continue
+    db.getBlockBody(blockNumber, body).isOkOr:
+      error "Failed to get block body from ere", error
+      continue
+    db.getReceipts(blockNumber, receipts).isOkOr:
+      error "Failed to get receipts from ere", error
       continue
 
     block bodyBlock:
-      let _ = (await historyGetBlockBody(bridge.portalClient, blockTuple.header)).valueOr:
+      let _ = (await historyGetBlockBody(bridge.portalClient, header)).valueOr:
         info "Failed to find block body content, gossiping..", error = $error
-        await bridge.gossipBlockBody(blockNumber, blockTuple.body)
+        await bridge.gossipBlockBody(blockNumber, body)
         break bodyBlock
 
     block receiptsBlock:
-      let _ = (await historyGetReceipts(bridge.portalClient, blockTuple.header)).valueOr:
+      let _ = (await historyGetReceipts(bridge.portalClient, header)).valueOr:
         info "Failed to find block receipts content, gossiping..", error = $error
-        await bridge.gossipReceipts(blockNumber, blockTuple.receipts.to(StoredReceipts))
+        await bridge.gossipReceipts(blockNumber, receipts)
         break receiptsBlock
 
     await sleepAsync(1.seconds)
@@ -260,7 +255,8 @@ proc runHistory*(config: PortalBridgeConf) =
     portalClient: PortalRpcClient.init(newRpcClientConnect(config.portalRpcUrl)),
     web3Client: newRpcClientConnect(config.web3Url),
     gossipQueue: newAsyncQueue[(seq[byte], seq[byte])](config.gossipConcurrency),
-    cfg: chainConfigForNetwork(MainNet),
+    cfg: chainConfigForNetwork(config.networkId()),
+    network: config.network,
   )
 
   proc gossipWorker(bridge: PortalHistoryBridge) {.async: (raises: []).} =
@@ -336,19 +332,47 @@ proc runHistory*(config: PortalBridgeConf) =
   if config.latest:
     asyncSpawn bridge.runLatestLoop(config.blockVerify)
 
+  let
+    startEra = config.era
+    endEra =
+      if config.eraCount == 0:
+        high(uint64)
+      else:
+        config.era + config.eraCount - 1
+
   case config.backfillMode
   of BackfillMode.none:
     if not config.latest:
       ProcessState.scheduleStop("no_backfill_no_latest")
-  of BackfillMode.regular:
-    asyncSpawn bridge.runBackfillLoop(
-      config.era1Dir.string, config.startEra, config.endEra, config.backfillLoop
-    )
-  of BackfillMode.sync:
-    asyncSpawn bridge.runBackfillLoopSyncMode(
-      config.era1Dir.string, config.startEra, config.endEra, config.backfillLoop
-    )
-  of BackfillMode.audit:
-    asyncSpawn bridge.runBackfillLoopAuditMode(
-      config.era1Dir.string, config.startEra, config.endEra
-    )
+  of BackfillMode.regular, BackfillMode.sync, BackfillMode.audit:
+    if config.ereDir.isSome:
+      let ereDir = config.ereDir.get().string
+      case config.backfillMode
+      of BackfillMode.regular:
+        asyncSpawn bridge.runBackfillLoop(ereDir, startEra, endEra, config.backfillLoop)
+      of BackfillMode.sync:
+        asyncSpawn bridge.runBackfillLoopSyncMode(
+          ereDir, startEra, endEra, config.backfillLoop
+        )
+      of BackfillMode.audit:
+        asyncSpawn bridge.runBackfillLoopAuditMode(ereDir, startEra, endEra)
+      else:
+        discard
+    elif config.era1Dir.isSome:
+      let era1Dir = config.era1Dir.get().string
+      case config.backfillMode
+      of BackfillMode.regular:
+        asyncSpawn bridge.runBackfillLoopLegacy(
+          era1Dir, startEra, endEra, config.backfillLoop
+        )
+      of BackfillMode.sync:
+        asyncSpawn bridge.runBackfillLoopSyncModeLegacy(
+          era1Dir, startEra, endEra, config.backfillLoop
+        )
+      of BackfillMode.audit:
+        asyncSpawn bridge.runBackfillLoopAuditModeLegacy(era1Dir, startEra, endEra)
+      else:
+        discard
+    else:
+      fatal "Backfill mode requires --ere-dir or --era1-dir to be set"
+      quit(QuitFailure)

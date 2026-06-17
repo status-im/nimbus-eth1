@@ -13,12 +13,12 @@ import
   std/os,
   chronicles,
   stew/[io2, byteutils],
-  ../../portal/eth_history/ere,
-  ../../portal/database/era1_db,
-  ../../portal/eth_history/block_proofs/historical_hashes_accumulator,
-  ../../portal/eth_history/block_proofs/block_proof_historical_hashes_accumulator,
-  ../../portal/eth_history/block_proofs/block_proof_historical_roots,
-  ../../portal/eth_history/block_proofs/block_proof_historical_summaries,
+  ../../execution_chain/history/e2store_formats/ere,
+  ../../execution_chain/history/db/era1_db,
+  ../../execution_chain/history/block_proofs/historical_hashes_accumulator,
+  ../../execution_chain/history/block_proofs/block_proof_historical_hashes_accumulator,
+  ../../execution_chain/history/block_proofs/block_proof_historical_roots,
+  ../../execution_chain/history/block_proofs/block_proof_historical_summaries,
   ../../execution_chain/common/[hardforks, chain_config],
   ../../execution_chain/db/core_db,
   ../../execution_chain/db/core_db/persistent,
@@ -311,6 +311,13 @@ proc exportEreFromEra1*(config: HistoryExportConf) =
   let
     mergeBlockNumber = mergeBlockNumber(config.networkId())
     networkName = config.network
+
+  if mergeBlockNumber == 0:
+    fatal "exportEreFromEra1 is not supported for post-merge-only networks",
+      network = networkName
+    quit(QuitFailure)
+
+  let
     mergeEra = ere.era(mergeBlockNumber)
     startEraFromEra1 = ere.Era(config.eraEra1)
     endEraFromEra1 =

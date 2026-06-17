@@ -122,7 +122,17 @@ elif [[ "${PLATFORM}" == "linux_arm64" ]]; then
     NIMFLAGS="${NIMFLAGS_COMMON} --cpu:arm64 --passC:-fPIC --arm64.linux.gcc.exe=${CC} --arm64.linux.gcc.linkerexe=${CXX} --passL:'-static-libstdc++'" \
     PARTIAL_STATIC_LINKING=1 \
     USE_CACHED_ROCKSDB=1 \
-    ${BINARIES}
+    nimbus nimbus_verified_proxy
+
+  make \
+    -j1 \
+    LOG_LEVEL="TRACE" \
+    CC="${CC}" \
+    CXX="${CXX}" \
+    NIMFLAGS="${NIMFLAGS_COMMON} -d:disableLTO --cpu:arm64 --passC:-fPIC --arm64.linux.gcc.exe=${CC} --arm64.linux.gcc.linkerexe=${CXX} --passL:'-static-libstdc++'" \
+    PARTIAL_STATIC_LINKING=1 \
+    USE_CACHED_ROCKSDB=1 \
+    libverifproxy
 
 elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
   export PATH="/osxcross/bin:${PATH}"

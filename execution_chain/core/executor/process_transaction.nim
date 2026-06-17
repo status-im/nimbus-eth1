@@ -76,7 +76,8 @@ proc commitOrRollbackDependingOnGasUsed(
     vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), txFee)
     vmState.balTracker.commitCallFrame()
 
-  vmState.ledger.addBalance(vmState.coinbase(), txFee)
+  callResult.txFee = txFee
+  vmState.ledger.addBalance(vmState.coinbase(), txFee, checkEmptyAccount = vmState.fork < FkParis)
   vmState.ledger.commit(savePoint)
   vmState.cumulativeGasUsed += gasUsed
   vmState.blockRegularGasUsed += callResult.blockRegularGasUsed

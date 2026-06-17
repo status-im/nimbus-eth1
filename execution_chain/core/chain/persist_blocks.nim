@@ -96,8 +96,9 @@ proc getVmState(
 
   ok(p.vmState)
 
-func dispose*(p: var Persister) =
+proc dispose*(p: var Persister) =
   p.vmState.ledger.txFrame.dispose()
+  p.vmState.dispose()
   p.vmState = nil
 
 func init*(T: type Persister, com: CommonRef, flags: PersistBlockFlags): T =

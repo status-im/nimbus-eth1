@@ -17,7 +17,7 @@ import
   chronos,
   json_rpc/rpcclient,
   ../bridge/common/rpc_helpers,
-  eth_data_exporter/[exporter_conf, exporter_common, cl_data_exporter, el_data_exporter]
+  eth_data_exporter/[exporter_conf, cl_data_exporter, el_data_exporter]
 
 chronicles.formatIt(IoErrorCode):
   $it
@@ -88,7 +88,7 @@ when isMainModule:
 
       info "Block data exported successfully", fileName = fileName
   of ExporterCmd.beacon:
-    let (cfg, forkDigests, _) = getBeaconData()
+    let (cfg, forkDigests, _) = getBeaconData(config.network)
 
     case config.beaconCmd
     of BeaconCmd.exportLCBootstrap:
@@ -117,4 +117,6 @@ when isMainModule:
         config.restUrl, string config.dataDir, cfg, forkDigests
       )
     of BeaconCmd.exportBlockProof:
-      exportBlockProof(string config.dataDir, string config.eraDir, config.slotNumber)
+      exportBlockProof(
+        string config.dataDir, string config.eraDir, config.slotNumber, config.network
+      )

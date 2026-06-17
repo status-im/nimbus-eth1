@@ -11,7 +11,6 @@
 {.push raises:[].}
 
 import
-  std/sets,
   pkg/[chronos, eth/common, minilru, results],
   ../../../core/chain,
   ../../sync_desc,
@@ -38,6 +37,9 @@ type
     ## Used for avoiding sending the same failed request twice. This data
     ## structure is used as a self-cleaning hash set. The data argument is
     ## unused.
+
+  AccPathSet* = LruCache[seq[byte],uint8]
+    ## Ditto for account paths as used in the healing protocol.
 
   # -------------------
 
@@ -70,6 +72,10 @@ type
     packet: ByteCodesPacket
     elapsed: Duration
 
+  FetchTrieNodesData* = tuple
+    packet: TrieNodesPacket
+    elapsed: Duration
+
   Ticker* =
     proc(ctx: SnapCtxRef) {.gcsafe, raises: [].}
       ## Some function that is invoked regularly
@@ -86,7 +92,8 @@ type
   PeerFirstFetchReq* = object
     ## Register fetch request. This is intended to avoid sending the same (or
     ## similar) fetch request again from the same peer that sent it previously.
-    stateRoot*: StateRootSet         ## Account fetch (per state root)
+    stateRoot*: StateRootSet         ## Accounts fetch (per state root)
+    accPath*: AccPathSet             ## Trie nodes fetch (per account path)
 
   SnapPeerData* = object
     ## Local descriptor data extension
@@ -103,11 +110,10 @@ type
     stateDB*: StateDbRef             ## Incomplete states DB
     baseDir*: string                 ## Path for assembly database
     mptAsm*: MptAsmRef               ## Assembly cache database
+    pivot*: Opt[StateRoot]           ## Pivot root for analysys, healing, etc.
 
     # Info, debugging, and error handling stuff
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one
-    failedPeers*: HashSet[Hash]      ## Detect dead end sync by collecting peers
-    seenData*: bool                  ## Set `true` if data were fetched, already
     lastPeerSeen*: chronos.Moment    ## Time when the last peer was abandoned
     lastNoPeersLog*: chronos.Moment  ## Control messages about missing peers
     lastSyncUpdLog*: chronos.Moment  ## Control update messages
@@ -154,6 +160,20 @@ proc getEthPeer*(buddy: SnapPeerRef): BeaconPeerRef =
 proc getEthPeers*(buddy: SnapPeerRef): seq[BeaconPeerRef] =
   ##  Get all `eth` peer contexts available at the current time
   buddy.ctx.pool.beaconSync.ctx.getSyncPeers()
+
+# ---------
+
+func fromBytes*(_: type Hash32, path: openArray[byte]): Hash32 =
+  doAssert path.len == 32
+  let path = @path
+  (addr distinctBase(result)[0]).copyMem(unsafeAddr path[0], path.len)
+
+func toStr*(error: SnapError): string =
+  result = $error.excp
+  if 0 < error.name.len:
+    result &= "(" & error.name & ")"
+  if 0 < error.msg.len:
+    result &= "[" & error.msg & "]"
 
 # ------------------------------------------------------------------------------
 # End
