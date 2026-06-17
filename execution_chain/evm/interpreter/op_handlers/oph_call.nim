@@ -197,9 +197,13 @@ proc staticCallParams(c: Computation, res: var LocalParams): EvmResult[void] =
   ok()
 
 proc getCallCode(c: Computation, childMsg: Message): CodeBytesRef =
+  if c.balTrackerEnabled:
+    c.vmState.balTracker.trackAddressAccess(c.delegateTo)
+    
   # Avoid accessing ledger if it's a precompile address
   if MsgFlags.Precompile in childMsg.flags:
     return CodeBytesRef(nil)
+
   c.vmState.readOnlyLedger.getCode(c.delegateTo)
 
 proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) =
@@ -297,10 +301,6 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
   ? cpt.opcodeGasCost(Call, gasCost, reason = $Call)
   cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
 
-  if cpt.balTrackerEnabled:
-    # If OOG, `delegateTo` is not added to BAL
-    cpt.vmState.balTracker.trackAddressAccess(cpt.delegateTo)
-
   cpt.returnData.setLen(0)
 
   if cpt.msg.depth >= MaxCallDepth:
@@ -371,10 +371,6 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
 
   ? cpt.opcodeGasCost(CallCode, gasCost, reason = $CallCode)
   cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
-
-  if cpt.balTrackerEnabled:
-    # If OOG, `delegateTo` is not added to BAL
-    cpt.vmState.balTracker.trackAddressAccess(cpt.delegateTo)
 
   cpt.returnData.setLen(0)
 
@@ -447,10 +443,6 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
   ? cpt.opcodeGasCost(DelegateCall, gasCost, reason = $DelegateCall)
   cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
 
-  if cpt.balTrackerEnabled:
-    # If OOG, `delegateTo` is not added to BAL
-    cpt.vmState.balTracker.trackAddressAccess(cpt.delegateTo)
-
   cpt.returnData.setLen(0)
   if cpt.msg.depth >= MaxCallDepth:
     debug "Computation Failure",
@@ -514,10 +506,6 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
 
   ? cpt.opcodeGasCost(StaticCall, gasCost, reason = $StaticCall)
   cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
-
-  if cpt.balTrackerEnabled:
-    # If OOG, `delegateTo` is not added to BAL
-    cpt.vmState.balTracker.trackAddressAccess(cpt.delegateTo)
 
   cpt.returnData.setLen(0)
 
