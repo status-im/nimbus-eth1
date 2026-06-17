@@ -48,20 +48,24 @@ proc chainRlpNodes(
   ## Inspired by the `getBranchAux()` function from `hexary.nim`
   let (vtx, _) = ?db.getVtxRc(rvid)
 
+  var rlpNodes: array[2, seq[byte]]
   nodesCache.withValue(rvid, value):
-    chain.appendNodes(value[])
+    rlpNodes = value[]
   do:
     let node = vtx.toNode(rvid.root, db).valueOr:
       return err(PartChnNodeConvError)
-
-    # Save rpl encoded node(s)
-    let rlpNodes = node.to(array[2, seq[byte]])
+    rlpNodes = node.to(array[2, seq[byte]])
     nodesCache[rvid] = rlpNodes
-    chain.appendNodes(rlpNodes)
 
   # Follow up child node
   case vtx.vType:
+  of ExtNode:
+    # Proof generation is only called on full nodes; ExtNode (stateless
+    # boundary) must never appear here.
+    raiseAssert "ExtNode in proof generation"
+
   of Leaves:
+    chain.add(rlpNodes[0])
     if path != vtx.pfx:
       err(PartChnLeafPathMismatch)
     else:
@@ -70,18 +74,28 @@ proc chainRlpNodes(
   of Branches:
     let vtx = BranchRef(vtx)
     let nChewOff = sharedPrefixLen(vtx.pfx, path)
+
+    # Extension node always added
+    chain.add(rlpNodes[0])
+    # Branch node added only when path enters the branch (prefix fully matches).
+    # For diverging paths the extension alone proves non-membership so the
+    # branch is omitted
+    if rlpNodes[1].len() > 0 and nChewOff == vtx.pfx.len:
+      chain.add(rlpNodes[1])
+
     if nChewOff != vtx.pfx.len:
-      err(PartChnExtPfxMismatch)
-    elif path.len == nChewOff:
-      err(PartChnBranchPathExhausted)
-    else:
-      let
-        nibble = path[nChewOff]
-        rest = path.slice(nChewOff+1)
-      if not vtx.bVid(nibble).isValid:
-        return err(PartChnBranchVoidEdge)
-      # Recursion!
-      db.chainRlpNodes((rvid.root,vtx.bVid(nibble)), rest, chain, nodesCache)
+      return err(PartChnExtPfxMismatch)
+
+    if path.len == nChewOff:
+      return err(PartChnBranchPathExhausted)
+
+    let
+      nibble = path[nChewOff]
+      rest = path.slice(nChewOff+1)
+    if not vtx.bVid(nibble).isValid:
+      return err(PartChnBranchVoidEdge)
+    # Recursion!
+    db.chainRlpNodes((rvid.root,vtx.bVid(nibble)), rest, chain, nodesCache)
 
 proc makeProof(
     db: AristoTxRef;
@@ -392,18 +406,24 @@ proc convertSubtrie(
 
         # Convert the child branch node which will be merged with this extension node
         ?convertSubtrie(k.to(Hash32), src, dst, isStorage)
-        doAssert(dst.contains(k))
 
-        let
-          childNode = dst.getOrDefault(k)
-          childBranch = BranchRef(childNode.vtx)
+        if dst.contains(k):
+          let
+            childNode = dst.getOrDefault(k)
+            childBranch = BranchRef(childNode.vtx)
 
-        # Remove the childNode because it's branch was copied into this node
-        dst.del(k)
+          # Remove the childNode because it's branch was copied into this node
+          dst.del(k)
 
-        NodeRef(
-          key: childNode.key,
-          vtx: ExtBranchRef.init(segm, childBranch.startVid, childBranch.used))
+          NodeRef(
+            key: childNode.key,
+            vtx: ExtBranchRef.init(segm, childBranch.startVid, childBranch.used))
+        else:
+          # Branch absent from witness (proof boundary): represent as an
+          # ExtNode carrying the branch hash as childKey.
+          NodeRef(
+            key: default(array[16, HashKey]),
+            vtx: ExtNodeRef.init(segm, k))
 
     of 17: # Branch node
       var key: array[16, HashKey]
@@ -456,6 +476,11 @@ proc putSubtrie(
 
     of StoLeaf:
       discard
+
+    of ExtNode:
+      # Store vertex and pre-computed extension hash
+      db.layersPutKey(rvid, ExtNodeRef(node.vtx), key)
+      return ok()
 
     of Branch, ExtBranch:
       let bvtx = BranchRef(node.vtx)

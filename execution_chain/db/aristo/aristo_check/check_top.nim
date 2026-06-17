@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -37,6 +37,9 @@ proc checkTopStrict*(
 
     elif key.isValid:
       # So `vtx` and `key` exist
+      if vtx.vType == ExtNode:
+        # ExtNode has branch absent (not part of witness), so pre-computed key is trusted
+        continue
       let node = vtx.toNode(rvid.root, db).valueOr:
         # not all sub-keys might be ready du to lazy hashing
         continue
@@ -53,7 +56,6 @@ proc checkTopStrict*(
 
   ok()
 
-
 proc checkTopProofMode*(
     db: AristoTxRef;                               # Database, top layer
       ): Result[void,(VertexID,AristoError)] =
@@ -61,12 +63,14 @@ proc checkTopProofMode*(
     if key.isValid:                              # Otherwise to be deleted
       let vtx = db.getVtx rvid
       if vtx.isValid:
+        # ExtNode has branch absent (not part of witness), so pre-computed key is trusted
+        if vtx.vType == ExtNode:
+          continue
         let node = vtx.toNode(rvid.root, db).valueOr:
           continue
         if key != node.digestTo(HashKey):
           return err((rvid.vid,CheckRlxVtxKeyMismatch))
   ok()
-
 
 proc checkTopCommon*(
     db: AristoTxRef;                   # Database, top layer
@@ -97,6 +101,7 @@ proc checkTopCommon*(
               return err((stoVid,CheckAnyVidDeadStorageRoot))
             stoRoots.incl stoVid
       of StoLeaf: discard
+      of ExtNode: discard
       of Branches:
         block check42Links:
           var seen = false
@@ -123,4 +128,3 @@ proc checkTopCommon*(
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
-
