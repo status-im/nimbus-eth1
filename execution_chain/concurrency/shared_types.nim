@@ -146,7 +146,7 @@ proc placeEntry[K, V](
   ## slot exists (i.e. the fill ratio is respected).
   let mask = uint32(s.allocated - 1)
   var
-    cur = entry
+    cur = move(entry)
     i = bucket
     d = dist
 
@@ -220,12 +220,16 @@ template len*[K, V](s: SharedTable[K, V]): int =
   ## Number of key/value pairs in the table.
   s.used
 
-template contains*[K, V](s: SharedTable[K, V], key: K): bool =
+func contains*[K, V](s: SharedTable[K, V], key: K): bool =
   ## Return true iff `key` is present in the table.
   s.findEntry(subhash(key), key).isSome()
 
 func get*[K, V](s: SharedTable[K, V], key: K): Opt[V] =
   ## Retrieve the value associated with `key`, if present.
+  ##
+  ## The value is copied out, so this requires a copyable V and will not compile
+  ## for move-only value types (e.g. SharedBytes or a nested SharedTable); use
+  ## `withValue` to borrow such values in place instead.
   let i = ?s.findEntry(subhash(key), key)
   Opt.some(s.entries[i].value)
 
@@ -234,42 +238,49 @@ template `[]`*[K, V](s: SharedTable[K, V], key: K): Opt[V] =
 
 proc put*[K, V](s: var SharedTable[K, V], key: K, value: sink V) =
   ## Insert or update `key` with `value`, growing the table if needed.
+  ##
+  ## When `key` is already present its previous value is overwritten in place.
+  ## If V owns manually allocated memory (e.g. SharedBytes or a nested
+  ## SharedTable), the overwritten value is abandoned and leaked, so dispose the
+  ## existing value first (e.g. via `withValue`) before updating an owning value.
   let sh = subhash(key)
 
   if s.allocated == 0:
     s.grow(initialCapacity)
-  elif (s.used + 1) * 3 > s.allocated * 2: # used + 1 > fillRatio * allocated
-    s.grow(s.allocated * 2)
 
   # Probe as a lookup would: the robin-hood invariant makes the slot where a
   # failed lookup stops the same slot where a new key must be inserted.
   let mask = uint32(s.allocated - 1)
   var
-    entry: SharedTableEntry[K, V] = (sh, true, key, value)
     i = sh and mask
     dist = 0'u32
 
   while true:
     let e = addr s.entries[i]
-    if not e[].used:
-      e[] = move(entry)
-      s.used += 1
-      return
-
-    let bdist = psl(mask, i, e[].subhash)
-    if dist > bdist:
-      # Insert point: steal the slot and re-home the displaced entry.
-      swap(e[], entry)
-      s.used += 1
-      s.placeEntry(move(entry), (i + 1) and mask, bdist + 1)
-      return
+    if not e[].used or dist > psl(mask, i, e[].subhash):
+      # Empty slot or a richer entry: `key` is absent and `i`/`dist` mark its
+      # insertion point. Growth for the insert is deferred until after this
+      # probe so that an in-place update never triggers a needless resize.
+      break
 
     if e[].subhash == sh and e[].key == key:
-      e[].value = move(entry.value)
+      # Key already present: update in place. No new slot is consumed, so an
+      # update never grows the table.
+      e[].value = move(value)
       return
 
     i = (i + 1) and mask
     dist += 1
+
+  # `key` is absent and must be inserted. Grow only now that a new entry will
+  # actually be added; growth rehashes every entry and invalidates the probe
+  # above, so in that case re-probe from the ideal bucket via `rawInsert`.
+  if (s.used + 1) * 3 > s.allocated * 2: # used + 1 > fillRatio * allocated
+    s.grow(s.allocated * 2)
+    s.rawInsert(sh, key, value)
+  else:
+    s.placeEntry((sh, true, key, value), i, dist)
+  s.used += 1
 
 template `[]=`*(s: var SharedTable, key, value: untyped) =
   s.put(key, value)
@@ -323,6 +334,10 @@ proc pop*[K, V](s: var SharedTable[K, V], key: K): Opt[V] =
 
 proc clear*[K, V](s: var SharedTable[K, V]) =
   ## Remove all entries, keeping the allocated memory for reuse.
+  ##
+  ## The stored values are discarded without being disposed. If V owns manually
+  ## allocated memory (e.g. SharedBytes or a nested SharedTable), dispose each
+  ## value first (via the `mvalues` iterator), otherwise that memory is leaked.
   if s.allocated > 0:
     zeroMem(s.entries, s.allocated * sizeof(SharedTableEntry[K, V]))
   s.used = 0
@@ -330,10 +345,28 @@ proc clear*[K, V](s: var SharedTable[K, V]) =
 template withValue*[K, V](s: var SharedTable[K, V], key: K, val, body: untyped) =
   ## If `key` is present, run `body` with `val` injected as a `ptr V` pointing
   ## at the stored value. Does nothing if `key` is missing.
+  ##
+  ## `val` points into the table's storage and is invalidated by any operation
+  ## that reallocates or rearranges entries (`put` that grows the table, `del`,
+  ## `pop`, `clear`, `dispose`); do not retain it across such calls.
   let idx = s.findEntry(subhash(key), key)
   if idx.isSome():
     let val {.inject.} = addr s.entries[idx[]].value
     body
+
+template withValue*[K, V](
+    s: var SharedTable[K, V], key: K, val, body1, body2: untyped
+) =
+  ## Like the two-argument `withValue`, but additionally runs `body2` (typically
+  ## written as a trailing `do:` block) when `key` is missing. `body1` runs with
+  ## `val` injected as a `ptr V` pointing at the stored value, subject to the
+  ## same invalidation caveats; `body2` runs with nothing injected.
+  let idx = s.findEntry(subhash(key), key)
+  if idx.isSome():
+    let val {.inject.} = addr s.entries[idx[]].value
+    body1
+  else:
+    body2
 
 iterator keys*[K, V](s: SharedTable[K, V]): lent K =
   ## Iterate over the keys in the table in an unspecified order.

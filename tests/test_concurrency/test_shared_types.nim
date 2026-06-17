@@ -201,6 +201,38 @@ suite "SharedTable Tests":
       not t.contains(Key(v: 3))
     t.dispose()
 
+  test "withValue runs the do-block branch only when the key is missing":
+    var t = SharedTable[int, int].init()
+    t.put(1, 10)
+
+    # Present key: the first block runs (and can mutate through the pointer);
+    # the do-block must not run.
+    var present = 0
+    var missingRan = false
+    t.withValue(1, v):
+      v[] = 11
+      present = v[]
+    do:
+      missingRan = true
+    check:
+      present == 11
+      not missingRan
+      t.get(1) == Opt.some(11)
+
+    # Missing key: only the do-block runs.
+    var foundRan = false
+    var inserted = false
+    t.withValue(2, v):
+      foundRan = true
+    do:
+      inserted = true
+      t[2] = 20
+    check:
+      not foundRan
+      inserted
+      t.get(2) == Opt.some(20)
+    t.dispose()
+
 suite "SharedTable with move-only values Tests":
   # These cover the documented purpose of SharedTable: holding move-only,
   # non-GC value types (SharedBytes, nested SharedTable) whose `=copy` is
