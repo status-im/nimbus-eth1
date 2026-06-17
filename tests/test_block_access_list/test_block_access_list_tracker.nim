@@ -67,7 +67,7 @@ suite "Block access list tracker":
     ledger.setNonce(address3, nonce3)
 
   teardown:
-    tracker.builder.dispose()
+    tracker.dispose()
 
   test "Set valid block access index":
     let balIndexes = [
@@ -369,3 +369,42 @@ suite "Block access list tracker":
         balIndex in accData[].balanceChanges
         balIndex notin accData[].nonceChanges
         not hasCodeChange
+
+  test "tracker owns and frees a builder it allocated":
+    let before = getOccupiedSharedMem()
+    for _ in 0 ..< 50:
+      let owned = BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger)
+      check owned.builderOwner
+      owned.builder[].addTouchedAccount(address1)
+      check owned.builder[].accounts.contains(address1)
+      owned.dispose()
+    check getOccupiedSharedMem() == before
+
+  test "several trackers share one builder without owning it":
+    let before = getOccupiedSharedMem()
+
+    var shared = BlockAccessListBuilder.newShared(threadSafe = true)
+    let
+      t1 = BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger, shared)
+      t2 = BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger, shared)
+
+    check:
+      not t1.builderOwner
+      not t2.builderOwner
+      t1.builder == shared
+      t2.builder == shared
+
+    t1.builder[].addTouchedAccount(address1)
+    t2.builder[].addTouchedAccount(address2)
+    check:
+      shared[].accounts.contains(address1)
+      shared[].accounts.contains(address2)
+
+    t1.dispose()
+    t2.dispose()
+    check:
+      shared[].accounts.contains(address1)
+      shared[].accounts.contains(address2)
+
+    shared.dispose()
+    check getOccupiedSharedMem() == before

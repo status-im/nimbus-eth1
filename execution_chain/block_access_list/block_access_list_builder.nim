@@ -75,12 +75,24 @@ template init*(T: type BlockAccessListBuilder, threadSafe = false): var T =
   builder.init(threadSafe)
   builder
 
+proc newShared*(
+    T: type BlockAccessListBuilder, threadSafe = false
+): ptr BlockAccessListBuilder =
+  let builderPtr = createShared(BlockAccessListBuilder)
+  builderPtr[].init(threadSafe)
+  builderPtr
+
 proc dispose*(builder: var BlockAccessListBuilder) =
   for accData in builder.accounts.mvalues():
     accData.dispose()
   builder.accounts.dispose()
   if builder.threadSafe:
     deinitLock(builder.lock)
+
+proc dispose*(builderPtr: ptr BlockAccessListBuilder) =
+  if not builderPtr.isNil():
+    builderPtr[].dispose()
+    deallocShared(builderPtr)
 
 proc `=copy`(
     dest: var BlockAccessListBuilder, src: BlockAccessListBuilder
