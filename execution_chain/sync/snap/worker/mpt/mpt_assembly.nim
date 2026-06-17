@@ -23,6 +23,20 @@
 ## No column families are used, here.
 ##
 ##
+## Reference headers
+## ------------------
+##
+## * headers:
+##   + key9: <col, number>
+##   + value: <header>
+##   where
+##   + col:      `Headers`
+##   + number:   `BlockNumber`
+##   + header:   `Header`
+##   + touch:    `Moment`
+##   + tag:      `StateDataTag`
+##   * coverage: `UInt256`
+##
 ## Key/value download packet formats
 ## ---------------------------------
 ##
@@ -141,7 +155,8 @@
 
 import
   std/[dirs, paths, typetraits],
-  pkg/[chronicles, chronos, eth/common, results, rocksdb, stew/byteutils],
+  pkg/[chronicles, chronos, eth/common, results, rocksdb],
+  pkg/stew/[byteutils, endians2],
   ../../../wire_protocol/snap/snap_types,
   ../[state_db, worker_const],
   ./mpt_desc
@@ -162,6 +177,9 @@ type
   BlobResult* = Result[seq[byte],string]
     ## Shortcut
 
+  HeaderResult* = Result[Header,string]
+    ## Shortcut
+
   PutResult* = Result[void,string]
     ## Shortcut
 
@@ -176,6 +194,7 @@ type
 
   MptAsmCol = enum
     AdminCol = 0                                    # currently unused
+    Headers                                         # header chain by block num
 
     StateData                                       # root -> block hash/number
     Accounts                                        # as fetched from network
@@ -346,6 +365,16 @@ func decodeByteCode(data: seq[byte]): Result[DecodedByteCode,string] =
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(move res)
 
+func decodeHeader(data: seq[byte]): Result[Header,string] =
+  const info = "decodeStoSlot"
+  var
+    res: Header
+  try:
+    res = rlp.decode(data, Header)
+  except RlpError as e:
+    return err(info & ": " & $e.name & "(" & e.msg & ")")
+  ok(move res)
+
 
 template encodeStateData(
     hash: BlockHash;
@@ -398,6 +427,11 @@ template encodeByteCode(
   wrt.append codes
   wrt.append cast[uint](peerID)
   wrt.finish()
+
+template encodeHeader(
+    header: Header;
+      ): untyped =
+  rlp.encode header
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -569,6 +603,30 @@ iterator colWalkAtLeast33(adb: RocksDbRef, pfx: openArray[byte]): KkvTriple =
           break
         yield (move key1, key[33..^1], value)
 
+iterator colWalk9(
+    adb: RocksDbRef;
+    pfx: openArray[byte];
+      ): tuple[key: uint64, data: seq[byte]] =
+  ## Walk over key-value pairs of the database for keys of length 9 where
+  ## the search head is postioned at `pfx[0]`.
+  ##
+  const info = "mpt/colWalk9: "
+  block walkBody:
+    let rit = adb.openIterator().valueOr:
+      when extraTraceMessages:
+        trace info & "Open error", error
+      break walkBody
+    defer: rit.close()
+
+    let col = pfx[0]
+    rit.seekToKey(pfx)
+    while rit.isValid():
+      let (key,value) = rit.kvPair()
+      if 0 < key.len and col.ord.byte != key[0]:
+        break
+      if key.len == 9:
+        yield (uint64.fromBytesBE key.toOpenArray(1, 8), value)
+
 iterator colWalk33(
     adb: RocksDbRef;
     pfx: openArray[byte];
@@ -685,6 +743,34 @@ template delAtMost33(
     key: openArray[byte];
       ): untyped =
   db.adb.rDel col.keyAtMost33(key)
+
+# --------------
+
+template key9(col: MptAsmCol; key1: uint64): openArray[byte] =
+  var keyData: array[9,byte]
+  let key1Data = key1.toBytesBE()
+  keyData[0] = col.ord
+  (addr keyData[1]).copyMem(addr key1Data[0], 8)
+  keyData.toOpenArray(0,8)
+
+template key9(col: MptAsmCol): openArray[byte] =
+  var key: array[9,byte]
+  key[0] = col.ord
+  key.toOpenArray(0,8)
+
+template get9(db: MptAsmRef; col: MptAsmCol; key1: uint64): untyped =
+  db.adb.rGet(col.key9 key1)
+
+template put9(
+    db: MptAsmRef;
+    col: MptAsmCol;
+    key1: uint64;
+    data: openArray[byte];
+      ): untyped =
+  db.adb.rPut(col.key9 key1, data)
+
+template del9(db: MptAsmRef; col: MptAsmCol; key1: uint64): untyped =
+  db.adb.rDel(col.key9 key1)
 
 # --------------
 
@@ -982,6 +1068,55 @@ proc init*(
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
+
+proc hasHeader*(db: MptAsmRef, bn = BlockNumber(0)): BoolResult =
+  let data = db.get9(Headers, bn).valueOr:
+    return err(error)
+  ok(0 < data.len)
+
+proc getHeader*(db: MptAsmRef, bn: BlockNumber): HeaderResult =
+  let data = db.get9(Headers, bn).valueOr:
+    return err(error)
+  data.decodeHeader()
+
+proc lastHeader*(db: MptAsmRef): HeaderResult =
+  let data = db.get9(Headers, 0u64).valueOr:
+    return err(error)
+  if data.len != 8:
+    return err("")
+  db.getHeader uint64.fromBytesBE data
+
+proc putHeader*(db: MptAsmRef, header: Header): PutResult =
+  db.put9(Headers, header.number, header.encodeHeader()).isOkOr:
+    return err(error)
+  db.put9(Headers, 0u64, uint64(header.number).toBytesBE()).isOkOr:
+    return err(error)
+  ok()
+
+proc putHeader*(db: MptAsmRef, headers: openArray[Header]): PutResult =
+  for h in headers:
+    db.put9(Headers, h.number, h.encodeHeader()).isOkOr:
+      return err(error)
+  db.put9(Headers, 0u64, uint64(headers[^1].number).toBytesBE()).isOkOr:
+    return err(error)
+  ok()
+
+proc delHeader*(db: MptAsmRef, bn: BlockNumber): DelResult =
+  db.del9(Headers, bn)
+
+proc clearHeader*(db: MptAsmRef): DelResult =
+  db.adb.rClear(Headers)
+
+iterator walkHeader*(db: MptAsmRef): WalkHeader =
+  for (key,data) in db.adb.colWalk9 key9(Headers, 1u64):
+    let header = data.decodeHeader().valueOr:
+      var oops: WalkHeader
+      oops.error = error
+      yield oops
+      continue
+    yield (header,"")
+
+# ========================
 
 proc getStateData*(
     db: MptAsmRef;
