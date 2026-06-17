@@ -113,8 +113,6 @@ type
     PeekCache
       ## Peek into, but don't update cache - useful on work loads that are
       ## unfriendly to caches
-    NoPutCache
-      ## Don't put values in the cache after fetching from the database.
 
 const
   Leaves* = {VertexType.AccLeaf, VertexType.StoLeaf}
