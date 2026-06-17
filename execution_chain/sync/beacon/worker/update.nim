@@ -329,7 +329,7 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
       else:
         let stopBase = ctx.pool.stopBase.unsafeGet
         if not ctx.hdrCache.updateBlindStop(stopBase):
-          trace "Syncer single run rejected", stopBase=stopBase.number,
+          debug "Syncer single run rejected", stopBase=stopBase.number,
             head=ctx.chain.latestNumber
           ctx.hdrCache.clear()
           return
@@ -357,15 +357,27 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
       return
 
   if 0 < ctx.pool.minInitBuddies:
-    trace "Syncer activation rejected", base=ctx.chain.baseNumber,
+    debug "Syncer activation rejected", base=ctx.chain.baseNumber,
       head=ctx.chain.latestNumber, target=ctx.hdrCache.head.number,
       manualTarget=(if ctx.pool.initTarget.isNone(): "n/a"
                     else: ctx.pool.initTarget.get.hash.short),
       nSyncPeersMin=ctx.pool.minInitBuddies, nSyncPeers=ctx.nSyncPeers()
   else:
-    trace "Syncer activation rejected", base=ctx.chain.baseNumber,
-      head=ctx.chain.latestNumber, target=ctx.hdrCache.head.number,
-      manualTarget=ctx.pool.initTarget.isSome(), nSyncPeers=ctx.nSyncPeers()
+    block noiseCotrol:
+      if ctx.nSyncPeers() < 1 and
+         ctx.pool.initTarget.isSome():
+        # Avoid burst logging every some seconds at the rate of FCU requests
+        # from the CL. This runs in competition with the *No sync peers yet"
+        # messages. As the latter tests the `lastNoPeersLog` at a lower rate,
+        # the syncer message has probabilistic priority.
+        let now = Moment.now()
+        if now < ctx.pool.lastNoPeersLog + noPeersLogWaitInterval:
+          break noiseCotrol
+        ctx.pool.lastNoPeersLog = now
+
+      debug "Syncer activation rejected", base=ctx.chain.baseNumber,
+        head=ctx.chain.latestNumber, target=ctx.hdrCache.head.number,
+        manualTarget=ctx.pool.initTarget.isSome(), nSyncPeers=ctx.nSyncPeers()
 
   # Failed somewhere on the way
   ctx.hdrCache.clear()

@@ -21,6 +21,9 @@ import
 logScope:
   topics = "beacon sync"
 
+const
+  ZeroTarget: InitTarget = (zeroHash32, false, Opt.none(Hash32))
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -72,6 +75,9 @@ template headersTargetActivate*(
       peer {.inject,used.} = $buddy.peer                   # logging only
       trg = ctx.pool.initTarget.unsafeGet
 
+    if trg.hash == zeroHash32:                             # already in process?
+      break body                                           # .. yes, it is
+
     # Require minimum of sync peers
     if ctx.nSyncPeers() < ctx.pool.minInitBuddies:
       trace info & ": not enough peers to start manual sync", peer,
@@ -84,8 +90,11 @@ template headersTargetActivate*(
     if buddy.peerID in ctx.pool.failedPeers:
       break body                                           # return
 
-    # Grab header, so no other peer will interfere
-    ctx.pool.initTarget = Opt.none(InitTarget)
+    # Grab header, so no other peer will interfere. Rather then clearing
+    # the `Opt[InitTarget]` it is reset to some zero value. This pervents
+    # the syncer to start another session initiated by the CL while waiting
+    # for header to be resoved via eth/xx.
+    ctx.pool.initTarget = Opt.some(ZeroTarget)
 
     # Fetch header or return
     const iv = BnRange.new(0u,0u) # dummy interval
@@ -122,6 +131,9 @@ template headersTargetActivate*(
 
     # Got header so the cul-de-sac protection can be cleared
     ctx.pool.failedPeers.clear()
+
+    # Mark the target consumed, one way or the other.
+    ctx.pool.initTarget = Opt.none(InitTarget)
 
     # Verify that the target header is usable
     let hdr = hdrs[0]

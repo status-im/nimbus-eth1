@@ -102,7 +102,8 @@ proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
     return
 
   if data.standByMode:
-    if elapsed <= tickerLogStandByMax:
+    if t.lastStats.standByMode and
+       elapsed <= tickerLogStandByMax:
       return
   elif data == t.lastStats and
        elapsed <= tickerLogSuppressMax:
