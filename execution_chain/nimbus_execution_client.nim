@@ -186,6 +186,10 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
         hash32=hex
       quit QuitFailure
 
+  # Optional state montitor logger
+  if config.beaconSyncTicker:
+    nimbus.beaconSyncRef.configTicker(enable=true)
+
   # Configure snap sync if enabled. When done it will resume beacon sync.
   if config.snapSyncEnabled:
     if nimbus.snapSyncRef.isNil:

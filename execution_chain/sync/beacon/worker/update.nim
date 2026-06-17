@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -30,6 +30,11 @@ declareGauge nec_sync_last_block_imported, "" &
 declareGauge nec_sync_head, "" &
   "Current sync target block number (if any)"
 
+type ResetLingerError* = enum
+  NotApplicable = 0
+  DownloadCancelled                                 # retry when finished
+  AboutFinishing                                    # retry when finished
+
 # ------------------------------------------------------------------------------
 # Private functions, state handler helpers
 # ------------------------------------------------------------------------------
@@ -39,9 +44,9 @@ proc updateSuspendSyncer(ctx: BeaconCtxRef) =
   ## for awaiting a new request from the `CL`.
   ##
   ctx.hdrCache.clear()
-
   ctx.pool.failedPeers.clear()
   ctx.pool.seenData = false
+  ctx.subState.cancelRequest.reset
 
   ctx.hibernate = true
 
@@ -116,21 +121,42 @@ proc headersNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
 
 func headersCancelNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
   ## State transition handler
-  if ctx.poolMode:                     # wait for peers to sync in `poolMode`
+  if ctx.poolMode:                                  # wait for peers to sync
     return headersCancel
-  idle                                 # will continue hibernating
+
+  if ctx.pool.stopBase.isSome():                    # single run mode stop?
+    return SyncState.linger                         # stay until further notice
+
+  idle                                              # will continue hibernating
 
 proc headersFinishNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
   ## State transition handler
-  if ctx.poolMode:                     # wait for peers to sync in `poolMode`
+  if ctx.poolMode:                                  # wait for peers to sync
     return headersFinish
 
-  if ctx.hdrCache.state == ready:
-    if ctx.commitCollectHeaders info:  # commit downloading headers
-      ctx.setupProcessingBlocks info   # initialise blocks processing
-      return SyncState.blocks          # transition to blocks processing
+  if ctx.hdrCache.state == ready and
+     ctx.commitCollectHeaders(info):                # commit downloading headers
 
-  idle                                 # will continue hibernating
+    if ctx.pool.stopBase.isSome():                  # single run mode stop?
+      return SyncState.linger                       # stay until further notice
+
+    ctx.setupProcessingBlocks info                  # init blocks processing
+    return SyncState.blocks                         # to blocks processing
+
+  idle                                              # will continue hibernating
+
+proc lingerNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
+  ## State transition handler
+  ctx.updateEtaHeadersDone()                        # update metrics
+
+  if not ctx.pool.stopNotifier.isNil:               # notify success/failure
+    ctx.pool.stopNotifier(ctx.hdrCache.state == locked)
+    ctx.pool.stopNotifier = BeaconNotifier(nil)     # run only once
+
+  if ctx.subState.cancelRequest:                    # req by `stopNotifier()`
+    return SyncState.idle                           # .. via `resetSingleRun()`
+
+  SyncState.linger
 
 proc blocksNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
   ## State transition handler
@@ -151,38 +177,72 @@ proc blocksNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
 
 func blocksCancelNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
   ## State transition handler
-  if ctx.poolMode:                     # wait for peers to sync in `poolMode`
+  if ctx.poolMode:                                  # wait for peers to sync
     return blocksCancel
-  idle                                 # will continue hibernating
+  idle                                              # will continue hibernating
 
 func blocksFinishNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
   ## State transition handler
-  if ctx.poolMode:                     # wait for peers to sync in `poolMode`
+  if ctx.poolMode:                                  # wait for peers to sync
     return blocksCancel
-  idle                                 # will continue hibernating
+  idle                                              # will continue hibernating
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
+
+proc singleRunStart*(ctx: BeaconCtxRef): Opt[void] =
+  if ctx.pool.syncState == idle:
+    # The header cache notifier event is triggered once, and then it blocks
+    # (aka edge trigger event.) If there was one while in stand-by mode, the
+    # event has been irretrievably missed. So the header cache needs to be
+    # cleared.
+    ctx.hdrCache.clear()
+    return ok()
+  err()
+
+proc resetSingleRun*(ctx: BeaconCtxRef): Result[void,ResetLingerError] =
+  ## Reset state machine in single run mode to `idle` if possible, or request
+  ## cancellation of the current download. In the latter case, This function
+  ## has to be called again. If the system could be set to `idle` the function
+  ## returns `true`, otherwise `false`.
+  ##
+  if ctx.pool.stopBase.isSome():
+    case ctx.pool.syncState:
+    of idle:
+      return ok()
+    of SyncState.headers:
+      ctx.subState.cancelRequest = true
+      return err(DownloadCancelled)
+    of headersCancel:
+      return err(DownloadCancelled)
+    of headersFinish:
+      return err(AboutFinishing)
+    of linger:
+      ctx.subState.cancelRequest = true
+      return ok()
+    else:
+      discard
+  err(NotApplicable)
 
 proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
   ## Update internal state when needed
   ##
   # State machine
   # ::
-  #     idle <-----------------------.
-  #      |                           |
-  #      v                           |
-  #     headers -> headersCancel --> +
-  #      |                           |
-  #      v                           |
-  #     headersFinish -------------> +
-  #      |                           |
-  #      v                           |
-  #     blocks -> blocksCancel ----> +
-  #      |                           |
-  #      v                           |
-  #     blocksFinish ----------------'
+  #     idle <--------------------------.
+  #      |                              |
+  #      v                              |
+  #     headers ----> headersCancel --> +
+  #      |                 |            |
+  #      v                 v            |
+  #     headersFinish -> linger ------> +
+  #      |                              |
+  #      v                              |
+  #     blocks -> blocksCancel -------> +
+  #      |                              |
+  #      v                              |
+  #     blocksFinish -------------------'
   #
   let newState =
     case ctx.pool.syncState:
@@ -197,6 +257,9 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
 
     of headersFinish:
       ctx.headersFinishNext info
+
+    of linger:
+      ctx.lingerNext info
 
     of SyncState.blocks:
       ctx.blocksNext info
@@ -226,9 +289,13 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
       base=ctx.chain.baseNumber, head=ctx.chain.latestNumber,
       target=ctx.subState.headNum, targetHash=ctx.subState.headHash.short
 
-  else:
-    # Most states require synchronisation via `poolMode`
-    ctx.poolMode = true
+  of SyncState.linger:
+    info "State change, waiting for reset", prevState, newState,
+      nSyncPeers=ctx.nSyncPeers()
+
+  of headersCancel, headersFinish, blocksCancel, blocksFinish:
+    # These states require synchronisation via `poolMode`
+    ctx.poolMode = true                             # might be set already
     info "State change, waiting for sync", prevState, newState,
       nSyncPeers=ctx.nSyncPeers()
 
@@ -248,20 +315,32 @@ proc updateLastBlockImported*(ctx: BeaconCtxRef; bn: BlockNumber) =
 proc updateActivateSyncer*(ctx: BeaconCtxRef) =
   ## If in hibernate mode, accept a cache session and activate syncer
   ##
-  if ctx.pool.standByMode:                      # waiting for clear
+  if ctx.pool.standByMode:                          # waiting for clear
     return
 
-  if ctx.hibernate and                          # only in idle mode
+  if ctx.hibernate and                              # only in idle mode
      ctx.pool.minInitBuddies <= ctx.nSyncPeers() and
-     ctx.pool.initTarget.isNone():              # otherwise manual setup
-    let (b, t) = (ctx.chain.baseNumber, ctx.hdrCache.head.number)
+     ctx.pool.initTarget.isNone():                  # otherwise manual setup
+
+    # Initialise header chain
+    let (b, t) =
+      if ctx.pool.stopBase.isNone():                # standard mode
+        (ctx.chain.baseNumber, ctx.hdrCache.head.number)
+      else:
+        let stopBase = ctx.pool.stopBase.unsafeGet
+        if not ctx.hdrCache.updateBlindStop(stopBase):
+          debug "Syncer single run rejected", stopBase=stopBase.number,
+            head=ctx.chain.latestNumber
+          ctx.hdrCache.clear()
+          return
+        (stopBase.number, ctx.hdrCache.head.number)
 
     # Exclude the case of a single header chain which would be `T` only
     if b+1 < t:
-      ctx.pool.minInitBuddies = 0               # reset
-      ctx.pool.syncState = SyncState.headers    # state transition
+      ctx.pool.minInitBuddies = 0                   # reset
+      ctx.pool.syncState = SyncState.headers        # state transition
       ctx.subState.stateSince = Moment.now()
-      ctx.hibernate = false                     # wake up
+      ctx.hibernate = false                         # wake up
 
       # Update range
       ctx.headersUnprocSet(b+1, t-1)
@@ -278,15 +357,27 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
       return
 
   if 0 < ctx.pool.minInitBuddies:
-    trace "Syncer activation rejected", base=ctx.chain.baseNumber,
+    debug "Syncer activation rejected", base=ctx.chain.baseNumber,
       head=ctx.chain.latestNumber, target=ctx.hdrCache.head.number,
-      initTarget=(if ctx.pool.initTarget.isNone(): "n/a"
-                  else: ctx.pool.initTarget.get.hash.short),
+      manualTarget=(if ctx.pool.initTarget.isNone(): "n/a"
+                    else: ctx.pool.initTarget.get.hash.short),
       nSyncPeersMin=ctx.pool.minInitBuddies, nSyncPeers=ctx.nSyncPeers()
   else:
-    trace "Syncer activation rejected", base=ctx.chain.baseNumber,
-      head=ctx.chain.latestNumber, target=ctx.hdrCache.head.number,
-      initTarget=ctx.pool.initTarget.isSome(), nSyncPeers=ctx.nSyncPeers()
+    block noiseCotrol:
+      if ctx.nSyncPeers() < 1 and
+         ctx.pool.initTarget.isSome():
+        # Avoid burst logging every some seconds at the rate of FCU requests
+        # from the CL. This runs in competition with the *No sync peers yet"
+        # messages. As the latter tests the `lastNoPeersLog` at a lower rate,
+        # the syncer message has probabilistic priority.
+        let now = Moment.now()
+        if now < ctx.pool.lastNoPeersLog + noPeersLogWaitInterval:
+          break noiseCotrol
+        ctx.pool.lastNoPeersLog = now
+
+      debug "Syncer activation rejected", base=ctx.chain.baseNumber,
+        head=ctx.chain.latestNumber, target=ctx.hdrCache.head.number,
+        manualTarget=ctx.pool.initTarget.isSome(), nSyncPeers=ctx.nSyncPeers()
 
   # Failed somewhere on the way
   ctx.hdrCache.clear()

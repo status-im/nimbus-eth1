@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -114,7 +114,8 @@ template headersCollect*(buddy: BeaconPeerRef; info: static[string]) =
 
           # Fetch some headers
           rev = buddy.headersFetch(parent, nFetchHeadersRequest, info).valueOr:
-            trace info & ": fetch to disk error ***", peer
+            if 0 < ctx.headersUnprocAvail():
+              trace info & ": Header fetch error", peer
             break fetchHeadersBody                   # error => exit block
 
         ctx.pool.seenData = true                     # header data exist

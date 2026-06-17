@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -43,20 +43,20 @@ proc start*(buddy: BeaconPeerRef; info: static[string]): bool =
     ctx = buddy.ctx
 
   if not ctx.pool.seenData and buddy.peerID in ctx.pool.failedPeers:
-    if not ctx.hibernate: debug info & ": useless peer already tried", peer
+    if not ctx.hibernate: debug info & ": Useless peer already tried", peer
     return false
 
   if not buddy.startSyncPeer():
-    if not ctx.hibernate: debug info & ": failed", peer
+    if not ctx.hibernate: debug info & ": Failed", peer
     return false
 
-  if not ctx.hibernate: debug info & ": new peer",
+  if not ctx.hibernate: debug info & ": New peer",
     peer, nSyncPeers=ctx.nSyncPeers()
   true
 
 proc stop*(buddy: BeaconPeerRef; info: static[string]) =
   ## Clean up this peer
-  if not buddy.ctx.hibernate: debug info & ": release peer",
+  if not buddy.ctx.hibernate: debug info & ": Release peer",
     peer=buddy.peer, thPut=buddy.only.thPutStats.toMeanVar.toStr,
     nSyncPeers=(buddy.ctx.nSyncPeers()-1), state=($buddy.syncState)
   buddy.stopSyncPeer()
@@ -78,7 +78,7 @@ proc runTicker*(ctx: BeaconCtxRef; info: static[string]) =
     let now = Moment.now()
     if ctx.pool.lastNoPeersLog + noPeersLogWaitInterval < now:
       ctx.pool.lastNoPeersLog = now
-      debug info & ": no sync peers yet",
+      debug info & ": No sync peers yet",
         ela=(now - ctx.pool.lastPeerSeen).toStr,
         nOtherPeers=ctx.node.peerPool.connectedNodes.len
 
@@ -101,7 +101,7 @@ template runDaemon*(ctx: BeaconCtxRef; info: static[string]): Duration =
     ctx.updateSyncState info
 
     # Extra waiting time unless immediate change expected.
-    if ctx.pool.syncState in {headers,blocks}:
+    if ctx.pool.syncState in {headers,blocks,linger}:
       bodyRc = daemonWaitInterval
 
   bodyRc
@@ -148,7 +148,7 @@ template runPeer*(
   block body:
     if buddy.somethingToCollectOrUnstage():
 
-      trace info & ": start processing", peer=buddy.peer,
+      trace info & ": Start processing", peer=buddy.peer,
         thPut=buddy.only.thPutStats.toMeanVar.toStr, rankInfo=($rank.assessed),
         rank=(if rank.ranking < 0: "n/a" else: $rank.ranking),
         nSyncPeers=buddy.ctx.nSyncPeers(), state=($buddy.syncState)
