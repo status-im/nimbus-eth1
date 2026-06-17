@@ -9,9 +9,7 @@
 
 {.push raises: [], gcsafe.}
 
-import
-  eth/common/[addresses, block_access_lists],
-  stew/byteutils
+import eth/common/[addresses, block_access_lists], stew/byteutils
 
 func accChangesCmp*(x, y: AccountChanges): int =
   cmp(x.address.data(), y.address.data())

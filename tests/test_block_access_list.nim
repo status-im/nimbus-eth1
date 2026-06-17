@@ -9,7 +9,7 @@
 # distributed except according to those terms.
 
 import
-  ./test_concurrency/[
-    test_lru, test_queue, test_readwritelock, test_semaphore, test_shared_types,
-    test_utils
+  ./test_block_access_list/[
+    test_block_access_list_builder, test_block_access_list_validation,
+    test_block_access_list_tracker,
   ]

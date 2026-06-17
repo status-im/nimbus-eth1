@@ -13,7 +13,7 @@
 import
   unittest2,
   taskpools,
-  ../execution_chain/block_access_list/block_access_list_builder
+  ../../execution_chain/block_access_list/block_access_list_builder
 
 suite "Block access list builder":
   const
@@ -25,7 +25,12 @@ suite "Block access list builder":
     slot3 = 3.u256()
 
   setup:
-    let builder = BlockAccessListBuilderRef.init()
+    var builder: BlockAccessListBuilder
+    builder.init()
+
+
+  teardown:
+    builder.dispose()
 
   test "Add touched account":
     builder.addTouchedAccount(address3)
@@ -133,6 +138,16 @@ suite "Block access list builder":
       bal[1].address == address2
       bal[1].codeChanges == @[(0.BlockAccessIndex, @[0x1.byte]), (1.BlockAccessIndex, @[0x2.byte])]
 
+  test "Overwriting a code change at the same index does not leak":
+    let before = getOccupiedSharedMem()
+    for _ in 0 ..< 100:
+      var b: BlockAccessListBuilder
+      b.init()
+      b.addCodeChange(address1, 3, @[0x1.byte, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8])
+      b.addCodeChange(address1, 3, @[0x9.byte]) # overwrites; old buffer must be freed
+      b.dispose()
+    check getOccupiedSharedMem() == before
+
   test "All changes and reads":
     builder.addTouchedAccount(address3)
     builder.addTouchedAccount(address2)
@@ -196,6 +211,48 @@ suite "Block access list builder":
       bal[2].balanceChanges == @[(3.BlockAccessIndex, 3.u256)]
       bal[2].nonceChanges == @[(1.BlockAccessIndex, 10.AccountNonce)]
 
+
+proc addTouchedAccount(builder: ptr BlockAccessListBuilder, address: Address) =
+  builder[].addTouchedAccount(address)
+
+proc addStorageWrite(
+    builder: ptr BlockAccessListBuilder,
+    address: Address,
+    slot: UInt256,
+    blockAccessIndex: int,
+    newValue: UInt256,
+) =
+  builder[].addStorageWrite(address, slot, blockAccessIndex, newValue)
+
+proc addStorageRead(
+    builder: ptr BlockAccessListBuilder, address: Address, slot: UInt256
+) =
+  builder[].addStorageRead(address, slot)
+
+proc addBalanceChange(
+    builder: ptr BlockAccessListBuilder,
+    address: Address,
+    blockAccessIndex: int,
+    postBalance: UInt256,
+) =
+  builder[].addBalanceChange(address, blockAccessIndex, postBalance)
+
+proc addNonceChange(
+    builder: ptr BlockAccessListBuilder,
+    address: Address,
+    blockAccessIndex: int,
+    newNonce: AccountNonce,
+) =
+  builder[].addNonceChange(address, blockAccessIndex, newNonce)
+
+proc addCodeChange(
+    builder: ptr BlockAccessListBuilder,
+    address: Address,
+    blockAccessIndex: int,
+    newCode: openArray[byte],
+) =
+  builder[].addCodeChange(address, blockAccessIndex, newCode)
+
 suite "Concurrent block access list builder":
   const
     address1 = address"0x10007bc31cedb7bfb8a345f31e668033056b2728"
@@ -206,10 +263,13 @@ suite "Concurrent block access list builder":
     slot3 = 3.u256()
 
   setup:
-    let
-      taskpool = Taskpool.new()
-      builder = ConcurrentBlockAccessListBuilderRef.init()
-      builderPtr = builder.addr
+    let taskpool = Taskpool.new()
+    var builder: BlockAccessListBuilder
+    builder.init(threadSafe = true)
+    let builderPtr = builder.addr
+
+  teardown:
+    builder.dispose()
 
   test "Add touched account":
     taskpool.spawn builderPtr.addTouchedAccount(address3)

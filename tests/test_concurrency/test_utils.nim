@@ -189,3 +189,4 @@ suite "Concurrency Utils Tests":
       check rc(src) == before
       dest.unborrowRef()
       check rc(src) == before
+

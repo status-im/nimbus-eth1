@@ -72,6 +72,9 @@ proc statelessProcessBlock*(
     parent, blk.header, com, memoryTxFrame, storeSlotHash = false,
     enableBalTracker = com.isAmsterdamOrLater(blk.header.timestamp))
 
+  defer:
+    memoryVmState.dispose()
+
   # Execute the block with all validations enabled
   ?memoryVmState.processBlock(
     blk,
