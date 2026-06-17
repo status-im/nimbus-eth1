@@ -65,6 +65,18 @@ suite "SharedTable Tests":
       t.get(3) == Opt.some(30)
     t.dispose()
 
+  test "getOrDefault returns the value when present or a default when absent":
+    var t = SharedTable[int, int].init()
+    t.put(1, 10)
+
+    check:
+      t.getOrDefault(1) == 10 # present
+      t.getOrDefault(2) == 0 # absent -> default(int)
+      t.getOrDefault(1, -1) == 10 # present ignores the supplied default
+      t.getOrDefault(2, -1) == -1 # absent -> supplied default
+      t.len == 1 # lookups never insert
+    t.dispose()
+
   test "put updates an existing key without changing len":
     var t = SharedTable[int, int].init()
     t.put(1, 10)

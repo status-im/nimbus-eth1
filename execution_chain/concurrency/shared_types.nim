@@ -236,6 +236,31 @@ func get*[K, V](s: SharedTable[K, V], key: K): Opt[V] =
 template `[]`*[K, V](s: SharedTable[K, V], key: K): Opt[V] =
   s.get(key)
 
+func getOrDefault*[K, V](s: SharedTable[K, V], key: K): V =
+  ## Retrieve the value associated with `key`, or `default(V)` if `key` is
+  ## absent.
+  ##
+  ## The value is copied out, so this requires a copyable V and will not compile
+  ## for move-only value types (e.g. SharedBytes or a nested SharedTable); use
+  ## `withValue` to borrow such values in place instead.
+  let idx = s.findEntry(subhash(key), key)
+  if idx.isSome():
+    s.entries[idx[]].value
+  else:
+    default(V)
+
+func getOrDefault*[K, V](s: SharedTable[K, V], key: K, default: V): V =
+  ## Retrieve the value associated with `key`, or `default` if `key` is absent.
+  ##
+  ## The value is copied out, so this requires a copyable V and will not compile
+  ## for move-only value types (e.g. SharedBytes or a nested SharedTable); use
+  ## `withValue` to borrow such values in place instead.
+  let idx = s.findEntry(subhash(key), key)
+  if idx.isSome():
+    s.entries[idx[]].value
+  else:
+    default
+
 proc put*[K, V](s: var SharedTable[K, V], key: K, value: sink V) =
   ## Insert or update `key` with `value`, growing the table if needed.
   ##
