@@ -29,6 +29,7 @@ type
     StoLeaf
     Branch
     ExtBranch
+    ExtNode # Stateless only type
 
   AristoAccount* = object
     ## Application relevant part of an Ethereum account. Note that the storage
@@ -55,6 +56,14 @@ type
 
   ExtBranchRef* = ref object of BranchRef
     pfx*: NibblesBuf
+
+  ExtNodeRef* = ref object of VertexRef
+    ## Stateless only type, represents a standard MPT Extension node:
+    ## pfx as usual path prefix, childKey is the hash of the absent branch child.
+    ## Created from witness by putSubtrie for non-membership proof boundaries.
+    ## Never created / used during full-node execution.
+    pfx*: NibblesBuf
+    childKey*: HashKey
 
   LeafRef* = ref object of VertexRef
     pfx*: NibblesBuf
@@ -110,7 +119,7 @@ type
 const
   Leaves* = {VertexType.AccLeaf, VertexType.StoLeaf}
   Branches* = {VertexType.Branch, VertexType.ExtBranch}
-  VertexTypes* = Leaves + Branches
+  VertexTypes* = Leaves + Branches + {VertexType.ExtNode}
 
 # ------------------------------------------------------------------------------
 # Public helpers (misc)
@@ -131,6 +140,9 @@ template init*(
     _: type ExtBranchRef, pfxp: NibblesBuf, startVidp: VertexID, usedp: uint16
 ): ExtBranchRef =
   ExtBranchRef(vType: ExtBranch, pfx: pfxp, startVid: startVidp, used: usedp)
+
+template init*(_: type ExtNodeRef, pfxp: NibblesBuf, childKeyp: HashKey): ExtNodeRef =
+  ExtNodeRef(vType: ExtNode, pfx: pfxp, childKey: childKeyp)
 
 template init*(
     T: type CachedAccLeaf, pfxp: NibblesBuf, accountp: AristoAccount, stoIDp: StorageID): T =
@@ -181,6 +193,8 @@ template pfx*(vtx: VertexRef): NibblesBuf =
     LeafRef(vtx).pfx
   of ExtBranch:
     ExtBranchRef(vtx).pfx
+  of ExtNode:
+    ExtNodeRef(vtx).pfx
   of Branch:
     emptyNibbles
 
@@ -231,13 +245,15 @@ proc `==`*(a, b: VertexRef): bool =
       BranchRef(a)[] == BranchRef(b)[]
     of ExtBranch:
       ExtBranchRef(a)[] == ExtBranchRef(b)[]
+    of ExtNode:
+      ExtNodeRef(a)[] == ExtNodeRef(b)[]
   else:
     true
 
 iterator pairs*(vtx: VertexRef): tuple[nibble: uint8, vid: VertexID] =
-  ## Iterates over the sub-vids of a branch (does nothing for leaves)
+  ## Iterates over the sub-vids of a branch (does nothing for leaves or ExtNode)
   case vtx.vType
-  of Leaves:
+  of Leaves, ExtNode:
     discard
   of Branches:
     let vtx = BranchRef(vtx)
@@ -246,10 +262,10 @@ iterator pairs*(vtx: VertexRef): tuple[nibble: uint8, vid: VertexID] =
         yield (n, VertexID(uint64(vtx.startVid) + n))
 
 iterator allPairs*(vtx: VertexRef): tuple[nibble: uint8, vid: VertexID] =
-  ## Iterates over the sub-vids of a branch (does nothing for leaves) including
-  ## currently unset nodes
+  ## Iterates over the sub-vids of a branch (does nothing for leaves or ExtNode)
+  ## including currently unset nodes
   case vtx.vType
-  of Leaves:
+  of Leaves, ExtNode:
     discard
   of Branches:
     let vtx = BranchRef(vtx)
@@ -296,6 +312,9 @@ func dup*(vtx: VertexRef): VertexRef =
     of ExtBranch:
       let vtx = ExtBranchRef(vtx)
       ExtBranchRef.init(vtx.pfx, vtx.startVid, vtx.used)
+    of ExtNode:
+      let vtx = ExtNodeRef(vtx)
+      ExtNodeRef.init(vtx.pfx, vtx.childKey)
 
 template dup*(vtx: StoLeafRef): StoLeafRef =
   StoLeafRef(VertexRef(vtx).dup())
@@ -308,6 +327,9 @@ template dup*(vtx: BranchRef): BranchRef =
 
 template dup*(vtx: ExtBranchRef): ExtBranchRef =
   ExtBranchRef(VertexRef(vtx).dup())
+
+template dup*(vtx: ExtNodeRef): ExtNodeRef =
+  ExtNodeRef(VertexRef(vtx).dup())
 
 func `$`*(aa: AristoAccount): string =
   $aa.nonce & "," & $aa.balance & "," &
@@ -344,6 +366,12 @@ func `$`*(vtx: ExtBranchRef): string =
   else:
     "E(" & $vtx.pfx & ":"  & $vtx.startVid & "+" & toBin(BiggestInt(vtx.used), 16) & ")"
 
+func `$`*(vtx: ExtNodeRef): string =
+  if vtx == nil:
+    "EN(nil)"
+  else:
+    "EN(" & $vtx.pfx & ":" & $vtx.childKey & ")"
+
 func `$`*(vtx: VertexRef): string =
   if vtx == nil:
     "V(nil)"
@@ -357,6 +385,8 @@ func `$`*(vtx: VertexRef): string =
       $(BranchRef(vtx)[])
     of ExtBranch:
       $(ExtBranchRef(vtx)[])
+    of ExtNode:
+      $(ExtNodeRef(vtx)[])
 
 
 # ------------------------------------------------------------------------------

@@ -44,10 +44,7 @@ import
     test_tx_frame_blobify,
     test_networking,
     test_pooled_tx,
-    test_stateless_witness_types,
-    test_stateless_witness_generation,
-    test_stateless_witness_verification,
-    test_stateless_execution,
+    test_stateless,
     test_block_access_list,
     test_pruner,
     # These suites below are much slower than all the rest, so run them last

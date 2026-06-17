@@ -12,7 +12,7 @@
 
 import
   unittest2,
-  ../execution_chain/stateless/witness_types
+  ../../execution_chain/stateless/witness_types
 
 suite "Stateless: Witness Types":
 

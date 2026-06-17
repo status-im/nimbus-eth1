@@ -195,6 +195,8 @@ proc blobifyTo*(vtx: VertexRef, key: HashKey, data: var VertexBuf) =
 
   let bits =
     case vtx.vType
+    of ExtNode:
+      raiseAssert "ExtNode is stateless-only and must never be persisted"
     of Branches:
       let
         vtx = BranchRef(vtx)

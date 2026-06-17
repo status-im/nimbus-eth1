@@ -91,6 +91,10 @@ proc retrieveAccStatic(
           err FetchPathNotFound
         else:
           ok (vtx, path, next)
+    of ExtNode:
+      # Stateless-only boundary: child branch absent from witness, not traversable.
+      countHitOrLower()
+      return err FetchPathNotFound
     of ExtBranch:
       let vtx = ExtBranchRef(vtx[0])
 
