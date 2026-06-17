@@ -55,7 +55,7 @@ proc toNode*(
     # Need to resolve storage root for account leaf
     return ok node
 
-  of ExtNode:
+  of BoundaryNode:
     # No child vids to resolve as the branch child is absent by design
     let node = NodeRef(vtx: vtx.dup())
     return ok node
@@ -76,7 +76,7 @@ iterator subVids*(vtx: VertexRef): VertexID =
     if stoID.isValid:
       yield stoID.vid
 
-  of StoLeaf, ExtNode:
+  of StoLeaf, BoundaryNode:
     discard
   of Branches:
     for _, subvid in vtx.pairs():
@@ -89,7 +89,7 @@ iterator subVidKeys*(node: NodeRef): (VertexID,HashKey) =
     let stoID = AccLeafRef(node.vtx).stoID
     if stoID.isValid:
       yield (stoID.vid, node.key[0])
-  of StoLeaf, ExtNode:
+  of StoLeaf, BoundaryNode:
     discard
   of Branches:
     for n, subvid in node.vtx.pairs():

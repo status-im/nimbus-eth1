@@ -37,8 +37,8 @@ proc checkTopStrict*(
 
     elif key.isValid:
       # So `vtx` and `key` exist
-      if vtx.vType == ExtNode:
-        # ExtNode has branch absent (not part of witness), so pre-computed key is trusted
+      if vtx.vType == BoundaryNode:
+        # BoundaryNode has branch absent (not part of witness), so pre-computed key is trusted
         continue
       let node = vtx.toNode(rvid.root, db).valueOr:
         # not all sub-keys might be ready du to lazy hashing
@@ -63,8 +63,8 @@ proc checkTopProofMode*(
     if key.isValid:                              # Otherwise to be deleted
       let vtx = db.getVtx rvid
       if vtx.isValid:
-        # ExtNode has branch absent (not part of witness), so pre-computed key is trusted
-        if vtx.vType == ExtNode:
+        # BoundaryNode has branch absent (not part of witness), so pre-computed key is trusted
+        if vtx.vType == BoundaryNode:
           continue
         let node = vtx.toNode(rvid.root, db).valueOr:
           continue
@@ -101,7 +101,7 @@ proc checkTopCommon*(
               return err((stoVid,CheckAnyVidDeadStorageRoot))
             stoRoots.incl stoVid
       of StoLeaf: discard
-      of ExtNode: discard
+      of BoundaryNode: discard
       of Branches:
         block check42Links:
           var seen = false

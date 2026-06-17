@@ -198,16 +198,16 @@ proc mergePayloadImpl[LeafType, T](
         resetKeys()
         return ok((leafVtx, nil, nil))
 
-    of ExtNode:
-      let evtx = ExtNodeRef(vtx)
+    of BoundaryNode:
+      let evtx = BoundaryNodeRef(vtx)
       if n == evtx.pfx.len:
         # Full prefix match: the new key would traverse into the absent branch
         # child. This is not supported in partial-trie / stateless mode.
         return err(MergeHikeFailed)
       else:
-        # Partial prefix match: split the ExtNode at the divergence point,
+        # Partial prefix match: split the BoundaryNode at the divergence point,
         # creating a new branch. This is similar as for leaves except that
-        # the existing ExtNode is moved down one level.
+        # the existing BoundaryNode is moved down one level.
         let
           startVid =
             if root == STATE_ROOT_VID:
@@ -220,13 +220,13 @@ proc mergePayloadImpl[LeafType, T](
             else:
               BranchRef.init(startVid, 0)
 
-        # Place the existing ExtNode content at its new position
+        # Place the existing BoundaryNode content at its new position
         let
           local = branch.setUsed(evtx.pfx[n], true)
           pfx = evtx.pfx.slice(n + 1)
         if pfx.len > 0:
-          # Remaining prefix: create new ExtNode pointing to the same child.
-          let newExt = ExtNodeRef.init(pfx, evtx.childKey)
+          # Remaining prefix: create new BoundaryNode pointing to the same child.
+          let newExt = BoundaryNodeRef.init(pfx, evtx.childKey)
           db.layersPutKey(
             (root, local), newExt,
             rlpEncodeExt(pfx, evtx.childKey).digestTo(HashKey))

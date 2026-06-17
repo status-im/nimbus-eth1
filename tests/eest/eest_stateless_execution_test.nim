@@ -28,11 +28,6 @@ const skipFiles = [
   #
   # --- eest_zkevm files with failures ---
   #
-  # persistStorage(): Unspecified(Aristo, ctx=, error=DelVidStaleVtx) [AssertionDefect]
-  # -> on execution with test vector witness
-  # generated witness has an extra state node, stateless execution works with it
-  "witness_state_block_diff_delete_insert_before_delete_order.json",
-  #
   # Witness codes mismatch -> codes optimisation: implemented in
   # https://github.com/status-im/nimbus-eth1/pull/4099
   "witness_codes_create_same_hash_then_read.json",

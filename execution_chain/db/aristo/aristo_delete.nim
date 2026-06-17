@@ -19,7 +19,7 @@ import
   eth/common/hashes,
   results,
   ./aristo_delete/delete_subtree,
-  "."/[aristo_desc, aristo_fetch, aristo_get, aristo_hike, aristo_layers]
+  "."/[aristo_desc, aristo_fetch, aristo_get, aristo_hike, aristo_layers, aristo_serialise]
 
 # ------------------------------------------------------------------------------
 # Private heplers
@@ -86,7 +86,26 @@ proc deleteImpl(
       vid = brVtx.bVid(uint8 nbl)
       nxt = db.getVtx (hike.root, vid)
     if not nxt.isValid:
-      return err(DelVidStaleVtx)
+      # In stateless mode the surviving child may be a nil vertex boundary,
+      # absent from the witness but with a known hash in kMap. Collapse the
+      # branch into a BoundaryNode (prefix + boundary hash) so state root
+      # computation stays correct.
+      # In a full node this should be unreachable: every referenced child vid
+      # should always have a non zero vertex.
+      let childKey = db.layersGetKeyOrVoid((hike.root, vid))
+      doAssert childKey.isValid,
+        "nil surviving child without boundary hash, this is not a valid stateless boundary"
+      let pfx =
+        if brVtx.vType == Branch:
+          NibblesBuf.nibble(nbl.byte)
+        else:
+          ExtBranchRef(brVtx).pfx & NibblesBuf.nibble(nbl.byte)
+      let newExt = BoundaryNodeRef.init(pfx, childKey)
+      db.layersPutKey(
+        (hike.root, br.vid), newExt,
+        rlpEncodeExt(pfx, childKey).digestTo(HashKey))
+      db.layersResVtx((hike.root, vid))
+      return ok(VertexRef(newExt))
 
     db.layersResVtx((hike.root, vid))
     let
@@ -109,9 +128,9 @@ proc deleteImpl(
         of ExtBranch:
           let nxt = ExtBranchRef(nxt)
           ExtBranchRef.init(pfx & nxt.pfx, nxt.startVid, nxt.used)
-        of ExtNode:
-          let nxt = ExtNodeRef(nxt)
-          ExtNodeRef.init(pfx & nxt.pfx, nxt.childKey)
+        of BoundaryNode:
+          let nxt = BoundaryNodeRef(nxt)
+          BoundaryNodeRef.init(pfx & nxt.pfx, nxt.childKey)
 
     # Put the new vertex at the id of the obsolete branch
     db.layersPutVtx((hike.root, br.vid), vtx)
@@ -156,8 +175,8 @@ proc deleteAccount*(
         Hash32(getBytes(NibblesBuf.fromBytes(accPath.data).replaceSuffix(AccLeafRef(otherVtx).pfx)))
       db.layersPutAccLeaf(sibAccPath, AccLeafRef(otherVtx))
       if db.collectWitness:
-        db.collapsedSiblings.add((sibAccPath, Opt.none(Hash32)))
-    elif db.collectWitness:
+        db.collapsedSiblings.add((sibAccPath, Opt.none(Hash32), VertexID(0), VertexID(0)))
+    elif db.collectWitness and otherVtx.vType in Branches:
       # Branch collapse with non-leaf sibling: the witness must include the
       # sibling branch node so stateless execution can read it. This builds a
       # proof path for it: root prefix + extBranch.pfx (rest is arbitrary).
@@ -172,7 +191,7 @@ proc deleteAccount*(
         sibAccPath = Hash32(
           getBytes(accNibbles.slice(0, branchDepth) & ExtBranchRef(otherVtx).pfx)
         )
-      db.collapsedSiblings.add((sibAccPath, Opt.none(Hash32)))
+      db.collapsedSiblings.add((sibAccPath, Opt.none(Hash32), VertexID(0), VertexID(0)))
 
   ok()
 
@@ -230,8 +249,13 @@ proc deleteSlot*(
         leafMixPath = mixUp(accPath, sibStoPath)
       db.layersPutStoLeaf(leafMixPath, StoLeafRef(otherVtx))
       if db.collectWitness:
-        db.collapsedSiblings.add((accPath, Opt.some(sibStoPath)))
-    elif db.collectWitness:
+        # Record the collapsed branch vid so we can check after all transactions
+        # whether the collapse was re-expanded by a later insertion.
+        db.collapsedSiblings.add((
+            accPath, Opt.some(sibStoPath),
+            stoID.vid,
+            stoHike.legs[^2].wp.vid))
+    elif db.collectWitness and otherVtx.vType in Branches:
       # Branch collapse with non-leaf sibling: the witness must include the
       # sibling branch node so stateless execution can read it. This builds a
       # proof path for it: root prefix + extBranch.pfx (rest is arbitrary).
@@ -244,7 +268,7 @@ proc deleteSlot*(
         sibStoPath = Hash32(
           getBytes(stoNibbles.slice(0, branchDepth) & ExtBranchRef(otherVtx).pfx)
         )
-      db.collapsedSiblings.add((accPath, Opt.some(sibStoPath)))
+      db.collapsedSiblings.add((accPath, Opt.some(sibStoPath), VertexID(0), VertexID(0)))
 
   # If there was only one item (that got deleted), update the account as well
   if stoHike.legs.len == 1:
