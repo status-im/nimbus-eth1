@@ -25,7 +25,9 @@ suite "Block access list builder":
     slot3 = 3.u256()
 
   setup:
-    var builder = BlockAccessListBuilder.init()
+    var builder: BlockAccessListBuilder
+    builder.init()
+
 
   teardown:
     builder.dispose()
@@ -139,7 +141,8 @@ suite "Block access list builder":
   test "Overwriting a code change at the same index does not leak":
     let before = getOccupiedSharedMem()
     for _ in 0 ..< 100:
-      var b = BlockAccessListBuilder.init()
+      var b: BlockAccessListBuilder
+      b.init()
       b.addCodeChange(address1, 3, @[0x1.byte, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8])
       b.addCodeChange(address1, 3, @[0x9.byte]) # overwrites; old buffer must be freed
       b.dispose()
@@ -261,7 +264,8 @@ suite "Concurrent block access list builder":
 
   setup:
     let taskpool = Taskpool.new()
-    var builder = BlockAccessListBuilder.init(threadSafe = true)
+    var builder: BlockAccessListBuilder
+    builder.init(threadSafe = true)
     let builderPtr = builder.addr
 
   teardown:
