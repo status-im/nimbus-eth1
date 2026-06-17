@@ -189,7 +189,7 @@ template sessionResume*(
       state = sdb.register(p.root, p.hash, p.number, info)
 
       # Walk account for the current state root
-      for w in adb.walkAccounts(p.root):
+      for w in adb.walkAccount(p.root):
         if 0 < w.error.len:
           chronicles.info info & ": Bad accounts record ignored",
             error=w.error, root=state.rootStr

@@ -38,7 +38,7 @@ type
     state: WalkStateData                            # current state data
     distance: uint64                                # distance to pivot state
 
-    accData: WalkAccounts                           # accounts range from cache
+    accData: WalkAccount                            # accounts range from cache
     accRange: ItemKeyRange                          # avoid repeated calculation
 
     fullCov: ItemKeyRangeSet                        # collect all ranges
@@ -511,7 +511,7 @@ template sessionMkTrie*(ctx: SnapCtxRef; info: static[string]): auto =
       let root {.inject,used} = state.toStr         # logging only
 
       # Walk account for the current state root
-      for w in session.db.walkAccounts(state.root):
+      for w in session.db.walkAccount(state.root):
         accData = w                                 # update descriptor fields
         accRange = ItemKeyRange.new(w.start, w.limit)
 
@@ -528,7 +528,7 @@ template sessionMkTrie*(ctx: SnapCtxRef; info: static[string]): auto =
         session.mkTrieImpl(info).isErrOr:
           if value == ECancelledError:              # check for shutdown
             break body                              # otherwise ignore for now
-        # End `for walkAccounts()`
+        # End `for walkAccount()`
 
       if state.tag == Untagged:                     # Register updated state
         state.tag = (if session.isPivot: PivotOnTrie else: OnTrie)
