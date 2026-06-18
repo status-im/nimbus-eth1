@@ -117,12 +117,26 @@ template to*(h: StateRoot|StoreRoot|BlockHash; _: type HashKey): HashKey =
   ## Variant of `desc_identifiers.to()`
   h.Hash32.to(HashKey)
 
-func digestTo*(node: ProofNode, _: type HashKey, rootKey: HashKey): HashKey =
+func digestToOrPlain*(node: ProofNode, _: type HashKey, root: HashKey): HashKey=
   ## Variant of `desc_identifiers.digestTo()`
   let key32 = HashKey.fromBytes(node.distinctBase.keccak256.data).value
-  if 32 <= node.distinctBase.len or key32 == rootKey:
+  if 32 <= node.distinctBase.len or key32 == root:
     return key32
   HashKey.fromBytes(node.distinctBase).value
+
+func digestToOrPlain*(node: openArray[byte], _: type HashKey, root: HashKey): HashKey =
+  ## Variant of `desc_identifiers.digestTo()`
+  let key32 = HashKey.fromBytes(node.keccak256.data).value
+  if 32 <= node.len or key32 == root:
+    return key32
+  HashKey.fromBytes(node).value
+
+func digestToOrPlain*(node: openArray[byte], _: type HashKey): HashKey =
+  ## Variant of `desc_identifiers.digestTo()`
+  let key32 = HashKey.fromBytes(node.keccak256.data).value
+  if 32 <= node.len:
+    return key32
+  HashKey.fromBytes(node).value
 
 # ------------------------------------------------------------------------------
 # End

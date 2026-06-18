@@ -53,7 +53,7 @@ proc nodeStash(
       ): bool =
   ## Decode a trusted rlp-encoded node and add it to the node list.
   ##
-  let selfKey = proofNode.digestTo(HashKey, rootKey)
+  let selfKey = proofNode.digestToOrPlain(HashKey, rootKey)
   if nodes.hasKey selfKey:                          # Already seen and listed?
     return true
 
@@ -343,7 +343,7 @@ template reKeyWalkerLeaf(node: LeafNodeRef) =
   wrt.append @(node.lfPfx.toHexPrefix(true).data())
   wrt.append node.lfPayload
   node.lfData = wrt.finish()
-  node.selfKey = node.lfData.digestTo(HashKey)
+  node.selfKey = node.lfData.digestToOrPlain(HashKey)
 
 proc reKeyWalkerBranch(node: var BranchNodeRef) =
   var wrt = initRlpList 17
