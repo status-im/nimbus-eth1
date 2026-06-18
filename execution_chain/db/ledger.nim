@@ -20,7 +20,7 @@ import
   ../evm/code_bytes,
   ../constants,
   ./[access_list as ac_access_list, core_db, storage_types],
-  ./aristo/aristo_blobify
+  ./aristo/[aristo_blobify, aristo_desc, aristo_get]
 
 export
   code_bytes, core_db.computeAccPath, core_Db.computeSlotKey
@@ -664,10 +664,23 @@ proc clearEmptyAccounts(ledger: LedgerRef) =
 template getWitnessKeys*(ledger: LedgerRef): WitnessTable =
   ledger.witnessKeys
 
-template getCollapsedSiblings*(
+proc getCollapsedSiblings*(
     ledger: LedgerRef
 ): seq[tuple[sibAccPath: Hash32, sibStoPath: Opt[Hash32]]] =
-  ledger.txFrame.aTx.collapsedSiblings
+  ## Collapsed siblings for witness generation. StoLeaf collapses (brVid
+  ## valid) are only included if brVid is still a StoLeaf in the final trie.
+  ## A branch there means a later insertion expanded it again, no auxiliary
+  ## needed.
+  let db = ledger.txFrame.aTx
+  var res: seq[tuple[sibAccPath: Hash32, sibStoPath: Opt[Hash32]]]
+  for (accPath, sibStoPath, stoRoot, brVid) in db.collapsedSiblings:
+    if brVid.isValid:
+      let vtx = db.getVtx((stoRoot, brVid))
+      if vtx.isValid and vtx.vType == StoLeaf:
+        res.add((accPath, sibStoPath))
+    else:
+      res.add((accPath, sibStoPath))
+  res
 
 template clearWitnessKeys*(ledger: LedgerRef) =
   ledger.witnessKeys.clear()

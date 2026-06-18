@@ -59,10 +59,10 @@ proc chainRlpNodes(
 
   # Follow up child node
   case vtx.vType:
-  of ExtNode:
-    # Proof generation is only called on full nodes; ExtNode (stateless
+  of BoundaryNode:
+    # Proof generation is only called on full nodes; BoundaryNode (stateless
     # boundary) must never appear here.
-    raiseAssert "ExtNode in proof generation"
+    raiseAssert "BoundaryNode in proof generation"
 
   of Leaves:
     chain.add(rlpNodes[0])
@@ -419,11 +419,11 @@ proc convertSubtrie(
             key: childNode.key,
             vtx: ExtBranchRef.init(segm, childBranch.startVid, childBranch.used))
         else:
-          # Branch absent from witness (proof boundary): represent as an
-          # ExtNode carrying the branch hash as childKey.
+          # Child absent from witness (proof boundary): represent as a
+          # BoundaryNode carrying the child hash as childKey.
           NodeRef(
             key: default(array[16, HashKey]),
-            vtx: ExtNodeRef.init(segm, k))
+            vtx: BoundaryNodeRef.init(segm, k))
 
     of 17: # Branch node
       var key: array[16, HashKey]
@@ -477,9 +477,9 @@ proc putSubtrie(
     of StoLeaf:
       discard
 
-    of ExtNode:
+    of BoundaryNode:
       # Store vertex and pre-computed extension hash
-      db.layersPutKey(rvid, ExtNodeRef(node.vtx), key)
+      db.layersPutKey(rvid, BoundaryNodeRef(node.vtx), key)
       return ok()
 
     of Branch, ExtBranch:

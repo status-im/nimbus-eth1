@@ -39,8 +39,8 @@ func getNibblesImpl(hike: Hike; start = 0; maxLen = high(int)): NibblesBuf =
     of ExtBranch:
       let vtx = ExtBranchRef(leg.wp.vtx)
       result = result & vtx.pfx & NibblesBuf.nibble(leg.nibble.byte)
-    of ExtNode:
-      discard # ExtNode never successfully steps forward
+    of BoundaryNode:
+      discard # BoundaryNode never successfully steps forward
     of Leaves:
       let vtx = LeafRef(leg.wp.vtx)
       result = result & vtx.pfx
@@ -113,8 +113,8 @@ proc step*(
 
     ok (vtx, vtx.pfx.len + 1, nextVid)
 
-  of ExtNode:
-    # branch absent from witness, no reachable child VID
+  of BoundaryNode:
+    # child absent from witness, no reachable child VID
     return err(HikeBranchMissingEdge)
 
 
@@ -188,8 +188,8 @@ proc hikeUp*[LeafType](
     of ExtBranch:
       let vtx = ExtBranchRef(vtx)
       hike.legs.add Leg(wp: wp, nibble: int8 path[vtx.pfx.len])
-    of ExtNode:
-      discard # step() always fails for ExtNode thus this is unreachable
+    of BoundaryNode:
+      discard # step() always fails for BoundaryNode thus this is unreachable
 
     path = path.slice(common)
     vid = next

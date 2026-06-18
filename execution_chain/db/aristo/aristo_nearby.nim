@@ -49,8 +49,8 @@ iterator rightPairs*(
         var x = hike.legs[^1]
 
         case x.wp.vtx.vType
-        of ExtNode:
-          discard # ExtNode never appears in hike legs (step always fails for it)
+        of BoundaryNode:
+          discard # BoundaryNode never appears in hike legs (step always fails for it)
         of Branches:
           let vtx = BranchRef(x.wp.vtx)
           for i in uint8(x.nibble + 1) ..< 16u8:

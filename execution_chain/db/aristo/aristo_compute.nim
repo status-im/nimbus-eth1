@@ -213,7 +213,7 @@ template childVid(vp: VertexRef): VertexID =
   of Branch, ExtBranch:
     let v = BranchRef(v)
     v.startVid
-  of ExtNode, StoLeaf:
+  of BoundaryNode, StoLeaf:
     default(VertexID)
 
 proc computeKeyImplTask(
@@ -277,11 +277,11 @@ proc computeKeyImpl(
     of StoLeaf:
       let vtx = StoLeafRef(vtx)
       rlpEncodeStoLeaf(vtx.pfx, vtx.stoData).digestTo(HashKey)
-    of ExtNode:
+    of BoundaryNode:
       # Boundary node from a witness (no branch): pfx and childKey (absent branch
       # hash) are sufficient to get the extension RLP. putSubtrie set the key
       # so normally this branch is not reached.
-      let ev = ExtNodeRef(vtx)
+      let ev = BoundaryNodeRef(vtx)
       rlpEncodeExt(ev.pfx, ev.childKey).digestTo(HashKey)
     of Branches:
       # For branches, we need to load the vertices before recursing into them

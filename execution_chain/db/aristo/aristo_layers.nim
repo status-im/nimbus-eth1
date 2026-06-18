@@ -149,7 +149,7 @@ func layersPutKey*(
 func layersPutKey*(
     db: AristoTxRef;
     rvid: RootedVertexID;
-    vtx: ExtNodeRef,
+    vtx: BoundaryNodeRef,
     key: HashKey;
       ) =
   ## Stores the live vertex so mergePayloadImpl can read pfx/childKey on split.

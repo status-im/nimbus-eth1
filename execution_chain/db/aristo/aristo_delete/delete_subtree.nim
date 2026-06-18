@@ -36,7 +36,7 @@ proc delStoTreeNow(
     let vtx = BranchRef(vtx)
     for n, subvid in vtx.pairs():
       ?db.delStoTreeNow((rvid.root, subvid), accPath, stoPath & NibblesBuf.nibble(n))
-  of ExtNode:
+  of BoundaryNode:
     discard # stateless only boundary node has no subvids to recurse into
   of ExtBranch:
     let vtx = ExtBranchRef(vtx)
