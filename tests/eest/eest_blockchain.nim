@@ -178,7 +178,11 @@ proc compare(
 
   ok()
 
-proc runTest(env: TestEnv, unit: BlockchainUnitEnv, statelessEnabled = false): Future[Result[void, string]] {.async.} =
+proc runTest(
+    env: TestEnv,
+    statelessEnv: Opt[TestEnv],
+    unit: BlockchainUnitEnv,
+): Future[Result[void, string]] {.async.} =
   let blocks = parseBlocks(unit.blocks)
   var latestStateRoot = unit.genesisBlockHeader.stateRoot
 
@@ -190,13 +194,15 @@ proc runTest(env: TestEnv, unit: BlockchainUnitEnv, statelessEnabled = false): F
       if blk.badBlock:
         return err("Bad block got imported succesfully")
       else:
-        if statelessEnabled:
+        if statelessEnv.isSome():
           # Get witness that should have been generated when importing the block
           var witness = env.chain.getExecutionWitness(blk.blk.header.computeRlpHash).valueOr:
             return err("Execution witness was not found in the database")
 
+          let com = statelessEnv.get().chain.com
+
           # process block stateless with generated witness
-          ?witness.statelessProcessBlock(env.chain.com, blk.blk, verifyState = true)
+          ?witness.statelessProcessBlock(com, blk.blk, verifyState = true)
 
           let successful_validation =
             if blk.statelessValidationResult.isSome():
@@ -208,7 +214,7 @@ proc runTest(env: TestEnv, unit: BlockchainUnitEnv, statelessEnabled = false): F
             # If block witness in test vector and validation is successful,
             # process block stateless with test vector witness
             let expectedWitness = blk.witness.value()
-            ?expectedWitness.statelessProcessBlock(env.chain.com, blk.blk)
+            ?expectedWitness.statelessProcessBlock(com, blk.blk)
 
             # compare both witnesses
             ?compare(witness, expectedWitness)
@@ -244,10 +250,18 @@ proc processFile*(filePath: string, statelessEnabled = false, parallelEnabled = 
         let header = testUnit.genesisBlockHeader.to(Header)
         check testUnit.genesisBlockHeader.hash == header.computeRlpHash
         let env = prepareEnv(testUnit, header, rpcEnabled = false, statelessEnabled, parallelEnabled)
+        let statelessEnv =
+          if statelessEnabled:
+            # with stateless execution, parallelEnabled is always set to false
+            Opt.some(prepareEnv(testUnit, header, rpcEnabled = false, statelessEnabled = true, parallelEnabled = false))
+          else:
+            Opt.none(TestEnv)
 
-        let testResult = waitFor env.runTest(testUnit, statelessEnabled)
+        let testResult = waitFor env.runTest(statelessEnv, testUnit)
         check testResult == Result[void, string].ok()
 
+        if statelessEnv.isSome():
+          statelessEnv.get().close()
         env.close()
 
 when isMainModule:

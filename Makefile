@@ -136,7 +136,6 @@ endif
 	eest_engine_test \
 	eest_blockchain \
 	eest_blockchain_test \
-	eest_stateless_execution_test \
 	eest_full_test \
 	t8n \
 	t8n_test \
@@ -438,9 +437,6 @@ eest_engine_test: | build deps eest
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
 
 eest_blockchain_test: | build deps eest
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
-
-eest_stateless_execution_test: | build deps eest
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
 
 eest_full_test: | build deps eest

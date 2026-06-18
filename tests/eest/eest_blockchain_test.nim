@@ -18,11 +18,14 @@ const
   eestType = "blockchain_tests"
   eestReleases = [
     "eest_develop",
-    "eest_bal"
+    "eest_bal",
+    "eest_zkevm"
   ]
 
 const skipFiles = [
-  ""
+  # Witness codes mismatch -> codes optimisation: implemented in
+  # https://github.com/status-im/nimbus-eth1/pull/4099
+  "witness_codes_create_same_hash_then_read.json",
 ]
 
 runEESTSuite(
@@ -30,5 +33,6 @@ runEESTSuite(
   skipFiles,
   baseFolder,
   eestType,
+  statelessEnabled = true,
   parallelEnabled = true
 )
