@@ -23,6 +23,9 @@ const
   extraTraceMessages = false
     ## Enable additional logging noise
 
+  AdmKeyNext* = @[byte STATE_ROOT_VID, byte STATE_ROOT_VID]
+    ## Start after any `SavedState` admin record(s)
+
 when extraTraceMessages:
   import
     chronicles
@@ -46,7 +49,7 @@ iterator walkKey*(rdb: RdbInst): tuple[rvid: RootedVertexID, data: HashKey] =
       break walkBody
     defer: rit.close()
 
-    rit.seekToFirst()
+    rit.seekToKey(AdmKeyNext)
     var key: RootedVertexID
     var value: HashKey
     var valid: bool
@@ -85,7 +88,7 @@ iterator walkVtx*(
       break walkBody
     defer: rit.close()
 
-    rit.seekToFirst()
+    rit.seekToKey(AdmKeyNext)
     var key: RootedVertexID
     var value: VertexRef
     var valid: bool
