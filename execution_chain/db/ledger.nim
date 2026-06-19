@@ -19,6 +19,7 @@ import
   ../utils/[mergeutils, utils],
   ../evm/code_bytes,
   ../constants,
+  ../block_access_list/block_access_list_overlay,
   ./[access_list as ac_access_list, core_db, storage_types],
   ./aristo/[aristo_blobify, aristo_desc, aristo_get]
 
@@ -101,6 +102,8 @@ type
       ## Also used when building the execution witness to determine the
       ## block numbers fetched by the BLOCKHASH opcode for any given block.
 
+    balOverlay*: BlockAccessListOverlayRef
+
   ReadOnlyLedger* = distinct LedgerRef
 
   LedgerSpRef* = ref object
@@ -147,6 +150,12 @@ proc getAccount(
     return
 
   # not found in cache, look into state trie
+  let overlayAcc =
+    if not ledger.balOverlay.isNil():
+      ledger.balOverlay.getAccount(address)
+    else:
+      default(OverlayAccount)
+
   let
     accPath = address.computeAccPath
     rc = ledger.txFrame.fetchAccount accPath
@@ -155,6 +164,14 @@ proc getAccount(
       statement: rc.value,
       accPath:   accPath,
       flags:     {Alive})
+  elif overlayAcc.exists():
+    result = AccountRef(
+      statement: CoreDbAccount(
+        nonce:    EMPTY_ACCOUNT.nonce,
+        balance:  EMPTY_ACCOUNT.balance,
+        codeHash: EMPTY_ACCOUNT.codeHash),
+      accPath:    accPath,
+      flags:      {Alive, IsNew})
   elif shouldCreate:
     result = AccountRef(
       statement: CoreDbAccount(
@@ -165,6 +182,14 @@ proc getAccount(
       flags:      {Alive, IsNew})
   else:
     return # ignore, don't cache
+
+  if overlayAcc.balance.isSome():
+    result.statement.balance = overlayAcc.balance[]
+  if overlayAcc.nonce.isSome():
+    result.statement.nonce = overlayAcc.nonce[]
+  if overlayAcc.code.isSome():
+    result.statement.codeHash = keccak256(overlayAcc.code[])
+    result.code = CodeBytesRef.init(overlayAcc.code[])
 
   # cache the account
   ledger.savePoint.cache[address] = result
@@ -192,6 +217,7 @@ template exists(acc: AccountRef): bool =
 
 proc originalStorageValue(
     acc: AccountRef;
+    address: Address;
     slot: UInt256;
     ledger: LedgerRef;
       ): UInt256 =
@@ -204,7 +230,15 @@ proc originalStorageValue(
       return val[]
 
   # Not in the original values cache - go to the DB unless it's a new account
-  if acc.flags * {IsNew, NewlyCreated} == {}:
+  let overlayValue =
+    if not ledger.balOverlay.isNil():
+      ledger.balOverlay.getStorage(address, slot)
+    else:
+      Opt.none(UInt256)
+
+  if overlayValue.isSome():
+    result = overlayValue[]
+  elif acc.flags * {IsNew, NewlyCreated} == {}:
     let
       slotKey = ledger.slots.get(slot).valueOr:
         computeSlotKey(slot)
@@ -214,13 +248,14 @@ proc originalStorageValue(
 
 proc storageValue(
     acc: AccountRef;
+    address: Address;
     slot: UInt256;
     ledger: LedgerRef;
       ): UInt256 =
   acc.overlayStorage.withValue(slot, val) do:
     return val[]
   do:
-    result = acc.originalStorageValue(slot, ledger)
+    result = acc.originalStorageValue(address, slot, ledger)
 
 proc kill(ledger: LedgerRef, acc: AccountRef) =
   acc.flags.excl Alive
@@ -484,7 +519,7 @@ proc getCommittedStorage*(ledger: LedgerRef, address: Address, slot: UInt256): U
 
   if acc.isNil:
     return
-  acc.originalStorageValue(slot, ledger)
+  acc.originalStorageValue(address, slot, ledger)
 
 proc getStorage*(ledger: LedgerRef, address: Address, slot: UInt256): UInt256 =
   let acc = ledger.getAccount(address, false)
@@ -496,7 +531,7 @@ proc getStorage*(ledger: LedgerRef, address: Address, slot: UInt256): UInt256 =
 
   if acc.isNil:
     return
-  acc.storageValue(slot, ledger)
+  acc.storageValue(address, slot, ledger)
 
 proc contractCollision*(ledger: LedgerRef, address: Address): bool =
   let acc = ledger.getAccount(address, false)
@@ -589,7 +624,7 @@ proc setStorage*(ledger: LedgerRef, address: Address, slot, value: UInt256) =
     if not ledger.witnessKeys.contains(lookupKey):
       ledger.witnessKeys[lookupKey] = false
 
-  let oldValue = acc.storageValue(slot, ledger)
+  let oldValue = acc.storageValue(address, slot, ledger)
   if oldValue != value:
     var acc = ledger.makeDirty(address)
     acc.overlayStorage[slot] = value

@@ -9,7 +9,7 @@
 
 {.push raises: [], gcsafe.}
 
-import eth/common/[addresses, block_access_lists], stew/byteutils
+import std/algorithm, eth/common/[addresses, block_access_lists], stew/byteutils
 
 func accChangesCmp*(x, y: AccountChanges): int =
   cmp(x.address.data(), y.address.data())
@@ -39,3 +39,38 @@ func balIndexCmpTreatEqualAsGreater*(
 
 func storageKeyCmpTreatEqualAsGreater*(x, y: StorageKey): int =
   cmpTreatEqualAsGreater(x, y)
+
+func findAccountChanges*(bal: BlockAccessList, address: Address): int =
+  # The BAL is assumed to be sorted by address
+  binarySearch(
+    bal,
+    address,
+    proc(x: AccountChanges, y: Address): int =
+      cmp(x.address.data(), y.data()),
+  )
+
+func findSlotChanges*(storageChanges: openArray[SlotChanges], slot: StorageKey): int =
+  # The storage changes are assumed to be sorted by slot
+  binarySearch(
+    storageChanges,
+    slot,
+    proc(x: SlotChanges, y: StorageKey): int =
+      cmp(x.slot, y),
+  )
+
+func findLastWriteBefore*[T: StorageChange | BalanceChange | NonceChange | CodeChange](
+    changes: openArray[T], balIndex: int
+): int =
+  var
+    lo = 0
+    hi = changes.len() - 1
+    foundAt = -1
+  while lo <= hi:
+    let mid = (lo + hi) shr 1
+    if changes[mid].blockAccessIndex.int < balIndex:
+      foundAt = mid
+      lo = mid + 1
+    else:
+      hi = mid - 1
+
+  foundAt
