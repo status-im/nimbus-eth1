@@ -103,6 +103,10 @@ type
       ## block numbers fetched by the BLOCKHASH opcode for any given block.
 
     balOverlay*: BlockAccessListOverlayRef
+      ## For Parallel execution using BALs, when executing each transaction
+      ## we need to read from the writes in the BAL in order to have the
+      ## correct pre-state. The BAL overlay enables searching for the last write
+      ## in the BAL for accounts, storage and code.
 
   ReadOnlyLedger* = distinct LedgerRef
 
@@ -151,10 +155,10 @@ proc getAccount(
 
   # not found in cache, look into state trie
   let overlayAcc =
-    if not ledger.balOverlay.isNil():
-      ledger.balOverlay.getAccount(address)
+    if ledger.balOverlay.isNil():
+      emptyOverlayAcc
     else:
-      default(OverlayAccount)
+      ledger.balOverlay.getAccount(address)   
 
   let
     accPath = address.computeAccPath
@@ -164,15 +168,7 @@ proc getAccount(
       statement: rc.value,
       accPath:   accPath,
       flags:     {Alive})
-  elif overlayAcc.exists():
-    result = AccountRef(
-      statement: CoreDbAccount(
-        nonce:    EMPTY_ACCOUNT.nonce,
-        balance:  EMPTY_ACCOUNT.balance,
-        codeHash: EMPTY_ACCOUNT.codeHash),
-      accPath:    accPath,
-      flags:      {Alive, IsNew})
-  elif shouldCreate:
+  elif shouldCreate or overlayAcc.exists():
     result = AccountRef(
       statement: CoreDbAccount(
         nonce:    EMPTY_ACCOUNT.nonce,
@@ -183,13 +179,14 @@ proc getAccount(
   else:
     return # ignore, don't cache
 
-  if overlayAcc.balance.isSome():
-    result.statement.balance = overlayAcc.balance[]
-  if overlayAcc.nonce.isSome():
-    result.statement.nonce = overlayAcc.nonce[]
-  if overlayAcc.code.isSome():
-    result.statement.codeHash = keccak256(overlayAcc.code[])
-    result.code = CodeBytesRef.init(overlayAcc.code[])
+  if not ledger.balOverlay.isNil():
+    if overlayAcc.balance.isSome():
+      result.statement.balance = overlayAcc.balance[]
+    if overlayAcc.nonce.isSome():
+      result.statement.nonce = overlayAcc.nonce[]
+    if overlayAcc.code.isSome():
+      result.statement.codeHash = keccak256(overlayAcc.code[])
+      result.code = CodeBytesRef.init(overlayAcc.code[])
 
   # cache the account
   ledger.savePoint.cache[address] = result
@@ -231,10 +228,10 @@ proc originalStorageValue(
 
   # Not in the original values cache - go to the DB unless it's a new account
   let overlayValue =
-    if not ledger.balOverlay.isNil():
-      ledger.balOverlay.getStorage(address, slot)
-    else:
+    if ledger.balOverlay.isNil():
       Opt.none(UInt256)
+    else:
+      ledger.balOverlay.getStorage(address, slot)
 
   if overlayValue.isSome():
     result = overlayValue[]

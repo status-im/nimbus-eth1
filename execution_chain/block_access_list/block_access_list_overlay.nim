@@ -24,6 +24,8 @@ type
     nonce*: Opt[AccountNonce]
     code*: Opt[Bytecode]
 
+const emptyOverlayAcc* = default(OverlayAccount)
+
 func init*(
     T: type BlockAccessListOverlayRef, bal: ptr BlockAccessList, balIndex: int
 ): T =
@@ -36,7 +38,7 @@ func exists*(acc: OverlayAccount): bool =
 func getAccount*(overlay: BlockAccessListOverlayRef, address: Address): OverlayAccount =
   let i = overlay.bal[].findAccountChanges(address)
   if i < 0:
-    return default(OverlayAccount)
+    return emptyOverlayAcc
 
   template accChanges(): AccountChanges =
     overlay.bal[][i]
