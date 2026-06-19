@@ -61,6 +61,7 @@ func findSlotChanges*(storageChanges: openArray[SlotChanges], slot: StorageKey):
 func findLastWriteBefore*[T: StorageChange | BalanceChange | NonceChange | CodeChange](
     changes: openArray[T], balIndex: int
 ): int =
+  # The changes list is assumed to be sorted by bal index
   var
     lo = 0
     hi = changes.len() - 1

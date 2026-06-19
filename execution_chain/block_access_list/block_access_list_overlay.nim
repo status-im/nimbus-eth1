@@ -15,7 +15,7 @@ import
 export addresses, block_access_lists, results
 
 type
-  BlockAccessListOverlayRef* = ref object
+  BlockAccessListOverlay* = object
     bal: ptr BlockAccessList
     balIndex: int
 
@@ -27,7 +27,7 @@ type
 const emptyOverlayAcc* = default(OverlayAccount)
 
 func init*(
-    T: type BlockAccessListOverlayRef, bal: ptr BlockAccessList, balIndex: int
+    T: type BlockAccessListOverlay, bal: ptr BlockAccessList, balIndex: int
 ): T =
   doAssert not bal.isNil()
   T(bal: bal, balIndex: balIndex)
@@ -35,7 +35,7 @@ func init*(
 func exists*(acc: OverlayAccount): bool =
   acc.balance.isSome() or acc.nonce.isSome() or acc.code.isSome()
 
-func getAccount*(overlay: BlockAccessListOverlayRef, address: Address): OverlayAccount =
+func getAccount*(overlay: BlockAccessListOverlay, address: Address): OverlayAccount =
   let i = overlay.bal[].findAccountChanges(address)
   if i < 0:
     return emptyOverlayAcc
@@ -59,7 +59,7 @@ func getAccount*(overlay: BlockAccessListOverlayRef, address: Address): OverlayA
   overlayAcc
 
 func getStorage*(
-    overlay: BlockAccessListOverlayRef, address: Address, slot: UInt256
+    overlay: BlockAccessListOverlay, address: Address, slot: UInt256
 ): Opt[UInt256] =
   let i = overlay.bal[].findAccountChanges(address)
   if i < 0:

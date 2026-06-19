@@ -102,7 +102,7 @@ type
       ## Also used when building the execution witness to determine the
       ## block numbers fetched by the BLOCKHASH opcode for any given block.
 
-    balOverlay*: BlockAccessListOverlayRef
+    balOverlay*: Opt[BlockAccessListOverlay]
       ## For Parallel execution using BALs, when executing each transaction
       ## we need to read from the writes in the BAL in order to have the
       ## correct pre-state. The BAL overlay enables searching for the last write
@@ -155,10 +155,10 @@ proc getAccount(
 
   # not found in cache, look into state trie
   let overlayAcc =
-    if ledger.balOverlay.isNil():
+    if ledger.balOverlay.isNone():
       emptyOverlayAcc
     else:
-      ledger.balOverlay.getAccount(address)   
+      ledger.balOverlay[].getAccount(address)   
 
   let
     accPath = address.computeAccPath
@@ -179,7 +179,7 @@ proc getAccount(
   else:
     return # ignore, don't cache
 
-  if not ledger.balOverlay.isNil():
+  if ledger.balOverlay.isSome():
     if overlayAcc.balance.isSome():
       result.statement.balance = overlayAcc.balance[]
     if overlayAcc.nonce.isSome():
@@ -228,10 +228,10 @@ proc originalStorageValue(
 
   # Not in the original values cache - go to the DB unless it's a new account
   let overlayValue =
-    if ledger.balOverlay.isNil():
+    if ledger.balOverlay.isNone():
       Opt.none(UInt256)
     else:
-      ledger.balOverlay.getStorage(address, slot)
+      ledger.balOverlay[].getStorage(address, slot)
 
   if overlayValue.isSome():
     result = overlayValue[]
