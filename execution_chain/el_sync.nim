@@ -195,8 +195,7 @@ proc syncToEngineApi*(dag: ChainDAGRef, url: EngineApiUrl) {.async.} =
         # This would be highly unusual since it would imply a CL-valid but
         # EL-invalid block..
         warn "Payload invalid",
-          elBlockNumber, status = payloadResponse.status, curBlck = shortLog(curBlck),
-          payload = forkyBlck.message.body.execution_payload
+          elBlockNumber, status = payloadResponse.status, curBlck
       return
 
     debug "newPayload accepted", elBlockNumber, response = payloadResponse.status
