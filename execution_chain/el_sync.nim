@@ -196,7 +196,7 @@ proc syncToEngineApi*(dag: ChainDAGRef, url: EngineApiUrl) {.async.} =
         # EL-invalid block..
         warn "Payload invalid",
           elBlockNumber, status = payloadResponse.status, curBlck = shortLog(curBlck),
-          payload
+          payload = forkyBlck.message.body.execution_payload
       return
 
     debug "newPayload accepted", elBlockNumber, response = payloadResponse.status
