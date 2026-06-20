@@ -44,6 +44,7 @@ import
     el_sync,
     nimbus_desc,
     nimbus_execution_client,
+    nimbus_light_client,
     version_info,
   ]
 
@@ -148,6 +149,11 @@ type
       defaultValue: true
       name: "el-sync" .}: bool
 
+    light* {.
+      desc: "Run a light node: pair the execution client with the consensus light client instead of a full beacon node (requires --trusted-block-root)"
+      defaultValue: false
+      name: "light" .}: bool
+
     # detect if user added --engine-api option which is not valid in unified mode
     engineApiEnabled* {.
       hidden
@@ -183,6 +189,11 @@ type
     tsp: ThreadSignalPtr
     tcpPort: Port
     udpPort: Option[Port]
+
+  LightThreadConfig = object
+    tsp: ThreadSignalPtr
+    tcpPort: Port
+    udpPort: Port
 
 var jwtKey: JwtSharedKey
 
@@ -261,6 +272,30 @@ proc runBeaconNode(p: BeaconThreadConfig) {.thread.} =
       node.run(stopper)
 
   # Stop the other thread as well, in case we're stopping early
+  waitFor p.tsp.fire()
+
+proc runLightClientThread(p: LightThreadConfig) {.thread.} =
+  var config = LightClientConf.loadWithBanners(clientId, copyright, [specBanner], true).valueOr:
+    stderr.writeLine error # Logging not yet set up
+    quit QuitFailure
+
+  let engineUrl =
+    EngineApiUrl.init(&"http://127.0.0.1:{defaultEngineApiPort}/", Opt.some(jwtKey))
+
+  config.metricsEnabled = false
+  config.elUrls.add EngineApiUrlConfigValue(
+    url: engineUrl.url, jwtSecret: some toHex(distinctBase(jwtKey))
+  )
+  config.tcpPort = p.tcpPort
+  config.udpPort = p.udpPort
+
+  info "Launching light client",
+    version = fullVersionStr, cmdParams = commandLineParams(), config
+
+  dynamicLogScope(comp = "lc"):
+    runLightClient(config, p.tsp.justWait())
+
+  # Stop the other thread as well, in case the light client stopped early
   waitFor p.tsp.fire()
 
 proc runExecutionClient(p: ExecutionThreadConfig) {.thread.} =
@@ -344,18 +379,39 @@ proc runCombinedClient() =
       "Baked-in KZG setup is correct"
     )
 
-  var bnThread: Thread[BeaconThreadConfig]
-  let bnStop = ThreadSignalPtr.new().expect("working ThreadSignalPtr")
-  createThread(
-    bnThread,
-    runBeaconNode,
-    BeaconThreadConfig(
-      tsp: bnStop,
-      tcpPort: config.beaconTcpPort.get(config.tcpPort.get(Port defaultEth2TcpPort)),
-      udpPort: config.beaconUdpPort.get(config.udpPort.get(Port defaultEth2TcpPort)),
-      elSync: config.elSync,
-    ),
-  )
+  # Consensus side: either a full beacon node or, with `--light`, the consensus
+  # light client. Both are stopped via `bnStop` and drive the EL over the
+  # internal loopback Engine API.
+  var
+    bnThread: Thread[BeaconThreadConfig]
+    lightThread: Thread[LightThreadConfig]
+  let
+    bnStop = ThreadSignalPtr.new().expect("working ThreadSignalPtr")
+    beaconTcpPort =
+      config.beaconTcpPort.get(config.tcpPort.get(Port defaultEth2TcpPort))
+    beaconUdpPort =
+      config.beaconUdpPort.get(config.udpPort.get(Port defaultEth2TcpPort))
+  if config.light:
+    createThread(
+      lightThread,
+      runLightClientThread,
+      LightThreadConfig(
+        tsp: bnStop,
+        tcpPort: beaconTcpPort,
+        udpPort: beaconUdpPort,
+      ),
+    )
+  else:
+    createThread(
+      bnThread,
+      runBeaconNode,
+      BeaconThreadConfig(
+        tsp: bnStop,
+        tcpPort: beaconTcpPort,
+        udpPort: beaconUdpPort,
+        elSync: config.elSync,
+      ),
+    )
 
   var ecThread: Thread[ExecutionThreadConfig]
   let ecStop = ThreadSignalPtr.new().expect("working ThreadSignalPtr")
@@ -379,13 +435,27 @@ proc runCombinedClient() =
     ),
   )
 
+  # Shut the whole process down if either worker thread exits on its own (e.g. an
+  # unrecoverable startup error). Without this the main thread would keep polling
+  # `ProcessState` forever while the surviving thread - or nothing - runs on.
+  proc workerExited(): bool =
+    let consensusStopped =
+      if config.light: not lightThread.running else: not bnThread.running
+    consensusStopped or not ecThread.running
+
   while not ProcessState.stopIt(notice("Shutting down", reason = it)):
+    if workerExited():
+      notice "A worker thread stopped, shutting down"
+      break
     os.sleep(100)
 
   waitFor bnStop.fire()
   waitFor ecStop.fire()
 
-  joinThread(bnThread)
+  if config.light:
+    joinThread(lightThread)
+  else:
+    joinThread(bnThread)
   joinThread(ecThread)
 
   waitFor metricsServer.stopMetricsServer()
