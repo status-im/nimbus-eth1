@@ -14,16 +14,16 @@ import
   testutils,
   std/[os, strutils],
   stew/byteutils,
-  ../execution_chain/common,
-  ../execution_chain/conf,
-  ../execution_chain/utils/utils,
-  ../execution_chain/core/chain/forked_chain,
-  ../execution_chain/core/chain/forked_chain/chain_desc,
-  ../execution_chain/db/core_db/memory_only,
-  ../execution_chain/db/ledger,
-  ../execution_chain/history/db/ere_db,
-  ../execution_chain/rpc/debug,
-  ../execution_chain/stateless/[stateless_execution, stateless_execution_helpers]
+  ../../execution_chain/common,
+  ../../execution_chain/conf,
+  ../../execution_chain/utils/utils,
+  ../../execution_chain/core/chain/forked_chain,
+  ../../execution_chain/core/chain/forked_chain/chain_desc,
+  ../../execution_chain/db/core_db/memory_only,
+  ../../execution_chain/db/ledger,
+  ../../execution_chain/history/db/ere_db,
+  ../../execution_chain/rpc/debug,
+  ../../execution_chain/stateless/[stateless_execution, stateless_execution_helpers]
 
 const
   sourcePath  = currentSourcePath.rsplit({DirSep, AltSep}, 1)[0]
@@ -34,7 +34,7 @@ procSuite "Stateless Execution Tests":
   setup:
     let
       db = AristoDbMemory.newCoreDbRef()
-      era0 = EreDB.new(sourcePath / "replay", "mainnet", 15537394'u64).expect("Ere files present")
+      era0 = EreDB.new(sourcePath.parentDir / "replay", "mainnet", 15537394'u64).expect("Ere files present")
       # Stateless provider is enabled so that witnesses will be generated
       # and stored in the database
       com = CommonRef.new(db, statelessProviderEnabled = true)
@@ -60,8 +60,8 @@ procSuite "Stateless Execution Tests":
 
   asyncTest "Stateless process block json files - mainnet block 100":
     let
-      witnessJsonFile = sourcePath / "stateless" / "mainnet_100_witness.json"
-      blkJsonFile = sourcePath / "stateless" / "mainnet_100_block.json"
+      witnessJsonFile = sourcePath / "mainnet_100_witness.json"
+      blkJsonFile = sourcePath / "mainnet_100_block.json"
     check statelessProcessBlockJsonFiles(witnessJsonFile, com, blkJsonFile).isOk()
 
     let com2 = CommonRef.new(
@@ -76,8 +76,8 @@ procSuite "Stateless Execution Tests":
 
   asyncTest "Stateless process block json files - mainnet block 73141":
     let
-      witnessJsonFile = sourcePath / "stateless" / "mainnet_73141_witness.json"
-      blkJsonFile = sourcePath / "stateless" / "mainnet_73141_block.json"
+      witnessJsonFile = sourcePath / "mainnet_73141_witness.json"
+      blkJsonFile = sourcePath / "mainnet_73141_block.json"
     check statelessProcessBlockJsonFiles(witnessJsonFile, com, blkJsonFile).isOk()
 
     let com2 = CommonRef.new(

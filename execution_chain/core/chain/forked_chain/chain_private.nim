@@ -74,6 +74,8 @@ proc processBlock*(
     enableBalTracker = (not finalized or blockAccessList.isNone()) and
         c.com.isAmsterdamOrLater(header.timestamp),
   )
+  defer:
+    vmState.dispose()
 
   c.com.validateHeaderAndKinship(
     blk,

@@ -8,8 +8,10 @@
 # at your option. This file may not be copied, modified, or
 # distributed except according to those terms.
 
+{.warning[UnusedImport]: off.}
+
 import
-  ./test_concurrency/[
-    test_lru, test_queue, test_readwritelock, test_semaphore, test_shared_types,
-    test_utils
+  ./test_stateless/[
+    test_stateless_witness_types, test_stateless_witness_generation,
+    test_stateless_witness_verification, test_stateless_execution,
   ]

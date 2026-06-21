@@ -18,6 +18,8 @@
 # The unborrowRef function is needed to cleanup the borrowed ref after usage
 # and before the GC runs on the ref type containing the borrowed ref.
 
+{.push raises: [], gcsafe.}
+
 template borrowRef*[T](dest, src: ref T) =
   # Copies the ref type without updating the ref count.
   copyMem(addr dest, addr src, sizeof(pointer))

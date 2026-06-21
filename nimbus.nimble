@@ -17,21 +17,27 @@ skipDirs      = @["tests", "examples"]
 # bin           = @["build/nimbus"]
 
 requires "nim >= 2.2.10",
+  "beacon_chain",
+  "blscurve",
   "bncurve",
   "chronicles",
   "chronos",
+  "confutils",
   "eth",
+  "intops",
   "json_rpc",
   "libbacktrace",
+  "metrics",
+  "minilru",
   "nimcrypto",
+  "snappy",
   "stew",
   "stint",
+  "taskpools",
+  "toml_serialization",
   "rocksdb",
-  "ethash",
-  "blscurve",
-  "web3",
-  "minilru",
-  "intops"
+  "unittest2",
+  "web3"
 
 binDir = "build"
 

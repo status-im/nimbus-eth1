@@ -281,6 +281,8 @@ func `rmHash=`*(xp: TxPoolRef, val: Hash32) =
 
 proc updateVmState*(xp: TxPoolRef) =
   ## Reset transaction environment, e.g. before packing a new block
+  if not xp.vmState.isNil():
+    xp.vmState.dispose()
   xp.vmState = setupVMState(xp.chain.com,
     xp.chain.latestHeader, xp.chain.latestHash,
     xp.pos, xp.chain.txFrame(xp.chain.latestHash))

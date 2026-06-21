@@ -13,8 +13,8 @@
 import
   unittest2,
   eth/common/block_access_lists_rlp,
-  ../execution_chain/constants,
-  ../execution_chain/block_access_list/[block_access_list_builder, block_access_list_validation]
+  ../../execution_chain/constants,
+  ../../execution_chain/block_access_list/[block_access_list_builder, block_access_list_validation]
 
 const
   ENABLE_BENCHMARKS = false
@@ -28,7 +28,11 @@ const
 
 suite "Block access list validation":
   setup:
-    let builder = BlockAccessListBuilderRef.init()
+    var builder: BlockAccessListBuilder
+    builder.init()
+
+  teardown:
+    builder.dispose()
 
   test "Empty BAL should equal the EMPTY_BLOCK_ACCESS_LIST_HASH":
     let emptyBal = builder.buildBlockAccessList()
@@ -312,7 +316,8 @@ when ENABLE_BENCHMARKS:
 
   suite "Block access list validation benchmarks":
     setup:
-      let builder = BlockAccessListBuilderRef.init()
+      var builder: BlockAccessListBuilder
+      builder.init()
 
       builder.addTouchedAccount(address3)
       builder.addTouchedAccount(address2)
@@ -342,6 +347,9 @@ when ENABLE_BENCHMARKS:
       builder.addCodeChange(address2, 0, @[0x1.byte])
       builder.addCodeChange(address2, 1, @[0x2.byte])
       builder.addCodeChange(address1, 3, @[0x3.byte])
+
+    teardown:
+      builder.dispose()
 
     test "Benchmark validation":
       let

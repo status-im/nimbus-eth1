@@ -535,6 +535,12 @@ type
         defaultValue: false
         name: "debug-snap-server" .}: bool
 
+      beaconSyncTicker* {.
+        hidden
+        desc: "Activate periodic state message logger"
+        defaultValue: false
+        name: "debug-beacon-sync-ticker" .}: bool
+
       beaconSyncTarget* {.
         hidden
         desc: "Manually set the initial sync target specified by its 32 byte" &
@@ -850,7 +856,8 @@ func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
     rdbPrintStats = config.rdbPrintStats,
     maxSnapshots = config.aristoDbMaxSnapshots,
     parallelStateRootComputation = config.parallelStateRootComputation,
-    threadSafeCaches = config.optimisticStatePrefetch or config.balStatePrefetch,
+    threadSafeCaches = config.optimisticStatePrefetch or config.balStatePrefetch or
+      config.parallelStateRootComputation,
     blockCacheType = config.rocksdbBlockCacheType,
   )
 
