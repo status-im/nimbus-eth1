@@ -230,7 +230,7 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: 
     if c.isError:
       c.gasMeter.returnAllStateGas()
       # https://github.com/ethereum/execution-specs/commit/eb80b438a39d188fddf372ef5632123ca3ee238e
-      if call.isCreate:
+      if call.isCreate or MsgFlags.TargetAlive in c.msg.flags:
         c.gasMeter.returnStateGas(CREATE_ACCOUNT_STATE_GAS)
         stateGasRefund += CREATE_ACCOUNT_STATE_GAS
 

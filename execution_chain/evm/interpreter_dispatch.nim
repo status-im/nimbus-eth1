@@ -95,6 +95,10 @@ proc afterExecCall(c: Computation) =
       c.vmState.ledger.ripemdSpecial()
 
 proc beforeExecCreate(c: Computation): bool =
+  if c.fork >= FkAmsterdam:
+    if c.accountExists(c.msg.contractAddress):
+      c.msg.flags.incl MsgFlags.TargetAlive
+
   c.vmState.mutateLedger:
     let nonce = ledger.getNonce(c.msg.sender)
     if nonce + 1 < nonce:

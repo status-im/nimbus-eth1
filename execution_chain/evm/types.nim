@@ -119,6 +119,7 @@ type
   MsgFlags* {.pure.} = enum
     Static
     Precompile
+    TargetAlive
 
   Message* = ref object
     kind*:             CallKind
