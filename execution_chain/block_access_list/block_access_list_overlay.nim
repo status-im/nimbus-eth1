@@ -11,7 +11,10 @@
 
 import
   std/tables,
-  eth/common/[addresses, block_access_lists], stint, results, ./block_access_list_utils
+  eth/common/[addresses, block_access_lists],
+  stint,
+  results,
+  ./block_access_list_utils
 
 export addresses, block_access_lists, results
 
@@ -24,7 +27,7 @@ type
   BlockAccessListOverlay* = object
     bal: ptr BlockAccessList
     balIndex: int
-    accIndexes: Table[Address, int] 
+    accIndexes: Table[Address, int]
 
   OverlayAccount* = object
     balance*: Opt[UInt256]
@@ -33,9 +36,7 @@ type
 
 const emptyOverlayAcc* = default(OverlayAccount)
 
-func init*(
-    T: type BlockAccessListOverlay, bal: ptr BlockAccessList, balIndex: int
-): T =
+func init*(T: type BlockAccessListOverlay, bal: ptr BlockAccessList, balIndex: int): T =
   doAssert not bal.isNil()
   T(bal: bal, balIndex: balIndex, accIndexes: initTable[Address, int]())
 
@@ -70,7 +71,9 @@ proc hasAccount*(overlay: var BlockAccessListOverlay, address: Address): bool =
 
   false
 
-proc getAccount*(overlay: var BlockAccessListOverlay, address: Address): OverlayAccount =
+proc getAccount*(
+    overlay: var BlockAccessListOverlay, address: Address
+): OverlayAccount =
   let i = overlay.findAccount(address)
   if i < 0:
     return emptyOverlayAcc
