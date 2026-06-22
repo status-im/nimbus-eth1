@@ -211,10 +211,14 @@ template blocksImport*(
           nthBn = blocks[n].header.number
           blkStart = Moment.now()
 
-        # Skip blocks at or below the current base — `FC` would otherwise
-        # quarantine them as orphans and abort the batch.
-        if nthBn <= ctx.chain.baseNumber:
-          trace "Ignoring block less eq. base", peer, blk=nthBn,
+        # Skip blocks the live `FC` head already covers. These were imported
+        # either by us earlier or by a concurrent importer such as `el_sync`
+        # (which feeds the EL via the engine API from the beacon-node thread).
+        # Re-importing is redundant, and for blocks pruned below `base` the `FC`
+        # would quarantine them as orphans and abort the batch. Re-reading
+        # `latestNumber` here keeps the decision fresh as the head moves.
+        if nthBn <= ctx.chain.latestNumber:
+          trace "Ignoring block already in FC", peer, blk=nthBn,
             B=ctx.chain.baseNumber, L=ctx.chain.latestNumber
           blocks[n].reset()
           continue
@@ -231,6 +235,29 @@ template blocksImport*(
               (ENoException, "", res.error, Moment.now() - blkStart)
           except CancelledError as e:
             (ECancelledError, $e.name, e.msg, Moment.now() - blkStart)
+
+        # A plain import failure (no exception, but a non-empty message) means
+        # the block could not be linked because its parent is no longer in the
+        # in-memory `(base,latest]` window — typically a concurrent importer
+        # (`el_sync`) advanced the `FC` head and stranded this batch. That is not
+        # the sync peer's fault: stop the batch quietly and let the next job
+        # re-anchor on the live head (the un-imported tail is rolled back to
+        # `unprocessed` by the caller). Crucially, do NOT advance `topNum` and do
+        # NOT penalise the peer. A spin-guard still cancels the session if the
+        # *same* block keeps failing (e.g. a genuinely bad block).
+        if importErr.excp == ENoException and 0 < importErr.msg.len:
+          if ctx.subState.procFailNum != nthBn:
+            ctx.subState.procFailNum = nthBn
+            ctx.subState.procFailCount = 1
+          else:
+            ctx.subState.procFailCount.inc
+            if nImportBlocksErrThreshold < ctx.subState.procFailCount:
+              ctx.subState.cancelRequest = true
+          trace info & ": batch stranded, FC head moved", peer, n=n, nthBn,
+            nthHash=ctx.getNthHash(blocks, n).short,
+            base=ctx.chain.baseNumber, head=ctx.chain.latestNumber,
+            blkFailCount=ctx.subState.procFailCount, error=importErr.msg
+          break loop
 
         let error: BeaconError =
           if importErr.excp != ENoException:

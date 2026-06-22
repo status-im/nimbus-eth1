@@ -60,6 +60,10 @@ template blocksCollect*(
     peer = $buddy.peer                               # logging only
 
   block body:
+    # Re-anchor on the live `FC` head before deciding what to fetch, in case a
+    # concurrent importer (`el_sync`) moved it under us.
+    ctx.blocksUnprocReconcile()
+
     if ctx.blocksUnprocIsEmpty():
       break body                                     # no action
 
@@ -230,6 +234,11 @@ template blocksUnstage*(
   var bodyRc = false
   block body:
     let ctx = buddy.ctx
+
+    # Re-anchor on the live `FC` head before importing staged blocks, in case a
+    # concurrent importer (`el_sync`) moved it under us.
+    ctx.blocksUnprocReconcile()
+
     if ctx.blk.staged.len == 0:
       break body                                   # return false => switch peer
 
@@ -245,6 +254,13 @@ template blocksUnstage*(
       # Fetch list with the least block numbers
       let qItem = ctx.blk.staged.ge(0).valueOr:
         break                                      # all done
+
+      # Drop staged batches that the live `FC` head already covers (e.g. they
+      # were imported in the meantime by a concurrent importer like `el_sync`).
+      # Importing them would be redundant and could orphan-cascade.
+      if qItem.data.blocks[^1].header.number <= ctx.chain.latestNumber:
+        ctx.blocksStagedQueueDelete qItem.key
+        continue
 
       # Make sure that the lowest block is available, already. Or the other
       # way round: no unprocessed block number range precedes the least staged
