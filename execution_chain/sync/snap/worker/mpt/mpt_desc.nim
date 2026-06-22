@@ -30,12 +30,12 @@ type
     Leaf
     Stop
 
-  NodeRef* {.acyclic.} = ref object of RootRef
+  NodeBaseRef* {.acyclic.} = ref object of RootRef
     ## Base node object for building a temporary, partial hexary MPT.
     kind*: NodeType                                 ## sub-type (see below)
     selfKey*: HashKey                               ## owned node key
 
-  BranchNodeRef* {.acyclic.} = ref object of NodeRef
+  BranchNodeRef* {.acyclic.} = ref object of NodeBaseRef
     ## Branch and/or extension node.
     ##
     ## * Pure extension node
@@ -65,22 +65,22 @@ type
     xtPfx*: NibblesBuf                              ## portion of path segment
     xtData*: seq[byte]                              ## rlp encoded extension
     brKey*: HashKey                                 ## if `xtPfx` is non-empty
-    brLinks*: array[16,NodeRef]                     ## down links
+    brLinks*: array[16,NodeBaseRef]                 ## down links
     brData*: seq[byte]                              ## rlp encoded branch node
 
-  LeafNodeRef* = ref object of NodeRef
+  LeafNodeRef* = ref object of NodeBaseRef
     lfPfx*: NibblesBuf                              ## portion of path segment
     lfData*: seq[byte]                              ## rlp encoded leaf node
     lfPayload*: seq[byte]                           ## leaf data
 
-  StopNodeRef* = ref object of NodeRef
+  StopNodeRef* = ref object of NodeBaseRef
     path*: NibblesBuf                               ## partial path
-    parent*: NodeRef                                ## unique parent node
+    parent*: NodeBaseRef                            ## unique parent node
     inx*: byte                                      ## index (for branch parent)
-    sub*: NodeRef                                   ## start of a sub-MPT
+    sub*: NodeBaseRef                               ## start of a sub-MPT
 
   NodeTrieRef* = ref object of RootRef
-    root*: NodeRef                                  ## start of in-memory MPT
+    root*: NodeBaseRef                              ## start of in-memory MPT
     stops*: Table[HashKey,StopNodeRef]              ## sub-MPT to complete
     dangling*: seq[(HashKey,StopNodeRef)]           ## dangling link keys
     leafs*: seq[(Hash32,LeafNodeRef)]               ## leaf pairs `(path,node)`
