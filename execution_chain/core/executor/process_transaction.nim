@@ -21,7 +21,6 @@ import
   ../../transaction,
   ../../evm/state,
   ../../evm/types,
-  ../../evm/eip7708,
   ../../constants,
   ../eip4844,
   ../eip7691,
@@ -84,9 +83,6 @@ proc commitOrRollbackDependingOnGasUsed(
   vmState.blockStateGasUsed += callResult.blockStateGasUsed
   vmState.blobGasUsed += blobGasUsed
 
-  # EIP-7708: Emit closure logs for accounts with remaining balance before deletion
-  if vmState.fork >= FkAmsterdam:
-    emitClosureLogs(vmState, callResult.logEntries)
   ok()
 
 template validateForInclusion(
