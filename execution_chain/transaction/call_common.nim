@@ -248,10 +248,8 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: 
 
   if fork >= FkAmsterdam:
     txGasUsed = max(txGasUsedAfterRefund, call.intrinsic.floorDataGas)
-    let
-      txRegularGas = call.intrinsic.regular + c.gasMeter.regularGasUsed
-    blockRegularGasUsed = max(txRegularGas, call.intrinsic.floorDataGas)
     blockStateGasUsed = GasInt(max(0, call.intrinsic.state.int64 - stateGasRefund + c.gasMeter.stateGasUsed))
+    blockRegularGasUsed = txGasUsedBeforeRefund + blockStateGasUsed
     debug "EIP-8037 gas accounting",
       intrinsicRegular = call.intrinsic.regular,
       intrinsicState = call.intrinsic.state,
@@ -259,7 +257,6 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: 
       stateGasUsed = c.gasMeter.stateGasUsed,
       gasRemaining = c.gasMeter.gasRemaining,
       stateGasLeft = c.gasMeter.stateGasLeft,
-      txRegularGas = txRegularGas,
       blockRegularGasUsed = blockRegularGasUsed,
       blockStateGasUsed = blockStateGasUsed,
       txGasUsed = txGasUsed,

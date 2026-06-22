@@ -206,7 +206,7 @@ proc getCallCode(c: Computation, childMsg: Message): CodeBytesRef =
 
   c.vmState.readOnlyLedger.getCode(c.delegateTo)
 
-proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) =
+proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int, newAccountCharged = false) =
   ## Call new VM -- helper for `Call`-like operations
 
   # need to provide explicit <c> and <child> for capturing in chainTo proc()
@@ -240,7 +240,9 @@ proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) =
           child.gasMeter.stateGasUsed +
           child.gasMeter.stateGasLeft.int64)
         )
-
+        if newAccountCharged:
+          c.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
+      
     let actualOutputSize = min(memLen, child.output.len)
     if actualOutputSize > 0:
       ? c.memory.write(memPos, child.output.toOpenArray(0, actualOutputSize - 1))
@@ -274,11 +276,13 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
     )
     gasCost1 = ? cpt.gasCosts[Call].c_handler1(params1)
 
+  var newAccountCharged = false
   # EIP-8037: Charge state gas for new account creation BEFORE the 63/64
   # child gas calculation. When state gas spills from an empty reservoir
   # into regular gas, it must reduce the gas available for childGasLimit.
   if cpt.fork >= FkAmsterdam:
-    if isNewAccount() and params1.nonZeroVal:
+    newAccountCharged = isNewAccount() and params1.nonZeroVal
+    if newAccountCharged:
       # eels reviewer think there is an issue with the design to charge regular gas multiple times.
       # https://github.com/ethereum/execution-specs/pull/2526/changes#diff-28a1b575fd7c3d82832c0826cf58a881101643543d35c123c78ca65202152c23R456
       # And it also make EVM tracer produce two traces of call or weird result.
@@ -309,6 +313,8 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
       maximumDepth = MaxCallDepth,
       depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
+    if newAccountCharged:
+      cpt.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
     return ok()
 
   cpt.memory.extend(p.memInPos, p.memInLen)
@@ -337,7 +343,8 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
   cpt.execSubCall(
     memPos = p.memOutPos,
     memLen = p.memOutLen,
-    childMsg = childMsg)
+    childMsg = childMsg,
+    newAccountCharged = newAccountCharged)
   ok()
 
 # ---------------------
