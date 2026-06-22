@@ -17,7 +17,7 @@ import
   ../core/eip8037,
   ../constants,
   ../db/ledger,
-  ./interpreter/op_dispatcher,
+  ./interpreter/[op_dispatcher, gas_costs],
   ./[code_stream, computation, evm_errors, message, precompiles, state, types]
 
 logScope:
@@ -67,7 +67,20 @@ macro selectVM(v: VmCpt, fork: EVMFork, tracingEnabled: bool): EvmResultVoid =
     caseStmt.add nnkOfBranch.newTree(forkVal, call)
   caseStmt
 
-proc beforeExecCall(c: Computation) =
+proc beforeExecCall(c: Computation): bool =
+  if c.fork >= FkAmsterdam and c.msg.depth == 0:
+    if c.msg.value.isZero.not and
+      MsgFlags.Precompile notin c.msg.flags and
+      c.vmState.readOnlyLedger.isDeadAccount(c.msg.codeAddress):
+      c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "topFrameCharges").isOkOr:
+        c.setError($error.code, true)
+        return true
+
+    if MsgFlags.Delegated in c.msg.flags:
+      c.gasMeter.consumeGas(COLD_ACCOUNT_ACCESS_2780, "topFrameCharges").isOkOr:
+        c.setError($error.code, true)
+        return true
+
   c.beginSavePoint()
   if c.msg.kind == CallKind.Call:
     c.vmState.mutateLedger:
@@ -83,6 +96,8 @@ proc beforeExecCall(c: Computation) =
     if c.fork >= FkAmsterdam:
       # EIP-7708: Emit transfer log for ETH-tx or contract call and CALL op code
       c.emitTransferLog()
+
+  false
 
 proc afterExecCall(c: Computation) =
   ## Collect all of the accounts that *may* need to be deleted based on EIP161
@@ -188,11 +203,10 @@ proc beforeExec(c: Computation): bool =
       c.msg.value,
     )
 
-  if not c.msg.isCreate:
-    c.beforeExecCall()
-    false
-  else:
+  if c.msg.isCreate:
     c.beforeExecCreate()
+  else:
+    c.beforeExecCall()
 
 proc afterExec(c: Computation) =
   if not c.msg.isCreate:

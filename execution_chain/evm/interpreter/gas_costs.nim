@@ -137,6 +137,8 @@ type
 
 const
   TX_BASE_COST*          = 21000
+  TX_BASE_COST_2780*     = 12000
+  COLD_ACCOUNT_ACCESS_2780* = 3000
 
   # From EIP-2929
   ColdSloadCost*         = 2100
@@ -788,7 +790,7 @@ func shanghaiGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
 
 func amsterdamGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
   result = previousFees
-  result[GasTXCreate] = 9000.GasInt  # EIP-8037
+  result[GasTXCreate] = 11000.GasInt  # EIP-8037
   result[GasCreate] = 9000.GasInt  # EIP-8037
 
 const

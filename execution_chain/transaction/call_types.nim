@@ -10,6 +10,7 @@
 {.push raises: [].}
 
 import
+  stint,
   results,
   eth/common/transactions,
   eth/common/addresses,
@@ -76,11 +77,19 @@ template input(tx: Transaction): auto =
 func isError*(cr: CallResult): bool =
   cr.error.len > 0
 
+func selfTransfer(call: CallParams, sender: Address): bool =
+  call.to == sender
+
+func selfTransfer(tx: Transaction, sender: Address): bool =
+  tx.to.isSome and tx.to.value == sender
+
 const
   TOTAL_COST_FLOOR_PER_TOKEN_EIP7623 = 10
   TOTAL_COST_FLOOR_PER_TOKEN_EIP7976 = 16
-
-func intrinsicGas*(call: CallParams | Transaction, hardFork: HardFork, gasLimit: GasInt): IntrinsicGas =
+  TX_VALUE_COST = 4244
+  TRANSFER_LOG_COST = 1756
+  
+func intrinsicGas*(call: CallParams | Transaction, hardFork: HardFork, gasLimit: GasInt, sender: Address): IntrinsicGas =
   # Compute the baseline gas cost for this transaction.  This is the amount
   # of gas needed to send this transaction (but that is not actually used
   # for computation).
@@ -88,7 +97,8 @@ func intrinsicGas*(call: CallParams | Transaction, hardFork: HardFork, gasLimit:
     fork = ToEVMFork[hardFork]
 
   var
-    regularGas = TX_BASE_COST
+    regularGas = if hardFork >= Amsterdam: TX_BASE_COST_2780
+                 else: TX_BASE_COST
     stateGas = 0.GasInt
     floorDataGas = regularGas
     tokens = 0
@@ -98,10 +108,18 @@ func intrinsicGas*(call: CallParams | Transaction, hardFork: HardFork, gasLimit:
   if call.isCreate:
     if hardFork >= Amsterdam:
       stateGas += CREATE_ACCOUNT_STATE_GAS
+      if call.value.isZero.not:
+        regularGas += TRANSFER_LOG_COST
 
     regularGas += gasFees[fork][GasTXCreate]
     if hardFork >= Shanghai:
       regularGas += (gasFees[fork][GasInitcodeWord] * call.input.len.wordCount)
+  elif not call.selfTransfer(sender):
+    if hardFork >= Amsterdam:
+      regularGas += COLD_ACCOUNT_ACCESS_2780
+      if call.value.isZero.not:
+        regularGas += TRANSFER_LOG_COST
+        regularGas += TX_VALUE_COST
 
   # Input data cost, reduced in EIP-2028 (Istanbul).
   let

@@ -109,17 +109,18 @@ proc gasCallDelegate(c: Computation, codeAddress: Address, flags: set[MsgFlags])
       # precompile doesn't exist in the state trie and can never be a 7702
       # delegation, so resolving the delegation target is a no-op.
       if MsgFlags.Precompile in flags:
-        c.delegateTo = codeAddress
+        c.msg.delegateTo = codeAddress
         return 0.GasInt
 
       let delegateTo = parseDelegationAddress(c.getCode(codeAddress)).valueOr:
-        c.delegateTo = codeAddress
+        c.msg.delegateTo = codeAddress
         return 0.GasInt
-      c.delegateTo = delegateTo
+      c.msg.flags.incl MsgFlags.Delegated
+      c.msg.delegateTo = delegateTo
       delegateResolutionCost(c, delegateTo)
   else:
     GasProc proc(): GasInt =
-      c.delegateTo = codeAddress
+      c.msg.delegateTo = codeAddress
       0.GasInt
 
 
@@ -198,13 +199,13 @@ proc staticCallParams(c: Computation, res: var LocalParams): EvmResult[void] =
 
 proc getCallCode(c: Computation, childMsg: Message): CodeBytesRef =
   if c.balTrackerEnabled:
-    c.vmState.balTracker.trackAddressAccess(c.delegateTo)
+    c.vmState.balTracker.trackAddressAccess(c.msg.delegateTo)
 
   # Avoid accessing ledger if it's a precompile address
   if MsgFlags.Precompile in childMsg.flags:
     return CodeBytesRef(nil)
 
-  c.vmState.readOnlyLedger.getCode(c.delegateTo)
+  c.vmState.readOnlyLedger.getCode(c.msg.delegateTo)
 
 proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int, newAccountCharged = false) =
   ## Call new VM -- helper for `Call`-like operations

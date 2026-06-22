@@ -104,7 +104,7 @@ template validateForInclusion(
     fork = vmState.hardFork
     regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
     stateGasAvailable = vmState.blockCtx.gasLimit - vmState.blockStateGasUsed
-    intrinsicVar = tx.intrinsicGas(fork, vmState.blockCtx.gasLimit)
+    intrinsicVar = tx.intrinsicGas(fork, vmState.blockCtx.gasLimit, sender)
 
   let want = min(TX_GAS_LIMIT.GasInt, tx.gasLimit)
   if want > regularGasAvailable:

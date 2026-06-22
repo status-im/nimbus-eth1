@@ -165,6 +165,7 @@ proc setupComputation(call: CallParams, gasRefund: int64, keepStack: bool): Comp
       stateGas:        stateGas,
       contractAddress: call.to,
       codeAddress:     call.to,
+      delegateTo:      call.to,
       sender:          call.sender,
       value:           call.value,
     )
@@ -180,6 +181,7 @@ proc setupComputation(call: CallParams, gasRefund: int64, keepStack: bool): Comp
 
   if not isAmsterdamOrLater:
     computation.addRefund(gasRefund)
+
   vmState.captureStart(computation, call.sender, call.to,
                        call.isCreate, call.input,
                        call.gasLimit, call.value)
@@ -228,7 +230,7 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: 
 
   if c.fork >= FkAmsterdam:
     if c.isError:
-      c.gasMeter.refillFrameStateGas(c.msg.stateGas)    
+      c.gasMeter.refillFrameStateGas(c.msg.stateGas)
     if call.isCreate:
       if c.isError or MsgFlags.TargetAlive in c.msg.flags:
         c.gasMeter.returnStateGas(CREATE_ACCOUNT_STATE_GAS)

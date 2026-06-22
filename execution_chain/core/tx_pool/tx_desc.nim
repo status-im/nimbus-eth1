@@ -350,8 +350,11 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     debug "Transaction already known", txHash = id
     return err(txErrorAlreadyKnown)
 
+
   let
-    intrinsic = ptx.tx.intrinsicGas(xp.hardFork, xp.gasLimit)
+    sender = ptx.tx.recoverSender().valueOr:
+      return err(txErrorInvalidSignature)
+    intrinsic = ptx.tx.intrinsicGas(xp.hardFork, xp.gasLimit, sender)
 
   validateTxBasic(
     xp.com,
@@ -365,8 +368,6 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     return err(txErrorBasicValidation)
 
   let
-    sender = ptx.tx.recoverSender().valueOr:
-      return err(txErrorInvalidSignature)
     nonce = xp.getNonce(sender)
 
   if ptx.tx.nonce < nonce:
