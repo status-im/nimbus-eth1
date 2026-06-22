@@ -61,7 +61,7 @@ template blocksCollect*(
 
   block body:
     # Re-anchor on the live `FC` head before deciding what to fetch, in case a
-    # concurrent importer (`el_sync`) moved it under us.
+    # concurrent importer (`el_sync`) moved it
     ctx.blocksUnprocReconcile()
 
     if ctx.blocksUnprocIsEmpty():
@@ -236,7 +236,7 @@ template blocksUnstage*(
     let ctx = buddy.ctx
 
     # Re-anchor on the live `FC` head before importing staged blocks, in case a
-    # concurrent importer (`el_sync`) moved it under us.
+    # concurrent importer (`el_sync`) moved it
     ctx.blocksUnprocReconcile()
 
     if ctx.blk.staged.len == 0:
