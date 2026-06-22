@@ -26,6 +26,7 @@ import
   ../../concurrency/utils,
   ../dao,
   ../eip6110,
+  ../eip7997,
   ./calculate_reward,
   ./executor_helpers,
   ./process_transaction,
@@ -317,9 +318,12 @@ proc procBlkPreamble(
     vmState.balTracker.beginCallFrame()
 
   let com = vmState.com
-  if com.daoForkSupport and com.daoForkBlock.get == header.number:
-    vmState.mutateLedger:
+  vmState.mutateLedger:
+    if com.daoForkSupport and com.daoForkBlock.get == header.number:
       ledger.applyDAOHardFork()
+
+    if com.amsterdamTransition(vmState.parent.timestamp, header.timestamp):
+      ledger.applyEip7997()
 
   if not skipValidation: # Expensive!
     if blk.transactions.calcTxRoot != header.txRoot:
