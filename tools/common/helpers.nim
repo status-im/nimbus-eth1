@@ -80,9 +80,9 @@ func getChainConfig*(network: string, c: ChainConfig) =
     c.assignNumber(HardFork.Frontier, BlockNumberZero)
   of $TestFork.Homestead:
     c.assignNumber(HardFork.Homestead, BlockNumberZero)
-  of $TestFork.EIP150:
+  of $TestFork.EIP150, "TangerineWhistle":
     c.assignNumber(HardFork.Tangerine, BlockNumberZero)
-  of $TestFork.EIP158:
+  of $TestFork.EIP158, "SpuriousDragon":
     c.assignNumber(HardFork.Spurious, BlockNumberZero)
   of $TestFork.Byzantium:
     c.assignNumber(HardFork.Byzantium, BlockNumberZero)

@@ -20,14 +20,11 @@ const
   eestType = "blockchain_tests_engine"
   eestReleases = [
     "eest_develop",
-    "eest_bal"
+    "eest_devnet"
   ]
 
 const skipFiles = [
   "CALLBlake2f_MaxRounds.json", # Doesn't work in github CI
-
-  # TODO: remove this entry after we have EEST new release for glamsterdam-devnet-7
-  "bal_call_revert_insufficient_funds.json",
 ]
 
 runEESTSuite(

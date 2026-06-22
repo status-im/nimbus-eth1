@@ -18,7 +18,7 @@ const
   eestType = "blockchain_tests"
   eestReleases = [
     "eest_develop",
-    "eest_bal"
+    "eest_devnet"
   ]
 
 const skipFiles = [
@@ -30,9 +30,6 @@ const skipFiles = [
   # will pass when executed by txpool. It's already amazing we only need
   # to skip one fixture file.
   "test_correct_decreasing_blob_gas_costs.json",
-
-  # TODO: remove this entry after we have EEST new release for glamsterdam-devnet-7
-  "bal_call_revert_insufficient_funds.json",
 ]
 
 runEESTSuite(

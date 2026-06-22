@@ -54,9 +54,9 @@ nimbus-build-system.paths
 
 # EEST test vectors
 tests/fixtures/eest_develop
-tests/fixtures/eest_bal
+tests/fixtures/eest_devnet
 tests/fixtures/eest_zkevm
 
 execution_chain/nimbus
-GeneralStateTestsBal.md
+GeneralStateTestsDevnet.md
 GeneralStateTestsDevelop.md

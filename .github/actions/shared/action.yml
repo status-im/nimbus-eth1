@@ -174,7 +174,7 @@ runs:
       with:
         path: |
           tests/fixtures/eest_develop
-          tests/fixtures/eest_bal
+          tests/fixtures/eest_devnet
           tests/fixtures/eest_zkevm
         # EEST release version contained in eest_ci_cache.sh.
         # Each time we bump EEST version, it should invalidate the cache too.

@@ -246,8 +246,8 @@ proc generalStateJsonMain*(debugMode = false) =
     suite "new generalstate json tests: eest_develop":
       jsonTest("eest_develop/state_tests", "GeneralStateTestsDevelop", testFixture, slowGSTTests)
 
-    suite "new generalstate json tests: eest_bal":
-      jsonTest("eest_bal/state_tests", "GeneralStateTestsBal", testFixture)
+    suite "new generalstate json tests: eest_devnet":
+      jsonTest("eest_devnet/state_tests", "GeneralStateTestsDevnet", testFixture)
 
   else:
     # execute single test in debug mode
@@ -255,7 +255,7 @@ proc generalStateJsonMain*(debugMode = false) =
       echo "missing test subject"
       quit(QuitFailure)
 
-    let path = "tests/fixtures/eest_bal/state_tests"
+    let path = "tests/fixtures/eest_devnet/state_tests"
     let n = json.parseFile(path / config.testSubject)
     var testStatusIMPL: TestStatus
     testFixture(n, testStatusIMPL, config.trace, true)
