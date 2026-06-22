@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -147,9 +147,7 @@ proc blocksUnprocReconcile*(ctx: BeaconCtxRef) =
   ##
   ## Bumping `topNum` to the current `FC` head and dropping the now-redundant
   ## `unprocessed` numbers makes the next fetch start at `latest + 1`, whose
-  ## parent is the live `FC` tip. The `borrowed` set is left untouched; those
-  ## ranges are committed/imported normally and skipped by the live-`latest`
-  ## guard in `blocksImport`.
+  ## parent is the live `FC` tip.
   let
     fcLatest = ctx.chain.latestNumber
     top = min(fcLatest, ctx.subState.headNum)
