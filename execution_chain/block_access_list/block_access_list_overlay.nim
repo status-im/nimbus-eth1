@@ -17,6 +17,8 @@ export addresses, block_access_lists, results
 
 # The BlockAccessList pointer is not owned or managed by the BlockAccessListOverlay
 # and therefore it must outlive and exist longer than the overlay.
+# The passed in BAL must already be validated and therefore sorted according to the
+# EIP-7928 spec rules. 
 
 type
   BlockAccessListOverlay* = object

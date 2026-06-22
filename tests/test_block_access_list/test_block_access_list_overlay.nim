@@ -19,6 +19,13 @@ import
   ../../execution_chain/block_access_list/[
     block_access_list_builder, block_access_list_overlay, block_access_list_utils]
 
+proc ledgerWithOverlay(
+    coreDb: CoreDbRef, bal: BlockAccessListRef, balIndex: int
+): LedgerRef =
+  ## A fresh ledger over `coreDb`'s base frame with the BAL overlay at `balIndex`.
+  result = LedgerRef.init(coreDb.baseTxFrame())
+  result.balOverlay = Opt.some(BlockAccessListOverlay.init(bal[].addr, balIndex))
+
 suite "Block access list overlay":
   let
     address1 = address"0x10007bc31cedb7bfb8a345f31e668033056b2728"
@@ -121,8 +128,7 @@ suite "Block access list overlay":
       dbLedger.persist()
 
     block:
-      let ledger = LedgerRef.init(coreDb.baseTxFrame())
-      ledger.balOverlay = Opt.some(BlockAccessListOverlay.init(bal[].addr, 1))
+      let ledger = ledgerWithOverlay(coreDb, bal, 1)
       check:
         ledger.getBalance(address1) == 1.u256
         ledger.getNonce(address1) == 1.AccountNonce
@@ -133,8 +139,7 @@ suite "Block access list overlay":
         not ledger.accountExists(address4)
 
     block:
-      let ledger = LedgerRef.init(coreDb.baseTxFrame())
-      ledger.balOverlay = Opt.some(BlockAccessListOverlay.init(bal[].addr, 2))
+      let ledger = ledgerWithOverlay(coreDb, bal, 2)
       check:
         ledger.getBalance(address1) == 11.u256
         ledger.getNonce(address1) == 5.AccountNonce
@@ -144,8 +149,7 @@ suite "Block access list overlay":
         ledger.getStorage(address1, slot2) == 20.u256
 
     block:
-      let ledger = LedgerRef.init(coreDb.baseTxFrame())
-      ledger.balOverlay = Opt.some(BlockAccessListOverlay.init(bal[].addr, 4))
+      let ledger = ledgerWithOverlay(coreDb, bal, 4)
       check:
         ledger.getBalance(address1) == 33.u256
         ledger.getCode(address1).bytes() == code2
@@ -157,20 +161,175 @@ suite "Block access list overlay":
         ledger.getCode(address4).bytes() == code2
         ledger.getStorage(address4, slot1) == 0.u256
 
-  test "Ledger reads storage for an overlay account with only storage writes":
-    # address3 has only a storage write in the BAL (no balance/nonce/code change)
-    # and is absent from the database. The hasAccount check must still materialise
-    # it so the overlay storage is read - exists() alone (balance/nonce/code) would
-    # miss it and getStorage would wrongly return 0.
-    var storageOnlyBuilder: BlockAccessListBuilder
-    storageOnlyBuilder.init()
-    storageOnlyBuilder.addStorageWrite(address3, slot1, 1, 777.u256)
-    let storageOnlyBal = storageOnlyBuilder.buildBlockAccessList()
+suite "BAL overlay ledger reads":
+  # Each test configures a LedgerRef with a BAL overlay and checks that every
+  # read (balance, nonce, code, storage, existence) returns the overlay's
+  # pre-state when the BAL has a write *before* the overlay's block access index,
+  # and otherwise falls back to the database. Accounts cover: DB-only,
+  # overlay-only, in-both, storage-only-in-overlay, and absent-from-both.
+  let
+    dbAddr = address"0x01007bc31cedb7bfb8a345f31e668033056b2728"
+    overlayAddr = address"0x02007bc31cedb7bfb8a345f31e668033056b2728"
+    bothAddr = address"0x03007bc31cedb7bfb8a345f31e668033056b2728"
+    storageAddr = address"0x04007bc31cedb7bfb8a345f31e668033056b2728"
+    absentAddr = address"0x05007bc31cedb7bfb8a345f31e668033056b2728"
+    slotA = 1.u256()
+    slotB = 2.u256()
+    codeDb = @[0x11.byte, 0x22]
+    codeOverlay = @[0xaa.byte, 0xbb, 0xcc]
 
+  setup:
+    # BAL pre-state writes (blockAccessIndex -> value):
+    #   overlayAddr: balance @1=10 @3=30, nonce @1=5, code @2, storage slotA @1=100 @3=300
+    #   bothAddr:    balance @2=200, storage slotA @2=2000
+    #   storageAddr: storage slotA @1=777
+    var builder: BlockAccessListBuilder
+    builder.init()
+    builder.addBalanceChange(overlayAddr, 1, 10.u256)
+    builder.addBalanceChange(overlayAddr, 3, 30.u256)
+    builder.addNonceChange(overlayAddr, 1, 5.AccountNonce)
+    builder.addCodeChange(overlayAddr, 2, codeOverlay)
+    builder.addStorageWrite(overlayAddr, slotA, 1, 100.u256)
+    builder.addStorageWrite(overlayAddr, slotA, 3, 300.u256)
+    builder.addBalanceChange(bothAddr, 2, 200.u256)
+    builder.addStorageWrite(bothAddr, slotA, 2, 2000.u256)
+    builder.addStorageWrite(storageAddr, slotA, 1, 777.u256)
+    let bal = builder.buildBlockAccessList()
+
+    # Pre-block database state.
     let coreDb = newCoreDbRef(DefaultDbMemory)
-    let ledger = LedgerRef.init(coreDb.baseTxFrame())
-    ledger.balOverlay = Opt.some(BlockAccessListOverlay.init(storageOnlyBal[].addr, 2))
+    block:
+      let dbLedger = LedgerRef.init(coreDb.baseTxFrame())
+      dbLedger.setBalance(dbAddr, 1.u256)
+      dbLedger.setNonce(dbAddr, 1.AccountNonce)
+      dbLedger.setCode(dbAddr, codeDb)
+      dbLedger.setStorage(dbAddr, slotA, 11.u256)
+      dbLedger.setBalance(bothAddr, 99.u256)
+      dbLedger.setNonce(bothAddr, 7.AccountNonce)
+      dbLedger.setCode(bothAddr, codeDb)
+      dbLedger.setStorage(bothAddr, slotA, 999.u256)
+      dbLedger.setStorage(bothAddr, slotB, 888.u256)
+      dbLedger.persist()
+
+  test "getBalance reads overlay pre-state and falls back to the database":
+    block: # index 2
+      let ledger = ledgerWithOverlay(coreDb, bal, 2)
+      check:
+        ledger.getBalance(dbAddr) == 1.u256        # not in BAL -> DB
+        ledger.getBalance(overlayAddr) == 10.u256  # last write before 2 (@1)
+        ledger.getBalance(bothAddr) == 99.u256     # BAL write @2 not < 2 -> DB
+        ledger.getBalance(storageAddr) == 0.u256   # no balance write anywhere
+        ledger.getBalance(absentAddr) == 0.u256
+    block: # index 4
+      let ledger = ledgerWithOverlay(coreDb, bal, 4)
+      check:
+        ledger.getBalance(dbAddr) == 1.u256
+        ledger.getBalance(overlayAddr) == 30.u256  # last write before 4 (@3)
+        ledger.getBalance(bothAddr) == 200.u256    # overlay (@2) overrides DB
+
+  test "getNonce reads overlay pre-state and falls back to the database":
+    let ledger = ledgerWithOverlay(coreDb, bal, 4)
     check:
-      ledger.accountExists(address3)
-      ledger.getStorage(address3, slot1) == 777.u256
-      ledger.getStorage(address3, slot2) == 0.u256
+      ledger.getNonce(dbAddr) == 1.AccountNonce
+      ledger.getNonce(overlayAddr) == 5.AccountNonce  # @1
+      ledger.getNonce(bothAddr) == 7.AccountNonce      # no nonce in BAL -> DB
+      ledger.getNonce(storageAddr) == 0.AccountNonce
+      ledger.getNonce(absentAddr) == 0.AccountNonce
+
+  test "getCode / getCodeHash / getCodeSize read overlay pre-state and fall back":
+    block: # index 2 - overlayAddr code is written @2, not yet visible
+      let ledger = ledgerWithOverlay(coreDb, bal, 2)
+      check:
+        ledger.getCode(dbAddr).bytes() == codeDb
+        ledger.getCode(overlayAddr).bytes().len == 0
+        ledger.getCode(bothAddr).bytes() == codeDb     # no code in BAL -> DB
+    block: # index 4 - overlayAddr code now visible
+      let ledger = ledgerWithOverlay(coreDb, bal, 4)
+      check:
+        ledger.getCode(overlayAddr).bytes() == codeOverlay
+        ledger.getCodeHash(overlayAddr) == keccak256(codeOverlay)
+        ledger.getCodeSize(overlayAddr) == codeOverlay.len
+        ledger.getCode(bothAddr).bytes() == codeDb           # still DB
+        ledger.getCodeHash(bothAddr) == keccak256(codeDb)
+
+  test "getStorage / getCommittedStorage read overlay pre-state and fall back":
+    block: # index 2
+      let ledger = ledgerWithOverlay(coreDb, bal, 2)
+      check:
+        ledger.getStorage(dbAddr, slotA) == 11.u256        # not in BAL -> DB
+        ledger.getStorage(overlayAddr, slotA) == 100.u256  # @1
+        ledger.getCommittedStorage(overlayAddr, slotA) == 100.u256
+        ledger.getStorage(bothAddr, slotA) == 999.u256     # BAL @2 not < 2 -> DB
+        ledger.getStorage(bothAddr, slotB) == 888.u256     # not in BAL -> DB
+        ledger.getStorage(storageAddr, slotA) == 777.u256  # @1
+        ledger.getStorage(absentAddr, slotA) == 0.u256
+    block: # index 4
+      let ledger = ledgerWithOverlay(coreDb, bal, 4)
+      check:
+        ledger.getStorage(overlayAddr, slotA) == 300.u256  # last write before 4 (@3)
+        ledger.getCommittedStorage(overlayAddr, slotA) == 300.u256
+        ledger.getStorage(bothAddr, slotA) == 2000.u256    # overlay @2 overrides DB
+        ledger.getStorage(bothAddr, slotB) == 888.u256     # still DB
+
+  test "accountExists reflects overlay pre-state and database presence":
+    block: # index 2
+      let ledger = ledgerWithOverlay(coreDb, bal, 2)
+      check:
+        ledger.accountExists(dbAddr)        # in DB
+        ledger.accountExists(overlayAddr)   # overlay balance @1
+        ledger.accountExists(bothAddr)      # in DB
+        ledger.accountExists(storageAddr)   # overlay storage @1
+        not ledger.accountExists(absentAddr)
+    block: # index 1 - overlay-only accounts have no write before index 1 yet
+      let ledger = ledgerWithOverlay(coreDb, bal, 1)
+      check:
+        ledger.accountExists(dbAddr)
+        ledger.accountExists(bothAddr)
+        not ledger.accountExists(overlayAddr)
+        not ledger.accountExists(storageAddr)
+        not ledger.accountExists(absentAddr)
+
+  test "reads select the last write strictly before the block access index":
+    # overlayAddr: balance @1=10 @3=30; storage slotA @1=100 @3=300.
+    check:
+      ledgerWithOverlay(coreDb, bal, 1).getBalance(overlayAddr) == 0.u256
+      ledgerWithOverlay(coreDb, bal, 2).getBalance(overlayAddr) == 10.u256
+      ledgerWithOverlay(coreDb, bal, 3).getBalance(overlayAddr) == 10.u256 # @3 not < 3
+      ledgerWithOverlay(coreDb, bal, 4).getBalance(overlayAddr) == 30.u256
+      ledgerWithOverlay(coreDb, bal, 5).getBalance(overlayAddr) == 30.u256
+      ledgerWithOverlay(coreDb, bal, 1).getStorage(overlayAddr, slotA) == 0.u256
+      ledgerWithOverlay(coreDb, bal, 2).getStorage(overlayAddr, slotA) == 100.u256
+      ledgerWithOverlay(coreDb, bal, 3).getStorage(overlayAddr, slotA) == 100.u256
+      ledgerWithOverlay(coreDb, bal, 4).getStorage(overlayAddr, slotA) == 300.u256
+
+  test "account absent from the overlay reads entirely from the database":
+    let ledger = ledgerWithOverlay(coreDb, bal, 4)
+    check:
+      ledger.getBalance(dbAddr) == 1.u256
+      ledger.getNonce(dbAddr) == 1.AccountNonce
+      ledger.getCode(dbAddr).bytes() == codeDb
+      ledger.getStorage(dbAddr, slotA) == 11.u256
+      ledger.getStorage(dbAddr, slotB) == 0.u256   # unset slot
+      ledger.accountExists(dbAddr)
+
+  test "overlay overrides only the fields it has; the database supplies the rest":
+    # bothAddr at index 4: overlay supplies balance and storage slotA; nonce and
+    # code come from the database.
+    let ledger = ledgerWithOverlay(coreDb, bal, 4)
+    check:
+      ledger.getBalance(bothAddr) == 200.u256          # overlay
+      ledger.getStorage(bothAddr, slotA) == 2000.u256  # overlay
+      ledger.getNonce(bothAddr) == 7.AccountNonce       # DB
+      ledger.getCode(bothAddr).bytes() == codeDb         # DB
+      ledger.getStorage(bothAddr, slotB) == 888.u256     # DB
+
+  test "storage-only overlay account is materialised so its storage is read":
+    # storageAddr has only a storage write in the BAL and is absent from the DB;
+    # hasAccount must still materialise it (exists() on balance/nonce/code alone
+    # would miss it, making getStorage wrongly return 0).
+    let ledger = ledgerWithOverlay(coreDb, bal, 2)
+    check:
+      ledger.accountExists(storageAddr)
+      ledger.getStorage(storageAddr, slotA) == 777.u256
+      ledger.getStorage(storageAddr, slotB) == 0.u256
+      ledger.getBalance(storageAddr) == 0.u256

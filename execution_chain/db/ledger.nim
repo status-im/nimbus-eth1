@@ -166,14 +166,6 @@ proc getAccount(
       statement: rc.value,
       accPath:   accPath,
       flags:     {Alive})
-  elif shouldCreate:
-    result = AccountRef(
-      statement: CoreDbAccount(
-        nonce:    EMPTY_ACCOUNT.nonce,
-        balance:  EMPTY_ACCOUNT.balance,
-        codeHash: EMPTY_ACCOUNT.codeHash),
-      accPath:    accPath,
-      flags:      {Alive, IsNew})
   elif ledger.balOverlay.isSome() and ledger.balOverlay[].hasAccount(address):
     result = AccountRef(
       statement: CoreDbAccount(
@@ -181,7 +173,15 @@ proc getAccount(
         balance:  EMPTY_ACCOUNT.balance,
         codeHash: EMPTY_ACCOUNT.codeHash),
       accPath:    accPath,
-      flags:      {Alive})
+      flags: {Alive})
+  elif shouldCreate:
+    result = AccountRef(
+      statement: CoreDbAccount(
+        nonce:    EMPTY_ACCOUNT.nonce,
+        balance:  EMPTY_ACCOUNT.balance,
+        codeHash: EMPTY_ACCOUNT.codeHash),
+      accPath:    accPath,
+      flags: {Alive, IsNew})
   else:
     return # ignore, don't cache
 
@@ -194,6 +194,7 @@ proc getAccount(
     if overlayAcc.code.isSome():
       result.statement.codeHash = keccak256(overlayAcc.code[])
       result.code = CodeBytesRef.init(overlayAcc.code[])
+      result.flags.incl CodeChanged
 
   # cache the account
   ledger.savePoint.cache[address] = result
