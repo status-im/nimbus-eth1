@@ -56,10 +56,9 @@ proc execSubCreate(c: Computation; childMsg: Message;
     if child.isSuccess:
       if c.fork >= FkAmsterdam:
         c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
-        c.gasMeter.appendStateGasUsed(child.gasMeter.stateGasUsed)
         c.gasMeter.stateGasSpilled += child.gasMeter.stateGasSpilled
         if MsgFlags.TargetAlive in c.msg.flags:
-          c.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)        
+          c.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
       c.merge(child)
       c.stack.lsTop child.msg.contractAddress
     else:

@@ -226,7 +226,6 @@ proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int, newAcco
     if child.isSuccess:
       if c.fork >= FkAmsterdam:
         c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
-        c.gasMeter.appendStateGasUsed(child.gasMeter.stateGasUsed)
         c.gasMeter.stateGasSpilled += child.gasMeter.stateGasSpilled
       c.merge(child)
       c.stack.lsTop(1)

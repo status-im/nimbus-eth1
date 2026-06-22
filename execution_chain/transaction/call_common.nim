@@ -228,7 +228,7 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: 
 
   if c.fork >= FkAmsterdam:
     if c.isError:
-      c.gasMeter.refillFrameStateGas()    
+      c.gasMeter.refillFrameStateGas(c.msg.stateGas)    
     if call.isCreate:
       if c.isError or MsgFlags.TargetAlive in c.msg.flags:
         c.gasMeter.returnStateGas(CREATE_ACCOUNT_STATE_GAS)
@@ -247,14 +247,15 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: 
     blockStateGasUsed = 0.GasInt
 
   if fork >= FkAmsterdam:
+    let stateGasUsed = c.gasMeter.frameStateGasUsed(c.msg.stateGas)
     txGasUsed = max(txGasUsedAfterRefund, call.intrinsic.floorDataGas)
-    blockStateGasUsed = GasInt(max(0, call.intrinsic.state.int64 - stateGasRefund + c.gasMeter.stateGasUsed))
+    blockStateGasUsed = GasInt(max(0, call.intrinsic.state.int64 - stateGasRefund + stateGasUsed))
     blockRegularGasUsed = txGasUsedBeforeRefund + blockStateGasUsed
     debug "EIP-8037 gas accounting",
       intrinsicRegular = call.intrinsic.regular,
       intrinsicState = call.intrinsic.state,
       regularGasUsed = c.gasMeter.regularGasUsed,
-      stateGasUsed = c.gasMeter.stateGasUsed,
+      stateGasUsed = stateGasUsed,
       gasRemaining = c.gasMeter.gasRemaining,
       stateGasLeft = c.gasMeter.stateGasLeft,
       blockRegularGasUsed = blockRegularGasUsed,
