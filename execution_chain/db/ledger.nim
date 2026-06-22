@@ -168,7 +168,7 @@ proc getAccount(
       statement: rc.value,
       accPath:   accPath,
       flags:     {Alive})
-  elif shouldCreate or overlayAcc.exists():
+  elif shouldCreate:
     result = AccountRef(
       statement: CoreDbAccount(
         nonce:    EMPTY_ACCOUNT.nonce,
@@ -176,6 +176,14 @@ proc getAccount(
         codeHash: EMPTY_ACCOUNT.codeHash),
       accPath:    accPath,
       flags:      {Alive, IsNew})
+  elif overlayAcc.exists():
+    result = AccountRef(
+      statement: CoreDbAccount(
+        nonce:    EMPTY_ACCOUNT.nonce,
+        balance:  EMPTY_ACCOUNT.balance,
+        codeHash: EMPTY_ACCOUNT.codeHash),
+      accPath:    accPath,
+      flags:      {Alive})
   else:
     return # ignore, don't cache
 
@@ -226,20 +234,19 @@ proc originalStorageValue(
     acc.originalStorage[].withValue(slot, val) do:
       return val[]
 
-  # Not in the original values cache - go to the DB unless it's a new account
-  let overlayValue =
-    if ledger.balOverlay.isNone():
-      Opt.none(UInt256)
-    else:
-      ledger.balOverlay[].getStorage(address, slot)
+  if acc.flags * {IsNew, NewlyCreated} == {}:
+    let overlayValue =
+      if ledger.balOverlay.isNone():
+        Opt.none(UInt256)
+      else:
+        ledger.balOverlay[].getStorage(address, slot)
 
-  if overlayValue.isSome():
-    result = overlayValue[]
-  elif acc.flags * {IsNew, NewlyCreated} == {}:
-    let
-      slotKey = ledger.slots.get(slot).valueOr:
+    if overlayValue.isSome():
+      result = overlayValue[]
+    else:
+      let slotKey = ledger.slots.get(slot).valueOr:
         computeSlotKey(slot)
-    result = ledger.txFrame.fetchSlot(acc.accPath, slotKey).valueOr(0'u256)
+      result = ledger.txFrame.fetchSlot(acc.accPath, slotKey).valueOr(0'u256)
 
   acc.originalStorage[slot] = result
 
