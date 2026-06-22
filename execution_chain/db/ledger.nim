@@ -106,7 +106,11 @@ type
       ## For Parallel execution using BALs, when executing each transaction
       ## we need to read from the writes in the BAL in order to have the
       ## correct pre-state. The BAL overlay enables searching for the last write
-      ## in the BAL for accounts, storage and code.
+      ## in the BAL for accounts, storage and code. Only the first lookup of
+      ## a balance, nonce, code or storage slot hits the overlay and then after
+      ## that the values will be returned from the ledger caches. The intention
+      ## is that a separate ledger instance is used for each transaction each having
+      ## its own overlay instance for the given BAL index.
 
   ReadOnlyLedger* = distinct LedgerRef
 

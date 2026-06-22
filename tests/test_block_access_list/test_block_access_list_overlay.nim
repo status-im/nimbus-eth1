@@ -66,42 +66,46 @@ suite "Block access list overlay":
 
   test "Overlay account lookup returns the last write below the index":
     block:
-      let overlay = BlockAccessListOverlay.init(bal[].addr, 1)
+      var overlay = BlockAccessListOverlay.init(bal[].addr, 1)
       check:
         not overlay.getAccount(address1).exists()
         overlay.getAccount(address3) == default(OverlayAccount)
         overlay.getAccount(address2).balance == Opt.some(100.u256)
 
     block:
-      let
-        overlay = BlockAccessListOverlay.init(bal[].addr, 2)
-        acc = overlay.getAccount(address1)
+      var overlay = BlockAccessListOverlay.init(bal[].addr, 2)
+      let acc = overlay.getAccount(address1)
       check:
         acc.balance == Opt.some(11.u256)
         acc.nonce == Opt.some(5.AccountNonce)
         acc.code.isNone()
 
     block:
-      let
-        overlay = BlockAccessListOverlay.init(bal[].addr, 4)
-        acc = overlay.getAccount(address1)
+      var overlay = BlockAccessListOverlay.init(bal[].addr, 4)
+      let acc = overlay.getAccount(address1)
       check:
         acc.balance == Opt.some(33.u256)
         acc.nonce == Opt.some(5.AccountNonce)
         acc.code == Opt.some(code2)
 
   test "Overlay storage lookup returns the last write below the index":
+    var
+      overlay1 = BlockAccessListOverlay.init(bal[].addr, 1)
+      overlay2 = BlockAccessListOverlay.init(bal[].addr, 2)
+      overlay3 = BlockAccessListOverlay.init(bal[].addr, 3)
+      overlay4 = BlockAccessListOverlay.init(bal[].addr, 4)
+
     check:
-      BlockAccessListOverlay.init(bal[].addr, 1).getStorage(address1, slot1).isNone()
-      BlockAccessListOverlay.init(bal[].addr, 2).getStorage(address1, slot1) ==
+      overlay1.getStorage(address1, slot1).isNone()
+      overlay2.getStorage(address1, slot1) ==
         Opt.some(111.u256)
-      BlockAccessListOverlay.init(bal[].addr, 3).getStorage(address1, slot1) ==
+      overlay3.getStorage(address1, slot1) ==
         Opt.some(111.u256)
-      BlockAccessListOverlay.init(bal[].addr, 4).getStorage(address1, slot1) ==
+      overlay4.getStorage(address1, slot1) ==
         Opt.some(333.u256)
-      BlockAccessListOverlay.init(bal[].addr, 4).getStorage(address1, slot2).isNone()
-      BlockAccessListOverlay.init(bal[].addr, 4).getStorage(address1, slot3).isNone()
-      BlockAccessListOverlay.init(bal[].addr, 4).getStorage(address3, slot1).isNone()
+      overlay4.getStorage(address1, slot2).isNone()
+      overlay4.getStorage(address1, slot3).isNone()
+      overlay4.getStorage(address3, slot1).isNone()
 
   test "Ledger reads through the overlay with database fallback":
     let coreDb = newCoreDbRef(DefaultDbMemory)

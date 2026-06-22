@@ -10,14 +10,19 @@
 {.push raises: [], gcsafe.}
 
 import
+  std/tables,
   eth/common/[addresses, block_access_lists], stint, results, ./block_access_list_utils
 
 export addresses, block_access_lists, results
+
+# The BlockAccessList pointer is not owned or managed by the BlockAccessListOverlay
+# and therefore it must outlive and exist longer than the overlay.
 
 type
   BlockAccessListOverlay* = object
     bal: ptr BlockAccessList
     balIndex: int
+    accIndexes: Table[Address, int] 
 
   OverlayAccount* = object
     balance*: Opt[UInt256]
@@ -26,23 +31,39 @@ type
 
 const emptyOverlayAcc* = default(OverlayAccount)
 
+func exists*(acc: OverlayAccount): bool =
+  acc.balance.isSome() or acc.nonce.isSome() or acc.code.isSome()
+
 func init*(
     T: type BlockAccessListOverlay, bal: ptr BlockAccessList, balIndex: int
 ): T =
   doAssert not bal.isNil()
-  T(bal: bal, balIndex: balIndex)
+  T(bal: bal, balIndex: balIndex, accIndexes: initTable[Address, int]())
 
-func exists*(acc: OverlayAccount): bool =
-  acc.balance.isSome() or acc.nonce.isSome() or acc.code.isSome()
+proc `=copy`(
+    dest: var BlockAccessListOverlay, src: BlockAccessListOverlay
+) {.error: "Copying BlockAccessListOverlay is forbidden".} =
+  discard
 
-func getAccount*(overlay: BlockAccessListOverlay, address: Address): OverlayAccount =
-  let i = overlay.bal[].findAccountChanges(address)
+proc findAccount(overlay: var BlockAccessListOverlay, address: Address): int =
+  ## Index of `address` within the BAL (or -1), memoised in the overlay cache so
+  ## that repeated lookups for the same account skip the binary search.
+  overlay.accIndexes.withValue(address, cached):
+    return cached[]
+  do:
+    result = overlay.bal[].findAccountChanges(address)
+    overlay.accIndexes[address] = result
+
+# hasAccount?
+
+proc getAccount*(overlay: var BlockAccessListOverlay, address: Address): OverlayAccount =
+  let i = overlay.findAccount(address)
   if i < 0:
     return emptyOverlayAcc
 
   template accChanges(): AccountChanges =
     overlay.bal[][i]
-  
+
   var overlayAcc: OverlayAccount
   let balancePos = accChanges.balanceChanges.findLastWriteBefore(overlay.balIndex)
   if balancePos >= 0:
@@ -55,13 +76,13 @@ func getAccount*(overlay: BlockAccessListOverlay, address: Address): OverlayAcco
   let codePos = accChanges.codeChanges.findLastWriteBefore(overlay.balIndex)
   if codePos >= 0:
     overlayAcc.code = Opt.some(accChanges.codeChanges[codePos].newCode)
-  
+
   overlayAcc
 
-func getStorage*(
-    overlay: BlockAccessListOverlay, address: Address, slot: UInt256
+proc getStorage*(
+    overlay: var BlockAccessListOverlay, address: Address, slot: UInt256
 ): Opt[UInt256] =
-  let i = overlay.bal[].findAccountChanges(address)
+  let i = overlay.findAccount(address)
   if i < 0:
     return Opt.none(UInt256)
 
