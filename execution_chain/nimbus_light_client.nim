@@ -7,23 +7,6 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms
 
-# This is a near-verbatim copy of the light-client run loop from the vendored
-# standalone client at
-#   vendor/nimbus-eth2/beacon_chain/nimbus_light_client.nim
-# It is duplicated here (rather than refactored upstream) so that the unified
-# `./nimbus --light` mode can drive an in-process execution client over the
-# loopback Engine API without modifying the nimbus-eth2 submodule. Keep the two
-# in sync when the upstream light client changes.
-#
-# Differences from the upstream `main()`:
-#  - the body lives in a reusable `runLightClient*(config, stop)` proc
-#  - it does NOT call `ProcessState.setupStopHandlers()` (the combined client
-#    installs handlers before spawning threads)
-#  - the `beacon_slot` / `beacon_current_epoch` gauges are not declared here, as
-#    they are already declared by `nimbus_beacon_node` which is linked into the
-#    same `./nimbus` binary (duplicate registration would crash at startup)
-#  - the run loop also exits when the supplied `stop` future is finished
-
 {.push raises: [], gcsafe.}
 
 import

@@ -392,6 +392,9 @@ proc runCombinedClient() =
     beaconUdpPort =
       config.beaconUdpPort.get(config.udpPort.get(Port defaultEth2TcpPort))
   if config.light:
+    # The light client drives the EL directly via the Engine API, so the
+    # beacon-node CL-driven EL sync loop (`elSyncLoop`/`--el-sync`) must not run.
+    config.elSync = false
     createThread(
       lightThread,
       runLightClientThread,
