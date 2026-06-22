@@ -358,6 +358,16 @@ proc populateConfigObject*(com: CommonRef, fork: HardFork): ConfigObject =
         name: "WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS"
       )
     ]
+    amsterdamSystemContracts: seq[SystemContractPair] = @[
+      SystemContractPair(
+        address: BUILDER_DEPOSIT_CONTRACT_ADDRESS,
+        name: "BUILDER_DEPOSIT_CONTRACT_ADDRESS"
+      ),
+      SystemContractPair(
+        address: BUILDER_EXIT_CONTRACT_ADDRESS,
+        name: "BUILDER_EXIT_CONTRACT_ADDRESS"
+      )
+    ]
 
   var configObject = ConfigObject()
 
@@ -386,6 +396,8 @@ proc populateConfigObject*(com: CommonRef, fork: HardFork): ConfigObject =
     configObject.systemContracts = cancunSystemContracts
   elif fork >= Prague:
     configObject.systemContracts = cancunSystemContracts & pragueSystemContracts
+  elif fork >= Amsterdam:
+    configObject.systemContracts = cancunSystemContracts & pragueSystemContracts & amsterdamSystemContracts
   else:
     configObject.systemContracts = @[]
 

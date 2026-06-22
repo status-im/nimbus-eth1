@@ -127,11 +127,22 @@ func validateExecutionRequest(blockHash: Hash32,
       raise invalidParams("newPayload" & $apiVersion &
         ": " & "Empty data for request type " & $requestType)
 
-    if requestType notin [
-       DEPOSIT_REQUEST_TYPE,
-       WITHDRAWAL_REQUEST_TYPE,
-       CONSOLIDATION_REQUEST_TYPE]:
-      return Opt.some(invalidStatus(blockHash, "Invalid execution request type" & $requestType))
+    if apiVersion >= Version.V5:
+      if requestType notin [
+        DEPOSIT_REQUEST_TYPE,
+        WITHDRAWAL_REQUEST_TYPE,
+        CONSOLIDATION_REQUEST_TYPE,
+        BUILDER_DEPOSIT_REQUEST_TYPE,
+        BUILDER_EXIT_REQUEST_TYPE]:
+        return Opt.some(invalidStatus(blockHash,
+          "newPayload" & $apiVersion & ": Invalid execution request type" & $requestType))
+    else:
+      if requestType notin [
+        DEPOSIT_REQUEST_TYPE,
+        WITHDRAWAL_REQUEST_TYPE,
+        CONSOLIDATION_REQUEST_TYPE]:
+        return Opt.some(invalidStatus(blockHash,
+          "newPayload" & $apiVersion & ": Invalid execution request type" & $requestType))
 
     previousRequestType = requestType.int
   err()

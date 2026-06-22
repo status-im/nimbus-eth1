@@ -162,7 +162,7 @@ when compileOption("threads"):
         discard sync(e.fut)
 
   func firstBalIndex(sc: SlotChanges): BlockAccessIndex =
-    ## Earliest block access index at which the slot was written. 
+    ## Earliest block access index at which the slot was written.
     ## Block access list validation guarantees `changes` is non-empty.
     assert sc.changes.len > 0
     sc.changes[0].blockAccessIndex
@@ -180,7 +180,7 @@ when compileOption("threads"):
       let accChanges = addr ctx[].balPtr[][i]
 
       # Precompile contracts don't exist in the state trie and don't get loaded
-      # when called so we don't prefetch them. The BAL can contain precompile addresses 
+      # when called so we don't prefetch them. The BAL can contain precompile addresses
       # but in most cases the state trie account is not actually fetched. The edge
       # case here is when a precompile contract receives a value transfer which will
       # load the account to update the balance but unfortunately we can't determine
@@ -208,7 +208,7 @@ when compileOption("threads"):
 
   template withBalPrefetchParallel(
       vmState: BaseVMState, bal: Opt[BlockAccessListRef], body: untyped) =
-      
+
     let balRef = bal.get()
 
     var ctx: BalPrefetchCtx
@@ -220,12 +220,12 @@ when compileOption("threads"):
     ctx.nextIndex.store(0, moRelease)
     ctx.finished.store(false, moRelease)
 
-    let 
+    let
       ctxPtr = ctx.addr
       n = vmState.com.taskpool.numThreads
       configured = vmState.com.balStatePrefetchWorkers
       numWorkers = if configured <= 0: n else: min(configured, n)
-    
+
     var futs = newSeq[Flowvar[bool]](numWorkers)
     for i in 0 ..< numWorkers:
       futs[i] = vmState.com.taskpool.spawn balPrefetchWorker(ctxPtr)
@@ -444,12 +444,18 @@ proc procBlkEpilogue(
   var
     withdrawalReqs: seq[byte]
     consolidationReqs: seq[byte]
+    builderDepositReqs: seq[byte]
+    builderExitReqs: seq[byte]
 
   if header.requestsHash.isSome:
     # Execute EIP-7002 and EIP-7251 before calculating stateRoot
     # because they will alter the state
     withdrawalReqs = ?processDequeueWithdrawalRequests(vmState)
     consolidationReqs = ?processDequeueConsolidationRequests(vmState)
+
+    if vmState.com.isAmsterdamOrLater(header.timestamp):
+      builderDepositReqs = ?processBuilderDepositRequests(vmState)
+      builderExitReqs = ?processBuilderExitRequests(vmState)
 
   # Commit block access list tracker changes for post‑execution system calls
   if vmState.balTrackerEnabled:
@@ -511,13 +517,24 @@ proc procBlkEpilogue(
       let
         depositReqs =
           ?parseDepositLogs(vmState.allLogs, vmState.com.depositContractAddress)
-        requestsHash = calcRequestsHash(
-          [
-            (DEPOSIT_REQUEST_TYPE, depositReqs),
-            (WITHDRAWAL_REQUEST_TYPE, withdrawalReqs),
-            (CONSOLIDATION_REQUEST_TYPE, consolidationReqs),
-          ]
-        )
+        requestsHash = if vmState.com.isAmsterdamOrLater(header.timestamp):
+            calcRequestsHash(
+              [
+                (DEPOSIT_REQUEST_TYPE, depositReqs),
+                (WITHDRAWAL_REQUEST_TYPE, withdrawalReqs),
+                (CONSOLIDATION_REQUEST_TYPE, consolidationReqs),
+                (BUILDER_DEPOSIT_REQUEST_TYPE, builderDepositReqs),
+                (BUILDER_EXIT_REQUEST_TYPE, builderExitReqs),
+              ]
+            )
+          else:
+            calcRequestsHash(
+              [
+                (DEPOSIT_REQUEST_TYPE, depositReqs),
+                (WITHDRAWAL_REQUEST_TYPE, withdrawalReqs),
+                (CONSOLIDATION_REQUEST_TYPE, consolidationReqs),
+              ]
+            )
 
       if header.requestsHash.get != requestsHash:
         debug "wrong requestsHash in block",

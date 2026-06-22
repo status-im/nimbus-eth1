@@ -243,6 +243,38 @@ proc processDequeueConsolidationRequests*(vmState: BaseVMState): Result[seq[byte
     return err("processDequeueConsolidationRequests: " & res.error)
   ok(move(res.output))
 
+proc processBuilderDepositRequests*(vmState: BaseVMState): Result[seq[byte], string] =
+  ## processBuilderDepositRequests applies the EIP-8282 system call
+  ## to the builder deposit requests contract.
+  let
+    call = CallParams(
+      vmState  : vmState,
+      sender   : SYSTEM_ADDRESS,
+      gasLimit : 30_000_000.GasInt,
+      to       : BUILDER_DEPOSIT_CONTRACT_ADDRESS,
+    )
+
+  var res = call.systemCall(OutputResult)
+  if res.error.len > 0:
+    return err("processBuilderDepositRequests: " & res.error)
+  ok(move(res.output))
+
+proc processBuilderExitRequests*(vmState: BaseVMState): Result[seq[byte], string] =
+  ## processBuilderExitRequests applies the EIP-8282 system call
+  ## to the builder exit requests contract.
+  let
+    call = CallParams(
+      vmState  : vmState,
+      sender   : SYSTEM_ADDRESS,
+      gasLimit : 30_000_000.GasInt,
+      to       : BUILDER_EXIT_CONTRACT_ADDRESS,
+    )
+
+  var res = call.systemCall(OutputResult)
+  if res.error.len > 0:
+    return err("processBuilderExitRequests: " & res.error)
+  ok(move(res.output))
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

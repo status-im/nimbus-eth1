@@ -299,13 +299,21 @@ func postExecComputation*(c: Computation) =
   c.vmState.status = c.isSuccess
 
 func preExecComputation*(c: Computation) =
-  if c.fork >= FkPrague and (
-    c.msg.contractAddress == WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS or
-    c.msg.contractAddress == CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS
-  ):
-    # EIP-7002 and EIP-7215 dicates that the code must be present, or else block is invalid
-    if c.code.len <= 0:
-      c.setError("No code found for withdrawal or consolidation requests contract")
+  if c.fork >= FkPrague:
+    if c.msg.contractAddress == WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS or
+       c.msg.contractAddress == CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS:
+
+      # EIP-7002 and EIP-7215 dicates that the code must be present, or else block is invalid
+      if c.code.len <= 0:
+        c.setError("No code found for withdrawal or consolidation requests contract")
+
+    if c.fork >= FkAmsterdam and (
+      c.msg.contractAddress == BUILDER_DEPOSIT_CONTRACT_ADDRESS or
+      c.msg.contractAddress == BUILDER_EXIT_CONTRACT_ADDRESS
+    ):
+      # EIP-8282 dicates that the code must be present, or else block is invalid
+      if c.code.len <= 0:
+        c.setError("No code found for builder deposit or exit requests contract")
 
 # ------------------------------------------------------------------------------
 # End
