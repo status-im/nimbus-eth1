@@ -57,6 +57,7 @@ func chargeStateGas*(gasMeter: var GasMeter; amount: GasInt, reason: string): Ev
     let remainder = amount - gasMeter.stateGasLeft
     gasMeter.stateGasLeft = 0
     gasMeter.gasRemaining -= remainder
+    gasMeter.stateGasSpilled += remainder
   else:
     return EvmResultVoid.err(gasErr(OutOfGas))
 
@@ -91,11 +92,19 @@ func checkGas*(gasMeter: GasMeter, cost, amount: GasInt): EvmResultVoid =
     return err(gasErr(OutOfGas))
   ok()
 
-func returnAllStateGas*(gasMeter: var GasMeter) =
-  gasMeter.stateGasLeft = GasInt(gasMeter.stateGasLeft.int64 + gasMeter.stateGasUsed)
+func refillFrameStateGas*(gasMeter: var GasMeter) =
+  gasMeter.gasRemaining += gasMeter.stateGasSpilled
+  gasMeter.stateGasLeft = GasInt(
+    gasMeter.stateGasLeft.int64 +
+    gasMeter.stateGasUsed -
+    gasMeter.stateGasSpilled.int64
+  )
   gasMeter.stateGasUsed = 0
+  gasMeter.stateGasSpilled = 0
 
-# https://github.com/ethereum/execution-specs/pull/2733/changes
 func creditStateGasRefund*(gasMeter: var GasMeter; amount: GasInt) =
-  gasMeter.stateGasLeft += amount
+  let fromGasLeft = min(amount, gasMeter.stateGasSpilled)
+  gasMeter.gasRemaining += fromGasLeft
+  gasMeter.stateGasSpilled -= fromGasLeft
+  gasMeter.stateGasLeft += amount - fromGasLeft
   gasMeter.stateGasUsed -= amount.int64

@@ -199,7 +199,7 @@ proc staticCallParams(c: Computation, res: var LocalParams): EvmResult[void] =
 proc getCallCode(c: Computation, childMsg: Message): CodeBytesRef =
   if c.balTrackerEnabled:
     c.vmState.balTracker.trackAddressAccess(c.delegateTo)
-    
+
   # Avoid accessing ledger if it's a precompile address
   if MsgFlags.Precompile in childMsg.flags:
     return CodeBytesRef(nil)
@@ -227,22 +227,15 @@ proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int, newAcco
       if c.fork >= FkAmsterdam:
         c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
         c.gasMeter.appendStateGasUsed(child.gasMeter.stateGasUsed)
+        c.gasMeter.stateGasSpilled += child.gasMeter.stateGasSpilled
       c.merge(child)
       c.stack.lsTop(1)
     else:
       if c.fork >= FkAmsterdam:
-        # State is rolled back, so all state gas is restored to the parent's
-        # reservoir via the `state_gas_left + state_gas_used` invariant. Any
-        # inline refunds the child credited net out automatically — their
-        # matching charges are rolled back too.
-        c.gasMeter.returnStateGas(GasInt(
-          c.gasMeter.stateGasLeft.int64 +
-          child.gasMeter.stateGasUsed +
-          child.gasMeter.stateGasLeft.int64)
-        )
+        c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
         if newAccountCharged:
           c.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
-      
+
     let actualOutputSize = min(memLen, child.output.len)
     if actualOutputSize > 0:
       ? c.memory.write(memPos, child.output.toOpenArray(0, actualOutputSize - 1))
