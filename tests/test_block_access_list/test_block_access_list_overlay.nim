@@ -68,7 +68,7 @@ suite "Block access list overlay":
     block:
       var overlay = BlockAccessListOverlay.init(bal[].addr, 1)
       check:
-        not overlay.getAccount(address1).exists()
+        not overlay.hasAccount(address1)
         overlay.getAccount(address3) == default(OverlayAccount)
         overlay.getAccount(address2).balance == Opt.some(100.u256)
 
@@ -156,3 +156,21 @@ suite "Block access list overlay":
         ledger.getNonce(address4) == 1.AccountNonce
         ledger.getCode(address4).bytes() == code2
         ledger.getStorage(address4, slot1) == 0.u256
+
+  test "Ledger reads storage for an overlay account with only storage writes":
+    # address3 has only a storage write in the BAL (no balance/nonce/code change)
+    # and is absent from the database. The hasAccount check must still materialise
+    # it so the overlay storage is read - exists() alone (balance/nonce/code) would
+    # miss it and getStorage would wrongly return 0.
+    var storageOnlyBuilder: BlockAccessListBuilder
+    storageOnlyBuilder.init()
+    storageOnlyBuilder.addStorageWrite(address3, slot1, 1, 777.u256)
+    let storageOnlyBal = storageOnlyBuilder.buildBlockAccessList()
+
+    let coreDb = newCoreDbRef(DefaultDbMemory)
+    let ledger = LedgerRef.init(coreDb.baseTxFrame())
+    ledger.balOverlay = Opt.some(BlockAccessListOverlay.init(storageOnlyBal[].addr, 2))
+    check:
+      ledger.accountExists(address3)
+      ledger.getStorage(address3, slot1) == 777.u256
+      ledger.getStorage(address3, slot2) == 0.u256

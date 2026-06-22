@@ -31,9 +31,6 @@ type
 
 const emptyOverlayAcc* = default(OverlayAccount)
 
-func exists*(acc: OverlayAccount): bool =
-  acc.balance.isSome() or acc.nonce.isSome() or acc.code.isSome()
-
 func init*(
     T: type BlockAccessListOverlay, bal: ptr BlockAccessList, balIndex: int
 ): T =
@@ -46,15 +43,30 @@ proc `=copy`(
   discard
 
 proc findAccount(overlay: var BlockAccessListOverlay, address: Address): int =
-  ## Index of `address` within the BAL (or -1), memoised in the overlay cache so
-  ## that repeated lookups for the same account skip the binary search.
   overlay.accIndexes.withValue(address, cached):
     return cached[]
   do:
     result = overlay.bal[].findAccountChanges(address)
     overlay.accIndexes[address] = result
 
-# hasAccount?
+proc hasAccount*(overlay: var BlockAccessListOverlay, address: Address): bool =
+  let i = overlay.findAccount(address)
+  if i < 0:
+    return false
+
+  template accChanges(): AccountChanges =
+    overlay.bal[][i]
+
+  if accChanges.balanceChanges.findLastWriteBefore(overlay.balIndex) >= 0 or
+      accChanges.nonceChanges.findLastWriteBefore(overlay.balIndex) >= 0 or
+      accChanges.codeChanges.findLastWriteBefore(overlay.balIndex) >= 0:
+    return true
+
+  for slotChanges in accChanges.storageChanges:
+    if slotChanges.changes.findLastWriteBefore(overlay.balIndex) >= 0:
+      return true
+
+  false
 
 proc getAccount*(overlay: var BlockAccessListOverlay, address: Address): OverlayAccount =
   let i = overlay.findAccount(address)

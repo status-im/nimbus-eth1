@@ -158,12 +158,6 @@ proc getAccount(
     return
 
   # not found in cache, look into state trie
-  let overlayAcc =
-    if ledger.balOverlay.isNone():
-      emptyOverlayAcc
-    else:
-      ledger.balOverlay[].getAccount(address)   
-
   let
     accPath = address.computeAccPath
     rc = ledger.txFrame.fetchAccount accPath
@@ -180,7 +174,7 @@ proc getAccount(
         codeHash: EMPTY_ACCOUNT.codeHash),
       accPath:    accPath,
       flags:      {Alive, IsNew})
-  elif overlayAcc.exists():
+  elif ledger.balOverlay.isSome() and ledger.balOverlay[].hasAccount(address):
     result = AccountRef(
       statement: CoreDbAccount(
         nonce:    EMPTY_ACCOUNT.nonce,
@@ -192,6 +186,7 @@ proc getAccount(
     return # ignore, don't cache
 
   if ledger.balOverlay.isSome():
+    let overlayAcc = ledger.balOverlay[].getAccount(address)   
     if overlayAcc.balance.isSome():
       result.statement.balance = overlayAcc.balance[]
     if overlayAcc.nonce.isSome():
