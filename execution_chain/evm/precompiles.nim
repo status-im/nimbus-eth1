@@ -808,9 +808,11 @@ template isPrecompile*(fork: EVMFork, codeAddress: Address): bool =
 # bytes fit in a fixed-capacity buffer and can be used directly as the cache
 # key. Using the raw bytes as the key means lookups are exact (the cache
 # compares the full key with `==`), so there is no collision/correctness risk -
-# the internal hash only affects bucket placement. Precompiles whose input is
-# variable/large (modExp, the pairings and multi-exponentiations) are not
-# cached, nor are the cheap identity/sha256/ripemd160 precompiles.
+# the internal hash only affects bucket placement. A call is only cached when
+# its input fits the fixed-capacity key buffer (and, on store, its output fits
+# the value buffer), so variable/large-input precompiles are transparently
+# cached for their small inputs and fall through to normal computation for big
+# ones. Only the trivial identity precompile is never cached.
 
 const
   # Compile with `-d:disablePrecompileCache` to bypass the cache entirely (for
@@ -820,9 +822,14 @@ const
   MaxCachedPrecompileInput = 512    # BLS G2 add - the largest cached input
   MaxCachedPrecompileOutput = 256   # BLS G2 add / mapG2 - the largest cached output
 
+  # Every precompile except the trivial identity (a plain memcpy) is cached;
+  # variable-input precompiles are only actually cached when their input fits
+  # the key buffer (see the `cacheable` guard in execPrecompile).
   cachedPrecompiles = {
-    paEcRecover, paEcAdd, paEcMul, paBlake2bf, paPointEvaluation,
-    paBlsG1Add, paBlsG2Add, paBlsMapG1, paBlsMapG2, paP256Verify}
+    paEcRecover, paSha256, paRipeMd160, paModExp, paEcAdd, paEcMul,
+    paPairing, paBlake2bf, paPointEvaluation, paBlsG1Add, paBlsG1MultiExp,
+    paBlsG2Add, paBlsG2MultiExp, paBlsPairing, paBlsMapG1, paBlsMapG2,
+    paP256Verify}
 
 type
   PrecompileCacheKey = ArrayBuf[MaxCachedPrecompileInput, byte]

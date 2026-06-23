@@ -40,36 +40,67 @@ const
 
 # precompile -> fixture file holding a valid (non-error) input
 const cases = [
-  (paEcRecover,  "ecrecover.json"),
-  (paEcAdd,      "bn256Add_istanbul.json"),
-  (paEcMul,      "bn256mul_istanbul.json"),
-  (paBlake2bf,   "blake2F.json"),
-  (paBlsG1Add,   "blsG1Add.json"),
-  (paBlsG2Add,   "blsG2Add.json"),
-  (paBlsMapG1,   "blsMapG1.json"),
-  (paBlsMapG2,   "blsMapG2.json"),
-  (paP256Verify, "P256Verify.json"),
+  (paEcRecover,      "ecrecover.json"),
+  (paSha256,         "sha256.json"),
+  (paRipeMd160,      "ripemd160.json"),
+  (paModExp,         "modexp_eip7883.json"),
+  (paEcAdd,          "bn256Add_istanbul.json"),
+  (paEcMul,          "bn256mul_istanbul.json"),
+  (paPairing,        "pairing_istanbul.json"),
+  (paBlake2bf,       "blake2F.json"),
+  (paBlsG1Add,       "blsG1Add.json"),
+  (paBlsG1MultiExp,  "blsG1MultiExp.json"),
+  (paBlsG2Add,       "blsG2Add.json"),
+  (paBlsG2MultiExp,  "blsG2MultiExp.json"),
+  (paBlsPairing,     "blsPairing.json"),
+  (paBlsMapG1,       "blsMapG1.json"),
+  (paBlsMapG2,       "blsMapG2.json"),
+  (paP256Verify,     "P256Verify.json"),
 ]
 
-proc firstValidInput(file: string): seq[byte] =
+# Variable-input precompiles: time the smallest vs largest cacheable (<=512B)
+# fixture input rather than a constructed fast/slow pair.
+const sizeVarying = {
+  paModExp, paPairing, paBlsG1MultiExp, paBlsG2MultiExp, paBlsPairing}
+
+proc validInputs(file: string): seq[seq[byte]] =
+  ## All valid (non-error) fixture inputs that fit the cache key buffer,
+  ## sorted ascending by length.
   let fixture = json.parseFile(fixtureDir / file)
   for test in fixture["data"]:
     if not test.hasKey("ExpectedError") and
        test.hasKey("Input") and test["Input"].getStr.len > 0:
       let input = test["Input"].getStr.hexToSeqByte
       if input.len <= 512:
-        return input
-  raiseAssert "no valid bounded input in " & file
+        result.add input
+  doAssert result.len > 0, "no valid bounded input in " & file
+  # simple insertion sort by length (input lists are tiny)
+  for i in 1 ..< result.len:
+    var j = i
+    while j > 0 and result[j-1].len > result[j].len:
+      swap(result[j-1], result[j]); dec j
 
 proc padded(input: openArray[byte], n: int): seq[byte] =
   result = newSeq[byte](n)
   for i in 0 ..< min(n, input.len):
     result[i] = input[i]
 
-# Construct (fastInput, slowInput) for a precompile from its valid fixture input.
-proc scenarios(precompile: Precompiles, fixture: seq[byte]):
+# Construct (fastInput, slowInput) for a precompile from its valid fixture inputs
+# (sorted ascending by length).
+proc scenarios(precompile: Precompiles, inputs: seq[seq[byte]]):
     tuple[fast, slow: seq[byte], note: string] =
+  if precompile in sizeVarying:
+    # smallest vs largest cacheable fixture input
+    let fast = inputs[0]
+    let slow = inputs[^1]
+    return (fast, slow, $fast.len & "B vs " & $slow.len & "B input")
+
+  let fixture = inputs[0]
   case precompile
+  of paSha256, paRipeMd160:
+    # Cost scales with input length; cache only stores inputs <= 512 bytes.
+    # FAST: empty input. SLOW: largest cacheable input (512 bytes).
+    (newSeq[byte](0), newSeq[byte](512), "0B vs 512B input (max cacheable)")
   of paEcAdd:
     # FAST: infinity + infinity (all zeros). SLOW: two real curve points.
     (newSeq[byte](128), padded(fixture, 128), "0+0 vs P+Q")
@@ -158,8 +189,7 @@ proc main() =
   echo align("precompile", 14), align("fast ns/op", 13), align("slow ns/op", 13),
        "  scenario (fast vs slow)"
   for (precompile, file) in cases:
-    let fixture = firstValidInput(file)
-    let (fast, slow, note) = scenarios(precompile, fixture)
+    let (fast, slow, note) = scenarios(precompile, validInputs(file))
     let fastNs = bench(vmState, precompile, fast)
     let slowNs = bench(vmState, precompile, slow)
     echo align($precompile, 14),
