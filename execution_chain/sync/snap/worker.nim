@@ -13,7 +13,7 @@
 import
   std/os,
   pkg/[chronicles, chronos, minilru, results],
-  ./worker/[download, helpers, session, start_stop, state_db, worker_desc]
+  ./worker/[download, helpers, mpt, session, start_stop, state_db, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -115,6 +115,9 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
     of SnapAnalyse:
       let stats {.used.} = ctx.sessionAnalyseFullTrie(info).valueOr:
         break body                                  # shutdown?
+
+      # Update pivot state record on DB cache
+      discard ctx.setPivotTag(PivotMptAnalysed, info)
 
       debug info & ": Partial MPT analysed",
         ela=stats.ela.toStr, syncState=($ctx.syncState)

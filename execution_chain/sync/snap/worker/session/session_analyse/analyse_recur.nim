@@ -272,8 +272,6 @@ proc sessionAnalyseTrieRecur*(
   if 0 < trd.cacheErr:
     return err(EPutError)
 
-  discard ctx.setPivotTag(PivotMptAnalysed, info)
-
   stats.nAccNodes += stats.nNodes
   stats.nNodes = stats.nAccNodes + stats.nStoNodes
   stats.ela = Moment.now() - start
