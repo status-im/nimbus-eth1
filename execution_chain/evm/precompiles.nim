@@ -795,8 +795,6 @@ template isPrecompile*(fork: EVMFork, codeAddress: Address): bool =
   getPrecompile(fork, codeAddress).isSome
 
 proc execPrecompile*(c: Computation, precompile: Precompiles) =
-  if c.balTrackerEnabled:
-    c.vmState.balTracker.trackAddressAccess(precompileAddrs[precompile])
   let fork = c.fork
   let res = case precompile
     of paEcRecover: ecRecover(c)

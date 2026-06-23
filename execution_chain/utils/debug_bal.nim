@@ -19,6 +19,13 @@ import
 export
   json
 
+func stripLeadingZeros(value: string): string =
+  var cidx = 0
+  # ignore the last character so we retain '0' on zero value
+  while cidx < value.len - 2 and value[cidx] == '0':
+    cidx.inc
+  value[cidx .. ^1]
+
 proc `@@`[T](list: openArray[T]): JsonNode
 
 proc `@@`(x: Address): JsonNode =
@@ -28,10 +35,12 @@ proc `@@`(x: Bytes): JsonNode =
   %("0x" & x.toHex)
 
 proc `@@`(x: uint16 | uint32 | uint64): JsonNode =
-  %("0x" & x.toHex)
+  %("0x" & x.toHex.stripLeadingZeros)
 
 proc `@@`(x: UInt256): JsonNode =
-  %("0x" & x.toHex)
+  let hex = x.toHex
+  if hex.len mod 2 != 0: %("0x0" & hex)
+  else: %("0x" & hex)
 
 proc `@@`(x: NonceChange): JsonNode =
   result = %{

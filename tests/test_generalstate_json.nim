@@ -235,6 +235,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
     ctx.name = label
     ctx.subFixture = subFixture
     inc subFixture
+
     if conf.subFixture.isSome and conf.subFixture.get != ctx.subFixture:
       continue
     testSubFixture(ctx, child, testStatusIMPL, trace, debugMode)

@@ -88,7 +88,7 @@ const
   TOTAL_COST_FLOOR_PER_TOKEN_EIP7976 = 16
   TX_VALUE_COST = 4244
   TRANSFER_LOG_COST = 1756
-  
+
 func intrinsicGas*(call: CallParams | Transaction, hardFork: HardFork, gasLimit: GasInt, sender: Address): IntrinsicGas =
   # Compute the baseline gas cost for this transaction.  This is the amount
   # of gas needed to send this transaction (but that is not actually used
@@ -116,7 +116,7 @@ func intrinsicGas*(call: CallParams | Transaction, hardFork: HardFork, gasLimit:
       regularGas += (gasFees[fork][GasInitcodeWord] * call.input.len.wordCount)
   elif not call.selfTransfer(sender):
     if hardFork >= Amsterdam:
-      regularGas += COLD_ACCOUNT_ACCESS_2780
+      regularGas += COLD_ACCOUNT_ACCESS_8038
       if call.value.isZero.not:
         regularGas += TRANSFER_LOG_COST
         regularGas += TX_VALUE_COST
@@ -137,15 +137,22 @@ func intrinsicGas*(call: CallParams | Transaction, hardFork: HardFork, gasLimit:
 
   # EIP-2930 (Berlin) intrinsic gas for transaction access list.
   if hardFork >= Berlin:
-    for account in call.accessList:
-      regularGas += ACCESS_LIST_ADDRESS_COST
-      regularGas += account.storageKeys.len * ACCESS_LIST_STORAGE_KEY_COST
-      # Total byte count of addresses(20 bytes each) and storage keys (32 bytes each) in the access list.
-      accessListBytes += 20 + account.storageKeys.len * 32
+    if hardFork >= Amsterdam:
+      for account in call.accessList:
+        regularGas += ACCESS_LIST_ADDRESS_COST_8038
+        regularGas += account.storageKeys.len * ACCESS_LIST_STORAGE_KEY_COST_8038
+        # Total byte count of addresses(20 bytes each) and storage keys (32 bytes each) in the access list.
+        accessListBytes += 20 + account.storageKeys.len * 32
+    else:
+      for account in call.accessList:
+        regularGas += ACCESS_LIST_ADDRESS_COST_2930
+        regularGas += account.storageKeys.len * ACCESS_LIST_STORAGE_KEY_COST_2930
+        # Total byte count of addresses(20 bytes each) and storage keys (32 bytes each) in the access list.
+        accessListBytes += 20 + account.storageKeys.len * 32
 
   if hardFork >= Prague:
     if hardFork >= Amsterdam:
-      regularGas += REGULAR_PER_AUTH_BASE_COST * call.authorizationList.len
+      regularGas += (ACCOUNT_WRITE_8038 + REGULAR_PER_AUTH_BASE_COST) * call.authorizationList.len
       # EIP-7981: Increase Access List Cost
       let floorTokensInAccessList = accessListBytes * 4
       tokens += floorTokensInAccessList

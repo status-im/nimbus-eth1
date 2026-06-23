@@ -70,14 +70,13 @@ macro selectVM(v: VmCpt, fork: EVMFork, tracingEnabled: bool): EvmResultVoid =
 proc beforeExecCall(c: Computation): bool =
   if c.fork >= FkAmsterdam and c.msg.depth == 0:
     if c.msg.value.isZero.not and
-      MsgFlags.Precompile notin c.msg.flags and
       c.vmState.readOnlyLedger.isDeadAccount(c.msg.codeAddress):
       c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "topFrameCharges").isOkOr:
         c.setError($error.code, true)
         return true
 
     if MsgFlags.Delegated in c.msg.flags:
-      c.gasMeter.consumeGas(COLD_ACCOUNT_ACCESS_2780, "topFrameCharges").isOkOr:
+      c.gasMeter.consumeGas(COLD_ACCOUNT_ACCESS_8038, "topFrameCharges").isOkOr:
         c.setError($error.code, true)
         return true
 
@@ -110,10 +109,6 @@ proc afterExecCall(c: Computation) =
       c.vmState.ledger.ripemdSpecial()
 
 proc beforeExecCreate(c: Computation): bool =
-  if c.fork >= FkAmsterdam:
-    if c.accountExists(c.msg.contractAddress):
-      c.msg.flags.incl MsgFlags.TargetAlive
-
   c.vmState.mutateLedger:
     let nonce = ledger.getNonce(c.msg.sender)
     if nonce + 1 < nonce:
@@ -134,16 +129,12 @@ proc beforeExecCreate(c: Computation): bool =
 
   if c.balTrackerEnabled:
     c.vmState.balTracker.trackAddressAccess(c.msg.contractAddress)
+
+  if c.fork >= FkAmsterdam:
+    if c.vmState.readOnlyLedger().accountExists(c.msg.contractAddress):
+      c.msg.flags.incl MsgFlags.TargetAlive
+
   if c.vmState.readOnlyLedger().contractCollision(c.msg.contractAddress):
-    # Per EIP-684 collision behaves as an immediate exceptional halt,
-    # so the burned gas belongs in the regular dimension.
-    # On CREATE/CREATE2 address collision the 63/64 gas allocation is
-    # burned and added to regularGasUsed.
-    # But contract creation tx collision does not add the burned gas to
-    # regularGasUsed.
-    if c.fork >= FkAmsterdam and c.msg.depth > 0:
-      # https://github.com/ethereum/execution-specs/pull/2733/changes
-      c.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
     let blurb = c.msg.contractAddress.toHex
     c.setError("Address collision when creating contract address=" & blurb, true)
     return true
@@ -217,6 +208,7 @@ proc afterExec(c: Computation) =
   if c.isSuccess:
     c.commit()
   else:
+    c.gasMeter.refillFrameStateGas()
     c.rollback()
 
   if c.msg.depth > 0:

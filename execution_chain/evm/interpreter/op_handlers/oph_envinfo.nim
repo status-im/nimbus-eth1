@@ -150,6 +150,15 @@ proc extCodeSizeEIP2929Op(cpt: VmCpt): EvmResultVoid =
 
   cpt.stack.unaryAddress(ecsEIP2929)
 
+proc extCodeSizeEIP8038Op(cpt: VmCpt): EvmResultVoid =
+  ## 0x3b, Get size of an account's code (EIP-2929)
+  template ecsEIP8038(address): auto =
+    let gasCost = cpt.gasEip8038AccountCheck(address) + WarmStorageReadCost
+    ? cpt.opcodeGasCost(ExtCodeSize, gasCost, reason = "ExtCodeSize EIP8038")
+    cpt.getCodeSize(address)
+
+  cpt.stack.unaryAddress(ecsEIP8038)
+
 # -----------
 
 proc extCodeCopyOp(cpt: VmCpt): EvmResultVoid =
@@ -184,6 +193,24 @@ proc extCodeCopyEIP2929Op(cpt: VmCpt): EvmResultVoid =
 
   cpt.stack.lsShrink(4)
   ? cpt.opcodeGasCost(ExtCodeCopy, gasCost, reason = "ExtCodeCopy EIP2929")
+
+  let code = cpt.getCode(address)
+  cpt.memory.writePadded(code.bytes(), memPos, codePos, len)
+  ok()
+
+proc extCodeCopyEIP8038Op(cpt: VmCpt): EvmResultVoid =
+  ## 0x3c, Copy an account's code to memory (EIP-2929).
+  ? cpt.stack.lsCheck(4)
+  let
+    address = cpt.stack.lsPeekAddress(^1)
+    memPos  = cpt.stack.lsPeekMemRef(^2)
+    codePos = cpt.stack.lsPeekMemRef(^3)
+    len     = cpt.stack.lsPeekMemRef(^4)
+    gasCost = cpt.gasCosts[ExtCodeCopy].m_handler(cpt.memory.len, memPos, len) +
+                cpt.gasEip8038AccountCheck(address) + WarmStorageReadCost
+
+  cpt.stack.lsShrink(4)
+  ? cpt.opcodeGasCost(ExtCodeCopy, gasCost, reason = "ExtCodeCopy EIP8038")
 
   let code = cpt.getCode(address)
   cpt.memory.writePadded(code.bytes(), memPos, codePos, len)
@@ -330,12 +357,17 @@ const
      exec: extCodeSizeOp),
 
 
-    (opCode: ExtCodeSize,    ## 0x3b, Account code size for Berlin through Cancun
-     forks: VmOpBerlinAndLater,
+    (opCode: ExtCodeSize,    ## 0x3b, Account code size for Berlin through Osaka
+     forks: VmOpBerlinAndLater - VmOpAmsterdamAndLater,
      name: "extCodeSizeEIP2929",
      info: "EIP2929: Get size of an account's code",
      exec: extCodeSizeEIP2929Op),
 
+    (opCode: ExtCodeSize,    ## 0x3b, Account code size for Amsterdam
+     forks: VmOpAmsterdamAndLater,
+     name: "extCodeSizeEIP8038",
+     info: "EIP8038: Get size of an account's code",
+     exec: extCodeSizeEIP8038Op),
 
     (opCode: ExtCodeCopy,    ## 0x3c, Account code copy to memory.
      forks: VmOpAllForks - VmOpBerlinAndLater,
@@ -344,12 +376,17 @@ const
      exec: extCodeCopyOp),
 
 
-    (opCode: ExtCodeCopy,    ## 0x3c, Account Code-copy for Berlin through Cancun
-     forks: VmOpBerlinAndLater,
+    (opCode: ExtCodeCopy,    ## 0x3c, Account Code-copy for Berlin through Osaka
+     forks: VmOpBerlinAndLater - VmOpAmsterdamAndLater,
      name: "extCodeCopyEIP2929",
      info: "EIP2929: Copy an account's code to memory",
      exec: extCodeCopyEIP2929Op),
 
+    (opCode: ExtCodeCopy,    ## 0x3c, Account Code-copy for Amsterdam
+     forks: VmOpAmsterdamAndLater,
+     name: "extCodeCopyEIP8038",
+     info: "EIP8038: Copy an account's code to memory",
+     exec: extCodeCopyEIP8038Op),
 
     (opCode: ReturnDataSize, ## 0x3d, Previous call output data size
      forks: VmOpByzantiumAndLater,

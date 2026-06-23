@@ -89,7 +89,10 @@ proc gasCallEIP2929(c: Computation, codeAddress: Address): GasProc =
 
           # The WarmStorageReadCostEIP2929 (100) is already deducted in
           # the form of a constant `gasCall`
-          (ColdAccountAccessCost - WarmStorageReadCost).GasInt
+          if c.fork >= FkAmsterdam:
+            (COLD_ACCOUNT_ACCESS_8038 - WarmStorageReadCost).GasInt
+          else:
+            (COLD_ACCOUNT_ACCESS_2929 - WarmStorageReadCost).GasInt
         else:
           0.GasInt
   else:
@@ -198,9 +201,6 @@ proc staticCallParams(c: Computation, res: var LocalParams): EvmResult[void] =
   ok()
 
 proc getCallCode(c: Computation, childMsg: Message): CodeBytesRef =
-  if c.balTrackerEnabled:
-    c.vmState.balTracker.trackAddressAccess(c.msg.delegateTo)
-
   # Avoid accessing ledger if it's a precompile address
   if MsgFlags.Precompile in childMsg.flags:
     return CodeBytesRef(nil)
@@ -227,6 +227,7 @@ proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int, newAcco
     if child.isSuccess:
       if c.fork >= FkAmsterdam:
         c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
+        c.gasMeter.appendStateGasUsed(child.gasMeter.stateGasUsed)
         c.gasMeter.stateGasSpilled += child.gasMeter.stateGasSpilled
       c.merge(child)
       c.stack.lsTop(1)
@@ -298,6 +299,9 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
   ? cpt.opcodeGasCost(Call, gasCost, reason = $Call)
   cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
 
+  if cpt.balTrackerEnabled:
+    cpt.vmState.balTracker.trackAddressAccess(cpt.msg.delegateTo)
+
   cpt.returnData.setLen(0)
 
   if cpt.msg.depth >= MaxCallDepth:
@@ -316,6 +320,8 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
   let senderBalance = cpt.getBalance(p.sender)
   if senderBalance < p.value:
     cpt.gasMeter.returnGas(childGasLimit)
+    if newAccountCharged:
+      cpt.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
     return ok()
 
   # Pass full reservoir to child (no 63/64 rule for state gas)
@@ -371,6 +377,9 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
 
   ? cpt.opcodeGasCost(CallCode, gasCost, reason = $CallCode)
   cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
+
+  if cpt.balTrackerEnabled:
+    cpt.vmState.balTracker.trackAddressAccess(cpt.msg.delegateTo)
 
   cpt.returnData.setLen(0)
 
@@ -443,6 +452,9 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
   ? cpt.opcodeGasCost(DelegateCall, gasCost, reason = $DelegateCall)
   cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
 
+  if cpt.balTrackerEnabled:
+    cpt.vmState.balTracker.trackAddressAccess(cpt.msg.delegateTo)
+
   cpt.returnData.setLen(0)
   if cpt.msg.depth >= MaxCallDepth:
     debug "Computation Failure",
@@ -506,6 +518,9 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
 
   ? cpt.opcodeGasCost(StaticCall, gasCost, reason = $StaticCall)
   cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
+
+  if cpt.balTrackerEnabled:
+    cpt.vmState.balTracker.trackAddressAccess(cpt.msg.delegateTo)
 
   cpt.returnData.setLen(0)
 

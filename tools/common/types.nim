@@ -13,7 +13,9 @@ type
     Frontier
     Homestead
     EIP150
+    TangerineWhistle
     EIP158
+    SpuriousDragon
     Byzantium
     Constantinople
     ConstantinopleFix

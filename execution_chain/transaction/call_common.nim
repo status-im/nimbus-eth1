@@ -55,14 +55,19 @@ proc initialAccessListEIP2929(call: CallParams) =
       for key in account.storageKeys:
         ledger.accessList(account.address, key.to(UInt256))
 
-proc setDelegation(call: CallParams): int64 =
-  var gasRefund = 0'i64
+proc setDelegation(call: CallParams): (int64, int64) =
+  var
+    regularRefund = 0'i64
+    stateRefund = 0'i64
+    passCount = 0
+
   let
     vmState = call.vmState
     ledger = vmState.ledger
 
   # EIP-7702
   for auth in call.authorizationList:
+
     # 1. Verify the chain id is either 0 or the chain's current ID.
     if not(auth.chainId == 0.u256 or auth.chainId == vmState.com.chainId):
       continue
@@ -81,7 +86,8 @@ proc setDelegation(call: CallParams): int64 =
     # 5. Verify the code of authority is either empty or already delegated.
     if vmState.balTrackerEnabled:
       vmState.balTracker.trackAddressAccess(authority)
-    let code = ledger.getCode(authority)
+    let
+      code = ledger.getCode(authority)
     if code.len > 0:
       if not isDelegation(code):
         continue
@@ -90,36 +96,62 @@ proc setDelegation(call: CallParams): int64 =
     if ledger.getNonce(authority) != auth.nonce:
       continue
 
-    # 7. Add PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST gas to the global refund counter if authority exists in the trie.
-    if vmState.fork >= FkAmsterdam:
-      if ledger.accountExists(authority):
-        gasRefund += CREATE_ACCOUNT_STATE_GAS
-      if auth.address == zeroAddress or ledger.getCodeHash(authority) != EMPTY_CODE_HASH:
-        # https://github.com/ethereum/execution-specs/commit/a0a1ed10f32bd60d4837566aabc9ee2cd2a8b88a
-        # Existing delegation indicator: overwrite in place, no new state bytes added.
-        gasRefund += STATE_BYTES_PER_AUTH_BASE * COST_PER_STATE_BYTE
-    else:
-      if ledger.accountExists(authority):
-        gasRefund += PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST
+    inc passCount
 
-    # 8. Set the code of authority to be 0xef0100 || address. This is a delegation designation.
-    let authCode =
-      if auth.address == zeroAddress:
-        @[]
-      else:
-        @(addressToDelegation(auth.address))
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.trackCodeChange(authority, authCode)
-    ledger.setCode(authority, authCode)
+    if vmState.fork >= FkAmsterdam:
+      # 7. Add PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST gas to the global refund counter if authority exists in the trie.
+      if ledger.accountExists(authority):
+        stateRefund += CREATE_ACCOUNT_STATE_GAS
+        regularRefund += ACCOUNT_WRITE_8038
+
+      # 8. Set the code of authority to be 0xef0100 || address. This is a delegation designation.
+      let
+        preStateAuthorityCode = ledger.getOriginalCode(authority)
+        delegatedBeforeTx = isDelegation(preStateAuthorityCode)
+        delegatedNow = isDelegation(code)
+
+      let authCode =
+        if auth.address == zeroAddress:
+          stateRefund += AUTH_BASE_STATE_GAS
+          if delegatedNow and not delegatedBeforeTx:
+            stateRefund += AUTH_BASE_STATE_GAS
+          @[]
+        else:
+          if delegatedNow or delegatedBeforeTx:
+            stateRefund += AUTH_BASE_STATE_GAS
+          @(addressToDelegation(auth.address))
+
+      if vmState.balTrackerEnabled:
+        vmState.balTracker.trackCodeChange(authority, authCode)
+      ledger.setCode(authority, authCode)
+    else:
+      # 7. Add PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST gas to the global refund counter if authority exists in the trie.
+      if ledger.accountExists(authority):
+        regularRefund += PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST
+
+      # 8. Set the code of authority to be 0xef0100 || address. This is a delegation designation.
+      let authCode =
+        if auth.address == zeroAddress:
+          @[]
+        else:
+          @(addressToDelegation(auth.address))
+      if vmState.balTrackerEnabled:
+        vmState.balTracker.trackCodeChange(authority, authCode)
+      ledger.setCode(authority, authCode)
 
     # 9. Increase the nonce of authority by one.
     if vmState.balTrackerEnabled:
       vmState.balTracker.trackNonceChange(authority, auth.nonce + 1)
     ledger.setNonce(authority, auth.nonce + 1)
 
-  gasRefund
+  if vmState.fork >= FkAmsterdam:
+    let refundCount = call.authorizationList.len - passCount
+    regularRefund += ACCOUNT_WRITE_8038 * refundCount
+    stateRefund += (AUTH_BASE_STATE_GAS + CREATE_ACCOUNT_STATE_GAS) * refundCount
 
-proc setupComputation(call: CallParams, gasRefund: int64, keepStack: bool): Computation =
+  (regularRefund, stateRefund)
+
+proc setupComputation(call: CallParams, regularRefund: int64, stateRefund: int64, keepStack: bool): Computation =
   let
     vmState = call.vmState
     fork = vmState.hardFork
@@ -151,7 +183,7 @@ proc setupComputation(call: CallParams, gasRefund: int64, keepStack: bool): Comp
 
   if isAmsterdamOrLater:
     gasLeft = min(regularGasBudget, executionGas)
-    stateGas = executionGas - gasLeft + gasRefund.GasInt
+    stateGas = executionGas - gasLeft + stateRefund.GasInt
 
   let
     msg = Message(
@@ -179,8 +211,7 @@ proc setupComputation(call: CallParams, gasRefund: int64, keepStack: bool): Comp
 
     computation = newComputation(vmState, keepStack, msg, code)
 
-  if not isAmsterdamOrLater:
-    computation.addRefund(gasRefund)
+  computation.addRefund(regularRefund)
 
   vmState.captureStart(computation, call.sender, call.to,
                        call.isCreate, call.input,
@@ -214,7 +245,7 @@ proc prepareToRunComputation(call: CallParams) =
       vmState.balTracker.trackSubBalanceChange(call.sender, gasFee)
     ledger.subBalance(call.sender, gasFee)
 
-proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: int64): GasUsed =
+proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, stateRefund: int64): GasUsed =
   let
     vmState = c.vmState
     fork = c.vmState.fork
@@ -223,14 +254,12 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: 
                         else: 2.GasInt
 
   var
-    stateGasRefund = gasRefund
+    stateGasRefund = stateRefund
 
   if c.shouldBurnGas:
     c.gasMeter.burnGas()
 
   if c.fork >= FkAmsterdam:
-    if c.isError:
-      c.gasMeter.refillFrameStateGas(c.msg.stateGas)
     if call.isCreate:
       if c.isError or MsgFlags.TargetAlive in c.msg.flags:
         c.gasMeter.returnStateGas(CREATE_ACCOUNT_STATE_GAS)
@@ -249,15 +278,14 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: 
     blockStateGasUsed = 0.GasInt
 
   if fork >= FkAmsterdam:
-    let stateGasUsed = c.gasMeter.frameStateGasUsed(c.msg.stateGas)
     txGasUsed = max(txGasUsedAfterRefund, call.intrinsic.floorDataGas)
-    blockStateGasUsed = GasInt(max(0, call.intrinsic.state.int64 - stateGasRefund + stateGasUsed))
-    blockRegularGasUsed = txGasUsedBeforeRefund + blockStateGasUsed
+    blockStateGasUsed = GasInt(max(0, call.intrinsic.state.int64 + c.gasMeter.stateGasUsed - stateGasRefund))
+    blockRegularGasUsed = txGasUsedBeforeRefund - blockStateGasUsed
     debug "EIP-8037 gas accounting",
       intrinsicRegular = call.intrinsic.regular,
       intrinsicState = call.intrinsic.state,
       regularGasUsed = c.gasMeter.regularGasUsed,
-      stateGasUsed = stateGasUsed,
+      stateGasUsed = c.gasMeter.stateGasUsed,
       gasRemaining = c.gasMeter.gasRemaining,
       stateGasLeft = c.gasMeter.stateGasLeft,
       blockRegularGasUsed = blockRegularGasUsed,
@@ -285,9 +313,9 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: 
   )
 
 proc finishRunningComputation(
-    c: Computation, call: CallParams, gasRefund: int64, T: type): T =
+    c: Computation, call: CallParams, stateRefund: int64, T: type): T =
   let
-    gasUsed = calculateAndPossiblyRefundGas(c, call, gasRefund)
+    gasUsed = calculateAndPossiblyRefundGas(c, call, stateRefund)
 
   # evm gas used without intrinsic gas
   c.vmState.captureEnd(c, c.output, gasUsed.evmGasUsed, c.errorOpt)
@@ -323,12 +351,12 @@ proc runComputation*(call: CallParams, T: type): T =
   initialAccessListEIP2929(call)
 
   let
-    gasRefund = setDelegation(call)
-    c = setupComputation(call, gasRefund, keepStack = T is DebugCallResult)
+    (regularRefund, stateRefund) = setDelegation(call)
+    c = setupComputation(call, regularRefund, stateRefund, keepStack = T is DebugCallResult)
 
   # Pre-execution sanity checks
   c.preExecComputation()
   if c.isSuccess:
     c.execCallOrCreate()
     c.postExecComputation()
-  finishRunningComputation(c, call, gasRefund, T)
+  finishRunningComputation(c, call, stateRefund, T)

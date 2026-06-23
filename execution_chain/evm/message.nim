@@ -30,6 +30,8 @@ proc generateContractAddress*(vmState: BaseVMState,
 proc getCallCode*(vmState: BaseVMState, msg: Message): CodeBytesRef =
   # Avoid accessing ledger if it's a precompile address
   if isPrecompile(vmState.fork, msg.codeAddress):
+    if vmState.balTrackerEnabled:
+      vmState.balTracker.trackAddressAccess(msg.codeAddress)
     msg.flags.incl MsgFlags.Precompile
     return CodeBytesRef(nil)
 

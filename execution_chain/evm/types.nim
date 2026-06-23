@@ -104,6 +104,7 @@ type
     gasRefunded*: int64
     gasRemaining*: GasInt
     stateGasLeft*: GasInt
+    stateGasUsed*: int64
     regularGasUsed*: GasInt
     stateGasSpilled*: GasInt
 

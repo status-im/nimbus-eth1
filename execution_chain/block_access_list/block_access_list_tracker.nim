@@ -431,11 +431,11 @@ proc handleInTransactionSelfDestruct*(
     tracker.pendingCallFrame.storageReads.incl(storageKey)
     tracker.pendingCallFrame.storageChanges.del(storageKey)
 
-  tracker.pendingCallFrame.balanceChanges.del(address)
   tracker.pendingCallFrame.nonceChanges.del(address)
   tracker.pendingCallFrame.codeChanges.del(address)
-
-  tracker.trackBalanceChange(address, 0.u256)
+  
+  tracker.trackNonceChange(address, 0)
+  tracker.trackCodeChange(address, @[])
 
 proc normalizePendingCallFrameChanges*(tracker: BlockAccessListTrackerRef) =
   ## Normalize balance, nonce, code and storage changes for the current
