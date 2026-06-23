@@ -12,7 +12,7 @@
 
 import
   pkg/chronicles,
-  ./[helpers, mpt, session, worker_const, worker_desc]
+  ./[helpers, mpt, session, state_db, worker_const, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -26,9 +26,6 @@ func readyForMptAssembly(ctx: SnapCtxRef): bool =
   let sdb = ctx.pool.stateDB
   sdb.isComplete or
     accuAccountsCovMin < sdb.archivedCoverage() + sdb.accountsCoverage()
-
-func toStr(root: Opt[StateRoot]): string =
-  if root.isNone: "n/a" else: root.unsafeGet.Hash32.short
 
 # ------------------------------------------------------------------------------
 # Private FSA transition functions

@@ -34,6 +34,9 @@ func toStr*(h: Hash32): string =
   elif h == zeroHash32: "zero"
   else: h.short
 
+func toStr*(h: Opt[Hash32]): string =
+  if h.isNone: "n/a" else: h.unsafeGet.toStr
+
 # --------------
 
 func to*(w: UInt256; _: type float): float =

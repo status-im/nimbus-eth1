@@ -144,7 +144,9 @@
 ##   + key:       `seq[byte]`
 ##   * path:      `seq[byte]`
 ##
+##
 ## Additional assumptions:
+## -----------------------
 ##
 ## * The `CoreDB`/`Aristo`/`Kvt` state database suite is mostly idle,
 ##   typically it would be empty. This only matters when the MPT assembly
@@ -781,7 +783,13 @@ template del9(db: MptAsmRef; col: MptAsmCol; key1: uint64): untyped =
 template key33(col: MptAsmCol; key1: untyped): openArray[byte] =
   var key: array[33,byte]
   key[0] = col.ord
-  (addr key[1]).copyMem(addr (key1.distinctBase)[0], 32)
+  when key1 is seq[byte]:
+    (addr key[1]).copyMem(addr key1[0], 32)
+  elif key1 is openArray[byte]:
+    let key2 = @key1
+    (addr key[1]).copyMem(addr key2[0], 32)
+  else:
+    (addr key[1]).copyMem(addr (key1.distinctBase)[0], 32)
   key.toOpenArray(0,32)
 
 template key33(col: MptAsmCol): openArray[byte] =
@@ -1382,6 +1390,11 @@ proc getAccKvt*(db: MptAsmRef; key: openArray[byte]): BlobResult =
     return err(error)
   ok(move data)
 
+proc putAccKvt*(db: MptAsmRef; key, node: openArray[byte]): PutResult =
+  db.putAtMost33(cAccKvt, key, node).isOkOr:
+    return err(error)
+  ok()
+
 proc putAccKvt*(db: MptAsmRef; nodes: openArray[KnPair]): PutResult =
   for w in nodes:
     db.putAtMost33(cAccKvt, w.key, w.node).isOkOr:
@@ -1417,6 +1430,15 @@ proc getStoKvt*(
   var data = db.getAtMost65(cStoKvt, acc, key).valueOr:
     return err(error)
   ok(move data)
+
+proc putStoKvt*(
+    db: MptAsmRef;
+    acc: Hash32;
+    key, node: openArray[byte];
+      ): PutResult =
+  db.putAtMost65(cStoKvt, acc, key, node).isOkOr:
+    return err(error)
+  ok()
 
 proc putStoKvt*(
     db: MptAsmRef;
@@ -1464,6 +1486,9 @@ proc getCodeKvt*(db: MptAsmRef; hash: Hash32): BlobResult =
   var data = db.get33(cCodeKvt, hash).valueOr:
     return err(error)
   ok(move data)
+
+proc putCodeKvt*(db: MptAsmRef; key, data: openArray[byte]): PutResult =
+  db.put33(cCodeKvt, key, data)
 
 proc putCodeKvt*(db: MptAsmRef; cdHash: CodeHash; data: CodeItem): PutResult =
   db.put33(cCodeKvt, cdHash.to(Hash32), data.to(seq[byte]))

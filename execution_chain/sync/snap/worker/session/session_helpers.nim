@@ -12,7 +12,7 @@
 
 import
   pkg/[chronicles, chronos],
-  ../[mpt, worker_desc]
+  ../[mpt, state_db, worker_desc]
 
 type
   SessionTicker* = object of RootObj
@@ -30,8 +30,7 @@ proc getPivotData(
   let root = ctx.pool.pivot.valueOr:
     return err()
   var data = ctx.pool.mptAsm.getStateData(root).valueOr:
-    error info & ": Cached pivot inaccessible",
-      root=root.Hash32.short, `error`=error
+    error info & ": Cached pivot inaccessible", root=root.toStr, `error`=error
     return err()
   ok((root, move data))
 

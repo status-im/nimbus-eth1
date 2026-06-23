@@ -75,10 +75,14 @@ proc headerDownloadTrigger*(
 
   bcSync.singleRun(header, storeTopHeaderCB).isOkOr:
     if ctx.nEthPeers() == 0:
-      chronicles.info info & ": Waiting for eth/xx peers"
+      chronicles.info info & ": Waiting for eth/xx peers",
+        syncState=($ctx.syncState), nSyncPeers=ctx.nSyncPeers()
+    elif ctx.hdrCache.latestConsHeadNumber() == 0:
+      chronicles.info info & ": Waiting for CL to send updates",
+        syncState=($ctx.syncState), nSyncPeers=ctx.nSyncPeers()
     elif ctx.pool.headersSynced:                    # otherwise ongoing download
       chronicles.error info & ": Unable to trigger ref headers download",
-        `error`=error
+        syncState=($ctx.syncState), nSyncPeers=ctx.nSyncPeers(), `error`=error
     return err(error)
 
   ctx.pool.headersSynced = false                    # reset download flag
