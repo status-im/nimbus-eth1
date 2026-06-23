@@ -134,6 +134,17 @@ const
 template logTxt(info: static[string]): static[string] =
   "LedgerRef " & info
 
+proc applyOverlay(ledger: LedgerRef, address: Address, acc: AccountRef) =
+  let overlayAcc = ledger.balOverlay.expect("bal overlay enabled").getAccount(address)
+  if overlayAcc.balance.isSome():
+    acc.statement.balance = overlayAcc.balance[]
+  if overlayAcc.nonce.isSome():
+    acc.statement.nonce = overlayAcc.nonce[]
+  if overlayAcc.code.isSome():
+    acc.statement.codeHash = keccak256(overlayAcc.code[])
+    acc.code = CodeBytesRef.init(overlayAcc.code[])
+    acc.flags.incl CodeChanged
+
 proc getAccount(
     ledger: LedgerRef;
     address: Address;
@@ -161,11 +172,15 @@ proc getAccount(
   let
     accPath = address.computeAccPath
     rc = ledger.txFrame.fetchAccount accPath
+
   if rc.isOk:
     result = AccountRef(
       statement: rc.value,
       accPath:   accPath,
       flags:     {Alive})
+    if ledger.balOverlay.isSome():
+      ledger.applyOverlay(address, result)
+
   elif ledger.balOverlay.isSome() and ledger.balOverlay[].hasAccount(address):
     result = AccountRef(
       statement: CoreDbAccount(
@@ -174,6 +189,8 @@ proc getAccount(
         codeHash: EMPTY_ACCOUNT.codeHash),
       accPath:    accPath,
       flags: {Alive})
+    ledger.applyOverlay(address, result)
+
   elif shouldCreate:
     result = AccountRef(
       statement: CoreDbAccount(
@@ -184,17 +201,6 @@ proc getAccount(
       flags: {Alive, IsNew})
   else:
     return # ignore, don't cache
-
-  if ledger.balOverlay.isSome():
-    let overlayAcc = ledger.balOverlay[].getAccount(address)   
-    if overlayAcc.balance.isSome():
-      result.statement.balance = overlayAcc.balance[]
-    if overlayAcc.nonce.isSome():
-      result.statement.nonce = overlayAcc.nonce[]
-    if overlayAcc.code.isSome():
-      result.statement.codeHash = keccak256(overlayAcc.code[])
-      result.code = CodeBytesRef.init(overlayAcc.code[])
-      result.flags.incl CodeChanged
 
   # cache the account
   ledger.savePoint.cache[address] = result
@@ -234,19 +240,18 @@ proc originalStorageValue(
     acc.originalStorage[].withValue(slot, val) do:
       return val[]
 
+  # Not in the original values cache - go to the DB unless it's a new account
   if acc.flags * {IsNew, NewlyCreated} == {}:
-    let overlayValue =
+    result = 
       if ledger.balOverlay.isNone():
-        Opt.none(UInt256)
+        let slotKey = ledger.slots.get(slot).valueOr:
+          computeSlotKey(slot)
+        ledger.txFrame.fetchSlot(acc.accPath, slotKey).valueOr(0'u256)
       else:
-        ledger.balOverlay[].getStorage(address, slot)
-
-    if overlayValue.isSome():
-      result = overlayValue[]
-    else:
-      let slotKey = ledger.slots.get(slot).valueOr:
-        computeSlotKey(slot)
-      result = ledger.txFrame.fetchSlot(acc.accPath, slotKey).valueOr(0'u256)
+        ledger.balOverlay[].getStorage(address, slot).valueOr:
+          let slotKey = ledger.slots.get(slot).valueOr:
+            computeSlotKey(slot)
+          ledger.txFrame.fetchSlot(acc.accPath, slotKey).valueOr(0'u256)
 
   acc.originalStorage[slot] = result
 
