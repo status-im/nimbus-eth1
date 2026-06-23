@@ -49,8 +49,13 @@ proc resumeNext(ctx: SnapCtxRef; info: static[string]): SyncState =
 func readyNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
   if ctx.hdrCache.latestConsHeadNumber() != 0:
-    return SnapDownload
+    return SnapHeaderBase
   SnapReady
+
+func headerBaseNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+  if 0 < ctx.pool.topBlockNumber:
+    return SnapDownload
+  SnapHeaderBase
 
 func downloadNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
@@ -139,6 +144,9 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]): SyncState =
   #      | `--> ready
   #      |        |
   #      |        v
+  #      |      header
+  #      |        |
+  #      |        v
   #      |     download
   #      |        |
   #      |        v
@@ -173,6 +181,8 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]): SyncState =
       ctx.resumeNext info
     of SnapReady:
       ctx.readyNext info
+    of SnapHeaderBase:
+      ctx.headerBaseNext info
     of SnapDownload:
       ctx.downloadNext info
     of SnapDownloadFinish:
@@ -200,7 +210,7 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]): SyncState =
 
   ctx.pool.syncState = newState
   case newState:
-  of SnapDownload, SnapDownloadFinish, SnapMkTrie:
+  of SnapHeaderBase, SnapDownload, SnapDownloadFinish, SnapMkTrie:
     chronicles.info info & ": State changed", prevState, newState,
       top=sdb.top, pivot=sdb.pivot.bnStr, nSyncPeers=ctx.nSyncPeers()
   of SnapAnalyse, SnapHealing, SnapHealingFinish,

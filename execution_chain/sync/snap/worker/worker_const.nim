@@ -18,6 +18,7 @@ type
     SnapIdle = 0
     SnapResume                     ## Resume from previous session
     SnapReady                      ## Wait for download state
+    SnapHeaderBase                 ## Download headers (for state reference)
     SnapDownload                   ## Downloading and caching data
     SnapDownloadFinish             ## Wait for sync before proceeding
     SnapMkTrie                     ## Assembling downloaded data
@@ -53,6 +54,9 @@ const
     ## Some polling interval time waiting until the system gets into download
     ## state when the the FCU modue hash  a finalised header.
 
+  daemonWaitHeaderInterval* = chronos.seconds(30)
+    ## Ditto for header download.
+
   daemonWaitElseInterval* = chronos.seconds(10)
     ## Ditto for other states.
 
@@ -67,7 +71,7 @@ const
     ## Force a thread switch after that time running continuously. This
     ## applies mainly for DB building and analysing sessions.
 
-  accuAccountsCovMin* = 5.0
+  accuAccountsCovMin* = 1.01
     ## In absence of a completed pivot state, the syncer will stop downloading
     ## if all accounts are covered at least by this factor. Then trie-assembly
     ## and healing can take place.

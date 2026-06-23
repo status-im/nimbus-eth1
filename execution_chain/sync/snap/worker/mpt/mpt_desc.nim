@@ -30,12 +30,12 @@ type
     Leaf
     Stop
 
-  NodeRef* {.acyclic.} = ref object of RootRef
+  NodeBaseRef* {.acyclic.} = ref object of RootRef
     ## Base node object for building a temporary, partial hexary MPT.
     kind*: NodeType                                 ## sub-type (see below)
     selfKey*: HashKey                               ## owned node key
 
-  BranchNodeRef* {.acyclic.} = ref object of NodeRef
+  BranchNodeRef* {.acyclic.} = ref object of NodeBaseRef
     ## Branch and/or extension node.
     ##
     ## * Pure extension node
@@ -65,22 +65,22 @@ type
     xtPfx*: NibblesBuf                              ## portion of path segment
     xtData*: seq[byte]                              ## rlp encoded extension
     brKey*: HashKey                                 ## if `xtPfx` is non-empty
-    brLinks*: array[16,NodeRef]                     ## down links
+    brLinks*: array[16,NodeBaseRef]                 ## down links
     brData*: seq[byte]                              ## rlp encoded branch node
 
-  LeafNodeRef* = ref object of NodeRef
+  LeafNodeRef* = ref object of NodeBaseRef
     lfPfx*: NibblesBuf                              ## portion of path segment
     lfData*: seq[byte]                              ## rlp encoded leaf node
     lfPayload*: seq[byte]                           ## leaf data
 
-  StopNodeRef* = ref object of NodeRef
+  StopNodeRef* = ref object of NodeBaseRef
     path*: NibblesBuf                               ## partial path
-    parent*: NodeRef                                ## unique parent node
+    parent*: NodeBaseRef                            ## unique parent node
     inx*: byte                                      ## index (for branch parent)
-    sub*: NodeRef                                   ## start of a sub-MPT
+    sub*: NodeBaseRef                               ## start of a sub-MPT
 
   NodeTrieRef* = ref object of RootRef
-    root*: NodeRef                                  ## start of in-memory MPT
+    root*: NodeBaseRef                              ## start of in-memory MPT
     stops*: Table[HashKey,StopNodeRef]              ## sub-MPT to complete
     dangling*: seq[(HashKey,StopNodeRef)]           ## dangling link keys
     leafs*: seq[(Hash32,LeafNodeRef)]               ## leaf pairs `(path,node)`
@@ -117,12 +117,26 @@ template to*(h: StateRoot|StoreRoot|BlockHash; _: type HashKey): HashKey =
   ## Variant of `desc_identifiers.to()`
   h.Hash32.to(HashKey)
 
-func digestTo*(node: ProofNode, _: type HashKey, rootKey: HashKey): HashKey =
+func digestToOrPlain*(node: ProofNode, _: type HashKey, root: HashKey): HashKey=
   ## Variant of `desc_identifiers.digestTo()`
   let key32 = HashKey.fromBytes(node.distinctBase.keccak256.data).value
-  if 32 <= node.distinctBase.len or key32 == rootKey:
+  if 32 <= node.distinctBase.len or key32 == root:
     return key32
   HashKey.fromBytes(node.distinctBase).value
+
+func digestToOrPlain*(node: openArray[byte], _: type HashKey, root: HashKey): HashKey =
+  ## Variant of `desc_identifiers.digestTo()`
+  let key32 = HashKey.fromBytes(node.keccak256.data).value
+  if 32 <= node.len or key32 == root:
+    return key32
+  HashKey.fromBytes(node).value
+
+func digestToOrPlain*(node: openArray[byte], _: type HashKey): HashKey =
+  ## Variant of `desc_identifiers.digestTo()`
+  let key32 = HashKey.fromBytes(node.keccak256.data).value
+  if 32 <= node.len:
+    return key32
+  HashKey.fromBytes(node).value
 
 # ------------------------------------------------------------------------------
 # End
