@@ -51,12 +51,18 @@ The proxy syncs with the beacon chain in the background. The first few calls may
 
 | Field | Description |
 |---|---|
-| `eth2Network` | Network name: `mainnet`, `sepolia`, or `hoodi` |
+| `eth2Network` | Network name: `mainnet`, `sepolia`, `hoodi`, or an OP Stack network (`op-mainnet`, `base-mainnet`, `op-sepolia`) |
 | `trustedBlockRoot` | A trusted checkpoint block root (hex) used to bootstrap the light client |
 | `executionApiUrls` | Comma-separated execution layer JSON-RPC URLs |
 | `beaconApiUrls` | Comma-separated beacon API URLs |
+| `opExecutionApiUrls` | Comma-separated L2 (op-geth) execution JSON-RPC URLs. Only used for OP Stack networks |
 | `logLevel` | Log verbosity: `TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`, `FATAL` |
 | `logStdout` | Log destination: `Auto`, `None`, or `Stdout` |
+
+When an OP Stack network is configured, the primary engine verifies the L1 the rollup
+settles to (so `eth_*` calls target L1) and a secondary L2 engine is served under the `op_`
+namespace. Call it through the same `CallRpc`, e.g.
+`ctx.CallRpc("op_getBalance", params, timeout)`.
 
 ## Custom transports
 

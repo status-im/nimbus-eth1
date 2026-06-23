@@ -186,6 +186,7 @@ void proxyCall(Context *ctx, char* name, char* params, CallBackProc cb, void *us
  * @param userData  pointer to user data
  */
 void eth_blockNumber(Context *ctx, CallBackProc cb, void *userData);
+void op_blockNumber(Context *ctx, CallBackProc cb, void *userData);
 
 /**
  * Retrieve the EIP-4844 blob base fee.
@@ -195,6 +196,7 @@ void eth_blockNumber(Context *ctx, CallBackProc cb, void *userData);
  * @param userData  pointer to user data
  */
 void eth_blobBaseFee(Context *ctx, CallBackProc cb, void *userData);
+void op_blobBaseFee(Context *ctx, CallBackProc cb, void *userData);
 
 /**
  * Retrieve the current gas price.
@@ -204,6 +206,7 @@ void eth_blobBaseFee(Context *ctx, CallBackProc cb, void *userData);
  * @param userData  pointer to user data
  */
 void eth_gasPrice(Context *ctx, CallBackProc cb, void *userData);
+void op_gasPrice(Context *ctx, CallBackProc cb, void *userData);
 
 /**
  * Retrieve the suggested priority fee per gas.
@@ -213,6 +216,7 @@ void eth_gasPrice(Context *ctx, CallBackProc cb, void *userData);
  * @param userData  pointer to user data
  */
 void eth_maxPriorityFeePerGas(Context *ctx, CallBackProc cb, void *userData);
+void op_maxPriorityFeePerGas(Context *ctx, CallBackProc cb, void *userData);
 
 
 /* ========================================================================== */
@@ -230,6 +234,7 @@ void eth_maxPriorityFeePerGas(Context *ctx, CallBackProc cb, void *userData);
  * @param userData  pointer to user data
  */
 void eth_getBalance(Context *ctx, char *address, char *blockTag, CallBackProc cb, void *userData);
+void op_getBalance(Context *ctx, char *address, char *blockTag, CallBackProc cb, void *userData);
 
 /**
  * Retrieve storage from a contract.
@@ -243,6 +248,7 @@ void eth_getBalance(Context *ctx, char *address, char *blockTag, CallBackProc cb
  * @param userData  pointer to user data
  */
 void eth_getStorageAt(Context *ctx, char *address, char *slot, char *blockTag, CallBackProc cb, void *userData);
+void op_getStorageAt(Context *ctx, char *address, char *slot, char *blockTag, CallBackProc cb, void *userData);
 
 /**
  * Retrieve an address's transaction count (nonce).
@@ -255,6 +261,7 @@ void eth_getStorageAt(Context *ctx, char *address, char *slot, char *blockTag, C
  * @param userData  pointer to user data
  */
 void eth_getTransactionCount(Context *ctx, char *address, char *blockTag, CallBackProc cb, void *userData);
+void op_getTransactionCount(Context *ctx, char *address, char *blockTag, CallBackProc cb, void *userData);
 
 /**
  * Retrieve bytecode stored at an address.
@@ -267,6 +274,7 @@ void eth_getTransactionCount(Context *ctx, char *address, char *blockTag, CallBa
  * @param userData  pointer to user data
  */
 void eth_getCode(Context *ctx, char *address, char *blockTag, CallBackProc cb, void *userData);
+void op_getCode(Context *ctx, char *address, char *blockTag, CallBackProc cb, void *userData);
 
 
 /* ========================================================================== */
@@ -283,6 +291,7 @@ void eth_getCode(Context *ctx, char *address, char *blockTag, CallBackProc cb, v
  * @param userData         pointer to user data
  */
 void eth_getBlockByHash(Context *ctx, char *blockHash, bool fullTransactions, CallBackProc cb, void *userData);
+void op_getBlockByHash(Context *ctx, char *blockHash, bool fullTransactions, CallBackProc cb, void *userData);
 
 /**
  * Retrieve a block by number or tag.
@@ -295,6 +304,7 @@ void eth_getBlockByHash(Context *ctx, char *blockHash, bool fullTransactions, Ca
  * @param userData         pointer to user data
  */
 void eth_getBlockByNumber(Context *ctx, char *blockTag, bool fullTransactions, CallBackProc cb, void *userData);
+void op_getBlockByNumber(Context *ctx, char *blockTag, bool fullTransactions, CallBackProc cb, void *userData);
 
 /**
  * Get the number of uncles in a block.
@@ -306,6 +316,7 @@ void eth_getBlockByNumber(Context *ctx, char *blockTag, bool fullTransactions, C
  * @param userData  pointer to user data
  */
 void eth_getUncleCountByBlockNumber(Context *ctx, char *blockTag, CallBackProc cb, void *userData);
+void op_getUncleCountByBlockNumber(Context *ctx, char *blockTag, CallBackProc cb, void *userData);
 
 /**
  * Get the number of uncles in a block.
@@ -316,6 +327,7 @@ void eth_getUncleCountByBlockNumber(Context *ctx, char *blockTag, CallBackProc c
  * @param userData  pointer to user data
  */
 void eth_getUncleCountByBlockHash(Context *ctx, char *blockHash, CallBackProc cb, void *userData);
+void op_getUncleCountByBlockHash(Context *ctx, char *blockHash, CallBackProc cb, void *userData);
 
 /**
  * Get the number of transactions in a block.
@@ -327,6 +339,7 @@ void eth_getUncleCountByBlockHash(Context *ctx, char *blockHash, CallBackProc cb
  * @param userData  pointer to user data
  */
 void eth_getBlockTransactionCountByNumber(Context *ctx, char *blockTag, CallBackProc cb, void *userData);
+void op_getBlockTransactionCountByNumber(Context *ctx, char *blockTag, CallBackProc cb, void *userData);
 
 /**
  * Get the number of transactions in a block identified by hash.
@@ -337,6 +350,7 @@ void eth_getBlockTransactionCountByNumber(Context *ctx, char *blockTag, CallBack
  * @param userData  pointer to user data
  */
 void eth_getBlockTransactionCountByHash(Context *ctx, char *blockHash, CallBackProc cb, void *userData);
+void op_getBlockTransactionCountByHash(Context *ctx, char *blockHash, CallBackProc cb, void *userData);
 
 
 /* ========================================================================== */
@@ -360,6 +374,13 @@ void eth_getTransactionByBlockNumberAndIndex(
     CallBackProc cb,
     void *userData
 );
+void op_getTransactionByBlockNumberAndIndex(
+    Context *ctx,
+    char *blockTag,
+    unsigned long long index,
+    CallBackProc cb,
+    void *userData
+);
 
 /**
  * Retrieve a transaction by block hash and index.
@@ -377,6 +398,13 @@ void eth_getTransactionByBlockHashAndIndex(
     CallBackProc cb,
     void *userData
 );
+void op_getTransactionByBlockHashAndIndex(
+    Context *ctx,
+    char *blockHash,
+    unsigned long long index,
+    CallBackProc cb,
+    void *userData
+);
 
 /**
  * Retrieve a transaction by hash.
@@ -387,6 +415,7 @@ void eth_getTransactionByBlockHashAndIndex(
  * @param userData  pointer to user data
  */
 void eth_getTransactionByHash(Context *ctx, char *txHash, CallBackProc cb, void *userData);
+void op_getTransactionByHash(Context *ctx, char *txHash, CallBackProc cb, void *userData);
 
 /**
  * Retrieve a transaction receipt by hash.
@@ -397,6 +426,7 @@ void eth_getTransactionByHash(Context *ctx, char *txHash, CallBackProc cb, void 
  * @param userData  pointer to user data
  */
 void eth_getTransactionReceipt(Context *ctx, char *txHash, CallBackProc cb, void *userData);
+void op_getTransactionReceipt(Context *ctx, char *txHash, CallBackProc cb, void *userData);
 
 
 /* ========================================================================== */
@@ -415,6 +445,14 @@ void eth_getTransactionReceipt(Context *ctx, char *txHash, CallBackProc cb, void
  * @param userData              pointer to user data
  */
 void eth_call(
+    Context *ctx,
+    char *txArgs,
+    char *blockTag,
+    bool optimisticStateFetch,
+    CallBackProc cb,
+    void *userData
+);
+void op_call(
     Context *ctx,
     char *txArgs,
     char *blockTag,
@@ -442,6 +480,14 @@ void eth_createAccessList(
     CallBackProc cb,
     void *userData
 );
+void op_createAccessList(
+    Context *ctx,
+    char *txArgs,
+    char *blockTag,
+    bool optimisticStateFetch,
+    CallBackProc cb,
+    void *userData
+);
 
 /**
  * Estimate gas for a transaction.
@@ -455,6 +501,14 @@ void eth_createAccessList(
  * @param userData              pointer to user data
  */
 void eth_estimateGas(
+    Context *ctx,
+    char *txArgs,
+    char *blockTag,
+    bool optimisticStateFetch,
+    CallBackProc cb,
+    void *userData
+);
+void op_estimateGas(
     Context *ctx,
     char *txArgs,
     char *blockTag,
@@ -477,6 +531,7 @@ void eth_estimateGas(
  * @param userData      pointer to user data
  */
 void eth_getLogs(Context *ctx, char *filterOptions, CallBackProc cb, void *userData);
+void op_getLogs(Context *ctx, char *filterOptions, CallBackProc cb, void *userData);
 
 /**
  * Create a new log filter.
@@ -487,6 +542,7 @@ void eth_getLogs(Context *ctx, char *filterOptions, CallBackProc cb, void *userD
  * @param userData      pointer to user data
  */
 void eth_newFilter(Context *ctx, char *filterOptions, CallBackProc cb, void *userData);
+void op_newFilter(Context *ctx, char *filterOptions, CallBackProc cb, void *userData);
 
 /**
  * Remove an installed filter.
@@ -497,6 +553,7 @@ void eth_newFilter(Context *ctx, char *filterOptions, CallBackProc cb, void *use
  * @param userData pointer to user data
  */
 void eth_uninstallFilter(Context *ctx, char *filterId, CallBackProc cb, void *userData);
+void op_uninstallFilter(Context *ctx, char *filterId, CallBackProc cb, void *userData);
 
 /**
  * Retrieve all logs for an installed filter.
@@ -507,6 +564,7 @@ void eth_uninstallFilter(Context *ctx, char *filterId, CallBackProc cb, void *us
  * @param userData pointer to user data
  */
 void eth_getFilterLogs(Context *ctx, char *filterId, CallBackProc cb, void *userData);
+void op_getFilterLogs(Context *ctx, char *filterId, CallBackProc cb, void *userData);
 
 /**
  * Retrieve new logs since the previous poll.
@@ -517,6 +575,7 @@ void eth_getFilterLogs(Context *ctx, char *filterId, CallBackProc cb, void *user
  * @param userData pointer to user data
  */
 void eth_getFilterChanges(Context *ctx, char *filterId, CallBackProc cb, void *userData);
+void op_getFilterChanges(Context *ctx, char *filterId, CallBackProc cb, void *userData);
 
 
 /* ========================================================================== */
@@ -533,6 +592,7 @@ void eth_getFilterChanges(Context *ctx, char *filterId, CallBackProc cb, void *u
  * @param userData  pointer to user data
  */
 void eth_getBlockReceipts(Context *ctx, char *blockTag, CallBackProc cb, void *userData);
+void op_getBlockReceipts(Context *ctx, char *blockTag, CallBackProc cb, void *userData);
 
 /**
  * Retrieve fee history.
@@ -553,6 +613,14 @@ void eth_feeHistory(
     CallBackProc cb,
     void *userData
 );
+void op_feeHistory(
+    Context *ctx,
+    unsigned long long blockCount,
+    char *newestBlock,
+    char *rewardPercentiles,
+    CallBackProc cb,
+    void *userData
+);
 
 /**
  * Send a signed transaction to the RPC provider to be relayed in the network.
@@ -563,6 +631,7 @@ void eth_feeHistory(
  * @param userData  pointer to user data
  */
 void eth_sendRawTransaction(Context *ctx, char *txHexBytes, CallBackProc cb, void *userData);
+void op_sendRawTransaction(Context *ctx, char *txHexBytes, CallBackProc cb, void *userData);
 
 #ifdef __cplusplus
 }

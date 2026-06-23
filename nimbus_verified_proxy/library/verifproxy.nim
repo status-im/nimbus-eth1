@@ -18,10 +18,13 @@ import
   beacon_chain/nimbus_binary_common,
   ../engine/types,
   ../engine/engine,
+  ../engine/utils,
   ../engine/rpc_frontend,
   ../lc_backend,
   ../json_rpc_backend,
   ../nimbus_verified_proxy_conf,
+  ../op/op_chain_params,
+  ../op/op_frontend,
   ./types,
   ./c_execution_backend,
   ./c_beacon_backend
@@ -108,6 +111,17 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
         raise newException(
           ProxyError, "Couldn't parse `privateTxUrls` from JSON config: " & e.msg
         )
+    opExecutionApiUrls =
+      try:
+        let rawUrls = jsonNode.getOrDefault("opExecutionApiUrls").getStr("")
+        if rawUrls.len == 0:
+          UrlList(@[])
+        else:
+          parseCmdArg(UrlList, rawUrls)
+      except CatchableError as e:
+        raise newException(
+          ProxyError, "Couldn't parse `opExecutionApiUrls` from JSON config: " & e.msg
+        )
     logLevel = jsonNode.getOrDefault("logLevel").getStr("INFO")
     logFormat =
       case jsonNode.getOrDefault("logFormat").getStr("None")
@@ -158,6 +172,7 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
       else:
         uint64(maxLcUpdates),
     privateTxUrls: privateTxUrls,
+    opExecutionApiUrls: opExecutionApiUrls,
     syncHeaderStore: syncHeaderStore,
     freezeAtSlot: freezeAtSlot,
   )
@@ -172,10 +187,32 @@ proc run*(
 
   setupLogging(config.logLevel, config.logFormat)
 
+  let networkName = config.eth2Network.get("mainnet")
+
+  let opParams =
+    if isOpNetwork(networkName):
+      let p = opChainParamsForNetwork(networkName).valueOr:
+        raise newException(ProxyError, "Unknown OP network: " & error)
+      some(p)
+    else:
+      none(OpChainParams)
+
+  let
+    l1NetworkName =
+      if opParams.isSome():
+        opParams.get().l1Network
+      else:
+        networkName
+    l1ChainId =
+      if opParams.isSome():
+        opParams.get().l1ChainId
+      else:
+        getConfiguredChainId(config.eth2Network)
+
   let
     engineConf = RpcVerificationEngineConf(
-      chainId: getConfiguredChainId(config.eth2Network),
-      eth2Network: config.eth2Network,
+      chainId: l1ChainId,
+      eth2Network: some(l1NetworkName),
       maxBlockWalk: config.maxBlockWalk,
       headerStoreLen: config.headerStoreLen,
       accountCacheLen: config.accountCacheLen,
@@ -248,6 +285,45 @@ proc run*(
         )
 
   ctx.frontend = engine.getExecutionApiFrontend()
+
+  if opParams.isSome():
+    let l2NetworkId = chainIdToNetworkId(l1ChainId).valueOr:
+      raise newException(
+        ProxyError, "Couldn't derive the L2 network id from the L1 chain id"
+      )
+
+    let l2Engine = RpcVerificationEngine.initCore(
+      chainId = opParams.get().l2ChainId,
+      networkId = l2NetworkId,
+      maxBlockWalk = config.maxBlockWalk,
+      parallelBlockDownloads = config.parallelBlockDownloads,
+      headerStoreLen = config.headerStoreLen,
+      accountCacheLen = config.accountCacheLen,
+      codeCacheLen = config.codeCacheLen,
+      storageCacheLen = config.storageCacheLen,
+    ).valueOr:
+      raise newException(ProxyError, "Couldn't initialize OP verification engine")
+
+    for url in config.opExecutionApiUrls:
+      if executionTransportProc != nil:
+        l2Engine.registerBackend(
+          getExecutionApiBackend(ctx, url, executionTransportProc),
+          fullExecutionCapabilities,
+        )
+      else:
+        let client = JsonRpcClient.init(url).valueOr:
+          error "Error initializing L2 backend client", error = error.errMsg
+          continue
+        let startRes = await client.start()
+        if startRes.isErr():
+          error "Error connecting to L2 backend",
+            url = url, error = startRes.error.errMsg
+          continue
+        l2Engine.registerBackend(
+          client.getExecutionApiBackend(), fullExecutionCapabilities
+        )
+
+    ctx.opFrontend = getExecutionApiFrontend(l2Engine, engine)
 
 proc startVerifProxy(
     configJson: cstring,

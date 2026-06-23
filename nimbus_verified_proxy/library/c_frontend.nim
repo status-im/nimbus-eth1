@@ -46,6 +46,16 @@ template callbackToC(
   else:
     fut.addCallback sendResult
 
+template requireOpFrontend(ctx: ptr Context, cb: CallBackProc, userData: pointer) =
+  if ctx.opFrontend.eth_blockNumber.isNil:
+    cb(
+      ctx,
+      RET_ERROR,
+      alloc("op_ namespace unavailable (no OP network configured)"),
+      userData,
+    )
+    return
+
 proc eth_blockNumber(
     ctx: ptr Context, cb: CallBackProc, userData: pointer
 ) {.exported.} =
@@ -415,6 +425,406 @@ proc eth_sendRawTransaction(
   callbackToC(ctx, cb, userData):
     ctx.frontend.eth_sendRawTransaction(txBytes)
 
+proc op_blockNumber(
+    ctx: ptr Context, cb: CallBackProc, userData: pointer
+) {.exported.} =
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_blockNumber()
+
+proc op_getBalance(
+    ctx: ptr Context,
+    address: cstring,
+    blockTag: cstring,
+    cb: CallBackProc,
+    userData: pointer,
+) {.exported.} =
+  let
+    addressTyped = unpackArg($address, Address).valueOr:
+      cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+      return
+
+    blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
+      cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+      return
+
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_getBalance(addressTyped, blockTagTyped)
+
+proc op_getStorageAt(
+    ctx: ptr Context,
+    address: cstring,
+    slot: cstring,
+    blockTag: cstring,
+    cb: CallBackProc,
+    userData: pointer,
+) {.exported.} =
+  let
+    addressTyped = unpackArg($address, Address).valueOr:
+      cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+      return
+
+    slotTyped = unpackArg($slot, UInt256).valueOr:
+      cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+      return
+
+    blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
+      cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+      return
+
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_getStorageAt(addressTyped, slotTyped, blockTagTyped)
+
+proc op_getTransactionCount(
+    ctx: ptr Context,
+    address: cstring,
+    blockTag: cstring,
+    cb: CallBackProc,
+    userData: pointer,
+) {.exported.} =
+  let
+    addressTyped = unpackArg($address, Address).valueOr:
+      cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+      return
+
+    blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
+      cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+      return
+
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_getTransactionCount(addressTyped, blockTagTyped)
+
+proc op_getCode(
+    ctx: ptr Context,
+    address: cstring,
+    blockTag: cstring,
+    cb: CallBackProc,
+    userData: pointer,
+) {.exported.} =
+  let
+    addressTyped = unpackArg($address, Address).valueOr:
+      cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+      return
+
+    blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
+      cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+      return
+
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_getCode(addressTyped, blockTagTyped)
+
+proc op_getBlockByHash(
+    ctx: ptr Context,
+    blockHash: cstring,
+    fullTransactions: bool,
+    cb: CallBackProc,
+    userData: pointer,
+) {.exported.} =
+  let blockHashTyped = unpackArg($blockHash, Hash32).valueOr:
+    cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+    return
+
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_getBlockByHash(blockHashTyped, fullTransactions)
+
+proc op_getBlockByNumber(
+    ctx: ptr Context,
+    blockTag: cstring,
+    fullTransactions: bool,
+    cb: CallBackProc,
+    userData: pointer,
+) {.exported.} =
+  let blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
+    cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+    return
+
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_getBlockByNumber(blockTagTyped, fullTransactions)
+
+proc op_getUncleCountByBlockNumber(
+    ctx: ptr Context, blockTag: cstring, cb: CallBackProc, userData: pointer
+) {.exported.} =
+  let blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
+    cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+    return
+
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_getUncleCountByBlockNumber(blockTagTyped)
+
+proc op_getUncleCountByBlockHash(
+    ctx: ptr Context, blockHash: cstring, cb: CallBackProc, userData: pointer
+) {.exported.} =
+  let blockHashTyped = unpackArg($blockHash, Hash32).valueOr:
+    cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+    return
+
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_getUncleCountByBlockHash(blockHashTyped)
+
+proc op_getBlockTransactionCountByNumber(
+    ctx: ptr Context, blockTag: cstring, cb: CallBackProc, userData: pointer
+) {.exported.} =
+  let blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
+    cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+    return
+
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_getBlockTransactionCountByNumber(blockTagTyped)
+
+proc op_getBlockTransactionCountByHash(
+    ctx: ptr Context, blockHash: cstring, cb: CallBackProc, userData: pointer
+) {.exported.} =
+  let blockHashTyped = unpackArg($blockHash, Hash32).valueOr:
+    cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+    return
+
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_getBlockTransactionCountByHash(blockHashTyped)
+
+proc op_getTransactionByBlockNumberAndIndex(
+    ctx: ptr Context,
+    blockTag: cstring,
+    index: culonglong,
+    cb: CallBackProc,
+    userData: pointer,
+) {.exported.} =
+  let
+    blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
+      cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+      return
+
+    indexTyped = Quantity(uint64(index))
+
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_getTransactionByBlockNumberAndIndex(blockTagTyped, indexTyped)
+
+proc op_getTransactionByBlockHashAndIndex(
+    ctx: ptr Context,
+    blockHash: cstring,
+    index: culonglong,
+    cb: CallBackProc,
+    userData: pointer,
+) {.exported.} =
+  let
+    blockHashTyped = unpackArg($blockHash, Hash32).valueOr:
+      cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+      return
+
+    indexTyped = Quantity(uint64(index))
+
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_getTransactionByBlockHashAndIndex(blockHashTyped, indexTyped)
+
+proc op_call(
+    ctx: ptr Context,
+    txArgs: cstring,
+    blockTag: cstring,
+    optimisticStateFetch: bool,
+    cb: CallBackProc,
+    userData: pointer,
+) {.exported.} =
+  let
+    txArgsTyped = unpackArg($txArgs, TransactionArgs).valueOr:
+      cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+      return
+
+    blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
+      cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+      return
+
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_call(txArgsTyped, blockTagTyped, optimisticStateFetch)
+
+proc op_createAccessList(
+    ctx: ptr Context,
+    txArgs: cstring,
+    blockTag: cstring,
+    optimisticStateFetch: bool,
+    cb: CallBackProc,
+    userData: pointer,
+) {.exported.} =
+  let
+    txArgsTyped = unpackArg($txArgs, TransactionArgs).valueOr:
+      cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+      return
+
+    blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
+      cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+      return
+
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_createAccessList(
+      txArgsTyped, blockTagTyped, optimisticStateFetch
+    )
+
+proc op_estimateGas(
+    ctx: ptr Context,
+    txArgs: cstring,
+    blockTag: cstring,
+    optimisticStateFetch: bool,
+    cb: CallBackProc,
+    userData: pointer,
+) {.exported.} =
+  let
+    txArgsTyped = unpackArg($txArgs, TransactionArgs).valueOr:
+      cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+      return
+
+    blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
+      cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+      return
+
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_estimateGas(txArgsTyped, blockTagTyped, optimisticStateFetch)
+
+proc op_getTransactionByHash(
+    ctx: ptr Context, txHash: cstring, cb: CallBackProc, userData: pointer
+) {.exported.} =
+  let txHashTyped = unpackArg($txHash, Hash32).valueOr:
+    cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+    return
+
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_getTransactionByHash(txHashTyped)
+
+proc op_getBlockReceipts(
+    ctx: ptr Context, blockTag: cstring, cb: CallBackProc, userData: pointer
+) {.exported.} =
+  let blockTagTyped = unpackArg($blockTag, BlockTag).valueOr:
+    cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+    return
+
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_getBlockReceipts(blockTagTyped)
+
+proc op_getTransactionReceipt(
+    ctx: ptr Context, txHash: cstring, cb: CallBackProc, userData: pointer
+) {.exported.} =
+  let txHashTyped = unpackArg($txHash, Hash32).valueOr:
+    cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+    return
+
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_getTransactionReceipt(txHashTyped)
+
+proc op_getLogs(
+    ctx: ptr Context, filterOptions: cstring, cb: CallBackProc, userData: pointer
+) {.exported.} =
+  let filterOptionsTyped = unpackArg($filterOptions, FilterOptions).valueOr:
+    cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+    return
+
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_getLogs(filterOptionsTyped)
+
+proc op_newFilter(
+    ctx: ptr Context, filterOptions: cstring, cb: CallBackProc, userData: pointer
+) {.exported.} =
+  let filterOptionsTyped = unpackArg($filterOptions, FilterOptions).valueOr:
+    cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+    return
+
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_newFilter(filterOptionsTyped)
+
+proc op_uninstallFilter(
+    ctx: ptr Context, filterId: cstring, cb: CallBackProc, userData: pointer
+) {.exported.} =
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_uninstallFilter($filterId)
+
+proc op_getFilterLogs(
+    ctx: ptr Context, filterId: cstring, cb: CallBackProc, userData: pointer
+) {.exported.} =
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_getFilterLogs($filterId)
+
+proc op_getFilterChanges(
+    ctx: ptr Context, filterId: cstring, cb: CallBackProc, userData: pointer
+) {.exported.} =
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_getFilterChanges($filterId)
+
+proc op_blobBaseFee(
+    ctx: ptr Context, cb: CallBackProc, userData: pointer
+) {.exported.} =
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_blobBaseFee()
+
+proc op_gasPrice(ctx: ptr Context, cb: CallBackProc, userData: pointer) {.exported.} =
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_gasPrice()
+
+proc op_maxPriorityFeePerGas(
+    ctx: ptr Context, cb: CallBackProc, userData: pointer
+) {.exported.} =
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_maxPriorityFeePerGas()
+
+proc op_feeHistory(
+    ctx: ptr Context,
+    blockCount: culonglong,
+    newestBlock: cstring,
+    rewardPercentiles: cstring,
+    cb: CallBackProc,
+    userData: pointer,
+) {.exported.} =
+  let
+    blockCountTyped = Quantity(uint64(blockCount))
+    newestBlockTyped = unpackArg($newestBlock, BlockTag).valueOr:
+      cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+      return
+    rewardPercentilesTyped = unpackArg($rewardPercentiles, seq[int]).valueOr:
+      cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+      return
+
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_feeHistory(
+      blockCountTyped, newestBlockTyped, rewardPercentilesTyped
+    )
+
+proc op_sendRawTransaction(
+    ctx: ptr Context, txHexBytes: cstring, cb: CallBackProc, userData: pointer
+) {.exported.} =
+  let txBytes =
+    try:
+      let temp = hexToSeqByte($txHexBytes)
+      temp
+    except ValueError as e:
+      cb(ctx, RET_DESER_ERROR, alloc(e.msg), userData)
+      return
+
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_sendRawTransaction(txBytes)
+
 proc proxyCall(
     ctx: ptr Context,
     name: cstring,
@@ -596,5 +1006,165 @@ proc proxyCall(
   of "eth_sendRawTransaction":
     requireParams(1)
     eth_sendRawTransaction(ctx, parsedParams[0].getStr().cstring, cb, userData)
+  of "op_blockNumber":
+    requireParams(0)
+    op_blockNumber(ctx, cb, userData)
+  of "op_getBalance":
+    requireParams(2)
+    op_getBalance(
+      ctx,
+      parsedParams[0].getStr().cstring,
+      parsedParams[1].getStr().cstring,
+      cb,
+      userData,
+    )
+  of "op_getStorageAt":
+    requireParams(3)
+    op_getStorageAt(
+      ctx,
+      parsedParams[0].getStr().cstring,
+      parsedParams[1].getStr().cstring,
+      parsedParams[2].getStr().cstring,
+      cb,
+      userData,
+    )
+  of "op_getTransactionCount":
+    requireParams(2)
+    op_getTransactionCount(
+      ctx,
+      parsedParams[0].getStr().cstring,
+      parsedParams[1].getStr().cstring,
+      cb,
+      userData,
+    )
+  of "op_getCode":
+    requireParams(2)
+    op_getCode(
+      ctx,
+      parsedParams[0].getStr().cstring,
+      parsedParams[1].getStr().cstring,
+      cb,
+      userData,
+    )
+  of "op_getBlockByHash":
+    requireParams(2)
+    op_getBlockByHash(
+      ctx, parsedParams[0].getStr().cstring, parsedParams[1].getBool(), cb, userData
+    )
+  of "op_getBlockByNumber":
+    requireParams(2)
+    op_getBlockByNumber(
+      ctx, parsedParams[0].getStr().cstring, parsedParams[1].getBool(), cb, userData
+    )
+  of "op_getUncleCountByBlockNumber":
+    requireParams(1)
+    op_getUncleCountByBlockNumber(ctx, parsedParams[0].getStr().cstring, cb, userData)
+  of "op_getUncleCountByBlockHash":
+    requireParams(1)
+    op_getUncleCountByBlockHash(ctx, parsedParams[0].getStr().cstring, cb, userData)
+  of "op_getBlockTransactionCountByNumber":
+    requireParams(1)
+    op_getBlockTransactionCountByNumber(
+      ctx, parsedParams[0].getStr().cstring, cb, userData
+    )
+  of "op_getBlockTransactionCountByHash":
+    requireParams(1)
+    op_getBlockTransactionCountByHash(
+      ctx, parsedParams[0].getStr().cstring, cb, userData
+    )
+  of "op_getTransactionByBlockNumberAndIndex":
+    requireParams(2)
+    op_getTransactionByBlockNumberAndIndex(
+      ctx,
+      parsedParams[0].getStr().cstring,
+      parsedParams[1].getBiggestInt().culonglong,
+      cb,
+      userData,
+    )
+  of "op_getTransactionByBlockHashAndIndex":
+    requireParams(2)
+    op_getTransactionByBlockHashAndIndex(
+      ctx,
+      parsedParams[0].getStr().cstring,
+      parsedParams[1].getBiggestInt().culonglong,
+      cb,
+      userData,
+    )
+  of "op_call":
+    requireParams(3)
+    op_call(
+      ctx,
+      ($parsedParams[0]).cstring,
+      parsedParams[1].getStr().cstring,
+      parsedParams[2].getBool(),
+      cb,
+      userData,
+    )
+  of "op_createAccessList":
+    requireParams(3)
+    op_createAccessList(
+      ctx,
+      ($parsedParams[0]).cstring,
+      parsedParams[1].getStr().cstring,
+      parsedParams[2].getBool(),
+      cb,
+      userData,
+    )
+  of "op_estimateGas":
+    requireParams(3)
+    op_estimateGas(
+      ctx,
+      ($parsedParams[0]).cstring,
+      parsedParams[1].getStr().cstring,
+      parsedParams[2].getBool(),
+      cb,
+      userData,
+    )
+  of "op_getTransactionByHash":
+    requireParams(1)
+    op_getTransactionByHash(ctx, parsedParams[0].getStr().cstring, cb, userData)
+  of "op_getBlockReceipts":
+    requireParams(1)
+    op_getBlockReceipts(ctx, parsedParams[0].getStr().cstring, cb, userData)
+  of "op_getTransactionReceipt":
+    requireParams(1)
+    op_getTransactionReceipt(ctx, parsedParams[0].getStr().cstring, cb, userData)
+  of "op_getLogs":
+    requireParams(1)
+    op_getLogs(ctx, ($parsedParams[0]).cstring, cb, userData)
+  of "op_newFilter":
+    requireParams(1)
+    op_newFilter(ctx, ($parsedParams[0]).cstring, cb, userData)
+  of "op_uninstallFilter":
+    requireParams(1)
+    op_uninstallFilter(ctx, parsedParams[0].getStr().cstring, cb, userData)
+  of "op_getFilterLogs":
+    requireParams(1)
+    op_getFilterLogs(ctx, parsedParams[0].getStr().cstring, cb, userData)
+  of "op_getFilterChanges":
+    requireParams(1)
+    op_getFilterChanges(ctx, parsedParams[0].getStr().cstring, cb, userData)
+  of "op_blobBaseFee":
+    requireParams(0)
+    op_blobBaseFee(ctx, cb, userData)
+  of "op_gasPrice":
+    requireParams(0)
+    op_gasPrice(ctx, cb, userData)
+  of "op_maxPriorityFeePerGas":
+    requireParams(0)
+    op_maxPriorityFeePerGas(ctx, cb, userData)
+  of "op_feeHistory":
+    requireParams(3)
+    op_feeHistory(
+      ctx,
+      parsedParams[0].getBiggestInt().culonglong,
+      parsedParams[1].getStr().cstring,
+      ($parsedParams[2]).cstring,
+      cb,
+      userData,
+    )
+  of "op_sendRawTransaction":
+    requireParams(1)
+    op_sendRawTransaction(ctx, parsedParams[0].getStr().cstring, cb, userData)
   else:
     cb(ctx, RET_DESER_ERROR, alloc("unknown method"), userData)

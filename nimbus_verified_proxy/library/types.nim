@@ -15,6 +15,7 @@ type
     stop*: bool
     pendingCalls*: int
     frontend*: ExecutionApiFrontend
+    opFrontend*: ExecutionApiFrontend
 
   CallBackProc* = proc(ctx: ptr Context, status: cint, res: cstring, userData: pointer) {.
     cdecl, gcsafe, raises: []

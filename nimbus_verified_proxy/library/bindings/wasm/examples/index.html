@@ -250,6 +250,9 @@
         <option value="mainnet">mainnet</option>
         <option value="holesky">holesky</option>
         <option value="sepolia">sepolia</option>
+        <option value="op-mainnet">op-mainnet (serves op_*)</option>
+        <option value="base-mainnet">base-mainnet (serves op_*)</option>
+        <option value="op-sepolia">op-sepolia (serves op_*)</option>
       </select>
 
       <label>Trusted Block Root</label>
@@ -266,6 +269,11 @@
       <input id="cfg-beacon" type="text"
         value="http://testing.mainnet.beacon-api.nimbus.team,http://www.lightclientdata.org"
         placeholder="http://…" />
+
+      <label>OP (L2) Execution API URLs (comma-separated, only for op-* networks)</label>
+      <input id="cfg-op-exec" type="text"
+        value="https://mainnet.optimism.io"
+        placeholder="https://…" />
 
       <label>Log Level</label>
       <select id="cfg-loglevel">
@@ -320,6 +328,10 @@
         <button class="btn-clear" data-quick='["eth_gasPrice","[]"]'>eth_gasPrice</button>
         <button class="btn-clear" data-quick='["eth_getBalance","[\"0x954a86C613fd1fBaC9C7A43a071A68254C75E4AC\",\"latest\"]"]'>eth_getBalance (example addr)</button>
         <button class="btn-clear" data-quick='["eth_getBlockByNumber","[\"latest\",false]"]'>eth_getBlockByNumber (latest)</button>
+        <!-- op_* — only resolve when an op-* network is configured -->
+        <button class="btn-clear" data-quick='["op_blockNumber","[]"]'>op_blockNumber</button>
+        <button class="btn-clear" data-quick='["op_getBalance","[\"0x4200000000000000000000000000000000000016\",\"safe\"]"]'>op_getBalance (msg passer, safe)</button>
+        <button class="btn-clear" data-quick='["op_getBlockByNumber","[\"safe\",false]"]'>op_getBlockByNumber (safe)</button>
       </div>
     </section>
 
@@ -376,12 +388,13 @@
 
   function buildConfig() {
     return JSON.stringify({
-      eth2Network:       $('cfg-network').value,
-      trustedBlockRoot:  $('cfg-root').value.trim(),
-      executionApiUrls:  $('cfg-exec').value.trim(),
-      beaconApiUrls:     $('cfg-beacon').value.trim(),
-      logLevel:          $('cfg-loglevel').value,
-      logStdout:         'None',
+      eth2Network:        $('cfg-network').value,
+      trustedBlockRoot:   $('cfg-root').value.trim(),
+      executionApiUrls:   $('cfg-exec').value.trim(),
+      beaconApiUrls:      $('cfg-beacon').value.trim(),
+      opExecutionApiUrls: $('cfg-op-exec').value.trim(),
+      logLevel:           $('cfg-loglevel').value,
+      logStdout:          'None',
     });
   }
 

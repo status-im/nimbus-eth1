@@ -30,6 +30,9 @@ import
   ./p2p_lc_backend,
   ./json_rpc_backend,
   ./json_rpc_frontend,
+  ./op/op_anchor,
+  ./op/op_chain_params,
+  ./op/op_frontend,
   ../execution_chain/version_info
 
 # error object to translate results to error
@@ -183,10 +186,33 @@ proc run(
     except Exception:
       notice "commandLineParams() exception"
 
+  let networkName = config.eth2Network.get("mainnet")
+
+  # If an op-stack network is selected we run a secondary engine alongside the primary engine
+  let opParams =
+    if isOpNetwork(networkName):
+      let p = opChainParamsForNetwork(networkName).valueOr:
+        raise newException(ProxyError, "Unknown OP network: " & error)
+      some(p)
+    else:
+      none(OpChainParams)
+
+  let
+    l1NetworkName =
+      if opParams.isSome():
+        opParams.get().l1Network
+      else:
+        networkName
+    l1ChainId =
+      if opParams.isSome():
+        opParams.get().l1ChainId
+      else:
+        getConfiguredChainId(config.eth2Network)
+
   let
     engineConf = RpcVerificationEngineConf(
-      chainId: getConfiguredChainId(config.eth2Network),
-      eth2Network: config.eth2Network,
+      chainId: l1ChainId,
+      eth2Network: some(l1NetworkName),
       maxBlockWalk: config.maxBlockWalk,
       headerStoreLen: config.headerStoreLen,
       accountCacheLen: config.accountCacheLen,
@@ -238,17 +264,65 @@ proc run(
   let frontend = engine.getExecutionApiFrontend()
   let frontendServers = startFrontends(frontend, config.frontendUrls)
 
+  # nil unless an OP network is configured (RpcVerificationEngine is a ref, so nil is the
+  # natural "no L2 engine" state no Option wrapping needed)
+  var
+    l2Engine: RpcVerificationEngine
+    opExecBackendClients: seq[JsonRpcClient] = @[]
+    opFrontendServers: seq[JsonRpcServer] = @[]
+
+  if opParams.isSome():
+    if config.opExecutionApiUrls.len <= 0:
+      raise newException(
+        ProxyError, "Need at least one L2 execution api url (--op-execution-api-url)"
+      )
+
+    # the L2 EVM follows the L1 fork schedule, so it uses the L1 network id
+    let l2NetworkId = chainIdToNetworkId(l1ChainId).valueOr:
+      raise newException(
+        ProxyError, "Couldn't derive the L2 network id from the L1 chain id"
+      )
+
+    l2Engine = RpcVerificationEngine.initCore(
+      chainId = opParams.get().l2ChainId,
+      networkId = l2NetworkId,
+      maxBlockWalk = config.maxBlockWalk,
+      parallelBlockDownloads = config.parallelBlockDownloads,
+      headerStoreLen = config.headerStoreLen,
+      accountCacheLen = config.accountCacheLen,
+      codeCacheLen = config.codeCacheLen,
+      storageCacheLen = config.storageCacheLen,
+    ).valueOr:
+      raise newException(ProxyError, "Couldn't initialize OP verification engine")
+
+    opExecBackendClients = await startExecutionBackends(
+      l2Engine, config.opExecutionApiUrls, fullExecutionCapabilities
+    )
+
+    let opFrontend = getExecutionApiFrontend(l2Engine, engine)
+    opFrontendServers = startFrontends(opFrontend, config.opFrontendUrls)
+
   try:
     while true:
       await sleepAsync(engine.timeParams.SLOT_DURATION)
+
       let syncRes = await engine.syncOnce()
       if syncRes.isErr():
-        debug "LC sync failed", error = syncRes.error.errMsg
+        error "LC sync failed", error = syncRes.error.errMsg
+
+      if opParams.isSome():
+        let opRes = await l2Engine.opSyncOnce(engine)
+        if opRes.isErr():
+          error "OP sync failed", error = opRes.error.errMsg
   except CancelledError as e:
     debug "proxy loop cancelled"
     for s in frontendServers:
       await s.stop()
+    for s in opFrontendServers:
+      await s.stop()
     for c in execBackendClients:
+      await c.stop()
+    for c in opExecBackendClients:
       await c.stop()
     for c in beaconBackendClients:
       await c.stop()
