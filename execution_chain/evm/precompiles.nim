@@ -876,8 +876,9 @@ when defined(precompileCacheStats):
   type PrecompileStat = object
     calls: int64
     hits: int64
-    hitNs: int64
-    missNs: int64
+    hitNs: int64        # full hit-path cost (key build + get + replay)
+    computeNs: int64    # pure precompile computation on misses (dispatch only)
+    overheadNs: int64   # cache management on misses (key build + failed get + put)
 
   var precompileStats: array[Precompiles, PrecompileStat]
 
@@ -886,42 +887,57 @@ when defined(precompileCacheStats):
     inc precompileStats[p].hits
     precompileStats[p].hitNs += inNanoseconds(getMonoTime() - t0)
 
-  template recordMiss(p: Precompiles, t0: MonoTime) =
+  # t0:      before key build / lookup
+  # tLookup: after key build + (failed) get  -> 0..tLookup is cache overhead
+  # tComp:   after the precompile dispatch    -> tLookup..tComp is pure compute
+  # now:     after the put                     -> tComp..now is the insertion cost
+  template recordMiss(p: Precompiles, t0, tLookup, tComp: MonoTime) =
     inc precompileStats[p].calls
-    precompileStats[p].missNs += inNanoseconds(getMonoTime() - t0)
+    precompileStats[p].computeNs += inNanoseconds(tComp - tLookup)
+    precompileStats[p].overheadNs +=
+      inNanoseconds(tLookup - t0) + inNanoseconds(getMonoTime() - tComp)
 
   proc dumpPrecompileCacheStats() =
-    template pad(s: string): string = align(s, 12)
+    template pad(s: string): string = align(s, 11)
     debugEcho "=== precompile cache stats ==="
-    debugEcho align("precompile", 16), pad("calls"), pad("hits"), pad("hit%"),
-      pad("avgMiss_ns"), pad("avgHit_ns"), pad("saved_ms")
+    debugEcho "  (compute = pure miss computation; hit = full hit-path cost; ",
+      "ovh = added cache overhead per miss)"
+    debugEcho align("precompile", 16), pad("calls"), pad("hit%"),
+      pad("compute_ns"), pad("hit_ns"), pad("missOvh_ns"),
+      pad("gross_ms"), pad("net_ms")
     var totalCalls, totalHits: int64
-    var totalSavedNs: float
+    var totalGrossNs, totalNetNs: float
     for p in Precompiles:
       let s = precompileStats[p]
       if s.calls == 0:
         continue
       let
         misses = s.calls - s.hits
-        avgMiss = if misses > 0: s.missNs.float / misses.float else: 0.0
+        avgCompute = if misses > 0: s.computeNs.float / misses.float else: 0.0
         avgHit = if s.hits > 0: s.hitNs.float / s.hits.float else: 0.0
         hitPct = s.hits.float * 100.0 / s.calls.float
-        # Estimate: had the cache been absent, each hit would have cost ~avgMiss.
-        savedNs = s.hits.float * (avgMiss - avgHit)
+        # Gross: compute avoided on hits (vs the full hit-path cost we paid).
+        grossNs = s.hits.float * (avgCompute - avgHit)
+        # Net: also subtract the cache overhead paid on every miss.
+        netNs = grossNs - s.overheadNs.float
       totalCalls += s.calls
       totalHits += s.hits
-      totalSavedNs += savedNs
+      totalGrossNs += grossNs
+      totalNetNs += netNs
       debugEcho align($p, 16),
-        pad($s.calls), pad($s.hits),
+        pad($s.calls),
         pad(formatFloat(hitPct, ffDecimal, 1)),
-        pad(formatFloat(avgMiss, ffDecimal, 0)),
+        pad(formatFloat(avgCompute, ffDecimal, 0)),
         pad(formatFloat(avgHit, ffDecimal, 0)),
-        pad(formatFloat(savedNs / 1_000_000.0, ffDecimal, 1))
+        pad(formatFloat(s.overheadNs.float / max(1.0, misses.float), ffDecimal, 0)),
+        pad(formatFloat(grossNs / 1_000_000.0, ffDecimal, 1)),
+        pad(formatFloat(netNs / 1_000_000.0, ffDecimal, 1))
     let totalPct =
       if totalCalls > 0: totalHits.float * 100.0 / totalCalls.float else: 0.0
     debugEcho "total calls=", totalCalls, " hits=", totalHits,
       " hit%=", formatFloat(totalPct, ffDecimal, 1),
-      " est. compute saved=", formatFloat(totalSavedNs / 1_000_000.0, ffDecimal, 1), "ms"
+      " | gross saved=", formatFloat(totalGrossNs / 1_000_000.0, ffDecimal, 1),
+      "ms  net saved=", formatFloat(totalNetNs / 1_000_000.0, ffDecimal, 1), "ms"
 
   addExitProc(dumpPrecompileCacheStats)
 
@@ -966,6 +982,9 @@ proc execPrecompile*(c: Computation, precompile: Precompiles) =
       handlePrecompileResult(c, precompile, fork, res)
       return
 
+  when defined(precompileCacheStats):
+    let statsLookupEnd = getMonoTime()
+
   let gasBefore = c.gasMeter.gasRemaining
   let res = case precompile
     of paEcRecover: ecRecover(c)
@@ -987,6 +1006,9 @@ proc execPrecompile*(c: Computation, precompile: Precompiles) =
     of paBlsMapG2: blsMapG2(c)
     of paP256Verify: p256verify(c)
 
+  when defined(precompileCacheStats):
+    let statsComputeEnd = getMonoTime()
+
   # Cache successful results whose output fits the fixed-capacity buffer.
   if cacheable and res.isOk and c.output.len <= MaxCachedPrecompileOutput:
     precompileCaches[precompile].put(key, PrecompileCacheEntry(
@@ -995,6 +1017,6 @@ proc execPrecompile*(c: Computation, precompile: Precompiles) =
       output: ArrayBuf[MaxCachedPrecompileOutput, byte].initCopyFrom(c.output)))
 
   when defined(precompileCacheStats):
-    recordMiss(precompile, statsT0)
+    recordMiss(precompile, statsT0, statsLookupEnd, statsComputeEnd)
 
   handlePrecompileResult(c, precompile, fork, res)
