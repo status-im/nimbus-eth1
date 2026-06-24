@@ -181,6 +181,9 @@ type
   HeaderResult* = Result[Header,string]
     ## Shortcut
 
+  HashResult* = Result[Hash32,string]
+    ## Shortcut
+
   PutResult* = Result[void,string]
     ## Shortcut
 
@@ -1080,6 +1083,13 @@ proc getHeader*(db: MptAsmRef, bn: BlockNumber): HeaderResult =
     return err(error)
   data.decodeHeader()
 
+proc getBlockHash*(db: MptAsmRef, bn: BlockNumber): HashResult =
+  db.getHeader(bn + 1).isErrOr:
+    return ok value.parentHash
+  let hdr = db.getHeader(bn).valueOr:
+    return err(error)
+  ok hdr.computeBlockHash
+
 proc lastHeader*(db: MptAsmRef): HeaderResult =
   let data = db.get9(cHeader, 0u64).valueOr:
     return err(error)
@@ -1118,6 +1128,15 @@ iterator walkHeader*(db: MptAsmRef): WalkHeader =
     yield (header,"")
 
 # ========================
+
+proc hasStateData*(
+    db: MptAsmRef;
+      ): Result[bool,string] =
+  for (_,value) in db.adb.colWalk33 cStateData.key33():
+    value.decodeStateData().isOkOr:
+      return err(error)
+    return ok(true)
+  ok(false)
 
 proc getStateData*(
     db: MptAsmRef;

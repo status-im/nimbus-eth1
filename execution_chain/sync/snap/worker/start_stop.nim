@@ -46,6 +46,10 @@ proc setupServices*(ctx: SnapCtxRef; info: static[string]): bool =
   ctx.pool.mptAsm = MptAsmRef.init(ctx.pool.baseDir,info).valueOr:
     return false
 
+  # Set up manual beacon target request. If set, there is no point in
+  # waiting for inital CL to sed updates.
+  ctx.pool.beaconTarget = ctx.beaconInitTarget()
+
   # Set up ticker, disabled by default
   if ctx.pool.ticker.isNil:
     ctx.pool.ticker = proc(ctx: SnapCtxRef) = discard

@@ -18,7 +18,6 @@ type
     SnapIdle = 0
     SnapResume                     ## Resume from previous session
     SnapReady                      ## Wait for download state
-    SnapHeaderBase                 ## Download headers (for state reference)
     SnapDownload                   ## Downloading and caching data
     SnapDownloadFinish             ## Wait for sync before proceeding
     SnapMkTrie                     ## Assembling downloaded data

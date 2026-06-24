@@ -88,19 +88,15 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
 
     case ctx.updateSyncState(info):                 # set next state
     of SnapReady:
-      chronicles.info info & ": Waiting for CL to send updates",
-        syncState=($ctx.syncState), nSyncPeers=ctx.nSyncPeers()
+      # Start headers download on the beacon sync server to run quasi-parallel
+      # mode to the snap sync.
+      discard ctx.headerDownloadTrigger(info)
       bodyRc = daemonWaitReadyInterval              # take a nap
 
-    of SnapHeaderBase:
-      # Older headers are of no value here. So top-only applies.
-      discard ctx.headerDownloadTrigger(topOnly=true, info)
-      bodyRc = daemonWaitHeaderInterval
-
     of SnapDownload:
-      bodyRc = daemonWaitDownloadInterval           # download handled by peers
+      discard ctx.headerDownloadTrigger(info)       # cont. header downloading
+      bodyRc = daemonWaitDownloadInterval           # snap dwnld handled by peer
     of SnapDownloadFinish:
-      discard ctx.headerDownloadTrigger(topOnly=false, info)
       bodyRc = daemonWaitDownloadFinishInterval     # wait for sync
 
     of SnapMkTrie:
