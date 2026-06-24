@@ -861,6 +861,70 @@ proc initPrecompileCaches() =
 when enablePrecompileCache:
   initPrecompileCaches()
 
+# ------------------------------------------------------------------------------
+# Optional cache hit-rate / timing instrumentation
+# ------------------------------------------------------------------------------
+# Compile with `-d:precompileCacheStats` to collect per-precompile call counts,
+# hit rate and hit-vs-miss timing, dumped on program exit. Intended for
+# benchmarking real workloads (e.g. block import); adds timing overhead so the
+# absolute throughput of such a build is not representative - use the counts and
+# the estimated time saved to reason about the realistic speedup.
+
+when defined(precompileCacheStats):
+  import std/[monotimes, times, strutils, exitprocs]
+
+  type PrecompileStat = object
+    calls: int64
+    hits: int64
+    hitNs: int64
+    missNs: int64
+
+  var precompileStats: array[Precompiles, PrecompileStat]
+
+  template recordHit(p: Precompiles, t0: MonoTime) =
+    inc precompileStats[p].calls
+    inc precompileStats[p].hits
+    precompileStats[p].hitNs += inNanoseconds(getMonoTime() - t0)
+
+  template recordMiss(p: Precompiles, t0: MonoTime) =
+    inc precompileStats[p].calls
+    precompileStats[p].missNs += inNanoseconds(getMonoTime() - t0)
+
+  proc dumpPrecompileCacheStats() =
+    template pad(s: string): string = align(s, 12)
+    debugEcho "=== precompile cache stats ==="
+    debugEcho align("precompile", 16), pad("calls"), pad("hits"), pad("hit%"),
+      pad("avgMiss_ns"), pad("avgHit_ns"), pad("saved_ms")
+    var totalCalls, totalHits: int64
+    var totalSavedNs: float
+    for p in Precompiles:
+      let s = precompileStats[p]
+      if s.calls == 0:
+        continue
+      let
+        misses = s.calls - s.hits
+        avgMiss = if misses > 0: s.missNs.float / misses.float else: 0.0
+        avgHit = if s.hits > 0: s.hitNs.float / s.hits.float else: 0.0
+        hitPct = s.hits.float * 100.0 / s.calls.float
+        # Estimate: had the cache been absent, each hit would have cost ~avgMiss.
+        savedNs = s.hits.float * (avgMiss - avgHit)
+      totalCalls += s.calls
+      totalHits += s.hits
+      totalSavedNs += savedNs
+      debugEcho align($p, 16),
+        pad($s.calls), pad($s.hits),
+        pad(formatFloat(hitPct, ffDecimal, 1)),
+        pad(formatFloat(avgMiss, ffDecimal, 0)),
+        pad(formatFloat(avgHit, ffDecimal, 0)),
+        pad(formatFloat(savedNs / 1_000_000.0, ffDecimal, 1))
+    let totalPct =
+      if totalCalls > 0: totalHits.float * 100.0 / totalCalls.float else: 0.0
+    debugEcho "total calls=", totalCalls, " hits=", totalHits,
+      " hit%=", formatFloat(totalPct, ffDecimal, 1),
+      " est. compute saved=", formatFloat(totalSavedNs / 1_000_000.0, ffDecimal, 1), "ms"
+
+  addExitProc(dumpPrecompileCacheStats)
+
 proc handlePrecompileResult(
     c: Computation, precompile: Precompiles, fork: EVMFork, res: EvmResultVoid) =
   if res.isErr:
@@ -885,6 +949,9 @@ proc execPrecompile*(c: Computation, precompile: Precompiles) =
                   precompile in cachedPrecompiles and
                   c.msg.data.len <= MaxCachedPrecompileInput
 
+  when defined(precompileCacheStats):
+    let statsT0 = getMonoTime()
+
   var key: PrecompileCacheKey
   if cacheable:
     key = PrecompileCacheKey.initCopyFrom(c.msg.data)
@@ -894,6 +961,8 @@ proc execPrecompile*(c: Computation, precompile: Precompiles) =
       let res = c.gasMeter.consumeGas(cached[].gasUsed, reason = "Precompile cache hit")
       if res.isOk:
         assign(c.output, cached[].output.data())
+      when defined(precompileCacheStats):
+        recordHit(precompile, statsT0)
       handlePrecompileResult(c, precompile, fork, res)
       return
 
@@ -924,5 +993,8 @@ proc execPrecompile*(c: Computation, precompile: Precompiles) =
       fork: fork,
       gasUsed: gasBefore - c.gasMeter.gasRemaining,
       output: ArrayBuf[MaxCachedPrecompileOutput, byte].initCopyFrom(c.output)))
+
+  when defined(precompileCacheStats):
+    recordMiss(precompile, statsT0)
 
   handlePrecompileResult(c, precompile, fork, res)
