@@ -45,6 +45,25 @@ const
   PersistBatchSize = 4'u64
   MaxQueueSize = 128
 
+type
+  ImportOutcome* = enum
+    ## Successful classification of a block handed to `importBlock`.
+    Valid           ## newly validated and linked into the `FC`
+    AlreadyObserved ## block already present by hash (content arrived earlier)
+
+  ImportErrorKind* = enum
+    ## Error classification of a block handed to `importBlock`. The error
+    ## channel is preserved: every `err` that the previous `Result[void,string]`
+    ## interface returned still returns `err` with the same `msg` text - only a
+    ## `kind` tag is added so callers can react without re-deriving FC state.
+    Invalid         ## genuine validation/`processBlock` failure
+    Orphaned        ## branch cut off at/below finalized - drop forward blocks
+    MissingParent   ## parent absent but above finalized - quarantined, retry
+
+  ImportError* = object
+    kind*: ImportErrorKind
+    msg*:  string
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -686,9 +705,17 @@ proc importBlock*(
     blk: Block,
     blockAccessList = Opt.none(BlockAccessListRef),
     finalized = false
-  ): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
+  ): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
   ## Try to import block to canonical or side chain.
-  ## return error if the block is invalid
+  ##
+  ## Classifies the block and returns a typed verdict instead of forcing the
+  ## caller to second-guess `FC` state:
+  ##  * `ok(Valid)`           - newly validated and linked
+  ##  * `ok(AlreadyObserved)` - block already present by hash
+  ##  * `err(Invalid)`        - genuine validation failure
+  ##  * `err(Orphaned)`       - branch cut off at/below finalized (drop forward)
+  ##  * `err(MissingParent)`  - parent not yet present (above finalized)
+  ## The `err.msg` text is unchanged from the previous string interface.
   ##
   ## `finalized` should be set to true for blocks that are known to be finalized
   ## already per the latest fork choice update from the consensus client, for
@@ -697,6 +724,13 @@ proc importBlock*(
   ## disk (instead of once for every block).
   template header(): Header =
     blk.header
+
+  let blkHash = header.computeBlockHash
+
+  # Already observed: the block content arrived earlier (from us or a concurrent
+  # importer such as `el_sync`). Nothing to do.
+  if c.hashToBlock.hasKey(blkHash):
+    return ok(AlreadyObserved)
 
   let parent = c.hashToBlock.getOrDefault(header.parentHash)
   if parent.isOk:
@@ -708,25 +742,31 @@ proc importBlock*(
 
     # Setting the finalized flag to true here has the effect of skipping the
     # stateroot check for performance reasons.
-    let
-      isFinalized = finalized or blk.header.number <= c.latestFinalized.number
-      parent = ?(await c.validateBlock(parent, blk, blockAccessList, isFinalized))
+    let isFinalized = finalized or blk.header.number <= c.latestFinalized.number
+    let newParent = (await c.validateBlock(parent, blk, blockAccessList, isFinalized)).valueOr:
+      return err(ImportError(kind: Invalid, msg: error))
     if c.quarantine.hasOrphans():
-      c.queueOrphan(parent, isFinalized)
+      c.queueOrphan(newParent, isFinalized)
+    return ok(Valid)
 
-  else:
-    # If its parent is an invalid block
-    # there is no hope the descendant is valid
-    let blockHash = header.computeBlockHash
-    debug "Parent block not found",
-      blockHash = blockHash.short,
-      parentHash = header.parentHash.short
+  # Parent is not in the in-memory `(base, latest]` window. Classify by the
+  # block's height relative to `base`/`latest` (the error channel is preserved -
+  # same `msg` as the previous `err("Block is not part of valid chain")`).
+  debug "Parent block not found",
+    blockHash = blkHash.short,
+    parentHash = header.parentHash.short
 
-    # Put into quarantine and hope we receive the parent block
-    c.quarantine.addOrphan(blockHash, blk, blockAccessList)
-    return err("Block is not part of valid chain")
+  if header.number <= c.latest.number:
+    # The in-memory chain already spans this height yet the parent is gone: the
+    # parent's branch was pruned (finality cut it off), so this block is on a
+    # dead fork. `c.latest` is the reliable frontier here - `c.latestFinalized`
+    # can lag until a matching fork-choice block is imported.
+    return err(ImportError(kind: Orphaned, msg: "Block is not part of valid chain"))
 
-  ok()
+  # The chain has not reached this height yet: the parent may still arrive.
+  # Quarantine and wait.
+  c.quarantine.addOrphan(blkHash, blk, blockAccessList)
+  return err(ImportError(kind: MissingParent, msg: "Block is not part of valid chain"))
 
 proc forkChoice*(c: ForkedChainRef,
                  headHash: Hash32,
@@ -789,8 +829,13 @@ template queueImportBlock*(
     blockAccessList = Opt.none(BlockAccessListRef),
     finalized = false): auto =
 
-  proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError], raw: true).} =
-    c.importBlock(blk, blockAccessList, finalized)
+  # Map the typed import verdict down to the queue's `Result[void, string]`
+  # interface, preserving the original error message text. Callers that only
+  # care about ok/err (e.g. the engine API `newPayload`) use this variant.
+  proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
+    let r = await c.importBlock(blk, blockAccessList, finalized)
+    if r.isOk: ok()
+    else: err(r.error.msg)
 
   let item = QueueItem(
     responseFut: Future[Result[void, string]].Raising([CancelledError]).init(),
@@ -798,6 +843,30 @@ template queueImportBlock*(
   )
   await c.queue.addLast(item)
   item.responseFut
+
+template queueImportBlockClassified*(
+    c: ForkedChainRef,
+    blk: Block,
+    blockAccessList = Opt.none(BlockAccessListRef),
+    finalized = false): auto =
+  ## Like `queueImportBlock` but exposes the full typed `importBlock` verdict so
+  ## the caller (the devp2p block syncer) can react to the classification
+  ## (Valid / AlreadyObserved / Orphaned / MissingParent / Invalid) without
+  ## re-deriving `FC` state. Serialised through the same `FC` queue.
+  let verdict = Future[Result[ImportOutcome, ImportError]]
+                  .Raising([CancelledError]).init()
+
+  proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
+    let r = await c.importBlock(blk, blockAccessList, finalized)
+    if not verdict.finished:
+      verdict.complete(r)
+    if r.isOk: ok()
+    else: err(r.error.msg)
+
+  # `responseFut` is left nil: `processQueue` tolerates it and we await the
+  # typed `verdict` future instead.
+  await c.queue.addLast(QueueItem(handler: asyncHandler))
+  verdict
 
 template queueForkChoice*(c: ForkedChainRef,
                  headHash: Hash32,
