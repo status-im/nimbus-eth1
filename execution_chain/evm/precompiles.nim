@@ -796,81 +796,80 @@ func getPrecompile*(fork: EVMFork, codeAddress: Address): Opt[Precompiles] =
 template isPrecompile*(fork: EVMFork, codeAddress: Address): bool =
   getPrecompile(fork, codeAddress).isSome
 
-# ------------------------------------------------------------------------------
-# Precompile result cache
-# ------------------------------------------------------------------------------
-#
-# Precompiles are pure functions of (input bytes, fork), so their results can be
-# cached and replayed - skipping the (often expensive) computation - as long as
-# the exact same gas and output bytes are reproduced.
-#
-# Only precompiles with a bounded input length are cached, so the raw input
-# bytes fit in a fixed-capacity buffer and can be used directly as the cache
-# key. Using the raw bytes as the key means lookups are exact (the cache
-# compares the full key with `==`), so there is no collision/correctness risk -
-# the internal hash only affects bucket placement. A call is only cached when
-# its input fits the fixed-capacity key buffer (and, on store, its output fits
-# the value buffer), so variable/large-input precompiles are transparently
-# cached for their small inputs and fall through to normal computation for big
-# ones. Only the trivial identity precompile is never cached.
 
 const
-  # Compile with `-d:disablePrecompileCache` to bypass the cache entirely (for
-  # differential testing / benchmarking against the uncached behaviour).
-  enablePrecompileCache = not defined(disablePrecompileCache)
+  enablePrecompileCache = true
 
-  MaxCachedPrecompileInput = 512    # BLS G2 add - the largest cached input
-  MaxCachedPrecompileOutput = 256   # BLS G2 add / mapG2 - the largest cached output
+  MaxCachedPrecompileInput = 192
+  MaxCachedPrecompileOutput = 128
 
-  # Every precompile except the trivial identity (a plain memcpy) is cached;
-  # variable-input precompiles are only actually cached when their input fits
-  # the key buffer (see the `cacheable` guard in execPrecompile).
+  # Only precompiles that have input and outputs less than these limits above
+  # are cached. We also don't cache precompiles which are generally fast such as
+  # the hash functions.
   cachedPrecompiles = {
-    paEcRecover, paSha256, paRipeMd160, paModExp, paEcAdd, paEcMul,
-    paPairing, paBlake2bf, paPointEvaluation, paBlsG1Add, paBlsG1MultiExp,
-    paBlsG2Add, paBlsG2MultiExp, paBlsPairing, paBlsMapG1, paBlsMapG2,
-    paP256Verify}
+    # Frontier to Spurious Dragron
+    paEcRecover,
+    #paSha256,
+    #paRipeMd160,
+    #paIdentity,
+    # Byzantium and Constantinople
+    #paModExp,
+    paEcAdd,
+    paEcMul,
+    paPairing,
+    # Istanbul
+    #paBlake2bf,
+    # Cancun
+    paPointEvaluation,
+    # Prague (EIP-2537)
+    #paBlsG1Add,
+    paBlsG1MultiExp,
+    #paBlsG2Add,
+    #paBlsG2MultiExp,
+    #paBlsPairing,
+    paBlsMapG1,
+    #paBlsMapG2,
+    # Osaka
+    paP256Verify,
+  }
 
 type
   PrecompileCacheKey = ArrayBuf[MaxCachedPrecompileInput, byte]
 
-  PrecompileCacheEntry = object
+  PrecompileCacheValue = object
     fork: EVMFork
     gasUsed: GasInt
     output: ArrayBuf[MaxCachedPrecompileOutput, byte]
 
 func hash(k: PrecompileCacheKey): Hash =
-  # Fast (non-cryptographic) bucket hash over the raw input bytes. Key identity
-  # is still the full byte comparison via ArrayBuf's `==`, so this never affects
-  # correctness, only bucket distribution.
   hash(k.data())
-
-var precompileCaches: array[Precompiles, ConcurrentLruCache[PrecompileCacheKey, PrecompileCacheEntry]]
 
 const
   precompileCacheBytes = 1_000_000  # ~1MB per cached precompile
-  lruOverhead = 20                  # approximate per-entry LRU overhead
+  lruOverhead = 20
   precompileCacheCapacity =
     precompileCacheBytes div
-    (sizeof(PrecompileCacheKey) + sizeof(PrecompileCacheEntry) + lruOverhead)
+    (sizeof(PrecompileCacheKey) + sizeof(PrecompileCacheValue) + lruOverhead)
+
+var precompileCaches: array[Precompiles, ConcurrentLruCache[PrecompileCacheKey, PrecompileCacheValue]]
 
 proc initPrecompileCaches() =
   for p in cachedPrecompiles:
-    precompileCaches[p].init(precompileCacheCapacity)
+    precompileCaches[p].init(precompileCacheCapacity, initialSize = precompileCacheCapacity)
 
 when enablePrecompileCache:
   initPrecompileCaches()
 
 # ------------------------------------------------------------------------------
-# Optional cache hit-rate / timing instrumentation
+# Cache hit-rate / timing instrumentation
 # ------------------------------------------------------------------------------
-# Compile with `-d:precompileCacheStats` to collect per-precompile call counts,
-# hit rate and hit-vs-miss timing, dumped on program exit. Intended for
-# benchmarking real workloads (e.g. block import); adds timing overhead so the
-# absolute throughput of such a build is not representative - use the counts and
-# the estimated time saved to reason about the realistic speedup.
+# Always-on: collects per-precompile call counts, hit rate and hit-vs-miss
+# timing, dumped on program exit. Adds a little timing overhead per precompile
+# call; use the counts and the estimated time saved to reason about the realistic
+# speedup. Flip the `when true` here (and the matching guards in execPrecompile)
+# to `when defined(precompileCacheStats)` to make it opt-in again.
 
-when defined(precompileCacheStats):
+when true:
   import std/[monotimes, times, strutils, exitprocs]
 
   type PrecompileStat = object
@@ -941,8 +940,7 @@ when defined(precompileCacheStats):
 
   addExitProc(dumpPrecompileCacheStats)
 
-proc handlePrecompileResult(
-    c: Computation, precompile: Precompiles, fork: EVMFork, res: EvmResultVoid) =
+template handlePrecompileResult(c: Computation, precompile: Precompiles, fork: EVMFork, res: EvmResultVoid) =
   if res.isErr:
     if res.error.code == EvmErrorCode.OutOfGas:
       c.setError(StatusCode.OutOfGas, $res.error.code, true)
@@ -955,68 +953,78 @@ proc handlePrecompileResult(
           errCode = $res.error.code,
           precompile = precompile
 
+template dispatchPrecompile(c: Computation, precompile: Precompiles, fork: EVMFork): EvmResultVoid =
+  case precompile
+  of paEcRecover: ecRecover(c)
+  of paSha256: sha256(c)
+  of paRipeMd160: ripemd160(c)
+  of paIdentity: identity(c)
+  of paModExp: modExp(c, fork)
+  of paEcAdd: bn256ecAdd(c, fork)
+  of paEcMul: bn256ecMul(c, fork)
+  of paPairing: bn256ecPairing(c, fork)
+  of paBlake2bf: blake2bf(c)
+  of paPointEvaluation: pointEvaluation(c)
+  of paBlsG1Add: blsG1Add(c)
+  of paBlsG1MultiExp: blsG1MultiExp(c)
+  of paBlsG2Add: blsG2Add(c)
+  of paBlsG2MultiExp: blsG2MultiExp(c)
+  of paBlsPairing: blsPairing(c)
+  of paBlsMapG1: blsMapG1(c)
+  of paBlsMapG2: blsMapG2(c)
+  of paP256Verify: p256verify(c)
+
 proc execPrecompile*(c: Computation, precompile: Precompiles) =
   if c.balTrackerEnabled:
     c.vmState.balTracker.trackAddressAccess(precompileAddrs[precompile])
-  let fork = c.fork
 
-  # A cacheable call only when the input fits the fixed-capacity key buffer.
-  let cacheable = enablePrecompileCache and
-                  precompile in cachedPrecompiles and
-                  c.msg.data.len <= MaxCachedPrecompileInput
+  let
+    fork = c.fork
+    cacheable =
+      when enablePrecompileCache:
+        precompile in cachedPrecompiles and c.msg.data.len <= MaxCachedPrecompileInput
+      else:
+        false
 
-  when defined(precompileCacheStats):
+  when true:
     let statsT0 = getMonoTime()
 
-  var key: PrecompileCacheKey
-  if cacheable:
-    key = PrecompileCacheKey.initCopyFrom(c.msg.data)
-    let cached = precompileCaches[precompile].get(key)
-    if cached.isSome and cached[].fork == fork:
-      # Cache hit: reproduce the exact gas and output of the original call.
-      let res = c.gasMeter.consumeGas(cached[].gasUsed, reason = "Precompile cache hit")
-      if res.isOk:
-        assign(c.output, cached[].output.data())
-      when defined(precompileCacheStats):
-        recordHit(precompile, statsT0)
-      handlePrecompileResult(c, precompile, fork, res)
-      return
+  let res =
+      if cacheable:
+        let
+          key = PrecompileCacheKey.initCopyFrom(c.msg.data)
+          cached = precompileCaches[precompile].get(key)
+        when true:
+          let statsLookupEnd = getMonoTime()
 
-  when defined(precompileCacheStats):
-    let statsLookupEnd = getMonoTime()
-
-  let gasBefore = c.gasMeter.gasRemaining
-  let res = case precompile
-    of paEcRecover: ecRecover(c)
-    of paSha256: sha256(c)
-    of paRipeMd160: ripemd160(c)
-    of paIdentity: identity(c)
-    of paModExp: modExp(c, fork)
-    of paEcAdd: bn256ecAdd(c, fork)
-    of paEcMul: bn256ecMul(c, fork)
-    of paPairing: bn256ecPairing(c, fork)
-    of paBlake2bf: blake2bf(c)
-    of paPointEvaluation: pointEvaluation(c)
-    of paBlsG1Add: blsG1Add(c)
-    of paBlsG1MultiExp: blsG1MultiExp(c)
-    of paBlsG2Add: blsG2Add(c)
-    of paBlsG2MultiExp: blsG2MultiExp(c)
-    of paBlsPairing: blsPairing(c)
-    of paBlsMapG1: blsMapG1(c)
-    of paBlsMapG2: blsMapG2(c)
-    of paP256Verify: p256verify(c)
-
-  when defined(precompileCacheStats):
-    let statsComputeEnd = getMonoTime()
-
-  # Cache successful results whose output fits the fixed-capacity buffer.
-  if cacheable and res.isOk and c.output.len <= MaxCachedPrecompileOutput:
-    precompileCaches[precompile].put(key, PrecompileCacheEntry(
-      fork: fork,
-      gasUsed: gasBefore - c.gasMeter.gasRemaining,
-      output: ArrayBuf[MaxCachedPrecompileOutput, byte].initCopyFrom(c.output)))
-
-  when defined(precompileCacheStats):
-    recordMiss(precompile, statsT0, statsLookupEnd, statsComputeEnd)
+        if cached.isSome() and cached[].fork == fork:
+          let r = c.gasMeter.consumeGas(cached[].gasUsed, reason = "Precompile cache hit")
+          if r.isOk():
+            assign(c.output, cached[].output.data())
+          when true:
+            recordHit(precompile, statsT0)
+          r
+        else:
+          let
+            gasBefore = c.gasMeter.gasRemaining
+            r = dispatchPrecompile(c, precompile, fork)
+          when true:
+            let statsComputeEnd = getMonoTime()
+          if r.isOk() and c.output.len <= MaxCachedPrecompileOutput:
+            precompileCaches[precompile].put(key, PrecompileCacheValue(
+              fork: fork,
+              gasUsed: gasBefore - c.gasMeter.gasRemaining,
+              output: ArrayBuf[MaxCachedPrecompileOutput, byte].initCopyFrom(c.output)))
+          when true:
+            recordMiss(precompile, statsT0, statsLookupEnd, statsComputeEnd)
+          r
+      else:
+        let r = dispatchPrecompile(c, precompile, fork)
+        when true:
+          let statsComputeEnd = getMonoTime()
+          # No cache lookup or insertion for an uncacheable call, so there is no
+          # cache overhead: pass statsT0 as the lookup-end too.
+          recordMiss(precompile, statsT0, statsT0, statsComputeEnd)
+        r
 
   handlePrecompileResult(c, precompile, fork, res)
