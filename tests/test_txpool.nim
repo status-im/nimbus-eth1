@@ -151,7 +151,7 @@ template checkAssembleBlock(xp, expCount): auto =
   rc.get
 
 template checkImportBlock(xp: TxPoolRef, bundle: AssembledBlock) =
-  let rc = waitFor xp.chain.importBlock(bundle.blk)
+  let rc = waitFor xp.chain.importBlock(bundle.blk, finalized = true)
   check rc.isOk == true
   if rc.isErr:
     debugEcho "IMPORT BLOCK: ", rc.error
@@ -402,7 +402,7 @@ suite "TxPool test suite":
 
       numTxsPacked += bundle.blk.transactions.len
 
-      (waitFor chain.importBlock(bundle.blk)).isOkOr:
+      (waitFor chain.importBlock(bundle.blk, finalized = true)).isOkOr:
         check false
         debugEcho error
         return
