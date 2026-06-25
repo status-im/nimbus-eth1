@@ -46,6 +46,8 @@ proc statelessProcessBlock*(
   let
     memoryDb = newCoreDbRef(DefaultDbMemory)
     memoryTxFrame = memoryDb.baseTxFrame()
+  defer:
+    memoryDb.close()
 
   # Load the subtrie of trie nodes (both account and storage tries) into the
   # in memory database.
@@ -69,6 +71,9 @@ proc statelessProcessBlock*(
   memoryVmState.init(
     parent, blk.header, com, memoryTxFrame, storeSlotHash = false,
     enableBalTracker = com.isAmsterdamOrLater(blk.header.timestamp))
+
+  defer:
+    memoryVmState.dispose()
 
   # Execute the block with all validations enabled
   ?memoryVmState.processBlock(

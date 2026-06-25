@@ -361,7 +361,7 @@ proc configurationMain*() =
       check config.rdbPrintStats == true
       check config.rewriteDatadirId == true
       check config.eagerStateRootCheck == false
-      check config.parallelStateRootComputation == true
+      check config.parallelStateRootComputation == false
       check config.statelessProviderEnabled == true
       check config.statelessWitnessValidation == true
 
@@ -381,5 +381,16 @@ proc configurationMain*() =
       check config.engineApiWsEnabled == true
       check config.allowedOrigins == ["*"]
       check config.jwtSecret.get.string == "basic_jwt_secret_file"
+
+    test "TOML --network":
+      privateAccess(ExecutionClientConf)
+      let c1 = makeConfig(@["--config-file:tests/config_file/network1.toml"])
+      check c1.network == @["hoodi", "777"]
+
+      let c2 = makeConfig(@["--config-file:tests/config_file/network2.toml"])
+      check c2.network == @["sepolia"]
+
+      let c3 = makeConfig(@["--config-file:tests/config_file/network3.toml"])
+      check c3.network == @["666"]
 
 configurationMain()

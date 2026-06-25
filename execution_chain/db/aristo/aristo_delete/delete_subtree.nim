@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -36,6 +36,8 @@ proc delStoTreeNow(
     let vtx = BranchRef(vtx)
     for n, subvid in vtx.pairs():
       ?db.delStoTreeNow((rvid.root, subvid), accPath, stoPath & NibblesBuf.nibble(n))
+  of BoundaryNode:
+    discard # stateless only boundary node has no subvids to recurse into
   of ExtBranch:
     let vtx = ExtBranchRef(vtx)
     for n, subvid in vtx.pairs():

@@ -64,10 +64,12 @@ EXCLUDED_NIM_PACKAGES := 	\
 
 # debugging tools + testing tools
 TOOLS := \
-	test_tools_build \
-	nrpc
+	nrpc \
+	nimbus_history_exporter \
+	test_tools_build
 TOOLS_DIRS := \
 	nrpc \
+	tools/nimbus_history_exporter \
 	tests
 # comma-separated values for the "clean" target
 TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
@@ -85,7 +87,7 @@ PORTAL_TOOLS_DIRS := \
 	portal/bridge/history \
 	portal/tools
 # comma-separated values for the "clean" target
-PORTAL_TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(FLUFFY_TOOLS))
+PORTAL_TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(PORTAL_TOOLS))
 
 # Namespaced variables to avoid conflicts with other makefiles
 OS_PLATFORM = $(shell $(CC) -dumpmachine)
@@ -421,8 +423,8 @@ stateless_execution_baremetal: | build deps
 	$(ENV_SCRIPT) nim c --hints:off --cpu:riscv64 --os:any --mm:arc -d:useMalloc -d:chronicles_enabled:off -u:metrics --threads:off --stackTrace:off -d:disable_libbacktrace --compileOnly --genScript "execution_chain/stateless/stateless_execution.nim"
 
 stateless_execution_test: | build deps
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -o:build/$@ "tests/test_stateless_execution.nim"
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) --mm:arc -d:useMalloc -d:chronicles_log_level=ERROR -o:build/$@ "tests/test_stateless_execution.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -o:build/$@ "tests/test_stateless/test_stateless_execution.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) --mm:arc -d:useMalloc -d:chronicles_log_level=ERROR -o:build/$@ "tests/test_stateless/test_stateless_execution.nim"
 
 # EEST standalone targets - binary to run individual test vector files
 eest_engine: | build deps

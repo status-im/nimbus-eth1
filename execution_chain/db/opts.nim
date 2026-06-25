@@ -59,6 +59,7 @@ type DbOptions* = object # Options that are transported to the database layer
   rdbPrintStats*: bool
   maxSnapshots*: int
   parallelStateRootComputation*: bool
+  threadSafeCaches*: bool
   blockCacheType*: RocksDbBlockCacheType
 
 func init*(
@@ -72,7 +73,8 @@ func init*(
     rdbBranchCacheSize = defaultRdbBranchCacheSize,
     rdbPrintStats = false,
     maxSnapshots = defaultMaxSnapshots,
-    parallelStateRootComputation = false,
+    parallelStateRootComputation = true,
+    threadSafeCaches = true,
     blockCacheType = defaultBlockCacheType,
 ): T =
   T(
@@ -86,5 +88,6 @@ func init*(
     rdbPrintStats: rdbPrintStats,
     maxSnapshots: maxSnapshots,
     parallelStateRootComputation: parallelStateRootComputation,
+    threadSafeCaches: threadSafeCaches,
     blockCacheType: blockCacheType
   )

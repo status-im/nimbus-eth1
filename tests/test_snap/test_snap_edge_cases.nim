@@ -54,7 +54,7 @@ suite "Snap Data Edge Cases":
       check db.isComplete()
 
       if db.isComplete():
-        let dbx = NodeTrieRef.init(root, db.kvPairs().mapIt(it[1]), 1)
+        let dbx = NodeTrieRef.init(root, db.knPairs().mapIt(it[1]), 1)
         check not dbx.isNil
 
         if not dbx.isNil:

@@ -62,7 +62,7 @@ proc init*[E, T](q: var ConcurrentQueue[E, T]) =
   q.condEmpty.initCond()
   q.state = State.INITIALIZED
 
-proc dispose*[E, T](q: var ConcurrentQueue[E, T]) =  
+proc dispose*[E, T](q: var ConcurrentQueue[E, T]) =
   if q.state == State.INITIALIZED:
     q.lock.deinitLock()
     q.condFull.deinitCond()

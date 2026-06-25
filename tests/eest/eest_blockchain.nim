@@ -229,7 +229,7 @@ proc runTest(env: TestEnv, unit: BlockchainUnitEnv, statelessEnabled = false): F
 
   ok()
 
-proc processFile*(filePath: string, statelessEnabled = false, skipFiles: seq[string] = @[]) =
+proc processFile*(filePath: string, statelessEnabled = false, parallelEnabled = false, skipFiles: seq[string] = @[]) =
   let fixture = parseFixture(filePath, BlockchainFixture)
   let fileName = filePath.splitPath().tail
 
@@ -243,7 +243,7 @@ proc processFile*(filePath: string, statelessEnabled = false, skipFiles: seq[str
       else:
         let header = testUnit.genesisBlockHeader.to(Header)
         check testUnit.genesisBlockHeader.hash == header.computeRlpHash
-        let env = prepareEnv(testUnit, header, rpcEnabled = false, statelessEnabled)
+        let env = prepareEnv(testUnit, header, rpcEnabled = false, statelessEnabled, parallelEnabled)
 
         let testResult = waitFor env.runTest(testUnit, statelessEnabled)
         check testResult == Result[void, string].ok()
@@ -258,4 +258,4 @@ when isMainModule:
     echo "Usage: " & testFile & " vector.json"
     quit(QuitFailure)
 
-  processFile(paramStr(1), true)
+  processFile(paramStr(1), statelessEnabled = true)

@@ -140,6 +140,7 @@ proc parseHeader*(n: JsonNode): Header =
 
 proc parseParentHeader*(n: JsonNode): Header =
   Header(
+    number: required(BlockNumber, "currentNumber") - 1,
     stateRoot: emptyRoot,
     excessBlobGas: optional(uint64, "parentExcessBlobGas"),
     blobGasUsed: optional(uint64, "parentBlobGasUsed"),

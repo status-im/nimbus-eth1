@@ -26,6 +26,7 @@ export
 
 proc newCoreDbRef*(
     dbType: static[CoreDbType];      # Database type symbol
+    enableCaches: static bool = false
       ): CoreDbRef =
   ## Constructor for volatile/memory type DB
   ##
@@ -33,7 +34,7 @@ proc newCoreDbRef*(
   ## `CoreDbRef.init()` because of compiler coughing.
   ##
   when dbType == AristoDbMemory:
-    newMemoryCoreDbRef()
+    newMemoryCoreDbRef(enableCaches)
 
   else:
     {.error: "Unsupported constructor " & $dbType & ".newCoreDbRef()".}

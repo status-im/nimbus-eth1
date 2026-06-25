@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -12,7 +12,6 @@ import
   chronos,
   eth/p2p/discoveryv5/protocol,
   beacon_chain/spec/forks,
-  ../eth_history/history_data_ssz_e2s,
   ../database/content_db,
   ./wire/[portal_stream, portal_protocol_config],
   ./history/history_network,
@@ -69,13 +68,6 @@ proc new*(
     rng = newRng(),
 ): T =
   let
-    networkData =
-      case network
-      of PortalNetwork.mainnet:
-        loadNetworkData("mainnet")
-      of PortalNetwork.none:
-        loadNetworkData("mainnet")
-
     streamManager = StreamManager.new(discovery)
 
     historyNetwork =
@@ -107,9 +99,17 @@ proc new*(
       else:
         Opt.none(HistoryNetwork)
 
-    beaconNetwork =
+    (beaconNetwork, beaconLightClient) =
       if PortalSubnetwork.beacon in subnetworks:
         let
+          networkData =
+            case network
+            of PortalNetwork.mainnet, PortalNetwork.none:
+              loadNetworkData("mainnet")
+            of PortalNetwork.sepolia:
+              loadNetworkData("sepolia")
+            of PortalNetwork.hoodi:
+              loadNetworkData("hoodi")
           beaconDb = BeaconDb.new(networkData, config.dataDir / dbDir)
           beaconNetwork = BeaconNetwork.new(
             network,
@@ -125,27 +125,18 @@ proc new*(
             contentQueueWorkers = config.contentQueueWorkers,
             contentQueueSize = config.contentQueueSize,
           )
-        Opt.some(beaconNetwork)
-      else:
-        Opt.none(BeaconNetwork)
-
-    beaconLightClient =
-      if beaconNetwork.isSome():
-        let beaconLightClient = LightClient.new(
-          beaconNetwork.value, rng, networkData, LightClientFinalizationMode.Optimistic
-        )
-
+          beaconLightClient = LightClient.new(
+            beaconNetwork, rng, networkData, LightClientFinalizationMode.Optimistic
+          )
         beaconLightClient.onFinalizedHeader = onFinalizedHeader
         beaconLightClient.onOptimisticHeader = onOptimisticHeader
-
         # TODO:
         # Quite dirty. Use register validate callbacks instead. Or, revisit
         # the object relationships regarding the beacon light client.
-        beaconNetwork.value.processor = beaconLightClient.processor
-
-        Opt.some(beaconLightClient)
+        beaconNetwork.processor = beaconLightClient.processor
+        (Opt.some(beaconNetwork), Opt.some(beaconLightClient))
       else:
-        Opt.none(LightClient)
+        (Opt.none(BeaconNetwork), Opt.none(LightClient))
 
   PortalNode(
     discovery: discovery,

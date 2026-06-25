@@ -8,7 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   std/[sequtils, sets, strformat],
@@ -224,7 +224,8 @@ func validateLegacySignatureForm(tx: Transaction, fork: HardFork): bool =
 func validateEip2930SignatureForm(tx: Transaction): bool =
   var isValid = tx.V == 0'u64 or tx.V == 1'u64
   isValid = isValid and tx.S >= UInt256.one
-  isValid = isValid and tx.S < SECPK1_N
+  # https://eips.ethereum.org/EIPS/eip-2#specification
+  isValid = isValid and tx.S < SECPK1_N div 2
   isValid = isValid and tx.R < SECPK1_N
   isValid
 
@@ -347,8 +348,9 @@ proc validateTransaction*(
     vmState: BaseVMState;
     tx:      Transaction;     ## tx to validate
     sender:  Address;         ## tx.recoverSender
+    skipNonceCheck = false
     ): Result[void, string] =
-
+    
   let
     ledger  = vmState.ledger
     baseFee = vmState.blockCtx.baseFeePerGas
@@ -384,8 +386,9 @@ proc validateTransaction*(
   if balance - gasCost < tx.value:
     return err(&"invalid tx: not enough cash to send. avail={balance}, availMinusGas={balance-gasCost}, require={tx.value}")
 
-  if tx.nonce != nonce:
-    return err(&"invalid tx: account nonce mismatch. txNonce={tx.nonce}, accNonce={nonce}")
+  if not skipNonceCheck:
+    if tx.nonce != nonce:
+      return err(&"invalid tx: account nonce mismatch. txNonce={tx.nonce}, accNonce={nonce}")
 
   if tx.nonce == high(uint64):
     return err(&"invalid tx: nonce at maximum")
@@ -397,7 +400,7 @@ proc validateTransaction*(
   # EOA = Externally Owned Account
   let
     code = ledger.getCode(sender)
-    delegated = code.parseDelegation()
+    delegated = code.isDelegation()
   if code.len > 0 and not delegated:
     return err(&"invalid tx: sender is not an EOA. sender={sender.toHex}, codeLen={code.len}")
 

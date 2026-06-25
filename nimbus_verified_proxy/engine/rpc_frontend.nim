@@ -488,8 +488,12 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   .} =
     engine.beaconSync()
 
+    let db = DefaultDbMemory.newCoreDbRef()
+    defer:
+      db.close()
+
     let com = CommonRef.new(
-      DefaultDbMemory.newCoreDbRef(),
+      db,
       config = chainConfigForNetwork(engine.chainId),
       initializeDb = false,
       statelessProviderEnabled = true, # Enables collection of witness keys

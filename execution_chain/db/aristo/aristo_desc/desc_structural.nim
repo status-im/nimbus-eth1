@@ -29,6 +29,7 @@ type
     StoLeaf
     Branch
     ExtBranch
+    BoundaryNode # Stateless only type
 
   AristoAccount* = object
     ## Application relevant part of an Ethereum account. Note that the storage
@@ -55,6 +56,18 @@ type
 
   ExtBranchRef* = ref object of BranchRef
     pfx*: NibblesBuf
+
+  BoundaryNodeRef* = ref object of VertexRef
+    ## Stateless-only type. Represents a path prefix leading to an absent
+    ## subtrie whose hash is known. Used in two scenarios:
+    ##   1. Non-membership proof boundaries: `putSubtrie` puts a BoundaryNode
+    ##      where the witness ends at a known hash but the subtrie is absent.
+    ##   2. Branch collapse during delete: when a branch collapses to a single
+    ##      nil vtx boundary child, the branch is replaced by a BoundaryNode
+    ##      (prefix + boundary hash).
+    ## Should never be created or used during full-node execution.
+    pfx*: NibblesBuf
+    childKey*: HashKey
 
   LeafRef* = ref object of VertexRef
     pfx*: NibblesBuf
@@ -104,13 +117,11 @@ type
     PeekCache
       ## Peek into, but don't update cache - useful on work loads that are
       ## unfriendly to caches
-    NoPutCache
-      ## Don't put values in the cache after fetching from the database.
 
 const
   Leaves* = {VertexType.AccLeaf, VertexType.StoLeaf}
   Branches* = {VertexType.Branch, VertexType.ExtBranch}
-  VertexTypes* = Leaves + Branches
+  VertexTypes* = Leaves + Branches + {VertexType.BoundaryNode}
 
 # ------------------------------------------------------------------------------
 # Public helpers (misc)
@@ -131,6 +142,9 @@ template init*(
     _: type ExtBranchRef, pfxp: NibblesBuf, startVidp: VertexID, usedp: uint16
 ): ExtBranchRef =
   ExtBranchRef(vType: ExtBranch, pfx: pfxp, startVid: startVidp, used: usedp)
+
+template init*(_: type BoundaryNodeRef, pfxp: NibblesBuf, childKeyp: HashKey): BoundaryNodeRef =
+  BoundaryNodeRef(vType: BoundaryNode, pfx: pfxp, childKey: childKeyp)
 
 template init*(
     T: type CachedAccLeaf, pfxp: NibblesBuf, accountp: AristoAccount, stoIDp: StorageID): T =
@@ -181,6 +195,8 @@ template pfx*(vtx: VertexRef): NibblesBuf =
     LeafRef(vtx).pfx
   of ExtBranch:
     ExtBranchRef(vtx).pfx
+  of BoundaryNode:
+    BoundaryNodeRef(vtx).pfx
   of Branch:
     emptyNibbles
 
@@ -231,13 +247,15 @@ proc `==`*(a, b: VertexRef): bool =
       BranchRef(a)[] == BranchRef(b)[]
     of ExtBranch:
       ExtBranchRef(a)[] == ExtBranchRef(b)[]
+    of BoundaryNode:
+      BoundaryNodeRef(a)[] == BoundaryNodeRef(b)[]
   else:
     true
 
 iterator pairs*(vtx: VertexRef): tuple[nibble: uint8, vid: VertexID] =
-  ## Iterates over the sub-vids of a branch (does nothing for leaves)
+  ## Iterates over the sub-vids of a branch (does nothing for leaves or BoundaryNode)
   case vtx.vType
-  of Leaves:
+  of Leaves, BoundaryNode:
     discard
   of Branches:
     let vtx = BranchRef(vtx)
@@ -246,10 +264,10 @@ iterator pairs*(vtx: VertexRef): tuple[nibble: uint8, vid: VertexID] =
         yield (n, VertexID(uint64(vtx.startVid) + n))
 
 iterator allPairs*(vtx: VertexRef): tuple[nibble: uint8, vid: VertexID] =
-  ## Iterates over the sub-vids of a branch (does nothing for leaves) including
-  ## currently unset nodes
+  ## Iterates over the sub-vids of a branch (does nothing for leaves or BoundaryNode)
+  ## including currently unset nodes
   case vtx.vType
-  of Leaves:
+  of Leaves, BoundaryNode:
     discard
   of Branches:
     let vtx = BranchRef(vtx)
@@ -296,6 +314,9 @@ func dup*(vtx: VertexRef): VertexRef =
     of ExtBranch:
       let vtx = ExtBranchRef(vtx)
       ExtBranchRef.init(vtx.pfx, vtx.startVid, vtx.used)
+    of BoundaryNode:
+      let vtx = BoundaryNodeRef(vtx)
+      BoundaryNodeRef.init(vtx.pfx, vtx.childKey)
 
 template dup*(vtx: StoLeafRef): StoLeafRef =
   StoLeafRef(VertexRef(vtx).dup())
@@ -308,6 +329,9 @@ template dup*(vtx: BranchRef): BranchRef =
 
 template dup*(vtx: ExtBranchRef): ExtBranchRef =
   ExtBranchRef(VertexRef(vtx).dup())
+
+template dup*(vtx: BoundaryNodeRef): BoundaryNodeRef =
+  BoundaryNodeRef(VertexRef(vtx).dup())
 
 func `$`*(aa: AristoAccount): string =
   $aa.nonce & "," & $aa.balance & "," &
@@ -344,6 +368,12 @@ func `$`*(vtx: ExtBranchRef): string =
   else:
     "E(" & $vtx.pfx & ":"  & $vtx.startVid & "+" & toBin(BiggestInt(vtx.used), 16) & ")"
 
+func `$`*(vtx: BoundaryNodeRef): string =
+  if vtx == nil:
+    "BN(nil)"
+  else:
+    "BN(" & $vtx.pfx & ":" & $vtx.childKey & ")"
+
 func `$`*(vtx: VertexRef): string =
   if vtx == nil:
     "V(nil)"
@@ -357,6 +387,8 @@ func `$`*(vtx: VertexRef): string =
       $(BranchRef(vtx)[])
     of ExtBranch:
       $(ExtBranchRef(vtx)[])
+    of BoundaryNode:
+      $(BoundaryNodeRef(vtx)[])
 
 
 # ------------------------------------------------------------------------------

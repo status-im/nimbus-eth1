@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -154,10 +154,11 @@ proc syncToEngineApi*(dag: ChainDAGRef, url: EngineApiUrl) {.async.} =
         break
       elif consensusFork >= ConsensusFork.Bellatrix:
         # Load the execution payload for all blocks after the bellatrix upgrade
+        debug "Sending payload",
+          payload = shortLog(forkyBlck.message.body.execution_payload)
+
         let payload =
           forkyBlck.message.body.execution_payload.asEngineExecutionPayload()
-
-        debug "Sending payload", payload
 
         when consensusFork >= ConsensusFork.Electra:
           let
@@ -194,7 +195,7 @@ proc syncToEngineApi*(dag: ChainDAGRef, url: EngineApiUrl) {.async.} =
         # This would be highly unusual since it would imply a CL-valid but
         # EL-invalid block..
         warn "Payload invalid",
-          elBlockNumber, status = payloadResponse.status, curBlck = shortLog(curBlck)
+          elBlockNumber, status = payloadResponse.status, curBlck
       return
 
     debug "newPayload accepted", elBlockNumber, response = payloadResponse.status

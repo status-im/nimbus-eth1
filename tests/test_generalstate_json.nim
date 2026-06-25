@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[strutils, tables, json, os, sets],
+  std/[strutils, tables, json, os, sets, cpuinfo],
   ./test_helpers, ./test_allowed_to_fail,
   ../execution_chain/core/executor, test_config,
   ../execution_chain/transaction,
@@ -14,6 +14,7 @@ import
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/ledger,
   ../execution_chain/common/common,
+  ../execution_chain/conf,
   ../execution_chain/utils/[utils, debug],
   ../execution_chain/evm/tracer/legacy_tracer,
   ../tools/common/helpers as chp,
@@ -21,6 +22,7 @@ import
   ../tools/common/state_clearing,
   eth/common/transaction_utils,
   kzg4844/kzg,
+  taskpools,
   unittest2,
   stew/byteutils,
   results
@@ -29,12 +31,19 @@ import
 proc loadKzgSetup() {.thread.} =
   discard loadTrustedSetupFromString(kzg.trustedSetup, 8)
 
-# Loading on a dedicated thread because parsing the trusted setup uses ~400 KB 
+# Loading on a dedicated thread because parsing the trusted setup uses ~400 KB
 # of stack which exceeds the 1 MB ulimit set for `make test`.
 block:
   var t: Thread[void]
   createThread(t, loadKzgSetup)
   joinThread(t)
+
+let taskpool =
+  try:
+    Taskpool.new(numThreads = min(countProcessors(), 16))
+  except CatchableError as exc:
+    echo "Failed to start taskpool: ", exc.msg
+    quit(QuitFailure)
 
 type
   TestCtx = object
@@ -52,16 +61,18 @@ type
     subFixture: int
     fork: string
 
+  TestVMState = ref object of BaseVMState
+
 proc toBytes(x: string): seq[byte] =
   result = newSeq[byte](x.len)
   for i in 0..<x.len: result[i] = x[i].byte
 
-method getAncestorHash*(vmState: BaseVMState; blockNumber: BlockNumber): Hash32 =
+method getAncestorHash*(vmState: TestVMState; blockNumber: BlockNumber): Hash32 =
   if blockNumber >= vmState.blockNumber:
     return default(Hash32)
   elif blockNumber < 0:
     return default(Hash32)
-  elif blockNumber < vmState.blockNumber - 256:
+  elif (vmState.blockNumber > 256) and (blockNumber < vmState.blockNumber - 256):
     return default(Hash32)
   else:
     return keccak256(toBytes($blockNumber))
@@ -105,23 +116,27 @@ proc dumpDebugData(ctx: TestCtx, vmState: BaseVMState, gasUsed: GasInt, logs: op
 
 proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
   let
-    com    = CommonRef.new(newCoreDbRef DefaultDbMemory, ctx.chainConfig)
-    parent = Header(stateRoot: emptyRoot)
+    com = CommonRef.new(newCoreDbRef DefaultDbMemory, ctx.chainConfig,
+                           optimisticStatePrefetch = defaultOptimisticStatePrefetch)
+  com.taskpool = taskpool
+  com.db.mpt.taskpool = taskpool
+
+  let
     tracer = if ctx.trace:
                newLegacyTracer({})
              else:
                LegacyTracer(nil)
-
-    vmState = BaseVMState.new(
-      parent = parent,
-      header = ctx.header,
-      com    = com,
-      txFrame = com.db.baseTxFrame(),
-      tracer = tracer,
-      storeSlotHash = ctx.trace,
-    )
-
+    vmState = TestVMState()
     sender = ctx.tx.recoverSender().expect("valid signature")
+
+  vmState.init(
+    parent = ctx.parent,
+    header = ctx.header,
+    com    = com,
+    txFrame = com.db.baseTxFrame(),
+    tracer = tracer,
+    storeSlotHash = ctx.trace,
+  )
 
   vmState.mutateLedger:
     setupLedger(ctx.pre, ledger)

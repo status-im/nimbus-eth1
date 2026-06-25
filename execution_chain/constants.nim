@@ -71,6 +71,12 @@ const
   # - Update initcode size limit of 48KiB(0xC000 bytes) to 64KiB(0x10000 bytes).
   EIP7954_MAX_CODE_SIZE* =                  0x8000
   EIP7954_MAX_INITCODE_SIZE* =              0x10000
+
+  # See EIP-7702 (https://eips.ethereum.org/EIPS/eip-7702). When an EOA delegates
+  # via a SETCODE transaction its code is set to a "delegation designator": the
+  # 3-byte prefix 0xef0100 followed by the 20-byte delegate address (23 bytes).
+  EIP7702_DELEGATION_PREFIX* =              [0xEF.byte, 0x01, 0x00]
+  EIP7702_DELEGATION_SIZE* =                23
   
   # EIP
   MaxPrecompilesAddr* =                     0xFFFF

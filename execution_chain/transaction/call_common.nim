@@ -83,7 +83,7 @@ proc setDelegation(call: CallParams): int64 =
       vmState.balTracker.trackAddressAccess(authority)
     let code = ledger.getCode(authority)
     if code.len > 0:
-      if not parseDelegation(code):
+      if not isDelegation(code):
         continue
 
     # 6. Verify the nonce of authority is equal to nonce.
@@ -174,7 +174,7 @@ proc setupComputation(call: CallParams, gasRefund: int64, keepStack: bool): Comp
              CodeBytesRef.init(call.input)
            else:
              assign(msg.data, call.input)
-             getCallCode(vmState, msg.codeAddress)
+             getCallCode(vmState, msg)
 
     computation = newComputation(vmState, keepStack, msg, code)
 
@@ -275,7 +275,7 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, gasRefund: 
     if vmState.balTrackerEnabled:
       vmState.balTracker.trackAddBalanceChange(call.sender, gasRefundAmount)
     vmState.mutateLedger:
-      ledger.addBalance(call.sender, gasRefundAmount)
+      ledger.addBalance(call.sender, gasRefundAmount, checkEmptyAccount = fork < FkParis)
 
   GasUsed(
     evmGasUsed: c.msg.gas - txGasLeft,
@@ -313,6 +313,8 @@ proc finishRunningComputation(
     result.blockStateGasUsed = gasUsed.blockStateGasUsed
     if c.isSuccess:
       result.logEntries = move(c.logEntries)
+  elif T is VoidResult:
+    discard
   else:
     {.error: "Unknown computation output".}
 

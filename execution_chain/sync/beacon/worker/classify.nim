@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -18,7 +18,8 @@ import
 # ------------------------------------------------------------------------------
 
 func somethingToCollectOrUnstage*(buddy: BeaconPeerRef): bool =
-  if buddy.ctx.hibernate:                        # not activated yet?
+  if buddy.ctx.hibernate or                      # not activated yet?
+     buddy.ctx.pool.syncState == linger:         # wait for idle mode
     return false
   if buddy.headersCollectOk() or                 # something on TODO list
      buddy.headersUnstageOk() or

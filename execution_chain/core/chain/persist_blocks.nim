@@ -86,8 +86,9 @@ proc getVmState(
 
   ok(p.vmState)
 
-func dispose*(p: var Persister) =
+proc dispose*(p: var Persister) =
   p.vmState.ledger.txFrame.dispose()
+  p.vmState.dispose()
   p.vmState = nil
 
 func init*(T: type Persister, com: CommonRef, flags: PersistBlockFlags): T =
@@ -164,7 +165,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     # Generate receipts for storage or validation but skip them otherwise
     ?vmState.processBlock(
       blk,
-      skipValidation,
+      skipValidation = skipValidation,
       skipReceipts = skipValidation and PersistReceipts notin p.flags,
       skipUncles = PersistUncles notin p.flags,
       skipStateRootCheck = skipValidation,

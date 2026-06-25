@@ -12,17 +12,17 @@
 
 import
   pkg/[chronicles, chronos],
-  ./download/[account, code, storage],
+  ./download/[account, code, header, storage, trie_node],
   ./[helpers, mpt, state_db, update, worker_desc]
 
 export
-  account, code, storage
+  account, code, header, storage, trie_node
 
 # ------------------------------------------------------------------------------
 # Public function(s)
 # ------------------------------------------------------------------------------
 
-template download*(buddy: SnapPeerRef, info: static[string]) =
+template downloadAccountsAndStorage*(buddy: SnapPeerRef, info: static[string]) =
   ## Async/template
   ##
   ## Fetch and stash account, storage, and code ranges for available state
@@ -53,14 +53,13 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
       break body                                    # return err()
 
     # Fetch for state DB items, start with pivot root
-    var theseFirst: seq[StateRoot]
-    theseFirst.add pivot.stateRoot
+    var theseFirst = @[pivot.stateRoot]
     buddy.only.finRoot.isErrOr:
-      theseFirst.add value
+      theseFirst.add value                          # add finalised state root
 
     trace info & ": start downloading", peer,
       notAvailMax=buddy.only.notAvailMax,
-      syncState=buddy.syncState, nSyncPeers=ctx.nSyncPeers()
+      syncState=($buddy.syncState), nSyncPeers=ctx.nSyncPeers()
 
     # Run `download()` for available states, the order of which is
     # determined by the following criteria with deacening priority
@@ -89,7 +88,7 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
                   else:
                     break                           # done this state, try next
           buddy.storageDownload(state, acc, info)   # fetch storage slots
-          buddy.codeDownload(state, acc, info)      # fetch byte codes
+          buddy.downloadCodeCache(state, acc, info) # fetch byte codes
           if not state.isOperable():                # proceed unless evicted
             break
           didSomething = true                       # continue with this one
@@ -108,7 +107,7 @@ template download*(buddy: SnapPeerRef, info: static[string]) =
       buddy.ctrl.stopped = true
 
     trace info & ": downloaded states", peer,
-      notAvailMax=buddy.only.notAvailMax, syncState=buddy.syncState,
+      notAvailMax=buddy.only.notAvailMax, syncState=($buddy.syncState),
       nStatesOk, nStatesIdle, nSyncPeers=ctx.nSyncPeers()
 
   discard                                           # visual alignment

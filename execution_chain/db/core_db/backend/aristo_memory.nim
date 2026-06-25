@@ -23,8 +23,8 @@ export base_desc
 # Public constructors
 # ------------------------------------------------------------------------------
 
-proc newMemoryCoreDbRef*(): CoreDbRef =
-  CoreDbRef(mpt: AristoDbRef.init(), kvt: KvtDbRef.init())
+proc newMemoryCoreDbRef*(enableCaches: static bool): CoreDbRef =
+  CoreDbRef(mpt: AristoDbRef.init(enableCaches), kvt: KvtDbRef.init())
 
 # ------------------------------------------------------------------------------
 # End

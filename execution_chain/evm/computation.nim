@@ -298,13 +298,16 @@ proc writeContract*(c: Computation) =
     # The account already has zero-length code to handle nested calls.
     withExtra trace, "New contract given empty code by pre-Homestead rules"
 
-template chainTo*(c: Computation,
-                  toChild: typeof(c.child),
+template chainTo*(cpt: Computation,
+                  toChild: typeof(cpt.child),
                   after: untyped) =
 
-  c.child = toChild
-  c.continuation = proc(): EvmResultVoid {.gcsafe, raises: [].} =
-    c.continuation = nil
+  cpt.child = toChild
+  cpt.continuation = proc(cc: Computation): EvmResultVoid {.gcsafe, raises: [].} =
+    cc.continuation = nil
+    let # we inject these variables so the `after` block can use it without having to capture
+      c {.inject.} = cc
+      child {.inject} = cc.child
     after
 
 proc execSelfDestruct*(c: Computation, beneficiary: Address) =
@@ -320,7 +323,7 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
         ledger.subBalance(c.msg.contractAddress, localBalance)
         # Transfer to beneficiary
         c.vmState.balTracker.trackAddBalanceChange(beneficiary, localBalance)
-        ledger.addBalance(beneficiary, localBalance)
+        ledger.addBalance(beneficiary, localBalance, checkEmptyAccount = c.fork < FkParis)
         if ledger.selfDestruct6780(c.msg.contractAddress):
           c.vmState.balTracker.trackInTransactionSelfDestruct(c.msg.contractAddress)
           newContract = true
@@ -328,14 +331,14 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
         # Zeroing contract balance except beneficiary is the same address
         ledger.subBalance(c.msg.contractAddress, localBalance)
         # Transfer to beneficiary
-        ledger.addBalance(beneficiary, localBalance)
+        ledger.addBalance(beneficiary, localBalance, checkEmptyAccount = c.fork < FkParis)
         newContract = ledger.selfDestruct6780(c.msg.contractAddress)
 
       if c.fork >= FkAmsterdam:
         c.emitSelfDestructLog(beneficiary, localBalance, newContract)
     else:
       # Transfer to beneficiary
-      ledger.addBalance(beneficiary, localBalance)
+      ledger.addBalance(beneficiary, localBalance, checkEmptyAccount = c.fork < FkParis)
       ledger.selfDestruct(c.msg.contractAddress)
 
     trace "SELFDESTRUCT",
