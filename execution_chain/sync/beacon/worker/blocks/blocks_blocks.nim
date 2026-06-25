@@ -17,7 +17,7 @@ import
   ../../../../networking/p2p,
   ../../../wire_protocol/types,
   ../[helpers, update, worker_desc],
-  ./[blocks_fetch, blocks_helpers, blocks_unproc]
+  ./[blocks_bal, blocks_fetch, blocks_helpers, blocks_unproc]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -43,16 +43,18 @@ template blocksFetchCheckImpl(
     buddy: BeaconPeerRef;
     iv: BnRange;
     info: static[string];
-      ): Opt[seq[EthBlock]] =
+      ): Opt[BlocksForImport] =
   ## Async/template
   ##
   ## From the ptp/ethXX network fetch the argument range `iv` of block bodies
-  ## and assemble a list of blocks to be returned.
+  ## and assemble a list of blocks to be returned. For post-Amsterdam blocks the
+  ## matching block access lists (EIP-7928) are fetched as well from `eth/71`
+  ## peers.
   ##
   ## The block bodies are heuristically verified, the headers are taken from
   ## the header chain cache.
   ##
-  var bodyRc = Opt[seq[EthBlock]].err()
+  var bodyRc = Opt[BlocksForImport].err()
   block body:
     let
       ctx = buddy.ctx
@@ -122,8 +124,36 @@ template blocksFetchCheckImpl(
         blocks[n].uncles = bodies[n].uncles
         blocks[n].withdrawals = bodies[n].withdrawals
 
+    # Fetch block access lists (EIP-7928) for the post-Amsterdam blocks from the
+    # `eth/71` peer and verify each against the hash committed in its header.
+    var bals = newSeq[Opt[BlockAccessListRef]](blocks.len)
+    block balFetch:
+      let com = ctx.chain.com
+      var
+        balRequest: BlockAccessListsRequest
+        balPos: seq[int]                                   # bal index -> block index
+      for n in 0 ..< blocks.len:
+        if com.isAmsterdamOrLater(blocks[n].header.timestamp):
+          balRequest.blockHashes.add request.blockHashes[n]
+          balPos.add n
+      if balRequest.blockHashes.len == 0:
+        break balFetch                                     # no post-Amsterdam blocks
+
+      # The response is served in request order and may be truncated by the
+      # peer's soft response size limit.
+      let raws = (await buddy.fetchRawBlockAccessLists(balRequest)).valueOr:
+        default(seq[RawBlockAccessList])
+      var nBals = 0
+      for j in 0 ..< min(raws.len, balPos.len):
+        bals[balPos[j]] = decodeBlockAccessList(raws[j], blocks[balPos[j]].header)
+        if bals[balPos[j]].isSome:
+          inc nBals
+      trace info & ": fetched block access lists", peer, iv=($iv),
+        nReq=balRequest.blockHashes.len, nResp=raws.len, nBals
+
     if 0 < blocks.len.uint64:
-      bodyRc = Opt[seq[EthBlock]].ok(blocks)               # return ok()
+      bodyRc = Opt[BlocksForImport].ok(BlocksForImport(
+        blocks: move(blocks), move(bals): bals, peerID: buddy.peerID)) # return ok()
 
     buddy.nErrors.apply.blk.inc
     break body                                             # return err()
@@ -138,14 +168,14 @@ template blocksFetch*(
     buddy: BeaconPeerRef;
     num: uint;
     info: static[string];
-      ): Opt[seq[EthBlock]] =
+      ): Opt[BlocksForImport] =
   ## Async/template
   ##
   ## From the p2p/ethXX network fetch as many blocks as given as argument `num`.
   ##
   let ctx = buddy.ctx
 
-  var bodyRc = Opt[seq[EthBlock]].err()
+  var bodyRc = Opt[BlocksForImport].err()
   block body:
     # Make sure that this sync peer is not banned from block processing,
     # already.
@@ -171,7 +201,7 @@ template blocksFetch*(
     if rc.isErr:
       ctx.blocksUnprocCommit(iv, iv)
     else:
-      ctx.blocksUnprocCommit(iv, iv.minPt + rc.value.len.uint64, iv.maxPt)
+      ctx.blocksUnprocCommit(iv, iv.minPt + rc.value.blocks.len.uint64, iv.maxPt)
 
     bodyRc = rc
 
@@ -181,12 +211,17 @@ template blocksFetch*(
 template blocksImport*(
     buddy: BeaconPeerRef;
     blocks: seq[EthBlock];
+    bals: seq[Opt[BlockAccessListRef]];
     peerID: Hash;
     info: static[string];
       ): uint64 =
   ## Async/template
   ##
-  ## Import/execute a list of argument blocks. The function sets the global
+  ## Import/execute a list of argument blocks. For post-Amsterdam blocks the
+  ## matching block access lists (when available, aligned by index
+  ## with `blocks`) is passed to the importer.
+  ##
+  ## The function sets the global
   ## block number of the last executed block which might preceed the least block
   ## number from the argument list in case of an error.
   ##
@@ -224,7 +259,8 @@ template blocksImport*(
         let importErr: BeaconError =
           try:
             let res = await ctx.chain.queueImportBlock(
-              blocks[n], Opt.none(BlockAccessListRef))
+              blocks[n],
+              if n < bals.len: bals[n] else: Opt.none(BlockAccessListRef))
             if res.isOk:
               default(BeaconError)
             else:
