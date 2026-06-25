@@ -265,12 +265,12 @@ proc newPayload*(ben: BeaconEngineRef,
       number = header.number,
       hash = blockHash.short,
       parent = header.parentHash.short,
-      error = vres.error()
+      error = vres.error.msg
     ben.setInvalidAncestor(header, blockHash)
     let
       txFrame = chain.latestTxFrame()
       blockHash = latestValidHash(txFrame, parent, ttd)
-    return invalidStatus(blockHash, vres.error())
+    return invalidStatus(blockHash, vres.error.msg)
 
   ben.txPool.removeNewBlockTxs(blk, Opt.some(blockHash))
 

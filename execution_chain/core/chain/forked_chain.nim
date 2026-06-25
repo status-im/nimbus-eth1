@@ -37,6 +37,9 @@ logScope:
 export
   BlockRef,
   ForkedChainRef,
+  ImportOutcome,
+  ImportErrorKind,
+  ImportError,
   common,
   core_db
 
@@ -45,28 +48,18 @@ const
   PersistBatchSize = 4'u64
   MaxQueueSize = 128
 
-type
-  ImportOutcome* = enum
-    ## Successful classification of a block handed to `importBlock`.
-    Valid           ## newly validated and linked into the `FC`
-    AlreadyObserved ## block already present by hash (content arrived earlier)
-
-  ImportErrorKind* = enum
-    ## Error classification of a block handed to `importBlock`. The error
-    ## channel is preserved: every `err` that the previous `Result[void,string]`
-    ## interface returned still returns `err` with the same `msg` text - only a
-    ## `kind` tag is added so callers can react without re-deriving FC state.
-    Invalid         ## genuine validation/`processBlock` failure
-    Orphaned        ## branch cut off at/below finalized - drop forward blocks
-    MissingParent   ## parent absent but above finalized - quarantined, retry
-
-  ImportError* = object
-    kind*: ImportErrorKind
-    msg*:  string
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
+
+func toQueueResult(r: Result[void, string]): Result[ImportOutcome, ImportError] =
+  ## Adapt the `Result[void, string]` of the non-import queue handlers
+  ## (`forkChoice`, `processUpdateBase`, `processOrphan`) to the shared
+  ## `QueueItem` result type. The error `kind` is irrelevant on these paths:
+  ## their consumers only inspect ok/err and `msg` (the base/orphan results are
+  ## not even read back), so a plain `Valid`/`Invalid` mapping suffices.
+  if r.isOk: ok(Valid)
+  else: err(ImportError(kind: Invalid, msg: r.error))
 
 func appendBlock(c: ForkedChainRef,
          parent: BlockRef,
@@ -444,8 +437,8 @@ proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async:
     # This recursive mode only used in test env with small set of blocks
     discard await c.processUpdateBase()
   else:
-    proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError], raw: true).} =
-      c.processUpdateBase()
+    proc asyncHandler(): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
+      toQueueResult(await c.processUpdateBase())
     await c.queue.addLast(QueueItem(handler: asyncHandler))
 
   ok()
@@ -481,8 +474,8 @@ proc queueUpdateBase(c: ForkedChainRef, base: BlockRef)
     # This recursive mode only used in test env with small set of blocks
     discard await c.processUpdateBase()
   else:
-    proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError], raw: true).} =
-      c.processUpdateBase()
+    proc asyncHandler(): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
+      toQueueResult(await c.processUpdateBase())
     await c.queue.addLast(QueueItem(handler: asyncHandler))
 
 proc validateBlock(
@@ -582,8 +575,8 @@ template queueOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false): au
     # This recursive mode only used in test env with small set of blocks
     discard await c.processOrphan(parent, finalized)
   else:
-    proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError], raw: true).} =
-      c.processOrphan(parent, finalized)
+    proc asyncHandler(): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
+      toQueueResult(await c.processOrphan(parent, finalized))
     await c.queue.addLast(QueueItem(handler: asyncHandler))
 
 proc processOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false): Future[Result[void, string]]
@@ -742,9 +735,10 @@ proc importBlock*(
 
     # Setting the finalized flag to true here has the effect of skipping the
     # stateroot check for performance reasons.
-    let isFinalized = finalized or blk.header.number <= c.latestFinalized.number
-    let newParent = (await c.validateBlock(parent, blk, blockAccessList, isFinalized)).valueOr:
-      return err(ImportError(kind: Invalid, msg: error))
+    let
+      isFinalized = finalized or blk.header.number <= c.latestFinalized.number
+      newParent = (await c.validateBlock(parent, blk, blockAccessList, isFinalized)).valueOr:
+        return err(ImportError(kind: Invalid, msg: error))
     if c.quarantine.hasOrphans():
       c.queueOrphan(newParent, isFinalized)
     return ok(Valid)
@@ -829,54 +823,26 @@ template queueImportBlock*(
     blockAccessList = Opt.none(BlockAccessListRef),
     finalized = false): auto =
 
-  # Map the typed import verdict down to the queue's `Result[void, string]`
-  # interface, preserving the original error message text. Callers that only
-  # care about ok/err (e.g. the engine API `newPayload`) use this variant.
-  proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
-    let r = await c.importBlock(blk, blockAccessList, finalized)
-    if r.isOk: ok()
-    else: err(r.error.msg)
+  proc asyncHandler(): Future[Result[ImportOutcome, ImportError]]
+      {.async: (raises: [CancelledError], raw: true).} =
+    c.importBlock(blk, blockAccessList, finalized)
 
   let item = QueueItem(
-    responseFut: Future[Result[void, string]].Raising([CancelledError]).init(),
+    responseFut: Future[Result[ImportOutcome, ImportError]].Raising([CancelledError]).init(),
     handler: asyncHandler
   )
   await c.queue.addLast(item)
   item.responseFut
 
-template queueImportBlockClassified*(
-    c: ForkedChainRef,
-    blk: Block,
-    blockAccessList = Opt.none(BlockAccessListRef),
-    finalized = false): auto =
-  ## Like `queueImportBlock` but exposes the full typed `importBlock` verdict so
-  ## the caller (the devp2p block syncer) can react to the classification
-  ## (Valid / AlreadyObserved / Orphaned / MissingParent / Invalid) without
-  ## re-deriving `FC` state. Serialised through the same `FC` queue.
-  let verdict = Future[Result[ImportOutcome, ImportError]]
-                  .Raising([CancelledError]).init()
-
-  proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
-    let r = await c.importBlock(blk, blockAccessList, finalized)
-    if not verdict.finished:
-      verdict.complete(r)
-    if r.isOk: ok()
-    else: err(r.error.msg)
-
-  # `responseFut` is left nil: `processQueue` tolerates it and we await the
-  # typed `verdict` future instead.
-  await c.queue.addLast(QueueItem(handler: asyncHandler))
-  verdict
-
 template queueForkChoice*(c: ForkedChainRef,
                  headHash: Hash32,
                  finalizedHash: Hash32,
                  safeHash: Hash32 = zeroHash32): auto =
-  proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError], raw: true).} =
-    c.forkChoice(headHash, finalizedHash, safeHash)
+  proc asyncHandler(): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
+    toQueueResult(await c.forkChoice(headHash, finalizedHash, safeHash))
 
   let item = QueueItem(
-    responseFut: Future[Result[void, string]].Raising([CancelledError]).init(),
+    responseFut: Future[Result[ImportOutcome, ImportError]].Raising([CancelledError]).init(),
     handler: asyncHandler
   )
   await c.queue.addLast(item)

@@ -208,7 +208,7 @@ template blocksImport*(
         # per-item, so no extra throttle is needed here.
         let verdict =
           try:
-            await ctx.chain.queueImportBlockClassified(
+            await ctx.chain.queueImportBlock(
               blocks[n], Opt.none(BlockAccessListRef))
           except CancelledError:
             break loop                               # await cancelled, stop
