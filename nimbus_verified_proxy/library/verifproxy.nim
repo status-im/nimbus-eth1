@@ -74,8 +74,8 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
   let jsonNode =
     try:
       parseJson($configJson)
-    except CatchableError as e:
-      raise newException(ProxyError, "error parsing json: " & e.msg)
+    except ValueError, IOError, OSError:
+      raise newException(ProxyError, "error parsing config json")
 
   let
     eth2Network = some(jsonNode.getOrDefault("eth2Network").getStr("mainnet"))
@@ -89,14 +89,14 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
     executionApiUrls =
       try:
         parseCmdArg(UrlList, jsonNode["executionApiUrls"].getStr())
-      except CatchableError as e:
+      except ValueError as e:
         raise newException(
           ProxyError, "Couldn't parse `backendUrl` from JSON config: " & e.msg
         )
     beaconApiUrls =
       try:
         parseCmdArg(UrlList, jsonNode["beaconApiUrls"].getStr())
-      except CatchableError as e:
+      except ValueError as e:
         raise newException(
           ProxyError, "Couldn't parse `beaconApiUrls` from JSON config: " & e.msg
         )
@@ -107,7 +107,7 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
           UrlList(@[])
         else:
           parseCmdArg(UrlList, rawUrls)
-      except CatchableError as e:
+      except ValueError as e:
         raise newException(
           ProxyError, "Couldn't parse `privateTxUrls` from JSON config: " & e.msg
         )
@@ -118,7 +118,7 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
           UrlList(@[])
         else:
           parseCmdArg(UrlList, rawUrls)
-      except CatchableError as e:
+      except ValueError as e:
         raise newException(
           ProxyError, "Couldn't parse `opExecutionApiUrls` from JSON config: " & e.msg
         )
