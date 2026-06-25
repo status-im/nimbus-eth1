@@ -199,6 +199,7 @@ proc populateBlockObject*(blockHash: Hash32,
   result.blobGasUsed = w3Qty(header.blobGasUsed)
   result.excessBlobGas = w3Qty(header.excessBlobGas)
   result.requestsHash = header.requestsHash
+  result.blockAccessListHash = header.blockAccessListHash
 
 proc populateReceipt*(rec: StoredReceipt, gasUsed: GasInt, tx: Transaction,
                       txIndex: uint64, header: Header, com: CommonRef): ReceiptObject =
