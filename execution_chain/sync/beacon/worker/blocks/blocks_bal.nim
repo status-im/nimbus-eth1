@@ -12,9 +12,9 @@
 
 import
   std/typetraits,
-  pkg/[chronos, results],
-  pkg/eth/common,
-  pkg/eth/common/[block_access_lists, block_access_lists_rlp],
+  chronos, 
+  results,
+  eth/common,
   ../../../wire_protocol,
   ../worker_desc
 
@@ -53,7 +53,6 @@ proc decodeBlockAccessList*(
   ## and verify it against the BAL hash committed in the block header.
   ## Returns `none` when the peer reported the list as unavailable, when it is
   ## malformed, or when its hash does not match the header. 
-
   let bytes = distinctBase(raw)
 
   if bytes.len == 0 or (bytes.len == 1 and bytes[0] == 0x80'u8):
@@ -62,11 +61,11 @@ proc decodeBlockAccessList*(
   let expectedHash = header.blockAccessListHash.valueOr:
     return Opt.none(BlockAccessListRef)
 
-  let bal: BlockAccessListRef = new BlockAccessList
-  bal[] = BlockAccessList.decode(bytes).valueOr:
+  if keccak256(bytes) != expectedHash:
     return Opt.none(BlockAccessListRef)
 
-  if bal[].computeBlockAccessListHash() != expectedHash:
+  let bal: BlockAccessListRef = new BlockAccessList
+  bal[] = BlockAccessList.decode(bytes).valueOr:
     return Opt.none(BlockAccessListRef)
 
   Opt.some(bal)

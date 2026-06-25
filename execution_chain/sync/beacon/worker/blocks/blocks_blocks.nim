@@ -153,7 +153,7 @@ template blocksFetchCheckImpl(
 
     if 0 < blocks.len.uint64:
       bodyRc = Opt[BlocksForImport].ok(BlocksForImport(
-        blocks: move(blocks), move(bals): bals, peerID: buddy.peerID)) # return ok()
+        blocks: move(blocks), bals: move(bals), peerID: buddy.peerID)) # return ok()
 
     buddy.nErrors.apply.blk.inc
     break body                                             # return err()
