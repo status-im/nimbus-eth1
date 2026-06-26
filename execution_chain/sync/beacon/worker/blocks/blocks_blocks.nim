@@ -239,6 +239,14 @@ template blocksImport*(
       for n in 0 ..< blocks.len:
         let nthBn = blocks[n].header.number
 
+        # Skip blocks at or below the current base — `FC` would otherwise
+        # quarantine them as orphans and abort the batch.
+        if nthBn <= ctx.chain.baseNumber:
+          trace "Ignoring block less eq. base", peer, blk=nthBn,
+            B=ctx.chain.baseNumber, L=ctx.chain.latestNumber
+          blocks[n].reset()
+          continue
+
         # Hand the block to the `FC` and let it classify the outcome. The `FC`
         # owns the hash/branch/finalized knowledge needed to tell a duplicate or
         # an orphaned fork from a genuinely invalid block; the syncer must not
@@ -276,14 +284,6 @@ template blocksImport*(
 
         case verdict.error.kind
         of Orphaned, MissingParent:
-          # The block could not be linked because the `FC` head moved (a
-          # concurrent importer like `el_sync` advanced base/latest) or its
-          # branch was cut off by finality. That is not the sync peer's fault:
-          # stop the batch quietly and let the next job re-anchor on the live
-          # head. An orphaned block's forward neighbours share its dead branch,
-          # so the rest of this batch is dropped too. Do NOT advance `topNum`
-          # and do NOT penalise the peer. A spin-guard still cancels the session
-          # if the *same* block keeps failing.
           if ctx.subState.procFailNum != nthBn:
             ctx.subState.procFailNum = nthBn
             ctx.subState.procFailCount = 1
