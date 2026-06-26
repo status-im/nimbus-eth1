@@ -12,7 +12,8 @@
 
 import
   unittest2,
-  eth/common/block_access_lists,
+  results,
+  eth/common/[block_access_lists, headers],
   ../../execution_chain/block_access_list/block_access_list_utils
 
 func accountChanges(address: Address): AccountChanges =
@@ -192,3 +193,63 @@ suite "Block access list utils":
       nonceChanges.findLastWriteBefore(0) == -1
       nonceChanges.findLastWriteBefore(1) == 0
       nonceChanges.findLastWriteBefore(5) == 1
+
+suite "Block access list retention period":
+  # isWithinBalRetentionPeriod is true iff the block falls within the last
+  # BAL_RETENTION_EPOCHS (3533) epochs of the head slot. An epoch is
+  # SLOTS_PER_EPOCH (32) slots, so the retention window is 3533 * 32 = 113056
+  # slots, but the boundary is on the epoch (slot div 32), not the raw slot.
+
+  func headerWithSlot(slot: uint64): Header =
+    Header(slotNumber: Opt.some(slot))
+
+  const retentionSlots = BAL_RETENTION_EPOCHS * SLOTS_PER_EPOCH # 113056
+
+  test "a pre-Amsterdam header (no slot number) is never within retention":
+    let header = Header(slotNumber: Opt.none(uint64))
+    check:
+      not header.isWithinBalRetentionPeriod(0)
+      not header.isWithinBalRetentionPeriod(1_000_000)
+
+  test "current and future blocks are within the retention period":
+    const headSlot = 1_000_000'u64
+    check:
+      headerWithSlot(headSlot).isWithinBalRetentionPeriod(headSlot)       # head itself
+      headerWithSlot(headSlot - 1).isWithinBalRetentionPeriod(headSlot)   # just behind
+      headerWithSlot(headSlot + 1).isWithinBalRetentionPeriod(headSlot)   # ahead, no underflow
+      headerWithSlot(headSlot + retentionSlots).isWithinBalRetentionPeriod(headSlot)
+
+  test "the oldest in-window epoch is retained, the next one out is pruned":
+    # Epoch-aligned head so the boundary is exact: head epoch is 4000, so the
+    # oldest retained epoch is 4000 - (3533 - 1) = 468 and epoch 467 is pruned.
+    const headSlot = 4000'u64 * SLOTS_PER_EPOCH
+    check:
+      # First and last slot of the oldest retained epoch (468).
+      headerWithSlot(468'u64 * SLOTS_PER_EPOCH).isWithinBalRetentionPeriod(headSlot)
+      headerWithSlot(468'u64 * SLOTS_PER_EPOCH + (SLOTS_PER_EPOCH - 1))
+        .isWithinBalRetentionPeriod(headSlot)
+      # First and last slot of the first pruned epoch (467), and the genesis slot.
+      not headerWithSlot(467'u64 * SLOTS_PER_EPOCH).isWithinBalRetentionPeriod(headSlot)
+      not headerWithSlot(467'u64 * SLOTS_PER_EPOCH + (SLOTS_PER_EPOCH - 1))
+        .isWithinBalRetentionPeriod(headSlot)
+      not headerWithSlot(0).isWithinBalRetentionPeriod(headSlot)
+
+  test "a block exactly the retention window back is pruned":
+    const headSlot = 1_000_000'u64 # head epoch 31250
+    let blockSlot = headSlot - retentionSlots # 886944, epoch 27717
+    check:
+      not headerWithSlot(blockSlot).isWithinBalRetentionPeriod(headSlot)
+      # One epoch newer is retained.
+      headerWithSlot(blockSlot + SLOTS_PER_EPOCH).isWithinBalRetentionPeriod(headSlot)
+
+  test "the boundary is by epoch, not raw slot distance":
+    # Mid-epoch head (epoch 5000). A block in epoch 1467 is exactly 3533 epochs
+    # back and pruned even though it is fewer than `retentionSlots` slots behind.
+    const headSlot = 5000'u64 * SLOTS_PER_EPOCH + 5
+    let
+      prunedSlot = 1467'u64 * SLOTS_PER_EPOCH + (SLOTS_PER_EPOCH - 1) # epoch 1467
+      retainedSlot = 1468'u64 * SLOTS_PER_EPOCH                       # epoch 1468
+    check:
+      headSlot - prunedSlot < retentionSlots # closer than the window, yet ...
+      not headerWithSlot(prunedSlot).isWithinBalRetentionPeriod(headSlot) # ... pruned
+      headerWithSlot(retainedSlot).isWithinBalRetentionPeriod(headSlot)

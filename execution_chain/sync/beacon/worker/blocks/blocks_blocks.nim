@@ -15,6 +15,7 @@ import
   pkg/eth/common,
   pkg/stew/interval_set,
   ../../../../networking/p2p,
+  ../../../../block_access_list/block_access_list_utils,
   ../../../wire_protocol/types,
   ../[helpers, update, worker_desc],
   ./[blocks_bal, blocks_fetch, blocks_helpers, blocks_unproc]
@@ -128,12 +129,17 @@ template blocksFetchCheckImpl(
     # `eth/71` peer and verify each against the hash committed in its header.
     var bals = newSeq[Opt[BlockAccessListRef]](blocks.len)
     block balFetch:
-      let com = ctx.chain.com
+      let
+        com = ctx.chain.com
+        headSlot = ctx.hdrCache.head.slotNumber          # sync target slot
       var
         balRequest: BlockAccessListsRequest
         balPos: seq[int]                                   # bal index -> block index
       for n in 0 ..< blocks.len:
-        if com.isAmsterdamOrLater(blocks[n].header.timestamp):
+        # Only request lists for post-Amsterdam blocks that are still within the
+        # EIP-7928 retention period; peers have pruned anything older.
+        if com.isAmsterdamOrLater(blocks[n].header.timestamp) and
+            blocks[n].header.isWithinBalRetentionPeriod(headSlot.expect("slot number exists"))):
           balRequest.blockHashes.add request.blockHashes[n]
           balPos.add n
       if balRequest.blockHashes.len == 0:
