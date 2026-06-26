@@ -111,6 +111,7 @@ type
     baseDir*: string                 ## Path for assembly database
     mptAsm*: MptAsmRef               ## Assembly cache database
     pivot*: Opt[StateRoot]           ## Pivot root for analysys, healing, etc.
+    topBlockNumber*: BlockNumber     ## From header base
 
     # Info, debugging, and error handling stuff
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one
@@ -160,6 +161,10 @@ proc getEthPeer*(buddy: SnapPeerRef): BeaconPeerRef =
 proc getEthPeers*(buddy: SnapPeerRef): seq[BeaconPeerRef] =
   ##  Get all `eth` peer contexts available at the current time
   buddy.ctx.pool.beaconSync.ctx.getSyncPeers()
+
+proc nEthPeers*(ctx: SnapCtxRef): int =
+  ## Shortcut for `buddy.getSyncPeers().len`
+  ctx.pool.beaconSync.ctx.nSyncPeers()
 
 # ---------
 

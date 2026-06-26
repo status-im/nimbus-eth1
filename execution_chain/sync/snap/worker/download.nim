@@ -12,11 +12,11 @@
 
 import
   pkg/[chronicles, chronos],
-  ./download/[account, code, storage, trie_node],
+  ./download/[account, code, header, storage, trie_node],
   ./[helpers, mpt, state_db, update, worker_desc]
 
 export
-  account, code, storage, trie_node
+  account, code, header, storage, trie_node
 
 # ------------------------------------------------------------------------------
 # Public function(s)
@@ -88,6 +88,7 @@ template downloadAccountsAndStorage*(buddy: SnapPeerRef, info: static[string]) =
                   else:
                     break                           # done this state, try next
           buddy.storageDownload(state, acc, info)   # fetch storage slots
+          buddy.downloadCodeCache(state, acc, info) # fetch byte codes
           if not state.isOperable():                # proceed unless evicted
             break
           didSomething = true                       # continue with this one

@@ -48,17 +48,17 @@ proc nodeStash(
     db: NodeTrieRef;                                # Needed for root node
     rootKey: HashKey;                               # State root key
     proofNode: ProofNode;                           # Node to add
-    nodes: var Table[HashKey,NodeRef];              # Collect nodes
+    nodes: var Table[HashKey,NodeBaseRef];          # Collect nodes
     links: var Table[HashKey,StopNodeRef];          # Collect open links
       ): bool =
   ## Decode a trusted rlp-encoded node and add it to the node list.
   ##
-  let selfKey = proofNode.digestTo(HashKey, rootKey)
+  let selfKey = proofNode.digestToOrPlain(HashKey, rootKey)
   if nodes.hasKey selfKey:                          # Already seen and listed?
     return true
 
   var
-    node: NodeRef
+    node: NodeBaseRef
     rlp = proofNode.distinctBase.rlpFromBytes()
   try:
     case rlp.listLen
@@ -157,7 +157,7 @@ proc updateProofTrieBranch(
         leafs.add (Hash32((path & down.lfPfx).getBytes), down)
 
 template updateProofTrie(
-    root: NodeRef;
+    root: NodeBaseRef;
     leafs: var seq[(Hash32,LeafNodeRef)];
       ) =
   ## Recursively traverse partial proof MPT and label path prefixes so they
@@ -232,9 +232,9 @@ proc mergeSubTree(
   ## Merge a `Leaf` node with an MPT path `pfx` into the sub-tree
   ##
   var
-    parent = NodeRef(nil)
+    parent = NodeBaseRef(nil)
     inx = 0u8
-    node = NodeRef(tree)
+    node = NodeBaseRef(tree)
     pfx = pfx
 
   doAssert tree.path.len + pfx.len == 64
@@ -343,7 +343,7 @@ template reKeyWalkerLeaf(node: LeafNodeRef) =
   wrt.append @(node.lfPfx.toHexPrefix(true).data())
   wrt.append node.lfPayload
   node.lfData = wrt.finish()
-  node.selfKey = node.lfData.digestTo(HashKey)
+  node.selfKey = node.lfData.digestToOrPlain(HashKey)
 
 proc reKeyWalkerBranch(node: var BranchNodeRef) =
   var wrt = initRlpList 17
@@ -426,7 +426,7 @@ proc exportTrieBranch(node: BranchNodeRef, queue: var seq[KnPair]): bool =
       return false
   true
 
-template exportTrie(node: NodeRef, queue: var seq[KnPair]): bool =
+template exportTrie(node: NodeBaseRef, queue: var seq[KnPair]): bool =
   ## Recursively export rlp encodings
   let ok =
     if node.kind == Branch: BranchNodeRef(node).exportTrieBranch(queue)
@@ -473,7 +473,7 @@ proc init*(
     db = T()
     root = root.to(HashKey)
   var
-    tmpNodes: Table[HashKey,NodeRef]
+    tmpNodes: Table[HashKey,NodeBaseRef]
     tmpLinks: Table[HashKey,StopNodeRef]
   for n in 0 ..< nodes.len:
     if not db.nodeStash(root, nodes[n], tmpNodes, tmpLinks):
@@ -541,7 +541,7 @@ proc init*(
     db.stops[db.root.selfKey] = StopNodeRef(db.root)
     return db
 
-  var tmpNodes: Table[HashKey,NodeRef]
+  var tmpNodes: Table[HashKey,NodeBaseRef]
   for n in 0 ..< nodes.len:
     if not db.nodeStash(root, ProofNode(nodes[n]), tmpNodes, db.stops):
       return T(nil)

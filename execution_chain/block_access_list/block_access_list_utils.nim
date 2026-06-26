@@ -9,7 +9,35 @@
 
 {.push raises: [], gcsafe.}
 
-import std/algorithm, eth/common/[addresses, block_access_lists], stew/byteutils
+import
+  std/algorithm,
+  results,
+  eth/common/[addresses, block_access_lists, headers],
+  stew/byteutils
+
+const
+  SLOTS_PER_EPOCH* = 32'u64
+    ## Consensus layer slots per epoch.
+
+  BAL_RETENTION_EPOCHS* = 3533'u64
+    ## EIP-7928: execution clients are only required to retain block access
+    ## lists for (at least) the last 3533 epochs.
+
+func isWithinBalRetentionPeriod*(header: Header, headSlot: uint64): bool =
+  ## Whether the block access list (EIP-7928) for `header` must still be retained
+  ## by an execution client, i.e. the block falls within the last
+  ## `BAL_RETENTION_EPOCHS` epochs relative to `currentSlot` (typically the slot
+  ## of the chain head).
+  
+  # Blocks before Amsterdam carry no slot number (and no block access list)
+  let blockSlot = header.slotNumber.valueOr:
+    return false
+
+  let
+    blockEpoch = blockSlot div SLOTS_PER_EPOCH
+    headEpoch = headSlot div SLOTS_PER_EPOCH
+
+  blockEpoch + BAL_RETENTION_EPOCHS > headEpoch
 
 func accChangesCmp*(x, y: AccountChanges): int =
   cmp(x.address.data(), y.address.data())
