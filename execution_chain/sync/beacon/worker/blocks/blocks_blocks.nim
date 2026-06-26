@@ -125,34 +125,31 @@ template blocksFetchCheckImpl(
         blocks[n].uncles = bodies[n].uncles
         blocks[n].withdrawals = bodies[n].withdrawals
 
-    # Fetch block access lists (EIP-7928) for the post-Amsterdam blocks from the
-    # `eth/71` peer and verify each against the hash committed in its header.
+    # Fetch block access lists (EIP-7928) for the batch from the `eth/71` peer
+    # and verify each against the hash committed in its header.
     var bals = newSeq[Opt[BlockAccessListRef]](blocks.len)
     block balFetch:
-      let
-        com = ctx.chain.com
-        headSlot = ctx.hdrCache.head.slotNumber          # sync target slot
-      var
-        balRequest: BlockAccessListsRequest
-        balPos: seq[int]                                   # bal index -> block index
-      for n in 0 ..< blocks.len:
-        # Only request lists for post-Amsterdam blocks that are still within the
-        # EIP-7928 retention period; peers have pruned anything older.
-        if com.isAmsterdamOrLater(blocks[n].header.timestamp) and
-            blocks[n].header.isWithinBalRetentionPeriod(headSlot.expect("slot number exists"))):
-          balRequest.blockHashes.add request.blockHashes[n]
-          balPos.add n
-      if balRequest.blockHashes.len == 0:
-        break balFetch                                     # no post-Amsterdam blocks
+      if blocks.len == 0:
+        break balFetch
+      
+      let headSlot = ctx.hdrCache.head.slotNumber          # sync target slot
+
+      if not ctx.chain.com.isAmsterdamOrLater(blocks[0].header.timestamp) or 
+          headSlot.isNone() or
+          not blocks[0].header.isWithinBalRetentionPeriod(headSlot.unsafeGet):
+        break balFetch
+
+      let balRequest = BlockAccessListsRequest(
+        blockHashes: request.blockHashes[0 ..< blocks.len])
 
       # The response is served in request order and may be truncated by the
       # peer's soft response size limit.
       let raws = (await buddy.fetchRawBlockAccessLists(balRequest)).valueOr:
         default(seq[RawBlockAccessList])
       var nBals = 0
-      for j in 0 ..< min(raws.len, balPos.len):
-        bals[balPos[j]] = decodeBlockAccessList(raws[j], blocks[balPos[j]].header)
-        if bals[balPos[j]].isSome:
+      for j in 0 ..< min(raws.len, blocks.len):
+        bals[j] = decodeBlockAccessList(raws[j], blocks[j].header)
+        if bals[j].isSome:
           inc nBals
       trace info & ": fetched block access lists", peer, iv=($iv),
         nReq=balRequest.blockHashes.len, nResp=raws.len, nBals
