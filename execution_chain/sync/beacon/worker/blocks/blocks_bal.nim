@@ -30,20 +30,40 @@ proc fetchRawBlockAccessLists*(
       ): Future[Opt[seq[RawBlockAccessList]]]
       {.async: (raises: []).} =
   ## Request the raw (RLP-encoded) block access lists (EIP-7928) for the block
-  ## hashes in `request` from the sync peer. 
+  ## hashes in `request` from the sync peer.
+  ##
+  ## The peer serves the lists in request order but truncates its response at a
+  ## soft size limit (and a maximum count), so a single response may cover only
+  ## a prefix of the requested hashes. Follow-up requests are issued for the
+  ## remaining hashes until all are received (or the peer stops making
+  ## progress), so the returned sequence is aligned by index with
+  ## `request.blockHashes`.
 
   if not buddy.peer.supports(eth71):
     return Opt.none(seq[RawBlockAccessList])
 
+  let nReq = request.blockHashes.len
+  if nReq == 0:
+    return Opt.some(newSeq[RawBlockAccessList](0))
+
+  var accessLists = newSeqOfCap[RawBlockAccessList](nReq)
   try:
-    let resp = (await buddy.peer.getBlockAccessLists(
-      request, fetchBalsRlpxTimeout)).valueOr:
-        return Opt.none(seq[RawBlockAccessList])
-    return Opt.some(resp.accessLists)
+    while accessLists.len < nReq:
+      # Request only the hashes not yet served by previous responses.
+      let remaining = BlockAccessListsRequest(
+        blockHashes: request.blockHashes[accessLists.len ..< nReq])
+      let resp = (await buddy.peer.getBlockAccessLists(
+        remaining, fetchBalsRlpxTimeout)).valueOr:
+          return Opt.none(seq[RawBlockAccessList])
+      if resp.accessLists.len == 0:
+        break               # peer served nothing; avoid looping indefinitely
+      accessLists.add resp.accessLists
   except CancelledError:
     return Opt.none(seq[RawBlockAccessList])
   except CatchableError:
     return Opt.none(seq[RawBlockAccessList])
+
+  Opt.some(accessLists)
 
 proc decodeBlockAccessList*(
     raw: RawBlockAccessList;
