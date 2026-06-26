@@ -1108,6 +1108,8 @@ proc lastHeader*(db: MptAsmRef): HeaderResult =
 proc lastNumber*(db: MptAsmRef): BlockNumber =
   let data = db.get9(cHeader, 0u64).valueOr:
     return BlockNumber(0)
+  if data.len != 8:
+    return BlockNumber(0)
   uint64.fromBytesBE data
 
 proc putHeader*(db: MptAsmRef, header: Header): PutResult =

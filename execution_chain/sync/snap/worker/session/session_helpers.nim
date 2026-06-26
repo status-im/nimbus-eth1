@@ -85,9 +85,9 @@ proc getPivotTag*(
     ctx: SnapCtxRef;
     info: static[string];
       ): Opt[StateDataTag] =
-  let pivot = ctx.getPivotData(info).valueOr:
-    return err()
-  ok(pivot[1].tag)
+  ctx.getPivotData(info).isErrOr:
+    return ok(value[1].tag)
+  err()
 
 proc setPivotTag*(
     ctx: SnapCtxRef;

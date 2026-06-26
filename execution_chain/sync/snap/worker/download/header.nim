@@ -72,7 +72,7 @@ proc headerDownloadTrigger*(
   if consHeadNum == 0:                              # no FCU request from CL?
     if latestNum < lastCached:
       if not reducedNoise:
-        trace info & ": Enough headers cached already (for now)",
+        trace info & ": Cached enough headers already (for now)",
           lastCached, head=latestNum, syncState=($ctx.syncState)
       return ok()
 
@@ -98,14 +98,18 @@ proc headerDownloadTrigger*(
         syncState=($ctx.syncState), nSyncPeers=ctx.nSyncPeers()
     elif ctx.hdrCache.latestConsHeadNumber() == 0:
       chronicles.info info & ": Waiting for CL to send updates",
-        syncState=($ctx.syncState), nSyncPeers=ctx.nSyncPeers()
+        syncState=($ctx.syncState), nSyncPeers=ctx.nSyncPeers(),
+        nEthPeers=ctx.nEthPeers()
     elif ctx.pool.headersSynced:                    # otherwise ongoing download
       chronicles.error info & ": Unable to trigger ref headers download",
-        syncState=($ctx.syncState), nSyncPeers=ctx.nSyncPeers(), `error`=error
+        syncState=($ctx.syncState), nSyncPeers=ctx.nSyncPeers(),
+        nEthPeers=ctx.nEthPeers(), `error`=error
     return err(error)
 
   ctx.pool.headersSynced = false                    # reset download flag
-  trace info & ": Triggered headers downloading", `from`=leastBn
+  trace info & ": Triggered headers downloading", `from`=leastBn,
+    syncState=($ctx.syncState), nSyncPeers=ctx.nSyncPeers(),
+    nEthPeers=ctx.nEthPeers()
   ok()
 
 # ------------------------------------------------------------------------------
