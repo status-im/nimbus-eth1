@@ -137,8 +137,8 @@ proc build*(
   witness
 
 proc build*(
-    T: type ExecutionWitness, witness: Witness, txFrame: CoreDbTxRef
-): ExecutionWitness =
+    T: type ExecutionWitnessWithKeys, witness: Witness, txFrame: CoreDbTxRef
+): ExecutionWitnessWithKeys =
   var codes: seq[seq[byte]]
   for codeHash in witness.codeHashes:
     let code = txFrame.getCodeByHash(codeHash).valueOr:
@@ -155,7 +155,7 @@ proc build*(
       raiseAssert "Header not found"
     headers.add(rlp.encode(header))
 
-  ExecutionWitness.init(
+  ExecutionWitnessWithKeys.init(
     state = witness.state,
     codes = move(codes),
     keys = witness.keys,
@@ -163,6 +163,6 @@ proc build*(
   )
 
 template build*(
-    T: type ExecutionWitness, witness: Witness, ledger: LedgerRef
-): ExecutionWitness =
+    T: type ExecutionWitnessWithKeys, witness: Witness, ledger: LedgerRef
+): ExecutionWitnessWithKeys =
   T.build(witness, ledger.txFrame)
