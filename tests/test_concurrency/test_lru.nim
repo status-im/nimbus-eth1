@@ -373,6 +373,25 @@ suite "LruCache Tests":
     check:
       toSeq(lru.keys()) == @[5, 4, 3, 2, 1]
 
+  test "moveToFront by key":
+    var lru = LruCache[int, int].init(5)
+
+    for i in 0 ..< 5:
+      lru.put(i, i)
+    check toSeq(lru.keys()) == @[4, 3, 2, 1, 0]
+
+    # promote a key to the front (without copying its value out)
+    lru.moveToFront(subhash(0), 0)
+    check toSeq(lru.keys()) == @[0, 4, 3, 2, 1]
+
+    # promoting the existing front is a no-op
+    lru.moveToFront(subhash(0), 0)
+    check toSeq(lru.keys()) == @[0, 4, 3, 2, 1]
+
+    # a missing key leaves the order untouched
+    lru.moveToFront(subhash(99), 99)
+    check toSeq(lru.keys()) == @[0, 4, 3, 2, 1]
+
   test "dispose":
     block:
       var lru = LruCache[int, int].init(2)
@@ -489,6 +508,29 @@ suite "ConcurrentLruCache Tests":
     check:
       lru.peek(1) == Opt.some(10)
       lru.peek(99) == Opt.none(int)
+
+  test "withValue":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000)
+    defer:
+      lru.dispose()
+
+    lru.put(1, 10)
+
+    var ran = false
+    var seen = 0
+    lru.withValue(1, v):
+      ran = true
+      seen = v[] # v is a `ptr int` pointing straight at the stored value
+    check:
+      ran
+      seen == 10
+
+    # absent key: body must not run and no pointer is exposed
+    ran = false
+    lru.withValue(99, v):
+      ran = true
+    check not ran
 
   test "del":
     var lru: ConcurrentLruCache[int, int]
@@ -1022,3 +1064,39 @@ suite "ConcurrentLruCache Tests (threadSafe = false)":
       not lru.contains(2)
       lru.contains(3)
       lru.contains(4)
+
+  test "withValue promotes and allows mutation":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(3, shardBits = 0, threadSafe = false)
+    defer:
+      lru.dispose()
+
+    lru.put(1, 10)
+    lru.put(2, 20)
+    lru.put(3, 30)
+
+    # withValue promotes to MRU like get; inserting a new key must evict 2
+    # (the actual LRU), not 1
+    for _ in 0 ..< 5:
+      var seen = 0
+      lru.withValue(1, v):
+        seen = v[]
+      check seen == 10
+
+    lru.put(4, 40)
+    check:
+      lru.contains(1)
+      not lru.contains(2)
+      lru.contains(3)
+      lru.contains(4)
+
+    # single-threaded mode: the value can be mutated through the pointer
+    lru.withValue(1, v):
+      v[] = 111
+    check lru.peek(1) == Opt.some(111)
+
+    # absent key: body must not run
+    var ran = false
+    lru.withValue(123, v):
+      ran = true
+    check not ran

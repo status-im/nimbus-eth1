@@ -800,8 +800,8 @@ template isPrecompile*(fork: EVMFork, codeAddress: Address): bool =
 const
   enablePrecompileCache = true
 
-  MaxCachedPrecompileInput = 192
-  MaxCachedPrecompileOutput = 128
+  MAX_CACHED_PRECOMPILE_INPUT = 192
+  MAX_CACHED_PRECOMPILE_OUTPUT = 128
 
   # Only precompiles that have input and outputs less than these limits above
   # are cached. We also don't cache precompiles which are generally fast such as
@@ -834,12 +834,12 @@ const
   }
 
 type
-  PrecompileCacheKey = ArrayBuf[MaxCachedPrecompileInput, byte]
+  PrecompileCacheKey = ArrayBuf[MAX_CACHED_PRECOMPILE_INPUT, byte]
 
   PrecompileCacheValue = object
     fork: EVMFork
     gasUsed: GasInt
-    output: ArrayBuf[MaxCachedPrecompileOutput, byte]
+    output: ArrayBuf[MAX_CACHED_PRECOMPILE_OUTPUT, byte]
 
 func hash(k: PrecompileCacheKey): Hash =
   hash(k.data())
@@ -902,7 +902,7 @@ proc execPrecompile*(c: Computation, precompile: Precompiles) =
     fork = c.fork
     cacheable = 
       when enablePrecompileCache:
-        precompile in cachedPrecompiles and c.msg.data.len <= MaxCachedPrecompileInput
+        precompile in cachedPrecompiles and c.msg.data.len <= MAX_CACHED_PRECOMPILE_INPUT
       else: 
         false
     res = 
@@ -920,11 +920,11 @@ proc execPrecompile*(c: Computation, precompile: Precompiles) =
           let
             gasBefore = c.gasMeter.gasRemaining
             r = dispatchPrecompile(c, precompile, fork)
-          if r.isOk() and c.output.len <= MaxCachedPrecompileOutput:
+          if r.isOk() and c.output.len <= MAX_CACHED_PRECOMPILE_OUTPUT:
             precompileCaches[precompile].put(key, PrecompileCacheValue(
               fork: fork,
               gasUsed: gasBefore - c.gasMeter.gasRemaining,
-              output: ArrayBuf[MaxCachedPrecompileOutput, byte].initCopyFrom(c.output)))
+              output: ArrayBuf[MAX_CACHED_PRECOMPILE_OUTPUT, byte].initCopyFrom(c.output)))
           r
       else:
         dispatchPrecompile(c, precompile, fork)

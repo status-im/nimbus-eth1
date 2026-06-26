@@ -446,6 +446,30 @@ template peek[K, V](s: var LruCache[K, V], key: auto): Opt[V] =
   ## Retrieve item without moving it to the front
   s.peek(subhash(key), key)
 
+proc getPtr[K, V](s: var LruCache[K, V], subhash: uint32, key: auto): ptr V =
+  ## Pointer to the value, moving the item to the front - nil if not found
+  let index = s.tableGet(subhash, key).valueOr:
+    return nil
+  s.moveToFront(index)
+  addr s.nodes[index].value
+
+template getPtr[K, V](s: var LruCache[K, V], key: auto): ptr V =
+  ## Pointer to the value, moving the item to the front - nil if not found
+  s.getPtr(subhash(key), key)
+
+func peekPtr[K, V](s: var LruCache[K, V], subhash: uint32, key: auto): ptr V =
+  ## Pointer to the value without moving the item - nil if not found
+  let index = s.tableGet(subhash, key).valueOr:
+    return nil
+  addr s.nodes[index].value
+
+proc moveToFront(s: var LruCache, subhash: uint32, key: auto) =
+  ## Look up the item by key and move it to the front of the LRU cache - does
+  ## nothing if the key is not present. Unlike `get`, no value is copied out.
+  let index = s.tableGet(subhash, key).valueOr:
+    return
+  s.moveToFront(index)
+
 proc update(s: var LruCache, subhash: uint32, key: auto, value: auto): bool =
   let index = s.tableGet(subhash, key).valueOr:
     return false
@@ -802,10 +826,42 @@ proc get*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
       inc tlsLruGetCounter
       if (tlsLruGetCounter and SAMPLE_MASK) == 0'u32:
         s.lock.withWriteLock:
-          discard s.cache.get(sh, key)
+          s.cache.moveToFront(sh, key)
     value
   else:
     lru.cache.get(key)
+
+template withValue*[K, V](
+    lru: var ConcurrentLruCache[K, V], key: K, value, body: untyped
+) =
+  mixin hash
+
+  if lru.threadSafe:
+    let
+      h = hash(key)
+      sh = h.toSubhash()
+      s = addr lru.shards[h.toShardIdx(lru.shardBits)]
+    var promote = false
+
+    # s.lock.lockRead()
+    # try:
+    s.lock.withReadLock:
+      let value {.inject.} = s.cache.peekPtr(sh, key)
+      if value != nil:
+        promote = true
+        body
+    # finally:
+    #   s.lock.unlockRead()
+
+    if promote:
+      inc tlsLruGetCounter
+      if (tlsLruGetCounter and SAMPLE_MASK) == 0'u32:
+        s.lock.withWriteLock:
+          s.cache.moveToFront(sh, key)
+  else:
+    let value {.inject.} = lru.cache.getPtr(key)
+    if value != nil:
+      body
 
 proc put*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V) =
   if lru.threadSafe:
