@@ -1097,6 +1097,11 @@ proc lastHeader*(db: MptAsmRef): HeaderResult =
     return err("")
   db.getHeader uint64.fromBytesBE data
 
+proc lastNumber*(db: MptAsmRef): BlockNumber =
+  let data = db.get9(cHeader, 0u64).valueOr:
+    return BlockNumber(0)
+  uint64.fromBytesBE data
+
 proc putHeader*(db: MptAsmRef, header: Header): PutResult =
   db.put9(cHeader, header.number, header.encodeHeader()).isOkOr:
     return err(error)

@@ -103,6 +103,11 @@ const
 
   # -----------
 
+  nConsHeadcachedDeltaMax* = 128
+    ## If the block number difference between FCU update header and cached
+    ## header is larger than this contant, a beacon header fetch cycle is
+    ## triggered to fill up the cache.
+
   nFetchHeaderPeersMax* = 5
     ## Try at most this many `eth` peers for fetching a header
 

@@ -94,7 +94,13 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       bodyRc = daemonWaitReadyInterval              # take a nap
 
     of SnapDownload:
-      discard ctx.headerDownloadTrigger(info)       # cont. header downloading
+      # Trigger a beacon header fetch cycle if there are many headers to fetch.
+      let
+        lastCached = ctx.pool.mptAsm.lastNumber()
+        lastConsHead = ctx.hdrCache.latestConsHeadNumber()
+      if lastCached + nConsHeadcachedDeltaMax < lastConsHead:
+        discard ctx.headerDownloadTrigger(info)     # download header chain
+
       bodyRc = daemonWaitDownloadInterval           # snap dwnld handled by peer
     of SnapDownloadFinish:
       bodyRc = daemonWaitDownloadFinishInterval     # wait for sync
