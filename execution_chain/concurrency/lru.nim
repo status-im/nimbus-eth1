@@ -837,16 +837,13 @@ func toLent[T](p: ptr T): lent T =
   # to a `lent` is a compile error.
   p[]
 
-template withReadValue*[K, V](
-    lru: var ConcurrentLruCache[K, V], key: K, value, body: untyped
+template withReadValueByHash*[K, V](
+    lru: var ConcurrentLruCache[K, V], keyHash: Hash, key: K, value, body: untyped
 ) =
-  mixin hash
-
   if lru.threadSafe:
     let
-      h = hash(key)
-      sh = h.toSubhash()
-      s = addr lru.shards[h.toShardIdx(lru.shardBits)]
+      sh = keyHash.toSubhash()
+      s = addr lru.shards[keyHash.toShardIdx(lru.shardBits)]
     var found = false
 
     s.lock.withReadLock:
@@ -862,21 +859,20 @@ template withReadValue*[K, V](
         s.lock.withWriteLock:
           s.cache.moveToFront(sh, key)
   else:
-    let valuePtr = lru.cache.getPtr(key)
+    let valuePtr = lru.cache.getPtr(keyHash.toSubhash(), key)
     if valuePtr != nil:
       template value(): untyped {.inject.} = toLent(valuePtr)
       body
 
 template withReadValue*[K, V](
-    lru: var ConcurrentLruCache[K, V], key: K, value, body1, body2: untyped
+    lru: var ConcurrentLruCache[K, V], key: K, value, body: untyped
 ) =
   mixin hash
-
+  let keyHash = hash(key)
   if lru.threadSafe:
     let
-      h = hash(key)
-      sh = h.toSubhash()
-      s = addr lru.shards[h.toShardIdx(lru.shardBits)]
+      sh = keyHash.toSubhash()
+      s = addr lru.shards[keyHash.toShardIdx(lru.shardBits)]
     var found = false
 
     s.lock.withReadLock:
@@ -884,30 +880,34 @@ template withReadValue*[K, V](
       if valuePtr != nil:
         found = true
         template value(): untyped {.inject.} = toLent(valuePtr)
-        body1
+        body
 
     if found:
       inc tlsLruGetCounter
       if (tlsLruGetCounter and SAMPLE_MASK) == 0'u32:
         s.lock.withWriteLock:
           s.cache.moveToFront(sh, key)
-    else:
-      body2
   else:
-    let valuePtr = lru.cache.getPtr(key)
+    let valuePtr = lru.cache.getPtr(keyHash.toSubhash(), key)
     if valuePtr != nil:
       template value(): untyped {.inject.} = toLent(valuePtr)
-      body1
-    else:
-      body2
+      body
 
-proc put*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V) =
+proc putByHash*[K, V](
+    lru: var ConcurrentLruCache[K, V], keyHash: Hash, key: K, val: V
+) =
   if lru.threadSafe:
-    withShardWrite(lru, key):
+    let
+      sh = keyHash.toSubhash()
+      s = addr lru.shards[keyHash.toShardIdx(lru.shardBits)]
+    s.lock.withWriteLock:
       if s.cache.put(sh, key, val):
         s.usedCount.store(s.cache.len, moRelaxed)
   else:
-    lru.cache.put(key, val)
+    lru.cache.put(keyHash.toSubhash(), key, val)
+
+proc put*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V) =
+  lru.putByHash(hash(key), key, val)
 
 proc pop*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
   if lru.threadSafe:

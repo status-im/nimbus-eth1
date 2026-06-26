@@ -908,11 +908,12 @@ proc execPrecompile*(c: Computation, precompile: Precompiles) =
 
   var res: EvmResultVoid
   if cacheable:
-    let key = PrecompileCacheKey.initCopyFrom(c.msg.data)
+    let
+      key = PrecompileCacheKey.initCopyFrom(c.msg.data)
+      keyHash = hash(key) # hash once and reuse for both the lookup and the put
 
     var hit = false
-    precompileCaches[precompile].withReadValue(key, cached):
-
+    precompileCaches[precompile].withReadValueByHash(keyHash, key, cached):
       if cached.fork == fork:
         res = c.gasMeter.consumeGas(cached.gasUsed, reason = "Precompile cache hit")
         if res.isOk():
@@ -923,7 +924,7 @@ proc execPrecompile*(c: Computation, precompile: Precompiles) =
       let gasBefore = c.gasMeter.gasRemaining
       res = dispatchPrecompile(c, precompile, fork)
       if res.isOk() and c.output.len <= MAX_CACHED_PRECOMPILE_OUTPUT:
-        precompileCaches[precompile].put(key, PrecompileCacheValue(
+        precompileCaches[precompile].putByHash(keyHash, key, PrecompileCacheValue(
           fork: fork,
           gasUsed: gasBefore - c.gasMeter.gasRemaining,
           output: ArrayBuf[MAX_CACHED_PRECOMPILE_OUTPUT, byte].initCopyFrom(c.output)))

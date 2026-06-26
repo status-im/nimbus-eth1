@@ -532,64 +532,36 @@ suite "ConcurrentLruCache Tests":
       ran = true
     check not ran
 
-  test "withReadValue with do block":
-    var lru: ConcurrentLruCache[int, int]
+  test "withReadValue and put with a precomputed hash":
+    # Uses an object key (not int) because Hash is an alias of int, which would
+    # make the precomputed-hash withReadValue overload ambiguous for int keys.
+    var lru: ConcurrentLruCache[A, int]
     lru.init(1000)
     defer:
       lru.dispose()
 
-    lru.put(1, 10)
+    let
+      key = A(v: 7)
+      keyHash = hash(key)
 
-    # present key: the found body runs, the do block does not
+    lru.putByHash(keyHash, key, 70) # insert using the precomputed hash
+
+    var ran = false
     var seen = 0
-    var missRan = false
-    lru.withReadValue(1, v):
+    lru.withReadValueByHash(keyHash, key, v): # look up using the same hash
+      ran = true
       seen = v
-    do:
-      missRan = true
     check:
-      seen == 10
-      not missRan
+      ran
+      seen == 70
+      lru.peek(key) == Opt.some(70) # agrees with the hash-computing overloads
 
-    # absent key: the do block runs, the found body does not
-    var foundRan = false
-    missRan = false
-    lru.withReadValue(99, v):
-      foundRan = true
-    do:
-      missRan = true
-    check:
-      not foundRan
-      missRan
-
-  test "withReadValue do block can populate on miss":
-    var lru: ConcurrentLruCache[int, int]
-    lru.init(1000)
-    defer:
-      lru.dispose()
-
-    # miss: the do block computes and inserts the value. It runs outside the
-    # read lock, so calling back into the cache (put) does not deadlock.
-    var computed = 0
-    lru.withReadValue(7, v):
-      computed = v
-    do:
-      lru.put(7, 70)
-      computed = 70
-    check:
-      computed == 70
-      lru.peek(7) == Opt.some(70)
-
-    # the freshly inserted value is now a hit
-    var hitVal = 0
-    var missRan = false
-    lru.withReadValue(7, v):
-      hitVal = v
-    do:
-      missRan = true
-    check:
-      hitVal == 70
-      not missRan
+    # absent key: the body must not run
+    let missKey = A(v: 8)
+    ran = false
+    lru.withReadValueByHash(hash(missKey), missKey, v):
+      ran = true
+    check not ran
 
   test "del":
     var lru: ConcurrentLruCache[int, int]
@@ -1161,31 +1133,21 @@ suite "ConcurrentLruCache Tests (threadSafe = false)":
       ran = true
     check not ran
 
-  test "withReadValue with do block":
-    var lru: ConcurrentLruCache[int, int]
+  test "withReadValue and put with a precomputed hash":
+    var lru: ConcurrentLruCache[A, int]
     lru.init(1000, shardBits = 0, threadSafe = false)
     defer:
       lru.dispose()
 
-    lru.put(1, 10)
+    let
+      key = A(v: 7)
+      keyHash = hash(key)
 
-    # present key: the found body runs, the do block does not
+    lru.putByHash(keyHash, key, 70)
+
     var seen = 0
-    var missRan = false
-    lru.withReadValue(1, v):
+    lru.withReadValueByHash(keyHash, key, v):
       seen = v
-    do:
-      missRan = true
     check:
-      seen == 10
-      not missRan
-
-    # absent key: the do block runs and can populate the cache
-    var foundRan = false
-    lru.withReadValue(2, v):
-      foundRan = true
-    do:
-      lru.put(2, 20)
-    check:
-      not foundRan
-      lru.peek(2) == Opt.some(20)
+      seen == 70
+      lru.peek(key) == Opt.some(70)
