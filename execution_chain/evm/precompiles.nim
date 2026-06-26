@@ -808,10 +808,10 @@ const
   # the hash functions.
   cachedPrecompiles = {
     # Frontier to Spurious Dragron
-    paEcRecover,
-    #paSha256,
-    #paRipeMd160,
-    #paIdentity,
+    paEcRecover, # IN=128 OUT=32
+    #paSha256, # IN=variable OUT=32
+    #paRipeMd160, # IN=variable OUT=32
+    #paIdentity, # IN=variable OUT=variable
     # Byzantium and Constantinople
     #paModExp,
     paEcAdd,
@@ -900,33 +900,34 @@ proc execPrecompile*(c: Computation, precompile: Precompiles) =
 
   let
     fork = c.fork
-    cacheable = 
+    cacheable =
       when enablePrecompileCache:
         precompile in cachedPrecompiles and c.msg.data.len <= MAX_CACHED_PRECOMPILE_INPUT
-      else: 
-        false
-    res = 
-      if cacheable:
-        let
-          key = PrecompileCacheKey.initCopyFrom(c.msg.data)
-          cached = precompileCaches[precompile].get(key)
-
-        if cached.isSome() and cached[].fork == fork:
-          let r = c.gasMeter.consumeGas(cached[].gasUsed, reason = "Precompile cache hit")
-          if r.isOk():
-            assign(c.output, cached[].output.data())
-          r
-        else:
-          let
-            gasBefore = c.gasMeter.gasRemaining
-            r = dispatchPrecompile(c, precompile, fork)
-          if r.isOk() and c.output.len <= MAX_CACHED_PRECOMPILE_OUTPUT:
-            precompileCaches[precompile].put(key, PrecompileCacheValue(
-              fork: fork,
-              gasUsed: gasBefore - c.gasMeter.gasRemaining,
-              output: ArrayBuf[MAX_CACHED_PRECOMPILE_OUTPUT, byte].initCopyFrom(c.output)))
-          r
       else:
-        dispatchPrecompile(c, precompile, fork)
+        false
+
+  var res: EvmResultVoid
+  if cacheable:
+    let key = PrecompileCacheKey.initCopyFrom(c.msg.data)
+
+    var hit = false
+    precompileCaches[precompile].withReadValue(key, cached):
+
+      if cached.fork == fork:
+        res = c.gasMeter.consumeGas(cached.gasUsed, reason = "Precompile cache hit")
+        if res.isOk():
+          assign(c.output, cached.output.data())
+        hit = true
+
+    if not hit:
+      let gasBefore = c.gasMeter.gasRemaining
+      res = dispatchPrecompile(c, precompile, fork)
+      if res.isOk() and c.output.len <= MAX_CACHED_PRECOMPILE_OUTPUT:
+        precompileCaches[precompile].put(key, PrecompileCacheValue(
+          fork: fork,
+          gasUsed: gasBefore - c.gasMeter.gasRemaining,
+          output: ArrayBuf[MAX_CACHED_PRECOMPILE_OUTPUT, byte].initCopyFrom(c.output)))
+  else:
+    res = dispatchPrecompile(c, precompile, fork)
 
   handlePrecompileResult(c, precompile, fork, res)

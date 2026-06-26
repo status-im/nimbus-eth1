@@ -16,7 +16,7 @@ import
   ../../execution_chain/concurrency/lru {.all.}
 
 const
-  benchNameWidth = 36
+  benchNameWidth = 44
   cacheCapacity = 100_000
   singleThreadOps = 8_000_000
   opsPerThread = 2_000_000
@@ -110,6 +110,18 @@ proc runSingleThreadedPeek(
       checksum += uint64(v.unsafeGet()) + 1
   BenchmarkStats(elapsed: epochTime() - started, operations: count, checksum: checksum)
 
+proc runSingleThreadedWithReadValue(
+    cache: ptr ConcurrentLruCache[int, int], count: int
+): BenchmarkStats =
+  # Like get, but reads the value in place through a read-only view rather than
+  # copying it out. The body only runs on a hit.
+  var checksum: uint64
+  let started = epochTime()
+  for i in 0 ..< count:
+    cache[].withReadValue(i mod cacheCapacity, v):
+      checksum += uint64(v) + 1
+  BenchmarkStats(elapsed: epochTime() - started, operations: count, checksum: checksum)
+
 proc runLruPut(cache: ptr lru.LruCache[int, int], count: int): BenchmarkStats =
   let started = epochTime()
   for i in 0 ..< count:
@@ -194,9 +206,12 @@ suite "LruCache vs ConcurrentLruCache single-threaded comparison":
       concPut = runSingleThreadedPut(concPtr, singleThreadOps)
       concGet = runSingleThreadedGet(concPtr, singleThreadOps)
       concPeek = runSingleThreadedPeek(concPtr, singleThreadOps)
+      concWithReadValue = runSingleThreadedWithReadValue(concPtr, singleThreadOps)
       concNoLockPut = runSingleThreadedPut(concNoLockPtr, singleThreadOps)
       concNoLockGet = runSingleThreadedGet(concNoLockPtr, singleThreadOps)
       concNoLockPeek = runSingleThreadedPeek(concNoLockPtr, singleThreadOps)
+      concNoLockWithReadValue =
+        runSingleThreadedWithReadValue(concNoLockPtr, singleThreadOps)
 
     debugEcho ""
     debugEcho "  capacity=", cacheCapacity, ", ops=", singleThreadOps
@@ -207,6 +222,9 @@ suite "LruCache vs ConcurrentLruCache single-threaded comparison":
     debugEcho benchmarkLine("LruCache get", lruGet)
     debugEcho benchmarkLine("ConcurrentLruCache get (no lock)", concNoLockGet)
     debugEcho benchmarkLine("ConcurrentLruCache get", concGet)
+    debugEcho benchmarkLine(
+      "ConcurrentLruCache withReadValue (no lock)", concNoLockWithReadValue)
+    debugEcho benchmarkLine("ConcurrentLruCache withReadValue", concWithReadValue)
     debugEcho benchmarkLine("LruCache peek", lruPeek)
     debugEcho benchmarkLine("ConcurrentLruCache peek (no lock)", concNoLockPeek)
     debugEcho benchmarkLine("ConcurrentLruCache peek", concPeek)
@@ -221,6 +239,9 @@ suite "LruCache vs ConcurrentLruCache single-threaded comparison":
       concNoLockPut.elapsed > 0
       concNoLockGet.checksum != 0
       concNoLockPeek.checksum != 0
+      # withReadValue reads the same values as get on the same cache
+      concWithReadValue.checksum == concGet.checksum
+      concNoLockWithReadValue.checksum == concNoLockGet.checksum
 
 suite "ConcurrentLruCache Benchmark":
   test "Single and multi-threaded throughput":

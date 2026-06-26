@@ -509,7 +509,7 @@ suite "ConcurrentLruCache Tests":
       lru.peek(1) == Opt.some(10)
       lru.peek(99) == Opt.none(int)
 
-  test "withValue":
+  test "withReadValue":
     var lru: ConcurrentLruCache[int, int]
     lru.init(1000)
     defer:
@@ -519,18 +519,77 @@ suite "ConcurrentLruCache Tests":
 
     var ran = false
     var seen = 0
-    lru.withValue(1, v):
+    lru.withReadValue(1, v):
       ran = true
-      seen = v[] # v is a `ptr int` pointing straight at the stored value
+      seen = v # v is a read-only, zero-copy view of the stored value
     check:
       ran
       seen == 10
 
     # absent key: body must not run and no pointer is exposed
     ran = false
-    lru.withValue(99, v):
+    lru.withReadValue(99, v):
       ran = true
     check not ran
+
+  test "withReadValue with do block":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000)
+    defer:
+      lru.dispose()
+
+    lru.put(1, 10)
+
+    # present key: the found body runs, the do block does not
+    var seen = 0
+    var missRan = false
+    lru.withReadValue(1, v):
+      seen = v
+    do:
+      missRan = true
+    check:
+      seen == 10
+      not missRan
+
+    # absent key: the do block runs, the found body does not
+    var foundRan = false
+    missRan = false
+    lru.withReadValue(99, v):
+      foundRan = true
+    do:
+      missRan = true
+    check:
+      not foundRan
+      missRan
+
+  test "withReadValue do block can populate on miss":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000)
+    defer:
+      lru.dispose()
+
+    # miss: the do block computes and inserts the value. It runs outside the
+    # read lock, so calling back into the cache (put) does not deadlock.
+    var computed = 0
+    lru.withReadValue(7, v):
+      computed = v
+    do:
+      lru.put(7, 70)
+      computed = 70
+    check:
+      computed == 70
+      lru.peek(7) == Opt.some(70)
+
+    # the freshly inserted value is now a hit
+    var hitVal = 0
+    var missRan = false
+    lru.withReadValue(7, v):
+      hitVal = v
+    do:
+      missRan = true
+    check:
+      hitVal == 70
+      not missRan
 
   test "del":
     var lru: ConcurrentLruCache[int, int]
@@ -1065,7 +1124,7 @@ suite "ConcurrentLruCache Tests (threadSafe = false)":
       lru.contains(3)
       lru.contains(4)
 
-  test "withValue promotes and allows mutation":
+  test "withReadValue promotes and exposes a read-only view":
     var lru: ConcurrentLruCache[int, int]
     lru.init(3, shardBits = 0, threadSafe = false)
     defer:
@@ -1075,12 +1134,12 @@ suite "ConcurrentLruCache Tests (threadSafe = false)":
     lru.put(2, 20)
     lru.put(3, 30)
 
-    # withValue promotes to MRU like get; inserting a new key must evict 2
+    # withReadValue promotes to MRU like get; inserting a new key must evict 2
     # (the actual LRU), not 1
     for _ in 0 ..< 5:
       var seen = 0
-      lru.withValue(1, v):
-        seen = v[]
+      lru.withReadValue(1, v):
+        seen = v
       check seen == 10
 
     lru.put(4, 40)
@@ -1090,13 +1149,43 @@ suite "ConcurrentLruCache Tests (threadSafe = false)":
       lru.contains(3)
       lru.contains(4)
 
-    # single-threaded mode: the value can be mutated through the pointer
-    lru.withValue(1, v):
-      v[] = 111
-    check lru.peek(1) == Opt.some(111)
+    # the view is read-only: assigning through it must not compile
+    check not compiles(
+      (block:
+        lru.withReadValue(1, v):
+          v = 111))
 
     # absent key: body must not run
     var ran = false
-    lru.withValue(123, v):
+    lru.withReadValue(123, v):
       ran = true
     check not ran
+
+  test "withReadValue with do block":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000, shardBits = 0, threadSafe = false)
+    defer:
+      lru.dispose()
+
+    lru.put(1, 10)
+
+    # present key: the found body runs, the do block does not
+    var seen = 0
+    var missRan = false
+    lru.withReadValue(1, v):
+      seen = v
+    do:
+      missRan = true
+    check:
+      seen == 10
+      not missRan
+
+    # absent key: the do block runs and can populate the cache
+    var foundRan = false
+    lru.withReadValue(2, v):
+      foundRan = true
+    do:
+      lru.put(2, 20)
+    check:
+      not foundRan
+      lru.peek(2) == Opt.some(20)

@@ -831,7 +831,13 @@ proc get*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
   else:
     lru.cache.get(key)
 
-template withValue*[K, V](
+func toLent[T](p: ptr T): lent T =
+  # Borrow the pointee as a read-only view (no copy). Used to hand `withReadValue`
+  # bodies access to the cached value without letting them mutate it - assigning
+  # to a `lent` is a compile error.
+  p[]
+
+template withReadValue*[K, V](
     lru: var ConcurrentLruCache[K, V], key: K, value, body: untyped
 ) =
   mixin hash
@@ -841,27 +847,59 @@ template withValue*[K, V](
       h = hash(key)
       sh = h.toSubhash()
       s = addr lru.shards[h.toShardIdx(lru.shardBits)]
-    var promote = false
+    var found = false
 
-    # s.lock.lockRead()
-    # try:
     s.lock.withReadLock:
-      let value {.inject.} = s.cache.peekPtr(sh, key)
-      if value != nil:
-        promote = true
+      let valuePtr = s.cache.peekPtr(sh, key)
+      if valuePtr != nil:
+        found = true
+        template value(): untyped {.inject.} = toLent(valuePtr)
         body
-    # finally:
-    #   s.lock.unlockRead()
 
-    if promote:
+    if found:
       inc tlsLruGetCounter
       if (tlsLruGetCounter and SAMPLE_MASK) == 0'u32:
         s.lock.withWriteLock:
           s.cache.moveToFront(sh, key)
   else:
-    let value {.inject.} = lru.cache.getPtr(key)
-    if value != nil:
+    let valuePtr = lru.cache.getPtr(key)
+    if valuePtr != nil:
+      template value(): untyped {.inject.} = toLent(valuePtr)
       body
+
+template withReadValue*[K, V](
+    lru: var ConcurrentLruCache[K, V], key: K, value, body1, body2: untyped
+) =
+  mixin hash
+
+  if lru.threadSafe:
+    let
+      h = hash(key)
+      sh = h.toSubhash()
+      s = addr lru.shards[h.toShardIdx(lru.shardBits)]
+    var found = false
+
+    s.lock.withReadLock:
+      let valuePtr = s.cache.peekPtr(sh, key)
+      if valuePtr != nil:
+        found = true
+        template value(): untyped {.inject.} = toLent(valuePtr)
+        body1
+
+    if found:
+      inc tlsLruGetCounter
+      if (tlsLruGetCounter and SAMPLE_MASK) == 0'u32:
+        s.lock.withWriteLock:
+          s.cache.moveToFront(sh, key)
+    else:
+      body2
+  else:
+    let valuePtr = lru.cache.getPtr(key)
+    if valuePtr != nil:
+      template value(): untyped {.inject.} = toLent(valuePtr)
+      body1
+    else:
+      body2
 
 proc put*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V) =
   if lru.threadSafe:
