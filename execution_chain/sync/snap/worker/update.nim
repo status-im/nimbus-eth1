@@ -33,14 +33,10 @@ func readyForMptAssembly(ctx: SnapCtxRef): bool =
 
 proc idleNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
-  if not ctx.pool.mptAsm.clear info:
-    return SnapIdle
-  SnapReady
-
-proc resumeNext(ctx: SnapCtxRef; info: static[string]): SyncState =
-  ## State transition handler
-  if ctx.readyForMptAssembly():
-    return SnapMkTrie
+  if ctx.pool.contPrevSession:
+    chronicles.info info & ": Resuming previous session"
+  elif not ctx.pool.mptAsm.clear(info):
+    return SnapIdle                                 # disk full?, stay anyway
   SnapReady
 
 func readyNext(ctx: SnapCtxRef; info: static[string]): SyncState =
@@ -48,24 +44,40 @@ func readyNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   # Wait for the beacon syncer to have completed the first header chain
   # download  which might be considerably more to do than any subsequent
   # updates.
-  if ctx.pool.headersSynced:
-    # So some headers have bben downloaded
-    if ctx.hdrCache.latestConsHeadNumber() != 0:
-      return SnapDownload                           # all sort of working, now
-    if ctx.pool.beaconTarget:
-      # This is some artificial or test mode when the becon sync server has a
-      # manual target set to download, to, first. For the same test resons, the
-      # snap syncer will start with a head from the header chain cache if there
-      # is no finalised CL header available.
-      return SnapDownload
-  SnapReady
+  block stayReady:
+    if ctx.pool.headersSynced:
+      # So some headers have been downloaded
+      if ctx.hdrCache.latestConsHeadNumber() != 0:
+        break stayReady                             # all sort of working, now
+      if ctx.pool.beaconTarget:
+        # This is some artificial or test mode when the becon sync server has
+        # a manual target set to download, to, first. For the same test resons,
+        # the snap syncer will start with a head from the header chain cache
+        # if there is no finalised CL header available.
+        break stayReady
+      # End `if headersSynced`
+    return SnapReady
+  if ctx.pool.contPrevSession:
+    return SnapResume
+  SnapDownload
+
+proc resumeNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+  ## State transition handler
+  # Continuing a a session is fully controlled by the daemon (no peers'
+  # interaction.) So there is no need to sync via `poolMode`.
+  ctx.getPivotTag(info).isErrOr:
+    if PivotOnTrie <= value:
+      return SnapAnalyse
+  if ctx.readyForMptAssembly():
+    return SnapMkTrie
+  SnapDownload
 
 func downloadNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
   if ctx.readyForMptAssembly():
-    ctx.poolMode = true                             # sync peers
+    ctx.poolMode = true                             # sync peers needed
     return SnapDownloadFinish
-  SnapDownload
+  SnapDownload                                      # otherwise stay
 
 proc downloadFinishNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
@@ -77,37 +89,18 @@ proc mkTrieNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
   if ctx.pool.pivot.isNone():                       # enter unless pivot is set
     return SnapMkTrie
-  ctx.getPivotTag(info).isErrOr:
-    if PivotMptAnalysed <= value:
-      return SnapHealing
+  # Continuing a a session is fully controlled by the daemon (no peers'
+  # interaction.) So there is no need to sync via `poolMode`.
   SnapAnalyse
 
-func analyseNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+proc analyseNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
-  SnapHealing
+  ctx.getPivotTag(info).isErrOr:
+    if PivotMptAnalysed <= value:
+      return SnapStop                               # FIXME-- might change
+  SnapAnalyse
 
-proc healingNext(ctx: SnapCtxRef; info: static[string]): SyncState =
-  ## State transition handler
-  if ctx.pool.mptAsm.hasDnglAccSto():
-    return SnapHealing
-  ctx.poolMode = true                               # sync peers
-  SnapHealingFinish
-
-func healingFinishNext(ctx: SnapCtxRef; info: static[string]): SyncState =
-  if ctx.poolMode:                                  # wait for peers to sync
-    return SnapHealingFinish
-  SnapContracts
-
-proc contractsNext(ctx: SnapCtxRef; info: static[string]): SyncState =
-  if ctx.pool.mptAsm.hasMissContracts():
-    return SnapContracts
-  ctx.poolMode = true                               # sync peers
-  SnapContractsFinish
-
-func contractsFinishNext(ctx: SnapCtxRef; info: static[string]): SyncState =
-  if ctx.poolMode:                                  # wait for peers to sync
-    return SnapContractsFinish
-  SnapStop
+# TBD ..
 
 func stopNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   SnapStop
@@ -116,71 +109,43 @@ func stopNext(ctx: SnapCtxRef; info: static[string]): SyncState =
 # Public FSA related functions
 # ------------------------------------------------------------------------------
 
-proc updateSyncReset*(ctx: SnapCtxRef) =
-  ## Reset syncer state machine
-  ctx.pool.syncState = SnapIdle
-
-proc updateSyncResume*(ctx: SnapCtxRef) =
-  ## Force `resume` syncer state
-  ctx.pool.syncState = SnapResume
-
-proc updateSyncHealingFinish*(ctx: SnapCtxRef) =
-  ## Force `healing-finish` syncer state
-  ctx.pool.syncState = SnapHealingFinish
-
-proc updateSyncContractsFinish*(ctx: SnapCtxRef) =
-  ## Force `contracts-finish` syncer state
-  ctx.pool.syncState = SnapContractsFinish
-
-
 proc updateSyncState*(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## Update internal state when needed
   ##
+  #
   # State machine
   # ::
-  #       initialise
-  #        |      |
-  #        v      v
-  #    resume   idle
-  #      | |      |
-  #      | |      v
-  #      | `--> ready
-  #      |        |
-  #      |        v
-  #      |     download
-  #      |        |
-  #      |        v
-  #      |  downloadFinish
-  #      |        |
-  #      |        v
-  #      `----> mkTrie ----.
-  #               |        |
-  #               v        |
-  #      .---> analyse     |
-  #      |        |        |
-  #      |        v        |
-  #      |     healing <---'
-  #      |        |
-  #      |        v
-  #      `-- healingFinish
-  #               |
-  #               v
-  #           contracts
-  #               |
-  #               v
-  #         contractsFinish
-  #               |
-  #               v
-  #             stop
+  #                  idle
+  #                    |
+  #                    v
+  #      resume <--- ready
+  #         |          |
+  #         |          v
+  #         |      download
+  #         |          |
+  #         |          v
+  #         |    downloadFinish
+  #         |          |
+  #         |          v
+  #         +------> mkTrie
+  #         |          |
+  #         |          v
+  #         `---->  analyse
+  #                    |
+  #                    v
+  #                  [...]
+  #                    |
+  #                    v
+  #                  stop
   #
   let newState =
     case ctx.pool.syncState:
     of SnapIdle:
       ctx.idleNext info
-    of SnapResume:
-      ctx.resumeNext info
     of SnapReady:
       ctx.readyNext info
+    of SnapResume:
+      ctx.resumeNext info
     of SnapDownload:
       ctx.downloadNext info
     of SnapDownloadFinish:
@@ -189,16 +154,9 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]): SyncState =
       ctx.mkTrieNext info
     of SnapAnalyse:
       ctx.analyseNext info
-    of SnapHealing:
-      ctx.healingNext info
-    of SnapHealingFinish:
-      ctx.healingFinishNext info
-    of SnapContracts:
-      ctx.contractsNext info
-    of SnapContractsFinish:
-      ctx.contractsFinishNext info
     of SnapStop:
       ctx.stopNext info
+
   if ctx.pool.syncState == newState:
     return newState
 
@@ -211,8 +169,7 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]): SyncState =
   of SnapDownload, SnapDownloadFinish, SnapMkTrie:
     chronicles.info info & ": State changed", prevState, newState,
       top=sdb.top, pivot=sdb.pivot.bnStr, nSyncPeers=ctx.nSyncPeers()
-  of SnapAnalyse, SnapHealing, SnapHealingFinish,
-     SnapContracts, SnapContractsFinish, SnapStop:
+  of SnapAnalyse, SnapStop:
     chronicles.info info & ": State changed", prevState, newState,
       pivot=ctx.pool.pivot.toStr, nSyncPeers=ctx.nSyncPeers()
   of SnapIdle, SnapResume, SnapReady:

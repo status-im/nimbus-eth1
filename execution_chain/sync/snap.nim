@@ -17,7 +17,7 @@ import
   ../core/chain,
   ../networking/p2p,
   ./snap/[snap_desc, worker],
-  ./snap/worker/[helpers, update],
+  ./snap/worker/helpers,
   ./[sync_sched, wire_protocol]
 
 from ./beacon
@@ -83,7 +83,7 @@ proc config*(
   ## Note that the `init()` constructor might have specified a configuration
   ## task to be run at the end of the `config()` function.
   ##
-  doAssert desc.ctx.isNil # This can only run once
+  doAssert desc.ctx.isNil                           # This can only run once
   desc.initSync(ethNode, maxPeers)
   desc.addSyncProtocol snap1
   desc.ctx.pool.baseDir = dataDir
@@ -96,8 +96,7 @@ proc configResume*(desc: SnapSyncRef; resume = true) =
   ## Set syncer into resume (or no-resume) mode. By default, the syncer is
   ## in no-resume mode.
   doAssert not desc.ctx.isNil
-  if resume: desc.ctx.updateSyncResume()
-  else: desc.ctx.updateSyncReset()
+  desc.ctx.pool.contPrevSession = true
 
 proc start*(desc: SnapSyncRef; bcSyncRef: BeaconSyncRef): bool =
   ## Starting beacon sync in stand-by mode and then snap sync.
