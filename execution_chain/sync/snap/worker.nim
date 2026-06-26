@@ -92,9 +92,15 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
         syncState=($ctx.syncState), nSyncPeers=ctx.nSyncPeers()
       bodyRc = daemonWaitReadyInterval              # take a nap
 
+    of SnapHeaderBase:
+      # Older headers are of no value here. So top-only applies.
+      discard ctx.headerDownloadTrigger(topOnly=true, info)
+      bodyRc = daemonWaitHeaderInterval
+
     of SnapDownload:
       bodyRc = daemonWaitDownloadInterval           # download handled by peers
     of SnapDownloadFinish:
+      discard ctx.headerDownloadTrigger(topOnly=false, info)
       bodyRc = daemonWaitDownloadFinishInterval     # wait for sync
 
     of SnapMkTrie:
@@ -183,7 +189,7 @@ template runPeer*(
 
     of SnapContracts:
       # Download persistent contract data
-      buddy.downloadCode(info).isOkOr:
+      buddy.downloadCodePersist(info).isOkOr:
         buddy.ctrl.zombie = true
 
     else:

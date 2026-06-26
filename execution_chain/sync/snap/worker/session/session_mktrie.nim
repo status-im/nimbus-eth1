@@ -38,7 +38,7 @@ type
     state: WalkStateData                            # current state data
     distance: uint64                                # distance to pivot state
 
-    accData: WalkAccounts                           # accounts range from cache
+    accData: WalkAccount                            # accounts range from cache
     accRange: ItemKeyRange                          # avoid repeated calculation
 
     fullCov: ItemKeyRangeSet                        # collect all ranges
@@ -261,6 +261,56 @@ template mkStoTrie(
 
   bodyRc
 
+template mkCodesList(
+    session: MkTrieSession;                         # used as var parameter
+    info: static[string];
+      ): Opt[ErrorType] =
+  ## Async/template
+  ##
+  var bodyRc = Opt.none(ErrorType)
+  block body:
+    # Some shortcuts
+    template state: auto = session.state
+    template stateInx: auto = session.stateInx
+    template nStates: auto = session.nStates
+    template distance: auto = session.distance
+    template accData: auto = session.accData
+
+    let
+      accMin = accData.accounts[0].accHash.to(ItemKey)
+      accMax = accData.accounts[^1].accHash.to(ItemKey)
+
+      root {.inject,used.} = state.toStr            # logging only
+
+    # Find all available `CodeHash` keys
+    var found: HashSet[CodeHash]
+    for w in session.db.walkByteCode(session.accData.root, accMin):
+      if accMax < w.limit:
+        break
+
+      # Print keep alive messages and allow thread switch
+      bodyRc = session.sessionTicker(info):
+        trace info & ": Processing code lists ..", stateInx, nStates, root,
+          distance
+      if bodyRc.isSome():
+        break body
+
+      for (key,val) in w.codes:
+        let hash = val.distinctBase.keccak256
+        if hash != Hash32(key):
+          error info & ": Code key mismatch", stateInx, nStates, root,
+            distance, key=key.toStr, expected=hash.toStr,
+            nData=val.to(seq[byte]).len
+
+        session.db.putCodeKvt(key,val).isOkOr:
+          error info & ": Cannot store on DB code table", stateInx, nStates,
+            root, distance, key=key.toStr, nData=val.to(seq[byte]).len,
+            `error`=error
+          continue
+        found.incl key
+
+  bodyRc
+
 template mkTrieImpl(
     session: MkTrieSession;                         # used as var parameter
     info: static[string];
@@ -342,6 +392,12 @@ template mkTrieImpl(
             if value == ECancelledError:            # check for shutdown..
               bodyRc = Opt.some(value)              # ..otherwise ignore for now
               break body
+
+      # Process code list
+      session.mkCodesList(info).isErrOr():
+        if value == ECancelledError:                # check for shutdown..
+          bodyRc = Opt.some(value)                  # ..otherwise ignore for now
+          break body
 
     # Some accounting for merged accounts ranges
     session.updateCoverageMetrics()                 # full coverage metrics
@@ -455,7 +511,7 @@ template sessionMkTrie*(ctx: SnapCtxRef; info: static[string]): auto =
       let root {.inject,used} = state.toStr         # logging only
 
       # Walk account for the current state root
-      for w in session.db.walkAccounts(state.root):
+      for w in session.db.walkAccount(state.root):
         accData = w                                 # update descriptor fields
         accRange = ItemKeyRange.new(w.start, w.limit)
 
@@ -472,7 +528,7 @@ template sessionMkTrie*(ctx: SnapCtxRef; info: static[string]): auto =
         session.mkTrieImpl(info).isErrOr:
           if value == ECancelledError:              # check for shutdown
             break body                              # otherwise ignore for now
-        # End `for walkAccounts()`
+        # End `for walkAccount()`
 
       if state.tag == Untagged:                     # Register updated state
         state.tag = (if session.isPivot: PivotOnTrie else: OnTrie)

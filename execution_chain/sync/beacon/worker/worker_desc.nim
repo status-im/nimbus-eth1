@@ -13,6 +13,7 @@
 import
   std/[sets, sequtils],
   pkg/[chronos, eth/common, results],
+  pkg/eth/common/block_access_lists,
   pkg/stew/[interval_set, sorted_set],
   ../../../core/chain,
   ../../[sync_desc, wire_protocol],
@@ -86,6 +87,9 @@ type
   BlocksForImport* = object
     ## Blocks list item indexed by least block number (i.e. by `blocks[0]`.)
     blocks*: seq[EthBlock]           ## List of blocks lineage for import
+    bals*: seq[Opt[BlockAccessListRef]]
+                                     ## Optional block access lists (EIP-7928),
+                                     ## aligned by index with `blocks`.
     peerID*: Hash                    ## For comparing peers
 
   # -------------------

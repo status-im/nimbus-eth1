@@ -53,6 +53,7 @@ type
     ## and prossessed by a sigle peer at a time.
     stoRoot*: StoreRoot                 ## Account storage root (for mpt)
     stoLeft*: ItemKeyRange              ## Unprocessed storage slots
+    code*: CodeHash                     ## Code hash (for mpt)
 
   StateDataRef* = ref object
     ## Single download state organises unprocessed accounts, and unprocessed
@@ -464,10 +465,28 @@ proc register*(
     if rc.isOk:
       data = rc.value.data
     else:
-      data = AccDataRef()
+      data = AccDataRef(code: CodeHash(EMPTY_CODE_HASH))
       state.byAccount.insert(account).value.data = data
     data.stoRoot = stoRoot
     data.stoLeft = iv
+
+proc register*(
+    state: StateDataRef,
+    account: ItemKey,
+    codeHash: CodeHash) =
+  ## Add contract hash to an account (if any.)
+  ##
+  if not state.deadState and
+     codeHash != CodeHash(EMPTY_CODE_HASH):
+    var data: AccDataRef
+    let rc = state.byAccount.eq(account)
+    if rc.isOk:
+      data = rc.value.data
+    else:
+      data = AccDataRef(stoRoot: StoreRoot(EMPTY_ROOT_HASH))
+      state.byAccount.insert(account).value.data = data
+    data.code = codeHash
+
 
 func get*(state: StateDataRef, account: ItemKey): Opt[AccDataRef] =
   if not state.deadState:
@@ -478,11 +497,26 @@ func get*(state: StateDataRef, account: ItemKey): Opt[AccDataRef] =
 func hasKey*(state: StateDataRef, account: ItemKey): bool =
   not state.deadState and state.byAccount.eq(account).isOk()
 
+
 proc delStorage*(state: StateDataRef, account: ItemKey) =
   if not state.deadState:
-    discard state.byAccount.delete account
+    let kv = state.byAccount.eq(account).valueOr:
+      return
+    if kv.data.code == CodeHash(EMPTY_CODE_HASH):
+      discard state.byAccount.delete account
+    else:
+      kv.data.stoRoot = StoreRoot(EMPTY_ROOT_HASH)
 
-func hasStorage*(state: StateDataRef): bool =
+proc delCode*(state: StateDataRef, account: ItemKey) =
+  if not state.deadState:
+    let kv = state.byAccount.eq(account).valueOr:
+      return
+    if kv.data.stoRoot == StoreRoot(EMPTY_ROOT_HASH):
+      discard state.byAccount.delete account
+    else:
+      kv.data.code = CodeHash(EMPTY_CODE_HASH)
+
+func hasCodeOrStorage*(state: StateDataRef): bool =
   not state.deadState and 0 < state.byAccount.len
 
 # ------------------------------------------------------------------------------
@@ -505,8 +539,25 @@ iterator stoItems*(
     rc = state.byAccount.ge(low ItemKey)
   while rc.isOk and count < maxItems:
     count.inc
-    let key = rc.value.key
-    yield (key, rc.value.data)
+    let (key, data) = (rc.value.key, rc.value.data)
+    if data.stoRoot != StoreRoot(EMPTY_ROOT_HASH):
+      yield (key, data)
+    rc = state.byAccount.gt(key)
+
+iterator codeItems*(
+    state: StateDataRef;
+    maxItems = high(int);
+      ): tuple[key: ItemKey, data: AccDataRef] =
+  ## Similar to `stoItems()` but for codes.
+  ##
+  var
+    count = 0
+    rc = state.byAccount.ge(low ItemKey)
+  while rc.isOk and count < maxItems:
+    count.inc
+    let (key, data) = (rc.value.key, rc.value.data)
+    if data.code != CodeHash(EMPTY_CODE_HASH):
+      yield (key, data)
     rc = state.byAccount.gt(key)
 
 iterator items*(
