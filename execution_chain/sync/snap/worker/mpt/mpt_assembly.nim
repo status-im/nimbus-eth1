@@ -144,7 +144,9 @@
 ##   + key:       `seq[byte]`
 ##   * path:      `seq[byte]`
 ##
+##
 ## Additional assumptions:
+## -----------------------
 ##
 ## * The `CoreDB`/`Aristo`/`Kvt` state database suite is mostly idle,
 ##   typically it would be empty. This only matters when the MPT assembly
@@ -179,6 +181,9 @@ type
     ## Shortcut
 
   HeaderResult* = Result[Header,string]
+    ## Shortcut
+
+  HashResult* = Result[Hash32,string]
     ## Shortcut
 
   PutResult* = Result[void,string]
@@ -778,7 +783,13 @@ template del9(db: MptAsmRef; col: MptAsmCol; key1: uint64): untyped =
 template key33(col: MptAsmCol; key1: untyped): openArray[byte] =
   var key: array[33,byte]
   key[0] = col.ord
-  (addr key[1]).copyMem(addr (key1.distinctBase)[0], 32)
+  when key1 is seq[byte]:
+    (addr key[1]).copyMem(addr key1[0], 32)
+  elif key1 is openArray[byte]:
+    let key2 = @key1
+    (addr key[1]).copyMem(addr key2[0], 32)
+  else:
+    (addr key[1]).copyMem(addr (key1.distinctBase)[0], 32)
   key.toOpenArray(0,32)
 
 template key33(col: MptAsmCol): openArray[byte] =
@@ -1080,12 +1091,24 @@ proc getHeader*(db: MptAsmRef, bn: BlockNumber): HeaderResult =
     return err(error)
   data.decodeHeader()
 
+proc getBlockHash*(db: MptAsmRef, bn: BlockNumber): HashResult =
+  db.getHeader(bn + 1).isErrOr:
+    return ok value.parentHash
+  let hdr = db.getHeader(bn).valueOr:
+    return err(error)
+  ok hdr.computeBlockHash
+
 proc lastHeader*(db: MptAsmRef): HeaderResult =
   let data = db.get9(cHeader, 0u64).valueOr:
     return err(error)
   if data.len != 8:
     return err("")
   db.getHeader uint64.fromBytesBE data
+
+proc lastNumber*(db: MptAsmRef): BlockNumber =
+  let data = db.get9(cHeader, 0u64).valueOr:
+    return BlockNumber(0)
+  uint64.fromBytesBE data
 
 proc putHeader*(db: MptAsmRef, header: Header): PutResult =
   db.put9(cHeader, header.number, header.encodeHeader()).isOkOr:
@@ -1118,6 +1141,15 @@ iterator walkHeader*(db: MptAsmRef): WalkHeader =
     yield (header,"")
 
 # ========================
+
+proc hasStateData*(
+    db: MptAsmRef;
+      ): Result[bool,string] =
+  for (_,value) in db.adb.colWalk33 cStateData.key33():
+    value.decodeStateData().isOkOr:
+      return err(error)
+    return ok(true)
+  ok(false)
 
 proc getStateData*(
     db: MptAsmRef;
@@ -1358,6 +1390,11 @@ proc getAccKvt*(db: MptAsmRef; key: openArray[byte]): BlobResult =
     return err(error)
   ok(move data)
 
+proc putAccKvt*(db: MptAsmRef; key, node: openArray[byte]): PutResult =
+  db.putAtMost33(cAccKvt, key, node).isOkOr:
+    return err(error)
+  ok()
+
 proc putAccKvt*(db: MptAsmRef; nodes: openArray[KnPair]): PutResult =
   for w in nodes:
     db.putAtMost33(cAccKvt, w.key, w.node).isOkOr:
@@ -1393,6 +1430,15 @@ proc getStoKvt*(
   var data = db.getAtMost65(cStoKvt, acc, key).valueOr:
     return err(error)
   ok(move data)
+
+proc putStoKvt*(
+    db: MptAsmRef;
+    acc: Hash32;
+    key, node: openArray[byte];
+      ): PutResult =
+  db.putAtMost65(cStoKvt, acc, key, node).isOkOr:
+    return err(error)
+  ok()
 
 proc putStoKvt*(
     db: MptAsmRef;
@@ -1440,6 +1486,9 @@ proc getCodeKvt*(db: MptAsmRef; hash: Hash32): BlobResult =
   var data = db.get33(cCodeKvt, hash).valueOr:
     return err(error)
   ok(move data)
+
+proc putCodeKvt*(db: MptAsmRef; key, data: openArray[byte]): PutResult =
+  db.put33(cCodeKvt, key, data)
 
 proc putCodeKvt*(db: MptAsmRef; cdHash: CodeHash; data: CodeItem): PutResult =
   db.put33(cCodeKvt, cdHash.to(Hash32), data.to(seq[byte]))

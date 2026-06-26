@@ -158,6 +158,10 @@ proc start*(desc: BeaconSyncRef; standBy = false): bool =
   doAssert not desc.ctx.isNil
   let save = desc.ctx.pool.standByMode
   desc.ctx.pool.standByMode = standBy
+  # The `resetSync()` directive prevents from accidential re-initialising
+  # after shut down (e.g. via `singleRun()`.)  This has no effect on the
+  # first `startSync()` directive.
+  discard desc.resetSync()
   if desc.startSync(standBy):
     return true
   desc.ctx.pool.standByMode = save

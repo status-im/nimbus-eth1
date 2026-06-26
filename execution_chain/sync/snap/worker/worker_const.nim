@@ -18,7 +18,6 @@ type
     SnapIdle = 0
     SnapResume                     ## Resume from previous session
     SnapReady                      ## Wait for download state
-    SnapHeaderBase                 ## Download headers (for state reference)
     SnapDownload                   ## Downloading and caching data
     SnapDownloadFinish             ## Wait for sync before proceeding
     SnapMkTrie                     ## Assembling downloaded data
@@ -103,6 +102,11 @@ const
     ## Poll waiting for all downloading peers to have stopped
 
   # -----------
+
+  nConsHeadcachedDeltaMax* = 128
+    ## If the block number difference between FCU update header and cached
+    ## header is larger than this contant, a beacon header fetch cycle is
+    ## triggered to fill up the cache.
 
   nFetchHeaderPeersMax* = 5
     ## Try at most this many `eth` peers for fetching a header

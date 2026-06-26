@@ -12,7 +12,7 @@
 
 import
   pkg/chronicles,
-  ./[helpers, mpt, session, worker_const, worker_desc]
+  ./[helpers, mpt, session, state_db, worker_const, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -26,9 +26,6 @@ func readyForMptAssembly(ctx: SnapCtxRef): bool =
   let sdb = ctx.pool.stateDB
   sdb.isComplete or
     accuAccountsCovMin < sdb.archivedCoverage() + sdb.accountsCoverage()
-
-func toStr(root: Opt[StateRoot]): string =
-  if root.isNone: "n/a" else: root.unsafeGet.Hash32.short
 
 # ------------------------------------------------------------------------------
 # Private FSA transition functions
@@ -48,14 +45,20 @@ proc resumeNext(ctx: SnapCtxRef; info: static[string]): SyncState =
 
 func readyNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
-  if ctx.hdrCache.latestConsHeadNumber() != 0:
-    return SnapHeaderBase
+  # Wait for the beacon syncer to have completed the first header chain
+  # download  which might be considerably more to do than any subsequent
+  # updates.
+  if ctx.pool.headersSynced:
+    # So some headers have bben downloaded
+    if ctx.hdrCache.latestConsHeadNumber() != 0:
+      return SnapDownload                           # all sort of working, now
+    if ctx.pool.beaconTarget:
+      # This is some artificial or test mode when the becon sync server has a
+      # manual target set to download, to, first. For the same test resons, the
+      # snap syncer will start with a head from the header chain cache if there
+      # is no finalised CL header available.
+      return SnapDownload
   SnapReady
-
-func headerBaseNext(ctx: SnapCtxRef; info: static[string]): SyncState =
-  if 0 < ctx.pool.topBlockNumber:
-    return SnapDownload
-  SnapHeaderBase
 
 func downloadNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
@@ -144,9 +147,6 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]): SyncState =
   #      | `--> ready
   #      |        |
   #      |        v
-  #      |      header
-  #      |        |
-  #      |        v
   #      |     download
   #      |        |
   #      |        v
@@ -181,8 +181,6 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]): SyncState =
       ctx.resumeNext info
     of SnapReady:
       ctx.readyNext info
-    of SnapHeaderBase:
-      ctx.headerBaseNext info
     of SnapDownload:
       ctx.downloadNext info
     of SnapDownloadFinish:
@@ -210,7 +208,7 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]): SyncState =
 
   ctx.pool.syncState = newState
   case newState:
-  of SnapHeaderBase, SnapDownload, SnapDownloadFinish, SnapMkTrie:
+  of SnapDownload, SnapDownloadFinish, SnapMkTrie:
     chronicles.info info & ": State changed", prevState, newState,
       top=sdb.top, pivot=sdb.pivot.bnStr, nSyncPeers=ctx.nSyncPeers()
   of SnapAnalyse, SnapHealing, SnapHealingFinish,
@@ -269,8 +267,28 @@ template updateFcuRoot*(buddy: SnapPeerRef, info: static[string]) =
     let
       hdr = ctx.hdrCache.latestConsHead()
       blockNumber {.inject.} = BlockNumber(hdr.number)
-    if blockNumber == 0:
-      break body                                    # no FCU request yet
+    if blockNumber == 0:                            # no FCU request yet
+      # Check whether there has been a recent header download by the
+      # beacon syncer. Typically, it will relay on the FCU update, but
+      # for the initial phase there might be a manual sync target set.
+      #
+      # The latter is exploited for getting the snap syncer trying to fetch
+      # a recent manually set header target related state from snap sync
+      # peers. When doing this, success is only expected for test peers as
+      # this state most certainly falls out of the supported 128 latest
+      # states window.
+      if ctx.pool.beaconTarget:                     # check for manual heder trg
+        let
+          adb = ctx.pool.mptAsm
+          lastHeader = adb.lastHeader().valueOr:
+            break body
+          lastHash = adb.getBlockHash(lastHeader.number).valueOr:
+            break body
+          root = StateRoot lastHeader.stateRoot
+        discard sdb.register(root, BlockHash lastHash, lastHeader.number, info)
+        buddy.only.finRoot = Opt.some(root)
+        # End `if beaconTarget`
+      break body
 
     let
       hash = BlockHash(hdr.computeBlockHash())

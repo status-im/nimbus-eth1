@@ -13,7 +13,7 @@
 import
   std/os,
   pkg/[chronicles, chronos, minilru, results],
-  ./worker/[download, helpers, session, start_stop, state_db, worker_desc]
+  ./worker/[download, helpers, mpt, session, start_stop, state_db, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -88,19 +88,21 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
 
     case ctx.updateSyncState(info):                 # set next state
     of SnapReady:
-      chronicles.info info & ": Waiting for CL to send updates",
-        syncState=($ctx.syncState), nSyncPeers=ctx.nSyncPeers()
+      # Start headers download on the beacon sync server to run quasi-parallel
+      # mode to the snap sync.
+      discard ctx.headerDownloadTrigger(info)
       bodyRc = daemonWaitReadyInterval              # take a nap
 
-    of SnapHeaderBase:
-      # Older headers are of no value here. So top-only applies.
-      discard ctx.headerDownloadTrigger(topOnly=true, info)
-      bodyRc = daemonWaitHeaderInterval
-
     of SnapDownload:
-      bodyRc = daemonWaitDownloadInterval           # download handled by peers
+      # Trigger a beacon header fetch cycle if there are many headers to fetch.
+      let
+        lastCached = ctx.pool.mptAsm.lastNumber()
+        lastConsHead = ctx.hdrCache.latestConsHeadNumber()
+      if lastCached + nConsHeadcachedDeltaMax < lastConsHead:
+        discard ctx.headerDownloadTrigger(info)     # download header chain
+
+      bodyRc = daemonWaitDownloadInterval           # snap dwnld handled by peer
     of SnapDownloadFinish:
-      discard ctx.headerDownloadTrigger(topOnly=false, info)
       bodyRc = daemonWaitDownloadFinishInterval     # wait for sync
 
     of SnapMkTrie:
@@ -115,6 +117,9 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
     of SnapAnalyse:
       let stats {.used.} = ctx.sessionAnalyseFullTrie(info).valueOr:
         break body                                  # shutdown?
+
+      # Update pivot state record on DB cache
+      discard ctx.setPivotTag(PivotMptAnalysed, info)
 
       debug info & ": Partial MPT analysed",
         ela=stats.ela.toStr, syncState=($ctx.syncState)

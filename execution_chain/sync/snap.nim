@@ -105,9 +105,13 @@ proc start*(desc: SnapSyncRef; bcSyncRef: BeaconSyncRef): bool =
   doAssert not bcSyncRef.isNil
   desc.ctx.pool.beaconSync = bcSyncRef
   if not desc.isRunning and
-     desc.ctx.pool.beaconSync.start(standBy=true) and
-     desc.startSync():
-    return true
+     # Re-start  beacon sync in server mode.
+     bcSyncRef.start(standBy=true):
+    # The `resetSync()` directive prevents from accidential re-initialising
+    # after shut down. This has no effect on the first `starSynct()` call.
+    discard desc.resetSync()
+    if desc.startSync():
+      return true
   # false
 
 proc stop*(desc: SnapSyncRef) {.async.} =
