@@ -76,6 +76,7 @@ type
     badBlock*: bool
     bal*: Opt[BlockAccessListRef]
     witness*: Opt[ExecutionWitness]
+    statelessInput*: Opt[StatelessInput]
     statelessValidationResult*: Opt[StatelessValidationResult]
 
   Numero* = distinct uint64

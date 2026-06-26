@@ -130,8 +130,8 @@ proc processBlock*(
     # Convert the witness to ExecutionWitness format and verify against the pre-stateroot.
     if vmState.com.statelessWitnessValidation:
       doAssert witness.validateKeys(vmState.ledger.getWitnessKeys()).isOk()
-      let executionWitness = ExecutionWitness.build(witness, vmState.ledger)
-      ?executionWitness.statelessProcessBlock(c.com, blk)
+      let executionWitness = ExecutionWitnessWithKeys.build(witness, vmState.ledger)
+      ?executionWitness.toExecutionWitness().statelessProcessBlock(c.com, blk)
 
     ?vmState.ledger.txFrame.persistWitness(blkHash, witness)
 
