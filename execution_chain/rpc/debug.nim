@@ -39,7 +39,7 @@ BadBlock.useDefaultSerializationIn EthJson
 
 TestBlockSummary.useDefaultSerializationIn EthJson
 
-ExecutionWitness.useDefaultSerializationIn EthJson
+ExecutionWitnessWithKeys.useDefaultSerializationIn EthJson
 
 #type
 #   TraceOptions = object
@@ -63,7 +63,7 @@ ExecutionWitness.useDefaultSerializationIn EthJson
 #     if opts.disableState.isTrue  : result.incl TracerFlags.DisableState
 #     if opts.disableStateDiff.isTrue: result.incl TracerFlags.DisableStateDiff
 
-proc getExecutionWitness*(chain: ForkedChainRef, blockHash: Hash32): Result[ExecutionWitness, string] =
+proc getExecutionWitness*(chain: ForkedChainRef, blockHash: Hash32): Result[ExecutionWitnessWithKeys, string] =
   let txFrame = chain.txFrame(blockHash).txFrameBegin()
   defer:
     txFrame.dispose()
@@ -71,7 +71,7 @@ proc getExecutionWitness*(chain: ForkedChainRef, blockHash: Hash32): Result[Exec
   let witness = txFrame.getWitness(blockHash).valueOr:
     return err("Witness not found")
 
-  ok(ExecutionWitness.build(witness, txFrame))
+  ok(ExecutionWitnessWithKeys.build(witness, txFrame))
 
 proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
   let
@@ -259,7 +259,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
 
     # Execution Witness endpoints - not specified in the Execution API
 
-    proc debug_executionWitness(quantityTag: BlockTag): ExecutionWitness {.raises: [ValueError].} =
+    proc debug_executionWitness(quantityTag: BlockTag): ExecutionWitnessWithKeys {.raises: [ValueError].} =
       ## Returns an execution witness for the given block number.
       let header = chain.headerFromTag(quantityTag).valueOr:
         raise newException(ValueError, "Header not found")
@@ -267,7 +267,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
       chain.getExecutionWitness(header.computeBlockHash()).valueOr:
         raise newException(ValueError, error)
 
-    proc debug_executionWitnessByBlockHash(blockHash: Hash32): ExecutionWitness {.raises: [ValueError].} =
+    proc debug_executionWitnessByBlockHash(blockHash: Hash32): ExecutionWitnessWithKeys {.raises: [ValueError].} =
       ## Returns an execution witness for the given block hash.
       chain.getExecutionWitness(blockHash).valueOr:
         raise newException(ValueError, error)

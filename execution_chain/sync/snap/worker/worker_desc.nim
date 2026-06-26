@@ -107,11 +107,12 @@ type
     ## Globally shared data extension
     syncState*: SyncState            ## Last known layout state
     beaconSync*: BeaconSyncRef       ## Beacon syncer to resume after snap sync
+    beaconTarget*: bool              ## inital beacon target if `true`
     stateDB*: StateDbRef             ## Incomplete states DB
     baseDir*: string                 ## Path for assembly database
     mptAsm*: MptAsmRef               ## Assembly cache database
     pivot*: Opt[StateRoot]           ## Pivot root for analysys, healing, etc.
-    topBlockNumber*: BlockNumber     ## From header base
+    headersSynced*: bool             ## beacon sync headers
 
     # Info, debugging, and error handling stuff
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one
@@ -131,6 +132,10 @@ func chain*(ctx: SnapCtxRef): ForkedChainRef =
 func hdrCache*(ctx: SnapCtxRef): HeaderChainRef =
   ## Getter
   ctx.pool.beaconSync.ctx.pool.hdrCache
+
+func beaconInitTarget*(ctx: SnapCtxRef): bool =
+  ## Getter
+  ctx.pool.beaconSync.ctx.pool.initTarget.isSome()
 
 func nErrors*(buddy: SnapPeerRef): var PeerErrors =
   ## Shortcut

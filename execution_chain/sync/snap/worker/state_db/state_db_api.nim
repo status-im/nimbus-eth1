@@ -595,7 +595,7 @@ func bnStr*(rc: Opt[StateDataRef]): string =
   if rc.isErr: "n/a" else: $rc.value.blockNumber
 
 func rootStr*(state: StateDataRef): string =
-  state.stateRoot.Hash32.short & "(" & $state.blockNumber & ")"
+  state.stateRoot.toStr & "(" & $state.blockNumber & ")"
 
 proc toStr*(state: StateDataRef, db: StateDbRef): string =
   state.toStr(db, stateRootOk = true)

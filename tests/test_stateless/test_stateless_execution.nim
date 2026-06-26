@@ -48,8 +48,8 @@ procSuite "Stateless Execution Tests":
 
       let witness = fc.getExecutionWitness(blk.header.computeBlockHash()).expect("ok")
       check:
-        statelessProcessBlock(witness, com, blk).isOk()
-        statelessProcessBlock(witness, networkId, blk).isOk()
+        statelessProcessBlock(witness.toExecutionWitness(), com, blk).isOk()
+        statelessProcessBlock(witness.toExecutionWitness(), networkId, blk).isOk()
 
       let
         witnessRlpBytes = witness.encode()
