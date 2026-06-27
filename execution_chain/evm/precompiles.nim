@@ -905,7 +905,7 @@ when enablePrecompileCache:
 
     let
       key = PrecompileCacheKey[I].initCopyFrom(c.msg.data)
-      keyHash = hash(key) # hash once and reuse for both the lookup and the put
+      keyHash = cache.toKeyHash(key) # hash once, reuse for the lookup and the put
 
     var hit = false
     cache.withReadValueByHash(keyHash, key, cached):

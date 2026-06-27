@@ -533,16 +533,14 @@ suite "ConcurrentLruCache Tests":
     check not ran
 
   test "withReadValue and put with a precomputed hash":
-    # Uses an object key (not int) because Hash is an alias of int, which would
-    # make the precomputed-hash withReadValue overload ambiguous for int keys.
-    var lru: ConcurrentLruCache[A, int]
+    var lru: ConcurrentLruCache[int, int]
     lru.init(1000)
     defer:
       lru.dispose()
 
     let
-      key = A(v: 7)
-      keyHash = hash(key)
+      key = 7
+      keyHash = lru.toKeyHash(key)
 
     lru.putByHash(keyHash, key, 70) # insert using the precomputed hash
 
@@ -557,9 +555,8 @@ suite "ConcurrentLruCache Tests":
       lru.peek(key) == Opt.some(70) # agrees with the hash-computing overloads
 
     # absent key: the body must not run
-    let missKey = A(v: 8)
     ran = false
-    lru.withReadValueByHash(hash(missKey), missKey, v):
+    lru.withReadValueByHash(lru.toKeyHash(8), 8, v):
       ran = true
     check not ran
 
@@ -1134,14 +1131,14 @@ suite "ConcurrentLruCache Tests (threadSafe = false)":
     check not ran
 
   test "withReadValue and put with a precomputed hash":
-    var lru: ConcurrentLruCache[A, int]
+    var lru: ConcurrentLruCache[int, int]
     lru.init(1000, shardBits = 0, threadSafe = false)
     defer:
       lru.dispose()
 
     let
-      key = A(v: 7)
-      keyHash = hash(key)
+      key = 7
+      keyHash = lru.toKeyHash(key)
 
     lru.putByHash(keyHash, key, 70)
 

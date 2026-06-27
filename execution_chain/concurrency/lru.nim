@@ -831,6 +831,23 @@ proc get*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
   else:
     lru.cache.get(key)
 
+
+type
+  KeyHash* = object
+    subhash: uint32
+    shardIdx: int
+
+func toKeyHash*[K, V](lru: ConcurrentLruCache[K, V], key: K): KeyHash =
+  ## Hash `key` for `lru` once, returning a token to pass to
+  ## `withReadValueByHash` / `putByHash` - reuse it for a lookup followed by a
+  ## `put` so the key is hashed (and the subhash derived) only once.
+  mixin hash
+  let h = hash(key)
+  if lru.threadSafe:
+    KeyHash(subhash: h.toSubhash(), shardIdx: h.toShardIdx(lru.shardBits))
+  else:
+    KeyHash(subhash: h.toSubhash())
+
 func toLent[T](p: ptr T): lent T =
   # Borrow the pointee as a read-only view (no copy). Used to hand `withReadValue`
   # bodies access to the cached value without letting them mutate it - assigning
@@ -838,12 +855,12 @@ func toLent[T](p: ptr T): lent T =
   p[]
 
 template withReadValueByHash*[K, V](
-    lru: var ConcurrentLruCache[K, V], keyHash: Hash, key: K, value, body: untyped
+    lru: var ConcurrentLruCache[K, V], keyHash: KeyHash, key: K, value, body: untyped
 ) =
   if lru.threadSafe:
     let
-      sh = keyHash.toSubhash()
-      s = addr lru.shards[keyHash.toShardIdx(lru.shardBits)]
+      sh = keyHash.subhash
+      s = addr lru.shards[keyHash.shardIdx]
     var found = false
 
     s.lock.withReadLock:
@@ -859,55 +876,54 @@ template withReadValueByHash*[K, V](
         s.lock.withWriteLock:
           s.cache.moveToFront(sh, key)
   else:
-    let valuePtr = lru.cache.getPtr(keyHash.toSubhash(), key)
-    if valuePtr != nil:
-      template value(): untyped {.inject.} = toLent(valuePtr)
-      body
-
-template withReadValue*[K, V](
-    lru: var ConcurrentLruCache[K, V], key: K, value, body: untyped
-) =
-  mixin hash
-  let keyHash = hash(key)
-  if lru.threadSafe:
-    let
-      sh = keyHash.toSubhash()
-      s = addr lru.shards[keyHash.toShardIdx(lru.shardBits)]
-    var found = false
-
-    s.lock.withReadLock:
-      let valuePtr = s.cache.peekPtr(sh, key)
-      if valuePtr != nil:
-        found = true
-        template value(): untyped {.inject.} = toLent(valuePtr)
-        body
-
-    if found:
-      inc tlsLruGetCounter
-      if (tlsLruGetCounter and SAMPLE_MASK) == 0'u32:
-        s.lock.withWriteLock:
-          s.cache.moveToFront(sh, key)
-  else:
-    let valuePtr = lru.cache.getPtr(keyHash.toSubhash(), key)
+    let valuePtr = lru.cache.getPtr(keyHash.subhash, key)
     if valuePtr != nil:
       template value(): untyped {.inject.} = toLent(valuePtr)
       body
 
 proc putByHash*[K, V](
-    lru: var ConcurrentLruCache[K, V], keyHash: Hash, key: K, val: V
+    lru: var ConcurrentLruCache[K, V], keyHash: KeyHash, key: K, val: V
 ) =
   if lru.threadSafe:
     let
-      sh = keyHash.toSubhash()
-      s = addr lru.shards[keyHash.toShardIdx(lru.shardBits)]
+      sh = keyHash.subhash
+      s = addr lru.shards[keyHash.shardIdx]
     s.lock.withWriteLock:
       if s.cache.put(sh, key, val):
         s.usedCount.store(s.cache.len, moRelaxed)
   else:
-    lru.cache.put(keyHash.toSubhash(), key, val)
+    lru.cache.put(keyHash.subhash, key, val)
+
+template withReadValue*[K, V](
+    lru: var ConcurrentLruCache[K, V], key: K, value, body: untyped
+) =
+  let keyHash = lru.toKeyHash(key)
+  if lru.threadSafe:
+    let
+      sh = keyHash.subhash
+      s = addr lru.shards[keyHash.shardIdx]
+    var found = false
+
+    s.lock.withReadLock:
+      let valuePtr = s.cache.peekPtr(sh, key)
+      if valuePtr != nil:
+        found = true
+        template value(): untyped {.inject.} = toLent(valuePtr)
+        body
+
+    if found:
+      inc tlsLruGetCounter
+      if (tlsLruGetCounter and SAMPLE_MASK) == 0'u32:
+        s.lock.withWriteLock:
+          s.cache.moveToFront(sh, key)
+  else:
+    let valuePtr = lru.cache.getPtr(keyHash.subhash, key)
+    if valuePtr != nil:
+      template value(): untyped {.inject.} = toLent(valuePtr)
+      body
 
 proc put*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V) =
-  lru.putByHash(hash(key), key, val)
+  lru.putByHash(lru.toKeyHash(key), key, val)
 
 proc pop*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
   if lru.threadSafe:
