@@ -800,64 +800,66 @@ template isPrecompile*(fork: EVMFork, codeAddress: Address): bool =
 const
   enablePrecompileCache = true
 
-  MAX_CACHED_PRECOMPILE_INPUT = 192
-  MAX_CACHED_PRECOMPILE_OUTPUT = 128
-
-  # Only precompiles that have input and outputs less than these limits above
-  # are cached. We also don't cache precompiles which are generally fast such as
-  # the hash functions.
-  cachedPrecompiles = {
-    # Frontier to Spurious Dragron
-    paEcRecover, # IN=128 OUT=32
-    #paSha256, # IN=variable OUT=32
-    #paRipeMd160, # IN=variable OUT=32
-    #paIdentity, # IN=variable OUT=variable
-    # Byzantium and Constantinople
-    #paModExp,
-    paEcAdd,
-    paEcMul,
-    paPairing,
-    # Istanbul
-    #paBlake2bf,
-    # Cancun
-    paPointEvaluation,
-    # Prague (EIP-2537)
-    #paBlsG1Add,
-    paBlsG1MultiExp,
-    #paBlsG2Add,
-    #paBlsG2MultiExp,
-    #paBlsPairing,
-    paBlsMapG1,
-    #paBlsMapG2,
-    # Osaka
-    paP256Verify,
-  }
-
-type
-  PrecompileCacheKey = ArrayBuf[MAX_CACHED_PRECOMPILE_INPUT, byte]
-
-  PrecompileCacheValue = object
-    fork: EVMFork
-    gasUsed: GasInt
-    output: ArrayBuf[MAX_CACHED_PRECOMPILE_OUTPUT, byte]
-
-func hash(k: PrecompileCacheKey): Hash =
-  hash(k.data())
-
-const
-  precompileCacheBytes = 1_000_000  # ~1MB per cached precompile
-  lruOverhead = 20
-  precompileCacheCapacity =
-    precompileCacheBytes div
-    (sizeof(PrecompileCacheKey) + sizeof(PrecompileCacheValue) + lruOverhead)
-
-var precompileCaches: array[Precompiles, ConcurrentLruCache[PrecompileCacheKey, PrecompileCacheValue]]
-
-proc initPrecompileCaches() =
-  for p in cachedPrecompiles:
-    precompileCaches[p].init(precompileCacheCapacity, initialSize = precompileCacheCapacity)
-
 when enablePrecompileCache:
+  type
+    # Input bytes for a precompile, sized to its maximum cacheable input `I`.
+    # `ArrayBuf` tracks the actual length, so inputs shorter than `I` are
+    # distinguished from each other and from a full-length input.
+    PrecompileCacheKey[I: static int] = ArrayBuf[I, byte]
+
+    # A cached precompile result: the fork it was produced under (a hit is only
+    # valid within the same fork), the gas it consumed and its output (up to `O`
+    # bytes; `ArrayBuf` tracks the actual length).
+    PrecompileCacheValue[O: static int] = object
+      fork: EVMFork
+      gasUsed: GasInt
+      output: ArrayBuf[O, byte]
+
+  func hash[I: static int](k: PrecompileCacheKey[I]): Hash =
+    hash(k.data())
+
+  const
+    precompileCacheBytes = 1_000_000 # ~1MB budget per cached precompile
+    lruOverhead = 20
+
+  # One cache per cached precompile, with the key and value buffers sized to
+  # exactly that precompile's input and output byte counts (see IN/OUT). Sizing
+  # each cache individually keeps entries compact so the byte budget holds more
+  # of them. Only precompiles with small, fixed-size input and output are cached;
+  # the generally-fast hash precompiles (sha256, ripemd160, identity) and the
+  # variable-length ones (modExp, pairings, multi-exp) are not.
+  var
+    ecRecoverCache: ConcurrentLruCache[PrecompileCacheKey[128], PrecompileCacheValue[32]]  # IN=128 OUT=32
+    ecAddCache: ConcurrentLruCache[PrecompileCacheKey[128], PrecompileCacheValue[64]]  # IN=128 OUT=64
+    ecMulCache: ConcurrentLruCache[PrecompileCacheKey[96], PrecompileCacheValue[64]]   # IN=96  OUT=64
+    blake2bfCache: ConcurrentLruCache[PrecompileCacheKey[213], PrecompileCacheValue[64]]  # IN=213 OUT=64
+    pointEvaluationCache: ConcurrentLruCache[PrecompileCacheKey[192], PrecompileCacheValue[64]]  # IN=192 OUT=64
+    blsG1AddCache: ConcurrentLruCache[PrecompileCacheKey[256], PrecompileCacheValue[128]] # IN=256 OUT=128
+    blsG2AddCache: ConcurrentLruCache[PrecompileCacheKey[512], PrecompileCacheValue[256]] # IN=512 OUT=256
+    blsMapG1Cache: ConcurrentLruCache[PrecompileCacheKey[64], PrecompileCacheValue[128]]  # IN=64  OUT=128
+    blsMapG2Cache: ConcurrentLruCache[PrecompileCacheKey[128], PrecompileCacheValue[256]] # IN=128 OUT=256
+    p256VerifyCache: ConcurrentLruCache[PrecompileCacheKey[160], PrecompileCacheValue[32]]  # IN=160 OUT=32
+
+  proc initCache[I, O: static int](
+      cache: var ConcurrentLruCache[PrecompileCacheKey[I], PrecompileCacheValue[O]]) =
+    # Give every cache the same byte budget; smaller entries get proportionally
+    # more slots. `I`/`O` are inferred from the cache's type.
+    let capacity = precompileCacheBytes div
+      (sizeof(PrecompileCacheKey[I]) + sizeof(PrecompileCacheValue[O]) + lruOverhead)
+    cache.init(capacity, initialSize = capacity)
+
+  proc initPrecompileCaches() =
+    initCache(ecRecoverCache)
+    initCache(ecAddCache)
+    initCache(ecMulCache)
+    initCache(blake2bfCache)
+    initCache(pointEvaluationCache)
+    initCache(blsG1AddCache)
+    initCache(blsG2AddCache)
+    initCache(blsMapG1Cache)
+    initCache(blsMapG2Cache)
+    initCache(p256VerifyCache)
+
   initPrecompileCaches()
 
 template handlePrecompileResult(c: Computation, precompile: Precompiles, fork: EVMFork, res: EvmResultVoid) =
@@ -894,41 +896,59 @@ template dispatchPrecompile(c: Computation, precompile: Precompiles, fork: EVMFo
   of paBlsMapG2: blsMapG2(c)
   of paP256Verify: p256verify(c)
 
-proc execPrecompile*(c: Computation, precompile: Precompiles) =
-  if c.balTrackerEnabled:
-    c.vmState.balTracker.trackAddressAccess(precompileAddrs[precompile])
+when enablePrecompileCache:
+  proc execCachedPrecompile[I, O: static int](
+      c: Computation, precompile: Precompiles, fork: EVMFork,
+      cache: var ConcurrentLruCache[PrecompileCacheKey[I], PrecompileCacheValue[O]]
+  ): EvmResultVoid =
+    ## Run `precompile` through its dedicated result cache. The key/value sizes
+    ## `I`/`O` are inferred from `cache`, so each call site only names the cache.
+    if c.msg.data.len > I:
+      # Larger than this precompile's cache key can hold - run uncached.
+      return dispatchPrecompile(c, precompile, fork)
 
-  let
-    fork = c.fork
-    cacheable =
-      when enablePrecompileCache:
-        precompile in cachedPrecompiles and c.msg.data.len <= MAX_CACHED_PRECOMPILE_INPUT
-      else:
-        false
-
-  var res: EvmResultVoid
-  if cacheable:
     let
-      key = PrecompileCacheKey.initCopyFrom(c.msg.data)
+      key = PrecompileCacheKey[I].initCopyFrom(c.msg.data)
       keyHash = hash(key) # hash once and reuse for both the lookup and the put
 
     var hit = false
-    precompileCaches[precompile].withReadValueByHash(keyHash, key, cached):
+    cache.withReadValueByHash(keyHash, key, cached):
       if cached.fork == fork:
-        res = c.gasMeter.consumeGas(cached.gasUsed, reason = "Precompile cache hit")
-        if res.isOk():
+        result = c.gasMeter.consumeGas(cached.gasUsed, reason = "Precompile cache hit")
+        if result.isOk():
           assign(c.output, cached.output.data())
         hit = true
 
     if not hit:
       let gasBefore = c.gasMeter.gasRemaining
-      res = dispatchPrecompile(c, precompile, fork)
-      if res.isOk() and c.output.len <= MAX_CACHED_PRECOMPILE_OUTPUT:
-        precompileCaches[precompile].putByHash(keyHash, key, PrecompileCacheValue(
+      result = dispatchPrecompile(c, precompile, fork)
+      if result.isOk() and c.output.len <= O:
+        cache.putByHash(keyHash, key, PrecompileCacheValue[O](
           fork: fork,
           gasUsed: gasBefore - c.gasMeter.gasRemaining,
-          output: ArrayBuf[MAX_CACHED_PRECOMPILE_OUTPUT, byte].initCopyFrom(c.output)))
-  else:
-    res = dispatchPrecompile(c, precompile, fork)
+          output: ArrayBuf[O, byte].initCopyFrom(c.output)))
 
-  handlePrecompileResult(c, precompile, fork, res)
+proc execPrecompile*(c: Computation, precompile: Precompiles) =
+  if c.balTrackerEnabled:
+    c.vmState.balTracker.trackAddressAccess(precompileAddrs[precompile])
+
+  let res =
+    when enablePrecompileCache:
+      # Dispatch to the precompile's exactly-sized cache; the sizes are carried
+      # by each cache's type. Uncached precompiles fall through to `else`.
+      case precompile
+      of paEcRecover:       execCachedPrecompile(c, precompile, c.fork, ecRecoverCache)
+      of paEcAdd:           execCachedPrecompile(c, precompile, c.fork, ecAddCache)
+      of paEcMul:           execCachedPrecompile(c, precompile, c.fork, ecMulCache)
+      of paBlake2bf:        execCachedPrecompile(c, precompile, c.fork, blake2bfCache)
+      of paPointEvaluation: execCachedPrecompile(c, precompile, c.fork, pointEvaluationCache)
+      of paBlsG1Add:        execCachedPrecompile(c, precompile, c.fork, blsG1AddCache)
+      of paBlsG2Add:        execCachedPrecompile(c, precompile, c.fork, blsG2AddCache)
+      of paBlsMapG1:        execCachedPrecompile(c, precompile, c.fork, blsMapG1Cache)
+      of paBlsMapG2:        execCachedPrecompile(c, precompile, c.fork, blsMapG2Cache)
+      of paP256Verify:      execCachedPrecompile(c, precompile, c.fork, p256VerifyCache)
+      else:                 dispatchPrecompile(c, precompile, c.fork)
+    else:
+      dispatchPrecompile(c, precompile, c.fork)
+
+  handlePrecompileResult(c, precompile, c.fork, res)
