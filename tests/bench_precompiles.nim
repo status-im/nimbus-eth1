@@ -7,9 +7,13 @@
 
 # Micro-benchmark for the precompile result cache (see precompiles.nim).
 #
-# Each precompile's most expensive ("slow") input is timed twice - once with the
-# cache enabled (a 100% cache-hit workload) and once disabled - and the results
-# are printed side by side with the speedup.
+# Each precompile's most expensive ("slow") input is timed three ways and the
+# results are printed side by side:
+#   - hit:      cache enabled, same input repeated (steady-state cache hit)
+#   - miss:     cache enabled, entry evicted before every call (lookup miss +
+#               compute + put). This includes the forced eviction, so it slightly
+#               overstates a true single miss - most visible on cheap precompiles.
+#   - disabled: cache disabled (the raw precompile cost)
 #
 #   nim c -d:release -o:build/bench_precompiles tests/bench_precompiles.nim
 #   ./build/bench_precompiles
@@ -25,6 +29,7 @@ import
     evm/state,
     evm/types,
     constants,
+    concurrency/lru,
     evm/precompiles {.all.}],
   eth/common/base
 
@@ -98,8 +103,17 @@ proc scenarios(precompile: Precompiles, inputs: seq[seq[byte]]):
     # FAST: empty input. SLOW: largest cacheable input (512 bytes).
     (newSeq[byte](0), newSeq[byte](512), "0B vs 512B input (max cacheable)")
   of paEcAdd:
-    # FAST: infinity + infinity (all zeros). SLOW: two real curve points.
-    (newSeq[byte](128), padded(fixture, 128), "0+0 vs P+Q")
+    # FAST: infinity + infinity (all zeros, the cheap early-out).
+    # SLOW: two real curve points (a genuine field-arithmetic addition).
+    # inputs[0] is the shortest fixture, which is all-zeros (infinity) and would
+    # measure the same trivial path as FAST; pick a full 128-byte input whose
+    # first point is non-zero instead.
+    var slow = padded(fixture, 128)
+    for inp in inputs:
+      if inp.len >= 128 and inp[0] != 0:
+        slow = padded(inp, 128)
+        break
+    (newSeq[byte](128), slow, "0+0 vs P+Q")
   of paEcMul:
     # Same point; FAST scalar = 0 (-> infinity), SLOW scalar = 2^256-1.
     var fast = padded(fixture, 96)
@@ -152,8 +166,31 @@ proc run(c: Computation, precompile: Precompiles) {.inline.} =
   c.error = nil
   c.execPrecompile(precompile)
 
-proc bench(vmState: BaseVMState, precompile: Precompiles, input: seq[byte]):
-    float =
+proc evict(precompile: Precompiles, input: openArray[byte]) =
+  ## Remove this precompile's cached entry (using the same key the cache builds
+  ## for `input`) so the next call is a cache miss. The cache must be enabled.
+  template d(cache: untyped) =
+    cache.del(cache.toCacheKey(input))
+  case precompile
+  of paEcRecover: d(ecRecoverCache)
+  of paSha256, paRipeMd160, paIdentity: discard # not cached
+  of paModExp: d(modExpCache)
+  of paEcAdd: d(ecAddCache)
+  of paEcMul: d(ecMulCache)
+  of paPairing: d(pairingCache)
+  of paBlake2bf: d(blake2bfCache)
+  of paPointEvaluation: d(pointEvaluationCache)
+  of paBlsG1Add: d(blsG1AddCache)
+  of paBlsG1MultiExp: d(blsG1MultiExpCache)
+  of paBlsG2Add: d(blsG2AddCache)
+  of paBlsG2MultiExp: d(blsG2MultiExpCache)
+  of paBlsPairing: d(blsPairingCache)
+  of paBlsMapG1: d(blsMapG1Cache)
+  of paBlsMapG2: d(blsMapG2Cache)
+  of paP256Verify: d(p256VerifyCache)
+
+proc bench(vmState: BaseVMState, precompile: Precompiles, input: seq[byte],
+           forceMiss: bool): float =
   let msg = Message(
     kind: CallKind.Call,
     gas: 1_000_000_000,
@@ -163,51 +200,100 @@ proc bench(vmState: BaseVMState, precompile: Precompiles, input: seq[byte]):
     flags: {MsgFlags.Precompile})
   let c = newComputation(vmState, false, msg)
 
-  for _ in 0 ..< warmupIters:
+  template once() =
+    if forceMiss:
+      evict(precompile, input)
     run(c, precompile)
+
+  for _ in 0 ..< warmupIters:
+    once()
 
   var iters = 0
   let start = getMonoTime()
   while true:
-    run(c, precompile)
+    once()
     inc iters
     if (iters and 0x3FF) == 0 and
        (getMonoTime() - start).inNanoseconds >= budgetNs:
       break
   (getMonoTime() - start).inNanoseconds.float / iters.float
 
+proc disposeAllCaches() =
+  ## Free and reset every cache back to the UNINITIALIZED state so it can be
+  ## re-initialized in a different mode (`init` asserts UNINITIALIZED, and
+  ## `dispose` alone leaves it DISPOSED). A no-op on a fresh cache.
+  template z(cache: untyped) =
+    cache.dispose()
+    reset(cache)
+  z ecRecoverCache
+  z modExpCache
+  z ecAddCache
+  z ecMulCache
+  z pairingCache
+  z blake2bfCache
+  z pointEvaluationCache
+  z blsG1AddCache
+  z blsG1MultiExpCache
+  z blsG2AddCache
+  z blsG2MultiExpCache
+  z blsPairingCache
+  z blsMapG1Cache
+  z blsMapG2Cache
+  z p256VerifyCache
+
+proc runComparison(
+    vmState: BaseVMState, threadSafe: bool,
+    work: seq[tuple[precompile: Precompiles, input: seq[byte], note: string]]) =
+  # Hit (same input repeated) and miss (entry evicted before every call) both
+  # need the cache enabled; disabled measures the raw precompile cost. Re-init
+  # the caches in the requested mode (dispose any previous run's caches first).
+  disposeAllCaches()
+  initPrecompileCaches(threadSafe)
+  precompileCacheActive = true
+  var hit, miss: seq[float]
+  for w in work:
+    hit.add bench(vmState, w.precompile, w.input, forceMiss = false)
+    miss.add bench(vmState, w.precompile, w.input, forceMiss = true)
+
+  precompileCacheActive = false
+  var disabled: seq[float]
+  for w in work:
+    disabled.add bench(vmState, w.precompile, w.input, forceMiss = false)
+
+  echo "precompile cache: hit vs miss vs disabled (fork=", vmState.fork,
+    ", threadSafe=", threadSafe,
+    ", slow input; miss includes the eviction used to force it)"
+  echo align("precompile", 18), align("hit ns", 12), align("miss ns", 12),
+       align("disabled ns", 13), align("hit speedup", 13), align("miss ovh", 11),
+       "  scenario"
+  for i in 0 ..< work.len:
+    let
+      h = hit[i]
+      m = miss[i]
+      d = disabled[i]
+      hitSpeedup = if h > 0: d / h else: 0.0
+      missOverhead = if d > 0: m / d else: 0.0
+    echo align($work[i].precompile, 18),
+         align(formatFloat(h, ffDecimal, 1), 12),
+         align(formatFloat(m, ffDecimal, 1), 12),
+         align(formatFloat(d, ffDecimal, 1), 13),
+         align(formatFloat(hitSpeedup, ffDecimal, 1) & "x", 13),
+         align(formatFloat(missOverhead, ffDecimal, 2) & "x", 11),
+         "  ", work[i].note
+
 proc main() =
   let vmState = newVmState()
 
-  # Build the work list once so both runs use identical inputs.
-  var work: seq[tuple[precompile: Precompiles, fast, slow: seq[byte], note: string]]
+  # Build the work list once so every run uses identical inputs. Each precompile
+  # is timed on its most expensive ("slow") cacheable input.
+  var work: seq[tuple[precompile: Precompiles, input: seq[byte], note: string]]
   for (precompile, file) in cases:
-    let (fast, slow, note) = scenarios(precompile, validInputs(file))
-    work.add (precompile, fast, slow, note)
+    let (_, slow, note) = scenarios(precompile, validInputs(file))
+    work.add (precompile, slow, note)
 
-  proc runAll(): seq[tuple[fast, slow: float]] =
-    for w in work:
-      result.add (bench(vmState, w.precompile, w.fast),
-                  bench(vmState, w.precompile, w.slow))
-
-  setPrecompileCacheEnabled(true)
-  let cached = runAll()
-  setPrecompileCacheEnabled(false)
-  let uncached = runAll()
-
-  echo "precompile cache: cached vs uncached (fork=", vmState.fork,
-    ", timing the slow scenario)"
-  echo align("precompile", 18), align("cached ns", 13), align("uncached ns", 13),
-       align("speedup", 11), "  scenario"
-  for i in 0 ..< work.len:
-    let
-      c = cached[i].slow
-      u = uncached[i].slow
-      speedup = if c > 0: u / c else: 0.0
-    echo align($work[i].precompile, 18),
-         align(formatFloat(c, ffDecimal, 1), 13),
-         align(formatFloat(u, ffDecimal, 1), 13),
-         align(formatFloat(speedup, ffDecimal, 1) & "x", 11),
-         "  ", work[i].note
+  # Single-threaded caches (shardBits = 0, no locking) then thread-safe caches.
+  runComparison(vmState, threadSafe = false, work)
+  echo ""
+  runComparison(vmState, threadSafe = true, work)
 
 main()
