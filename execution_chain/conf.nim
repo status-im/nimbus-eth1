@@ -392,6 +392,12 @@ type
       desc: "Eagerly check state roots when syncing finalized blocks"
       name: "debug-eager-state-root".}: bool
 
+    precompileCache* {.
+      hidden
+      defaultValue: false
+      desc: "Enable precompile caching"
+      name: "debug-precompile-cache".}: bool
+
     deserializeFcState* {.
       hidden
       defaultValue: true

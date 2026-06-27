@@ -7,16 +7,12 @@
 
 # Micro-benchmark for the precompile result cache (see precompiles.nim).
 #
-# For each cached precompile we time two scenarios:
-#   * FAST  - parameters that trigger the cheapest possible computation
-#   * SLOW  - parameters that trigger the most expensive computation
-# both repeated with a fixed input (a 100% cache-hit workload).
+# Each precompile's most expensive ("slow") input is timed twice - once with the
+# cache enabled (a 100% cache-hit workload) and once disabled - and the results
+# are printed side by side with the speedup.
 #
-# Build the cached and uncached variants and compare:
 #   nim c -d:release -o:build/bench_precompiles tests/bench_precompiles.nim
-#   nim c -d:release -d:disablePrecompileCache -o:build/bench_precompiles_nocache tests/bench_precompiles.nim
-#   ./build/bench_precompiles_nocache    # "before"
-#   ./build/bench_precompiles            # "after"
+#   ./build/bench_precompiles
 
 import
   std/[json, os, strutils, monotimes, times],
@@ -182,19 +178,36 @@ proc bench(vmState: BaseVMState, precompile: Precompiles, input: seq[byte]):
 
 proc main() =
   let vmState = newVmState()
-  when enablePrecompileCache:
-    echo "precompile cache: ENABLED  (fork=", vmState.fork, ")"
-  else:
-    echo "precompile cache: DISABLED (fork=", vmState.fork, ")"
-  echo align("precompile", 14), align("fast ns/op", 13), align("slow ns/op", 13),
-       "  scenario (fast vs slow)"
+
+  # Build the work list once so both runs use identical inputs.
+  var work: seq[tuple[precompile: Precompiles, fast, slow: seq[byte], note: string]]
   for (precompile, file) in cases:
     let (fast, slow, note) = scenarios(precompile, validInputs(file))
-    let fastNs = bench(vmState, precompile, fast)
-    let slowNs = bench(vmState, precompile, slow)
-    echo align($precompile, 14),
-         align(formatFloat(fastNs, ffDecimal, 1), 13),
-         align(formatFloat(slowNs, ffDecimal, 1), 13),
-         "  ", note
+    work.add (precompile, fast, slow, note)
+
+  proc runAll(): seq[tuple[fast, slow: float]] =
+    for w in work:
+      result.add (bench(vmState, w.precompile, w.fast),
+                  bench(vmState, w.precompile, w.slow))
+
+  setPrecompileCacheEnabled(true)
+  let cached = runAll()
+  setPrecompileCacheEnabled(false)
+  let uncached = runAll()
+
+  echo "precompile cache: cached vs uncached (fork=", vmState.fork,
+    ", timing the slow scenario)"
+  echo align("precompile", 18), align("cached ns", 13), align("uncached ns", 13),
+       align("speedup", 11), "  scenario"
+  for i in 0 ..< work.len:
+    let
+      c = cached[i].slow
+      u = uncached[i].slow
+      speedup = if c > 0: u / c else: 0.0
+    echo align($work[i].precompile, 18),
+         align(formatFloat(c, ffDecimal, 1), 13),
+         align(formatFloat(u, ffDecimal, 1), 13),
+         align(formatFloat(speedup, ffDecimal, 1) & "x", 11),
+         "  ", work[i].note
 
 main()
