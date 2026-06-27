@@ -222,6 +222,10 @@ func updateHead(c: ForkedChainRef, head: BlockRef) =
     head.number)
 
 func updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) =
+  # Invariant: must only be called from inside a queue handler (currently
+  # `validateBlock` and `forkChoice`). `preflightForkChoice` runs synchronously
+  # in the RPC handler and relies on this proc — and `updateBase` — never
+  # mutating `c.heads`/`hashToBlock` outside the single-consumer worker.
   # Pruning
   # ::
   #                       - B5 - B6 - B7 - B8
@@ -296,6 +300,11 @@ func updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
     c.latest = candidate
 
 proc updateBase(c: ForkedChainRef, base: BlockRef): uint =
+  ## Invariant: must only be called from inside a queue handler (currently
+  ## `processUpdateBase`, enqueued via `queueUpdateBase`). `preflightForkChoice`
+  ## runs synchronously in the RPC handler and relies on this proc — and
+  ## `updateFinalized` — never mutating `c.heads`/`hashToBlock` outside the
+  ## single-consumer worker.
   ##
   ##     A1 - A2 - A3          D5 - D6
   ##    /                     /
@@ -743,7 +752,10 @@ proc forkChoice*(c: ForkedChainRef,
     if safe.isOk:
       c.fcuSafe.number = safe.number
       c.fcuSafe.hash = safeHash
-      ?safe.txFrame.fcuSafe(c.fcuSafe)
+      # Use `.expect(...)` like the sibling fcuHead/fcuFinalized writes so a
+      # DB-level failure here is a hard fault rather than a recoverable err -
+      # the RPC handler may have already acked the fCU before we run.
+      safe.txFrame.fcuSafe(c.fcuSafe).expect("fcuSafe OK")
 
   if headHash == c.latest.hash:
     if finalizedHash == zeroHash32:
@@ -812,6 +824,46 @@ template queueForkChoice*(c: ForkedChainRef,
   )
   await c.queue.addLast(item)
   item.responseFut
+
+func preflightForkChoice*(c: ForkedChainRef,
+                          headHash: Hash32,
+                          finalizedHash: Hash32,
+                          safeHash: Hash32 = zeroHash32):
+                            Result[void, string] =
+  ## Pre-validate a forkchoice update against the current in-memory chain,
+  ## mirroring the failure paths inside `forkChoice()`. Run this from the RPC
+  ## handler before enqueuing so we don't ack a request that the queue worker
+  ## would later reject (since the ack has already been sent by then).
+  ##
+  ## Invariant: between this check and the worker actually running our
+  ## enqueued item, the only mutators of `c.heads`/`hashToBlock` are
+  ## previously-queued `validateBlock` (adds heads, never removes the
+  ## validated one) and `updateFinalized` (only prunes branches that don't
+  ## contain the finalized block we already verified is on head's chain).
+  ## So a successful preflight remains valid by the time the worker runs.
+  let head = c.hashToBlock.getOrDefault(headHash)
+  if head.isNil:
+    return err("Cannot find head block: " & headHash.short)
+
+  if safeHash != zeroHash32 and c.hashToBlock.getOrDefault(safeHash).isNil:
+    return err("Cannot find safe block: " & safeHash.short)
+
+  if finalizedHash != zeroHash32:
+    let fin = c.hashToBlock.getOrDefault(finalizedHash)
+    if fin.isNil:
+      return err("Cannot find finalized block: " & finalizedHash.short)
+    if fin.number > head.number:
+      return err("Invalid finalizedHash: block is newer than head block")
+    if c.heads.len > 1:
+      var found = false
+      for it in ancestors(head):
+        if it == fin:
+          found = true
+          break
+      if not found:
+        return err("Invalid finalizedHash: block not in argument head ancestor lineage")
+
+  ok()
 
 func resolvedFinHash*(c: ForkedChainRef): Hash32 =
   c.latestFinalized.hash
