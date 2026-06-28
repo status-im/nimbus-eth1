@@ -104,15 +104,16 @@ template blocksCollect*(
         if bottom < ctx.subState.topNum:
           discard ctx.blocksUnprocFetch(ctx.subState.topNum-bottom).expect("iv")
 
-        # Fetch blocks and verify result
-        var blocks = buddy.blocksFetch(nFetchBodiesRequest, info).valueOr:
+        # Fetch blocks (with block access lists) and verify result
+        var fetched = buddy.blocksFetch(nFetchBodiesRequest, info).valueOr:
           break fetchBlocksBody                      # done, exit this function
 
         # Set flag that there were some blocks fetched at all
         ctx.pool.seenData = true                     # blocks data exist
 
         # Import blocks (no staging), async/template
-        nImported += buddy.blocksImport(blocks, buddy.peerID, info)
+        nImported += buddy.blocksImport(
+          fetched.blocks, fetched.bals, fetched.peerID, info)
 
         # Sync status logging
         if 0 < nImported:
@@ -132,7 +133,7 @@ template blocksCollect*(
             nImported = 0
 
         # Import may be incomplete, so a partial roll back may be needed
-        let lastBn = blocks[^1].header.number
+        let lastBn = fetched.blocks[^1].header.number
         if ctx.subState.topNum < lastBn:
           ctx.blocksUnprocAppend(ctx.subState.topNum + 1, lastBn)
 
@@ -155,14 +156,13 @@ template blocksCollect*(
 
         let
           # Insert blocks list on the `staged` queue
-          key = rc.value[0].header.number
+          key = rc.value.blocks[0].header.number
           qItem = ctx.blocksStagedQueueInsert(key).valueOr:
             raiseAssert info & ": duplicate key on staged queue iv=" &
-              (key, rc.value[^1].header.number).toStr
+              (key, rc.value.blocks[^1].header.number).toStr
 
-        qItem.data.blocks = rc.value                # store `blocks[]` list
-        qItem.data.peerID = buddy.peerID
-        nQueued += rc.value.len                     # statistics
+        qItem.data = rc.value                       # store blocks + access lists
+        nQueued += rc.value.blocks.len              # statistics
         # End if
 
       # End block: `fetchBlocksBody`
@@ -261,7 +261,8 @@ template blocksUnstage*(
       ctx.blocksStagedQueueDelete qItem.key
 
       # Import blocks list, async/template
-      nImported += buddy.blocksImport(qItem.data.blocks,qItem.data.peerID, info)
+      nImported += buddy.blocksImport(
+        qItem.data.blocks, qItem.data.bals, qItem.data.peerID, info)
       nUnstaged.inc
 
       # Sync status logging

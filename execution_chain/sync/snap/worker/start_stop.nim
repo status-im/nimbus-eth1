@@ -46,6 +46,10 @@ proc setupServices*(ctx: SnapCtxRef; info: static[string]): bool =
   ctx.pool.mptAsm = MptAsmRef.init(ctx.pool.baseDir,info).valueOr:
     return false
 
+  # Set up manual beacon target request. If set, there is no point in
+  # waiting for inital CL to sed updates.
+  ctx.pool.beaconTarget = ctx.beaconInitTarget()
+
   # Set up ticker, disabled by default
   if ctx.pool.ticker.isNil:
     ctx.pool.ticker = proc(ctx: SnapCtxRef) = discard
@@ -73,7 +77,8 @@ proc startSyncPeer*(buddy: SnapPeerRef): bool =
   # Initialise peer data
   buddy.only.peerType = buddy.peer.clientId.split('/',1)[0]
   buddy.only.failedReq = PeerFirstFetchReq(
-    stateRoot: StateRootSet.init stateDbCapacity)
+    stateRoot: StateRootSet.init stateDbCapacity,
+    accPath:   AccPathSet.init trieNodeAccPathCapacity)
 
   # Reset global register for fall-back peer
   ctx.pool.lastSlowPeer = Opt.none(Hash)

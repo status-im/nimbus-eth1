@@ -14,7 +14,7 @@ import
   eth/common,
   ../db/ledger,
   ../db/aristo/aristo_proof,
-  ./witness_types
+  ./[witness_types, stateless_types]
 
 template isAddress(bytes: openArray[byte]): bool =
   bytes.len() == 20
@@ -84,9 +84,9 @@ func verifyHeaders*(
 
   # Rlp decode the headers in the witness
   var headers: seq[Header]
-  for header in witness.headers:
+  for h in witness.headers:
     try:
-      headers.add(rlp.decode(header, Header))
+      headers.add(rlp.decode(h.asSeq(), Header))
     except RlpError as e:
       return err("Failed to decode header in witness: " & e.msg)
 
@@ -113,7 +113,7 @@ func verifyHeaders*(
   ok(headers)
 
 func verifyState*(
-    witness: ExecutionWitness, preStateRoot: Hash32
+    witness: ExecutionWitnessWithKeys, preStateRoot: Hash32
 ): Result[void, string] =
   # Short path for emptyRoot -> empty trie: no accounts exist in the pre-state,
   # nothing to verify.

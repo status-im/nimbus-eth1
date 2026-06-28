@@ -54,10 +54,13 @@ type
     gasUsed*: GasInt
     blockRegularGasUsed*: GasInt
     blockStateGasUsed*: GasInt
+    txFee*: UInt256
 
   OutputResult* = object
     error*:   string
     output*:  seq[byte]
+
+  VoidResult* = object
 
   IntrinsicGas* = object
     regular*: GasInt

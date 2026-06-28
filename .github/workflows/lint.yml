@@ -43,7 +43,7 @@ jobs:
           version: 0.7.0
           options: "nimbus_verified_proxy/ portal/"
       - name: Check copyright year & version
-        if: ${{ !cancelled() }} && github.event_name == 'pull_request'
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
         run: |
           bash scripts/check_copyright_year.sh
           bash scripts/check_version.sh

@@ -88,8 +88,13 @@ in stdenv.mkDerivation rec {
     patchShebangs scripts vendor >/dev/null
   '';
 
-  # Generate the nimbus-build-system.paths file with vendor module paths.
   configurePhase = ''
+    # Avoid Nim cache permission errors.
+    export XDG_CACHE_HOME="$TMPDIR/.cache"
+    export NIMBLE_DIR="$TMPDIR/.nimble"
+    export NIMCACHE="$TMPDIR/nimcache"
+
+    # Generate the nimbus-build-system.paths file with vendor module paths.
     make nimbus-build-system-paths
   '';
 

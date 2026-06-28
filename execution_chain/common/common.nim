@@ -44,6 +44,10 @@ type
 
   ResolveFinHashCB* = proc(fin: Hash32) {.gcsafe, raises: [].}
 
+  HeaderTargetRequestCB* = proc(hash, finHash: Hash32) {.gcsafe, raises: [].}
+    ## Ask the syncer to fetch an unknown head from the `eth` network and
+    ## then activate the normal header-chain sync toward it.
+
   CommonRef* = ref object
     # all purpose storage
     db: CoreDbRef
@@ -78,6 +82,10 @@ type
 
     resolveFinHash: ResolveFinHashCB
 
+    headerTargetRequestCB: HeaderTargetRequestCB
+      ## Call back function asking the syncer to fetch an unknown forkchoice
+      ## head from peers (used when the head is not in our DB or quarantine).
+
     startOfHistory: Hash32
       ## This setting is needed for resuming blockwise syncying after
       ## installing a snapshot pivot. The default value for this field is
@@ -103,6 +111,19 @@ type
 
     statelessWitnessValidation*: bool
       ## Enable full validation of execution witnesses.
+
+    optimisticStatePrefetch*: bool
+      ## Optimistically pre-execute the transactions of a block on background
+      ## threads to warm database caches before the main thread executes them.
+
+    balStatePrefetch*: bool
+      ## Use the supplied block access list to prefetch the accounts and storage
+      ## slots of a block on background threads.
+
+    balStatePrefetchWorkers*: int
+      ## Number of background worker tasks used for block access list state
+      ## prefetching. 0 means use the same number of workers as the number of
+      ## available taskpool threads.
 
 # ------------------------------------------------------------------------------
 # Private helper functions
@@ -176,7 +197,10 @@ proc init(com         : CommonRef,
           genesis     : Genesis,
           initializeDb: bool,
           statelessProviderEnabled: bool,
-          statelessWitnessValidation: bool) =
+          statelessWitnessValidation: bool,
+          optimisticStatePrefetch: bool,
+          balStatePrefetch: bool,
+          balStatePrefetchWorkers: int) =
 
 
   config.daoCheck()
@@ -215,6 +239,9 @@ proc init(com         : CommonRef,
 
   com.statelessProviderEnabled = statelessProviderEnabled
   com.statelessWitnessValidation = statelessWitnessValidation
+  com.optimisticStatePrefetch = optimisticStatePrefetch
+  com.balStatePrefetch = balStatePrefetch
+  com.balStatePrefetchWorkers = balStatePrefetchWorkers
 
 proc isBlockAfterTtd(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
   if com.config.terminalTotalDifficulty.isNone:
@@ -239,6 +266,9 @@ proc new*(
     initializeDb = true;
     statelessProviderEnabled = false;
     statelessWitnessValidation = false;
+    optimisticStatePrefetch = false;
+    balStatePrefetch = false;
+    balStatePrefetchWorkers = 0;
       ): CommonRef =
 
   ## If genesis data is present, the forkIds will be initialized
@@ -251,7 +281,10 @@ proc new*(
     params.genesis,
     initializeDb,
     statelessProviderEnabled,
-    statelessWitnessValidation)
+    statelessWitnessValidation,
+    optimisticStatePrefetch,
+    balStatePrefetch,
+    balStatePrefetchWorkers)
 
 proc new*(
     _: type CommonRef;
@@ -260,7 +293,10 @@ proc new*(
     networkId: NetworkId = MainNet;
     initializeDb = true;
     statelessProviderEnabled = false;
-    statelessWitnessValidation = false
+    statelessWitnessValidation = false;
+    optimisticStatePrefetch = false;
+    balStatePrefetch = false;
+    balStatePrefetchWorkers = 0;
       ): CommonRef =
 
   ## There is no genesis data present
@@ -273,7 +309,10 @@ proc new*(
     nil,
     initializeDb,
     statelessProviderEnabled,
-    statelessWitnessValidation)
+    statelessWitnessValidation,
+    optimisticStatePrefetch,
+    balStatePrefetch,
+    balStatePrefetchWorkers)
 
 func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
   ## clone but replace the db
@@ -287,7 +326,10 @@ func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
     genesisHeader: com.genesisHeader,
     networkId    : com.networkId,
     statelessProviderEnabled: com.statelessProviderEnabled,
-    statelessWitnessValidation: com.statelessWitnessValidation
+    statelessWitnessValidation: com.statelessWitnessValidation,
+    optimisticStatePrefetch: com.optimisticStatePrefetch,
+    balStatePrefetch: com.balStatePrefetch,
+    balStatePrefetchWorkers: com.balStatePrefetchWorkers
   )
 
 func clone*(com: CommonRef): CommonRef =
@@ -428,6 +470,11 @@ proc resolveFinHash*(com: CommonRef; fin: Hash32) =
   if not com.resolveFinHash.isNil:
     com.resolveFinHash(fin)
 
+proc headerTargetRequest*(com: CommonRef; hash, finHash: Hash32) =
+  ## Request the syncer to fetch an unknown forkchoice head from peers.
+  if not com.headerTargetRequestCB.isNil:
+    com.headerTargetRequestCB(hash, finHash)
+
 # ------------------------------------------------------------------------------
 # Getters
 # ------------------------------------------------------------------------------
@@ -526,6 +573,10 @@ func `notifyBadBlock=`*(com: CommonRef; cb: NotifyBadBlockCB) =
 
 func `resolveFinHash=`*(com: CommonRef; cb: ResolveFinHashCB) =
   com.resolveFinHash = cb
+
+func `headerTargetRequest=`*(com: CommonRef; cb: HeaderTargetRequestCB) =
+  ## Activate or reset a call back handler for fetching unknown FCU heads.
+  com.headerTargetRequestCB = cb
 
 func `extraData=`*(com: CommonRef, val: string) =
   com.extraData = val

@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -22,6 +22,9 @@ import
 const
   extraTraceMessages = false
     ## Enable additional logging noise
+
+  AdmKeyNext* = @[byte STATE_ROOT_VID, byte STATE_ROOT_VID]
+    ## Start after any `SavedState` admin record(s)
 
 when extraTraceMessages:
   import
@@ -46,7 +49,7 @@ iterator walkKey*(rdb: RdbInst): tuple[rvid: RootedVertexID, data: HashKey] =
       break walkBody
     defer: rit.close()
 
-    rit.seekToFirst()
+    rit.seekToKey(AdmKeyNext)
     var key: RootedVertexID
     var value: HashKey
     var valid: bool
@@ -85,7 +88,7 @@ iterator walkVtx*(
       break walkBody
     defer: rit.close()
 
-    rit.seekToFirst()
+    rit.seekToKey(AdmKeyNext)
     var key: RootedVertexID
     var value: VertexRef
     var valid: bool

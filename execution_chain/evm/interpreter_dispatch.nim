@@ -75,10 +75,10 @@ proc beforeExecCall(c: Computation) =
         c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
         ledger.subBalance(c.msg.sender, c.msg.value)
         c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
-        ledger.addBalance(c.msg.contractAddress, c.msg.value)
+        ledger.addBalance(c.msg.contractAddress, c.msg.value, checkEmptyAccount = c.fork < FkParis)
       else:
         ledger.subBalance(c.msg.sender, c.msg.value)
-        ledger.addBalance(c.msg.contractAddress, c.msg.value)
+        ledger.addBalance(c.msg.contractAddress, c.msg.value, checkEmptyAccount = c.fork < FkParis)
 
     if c.fork >= FkAmsterdam:
       # EIP-7708: Emit transfer log for ETH-tx or contract call and CALL op code
@@ -136,14 +136,14 @@ proc beforeExecCreate(c: Computation): bool =
       c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
       ledger.subBalance(c.msg.sender, c.msg.value)
       c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
-      ledger.addBalance(c.msg.contractAddress, c.msg.value)
+      ledger.addBalance(c.msg.contractAddress, c.msg.value, checkEmptyAccount = c.fork < FkParis)
       ledger.clearStorage(c.msg.contractAddress)
-      # no need to check c.fork >= FkSpurious, it's FkAmsterdam
-      c.vmState.balTracker.trackIncNonceChange(c.msg.contractAddress)
-      ledger.incNonce(c.msg.contractAddress)
+      if c.fork >= FkSpurious:
+        c.vmState.balTracker.trackIncNonceChange(c.msg.contractAddress)
+        ledger.incNonce(c.msg.contractAddress)
     else:
       ledger.subBalance(c.msg.sender, c.msg.value)
-      ledger.addBalance(c.msg.contractAddress, c.msg.value)
+      ledger.addBalance(c.msg.contractAddress, c.msg.value, checkEmptyAccount = c.fork < FkParis)
       ledger.clearStorage(c.msg.contractAddress)
       if c.fork >= FkSpurious:
         # EIP161 nonce incrementation
@@ -221,13 +221,13 @@ proc executeOpcodes*(c: Computation) =
   block blockOne:
     let cont = c.continuation
     if cont.isNil:
-      let precompile = c.fork.getPrecompile(c.msg.codeAddress)
-      if precompile.isSome:
+      if MsgFlags.Precompile in c.msg.flags:
+        let precompile = c.fork.getPrecompile(c.msg.codeAddress)
         c.execPrecompile(precompile[])
         break blockOne
     else:
       c.continuation = nil
-      cont().isOkOr:
+      cont(c).isOkOr:
         handleEvmError(error)
         break blockOne
 
@@ -264,19 +264,28 @@ proc execCallOrCreate*(cParam: Computation) =
         break
       c.executeOpcodes()
       if c.continuation.isNil:
+        c.child = nil
         c.afterExec()
         break
-      (before, c.child, c, c.parent) =
-        (true, nil.Computation, c.child, c)
+
+      # recurse into the child computation
+      let child = c.child
+      child.parent = c
+      before = true
+      c = child
     if c.parent.isNil:
       break
     c.dispose()
-    (before, c.parent, c) =
-      (false, nil.Computation, c.parent)
+
+    # recurse out: child is still owned by the parent
+    before = false
+    c = c.parent
 
   while not c.isNil:
+    let p = c.parent
     c.dispose()
-    (c.parent, c) = (nil.Computation, c.parent)
+    c.child = nil
+    c = p
 
 func postExecComputation*(c: Computation) =
   if c.isSuccess:

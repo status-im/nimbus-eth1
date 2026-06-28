@@ -88,6 +88,8 @@ type
   HccSession = object
     ## Header cache state record
     mode: HeaderChainMode       # header chain state
+    stopNum: Opt[BlockNumber]   # syncing against a fixed base header
+    stopHash: Hash32            # ditto
     ante: Header                # antecedent, bottom of header chain
     head: Header                # top end of header chain, highest block number
     headHash: Hash32
@@ -355,7 +357,7 @@ func state*(hc: HeaderChainRef): HeaderChainMode =
   ##    collecting     -- put()
   ##    ready          -- complete()
   ##    orphan         -- n/a
-  ##    locked         -- importBlock() from FC module
+  ##    locked         -- can importBlock() from FC module (or something else)
   ##
   hc.session.mode
 
@@ -443,6 +445,16 @@ proc get*(hc: HeaderChainRef; hash: Hash32): Opt[Header] =
     return err()
   ok(move hdr)
 
+iterator incrFrom*(hc: HeaderChainRef, start = BlockNumber(0)): Header =
+  ## Read out stored headers with increasing block numbers, opionally
+  ## starting at `start`.
+  var bn = if 0 < start: start else: hc.session.ante.number
+  while true:
+    let header = hc.get(bn).valueOr:
+      break
+    bn.inc
+    yield header
+
 proc put*(
     hc: HeaderChainRef;
     rev: openArray[Header];
@@ -501,15 +513,21 @@ proc put*(
     return err("Argument rev[] exceeds chain head " &
       $hc.session.head.number)
 
-  # Check whether the `FC` module has changed and the current antecedent
-  # already is the end of it.
-  block:
+  if hc.session.stopNum.isNone():
+    # Check whether the `FC` module has changed and the current antecedent
+    # already is the end of it.
     let newMode = hc.tryFcParent(hc.session.ante)
     if newMode in {ready,orphan}:
       hc.session.mode = newMode
       return ok()
+  elif hc.session.ante.number <= hc.session.stopNum.unsafeGet():
+    # Oops, not allowed
+    hc.session.mode = orphan
+    debug "stop node mismatch => orphan", ante=hc.session.ante.number,
+      stopNum=hc.session.stopNum.unsafeGet()
+    return ok()
 
- # Start at the entry that is parent to `ante` (if any)
+  # Start at the entry that is parent to `ante` (if any)
   let offset = ((lastNumber + 1) - hc.session.ante.number).int
   if offset < rev.len:
     #
@@ -546,10 +564,19 @@ proc put*(
             number=hdr.number
 
       # Check whether `hdr` has a parent on the `FC` module.
-      let newMode = hc.tryFcParent(hdr)
-      if newMode in {ready,orphan}:
-        hc.session.mode = newMode
-        revTopInx = n                              # chaining headers stops here
+      if hc.session.stopNum.isNone():
+        let newMode = hc.tryFcParent(hdr)
+        if newMode in {ready,orphan}:
+          hc.session.mode = newMode
+          revTopInx = n                            # chaining headers stops here
+          break
+      elif hdr.number == 1 + hc.session.stopNum.unsafeGet():
+        hc.session.mode =
+          (if hdr.parentHash == hc.session.stopHash: ready else: orphan)
+        if hc.session.mode == orphan:
+          debug "stop node mismatch => orphan", hdr=hdr.number,
+            stopNum=hc.session.stopNum.unsafeGet()
+        revTopInx = n
         break
 
     # Store on database
@@ -578,6 +605,18 @@ proc commit*(hc: HeaderChainRef): Result[void,string] =
   ##
   ?hc.expectingMode(ready)
 
+  # Check for a blind stop
+  if hc.session.stopNum.isSome():
+    let stopNum = hc.session.stopNum.unsafeGet()
+    if hc.session.ante.number == 1 + stopNum and
+       hc.session.ante.parentHash == hc.session.stopHash:
+      hc.session.mode = locked                        # update internal state
+      return ok()
+    hc.session.mode = orphan
+    return err("Blind stop does not match" &
+      ", ante=" & $hc.session.ante.number &
+      ", stop=" & $stopNum)
+
   # The benign case: verify that `ante` has still parent on the `FC` module
   if hc.chain.hashToBlock.hasKey(hc.session.ante.parentHash):
     hc.session.mode = locked                          # update internal state
@@ -600,6 +639,28 @@ proc commit*(hc: HeaderChainRef): Result[void,string] =
   hc.session.mode = orphan
   err("Parent on FC module has been lost: obsolete branch segment")
 
+
+proc updateBlindStop*(hc: HeaderChainRef, stop: Header): bool =
+  ## Accumulate the top down header chain against a fixed stop header
+  ## parent, rather than stop the FC module.
+  ##
+  ## The function returns false unless the `antecedent` is large enough.
+  ## If blind mode is needed, this function should be called immediately
+  ## after notification that a new session has started before any headers
+  ## are `put()` on the chain cache.
+  ##
+  if 1 + stop.number < hc.session.ante.number:
+    hc.session.stopNum = Opt.some(stop.number)
+    hc.session.stopHash = stop.computeBlockHash()
+    return true
+  # false
+
+proc clearBlindStop*(hc: HeaderChainRef, stop: Header) =
+  ## Reset the fixed stop header and proceed in normal mode, accumulating
+  ## up until the FC module is matched.
+  ##
+  hc.session.stopNum = Opt.none(BlockNumber)
+
 # --------------------
 
 func head*(hc: HeaderChainRef): Header =
@@ -615,6 +676,7 @@ func headHash*(hc: HeaderChainRef): Hash32 =
   ##
   if collecting <= hc.state:
     return hc.session.headHash
+  # zeroHash32
 
 func antecedent*(hc: HeaderChainRef): Header =
   ## Getter: bottom of header chain. In case there is no header chain
@@ -623,6 +685,7 @@ func antecedent*(hc: HeaderChainRef): Header =
   ##
   if collecting <= hc.state:
     return hc.session.ante
+  # Header()
 
 # --------------------
 

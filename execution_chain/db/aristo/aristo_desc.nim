@@ -25,7 +25,7 @@ import
   std/[hashes, sequtils, sets, tables, heapqueue],
   eth/common/hashes, eth/trie/nibbles,
   results,
-  minilru,
+  ../../concurrency/lru,
   ./aristo_constants,
   ./aristo_desc/[desc_error, desc_identifiers, desc_structural],
   ./aristo_desc/desc_backend
@@ -37,7 +37,7 @@ when compileOption("threads"):
 # Not auto-exporting backend
 export
   tables, aristo_constants, desc_error, desc_identifiers, nibbles,
-  desc_structural, minilru, hashes, heapqueue, PutHdlRef
+  desc_structural, lru, hashes, heapqueue, PutHdlRef
 
 type
   AristoTxRef* = ref object
@@ -80,13 +80,18 @@ type
       ## When true, records collapsed siblings during deletion for witness
       ## generation.
 
-    collapsedSiblings*: seq[tuple[sibAccPath: Hash32, sibStoPath: Opt[Hash32]]]
-      ## Records path pairs for each surviving sibling when a branch collapses
-      ## during deletion. `sibAccPath` is the account path (used to look up the
-      ## storage trie root); `sibStoPath` is the sibling's own path hash. For
-      ## account-trie collapses, sibStoPath is none. Used by witness
-      ## generation to include the sibling node in the witness for stateless
-      ## execution. Only populated when collectWitness is true.
+    collapsedSiblings*: seq[
+      tuple[
+        sibAccPath: Hash32, sibStoPath: Opt[Hash32], stoRoot: VertexID, brVid: VertexID
+      ]
+    ]
+      ## Records collapsed siblings for witness generation. For each entry:
+      ## `sibAccPath` is the account path; `sibStoPath` is the sibling storage
+      ## path (none for account-trie collapses). When `brVid` is valid, the
+      ## entry is a deferred StoLeaf collapse. On witness building the
+      ## `getCollapsedSiblings` checks the vertex type at (stoRoot, brVid)
+      ## in the final trie before including it.
+      ## Only populated when collectWitness is true.
 
     snapshot*: Snapshot
       ## Optional snapshot containing the cumulative changes from ancestors and
@@ -129,7 +134,7 @@ type
 
     txRef*: AristoTxRef              ## Bottom-most in-memory frame
 
-    accLeaves*: LruCache[Hash32, CachedAccLeaf]
+    accLeaves*: ConcurrentLruCache[Hash32, CachedAccLeaf]
       ## Account path to payload cache - accounts are frequently accessed by
       ## account path when contracts interact with them - this cache ensures
       ## that we don't have to re-traverse the storage trie for every such
@@ -137,7 +142,7 @@ type
       ## TODO a better solution would probably be to cache this in a type
       ## exposed to the high-level API
 
-    stoLeaves*: LruCache[Hash32, CachedStoLeaf]
+    stoLeaves*: ConcurrentLruCache[Hash32, CachedStoLeaf]
       ## Mixed account/storage path to payload cache - same as above but caches
       ## the full lookup of storage slots
 

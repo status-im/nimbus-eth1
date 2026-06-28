@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -11,7 +11,7 @@
 {.push raises:[].}
 
 import
-  pkg/[chronicles, chronos],
+  pkg/[chronicles, chronos, results],
   pkg/eth/common,
   pkg/stew/interval_set,
   ../../../../networking/p2p,
@@ -20,6 +20,9 @@ import
 
 logScope:
   topics = "beacon sync"
+
+const
+  ZeroTarget: InitTarget = (zeroHash32, false, Opt.none(Hash32))
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -30,11 +33,17 @@ proc headersTargetRequest*(
     h: Hash32;
     isFinal: bool;
     info: static[string];
+    finHash: Opt[Hash32] = Opt.none(Hash32);
       ) =
   ## Request *manual* syncer target. It has to be activated by the
   ## `headersTargetActivate()` function below.
-  ctx.pool.initTarget = Opt.some((h,isFinal))
-  trace info & ": request syncer target", targetHash=h.short, isFinal
+  ##
+  ## When `finHash` is set, it will be used as the finalised hash passed
+  ## to the header chain cache on activation, overriding the default of
+  ## `chain.baseHash`.
+  ctx.pool.initTarget = Opt.some((h, isFinal, finHash))
+  trace info & ": request syncer target", targetHash=h.short, isFinal,
+    finHash=(if finHash.isSome: finHash.unsafeGet.short else: "n/a")
 
 proc headersTargetReset*(ctx: BeaconCtxRef) =
   ## Reset *manual* syncer target.
@@ -66,6 +75,9 @@ template headersTargetActivate*(
       peer {.inject,used.} = $buddy.peer                   # logging only
       trg = ctx.pool.initTarget.unsafeGet
 
+    if trg.hash == zeroHash32:                             # already in process?
+      break body                                           # .. yes, it is
+
     # Require minimum of sync peers
     if ctx.nSyncPeers() < ctx.pool.minInitBuddies:
       trace info & ": not enough peers to start manual sync", peer,
@@ -78,8 +90,11 @@ template headersTargetActivate*(
     if buddy.peerID in ctx.pool.failedPeers:
       break body                                           # return
 
-    # Grab header, so no other peer will interfere
-    ctx.pool.initTarget = Opt.none(InitTarget)
+    # Grab header, so no other peer will interfere. Rather then clearing
+    # the `Opt[InitTarget]` it is reset to some zero value. This pervents
+    # the syncer to start another session initiated by the CL while waiting
+    # for header to be resoved via eth/xx.
+    ctx.pool.initTarget = Opt.some(ZeroTarget)
 
     # Fetch header or return
     const iv = BnRange.new(0u,0u) # dummy interval
@@ -117,6 +132,9 @@ template headersTargetActivate*(
     # Got header so the cul-de-sac protection can be cleared
     ctx.pool.failedPeers.clear()
 
+    # Mark the target consumed, one way or the other.
+    ctx.pool.initTarget = Opt.none(InitTarget)
+
     # Verify that the target header is usable
     let hdr = hdrs[0]
     if hdr.number <= ctx.chain.baseNumber:
@@ -131,7 +149,10 @@ template headersTargetActivate*(
       targetHash=trg.hash.short, isFinal=trg.isFinal,
       nSyncPeers=ctx.nSyncPeers()
 
-    let finalised = if trg.isFinal: trg.hash else: ctx.chain.baseHash
+    let finalised =
+      if trg.finHash.isSome:        trg.finHash.unsafeGet
+      elif trg.isFinal:             trg.hash
+      else:                         ctx.chain.baseHash
     ctx.hdrCache.headTargetUpdate(hdr, finalised)
 
     bodyRc = true

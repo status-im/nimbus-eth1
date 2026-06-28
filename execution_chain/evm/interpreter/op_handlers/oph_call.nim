@@ -74,6 +74,9 @@ proc updateStackAndParams(q: var LocalParams; c: Computation) =
     q.memOffset = q.memOutPos
     q.memLength = q.memOutLen
 
+  if isPrecompile(c.vmState.fork, q.codeAddress):
+    q.flags.incl MsgFlags.Precompile
+
 # EIP2929: This came before old gas calculator
 #           because it will affect `c.gasMeter.gasRemaining`
 #           and further `childGasLimit`
@@ -93,7 +96,7 @@ proc gasCallEIP2929(c: Computation, codeAddress: Address): GasProc =
     GasProc proc(): GasInt =
       0.GasInt
 
-proc gasCallDelegate(c: Computation, codeAddress: Address): GasProc =
+proc gasCallDelegate(c: Computation, codeAddress: Address, flags: set[MsgFlags]): GasProc =
   if FkPrague <= c.fork:
     GasProc proc(): GasInt =
       # When the target is a 7702-delegated EOA both target and
@@ -101,6 +104,14 @@ proc gasCallDelegate(c: Computation, codeAddress: Address): GasProc =
       # But in OOG case, only `codeAddress` appear in BAL.
       if c.balTrackerEnabled:
         c.vmState.balTracker.trackAddressAccess(codeAddress)
+
+      # Code does not need to be loaded for precompile addresses because the
+      # precompile doesn't exist in the state trie and can never be a 7702
+      # delegation, so resolving the delegation target is a no-op.
+      if MsgFlags.Precompile in flags:
+        c.delegateTo = codeAddress
+        return 0.GasInt
+
       let delegateTo = parseDelegationAddress(c.getCode(codeAddress)).valueOr:
         c.delegateTo = codeAddress
         return 0.GasInt
@@ -185,9 +196,9 @@ proc staticCallParams(c: Computation, res: var LocalParams): EvmResult[void] =
   res.updateStackAndParams(c)
   ok()
 
-proc getCallCode(c: Computation): CodeBytesRef =
+proc getCallCode(c: Computation, childMsg: Message): CodeBytesRef =
   # Avoid accessing ledger if it's a precompile address
-  if getPrecompile(c.vmState.fork, c.msg.codeAddress).isSome:
+  if MsgFlags.Precompile in childMsg.flags:
     return CodeBytesRef(nil)
   c.vmState.readOnlyLedger.getCode(c.delegateTo)
 
@@ -197,7 +208,7 @@ proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) =
   # need to provide explicit <c> and <child> for capturing in chainTo proc()
   # <memPos> and <memLen> are provided by value and need not be captured
   var
-    code = c.getCallCode()
+    code = c.getCallCode(childMsg)
     child = newComputation(
       c.vmState, keepStack = false, childMsg, code)
 
@@ -280,7 +291,7 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
         gasCost1:        gasCost1,
         isNewAccount:    isNewAccount,
         gasLeft:         cpt.gasMeter.gasRemaining,
-        gasCallDelegate: cpt.gasCallDelegate(p.codeAddress),
+        gasCallDelegate: cpt.gasCallDelegate(p.codeAddress, p.flags),
         contractGas:     p.gas))
 
   ? cpt.opcodeGasCost(Call, gasCost, reason = $Call)
@@ -355,7 +366,7 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
         gasCost1:        gasCost1,
         isNewAccount:    isNewAccount,
         gasLeft:         cpt.gasMeter.gasRemaining,
-        gasCallDelegate: cpt.gasCallDelegate(p.codeAddress),
+        gasCallDelegate: cpt.gasCallDelegate(p.codeAddress, p.flags),
         contractGas:     p.gas))
 
   ? cpt.opcodeGasCost(CallCode, gasCost, reason = $CallCode)
@@ -430,7 +441,7 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
         gasCost1:        gasCost1,
         isNewAccount:    isNewAccount,
         gasLeft:         cpt.gasMeter.gasRemaining,
-        gasCallDelegate: cpt.gasCallDelegate(p.codeAddress),
+        gasCallDelegate: cpt.gasCallDelegate(p.codeAddress, p.flags),
         contractGas:     p.gas))
 
   ? cpt.opcodeGasCost(DelegateCall, gasCost, reason = $DelegateCall)
@@ -498,7 +509,7 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
         gasCost1:        gasCost1,
         isNewAccount:    isNewAccount,
         gasLeft:         cpt.gasMeter.gasRemaining,
-        gasCallDelegate: cpt.gasCallDelegate(p.codeAddress),
+        gasCallDelegate: cpt.gasCallDelegate(p.codeAddress, p.flags),
         contractGas:     p.gas))
 
   ? cpt.opcodeGasCost(StaticCall, gasCost, reason = $StaticCall)

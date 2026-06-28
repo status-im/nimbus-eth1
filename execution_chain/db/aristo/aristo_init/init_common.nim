@@ -81,7 +81,10 @@ proc finishSession*(hdl: TypedPutHdlRef; db: TypedBackendRef) =
 proc initInstance*(
     db: AristoDbRef,
     maxSnapshots = defaultMaxSnapshots,
-    parallelStateRootComputation = false
+    parallelStateRootComputation = true,
+    threadSafeCaches = true,
+    accLeavesLruSize = 0,
+    stoLeavesLruSize = 0
 ): Result[void, AristoError] =
   doAssert maxSnapshots > 0
   let vTop = (?db.getLstFn()).vTop
@@ -90,11 +93,15 @@ proc initInstance*(
   when compileOption("threads"):
     db.txRef.lock.init()
 
-  db.accLeaves = LruCache[Hash32, CachedAccLeaf].init(ACC_LRU_SIZE)
-  db.stoLeaves = LruCache[Hash32, CachedStoLeaf].init(ACC_LRU_SIZE)
+  if threadSafeCaches:
+    db.accLeaves.init(accLeavesLruSize)
+    db.stoLeaves.init(stoLeavesLruSize)
+  else:
+    db.accLeaves.init(accLeavesLruSize, shardBits = 0, threadSafe = false)
+    db.stoLeaves.init(stoLeavesLruSize, shardBits = 0, threadSafe = false)
   db.maxSnapshots = maxSnapshots
   db.parallelStateRootComputation = parallelStateRootComputation
-  
+
   ok()
 
 proc close*(db: AristoDbRef; wipe = false) =
@@ -108,6 +115,11 @@ proc close*(db: AristoDbRef; wipe = false) =
   ##
   ## This distructor may be used on already *destructed* descriptors.
   ##
+  db.accLeaves.dispose()
+  db.stoLeaves.dispose()
+  db.accLeaves.reset()
+  db.stoLeaves.reset()
+
   db.closeFn wipe
 
 # ------------------------------------------------------------------------------

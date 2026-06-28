@@ -1,0 +1,3 @@
+# Test dynamic parser with `tokKind` string
+
+network = "sepolia"

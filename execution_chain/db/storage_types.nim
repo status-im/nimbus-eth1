@@ -109,7 +109,7 @@ func fcuKey*(u: uint64): DbKey {.inline.} =
 func hashIndexKey*(hash: Hash32, index: uint16): HashIndexKey =
   result[0..31] = hash.data
   result[32] = byte(index and 0xFF)
-  result[33] = byte((index shl 8) and 0xFF)
+  result[33] = byte((index shr 8) and 0xFF)
 
 func beaconHeaderKey*(u: BlockNumber): DbKey =
   uint64KeyImpl(beaconHeader)

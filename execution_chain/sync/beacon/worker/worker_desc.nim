@@ -13,6 +13,7 @@
 import
   std/[sets, sequtils],
   pkg/[chronos, eth/common, results],
+  pkg/eth/common/block_access_lists,
   pkg/stew/[interval_set, sorted_set],
   ../../../core/chain,
   ../../[sync_desc, wire_protocol],
@@ -29,6 +30,9 @@ type
     ## Extended global descriptor
 
   # -------------------
+
+  BeaconNotifier* = proc(ok: bool) {.gcsafe, raises: [].}
+    ## Used for single sprint notification when the header chain is complete.
 
   BeaconError* = tuple
     ## Capture exception context for heders/bodies fetcher logging
@@ -83,6 +87,9 @@ type
   BlocksForImport* = object
     ## Blocks list item indexed by least block number (i.e. by `blocks[0]`.)
     blocks*: seq[EthBlock]           ## List of blocks lineage for import
+    bals*: seq[Opt[BlockAccessListRef]]
+                                     ## Optional block access lists (EIP-7928),
+                                     ## aligned by index with `blocks`.
     peerID*: Hash                    ## For comparing peers
 
   # -------------------
@@ -157,6 +164,9 @@ type
   InitTarget* = tuple
     hash: Hash32                     ## Some block hash to sync towards to
     isFinal: bool                    ## The `hash` belongs to a finalised block
+    finHash: Opt[Hash32]             ## Optional finalised hash from FCU; when
+                                     ## set, overrides the default finalised
+                                     ## hash chosen during target activation.
 
   SyncEta* = tuple
     ## Eta calculator. The latest values of `headerTime` and `blockTime` are
@@ -173,12 +183,15 @@ type
     hdrSync*: HeaderFetchSync        ## Syncing by linked header chains
     blkSync*: BlocksFetchSync        ## For importing/executing blocks
     syncState*: SyncState            ## Current syncer state
-    standByMode*: bool               ## Do not activate if `true`
+    standByMode*: bool               ## Do not generally activate if `true`
     subState*: SyncSubState          ## Additional state variables
     nextMetricsUpdate*: Moment       ## For updating metrics
 
     chain*: ForkedChainRef           ## Core database, FCU support
     hdrCache*: HeaderChainRef        ## Currently in tandem with `chain`
+
+    stopBase*: Opt[Header]           ## Single run base
+    stopNotifier*: BeaconNotifier    ## Tu be called when `stopBase` reached
 
     # Info, debugging, and error handling stuff
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one
@@ -190,6 +203,7 @@ type
     lastNoPeersLog*: chronos.Moment  ## Control messages about missing peers
     lastSyncUpdLog*: chronos.Moment  ## Control update messages
     syncEta*: SyncEta                ## Estimated time until all in sync
+    syncTickerOk*: bool              ## Activate built in state monitor
     ticker*: Ticker                  ## Ticker function to run in background
 
 # ------------------------------------------------------------------------------
