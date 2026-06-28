@@ -815,7 +815,7 @@ func hash[I: static int](k: PrecompileCacheKey[I]): Hash =
   hash(k.data())
 
 const
-  precompileCacheBytes = 1_000_000 # ~1MB budget per cached precompile
+  precompileCacheBytes = 10_000_000 # ~10MB budget per cached precompile
   lruOverhead = 20
 
 var
