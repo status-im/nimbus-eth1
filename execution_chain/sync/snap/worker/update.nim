@@ -39,24 +39,36 @@ proc idleNext(ctx: SnapCtxRef; info: static[string]): SyncState =
     return SnapIdle                                 # disk full?, stay anyway
   SnapReady
 
-func readyNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+proc readyNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   ## State transition handler
   # Wait for the beacon syncer to have completed the first header chain
   # download  which might be considerably more to do than any subsequent
   # updates.
   block stayReady:
+    let consHeadNum = ctx.hdrCache.latestConsHeadNumber()
+
     if ctx.pool.headersSynced:
       # So some headers have been downloaded
-      if ctx.hdrCache.latestConsHeadNumber() != 0:
-        break stayReady                             # all sort of working, now
+      if consHeadNum != 0:                          # have FCU request from CL?
+        break stayReady                             # advance to next state
       if ctx.pool.beaconTarget:
         # This is some artificial or test mode when the becon sync server has
         # a manual target set to download, to, first. For the same test resons,
         # the snap syncer will start with a head from the header chain cache
         # if there is no finalised CL header available.
-        break stayReady
+        break stayReady                             # advance to next state
       # End `if headersSynced`
+
+    # If there has been no FCU request from the CL yet, it might make sense
+    # to proceed to the next state if there are locally cached headers already,
+    # available with recovery mode.
+    if consHeadNum == 0 and                         # no FCU request from CL?
+       ctx.chain.latestNumber() < ctx.pool.mptAsm.lastNumber():
+      break stayReady                               # advance to next state
+
     return SnapReady
+    # End `block stayReady`
+
   if ctx.pool.contPrevSession:
     return SnapResume
   SnapDownload

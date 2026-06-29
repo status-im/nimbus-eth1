@@ -89,21 +89,17 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
     of SnapReady:
       # Start headers download on the beacon sync server to run quasi-parallel
       # mode to the snap sync.
-      discard ctx.headerDownloadTrigger(info)
-      bodyRc = daemonWaitReadyInterval              # take a nap
+      ctx.headerDownloadTrigger(info).isOkOr:
+        bodyRc = daemonWaitReadyInterval            # take a nap
 
     of SnapResume:
       # Import/reconstruct in-memory state DB from persistent cache DB.
-      ctx.sessionResume(info).isOkOr:
-        break body                                  # shutdown?
+      discard ctx.sessionResume(info)
 
     of SnapDownload:
-      # Trigger a beacon header fetch cycle if there are many headers to fetch.
-      let
-        lastCached = ctx.pool.mptAsm.lastNumber()
-        lastConsHead = ctx.hdrCache.latestConsHeadNumber()
-      if lastCached + nConsHeadcachedDeltaMax < lastConsHead:
-        discard ctx.headerDownloadTrigger(info)     # download header chain
+      # Download headers. The request will be silently ignored if the
+      # distance to the CL head is too small.
+      discard ctx.headerDownloadTrigger(info, reducedNoise=true)
 
       bodyRc = daemonWaitDownloadInterval           # snap dwnld handled by peer
     of SnapDownloadFinish:
