@@ -28,14 +28,6 @@ proc getNthHash(ctx: BeaconCtxRef; blocks: seq[EthBlock]; n: int): Hash32 =
   ctx.hdrCache.getHash(blocks[n].header.number).valueOr:
     return zeroHash32
 
-func toStr(e: BeaconError): string =
-  result = "(" & $e.excp & ","
-  if 0 < e.name.len:
-    result &= e.name & "(" & e.msg & "),"
-  elif 0 < e.msg.len:
-    result &= e.msg & ","
-  result &= e.elapsed.toStr
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -245,9 +237,7 @@ template blocksImport*(
         base=ctx.chain.baseNumber, head=ctx.chain.latestNumber
 
       for n in 0 ..< blocks.len:
-        let
-          nthBn = blocks[n].header.number
-          blkStart = Moment.now()
+        let nthBn = blocks[n].header.number
 
         # Skip blocks at or below the current base — `FC` would otherwise
         # quarantine them as orphans and abort the batch.
@@ -257,85 +247,89 @@ template blocksImport*(
           blocks[n].reset()
           continue
 
-        # `processQueue` already yields per-item via `idleAsync().withTimeout`,
-        # so no extra throttle is needed here.
-        let importErr: BeaconError =
+        # Hand the block to the `FC` and let it classify the outcome. The `FC`
+        # owns the hash/branch/finalized knowledge needed to tell a duplicate or
+        # an orphaned fork from a genuinely invalid block; the syncer must not
+        # second-guess that from block numbers. `processQueue` already yields
+        # per-item, so no extra throttle is needed here.
+        let verdict =
           try:
-            let res = await ctx.chain.queueImportBlock(
+            await ctx.chain.queueImportBlock(
               blocks[n],
               if n < bals.len: bals[n] else: Opt.none(BlockAccessListRef))
-            if res.isOk:
-              default(BeaconError)
-            else:
-              (ENoException, "", res.error, Moment.now() - blkStart)
-          except CancelledError as e:
-            (ECancelledError, $e.name, e.msg, Moment.now() - blkStart)
+          except CancelledError:
+            break loop                               # await cancelled, stop
 
-        let error: BeaconError =
-          if importErr.excp != ENoException:
-            importErr
-          elif not ctx.daemon:
-            (ESyncerTermination, "", "", Moment.now() - blkStart)
+        if verdict.isOk:
+          # `Valid` or `AlreadyObserved`: both are forward progress. A block
+          # already present in the `FC` (imported earlier or by a concurrent
+          # importer such as `el_sync`) advances `topNum` without a re-download.
+          if verdict.value == AlreadyObserved:
+            trace info & ": block already in FC", peer, blk=nthBn,
+              B=ctx.chain.baseNumber, L=ctx.chain.latestNumber
+          ctx.updateLastBlockImported nthBn          # block imported OK
+          ctx.updateEtaBlocks()                      # metrics, eta estimate
+
+          # Free block body immediately - ForkedChain only retains the header.
+          # Transactions are already persisted as RLP bytes in the txFrame.
+          blocks[n].reset()
+          continue
+
+        # Daemon stopped mid-import: abort the batch without committing.
+        if not ctx.daemon:
+          chronicles.debug "Blocks import stopped (syncer terminating)", n=n,
+            iv=($iv), nBlocks=iv.len, nthBn,
+            base=ctx.chain.baseNumber, head=ctx.chain.latestNumber
+          break loop
+
+        case verdict.error.kind
+        of Orphaned, MissingParent:
+          if ctx.subState.procFailNum != nthBn:
+            ctx.subState.procFailNum = nthBn
+            ctx.subState.procFailCount = 1
           else:
-            default(BeaconError)
+            ctx.subState.procFailCount.inc
+            if nImportBlocksErrThreshold < ctx.subState.procFailCount:
+              ctx.subState.cancelRequest = true
+          trace info & ": batch stranded, FC head moved", peer, n=n, nthBn,
+            kind=verdict.error.kind, nthHash=ctx.getNthHash(blocks, n).short,
+            base=ctx.chain.baseNumber, head=ctx.chain.latestNumber,
+            blkFailCount=ctx.subState.procFailCount, error=verdict.error.msg
+          break loop
 
-        if error.excp != ENoException:
-          if error.excp != ECancelledError:
-            isError = true
+        of Invalid:
+          # Genuine validation failure: the peer served an unusable block.
+          isError = true
 
-            # Mark peer that produced that unusable headers list as a zombie
-            let srcPeer = buddy.getSyncPeer peerID
-            if not srcPeer.isNil:
-              srcPeer.only.nErrors.apply.blk = nProcBlocksErrThreshold + 1
+          # Mark peer that produced that unusable block as a zombie
+          let srcPeer = buddy.getSyncPeer peerID
+          if not srcPeer.isNil:
+            srcPeer.only.nErrors.apply.blk = nProcBlocksErrThreshold + 1
 
-            # Check whether it is enough to skip the current blocks list, only
-            if ctx.subState.procFailNum != nthBn:
-              ctx.subState.procFailNum = nthBn     # OK, this is a new block
-              ctx.subState.procFailCount = 1
+          # Check whether it is enough to skip the current blocks list, only
+          if ctx.subState.procFailNum != nthBn:
+            ctx.subState.procFailNum = nthBn         # OK, this is a new block
+            ctx.subState.procFailCount = 1
+          else:
+            ctx.subState.procFailCount.inc           # block num was seen, already
 
-            else:
-              ctx.subState.procFailCount.inc       # block num was seen, already
+            # Cancel the whole download if needed
+            if nImportBlocksErrThreshold < ctx.subState.procFailCount:
+              ctx.subState.cancelRequest = true      # So require queue reset
 
-              # Cancel the whole download if needed
-              if nImportBlocksErrThreshold < ctx.subState.procFailCount:
-                ctx.subState.cancelRequest = true  # So require queue reset
-
-            # Proper logging ..
-            if ctx.subState.cancelRequest:
-              warn "Blocks import error (cancel this session)", n=n,
-                iv=($iv),
-                nBlocks=iv.len, nthBn,
-                nthHash=ctx.getNthHash(blocks, n).short,
-                base=ctx.chain.baseNumber,
-                head=ctx.chain.latestNumber,
-                blkFailCount=ctx.subState.procFailCount, error=error.toStr
-            elif error.excp == ESyncerTermination:
-              chronicles.debug "Blocks import error (skip remaining)", n=n,
-                iv=($iv),
-                nBlocks=iv.len, nthBn,
-                nthHash=ctx.getNthHash(blocks, n).short,
-                base=ctx.chain.baseNumber,
-                head=ctx.chain.latestNumber,
-                blkFailCount=ctx.subState.procFailCount, error=error.toStr
-            else:
-              chronicles.info "Blocks import error (skip remaining)", n=n,
-                iv=($iv),
-                nBlocks=iv.len, nthBn,
-                nthHash=ctx.getNthHash(blocks, n).short,
-                base=ctx.chain.baseNumber,
-                head=ctx.chain.latestNumber,
-                blkFailCount=ctx.subState.procFailCount, error=error.toStr
-
-          break loop                               # stop
-          # End `importBlock(..).valueOr`
-
-        # isOk => next instruction
-        ctx.updateLastBlockImported nthBn          # block imported OK
-        ctx.updateEtaBlocks()                      # metrics, eta estimate
-
-        # Free block body immediately - ForkedChain only retains the header.
-        # Transactions are already persisted as RLP bytes in the txFrame.
-        blocks[n].reset()
+          # Proper logging ..
+          if ctx.subState.cancelRequest:
+            warn "Blocks import error (cancel this session)", n=n, iv=($iv),
+              nBlocks=iv.len, nthBn, nthHash=ctx.getNthHash(blocks, n).short,
+              base=ctx.chain.baseNumber, head=ctx.chain.latestNumber,
+              blkFailCount=ctx.subState.procFailCount, error=verdict.error.msg
+          else:
+            chronicles.info "Blocks import error (skip remaining)", n=n,
+              iv=($iv), nBlocks=iv.len, nthBn,
+              nthHash=ctx.getNthHash(blocks, n).short,
+              base=ctx.chain.baseNumber, head=ctx.chain.latestNumber,
+              blkFailCount=ctx.subState.procFailCount, error=verdict.error.msg
+          break loop
 
         # End block: `loop`
 

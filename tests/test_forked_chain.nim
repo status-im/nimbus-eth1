@@ -164,7 +164,7 @@ template checkImportBlock(chain, blk) =
   let res = waitFor chain.importBlock(blk)
   check res.isOk
   if res.isErr:
-    debugEcho "IMPORT BLOCK FAIL: ", res.error
+    debugEcho "IMPORT BLOCK FAIL: ", res.error.msg
     debugEcho "Block Number: ", blk.header.number
 
 template checkImportBlockErr(chain, blk) =
@@ -173,6 +173,35 @@ template checkImportBlockErr(chain, blk) =
   if res.isOk:
     debugEcho "IMPORT BLOCK SHOULD FAIL"
     debugEcho "Block Number: ", blk.header.number
+
+template checkVerdict(chain, blk, expected) =
+  ## Import `blk` and assert the `FC` classified it as `expected` (the ok-side
+  ## verdict the block syncer relies on: `Valid` / `AlreadyObserved`).
+  let res = waitFor chain.importBlock(blk)
+  check res.isOk
+  if res.isOk:
+    check res.value == expected
+    if res.value != expected:
+      debugEcho "VERDICT mismatch blk#", blk.header.number,
+        " expected ok(", expected, ") got ok(", res.value, ")"
+  else:
+    debugEcho "VERDICT mismatch blk#", blk.header.number,
+      " expected ok(", expected, ") got err(", res.error.kind, "): ", res.error.msg
+
+template checkVerdictErr(chain, blk, expected) =
+  ## Import `blk` and assert the `FC` classified the failure as `expected` (the
+  ## err-side verdict the syncer branches on: `Orphaned` / `MissingParent` =
+  ## benign re-anchor, `Invalid` = bad block / zombie peer).
+  let res = waitFor chain.importBlock(blk)
+  check res.isErr
+  if res.isErr:
+    check res.error.kind == expected
+    if res.error.kind != expected:
+      debugEcho "VERDICT mismatch blk#", blk.header.number,
+        " expected err(", expected, ") got err(", res.error.kind, "): ", res.error.msg
+  else:
+    debugEcho "VERDICT mismatch blk#", blk.header.number,
+      " expected err(", expected, ") got ok(", res.value, ")"
 
 template checkForkChoice(chain, a, b) =
   let res = waitFor chain.forkChoice(a.blockHash, b.blockHash)
@@ -268,6 +297,115 @@ suite "ForkedChainRef tests":
     check chain.wdWritten(blk1) == 1
     check chain.wdWritten(blk2) == 2
     check chain.validate info & " (9)"
+
+  # --------------------------------------------------------------------------
+  # Re-org handling: these exercise the per-block verdicts the devp2p block
+  # syncer relies on when a re-org arrives mid-sync. The syncer hands every
+  # fetched block to the `FC` and reacts to the classification rather than
+  # second-guessing it by block number, so a legitimate fork must not be
+  # mistaken for a duplicate, and a duplicate must not be re-executed.
+  # --------------------------------------------------------------------------
+
+  test "reorg: duplicate block is AlreadyObserved":
+    const info = "reorg AlreadyObserved"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com)
+    checkVerdict(chain, blk1, ImportOutcome.Valid)
+    checkVerdict(chain, blk2, ImportOutcome.Valid)
+    checkVerdict(chain, blk3, ImportOutcome.Valid)
+    # Re-feeding a block already present (by hash) is recognised and not
+    # re-imported - the syncer advances `topNum` without re-execution.
+    checkVerdict(chain, blk1, ImportOutcome.AlreadyObserved)
+    checkVerdict(chain, blk3, ImportOutcome.AlreadyObserved)
+    check chain.latestHash == blk3.blockHash
+    check chain.validate info
+
+  test "reorg: sibling fork above base is Valid (new branch)":
+    const info = "reorg sibling Valid"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com)
+    checkVerdict(chain, blk1, ImportOutcome.Valid)
+    checkVerdict(chain, blk2, ImportOutcome.Valid)
+    checkVerdict(chain, blk3, ImportOutcome.Valid)
+    checkVerdict(chain, blk4, ImportOutcome.Valid)
+    check chain.heads.len == 1
+    # A re-org arrives: B4 is a sibling of blk4 (both children of blk3) with a
+    # different hash. Its parent blk3 is the in-memory common ancestor, so it is
+    # accepted onto a NEW branch - not mistaken for a duplicate of blk4.
+    checkVerdict(chain, B4, ImportOutcome.Valid)
+    check chain.heads.len == 2
+    checkVerdict(chain, B5, ImportOutcome.Valid)
+    checkVerdict(chain, B6, ImportOutcome.Valid)
+    checkVerdict(chain, B7, ImportOutcome.Valid)
+    # The CL fork-choice can now promote the re-orged branch to the head.
+    checkForkChoice(chain, B7, blk3)
+    checkHeadHash chain, B7.blockHash
+    check chain.latestHash == B7.blockHash
+    check chain.validate info
+
+  test "reorg: gap above finalized is MissingParent (retry, not dead)":
+    const info = "reorg MissingParent"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com)
+    checkVerdict(chain, blk1, ImportOutcome.Valid)
+    checkVerdict(chain, blk2, ImportOutcome.Valid)
+    # blk5's parent (blk4) is absent and blk5.number is above the finalized
+    # point, so it is quarantined for retry - NOT declared a dead branch. The
+    # syncer treats this as a benign re-anchor (no peer penalty).
+    checkVerdictErr(chain, blk5, ImportErrorKind.MissingParent)
+    check chain.latestHash == blk2.blockHash
+    check chain.validate info
+
+  test "reorg: block on a finality-pruned branch is Orphaned":
+    const info = "reorg Orphaned"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
+    checkVerdict(chain, blk1, ImportOutcome.Valid)
+    checkVerdict(chain, blk2, ImportOutcome.Valid)
+    checkVerdict(chain, blk3, ImportOutcome.Valid)
+    checkVerdict(chain, blk4, ImportOutcome.Valid)
+    checkVerdict(chain, blk5, ImportOutcome.Valid)
+    checkVerdict(chain, blk6, ImportOutcome.Valid)
+    checkVerdict(chain, blk7, ImportOutcome.Valid)
+    # B4 is a sibling branch off blk3.
+    checkVerdict(chain, B4, ImportOutcome.Valid)
+    check chain.heads.len == 2
+    # Finalize blk6: the B branch is not reachable from the finalized lineage
+    # and is pruned from memory.
+    checkForkChoice(chain, blk7, blk6)
+    check chain.heads.len == 1
+    # B4 is gone; its child B5 (number 5 <= finalized 6) can never link. The FC
+    # declares the whole forward branch dead instead of quarantining it, so the
+    # syncer drops the rest of that branch.
+    checkVerdictErr(chain, B5, ImportErrorKind.Orphaned)
+    check chain.validate info
+
+  test "reorg: full branch switch keeps pre-reorg blocks observable":
+    const info = "reorg full switch"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com)
+    # The lineage the syncer imported before the re-org.
+    checkVerdict(chain, blk1, ImportOutcome.Valid)
+    checkVerdict(chain, blk2, ImportOutcome.Valid)
+    checkVerdict(chain, blk3, ImportOutcome.Valid)
+    checkVerdict(chain, blk4, ImportOutcome.Valid)
+    checkVerdict(chain, blk5, ImportOutcome.Valid)
+    check chain.latestHash == blk5.blockHash
+    # The re-org lands: it shares blk1..blk4 and diverges at C5 (sibling of
+    # blk5). Each new-branch block links to its in-memory parent -> Valid.
+    checkVerdict(chain, C5, ImportOutcome.Valid)
+    checkVerdict(chain, C6, ImportOutcome.Valid)
+    checkVerdict(chain, C7, ImportOutcome.Valid)
+    check chain.heads.len == 2
+    # The CL promotes the C branch.
+    checkForkChoice(chain, C7, blk4)
+    checkHeadHash chain, C7.blockHash
+    check chain.latestHash == C7.blockHash
+    # The pre-reorg blocks are still in memory (above the finalized point), so
+    # re-feeding them is a no-op rather than a re-execution or an error.
+    checkVerdict(chain, blk4, ImportOutcome.AlreadyObserved)
+    checkVerdict(chain, blk5, ImportOutcome.AlreadyObserved)
+    check chain.validate info
 
   test "newBase on activeBranch":
     const info = "newBase on activeBranch"
@@ -937,7 +1075,7 @@ procSuite "ForkedChain mainnet replay":
 
     check (await fc.importBlock(blk1)).isOk()
 
-    var futs: seq[Future[Result[void, string]]]
+    var futs: seq[Future[Result[ImportOutcome, ImportError]]]
     for i in 1..10:
       futs.add fc.importBlock(invalidBlk)
 

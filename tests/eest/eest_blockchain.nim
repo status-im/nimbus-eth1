@@ -212,7 +212,7 @@ proc runTest(env: TestEnv, unit: BlockchainUnitEnv, statelessEnabled = false): F
             ?statelessInput.witness.statelessProcessBlock(env.chain.com, blk.blk)
     else:
       if not blk.badBlock:
-        return err("Good block was rejected at import: " & res.error)
+        return err("Good block was rejected at import: " & res.error.msg)
 
   (await env.chain.forkChoice(unit.lastblockhash, unit.lastblockhash)).isOkOr:
     return err("Fork choice failed")

@@ -60,6 +60,10 @@ template blocksCollect*(
     peer = $buddy.peer                               # logging only
 
   block body:
+    # Re-anchor on the live `FC` head before deciding what to fetch, in case a
+    # concurrent importer (`el_sync`) moved it
+    ctx.blocksUnprocReconcile()
+
     if ctx.blocksUnprocIsEmpty():
       break body                                     # no action
 
@@ -230,6 +234,11 @@ template blocksUnstage*(
   var bodyRc = false
   block body:
     let ctx = buddy.ctx
+
+    # Re-anchor on the live `FC` head before importing staged blocks, in case a
+    # concurrent importer (`el_sync`) moved it
+    ctx.blocksUnprocReconcile()
+
     if ctx.blk.staged.len == 0:
       break body                                   # return false => switch peer
 
