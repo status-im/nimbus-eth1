@@ -115,7 +115,7 @@ proc setDelegation(call: CallParams): (int64, int64) =
           stateRefund += AUTH_BASE_STATE_GAS
           if delegatedNow and not delegatedBeforeTx:
             stateRefund += AUTH_BASE_STATE_GAS
-          @[]
+          newSeq[byte]() # @[] will cause wasm compilation crash nim v2.2.10
         else:
           if delegatedNow or delegatedBeforeTx:
             stateRefund += AUTH_BASE_STATE_GAS
