@@ -35,6 +35,7 @@ import
   ../../execution_chain/conf,
   ../../execution_chain/stateless/witness_types,
   ../../execution_chain/stateless/stateless_types,
+  ../../execution_chain/evm/precompiles,
   ../../hive_integration/engine_client
 
 import ../../tools/common/helpers as chp except HardFork
@@ -266,6 +267,8 @@ proc prepareEnv*(
         balStatePrefetch = parallelEnabled)
 
     com.db.mpt.parallelStateRootComputation = parallelEnabled
+
+    setPrecompileCacheEnabled(true, threadSafe = true)
 
     if parallelEnabled:
       let taskpool =

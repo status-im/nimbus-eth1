@@ -394,7 +394,7 @@ type
 
     precompileCache* {.
       hidden
-      defaultValue: false
+      defaultValue: true
       desc: "Enable precompile caching"
       name: "debug-precompile-cache".}: bool
 

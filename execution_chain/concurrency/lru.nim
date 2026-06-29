@@ -837,10 +837,15 @@ type
     subhash: uint32
     shardIdx: int
 
-func toKeyHash*[K, V](lru: ConcurrentLruCache[K, V], key: K): KeyHash =
+func toKeyHash*[K, V](lru: ConcurrentLruCache[K, V], key: auto): KeyHash =
   ## Hash `key` for `lru` once, returning a token to pass to
   ## `withReadValueByHash` / `putByHash` - reuse it for a lookup followed by a
   ## `put` so the key is hashed (and the subhash derived) only once.
+  ##
+  ## `key` may be a borrowed view rather than a `K` (e.g. an `openArray` aliasing
+  ## the bytes of an `ArrayBuf` key) as long as it hashes identically to - and
+  ## compares equal to - the corresponding `K`. This lets a lookup avoid
+  ## materializing the key, copying it only when a miss requires a `put`.
   mixin hash
   let h = hash(key)
   if lru.threadSafe:
@@ -855,8 +860,10 @@ func toLent[T](p: ptr T): lent T =
   p[]
 
 template withReadValueByHash*[K, V](
-    lru: var ConcurrentLruCache[K, V], keyHash: KeyHash, key: K, value, body: untyped
+    lru: var ConcurrentLruCache[K, V], keyHash: KeyHash, key: auto, value, body: untyped
 ) =
+  ## `key` may be a borrowed view that hashes and compares equal to a `K` (see
+  ## `toKeyHash`); `keyHash` must have been derived from the same key.
   if lru.threadSafe:
     let
       sh = keyHash.subhash

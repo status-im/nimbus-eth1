@@ -814,6 +814,11 @@ type
 func hash[I: static int](k: PrecompileCacheKey[I]): Hash =
   hash(k.data())
 
+func `==`[I: static int](k: PrecompileCacheKey[I], data: openArray[byte]): bool =
+  ## Compare a stored key against raw input bytes, so a cache lookup can borrow
+  ## `c.msg.data` directly instead of first copying it into a key.
+  k.data() == data
+
 const
   precompileCacheBytes = 10_000_000 # ~10MB budget per cached precompile
   lruOverhead = 20
@@ -914,34 +919,35 @@ template valueCapacity[I, O: static int](
 
 func toCacheKey[I, O: static int](
     cache: ConcurrentLruCache[PrecompileCacheKey[I], PrecompileCacheValue[O]],
-    data: openArray[byte]): PrecompileCacheKey[I] =
+    data: openArray[byte]): PrecompileCacheKey[I] {.inline.} =
   PrecompileCacheKey[I].initCopyFrom(data)
 
 func toCacheValue[I, O: static int](
     cache: ConcurrentLruCache[PrecompileCacheKey[I], PrecompileCacheValue[O]],
-    fork: EVMFork, gasUsed: GasInt, output: openArray[byte]): PrecompileCacheValue[O] =
+    fork: EVMFork, gasUsed: GasInt, output: openArray[byte]): PrecompileCacheValue[O] {.inline.} =
   PrecompileCacheValue[O](
     fork: fork, gasUsed: gasUsed, output: ArrayBuf[O, byte].initCopyFrom(output))
 
 template execCachedPrecompile(
     c: Computation, fork: EVMFork, cache: untyped, compute: untyped,
-    checkInputLen: static bool = false, checkOutputLen: static bool = false
+    checkOutputLen: static bool = false
 ): EvmResultVoid =
   block:
     var res: EvmResultVoid
     block body:
-      when checkInputLen:
-        if c.msg.data.len > cache.keyCapacity:
-          # Larger than this precompile's cache key can hold - run uncached.
-          res = compute
-          break body
+      if c.msg.data.len > cache.keyCapacity:
+        # Input doesn't fit this cache's key buffer - run uncached. Caching would
+        # store a truncated key (initCopyFrom silently truncates)
+        res = compute
+        break body
 
-      let
-        key = cache.toCacheKey(c.msg.data)
-        keyHash = cache.toKeyHash(key) # hash once, reuse for the lookup and put
+      # Hash and look up using the raw input bytes (a borrowed view, no copy).
+      # The key is only copied into an ArrayBuf on a miss, when it must be stored.
+      let keyHash = cache.toKeyHash(c.msg.data.toOpenArray(0, c.msg.data.high))
 
       var hit = false
-      cache.withReadValueByHash(keyHash, key, cached):
+      cache.withReadValueByHash(
+          keyHash, c.msg.data.toOpenArray(0, c.msg.data.high), cached):
         if cached.fork == fork:
           res = c.gasMeter.consumeGas(cached.gasUsed, reason = "Precompile cache hit")
           if res.isOk():
@@ -955,7 +961,7 @@ template execCachedPrecompile(
           when checkOutputLen:
             if c.output.len > cache.valueCapacity:
               break body
-          cache.putByHash(keyHash, key,
+          cache.putByHash(keyHash, cache.toCacheKey(c.msg.data),
             cache.toCacheValue(fork, gasBefore - c.gasMeter.gasRemaining, c.output))
     res
 
@@ -971,12 +977,10 @@ proc execPrecompile*(c: Computation, precompile: Precompiles) =
     return
 
   let res =
-    # Fixed-size precompiles skip the length guards (the precompile errors on a
-    # wrong-length input, so it is never cached). Variable-length ones enable
-    # checkInputLen so over-cap inputs run uncached instead of truncating the
-    # key; modExp also has variable output so it enables checkOutputLen. p256
-    # verify is fixed-length but returns ok (not err) for a wrong length, so it
-    # needs checkInputLen too to avoid a truncated >160B input colliding keys.
+    # Every cached precompile runs uncached when the input exceeds its cache key
+    # capacity (the guard inside execCachedPrecompile), so an over-length input is
+    # never stored as a truncated key. modExp additionally has variable output,
+    # so it enables checkOutputLen to skip caching outputs that don't fit.
     # sha256, ripemd160 and identity are not cached (cheap, variable length).
     case precompile
     of paEcRecover: execCachedPrecompile(c, fork, ecRecoverCache, ecRecover(c))
@@ -984,25 +988,22 @@ proc execPrecompile*(c: Computation, precompile: Precompiles) =
     of paRipeMd160: ripemd160(c)
     of paIdentity: identity(c)
     of paModExp: execCachedPrecompile(c, fork, modExpCache, modExp(c, fork),
-                                      checkInputLen = true, checkOutputLen = true)
+                                      checkOutputLen = true)
     of paEcAdd: execCachedPrecompile(c, fork, ecAddCache, bn256ecAdd(c, fork))
     of paEcMul: execCachedPrecompile(c, fork, ecMulCache, bn256ecMul(c, fork))
-    of paPairing: execCachedPrecompile(c, fork, pairingCache, bn256ecPairing(c, fork),
-                                       checkInputLen = true)
+    of paPairing: execCachedPrecompile(c, fork, pairingCache, bn256ecPairing(c, fork))
     of paBlake2bf: execCachedPrecompile(c, fork, blake2bfCache, blake2bf(c))
     of paPointEvaluation:
       execCachedPrecompile(c, fork, pointEvaluationCache, pointEvaluation(c))
     of paBlsG1Add: execCachedPrecompile(c, fork, blsG1AddCache, blsG1Add(c))
-    of paBlsG1MultiExp: execCachedPrecompile(c, fork, blsG1MultiExpCache, blsG1MultiExp(c),
-                                             checkInputLen = true)
+    of paBlsG1MultiExp:
+      execCachedPrecompile(c, fork, blsG1MultiExpCache, blsG1MultiExp(c))
     of paBlsG2Add: execCachedPrecompile(c, fork, blsG2AddCache, blsG2Add(c))
-    of paBlsG2MultiExp: execCachedPrecompile(c, fork, blsG2MultiExpCache, blsG2MultiExp(c),
-                                             checkInputLen = true)
-    of paBlsPairing: execCachedPrecompile(c, fork, blsPairingCache, blsPairing(c),
-                                          checkInputLen = true)
+    of paBlsG2MultiExp:
+      execCachedPrecompile(c, fork, blsG2MultiExpCache, blsG2MultiExp(c))
+    of paBlsPairing: execCachedPrecompile(c, fork, blsPairingCache, blsPairing(c))
     of paBlsMapG1: execCachedPrecompile(c, fork, blsMapG1Cache, blsMapG1(c))
     of paBlsMapG2: execCachedPrecompile(c, fork, blsMapG2Cache, blsMapG2(c))
-    of paP256Verify: execCachedPrecompile(c, fork, p256VerifyCache, p256verify(c),
-                                          checkInputLen = true)
+    of paP256Verify: execCachedPrecompile(c, fork, p256VerifyCache, p256verify(c))
 
   handlePrecompileResult(c, precompile, fork, res)
