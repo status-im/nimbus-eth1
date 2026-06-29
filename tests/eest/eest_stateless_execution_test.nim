@@ -18,7 +18,9 @@ const
   eestType = "blockchain_tests"
   eestReleases = [
     "eest_develop",
-    "eest_zkevm"
+    # zkevm v0.4.1 is not compatible with glamsterdam devnet v6.1.0
+    # reenable after we have compatible zkevm release.
+    # "eest_zkevm"
   ]
 
 const skipFiles = [
