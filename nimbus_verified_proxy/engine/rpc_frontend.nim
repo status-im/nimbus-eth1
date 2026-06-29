@@ -41,25 +41,6 @@ template beaconSync(engine: RpcVerificationEngine) =
     if not engine.isSynced():
       ?(await engine.syncOnce())
 
-proc applyPenalty(engine: RpcVerificationEngine, e: ErrorTuple) =
-  if e.backendIdx < 0:
-    return
-  let idx = e.backendIdx
-  try:
-    case e.errType
-    of BackendFetchError, BackendDecodingError:
-      engine.scores[idx].availability =
-        engine.availabilityScoreFunc(engine.scores[idx].availability, Penalty)
-      engine.scores[idx].quality =
-        engine.qualityScoreFunc(engine.scores[idx].quality, UndoReward)
-    of VerificationError:
-      engine.scores[idx].quality =
-        engine.qualityScoreFunc(engine.scores[idx].quality, Penalty)
-    else:
-      discard
-  except KeyError:
-    discard
-
 template penaltyOr[T](engine: RpcVerificationEngine, r: EngineResult[T]): T =
   # `result = ...; return` pattern for chronos async compatibility
   # see https://github.com/status-im/nim-stew/issues/37
