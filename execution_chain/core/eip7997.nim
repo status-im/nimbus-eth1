@@ -13,7 +13,6 @@
 import
   eth/common/addresses,
   stew/byteutils,
-  ../evm/types,
   ../db/ledger
 
 const
@@ -26,4 +25,4 @@ proc applyEip7997*(ledger: LedgerRef) =
   # when interacting with CodeBytesRef sink in test environment.
   let factoryCode = FactoryCode
   ledger.setCode(FactoryAddress, factoryCode)
-  ledger.setNonce(FactoryAddress, 1.AccountNonce)
+  ledger.setNonce(FactoryAddress, 1)
