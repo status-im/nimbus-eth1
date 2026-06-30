@@ -55,13 +55,13 @@ func hashFnSig(sig: string): seq[byte] =
 proc abiEncode[T](value: T): EngineResult[seq[byte]] =
   try:
     ok(Abi.encode(value))
-  except CatchableError as e:
+  except SerializationError as e:
     err((InvalidDataError, "calldata ABI encode failed: " & e.msg, UNTAGGED))
 
 proc abiDecode(output: seq[byte], T: typedesc): EngineResult[T] =
   try:
     ok(Abi.decode(output, T))
-  except CatchableError as e:
+  except SerializationError as e:
     err((InvalidDataError, "call return ABI decode failed: " & e.msg, UNTAGGED))
 
 proc makeCall(
@@ -135,7 +135,7 @@ proc readLatestGame*(
       ?(await l1Engine.makeCall(dgfContract, hashFnSig("gameCount()"), l1Header))
     count = ?abiDecode(countOut, UInt256)
 
-  if count == 0.u256:
+  if count.isZero:
     return err((UnavailableDataError, "no dispute games posted yet", UNTAGGED))
 
   let

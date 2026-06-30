@@ -512,7 +512,7 @@ proc getExecutionApiFrontend*(
     opEngine.opSync(l1Engine)
 
     let suggestedPrice = opEngine.penaltyOr(await opEngine.suggestGasPrice())
-    ok(Quantity(suggestedPrice.uint64))
+    ok(Quantity(suggestedPrice))
 
   frontend.eth_maxPriorityFeePerGas = proc(): Future[EngineResult[Quantity]] {.
       async: (raises: [CancelledError])
@@ -520,7 +520,7 @@ proc getExecutionApiFrontend*(
     opEngine.opSync(l1Engine)
 
     let suggestedPrice = opEngine.penaltyOr(await opEngine.suggestMaxPriorityGasPrice())
-    ok(Quantity(suggestedPrice.uint64))
+    ok(Quantity(suggestedPrice))
 
   # pass-forward
   frontend.eth_getProof = proc(

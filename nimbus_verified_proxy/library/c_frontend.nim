@@ -223,7 +223,7 @@ proc eth_getTransactionByBlockNumberAndIndex(
       cb(ctx, RET_DESER_ERROR, alloc(error), userData)
       return
 
-    indexTyped = Quantity(uint64(index))
+    indexTyped = Quantity(index)
 
   callbackToC(ctx, cb, userData):
     ctx.frontend.eth_getTransactionByBlockNumberAndIndex(blockTagTyped, indexTyped)
@@ -240,7 +240,7 @@ proc eth_getTransactionByBlockHashAndIndex(
       cb(ctx, RET_DESER_ERROR, alloc(error), userData)
       return
 
-    indexTyped = Quantity(uint64(index))
+    indexTyped = Quantity(index)
 
   callbackToC(ctx, cb, userData):
     ctx.frontend.eth_getTransactionByBlockHashAndIndex(blockHashTyped, indexTyped)
@@ -603,7 +603,7 @@ proc op_getTransactionByBlockNumberAndIndex(
       cb(ctx, RET_DESER_ERROR, alloc(error), userData)
       return
 
-    indexTyped = Quantity(uint64(index))
+    indexTyped = Quantity(index)
 
   requireOpFrontend(ctx, cb, userData)
   callbackToC(ctx, cb, userData):
@@ -621,7 +621,7 @@ proc op_getTransactionByBlockHashAndIndex(
       cb(ctx, RET_DESER_ERROR, alloc(error), userData)
       return
 
-    indexTyped = Quantity(uint64(index))
+    indexTyped = Quantity(index)
 
   requireOpFrontend(ctx, cb, userData)
   callbackToC(ctx, cb, userData):
@@ -796,7 +796,7 @@ proc op_feeHistory(
     userData: pointer,
 ) {.exported.} =
   let
-    blockCountTyped = Quantity(uint64(blockCount))
+    blockCountTyped = Quantity(blockCount)
     newestBlockTyped = unpackArg($newestBlock, BlockTag).valueOr:
       cb(ctx, RET_DESER_ERROR, alloc(error), userData)
       return

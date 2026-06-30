@@ -193,9 +193,9 @@ proc run*(
     if isOpNetwork(networkName):
       let p = opChainParamsForNetwork(networkName).valueOr:
         raise newException(ProxyError, "Unknown OP network: " & error)
-      some(p)
+      Opt.some(p)
     else:
-      none(OpChainParams)
+      Opt.none(OpChainParams)
 
   let
     l1NetworkName =
@@ -286,14 +286,14 @@ proc run*(
 
   ctx.frontend = engine.getExecutionApiFrontend()
 
-  if opParams.isSome():
+  opParams.isErrOr:
     let l2NetworkId = chainIdToNetworkId(l1ChainId).valueOr:
       raise newException(
         ProxyError, "Couldn't derive the L2 network id from the L1 chain id"
       )
 
     let l2Engine = RpcVerificationEngine.initCore(
-      chainId = opParams.get().l2ChainId,
+      chainId = value.l2ChainId,
       networkId = l2NetworkId,
       maxBlockWalk = config.maxBlockWalk,
       parallelBlockDownloads = config.parallelBlockDownloads,

@@ -193,9 +193,9 @@ proc run(
     if isOpNetwork(networkName):
       let p = opChainParamsForNetwork(networkName).valueOr:
         raise newException(ProxyError, "Unknown OP network: " & error)
-      some(p)
+      Opt.some(p)
     else:
-      none(OpChainParams)
+      Opt.none(OpChainParams)
 
   let
     l1NetworkName =
@@ -268,10 +268,10 @@ proc run(
   # natural "no L2 engine" state no Option wrapping needed)
   var
     l2Engine: RpcVerificationEngine
-    opExecBackendClients: seq[JsonRpcClient] = @[]
-    opFrontendServers: seq[JsonRpcServer] = @[]
+    opExecBackendClients: seq[JsonRpcClient]
+    opFrontendServers: seq[JsonRpcServer]
 
-  if opParams.isSome():
+  opParams.isErrOr:
     if config.opExecutionApiUrls.len <= 0:
       raise newException(
         ProxyError, "Need at least one L2 execution api url (--op-execution-api-url)"
@@ -284,7 +284,7 @@ proc run(
       )
 
     l2Engine = RpcVerificationEngine.initCore(
-      chainId = opParams.get().l2ChainId,
+      chainId = value.l2ChainId,
       networkId = l2NetworkId,
       maxBlockWalk = config.maxBlockWalk,
       parallelBlockDownloads = config.parallelBlockDownloads,
@@ -310,7 +310,7 @@ proc run(
       if syncRes.isErr():
         error "LC sync failed", error = syncRes.error.errMsg
 
-      if opParams.isSome():
+      opParams.isErrOr:
         let opRes = await l2Engine.opSyncOnce(engine)
         if opRes.isErr():
           error "OP sync failed", error = opRes.error.errMsg
