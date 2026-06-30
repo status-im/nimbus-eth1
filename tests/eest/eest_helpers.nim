@@ -268,7 +268,7 @@ proc prepareEnv*(
 
     com.db.mpt.parallelStateRootComputation = parallelEnabled
 
-    setPrecompileCacheEnabled(true, threadSafe = true)
+    setPrecompileCacheEnabled(false)
 
     if parallelEnabled:
       let taskpool =

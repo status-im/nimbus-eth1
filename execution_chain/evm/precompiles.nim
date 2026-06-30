@@ -978,8 +978,6 @@ proc execPrecompile*(c: Computation, precompile: Precompiles) =
     # capacity (the guard inside execCachedPrecompile), so an over-length input is
     # never stored as a truncated key. modExp additionally has variable output,
     # so it enables checkOutputLen to skip caching outputs that don't fit.
-    # sha256 is cached with a 256-byte key (longer inputs run uncached) and a
-    # fixed 32-byte output. ripemd160 and identity are not cached.
     case precompile
     of paEcRecover: execCachedPrecompile(c, fork, ecRecoverCache, ecRecover(c))
     of paSha256: sha256(c) 
