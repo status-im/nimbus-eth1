@@ -106,6 +106,7 @@ type
   SnapCtxData* = object
     ## Globally shared data extension
     syncState*: SyncState            ## Last known layout state
+    contPrevSession*: bool           ## Request resuming previous session
     beaconSync*: BeaconSyncRef       ## Beacon syncer to resume after snap sync
     beaconTarget*: bool              ## inital beacon target if `true`
     stateDB*: StateDbRef             ## Incomplete states DB

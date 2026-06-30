@@ -16,17 +16,14 @@ import
 type
   SyncState* = enum
     SnapIdle = 0
-    SnapResume                     ## Resume from previous session
     SnapReady                      ## Wait for download state
+    SnapResume                     ## Resume from previous session
     SnapDownload                   ## Downloading and caching data
     SnapDownloadFinish             ## Wait for sync before proceeding
     SnapMkTrie                     ## Assembling downloaded data
     SnapAnalyse                    ## Analyse for missing MPT nodes
-    SnapHealing                    ## Complete missing trie nodes
-    SnapHealingFinish              ## Wait for sync before proceeding
-    SnapContracts                  ## Download contracts code
-    SnapContractsFinish            ## Wait for sync before proceeding
-    SnapStop                       ## TBD ...
+    # ..                           ## TBD ..
+    SnapStop                       ## TBD ..
 
   ErrorType* = enum
     ## For `FetchError` return code object/tuple
