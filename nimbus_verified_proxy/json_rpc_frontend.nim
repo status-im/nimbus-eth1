@@ -95,6 +95,9 @@ proc injectEngineFrontend*(server: JsonRpcServer, frontend: ExecutionApiFrontend
     proc eth_blockNumber(): uint64 {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(await frontend.eth_blockNumber())
 
+    proc eth_syncing(): SyncingStatus {.async: (raises: [ValueError, CancelledError]).} =
+      unpackEngineResult(await frontend.eth_syncing())
+
     proc eth_getBalance(
         address: Address, quantityTag: BlockTag
     ): UInt256 {.async: (raises: [ValueError, CancelledError]).} =

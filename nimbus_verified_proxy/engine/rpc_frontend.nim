@@ -95,6 +95,13 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
 
     ok(latest.number.uint64)
 
+  frontend.eth_syncing = proc(): Future[EngineResult[SyncingStatus]] {.
+      async: (raises: [CancelledError])
+  .} =
+    engine.beaconSync()
+
+    ok(SyncingStatus(syncing: false))
+
   frontend.eth_getBalance = proc(
       address: Address, quantityTag: BlockTag
   ): Future[EngineResult[UInt256]] {.async: (raises: [CancelledError]).} =

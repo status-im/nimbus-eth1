@@ -122,6 +122,8 @@ type
       proc(): Future[EngineResult[UInt256]] {.async: (raises: [CancelledError]).}
     eth_blockNumber*:
       proc(): Future[EngineResult[uint64]] {.async: (raises: [CancelledError]).}
+    eth_syncing*:
+      proc(): Future[EngineResult[SyncingStatus]] {.async: (raises: [CancelledError]).}
 
     # State
     eth_getBalance*: proc(
