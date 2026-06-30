@@ -811,13 +811,11 @@ type
     gasUsed: GasInt
     output: ArrayBuf[O, byte]
 
-func hash[I: static int](k: PrecompileCacheKey[I]): Hash =
-  hash(k.data())
+func `==`[I: static int](a: PrecompileCacheKey[I], b: openArray[byte]): bool =
+  a.len() == b.len() and a.buf.toOpenArray(0, a.len() - 1) == b
 
-func `==`[I: static int](k: PrecompileCacheKey[I], data: openArray[byte]): bool =
-  ## Compare a stored key against raw input bytes, so a cache lookup can borrow
-  ## `c.msg.data` directly instead of first copying it into a key.
-  k.data() == data
+func `==`[I: static int](a: PrecompileCacheKey[I], b: PrecompileCacheKey[I]): bool =
+  a.len() == b.len() and a.buf.toOpenArray(0, a.len() - 1) == b.buf.toOpenArray(0, b.len() - 1)
 
 const
   precompileCacheBytes = 10_000_000 # ~10MB budget per cached precompile
