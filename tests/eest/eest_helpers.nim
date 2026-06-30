@@ -35,6 +35,7 @@ import
   ../../execution_chain/conf,
   ../../execution_chain/stateless/witness_types,
   ../../execution_chain/stateless/stateless_types,
+  ../../execution_chain/evm/precompiles,
   ../../hive_integration/engine_client
 
 import ../../tools/common/helpers as chp except HardFork
@@ -265,6 +266,10 @@ proc prepareEnv*(
         statelessWitnessValidation = false, # Running stateless execution separately in test runner
         optimisticStatePrefetch = parallelEnabled,
         balStatePrefetch = parallelEnabled)
+
+    com.db.mpt.parallelStateRootComputation = parallelEnabled
+
+    setPrecompileCacheEnabled(false)
 
     if parallelEnabled:
       let taskpool =

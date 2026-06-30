@@ -373,6 +373,25 @@ suite "LruCache Tests":
     check:
       toSeq(lru.keys()) == @[5, 4, 3, 2, 1]
 
+  test "moveToFront by key":
+    var lru = LruCache[int, int].init(5)
+
+    for i in 0 ..< 5:
+      lru.put(i, i)
+    check toSeq(lru.keys()) == @[4, 3, 2, 1, 0]
+
+    # promote a key to the front (without copying its value out)
+    lru.moveToFront(subhash(0), 0)
+    check toSeq(lru.keys()) == @[0, 4, 3, 2, 1]
+
+    # promoting the existing front is a no-op
+    lru.moveToFront(subhash(0), 0)
+    check toSeq(lru.keys()) == @[0, 4, 3, 2, 1]
+
+    # a missing key leaves the order untouched
+    lru.moveToFront(subhash(99), 99)
+    check toSeq(lru.keys()) == @[0, 4, 3, 2, 1]
+
   test "dispose":
     block:
       var lru = LruCache[int, int].init(2)
@@ -489,6 +508,57 @@ suite "ConcurrentLruCache Tests":
     check:
       lru.peek(1) == Opt.some(10)
       lru.peek(99) == Opt.none(int)
+
+  test "withReadValue":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000)
+    defer:
+      lru.dispose()
+
+    lru.put(1, 10)
+
+    var ran = false
+    var seen = 0
+    lru.withReadValue(1, v):
+      ran = true
+      seen = v # v is a read-only, zero-copy view of the stored value
+    check:
+      ran
+      seen == 10
+
+    # absent key: body must not run and no pointer is exposed
+    ran = false
+    lru.withReadValue(99, v):
+      ran = true
+    check not ran
+
+  test "withReadValue and put with a precomputed hash":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000)
+    defer:
+      lru.dispose()
+
+    let
+      key = 7
+      keyHash = lru.toKeyHash(key)
+
+    lru.putByHash(keyHash, key, 70) # insert using the precomputed hash
+
+    var ran = false
+    var seen = 0
+    lru.withReadValueByHash(keyHash, key, v): # look up using the same hash
+      ran = true
+      seen = v
+    check:
+      ran
+      seen == 70
+      lru.peek(key) == Opt.some(70) # agrees with the hash-computing overloads
+
+    # absent key: the body must not run
+    ran = false
+    lru.withReadValueByHash(lru.toKeyHash(8), 8, v):
+      ran = true
+    check not ran
 
   test "del":
     var lru: ConcurrentLruCache[int, int]
@@ -1022,3 +1092,59 @@ suite "ConcurrentLruCache Tests (threadSafe = false)":
       not lru.contains(2)
       lru.contains(3)
       lru.contains(4)
+
+  test "withReadValue promotes and exposes a read-only view":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(3, shardBits = 0, threadSafe = false)
+    defer:
+      lru.dispose()
+
+    lru.put(1, 10)
+    lru.put(2, 20)
+    lru.put(3, 30)
+
+    # withReadValue promotes to MRU like get; inserting a new key must evict 2
+    # (the actual LRU), not 1
+    for _ in 0 ..< 5:
+      var seen = 0
+      lru.withReadValue(1, v):
+        seen = v
+      check seen == 10
+
+    lru.put(4, 40)
+    check:
+      lru.contains(1)
+      not lru.contains(2)
+      lru.contains(3)
+      lru.contains(4)
+
+    # the view is read-only: assigning through it must not compile
+    check not compiles(
+      (block:
+        lru.withReadValue(1, v):
+          v = 111))
+
+    # absent key: body must not run
+    var ran = false
+    lru.withReadValue(123, v):
+      ran = true
+    check not ran
+
+  test "withReadValue and put with a precomputed hash":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000, shardBits = 0, threadSafe = false)
+    defer:
+      lru.dispose()
+
+    let
+      key = 7
+      keyHash = lru.toKeyHash(key)
+
+    lru.putByHash(keyHash, key, 70)
+
+    var seen = 0
+    lru.withReadValueByHash(keyHash, key, v):
+      seen = v
+    check:
+      seen == 70
+      lru.peek(key) == Opt.some(70)

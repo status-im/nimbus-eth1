@@ -24,7 +24,6 @@ import
 
   ./test_helpers
 
-
 template doTest(fixture: JsonNode; vmState: BaseVMState; precompile: Precompiles): untyped =
   for test in fixture:
     let
@@ -101,5 +100,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     echo "Unknown test vector '" & $label & "'"
     testStatusIMPL = SKIPPED
 
-suite "Precompiles":
-  jsonTest("PrecompileTests", testFixture)
+for cacheEnabled in [true, false]:
+  setPrecompileCacheEnabled(cacheEnabled)
+  suite "Precompiles (cache " & (if cacheEnabled: "enabled" else: "disabled") & ")":
+    jsonTest("PrecompileTests", testFixture)

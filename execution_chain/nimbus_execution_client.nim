@@ -19,6 +19,7 @@ import
   stew/byteutils,
   kzg4844/kzg,
   ./[conf, constants, nimbus_desc, nimbus_import, rpc, version_info],
+  ./evm/precompiles,
   ./core/block_import,
   ./core/chain/forked_chain/chain_serialize,
   ./db/aristo/aristo_compute,
@@ -397,6 +398,10 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
     loadTrustedSetupFromString(kzg.trustedSetup, 8).expect(
       "Baked-in KZG setup is correct"
     )
+
+  # Configure the precompile caches
+  setPrecompileCacheEnabled(
+    config.precompileCache, threadSafe = config.threadSafeCaches)
 
   # Metrics are useful not just when running node but also during import
   let metricsServer =
