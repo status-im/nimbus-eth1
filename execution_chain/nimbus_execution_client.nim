@@ -401,9 +401,7 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
 
   # Configure the precompile caches
   setPrecompileCacheEnabled(
-    config.precompileCache,
-    threadSafe = config.optimisticStatePrefetch or config.balStatePrefetch or
-      config.parallelStateRootComputation)
+    config.precompileCache, threadSafe = config.threadSafeCaches)
 
   # Metrics are useful not just when running node but also during import
   let metricsServer =

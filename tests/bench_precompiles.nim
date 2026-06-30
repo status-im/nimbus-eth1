@@ -5,21 +5,31 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-# Micro-benchmark for the precompile result cache (see precompiles.nim).
+# Benchmark: precompile cache speedup vs. disabled, across cache hit rates.
 #
-# Each precompile's most expensive ("slow") input is timed three ways and the
-# results are printed side by side:
-#   - hit:      cache enabled, same input repeated (steady-state cache hit)
-#   - miss:     cache enabled, entry evicted before every call (lookup miss +
-#               compute + put). This includes the forced eviction, so it slightly
-#               overstates a true single miss - most visible on cheap precompiles.
-#   - disabled: cache disabled (the raw precompile cost)
+# bench_precompiles.nim times each precompile's single worst-case input repeated
+# - i.e. a 100%-hit steady state, which flatters the cache enormously. This
+# benchmark asks the practical question instead: for a realistic mix where only
+# a fraction of lookups hit, is the cache a net win for the run overall?
 #
-#   nim c -d:release -o:build/bench_precompiles tests/bench_precompiles.nim
-#   ./build/bench_precompiles
+# For each cached precompile we pick an *average* input - the median-compute-cost
+# valid fixture input, not the worst case (pathological inputs above a cost cap,
+# e.g. blake2f with millions of rounds, are excluded from the median) - and time
+# a sequence of calls at several hit rates with the cache enabled vs disabled.
+#
+#   speedup = (disabled compute ns) / (enabled ns at that hit rate)
+#   > 1  cache is faster;  < 1  cache is a net loss
+#
+# A miss is forced by evicting the entry just before the call (a small, documented
+# overhead). The cache holds a single entry, so probe lengths are best-case - this
+# slightly understates real overhead, so treat low-hit-rate speedups as optimistic.
+#
+#   nim c -d:release -o:build/bench_precompile_cache_hitrate \
+#     tests/bench_precompile_cache_hitrate.nim
+#   ./build/bench_precompile_cache_hitrate
 
 import
-  std/[json, os, strutils, monotimes, times],
+  std/[json, os, strutils, monotimes, times, algorithm, math],
   stew/byteutils,
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/common/common,
@@ -35,120 +45,43 @@ import
 
 const
   fixtureDir = "tests/fixtures/PrecompileTests"
-  warmupIters = 100
-  budgetNs = 400_000_000'i64   # ~0.4s of timed work per scenario
-  blakeSlowRounds = 50_000'u32
+  warmupIters = 20
+  budgetNs = 150_000_000'i64       # ~0.15s of timed work per (precompile, scenario)
+  calibIters = 5                   # cost samples per fixture input when picking the median
+  costCapNs = 5_000_000.0          # exclude inputs slower than this from the "average"
+  hitRates = [5, 25, 50, 75, 95, 100]
 
-# precompile -> fixture file holding a valid (non-error) input
+# precompile -> (fixture file, cache key capacity in bytes). Only the cached
+# precompiles are listed; pointEvaluation needs a trusted setup and is omitted
+# (matching bench_precompiles.nim).
 const cases = [
-  (paEcRecover,      "ecrecover.json"),
-  (paSha256,         "sha256.json"),
-  (paRipeMd160,      "ripemd160.json"),
-  (paModExp,         "modexp_eip7883.json"),
-  (paEcAdd,          "bn256Add_istanbul.json"),
-  (paEcMul,          "bn256mul_istanbul.json"),
-  (paPairing,        "pairing_istanbul.json"),
-  (paBlake2bf,       "blake2F.json"),
-  (paBlsG1Add,       "blsG1Add.json"),
-  (paBlsG1MultiExp,  "blsG1MultiExp.json"),
-  (paBlsG2Add,       "blsG2Add.json"),
-  (paBlsG2MultiExp,  "blsG2MultiExp.json"),
-  (paBlsPairing,     "blsPairing.json"),
-  (paBlsMapG1,       "blsMapG1.json"),
-  (paBlsMapG2,       "blsMapG2.json"),
-  (paP256Verify,     "P256Verify.json"),
+  (paEcRecover,     "ecrecover.json",          128),
+  (paSha256,        "sha256.json",             256),
+  (paModExp,        "modexp_eip7883.json",    1024),
+  (paEcAdd,         "bn256Add_istanbul.json",  128),
+  (paEcMul,         "bn256mul_istanbul.json",   96),
+  (paPairing,       "pairing_istanbul.json",   768),
+  (paBlake2bf,      "blake2F.json",            213),
+  (paBlsG1Add,      "blsG1Add.json",           256),
+  (paBlsG1MultiExp, "blsG1MultiExp.json",      640),
+  (paBlsG2Add,      "blsG2Add.json",           512),
+  (paBlsG2MultiExp, "blsG2MultiExp.json",     1152),
+  (paBlsPairing,    "blsPairing.json",        1536),
+  (paBlsMapG1,      "blsMapG1.json",            64),
+  (paBlsMapG2,      "blsMapG2.json",            128),
+  (paP256Verify,    "P256Verify.json",         160),
 ]
 
-# Variable-input precompiles: time the smallest vs largest cacheable (<=512B)
-# fixture input rather than a constructed fast/slow pair.
-const sizeVarying = {
-  paModExp, paPairing, paBlsG1MultiExp, paBlsG2MultiExp, paBlsPairing}
-
-proc validInputs(file: string): seq[seq[byte]] =
-  ## All valid (non-error) fixture inputs that fit the cache key buffer,
-  ## sorted ascending by length.
+proc validInputs(file: string, keyCap: int): seq[seq[byte]] =
+  ## All valid (non-error) fixture inputs that fit this precompile's cache key.
   let fixture = json.parseFile(fixtureDir / file)
   for test in fixture["data"]:
     if not test.hasKey("ExpectedError") and
        test.hasKey("Input") and test["Input"].getStr.len > 0:
       let input = test["Input"].getStr.hexToSeqByte
-      if input.len <= 512:
+      if input.len <= keyCap:
         result.add input
-  doAssert result.len > 0, "no valid bounded input in " & file
-  # simple insertion sort by length (input lists are tiny)
-  for i in 1 ..< result.len:
-    var j = i
-    while j > 0 and result[j-1].len > result[j].len:
-      swap(result[j-1], result[j]); dec j
-
-proc padded(input: openArray[byte], n: int): seq[byte] =
-  result = newSeq[byte](n)
-  for i in 0 ..< min(n, input.len):
-    result[i] = input[i]
-
-# Construct (fastInput, slowInput) for a precompile from its valid fixture inputs
-# (sorted ascending by length).
-proc scenarios(precompile: Precompiles, inputs: seq[seq[byte]]):
-    tuple[fast, slow: seq[byte], note: string] =
-  if precompile in sizeVarying:
-    # smallest vs largest cacheable fixture input
-    let fast = inputs[0]
-    let slow = inputs[^1]
-    return (fast, slow, $fast.len & "B vs " & $slow.len & "B input")
-
-  let fixture = inputs[0]
-  case precompile
-  of paSha256, paRipeMd160:
-    # Cost scales with input length; cache only stores inputs <= 512 bytes.
-    # FAST: empty input. SLOW: largest cacheable input (512 bytes).
-    (newSeq[byte](0), newSeq[byte](512), "0B vs 512B input (max cacheable)")
-  of paEcAdd:
-    # FAST: infinity + infinity (all zeros, the cheap early-out).
-    # SLOW: two real curve points (a genuine field-arithmetic addition).
-    # inputs[0] is the shortest fixture, which is all-zeros (infinity) and would
-    # measure the same trivial path as FAST; pick a full 128-byte input whose
-    # first point is non-zero instead.
-    var slow = padded(fixture, 128)
-    for inp in inputs:
-      if inp.len >= 128 and inp[0] != 0:
-        slow = padded(inp, 128)
-        break
-    (newSeq[byte](128), slow, "0+0 vs P+Q")
-  of paEcMul:
-    # Same point; FAST scalar = 0 (-> infinity), SLOW scalar = 2^256-1.
-    var fast = padded(fixture, 96)
-    var slow = padded(fixture, 96)
-    for i in 64 ..< 96:
-      fast[i] = 0x00
-      slow[i] = 0xFF
-    (fast, slow, "scalar 0 vs 2^256-1")
-  of paBlake2bf:
-    # FAST: 0 rounds. SLOW: many rounds (first 4 big-endian bytes).
-    var fast = padded(fixture, 213)
-    var slow = padded(fixture, 213)
-    fast[0] = 0; fast[1] = 0; fast[2] = 0; fast[3] = 0
-    slow[0] = byte(blakeSlowRounds shr 24)
-    slow[1] = byte(blakeSlowRounds shr 16)
-    slow[2] = byte(blakeSlowRounds shr 8)
-    slow[3] = byte(blakeSlowRounds)
-    (fast, slow, "0 vs " & $blakeSlowRounds & " rounds")
-  of paBlsG1Add:
-    (newSeq[byte](256), padded(fixture, 256), "0+0 vs P+Q")
-  of paBlsG2Add:
-    (newSeq[byte](512), padded(fixture, 512), "0+0 vs P+Q")
-  of paBlsMapG1:
-    (newSeq[byte](64), padded(fixture, 64), "fe=0 vs fe (~constant)")
-  of paBlsMapG2:
-    (newSeq[byte](128), padded(fixture, 128), "fe=0 vs fe (~constant)")
-  of paP256Verify:
-    # FAST: zeroed public key -> bound check fails fast (still returns ok).
-    # SLOW: valid signature -> full verification.
-    var fast = padded(fixture, 160)
-    for i in 96 ..< 160: fast[i] = 0
-    (fast, padded(fixture, 160), "invalid pk vs full verify")
-  else:
-    # ecRecover: only the full-recovery path is cacheable (constant cost).
-    (fixture, fixture, "constant (no cheap cacheable path)")
+  doAssert result.len > 0, "no valid cacheable input in " & file
 
 proc newVmState(): BaseVMState =
   let
@@ -156,9 +89,18 @@ proc newVmState(): BaseVMState =
     com = CommonRef.new(newCoreDbRef DefaultDbMemory, config = conf)
   BaseVMState.new(
     Header(number: 1'u64, stateRoot: EMPTY_ROOT_HASH),
-    Header(),
-    com,
-    com.db.baseTxFrame())
+    Header(), com, com.db.baseTxFrame())
+
+proc newComp(vmState: BaseVMState, precompile: Precompiles,
+             input: seq[byte]): Computation =
+  let msg = Message(
+    kind: CallKind.Call,
+    gas: 1_000_000_000,
+    contractAddress: precompileAddrs[precompile],
+    codeAddress: precompileAddrs[precompile],
+    data: input,
+    flags: {MsgFlags.Precompile})
+  newComputation(vmState, false, msg)
 
 proc run(c: Computation, precompile: Precompiles) {.inline.} =
   c.gasMeter.gasRemaining = 1_000_000_000
@@ -167,13 +109,14 @@ proc run(c: Computation, precompile: Precompiles) {.inline.} =
   c.execPrecompile(precompile)
 
 proc evict(precompile: Precompiles, input: openArray[byte]) =
-  ## Remove this precompile's cached entry (using the same key the cache builds
-  ## for `input`) so the next call is a cache miss. The cache must be enabled.
+  ## Drop this precompile's cached entry (same key the cache builds for `input`)
+  ## so the next call is a miss. The cache must be enabled.
   template d(cache: untyped) =
     cache.del(cache.toCacheKey(input))
   case precompile
   of paEcRecover: d(ecRecoverCache)
-  of paSha256, paRipeMd160, paIdentity: discard # not cached
+  of paSha256: d(sha256Cache)
+  of paRipeMd160, paIdentity: discard # not cached
   of paModExp: d(modExpCache)
   of paEcAdd: d(ecAddCache)
   of paEcMul: d(ecMulCache)
@@ -189,43 +132,12 @@ proc evict(precompile: Precompiles, input: openArray[byte]) =
   of paBlsMapG2: d(blsMapG2Cache)
   of paP256Verify: d(p256VerifyCache)
 
-proc bench(vmState: BaseVMState, precompile: Precompiles, input: seq[byte],
-           forceMiss: bool): float =
-  let msg = Message(
-    kind: CallKind.Call,
-    gas: 1_000_000_000,
-    contractAddress: precompileAddrs[precompile],
-    codeAddress: precompileAddrs[precompile],
-    data: input,
-    flags: {MsgFlags.Precompile})
-  let c = newComputation(vmState, false, msg)
-
-  template once() =
-    if forceMiss:
-      evict(precompile, input)
-    run(c, precompile)
-
-  for _ in 0 ..< warmupIters:
-    once()
-
-  var iters = 0
-  let start = getMonoTime()
-  while true:
-    once()
-    inc iters
-    if (iters and 0x3FF) == 0 and
-       (getMonoTime() - start).inNanoseconds >= budgetNs:
-      break
-  (getMonoTime() - start).inNanoseconds.float / iters.float
-
 proc disposeAllCaches() =
-  ## Free and reset every cache back to the UNINITIALIZED state so it can be
-  ## re-initialized in a different mode (`init` asserts UNINITIALIZED, and
-  ## `dispose` alone leaves it DISPOSED). A no-op on a fresh cache.
   template z(cache: untyped) =
     cache.dispose()
     reset(cache)
   z ecRecoverCache
+  z sha256Cache
   z modExpCache
   z ecAddCache
   z ecMulCache
@@ -241,59 +153,148 @@ proc disposeAllCaches() =
   z blsMapG2Cache
   z p256VerifyCache
 
-proc runComparison(
-    vmState: BaseVMState, threadSafe: bool,
-    work: seq[tuple[precompile: Precompiles, input: seq[byte], note: string]]) =
-  # Hit (same input repeated) and miss (entry evicted before every call) both
-  # need the cache enabled; disabled measures the raw precompile cost. Re-init
-  # the caches in the requested mode (dispose any previous run's caches first).
+# ----------------------------------------------------------------------------
+# Timing
+# ----------------------------------------------------------------------------
+
+proc timeCompute(vmState: BaseVMState, precompile: Precompiles,
+                 input: seq[byte]): float =
+  ## ns/call, cache disabled (raw compute). Caller sets precompileCacheActive = false.
+  let c = newComp(vmState, precompile, input)
+  for _ in 0 ..< warmupIters:
+    run(c, precompile)
+  var iters = 0
+  let start = getMonoTime()
+  while true:
+    run(c, precompile)
+    inc iters
+    if (iters and 0x3F) == 0 and (getMonoTime() - start).inNanoseconds >= budgetNs:
+      break
+  (getMonoTime() - start).inNanoseconds.float / iters.float
+
+proc timeEnabled(vmState: BaseVMState, precompile: Precompiles,
+                 input: seq[byte], hitRatePct: int): float =
+  ## ns/call, cache enabled, with hitRatePct% of calls hitting and the rest
+  ## forced to miss by eviction. Caller has the caches initialized & active.
+  let c = newComp(vmState, precompile, input)
+  run(c, precompile) # warm: ensure the entry is present
+  for _ in 0 ..< warmupIters:
+    run(c, precompile)
+  var acc = 0
+  template once() =
+    acc += hitRatePct
+    if acc >= 100:
+      acc -= 100 # hit: leave the entry in place
+    else:
+      evict(precompile, input) # miss: drop it -> miss + compute + put
+    run(c, precompile)
+  var iters = 0
+  let start = getMonoTime()
+  while true:
+    once()
+    inc iters
+    if (iters and 0x3F) == 0 and (getMonoTime() - start).inNanoseconds >= budgetNs:
+      break
+  (getMonoTime() - start).inNanoseconds.float / iters.float
+
+proc avgInput(vmState: BaseVMState, precompile: Precompiles, file: string,
+              keyCap: int): seq[byte] =
+  ## The median-compute-cost valid fixture input - a representative "average"
+  ## call. Inputs slower than costCapNs (pathological worst cases) are excluded.
+  let inputs = validInputs(file, keyCap)
+  if inputs.len == 1:
+    return inputs[0]
+  var
+    ranked: seq[(float, seq[byte])]
+    cheapest = (float.high, inputs[0])
+  for inp in inputs:
+    let c = newComp(vmState, precompile, inp)
+    run(c, precompile) # warmup
+    var best = float.high
+    for _ in 0 ..< calibIters:
+      let s = getMonoTime()
+      run(c, precompile)
+      best = min(best, (getMonoTime() - s).inNanoseconds.float)
+    if best < cheapest[0]:
+      cheapest = (best, inp)
+    if best <= costCapNs:
+      ranked.add (best, inp)
+  if ranked.len == 0: # everything was pathologically slow - fall back to cheapest
+    return cheapest[1]
+  ranked.sort(proc(x, y: (float, seq[byte])): int = cmp(x[0], y[0]))
+  ranked[ranked.len div 2][1]
+
+proc runSweep(vmState: BaseVMState, threadSafe: bool,
+              work: seq[tuple[precompile: Precompiles, input: seq[byte]]]) =
   disposeAllCaches()
   initPrecompileCaches(threadSafe)
-  precompileCacheActive = true
-  var hit, miss: seq[float]
-  for w in work:
-    hit.add bench(vmState, w.precompile, w.input, forceMiss = false)
-    miss.add bench(vmState, w.precompile, w.input, forceMiss = true)
 
+  # disabled compute cost per precompile
   precompileCacheActive = false
-  var disabled: seq[float]
+  var compute: seq[float]
   for w in work:
-    disabled.add bench(vmState, w.precompile, w.input, forceMiss = false)
+    compute.add timeCompute(vmState, w.precompile, w.input)
 
-  echo "precompile cache: hit vs miss vs disabled (fork=", vmState.fork,
-    ", threadSafe=", threadSafe,
-    ", slow input; miss includes the eviction used to force it)"
-  echo align("precompile", 18), align("hit ns", 12), align("miss ns", 12),
-       align("disabled ns", 13), align("hit speedup", 13), align("miss ovh", 11),
-       "  scenario"
-  for i in 0 ..< work.len:
-    let
-      h = hit[i]
-      m = miss[i]
-      d = disabled[i]
-      hitSpeedup = if h > 0: d / h else: 0.0
-      missOverhead = if d > 0: m / d else: 0.0
-    echo align($work[i].precompile, 18),
-         align(formatFloat(h, ffDecimal, 1), 12),
-         align(formatFloat(m, ffDecimal, 1), 12),
-         align(formatFloat(d, ffDecimal, 1), 13),
-         align(formatFloat(hitSpeedup, ffDecimal, 1) & "x", 13),
-         align(formatFloat(missOverhead, ffDecimal, 2) & "x", 11),
-         "  ", work[i].note
+  # enabled cost at each hit rate
+  precompileCacheActive = true
+  var enabled: seq[array[hitRates.len, float]]
+  for w in work:
+    var row: array[hitRates.len, float]
+    for hi, hr in hitRates:
+      row[hi] = timeEnabled(vmState, w.precompile, w.input, hr)
+    enabled.add row
+
+  # ----- report -----
+  echo "precompile cache speedup vs disabled, by hit rate (fork=", vmState.fork,
+       ", threadSafe=", threadSafe, ")"
+  echo "speedup = compute / enabled;  >1.0 cache faster, <1.0 net loss;  ",
+       "miss forced by eviction"
+  stdout.write align("precompile", 18), align("compute ns", 13), "  "
+  for hr in hitRates:
+    stdout.write align($hr & "%", 9)
+  echo align("input B", 9)
+
+  var
+    sumCompute = 0.0
+    sumEnabled: array[hitRates.len, float]
+    logSpeedup: array[hitRates.len, float]
+  for wi, w in work:
+    stdout.write align($w.precompile, 18),
+      align(formatFloat(compute[wi], ffDecimal, 1), 13), "  "
+    for hi in 0 ..< hitRates.len:
+      let sp = compute[wi] / enabled[wi][hi]
+      stdout.write align(formatFloat(sp, ffDecimal, 2) & "x", 9)
+      sumEnabled[hi] += enabled[wi][hi]
+      logSpeedup[hi] += ln(sp)
+    echo align($w.input.len, 9)
+    sumCompute += compute[wi]
+
+  # overall: a run calling each precompile once (cost-weighted -> dominated by
+  # the expensive precompiles)
+  stdout.write align("OVERALL sum", 18),
+    align(formatFloat(sumCompute, ffDecimal, 1), 13), "  "
+  for hi in 0 ..< hitRates.len:
+    stdout.write align(formatFloat(sumCompute / sumEnabled[hi], ffDecimal, 2) & "x", 9)
+  echo align("each x1", 9)
+
+  # overall: geometric mean of per-precompile speedups (equal weight, cost-independent)
+  stdout.write align("OVERALL geomean", 18), align("-", 13), "  "
+  for hi in 0 ..< hitRates.len:
+    let g = exp(logSpeedup[hi] / work.len.float)
+    stdout.write align(formatFloat(g, ffDecimal, 2) & "x", 9)
+  echo align("equal wt", 9)
 
 proc main() =
   let vmState = newVmState()
 
-  # Build the work list once so every run uses identical inputs. Each precompile
-  # is timed on its most expensive ("slow") cacheable input.
-  var work: seq[tuple[precompile: Precompiles, input: seq[byte], note: string]]
-  for (precompile, file) in cases:
-    let (_, slow, note) = scenarios(precompile, validInputs(file))
-    work.add (precompile, slow, note)
+  # Calibrate the average input per precompile with the cache off.
+  precompileCacheActive = false
+  var work: seq[tuple[precompile: Precompiles, input: seq[byte]]]
+  for (precompile, file, keyCap) in cases:
+    work.add (precompile, avgInput(vmState, precompile, file, keyCap))
 
-  # Single-threaded caches (shardBits = 0, no locking) then thread-safe caches.
-  runComparison(vmState, threadSafe = false, work)
+  runSweep(vmState, threadSafe = false, work)
   echo ""
-  runComparison(vmState, threadSafe = true, work)
+  runSweep(vmState, threadSafe = true, work)
 
 main()

@@ -843,7 +843,7 @@ func toKeyHash*[K, V](lru: ConcurrentLruCache[K, V], key: auto): KeyHash =
   ## `put` so the key is hashed (and the subhash derived) only once.
   ##
   ## `key` may be a borrowed view rather than a `K` (e.g. an `openArray` aliasing
-  ## the bytes of an `ArrayBuf` key) as long as it hashes identically to - and
+  ## the bytes of the key) as long as it hashes identically to - and
   ## compares equal to - the corresponding `K`. This lets a lookup avoid
   ## materializing the key, copying it only when a miss requires a `put`.
   mixin hash
@@ -904,30 +904,7 @@ proc putByHash*[K, V](
 template withReadValue*[K, V](
     lru: var ConcurrentLruCache[K, V], key: K, value, body: untyped
 ) =
-  let keyHash = lru.toKeyHash(key)
-  if lru.threadSafe:
-    let
-      sh = keyHash.subhash
-      s = addr lru.shards[keyHash.shardIdx]
-    var found = false
-
-    s.lock.withReadLock:
-      let valuePtr = s.cache.peekPtr(sh, key)
-      if valuePtr != nil:
-        found = true
-        template value(): untyped {.inject.} = toLent(valuePtr)
-        body
-
-    if found:
-      inc tlsLruGetCounter
-      if (tlsLruGetCounter and SAMPLE_MASK) == 0'u32:
-        s.lock.withWriteLock:
-          s.cache.moveToFront(sh, key)
-  else:
-    let valuePtr = lru.cache.getPtr(keyHash.subhash, key)
-    if valuePtr != nil:
-      template value(): untyped {.inject.} = toLent(valuePtr)
-      body
+  lru.withReadValueByHash(lru.toKeyHash(key), key, value, body)
 
 proc put*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V) =
   lru.putByHash(lru.toKeyHash(key), key, val)

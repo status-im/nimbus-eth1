@@ -817,6 +817,9 @@ func `==`[I: static int](a: PrecompileCacheKey[I], b: openArray[byte]): bool =
 func `==`[I: static int](a: PrecompileCacheKey[I], b: PrecompileCacheKey[I]): bool =
   a.len() == b.len() and a.buf.toOpenArray(0, a.len() - 1) == b.buf.toOpenArray(0, b.len() - 1)
 
+func hash[I: static int](k: PrecompileCacheKey[I]): Hash =
+  hash(k.data())
+
 const
   precompileCacheBytes = 10_000_000 # ~10MB budget per cached precompile
   lruOverhead = 20
@@ -824,10 +827,8 @@ const
 var
   ecRecoverCache: ConcurrentLruCache[PrecompileCacheKey[128], PrecompileCacheValue[32]]
   modExpCache: ConcurrentLruCache[PrecompileCacheKey[1024], PrecompileCacheValue[512]]
-  ecAddCache: ConcurrentLruCache[PrecompileCacheKey[128], PrecompileCacheValue[64]]
   ecMulCache: ConcurrentLruCache[PrecompileCacheKey[96], PrecompileCacheValue[64]]
   pairingCache: ConcurrentLruCache[PrecompileCacheKey[768], PrecompileCacheValue[32]]
-  blake2bfCache: ConcurrentLruCache[PrecompileCacheKey[213], PrecompileCacheValue[64]]
   pointEvaluationCache: ConcurrentLruCache[PrecompileCacheKey[192], PrecompileCacheValue[64]]
   blsG1AddCache: ConcurrentLruCache[PrecompileCacheKey[256], PrecompileCacheValue[128]]
   blsG1MultiExpCache: ConcurrentLruCache[PrecompileCacheKey[640], PrecompileCacheValue[128]]
@@ -844,17 +845,15 @@ proc initCache[I, O: static int](
   let capacity = precompileCacheBytes div
     (sizeof(PrecompileCacheKey[I]) + sizeof(PrecompileCacheValue[O]) + lruOverhead)
   if threadSafe:
-    cache.init(capacity, initialSize = capacity, threadSafe = true)
+    cache.init(capacity, threadSafe = true)
   else:
-    cache.init(capacity, initialSize = capacity, shardBits = 0, threadSafe = false)
+    cache.init(capacity, shardBits = 0, threadSafe = false)
 
 proc initPrecompileCaches(threadSafe: bool) =
   initCache(ecRecoverCache, threadSafe)
   initCache(modExpCache, threadSafe)
-  initCache(ecAddCache, threadSafe)
   initCache(ecMulCache, threadSafe)
   initCache(pairingCache, threadSafe)
-  initCache(blake2bfCache, threadSafe)
   initCache(pointEvaluationCache, threadSafe)
   initCache(blsG1AddCache, threadSafe)
   initCache(blsG1MultiExpCache, threadSafe)
@@ -979,18 +978,19 @@ proc execPrecompile*(c: Computation, precompile: Precompiles) =
     # capacity (the guard inside execCachedPrecompile), so an over-length input is
     # never stored as a truncated key. modExp additionally has variable output,
     # so it enables checkOutputLen to skip caching outputs that don't fit.
-    # sha256, ripemd160 and identity are not cached (cheap, variable length).
+    # sha256 is cached with a 256-byte key (longer inputs run uncached) and a
+    # fixed 32-byte output. ripemd160 and identity are not cached.
     case precompile
     of paEcRecover: execCachedPrecompile(c, fork, ecRecoverCache, ecRecover(c))
-    of paSha256: sha256(c)
+    of paSha256: sha256(c) 
     of paRipeMd160: ripemd160(c)
     of paIdentity: identity(c)
     of paModExp: execCachedPrecompile(c, fork, modExpCache, modExp(c, fork),
                                       checkOutputLen = true)
-    of paEcAdd: execCachedPrecompile(c, fork, ecAddCache, bn256ecAdd(c, fork))
+    of paEcAdd: bn256ecAdd(c, fork)
     of paEcMul: execCachedPrecompile(c, fork, ecMulCache, bn256ecMul(c, fork))
     of paPairing: execCachedPrecompile(c, fork, pairingCache, bn256ecPairing(c, fork))
-    of paBlake2bf: execCachedPrecompile(c, fork, blake2bfCache, blake2bf(c))
+    of paBlake2bf: blake2bf(c)
     of paPointEvaluation:
       execCachedPrecompile(c, fork, pointEvaluationCache, pointEvaluation(c))
     of paBlsG1Add: execCachedPrecompile(c, fork, blsG1AddCache, blsG1Add(c))
