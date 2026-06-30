@@ -18,7 +18,7 @@ import
   eth/common/keys,
   chronicles,
   nimcrypto/[ripemd, sha2, utils],
-  stew/[assign2, arraybuf],
+  stew/[assign2, arraybuf, byteutils],
   ../common/evmforks,
   ../concurrency/lru,
   ../core/eip4844,
@@ -945,24 +945,45 @@ template execCachedPrecompile(
       # The key is only copied into an ArrayBuf on a miss, when it must be stored.
       let keyHash = cache.toKeyHash(c.msg.data.toOpenArray(0, c.msg.data.high))
 
-      var hit = false
+      # DEBUG: capture the cached entry (if any), then ALWAYS recompute fresh and
+      # assert the cache matches - gas, output, AND success-vs-error. Catches a
+      # cached result that diverges from a fresh run for the current input/fork.
+      var
+        hadHit = false
+        cachedGas: GasInt
+        cachedOutput: seq[byte]
       cache.withReadValueByHash(
           keyHash, c.msg.data.toOpenArray(0, c.msg.data.high), cached):
         if cached.fork == fork:
-          res = c.gasMeter.consumeGas(cached.gasUsed, reason = "Precompile cache hit")
-          if res.isOk():
-            assign(c.output, cached.output.data())
-          hit = true
+          hadHit = true
+          cachedGas = cached.gasUsed
+          cachedOutput = @(cached.output.data())
 
-      if not hit:
-        let gasBefore = c.gasMeter.gasRemaining
-        res = compute
-        if res.isOk():
+      let gasBefore = c.gasMeter.gasRemaining
+      res = compute
+      if res.isOk():
+        let freshGas = gasBefore - c.gasMeter.gasRemaining
+        if hadHit:
+          doAssert cachedGas == freshGas,
+            "precompile cache GAS mismatch: cached=" & $cachedGas & " fresh=" &
+              $freshGas & " fork=" & $fork & " input=0x" & byteutils.toHex(c.msg.data)
+          doAssert c.output == cachedOutput,
+            "precompile cache OUTPUT mismatch: fork=" & $fork &
+              " input=0x" & byteutils.toHex(c.msg.data) &
+              " cached=0x" & byteutils.toHex(cachedOutput) &
+              " fresh=0x" & byteutils.toHex(c.output)
+        else:
           when checkOutputLen:
             if c.output.len > cache.valueCapacity:
               break body
           cache.putByHash(keyHash, cache.toCacheKey(c.msg.data),
-            cache.toCacheValue(fork, gasBefore - c.gasMeter.gasRemaining, c.output))
+            cache.toCacheValue(fork, freshGas, c.output))
+      elif hadHit and res.error.code != EvmErrorCode.OutOfGas:
+        # Cache held a (successful) entry for this input, but a fresh run errors
+        # (non-OOG) - the cache would have returned a success the chain rejects.
+        doAssert false,
+          "precompile cache HIT but fresh recompute ERRORED: code=" &
+            $res.error.code & " fork=" & $fork & " input=0x" & byteutils.toHex(c.msg.data)
     res
 
 proc execPrecompile*(c: Computation, precompile: Precompiles) =
