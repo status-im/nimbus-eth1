@@ -173,7 +173,8 @@ template runPeer*(
     case buddy.ctx.pool.syncState:
     of SnapDownload:
       # Download and cache accounts, storage slots, contracts
-      buddy.downloadAccountsAndStorage info
+      buddy.downloadAccountsAndStorage(info).isOkOr:
+        bodyRc = peerWaitDownloadInterval           # maybe no CL or peers yet
 
     else:
       bodyRc = peerWaitElseInterval

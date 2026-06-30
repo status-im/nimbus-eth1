@@ -102,6 +102,7 @@ type
     nErrors*: PeerErrors             ## Error register
     peerType*: string                ## Self declared peer type
     failedReq*: PeerFirstFetchReq    ## Don't send the same failed request twice
+    lastMsgLog*: Moment              ## Helps reducing logging noise
 
   SnapCtxData* = object
     ## Globally shared data extension
