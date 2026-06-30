@@ -37,6 +37,7 @@ type
     parentDifficulty*: Opt[UInt256]
     currentGasLimit*: GasInt
     currentNumber*: BlockNumber
+    currentSlotNumber*: Opt[uint64]  # EIP-7843: consensus slot number, read by SLOTNUM
     currentTimestamp*: EthTime
     parentTimestamp*: EthTime
     blockHashes*: Table[uint64, Hash32]

@@ -95,6 +95,7 @@ proc envToHeader(env: EnvStruct): Header =
     difficulty : env.currentDifficulty.get(0.u256),
     mixHash    : env.currentRandom.get(default(Bytes32)),
     number     : env.currentNumber,
+    slotNumber : env.currentSlotNumber,
     gasLimit   : env.currentGasLimit,
     timestamp  : env.currentTimestamp,
     stateRoot  : emptyRlpHash,

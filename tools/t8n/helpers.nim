@@ -169,6 +169,7 @@ proc readValue*(r: var JsonReader[T8Conv], val: var EnvStruct)
     of "currentTimestamp":
       r.readValue(val.currentTimestamp)
       currentTimestampParsed = true
+    of "currentSlotNumber": r.readValue(val.currentSlotNumber)
     of "currentDifficulty": r.readValue(val.currentDifficulty)
     of "currentRandom": r.readValue(val.currentRandom)
     of "parentDifficulty": r.readValue(val.parentDifficulty)
