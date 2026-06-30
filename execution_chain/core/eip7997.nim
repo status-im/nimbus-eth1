@@ -11,15 +11,21 @@
 {.push raises: [], gcsafe.}
 
 import
-  eth/common/addresses,
+  eth/common/[addresses, hashes],
   stew/byteutils,
   ../db/ledger
 
 const
   FactoryAddress = address"0x4e59b44847b379578588920cA78FbF26c0B4956C"
   FactoryCode = hexToSeqByte"0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf3"
+  FactoryCodeHash = hashes.keccak256(FactoryCode)
 
 proc applyEip7997*(ledger: LedgerRef) =
+  let codeHash = ledger.getCodeHash(FactoryAddress)
+  if codeHash == FactoryCodeHash:
+    # It's a no-op on chain that already have factory at the FactoryAddress.
+    return
+
   # Although this code only called once during fork transition,
   # if using the constant above, sometimes it will crash
   # when interacting with CodeBytesRef sink in test environment.
