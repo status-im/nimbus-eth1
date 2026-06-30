@@ -82,7 +82,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
   ##
   var bodyRc = ZeroDuration                         # to be re-invoked, soon?
   block body:
-    case ctx.updateSyncState(info):                 # set next state
+    case ctx.updateSnapState(info):                 # set next state
     of SnapIdle:
       bodyRc = daemonWaitElseInterval               # take a nap
 

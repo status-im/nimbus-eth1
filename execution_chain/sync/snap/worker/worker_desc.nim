@@ -105,7 +105,7 @@ type
 
   SnapCtxData* = object
     ## Globally shared data extension
-    syncState*: SyncState            ## Last known layout state
+    syncState*: SnapState            ## Last known layout state
     contPrevSession*: bool           ## Request resuming previous session
     beaconSync*: BeaconSyncRef       ## Beacon syncer to resume after snap sync
     beaconTarget*: bool              ## inital beacon target if `true`
@@ -142,13 +142,12 @@ func nErrors*(buddy: SnapPeerRef): var PeerErrors =
   ## Shortcut
   buddy.only.nErrors
 
-
-func syncState*(ctx: SnapCtxRef): (SyncState, bool) =
+func syncState*(ctx: SnapCtxRef): (SnapState, bool) =
   (ctx.pool.syncState, ctx.poolMode)
 
 func syncState*(
     buddy: SnapPeerRef;
-      ): (string, SyncPeerRunState, SyncState, bool) =
+      ): (string, SyncPeerRunState, SnapState, bool) =
   (buddy.only.peerType,
    buddy.ctrl.state,
    buddy.ctx.pool.syncState,

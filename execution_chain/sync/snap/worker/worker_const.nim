@@ -14,7 +14,7 @@ import
   pkg/[chronos, stint]
 
 type
-  SyncState* = enum
+  SnapState* = enum
     SnapIdle = 0
     SnapReady                      ## Wait for download state
     SnapResume                     ## Resume from previous session
