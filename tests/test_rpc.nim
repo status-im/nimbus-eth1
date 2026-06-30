@@ -71,6 +71,7 @@ const
   feeRecipient = address"0000000000000000000000000000000000000212"
   prevRandao = Bytes32 EMPTY_UNCLE_HASH # it can be any valid hash
   oneETH = 1.u256 * 1_000_000_000.u256 * 1_000_000_000.u256
+  DEPOSIT_CONTRACT_ADDRESS = address"0x4242424242424242424242424242424242424242"
 
 proc persistFixtureBlock(chainDB: CoreDbTxRef) =
   let header = getBlockHeader4514995()
@@ -196,6 +197,7 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     conf.networkParams.config.cancunTime = Opt.some(0.EthTime)
 
   if envFork >= Prague:
+    conf.networkParams.config.depositContractAddress = Opt.some(DEPOSIT_CONTRACT_ADDRESS)
     conf.networkParams.config.pragueTime = Opt.some(0.EthTime)
     conf.networkParams.config.osakaTime = Opt.some(3805601325.EthTime)
     conf.networkParams.config.bpo1Time = Opt.some(3805701325.EthTime)
@@ -293,6 +295,39 @@ proc generateBlock(env: var TestEnv) =
   env.txHash = tx1.computeRlpHash
   env.blockHash = blk.header.computeBlockHash
 
+func contractsInConfig(c: ConfigObject, contracts: openArray[addresses.Address]): bool =
+  for z in contracts:
+    var found = false
+    for x in c.systemContracts:
+      if x.address == z:
+        found = true
+        break
+    if not found:
+      return false
+
+  contracts.len == c.systemContracts.len
+
+const
+  cancunSystemContracts = [
+    BEACON_ROOTS_ADDRESS
+  ]
+  pragueSystemContracts = [
+    BEACON_ROOTS_ADDRESS,
+    DEPOSIT_CONTRACT_ADDRESS,
+    CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
+    HISTORY_STORAGE_ADDRESS,
+    WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
+  ]
+  amsterdamSystemContracts = [
+    BEACON_ROOTS_ADDRESS,
+    DEPOSIT_CONTRACT_ADDRESS,
+    CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
+    HISTORY_STORAGE_ADDRESS,
+    WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
+    BUILDER_DEPOSIT_CONTRACT_ADDRESS,
+    BUILDER_EXIT_CONTRACT_ADDRESS,
+  ]
+
 createRpcSigsFromNim(RpcClient, EthJson):
   proc web3_clientVersion(): string
   proc web3_sha3(data: seq[byte]): Hash32
@@ -378,6 +413,8 @@ proc rpcMain*() =
 
       check res.last.get().chainId == com.chainId
       check res.last.get().activationTime.uint64 == 3805801325'u64
+
+      check res.current.contractsInConfig(pragueSystemContracts)
 
     test "eth_syncing":
       let res = await client.eth_syncing()
@@ -943,10 +980,28 @@ proc rpcMain*() =
 
     env.close()
 
+  suite "Remote Procedure Calls - Cancun":
+    var env = setupEnv(Cancun)
+    env.generateBlock()
+    let
+      client = env.client
+      com = env.com
+
+    test "eth_config":
+      let res = await client.eth_config()
+      check res.current.chainId == com.chainId
+      check res.current.activationTime.uint64 == 0'u64
+
+      check res.current.contractsInConfig(cancunSystemContracts)
+
+    env.close()
+
   suite "Remote Procedure Calls - Amsterdam":
     var env = setupEnv(Amsterdam)
     env.generateBlock()
-    let client = env.client
+    let
+      client = env.client
+      com = env.com
 
     test "debug_getRawBlockAccessList - happy path":
       let r = await client.call("debug_getRawBlockAccessList",
@@ -956,6 +1011,13 @@ proc rpcMain*() =
 
       let bal = ethBlockAccessList(raw)
       check rlp.encode(bal[]) == raw
+
+    test "eth_config":
+      let res = await client.eth_config()
+      check res.current.chainId == com.chainId
+      check res.current.activationTime.uint64 == 0'u64
+
+      check res.current.contractsInConfig(amsterdamSystemContracts)
 
     env.close()
 
