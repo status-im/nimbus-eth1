@@ -69,14 +69,23 @@ proc headerDownloadTrigger*(
     latestNum = ctx.chain.latestNumber()            # head from `FC` module
     consHeadNum = ctx.hdrCache.latestConsHeadNumber()
 
+  # Check whether there is an ongoing header download, already.
+  if ctx.beaconState in {headers, headersFinish, linger}:
+    # Note: The `linger` state is active when waiting for the
+    #       `storeTopHeaderCB()` event handler (see below) to
+    #       clean up.
+    return ok()                                     # nothing to do
+
   if consHeadNum == 0:                              # no FCU request from CL?
-    if latestNum < lastCached:
+    if latestNum < lastCached:                      # maybe manual target set
       if not reducedNoise:
-        trace info & ": Cached enough headers already (for now)",
+        trace info & ": Cached enough headers already",
           lastCached, head=latestNum, syncState=($ctx.syncState)
+      ctx.pool.headersSynced = true                 # mark it synnced (for now)
       return ok()
 
-  # Ignoring a beacon header fetch cycle if there are many headers to fetch.
+  # Ignoring a beacon header fetch cycle if there are not too many headers
+  # available to fetch.
   if latestNum < consHeadNum and
      lastCached + nConsHeadcachedDeltaMax < consHeadNum:
     if not reducedNoise:
@@ -84,6 +93,7 @@ proc headerDownloadTrigger*(
         consHeadNum, lastCached, syncState=($ctx.syncState)
     return ok()
 
+  # Define event handler to complete beacon syncer download
   proc storeTopHeaderCB(ok: bool) =
     if ok:
       ctx.storeCachedHeaders(leastBn, info)
@@ -92,6 +102,7 @@ proc headerDownloadTrigger*(
         `error`=error
     ctx.pool.headersSynced = true
 
+  # Trigger beacon syncer
   bcSync.singleRun(header, storeTopHeaderCB).isOkOr:
     if ctx.nEthPeers() == 0:
       chronicles.info info & ": Waiting for eth/xx peers",

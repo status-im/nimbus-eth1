@@ -19,10 +19,15 @@ import
 
 from ./mpt/mpt_assembly
   import MptAsmRef
+
+# Running beacon syncer in tandem
 from ../../beacon
   import BeaconPeerRef, BeaconSyncRef
+from ../../beacon/worker/worker_const as beacon_const
+  import BeaconState
 
 export
+  BeaconState,
   chain, common, results, state_db, sync_desc, wire_types, worker_const
 
 
@@ -138,6 +143,10 @@ func hdrCache*(ctx: SnapCtxRef): HeaderChainRef =
 func beaconInitTarget*(ctx: SnapCtxRef): bool =
   ## Getter
   ctx.pool.beaconSync.ctx.pool.initTarget.isSome()
+
+func beaconState*(ctx: SnapCtxRef): BeaconState =
+  ## Getter
+  ctx.pool.beaconSync.ctx.pool.syncState
 
 func nErrors*(buddy: SnapPeerRef): var PeerErrors =
   ## Shortcut
