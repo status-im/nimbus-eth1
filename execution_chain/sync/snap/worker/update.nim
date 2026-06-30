@@ -34,7 +34,7 @@ func readyForMptAssembly(ctx: SnapCtxRef): bool =
 proc idleNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
   if ctx.pool.contPrevSession:
-    chronicles.info info & ": Resuming previous session"
+    info info & ": Request to resume previous session"
   elif not ctx.pool.mptAsm.clear(info):
     return SnapIdle                                 # disk full?, stay anyway
   SnapReady
