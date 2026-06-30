@@ -439,25 +439,6 @@ proc beaconBackendFor*(
   except KeyError:
     err((BackendError, "Chosen backend not found", UNTAGGED))
 
-proc applyPenalty*(engine: RpcVerificationEngine, e: ErrorTuple) =
-  if e.backendIdx < 0:
-    return
-  let idx = e.backendIdx
-  try:
-    case e.errType
-    of BackendFetchError, BackendDecodingError:
-      engine.scores[idx].availability =
-        engine.availabilityScoreFunc(engine.scores[idx].availability, Penalty)
-      engine.scores[idx].quality =
-        engine.qualityScoreFunc(engine.scores[idx].quality, UndoReward)
-    of VerificationError:
-      engine.scores[idx].quality =
-        engine.qualityScoreFunc(engine.scores[idx].quality, Penalty)
-    else:
-      discard
-  except KeyError:
-    discard
-
 template tagBackend*[T](r: EngineResult[T], idx: int): EngineResult[T] =
   block:
     let taggedR: EngineResult[T] = r

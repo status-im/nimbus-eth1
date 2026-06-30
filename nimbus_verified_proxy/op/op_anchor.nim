@@ -14,6 +14,7 @@ import
   eth/common/[hashes, headers, base, eth_types_rlp],
   web3/eth_api_types,
   ../engine/types,
+  ../engine/engine,
   ../engine/header_store,
   ../engine/accounts,
   ../engine/blocks,

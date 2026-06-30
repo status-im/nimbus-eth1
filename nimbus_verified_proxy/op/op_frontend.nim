@@ -19,6 +19,7 @@ import
   ../../execution_chain/db/core_db/memory_only,
   ../../execution_chain/common/common,
   ../engine/types,
+  ../engine/engine,
   ../engine/header_store,
   ../engine/accounts,
   ../engine/blocks,
