@@ -1192,6 +1192,9 @@ proc putStateData*(
 proc delStateData*(db: MptAsmRef; root: StateRoot): DelResult =
   db.del33(cStateData, root)
 
+proc clearStateData*(db: MptAsmRef): DelResult =
+  db.adb.rClear(cStateData)
+
 iterator walkStateData*(db: MptAsmRef): WalkStateData =
   for (key,value) in db.adb.colWalk33 cStateData.key33():
     let w = value.decodeStateData().valueOr:

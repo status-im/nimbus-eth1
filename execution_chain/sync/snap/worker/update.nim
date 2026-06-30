@@ -31,15 +31,15 @@ func readyForMptAssembly(ctx: SnapCtxRef): bool =
 # Private FSA transition functions
 # ------------------------------------------------------------------------------
 
-proc idleNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+proc idleNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
   if ctx.pool.contPrevSession:
-    chronicles.info info & ": Resuming previous session"
+    info info & ": Request to resume previous session"
   elif not ctx.pool.mptAsm.clear(info):
     return SnapIdle                                 # disk full?, stay anyway
   SnapReady
 
-proc readyNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+proc readyNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
   # Wait for the beacon syncer to have completed the first header chain
   # download  which might be considerably more to do than any subsequent
@@ -73,7 +73,7 @@ proc readyNext(ctx: SnapCtxRef; info: static[string]): SyncState =
     return SnapResume
   SnapDownload
 
-proc resumeNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+proc resumeNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
   # Continuing a a session is fully controlled by the daemon (no peers'
   # interaction.) So there is no need to sync via `poolMode`.
@@ -84,20 +84,20 @@ proc resumeNext(ctx: SnapCtxRef; info: static[string]): SyncState =
     return SnapMkTrie
   SnapDownload
 
-func downloadNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+func downloadNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
   if ctx.readyForMptAssembly():
     ctx.poolMode = true                             # sync peers needed
     return SnapDownloadFinish
   SnapDownload                                      # otherwise stay
 
-proc downloadFinishNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+proc downloadFinishNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
   if ctx.poolMode:                                  # wait for peers to sync
     return SnapDownloadFinish
   SnapMkTrie
 
-proc mkTrieNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+proc mkTrieNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
   if ctx.pool.pivot.isNone():                       # enter unless pivot is set
     return SnapMkTrie
@@ -105,7 +105,7 @@ proc mkTrieNext(ctx: SnapCtxRef; info: static[string]): SyncState =
   # interaction.) So there is no need to sync via `poolMode`.
   SnapAnalyse
 
-proc analyseNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+proc analyseNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
   ctx.getPivotTag(info).isErrOr:
     if PivotMptAnalysed <= value:
@@ -114,14 +114,14 @@ proc analyseNext(ctx: SnapCtxRef; info: static[string]): SyncState =
 
 # TBD ..
 
-func stopNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+func stopNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   SnapStop
 
 # ------------------------------------------------------------------------------
 # Public FSA related functions
 # ------------------------------------------------------------------------------
 
-proc updateSyncState*(ctx: SnapCtxRef; info: static[string]): SyncState =
+proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## Update internal state when needed
   ##
   #
