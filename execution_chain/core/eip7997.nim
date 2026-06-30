@@ -20,9 +20,11 @@ const
   FactoryCode = hexToSeqByte"0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf3"
 
 proc applyEip7997*(ledger: LedgerRef) =
-  # Although this code only called once during fork transition,
-  # if using the constant above, sometimes it will crash
-  # when interacting with CodeBytesRef sink in test environment.
-  let factoryCode = FactoryCode
-  ledger.setCode(FactoryAddress, factoryCode)
-  ledger.setNonce(FactoryAddress, 1)
+  # EIP-7997: seed the factory with nonce 1 and its runtime code, but only when
+  # it isn't already present. Per the EIP this is a no-op on chains that already
+  # have the factory; resetting an existing (possibly already-used) factory's
+  # nonce would corrupt the state root at the transition block.
+  if ledger.getCodeSize(FactoryAddress) == 0:
+    let factoryCode = FactoryCode
+    ledger.setCode(FactoryAddress, factoryCode)
+    ledger.setNonce(FactoryAddress, 1)
