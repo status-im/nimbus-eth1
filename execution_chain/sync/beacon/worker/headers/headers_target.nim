@@ -66,7 +66,7 @@ template headersTargetActivate*(
     let ctx = buddy.ctx
 
     # Must be called before first syncer activation
-    doAssert ctx.pool.syncState == SyncState.idle
+    doAssert ctx.pool.syncState == BeaconState.idle
 
     if ctx.pool.initTarget.isNone():
       break body                                           # return

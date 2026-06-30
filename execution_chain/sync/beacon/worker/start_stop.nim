@@ -30,11 +30,11 @@ declareGauge nec_sync_peers, "" &
 
 proc querySyncProgress(ctx: BeaconCtxRef): SyncStateData =
   ## Syncer status query function (for call back closure)
-  if SyncState.blocks <= ctx.pool.syncState:
+  if BeaconState.blocks <= ctx.pool.syncState:
     return (ctx.hdrCache.antecedent.number,
             ctx.subState.topNum, ctx.subState.headNum)
 
-  if SyncState.headers <= ctx.pool.syncState:
+  if BeaconState.headers <= ctx.pool.syncState:
     let b = ctx.chain.baseNumber
     return (b, b, ctx.subState.headNum)
 

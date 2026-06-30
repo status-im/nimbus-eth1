@@ -146,10 +146,10 @@ type
   PeerFirstFetchReq* = object
     ## Register fetch request. This is intended to avoid sending the same (or
     ## similar) fetch request again from the same peer that sent it previously.
-    case state*: SyncState
-    of SyncState.headers:
+    case state*: BeaconState
+    of BeaconState.headers:
       blockNumber*: BlockNumber      ## First block number
-    of SyncState.blocks:
+    of BeaconState.blocks:
       blockHash*: Hash32             ## First block hash
     else:
       discard
@@ -182,7 +182,7 @@ type
     ## Globally shared data extension
     hdrSync*: HeaderFetchSync        ## Syncing by linked header chains
     blkSync*: BlocksFetchSync        ## For importing/executing blocks
-    syncState*: SyncState            ## Current syncer state
+    syncState*: BeaconState            ## Current syncer state
     standByMode*: bool               ## Do not generally activate if `true`
     subState*: SyncSubState          ## Additional state variables
     nextMetricsUpdate*: Moment       ## For updating metrics
@@ -254,7 +254,7 @@ proc `hibernate=`*(ctx: BeaconCtxRef; val: bool) =
 
 func syncState*(
     ctx: BeaconCtxRef;
-      ): (SyncState,HeaderChainMode,bool) =
+      ): (BeaconState,HeaderChainMode,bool) =
   ## Getter, triple of relevant run-time states
   (ctx.pool.syncState,
    ctx.hdrCache.state,
@@ -262,7 +262,7 @@ func syncState*(
 
 func syncState*(
     buddy: BeaconPeerRef;
-      ): (SyncPeerRunState,SyncState,HeaderChainMode,bool) =
+      ): (SyncPeerRunState,BeaconState,HeaderChainMode,bool) =
   ## Getter, also includes buddy state
   (buddy.ctrl.state,
    buddy.ctx.pool.syncState,

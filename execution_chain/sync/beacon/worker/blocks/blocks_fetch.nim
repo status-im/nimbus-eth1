@@ -33,7 +33,7 @@ proc maybeSlowPeerError(
 
     # Do not repeat the same time-consuming failed request
     buddy.only.failedReq = PeerFirstFetchReq(
-      state:     SyncState.blocks,
+      state:     BeaconState.blocks,
       blockHash: hash)
 
     return true
@@ -62,7 +62,7 @@ proc getBlockBodies(
   ## Wrapper around `getBlockHeaders()`
   let start = Moment.now()
 
-  if buddy.only.failedReq.state == SyncState.blocks and
+  if buddy.only.failedReq.state == BeaconState.blocks and
      buddy.only.failedReq.blockHash == req.blockHashes[0]:
     return err((EAlreadyTriedAndFailed,"","",Moment.now()-start))
 
