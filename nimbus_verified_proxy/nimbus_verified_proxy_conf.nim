@@ -8,9 +8,10 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[strutils],
+  std/[strutils, uri],
   json_serialization/std/net,
-  beacon_chain/conf_light_client,
+  confutils/toml/defs as confTomlDefs,
+  beacon_chain/spec/digest,
   beacon_chain/nimbus_binary_common
 
 export net
@@ -38,13 +39,6 @@ type VerifiedProxyConf* = object
     defaultValue: StdoutLogKind.Auto,
     name: "log-format"
   .}: StdoutLogKind
-
-  # Storage
-  dataDirFlag* {.
-    desc: "The directory where nimbus will store all blockchain data",
-    abbr: "d",
-    name: "data-dir"
-  .}: Option[OutDir]
 
   # Network
   eth2Network* {.
@@ -93,6 +87,13 @@ type VerifiedProxyConf* = object
     desc: "Number of blocks downloaded parallely. Affects memory usage",
     defaultValue: 10,
     name: "debug-parallel-downloads"
+  .}: uint64
+
+  maxLightClientUpdates* {.
+    hidden,
+    desc: "Maximum number of light client updates fetched per sync round. Lower values reduce peak memory usage at the cost of slower initial sync.",
+    defaultValue: 128,
+    name: "debug-max-lc-updates"
   .}: uint64
 
   syncHeaderStore* {.
@@ -144,6 +145,49 @@ type VerifiedProxyConf* = object
     defaultValue: @[],
     name: "private-tx-url"
   .}: UrlList
+
+  # P2P light client backend
+  p2pEnabled* {.
+    desc: "Enable P2P light client data backend",
+    defaultValue: false,
+    defaultValueDesc: "false"
+    name: "p2p"
+  .}: bool
+
+  p2pTcpPort* {.
+    desc: "Listening TCP port for the P2P light client backend",
+    defaultValue: 9000,
+    defaultValueDesc: "9000"
+    name: "p2p-tcp-port"
+  .}: uint16
+
+  p2pUdpPort* {.
+    desc: "Listening UDP port for the P2P light client backend",
+    defaultValue: 9000,
+    defaultValueDesc: "9000"
+    name: "p2p-udp-port"
+  .}: uint16
+
+  p2pMaxPeers* {.
+    desc: "Target number of peers for the P2P light client backend",
+    defaultValue: 160,
+    defaultValueDesc: "160"
+    name: "p2p-max-peers"
+  .}: int
+
+  p2pBootstrapNodesFile* {.
+    desc: "Path to a file containing bootstrap node ENRs (one per line) for the P2P light client backend",
+    defaultValue: "",
+    defaultValueDesc: ""
+    name: "p2p-bootstrap-nodes-file"
+  .}: string
+
+  p2pNat* {.
+    desc: "NAT traversal for the P2P backend. One of: any, none, upnp, pmp, extip:<IP>",
+    defaultValue: "any",
+    defaultValueDesc: "any"
+    name: "p2p-nat"
+  .}: string
 
 #!fmt: on
 

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -15,7 +15,7 @@ import
   json_rpc/rpcclient,
   web3/[eth_api_types, eth_api],
   eth/common/[headers_rlp, blocks_rlp, receipts_rlp],
-  ../../eth_history/yaml_utils,
+  ../yaml_utils,
   ../../bridge/common/rpc_helpers
 
 type BlockData* = object

@@ -34,7 +34,7 @@ URLS_FILE=$(mktemp)
 curl -s "$DOWNLOAD_URL" | \
 grep -Eo 'href="[^"]+"' | \
 cut -d'"' -f2 | \
-grep -Ei '\.(era|era1|txt)$' | \
+grep -Ei '\.(ere|era|era1|txt)$' | \
 sort -u > "$URLS_RAW_FILE"
 
 # Remove trailing file (like index.html) to get actual base path
@@ -68,13 +68,13 @@ ARIA_PID=$!
 
 echo "📥 Starting download of $TOTAL_FILES files..."
 while kill -0 "$ARIA_PID" 2> /dev/null; do
-  COMPLETED=$(find . -type f \( -name '*.era' -o -name '*.era1' -o -name '*.txt' \) | wc -l)
+  COMPLETED=$(find . -type f \( -name '*.ere' -o -name '*.era' -o -name '*.era1' -o -name '*.txt' \) | wc -l)
   PERCENT=$(awk "BEGIN { printf \"%.1f\", ($COMPLETED/$TOTAL_FILES)*100 }")
   echo -ne "📦 Download Progress: $PERCENT% complete ($COMPLETED / $TOTAL_FILES files)     \r"
   sleep 1
 done
 
-COMPLETED=$(find . -type f \( -name '*.era' -o -name '*.era1' -o -name '*.txt' \) | wc -l)
+COMPLETED=$(find . -type f \( -name '*.ere' -o -name '*.era' -o -name '*.era1' -o -name '*.txt' \) | wc -l)
 echo -ne "📦 Download Progress: 100% complete ($COMPLETED / $TOTAL_FILES files)     \n"
 
 # ✅ Cleanup temp files

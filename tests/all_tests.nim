@@ -39,17 +39,15 @@ import
     test_rpc,
     test_snap,
     test_transaction_json,
+    test_transactions_receipts_storage,
     test_txpool,
+    test_tx_frame_blobify,
     test_networking,
     test_pooled_tx,
-    test_stateless_witness_types,
-    test_stateless_witness_generation,
-    test_stateless_witness_verification,
-    test_stateless_execution,
-    test_block_access_list_builder,
-    test_block_access_list_validation,
-    test_block_access_list_tracker,
+    test_stateless,
+    test_block_access_list,
     test_pruner,
     # These suites below are much slower than all the rest, so run them last
     test_generalstate_json,
-]
+  ],
+  ./blockproofs/all_blockproofs_tests

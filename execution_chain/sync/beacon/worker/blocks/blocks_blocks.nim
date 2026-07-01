@@ -15,9 +15,10 @@ import
   pkg/eth/common,
   pkg/stew/interval_set,
   ../../../../networking/p2p,
+  ../../../../block_access_list/block_access_list_utils,
   ../../../wire_protocol/types,
   ../[helpers, update, worker_desc],
-  ./[blocks_fetch, blocks_helpers, blocks_import, blocks_unproc]
+  ./[blocks_bal, blocks_fetch, blocks_helpers, blocks_unproc]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -27,14 +28,6 @@ proc getNthHash(ctx: BeaconCtxRef; blocks: seq[EthBlock]; n: int): Hash32 =
   ctx.hdrCache.getHash(blocks[n].header.number).valueOr:
     return zeroHash32
 
-func toStr(e: BeaconError): string =
-  result = "(" & $e.excp & ","
-  if 0 < e.name.len:
-    result &= e.name & "(" & e.msg & "),"
-  elif 0 < e.msg.len:
-    result &= e.msg & ","
-  result &= e.elapsed.toStr
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -43,16 +36,18 @@ template blocksFetchCheckImpl(
     buddy: BeaconPeerRef;
     iv: BnRange;
     info: static[string];
-      ): Opt[seq[EthBlock]] =
+      ): Opt[BlocksForImport] =
   ## Async/template
   ##
   ## From the ptp/ethXX network fetch the argument range `iv` of block bodies
-  ## and assemble a list of blocks to be returned.
+  ## and assemble a list of blocks to be returned. For post-Amsterdam blocks the
+  ## matching block access lists (EIP-7928) are fetched as well from `eth/71`
+  ## peers.
   ##
   ## The block bodies are heuristically verified, the headers are taken from
   ## the header chain cache.
   ##
-  var bodyRc = Opt[seq[EthBlock]].err()
+  var bodyRc = Opt[BlocksForImport].err()
   block body:
     let
       ctx = buddy.ctx
@@ -122,8 +117,38 @@ template blocksFetchCheckImpl(
         blocks[n].uncles = bodies[n].uncles
         blocks[n].withdrawals = bodies[n].withdrawals
 
+    # Fetch block access lists (EIP-7928) for the batch from the `eth/71` peer
+    # and verify each against the hash committed in its header.
+    var bals = newSeq[Opt[BlockAccessListRef]](blocks.len)
+    block balFetch:
+      if blocks.len == 0:
+        break balFetch
+      
+      let headSlot = ctx.hdrCache.head.slotNumber          # sync target slot
+
+      if not ctx.chain.com.isAmsterdamOrLater(blocks[0].header.timestamp) or 
+          headSlot.isNone() or
+          not blocks[0].header.isWithinBalRetentionPeriod(headSlot.unsafeGet):
+        break balFetch
+
+      let balRequest = BlockAccessListsRequest(
+        blockHashes: request.blockHashes[0 ..< blocks.len])
+
+      # The response is served in request order and may be truncated by the
+      # peer's soft response size limit.
+      let raws = (await buddy.fetchRawBlockAccessLists(balRequest)).valueOr:
+        default(seq[RawBlockAccessList])
+      var nBals = 0
+      for j in 0 ..< min(raws.len, blocks.len):
+        bals[j] = decodeBlockAccessList(raws[j], blocks[j].header)
+        if bals[j].isSome:
+          inc nBals
+      trace info & ": fetched block access lists", peer, iv=($iv),
+        nReq=balRequest.blockHashes.len, nResp=raws.len, nBals
+
     if 0 < blocks.len.uint64:
-      bodyRc = Opt[seq[EthBlock]].ok(blocks)               # return ok()
+      bodyRc = Opt[BlocksForImport].ok(BlocksForImport(
+        blocks: move(blocks), bals: move(bals), peerID: buddy.peerID)) # return ok()
 
     buddy.nErrors.apply.blk.inc
     break body                                             # return err()
@@ -138,14 +163,14 @@ template blocksFetch*(
     buddy: BeaconPeerRef;
     num: uint;
     info: static[string];
-      ): Opt[seq[EthBlock]] =
+      ): Opt[BlocksForImport] =
   ## Async/template
   ##
   ## From the p2p/ethXX network fetch as many blocks as given as argument `num`.
   ##
   let ctx = buddy.ctx
 
-  var bodyRc = Opt[seq[EthBlock]].err()
+  var bodyRc = Opt[BlocksForImport].err()
   block body:
     # Make sure that this sync peer is not banned from block processing,
     # already.
@@ -171,7 +196,7 @@ template blocksFetch*(
     if rc.isErr:
       ctx.blocksUnprocCommit(iv, iv)
     else:
-      ctx.blocksUnprocCommit(iv, iv.minPt + rc.value.len.uint64, iv.maxPt)
+      ctx.blocksUnprocCommit(iv, iv.minPt + rc.value.blocks.len.uint64, iv.maxPt)
 
     bodyRc = rc
 
@@ -181,12 +206,17 @@ template blocksFetch*(
 template blocksImport*(
     buddy: BeaconPeerRef;
     blocks: seq[EthBlock];
+    bals: seq[Opt[BlockAccessListRef]];
     peerID: Hash;
     info: static[string];
       ): uint64 =
   ## Async/template
   ##
-  ## Import/execute a list of argument blocks. The function sets the global
+  ## Import/execute a list of argument blocks. For post-Amsterdam blocks the
+  ## matching block access lists (when available, aligned by index
+  ## with `blocks`) is passed to the importer.
+  ##
+  ## The function sets the global
   ## block number of the last executed block which might preceed the least block
   ## number from the argument list in case of an error.
   ##
@@ -208,64 +238,99 @@ template blocksImport*(
 
       for n in 0 ..< blocks.len:
         let nthBn = blocks[n].header.number
-        discard (await buddy.importBlock(blocks[n], peerID)).valueOr:
-          if error.excp != ECancelledError:
-            isError = true
 
-            # Mark peer that produced that unusable headers list as a zombie
-            let srcPeer = buddy.getSyncPeer peerID
-            if not srcPeer.isNil:
-              srcPeer.only.nErrors.apply.blk = nProcBlocksErrThreshold + 1
+        # Skip blocks at or below the current base — `FC` would otherwise
+        # quarantine them as orphans and abort the batch.
+        if nthBn <= ctx.chain.baseNumber:
+          trace "Ignoring block less eq. base", peer, blk=nthBn,
+            B=ctx.chain.baseNumber, L=ctx.chain.latestNumber
+          blocks[n].reset()
+          continue
 
-            # Check whether it is enough to skip the current blocks list, only
-            if ctx.subState.procFailNum != nthBn:
-              ctx.subState.procFailNum = nthBn     # OK, this is a new block
-              ctx.subState.procFailCount = 1
+        # Hand the block to the `FC` and let it classify the outcome. The `FC`
+        # owns the hash/branch/finalized knowledge needed to tell a duplicate or
+        # an orphaned fork from a genuinely invalid block; the syncer must not
+        # second-guess that from block numbers. `processQueue` already yields
+        # per-item, so no extra throttle is needed here.
+        let verdict =
+          try:
+            await ctx.chain.queueImportBlock(
+              blocks[n],
+              if n < bals.len: bals[n] else: Opt.none(BlockAccessListRef))
+          except CancelledError:
+            break loop                               # await cancelled, stop
 
-            else:
-              ctx.subState.procFailCount.inc       # block num was seen, already
+        if verdict.isOk:
+          # `Valid` or `AlreadyObserved`: both are forward progress. A block
+          # already present in the `FC` (imported earlier or by a concurrent
+          # importer such as `el_sync`) advances `topNum` without a re-download.
+          if verdict.value == AlreadyObserved:
+            trace info & ": block already in FC", peer, blk=nthBn,
+              B=ctx.chain.baseNumber, L=ctx.chain.latestNumber
+          ctx.updateLastBlockImported nthBn          # block imported OK
+          ctx.updateEtaBlocks()                      # metrics, eta estimate
 
-              # Cancel the whole download if needed
-              if nImportBlocksErrThreshold < ctx.subState.procFailCount:
-                ctx.subState.cancelRequest = true  # So require queue reset
+          # Free block body immediately - ForkedChain only retains the header.
+          # Transactions are already persisted as RLP bytes in the txFrame.
+          blocks[n].reset()
+          continue
 
-            # Proper logging ..
-            if ctx.subState.cancelRequest:
-              warn "Blocks import error (cancel this session)", n=n,
-                iv=($iv),
-                nBlocks=iv.len, nthBn,
-                nthHash=ctx.getNthHash(blocks, n).short,
-                base=ctx.chain.baseNumber,
-                head=ctx.chain.latestNumber,
-                blkFailCount=ctx.subState.procFailCount, error=error.toStr
-            elif error.excp == ESyncerTermination:
-              chronicles.debug "Blocks import error (skip remaining)", n=n,
-                iv=($iv),
-                nBlocks=iv.len, nthBn,
-                nthHash=ctx.getNthHash(blocks, n).short,
-                base=ctx.chain.baseNumber,
-                head=ctx.chain.latestNumber,
-                blkFailCount=ctx.subState.procFailCount, error=error.toStr
-            else:
-              chronicles.info "Blocks import error (skip remaining)", n=n,
-                iv=($iv),
-                nBlocks=iv.len, nthBn,
-                nthHash=ctx.getNthHash(blocks, n).short,
-                base=ctx.chain.baseNumber,
-                head=ctx.chain.latestNumber,
-                blkFailCount=ctx.subState.procFailCount, error=error.toStr
+        # Daemon stopped mid-import: abort the batch without committing.
+        if not ctx.daemon:
+          chronicles.debug "Blocks import stopped (syncer terminating)", n=n,
+            iv=($iv), nBlocks=iv.len, nthBn,
+            base=ctx.chain.baseNumber, head=ctx.chain.latestNumber
+          break loop
 
-          break loop                               # stop
-          # End `importBlock(..).valueOr`
+        case verdict.error.kind
+        of Orphaned, MissingParent:
+          if ctx.subState.procFailNum != nthBn:
+            ctx.subState.procFailNum = nthBn
+            ctx.subState.procFailCount = 1
+          else:
+            ctx.subState.procFailCount.inc
+            if nImportBlocksErrThreshold < ctx.subState.procFailCount:
+              ctx.subState.cancelRequest = true
+          trace info & ": batch stranded, FC head moved", peer, n=n, nthBn,
+            kind=verdict.error.kind, nthHash=ctx.getNthHash(blocks, n).short,
+            base=ctx.chain.baseNumber, head=ctx.chain.latestNumber,
+            blkFailCount=ctx.subState.procFailCount, error=verdict.error.msg
+          break loop
 
-        # isOk => next instruction
-        ctx.updateLastBlockImported nthBn          # block imported OK
-        ctx.updateEtaBlocks()                      # metrics, eta estimate
+        of Invalid:
+          # Genuine validation failure: the peer served an unusable block.
+          isError = true
 
-        # Free block body immediately - ForkedChain only retains the header.
-        # Transactions are already persisted as RLP bytes in the txFrame.
-        blocks[n].reset()
-        
+          # Mark peer that produced that unusable block as a zombie
+          let srcPeer = buddy.getSyncPeer peerID
+          if not srcPeer.isNil:
+            srcPeer.only.nErrors.apply.blk = nProcBlocksErrThreshold + 1
+
+          # Check whether it is enough to skip the current blocks list, only
+          if ctx.subState.procFailNum != nthBn:
+            ctx.subState.procFailNum = nthBn         # OK, this is a new block
+            ctx.subState.procFailCount = 1
+          else:
+            ctx.subState.procFailCount.inc           # block num was seen, already
+
+            # Cancel the whole download if needed
+            if nImportBlocksErrThreshold < ctx.subState.procFailCount:
+              ctx.subState.cancelRequest = true      # So require queue reset
+
+          # Proper logging ..
+          if ctx.subState.cancelRequest:
+            warn "Blocks import error (cancel this session)", n=n, iv=($iv),
+              nBlocks=iv.len, nthBn, nthHash=ctx.getNthHash(blocks, n).short,
+              base=ctx.chain.baseNumber, head=ctx.chain.latestNumber,
+              blkFailCount=ctx.subState.procFailCount, error=verdict.error.msg
+          else:
+            chronicles.info "Blocks import error (skip remaining)", n=n,
+              iv=($iv), nBlocks=iv.len, nthBn,
+              nthHash=ctx.getNthHash(blocks, n).short,
+              base=ctx.chain.baseNumber, head=ctx.chain.latestNumber,
+              blkFailCount=ctx.subState.procFailCount, error=verdict.error.msg
+          break loop
+
         # End block: `loop`
 
     if not isError:

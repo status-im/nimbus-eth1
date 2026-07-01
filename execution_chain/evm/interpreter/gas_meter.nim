@@ -60,7 +60,7 @@ func chargeStateGas*(gasMeter: var GasMeter; amount: GasInt, reason: string): Ev
   else:
     return EvmResultVoid.err(gasErr(OutOfGas))
 
-  gasMeter.stateGasUsed += amount
+  gasMeter.stateGasUsed += amount.int64
   EvmResultVoid.ok()
 
 func returnStateGas*(gasMeter: var GasMeter; amount: GasInt) =
@@ -82,7 +82,7 @@ func escrowSubcallRegularGas*(gasMeter: var GasMeter, subCallGas: GasInt) =
 func appendRegularGasUsed*(gasMeter: var GasMeter, amount: GasInt) =
   gasMeter.regularGasUsed += amount
 
-func appendStateGasUsed*(gasMeter: var GasMeter, amount: GasInt) =
+func appendStateGasUsed*(gasMeter: var GasMeter, amount: int64) =
   gasMeter.stateGasUsed += amount
 
 func checkGas*(gasMeter: GasMeter, cost, amount: GasInt): EvmResultVoid =
@@ -90,3 +90,12 @@ func checkGas*(gasMeter: GasMeter, cost, amount: GasInt): EvmResultVoid =
   if amount > gasMeter.stateGasLeft + gasMeter.gasRemaining - cost:
     return err(gasErr(OutOfGas))
   ok()
+
+func returnAllStateGas*(gasMeter: var GasMeter) =
+  gasMeter.stateGasLeft = GasInt(gasMeter.stateGasLeft.int64 + gasMeter.stateGasUsed)
+  gasMeter.stateGasUsed = 0
+
+# https://github.com/ethereum/execution-specs/pull/2733/changes
+func creditStateGasRefund*(gasMeter: var GasMeter; amount: GasInt) =
+  gasMeter.stateGasLeft += amount
+  gasMeter.stateGasUsed -= amount.int64

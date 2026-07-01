@@ -15,10 +15,12 @@ import
   testutils,
   chronos,
   eth/[common, rlp],
+  eth/common/block_access_lists_rlp,
   stew/endians2,
   ../../execution_chain/networking/p2p,
   ../../execution_chain/sync/wire_protocol,
   ../../execution_chain/sync/wire_protocol/eth/eth_handler {.all.},
+  ../../execution_chain/sync/beacon/worker/blocks/blocks_bal,
   ../../execution_chain/core/chain/forked_chain,
   ../../execution_chain/db/core_db,
   ../../execution_chain/db/core_db/core_apps,
@@ -396,3 +398,68 @@ procSuite "devp2p eth/71 Tests":
 
     env2.close()
     env1.close()
+
+# Unit tests for the sync-side decoding of block access lists fetched from
+# peers (`blocks_bal.decodeBlockAccessList`). A peer-supplied list is only
+# trusted when it matches the hash committed in the (already validated) header.
+suite "eth/71 sync block access list decoding":
+
+  func balWithAddress(addrHex: string): BlockAccessList =
+    result = newSeq[AccountChanges](1)
+    result[0].address = Address.fromHex(addrHex)
+
+  func headerForBal(bal: BlockAccessList): Header =
+    Header(blockAccessListHash: Opt.some(computeBlockAccessListHash(bal)))
+
+  test "unavailable marker (0x80) decodes to none":
+    let header = headerForBal(default(BlockAccessList))
+    check decodeBlockAccessList(
+      RawBlockAccessList(UNAVAILABLE_BAL_BYTES), header).isNone()
+
+  test "empty raw bytes decode to none":
+    let header = headerForBal(default(BlockAccessList))
+    check decodeBlockAccessList(
+      RawBlockAccessList(newSeq[byte](0)), header).isNone()
+
+  test "header without a bal hash decodes to none":
+    let
+      bal = balWithAddress("0x1234567890123456789012345678901234567890")
+      raw = RawBlockAccessList(rlp.encode(bal))
+      header = Header(blockAccessListHash: Opt.none(Hash32))
+    check decodeBlockAccessList(raw, header).isNone()
+
+  test "valid empty bal (0xC0) decodes to an empty list":
+    let
+      bal = default(BlockAccessList)
+      raw = RawBlockAccessList(rlp.encode(bal))
+      res = decodeBlockAccessList(raw, headerForBal(bal))
+    check:
+      res.isSome()
+      res.get()[] == bal
+
+  test "valid non-empty bal matching the header decodes":
+    let
+      bal = balWithAddress("0x1234567890123456789012345678901234567890")
+      raw = RawBlockAccessList(rlp.encode(bal))
+      res = decodeBlockAccessList(raw, headerForBal(bal))
+    check:
+      res.isSome()
+      res.get()[] == bal
+
+  test "bal not matching the header hash is rejected":
+    let
+      bal = balWithAddress("0x1234567890123456789012345678901234567890")
+      otherBal = balWithAddress("0x2222222222222222222222222222222222222222")
+      raw = RawBlockAccessList(rlp.encode(bal))
+      # The header commits to a different list, so the peer-supplied one must be
+      # discarded - otherwise a bad peer could stall syncing.
+      header = headerForBal(otherBal)
+    check decodeBlockAccessList(raw, header).isNone()
+
+  test "malformed rlp decodes to none":
+    let
+      bal = balWithAddress("0x1234567890123456789012345678901234567890")
+      header = headerForBal(bal)
+      # A valid RLP string item where a list (the access list) is expected.
+      raw = RawBlockAccessList(@[0x82'u8, 0x12, 0x34])
+    check decodeBlockAccessList(raw, header).isNone()

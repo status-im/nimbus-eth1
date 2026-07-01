@@ -44,19 +44,22 @@ suite "Stateroot Mismatch Checks":
   # 4. Create a new txFrame and check that the state (account/slot) which was read
   #    in step 2 is as expected before and after persisting to the database.
 
+  const
+    addr1 = address"0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6"
+    addr2 = address"0x1f572e5295c57f15886f9b263e2f6d2d6c7b5ec7"
+    addr3 = address"0x2f572e5295c57f15886f9b263e2f6d2d6c7b5ec8"  
+    slot1 = 1.u256
+    slot2 = 2.u256
+    slot3 = 3.u256
+  
   setup:
     let
       memDB = DefaultDbMemory.newCoreDbRef()
-      addr1 = address"0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6"
-      addr2 = address"0x1f572e5295c57f15886f9b263e2f6d2d6c7b5ec7"
-      addr3 = address"0x2f572e5295c57f15886f9b263e2f6d2d6c7b5ec8"
       code = hexToSeqByte("0x010203")
-      slot1 = 1.u256
-      slot2 = 2.u256
-      slot3 = 3.u256
 
   test "Stateroot check - Accounts":
-
+    discard code # not used in this test
+    
     # Persist first update to database - changes from a single checkpoint
     let txFrame0 = memDB.baseTxFrame().txFrameBegin()
     block:

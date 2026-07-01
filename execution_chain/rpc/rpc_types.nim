@@ -23,19 +23,19 @@ type
 
 
 proc writeValue*(
-    w: var JsonWriter[JrpcConv], val: BlockAccessIndex
+    w: var JsonWriter[EthJson], val: BlockAccessIndex
 ) {.raises: [IOError].} =
   w.writeValue(val.uint64)
 
 proc readValue*(
-    r: var JsonReader[JrpcConv], val: var BlockAccessIndex
+    r: var JsonReader[EthJson], val: var BlockAccessIndex
 ) {.raises: [SerializationError, IOError].} =
   val = BlockAccessIndex(r.readValue(uint64))
 
 # Block access list json serialization
-AccountChanges.useDefaultSerializationIn JrpcConv
-SlotChanges.useDefaultSerializationIn JrpcConv
-StorageChange.useDefaultSerializationIn JrpcConv
-BalanceChange.useDefaultSerializationIn JrpcConv
-NonceChange.useDefaultSerializationIn JrpcConv
-CodeChange.useDefaultSerializationIn JrpcConv
+AccountChanges.useDefaultSerializationIn EthJson
+SlotChanges.useDefaultSerializationIn EthJson
+StorageChange.useDefaultSerializationIn EthJson
+BalanceChange.useDefaultSerializationIn EthJson
+NonceChange.useDefaultSerializationIn EthJson
+CodeChange.useDefaultSerializationIn EthJson

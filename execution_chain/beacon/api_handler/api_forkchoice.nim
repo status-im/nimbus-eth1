@@ -107,13 +107,18 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     if res.isSome:
       return simpleFCU(res.value)
 
-    # If the head hash is unknown (was not given to us in a newPayload request),
-    # we cannot resolve the header, so not much to do. This could be extended in
-    # the future to resolve from the `eth` network, but it's an unexpected case
-    # that should be fixed, not papered over.
+    # If the head hash is unknown (was not given to us in a newPayload
+    # request), ask the syncer to fetch the head header from a connected
+    # peer over the `eth` wire protocol. Once the header arrives, the
+    # syncer's normal header-chain sync activates toward it.
     let header = chain.quarantine.getHeader(headHash).valueOr:
-      warn "Forkchoice requested unknown head",
-        hash = headHash.short
+      info "Forkchoice requested sync to unknown head",
+        hash = headHash.short,
+        finHash = update.finalizedBlockHash.short,
+        safe = update.safeBlockHash.short,
+        base = chain.baseNumber,
+        pendingFCU = chain.pendingFCU.short
+      com.headerTargetRequest(headHash, update.finalizedBlockHash)
       return simpleFCU(PayloadExecutionStatus.syncing)
 
     # Header advertised via a past newPayload request. Start syncing to it.
@@ -200,7 +205,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     # similar to headHash, safeBlockHash is saved by FC module
 
   (await chain.queueForkChoice(headHash, finalizedBlockHash, safeBlockHash)).isOkOr:
-    return invalidFCU(error, chain, header)
+    return invalidFCU(error.msg, chain, header)
 
   # If payload generation was requested, create a new block to be potentially
   # sealed by the beacon client. The payload will be requested later, and we

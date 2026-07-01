@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -22,11 +22,14 @@ import
 # Public database constuctors, destructor
 # ------------------------------------------------------------------------------
 
-proc init*(T: type AristoDbRef): T =
+proc init*(T: type AristoDbRef, enableCaches: static bool = false): T =
   ## Memory backend constructor.
   ##
   let db = memoryBackend()
-  db.initInstance()[]
+  when enableCaches:
+    db.initInstance(accLeavesLruSize = ACC_LRU_SIZE, stoLeavesLruSize = ACC_LRU_SIZE)[]
+  else:
+    db.initInstance(accLeavesLruSize = 0, stoLeavesLruSize = 0)[]
   db
 
 # --+----------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -14,6 +14,7 @@ import
   pkg/[chronicles, chronos, eth/common, metrics],
   ../../../networking/p2p,
   ../../wire_protocol,
+  ./start_stop/sync_ticker,
   ./[blocks, headers, update, worker_desc]
 
 type
@@ -29,11 +30,11 @@ declareGauge nec_sync_peers, "" &
 
 proc querySyncProgress(ctx: BeaconCtxRef): SyncStateData =
   ## Syncer status query function (for call back closure)
-  if SyncState.blocks <= ctx.pool.syncState:
+  if BeaconState.blocks <= ctx.pool.syncState:
     return (ctx.hdrCache.antecedent.number,
             ctx.subState.topNum, ctx.subState.headNum)
 
-  if SyncState.headers <= ctx.pool.syncState:
+  if BeaconState.headers <= ctx.pool.syncState:
     let b = ctx.chain.baseNumber
     return (b, b, ctx.subState.headNum)
 
@@ -74,15 +75,28 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
   ctx.pool.chain.com.beaconSyncerProgress = proc(): SyncStateData =
     ctx.querySyncProgress()
 
-  # Set up ticker, disabled by default
-  if ctx.pool.ticker.isNil:
-    ctx.pool.ticker = proc(ctx: BeaconCtxRef) = discard
+  # Allow the engine-API forkchoice path to ask the syncer to fetch an
+  # unknown head from peers (see `api_forkchoice.nim`). The mechanism reuses
+  # the same `initTarget` activation pipeline that the `--debug-beacon-sync-
+  # target` CLI flag drives.
+  ctx.pool.chain.com.headerTargetRequest = proc(hash, finHash: Hash32) =
+    let fin =
+      if finHash == zeroHash32: Opt.none(Hash32)
+      else: Opt.some(finHash)
+    ctx.headersTargetRequest(hash, isFinal = false, "fcu", finHash = fin)
 
+  # Set up ticker
+  if ctx.pool.syncTickerOk:
+    ctx.pool.ticker = syncTicker()
+  elif ctx.pool.ticker.isNil:
+    ctx.pool.ticker = proc(ctx: BeaconCtxRef) = discard
 
 proc destroyServices*(ctx: BeaconCtxRef) =
   ## Helper for `release()`
   ctx.hdrCache.destroy()
   ctx.pool.chain.com.beaconSyncerProgress = BeaconSyncerProgressCB(nil)
+  ctx.pool.chain.com.headerTargetRequest = HeaderTargetRequestCB(nil)
+  ctx.pool.ticker = Ticker(nil)
 
 # ---------
 

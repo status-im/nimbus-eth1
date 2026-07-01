@@ -15,55 +15,68 @@
 
 import std/[atomics, locks], ./semaphore
 
-const MAX_READERS: int32 = 1 shl 30
+const
+  MAX_READERS: int32 = 1 shl 30
+  CACHE_LINE_SIZE = when defined(macosx) and defined(arm64): 128 else: 64
 
 type
+  State {.pure.} = enum
+    UNINITIALIZED
+    INITIALIZED
+    DISPOSED
+
   ReadWriteLock* = object
-    lock: Lock                         
-    writerWait: Semaphore     
-    readerWait: Semaphore   
-    numPending: Atomic[int32]     
-    readersDeparting: Atomic[int32]
+    numPending {.align: CACHE_LINE_SIZE.}: Atomic[int32]
+    readersDeparting {.align: CACHE_LINE_SIZE.}: Atomic[int32]
+    lock: Lock
+    writerWait: Semaphore
+    readerWait: Semaphore
+    state: State
 
 proc init*(l: var ReadWriteLock) =
+  doAssert l.state == State.UNINITIALIZED
+
   initLock(l.lock)
   l.writerWait.init()
   l.readerWait.init()
   l.numPending.store(0)
   l.readersDeparting.store(0)
-
-func init*(T: type ReadWriteLock): T =
-  var l = ReadWriteLock()
-  l.init()
-  l
+  l.state = State.INITIALIZED
 
 proc dispose*(l: var ReadWriteLock) =
-  deinitLock(l.lock)
-  l.writerWait.dispose()
-  l.readerWait.dispose()
+  if l.state == State.INITIALIZED:
+    deinitLock(l.lock)
+    l.writerWait.dispose()
+    l.readerWait.dispose()
+    l.state = State.DISPOSED
 
-template atomicAdd(a: var Atomic[int32], delta: int32): int32 =
-  a.fetchAdd(delta) + delta
+proc `=copy`*(
+    dest: var ReadWriteLock, src: ReadWriteLock
+) {.error: "Copying ReadWriteLock is forbidden".} =
+  discard
 
-proc lockRead*(l: var ReadWriteLock) =
-  if atomicAdd(l.numPending, 1) < 0:
+template atomicAdd(a: var Atomic[int32], delta: int32, order: MemoryOrder): int32 =
+  a.fetchAdd(delta, order) + delta
+
+proc lockRead*(l: var ReadWriteLock) {.inline.} =
+  if atomicAdd(l.numPending, 1, moAcquire) < 0:
     l.readerWait.wait()
 
-proc unlockRead*(l: var ReadWriteLock) =
-  let r = atomicAdd(l.numPending, -1)
+proc unlockRead*(l: var ReadWriteLock) {.inline.} =
+  let r = atomicAdd(l.numPending, -1, moRelease)
   if r < 0:
     assert r + 1 != 0 and r + 1 != -MAX_READERS
-    if atomicAdd(l.readersDeparting, -1) == 0:
+    if atomicAdd(l.readersDeparting, -1, moAcquireRelease) == 0:
       l.writerWait.signal()
 
 proc lockWrite*(l: var ReadWriteLock) =
   acquire(l.lock)
-  let r = atomicAdd(l.numPending, -MAX_READERS) + MAX_READERS
-  if r != 0 and atomicAdd(l.readersDeparting, r) != 0:
+  let r = atomicAdd(l.numPending, -MAX_READERS, moAcquireRelease) + MAX_READERS
+  if r != 0 and atomicAdd(l.readersDeparting, r, moAcquireRelease) != 0:
     l.writerWait.wait()
 
 proc unlockWrite*(l: var ReadWriteLock) =
-  let r = atomicAdd(l.numPending, MAX_READERS)
+  let r = atomicAdd(l.numPending, MAX_READERS, moRelease)
   assert r < MAX_READERS
   for i in 0 ..< int(r):
     l.readerWait.signal()
@@ -82,5 +95,3 @@ template withWriteLock*(l: var ReadWriteLock, body: untyped) =
     body
   finally:
     l.unlockWrite()
-
-

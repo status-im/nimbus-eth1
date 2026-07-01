@@ -25,9 +25,23 @@ from ../../../block_access_list/block_access_list_builder import BlockAccessList
 export tables, minilru
 
 type
+  ImportOutcome* = enum
+    ## Successful classification of a block handed to `importBlock`.
+    Valid           ## newly validated and linked into the `FC`
+    AlreadyObserved ## block already present by hash (content arrived earlier)
+
+  ImportErrorKind* = enum
+    Invalid         ## genuine validation/`processBlock` failure
+    Orphaned        ## branch already pruned below the live head - drop forward
+    MissingParent   ## parent absent above the live head - quarantined, retry
+
+  ImportError* = object
+    kind*: ImportErrorKind
+    msg*:  string
+
   QueueItem* = object
-    responseFut*: Future[Result[void, string]].Raising([CancelledError])
-    handler*: proc(): Future[Result[void, string]] {.async: (raises: [CancelledError]).}
+    responseFut*: Future[Result[ImportOutcome, ImportError]].Raising([CancelledError])
+    handler*: proc(): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).}
 
   ForkedChainRef* = ref object
     com*: CommonRef

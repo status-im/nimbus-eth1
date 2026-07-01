@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [], gcsafe.}
+
 import
   std/[json, strutils],
   stint,
@@ -25,7 +27,7 @@ proc `@@`(x: Address): JsonNode =
 proc `@@`(x: Bytes): JsonNode =
   %("0x" & x.toHex)
 
-proc `@@`(x: uint16 | uint64): JsonNode =
+proc `@@`(x: uint16 | uint32 | uint64): JsonNode =
   %("0x" & x.toHex)
 
 proc `@@`(x: UInt256): JsonNode =

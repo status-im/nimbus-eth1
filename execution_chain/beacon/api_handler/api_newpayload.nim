@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -265,12 +265,12 @@ proc newPayload*(ben: BeaconEngineRef,
       number = header.number,
       hash = blockHash.short,
       parent = header.parentHash.short,
-      error = vres.error()
+      error = vres.error.msg
     ben.setInvalidAncestor(header, blockHash)
     let
       txFrame = chain.latestTxFrame()
       blockHash = latestValidHash(txFrame, parent, ttd)
-    return invalidStatus(blockHash, vres.error())
+    return invalidStatus(blockHash, vres.error.msg)
 
   ben.txPool.removeNewBlockTxs(blk, Opt.some(blockHash))
 

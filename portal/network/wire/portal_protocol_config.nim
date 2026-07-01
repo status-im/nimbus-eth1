@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2025 Status Research & Development GmbH
+# Copyright (c) 2021-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -20,6 +20,8 @@ type
   PortalNetwork* = enum
     none
     mainnet
+    sepolia
+    hoodi
 
   # The Portal sub-protocols
   PortalSubnetwork* = enum
@@ -143,6 +145,14 @@ func getPortalEnrField*(network: PortalNetwork): PortalEnrField =
     PortalEnrField.init(localSupportedVersionMin, localSupportedVersionMax, 0.chainId())
   of PortalNetwork.mainnet:
     PortalEnrField.init(localSupportedVersionMin, localSupportedVersionMax, 1.chainId())
+  of PortalNetwork.sepolia:
+    PortalEnrField.init(
+      localSupportedVersionMin, localSupportedVersionMax, 11155111.chainId()
+    )
+  of PortalNetwork.hoodi:
+    PortalEnrField.init(
+      localSupportedVersionMin, localSupportedVersionMax, 560048.chainId()
+    )
 
 ## Confutils parsers
 

@@ -19,22 +19,20 @@ suite "ReadWriteLock Tests":
 
   test "init, dispose":
     block:
-      var rwLock = ReadWriteLock.init()
-      rwLock.dispose()
-
-    block:
-      var rwLock: ReadWriteLock
-      rwLock.init()
-      rwLock.dispose()
+      var rwl: ReadWriteLock
+      rwl.init()
+      rwl.dispose()
 
   test "Single-thread read lock / unlock":
-    var rwl = ReadWriteLock.init()
+    var rwl: ReadWriteLock
+    rwl.init()
     rwl.lockRead()
     rwl.unlockRead()
     rwl.dispose()
 
   test "Single-thread write lock / unlock":
-    var rwl = ReadWriteLock.init()
+    var rwl: ReadWriteLock
+    rwl.init()
     rwl.lockWrite()
     rwl.unlockWrite()
     rwl.dispose()
@@ -186,9 +184,10 @@ suite "ReadWriteLock Tests":
 
   test "withReadLock template":
     var
-      rwl = ReadWriteLock.init()
+      rwl: ReadWriteLock
       value = 100
       observed = 0
+    rwl.init()
 
     rwl.withReadLock:
       observed = value
@@ -198,8 +197,9 @@ suite "ReadWriteLock Tests":
 
   test "withWriteLock template":
     var
-      rwl = ReadWriteLock.init()
+      rwl: ReadWriteLock
       value = 0
+    rwl.init()
 
     rwl.withWriteLock:
       value = 999
@@ -208,7 +208,8 @@ suite "ReadWriteLock Tests":
     rwl.dispose()
 
   test "Sequential reads on same thread":
-    var rwl = ReadWriteLock.init()
+    var rwl: ReadWriteLock
+    rwl.init()
 
     rwl.lockRead()
     rwl.unlockRead()
@@ -220,9 +221,10 @@ suite "ReadWriteLock Tests":
     rwl.dispose()
 
   test "Read-then-write sequencing on single thread":
-    var
-      rwl = ReadWriteLock.init()
+    var 
+      rwl: ReadWriteLock
       value = 0
+    rwl.init()
 
     rwl.withReadLock:
       check value == 0

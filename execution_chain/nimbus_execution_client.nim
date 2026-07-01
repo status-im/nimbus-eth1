@@ -186,6 +186,10 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
         hash32=hex
       quit QuitFailure
 
+  # Optional state montitor logger
+  if config.beaconSyncTicker:
+    nimbus.beaconSyncRef.configTicker(enable=true)
+
   # Configure snap sync if enabled. When done it will resume beacon sync.
   if config.snapSyncEnabled:
     if nimbus.snapSyncRef.isNil:
@@ -196,12 +200,8 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
     # Configure snap syncer.
     nimbus.snapSyncRef.config(nimbus.ethNode, config.dataDir, config.maxPeers)
 
-    if config.snapSyncTarget.isSome():
-      let hex = config.snapSyncTarget.unsafeGet
-      if not nimbus.snapSyncRef.configTarget(hex):
-        fatal "Error parsing hash32 argument for --debug-snap-sync-target",
-          hash32=hex
-        quit QuitFailure
+    if config.snapSyncResume:
+      nimbus.snapSyncRef.configResume()
   else:
     # Disable any external setup unless explicitely activated
     nimbus.snapSyncRef = SnapSyncRef(nil)
@@ -291,7 +291,10 @@ proc setupCommonRef*(config: ExecutionClientConf): (CommonRef, bool) =
     networkId = config.networkId,
     params = config.networkParams,
     statelessProviderEnabled = config.statelessProviderEnabled,
-    statelessWitnessValidation = config.statelessWitnessValidation)
+    statelessWitnessValidation = config.statelessWitnessValidation,
+    optimisticStatePrefetch = config.optimisticStatePrefetch,
+    balStatePrefetch = config.balStatePrefetch,
+    balStatePrefetchWorkers = config.balStatePrefetchWorkers)
 
   if config.extraData.len > 32:
     warn "ExtraData exceeds 32 bytes limit, truncate",
@@ -386,9 +389,14 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   # so it needs to be initalized from the main thread before anything else tries
   # to use it
   if config.trustedSetupFile.isSome:
-    kzg.loadTrustedSetup(config.trustedSetupFile.get(), 0).isOkOr:
+    kzg.loadTrustedSetup(config.trustedSetupFile.get(), 8).isOkOr:
       fatal "Cannot load KZG trusted setup from file", msg = error
       quit(QuitFailure)
+  else:
+    # Load eagerly to avoid race conditions - lazy kzg loading is not thread safe
+    loadTrustedSetupFromString(kzg.trustedSetup, 8).expect(
+      "Baked-in KZG setup is correct"
+    )
 
   # Metrics are useful not just when running node but also during import
   let metricsServer =

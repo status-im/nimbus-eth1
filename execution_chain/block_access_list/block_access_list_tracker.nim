@@ -50,8 +50,8 @@ type
   # writes) are recorded in the access list.
   BlockAccessListTrackerRef* = ref object
     ledger*: ReadOnlyLedger ## Used to fetch the pre-transaction values from the state.
-    builder*: BlockAccessListBuilderRef
-      ## The builder instance that accumulates all tracked changes.
+    builder*: ptr BlockAccessListBuilder
+    builderOwner*: bool
     preStorageCache*: Table[(Address, UInt256), UInt256]
       ## Cache of pre-transaction storage values, keyed by (address, slot) tuples.
       ## This cache is cleared at the start of each transaction to track values
@@ -89,9 +89,21 @@ proc `=copy`(
 proc init*(
     T: type BlockAccessListTrackerRef,
     ledger: ReadOnlyLedger,
-    builder = BlockAccessListBuilderRef.init(),
+    builder: ptr BlockAccessListBuilder = nil,
 ): T =
-  BlockAccessListTrackerRef(ledger: ledger, builder: builder)
+  if builder.isNil():
+    BlockAccessListTrackerRef(
+      ledger: ledger, builder: BlockAccessListBuilder.newShared(), builderOwner: true
+    )
+  else:
+    BlockAccessListTrackerRef(ledger: ledger, builder: builder, builderOwner: false)
+
+proc dispose*(tracker: BlockAccessListTrackerRef) =
+  if tracker.builderOwner:
+    assert not tracker.builder.isNil()
+    tracker.builder.dispose()
+    tracker.builder = nil
+    tracker.builderOwner = false
 
 proc setBlockAccessIndex*(tracker: BlockAccessListTrackerRef, blockAccessIndex: int) =
   ## Must be called before processing each transaction/system contract
@@ -175,22 +187,22 @@ proc commitCallFrame*(tracker: BlockAccessListTrackerRef) =
 
     for storageKey, newValue in tracker.pendingCallFrame.storageChanges:
       let (address, slot) = storageKey
-      tracker.builder.addStorageWrite(address, slot, currentIndex, newValue)
+      tracker.builder[].addStorageWrite(address, slot, currentIndex, newValue)
 
     for address, newBalance in tracker.pendingCallFrame.balanceChanges:
-      tracker.builder.addBalanceChange(address, currentIndex, newBalance)
+      tracker.builder[].addBalanceChange(address, currentIndex, newBalance)
 
     for address, newNonce in tracker.pendingCallFrame.nonceChanges:
-      tracker.builder.addNonceChange(address, currentIndex, newNonce)
+      tracker.builder[].addNonceChange(address, currentIndex, newNonce)
 
     for address, newCode in tracker.pendingCallFrame.codeChanges:
-      tracker.builder.addCodeChange(address, currentIndex, newCode)
+      tracker.builder[].addCodeChange(address, currentIndex, newCode)
 
     # Merge the pending call frame reads into the builder
     for address in tracker.pendingCallFrame.touchedAddresses:
-      tracker.builder.addTouchedAccount(address)
+      tracker.builder[].addTouchedAccount(address)
     for storageKey in tracker.pendingCallFrame.storageReads:
-      tracker.builder.addStorageRead(storageKey[0], storageKey[1])
+      tracker.builder[].addStorageRead(storageKey[0], storageKey[1])
 
   tracker.popCallFrame()
 
@@ -220,13 +232,13 @@ proc rollbackCallFrame*(tracker: BlockAccessListTrackerRef, rollbackReads = fals
   else:
     # Merge the pending call frame reads into the builder
     for address in tracker.pendingCallFrame.touchedAddresses:
-      tracker.builder.addTouchedAccount(address)
+      tracker.builder[].addTouchedAccount(address)
     for storageKey in tracker.pendingCallFrame.storageReads:
-      tracker.builder.addStorageRead(storageKey[0], storageKey[1])
+      tracker.builder[].addStorageRead(storageKey[0], storageKey[1])
 
     # Convert storage writes to reads
     for storageKey in tracker.pendingCallFrame.storageChanges.keys():
-      tracker.builder.addStorageRead(storageKey[0], storageKey[1])
+      tracker.builder[].addStorageRead(storageKey[0], storageKey[1])
 
   tracker.popCallFrame()
 
@@ -488,6 +500,6 @@ proc getBlockAccessList*(
     tracker: BlockAccessListTrackerRef, rebuild = false
 ): lent Opt[BlockAccessListRef] =
   if rebuild or tracker.blockAccessList.isNone():
-    tracker.blockAccessList = Opt.some(tracker.builder.buildBlockAccessList())
+    tracker.blockAccessList = Opt.some(tracker.builder[].buildBlockAccessList())
 
   tracker.blockAccessList

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2025 Status Research & Development GmbH
+# Copyright (c) 2021-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -11,7 +11,7 @@ import json_rpc/rpcclient, ../rpc_types, ../rpc_discovery_api
 
 export rpc_types, rpc_discovery_api
 
-createRpcSigsFromNim(RpcClient):
+createRpcSigsFromNim(RpcClient, EthJson):
   # Discovery v5 json-rpc calls
   proc discv5_nodeInfo(): NodeInfo
   proc discv5_updateNodeInfo(kvPairs: seq[(string, string)]): RoutingTableInfo

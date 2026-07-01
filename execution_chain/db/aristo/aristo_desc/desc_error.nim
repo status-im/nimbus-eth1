@@ -93,6 +93,10 @@ type
     PartTrkLinkExpected
     PartTrkRlpError
 
+    # TxFrame blobify/deblobify
+    DeblobTxFrameVersion
+    DeblobTxFrameTruncated
+
     # RocksDB backend
     RdbBeCantCreateTmpDir
     RdbBeDriverDelAdmError

@@ -11,7 +11,6 @@
 {.push raises:[].}
 
 import
-  std/sets,
   pkg/[chronos, eth/common, minilru, results],
   ../../../core/chain,
   ../../sync_desc,
@@ -20,10 +19,15 @@ import
 
 from ./mpt/mpt_assembly
   import MptAsmRef
+
+# Running beacon syncer in tandem
 from ../../beacon
   import BeaconPeerRef, BeaconSyncRef
+from ../../beacon/worker/worker_const as beacon_const
+  import BeaconState
 
 export
+  BeaconState,
   chain, common, results, state_db, sync_desc, wire_types, worker_const
 
 
@@ -38,6 +42,9 @@ type
     ## Used for avoiding sending the same failed request twice. This data
     ## structure is used as a self-cleaning hash set. The data argument is
     ## unused.
+
+  AccPathSet* = LruCache[seq[byte],uint8]
+    ## Ditto for account paths as used in the healing protocol.
 
   # -------------------
 
@@ -70,6 +77,10 @@ type
     packet: ByteCodesPacket
     elapsed: Duration
 
+  FetchTrieNodesData* = tuple
+    packet: TrieNodesPacket
+    elapsed: Duration
+
   Ticker* =
     proc(ctx: SnapCtxRef) {.gcsafe, raises: [].}
       ## Some function that is invoked regularly
@@ -86,7 +97,8 @@ type
   PeerFirstFetchReq* = object
     ## Register fetch request. This is intended to avoid sending the same (or
     ## similar) fetch request again from the same peer that sent it previously.
-    stateRoot*: StateRootSet         ## Account fetch (per state root)
+    stateRoot*: StateRootSet         ## Accounts fetch (per state root)
+    accPath*: AccPathSet             ## Trie nodes fetch (per account path)
 
   SnapPeerData* = object
     ## Local descriptor data extension
@@ -95,23 +107,22 @@ type
     nErrors*: PeerErrors             ## Error register
     peerType*: string                ## Self declared peer type
     failedReq*: PeerFirstFetchReq    ## Don't send the same failed request twice
+    lastMsgLog*: Moment              ## Helps reducing logging noise
 
   SnapCtxData* = object
     ## Globally shared data extension
-    syncState*: SyncState            ## Last known layout state
+    syncState*: SnapState            ## Last known layout state
+    contPrevSession*: bool           ## Request resuming previous session
     beaconSync*: BeaconSyncRef       ## Beacon syncer to resume after snap sync
+    beaconTarget*: bool              ## inital beacon target if `true`
     stateDB*: StateDbRef             ## Incomplete states DB
     baseDir*: string                 ## Path for assembly database
     mptAsm*: MptAsmRef               ## Assembly cache database
-
-    # Preloading/manual state update
-    target*: Opt[BlockHash]          ## Optional for setting up a sync target
-    stateUpdateChecked*: string      ## Last update value (avoids log spamming)
+    pivot*: Opt[StateRoot]           ## Pivot root for analysys, healing, etc.
+    headersSynced*: bool             ## beacon sync headers
 
     # Info, debugging, and error handling stuff
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one
-    failedPeers*: HashSet[Hash]      ## Detect dead end sync by collecting peers
-    seenData*: bool                  ## Set `true` if data were fetched, already
     lastPeerSeen*: chronos.Moment    ## Time when the last peer was abandoned
     lastNoPeersLog*: chronos.Moment  ## Control messages about missing peers
     lastSyncUpdLog*: chronos.Moment  ## Control update messages
@@ -129,17 +140,24 @@ func hdrCache*(ctx: SnapCtxRef): HeaderChainRef =
   ## Getter
   ctx.pool.beaconSync.ctx.pool.hdrCache
 
+func beaconInitTarget*(ctx: SnapCtxRef): bool =
+  ## Getter
+  ctx.pool.beaconSync.ctx.pool.initTarget.isSome()
+
+func beaconState*(ctx: SnapCtxRef): BeaconState =
+  ## Getter
+  ctx.pool.beaconSync.ctx.pool.syncState
+
 func nErrors*(buddy: SnapPeerRef): var PeerErrors =
   ## Shortcut
   buddy.only.nErrors
 
-
-func syncState*(ctx: SnapCtxRef): (SyncState, bool) =
+func syncState*(ctx: SnapCtxRef): (SnapState, bool) =
   (ctx.pool.syncState, ctx.poolMode)
 
 func syncState*(
     buddy: SnapPeerRef;
-      ): (string, SyncPeerRunState, SyncState, bool) =
+      ): (string, SyncPeerRunState, SnapState, bool) =
   (buddy.only.peerType,
    buddy.ctrl.state,
    buddy.ctx.pool.syncState,
@@ -158,6 +176,24 @@ proc getEthPeer*(buddy: SnapPeerRef): BeaconPeerRef =
 proc getEthPeers*(buddy: SnapPeerRef): seq[BeaconPeerRef] =
   ##  Get all `eth` peer contexts available at the current time
   buddy.ctx.pool.beaconSync.ctx.getSyncPeers()
+
+proc nEthPeers*(ctx: SnapCtxRef): int =
+  ## Shortcut for `buddy.getSyncPeers().len`
+  ctx.pool.beaconSync.ctx.nSyncPeers()
+
+# ---------
+
+func fromBytes*(_: type Hash32, path: openArray[byte]): Hash32 =
+  doAssert path.len == 32
+  let path = @path
+  (addr distinctBase(result)[0]).copyMem(unsafeAddr path[0], path.len)
+
+func toStr*(error: SnapError): string =
+  result = $error.excp
+  if 0 < error.name.len:
+    result &= "(" & error.name & ")"
+  if 0 < error.msg.len:
+    result &= "[" & error.msg & "]"
 
 # ------------------------------------------------------------------------------
 # End

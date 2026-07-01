@@ -17,15 +17,14 @@ import
   json_rpc/rpcclient,
   beacon_chain/era_db,
   beacon_chain/spec/forks,
-  beacon_chain/networking/network_metadata,
+  beacon_chain/networking/[network_metadata, network_metadata_downloads],
   beacon_chain/spec/eth2_apis/rest_beacon_client,
   beacon_chain/beacon_clock,
   ../../network/beacon/beacon_content,
   ../../network/beacon/beacon_init_loader,
-  ../../eth_history/block_proofs/block_proof_historical_roots,
-  ../../eth_history/block_proofs/block_proof_historical_summaries,
-  ../../eth_history/[yaml_utils, yaml_eth_types],
-  ../../network/network_metadata,
+  ../../../execution_chain/history/block_proofs/block_proof_historical_roots,
+  ../../../execution_chain/history/block_proofs/block_proof_historical_summaries,
+  ../[yaml_utils, yaml_eth_types],
   ./exporter_common
 
 export beacon_clock
@@ -34,21 +33,14 @@ const
   largeRequestsTimeout = 120.seconds # For downloading large items such as states.
   restRequestsTimeout = 30.seconds
 
-proc getBeaconData*(): (RuntimeConfig, ref ForkDigests, BeaconClock) =
+proc getBeaconData*(network: string): (RuntimeConfig, ref ForkDigests, BeaconClock) =
   let
-    metadata = getMetadataForNetwork("mainnet")
+    metadata = getMetadataForNetwork(network)
     genesisState =
       try:
-        template genesisData(): auto =
-          metadata.genesis.bakedBytes
-
-        newClone(
-          readSszForkedHashedBeaconState(
-            metadata.cfg, genesisData.toOpenArray(genesisData.low, genesisData.high)
-          )
-        )
-      except SerializationError as err:
-        raiseAssert "Invalid baked-in state: " & err.msg
+        waitFor fetchGenesisState(metadata)
+      except CatchableError as err:
+        raiseAssert "Failed to fetch genesis state: " & err.msg
     genesis_validators_root = genesisState[].genesis_validators_root
     forkDigests = newClone ForkDigests.init(metadata.cfg, genesis_validators_root)
 
@@ -259,21 +251,72 @@ proc writeToFile(file: string, data: openArray[byte]) =
   else:
     notice "Successfully wrote data to file", file
 
+proc loadHistoricalDataFromEra(
+    eraDir: string, cfg: RuntimeConfig
+): Result[
+    (
+      HashList[Eth2Digest, Limit HISTORICAL_ROOTS_LIMIT],
+      HashList[HistoricalSummary, Limit HISTORICAL_ROOTS_LIMIT],
+      Slot,
+    ),
+    string,
+] =
+  ## Load historical_roots and historical_summaries from the latest era file.
+  let
+    (latestEra, latestPath) = EraFile.latest(cfg, eraDir).valueOr:
+      return err("No era files found in " & eraDir)
+    f = EraFile.open(latestPath).valueOr:
+      return err("Cannot open latest era file: " & error)
+    slot = start_slot(latestEra)
+  var bytes: seq[byte]
+
+  ?f.getStateSSZ(slot, bytes)
+
+  if bytes.len() == 0:
+    return err("State not found")
+
+  let state =
+    try:
+      newClone(readSszForkedHashedBeaconState(cfg, slot, bytes))
+    except SerializationError as exc:
+      return err("Unable to read state: " & exc.msg)
+
+  withState(state[]):
+    when consensusFork >= ConsensusFork.Capella:
+      ok(
+        (
+          forkyState.data.historical_roots, forkyState.data.historical_summaries,
+          forkyState.data.slot,
+        )
+      )
+    else:
+      ok(
+        (
+          forkyState.data.historical_roots,
+          HashList[HistoricalSummary, Limit HISTORICAL_ROOTS_LIMIT](),
+          forkyState.data.slot,
+        )
+      )
+
 proc getBlockProofBellatrix(
-    dataDir: string, eraDir: string, slotNumber: uint64
+    dataDir: string, eraDir: string, slotNumber: uint64, network: string
 ): (BlockProofHistoricalRoots, uint64, Hash32) =
   let
-    networkData = loadNetworkData("mainnet")
+    networkData = loadNetworkData(network)
     db =
       EraDB.new(networkData.metadata.cfg, eraDir, networkData.genesis_validators_root)
-    historical_roots = loadHistoricalRoots().asSeq()
+    (historical_roots, _, _) = loadHistoricalDataFromEra(
+      eraDir, networkData.metadata.cfg
+    ).valueOr:
+      error "Failed to load historical data", error
+      quit QuitFailure
     slot = Slot(slotNumber)
     era = era(slot)
 
   # Note: Provide just empty historical_summaries here as this is only
   # supposed to generate proofs for Bellatrix.
   var state: ForkedHashedBeaconState
-  db.getState(historical_roots, [], start_slot(era + 1), state).isOkOr:
+  db.getState(historical_roots.asSeq(), [], start_slot(era + 1), state).isOkOr:
     error "Failed to load state", error = error
     quit QuitFailure
 
@@ -283,7 +326,7 @@ proc getBlockProofBellatrix(
     )
 
     beaconBlock = db.getBlock(
-      historical_roots,
+      historical_roots.asSeq(),
       [],
       slot,
       Opt.none(Eth2Digest),
@@ -308,91 +351,37 @@ proc getBlockProofBellatrix(
 
   (blockProof, blockNumber, blockHash)
 
-proc latestEraFile(eraDir: string): Result[(string, Era), string] =
-  ## Find the latest era file in the era directory.
-  var
-    latestEra = 0
-    latestEraFile = ""
-
-  try:
-    for kind, obj in walkDir eraDir:
-      let (_, name, _) = splitFile(obj)
-      let parts = name.split('-')
-      if parts.len() == 3 and parts[0] == "mainnet":
-        let era =
-          try:
-            parseInt(parts[1])
-          except ValueError:
-            return err("Invalid era number")
-        if era > latestEra:
-          latestEra = era
-          latestEraFile = obj
-  except OSError as e:
-    return err(e.msg)
-
-  if latestEraFile == "":
-    err("No valid era files found")
-  else:
-    ok((latestEraFile, Era(latestEra)))
-
-proc loadHistoricalSummariesFromEra(
-    eraDir: string, cfg: RuntimeConfig
-): Result[(HashList[HistoricalSummary, Limit HISTORICAL_ROOTS_LIMIT], Slot), string] =
-  ## Load the historical_summaries from the latest era file.
-  let
-    (latestEraFile, latestEra) = ?latestEraFile(eraDir)
-    f = ?EraFile.open(latestEraFile)
-    slot = start_slot(latestEra)
-  var bytes: seq[byte]
-
-  ?f.getStateSSZ(slot, bytes)
-
-  if bytes.len() == 0:
-    return err("State not found")
-
-  let state =
-    try:
-      newClone(readSszForkedHashedBeaconState(cfg, slot, bytes))
-    except SerializationError as exc:
-      return err("Unable to read state: " & exc.msg)
-
-  return ok((state[].historical_summaries(), state[].slot))
-
 proc getBlockProofCapella(
-    dataDir: string, eraDir: string, slotNumber: uint64
+    dataDir: string, eraDir: string, slotNumber: uint64, network: string
 ): (BlockProofHistoricalSummaries, uint64, Hash32) =
   ## Get a beacon block proof for a block from Capella. Also
   ## exports the historical summaries in SSZ encoding as this is required to
   ## verify the proof.
   let
-    networkData = loadNetworkData("mainnet")
+    networkData = loadNetworkData(network)
     db =
       EraDB.new(networkData.metadata.cfg, eraDir, networkData.genesis_validators_root)
     slot = Slot(slotNumber)
     era = era(slot)
-    historical_roots = loadHistoricalRoots().asSeq()
-    # Note: This could be considered somewhat of a hack. The EraDB API requires
-    # access to the historical_summaries, which we do not have. It could be taken
-    # from a full node through the rest API, but that is a bit slow as it needs
-    # to request the full state. Instead we take the historical summaries from
-    # the state in latest era file.
-    (historical_summaries, historicalSummariesSlot) = loadHistoricalSummariesFromEra(
+    # The EraDB API requires access to the historical_roots and historical_summaries
+    # We take these from the the state in latest era file.
+    (historical_roots, historical_summaries, historicalSummariesSlot) = loadHistoricalDataFromEra(
       eraDir, networkData.metadata.cfg
     ).valueOr:
-      error "Failed to load historical summaries", error
+      error "Failed to load historical data", error
       quit QuitFailure
 
   var state: ForkedHashedBeaconState
 
   db.getState(
-    historical_roots, historical_summaries.asSeq(), start_slot(era + 1), state
+    historical_roots.asSeq(), historical_summaries.asSeq(), start_slot(era + 1), state
   ).isOkOr:
     error "Failed to load state", error = error
     quit QuitFailure
 
   let
     beaconBlock = db.getBlock(
-      historical_roots,
+      historical_roots.asSeq(),
       historical_summaries.asSeq(),
       slot,
       Opt.none(Eth2Digest),
@@ -428,35 +417,34 @@ proc getBlockProofCapella(
   (blockProof, blockNumber, blockHash)
 
 proc getBlockProofDeneb(
-    dataDir: string, eraDir: string, slotNumber: uint64
+    dataDir: string, eraDir: string, slotNumber: uint64, network: string
 ): (BlockProofHistoricalSummariesDeneb, uint64, Hash32) =
   ## Get a beacon block proof for a block from Deneb and onwards. Also
   ## exports the historical summaries in SSZ encoding as this is required to
   ## verify the proof.
   let
-    networkData = loadNetworkData("mainnet")
+    networkData = loadNetworkData(network)
     db =
       EraDB.new(networkData.metadata.cfg, eraDir, networkData.genesis_validators_root)
     slot = Slot(slotNumber)
     era = era(slot)
-    historical_roots = loadHistoricalRoots().asSeq()
-    (historical_summaries, historicalSummariesSlot) = loadHistoricalSummariesFromEra(
+    (historical_roots, historical_summaries, historicalSummariesSlot) = loadHistoricalDataFromEra(
       eraDir, networkData.metadata.cfg
     ).valueOr:
-      error "Failed to load historical summaries", error
+      error "Failed to load historical data", error
       quit QuitFailure
 
   var state: ForkedHashedBeaconState
 
   db.getState(
-    historical_roots, historical_summaries.asSeq(), start_slot(era + 1), state
+    historical_roots.asSeq(), historical_summaries.asSeq(), start_slot(era + 1), state
   ).isOkOr:
     error "Failed to load state", error = error
     quit QuitFailure
 
   let
     beaconBlock = db.getBlock(
-      historical_roots,
+      historical_roots.asSeq(),
       historical_summaries.asSeq(),
       slot,
       Opt.none(Eth2Digest),
@@ -491,15 +479,17 @@ proc getBlockProofDeneb(
 
   (blockProof, blockNumber, blockHash)
 
-proc exportBlockProof*(dataDir: string, eraDir: string, slotNumber: uint64) =
+proc exportBlockProof*(
+    dataDir: string, eraDir: string, slotNumber: uint64, network: string
+) =
   let
-    networkData = loadNetworkData("mainnet")
+    networkData = loadNetworkData(network)
     cfg = networkData.metadata.cfg
     slot = Slot(slotNumber)
 
   if slot.epoch() >= cfg.DENEB_FORK_EPOCH:
     let (proof, blockNumber, blockHash) =
-      getBlockProofDeneb(dataDir, eraDir, slotNumber)
+      getBlockProofDeneb(dataDir, eraDir, slotNumber, network)
 
     let yamlTestProof = YamlTestProofDeneb(
       execution_block_header: blockHash.to0xHex(),
@@ -513,7 +503,7 @@ proc exportBlockProof*(dataDir: string, eraDir: string, slotNumber: uint64) =
     yamlTestProof.writeDataToYaml(file)
   elif slot.epoch() >= cfg.CAPELLA_FORK_EPOCH:
     let (proof, blockNumber, blockHash) =
-      getBlockProofCapella(dataDir, eraDir, slotNumber)
+      getBlockProofCapella(dataDir, eraDir, slotNumber, network)
 
     let yamlTestProof = YamlTestProofCapella(
       execution_block_header: blockHash.to0xHex(),
@@ -527,7 +517,7 @@ proc exportBlockProof*(dataDir: string, eraDir: string, slotNumber: uint64) =
     yamlTestProof.writeDataToYaml(file)
   elif slot.epoch() >= cfg.BELLATRIX_FORK_EPOCH:
     let (proof, blockNumber, blockHash) =
-      getBlockProofBellatrix(dataDir, eraDir, slotNumber)
+      getBlockProofBellatrix(dataDir, eraDir, slotNumber, network)
 
     let yamlTestProof = YamlTestProofBellatrix(
       execution_block_header: blockHash.to0xHex(),

@@ -17,11 +17,16 @@ import
   ../networking/p2p,
   ./beacon/worker/headers/headers_target,
   ./beacon/[beacon_desc, worker],
-  ./beacon/worker/classify,
+  ./beacon/worker/[classify, update],
   ./[sync_sched, wire_protocol]
 
 export
-  beacon_desc
+  beacon_desc, ResetLingerError
+
+type TriggerRunError* = enum
+  Notused = 0
+  NotInStandByMode
+  NotInIdleMode
 
 logScope:
   topics = "beacon sync"
@@ -138,6 +143,10 @@ proc configTarget*(desc: BeaconSyncRef; hex: string; isFinal: bool): bool =
     discard
   # false
 
+proc configTicker*(desc: BeaconSyncRef, enable: bool) =
+  doAssert not desc.ctx.isNil
+  desc.ctx.pool.syncTickerOk = enable
+
 # -----------------
 
 proc start*(desc: BeaconSyncRef; standBy = false): bool =
@@ -148,11 +157,51 @@ proc start*(desc: BeaconSyncRef; standBy = false): bool =
   ##
   doAssert not desc.ctx.isNil
   let save = desc.ctx.pool.standByMode
-  desc.ctx.pool.standByMode = standBy # the ticker sees this when starting
+  desc.ctx.pool.standByMode = standBy
+  # The `resetSync()` directive prevents from accidential re-initialising
+  # after shut down (e.g. via `singleRun()`.)  This has no effect on the
+  # first `startSync()` directive.
+  discard desc.resetSync()
   if desc.startSync(standBy):
     return true
   desc.ctx.pool.standByMode = save
   # false
+
+proc singleRun*(
+    desc: BeaconSyncRef;
+    baseHeader: Header;
+    notify = BeaconNotifier(nil);
+      ): Result[void,TriggerRunError] =
+  ## In stand by mode, trigger synchronising a single header chain starting
+  ## with the argument `header` as parent, up until the latest CL finalised
+  ## header. Then stop and wait.
+  ##
+  ## This function realises some slave mode for the beacon syncer.
+  ##
+  doAssert not desc.ctx.isNil
+  if desc.startSync(standBy = false):               # run state was changed
+    desc.ctx.singleRunStart().isOkOr:
+      discard desc.startSync(standBy = true)
+      return err(NotInIdleMode)                     # oops, something went wrong
+    desc.ctx.pool.standByMode = false               # leave stand-by mode
+    desc.ctx.pool.stopBase = Opt.some(baseHeader)   # set stop header
+    desc.ctx.pool.stopNotifier = notify             # register notifier
+    return ok()
+  err(NotInStandByMode)
+
+proc singleReset*(desc: BeaconSyncRef):  Result[void,ResetLingerError] =
+  ## This function tries to reset the syncer to stand-by mode.If it succeeds,
+  ## the value `true` is returned, and `false` otherwise. In the latter case
+  ## This function should be called again after some delay.
+  ##
+  doAssert not desc.ctx.isNil
+  desc.ctx.resetSingleRun().isOkOr:
+    return  err(error)
+  discard desc.startSync(standBy = true)            # enter stand-by mode again
+  desc.ctx.pool.standByMode = true                  # ditto
+  desc.ctx.pool.stopBase = Opt.none(Header)
+  desc.ctx.pool.stopNotifier = BeaconNotifier(nil)
+  ok()
 
 proc stop*(desc: BeaconSyncRef) {.async.} =
   doAssert not desc.ctx.isNil

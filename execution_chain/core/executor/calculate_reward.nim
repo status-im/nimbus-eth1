@@ -47,12 +47,8 @@ const
     eth0, # Cancun
     eth0, # Prague
     eth0, # Osaka
-    eth0, # Bpo1
-    eth0, # Bpo2
-    eth0, # Bpo3
-    eth0, # Bpo4
-    eth0, # Bpo5
     eth0, # Amsterdam
+    eth0, # Bogota
   ]
 
 proc calculateReward*(vmState: BaseVMState; account: Address;

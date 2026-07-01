@@ -15,6 +15,7 @@ import
   stint,
   results,
   ../constants,
+  ../core/eip7702,
   ./block_access_list_utils
 
 export block_access_lists, hashes, results
@@ -30,6 +31,19 @@ export block_access_lists, hashes, results
 
 const BAL_ITEM_COST = 2000.GasInt
 
+func checkCodeChange(newCode: openArray[byte]): Result[void, string] =
+  if newCode.len > EIP7954_MAX_CODE_SIZE:
+    return err("Code change exceeds the maximum contract code size")
+
+  # EIP-3541 forbids new contract code starting with the 0xEF byte. The only
+  # valid code beginning with 0xEF is an EIP-7702 delegation designator.
+  if newCode.len > 0 and newCode[0] == 0xEF.byte and not newCode.isDelegation():
+    return err(
+      "Code change starting with 0xEF must be a valid EIP-7702 delegation (EIP-3541)"
+    )
+
+  ok()
+
 func checkBalSize(
     bal: BlockAccessListRef, blockGasLimit: GasInt
 ): Result[void, string] =
@@ -39,14 +53,11 @@ func checkBalSize(
   # This is fine because BALs with duplicates will get rejected in the other
   # validations anyway.
 
-  let addressCount = bal[].len()
-
   var storageKeysCount = 0
   for changes in bal[]:
     storageKeysCount += changes.storageChanges.len() + changes.storageReads.len()
 
-  let balItemCount = addressCount + storageKeysCount
-
+  let balItemCount = bal[].len() + storageKeysCount
   if balItemCount.GasInt <= blockGasLimit div BAL_ITEM_COST:
     ok()
   else:
@@ -81,6 +92,8 @@ func validate*(
     var changedSlots: HashSet[StorageKey]
     for slotChanges in accountChanges.storageChanges:
       changedSlots.incl(slotChanges.slot)
+      if slotChanges.changes.len == 0:
+        return err("Each slot in storage changes must have at least one change")
       if not slotChanges.changes.isSorted(balIndexCmpTreatEqualAsGreater):
         return err("Slot changes should be unique and sorted by blockAccessIndex")
 
@@ -104,6 +117,10 @@ func validate*(
     # Check code changes
     if not accountChanges.codeChanges.isSorted(balIndexCmpTreatEqualAsGreater):
       return err("Code changes should be unique and sorted by blockAccessIndex")
+
+    # Validate the bytecode recorded by each code change.
+    for codeChange in accountChanges.codeChanges:
+      ?checkCodeChange(codeChange.newCode)
 
   # Check that the block access list matches the expected hash.
   if bal[].computeBlockAccessListHash() != expectedHash:

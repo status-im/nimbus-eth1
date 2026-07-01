@@ -74,6 +74,8 @@ proc processBlock*(
     enableBalTracker = (not finalized or blockAccessList.isNone()) and
         c.com.isAmsterdamOrLater(header.timestamp),
   )
+  defer:
+    vmState.dispose()
 
   c.com.validateHeaderAndKinship(
     blk,
@@ -81,10 +83,7 @@ proc processBlock*(
     # Depending on the BAL retention period of clients, finalized blocks might
     # be received without a BAL. In this case we skip checking the BAL against
     # the header bal hash.
-    # For now we allow BALs to be optional even for finalized blocks for bal-devnet-2.
-    # Once clients have implemented the devp2p eth/71 protocol we can require BALs
-    # to be present for finalized blocks.
-    skipPreExecBalCheck = blockAccessList.isNone(), # finalized and blockAccessList.isNone(),
+    skipPreExecBalCheck = blockAccessList.isNone(),
     vmState.parent,
     txFrame
   ).isOkOr:
@@ -94,6 +93,7 @@ proc processBlock*(
   template processBlock(): auto =
     vmState.processBlock(
       blk,
+      blockAccessList = blockAccessList,
       skipValidation = false,
       skipReceipts = false,
       skipUncles = true,
@@ -130,8 +130,8 @@ proc processBlock*(
     # Convert the witness to ExecutionWitness format and verify against the pre-stateroot.
     if vmState.com.statelessWitnessValidation:
       doAssert witness.validateKeys(vmState.ledger.getWitnessKeys()).isOk()
-      let executionWitness = ExecutionWitness.build(witness, vmState.ledger)
-      ?executionWitness.statelessProcessBlock(c.com, blk)
+      let executionWitness = ExecutionWitnessWithKeys.build(witness, vmState.ledger)
+      ?executionWitness.toExecutionWitness().statelessProcessBlock(c.com, blk)
 
     ?vmState.ledger.txFrame.persistWitness(blkHash, witness)
 

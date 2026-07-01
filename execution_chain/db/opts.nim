@@ -26,7 +26,7 @@ const
     ## The row cache is disabled by default as the rdb lru caches do a better
     ## job at a similar abstraction level - ie they work at the same granularity
     ## as the rocksdb row cache but with less overhead
-  defaultBlockCacheSize* = 1024 * 1024 * 1024 * 2
+  defaultBlockCacheSize* = 2147483648'i64
     ## The block cache is used to cache indicies, ribbon filters and
     ## decompressed data, roughly in that priority order. At the time of writing
     ## we have about 2 giga-entries in the MPT - with the ribbon filter
@@ -59,6 +59,7 @@ type DbOptions* = object # Options that are transported to the database layer
   rdbPrintStats*: bool
   maxSnapshots*: int
   parallelStateRootComputation*: bool
+  threadSafeCaches*: bool
   blockCacheType*: RocksDbBlockCacheType
 
 func init*(
@@ -72,7 +73,8 @@ func init*(
     rdbBranchCacheSize = defaultRdbBranchCacheSize,
     rdbPrintStats = false,
     maxSnapshots = defaultMaxSnapshots,
-    parallelStateRootComputation = false,
+    parallelStateRootComputation = true,
+    threadSafeCaches = true,
     blockCacheType = defaultBlockCacheType,
 ): T =
   T(
@@ -86,5 +88,6 @@ func init*(
     rdbPrintStats: rdbPrintStats,
     maxSnapshots: maxSnapshots,
     parallelStateRootComputation: parallelStateRootComputation,
+    threadSafeCaches: threadSafeCaches,
     blockCacheType: blockCacheType
   )

@@ -23,7 +23,7 @@ import
 suite "test state verification":
   let
     ts = TestApiState.init(1.u256)
-    engine = initTestEngine(ts, 1, 1).valueOr:
+    (engine, frontend) = initTestEngine(ts, 1, 1).valueOr:
       raise newException(TestProxyError, error.errMsg)
 
   test "test EVM-based methods":
@@ -61,14 +61,13 @@ suite "test state verification":
       engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
 
     let
-      verifiedBalance = waitFor engine.frontend.eth_getBalance(address, latestTag)
-      verifiedNonce =
-        waitFor engine.frontend.eth_getTransactionCount(address, latestTag)
-      verifiedCode = waitFor engine.frontend.eth_getCode(address, latestTag)
-      verifiedSlot = waitFor engine.frontend.eth_getStorageAt(address, slot, latestTag)
-      verifiedCall = waitFor engine.frontend.eth_call(tx, latestTag)
-      verifiedAccessList = waitFor engine.frontend.eth_createAccessList(tx, latestTag)
-      verifiedEstimate = waitFor engine.frontend.eth_estimateGas(tx, latestTag)
+      verifiedBalance = waitFor frontend.eth_getBalance(address, latestTag)
+      verifiedNonce = waitFor frontend.eth_getTransactionCount(address, latestTag)
+      verifiedCode = waitFor frontend.eth_getCode(address, latestTag)
+      verifiedSlot = waitFor frontend.eth_getStorageAt(address, slot, latestTag)
+      verifiedCall = waitFor frontend.eth_call(tx, latestTag)
+      verifiedAccessList = waitFor frontend.eth_createAccessList(tx, latestTag)
+      verifiedEstimate = waitFor frontend.eth_estimateGas(tx, latestTag)
 
     check:
       verifiedBalance.isOk()

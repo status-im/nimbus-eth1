@@ -17,7 +17,7 @@ import
   ../core/chain,
   ../networking/p2p,
   ./snap/[snap_desc, worker],
-  ./snap/worker/[helpers, update],
+  ./snap/worker/helpers,
   ./[sync_sched, wire_protocol]
 
 from ./beacon
@@ -83,7 +83,7 @@ proc config*(
   ## Note that the `init()` constructor might have specified a configuration
   ## task to be run at the end of the `config()` function.
   ##
-  doAssert desc.ctx.isNil # This can only run once
+  doAssert desc.ctx.isNil                           # This can only run once
   desc.initSync(ethNode, maxPeers)
   desc.addSyncProtocol snap1
   desc.ctx.pool.baseDir = dataDir
@@ -96,18 +96,7 @@ proc configResume*(desc: SnapSyncRef; resume = true) =
   ## Set syncer into resume (or no-resume) mode. By default, the syncer is
   ## in no-resume mode.
   doAssert not desc.ctx.isNil
-  if resume: desc.ctx.updateSyncResume()
-  else: desc.ctx.updateSyncReset()
-
-proc configTarget*(desc: SnapSyncRef; hex: string): bool =
-  ## Set up inital target root (if any, mainly for debugging)
-  doAssert not desc.ctx.isNil
-  try:
-    desc.ctx.pool.target = Opt.some(BlockHash Hash32.fromHex(hex))
-    return true
-  except ValueError:
-    discard
-  # false
+  desc.ctx.pool.contPrevSession = true
 
 proc start*(desc: SnapSyncRef; bcSyncRef: BeaconSyncRef): bool =
   ## Starting beacon sync in stand-by mode and then snap sync.
@@ -115,9 +104,13 @@ proc start*(desc: SnapSyncRef; bcSyncRef: BeaconSyncRef): bool =
   doAssert not bcSyncRef.isNil
   desc.ctx.pool.beaconSync = bcSyncRef
   if not desc.isRunning and
-     desc.ctx.pool.beaconSync.start(standBy=true) and
-     desc.startSync():
-    return true
+     # Re-start  beacon sync in server mode.
+     bcSyncRef.start(standBy=true):
+    # The `resetSync()` directive prevents from accidential re-initialising
+    # after shut down. This has no effect on the first `starSynct()` call.
+    discard desc.resetSync()
+    if desc.startSync():
+      return true
   # false
 
 proc stop*(desc: SnapSyncRef) {.async.} =

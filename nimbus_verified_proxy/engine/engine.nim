@@ -11,28 +11,114 @@ import
   std/[options, random],
   chronicles,
   chronos,
-  stew/byteutils,
-  eth/common/[hashes, headers, addresses],
+  eth/common/[hashes, headers, addresses, eth_types_rlp],
   beacon_chain/spec/forks,
-  beacon_chain/spec/beaconstate,
   beacon_chain/gossip_processing/light_client_processor,
   beacon_chain/beacon_clock,
   beacon_chain/sync/light_client_sync_helpers,
   beacon_chain/networking/network_metadata,
   beacon_chain/el/engine_api_conversions,
-  beacon_chain/conf,
   ./types,
   ./utils,
+  ./genesis_params,
   ./header_store,
+  ./blocks,
   ./evm
 
 from eth/common/blocks import EMPTY_UNCLE_HASH
 
-const MAX_REQUEST_LIGHT_CLIENT_UPDATES* = 128
+proc applyPenalty*(engine: RpcVerificationEngine, e: ErrorTuple) =
+  if e.backendIdx < 0:
+    return
+  let idx = e.backendIdx
+  try:
+    case e.errType
+    of BackendFetchError, BackendDecodingError:
+      engine.scores[idx].availability =
+        engine.availabilityScoreFunc(engine.scores[idx].availability, Penalty)
+      engine.scores[idx].quality =
+        engine.qualityScoreFunc(engine.scores[idx].quality, UndoReward)
+    of VerificationError:
+      engine.scores[idx].quality =
+        engine.qualityScoreFunc(engine.scores[idx].quality, Penalty)
+    else:
+      discard
+  except KeyError:
+    discard
+
+proc downloadAndStoreFinalized(
+    engine: RpcVerificationEngine, blockHash: Hash32
+) {.async: (raises: []).} =
+  let (backend, backendIdx) = engine.executionBackendFor(GetBlockByHash).valueOr:
+    warn "No execution backend available for finalized header download",
+      blockHash = blockHash
+    return
+
+  let blk =
+    try:
+      (await backend.eth_getBlockByHash(blockHash, false)).valueOr:
+        engine.applyPenalty(
+          (BackendFetchError, "failed to download finalized header", backendIdx)
+        )
+        warn "Failed to download finalized header",
+          blockHash = blockHash, backendIdx = backendIdx
+        return
+    except CancelledError:
+      return
+
+  let header = convHeader(blk)
+
+  if header.computeBlockHash != blockHash:
+    engine.applyPenalty(
+      (VerificationError, "finalized header hash mismatch", backendIdx)
+    )
+    error "Finalized header hash mismatch",
+      expected = blockHash, computed = header.computeBlockHash, backendIdx = backendIdx
+    return
+
+  let res = engine.headerStore.updateFinalized(header, blockHash)
+  if res.isErr():
+    error "finalized header update error", error = res.error()
+
+proc downloadAndStoreOptimistic(
+    engine: RpcVerificationEngine, blockHash: Hash32
+) {.async: (raises: []).} =
+  let (backend, backendIdx) = engine.executionBackendFor(GetBlockByHash).valueOr:
+    warn "No execution backend available for optimistic header download",
+      blockHash = blockHash
+    return
+
+  let blk =
+    try:
+      (await backend.eth_getBlockByHash(blockHash, false)).valueOr:
+        engine.applyPenalty(
+          (BackendFetchError, "failed to download optimistic header", backendIdx)
+        )
+        warn "Failed to download optimistic header",
+          blockHash = blockHash, backendIdx = backendIdx
+        return
+    except CancelledError:
+      return
+
+  let header = convHeader(blk)
+
+  if header.computeBlockHash != blockHash:
+    engine.applyPenalty(
+      (VerificationError, "optimistic header hash mismatch", backendIdx)
+    )
+    error "Optimistic header hash mismatch",
+      expected = blockHash, computed = header.computeBlockHash, backendIdx = backendIdx
+    return
+
+  let res = engine.headerStore.add(header, blockHash)
+  if res.isErr():
+    error "optimistic header update error", error = res.error()
 
 func convLCHeader*(lcHeader: ForkyLightClientHeader): Result[Header, string] =
   when lcHeader is altair.LightClientHeader:
     err("pre-bellatrix light client headers do not have execution header")
+  elif lcHeader is gloas.LightClientHeader:
+    err("gloas light client headers do not carry full execution header")
   else:
     template p(): auto =
       lcHeader.execution
@@ -79,22 +165,12 @@ proc init*(
 ): EngineResult[T] =
   randomize()
 
-  let metadata = loadEth2Network(config.eth2Network)
-
   let
-    genesisState =
-      try:
-        template genesisData(): auto =
-          metadata.genesis.bakedBytes
-
-        newClone(
-          readSszForkedHashedBeaconState(
-            metadata.cfg, genesisData.toOpenArray(genesisData.low, genesisData.high)
-          )
-        )
-      except CatchableError as err:
-        raiseAssert "Invalid baked-in state: " & err.msg
-    genesisTime = genesisState[].genesis_time
+    networkName = config.eth2Network.get("mainnet")
+    metadata = getMetadataForNetwork(networkName)
+    genesis = genesisParamsForNetwork(networkName)
+    genesisTime = genesis.genesisTime
+    genesis_validators_root = genesis.genesisValidatorsRoot
     beaconClock = BeaconClock.init(metadata.cfg.timeParams, genesisTime).valueOr:
       error "Invalid genesis time in state", genesisTime
       quit QuitFailure
@@ -104,7 +180,6 @@ proc init*(
       else:
         proc(): BeaconTime {.gcsafe, raises: [].} =
           config.freezeAtSlot.start_beacon_time(metadata.cfg.timeParams)
-    genesis_validators_root = genesisState[].genesis_validators_root
     forkDigests = newClone ForkDigests.init(metadata.cfg, genesis_validators_root)
 
   let engine = RpcVerificationEngine(
@@ -119,6 +194,7 @@ proc init*(
     codeCache: CodeCache.init(config.codeCacheLen),
     storageCache: StorageCache.init(config.storageCacheLen),
     parallelBlockDownloads: config.parallelBlockDownloads,
+    maxLightClientUpdates: config.maxLightClientUpdates,
     availabilityScoreFunc: defaultAvailabilityScoreFunc,
     qualityScoreFunc: defaultQualityScoreFunc,
     cfg: metadata.cfg,
@@ -137,16 +213,29 @@ proc init*(
   proc onFinalizedHeader() =
     if not config.syncHeaderStore:
       return
+
     withForkyStore(engine.lcStore[]):
-      when lcDataFork > LightClientDataFork.Altair:
+      when lcDataFork > LightClientDataFork.Gloas:
+        {.warning: "Please add implementation here for: " & $lcDataFork.}
+        error "post-gloas onFinalizedHeader has no implementation"
+      elif lcDataFork == LightClientDataFork.Gloas:
+        info "New LC finalized header",
+          execution_block_hash = forkyStore.finalized_header.execution_block_hash
+        waitFor engine.downloadAndStoreFinalized(
+          forkyStore.finalized_header.execution_block_hash.asBlockHash
+        )
+      elif lcDataFork > LightClientDataFork.Altair:
         info "New LC finalized header",
           finalized_header = shortLog(forkyStore.finalized_header)
+
         let header = convLCHeader(forkyStore.finalized_header).valueOr:
           error "finalized header conversion error", error = error
           return
+
         let res = engine.headerStore.updateFinalized(
           header, forkyStore.finalized_header.execution.block_hash.asBlockHash
         )
+
         if res.isErr():
           error "finalized header update error", error = res.error()
       else:
@@ -156,15 +245,27 @@ proc init*(
     if not config.syncHeaderStore:
       return
     withForkyStore(engine.lcStore[]):
-      when lcDataFork > LightClientDataFork.Altair:
+      when lcDataFork > LightClientDataFork.Gloas:
+        {.warning: "Please add implementation here for: " & $lcDataFork.}
+        error "post-gloas onOptimisticHeader has no implementation"
+      elif lcDataFork == LightClientDataFork.Gloas:
+        info "New LC optimistic header",
+          execution_block_hash = forkyStore.optimistic_header.execution_block_hash
+        waitFor engine.downloadAndStoreOptimistic(
+          forkyStore.optimistic_header.execution_block_hash.asBlockHash
+        )
+      elif lcDataFork > LightClientDataFork.Altair:
         info "New LC optimistic header",
           optimistic_header = shortLog(forkyStore.optimistic_header)
+
         let header = convLCHeader(forkyStore.optimistic_header).valueOr:
           error "optimistic header conversion error", error = error
           return
-        let res = engine.headerStore.updateFinalized(
+
+        let res = engine.headerStore.add(
           header, forkyStore.optimistic_header.execution.block_hash.asBlockHash
         )
+
         if res.isErr():
           error "optimistic header update error", error = res.error()
       else:
@@ -185,6 +286,8 @@ proc init*(
     onFinalizedHeader,
     onOptimisticHeader,
   )
+
+  engine.syncLock = newAsyncLock()
 
   ok(engine)
 
@@ -241,7 +344,8 @@ proc processObject[T: SomeForkedLightClientObject](
     debug "LC object requires missing parent", endpoint = endpoint
     return err((UnavailableDataError, "missing parent", UNTAGGED))
   of LightClientVerifierError.Duplicate:
-    return err((UnavailableDataError, "duplicate", UNTAGGED))
+    # we don't care about duplicates
+    return ok()
   of LightClientVerifierError.UnviableFork:
     notice "Received LC value from an unviable fork", endpoint = endpoint
     return err((VerificationError, "unviable fork", UNTAGGED))
@@ -283,7 +387,7 @@ proc syncOnce*(
       else:
         min(
           current.sync_committee_period - finalized.sync_committee_period,
-          MAX_REQUEST_LIGHT_CLIENT_UPDATES,
+          engine.maxLightClientUpdates,
         )
 
     let

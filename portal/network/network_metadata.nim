@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -14,7 +14,7 @@ import
   chronos/timer,
   eth/common/headers,
   beacon_chain/spec/forks,
-  ../eth_history/block_proofs/historical_hashes_accumulator
+  ../../execution_chain/history/block_proofs/historical_hashes_accumulator
 
 proc loadBootstrapNodes(path: string): seq[string] {.raises: [IOError].} =
   # Read a list of ENR URIs from a file containing a flat list of entries.
@@ -30,36 +30,51 @@ proc loadCompileTimeBootstrapNodes(path: string): seq[string] =
     macros.error "Failed to load bootstrap nodes metadata at '" & path & "': " & err.msg
 
 const
-  portalConfigDir =
-    currentSourcePath.parentDir.parentDir.parentDir.replace('\\', '/') / "vendor" /
-    "portal-mainnet" / "config"
+  portalVendorDir =
+    currentSourcePath.parentDir.parentDir.parentDir.replace('\\', '/') / "vendor"
+
+  mainnetPortalConfigDir = portalVendorDir / "portal-mainnet" / "config"
+  sepoliaPortalConfigDir = portalVendorDir / "portal-sepolia" / "config"
+
   # Note:
   # These are the bootstrap nodes for the Portal mainnet.
   # TODO: For the Portal testnet, additional bootstrap nodes need to be read
   # still and Protocol Ids need to be adjusted.
-  #
-  # When more config data is required per Portal network, a metadata object can
-  # be created, but right now only bootstrap nodes can be different.
-  # TODO: It would be nice to be able to use `loadBootstrapFile` here, but that
-  # doesn't work at compile time. The main issue seems to be the usage of
-  # rlp.rawData() in the enr code.
   mainnetBootstrapNodes* =
-    loadCompileTimeBootstrapNodes(portalConfigDir / "bootstrap_nodes.txt")
+    loadCompileTimeBootstrapNodes(mainnetPortalConfigDir / "bootstrap_nodes.txt")
 
-  historicalHashesAccumulatorSSZ* =
-    slurp(portalConfigDir / "historical_hashes_accumulator.ssz")
+  mainnetHistoricalHashesAccumulatorSSZ* =
+    slurp(mainnetPortalConfigDir / "historical_hashes_accumulator.ssz")
+  sepoliaHistoricalHashesAccumulatorSSZ* =
+    slurp(sepoliaPortalConfigDir / "historical_hashes_accumulator.ssz")
 
-  historicalRootsSSZ* = slurp(portalConfigDir / "historical_roots.ssz")
+  mainnetHistoricalRootsSSZ* = slurp(mainnetPortalConfigDir / "historical_roots.ssz")
 
-func loadAccumulator*(): FinishedHistoricalHashesAccumulator =
+func loadAccumulator*(network: string): FinishedHistoricalHashesAccumulator =
+  let ssz =
+    case network
+    of "mainnet":
+      mainnetHistoricalHashesAccumulatorSSZ
+    of "sepolia":
+      sepoliaHistoricalHashesAccumulatorSSZ
+    else:
+      raiseAssert "No baked-in accumulator for network: " & network
   try:
-    SSZ.decode(historicalHashesAccumulatorSSZ, FinishedHistoricalHashesAccumulator)
+    SSZ.decode(ssz, FinishedHistoricalHashesAccumulator)
   except SerializationError as err:
     raiseAssert "Invalid baked-in accumulator: " & err.msg
 
-func loadHistoricalRoots*(): HashList[Eth2Digest, Limit HISTORICAL_ROOTS_LIMIT] =
+func loadHistoricalRoots*(
+    network: string
+): HashList[Eth2Digest, Limit HISTORICAL_ROOTS_LIMIT] =
+  let ssz =
+    case network
+    of "mainnet":
+      mainnetHistoricalRootsSSZ
+    else:
+      raiseAssert "No baked-in historical_roots for network: " & network
   try:
-    SSZ.decode(historicalRootsSSZ, HashList[Eth2Digest, Limit HISTORICAL_ROOTS_LIMIT])
+    SSZ.decode(ssz, HashList[Eth2Digest, Limit HISTORICAL_ROOTS_LIMIT])
   except SerializationError as err:
     raiseAssert "Invalid baked-in historical_roots: " & err.msg
 

@@ -200,6 +200,14 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     conf.networkParams.config.bpo1Time = Opt.some(3805701325.EthTime)
     conf.networkParams.config.bpo2Time = Opt.some(3805801325.EthTime)
 
+  if envFork >= Osaka:
+    conf.networkParams.config.osakaTime = Opt.some(0.EthTime)
+    conf.networkParams.config.bpo1Time = Opt.some(0.EthTime)
+    conf.networkParams.config.bpo2Time = Opt.some(0.EthTime)
+
+  if envFork >= Amsterdam:
+    conf.networkParams.config.amsterdamTime = Opt.some(0.EthTime)
+
   let
     com   = setupCom(conf)
     chain = ForkedChainRef.init(com)
@@ -272,7 +280,7 @@ proc generateBlock(env: var TestEnv) =
 
   # import block
   (waitFor chain.importBlock(blk)).isOkOr:
-    debugEcho error
+    debugEcho error.msg
     quit(QuitFailure)
 
   xp.removeNewBlockTxs(blk)
@@ -282,7 +290,7 @@ proc generateBlock(env: var TestEnv) =
   env.txHash = tx1.computeRlpHash
   env.blockHash = blk.header.computeBlockHash
 
-createRpcSigsFromNim(RpcClient):
+createRpcSigsFromNim(RpcClient, EthJson):
   proc web3_clientVersion(): string
   proc web3_sha3(data: seq[byte]): Hash32
   proc net_version(): string
@@ -615,7 +623,7 @@ proc rpcMain*() =
       check res.hash == env.blockHash
 
       expect JsonRpcError:
-        let res2 = await client.eth_getBlockByNumber($1, true)
+        discard await client.eth_getBlockByNumber($1, true)
 
     test "eth_getTransactionByHash":
       let res = await client.eth_getTransactionByHash(env.txHash)
@@ -664,32 +672,45 @@ proc rpcMain*() =
       for receipt in rawReceipts:
         check seq[byte](receipt).len > 0
 
+    test "debug_getRawBlockAccessList":
+      try:
+        discard await client.call("debug_getRawBlockAccessList",
+          %[%"latest"], EthJson)
+        check false
+      except JsonRpcError as exc:
+        check "Resource not found" in exc.msg
+
+      # Unknown block tag must raise an error.
+      expect JsonRpcError:
+        discard await client.call("debug_getRawBlockAccessList",
+          %[%"0xabcdabcd"], EthJson)
+
     test "eth_getBlockReceipts with EIP-1898 object param":
       # blockHash object form (what go-ethereum's ethclient sends)
       let r1 = await client.call("eth_getBlockReceipts",
-        %[%*{"blockHash": $env.blockHash}])
-      let recs1 = JrpcConv.decode(r1.string, Opt[seq[ReceiptObject]])
+        %[%*{"blockHash": $env.blockHash}], EthJson)
+      let recs1 = EthJson.decode(r1.string, Opt[seq[ReceiptObject]])
       check recs1.isSome
       check recs1.get.len == 2
 
       # blockHash with requireCanonical=false
       let r2 = await client.call("eth_getBlockReceipts",
-        %[%*{"blockHash": $env.blockHash, "requireCanonical": false}])
-      let recs2 = JrpcConv.decode(r2.string, Opt[seq[ReceiptObject]])
+        %[%*{"blockHash": $env.blockHash, "requireCanonical": false}], EthJson)
+      let recs2 = EthJson.decode(r2.string, Opt[seq[ReceiptObject]])
       check recs2.isSome
       check recs2.get.len == 2
 
       # blockNumber object form
       let r3 = await client.call("eth_getBlockReceipts",
-        %[%*{"blockNumber": "0x1"}])
-      let recs3 = JrpcConv.decode(r3.string, Opt[seq[ReceiptObject]])
+        %[%*{"blockNumber": "0x1"}], EthJson)
+      let recs3 = EthJson.decode(r3.string, Opt[seq[ReceiptObject]])
       check recs3.isSome
       check recs3.get.len == 2
 
       # requireCanonical=true should fail
       expect JsonRpcError:
         discard await client.call("eth_getBlockReceipts",
-          %[%*{"blockHash": $env.blockHash, "requireCanonical": true}])
+          %[%*{"blockHash": $env.blockHash, "requireCanonical": true}], EthJson)
 
     test "eth_getTransactionReceipt":
       let res = await client.eth_getTransactionReceipt(env.txHash)
@@ -916,6 +937,22 @@ proc rpcMain*() =
           proofResponse.storageHash == hash32"0x2ed06ec37dad4cd8c8fc1a1172d633a8973987fa6995b14a7c0a50c0e8d1a9c3"
           storageProof.len() == 1
           verifySlotLeafExists(proofResponse.storageHash, storageProof[0])
+
+    env.close()
+
+  suite "Remote Procedure Calls - Amsterdam":
+    var env = setupEnv(Amsterdam)
+    env.generateBlock()
+    let client = env.client
+
+    test "debug_getRawBlockAccessList - happy path":
+      let r = await client.call("debug_getRawBlockAccessList",
+        %[%"latest"], EthJson)
+      let raw = EthJson.decode(r.string, seq[byte])
+      check raw.len > 0
+
+      let bal = ethBlockAccessList(raw)
+      check rlp.encode(bal[]) == raw
 
     env.close()
 

@@ -33,7 +33,7 @@ proc maybeSlowPeerError(
 
     # Do not repeat the same time-consuming failed request
     buddy.only.failedReq = PeerFirstFetchReq(
-      state:       SyncState.headers,
+      state:       BeaconState.headers,
       blockNumber: bn)
 
     return true
@@ -63,7 +63,7 @@ proc getBlockHeaders(
   ## Wrapper around `getBlockHeaders()`
   let start = Moment.now()
 
-  if buddy.only.failedReq.state == SyncState.headers and
+  if buddy.only.failedReq.state == BeaconState.headers and
      buddy.only.failedReq.blockNumber == bn:
     return err((EAlreadyTriedAndFailed,"","",Moment.now()-start))
 

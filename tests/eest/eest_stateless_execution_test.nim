@@ -26,46 +26,11 @@ const skipFiles = [
   # Once all of these pass we could simply run eest_blockchain_test.nim
   # with statelessEnabled = true and remove this test file.
   #
-  # --- eest_develop files with failures ---
-  #
-  "underflowTest.json", # stateRoot mismatch
-  "CREATE2_HighNonceDelegatecall.json", # stateRoot mismatch
-  "test_precompile_warming.json", # stateRoot mismatch
-  "gasPriceDiffPlaces.json", # stateRoot mismatch
-  "baseFeeDiffPlaces.json", # stateRoot mismatch
-  "test_genesis_hash_available.json", # witness.validateKeys assert
-  "test_scenarios.json", # stateRoot mismatch + persist assert
-  "test_gas_limit_below_minimum.json", # multiproof assert
-  "test_multiple_withdrawals_same_address.json", # multiproof assert
-  "test_large_amount.json", # multiproof assert
-  "test_withdrawals_root.json", # witness.validateKeys assert
-  "CallcodeToPrecompileFromCalledContract.json", # stateRoot mismatch
-  "DelegatecallToPrecompileFromCalledContract.json", # stateRoot mismatch
-  "CallWithNOTZeroValueToPrecompileFromCalledContract.json", # stateRoot mismatch
-  "CallWithZeroValueToPrecompileFromCalledContract.json", # stateRoot mismatch
-  #
   # --- eest_zkevm files with failures ---
   #
-  "varying_calldata_costs.json", # Witness state mismatch
-  "witness_codes_delegated_eoa_insufficient_balance.json", # blockAccessListHash mismatch
-  "witness_codes_create_same_hash_then_read.json", # Witness codes mismatch
-  "witness_headers_blockhash_boundary.json", # Witness state mismatch
-  "witness_headers_extra_unused_older_ancestor.json", # Witness headers mismatch
-  "witness_state_block_diff_delete_insert_before_delete_order.json", # persistStorage assert
-  "genesis_hash_available.json", # Witness state mismatch
-  "scenarios.json", # Witness state mismatch + stateRoot mismatch
-  "withdrawal_requests.json", # persistStorage assert + Witness state mismatch
-  "consolidation_requests.json", # Witness state mismatch
-  "multiple_withdrawals_same_address.json", # Witness state mismatch
-  "precompile_warming.json", # stateRoot mismatch
-  "return_bounds.json", # Witness state mismatch
-  "underflow_test.json", # stateRoot mismatch
-  "create2_high_nonce_delegatecall.json", # stateRoot mismatch
-  "gas_price_diff_places.json", # stateRoot mismatch
-  "base_fee_diff_places.json", # stateRoot mismatch
-  "delegatecall_to_precompile_from_called_contract.json", # stateRoot mismatch
-  "callcode_to_precompile_from_called_contract.json", # stateRoot mismatch
-  "validation_codes_missing_delegated_code_on_insufficient_balance_call.json", # blockAccessListHash mismatch
+  # Witness codes mismatch -> codes optimisation: implemented in
+  # https://github.com/status-im/nimbus-eth1/pull/4099
+  "witness_codes_create_same_hash_then_read.json",
 ]
 
 runEESTSuite(
@@ -73,5 +38,6 @@ runEESTSuite(
   skipFiles,
   baseFolder,
   eestType,
-  statelessEnabled = true
+  statelessEnabled = true,
+  parallelEnabled = false
 )

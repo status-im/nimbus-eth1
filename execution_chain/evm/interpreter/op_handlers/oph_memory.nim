@@ -27,8 +27,7 @@ import
   ./oph_defs,
   ./oph_helpers,
   ../../state,
-  ../../../db/ledger,
-  ../../../core/eip8037
+  ../../../db/ledger
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -44,8 +43,6 @@ proc sstoreImpl(c: Computation, slot, newValue: UInt256): EvmResultVoid =
   ? c.opcodeGasCost(Sstore, res.gasCost, "SSTORE")
   c.gasMeter.refundGas(res.gasRefund)
 
-  if c.balTrackerEnabled:
-    c.vmState.balTracker.trackStorageWrite(c.msg.contractAddress, slot, newValue)
   c.vmState.mutateLedger:
     ledger.setStorage(c.msg.contractAddress, slot, newValue)
   ok()
@@ -59,7 +56,6 @@ proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256, coldAcces
     gasParam = GasParamsSs(
       currentValue: currentValue,
       originalValue: ledger.getCommittedStorage(c.msg.contractAddress, slot),
-      stateGasStorageSet: STATE_BYTES_PER_STORAGE_SET * c.getCostPerStateByte,
       )
 
     res = c.gasCosts[Sstore].ss_handler(newValue, gasParam)
@@ -69,8 +65,12 @@ proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256, coldAcces
   # reservoir on frame failure.
   ? c.opcodeGasCost(Sstore, res.gasCost + coldAccess, "SSTORE")
 
-  if stateGas and res.stateGas > 0:
-    ? c.gasMeter.chargeStateGas(res.stateGas, reason = "SSTORE state gas")
+  if stateGas:
+    # https://github.com/ethereum/execution-specs/pull/2733/changes
+    if res.creditStateGas > 0:
+      c.gasMeter.creditStateGasRefund(res.creditStateGas)
+    if res.stateGas > 0:
+      ? c.gasMeter.chargeStateGas(res.stateGas, reason = "SSTORE state gas")
 
   c.gasMeter.refundGas(res.gasRefund)
 

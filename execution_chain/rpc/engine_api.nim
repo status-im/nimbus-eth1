@@ -64,125 +64,103 @@ const supportedMethods: HashSet[string] =
 # bodies up to the various procs above. Once we have multiple
 # versions, they'll need to be able to share code.
 proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
+  server.rpc(EthJson):
+    proc engine_exchangeCapabilities(methods: seq[string]): seq[string] =
+      return methods.filterIt(supportedMethods.contains(it))
 
-  server.rpc("engine_exchangeCapabilities") do(methods: seq[string]) -> seq[string]:
-    return methods.filterIt(supportedMethods.contains(it))
-
-  server.rpc("engine_newPayloadV1") do(payload: ExecutionPayloadV1) -> PayloadStatusV1:
-    apiTiming("engine_newPayloadV1"):
+    proc engine_newPayloadV1(payload: ExecutionPayloadV1): PayloadStatusV1 {.async: (raises: [CancelledError, ApplicationError, RlpError]).} =
       await engine.newPayload(Version.V1, payload.executionPayload)
 
-  server.rpc("engine_newPayloadV2") do(payload: ExecutionPayload) -> PayloadStatusV1:
-    apiTiming("engine_newPayloadV2"):
+    proc engine_newPayloadV2(payload: ExecutionPayload): PayloadStatusV1 {.async: (raises: [CancelledError, ApplicationError, RlpError]).} =
       await engine.newPayload(Version.V2, payload)
 
-  server.rpc("engine_newPayloadV3") do(payload: ExecutionPayload,
-                                       expectedBlobVersionedHashes: Opt[seq[Hash32]],
-                                       parentBeaconBlockRoot: Opt[Hash32]) -> PayloadStatusV1:
-    apiTiming("engine_newPayloadV3"):
+    proc engine_newPayloadV3(payload: ExecutionPayload,
+                                        expectedBlobVersionedHashes: Opt[seq[Hash32]],
+                                        parentBeaconBlockRoot: Opt[Hash32]): PayloadStatusV1 {.async: (raises: [CancelledError, ApplicationError, RlpError]).} =
       await engine.newPayload(Version.V3, payload, expectedBlobVersionedHashes, parentBeaconBlockRoot)
 
-  server.rpc("engine_newPayloadV4") do(payload: ExecutionPayload,
-                                       expectedBlobVersionedHashes: Opt[seq[Hash32]],
-                                       parentBeaconBlockRoot: Opt[Hash32],
-                                       executionRequests: Opt[seq[seq[byte]]]) -> PayloadStatusV1:
-    apiTiming("engine_newPayloadV4"):
+    proc engine_newPayloadV4(payload: ExecutionPayload,
+                                        expectedBlobVersionedHashes: Opt[seq[Hash32]],
+                                        parentBeaconBlockRoot: Opt[Hash32],
+                                        executionRequests: Opt[seq[seq[byte]]]): PayloadStatusV1 {.async: (raises: [CancelledError, ApplicationError, RlpError]).} =
       await engine.newPayload(Version.V4, payload,
         expectedBlobVersionedHashes, parentBeaconBlockRoot, executionRequests)
 
-  server.rpc("engine_newPayloadV5") do(payload: ExecutionPayload,
-                                       expectedBlobVersionedHashes: Opt[seq[Hash32]],
-                                       parentBeaconBlockRoot: Opt[Hash32],
-                                       executionRequests: Opt[seq[seq[byte]]]) -> PayloadStatusV1:
-    apiTiming("engine_newPayloadV5"):
+    proc engine_newPayloadV5(payload: ExecutionPayload,
+                                        expectedBlobVersionedHashes: Opt[seq[Hash32]],
+                                        parentBeaconBlockRoot: Opt[Hash32],
+                                        executionRequests: Opt[seq[seq[byte]]]): PayloadStatusV1 {.async: (raises: [CancelledError, ApplicationError, RlpError]).} =
       await engine.newPayload(Version.V5, payload,
         expectedBlobVersionedHashes, parentBeaconBlockRoot, executionRequests)
 
-  server.rpc("engine_getPayloadV1") do(payloadId: Bytes8) -> ExecutionPayloadV1:
-    apiTiming("engine_getPayloadV1"):
-      engine.getPayload(Version.V1, payloadId).executionPayload.V1
+    proc engine_getPayloadV1(payloadId: Bytes8): ExecutionPayloadV1 {.raises: [CatchableError].} =
+      return engine.getPayload(Version.V1, payloadId).executionPayload.V1
 
-  server.rpc("engine_getPayloadV2") do(payloadId: Bytes8) -> GetPayloadV2Response:
-    apiTiming("engine_getPayloadV2"):
-      engine.getPayload(Version.V2, payloadId)
+    proc engine_getPayloadV2(payloadId: Bytes8): GetPayloadV2Response {.raises: [CatchableError].} =
+      return engine.getPayload(Version.V2, payloadId)
 
-  server.rpc("engine_getPayloadV3") do(payloadId: Bytes8) -> GetPayloadV3Response:
-    apiTiming("engine_getPayloadV3"):
-      engine.getPayloadV3(payloadId)
+    proc engine_getPayloadV3(payloadId: Bytes8): GetPayloadV3Response {.raises: [CatchableError].} =
+      return engine.getPayloadV3(payloadId)
 
-  server.rpc("engine_getPayloadV4") do(payloadId: Bytes8) -> GetPayloadV4Response:
-    apiTiming("engine_getPayloadV4"):
-      engine.getPayloadV4(payloadId)
+    proc engine_getPayloadV4(payloadId: Bytes8): GetPayloadV4Response {.raises: [CatchableError].} =
+      return engine.getPayloadV4(payloadId)
 
-  server.rpc("engine_getPayloadV5") do(payloadId: Bytes8) -> GetPayloadV5Response:
-    apiTiming("engine_getPayloadV5"):
-      engine.getPayloadV5(payloadId)
+    proc engine_getPayloadV5(payloadId: Bytes8): GetPayloadV5Response {.raises: [CatchableError].} =
+      return engine.getPayloadV5(payloadId)
 
-  server.rpc("engine_getPayloadV6") do(payloadId: Bytes8) -> GetPayloadV6Response:
-    apiTiming("engine_getPayloadV6"):
-      engine.getPayloadV6(payloadId)
+    proc engine_getPayloadV6(payloadId: Bytes8): GetPayloadV6Response {.raises: [CatchableError].} =
+      return engine.getPayloadV6(payloadId)
 
-  server.rpc("engine_forkchoiceUpdatedV1") do(update: ForkchoiceStateV1,
-                    attrs: Opt[PayloadAttributesV1]) -> ForkchoiceUpdatedResponse:
-    apiTiming("engine_forkchoiceUpdatedV1"):
+    proc engine_forkchoiceUpdatedV1(update: ForkchoiceStateV1,
+                      attrs: Opt[PayloadAttributesV1]): ForkchoiceUpdatedResponse {.async: (raises: [CancelledError, ApplicationError]).} =
       await engine.forkchoiceUpdated(Version.V1, update, attrs.payloadAttributes)
 
-  server.rpc("engine_forkchoiceUpdatedV2") do(update: ForkchoiceStateV1,
-                    attrs: Opt[PayloadAttributes]) -> ForkchoiceUpdatedResponse:
-    apiTiming("engine_forkchoiceUpdatedV2"):
+    proc engine_forkchoiceUpdatedV2(update: ForkchoiceStateV1,
+                      attrs: Opt[PayloadAttributes]): ForkchoiceUpdatedResponse {.async: (raises: [CancelledError, ApplicationError]).} =
       await engine.forkchoiceUpdated(Version.V2, update, attrs)
 
-  server.rpc("engine_forkchoiceUpdatedV3") do(update: ForkchoiceStateV1,
-                    attrs: Opt[PayloadAttributes]) -> ForkchoiceUpdatedResponse:
-    apiTiming("engine_forkchoiceUpdatedV3"):
+    proc engine_forkchoiceUpdatedV3(update: ForkchoiceStateV1,
+                      attrs: Opt[PayloadAttributes]): ForkchoiceUpdatedResponse {.async: (raises: [CancelledError, ApplicationError]).} =
       await engine.forkchoiceUpdated(Version.V3, update, attrs)
 
-  server.rpc("engine_forkchoiceUpdatedV4") do(update: ForkchoiceStateV1,
-                    attrs: Opt[PayloadAttributes]) -> ForkchoiceUpdatedResponse:
-    apiTiming("engine_forkchoiceUpdatedV4"):
+    proc engine_forkchoiceUpdatedV4(update: ForkchoiceStateV1,
+                      attrs: Opt[PayloadAttributes]): ForkchoiceUpdatedResponse {.async: (raises: [CancelledError, ApplicationError]).} =
       await engine.forkchoiceUpdated(Version.V4, update, attrs)
 
-  server.rpc("engine_getPayloadBodiesByHashV1") do(hashes: seq[Hash32]) ->
-                                               seq[Opt[ExecutionPayloadBodyV1]]:
-    apiTiming("engine_getPayloadBodiesByHashV1"):
-      engine.getPayloadBodiesByHashV1(hashes)
+    proc engine_getPayloadBodiesByHashV1(hashes: seq[Hash32]):
+                                                seq[Opt[ExecutionPayloadBodyV1]] {.raises: [CatchableError].} =
+      return engine.getPayloadBodiesByHashV1(hashes)
 
-  server.rpc("engine_getPayloadBodiesByHashV2") do(hashes: seq[Hash32]) ->
-                                               seq[Opt[ExecutionPayloadBodyV2]]:
-    apiTiming("engine_getPayloadBodiesByHashV2"):
-      engine.getPayloadBodiesByHashV2(hashes)
+    proc engine_getPayloadBodiesByHashV2(hashes: seq[Hash32]):
+                                                seq[Opt[ExecutionPayloadBodyV2]] {.raises: [CatchableError].} =
+      return engine.getPayloadBodiesByHashV2(hashes)
 
-  server.rpc("engine_getPayloadBodiesByRangeV1") do(
-      start: Quantity, count: Quantity) -> seq[Opt[ExecutionPayloadBodyV1]]:
-    apiTiming("engine_getPayloadBodiesByRangeV1"):
-      engine.getPayloadBodiesByRangeV1(start.uint64, count.uint64)
+    proc engine_getPayloadBodiesByRangeV1(
+        start: Quantity, count: Quantity): seq[Opt[ExecutionPayloadBodyV1]] {.raises: [CatchableError].} =
+      return engine.getPayloadBodiesByRangeV1(start.uint64, count.uint64)
 
-  server.rpc("engine_getPayloadBodiesByRangeV2") do(
-      start: Quantity, count: Quantity) -> seq[Opt[ExecutionPayloadBodyV2]]:
-    apiTiming("engine_getPayloadBodiesByRangeV2"):
-      engine.getPayloadBodiesByRangeV2(start.uint64, count.uint64)
+    proc engine_getPayloadBodiesByRangeV2(
+        start: Quantity, count: Quantity): seq[Opt[ExecutionPayloadBodyV2]] {.raises: [CatchableError].} =
+      return engine.getPayloadBodiesByRangeV2(start.uint64, count.uint64)
 
-  server.rpc("engine_getClientVersionV1") do(version: ClientVersionV1) ->
-                                         seq[ClientVersionV1]:
-    # TODO: what should we do with the `version` parameter?
-    return @[ClientVersionV1(
-      code: "NB",
-      name: NimbusName,
-      version: NimbusVersion,
-      commit: FixedBytes[4](GitRevisionBytes),
-    )]
+    proc engine_getClientVersionV1(version: ClientVersionV1):
+                                          seq[ClientVersionV1] =
+      # TODO: what should we do with the `version` parameter?
+      return @[ClientVersionV1(
+        code: "NB",
+        name: NimbusName,
+        version: NimbusVersion,
+        commit: FixedBytes[4](GitRevisionBytes),
+      )]
 
-  server.rpc("engine_getBlobsV1") do(versionedHashes: seq[VersionedHash]) ->
-                                         seq[Opt[BlobAndProofV1]]:
-    apiTiming("engine_getBlobsV1"):
-      engine.getBlobsV1(versionedHashes)
+    proc engine_getBlobsV1(versionedHashes: seq[VersionedHash]):
+                                          seq[Opt[BlobAndProofV1]] {.raises: [ApplicationError].} =
+      return engine.getBlobsV1(versionedHashes)
 
-  server.rpc("engine_getBlobsV2") do(versionedHashes: seq[VersionedHash]) ->
-                                         Opt[seq[BlobAndProofV2]]:
-    apiTiming("engine_getBlobsV2"):
-      engine.getBlobsV2(versionedHashes)
+    proc engine_getBlobsV2(versionedHashes: seq[VersionedHash]):
+                                          Opt[seq[BlobAndProofV2]] {.raises: [ApplicationError].} =
+      return engine.getBlobsV2(versionedHashes)
 
-  server.rpc("engine_getBlobsV3") do(versionedHashes: seq[VersionedHash]) ->
-                                         seq[Opt[BlobAndProofV2]]:
-    apiTiming("engine_getBlobsV3"):
-      engine.getBlobsV3(versionedHashes)
+    proc engine_getBlobsV3(versionedHashes: seq[VersionedHash]):
+                                          seq[Opt[BlobAndProofV2]] {.raises: [ApplicationError].} =
+      return engine.getBlobsV3(versionedHashes)

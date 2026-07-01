@@ -24,7 +24,7 @@ import
   ../execution_chain/core/eip4844,
   ../execution_chain/[conf, transaction, constants],
   ../execution_chain/core/tx_pool,
-  ../execution_chain/core/tx_pool/tx_desc,
+  ../execution_chain/core/tx_pool/tx_desc {.all.},
   ../execution_chain/core/pooled_txs,
   ../execution_chain/common/common,
   ../execution_chain/utils/utils,
@@ -154,7 +154,7 @@ template checkImportBlock(xp: TxPoolRef, bundle: AssembledBlock) =
   let rc = waitFor xp.chain.importBlock(bundle.blk)
   check rc.isOk == true
   if rc.isErr:
-    debugEcho "IMPORT BLOCK: ", rc.error
+    debugEcho "IMPORT BLOCK: ", rc.error.msg
 
 template checkImportBlock(xp: TxPoolRef, expCount: int, expRem: int) =
   let bundle = checkAssembleBlock(xp, expCount)
@@ -404,7 +404,7 @@ suite "TxPool test suite":
 
       (waitFor chain.importBlock(bundle.blk)).isOkOr:
         check false
-        debugEcho error
+        debugEcho error.msg
         return
 
       xp.removeNewBlockTxs(bundle.blk)
@@ -978,7 +978,6 @@ suite "TxPool BAL post-Amsterdam":
     env = initEnv(Amsterdam)
     xp = env.xp
     mx = env.sender
-    chain = env.chain
 
   xp.prevRandao = prevRandao
   xp.feeRecipient = feeRecipient

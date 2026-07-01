@@ -81,7 +81,7 @@ template fetchAccounts*(
     buddy: SnapPeerRef;
     stateRoot: StateRoot;                           # DB state
     ivReq: ItemKeyRange;                            # Range to be fetched
-      ): FetchAccountsResult =
+      ): auto =
   ## Async/template
   ##
   ## Fetch accounts from the network.
@@ -103,7 +103,7 @@ template fetchAccounts*(
       nReqAcc {.inject,used.} = ivReq.len.flStr     # logging only
 
     trace sendInfo, peer, root, reqAcc, nReqAcc,
-      syncState=buddy.syncState, nErrors=buddy.nErrors.fetch.acc
+      syncState=($buddy.syncState), nErrors=buddy.nErrors.fetch.acc
 
     let rc = await buddy.getAccounts(fetchReq)
     var elapsed: Duration
@@ -111,14 +111,14 @@ template fetchAccounts*(
       elapsed = rc.value.elapsed
     else:
       elapsed = rc.error.elapsed
-      bodyRc = FetchAccountsResult.err(rc.error.excp)
+      bodyRc = typeof(bodyRc).err(rc.error.excp)
       block evalError:
         case rc.error.excp:
         of EGeneric:
           break evalError
         of EAlreadyTriedAndFailed:
           trace recvInfo & " error", peer, root, reqAcc, nReqAcc,
-            ela=elapsed.toStr, syncState=buddy.syncState, error=rc.errStr,
+            ela=elapsed.toStr, syncState=($buddy.syncState), error=rc.errStr,
             nErrors=buddy.nErrors.fetch.acc
           break body                                # return err()
         of EPeerDisconnected, ECancelledError:
@@ -133,7 +133,7 @@ template fetchAccounts*(
 
         # Debug message for other errors
         debug recvInfo & " error", peer, root, reqAcc, nReqAcc,
-          ela=elapsed.toStr, syncState=buddy.syncState, error=rc.errStr,
+          ela=elapsed.toStr, syncState=($buddy.syncState), error=rc.errStr,
           nErrors=buddy.nErrors.fetch.acc
         break body                                  # return err()
 
@@ -196,7 +196,7 @@ template fetchAccounts*(
       buddy.registerPeerError(stateRoot)
       trace recvInfo & " not available", peer, root, reqAcc, nReqAcc,
         ela, syncState, nErrors=buddy.nErrors.fetch.acc
-      bodyRc = FetchAccountsResult.err(ENoDataAvailable)
+      bodyRc = typeof(bodyRc).err(ENoDataAvailable)
       break body                                    # return err()
 
     # Ban an overly slow peer for a while when observed consecutively.
@@ -209,7 +209,7 @@ template fetchAccounts*(
     trace recvInfo, peer, root, reqAcc, nReqAcc, respAcc, nRespAcc,
       nRespProof, ela, syncState, nErrors=buddy.nErrors.fetch.acc
 
-    bodyRc = FetchAccountsResult.ok(rc.value.packet)
+    bodyRc = typeof(bodyRc).ok(rc.value.packet)
 
   bodyRc
 

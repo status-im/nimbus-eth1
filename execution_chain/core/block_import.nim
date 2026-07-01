@@ -61,10 +61,10 @@ proc importRlpBlocks*(
       error "Error occurred when importing block",
         hash = blk.header.computeBlockHash.short,
         number = blk.header.number,
-        msg = res.error
+        msg = res.error.msg
       if finalize:
         ?(await chain.forkChoice(chain.latestHash, chain.latestHash))
-      return res
+      return err(res.error.msg)
 
   if finalize:
     ?(await chain.forkChoice(chain.latestHash, chain.latestHash))

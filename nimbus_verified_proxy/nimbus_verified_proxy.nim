@@ -8,7 +8,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[os, strutils],
+  std/[options, os, strutils],
   chronicles,
   chronos,
   confutils,
@@ -16,18 +16,18 @@ import
   json_rpc/rpcproxy,
   beacon_chain/gossip_processing/light_client_processor,
   beacon_chain/networking/network_metadata,
-  beacon_chain/spec/beaconstate,
-  beacon_chain/conf,
-  beacon_chain/[beacon_clock, buildinfo, nimbus_binary_common, process_state],
-  beacon_chain/spec/forks,
+  beacon_chain/spec/[forks, beaconstate],
+  beacon_chain/[conf, beacon_clock, buildinfo, nimbus_binary_common, process_state],
   ../execution_chain/common/common,
   ./nimbus_verified_proxy_conf,
   ./engine/engine,
+  ./engine/genesis_params,
   ./engine/rpc_frontend,
   ./engine/header_store,
   ./engine/utils,
   ./engine/types,
   ./lc_backend,
+  ./p2p_lc_backend,
   ./json_rpc_backend,
   ./json_rpc_frontend,
   ../execution_chain/version_info
@@ -114,8 +114,40 @@ proc startBeaconBackends(
 
   clients
 
+proc startP2PBeaconBackend(
+    engine: RpcVerificationEngine, config: VerifiedProxyConf
+): Future[Option[P2PLightClientBackend]] {.async: (raises: [CancelledError]).} =
+  let
+    networkName = config.eth2Network.get("mainnet")
+    genesis = genesisParamsForNetwork(networkName)
+    p2pConf = P2PBackendConf(
+      cfg: engine.cfg,
+      forkDigests: engine.forkDigests,
+      getBeaconTime: engine.getBeaconTime,
+      genesisValidatorsRoot: genesis.genesisValidatorsRoot,
+      genesisBlockRoot: genesis.genesisBlockRoot,
+      tcpPort: Port(config.p2pTcpPort),
+      udpPort: Port(config.p2pUdpPort),
+      maxPeers: config.p2pMaxPeers,
+      bootstrapNodesFile: config.p2pBootstrapNodesFile,
+      nat: config.p2pNat,
+      network: networkName,
+    )
+    backend = P2PLightClientBackend.init(p2pConf).valueOr:
+      error "Failed to create P2P light client node", err = error.errMsg
+      return none(P2PLightClientBackend)
+
+  let startRes = await backend.start()
+  if startRes.isErr():
+    error "Failed to start P2P light client backend", err = startRes.error.errMsg
+    return none(P2PLightClientBackend)
+
+  engine.registerBackend(backend.getBeaconApiBackend(), fullBeaconCapabilities)
+  info "P2P light client backend started"
+  some(backend)
+
 proc startFrontends(
-    engine: RpcVerificationEngine, urls: seq[string]
+    frontend: ExecutionApiFrontend, urls: seq[string]
 ): seq[JsonRpcServer] {.raises: [ProxyError].} =
   var servers: seq[JsonRpcServer] = @[]
 
@@ -125,7 +157,7 @@ proc startFrontends(
       continue
 
     # inject frontend
-    server.injectEngineFrontend(engine.frontend)
+    server.injectEngineFrontend(frontend)
 
     let status = server.start()
     if status.isErr():
@@ -161,11 +193,19 @@ proc run(
       codeCacheLen: config.codeCacheLen,
       storageCacheLen: config.storageCacheLen,
       parallelBlockDownloads: config.parallelBlockDownloads,
+      maxLightClientUpdates: config.maxLightClientUpdates,
       trustedBlockRoot: config.trustedBlockRoot,
       syncHeaderStore: config.syncHeaderStore,
     )
     engine = RpcVerificationEngine.init(engineConf).valueOr:
       raise newException(ProxyError, "Couldn't initialize verification engine")
+
+  # sanity check
+  if config.executionApiUrls.len <= 0:
+    raise newException(ProxyError, "Need atleast one execution api url to be specified")
+
+  if (config.beaconApiUrls.len <= 0) and (not config.p2pEnabled):
+    raise newException(ProxyError, "Need atleast one beacon url or p2p enabled")
 
   let usePrivateTx = config.privateTxUrls.len > 0
 
@@ -183,10 +223,20 @@ proc run(
 
   let execBackendClients =
     await startExecutionBackends(engine, config.executionApiUrls, regularCaps)
-  let beaconBackendClients = await startBeaconBackends(engine, config.beaconApiUrls)
-  let frontendServers = engine.startFrontends(config.frontendUrls)
+  let beaconBackendClients =
+    if config.beaconApiUrls.len > 0:
+      await startBeaconBackends(engine, config.beaconApiUrls)
+    else:
+      @[]
 
-  engine.registerDefaultFrontend()
+  let p2pBackend =
+    if config.p2pEnabled:
+      await startP2PBeaconBackend(engine, config)
+    else:
+      none(P2PLightClientBackend)
+
+  let frontend = engine.getExecutionApiFrontend()
+  let frontendServers = startFrontends(frontend, config.frontendUrls)
 
   try:
     while true:
@@ -204,9 +254,11 @@ proc run(
       await c.stop()
     for c in privateTxClients:
       await c.stop()
+    if p2pBackend.isSome():
+      await p2pBackend.get().stop()
     raise e
 
-proc main() {.raises: [].} =
+when isMainModule:
   const
     banner = "Nimbus Verified Proxy " & FullVersionStr
     copyright =
@@ -243,6 +295,3 @@ proc main() {.raises: [].} =
   except CatchableError as e:
     fatal "Unexpected error", error = e.msg
     quit QuitFailure
-
-when isMainModule:
-  main()

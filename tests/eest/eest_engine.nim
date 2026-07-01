@@ -117,7 +117,7 @@ proc runTest(env: TestEnv, unit: EngineUnitEnv): Result[void, string] =
 
   ok()
 
-proc processFile*(filePath: string, statelessEnabled = false, skipFiles: seq[string] = @[]) =
+proc processFile*(filePath: string, statelessEnabled = false, parallelEnabled = false, skipFiles: seq[string] = @[]) =
   let fixture = parseFixture(filePath, EngineFixture)
   let fileName = filePath.splitPath().tail
 
@@ -131,7 +131,7 @@ proc processFile*(filePath: string, statelessEnabled = false, skipFiles: seq[str
       else:
         let header = testUnit.genesisBlockHeader.to(Header)
         check testUnit.genesisBlockHeader.hash == header.computeRlpHash
-        let env = prepareEnv(testUnit, header, rpcEnabled = true, statelessEnabled)
+        let env = prepareEnv(testUnit, header, rpcEnabled = true, statelessEnabled, parallelEnabled)
 
         let testResult = env.runTest(testUnit)
         check testResult == Result[void, string].ok()

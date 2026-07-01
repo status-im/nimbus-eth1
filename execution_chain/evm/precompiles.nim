@@ -755,13 +755,44 @@ func activePrecompilesList*(fork: EVMFork): seq[Address] =
   for address in activePrecompiles(fork):
     result.add address
 
-proc getPrecompile*(fork: EVMFork, codeAddress: Address): Opt[Precompiles] =
-  let maxPrecompile = getMaxPrecompile(fork)
-  for c in Precompiles.low..maxPrecompile:
-    if precompileAddrs[c] == codeAddress:
-      return Opt.some(c)
+# Every precompile address has only its low two bytes populated (the largest
+# is P256VERIFY at 0x0100), so an address can be reverse-mapped to its
+# precompile via a small array indexed by that 16-bit value. A `0` entry means 
+# "no precompile maps to this value"; any other entry is `ord(precompile) + 1`.
+const precompileForKey: array[0 .. 0x0100, byte] = static:
+  var arr: array[0 .. 0x0100, byte]
+  for c in Precompiles:
+    let data = precompileAddrs[c].data
+    arr[(data[18].int shl 8) or data[19].int] = byte(ord(c) + 1)
+  arr
 
-  Opt.none(Precompiles)
+func precompileKey(codeAddress: Address): int =
+  ## Reduce a precompile address to its 16-bit lookup key, or -1 when the address
+  ## is outside the precompile range (i.e. any of the high 18 bytes are set).
+  var hi0, hi1: uint64
+  copyMem(addr hi0, unsafeAddr codeAddress.data[0], sizeof(hi0))
+  copyMem(addr hi1, unsafeAddr codeAddress.data[8], sizeof(hi1))
+  if (hi0 or hi1) != 0 or codeAddress.data[16] != 0 or codeAddress.data[17] != 0:
+    return -1
+  (codeAddress.data[18].int shl 8) or codeAddress.data[19].int
+
+func getPrecompile*(fork: EVMFork, codeAddress: Address): Opt[Precompiles] =
+  let key = codeAddress.precompileKey
+  if key notin 0 .. precompileForKey.high:
+    return Opt.none(Precompiles)
+  let v = precompileForKey[key]
+  if v == 0:
+    return Opt.none(Precompiles)
+
+  # A precompile is only active once its introducing fork has been reached.
+  let precompile = Precompiles(v - 1)
+  if precompile <= getMaxPrecompile(fork):
+    Opt.some(precompile)
+  else:
+    Opt.none(Precompiles)
+
+template isPrecompile*(fork: EVMFork, codeAddress: Address): bool =
+  getPrecompile(fork, codeAddress).isSome
 
 proc execPrecompile*(c: Computation, precompile: Precompiles) =
   if c.balTrackerEnabled:

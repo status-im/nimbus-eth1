@@ -52,11 +52,11 @@ suite "backend scoring":
       raise newException(TestProxyError, error.errMsg)
     engine.registerBackend(backend, fullExecutionCapabilities)
     engine.setupTestBeacon(ts)
-    engine.registerDefaultFrontend()
+    let frontend1 = engine.getExecutionApiFrontend()
 
     check engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
 
-    let res = waitFor engine.frontend.eth_getBalance(address, latestTag)
+    let res = waitFor frontend1.eth_getBalance(address, latestTag)
 
     check:
       res.isErr()
@@ -87,11 +87,11 @@ suite "backend scoring":
       raise newException(TestProxyError, error.errMsg)
     engine.registerBackend(backend, fullExecutionCapabilities)
     engine.setupTestBeacon(ts)
-    engine.registerDefaultFrontend()
+    let frontend2 = engine.getExecutionApiFrontend()
 
     check engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
 
-    let res = waitFor engine.frontend.eth_getBalance(address, latestTag)
+    let res = waitFor frontend2.eth_getBalance(address, latestTag)
 
     check:
       res.isErr()

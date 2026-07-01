@@ -19,12 +19,22 @@ import
   ../db/core_db/memory_only,
   ../evm/[types, state],
   ../core/executor/process_block,
-  ./[witness_types, witness_verification]
+  ./[witness_types, witness_verification, stateless_types]
 
-export witness_types, common, headers, blocks, results
+export witness_types, stateless_types, common, headers, blocks, results
+
+func toExecutionWitness*(w: ExecutionWitnessWithKeys): ExecutionWitness =
+  var res: ExecutionWitness
+  for node in w.state:
+    discard res.state.add(ByteList[MAX_BYTES_PER_WITNESS_NODE].init(node))
+  for code in w.codes:
+    discard res.codes.add(ByteList[MAX_BYTES_PER_CODE].init(code))
+  for header in w.headers:
+    discard res.headers.add(ByteList[MAX_BYTES_PER_HEADER].init(header))
+  res
 
 proc statelessProcessBlock*(
-    witness: ExecutionWitness, com: CommonRef, blk: Block, verifyState = false
+    witness: ExecutionWitness, com: CommonRef, blk: Block
 ): Result[void, string] =
   let
     verifiedHeaders = ?witness.verifyHeaders(blk.header)
@@ -32,20 +42,17 @@ proc statelessProcessBlock*(
     parent = verifiedHeaders[^1] # The last header is the parent
     preStateRoot = parent.stateRoot
 
-  if verifyState:
-    # Verify the witness against the parent header stateroot.
-    # This validates the state against the keys, the code and headers in the witness.
-    ?witness.verifyState(preStateRoot)
-
   # Convert the list of trie nodes into a table keyed by node hash.
   var nodes: Table[Hash32, seq[byte]]
   for n in witness.state:
-    nodes[keccak256(n)] = n
+    nodes[keccak256(n.asSeq())] = n.asSeq()
 
   # Create an empty in memory database.
   let
     memoryDb = newCoreDbRef(DefaultDbMemory)
     memoryTxFrame = memoryDb.baseTxFrame()
+  defer:
+    memoryDb.close()
 
   # Load the subtrie of trie nodes (both account and storage tries) into the
   # in memory database.
@@ -55,7 +62,7 @@ proc statelessProcessBlock*(
 
   # Load the contract code into the database indexed by code hash.
   for c in witness.codes:
-    doAssert memoryTxFrame.persistCodeByHash(keccak256(c), c).isOk()
+    doAssert memoryTxFrame.persistCodeByHash(keccak256(c.asSeq()), c.asSeq()).isOk()
 
   # Load the block hashes into the database indexed by block number.
   for h in verifiedHeaders:
@@ -69,6 +76,9 @@ proc statelessProcessBlock*(
   memoryVmState.init(
     parent, blk.header, com, memoryTxFrame, storeSlotHash = false,
     enableBalTracker = com.isAmsterdamOrLater(blk.header.timestamp))
+
+  defer:
+    memoryVmState.dispose()
 
   # Execute the block with all validations enabled
   ?memoryVmState.processBlock(
