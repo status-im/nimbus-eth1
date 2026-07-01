@@ -346,11 +346,12 @@ template runEESTSuite*(
     eestReleases: openArray[string],
     skipFiles: openArray[string],
     baseFolder: string,
+    suiteName: string,
     eestType: string,
     statelessEnabled = false,
     parallelEnabled = false
 ) =
   for eest in eestReleases:
-    suite eest & ": " & eestType:
+    suite eest & ": " & suiteName:
       for filePath in walkDirRec(baseFolder / eest / eestType):
         processFile(handleLongPath(filePath), statelessEnabled, parallelEnabled, @skipFiles)

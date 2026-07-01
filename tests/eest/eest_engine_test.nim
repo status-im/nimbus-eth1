@@ -17,6 +17,7 @@ import
 
 const
   baseFolder = "tests/fixtures"
+  suiteName = "Engine Tests"
   eestType = "blockchain_tests_engine"
   eestReleases = [
     "eest_develop",
@@ -31,6 +32,7 @@ runEESTSuite(
   eestReleases,
   skipFiles,
   baseFolder,
+  suiteName,
   eestType,
   parallelEnabled = true
 )
