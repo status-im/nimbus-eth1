@@ -52,6 +52,10 @@ proc eth_blockNumber(
   callbackToC(ctx, cb, userData):
     ctx.frontend.eth_blockNumber()
 
+proc eth_syncing(ctx: ptr Context, cb: CallBackProc, userData: pointer) {.exported.} =
+  callbackToC(ctx, cb, userData):
+    ctx.frontend.eth_syncing()
+
 proc eth_getBalance(
     ctx: ptr Context,
     address: cstring,
@@ -439,6 +443,9 @@ proc proxyCall(
   of "eth_blockNumber":
     requireParams(0)
     eth_blockNumber(ctx, cb, userData)
+  of "eth_syncing":
+    requireParams(0)
+    eth_syncing(ctx, cb, userData)
   of "eth_getBalance":
     requireParams(2)
     eth_getBalance(
