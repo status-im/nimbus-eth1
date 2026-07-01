@@ -109,7 +109,8 @@ template fetchHeadersReversed*(
       peer {.inject,used.} = $buddy.peer           # logging only
       hash {.inject,used.} = topHash.toStr         # logging only
       req = block:
-        if topHash != emptyRoot:
+        if topHash != emptyRoot and
+           topHash != zeroHash32:
           BlockHeadersRequest(
             maxResults: ivReq.len.uint,
             skip:       0,

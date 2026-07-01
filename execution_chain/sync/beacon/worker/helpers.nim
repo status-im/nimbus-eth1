@@ -73,7 +73,7 @@ func toStr*(w: MeanVarStats): string =
 
 func toStr*(h: Hash32): string =
   if h == emptyRoot: "n/a"
-  elif h == zeroHash32: "n/a"
+  elif h == zeroHash32: "zero"
   else: h.short
 
 func `$`*(w: Interval[BlockNumber,uint64]): string =
