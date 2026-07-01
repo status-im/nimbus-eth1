@@ -42,7 +42,7 @@ proc headersTargetRequest*(
   ## to the header chain cache on activation, overriding the default of
   ## `chain.baseHash`.
   ctx.pool.initTarget = Opt.some((h, isFinal, finHash))
-  trace info & ": request syncer target", targetHash=h.short, isFinal,
+  trace info & ": Request syncer target", targetHash=h.short, isFinal,
     finHash=(if finHash.isSome: finHash.unsafeGet.short else: "n/a")
 
 proc headersTargetReset*(ctx: BeaconCtxRef) =
@@ -80,7 +80,7 @@ template headersTargetActivate*(
 
     # Require minimum of sync peers
     if ctx.nSyncPeers() < ctx.pool.minInitBuddies:
-      trace info & ": not enough peers to start manual sync", peer,
+      trace info & ": Not enough peers to start manual sync", peer,
         targetHash=trg.hash.short, isFinal=trg.isFinal,
         state=($buddy.syncState),
         nSyncPeersMin=ctx.pool.minInitBuddies, nSyncPeers=ctx.nSyncPeers()
@@ -100,7 +100,7 @@ template headersTargetActivate*(
     const iv = BnRange.new(0u,0u) # dummy interval
     let hdrs = buddy.fetchHeadersReversed(iv, trg.hash).valueOr:
       if buddy.ctrl.running:
-        trace info & ": peer failed on syncer target", peer,
+        trace info & ": Peer failed on syncer target", peer,
           targetHash=trg.hash.short, isFinal=trg.isFinal,
           failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.nSyncPeers(),
           nErrors=buddy.nErrors.fetch.hdr, state=($buddy.syncState)
@@ -120,7 +120,7 @@ template headersTargetActivate*(
           # not restoring target
 
         else:
-          trace info & ": peer repeatedly failed", peer,
+          trace info & ": Peer repeatedly failed", peer,
             targetHash=trg.hash.short, isFinal=trg.isFinal,
             failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.nSyncPeers(),
             nErrors=buddy.nErrors.fetch.hdr, state=($buddy.syncState)
