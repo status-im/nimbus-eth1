@@ -43,12 +43,24 @@ proc retrieveLeaf(
 proc cachedAccLeaf*(db: AristoTxRef; accPath: Hash32): Opt[AccLeafRef] =
   # Return vertex from layers or cache, `nil` if it's known to not exist and
   # none otherwise
-  db.layersGetAccLeaf(accPath) or db.db.accLeaves.get(accPath).map(toLeaf)
+  db.layersGetAccLeaf(accPath).isErrOr:
+    return Opt.some(value)
+
+  db.db.accLeaves.withGet(accPath, cached):
+    return Opt.some(cached.toLeaf())
+  do:
+    return Opt.none(AccLeafRef)
 
 proc cachedStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[StoLeafRef] =
   # Return vertex from layers or cache, `nil` if it's known to not exist and
   # none otherwise
-  db.layersGetStoLeaf(mixPath) or db.db.stoLeaves.get(mixPath).map(toLeaf)
+  db.layersGetStoLeaf(mixPath).isErrOr:
+    return Opt.some(value)
+
+  db.db.stoLeaves.withGet(mixPath, cached):
+    return Opt.some(cached.toLeaf())
+  do:
+    return Opt.none(StoLeafRef)
 
 proc retrieveAccStatic(
     db: AristoTxRef;
@@ -280,30 +292,29 @@ proc fetchSlot*(
   ## from the database indexed by `path`. Returns err(FetchPathNotFound) if the
   ## account does not exist and 0'u256 if the account has not stored anything
   ## at the given slot
-  let 
-    mixPath = mixUp(accPath, stoPath)
-    leafVtx = db.layersGetStoLeaf(mixPath)
+  let mixPath = mixUp(accPath, stoPath)
   
-  if leafVtx.isSome():
+  db.layersGetStoLeaf(mixPath).isErrOr:
     # Found in the layers so we don't need to copy into the cache 
     # because the value will be updated from the layers during persist
-    ok leafVtx[].toStoData()
-  else:
-    let cached = db.db.stoLeaves.get(mixPath)
-    if cached.isSome():
-      ok cached[].toStoData()
-    else:
-      # Updated payloads are stored in the layers so if we didn't find them there,
-      # it must have been in the database
-      let stoID = ?db.fetchStorageID(accPath)
+    return ok value.toStoData()
+  
+  db.db.stoLeaves.withGet(mixPath, cached):
+    return ok cached.toStoData()
+  do:
+    # Updated payloads are stored in the layers so if we didn't find them there,
+    # it must have been in the database
 
-      if stoID.isValid():
-        let leaf = StoLeafRef(db.retrieveLeaf(stoID, NibblesBuf.fromBytes(stoPath.data)).valueOr(nil))
-        db.db.stoLeaves.put(mixPath, if leaf.isValid(): CachedStoLeaf.init(leaf.pfx, leaf.stoData) else: emptyCachedStoLeaf)
-        ok leaf.toStoData()
-      else:
-        db.db.stoLeaves.put(mixPath, emptyCachedStoLeaf)
-        ok 0'u256
+    let stoID = ?db.fetchStorageID(accPath)
+    if not stoID.isValid():
+      db.db.stoLeaves.put(mixPath, emptyCachedStoLeaf)
+      return ok 0'u256
+
+    let leaf = StoLeafRef(db.retrieveLeaf(stoID, 
+        NibblesBuf.fromBytes(stoPath.data)).valueOr(nil))
+    db.db.stoLeaves.put(mixPath, if leaf.isValid(): 
+        CachedStoLeaf.init(leaf.pfx, leaf.stoData) else: emptyCachedStoLeaf)
+    return ok leaf.toStoData()
 
 proc fetchStorageRoot*(
     db: AristoTxRef;
