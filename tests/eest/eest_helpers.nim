@@ -266,6 +266,8 @@ proc prepareEnv*(
         optimisticStatePrefetch = parallelEnabled,
         balStatePrefetch = parallelEnabled)
 
+    com.db.mpt.parallelStateRootComputation = parallelEnabled
+
     if parallelEnabled:
       let taskpool =
         try:
