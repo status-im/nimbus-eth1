@@ -105,7 +105,7 @@ template blocksFetchCheckImpl(
           break loop
 
         # In order to avoid extensive checking here and also within the `FC`
-        # module, thourough checking is left to the `FC` module. Staging a few
+        # module, thorough checking is left to the `FC` module. Staging a few
         # bogus blocks is not too expensive.
         #
         # If there is a mere block body error, all that will happen is that
@@ -116,6 +116,7 @@ template blocksFetchCheckImpl(
         blocks[n].transactions = bodies[n].transactions
         blocks[n].uncles = bodies[n].uncles
         blocks[n].withdrawals = bodies[n].withdrawals
+      # End `block loop`
 
     # Fetch block access lists (EIP-7928) for the batch from the `eth/71` peer
     # and verify each against the hash committed in its header.
@@ -145,13 +146,15 @@ template blocksFetchCheckImpl(
           inc nBals
       trace info & ": fetched block access lists", peer, iv=($iv),
         nReq=balRequest.blockHashes.len, nResp=raws.len, nBals
+      # End `block balFetch`
 
     if 0 < blocks.len.uint64:
       bodyRc = Opt[BlocksForImport].ok(BlocksForImport(
-        blocks: move(blocks), bals: move(bals), peerID: buddy.peerID)) # return ok()
+        blocks: move(blocks), bals: move(bals), peerID: buddy.peerID))
+      break body                                           # return ok()
 
-    buddy.nErrors.apply.blk.inc
-    break body                                             # return err()
+    buddy.nErrors.apply.blk.inc                            # return err()
+    # End `block body`
 
   bodyRc # return
 
@@ -196,7 +199,8 @@ template blocksFetch*(
     if rc.isErr:
       ctx.blocksUnprocCommit(iv, iv)
     else:
-      ctx.blocksUnprocCommit(iv, iv.minPt + rc.value.blocks.len.uint64, iv.maxPt)
+      ctx.blocksUnprocCommit(
+        iv, iv.minPt + rc.value.blocks.len.uint64, iv.maxPt)
 
     bodyRc = rc
 
