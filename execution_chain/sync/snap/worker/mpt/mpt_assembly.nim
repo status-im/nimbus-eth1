@@ -1238,6 +1238,14 @@ proc getStateData*(
 
 proc putStateData*(
     db: MptAsmRef;
+    state: WalkStateData;
+      ): PutResult =
+  db.put33(cStateData, state.root,
+    encodeStateData(
+      state.hash, state.number, state.touch, state.tag, state.coverage))
+
+proc putStateData*(
+    db: MptAsmRef;
     root: StateRoot;
     data: CachedStateData;
       ): PutResult =
@@ -1255,14 +1263,6 @@ proc putStateData*(
       ): PutResult =
   db.put33(cStateData, root,
            encodeStateData(hash, number, touch, tag, coverage))
-
-proc putStateData*(
-    db: MptAsmRef;
-    state: WalkStateData;
-      ): PutResult =
-  db.put33(cStateData, state.root,
-    encodeStateData(
-      state.hash, state.number, state.touch, state.tag, state.coverage))
 
 proc delStateData*(db: MptAsmRef; root: StateRoot): DelResult =
   db.del33(cStateData, root)

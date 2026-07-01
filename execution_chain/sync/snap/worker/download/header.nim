@@ -28,11 +28,12 @@ proc storeCachedHeaders(
   for header in ctx.hdrCache.incrFrom():
     if leastBn <= header.number:
       ctx.pool.mptAsm.putHeader(header).isOkOr:
-        chronicles.error info & ": Unable to register cached headers",
-          blockNumber=header.number, `error`=error
+        error info & ": Unable to register cached headers",
+          blockNumber=header.number, syncState=($ctx.syncState), `error`=error
         return
       count.inc
-  trace info & ": Registered headers", count
+  trace info & ": Registered headers",
+    count, head=ctx.hdrCache.head.number, syncState=($ctx.syncState)
 
 proc minStateNum(
     ctx: SnapCtxRef;
@@ -106,8 +107,7 @@ proc headerDownloadTrigger*(
     if ok:
       ctx.storeCachedHeaders(leastBn, info)
     bcSync.singleReset().isOkOr:
-      chronicles.error info & ": Unable to reset header download",
-        `error`=error
+      error info & ": Unable to reset header download", `error`=error
     ctx.pool.headersSynced = true
 
   # Trigger beacon syncer
