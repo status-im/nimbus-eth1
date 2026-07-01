@@ -5,7 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   std/os,
@@ -265,7 +265,7 @@ proc loadHistoricalDataFromEra(
   let
     (latestEra, latestPath) = EraFile.latest(cfg, eraDir).valueOr:
       return err("No era files found in " & eraDir)
-    f = EraFile.open(latestPath).valueOr:
+    f = EraFile.open(latestPath, latestEra).valueOr:
       return err("Cannot open latest era file: " & error)
     slot = start_slot(latestEra)
   var bytes: seq[byte]
