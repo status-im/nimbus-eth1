@@ -872,34 +872,44 @@ template withValueImpl[K, V](
     let
       sh = keyHash.subhash
       s = addr lru.shards[keyHash.shardIdx]
-    var found = false
-
-    s.lock.withReadLock:
-      let valuePtr = s.cache.peekPtr(sh, key)
-      if valuePtr != nil:
-        found = true
-        template value(): untyped {.inject.} = toLent(valuePtr)
-        foundBody
-
-    if found:
-      when not peek:
-        inc tlsLruGetCounter
-        if (tlsLruGetCounter and SAMPLE_MASK) == 0'u32:
-          s.lock.withWriteLock:
-            s.cache.moveToFront(sh, key)
+    
+    var valuePtr: ptr V
+    when peek:
+      s.lock.withReadLock:
+        valuePtr = s.cache.peekPtr(sh, key)
+        if not valuePtr.isNil():
+          template value(): untyped {.inject.} = toLent(valuePtr)
+          foundBody
     else:
+      try:
+        s.lock.withReadLock:
+          valuePtr = s.cache.peekPtr(sh, key)
+          if not valuePtr.isNil():
+            template value(): untyped {.inject.} = toLent(valuePtr)
+            foundBody
+      finally:
+        # Promote in a `finally` so it still runs if `foundBody` exits early via
+        # `return`/`break`. The read lock is released before the `finally` runs, so
+        # taking the write lock here cannot deadlock against it.
+        if not valuePtr.isNil():
+          inc tlsLruGetCounter
+          if (tlsLruGetCounter and SAMPLE_MASK) == 0'u32:
+            s.lock.withWriteLock:
+              s.cache.moveToFront(sh, key)
+    if valuePtr.isNil():
       notFoundBody
+
   else:
     let valuePtr =
       when peek:
         lru.cache.peekPtr(keyHash.subhash, key)
       else:
         lru.cache.getPtr(keyHash.subhash, key)
-    if valuePtr != nil:
+    if valuePtr.isNil():
+      notFoundBody
+    else:
       template value(): untyped {.inject.} = toLent(valuePtr)
       foundBody
-    else:
-      notFoundBody
 
 template withGetByHash*[K, V](
     lru: var ConcurrentLruCache[K, V], keyHash: KeyHash, key: auto, value, body: untyped

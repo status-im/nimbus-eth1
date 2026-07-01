@@ -403,6 +403,13 @@ suite "LruCache Tests":
       lru.put(20, 20)
       lru.dispose()
 
+proc getOrReturn(lru: var ConcurrentLruCache[int, int], key: int): int =
+  ## Reads via `withGet` but exits the `foundBody` early via `return`. Used to
+  ## verify that the sampled MRU promotion still runs when the body returns.
+  lru.withGet(key, v):
+    return v
+  -1
+
 suite "ConcurrentLruCache Tests":
   test "defaultShardBits":
     # Smallest shardBits b such that (1 shl b) >= cpuCount * 4
@@ -417,6 +424,33 @@ suite "ConcurrentLruCache Tests":
       defaultShardBits(16) == 6 # 64 shards
       defaultShardBits(16) == 6 # 64 shards
       defaultShardBits(32) == 6 # 64 shards
+
+  test "withGet promotion runs even if foundBody returns":
+    # Single-shard, thread-safe cache so the promotion goes through the locked
+    # path (the one that promotes in a `finally`).
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(3, shardBits = 0)
+    defer:
+      lru.dispose()
+
+    lru.put(1, 10)
+    lru.put(2, 20)
+    lru.put(3, 30)
+
+    # Access key 1 (the current LRU item) via reads that `return` out of the
+    # foundBody. Promotion is sampled (one hit per 16 reads), so 16 consecutive
+    # reads guarantee at least one promotion - and it must fire despite the
+    # early `return`.
+    for _ in 0 ..< 16:
+      check lru.getOrReturn(1) == 10
+
+    # 1 was promoted, so inserting a 4th key evicts 2 (now the LRU), not 1
+    lru.put(4, 40)
+    check:
+      lru.contains(1)
+      not lru.contains(2)
+      lru.contains(3)
+      lru.contains(4)
 
   test "init and dispose":
     block:
