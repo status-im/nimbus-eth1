@@ -12,7 +12,7 @@
 import
   std/os,
   unittest2,
-  ./eest_helpers,
+  ./eest_runner,
   ./eest_engine
 
 const
