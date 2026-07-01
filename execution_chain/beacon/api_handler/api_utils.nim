@@ -174,6 +174,12 @@ proc tooLargeRequest*(msg: string): ref ApplicationError =
     msg: msg
   )
 
+proc parseError*(msg: string): ref ApplicationError =
+  (ref ApplicationError)(
+    code: engineApiParseError,
+    msg: msg
+  )
+
 proc latestValidHash*(txFrame: CoreDbTxRef,
                       parent: Header,
                       ttd: DifficultyInt): Hash32 =
