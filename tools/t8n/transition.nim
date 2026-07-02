@@ -36,13 +36,11 @@ type
     stdout: JsonNode
     stderr: JsonNode
 
-  ExecOutput = object
-    result: ExecutionResult
-    alloc: GenesisAlloc
-
   TestVMState = ref object of BaseVMState
     blockHashes: Table[uint64, Hash32]
     hashError: string
+
+  BlobScheduleList = array[HardFork.Cancun .. HardFork.high, Opt[BlobSchedule]]
 
 proc init(_: type Dispatch): Dispatch =
   result.stdout = newJObject()
@@ -65,25 +63,6 @@ proc dispatch(dis: var Dispatch, baseDir, fName, name: string, obj: JsonNode) =
                  fName
     writeFile(path, obj.pretty)
 
-proc dispatchOutput(ctx: TransContext, conf: T8NConf, res: ExecOutput) =
-  var dis = Dispatch.init()
-  createDir(conf.outputBaseDir)
-
-  dis.dispatch(conf.outputBaseDir, conf.outputAlloc, "alloc", @@(res.alloc))
-  dis.dispatch(conf.outputBaseDir, conf.outputResult, "result", @@(res.result))
-
-  let txList = ctx.filterGoodTransactions()
-  let body = @@(rlp.encode(txList))
-  dis.dispatch(conf.outputBaseDir, conf.outputBody, "body", body)
-
-  if dis.stdout.len > 0:
-    stdout.write(dis.stdout.pretty)
-    stdout.write("\n")
-
-  if dis.stderr.len > 0:
-    stderr.write(dis.stderr.pretty)
-    stderr.write("\n")
-
 proc calcWithdrawalsRoot(w: Opt[seq[Withdrawal]]): Opt[Hash32] =
   if w.isNone:
     return Opt.none(Hash32)
@@ -102,6 +81,7 @@ proc envToHeader(env: EnvStruct): Header =
     withdrawalsRoot: env.withdrawals.calcWithdrawalsRoot(),
     blobGasUsed    : env.currentBlobGasUsed,
     excessBlobGas  : env.currentExcessBlobGas,
+    slotNumber : env.slotNumber,
   )
 
 proc postState(ledger: LedgerRef, alloc: var GenesisAlloc) =
@@ -229,6 +209,11 @@ proc exec(ctx: TransContext,
     rejected = newSeq[RejectedTx]()
     includedTx = newSeq[Transaction]()
 
+  # Setup block access list tracker for pre-execution system calls
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.setBlockAccessIndex(0)
+    vmState.balTracker.beginCallFrame()
+
   if vmState.com.daoForkSupport and
      vmState.com.daoForkBlock.get == vmState.blockNumber:
     vmState.mutateLedger:
@@ -253,6 +238,10 @@ proc exec(ctx: TransContext,
 
     vmState.processParentBlockHash(prevHash)
 
+  # Commit block access list tracker changes for pre-execution system calls
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.commitCallFrame()
+
   for txIndex, txRes in ctx.txList:
     if txRes.isErr:
       rejected.add RejectedTx(
@@ -272,6 +261,9 @@ proc exec(ctx: TransContext,
     var closeStream = true
     if conf.traceEnabled.isSome:
       closeStream = setupTrace(conf, txIndex, computeRlpHash(tx), vmState)
+
+    if vmState.balTrackerEnabled:
+      vmState.balTracker.setBlockAccessIndex(includedTx.len + 1)
 
     let rc = vmState.processTransaction(tx, sender)
 
@@ -312,9 +304,19 @@ proc exec(ctx: TransContext,
     vmState.mutateLedger:
       ledger.addBalance(ctx.env.currentCoinbase, mainReward)
 
+  # Setup block access list tracker for post-execution system calls
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.setBlockAccessIndex(includedTx.len() + 1)
+    vmState.balTracker.beginCallFrame()
+
   if ctx.env.withdrawals.isSome:
-    for withdrawal in ctx.env.withdrawals.get:
-      vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
+    if vmState.balTrackerEnabled:
+      for withdrawal in ctx.env.withdrawals.get:
+        vmState.balTracker.trackAddBalanceChange(withdrawal.address, withdrawal.weiAmount)
+        vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
+    else:
+      for withdrawal in ctx.env.withdrawals.get:
+        vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
 
   let miner = ctx.env.currentCoinbase
   coinbaseStateClearing(vmState, miner, stateReward.isSome())
@@ -330,9 +332,16 @@ proc exec(ctx: TransContext,
     consolidationReqs = processDequeueConsolidationRequests(vmState).valueOr:
       raise newError(ErrorConfig, error)
 
-  let ledger = vmState.ledger
-  ledger.postState(result.alloc)
-  result.result = ExecutionResult(
+  # Commit block access list tracker changes for post-execution system calls
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.commitCallFrame()
+
+  let
+    ledger = vmState.ledger
+    output = ExecOutput()
+
+  ledger.postState(output.alloc)
+  output.result = ExecutionResult(
     stateRoot   : ledger.getStateRoot(),
     txRoot      : includedTx.calcTxRoot,
     receiptsRoot: calcReceiptsRoot(vmState.receipts),
@@ -355,12 +364,12 @@ proc exec(ctx: TransContext,
     excessBlobGas = Opt.some calcExcessBlobGas(vmState.com, vmState.parent, vmState.hardFork)
 
   if excessBlobGas.isSome:
-    result.result.blobGasUsed = Opt.some vmState.blobGasUsed
-    result.result.currentExcessBlobGas = excessBlobGas
+    output.result.blobGasUsed = Opt.some vmState.blobGasUsed
+    output.result.currentExcessBlobGas = excessBlobGas
 
   if vmState.com.isPragueOrLater(ctx.env.currentTimestamp):
     var allLogs: seq[Log]
-    for rec in result.result.receipts:
+    for rec in output.result.receipts:
       allLogs.add rec.logs
     var
       depositReqs = parseDepositLogs(allLogs, vmState.com.depositContractAddress).valueOr:
@@ -377,8 +386,20 @@ proc exec(ctx: TransContext,
     executionRequests.append(CONSOLIDATION_REQUEST_TYPE, consolidationReqs)
 
     let requestsHash = calcRequestsHash(executionRequests)
-    result.result.requestsHash = Opt.some(requestsHash)
-    result.result.requests = Opt.some(executionRequests)
+    output.result.requestsHash = Opt.some(requestsHash)
+    output.result.requests = Opt.some(executionRequests)
+
+  if vmState.balTrackerEnabled:
+    let
+      bal = vmState.balTracker.getBlockAccessList().get()
+      balHash = bal[].computeBlockAccessListHash()
+    output.result.blockAccessListHash = Opt.some(balHash)
+    output.result.blockAccessList = Opt.some(bal)
+
+  if vmState.com.isAmsterdamOrLater(ctx.env.currentTimestamp):
+    output.result.gasUsed = max(vmState.blockRegularGasUsed, vmState.blockStateGasUsed)
+
+  output
 
 template wrapException(body: untyped) =
   when wrapExceptionEnabled:
@@ -439,7 +460,7 @@ proc calcBaseFee(env: EnvStruct): UInt256 =
     env.parentGasUsed.get,
     env.parentBaseFee.get)
 
-proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
+proc processInputs*(ctx: var TransContext, conf: T8NConf) =
   wrapException:
     if conf.inputAlloc.len == 0 and conf.inputEnv.len == 0 and conf.inputTxs.len == 0:
       raise newError(ErrorConfig, "either one of input is needeed(alloc, txs, or env)")
@@ -465,6 +486,29 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       else:
         ctx.parseTxsJson(conf.inputTxs)
 
+proc dispatchOutput*(ctx: TransContext, conf: T8NConf, res: ExecOutput) =
+  var dis = Dispatch.init()
+  createDir(conf.outputBaseDir)
+
+  dis.dispatch(conf.outputBaseDir, conf.outputAlloc, "alloc", @@(res.alloc))
+  dis.dispatch(conf.outputBaseDir, conf.outputResult, "result", @@(res.result))
+
+  let txList = ctx.filterGoodTransactions()
+  let body = @@(rlp.encode(txList))
+  dis.dispatch(conf.outputBaseDir, conf.outputBody, "body", body)
+
+  if dis.stdout.len > 0:
+    stdout.write(dis.stdout.pretty)
+    stdout.write("\n")
+
+  if dis.stderr.len > 0:
+    stderr.write(dis.stderr.pretty)
+    stderr.write("\n")
+
+proc transitionAction*(ctx: var TransContext,
+                       conf: T8NConf,
+                       blobSchedule = Opt.none(BlobScheduleList)): ExecOutput =
+  wrapException:
     let uncleHash = if ctx.env.parentUncleHash == default(Hash32):
                       EMPTY_UNCLE_HASH
                     else:
@@ -483,6 +527,10 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
     let config = parseChainConfig(conf.stateFork)
     config.depositContractAddress = ctx.env.depositContractAddress
     config.chainId = conf.stateChainId.ChainId
+
+    if blobSchedule.isSome:
+      # Not part of t8n spec, but needed when testing against EEST
+      config.blobSchedule = blobSchedule.value
 
     let com = CommonRef.new(newCoreDbRef DefaultDbMemory, config)
     com.taskpool = Taskpool.new()
@@ -541,7 +589,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
 
     let header  = envToHeader(ctx.env)
 
-    let vmState = TestVMState(
+    var vmState = TestVMState(
       blockHashes: ctx.env.blockHashes,
       hashError: ""
     )
@@ -551,7 +599,8 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       header      = header,
       com         = com,
       txFrame     = com.db.baseTxFrame(),
-      storeSlotHash = true
+      storeSlotHash = true,
+      enableBalTracker = com.isAmsterdamOrLater(ctx.env.currentTimestamp),
     )
 
     vmState.mutateLedger:
@@ -564,4 +613,10 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
     if vmState.hashError.len > 0:
       raise newError(ErrorMissingBlockhash, vmState.hashError)
 
-    ctx.dispatchOutput(conf, res)
+    vmState.ledger.txFrame.dispose()
+    vmState.dispose()
+    vmState = nil
+    com.taskpool.shutdown()
+    com.db.close()
+
+    return res
