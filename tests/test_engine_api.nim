@@ -284,9 +284,9 @@ proc newPayloadInvalidRLP(env: TestEnv): Result[void, string] =
   if res.isOk:
     return err("res should error on undecodable payload")
 
-  if $engineApiParseError notin res.error:
+  if $engineApiInvalidParams notin res.error:
     return err("invalid error code: " & res.error &
-      " expect: " & $engineApiParseError)
+      " expect: " & $engineApiInvalidParams)
 
   ok()
 
