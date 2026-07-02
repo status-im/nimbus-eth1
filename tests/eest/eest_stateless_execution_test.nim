@@ -17,7 +17,6 @@ const
   baseFolder = "tests/fixtures"
   eestType = "blockchain_tests"
   eestReleases = [
-    "eest_develop",
     "eest_zkevm"
   ]
 
