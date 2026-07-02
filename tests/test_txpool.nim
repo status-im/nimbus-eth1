@@ -28,7 +28,9 @@ import
   ../execution_chain/core/pooled_txs,
   ../execution_chain/common/common,
   ../execution_chain/utils/utils,
+  ./shared_data/eip8282data,
   ./macro_assembler
+
 
 const
   genesisFile = "tests/customgenesis/merge.json"
@@ -92,6 +94,8 @@ proc initConf(envFork: HardFork): ExecutionClientConf =
 
   if envFork >= Amsterdam:
     cc.amsterdamTime = Opt.some(0.EthTime)
+    config.networkParams.genesis.alloc[BUILDER_DEPOSIT_CONTRACT_ADDRESS] = GenesisAccount(code: builderDepositRequestCode)
+    config.networkParams.genesis.alloc[BUILDER_EXIT_CONTRACT_ADDRESS] = GenesisAccount(code: builderExitRequestCode)
 
   config.networkParams.genesis.alloc[recipient] = GenesisAccount(code: contractCode)
   config

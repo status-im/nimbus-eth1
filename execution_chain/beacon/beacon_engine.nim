@@ -159,6 +159,7 @@ proc generateExecutionBundle*(
     xp.prevRandao   = attrs.prevRandao
     xp.timestamp    = ethTime attrs.timestamp
     xp.feeRecipient = attrs.suggestedFeeRecipient
+    xp.targetGasLimit = u64 attrs.targetGasLimit
 
     if attrs.parentBeaconBlockRoot.isSome:
       xp.parentBeaconBlockRoot = attrs.parentBeaconBlockRoot.get

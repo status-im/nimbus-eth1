@@ -49,6 +49,8 @@ type
     withdrawalReqs: seq[byte]
     consolidationReqs: seq[byte]
     depositReqs: seq[byte]
+    builderDepositReqs: seq[byte]
+    builderExitReqs: seq[byte]
 
 const
   receiptsExtensionSize = ##\
@@ -185,12 +187,18 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
     pst.consolidationReqs = ?processDequeueConsolidationRequests(vmState)
     pst.depositReqs = ?parseDepositLogs(vmState.allLogs, vmState.com.depositContractAddress)
 
+    if vmState.fork >= FkAmsterdam:
+      # EIP-8282
+      pst.builderDepositReqs = ?processBuilderDepositRequests(vmState)
+      pst.builderExitReqs = ?processBuilderExitRequests(vmState)
+
+
   # Finish up, then vmState.ledger.stateRoot may be accessed
   ledger.persist(clearEmptyAccount = vmState.fork >= FkSpurious)
 
   # Update flexi-array, set proper length
   vmState.receipts.setLen(pst.packedTxs.len)
-  
+
   pst.receiptsRoot = vmState.receipts.calcReceiptsRoot
   pst.logsBloom = vmState.receipts.createBloom
   pst.stateRoot = vmState.ledger.getStateRoot()
@@ -263,11 +271,20 @@ func assembleHeader*(pst: TxPacker, xp: TxPoolRef): Header =
     header.excessBlobGas = Opt.some vmState.blockCtx.excessBlobGas
 
   if com.isPragueOrLater(xp.timestamp):
-    let requestsHash = calcRequestsHash([
-      (DEPOSIT_REQUEST_TYPE, pst.depositReqs),
-      (WITHDRAWAL_REQUEST_TYPE, pst.withdrawalReqs),
-      (CONSOLIDATION_REQUEST_TYPE, pst.consolidationReqs)
-    ])
+    let requestsHash = if com.isAmsterdamOrLater(xp.timestamp):
+        calcRequestsHash([
+          (DEPOSIT_REQUEST_TYPE, pst.depositReqs),
+          (WITHDRAWAL_REQUEST_TYPE, pst.withdrawalReqs),
+          (CONSOLIDATION_REQUEST_TYPE, pst.consolidationReqs),
+          (BUILDER_DEPOSIT_REQUEST_TYPE, pst.builderDepositReqs),
+          (BUILDER_EXIT_REQUEST_TYPE, pst.builderExitReqs),
+        ])
+      else:
+        calcRequestsHash([
+          (DEPOSIT_REQUEST_TYPE, pst.depositReqs),
+          (WITHDRAWAL_REQUEST_TYPE, pst.withdrawalReqs),
+          (CONSOLIDATION_REQUEST_TYPE, pst.consolidationReqs)
+        ])
     header.requestsHash = Opt.some(requestsHash)
 
   if com.isAmsterdamOrLater(xp.timestamp):

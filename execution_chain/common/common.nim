@@ -433,6 +433,11 @@ func isOsakaOrLater*(com: CommonRef, t: EthTime): bool =
 func isAmsterdamOrLater*(com: CommonRef, t: EthTime): bool =
   com.config.amsterdamTime.isSome and t >= com.config.amsterdamTime.value
 
+func amsterdamTransition*(com: CommonRef, parentTime, t: EthTime): bool =
+  com.config.amsterdamTime.isSome and
+    t >= com.config.amsterdamTime.value and
+    parentTime < com.config.amsterdamTime.value
+
 func isBogotaOrLater*(com: CommonRef, t: EthTime): bool =
   com.config.bogotaTime.isSome and t >= com.config.bogotaTime.value
 

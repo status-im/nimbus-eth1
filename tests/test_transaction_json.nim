@@ -43,16 +43,17 @@ proc testTxByFork(tx: Transaction, forkData: JsonNode, forkName: string, testSta
     memDB  = newCoreDbRef DefaultDbMemory
     com    = CommonRef.new(memDB, config)
     fork   = nameToFork[forkName]
-    intrinsic = tx.intrinsicGas(fork, 10_000_000)
+    sender = tx.recoverSender().expect("valid signature")
+    intrinsic = tx.intrinsicGas(fork, 10_000_000, sender)
 
   validateTxBasic(com, tx, intrinsic, fork).isOkOr:
     return
 
   if forkData.len > 0 and "sender" in forkData:
-    let sender = Address.fromHex(forkData["sender"].getStr)
+    let txSender = Address.fromHex(forkData["sender"].getStr)
     check "hash" in forkData
     check tx.txHash == forkData["hash"].getStr
-    check tx.recoverSender().expect("valid signature") == sender
+    check txSender == sender
 
 func noHash(fixture: JsonNode): bool =
   result = true

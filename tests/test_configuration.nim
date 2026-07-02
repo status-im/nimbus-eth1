@@ -315,7 +315,7 @@ proc configurationMain*() =
       check config.importKey.string == "basic_import_key"
       check config.trustedSetupFile == some "basic_trusted_setup_file"
       check config.extraData == "basic_extra_data"
-      check config.gasLimit == 5678
+      check config.gasLimit == some(5678'u64)
       check config.networkId == 777.u256
       check config.networkParams.config.isNil.not
 

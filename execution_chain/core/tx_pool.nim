@@ -268,7 +268,8 @@ export
   `prevRandao=`,
   `withdrawals=`,
   `parentBeaconBlockRoot=`,
-  `slotNumber=`
+  `slotNumber=`,
+  `targetGasLimit=`
 
 # `feeRecipient=`(xp: TxPoolRef, val: Address)
 # `timestamp=`(xp: TxPoolRef, val: EthTime)
@@ -276,3 +277,4 @@ export
 # `withdrawals=`(xp: TxPoolRef, val: sink seq[Withdrawal])
 # `parentBeaconBlockRoot=`(xp: TxPoolRef, val: Hash32)
 # `slotNumber=`(xp: TxPoolRef, val: uint64)
+# `targetGasLimit=`(xp: TxPoolRef, val: Opt[uint64])

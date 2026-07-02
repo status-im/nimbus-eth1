@@ -322,6 +322,8 @@ proc exec(ctx: TransContext,
   var
     withdrawalReqs: seq[byte]
     consolidationReqs: seq[byte]
+    builderDepositReqs: seq[byte]
+    builderExitReqs: seq[byte]
 
   if vmState.com.isPragueOrLater(ctx.env.currentTimestamp):
     # Execute EIP-7002 and EIP-7251 before calculating stateRoot
@@ -329,6 +331,12 @@ proc exec(ctx: TransContext,
       raise newError(ErrorConfig, error)
     consolidationReqs = processDequeueConsolidationRequests(vmState).valueOr:
       raise newError(ErrorConfig, error)
+
+    if vmState.com.isAmsterdamOrLater(ctx.env.currentTimestamp):
+      builderDepositReqs = processBuilderDepositRequests(vmState).valueOr:
+        raise newError(ErrorConfig, error)
+      builderExitReqs = processBuilderExitRequests(vmState).valueOr:
+        raise newError(ErrorConfig, error)
 
   let ledger = vmState.ledger
   ledger.postState(result.alloc)
@@ -375,6 +383,10 @@ proc exec(ctx: TransContext,
     executionRequests.append(DEPOSIT_REQUEST_TYPE, depositReqs)
     executionRequests.append(WITHDRAWAL_REQUEST_TYPE, withdrawalReqs)
     executionRequests.append(CONSOLIDATION_REQUEST_TYPE, consolidationReqs)
+
+    if vmState.com.isAmsterdamOrLater(ctx.env.currentTimestamp):
+      executionRequests.append(BUILDER_DEPOSIT_REQUEST_TYPE, depositReqs)
+      executionRequests.append(BUILDER_EXIT_REQUEST_TYPE, depositReqs)
 
     let requestsHash = calcRequestsHash(executionRequests)
     result.result.requestsHash = Opt.some(requestsHash)
