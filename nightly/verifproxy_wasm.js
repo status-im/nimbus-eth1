@@ -6607,6 +6607,8 @@ var _mclBnG2_normalizeVec = Module["_mclBnG2_normalizeVec"] = (a0, a1, a2) => (_
 
 var _eth_blockNumber = Module["_eth_blockNumber"] = (a0, a1, a2) => (_eth_blockNumber = Module["_eth_blockNumber"] = wasmExports["eth_blockNumber"])(a0, a1, a2);
 
+var _eth_syncing = Module["_eth_syncing"] = (a0, a1, a2) => (_eth_syncing = Module["_eth_syncing"] = wasmExports["eth_syncing"])(a0, a1, a2);
+
 var _eth_getBalance = Module["_eth_getBalance"] = (a0, a1, a2, a3, a4) => (_eth_getBalance = Module["_eth_getBalance"] = wasmExports["eth_getBalance"])(a0, a1, a2, a3, a4);
 
 var _eth_getStorageAt = Module["_eth_getStorageAt"] = (a0, a1, a2, a3, a4, a5) => (_eth_getStorageAt = Module["_eth_getStorageAt"] = wasmExports["eth_getStorageAt"])(a0, a1, a2, a3, a4, a5);
