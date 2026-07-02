@@ -39,6 +39,7 @@ type
     # Packer state
     vmState: BaseVMState
     numBlobPerBlock: int
+    currentRlpSize: uint64
 
     # Packer results
     blockValue: UInt256
@@ -56,6 +57,11 @@ const
   receiptsExtensionSize = ##\
     ## Number of slots to extend the `receipts[]` at the same time.
     20
+
+  blockRlpOverhead = ##\
+    ## Conservative allowance for the encoded header (< 800 bytes with all
+    ## optional fields) plus the block RLP list prefix.
+    1024'u64
 
   ContinueWithNextAccount = true
   StopCollecting = false
@@ -88,7 +94,13 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string] =
       numBlobPerBlock: 0,
       blockValue: 0.u256,
       stateRoot: vmState.parent.stateRoot,
+      currentRlpSize: blockRlpOverhead,
     )
+
+  # EIP-7934: reserve space for the withdrawals so packing can bound the
+  # encoded block size
+  if xp.nextFork >= FkShanghai:
+    packer.currentRlpSize += rlp.getEncodedLength(xp.withdrawals).uint64
 
   # Setup block access list tracker for pre‑execution system calls
   if vmState.balTrackerEnabled:
@@ -135,6 +147,15 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
     if (pst.numBlobPerBlock + item.tx.versionedHashes.len).uint64 > maxBlobsPerBlock:
       return ContinueWithNextAccount
 
+  # EIP-7934: a tx that cannot fit within the block RLP size limit must not
+  # be executed at all, otherwise the header gas values, receipts and the
+  # EIP-7928 block access list would commit to a tx missing from the body
+  var txSize = 0'u64
+  if vmState.fork >= FkOsaka:
+    txSize = rlp.getEncodedLength(item.tx).uint64
+    if pst.currentRlpSize + txSize > MAX_RLP_BLOCK_SIZE.uint64:
+      return ContinueWithNextAccount
+
   if vmState.balTrackerEnabled:
     vmState.balTracker.setBlockAccessIndex(pst.packedTxs.len() + 1)
 
@@ -158,6 +179,7 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
   pst.packedTxs.add item
   pst.numBlobPerBlock += item.tx.versionedHashes.len
   pst.blockValue += rc.value.txFee
+  pst.currentRlpSize += txSize
 
   ContinueWithNextAccount
 

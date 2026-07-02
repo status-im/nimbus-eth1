@@ -1029,3 +1029,64 @@ suite "TxPool BAL post-Amsterdam":
     check bal[].len >= 4
 
     xp.checkImportBlock(bundle, 0)
+
+suite "TxPool EIP-7934 block RLP size limit":
+  # Regression test: when the pending tx set exceeds MAX_RLP_BLOCK_SIZE,
+  # assembleBlock used to truncate the body *after* the packer had executed
+  # the full set, leaving header gasUsed / receiptsRoot / stateRoot and the
+  # EIP-7928 BAL committed to transactions that are not in the block. Such
+  # blocks fail re-execution and are rejected by every peer.
+
+  let
+    env = block:
+      var config = initConf(Amsterdam)
+      # The RLP cap (~8 MiB) only binds if the block gas limit allows more
+      # calldata than fits; post-Amsterdam the EIP-7976 floor cost is
+      # ~64 gas per calldata byte, so that takes ~540M+ block gas.
+      config.networkParams.genesis.gasLimit = 1_000_000_000
+      initEnv(config)
+    xp = env.xp
+    mx = env.sender
+
+  xp.prevRandao = prevRandao
+  xp.feeRecipient = feeRecipient
+  xp.timestamp = EthTime.now()
+  xp.slotNumber = 1
+
+  test "oversized tx set: body, header and BAL stay consistent":
+    const
+      numAccounts = 30
+      txCount = 70                        # ~70 * ~130 KiB > MAX_RLP_BLOCK_SIZE
+      payloadSize = TX_MAX_SIZE - 1024
+
+    var tc = BaseTx(
+      recipient: Opt.some(recipient214),
+      # ~130 KiB of zero calldata floors at ~8.35M gas post-Amsterdam
+      gasLimit: 12_000_000,
+    )
+    tc.payload = newSeq[byte](payloadSize)
+
+    var nonces: array[numAccounts, AccountNonce]
+    for i in 0 ..< txCount:
+      let accIdx = i mod numAccounts
+      xp.checkAddTx(mx.makeTx(tc, mx.getAccount(accIdx), nonces[accIdx]))
+      inc nonces[accIdx]
+
+    xp.timestamp = xp.timestamp + 1
+    let rc = xp.assembleBlock()
+    require rc.isOk
+    let bundle = rc.get
+
+    # The cap must actually bind, otherwise this test exercises nothing
+    check bundle.blk.transactions.len < txCount
+    check bundle.blk.transactions.len > 0
+
+    # EIP-7934: the produced block must fit the cap
+    check getEncodedLength(bundle.blk) <= MAX_RLP_BLOCK_SIZE
+
+    # The produced block must survive re-execution — the same validation
+    # peers apply (gasUsed, receiptsRoot, stateRoot, BAL hash vs the body)
+    let ic = waitFor env.chain.importBlock(bundle.blk)
+    check ic.isOk
+    if ic.isErr:
+      debugEcho "IMPORT BLOCK: ", ic.error.msg
