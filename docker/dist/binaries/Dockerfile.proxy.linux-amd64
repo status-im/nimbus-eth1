@@ -1,0 +1,26 @@
+# Nimbus
+# Copyright (c) 2026 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
+
+FROM --platform=linux/amd64 debian:trixie-slim
+
+SHELL ["/bin/bash", "-c"]
+
+# Likely to match the first regular user:group created on the host.
+RUN groupadd -g 1000 user && \
+    useradd -u 1000 -g 1000 -c "" -m -s /bin/bash -p '*' user
+
+USER user
+
+STOPSIGNAL SIGINT
+
+# Docker refuses to copy the source directory here, so read it as "nimbus-verified-proxy/*"
+COPY "nimbus-verified-proxy" "/home/user/nimbus-verified-proxy/"
+WORKDIR "/home/user/nimbus-verified-proxy/"
+ENTRYPOINT ["/home/user/nimbus-verified-proxy/build/nimbus_verified_proxy"]
