@@ -314,10 +314,6 @@ proc processFile*(filePath: string, statelessEnabled = false, parallelEnabled = 
       else:
         let testResult = runTest(testData, filePath, unitIndex)
         check testResult == Result[void, string].ok()
-        if testResult.isErr:
-          debugEcho testName
-          debugEcho testResult.error
-          quit(1)
 
 when isMainModule:
   import std/cmdline
