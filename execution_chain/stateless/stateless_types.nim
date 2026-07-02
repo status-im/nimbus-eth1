@@ -22,7 +22,7 @@ export ssz_serialization, ssz_codec
 # ---------------------------------------------------------------------------
 
 # As per spec:
-# https://github.com/ethereum/execution-specs/blob/f03c2e0af2df95cd2eed029ba4ea7140acd028c7/src/ethereum/forks/amsterdam/stateless_ssz.py#L41
+# https://github.com/ethereum/execution-specs/blob/b6b764ff21bb754b79e11ef5dc7ad1f79996e923/src/ethereum/forks/amsterdam/stateless_ssz.py#L41
 #
 # Not all consts are defined here as we get some of the types from beacon_chain datatypes
 
@@ -31,9 +31,10 @@ const
   MAX_WITNESS_NODES* = 1 shl 22 # 2^22
   MAX_WITNESS_CODES* = 1 shl 18 # 2^18
   MAX_WITNESS_HEADERS* = 256
-  # Should be 2^16 but there are test vectors that violate this limit
+  # Should be 2^16 but there are test vectors that violate this limit and must pass currently
+  # TODO: retest with 2^16 for tests-zkevm@v0.5.0 as limit got fixed there.
   # MAX_BYTES_PER_CODE* = 1 shl 16            # 2^16
-  MAX_BYTES_PER_CODE* = 1 shl 17 # 2^17
+  MAX_BYTES_PER_CODE* = 1 shl 24 # 2^24
   MAX_BYTES_PER_HEADER* = 1 shl 10 # 2^10
   MAX_BYTES_PER_WITNESS_NODE* = 1 shl 10 # 2^10
   MAX_OPTIONAL_FORK_ACTIVATION_VALUES* = 1
@@ -50,7 +51,7 @@ const
 # ---------------------------------------------------------------------------
 
 # As per spec:
-# https://github.com/ethereum/execution-specs/blob/f03c2e0af2df95cd2eed029ba4ea7140acd028c7/src/ethereum/forks/amsterdam/stateless_ssz.py#L96
+# https://github.com/ethereum/execution-specs/blob/b6b764ff21bb754b79e11ef5dc7ad1f79996e923/src/ethereum/forks/amsterdam/stateless_ssz.py#L96
 #
 # Not all types are defined here as we get some of the types from beacon_chain datatypes
 
