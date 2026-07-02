@@ -25,8 +25,8 @@ import
   ../../execution_chain/evm/tracer/json_tracer,
   ../../execution_chain/utils/state_dump,
   ../common/helpers as chp,
-  "."/[config, helpers],
-  ../common/state_clearing
+  ../common/state_clearing,
+   ./[config, helpers]
 
 type
   StateContext = object
@@ -36,6 +36,7 @@ type
     tx: Transaction
     expectedHash: Hash32
     expectedLogs: Hash32
+    postState: JsonNode
     forkStr: string
     chainConfig: ChainConfig
     index: int
@@ -49,6 +50,7 @@ type
     fork : string
     error: string
     state: StateDump
+    postState: JsonNode
 
   TestVMState = ref object of BaseVMState
 
@@ -64,7 +66,14 @@ proc toBytes(x: string): seq[byte] =
   for i in 0..<x.len: result[i] = x[i].byte
 
 method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash32 =
-  keccak256(toBytes($blockNumber))
+  if blockNumber >= vmState.blockNumber:
+    default(Hash32)
+  elif blockNumber < 0:
+    default(Hash32)
+  elif (vmState.blockNumber > 256) and (blockNumber < vmState.blockNumber - 256):
+    default(Hash32)
+  else:
+    keccak256(toBytes($blockNumber))
 
 proc verifyResult(ctx: var StateContext,
                   vmState: BaseVMState,
@@ -94,6 +103,8 @@ proc writeResultToStdout(stateRes: seq[StateResult]) =
     }
     if res.state.isNil.not:
       z["state"] = %(res.state)
+    if res.postState.isNil.not:
+      z["postState"] = res.postState
     n.add(z)
 
   stdout.write(n.pretty)
@@ -141,6 +152,8 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
     )
     if conf.dumpEnabled:
       result.state = dumpState(vmState.ledger)
+    if conf.postState:
+      result.postState = ctx.postState
     if conf.jsonEnabled:
       writeRootHashToStderr(stateRoot)
 
@@ -169,7 +182,7 @@ proc toTracerFlags(conf: StateConf): set[TracerFlags] =
 template hasError(ctx: StateContext): bool =
   ctx.error.len > 0
 
-proc prepareAndRun(inputFile: string, conf: StateConf): bool =
+proc prepareAndRun*(inputFile: string, conf: StateConf): bool =
   var
     ctx: StateContext
 
@@ -204,6 +217,7 @@ proc prepareAndRun(inputFile: string, conf: StateConf): bool =
   template runSubTest(subTest: JsonNode) =
     ctx.expectedHash = Hash32.fromJson(subTest["hash"])
     ctx.expectedLogs = Hash32.fromJson(subTest["logs"])
+    ctx.postState    = subTest["state"]
     ctx.tx = parseTx(txData, subTest["indexes"])
     let res = ctx.runExecution(conf, pre)
     stateRes.add res
@@ -234,7 +248,12 @@ proc prepareAndRun(inputFile: string, conf: StateConf): bool =
       for subTest in forkData:
         runSubTest(subTest)
 
-  writeResultToStdout(stateRes)
+  if conf.disableOutput:
+    if hasError:
+      writeResultToStdout(stateRes)
+  else:
+    writeResultToStdout(stateRes)
+
   not hasError
 
 when defined(chronicles_runtime_filtering):
@@ -252,7 +271,7 @@ when defined(chronicles_runtime_filtering):
     let level = v.toLogLevel
     setLogLevel(level)
 
-proc main() =
+proc evmStateMain*() =
   # https://github.com/status-im/nimbus-eth1/issues/3131
   setStdIoUnbuffered()
 
@@ -271,4 +290,5 @@ proc main() =
     if not noError:
       quit(QuitFailure)
 
-main()
+when isMainModule:
+  evmStateMain()
