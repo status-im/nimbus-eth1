@@ -153,6 +153,7 @@ proc processTransaction*(
     tx:      Transaction; ## Transaction to validate
     sender:  Address;  ## tx.recoverSender
     rollbackReads: bool = false;
+    persist = true;
       ): Result[LogResult, string] =
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
   ## which provides a backward compatible framwork for EIP1559.
@@ -177,7 +178,8 @@ proc processTransaction*(
     else:
       ok(move(callResult))
 
-  vmState.ledger.persist(clearEmptyAccount = vmState.hardFork >= Spurious)
+  if persist:
+    vmState.ledger.persist(clearEmptyAccount = vmState.hardFork >= Spurious)
 
   res
 

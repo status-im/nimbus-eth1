@@ -23,9 +23,15 @@ import
   ../../evm/precompiles,
   ../../evm/interpreter/gas_costs,
   ../../block_access_list/block_access_list_validation,
+  ../../block_access_list/block_access_list_overlay,
+  ../../block_access_list/block_access_list_tracker,
+  ../../block_access_list/block_access_list_builder,
+  ../../block_access_list/block_access_list_utils,
   ../../concurrency/utils,
+  ../../concurrency/shared_types,
   ../dao,
   ../eip6110,
+  ../eip7691,
   ./calculate_reward,
   ./executor_helpers,
   ./process_transaction,
@@ -45,7 +51,7 @@ when compileOption("threads"):
       senderReady: Atomic[bool]
       fut: Flowvar[bool]
 
-    PrefetchCtx = object
+    OptimisticPrefetchCtx = object
       cancel: Atomic[bool]
       parent: Header
       blockCtx: BlockContext
@@ -60,7 +66,7 @@ when compileOption("threads"):
       fork: EVMFork
 
   proc recoverAndPrefetchTask(
-      e: ptr Entry, ctx: ptr PrefetchCtx, tx: ptr Transaction): bool {.nimcall.} =
+      e: ptr Entry, ctx: ptr OptimisticPrefetchCtx, tx: ptr Transaction): bool {.nimcall.} =
     # Recover the sender from the signature. `default(Address)` signals sig
     # check failure.
     let
@@ -117,8 +123,8 @@ when compileOption("threads"):
     # Execute transactions offloading the signature checking to the task pool
     var
       entries = newSeq[Entry](txs.len)
-      ctx: PrefetchCtx
-      ctxPtr: ptr PrefetchCtx = nil
+      ctx: OptimisticPrefetchCtx
+      ctxPtr: ptr OptimisticPrefetchCtx = nil
 
     if vmState.com.optimisticStatePrefetch and not vmState.balPrefetchActive:
       ctx.parent = vmState.parent
@@ -267,12 +273,220 @@ template withBalPrefetch(
   else:
     body
 
-# Factored this out of procBlkPreamble so that it can be used directly for
-# stateless execution of specific transactions.
+func balParallelExecutionEnabled*(
+    com: CommonRef,
+    header: Header,
+    blockAccessList: Opt[BlockAccessListRef],
+): bool =
+  when compileOption("threads"):
+    blockAccessList.isSome() and com.balParallelExecution and
+      com.isAmsterdamOrLater(header.timestamp) and not com.taskpool.isNil() and
+      com.taskpool.numThreads > 1
+  else:
+    false
+
+func bytesToString(data: openArray[byte]): string =
+  result = newString(data.len)
+  if data.len > 0:
+    copyMem(addr result[0], unsafeAddr data[0], data.len)
+
+proc applyBlockAccessListState(
+    ledger: LedgerRef, bal: BlockAccessList, txCount: int
+) =
+  let boundary = txCount + 1
+
+  for accChanges in bal:
+    let address = accChanges.address
+
+    var balanceZeroed = false
+    let balancePos = accChanges.balanceChanges.findLastWriteBefore(boundary)
+    if balancePos >= 0:
+      let postBalance = accChanges.balanceChanges[balancePos].postBalance
+      ledger.setBalance(address, postBalance)
+      balanceZeroed = postBalance.isZero
+
+    let noncePos = accChanges.nonceChanges.findLastWriteBefore(boundary)
+    if noncePos >= 0:
+      ledger.setNonce(address, accChanges.nonceChanges[noncePos].newNonce)
+
+    let codePos = accChanges.codeChanges.findLastWriteBefore(boundary)
+    if codePos >= 0:
+      ledger.setCode(address, accChanges.codeChanges[codePos].newCode)
+
+    for slotChanges in accChanges.storageChanges:
+      let changePos = slotChanges.changes.findLastWriteBefore(boundary)
+      if changePos >= 0:
+        ledger.setStorage(
+          address, slotChanges.slot, slotChanges.changes[changePos].newValue)
+
+    if balanceZeroed:
+      ledger.addBalance(address, 0.u256, checkEmptyAccount = true)
+
+when compileOption("threads"):
+  type
+    ParTxCtx = object
+      com: CommonRef
+      parent: Header
+      blockCtx: BlockContext
+      txFrame: CoreDbTxRef
+      balPtr: ptr BlockAccessList
+      sharedBuilder: ptr BlockAccessListBuilder
+
+    ParTxEntry = object
+      sig: Signature #
+      hash: Hash32
+      ok: bool
+      status: bool
+      gasUsed: GasInt
+      blockRegularGasUsed: GasInt
+      blockStateGasUsed: GasInt
+      blobGasUsed: uint64
+      txType: TxType
+      resultBytes: SharedBytes
+      fut: Flowvar[bool]
+
+  const senderRecoveryError = "could not recover sender"
+
+  proc processTxTask(
+      e: ptr ParTxEntry, ctx: ptr ParTxCtx, tx: ptr Transaction, index: int
+  ): bool {.nimcall.} =
+    let
+      pk = recover(e[].sig, SkMessage(e[].hash.data))
+      sender =
+        if pk.isOk(): pk[].to(Address) else: default(Address)
+    if sender == default(Address):
+      e[].ok = false
+      e[].resultBytes = SharedBytes.init(
+        senderRecoveryError.toOpenArrayByte(0, senderRecoveryError.len - 1))
+      return true
+
+    let ledger = LedgerRef()
+    ledger.txFrame.borrowRef(ctx[].txFrame)
+    defer:
+      ledger.txFrame.unborrowRef()
+    ledger.balOverlay = Opt.some(BlockAccessListOverlay.init(ctx[].balPtr, index + 1))
+    discard ledger.beginSavePoint()
+
+    let vmState = BaseVMState()
+    vmState.com.borrowRef(ctx[].com)
+    defer:
+      vmState.com.unborrowRef()
+    vmState.ledger = ledger
+    assign(vmState.parent, ctx[].parent)
+    assign(vmState.blockCtx, ctx[].blockCtx)
+    const txCtx = default(TxContext)
+    assign(vmState.txCtx, txCtx)
+    vmState.hardFork = vmState.determineFork
+    vmState.fork = ToEVMFork[vmState.hardFork]
+    vmState.gasCosts = vmState.fork.forkToSchedule
+    vmState.tracer = nil
+    vmState.receipts.setLen(0)
+    vmState.cumulativeGasUsed = 0
+    vmState.blockRegularGasUsed = 0
+    vmState.blockStateGasUsed = 0
+    vmState.blobGasUsed = 0'u64
+    vmState.allLogs.setLen(0)
+    vmState.gasRefunded = 0
+    vmState.balTracker =
+      BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger, ctx[].sharedBuilder)
+    vmState.balTracker.setBlockAccessIndex(index + 1)
+
+    let rc = vmState.processTransaction(tx[], sender, persist = false)
+    if rc.isErr:
+      e[].ok = false
+      e[].resultBytes =
+        SharedBytes.init(rc.error.toOpenArrayByte(0, rc.error.len - 1))
+      return true
+    debugEcho "successfully processed transaction in thread"
+    e[].ok = true
+    e[].status = vmState.status
+    e[].gasUsed = rc.value.gasUsed
+    e[].blockRegularGasUsed = vmState.blockRegularGasUsed
+    e[].blockStateGasUsed = vmState.blockStateGasUsed
+    e[].blobGasUsed = vmState.blobGasUsed
+    e[].txType = tx[].txType
+    e[].resultBytes = SharedBytes.init(rlp.encode(rc.value.logEntries))
+    true
+
+  proc processTransactionsParallel(
+      vmState: BaseVMState,
+      transactions: seq[Transaction],
+      balRef: BlockAccessListRef,
+      skipReceipts: bool,
+      collectLogs: bool,
+  ): Result[void, string] =
+    let n = transactions.len()
+
+    var
+      ctx = ParTxCtx(
+        com: vmState.com,
+        parent: vmState.parent,
+        blockCtx: vmState.blockCtx,
+        txFrame: vmState.ledger.txFrame,
+        balPtr: balRef[].addr,
+        sharedBuilder: vmState.balTracker.builder,
+      )
+      entries = newSeq[ParTxEntry](n)
+
+    for i in 0 ..< n:
+      entries[i].sig = transactions[i].signature().valueOr(default(Signature))
+      entries[i].hash = transactions[i].rlpHashForSigning(transactions[i].isEip155)
+      entries[i].fut = vmState.com.taskpool.spawn processTxTask(
+        entries[i].addr, ctx.addr, transactions[i].addr, i)
+
+    for i in 0 ..< n:
+      discard sync(entries[i].fut)
+
+    defer:
+      for i in 0 ..< n:
+        entries[i].resultBytes.dispose()
+
+    vmState.cumulativeGasUsed = 0
+    vmState.blockRegularGasUsed = 0
+    vmState.blockStateGasUsed = 0
+    vmState.blobGasUsed = 0'u64
+
+    for i in 0 ..< n:
+      if not entries[i].ok:
+        return err(
+          "Error processing tx with index " & $i & ":" &
+          bytesToString(entries[i].resultBytes.data(asOpenArray = true)))
+
+      vmState.cumulativeGasUsed += entries[i].gasUsed
+      vmState.blockRegularGasUsed += entries[i].blockRegularGasUsed
+      vmState.blockStateGasUsed += entries[i].blockStateGasUsed
+      vmState.blobGasUsed += entries[i].blobGasUsed
+      vmState.status = entries[i].status
+
+      let logs =
+        try:
+          rlp.decode(entries[i].resultBytes.data(asOpenArray = true), seq[Log])
+        except RlpError as e:
+          return err("Failed to decode parallel tx logs at index " & $i & ":" & e.msg)
+      if skipReceipts:
+        if collectLogs:
+          vmState.allLogs.add logs
+      else:
+        vmState.receipts[i] =
+          vmState.makeReceipt(entries[i].txType, LogResult(logEntries: logs))
+        if collectLogs:
+          vmState.allLogs.add vmState.receipts[i].logs
+
+    let maxBlobGasPerBlock = getMaxBlobGasPerBlock(vmState.com, vmState.hardFork)
+    if vmState.blobGasUsed > maxBlobGasPerBlock:
+      return err(
+        "blobGasUsed " & $vmState.blobGasUsed & " exceeds maximum allowance " &
+        $maxBlobGasPerBlock)
+
+    applyBlockAccessListState(vmState.ledger, balRef[], n)
+    ok()
+
+
 proc processTransactions*(
     vmState: BaseVMState,
     header: Header,
     transactions: seq[Transaction],
+    blockAccessList = Opt.none(BlockAccessListRef),
     skipReceipts = false,
     collectLogs = false
 ): Result[void, string] =
@@ -281,6 +495,11 @@ proc processTransactions*(
   vmState.blockRegularGasUsed = 0
   vmState.blockStateGasUsed = 0
   vmState.allLogs = @[]
+
+  when compileOption("threads"):
+    if vmState.com.balParallelExecutionEnabled(header, blockAccessList):
+      return processTransactionsParallel(
+        vmState, transactions, blockAccessList.get(), skipReceipts, collectLogs)
 
   vmState.withSender(transactions):
     if sender == default(Address):
@@ -306,6 +525,7 @@ proc processTransactions*(
 proc procBlkPreamble(
     vmState: BaseVMState,
     blk: Block,
+    blockAccessList: Opt[BlockAccessListRef],
     skipValidation, skipReceipts, skipUncles: bool
 ): Result[void, string] =
   template header(): Header =
@@ -364,7 +584,7 @@ proc procBlkPreamble(
 
     let collectLogs = header.requestsHash.isSome and not skipValidation
     ?processTransactions(
-      vmState, header, blk.transactions, skipReceipts, collectLogs
+      vmState, header, blk.transactions, blockAccessList, skipReceipts, collectLogs
     )
   elif blk.transactions.len > 0:
     return err("Transactions in block with empty txRoot")
@@ -547,7 +767,7 @@ proc processBlock*(
   ## Generalised function to processes `blk` for any network.
 
   vmState.withBalPrefetch(blockAccessList):
-    ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles)
+    ?vmState.procBlkPreamble(blk, blockAccessList, skipValidation, skipReceipts, skipUncles)
 
     # EIP-3675: no reward for miner in POA/POS
     if not vmState.com.proofOfStake(blk.header, vmState.ledger.txFrame):
