@@ -249,9 +249,13 @@ template updateFcuRoot*(buddy: SnapPeerRef, info: static[string]) =
       if ctx.pool.beaconTarget:                     # check for manual heder trg
         let
           adb = ctx.pool.mptAsm
-          lastHeader = adb.lastHeader().valueOr:
+          optLastHeader = adb.lastHeader().valueOr:
             break body
-          lastHash = adb.getBlockHash(lastHeader.number).valueOr:
+          lastHeader = optLastHeader.valueOr:
+            break body
+          optLastHash = adb.getBlockHash(lastHeader.number).valueOr:
+            break body
+          lastHash = optLastHash.valueOr:
             break body
           root = StateRoot lastHeader.stateRoot
         discard sdb.register(root, BlockHash lastHash, lastHeader.number, info)

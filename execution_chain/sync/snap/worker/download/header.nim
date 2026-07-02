@@ -49,6 +49,14 @@ proc minStateNum(
         result = w.number
   # BlockNumber(0)
 
+proc getLastHeaderOrGenesis(ctx: SnapCtxRef): Header =
+  ## Ignore errors
+  var hdr = ctx.pool.mptAsm.lastHeader().valueOr:
+    return ctx.chain.com.genesisHeader()
+  if hdr.isNone():
+    return ctx.chain.com.genesisHeader()
+  hdr.unsafeGet
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -62,7 +70,7 @@ proc headerDownloadTrigger*(
   ## afterwards.
   let
     bcSync = ctx.pool.beaconSync
-    header = ctx.pool.mptAsm.lastHeader().valueOr: ctx.chain.com.genesisHeader()
+    header = ctx.getLastHeaderOrGenesis()
     lastCached = header.number                      # top header already cached
     leastBn = if 0 < lastCached: lastCached + 1     # discard smaller ones
               else: ctx.minStateNum(info)           # ..

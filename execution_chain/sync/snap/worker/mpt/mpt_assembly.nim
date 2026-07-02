@@ -23,8 +23,8 @@
 ## No column families are used, here.
 ##
 ##
-## Reference headers
-## ------------------
+## Reference headers and block access lists
+## ----------------------------------------
 ##
 ## * headers:
 ##   + key9: <col, number>
@@ -33,9 +33,14 @@
 ##   + col:      `cHeader`
 ##   + number:   `BlockNumber`
 ##   + header:   `Header`
-##   + touch:    `Moment`
-##   + tag:      `StateDataTag`
-##   * coverage: `UInt256`
+##
+## * block access lists:
+##   + key9: <col, number>
+##   + value: <bal>
+##   where
+##   + col:      `cBal`
+##   + number:   `BlockNumber`
+##   + bal:      `BlockAccessList`
 ##
 ##
 ## Key/value download packet formats
@@ -180,10 +185,13 @@ type
   BlobResult* = Result[seq[byte],string]
     ## Shortcut
 
-  HeaderResult* = Result[Header,string]
+  OptHeaderResult* = Result[Opt[Header],string]
     ## Shortcut
 
-  HashResult* = Result[Hash32,string]
+  OptBalResult* = Result[Opt[BlockAccessListRef],string]
+    ## Shortcut
+
+  OptHashResult* = Result[Opt[Hash32],string]
     ## Shortcut
 
   PutResult* = Result[void,string]
@@ -201,6 +209,7 @@ type
   MptAsmCol = enum
     cAdminCol = 0                                   # currently unused
     cHeader                                         # header chain by block num
+    cBal                                            # block access lists
 
     cStateData                                      # root -> block hash/number
     cAccount                                        # as fetched from network
@@ -293,6 +302,10 @@ type
     header: Header
     error: string
 
+  WalkBal* = tuple
+    bal: BlockAccessListRef
+    error: string
+
 
   KvPair* = tuple
     key: seq[byte]
@@ -372,11 +385,21 @@ func decodeByteCode(data: seq[byte]): Result[DecodedByteCode,string] =
   ok(move res)
 
 func decodeHeader(data: seq[byte]): Result[Header,string] =
-  const info = "decodeStoSlot"
+  const info = "decodeHeader"
   var
     res: Header
   try:
     res = rlp.decode(data, Header)
+  except RlpError as e:
+    return err(info & ": " & $e.name & "(" & e.msg & ")")
+  ok(move res)
+
+func decodeBal(data: seq[byte]): Result[BlockAccessListRef,string] =
+  const info = "decodeBal"
+  var
+    res = new BlockAccessList
+  try:
+    res[] = rlp.decode(data, BlockAccessList)
   except RlpError as e:
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(move res)
@@ -438,6 +461,11 @@ template encodeHeader(
     header: Header;
       ): untyped =
   rlp.encode header
+
+template encodeBal(
+    bal: BlockAccessListRef;
+      ): untyped =
+  rlp.encode bal[]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -1086,19 +1114,26 @@ proc hasHeader*(db: MptAsmRef, bn = BlockNumber(0)): BoolResult =
     return err(error)
   ok(0 < data.len)
 
-proc getHeader*(db: MptAsmRef, bn: BlockNumber): HeaderResult =
+proc getHeader*(db: MptAsmRef, bn: BlockNumber): OptHeaderResult =
   let data = db.get9(cHeader, bn).valueOr:
     return err(error)
-  data.decodeHeader()
+  if data.len == 0:
+    return ok(Opt.none(Header))
+  let hdr = data.decodeHeader().valueOr:
+    return err(error)
+  ok Opt.some(hdr)
 
-proc getBlockHash*(db: MptAsmRef, bn: BlockNumber): HashResult =
+proc getBlockHash*(db: MptAsmRef, bn: BlockNumber): OptHashResult =
   db.getHeader(bn + 1).isErrOr:
-    return ok value.parentHash
+    if value.isSome():
+      return ok Opt.some(value.unsafeGet.parentHash)
   let hdr = db.getHeader(bn).valueOr:
     return err(error)
-  ok hdr.computeBlockHash
+  if hdr.isNone():
+    return ok Opt.none(Hash32)
+  ok Opt.some(hdr.unsafeGet.computeBlockHash)
 
-proc lastHeader*(db: MptAsmRef): HeaderResult =
+proc lastHeader*(db: MptAsmRef): OptHeaderResult =
   let data = db.get9(cHeader, 0u64).valueOr:
     return err(error)
   if data.len != 8:
@@ -1141,6 +1176,46 @@ iterator walkHeader*(db: MptAsmRef): WalkHeader =
       yield oops
       continue
     yield (header,"")
+
+# -------------
+
+proc hasBal*(db: MptAsmRef, bn = BlockNumber(0)): BoolResult =
+  let data = db.get9(cBal, bn).valueOr:
+    return err(error)
+  ok(0 < data.len)
+
+proc getBal*(db: MptAsmRef, bn: BlockNumber): OptBalResult =
+  let data = db.get9(cBal, bn).valueOr:
+    return err(error)
+  if data.len == 0:
+    return ok(Opt.none(BlockAccessListRef))
+  let bal = data.decodeBal().valueOr:
+    return err(error)
+  ok(Opt.some(bal))
+
+proc putBal*(
+    db: MptAsmRef;
+    bn: BlockNumber;
+    bal: BlockAccessListRef;
+      ): PutResult =
+  db.put9(cBal, bn, bal.encodeBal()).isOkOr:
+    return err(error)
+  ok()
+
+proc delBal*(db: MptAsmRef, bn: BlockNumber): DelResult =
+  db.del9(cBal, bn)
+
+proc clearBal*(db: MptAsmRef): DelResult =
+  db.adb.rClear(cBal)
+
+iterator walkBal*(db: MptAsmRef): WalkBal =
+  for (key,data) in db.adb.colWalk9 key9(cBal):
+    let bal = data.decodeBal().valueOr:
+      var oops: WalkBal
+      oops.error = error
+      yield oops
+      continue
+    yield (bal,"")
 
 # ========================
 
