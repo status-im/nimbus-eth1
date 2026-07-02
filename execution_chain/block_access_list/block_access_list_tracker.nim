@@ -90,10 +90,13 @@ proc init*(
     T: type BlockAccessListTrackerRef,
     ledger: ReadOnlyLedger,
     builder: ptr BlockAccessListBuilder = nil,
+    builderThreadSafe = true,
 ): T =
   if builder.isNil():
     BlockAccessListTrackerRef(
-      ledger: ledger, builder: BlockAccessListBuilder.newShared(), builderOwner: true
+      ledger: ledger,
+      builder: BlockAccessListBuilder.newShared(builderThreadSafe),
+      builderOwner: true,
     )
   else:
     BlockAccessListTrackerRef(ledger: ledger, builder: builder, builderOwner: false)

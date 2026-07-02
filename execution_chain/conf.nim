@@ -54,6 +54,7 @@ const
   defaultOptimisticStatePrefetch* = false
   defaultBalStatePrefetch* = false
   defaultBalStatePrefetchWorkers* = 0
+  defaultBalParallelExecution* = false
 
 template defaultListenAddress(): IpAddress =
   getAutoAddress(Port(0)).toIpAddress()
@@ -386,6 +387,13 @@ type
       desc: "Number of background worker tasks used for block access list " &
         "state prefetching (0 = use number equal to the taskpool threads count)"
       name: "debug-bal-state-prefetch-workers".}: int
+
+    balParallelExecution* {.
+      hidden
+      defaultValue: defaultBalParallelExecution
+      desc: "Execute block transactions in parallel on background threads " &
+        "using the supplied block access list"
+      name: "debug-bal-parallel-execution".}: bool
 
     eagerStateRootCheck* {.
       hidden
