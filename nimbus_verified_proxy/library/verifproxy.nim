@@ -15,7 +15,6 @@ import
   beacon_chain/spec/eth2_apis/eth2_rest_json_serialization,
   beacon_chain/beacon_clock,
   beacon_chain/networking/network_metadata,
-  beacon_chain/nimbus_binary_common,
   ../engine/types,
   ../engine/engine,
   ../engine/rpc_frontend,
