@@ -735,9 +735,14 @@ template clearCollapsedSiblings*(ledger: LedgerRef) =
 proc getBlockHash*(ledger: LedgerRef, blockNumber: BlockNumber): Result[Hash32, string] =
   # Range checks must be done earlier, any miss here treated as an error
   let blockHash = ledger.blockHashes.get(blockNumber).valueOr:
-
     let hash = ledger.txFrame.getBlockHash(blockNumber).valueOr:
+      # Still record the requested number in the cache on a miss: the async EVM
+      # used by the verified proxy discovers which block hashes to fetch by
+      # reading this cache, then fetches them and re-runs. This makes this whole thing
+      # even uglier. But it is still better than continuing with just default hashes.
+      ledger.blockHashes.put(blockNumber, default(Hash32))
       return err("Block hash not available for block " & $blockNumber)
+
     ledger.blockHashes.put(blockNumber, hash)
     hash
   ok(blockHash)

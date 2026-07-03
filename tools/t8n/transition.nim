@@ -423,14 +423,16 @@ proc setupAlloc(ledger: LedgerRef, alloc: GenesisAlloc) =
     for slot, value in acc.storage:
       ledger.setStorage(accAddr, slot, value)
 
-method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash32 =
+method getAncestorHash(
+    vmState: TestVMState; blockNumber: BlockNumber
+): Result[Hash32, string] =
   # we can't raise exception here, it'll mess with EVM exception handler.
   # so, store the exception for later using `hashError`
   var h = default(Hash32)
   if vmState.blockHashes.len == 0:
     vmState.hashError = "getAncestorHash(" &
       $blockNumber & ") invoked, no blockhashes provided"
-    return h
+    return ok(h)
 
   vmState.blockHashes.withValue(blockNumber, val) do:
     h = val[]
@@ -438,7 +440,7 @@ method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash32 =
     vmState.hashError = "getAncestorHash(" &
       $blockNumber & ") invoked, blockhash for that block not provided"
 
-  return h
+  return ok(h)
 
 proc parseChainConfig(network: string): ChainConfig =
   try:

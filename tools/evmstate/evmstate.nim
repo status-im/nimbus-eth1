@@ -65,15 +65,17 @@ proc toBytes(x: string): seq[byte] =
   result = newSeq[byte](x.len)
   for i in 0..<x.len: result[i] = x[i].byte
 
-method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash32 =
+method getAncestorHash(
+    vmState: TestVMState; blockNumber: BlockNumber
+): Result[Hash32, string] =
   if blockNumber >= vmState.blockNumber:
-    default(Hash32)
+    ok(default(Hash32))
   elif blockNumber < 0:
-    default(Hash32)
+    ok(default(Hash32))
   elif (vmState.blockNumber > 256) and (blockNumber < vmState.blockNumber - 256):
-    default(Hash32)
+    ok(default(Hash32))
   else:
-    keccak256(toBytes($blockNumber))
+    ok(keccak256(toBytes($blockNumber)))
 
 proc verifyResult(ctx: var StateContext,
                   vmState: BaseVMState,

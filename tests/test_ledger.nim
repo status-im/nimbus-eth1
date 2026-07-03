@@ -789,8 +789,10 @@ proc runLedgerBasicOperationsTests() =
 
       let ledger = LedgerRef.init(db, false)
       check:
-        ledger.getBlockHash(BlockNumber(1)) == blockHash
-        ledger.getBlockHash(BlockNumber(2)) == default(Hash32)
+        # A present block hash is returned; a missing one is an error rather
+        # than a zero hash (range checks happen earlier, in the EVM).
+        ledger.getBlockHash(BlockNumber(1)).get == blockHash
+        ledger.getBlockHash(BlockNumber(2)).isErr
 
     test "Get earliest cached block number":
       let
