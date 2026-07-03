@@ -84,7 +84,8 @@ proc statelessProcessBlock*(
   let memoryVmState = BaseVMState()
   memoryVmState.init(
     parent, blk.header, com, memoryTxFrame, storeSlotHash = false,
-    enableBalTracker = com.isAmsterdamOrLater(blk.header.timestamp))
+    enableBalTracker = com.isAmsterdamOrLater(blk.header.timestamp),
+    stateless = true)
 
   defer:
     memoryVmState.dispose()
