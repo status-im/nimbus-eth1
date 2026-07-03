@@ -1090,3 +1090,56 @@ suite "TxPool EIP-7934 block RLP size limit":
     check ic.isOk
     if ic.isErr:
       debugEcho "IMPORT BLOCK: ", ic.error.msg
+
+suite "TxPool payload rebuild consistency":
+  # Regression: forkchoiceUpdated rebuilds the payload for the same slot
+  # (same timestamp) arbitrarily many times. assembleBlock only reset the
+  # packing vmState when the timestamp changed, so a second build at the same
+  # timestamp reused the first pack's persisted ledger (tx nonces bumped) and
+  # its stale blobGasUsed accumulator. Every pooled tx then failed the nonce
+  # check, leaving an empty body while the header still committed to the first
+  # pack's blobGasUsed -- a block every peer rejects as
+  # "blob gas used mismatch (header N, calculated 0)".
+  let
+    env = initEnv(Cancun)
+    xp = env.xp
+    mx = env.sender
+
+  xp.prevRandao = prevRandao
+  xp.feeRecipient = feeRecipient
+  xp.timestamp = EthTime.now()
+
+  test "repeated build at same timestamp keeps header consistent with body":
+    let
+      acc = mx.getAccount(0)
+      tx1 = mx.createPooledTransactionWithBlob(acc, recipient, amount, 0)
+      tx2 = mx.createPooledTransactionWithBlob(acc, recipient, amount, 1)
+    xp.checkAddTx(tx1)
+    xp.checkAddTx(tx2)
+
+    let expectedBlobGas = tx1.tx.getTotalBlobGas + tx2.tx.getTotalBlobGas
+
+    # advance to a new slot timestamp: first payload build
+    xp.timestamp = xp.timestamp + 1
+    let rc1 = xp.assembleBlock()
+    require rc1.isOk
+    let b1 = rc1.get
+    check b1.blk.transactions.len == 2
+    check b1.blk.header.blobGasUsed.get(0'u64) == expectedBlobGas
+
+    # rebuild for the SAME slot/timestamp (mimics a repeated forkchoiceUpdated).
+    # It must not collapse to an empty body with a stale header.
+    let rc2 = xp.assembleBlock()
+    require rc2.isOk
+    let b2 = rc2.get
+    check b2.blk.transactions.len == 2
+    check b2.blk.header.blobGasUsed.get(0'u64) == expectedBlobGas
+
+    # header blobGasUsed must equal the blob gas actually present in the body
+    var bodyBlobGas = 0'u64
+    for tx in b2.blk.transactions:
+      bodyBlobGas += tx.getTotalBlobGas
+    check b2.blk.header.blobGasUsed.get(0'u64) == bodyBlobGas
+
+    # the rebuilt block must survive re-execution (what every peer does)
+    xp.checkImportBlock(b2)
