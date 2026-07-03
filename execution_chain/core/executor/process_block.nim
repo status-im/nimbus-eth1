@@ -387,9 +387,10 @@ when compileOption("threads"):
     vmState.blobGasUsed = 0'u64
     vmState.allLogs.setLen(0)
     vmState.gasRefunded = 0
-    vmState.balTracker =
-      BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger, ctx[].sharedBuilder)
-    vmState.balTracker.setBlockAccessIndex(index + 1)
+    if not ctx[].sharedBuilder.isNil():
+      vmState.balTracker =
+        BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger, ctx[].sharedBuilder)
+      vmState.balTracker.setBlockAccessIndex(index + 1)
 
     let rc = vmState.processTransaction(tx[], sender, persist = false)
     if rc.isErr:
@@ -424,7 +425,8 @@ when compileOption("threads"):
         blockCtx: vmState.blockCtx,
         txFrame: vmState.ledger.txFrame,
         balPtr: balRef[].addr,
-        sharedBuilder: vmState.balTracker.builder,
+        sharedBuilder:
+          if vmState.balTrackerEnabled: vmState.balTracker.builder else: nil,
       )
       entries = newSeq[ParTxEntry](n)
 
