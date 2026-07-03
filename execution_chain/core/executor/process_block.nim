@@ -80,8 +80,8 @@ when compileOption("threads"):
       blockStateGasUsed: GasInt
       blobGasUsed: uint64
       status: bool
-      ok: bool
-      resultBytes: SharedBytes
+      logs: SharedBytes
+      error: SharedString
 
   proc recoverAndPrefetchTask(
       ctx: ptr OptimisticPrefetchCtx, e: ptr OptimisticTxEntry): bool {.nimcall.} =
@@ -299,67 +299,107 @@ func balParallelExecutionEnabled*(
   else:
     false
 
-func bytesToString(data: openArray[byte]): string =
-  result = newString(data.len)
-  if data.len > 0:
-    copyMem(addr result[0], unsafeAddr data[0], data.len)
-
-proc applyBlockAccessListState(
-    ledger: LedgerRef, bal: BlockAccessList, txCount: int
-) =
-  let boundary = txCount + 1
-
-  for accChanges in bal:
-    let address = accChanges.address
-
-    var balanceZeroed = false
-    let balancePos = accChanges.balanceChanges.findLastWriteBefore(boundary)
-    if balancePos >= 0:
-      let postBalance = accChanges.balanceChanges[balancePos].postBalance
-      ledger.setBalance(address, postBalance)
-      balanceZeroed = postBalance.isZero
-
-    let noncePos = accChanges.nonceChanges.findLastWriteBefore(boundary)
-    if noncePos >= 0:
-      ledger.setNonce(address, accChanges.nonceChanges[noncePos].newNonce)
-
-    let codePos = accChanges.codeChanges.findLastWriteBefore(boundary)
-    if codePos >= 0:
-      ledger.setCode(address, accChanges.codeChanges[codePos].newCode)
-
-    for slotChanges in accChanges.storageChanges:
-      let changePos = slotChanges.changes.findLastWriteBefore(boundary)
-      if changePos >= 0:
-        ledger.setStorage(
-          address, slotChanges.slot, slotChanges.changes[changePos].newValue)
-
-    if balanceZeroed:
-      ledger.addBalance(address, 0.u256, checkEmptyAccount = true)
-
 when compileOption("threads"):
 
-  const
-    senderRecoveryError = "could not recover sender"
-    executionCancelledError =
-      "transaction execution cancelled due to a failure in another transaction"
+  proc applyBlockAccessListState(ledger: LedgerRef, bal: BlockAccessList, txCount: int) =
+    let boundary = txCount + 1
+
+    for accChanges in bal:
+      let address = accChanges.address
+
+      var balanceZeroed = false
+      let balancePos = accChanges.balanceChanges.findLastWriteBefore(boundary)
+      if balancePos >= 0:
+        let postBalance = accChanges.balanceChanges[balancePos].postBalance
+        ledger.setBalance(address, postBalance)
+        balanceZeroed = postBalance.isZero
+
+      let noncePos = accChanges.nonceChanges.findLastWriteBefore(boundary)
+      if noncePos >= 0:
+        ledger.setNonce(address, accChanges.nonceChanges[noncePos].newNonce)
+
+      let codePos = accChanges.codeChanges.findLastWriteBefore(boundary)
+      if codePos >= 0:
+        ledger.setCode(address, accChanges.codeChanges[codePos].newCode)
+
+      for slotChanges in accChanges.storageChanges:
+        let changePos = slotChanges.changes.findLastWriteBefore(boundary)
+        if changePos >= 0:
+          ledger.setStorage(
+            address, slotChanges.slot, slotChanges.changes[changePos].newValue)
+
+      if balanceZeroed:
+        ledger.addBalance(address, 0.u256, checkEmptyAccount = true)
+
+  proc packLogs(logs: openArray[Log]): SharedBytes =
+    var size = sizeof(uint32)
+    for log in logs:
+      size +=
+        sizeof(Address) + sizeof(uint32) + log.topics.len * sizeof(Topic) +
+        sizeof(uint32) + log.data.len
+
+    var
+      packed = SharedBytes.init(size)
+      pos = 0
+
+    template put(src: pointer, n: int) =
+      copyMem(addr packed[pos], src, n)
+      pos += n
+
+    template putLen(v: int) =
+      var x = uint32(v)
+      put(addr x, sizeof(uint32))
+
+    putLen(logs.len)
+    for log in logs:
+      put(unsafeAddr log.address, sizeof(Address))
+      putLen(log.topics.len)
+      for topic in log.topics:
+        put(unsafeAddr topic, sizeof(Topic))
+      putLen(log.data.len)
+      if log.data.len > 0:
+        put(unsafeAddr log.data[0], log.data.len)
+
+    packed
+
+  proc unpackLogs(buf: openArray[byte]): seq[Log] =
+    var pos = 0
+
+    template get(dst: pointer, n: int) =
+      copyMem(dst, unsafeAddr buf[pos], n)
+      pos += n
+
+    template getLen(): int =
+      var x: uint32
+      get(addr x, sizeof(uint32))
+      int(x)
+
+    var logs = newSeq[Log](getLen())
+    for log in logs.mitems:
+      get(addr log.address, sizeof(Address))
+      log.topics = newSeq[Topic](getLen())
+      for topic in log.topics.mitems:
+        get(addr topic, sizeof(Topic))
+      log.data = newSeq[byte](getLen())
+      if log.data.len > 0:
+        get(addr log.data[0], log.data.len)
+
+    logs
 
   proc processTxTask(
       ctx: ptr BalParallelTxCtx, e: ptr BalParallelTxEntry
   ): bool {.nimcall.} =
     if ctx[].finished.load(moAcquire):
-      e[].ok = false
-      e[].resultBytes = SharedBytes.init(
-        executionCancelledError.toOpenArrayByte(0, executionCancelledError.len - 1))
-      return true
+      e[].error = SharedString.init("tx execution cancelled")
+      return false
 
-    let sender = e[].tx[].recoverSender().valueOr(default(Address))
-    if sender == default(Address):
-      e[].ok = false
-      e[].resultBytes = SharedBytes.init(
-        senderRecoveryError.toOpenArrayByte(0, senderRecoveryError.len - 1))
+    let sender = e[].tx[].recoverSender().valueOr:
+      e[].error = SharedString.init("could not recover sender")
       ctx[].finished.store(true, moRelease)
-      return true
+      return false
 
+    # Create the ledger without triggering a ref count increment on the txFrame
+    # which is owned by the main/parent thread.
     let ledger = LedgerRef()
     ledger.txFrame.borrowRef(ctx[].txFrame)
     defer:
@@ -367,6 +407,8 @@ when compileOption("threads"):
     ledger.balOverlay = Opt.some(BlockAccessListOverlay.init(ctx[].balPtr, e[].txIndex + 1))
     discard ledger.beginSavePoint()
 
+    # Create the vmState without triggering a ref count increment on the common object
+    # which is owned by the main/parent thread.
     let vmState = BaseVMState()
     vmState.com.borrowRef(ctx[].com)
     defer:
@@ -392,21 +434,19 @@ when compileOption("threads"):
         BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger, ctx[].sharedBuilder)
       vmState.balTracker.setBlockAccessIndex(e[].txIndex + 1)
 
-    let rc = vmState.processTransaction(e[].tx[], sender, persist = false)
-    if rc.isErr:
-      e[].ok = false
-      e[].resultBytes =
-        SharedBytes.init(rc.error.toOpenArrayByte(0, rc.error.len - 1))
+    let logResult = vmState.processTransaction(e[].tx[], sender, persist = false).valueOr:
+      e[].error = SharedString.init(error)
       ctx[].finished.store(true, moRelease)
-      return true
-    debugEcho "successfully processed transaction in thread"
-    e[].ok = true
-    e[].status = vmState.status
-    e[].gasUsed = rc.value.gasUsed
+      return false
+
+    e[].gasUsed = logResult.gasUsed
     e[].blockRegularGasUsed = vmState.blockRegularGasUsed
     e[].blockStateGasUsed = vmState.blockStateGasUsed
     e[].blobGasUsed = vmState.blobGasUsed
-    e[].resultBytes = SharedBytes.init(rlp.encode(rc.value.logEntries))
+    e[].status = vmState.status
+
+    e[].logs = packLogs(logResult.logEntries)
+
     true
 
   proc processTransactionsParallel(
@@ -440,23 +480,24 @@ when compileOption("threads"):
       futs[i] = vmState.com.taskpool.spawn processTxTask(
         ctx.addr, entries[i].addr)
 
-    for i in 0 ..< n:
-      discard sync(futs[i])
-
-    defer:
-      for i in 0 ..< n:
-        entries[i].resultBytes.dispose()
-
     vmState.cumulativeGasUsed = 0
     vmState.blockRegularGasUsed = 0
     vmState.blockStateGasUsed = 0
     vmState.blobGasUsed = 0'u64
 
+    var oks = newSeq[bool](n)
     for i in 0 ..< n:
-      if not entries[i].ok:
+      oks[i] = sync(futs[i])
+
+    defer:
+      for i in 0 ..< n:
+        entries[i].logs.dispose()
+        entries[i].error.dispose()
+
+    for i in 0 ..< n:
+      if not oks[i]:
         return err(
-          "Error processing tx with index " & $i & ":" &
-          bytesToString(entries[i].resultBytes.data(asOpenArray = true)))
+          "Error processing tx with index " & $i & ":" & entries[i].error.toString())
 
       vmState.cumulativeGasUsed += entries[i].gasUsed
       vmState.blockRegularGasUsed += entries[i].blockRegularGasUsed
@@ -464,17 +505,13 @@ when compileOption("threads"):
       vmState.blobGasUsed += entries[i].blobGasUsed
       vmState.status = entries[i].status
 
-      let logs =
-        try:
-          rlp.decode(entries[i].resultBytes.data(asOpenArray = true), seq[Log])
-        except RlpError as e:
-          return err("Failed to decode parallel tx logs at index " & $i & ":" & e.msg)
+      var logs = unpackLogs(entries[i].logs.data(asOpenArray = true))
       if skipReceipts:
         if collectLogs:
           vmState.allLogs.add logs
       else:
         vmState.receipts[i] =
-          vmState.makeReceipt(transactions[i].txType, LogResult(logEntries: logs))
+          vmState.makeReceipt(transactions[i].txType, LogResult(logEntries: move(logs)))
         if collectLogs:
           vmState.allLogs.add vmState.receipts[i].logs
 
@@ -486,7 +523,6 @@ when compileOption("threads"):
 
     applyBlockAccessListState(vmState.ledger, balRef[], n)
     ok()
-
 
 proc processTransactions*(
     vmState: BaseVMState,

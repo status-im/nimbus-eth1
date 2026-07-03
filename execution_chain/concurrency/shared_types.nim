@@ -29,19 +29,22 @@ type
     data: ptr UncheckedArray[E]
     len: int
 
-proc init*[E](T: type SharedSeq[E], values: openArray[E]): SharedSeq[E] =
+proc init*[E](T: type SharedSeq[E], len: int): SharedSeq[E] =
   static:
     doAssert supportsCopyMem(E), "E must be a non-GC type"
 
-  if values.len() == 0:
+  if len <= 0:
     return T()
 
-  let s = T(
-    data: cast[ptr UncheckedArray[E]](allocShared(values.len() * sizeof(E))),
-    len: values.len(),
+  T(
+    data: cast[ptr UncheckedArray[E]](allocShared(len * sizeof(E))),
+    len: len,
   )
-  copyMem(s.data, unsafeAddr values[0], values.len() * sizeof(E))
 
+proc init*[E](T: type SharedSeq[E], values: openArray[E]): SharedSeq[E] =
+  var s = T.init(values.len())
+  if values.len() > 0:
+    copyMem(s.data, unsafeAddr values[0], values.len() * sizeof(E))
   s
 
 proc dispose*[E](s: var SharedSeq[E]) =
@@ -71,6 +74,12 @@ template data*[E](s: SharedSeq[E], asOpenArray: static bool = false): auto =
     s.toOpenArray()
   else:
     s.toSeq()
+
+proc `[]`*[E](s: SharedSeq[E], i: int): lent E =
+  s.data[i]
+
+proc `[]`*[E](s: var SharedSeq[E], i: int): var E =
+  s.data[i]
 
 type
   SharedBytes* = SharedSeq[byte]
