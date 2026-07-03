@@ -47,7 +47,6 @@ proc statelessProcessBlock*(
 ): Result[void, string] =
   let
     verifiedHeaders = ?witness.verifyHeaders(blk.header)
-      # Returns headers sorted by block number
     parent = verifiedHeaders[^1] # The last header is the parent
     preStateRoot = parent.stateRoot
 
@@ -67,7 +66,8 @@ proc statelessProcessBlock*(
   # in memory database.
   memoryTxFrame.putSubtrie(preStateRoot, nodes).isOkOr:
     return err("Unable to load subtrie: " & $error)
-  doAssert memoryTxFrame.getStateRoot().get() == preStateRoot
+  if memoryTxFrame.getStateRoot().get() != preStateRoot:
+    return err("Witness subtrie state root mismatch")
 
   # Load the contract code into the database indexed by code hash.
   for c in witness.codes:
