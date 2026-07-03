@@ -249,7 +249,7 @@ template blocksUnstage*(
       importedOK = false                           # imported some blocks
       switchPeer {.inject.} = false                # for return code
 
-    while ctx.pool.syncState == SyncState.blocks:
+    while ctx.pool.syncState == BeaconState.blocks:
 
       # Fetch list with the least block numbers
       let qItem = ctx.blk.staged.ge(0).valueOr:

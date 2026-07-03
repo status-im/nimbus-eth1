@@ -190,14 +190,14 @@ proc newPayload*(ben: BeaconEngineRef,
       except RlpError as e:
         warn "Failed to decode payload",
           error = e.msg
-        return invalidStatus(payload.blockHash, "Failed to decode payload")
+        raise invalidParams("Failed to decode block in payload: " & e.msg)
     blockAccessList =
       try:
         blockAccessList(payload)
       except RlpError as e:
         warn "Failed to decode payload",
           error = e.msg
-        return invalidStatus(payload.blockHash, "Failed to decode payload")
+        raise invalidParams("Failed to decode BAL in payload: " & e.msg)
 
   template header: Header = blk.header
 

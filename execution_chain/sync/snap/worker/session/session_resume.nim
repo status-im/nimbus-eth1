@@ -164,7 +164,9 @@ template sessionResume*(
         continue
 
       if not intro:                                 # print message once, only
-        chronicles.info info & ": Resuming download session", nStates
+        chronicles.info info & ": Resuming download session", nStates,
+          syncState=($ctx.syncState), nSyncPeers=ctx.nSyncPeers(),
+          nEthPeers=ctx.nEthPeers()
         intro = true
 
       if p.tag != Untagged:                         # ignore assembled data

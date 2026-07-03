@@ -138,6 +138,7 @@ endif
 	eest_blockchain_test \
 	eest_stateless_execution_test \
 	eest_full_test \
+	eest_tool_test \
 	t8n \
 	t8n_test \
 	evmstate \
@@ -447,8 +448,12 @@ eest_stateless_execution_test: | build deps eest
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
 
 eest_full_test: | build deps eest
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/all_eest_tests.nim"
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/all_eest_tests.nim"
+	build/$@
 
+eest_tool_test: | build deps eest
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/eest_tool_tests.nim"
+	build/$@
 # builds transition tool
 t8n: | build deps
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) $(T8N_PARAMS) "tools/t8n/$@.nim"

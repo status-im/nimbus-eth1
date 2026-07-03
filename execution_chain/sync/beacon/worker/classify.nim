@@ -40,7 +40,7 @@ func classifyForFetching*(buddy: BeaconPeerRef): PeerRanking =
   var ranking = 0
 
   case buddy.ctx.pool.syncState:
-  of SyncState.headers:
+  of BeaconState.headers:
     # Classify this peer only if there are enough header slots available on
     # the queue for dowmloading simmultaneously. There is an additional slot
     # for downlading directly to the header chain cache (rather than queuing.)
@@ -72,7 +72,7 @@ func classifyForFetching*(buddy: BeaconPeerRef): PeerRanking =
     if ranking < buddy.ctx.nSyncPeers() - headersStagedQueueLengthMax:
       return (rankingTooLow, ranking)
 
-  of SyncState.blocks:
+  of BeaconState.blocks:
     # Ditto for block bodies
     if buddy.ctx.nSyncPeers() <= blocksStagedQueueLengthMax + 1:
       return (qSlotsAvail, -1)

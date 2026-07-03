@@ -1108,6 +1108,8 @@ proc lastHeader*(db: MptAsmRef): HeaderResult =
 proc lastNumber*(db: MptAsmRef): BlockNumber =
   let data = db.get9(cHeader, 0u64).valueOr:
     return BlockNumber(0)
+  if data.len != 8:
+    return BlockNumber(0)
   uint64.fromBytesBE data
 
 proc putHeader*(db: MptAsmRef, header: Header): PutResult =
@@ -1189,6 +1191,9 @@ proc putStateData*(
 
 proc delStateData*(db: MptAsmRef; root: StateRoot): DelResult =
   db.del33(cStateData, root)
+
+proc clearStateData*(db: MptAsmRef): DelResult =
+  db.adb.rClear(cStateData)
 
 iterator walkStateData*(db: MptAsmRef): WalkStateData =
   for (key,value) in db.adb.colWalk33 cStateData.key33():

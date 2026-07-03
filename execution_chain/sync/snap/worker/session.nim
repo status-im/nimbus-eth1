@@ -16,8 +16,6 @@ import
 export
   getPivotTag,
   setPivotTag,
-  countKvtNodes,
-  countDnglLinks,
   session_analyse,
   session_mktrie,
   session_resume

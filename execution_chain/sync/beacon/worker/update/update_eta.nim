@@ -57,7 +57,7 @@ proc updateEtaIdle*(ctx: BeaconCtxRef) =
   if ctx.pool.standByMode:
     metrics.set(nec_sync_eta_secs, 0f)              # currently all done
 
-  elif ctx.pool.syncState == SyncState.idle and
+  elif ctx.pool.syncState == BeaconState.idle and
      low(Moment) < ctx.pool.syncEta.lastUpdate and
      ctx.pool.syncEta.lastUpdate + etaIdleMaxDensity <= Moment.now():
 

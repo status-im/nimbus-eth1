@@ -155,10 +155,10 @@ func toStr*(a: chronos.Moment): string =
 
 # -----------
 
-func `$`*(w: (SyncState,bool)): string =
+func `$`*(w: (SnapState,bool)): string =
   $w[0] & (if w[1]: "+" & "poolMode" else: "")
 
-func `$`*(w: (string,SyncPeerRunState,SyncState,bool)): string =
+func `$`*(w: (string,SyncPeerRunState,SnapState,bool)): string =
   if 0 < w[0].len:
     result = w[0] & "/"
   result &= $w[1] & ":" & $(w[2],w[3])

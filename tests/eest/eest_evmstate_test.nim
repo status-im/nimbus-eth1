@@ -1,4 +1,4 @@
-# Nimbus
+# nimbus-execution-client
 # Copyright (c) 2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
@@ -9,28 +9,20 @@
 
 import
   std/os,
-  unittest2,
   ./eest_runner,
-  ./eest_txpool
+  ./eest_evmstate
 
 const
   baseFolder = "tests/fixtures"
-  suiteName = "Transaction Pool Test"
-  eestType = "blockchain_tests"
+  suiteName = "Evmstate Test"
+  eestType = "state_tests"
   eestReleases = [
     "eest_develop",
-    "eest_devnet"
+    "eest_bal"
   ]
 
 const skipFiles = [
   "",
-  # This is a case where the parent block have excess blob gas
-  # greater than expected. Not a bug anywhere, but part of the txpool
-  # algorithm is calculating the next block excess blob gas from
-  # the parent, so there is no way this test intended for block execution
-  # will pass when executed by txpool. It's already amazing we only need
-  # to skip one fixture file.
-  "test_correct_decreasing_blob_gas_costs.json",
 ]
 
 runEESTSuite(

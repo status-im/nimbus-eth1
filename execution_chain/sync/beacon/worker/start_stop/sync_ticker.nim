@@ -42,7 +42,7 @@ type
     nBlkStaged: int
     blkStagedBottom: BlockNumber
 
-    state: SyncState
+    state: BeaconState
     standByMode: bool
     nSyncPeers: int
     eta: chronos.Duration

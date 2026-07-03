@@ -17,7 +17,8 @@ import
   eth/common/block_access_lists
 
 export
-  json
+  json,
+  block_access_lists
 
 func stripLeadingZeros(value: string): string =
   var cidx = 0
@@ -26,58 +27,58 @@ func stripLeadingZeros(value: string): string =
     cidx.inc
   value[cidx .. ^1]
 
-proc `@@`[T](list: openArray[T]): JsonNode
+func `@@`[T](list: openArray[T]): JsonNode
 
-proc `@@`(x: Address): JsonNode =
+func `@@`(x: Address): JsonNode =
   %(x.to0xHex)
 
-proc `@@`(x: Bytes): JsonNode =
+func `@@`(x: Bytes): JsonNode =
   %("0x" & x.toHex)
 
-proc `@@`(x: uint16 | uint32 | uint64): JsonNode =
+func `@@`(x: uint16 | uint32 | uint64): JsonNode =
   %("0x" & x.toHex.stripLeadingZeros)
 
-proc `@@`(x: UInt256): JsonNode =
+func `@@`(x: UInt256): JsonNode =
   let hex = x.toHex
   if hex.len mod 2 != 0: %("0x0" & hex)
   else: %("0x" & hex)
 
-proc `@@`(x: NonceChange): JsonNode =
+func `@@`(x: NonceChange): JsonNode =
   result = %{
     "blockAccessIndex": @@(x.blockAccessIndex),
     "postNonce": @@(x.newNonce),
   }
 
-proc `@@`(x: BalanceChange): JsonNode =
+func `@@`(x: BalanceChange): JsonNode =
   result = %{
     "blockAccessIndex": @@(x.blockAccessIndex),
     "postBalance": @@(x.postBalance),
   }
 
-proc `@@`(x: CodeChange): JsonNode =
+func `@@`(x: CodeChange): JsonNode =
   result = %{
     "blockAccessIndex": @@(x.blockAccessIndex),
     "newCode": @@(x.newCode),
   }
 
-proc `@@`(x: StorageChange): JsonNode =
+func `@@`(x: StorageChange): JsonNode =
   result = %{
     "blockAccessIndex": @@(x.blockAccessIndex),
     "postValue": @@(x.newValue),
   }
 
-proc `@@`(x: SlotChanges): JsonNode =
+func `@@`(x: SlotChanges): JsonNode =
   result = %{
     "slot": @@(x.slot),
     "slotChanges": @@(x.changes),
   }
 
-proc `@@`[T](list: openArray[T]): JsonNode =
+func `@@`[T](list: openArray[T]): JsonNode =
   result = newJArray()
   for x in list:
     result.add @@(x)
 
-proc toJson*(x: AccountChanges): JsonNode =
+func `@@`*(x: AccountChanges): JsonNode =
   result = %{
     "address"       : @@(x.address),
     "nonceChanges"  : @@(x.nonceChanges),
@@ -87,7 +88,7 @@ proc toJson*(x: AccountChanges): JsonNode =
     "storageReads"  : @@(x.storageReads),
   }
 
-proc toJson*(bal: BlockAccessList): JsonNode =
+func `@@`*(bal: BlockAccessListRef): JsonNode =
   result = newJArray()
-  for x in bal:
-    result.add x.toJson()
+  for x in bal[]:
+    result.add @@(x)

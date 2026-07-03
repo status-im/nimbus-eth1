@@ -14,19 +14,16 @@ import
   pkg/[chronos, stint]
 
 type
-  SyncState* = enum
+  SnapState* = enum
     SnapIdle = 0
-    SnapResume                     ## Resume from previous session
     SnapReady                      ## Wait for download state
+    SnapResume                     ## Resume from previous session
     SnapDownload                   ## Downloading and caching data
     SnapDownloadFinish             ## Wait for sync before proceeding
     SnapMkTrie                     ## Assembling downloaded data
     SnapAnalyse                    ## Analyse for missing MPT nodes
-    SnapHealing                    ## Complete missing trie nodes
-    SnapHealingFinish              ## Wait for sync before proceeding
-    SnapContracts                  ## Download contracts code
-    SnapContractsFinish            ## Wait for sync before proceeding
-    SnapStop                       ## TBD ...
+    # ..                           ## TBD ..
+    SnapStop                       ## TBD ..
 
   ErrorType* = enum
     ## For `FetchError` return code object/tuple
@@ -59,6 +56,10 @@ const
   daemonWaitElseInterval* = chronos.seconds(10)
     ## Ditto for other states.
 
+  peerWaitDownloadInterval* = chronos.seconds(5)
+    ## Some waiting time at the end of the daemon task which always lingers
+    ## in the background. This one is for non-`SnapDownload` states.
+
   peerWaitElseInterval* = chronos.milliseconds(1200)
     ## Some waiting time at the end of the daemon task which always lingers
     ## in the background. This one is for non-`SnapDownload` states.
@@ -78,6 +79,10 @@ const
   stateIdleTimeBeforeEviction* = chronos.minutes(30)
     ## Minimum time a state is cached before eviction unless other criteria
     ## apply (e.g. fully unprocessed account range.)
+
+  noStateRecordsMsgDelay* = chronos.seconds(20)
+    ## After logging a `no state records` message, subsequent similar messages
+    ## are suppressed for a while.
 
   # ----------------------
 

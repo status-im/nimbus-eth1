@@ -269,6 +269,27 @@ proc newPayloadV4InvalidRequests(env: TestEnv): Result[void, string] =
 
   ok()
 
+proc newPayloadInvalidRLP(env: TestEnv): Result[void, string] =
+  const paramsFile = "tests/engine_api/newPayload_invalid_rlp.json"
+
+  let
+    client = env.client
+    params = EthJson.loadFile(paramsFile, NewPayloadV4Params)
+    res = client.newPayloadV4(
+      params.payload,
+      params.expectedBlobVersionedHashes,
+      params.parentBeaconBlockRoot,
+      params.executionRequests)
+
+  if res.isOk:
+    return err("res should error on undecodable payload")
+
+  if $engineApiInvalidParams notin res.error:
+    return err("invalid error code: " & res.error &
+      " expect: " & $engineApiInvalidParams)
+
+  ok()
+
 proc newPayloadV4InvalidRequestType(env: TestEnv): Result[void, string] =
   const
     paramsFile = "tests/engine_api/newPayloadV4_invalid_requests_type.json"
@@ -321,6 +342,11 @@ const testList = [
     name: "newPayloadV4 invalid execution request type",
     fork: Prague,
     testProc: newPayloadV4InvalidRequestType
+  ),
+  TestSpec(
+    name: "newPayload undecodable RLP payload",
+    fork: Prague,
+    testProc: newPayloadInvalidRLP
   ),
   ]
 

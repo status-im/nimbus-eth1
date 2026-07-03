@@ -18,12 +18,14 @@ import
   nimcrypto/sha2,
   ../constants
 
-export eth_types_rlp
+from beacon_chain/spec/datatypes/constants import
+  DEPOSIT_REQUEST_TYPE, WITHDRAWAL_REQUEST_TYPE, CONSOLIDATION_REQUEST_TYPE
+
+export
+  eth_types_rlp, DEPOSIT_REQUEST_TYPE, WITHDRAWAL_REQUEST_TYPE,
+  CONSOLIDATION_REQUEST_TYPE
 
 const
-  DEPOSIT_REQUEST_TYPE*         = 0x00.byte
-  WITHDRAWAL_REQUEST_TYPE*      = 0x01.byte
-  CONSOLIDATION_REQUEST_TYPE*   = 0x02.byte
   BUILDER_DEPOSIT_REQUEST_TYPE* = 0x03.byte
   BUILDER_EXIT_REQUEST_TYPE*    = 0x04.byte
 

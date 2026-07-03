@@ -58,5 +58,3 @@ tests/fixtures/eest_devnet
 tests/fixtures/eest_zkevm
 
 execution_chain/nimbus
-GeneralStateTestsDevnet.md
-GeneralStateTestsDevelop.md

@@ -12,17 +12,20 @@
 
 import
   pkg/[chronicles, chronos],
-  ./download/[account, code, header, storage, trie_node],
+  ./download/[account, code, header, storage],
   ./[helpers, mpt, state_db, update, worker_desc]
 
 export
-  account, code, header, storage, trie_node
+  account, code, header, storage
 
 # ------------------------------------------------------------------------------
 # Public function(s)
 # ------------------------------------------------------------------------------
 
-template downloadAccountsAndStorage*(buddy: SnapPeerRef, info: static[string]) =
+template downloadAccountsAndStorage*(
+    buddy: SnapPeerRef;
+    info: static[string];
+      ): auto =
   ## Async/template
   ##
   ## Fetch and stash account, storage, and code ranges for available state
@@ -35,10 +38,12 @@ template downloadAccountsAndStorage*(buddy: SnapPeerRef, info: static[string]) =
   ##   + not older than the first two states (if any),
   ##   + and no more than `nWorkingStateRoots`
   ##
+  var blockRc = Opt[void].ok()
   block body:
     # Make sure that this sync peer is not banned from processing, already.
     if nProcAccountErrThreshold < buddy.nErrors.apply.acc:
       buddy.ctrl.zombie = true
+      blockRc = Opt[void].err()
       break body                                    # return err()
 
     let
@@ -49,7 +54,10 @@ template downloadAccountsAndStorage*(buddy: SnapPeerRef, info: static[string]) =
     buddy.updateFcuRoot info                        # FCU header => state
 
     let pivot = sdb.pivot.valueOr:
-      trace info & ": no state records", peer
+      if buddy.only.lastMsgLog + noStateRecordsMsgDelay <= Moment.now():
+        trace info & ": no state records", peer
+        buddy.only.lastMsgLog = Moment.now()
+      blockRc = Opt[void].err()
       break body                                    # return err()
 
     # Fetch for state DB items, start with pivot root
@@ -105,12 +113,13 @@ template downloadAccountsAndStorage*(buddy: SnapPeerRef, info: static[string]) =
        0 < ctx.nSyncPeers() and
        nStatesOk == 0 and 0 < nStatesIdle:
       buddy.ctrl.stopped = true
+      blockRc = Opt[void].err()
 
     trace info & ": downloaded states", peer,
       notAvailMax=buddy.only.notAvailMax, syncState=($buddy.syncState),
       nStatesOk, nStatesIdle, nSyncPeers=ctx.nSyncPeers()
 
-  discard                                           # visual alignment
+  blockRc                                           # return value
 
 # ------------------------------------------------------------------------------
 # End
