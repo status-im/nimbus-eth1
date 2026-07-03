@@ -32,10 +32,11 @@ const OUTPUT_ROOT_VERSION_V0* = default(array[32, byte])
 func computeOutputRoot*(
     stateRoot: Hash32, messagePasserStorageRoot: Hash32, blockHash: Hash32
 ): Hash32 =
-  let preimage =
-    @OUTPUT_ROOT_VERSION_V0 & @(stateRoot.data) & @(messagePasserStorageRoot.data) &
-    @(blockHash.data)
-  keccak256(preimage)
+  withKeccak256:
+    h.update(OUTPUT_ROOT_VERSION_V0)
+    h.update(stateRoot.data)
+    h.update(messagePasserStorageRoot.data)
+    h.update(blockHash.data)
 
 func matchesOutputRoot*(
     postedRoot: Hash32,

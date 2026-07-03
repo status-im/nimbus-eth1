@@ -189,13 +189,7 @@ proc run(
   let networkName = config.eth2Network.get("mainnet")
 
   # If an op-stack network is selected we run a secondary engine alongside the primary engine
-  let opParams =
-    if isOpNetwork(networkName):
-      let p = opChainParamsForNetwork(networkName).valueOr:
-        raise newException(ProxyError, "Unknown OP network: " & error)
-      Opt.some(p)
-    else:
-      Opt.none(OpChainParams)
+  let opParams = opChainParamsForNetwork(networkName).optValue()
 
   let
     l1NetworkName =

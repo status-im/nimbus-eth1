@@ -54,9 +54,6 @@ func opChainParamsForNetwork*(name: string): Result[OpChainParams, string] =
   else:
     err("unknown op-network preset: " & name)
 
-func isOpNetwork*(name: string): bool =
-  opChainParamsForNetwork(name).isOk()
-
 func getSystemConfig*(chainId: UInt256): Result[Address, string] =
   for params in [opMainnet, baseMainnet, opSepolia]:
     if params.l2ChainId == chainId:
