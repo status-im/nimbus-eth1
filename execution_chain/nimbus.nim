@@ -166,17 +166,7 @@ type
       name: "debug-trusted-setup-file" .}: Option[string]
 
     case cmd* {.command, defaultValue: NStartUpCmd.nimbus.}: NStartUpCmd
-    of nimbus:
-      discard
-    of beaconNode:
-      discard
-    of executionClient:
-      discard
-    of `import`:
-      discard
-    of trustedNodeSync:
-      discard
-    of deposits:
+    of nimbus, beaconNode, executionClient, `import`, trustedNodeSync, deposits:
       discard
 
 #!fmt: on
