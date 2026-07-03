@@ -45,45 +45,42 @@ when compileOption("threads"):
 
   type
     OptimisticPrefetchCtx = object
-      cancel: Atomic[bool]
-      parent: Header
-      blockCtx: BlockContext
       com: CommonRef
       txFrame: CoreDbTxRef
+      parent: Header
+      blockCtx: BlockContext
+      finished: Atomic[bool]
 
     OptimisticTxEntry = object
       tx: ptr Transaction
       sender: Address
       senderReady: Atomic[bool]
-      fut: Flowvar[bool] # why this?
 
     BalPrefetchCtx = object
-      finished: Atomic[bool]
-      nextIndex: Atomic[int]
-      balPtr: ptr BlockAccessList
       txFrame: CoreDbTxRef
       fork: EVMFork
+      balPtr: ptr BlockAccessList
+      nextIndex: Atomic[int]
+      finished: Atomic[bool]
 
     BalParallelTxCtx = object
       com: CommonRef
+      txFrame: CoreDbTxRef
       parent: Header
       blockCtx: BlockContext
-      txFrame: CoreDbTxRef
       balPtr: ptr BlockAccessList
       sharedBuilder: ptr BlockAccessListBuilder
 
     BalParallelTxEntry = object
       tx: ptr Transaction
-      index: int
-      ok: bool
-      status: bool
+      txIndex: int
       gasUsed: GasInt
       blockRegularGasUsed: GasInt
       blockStateGasUsed: GasInt
       blobGasUsed: uint64
-      txType: TxType
+      status: bool
+      ok: bool
       resultBytes: SharedBytes
-      fut: Flowvar[bool]
 
   proc recoverAndPrefetchTask(
       ctx: ptr OptimisticPrefetchCtx, e: ptr OptimisticTxEntry): bool {.nimcall.} =
@@ -94,7 +91,7 @@ when compileOption("threads"):
     e[].senderReady.store(true, moRelease)
 
     # When ctx is non-nil, optimistic state prefetch is enabled
-    if ctx.isNil() or sender == default(Address) or ctx[].cancel.load(moAcquire):
+    if ctx.isNil() or sender == default(Address) or ctx[].finished.load(moAcquire):
       return true
 
     # Create the ledger without triggering a ref count increment on the txFrame
@@ -139,6 +136,7 @@ when compileOption("threads"):
     # Execute transactions offloading the signature checking to the task pool
     var
       entries = newSeq[OptimisticTxEntry](txs.len)
+      futs = newSeq[Flowvar[bool]](txs.len)
       ctx: OptimisticPrefetchCtx
       ctxPtr: ptr OptimisticPrefetchCtx = nil
 
@@ -150,7 +148,7 @@ when compileOption("threads"):
       # be writen to during block execution and this way we avoid having to
       # use locking on the frame data structures.
       ctx.txFrame = vmState.ledger.txFrame.parent()
-      ctx.cancel.store(false, moRelease)
+      ctx.finished.store(false, moRelease)
       ctxPtr = ctx.addr
 
     # Spawn one task per transaction that recovers the sender and, when ctxPtr
@@ -159,7 +157,7 @@ when compileOption("threads"):
     for i, e in entries.mpairs():
       e.tx = txs[i].addr
       let entryPtr = e.addr
-      e.fut = vmState.com.taskpool.spawn recoverAndPrefetchTask(
+      futs[i] = vmState.com.taskpool.spawn recoverAndPrefetchTask(
         ctxPtr, entryPtr)
 
     try:
@@ -176,11 +174,11 @@ when compileOption("threads"):
     finally:
       if not ctxPtr.isNil():
         # Cancel any in-flight prefetch tasks so that they bail out quickly.
-        ctxPtr[].cancel.store(true, moRelease)
+        ctxPtr[].finished.store(true, moRelease)
       # Wait for all tasks to complete before returning so that no task
       # outlives the local data it references.
-      for e in entries.mitems():
-        discard sync(e.fut)
+      for f in futs.mitems():
+        discard sync(f)
 
   func firstBalIndex(sc: SlotChanges): BlockAccessIndex =
     ## Earliest block access index at which the slot was written. 
@@ -355,7 +353,7 @@ when compileOption("threads"):
     ledger.txFrame.borrowRef(ctx[].txFrame)
     defer:
       ledger.txFrame.unborrowRef()
-    ledger.balOverlay = Opt.some(BlockAccessListOverlay.init(ctx[].balPtr, e[].index + 1))
+    ledger.balOverlay = Opt.some(BlockAccessListOverlay.init(ctx[].balPtr, e[].txIndex + 1))
     discard ledger.beginSavePoint()
 
     let vmState = BaseVMState()
@@ -381,7 +379,7 @@ when compileOption("threads"):
     if not ctx[].sharedBuilder.isNil():
       vmState.balTracker =
         BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger, ctx[].sharedBuilder)
-      vmState.balTracker.setBlockAccessIndex(e[].index + 1)
+      vmState.balTracker.setBlockAccessIndex(e[].txIndex + 1)
 
     let rc = vmState.processTransaction(e[].tx[], sender, persist = false)
     if rc.isErr:
@@ -396,7 +394,6 @@ when compileOption("threads"):
     e[].blockRegularGasUsed = vmState.blockRegularGasUsed
     e[].blockStateGasUsed = vmState.blockStateGasUsed
     e[].blobGasUsed = vmState.blobGasUsed
-    e[].txType = e[].tx[].txType
     e[].resultBytes = SharedBytes.init(rlp.encode(rc.value.logEntries))
     true
 
@@ -420,15 +417,16 @@ when compileOption("threads"):
           if vmState.balTrackerEnabled: vmState.balTracker.builder else: nil,
       )
       entries = newSeq[BalParallelTxEntry](n)
+      futs = newSeq[Flowvar[bool]](n)
 
     for i in 0 ..< n:
       entries[i].tx = transactions[i].addr
-      entries[i].index = i
-      entries[i].fut = vmState.com.taskpool.spawn processTxTask(
+      entries[i].txIndex = i
+      futs[i] = vmState.com.taskpool.spawn processTxTask(
         ctx.addr, entries[i].addr)
 
     for i in 0 ..< n:
-      discard sync(entries[i].fut)
+      discard sync(futs[i])
 
     defer:
       for i in 0 ..< n:
@@ -461,7 +459,7 @@ when compileOption("threads"):
           vmState.allLogs.add logs
       else:
         vmState.receipts[i] =
-          vmState.makeReceipt(entries[i].txType, LogResult(logEntries: logs))
+          vmState.makeReceipt(transactions[i].txType, LogResult(logEntries: logs))
         if collectLogs:
           vmState.allLogs.add vmState.receipts[i].logs
 
