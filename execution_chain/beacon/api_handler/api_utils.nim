@@ -174,7 +174,7 @@ proc tooLargeRequest*(msg: string): ref ApplicationError =
     msg: msg
   )
 
-proc parseError*(msg: string): ref ApplicationError =
+func parseError*(msg: string): ref ApplicationError =
   (ref ApplicationError)(
     code: engineApiParseError,
     msg: msg
