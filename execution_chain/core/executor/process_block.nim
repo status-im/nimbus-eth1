@@ -456,6 +456,8 @@ when compileOption("threads"):
       skipReceipts: bool,
       collectLogs: bool,
   ): Result[void, string] =
+    doAssert vmState.fork >= FkAmsterdam
+
     let n = transactions.len()
 
     var
@@ -479,11 +481,6 @@ when compileOption("threads"):
       entries[i].txIndex = i
       futs[i] = vmState.com.taskpool.spawn processTxTask(
         ctx.addr, entries[i].addr)
-
-    vmState.cumulativeGasUsed = 0
-    vmState.blockRegularGasUsed = 0
-    vmState.blockStateGasUsed = 0
-    vmState.blobGasUsed = 0'u64
 
     # Number of tasks already synced. On an early return the remaining tasks must
     # still be synced before their entry/ctx data goes out of scope, otherwise a
@@ -511,6 +508,18 @@ when compileOption("threads"):
       vmState.blockStateGasUsed += entries[i].blockStateGasUsed
       vmState.blobGasUsed += entries[i].blobGasUsed
       vmState.status = entries[i].status
+
+      # Enforce the block gas limit on the running total so that an invalid
+      # over-limit block is rejected as early as possible, cancelling the
+      # remaining tasks instead of executing every transaction.
+      if vmState.blockCtx.gasLimit <
+          max(vmState.blockRegularGasUsed, vmState.blockStateGasUsed):
+        ctx.cancelled.store(true, moRelease)
+        return err(
+          "Error processing tx with index " & $i & ": block gas limit reached (2D). " &
+          "gasLimit=" & $vmState.blockCtx.gasLimit &
+          ", regularGas=" & $vmState.blockRegularGasUsed &
+          ", stateGas=" & $vmState.blockStateGasUsed)
 
       var logs = unpackLogs(entries[i].logs.data(asOpenArray = true))
       if skipReceipts:
@@ -544,7 +553,8 @@ proc processTransactions*(
   vmState.cumulativeGasUsed = 0
   vmState.blockRegularGasUsed = 0
   vmState.blockStateGasUsed = 0
-  vmState.allLogs = @[]
+  vmState.blobGasUsed = 0'u64
+  vmState.allLogs = @[]    
 
   when compileOption("threads"):
     if vmState.com.balParallelExecutionEnabled(header, blockAccessList):
