@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -11,6 +11,7 @@
 import
   std/[options, os, strutils],
   confutils, stint,
+  ../../execution_chain/version,
   ./types
 
 export
@@ -173,7 +174,7 @@ const
   Copyright = "Copyright (c) 2022-" &
     CompileDate.split('-')[0] &
     " Status Research & Development GmbH"
-  Version   = "Nimbus-t8n 0.2.4"
+  Version   = "Nimbus-t8n " & NimbusVersion
 
 # force the compiler to instantiate T8NConf.load
 # rather than have to export parseCmdArg
