@@ -1,5 +1,5 @@
-# Nimbus
-# Copyright (c) 2025-2026 Status Research & Development GmbH
+# nimbus-execution-client
+# Copyright (c) 2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -9,13 +9,12 @@
 
 import
   std/os,
-  unittest2,
   ./eest_runner,
-  ./eest_blockchain
+  ./eest_t8n
 
 const
   baseFolder = "tests/fixtures"
-  suiteName = "Block Chain Test"
+  suiteName = "Transition Tool Test"
   eestType = "blockchain_tests"
   eestReleases = [
     "eest_develop",
@@ -23,7 +22,7 @@ const
   ]
 
 const skipFiles = [
-  ""
+  "",
 ]
 
 runEESTSuite(
