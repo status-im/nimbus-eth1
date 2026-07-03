@@ -18,7 +18,7 @@ const
   suiteName = "Transaction Pool Test"
   eestType = "blockchain_tests"
   eestReleases = [
-    "eest_develop",
+    "eest_mainnet",
     "eest_bal"
   ]
 

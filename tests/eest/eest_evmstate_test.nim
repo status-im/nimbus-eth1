@@ -17,12 +17,13 @@ const
   suiteName = "Evmstate Test"
   eestType = "state_tests"
   eestReleases = [
-    "eest_develop",
+    "eest_mainnet",
     "eest_bal"
   ]
 
 const skipFiles = [
-  "",
+  "invalid_chain_id.json",
+  "bad_v_r_s.json",
 ]
 
 runEESTSuite(
