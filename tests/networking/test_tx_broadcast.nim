@@ -14,9 +14,10 @@
 {.used.}
 
 import
-  std/[json, os, strutils],
+  std/[json, os, strutils, times, sets],
   unittest2,
   chronos,
+  chronos/ratelimit,
   stint,
   eth/common/[keys, hashes],
   eth/common/times as ethTimes,
@@ -329,6 +330,54 @@ suite "Tx broadcast queue":
 
       await sleepAsync(chronos.milliseconds(200))
       check fastDone
+
+      env.close()
+
+    waitFor runTest()
+
+  test "cleanupSeenTransactions tolerates concurrent seenTransactions mutation":
+    ## Regression: the periodic cleanup must NOT await while iterating the live
+    ## seenTransactions table. A concurrently-dispatched handleTxHashesBroadcast
+    ## inserts into that table; if cleanup yields mid-iteration, Nim's
+    ## "length of the table changed while iterating over it" assertion fires and
+    ## crashes the client. cleanupSeenTransactions must complete cleanly even
+    ## when the table is mutated while it runs.
+    proc runTest() {.async.} =
+      let env = newBroadcastTestEnv()
+
+      # Force awaitQuota to actually suspend: a capacity-1 bucket that
+      # replenishes slowly means every throttled consume yields to the event
+      # loop, opening the window for a concurrent mutation to land.
+      env.wire.quota = TokenBucket.new(1, chronos.milliseconds(5))
+
+      proc mkHash(i: int): Hash32 =
+        var a: array[32, byte]
+        a[0] = byte(i and 0xff)
+        a[1] = byte((i shr 8) and 0xff)
+        a.to(Hash32)
+
+      # Populate with expired entries so the deletion loop performs awaits.
+      let expiredAt = getTime() - initDuration(minutes = 25)
+      for i in 0 ..< 32:
+        env.wire.seenTransactions[mkHash(i)] =
+          SeenObject(lastSeen: expiredAt, peers: initHashSet[NodeId]())
+
+      # Concurrently insert fresh entries while cleanup runs, mimicking a
+      # handleTxHashesBroadcast dispatch landing during a cleanup yield.
+      proc mutator() {.async: (raises: [CancelledError]).} =
+        for i in 0 ..< 40:
+          await sleepAsync(chronos.milliseconds(1))
+          env.wire.seenTransactions[mkHash(1000 + i)] =
+            SeenObject(lastSeen: getTime(), peers: initHashSet[NodeId]())
+
+      let
+        cleanupFut = env.wire.cleanupSeenTransactions()
+        mutatorFut = mutator()
+
+      let completed = await withTimeout(
+        allFutures(cleanupFut, mutatorFut), chronos.seconds(5))
+      check completed
+      check cleanupFut.finished() and not cleanupFut.failed()
 
       env.close()
 
