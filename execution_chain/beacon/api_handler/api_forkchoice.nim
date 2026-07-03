@@ -213,11 +213,11 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   if attrsOpt.isSome:
     let attrs = attrsOpt.value
     validateVersion(attrs, com, apiVersion)
-    
+
     let bundle = ben.generateExecutionBundle(attrs).valueOr:
       error "Failed to create sealing payload", err = error
       raise invalidAttr(error)
-    
+
     let id = computePayloadId(headHash, attrs)
     ben.putPayloadBundle(id, bundle)
 
