@@ -177,16 +177,9 @@ proc assembleBlock*(
     blobsBundle = BlobsBundle(
       wrapperVersion: getWrapperVersion(com, blk.header.timestamp)
     )
-    currentRlpSize = rlp.getEncodedLength(blk.header)
-
-  if blk.withdrawals.isSome:
-    currentRlpSize = currentRlpSize + rlp.getEncodedLength(blk.withdrawals.get())
 
   for item in pst.packedTxs:
     let tx = item.pooledTx
-    if currentRlpSize > MAX_RLP_BLOCK_SIZE - 7:
-      break
-    currentRlpSize = currentRlpSize + rlp.getEncodedLength(tx.tx)
     blk.txs.add tx.tx
     if tx.blobsBundle != nil:
       doAssert(tx.blobsBundle.wrapperVersion == blobsBundle.wrapperVersion)
@@ -200,6 +193,13 @@ proc assembleBlock*(
 
   if com.isShanghaiOrLater(blk.header.timestamp):
     blk.withdrawals = Opt.some(xp.withdrawals)
+
+  # EIP-7934: the packer bounds the encoded block size while selecting txs.
+  # Never truncate the body here — the header and the EIP-7928 block access
+  # list already commit to the full packed tx set.
+  if com.isOsakaOrLater(blk.header.timestamp) and
+     rlp.getEncodedLength(blk) > MAX_RLP_BLOCK_SIZE:
+    return err("assembled block exceeds MAX_RLP_BLOCK_SIZE")
 
   if not com.isCancunOrLater(blk.header.timestamp) and blobsBundle.commitments.len > 0:
     return err("PooledTransaction contains blobs prior to Cancun")
