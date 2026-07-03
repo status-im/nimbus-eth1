@@ -22,7 +22,7 @@ EEST_DEVELOP_URL="https://github.com/ethereum/execution-spec-tests/releases/down
 
 # --- Devnet Release ---
 EEST_DEVNET_NAME="tests-glamsterdam-devnet"
-EEST_DEVNET_VERSION="v6.1.0"
+EEST_DEVNET_VERSION="v6.1.1"
 EEST_DEVNET_DIR="${FIXTURES_DIR}/eest_devnet"
 EEST_DEVNET_ARCHIVE="fixtures_glamsterdam-devnet.tar.gz"
 EEST_DEVNET_URL="https://github.com/ethereum/execution-specs/releases/download/${EEST_DEVNET_NAME}%40${EEST_DEVNET_VERSION}/${EEST_DEVNET_ARCHIVE}"
