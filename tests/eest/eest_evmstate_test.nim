@@ -7,11 +7,29 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-{.warning[UnusedImport]: off.}
-
 import
-  ./[
-    eest_t8n_test,
-    eest_evmstate_test,
+  std/os,
+  ./eest_runner,
+  ./eest_evmstate
+
+const
+  baseFolder = "tests/fixtures"
+  suiteName = "Evmstate Test"
+  eestType = "state_tests"
+  eestReleases = [
+    "eest_develop",
+    "eest_bal"
+  ]
+
+const skipFiles = [
+  "",
 ]
 
+runEESTSuite(
+  eestReleases,
+  skipFiles,
+  baseFolder,
+  suiteName,
+  eestType,
+  parallelEnabled = true
+)

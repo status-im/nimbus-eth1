@@ -49,8 +49,7 @@ const skipFiles = [
   "validation_codes_missing_external_code_read_target.json",
 
   # cases of missing headers in witness, which we currently don't check for
-  "validation_headers_missing_oldest_blockhash_ancestor.json",
-  "validation_headers_non_contiguous_chain.json"
+  "validation_headers_missing_oldest_blockhash_ancestor.json"
 ]
 
 runEESTSuite(
