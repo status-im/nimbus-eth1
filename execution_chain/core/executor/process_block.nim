@@ -49,7 +49,7 @@ when compileOption("threads"):
       txFrame: CoreDbTxRef
       parent: Header
       blockCtx: BlockContext
-      finished: Atomic[bool]
+      cancelled: Atomic[bool]
 
     OptimisticTxEntry = object
       tx: ptr Transaction
@@ -61,7 +61,7 @@ when compileOption("threads"):
       fork: EVMFork
       balPtr: ptr BlockAccessList
       nextIndex: Atomic[int]
-      finished: Atomic[bool]
+      cancelled: Atomic[bool]
 
     BalParallelTxCtx = object
       com: CommonRef
@@ -70,7 +70,7 @@ when compileOption("threads"):
       blockCtx: BlockContext
       balPtr: ptr BlockAccessList
       sharedBuilder: ptr BlockAccessListBuilder
-      finished: Atomic[bool]
+      cancelled: Atomic[bool]
 
     BalParallelTxEntry = object
       tx: ptr Transaction
@@ -92,7 +92,7 @@ when compileOption("threads"):
     e[].senderReady.store(true, moRelease)
 
     # When ctx is non-nil, optimistic state prefetch is enabled
-    if ctx.isNil() or sender == default(Address) or ctx[].finished.load(moAcquire):
+    if ctx.isNil() or sender == default(Address) or ctx[].cancelled.load(moAcquire):
       return true
 
     # Create the ledger without triggering a ref count increment on the txFrame
@@ -149,7 +149,7 @@ when compileOption("threads"):
       # be writen to during block execution and this way we avoid having to
       # use locking on the frame data structures.
       ctx.txFrame = vmState.ledger.txFrame.parent()
-      ctx.finished.store(false, moRelease)
+      ctx.cancelled.store(false, moRelease)
       ctxPtr = ctx.addr
 
     # Spawn one task per transaction that recovers the sender and, when ctxPtr
@@ -175,7 +175,7 @@ when compileOption("threads"):
     finally:
       if not ctxPtr.isNil():
         # Cancel any in-flight prefetch tasks so that they bail out quickly.
-        ctxPtr[].finished.store(true, moRelease)
+        ctxPtr[].cancelled.store(true, moRelease)
       # Wait for all tasks to complete before returning so that no task
       # outlives the local data it references.
       for f in futs.mitems():
@@ -190,7 +190,7 @@ when compileOption("threads"):
   proc balPrefetchWorker(ctx: ptr BalPrefetchCtx): bool {.nimcall.} =
     let len = ctx[].balPtr[].len
     while true:
-      if ctx[].finished.load(moAcquire):
+      if ctx[].cancelled.load(moAcquire):
         break
 
       let i = ctx[].nextIndex.fetchAdd(1, moRelaxed)
@@ -238,7 +238,7 @@ when compileOption("threads"):
     ctx.txFrame = vmState.ledger.txFrame.parent()
     ctx.fork = vmState.fork
     ctx.nextIndex.store(0, moRelease)
-    ctx.finished.store(false, moRelease)
+    ctx.cancelled.store(false, moRelease)
 
     let 
       ctxPtr = ctx.addr
@@ -255,7 +255,7 @@ when compileOption("threads"):
     finally:
       # Signal completion so workers stop claiming new items, then collect all
       # so that no worker outlives the data it references.
-      ctxPtr[].finished.store(true, moRelease)
+      ctxPtr[].cancelled.store(true, moRelease)
       for f in futs.mitems():
         discard sync(f)
 
@@ -389,13 +389,13 @@ when compileOption("threads"):
   proc processTxTask(
       ctx: ptr BalParallelTxCtx, e: ptr BalParallelTxEntry
   ): bool {.nimcall.} =
-    if ctx[].finished.load(moAcquire):
+    if ctx[].cancelled.load(moAcquire):
       e[].error = SharedString.init("tx execution cancelled")
       return false
 
     let sender = e[].tx[].recoverSender().valueOr:
       e[].error = SharedString.init("could not recover sender")
-      ctx[].finished.store(true, moRelease)
+      ctx[].cancelled.store(true, moRelease)
       return false
 
     # Create the ledger without triggering a ref count increment on the txFrame
@@ -436,7 +436,7 @@ when compileOption("threads"):
 
     let logResult = vmState.processTransaction(e[].tx[], sender, persist = false).valueOr:
       e[].error = SharedString.init(error)
-      ctx[].finished.store(true, moRelease)
+      ctx[].cancelled.store(true, moRelease)
       return false
 
     e[].gasUsed = logResult.gasUsed
@@ -485,17 +485,24 @@ when compileOption("threads"):
     vmState.blockStateGasUsed = 0
     vmState.blobGasUsed = 0'u64
 
-    var oks = newSeq[bool](n)
-    for i in 0 ..< n:
-      oks[i] = sync(futs[i])
-
+    # Number of tasks already synced. On an early return the remaining tasks must
+    # still be synced before their entry/ctx data goes out of scope, otherwise a
+    # still running task would reference freed memory and leak its Flowvar.
+    var synced = 0
     defer:
+      while synced < n:
+        discard sync(futs[synced])
+        inc synced
       for i in 0 ..< n:
         entries[i].logs.dispose()
         entries[i].error.dispose()
 
+    # Process each result as soon as its task completes so the main thread makes
+    # progress while the remaining tasks keep running in the background.
     for i in 0 ..< n:
-      if not oks[i]:
+      let ok = sync(futs[i])
+      inc synced
+      if not ok:
         return err(
           "Error processing tx with index " & $i & ":" & entries[i].error.toString())
 
@@ -522,6 +529,7 @@ when compileOption("threads"):
         $maxBlobGasPerBlock)
 
     applyBlockAccessListState(vmState.ledger, balRef[], n)
+    
     ok()
 
 proc processTransactions*(
