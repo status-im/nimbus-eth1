@@ -19,8 +19,11 @@ import
   unittest2
 
 import
+  eth/keys,
   ../execution_chain/rpc,
   ../execution_chain/conf,
+  ../execution_chain/common,
+  ../execution_chain/transaction,
   ../execution_chain/core/chain,
   ../execution_chain/core/tx_pool,
   ../execution_chain/db/core_db/memory_only,
@@ -34,6 +37,7 @@ type
     server : RpcHttpServer
     client : RpcHttpClient
     chain  : ForkedChainRef
+    txPool : TxPoolRef
 
   NewPayloadV4Params* = object
     payload*: ExecutionPayload
@@ -52,6 +56,14 @@ NewPayloadV4Params.useDefaultSerializationIn EthJson
 const
   defaultGenesisFile = "tests/customgenesis/engine_api_genesis.json"
   mekongGenesisFile = "tests/customgenesis/mekong.json"
+
+let
+  # Deterministic test signer, funded in the default genesis (see setupEnv) so
+  # that a valid transaction can be injected into the tx pool.
+  testSenderKey = PrivateKey.fromHex(
+    "0x4646464646464646464646464646464646464646464646464646464646464646").expect(
+    "valid private key")
+  testSender = testSenderKey.toPublicKey().to(Address)
 
 proc setupConfig(genesisFile: string): ExecutionClientConf =
   makeConfig(@[
@@ -87,6 +99,12 @@ proc setupEnv(envFork: HardFork = MergeFork,
   if envFork >= Prague:
     config.networkParams.config.pragueTime = Opt.some(0.EthTime)
 
+  # Fund the test signer only for the default genesis, so tests that rely on a
+  # fixed genesis/block hash (e.g. the mekong canonical test) are unaffected.
+  if genesisFile == defaultGenesisFile:
+    config.networkParams.genesis.alloc[testSender] =
+      GenesisAccount(balance: 1_000_000_000_000_000_000.u256)
+
   let
     com   = setupCom(config)
     chain = ForkedChainRef.init(com, enableQueue = true)
@@ -112,6 +130,7 @@ proc setupEnv(envFork: HardFork = MergeFork,
     server : server,
     client : client,
     chain  : chain,
+    txPool : txPool,
   )
 
 proc close(env: TestEnv) =
@@ -144,6 +163,72 @@ proc runBasicCycleTest(env: TestEnv): Result[void, string] =
 
   if bn != 1:
     return err("Expect returned block number: 1, got: " & $bn)
+
+  ok()
+
+proc makeSignedTx(env: TestEnv): Transaction =
+  # A valid, includable legacy tx from the funded test signer.
+  let tx = Transaction(
+    txType:   TxLegacy,
+    chainId:  env.com.chainId,
+    nonce:    0.AccountNonce,
+    gasPrice: 30_000_000_000.GasInt,
+    gasLimit: 70_000.GasInt,
+    to:       Opt.some(default(Address)),
+    value:    1.u256,
+  )
+  signTransaction(tx, testSenderKey, eip155 = true)
+
+proc runPayloadReuseTest(env: TestEnv): Result[void, string] =
+  # Calling forkchoiceUpdated twice with identical payload attributes must reuse
+  # the already-built payload instead of rebuilding it. We prove this by
+  # injecting a new transaction into the pool between the two identical FCU
+  # calls: a rebuild would pick it up, a reuse would not.
+  let
+    client = env.client
+    header = ? client.latestHeader()
+    update = ForkchoiceStateV1(
+      headBlockHash: header.computeBlockHash
+    )
+    time = getTime().toUnix
+    attr = PayloadAttributes(
+      timestamp:             w3Qty(time + 1),
+      prevRandao:            default(Bytes32),
+      suggestedFeeRecipient: default(Address),
+      withdrawals:           Opt.some(newSeq[WithdrawalV1]()),
+    )
+
+  # First FCU: builds an empty payload.
+  let
+    fcuRes1 = ? client.forkchoiceUpdated(Version.V1, update, Opt.some(attr))
+    id1     = fcuRes1.payloadId.get
+    payload1 = ? client.getPayload(Version.V1, id1)
+
+  if payload1.executionPayload.transactions.len != 0:
+    return err("Expected empty payload before injecting tx, got: " &
+      $payload1.executionPayload.transactions.len & " txs")
+
+  # Inject a valid transaction into the pool.
+  env.txPool.addTx(env.makeSignedTx()).isOkOr:
+    return err("Failed to add tx to pool: " & $error)
+
+  # Second FCU with the SAME attributes: must return the same id and reuse the
+  # already-built payload (not rebuild it to include the new tx).
+  let
+    fcuRes2 = ? client.forkchoiceUpdated(Version.V1, update, Opt.some(attr))
+    id2     = fcuRes2.payloadId.get
+
+  if id1 != id2:
+    return err("Expected identical payload id, got: " & id1.toHex & " vs " & id2.toHex)
+
+  let payload2 = ? client.getPayload(Version.V1, id2)
+
+  if payload2.executionPayload.transactions.len != 0:
+    return err("Payload was rebuilt: expected 0 txs, got " &
+      $payload2.executionPayload.transactions.len)
+
+  if payload2.executionPayload.blockHash != payload1.executionPayload.blockHash:
+    return err("Payload was rebuilt: block hash changed")
 
   ok()
 
@@ -295,6 +380,11 @@ const testList = [
     name: "Basic cycle",
     fork: MergeFork,
     testProc: runBasicCycleTest
+  ),
+  TestSpec(
+    name: "Payload reuse for identical FCU",
+    fork: MergeFork,
+    testProc: runPayloadReuseTest
   ),
   TestSpec(
     name: "newPayloadV4",
