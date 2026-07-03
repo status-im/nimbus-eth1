@@ -732,13 +732,15 @@ template clearWitnessKeys*(ledger: LedgerRef) =
 template clearCollapsedSiblings*(ledger: LedgerRef) =
   ledger.txFrame.aTx.collapsedSiblings.setLen(0)
 
-proc getBlockHash*(ledger: LedgerRef, blockNumber: BlockNumber): Hash32 =
-  ledger.blockHashes.get(blockNumber).valueOr:
-    let blockHash = ledger.txFrame.getBlockHash(blockNumber).valueOr:
-      default(Hash32)
+proc getBlockHash*(ledger: LedgerRef, blockNumber: BlockNumber): Result[Hash32, string] =
+  # Range checks must be done earlier, any miss here treated as an error
+  let blockHash = ledger.blockHashes.get(blockNumber).valueOr:
 
-    ledger.blockHashes.put(blockNumber, blockHash)
-    blockHash
+    let hash = ledger.txFrame.getBlockHash(blockNumber).valueOr:
+      return err("Block hash not available for block " & $blockNumber)
+    ledger.blockHashes.put(blockNumber, hash)
+    hash
+  ok(blockHash)
 
 template getBlockHashesCache*(ledger: LedgerRef): BlockHashesCache =
   ledger.blockHashes

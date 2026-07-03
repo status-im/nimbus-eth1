@@ -77,14 +77,17 @@ template getVersionedHashesLen*(c: Computation): int =
 template getBlobBaseFee*(c: Computation): UInt256 =
   c.vmState.txCtx.blobBaseFee
 
-proc getBlockHash*(c: Computation, number: BlockNumber): Hash32 =
+proc getBlockHash*(c: Computation, number: BlockNumber): Result[Hash32, string] =
   let
     blockNumber = c.vmState.blockNumber
     ancestorDepth = blockNumber - number - 1
+  # Outside the accessible range (older than 256 blocks or not a past block) is
+  # not an error: BLOCKHASH returns the default zero hash. Inside the range the
+  # hash must be available, so a miss there propagates as an error.
   if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH:
-    return default(Hash32)
+    return ok(default(Hash32))
   if number >= blockNumber:
-    return default(Hash32)
+    return ok(default(Hash32))
   c.vmState.getAncestorHash(number)
 
 template accountExists*(c: Computation, address: Address): bool =

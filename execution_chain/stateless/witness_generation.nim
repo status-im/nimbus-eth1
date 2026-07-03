@@ -13,6 +13,7 @@ import
   std/[tables, sets, algorithm],
   stew/byteutils,
   minilru,
+  results,
   eth/common,
   ../db/[ledger, core_db],
   ./witness_types
@@ -128,8 +129,8 @@ proc build*(
     # Add headers in ascending block number order:
     # https://github.com/ethereum/execution-specs/blob/33aa038697162a3ba0aedbadf177c4c59ee5b007/src/ethereum/forks/amsterdam/stateless_host_exec_witness.py#L175-L176
     for n in earliestBlockNumber.get() ..< parent.number:
-      let blockHash = ledger.getBlockHash(BlockNumber(n))
-      doAssert(blockHash != default(Hash32))
+      let blockHash = ledger.getBlockHash(BlockNumber(n)).valueOr:
+        raiseAssert "Missing block hash for witness at block " & $n
       witness.addHeaderHash(blockHash)
 
   witness.addHeaderHash(header.parentHash)

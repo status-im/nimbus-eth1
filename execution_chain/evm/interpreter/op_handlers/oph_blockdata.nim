@@ -33,7 +33,10 @@ proc blockhashOp(cpt: VmCpt): EvmResultVoid =
     if number > high(BlockNumber).u256:
       conv(zero(UInt256), top)
     else:
-      conv(cpt.getBlockHash(number.truncate(BlockNumber)), top)
+      let h = cpt.getBlockHash(number.truncate(BlockNumber))
+      if h.isErr:
+        return EvmResultVoid.err(evmErr(EvmBug))
+      conv(h.get(), top)
 
   cpt.stack.unaryWithTop(block256)
 

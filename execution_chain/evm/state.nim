@@ -250,7 +250,8 @@ proc difficultyOrPrevRandao*(vmState: BaseVMState): UInt256 =
     vmState.blockCtx.difficulty
 
 method getAncestorHash*(
-    vmState: BaseVMState, blockNumber: BlockNumber): Hash32 {.gcsafe, base.} =
+    vmState: BaseVMState, blockNumber: BlockNumber
+): Result[Hash32, string] {.gcsafe, base.} =
   vmState.ledger.getBlockHash(blockNumber)
 
 proc readOnlyLedger*(vmState: BaseVMState): ReadOnlyLedger {.inline.} =
