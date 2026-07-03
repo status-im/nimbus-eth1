@@ -166,12 +166,12 @@ proc runBasicCycleTest(env: TestEnv): Result[void, string] =
 
   ok()
 
-proc makeSignedTx(env: TestEnv): Transaction =
+proc makeSignedTx(env: TestEnv, nonce: AccountNonce = 0): Transaction =
   # A valid, includable legacy tx from the funded test signer.
   let tx = Transaction(
     txType:   TxLegacy,
     chainId:  env.com.chainId,
-    nonce:    0.AccountNonce,
+    nonce:    nonce,
     gasPrice: 30_000_000_000.GasInt,
     gasLimit: 70_000.GasInt,
     to:       Opt.some(default(Address)),
@@ -179,11 +179,18 @@ proc makeSignedTx(env: TestEnv): Transaction =
   )
   signTransaction(tx, testSenderKey, eip155 = true)
 
-proc runPayloadReuseTest(env: TestEnv): Result[void, string] =
-  # Calling forkchoiceUpdated twice with identical payload attributes must reuse
-  # the already-built payload instead of rebuilding it. We prove this by
-  # injecting a new transaction into the pool between the two identical FCU
-  # calls: a rebuild would pick it up, a reuse would not.
+proc runPayloadRebuildTest(env: TestEnv): Result[void, string] =
+  # Calling forkchoiceUpdated repeatedly with identical payload attributes must
+  # rebuild the payload from a fresh transaction environment each time. This
+  # guards a regression where a rebuild for the same slot reused the previous
+  # pack's dirtied ledger state: on the second build every pooled tx then failed
+  # the nonce check, so the body came out empty, yet the header still committed
+  # to the first pack's accumulators.
+  #
+  # We prove it by building the SAME payload twice from the SAME pool (several
+  # includable txs sitting in it the whole time): both builds must produce the
+  # identical, non-empty block, and newPayload must accept it as valid.
+  const numTxs = 5
   let
     client = env.client
     header = ? client.latestHeader()
@@ -198,37 +205,48 @@ proc runPayloadReuseTest(env: TestEnv): Result[void, string] =
       withdrawals:           Opt.some(newSeq[WithdrawalV1]()),
     )
 
-  # First FCU: builds an empty payload.
+  # Seed the pool with several valid transactions (consecutive nonces) before
+  # any build.
+  for nonce in 0 ..< numTxs:
+    env.txPool.addTx(env.makeSignedTx(nonce.AccountNonce)).isOkOr:
+      return err("Failed to add tx " & $nonce & " to pool: " & $error)
+
+  # First FCU: builds a payload that includes the pooled txs.
   let
     fcuRes1 = ? client.forkchoiceUpdated(Version.V1, update, Opt.some(attr))
     id1     = fcuRes1.payloadId.get
     payload1 = ? client.getPayload(Version.V1, id1)
 
-  if payload1.executionPayload.transactions.len != 0:
-    return err("Expected empty payload before injecting tx, got: " &
-      $payload1.executionPayload.transactions.len & " txs")
+  if payload1.executionPayload.transactions.len != numTxs:
+    return err("Expected " & $numTxs & " txs in first build, got: " &
+      $payload1.executionPayload.transactions.len)
 
-  # Inject a valid transaction into the pool.
-  env.txPool.addTx(env.makeSignedTx()).isOkOr:
-    return err("Failed to add tx to pool: " & $error)
-
-  # Second FCU with the SAME attributes: must return the same id and reuse the
-  # already-built payload (not rebuild it to include the new tx).
+  # Second FCU with the SAME attributes and the SAME pool: must rebuild from a
+  # fresh state and again include every tx. If the second pack reused the first
+  # pack's dirtied ledger, the txs would fail their nonce checks and the body
+  # would come out empty.
   let
     fcuRes2 = ? client.forkchoiceUpdated(Version.V1, update, Opt.some(attr))
     id2     = fcuRes2.payloadId.get
+    payload2 = ? client.getPayload(Version.V1, id2)
 
-  if id1 != id2:
-    return err("Expected identical payload id, got: " & id1.toHex & " vs " & id2.toHex)
-
-  let payload2 = ? client.getPayload(Version.V1, id2)
-
-  if payload2.executionPayload.transactions.len != 0:
-    return err("Payload was rebuilt: expected 0 txs, got " &
+  if payload2.executionPayload.transactions.len != numTxs:
+    return err("Rebuild dropped txs: expected " & $numTxs & " txs, got " &
       $payload2.executionPayload.transactions.len)
 
+  # Same head, same attributes, same txs -> byte-identical block.
   if payload2.executionPayload.blockHash != payload1.executionPayload.blockHash:
-    return err("Payload was rebuilt: block hash changed")
+    return err("Rebuilt block differs from first build: " &
+      payload1.executionPayload.blockHash.toHex & " vs " &
+      payload2.executionPayload.blockHash.toHex)
+
+  # The rebuilt block must be self-consistent: newPayload validates the header's
+  # gasUsed/stateRoot/receiptsRoot against the actual body, which would fail if
+  # the header committed to a stale (empty-body) pack.
+  let npRes = ? client.newPayloadV1(payload2.executionPayload)
+  if npRes.status != PayloadExecutionStatus.valid:
+    return err("Rebuilt block rejected by newPayload: " & $npRes.status &
+      " err: " & npRes.validationError.get(""))
 
   ok()
 
@@ -403,9 +421,9 @@ const testList = [
     testProc: runBasicCycleTest
   ),
   TestSpec(
-    name: "Payload reuse for identical FCU",
+    name: "Payload rebuild for identical FCU",
     fork: MergeFork,
-    testProc: runPayloadReuseTest
+    testProc: runPayloadRebuildTest
   ),
   TestSpec(
     name: "newPayloadV4",

@@ -213,20 +213,12 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   if attrsOpt.isSome:
     let attrs = attrsOpt.value
     validateVersion(attrs, com, apiVersion)
-
-    let id = computePayloadId(headHash, attrs)
-
-    # If a payload with these exact attributes was already built for this head,
-    # reuse it instead of assembling a new block (matches geth semantics and the
-    # Engine API expectation that repeated FCU with identical attrs is
-    # idempotent).
-    if ben.getPayloadBundle(id).isSome:
-      return validFCU(Opt.some(id), headHash)
-
+    
     let bundle = ben.generateExecutionBundle(attrs).valueOr:
       error "Failed to create sealing payload", err = error
       raise invalidAttr(error)
     
+    let id = computePayloadId(headHash, attrs)
     ben.putPayloadBundle(id, bundle)
 
     info "Created payload for block proposal",
