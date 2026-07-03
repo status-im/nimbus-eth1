@@ -44,19 +44,18 @@ when compileOption("threads"):
   import std/atomics, taskpools
 
   type
-    Entry = object
-      sig: Signature
-      hash: Hash32
-      sender: Address
-      senderReady: Atomic[bool]
-      fut: Flowvar[bool]
-
     OptimisticPrefetchCtx = object
       cancel: Atomic[bool]
       parent: Header
       blockCtx: BlockContext
       com: CommonRef
       txFrame: CoreDbTxRef
+
+    OptimisticTxEntry = object
+      tx: ptr Transaction
+      sender: Address
+      senderReady: Atomic[bool]
+      fut: Flowvar[bool] # why this?
 
     BalPrefetchCtx = object
       finished: Atomic[bool]
@@ -65,15 +64,32 @@ when compileOption("threads"):
       txFrame: CoreDbTxRef
       fork: EVMFork
 
+    BalParallelTxCtx = object
+      com: CommonRef
+      parent: Header
+      blockCtx: BlockContext
+      txFrame: CoreDbTxRef
+      balPtr: ptr BlockAccessList
+      sharedBuilder: ptr BlockAccessListBuilder
+
+    BalParallelTxEntry = object
+      tx: ptr Transaction
+      index: int
+      ok: bool
+      status: bool
+      gasUsed: GasInt
+      blockRegularGasUsed: GasInt
+      blockStateGasUsed: GasInt
+      blobGasUsed: uint64
+      txType: TxType
+      resultBytes: SharedBytes
+      fut: Flowvar[bool]
+
   proc recoverAndPrefetchTask(
-      e: ptr Entry, ctx: ptr OptimisticPrefetchCtx, tx: ptr Transaction): bool {.nimcall.} =
+      ctx: ptr OptimisticPrefetchCtx, e: ptr OptimisticTxEntry): bool {.nimcall.} =
     # Recover the sender from the signature. `default(Address)` signals sig
     # check failure.
-    let
-      pk = recover(e[].sig, SkMessage(e[].hash.data))
-      sender =
-        if pk.isOk(): pk[].to(Address)
-        else: default(Address)
+    let sender = e[].tx[].recoverSender().valueOr(default(Address))
     e[].sender = sender
     e[].senderReady.store(true, moRelease)
 
@@ -114,7 +130,7 @@ when compileOption("threads"):
     vmState.balTracker = nil
 
     # Execute the transaction discarding the results in order to fill the in memory caches.
-    vmState.prefetchTransaction(tx[], sender)
+    vmState.prefetchTransaction(e[].tx[], sender)
 
     true
 
@@ -122,7 +138,7 @@ when compileOption("threads"):
       vmState: BaseVMState, txs: openArray[Transaction], body: untyped) =
     # Execute transactions offloading the signature checking to the task pool
     var
-      entries = newSeq[Entry](txs.len)
+      entries = newSeq[OptimisticTxEntry](txs.len)
       ctx: OptimisticPrefetchCtx
       ctxPtr: ptr OptimisticPrefetchCtx = nil
 
@@ -139,13 +155,12 @@ when compileOption("threads"):
 
     # Spawn one task per transaction that recovers the sender and, when ctxPtr
     # is non-nil, also performs an optimistic state prefetch. Spawning here
-    # allows the task to start early, while we still haven't hashed subsequent txs.
+    # allows the task to start early, while we still haven't processed subsequent txs.
     for i, e in entries.mpairs():
-      e.sig = txs[i].signature().valueOr(default(Signature))
-      e.hash = txs[i].rlpHashForSigning(txs[i].isEip155)
+      e.tx = txs[i].addr
       let entryPtr = e.addr
       e.fut = vmState.com.taskpool.spawn recoverAndPrefetchTask(
-        entryPtr, ctxPtr, txs[i].addr)
+        ctxPtr, entryPtr)
 
     try:
       for txIndex {.inject.}, e in entries.mpairs():
@@ -323,37 +338,13 @@ proc applyBlockAccessListState(
       ledger.addBalance(address, 0.u256, checkEmptyAccount = true)
 
 when compileOption("threads"):
-  type
-    ParTxCtx = object
-      com: CommonRef
-      parent: Header
-      blockCtx: BlockContext
-      txFrame: CoreDbTxRef
-      balPtr: ptr BlockAccessList
-      sharedBuilder: ptr BlockAccessListBuilder
-
-    ParTxEntry = object
-      sig: Signature #
-      hash: Hash32
-      ok: bool
-      status: bool
-      gasUsed: GasInt
-      blockRegularGasUsed: GasInt
-      blockStateGasUsed: GasInt
-      blobGasUsed: uint64
-      txType: TxType
-      resultBytes: SharedBytes
-      fut: Flowvar[bool]
 
   const senderRecoveryError = "could not recover sender"
 
   proc processTxTask(
-      e: ptr ParTxEntry, ctx: ptr ParTxCtx, tx: ptr Transaction, index: int
+      ctx: ptr BalParallelTxCtx, e: ptr BalParallelTxEntry
   ): bool {.nimcall.} =
-    let
-      pk = recover(e[].sig, SkMessage(e[].hash.data))
-      sender =
-        if pk.isOk(): pk[].to(Address) else: default(Address)
+    let sender = e[].tx[].recoverSender().valueOr(default(Address))
     if sender == default(Address):
       e[].ok = false
       e[].resultBytes = SharedBytes.init(
@@ -364,7 +355,7 @@ when compileOption("threads"):
     ledger.txFrame.borrowRef(ctx[].txFrame)
     defer:
       ledger.txFrame.unborrowRef()
-    ledger.balOverlay = Opt.some(BlockAccessListOverlay.init(ctx[].balPtr, index + 1))
+    ledger.balOverlay = Opt.some(BlockAccessListOverlay.init(ctx[].balPtr, e[].index + 1))
     discard ledger.beginSavePoint()
 
     let vmState = BaseVMState()
@@ -390,9 +381,9 @@ when compileOption("threads"):
     if not ctx[].sharedBuilder.isNil():
       vmState.balTracker =
         BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger, ctx[].sharedBuilder)
-      vmState.balTracker.setBlockAccessIndex(index + 1)
+      vmState.balTracker.setBlockAccessIndex(e[].index + 1)
 
-    let rc = vmState.processTransaction(tx[], sender, persist = false)
+    let rc = vmState.processTransaction(e[].tx[], sender, persist = false)
     if rc.isErr:
       e[].ok = false
       e[].resultBytes =
@@ -405,7 +396,7 @@ when compileOption("threads"):
     e[].blockRegularGasUsed = vmState.blockRegularGasUsed
     e[].blockStateGasUsed = vmState.blockStateGasUsed
     e[].blobGasUsed = vmState.blobGasUsed
-    e[].txType = tx[].txType
+    e[].txType = e[].tx[].txType
     e[].resultBytes = SharedBytes.init(rlp.encode(rc.value.logEntries))
     true
 
@@ -419,7 +410,7 @@ when compileOption("threads"):
     let n = transactions.len()
 
     var
-      ctx = ParTxCtx(
+      ctx = BalParallelTxCtx(
         com: vmState.com,
         parent: vmState.parent,
         blockCtx: vmState.blockCtx,
@@ -428,13 +419,13 @@ when compileOption("threads"):
         sharedBuilder:
           if vmState.balTrackerEnabled: vmState.balTracker.builder else: nil,
       )
-      entries = newSeq[ParTxEntry](n)
+      entries = newSeq[BalParallelTxEntry](n)
 
     for i in 0 ..< n:
-      entries[i].sig = transactions[i].signature().valueOr(default(Signature))
-      entries[i].hash = transactions[i].rlpHashForSigning(transactions[i].isEip155)
+      entries[i].tx = transactions[i].addr
+      entries[i].index = i
       entries[i].fut = vmState.com.taskpool.spawn processTxTask(
-        entries[i].addr, ctx.addr, transactions[i].addr, i)
+        ctx.addr, entries[i].addr)
 
     for i in 0 ..< n:
       discard sync(entries[i].fut)
