@@ -70,6 +70,7 @@ when compileOption("threads"):
       blockCtx: BlockContext
       balPtr: ptr BlockAccessList
       sharedBuilder: ptr BlockAccessListBuilder
+      finished: Atomic[bool]
 
     BalParallelTxEntry = object
       tx: ptr Transaction
@@ -337,16 +338,26 @@ proc applyBlockAccessListState(
 
 when compileOption("threads"):
 
-  const senderRecoveryError = "could not recover sender"
+  const
+    senderRecoveryError = "could not recover sender"
+    executionCancelledError =
+      "transaction execution cancelled due to a failure in another transaction"
 
   proc processTxTask(
       ctx: ptr BalParallelTxCtx, e: ptr BalParallelTxEntry
   ): bool {.nimcall.} =
+    if ctx[].finished.load(moAcquire):
+      e[].ok = false
+      e[].resultBytes = SharedBytes.init(
+        executionCancelledError.toOpenArrayByte(0, executionCancelledError.len - 1))
+      return true
+
     let sender = e[].tx[].recoverSender().valueOr(default(Address))
     if sender == default(Address):
       e[].ok = false
       e[].resultBytes = SharedBytes.init(
         senderRecoveryError.toOpenArrayByte(0, senderRecoveryError.len - 1))
+      ctx[].finished.store(true, moRelease)
       return true
 
     let ledger = LedgerRef()
@@ -386,6 +397,7 @@ when compileOption("threads"):
       e[].ok = false
       e[].resultBytes =
         SharedBytes.init(rc.error.toOpenArrayByte(0, rc.error.len - 1))
+      ctx[].finished.store(true, moRelease)
       return true
     debugEcho "successfully processed transaction in thread"
     e[].ok = true
@@ -407,17 +419,20 @@ when compileOption("threads"):
     let n = transactions.len()
 
     var
-      ctx = BalParallelTxCtx(
-        com: vmState.com,
-        parent: vmState.parent,
-        blockCtx: vmState.blockCtx,
-        txFrame: vmState.ledger.txFrame,
-        balPtr: balRef[].addr,
-        sharedBuilder:
-          if vmState.balTrackerEnabled: vmState.balTracker.builder else: nil,
-      )
+      ctx: BalParallelTxCtx
       entries = newSeq[BalParallelTxEntry](n)
       futs = newSeq[Flowvar[bool]](n)
+
+    ctx.com = vmState.com
+    ctx.txFrame = vmState.ledger.txFrame
+    ctx.parent = vmState.parent
+    ctx.blockCtx = vmState.blockCtx
+    ctx.balPtr = balRef[].addr
+    ctx.sharedBuilder =
+      if vmState.balTrackerEnabled: 
+        vmState.balTracker.builder 
+      else: 
+        nil
 
     for i in 0 ..< n:
       entries[i].tx = transactions[i].addr
