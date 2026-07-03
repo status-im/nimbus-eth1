@@ -105,6 +105,8 @@ proc writeResultToStdout(stateRes: seq[StateResult]) =
       z["state"] = %(res.state)
     if res.postState.isNil.not:
       z["postState"] = res.postState
+    else:
+      z["postState"] = newJNull()
     n.add(z)
 
   stdout.write(n.pretty)
@@ -217,7 +219,8 @@ proc prepareAndRun*(inputFile: string, conf: StateConf): bool =
   template runSubTest(subTest: JsonNode) =
     ctx.expectedHash = Hash32.fromJson(subTest["hash"])
     ctx.expectedLogs = Hash32.fromJson(subTest["logs"])
-    ctx.postState    = subTest["state"]
+    if subTest.hasKey("state"):
+      ctx.postState  = subTest["state"]
     ctx.tx = parseTx(txData, subTest["indexes"])
     let res = ctx.runExecution(conf, pre)
     stateRes.add res
