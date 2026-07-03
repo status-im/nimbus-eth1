@@ -137,6 +137,7 @@ endif
 	eest_blockchain \
 	eest_blockchain_test \
 	eest_stateless_execution_test \
+	eest_txpool_test \
 	eest_full_test \
 	eest_tool_test \
 	t8n \
@@ -440,7 +441,7 @@ eest_engine_test: | build deps eest
 
 eest_txpool_test: | build deps eest
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
-	
+
 eest_blockchain_test: | build deps eest
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
 
