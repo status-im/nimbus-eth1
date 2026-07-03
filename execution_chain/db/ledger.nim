@@ -102,6 +102,13 @@ type
       ## Also used when building the execution witness to determine the
       ## block numbers fetched by the BLOCKHASH opcode for any given block.
 
+    fatalError*: Opt[string]
+      ## Set when a fatal block-aborting condition is detected during
+      ## execution that cannot travel the EVM's transaction-level error channel
+      ## (which is absorbed by the calling frame as a reverted CALL). Checked in
+      ## processTransaction to abort the whole block immediately rather than
+      ## letting it fail later at the state-root check.
+
     balOverlay*: Opt[BlockAccessListOverlay]
       ## For Parallel execution using BALs, when executing each transaction
       ## we need to read from the writes in the BAL in order to have the
@@ -741,7 +748,11 @@ proc getBlockHash*(ledger: LedgerRef, blockNumber: BlockNumber): Result[Hash32, 
       # reading this cache, then fetches them and re-runs. This makes this whole thing
       # even uglier. But it is still better than continuing with just default hashes.
       ledger.blockHashes.put(blockNumber, default(Hash32))
-      return err("Block hash not available for block " & $blockNumber)
+      # Record the miss as a fatal error so processTransaction aborts the whole
+      # block, since the EVM only reverts the current transaction from here.
+      let errorMsg = "Block hash not available for block " & $blockNumber
+      ledger.fatalError = Opt.some(errorMsg)
+      return err(errorMsg)
 
     ledger.blockHashes.put(blockNumber, hash)
     hash

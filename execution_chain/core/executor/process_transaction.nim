@@ -169,6 +169,11 @@ proc processTransaction*(
   var callResult = tx.txCallEvm(sender, vmState, intrinsic)
   vmState.captureTxEnd(tx.gasLimit - callResult.gasUsed)
 
+  # A fatal condition is recorded on the ledger during execution, abort the
+  # block immediately.
+  if vmState.ledger.fatalError.isSome:
+    return err(vmState.ledger.fatalError.get())
+
   let
     tmp = commitOrRollbackDependingOnGasUsed(
       vmState, savePoint, tx, callResult, blobGasUsed, rollbackReads)
