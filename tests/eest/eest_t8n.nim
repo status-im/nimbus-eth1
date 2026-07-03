@@ -104,8 +104,9 @@ const
 func blockReward(network: string, number: uint64): Option[UInt256] =
   case network:
   of $TestFork.Frontier, $TestFork.Homestead, $TestFork.EIP150,
-     $TestFork.EIP158, $TestFork.FrontierToHomesteadAt5,
-     $TestFork.HomesteadToEIP150At5, $TestFork.HomesteadToDaoAt5:
+     $TestFork.TangerineWhistle, $TestFork.EIP158, $TestFork.SpuriousDragon,
+     $TestFork.FrontierToHomesteadAt5, $TestFork.HomesteadToEIP150At5,
+     $TestFork.HomesteadToDaoAt5:
     some(eth5)
   of $TestFork.EIP158ToByzantiumAt5:
     if number < 5: some(eth5)
