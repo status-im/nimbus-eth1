@@ -20,7 +20,7 @@ import
   ./block_quarantine,
   ./chain_branch
 
-from ../../../block_access_list/block_access_list_builder import BlockAccessListRef
+from ../../../block_access_list/bal_builder import BlockAccessListRef
 
 export tables, minilru
 
