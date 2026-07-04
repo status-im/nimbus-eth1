@@ -22,8 +22,7 @@ const
   ]
 
 const skipFiles = [
-  "invalid_chain_id.json",
-  "bad_v_r_s.json",
+  ""
 ]
 
 runEESTSuite(
