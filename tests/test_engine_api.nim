@@ -318,7 +318,7 @@ proc payloadAttrV4PreserveWithdrawalsTest(env: TestEnv): Result[void, string] =
   # seq, so the assembled payload carried no withdrawals even when the attributes
   # requested some. Verify they are preserved.
   let
-    ben = BeaconEngineRef.new(env.txPool)
+    ben = BeaconEngineRef.new(TxPoolRef.new(env.chain))
     time = getTime().toUnix
     withdrawals = @[
       WithdrawalV1(
