@@ -85,10 +85,12 @@ const
 
 func setWithdrawals(xp: TxPoolRef, attrs: PayloadAttributes) =
   case attrs.version
-  of Version.V2, Version.V3:
-    xp.withdrawals = ethWithdrawals attrs.withdrawals.get
-  else:
+  of Version.V1:
     xp.withdrawals = @[]
+  of Version.V2 .. Version.V4:
+    xp.withdrawals = ethWithdrawals attrs.withdrawals.get
+  of Version.V5, Version.V6:
+    raiseAssert "unreachable: PayloadAttributes has no V5/V6 variant"
 
 template wrapException(body: untyped): auto =
   try:
