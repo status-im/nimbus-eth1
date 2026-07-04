@@ -13,12 +13,12 @@ cd "$(dirname "${BASH_SOURCE[0]}")"/..
 REPO_DIR="${PWD}"
 FIXTURES_DIR="${REPO_DIR}/tests/fixtures"
 
-# --- Current Release Develop ---
-EEST_DEVELOP_NAME="Mainnet Develop"
-EEST_DEVELOP_VERSION="v5.4.0"
-EEST_DEVELOP_DIR="${FIXTURES_DIR}/eest_develop"
-EEST_DEVELOP_ARCHIVE="fixtures_develop.tar.gz"
-EEST_DEVELOP_URL="https://github.com/ethereum/execution-spec-tests/releases/download/${EEST_DEVELOP_VERSION}/${EEST_DEVELOP_ARCHIVE}"
+# --- Mainnet Release ---
+EEST_MAINNET_NAME="mainnet"
+EEST_MAINNET_VERSION="v20.0.0"
+EEST_MAINNET_DIR="${FIXTURES_DIR}/eest_mainnet"
+EEST_MAINNET_ARCHIVE="fixtures.tar.gz"
+EEST_MAINNET_URL="https://github.com/ethereum/execution-specs/releases/download/tests%40${EEST_MAINNET_VERSION}/${EEST_MAINNET_ARCHIVE}"
 
 # --- Devnet Release ---
 EEST_DEVNET_NAME="tests-glamsterdam-devnet"
@@ -90,6 +90,6 @@ download_and_extract() {
 }
 
 # Download stable and develop versions
-download_and_extract "${EEST_DEVELOP_URL}" "${EEST_DEVELOP_DIR}" "${EEST_DEVELOP_NAME}" "${EEST_DEVELOP_VERSION}" "${EEST_DEVELOP_ARCHIVE}"
+download_and_extract "${EEST_MAINNET_URL}" "${EEST_MAINNET_DIR}" "${EEST_MAINNET_NAME}" "${EEST_MAINNET_VERSION}" "${EEST_MAINNET_ARCHIVE}"
 download_and_extract "${EEST_DEVNET_URL}" "${EEST_DEVNET_DIR}" "${EEST_DEVNET_NAME}" "${EEST_DEVNET_VERSION}" "${EEST_DEVNET_ARCHIVE}"
 download_and_extract "${EEST_ZKEVM_URL}" "${EEST_ZKEVM_DIR}" "${EEST_ZKEVM_NAME}" "${EEST_ZKEVM_VERSION}" "${EEST_ZKEVM_ARCHIVE}"

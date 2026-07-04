@@ -104,6 +104,19 @@ type
       ## Used to collect the keys of all read accounts, code and storage slots.
       ## Maps a tuple of address and slot (optional) to the codeTouched flag.
 
+    stateless*: bool
+      ## Selects how a fatal condition detected during execution (see fatalError)
+      ## is handled. Under stateless execution the used witness is untrusted, so
+      ## it may be invalid or incomplete. A fatal condition then must stop the
+      ## block execution with a validation error. On a full node the state is
+      ## complete, so it is instead a defect (assert).
+
+    fatalError*: Opt[string]
+      ## Set when a fatal block-aborting condition is detected during execution
+      ## that cannot travel the EVM's transaction-level error channel (which is
+      ## absorbed by the calling frame as a reverted CALL). Checked and acted on
+      ## in processTransaction (see the stateless flag).
+
     blockHashes: BlockHashesCache
       ## Caches the block hashes fetched by the BLOCKHASH opcode in the EVM.
       ## Also used when building the execution witness to determine the
@@ -457,7 +470,7 @@ proc dispose*(ledger: LedgerRef, savePoint: LedgerSpRef) =
   if savePoint.parentSavePoint != nil:
     ledger.rollback(savePoint)
 
-proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool, collectWitness = false): LedgerRef =
+proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool, collectWitness = false, stateless = false): LedgerRef =
   new result
   result.txFrame = db
   result.storeSlotHash = storeSlotHash
@@ -465,6 +478,7 @@ proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool, collect
   result.slots = typeof(result.slots).init(slotsLruSize)
   result.collectWitness = collectWitness
   result.txFrame.aTx.collectWitness = collectWitness
+  result.stateless = stateless
   result.blockHashes = typeof(result.blockHashes).init(MAX_PREV_HEADER_DEPTH.int)
   discard result.beginSavePoint
 
@@ -793,8 +807,14 @@ template clearCollapsedSiblings*(ledger: LedgerRef) =
   ledger.txFrame.aTx.collapsedSiblings.setLen(0)
 
 proc getBlockHash*(ledger: LedgerRef, blockNumber: BlockNumber): Hash32 =
+  # Range checks must be done earlier, any miss here treated as an error:
+  # we record it as a fatalError.
+  # The zero hash is still returned so behaviour is otherwise unchanged,
+  # in particular the verified proxy's async EVM continues, discovers the
+  # number from the cache, fetches it and re-runs.
   ledger.blockHashes.get(blockNumber).valueOr:
     let blockHash = ledger.txFrame.getBlockHash(blockNumber).valueOr:
+      ledger.fatalError = Opt.some("Block hash not available for block " & $blockNumber)
       default(Hash32)
 
     ledger.blockHashes.put(blockNumber, blockHash)

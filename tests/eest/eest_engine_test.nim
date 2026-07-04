@@ -20,8 +20,8 @@ const
   suiteName = "Engine Tests"
   eestType = "blockchain_tests_engine"
   eestReleases = [
-    "eest_develop",
-    "eest_devnet"
+    "eest_mainnet",
+    "eest_devnet",
   ]
 
 const skipFiles = [

@@ -18,8 +18,8 @@ const
   suiteName = "Transaction Pool Test"
   eestType = "blockchain_tests"
   eestReleases = [
-    "eest_develop",
-    "eest_devnet"
+    "eest_mainnet",
+    "eest_devnet",
   ]
 
 const skipFiles = [

@@ -324,9 +324,12 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
   if xp.pos.timestamp != xp.vmState.blockCtx.timestamp:
     xp.updateVmState()
 
-  if not ptx.tx.validateChainId(xp.chain.com.chainId):
+  let
+    (validChainId, derivedChainId) = ptx.tx.validateChainId(xp.chain.com.chainId)
+
+  if not validChainId:
     debug "Transaction chain id mismatch",
-      txChainId = ptx.tx.chainId,
+      txChainId = derivedChainId,
       chainId = xp.chain.com.chainId
     return err(txErrorChainIdMismatch)
 

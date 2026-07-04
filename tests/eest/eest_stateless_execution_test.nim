@@ -71,12 +71,15 @@ const skipFiles = [
   "validation_codes_missing_sender_delegation_marker.json",
   "validation_codes_missing_redelegation_old_marker.json",
   "validation_codes_missing_external_code_read_target.json",
+<<<<<<< HEAD
 
   # cases of missing headers in witness, which we currently don't check for
   "validation_headers_missing_oldest_blockhash_ancestor.json",
 
   # cases of missing states in witness, which we currently don't check for
   "validation_state_missing_failed_call_target_account_proof_node.json",
+=======
+>>>>>>> master
 ]
 
 runEESTSuite(

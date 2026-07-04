@@ -53,7 +53,7 @@ nimbus-build-system.paths
 .vscode
 
 # EEST test vectors
-tests/fixtures/eest_develop
+tests/fixtures/eest_mainnet
 tests/fixtures/eest_devnet
 tests/fixtures/eest_zkevm
 
