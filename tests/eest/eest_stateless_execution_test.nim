@@ -50,6 +50,12 @@ const skipFiles = [
   "slotnum_at_fork_transition.json",
   "transfer_log_fork_transition.json",
 
+  # The test code only support Prague request types, need to add Amsterdam request types
+  "invalid_multi_type_requests.json",
+
+  "stateless_input_opposite_y_parity_public_key_is_rejected.json",
+  "validation_chain_config_wrong_chain_id_legacy_signature.json",
+
   # No fail yet as we don't check/use public keys. We could check them easily
   # but the better way is to use them as optimization and check automatically
   # that way.
@@ -67,7 +73,10 @@ const skipFiles = [
   "validation_codes_missing_external_code_read_target.json",
 
   # cases of missing headers in witness, which we currently don't check for
-  "validation_headers_missing_oldest_blockhash_ancestor.json"
+  "validation_headers_missing_oldest_blockhash_ancestor.json",
+
+  # cases of missing states in witness, which we currently don't check for
+  "validation_state_missing_failed_call_target_account_proof_node.json",
 ]
 
 runEESTSuite(
