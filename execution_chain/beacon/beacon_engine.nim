@@ -87,7 +87,7 @@ func setWithdrawals(xp: TxPoolRef, attrs: PayloadAttributes) =
   case attrs.version
   of Version.V1:
     xp.withdrawals = @[]
-  of Version.V2 .. Version.V6:
+  of Version.V2 .. Version.V4:
     xp.withdrawals = ethWithdrawals attrs.withdrawals.get
 
 template wrapException(body: untyped): auto =
