@@ -102,4 +102,3 @@ jobs:
           make ${DEFAULT_MAKE_FLAGS} test t8n_test evmstate_test
           make eest_full_test
           make eest_tool_test
-
