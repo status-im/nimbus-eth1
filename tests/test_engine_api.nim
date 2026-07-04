@@ -19,7 +19,7 @@ import
   unittest2
 
 import
-  eth/keys,
+  eth/common/keys,
   ../execution_chain/rpc,
   ../execution_chain/conf,
   ../execution_chain/common,
@@ -29,7 +29,8 @@ import
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/beacon/beacon_engine,
   ../execution_chain/beacon/web3_eth_conv,
-  ../hive_integration/engine_client
+  ../hive_integration/engine_client,
+   ./shared_data/eip8282data
 
 type
   TestEnv = ref object
@@ -56,6 +57,7 @@ NewPayloadV4Params.useDefaultSerializationIn EthJson
 const
   defaultGenesisFile = "tests/customgenesis/engine_api_genesis.json"
   mekongGenesisFile = "tests/customgenesis/mekong.json"
+  wdAddress = address"0xf6c3a9edc1afa0ad5b720e4d42e1437c43d3b3ff"
 
 let
   # Deterministic test signer, funded in the default genesis (see setupEnv) so
@@ -99,10 +101,22 @@ proc setupEnv(envFork: HardFork = MergeFork,
   if envFork >= Prague:
     config.networkParams.config.pragueTime = Opt.some(0.EthTime)
 
+  if envFork >= Osaka:
+    config.networkParams.config.osakaTime = Opt.some(0.EthTime)
+
+  if envFork >= Amsterdam:
+    config.networkParams.config.bpo1Time = Opt.some(0.EthTime)
+    config.networkParams.config.bpo2Time = Opt.some(0.EthTime)
+    config.networkParams.config.amsterdamTime = Opt.some(0.EthTime)
+    config.networkParams.genesis.alloc[BUILDER_DEPOSIT_CONTRACT_ADDRESS] = GenesisAccount(code: builderDepositRequestCode)
+    config.networkParams.genesis.alloc[BUILDER_EXIT_CONTRACT_ADDRESS] = GenesisAccount(code: builderExitRequestCode)
+
   # Fund the test signer only for the default genesis, so tests that rely on a
   # fixed genesis/block hash (e.g. the mekong canonical test) are unaffected.
   if genesisFile == defaultGenesisFile:
     config.networkParams.genesis.alloc[testSender] =
+      GenesisAccount(balance: 1_000_000_000_000_000_000.u256)
+    config.networkParams.genesis.alloc[wdAddress] =
       GenesisAccount(balance: 1_000_000_000_000_000_000.u256)
 
   let
@@ -421,38 +435,50 @@ proc payloadAttrV4PreserveWithdrawalsTest(env: TestEnv): Result[void, string] =
   # seq, so the assembled payload carried no withdrawals even when the attributes
   # requested some. Verify they are preserved.
   let
-    ben = BeaconEngineRef.new(TxPoolRef.new(env.chain))
+    client = env.client
+    header = ? client.latestHeader()
+    update = ForkchoiceStateV1(
+      headBlockHash: header.computeBlockHash
+    )
     time = getTime().toUnix
-    withdrawals = @[
-      WithdrawalV1(
-        index:          w3Qty(1'u64),
-        validatorIndex: w3Qty(100'u64),
-        address:        default(Address),
-        amount:         w3Qty(42'u64)
-      )
-    ]
-    # targetGasLimit set -> PayloadAttributes.version == Version.V4
+    wd = WithdrawalV1(
+      index: w3Qty(0'u64),
+      validatorIndex: w3Qty(0'u64),
+      address: wdAddress,
+      amount: w3Qty(7'u64),
+    )
     attr = PayloadAttributes(
       timestamp:             w3Qty(time + 1),
       prevRandao:            default(Bytes32),
       suggestedFeeRecipient: default(Address),
-      withdrawals:           Opt.some(withdrawals),
+      withdrawals:           Opt.some(@[wd]),
       parentBeaconBlockRoot: Opt.some(default(Hash32)),
-      targetGasLimit:        Opt.some(w3Qty(30_000_000'u64))
+      slotNumber:            Opt.some(w3Qty(0'u64)),
+      targetGasLimit:        Opt.some(w3Qty(60_000_000'u64)),
     )
 
-  if attr.version != Version.V4:
-    return err("expected PayloadAttributes version V4, got " & $attr.version)
+  let
+    fcuRes  = ? client.forkchoiceUpdated(Version.V4, update, Opt.some(attr))
+    id      = fcuRes.payloadId.get
+    payload = ? client.getPayload(Version.V6, id)
 
-  let bundle = ? ben.generateExecutionBundle(attr)
+  if payload.executionPayload.transactions.len != 0:
+    return err("Expected empty payload before injecting tx, got: " &
+      $payload.executionPayload.transactions.len & " txs")
 
-  if bundle.payload.withdrawals.isNone:
-    return err("V4 payload attributes dropped withdrawals (withdrawals is none)")
+  if payload.executionPayload.withdrawals.isNone:
+    return err("Expected non empty withdrawals")
 
-  let got = bundle.payload.withdrawals.get
-  if got.len != withdrawals.len:
-    return err("V4 payload attributes dropped withdrawals: expected " &
-      $withdrawals.len & " got " & $got.len)
+  let wds = payload.executionPayload.withdrawals.value
+  if wds.len != 1:
+    return err("Expected withdrawals len 1, got: " & $wds.len)
+
+  if wds[0].amount.uint64 != 7:
+    return err("Expected withdrawals[0].amount = 7, got : " & $wds[0].amount)
+
+  if wds[0].address != wdAddress:
+    return err("Expected withdrawals[0].address = " & $wdAddress &
+      ", got : " & $wds[0].address)
 
   ok()
 
@@ -500,7 +526,7 @@ const testList = [
   ),
   TestSpec(
     name: "PayloadAttributesV4 preserve withdrawals",
-    fork: Prague,
+    fork: Amsterdam,
     testProc: payloadAttrV4PreserveWithdrawalsTest
   ),
   ]
