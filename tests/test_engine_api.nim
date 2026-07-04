@@ -311,6 +311,48 @@ proc newPayloadV4InvalidRequestType(env: TestEnv): Result[void, string] =
 
   ok()
 
+proc payloadAttrV4PreserveWithdrawalsTest(env: TestEnv): Result[void, string] =
+  # Regression: setWithdrawals used to drop withdrawals for V4 (Amsterdam) payload
+  # attributes. A PayloadAttributes with a targetGasLimit resolves to Version.V4,
+  # which fell into the `else` branch and had its withdrawals replaced with an empty
+  # seq, so the assembled payload carried no withdrawals even when the attributes
+  # requested some. Verify they are preserved.
+  let
+    ben = BeaconEngineRef.new(env.txPool)
+    time = getTime().toUnix
+    withdrawals = @[
+      WithdrawalV1(
+        index:          w3Qty(1'u64),
+        validatorIndex: w3Qty(100'u64),
+        address:        default(Address),
+        amount:         w3Qty(42'u64)
+      )
+    ]
+    # targetGasLimit set -> PayloadAttributes.version == Version.V4
+    attr = PayloadAttributes(
+      timestamp:             w3Qty(time + 1),
+      prevRandao:            default(Bytes32),
+      suggestedFeeRecipient: default(Address),
+      withdrawals:           Opt.some(withdrawals),
+      parentBeaconBlockRoot: Opt.some(default(Hash32)),
+      targetGasLimit:        Opt.some(w3Qty(30_000_000'u64))
+    )
+
+  if attr.version != Version.V4:
+    return err("expected PayloadAttributes version V4, got " & $attr.version)
+
+  let bundle = ? ben.generateExecutionBundle(attr)
+
+  if bundle.payload.withdrawals.isNone:
+    return err("V4 payload attributes dropped withdrawals (withdrawals is none)")
+
+  let got = bundle.payload.withdrawals.get
+  if got.len != withdrawals.len:
+    return err("V4 payload attributes dropped withdrawals: expected " &
+      $withdrawals.len & " got " & $got.len)
+
+  ok()
+
 const testList = [
   TestSpec(
     name: "Basic cycle",
@@ -347,6 +389,11 @@ const testList = [
     name: "newPayload undecodable RLP payload",
     fork: Prague,
     testProc: newPayloadInvalidRLP
+  ),
+  TestSpec(
+    name: "PayloadAttributesV4 preserve withdrawals",
+    fork: Prague,
+    testProc: payloadAttrV4PreserveWithdrawalsTest
   ),
   ]
 
