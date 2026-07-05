@@ -12,9 +12,5 @@
 {.warning[UnusedImport]: off.}
 
 import
-  ../tools/t8n/t8n,
-  ../tools/t8n/t8n_test,
-  ../tools/evmstate/evmstate,
-  ../tools/evmstate/evmstate_test,
   ../tools/txparse/txparse,
   ../tools/txparse/txparse_test

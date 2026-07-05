@@ -18,7 +18,7 @@ const
   suiteName = "Block Chain Test"
   eestType = "blockchain_tests"
   eestReleases = [
-    "eest_develop",
+    "eest_mainnet",
     "eest_bal"
   ]
 

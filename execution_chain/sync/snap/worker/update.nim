@@ -45,11 +45,11 @@ proc readyNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   # download  which might be considerably more to do than any subsequent
   # updates.
   block stayReady:
-    let consHeadNum = ctx.hdrCache.latestConsHeadNumber()
+    let haveConsHead = (ctx.hdrCache.latestConsHeadNumber() != 0)
 
     if ctx.pool.headersSynced:
       # So some headers have been downloaded
-      if consHeadNum != 0:                          # have FCU request from CL?
+      if haveConsHead:                              # have FCU request from CL?
         break stayReady                             # advance to next state
       if ctx.pool.beaconTarget:
         # This is some artificial or test mode when the becon sync server has
@@ -62,7 +62,7 @@ proc readyNext(ctx: SnapCtxRef; info: static[string]): SnapState =
     # If there has been no FCU request from the CL yet, it might make sense
     # to proceed to the next state if there are locally cached headers already,
     # available with recovery mode.
-    if consHeadNum == 0 and                         # no FCU request from CL?
+    if not haveConsHead and                         # no FCU request from CL?
        ctx.chain.latestNumber() < ctx.pool.mptAsm.lastNumber():
       break stayReady                               # advance to next state
 
@@ -142,7 +142,7 @@ proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
   #         +------> mkTrie
   #         |          |
   #         |          v
-  #         `---->  analyse
+  #         `-----> analyse
   #                    |
   #                    v
   #                  [...]
@@ -249,9 +249,13 @@ template updateFcuRoot*(buddy: SnapPeerRef, info: static[string]) =
       if ctx.pool.beaconTarget:                     # check for manual heder trg
         let
           adb = ctx.pool.mptAsm
-          lastHeader = adb.lastHeader().valueOr:
+          optLastHeader = adb.lastHeader().valueOr:
             break body
-          lastHash = adb.getBlockHash(lastHeader.number).valueOr:
+          lastHeader = optLastHeader.valueOr:
+            break body
+          optLastHash = adb.getBlockHash(lastHeader.number).valueOr:
+            break body
+          lastHash = optLastHash.valueOr:
             break body
           root = StateRoot lastHeader.stateRoot
         discard sdb.register(root, BlockHash lastHash, lastHeader.number, info)

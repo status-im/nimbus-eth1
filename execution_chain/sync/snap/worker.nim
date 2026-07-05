@@ -93,8 +93,12 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
         bodyRc = daemonWaitReadyInterval            # take a nap
 
     of SnapResume:
-      # Import/reconstruct in-memory state DB from persistent cache DB.
-      discard ctx.sessionResume(info)
+      # If there is a pivot, then there is an assembled partial MPT. In that
+      # case, there no point resuming a downloading session.
+      if ctx.sessionPivotActivate(info) < PivotOnTrie:
+        # Import/reconstruct in-memory state DB from persistent cache DB.
+        ctx.sessionResume(info).isOkOr:
+           break body                               # shutdown?
 
     of SnapDownload:
       # Download headers. The request will be silently ignored if the

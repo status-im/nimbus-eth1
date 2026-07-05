@@ -12,5 +12,6 @@
 import
   ./[
     eest_t8n_test,
+    eest_evmstate_test,
 ]
 

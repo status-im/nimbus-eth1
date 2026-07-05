@@ -99,7 +99,6 @@ jobs:
           # clear some space
           find . -type d -name "nimcache" -exec rm -rf {} +
           # "-static" option will not work for osx unless static system libraries are provided
-          make ${DEFAULT_MAKE_FLAGS} test t8n_test
+          make ${DEFAULT_MAKE_FLAGS} test t8n_test evmstate_test
           make eest_full_test
           make eest_tool_test
-

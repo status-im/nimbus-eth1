@@ -25,8 +25,8 @@ import
   ../../execution_chain/evm/tracer/json_tracer,
   ../../execution_chain/utils/state_dump,
   ../common/helpers as chp,
-  "."/[config, helpers],
-  ../common/state_clearing
+  ../common/state_clearing,
+   ./[config, helpers]
 
 type
   StateContext = object
@@ -36,6 +36,7 @@ type
     tx: Transaction
     expectedHash: Hash32
     expectedLogs: Hash32
+    postState: JsonNode
     forkStr: string
     chainConfig: ChainConfig
     index: int
@@ -49,6 +50,7 @@ type
     fork : string
     error: string
     state: StateDump
+    postState: JsonNode
 
   TestVMState = ref object of BaseVMState
 
@@ -64,7 +66,14 @@ proc toBytes(x: string): seq[byte] =
   for i in 0..<x.len: result[i] = x[i].byte
 
 method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash32 =
-  keccak256(toBytes($blockNumber))
+  if blockNumber >= vmState.blockNumber:
+    default(Hash32)
+  elif blockNumber < 0:
+    default(Hash32)
+  elif (vmState.blockNumber > 256) and (blockNumber < vmState.blockNumber - 256):
+    default(Hash32)
+  else:
+    keccak256(toBytes($blockNumber))
 
 proc verifyResult(ctx: var StateContext,
                   vmState: BaseVMState,
@@ -94,6 +103,10 @@ proc writeResultToStdout(stateRes: seq[StateResult]) =
     }
     if res.state.isNil.not:
       z["state"] = %(res.state)
+    if res.postState.isNil.not:
+      z["postState"] = res.postState
+    else:
+      z["postState"] = newJNull()
     n.add(z)
 
   stdout.write(n.pretty)
@@ -141,6 +154,8 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
     )
     if conf.dumpEnabled:
       result.state = dumpState(vmState.ledger)
+    if conf.postState:
+      result.postState = ctx.postState
     if conf.jsonEnabled:
       writeRootHashToStderr(stateRoot)
 
@@ -169,7 +184,36 @@ proc toTracerFlags(conf: StateConf): set[TracerFlags] =
 template hasError(ctx: StateContext): bool =
   ctx.error.len > 0
 
-proc prepareAndRun(inputFile: string, conf: StateConf): bool =
+proc parseTx(ctx: var StateContext, txData: JsonNode, subTest: JsonNode) =
+  try:
+    block txBytes:
+      if not subTest.hasKey("txbytes"):
+        break txBytes
+
+      if subTest.hasKey("expectException"):
+        let exceptionString = subTest["expectException"].getStr
+        if "GASLIMIT_PRICE_PRODUCT_OVERFLOW" in exceptionString:
+          # high_gas_price_paris.json cannot be rlp decoded
+          # due to UInt256 gasPrice, while Nimbus tx gasPrice
+          # field is uint64.
+          # high_gas_price_paris.json can be decoded by parseTx.
+          break txBytes
+
+      let rlpBytes = hexToSeqByte(subTest["txbytes"].getStr)
+      ctx.tx = rlp.decode(rlpBytes, Transaction)
+      return
+
+    if txData.hasKey("secretKey"):
+      ctx.tx = parseTx(txData, subTest["indexes"])
+      return
+
+    doAssert(false, "Unsupported fixture format")
+  except KeyError as exc:
+    doAssert(false, exc.msg)
+  except RlpError as exc:
+    doAssert(false, exc.msg)
+
+proc prepareAndRun*(inputFile: string, conf: StateConf): bool =
   var
     ctx: StateContext
 
@@ -204,7 +248,9 @@ proc prepareAndRun(inputFile: string, conf: StateConf): bool =
   template runSubTest(subTest: JsonNode) =
     ctx.expectedHash = Hash32.fromJson(subTest["hash"])
     ctx.expectedLogs = Hash32.fromJson(subTest["logs"])
-    ctx.tx = parseTx(txData, subTest["indexes"])
+    if subTest.hasKey("state"):
+      ctx.postState  = subTest["state"]
+    ctx.parseTx(txData, subTest)
     let res = ctx.runExecution(conf, pre)
     stateRes.add res
     hasError = hasError or ctx.hasError
@@ -234,7 +280,12 @@ proc prepareAndRun(inputFile: string, conf: StateConf): bool =
       for subTest in forkData:
         runSubTest(subTest)
 
-  writeResultToStdout(stateRes)
+  if conf.disableOutput:
+    if hasError:
+      writeResultToStdout(stateRes)
+  else:
+    writeResultToStdout(stateRes)
+
   not hasError
 
 when defined(chronicles_runtime_filtering):
@@ -252,7 +303,7 @@ when defined(chronicles_runtime_filtering):
     let level = v.toLogLevel
     setLogLevel(level)
 
-proc main() =
+proc evmStateMain*() =
   # https://github.com/status-im/nimbus-eth1/issues/3131
   setStdIoUnbuffered()
 
@@ -271,4 +322,5 @@ proc main() =
     if not noError:
       quit(QuitFailure)
 
-main()
+when isMainModule:
+  evmStateMain()
