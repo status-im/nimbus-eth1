@@ -394,8 +394,8 @@ proc exec(ctx: TransContext,
     executionRequests.append(CONSOLIDATION_REQUEST_TYPE, consolidationReqs)
 
     if vmState.com.isAmsterdamOrLater(ctx.env.currentTimestamp):
-      executionRequests.append(BUILDER_DEPOSIT_REQUEST_TYPE, depositReqs)
-      executionRequests.append(BUILDER_EXIT_REQUEST_TYPE, depositReqs)
+      executionRequests.append(BUILDER_DEPOSIT_REQUEST_TYPE, builderDepositReqs)
+      executionRequests.append(BUILDER_EXIT_REQUEST_TYPE, builderExitReqs)
 
     let requestsHash = calcRequestsHash(executionRequests)
     output.result.requestsHash = Opt.some(requestsHash)
@@ -573,7 +573,7 @@ proc transitionAction*(ctx: var TransContext,
       if ctx.env.currentRandom.isNone:
         raise newError(ErrorConfig, "post-merge requires currentRandom to be defined in env")
 
-      if ctx.env.currentDifficulty.isSome and ctx.env.currentDifficulty.get() != 0:
+      if ctx.env.currentDifficulty.isSome and ctx.env.currentDifficulty.value.isZero.not:
         raise newError(ErrorConfig, "post-merge difficulty must be zero (or omitted) in env")
       ctx.env.currentDifficulty = Opt.none(DifficultyInt)
 
