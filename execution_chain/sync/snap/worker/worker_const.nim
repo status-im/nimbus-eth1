@@ -46,9 +46,10 @@ const
   twoHundredYears* = chronos.days(365 * 200 + 48)
     ## Large Duration constant considered sort of infinite.
 
-  daemonWaitReadyInterval* = chronos.seconds(30)
+  daemonWaitReadyInterval* = chronos.seconds(47)
     ## Some polling interval time waiting until the system gets into download
-    ## state when the the FCU modue hash  a finalised header.
+    ## state when the the FCU modue hash provides a finalised header and there
+    ## are eth/xx download peers available.
 
   daemonWaitHeaderInterval* = chronos.seconds(30)
     ## Ditto for header download.
