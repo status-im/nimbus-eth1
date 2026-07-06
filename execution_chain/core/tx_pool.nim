@@ -37,6 +37,7 @@
 {.push raises: [].}
 
 import
+  metrics,
   eth/common/blocks,
   ./tx_pool/tx_tabs,
   ./tx_pool/tx_item,
@@ -47,6 +48,11 @@ import
 
 from ../evm/state import blockAccessList
 from eth/common/eth_types_rlp import rlpHash
+
+declareCounter nec_txpool_packed_total,   "Transactions packed into assembled blocks"
+declareGauge   nec_txpool_last_block_txs, "Transactions in the last assembled block"
+declareGauge   nec_txpool_last_block_value,
+  "Reward (gwei) of the last assembled block"
 
 # ------------------------------------------------------------------------------
 # TxPoolRef public types
@@ -240,6 +246,14 @@ proc assembleBlock*(
       xp.vmState.blockAccessList
     else:
       Opt.none(BlockAccessListRef)
+
+  nec_txpool_packed_total.inc(blk.txs.len)
+  nec_txpool_last_block_txs.set(blk.txs.len.int64)
+  nec_txpool_last_block_value.set(
+    (pst.blockValue div 1_000_000_000.u256).truncate(int64))
+  # Packing prunes stale-nonce txs directly via tx_tabs, bypassing removeTx, so
+  # refresh the size gauges here to keep them from drifting.
+  xp.updatePoolSizeMetrics()
 
   ok AssembledBlock(
     blk: blk,
