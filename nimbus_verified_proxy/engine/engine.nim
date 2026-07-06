@@ -160,11 +160,42 @@ func convLCHeader*(lcHeader: ForkyLightClientHeader): Result[Header, string] =
       )
     )
 
-proc init*(
-    T: type RpcVerificationEngine, config: RpcVerificationEngineConf
+proc initCore*(
+    T: type RpcVerificationEngine,
+    chainId: UInt256,
+    networkId: UInt256,
+    maxBlockWalk: uint64,
+    parallelBlockDownloads: uint64,
+    headerStoreLen: int,
+    accountCacheLen: int,
+    codeCacheLen: int,
+    storageCacheLen: int,
 ): EngineResult[T] =
   randomize()
 
+  let engine = RpcVerificationEngine(
+    chainId: chainId,
+    maxBlockWalk: maxBlockWalk,
+    headerStore: HeaderStore.new(headerStoreLen),
+    accountsCache: AccountsCache.init(accountCacheLen),
+    codeCache: CodeCache.init(codeCacheLen),
+    storageCache: StorageCache.init(storageCacheLen),
+    parallelBlockDownloads: parallelBlockDownloads,
+    availabilityScoreFunc: defaultAvailabilityScoreFunc,
+    qualityScoreFunc: defaultQualityScoreFunc,
+  )
+
+  # since AsyncEvm requires a few transport methods (getStorage, getCode etc.)
+  # for initialization, we initialize the proxy first then the evm within it
+  engine.evm = AsyncEvm.init(engine.toAsyncEvmStateBackend(), networkId)
+
+  engine.syncLock = newAsyncLock()
+
+  ok(engine)
+
+proc init*(
+    T: type RpcVerificationEngine, config: RpcVerificationEngineConf
+): EngineResult[T] =
   let
     networkName = config.eth2Network.get("mainnet")
     metadata = getMetadataForNetwork(networkName)
@@ -181,31 +212,27 @@ proc init*(
         proc(): BeaconTime {.gcsafe, raises: [].} =
           config.freezeAtSlot.start_beacon_time(metadata.cfg.timeParams)
     forkDigests = newClone ForkDigests.init(metadata.cfg, genesis_validators_root)
+    networkId = ?chainIdToNetworkId(config.chainId)
 
-  let engine = RpcVerificationEngine(
-    chainId: config.chainId,
-    timeParams: metadata.cfg.timeParams,
-    getBeaconTime: getBeaconTime,
-    trustedBlockRoot: some(config.trustedBlockRoot),
-    lcStore: (ref ForkedLightClientStore)(),
-    maxBlockWalk: config.maxBlockWalk,
-    headerStore: HeaderStore.new(config.headerStoreLen),
-    accountsCache: AccountsCache.init(config.accountCacheLen),
-    codeCache: CodeCache.init(config.codeCacheLen),
-    storageCache: StorageCache.init(config.storageCacheLen),
-    parallelBlockDownloads: config.parallelBlockDownloads,
-    maxLightClientUpdates: config.maxLightClientUpdates,
-    availabilityScoreFunc: defaultAvailabilityScoreFunc,
-    qualityScoreFunc: defaultQualityScoreFunc,
-    cfg: metadata.cfg,
-    forkDigests: forkDigests,
+  let engine = ?RpcVerificationEngine.initCore(
+    chainId = config.chainId,
+    networkId = networkId,
+    maxBlockWalk = config.maxBlockWalk,
+    parallelBlockDownloads = config.parallelBlockDownloads,
+    headerStoreLen = config.headerStoreLen,
+    accountCacheLen = config.accountCacheLen,
+    codeCacheLen = config.codeCacheLen,
+    storageCacheLen = config.storageCacheLen,
   )
 
-  let networkId = ?chainIdToNetworkId(config.chainId)
-
-  # since AsyncEvm requires a few transport methods (getStorage, getCode etc.)
-  # for initialization, we initialize the proxy first then the evm within it
-  engine.evm = AsyncEvm.init(engine.toAsyncEvmStateBackend(), networkId)
+  # layer the beacon / light-client fields on top of the core
+  engine.timeParams = metadata.cfg.timeParams
+  engine.getBeaconTime = getBeaconTime
+  engine.trustedBlockRoot = some(config.trustedBlockRoot)
+  engine.lcStore = (ref ForkedLightClientStore)()
+  engine.maxLightClientUpdates = config.maxLightClientUpdates
+  engine.cfg = metadata.cfg
+  engine.forkDigests = forkDigests
 
   proc onStoreInitialized() =
     discard
@@ -286,8 +313,6 @@ proc init*(
     onFinalizedHeader,
     onOptimisticHeader,
   )
-
-  engine.syncLock = newAsyncLock()
 
   ok(engine)
 
