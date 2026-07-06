@@ -249,6 +249,18 @@ proc init*(xp: TxPoolRef; chain: ForkedChainRef, flags: set[TxPoolFlags] = {}) =
   xp.rmHash = chain.latestHash
   xp.flags = flags
 
+proc dispose*(xp: TxPoolRef) =
+  if not xp.vmState.isNil():
+    xp.vmState.ledger.txFrame.dispose()
+    xp.vmState.ledger = nil
+    xp.vmState.dispose()
+    xp.vmState = nil
+
+  xp.chain = nil
+  xp.senderTab.clear()
+  xp.idTab.clear()
+  xp.blobTab.clear()
+
 # ------------------------------------------------------------------------------
 # Public functions, getters
 # ------------------------------------------------------------------------------
@@ -284,6 +296,8 @@ func `rmHash=`*(xp: TxPoolRef, val: Hash32) =
 proc updateVmState*(xp: TxPoolRef) =
   ## Reset transaction environment, e.g. before packing a new block
   if not xp.vmState.isNil():
+    xp.vmState.ledger.txFrame.dispose()
+    xp.vmState.ledger = nil
     xp.vmState.dispose()
   xp.vmState = setupVMState(xp.chain.com,
     xp.chain.latestHeader, xp.chain.latestHash,
