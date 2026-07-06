@@ -1,5 +1,5 @@
-# Nimbus
-# Copyright (c) 2025-2026 Status Research & Development GmbH
+# nimbus-execution-client
+# Copyright (c) 2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -7,25 +7,22 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-{.push raises: [], gcsafe.}
-
 import
   std/os,
-  unittest2,
   ./eest_runner,
-  ./eest_engine
+  ./eest_t8n
 
 const
   baseFolder = "tests/fixtures"
-  suiteName = "Engine Tests"
-  eestType = "blockchain_tests_engine"
+  suiteName = "Transition Tool Test"
+  eestType = "blockchain_tests"
   eestReleases = [
     "eest_mainnet",
     "eest_bal"
   ]
 
 const skipFiles = [
-  "CALLBlake2f_MaxRounds.json", # Doesn't work in github CI
+  "",
 ]
 
 runEESTSuite(

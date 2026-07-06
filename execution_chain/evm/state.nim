@@ -181,7 +181,9 @@ proc init*(
       tracer: TracerRef = nil,
       storeSlotHash = false,
       enableBalTracker = false,
-      balBuilderThreadSafe = true) =
+      balBuilderThreadSafe = true,
+      stateless = false) =
+
   ## Variant of `new()` constructor above for in-place initalisation. The
   ## `parent` argument is used to sync the accounts cache and the `header`
   ## is used as a container to pass the `timestamp`, `gasLimit`, and `fee`
@@ -190,7 +192,8 @@ proc init*(
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
   let
-    ledger = LedgerRef.init(txFrame, storeSlotHash, com.statelessProviderEnabled)
+    ledger = LedgerRef.init(
+      txFrame, storeSlotHash, com.statelessProviderEnabled, stateless)
     tracker =
       if enableBalTracker:
         BlockAccessListTrackerRef.init(

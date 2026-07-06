@@ -29,8 +29,17 @@ type
     root*: Hash32
     accounts*: Table[Address, DumpAccount]
 
+func stripLeadingZeros(value: string): string =
+  var cidx = 0
+  # ignore the last character so we retain '0' on zero value
+  while cidx < value.len - 2 and value[cidx] == '0':
+    cidx.inc
+  value[cidx .. ^1]
+
 proc `%`*(x: UInt256): JsonNode =
-  %("0x" & x.toHex)
+  let hex = x.toHex
+  if hex.len mod 2 != 0: %("0x0" & hex)
+  else: %("0x" & hex)
 
 proc `%`*(x: seq[byte]): JsonNode =
   %("0x" & x.toHex)
@@ -39,7 +48,7 @@ proc `%`*(x: Hash32): JsonNode =
   %("0x" & x.data.toHex)
 
 proc `%`*(x: AccountNonce): JsonNode =
-  %("0x" & x.toHex)
+  %("0x" & x.toHex.stripLeadingZeros)
 
 proc `%`*(x: Table[UInt256, UInt256]): JsonNode =
   result = newJObject()
@@ -48,15 +57,14 @@ proc `%`*(x: Table[UInt256, UInt256]): JsonNode =
 
 proc `%`*(x: DumpAccount): JsonNode =
   result = %{
-    "balance" : %(x.balance),
     "nonce"   : %(x.nonce),
+    "balance" : %(x.balance),
+    "code"    : %(x.code),
+    "storage" : %(x.storage),
     "root"    : %(x.root),
     "codeHash": %(x.codeHash),
-    "code"    : %(x.code),
     "key"     : %(x.key)
   }
-  if x.storage.len > 0:
-    result["storage"] = %(x.storage)
 
 proc `%`*(x: Table[Address, DumpAccount]): JsonNode =
   result = newJObject()
@@ -95,4 +103,3 @@ proc dumpAccounts*(ledger: LedgerRef, addresses: openArray[Address]): JsonNode =
   result = newJObject()
   for address in addresses:
     result[address.toHex] = %dumpAccount(ledger, address)
-

@@ -156,7 +156,7 @@ proc processTransaction*(
     persist = true;
       ): Result[LogResult, string] =
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
-  ## which provides a backward compatible framwork for EIP1559.
+  ## which provides a backward compatible framework for EIP1559.
 
   validateForInclusion(vmState, tx, sender, false, true, intrinsic, blobGasUsed)
 
@@ -169,6 +169,13 @@ proc processTransaction*(
 
   var callResult = tx.txCallEvm(sender, vmState, intrinsic)
   vmState.captureTxEnd(tx.gasLimit - callResult.gasUsed)
+
+  # A fatal condition recorded during execution aborts the block immediately
+  if vmState.ledger.fatalError.isSome:
+    if vmState.ledger.stateless:
+      return err(vmState.ledger.fatalError.get())
+    else:
+      raiseAssert vmState.ledger.fatalError.get()
 
   let
     tmp = commitOrRollbackDependingOnGasUsed(

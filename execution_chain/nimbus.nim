@@ -53,8 +53,11 @@ const
 
 type NStartUpCmd* {.pure.} = enum
   nimbus = "Run Ethereum node"
-  beaconNode = "Run beacon node in stand-alone mode"
-  executionClient = "Run execution client in stand-alone mode"
+  beaconNode = "Run beacon node in stand-alone mode\pSee 'nimbus beaconNode --help' for further details"
+  executionClient = "Run execution client in stand-alone mode\pSee 'nimbus executionClient --help' for further details"
+  `import` = "Import execution blocks from era files\pSee 'nimbus import --help' for further details"
+  trustedNodeSync = "Sync the beacon node database from a trusted node (checkpoint sync)\pSee 'nimbus trustedNodeSync --help' for further details"
+  deposits = "Handle validator deposits\pSee 'nimbus deposits --help' for further details"
 
 proc matchSymbolName*(T: type enum, p: string): T {.raises: [ValueError].} =
   let p = normalize(p)
@@ -163,11 +166,7 @@ type
       name: "debug-trusted-setup-file" .}: Option[string]
 
     case cmd* {.command, defaultValue: NStartUpCmd.nimbus.}: NStartUpCmd
-    of nimbus:
-      discard
-    of beaconNode:
-      discard
-    of executionClient:
+    of nimbus, beaconNode, executionClient, `import`, trustedNodeSync, deposits:
       discard
 
 #!fmt: on

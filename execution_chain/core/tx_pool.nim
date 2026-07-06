@@ -158,8 +158,17 @@ proc assembleBlock*(
     someBaseFee: bool = false,
     gasLimit: Opt[GasInt] = Opt.none(GasInt)
 ): Result[AssembledBlock, string] =
-  if xp.timestamp != xp.vmState.blockCtx.timestamp:
-    xp.updateVmState()
+  # Packing mutates the ledger (tx nonces/balances are persisted) and the
+  # per-block accumulators (blobGasUsed, gas counters, receipts), and
+  # vmExecInit does not reset them. forkchoiceUpdated rebuilds the payload
+  # for the same slot (same timestamp) arbitrarily many times, so guarding
+  # the reset on a timestamp change let a rebuild reuse the previous pack's
+  # dirtied state: every pooled tx then failed the nonce check, the body
+  # ended up empty, yet the header still committed to the stale blobGasUsed
+  # (and gasUsed/stateRoot) of the first pack — producing a block other
+  # clients reject as a blob-gas mismatch. Always start each build from a
+  # fresh transaction environment.
+  xp.updateVmState()
 
   let com = xp.vmState.com
 

@@ -109,7 +109,8 @@ template fetchHeadersReversed*(
       peer {.inject,used.} = $buddy.peer           # logging only
       hash {.inject,used.} = topHash.toStr         # logging only
       req = block:
-        if topHash != emptyRoot:
+        if topHash != emptyRoot and
+           topHash != zeroHash32:
           BlockHeadersRequest(
             maxResults: ivReq.len.uint,
             skip:       0,
@@ -187,12 +188,21 @@ template fetchHeadersReversed*(
         ela, state, nErrors=buddy.nErrors.fetch.hdr
       break body                                   # return err()
 
-    # Verify that the first block number matches the request
+    # Verify that the first block number matches the request. Note that for a
+    # manual target request, the `ivReq` == `[0,0]`.
     if h[0].number != ivReq.maxPt and ivReq.maxPt != 0:
       buddy.hdrFetchRegisterError(forceZombie=true)
       trace recvInfo & " error", peer, nReq=req.maxResults, hash,
         reqMaxPt=ivReq.maxPt, respMaxPt=h[0].number, nResp=h.len,
         ela, state, nErrors=buddy.nErrors.fetch.hdr
+      break body
+    if h[0].number == BlockNumber(0):
+      # Should not happen. The zero block number was observed on `bal-devnet-7`
+      # when manually asked for the (wrong?) block hash. A a header with
+      # zero bock umber is of no use, here.
+      buddy.hdrFetchRegisterError(forceZombie=true)
+      trace recvInfo & " error, zero block number", peer, nReq=req.maxResults,
+        hash, nResp=h.len, ela, state, nErrors=buddy.nErrors.fetch.hdr
       break body
 
     # Update download statistics
