@@ -78,10 +78,12 @@ when compileOption("threads"):
       gasUsed: GasInt
       blockRegularGasUsed: GasInt
       blockStateGasUsed: GasInt
+      intrinsic: IntrinsicGas
       blobGasUsed: uint64
       status: bool
       logs: SharedBytes
       error: SharedString
+      preempted: bool
 
   proc recoverAndPrefetchTask(
       ctx: ptr OptimisticPrefetchCtx, e: ptr OptimisticTxEntry): bool {.nimcall.} =
@@ -390,7 +392,8 @@ when compileOption("threads"):
       ctx: ptr BalParallelTxCtx, e: ptr BalParallelTxEntry
   ): bool {.nimcall.} =
     if ctx[].cancelled.load(moAcquire):
-      e[].error = SharedString.init("tx execution cancelled")
+      # Another task has already failed and cancelled the block.
+      e[].preempted = true
       return false
 
     let sender = e[].tx[].recoverSender().valueOr:
@@ -442,9 +445,9 @@ when compileOption("threads"):
     e[].gasUsed = logResult.gasUsed
     e[].blockRegularGasUsed = vmState.blockRegularGasUsed
     e[].blockStateGasUsed = vmState.blockStateGasUsed
+    e[].intrinsic = e[].tx[].intrinsicGas(vmState.hardFork, vmState.blockCtx.gasLimit)
     e[].blobGasUsed = vmState.blobGasUsed
     e[].status = vmState.status
-
     e[].logs = packLogs(logResult.logEntries)
 
     true
@@ -457,6 +460,7 @@ when compileOption("threads"):
       collectLogs: bool,
   ): Result[void, string] =
     doAssert vmState.fork >= FkAmsterdam
+    doAssert not vmState.com.statelessProviderEnabled
 
     let n = transactions.len()
 
@@ -500,8 +504,33 @@ when compileOption("threads"):
       let ok = sync(futs[i])
       inc synced
       if not ok:
+        # find the task that caused the failure
+        var failIdx = i
+        while entries[failIdx].preempted and failIdx + 1 < n:
+          inc failIdx
+          discard sync(futs[failIdx])
+          inc synced
         return err(
-          "Error processing tx with index " & $i & ":" & entries[i].error.toString())
+          "Error processing tx with index " & $failIdx & ":" &
+          entries[failIdx].error.toString())
+
+      # Per-tx 2D gas inclusion check as in validateForInclusion
+      let
+        regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
+        stateGasAvailable = vmState.blockCtx.gasLimit - vmState.blockStateGasUsed
+        want = min(TX_GAS_LIMIT.GasInt, transactions[i].gasLimit - entries[i].intrinsic.state)
+      if want > regularGasAvailable:
+        ctx.cancelled.store(true, moRelease)
+        return err(
+          "Error processing tx with index " & $i & ":regular gas used exceeds limit, want: " &
+          $want & ", available: " & $regularGasAvailable)
+
+      let stateGas = transactions[i].gasLimit - entries[i].intrinsic.regular
+      if stateGas > stateGasAvailable:
+        ctx.cancelled.store(true, moRelease)
+        return err(
+          "Error processing tx with index " & $i & ":state gas used exceeds limit, want: " &
+          $stateGas & ", available: " & $stateGasAvailable)
 
       vmState.cumulativeGasUsed += entries[i].gasUsed
       vmState.blockRegularGasUsed += entries[i].blockRegularGasUsed
