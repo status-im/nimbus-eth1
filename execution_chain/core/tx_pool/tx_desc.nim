@@ -12,6 +12,7 @@
 
 import
   chronicles,
+  metrics,
   std/[times, tables],
   eth/eip1559,
   eth/common/transaction_utils,
@@ -37,6 +38,13 @@ from eth/common/eth_types_rlp import rlpHash
 
 logScope:
   topics = "txpool"
+
+declareGauge   nec_txpool_transactions,   "Transactions currently in the pool"
+declareGauge   nec_txpool_senders,        "Distinct senders with pooled transactions"
+declareCounter nec_txpool_added_total,    "Transactions accepted into the pool"
+declareCounter nec_txpool_removed_total,  "Transactions removed from the pool"
+declareCounter nec_txpool_rejected_total, "Transactions rejected on add",
+  labels = ["reason"]
 
 type
   PosPayloadAttr = object
@@ -299,6 +307,11 @@ proc getItem*(xp: TxPoolRef, id: Hash32): Result[TxItemRef, TxError] =
     return err(txErrorItemNotFound)
   ok(item)
 
+proc updatePoolSizeMetrics*(xp: TxPoolRef) =
+  ## Refresh the live pool-size gauges from the current pool state.
+  nec_txpool_transactions.set(xp.idTab.len.int64)
+  nec_txpool_senders.set(xp.senderTab.len.int64)
+
 proc removeTx*(xp: TxPoolRef, id: Hash32) =
   let item = xp.getItem(id).valueOr:
     return
@@ -306,6 +319,9 @@ proc removeTx*(xp: TxPoolRef, id: Hash32) =
     xp.removeFromSenderTab(item)
   xp.idTab.del(id)
   xp.blobTab.removeLookup(item)
+
+  nec_txpool_removed_total.inc()
+  xp.updatePoolSizeMetrics()
 
 proc removeExpiredTxs*(xp: TxPoolRef, lifeTime: Duration = TX_ITEM_LIFETIME) =
   var expired = newSeqOfCap[Hash32](xp.idTab.len div 4)
@@ -318,7 +334,7 @@ proc removeExpiredTxs*(xp: TxPoolRef, lifeTime: Duration = TX_ITEM_LIFETIME) =
   for txHash in expired:
     xp.removeTx(txHash)
 
-proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
+proc addTxImpl(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
   if xp.pos.timestamp != xp.vmState.blockCtx.timestamp:
     xp.updateVmState()
 
@@ -408,6 +424,14 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
                      else: $ptx.blobsBundle.wrapperVersion
 
   ok()
+
+proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
+  result = xp.addTxImpl(ptx)
+  if result.isErr:
+    nec_txpool_rejected_total.inc(labelValues = [$result.error])
+  else:
+    nec_txpool_added_total.inc()
+    xp.updatePoolSizeMetrics()
 
 proc addTx*(xp: TxPoolRef, tx: Transaction): Result[void, TxError] =
   xp.addTx(PooledTransaction(tx: tx))
