@@ -89,6 +89,28 @@ proc commitOrRollbackDependingOnGasUsed(
     emitClosureLogs(vmState, callResult.logEntries)
   ok()
 
+template check2dGasInclusion*(
+    gasLimit, regularGasUsed, stateGasUsed, txGasLimit: GasInt;
+    intrinsic: IntrinsicGas;
+    fail: untyped) =
+  let
+    regularGasAvailable = gasLimit - regularGasUsed
+    stateGasAvailable = gasLimit - stateGasUsed
+    # https://github.com/ethereum/execution-specs/pull/2703/changes
+    # Worst-case regular contribution: tx.gasLimit minus the portion that
+    # must go to intrinsic state gas, capped at TX_MAX_GAS_LIMIT.
+    want = min(TX_GAS_LIMIT.GasInt, txGasLimit - intrinsic.state)
+  if want > regularGasAvailable:
+    fail("regular gas used exceeds limit, want: " & $want &
+      ", available: " & $regularGasAvailable)
+
+  # Worst-case state contribution: tx.gasLimit minus the portion that
+  # must go to intrinsic regular gas.
+  let stateGas = txGasLimit - intrinsic.regular
+  if stateGas > stateGasAvailable:
+    fail("state gas used exceeds limit, want: " & $stateGas &
+      ", available: " & $stateGasAvailable)
+
 template validateForInclusion(
     vmState: BaseVMState;
     tx: Transaction;
@@ -106,30 +128,21 @@ template validateForInclusion(
   let
     com = vmState.com
     fork = vmState.hardFork
-    regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
-    stateGasAvailable = vmState.blockCtx.gasLimit - vmState.blockStateGasUsed
     intrinsicVar = tx.intrinsicGas(fork, vmState.blockCtx.gasLimit)
 
   # Per-tx 2D gas inclusion check: for each dimension the worst-case
   # contribution must fit in the remaining budget.  Block-end
   # validation still enforces
   if fork < Amsterdam:
-    let want = min(TX_GAS_LIMIT.GasInt, tx.gasLimit)
+    let
+      regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
+      want = min(TX_GAS_LIMIT.GasInt, tx.gasLimit)
     if want > regularGasAvailable:
       fail("regular gas used exceeds limit, want: " & $want & ", available: " & $regularGasAvailable)
   else:
-    # https://github.com/ethereum/execution-specs/pull/2703/changes
-    # Worst-case regular contribution: tx.gasLimit minus the portion that
-    # must go to intrinsic state gas, capped at TX_MAX_GAS_LIMIT.
-    let want = min(TX_GAS_LIMIT.GasInt, tx.gasLimit - intrinsicVar.state)
-    if want > regularGasAvailable:
-      fail("regular gas used exceeds limit, want: " & $want & ", available: " & $regularGasAvailable)
-
-    # Worst-case state contribution: tx.gasLimit minus the portion that
-    # must go to intrinsic regular gas.
-    let stateGas = tx.gasLimit - intrinsicVar.regular
-    if stateGas > stateGasAvailable:
-      fail("state gas used exceeds limit, want: " & $stateGas & ", available: " & $stateGasAvailable)
+    check2dGasInclusion(
+      vmState.blockCtx.gasLimit, vmState.blockRegularGasUsed,
+      vmState.blockStateGasUsed, tx.gasLimit, intrinsicVar, fail)
 
   # blobGasUsed will be added to vmState.blobGasUsed if the tx is ok.
   let

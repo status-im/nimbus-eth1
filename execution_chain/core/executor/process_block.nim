@@ -514,23 +514,15 @@ when compileOption("threads"):
           "Error processing tx with index " & $failIdx & ":" &
           entries[failIdx].error.toString())
 
-      # Per-tx 2D gas inclusion check as in validateForInclusion
-      let
-        regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
-        stateGasAvailable = vmState.blockCtx.gasLimit - vmState.blockStateGasUsed
-        want = min(TX_GAS_LIMIT.GasInt, transactions[i].gasLimit - entries[i].intrinsic.state)
-      if want > regularGasAvailable:
-        ctx.cancelled.store(true, moRelease)
-        return err(
-          "Error processing tx with index " & $i & ":regular gas used exceeds limit, want: " &
-          $want & ", available: " & $regularGasAvailable)
+      block:
+        template fail(msg: string) =
+          ctx.cancelled.store(true, moRelease)
+          return err("Error processing tx with index " & $i & ":" & msg)
 
-      let stateGas = transactions[i].gasLimit - entries[i].intrinsic.regular
-      if stateGas > stateGasAvailable:
-        ctx.cancelled.store(true, moRelease)
-        return err(
-          "Error processing tx with index " & $i & ":state gas used exceeds limit, want: " &
-          $stateGas & ", available: " & $stateGasAvailable)
+        check2dGasInclusion(
+          vmState.blockCtx.gasLimit, vmState.blockRegularGasUsed,
+          vmState.blockStateGasUsed, transactions[i].gasLimit,
+          entries[i].intrinsic, fail)
 
       vmState.cumulativeGasUsed += entries[i].gasUsed
       vmState.blockRegularGasUsed += entries[i].blockRegularGasUsed
