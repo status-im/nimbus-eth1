@@ -332,12 +332,50 @@ for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
     RPC="ws"
   fi
 
+  # Some testing here for now...
+  group=$(( NUM_NODE % 3 ))
+
+  case "${group}" in
+    0)
+      # Group 2: Dual stack
+      # Need to specifically set both extip because they are loopback addresses
+      EXTIP="127.0.0.1"
+      EXTIPV6="::1"
+      LISTEN_ADDRESS="::" # This is the default setting, so could also not set it
+      NETWORK_ARGS="\
+      --listen-address="${LISTEN_ADDRESS}" \
+      --nat:extip:"${EXTIP}" \
+      --debug-enr-ipv6-address="${EXTIPV6}" \
+      "
+      ;;
+    1)
+      # Group 0: IPv4 only
+      EXTIP="127.0.0.1"
+      LISTEN_ADDRESS="127.0.0.1" # Could set 0.0.0.0
+      NETWORK_ARGS="\
+      --listen-address="${LISTEN_ADDRESS}" \
+      --nat:extip:"${EXTIP}" \
+      "
+      ;;
+    2)
+      # Group 1: IPv6 only
+      # TODO: The nat:none should not be needed, based on IPv6 only bind address we should not set enr ipv4
+      EXTIPV6="::1"
+      LISTEN_ADDRESS="::1" # Cannot set :: as this would also listen on IPv4
+      NETWORK_ARGS="\
+      --listen-address="${LISTEN_ADDRESS}" \
+      --debug-enr-ipv6-address="${EXTIPV6}" \
+      --nat:none \
+      "
+      ;;
+  esac
+
   # Running with bits-per-hop of 1 to make the lookups more likely requiring
   # to request to nodes over the network instead of having most of them in the
   # own routing table.
+
   ./build/nimbus_portal_client \
-    --listen-address:127.0.0.1 \
-    --nat:extip:127.0.0.1 \
+    ${NETWORK_ARGS} \
     --log-level="${LOG_LEVEL}" \
     --udp-port=$(( BASE_PORT + NUM_NODE )) \
     --data-dir="${NODE_DATA_DIR}" \
