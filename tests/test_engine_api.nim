@@ -453,7 +453,7 @@ proc payloadAttrV4PreserveWithdrawalsTest(env: TestEnv): Result[void, string] =
       suggestedFeeRecipient: default(Address),
       withdrawals:           Opt.some(@[wd]),
       parentBeaconBlockRoot: Opt.some(default(Hash32)),
-      slotNumber:            Opt.some(w3Qty(0'u64)),
+      slotNumber:            Opt.some(w3Qty(9'u64)),
       targetGasLimit:        Opt.some(w3Qty(60_000_000'u64)),
     )
 
@@ -473,12 +473,18 @@ proc payloadAttrV4PreserveWithdrawalsTest(env: TestEnv): Result[void, string] =
   if wds.len != 1:
     return err("Expected withdrawals len 1, got: " & $wds.len)
 
-  if wds[0].amount.uint64 != 7:
-    return err("Expected withdrawals[0].amount = 7, got : " & $wds[0].amount)
+  if wds[0].amount.uint64 != wd.amount.uint64:
+    return err("Expected withdrawals[0].amount = " & $wd.amount.uint64 &
+      ", got : " & $wds[0].amount)
 
   if wds[0].address != wdAddress:
     return err("Expected withdrawals[0].address = " & $wdAddress &
       ", got : " & $wds[0].address)
+
+  let slotNumber = payload.executionPayload.slotNumber
+  if slotNumber != attr.slotNumber:
+    return err("Expected slotNumber: " & $attr.slotNumber &
+      ", got : " & $slotNumber)
 
   ok()
 

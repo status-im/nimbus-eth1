@@ -95,6 +95,9 @@ export
 # chain(xp: TxPoolRef): ForkedChainRef
 # com(xp: TxPoolRef): CommonRef
 # len(xp: TxPoolRef): int
+# baseFee(xp: TxPoolRef): GasInt
+# senderCount(xp: TxPoolRef): int
+# iterator allItems(xp: TxPoolRef): TxItemRef
 
 # ------------------------------------------------------------------------------
 # TxPoolRef public functions
@@ -112,11 +115,13 @@ export
 
 # addTx(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError]
 # addTx(xp: TxPoolRef, tx: Transaction): Result[void, TxError]
-# contains(xp: TxPoolRef, id: Hash32): bool
 # getItem(xp: TxPoolRef, id: Hash32): Result[TxItemRef, TxError]
+# getNonce(xp: TxPoolRef; account: Address): AccountNonce
+# contains(xp: TxPoolRef, id: Hash32): bool
 # removeTx(xp: TxPoolRef, id: Hash32)
 # removeExpiredTxs(xp: TxPoolRef, lifeTime: Duration)
-# getBlobAndProof(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV1]
+# getBlobAndProofV1(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV1]
+# getBlobAndProofV2(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV2]
 
 proc removeNewBlockTxs*(xp: TxPoolRef, blk: Block, optHash = Opt.none(Hash32)) =
   let fromHash = if optHash.isSome: optHash.get
