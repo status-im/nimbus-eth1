@@ -141,6 +141,8 @@ proc removeFromSenderTab(xp: TxPoolRef; item: TxItemRef) =
   if sn.isNil:
     return
   discard sn.list.delete(item.nonce)
+  if sn.list.len == 0:
+    xp.senderTab.del(item.sender)
 
 func alreadyKnown(xp: TxPoolRef, id: Hash32): bool =
   xp.idTab.getOrDefault(id).isNil.not
