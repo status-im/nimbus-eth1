@@ -95,13 +95,22 @@ proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
 
 func idleNext(ctx: BeaconCtxRef; info: static[string]): BeaconState =
   ## State transition handler
+  if ctx.subState.cancelRequest and                 # failed activation..
+     ctx.pool.stopBase.isSome():                    # ..in single run mode
+    return BeaconState.linger                       # => wait for terminate
+
+  # The header chain cache must be checked after checking for a failed
+  # start of a single run. The reason is that the header chain cache might
+  # semi-autonomously start a new session to be accepted (or rejected) by
+  # the beacon syncer.
   if ctx.hdrCache.state == collecting:
     return BeaconState.headers
+
   idle
 
 proc headersNext(ctx: BeaconCtxRef; info: static[string]): BeaconState =
   ## State transition handler
-  if not ctx.pool.seenData and         # checks for cul-de-sac syncing
+  if not ctx.pool.seenData and                      # cul-de-sac syncing?
      nFetchHeadersFailedInitialPeersThreshold < ctx.pool.failedPeers.len:
     debug info & ": too many failed header peers",
       failedPeers=ctx.pool.failedPeers.len,
@@ -230,19 +239,24 @@ proc updateBeaconState*(ctx: BeaconCtxRef; info: static[string]) =
   ##
   # State machine
   # ::
-  #     idle <--------------------------.
-  #      |                              |
-  #      v                              |
-  #     headers ----> headersCancel --> +
-  #      |                 |            |
-  #      v                 v            |
-  #     headersFinish -> linger ------> +
-  #      |                              |
-  #      v                              |
-  #     blocks -> blocksCancel -------> +
-  #      |                              |
-  #      v                              |
-  #     blocksFinish -------------------'
+  #        .-- idle <--------------------------.
+  #        |    |                              |
+  #        |    v                              |
+  #        |   headers ----> headersCancel --> +
+  #        |    |                 |            |
+  #        |    v                 v            |
+  #        |   headersFinish -> linger ------> +
+  #        |    |                 ^            |
+  #        |    |                 |            |
+  #        `----|-----------------'            |
+  #             v                              |
+  #            linger -----------------------> +
+  #             |                              |
+  #             v                              |
+  #            blocks -> blocksCancel -------> +
+  #             |                              |
+  #             v                              |
+  #            blocksFinish -------------------'
   #
   let newState =
     case ctx.pool.syncState:
@@ -327,11 +341,12 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
       if ctx.pool.stopBase.isNone():                # standard mode
         (ctx.chain.baseNumber, ctx.hdrCache.head.number)
       else:
-        let stopBase = ctx.pool.stopBase.unsafeGet
+        let stopBase = ctx.pool.stopBase.unsafeGet  # single run was triggered
         if not ctx.hdrCache.updateBlindStop(stopBase):
           debug "Syncer single run rejected", stopBase=stopBase.number,
             head=ctx.chain.latestNumber
-          ctx.hdrCache.clear()
+          ctx.subState.cancelRequest = true         # => change to `linger`
+          ctx.hibernate = false                     # wake up for state change
           return
         (stopBase.number, ctx.hdrCache.head.number)
 

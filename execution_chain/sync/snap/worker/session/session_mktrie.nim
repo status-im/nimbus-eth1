@@ -15,7 +15,7 @@ import
   pkg/[chronicles, chronos, metrics, stint],
   pkg/stew/[byteutils, interval_set],
   ../[helpers, mpt, state_db, worker_desc],
-  ./[session_analyse, session_helpers]
+  ./[session_analyse, session_pivot, session_helpers]
 
 declareGauge nec_snap_merged_mpt_coverage, "" &
   "Factor of accumulated account ranges covered when assembling MPT"
@@ -538,14 +538,15 @@ template sessionMkTrie*(ctx: SnapCtxRef; info: static[string]): auto =
         covered=session.fullCov.totalRatio.pcStr
       # End `for walkStateData()`
 
+    # Publish pivot for MPT analysis and healing
+    doAssert PivotOnTrie <= ctx.sessionPivotActivate(info)
+
     let elapsed = Moment.now() - start
     bodyRc = typeof(bodyRc).ok(elapsed)
 
     chronicles.info info & ": Done all states", nStates, pivot=pivot.toStr,
       coverage=session.fullCov.totalRatio.pcStr, elapsed=elapsed.toStr
 
-    # Publish pivot for MPT analysis and healing
-    ctx.pool.pivot = Opt.some(pivot.root)
     # End block `body`
 
   bodyRc

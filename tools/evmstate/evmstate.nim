@@ -13,6 +13,7 @@ import
   chronicles,
   eth/common/keys,
   eth/common/transaction_utils,
+  beacon_chain/process_state,
   stew/byteutils,
   results,
   stint,
@@ -158,6 +159,12 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
       result.postState = ctx.postState
     if conf.jsonEnabled:
       writeRootHashToStderr(stateRoot)
+    vmState.ledger.txFrame.dispose()
+    vmState.dispose()
+    if com.taskpool.isNil.not:
+      com.taskpool.shutdown()
+      com.taskpool = nil
+    com.db.close()
 
   try:
     let res = vmState.processTransaction(ctx.tx, sender)
@@ -315,8 +322,12 @@ proc evmStateMain*() =
     if not prepareAndRun(conf.inputFile, conf):
       quit(QuitFailure)
   else:
+    ProcessState.setupStopHandlers()
     var noError = true
     for inputFile in lines(stdin):
+      if (let reason = ProcessState.stopping(); reason.isSome()):
+        echo "Shutting down, reason = ", reason[]
+        break
       let res = prepareAndRun(inputFile, conf)
       noError = noError and res
     if not noError:
