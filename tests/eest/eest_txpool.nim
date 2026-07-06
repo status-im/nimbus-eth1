@@ -75,7 +75,7 @@ proc importTxAndAssembleBlock(xp: TxPoolRef, blk: EthBlock): Result[EthBlock, st
       return err($error)
 
   let
-    # Overrride gasLimit
+    # Override gasLimit
     gasLimit = Opt.some(blk.header.gasLimit)
     res = ? xp.assembleBlock(someBaseFee = true, gasLimit = gasLimit)
     blockHash = res.blk.header.computeBlockHash
@@ -148,12 +148,12 @@ proc processFile*(filePath: string, statelessEnabled = false, parallelEnabled = 
       else:
         let header = testUnit.genesisBlockHeader.to(Header)
         check testUnit.genesisBlockHeader.hash == header.computeRlpHash
-        #let env = prepareEnv(testUnit, header, rpcEnabled = false, statelessEnabled, parallelEnabled)
+        let env = prepareEnv(testUnit, header, rpcEnabled = false, statelessEnabled, parallelEnabled)
 
-        #let testResult = env.runTest(testUnit, statelessEnabled)
-        #check testResult == Result[void, string].ok()
+        let testResult = env.runTest(testUnit, statelessEnabled)
+        check testResult == Result[void, string].ok()
 
-        #env.close()
+        env.close()
 
 when isMainModule:
   import std/cmdline
