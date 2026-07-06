@@ -287,15 +287,15 @@ proc verifyHeader(
             UNTAGGED,
           )
         )
-      latest = engine.headerStore.latest.valueOr:
+      finalized = engine.headerStore.finalized.valueOr:
         # untagged(-1) because this doesn't link to any backend
         return err(
           (
-            UnavailableDataError, "latest block is not available yet. Still syncing?",
-            UNTAGGED,
+            UnavailableDataError,
+            "finalized block is not available yet. Still syncing?", UNTAGGED,
           )
         )
-      finalized = engine.headerStore.finalized.valueOr:
+      latest = engine.headerStore.latest.valueOr:
         # untagged(-1) because this doesn't link to any backend
         return err(
           (
