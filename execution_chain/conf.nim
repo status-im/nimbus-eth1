@@ -840,6 +840,10 @@ proc ereDir*(config: ExecutionClientConf): string =
 func udpPort*(config: ExecutionClientConf): Port =
   config.udpPortFlag.get(config.tcpPort)
 
+func threadSafeCaches*(config: ExecutionClientConf): bool =
+  config.optimisticStatePrefetch or config.balStatePrefetch or
+    config.parallelStateRootComputation
+
 func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
   DbOptions.init(
     maxOpenFiles = config.rocksdbMaxOpenFiles,
@@ -856,8 +860,7 @@ func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
     rdbPrintStats = config.rdbPrintStats,
     maxSnapshots = config.aristoDbMaxSnapshots,
     parallelStateRootComputation = config.parallelStateRootComputation,
-    threadSafeCaches = config.optimisticStatePrefetch or config.balStatePrefetch or
-      config.parallelStateRootComputation,
+    threadSafeCaches = config.threadSafeCaches,
     blockCacheType = config.rocksdbBlockCacheType,
   )
 

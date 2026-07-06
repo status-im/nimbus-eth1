@@ -10,7 +10,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[tables, sets, algorithm],
+  std/[tables, sets],
   eth/common,
   ../db/ledger,
   ../db/aristo/aristo_proof,
@@ -74,6 +74,7 @@ func validateKeys*(witness: Witness, expectedKeys: WitnessTable): Result[void, s
 
   ok()
 
+# https://github.com/ethereum/execution-specs/blob/b6b764ff21bb754b79e11ef5dc7ad1f79996e923/src/ethereum/forks/amsterdam/stateless.py#L257
 func verifyHeaders*(
     witness: ExecutionWitness, header: Header
 ): Result[seq[Header], string] =
@@ -90,25 +91,22 @@ func verifyHeaders*(
     except RlpError as e:
       return err("Failed to decode header in witness: " & e.msg)
 
-  # Sort the headers in ascending order by block number
-  func compareByNumber(a, b: Header): int =
-    if a.number == b.number:
-      0
-    elif a.number > b.number:
-      1
-    else: # a.number < b.number
-      -1
-  headers.sort(compareByNumber)
+  # Validate that a sequence of encoded headers forms a contiguous chain
+  for i in 1..<headers.len:
+    if headers[i].parentHash != keccak256(witness.headers[i - 1].asSeq()):
+      return err("Witness headers are not contiguous")
 
-  # Check that the last header in the list (after sorting) is the parent header
-  if headers[headers.high].computeRlpHash() != header.parentHash:
+  # The last provided header must be the parent of the block being validated.
+  # This anchors preStateRoot (taken from the last witness header) to the block's
+  # parentHash: without it an attacker could supply a fabricated last header with
+  # an arbitrary stateRoot, paired with matching fake trie nodes, and pass the
+  # preStateRoot check in statelessProcessBlock() while executing on a bogus
+  # pre-state.
+  #
+  # Note that execution-specs does the same check inside execute_block via
+  # validate_header().
+  if keccak256(witness.headers[^1].asSeq()) != header.parentHash:
     return err("Parent header is required in the witness")
-
-  var i = headers.high
-  while i > 0:
-    if headers[i - 1].computeRlpHash() != headers[i].parentHash:
-      return err("Header chain verification failed")
-    dec i
 
   ok(headers)
 

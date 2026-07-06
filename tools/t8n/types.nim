@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -12,6 +12,7 @@ import
   std/[tables],
   eth/common/blocks,
   eth/common/receipts,
+  eth/common/block_access_lists,
   results,
   stint,
   ../../execution_chain/common/chain_config,
@@ -53,6 +54,7 @@ type
     parentExcessBlobGas*: Opt[uint64]
     parentBeaconBlockRoot*: Opt[Hash32]
     depositContractAddress*: Opt[Address]
+    slotNumber*: Opt[uint64]
 
   TxObject* = object
     `type`*: Opt[uint64]
@@ -119,6 +121,12 @@ type
     currentExcessBlobGas*: Opt[uint64]
     requestsHash*: Opt[Hash32]
     requests*: Opt[seq[seq[byte]]]
+    blockAccessListHash*: Opt[Hash32]
+    blockAccessList*: Opt[BlockAccessListRef]
+
+  ExecOutput* = ref object
+    result*: ExecutionResult
+    alloc*: GenesisAlloc
 
 const
   ErrorEVM*              = 2.T8NExitCode

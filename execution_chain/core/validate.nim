@@ -244,6 +244,11 @@ func validateTxBasic*(
     fork:     HardFork,
     validateFork: bool = true): Result[void, string] =
 
+  let (validChainId, derivedChainId) = tx.validateChainId(com.chainId)
+  if not validChainId:
+    return err("invalid tx: chain id mismatch, got: " &
+      $derivedChainId & " expected: " & $com.chainId)
+
   if validateFork:
     if tx.txType == TxEip2930 and fork < Berlin:
       return err("invalid tx: EIP-2930 Tx type detected before Berlin")
@@ -350,7 +355,7 @@ proc validateTransaction*(
     sender:  Address;         ## tx.recoverSender
     skipNonceCheck = false
     ): Result[void, string] =
-    
+
   let
     ledger  = vmState.ledger
     baseFee = vmState.blockCtx.baseFeePerGas

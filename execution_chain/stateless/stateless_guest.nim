@@ -9,11 +9,14 @@
 
 {.push raises: [], gcsafe.}
 
-import stew/[byteutils, endians2], ./stateless_types
+import stew/[byteutils, endians2], ./[stateless_types, stateless_execution]
 
-export stateless_types
+export stateless_types, stateless_execution
 
-# https://github.com/ethereum/execution-specs/blob/f03c2e0af2df95cd2eed029ba4ea7140acd028c7/src/ethereum/forks/amsterdam/stateless_guest.py#L36
+## Stateless guest interfaces
+## Spec:
+## https://github.com/ethereum/execution-specs/blob/b6b764ff21bb754b79e11ef5dc7ad1f79996e923/src/ethereum/forks/amsterdam/stateless_guest.py#L1
+
 func deserialize_stateless_input*(
     data: openArray[byte]
 ): Result[StatelessInput, string] =
@@ -31,3 +34,15 @@ func deserialize_stateless_input*(
     )
   except SerializationError as e:
     err("Failed to deserialize StatelessInput: " & e.msg)
+
+const FAILED_STATELESS_OUTPUT = StatelessValidationResult(
+  new_payload_request_root: default(Digest),
+  successful_validation: false,
+  chain_config: default(StatelessChainConfig),
+)
+
+proc run_stateless_guest*(data: openArray[byte]): seq[byte] =
+  let input = deserialize_stateless_input(data).valueOr:
+    return SSZ.encode(FAILED_STATELESS_OUTPUT)
+
+  SSZ.encode(verify_stateless_new_payload(input))

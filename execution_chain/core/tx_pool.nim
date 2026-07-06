@@ -37,6 +37,7 @@
 {.push raises: [].}
 
 import
+  metrics,
   eth/common/blocks,
   ./tx_pool/tx_tabs,
   ./tx_pool/tx_item,
@@ -47,6 +48,11 @@ import
 
 from ../evm/state import blockAccessList
 from eth/common/eth_types_rlp import rlpHash
+
+declareCounter nec_txpool_packed_total,   "Transactions packed into assembled blocks"
+declareGauge   nec_txpool_last_block_txs, "Transactions in the last assembled block"
+declareGauge   nec_txpool_last_block_value,
+  "Reward (gwei) of the last assembled block"
 
 # ------------------------------------------------------------------------------
 # TxPoolRef public types
@@ -158,8 +164,17 @@ proc assembleBlock*(
     someBaseFee: bool = false,
     gasLimit: Opt[GasInt] = Opt.none(GasInt)
 ): Result[AssembledBlock, string] =
-  if xp.timestamp != xp.vmState.blockCtx.timestamp:
-    xp.updateVmState()
+  # Packing mutates the ledger (tx nonces/balances are persisted) and the
+  # per-block accumulators (blobGasUsed, gas counters, receipts), and
+  # vmExecInit does not reset them. forkchoiceUpdated rebuilds the payload
+  # for the same slot (same timestamp) arbitrarily many times, so guarding
+  # the reset on a timestamp change let a rebuild reuse the previous pack's
+  # dirtied state: every pooled tx then failed the nonce check, the body
+  # ended up empty, yet the header still committed to the stale blobGasUsed
+  # (and gasUsed/stateRoot) of the first pack — producing a block other
+  # clients reject as a blob-gas mismatch. Always start each build from a
+  # fresh transaction environment.
+  xp.updateVmState()
 
   let com = xp.vmState.com
 
@@ -231,6 +246,14 @@ proc assembleBlock*(
       xp.vmState.blockAccessList
     else:
       Opt.none(BlockAccessListRef)
+
+  nec_txpool_packed_total.inc(blk.txs.len)
+  nec_txpool_last_block_txs.set(blk.txs.len.int64)
+  nec_txpool_last_block_value.set(
+    (pst.blockValue div 1_000_000_000.u256).truncate(int64))
+  # Packing prunes stale-nonce txs directly via tx_tabs, bypassing removeTx, so
+  # refresh the size gauges here to keep them from drifting.
+  xp.updatePoolSizeMetrics()
 
   ok AssembledBlock(
     blk: blk,

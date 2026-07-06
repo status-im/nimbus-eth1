@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -22,7 +22,8 @@ import
   ../../execution_chain/transaction,
   ../../execution_chain/common/chain_config,
   ../common/helpers,
-  ./types
+   ./serialize_bal,
+   ./types
 
 export
   helpers
@@ -187,6 +188,7 @@ proc readValue*(r: var JsonReader[T8Conv], val: var EnvStruct)
     of "ommers": r.readValue(val.ommers)
     of "withdrawals": r.readValue(val.withdrawals)
     of "depositContractAddress": r.readValue(val.depositContractAddress)
+    of "slotNumber": r.readValue(val.slotNumber)
     else: discard r.readValue(JsonString)
 
   if not currentCoinbaseParsed:
@@ -442,11 +444,11 @@ func `@@`[N, T](x: array[N, T]): JsonNode =
   for c in x:
     result.add @@(c)
 
-func `@@`[T](x: Opt[T]): JsonNode =
+func `@@`*[T](x: Opt[T]): JsonNode =
   if x.isNone:
     newJNull()
   else:
-    @@(x.get())
+    @@(x.value)
 
 func `@@`*(x: ExecutionResult): JsonNode =
   result = %{
@@ -473,3 +475,7 @@ func `@@`*(x: ExecutionResult): JsonNode =
     result["requestsHash"] = @@(x.requestsHash)
   if x.requests.isSome:
     result["requests"] = @@(x.requests)
+  if x.blockAccessListHash.isSome:
+    result["blockAccessListHash"] = @@(x.blockAccessListHash)
+  if x.blockAccessList.isSome:
+    result["blockAccessList"] = @@(x.blockAccessList)

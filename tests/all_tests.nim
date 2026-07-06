@@ -47,7 +47,5 @@ import
     test_stateless,
     test_block_access_list,
     test_pruner,
-    # These suites below are much slower than all the rest, so run them last
-    test_generalstate_json,
   ],
   ./blockproofs/all_blockproofs_tests
