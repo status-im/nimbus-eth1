@@ -91,7 +91,7 @@ func convHeader*(blk: eth_api_types.BlockObject): Header =
     requestsHash: blk.requestsHash,
   )
 
-proc walkBlocks(
+proc walkBlocks*(
     engine: RpcVerificationEngine,
     sourceNum: base.BlockNumber,
     targetNum: base.BlockNumber,
@@ -258,23 +258,13 @@ proc verifyBlock(
   if fullTransactions:
     ?verifyTransactions(header.transactionsRoot, blk.transactions)
 
-  # verify withdrawals
-  if blk.withdrawalsRoot.isSome():
-    if blk.withdrawalsRoot.get() != orderedTrieRoot(blk.withdrawals.get(@[])):
+  if blk.withdrawals.isSome() and blk.withdrawalsRoot.isSome():
+    if blk.withdrawalsRoot.get() != orderedTrieRoot(blk.withdrawals.get()):
       # untagged(-1) so the relevant backend can be tagged
       return err(
         (
           VerificationError,
           "Withdrawals within the block do not yield the same withdrawals root",
-          UNTAGGED,
-        )
-      )
-  else:
-    if blk.withdrawals.isSome():
-      # untagged(-1) so the relevant backend can be tagged
-      return err(
-        (
-          VerificationError, "Block contains withdrawals but no withdrawalsRoot",
           UNTAGGED,
         )
       )
