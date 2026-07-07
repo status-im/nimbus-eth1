@@ -303,15 +303,20 @@ func rmHash*(xp: TxPoolRef): Hash32 =
 func `rmHash=`*(xp: TxPoolRef, val: Hash32) =
   xp.rmHash = val
 
-proc updateVmState*(xp: TxPoolRef) =
-  ## Reset transaction environment, e.g. before packing a new block
+proc updateVmState*(xp: TxPoolRef, parentHeader: Header, parentHash: Hash32) =
+  ## Reset transaction environment, e.g. before packing a new block on
+  ## top of the given parent block.
   if not xp.vmState.isNil():
     xp.vmState.ledger.txFrame.dispose()
     xp.vmState.ledger = nil
     xp.vmState.dispose()
   xp.vmState = setupVMState(xp.chain.com,
-    xp.chain.latestHeader, xp.chain.latestHash,
-    xp.pos, xp.chain.txFrame(xp.chain.latestHash))
+    parentHeader, parentHash,
+    xp.pos, xp.chain.txFrame(parentHash))
+
+proc updateVmState*(xp: TxPoolRef) =
+  ## Reset transaction environment on top of the latest block.
+  xp.updateVmState(xp.chain.latestHeader, xp.chain.latestHash)
 
 # ------------------------------------------------------------------------------
 # Public functions

@@ -167,7 +167,8 @@ func getWrapperVersion(com: CommonRef, timestamp: EthTime): WrapperVersion =
 proc assembleBlock*(
     xp: TxPoolRef,
     someBaseFee: bool = false,
-    gasLimit: Opt[GasInt] = Opt.none(GasInt)
+    gasLimit: Opt[GasInt] = Opt.none(GasInt),
+    parentHash: Opt[Hash32] = Opt.none(Hash32)
 ): Result[AssembledBlock, string] =
   # Packing mutates the ledger (tx nonces/balances are persisted) and the
   # per-block accumulators (blobGasUsed, gas counters, receipts), and
@@ -179,7 +180,16 @@ proc assembleBlock*(
   # (and gasUsed/stateRoot) of the first pack — producing a block other
   # clients reject as a blob-gas mismatch. Always start each build from a
   # fresh transaction environment.
-  xp.updateVmState()
+  #
+  # When `parentHash` is given, build on that block instead of the most
+  # recently imported one: the engine API requires the payload to sit on
+  # the forkchoiceUpdated headBlockHash, which need not be `chain.latest`
+  # when sibling payloads exist at the same height.
+  if parentHash.isSome:
+    let parentHeader = ?xp.chain.headerByHash(parentHash[])
+    xp.updateVmState(parentHeader, parentHash[])
+  else:
+    xp.updateVmState()
 
   let com = xp.vmState.com
 
