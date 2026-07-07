@@ -41,7 +41,7 @@ proc commitOrRollbackDependingOnGasUsed(
     callResult: var LogResult;
     blobGasUsed: GasInt;
     rollbackReads: bool;
-      ): Result[void, string] =
+      ): Result[void, string] {.noinline.} =
   # Make sure that the tx does not exceed the maximum cumulative limit as
   # set in the vmState.blockCtx. Again, the EIP-1559 reference does not mention
   # an early stop. It would rather detect differing values for the  block
