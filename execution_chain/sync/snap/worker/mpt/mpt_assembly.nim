@@ -150,6 +150,32 @@
 ##   * path:      `seq[byte]`
 ##
 ##
+## * Unprocessed leaf ranges
+##   + key33: <col, key>
+##   + value: <root, ranges>
+##   where
+##   + col:       `cLeafIntv`
+##   + key:       `Hash32`, zero for accounts, account path for storage slots
+##   * root:      `Hash32`, state root or storage root
+##
+## * Flat accounts list
+##   + key33: <col, key>
+##   + value: <account>
+##   where
+##   + col:       `cFlatAcc`
+##   + key:       `Hash32`
+##   + data:      `Account`
+##
+## * Flat storage slots list
+##   + key33: <col, acc-path, key>
+##   + value: <slot>
+##   where
+##   + col:       `cFlatSlot`
+##   + acc-path:  `Hash32`
+##   + key:       `Hash32`,
+##   + data:      `UInt32`
+##
+##
 ## Additional assumptions:
 ## -----------------------
 ##
@@ -164,7 +190,7 @@
 import
   std/[dirs, paths, typetraits],
   pkg/[chronicles, chronos, eth/common, results, rocksdb],
-  pkg/stew/[byteutils, endians2],
+  pkg/stew/[byteutils, endians2, interval_set],
   ../../../wire_protocol/snap/snap_types,
   ../[state_db, worker_const],
   ./mpt_desc
@@ -192,6 +218,15 @@ type
     ## Shortcut
 
   OptHashResult* = Result[Opt[Hash32],string]
+    ## Shortcut
+
+  OptLeafInvResult* = Result[Opt[DecodedLeafIntv],string]
+    ## Shortcut
+
+  OptFlatAccResult* = Result[Opt[Account],string]
+    ## Shortcut
+
+  OptFlatSlotResult* = Result[Opt[UInt256],string]
     ## Shortcut
 
   PutResult* = Result[void,string]
@@ -224,6 +259,10 @@ type
     cStoDnglKvt                                     # dangling sto nodes links
     cCodeMissKvt                                    # missing contract links
 
+    cLeafIntv                                       # missing accounts/slots
+    cFlatAcc
+    cFlatSlot
+
   StateDataTag* = enum
     Untagged = 0                                    # well, still a tag :)
     OnTrie                                          # assembled and merged
@@ -254,6 +293,9 @@ type
     codes: seq[(CodeHash,CodeItem)]
     peerID: Hash
 
+  DecodedLeafIntv* = tuple
+    root: Hash32
+    ranges: ItemKeyRangeSet
 
   CachedStateData* = tuple
     hash: BlockHash
@@ -396,10 +438,46 @@ func decodeHeader(data: seq[byte]): Result[Header,string] =
 
 func decodeBal(data: seq[byte]): Result[BlockAccessListRef,string] =
   const info = "decodeBal"
-  var
-    res = new BlockAccessList
+  var res = new BlockAccessList
   try:
     res[] = rlp.decode(data, BlockAccessList)
+  except RlpError as e:
+    return err(info & ": " & $e.name & "(" & e.msg & ")")
+  ok(move res)
+
+func decodeLeafInv(data: seq[byte]): Result[DecodedLeafIntv,string] =
+  const info = "decodeLeafInv"
+  var
+    rd = data.rlpFromBytes
+    res: DecodedLeafIntv
+    first = true
+  try:
+    res.ranges = ItemKeyRangeSet.init()
+    for w in rd.items:
+      if first:
+        res.root = w.read(Hash32)
+        first = false
+      else:
+        let iv = w.read((UInt256,UInt256))
+        discard res.ranges.merge(iv[0].to(ItemKey),iv[1].to(ItemKey))
+  except RlpError as e:
+    return err(info & ": " & $e.name & "(" & e.msg & ")")
+  ok(move res)
+
+func decodeFlatAcc(data: seq[byte]): Result[Account,string] =
+  const info = "decodeFlatAcc"
+  var res: Account
+  try:
+    res = rlp.decode(data, Account)
+  except RlpError as e:
+    return err(info & ": " & $e.name & "(" & e.msg & ")")
+  ok(move res)
+
+func decodeFlatSlot(data: seq[byte]): Result[UInt256,string] =
+  const info = "decodeFlatSlot"
+  var res: UInt256
+  try:
+    res = rlp.decode(data, UInt256)
   except RlpError as e:
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(move res)
@@ -466,6 +544,26 @@ template encodeBal(
     bal: BlockAccessListRef;
       ): untyped =
   rlp.encode bal[]
+
+template encodeLeafInv(
+    root: Hash32;
+    ranges: ItemKeyRangeSet;
+      ): untyped =
+  var wrt = initRlpList ranges.chunks+1
+  wrt.append root
+  for iv in ranges.increasing:
+    wrt.append (iv.minPt.to(UInt256),iv.maxPt.to(UInt256))
+  wrt.finish()
+
+template encodeFlatAcc(
+    account: Account;
+      ): untyped =
+  rlp.encode(account)
+
+template encodeFlatSlot(
+    slot: UInt256;
+      ): untyped =
+  rlp.encode(slot)
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -920,6 +1018,14 @@ template get65(
   let startHash = start.to(Hash32)
   db.adb.rGet col.key65(root, startHash)
 
+template get65(
+    db: MptAsmRef;
+    col: MptAsmCol;
+    path: Hash32;
+    key: Hash32;
+      ): untyped =
+  db.adb.rGet col.key65(path, key)
+
 template put65(
     db: MptAsmRef;
     col: MptAsmCol;
@@ -930,6 +1036,15 @@ template put65(
   let startHash = start.to(Hash32)
   db.adb.rPut(col.key65(root, startHash), data)
 
+template put65(
+    db: MptAsmRef;
+    col: MptAsmCol;
+    path: Hash32;
+    key: Hash32;
+    data: openArray[byte];
+      ): untyped =
+  db.adb.rPut(col.key65(path, key), data)
+
 template del65(
     db: MptAsmRef;
     col: MptAsmCol;
@@ -938,6 +1053,14 @@ template del65(
       ): untyped =
   let startHash = start.to(Hash32)
   db.adb.rDel col.key65(root, startHash)
+
+template del65(
+    db: MptAsmRef;
+    col: MptAsmCol;
+    path: Hash32;
+    key: Hash32;
+      ): untyped =
+  db.adb.rDel col.key65(path, key)
 
 # --------------
 
@@ -1786,6 +1909,115 @@ proc hasMissContracts*(db: MptAsmRef): bool =
   for _ in db.walkCodeMissKvt:
     return true
   # false
+
+# =============
+
+proc hasAccLeafIntv*(db: MptAsmRef): BoolResult =
+  let data = db.get33(cLeafIntv, zeroHash32).valueOr:
+    return err(error)
+  ok(0 < data.len)
+
+proc hasStoLeafIntv*(db: MptAsmRef, accPath: Hash32): BoolResult =
+  let data = db.get33(cLeafIntv, accPath).valueOr:
+    return err(error)
+  ok(0 < data.len)
+
+proc getAccLeafInv*(db: MptAsmRef): OptLeafInvResult =
+  let data = db.get33(cLeafIntv, zeroHash32).valueOr:
+    return err(error)
+  if data.len == 0:
+    return ok Opt.none(DecodedLeafIntv)
+  var res = data.decodeLeafInv().valueOr:
+    return err(error)
+  ok Opt.some(move res)
+
+proc getStoLeafInv*(db: MptAsmRef, accPath: Hash32): OptLeafInvResult =
+  let data = db.get33(cLeafIntv, accPath).valueOr:
+    return err(error)
+  if data.len == 0:
+    return ok Opt.none(DecodedLeafIntv)
+  var res = data.decodeLeafInv().valueOr:
+    return err(error)
+  ok Opt.some(move res)
+
+proc putAccLeafInv*(
+    db: MptAsmRef;
+    root: StateRoot;
+    ranges: ItemKeyRangeSet;
+      ): PutResult =
+  db.put33(cLeafIntv, zeroHash32, encodeLeafInv(Hash32 root, ranges))
+
+proc putStoLeafInv*(
+    db: MptAsmRef;
+    accPath: Hash32;
+    root: StoreRoot;
+    ranges: ItemKeyRangeSet;
+      ): PutResult =
+  db.put33(cLeafIntv, accPath, encodeLeafInv(Hash32 root, ranges))
+
+proc delStoLeafInv*(
+    db: MptAsmRef,
+    accPath: Hash32;
+      ): DelResult =
+  db.del33(cLeafIntv, accPath)
+
+proc clearLeafInv*(db: MptAsmRef): DelResult =
+  db.adb.rClear(cLeafIntv)
+
+# -------------
+
+proc hasFlatAcc*(db: MptAsmRef, path: Hash32): BoolResult =
+  let data = db.get33(cFlatAcc, path).valueOr:
+    return err(error)
+  ok(0 < data.len)
+
+proc getFlatAcc*(db: MptAsmRef, path: Hash32): OptFlatAccResult =
+  let data = db.get33(cFlatAcc, path).valueOr:
+    return err(error)
+  if data.len == 0:
+    return ok Opt.none(Account)
+  var res = data.decodeFlatAcc().valueOr:
+    return err(error)
+  ok Opt.some(move res)
+
+proc putFlatAcc*(db: MptAsmRef, path: Hash32, account: Account): PutResult =
+  db.put33(cFlatAcc, path, encodeFlatAcc(account))
+
+proc delFlatAcc*(db: MptAsmRef, path: Hash32): DelResult =
+  db.del33(cFlatAcc, path)
+
+proc clearFlatAcc*(db: MptAsmRef): DelResult =
+  db.adb.rClear(cFlatAcc)
+
+# -------------
+
+proc hasFlatSlot*(db: MptAsmRef, accPath, key: Hash32): BoolResult =
+  let data = db.get65(cFlatSlot, accPath, key).valueOr:
+    return err(error)
+  ok(0 < data.len)
+
+proc getFlatSlot*(db: MptAsmRef, accPath, key: Hash32): OptFlatSlotResult =
+  let data = db.get65(cFlatSlot, accPath, key).valueOr:
+    return err(error)
+  if data.len == 0:
+    return ok Opt.none(UInt256)
+  var res = data.decodeFlatSlot().valueOr:
+    return err(error)
+  ok Opt.some(move res)
+
+proc putFlatSlot*(
+    db: MptAsmRef;
+    accPath: Hash32;
+    key: Hash32;
+    data: UInt256;
+      ): PutResult =
+  db.put65(cFlatSlot, accPath, key, encodeFlatSlot(data))
+
+proc delFlatSlot*(db: MptAsmRef, accPath, key: Hash32): DelResult =
+  db.del65(cFlatSlot, accPath, key)
+
+proc clearFlatSlot*(db: MptAsmRef): DelResult =
+  db.adb.rClear(cFlatSlot)
 
 # ------------------------------------------------------------------------------
 # End
