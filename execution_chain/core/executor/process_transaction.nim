@@ -184,7 +184,12 @@ proc processTransaction*(
     else:
       ok(move(callResult))
 
-  vmState.ledger.persist(clearEmptyAccount = vmState.hardFork >= Spurious)
+  try:
+    vmState.ledger.persist(clearEmptyAccount = vmState.hardFork >= Spurious)
+  except BlockAbortError as e:
+    if vmState.ledger.stateless:
+      return err(e.msg)
+    raiseAssert e.msg
 
   res
 
@@ -200,7 +205,7 @@ proc prefetchTransaction*(
   tx.txCallEvm(sender, vmState, intrinsic, discardResult = true)
   vmState.ledger.rollback(savePoint)
 
-proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32) =
+proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32) {.raises: [BlockAbortError].} =
   ## processBeaconBlockRoot applies the EIP-4788 system call to the
   ## beacon block root contract. This method is exported to be used in tests.
   ## If EIP-4788 is enabled, we need to invoke the beaconroot storage
@@ -217,7 +222,7 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32) =
   # EIP-4788: fail silently
   call.systemCall(void)
 
-proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32) =
+proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32) {.raises: [BlockAbortError].} =
   ## processParentBlockHash stores the parent block hash in the
   ## history storage contract as per EIP-2935.
   let
@@ -232,7 +237,7 @@ proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32) =
   # EIP-2923: fail silently
   call.systemCall(void)
 
-proc processDequeueWithdrawalRequests*(vmState: BaseVMState): Result[seq[byte], string] =
+proc processDequeueWithdrawalRequests*(vmState: BaseVMState): Result[seq[byte], string] {.raises: [BlockAbortError].} =
   ## processDequeueWithdrawalRequests applies the EIP-7002 system call
   ## to the withdrawal requests contract.
   let
@@ -248,7 +253,7 @@ proc processDequeueWithdrawalRequests*(vmState: BaseVMState): Result[seq[byte], 
     return err("processDequeueWithdrawalRequests: " & res.error)
   ok(move(res.output))
 
-proc processDequeueConsolidationRequests*(vmState: BaseVMState): Result[seq[byte], string] =
+proc processDequeueConsolidationRequests*(vmState: BaseVMState): Result[seq[byte], string] {.raises: [BlockAbortError].} =
   ## processDequeueConsolidationRequests applies the EIP-7251 system call
   ## to the consolidation requests contract.
   let

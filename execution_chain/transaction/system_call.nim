@@ -67,7 +67,7 @@ proc finishRunningComputation(c: Computation, T: type): T =
   else:
     {.error: "Unknown systemCall output".}
 
-proc systemCall*(call: CallParams, T: type): T =
+proc systemCall*(call: CallParams, T: type): T {.raises: [BlockAbortError].} =
   let
     ledger = call.vmState.ledger
     c = setupComputation(call)

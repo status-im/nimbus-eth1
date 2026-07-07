@@ -37,11 +37,6 @@ const skipFiles = [
   # that way.
   "stateless_input_invalid_public_key_is_rejected.json",
 
-  # We AssertionDefect currently on these missing nodes. Need to adjust this
-  # to properly  return a Result.err() instead of crashing.
-  "validation_state_missing_absent_account_proof_node.json",
-  "validation_state_missing_absent_slot_proof_leaf_node.json",
-
   # cases of missing code in witness, which we currently don't check for
   "validation_codes_missing_delegated_code_on_insufficient_balance_call.json",
   "validation_codes_missing_sender_delegation_marker.json",

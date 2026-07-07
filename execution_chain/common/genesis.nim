@@ -34,7 +34,11 @@ proc writeGenesisAlloc*(alloc: GenesisAlloc, db: CoreDbTxRef): Hash32 =
     for k, v in account.storage:
       ledger.setStorage(address, k, v)
 
-  ledger.persist()
+  # Genesis is never stateless, so persist cannot abort the block here.
+  try:
+    ledger.persist()
+  except BlockAbortError as e:
+    raiseAssert e.msg
   ledger.getStateRoot()
 
 proc writeGenesis*(g: Genesis, db: CoreDbTxRef, fork: HardFork): Header =

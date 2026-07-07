@@ -77,7 +77,10 @@ proc makeBlk(txFrame: CoreDbTxRef, number: BlockNumber, parentBlk: Block): Block
   for wd in wds:
     ledger.addBalance(wd.address, wd.weiAmount)
 
-  ledger.persist()
+  try:
+    ledger.persist()
+  except BlockAbortError as e:
+    raiseAssert e.msg
 
   let wdRoot = calcWithdrawalsRoot(wds)
   let body = BlockBody(

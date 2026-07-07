@@ -68,7 +68,10 @@ proc prepareEnv*(
     config.blobSchedule = unit.config.blobSchedule
 
     setupLedger(unit.pre, ledger)
-    ledger.persist()
+    try:
+      ledger.persist()
+    except BlockAbortError as e:
+      raiseAssert e.msg
 
     ledger.txFrame.persistHeaderAndSetHead(genesis).isOkOr:
       debugEcho "Failed to put genesis header into database: ", error

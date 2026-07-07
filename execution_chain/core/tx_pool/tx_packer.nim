@@ -78,7 +78,7 @@ func classifyPackedNext(vmState: BaseVMState): bool =
 # Private functions: packer packerVmExec() helpers
 # ------------------------------------------------------------------------------
 
-proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string] =
+proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string] {.raises: [BlockAbortError].} =
   let
     vmState = xp.vmState
     packer = TxPacker(
@@ -159,7 +159,7 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
 
   ContinueWithNextAccount
 
-proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
+proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] {.raises: [BlockAbortError].} =
   let
     vmState = pst.vmState
     ledger = vmState.ledger
@@ -207,8 +207,14 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
 
 proc packerVmExec*(xp: TxPoolRef): Result[TxPacker, string] =
   ## Execute as much transactions as possible.
-  var pst = xp.vmExecInit.valueOr:
-    return err(error)
+  # Block building is never stateless, so persist cannot abort here; the guards
+  # below only satisfy the static exception effect at the two raising calls.
+  var pst: TxPacker
+  try:
+    pst = xp.vmExecInit.valueOr:
+      return err(error)
+  except BlockAbortError as e:
+    raiseAssert e.msg
 
   if xp.isOrdered:
     for item in xp.byOrder:
@@ -221,7 +227,10 @@ proc packerVmExec*(xp: TxPoolRef): Result[TxPacker, string] =
       if rc == StopCollecting:
         break
 
-  ?pst.vmExecCommit(xp)
+  try:
+    ?pst.vmExecCommit(xp)
+  except BlockAbortError as e:
+    raiseAssert e.msg
   ok(pst)
 
 func getExtraData(com: CommonRef): seq[byte] =

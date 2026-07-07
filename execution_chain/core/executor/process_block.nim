@@ -307,7 +307,7 @@ proc procBlkPreamble(
     vmState: BaseVMState,
     blk: Block,
     skipValidation, skipReceipts, skipUncles: bool
-): Result[void, string] =
+): Result[void, string] {.raises: [BlockAbortError].} =
   template header(): Header =
     blk.header
 
@@ -428,7 +428,7 @@ proc procBlkEpilogue(
     skipReceipts: bool,
     skipStateRootCheck: bool,
     skipPostExecBalCheck: bool
-): Result[void, string] =
+): Result[void, string] {.raises: [BlockAbortError].} =
   template header(): Header =
     blk.header
 
@@ -546,14 +546,26 @@ proc processBlock*(
 ): Result[void, string] =
   ## Generalised function to processes `blk` for any network.
 
+  # A partial-witness persist raises during stateless execution; contain it at
+  # the raising calls so that (stateful) callers are unaffected.
   vmState.withBalPrefetch(blockAccessList):
-    ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles)
+    try:
+      ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles)
+    except BlockAbortError as e:
+      if vmState.ledger.stateless:
+        return err(e.msg)
+      raiseAssert e.msg
 
     # EIP-3675: no reward for miner in POA/POS
     if not vmState.com.proofOfStake(blk.header, vmState.ledger.txFrame):
       vmState.calculateReward(blk.header, blk.uncles)
 
-    ?vmState.procBlkEpilogue(blk, skipValidation, skipReceipts, skipStateRootCheck, skipPostExecBalCheck)
+    try:
+      ?vmState.procBlkEpilogue(blk, skipValidation, skipReceipts, skipStateRootCheck, skipPostExecBalCheck)
+    except BlockAbortError as e:
+      if vmState.ledger.stateless:
+        return err(e.msg)
+      raiseAssert e.msg
 
   ok()
 

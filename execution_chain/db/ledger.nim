@@ -316,7 +316,15 @@ proc persistCode(acc: AccountRef, ledger: LedgerRef) =
       # code cache must also be cleared!
       acc.code.persisted = true
 
-proc persistStorage(acc: AccountRef, ledger: LedgerRef) =
+type BlockAbortError* = object of CatchableError
+  ## Fatal condition during a persist (e.g. a write into an incomplete witness).
+  ## Caught at the block boundary, where it is turned into a validation error
+  ## under stateless execution and asserted (corrupt DB) otherwise.
+
+template raiseBlockAbort(message: string) =
+  raise (ref BlockAbortError)(msg: message)
+
+proc persistStorage(acc: AccountRef, ledger: LedgerRef) {.raises: [BlockAbortError].} =
   const info = "persistStorage(): "
 
   if acc.overlayStorage.len == 0:
@@ -331,7 +339,7 @@ proc persistStorage(acc: AccountRef, ledger: LedgerRef) =
   # `Aristo` for updating the account's storage area reference. As a side effect,
   # this action also updates the latest statement data.
   ledger.txFrame.mergeAccount(acc.accPath, acc.statement).isOkOr:
-    raiseAssert info & $$error
+    raiseBlockAbort(info & $$error)
 
   # Save `overlayStorage[]` on database
   for slot, value in acc.overlayStorage:
@@ -348,14 +356,14 @@ proc persistStorage(acc: AccountRef, ledger: LedgerRef) =
 
     if value > 0:
       ledger.txFrame.mergeSlot(acc.accPath, slotKey, value).isOkOr:
-        raiseAssert info & $$error
+        raiseBlockAbort(info & $$error)
 
       # move the overlayStorage to originalStorage, related to EIP2200, EIP1283
       acc.originalStorage[slot] = value
 
     else:
       ledger.txFrame.deleteSlot(acc.accPath, slotKey).isOkOr:
-        raiseAssert info & $$error
+        raiseBlockAbort(info & $$error)
       acc.originalStorage.del(slot)
 
     if ledger.storeSlotHash and not cached:
@@ -770,7 +778,7 @@ proc clearBlockHashesCache*(ledger: LedgerRef) =
 proc persist*(ledger: LedgerRef,
               clearEmptyAccount: bool = false,
               clearCache = false,
-              clearWitness = false) =
+              clearWitness = false) {.raises: [BlockAbortError].} =
   const info = "persist(): "
 
   # make sure all savePoint already committed
@@ -800,11 +808,11 @@ proc persist*(ledger: LedgerRef,
         # This one is only necessary unless `persistStorage()` is run which needs
         # to `merge()` the latest statement as well.
         ledger.txFrame.mergeAccount(acc.accPath, acc.statement).isOkOr:
-          raiseAssert info & $$error
+          raiseBlockAbort(info & $$error)
     of Remove:
       ledger.txFrame.deleteAccount(acc.accPath).isOkOr:
         if error.error != AccNotFound:
-          raiseAssert info & $$error
+          raiseBlockAbort(info & $$error)
       ledger.savePoint.cache.del address
     of DoNothing:
       # dead man tell no tales
