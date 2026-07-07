@@ -90,7 +90,7 @@ proc init*(
     T: type BlockAccessListTrackerRef,
     ledger: ReadOnlyLedger,
     builder: ptr BlockAccessListBuilder = nil,
-    builderThreadSafe = false,
+    builderThreadSafe = true,
 ): T =
   if builder.isNil():
     BlockAccessListTrackerRef(

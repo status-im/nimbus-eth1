@@ -88,7 +88,7 @@ proc new*(
       tracer:   TracerRef = nil,
       storeSlotHash = false,
       enableBalTracker = false,
-      balBuilderThreadSafe = false): T =
+      balBuilderThreadSafe = true): T =
   ## Create a new `BaseVMState` descriptor from a parent block header. This
   ## function internally constructs a new account state cache rooted at
   ## `parent.stateRoot`
@@ -181,7 +181,7 @@ proc init*(
       tracer: TracerRef = nil,
       storeSlotHash = false,
       enableBalTracker = false,
-      balBuilderThreadSafe = false,
+      balBuilderThreadSafe = true,
       stateless = false) =
 
   ## Variant of `new()` constructor above for in-place initalisation. The
@@ -218,7 +218,7 @@ proc new*(
       tracer: TracerRef = nil,
       storeSlotHash = false,
       enableBalTracker = false,
-      balBuilderThreadSafe = false): T =
+      balBuilderThreadSafe = true): T =
   ## This is a variant of the `new()` constructor above where the `parent`
   ## argument is used to sync the accounts cache and the `header` is used
   ## as a container to pass the `timestamp`, `gasLimit`, and `fee` values.
