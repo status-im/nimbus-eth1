@@ -71,12 +71,13 @@ proc commitOrRollbackDependingOnGasUsed(
     baseFee = vmState.blockCtx.baseFeePerGas
     priorityFee = min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFee)
     txFee = gasUsed.u256 * priorityFee.u256
+  
+  callResult.txFee = txFee
 
   if vmState.balTrackerEnabled:
     vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), txFee)
     vmState.balTracker.commitCallFrame()
 
-  callResult.txFee = txFee
   vmState.ledger.addBalance(vmState.coinbase(), txFee, checkEmptyAccount = vmState.fork < FkParis)
   vmState.ledger.commit(savePoint)
   vmState.cumulativeGasUsed += gasUsed
@@ -88,6 +89,28 @@ proc commitOrRollbackDependingOnGasUsed(
   if vmState.fork >= FkAmsterdam:
     emitClosureLogs(vmState, callResult.logEntries)
   ok()
+
+template check2dGasInclusion*(
+    gasLimit, regularGasUsed, stateGasUsed, txGasLimit: GasInt;
+    intrinsic: IntrinsicGas;
+    fail: untyped) =
+  let
+    regularGasAvailable = gasLimit - regularGasUsed
+    stateGasAvailable = gasLimit - stateGasUsed
+    # https://github.com/ethereum/execution-specs/pull/2703/changes
+    # Worst-case regular contribution: tx.gasLimit minus the portion that
+    # must go to intrinsic state gas, capped at TX_MAX_GAS_LIMIT.
+    want = min(TX_GAS_LIMIT.GasInt, txGasLimit - intrinsic.state)
+  if want > regularGasAvailable:
+    fail("regular gas used exceeds limit, want: " & $want &
+      ", available: " & $regularGasAvailable)
+
+  # Worst-case state contribution: tx.gasLimit minus the portion that
+  # must go to intrinsic regular gas.
+  let stateGas = txGasLimit - intrinsic.regular
+  if stateGas > stateGasAvailable:
+    fail("state gas used exceeds limit, want: " & $stateGas &
+      ", available: " & $stateGasAvailable)
 
 template validateForInclusion(
     vmState: BaseVMState;
@@ -106,30 +129,21 @@ template validateForInclusion(
   let
     com = vmState.com
     fork = vmState.hardFork
-    regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
-    stateGasAvailable = vmState.blockCtx.gasLimit - vmState.blockStateGasUsed
     intrinsicVar = tx.intrinsicGas(fork, vmState.blockCtx.gasLimit)
 
   # Per-tx 2D gas inclusion check: for each dimension the worst-case
   # contribution must fit in the remaining budget.  Block-end
   # validation still enforces
   if fork < Amsterdam:
-    let want = min(TX_GAS_LIMIT.GasInt, tx.gasLimit)
+    let
+      regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
+      want = min(TX_GAS_LIMIT.GasInt, tx.gasLimit)
     if want > regularGasAvailable:
       fail("regular gas used exceeds limit, want: " & $want & ", available: " & $regularGasAvailable)
   else:
-    # https://github.com/ethereum/execution-specs/pull/2703/changes
-    # Worst-case regular contribution: tx.gasLimit minus the portion that
-    # must go to intrinsic state gas, capped at TX_MAX_GAS_LIMIT.
-    let want = min(TX_GAS_LIMIT.GasInt, tx.gasLimit - intrinsicVar.state)
-    if want > regularGasAvailable:
-      fail("regular gas used exceeds limit, want: " & $want & ", available: " & $regularGasAvailable)
-
-    # Worst-case state contribution: tx.gasLimit minus the portion that
-    # must go to intrinsic regular gas.
-    let stateGas = tx.gasLimit - intrinsicVar.regular
-    if stateGas > stateGasAvailable:
-      fail("state gas used exceeds limit, want: " & $stateGas & ", available: " & $stateGasAvailable)
+    check2dGasInclusion(
+      vmState.blockCtx.gasLimit, vmState.blockRegularGasUsed,
+      vmState.blockStateGasUsed, tx.gasLimit, intrinsicVar, fail)
 
   # blobGasUsed will be added to vmState.blobGasUsed if the tx is ok.
   let
@@ -153,6 +167,7 @@ proc processTransaction*(
     tx:      Transaction; ## Transaction to validate
     sender:  Address;  ## tx.recoverSender
     rollbackReads: bool = false;
+    persist = true;
       ): Result[LogResult, string] =
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
   ## which provides a backward compatible framework for EIP1559.
@@ -184,7 +199,8 @@ proc processTransaction*(
     else:
       ok(move(callResult))
 
-  vmState.ledger.persist(clearEmptyAccount = vmState.hardFork >= Spurious)
+  if persist:
+    vmState.ledger.persist(clearEmptyAccount = vmState.hardFork >= Spurious)
 
   res
 
