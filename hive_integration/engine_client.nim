@@ -53,42 +53,64 @@ template wrapTrySimpleRes(body: untyped) =
 proc forkchoiceUpdatedV1*(client: RpcClient,
       update: ForkchoiceStateV1,
       payloadAttributes = Opt.none(PayloadAttributesV1)):
-        Result[ForkchoiceUpdatedResponse, string] =
+        Result[ForkchoiceUpdatedResponseV1, string] =
   wrapTrySimpleRes:
     client.engine_forkchoiceUpdatedV1(update, payloadAttributes)
 
 proc forkchoiceUpdatedV2*(client: RpcClient,
       update: ForkchoiceStateV1,
       payloadAttributes = Opt.none(PayloadAttributesV2)):
-        Result[ForkchoiceUpdatedResponse, string] =
+        Result[ForkchoiceUpdatedResponseV1, string] =
   wrapTrySimpleRes:
     client.engine_forkchoiceUpdatedV2(update, payloadAttributes)
 
 proc forkchoiceUpdatedV3*(client: RpcClient,
       update: ForkchoiceStateV1,
       payloadAttributes = Opt.none(PayloadAttributesV3)):
-        Result[ForkchoiceUpdatedResponse, string] =
+        Result[ForkchoiceUpdatedResponseV1, string] =
   wrapTrySimpleRes:
     client.engine_forkchoiceUpdatedV3(update, payloadAttributes)
 
 proc forkchoiceUpdatedV4*(client: RpcClient,
       update: ForkchoiceStateV1,
       payloadAttributes = Opt.none(PayloadAttributesV4)):
-        Result[ForkchoiceUpdatedResponse, string] =
+        Result[ForkchoiceUpdatedResponseV1, string] =
   wrapTrySimpleRes:
     client.engine_forkchoiceUpdatedV4(update, payloadAttributes)
 
+proc forkchoiceUpdatedV5*(client: RpcClient,
+      update: ForkchoiceStateV1,
+      payloadAttributes = Opt.none(PayloadAttributesV5)):
+        Result[ForkchoiceUpdatedResponseV2, string] =
+  wrapTrySimpleRes:
+    client.engine_forkchoiceUpdatedV5(update, payloadAttributes)
+
+func fcur(res: Result[ForkchoiceUpdatedResponseV1, string]):
+  Result[ForkchoiceUpdatedResponse, string] =
+  if res.isOk:
+    return ok(res.value.forkchoiceUpdatedResponse)
+  else:
+    return err(res.error)
+
+func fcur(res: Result[ForkchoiceUpdatedResponseV2, string]):
+  Result[ForkchoiceUpdatedResponse, string] =
+  if res.isOk:
+    return ok(res.value.forkchoiceUpdatedResponse)
+  else:
+    return err(res.error)
+
 proc forkchoiceUpdated*(client: RpcClient,
                         version: Version,
-                        update: ForkchoiceStateV1,
+                        update: ForkchoiceState,
                         attr = Opt.none(PayloadAttributes)):
                           Result[ForkchoiceUpdatedResponse, string] =
   case version
-  of Version.V1: return client.forkchoiceUpdatedV1(update, attr.V1)
-  of Version.V2: return client.forkchoiceUpdatedV2(update, attr.V2)
-  of Version.V3: return client.forkchoiceUpdatedV3(update, attr.V3)
-  of Version.V4: return client.forkchoiceUpdatedV4(update, attr.V4)
-  of Version.V5, Version.V6: discard
+  of Version.V1: return client.forkchoiceUpdatedV1(update.V1, attr.V1).fcur
+  of Version.V2: return client.forkchoiceUpdatedV2(update.V1, attr.V2).fcur
+  of Version.V3: return client.forkchoiceUpdatedV3(update.V1, attr.V3).fcur
+  of Version.V4: return client.forkchoiceUpdatedV4(update.V1, attr.V4).fcur
+  of Version.V5: return client.forkchoiceUpdatedV5(update.V1, attr.V5).fcur
+  of Version.V6: discard
 
 proc getPayloadV1*(client: RpcClient, payloadId: Bytes8): Result[ExecutionPayloadV1, string] =
   wrapTrySimpleRes:
@@ -217,15 +239,26 @@ proc newPayloadV5*(client: RpcClient,
     client.engine_newPayloadV5(payload, versionedHashes,
       parentBeaconBlockRoot, executionRequests)
 
+proc newPayloadV6*(client: RpcClient,
+      payload: ExecutionPayloadV4,
+      versionedHashes: seq[VersionedHash],
+      parentBeaconBlockRoot: Hash32,
+      executionRequests: seq[seq[byte]],
+      inclusionList: InclusionList):
+        Result[PayloadStatusV2, string] =
+  wrapTrySimpleRes:
+    client.engine_newPayloadV6(payload, versionedHashes,
+      parentBeaconBlockRoot, executionRequests, inclusionList)
+
 proc newPayloadV1*(client: RpcClient,
       payload: ExecutionPayload):
-        Result[PayloadStatusV1, string] =
+        Result[PayloadStatus, string] =
   wrapTrySimpleRes:
     client.engine_newPayloadV1(payload)
 
 proc newPayloadV2*(client: RpcClient,
       payload: ExecutionPayload):
-        Result[PayloadStatusV1, string] =
+        Result[PayloadStatus, string] =
   wrapTrySimpleRes:
     client.engine_newPayloadV2(payload)
 
@@ -234,7 +267,7 @@ proc newPayloadV3*(client: RpcClient,
       versionedHashes: Opt[seq[VersionedHash]],
       parentBeaconBlockRoot: Opt[Hash32]
       ):
-        Result[PayloadStatusV1, string] =
+        Result[PayloadStatus, string] =
   wrapTrySimpleRes:
     client.engine_newPayloadV3(payload, versionedHashes, parentBeaconBlockRoot)
 
@@ -243,7 +276,7 @@ proc newPayloadV4*(client: RpcClient,
       versionedHashes: Opt[seq[VersionedHash]],
       parentBeaconBlockRoot: Opt[Hash32],
       executionRequests: Opt[seq[seq[byte]]]):
-        Result[PayloadStatusV1, string] =
+        Result[PayloadStatus, string] =
   wrapTrySimpleRes:
     client.engine_newPayloadV4(payload, versionedHashes,
       parentBeaconBlockRoot, executionRequests)
@@ -253,14 +286,25 @@ proc newPayloadV5*(client: RpcClient,
       versionedHashes: Opt[seq[VersionedHash]],
       parentBeaconBlockRoot: Opt[Hash32],
       executionRequests: Opt[seq[seq[byte]]]):
-        Result[PayloadStatusV1, string] =
+        Result[PayloadStatus, string] =
   wrapTrySimpleRes:
     client.engine_newPayloadV5(payload, versionedHashes,
       parentBeaconBlockRoot, executionRequests)
 
+proc newPayloadV6*(client: RpcClient,
+      payload: ExecutionPayload,
+      versionedHashes: Opt[seq[VersionedHash]],
+      parentBeaconBlockRoot: Opt[Hash32],
+      executionRequests: Opt[seq[seq[byte]]],
+      inclusionList: Opt[InclusionList]):
+        Result[PayloadStatus, string] =
+  wrapTrySimpleRes:
+    client.engine_newPayloadV6(payload, versionedHashes,
+      parentBeaconBlockRoot, executionRequests, inclusionList)
+
 proc newPayload*(client: RpcClient,
                  version: Version,
-                 payload: ExecutableData): Result[PayloadStatusV1, string] =
+                 payload: ExecutableData): Result[PayloadStatus, string] =
   case version
   of Version.V1:
     return client.newPayloadV1(payload.basePayload)
@@ -280,7 +324,12 @@ proc newPayload*(client: RpcClient,
       payload.versionedHashes,
       payload.beaconRoot,
       payload.executionRequests)
-  of Version.V6: discard
+  of Version.V6:
+    return client.newPayloadV6(payload.basePayload,
+      payload.versionedHashes,
+      payload.beaconRoot,
+      payload.executionRequests,
+      payload.inclusionList)
 
 proc exchangeCapabilities*(client: RpcClient,
       methods: seq[string]):

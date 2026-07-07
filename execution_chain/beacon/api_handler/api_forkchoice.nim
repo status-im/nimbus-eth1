@@ -30,7 +30,14 @@ template validateVersion(attr, com, apiVersion) =
     version   = attr.version
     timestamp = ethTime(attr.timestamp)
 
-  if apiVersion == Version.V4:
+  if apiVersion == Version.V5:
+    if version != apiVersion:
+      raise invalidAttr("forkChoiceUpdatedV5 expect PayloadAttributesV5" &
+      " but got PayloadAttributes" & $version)
+    if not com.isBogotaOrLater(timestamp):
+      raise unsupportedFork(
+        "forkchoiceUpdatedV5 get invalid payloadAttributes timestamp")
+  elif apiVersion == Version.V4:
     if version != apiVersion:
       raise invalidAttr("forkChoiceUpdatedV4 expect PayloadAttributesV4" &
       " but got PayloadAttributes" & $version)
@@ -80,7 +87,7 @@ template validateHeaderTimestamp(header, com, apiVersion) =
 
 proc forkchoiceUpdated*(ben: BeaconEngineRef,
                         apiVersion: Version,
-                        update: ForkchoiceStateV1,
+                        update: ForkchoiceState,
                         attrsOpt: Opt[PayloadAttributes]):
                           Future[ForkchoiceUpdatedResponse]
                             {.async: (raises: [CancelledError, ApplicationError]).} =

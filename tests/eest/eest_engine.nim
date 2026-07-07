@@ -31,7 +31,7 @@ import
   ../../hive_integration/engine_client,
   ./eest_helpers
 
-proc sendNewPayload(env: TestEnv, version: uint64, param: PayloadParam): Result[PayloadStatusV1, string] =
+proc sendNewPayload(env: TestEnv, version: uint64, param: PayloadParam): Result[PayloadStatus, string] =
   if not env.client.isSome:
     return err("Client is not initialized")
 
@@ -58,6 +58,13 @@ proc sendNewPayload(env: TestEnv, version: uint64, param: PayloadParam): Result[
       param.versionedHashes,
       param.parentBeaconBlockRoot,
       param.executionRequests)
+  elif version == 6:
+    env.client.get().newPayloadV6(
+      param.payload,
+      param.versionedHashes,
+      param.parentBeaconBlockRoot,
+      param.executionRequests,
+      param.inclusionList)
   else:
     err("Unsupported NewPayload version: " & $version)
 
@@ -65,19 +72,21 @@ proc sendFCU(env: TestEnv, version: uint64, param: PayloadParam): Result[Forkcho
   if not env.client.isSome:
     return err("Client is not initialized")
 
-  let update = ForkchoiceStateV1(
+  let update = ForkchoiceState(
     headblockHash:      param.payload.blockHash,
     finalizedblockHash: param.payload.blockHash
   )
 
   if version == 1:
-    env.client.get().forkchoiceUpdatedV1(update)
+    env.client.get().forkchoiceUpdated(Version.V1, update)
   elif version == 2:
-    env.client.get().forkchoiceUpdatedV2(update)
+    env.client.get().forkchoiceUpdated(Version.V2, update)
   elif version == 3:
-    env.client.get().forkchoiceUpdatedV3(update)
+    env.client.get().forkchoiceUpdated(Version.V3, update)
   elif version == 4:
-    env.client.get().forkchoiceUpdatedV4(update)
+    env.client.get().forkchoiceUpdated(Version.V4, update)
+  elif version == 5:
+    env.client.get().forkchoiceUpdated(Version.V5, update)
   else:
     err("Unsupported FCU version: " & $version)
 

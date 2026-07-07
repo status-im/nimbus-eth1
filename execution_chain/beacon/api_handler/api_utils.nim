@@ -51,7 +51,7 @@ proc computePayloadId*(blockHash: common.Hash32,
 
 proc validateBlockHash*(header: common.Header,
                         wantHash: common.Hash32,
-                        version: Version): Result[void, PayloadStatusV1]
+                        version: Version): Result[void, PayloadStatus]
                           {.gcsafe.} =
   let gotHash = header.computeBlockHash
   if wantHash != gotHash:
@@ -60,7 +60,7 @@ proc validateBlockHash*(header: common.Header,
                  else:
                    PayloadExecutionStatus.invalid
 
-    let res = PayloadStatusV1(
+    let res = PayloadStatus(
       status: status,
       validationError: Opt.some("blockhash mismatch, want " &
         $wantHash & ", got " & $gotHash)
@@ -72,16 +72,16 @@ proc validateBlockHash*(header: common.Header,
 template toValidHash*(x: common.Hash32): Opt[Hash32] =
   Opt.some(x)
 
-proc simpleFCU*(status: PayloadStatusV1): ForkchoiceUpdatedResponse =
+proc simpleFCU*(status: PayloadStatus): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(payloadStatus: status)
 
 proc simpleFCU*(status: PayloadExecutionStatus): ForkchoiceUpdatedResponse =
-  ForkchoiceUpdatedResponse(payloadStatus: PayloadStatusV1(status: status))
+  ForkchoiceUpdatedResponse(payloadStatus: PayloadStatus(status: status))
 
 proc simpleFCU*(status: PayloadExecutionStatus,
                 msg: string): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(
-    payloadStatus: PayloadStatusV1(
+    payloadStatus: PayloadStatus(
       status: status,
       validationError: Opt.some(msg)
     )
@@ -91,7 +91,7 @@ proc invalidFCU*(
     validationError: string,
     hash = default(common.Hash32)): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(payloadStatus:
-    PayloadStatusV1(
+    PayloadStatus(
       status: PayloadExecutionStatus.invalid,
       latestValidHash: toValidHash(hash),
       validationError: Opt.some validationError
@@ -101,39 +101,39 @@ proc invalidFCU*(
 proc validFCU*(id: Opt[Bytes8],
                validHash: common.Hash32): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(
-    payloadStatus: PayloadStatusV1(
+    payloadStatus: PayloadStatus(
       status: PayloadExecutionStatus.valid,
       latestValidHash: toValidHash(validHash)
     ),
     payloadId: id
   )
 
-proc invalidStatus*(validHash: common.Hash32, msg: string): PayloadStatusV1 =
-  PayloadStatusV1(
+proc invalidStatus*(validHash: common.Hash32, msg: string): PayloadStatus =
+  PayloadStatus(
     status: PayloadExecutionStatus.invalid,
     latestValidHash: toValidHash(validHash),
     validationError: Opt.some(msg)
   )
 
-proc invalidStatus*(validHash = default(common.Hash32)): PayloadStatusV1 =
-  PayloadStatusV1(
+proc invalidStatus*(validHash = default(common.Hash32)): PayloadStatus =
+  PayloadStatus(
     status: PayloadExecutionStatus.invalid,
     latestValidHash: toValidHash(validHash)
   )
 
-proc acceptedStatus*(validHash: common.Hash32): PayloadStatusV1 =
-  PayloadStatusV1(
+proc acceptedStatus*(validHash: common.Hash32): PayloadStatus =
+  PayloadStatus(
     status: PayloadExecutionStatus.accepted,
     latestValidHash: toValidHash(validHash)
   )
 
-proc acceptedStatus*(): PayloadStatusV1 =
-  PayloadStatusV1(
+proc acceptedStatus*(): PayloadStatus =
+  PayloadStatus(
     status: PayloadExecutionStatus.accepted
   )
 
-proc validStatus*(validHash: common.Hash32): PayloadStatusV1 =
-  PayloadStatusV1(
+proc validStatus*(validHash: common.Hash32): PayloadStatus =
+  PayloadStatus(
     status: PayloadExecutionStatus.valid,
     latestValidHash: toValidHash(validHash)
   )

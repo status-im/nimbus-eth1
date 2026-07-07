@@ -192,7 +192,7 @@ func setInvalidAncestor*(ben: BeaconEngineRef, header: Header, blockHash: Hash32
 # checkInvalidAncestor checks whether the specified chain end links to a known
 # bad ancestor. If yes, it constructs the payload failure response to return.
 proc checkInvalidAncestor*(ben: BeaconEngineRef,
-                           check, head: Hash32): Opt[PayloadStatusV1] =
+                           check, head: Hash32): Opt[PayloadStatus] =
   proc latestValidHash(chain: ForkedChainRef, invalid: auto): Hash32 =
     let parent = chain.headerByHash(invalid.parentHash).valueOr:
       return invalid.parentHash
@@ -221,7 +221,7 @@ proc checkInvalidAncestor*(ben: BeaconEngineRef,
       for x in deleted:
         ben.invalidTipsets.del(x)
 
-      return Opt.none(PayloadStatusV1)
+      return Opt.none(PayloadStatus)
 
     # Not too many failures yet, mark the head of the invalid chain as invalid
     if check != head:
@@ -244,7 +244,7 @@ proc checkInvalidAncestor*(ben: BeaconEngineRef,
     let lastValid = latestValidHash(ben.chain, invalid)
     return Opt.some invalidStatus(lastValid, "links to previously rejected block")
   do:
-    return Opt.none(PayloadStatusV1)
+    return Opt.none(PayloadStatus)
 
 # delayPayloadImport stashes the given block away for import at a later time,
 # either via a forkchoice update or a sync extension. This method is meant to
@@ -255,14 +255,14 @@ proc delayPayloadImport*(
   blockHash: Hash32,
   blk: Block,
   blockAccessList: Opt[BlockAccessListRef]
-): PayloadStatusV1 =
+): PayloadStatus =
   # Sanity check that this block's parent is not on a previously invalidated
   # chain. If it is, mark the block as invalid too.
   ben.checkInvalidAncestor(blk.header.parentHash, blockHash).valueOr:
     # Stash the block away for a potential forced forkchoice update to it
     # at a later time.
     ben.chain.quarantine.addOrphan(blockHash, blk, blockAccessList)
-    return PayloadStatusV1(status: PayloadExecutionStatus.syncing)
+    return PayloadStatus(status: PayloadExecutionStatus.syncing)
 
 func latestFork*(ben: BeaconEngineRef): HardFork =
   let timestamp = max(ben.txPool.timestamp, ben.chain.latestHeader.timestamp)
