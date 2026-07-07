@@ -13,6 +13,7 @@ import
   chronos,
   confutils,
   eth/common/[keys, eth_types_rlp],
+  web3/eth_api_types,
   json_rpc/rpcproxy,
   beacon_chain/gossip_processing/light_client_processor,
   beacon_chain/networking/network_metadata,
@@ -286,6 +287,7 @@ proc run(
       accountCacheLen = config.accountCacheLen,
       codeCacheLen = config.codeCacheLen,
       storageCacheLen = config.storageCacheLen,
+      anchor = blockId("safe"),
     ).valueOr:
       raise newException(ProxyError, "Couldn't initialize OP verification engine")
 

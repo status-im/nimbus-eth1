@@ -28,26 +28,26 @@ import
 const HISTORY_SERVE_WINDOW = 8191'u64
 
 func isInEIP2935VerifiableRange(
-    finalized: base.BlockNumber, latest: base.BlockNumber, target: base.BlockNumber
+    anchor: base.BlockNumber, latest: base.BlockNumber, target: base.BlockNumber
 ): bool =
   # relax the timing by one block
-  if target > finalized or target < latest - HISTORY_SERVE_WINDOW + 1: false else: true
+  if target > anchor or target < latest - HISTORY_SERVE_WINDOW + 1: false else: true
 
 proc verifyEIP2935Membership(
     engine: RpcVerificationEngine,
-    finalized: Header,
+    anchor: Header,
     latest: Header,
     targetNum: base.BlockNumber,
     targetHash: Hash32,
 ): Future[EngineResult[bool]] {.async: (raises: [CancelledError]).} =
-  if not isInEIP2935VerifiableRange(finalized.number, latest.number, targetNum):
+  if not isInEIP2935VerifiableRange(anchor.number, latest.number, targetNum):
     return ok(false)
 
   let slot = (targetNum mod HISTORY_SERVE_WINDOW).u256
 
   let storedValue = (
     await engine.getStorageAt(
-      HISTORY_STORAGE_ADDRESS, slot, finalized.number, finalized.stateRoot
+      HISTORY_STORAGE_ADDRESS, slot, anchor.number, anchor.stateRoot
     )
   ).valueOr:
     return ok(false) # unservable/invalid proof -> fall back to the walk
@@ -287,14 +287,24 @@ proc verifyHeader(
             UNTAGGED,
           )
         )
-      finalized = engine.headerStore.finalized.valueOr:
-        # untagged(-1) because this doesn't link to any backend
-        return err(
-          (
-            UnavailableDataError,
-            "finalized block is not available yet. Still syncing?", UNTAGGED,
-          )
-        )
+      anchorOrFinalized =
+        if engine.anchor.kind == bidAlias and
+            engine.anchor.alias.toLowerAscii() == "safe":
+          engine.headerStore.latest.valueOr:
+            return err(
+              (
+                UnavailableDataError, "safe block is not available yet. Still syncing?",
+                UNTAGGED,
+              )
+            )
+        else:
+          engine.headerStore.finalized.valueOr:
+            return err(
+              (
+                UnavailableDataError,
+                "finalized block is not available yet. Still syncing?", UNTAGGED,
+              )
+            )
       latest = engine.headerStore.latest.valueOr:
         # untagged(-1) because this doesn't link to any backend
         return err(
@@ -304,8 +314,11 @@ proc verifyHeader(
           )
         )
 
-    let eipVerified =
-      ?(await engine.verifyEIP2935Membership(finalized, latest, header.number, hash))
+    let eipVerified = ?(
+      await engine.verifyEIP2935Membership(
+        anchorOrFinalized, latest, header.number, hash
+      )
+    )
 
     if not eipVerified:
       ?(

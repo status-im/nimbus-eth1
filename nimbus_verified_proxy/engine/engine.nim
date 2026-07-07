@@ -12,6 +12,7 @@ import
   chronicles,
   chronos,
   eth/common/[hashes, headers, addresses, eth_types_rlp],
+  web3/eth_api_types,
   beacon_chain/spec/forks,
   beacon_chain/gossip_processing/light_client_processor,
   beacon_chain/beacon_clock,
@@ -144,7 +145,7 @@ func convLCHeader*(lcHeader: ForkyLightClientHeader): Result[Header, string] =
         receiptsRoot: p.receipts_root.asBlockHash,
         logsBloom: FixedBytes[BYTES_PER_LOGS_BLOOM](p.logs_bloom.data),
         difficulty: DifficultyInt(0.u256),
-        number: BlockNumber(p.block_number),
+        number: base.BlockNumber(p.block_number),
         gasLimit: GasInt(p.gas_limit),
         gasUsed: GasInt(p.gas_used),
         timestamp: EthTime(p.timestamp),
@@ -170,11 +171,13 @@ proc initCore*(
     accountCacheLen: int,
     codeCacheLen: int,
     storageCacheLen: int,
+    anchor: BlockTag = blockId("finalized"),
 ): EngineResult[T] =
   randomize()
 
   let engine = RpcVerificationEngine(
     chainId: chainId,
+    anchor: anchor,
     maxBlockWalk: maxBlockWalk,
     headerStore: HeaderStore.new(headerStoreLen),
     accountsCache: AccountsCache.init(accountCacheLen),
