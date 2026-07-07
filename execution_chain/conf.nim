@@ -850,7 +850,7 @@ func udpPort*(config: ExecutionClientConf): Port =
 
 func threadSafeCaches*(config: ExecutionClientConf): bool =
   config.optimisticStatePrefetch or config.balStatePrefetch or
-    config.parallelStateRootComputation
+    config.parallelStateRootComputation or config.balParallelExecution
 
 func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
   DbOptions.init(
