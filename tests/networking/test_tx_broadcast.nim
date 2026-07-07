@@ -14,9 +14,10 @@
 {.used.}
 
 import
-  std/[json, os, strutils],
+  std/[json, os, strutils, times, sets],
   unittest2,
   chronos,
+  chronos/ratelimit,
   stint,
   eth/common/[keys, hashes],
   eth/common/times as ethTimes,
@@ -329,6 +330,84 @@ suite "Tx broadcast queue":
 
       await sleepAsync(chronos.milliseconds(200))
       check fastDone
+
+      env.close()
+
+    waitFor runTest()
+
+  test "periodic cleanup survives concurrent seenTransactions mutation":
+    ## Regression for the production crash:
+    ##   `len(t) == L` the length of the table changed while iterating over it
+    ##   [AssertionDefect]
+    ##
+    ## Black-box: drives the real "Periodical cleanup" action that tickerLoop
+    ## enqueues (the only cleanup entry point that exists in BOTH the buggy and
+    ## fixed trees), then runs it while another task mutates seenTransactions —
+    ## exactly as a concurrently-dispatched handleTxHashesBroadcast would.
+    ##
+    ## FAILS on the buggy code: the cleanup awaits (awaitQuota) *inside* its
+    ## `for key, seen in wire.seenTransactions` scan, so the concurrent insert
+    ## changes the table length mid-iteration and trips the pairs-iterator
+    ## assertion. PASSES after the fix: the scan is fully synchronous.
+    proc runTest() {.async.} =
+      let env = newBroadcastTestEnv()
+
+      # Take over scheduling: stop the auto-started ticker/action loops so we
+      # can enqueue exactly one cleanup action and run it ourselves.
+      await env.wire.tickerHeartbeat.cancelAndWait()
+      for fut in env.wire.actionHeartbeat:
+        await fut.cancelAndWait()
+
+      # Force awaitQuota to actually suspend: a capacity-1 bucket that
+      # replenishes slowly means every throttled consume yields to the event
+      # loop. On the buggy code that yield happens *inside* the table scan.
+      env.wire.quota = TokenBucket.new(1, chronos.milliseconds(5))
+
+      proc mkHash(i: int): Hash32 =
+        var a: array[32, byte]
+        a[0] = byte(i and 0xff)
+        a[1] = byte((i shr 8) and 0xff)
+        a.to(Hash32)
+
+      # Populate with expired entries so the cleanup scan/deletion does work.
+      let expiredAt = getTime() - initDuration(minutes = 25)
+      for i in 0 ..< 32:
+        env.wire.seenTransactions[mkHash(i)] =
+          SeenObject(lastSeen: expiredAt, peers: initHashSet[NodeId]())
+
+      # Make tickerLoop take its cleanup branch promptly: a short (but not-yet-
+      # finished) cleanupTimer is kept and fires quickly; a long brUpdateTimer
+      # never wins the `one()` race. tickerLoop runs synchronously up to its
+      # first await, so these assignments are seen before the timers are read.
+      env.wire.cleanupTimer = sleepAsync(chronos.milliseconds(50))
+      env.wire.brUpdateTimer = sleepAsync(chronos.hours(1))
+
+      let tl = tickerLoop(env.wire)
+
+      # Wait for the cleanup action to be enqueued, then stop the ticker.
+      var waited = 0
+      while env.wire.actionQueue.len == 0 and waited < 200:
+        await sleepAsync(chronos.milliseconds(10))
+        inc waited
+      await tl.cancelAndWait()
+      check env.wire.actionQueue.len == 1
+
+      # Concurrently insert fresh entries while the cleanup action runs,
+      # mimicking a handleTxHashesBroadcast dispatch landing during a yield.
+      proc mutator() {.async: (raises: [CancelledError]).} =
+        for i in 0 ..< 40:
+          await sleepAsync(chronos.milliseconds(1))
+          env.wire.seenTransactions[mkHash(1000 + i)] =
+            SeenObject(lastSeen: getTime(), peers: initHashSet[NodeId]())
+
+      let mutatorFut = mutator()
+      let action = await env.wire.actionQueue.popFirst()
+
+      # On the buggy code this raises the AssertionDefect and the test fails.
+      # On the fixed code it completes cleanly.
+      let completed = await withTimeout(action(), chronos.seconds(5))
+      check completed
+      await mutatorFut.cancelAndWait()
 
       env.close()
 

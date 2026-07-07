@@ -42,7 +42,8 @@ type VerifiedProxyConf* = object
 
   # Network
   eth2Network* {.
-    desc: "Consensus network to join (mainnet, hoodi, sepolia, custom/path)"
+    desc:
+      "Network to serve. L1: mainnet, hoodi, sepolia. OP Stack L2 (also starts the L2 engine): op-mainnet, base-mainnet, op-sepolia"
     defaultValueDesc: "mainnet"
     name: "network"
   .}: Option[string]
@@ -124,6 +125,13 @@ type VerifiedProxyConf* = object
     name: "execution-api-url"
   .}: UrlList
 
+  # (Untrusted) L2 web3 provider, only used for OP Stack networks
+  opExecutionApiUrls* {.
+    desc: "URL of the L2 (op-geth) execution data provider, used only for OP Stack networks. Multiple URLs can be specified by defining the option again on the command line.",
+    defaultValue: @[],
+    name: "op-execution-api-url"
+  .}: UrlList
+
   # Listening endpoint of the proxy
   # (verified) web3 end
   frontendUrls* {.
@@ -131,6 +139,14 @@ type VerifiedProxyConf* = object
     defaultValue: @["http://127.0.0.1:8545"],
     defaultValueDesc: "http://127.0.0.1:8545",
     name: "listen-url"
+  .}: UrlList
+
+  # Listening endpoint of the secondary L2 (OP Stack) proxy
+  opFrontendUrls* {.
+    desc: "URL for the listening end of the L2 (OP Stack) proxy - [http/ws]://[address]:[port]. Used only for OP Stack networks. Multiple URLs can be specified by defining the option again on the command line",
+    defaultValue: @["http://127.0.0.1:8546"],
+    defaultValueDesc: "http://127.0.0.1:8546",
+    name: "op-listen-url"
   .}: UrlList
 
   # (Untrusted) web3 provider
