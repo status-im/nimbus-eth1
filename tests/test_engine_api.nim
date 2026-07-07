@@ -264,6 +264,72 @@ proc runPayloadRebuildTest(env: TestEnv): Result[void, string] =
 
   ok()
 
+proc runSiblingHeadPayloadTest(env: TestEnv): Result[void, string] =
+  # Regression: when two VALID sibling payloads exist at the same height, the
+  # payload built for a forkchoiceUpdated carrying attributes must sit on the
+  # fcU headBlockHash, not on whichever sibling happened to be imported last.
+  # The build parent used to be ForkedChain.latest (the most recently imported
+  # block), so getPayload returned a payload with the wrong parent hash and the
+  # consensus client refused to sign it, missing the proposal.
+  let
+    client = env.client
+    genesisHeader = ? client.latestHeader()
+    genesisHash = genesisHeader.computeBlockHash
+    update = ForkchoiceStateV1(
+      headBlockHash: genesisHash
+    )
+    time = getTime().toUnix
+    attrA = PayloadAttributes(
+      timestamp:             w3Qty(time + 1),
+      prevRandao:            default(Bytes32),
+      suggestedFeeRecipient: default(Address),
+      withdrawals:           Opt.some(newSeq[WithdrawalV1]()),
+    )
+  var attrB = attrA
+  attrB.prevRandao = Bytes32 EMPTY_UNCLE_HASH
+
+  # Build two distinct sibling payloads on top of genesis.
+  let
+    fcuResA  = ? client.forkchoiceUpdated(Version.V1, update, Opt.some(attrA))
+    payloadA = (? client.getPayload(Version.V1, fcuResA.payloadId.get)).executionPayload
+    fcuResB  = ? client.forkchoiceUpdated(Version.V1, update, Opt.some(attrB))
+    payloadB = (? client.getPayload(Version.V1, fcuResB.payloadId.get)).executionPayload
+
+  if payloadA.blockHash == payloadB.blockHash:
+    return err("Expected two distinct sibling payloads")
+
+  let npResA = ? client.newPayloadV1(payloadA)
+  if npResA.status != PayloadExecutionStatus.valid:
+    return err("newPayload(A) should be valid, got: " & $npResA.status)
+
+  let npResB = ? client.newPayloadV1(payloadB)
+  if npResB.status != PayloadExecutionStatus.valid:
+    return err("newPayload(B) should be valid, got: " & $npResB.status)
+
+  # Sibling B was imported last. Request a payload on top of sibling A.
+  let
+    attrC = PayloadAttributes(
+      timestamp:             w3Qty(time + 2),
+      prevRandao:            default(Bytes32),
+      suggestedFeeRecipient: default(Address),
+      withdrawals:           Opt.some(newSeq[WithdrawalV1]()),
+    )
+    updateC = ForkchoiceStateV1(
+      headBlockHash: payloadA.blockHash,
+      finalizedBlockHash: genesisHash,
+    )
+    fcuResC  = ? client.forkchoiceUpdated(Version.V1, updateC, Opt.some(attrC))
+    payloadC = (? client.getPayload(Version.V1, fcuResC.payloadId.get)).executionPayload
+
+  if payloadC.parentHash != payloadA.blockHash:
+    return err("Payload must be built on the fcU head " &
+      payloadA.blockHash.toHex & ", got parent: " & payloadC.parentHash.toHex)
+
+  if uint64(payloadC.blockNumber) != 2:
+    return err("Expected block number 2, got: " & $payloadC.blockNumber)
+
+  ok()
+
 proc runNewPayloadV4Test(env: TestEnv): Result[void, string] =
   let
     client = env.client
@@ -498,6 +564,11 @@ const testList = [
     name: "Payload rebuild for identical FCU",
     fork: MergeFork,
     testProc: runPayloadRebuildTest
+  ),
+  TestSpec(
+    name: "Payload built on fcU head, not last imported sibling",
+    fork: MergeFork,
+    testProc: runSiblingHeadPayloadTest
   ),
   TestSpec(
     name: "newPayloadV4",

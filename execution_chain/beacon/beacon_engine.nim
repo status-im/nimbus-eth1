@@ -150,13 +150,18 @@ func getPayloadBundle*(ben: BeaconEngineRef, id: Bytes8): Opt[ExecutionBundle] =
 # ------------------------------------------------------------------------------
 proc generateExecutionBundle*(
   ben: BeaconEngineRef,
+  headHash: Hash32,
   attrs: PayloadAttributes
 ): Result[ExecutionBundle, string] =
 
   wrapException:
     let
       xp  = ben.txPool
-      headBlock = ben.chain.latestHeader
+      # Build on the forkchoiceUpdated headBlockHash: `chain.latest` tracks the
+      # most recently imported block, which may be a sibling of the requested
+      # head when multiple valid payloads exist at the same height.
+      headBlock = ben.chain.headerByHash(headHash).valueOr:
+        return err("payload build parent not found: " & headHash.short)
 
     xp.prevRandao   = attrs.prevRandao
     xp.timestamp    = ethTime attrs.timestamp
@@ -176,7 +181,8 @@ proc generateExecutionBundle*(
 
     # someBaseFee = true: make sure bundle.blk.header
     # have the same blockHash with generated payload
-    let bundle = xp.assembleBlock(someBaseFee = true).valueOr:
+    let bundle = xp.assembleBlock(someBaseFee = true,
+                                  parentHash = headHash).valueOr:
       return err(error)
 
     if bundle.blk.header.extraData.len > 32:

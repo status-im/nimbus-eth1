@@ -166,6 +166,7 @@ func getWrapperVersion(com: CommonRef, timestamp: EthTime): WrapperVersion =
 
 proc assembleBlock*(
     xp: TxPoolRef,
+    parentHash: Hash32,
     someBaseFee: bool = false,
     gasLimit: Opt[GasInt] = Opt.none(GasInt)
 ): Result[AssembledBlock, string] =
@@ -179,7 +180,12 @@ proc assembleBlock*(
   # (and gasUsed/stateRoot) of the first pack — producing a block other
   # clients reject as a blob-gas mismatch. Always start each build from a
   # fresh transaction environment.
-  xp.updateVmState()
+  #
+  # The build parent is always explicit: the engine API requires the payload
+  # to sit on the forkchoiceUpdated headBlockHash, which need not be
+  # `chain.latest` when sibling payloads exist at the same height.
+  let parentHeader = ?xp.chain.headerByHash(parentHash)
+  xp.updateVmState(parentHeader, parentHash)
 
   let com = xp.vmState.com
 

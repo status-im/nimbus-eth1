@@ -303,7 +303,7 @@ proc runLedgerTransactionTests(noisy = true) =
 
         blockTime = EthTime(blockTime.uint64 + 1'u64)
 
-        let r = env.xp.assembleBlock()
+        let r = env.xp.assembleBlock(env.xp.chain.latestHash)
         if r.isErr:
           debugEcho r.error
           check false
