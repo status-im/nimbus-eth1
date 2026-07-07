@@ -109,6 +109,7 @@ template to*(v: VertexType, T: type RdbVertexType): RdbVertexType =
   of VertexType.AccLeaf, VertexType.StoLeaf: RdbVertexType.Leaf
   of VertexType.Branch: RdbVertexType.Branch
   of VertexType.ExtBranch: RdbVertexType.ExtBranch
+  of VertexType.BoundaryNode: raiseAssert "BoundaryNode is stateless-only and never persisted"
 
 template inc*(v: var RdbLruCounter, hit: bool) =
   discard v[hit].fetchAdd(1, moRelaxed)

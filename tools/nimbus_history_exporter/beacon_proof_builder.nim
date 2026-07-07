@@ -66,7 +66,7 @@ proc loadHistoricalDataFromEraDir*(
     (latestEra, latestPath) = EraFile.latest(cfg, eraDir).valueOr:
       return err("No era files found in " & eraDir)
     latestSlot = start_slot(latestEra)
-    eraFile = EraFile.open(latestPath).valueOr:
+    eraFile = EraFile.open(latestPath, latestEra).valueOr:
       return err("Cannot open latest era file " & latestPath & ": " & error)
 
   var bytes: seq[byte]

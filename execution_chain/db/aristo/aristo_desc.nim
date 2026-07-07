@@ -80,13 +80,18 @@ type
       ## When true, records collapsed siblings during deletion for witness
       ## generation.
 
-    collapsedSiblings*: seq[tuple[sibAccPath: Hash32, sibStoPath: Opt[Hash32]]]
-      ## Records path pairs for each surviving sibling when a branch collapses
-      ## during deletion. `sibAccPath` is the account path (used to look up the
-      ## storage trie root); `sibStoPath` is the sibling's own path hash. For
-      ## account-trie collapses, sibStoPath is none. Used by witness
-      ## generation to include the sibling node in the witness for stateless
-      ## execution. Only populated when collectWitness is true.
+    collapsedSiblings*: seq[
+      tuple[
+        sibAccPath: Hash32, sibStoPath: Opt[Hash32], stoRoot: VertexID, brVid: VertexID
+      ]
+    ]
+      ## Records collapsed siblings for witness generation. For each entry:
+      ## `sibAccPath` is the account path; `sibStoPath` is the sibling storage
+      ## path (none for account-trie collapses). When `brVid` is valid, the
+      ## entry is a deferred StoLeaf collapse. On witness building the
+      ## `getCollapsedSiblings` checks the vertex type at (stoRoot, brVid)
+      ## in the final trie before including it.
+      ## Only populated when collectWitness is true.
 
     snapshot*: Snapshot
       ## Optional snapshot containing the cumulative changes from ancestors and

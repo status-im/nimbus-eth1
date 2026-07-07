@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   results,
@@ -45,7 +45,7 @@ type
 # RLP serializer functions
 # ------------------------------------------------------------------------------
 
-proc append(w: var RlpWriter, b: BlockRef) =
+func append(w: var RlpWriter, b: BlockRef) =
   # Only the header is persisted in the block-index entry.  The full block
   # body lives in the per-block txFrame blob (written separately under
   # txFrameKey(b.hash)) and is no longer needed at deserialize time since
@@ -57,7 +57,7 @@ proc append(w: var RlpWriter, b: BlockRef) =
                     else: b.parent.index + 1'u
   w.append(parentIndex)
 
-proc append(w: var RlpWriter, fc: ForkedChainRef) =
+func append(w: var RlpWriter, fc: ForkedChainRef) =
   w.startList(9)
   w.append(fc.hashToBlock.len.uint)
   w.append(fc.base.index)
@@ -80,14 +80,14 @@ proc append(w: var RlpWriter, fc: ForkedChainRef) =
   w.append(fc.fcuHead)
   w.append(fc.fcuSafe)
 
-proc read(rlp: var Rlp, T: type BlockRef): T {.raises: [RlpError].} =
+func read(rlp: var Rlp, T: type BlockRef): T {.raises: [RlpError].} =
   rlp.tryEnterList()
   result = T()
   rlp.read(result.header)
   rlp.read(result.hash)
   rlp.read(result.index)
 
-proc read(rlp: var Rlp, T: type FcState): T {.raises: [RlpError].} =
+func read(rlp: var Rlp, T: type FcState): T {.raises: [RlpError].} =
   rlp.tryEnterList()
   rlp.read(result.numBlocks)
   rlp.read(result.base)
@@ -170,7 +170,7 @@ proc loadAllTxFrames(fc: ForkedChainRef): Result[void, string] =
 
   ok()
 
-proc reset(fc: ForkedChainRef, base: BlockRef) =
+func reset(fc: ForkedChainRef, base: BlockRef) =
   fc.base        = base
   fc.latest      = base
   fc.heads       = @[base]
@@ -290,6 +290,7 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
         return err("corrupted FC: block " & $b.number &
           " has parent with unexpected number " & $parentCandidate.number)
       b.parent = parentCandidate
+    b.index = 0
     fc.hashToBlock[b.hash] = b
 
   fc.loadAllTxFrames().isOkOr:

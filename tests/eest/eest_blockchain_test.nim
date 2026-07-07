@@ -10,14 +10,15 @@
 import
   std/os,
   unittest2,
-  ./eest_helpers,
+  ./eest_runner,
   ./eest_blockchain
 
 const
   baseFolder = "tests/fixtures"
+  suiteName = "Block Chain Test"
   eestType = "blockchain_tests"
   eestReleases = [
-    "eest_develop",
+    "eest_mainnet",
     "eest_bal"
   ]
 
@@ -29,6 +30,7 @@ runEESTSuite(
   eestReleases,
   skipFiles,
   baseFolder,
+  suiteName,
   eestType,
   parallelEnabled = true
 )

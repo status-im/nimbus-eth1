@@ -280,7 +280,7 @@ proc generateBlock(env: var TestEnv) =
 
   # import block
   (waitFor chain.importBlock(blk)).isOkOr:
-    debugEcho error
+    debugEcho error.msg
     quit(QuitFailure)
 
   xp.removeNewBlockTxs(blk)

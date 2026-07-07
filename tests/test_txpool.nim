@@ -154,7 +154,7 @@ template checkImportBlock(xp: TxPoolRef, bundle: AssembledBlock) =
   let rc = waitFor xp.chain.importBlock(bundle.blk)
   check rc.isOk == true
   if rc.isErr:
-    debugEcho "IMPORT BLOCK: ", rc.error
+    debugEcho "IMPORT BLOCK: ", rc.error.msg
 
 template checkImportBlock(xp: TxPoolRef, expCount: int, expRem: int) =
   let bundle = checkAssembleBlock(xp, expCount)
@@ -404,7 +404,7 @@ suite "TxPool test suite":
 
       (waitFor chain.importBlock(bundle.blk)).isOkOr:
         check false
-        debugEcho error
+        debugEcho error.msg
         return
 
       xp.removeNewBlockTxs(bundle.blk)

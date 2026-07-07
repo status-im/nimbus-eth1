@@ -19,8 +19,9 @@ import
   ../utils/[mergeutils, utils],
   ../evm/code_bytes,
   ../constants,
+  ../block_access_list/block_access_list_overlay,
   ./[access_list as ac_access_list, core_db, storage_types],
-  ./aristo/aristo_blobify
+  ./aristo/[aristo_blobify, aristo_desc, aristo_get]
 
 export
   code_bytes, core_db.computeAccPath, core_Db.computeSlotKey
@@ -96,10 +97,33 @@ type
       ## Used to collect the keys of all read accounts, code and storage slots.
       ## Maps a tuple of address and slot (optional) to the codeTouched flag.
 
+    stateless*: bool
+      ## Selects how a fatal condition detected during execution (see fatalError)
+      ## is handled. Under stateless execution the used witness is untrusted, so
+      ## it may be invalid or incomplete. A fatal condition then must stop the
+      ## block execution with a validation error. On a full node the state is
+      ## complete, so it is instead a defect (assert).
+
+    fatalError*: Opt[string]
+      ## Set when a fatal block-aborting condition is detected during execution
+      ## that cannot travel the EVM's transaction-level error channel (which is
+      ## absorbed by the calling frame as a reverted CALL). Checked and acted on
+      ## in processTransaction (see the stateless flag).
+
     blockHashes: BlockHashesCache
       ## Caches the block hashes fetched by the BLOCKHASH opcode in the EVM.
       ## Also used when building the execution witness to determine the
       ## block numbers fetched by the BLOCKHASH opcode for any given block.
+
+    balOverlay*: Opt[BlockAccessListOverlay]
+      ## For Parallel execution using BALs, when executing each transaction
+      ## we need to read from the writes in the BAL in order to have the
+      ## correct pre-state. The BAL overlay enables searching for the last write
+      ## in the BAL for accounts, storage and code. Only the first lookup of
+      ## a balance, nonce, code or storage slot hits the overlay and then after
+      ## that the values will be returned from the ledger caches. The intention
+      ## is that a separate ledger instance is used for each transaction each having
+      ## its own overlay instance for the given BAL index.
 
   ReadOnlyLedger* = distinct LedgerRef
 
@@ -122,6 +146,17 @@ const
 
 template logTxt(info: static[string]): static[string] =
   "LedgerRef " & info
+
+proc applyOverlay(ledger: LedgerRef, address: Address, acc: AccountRef) =
+  let overlayAcc = ledger.balOverlay.expect("bal overlay enabled").getAccount(address)
+  if overlayAcc.balance.isSome():
+    acc.statement.balance = overlayAcc.balance[]
+  if overlayAcc.nonce.isSome():
+    acc.statement.nonce = overlayAcc.nonce[]
+  if overlayAcc.code.isSome():
+    acc.statement.codeHash = keccak256(overlayAcc.code[])
+    acc.code = CodeBytesRef.init(overlayAcc.code[])
+    acc.flags.incl CodeChanged
 
 proc getAccount(
     ledger: LedgerRef;
@@ -150,11 +185,25 @@ proc getAccount(
   let
     accPath = address.computeAccPath
     rc = ledger.txFrame.fetchAccount accPath
+
   if rc.isOk:
     result = AccountRef(
       statement: rc.value,
       accPath:   accPath,
       flags:     {Alive})
+    if ledger.balOverlay.isSome():
+      ledger.applyOverlay(address, result)
+
+  elif ledger.balOverlay.isSome() and ledger.balOverlay[].hasAccount(address):
+    result = AccountRef(
+      statement: CoreDbAccount(
+        nonce:    EMPTY_ACCOUNT.nonce,
+        balance:  EMPTY_ACCOUNT.balance,
+        codeHash: EMPTY_ACCOUNT.codeHash),
+      accPath:    accPath,
+      flags: {Alive})
+    ledger.applyOverlay(address, result)
+
   elif shouldCreate:
     result = AccountRef(
       statement: CoreDbAccount(
@@ -162,7 +211,7 @@ proc getAccount(
         balance:  EMPTY_ACCOUNT.balance,
         codeHash: EMPTY_ACCOUNT.codeHash),
       accPath:    accPath,
-      flags:      {Alive, IsNew})
+      flags: {Alive, IsNew})
   else:
     return # ignore, don't cache
 
@@ -192,6 +241,7 @@ template exists(acc: AccountRef): bool =
 
 proc originalStorageValue(
     acc: AccountRef;
+    address: Address;
     slot: UInt256;
     ledger: LedgerRef;
       ): UInt256 =
@@ -205,22 +255,29 @@ proc originalStorageValue(
 
   # Not in the original values cache - go to the DB unless it's a new account
   if acc.flags * {IsNew, NewlyCreated} == {}:
-    let
-      slotKey = ledger.slots.get(slot).valueOr:
-        computeSlotKey(slot)
-    result = ledger.txFrame.fetchSlot(acc.accPath, slotKey).valueOr(0'u256)
+    result = 
+      if ledger.balOverlay.isNone():
+        let slotKey = ledger.slots.get(slot).valueOr:
+          computeSlotKey(slot)
+        ledger.txFrame.fetchSlot(acc.accPath, slotKey).valueOr(0'u256)
+      else:
+        ledger.balOverlay[].getStorage(address, slot).valueOr:
+          let slotKey = ledger.slots.get(slot).valueOr:
+            computeSlotKey(slot)
+          ledger.txFrame.fetchSlot(acc.accPath, slotKey).valueOr(0'u256)
 
   acc.originalStorage[slot] = result
 
 proc storageValue(
     acc: AccountRef;
+    address: Address;
     slot: UInt256;
     ledger: LedgerRef;
       ): UInt256 =
   acc.overlayStorage.withValue(slot, val) do:
     return val[]
   do:
-    result = acc.originalStorageValue(slot, ledger)
+    result = acc.originalStorageValue(address, slot, ledger)
 
 proc kill(ledger: LedgerRef, acc: AccountRef) =
   acc.flags.excl Alive
@@ -400,7 +457,7 @@ proc dispose*(ledger: LedgerRef, savePoint: LedgerSpRef) =
   if savePoint.parentSavePoint != nil:
     ledger.rollback(savePoint)
 
-proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool, collectWitness = false): LedgerRef =
+proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool, collectWitness = false, stateless = false): LedgerRef =
   new result
   result.txFrame = db
   result.storeSlotHash = storeSlotHash
@@ -408,6 +465,7 @@ proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool, collect
   result.slots = typeof(result.slots).init(slotsLruSize)
   result.collectWitness = collectWitness
   result.txFrame.aTx.collectWitness = collectWitness
+  result.stateless = stateless
   result.blockHashes = typeof(result.blockHashes).init(MAX_PREV_HEADER_DEPTH.int)
   discard result.beginSavePoint
 
@@ -484,7 +542,7 @@ proc getCommittedStorage*(ledger: LedgerRef, address: Address, slot: UInt256): U
 
   if acc.isNil:
     return
-  acc.originalStorageValue(slot, ledger)
+  acc.originalStorageValue(address, slot, ledger)
 
 proc getStorage*(ledger: LedgerRef, address: Address, slot: UInt256): UInt256 =
   let acc = ledger.getAccount(address, false)
@@ -496,7 +554,7 @@ proc getStorage*(ledger: LedgerRef, address: Address, slot: UInt256): UInt256 =
 
   if acc.isNil:
     return
-  acc.storageValue(slot, ledger)
+  acc.storageValue(address, slot, ledger)
 
 proc contractCollision*(ledger: LedgerRef, address: Address): bool =
   let acc = ledger.getAccount(address, false)
@@ -589,7 +647,7 @@ proc setStorage*(ledger: LedgerRef, address: Address, slot, value: UInt256) =
     if not ledger.witnessKeys.contains(lookupKey):
       ledger.witnessKeys[lookupKey] = false
 
-  let oldValue = acc.storageValue(slot, ledger)
+  let oldValue = acc.storageValue(address, slot, ledger)
   if oldValue != value:
     var acc = ledger.makeDirty(address)
     acc.overlayStorage[slot] = value
@@ -664,10 +722,23 @@ proc clearEmptyAccounts(ledger: LedgerRef) =
 template getWitnessKeys*(ledger: LedgerRef): WitnessTable =
   ledger.witnessKeys
 
-template getCollapsedSiblings*(
+proc getCollapsedSiblings*(
     ledger: LedgerRef
 ): seq[tuple[sibAccPath: Hash32, sibStoPath: Opt[Hash32]]] =
-  ledger.txFrame.aTx.collapsedSiblings
+  ## Collapsed siblings for witness generation. StoLeaf collapses (brVid
+  ## valid) are only included if brVid is still a StoLeaf in the final trie.
+  ## A branch there means a later insertion expanded it again, no auxiliary
+  ## needed.
+  let db = ledger.txFrame.aTx
+  var res: seq[tuple[sibAccPath: Hash32, sibStoPath: Opt[Hash32]]]
+  for (accPath, sibStoPath, stoRoot, brVid) in db.collapsedSiblings:
+    if brVid.isValid:
+      let vtx = db.getVtx((stoRoot, brVid))
+      if vtx.isValid and vtx.vType == StoLeaf:
+        res.add((accPath, sibStoPath))
+    else:
+      res.add((accPath, sibStoPath))
+  res
 
 template clearWitnessKeys*(ledger: LedgerRef) =
   ledger.witnessKeys.clear()
@@ -676,8 +747,14 @@ template clearCollapsedSiblings*(ledger: LedgerRef) =
   ledger.txFrame.aTx.collapsedSiblings.setLen(0)
 
 proc getBlockHash*(ledger: LedgerRef, blockNumber: BlockNumber): Hash32 =
+  # Range checks must be done earlier, any miss here treated as an error:
+  # we record it as a fatalError.
+  # The zero hash is still returned so behaviour is otherwise unchanged,
+  # in particular the verified proxy's async EVM continues, discovers the
+  # number from the cache, fetches it and re-runs.
   ledger.blockHashes.get(blockNumber).valueOr:
     let blockHash = ledger.txFrame.getBlockHash(blockNumber).valueOr:
+      ledger.fatalError = Opt.some("Block hash not available for block " & $blockNumber)
       default(Hash32)
 
     ledger.blockHashes.put(blockNumber, blockHash)

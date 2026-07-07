@@ -87,6 +87,32 @@ template storageRecover(
 
   bodyRc
 
+proc codesRecover(
+    session: ResumeSession;
+    lst: openArray[SnapAccount];
+    info: static[string];
+      ) =
+  if 0 < lst.len:
+    let
+      accMin = lst[0].accHash.to(ItemKey)
+      accMax = lst[^1].accHash.to(ItemKey)
+
+    # Find all available `CodeHash` keys
+    var found: HashSet[CodeHash]
+    for w in session.db.walkByteCode(session.state.stateRoot, accMin):
+      if accMax < w.limit:
+        break
+      for (key,_) in w.codes:
+        found.incl key
+
+    # Check for unprocessed byte codes
+    for w in lst:
+      let
+        snapHash = w.accBody.codeHash
+        codeHash = snapHash.to(CodeHash)
+      if not snapHash.isEmpty and codeHash notin found:
+        session.state.register(w.accHash.to(ItemKey), codeHash)
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -138,7 +164,9 @@ template sessionResume*(
         continue
 
       if not intro:                                 # print message once, only
-        chronicles.info info & ": Resuming download session", nStates
+        chronicles.info info & ": Resuming download session", nStates,
+          syncState=($ctx.syncState), nSyncPeers=ctx.nSyncPeers(),
+          nEthPeers=ctx.nEthPeers()
         intro = true
 
       if p.tag != Untagged:                         # ignore assembled data
@@ -163,7 +191,7 @@ template sessionResume*(
       state = sdb.register(p.root, p.hash, p.number, info)
 
       # Walk account for the current state root
-      for w in adb.walkAccounts(p.root):
+      for w in adb.walkAccount(p.root):
         if 0 < w.error.len:
           chronicles.info info & ": Bad accounts record ignored",
             error=w.error, root=state.rootStr
@@ -183,6 +211,9 @@ template sessionResume*(
         for acc in w.accounts:
           session.storageRecover(acc, info).isOkOr:
             break body                              # system termination?
+
+        # Register unprocessed codes for the current account list
+        session.codesRecover(w.accounts, info)
 
     debug info & ": Download session restored",
       coverage=sdb.accountsCoverage.pcStr,

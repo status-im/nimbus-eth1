@@ -313,6 +313,23 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
         await sleepAsync(ZeroDuration)
         awaitQuota(wire, txPoolProcessCost, "broadcast transactions hashes")
 
+proc cleanupSeenTransactions*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
+  # Collect expired keys in a single synchronous pass. Do NOT await while
+  # iterating the live table: a concurrently-dispatched handleTxHashesBroadcast
+  # can insert into seenTransactions and trip Nim's "length of the table changed
+  # while iterating over it" assertion.
+  var expireds: seq[Hash32]
+  let now = getTime()
+  for key, seen in wire.seenTransactions:
+    if now - seen.lastSeen > POOLED_STORAGE_TIME_LIMIT:
+      expireds.add key
+
+  # Deletion iterates over `expireds` (a seq), so awaiting here is safe even if
+  # a concurrent handler mutates the table.
+  for expire in expireds:
+    wire.seenTransactions.del(expire)
+    awaitQuota(wire, hashLookupCost, "broadcast transactions hashes")
+
 proc tickerLoop*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
   while true:
     # Create or replenish timer
@@ -327,15 +344,7 @@ proc tickerLoop*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
 
     if res == wire.cleanupTimer:
       wire.reqisterAction("Periodical cleanup"):
-        var expireds: seq[Hash32]
-        for key, seen in wire.seenTransactions:
-          if getTime() - seen.lastSeen > POOLED_STORAGE_TIME_LIMIT:
-            expireds.add key
-          awaitQuota(wire, hashLookupCost, "broadcast transactions hashes")
-
-        for expire in expireds:
-          wire.seenTransactions.del(expire)
-          awaitQuota(wire, hashLookupCost, "broadcast transactions hashes")
+        await wire.cleanupSeenTransactions()
 
     if res == wire.brUpdateTimer:
       wire.reqisterAction("Periodical blockRangeUpdate"):

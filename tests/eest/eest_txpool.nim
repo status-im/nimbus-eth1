@@ -111,7 +111,7 @@ proc runTest(env: TestEnv, unit: BlockchainUnitEnv, statelessEnabled = false): R
     if res.isOk:
       latestStateRoot = blk.header.stateRoot
     else:
-      return err("Good block was rejected at import: " & res.error)
+      return err("Good block was rejected at import: " & res.error.msg)
 
     xp.removeNewBlockTxs(blk)
 

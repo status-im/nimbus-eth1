@@ -298,13 +298,16 @@ proc writeContract*(c: Computation) =
     # The account already has zero-length code to handle nested calls.
     withExtra trace, "New contract given empty code by pre-Homestead rules"
 
-template chainTo*(c: Computation,
-                  toChild: typeof(c.child),
+template chainTo*(cpt: Computation,
+                  toChild: typeof(cpt.child),
                   after: untyped) =
 
-  c.child = toChild
-  c.continuation = proc(): EvmResultVoid {.gcsafe, raises: [].} =
-    c.continuation = nil
+  cpt.child = toChild
+  cpt.continuation = proc(cc: Computation): EvmResultVoid {.gcsafe, raises: [].} =
+    cc.continuation = nil
+    let # we inject these variables so the `after` block can use it without having to capture
+      c {.inject.} = cc
+      child {.inject} = cc.child
     after
 
 proc execSelfDestruct*(c: Computation, beneficiary: Address) =

@@ -27,45 +27,30 @@ import
   ../../execution_chain/core/chain/forked_chain,
   ../../execution_chain/beacon/beacon_engine,
   ../../execution_chain/common/common,
-  ../../execution_chain/stateless/witness_types,
-  ../../execution_chain/stateless/stateless_types,
   ../../execution_chain/stateless/stateless_execution,
+  ../../execution_chain/stateless/stateless_guest,
   ../../hive_integration/engine_client,
   ./eest_helpers,
   ./bal_parser
 
 from ../../execution_chain/rpc/debug import getExecutionWitness
 
-proc hexListToSeqByteList(n: JsonNode, field: string): seq[seq[byte]] =
-  var res: seq[seq[byte]]
-  for item in n[field]:
-    res.add hexToSeqByte(item.getStr)
-
-  res
-
 proc fromJson(T: type ExecutionWitness, n: JsonNode): ExecutionWitness =
-  ExecutionWitness(
-    state: hexListToSeqByteList(n, "state"),
-    codes: hexListToSeqByteList(n, "codes"),
-    keys: if "keys" in n: hexListToSeqByteList(n, "keys") else: @[],
-    headers: hexListToSeqByteList(n, "headers")
-  )
+  var res: ExecutionWitness
+  for item in n["state"]:
+    discard res.state.add(ByteList[MAX_BYTES_PER_WITNESS_NODE].init(hexToSeqByte(item.getStr)))
+  for item in n["codes"]:
+    discard res.codes.add(ByteList[MAX_BYTES_PER_CODE].init(hexToSeqByte(item.getStr)))
+  if "headers" in n:
+    for item in n["headers"]:
+      discard res.headers.add(ByteList[MAX_BYTES_PER_HEADER].init(hexToSeqByte(item.getStr)))
+  res
 
 proc parseWitness(node: JsonNode): Opt[ExecutionWitness] =
   if "executionWitness" in node:
     Opt.some(ExecutionWitness.fromJson(node["executionWitness"]))
   else:
     Opt.none(ExecutionWitness)
-
-proc parseStatelessOutput(node: JsonNode): Opt[StatelessValidationResult] =
-  if "statelessOutputBytes" in node:
-    let sszBytes = hexToSeqByte(node["statelessOutputBytes"].getStr)
-    try:
-      Opt.some(SSZ.decode(sszBytes, StatelessValidationResult))
-    except SerializationError as e:
-      raiseAssert("Failed to deserialize StatelessValidationResult: " & e.msg)
-  else:
-    Opt.none(StatelessValidationResult)
 
 proc parseBAL(node: JsonNode): Opt[BlockAccessListRef] =
   const
@@ -101,7 +86,16 @@ proc parseBlocks*(node: JsonNode): seq[BlockDesc] =
         bal: parseBAL(x),
         badBlock: "expectException" in x,
         witness: parseWitness(x),
-        statelessValidationResult: parseStatelessOutput(x)
+        statelessInputBytes:
+          if "statelessInputBytes" in x:
+            Opt.some(hexToSeqByte(x["statelessInputBytes"].getStr))
+          else:
+            Opt.none(seq[byte]),
+        statelessOutputBytes:
+          if "statelessOutputBytes" in x:
+            Opt.some(hexToSeqByte(x["statelessOutputBytes"].getStr))
+          else:
+            Opt.none(seq[byte]),
       )
     except RlpError:
       # invalid rlp will not participate in block validation
@@ -116,45 +110,33 @@ proc rootExists(db: CoreDbTxRef; root: Hash32): bool =
 proc shortLog(witness: ExecutionWitness): string =
   var res = "ExecutionWitness:\n"
   res.add "State:\n"
-  for stateNode in witness.state:
-    res.add stateNode.to0xHex() & "\n"
+  for node in witness.state:
+    res.add node.asSeq().to0xHex() & "\n"
   res.add "Codes:\n"
-  for codeNode in witness.codes:
-    res.add codeNode.to0xHex() & "\n"
+  for code in witness.codes:
+    res.add code.asSeq().to0xHex() & "\n"
   res.add "Headers:\n"
-  for headerNode in witness.headers:
-    res.add headerNode.to0xHex() & "\n"
+  for header in witness.headers:
+    res.add header.asSeq().to0xHex() & "\n"
   res
 
 proc compare(
     generated, expected: ExecutionWitness, strict = false
 ): Result[void, string] =
-  ## Compare witness state, nodes and headers, not comparing keys as these
-  ## are not included in the test vectors.
-  ## When strict is false, allow generated witness state, codes and headers to
-  ## be a subset of expected. This is because some test vectors include extra
-  ## unused state nodes, code and headers in the witness to test that stateless
-  ## execution still works. Same counts for the lexicographical order.
+  ## Compare witness state, codes and headers.
+  ## When strict is true the witnesses must be identical.
+  ## When strict is false, allow generated to be a subset of expected.
+  ## This is because some test vectors include extra unused state nodes,
+  ## code and headers in the witness to test that stateless execution
+  ## still works. Same counts for the lexicographical order.
 
   if strict:
-    # when strict enabled, also compare state and codes to be identical
-    if generated.state != expected.state:
+    if generated != expected:
       return err(
-        "Witness state mismatch, got: " & $generated.shortLog & " expected: " &
-          $expected.shortLog
-      )
-    if generated.codes != expected.codes:
-      return err(
-        "Witness codes mismatch, got: " & $generated.shortLog & " expected: " &
-          $expected.shortLog
-      )
-    if generated.headers != expected.headers:
-      return err(
-        "Witness headers mismatch, got: " & $generated.shortLog & " expected: " &
-          $expected.shortLog
+        "Witness mismatch, got: " & $generated.shortLog &
+          " expected: " & $expected.shortLog
       )
   else:
-    # else allow them just to be a subset of expected
     for node in generated.state:
       if node notin expected.state:
         return err(
@@ -178,51 +160,103 @@ proc compare(
 
   ok()
 
-proc runTest(env: TestEnv, unit: BlockchainUnitEnv, statelessEnabled = false): Future[Result[void, string]] {.async.} =
+proc runTest(
+    env: TestEnv, unit: BlockchainUnitEnv, statelessEnabled = false
+): Future[Result[void, string]] {.async.} =
   let blocks = parseBlocks(unit.blocks)
   var latestStateRoot = unit.genesisBlockHeader.stateRoot
 
   for blk in blocks:
+    # Stateful test
     let res = await env.chain.importBlock(blk.blk, blk.bal, finalized = true)
     if res.isOk:
       if unit.lastblockhash == blk.blk.header.computeBlockHash:
         latestStateRoot = blk.blk.header.stateRoot
       if blk.badBlock:
         return err("Bad block got imported succesfully")
-      else:
-        if statelessEnabled:
-          # Get witness that should have been generated when importing the block
-          var witness = env.chain.getExecutionWitness(blk.blk.header.computeRlpHash).valueOr:
-            return err("Execution witness was not found in the database")
-
-          # process block stateless with generated witness
-          ?witness.statelessProcessBlock(env.chain.com, blk.blk, verifyState = true)
-
-          let successful_validation =
-            if blk.statelessValidationResult.isSome():
-              blk.statelessValidationResult.get().successful_validation
-            else:
-              true
-
-          if blk.witness.isSome() and successful_validation:
-            # If block witness in test vector and validation is successful,
-            # process block stateless with test vector witness
-            let expectedWitness = blk.witness.value()
-            ?expectedWitness.statelessProcessBlock(env.chain.com, blk.blk)
-
-            # compare both witnesses
-            ?compare(witness, expectedWitness)
     else:
       if not blk.badBlock:
-        return err("Good block was rejected at import: " & res.error)
+        return err("Good block was rejected at import: " & res.error.msg)
+
+    if not statelessEnabled:
+      continue
+
+    # Stateless test
+
+    var expectedSuccessful = false
+
+    # Run the full stateless guest pipeline with the test-vector bytes
+    # when both input and output are provided.
+    if blk.statelessInputBytes.isSome and blk.statelessOutputBytes.isSome:
+      let
+        expectedOutput =
+          try:
+            SSZ.decode(blk.statelessOutputBytes.get(), StatelessValidationResult)
+          except SerializationError as e:
+            return err("Failed to decode expected stateless guest output: " & e.msg)
+
+        outputBytes = run_stateless_guest(blk.statelessInputBytes.value())
+        output =
+          try:
+            SSZ.decode(outputBytes, StatelessValidationResult)
+          except SerializationError as e:
+            return err("Failed to decode stateless guest output: " & e.msg)
+
+      expectedSuccessful = expectedOutput.successful_validation
+
+      if output.successful_validation != expectedOutput.successful_validation:
+        return err(
+          "Stateless guest: expected successful_validation=" &
+            $expectedOutput.successful_validation & " got " &
+            $output.successful_validation
+        )
+
+      # TODO: new_payload_request_root comparison disabled
+      # the block_access_list field in ExecutionPayload uses MAX_BYTES_PER_TRANSACTION (2^30)
+      # in our gloas.nim data types but the stateless_ssz.py spec uses
+      # MAX_BLOCK_ACCESS_LIST_BYTES = (2^24), causing a hash_tree_root mismatch.
+      # Expected to be fixed in the next release of test vectors.
+      # if output.new_payload_request_root != expectedOutput.new_payload_request_root:
+      #   return err(
+      #     "Stateless guest: new_payload_request_root mismatch, got " &
+      #     $output.new_payload_request_root &
+      #     " expected " & $expectedOutput.new_payload_request_root
+      #   )
+
+      # Verify that the SSZ input witness matches the JSON witness field.
+      # This rather validates the test vector itself, not our implementation.
+      if expectedSuccessful and blk.witness.isSome:
+        let statelessInput = deserialize_stateless_input(blk.statelessInputBytes.get()).valueOr:
+          return err("Failed to deserialize StatelessInput: " & error)
+        ?compare(statelessInput.witness, blk.witness.get(), strict = true)
+
+    # Run statelessProcessBlock with the full node generated witness. The witness
+    # is only stored for successfully imported blocks, so skip if import failed.
+    # Note that failed import for not bad block fails early.
+    if res.isOk:
+      let witnessWithKeys = env.chain.getExecutionWitness(blk.blk.header.computeRlpHash).valueOr:
+        return err("Execution witness was not found in the database")
+      let generatedWitness = witnessWithKeys.toExecutionWitness()
+
+      ?generatedWitness.statelessProcessBlock(env.chain.com, blk.blk)
+
+      # Compare the generated witness against the test-vector witness input
+      # only when validation is expected to succeed.
+      if expectedSuccessful and blk.statelessInputBytes.isSome:
+        let statelessInput = deserialize_stateless_input(blk.statelessInputBytes.get()).valueOr:
+          return err("Failed to deserialize StatelessInput: " & error)
+        # Generated witness must be a subset of the stateless input witness
+        ?compare(generatedWitness, statelessInput.witness)
 
   (await env.chain.forkChoice(unit.lastblockhash, unit.lastblockhash)).isOkOr:
     return err("Fork choice failed")
 
   let headHash = env.chain.latestHash
   if headHash != unit.lastblockhash:
-    return err("Latest block hash mismatch, got: " & $headHash &
-      " expected: " & $unit.lastblockhash)
+    return err(
+      "Latest block hash mismatch, got: " & $headHash & " expected: " &
+        $unit.lastblockhash
+    )
 
   if not env.chain.txFrame(headHash).rootExists(latestStateRoot):
     return err("Latest stateRoot does not exist in the database")

@@ -51,7 +51,7 @@ if defined(release) and not defined(disableLTO) and not defined(windows):
   extend "gcc.options.linker", " -flto=auto -Wno-stringop-overflow -Wno-stringop-overread -finline-limit=100000"  # https://github.com/nim-lang/Nim/issues/21595
   extend "gcc.cpp.options.linker", " -flto=auto -Wno-stringop-overflow -Wno-stringop-overread -finline-limit=100000"
 
-  if defined(macosx):
+  if defined(macosx) and not defined(emscripten):
     # https://clang.llvm.org/docs/CommandGuide/clang.html#cmdoption-flto
     extend "clang.options.linker", " -Wl,-object_path_lto," & nimCachePath & "/lto"
     extend "clang.cpp.options.linker", " -Wl,-object_path_lto," & nimCachePath & "/lto"
@@ -143,10 +143,11 @@ switch("define", "withoutPCRE")
 
 when not defined(disable_libbacktrace):
   --define:nimStackTraceOverride
+  switch("stacktrace", "off")
   switch("import", "libbacktrace")
 else:
-  --stacktrace:on
-  --linetrace:on
+  switch("stacktrace", "on")
+  switch("linetrace", "on")
 
 var canEnableDebuggingSymbols = true
 if defined(macosx):
@@ -172,10 +173,12 @@ if canEnableDebuggingSymbols:
 
 switch("warningAsError", "BareExcept:on")
 switch("warningAsError", "CaseTransition:on")
+switch("warningAsError", "CycleCreated:on")
 switch("warningAsError", "ImplicitDefaultValue:on")
 switch("warningAsError", "ImplicitTemplateRedefinition:on")
 switch("warningAsError", "LongLiterals:on")
 switch("warningAsError", "ProveField:on")
+switch("warningAsError", "StmtListLambda:on")
 switch("warningAsError", "UnreachableCode:on")
 switch("warningAsError", "UnusedImport:on")
 switch("hintAsError", "ConvFromXtoItselfNotNeeded:on")

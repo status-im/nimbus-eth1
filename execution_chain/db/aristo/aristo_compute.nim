@@ -187,18 +187,11 @@ proc getKey(
     skipLayers: static bool,
     parallel: static bool,
 ): Result[((HashKey, VertexRef), int), AristoError] =
-  when not parallel and not skipLayers:
-    const
-      emptyFlags: set[GetVtxFlag] = {}
-  const
-    flags =
-      when parallel:
-        {GetVtxFlag.PeekCache, GetVtxFlag.NoPutCache}
-      else:
-        when skipLayers:
-          {GetVtxFlag.PeekCache}
-        else:
-          emptyFlags
+  const flags: set[GetVtxFlag] =
+    when parallel or skipLayers:
+      {GetVtxFlag.PeekCache}
+    else:
+      {}
 
   when not skipLayers:
     let keyVtxRes = txRef.layersGetKeyOrVtx(rvid, parallel)
@@ -220,7 +213,7 @@ template childVid(vp: VertexRef): VertexID =
   of Branch, ExtBranch:
     let v = BranchRef(v)
     v.startVid
-  of StoLeaf:
+  of BoundaryNode, StoLeaf:
     default(VertexID)
 
 proc computeKeyImplTask(
@@ -284,6 +277,12 @@ proc computeKeyImpl(
     of StoLeaf:
       let vtx = StoLeafRef(vtx)
       rlpEncodeStoLeaf(vtx.pfx, vtx.stoData).digestTo(HashKey)
+    of BoundaryNode:
+      # Boundary node from a witness (no branch): pfx and childKey (absent branch
+      # hash) are sufficient to get the extension RLP. putSubtrie set the key
+      # so normally this branch is not reached.
+      let ev = BoundaryNodeRef(vtx)
+      rlpEncodeExt(ev.pfx, ev.childKey).digestTo(HashKey)
     of Branches:
       # For branches, we need to load the vertices before recursing into them
       # to exploit their on-disk order

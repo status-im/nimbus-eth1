@@ -105,10 +105,11 @@ type
     ## with the same IP address but different ports.
 
   RunCtrl = enum
-    terminated = 0
+    uninitialised = 0           ## start up state
     shutdown                    ## About to terminate
     allRunning                  ## Running, full support
     standByMode                 ## Suspending worker and deamon loop
+    terminated                  ## final state
 
   PeerProtoCheck[S,W] = ref object
     hasProto: AcceptPeerOk      ## Sub protocol selector closure
@@ -144,6 +145,8 @@ type
     filter: seq[PeerProtoCheck[S,W]] ## List of p2p sub-protocol handler filters
 
 const
+  CtrlDownStates = {uninitialised,shutdown,terminated}
+
   tickerExecLoopWaitInterval = 5.seconds
     ## Run exec loop with ticker body and then wait some time
 
@@ -371,7 +374,7 @@ proc workerLoop[S,W](buddy: RunnerPeerRef[S,W]) {.async: (raises: []).} =
   block taskExecLoop:
 
     template isActive(): bool =
-      worker.ctrl.running and dsc.runCtrl notin {terminated,shutdown}
+      worker.ctrl.running and dsc.runCtrl notin CtrlDownStates
 
     while isActive():
       # Enforce minimum time spend on this loop
@@ -411,7 +414,7 @@ proc workerLoop[S,W](buddy: RunnerPeerRef[S,W]) {.async: (raises: []).} =
               delayed = nil # not executing any final item
               break # `true` => stop
             # Shutdown in progress?
-            if dsc.runCtrl in {terminated,shutdown}:
+            if dsc.runCtrl in CtrlDownStates:
               dsc.monitorLock = false
               break taskExecLoop
           if not delayed.isNil:
@@ -437,7 +440,7 @@ proc workerLoop[S,W](buddy: RunnerPeerRef[S,W]) {.async: (raises: []).} =
         dsc.activeMulti.dec
 
       # Check for shutdown
-      if dsc.runCtrl in {terminated,shutdown}:
+      if dsc.runCtrl in CtrlDownStates:
         worker.ctrl.stopped = true
         break taskExecLoop
 
@@ -465,7 +468,7 @@ proc workerLoop[S,W](buddy: RunnerPeerRef[S,W]) {.async: (raises: []).} =
         break taskExecLoop # stop on error (must not end up in busy-loop)
 
       # Need to re-check after potential task switch
-      if dsc.runCtrl in {terminated,shutdown}:
+      if dsc.runCtrl in CtrlDownStates:
         worker.ctrl.stopped = true
         break taskExecLoop
 
@@ -694,7 +697,7 @@ proc startSync*[S,W](dsc: RunnerSyncRef[S,W]; standBy = false): bool =
   mixin runSetup
 
   case dsc.runCtrl:
-  of terminated:
+  of uninitialised:
     # Initialise sub-systems
     if dsc.ctx.runSetup():
       # Initialise descriptor for running, probably after an earlier
@@ -728,20 +731,28 @@ proc startSync*[S,W](dsc: RunnerSyncRef[S,W]; standBy = false): bool =
       dsc.runCtrl = standByMode
       return true
 
-  of shutdown:
+  of shutdown, terminated:
     discard
   # false
 
 proc isRunning*[S,W](dsc: RunnerSyncRef[S,W]): bool =
-  dsc.runCtrl notin {terminated,shutdown}
+  dsc.runCtrl notin CtrlDownStates
 
 proc isStandBy*[S,W](dsc: RunnerSyncRef[S,W]): bool =
   dsc.runCtrl == standByMode
 
 proc stopSync*[S,W](dsc: RunnerSyncRef[S,W]) {.async.} =
   ## Stop syncing and free peer handlers .
-  if dsc.runCtrl notin {terminated,shutdown}:
+  if dsc.runCtrl notin CtrlDownStates:
     await dsc.terminate()
+
+proc resetSync*[S,W](dsc: RunnerSyncRef[S,W]): bool =
+  ## Reset after termination. Returns `true` if the scheduler was in
+  ## `terminated` state.
+  if dsc.runCtrl == terminated:
+    dsc.runCtrl = uninitialised
+    return true
+  # false
 
 # ------------------------------------------------------------------------------
 # End

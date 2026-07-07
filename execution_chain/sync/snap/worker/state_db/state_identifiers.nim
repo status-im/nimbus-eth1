@@ -11,8 +11,9 @@
 
 import
   std/[hashes, typetraits],
+  pkg/eth/common,
   ../../../wire_protocol,
-  pkg/eth/common
+  ../helpers
 
 type
   StateRoot* = distinct Hash32
@@ -62,10 +63,14 @@ template to*[T: CodeHash](w: SnapCodeHash, _: type T): T = T(w.Hash32)
 template to*[T: seq[byte]](w: SnapDistinctBlobs, _: type T): T = T(w)
 
 # ------------------------------------------------------------------------------
-# Public print function()s
+# Public print function(s)
 # ------------------------------------------------------------------------------
 
-func toStr*(w: DistinctHash32): string = w.Hash32.short
+func toStr*(w: DistinctHash32): string = w.Hash32.toStr
+
+func toStr*(w: Opt[DistinctHash32]): string =
+  if w.isNone: Opt.none(Hash32).toStr
+  else: Opt.some(w.unsafeGet.Hash32).toStr
 
 # ------------------------------------------------------------------------------
 # End

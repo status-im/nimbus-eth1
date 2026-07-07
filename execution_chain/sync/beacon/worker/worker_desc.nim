@@ -13,6 +13,7 @@
 import
   std/[sets, sequtils],
   pkg/[chronos, eth/common, results],
+  pkg/eth/common/block_access_lists,
   pkg/stew/[interval_set, sorted_set],
   ../../../core/chain,
   ../../[sync_desc, wire_protocol],
@@ -29,6 +30,9 @@ type
     ## Extended global descriptor
 
   # -------------------
+
+  BeaconNotifier* = proc(ok: bool) {.gcsafe, raises: [].}
+    ## Used for single sprint notification when the header chain is complete.
 
   BeaconError* = tuple
     ## Capture exception context for heders/bodies fetcher logging
@@ -83,6 +87,9 @@ type
   BlocksForImport* = object
     ## Blocks list item indexed by least block number (i.e. by `blocks[0]`.)
     blocks*: seq[EthBlock]           ## List of blocks lineage for import
+    bals*: seq[Opt[BlockAccessListRef]]
+                                     ## Optional block access lists (EIP-7928),
+                                     ## aligned by index with `blocks`.
     peerID*: Hash                    ## For comparing peers
 
   # -------------------
@@ -139,10 +146,10 @@ type
   PeerFirstFetchReq* = object
     ## Register fetch request. This is intended to avoid sending the same (or
     ## similar) fetch request again from the same peer that sent it previously.
-    case state*: SyncState
-    of SyncState.headers:
+    case state*: BeaconState
+    of BeaconState.headers:
       blockNumber*: BlockNumber      ## First block number
-    of SyncState.blocks:
+    of BeaconState.blocks:
       blockHash*: Hash32             ## First block hash
     else:
       discard
@@ -175,13 +182,16 @@ type
     ## Globally shared data extension
     hdrSync*: HeaderFetchSync        ## Syncing by linked header chains
     blkSync*: BlocksFetchSync        ## For importing/executing blocks
-    syncState*: SyncState            ## Current syncer state
-    standByMode*: bool               ## Do not activate if `true`
+    syncState*: BeaconState            ## Current syncer state
+    standByMode*: bool               ## Do not generally activate if `true`
     subState*: SyncSubState          ## Additional state variables
     nextMetricsUpdate*: Moment       ## For updating metrics
 
     chain*: ForkedChainRef           ## Core database, FCU support
     hdrCache*: HeaderChainRef        ## Currently in tandem with `chain`
+
+    stopBase*: Opt[Header]           ## Single run base
+    stopNotifier*: BeaconNotifier    ## Tu be called when `stopBase` reached
 
     # Info, debugging, and error handling stuff
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one
@@ -193,6 +203,7 @@ type
     lastNoPeersLog*: chronos.Moment  ## Control messages about missing peers
     lastSyncUpdLog*: chronos.Moment  ## Control update messages
     syncEta*: SyncEta                ## Estimated time until all in sync
+    syncTickerOk*: bool              ## Activate built in state monitor
     ticker*: Ticker                  ## Ticker function to run in background
 
 # ------------------------------------------------------------------------------
@@ -243,7 +254,7 @@ proc `hibernate=`*(ctx: BeaconCtxRef; val: bool) =
 
 func syncState*(
     ctx: BeaconCtxRef;
-      ): (SyncState,HeaderChainMode,bool) =
+      ): (BeaconState,HeaderChainMode,bool) =
   ## Getter, triple of relevant run-time states
   (ctx.pool.syncState,
    ctx.hdrCache.state,
@@ -251,7 +262,7 @@ func syncState*(
 
 func syncState*(
     buddy: BeaconPeerRef;
-      ): (SyncPeerRunState,SyncState,HeaderChainMode,bool) =
+      ): (SyncPeerRunState,BeaconState,HeaderChainMode,bool) =
   ## Getter, also includes buddy state
   (buddy.ctrl.state,
    buddy.ctx.pool.syncState,

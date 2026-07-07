@@ -41,7 +41,7 @@ proc commitOrRollbackDependingOnGasUsed(
     callResult: var LogResult;
     blobGasUsed: GasInt;
     rollbackReads: bool;
-      ): Result[void, string] =
+      ): Result[void, string] {.noinline.} =
   # Make sure that the tx does not exceed the maximum cumulative limit as
   # set in the vmState.blockCtx. Again, the EIP-1559 reference does not mention
   # an early stop. It would rather detect differing values for the  block
@@ -89,6 +89,28 @@ proc commitOrRollbackDependingOnGasUsed(
     emitClosureLogs(vmState, callResult.logEntries)
   ok()
 
+template check2dGasInclusion*(
+    gasLimit, regularGasUsed, stateGasUsed, txGasLimit: GasInt;
+    intrinsic: IntrinsicGas;
+    fail: untyped) =
+  let
+    regularGasAvailable = gasLimit - regularGasUsed
+    stateGasAvailable = gasLimit - stateGasUsed
+    # https://github.com/ethereum/execution-specs/pull/2703/changes
+    # Worst-case regular contribution: tx.gasLimit minus the portion that
+    # must go to intrinsic state gas, capped at TX_MAX_GAS_LIMIT.
+    want = min(TX_GAS_LIMIT.GasInt, txGasLimit - intrinsic.state)
+  if want > regularGasAvailable:
+    fail("regular gas used exceeds limit, want: " & $want &
+      ", available: " & $regularGasAvailable)
+
+  # Worst-case state contribution: tx.gasLimit minus the portion that
+  # must go to intrinsic regular gas.
+  let stateGas = txGasLimit - intrinsic.regular
+  if stateGas > stateGasAvailable:
+    fail("state gas used exceeds limit, want: " & $stateGas &
+      ", available: " & $stateGasAvailable)
+
 template validateForInclusion(
     vmState: BaseVMState;
     tx: Transaction;
@@ -106,30 +128,21 @@ template validateForInclusion(
   let
     com = vmState.com
     fork = vmState.hardFork
-    regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
-    stateGasAvailable = vmState.blockCtx.gasLimit - vmState.blockStateGasUsed
     intrinsicVar = tx.intrinsicGas(fork, vmState.blockCtx.gasLimit)
 
   # Per-tx 2D gas inclusion check: for each dimension the worst-case
   # contribution must fit in the remaining budget.  Block-end
   # validation still enforces
   if fork < Amsterdam:
-    let want = min(TX_GAS_LIMIT.GasInt, tx.gasLimit)
+    let
+      regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
+      want = min(TX_GAS_LIMIT.GasInt, tx.gasLimit)
     if want > regularGasAvailable:
       fail("regular gas used exceeds limit, want: " & $want & ", available: " & $regularGasAvailable)
   else:
-    # https://github.com/ethereum/execution-specs/pull/2703/changes
-    # Worst-case regular contribution: tx.gasLimit minus the portion that
-    # must go to intrinsic state gas, capped at TX_MAX_GAS_LIMIT.
-    let want = min(TX_GAS_LIMIT.GasInt, tx.gasLimit - intrinsicVar.state)
-    if want > regularGasAvailable:
-      fail("regular gas used exceeds limit, want: " & $want & ", available: " & $regularGasAvailable)
-
-    # Worst-case state contribution: tx.gasLimit minus the portion that
-    # must go to intrinsic regular gas.
-    let stateGas = tx.gasLimit - intrinsicVar.regular
-    if stateGas > stateGasAvailable:
-      fail("state gas used exceeds limit, want: " & $stateGas & ", available: " & $stateGasAvailable)
+    check2dGasInclusion(
+      vmState.blockCtx.gasLimit, vmState.blockRegularGasUsed,
+      vmState.blockStateGasUsed, tx.gasLimit, intrinsicVar, fail)
 
   # blobGasUsed will be added to vmState.blobGasUsed if the tx is ok.
   let
@@ -153,9 +166,10 @@ proc processTransaction*(
     tx:      Transaction; ## Transaction to validate
     sender:  Address;  ## tx.recoverSender
     rollbackReads: bool = false;
+    persist = true;
       ): Result[LogResult, string] =
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
-  ## which provides a backward compatible framwork for EIP1559.
+  ## which provides a backward compatible framework for EIP1559.
 
   validateForInclusion(vmState, tx, sender, false, true, intrinsic, blobGasUsed)
 
@@ -169,6 +183,13 @@ proc processTransaction*(
   var callResult = tx.txCallEvm(sender, vmState, intrinsic)
   vmState.captureTxEnd(tx.gasLimit - callResult.gasUsed)
 
+  # A fatal condition recorded during execution aborts the block immediately
+  if vmState.ledger.fatalError.isSome:
+    if vmState.ledger.stateless:
+      return err(vmState.ledger.fatalError.get())
+    else:
+      raiseAssert vmState.ledger.fatalError.get()
+
   let
     tmp = commitOrRollbackDependingOnGasUsed(
       vmState, savePoint, tx, callResult, blobGasUsed, rollbackReads)
@@ -177,7 +198,8 @@ proc processTransaction*(
     else:
       ok(move(callResult))
 
-  vmState.ledger.persist(clearEmptyAccount = vmState.hardFork >= Spurious)
+  if persist:
+    vmState.ledger.persist(clearEmptyAccount = vmState.hardFork >= Spurious)
 
   res
 

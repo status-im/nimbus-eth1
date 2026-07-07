@@ -55,6 +55,7 @@ const
   defaultBalStatePrefetch* = false
   defaultBalStatePrefetchWorkers* = 0
   defaultBalStatePrefetchForce* = false
+  defaultBalParallelExecution* = false
 
 template defaultListenAddress(): IpAddress =
   getAutoAddress(Port(0)).toIpAddress()
@@ -395,6 +396,13 @@ type
         "for pre-Amsterdam blocks (requires BALs supplied out of band)"
       name: "debug-bal-state-prefetch-force".}: bool
 
+    balParallelExecution* {.
+      hidden
+      defaultValue: defaultBalParallelExecution
+      desc: "Execute block transactions in parallel on background threads " &
+        "using the supplied block access list"
+      name: "debug-bal-parallel-execution".}: bool
+
     eagerStateRootCheck* {.
       hidden
       desc: "Eagerly check state roots when syncing finalized blocks"
@@ -542,6 +550,12 @@ type
               " also available"
         defaultValue: false
         name: "debug-snap-server" .}: bool
+
+      beaconSyncTicker* {.
+        hidden
+        desc: "Activate periodic state message logger"
+        defaultValue: false
+        name: "debug-beacon-sync-ticker" .}: bool
 
       beaconSyncTarget* {.
         hidden
@@ -854,6 +868,10 @@ proc ereDir*(config: ExecutionClientConf): string =
 func udpPort*(config: ExecutionClientConf): Port =
   config.udpPortFlag.get(config.tcpPort)
 
+func threadSafeCaches*(config: ExecutionClientConf): bool =
+  config.optimisticStatePrefetch or config.balStatePrefetch or
+    config.parallelStateRootComputation
+
 func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
   DbOptions.init(
     maxOpenFiles = config.rocksdbMaxOpenFiles,
@@ -870,7 +888,7 @@ func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
     rdbPrintStats = config.rdbPrintStats,
     maxSnapshots = config.aristoDbMaxSnapshots,
     parallelStateRootComputation = config.parallelStateRootComputation,
-    threadSafeCaches = config.optimisticStatePrefetch or config.balStatePrefetch or config.balStatePrefetchForce,
+    threadSafeCaches = config.threadSafeCaches,
     blockCacheType = config.rocksdbBlockCacheType,
   )
 
@@ -879,6 +897,15 @@ func jwtSecretOpt*(config: ExecutionClientConf): Opt[InputFile] =
     Opt.some config.jwtSecret.get
   else:
     Opt.none InputFile
+
+proc readValue*(r: var TomlReader, value: var seq[string]) {.raises: [IOError, SerializationError].} =
+  mixin readValue
+  case r.tokKind
+  of TomlTokKind.Array:
+    r.parseList():
+      value.add r.parseAsString()
+  else:
+    value.add r.parseAsString()
 
 {.pop.}
 

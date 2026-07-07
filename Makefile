@@ -138,6 +138,7 @@ endif
 	eest_blockchain_test \
 	eest_stateless_execution_test \
 	eest_full_test \
+  eest_tool_test \
 	t8n \
 	t8n_test \
 	evmstate \
@@ -423,8 +424,8 @@ stateless_execution_baremetal: | build deps
 	$(ENV_SCRIPT) nim c --hints:off --cpu:riscv64 --os:any --mm:arc -d:useMalloc -d:chronicles_enabled:off -u:metrics --threads:off --stackTrace:off -d:disable_libbacktrace --compileOnly --genScript "execution_chain/stateless/stateless_execution.nim"
 
 stateless_execution_test: | build deps
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -o:build/$@ "tests/test_stateless_execution.nim"
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) --mm:arc -d:useMalloc -d:chronicles_log_level=ERROR -o:build/$@ "tests/test_stateless_execution.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -o:build/$@ "tests/test_stateless/test_stateless_execution.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) --mm:arc -d:useMalloc -d:chronicles_log_level=ERROR -o:build/$@ "tests/test_stateless/test_stateless_execution.nim"
 
 # EEST standalone targets - binary to run individual test vector files
 eest_engine: | build deps
@@ -444,8 +445,12 @@ eest_stateless_execution_test: | build deps eest
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
 
 eest_full_test: | build deps eest
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/all_eest_tests.nim"
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/all_eest_tests.nim"
+	build/$@
 
+eest_tool_test: | build deps eest
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/eest_tool_tests.nim"
+	build/$@
 # builds transition tool
 t8n: | build deps
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) $(T8N_PARAMS) "tools/t8n/$@.nim"

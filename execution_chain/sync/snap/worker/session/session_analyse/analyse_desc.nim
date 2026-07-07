@@ -12,7 +12,7 @@
 
 import
   pkg/[chronicles, chronos, eth/common, stew/byteutils],
-  ../../[mpt, worker_desc]
+  ../../[mpt, helpers, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -32,6 +32,8 @@ type
     EGetError                                       # serious database problem?
     EClearError                                     # ..
     EPutError
+    EAristoError                                    # incomplete import?
+    EPartialMpt
     EOtherError                                     # any other error
 
   OnDanglingCB* =

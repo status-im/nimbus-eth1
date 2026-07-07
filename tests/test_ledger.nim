@@ -145,7 +145,7 @@ func initAddr(z: int): Address =
 proc importBlock(env: TestEnv; blk: Block) =
   (waitFor env.chain.importBlock(blk)).isOkOr:
     raiseAssert "persistBlocks() failed at block #" &
-      $blk.header.number & " msg: " & error
+      $blk.header.number & " msg: " & error.msg
 
 proc getLedger(txFrame: CoreDbTxRef): LedgerRef =
   LedgerRef.init(txFrame)

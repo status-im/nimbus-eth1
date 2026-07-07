@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -22,7 +22,9 @@ type
     headerHashes*: seq[Hash32]
       # Hashes of block headers which are required by the witness.
 
-  ExecutionWitness* = object
+  # Note: Currently used only for the JSON-RPC debug_executionWitness API.
+  # May be removed if that API gets dropped in the future.
+  ExecutionWitnessWithKeys* = object
     state*: seq[seq[byte]] # MPT trie nodes accessed while executing the block.
     codes*: seq[seq[byte]] # Contract bytecodes read while executing the block.
     keys*: seq[seq[byte]]
@@ -63,31 +65,31 @@ func decode*(T: type Witness, witnessBytes: openArray[byte]): Result[T, string] 
     err(e.msg)
 
 func init*(
-    T: type ExecutionWitness,
+    T: type ExecutionWitnessWithKeys,
     state = newSeq[seq[byte]](),
     codes = newSeq[seq[byte]](),
     keys = newSeq[seq[byte]](),
     headers = newSeq[seq[byte]](),
 ): T =
-  ExecutionWitness(state: state, codes: codes, keys: keys, headers: headers)
+  ExecutionWitnessWithKeys(state: state, codes: codes, keys: keys, headers: headers)
 
-template addState*(witness: var ExecutionWitness, trieNode: seq[byte]) =
+template addState*(witness: var ExecutionWitnessWithKeys, trieNode: seq[byte]) =
   witness.state.add(trieNode)
 
-template addCode*(witness: var ExecutionWitness, code: seq[byte]) =
+template addCode*(witness: var ExecutionWitnessWithKeys, code: seq[byte]) =
   witness.codes.add(code)
 
-template addKey*(witness: var ExecutionWitness, key: seq[byte]) =
+template addKey*(witness: var ExecutionWitnessWithKeys, key: seq[byte]) =
   witness.keys.add(key)
 
-template addHeader*(witness: var ExecutionWitness, header: seq[byte]) =
+template addHeader*(witness: var ExecutionWitnessWithKeys, header: seq[byte]) =
   witness.headers.add(header)
 
-func encode*(witness: ExecutionWitness): seq[byte] =
+func encode*(witness: ExecutionWitnessWithKeys): seq[byte] =
   rlp.encode(witness)
 
 func decode*(
-    T: type ExecutionWitness, witnessBytes: openArray[byte]
+    T: type ExecutionWitnessWithKeys, witnessBytes: openArray[byte]
 ): Result[T, string] =
   try:
     ok(rlp.decode(witnessBytes, T))

@@ -21,6 +21,9 @@ import
 logScope:
   topics = "beacon sync"
 
+const
+  ZeroTarget: InitTarget = (zeroHash32, false, Opt.none(Hash32))
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -39,7 +42,7 @@ proc headersTargetRequest*(
   ## to the header chain cache on activation, overriding the default of
   ## `chain.baseHash`.
   ctx.pool.initTarget = Opt.some((h, isFinal, finHash))
-  trace info & ": request syncer target", targetHash=h.short, isFinal,
+  trace info & ": Request syncer target", targetHash=h.short, isFinal,
     finHash=(if finHash.isSome: finHash.unsafeGet.short else: "n/a")
 
 proc headersTargetReset*(ctx: BeaconCtxRef) =
@@ -63,7 +66,7 @@ template headersTargetActivate*(
     let ctx = buddy.ctx
 
     # Must be called before first syncer activation
-    doAssert ctx.pool.syncState == SyncState.idle
+    doAssert ctx.pool.syncState == BeaconState.idle
 
     if ctx.pool.initTarget.isNone():
       break body                                           # return
@@ -72,9 +75,12 @@ template headersTargetActivate*(
       peer {.inject,used.} = $buddy.peer                   # logging only
       trg = ctx.pool.initTarget.unsafeGet
 
+    if trg.hash == zeroHash32:                             # already in process?
+      break body                                           # .. yes, it is
+
     # Require minimum of sync peers
     if ctx.nSyncPeers() < ctx.pool.minInitBuddies:
-      trace info & ": not enough peers to start manual sync", peer,
+      trace info & ": Not enough peers to start manual sync", peer,
         targetHash=trg.hash.short, isFinal=trg.isFinal,
         state=($buddy.syncState),
         nSyncPeersMin=ctx.pool.minInitBuddies, nSyncPeers=ctx.nSyncPeers()
@@ -84,14 +90,17 @@ template headersTargetActivate*(
     if buddy.peerID in ctx.pool.failedPeers:
       break body                                           # return
 
-    # Grab header, so no other peer will interfere
-    ctx.pool.initTarget = Opt.none(InitTarget)
+    # Grab header, so no other peer will interfere. Rather then clearing
+    # the `Opt[InitTarget]` it is reset to some zero value. This pervents
+    # the syncer to start another session initiated by the CL while waiting
+    # for header to be resoved via eth/xx.
+    ctx.pool.initTarget = Opt.some(ZeroTarget)
 
     # Fetch header or return
     const iv = BnRange.new(0u,0u) # dummy interval
     let hdrs = buddy.fetchHeadersReversed(iv, trg.hash).valueOr:
       if buddy.ctrl.running:
-        trace info & ": peer failed on syncer target", peer,
+        trace info & ": Peer failed on syncer target", peer,
           targetHash=trg.hash.short, isFinal=trg.isFinal,
           failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.nSyncPeers(),
           nErrors=buddy.nErrors.fetch.hdr, state=($buddy.syncState)
@@ -111,7 +120,7 @@ template headersTargetActivate*(
           # not restoring target
 
         else:
-          trace info & ": peer repeatedly failed", peer,
+          trace info & ": Peer repeatedly failed", peer,
             targetHash=trg.hash.short, isFinal=trg.isFinal,
             failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.nSyncPeers(),
             nErrors=buddy.nErrors.fetch.hdr, state=($buddy.syncState)
@@ -122,6 +131,9 @@ template headersTargetActivate*(
 
     # Got header so the cul-de-sac protection can be cleared
     ctx.pool.failedPeers.clear()
+
+    # Mark the target consumed, one way or the other.
+    ctx.pool.initTarget = Opt.none(InitTarget)
 
     # Verify that the target header is usable
     let hdr = hdrs[0]

@@ -80,8 +80,9 @@ type
     savePoint*:             LedgerSpRef
     instr*:                 Op
     opIndex*:               int
-    parent*, child*:        Computation
-    continuation*:          proc(): EvmResultVoid {.gcsafe, raises: [].}
+    parent* {.cursor.}:     Computation  # non-owning back pointer
+    child*:                 Computation  # owning front pointer
+    continuation*:          proc(c: Computation): EvmResultVoid {.gcsafe, raises: [].}
     keepStack*:             bool
     finalStack*:            seq[UInt256]
     balTrackerEnabled*:     bool

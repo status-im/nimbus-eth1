@@ -70,11 +70,6 @@ proc init*(builder: var BlockAccessListBuilder, threadSafe = false) =
   if threadSafe:
     initLock(builder.lock)
 
-template init*(T: type BlockAccessListBuilder, threadSafe = false): var T =
-  var builder = T()
-  builder.init(threadSafe)
-  builder
-
 proc newShared*(
     T: type BlockAccessListBuilder, threadSafe = false
 ): ptr BlockAccessListBuilder =
@@ -177,13 +172,15 @@ proc addCodeChange*(
         existing[].dispose()
       accData[].codeChanges[blockAccessIndex] = SharedBytes.init(newCode)
 
-func buildBlockAccessListImpl(builder: var BlockAccessListBuilder): BlockAccessListRef =
+func buildBlockAccessList*(builder: var BlockAccessListBuilder): BlockAccessListRef =
+  # This function is not thread safe and should only be called once all threads
+  # have finished writing to the builder.
   let blockAccessList: BlockAccessListRef = new BlockAccessList
 
-  for address, accData in builder.accounts.mpairs():
+  for address, accData in builder.accounts.pairs():
     # Collect and sort storageChanges
     var storageChanges: seq[SlotChanges]
-    for slot, changes in accData.storageChanges.mpairs():
+    for slot, changes in accData.storageChanges.pairs():
       var slotChanges: seq[StorageChange]
 
       for balIndex, value in changes.pairs():
@@ -214,7 +211,7 @@ func buildBlockAccessListImpl(builder: var BlockAccessListBuilder): BlockAccessL
 
     # Collect and sort codeChanges
     var codeChanges: seq[CodeChange]
-    for balIndex, code in accData.codeChanges.mpairs():
+    for balIndex, code in accData.codeChanges.pairs():
       codeChanges.add((BlockAccessIndex(balIndex), Bytecode(code.data())))
     codeChanges.sort(balIndexCmp)
 
@@ -232,7 +229,3 @@ func buildBlockAccessListImpl(builder: var BlockAccessListBuilder): BlockAccessL
   blockAccessList[].sort(accChangesCmp)
 
   blockAccessList
-
-func buildBlockAccessList*(builder: var BlockAccessListBuilder): BlockAccessListRef =
-  withOptionalLock(builder):
-    result = builder.buildBlockAccessListImpl()

@@ -28,7 +28,8 @@ const
 
 suite "Block access list validation":
   setup:
-    var builder = BlockAccessListBuilder.init()
+    var builder: BlockAccessListBuilder
+    builder.init()
 
   teardown:
     builder.dispose()
@@ -315,7 +316,8 @@ when ENABLE_BENCHMARKS:
 
   suite "Block access list validation benchmarks":
     setup:
-      var builder = BlockAccessListBuilder.init()
+      var builder: BlockAccessListBuilder
+      builder.init()
 
       builder.addTouchedAccount(address3)
       builder.addTouchedAccount(address2)

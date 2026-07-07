@@ -205,7 +205,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     # similar to headHash, safeBlockHash is saved by FC module
 
   (await chain.queueForkChoice(headHash, finalizedBlockHash, safeBlockHash)).isOkOr:
-    return invalidFCU(error, chain, header)
+    return invalidFCU(error.msg, chain, header)
 
   # If payload generation was requested, create a new block to be potentially
   # sealed by the beacon client. The payload will be requested later, and we

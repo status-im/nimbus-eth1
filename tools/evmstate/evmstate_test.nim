@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -11,8 +11,7 @@
 import
   std/[os, osproc, strutils, tables],
   unittest2,
-  testutils/markdown_reports,
-  ../../tests/test_allowed_to_fail
+  testutils/markdown_reports
 
 type
   StatusMap = OrderedTable[string, OrderedTable[string, Status]]
@@ -21,7 +20,6 @@ type
     dispName: string
 
 const
-  inputFolder = "tests/fixtures/eest/state_tests"
   testData = "tools/evmstate/testdata"
 
 proc runTest(filename: string): bool =
@@ -34,9 +32,6 @@ proc runTest(filename: string): bool =
 
   true
 
-template skipTest(folder, name: untyped): bool =
-  slowGSTTests(folder, name)
-
 proc collectFileNames(inputPath: string, map: var StatusMap, fileNames: var seq[TestFile]) =
   for fileName in walkDirRec(inputPath):
     if not fileName.endsWith(".json"):
@@ -47,9 +42,6 @@ proc collectFileNames(inputPath: string, map: var StatusMap, fileNames: var seq[
     if not map.hasKey(last):
       map[last] = initOrderedTable[string, Status]()
     map[last][name] = Status.Skip
-    if skipTest(last, name):
-      continue
-
     fileNames.add TestFile(
       fullPath: fileName,
       dispName: substr(fileName, inputPath.len+1)
@@ -60,7 +52,6 @@ proc main() =
     var status = initOrderedTable[string, OrderedTable[string, Status]]()
     var filenames: seq[TestFile] = @[]
     collectFileNames(testData, status, filenames)
-    collectFileNames(inputFolder, status, filenames)
 
     for filename in filenames:
       let input = filename
