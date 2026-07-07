@@ -160,7 +160,7 @@ suite "TxFrame blobify round-trip":
         acc, i.AccountNonce)
       check xp.addTx(ptx).isOk
 
-    let bundle1Rc = xp.assembleBlock()
+    let bundle1Rc = xp.assembleBlock(xp.chain.latestHash)
     check bundle1Rc.isOk
     let blk1 = bundle1Rc.get.blk
     check blk1.transactions.len == 3
@@ -240,7 +240,7 @@ suite "TxFrame blobify round-trip":
       check xp.addTx(ptx).isOk
 
     xp.timestamp = xp.timestamp + 1
-    let bundle2Rc = xp.assembleBlock()
+    let bundle2Rc = xp.assembleBlock(xp.chain.latestHash)
     check bundle2Rc.isOk
     let blk2 = bundle2Rc.get.blk
     check blk2.transactions.len == 2
@@ -279,7 +279,7 @@ suite "TxFrame blobify round-trip":
         acc, i.AccountNonce)
       check xp.addTx(ptx).isOk
 
-    let bundle1 = xp.assembleBlock().get
+    let bundle1 = xp.assembleBlock(xp.chain.latestHash).get
     let blk1 = bundle1.blk
     check blk1.transactions.len == 3
     check (waitFor chain.importBlock(blk1)).isOk
@@ -296,7 +296,7 @@ suite "TxFrame blobify round-trip":
       check xp.addTx(ptx).isOk
 
     xp.timestamp = xp.timestamp + 1
-    let bundle2 = xp.assembleBlock().get
+    let bundle2 = xp.assembleBlock(xp.chain.latestHash).get
     let blk2 = bundle2.blk
     check blk2.transactions.len == 2
     check (waitFor chain.importBlock(blk2)).isOk
@@ -388,7 +388,7 @@ suite "TxFrame blobify round-trip":
         acc, i.AccountNonce)
       check xp2.addTx(ptx).isOk
 
-    let bundle3 = xp2.assembleBlock().get
+    let bundle3 = xp2.assembleBlock(xp2.chain.latestHash).get
     let blk3 = bundle3.blk
     check blk3.transactions.len == 2
     check (waitFor fc.importBlock(blk3)).isOk

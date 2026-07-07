@@ -182,7 +182,7 @@ proc generateExecutionBundle*(
     # someBaseFee = true: make sure bundle.blk.header
     # have the same blockHash with generated payload
     let bundle = xp.assembleBlock(someBaseFee = true,
-                                  parentHash = Opt.some(headHash)).valueOr:
+                                  parentHash = headHash).valueOr:
       return err(error)
 
     if bundle.blk.header.extraData.len > 32:

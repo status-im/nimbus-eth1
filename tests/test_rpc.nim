@@ -276,7 +276,7 @@ proc generateBlock(env: var TestEnv) =
   xp.feeRecipient = feeRecipient
   xp.timestamp = EthTime.now()
 
-  let bundle = xp.assembleBlock().valueOr:
+  let bundle = xp.assembleBlock(xp.chain.latestHash).valueOr:
     debugEcho error
     quit(QuitFailure)
 

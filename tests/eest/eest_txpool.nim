@@ -77,7 +77,7 @@ proc importTxAndAssembleBlock(xp: TxPoolRef, blk: EthBlock): Result[EthBlock, st
   let
     # Override gasLimit
     gasLimit = Opt.some(blk.header.gasLimit)
-    res = ? xp.assembleBlock(someBaseFee = true, gasLimit = gasLimit)
+    res = ? xp.assembleBlock(xp.chain.latestHash, someBaseFee = true, gasLimit = gasLimit)
     blockHash = res.blk.header.computeBlockHash
     expectedBlockHash = blk.header.computeBlockHash
 

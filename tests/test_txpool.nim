@@ -146,7 +146,7 @@ template checkAddTxSupersede(xp, tx) =
 
 template checkAssembleBlock(xp, expCount): auto =
   xp.timestamp = xp.timestamp + 1
-  let rc = xp.assembleBlock()
+  let rc = xp.assembleBlock(xp.chain.latestHash)
   check rc.isOk == true
   if rc.isErr:
     debugEcho "ASSEMBLE BLOCK: ", rc.error
@@ -399,7 +399,7 @@ suite "TxPool test suite":
     var numTxsPacked = 0
     while numTxsPacked < MAX_TXS_GENERATED:
       xp.timestamp = xp.timestamp + 1
-      let bundle = xp.assembleBlock().valueOr:
+      let bundle = xp.assembleBlock(xp.chain.latestHash).valueOr:
         debugEcho error
         check false
         return
@@ -1073,7 +1073,7 @@ suite "TxPool EIP-7934 block RLP size limit":
       inc nonces[accIdx]
 
     xp.timestamp = xp.timestamp + 1
-    let rc = xp.assembleBlock()
+    let rc = xp.assembleBlock(xp.chain.latestHash)
     require rc.isOk
     let bundle = rc.get
 
@@ -1121,7 +1121,7 @@ suite "TxPool payload rebuild consistency":
 
     # advance to a new slot timestamp: first payload build
     xp.timestamp = xp.timestamp + 1
-    let rc1 = xp.assembleBlock()
+    let rc1 = xp.assembleBlock(xp.chain.latestHash)
     require rc1.isOk
     let b1 = rc1.get
     check b1.blk.transactions.len == 2
@@ -1129,7 +1129,7 @@ suite "TxPool payload rebuild consistency":
 
     # rebuild for the SAME slot/timestamp (mimics a repeated forkchoiceUpdated).
     # It must not collapse to an empty body with a stale header.
-    let rc2 = xp.assembleBlock()
+    let rc2 = xp.assembleBlock(xp.chain.latestHash)
     require rc2.isOk
     let b2 = rc2.get
     check b2.blk.transactions.len == 2
