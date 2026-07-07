@@ -17,7 +17,7 @@ import
   ../../wire_protocol/types as wire_types,
   ./[state_db, worker_const]
 
-from ./mpt/mpt_assembly
+from ./mpt/mpt_cache
   import MptAsmRef
 
 # Running beacon syncer in tandem
