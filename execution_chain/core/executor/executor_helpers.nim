@@ -12,6 +12,7 @@
 
 import
   eth/bloom,
+  stew/assign2,
   ../../db/ledger,
   ../../evm/state,
   ../../evm/types,
@@ -47,7 +48,7 @@ func createBloom*(receipts: openArray[StoredReceipt]): Bloom =
   bloom.value.to(Bloom)
 
 proc makeReceipt*(
-    vmState: BaseVMState; txType: TxType, callResult: sink LogResult): StoredReceipt =
+    vmState: BaseVMState; txType: TxType, callResult: LogResult): StoredReceipt =
   var rec: StoredReceipt
   if vmState.com.isByzantiumOrLater(vmState.blockNumber, vmState.blockCtx.timestamp):
     rec.isHash = false
@@ -60,7 +61,7 @@ proc makeReceipt*(
 
   rec.receiptType = txType
   rec.cumulativeGasUsed = vmState.cumulativeGasUsed
-  rec.logs = move(callResult.logEntries)
+  assign(rec.logs, callResult.logEntries)
   rec
 
 # ------------------------------------------------------------------------------
