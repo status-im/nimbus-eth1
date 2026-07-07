@@ -1,0 +1,149 @@
+# Nimbus
+# Copyright (c) 2026 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at
+#     https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at
+#     https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed
+# except according to those terms.
+
+{.push raises: [].}
+
+import
+  #std/[dirs, paths, typetraits],
+  std/[paths],
+  #pkg/[chronicles, chronos, eth/common, results, rocksdb],
+  pkg/[chronos, eth/common, rocksdb],
+  pkg/stew/interval_set,
+  ../../../../wire_protocol/snap/snap_types,
+  ../../state_db, #worker_const],
+  ../mpt_desc
+
+type
+  BoolResult* = Result[bool,string]
+    ## Shortcut
+
+  BlobResult* = Result[seq[byte],string]
+    ## Shortcut
+
+  OptHeaderResult* = Result[Opt[Header],string]
+    ## Shortcut
+
+  OptBalResult* = Result[Opt[BlockAccessListRef],string]
+    ## Shortcut
+
+  OptHashResult* = Result[Opt[Hash32],string]
+    ## Shortcut
+
+  OptLeafInvResult* = Result[Opt[DecodedLeafIntv],string]
+    ## Shortcut
+
+  OptFlatAccResult* = Result[Opt[Account],string]
+    ## Shortcut
+
+  OptFlatSlotResult* = Result[Opt[UInt256],string]
+    ## Shortcut
+
+  PutResult* = Result[void,string]
+    ## Shortcut
+
+  DelResult* = Result[void,string]
+    ## Shortcut
+
+  MptAsmRef* = ref object
+    adb*: RocksDbReadWriteRef
+    dir*: Path
+    dnglLock*: int                                  # advisory lock
+    cntrLock*: int                                  # advisory lock
+
+  StateDataTag* = enum
+    Untagged = 0                                    # well, still a tag :)
+    OnTrie                                          # assembled and merged
+    PivotOnTrie                                     # ditto, state root here
+    PivotMptAnalysed
+
+  DecodedStateData* = tuple
+    hash: BlockHash
+    number: BlockNumber
+    touch: Moment                                   # last data change
+    tag: StateDataTag                               # state root also on trie
+    coverage: UInt256                               # account range coverage
+
+  DecodedAccount* = tuple
+    limit: ItemKey
+    accounts: seq[SnapAccount]
+    proof: seq[ProofNode]
+    peerID: Hash
+
+  DecodedStoSlot* = tuple
+    limit: ItemKey
+    slot: seq[StorageItem]
+    proof: seq[ProofNode]
+    peerID: Hash
+
+  DecodedByteCode* = tuple
+    limit: ItemKey
+    codes: seq[(CodeHash,CodeItem)]
+    peerID: Hash
+
+  DecodedLeafIntv* = tuple
+    root: Hash32
+    ranges: ItemKeyRangeSet
+
+  CachedStateData* = tuple
+    hash: BlockHash
+    number: BlockNumber
+    touch: Moment                                   # last data change
+    tag: StateDataTag                               # how this record is used
+    coverage: UInt256                               # account range coverage
+
+  WalkStateData* = tuple
+    root: StateRoot
+    hash: BlockHash
+    number: BlockNumber
+    touch: Moment                                   # last data change
+    tag: StateDataTag                               # how this record is used
+    coverage: UInt256                               # account range coverage
+    error: string
+
+  WalkAccount* = tuple
+    root: StateRoot
+    start: ItemKey
+    limit: ItemKey
+    accounts: seq[SnapAccount]
+    proof: seq[ProofNode]
+    peerID: Hash
+    error: string
+
+  WalkStoSlot* = tuple
+    root: StateRoot
+    account: ItemKey
+    start: ItemKey                                  # `0` unless incomplete
+    limit: ItemKey                                  # `high()` unless incomplete
+    slot: seq[StorageItem]
+    proof: seq[ProofNode]                           # Prof for `slot` (if any)
+    peerID: Hash
+    error: string
+
+  WalkByteCode* = tuple
+    root: StateRoot
+    start: ItemKey                                  # account coverage
+    limit: ItemKey                                  # account coverage
+    codes: seq[(CodeHash,CodeItem)]
+    peerID: Hash
+    error: string
+
+  WalkHeader* = tuple
+    header: Header
+    error: string
+
+  WalkBal* = tuple
+    bal: BlockAccessListRef
+    error: string
+
+  KvPair* = tuple
+    key: seq[byte]
+    value: seq[byte]
+
+# End
