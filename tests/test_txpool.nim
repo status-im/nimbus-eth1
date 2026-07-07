@@ -526,7 +526,7 @@ suite "TxPool test suite":
   test "Test TxPool with blobhash block":
     # Skip here until bug on arm64 is resolved.
     # bundle.blockValue is incorrect (zero) only on arm64 linux
-    when defined(linux):# and defined(arm64):
+    when defined(linux) and defined(arm64):
       skip()
     else:
       let
