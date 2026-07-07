@@ -53,7 +53,9 @@ func toRlp(rng: ItemKeyRangeSet): seq[byte] =
 # Public RLP decoders
 # ------------------------------------------------------------------------------
 
-proc decodeStateData*(data: seq[byte]): Result[CacheStateData,string] =
+proc decodeStateData*(
+    data: openArray[byte];
+      ): Result[CacheStateData,string] =
   const info = "decodeStateData"
   var
     rd = data.rlpFromBytes
@@ -69,7 +71,9 @@ proc decodeStateData*(data: seq[byte]): Result[CacheStateData,string] =
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(move res)
 
-func decodeAccountData*(data: seq[byte]): Result[CacheAccountData,string] =
+func decodeAccountData*(
+    data: openArray[byte];
+      ): Result[CacheAccountData,string] =
   const info = "decodeAccount"
   var
     rd = data.rlpFromBytes
@@ -84,7 +88,9 @@ func decodeAccountData*(data: seq[byte]): Result[CacheAccountData,string] =
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(move res)
 
-func decodeStoSlotData*(data: seq[byte]): Result[CacheStoSlotData,string] =
+func decodeStoSlotData*(
+    data: openArray[byte];
+      ): Result[CacheStoSlotData,string] =
   const info = "decodeStoSlot"
   var
     rd = data.rlpFromBytes
@@ -99,7 +105,9 @@ func decodeStoSlotData*(data: seq[byte]): Result[CacheStoSlotData,string] =
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(move res)
 
-func decodeByteCodeData*(data: seq[byte]): Result[CacheByteCodeData,string] =
+func decodeByteCodeData*(
+    data: openArray[byte];
+      ): Result[CacheByteCodeData,string] =
   const info = "decodeByteCode"
   var
     rd = data.rlpFromBytes
@@ -113,7 +121,7 @@ func decodeByteCodeData*(data: seq[byte]): Result[CacheByteCodeData,string] =
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(move res)
 
-func decodeHeader*(data: seq[byte]): Result[Header,string] =
+func decodeHeader*(data: openArray[byte]): Result[Header,string] =
   const info = "decodeHeader"
   var
     res: Header
@@ -123,7 +131,7 @@ func decodeHeader*(data: seq[byte]): Result[Header,string] =
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(move res)
 
-func decodeBal*(data: seq[byte]): Result[BlockAccessListRef,string] =
+func decodeBal*(data: openArray[byte]): Result[BlockAccessListRef,string] =
   const info = "decodeBal"
   var res = new BlockAccessList
   try:
@@ -133,7 +141,7 @@ func decodeBal*(data: seq[byte]): Result[BlockAccessListRef,string] =
   ok(move res)
 
 func decodeAccMissingIntvData*(
-    data: seq[byte];
+    data: openArray[byte];
       ): Result[CacheAccMissingIntvData,string] =
   const info = "decodeAccMissingIntvData"
   var
@@ -148,7 +156,7 @@ func decodeAccMissingIntvData*(
   ok(res)
 
 func decodeStoMissingIntvData*(
-    data: seq[byte];
+    data: openArray[byte];
       ): Result[CacheStoMissingIntvData,string] =
   const info = "decodeStoMissingIntvData"
   var
@@ -161,7 +169,7 @@ func decodeStoMissingIntvData*(
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(res)
 
-func decodeFlatAccData*(data: seq[byte]): Result[Account,string] =
+func decodeFlatAccData*(data: openArray[byte]): Result[Account,string] =
   const info = "decodeFlatAcc"
   var res: Account
   try:
@@ -170,7 +178,7 @@ func decodeFlatAccData*(data: seq[byte]): Result[Account,string] =
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(move res)
 
-func decodeFlatSlotData*(data: seq[byte]): Result[UInt256,string] =
+func decodeFlatSlotData*(data: openArray[byte]): Result[UInt256,string] =
   const info = "decodeFlatSlot"
   var res: UInt256
   try:

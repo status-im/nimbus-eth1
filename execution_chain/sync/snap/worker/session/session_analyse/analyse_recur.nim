@@ -179,7 +179,7 @@ proc accAndStoNotifyRecur(info: static[string]): WalkTrieRecCB =
       trd.putFlatAcc(base, payload, info)           # flat accounts table
 
       block forAccount:
-        let acc = payload.decodeAccount().valueOr:
+        let acc = payload.decodeAccount(info).valueOr:
           stats.nAccErr.inc
           break forAccount
 

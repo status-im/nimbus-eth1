@@ -110,11 +110,12 @@ proc updateCoverageMetrics(session: var MkTrieSession) =
 proc incompleteAccounts(
     session: MkTrieSession;
     accList: openArray[KppTriple];
+    info: static[string];
       ): seq[KpPair] =
   var kpRc: seq[KpPair]
   for (key,path,pyl) in accList:
     block checkAccount:
-      let a = pyl.decodeAccount().valueOr:
+      let a = pyl.decodeAccount(info).valueOr:
         break checkAccount
 
       if a.storageRoot != EMPTY_ROOT_HASH:
@@ -395,7 +396,7 @@ template mkTrieImpl(
     # links cache.
     let
       leafs = mpt.leafKpp()
-      incomplete = session.incompleteAccounts(leafs)
+      incomplete = session.incompleteAccounts(leafs, info)
       danglings = mpt.danglingKp()
 
     # Update cache of dangling links:

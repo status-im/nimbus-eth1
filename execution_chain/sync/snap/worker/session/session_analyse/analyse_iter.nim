@@ -310,7 +310,7 @@ template accAndStoNotify(
       let base = Hash32.fromBytes accPath.getBytes()
       trd.putFlatAcc(base, payload, info)           # flat accounts table
 
-      let acc = payload.decodeAccount().valueOr:
+      let acc = payload.decodeAccount(info).valueOr:
         stats.nAccErr.inc
         break body
 

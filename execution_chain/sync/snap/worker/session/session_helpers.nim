@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  pkg/[chronicles, chronos],
+  pkg/[chronicles, chronos, stew/byteutils],
   ../[mpt, state_db, worker_desc]
 
 type
@@ -105,13 +105,14 @@ proc setPivotTag*(
 
 # ----------------
 
-func decodeAccount*(pyl: openArray[byte]): Opt[Account] =
+proc decodeAccount*(pyl: openArray[byte], info: static[string]): Opt[Account] =
   ## Decode RLP encoded `Account`
   try:
     var acc = rlp.decode(pyl, Account)
     return ok(move acc)
-  except RlpError:
-    discard
+  except RlpError as e:
+    error info & ": Error decoding Account data",
+      slotData=pyl.toHex, error=($e.name & "(" & e.msg & ")")
   err()
 
 # ------------------------------------------------------------------------------
