@@ -210,6 +210,7 @@ proc getAccount(
       ledger.applyOverlay(address, result)
     result.original = OriginalValueRef(
       statement: result.statement,
+      code: result.code,
     )
 
   elif ledger.balOverlay.isSome() and ledger.balOverlay[].hasAccount(address):
@@ -221,6 +222,7 @@ proc getAccount(
     ledger.applyOverlay(address, result)
     result.original = OriginalValueRef(
       statement: result.statement,
+      code: result.code,
     )
 
   elif shouldCreate:
