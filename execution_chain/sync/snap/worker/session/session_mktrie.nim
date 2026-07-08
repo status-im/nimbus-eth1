@@ -35,7 +35,7 @@ type
     state: WalkStateData                            # current state data
     distance: uint64                                # distance to pivot state
 
-    accData: WalkAccount                            # accounts range from cache
+    accData: WalkAccountData                        # accounts range from cache
     accRange: ItemKeyRange                          # avoid repeated calculation
 
     fullCov: ItemKeyRangeSet                        # collect all ranges
@@ -218,13 +218,13 @@ template mkStoTrie(
     template accData: auto = session.accData
 
     let
-      acc = accData.accounts[accInx]
+      acc = accData.data.accounts[accInx]
       storageRoot = acc.accBody.storageRoot.to(StoreRoot)
 
       root {.inject,used.} = state.toStr            # logging only
       accKey {.inject,used.} = acc.accHash.to(ItemKey).flStr
       stoRoot {.inject,used.} = storageRoot.toStr   # logging only
-      peerID {.inject,used.} = accData.peerID.short # logging only
+      peerID {.inject,used.} = accData.data.peerID.short
 
     # Loop over storage slots for particular account
     for w in session.db.walkStoSlot(accData.root, acc.accHash.to(ItemKey)):
@@ -274,8 +274,8 @@ template mkCodesList(
     template accData: auto = session.accData
 
     let
-      accMin = accData.accounts[0].accHash.to(ItemKey)
-      accMax = accData.accounts[^1].accHash.to(ItemKey)
+      accMin = accData.data.accounts[0].accHash.to(ItemKey)
+      accMax = accData.data.accounts[^1].accHash.to(ItemKey)
 
       root {.inject,used.} = state.toStr            # logging only
 
@@ -329,19 +329,19 @@ template mkTrieImpl(
     template distance: auto = session.distance
     template accData: auto = session.accData
     template accRange: auto = session.accRange
-    template nAccounts: auto = accData.accounts.len
-    template nProof: auto = accData.proof.len
+    template nAccounts: auto = accData.data.accounts.len
+    template nProof: auto = accData.data.proof.len
 
     var
       start = Moment.now()
     let
       root {.inject,used.} = state.toStr            # logging only
-      peerID {.inject,used.} = accData.peerID.short # logging only
+      peerID {.inject,used.} = accData.data.peerID.short
       iv {.inject,used.} = accRange.flStr           # logging only
 
     # Validate packet, prepare for `(key,node)` extraction
     let mpt = session.accData.root.validate(
-         accData.start, accData.accounts, accData.proof).valueOr:
+         accData.start, accData.data.accounts, accData.data.proof).valueOr:
       error info & ": Accounts validation failed", stateInx, nStates, root,
         distance, peerID, nAccounts, nProof, iv
       bodyRc = Opt.some(ETrieError)
@@ -384,7 +384,7 @@ template mkTrieImpl(
     if 0 < nAccounts:
       # Process storage slots
       for n in 0 ..< nAccounts:
-        if not accData.accounts[n].accBody.storageRoot.isEmpty:
+        if not accData.data.accounts[n].accBody.storageRoot.isEmpty:
           session.mkStoTrie(n, info).isErrOr():
             if value == ECancelledError:            # check for shutdown..
               bodyRc = Opt.some(value)              # ..otherwise ignore for now
@@ -505,7 +505,7 @@ template sessionMkTrie*(ctx: SnapCtxRef; info: static[string]): auto =
       # Walk account for the current state root
       for w in session.db.walkAccount(state.root):
         accData = w                                 # update descriptor fields
-        accRange = ItemKeyRange.new(w.start, w.limit)
+        accRange = ItemKeyRange.new(w.start, w.data.limit)
 
         if 0 < accData.error.len:
           chronicles.info info & ": Bad accounts record ignored",

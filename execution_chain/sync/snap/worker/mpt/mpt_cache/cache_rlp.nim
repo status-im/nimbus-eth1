@@ -72,11 +72,11 @@ proc decodeStateData*(data: seq[byte]): Result[CacheStateData,string] =
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(move res)
 
-func decodeAccount*(data: seq[byte]): Result[DecodedAccount,string] =
+func decodeAccountData*(data: seq[byte]): Result[CacheAccountData,string] =
   const info = "decodeAccount"
   var
     rd = data.rlpFromBytes
-    res: DecodedAccount
+    res: CacheAccountData
   try:
     rd.tryEnterList()
     res.limit = rd.read(UInt256).to(ItemKey)
@@ -201,7 +201,7 @@ template encodeStateData*(
   wrt.append coverage
   wrt.finish()
 
-template encodeAccount*(
+template encodeAccountData*(
     limit: ItemKey;
     accounts: seq[SnapAccount];
     proof: seq[ProofNode];

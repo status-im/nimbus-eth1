@@ -51,12 +51,12 @@
 {.push raises: [].}
 
 import
-  pkg/[chronos, eth/common, results],
+  pkg/[eth/common, results],
   ../../../../wire_protocol/snap/snap_types,
   ../../state_db,
   ../mpt_desc,
-  ./[cache_api65, cache_api97,
-     cache_const, cache_desc, cache_iter, cache_r_cmd, cache_rlp]
+  ./[cache_api1, cache_api65, cache_api97,
+     cache_const, cache_desc, cache_iter, cache_rlp]
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -66,10 +66,10 @@ proc getAccount*(
     db: MptAsmRef;
     root: StateRoot;
     start: ItemKey;
-      ): Result[DecodedAccount,string] =
+      ): AccountDataResult =
   let data = db.get65(cAccount, root, start).valueOr:
     return err(error)
-  data.decodeAccount()
+  data.decodeAccountData()
 
 proc putAccount*(
     db: MptAsmRef;
@@ -81,43 +81,43 @@ proc putAccount*(
     peerID: Hash;
       ): PutResult =
   db.put65(
-    cAccount, root, start, encodeAccount(limit, accounts, proof, peerID))
+    cAccount, root, start, encodeAccountData(limit, accounts, proof, peerID))
 
 proc delAccount*(db: MptAsmRef; root: StateRoot; start: ItemKey): DelResult =
   db.del65(cAccount, root, start)
 
 proc clearAccount*(db: MptAsmRef): DelResult =
-  db.adb.rClear(cAccount)
+  db.clr1 cAccount
 
-iterator walkAccount*(db: MptAsmRef): WalkAccount =
+iterator walkAccount*(db: MptAsmRef): WalkAccountData =
   for (key1,key2,value) in db.adb.colWalk65 cAccount.key65():
     let
       root = StateRoot(key1)
       start = key2.to(ItemKey)
-      w = value.decodeAccount().valueOr:
-        var oops: WalkAccount
+      w = value.decodeAccountData().valueOr:
+        var oops: WalkAccountData
         oops.root = root
         oops.start = start
         oops.error = error
         yield oops
         continue
-    yield (root, start, w.limit, w.accounts, w.proof, w.peerID, "")
+    yield (root, start, w, "")
 
-iterator walkAccount*(db: MptAsmRef, root: StateRoot): WalkAccount =
+iterator walkAccount*(db: MptAsmRef, root: StateRoot): WalkAccountData =
   ## Variant of `walkAccount()` for fixed `root`
   for (key1,key2,value) in db.adb.colWalk65 cAccount.key65(root):
     if StateRoot(key1) != root:
       break
     let
       start = key2.to(ItemKey)
-      w = value.decodeAccount().valueOr:
-        var oops: WalkAccount
+      w = value.decodeAccountData().valueOr:
+        var oops: WalkAccountData
         oops.root = root
         oops.start = start
         oops.error = error
         yield oops
         continue
-    yield (root, start, w.limit, w.accounts, w.proof, w.peerID, "")
+    yield (root, start, w, "")
 
 # -------------
 
@@ -164,7 +164,7 @@ proc delStoSlot*(
   db.del97(cStoSlot, root, acc, start)
 
 proc clearStoSlot*(db: MptAsmRef): DelResult =
-  db.adb.rClear(cStoSlot)
+  db.clr1 cStoSlot
 
 iterator walkStoSlot*(
     db: MptAsmRef;
@@ -215,7 +215,7 @@ proc delByteCode*(db: MptAsmRef; root: StateRoot; start: ItemKey): DelResult =
   db.del65(cByteCode, root, start)
 
 proc clearByteCode*(db: MptAsmRef): DelResult =
-  db.adb.rClear(cByteCode)
+  db.clr1 cByteCode
 
 iterator walkByteCode*(
     db: MptAsmRef;

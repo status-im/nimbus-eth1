@@ -27,6 +27,9 @@ type
   BlobResult* = Result[seq[byte],string]
     ## Shortcut
 
+  AccountDataResult* = Result[CacheAccountData,string]
+    ## Shortcut
+
   OptHeaderResult* = Result[Opt[Header],string]
     ## Shortcut
 
@@ -73,7 +76,7 @@ type
     tag: StateDataTag                               # how this record is used
     coverage: UInt256                               # account range coverage
 
-  DecodedAccount* = tuple
+  CacheAccountData* = tuple
     limit: ItemKey
     accounts: seq[SnapAccount]
     proof: seq[ProofNode]
@@ -102,13 +105,10 @@ type
     data: CacheStateData
     error: string
 
-  WalkAccount* = tuple
+  WalkAccountData* = tuple
     root: StateRoot
     start: ItemKey
-    limit: ItemKey
-    accounts: seq[SnapAccount]
-    proof: seq[ProofNode]
-    peerID: Hash
+    data: CacheAccountData
     error: string
 
   WalkStoSlot* = tuple

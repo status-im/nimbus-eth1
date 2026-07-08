@@ -205,15 +205,15 @@ template sessionResume*(
           break body                                # system termination?
 
         # Register seen accounts in state record
-        sdb.setAccountRange(state, w.start, w.limit, Moment.now())
+        sdb.setAccountRange(state, w.start, w.data.limit, Moment.now())
 
         # Register unprocessed storages per account
-        for acc in w.accounts:
+        for acc in w.data.accounts:
           session.storageRecover(acc, info).isOkOr:
             break body                              # system termination?
 
         # Register unprocessed codes for the current account list
-        session.codesRecover(w.accounts, info)
+        session.codesRecover(w.data.accounts, info)
 
     debug info & ": Download session restored",
       coverage=sdb.accountsCoverage.pcStr,
