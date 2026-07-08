@@ -73,6 +73,7 @@ proc processBlock*(
     txFrame,
     enableBalTracker = (not finalized or blockAccessList.isNone()) and
         c.com.isAmsterdamOrLater(header.timestamp),
+    balBuilderThreadSafe = c.com.balParallelExecutionEnabled(header, blockAccessList),
   )
   defer:
     vmState.dispose()

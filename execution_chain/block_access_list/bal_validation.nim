@@ -16,7 +16,7 @@ import
   results,
   ../constants,
   ../core/eip7702,
-  ./block_access_list_utils
+  ./bal_utils
 
 export block_access_lists, hashes, results
 

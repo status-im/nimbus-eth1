@@ -125,6 +125,10 @@ type
       ## prefetching. 0 means use the same number of workers as the number of
       ## available taskpool threads.
 
+    balParallelExecution*: bool
+      ## Execute the transactions of a block in parallel on background threads
+      ## using the supplied block access list.
+
 # ------------------------------------------------------------------------------
 # Private helper functions
 # ------------------------------------------------------------------------------
@@ -200,7 +204,8 @@ proc init(com         : CommonRef,
           statelessWitnessValidation: bool,
           optimisticStatePrefetch: bool,
           balStatePrefetch: bool,
-          balStatePrefetchWorkers: int) =
+          balStatePrefetchWorkers: int,
+          balParallelExecution: bool) =
 
 
   config.daoCheck()
@@ -242,6 +247,7 @@ proc init(com         : CommonRef,
   com.optimisticStatePrefetch = optimisticStatePrefetch
   com.balStatePrefetch = balStatePrefetch
   com.balStatePrefetchWorkers = balStatePrefetchWorkers
+  com.balParallelExecution = balParallelExecution
 
 proc isBlockAfterTtd(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
   if com.config.terminalTotalDifficulty.isNone:
@@ -269,6 +275,7 @@ proc new*(
     optimisticStatePrefetch = false;
     balStatePrefetch = false;
     balStatePrefetchWorkers = 0;
+    balParallelExecution = false;
       ): CommonRef =
 
   ## If genesis data is present, the forkIds will be initialized
@@ -284,7 +291,8 @@ proc new*(
     statelessWitnessValidation,
     optimisticStatePrefetch,
     balStatePrefetch,
-    balStatePrefetchWorkers)
+    balStatePrefetchWorkers,
+    balParallelExecution)
 
 proc new*(
     _: type CommonRef;
@@ -297,6 +305,7 @@ proc new*(
     optimisticStatePrefetch = false;
     balStatePrefetch = false;
     balStatePrefetchWorkers = 0;
+    balParallelExecution = false;
       ): CommonRef =
 
   ## There is no genesis data present
@@ -312,7 +321,8 @@ proc new*(
     statelessWitnessValidation,
     optimisticStatePrefetch,
     balStatePrefetch,
-    balStatePrefetchWorkers)
+    balStatePrefetchWorkers,
+    balParallelExecution)
 
 func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
   ## clone but replace the db
@@ -329,7 +339,8 @@ func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
     statelessWitnessValidation: com.statelessWitnessValidation,
     optimisticStatePrefetch: com.optimisticStatePrefetch,
     balStatePrefetch: com.balStatePrefetch,
-    balStatePrefetchWorkers: com.balStatePrefetchWorkers
+    balStatePrefetchWorkers: com.balStatePrefetchWorkers,
+    balParallelExecution: com.balParallelExecution
   )
 
 func clone*(com: CommonRef): CommonRef =

@@ -16,11 +16,11 @@ import
   ./transient_storage,
   ../db/ledger,
   ../common/[common, evmforks],
-  ../block_access_list/block_access_list_tracker
+  ../block_access_list/bal_tracker
 
 from ../common/hardforks import HardFork
 
-export stack, memory, transient_storage, block_access_list_tracker
+export stack, memory, transient_storage, bal_tracker
 
 type
   VMFlag* = enum

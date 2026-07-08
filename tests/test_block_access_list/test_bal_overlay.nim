@@ -17,7 +17,7 @@ import
   ../../execution_chain/db/core_db,
   ../../execution_chain/db/ledger,
   ../../execution_chain/block_access_list/[
-    block_access_list_builder, block_access_list_overlay, block_access_list_utils]
+    bal_builder, bal_overlay, bal_utils]
 
 proc ledgerWithOverlay(
     coreDb: CoreDbRef, bal: BlockAccessListRef, balIndex: int

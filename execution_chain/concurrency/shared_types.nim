@@ -20,51 +20,78 @@ import std/[hashes, math, typetraits], results
 
 export hashes, results
 
-# SharedBytes is needed in order to pass bytes (e.g. seq[byte]) between threads
-# safely when using refc.
+# SharedSeq is needed in order to pass sequences (e.g. seq[byte]) between threads
+# safely when using refc. SharedBytes and SharedString are the byte and char
+# specialisations used to pass bytes and strings across thread boundaries.
 
-type SharedBytes* = object
-  data: ptr UncheckedArray[byte]
-  len: int
+type
+  SharedSeq*[E] = object
+    data: ptr UncheckedArray[E]
+    len: int
 
-proc init*(T: type SharedBytes, bytes: openArray[byte]): T =
-  if bytes.len() == 0:
+proc init*[E](T: type SharedSeq[E], len: int): SharedSeq[E] =
+  static:
+    doAssert supportsCopyMem(E), "E must be a non-GC type"
+
+  if len <= 0:
     return T()
 
-  let sb =
-    T(data: cast[ptr UncheckedArray[byte]](allocShared(bytes.len())), len: bytes.len())
-  copyMem(sb.data, unsafeAddr bytes[0], bytes.len())
+  T(
+    data: cast[ptr UncheckedArray[E]](allocShared(len * sizeof(E))),
+    len: len,
+  )
 
-  sb
-
-proc dispose*(sb: var SharedBytes) =
-  if not sb.data.isNil():
-    deallocShared(sb.data)
-    sb.data = nil
-    sb.len = 0
-
-proc `=copy`*(
-    dest: var SharedBytes, src: SharedBytes
-) {.error: "Copying SharedBytes is forbidden".} =
-  # Only a single owner is supported for now.
-  discard
-
-template toOpenArray(sb: SharedBytes): openArray[byte] =
-  sb.data.toOpenArray(0, sb.len - 1)
-
-func toSeq(sb: SharedBytes): seq[byte] =
-  if sb.len == 0:
-    return default(seq[byte])
-
-  let s = newSeq[byte](sb.len)
-  copyMem(addr s[0], sb.data, sb.len)
+proc init*[E](T: type SharedSeq[E], values: openArray[E]): SharedSeq[E] =
+  var s = T.init(values.len())
+  if values.len() > 0:
+    copyMem(s.data, unsafeAddr values[0], values.len() * sizeof(E))
   s
 
-template data*(sb: SharedBytes, asOpenArray: static bool = false): auto =
+proc dispose*[E](s: var SharedSeq[E]) =
+  if not s.data.isNil():
+    deallocShared(s.data)
+    s.data = nil
+    s.len = 0
+
+proc `=copy`*[E](
+    dest: var SharedSeq[E], src: SharedSeq[E]
+) {.error: "Copying SharedSeq is forbidden".} =
+  discard
+
+template toOpenArray[E](s: SharedSeq[E]): openArray[E] =
+  s.data.toOpenArray(0, s.len - 1)
+
+func toSeq[E](s: SharedSeq[E]): seq[E] =
+  if s.len == 0:
+    return default(seq[E])
+
+  let res = newSeq[E](s.len)
+  copyMem(addr res[0], s.data, s.len * sizeof(E))
+  res
+
+template data*[E](s: SharedSeq[E], asOpenArray: static bool = false): auto =
   when asOpenArray:
-    sb.toOpenArray()
+    s.toOpenArray()
   else:
-    sb.toSeq()
+    s.toSeq()
+
+proc `[]`*[E](s: SharedSeq[E], i: int): lent E =
+  s.data[i]
+
+proc `[]`*[E](s: var SharedSeq[E], i: int): var E =
+  s.data[i]
+
+type
+  SharedBytes* = SharedSeq[byte]
+  SharedString* = SharedSeq[char]
+
+func toString*(s: SharedString): string =
+  if s.len == 0:
+    return default(string)
+
+  let res = newString(s.len)
+  copyMem(addr res[0], s.data, s.len)
+  res
 
 # SharedTable is a hash table similar to the standard library `Table`. Much of
 # the robin-hood open addressing logic is adapted from the LruCache type in the

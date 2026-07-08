@@ -10,7 +10,7 @@
 
 import
   ./test_block_access_list/[
-    test_block_access_list_builder, test_block_access_list_validation,
-    test_block_access_list_tracker, test_block_access_list_overlay,
-    test_block_access_list_utils,
+    test_bal_builder, test_bal_validation,
+    test_bal_tracker, test_bal_overlay,
+    test_bal_utils,
   ]

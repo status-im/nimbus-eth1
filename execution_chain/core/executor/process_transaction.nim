@@ -71,11 +71,12 @@ proc commitOrRollbackDependingOnGasUsed(
     priorityFee = min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFee)
     txFee = gasUsed.u256 * priorityFee.u256
 
+  callResult.txFee = txFee
+
   if vmState.balTrackerEnabled:
     vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), txFee)
     vmState.balTracker.commitCallFrame()
 
-  callResult.txFee = txFee
   vmState.ledger.addBalance(vmState.coinbase(), txFee, checkEmptyAccount = vmState.fork < FkParis)
   vmState.ledger.commit(savePoint)
   vmState.cumulativeGasUsed += gasUsed
@@ -84,6 +85,21 @@ proc commitOrRollbackDependingOnGasUsed(
   vmState.blobGasUsed += blobGasUsed
 
   ok()
+
+template check2dGasInclusion*(
+    vmState: BaseVMState;
+    txGasLimit: GasInt;
+    fail: untyped) =
+  let
+    regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
+    stateGasAvailable = vmState.blockCtx.gasLimit - vmState.blockStateGasUsed
+    want = min(TX_GAS_LIMIT.GasInt, txGasLimit)
+
+  if want > regularGasAvailable:
+    fail("regular gas used exceeds limit, want: " & $want & ", available: " & $regularGasAvailable)
+
+  if txGasLimit > stateGasAvailable:
+    fail("state gas used exceeds limit, want: " & $txGasLimit & ", available: " & $stateGasAvailable)
 
 template validateForInclusion(
     vmState: BaseVMState;
@@ -102,16 +118,9 @@ template validateForInclusion(
   let
     com = vmState.com
     fork = vmState.hardFork
-    regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
-    stateGasAvailable = vmState.blockCtx.gasLimit - vmState.blockStateGasUsed
     intrinsicVar = tx.intrinsicGas(fork, vmState.blockCtx.gasLimit, sender)
 
-  let want = min(TX_GAS_LIMIT.GasInt, tx.gasLimit)
-  if want > regularGasAvailable:
-    fail("regular gas used exceeds limit, want: " & $want & ", available: " & $regularGasAvailable)
-
-  if tx.gasLimit > stateGasAvailable:
-    fail("state gas used exceeds limit, want: " & $tx.gasLimit & ", available: " & $stateGasAvailable)
+  check2dGasInclusion(vmState, tx.gasLimit, fail)
 
   # blobGasUsed will be added to vmState.blobGasUsed if the tx is ok.
   let
@@ -135,6 +144,7 @@ proc processTransaction*(
     tx:      Transaction; ## Transaction to validate
     sender:  Address;  ## tx.recoverSender
     rollbackReads: bool = false;
+    persist = true;
       ): Result[LogResult, string] =
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
   ## which provides a backward compatible framework for EIP1559.
@@ -166,7 +176,8 @@ proc processTransaction*(
     else:
       ok(move(callResult))
 
-  vmState.ledger.persist(clearEmptyAccount = vmState.hardFork >= Spurious)
+  if persist:
+    vmState.ledger.persist(clearEmptyAccount = vmState.hardFork >= Spurious)
 
   res
 
