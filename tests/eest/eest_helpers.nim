@@ -81,7 +81,8 @@ proc prepareEnv*(
       statelessWitnessValidation = false, # Running stateless execution separately in test runner
       optimisticStatePrefetch = parallelEnabled,
       balStatePrefetch = parallelEnabled,
-      balParallelExecution = parallelEnabled
+      balParallelExecution = parallelEnabled,
+      parallelSenderRecovery = parallelEnabled
     )
     com.db.mpt.parallelStateRootComputation = parallelEnabled
 

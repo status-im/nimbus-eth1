@@ -282,11 +282,13 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionCli
 proc setupCommonRef*(
     config: ExecutionClientConf, numThreads: int): (CommonRef, bool) =
 
-  let disableParallelFeatures = numThreads <= 1 and config.parallelFeaturesEnabled()
+  let disableParallelFeatures = numThreads <= 1 and
+    (config.parallelFeaturesEnabled() or config.parallelSenderRecovery)
 
   if disableParallelFeatures:
     warn "Not enough taskpool threads, disabling parallel execution features",
       numThreads,
+      parallelSenderRecovery = config.parallelSenderRecovery,
       parallelStateRootComputation = config.parallelStateRootComputation,
       optimisticStatePrefetch = config.optimisticStatePrefetch,
       balStatePrefetch = config.balStatePrefetch,
@@ -310,7 +312,8 @@ proc setupCommonRef*(
     optimisticStatePrefetch = config.optimisticStatePrefetch and not disableParallelFeatures,
     balStatePrefetch = config.balStatePrefetch and not disableParallelFeatures,
     balStatePrefetchWorkers = config.balStatePrefetchWorkers,
-    balParallelExecution = config.balParallelExecution and not disableParallelFeatures)
+    balParallelExecution = config.balParallelExecution and not disableParallelFeatures,
+    parallelSenderRecovery = config.parallelSenderRecovery and not disableParallelFeatures)
 
   if config.extraData.len > 32:
     warn "ExtraData exceeds 32 bytes limit, truncate",

@@ -51,6 +51,8 @@ const
   defaultAdminListenAddress = (static parseIpAddress("127.0.0.1"))
   defaultAdminListenAddressDesc = $defaultAdminListenAddress & ", meaning local host only"
   logLevelDesc = getLogLevels()
+  defaultParallelStateRootComputation* = false
+  defaultParallelSenderRecovery* = true
   defaultOptimisticStatePrefetch* = false
   defaultBalStatePrefetch* = false
   defaultBalStatePrefetchWorkers* = 0
@@ -363,9 +365,15 @@ type
 
     parallelStateRootComputation* {.
       hidden
-      defaultValue: false
+      defaultValue: defaultParallelStateRootComputation
       desc: "Compute state root in parallel using multiple threads"
       name: "debug-parallel-state-root".}: bool
+
+    parallelSenderRecovery* {.
+      hidden
+      defaultValue: defaultParallelSenderRecovery
+      desc: "Recover transaction senders in parallel on background threads"
+      name: "debug-parallel-sender-recovery".}: bool
 
     optimisticStatePrefetch* {.
       hidden

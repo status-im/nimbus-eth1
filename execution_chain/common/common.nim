@@ -130,6 +130,10 @@ type
       ## Execute the transactions of a block in parallel on background threads
       ## using the supplied block access list.
 
+    parallelSenderRecovery*: bool
+      ## Recover the transaction senders of a block in parallel on background
+      ## threads.
+
 # ------------------------------------------------------------------------------
 # Private helper functions
 # ------------------------------------------------------------------------------
@@ -206,7 +210,8 @@ proc init(com         : CommonRef,
           optimisticStatePrefetch: bool,
           balStatePrefetch: bool,
           balStatePrefetchWorkers: int,
-          balParallelExecution: bool) =
+          balParallelExecution: bool,
+          parallelSenderRecovery: bool) =
 
 
   config.daoCheck()
@@ -249,6 +254,7 @@ proc init(com         : CommonRef,
   com.balStatePrefetch = balStatePrefetch
   com.balStatePrefetchWorkers = balStatePrefetchWorkers
   com.balParallelExecution = balParallelExecution
+  com.parallelSenderRecovery = parallelSenderRecovery
 
 proc isBlockAfterTtd(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
   if com.config.terminalTotalDifficulty.isNone:
@@ -277,6 +283,7 @@ proc new*(
     balStatePrefetch = false;
     balStatePrefetchWorkers = 0;
     balParallelExecution = false;
+    parallelSenderRecovery = false;
       ): CommonRef =
 
   ## If genesis data is present, the forkIds will be initialized
@@ -293,7 +300,8 @@ proc new*(
     optimisticStatePrefetch,
     balStatePrefetch,
     balStatePrefetchWorkers,
-    balParallelExecution)
+    balParallelExecution,
+    parallelSenderRecovery)
 
 proc new*(
     _: type CommonRef;
@@ -307,6 +315,7 @@ proc new*(
     balStatePrefetch = false;
     balStatePrefetchWorkers = 0;
     balParallelExecution = false;
+    parallelSenderRecovery = false;
       ): CommonRef =
 
   ## There is no genesis data present
@@ -323,7 +332,8 @@ proc new*(
     optimisticStatePrefetch,
     balStatePrefetch,
     balStatePrefetchWorkers,
-    balParallelExecution)
+    balParallelExecution,
+    parallelSenderRecovery)
 
 func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
   ## clone but replace the db
@@ -341,7 +351,8 @@ func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
     optimisticStatePrefetch: com.optimisticStatePrefetch,
     balStatePrefetch: com.balStatePrefetch,
     balStatePrefetchWorkers: com.balStatePrefetchWorkers,
-    balParallelExecution: com.balParallelExecution
+    balParallelExecution: com.balParallelExecution,
+    parallelSenderRecovery: com.parallelSenderRecovery
   )
 
 func clone*(com: CommonRef): CommonRef =
@@ -450,7 +461,10 @@ func isBogotaOrLater*(com: CommonRef, t: EthTime): bool =
 
 func parallelSenderRecoveryEnabled*(com: CommonRef): bool =
   when compileOption("threads"):
-    not com.taskpool.isNil() and com.taskpool.numThreads > 1
+    let enabled = com.parallelSenderRecovery
+    if enabled:
+      assert not com.taskpool.isNil() and com.taskpool.numThreads > 1
+    enabled
   else:
     false
 
