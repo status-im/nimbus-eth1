@@ -17,6 +17,7 @@ EXCLUDED_NIM_PACKAGES := 	\
   vendor/nimbus-eth2/vendor/nim-blscurve              \
   vendor/nimbus-eth2/vendor/nim-bearssl               \
   vendor/nimbus-eth2/vendor/nim-blscurve              \
+  vendor/nimbus-eth2/vendor/nim-boringssl             \
   vendor/nimbus-eth2/vendor/nimbus-build-system       \
   vendor/nimbus-eth2/vendor/nim-chronicles            \
   vendor/nimbus-eth2/vendor/nim-chronos               \

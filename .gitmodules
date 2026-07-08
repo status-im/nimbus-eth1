@@ -249,3 +249,9 @@
 	url = https://github.com/status-im/nim-protobuf-serialization
 	ignore = dirty
 	branch = master
+[submodule "vendor/nim-boringssl"]
+	path = vendor/nim-boringssl
+	url = https://github.com/vacp2p/nim-boringssl
+	ignore = dirty
+	branch = master
+  
