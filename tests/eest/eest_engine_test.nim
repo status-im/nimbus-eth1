@@ -34,5 +34,5 @@ runEESTSuite(
   baseFolder,
   suiteName,
   eestType,
-  parallelEnabled = true
+  parallelEnabled = false # TODO: reenable after bug fixed
 )
