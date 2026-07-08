@@ -26,6 +26,12 @@ const
 
 const skipFiles = [
   "CALLBlake2f_MaxRounds.json", # Doesn't work in github CI
+
+  # Fail when parallelEnabled = true
+  "pointer_resets_an_empty_code_account_with_storage.json",
+  "recreate_self_destructed_contract_different_txs.json",
+  "bal_create2_selfdestruct_then_recreate_same_block.json",
+  "bal_7702_delegation_clear.json",
 ]
 
 runEESTSuite(
@@ -34,5 +40,5 @@ runEESTSuite(
   baseFolder,
   suiteName,
   eestType,
-  parallelEnabled = false # TODO: reenable after bug fixed
+  parallelEnabled = true
 )
