@@ -11,14 +11,11 @@
 {.push raises: [].}
 
 import
-  pkg/[chronicles, chronos, eth/common, results, stew/interval_set],
+  pkg/[chronos, eth/common, results, stew/interval_set],
   ../../../../wire_protocol/snap/snap_types,
   ../../state_db,
   ../mpt_desc,
   ./cache_desc
-
-logScope:
-  topics = "snap sync"
 
 when sizeof(Hash) != sizeof(uint):
   {.error: "Hash type must have size of uint".}
@@ -87,11 +84,11 @@ func decodeAccountData*(data: seq[byte]): Result[CacheAccountData,string] =
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(move res)
 
-func decodeStoSlot*(data: seq[byte]): Result[DecodedStoSlot,string] =
+func decodeStoSlotData*(data: seq[byte]): Result[CacheStoSlotData,string] =
   const info = "decodeStoSlot"
   var
     rd = data.rlpFromBytes
-    res: DecodedStoSlot
+    res: CacheStoSlotData
   try:
     rd.tryEnterList()
     res.limit = rd.read(UInt256).to(ItemKey)
@@ -214,7 +211,7 @@ template encodeAccountData*(
   wrt.append cast[uint](peerID)
   wrt.finish()
 
-template encodeStoSlot*(
+template encodeStoSlotData*(
     limit: ItemKey;
     slot: seq[StorageItem];
     proof: seq[ProofNode];

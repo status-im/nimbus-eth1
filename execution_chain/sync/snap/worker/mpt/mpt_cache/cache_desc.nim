@@ -28,6 +28,8 @@ type
     ## Shortcut
 
   AccountDataResult* = Result[CacheAccountData,string]
+
+  StoSlotDataResult* = Result[CacheStoSlotData,string]
     ## Shortcut
 
   OptHeaderResult* = Result[Opt[Header],string]
@@ -82,7 +84,7 @@ type
     proof: seq[ProofNode]
     peerID: Hash
 
-  DecodedStoSlot* = tuple
+  CacheStoSlotData* = tuple
     limit: ItemKey
     slot: seq[StorageItem]
     proof: seq[ProofNode]
@@ -111,14 +113,11 @@ type
     data: CacheAccountData
     error: string
 
-  WalkStoSlot* = tuple
+  WalkStoSlotData* = tuple
     root: StateRoot
     account: ItemKey
     start: ItemKey                                  # `0` unless incomplete
-    limit: ItemKey                                  # `high()` unless incomplete
-    slot: seq[StorageItem]
-    proof: seq[ProofNode]                           # Prof for `slot` (if any)
-    peerID: Hash
+    data: CacheStoSlotData
     error: string
 
   WalkByteCode* = tuple

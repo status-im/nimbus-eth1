@@ -67,7 +67,7 @@ template storageRecover(
         left = ItemKeyRangeSet.init ItemKeyRangeMax
 
       for w in session.db.walkStoSlot(state.stateRoot, accKey):
-        discard left.reduce(w.start, w.limit)
+        discard left.reduce(w.start, w.data.limit)
 
         # Print keep alive messages and allow thread switch
         let rc = session.sessionTicker(info):

@@ -232,28 +232,30 @@ template mkStoTrie(
       # Print keep alive messages and allow thread switch
       bodyRc = session.sessionTicker(info):
         trace info & ": Processing storage slots..", stateInx, nStates, root,
-          distance, accKey, stoRoot, nSlot=w.slot.len
+          distance, accKey, stoRoot, nSlot=w.data.slot.len
       if bodyRc.isSome():
         break body
 
-      let mpt = storageRoot.validate(w.start, w.slot, w.proof).valueOr:
+      let mpt = storageRoot.validate(
+                    w.start, w.data.slot, w.data.proof).valueOr:
         error info & ": slot validation failed", stateInx, nStates, root,
-          distance, peerID, accKey, stoRoot, iv=(w.start,w.limit).flStr,
-          nSlot=w.slot.len, nProof=w.proof.len
+          distance, peerID, accKey, stoRoot, iv=(w.start,w.data.limit).flStr,
+          nSlot=w.data.slot.len, nProof=w.data.proof.len
         continue
 
       # Print keep alive messages and allow thread switch
       bodyRc = session.sessionTicker(info):
         trace info & ": Processing storage slots..", stateInx, nStates, root,
-          distance, accKey, stoRoot, nSlot=w.slot.len
+          distance, accKey, stoRoot, nSlot=w.data.slot.len
       if bodyRc.isSome():
         break body
 
       # Store `(key,node)` list on trie
       session.db.putStoKvt(acc.accHash, mpt.knPairs()).isOkOr:
         error info & ": cannot store slot on trie", stateInx, nStates, root,
-          distance, peerID, accKey, stoRoot, nProof=w.proof.len,
-          iv=(w.start,w.limit).to(float).toStr, nSlot=w.slot.len, `error`=error
+          distance, peerID, accKey, stoRoot, nProof=w.data.proof.len,
+          iv=(w.start,w.data.limit).to(float).toStr, nSlot=w.data.slot.len,
+          `error`=error
       # End `for()`
 
   bodyRc

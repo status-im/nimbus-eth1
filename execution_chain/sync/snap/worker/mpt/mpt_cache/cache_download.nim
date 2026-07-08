@@ -126,10 +126,10 @@ proc getStoSlot*(
     root: StateRoot;
     account: ItemKey;
     start: ItemKey;
-      ): Result[DecodedStoSlot,string] =
+      ): StoSlotDataResult =
   let data = db.get97(cStoSlot, root, account, start).valueOr:
     return err(error)
-  data.decodeStoSlot()
+  data.decodeStoSlotData()
 
 proc putStoSlot*(
     db: MptAsmRef;
@@ -142,7 +142,7 @@ proc putStoSlot*(
     peerID: Hash;
       ): PutResult =
   db.put97(
-    cStoSlot, root, acc, start, encodeStoSlot(limit, slot, proof, peerID))
+    cStoSlot, root, acc, start, encodeStoSlotData(limit, slot, proof, peerID))
 
 proc putStoSlot*(
     db: MptAsmRef;
@@ -153,7 +153,7 @@ proc putStoSlot*(
       ): PutResult =
   db.put97(
     cStoSlot, root, acc, low(ItemKey),
-    encodeStoSlot(high(ItemKey), slot, EmptyProof, peerID))
+    encodeStoSlotData(high(ItemKey), slot, EmptyProof, peerID))
 
 proc delStoSlot*(
     db: MptAsmRef;
@@ -170,7 +170,7 @@ iterator walkStoSlot*(
     db: MptAsmRef;
     root: StateRoot;
     acc: ItemKey;
-      ): WalkStoSlot =
+      ): WalkStoSlotData =
   ## Variant of `walkStoSlot()` for fixed `root`
   let aHash = acc.to(Hash32)
   for (k1,k2,k3,val) in db.adb.colWalk97 cStoSlot.key97(root, aHash):
@@ -179,15 +179,15 @@ iterator walkStoSlot*(
       break
     let
       start = k3.to(ItemKey)
-      w = val.decodeStoSlot().valueOr:
-        var oops: WalkStoSlot
+      w = val.decodeStoSlotData().valueOr:
+        var oops: WalkStoSlotData
         oops.root = root
         oops.account = acc
         oops.start = start
         oops.error = error
         yield oops
         continue
-    yield (root, acc, start, w.limit, w.slot, w.proof, w.peerID, "")
+    yield (root, acc, start, w, "")
 
 # -------------
 
