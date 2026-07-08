@@ -196,10 +196,10 @@ proc getByteCode*(
     root: StateRoot;
     start: ItemKey;
     limit: ItemKey;
-      ): Result[DecodedByteCode,string] =
+      ): ByteCodeDataResult =
   let data = db.get65(cByteCode, root, start).valueOr:
     return err(error)
-  data.decodeByteCode()
+  data.decodeByteCodeData()
 
 proc putByteCode*(
     db: MptAsmRef;
@@ -209,7 +209,7 @@ proc putByteCode*(
     codes: seq[(CodeHash,CodeItem)];
     peerID: Hash;
       ): PutResult =
-  db.put65(cByteCode, root, start, encodeByteCode(limit, codes, peerID))
+  db.put65(cByteCode, root, start, encodeByteCodeData(limit, codes, peerID))
 
 proc delByteCode*(db: MptAsmRef; root: StateRoot; start: ItemKey): DelResult =
   db.del65(cByteCode, root, start)
@@ -221,7 +221,7 @@ iterator walkByteCode*(
     db: MptAsmRef;
     root: StateRoot;
     start: ItemKey;
-      ): WalkByteCode =
+      ): WalkByteCodeData =
   ## Variant of `walkAccount()` for fixed `root` and `start` account
   let startHash = start.to(Hash32)
   for (key1,key2,value) in db.adb.colWalk65 cByteCode.key65(root, startHash):
@@ -229,14 +229,14 @@ iterator walkByteCode*(
       break
     let
       start2 = key2.to(ItemKey)
-      w = value.decodeByteCode().valueOr:
-        var oops: WalkByteCode
+      w = value.decodeByteCodeData().valueOr:
+        var oops: WalkByteCodeData
         oops.root = root
         oops.start = start2
         oops.error = error
         yield oops
         continue
-    yield (root, start2, w.limit, w.codes, w.peerID, "")
+    yield (root, start2, w, "")
 
 # ------------------------------------------------------------------------------
 # End

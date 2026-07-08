@@ -32,6 +32,9 @@ type
   StoSlotDataResult* = Result[CacheStoSlotData,string]
     ## Shortcut
 
+  ByteCodeDataResult* = Result[CacheByteCodeData,string]
+    ## Shortcut
+
   OptHeaderResult* = Result[Opt[Header],string]
     ## Shortcut
 
@@ -90,7 +93,7 @@ type
     proof: seq[ProofNode]
     peerID: Hash
 
-  DecodedByteCode* = tuple
+  CacheByteCodeData* = tuple
     limit: ItemKey
     codes: seq[(CodeHash,CodeItem)]
     peerID: Hash
@@ -120,12 +123,10 @@ type
     data: CacheStoSlotData
     error: string
 
-  WalkByteCode* = tuple
+  WalkByteCodeData* = tuple
     root: StateRoot
-    start: ItemKey                                  # account coverage
-    limit: ItemKey                                  # account coverage
-    codes: seq[(CodeHash,CodeItem)]
-    peerID: Hash
+    start: ItemKey
+    data: CacheByteCodeData
     error: string
 
   WalkHeader* = tuple

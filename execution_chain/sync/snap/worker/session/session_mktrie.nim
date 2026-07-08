@@ -284,7 +284,7 @@ template mkCodesList(
     # Find all available `CodeHash` keys
     var found: HashSet[CodeHash]
     for w in session.db.walkByteCode(session.accData.root, accMin):
-      if accMax < w.limit:
+      if accMax < w.data.limit:
         break
 
       # Print keep alive messages and allow thread switch
@@ -294,7 +294,7 @@ template mkCodesList(
       if bodyRc.isSome():
         break body
 
-      for (key,val) in w.codes:
+      for (key,val) in w.data.codes:
         let hash = val.distinctBase.keccak256
         if hash != Hash32(key):
           error info & ": Code key mismatch", stateInx, nStates, root,

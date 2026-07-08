@@ -99,11 +99,11 @@ func decodeStoSlotData*(data: seq[byte]): Result[CacheStoSlotData,string] =
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(move res)
 
-func decodeByteCode*(data: seq[byte]): Result[DecodedByteCode,string] =
+func decodeByteCodeData*(data: seq[byte]): Result[CacheByteCodeData,string] =
   const info = "decodeByteCode"
   var
     rd = data.rlpFromBytes
-    res: DecodedByteCode
+    res: CacheByteCodeData
   try:
     rd.tryEnterList()
     res.limit = rd.read(UInt256).to(ItemKey)
@@ -224,7 +224,7 @@ template encodeStoSlotData*(
   wrt.append cast[uint](peerID)
   wrt.finish()
 
-template encodeByteCode*(
+template encodeByteCodeData*(
     limit: ItemKey;
     codes: seq[(CodeHash,CodeItem)];
     peerID: Hash;

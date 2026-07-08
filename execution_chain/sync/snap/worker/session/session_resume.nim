@@ -100,9 +100,9 @@ proc codesRecover(
     # Find all available `CodeHash` keys
     var found: HashSet[CodeHash]
     for w in session.db.walkByteCode(session.state.stateRoot, accMin):
-      if accMax < w.limit:
+      if accMax < w.data.limit:
         break
-      for (key,_) in w.codes:
+      for (key,_) in w.data.codes:
         found.incl key
 
     # Check for unprocessed byte codes
