@@ -14,7 +14,7 @@
 {.push raises: [].}
 
 import
-  std/typetraits,
+  std/[atomics, typetraits],
   eth/common/[base, hashes],
   results,
   "."/[aristo_compute, aristo_desc, aristo_get, aristo_layers, aristo_hike, aristo_vid]
@@ -80,9 +80,9 @@ proc retrieveAccStatic(
   for sl in countdown(staticLevel, 0):
     template countHitOrLower() =
       if sl == staticLevel:
-        db.db.lookups.hits += 1
+        discard db.db.lookupsHits.fetchAdd(1, moRelaxed)
       else:
-        db.db.lookups.lower += 1
+        discard db.db.lookupsLower.fetchAdd(1, moRelaxed)
 
     let
       svid = path.staticVid(sl)
@@ -166,11 +166,11 @@ proc retrieveAccLeaf(
         # The branch was the deepest level where a vertex actually existed
         # meaning that it was a hit - else searches for non-existing paths would
         # skew the results towards more depth than exists in the MPT
-        db.db.lookups.hits += 1
+        discard db.db.lookupsHits.fetchAdd(1, moRelaxed)
         db.db.accLeaves.put(accPath, emptyCachedAccLeaf)
       return err(error)
 
-  db.db.lookups.higher += 1
+  discard db.db.lookupsHigher.fetchAdd(1, moRelaxed)
 
   let accLeaf = AccLeafRef(leafVtx)
   db.db.accLeaves.put(accPath, CachedAccLeaf.init(accLeaf.pfx, accLeaf.account, accLeaf.stoID))
