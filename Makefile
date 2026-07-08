@@ -57,6 +57,7 @@ EXCLUDED_NIM_PACKAGES := 	\
   vendor/nimbus-eth2/vendor/nim-kzg4844               \
   vendor/nimbus-eth2/vendor/nim-minilru               \
   vendor/nimbus-eth2/vendor/nimbus-security-resources \
+  vendor/nimbus-eth2/vendor/nim-protobuf-serialization \
   vendor/nimbus-eth2/vendor/NimYAML
 
 # we don't want an error here, so we can handle things later, in the ".DEFAULT" target

@@ -244,3 +244,8 @@
 	url = https://github.com/status-im/portal-sepolia
 	ignore = untracked
 	branch = master
+[submodule "vendor/nim-protobuf-serialization"]
+	path = vendor/nim-protobuf-serialization
+	url = https://github.com/status-im/nim-protobuf-serialization
+	ignore = dirty
+	branch = master
