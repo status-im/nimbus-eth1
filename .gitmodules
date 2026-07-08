@@ -254,4 +254,3 @@
 	url = https://github.com/vacp2p/nim-boringssl
 	ignore = dirty
 	branch = master
-  
