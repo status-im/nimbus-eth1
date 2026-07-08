@@ -18,7 +18,7 @@ const
   eestType = "blockchain_tests"
   eestReleases = [
     "eest_mainnet",
-    "eest_bal"
+    "eest_devnet",
   ]
 
 const skipFiles = [

@@ -19,8 +19,9 @@ import
   ../../types,
   ../gas_costs,
   eth/common/[addresses, base],
-  ../../state,
-  ../../../db/ledger
+  ../../[state, computation],
+  ../../../db/ledger,
+  ../../../common/evmforks
 
 # ------------------------------------------------------------------------------
 # Public
@@ -28,19 +29,41 @@ import
 
 proc gasEip2929AccountCheck*(c: Computation; address: Address): GasInt =
   c.vmState.mutateLedger:
-    result = if not ledger.inAccessList(address):
-               ledger.accessList(address)
-               ColdAccountAccessCost
-             else:
-               WarmStorageReadCost
+    if not ledger.inAccessList(address):
+      ledger.accessList(address)
+      if c.fork >= FkAmsterdam:
+        COLD_ACCOUNT_ACCESS_8038
+      else:
+        COLD_ACCOUNT_ACCESS_2929
+    else:
+      WarmStorageReadCost
+
+proc gasEip8038AccountCheck*(c: Computation; address: Address): GasInt =
+  c.vmState.mutateLedger:
+    if not ledger.inAccessList(address):
+      ledger.accessList(address)
+      COLD_ACCOUNT_ACCESS_8038
+    else:
+      WarmStorageReadCost
 
 proc gasEip2929AccountCheck*(c: Computation; address: Address, slot: UInt256): GasInt =
   c.vmState.mutateLedger:
-    result = if not ledger.inAccessList(address, slot):
-               ledger.accessList(address, slot)
-               ColdSloadCost
-             else:
-               WarmStorageReadCost
+    if not ledger.inAccessList(address, slot):
+      ledger.accessList(address, slot)
+      if c.fork >= FkAmsterdam:
+        COLD_STORAGE_ACCESS_8038
+      else:
+        COLD_STORAGE_ACCESS_2929
+    else:
+      WarmStorageReadCost
+
+proc gasEip8038AccountCheck*(c: Computation; address: Address, slot: UInt256): GasInt =
+  c.vmState.mutateLedger:
+    if not ledger.inAccessList(address, slot):
+      ledger.accessList(address, slot)
+      COLD_STORAGE_ACCESS_8038
+    else:
+      WarmStorageReadCost
 
 func checkInStaticContext*(c: Computation): EvmResultVoid =
   ## Verify static context in handler function, raise an error otherwise
@@ -55,7 +78,10 @@ proc delegateResolutionCost*(c: Computation, address: Address): GasInt =
   c.vmState.mutateLedger:
     if not ledger.inAccessList(address):
       ledger.accessList(address)
-      return ColdAccountAccessCost
+      if c.fork >= FkAmsterdam:
+        COLD_ACCOUNT_ACCESS_8038
+      else:
+        COLD_ACCOUNT_ACCESS_2929
     else:
       return WarmStorageReadCost
 

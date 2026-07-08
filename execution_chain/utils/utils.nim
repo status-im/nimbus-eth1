@@ -25,6 +25,10 @@ export
   eth_types_rlp, DEPOSIT_REQUEST_TYPE, WITHDRAWAL_REQUEST_TYPE,
   CONSOLIDATION_REQUEST_TYPE
 
+const
+  BUILDER_DEPOSIT_REQUEST_TYPE* = 0x03.byte
+  BUILDER_EXIT_REQUEST_TYPE*    = 0x04.byte
+
 template calcTxRoot*(transactions: openArray[Transaction]): Root =
   orderedTrieRoot(transactions)
 

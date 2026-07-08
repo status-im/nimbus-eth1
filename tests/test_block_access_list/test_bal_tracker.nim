@@ -353,8 +353,8 @@ suite "Block access list tracker":
     check:
       not tracker.pendingCallFrame().storageChanges.contains((address1, slot1))
       tracker.pendingCallFrame().balanceChanges.contains(address1)
-      not tracker.pendingCallFrame().nonceChanges.contains(address1)
-      not tracker.pendingCallFrame().codeChanges.contains(address1)
+      tracker.pendingCallFrame().nonceChanges.contains(address1)
+      tracker.pendingCallFrame().codeChanges.contains(address1)
 
     tracker.commitCallFrame()
 
@@ -362,13 +362,13 @@ suite "Block access list tracker":
     tracker.builder.accounts.withValue(address1, accData):
       # Compute codeChanges membership separately: a `notin` inside `check`
       # would try to stringify the Table[int, SharedBytes], which is non-copyable.
-      let hasCodeChange = balIndex in accData[].codeChanges
       check:
         slot1 notin accData[].storageChanges
         slot1 in accData[].storageReads
         balIndex in accData[].balanceChanges
-        balIndex notin accData[].nonceChanges
-        not hasCodeChange
+        balIndex in accData[].nonceChanges
+        balIndex in accData[].codeChanges
+        accData[].balanceChanges[balIndex] == Opt.some(balance1 + 2.u256)
 
   test "tracker owns and frees a builder it allocated":
     let before = getOccupiedSharedMem()
