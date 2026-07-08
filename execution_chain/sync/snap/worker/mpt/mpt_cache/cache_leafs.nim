@@ -15,9 +15,17 @@
 ##   + key33: <col, key>
 ##   + value: <root, ranges>
 ##   where
-##   + col:       `cLeafIntv`
+##   + col:       `cMissingIntv`
 ##   + key:       `Hash32`, zero for accounts, account path for storage slots
 ##   * root:      `Hash32`, state root or storage root
+##   * ranges:    `ItemKeyRangeSet`
+##
+## * Missing contract codes
+##   + key33: <col, key>
+##   + value: <1>
+##   where
+##   + col:       `cMissingBlob`
+##   + key:       `Hash32`, code hash
 ##
 ## * Flat accounts list
 ##   + key33: <col, key>
@@ -28,13 +36,20 @@
 ##   + data:      `Account`
 ##
 ## * Flat storage slots list
-##   + key33: <col, acc-path, key>
+##   + key33: <col, acc-path>
 ##   + value: <slot>
 ##   where
 ##   + col:       `cFlatSlot`
 ##   + acc-path:  `Hash32`
-##   + key:       `Hash32`,
 ##   + data:      `UInt32`
+##
+## * Flat contract codes
+##   + key33: <col, acc-path>
+##   + value: <blob>
+##   where
+##   + col:       `cFlatCodet`
+##   + acc-path:  `Hash32`
+##   + data:      `seq[byte]`
 ##
 
 {.push raises: [].}
@@ -42,119 +57,258 @@
 import
   pkg/[eth/common, results, stew/interval_set],
   ../../state_db,
-  ./[cache_api33, cache_api65,
-     cache_const, cache_desc, cache_r_cmd, cache_rlp]
+  ./[cache_api1, cache_api33, cache_api65,
+     cache_const, cache_desc, cache_iter, cache_rlp]
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc hasAccLeafIntv*(db: MptAsmRef): BoolResult =
-  let data = db.get33(cLeafIntv, zeroHash32).valueOr:
+proc hasAccMissingIntv*(db: MptAsmRef): BoolResult =
+  let data = db.get1(cMissingIntv).valueOr:
     return err(error)
   ok(0 < data.len)
 
-proc hasStoLeafIntv*(db: MptAsmRef, accPath: Hash32): BoolResult =
-  let data = db.get33(cLeafIntv, accPath).valueOr:
-    return err(error)
-  ok(0 < data.len)
-
-proc getAccLeafInv*(db: MptAsmRef): OptLeafInvResult =
-  let data = db.get33(cLeafIntv, zeroHash32).valueOr:
+proc getAccMissingIntv*(db: MptAsmRef): OptAccMissingIntvResult =
+  let data = db.get1(cMissingIntv).valueOr:
     return err(error)
   if data.len == 0:
-    return ok Opt.none(DecodedLeafIntv)
-  var res = data.decodeLeafInv().valueOr:
+    return ok Opt.none(CacheAccMissingIntvData)
+  var res = data.decodeAccMissingIntvData().valueOr:
     return err(error)
   ok Opt.some(move res)
 
-proc getStoLeafInv*(db: MptAsmRef, accPath: Hash32): OptLeafInvResult =
-  let data = db.get33(cLeafIntv, accPath).valueOr:
-    return err(error)
-  if data.len == 0:
-    return ok Opt.none(DecodedLeafIntv)
-  var res = data.decodeLeafInv().valueOr:
-    return err(error)
-  ok Opt.some(move res)
-
-proc putAccLeafInv*(
+proc putAccMissingIntv*(
     db: MptAsmRef;
     root: StateRoot;
     ranges: ItemKeyRangeSet;
       ): PutResult =
-  db.put33(cLeafIntv, zeroHash32, encodeLeafInv(Hash32 root, ranges))
+  db.put1(cMissingIntv, encodeAccMissingIntvData(root, ranges))
 
-proc putStoLeafInv*(
+proc addAccMissingIntv*(
     db: MptAsmRef;
-    accPath: Hash32;
-    root: StoreRoot;
-    ranges: ItemKeyRangeSet;
+    root: StateRoot;
+    iv: ItemKeyRange;
       ): PutResult =
-  db.put33(cLeafIntv, accPath, encodeLeafInv(Hash32 root, ranges))
+  let data = db.get1(cMissingIntv).valueOr:
+    return err(error)
+  var res: CacheAccMissingIntvData
+  if data.len == 0:
+    res.ranges = ItemKeyRangeSet.init()
+  else:
+    res = data.decodeAccMissingIntvData().valueOr:
+      return err(error)
+  res.root = root
+  discard res.ranges.merge iv
+  db.put1(cMissingIntv, encodeAccMissingIntvData(res.root, res.ranges))
 
-proc delStoLeafInv*(
+proc delAccMissingIntv*(
     db: MptAsmRef,
-    accPath: Hash32;
       ): DelResult =
-  db.del33(cLeafIntv, accPath)
-
-proc clearLeafInv*(db: MptAsmRef): DelResult =
-  db.adb.rClear(cLeafIntv)
+  db.del1(cMissingIntv)
 
 # -------------
 
-proc hasFlatAcc*(db: MptAsmRef, path: Hash32): BoolResult =
-  let data = db.get33(cFlatAcc, path).valueOr:
+proc hasStoMissingIntv*(db: MptAsmRef, accPath: Hash32): BoolResult =
+  let data = db.get33(cMissingIntv, accPath).valueOr:
     return err(error)
   ok(0 < data.len)
 
-proc getFlatAcc*(db: MptAsmRef, path: Hash32): OptFlatAccResult =
-  let data = db.get33(cFlatAcc, path).valueOr:
+proc getStoMissingIntv*(
+    db: MptAsmRef;
+    accPath: Hash32;
+      ): OptStoMissingIntvResult =
+  let data = db.get33(cMissingIntv, accPath).valueOr:
     return err(error)
   if data.len == 0:
-    return ok Opt.none(Account)
-  var res = data.decodeFlatAcc().valueOr:
+    return ok Opt.none(CacheStoMissingIntvData)
+  var res = data.decodeStoMissingIntvData().valueOr:
     return err(error)
   ok Opt.some(move res)
 
-proc putFlatAcc*(db: MptAsmRef, path: Hash32, account: Account): PutResult =
-  db.put33(cFlatAcc, path, encodeFlatAcc(account))
+proc putStoMissingIntv*(
+    db: MptAsmRef;
+    accPath: Hash32;
+    ranges: ItemKeyRangeSet;
+      ): PutResult =
+  db.put33(cMissingIntv, accPath, encodeStoMissingIntvData ranges)
 
-proc delFlatAcc*(db: MptAsmRef, path: Hash32): DelResult =
-  db.del33(cFlatAcc, path)
+proc addStoMissingIntv*(
+    db: MptAsmRef;
+    accPath: Hash32;
+    iv: ItemKeyRange;
+      ): PutResult =
+  let data = db.get33(cMissingIntv, accPath).valueOr:
+    return err(error)
+  var res: CacheStoMissingIntvData
+  if data.len == 0:
+    res.ranges = ItemKeyRangeSet.init()
+  else:
+    res = data.decodeStoMissingIntvData().valueOr:
+      return err(error)
+  discard res.ranges.merge iv
+  db.put33(cMissingIntv, accPath, encodeStoMissingIntvData res.ranges)
 
-proc clearFlatAcc*(db: MptAsmRef): DelResult =
-  db.adb.rClear(cFlatAcc)
+proc delStoMissingIntv*(
+    db: MptAsmRef,
+    accPath: Hash32;
+      ): DelResult =
+  db.del33(cMissingIntv, accPath)
+
+iterator walkStoMissingIntv*(db: MptAsmRef): WalkStoMissingIntvData =
+  for (key,value) in db.adb.colWalk33 key33(cMissingIntv, zeroHash32):
+    let w = value.decodeStoMissingIntvData().valueOr:
+      var oops: WalkStoMissingIntvData
+      oops.accPath = key
+      oops.error = error
+      yield oops
+      continue
+    yield (key, w, "")
 
 # -------------
 
-proc hasFlatSlot*(db: MptAsmRef, accPath, key: Hash32): BoolResult =
-  let data = db.get65(cFlatSlot, accPath, key).valueOr:
+proc clearMissingIntv*(db: MptAsmRef): DelResult =
+  db.clr1 cMissingIntv
+
+# -------------
+
+proc hasMissingBlob*(db: MptAsmRef, accPath: Hash32): BoolResult =
+  let data = db.get33(cMissingBlob, accPath).valueOr:
     return err(error)
   ok(0 < data.len)
 
-proc getFlatSlot*(db: MptAsmRef, accPath, key: Hash32): OptFlatSlotResult =
-  let data = db.get65(cFlatSlot, accPath, key).valueOr:
+proc putMissingBlob*(db: MptAsmRef, accPath: Hash32): PutResult =
+  db.put33(cMissingBlob, accPath, [byte 1])
+
+proc delMissingBlob*(db: MptAsmRef, accPath: Hash32): DelResult =
+  db.del33(cMissingBlob, accPath)
+
+proc clearMissingBlob*(db: MptAsmRef): DelResult =
+  db.clr1 cCodeMissKvt
+
+iterator walkMissingBlob*(db: MptAsmRef): Hash32 =
+  for (key, _) in db.adb.colWalk33 [byte cMissingBlob]:
+    yield key
+
+# =============
+
+proc hasFlatAcc*(db: MptAsmRef, accPath: Hash32): BoolResult =
+  let data = db.get33(cFlatAccount, accPath).valueOr:
+    return err(error)
+  ok(0 < data.len)
+
+proc getFlatAcc*(db: MptAsmRef, accPath: Hash32): OptFlatAccResult =
+  let data = db.get33(cFlatAccount, accPath).valueOr:
+    return err(error)
+  if data.len == 0:
+    return ok Opt.none(Account)
+  var res = data.decodeFlatAccData().valueOr:
+    return err(error)
+  ok Opt.some(move res)
+
+proc putFlatAcc*(db: MptAsmRef, accPath: Hash32, account: Account): PutResult =
+  db.put33(cFlatAccount, accPath, encodeFlatAccData(account))
+
+proc putFlatAcc*(
+    db: MptAsmRef;
+    accPath: Hash32;
+    data: openArray[byte];
+      ): PutResult =
+  db.put33(cFlatAccount, accPath, data)
+
+proc delFlatAcc*(db: MptAsmRef, accPath: Hash32): DelResult =
+  db.del33(cFlatAccount, accPath)
+
+proc clearFlatAcc*(db: MptAsmRef): DelResult =
+  db.clr1 cFlatAccount
+
+iterator walkFlatAcc*(db: MptAsmRef): WalkFlatAccData =
+  for (key,value) in db.adb.colWalk33 key33(cFlatAccount):
+    let w = value.decodeFlatAccData().valueOr:
+      var oops: WalkFlatAccData
+      oops.accPath = key
+      oops.error = error
+      yield oops
+      continue
+    yield (key, w, "")
+
+# -------------
+
+proc hasFlatSlot*(db: MptAsmRef, accPath, slotKey: Hash32): BoolResult =
+  let data = db.get65(cFlatSlot, accPath, slotKey).valueOr:
+    return err(error)
+  ok(0 < data.len)
+
+proc getFlatSlot*(db: MptAsmRef, accPath, slotKey: Hash32): OptFlatSlotResult =
+  let data = db.get65(cFlatSlot, accPath, slotKey).valueOr:
     return err(error)
   if data.len == 0:
     return ok Opt.none(UInt256)
-  var res = data.decodeFlatSlot().valueOr:
+  var res = data.decodeFlatSlotData().valueOr:
     return err(error)
   ok Opt.some(move res)
 
 proc putFlatSlot*(
     db: MptAsmRef;
     accPath: Hash32;
-    key: Hash32;
+    slotKey: Hash32;
     data: UInt256;
       ): PutResult =
-  db.put65(cFlatSlot, accPath, key, encodeFlatSlot(data))
+  db.put65(cFlatSlot, accPath, slotKey, encodeFlatSlotData(data))
 
-proc delFlatSlot*(db: MptAsmRef, accPath, key: Hash32): DelResult =
-  db.del65(cFlatSlot, accPath, key)
+proc putFlatSlot*(
+    db: MptAsmRef;
+    accPath: Hash32;
+    slotKey: Hash32;
+    data: openArray[byte];
+      ): PutResult =
+  db.put65(cFlatSlot, accPath, slotKey, data)
+
+proc delFlatSlot*(db: MptAsmRef, accPath, slotKey: Hash32): DelResult =
+  db.del65(cFlatSlot, accPath, slotKey)
 
 proc clearFlatSlot*(db: MptAsmRef): DelResult =
-  db.adb.rClear(cFlatSlot)
+  db.clr1 cFlatSlot
+
+iterator walkFlatSlot*(db: MptAsmRef): WalkFlatSlotData =
+  for (key1,key2,value) in db.adb.colWalk65 key65(cFlatSlot):
+    let w = value.decodeFlatSlotData().valueOr:
+      var oops: WalkFlatSlotData
+      oops.accPath = key1
+      oops.slotKey = key2
+      oops.error = error
+      yield oops
+      continue
+    yield (key1, key2, w, "")
+
+# -------------
+
+proc hasFlatCode*(db: MptAsmRef; accPath: Hash32): BoolResult =
+  let data = db.get33(cFlatCode, accPath).valueOr:
+    return err(error)
+  ok(0 < data.len)
+
+proc getFlatCode*(db: MptAsmRef; accPath: Hash32): BlobResult =
+  var data = db.get33(cFlatCode, accPath).valueOr:
+    return err(error)
+  ok(move data)
+
+proc putFlatCode*(
+    db: MptAsmRef;
+    accPath: Hash32;
+    data: openArray[byte];
+      ): PutResult =
+  db.put33(cFlatCode, accPath, data)
+
+proc delFlatCode*(db: MptAsmRef, accPath: Hash32): DelResult =
+  db.del33(cFlatCode, accPath)
+
+proc clearFlatCode*(db: MptAsmRef): DelResult =
+  db.clr1 cFlatCode
+
+iterator walkFlatCode*(db: MptAsmRef): KvPair =
+  for (key,value) in db.adb.colWalkAtLeast1 @[byte cFlatCode]:
+    yield (key,value)
 
 # ------------------------------------------------------------------------------
 # End

@@ -36,7 +36,10 @@ type
   OptHashResult* = Result[Opt[Hash32],string]
     ## Shortcut
 
-  OptLeafInvResult* = Result[Opt[DecodedLeafIntv],string]
+  OptAccMissingIntvResult* = Result[Opt[CacheAccMissingIntvData],string]
+    ## Shortcut
+
+  OptStoMissingIntvResult* = Result[Opt[CacheStoMissingIntvData],string]
     ## Shortcut
 
   OptFlatAccResult* = Result[Opt[Account],string]
@@ -87,8 +90,11 @@ type
     codes: seq[(CodeHash,CodeItem)]
     peerID: Hash
 
-  DecodedLeafIntv* = tuple
-    root: Hash32
+  CacheAccMissingIntvData* = tuple
+    root: StateRoot
+    ranges: ItemKeyRangeSet
+
+  CacheStoMissingIntvData* = tuple
     ranges: ItemKeyRangeSet
 
   CachedStateData* = tuple
@@ -140,6 +146,22 @@ type
 
   WalkBal* = tuple
     bal: BlockAccessListRef
+    error: string
+
+  WalkStoMissingIntvData* = tuple
+    accPath: Hash32
+    data: CacheStoMissingIntvData
+    error: string
+
+  WalkFlatAccData* = tuple
+    accPath: Hash32
+    data: Account
+    error: string
+
+  WalkFlatSlotData* = tuple
+    accPath: Hash32
+    slotKey: Hash32
+    data: UInt256
     error: string
 
   KvPair* = tuple

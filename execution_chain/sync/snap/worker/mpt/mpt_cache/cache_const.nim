@@ -44,8 +44,9 @@ type
     cCodeMissKvt                                    # missing contract links
 
     gFlatTables = 40                                # group, not used as column
-    cLeafIntv                                       # missing accounts/slots
-    cFlatAcc                                        # flat accounts table
+    cMissingIntv                                    # missing accounts/slots
+    cMissingBlob                                    # missing contract codes
+    cFlatAccount                                    # flat accounts table
     cFlatSlot                                       # flat storage slots table
     cFlatCode                                       # contract codes table
 

@@ -24,6 +24,35 @@ when sizeof(Hash) != sizeof(uint):
   {.error: "Hash type must have size of uint".}
 
 # ------------------------------------------------------------------------------
+# Private RLP helpers
+# ------------------------------------------------------------------------------
+
+func fromRlp(
+    _: type ItemKeyRangeSet;
+    data: openArray[byte];
+      ): ItemKeyRangeSet
+      {.raises: [RlpError].} =
+  var
+    rd = data.rlpFromBytes
+    rng = ItemKeyRangeSet.init()
+  for w in rd.items():
+    w.tryEnterList()
+    let
+      a = w.read UInt256
+      b = w.read UInt256
+    discard rng.merge(a.to(ItemKey),b.to(ItemKey))
+  rng
+
+func toRlp(rng: ItemKeyRangeSet): seq[byte] =
+  var wrt = initRlpList rng.chunks()
+  for iv in rng.increasing():
+    var w = initRlpList 2
+    w.append iv.minPt.to(UInt256)
+    w.append iv.maxPt.to(UInt256)
+    wrt.appendRawBytes w.finish()
+  wrt.finish()
+
+# ------------------------------------------------------------------------------
 # Public RLP decoders
 # ------------------------------------------------------------------------------
 
@@ -106,26 +135,36 @@ func decodeBal*(data: seq[byte]): Result[BlockAccessListRef,string] =
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(move res)
 
-func decodeLeafInv*(data: seq[byte]): Result[DecodedLeafIntv,string] =
-  const info = "decodeLeafInv"
+func decodeAccMissingIntvData*(
+    data: seq[byte];
+      ): Result[CacheAccMissingIntvData,string] =
+  const info = "decodeAccMissingIntvData"
   var
     rd = data.rlpFromBytes
-    res: DecodedLeafIntv
-    first = true
+    res: CacheAccMissingIntvData
   try:
-    res.ranges = ItemKeyRangeSet.init()
-    for w in rd.items:
-      if first:
-        res.root = w.read(Hash32)
-        first = false
-      else:
-        let iv = w.read((UInt256,UInt256))
-        discard res.ranges.merge(iv[0].to(ItemKey),iv[1].to(ItemKey))
+    rd.tryEnterList()
+    res.root = StateRoot rd.read(Hash32)
+    res.ranges = ItemKeyRangeSet.fromRlp rd.rawData()
   except RlpError as e:
     return err(info & ": " & $e.name & "(" & e.msg & ")")
-  ok(move res)
+  ok(res)
 
-func decodeFlatAcc*(data: seq[byte]): Result[Account,string] =
+func decodeStoMissingIntvData*(
+    data: seq[byte];
+      ): Result[CacheStoMissingIntvData,string] =
+  const info = "decodeStoMissingIntvData"
+  var
+    rd = data.rlpFromBytes
+    res: CacheStoMissingIntvData
+  try:
+    rd.tryEnterList()
+    res.ranges = ItemKeyRangeSet.fromRlp rd.rawData()
+  except RlpError as e:
+    return err(info & ": " & $e.name & "(" & e.msg & ")")
+  ok(res)
+
+func decodeFlatAccData*(data: seq[byte]): Result[Account,string] =
   const info = "decodeFlatAcc"
   var res: Account
   try:
@@ -134,7 +173,7 @@ func decodeFlatAcc*(data: seq[byte]): Result[Account,string] =
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(move res)
 
-func decodeFlatSlot*(data: seq[byte]): Result[UInt256,string] =
+func decodeFlatSlotData*(data: seq[byte]): Result[UInt256,string] =
   const info = "decodeFlatSlot"
   var res: UInt256
   try:
@@ -209,22 +248,29 @@ template encodeBal*(
       ): untyped =
   rlp.encode bal[]
 
-template encodeLeafInv*(
-    root: Hash32;
-    ranges: ItemKeyRangeSet;
+template encodeAccMissingIntvData*(
+    root: StateRoot;
+    rng: ItemKeyRangeSet;
       ): untyped =
-  var wrt = initRlpList ranges.chunks+1
-  wrt.append root
-  for iv in ranges.increasing:
-    wrt.append (iv.minPt.to(UInt256),iv.maxPt.to(UInt256))
+  var wrt = initRlpList 2
+  wrt.append Hash32(root)
+  wrt.appendRawBytes rng.toRlp()
+  var res = wrt.finish()
+  res
+
+template encodeStoMissingIntvData*(
+    rng: ItemKeyRangeSet;
+      ): untyped =
+  var wrt = initRlpList 1
+  wrt.appendRawBytes rng.toRlp()
   wrt.finish()
 
-template encodeFlatAcc*(
+template encodeFlatAccData*(
     account: Account;
       ): untyped =
   rlp.encode(account)
 
-template encodeFlatSlot*(
+template encodeFlatSlotData*(
     slot: UInt256;
       ): untyped =
   rlp.encode(slot)
