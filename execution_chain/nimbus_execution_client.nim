@@ -282,8 +282,7 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionCli
 proc setupCommonRef*(
     config: ExecutionClientConf, numThreads: int): (CommonRef, bool) =
 
-  let disableParallelFeatures = numThreads <= 1 and
-    (config.parallelFeaturesEnabled() or config.parallelSenderRecovery)
+  let disableParallelFeatures = numThreads <= 1 and config.parallelFeaturesEnabled()
 
   if disableParallelFeatures:
     warn "Not enough taskpool threads, disabling parallel execution features",

@@ -130,7 +130,8 @@ when compileOption("threads"):
     true
 
   template withSenderParallel(
-      vmState: BaseVMState, txs: openArray[Transaction], body: untyped) =
+      vmState: BaseVMState, txs: openArray[Transaction],
+      bal: Opt[BlockAccessListRef], body: untyped) =
     # Execute transactions offloading the signature checking to the task pool
     var
       entries = newSeq[OptimisticTxEntry](txs.len)
@@ -138,7 +139,10 @@ when compileOption("threads"):
       ctx: OptimisticPrefetchCtx
       ctxPtr: ptr OptimisticPrefetchCtx = nil
 
-    if vmState.com.optimisticStatePrefetchEnabled() and not vmState.balPrefetchActive:
+    # Skip optimistic state prefetch when block access list prefetch is running
+    # to avoid prefetching the same state twice.
+    if vmState.com.optimisticStatePrefetchEnabled() and
+        not vmState.com.balStatePrefetchEnabled(vmState.blockCtx.timestamp, bal):
       ctx.parent = vmState.parent
       ctx.blockCtx = vmState.blockCtx
       ctx.com = vmState.com
@@ -261,16 +265,17 @@ template withSenderSerial(txs: openArray[Transaction], body: untyped) =
     let sender {.inject.} = tx.recoverSender().valueOr(default(Address))
     body
 
-template withSender(vmState: BaseVMState, txs: openArray[Transaction], body: untyped) =
+template withSender(
+    vmState: BaseVMState, txs: openArray[Transaction],
+    bal: Opt[BlockAccessListRef], body: untyped) =
   if vmState.com.parallelSenderRecoveryEnabled():
-    withSenderParallel(vmState, txs, body)
+    withSenderParallel(vmState, txs, bal, body)
   else:
     withSenderSerial(txs, body)
 
 template withBalPrefetch(
     vmState: BaseVMState, bal: Opt[BlockAccessListRef], body: untyped) =
   if vmState.com.balStatePrefetchEnabled(vmState.blockCtx.timestamp, bal):
-    vmState.balPrefetchActive = true
     withBalPrefetchParallel(vmState, bal, body)
   else:
     body
@@ -556,7 +561,7 @@ proc processTransactions*(
       return processTransactionsParallel(
         vmState, transactions, blockAccessList.get(), skipReceipts, collectLogs)
 
-  vmState.withSender(transactions):
+  vmState.withSender(transactions, blockAccessList):
     if sender == default(Address):
       return err("Could not get sender for tx with index " & $(txIndex))
 
