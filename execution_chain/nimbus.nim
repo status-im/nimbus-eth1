@@ -281,11 +281,11 @@ proc runExecutionClient(p: ExecutionThreadConfig) {.thread.} =
       # TODO https://github.com/status-im/nim-taskpools/issues/6
       #      share taskpool between bn and ec
       taskpool = setupTaskpool(int config.numThreads)
-      (com, keyCacheEnabled) = setupCommonRef(config)
+      (com, keyCacheEnabled) = setupCommonRef(config, taskpool.numThreads)
     com.taskpool = taskpool
     com.db.mpt.taskpool = taskpool
   else:
-    let (com, keyCacheEnabled) = setupCommonRef(config)
+    let (com, keyCacheEnabled) = setupCommonRef(config, 0)
 
   if keyCacheEnabled:
     # Make sure key cache isn't empty

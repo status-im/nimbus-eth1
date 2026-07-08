@@ -848,7 +848,7 @@ proc ereDir*(config: ExecutionClientConf): string =
 func udpPort*(config: ExecutionClientConf): Port =
   config.udpPortFlag.get(config.tcpPort)
 
-func threadSafeCaches*(config: ExecutionClientConf): bool =
+func parallelFeaturesEnabled*(config: ExecutionClientConf): bool =
   config.optimisticStatePrefetch or config.balStatePrefetch or
     config.parallelStateRootComputation or config.balParallelExecution
 
@@ -868,7 +868,7 @@ func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
     rdbPrintStats = config.rdbPrintStats,
     maxSnapshots = config.aristoDbMaxSnapshots,
     parallelStateRootComputation = config.parallelStateRootComputation,
-    threadSafeCaches = config.threadSafeCaches,
+    threadSafeCaches = config.parallelFeaturesEnabled(),
     blockCacheType = config.rocksdbBlockCacheType,
   )
 
