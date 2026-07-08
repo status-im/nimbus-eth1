@@ -166,13 +166,15 @@ suite "BAL overlay ledger reads":
   # read (balance, nonce, code, storage, existence) returns the overlay's
   # pre-state when the BAL has a write *before* the overlay's block access index,
   # and otherwise falls back to the database. Accounts cover: DB-only,
-  # overlay-only, in-both, storage-only-in-overlay, and absent-from-both.
+  # overlay-only, in-both, storage-only-in-overlay, absent-from-both, and
+  # deleted-in-block.
   let
     dbAddr = address"0x01007bc31cedb7bfb8a345f31e668033056b2728"
     overlayAddr = address"0x02007bc31cedb7bfb8a345f31e668033056b2728"
     bothAddr = address"0x03007bc31cedb7bfb8a345f31e668033056b2728"
     storageAddr = address"0x04007bc31cedb7bfb8a345f31e668033056b2728"
     absentAddr = address"0x05007bc31cedb7bfb8a345f31e668033056b2728"
+    deletedAddr = address"0x06007bc31cedb7bfb8a345f31e668033056b2728"
     slotA = 1.u256()
     slotB = 2.u256()
     codeDb = @[0x11.byte, 0x22]
@@ -183,6 +185,7 @@ suite "BAL overlay ledger reads":
     #   overlayAddr: balance @1=10 @3=30, nonce @1=5, code @2, storage slotA @1=100 @3=300
     #   bothAddr:    balance @2=200, storage slotA @2=2000
     #   storageAddr: storage slotA @1=777
+    #   deletedAddr: balance @1=0 (deleted, e.g. selfdestruct sweeping the balance)
     var builder: BlockAccessListBuilder
     builder.init()
     builder.addBalanceChange(overlayAddr, 1, 10.u256)
@@ -194,6 +197,7 @@ suite "BAL overlay ledger reads":
     builder.addBalanceChange(bothAddr, 2, 200.u256)
     builder.addStorageWrite(bothAddr, slotA, 2, 2000.u256)
     builder.addStorageWrite(storageAddr, slotA, 1, 777.u256)
+    builder.addBalanceChange(deletedAddr, 1, 0.u256)
     let bal = builder.buildBlockAccessList()
 
     # Pre-block database state.
@@ -209,6 +213,8 @@ suite "BAL overlay ledger reads":
       dbLedger.setCode(bothAddr, codeDb)
       dbLedger.setStorage(bothAddr, slotA, 999.u256)
       dbLedger.setStorage(bothAddr, slotB, 888.u256)
+      dbLedger.setBalance(deletedAddr, 100.u256)
+      dbLedger.setStorage(deletedAddr, slotA, 555.u256)
       dbLedger.persist()
 
   test "getBalance reads overlay pre-state and falls back to the database":
@@ -261,7 +267,9 @@ suite "BAL overlay ledger reads":
         ledger.getCommittedStorage(overlayAddr, slotA) == 100.u256
         ledger.getStorage(bothAddr, slotA) == 999.u256     # BAL @2 not < 2 -> DB
         ledger.getStorage(bothAddr, slotB) == 888.u256     # not in BAL -> DB
-        ledger.getStorage(storageAddr, slotA) == 777.u256  # @1
+        # storageAddr materialises empty (storage-only write) so it is treated
+        # as deleted and its storage reads as 0
+        ledger.getStorage(storageAddr, slotA) == 0.u256
         ledger.getStorage(absentAddr, slotA) == 0.u256
     block: # index 4
       let ledger = ledgerWithOverlay(coreDb, bal, 4)
@@ -278,7 +286,8 @@ suite "BAL overlay ledger reads":
         ledger.accountExists(dbAddr)        # in DB
         ledger.accountExists(overlayAddr)   # overlay balance @1
         ledger.accountExists(bothAddr)      # in DB
-        ledger.accountExists(storageAddr)   # overlay storage @1
+        # storageAddr has only a storage write -> materialises empty -> deleted
+        not ledger.accountExists(storageAddr)
         not ledger.accountExists(absentAddr)
     block: # index 1 - overlay-only accounts have no write before index 1 yet
       let ledger = ledgerWithOverlay(coreDb, bal, 1)
@@ -323,13 +332,54 @@ suite "BAL overlay ledger reads":
       ledger.getCode(bothAddr).bytes() == codeDb         # DB
       ledger.getStorage(bothAddr, slotB) == 888.u256     # DB
 
-  test "storage-only overlay account is materialised so its storage is read":
-    # storageAddr has only a storage write in the BAL and is absent from the DB;
-    # hasAccount must still materialise it (exists() on balance/nonce/code alone
-    # would miss it, making getStorage wrongly return 0).
+  test "account left empty by BAL writes before the index is treated as deleted":
+    # storageAddr has only a storage write in the BAL and is absent from the DB,
+    # so it materialises empty (nonce 0, balance 0, no code). An account that
+    # was written but ends up empty cannot exist mid-block (every surviving
+    # execution path bumps the nonce, sets code or leaves a balance), so it must
+    # have been deleted by an earlier transaction and reads as non-existent.
     let ledger = ledgerWithOverlay(coreDb, bal, 2)
     check:
-      ledger.accountExists(storageAddr)
-      ledger.getStorage(storageAddr, slotA) == 777.u256
-      ledger.getStorage(storageAddr, slotB) == 0.u256
+      not ledger.accountExists(storageAddr)
+      ledger.getStorage(storageAddr, slotA) == 0.u256
       ledger.getBalance(storageAddr) == 0.u256
+
+    # overlayAddr also has storage writes but materialises non-empty
+    # (balance/nonce @1), so its overlay storage is readable.
+    check:
+      ledger.accountExists(overlayAddr)
+      ledger.getStorage(overlayAddr, slotA) == 100.u256
+
+  test "account deleted mid-block reads as non-existent with empty storage":
+    # deletedAddr exists in the database (balance 100, storage slotA=555) and
+    # the BAL records balance -> 0 @1, the only trace a same-transaction
+    # selfdestruct with a swept balance leaves. From index 2 onwards the
+    # account is deleted: existence, balance and storage must not leak the
+    # stale database values.
+    block: # index 1 - the deletion is not visible yet
+      let ledger = ledgerWithOverlay(coreDb, bal, 1)
+      check:
+        ledger.accountExists(deletedAddr)
+        ledger.getBalance(deletedAddr) == 100.u256
+        ledger.getStorage(deletedAddr, slotA) == 555.u256
+    block: # index 2 - deleted
+      let ledger = ledgerWithOverlay(coreDb, bal, 2)
+      check:
+        not ledger.accountExists(deletedAddr)
+        ledger.getBalance(deletedAddr) == 0.u256
+        ledger.getStorage(deletedAddr, slotA) == 0.u256
+
+  test "getOriginalCode resolves code applied from the overlay":
+    # Code applied from the overlay exists only in the BAL, not in the
+    # database, so getOriginalCode must resolve it from the materialised
+    # account rather than by codeHash lookup.
+    block: # index 2 - overlayAddr code written @2 is not visible yet
+      let ledger = ledgerWithOverlay(coreDb, bal, 2)
+      check:
+        ledger.getOriginalCode(overlayAddr).bytes().len == 0
+        ledger.getOriginalCode(bothAddr).bytes() == codeDb  # from the DB
+    block: # index 4 - overlay code visible
+      let ledger = ledgerWithOverlay(coreDb, bal, 4)
+      check:
+        ledger.getOriginalCode(overlayAddr).bytes() == codeOverlay
+        ledger.getOriginalCode(bothAddr).bytes() == codeDb
