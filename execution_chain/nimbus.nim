@@ -34,6 +34,7 @@ import
     beacon_node,
     nimbus_beacon_node,
     nimbus_binary_common,
+    nimbus_rest_common,
     process_state,
   ],
   ./db/aristo/aristo_compute,
