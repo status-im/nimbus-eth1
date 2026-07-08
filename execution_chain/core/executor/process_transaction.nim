@@ -73,6 +73,8 @@ proc commitOrRollbackDependingOnGasUsed(
 
   callResult.txFee = txFee
 
+  callResult.txFee = txFee
+
   if vmState.balTrackerEnabled:
     vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), txFee)
     vmState.balTracker.commitCallFrame()

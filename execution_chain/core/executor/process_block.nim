@@ -552,7 +552,6 @@ when compileOption("threads"):
         $maxBlobGasPerBlock)
 
     applyBlockAccessListState(vmState.ledger, balRef[], n)
-
     ok()
 
 proc processTransactions*(
