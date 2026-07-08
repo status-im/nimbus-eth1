@@ -19,7 +19,7 @@ import
   ../utils/[mergeutils, utils],
   ../evm/code_bytes,
   ../constants,
-  ../block_access_list/block_access_list_overlay,
+  ../block_access_list/bal_overlay,
   ./[access_list as ac_access_list, core_db, storage_types],
   ./aristo/[aristo_blobify, aristo_desc, aristo_get]
 

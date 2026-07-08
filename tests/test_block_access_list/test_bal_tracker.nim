@@ -17,7 +17,7 @@ import
   ../../execution_chain/db/core_db/memory_only,
   ../../execution_chain/db/core_db,
   ../../execution_chain/concurrency/shared_types,
-  ../../execution_chain/block_access_list/block_access_list_tracker
+  ../../execution_chain/block_access_list/bal_tracker
 
 
 suite "Block access list tracker":

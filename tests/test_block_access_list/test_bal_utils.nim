@@ -14,7 +14,7 @@ import
   unittest2,
   results,
   eth/common/[block_access_lists, headers],
-  ../../execution_chain/block_access_list/block_access_list_utils
+  ../../execution_chain/block_access_list/bal_utils
 
 func accountChanges(address: Address): AccountChanges =
   # Only the address is relevant for findAccountChanges, so the change lists are
@@ -35,7 +35,7 @@ func balanceChangesAt(indices: openArray[int]): seq[BalanceChange] =
     result.add((BlockAccessIndex(i), 0.u256))
 
 suite "Block access list utils":
-  # These tests exercise the binary search helpers in block_access_list_utils
+  # These tests exercise the binary search helpers in bal_utils
   # directly with small, hand-constructed and pre-sorted inputs, covering the
   # boundary, not-found, empty and single-element cases. Both length classes of
   # std/algorithm.binarySearch (the power-of-two fast path and the general path)

@@ -18,7 +18,7 @@ import
   ../transaction/call_types,
   ../[transaction, constants],
   ../utils/utils,
-  ../block_access_list/block_access_list_validation,
+  ../block_access_list/bal_validation,
   ./[dao, eip4844, eip7702, eip7691, gaslimit, withdrawals],
   ./pow/difficulty,
   stew/objects,

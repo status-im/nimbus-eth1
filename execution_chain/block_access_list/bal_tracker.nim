@@ -14,9 +14,9 @@ import
   eth/common/addresses,
   stint,
   ../db/ledger,
-  ./block_access_list_builder
+  ./bal_builder
 
-export addresses, block_access_list_builder, ledger, stint
+export addresses, bal_builder, ledger, stint
 
 type
   # Snapshot of block access list state for a single call frame.

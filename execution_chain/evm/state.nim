@@ -15,7 +15,7 @@ import
   stew/assign2,
   ../db/ledger,
   ../common/common,
-  ../block_access_list/block_access_list_tracker,
+  ../block_access_list/bal_tracker,
   ./interpreter/[op_codes, gas_costs],
   ./types,
   ./evm_errors

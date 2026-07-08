@@ -22,7 +22,7 @@ import
   ../db/core_db/memory_only,
   ../evm/[types, state],
   ../core/executor/process_block,
-  ../block_access_list/block_access_list_validation,
+  ../block_access_list/bal_validation,
   ./[witness_types, witness_verification, stateless_types]
 
 from beacon_chain/spec/datatypes/electra import
