@@ -38,20 +38,6 @@ type
     EPartialMpt
     EOtherError                                     # any other error
 
-  OnDanglingCB* = proc(
-      base: Hash32; key, path: openArray[byte]) {.gcsafe, raises:[].}
-    ## Closure function to perform bespoke actions when a dangling link or
-    ## a completely missing sub-MPT is found.
-
-  TravNotifyCB* = proc(
-      att: AttType, base: Hash32, path: NibblesBuf, key, data: openArray[byte],
-      depth: int) {.gcsafe, raises: [].}
-    ## Internal closure function used as call back when analysing an MPT.
-    ## This function is involved whenever there is something *interesting*
-    ## found (e.g. dangling link, leaf node.)
-    ##
-    ## Intended for debugging, mainly
-
   # ----------
 
   WalkTrieGetCB* = proc(

@@ -281,6 +281,19 @@ proc delFlatSlot*(db: CacheDbRef, accPath, slotKey: Hash32): DelResult =
 proc clearFlatSlot*(db: CacheDbRef): DelResult =
   db.clr1 cFlatSlot
 
+iterator walkFlatSlot*(db: CacheDbRef, accPath: Hash32): WalkFlatSlotData =
+  for (key1,key2,value) in db.adb.colWalk65 key65(cFlatSlot, accPath):
+    if key1 != accPath:
+      break
+    let w = value.decodeFlatSlotData().valueOr:
+      var oops: WalkFlatSlotData
+      oops.accPath = key1
+      oops.slotKey = key2
+      oops.error = error
+      yield oops
+      continue
+    yield (key1, key2, w, "")
+
 iterator walkFlatSlot*(db: CacheDbRef): WalkFlatSlotData =
   for (key1,key2,value) in db.adb.colWalk65 key65(cFlatSlot):
     let w = value.decodeFlatSlotData().valueOr:
