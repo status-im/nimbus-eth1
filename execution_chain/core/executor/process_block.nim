@@ -138,7 +138,7 @@ when compileOption("threads"):
       ctx: OptimisticPrefetchCtx
       ctxPtr: ptr OptimisticPrefetchCtx = nil
 
-    if vmState.com.optimisticStatePrefetch and not vmState.balPrefetchActive:
+    if vmState.com.optimisticStatePrefetchEnabled() and not vmState.balPrefetchActive:
       ctx.parent = vmState.parent
       ctx.blockCtx = vmState.blockCtx
       ctx.com = vmState.com
@@ -262,39 +262,18 @@ template withSenderSerial(txs: openArray[Transaction], body: untyped) =
     body
 
 template withSender(vmState: BaseVMState, txs: openArray[Transaction], body: untyped) =
-  when compileOption("threads"):
-    if not vmState.com.taskpool.isNil() and vmState.com.taskpool.numThreads > 1:
-      withSenderParallel(vmState, txs, body)
-    else:
-      withSenderSerial(txs, body)
+  if vmState.com.parallelSenderRecoveryEnabled():
+    withSenderParallel(vmState, txs, body)
   else:
     withSenderSerial(txs, body)
 
 template withBalPrefetch(
     vmState: BaseVMState, bal: Opt[BlockAccessListRef], body: untyped) =
-  when compileOption("threads"):
-    if bal.isSome() and vmState.com.balStatePrefetch and
-        vmState.com.isAmsterdamOrLater(vmState.blockCtx.timestamp) and
-        not vmState.com.taskpool.isNil() and vmState.com.taskpool.numThreads > 1:
-
-      vmState.balPrefetchActive = true
-      withBalPrefetchParallel(vmState, bal, body)
-    else:
-      body
+  if vmState.com.balStatePrefetchEnabled(vmState.blockCtx.timestamp, bal):
+    vmState.balPrefetchActive = true
+    withBalPrefetchParallel(vmState, bal, body)
   else:
     body
-
-func balParallelExecutionEnabled*(
-    com: CommonRef,
-    header: Header,
-    blockAccessList: Opt[BlockAccessListRef],
-): bool =
-  when compileOption("threads"):
-    blockAccessList.isSome() and com.balParallelExecution and
-      com.isAmsterdamOrLater(header.timestamp) and not com.taskpool.isNil() and
-      com.taskpool.numThreads > 1
-  else:
-    false
 
 when compileOption("threads"):
 
@@ -573,7 +552,7 @@ proc processTransactions*(
   vmState.allLogs = @[]    
 
   when compileOption("threads"):
-    if vmState.com.balParallelExecutionEnabled(header, blockAccessList):
+    if vmState.com.balParallelExecutionEnabled(header.timestamp, blockAccessList):
       return processTransactionsParallel(
         vmState, transactions, blockAccessList.get(), skipReceipts, collectLogs)
 

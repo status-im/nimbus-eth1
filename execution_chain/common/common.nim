@@ -12,6 +12,7 @@
 import
   chronicles,
   eth/common/eth_types_json_serialization,
+  eth/common/block_access_lists,
   ../db/[core_db, ledger, storage_types, fcu_db],
   ../utils/[utils],
   ".."/[constants, errors, version_info],
@@ -446,6 +447,47 @@ func isAmsterdamOrLater*(com: CommonRef, t: EthTime): bool =
 
 func isBogotaOrLater*(com: CommonRef, t: EthTime): bool =
   com.config.bogotaTime.isSome and t >= com.config.bogotaTime.value
+
+func parallelSenderRecoveryEnabled*(com: CommonRef): bool =
+  when compileOption("threads"):
+    not com.taskpool.isNil() and com.taskpool.numThreads > 1
+  else:
+    false
+
+func optimisticStatePrefetchEnabled*(com: CommonRef): bool =
+  when compileOption("threads"):
+    let enabled = com.optimisticStatePrefetch
+    if enabled:
+      assert not com.taskpool.isNil() and com.taskpool.numThreads > 1
+    enabled
+  else:
+    false
+
+func balStatePrefetchEnabled*(
+    com: CommonRef,
+    timestamp: EthTime,
+    blockAccessList: Opt[BlockAccessListRef]): bool =
+  when compileOption("threads"):
+    let enabled = blockAccessList.isSome() and com.balStatePrefetch and
+      com.isAmsterdamOrLater(timestamp)
+    if enabled:
+      assert not com.taskpool.isNil() and com.taskpool.numThreads > 1
+    enabled
+  else:
+    false
+
+func balParallelExecutionEnabled*(
+    com: CommonRef,
+    timestamp: EthTime,
+    blockAccessList: Opt[BlockAccessListRef]): bool =
+  when compileOption("threads"):
+    let enabled = blockAccessList.isSome() and com.balParallelExecution and
+      com.isAmsterdamOrLater(timestamp)
+    if enabled:
+      assert not com.taskpool.isNil() and com.taskpool.numThreads > 1
+    enabled
+  else:
+    false
 
 proc proofOfStake*(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
   if com.config.posBlock.isSome:
