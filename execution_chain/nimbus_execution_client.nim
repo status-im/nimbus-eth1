@@ -28,7 +28,7 @@ import
   ./common/chain_config_hash,
   ./portal/portal,
   ./networking/[bootnodes, netkeys],
-  beacon_chain/[nimbus_binary_common, process_state],
+  beacon_chain/[nimbus_binary_common, process_state, nimbus_rest_common],
   beacon_chain/validators/keystore_management
 
 const
