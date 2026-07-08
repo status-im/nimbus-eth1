@@ -29,8 +29,8 @@
 import
   pkg/[chronos, eth/common, results],
   ../../state_db,
-  ./[cache_api33, cache_desc,
-     cache_const, cache_iter, cache_r_cmd, cache_rlp]
+  ./[cache_api1, cache_api33, cache_desc,
+     cache_const, cache_iter, cache_rlp]
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -48,23 +48,15 @@ proc hasStateData*(
 proc getStateData*(
     db: MptAsmRef;
     root: StateRoot;
-      ): Result[CachedStateData,string] =
+      ): Result[CacheStateData,string] =
   let data = db.get33(cStateData, root).valueOr:
     return err(error)
   data.decodeStateData()
 
 proc putStateData*(
     db: MptAsmRef;
-    state: WalkStateData;
-      ): PutResult =
-  db.put33(cStateData, state.root,
-    encodeStateData(
-      state.hash, state.number, state.touch, state.tag, state.coverage))
-
-proc putStateData*(
-    db: MptAsmRef;
     root: StateRoot;
-    data: CachedStateData;
+    data: CacheStateData;
       ): PutResult =
   db.put33(cStateData, root, encodeStateData(
     data.hash, data.number, data.touch, data.tag, data.coverage))
@@ -85,7 +77,7 @@ proc delStateData*(db: MptAsmRef; root: StateRoot): DelResult =
   db.del33(cStateData, root)
 
 proc clearStateData*(db: MptAsmRef): DelResult =
-  db.adb.rClear(cStateData)
+  db.clr1 cStateData
 
 iterator walkStateData*(db: MptAsmRef): WalkStateData =
   for (key,value) in db.adb.colWalk33 cStateData.key33():
@@ -95,7 +87,7 @@ iterator walkStateData*(db: MptAsmRef): WalkStateData =
         oops.error = error
         yield oops
         continue
-    yield (StateRoot(key), w.hash, w.number, w.touch, w.tag, w.coverage, "")
+    yield (StateRoot(key), w, "")
 
 # ------------------------------------------------------------------------------
 # End

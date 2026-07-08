@@ -66,11 +66,11 @@ type
     PivotOnTrie                                     # ditto, state root here
     PivotMptAnalysed
 
-  DecodedStateData* = tuple
+  CacheStateData* = tuple
     hash: BlockHash
     number: BlockNumber
     touch: Moment                                   # last data change
-    tag: StateDataTag                               # state root also on trie
+    tag: StateDataTag                               # how this record is used
     coverage: UInt256                               # account range coverage
 
   DecodedAccount* = tuple
@@ -97,20 +97,9 @@ type
   CacheStoMissingIntvData* = tuple
     ranges: ItemKeyRangeSet
 
-  CachedStateData* = tuple
-    hash: BlockHash
-    number: BlockNumber
-    touch: Moment                                   # last data change
-    tag: StateDataTag                               # how this record is used
-    coverage: UInt256                               # account range coverage
-
   WalkStateData* = tuple
     root: StateRoot
-    hash: BlockHash
-    number: BlockNumber
-    touch: Moment                                   # last data change
-    tag: StateDataTag                               # how this record is used
-    coverage: UInt256                               # account range coverage
+    data: CacheStateData
     error: string
 
   WalkAccount* = tuple

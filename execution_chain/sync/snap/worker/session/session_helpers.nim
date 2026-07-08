@@ -26,7 +26,7 @@ type
 proc getPivotData(
     ctx: SnapCtxRef,
     info: static[string];
-      ): Opt[(StateRoot,CachedStateData)] =
+      ): Opt[(StateRoot,CacheStateData)] =
   let root = ctx.pool.pivot.valueOr:
     return err()
   var data = ctx.pool.mptAsm.getStateData(root).valueOr:

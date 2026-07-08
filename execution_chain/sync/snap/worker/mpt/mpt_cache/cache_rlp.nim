@@ -56,11 +56,11 @@ func toRlp(rng: ItemKeyRangeSet): seq[byte] =
 # Public RLP decoders
 # ------------------------------------------------------------------------------
 
-proc decodeStateData*(data: seq[byte]): Result[DecodedStateData,string] =
+proc decodeStateData*(data: seq[byte]): Result[CacheStateData,string] =
   const info = "decodeStateData"
   var
     rd = data.rlpFromBytes
-    res: DecodedStateData
+    res: CacheStateData
   try:
     rd.tryEnterList()
     res.hash = rd.read(Hash32).to(BlockHash)

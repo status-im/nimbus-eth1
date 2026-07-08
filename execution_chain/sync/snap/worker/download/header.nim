@@ -46,8 +46,8 @@ proc minStateNum(
   if haveData:
     result = BlockNumber high(uint64)
     for w in ctx.pool.mptAsm.walkStateData():
-      if w.error.len == 0 and w.number < result:
-        result = w.number
+      if w.error.len == 0 and w.data.number < result:
+        result = w.data.number
   # BlockNumber(0)
 
 proc getLastHeaderOrGenesis(ctx: SnapCtxRef): Header =

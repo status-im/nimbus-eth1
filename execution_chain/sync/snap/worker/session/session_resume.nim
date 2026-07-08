@@ -143,7 +143,7 @@ template sessionResume*(
     template nStates: auto = session.nStates
 
     # Sort states, order by latest time stamp first
-    byTouch.sort proc(x,y: WalkStateData): int = cmp(y.touch,x.touch)
+    byTouch.sort proc(x,y: WalkStateData): int = cmp(y.data.touch,x.data.touch)
 
     # Walk over states, latest time stamp first. Collect the lastest some
     # non-empty states (see `stateDbCapacity`) for import into the state
@@ -156,11 +156,11 @@ template sessionResume*(
         chronicles.info info & ": Bad state record ignored", stateInx, nStates
         continue
 
-      if p.coverage.isZero:
+      if p.data.coverage.isZero:
         continue
 
       if stateDbCapacity <= tchInx.len:             # index list complete?
-        sdb.addAccountArchive p.coverage.per256()   # set archived coverage
+        sdb.addAccountArchive p.data.coverage.per256() # set archived coverage
         continue
 
       if not intro:                                 # print message once, only
@@ -169,8 +169,8 @@ template sessionResume*(
           nEthPeers=ctx.nEthPeers()
         intro = true
 
-      if p.tag != Untagged:                         # ignore assembled data
-        sdb.addAccountArchive p.coverage.per256()   # set archived coverage
+      if p.data.tag != Untagged:                    # ignore assembled data
+        sdb.addAccountArchive p.data.coverage.per256() # set archived coverage
       else:
         tchInx.add n                                # collect, re-process below
 
@@ -188,7 +188,7 @@ template sessionResume*(
       stateInx = tchInx.len - n - 1                 # ranges `0`..`nStates-1`
 
       # Create record on state DB cache
-      state = sdb.register(p.root, p.hash, p.number, info)
+      state = sdb.register(p.root, p.data.hash, p.data.number, info)
 
       # Walk account for the current state root
       for w in adb.walkAccount(p.root):

@@ -20,9 +20,6 @@ import
 declareGauge nec_snap_merged_mpt_coverage, "" &
   "Factor of accumulated account ranges covered when assembling MPT"
 
-const
-  UnconditionallyClearCache = false or true
-
 type
   RecoveryStatus = enum
     NewAssembly
@@ -48,7 +45,7 @@ type
 # ------------------------------------------------------------------------------
 
 func toStr(state: WalkStateData): string =
-  state.root.toStr & "(" & $state.number & ")"
+  state.root.toStr & "(" & $state.data.number & ")"
 
 # -----------
 
@@ -79,10 +76,10 @@ proc mptTablesClear(ctx: SnapCtxRef, info: static[string]): Opt[void] =
 func dist(a, b: WalkStateData): uint64 =
   ## Block number distance between two states.
   ##
-  if a.number < b.number:
-    b.number - a.number
+  if a.data.number < b.data.number:
+    b.data.number - a.data.number
   else:
-    a.number - b.number
+    a.data.number - b.data.number
 
 func isPivot(session: MkTrieSession): bool =
   session.stateInx == 0
@@ -93,24 +90,24 @@ func maxCoverage(w: openArray[WalkStateData]): WalkStateData =
   ##
   for state in w:
     if state.error.len == 0:
-      if state.tag == PivotOnTrie:
+      if state.data.tag == PivotOnTrie:
         return state                                # previously set, already
-      if result.coverage < state.coverage:
+      if result.data.coverage < state.data.coverage:
         result = state
 
 func getRecoveryStatus(w: openArray[WalkStateData]): RecoveryStatus =
   ## Check whether/how the cache structure needs to be cleaned up from a
   ## previos session.
   ##
-  case w[0].tag:
+  case w[0].data.tag:
   of Untagged:
     for n in 1 ..< w.len:
-      if w[n].tag != Untagged:
+      if w[n].data.tag != Untagged:
         return PartiallyAssembled
     return NewAssembly                              # all tags `Untagged`
   of PivotOnTrie, PivotMptAnalysed:
     for n in 1 ..< w.len:
-      if w[n].tag != OnTrie:
+      if w[n].data.tag != OnTrie:
         return PartiallyAssembled
     return AllAssembled                             # partial MPT done
   of OnTrie:
@@ -466,11 +463,6 @@ template sessionMkTrie*(ctx: SnapCtxRef; info: static[string]): auto =
     # Sort states by its distance from pivot, smallest distance first
     byDist.sort proc(x,y: WalkStateData): int = cmp(x.dist pivot,y.dist pivot)
 
-    # FIXME -- begin (will go away) ------------------------------------------
-    when UnconditionallyClearCache:
-      byDist[0].tag = Untagged                      # => restart from scratch
-    # FIXME -- end (will go away) --------------------------------------------
-
     # If necessary, update state data record pretending the cache is empty if
     # the pivot state tag has changed. Otherwise proceed with an interrupted
     # session with the `Untagged` states.
@@ -489,7 +481,7 @@ template sessionMkTrie*(ctx: SnapCtxRef; info: static[string]): auto =
       chronicles.info info & ": Clear MPT and dangling links", nStates
       ctx.pool.pivot = Opt.none(StateRoot)          # clear
       for n in 0 ..< byDist.len:
-        byDist[n].tag = Untagged                    # reset all states
+        byDist[n].data.tag = Untagged               # reset all states
       discard ctx.mptTablesClear info               # rebuild MPT tables
       discard ctx.sessionAnalyseClear info          # ..
     of NewAssembly:
@@ -521,7 +513,7 @@ template sessionMkTrie*(ctx: SnapCtxRef; info: static[string]): auto =
           continue
 
         # Check for recovery of an interrupted previous session
-        if state.tag != Untagged:
+        if state.data.tag != Untagged:
           session.updateCoverageMetrics()           # full coverage metrics
           continue
 
@@ -530,9 +522,9 @@ template sessionMkTrie*(ctx: SnapCtxRef; info: static[string]): auto =
             break body                              # otherwise ignore for now
         # End `for walkAccount()`
 
-      if state.tag == Untagged:                     # Register updated state
-        state.tag = (if session.isPivot: PivotOnTrie else: OnTrie)
-        discard session.db.putStateData(state)
+      if state.data.tag == Untagged:                # Register updated state
+        state.data.tag = (if session.isPivot: PivotOnTrie else: OnTrie)
+        discard session.db.putStateData(state.root, state.data)
 
       debug info & ": Done this state", stateInx, nStates, root, distance,
         covered=session.fullCov.totalRatio.pcStr
