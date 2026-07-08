@@ -17,6 +17,7 @@ import
   ./rpc/rpc_server,
   ./core/chain,
   ./core/tx_pool,
+  ./core/tx_pool/tx_evictor,
   ./sync/peers,
   ./sync/beacon as beacon_sync,
   ./sync/snap as snap_sync,
@@ -35,6 +36,7 @@ export
   rpc_server,
   chain,
   tx_pool,
+  tx_evictor,
   peers,
   beacon_sync,
   snap_sync,
@@ -49,6 +51,7 @@ type
     ethNode*: EthereumNode
     fc*: ForkedChainRef
     txPool*: TxPoolRef
+    txEvictor*: TxEvictorRef
     peerManager*: PeerManagerRef
     beaconSyncRef*: BeaconSyncRef
     snapSyncRef*: SnapSyncRef
@@ -81,6 +84,9 @@ proc closeWait*(nimbus: NimbusNode) {.async.} =
 
   if nimbus.backgroundPruner.isNil.not:
     waitedFutures.add nimbus.backgroundPruner.stop()
+
+  if nimbus.txEvictor.isNil.not:
+    waitedFutures.add nimbus.txEvictor.stop()
 
   waitedFutures.add nimbus.fc.stopProcessingQueue()
 
