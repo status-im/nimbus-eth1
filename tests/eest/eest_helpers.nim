@@ -77,7 +77,7 @@ proc prepareEnv*(
     var testEnv = TestEnv()
 
     let com = CommonRef.new(memDB, config,
-      statelessProviderEnabled = statelessEnabled,
+      statelessProvider = statelessEnabled,
       statelessWitnessValidation = false, # Running stateless execution separately in test runner
       optimisticStatePrefetch = parallelEnabled,
       balStatePrefetch = parallelEnabled,

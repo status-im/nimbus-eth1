@@ -306,7 +306,7 @@ proc setupCommonRef*(
     db = coreDB,
     networkId = config.networkId,
     params = config.networkParams,
-    statelessProviderEnabled = config.statelessProviderEnabled,
+    statelessProvider = config.statelessProvider,
     statelessWitnessValidation = config.statelessWitnessValidation,
     optimisticStatePrefetch = config.optimisticStatePrefetch and not disableParallelFeatures,
     balStatePrefetch = config.balStatePrefetch and not disableParallelFeatures,

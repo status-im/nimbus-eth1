@@ -37,7 +37,7 @@ procSuite "Stateless Execution Tests":
       era0 = EreDB.new(sourcePath.parentDir / "replay", "mainnet", 15537394'u64).expect("Ere files present")
       # Stateless provider is enabled so that witnesses will be generated
       # and stored in the database
-      com = CommonRef.new(db, statelessProviderEnabled = true)
+      com = CommonRef.new(db, statelessProvider = true)
       fc = ForkedChainRef.init(com, enableQueue = false)
 
   asyncTest "Stateless process block - replay mainnet ere":

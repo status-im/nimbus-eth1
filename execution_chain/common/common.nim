@@ -105,7 +105,7 @@ type
       taskpool*: Taskpool
         ## Shared task pool for offloading computation to other threads
 
-    statelessProviderEnabled*: bool
+    statelessProvider*: bool
       ## Enable the stateless provider. This turns on the features required
       ## by stateless clients such as generation and storage of block witnesses
       ## and serving these witnesses to peers over the p2p network.
@@ -205,7 +205,7 @@ proc init(com         : CommonRef,
           config      : ChainConfig,
           genesis     : Genesis,
           initializeDb: bool,
-          statelessProviderEnabled: bool,
+          statelessProvider: bool,
           statelessWitnessValidation: bool,
           optimisticStatePrefetch: bool,
           balStatePrefetch: bool,
@@ -248,7 +248,7 @@ proc init(com         : CommonRef,
   if initializeDb:
     com.initializeDb()
 
-  com.statelessProviderEnabled = statelessProviderEnabled
+  com.statelessProvider = statelessProvider
   com.statelessWitnessValidation = statelessWitnessValidation
   com.optimisticStatePrefetch = optimisticStatePrefetch
   com.balStatePrefetch = balStatePrefetch
@@ -277,7 +277,7 @@ proc new*(
     networkId: NetworkId = MainNet;
     params = networkParams(MainNet);
     initializeDb = true;
-    statelessProviderEnabled = false;
+    statelessProvider = false;
     statelessWitnessValidation = false;
     optimisticStatePrefetch = false;
     balStatePrefetch = false;
@@ -295,7 +295,7 @@ proc new*(
     params.config,
     params.genesis,
     initializeDb,
-    statelessProviderEnabled,
+    statelessProvider,
     statelessWitnessValidation,
     optimisticStatePrefetch,
     balStatePrefetch,
@@ -309,7 +309,7 @@ proc new*(
     config: ChainConfig;
     networkId: NetworkId = MainNet;
     initializeDb = true;
-    statelessProviderEnabled = false;
+    statelessProvider = false;
     statelessWitnessValidation = false;
     optimisticStatePrefetch = false;
     balStatePrefetch = false;
@@ -327,7 +327,7 @@ proc new*(
     config,
     nil,
     initializeDb,
-    statelessProviderEnabled,
+    statelessProvider,
     statelessWitnessValidation,
     optimisticStatePrefetch,
     balStatePrefetch,
@@ -346,7 +346,7 @@ func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
     genesisHash  : com.genesisHash,
     genesisHeader: com.genesisHeader,
     networkId    : com.networkId,
-    statelessProviderEnabled: com.statelessProviderEnabled,
+    statelessProvider: com.statelessProvider,
     statelessWitnessValidation: com.statelessWitnessValidation,
     optimisticStatePrefetch: com.optimisticStatePrefetch,
     balStatePrefetch: com.balStatePrefetch,

@@ -413,7 +413,7 @@ type
       defaultValue: true
       name: "debug-deserialize-fc-state" .}: bool
 
-    statelessProviderEnabled* {.
+    statelessProvider* {.
       separator: "\pSTATELESS PROVIDER OPTIONS:"
       desc: "Enable the stateless provider. This turns on the features required" &
         " by stateless clients such as generation and storage of block witnesses" &

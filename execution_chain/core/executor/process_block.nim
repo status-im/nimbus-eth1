@@ -439,7 +439,7 @@ when compileOption("threads"):
       collectLogs: bool,
   ): Result[void, string] =
     doAssert vmState.fork >= FkAmsterdam
-    doAssert not vmState.com.statelessProviderEnabled
+    doAssert not vmState.com.statelessProvider
 
     let n = transactions.len()
 
