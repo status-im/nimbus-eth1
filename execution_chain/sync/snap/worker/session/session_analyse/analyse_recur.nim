@@ -39,7 +39,7 @@ type
 # ------------------------------------------------------------------------------
 
 proc getAccKvtWrap(
-    db: MptAsmRef;
+    db: CacheDbRef;
     _: Hash32;
     key: openArray[byte];
       ): BlobResult =
@@ -248,7 +248,7 @@ proc sessionAnalyseTrieRecur*(
   let
     trd = TravDescRef(
       ctx:   ctx,
-      db:    ctx.pool.mptAsm,
+      db:    ctx.pool.cacheDB,
       msgAt: Moment.now() + threadLogTimeLimit)
 
     pivot = ctx.pool.pivot.valueOr:

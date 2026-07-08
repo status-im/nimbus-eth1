@@ -25,7 +25,7 @@ proc reCacheContract(
     kpp: KpPair;
     info: static[string];
       ): Opt[void] =
-  buddy.ctx.pool.mptAsm.putCodeMissKvt(kpp).isOkOr:
+  buddy.ctx.pool.cacheDB.putCodeMissKvt(kpp).isOkOr:
     chronicles.error info & ": Error re-caching missing contract",
       peer=buddy.peer, `error`=error
     return err()
@@ -36,7 +36,7 @@ proc reCacheContracts(
     kpq: openArray[KpPair];
     info: static[string];
       ): Opt[void] =
-  buddy.ctx.pool.mptAsm.putCodeMissKvt(kpq).isOkOr:
+  buddy.ctx.pool.cacheDB.putCodeMissKvt(kpq).isOkOr:
     chronicles.error info & ": Error re-caching missing contracts",
       peer=buddy.peer, `error`=error
     return err()
@@ -47,7 +47,7 @@ proc delCachedContracts(
     kpq: openArray[KpPair];
     info: static[string];
       ): Opt[void] =
-  buddy.ctx.pool.mptAsm.delCodeMissKvt(kpq.mapIt it.key).isOkOr:
+  buddy.ctx.pool.cacheDB.delCodeMissKvt(kpq.mapIt it.key).isOkOr:
     chronicles.error info & ": Error deleting missing contracts",
       peer=buddy.peer, `error`=error
     return err()
@@ -58,7 +58,7 @@ proc persistContracts(
     kvq: openArray[KvPair];
     info: static[string];
       ): Opt[void] =
-  buddy.ctx.pool.mptAsm.putCodeKvt(kvq).isOkOr:
+  buddy.ctx.pool.cacheDB.putCodeKvt(kvq).isOkOr:
     chronicles.error info & ": Error persisting contracts",
       peer=buddy.peer, `error`=error
     return err()
@@ -80,7 +80,7 @@ proc getMiissingCodeList(
       ): seq[KpPair] =
   ## Fetch some missing contracts
   var kpq: seq[KpPair]
-  for w in buddy.ctx.pool.mptAsm.walkCodeMissKvt:
+  for w in buddy.ctx.pool.cacheDB.walkCodeMissKvt:
     kpq.add w
     if nFetchByteCodesMax <= kpq.len:
       break
@@ -117,7 +117,7 @@ template persistCodesRange(
       break body
 
     var nHashError = 0
-    buddy.ctx.pool.mptAsm.withMissContracts():
+    buddy.ctx.pool.cacheDB.withMissContracts():
       # Temporarily remove data from disk.
       buddy.delCachedContracts(kpq, info).isOkOr:
         break body
@@ -182,7 +182,7 @@ template downloadImpl(
   block body:
     let
       ctx = buddy.ctx
-      adb = ctx.pool.mptAsm
+      adb = ctx.pool.cacheDB
       peerID = buddy.peerID
 
       peer {.inject,used.} = $buddy.peer            # logging only

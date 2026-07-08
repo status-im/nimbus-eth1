@@ -28,7 +28,7 @@ type
 
   MkTrieSession = object of SessionTicker
     ctx: SnapCtxRef
-    db: MptAsmRef
+    db: CacheDbRef
 
     nStates: int                                    # total of available states
     stateInx: int                                   # index of current state
@@ -56,12 +56,12 @@ proc init(
       ) =
   procCall init(SessionTicker(w))                   # base method initialiser
   w.ctx = ctx
-  w.db = ctx.pool.mptAsm
+  w.db = ctx.pool.cacheDB
   w.nStates = nStates
   w.fullCov = ItemKeyRangeSet.init()
 
 proc mptTablesClear(ctx: SnapCtxRef, info: static[string]): Opt[void] =
-  let db = ctx.pool.mptAsm
+  let db = ctx.pool.cacheDB
   db.clearAccKvt().isOkOr:
     error info & ": Cannot reset accounts MPT", `error`=error
     return err()
@@ -440,7 +440,7 @@ template sessionMkTrie*(ctx: SnapCtxRef; info: static[string]): auto =
   var bodyRc = Opt[Duration].err()
   block body:
     var
-      byDist = ctx.pool.mptAsm.walkStateData().toSeq()
+      byDist = ctx.pool.cacheDB.walkStateData().toSeq()
       session = MkTrieSession()                      # session environment
     let
       pivot = byDist.maxCoverage()                   # assign pivot state

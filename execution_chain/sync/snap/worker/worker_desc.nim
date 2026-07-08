@@ -17,8 +17,8 @@ import
   ../../wire_protocol/types as wire_types,
   ./[state_db, worker_const]
 
-from ./mpt/mpt_cache
-  import MptAsmRef
+from ./mpt/mpt_cache/cache_desc
+  import CacheDbRef
 
 # Running beacon syncer in tandem
 from ../../beacon
@@ -117,7 +117,7 @@ type
     beaconTarget*: bool              ## inital beacon target if `true`
     stateDB*: StateDbRef             ## Incomplete states DB
     baseDir*: string                 ## Path for assembly database
-    mptAsm*: MptAsmRef               ## Assembly cache database
+    cacheDB*: CacheDbRef             ## Downloas and assembly cache database
     pivot*: Opt[StateRoot]           ## Pivot root for analysys, healing, etc.
     headersSynced*: bool             ## beacon sync headers
 

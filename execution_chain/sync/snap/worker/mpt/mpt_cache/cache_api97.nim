@@ -50,7 +50,7 @@ template key97*(col: MptAsmCol; key1, key2: untyped): openArray[byte] =
   key.toOpenArray(0,96)
 
 template get97*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     col: MptAsmCol;
     root: StateRoot;
     acc: ItemKey;
@@ -62,7 +62,7 @@ template get97*(
   db.adb.rGet(col.key97(root, account, startHash))
 
 template put97*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     col: MptAsmCol;
     root: StateRoot;
     acc: ItemKey;
@@ -75,7 +75,7 @@ template put97*(
   db.adb.rPut(col.key97(root, account, startHash), data)
 
 template del97*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     col: MptAsmCol;
     root: StateRoot;
     acc: ItemKey;

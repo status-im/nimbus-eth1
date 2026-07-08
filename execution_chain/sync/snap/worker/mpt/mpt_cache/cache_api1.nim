@@ -17,26 +17,26 @@ import
 # ------------------------------------------------------------------------------
 
 template get1*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     col: MptAsmCol;
       ): untyped =
   db.adb.rGet @[byte col]
 
 template put1*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     col: MptAsmCol;
     data: openArray[byte];
       ): untyped =
   db.adb.rPut(@[byte col], data)
 
 template del1*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     col: MptAsmCol;
       ): untyped =
   db.adb.rDel @[byte col]
 
 template clr1*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     col: MptAsmCol;
       ): untyped =
   db.adb.rClear col

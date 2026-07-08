@@ -37,7 +37,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc hasStateData*(
-    db: MptAsmRef;
+    db: CacheDbRef;
       ): Result[bool,string] =
   for (_,value) in db.adb.colWalk33 cStateData.key33():
     value.decodeStateData().isOkOr:
@@ -46,7 +46,7 @@ proc hasStateData*(
   ok(false)
 
 proc getStateData*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     root: StateRoot;
       ): Result[CacheStateData,string] =
   let data = db.get33(cStateData, root).valueOr:
@@ -54,7 +54,7 @@ proc getStateData*(
   data.decodeStateData()
 
 proc putStateData*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     root: StateRoot;
     data: CacheStateData;
       ): PutResult =
@@ -62,7 +62,7 @@ proc putStateData*(
     data.hash, data.number, data.touch, data.tag, data.coverage))
 
 proc putStateData*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     root: StateRoot;
     hash: BlockHash;
     number: BlockNumber;
@@ -73,13 +73,13 @@ proc putStateData*(
   db.put33(cStateData, root,
            encodeStateData(hash, number, touch, tag, coverage))
 
-proc delStateData*(db: MptAsmRef; root: StateRoot): DelResult =
+proc delStateData*(db: CacheDbRef; root: StateRoot): DelResult =
   db.del33(cStateData, root)
 
-proc clearStateData*(db: MptAsmRef): DelResult =
+proc clearStateData*(db: CacheDbRef): DelResult =
   db.clr1 cStateData
 
-iterator walkStateData*(db: MptAsmRef): WalkStateData =
+iterator walkStateData*(db: CacheDbRef): WalkStateData =
   for (key,value) in db.adb.colWalk33 cStateData.key33():
     let w = value.decodeStateData().valueOr:
         var oops: WalkStateData

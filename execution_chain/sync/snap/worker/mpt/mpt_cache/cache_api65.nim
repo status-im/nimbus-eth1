@@ -57,7 +57,7 @@ template key65*(col: MptAsmCol): openArray[byte] =
   key.toOpenArray(0,64)
 
 template getAtMost65*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     col: MptAsmCol;
     key1: untyped;
     key2: openArray[byte];
@@ -65,7 +65,7 @@ template getAtMost65*(
   db.adb.rGet col.keyAtMost65(key1, key2)
 
 template putAtMost65*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     col: MptAsmCol;
     key1: untyped;
     key2: openArray[byte];
@@ -77,7 +77,7 @@ template putAtMost65*(
     db.adb.rPut(col.keyAtMost65(key1, key2), data)
 
 template delAtMost65*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     col: MptAsmCol;
     key1: untyped;
     key2: openArray[byte];
@@ -94,7 +94,7 @@ template key65*(col: MptAsmCol; key1, key2: untyped): openArray[byte] =
   key.toOpenArray(0,64)
 
 template get65*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     col: MptAsmCol;
     root: StateRoot;
     start: ItemKey;
@@ -103,7 +103,7 @@ template get65*(
   db.adb.rGet col.key65(root, startHash)
 
 template get65*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     col: MptAsmCol;
     path: Hash32;
     key: Hash32;
@@ -111,7 +111,7 @@ template get65*(
   db.adb.rGet col.key65(path, key)
 
 template put65*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     col: MptAsmCol;
     root: StateRoot;
     start: ItemKey;
@@ -121,7 +121,7 @@ template put65*(
   db.adb.rPut(col.key65(root, startHash), data)
 
 template put65*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     col: MptAsmCol;
     path: Hash32;
     key: Hash32;
@@ -130,7 +130,7 @@ template put65*(
   db.adb.rPut(col.key65(path, key), data)
 
 template del65*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     col: MptAsmCol;
     root: StateRoot;
     start: ItemKey;
@@ -139,7 +139,7 @@ template del65*(
   db.adb.rDel col.key65(root, startHash)
 
 template del65*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     col: MptAsmCol;
     path: Hash32;
     key: Hash32;

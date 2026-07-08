@@ -23,7 +23,7 @@ logScope:
 type
   ResumeSession = object of SessionTicker
     ctx: SnapCtxRef
-    db: MptAsmRef
+    db: CacheDbRef
     nStates: int                                    # total of available states
     stateInx: int                                   # index of current state
     state: StateDataRef                             # current state data
@@ -40,7 +40,7 @@ proc init(
       ) =
   procCall init(SessionTicker(w))                   # base method initialiser
   w.ctx = ctx
-  w.db = ctx.pool.mptAsm
+  w.db = ctx.pool.cacheDB
   w.nStates = nStates
 
 # ------------------------------------------------------------------------------
@@ -127,7 +127,7 @@ template sessionResume*(
   block body:
     let
       sdb = ctx.pool.stateDB
-      adb = ctx.pool.mptAsm
+      adb = ctx.pool.cacheDB
     var
       # Get list of sorted states available, the most recent ones first.
       byTouch = adb.walkStateData().toSeq()       # list to be sorted, below

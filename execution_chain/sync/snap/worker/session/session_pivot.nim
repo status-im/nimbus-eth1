@@ -34,7 +34,7 @@ proc findPivotStateData(
       ): Opt[WalkStateData] =
   ## ..
   var state: WalkStateData
-  for w in ctx.pool.mptAsm.walkStateData():
+  for w in ctx.pool.cacheDB.walkStateData():
     if w.error.len == 0 and
        PivotOnTrie <= w.data.tag:
       if PivotOnTrie <= state.data.tag:             # is `w` another pivot?

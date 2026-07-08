@@ -63,7 +63,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc getAccount*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     root: StateRoot;
     start: ItemKey;
       ): AccountDataResult =
@@ -72,7 +72,7 @@ proc getAccount*(
   data.decodeAccountData()
 
 proc putAccount*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     root: StateRoot;
     start: ItemKey;
     limit: ItemKey;
@@ -83,13 +83,13 @@ proc putAccount*(
   db.put65(
     cAccount, root, start, encodeAccountData(limit, accounts, proof, peerID))
 
-proc delAccount*(db: MptAsmRef; root: StateRoot; start: ItemKey): DelResult =
+proc delAccount*(db: CacheDbRef; root: StateRoot; start: ItemKey): DelResult =
   db.del65(cAccount, root, start)
 
-proc clearAccount*(db: MptAsmRef): DelResult =
+proc clearAccount*(db: CacheDbRef): DelResult =
   db.clr1 cAccount
 
-iterator walkAccount*(db: MptAsmRef): WalkAccountData =
+iterator walkAccount*(db: CacheDbRef): WalkAccountData =
   for (key1,key2,value) in db.adb.colWalk65 cAccount.key65():
     let
       root = StateRoot(key1)
@@ -103,7 +103,7 @@ iterator walkAccount*(db: MptAsmRef): WalkAccountData =
         continue
     yield (root, start, w, "")
 
-iterator walkAccount*(db: MptAsmRef, root: StateRoot): WalkAccountData =
+iterator walkAccount*(db: CacheDbRef, root: StateRoot): WalkAccountData =
   ## Variant of `walkAccount()` for fixed `root`
   for (key1,key2,value) in db.adb.colWalk65 cAccount.key65(root):
     if StateRoot(key1) != root:
@@ -122,7 +122,7 @@ iterator walkAccount*(db: MptAsmRef, root: StateRoot): WalkAccountData =
 # -------------
 
 proc getStoSlot*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     root: StateRoot;
     account: ItemKey;
     start: ItemKey;
@@ -132,7 +132,7 @@ proc getStoSlot*(
   data.decodeStoSlotData()
 
 proc putStoSlot*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     root: StateRoot;
     acc: ItemKey;
     start: ItemKey;
@@ -145,7 +145,7 @@ proc putStoSlot*(
     cStoSlot, root, acc, start, encodeStoSlotData(limit, slot, proof, peerID))
 
 proc putStoSlot*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     root: StateRoot;
     acc: ItemKey;
     slot: seq[StorageItem];
@@ -156,18 +156,18 @@ proc putStoSlot*(
     encodeStoSlotData(high(ItemKey), slot, EmptyProof, peerID))
 
 proc delStoSlot*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     root: StateRoot;
     acc: ItemKey;
     start: ItemKey;
       ): DelResult =
   db.del97(cStoSlot, root, acc, start)
 
-proc clearStoSlot*(db: MptAsmRef): DelResult =
+proc clearStoSlot*(db: CacheDbRef): DelResult =
   db.clr1 cStoSlot
 
 iterator walkStoSlot*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     root: StateRoot;
     acc: ItemKey;
       ): WalkStoSlotData =
@@ -192,7 +192,7 @@ iterator walkStoSlot*(
 # -------------
 
 proc getByteCode*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     root: StateRoot;
     start: ItemKey;
     limit: ItemKey;
@@ -202,7 +202,7 @@ proc getByteCode*(
   data.decodeByteCodeData()
 
 proc putByteCode*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     root: StateRoot;
     start: ItemKey;
     limit: ItemKey;
@@ -211,14 +211,14 @@ proc putByteCode*(
       ): PutResult =
   db.put65(cByteCode, root, start, encodeByteCodeData(limit, codes, peerID))
 
-proc delByteCode*(db: MptAsmRef; root: StateRoot; start: ItemKey): DelResult =
+proc delByteCode*(db: CacheDbRef; root: StateRoot; start: ItemKey): DelResult =
   db.del65(cByteCode, root, start)
 
-proc clearByteCode*(db: MptAsmRef): DelResult =
+proc clearByteCode*(db: CacheDbRef): DelResult =
   db.clr1 cByteCode
 
 iterator walkByteCode*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     root: StateRoot;
     start: ItemKey;
       ): WalkByteCodeData =

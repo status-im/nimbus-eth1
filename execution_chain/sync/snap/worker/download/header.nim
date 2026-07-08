@@ -27,7 +27,7 @@ proc storeCachedHeaders(
   var count = 0
   for header in ctx.hdrCache.incrFrom():
     if leastBn <= header.number:
-      ctx.pool.mptAsm.putHeader(header).isOkOr:
+      ctx.pool.cacheDB.putHeader(header).isOkOr:
         error info & ": Unable to register cached headers",
           blockNumber=header.number, syncState=($ctx.syncState), `error`=error
         return
@@ -39,20 +39,20 @@ proc minStateNum(
     ctx: SnapCtxRef;
     info: static[string];
       ): BlockNumber =
-  let haveData = ctx.pool.mptAsm.hasStateData().valueOr:
+  let haveData = ctx.pool.cacheDB.hasStateData().valueOr:
     chronicles.error info & ": Failed to check exisitence of state data",
       `error`=error
     return BlockNumber(0)
   if haveData:
     result = BlockNumber high(uint64)
-    for w in ctx.pool.mptAsm.walkStateData():
+    for w in ctx.pool.cacheDB.walkStateData():
       if w.error.len == 0 and w.data.number < result:
         result = w.data.number
   # BlockNumber(0)
 
 proc getLastHeaderOrGenesis(ctx: SnapCtxRef): Header =
   ## Ignore errors
-  var hdr = ctx.pool.mptAsm.lastHeader().valueOr:
+  var hdr = ctx.pool.cacheDB.lastHeader().valueOr:
     return ctx.chain.com.genesisHeader()
   if hdr.isNone():
     return ctx.chain.com.genesisHeader()

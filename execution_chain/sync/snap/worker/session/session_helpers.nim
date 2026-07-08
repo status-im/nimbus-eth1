@@ -29,7 +29,7 @@ proc getPivotData(
       ): Opt[(StateRoot,CacheStateData)] =
   let root = ctx.pool.pivot.valueOr:
     return err()
-  var data = ctx.pool.mptAsm.getStateData(root).valueOr:
+  var data = ctx.pool.cacheDB.getStateData(root).valueOr:
     error info & ": Cached pivot inaccessible", root=root.toStr, `error`=error
     return err()
   ok((root, move data))
@@ -97,7 +97,7 @@ proc setPivotTag*(
   var (root,pivot) = ctx.getPivotData(info).valueOr:
     return err()
   pivot.tag = tag
-  ctx.pool.mptAsm.putStateData(root,pivot).isOkOr:
+  ctx.pool.cacheDB.putStateData(root,pivot).isOkOr:
     error info & ": Error updating cached pivot",
       root=root.Hash32.short, `error`=error
     return err()

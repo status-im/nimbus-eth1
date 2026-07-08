@@ -29,18 +29,18 @@ template key9*(col: MptAsmCol): openArray[byte] =
   key[0] = col.ord
   key.toOpenArray(0,8)
 
-template get9*(db: MptAsmRef; col: MptAsmCol; key1: uint64): untyped =
+template get9*(db: CacheDbRef; col: MptAsmCol; key1: uint64): untyped =
   db.adb.rGet(col.key9 key1)
 
 template put9*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     col: MptAsmCol;
     key1: uint64;
     data: openArray[byte];
       ): untyped =
   db.adb.rPut(col.key9 key1, data)
 
-template del9*(db: MptAsmRef; col: MptAsmCol; key1: uint64): untyped =
+template del9*(db: CacheDbRef; col: MptAsmCol; key1: uint64): untyped =
   db.adb.rDel(col.key9 key1)
 
 # ------------------------------------------------------------------------------

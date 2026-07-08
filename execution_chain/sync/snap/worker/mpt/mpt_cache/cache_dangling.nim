@@ -42,53 +42,53 @@
 import
   pkg/[eth/common, results],
   ../mpt_desc,
-  ./[cache_api33, cache_api65,
-     cache_const, cache_desc, cache_iter, cache_r_cmd]
+  ./[cache_api1, cache_api33, cache_api65,
+     cache_const, cache_desc, cache_iter]
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 
-proc hasAccDnglKvt*(db: MptAsmRef; key: openArray[byte]): BoolResult =
+proc hasAccDnglKvt*(db: CacheDbRef; key: openArray[byte]): BoolResult =
   let data = db.getAtMost33(cAccDnglKvt, key).valueOr:
     return err(error)
   ok(0 < data.len)
 
-proc getAccDnglKvt*(db: MptAsmRef; key: openArray[byte]): BlobResult =
+proc getAccDnglKvt*(db: CacheDbRef; key: openArray[byte]): BlobResult =
   var data = db.getAtMost33(cAccDnglKvt, key).valueOr:
     return err(error)
   ok(move data)
 
-proc putAccDnglKvt*(db: MptAsmRef; key, path: openArray[byte]): PutResult =
+proc putAccDnglKvt*(db: CacheDbRef; key, path: openArray[byte]): PutResult =
   db.putAtMost33(cAccDnglKvt, key, path)
 
-proc putAccDnglKvt*(db: MptAsmRef, kvp: openArray[KpPair]): PutResult =
+proc putAccDnglKvt*(db: CacheDbRef, kvp: openArray[KpPair]): PutResult =
   for w in kvp:
     db.putAtMost33(cAccDnglKvt, w.key, w.path).isOkOr:
       return err(error)
   ok()
 
-proc delAccDnglKvt*(db: MptAsmRef, key: openArray[byte]): DelResult =
+proc delAccDnglKvt*(db: CacheDbRef, key: openArray[byte]): DelResult =
   db.delAtMost33(cAccDnglKvt, key)
 
-proc delAccDnglKvt*(db: MptAsmRef, keys: openArray[seq[byte]]): DelResult =
+proc delAccDnglKvt*(db: CacheDbRef, keys: openArray[seq[byte]]): DelResult =
   for key in keys:
     db.delAtMost33(cAccDnglKvt, key).isOkOr:
       return err(error)
   ok()
 
-proc clearAccDnglKvt*(db: MptAsmRef): DelResult =
-  db.adb.rClear(cAccDnglKvt)
+proc clearAccDnglKvt*(db: CacheDbRef): DelResult =
+  db.clr1 cAccDnglKvt
 
-iterator walkAccDnglKvt*(db: MptAsmRef): KpPair =
+iterator walkAccDnglKvt*(db: CacheDbRef): KpPair =
   for (key,path) in db.adb.colWalkAtLeast1 @[byte cAccDnglKvt]:
     yield (key,path)
 
 # -------------
 
 proc hasStoDnglKvt*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     acc: Hash32;
     key: openArray[byte];
       ): BoolResult =
@@ -97,7 +97,7 @@ proc hasStoDnglKvt*(
   ok(0 < data.len)
 
 proc getStoDnglKvt*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     acc: Hash32;
     key: openArray[byte];
       ): BlobResult =
@@ -106,7 +106,7 @@ proc getStoDnglKvt*(
   ok(move data)
 
 proc putStoDnglKvt*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     acc: Hash32;
     key: openArray[byte];
     data: openArray[byte];
@@ -114,7 +114,7 @@ proc putStoDnglKvt*(
   db.putAtMost65(cStoDnglKvt, acc, key, data)
 
 proc putStoDnglKvt*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     acc: Hash32;
     kvp: openArray[KpPair];
       ): PutResult =
@@ -124,14 +124,14 @@ proc putStoDnglKvt*(
   ok()
 
 proc delStoDnglKvt*(
-    db: MptAsmRef,
+    db: CacheDbRef,
     acc: Hash32;
     key: openArray[byte];
       ): DelResult =
   db.delAtMost65(cStoDnglKvt, acc, key)
 
 proc delStoDnglKvt*(
-    db: MptAsmRef,
+    db: CacheDbRef,
     acc: Hash32;
     keys: openArray[seq[byte]];
       ): DelResult =
@@ -140,44 +140,44 @@ proc delStoDnglKvt*(
       return err(error)
   ok()
 
-proc clearStoDnglKvt*(db: MptAsmRef, acc: Hash32): DelResult =
+proc clearStoDnglKvt*(db: CacheDbRef, acc: Hash32): DelResult =
   for (key1, key2,_) in db.adb.colWalkAtLeast33 key33(cStoDnglKvt, acc):
     db.delAtMost65(cStoDnglKvt, key1, key2).isOkOr:
       return err(error)
   ok()
 
-proc clearStoDnglKvt*(db: MptAsmRef): DelResult =
-  db.adb.rClear(cStoDnglKvt)
+proc clearStoDnglKvt*(db: CacheDbRef): DelResult =
+  db.clr1 cStoDnglKvt
 
-iterator walkStoDnglKvt*(db: MptAsmRef, acc: Hash32): KkpTriple =
+iterator walkStoDnglKvt*(db: CacheDbRef, acc: Hash32): KkpTriple =
   for (key1, key2, path) in db.adb.colWalkAtLeast33 key33(cStoDnglKvt, acc):
     yield (key1, key2, path)
 
-iterator walkStoDnglKvt*(db: MptAsmRef): KkpTriple =
+iterator walkStoDnglKvt*(db: CacheDbRef): KkpTriple =
   for (key,path) in db.adb.colWalkAtLeast1 @[byte cStoDnglKvt]:
     if 32 < key.len:
       yield (key[0..31], key[32..^1], path)
 
 # -------------
 
-proc hasCodeMissKvt*(db: MptAsmRef; key: openArray[byte]): BoolResult =
+proc hasCodeMissKvt*(db: CacheDbRef; key: openArray[byte]): BoolResult =
   let data = db.getAtMost33(cCodeMissKvt, key).valueOr:
     return err(error)
   ok(0 < data.len)
 
-proc getCodeMissKvt*(db: MptAsmRef; key: openArray[byte]): BlobResult =
+proc getCodeMissKvt*(db: CacheDbRef; key: openArray[byte]): BlobResult =
   var data = db.getAtMost33(cCodeMissKvt, key).valueOr:
     return err(error)
   ok(move data)
 
-proc putCodeMissKvt*(db: MptAsmRef; key, path: openArray[byte]): PutResult =
+proc putCodeMissKvt*(db: CacheDbRef; key, path: openArray[byte]): PutResult =
   db.putAtMost33(cCodeMissKvt, key, path)
 
-proc putCodeMissKvt*(db: MptAsmRef; w: KpPair): PutResult =
+proc putCodeMissKvt*(db: CacheDbRef; w: KpPair): PutResult =
   db.putAtMost33(cCodeMissKvt, w.key, w.path)
 
 proc putCodeMissKvt*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     kvp: openArray[KpPair];
       ): PutResult =
   for w in kvp:
@@ -185,25 +185,25 @@ proc putCodeMissKvt*(
       return err(error)
   ok()
 
-proc delCodeMissKvt*(db: MptAsmRef, key: openArray[byte]): DelResult =
+proc delCodeMissKvt*(db: CacheDbRef, key: openArray[byte]): DelResult =
   db.delAtMost33(cCodeMissKvt, key)
 
-proc delCodeMissKvt*(db: MptAsmRef, keys: openArray[seq[byte]]): DelResult =
+proc delCodeMissKvt*(db: CacheDbRef, keys: openArray[seq[byte]]): DelResult =
   for key in keys:
     db.delAtMost33(cCodeMissKvt, key).isOkOr:
       return err(error)
   ok()
 
-proc clearCodeMissKvt*(db: MptAsmRef): DelResult =
-  db.adb.rClear(cCodeMissKvt)
+proc clearCodeMissKvt*(db: CacheDbRef): DelResult =
+  db.clr1 cCodeMissKvt
 
-iterator walkCodeMissKvt*(db: MptAsmRef): KpPair =
+iterator walkCodeMissKvt*(db: CacheDbRef): KpPair =
   for (key, path) in db.adb.colWalkAtLeast1 @[byte cCodeMissKvt]:
     yield (key, path)
 
 # -------------
 
-template withDnglAccSto*(db: MptAsmRef, code: untyped): untyped =
+template withDnglAccSto*(db: CacheDbRef, code: untyped): untyped =
   ## Run `code` while advisory lock is set. The only use of this lock is
   ## to make sure that the `hasDnglAccSto()` returns empty only if
   ##
@@ -215,7 +215,7 @@ template withDnglAccSto*(db: MptAsmRef, code: untyped): untyped =
     defer: db.dnglLock.dec
     code
 
-proc hasDnglAccSto*(db: MptAsmRef): bool =
+proc hasDnglAccSto*(db: CacheDbRef): bool =
   ## Return `true` if a lock was set or some of the `*DnglKvt` tables
   ## contain data.
   ##
@@ -227,7 +227,7 @@ proc hasDnglAccSto*(db: MptAsmRef): bool =
     return true
   # false
 
-template withMissContracts*(db: MptAsmRef, code: untyped): untyped =
+template withMissContracts*(db: CacheDbRef, code: untyped): untyped =
   ## Run `code` while advisory lock is set. The only use of this lock is
   ## to make sure that the `hasDangling()` returns empty only if
   ##
@@ -239,7 +239,7 @@ template withMissContracts*(db: MptAsmRef, code: untyped): untyped =
     defer: db.cntrLock.dec
     code
 
-proc hasMissContracts*(db: MptAsmRef): bool =
+proc hasMissContracts*(db: CacheDbRef): bool =
   if 0 < db.cntrLock:
     return true
   for _ in db.walkCodeMissKvt:

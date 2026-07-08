@@ -31,14 +31,14 @@ template keyAtMost33(col: MptAsmCol; key: openArray[byte]): openArray[byte] =
 # ------------------------------------------------------------------------------
 
 template getAtMost33*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     col: MptAsmCol;
     key: openArray[byte];
       ): untyped =
   db.adb.rGet(col.keyAtMost33 key)
 
 template putAtMost33*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     col: MptAsmCol;
     key: openArray[byte];
     data: openArray[byte];
@@ -49,7 +49,7 @@ template putAtMost33*(
     db.adb.rPut(col.keyAtMost33 key, data)
 
 template delAtMost33*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     col: MptAsmCol;
     key: openArray[byte];
       ): untyped =
@@ -74,18 +74,18 @@ template key33*(col: MptAsmCol): openArray[byte] =
   key[0] = col.ord
   key.toOpenArray(0,32)
 
-template get33*(db: MptAsmRef; col: MptAsmCol; key1: untyped): untyped =
+template get33*(db: CacheDbRef; col: MptAsmCol; key1: untyped): untyped =
   db.adb.rGet(col.key33 key1)
 
 template put33*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     col: MptAsmCol;
     key1: untyped;
     data: openArray[byte];
       ): untyped =
   db.adb.rPut(col.key33 key1, data)
 
-template del33*(db: MptAsmRef; col: MptAsmCol; key1: untyped): untyped =
+template del33*(db: CacheDbRef; col: MptAsmCol; key1: untyped): untyped =
   db.adb.rDel(col.key33 key1)
 
 # ------------------------------------------------------------------------------

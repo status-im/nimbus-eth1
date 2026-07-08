@@ -54,7 +54,7 @@ type
   # ----------
 
   WalkTrieGetCB* = proc(
-    db: MptAsmRef, base: Hash32, key: openArray[byte]
+    db: CacheDbRef, base: Hash32, key: openArray[byte]
       ): BlobResult {.gcsafe, raises: [].}
 
   WalkStats* = tuple                                # MPT traversal statistics
@@ -82,7 +82,7 @@ type
 
   TravDescRef* = ref object                         # MPT traversal descriptor
     ctx*: SnapCtxRef                                # snap context
-    db*: MptAsmRef                                  # database
+    db*: CacheDbRef                                 # database
     msgAt*: Moment                                  # occasional logging
     napAt*: Moment                                  # occasional thread switch
     stats*: WalkStats                               # MPT traversal statistics
@@ -99,7 +99,7 @@ template toKey*(rlp: Rlp): seq[byte] =
 # ----------
 
 proc clearDanglTables*(ctx: SnapCtxRef, info: static[string]): Opt[void] =
-  let db = ctx.pool.mptAsm
+  let db = ctx.pool.cacheDB
   db.clearAccDnglKvt().isOkOr:
     error info & ": Cannot reset dangling accounts", `error`=error
     return err()

@@ -26,18 +26,18 @@ logScope:
 # Private constructor helpers
 # ------------------------------------------------------------------------------
 
-proc closeDb(db: MptAsmRef) =
+proc closeDb(db: CacheDbRef) =
   if not db.adb.isNil:
     db.adb.close()
     db.adb = RocksDbReadWriteRef(nil)
 
-proc openDb(db: MptAsmRef; info: static[string]): bool =
+proc openDb(db: CacheDbRef; info: static[string]): bool =
   db.adb = db.dir.distinctBase.openRocksDb().valueOr:
     error info & ": Cannot create assembly DB", dir=db.dir, `error`=error
     return false
   true
 
-proc newDbFolder(db: MptAsmRef; info: static[string]): bool =
+proc newDbFolder(db: CacheDbRef; info: static[string]): bool =
   if db.dir.dirExists:
     let bakDir = Path(db.dir.distinctBase & "~")
     block backupOldFolder:
@@ -71,7 +71,7 @@ proc newDbFolder(db: MptAsmRef; info: static[string]): bool =
 # Public constructor
 # ------------------------------------------------------------------------------
 
-proc close*(db: MptAsmRef, wipe = false) =
+proc close*(db: CacheDbRef, wipe = false) =
   ## Close database unless done yet. If the argument `wipe` is set
   ## `true`, then the database will be physically deleted.
   ##
@@ -91,7 +91,7 @@ proc close*(db: MptAsmRef, wipe = false) =
     except CatchableError:
       discard
 
-proc clear*(db: MptAsmRef; info: static[string]): bool =
+proc clear*(db: CacheDbRef; info: static[string]): bool =
   ## Close database and move it to a backup directory, then re-open a new
   ## database. Any previous backup database will be deleted.
   ##
@@ -102,15 +102,15 @@ proc clear*(db: MptAsmRef; info: static[string]): bool =
   db.newDbFolder(info) and db.openDb(info)
 
 proc init*(
-    T: type MptAsmRef;
+    T: type CacheDbRef;
     baseDir: string;
     info: static[string];
       ): Opt[T] =
   ## Create or open an existing database. If the ergument `newDb` is set
-  ## `false`, the database is opened. Otherwise, `MptAsmRef.init(dir,true)`
+  ## `false`, the database is opened. Otherwise, `CacheDbRef.init(dir,true)`
   ## is roughly equivalent to
   ## ::
-  ##   let db = MptAsmRef.init(dir,false).expect "value"
+  ##   let db = CacheDbRef.init(dir,false).expect "value"
   ##   discard db.clear()
   ##
   if baseDir.len == 0:

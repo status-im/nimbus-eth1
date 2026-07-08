@@ -131,7 +131,7 @@ template runErrand(
 # ------------------------------------------------------------------------------
 
 template getAccKvtWrap(
-    db: MptAsmRef;
+    db: CacheDbRef;
     _: Hash32;
     key: openArray[byte];
       ): BlobResult =
@@ -379,7 +379,7 @@ template sessionAnalyseTrieIter*(cty: SnapCtxRef, info: static[string]): auto =
     let
       trd = TravDescRef(
         ctx:   cty,
-        db:    cty.pool.mptAsm,
+        db:    cty.pool.cacheDB,
         msgAt: Moment.now() + threadLogTimeLimit,
         napAt: Moment.now() + threadSwitchRunLimit)
 

@@ -11,9 +11,7 @@
 {.push raises: [].}
 
 import
-  #std/[dirs, paths, typetraits],
-  std/[paths],
-  #pkg/[chronicles, chronos, eth/common, results, rocksdb],
+  std/paths,
   pkg/[chronos, eth/common, rocksdb],
   pkg/stew/interval_set,
   ../../../../wire_protocol/snap/snap_types,
@@ -21,6 +19,12 @@ import
   ../mpt_desc
 
 type
+  CacheDbRef* = ref object
+    adb*: RocksDbReadWriteRef
+    dir*: Path
+    dnglLock*: int                                  # advisory lock
+    cntrLock*: int                                  # advisory lock
+
   BoolResult* = Result[bool,string]
     ## Shortcut
 
@@ -61,12 +65,6 @@ type
 
   DelResult* = Result[void,string]
     ## Shortcut
-
-  MptAsmRef* = ref object
-    adb*: RocksDbReadWriteRef
-    dir*: Path
-    dnglLock*: int                                  # advisory lock
-    cntrLock*: int                                  # advisory lock
 
   StateDataTag* = enum
     Untagged = 0                                    # well, still a tag :)

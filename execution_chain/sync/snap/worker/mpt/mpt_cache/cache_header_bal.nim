@@ -32,19 +32,19 @@
 
 import
   pkg/[eth/common, results, stew/endians2],
-  ./[cache_api9, cache_desc,
-     cache_const, cache_iter, cache_r_cmd, cache_rlp]
+  ./[cache_api1, cache_api9, cache_desc,
+     cache_const, cache_iter, cache_rlp]
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc hasHeader*(db: MptAsmRef, bn = BlockNumber(0)): BoolResult =
+proc hasHeader*(db: CacheDbRef, bn = BlockNumber(0)): BoolResult =
   let data = db.get9(cHeader, bn).valueOr:
     return err(error)
   ok(0 < data.len)
 
-proc getHeader*(db: MptAsmRef, bn: BlockNumber): OptHeaderResult =
+proc getHeader*(db: CacheDbRef, bn: BlockNumber): OptHeaderResult =
   let data = db.get9(cHeader, bn).valueOr:
     return err(error)
   if data.len == 0:
@@ -53,7 +53,7 @@ proc getHeader*(db: MptAsmRef, bn: BlockNumber): OptHeaderResult =
     return err(error)
   ok Opt.some(hdr)
 
-proc getBlockHash*(db: MptAsmRef, bn: BlockNumber): OptHashResult =
+proc getBlockHash*(db: CacheDbRef, bn: BlockNumber): OptHashResult =
   db.getHeader(bn + 1).isErrOr:
     if value.isSome():
       return ok Opt.some(value.unsafeGet.parentHash)
@@ -63,28 +63,28 @@ proc getBlockHash*(db: MptAsmRef, bn: BlockNumber): OptHashResult =
     return ok Opt.none(Hash32)
   ok Opt.some(hdr.unsafeGet.computeBlockHash)
 
-proc lastHeader*(db: MptAsmRef): OptHeaderResult =
+proc lastHeader*(db: CacheDbRef): OptHeaderResult =
   let data = db.get9(cHeader, 0u64).valueOr:
     return err(error)
   if data.len != 8:
     return err("")
   db.getHeader uint64.fromBytesBE data
 
-proc lastNumber*(db: MptAsmRef): BlockNumber =
+proc lastNumber*(db: CacheDbRef): BlockNumber =
   let data = db.get9(cHeader, 0u64).valueOr:
     return BlockNumber(0)
   if data.len != 8:
     return BlockNumber(0)
   uint64.fromBytesBE data
 
-proc putHeader*(db: MptAsmRef, header: Header): PutResult =
+proc putHeader*(db: CacheDbRef, header: Header): PutResult =
   db.put9(cHeader, header.number, header.encodeHeader()).isOkOr:
     return err(error)
   db.put9(cHeader, 0u64, uint64(header.number).toBytesBE()).isOkOr:
     return err(error)
   ok()
 
-proc putHeader*(db: MptAsmRef, headers: openArray[Header]): PutResult =
+proc putHeader*(db: CacheDbRef, headers: openArray[Header]): PutResult =
   for h in headers:
     db.put9(cHeader, h.number, h.encodeHeader()).isOkOr:
       return err(error)
@@ -92,13 +92,13 @@ proc putHeader*(db: MptAsmRef, headers: openArray[Header]): PutResult =
     return err(error)
   ok()
 
-proc delHeader*(db: MptAsmRef, bn: BlockNumber): DelResult =
+proc delHeader*(db: CacheDbRef, bn: BlockNumber): DelResult =
   db.del9(cHeader, bn)
 
-proc clearHeader*(db: MptAsmRef): DelResult =
-  db.adb.rClear(cHeader)
+proc clearHeader*(db: CacheDbRef): DelResult =
+  db.clr1 cHeader
 
-iterator walkHeader*(db: MptAsmRef): WalkHeader =
+iterator walkHeader*(db: CacheDbRef): WalkHeader =
   for (key,data) in db.adb.colWalk9 key9(cHeader, 1u64):
     let header = data.decodeHeader().valueOr:
       var oops: WalkHeader
@@ -109,12 +109,12 @@ iterator walkHeader*(db: MptAsmRef): WalkHeader =
 
 # -------------
 
-proc hasBal*(db: MptAsmRef, bn = BlockNumber(0)): BoolResult =
+proc hasBal*(db: CacheDbRef, bn = BlockNumber(0)): BoolResult =
   let data = db.get9(cBal, bn).valueOr:
     return err(error)
   ok(0 < data.len)
 
-proc getBal*(db: MptAsmRef, bn: BlockNumber): OptBalResult =
+proc getBal*(db: CacheDbRef, bn: BlockNumber): OptBalResult =
   let data = db.get9(cBal, bn).valueOr:
     return err(error)
   if data.len == 0:
@@ -124,7 +124,7 @@ proc getBal*(db: MptAsmRef, bn: BlockNumber): OptBalResult =
   ok(Opt.some(bal))
 
 proc putBal*(
-    db: MptAsmRef;
+    db: CacheDbRef;
     bn: BlockNumber;
     bal: BlockAccessListRef;
       ): PutResult =
@@ -132,13 +132,13 @@ proc putBal*(
     return err(error)
   ok()
 
-proc delBal*(db: MptAsmRef, bn: BlockNumber): DelResult =
+proc delBal*(db: CacheDbRef, bn: BlockNumber): DelResult =
   db.del9(cBal, bn)
 
-proc clearBal*(db: MptAsmRef): DelResult =
-  db.adb.rClear(cBal)
+proc clearBal*(db: CacheDbRef): DelResult =
+  db.clr1 cBal
 
-iterator walkBal*(db: MptAsmRef): WalkBal =
+iterator walkBal*(db: CacheDbRef): WalkBal =
   for (key,data) in db.adb.colWalk9 key9(cBal):
     let bal = data.decodeBal().valueOr:
       var oops: WalkBal
