@@ -172,6 +172,11 @@ proc applyOverlay(ledger: LedgerRef, address: Address, acc: AccountRef) =
     acc.code = CodeBytesRef.init(overlayAcc.code[])
     acc.flags.incl CodeChanged
 
+proc isEmpty(acc: AccountRef): bool =
+  acc.statement.nonce == 0 and
+    acc.statement.balance.isZero and
+    acc.statement.codeHash == EMPTY_CODE_HASH
+
 proc getAccount(
     ledger: LedgerRef;
     address: Address;
@@ -201,30 +206,32 @@ proc getAccount(
     rc = ledger.txFrame.fetchAccount accPath
 
   if rc.isOk:
+    # Acc found in the database
     result = AccountRef(
       statement: rc.value,
       accPath:   accPath,
       flags:     {Alive},
     )
-    if ledger.balOverlay.isSome():
-      ledger.applyOverlay(address, result)
-    result.original = OriginalValueRef(
-      statement: result.statement,
-      code: result.code,
-    )
 
-  elif ledger.balOverlay.isSome() and ledger.balOverlay[].hasAccount(address):
-    result = AccountRef(
-      statement: EMPTY_STATEMENT,
-      accPath:   accPath,
-      flags:    {Alive}
-    )
+  if ledger.balOverlay.isSome() and ledger.balOverlay[].hasAccount(address):
+    # Acc found in the BAL overlay
+    if result.isNil():
+      result = AccountRef(
+        statement: EMPTY_STATEMENT,
+        accPath:   accPath,
+        flags:    {Alive}
+      )
     ledger.applyOverlay(address, result)
+    # If the account from the overlay is empty, it was self destructed
+    # and so we treat it as such.
+    if result.isEmpty():
+      result = nil
+
+  if not result.isNil:
     result.original = OriginalValueRef(
       statement: result.statement,
       code: result.code,
     )
-
   elif shouldCreate:
     result = AccountRef(
       statement: EMPTY_STATEMENT,
@@ -254,10 +261,7 @@ proc clone(acc: AccountRef, cloneStorage: bool): AccountRef =
     # it's ok to clone a table this way
     result.overlayStorage = acc.overlayStorage
 
-proc isEmpty(acc: AccountRef): bool =
-  acc.statement.nonce == 0 and
-    acc.statement.balance.isZero and
-    acc.statement.codeHash == EMPTY_CODE_HASH
+
 
 template exists(acc: AccountRef): bool =
   Alive in acc.flags
