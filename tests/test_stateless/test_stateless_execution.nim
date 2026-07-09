@@ -58,6 +58,32 @@ procSuite "Stateless Execution Tests":
         statelessProcessBlockRlp(witnessRlpBytes, com, blkRlpBytes).isOk()
         statelessProcessBlockRlp(witnessRlpBytes.to0xHex(), com, blkRlpBytes.to0xHex()).isOk()
 
+  asyncTest "Stateless incomplete witness - fail at block-reward persist without crashing":
+    # These early mainnet blocks are empty, but the block-reward persist still runs
+    # in procBlkEpilogue so this runs the fatal error path caught by the abortOnFatalError.
+    # Dropping the coinbase's node makes that reward persist fail. Dropping a node
+    # that breaks the trie root is rejected even earlier at the witness subtrie root
+    # check. Either way execution must return an error, never assert/crash on the
+    # resulting partial trie.
+    var blk: EthBlock
+    for i in 1..100:
+      era0.getEthBlock(i.BlockNumber, blk).expect("block in test database")
+      check (await fc.importBlock(blk)).isOk()
+
+    let witness =
+      fc.getExecutionWitness(blk.header.computeBlockHash()).expect("ok").toExecutionWitness()
+
+    # The complete witness validates.
+    check statelessProcessBlock(witness, com, blk).isOk()
+
+    # Every incomplete variant (one state node dropped) is rejected with an error
+    # and never crashes.
+    check witness.state.len() > 0
+    for dropIdx in 0 ..< witness.state.len():
+      var partial = witness
+      partial.state.asSeq.delete(dropIdx)
+      check statelessProcessBlock(partial, com, blk).isErr()
+
   asyncTest "Stateless process block json files - mainnet block 100":
     let
       witnessJsonFile = sourcePath / "mainnet_100_witness.json"
