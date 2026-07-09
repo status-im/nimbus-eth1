@@ -133,7 +133,7 @@ proc selfDestructEIP2929Op(cpt: VmCpt): EvmResultVoid =
 
   var staticGasCosts = cpt.gasCosts[SelfDestruct].sc_handler(false)
   if beneficiaryIsCold:
-    staticGasCosts += ColdAccountAccessCost
+    staticGasCosts += COLD_ACCOUNT_ACCESS_2929
   if staticGasCosts > cpt.gasMeter.gasRemaining:
     return EvmResultVoid.err(gasErr(OutOfGas))
 
@@ -147,7 +147,7 @@ proc selfDestructEIP2929Op(cpt: VmCpt): EvmResultVoid =
   cpt.vmState.mutateLedger:
     if beneficiaryIsCold:
       ledger.accessList(beneficiary)
-      gasCost = gasCost + ColdAccountAccessCost
+      gasCost = gasCost + COLD_ACCOUNT_ACCESS_2929
 
   ? cpt.opcodeGasCost(SelfDestruct,
     gasCost, reason = "SELFDESTRUCT EIP-2929")
@@ -167,7 +167,7 @@ proc selfDestructEIP8037Op(cpt: VmCpt): EvmResultVoid =
 
   var staticGasCosts = cpt.gasCosts[SelfDestruct].sc_handler(false)
   if beneficiaryIsCold:
-    staticGasCosts += ColdAccountAccessCost
+    staticGasCosts += COLD_ACCOUNT_ACCESS_8038
   if staticGasCosts > cpt.gasMeter.gasRemaining:
     return EvmResultVoid.err(gasErr(OutOfGas))
 
@@ -181,7 +181,7 @@ proc selfDestructEIP8037Op(cpt: VmCpt): EvmResultVoid =
   cpt.vmState.mutateLedger:
     if beneficiaryIsCold:
       ledger.accessList(beneficiary)
-      gasCost = gasCost + ColdAccountAccessCost
+      gasCost += COLD_ACCOUNT_ACCESS_8038
 
   # Charge regular gas before state gas so that a regular-gas OOG
   # does not consume state gas that would inflate the parent's

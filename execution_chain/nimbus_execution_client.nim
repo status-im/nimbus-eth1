@@ -28,7 +28,7 @@ import
   ./common/chain_config_hash,
   ./portal/portal,
   ./networking/[bootnodes, netkeys],
-  beacon_chain/[nimbus_binary_common, process_state],
+  beacon_chain/[nimbus_binary_common, process_state, nimbus_rest_common],
   beacon_chain/validators/keystore_management
 
 const
@@ -294,22 +294,28 @@ proc setupCommonRef*(config: ExecutionClientConf): (CommonRef, bool) =
     statelessWitnessValidation = config.statelessWitnessValidation,
     optimisticStatePrefetch = config.optimisticStatePrefetch,
     balStatePrefetch = config.balStatePrefetch,
-    balStatePrefetchWorkers = config.balStatePrefetchWorkers)
+    balStatePrefetchWorkers = config.balStatePrefetchWorkers,
+    balParallelExecution = config.balParallelExecution)
 
   if config.extraData.len > 32:
     warn "ExtraData exceeds 32 bytes limit, truncate",
       extraData=config.extraData,
       len=config.extraData.len
 
-  if config.gasLimit > GAS_LIMIT_MAXIMUM or
-     config.gasLimit < GAS_LIMIT_MINIMUM:
-    warn "GasLimit not in expected range, truncate",
-      min=GAS_LIMIT_MINIMUM,
-      max=GAS_LIMIT_MAXIMUM,
-      get=config.gasLimit
+  if config.gasLimit.isSome:
+    let gasLimit = config.gasLimit.get()
+    if gasLimit > GAS_LIMIT_MAXIMUM or
+      gasLimit < GAS_LIMIT_MINIMUM:
+      warn "GasLimit not in expected range, truncate",
+        min=GAS_LIMIT_MINIMUM,
+        max=GAS_LIMIT_MAXIMUM,
+        get=gasLimit
+    warn "`--gas-limit` is deprecated, please use `targetGasLimit` field of PayloadAttributesV4"
+    com.gasLimit = gasLimit
+  else:
+    com.gasLimit = DEFAULT_GAS_LIMIT
 
   com.extraData = config.extraData
-  com.gasLimit = config.gasLimit
   com.maxBlobs = config.maxBlobs
 
   (com, dbOpts.rdbKeyCacheSize > 0)

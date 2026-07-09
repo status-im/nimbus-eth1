@@ -54,6 +54,7 @@ const
   defaultOptimisticStatePrefetch* = false
   defaultBalStatePrefetch* = false
   defaultBalStatePrefetchWorkers* = 0
+  defaultBalParallelExecution* = false
 
 template defaultListenAddress(): IpAddress =
   getAutoAddress(Port(0)).toIpAddress()
@@ -131,8 +132,8 @@ type
 
     gasLimit* {.
       desc: "Desired gas limit when building an execution payload"
-      defaultValue: DEFAULT_GAS_LIMIT
-      name: "gas-limit" .}: uint64
+      defaultValue: none(uint64)
+      name: "gas-limit" .}: Option[uint64]
 
     # https://eips.ethereum.org/EIPS/eip-7872
     maxBlobs* {.
@@ -386,6 +387,13 @@ type
       desc: "Number of background worker tasks used for block access list " &
         "state prefetching (0 = use number equal to the taskpool threads count)"
       name: "debug-bal-state-prefetch-workers".}: int
+
+    balParallelExecution* {.
+      hidden
+      defaultValue: defaultBalParallelExecution
+      desc: "Execute block transactions in parallel on background threads " &
+        "using the supplied block access list"
+      name: "debug-bal-parallel-execution".}: bool
 
     eagerStateRootCheck* {.
       hidden
@@ -842,7 +850,7 @@ func udpPort*(config: ExecutionClientConf): Port =
 
 func threadSafeCaches*(config: ExecutionClientConf): bool =
   config.optimisticStatePrefetch or config.balStatePrefetch or
-    config.parallelStateRootComputation
+    config.parallelStateRootComputation or config.balParallelExecution
 
 func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
   DbOptions.init(

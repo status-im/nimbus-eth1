@@ -101,6 +101,9 @@ export
 # chain(xp: TxPoolRef): ForkedChainRef
 # com(xp: TxPoolRef): CommonRef
 # len(xp: TxPoolRef): int
+# baseFee(xp: TxPoolRef): GasInt
+# senderCount(xp: TxPoolRef): int
+# iterator allItems(xp: TxPoolRef): TxItemRef
 
 # ------------------------------------------------------------------------------
 # TxPoolRef public functions
@@ -118,11 +121,13 @@ export
 
 # addTx(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError]
 # addTx(xp: TxPoolRef, tx: Transaction): Result[void, TxError]
-# contains(xp: TxPoolRef, id: Hash32): bool
 # getItem(xp: TxPoolRef, id: Hash32): Result[TxItemRef, TxError]
+# getNonce(xp: TxPoolRef; account: Address): AccountNonce
+# contains(xp: TxPoolRef, id: Hash32): bool
 # removeTx(xp: TxPoolRef, id: Hash32)
 # removeExpiredTxs(xp: TxPoolRef, lifeTime: Duration)
-# getBlobAndProof(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV1]
+# getBlobAndProofV1(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV1]
+# getBlobAndProofV2(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV2]
 
 proc removeNewBlockTxs*(xp: TxPoolRef, blk: Block, optHash = Opt.none(Hash32)) =
   let fromHash = if optHash.isSome: optHash.get
@@ -161,6 +166,7 @@ func getWrapperVersion(com: CommonRef, timestamp: EthTime): WrapperVersion =
 
 proc assembleBlock*(
     xp: TxPoolRef,
+    parentHash: Hash32,
     someBaseFee: bool = false,
     gasLimit: Opt[GasInt] = Opt.none(GasInt)
 ): Result[AssembledBlock, string] =
@@ -174,7 +180,12 @@ proc assembleBlock*(
   # (and gasUsed/stateRoot) of the first pack — producing a block other
   # clients reject as a blob-gas mismatch. Always start each build from a
   # fresh transaction environment.
-  xp.updateVmState()
+  #
+  # The build parent is always explicit: the engine API requires the payload
+  # to sit on the forkchoiceUpdated headBlockHash, which need not be
+  # `chain.latest` when sibling payloads exist at the same height.
+  let parentHeader = ?xp.chain.headerByHash(parentHash)
+  xp.updateVmState(parentHeader, parentHash)
 
   let com = xp.vmState.com
 
@@ -192,16 +203,9 @@ proc assembleBlock*(
     blobsBundle = BlobsBundle(
       wrapperVersion: getWrapperVersion(com, blk.header.timestamp)
     )
-    currentRlpSize = rlp.getEncodedLength(blk.header)
-
-  if blk.withdrawals.isSome:
-    currentRlpSize = currentRlpSize + rlp.getEncodedLength(blk.withdrawals.get())
 
   for item in pst.packedTxs:
     let tx = item.pooledTx
-    if currentRlpSize > MAX_RLP_BLOCK_SIZE - 7:
-      break
-    currentRlpSize = currentRlpSize + rlp.getEncodedLength(tx.tx)
     blk.txs.add tx.tx
     if tx.blobsBundle != nil:
       doAssert(tx.blobsBundle.wrapperVersion == blobsBundle.wrapperVersion)
@@ -215,6 +219,13 @@ proc assembleBlock*(
 
   if com.isShanghaiOrLater(blk.header.timestamp):
     blk.withdrawals = Opt.some(xp.withdrawals)
+
+  # EIP-7934: the packer bounds the encoded block size while selecting txs.
+  # Never truncate the body here — the header and the EIP-7928 block access
+  # list already commit to the full packed tx set.
+  if com.isOsakaOrLater(blk.header.timestamp) and
+     rlp.getEncodedLength(blk) > MAX_RLP_BLOCK_SIZE:
+    return err("assembled block exceeds MAX_RLP_BLOCK_SIZE")
 
   if not com.isCancunOrLater(blk.header.timestamp) and blobsBundle.commitments.len > 0:
     return err("PooledTransaction contains blobs prior to Cancun")
@@ -291,7 +302,8 @@ export
   `prevRandao=`,
   `withdrawals=`,
   `parentBeaconBlockRoot=`,
-  `slotNumber=`
+  `slotNumber=`,
+  `targetGasLimit=`
 
 # `feeRecipient=`(xp: TxPoolRef, val: Address)
 # `timestamp=`(xp: TxPoolRef, val: EthTime)
@@ -299,3 +311,4 @@ export
 # `withdrawals=`(xp: TxPoolRef, val: sink seq[Withdrawal])
 # `parentBeaconBlockRoot=`(xp: TxPoolRef, val: Hash32)
 # `slotNumber=`(xp: TxPoolRef, val: uint64)
+# `targetGasLimit=`(xp: TxPoolRef, val: Opt[uint64])

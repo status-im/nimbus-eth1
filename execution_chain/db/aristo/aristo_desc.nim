@@ -22,7 +22,7 @@
 {.push raises: [].}
 
 import
-  std/[hashes, sequtils, sets, tables, heapqueue],
+  std/[atomics, hashes, sequtils, sets, tables, heapqueue],
   eth/common/hashes, eth/trie/nibbles,
   results,
   ../../concurrency/lru,
@@ -146,9 +146,9 @@ type
       ## Mixed account/storage path to payload cache - same as above but caches
       ## the full lookup of storage slots
 
-    staticLevel*: int
+    staticLevel*: Atomic[int]
       ## MPT level where "most" leaves can be found, for static vid lookups
-    lookups*: tuple[lower, hits, higher: int]
+    lookupsLower*, lookupsHits*, lookupsHigher*: Atomic[int]
 
     snapshots*: HeapQueue[AristoTxRef]
       ## A priority queue of txFrames holding snapshots. Used to limit the number
@@ -270,18 +270,28 @@ proc deltaAtLevel*(db: AristoTxRef, level: int): AristoTxRef =
         return frame
     nil
 
-func getStaticLevel*(db: AristoDbRef): int =
+proc getStaticLevel*(db: AristoDbRef): int =
   # Retrieve the level where we can expect to find a leaf, updating it based on
   # recent lookups
+  let
+    lower = db.lookupsLower.load(moRelaxed)
+    hits = db.lookupsHits.load(moRelaxed)
+    higher = db.lookupsHigher.load(moRelaxed)
 
-  if db.lookups[0] + db.lookups[1] + db.lookups[2] >= 1024:
-    if db.lookups.lower > db.lookups.hits + db.lookups.higher:
-      db.staticLevel = max(1, db.staticLevel - 1)
-    elif db.lookups.higher > db.lookups.hits + db.lookups.lower:
-      db.staticLevel = min(STATIC_VID_LEVELS, db.staticLevel + 1)
-    reset(db.lookups)
+  var level = db.staticLevel.load(moRelaxed)
 
-  if db.staticLevel == 0:
-    db.staticLevel = 1
+  if lower + hits + higher >= 1024:
+    if lower > hits + higher:
+      level = max(1, level - 1)
+    elif higher > hits + lower:
+      level = min(STATIC_VID_LEVELS, level + 1)
+    db.lookupsLower.store(0, moRelaxed)
+    db.lookupsHits.store(0, moRelaxed)
+    db.lookupsHigher.store(0, moRelaxed)
 
-  db.staticLevel
+  if level == 0:
+    level = 1
+
+  db.staticLevel.store(level, moRelaxed)
+
+  level

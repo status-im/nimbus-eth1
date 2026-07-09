@@ -465,3 +465,186 @@ suite "SharedBytes Tests":
 
     dispose(b)
     dispose(a) # safe no-op on the moved-from value
+
+suite "SharedString Tests":
+
+  test "init and toString round-trip a non-empty string":
+    let input = "hello world"
+    var ss = SharedString.init(input)
+    check:
+      ss.data(asOpenArray = true).len == input.len
+      ss.toString() == input
+    dispose(ss)
+
+  test "init from an empty string yields an empty SharedString":
+    var ss = SharedString.init("")
+    check:
+      ss.data(asOpenArray = true).len == 0
+      ss.toString() == ""
+      ss.data(asOpenArray = true).len == 0
+    dispose(ss)
+
+  test "toString preserves embedded zero bytes":
+    let input = "a\0b\0\0c"
+    var ss = SharedString.init(input)
+    check:
+      ss.data(asOpenArray = true).len == input.len
+      ss.toString() == input
+    dispose(ss)
+
+  test "init copies the input, leaving SharedString independent of the source":
+    var input = "mutable"
+    var ss = SharedString.init(input)
+
+    # Mutating and even clearing the source must not affect the copy.
+    input[0] = 'X'
+    input.setLen(0)
+
+    check ss.toString() == "mutable"
+    dispose(ss)
+
+  test "data (asOpenArray = true) exposes a matching read-only char view":
+    let input = "abcd"
+    var ss = SharedString.init(input)
+    check:
+      ss.data(asOpenArray = true).len == input.len
+      ss.data(asOpenArray = true)[0] == 'a'
+      ss.data(asOpenArray = true)[3] == 'd'
+    dispose(ss)
+
+  test "round-trips a large string":
+    var input = newString(50_000)
+    for i in 0 ..< input.len:
+      input[i] = char(ord('a') + (i mod 26))
+    var ss = SharedString.init(input)
+    check:
+      ss.data(asOpenArray = true).len == input.len
+      ss.toString() == input
+    dispose(ss)
+
+  test "dispose frees, resets and is idempotent":
+    var ss = SharedString.init("data")
+
+    dispose(ss)
+    check:
+      ss.data(asOpenArray = true).len == 0
+      ss.toString() == ""
+
+    dispose(ss) # second dispose must be a safe no-op
+    check ss.toString() == ""
+
+  test "move transfers ownership and clears the source":
+    var a = SharedString.init("payload")
+    var b = move(a)
+
+    check:
+      b.toString() == "payload"
+      a.data(asOpenArray = true).len == 0 # the moved-from value is reset
+
+    dispose(b)
+    dispose(a) # safe no-op on the moved-from value
+
+type
+  # A plain (copyMem-able) object with several fields of different sizes. The
+  # char/int64 layout has interior padding, so element copying must respect the
+  # object's size and alignment rather than a flat byte count.
+  Elem = object
+    id: uint32
+    tag: char
+    score: int64
+
+suite "SharedSeq with object element Tests":
+
+  test "init and data round-trip a seq of multi-field objects":
+    let input =
+      @[
+        Elem(id: 1'u32, tag: 'a', score: 1000'i64),
+        Elem(id: 2'u32, tag: 'b', score: -2000'i64),
+        Elem(id: 3'u32, tag: 'z', score: 0'i64),
+      ]
+    var ss = SharedSeq[Elem].init(input)
+    check:
+      ss.data(asOpenArray = true).len == input.len
+      ss.data() == input
+    dispose(ss)
+
+  test "every field of every element survives the copy":
+    var input = newSeq[Elem](1000)
+    for i in 0 ..< input.len:
+      input[i] =
+        Elem(id: uint32(i), tag: char(ord('a') + (i mod 26)), score: int64(i) * 7 - 3)
+    var ss = SharedSeq[Elem].init(input)
+
+    check ss.data(asOpenArray = true).len == input.len
+
+    let got = ss.data()
+    for i in 0 ..< input.len:
+      check:
+        got[i].id == uint32(i)
+        got[i].tag == char(ord('a') + (i mod 26))
+        got[i].score == int64(i) * 7 - 3
+    dispose(ss)
+
+  test "init from an empty seq yields an empty SharedSeq":
+    var ss = SharedSeq[Elem].init(newSeq[Elem]())
+    check:
+      ss.data(asOpenArray = true).len == 0
+      ss.data().len == 0
+      ss.data(asOpenArray = true).len == 0
+    dispose(ss)
+
+  test "init copies the input, leaving the SharedSeq independent of the source":
+    var input =
+      @[Elem(id: 1'u32, tag: 'a', score: 10'i64), Elem(id: 2'u32, tag: 'b', score: 20'i64)]
+    var ss = SharedSeq[Elem].init(input)
+
+    # Mutating and even clearing the source must not affect the copy.
+    input[0].id = 99'u32
+    input.setLen(0)
+
+    check ss.data() ==
+      @[Elem(id: 1'u32, tag: 'a', score: 10'i64), Elem(id: 2'u32, tag: 'b', score: 20'i64)]
+    dispose(ss)
+
+  test "data (asOpenArray = true) exposes a matching read-only object view":
+    let input =
+      @[Elem(id: 5'u32, tag: 'x', score: 50'i64), Elem(id: 6'u32, tag: 'y', score: 60'i64)]
+    var ss = SharedSeq[Elem].init(input)
+    check:
+      ss.data(asOpenArray = true).len == 2
+      ss.data(asOpenArray = true)[0] == input[0]
+      ss.data(asOpenArray = true)[1].id == 6'u32
+    dispose(ss)
+
+  test "dispose frees, resets and is idempotent":
+    var ss = SharedSeq[Elem].init(@[Elem(id: 1'u32, tag: 'a', score: 1'i64)])
+
+    dispose(ss)
+    check ss.data(asOpenArray = true).len == 0
+
+    dispose(ss) # second dispose must be a safe no-op
+    check ss.data(asOpenArray = true).len == 0
+
+  test "move transfers ownership and clears the source":
+    var a = SharedSeq[Elem].init(@[Elem(id: 7'u32, tag: 'q', score: 77'i64)])
+    var b = move(a)
+
+    check:
+      b.data(asOpenArray = true).len == 1
+      b.data() == @[Elem(id: 7'u32, tag: 'q', score: 77'i64)]
+      a.data(asOpenArray = true).len == 0 # the moved-from value is reset
+
+    dispose(b)
+    dispose(a) # safe no-op on the moved-from value
+
+  test "init/dispose does not leak shared memory":
+    let before = getOccupiedSharedMem()
+    for _ in 0 ..< 100:
+      var ss = SharedSeq[Elem].init(
+        @[
+          Elem(id: 1'u32, tag: 'a', score: 1'i64),
+          Elem(id: 2'u32, tag: 'b', score: 2'i64),
+        ]
+      )
+      dispose(ss)
+    check getOccupiedSharedMem() == before

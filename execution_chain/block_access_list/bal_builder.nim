@@ -13,7 +13,7 @@ import
   std/[algorithm, locks],
   eth/common/[block_access_lists, block_access_lists_rlp],
   stint,
-  ./block_access_list_utils,
+  ./bal_utils,
   ../concurrency/shared_types
 
 export block_access_lists

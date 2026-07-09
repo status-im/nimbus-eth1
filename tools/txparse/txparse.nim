@@ -25,15 +25,15 @@ proc parseTx(com: CommonRef, hexLine: string) =
     let
       bytes = hexToSeqByte(hexLine)
       tx = decodeTx(bytes)
-      address = tx.recoverSender().expect("valid signature")
+      sender = tx.recoverSender().expect("valid signature")
       fork = HardFork.Prague
-      intrinsic = tx.intrinsicGas(fork, 10_000_000)
+      intrinsic = tx.intrinsicGas(fork, 10_000_000, sender)
 
     validateTxBasic(com, tx, intrinsic, fork).isOkOr:
       echo "err: ", error
 
     # everything ok
-    echo "0x", address.toHex
+    echo "0x", sender.toHex
 
   except RlpError as ex:
     echo "err: ", ex.msg
