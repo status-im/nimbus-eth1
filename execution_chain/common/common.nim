@@ -12,6 +12,7 @@
 import
   chronicles,
   eth/common/eth_types_json_serialization,
+  eth/common/block_access_lists,
   ../db/[core_db, ledger, storage_types, fcu_db],
   ../utils/[utils],
   ".."/[constants, errors, version_info],
@@ -100,17 +101,24 @@ type
     maxBlobs: Opt[uint8]
       ## For EIP-7872; allows constraining of max blobs packed into each payload
 
-    when compileOption("threads"):
-      taskpool*: Taskpool
-        ## Shared task pool for offloading computation to other threads
-
-    statelessProviderEnabled*: bool
+    statelessProvider*: bool
       ## Enable the stateless provider. This turns on the features required
       ## by stateless clients such as generation and storage of block witnesses
       ## and serving these witnesses to peers over the p2p network.
 
     statelessWitnessValidation*: bool
       ## Enable full validation of execution witnesses.
+
+    when compileOption("threads"):
+      taskpool: Taskpool
+        ## Shared task pool for offloading computation to other threads
+
+      taskpoolUsable: bool
+        ## Cached evaluation of `not taskpool.isNil() and taskpool.numThreads > 1`
+
+    parallelSenderRecovery*: bool
+      ## Recover the transaction senders of a block in parallel on background
+      ## threads.
 
     optimisticStatePrefetch*: bool
       ## Optimistically pre-execute the transactions of a block on background
@@ -200,12 +208,13 @@ proc init(com         : CommonRef,
           config      : ChainConfig,
           genesis     : Genesis,
           initializeDb: bool,
-          statelessProviderEnabled: bool,
+          statelessProvider: bool,
           statelessWitnessValidation: bool,
           optimisticStatePrefetch: bool,
           balStatePrefetch: bool,
           balStatePrefetchWorkers: int,
-          balParallelExecution: bool) =
+          balParallelExecution: bool,
+          parallelSenderRecovery: bool) =
 
 
   config.daoCheck()
@@ -242,12 +251,13 @@ proc init(com         : CommonRef,
   if initializeDb:
     com.initializeDb()
 
-  com.statelessProviderEnabled = statelessProviderEnabled
+  com.statelessProvider = statelessProvider
   com.statelessWitnessValidation = statelessWitnessValidation
   com.optimisticStatePrefetch = optimisticStatePrefetch
   com.balStatePrefetch = balStatePrefetch
   com.balStatePrefetchWorkers = balStatePrefetchWorkers
   com.balParallelExecution = balParallelExecution
+  com.parallelSenderRecovery = parallelSenderRecovery
 
 proc isBlockAfterTtd(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
   if com.config.terminalTotalDifficulty.isNone:
@@ -270,12 +280,13 @@ proc new*(
     networkId: NetworkId = MainNet;
     params = networkParams(MainNet);
     initializeDb = true;
-    statelessProviderEnabled = false;
+    statelessProvider = false;
     statelessWitnessValidation = false;
     optimisticStatePrefetch = false;
     balStatePrefetch = false;
     balStatePrefetchWorkers = 0;
     balParallelExecution = false;
+    parallelSenderRecovery = false;
       ): CommonRef =
 
   ## If genesis data is present, the forkIds will be initialized
@@ -287,12 +298,13 @@ proc new*(
     params.config,
     params.genesis,
     initializeDb,
-    statelessProviderEnabled,
+    statelessProvider,
     statelessWitnessValidation,
     optimisticStatePrefetch,
     balStatePrefetch,
     balStatePrefetchWorkers,
-    balParallelExecution)
+    balParallelExecution,
+    parallelSenderRecovery)
 
 proc new*(
     _: type CommonRef;
@@ -300,12 +312,13 @@ proc new*(
     config: ChainConfig;
     networkId: NetworkId = MainNet;
     initializeDb = true;
-    statelessProviderEnabled = false;
+    statelessProvider = false;
     statelessWitnessValidation = false;
     optimisticStatePrefetch = false;
     balStatePrefetch = false;
     balStatePrefetchWorkers = 0;
     balParallelExecution = false;
+    parallelSenderRecovery = false;
       ): CommonRef =
 
   ## There is no genesis data present
@@ -317,34 +330,13 @@ proc new*(
     config,
     nil,
     initializeDb,
-    statelessProviderEnabled,
+    statelessProvider,
     statelessWitnessValidation,
     optimisticStatePrefetch,
     balStatePrefetch,
     balStatePrefetchWorkers,
-    balParallelExecution)
-
-func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
-  ## clone but replace the db
-  ## used in EVM tracer whose db is CaptureDB
-  CommonRef(
-    db           : db,
-    config       : com.config,
-    forkTransitionTable: com.forkTransitionTable,
-    forkIdCalculator: com.forkIdCalculator,
-    genesisHash  : com.genesisHash,
-    genesisHeader: com.genesisHeader,
-    networkId    : com.networkId,
-    statelessProviderEnabled: com.statelessProviderEnabled,
-    statelessWitnessValidation: com.statelessWitnessValidation,
-    optimisticStatePrefetch: com.optimisticStatePrefetch,
-    balStatePrefetch: com.balStatePrefetch,
-    balStatePrefetchWorkers: com.balStatePrefetchWorkers,
-    balParallelExecution: com.balParallelExecution
-  )
-
-func clone*(com: CommonRef): CommonRef =
-  com.clone(com.db)
+    balParallelExecution,
+    parallelSenderRecovery)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -451,6 +443,66 @@ func amsterdamTransition*(com: CommonRef, parentTime, t: EthTime): bool =
 
 func isBogotaOrLater*(com: CommonRef, t: EthTime): bool =
   com.config.bogotaTime.isSome and t >= com.config.bogotaTime.value
+
+when compileOption("threads"):
+  func taskpool*(com: CommonRef): Taskpool =
+    com.taskpool
+
+  func `taskpool=`*(com: CommonRef, taskpool: Taskpool) =
+    com.taskpool = taskpool
+    com.taskpoolUsable = not taskpool.isNil() and taskpool.numThreads > 1
+
+  proc shutdownTaskpool*(com: CommonRef) =
+    if not com.taskpool.isNil():
+      com.taskpool.shutdown()
+      com.taskpool = nil
+      com.taskpoolUsable = false
+
+func parallelSenderRecoveryEnabled*(com: CommonRef): bool =
+  when compileOption("threads"):
+    if com.parallelSenderRecovery:
+      assert com.taskpoolUsable
+      true
+    else:
+      false
+  else:
+    false
+
+func optimisticStatePrefetchEnabled*(com: CommonRef): bool =
+  when compileOption("threads"):
+    if com.optimisticStatePrefetch:
+      assert com.taskpoolUsable
+      true
+    else:
+      false
+  else:
+    false
+
+func balStatePrefetchEnabled*(
+    com: CommonRef,
+    timestamp: EthTime,
+    blockAccessList: Opt[BlockAccessListRef]): bool =
+  when compileOption("threads"):
+    if com.balStatePrefetch:
+      assert com.taskpoolUsable
+      blockAccessList.isSome() and com.isAmsterdamOrLater(timestamp)
+    else:
+      false
+  else:
+    false
+
+func balParallelExecutionEnabled*(
+    com: CommonRef,
+    timestamp: EthTime,
+    blockAccessList: Opt[BlockAccessListRef]): bool =
+  when compileOption("threads"):
+    if com.balParallelExecution:
+      assert com.taskpoolUsable
+      blockAccessList.isSome() and com.isAmsterdamOrLater(timestamp)
+    else:
+      false
+  else:
+    false
 
 proc proofOfStake*(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
   if com.config.posBlock.isSome:

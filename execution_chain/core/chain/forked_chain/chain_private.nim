@@ -73,7 +73,7 @@ proc processBlock*(
     txFrame,
     enableBalTracker = (not finalized or blockAccessList.isNone()) and
         c.com.isAmsterdamOrLater(header.timestamp),
-    balBuilderThreadSafe = c.com.balParallelExecutionEnabled(header, blockAccessList),
+    balBuilderThreadSafe = c.com.balParallelExecutionEnabled(header.timestamp, blockAccessList),
   )
   defer:
     vmState.dispose()
@@ -112,7 +112,7 @@ proc processBlock*(
       c.badBlocks.put(blkHash, (blk, vmState.blockAccessList))
       return err(error)
 
-  if not vmState.com.statelessProviderEnabled:
+  if not vmState.com.statelessProvider:
     processBlock()
   else:
     # Clear the caches before executing the block to ensure we collect the correct

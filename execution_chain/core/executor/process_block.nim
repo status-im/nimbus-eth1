@@ -131,7 +131,8 @@ when compileOption("threads"):
     true
 
   template withSenderParallel(
-      vmState: BaseVMState, txs: openArray[Transaction], body: untyped) =
+      vmState: BaseVMState, txs: openArray[Transaction],
+      bal: Opt[BlockAccessListRef], body: untyped) =
     # Execute transactions offloading the signature checking to the task pool
     var
       entries = newSeq[OptimisticTxEntry](txs.len)
@@ -139,7 +140,10 @@ when compileOption("threads"):
       ctx: OptimisticPrefetchCtx
       ctxPtr: ptr OptimisticPrefetchCtx = nil
 
-    if vmState.com.optimisticStatePrefetch and not vmState.balPrefetchActive:
+    # Skip optimistic state prefetch when block access list prefetch is running
+    # to avoid prefetching the same state twice.
+    if vmState.com.optimisticStatePrefetchEnabled() and
+        not vmState.com.balStatePrefetchEnabled(vmState.blockCtx.timestamp, bal):
       ctx.parent = vmState.parent
       ctx.blockCtx = vmState.blockCtx
       ctx.com = vmState.com
@@ -262,40 +266,20 @@ template withSenderSerial(txs: openArray[Transaction], body: untyped) =
     let sender {.inject.} = tx.recoverSender().valueOr(default(Address))
     body
 
-template withSender(vmState: BaseVMState, txs: openArray[Transaction], body: untyped) =
-  when compileOption("threads"):
-    if not vmState.com.taskpool.isNil() and vmState.com.taskpool.numThreads > 1:
-      withSenderParallel(vmState, txs, body)
-    else:
-      withSenderSerial(txs, body)
+template withSender(
+    vmState: BaseVMState, txs: openArray[Transaction],
+    bal: Opt[BlockAccessListRef], body: untyped) =
+  if vmState.com.parallelSenderRecoveryEnabled():
+    withSenderParallel(vmState, txs, bal, body)
   else:
     withSenderSerial(txs, body)
 
 template withBalPrefetch(
     vmState: BaseVMState, bal: Opt[BlockAccessListRef], body: untyped) =
-  when compileOption("threads"):
-    if bal.isSome() and vmState.com.balStatePrefetch and
-        vmState.com.isAmsterdamOrLater(vmState.blockCtx.timestamp) and
-        not vmState.com.taskpool.isNil() and vmState.com.taskpool.numThreads > 1:
-
-      vmState.balPrefetchActive = true
-      withBalPrefetchParallel(vmState, bal, body)
-    else:
-      body
+  if vmState.com.balStatePrefetchEnabled(vmState.blockCtx.timestamp, bal):
+    withBalPrefetchParallel(vmState, bal, body)
   else:
     body
-
-func balParallelExecutionEnabled*(
-    com: CommonRef,
-    header: Header,
-    blockAccessList: Opt[BlockAccessListRef],
-): bool =
-  when compileOption("threads"):
-    blockAccessList.isSome() and com.balParallelExecution and
-      com.isAmsterdamOrLater(header.timestamp) and not com.taskpool.isNil() and
-      com.taskpool.numThreads > 1
-  else:
-    false
 
 when compileOption("threads"):
 
@@ -456,7 +440,7 @@ when compileOption("threads"):
       collectLogs: bool,
   ): Result[void, string] =
     doAssert vmState.fork >= FkAmsterdam
-    doAssert not vmState.com.statelessProviderEnabled
+    doAssert not vmState.com.statelessProvider
 
     let n = transactions.len()
 
@@ -570,11 +554,11 @@ proc processTransactions*(
   vmState.allLogs = @[]
 
   when compileOption("threads"):
-    if vmState.com.balParallelExecutionEnabled(header, blockAccessList):
+    if vmState.com.balParallelExecutionEnabled(header.timestamp, blockAccessList):
       return processTransactionsParallel(
         vmState, transactions, blockAccessList.get(), skipReceipts, collectLogs)
 
-  vmState.withSender(transactions):
+  vmState.withSender(transactions, blockAccessList):
     if sender == default(Address):
       return err("Could not get sender for tx with index " & $(txIndex))
 

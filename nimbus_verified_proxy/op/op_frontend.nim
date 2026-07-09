@@ -489,7 +489,7 @@ proc getExecutionApiFrontend*(
       db,
       config = chainConfigForNetwork(l1ChainId),
       initializeDb = false,
-      statelessProviderEnabled = true,
+      statelessProvider = true,
     )
 
     let header = opEngine.penaltyOr(await opEngine.getHeader(blockId("latest")))

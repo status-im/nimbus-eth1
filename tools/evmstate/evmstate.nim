@@ -161,9 +161,6 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
       writeRootHashToStderr(stateRoot)
     vmState.ledger.txFrame.dispose()
     vmState.dispose()
-    if com.taskpool.isNil.not:
-      com.taskpool.shutdown()
-      com.taskpool = nil
     com.db.close()
 
   try:
