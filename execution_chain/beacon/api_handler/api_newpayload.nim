@@ -174,7 +174,7 @@ proc newPayload*(ben: BeaconEngineRef,
     if res.isSome:
       return res.value
 
-  if apiVersion >= Version.V5:
+  if apiVersion >= Version.V6:
     if inclusionList.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         ": inclusionList is expected from execution payload")
