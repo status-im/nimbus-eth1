@@ -110,6 +110,7 @@ func intrinsicGas*(call: CallParams | Transaction, hardFork: HardFork, gasLimit:
       stateGas += CREATE_ACCOUNT_STATE_GAS
       if call.value.isZero.not:
         regularGas += TRANSFER_LOG_COST
+      floorDataGas += gasFees[fork][GasTXCreate]
 
     regularGas += gasFees[fork][GasTXCreate]
     if hardFork >= Shanghai:
