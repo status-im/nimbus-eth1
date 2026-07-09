@@ -202,17 +202,31 @@ type
 
     bootstrapNodes {.
       separator: "\pNETWORKING OPTIONS:"
-      desc: "Specifies one or more bootstrap nodes(ENR or enode URL) to use when connecting to the network"
+      desc: "Specifies one or more bootstrap nodes(ENR or enode URL) to use when connecting to the network. " &
+            "Alias = el-bootstrap-node"
       defaultValue: @[]
       defaultValueDesc: ""
       abbr: "b"
       name: "bootstrap-node" .}: seq[string]
 
+    elBootstrapNodes {.
+      hidden
+      desc: "alias to bootstrap-node"
+      defaultValue: @[]
+      defaultValueDesc: ""
+      name: "el-bootstrap-node" .}: seq[string]
+
     bootstrapFile {.
       desc: "Specifies a file of bootstrap Ethereum network addresses(ENR or enode URL). " &
-            "Both line delimited or YAML format are supported"
+            "Both line delimited or YAML format are supported. Alias = el-bootstrap-file"
       defaultValue: ""
       name: "bootstrap-file" .}: InputFile
+
+    elBootstrapFile {.
+      hidden
+      desc: "alias to bootstrap-file"
+      defaultValue: ""
+      name: "el-bootstrap-file" .}: InputFile
 
     staticPeers {.
       desc: "Connect to one or more trusted peers(ENR or enode URL)"
@@ -675,9 +689,12 @@ iterator repeatingList(listOfList: openArray[string]): string =
     for item in list:
       yield item
 
-func breakRepeatingList(listOfList: openArray[string]): seq[string] =
+func breakRepeatingList(listOfList: openArray[string], list: var seq[string]) =
   for strList in listOfList:
-    processList(strList, result)
+    processList(strList, list)
+
+func breakRepeatingList(listOfList: openArray[string]): seq[string] =
+  breakRepeatingList(listOfList, result)
 
 func decOrHex(s: string): bool =
   const allowedDigits = Digits + HexDigits + {'x', 'X'}
@@ -805,13 +822,20 @@ proc getBootstrapNodes*(config: ExecutionClientConf): BootstrapNodes =
     elif config.networkId == HoodiNet:
       getBootstrapNodes("hoodi", result).expect("no error")
 
-  let list = breakRepeatingList(config.bootstrapNodes)
+  var list = breakRepeatingList(config.bootstrapNodes)
+  if config.elBootstrapNodes.len > 0:
+    # Add el-bootstrap-node
+    breakRepeatingList(config.elBootstrapNodes, list)
   parseBootstrapNodes(list, result).isOkOr:
     warn "Error when parsing bootstrap nodes", msg=error
 
-  if config.bootstrapFile.string.len > 0:
-    loadBootstrapNodes(config.bootstrapFile.string, result).isOkOr:
-      warn "Error when parsing bootstrap nodes from file", msg=error, file=config.bootstrapFile.string
+  let bootstrapFile = if config.bootstrapFile.string.len > 0: config.bootstrapFile.string
+                      elif config.elBootstrapFile.string.len > 0: config.elBootstrapFile.string
+                      else: ""
+
+  if bootstrapFile.len > 0:
+    loadBootstrapNodes(bootstrapFile, result).isOkOr:
+      warn "Error when parsing bootstrap nodes from file", msg=error, file=bootstrapFile
 
 proc getStaticPeers*(config: ExecutionClientConf): BootstrapNodes =
   let list = breakRepeatingList(config.staticPeers)
