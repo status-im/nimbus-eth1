@@ -133,7 +133,7 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
                                           seq[ClientVersionV1] =
       # TODO: what should we do with the `version` parameter?
       return @[ClientVersionV1(
-        code: "NB",
+        code: "NE",
         name: NimbusName,
         version: NimbusVersion,
         commit: FixedBytes[4](GitRevisionBytes),
