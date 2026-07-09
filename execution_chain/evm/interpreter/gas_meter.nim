@@ -63,6 +63,9 @@ func chargeStateGas*(gasMeter: var GasMeter; amount: GasInt, reason: string): Ev
   gasMeter.stateGasUsed += amount.int64
   EvmResultVoid.ok()
 
+func removeStateGas*(gasMeter: var GasMeter; amount: GasInt) =
+  gasMeter.stateGasLeft -= amount
+
 func returnStateGas*(gasMeter: var GasMeter; amount: GasInt) =
   gasMeter.stateGasLeft += amount
 
@@ -112,3 +115,8 @@ proc creditStateGasRefund*(gasMeter: var GasMeter; amount: GasInt) =
   gasMeter.stateGasSpilled -= fromGasLeft
   gasMeter.stateGasLeft += amount - fromGasLeft
   gasMeter.stateGasUsed -= amount.int64
+
+func frameStateGasUsed*(gasMeter: var GasMeter, stateGas: GasInt) =
+  gasMeter.stateGasUsed = int64(stateGas) -
+    int(gasMeter.stateGasLeft) +
+    int(gasMeter.stateGasSpilled)

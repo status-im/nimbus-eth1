@@ -79,6 +79,7 @@ type
     savePoint*:             LedgerSpRef
     instr*:                 Op
     opIndex*:               int
+    ptc* {.cursor.}:        Computation
     parent* {.cursor.}:     Computation  # non-owning back pointer
     child*:                 Computation  # owning front pointer
     continuation*:          proc(c: Computation): EvmResultVoid {.gcsafe, raises: [].}
@@ -118,7 +119,7 @@ type
   MsgFlags* {.pure.} = enum
     Static
     Precompile
-    TargetAlive
+    NewAccountCharged
     Delegated
 
   Message* = ref object

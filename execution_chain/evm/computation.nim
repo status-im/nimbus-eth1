@@ -217,6 +217,57 @@ func errorOpt*(c: Computation): Opt[string] =
     return Opt.none(string)
   Opt.some(c.error.info)
 
+proc accountDeployable*(c: Computation): bool =
+  c.vmState.mutateLedger:
+    let nonce = ledger.getNonce(c.msg.sender)
+    if nonce + 1 < nonce:
+      let sender = c.msg.sender.toHex
+      c.setError(
+        "Nonce overflow when sender=" & sender & " wants to create contract", false
+      )
+      return false
+    if c.balTrackerEnabled:
+      c.vmState.balTracker.trackNonceChange(c.msg.sender, nonce + 1)
+    ledger.setNonce(c.msg.sender, nonce + 1)
+
+    # We add this to the access list _before_ taking a snapshot.
+    # Even if the creation fails, the access-list change should not be rolled
+    # back EIP2929
+    if c.fork >= FkBerlin:
+      ledger.accessList(c.msg.contractAddress)
+
+  if c.balTrackerEnabled:
+    c.vmState.balTracker.trackAddressAccess(c.msg.contractAddress)
+
+  if c.fork >= FkAmsterdam:
+    if not c.vmState.readOnlyLedger().accountExists(c.msg.contractAddress):
+      c.msg.flags.incl MsgFlags.NewAccountCharged
+      if c.msg.depth == 0:
+        c.msg.stateGas -= CREATE_ACCOUNT_STATE_GAS
+        c.gasMeter.removeStateGas(CREATE_ACCOUNT_STATE_GAS)
+      else:
+        c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "CREATE CHARGE").isOkOr:
+          c.setError("Out of gas when charge create state gas", true)
+          return false
+
+  if c.vmState.readOnlyLedger().contractCollision(c.msg.contractAddress):
+    if c.fork >= FkAmsterdam:
+      if MsgFlags.NewAccountCharged in c.msg.flags:
+        if c.msg.depth == 0:
+          c.msg.stateGas += CREATE_ACCOUNT_STATE_GAS
+          c.gasMeter.returnStateGas(CREATE_ACCOUNT_STATE_GAS)
+        else:
+          c.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
+
+    let blurb = c.msg.contractAddress.toHex
+    c.setError("Address collision when creating contract address=" & blurb, true)
+    return false
+
+  if c.ptc.isNil.not:
+    c.ptc.gasMeter.stateGasLeft = 0.GasInt
+    
+  true
+
 proc writeContract*(c: Computation) =
   template withExtra(tracer: untyped, args: varargs[untyped]) =
     tracer args, newContract=($c.msg.contractAddress),

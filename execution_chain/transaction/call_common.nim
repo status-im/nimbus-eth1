@@ -186,6 +186,8 @@ proc setupComputation(call: CallParams, regularRefund: int64, stateRefund: int64
   if isAmsterdamOrLater:
     gasLeft = min(regularGasBudget, executionGas)
     stateGas = executionGas - gasLeft + stateRefund.GasInt
+    if call.isCreate:
+      stateGas += CREATE_ACCOUNT_STATE_GAS
 
   let
     msg = Message(
@@ -255,17 +257,16 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, stateRefund
     MaxRefundQuotient = if fork >= FkLondon: 5.GasInt
                         else: 2.GasInt
 
-  var
-    stateGasRefund = stateRefund
-
   if c.shouldBurnGas:
     c.gasMeter.burnGas()
 
-  if c.fork >= FkAmsterdam:
-    if call.isCreate:
-      if c.isError or MsgFlags.TargetAlive in c.msg.flags:
+  if fork >= FkAmsterdam:
+    c.gasMeter.frameStateGasUsed(c.msg.stateGas)
+    if MsgFlags.NewAccountCharged in c.msg.flags:
+      if c.isError:
         c.gasMeter.returnStateGas(CREATE_ACCOUNT_STATE_GAS)
-        stateGasRefund += CREATE_ACCOUNT_STATE_GAS
+      else:
+        c.gasMeter.appendStateGasUsed(CREATE_ACCOUNT_STATE_GAS)
 
   # Calculated gas used, taking into account refund rules.
   let
@@ -281,7 +282,12 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, stateRefund
 
   if fork >= FkAmsterdam:
     txGasUsed = max(txGasUsedAfterRefund, call.intrinsic.floorDataGas)
-    blockStateGasUsed = GasInt(max(0, call.intrinsic.state.int64 + c.gasMeter.stateGasUsed - stateGasRefund))
+    var
+      txStateGas = call.intrinsic.state.int64 + c.gasMeter.stateGasUsed - stateRefund
+    if call.isCreate:
+      txStateGas -= CREATE_ACCOUNT_STATE_GAS.int64
+
+    blockStateGasUsed = GasInt(max(0, txStateGas))
     blockRegularGasUsed = txGasUsedBeforeRefund - blockStateGasUsed
     debug "EIP-8037 gas accounting",
       intrinsicRegular = call.intrinsic.regular,
