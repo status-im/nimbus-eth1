@@ -305,13 +305,14 @@ proc setupCommonRef*(
     db = coreDB,
     networkId = config.networkId,
     params = config.networkParams,
-    statelessProvider = config.statelessProvider and not config.balParallelExecution,
+    statelessProvider = config.statelessProvider,
     statelessWitnessValidation = config.statelessWitnessValidation,
     optimisticStatePrefetch = config.parallelSenderRecovery and 
         config.optimisticStatePrefetch and not disableParallelFeatures,
     balStatePrefetch = config.balStatePrefetch and not disableParallelFeatures,
     balStatePrefetchWorkers = config.balStatePrefetchWorkers,
-    balParallelExecution = config.balParallelExecution and not disableParallelFeatures,
+    balParallelExecution = config.balParallelExecution and 
+        not config.statelessProvider and not disableParallelFeatures,
     parallelSenderRecovery = config.parallelSenderRecovery and not disableParallelFeatures)
 
   if config.extraData.len > 32:
