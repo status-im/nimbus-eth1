@@ -91,6 +91,11 @@ func checkGas*(gasMeter: GasMeter, cost, amount: GasInt): EvmResultVoid =
     return err(gasErr(OutOfGas))
   ok()
 
+func checkGas*(gasMeter: GasMeter, amount: GasInt): EvmResultVoid =
+  if amount > gasMeter.gasRemaining:
+    return err(gasErr(OutOfGas))
+  ok()
+
 func refillFrameStateGas*(gasMeter: var GasMeter) =
   gasMeter.gasRemaining += gasMeter.stateGasSpilled
   gasMeter.stateGasLeft = GasInt(
