@@ -85,7 +85,6 @@ type
     keepStack*:             bool
     finalStack*:            seq[UInt256]
     balTrackerEnabled*:     bool
-    delegateTo*:            Address
 
   StatusCode* {.pure.} = enum
     None
@@ -106,6 +105,7 @@ type
     stateGasLeft*: GasInt
     stateGasUsed*: int64
     regularGasUsed*: GasInt
+    stateGasSpilled*: GasInt
 
   CallKind* {.pure.} = enum
     Call          # Request CALL.
@@ -118,6 +118,8 @@ type
   MsgFlags* {.pure.} = enum
     Static
     Precompile
+    TargetAlive
+    Delegated
 
   Message* = ref object
     kind*:             CallKind
@@ -127,6 +129,7 @@ type
     sender*:           Address
     contractAddress*:  Address
     codeAddress*:      Address
+    delegateTo*:       Address
     value*:            UInt256
     data*:             seq[byte]
     flags*:            set[MsgFlags]

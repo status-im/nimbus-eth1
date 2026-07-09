@@ -17,6 +17,7 @@ EXCLUDED_NIM_PACKAGES := 	\
   vendor/nimbus-eth2/vendor/nim-blscurve              \
   vendor/nimbus-eth2/vendor/nim-bearssl               \
   vendor/nimbus-eth2/vendor/nim-blscurve              \
+  vendor/nimbus-eth2/vendor/nim-boringssl             \
   vendor/nimbus-eth2/vendor/nimbus-build-system       \
   vendor/nimbus-eth2/vendor/nim-chronicles            \
   vendor/nimbus-eth2/vendor/nim-chronos               \
@@ -57,6 +58,7 @@ EXCLUDED_NIM_PACKAGES := 	\
   vendor/nimbus-eth2/vendor/nim-kzg4844               \
   vendor/nimbus-eth2/vendor/nim-minilru               \
   vendor/nimbus-eth2/vendor/nimbus-security-resources \
+  vendor/nimbus-eth2/vendor/nim-protobuf-serialization \
   vendor/nimbus-eth2/vendor/NimYAML
 
 # we don't want an error here, so we can handle things later, in the ".DEFAULT" target
@@ -137,8 +139,9 @@ endif
 	eest_blockchain \
 	eest_blockchain_test \
 	eest_stateless_execution_test \
+	eest_txpool_test \
 	eest_full_test \
-  eest_tool_test \
+	eest_tool_test \
 	t8n \
 	t8n_test \
 	evmstate \
@@ -438,6 +441,9 @@ eest_blockchain: | build deps
 eest_engine_test: | build deps eest
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
 
+eest_txpool_test: | build deps eest
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+
 eest_blockchain_test: | build deps eest
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
 
@@ -451,6 +457,7 @@ eest_full_test: | build deps eest
 eest_tool_test: | build deps eest
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/eest_tool_tests.nim"
 	build/$@
+
 # builds transition tool
 t8n: | build deps
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) $(T8N_PARAMS) "tools/t8n/$@.nim"

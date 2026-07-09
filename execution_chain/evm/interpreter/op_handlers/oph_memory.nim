@@ -231,7 +231,7 @@ proc sstoreEIP2929Op(cpt: VmCpt): EvmResultVoid =
   cpt.vmState.mutateLedger:
     if not ledger.inAccessList(cpt.msg.contractAddress, slot):
       ledger.accessList(cpt.msg.contractAddress, slot)
-      coldAccessGas = ColdSloadCost
+      coldAccessGas = COLD_STORAGE_ACCESS_2929
 
   sstoreNetGasMeteringImpl(cpt, slot, newValue, coldAccessGas)
 
@@ -251,12 +251,7 @@ proc sstoreEIP8037Op(cpt: VmCpt): EvmResultVoid =
   if cpt.gasMeter.gasRemaining <= SentryGasEIP2200:
     return err(opErr(OutOfGas))
 
-  var coldAccessGas = 0.GasInt
-  cpt.vmState.mutateLedger:
-    if not ledger.inAccessList(cpt.msg.contractAddress, slot):
-      ledger.accessList(cpt.msg.contractAddress, slot)
-      coldAccessGas = ColdSloadCost
-
+  let coldAccessGas = cpt.gasEip8038AccountCheck(cpt.msg.contractAddress, slot)
   sstoreNetGasMeteringImpl(cpt, slot, newValue, coldAccessGas, stateGas = true)
 
 # -------

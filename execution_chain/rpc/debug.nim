@@ -323,7 +323,8 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
       ## Assembles a block from the current transaction pool using the
       ## production block-building path (TxPoolRef.assembleBlock).
       ## Returns the number of transactions and blobs that were packed.
-      let bundle = txPool.assembleBlock().valueOr:
+      let latestHeadHash = chain.latest.hash
+      let bundle = txPool.assembleBlock(parentHash = latestHeadHash).valueOr:
         raise newException(ValueError, error)
       let blobCount =
         if bundle.blobsBundle.isNil: 0
