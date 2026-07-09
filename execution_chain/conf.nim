@@ -267,10 +267,17 @@ type
       defaultValueDesc: "default to --tcp-port"
       name: "udp-port" .}: Option[Port]
 
-    maxPeers* {.
+    maxPeersOpt {.
       desc: "Maximum number of peers to connect to"
-      defaultValue: 25
-      name: "max-peers" .}: int
+      defaultValue: none(int)
+      defaultValueDesc: "25"
+      name: "max-peers" .}: Option[int]
+
+    elMaxPeersOpt {.
+      hidden
+      desc: "alias to max-peers"
+      defaultValue: none(int)
+      name: "el-max-peers" .}: Option[int]
 
     nat* {.
       desc: "Specify method to use for determining public address. " &
@@ -910,6 +917,15 @@ proc readValue*(r: var TomlReader, value: var seq[string]) {.raises: [IOError, S
       value.add r.parseAsString()
   else:
     value.add r.parseAsString()
+
+func maxPeers*(config: ExecutionClientConf): int =
+  if config.maxPeersOpt.isSome:
+    return config.maxPeersOpt.get
+
+  if config.elMaxPeersOpt.isSome:
+    return config.elMaxPeersOpt.get
+
+  25
 
 {.pop.}
 
