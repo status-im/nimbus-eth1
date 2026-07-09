@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2026 Status Research & Development GmbH
+# Copyright (c) 2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -73,7 +73,8 @@ type
     preempted: bool
 
 proc recoverAndPrefetchTask*(
-    ctx: ptr OptimisticPrefetchCtx, e: ptr OptimisticTxEntry): bool {.nimcall.} =
+    ctx: ptr OptimisticPrefetchCtx, e: ptr OptimisticTxEntry
+): bool {.nimcall.} =
   # Recover the sender from the signature. `default(Address)` signals sig
   # check failure.
   let sender = e[].tx[].recoverSender().valueOr(default(Address))
@@ -122,8 +123,11 @@ proc recoverAndPrefetchTask*(
   true
 
 template withSenderParallel*(
-    vmState: BaseVMState, txs: openArray[Transaction],
-    bal: Opt[BlockAccessListRef], body: untyped) =
+    vmState: BaseVMState,
+    txs: openArray[Transaction],
+    bal: Opt[BlockAccessListRef],
+    body: untyped,
+) =
   # Execute transactions offloading the signature checking to the task pool
   var
     entries = newSeq[OptimisticTxEntry](txs.len)
@@ -151,8 +155,7 @@ template withSenderParallel*(
   for i, e in entries.mpairs():
     e.tx = txs[i].addr
     let entryPtr = e.addr
-    futs[i] = vmState.com.taskpool.spawn recoverAndPrefetchTask(
-      ctxPtr, entryPtr)
+    futs[i] = vmState.com.taskpool.spawn recoverAndPrefetchTask(ctxPtr, entryPtr)
 
   try:
     for txIndex {.inject.}, e in entries.mpairs():
@@ -210,8 +213,11 @@ proc balPrefetchWorker*(ctx: ptr BalPrefetchCtx): bool {.nimcall.} =
     # Prefetch the written slots ordered by the earliest block access index at
     # which each was written, so they are warmed in roughly the order the block
     # touches them.
-    for slotChanges in sorted(accChanges[].storageChanges,
-        proc(a, b: SlotChanges): int = cmp(firstBalIndex(a), firstBalIndex(b))):
+    for slotChanges in sorted(
+      accChanges[].storageChanges,
+      proc(a, b: SlotChanges): int =
+        cmp(firstBalIndex(a), firstBalIndex(b)),
+    ):
       discard ctx[].txFrame.fetchSlot(accPath, computeSlotKey(slotChanges.slot))
 
     for stoRead in accChanges[].storageReads:
@@ -220,8 +226,8 @@ proc balPrefetchWorker*(ctx: ptr BalPrefetchCtx): bool {.nimcall.} =
   true
 
 template withBalPrefetchParallel*(
-    vmState: BaseVMState, bal: Opt[BlockAccessListRef], body: untyped) =
-
+    vmState: BaseVMState, bal: Opt[BlockAccessListRef], body: untyped
+) =
   let balRef = bal.get()
 
   var ctx: BalPrefetchCtx
@@ -237,7 +243,11 @@ template withBalPrefetchParallel*(
     ctxPtr = ctx.addr
     n = vmState.com.taskpool.numThreads
     configured = vmState.com.balStatePrefetchWorkers
-    numWorkers = if configured <= 0: n else: min(configured, n)
+    numWorkers =
+      if configured <= 0:
+        n
+      else:
+        min(configured, n)
 
   var futs = newSeq[Flowvar[bool]](numWorkers)
   for i in 0 ..< numWorkers:
@@ -277,7 +287,8 @@ proc applyBlockAccessListState(ledger: LedgerRef, bal: BlockAccessList, txCount:
       let changePos = slotChanges.changes.findLastWriteBefore(boundary)
       if changePos >= 0:
         ledger.setStorage(
-          address, slotChanges.slot, slotChanges.changes[changePos].newValue)
+          address, slotChanges.slot, slotChanges.changes[changePos].newValue
+        )
 
     if balanceZeroed:
       ledger.addBalance(address, 0.u256, checkEmptyAccount = true)
@@ -286,8 +297,8 @@ proc packLogs(logs: openArray[Log]): SharedBytes =
   var size = sizeof(uint32)
   for log in logs:
     size +=
-      sizeof(Address) + sizeof(uint32) + log.topics.len * sizeof(Topic) +
-      sizeof(uint32) + log.data.len
+      sizeof(Address) + sizeof(uint32) + log.topics.len * sizeof(Topic) + sizeof(uint32) +
+      log.data.len
 
   var
     packed = SharedBytes.init(size)
@@ -356,7 +367,8 @@ proc processTxTask(
   ledger.txFrame.borrowRef(ctx[].txFrame)
   defer:
     ledger.txFrame.unborrowRef()
-  ledger.balOverlay = Opt.some(BlockAccessListOverlay.init(ctx[].balPtr, e[].txIndex + 1))
+  ledger.balOverlay =
+    Opt.some(BlockAccessListOverlay.init(ctx[].balPtr, e[].txIndex + 1))
   discard ledger.beginSavePoint()
 
   # Create the vmState without triggering a ref count increment on the common object
@@ -394,7 +406,8 @@ proc processTxTask(
   e[].gasUsed = logResult.gasUsed
   e[].blockRegularGasUsed = vmState.blockRegularGasUsed
   e[].blockStateGasUsed = vmState.blockStateGasUsed
-  e[].intrinsic = e[].tx[].intrinsicGas(vmState.hardFork, vmState.blockCtx.gasLimit, sender)
+  e[].intrinsic =
+    e[].tx[].intrinsicGas(vmState.hardFork, vmState.blockCtx.gasLimit, sender)
   e[].blobGasUsed = vmState.blobGasUsed
   e[].status = vmState.status
   e[].logs = packLogs(logResult.logEntries)
@@ -423,17 +436,12 @@ proc processTransactionsParallel*(
   ctx.parent = vmState.parent
   ctx.blockCtx = vmState.blockCtx
   ctx.balPtr = balRef[].addr
-  ctx.sharedBuilder =
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.builder
-    else:
-      nil
+  ctx.sharedBuilder = if vmState.balTrackerEnabled: vmState.balTracker.builder else: nil
 
   for i in 0 ..< n:
     entries[i].tx = transactions[i].addr
     entries[i].txIndex = i
-    futs[i] = vmState.com.taskpool.spawn processTxTask(
-      ctx.addr, entries[i].addr)
+    futs[i] = vmState.com.taskpool.spawn processTxTask(ctx.addr, entries[i].addr)
 
   # Number of tasks already synced. On an early return the remaining tasks must
   # still be synced before their entry/ctx data goes out of scope, otherwise a
@@ -461,7 +469,8 @@ proc processTransactionsParallel*(
         inc synced
       return err(
         "Error processing tx with index " & $failIdx & ":" &
-        entries[failIdx].error.toString())
+          entries[failIdx].error.toString()
+      )
 
     block:
       template fail(msg: string) =
@@ -484,9 +493,9 @@ proc processTransactionsParallel*(
       ctx.cancelled.store(true, moRelease)
       return err(
         "Error processing tx with index " & $i & ": block gas limit reached (2D). " &
-        "gasLimit=" & $vmState.blockCtx.gasLimit &
-        ", regularGas=" & $vmState.blockRegularGasUsed &
-        ", stateGas=" & $vmState.blockStateGasUsed)
+          "gasLimit=" & $vmState.blockCtx.gasLimit & ", regularGas=" &
+          $vmState.blockRegularGasUsed & ", stateGas=" & $vmState.blockStateGasUsed
+      )
 
     var logs = unpackLogs(entries[i].logs.data(asOpenArray = true))
     if skipReceipts:
@@ -502,7 +511,8 @@ proc processTransactionsParallel*(
   if vmState.blobGasUsed > maxBlobGasPerBlock:
     return err(
       "blobGasUsed " & $vmState.blobGasUsed & " exceeds maximum allowance " &
-      $maxBlobGasPerBlock)
+        $maxBlobGasPerBlock
+    )
 
   applyBlockAccessListState(vmState.ledger, balRef[], n)
   ok()
