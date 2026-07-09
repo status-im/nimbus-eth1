@@ -282,16 +282,19 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionCli
 proc setupCommonRef*(
     config: ExecutionClientConf, numThreads: int): (CommonRef, bool) =
 
-  let disableParallelFeatures = numThreads <= 1 and config.parallelFeaturesEnabled()
+  if config.optimisticStatePrefetch and not config.parallelSenderRecovery:
+    warn "Optimistic state prefetch requires parallel sender recovery to be enabled. " & 
+      "Running without optimistic prefetching."
 
-  if disableParallelFeatures:
-    warn "Not enough taskpool threads, disabling parallel execution features",
-      numThreads,
-      parallelSenderRecovery = config.parallelSenderRecovery,
-      parallelStateRootComputation = config.parallelStateRootComputation,
-      optimisticStatePrefetch = config.optimisticStatePrefetch,
-      balStatePrefetch = config.balStatePrefetch,
-      balParallelExecution = config.balParallelExecution
+  var disableParallelFeatures = false
+
+  if config.parallelFeaturesEnabled():
+    if config.statelessProvider:
+      info "Stateless provider enabled, disabling parallel execution features"
+      disableParallelFeatures = true
+    elif numThreads <= 1:
+      info "Not enough taskpool threads, disabling parallel execution features", numThreads
+      disableParallelFeatures = true
 
   var dbOpts = config.dbOptions(noKeyCache = config.cmd == NimbusCmd.`import`)
   if disableParallelFeatures:

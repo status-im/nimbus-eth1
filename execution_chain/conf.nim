@@ -857,8 +857,10 @@ func udpPort*(config: ExecutionClientConf): Port =
   config.udpPortFlag.get(config.tcpPort)
 
 func threadSafeCaches*(config: ExecutionClientConf): bool =
-  config.optimisticStatePrefetch or config.balStatePrefetch or
-    config.parallelStateRootComputation or config.balParallelExecution
+  (config.parallelSenderRecovery and config.optimisticStatePrefetch) or
+    config.parallelStateRootComputation or
+    config.balStatePrefetch or
+    config.balParallelExecution
 
 func parallelFeaturesEnabled*(config: ExecutionClientConf): bool =
   config.threadSafeCaches() or config.parallelSenderRecovery

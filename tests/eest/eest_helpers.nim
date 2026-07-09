@@ -79,10 +79,10 @@ proc prepareEnv*(
     let com = CommonRef.new(memDB, config,
       statelessProvider = statelessEnabled,
       statelessWitnessValidation = false, # Running stateless execution separately in test runner
+      parallelSenderRecovery = parallelEnabled,      
       optimisticStatePrefetch = parallelEnabled,
       balStatePrefetch = parallelEnabled,
-      balParallelExecution = parallelEnabled,
-      parallelSenderRecovery = parallelEnabled
+      balParallelExecution = parallelEnabled
     )
     com.db.mpt.parallelStateRootComputation = parallelEnabled
 

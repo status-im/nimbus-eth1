@@ -101,10 +101,6 @@ type
     maxBlobs: Opt[uint8]
       ## For EIP-7872; allows constraining of max blobs packed into each payload
 
-    when compileOption("threads"):
-      taskpool*: Taskpool
-        ## Shared task pool for offloading computation to other threads
-
     statelessProvider*: bool
       ## Enable the stateless provider. This turns on the features required
       ## by stateless clients such as generation and storage of block witnesses
@@ -112,6 +108,17 @@ type
 
     statelessWitnessValidation*: bool
       ## Enable full validation of execution witnesses.
+
+    when compileOption("threads"):
+      taskpool: Taskpool
+        ## Shared task pool for offloading computation to other threads
+
+      taskpoolUsable: bool
+        ## Cached evaluation of `not taskpool.isNil() and taskpool.numThreads > 1`
+
+    parallelSenderRecovery*: bool
+      ## Recover the transaction senders of a block in parallel on background
+      ## threads.
 
     optimisticStatePrefetch*: bool
       ## Optimistically pre-execute the transactions of a block on background
@@ -129,10 +136,6 @@ type
     balParallelExecution*: bool
       ## Execute the transactions of a block in parallel on background threads
       ## using the supplied block access list.
-
-    parallelSenderRecovery*: bool
-      ## Recover the transaction senders of a block in parallel on background
-      ## threads.
 
 # ------------------------------------------------------------------------------
 # Private helper functions
@@ -335,29 +338,6 @@ proc new*(
     balParallelExecution,
     parallelSenderRecovery)
 
-func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
-  ## clone but replace the db
-  ## used in EVM tracer whose db is CaptureDB
-  CommonRef(
-    db           : db,
-    config       : com.config,
-    forkTransitionTable: com.forkTransitionTable,
-    forkIdCalculator: com.forkIdCalculator,
-    genesisHash  : com.genesisHash,
-    genesisHeader: com.genesisHeader,
-    networkId    : com.networkId,
-    statelessProvider: com.statelessProvider,
-    statelessWitnessValidation: com.statelessWitnessValidation,
-    optimisticStatePrefetch: com.optimisticStatePrefetch,
-    balStatePrefetch: com.balStatePrefetch,
-    balStatePrefetchWorkers: com.balStatePrefetchWorkers,
-    balParallelExecution: com.balParallelExecution,
-    parallelSenderRecovery: com.parallelSenderRecovery
-  )
-
-func clone*(com: CommonRef): CommonRef =
-  com.clone(com.db)
-
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -464,21 +444,31 @@ func amsterdamTransition*(com: CommonRef, parentTime, t: EthTime): bool =
 func isBogotaOrLater*(com: CommonRef, t: EthTime): bool =
   com.config.bogotaTime.isSome and t >= com.config.bogotaTime.value
 
+when compileOption("threads"):
+  func taskpool*(com: CommonRef): Taskpool =
+    com.taskpool
+
+  func `taskpool=`*(com: CommonRef, taskpool: Taskpool) =
+    com.taskpool = taskpool
+    com.taskpoolUsable = not taskpool.isNil() and taskpool.numThreads > 1
+
 func parallelSenderRecoveryEnabled*(com: CommonRef): bool =
   when compileOption("threads"):
-    let enabled = com.parallelSenderRecovery
-    if enabled:
-      assert not com.taskpool.isNil() and com.taskpool.numThreads > 1
-    enabled
+    if com.parallelSenderRecovery:
+      assert com.taskpoolUsable
+      true
+    else:
+      false
   else:
     false
 
 func optimisticStatePrefetchEnabled*(com: CommonRef): bool =
   when compileOption("threads"):
-    let enabled = com.optimisticStatePrefetch
-    if enabled:
-      assert not com.taskpool.isNil() and com.taskpool.numThreads > 1
-    enabled
+    if com.optimisticStatePrefetch:
+      assert com.taskpoolUsable
+      true
+    else:
+      false
   else:
     false
 
@@ -487,11 +477,11 @@ func balStatePrefetchEnabled*(
     timestamp: EthTime,
     blockAccessList: Opt[BlockAccessListRef]): bool =
   when compileOption("threads"):
-    let enabled = blockAccessList.isSome() and com.balStatePrefetch and
-      com.isAmsterdamOrLater(timestamp)
-    if enabled:
-      assert not com.taskpool.isNil() and com.taskpool.numThreads > 1
-    enabled
+    if com.balStatePrefetch:
+      assert com.taskpoolUsable
+      blockAccessList.isSome() and com.isAmsterdamOrLater(timestamp)
+    else:
+      false
   else:
     false
 
@@ -500,11 +490,11 @@ func balParallelExecutionEnabled*(
     timestamp: EthTime,
     blockAccessList: Opt[BlockAccessListRef]): bool =
   when compileOption("threads"):
-    let enabled = blockAccessList.isSome() and com.balParallelExecution and
-      com.isAmsterdamOrLater(timestamp)
-    if enabled:
-      assert not com.taskpool.isNil() and com.taskpool.numThreads > 1
-    enabled
+    if com.balParallelExecution:
+      assert com.taskpoolUsable
+      blockAccessList.isSome() and com.isAmsterdamOrLater(timestamp)
+    else:
+      false
   else:
     false
 
