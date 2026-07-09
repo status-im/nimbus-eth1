@@ -75,10 +75,6 @@ type
     Debug                         ## enable debug_ set of RPC API
     Admin                         ## enable admin_ set of RPC API
 
-  DiscoveryType* {.pure.} = enum
-    V4
-    V5
-
   ExecutionClientConf* = object
     ## Main configuration for the execution client - when updating, coordinate
     ## options shared with other executables (logging, metrics etc)
@@ -268,15 +264,9 @@ type
       name: "nat" .}: NatConfig
 
     discovery* {.
-      desc: "Specify method to find suitable peer in an Ethereum network (None, V4, V5)"
-      longDesc:
-        "- None: Disables the peer discovery mechanism (manual peer addition)\n" &
-        "- V4  : Node Discovery Protocol v4\n" &
-        "- V5  : Node Discovery Protocol v5\n" &
-        "- All : V4, V5"
-      defaultValue: @["V4", "V5"]
-      defaultValueDesc: "V4, V5"
-      name: "discovery" .}: seq[string]
+      desc: "Enable peer discovery. When disabled, peers must be added manually"
+      defaultValue: true
+      name: "discovery" .}: bool
 
     netKey* {.
       desc: "P2P ethereum node (secp256k1) private key (random, path, hex)"
@@ -785,23 +775,6 @@ proc getRpcFlags*(config: ExecutionClientConf): set[RpcFlag] =
 
 proc getWsFlags*(config: ExecutionClientConf): set[RpcFlag] =
   getRpcFlags(config.wsApi)
-
-proc getDiscoveryFlags(api: openArray[string]): set[DiscoveryType] =
-  if api.len == 0:
-    return {DiscoveryType.V4, DiscoveryType.V5}
-
-  for item in repeatingList(api):
-    case item.toLowerAscii()
-    of "none": result = {}
-    of "v4": result.incl DiscoveryType.V4
-    of "v5": result.incl DiscoveryType.V5
-    of "all": result = {DiscoveryType.V4, DiscoveryType.V5}
-    else:
-      error "Unknown discovery type: ", name=item
-      quit QuitFailure
-
-proc getDiscoveryFlags*(config: ExecutionClientConf): set[DiscoveryType] =
-  getDiscoveryFlags(config.discovery)
 
 proc getBootstrapNodes*(config: ExecutionClientConf): BootstrapNodes =
   # Ignore standard bootnodes if customNetwork is loaded

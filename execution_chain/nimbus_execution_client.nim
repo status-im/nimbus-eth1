@@ -155,10 +155,9 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
 
   # Start Eth node
   if config.maxPeers > 0:
-    let discovery = config.getDiscoveryFlags()
     nimbus.ethNode.connectToNetwork(
-      enableDiscV4 = DiscoveryType.V4 in discovery,
-      enableDiscV5 = DiscoveryType.V5 in discovery,
+      enableDiscV4 = config.discovery,
+      enableDiscV5 = config.discovery,
     )
 
   # Initalise beacon sync descriptor.
