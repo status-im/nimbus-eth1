@@ -53,6 +53,42 @@ proc writeBaggage*(
       generatedBal.get(),
     )
 
+proc getVmState(
+    c: ForkedChainRef,
+    parentBlk: BlockRef,
+    txFrame: CoreDbTxRef,
+    header: Header,
+    blockAccessList: Opt[BlockAccessListRef],
+    finalized: bool,
+): BaseVMState =
+  let
+    enableBalTracker = (not finalized or blockAccessList.isNone()) and
+      c.com.isAmsterdamOrLater(header.timestamp)
+    balBuilderThreadSafe =
+      c.com.balParallelExecutionEnabled(header.timestamp, blockAccessList)
+
+  # c.vmState stays nil unless this block succeeds, so a half-executed ledger 
+  # can never be reused.
+  let cached = c.vmState
+  c.vmState = nil
+
+  # The ledger caches are valid only if the new block builds directly on the 
+  # block this vmState just executed.
+  if not cached.isNil and parentBlk.hash == c.vmStateBlockHash and 
+      cached.reinit(parentBlk.header, header, txFrame, enableBalTracker, balBuilderThreadSafe):
+    cached
+  else:
+    let vmState = BaseVMState()
+    vmState.init(
+      parentBlk.header,
+      header,
+      c.com,
+      txFrame,
+      enableBalTracker = enableBalTracker,
+      balBuilderThreadSafe = balBuilderThreadSafe,
+    )
+    vmState
+
 proc processBlock*(
     c: ForkedChainRef,
     parentBlk: BlockRef,
@@ -65,16 +101,7 @@ proc processBlock*(
   template header(): Header =
     blk.header
 
-  let vmState = BaseVMState()
-  vmState.init(
-    parentBlk.header,
-    header,
-    c.com,
-    txFrame,
-    enableBalTracker = (not finalized or blockAccessList.isNone()) and
-        c.com.isAmsterdamOrLater(header.timestamp),
-    balBuilderThreadSafe = c.com.balParallelExecutionEnabled(header.timestamp, blockAccessList),
-  )
+  let vmState = c.getVmState(parentBlk, txFrame, header, blockAccessList, finalized)
   defer:
     vmState.dispose()
 
@@ -141,5 +168,9 @@ proc processBlock*(
   ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory)
 
   c.writeBaggage(blk, blockAccessList, blkHash, txFrame, vmState.receipts, vmState.blockAccessList)
+
+  # Cache for the next block - the ledger caches stay warm on linear import
+  c.vmState = vmState
+  c.vmStateBlockHash = blkHash
 
   ok(move(vmState.receipts))
