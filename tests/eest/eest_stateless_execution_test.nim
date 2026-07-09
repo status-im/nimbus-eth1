@@ -23,8 +23,6 @@ const
 
 const skipFiles = [
   # Currently skipped as still failing with statelessEnabled = true
-  # Once all of these pass we could simply run eest_blockchain_test.nim
-  # with statelessEnabled = true and remove this test file.
   #
   # --- eest_zkevm files with failures ---
   #
@@ -86,5 +84,5 @@ runEESTSuite(
   suiteName,
   eestType,
   statelessEnabled = true,
-  parallelEnabled = false
+  parallelEnabled = false # Stateless features are not supported with parallel enabled
 )

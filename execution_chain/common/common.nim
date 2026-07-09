@@ -452,6 +452,12 @@ when compileOption("threads"):
     com.taskpool = taskpool
     com.taskpoolUsable = not taskpool.isNil() and taskpool.numThreads > 1
 
+  proc shutdownTaskpool*(com: CommonRef) =
+    if not com.taskpool.isNil():
+      com.taskpool.shutdown()
+      com.taskpool = nil
+      com.taskpoolUsable = false
+
 func parallelSenderRecoveryEnabled*(com: CommonRef): bool =
   when compileOption("threads"):
     if com.parallelSenderRecovery:

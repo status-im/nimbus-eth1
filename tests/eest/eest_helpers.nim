@@ -89,7 +89,8 @@ proc prepareEnv*(
     if parallelEnabled:
       let taskpool =
         try:
-          Taskpool.new(numThreads = min(countProcessors(), 16))
+          # Use between 2 and 16 threads
+          Taskpool.new(numThreads = max(min(countProcessors(), 16), 2))
         except CatchableError as exc:
           debugEcho "Failed to start taskpool: ", exc.msg
           quit(QuitFailure)

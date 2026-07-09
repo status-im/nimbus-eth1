@@ -282,22 +282,18 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionCli
 proc setupCommonRef*(
     config: ExecutionClientConf, numThreads: int): (CommonRef, bool) =
 
+  if config.statelessProvider and config.balParallelExecution:
+    warn "Stateless provider enabled. Running without BAL parallel execution"
+
   if config.optimisticStatePrefetch and not config.parallelSenderRecovery:
     warn "Optimistic state prefetch requires parallel sender recovery to be enabled. " & 
       "Running without optimistic prefetching."
 
-  var disableParallelFeatures = false
-
-  if config.parallelFeaturesEnabled():
-    if config.statelessProvider:
-      info "Stateless provider enabled, disabling parallel execution features"
-      disableParallelFeatures = true
-    elif numThreads <= 1:
-      info "Not enough taskpool threads, disabling parallel execution features", numThreads
-      disableParallelFeatures = true
+  let disableParallelFeatures = numThreads <= 1 and config.parallelFeaturesEnabled()
 
   var dbOpts = config.dbOptions(noKeyCache = config.cmd == NimbusCmd.`import`)
   if disableParallelFeatures:
+    info "Not enough taskpool threads, disabling parallel features", numThreads
     dbOpts.parallelStateRootComputation = false
     dbOpts.threadSafeCaches = false
 
@@ -309,9 +305,10 @@ proc setupCommonRef*(
     db = coreDB,
     networkId = config.networkId,
     params = config.networkParams,
-    statelessProvider = config.statelessProvider,
+    statelessProvider = config.statelessProvider and not config.balParallelExecution,
     statelessWitnessValidation = config.statelessWitnessValidation,
-    optimisticStatePrefetch = config.optimisticStatePrefetch and not disableParallelFeatures,
+    optimisticStatePrefetch = config.parallelSenderRecovery and 
+        config.optimisticStatePrefetch and not disableParallelFeatures,
     balStatePrefetch = config.balStatePrefetch and not disableParallelFeatures,
     balStatePrefetchWorkers = config.balStatePrefetchWorkers,
     balParallelExecution = config.balParallelExecution and not disableParallelFeatures,
