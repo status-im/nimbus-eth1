@@ -275,7 +275,7 @@ proc runSiblingHeadPayloadTest(env: TestEnv): Result[void, string] =
     client = env.client
     genesisHeader = ? client.latestHeader()
     genesisHash = genesisHeader.computeBlockHash
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: genesisHash
     )
     time = getTime().toUnix
@@ -314,7 +314,7 @@ proc runSiblingHeadPayloadTest(env: TestEnv): Result[void, string] =
       suggestedFeeRecipient: default(Address),
       withdrawals:           Opt.some(newSeq[WithdrawalV1]()),
     )
-    updateC = ForkchoiceStateV1(
+    updateC = ForkchoiceState(
       headBlockHash: payloadA.blockHash,
       finalizedBlockHash: genesisHash,
     )
@@ -503,7 +503,7 @@ proc payloadAttrV4PreserveWithdrawalsTest(env: TestEnv): Result[void, string] =
   let
     client = env.client
     header = ? client.latestHeader()
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix
