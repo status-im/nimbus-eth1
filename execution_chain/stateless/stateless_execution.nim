@@ -115,7 +115,7 @@ template statelessProcessBlock*(
 ): Result[void, string] =
   statelessProcessBlock(witness, id, chainConfigForNetwork(id), blk)
 
-# https://github.com/ethereum/execution-specs/blob/b6b764ff21bb754b79e11ef5dc7ad1f79996e923/src/ethereum/forks/amsterdam/execution_engine/validation_helpers.py#L22
+# https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/execution_engine/validation_helpers.py#L22
 func toBlock(
     p: ExecutionPayload, parentBeaconBlockRoot: Opt[Hash32], requestsHash: Opt[Hash32]
 ): Block {.raises: [RlpError].} =
@@ -209,7 +209,7 @@ func chainConfigForStateless(cc: StatelessChainConfig): ChainConfig =
   )
 
 # Encode execution requests into EL format:
-# https://github.com/ethereum/execution-specs/blob/b6b764ff21bb754b79e11ef5dc7ad1f79996e923/src/ethereum/forks/amsterdam/execution_engine/requests.py#L131
+# https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/execution_engine/requests.py#L135
 func encodeDeposits(
     deposits: List[DepositRequest, Limit MAX_DEPOSIT_REQUESTS_PER_PAYLOAD]
 ): seq[byte] =
@@ -288,7 +288,7 @@ proc executeNewPayload(input: StatelessInput): Result[void, string] =
 
   statelessProcessBlock(input.witness, com, blk)
 
-# https://github.com/ethereum/execution-specs/blob/b6b764ff21bb754b79e11ef5dc7ad1f79996e923/src/ethereum/forks/amsterdam/stateless.py#L344
+# https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/stateless.py#L368
 proc verify_stateless_new_payload*(input: StatelessInput): StatelessValidationResult =
   let new_payload_request_root = hash_tree_root(input.new_payload_request)
 
