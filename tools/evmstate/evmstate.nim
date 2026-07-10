@@ -44,23 +44,16 @@ type
     tracerFlags: set[TracerFlags]
     error: string
 
-  StateResult = object
-    name : string
-    pass : bool
-    root : Hash32
-    fork : string
-    error: string
-    state: StateDump
-    postState: JsonNode
+  StateResult* = object
+    name* : string
+    pass* : bool
+    root* : Hash32
+    fork* : string
+    error*: string
+    state*: StateDump
+    postState*: JsonNode
 
   TestVMState = ref object of BaseVMState
-
-proc extractNameAndFixture(ctx: var StateContext, n: JsonNode): JsonNode =
-  for label, child in n:
-    result = child
-    ctx.name = label
-    return
-  doAssert(false, "unreachable")
 
 proc toBytes(x: string): seq[byte] =
   result = newSeq[byte](x.len)
@@ -106,8 +99,6 @@ proc writeResultToStdout(stateRes: seq[StateResult]) =
       z["state"] = %(res.state)
     if res.postState.isNil.not:
       z["postState"] = res.postState
-    else:
-      z["postState"] = newJNull()
     n.add(z)
 
   stdout.write(n.pretty)
@@ -136,11 +127,19 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
     txFrame = com.db.baseTxFrame(),
     tracer = tracer)
 
-  let sender = ctx.tx.recoverSender().expect("valid signature")
-
   vmState.mutateLedger:
     setupLedger(pre, ledger)
     ledger.persist(clearEmptyAccount = false) # settle accounts storage
+
+  let sender = ctx.tx.recoverSender().valueOr:
+    # Invalid signature, early exit
+    let stateRoot = vmState.readOnlyLedger.getStateRoot()
+    return StateResult(
+      name : ctx.name,
+      pass : true,
+      root : stateRoot,
+      fork : ctx.forkStr
+    )
 
   var callResult: LogResult
   defer:
@@ -202,6 +201,8 @@ proc parseTx(ctx: var StateContext, txData: JsonNode, subTest: JsonNode) =
           # field is uint64.
           # high_gas_price_paris.json can be decoded by parseTx.
           break txBytes
+        if "NONCE_IS_MAX" in exceptionString:
+          break txBytes
 
       let rlpBytes = hexToSeqByte(subTest["txbytes"].getStr)
       ctx.tx = rlp.decode(rlpBytes, Transaction)
@@ -217,13 +218,13 @@ proc parseTx(ctx: var StateContext, txData: JsonNode, subTest: JsonNode) =
   except RlpError as exc:
     doAssert(false, exc.msg)
 
-proc prepareAndRun*(inputFile: string, conf: StateConf): bool =
+proc executeTest(stateRes: var seq[StateResult], name: string, n: JsonNode, conf: StateConf): bool =
   var
-    ctx: StateContext
+    ctx = StateContext(
+      name: name,
+    )
 
   let
-    fixture = json.parseFile(inputFile)
-    n       = ctx.extractNameAndFixture(fixture)
     txData  = n["transaction"]
     post    = n["post"]
     pre     = n["pre"]
@@ -235,7 +236,6 @@ proc prepareAndRun*(inputFile: string, conf: StateConf): bool =
     ctx.tracerFlags = toTracerFlags(conf)
 
   var
-    stateRes = newSeqOfCap[StateResult](post.len)
     index = 1
     hasError = false
 
@@ -266,16 +266,15 @@ proc prepareAndRun*(inputFile: string, conf: StateConf): bool =
 
     let forkData = post[conf.fork]
     prepareFork(conf.fork)
-    if conf.index.isNone:
+    if conf.subIndex.isNone:
       for subTest in forkData:
         runSubTest(subTest)
     else:
-      let index = conf.index.get()
+      let index = conf.subIndex.get()
       if index > forkData.len or index < 0:
-        stdout.writeLine("selected index out of range(0-$1), requested $2" %
+        stdout.writeLine("selected sub index out of range(0-$1), requested $2" %
           [$forkData.len, $index])
         return false
-
       let subTest = forkData[index]
       runSubTest(subTest)
   else:
@@ -284,13 +283,47 @@ proc prepareAndRun*(inputFile: string, conf: StateConf): bool =
       for subTest in forkData:
         runSubTest(subTest)
 
-  if conf.disableOutput:
-    if hasError:
-      writeResultToStdout(stateRes)
-  else:
-    writeResultToStdout(stateRes)
-
   not hasError
+
+proc prepareAndRun*(inputFile: string, conf: StateConf, T: type): T =
+  let
+    fixture = json.parseFile(inputFile)
+
+  var
+    noError = true
+    stateRes = newSeqOfCap[StateResult](fixture.len)
+
+  if conf.index.isSome:
+    let
+      index = conf.index.get()
+
+    var
+      idx = 0
+      found = false
+
+    for name, node in pairs(fixture):
+      if idx == index:
+        noError = noError and executeTest(stateRes, name, node, conf)
+        found = true
+      inc idx
+
+    if not found:
+      stdout.writeLine("selected index out of range(0-$1), requested $2" %
+        [$idx, $index])
+  else:
+    for name, node in pairs(fixture):
+      noError = noError and executeTest(stateRes, name, node, conf)
+
+  when T is bool:
+    if conf.disableOutput:
+      if not noError and conf.enableError:
+        writeResultToStdout(stateRes)
+    else:
+      writeResultToStdout(stateRes)
+
+    noError
+  else:
+    move(stateRes)
 
 when defined(chronicles_runtime_filtering):
   type Lev = chronicles.LogLevel
@@ -316,7 +349,7 @@ proc evmStateMain*() =
     setVerbosity(conf.verbosity)
 
   if conf.inputFile.len > 0:
-    if not prepareAndRun(conf.inputFile, conf):
+    if not prepareAndRun(conf.inputFile, conf, bool):
       quit(QuitFailure)
   else:
     ProcessState.setupStopHandlers()
@@ -325,7 +358,7 @@ proc evmStateMain*() =
       if (let reason = ProcessState.stopping(); reason.isSome()):
         echo "Shutting down, reason = ", reason[]
         break
-      let res = prepareAndRun(inputFile, conf)
+      let res = prepareAndRun(inputFile, conf, bool)
       noError = noError and res
     if not noError:
       quit(QuitFailure)
