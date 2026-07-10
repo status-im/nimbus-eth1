@@ -490,6 +490,8 @@ proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool, collect
 
 proc reinit*(ledger: LedgerRef, txFrame: CoreDbTxRef) =
   doAssert ledger.isTopLevelClean
+  doAssert txFrame.aTx.parent == ledger.txFrame.aTx,
+    "reinit txFrame must be a direct child of the ledger's current frame"
   ledger.txFrame = txFrame
   ledger.txFrame.aTx.collectWitness = ledger.collectWitness
   ledger.ripemdSpecial = false

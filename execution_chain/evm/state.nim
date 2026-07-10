@@ -34,7 +34,7 @@ proc init(
       com:          CommonRef;
       tracer:       TracerRef,
       tracker:      BlockAccessListTrackerRef,
-      flags:        set[VMFlag] = self.flags) =
+      flags:        set[VMFlag] = {}) =
   ## Initialisation helper
   # Take care to (re)set all fields since the VMState might be recycled
   self.com = com
@@ -145,15 +145,13 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
     tracker = self.balTracker
     com    = self.com
     ledger     = self.ledger
-    flags  = self.flags
   self.init(
     ledger       = ledger,
     parent   = parent,
     blockCtx = blockCtx,
     com      = com,
     tracer   = tracer,
-    tracker  = tracker,
-    flags    = flags)
+    tracker  = tracker)
   true
 
 proc reinit*(self:   BaseVMState; ## Object descriptor
@@ -182,7 +180,7 @@ proc reinit*(self:    BaseVMState; ## Object descriptor
   ## and rebuilds the BAL tracker from explicit per-block flags.
   if not self.ledger.isTopLevelClean:
     return false
-  
+
   self.ledger.reinit(txFrame)
 
   if not self.balTracker.isNil():
@@ -201,8 +199,7 @@ proc reinit*(self:    BaseVMState; ## Object descriptor
     blockCtx = blockCtx(header),
     com      = self.com,
     tracer   = self.tracer,
-    tracker  = tracker,
-    flags    = self.flags)
+    tracker  = tracker)
   true
 
 proc init*(
