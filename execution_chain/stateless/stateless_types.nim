@@ -22,7 +22,7 @@ export ssz_serialization, ssz_codec
 # ---------------------------------------------------------------------------
 
 # As per spec:
-# https://github.com/ethereum/execution-specs/blob/b6b764ff21bb754b79e11ef5dc7ad1f79996e923/src/ethereum/forks/amsterdam/stateless_ssz.py#L41
+# https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/stateless_ssz.py#L41
 #
 # Not all consts are defined here as we get some of the types from beacon_chain datatypes
 
@@ -48,7 +48,7 @@ const
 # ---------------------------------------------------------------------------
 
 # As per spec:
-# https://github.com/ethereum/execution-specs/blob/b6b764ff21bb754b79e11ef5dc7ad1f79996e923/src/ethereum/forks/amsterdam/stateless_ssz.py#L96
+# https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/stateless_ssz.py#L96
 #
 # Not all types are defined here as we get some of the types from beacon_chain datatypes
 
