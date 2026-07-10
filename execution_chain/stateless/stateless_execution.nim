@@ -83,9 +83,14 @@ proc statelessProcessBlock*(
   # Create evm instance using the in memory database.
   let memoryVmState = BaseVMState()
   memoryVmState.init(
-    parent, blk.header, com, memoryTxFrame, storeSlotHash = false,
+    parent,
+    blk.header,
+    com,
+    memoryTxFrame,
+    storeSlotHash = false,
     enableBalTracker = com.isAmsterdamOrLater(blk.header.timestamp),
-    stateless = true)
+    stateless = true,
+  )
 
   defer:
     memoryVmState.dispose()
@@ -97,7 +102,7 @@ proc statelessProcessBlock*(
     skipReceipts = false,
     skipUncles = true,
     skipStateRootCheck = false,
-    skipPostExecBalCheck = not memoryVmState.balTrackerEnabled
+    skipPostExecBalCheck = not memoryVmState.balTrackerEnabled,
   )
   doAssert memoryVmState.ledger.getStateRoot() == blk.header.stateRoot
 
@@ -121,7 +126,8 @@ func toBlock(
 ): Block {.raises: [RlpError].} =
   var txs = newSeqOfCap[Transaction](p.transactions.len)
   for tx in p.transactions:
-    txs.add(rlp.decode(distinctBase(tx), Transaction)) # asSeq
+    txs.add(rlp.decode(distinctBase(tx), Transaction))
+
   var wds = newSeqOfCap[Withdrawal](p.withdrawals.len)
   for wd in p.withdrawals:
     wds.add(
@@ -132,6 +138,7 @@ func toBlock(
         amount: uint64(wd.amount),
       )
     )
+
   Block(
     header: Header(
       parentHash: Hash32(p.parent_hash.data),
@@ -162,6 +169,51 @@ func toBlock(
     transactions: txs,
     withdrawals: Opt.some(wds),
   )
+
+# We should be using the HardFork enum value for Amsterdam from hardforks.nim
+# but BPO1-BPO5 are already defined there, while in the execution-specs tag
+# tests-zkevm@v0.5.0 only BPO1-BPO2 is defined. Making the enum value different.
+# So we hardcode it here for now to the value of the specs/tests used.
+const PROTOCOL_FORK_AMSTERDAM = 20'u64
+
+# https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/stateless.py#L304
+func isActivationActive(
+    activation: ForkActivation, execution_payload: ExecutionPayload
+): Result[void, string] =
+  ## Return whether an activation point is active for the payload.
+  if activation.block_number.len == 0 and activation.timestamp.len == 0:
+    return err("Fork activation must set block_number or timestamp")
+
+  if activation.block_number.len > 0 and
+      execution_payload.block_number < activation.block_number[0]:
+    return err("ChainConfig active_fork is not active for the target payload")
+
+  if activation.timestamp.len > 0 and
+      execution_payload.timestamp < activation.timestamp[0]:
+    return err("ChainConfig active_fork is not active for the target payload")
+
+  ok()
+
+# https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/stateless.py#L340
+func validate_chain_config(
+    chain_config: StatelessChainConfig, execution_payload: ExecutionPayload
+): Result[void, string] =
+  ## Validate the target payload's active fork config.
+  let active_fork = chain_config.active_fork
+
+  ?isActivationActive(active_fork.activation, execution_payload)
+
+  if active_fork.fork != PROTOCOL_FORK_AMSTERDAM:
+    return err("Amsterdam stateless guest cannot execute fork " & $active_fork.fork)
+
+  # The expected blob schedule is the one compiled into the guest for Amsterdam.
+  let expectedBlobSchedule =
+    defaultBlobSchedule()[Amsterdam].expect("Amsterdam blob schedule is defined")
+  if active_fork.blob_schedule.len == 0 or
+      active_fork.blob_schedule[0] != expectedBlobSchedule:
+    return err("ChainConfig active_fork blob_schedule does not match Amsterdam")
+
+  ok()
 
 func chainConfigForStateless(cc: StatelessChainConfig): ChainConfig =
   # Nimbus EVM needs the full fork timeline, but the stateless input only provides
@@ -244,7 +296,8 @@ func encodeConsolidations(
   res
 
 proc executeNewPayload(input: StatelessInput): Result[void, string] =
-  # TODO: implement validate_chain_config
+  ?validate_chain_config(input.chain_config, input.new_payload_request.executionPayload)
+
   let
     reqs = input.new_payload_request.executionRequests
     requestsHash = Opt.some(

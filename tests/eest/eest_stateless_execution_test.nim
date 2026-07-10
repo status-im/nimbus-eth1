@@ -51,9 +51,6 @@ const skipFiles = [
   # The test code only support Prague request types, need to add Amsterdam request types
   "invalid_multi_type_requests.json",
 
-  # No fail yet as we don't verify chain_config
-  "validation_chain_config_wrong_chain_id_legacy_signature.json",
-
   # No fail yet as we don't check/use public keys. We could check them easily
   # but the better way is to use them as optimization and check automatically
   # that way.
