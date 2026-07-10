@@ -67,27 +67,30 @@ proc getVmState(
     balBuilderThreadSafe =
       c.com.balParallelExecutionEnabled(header.timestamp, blockAccessList)
 
-  # c.vmState stays nil unless this block succeeds, so a half-executed ledger 
+  # The vmState stays nil unless this block succeeds, so a half-executed ledger 
   # can never be reused.
   let cached = c.vmState
   c.vmState = nil
 
-  # The ledger caches are valid only if the new block builds directly on the 
+  # The ledger caches are valid only if the new block builds directly on the
   # block this vmState just executed.
-  if not cached.isNil and parentBlk.hash == c.vmStateBlockHash and 
+  if not cached.isNil() and parentBlk.hash == c.vmStateBlockHash and
       cached.reinit(parentBlk.header, header, txFrame, enableBalTracker, balBuilderThreadSafe):
-    cached
-  else:
-    let vmState = BaseVMState()
-    vmState.init(
-      parentBlk.header,
-      header,
-      c.com,
-      txFrame,
-      enableBalTracker = enableBalTracker,
-      balBuilderThreadSafe = balBuilderThreadSafe,
-    )
-    vmState
+    return cached
+
+  if not cached.isNil():
+    cached.dispose()
+
+  let vmState = BaseVMState()
+  vmState.init(
+    parentBlk.header,
+    header,
+    c.com,
+    txFrame,
+    enableBalTracker = enableBalTracker,
+    balBuilderThreadSafe = balBuilderThreadSafe,
+  )
+  vmState
 
 proc processBlock*(
     c: ForkedChainRef,

@@ -491,7 +491,7 @@ proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool, collect
 proc reinit*(ledger: LedgerRef, txFrame: CoreDbTxRef) =
   doAssert ledger.isTopLevelClean
   ledger.txFrame = txFrame
-  txFrame.aTx.collectWitness = ledger.collectWitness
+  ledger.txFrame.aTx.collectWitness = ledger.collectWitness
   ledger.ripemdSpecial = false
   ledger.fatalError = Opt.none(string)
   ledger.balOverlay = Opt.none(BlockAccessListOverlay)

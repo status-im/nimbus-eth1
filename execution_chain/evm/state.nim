@@ -183,11 +183,11 @@ proc reinit*(self:    BaseVMState; ## Object descriptor
   if not self.ledger.isTopLevelClean:
     return false
   
+  self.ledger.reinit(txFrame)
+
   if not self.balTracker.isNil():
     self.balTracker.dispose()
     self.balTracker = nil
-
-  self.ledger.reinit(txFrame)
 
   let tracker =
     if enableBalTracker:
