@@ -22,7 +22,7 @@ import
   std/tables,
   pkg/[chronicles, chronos, eth/common],
   ../../[helpers, mpt, worker_desc],
-  ../session_helpers,
+  ../[session_clear, session_helpers],
   ./analyse_desc
 
 logScope:
@@ -260,7 +260,8 @@ proc sessionAnalyseTrieRecur*(
   let start = Moment.now()
   startTraversingMsg(info)
 
-  ctx.clearDanglTables(info).isOkOr:
+  trace info & ": Clearing dangling links tables"
+  ctx.sessionDanglTabsClear(info).isOkOr:
     return err(EClearError)
 
   trd.walkTrieRec(

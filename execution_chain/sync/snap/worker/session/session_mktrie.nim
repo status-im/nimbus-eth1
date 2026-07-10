@@ -15,7 +15,7 @@ import
   pkg/[chronicles, chronos, metrics, stint],
   pkg/stew/[byteutils, interval_set],
   ../[helpers, mpt, state_db, worker_desc],
-  ./[session_analyse, session_pivot, session_helpers]
+  ./[session_clear, session_pivot, session_helpers]
 
 declareGauge nec_snap_merged_mpt_coverage, "" &
   "Factor of accumulated account ranges covered when assembling MPT"
@@ -59,19 +59,6 @@ proc init(
   w.db = ctx.pool.cacheDB
   w.nStates = nStates
   w.fullCov = ItemKeyRangeSet.init()
-
-proc mptTablesClear(ctx: SnapCtxRef, info: static[string]): Opt[void] =
-  let db = ctx.pool.cacheDB
-  db.clearAccKvt().isOkOr:
-    error info & ": Cannot reset accounts MPT", `error`=error
-    return err()
-  db.clearStoKvt().isOkOr:
-    error info & ": Cannot reset slots MPT", `error`=error
-    return err()
-  db.clearCodeKvt().isOkOr:
-    error info & ": Cannot reset receipts table", `error`=error
-    return err()
-  ok()
 
 func dist(a, b: WalkStateData): uint64 =
   ## Block number distance between two states.
@@ -484,11 +471,11 @@ template sessionMkTrie*(ctx: SnapCtxRef; info: static[string]): auto =
       ctx.pool.pivot = Opt.none(StateRoot)          # clear
       for n in 0 ..< byDist.len:
         byDist[n].data.tag = Untagged               # reset all states
-      discard ctx.mptTablesClear info               # rebuild MPT tables
-      discard ctx.sessionAnalyseClear info          # ..
+      discard ctx.sessionPartMptClear info          # rebuild MPT tables
+      discard ctx.sessionDanglTabsClear info        # ..
     of NewAssembly:
       ctx.pool.pivot = Opt.none(StateRoot)          # clear (if any)
-      discard ctx.sessionAnalyseClear info
+      discard ctx.sessionDanglTabsClear info
 
     chronicles.info info & ": Assembling MPT from archived data", nStates
 

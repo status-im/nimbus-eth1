@@ -23,7 +23,7 @@ import
   std/tables,
   pkg/[chronicles, chronos, eth/common],
   ../../[helpers, mpt, worker_desc],
-  ../session_helpers,
+  ../[session_clear, session_helpers],
   ./analyse_desc
 
 export
@@ -393,7 +393,8 @@ template sessionAnalyseTrieIter*(cty: SnapCtxRef, info: static[string]): auto =
     let start = Moment.now()
     startTraversingMsg(info)
 
-    ctx.clearDanglTables(info).isOkOr:
+    trace info & ": Clearing dangling links tables"
+    ctx.sessionDanglTabsClear(info).isOkOr:
       bodyRc = typeof(bodyRc).err(EClearError)
       break body
 

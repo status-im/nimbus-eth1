@@ -98,19 +98,6 @@ template toKey*(rlp: Rlp): seq[byte] =
 
 # ----------
 
-proc clearDanglTables*(ctx: SnapCtxRef, info: static[string]): Opt[void] =
-  let db = ctx.pool.cacheDB
-  db.clearAccDnglKvt().isOkOr:
-    error info & ": Cannot reset dangling accounts", `error`=error
-    return err()
-  db.clearStoDnglKvt().isOkOr:
-    error info & ": Cannot reset dangling slots", `error`=error
-    return err()
-  db.clearCodeMissKvt().isOkOr:
-    error info & ": Cannot reset missing contracts", `error`=error
-    return err()
-  ok()
-
 proc putDanglAcc*(
     trd: TravDescRef;
     key: openArray[byte];
@@ -155,6 +142,77 @@ proc putMissCode*(
   trd.db.putCodeMissKvt(key, path).isOkOr:
     error info & ": Error caching dangling slot links",
       key=key.toHex, path=path.toHex, `error`=error
+    trd.cacheErr.inc
+
+# -------------
+
+proc addAccMissingIntv*(
+    trd: TravDescRef;
+    stateRoot: StateRoot;
+    iv: ItemKeyRange;
+    info: static[string];
+      ) =
+  trd.db.addAccMissingIntv(stateRoot, iv).isOkOr:
+    error info & ": Error caching storage account paths",
+      stateRoot=stateRoot.toStr, iv=iv.flStr, `error`=error
+    trd.cacheErr.inc
+
+proc putFlatAcc*(
+    trd: TravDescRef;
+    accPath: Hash32;
+    payload: openArray[byte];
+    info: static[string];
+      ) =
+  trd.db.putFlatAcc(accPath, payload).isOkOr:
+    error info & ": Error caching account",
+      accPath=accPath.toStr, payload=payload.toHex, `error`=error
+    trd.cacheErr.inc
+
+
+proc addStoMissingIntv*(
+    trd: TravDescRef;
+    accPath: Hash32;
+    iv: ItemKeyRange;
+    info: static[string];
+      ) =
+  trd.db.addStoMissingIntv(accPath, iv).isOkOr:
+    error info & ": Error caching missing storage slot paths",
+      accPath=accPath.toStr, iv=iv.flStr, `error`=error
+    trd.cacheErr.inc
+
+proc putFlatSlot*(
+    trd: TravDescRef;
+    accPath: Hash32;
+    slotKey: Hash32;
+    payload: openArray[byte];
+    info: static[string];
+      ) =
+  trd.db.putFlatSlot(accPath, slotKey, payload).isOkOr:
+    error info & ": Error caching flat storage slot data",
+      accPath=accPath.toStr, slotKey=slotKey.toStr, payload=payload.toHex,
+      `error`=error
+    trd.cacheErr.inc
+
+
+proc putMissingBlob*(
+    trd: TravDescRef;
+    accPath: Hash32;
+    info: static[string];
+      ) =
+  trd.db.putMissingBlob(accPath).isOkOr:
+    error info & ": Error caching missing contract closde",
+      accPath=accPath.toStr, `error`=error
+    trd.cacheErr.inc
+
+proc putFlatCode*(
+    trd: TravDescRef;
+    accPath: Hash32;
+    data: openArray[byte];
+    info: static[string];
+      ) =
+  trd.db.putFlatCode(accPath, data).isOkOr:
+    error info & ": Error caching contract code data",
+      accPath=accPath.toStr, codeData=data.toHex, `error`=error
     trd.cacheErr.inc
 
 # ------------------------------------------------------------------------------
