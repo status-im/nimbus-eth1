@@ -288,7 +288,7 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, stateRefund
       txStateGas -= CREATE_ACCOUNT_STATE_GAS.int64
 
     blockStateGasUsed = GasInt(max(0, txStateGas))
-    blockRegularGasUsed = txGasUsedBeforeRefund - blockStateGasUsed
+    blockRegularGasUsed = max(txGasUsedBeforeRefund - blockStateGasUsed, call.intrinsic.floorDataGas)
     debug "EIP-8037 gas accounting",
       intrinsicRegular = call.intrinsic.regular,
       intrinsicState = call.intrinsic.state,
