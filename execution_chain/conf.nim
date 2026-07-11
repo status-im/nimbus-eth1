@@ -263,10 +263,10 @@ type
       defaultValueDesc: "any"
       name: "nat" .}: NatConfig
 
-    discovery* {.
+    discv5* {.
       desc: "Enable peer discovery. When disabled, peers must be added manually"
       defaultValue: true
-      name: "discovery" .}: bool
+      name: "discv5" .}: bool
 
     netKey* {.
       desc: "P2P ethereum node (secp256k1) private key (random, path, hex)"

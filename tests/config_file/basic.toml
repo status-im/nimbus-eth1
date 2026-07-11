@@ -37,7 +37,7 @@ tcp-port = 5567
 udp-port = 8899
 max-peers = 45
 nat = "any"
-discovery = false
+discv5 = false
 net-key = "random"
 agent-string = "basic_agent_string"
 
