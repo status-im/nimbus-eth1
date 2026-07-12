@@ -35,7 +35,7 @@ proc idleNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
   if ctx.pool.contPrevSession:
     info info & ": Request to resume previous session"
-  elif not ctx.pool.mptAsm.clear(info):
+  elif not ctx.pool.cacheDB.clear(info):
     return SnapIdle                                 # disk full?, stay anyway
   SnapReady
 
@@ -63,7 +63,7 @@ proc readyNext(ctx: SnapCtxRef; info: static[string]): SnapState =
     # to proceed to the next state if there are locally cached headers already,
     # available with recovery mode.
     if not haveConsHead and                         # no FCU request from CL?
-       ctx.chain.latestNumber() < ctx.pool.mptAsm.lastNumber():
+       ctx.chain.latestNumber() < ctx.pool.cacheDB.lastNumber():
       break stayReady                               # advance to next state
 
     return SnapReady
@@ -248,7 +248,7 @@ template updateFcuRoot*(buddy: SnapPeerRef, info: static[string]) =
       # states window.
       if ctx.pool.beaconTarget:                     # check for manual heder trg
         let
-          adb = ctx.pool.mptAsm
+          adb = ctx.pool.cacheDB
           optLastHeader = adb.lastHeader().valueOr:
             break body
           lastHeader = optLastHeader.valueOr:
