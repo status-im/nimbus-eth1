@@ -172,7 +172,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
       skipPostExecBalCheck = skipValidation,
     )
 
-  if not vmState.com.statelessProviderEnabled:
+  if not vmState.com.statelessProvider:
     processBlock()
   else:
     # When the stateless provider is enabled we need to have access to the

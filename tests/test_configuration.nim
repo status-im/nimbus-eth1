@@ -362,7 +362,7 @@ proc configurationMain*() =
       check config.rewriteDatadirId == true
       check config.eagerStateRootCheck == false
       check config.parallelStateRootComputation == false
-      check config.statelessProviderEnabled == true
+      check config.statelessProvider == true
       check config.statelessWitnessValidation == true
 
       check config.httpPort == 12788.Port

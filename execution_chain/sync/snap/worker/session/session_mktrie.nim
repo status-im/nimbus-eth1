@@ -15,13 +15,10 @@ import
   pkg/[chronicles, chronos, metrics, stint],
   pkg/stew/[byteutils, interval_set],
   ../[helpers, mpt, state_db, worker_desc],
-  ./[session_analyse, session_pivot, session_helpers]
+  ./[session_clear, session_pivot, session_helpers]
 
 declareGauge nec_snap_merged_mpt_coverage, "" &
   "Factor of accumulated account ranges covered when assembling MPT"
-
-const
-  UnconditionallyClearCache = false or true
 
 type
   RecoveryStatus = enum
@@ -31,14 +28,14 @@ type
 
   MkTrieSession = object of SessionTicker
     ctx: SnapCtxRef
-    db: MptAsmRef
+    db: CacheDbRef
 
     nStates: int                                    # total of available states
     stateInx: int                                   # index of current state
     state: WalkStateData                            # current state data
     distance: uint64                                # distance to pivot state
 
-    accData: WalkAccount                            # accounts range from cache
+    accData: WalkAccountData                        # accounts range from cache
     accRange: ItemKeyRange                          # avoid repeated calculation
 
     fullCov: ItemKeyRangeSet                        # collect all ranges
@@ -48,7 +45,7 @@ type
 # ------------------------------------------------------------------------------
 
 func toStr(state: WalkStateData): string =
-  state.root.toStr & "(" & $state.number & ")"
+  state.root.toStr & "(" & $state.data.number & ")"
 
 # -----------
 
@@ -59,30 +56,17 @@ proc init(
       ) =
   procCall init(SessionTicker(w))                   # base method initialiser
   w.ctx = ctx
-  w.db = ctx.pool.mptAsm
+  w.db = ctx.pool.cacheDB
   w.nStates = nStates
   w.fullCov = ItemKeyRangeSet.init()
-
-proc mptTablesClear(ctx: SnapCtxRef, info: static[string]): Opt[void] =
-  let db = ctx.pool.mptAsm
-  db.clearAccKvt().isOkOr:
-    error info & ": Cannot reset accounts MPT", `error`=error
-    return err()
-  db.clearStoKvt().isOkOr:
-    error info & ": Cannot reset slots MPT", `error`=error
-    return err()
-  db.clearCodeKvt().isOkOr:
-    error info & ": Cannot reset receipts table", `error`=error
-    return err()
-  ok()
 
 func dist(a, b: WalkStateData): uint64 =
   ## Block number distance between two states.
   ##
-  if a.number < b.number:
-    b.number - a.number
+  if a.data.number < b.data.number:
+    b.data.number - a.data.number
   else:
-    a.number - b.number
+    a.data.number - b.data.number
 
 func isPivot(session: MkTrieSession): bool =
   session.stateInx == 0
@@ -93,24 +77,24 @@ func maxCoverage(w: openArray[WalkStateData]): WalkStateData =
   ##
   for state in w:
     if state.error.len == 0:
-      if state.tag == PivotOnTrie:
+      if state.data.tag == PivotOnTrie:
         return state                                # previously set, already
-      if result.coverage < state.coverage:
+      if result.data.coverage < state.data.coverage:
         result = state
 
 func getRecoveryStatus(w: openArray[WalkStateData]): RecoveryStatus =
   ## Check whether/how the cache structure needs to be cleaned up from a
   ## previos session.
   ##
-  case w[0].tag:
+  case w[0].data.tag:
   of Untagged:
     for n in 1 ..< w.len:
-      if w[n].tag != Untagged:
+      if w[n].data.tag != Untagged:
         return PartiallyAssembled
     return NewAssembly                              # all tags `Untagged`
   of PivotOnTrie, PivotMptAnalysed:
     for n in 1 ..< w.len:
-      if w[n].tag != OnTrie:
+      if w[n].data.tag != OnTrie:
         return PartiallyAssembled
     return AllAssembled                             # partial MPT done
   of OnTrie:
@@ -126,11 +110,12 @@ proc updateCoverageMetrics(session: var MkTrieSession) =
 proc incompleteAccounts(
     session: MkTrieSession;
     accList: openArray[KppTriple];
+    info: static[string];
       ): seq[KpPair] =
   var kpRc: seq[KpPair]
   for (key,path,pyl) in accList:
     block checkAccount:
-      let a = pyl.decodeAccount().valueOr:
+      let a = pyl.decodeAccount(info).valueOr:
         break checkAccount
 
       if a.storageRoot != EMPTY_ROOT_HASH:
@@ -221,13 +206,13 @@ template mkStoTrie(
     template accData: auto = session.accData
 
     let
-      acc = accData.accounts[accInx]
+      acc = accData.data.accounts[accInx]
       storageRoot = acc.accBody.storageRoot.to(StoreRoot)
 
       root {.inject,used.} = state.toStr            # logging only
       accKey {.inject,used.} = acc.accHash.to(ItemKey).flStr
       stoRoot {.inject,used.} = storageRoot.toStr   # logging only
-      peerID {.inject,used.} = accData.peerID.short # logging only
+      peerID {.inject,used.} = accData.data.peerID.short
 
     # Loop over storage slots for particular account
     for w in session.db.walkStoSlot(accData.root, acc.accHash.to(ItemKey)):
@@ -235,28 +220,30 @@ template mkStoTrie(
       # Print keep alive messages and allow thread switch
       bodyRc = session.sessionTicker(info):
         trace info & ": Processing storage slots..", stateInx, nStates, root,
-          distance, accKey, stoRoot, nSlot=w.slot.len
+          distance, accKey, stoRoot, nSlot=w.data.slot.len
       if bodyRc.isSome():
         break body
 
-      let mpt = storageRoot.validate(w.start, w.slot, w.proof).valueOr:
+      let mpt = storageRoot.validate(
+                    w.start, w.data.slot, w.data.proof).valueOr:
         error info & ": slot validation failed", stateInx, nStates, root,
-          distance, peerID, accKey, stoRoot, iv=(w.start,w.limit).flStr,
-          nSlot=w.slot.len, nProof=w.proof.len
+          distance, peerID, accKey, stoRoot, iv=(w.start,w.data.limit).flStr,
+          nSlot=w.data.slot.len, nProof=w.data.proof.len
         continue
 
       # Print keep alive messages and allow thread switch
       bodyRc = session.sessionTicker(info):
         trace info & ": Processing storage slots..", stateInx, nStates, root,
-          distance, accKey, stoRoot, nSlot=w.slot.len
+          distance, accKey, stoRoot, nSlot=w.data.slot.len
       if bodyRc.isSome():
         break body
 
       # Store `(key,node)` list on trie
       session.db.putStoKvt(acc.accHash, mpt.knPairs()).isOkOr:
         error info & ": cannot store slot on trie", stateInx, nStates, root,
-          distance, peerID, accKey, stoRoot, nProof=w.proof.len,
-          iv=(w.start,w.limit).to(float).toStr, nSlot=w.slot.len, `error`=error
+          distance, peerID, accKey, stoRoot, nProof=w.data.proof.len,
+          iv=(w.start,w.data.limit).to(float).toStr, nSlot=w.data.slot.len,
+          `error`=error
       # End `for()`
 
   bodyRc
@@ -277,15 +264,15 @@ template mkCodesList(
     template accData: auto = session.accData
 
     let
-      accMin = accData.accounts[0].accHash.to(ItemKey)
-      accMax = accData.accounts[^1].accHash.to(ItemKey)
+      accMin = accData.data.accounts[0].accHash.to(ItemKey)
+      accMax = accData.data.accounts[^1].accHash.to(ItemKey)
 
       root {.inject,used.} = state.toStr            # logging only
 
     # Find all available `CodeHash` keys
     var found: HashSet[CodeHash]
     for w in session.db.walkByteCode(session.accData.root, accMin):
-      if accMax < w.limit:
+      if accMax < w.data.limit:
         break
 
       # Print keep alive messages and allow thread switch
@@ -295,7 +282,7 @@ template mkCodesList(
       if bodyRc.isSome():
         break body
 
-      for (key,val) in w.codes:
+      for (key,val) in w.data.codes:
         let hash = val.distinctBase.keccak256
         if hash != Hash32(key):
           error info & ": Code key mismatch", stateInx, nStates, root,
@@ -332,19 +319,19 @@ template mkTrieImpl(
     template distance: auto = session.distance
     template accData: auto = session.accData
     template accRange: auto = session.accRange
-    template nAccounts: auto = accData.accounts.len
-    template nProof: auto = accData.proof.len
+    template nAccounts: auto = accData.data.accounts.len
+    template nProof: auto = accData.data.proof.len
 
     var
       start = Moment.now()
     let
       root {.inject,used.} = state.toStr            # logging only
-      peerID {.inject,used.} = accData.peerID.short # logging only
+      peerID {.inject,used.} = accData.data.peerID.short
       iv {.inject,used.} = accRange.flStr           # logging only
 
     # Validate packet, prepare for `(key,node)` extraction
     let mpt = session.accData.root.validate(
-         accData.start, accData.accounts, accData.proof).valueOr:
+         accData.start, accData.data.accounts, accData.data.proof).valueOr:
       error info & ": Accounts validation failed", stateInx, nStates, root,
         distance, peerID, nAccounts, nProof, iv
       bodyRc = Opt.some(ETrieError)
@@ -387,7 +374,7 @@ template mkTrieImpl(
     if 0 < nAccounts:
       # Process storage slots
       for n in 0 ..< nAccounts:
-        if not accData.accounts[n].accBody.storageRoot.isEmpty:
+        if not accData.data.accounts[n].accBody.storageRoot.isEmpty:
           session.mkStoTrie(n, info).isErrOr():
             if value == ECancelledError:            # check for shutdown..
               bodyRc = Opt.some(value)              # ..otherwise ignore for now
@@ -409,7 +396,7 @@ template mkTrieImpl(
     # links cache.
     let
       leafs = mpt.leafKpp()
-      incomplete = session.incompleteAccounts(leafs)
+      incomplete = session.incompleteAccounts(leafs, info)
       danglings = mpt.danglingKp()
 
     # Update cache of dangling links:
@@ -441,7 +428,7 @@ template sessionMkTrie*(ctx: SnapCtxRef; info: static[string]): auto =
   var bodyRc = Opt[Duration].err()
   block body:
     var
-      byDist = ctx.pool.mptAsm.walkStateData().toSeq()
+      byDist = ctx.pool.cacheDB.walkStateData().toSeq()
       session = MkTrieSession()                      # session environment
     let
       pivot = byDist.maxCoverage()                   # assign pivot state
@@ -466,11 +453,6 @@ template sessionMkTrie*(ctx: SnapCtxRef; info: static[string]): auto =
     # Sort states by its distance from pivot, smallest distance first
     byDist.sort proc(x,y: WalkStateData): int = cmp(x.dist pivot,y.dist pivot)
 
-    # FIXME -- begin (will go away) ------------------------------------------
-    when UnconditionallyClearCache:
-      byDist[0].tag = Untagged                      # => restart from scratch
-    # FIXME -- end (will go away) --------------------------------------------
-
     # If necessary, update state data record pretending the cache is empty if
     # the pivot state tag has changed. Otherwise proceed with an interrupted
     # session with the `Untagged` states.
@@ -489,12 +471,12 @@ template sessionMkTrie*(ctx: SnapCtxRef; info: static[string]): auto =
       chronicles.info info & ": Clear MPT and dangling links", nStates
       ctx.pool.pivot = Opt.none(StateRoot)          # clear
       for n in 0 ..< byDist.len:
-        byDist[n].tag = Untagged                    # reset all states
-      discard ctx.mptTablesClear info               # rebuild MPT tables
-      discard ctx.sessionAnalyseClear info          # ..
+        byDist[n].data.tag = Untagged               # reset all states
+      discard ctx.sessionPartMptClear info          # rebuild MPT tables
+      discard ctx.sessionDanglTabsClear info        # ..
     of NewAssembly:
       ctx.pool.pivot = Opt.none(StateRoot)          # clear (if any)
-      discard ctx.sessionAnalyseClear info
+      discard ctx.sessionDanglTabsClear info
 
     chronicles.info info & ": Assembling MPT from archived data", nStates
 
@@ -513,7 +495,7 @@ template sessionMkTrie*(ctx: SnapCtxRef; info: static[string]): auto =
       # Walk account for the current state root
       for w in session.db.walkAccount(state.root):
         accData = w                                 # update descriptor fields
-        accRange = ItemKeyRange.new(w.start, w.limit)
+        accRange = ItemKeyRange.new(w.start, w.data.limit)
 
         if 0 < accData.error.len:
           chronicles.info info & ": Bad accounts record ignored",
@@ -521,7 +503,7 @@ template sessionMkTrie*(ctx: SnapCtxRef; info: static[string]): auto =
           continue
 
         # Check for recovery of an interrupted previous session
-        if state.tag != Untagged:
+        if state.data.tag != Untagged:
           session.updateCoverageMetrics()           # full coverage metrics
           continue
 
@@ -530,9 +512,9 @@ template sessionMkTrie*(ctx: SnapCtxRef; info: static[string]): auto =
             break body                              # otherwise ignore for now
         # End `for walkAccount()`
 
-      if state.tag == Untagged:                     # Register updated state
-        state.tag = (if session.isPivot: PivotOnTrie else: OnTrie)
-        discard session.db.putStateData(state)
+      if state.data.tag == Untagged:                # Register updated state
+        state.data.tag = (if session.isPivot: PivotOnTrie else: OnTrie)
+        discard session.db.putStateData(state.root, state.data)
 
       debug info & ": Done this state", stateInx, nStates, root, distance,
         covered=session.fullCov.totalRatio.pcStr

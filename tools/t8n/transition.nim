@@ -628,7 +628,7 @@ proc transitionAction*(ctx: var TransContext,
     vmState.ledger.txFrame.dispose()
     vmState.dispose()
     vmState = nil
-    com.taskpool.shutdown()
+    com.shutdownTaskpool()
     com.db.close()
 
     return res

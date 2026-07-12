@@ -97,7 +97,7 @@ proc new*(
   ## `BaseVMState` environment where the account state cache is synchronised
   ## with the `parent` block header.
   let
-    ledger = LedgerRef.init(txFrame, storeSlotHash, com.statelessProviderEnabled)
+    ledger = LedgerRef.init(txFrame, storeSlotHash, com.statelessProvider)
     tracker =
       if enableBalTracker:
         BlockAccessListTrackerRef.init(
@@ -193,7 +193,7 @@ proc init*(
   ## networks, the miner address is retrievable via `ecRecover()`.
   let
     ledger = LedgerRef.init(
-      txFrame, storeSlotHash, com.statelessProviderEnabled, stateless)
+      txFrame, storeSlotHash, com.statelessProvider, stateless)
     tracker =
       if enableBalTracker:
         BlockAccessListTrackerRef.init(
