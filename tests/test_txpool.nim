@@ -1159,7 +1159,7 @@ suite "TxPool expiry":
   xp.prevRandao = prevRandao
   xp.feeRecipient = feeRecipient
   xp.timestamp = EthTime.now()
-  
+
   test "removeExpiredTxs only removes txs older than lifetime":
     let tc = BaseTx(gasLimit: 75000)
     xp.checkAddTx(mx.makeTx(tc, mx.getAccount(1), 0))
