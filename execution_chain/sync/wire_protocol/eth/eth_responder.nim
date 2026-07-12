@@ -398,6 +398,10 @@ proc eth68PeerConnected(peer: Peer) {.async: (
   peer.state(eth68).initialized = true
   peer.state(eth68).bestHash = m.bestHash
 
+  # Announce our pooled tx hashes to the new peer; only enqueues an
+  # action, the actual sends run in a background worker.
+  await ctx.scheduleTxAnnounceToNewPeer(peer)
+
 proc eth69OrLaterPeerConnected[PROTO](peer: Peer) {.async: (
     raises: [CancelledError, EthP2PError]).} =
   let
@@ -455,6 +459,10 @@ proc eth69OrLaterPeerConnected[PROTO](peer: Peer) {.async: (
   peer.state(PROTO).earliest = m.earliest
   peer.state(PROTO).latest = m.latest
   peer.state(PROTO).latestHash = m.latestHash
+
+  # Announce our pooled tx hashes to the new peer; only enqueues an
+  # action, the actual sends run in a background worker.
+  await ctx.scheduleTxAnnounceToNewPeer(peer)
 
 template registerCommonThunk(protocol: ProtocolInfo, PROTO: type) =
   registerMsg(protocol, NewBlockHashesMsg, "newBlockHashes",

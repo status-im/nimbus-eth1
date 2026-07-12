@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/[tables, sets, times, random],
+  std/[tables, sets, times, random, math],
   pkg/[chronos, chronicles, results],
   pkg/chronos/ratelimit,
   pkg/eth/common/[hashes, times],
@@ -29,6 +29,11 @@ const
   # https://github.com/ethereum/devp2p/blob/b0c213de97978053a0f62c3ea4d23c0a3d8784bc/caps/eth.md#blockrangeupdate-0x11
   blockRangeUpdateTicker = chronos.minutes(2)
   SOFT_RESPONSE_LIMIT* = 2 * 1024 * 1024
+  # https://github.com/ethereum/devp2p/blob/master/caps/eth.md#newpooledtransactionhashes-0x08
+  MAX_TX_HASH_ANNOUNCE = 4096
+  PENDING_TX_GOSSIP_MAX* = 2048
+  txGossipDebounce = chronos.milliseconds(250)
+  maxTxsPerFlush = 256
 
 template awaitQuota(bcParam: EthWireRef, costParam: float, protocolIdParam: string) =
   let
@@ -62,6 +67,7 @@ const
   txPoolProcessCost = allowedOpsPerSecondCost(50_000)
   hashLookupCost = allowedOpsPerSecondCost(200_000)
   blockRangeUpdateCost = allowedOpsPerSecondCost(20)
+  txGossipCost = allowedOpsPerSecondCost(200)
 
 iterator peers69OrLater(wire: EthWireRef, random: bool = false): Peer =
   var peers = newSeqOfCap[Peer](wire.node.numPeers)
@@ -83,6 +89,43 @@ iterator peers69OrLater(wire: EthWireRef, random: bool = false): Peer =
     if peer.connectionState != ConnectionState.Connected:
       continue
     yield peer
+
+iterator ethPeers(wire: EthWireRef, random: bool = false): Peer =
+  ## All connected eth peers regardless of version: the tx gossip
+  ## messages (0x02, 0x08) are identical across eth68..71.
+  var peers = newSeqOfCap[Peer](wire.node.numPeers)
+  for peer in wire.node.peers(eth71):
+    if peer.isNil:
+      continue
+    peers.add peer
+  for peer in wire.node.peers(eth70):
+    if peer.isNil:
+      continue
+    peers.add peer
+  for peer in wire.node.peers(eth69):
+    if peer.isNil:
+      continue
+    peers.add peer
+  for peer in wire.node.peers(eth68):
+    if peer.isNil:
+      continue
+    peers.add peer
+  if random:
+    shuffle(peers)
+  for peer in peers:
+    if peer.connectionState != ConnectionState.Connected:
+      continue
+    yield peer
+
+proc markSeen(wire: EthWireRef, txHash: Hash32, peerId: NodeId) =
+  wire.seenTransactions.withValue(txHash, seen):
+    seen[].lastSeen = getTime()
+    seen[].peers.incl(peerId)
+  do:
+    var peers = initHashSet[NodeId]()
+    peers.incl(peerId)
+    wire.seenTransactions[txHash] =
+      SeenObject(lastSeen: getTime(), peers: peers)
 
 proc syncerRunning*(wire: EthWireRef): bool =
   # Disable transactions gossip and processing when
@@ -126,6 +169,11 @@ proc handleTransactionsBroadcast*(wire: EthWireRef,
           remote=peer.remote, clientId=peer.clientId
         await peer.disconnect(BreachOfProtocol)
         return
+
+      # Mark the sender before addTx: the pool's onAddedTx callback fires
+      # synchronously inside addTx and the sender must already be excluded
+      # from the rebroadcast.
+      wire.markSeen(computeRlpHash(tx), peer.id)
 
       wire.txPool.addTx(tx).isOkOr:
         await sleepAsync(ZeroDuration)
@@ -330,6 +378,156 @@ proc cleanupSeenTransactions*(wire: EthWireRef) {.async: (raises: [CancelledErro
     wire.seenTransactions.del(expire)
     awaitQuota(wire, hashLookupCost, "broadcast transactions hashes")
 
+proc queueTransactionGossip*(wire: EthWireRef, txHash: Hash32) {.raises: [].} =
+  ## Synchronous and non-blocking: safe to invoke from inside `addTx`
+  ## (this is the txPool.onAddedTx callback target).
+  if wire.syncerRunning():
+    return
+
+  try:
+    wire.pendingTxGossip.addLastNoWait(txHash)
+  except AsyncQueueFullError:
+    debug "Tx gossip queue full, dropping transaction", txHash
+
+proc broadcastTransactions*(wire: EthWireRef, txHashes: seq[Hash32])
+    {.async: (raises: [CancelledError]).} =
+  # Resolve queued hashes to live pool items; txs mined or expired since
+  # queuing are silently skipped.
+  var items: seq[TxItemRef]
+  for txHash in txHashes:
+    let item = wire.txPool.getItem(txHash).valueOr:
+      continue
+    items.add item
+
+  if items.len == 0:
+    return
+
+  var peers = newSeqOfCap[Peer](wire.node.numPeers)
+  for peer in wire.ethPeers(random = true):
+    peers.add peer
+  if peers.len == 0:
+    return
+
+  # Spec: send full transactions to a small random subset of peers,
+  # announce hashes to everyone else.
+  let directCount = max(1, int(ceil(sqrt(float(peers.len)))))
+
+  for i, peer in peers:
+    if peer.connectionState != ConnectionState.Connected:
+      continue
+
+    let sendFull = i < directCount
+    var
+      fullTxs: seq[Transaction]
+      fullHashes: seq[Hash32]
+      fullBytes = 0
+      annTypes: seq[byte]
+      annSizes: seq[uint64]
+      annHashes: seq[Hash32]
+
+    for item in items:
+      wire.seenTransactions.withValue(item.id, seen):
+        if peer.id in seen[].peers:
+          continue
+      # Blob transactions are never sent in full (0x02), announce-only.
+      # Cap the full-tx message size; overflow degrades to announcement.
+      let txSize = getEncodedLength(item.tx)
+      if sendFull and item.tx.txType != TxEip4844 and
+         fullBytes + txSize <= SOFT_RESPONSE_LIMIT:
+        fullTxs.add item.tx
+        fullHashes.add item.id
+        fullBytes += txSize
+      else:
+        annTypes.add item.tx.txType.byte
+        # Announce the pooled encoding size (incl. blob sidecars): receivers
+        # validate the announced size against the fetched PooledTransaction.
+        annSizes.add uint64(getEncodedLength(item.pooledTx))
+        annHashes.add item.id
+
+    try:
+      if fullTxs.len > 0:
+        await peer.transactions(fullTxs)
+        for h in fullHashes:
+          wire.markSeen(h, peer.id)
+        awaitQuota(wire, txGossipCost, "broadcast transactions")
+      if annHashes.len > 0:
+        await peer.newPooledTransactionHashes(annTypes, annSizes, annHashes)
+        for h in annHashes:
+          wire.markSeen(h, peer.id)
+        awaitQuota(wire, txGossipCost, "announce tx hashes")
+    except EthP2PError as exc:
+      debug "Tx gossip to peer failed",
+        remote=peer.remote, msg=exc.msg
+      continue
+
+    await sleepAsync(ZeroDuration)
+
+proc txGossipLoop*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
+  while true:
+    # Sleep while idle, then debounce briefly so a burst of adds coalesces
+    # into a single message per peer.
+    var txHashes = @[await wire.pendingTxGossip.popFirst()]
+    await sleepAsync(txGossipDebounce)
+    while wire.pendingTxGossip.len > 0 and txHashes.len < maxTxsPerFlush:
+      try:
+        txHashes.add wire.pendingTxGossip.popFirstNoWait()
+      except AsyncQueueEmptyError:
+        break
+
+    if wire.syncerRunning():
+      continue
+
+    await wire.broadcastTransactions(txHashes)
+
+proc announcePooledTxsToPeer(wire: EthWireRef, peer: Peer)
+    {.async: (raises: [CancelledError]).} =
+  # The handshake handlers enqueue this before rlpx flips the peer to
+  # `Connected`, so only bail out on states that cannot recover.
+  if peer.connectionState in
+      {ConnectionState.Disconnecting, ConnectionState.Disconnected}:
+    return
+
+  # Synchronous snapshot: no awaits while iterating the live pool table.
+  var
+    txTypes: seq[byte]
+    txSizes: seq[uint64]
+    txHashes: seq[Hash32]
+  for item in wire.txPool.allItems:
+    txTypes.add item.tx.txType.byte
+    txSizes.add uint64(getEncodedLength(item.pooledTx))
+    txHashes.add item.id
+
+  var i = 0
+  while i < txHashes.len:
+    let j = min(i + MAX_TX_HASH_ANNOUNCE, txHashes.len)
+    if peer.connectionState in
+        {ConnectionState.Disconnecting, ConnectionState.Disconnected}:
+      return
+    try:
+      await peer.newPooledTransactionHashes(
+        txTypes[i..<j], txSizes[i..<j], txHashes[i..<j])
+    except EthP2PError as exc:
+      debug "Announce pool to new peer failed",
+        remote=peer.remote, msg=exc.msg
+      return
+    for k in i ..< j:
+      wire.markSeen(txHashes[k], peer.id)
+    awaitQuota(wire, txGossipCost, "announce pool to new peer")
+    i = j
+
+proc scheduleTxAnnounceToNewPeer*(wire: EthWireRef, peer: Peer)
+    {.async: (raises: [CancelledError]).} =
+  if wire.syncerRunning():
+    return
+  if wire.txPool.len == 0:
+    return
+  if wire.actionQueue.full:
+    debug "Action queue full, skipping tx announce to new peer"
+    return
+
+  wire.reqisterAction("Announce pooled txs to new peer"):
+    await wire.announcePooledTxsToPeer(peer)
+
 proc tickerLoop*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
   while true:
     # Create or replenish timer
@@ -372,7 +570,14 @@ proc actionLoop*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
     await action()
 
 proc stop*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
+  # Detach the pool callback first so a late addTx cannot touch the
+  # gossip queue while we are tearing down.
+  if not wire.txPool.isNil:
+    wire.txPool.onAddedTx = nil
+
   var waitedFutures = @[wire.tickerHeartbeat.cancelAndWait()]
+  if not wire.txGossipHeartbeat.isNil:
+    waitedFutures.add wire.txGossipHeartbeat.cancelAndWait()
   for fut in wire.actionHeartbeat:
     waitedFutures.add fut.cancelAndWait()
 
