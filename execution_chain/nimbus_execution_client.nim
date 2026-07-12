@@ -279,10 +279,25 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionCli
     quit(QuitFailure)
 
 
-proc setupCommonRef*(config: ExecutionClientConf): (CommonRef, bool) =
-  let
-    dbOpts = config.dbOptions(noKeyCache = config.cmd == NimbusCmd.`import`)
-    coreDB = AristoDbRocks.newCoreDbRef(config.dataDir, dbOpts)
+proc setupCommonRef*(
+    config: ExecutionClientConf, numThreads: int): (CommonRef, bool) =
+
+  if config.statelessProvider and config.balParallelExecution:
+    warn "Stateless provider enabled. Running without BAL parallel execution"
+
+  if config.optimisticStatePrefetch and not config.parallelSenderRecovery:
+    warn "Optimistic state prefetch requires parallel sender recovery to be enabled. " & 
+      "Running without optimistic prefetching."
+
+  let disableParallelFeatures = numThreads <= 1 and config.parallelFeaturesEnabled()
+
+  var dbOpts = config.dbOptions(noKeyCache = config.cmd == NimbusCmd.`import`)
+  if disableParallelFeatures:
+    info "Not enough taskpool threads, disabling parallel features", numThreads
+    dbOpts.parallelStateRootComputation = false
+    dbOpts.threadSafeCaches = false
+
+  let coreDB = AristoDbRocks.newCoreDbRef(config.dataDir, dbOpts)
 
   preventLoadingDataDirForTheWrongNetwork(coreDB, config)
 
@@ -290,12 +305,15 @@ proc setupCommonRef*(config: ExecutionClientConf): (CommonRef, bool) =
     db = coreDB,
     networkId = config.networkId,
     params = config.networkParams,
-    statelessProviderEnabled = config.statelessProviderEnabled,
+    statelessProvider = config.statelessProvider,
     statelessWitnessValidation = config.statelessWitnessValidation,
-    optimisticStatePrefetch = config.optimisticStatePrefetch,
-    balStatePrefetch = config.balStatePrefetch,
+    optimisticStatePrefetch = config.parallelSenderRecovery and 
+        config.optimisticStatePrefetch and not disableParallelFeatures,
+    balStatePrefetch = config.balStatePrefetch and not disableParallelFeatures,
     balStatePrefetchWorkers = config.balStatePrefetchWorkers,
-    balParallelExecution = config.balParallelExecution)
+    balParallelExecution = config.balParallelExecution and 
+        not config.statelessProvider and not disableParallelFeatures,
+    parallelSenderRecovery = config.parallelSenderRecovery and not disableParallelFeatures)
 
   if config.extraData.len > 32:
     warn "ExtraData exceeds 32 bytes limit, truncate",
@@ -418,11 +436,11 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   when compileOption("threads"):
     let
       taskpool = setupTaskpool(config.numThreads)
-      (com, keyCacheEnabled) = setupCommonRef(config)
+      (com, keyCacheEnabled) = setupCommonRef(config, taskpool.numThreads)
     com.taskpool = taskpool
     com.db.mpt.taskpool = taskpool
   else:
-    let (com, keyCacheEnabled) = setupCommonRef(config)
+    let (com, keyCacheEnabled) = setupCommonRef(config, 0)
 
   if keyCacheEnabled:
     # Make sure key cache isn't empty

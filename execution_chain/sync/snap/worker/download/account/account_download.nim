@@ -34,7 +34,7 @@ template accountDownload*(
     let
       ctx = buddy.ctx
       sdb = ctx.pool.stateDB
-      adb = ctx.pool.mptAsm
+      adb = ctx.pool.cacheDB
 
       peer {.inject,used.} = $buddy.peer            # logging only
       root {.inject,used.} = state.rootStr          # logging only

@@ -204,24 +204,11 @@ proc runTest(
 
       expectedSuccessful = expectedOutput.successful_validation
 
-      if output.successful_validation != expectedOutput.successful_validation:
+      if output != expectedOutput:
         return err(
-          "Stateless guest: expected successful_validation=" &
-            $expectedOutput.successful_validation & " got " &
-            $output.successful_validation
+          "Stateless guest: validation result mismatch, got: " & $output &
+            " expected: " & $expectedOutput
         )
-
-      # TODO: new_payload_request_root comparison disabled
-      # the block_access_list field in ExecutionPayload uses MAX_BYTES_PER_TRANSACTION (2^30)
-      # in our gloas.nim data types but the stateless_ssz.py spec uses
-      # MAX_BLOCK_ACCESS_LIST_BYTES = (2^24), causing a hash_tree_root mismatch.
-      # Expected to be fixed in the next release of test vectors.
-      # if output.new_payload_request_root != expectedOutput.new_payload_request_root:
-      #   return err(
-      #     "Stateless guest: new_payload_request_root mismatch, got " &
-      #     $output.new_payload_request_root &
-      #     " expected " & $expectedOutput.new_payload_request_root
-      #   )
 
       # Verify that the SSZ input witness matches the JSON witness field.
       # This rather validates the test vector itself, not our implementation.
