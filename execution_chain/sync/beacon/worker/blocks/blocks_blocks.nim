@@ -15,7 +15,7 @@ import
   pkg/eth/common,
   pkg/stew/interval_set,
   ../../../../networking/p2p,
-  ../../../../block_access_list/block_access_list_utils,
+  ../../../../block_access_list/bal_utils,
   ../../../wire_protocol/types,
   ../[helpers, update, worker_desc],
   ./[blocks_bal, blocks_fetch, blocks_helpers, blocks_unproc]

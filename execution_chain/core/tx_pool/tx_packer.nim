@@ -39,6 +39,8 @@ type
     # Packer state
     vmState: BaseVMState
     numBlobPerBlock: int
+    txsRlpSize: uint64
+    withdrawalsRlpSize: uint64
 
     # Packer results
     blockValue: UInt256
@@ -49,6 +51,8 @@ type
     withdrawalReqs: seq[byte]
     consolidationReqs: seq[byte]
     depositReqs: seq[byte]
+    builderDepositReqs: seq[byte]
+    builderExitReqs: seq[byte]
 
 const
   receiptsExtensionSize = ##\
@@ -61,6 +65,66 @@ const
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
+
+func getExtraData(com: CommonRef): seq[byte] =
+  if com.extraData.len > 32:
+    com.extraData.toBytes[0..<32]
+  else:
+    com.extraData.toBytes
+
+func rlpLengthBytes(v: uint64): uint64 =
+  var v = v
+  while v > 0:
+    inc result
+    v = v shr 8
+
+func rlpListPrefixLen(payloadLen: uint64): uint64 =
+  if payloadLen <= 55: 1'u64
+  else: 1'u64 + rlpLengthBytes(payloadLen)
+
+proc prospectiveBlockSize(pst: TxPacker, xp: TxPoolRef,
+                          item: TxItemRef, txSize: uint64): uint64 =
+  ## Exact encoded size of the assembled block if `item` is packed next.
+  ## Header fields not known until packing completes are either fixed-width
+  ## (hash roots, bloom) or substituted with a value that RLP-encodes to at
+  ## least as many bytes as the final one (gasUsed), so the result never
+  ## underestimates — a block passing this check cannot exceed the cap.
+  let
+    vmState = pst.vmState
+    com = vmState.com
+    gasUsedSoFar =
+      if vmState.fork >= FkAmsterdam:
+        max(vmState.blockRegularGasUsed, vmState.blockStateGasUsed)
+      else:
+        vmState.cumulativeGasUsed
+
+  var header = Header(
+    number:        vmState.blockNumber,
+    gasLimit:      vmState.blockCtx.gasLimit,
+    gasUsed:       min(gasUsedSoFar + item.tx.gasLimit, vmState.blockCtx.gasLimit),
+    timestamp:     xp.timestamp,
+    extraData:     getExtraData(com),
+    baseFeePerGas: Opt.some(xp.baseFee.u256),
+  )
+  if com.isShanghaiOrLater(xp.timestamp):
+    header.withdrawalsRoot = Opt.some(default(Hash32))
+  if com.isCancunOrLater(xp.timestamp):
+    header.parentBeaconBlockRoot = Opt.some(default(Hash32))
+    header.blobGasUsed = Opt.some(vmState.blobGasUsed + item.tx.getTotalBlobGas)
+    header.excessBlobGas = Opt.some(vmState.blockCtx.excessBlobGas)
+  if com.isPragueOrLater(xp.timestamp):
+    header.requestsHash = Opt.some(default(Hash32))
+  if com.isAmsterdamOrLater(xp.timestamp):
+    header.blockAccessListHash = Opt.some(default(Hash32))
+    header.slotNumber = Opt.some(xp.slotNumber)
+
+  let
+    txsLen = pst.txsRlpSize + txSize
+    bodyLen = rlp.getEncodedLength(header).uint64 +
+              rlpListPrefixLen(txsLen) + txsLen +
+              1 +   # empty ommers list
+              pst.withdrawalsRlpSize
+  rlpListPrefixLen(bodyLen) + bodyLen
 
 func classifyPackedNext(vmState: BaseVMState): bool =
   ## Classifier for *packing* (i.e. adding up `gasUsed` values after executing
@@ -87,6 +151,11 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string] =
       blockValue: 0.u256,
       stateRoot: vmState.parent.stateRoot,
     )
+
+  # EIP-7934: the withdrawals are part of the encoded block and their exact
+  # size is known before packing starts
+  if xp.nextFork >= FkShanghai:
+    packer.withdrawalsRlpSize = rlp.getEncodedLength(xp.withdrawals).uint64
 
   # Setup block access list tracker for pre‑execution system calls
   if vmState.balTrackerEnabled:
@@ -133,6 +202,15 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
     if (pst.numBlobPerBlock + item.tx.versionedHashes.len).uint64 > maxBlobsPerBlock:
       return ContinueWithNextAccount
 
+  # EIP-7934: a tx that cannot fit within the block RLP size limit must not
+  # be executed at all, otherwise the header gas values, receipts and the
+  # EIP-7928 block access list would commit to a tx missing from the body
+  var txSize = 0'u64
+  if vmState.fork >= FkOsaka:
+    txSize = rlp.getEncodedLength(item.tx).uint64
+    if pst.prospectiveBlockSize(xp, item, txSize) > MAX_RLP_BLOCK_SIZE.uint64:
+      return ContinueWithNextAccount
+
   if vmState.balTrackerEnabled:
     vmState.balTracker.setBlockAccessIndex(pst.packedTxs.len() + 1)
 
@@ -156,6 +234,7 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
   pst.packedTxs.add item
   pst.numBlobPerBlock += item.tx.versionedHashes.len
   pst.blockValue += rc.value.txFee
+  pst.txsRlpSize += txSize
 
   ContinueWithNextAccount
 
@@ -185,12 +264,18 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
     pst.consolidationReqs = ?processDequeueConsolidationRequests(vmState)
     pst.depositReqs = ?parseDepositLogs(vmState.allLogs, vmState.com.depositContractAddress)
 
+    if vmState.fork >= FkAmsterdam:
+      # EIP-8282
+      pst.builderDepositReqs = ?processBuilderDepositRequests(vmState)
+      pst.builderExitReqs = ?processBuilderExitRequests(vmState)
+
+
   # Finish up, then vmState.ledger.stateRoot may be accessed
   ledger.persist(clearEmptyAccount = vmState.fork >= FkSpurious)
 
   # Update flexi-array, set proper length
   vmState.receipts.setLen(pst.packedTxs.len)
-  
+
   pst.receiptsRoot = vmState.receipts.calcReceiptsRoot
   pst.logsBloom = vmState.receipts.createBloom
   pst.stateRoot = vmState.ledger.getStateRoot()
@@ -223,12 +308,6 @@ proc packerVmExec*(xp: TxPoolRef): Result[TxPacker, string] =
 
   ?pst.vmExecCommit(xp)
   ok(pst)
-
-func getExtraData(com: CommonRef): seq[byte] =
-  if com.extraData.len > 32:
-    com.extraData.toBytes[0..<32]
-  else:
-    com.extraData.toBytes
 
 func assembleHeader*(pst: TxPacker, xp: TxPoolRef): Header =
   ## Generate a new header, a child of the cached `head`
@@ -263,11 +342,20 @@ func assembleHeader*(pst: TxPacker, xp: TxPoolRef): Header =
     header.excessBlobGas = Opt.some vmState.blockCtx.excessBlobGas
 
   if com.isPragueOrLater(xp.timestamp):
-    let requestsHash = calcRequestsHash([
-      (DEPOSIT_REQUEST_TYPE, pst.depositReqs),
-      (WITHDRAWAL_REQUEST_TYPE, pst.withdrawalReqs),
-      (CONSOLIDATION_REQUEST_TYPE, pst.consolidationReqs)
-    ])
+    let requestsHash = if com.isAmsterdamOrLater(xp.timestamp):
+        calcRequestsHash([
+          (DEPOSIT_REQUEST_TYPE, pst.depositReqs),
+          (WITHDRAWAL_REQUEST_TYPE, pst.withdrawalReqs),
+          (CONSOLIDATION_REQUEST_TYPE, pst.consolidationReqs),
+          (BUILDER_DEPOSIT_REQUEST_TYPE, pst.builderDepositReqs),
+          (BUILDER_EXIT_REQUEST_TYPE, pst.builderExitReqs),
+        ])
+      else:
+        calcRequestsHash([
+          (DEPOSIT_REQUEST_TYPE, pst.depositReqs),
+          (WITHDRAWAL_REQUEST_TYPE, pst.withdrawalReqs),
+          (CONSOLIDATION_REQUEST_TYPE, pst.consolidationReqs)
+        ])
     header.requestsHash = Opt.some(requestsHash)
 
   if com.isAmsterdamOrLater(xp.timestamp):

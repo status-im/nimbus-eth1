@@ -14,9 +14,9 @@ import
   eth/common/addresses,
   stint,
   ../db/ledger,
-  ./block_access_list_builder
+  ./bal_builder
 
-export addresses, block_access_list_builder, ledger, stint
+export addresses, bal_builder, ledger, stint
 
 type
   # Snapshot of block access list state for a single call frame.
@@ -90,10 +90,13 @@ proc init*(
     T: type BlockAccessListTrackerRef,
     ledger: ReadOnlyLedger,
     builder: ptr BlockAccessListBuilder = nil,
+    builderThreadSafe = false,
 ): T =
   if builder.isNil():
     BlockAccessListTrackerRef(
-      ledger: ledger, builder: BlockAccessListBuilder.newShared(), builderOwner: true
+      ledger: ledger,
+      builder: BlockAccessListBuilder.newShared(builderThreadSafe),
+      builderOwner: true,
     )
   else:
     BlockAccessListTrackerRef(ledger: ledger, builder: builder, builderOwner: false)
@@ -431,11 +434,11 @@ proc handleInTransactionSelfDestruct*(
     tracker.pendingCallFrame.storageReads.incl(storageKey)
     tracker.pendingCallFrame.storageChanges.del(storageKey)
 
-  tracker.pendingCallFrame.balanceChanges.del(address)
   tracker.pendingCallFrame.nonceChanges.del(address)
   tracker.pendingCallFrame.codeChanges.del(address)
-
-  tracker.trackBalanceChange(address, 0.u256)
+  
+  tracker.trackNonceChange(address, 0)
+  tracker.trackCodeChange(address, @[])
 
 proc normalizePendingCallFrameChanges*(tracker: BlockAccessListTrackerRef) =
   ## Normalize balance, nonce, code and storage changes for the current

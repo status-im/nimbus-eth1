@@ -16,11 +16,11 @@ import
   ./transient_storage,
   ../db/ledger,
   ../common/[common, evmforks],
-  ../block_access_list/block_access_list_tracker
+  ../block_access_list/bal_tracker
 
 from ../common/hardforks import HardFork
 
-export stack, memory, transient_storage, block_access_list_tracker
+export stack, memory, transient_storage, bal_tracker
 
 type
   VMFlag* = enum
@@ -62,7 +62,6 @@ type
     allLogs*          : seq[Log] # EIP-6110
     gasRefunded*      : int64    # Global gasRefunded counter
     balTracker*       : BlockAccessListTrackerRef
-    balPrefetchActive*: bool
 
   Computation* = ref object
     # The execution computation
@@ -86,7 +85,6 @@ type
     keepStack*:             bool
     finalStack*:            seq[UInt256]
     balTrackerEnabled*:     bool
-    delegateTo*:            Address
 
   StatusCode* {.pure.} = enum
     None
@@ -107,6 +105,7 @@ type
     stateGasLeft*: GasInt
     stateGasUsed*: int64
     regularGasUsed*: GasInt
+    stateGasSpilled*: GasInt
 
   CallKind* {.pure.} = enum
     Call          # Request CALL.
@@ -119,6 +118,8 @@ type
   MsgFlags* {.pure.} = enum
     Static
     Precompile
+    TargetAlive
+    Delegated
 
   Message* = ref object
     kind*:             CallKind
@@ -128,6 +129,7 @@ type
     sender*:           Address
     contractAddress*:  Address
     codeAddress*:      Address
+    delegateTo*:       Address
     value*:            UInt256
     data*:             seq[byte]
     flags*:            set[MsgFlags]

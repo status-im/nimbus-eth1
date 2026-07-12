@@ -51,9 +51,12 @@ const
   defaultAdminListenAddress = (static parseIpAddress("127.0.0.1"))
   defaultAdminListenAddressDesc = $defaultAdminListenAddress & ", meaning local host only"
   logLevelDesc = getLogLevels()
+  defaultParallelStateRootComputation* = false
+  defaultParallelSenderRecovery* = true
   defaultOptimisticStatePrefetch* = false
   defaultBalStatePrefetch* = false
   defaultBalStatePrefetchWorkers* = 0
+  defaultBalParallelExecution* = false
 
 template defaultListenAddress(): IpAddress =
   getAutoAddress(Port(0)).toIpAddress()
@@ -131,8 +134,8 @@ type
 
     gasLimit* {.
       desc: "Desired gas limit when building an execution payload"
-      defaultValue: DEFAULT_GAS_LIMIT
-      name: "gas-limit" .}: uint64
+      defaultValue: none(uint64)
+      name: "gas-limit" .}: Option[uint64]
 
     # https://eips.ethereum.org/EIPS/eip-7872
     maxBlobs* {.
@@ -362,9 +365,15 @@ type
 
     parallelStateRootComputation* {.
       hidden
-      defaultValue: false
+      defaultValue: defaultParallelStateRootComputation
       desc: "Compute state root in parallel using multiple threads"
       name: "debug-parallel-state-root".}: bool
+
+    parallelSenderRecovery* {.
+      hidden
+      defaultValue: defaultParallelSenderRecovery
+      desc: "Recover transaction senders in parallel on background threads"
+      name: "debug-parallel-sender-recovery".}: bool
 
     optimisticStatePrefetch* {.
       hidden
@@ -387,6 +396,13 @@ type
         "state prefetching (0 = use number equal to the taskpool threads count)"
       name: "debug-bal-state-prefetch-workers".}: int
 
+    balParallelExecution* {.
+      hidden
+      defaultValue: defaultBalParallelExecution
+      desc: "Execute block transactions in parallel on background threads " &
+        "using the supplied block access list"
+      name: "debug-bal-parallel-execution".}: bool
+
     eagerStateRootCheck* {.
       hidden
       desc: "Eagerly check state roots when syncing finalized blocks"
@@ -397,7 +413,7 @@ type
       defaultValue: true
       name: "debug-deserialize-fc-state" .}: bool
 
-    statelessProviderEnabled* {.
+    statelessProvider* {.
       separator: "\pSTATELESS PROVIDER OPTIONS:"
       desc: "Enable the stateless provider. This turns on the features required" &
         " by stateless clients such as generation and storage of block witnesses" &
@@ -841,8 +857,13 @@ func udpPort*(config: ExecutionClientConf): Port =
   config.udpPortFlag.get(config.tcpPort)
 
 func threadSafeCaches*(config: ExecutionClientConf): bool =
-  config.optimisticStatePrefetch or config.balStatePrefetch or
-    config.parallelStateRootComputation
+  (config.parallelSenderRecovery and config.optimisticStatePrefetch) or
+    config.parallelStateRootComputation or
+    config.balStatePrefetch or
+    config.balParallelExecution
+
+func parallelFeaturesEnabled*(config: ExecutionClientConf): bool =
+  config.threadSafeCaches() or config.parallelSenderRecovery
 
 func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
   DbOptions.init(
@@ -860,7 +881,7 @@ func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
     rdbPrintStats = config.rdbPrintStats,
     maxSnapshots = config.aristoDbMaxSnapshots,
     parallelStateRootComputation = config.parallelStateRootComputation,
-    threadSafeCaches = config.threadSafeCaches,
+    threadSafeCaches = config.threadSafeCaches(),
     blockCacheType = config.rocksdbBlockCacheType,
   )
 

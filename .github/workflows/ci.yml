@@ -100,5 +100,46 @@ jobs:
           find . -type d -name "nimcache" -exec rm -rf {} +
           # "-static" option will not work for osx unless static system libraries are provided
           make ${DEFAULT_MAKE_FLAGS} test t8n_test evmstate_test
-          make eest_full_test
           make eest_tool_test
+
+  eest:
+    needs: matrix_config
+
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.matrix_config.outputs.matrix) }}
+
+    defaults:
+      run:
+        shell: bash
+
+    name: EEST-${{ matrix.os }}-${{ matrix.cpu }}${{ matrix.branch != '' && ' (Nim ' || '' }}${{ matrix.branch-short }}${{ matrix.branch != '' && ')' || '' }}
+    runs-on: ${{ matrix.builder }}
+    steps:
+      - name: Checkout nimbus-eth1
+        uses: actions/checkout@v6
+
+      - name: Clean up disk space
+        if: runner.os == 'Linux'
+        run: |
+          sudo rm -rf /usr/lib/jvm || true
+          sudo rm -rf /usr/local/.ghcup || true
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /usr/share/dotnet || true
+          sudo rm -rf /usr/share/swift || true
+
+      - id: shared-action
+        uses: ./.github/actions/shared
+        with:
+          llvm-mingw: true
+          nim-cache: true
+          rocksdb-cache: true
+          eest-cache: true
+
+      - name: Run EEST test suite
+        run: |
+          ./env.sh nim --version
+          gcc --version
+          DEFAULT_MAKE_FLAGS="-j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache"
+          make ${DEFAULT_MAKE_FLAGS} rocksdb          
+          make eest_full_test

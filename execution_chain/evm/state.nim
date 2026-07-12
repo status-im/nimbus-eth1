@@ -15,7 +15,7 @@ import
   stew/assign2,
   ../db/ledger,
   ../common/common,
-  ../block_access_list/block_access_list_tracker,
+  ../block_access_list/bal_tracker,
   ./interpreter/[op_codes, gas_costs],
   ./types,
   ./evm_errors
@@ -87,7 +87,8 @@ proc new*(
       txFrame:  CoreDbTxRef;
       tracer:   TracerRef = nil,
       storeSlotHash = false,
-      enableBalTracker = false): T =
+      enableBalTracker = false,
+      balBuilderThreadSafe = false): T =
   ## Create a new `BaseVMState` descriptor from a parent block header. This
   ## function internally constructs a new account state cache rooted at
   ## `parent.stateRoot`
@@ -96,10 +97,11 @@ proc new*(
   ## `BaseVMState` environment where the account state cache is synchronised
   ## with the `parent` block header.
   let
-    ledger = LedgerRef.init(txFrame, storeSlotHash, com.statelessProviderEnabled)
+    ledger = LedgerRef.init(txFrame, storeSlotHash, com.statelessProvider)
     tracker =
       if enableBalTracker:
-        BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger)
+        BlockAccessListTrackerRef.init(
+          ledger.ReadOnlyLedger, builderThreadSafe = balBuilderThreadSafe)
       else:
         nil
 
@@ -179,7 +181,9 @@ proc init*(
       tracer: TracerRef = nil,
       storeSlotHash = false,
       enableBalTracker = false,
+      balBuilderThreadSafe = false,
       stateless = false) =
+
   ## Variant of `new()` constructor above for in-place initalisation. The
   ## `parent` argument is used to sync the accounts cache and the `header`
   ## is used as a container to pass the `timestamp`, `gasLimit`, and `fee`
@@ -189,10 +193,11 @@ proc init*(
   ## networks, the miner address is retrievable via `ecRecover()`.
   let
     ledger = LedgerRef.init(
-      txFrame, storeSlotHash, com.statelessProviderEnabled, stateless)
+      txFrame, storeSlotHash, com.statelessProvider, stateless)
     tracker =
       if enableBalTracker:
-        BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger)
+        BlockAccessListTrackerRef.init(
+          ledger.ReadOnlyLedger, builderThreadSafe = balBuilderThreadSafe)
       else:
         nil
 
@@ -212,7 +217,8 @@ proc new*(
       txFrame: CoreDbTxRef;
       tracer: TracerRef = nil,
       storeSlotHash = false,
-      enableBalTracker = false): T =
+      enableBalTracker = false,
+      balBuilderThreadSafe = false): T =
   ## This is a variant of the `new()` constructor above where the `parent`
   ## argument is used to sync the accounts cache and the `header` is used
   ## as a container to pass the `timestamp`, `gasLimit`, and `fee` values.
@@ -227,7 +233,8 @@ proc new*(
     txFrame = txFrame,
     tracer = tracer,
     storeSlotHash = storeSlotHash,
-    enableBalTracker = enableBalTracker)
+    enableBalTracker = enableBalTracker,
+    balBuilderThreadSafe = balBuilderThreadSafe)
 
 func coinbase*(vmState: BaseVMState): Address =
   vmState.blockCtx.coinbase
