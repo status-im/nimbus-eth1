@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -18,7 +18,7 @@ import
   ./p2p_protocols,
   ./rlpx/rlpxtransport
 
-from ./discoveryv4/kademlia import Node, NodeId
+from ./p2p_node import Node, NodeId
 
 export
   p2p_protocols, rlpxtransport
