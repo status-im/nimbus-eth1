@@ -510,6 +510,17 @@ proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool, collect
   result.blockHashes = typeof(result.blockHashes).init(MAX_PREV_HEADER_DEPTH.int)
   discard result.beginSavePoint
 
+proc reinit*(ledger: LedgerRef, txFrame: CoreDbTxRef) =
+  doAssert ledger.isTopLevelClean
+  doAssert txFrame.aTx.parent == ledger.txFrame.aTx,
+    "reinit txFrame must be a direct child of the ledger's current frame"
+  ledger.txFrame = txFrame
+  ledger.txFrame.aTx.collectWitness = ledger.collectWitness
+  ledger.ripemdSpecial = false
+  ledger.fatalError = Opt.none(string)
+  ledger.balOverlay = Opt.none(BlockAccessListOverlay)
+  ledger.witnessKeys.clear()
+
 proc getCodeHash*(ledger: LedgerRef, address: Address): Hash32 =
   let acc = ledger.getAccount(address, false)
   if acc.isNil: EMPTY_ACCOUNT.codeHash
