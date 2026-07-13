@@ -87,8 +87,7 @@ proc new*(
       txFrame:  CoreDbTxRef;
       tracer:   TracerRef = nil,
       storeSlotHash = false,
-      enableBalTracker = false,
-      balBuilderThreadSafe = false): T =
+      enableBalTracker = false): T =
   ## Create a new `BaseVMState` descriptor from a parent block header. This
   ## function internally constructs a new account state cache rooted at
   ## `parent.stateRoot`
@@ -100,8 +99,7 @@ proc new*(
     ledger = LedgerRef.init(txFrame, storeSlotHash, com.statelessProvider)
     tracker =
       if enableBalTracker:
-        BlockAccessListTrackerRef.init(
-          ledger.ReadOnlyLedger, builderThreadSafe = balBuilderThreadSafe)
+        BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger)
       else:
         nil
 
@@ -181,7 +179,6 @@ proc init*(
       tracer: TracerRef = nil,
       storeSlotHash = false,
       enableBalTracker = false,
-      balBuilderThreadSafe = false,
       stateless = false) =
 
   ## Variant of `new()` constructor above for in-place initalisation. The
@@ -196,8 +193,7 @@ proc init*(
       txFrame, storeSlotHash, com.statelessProvider, stateless)
     tracker =
       if enableBalTracker:
-        BlockAccessListTrackerRef.init(
-          ledger.ReadOnlyLedger, builderThreadSafe = balBuilderThreadSafe)
+        BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger)
       else:
         nil
 
@@ -217,8 +213,7 @@ proc new*(
       txFrame: CoreDbTxRef;
       tracer: TracerRef = nil,
       storeSlotHash = false,
-      enableBalTracker = false,
-      balBuilderThreadSafe = false): T =
+      enableBalTracker = false): T =
   ## This is a variant of the `new()` constructor above where the `parent`
   ## argument is used to sync the accounts cache and the `header` is used
   ## as a container to pass the `timestamp`, `gasLimit`, and `fee` values.
@@ -233,8 +228,7 @@ proc new*(
     txFrame = txFrame,
     tracer = tracer,
     storeSlotHash = storeSlotHash,
-    enableBalTracker = enableBalTracker,
-    balBuilderThreadSafe = balBuilderThreadSafe)
+    enableBalTracker = enableBalTracker)
 
 func coinbase*(vmState: BaseVMState): Address =
   vmState.blockCtx.coinbase

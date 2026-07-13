@@ -301,7 +301,7 @@ proc packLogs(logs: openArray[Log]): SharedBytes =
       log.data.len
 
   var
-    packed = SharedBytes.init(size)
+    packed = SharedBytes.init(size, zeroed = false)
     pos = 0
 
   template put(src: pointer, n: int) =
