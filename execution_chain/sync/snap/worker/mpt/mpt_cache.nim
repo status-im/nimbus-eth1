@@ -33,11 +33,10 @@
 
 import
   ./mpt_cache/[
-    cache_dangling, cache_desc, cache_download, cache_init, cache_header_bal,
+    cache_desc, cache_download, cache_init, cache_header_bal,
     cache_leafs, cache_part_mpt, cache_state]
 
 export
-  cache_dangling,
   cache_desc,
   cache_download, 
   cache_header_bal,

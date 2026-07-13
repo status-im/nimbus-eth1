@@ -38,12 +38,12 @@ type
 # Private functions, MPT traversal core function
 # ------------------------------------------------------------------------------
 
-proc getAccKvtWrap(
+proc getAccPartMptWrap(
     db: CacheDbRef;
     _: Hash32;
     key: openArray[byte];
       ): BlobResult =
-  db.getAccKvt key
+  db.getAccPartMpt key
 
 proc walkTrieRecImpl(
     trd: TravDescRef,
@@ -195,7 +195,8 @@ proc accAndStoNotifyRecur(info: static[string]): WalkTrieRecCB =
           let stash = trd.ranges
           trd.ranges = ItemKeyRangeSet.init()
 
-          trd.walkTrieRec(base, acc.storageRoot.data, getStoKvt, notify).isOkOr:
+          trd.walkTrieRec(
+                  base, acc.storageRoot.data, getStoPartMpt, notify).isOkOr:
             if error != ENoRoot:
               debug info & ": Failed traversing storage slots",
                 root=acc.storageRoot.toStr, nErr=stats.nStoErr, `error`=error
@@ -214,7 +215,7 @@ proc accAndStoNotifyRecur(info: static[string]): WalkTrieRecCB =
 
           block handleCode:
             # Check whether the code has an entry on the database
-            let code = trd.db.getCodeKvt(acc.codeHash).valueOr:
+            let code = trd.db.getCodePartMpt(acc.codeHash).valueOr:
               debug info & ": Failed accessing byte code",
                 root=acc.codeHash.toStr, nErr=stats.nStoErr, `error`=error
               trd.cacheErr.inc
@@ -273,7 +274,7 @@ proc sessionAnalyseTrieRecur*(
   let start = Moment.now()
   trace info & ": Analysing partion MPTs.."
   trd.walkTrieRec(
-    zeroHash32, pivot.Hash32.data, getAccKvtWrap,
+    zeroHash32, pivot.Hash32.data, getAccPartMptWrap,
     accAndStoNotifyRecur info).isOkOr:
       debug info & ": Failed analysing MPT", `error`=error
       return err(error)

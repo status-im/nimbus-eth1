@@ -184,7 +184,7 @@ proc delMissingBlob*(db: CacheDbRef, accPath: Hash32): DelResult =
   db.del33(cMissingBlob, accPath)
 
 proc clearMissingBlob*(db: CacheDbRef): DelResult =
-  db.clr1 cCodeMissKvt
+  db.clr1 cMissingBlob
 
 iterator walkMissingBlob*(db: CacheDbRef): Hash32 =
   for (key, _) in db.adb.colWalk33 [byte cMissingBlob]:

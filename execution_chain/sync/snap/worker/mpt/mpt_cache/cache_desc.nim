@@ -22,8 +22,6 @@ type
   CacheDbRef* = ref object
     adb*: RocksDbReadWriteRef
     dir*: Path
-    dnglLock*: int                                  # advisory lock
-    cntrLock*: int                                  # advisory lock
 
   BoolResult* = Result[bool,string]
     ## Shortcut
