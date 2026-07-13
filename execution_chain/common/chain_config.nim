@@ -10,10 +10,10 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[tables, strutils, macros],
+  std/[tables, strutils, macros, os],
   eth/rlp, eth/common/eth_types_json_serialization,
   eth/common/eth_types_rlp,
-  stint, stew/[byteutils],
+  stint, stew/[byteutils, io2],
   json_serialization, chronicles,
   json_serialization/pkg/results,
   json_serialization/std/tables,
@@ -426,7 +426,7 @@ proc configureBlobSchedule(conf: ChainConfig) =
     if blobScheduleTime[fork].isSome:
       prevFork = fork
 
-proc parseGenesis*(data: string): Genesis
+proc parseGenesis(data: string): Genesis
      {.gcsafe.} =
   try:
     result = JGenesis.decode(data, Genesis, allowUnknownFields = true)
@@ -434,21 +434,49 @@ proc parseGenesis*(data: string): Genesis
     error "Invalid genesis config file format", msg=e.formatMsg("")
     return nil
 
-proc parseGenesisFile*(fileName: string): Genesis
+proc loadGenesisFromFile(fileName: string, withError = true): Genesis
      {.gcsafe.} =
   try:
     result = JGenesis.loadFile(fileName, Genesis, allowUnknownFields = true)
   except IOError as e:
-    error "Genesis I/O error", fileName, msg=e.msg
+    if withError:
+      error "Genesis I/O error", fileName, msg=e.msg
     return nil
   except SerializationError as e:
-    error "Invalid genesis config file format", msg=e.formatMsg("")
+    if withError:
+      error "Invalid genesis config file format", msg=e.formatMsg("")
     return nil
+
+proc loadGenesisFromFolder(inputPath: string): Genesis =
+  # first we try with "genesis.json"
+  var genesis = loadGenesisFromFile(inputPath & "/genesis.json", withError = false)
+  if genesis.isNil.not:
+    return genesis
+
+  # if there is no "genesis.json", we try to load any json file
+  try:
+    for fileName in walkDirRec(inputPath):
+      if not fileName.endsWith(".json"):
+        continue
+      genesis = loadGenesisFromFile(fileName, withError = false)
+      if genesis.isNil.not:
+        return genesis
+    error "No valid genesis.json found", path=inputPath
+    nil
+  except OSError as exc:
+    error "Error when looking for genesis file", path=inputPath, msg=exc.msg
+    nil
+
+proc loadGenesis(inputPath: string): Genesis =
+  if isDir(inputPath):
+    loadGenesisFromFolder(inputPath)
+  else:
+    loadGenesisFromFile(inputPath)
 
 proc validateNetworkParams(params: var NetworkParams, input: string, inputIsFile: bool): bool =
   if params.genesis.isNil:
     # lets try with geth's format
-    let genesis = if inputIsFile: parseGenesisFile(input)
+    let genesis = if inputIsFile: loadGenesis(input)
                   else: parseGenesis(input)
     if genesis.isNil:
       return false
@@ -461,18 +489,46 @@ proc validateNetworkParams(params: var NetworkParams, input: string, inputIsFile
   configureBlobSchedule(params.config)
   validateChainConfig(params.config)
 
-proc loadNetworkParams*(fileName: string, params: var NetworkParams):
-    bool =
+proc loadNetworkParamsFromFile(fileName: string, params: var NetworkParams, withError = true): bool =
   try:
     params = JGenesis.loadFile(fileName, NetworkParams, allowUnknownFields = true)
+    true
   except IOError as e:
-    error "Network params I/O error", fileName, msg=e.msg
-    return false
+    if withError:
+      error "Network params I/O error", fileName, msg=e.msg
+    false
   except SerializationError as e:
-    error "Invalid network params file format", fileName, msg=e.formatMsg("")
-    return false
+    if withError:
+      error "Invalid network params file format", fileName, msg=e.formatMsg("")
+    false
 
-  validateNetworkParams(params, fileName, true)
+proc loadNetworkParamsFromFolder(inputPath: string, params: var NetworkParams): bool =
+  # first we try with "genesis.json"
+  if loadNetworkParamsFromFile(inputPath & "/genesis.json", params, withError = false):
+    return true
+
+  # if there is no "genesis.json", we try to load any json file
+  try:
+    for fileName in walkDirRec(inputPath):
+      if not fileName.endsWith(".json"):
+        continue
+      if loadNetworkParamsFromFile(fileName, params, withError = false):
+        return true
+    error "No valid genesis.json found", path=inputPath
+    false
+  except OSError as exc:
+    error "Error when looking for genesis file", path=inputPath, msg=exc.msg
+    false
+
+proc loadNetworkParams*(inputPath: string, params: var NetworkParams): bool =
+  if isDir(inputPath):
+    if not loadNetworkParamsFromFolder(inputPath, params):
+      return false
+  else:
+    if not loadNetworkParamsFromFile(inputPath, params):
+      return false
+
+  validateNetworkParams(params, inputPath, true)
 
 proc decodeNetworkParams*(jsonString: string, params: var NetworkParams): bool =
   try:

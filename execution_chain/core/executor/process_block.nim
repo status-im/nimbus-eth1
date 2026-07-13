@@ -262,6 +262,10 @@ proc procBlkEpilogue(
   if vmState.balTrackerEnabled:
     vmState.balTracker.commitCallFrame()
 
+  # Catch a fatal condition from the reward persist or the post-execution system
+  # calls before getStateRoot below, which would otherwise assert on it.
+  vmState.ledger.abortOnFatalError()
+
   if not skipValidation:
     if not skipPostExecBalCheck and vmState.com.isAmsterdamOrLater(header.timestamp):
       doAssert vmState.balTrackerEnabled

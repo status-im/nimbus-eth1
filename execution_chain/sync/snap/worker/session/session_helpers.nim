@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  pkg/[chronicles, chronos],
+  pkg/[chronicles, chronos, stew/byteutils],
   ../[mpt, state_db, worker_desc]
 
 type
@@ -26,10 +26,10 @@ type
 proc getPivotData(
     ctx: SnapCtxRef,
     info: static[string];
-      ): Opt[(StateRoot,CachedStateData)] =
+      ): Opt[(StateRoot,CacheStateData)] =
   let root = ctx.pool.pivot.valueOr:
     return err()
-  var data = ctx.pool.mptAsm.getStateData(root).valueOr:
+  var data = ctx.pool.cacheDB.getStateData(root).valueOr:
     error info & ": Cached pivot inaccessible", root=root.toStr, `error`=error
     return err()
   ok((root, move data))
@@ -97,7 +97,7 @@ proc setPivotTag*(
   var (root,pivot) = ctx.getPivotData(info).valueOr:
     return err()
   pivot.tag = tag
-  ctx.pool.mptAsm.putStateData(root,pivot).isOkOr:
+  ctx.pool.cacheDB.putStateData(root,pivot).isOkOr:
     error info & ": Error updating cached pivot",
       root=root.Hash32.short, `error`=error
     return err()
@@ -105,13 +105,14 @@ proc setPivotTag*(
 
 # ----------------
 
-func decodeAccount*(pyl: openArray[byte]): Opt[Account] =
+proc decodeAccount*(pyl: openArray[byte], info: static[string]): Opt[Account] =
   ## Decode RLP encoded `Account`
   try:
     var acc = rlp.decode(pyl, Account)
     return ok(move acc)
-  except RlpError:
-    discard
+  except RlpError as e:
+    error info & ": Error decoding Account data",
+      slotData=pyl.toHex, error=($e.name & "(" & e.msg & ")")
   err()
 
 # ------------------------------------------------------------------------------
