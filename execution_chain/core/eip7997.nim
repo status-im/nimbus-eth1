@@ -13,7 +13,7 @@
 import
   eth/common/[addresses, hashes],
   stew/byteutils,
-  ../db/ledger
+  ../db/[core_db, ledger]
 
 const
   FactoryAddress = address"0x4e59b44847b379578588920cA78FbF26c0B4956C"
@@ -21,14 +21,19 @@ const
   FactoryCodeHash = hashes.keccak256(FactoryCode)
 
 proc applyEip7997*(ledger: LedgerRef) =
-  let codeHash = ledger.getCodeHash(FactoryAddress)
-  if codeHash == FactoryCodeHash:
+  # Use txFrame directly rather than through the ledger API: with witness
+  # collection enabled a ledger read would record the account as a witness access.
+  let acc = ledger.txFrame.fetchAccount(FactoryAddress.computeAccPath)
+  if acc.isOk and acc.value.codeHash == FactoryCodeHash:
     # It's a no-op on chain that already have factory at the FactoryAddress.
     return
 
   # Although this code only called once during fork transition,
   # if using the constant above, sometimes it will crash
   # when interacting with CodeBytesRef sink in test environment.
+  # Note: Also the accesses here should not be recorded in the witness,
+  # however actually deploying the factory code is not supported in
+  # combination with stateless at the moment.
   let factoryCode = FactoryCode
   ledger.setCode(FactoryAddress, factoryCode)
   ledger.setNonce(FactoryAddress, 1)
