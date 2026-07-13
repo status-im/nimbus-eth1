@@ -184,7 +184,7 @@ type
 
     bootstrapNodes {.
       separator: "\pNETWORKING OPTIONS:"
-      desc: "Specifies one or more bootstrap nodes(ENR or enode URL) to use when connecting to the network. " &
+      desc: "Specifies one or more bootstrap nodes (ENR) to use when connecting to the network. " &
             "Alias = el-bootstrap-node"
       defaultValue: @[]
       defaultValueDesc: ""
@@ -199,7 +199,7 @@ type
       name: "el-bootstrap-node" .}: seq[string]
 
     bootstrapFile {.
-      desc: "Specifies a file of bootstrap Ethereum network addresses(ENR or enode URL). " &
+      desc: "Specifies a file of bootstrap Ethereum network addresses (ENR). " &
             "Both line delimited or YAML format are supported. Alias = el-bootstrap-file"
       defaultValue: ""
       name: "bootstrap-file" .}: InputFile
