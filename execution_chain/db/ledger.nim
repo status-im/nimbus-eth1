@@ -337,19 +337,40 @@ proc persistCode(acc: AccountRef, ledger: LedgerRef) =
       # code cache must also be cleared!
       acc.code.persisted = true
 
-proc persistStorage(acc: AccountRef, ledger: LedgerRef) =
+template setFatalErrorOrAssert(ledger: LedgerRef, msg: string) =
+  ## Handle a failed trie write during persist:
+  ## - under stateless execution record a fatal error and stop
+  ## - on a full node the state is complete, so assert
+  if ledger.stateless:
+    ledger.fatalError = Opt.some(msg)
+    return
+  else:
+    raiseAssert msg
+
+template abortOnFatalError*(ledger: LedgerRef) =
+  ## Abort the current block if a fatal condition was recorded during execution
+  ## or persist, abort meaning:
+  ## - a validation error under stateless execution
+  ## - otherwise a defect (corrupt database)
+  if ledger.fatalError.isSome:
+    if ledger.stateless:
+      return err(ledger.fatalError.get())
+    else:
+      raiseAssert ledger.fatalError.get()
+
+proc persistStorage(acc: AccountRef, ledger: LedgerRef): Result[void, string] =
   const info = "persistStorage(): "
 
   if acc.overlayStorage.len == 0:
     # TODO: remove the storage too if we figure out
     # how to create 'virtual' storage room for each account
-    return
+    return ok()
 
   # Make sure that there is an account entry on the database. This is needed by
   # `Aristo` for updating the account's storage area reference. As a side effect,
   # this action also updates the latest statement data.
   ledger.txFrame.mergeAccount(acc.accPath, acc.statement).isOkOr:
-    raiseAssert info & $$error
+    return err(info & $$error)
 
   # Save `overlayStorage[]` on database
   let original = acc.original
@@ -367,14 +388,14 @@ proc persistStorage(acc: AccountRef, ledger: LedgerRef) =
 
     if value > 0:
       ledger.txFrame.mergeSlot(acc.accPath, slotKey, value).isOkOr:
-        raiseAssert info & $$error
+        return err(info & $$error)
 
       # move the overlayStorage to originalStorage, related to EIP2200, EIP1283
       original.storage[slot] = value
 
     else:
       ledger.txFrame.deleteSlot(acc.accPath, slotKey).isOkOr:
-        raiseAssert info & $$error
+        return err(info & $$error)
       original.storage.del(slot)
 
     if ledger.storeSlotHash and not cached:
@@ -387,6 +408,7 @@ proc persistStorage(acc: AccountRef, ledger: LedgerRef) =
         warn logTxt "persistStorage()", slot, error=($$rc.error)
 
   acc.overlayStorage.clear()
+  ok()
 
 proc makeDirty(ledger: LedgerRef, address: Address, cloneStorage = true): AccountRef =
   ledger.isDirty = true
@@ -487,6 +509,17 @@ proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool, collect
   result.stateless = stateless
   result.blockHashes = typeof(result.blockHashes).init(MAX_PREV_HEADER_DEPTH.int)
   discard result.beginSavePoint
+
+proc reinit*(ledger: LedgerRef, txFrame: CoreDbTxRef) =
+  doAssert ledger.isTopLevelClean
+  doAssert txFrame.aTx.parent == ledger.txFrame.aTx,
+    "reinit txFrame must be a direct child of the ledger's current frame"
+  ledger.txFrame = txFrame
+  ledger.txFrame.aTx.collectWitness = ledger.collectWitness
+  ledger.ripemdSpecial = false
+  ledger.fatalError = Opt.none(string)
+  ledger.balOverlay = Opt.none(BlockAccessListOverlay)
+  ledger.witnessKeys.clear()
 
 proc getCodeHash*(ledger: LedgerRef, address: Address): Hash32 =
   let acc = ledger.getAccount(address, false)
@@ -862,19 +895,20 @@ proc persist*(ledger: LedgerRef,
         ledger.txFrame.clearStorage(acc.accPath).expect("can clear storage of account")
 
       if StorageChanged in acc.flags:
-        acc.persistStorage(ledger)
+        acc.persistStorage(ledger).isOkOr:
+          ledger.setFatalErrorOrAssert(error)
       else:
         # This one is only necessary unless `persistStorage()` is run which needs
         # to `merge()` the latest statement as well.
         ledger.txFrame.mergeAccount(acc.accPath, acc.statement).isOkOr:
-          raiseAssert info & $$error
+          ledger.setFatalErrorOrAssert(info & $$error)
 
       acc.original.statement = acc.statement
       acc.original.code = acc.code
     of Remove:
       ledger.txFrame.deleteAccount(acc.accPath).isOkOr:
         if error.error != AccNotFound:
-          raiseAssert info & $$error
+          ledger.setFatalErrorOrAssert(info & $$error)
       ledger.savePoint.cache.del address
       acc.original.statement = EMPTY_STATEMENT
       acc.original.code = nil

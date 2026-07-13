@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -19,11 +19,12 @@ import
   "."/[light_client_test_data, beacon_test_helpers]
 
 procSuite "Beacon Network":
-  let rng = newRng()
+  let
+    rng = newRng()
+    networkData = loadNetworkData("mainnet")
 
   asyncTest "Get bootstrap by trusted block hash":
     let
-      networkData = loadNetworkData("mainnet")
       lcNode1 = newLCNode(rng, 20302, networkData)
       lcNode2 = newLCNode(rng, 20303, networkData)
       forkDigests = (newClone networkData.forks)[]
@@ -67,7 +68,6 @@ procSuite "Beacon Network":
 
   asyncTest "Get latest optimistic and finality updates":
     let
-      networkData = loadNetworkData("mainnet")
       lcNode1 = newLCNode(rng, 20302, networkData)
       lcNode2 = newLCNode(rng, 20303, networkData)
       forkDigests = (newClone networkData.forks)[]
@@ -136,7 +136,6 @@ procSuite "Beacon Network":
 
   asyncTest "Get range of light client updates":
     let
-      networkData = loadNetworkData("mainnet")
       lcNode1 = newLCNode(rng, 20302, networkData)
       lcNode2 = newLCNode(rng, 20303, networkData)
       forkDigests = (newClone networkData.forks)[]
@@ -190,7 +189,6 @@ procSuite "Beacon Network":
     let
       cfg = genesisTestRuntimeConfig(ConsensusFork.Electra)
       state = newClone(initGenesisState(cfg = cfg))
-      networkData = loadNetworkData("mainnet")
       forkDigests = (newClone networkData.forks)[]
 
     var cache = StateCache()

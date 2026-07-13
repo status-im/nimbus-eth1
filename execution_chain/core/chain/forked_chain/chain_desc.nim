@@ -16,6 +16,7 @@ import
   minilru,
   ../../../common,
   ../../../db/[core_db, fcu_db],
+  ../../../evm/types,
   ../../../portal/portal,
   ./block_quarantine,
   ./chain_branch
@@ -120,6 +121,14 @@ type
       # Recent blocks that failed validation for any reason,
       # indexed by block hash and containing a tuple of the block
       # and the generated block access list.
+
+    vmState*: BaseVMState
+      # Cached from the last successfully processed block so that the ledger
+      # caches stay warm across linear imports. nil when no reusable state
+      # exists (startup, or the previous block failed).
+
+    vmStateBlockHash*: Hash32
+      # Hash of the last block executed by cached vmState.
 
 # ------------------------------------------------------------------------------
 # These functions are private to ForkedChainRef

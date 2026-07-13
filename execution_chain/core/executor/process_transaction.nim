@@ -161,13 +161,6 @@ proc processTransaction*(
   var callResult = tx.txCallEvm(sender, vmState, intrinsic)
   vmState.captureTxEnd(tx.gasLimit - callResult.gasUsed)
 
-  # A fatal condition recorded during execution aborts the block immediately
-  if vmState.ledger.fatalError.isSome:
-    if vmState.ledger.stateless:
-      return err(vmState.ledger.fatalError.get())
-    else:
-      raiseAssert vmState.ledger.fatalError.get()
-
   let
     tmp = commitOrRollbackDependingOnGasUsed(
       vmState, savePoint, tx, callResult, blobGasUsed, rollbackReads)
@@ -178,6 +171,10 @@ proc processTransaction*(
 
   if persist:
     vmState.ledger.persist(clearEmptyAccount = vmState.hardFork >= Spurious)
+
+  # Checked after persist so both a BLOCKHASH miss (set during the EVM run)
+  # and a partial witness persist failure are caught here.
+  vmState.ledger.abortOnFatalError()
 
   res
 

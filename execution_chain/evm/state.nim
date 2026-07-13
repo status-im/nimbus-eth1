@@ -34,7 +34,7 @@ proc init(
       com:          CommonRef;
       tracer:       TracerRef,
       tracker:      BlockAccessListTrackerRef,
-      flags:        set[VMFlag] = self.flags) =
+      flags:        set[VMFlag] = {}) =
   ## Initialisation helper
   # Take care to (re)set all fields since the VMState might be recycled
   self.com = com
@@ -131,28 +131,25 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
   ## queries about its `getStateRoot()`, i.e. `isTopLevelClean` evaluated `true`. If
   ## this function returns `false`, the function argument `self` is left
   ## untouched.
+  if not self.ledger.isTopLevelClean:
+    return false
 
   if not self.balTracker.isNil():
     self.balTracker.dispose()
     self.balTracker = BlockAccessListTrackerRef.init(self.ledger.ReadOnlyLedger)
-
-  if not self.ledger.isTopLevelClean:
-    return false
 
   let
     tracer = self.tracer
     tracker = self.balTracker
     com    = self.com
     ledger     = self.ledger
-    flags  = self.flags
   self.init(
     ledger       = ledger,
     parent   = parent,
     blockCtx = blockCtx,
     com      = com,
     tracer   = tracer,
-    tracker  = tracker,
-    flags    = flags)
+    tracker  = tracker)
   true
 
 proc reinit*(self:   BaseVMState; ## Object descriptor
@@ -169,6 +166,37 @@ proc reinit*(self:   BaseVMState; ## Object descriptor
     parent   = parent,
     blockCtx = blockCtx(header),
     )
+
+proc reinit*(self:    BaseVMState; ## Object descriptor
+             parent:  Header;      ## parent header, account sync pos.
+             header:  Header;      ## header with tx environment data fields
+             txFrame: CoreDbTxRef; ## frame accumulating the new block's changes
+             enableBalTracker: bool;
+             ): bool =
+  ## Variant of `reinit()` which also moves the ledger over to a new `txFrame`
+  ## and rebuilds the BAL tracker from explicit per-block flags.
+  if not self.ledger.isTopLevelClean:
+    return false
+
+  self.ledger.reinit(txFrame)
+
+  if not self.balTracker.isNil():
+    self.balTracker.dispose()
+    self.balTracker = nil
+
+  let tracker =
+    if enableBalTracker:
+      BlockAccessListTrackerRef.init(self.ledger.ReadOnlyLedger)
+    else:
+      nil
+  self.init(
+    ledger   = self.ledger,
+    parent   = parent,
+    blockCtx = blockCtx(header),
+    com      = self.com,
+    tracer   = self.tracer,
+    tracker  = tracker)
+  true
 
 proc init*(
       self:   BaseVMState;     ## Object descriptor
