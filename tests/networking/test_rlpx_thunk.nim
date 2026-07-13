@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -12,29 +12,30 @@
 import
   std/[json, os],
   unittest2,
+  testutils,
   chronos, stew/byteutils,
   ../../execution_chain/networking/p2p,
   ./stubloglevel,
   ./p2p_test_helper
 
-var
-  env1 = newTestEnv()
-  env2 = newTestEnv()
-
-env2.node.startListening()
-let res = waitFor env1.node.rlpxConnect(newNode(env2.node.toENode()))
-check res.isOk()
-
-let peer = res.get()
-
-proc testThunk(payload: openArray[byte]) =
+proc testThunk(peer: Peer, payload: seq[byte]) {.async: (raises: [CancelledError, RlpError, EthP2PError]).} =
   var (msgId, msgData) = recvMsgMock(payload)
-  waitFor peer.invokeThunk(msgId, msgData)
+  await peer.invokeThunk(msgId, msgData)
 
 proc testPayloads(filename: string) =
   let js = json.parseFile(filename)
 
   suite extractFilename(filename):
+    var
+      env1 = newTestEnv()
+      env2 = newTestEnv()
+
+    env2.node.startListening()
+    let res = waitFor env1.node.rlpxConnect(newNode(env2.node.toENode()))
+    check res.isOk()
+
+    let peer = res.get()
+
     for testname, testdata in js:
       test testname:
         let
@@ -48,7 +49,7 @@ proc testPayloads(filename: string) =
         let payload = hexToSeqByte(payloadHex.str)
 
         if error.isNil:
-          testThunk(payload)
+          waitFor peer.testThunk(payload)
         else:
           if error.kind != JString:
             skip()
@@ -57,12 +58,12 @@ proc testPayloads(filename: string) =
           # TODO: can I convert the error string to an Exception type at runtime?
           expect CatchableError:
             try:
-              testThunk(payload)
+              waitFor peer.testThunk(payload)
             except CatchableError as e:
               check: e.name == error.str
               raise e
 
-    env1.close()
-    env2.close()
+    waitFor env1.close()
+    waitFor env2.close()
 
 testPayloads(sourceDir / "test_rlpx_thunk.json")
