@@ -68,8 +68,8 @@ procSuite "devp2p eth/71 Tests":
       distinctBase(balBytes) == UNAVAILABLE_BAL_BYTES
       rlp.encode(balBytes) == UNAVAILABLE_BAL_BYTES
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "getBlockAccessLists - empty BAL available":
     var
@@ -100,8 +100,8 @@ procSuite "devp2p eth/71 Tests":
       balBytes == EMPTY_BAL_BYTES
       BlockAccessList.decode(balBytes).expect("valid BAL") == default(BlockAccessList)
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "getBlockAccessLists - non empty BAL available":
     var
@@ -120,7 +120,7 @@ procSuite "devp2p eth/71 Tests":
 
     var bal: BlockAccessList = newSeq[AccountChanges](1)
     bal[0].address = Address.fromHex("0x1234567890123456789012345678901234567890")
-    
+
     seedBal(env2, blockHash, bal)
 
     let
@@ -136,8 +136,8 @@ procSuite "devp2p eth/71 Tests":
       balBytes.len() > 0
       BlockAccessList.decode(balBytes).expect("valid BAL") == bal
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "getBlockAccessLists - mixed unavailable, empty and non empty BALs":
     var
@@ -185,8 +185,8 @@ procSuite "devp2p eth/71 Tests":
       BlockAccessList.decode(emptyBytes).expect("valid BAL") == emptyBal
       BlockAccessList.decode(nonEmptyBytes).expect("valid BAL") == nonEmptyBal
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "getBlockAccessLists - MAX_BALS_SERVE cap":
     var
@@ -217,8 +217,8 @@ procSuite "devp2p eth/71 Tests":
     for balBytes in resp.accessLists:
       check distinctBase(balBytes) == UNAVAILABLE_BAL_BYTES
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "getBlockAccessLists - SOFT_RESPONSE_LIMIT respected":
     var
@@ -263,8 +263,8 @@ procSuite "devp2p eth/71 Tests":
     for i, balBytes in resp.accessLists:
       check BlockAccessList.decode(balBytes.distinctBase()).expect("valid BAL") == bals[i]
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "getBlockHeaders":
     var
@@ -293,8 +293,8 @@ procSuite "devp2p eth/71 Tests":
       resp.headers.len() == 1
       resp.headers[0].number == 0
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "getBlockBodies":
     var
@@ -318,8 +318,8 @@ procSuite "devp2p eth/71 Tests":
     check:
       resp.bodies.len() == 1
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "getPooledTransactions":
     var
@@ -342,8 +342,8 @@ procSuite "devp2p eth/71 Tests":
     let resp = respOpt.get()
     check resp.transactions.len() == 0
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "blockRangeUpdate":
     var
@@ -370,8 +370,8 @@ procSuite "devp2p eth/71 Tests":
       respOpt = await peer.getBlockAccessLists(req, timeout = chronos.seconds(3))
     check respOpt.isSome()
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "getReceipts (eth70+ format)":
     var
@@ -396,8 +396,8 @@ procSuite "devp2p eth/71 Tests":
       resp.receipts.len() == 0
       resp.lastBlockIncomplete
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
 # Unit tests for the sync-side decoding of block access lists fetched from
 # peers (`blocks_bal.decodeBlockAccessList`). A peer-supplied list is only
