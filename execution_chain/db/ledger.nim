@@ -438,7 +438,10 @@ template getCodeSizeImpl(ledger: LedgerRef, acc: AccountRef): int =
       var rc = ledger.txFrame.len(contractHashKey(acc.statement.codeHash).toOpenArray)
 
       return rc.valueOr:
+        # A non-empty code hash whose length is missing from the database: record
+        # a fatalError but still return 0 so the async EVM continues.
         warn logTxt "getCodeSize()", codeHash=acc.statement.codeHash, error=($$rc.error)
+        ledger.fatalError = Opt.some("getCodeSize(): failed to fetch code length from database")
         0
 
   acc.code.len()
@@ -558,7 +561,10 @@ proc getCode*(ledger: LedgerRef,
         ledger.code.get(acc.statement.codeHash).valueOr:
           var rc = ledger.txFrame.get(contractHashKey(acc.statement.codeHash).toOpenArray)
           if rc.isErr:
+            # A non-empty code hash with no code in the database: record a fatalError
+            # but still return empty code so the async EVM continues.
             warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=($$rc.error)
+            ledger.fatalError = Opt.some("getCode(): failed to fetch code from database")
             CodeBytesRef()
           else:
             let newCode = CodeBytesRef.init(move(rc.value), persisted = true)
