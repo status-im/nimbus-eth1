@@ -119,8 +119,12 @@ proc procBlkPreamble(
     if com.daoForkSupport and com.daoForkBlock.get == header.number:
       ledger.applyDAOHardFork()
 
-    if com.amsterdamTransition(vmState.parent.timestamp, header.timestamp):
-      ledger.applyEip7997()
+  # Not supported in stateless execution. Note that the execution-specs
+  # currently don't implement this fork-transition state change either
+  # (factory is pre-allocated at genesis there), so this needs to be revisited.
+  if com.amsterdamTransition(vmState.parent.timestamp, header.timestamp) and
+      not vmState.ledger.stateless:
+    vmState.ledger.txFrame.applyEip7997()
 
   if not skipValidation: # Expensive!
     if blk.transactions.calcTxRoot != header.txRoot:

@@ -35,10 +35,13 @@ proc writeGenesisAlloc*(alloc: GenesisAlloc, db: CoreDbTxRef, enableEIP7997: boo
     for k, v in account.storage:
       ledger.setStorage(address, k, v)
 
-  if enableEIP7997:
-    ledger.applyEip7997()
-
+  # Persist the alloc first before applyEip7997 is run, as applyEip7997 runs
+  # it over a new ledger instance.
   ledger.persist()
+
+  if enableEIP7997:
+    db.applyEip7997()
+
   ledger.getStateRoot()
 
 proc writeGenesis*(g: Genesis, db: CoreDbTxRef, fork: HardFork): Header =
