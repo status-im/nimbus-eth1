@@ -506,7 +506,8 @@ proc terminate[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
         buddy.worker.ctrl.stopped = true
       # Wait for async worker to terminate
       try:
-        waitFor sleepAsync termWaitPollingTime
+        # TODO verify that await is correct here
+        await sleepAsync termWaitPollingTime
       except CancelledError:
         trace "Shutdown: peer timeout was cancelled",
           nCachedWorkers=dsc.nSyncPeers()

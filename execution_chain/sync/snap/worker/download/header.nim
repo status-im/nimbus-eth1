@@ -79,7 +79,7 @@ proc headerDownloadTrigger*(
     consHeadNum = ctx.hdrCache.latestConsHeadNumber()
 
   # Check whether there is an ongoing header download, already.
-  if ctx.beaconState in {headers, headersFinish, linger}:
+  if ctx.beaconState in {BeaconState.headers, BeaconState.headersFinish, BeaconState.linger}:
     # Note: The `linger` state is active when waiting for the
     #       `storeTopHeaderCB()` event handler (see below) to
     #       clean up.
