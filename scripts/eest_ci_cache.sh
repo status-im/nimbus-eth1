@@ -29,7 +29,7 @@ EEST_DEVNET_URL="https://github.com/ethereum/execution-specs/releases/download/$
 
 # --- zkevm Release ---
 EEST_ZKEVM_NAME="tests-zkevm"
-EEST_ZKEVM_VERSION="v0.5.0"
+EEST_ZKEVM_VERSION="v0.6.1"
 EEST_ZKEVM_DIR="${FIXTURES_DIR}/eest_zkevm"
 EEST_ZKEVM_ARCHIVE="fixtures_zkevm.tar.gz"
 EEST_ZKEVM_URL="https://github.com/ethereum/execution-specs/releases/download/${EEST_ZKEVM_NAME}%40${EEST_ZKEVM_VERSION}/${EEST_ZKEVM_ARCHIVE}"
