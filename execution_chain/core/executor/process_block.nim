@@ -52,7 +52,7 @@ template withSender(
 template withBalPrefetch(
     vmState: BaseVMState, bal: Opt[BlockAccessListRef], body: untyped) =
   when compileOption("threads"):
-    if vmState.com.balStatePrefetchEnabled(vmState.blockCtx.timestamp, bal) or (bal.isSome() and vmState.com.balStatePrefetchForce):
+    if vmState.com.balStatePrefetchEnabled(vmState.blockCtx.timestamp, bal): #or (bal.isSome() and vmState.com.balStatePrefetchForce):
       withBalPrefetchParallel(vmState, bal, body)
     else:
       body
@@ -75,7 +75,7 @@ proc processTransactions*(
   vmState.allLogs = @[]
 
   when compileOption("threads"):
-    if vmState.com.balParallelExecutionEnabled(header.timestamp, blockAccessList):
+    if vmState.com.balParallelExecutionEnabled(header.timestamp, blockAccessList) or (blockAccessList.isSome() and vmState.com.balStatePrefetchForce):
       return processTransactionsParallel(
         vmState, transactions, blockAccessList.get(), skipReceipts, collectLogs)
 

@@ -421,7 +421,7 @@ proc processTransactionsParallel*(
     skipReceipts: bool,
     collectLogs: bool,
 ): Result[void, string] =
-  doAssert vmState.fork >= FkAmsterdam
+  #doAssert vmState.fork >= FkAmsterdam
   doAssert not vmState.com.statelessProvider
 
   let n = transactions.len()
