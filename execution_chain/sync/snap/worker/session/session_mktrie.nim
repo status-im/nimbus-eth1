@@ -520,7 +520,7 @@ template sessionMkTrie*(ctx: SnapCtxRef; info: static[string]): auto =
       # End `for walkStateData()`
 
     # Publish pivot for MPT analysis and healing
-    doAssert PivotOnTrie <= ctx.sessionPivotActivate(info)
+    doAssert PivotOnTrie <= ctx.sessionPivotActivateCached(info)
 
     let elapsed = Moment.now() - start
     bodyRc = typeof(bodyRc).ok(elapsed)
