@@ -438,7 +438,10 @@ template getCodeSizeImpl(ledger: LedgerRef, acc: AccountRef): int =
       var rc = ledger.txFrame.len(contractHashKey(acc.statement.codeHash).toOpenArray)
 
       return rc.valueOr:
+        # A non-empty code hash whose length is missing from the database: record
+        # a fatalError but still return 0 so the async EVM continues.
         warn logTxt "getCodeSize()", codeHash=acc.statement.codeHash, error=($$rc.error)
+        ledger.fatalError = Opt.some("getCodeSize(): failed to fetch code length from database")
         0
 
   acc.code.len()
@@ -510,6 +513,17 @@ proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool, collect
   result.blockHashes = typeof(result.blockHashes).init(MAX_PREV_HEADER_DEPTH.int)
   discard result.beginSavePoint
 
+proc reinit*(ledger: LedgerRef, txFrame: CoreDbTxRef) =
+  doAssert ledger.isTopLevelClean
+  doAssert txFrame.aTx.parent == ledger.txFrame.aTx,
+    "reinit txFrame must be a direct child of the ledger's current frame"
+  ledger.txFrame = txFrame
+  ledger.txFrame.aTx.collectWitness = ledger.collectWitness
+  ledger.ripemdSpecial = false
+  ledger.fatalError = Opt.none(string)
+  ledger.balOverlay = Opt.none(BlockAccessListOverlay)
+  ledger.witnessKeys.clear()
+
 proc getCodeHash*(ledger: LedgerRef, address: Address): Hash32 =
   let acc = ledger.getAccount(address, false)
   if acc.isNil: EMPTY_ACCOUNT.codeHash
@@ -547,7 +561,10 @@ proc getCode*(ledger: LedgerRef,
         ledger.code.get(acc.statement.codeHash).valueOr:
           var rc = ledger.txFrame.get(contractHashKey(acc.statement.codeHash).toOpenArray)
           if rc.isErr:
+            # A non-empty code hash with no code in the database: record a fatalError
+            # but still return empty code so the async EVM continues.
             warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=($$rc.error)
+            ledger.fatalError = Opt.some("getCode(): failed to fetch code from database")
             CodeBytesRef()
           else:
             let newCode = CodeBytesRef.init(move(rc.value), persisted = true)

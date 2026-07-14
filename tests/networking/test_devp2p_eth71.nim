@@ -68,8 +68,8 @@ procSuite "devp2p eth/71 Tests":
       distinctBase(balBytes) == UNAVAILABLE_BAL_BYTES
       rlp.encode(balBytes) == UNAVAILABLE_BAL_BYTES
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "getBlockAccessLists - empty BAL available":
     var
@@ -100,8 +100,8 @@ procSuite "devp2p eth/71 Tests":
       balBytes == EMPTY_BAL_BYTES
       BlockAccessList.decode(balBytes).expect("valid BAL") == default(BlockAccessList)
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "getBlockAccessLists - non empty BAL available":
     var
@@ -120,7 +120,7 @@ procSuite "devp2p eth/71 Tests":
 
     var bal: BlockAccessList = newSeq[AccountChanges](1)
     bal[0].address = Address.fromHex("0x1234567890123456789012345678901234567890")
-    
+
     seedBal(env2, blockHash, bal)
 
     let
@@ -136,8 +136,8 @@ procSuite "devp2p eth/71 Tests":
       balBytes.len() > 0
       BlockAccessList.decode(balBytes).expect("valid BAL") == bal
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "getBlockAccessLists - mixed unavailable, empty and non empty BALs":
     var
@@ -185,8 +185,8 @@ procSuite "devp2p eth/71 Tests":
       BlockAccessList.decode(emptyBytes).expect("valid BAL") == emptyBal
       BlockAccessList.decode(nonEmptyBytes).expect("valid BAL") == nonEmptyBal
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "getBlockAccessLists - MAX_BALS_SERVE cap":
     var
@@ -217,8 +217,8 @@ procSuite "devp2p eth/71 Tests":
     for balBytes in resp.accessLists:
       check distinctBase(balBytes) == UNAVAILABLE_BAL_BYTES
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "getBlockAccessLists - SOFT_RESPONSE_LIMIT respected":
     var
@@ -263,8 +263,8 @@ procSuite "devp2p eth/71 Tests":
     for i, balBytes in resp.accessLists:
       check BlockAccessList.decode(balBytes.distinctBase()).expect("valid BAL") == bals[i]
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "getBlockHeaders":
     var
@@ -293,8 +293,8 @@ procSuite "devp2p eth/71 Tests":
       resp.headers.len() == 1
       resp.headers[0].number == 0
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "getBlockBodies":
     var
@@ -318,8 +318,8 @@ procSuite "devp2p eth/71 Tests":
     check:
       resp.bodies.len() == 1
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "getPooledTransactions":
     var
@@ -342,8 +342,8 @@ procSuite "devp2p eth/71 Tests":
     let resp = respOpt.get()
     check resp.transactions.len() == 0
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "blockRangeUpdate":
     var
@@ -370,8 +370,8 @@ procSuite "devp2p eth/71 Tests":
       respOpt = await peer.getBlockAccessLists(req, timeout = chronos.seconds(3))
     check respOpt.isSome()
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "getReceipts (eth70+ format)":
     var
@@ -399,8 +399,8 @@ procSuite "devp2p eth/71 Tests":
       resp.receipts.len() == 0
       not resp.lastBlockIncomplete
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "GetReceipts eth/70+ request decodes the spec wire format (flat fields)":
     # https://github.com/ethereum/devp2p/blob/master/caps/eth.md#getreceipts-0x0f
@@ -490,6 +490,7 @@ suite "eth/71 sync block access list decoding":
       # A valid RLP string item where a list (the access list) is expected.
       raw = RawBlockAccessList(@[0x82'u8, 0x12, 0x34])
     check decodeBlockAccessList(raw, header).isNone()
+    
 # Unit tests for the eth/70+ GetReceipts continuation semantics
 # (https://github.com/ethereum/devp2p/blob/master/caps/eth.md#getreceipts-0x0f):
 # `firstBlockReceiptIndex` offsets into the FIRST block's receipt list, receipt
@@ -555,7 +556,7 @@ suite "eth/70 GetReceipts continuation":
       third.receipts.len == 1
       third.receipts[0] == receipts[4..4]
 
-    env.close()
+    waitFor env.close()
 
   test "continuation cursor covering the whole first block yields an empty positional entry":
     let
@@ -576,7 +577,7 @@ suite "eth/70 GetReceipts continuation":
       resp.receipts[0].len == 0
       resp.receipts[1] == small
 
-    env.close()
+    waitFor env.close()
 
   test "mid-response cut across blocks sets lastBlockIncomplete":
     let
@@ -595,7 +596,7 @@ suite "eth/70 GetReceipts continuation":
       resp.receipts[0] == small
       resp.receipts[1] == large[0..1]
 
-    env.close()
+    waitFor env.close()
 
   test "unknown block stops serving to preserve positional correspondence":
     let
@@ -614,4 +615,4 @@ suite "eth/70 GetReceipts continuation":
       resp.receipts.len == 1
       resp.receipts[0] == small
 
-    env.close()
+    waitFor env.close()

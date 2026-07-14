@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -27,16 +27,18 @@ suite "Block access list builder":
   setup:
     var builder: BlockAccessListBuilder
     builder.init()
+    # The sequential tests use block access indices 0 .. 3.
+    builder.ensureIndexCount(4)
 
 
   teardown:
     builder.dispose()
 
   test "Add touched account":
-    builder.addTouchedAccount(address3)
-    builder.addTouchedAccount(address2)
-    builder.addTouchedAccount(address1)
-    builder.addTouchedAccount(address1) # duplicate
+    builder.addTouchedAccount(0, address3)
+    builder.addTouchedAccount(0, address2)
+    builder.addTouchedAccount(0, address1)
+    builder.addTouchedAccount(0, address1) # duplicate
 
     let bal = builder.buildBlockAccessList()[]
     check:
@@ -54,12 +56,12 @@ suite "Block access list builder":
         accChange.codeChanges.len() == 0
 
   test "Add storage write":
-    builder.addStorageWrite(address1, slot3, 0, 3.u256)
-    builder.addStorageWrite(address1, slot2, 2, 2.u256)
-    builder.addStorageWrite(address1, slot1, 1, 1.u256)
-    builder.addStorageWrite(address2, slot1, 1, 1.u256)
-    builder.addStorageWrite(address1, slot3, 3, 4.u256)
-    builder.addStorageWrite(address1, slot3, 3, 5.u256) # duplicate should overwrite
+    builder.addStorageWrite(0, address1, slot3, 3.u256)
+    builder.addStorageWrite(2, address1, slot2, 2.u256)
+    builder.addStorageWrite(1, address1, slot1, 1.u256)
+    builder.addStorageWrite(1, address2, slot1, 1.u256)
+    builder.addStorageWrite(3, address1, slot3, 4.u256)
+    builder.addStorageWrite(3, address1, slot3, 5.u256) # duplicate should overwrite
 
     let bal = builder.buildBlockAccessList()[]
     check:
@@ -74,11 +76,11 @@ suite "Block access list builder":
       bal[1].storageChanges[0] == (slot1, @[(1.BlockAccessIndex, 1.u256)])
 
   test "Add storage read":
-    builder.addStorageRead(address2, slot3)
-    builder.addStorageRead(address2, slot2)
-    builder.addStorageRead(address3, slot3)
-    builder.addStorageRead(address1, slot1)
-    builder.addStorageRead(address1, slot1) # duplicate
+    builder.addStorageRead(0, address2, slot3)
+    builder.addStorageRead(0, address2, slot2)
+    builder.addStorageRead(0, address3, slot3)
+    builder.addStorageRead(0, address1, slot1)
+    builder.addStorageRead(0, address1, slot1) # duplicate
 
     let bal = builder.buildBlockAccessList()[]
     check:
@@ -91,11 +93,11 @@ suite "Block access list builder":
       bal[2].storageReads == @[slot3]
 
   test "Add balance change":
-    builder.addBalanceChange(address2, 1, 0.u256)
-    builder.addBalanceChange(address2, 0, 1.u256)
-    builder.addBalanceChange(address3, 3, 3.u256)
-    builder.addBalanceChange(address1, 2, 2.u256)
-    builder.addBalanceChange(address1, 2, 10.u256) # duplicate should overwrite
+    builder.addBalanceChange(1, address2, 0.u256)
+    builder.addBalanceChange(0, address2, 1.u256)
+    builder.addBalanceChange(3, address3, 3.u256)
+    builder.addBalanceChange(2, address1, 2.u256)
+    builder.addBalanceChange(2, address1, 10.u256) # duplicate should overwrite
 
     let bal = builder.buildBlockAccessList()[]
     check:
@@ -108,11 +110,11 @@ suite "Block access list builder":
       bal[2].balanceChanges == @[(3.BlockAccessIndex, 3.u256)]
 
   test "Add nonce change":
-    builder.addNonceChange(address1, 3, 3)
-    builder.addNonceChange(address2, 2, 2)
-    builder.addNonceChange(address2, 1, 1)
-    builder.addNonceChange(address3, 1, 1)
-    builder.addNonceChange(address3, 1, 10) # duplicate should overwrite
+    builder.addNonceChange(3, address1, 3)
+    builder.addNonceChange(2, address2, 2)
+    builder.addNonceChange(1, address2, 1)
+    builder.addNonceChange(1, address3, 1)
+    builder.addNonceChange(1, address3, 10) # duplicate should overwrite
 
     let bal = builder.buildBlockAccessList()[]
     check:
@@ -125,10 +127,10 @@ suite "Block access list builder":
       bal[2].nonceChanges == @[(1.BlockAccessIndex, 10.AccountNonce)]
 
   test "Add code change":
-    builder.addCodeChange(address2, 0, @[0x1.byte])
-    builder.addCodeChange(address2, 1, @[0x2.byte])
-    builder.addCodeChange(address1, 3, @[0x3.byte])
-    builder.addCodeChange(address1, 3, @[0x4.byte]) # duplicate should overwrite
+    builder.addCodeChange(0, address2, @[0x1.byte])
+    builder.addCodeChange(1, address2, @[0x2.byte])
+    builder.addCodeChange(3, address1, @[0x3.byte])
+    builder.addCodeChange(3, address1, @[0x4.byte]) # duplicate should overwrite
 
     let bal = builder.buildBlockAccessList()[]
     check:
@@ -138,51 +140,52 @@ suite "Block access list builder":
       bal[1].address == address2
       bal[1].codeChanges == @[(0.BlockAccessIndex, @[0x1.byte]), (1.BlockAccessIndex, @[0x2.byte])]
 
-  test "Overwriting a code change at the same index does not leak":
+  test "Appending two code changes at the same index frees both on dispose":
     let before = getOccupiedSharedMem()
     for _ in 0 ..< 100:
       var b: BlockAccessListBuilder
       b.init()
-      b.addCodeChange(address1, 3, @[0x1.byte, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8])
-      b.addCodeChange(address1, 3, @[0x9.byte]) # overwrites; old buffer must be freed
+      b.ensureIndexCount(4)
+      b.addCodeChange(3, address1, @[0x1.byte, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8])
+      b.addCodeChange(3, address1, @[0x9.byte]) # both buffers retained until dispose
       b.dispose()
     check getOccupiedSharedMem() == before
 
   test "All changes and reads":
-    builder.addTouchedAccount(address3)
-    builder.addTouchedAccount(address2)
-    builder.addTouchedAccount(address1)
-    builder.addTouchedAccount(address1) # duplicate
+    builder.addTouchedAccount(0, address3)
+    builder.addTouchedAccount(0, address2)
+    builder.addTouchedAccount(0, address1)
+    builder.addTouchedAccount(0, address1) # duplicate
 
-    builder.addStorageWrite(address1, slot3, 0, 3.u256)
-    builder.addStorageWrite(address1, slot2, 2, 2.u256)
-    builder.addStorageWrite(address1, slot1, 1, 1.u256)
-    builder.addStorageWrite(address2, slot1, 1, 1.u256)
-    builder.addStorageWrite(address1, slot3, 3, 4.u256)
-    builder.addStorageWrite(address1, slot3, 3, 5.u256) # duplicate should overwrite
+    builder.addStorageWrite(0, address1, slot3, 3.u256)
+    builder.addStorageWrite(2, address1, slot2, 2.u256)
+    builder.addStorageWrite(1, address1, slot1, 1.u256)
+    builder.addStorageWrite(1, address2, slot1, 1.u256)
+    builder.addStorageWrite(3, address1, slot3, 4.u256)
+    builder.addStorageWrite(3, address1, slot3, 5.u256) # duplicate should overwrite
 
-    builder.addStorageRead(address2, slot3)
-    builder.addStorageRead(address2, slot2)
-    builder.addStorageRead(address3, slot3)
-    builder.addStorageRead(address1, slot1)
-    builder.addStorageRead(address1, slot1) # duplicate
+    builder.addStorageRead(0, address2, slot3)
+    builder.addStorageRead(0, address2, slot2)
+    builder.addStorageRead(0, address3, slot3)
+    builder.addStorageRead(0, address1, slot1)
+    builder.addStorageRead(0, address1, slot1) # duplicate
 
-    builder.addBalanceChange(address2, 1, 0.u256)
-    builder.addBalanceChange(address2, 0, 1.u256)
-    builder.addBalanceChange(address3, 3, 3.u256)
-    builder.addBalanceChange(address1, 2, 2.u256)
-    builder.addBalanceChange(address1, 2, 10.u256) # duplicate should overwrite
+    builder.addBalanceChange(1, address2, 0.u256)
+    builder.addBalanceChange(0, address2, 1.u256)
+    builder.addBalanceChange(3, address3, 3.u256)
+    builder.addBalanceChange(2, address1, 2.u256)
+    builder.addBalanceChange(2, address1, 10.u256) # duplicate should overwrite
 
-    builder.addNonceChange(address1, 3, 3)
-    builder.addNonceChange(address2, 2, 2)
-    builder.addNonceChange(address2, 1, 1)
-    builder.addNonceChange(address3, 1, 1)
-    builder.addNonceChange(address3, 1, 10) # duplicate should overwrite
+    builder.addNonceChange(3, address1, 3)
+    builder.addNonceChange(2, address2, 2)
+    builder.addNonceChange(1, address2, 1)
+    builder.addNonceChange(1, address3, 1)
+    builder.addNonceChange(1, address3, 10) # duplicate should overwrite
 
-    builder.addCodeChange(address2, 0, @[0x1.byte])
-    builder.addCodeChange(address2, 1, @[0x2.byte])
-    builder.addCodeChange(address1, 3, @[0x3.byte])
-    builder.addCodeChange(address1, 3, @[0x4.byte]) # duplicate should overwrite
+    builder.addCodeChange(0, address2, @[0x1.byte])
+    builder.addCodeChange(1, address2, @[0x2.byte])
+    builder.addCodeChange(3, address1, @[0x3.byte])
+    builder.addCodeChange(3, address1, @[0x4.byte]) # duplicate should overwrite
 
     let bal = builder.buildBlockAccessList()[]
     check:
@@ -212,236 +215,90 @@ suite "Block access list builder":
       bal[2].nonceChanges == @[(1.BlockAccessIndex, 10.AccountNonce)]
 
 
-proc addTouchedAccount(builder: ptr BlockAccessListBuilder, address: Address) =
-  builder[].addTouchedAccount(address)
+# The builder is lock-free because each block access index has a single writer.
+# These helpers mirror that model: one task per distinct block access index.
 
-proc addStorageWrite(
-    builder: ptr BlockAccessListBuilder,
-    address: Address,
-    slot: UInt256,
-    blockAccessIndex: int,
-    newValue: UInt256,
+proc writeChangesForIndex(
+    builder: ptr BlockAccessListBuilder, address: Address, index: int
 ) =
-  builder[].addStorageWrite(address, slot, blockAccessIndex, newValue)
+  ## Simulates a worker thread that exclusively owns block access `index`,
+  ## appending a mix of changes for that index.
+  builder[].addTouchedAccount(index, address)
+  builder[].addStorageWrite(index, address, 1.u256, index.u256)
+  builder[].addStorageRead(index, address, 2.u256)
+  builder[].addBalanceChange(index, address, (index * 10).u256)
+  builder[].addNonceChange(index, address, index.AccountNonce)
+  builder[].addCodeChange(index, address, @[index.byte])
 
-proc addStorageRead(
-    builder: ptr BlockAccessListBuilder, address: Address, slot: UInt256
+proc writeSlotAtIndex(
+    builder: ptr BlockAccessListBuilder, address: Address, slot: UInt256, index: int
 ) =
-  builder[].addStorageRead(address, slot)
-
-proc addBalanceChange(
-    builder: ptr BlockAccessListBuilder,
-    address: Address,
-    blockAccessIndex: int,
-    postBalance: UInt256,
-) =
-  builder[].addBalanceChange(address, blockAccessIndex, postBalance)
-
-proc addNonceChange(
-    builder: ptr BlockAccessListBuilder,
-    address: Address,
-    blockAccessIndex: int,
-    newNonce: AccountNonce,
-) =
-  builder[].addNonceChange(address, blockAccessIndex, newNonce)
-
-proc addCodeChange(
-    builder: ptr BlockAccessListBuilder,
-    address: Address,
-    blockAccessIndex: int,
-    newCode: openArray[byte],
-) =
-  builder[].addCodeChange(address, blockAccessIndex, newCode)
+  builder[].addStorageWrite(index, address, slot, index.u256)
 
 suite "Concurrent block access list builder":
   const
     address1 = address"0x10007bc31cedb7bfb8a345f31e668033056b2728"
     address2 = address"0x20007bc31cedb7bfb8a345f31e668033056b2728"
     address3 = address"0x30007bc31cedb7bfb8a345f31e668033056b2728"
+    address4 = address"0x40007bc31cedb7bfb8a345f31e668033056b2728"
+    address5 = address"0x50007bc31cedb7bfb8a345f31e668033056b2728"
+    address6 = address"0x60007bc31cedb7bfb8a345f31e668033056b2728"
+    address7 = address"0x70007bc31cedb7bfb8a345f31e668033056b2728"
+    address8 = address"0x80007bc31cedb7bfb8a345f31e668033056b2728"
     slot1 = 1.u256()
-    slot2 = 2.u256()
-    slot3 = 3.u256()
 
   setup:
     let taskpool = Taskpool.new()
     var builder: BlockAccessListBuilder
-    builder.init(threadSafe = true)
+    builder.init()
     let builderPtr = builder.addr
 
   teardown:
     builder.dispose()
 
-  test "Add touched account":
-    taskpool.spawn builderPtr.addTouchedAccount(address3)
-    taskpool.spawn builderPtr.addTouchedAccount(address2)
-    taskpool.spawn builderPtr.addTouchedAccount(address1)
-    taskpool.spawn builderPtr.addTouchedAccount(address1) # duplicate
+  test "Concurrent writes to distinct block access indices":
+    const addresses =
+      [address1, address2, address3, address4, address5, address6, address7, address8]
 
+    # Pre-size on the main thread before spawning, exactly like the parallel
+    # execution path. Each task then writes only its own distinct index (1..N),
+    # so there is a single writer per partition and no locking is required.
+    builder.ensureIndexCount(addresses.len + 1)
+    for i, a in addresses:
+      taskpool.spawn builderPtr.writeChangesForIndex(a, i + 1)
     taskpool.syncAll()
 
     let bal = builder.buildBlockAccessList()[]
-    check:
-      bal.len() == 3
-      bal[0].address == address1
-      bal[1].address == address2
-      bal[2].address == address3
+    check bal.len() == addresses.len
 
-    for accChange in bal:
+    # The addresses are ordered so the sorted BAL matches the array order.
+    for i, a in addresses:
+      let index = i + 1
       check:
-        accChange.storageChanges.len() == 0
-        accChange.storageReads.len() == 0
-        accChange.balanceChanges.len() == 0
-        accChange.nonceChanges.len() == 0
-        accChange.codeChanges.len() == 0
+        bal[i].address == a
+        bal[i].storageChanges == @[(1.u256, @[(index.BlockAccessIndex, index.u256)])]
+        bal[i].storageReads == @[2.u256]
+        bal[i].balanceChanges == @[(index.BlockAccessIndex, (index * 10).u256)]
+        bal[i].nonceChanges == @[(index.BlockAccessIndex, index.AccountNonce)]
+        bal[i].codeChanges == @[(index.BlockAccessIndex, @[index.byte])]
 
-  test "Add storage write":
-    taskpool.spawn builderPtr.addStorageWrite(address1, slot3, 0, 3.u256)
-    taskpool.spawn builderPtr.addStorageWrite(address1, slot2, 2, 2.u256)
-    taskpool.spawn builderPtr.addStorageWrite(address1, slot1, 1, 1.u256)
-    taskpool.spawn builderPtr.addStorageWrite(address2, slot1, 1, 1.u256)
-    taskpool.spawn builderPtr.addStorageWrite(address1, slot3, 3, 5.u256)
-
+  test "Concurrent writes to the same slot at distinct indices merge":
+    # Every task targets the same address and slot but each at its own distinct
+    # index, so there is still exactly one writer per partition. The build phase
+    # must merge them into one slot with one change per index, sorted by index.
+    const n = 8
+    builder.ensureIndexCount(n + 1)
+    for index in 1 .. n:
+      taskpool.spawn builderPtr.writeSlotAtIndex(address1, slot1, index)
     taskpool.syncAll()
 
     let bal = builder.buildBlockAccessList()[]
     check:
-      bal.len() == 2
+      bal.len() == 1
       bal[0].address == address1
-      bal[0].storageChanges.len() == 3
-      bal[0].storageChanges[0] == (slot1, @[(1.BlockAccessIndex, 1.u256)])
-      bal[0].storageChanges[1] == (slot2, @[(2.BlockAccessIndex, 2.u256)])
-      bal[0].storageChanges[2] == (slot3, @[(0.BlockAccessIndex, 3.u256), (3.BlockAccessIndex, 5.u256)])
-      bal[1].address == address2
-      bal[1].storageChanges.len() == 1
-      bal[1].storageChanges[0] == (slot1, @[(1.BlockAccessIndex, 1.u256)])
+      bal[0].storageChanges.len() == 1
+      bal[0].storageChanges[0].slot == slot1
+      bal[0].storageChanges[0].changes.len() == n
 
-  test "Add storage read":
-    taskpool.spawn builderPtr.addStorageRead(address2, slot3)
-    taskpool.spawn builderPtr.addStorageRead(address2, slot2)
-    taskpool.spawn builderPtr.addStorageRead(address3, slot3)
-    taskpool.spawn builderPtr.addStorageRead(address1, slot1)
-    taskpool.spawn builderPtr.addStorageRead(address1, slot1) # duplicate
-
-    taskpool.syncAll()
-
-    let bal = builder.buildBlockAccessList()[]
-    check:
-      bal.len() == 3
-      bal[0].address == address1
-      bal[0].storageReads == @[slot1]
-      bal[1].address == address2
-      bal[1].storageReads == @[slot2, slot3]
-      bal[2].address == address3
-      bal[2].storageReads == @[slot3]
-
-  test "Add balance change":
-    taskpool.spawn builderPtr.addBalanceChange(address2, 1, 0.u256)
-    taskpool.spawn builderPtr.addBalanceChange(address2, 0, 1.u256)
-    taskpool.spawn builderPtr.addBalanceChange(address3, 3, 3.u256)
-    taskpool.spawn builderPtr.addBalanceChange(address1, 2, 10.u256)
-
-    taskpool.syncAll()
-
-    let bal = builder.buildBlockAccessList()[]
-    check:
-      bal.len() == 3
-      bal[0].address == address1
-      bal[0].balanceChanges == @[(2.BlockAccessIndex, 10.u256)]
-      bal[1].address == address2
-      bal[1].balanceChanges == @[(0.BlockAccessIndex, 1.u256), (1.BlockAccessIndex, 0.u256)]
-      bal[2].address == address3
-      bal[2].balanceChanges == @[(3.BlockAccessIndex, 3.u256)]
-
-  test "Add nonce change":
-    taskpool.spawn builderPtr.addNonceChange(address1, 3, 3)
-    taskpool.spawn builderPtr.addNonceChange(address2, 2, 2)
-    taskpool.spawn builderPtr.addNonceChange(address2, 1, 1)
-    taskpool.spawn builderPtr.addNonceChange(address3, 1, 10)
-
-    taskpool.syncAll()
-
-    let bal = builder.buildBlockAccessList()[]
-    check:
-      bal.len() == 3
-      bal[0].address == address1
-      bal[0].nonceChanges == @[(3.BlockAccessIndex, 3.AccountNonce)]
-      bal[1].address == address2
-      bal[1].nonceChanges == @[(1.BlockAccessIndex, 1.AccountNonce), (2.BlockAccessIndex, 2.AccountNonce)]
-      bal[2].address == address3
-      bal[2].nonceChanges == @[(1.BlockAccessIndex, 10.AccountNonce)]
-
-  test "Add code change":
-    taskpool.spawn builderPtr.addCodeChange(address2, 0, @[0x1.byte])
-    taskpool.spawn builderPtr.addCodeChange(address2, 1, @[0x2.byte])
-    taskpool.spawn builderPtr.addCodeChange(address1, 3, @[0x4.byte])
-
-    taskpool.syncAll()
-
-    let bal = builder.buildBlockAccessList()[]
-    check:
-      bal.len() == 2
-      bal[0].address == address1
-      bal[0].codeChanges == @[(3.BlockAccessIndex, @[0x4.byte])]
-      bal[1].address == address2
-      bal[1].codeChanges == @[(0.BlockAccessIndex, @[0x1.byte]), (1.BlockAccessIndex, @[0x2.byte])]
-
-  test "All changes and reads":
-    taskpool.spawn builderPtr.addTouchedAccount(address3)
-    taskpool.spawn builderPtr.addTouchedAccount(address2)
-    taskpool.spawn builderPtr.addTouchedAccount(address1)
-    taskpool.spawn builderPtr.addTouchedAccount(address1) # duplicate
-
-    taskpool.spawn builderPtr.addStorageWrite(address1, slot3, 0, 3.u256)
-    taskpool.spawn builderPtr.addStorageWrite(address1, slot2, 2, 2.u256)
-    taskpool.spawn builderPtr.addStorageWrite(address1, slot1, 1, 1.u256)
-    taskpool.spawn builderPtr.addStorageWrite(address2, slot1, 1, 1.u256)
-    taskpool.spawn builderPtr.addStorageWrite(address1, slot3, 3, 5.u256)
-
-    taskpool.spawn builderPtr.addStorageRead(address2, slot3)
-    taskpool.spawn builderPtr.addStorageRead(address2, slot2)
-    taskpool.spawn builderPtr.addStorageRead(address3, slot3)
-    taskpool.spawn builderPtr.addStorageRead(address1, slot1)
-    taskpool.spawn builderPtr.addStorageRead(address1, slot1) # duplicate
-
-    taskpool.spawn builderPtr.addBalanceChange(address2, 1, 0.u256)
-    taskpool.spawn builderPtr.addBalanceChange(address2, 0, 1.u256)
-    taskpool.spawn builderPtr.addBalanceChange(address3, 3, 3.u256)
-    taskpool.spawn builderPtr.addBalanceChange(address1, 2, 10.u256)
-
-    taskpool.spawn builderPtr.addNonceChange(address1, 3, 3)
-    taskpool.spawn builderPtr.addNonceChange(address2, 2, 2)
-    taskpool.spawn builderPtr.addNonceChange(address2, 1, 1)
-    taskpool.spawn builderPtr.addNonceChange(address3, 1, 10)
-
-    taskpool.spawn builderPtr.addCodeChange(address2, 0, @[0x1.byte])
-    taskpool.spawn builderPtr.addCodeChange(address2, 1, @[0x2.byte])
-    taskpool.spawn builderPtr.addCodeChange(address1, 3, @[0x4.byte])
-
-    taskpool.syncAll()
-
-    let bal = builder.buildBlockAccessList()[]
-    check:
-      bal.len() == 3
-
-      bal[0].address == address1
-      bal[0].storageChanges.len() == 3
-      bal[0].storageChanges[0] == (slot1, @[(1.BlockAccessIndex, 1.u256)])
-      bal[0].storageChanges[1] == (slot2, @[(2.BlockAccessIndex, 2.u256)])
-      bal[0].storageChanges[2] == (slot3, @[(0.BlockAccessIndex, 3.u256), (3.BlockAccessIndex, 5.u256)])
-      bal[0].storageReads.len() == 0 # read removed by storage change with the same slot
-      bal[0].balanceChanges == @[(2.BlockAccessIndex, 10.u256)]
-      bal[0].nonceChanges == @[(3.BlockAccessIndex, 3.AccountNonce)]
-      bal[0].codeChanges == @[(3.BlockAccessIndex, @[0x4.byte])]
-
-      bal[1].address == address2
-      bal[1].storageChanges.len() == 1
-      bal[1].storageChanges[0] == (slot1, @[(1.BlockAccessIndex, 1.u256)])
-      bal[1].storageReads == @[slot2, slot3]
-      bal[1].balanceChanges == @[(0.BlockAccessIndex, 1.u256), (1.BlockAccessIndex, 0.u256)]
-      bal[1].nonceChanges == @[(1.BlockAccessIndex, 1.AccountNonce), (2.BlockAccessIndex, 2.AccountNonce)]
-      bal[1].codeChanges == @[(0.BlockAccessIndex, @[0x1.byte]), (1.BlockAccessIndex, @[0x2.byte])]
-
-      bal[2].address == address3
-      bal[2].storageReads == @[slot3]
-      bal[2].balanceChanges == @[(3.BlockAccessIndex, 3.u256)]
-      bal[2].nonceChanges == @[(1.BlockAccessIndex, 10.AccountNonce)]
+    for i in 0 ..< n:
+      check bal[0].storageChanges[0].changes[i] == ((i + 1).BlockAccessIndex, (i + 1).u256)

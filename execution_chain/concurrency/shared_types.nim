@@ -17,6 +17,7 @@
 {.push raises: [], gcsafe.}
 
 import std/[hashes, math, typetraits], results
+from system/ansi_c import c_realloc, c_free
 
 export hashes, results
 
@@ -27,31 +28,39 @@ export hashes, results
 type
   SharedSeq*[E] = object
     data: ptr UncheckedArray[E]
-    len: int
+    count: int
+    cap: int
 
-proc init*[E](T: type SharedSeq[E], len: int): SharedSeq[E] =
+const seqInitialCapacity = 16
+
+proc reallocTo[E](s: var SharedSeq[E], newCap: int) =
+  s.data = cast[ptr UncheckedArray[E]](c_realloc(s.data, csize_t(newCap * sizeof(E))))
+  s.cap = newCap
+
+proc init*[E](T: type SharedSeq[E], len: int, zeroed = true): SharedSeq[E] =
   static:
     doAssert supportsCopyMem(E), "E must be a non-GC type"
 
   if len <= 0:
     return T()
 
-  T(
-    data: cast[ptr UncheckedArray[E]](allocShared(len * sizeof(E))),
-    len: len,
-  )
+  result.reallocTo(len)
+  result.count = len
+  if zeroed:
+    zeroMem(result.data, len * sizeof(E))
 
 proc init*[E](T: type SharedSeq[E], values: openArray[E]): SharedSeq[E] =
-  var s = T.init(values.len())
+  var s = T.init(values.len(), zeroed = false)
   if values.len() > 0:
     copyMem(s.data, unsafeAddr values[0], values.len() * sizeof(E))
   s
 
 proc dispose*[E](s: var SharedSeq[E]) =
   if not s.data.isNil():
-    deallocShared(s.data)
+    c_free(s.data)
     s.data = nil
-    s.len = 0
+  s.count = 0
+  s.cap = 0
 
 proc `=copy`*[E](
     dest: var SharedSeq[E], src: SharedSeq[E]
@@ -59,14 +68,14 @@ proc `=copy`*[E](
   discard
 
 template toOpenArray[E](s: SharedSeq[E]): openArray[E] =
-  s.data.toOpenArray(0, s.len - 1)
+  s.data.toOpenArray(0, s.count - 1)
 
 func toSeq[E](s: SharedSeq[E]): seq[E] =
-  if s.len == 0:
+  if s.count == 0:
     return default(seq[E])
 
-  let res = newSeq[E](s.len)
-  copyMem(addr res[0], s.data, s.len * sizeof(E))
+  let res = newSeq[E](s.count)
+  copyMem(addr res[0], s.data, s.count * sizeof(E))
   res
 
 template data*[E](s: SharedSeq[E], asOpenArray: static bool = false): auto =
@@ -81,16 +90,48 @@ proc `[]`*[E](s: SharedSeq[E], i: int): lent E =
 proc `[]`*[E](s: var SharedSeq[E], i: int): var E =
   s.data[i]
 
+template len*[E](s: SharedSeq[E]): int =
+  s.count
+
+
+
+proc grow[E](s: var SharedSeq[E], minCap: int) =
+  s.reallocTo(nextPowerOfTwo(max(minCap, seqInitialCapacity)))
+
+proc setLen*[E](s: var SharedSeq[E], newLen: int, zeroed = true, exact = false) =
+  if newLen > s.cap:
+    if exact:
+      s.reallocTo(newLen)
+    else:
+      s.grow(newLen)
+  if zeroed and newLen > s.count:
+    zeroMem(addr s.data[s.count], (newLen - s.count) * sizeof(E))
+  s.count = newLen
+
+proc add*[E](s: var SharedSeq[E], value: sink E) =
+  if s.count == s.cap:
+    s.grow(s.count + 1)
+  copyMem(addr s.data[s.count], addr value, sizeof(E))
+  inc s.count
+
+iterator items*[E](s: SharedSeq[E]): lent E =
+  for i in 0 ..< s.count:
+    yield s.data[i]
+
+iterator mitems*[E](s: var SharedSeq[E]): var E =
+  for i in 0 ..< s.count:
+    yield s.data[i]
+
 type
   SharedBytes* = SharedSeq[byte]
   SharedString* = SharedSeq[char]
 
 func toString*(s: SharedString): string =
-  if s.len == 0:
+  if s.count == 0:
     return default(string)
 
-  let res = newString(s.len)
-  copyMem(addr res[0], s.data, s.len)
+  let res = newString(s.count)
+  copyMem(addr res[0], s.data, s.count)
   res
 
 # SharedTable is a hash table similar to the standard library `Table`. Much of

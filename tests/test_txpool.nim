@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/math,
+  std/[math, times],
   eth/common/keys,
   results,
   unittest2,
@@ -25,6 +25,7 @@ import
   ../execution_chain/[conf, transaction, constants],
   ../execution_chain/core/tx_pool,
   ../execution_chain/core/tx_pool/tx_desc {.all.},
+  ../execution_chain/core/tx_pool/tx_evictor,
   ../execution_chain/core/pooled_txs,
   ../execution_chain/common/common,
   ../execution_chain/utils/utils,
@@ -1148,3 +1149,40 @@ suite "TxPool payload rebuild consistency":
 
     # the rebuilt block must survive re-execution (what every peer does)
     xp.checkImportBlock(b2)
+
+suite "TxPool expiry":
+  let
+    env = initEnv(Cancun)
+    xp = env.xp
+    mx = env.sender
+
+  xp.prevRandao = prevRandao
+  xp.feeRecipient = feeRecipient
+  xp.timestamp = EthTime.now()
+
+  test "removeExpiredTxs only removes txs older than lifetime":
+    let tc = BaseTx(gasLimit: 75000)
+    xp.checkAddTx(mx.makeTx(tc, mx.getAccount(1), 0))
+    xp.checkAddTx(mx.makeTx(tc, mx.getAccount(2), 0))
+
+    # Fresh txs survive a sweep
+    xp.removeExpiredTxs(initDuration(hours = 1))
+    check xp.len == 2
+
+    # Expiry uses a strict `now - time > lifeTime` comparison, so a negative
+    # lifetime expires everything without having to sleep past a deadline
+    xp.removeExpiredTxs(initDuration(milliseconds = -1))
+    check xp.len == 0
+
+  test "evictor loop sweeps expired txs and stops cleanly":
+    let tc = BaseTx(gasLimit: 75000)
+    xp.checkAddTx(mx.makeTx(tc, mx.getAccount(3), 0))
+    check xp.len == 1
+
+    let ev = TxEvictorRef.init(xp,
+      interval = chronos.milliseconds(1),
+      lifeTime = initDuration(milliseconds = -1))
+    ev.start()
+    waitFor sleepAsync(chronos.milliseconds(50))
+    check xp.len == 0
+    waitFor ev.stop()

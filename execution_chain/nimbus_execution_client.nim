@@ -81,6 +81,11 @@ proc basicServices(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonR
   nimbus.txPool = TxPoolRef.new(nimbus.fc)
   nimbus.beaconEngine = BeaconEngineRef.new(nimbus.txPool)
 
+  # Periodically evict expired transactions so the pool churns continuously
+  # instead of waiting for the capacity-triggered sweep in addTx
+  nimbus.txEvictor = TxEvictorRef.init(nimbus.txPool)
+  nimbus.txEvictor.start()
+
 proc manageAccounts(nimbus: NimbusNode, config: ExecutionClientConf) =
   if config.keyStoreDir.len > 0:
     nimbus.accountsManager[].loadKeystores(config.keyStoreDir).isOkOr:
@@ -155,10 +160,11 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
 
   # Start Eth node
   if config.maxPeers > 0:
-    let discovery = config.getDiscoveryFlags()
+    # The user-facing flag is --discv5, but discv4 is still enabled alongside
+    # it until the discv4 code is removed.
     nimbus.ethNode.connectToNetwork(
-      enableDiscV4 = DiscoveryType.V4 in discovery,
-      enableDiscV5 = DiscoveryType.V5 in discovery,
+      enableDiscV4 = config.discv5,
+      enableDiscV5 = config.discv5,
     )
 
   # Initalise beacon sync descriptor.
