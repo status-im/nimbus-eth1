@@ -57,6 +57,7 @@ template to*[T: Hash32](w: ItemKey; _: type T): T = w.UInt256.to(Bytes32).T
 template to*[T: UInt256](w: Hash32; _: type T): T = w.Bytes32.to(T)
 template to*[T: ItemKey](w: Hash32; _: type T): T = w.to(UInt256).T
 template to*[T: ItemKey](w: SomeUnsignedInt; _: type T): T = w.to(UInt256).T
+template to*[T: ItemKey](w: Bytes32; _: type T): T = w.to(UInt256).T
 
 template to*[T: ItemKey](w: array[32,byte]; _: type T): T =
   ## Handy for converting the result of `nibbles.getBytes()`
@@ -71,7 +72,7 @@ template to*[T: ItemKey](w: seq[Hash32], _: type seq[T]): seq[T] =
   ## Dito
   w.mapIt(it.to(T))
 
-template fromNibbles*[T: ItemKey](_: type T, pfx: NibblesBuf, pad: PadMode): T =
+proc fromNibbles*[T: ItemKey](_: type T, pfx: NibblesBuf, pad: PadMode): T =
   ## The function extend nibbles argument `pfx` to an `ItemKey`. It returns
   ## the eqivalent of `pfx & padding` where padding is an all zero nibbles
   ## sequence if the argument `pad` is `padMin`, and all `f` if `pad` is
@@ -84,6 +85,20 @@ template fromNibbles*[T: ItemKey](_: type T, pfx: NibblesBuf, pad: PadMode): T =
     const ffff = NibblesBuf.fromBytes 255u8.repeat(32)
     # Nibbles buf is 32 bytes, excess values will be ignored
     (pfx & ffff).getBytes.to(ItemKey)
+
+proc fromNibbles*[T: ItemKeyRange](_: type T, pfx: NibblesBuf): T =
+  if pfx.len < 64:
+    const
+      # Nibbles buf is 32 bytes. Any excess values will be ignored when
+      # applying `ffff`
+      ffff = NibblesBuf.fromBytes 255u8.repeat(32)
+    let
+      minPt = pfx.getBytes.to(ItemKey)
+      maxPt = (pfx & ffff).getBytes.to(ItemKey)
+    return ItemKeyRange.new(minPt, maxPt)
+
+  let pt = pfx.getBytes.to(ItemKey)
+  ItemKeyRange.new(pt, pt)
 
 # ------------------------------------------------------------------------------
 # Public `ItemKey` base arithmetic

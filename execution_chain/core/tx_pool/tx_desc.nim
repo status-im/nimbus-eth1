@@ -54,6 +54,7 @@ type
     withdrawals : seq[Withdrawal] ## EIP-4895
     beaconRoot  : Hash32 ## EIP-4788
     slotNumber  : uint64 ## EIP-7843
+    targetGasLimit: Opt[uint64]
 
   TxPoolFlags* = enum
     XP_ORDERED
@@ -94,9 +95,10 @@ proc getBaseFee(com: CommonRef; parent: Header): GasInt =
     parent.gasUsed,
     parent.baseFeePerGas.get(0.u256)).truncate(GasInt)
 
-func getGasLimit(com: CommonRef; parent: Header): GasInt =
+func getGasLimit(com: CommonRef; parent: Header, targetGasLimit: Opt[uint64]): GasInt =
   ## Post Merge rule
-  calcGasLimit1559(parent.gasLimit, desiredLimit = com.gasLimit)
+  let desiredLimit = targetGasLimit.get(com.gasLimit)
+  calcGasLimit1559(parent.gasLimit, desiredLimit = desiredLimit)
 
 proc setupVMState(com: CommonRef;
                   parent: Header,
@@ -106,7 +108,7 @@ proc setupVMState(com: CommonRef;
 
   let
     fork = com.toHardFork(pos.timestamp)
-    gasLimit = getGasLimit(com, parent)
+    gasLimit = getGasLimit(com, parent, pos.targetGasLimit)
 
   BaseVMState.new(
     parent   = parent,
@@ -257,6 +259,18 @@ proc init*(xp: TxPoolRef; chain: ForkedChainRef, flags: set[TxPoolFlags] = {}) =
   xp.rmHash = chain.latestHash
   xp.flags = flags
 
+proc dispose*(xp: TxPoolRef) =
+  if not xp.vmState.isNil():
+    xp.vmState.ledger.txFrame.dispose()
+    xp.vmState.ledger = nil
+    xp.vmState.dispose()
+    xp.vmState = nil
+
+  xp.chain = nil
+  xp.senderTab.clear()
+  xp.idTab.clear()
+  xp.blobTab.clear()
+
 # ------------------------------------------------------------------------------
 # Public functions, getters
 # ------------------------------------------------------------------------------
@@ -289,13 +303,20 @@ func rmHash*(xp: TxPoolRef): Hash32 =
 func `rmHash=`*(xp: TxPoolRef, val: Hash32) =
   xp.rmHash = val
 
-proc updateVmState*(xp: TxPoolRef) =
-  ## Reset transaction environment, e.g. before packing a new block
+proc updateVmState*(xp: TxPoolRef, parentHeader: Header, parentHash: Hash32) =
+  ## Reset transaction environment, e.g. before packing a new block on
+  ## top of the given parent block.
   if not xp.vmState.isNil():
+    xp.vmState.ledger.txFrame.dispose()
+    xp.vmState.ledger = nil
     xp.vmState.dispose()
   xp.vmState = setupVMState(xp.chain.com,
-    xp.chain.latestHeader, xp.chain.latestHash,
-    xp.pos, xp.chain.txFrame(xp.chain.latestHash))
+    parentHeader, parentHash,
+    xp.pos, xp.chain.txFrame(parentHash))
+
+proc updateVmState*(xp: TxPoolRef) =
+  ## Reset transaction environment on top of the latest block.
+  xp.updateVmState(xp.chain.latestHeader, xp.chain.latestHash)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -369,8 +390,11 @@ proc addTxImpl(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     debug "Transaction already known", txHash = id
     return err(txErrorAlreadyKnown)
 
+
   let
-    intrinsic = ptx.tx.intrinsicGas(xp.hardFork, xp.gasLimit)
+    sender = ptx.tx.recoverSender().valueOr:
+      return err(txErrorInvalidSignature)
+    intrinsic = ptx.tx.intrinsicGas(xp.hardFork, xp.gasLimit, sender)
 
   validateTxBasic(
     xp.com,
@@ -384,8 +408,6 @@ proc addTxImpl(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     return err(txErrorBasicValidation)
 
   let
-    sender = ptx.tx.recoverSender().valueOr:
-      return err(txErrorInvalidSignature)
     nonce = xp.getNonce(sender)
 
   if ptx.tx.nonce < nonce:
@@ -530,3 +552,6 @@ proc `parentBeaconBlockRoot=`*(xp: TxPoolRef, val: Hash32) =
 
 proc `slotNumber=`*(xp: TxPoolRef, val: uint64) =
   xp.pos.slotNumber = val
+
+proc `targetGasLimit=`*(xp: TxPoolRef, val: Opt[uint64]) =
+  xp.pos.targetGasLimit = val

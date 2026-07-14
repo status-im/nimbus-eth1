@@ -15,6 +15,7 @@ import
   eth/eip1559,
   eth/common/[blocks, hashes, accounts, headers, addresses],
   ../db/[ledger, core_db],
+  ../core/eip7997,
   ../constants,
   ../utils/utils,
   ./chain_config
@@ -23,7 +24,7 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc writeGenesisAlloc*(alloc: GenesisAlloc, db: CoreDbTxRef): Hash32 =
+proc writeGenesisAlloc*(alloc: GenesisAlloc, db: CoreDbTxRef, enableEIP7997: bool = false): Hash32 =
   let ledger = LedgerRef.init(db)
 
   for address, account in alloc:
@@ -34,6 +35,9 @@ proc writeGenesisAlloc*(alloc: GenesisAlloc, db: CoreDbTxRef): Hash32 =
     for k, v in account.storage:
       ledger.setStorage(address, k, v)
 
+  if enableEIP7997:
+    ledger.applyEip7997()
+
   ledger.persist()
   ledger.getStateRoot()
 
@@ -43,7 +47,7 @@ proc writeGenesis*(g: Genesis, db: CoreDbTxRef, fork: HardFork): Header =
   ##
   ## The function returns the `Genesis` block header.
   ##
-  let stateRoot = writeGenesisAlloc(g.alloc, db)
+  let stateRoot = writeGenesisAlloc(g.alloc, db, fork >= Amsterdam)
 
   result = Header(
     nonce: g.nonce,
@@ -53,7 +57,7 @@ proc writeGenesis*(g: Genesis, db: CoreDbTxRef, fork: HardFork): Header =
     difficulty: g.difficulty,
     mixHash: g.mixHash,
     coinbase: g.coinbase,
-    stateRoot:stateRoot,
+    stateRoot: stateRoot,
     parentHash: GENESIS_PARENT_HASH,
     transactionsRoot: EMPTY_ROOT_HASH,
     receiptsRoot: EMPTY_ROOT_HASH,

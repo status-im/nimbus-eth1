@@ -317,22 +317,22 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
 
     # Register the account to be deleted
     if c.fork >= FkCancun:
+      # Zeroing contract balance except beneficiary is the same address
       if c.balTrackerEnabled:
-        # Zeroing contract balance except beneficiary is the same address
         c.vmState.balTracker.trackSubBalanceChange(c.msg.contractAddress, localBalance)
-        ledger.subBalance(c.msg.contractAddress, localBalance)
-        # Transfer to beneficiary
+      ledger.subBalance(c.msg.contractAddress, localBalance)
+
+      # Transfer to beneficiary
+      if c.balTrackerEnabled:
         c.vmState.balTracker.trackAddBalanceChange(beneficiary, localBalance)
-        ledger.addBalance(beneficiary, localBalance, checkEmptyAccount = c.fork < FkParis)
-        if ledger.selfDestruct6780(c.msg.contractAddress):
-          c.vmState.balTracker.trackInTransactionSelfDestruct(c.msg.contractAddress)
-          newContract = true
-      else:
-        # Zeroing contract balance except beneficiary is the same address
-        ledger.subBalance(c.msg.contractAddress, localBalance)
-        # Transfer to beneficiary
-        ledger.addBalance(beneficiary, localBalance, checkEmptyAccount = c.fork < FkParis)
-        newContract = ledger.selfDestruct6780(c.msg.contractAddress)
+      ledger.addBalance(beneficiary, localBalance, checkEmptyAccount = c.fork < FkParis)
+
+      newContract = if c.fork >= FkAmsterdam:
+                      ledger.selfDestruct8246(c.msg.contractAddress)
+                    else:
+                      ledger.selfDestruct6780(c.msg.contractAddress)
+      if c.balTrackerEnabled and newContract:
+        c.vmState.balTracker.trackInTransactionSelfDestruct(c.msg.contractAddress)
 
       if c.fork >= FkAmsterdam:
         c.emitSelfDestructLog(beneficiary, localBalance, newContract)

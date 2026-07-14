@@ -85,7 +85,7 @@ proc init*(T: type P2PLightClientBackend, conf: P2PBackendConf): EngineResult[T]
 
   let
     rng = keys.newRng()
-    netKeys = rng[].getRandomNetKeys()
+    netKeys = rng.getRandomNetKeys()
     eth2Node = createEth2Node(
       rng, lcConf, netKeys, conf.cfg, conf.forkDigests, conf.getBeaconTime,
       conf.genesisValidatorsRoot,

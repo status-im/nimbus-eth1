@@ -34,6 +34,7 @@ import
     beacon_node,
     nimbus_beacon_node,
     nimbus_binary_common,
+    nimbus_rest_common,
     process_state,
   ],
   ./db/aristo/aristo_compute,
@@ -55,7 +56,7 @@ type NStartUpCmd* {.pure.} = enum
   nimbus = "Run Ethereum node"
   beaconNode = "Run beacon node in stand-alone mode\pSee 'nimbus beaconNode --help' for further details"
   executionClient = "Run execution client in stand-alone mode\pSee 'nimbus executionClient --help' for further details"
-  `import` = "Import execution blocks from era files\pSee 'nimbus import --help' for further details"
+  `import` = "Import execution blocks from ere or era1/era files\pSee 'nimbus import --help' for further details"
   trustedNodeSync = "Sync the beacon node database from a trusted node (checkpoint sync)\pSee 'nimbus trustedNodeSync --help' for further details"
   deposits = "Handle validator deposits\pSee 'nimbus deposits --help' for further details"
 
@@ -281,11 +282,11 @@ proc runExecutionClient(p: ExecutionThreadConfig) {.thread.} =
       # TODO https://github.com/status-im/nim-taskpools/issues/6
       #      share taskpool between bn and ec
       taskpool = setupTaskpool(int config.numThreads)
-      (com, keyCacheEnabled) = setupCommonRef(config)
+      (com, keyCacheEnabled) = setupCommonRef(config, taskpool.numThreads)
     com.taskpool = taskpool
     com.db.mpt.taskpool = taskpool
   else:
-    let (com, keyCacheEnabled) = setupCommonRef(config)
+    let (com, keyCacheEnabled) = setupCommonRef(config, 0)
 
   if keyCacheEnabled:
     # Make sure key cache isn't empty
