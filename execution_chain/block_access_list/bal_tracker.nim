@@ -90,12 +90,11 @@ proc init*(
     T: type BlockAccessListTrackerRef,
     ledger: ReadOnlyLedger,
     builder: ptr BlockAccessListBuilder = nil,
-    builderThreadSafe = false,
 ): T =
   if builder.isNil():
     BlockAccessListTrackerRef(
       ledger: ledger,
-      builder: BlockAccessListBuilder.newShared(builderThreadSafe),
+      builder: BlockAccessListBuilder.newShared(),
       builderOwner: true,
     )
   else:
@@ -120,6 +119,8 @@ proc setBlockAccessIndex*(tracker: BlockAccessListTrackerRef, blockAccessIndex: 
   tracker.preNonceCache.clear()
   tracker.preCodeCache.clear()
   tracker.currentBlockAccessIndex = blockAccessIndex
+
+  tracker.builder[].ensureIndexCount(blockAccessIndex + 1)
 
 template hasPendingCallFrame*(tracker: BlockAccessListTrackerRef): bool =
   tracker.callFrameSnapshots.len() > 0
@@ -190,22 +191,22 @@ proc commitCallFrame*(tracker: BlockAccessListTrackerRef) =
 
     for storageKey, newValue in tracker.pendingCallFrame.storageChanges:
       let (address, slot) = storageKey
-      tracker.builder[].addStorageWrite(address, slot, currentIndex, newValue)
+      tracker.builder[].addStorageWrite(currentIndex, address, slot, newValue)
 
     for address, newBalance in tracker.pendingCallFrame.balanceChanges:
-      tracker.builder[].addBalanceChange(address, currentIndex, newBalance)
+      tracker.builder[].addBalanceChange(currentIndex, address, newBalance)
 
     for address, newNonce in tracker.pendingCallFrame.nonceChanges:
-      tracker.builder[].addNonceChange(address, currentIndex, newNonce)
+      tracker.builder[].addNonceChange(currentIndex, address, newNonce)
 
     for address, newCode in tracker.pendingCallFrame.codeChanges:
-      tracker.builder[].addCodeChange(address, currentIndex, newCode)
+      tracker.builder[].addCodeChange(currentIndex, address, newCode)
 
     # Merge the pending call frame reads into the builder
     for address in tracker.pendingCallFrame.touchedAddresses:
-      tracker.builder[].addTouchedAccount(address)
+      tracker.builder[].addTouchedAccount(currentIndex, address)
     for storageKey in tracker.pendingCallFrame.storageReads:
-      tracker.builder[].addStorageRead(storageKey[0], storageKey[1])
+      tracker.builder[].addStorageRead(currentIndex, storageKey[0], storageKey[1])
 
   tracker.popCallFrame()
 
@@ -233,15 +234,17 @@ proc rollbackCallFrame*(tracker: BlockAccessListTrackerRef, rollbackReads = fals
     for storageKey in tracker.pendingCallFrame.storageChanges.keys():
       tracker.parentCallFrame.storageReads.incl(storageKey)
   else:
+    let currentIndex = tracker.currentBlockAccessIndex
+
     # Merge the pending call frame reads into the builder
     for address in tracker.pendingCallFrame.touchedAddresses:
-      tracker.builder[].addTouchedAccount(address)
+      tracker.builder[].addTouchedAccount(currentIndex, address)
     for storageKey in tracker.pendingCallFrame.storageReads:
-      tracker.builder[].addStorageRead(storageKey[0], storageKey[1])
+      tracker.builder[].addStorageRead(currentIndex, storageKey[0], storageKey[1])
 
     # Convert storage writes to reads
     for storageKey in tracker.pendingCallFrame.storageChanges.keys():
-      tracker.builder[].addStorageRead(storageKey[0], storageKey[1])
+      tracker.builder[].addStorageRead(currentIndex, storageKey[0], storageKey[1])
 
   tracker.popCallFrame()
 

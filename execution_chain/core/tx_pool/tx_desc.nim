@@ -77,7 +77,7 @@ type
 const
   MAX_POOL_SIZE = 8000
   MAX_TXS_PER_ACCOUNT = 500
-  TX_ITEM_LIFETIME = initDuration(minutes = 10)
+  TX_ITEM_LIFETIME* = initDuration(minutes = 10)
   TX_MAX_SIZE = 128 * 1024
   # BLOB_TX_MAX_SIZE is the maximum size a single transaction can have, outside
   # the included blobs. Since blob transactions are pulled instead of pushed,

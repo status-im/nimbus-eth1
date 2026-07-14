@@ -306,6 +306,7 @@ type
 
     # config items
     chainId*: UInt256
+    anchor*: BlockTag
     maxBlockWalk*: uint64
     parallelBlockDownloads*: uint64
     maxLightClientUpdates*: uint64

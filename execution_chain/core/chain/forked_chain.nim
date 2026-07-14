@@ -206,8 +206,13 @@ func calculateNewBase(
 
   doAssert(false, "Unreachable code, target base should exists")
 
-func removeBlockFromCache(c: ForkedChainRef, b: BlockRef) =
+proc removeBlockFromCache(c: ForkedChainRef, b: BlockRef) =
   c.hashToBlock.del(b.hash)
+
+  if not c.vmState.isNil() and b.hash == c.vmStateBlockHash:
+    c.vmState.dispose()
+    c.vmState = nil
+    c.vmStateBlockHash.reset()
 
   # Collect and remove tx records belonging to this block
   var toRemove: seq[Hash32]
@@ -233,7 +238,7 @@ func updateHead(c: ForkedChainRef, head: BlockRef) =
     head.hash,
     head.number)
 
-func updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) =
+proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) =
   # Pruning
   # ::
   #                       - B5 - B6 - B7 - B8
@@ -816,6 +821,11 @@ proc stopProcessingQueue*(c: ForkedChainRef) {.async: (raises: []).} =
   # and FC.serialize, e.g. the queue is not empty and processingQueue loop still running, and
   # at the same time FC.serialize modify the state, crash can happen.
   await noCancel c.processingQueueLoop.cancelAndWait()
+
+  if not c.vmState.isNil():
+    c.vmState.dispose()
+    c.vmState = nil
+    c.vmStateBlockHash.reset()
 
 template queueImportBlock*(
     c: ForkedChainRef,
