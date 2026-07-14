@@ -16,7 +16,7 @@ import
   ../../evm/[state, types],
   ../../common,
   ../../db/ledger,
-  ../../block_access_list/block_access_list_tracker,
+  ../../block_access_list/bal_tracker,
   ../../stateless/[witness_generation, witness_verification, stateless_execution],
   ../../db/storage_types,
   ../[executor, validate],
