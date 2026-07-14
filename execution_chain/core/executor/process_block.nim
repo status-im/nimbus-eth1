@@ -111,6 +111,7 @@ proc procBlkPreamble(
 
   # Setup block access list tracker for pre‑execution system calls
   if vmState.balTrackerEnabled:
+    vmState.balTracker.builder[].ensureIndexCount(blk.transactions.len() + 2, exact = true)
     vmState.balTracker.setBlockAccessIndex(0)
     vmState.balTracker.beginCallFrame()
 

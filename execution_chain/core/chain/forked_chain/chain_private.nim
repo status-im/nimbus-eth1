@@ -61,11 +61,8 @@ proc getVmState(
     blockAccessList: Opt[BlockAccessListRef],
     finalized: bool,
 ): BaseVMState =
-  let
-    enableBalTracker = (not finalized or blockAccessList.isNone()) and
+  let enableBalTracker = (not finalized or blockAccessList.isNone()) and
       c.com.isAmsterdamOrLater(header.timestamp)
-    balBuilderThreadSafe =
-      c.com.balParallelExecutionEnabled(header.timestamp, blockAccessList)
 
   # The vmState stays nil unless this block succeeds, so a half-executed ledger
   # can never be reused.
@@ -79,7 +76,7 @@ proc getVmState(
   # block this vmState just executed.
   if not cached.isNil():
     if parentBlk.hash == cachedBlockHash and
-        cached.reinit(parentBlk.header, header, txFrame, enableBalTracker, balBuilderThreadSafe):
+        cached.reinit(parentBlk.header, header, txFrame, enableBalTracker):
       return cached
 
     cached.dispose()
@@ -92,7 +89,6 @@ proc getVmState(
     c.com,
     txFrame,
     enableBalTracker = enableBalTracker,
-    balBuilderThreadSafe = balBuilderThreadSafe,
   )
   vmState
 

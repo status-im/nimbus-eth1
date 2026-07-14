@@ -1032,20 +1032,20 @@ suite "ForkedChainRef tests":
       txFrame1 = com.db.baseTxFrame().txFrameBegin()
       vmState = BaseVMState()
     vmState.init(genesis.header, blk1.header, com, txFrame1,
-      enableBalTracker = true, balBuilderThreadSafe = false)
+      enableBalTracker = true)
     check vmState.balTracker.isNil.not
 
     # The ledger is clean, so reinit succeeds and rebuilds the tracker from
     # the explicit per-block flags
     let txFrame2 = txFrame1.txFrameBegin()
     check vmState.reinit(blk1.header, blk2.header, txFrame2,
-      enableBalTracker = false, balBuilderThreadSafe = false)
+      enableBalTracker = false)
     check vmState.balTracker.isNil
     check vmState.ledger.txFrame == txFrame2
 
     let txFrame3 = txFrame2.txFrameBegin()
     check vmState.reinit(blk2.header, blk3.header, txFrame3,
-      enableBalTracker = true, balBuilderThreadSafe = true)
+      enableBalTracker = true)
     check vmState.balTracker.isNil.not
     check vmState.ledger.txFrame == txFrame3
 
