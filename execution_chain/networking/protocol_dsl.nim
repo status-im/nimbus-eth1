@@ -460,6 +460,25 @@ template rlpxWithPacketResponder*(PROTO: distinct type;
       packet {.inject.} = checkedRlpRead(peer, rlp, MSGTYPE)
     body
 
+template rlpxWithPacketResponder*(PROTO: distinct type;
+                        MSGTYPE: distinct type;
+                        peer: Peer;
+                        data: Rlp,
+                        fields: untyped;
+                        body): untyped =
+  ## Like the variant above, but reads the request fields flat from the
+  ## message body ([request-id, field₁, field₂, ...]) instead of as one
+  ## nested list ([request-id, [field₁, field₂, ...]]).
+  wrapRlpxWithPacketException(MSGTYPE, peer):
+    var rlp = data
+    tryEnterList(rlp)
+    let reqId = read(rlp, uint64)
+    var
+      response {.inject.} = initResponder(peer, reqId)
+      packet {.inject.} = MSGTYPE()
+    checkedRlpFields(peer, rlp, packet, fields)
+    body
+
 template rlpxWithFutureHandler*(PROTO: distinct type;
                         MSGTYPE: distinct type;
                         msgId: static[uint64];
