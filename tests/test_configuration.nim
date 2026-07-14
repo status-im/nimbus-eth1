@@ -369,7 +369,7 @@ proc configurationMain*() =
       check config.udpPort == 8899.Port
       check config.maxPeers == 45
       check config.nat == NatConfig(hasExtIp: false, nat: NatAny)
-      check config.discovery == ["V5"]
+      check config.discv5 == false
       check config.netKey == "random"
       check config.agentString == "basic_agent_string"
 
