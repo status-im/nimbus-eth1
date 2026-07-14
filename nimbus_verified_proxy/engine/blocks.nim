@@ -9,6 +9,7 @@
 
 import
   std/[strutils, sequtils],
+  stint,
   results,
   chronicles,
   web3/[eth_api_types, eth_api],
@@ -17,13 +18,76 @@ import
   eth/rlp,
   eth/trie/[ordered_trie, trie_defs],
   ../../execution_chain/beacon/web3_eth_conv,
+  ../../execution_chain/constants,
   ./types,
   ./header_store,
+  ./accounts,
   ./transactions
+
+# EIP-2935 windows size 
+const HISTORY_SERVE_WINDOW = 8191'u64
+
+func isInEIP2935VerifiableRange(
+    anchor: base.BlockNumber, latest: base.BlockNumber, target: base.BlockNumber
+): bool =
+  # relax the timing by one block
+  if target > anchor or target < latest - HISTORY_SERVE_WINDOW + 1: false else: true
+
+proc verifyEIP2935Membership(
+    engine: RpcVerificationEngine,
+    anchor: Header,
+    latest: Header,
+    targetNum: base.BlockNumber,
+    targetHash: Hash32,
+): Future[EngineResult[bool]] {.async: (raises: [CancelledError]).} =
+  if not isInEIP2935VerifiableRange(anchor.number, latest.number, targetNum):
+    return ok(false)
+
+  let slot = (targetNum mod HISTORY_SERVE_WINDOW).u256
+
+  let storedValue = (
+    await engine.getStorageAt(
+      HISTORY_STORAGE_ADDRESS, slot, anchor.number, anchor.stateRoot
+    )
+  ).valueOr:
+    return ok(false) # unservable/invalid proof -> fall back to the walk
+
+  # storage value is zero only when the fork activated less than 8191 blocks before
+  if storedValue.isZero():
+    return ok(false) # cannot be verified using EIP 2935
+
+  if storedValue == UInt256.fromBytesBE(targetHash.data):
+    return ok(true)
+
+  err(
+    (
+      VerificationError, "the requested block is not part of the canonical chain",
+      UNTAGGED,
+    )
+  )
+
+proc isEIP2935Full(
+    engine: RpcVerificationEngine, latest: Header
+): Future[bool] {.async: (raises: [CancelledError]).} =
+  # realx the timing by 1 block
+  let slot = ((latest.number - HISTORY_SERVE_WINDOW + 1) mod HISTORY_SERVE_WINDOW).u256
+
+  let storedValue = (
+    await engine.getStorageAt(
+      HISTORY_STORAGE_ADDRESS, slot, latest.number, latest.stateRoot
+    )
+  ).valueOr:
+    return false
+
+  # storage value is zero only when the fork activated less than 8191 blocks before
+  if storedValue.isZero():
+    return false
+
+  return true
 
 proc resolveBlockTag*(
     engine: RpcVerificationEngine, blockTag: BlockTag
-): EngineResult[BlockTag] =
+): Future[EngineResult[BlockTag]] {.async: (raises: [CancelledError]).} =
   if blockTag.kind == bidAlias:
     let tag = blockTag.alias.toLowerAscii()
     case tag
@@ -48,6 +112,22 @@ proc resolveBlockTag*(
         )
       ok(BlockTag(kind: bidNumber, number: Quantity(hFinalized.number)))
     of "earliest":
+      let hLatest = engine.headerStore.latest.valueOr:
+        # untagged(-1) so the relevant backend can be tagged
+        return err(
+          (
+            UnavailableDataError,
+            "Couldn't get the earliest block number from header store", UNTAGGED,
+          )
+        )
+
+      if await engine.isEIP2935Full(hLatest):
+        return ok(
+          BlockTag(
+            kind: bidNumber, number: Quantity(hLatest.number - HISTORY_SERVE_WINDOW + 1)
+          )
+        )
+
       let hEarliest = engine.headerStore.earliest.valueOr:
         # untagged(-1) so the relevant backend can be tagged
         return err(
@@ -56,6 +136,7 @@ proc resolveBlockTag*(
             "Couldn't get the earliest block number from header store", UNTAGGED,
           )
         )
+
       ok(BlockTag(kind: bidNumber, number: Quantity(hEarliest.number)))
     else:
       # untagged(-1) so the relevant backend can be tagged
@@ -206,14 +287,24 @@ proc verifyHeader(
             UNTAGGED,
           )
         )
-      finalized = engine.headerStore.finalized.valueOr:
-        # untagged(-1) because this doesn't link to any backend
-        return err(
-          (
-            UnavailableDataError,
-            "finalized block is not available yet. Still syncing?", UNTAGGED,
-          )
-        )
+      anchorOrFinalized =
+        if engine.anchor.kind == bidAlias and
+            engine.anchor.alias.toLowerAscii() == "safe":
+          engine.headerStore.latest.valueOr:
+            return err(
+              (
+                UnavailableDataError, "safe block is not available yet. Still syncing?",
+                UNTAGGED,
+              )
+            )
+        else:
+          engine.headerStore.finalized.valueOr:
+            return err(
+              (
+                UnavailableDataError,
+                "finalized block is not available yet. Still syncing?", UNTAGGED,
+              )
+            )
       latest = engine.headerStore.latest.valueOr:
         # untagged(-1) because this doesn't link to any backend
         return err(
@@ -223,27 +314,18 @@ proc verifyHeader(
           )
         )
 
-    # header is older than earliest
-    if header.number < earliest.number:
-      # earliest is finalized
-      if earliest.number < finalized.number:
-        ?await engine.walkBlocks(
+    let eipVerified = ?(
+      await engine.verifyEIP2935Membership(
+        anchorOrFinalized, latest, header.number, hash
+      )
+    )
+
+    if not eipVerified:
+      ?(
+        await engine.walkBlocks(
           earliest.number, header.number, earliest.parentHash, hash
         )
-      # earliest is not finalized (headerstore is smaller than 2 epochs or chain hasn't finalized for long)
-      else:
-        ?await engine.walkBlocks(
-          finalized.number, header.number, finalized.parentHash, hash
-        )
-    # is within the boundaries of header store but not found in cache
-    else:
-      if header.number < finalized.number:
-        ?await engine.walkBlocks(
-          finalized.number, header.number, finalized.parentHash, hash
-        )
-      else:
-        # optimistic walk
-        ?await engine.walkBlocks(latest.number, header.number, latest.parentHash, hash)
+      )
 
   ok()
 
@@ -300,7 +382,7 @@ proc getBlock*(
 proc getBlock*(
     engine: RpcVerificationEngine, blockTag: BlockTag, fullTransactions: bool
 ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
-  let numberTag = ?engine.resolveBlockTag(blockTag)
+  let numberTag = ?(await engine.resolveBlockTag(blockTag))
 
   # get the target block
   let
@@ -358,7 +440,7 @@ proc getHeader*(
     engine: RpcVerificationEngine, blockTag: BlockTag
 ): Future[EngineResult[Header]] {.async: (raises: [CancelledError]).} =
   let
-    numberTag = ?engine.resolveBlockTag(blockTag)
+    numberTag = ?(await engine.resolveBlockTag(blockTag))
     n = distinctBase(numberTag.number)
     cachedHeader = engine.headerStore.get(n)
 
