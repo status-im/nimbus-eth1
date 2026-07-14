@@ -203,6 +203,8 @@ ifeq ($(USE_LIBBACKTRACE), 0)
   NIM_PARAMS += -d:disable_libbacktrace
 endif
 
+NIM_PARAMS += -d:chronosSyncContinuations:1
+
 # Used in docker/dist/entry_point.sh
 # To avoid confusion with USE_SYSTEM_ROCKSDB
 ifeq ($(USE_CACHED_ROCKSDB), 1)
