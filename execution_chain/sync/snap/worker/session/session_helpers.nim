@@ -12,7 +12,7 @@
 
 import
   pkg/[chronicles, chronos, stew/byteutils],
-  ../[mpt, state_db, worker_desc]
+  ../[state_db, worker_desc]
 
 type
   SessionTicker* = object of RootObj

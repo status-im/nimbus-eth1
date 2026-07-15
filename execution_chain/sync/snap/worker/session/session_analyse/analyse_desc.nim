@@ -11,7 +11,7 @@
 {.push raises:[].}
 
 import
-  pkg/[chronicles, chronos, eth/common],
+  pkg/[chronicles, chronos, eth/common, eth/trie/nibbles],
   pkg/stew/[byteutils, interval_set],
   ../../[mpt, helpers, state_db, worker_desc]
 

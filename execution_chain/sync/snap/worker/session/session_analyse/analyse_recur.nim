@@ -20,7 +20,8 @@
 
 import
   std/tables,
-  pkg/[chronicles, chronos, eth/common, stew/interval_set],
+  pkg/[chronicles, chronos, eth/common, eth/trie/nibbles, stew/interval_set],
+  ../../../../../db/aristo,
   ../../[helpers, mpt, worker_desc],
   ../[session_clear, session_helpers],
   ./analyse_desc

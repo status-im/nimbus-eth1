@@ -16,7 +16,7 @@ import
   pkg/stew/interval_set,
   ../../../../wire_protocol/snap/snap_types,
   ../../state_db, #worker_const],
-  ../mpt_desc
+  ../mpt_build/build_desc
 
 type
   CacheDbRef* = ref object

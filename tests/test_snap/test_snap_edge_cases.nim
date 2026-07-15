@@ -48,7 +48,7 @@ suite "Snap Data Edge Cases":
         root = sample[n][2].to(Hash32)
         db = NodeTrieRef.init(root, 1)
       for i in 0 .. n:
-        check db.merge(sample[i][0], sample[i][1])
+        check db.merge(sample[i][0], sample[i][1]).isOk
 
       check db.finalise() == 1
       check db.isComplete()
