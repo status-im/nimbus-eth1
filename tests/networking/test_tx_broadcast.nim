@@ -593,6 +593,46 @@ suite "Tx propagation":
 
     waitFor runTest()
 
+  test "queued backlog drains back-to-back, not one flush per debounce":
+    ## Hive eth/LargeTxRequest regression: with 2000 queued txs the loop
+    ## used to sleep the 250ms debounce between every 256-tx flush, taking
+    ## ~2s to drain and blowing the simulator's deadline. The debounce must
+    ## only apply when the queue is empty (burst coalescing), so a backlog
+    ## drains at send speed.
+    proc runTest() {.async.} =
+      const numTxs = 4 * maxTxsPerFlush # 4 flushes
+      let genesisPath = writeRecentGenesis()
+      var env1 = newBroadcastTestEnv(genesisPath)
+      var env2 = newBroadcastTestEnv(genesisPath)
+
+      let peer = await connectPair(env1, env2)
+      check not peer.isNil
+
+      # Freeze the worker while adding so the whole batch is queued up
+      # front and none of it is dropped or drained early.
+      await env1.wire.txGossipHeartbeat.cancelAndWait()
+
+      var lastHash: Hash32
+      for nonce in 0 ..< numTxs:
+        let ptx = env1.makeSignedTx(nonce.AccountNonce)
+        check env1.txPool.addTx(ptx).isOk
+        lastHash = ptx.tx.computeRlpHash
+      check env1.wire.pendingTxGossip.len == numTxs
+
+      # Restart the worker and time the drain. Debounce-per-flush would
+      # need >= (numTxs / maxTxsPerFlush) * 250ms = 1s just in sleeps;
+      # back-to-back flushing finishes in a fraction of that.
+      let start = Moment.now()
+      env1.wire.txGossipHeartbeat = txGossipLoop(env1.wire)
+
+      check await env2.waitForPooled(lastHash)
+      check Moment.now() - start < chronos.milliseconds(750)
+
+      await env2.close()
+      await env1.close()
+
+    waitFor runTest()
+
   test "pool is announced to newly connected peer":
     proc runTest() {.async.} =
       let genesisPath = writeRecentGenesis()

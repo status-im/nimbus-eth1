@@ -33,7 +33,7 @@ const
   MAX_TX_HASH_ANNOUNCE = 4096
   PENDING_TX_GOSSIP_MAX* = 2048
   txGossipDebounce = chronos.milliseconds(250)
-  maxTxsPerFlush = 256
+  maxTxsPerFlush* = 256
 
 template awaitQuota(bcParam: EthWireRef, costParam: float, protocolIdParam: string) =
   let
@@ -465,9 +465,12 @@ proc broadcastTransactions*(wire: EthWireRef, txHashes: seq[Hash32])
 proc txGossipLoop*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
   while true:
     # Sleep while idle, then debounce briefly so a burst of adds coalesces
-    # into a single message per peer.
+    # into a single message per peer. Only debounce when the queue is empty:
+    # under backlog the loop must flush back-to-back or a large batch
+    # (e.g. 2000 txs) drains at just maxTxsPerFlush per debounce tick.
     var txHashes = @[await wire.pendingTxGossip.popFirst()]
-    await sleepAsync(txGossipDebounce)
+    if wire.pendingTxGossip.len == 0:
+      await sleepAsync(txGossipDebounce)
     while wire.pendingTxGossip.len > 0 and txHashes.len < maxTxsPerFlush:
       try:
         txHashes.add wire.pendingTxGossip.popFirstNoWait()
