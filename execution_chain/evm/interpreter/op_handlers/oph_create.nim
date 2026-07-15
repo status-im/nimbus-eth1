@@ -38,40 +38,70 @@ import
 # Private helpers
 # ------------------------------------------------------------------------------
 
+proc postExecutionCreate(c: Computation, child: Computation, newAccountCharged: bool) =
+  if child.shouldBurnGas:
+    c.gasMeter.appendRegularGasUsed(child.gasMeter.regularGasUsed + child.gasMeter.gasRemaining)
+  else:
+    c.gasMeter.returnGas(child.gasMeter.gasRemaining)
+    c.gasMeter.appendRegularGasUsed(child.gasMeter.regularGasUsed)
+
+  if child.isSuccess:
+    if c.fork >= FkAmsterdam:
+      c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
+      c.gasMeter.appendStateGasUsed(child.gasMeter.stateGasUsed)
+      c.gasMeter.stateGasSpilled += child.gasMeter.stateGasSpilled
+    c.merge(child)
+    c.stack.lsTop child.msg.contractAddress
+  else:
+    if c.fork >= FkAmsterdam:
+      c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
+      if newAccountCharged:
+        c.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
+
+    if not child.error.burnsGas: # Means return was `REVERT`.
+      # From create, only use `outputData` if child returned with `REVERT`.
+      c.returnData = move(child.output)
+
 proc execSubCreate(c: Computation; childMsg: Message;
-                   code: CodeBytesRef) =
+                   code: CodeBytesRef): EvmResultVoid =
   ## Create new VM -- helper for `Create`-like operations
 
   # need to provide explicit <c> and <child> for capturing in chainTo proc()
   var
     child = newComputation(c.vmState, keepStack = false, childMsg, code)
+    newAccountCharged = false
 
-  child.ptc = c
-  
+  if not child.incrementNonce():
+    postExecutionCreate(c, child, newAccountCharged)
+    child.dispose()
+    return ok()
+
+  if c.fork >= FkAmsterdam:
+    newAccountCharged = not c.accountExists(child.msg.contractAddress)
+    if newAccountCharged:
+      ? c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "Create op new account")
+
+  var createMsgGas = c.gasMeter.gasRemaining
+  if c.fork >= FkTangerine:
+    createMsgGas -= createMsgGas div 64
+  c.gasMeter.gasRemaining -= createMsgGas
+  child.msg.gas = createMsgGas
+  child.gasMeter.gasRemaining = createMsgGas
+
+  if not child.accountDeployable():
+    postExecutionCreate(c, child, newAccountCharged)
+    child.dispose()
+    return ok()
+
+  child.msg.stateGasReservoir = c.gasMeter.stateGasLeft
+  child.gasMeter.stateGasLeft = c.gasMeter.stateGasLeft
+  c.gasMeter.stateGasLeft = 0.GasInt
+
   c.chainTo(child):
-    if child.shouldBurnGas:
-      c.gasMeter.appendRegularGasUsed(child.gasMeter.regularGasUsed + child.gasMeter.gasRemaining)
-    else:
-      c.gasMeter.returnGas(child.gasMeter.gasRemaining)
-      c.gasMeter.appendRegularGasUsed(child.gasMeter.regularGasUsed)
-
-    if child.isSuccess:
-      if c.fork >= FkAmsterdam:
-        c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
-        c.gasMeter.appendStateGasUsed(child.gasMeter.stateGasUsed)
-        c.gasMeter.stateGasSpilled += child.gasMeter.stateGasSpilled
-      c.merge(child)
-      c.stack.lsTop child.msg.contractAddress
-    else:
-      if c.fork >= FkAmsterdam:
-        c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
-        if MsgFlags.NewAccountCharged in child.msg.flags:
-          c.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
-
-      if not child.error.burnsGas: # Means return was `REVERT`.
-        # From create, only use `outputData` if child returned with `REVERT`.
-        c.returnData = move(child.output)
+    postExecutionCreate(c, child, newAccountCharged)
     ok()
+
+  ok()
 
 
 # ------------------------------------------------------------------------------
@@ -139,28 +169,18 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
         balance = senderBalance
       return ok()
 
-  var createMsgGas = cpt.gasMeter.gasRemaining
-  if cpt.fork >= FkTangerine:
-    createMsgGas -= createMsgGas div 64
-  cpt.gasMeter.gasRemaining -= createMsgGas
-
-  let stateGas = cpt.gasMeter.stateGasLeft
-  #cpt.gasMeter.stateGasLeft = 0.GasInt
-
   var
-    childMsg = Message(
-      kind:   CallKind.Create,
-      depth:  cpt.msg.depth + 1,
-      gas:    createMsgGas,
-      stateGas: stateGas,
-      sender: cpt.msg.contractAddress,
-      contractAddress: generateContractAddress(
-        cpt.vmState,
-        cpt.msg.contractAddress),
-      value:  endowment)
     code = CodeBytesRef.init(cpt.memory.read(memPos, memLen))
+    childMsg = Message(
+      kind:              CallKind.Create,
+      depth:             cpt.msg.depth + 1,
+      sender:            cpt.msg.contractAddress,
+      value:             endowment,
+      contractAddress:   generateContractAddress(
+                           cpt.vmState,
+                           cpt.msg.contractAddress),
+      )
   cpt.execSubCreate(childMsg, code)
-  ok()
 
 # ---------------------
 
@@ -228,29 +248,19 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
         balance = senderBalance
       return ok()
 
-  var createMsgGas = cpt.gasMeter.gasRemaining
-  if cpt.fork >= FkTangerine:
-    createMsgGas -= createMsgGas div 64
-  cpt.gasMeter.gasRemaining -= createMsgGas
-
-  let stateGas = cpt.gasMeter.stateGasLeft
-  #cpt.gasMeter.stateGasLeft = 0.GasInt
-
   var
     code = CodeBytesRef.init(cpt.memory.read(memPos, memLen))
     childMsg = Message(
-      kind:   CallKind.Create2,
-      depth:  cpt.msg.depth + 1,
-      gas:    createMsgGas,
-      stateGas: stateGas,
-      sender: cpt.msg.contractAddress,
-      contractAddress: generateSafeAddress(
-        cpt.msg.contractAddress,
-        salt,
-        code.bytes),
-      value:  endowment)
+      kind:              CallKind.Create2,
+      depth:             cpt.msg.depth + 1,
+      sender:            cpt.msg.contractAddress,
+      value:             endowment,
+      contractAddress:   generateSafeAddress(
+                           cpt.msg.contractAddress,
+                           salt,
+                           code.bytes),
+      )
   cpt.execSubCreate(childMsg, code)
-  ok()
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries

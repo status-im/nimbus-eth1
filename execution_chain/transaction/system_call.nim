@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  ../evm/[types, state, computation, interpreter_dispatch],
+  ../evm/[types, state, computation, interpreter_dispatch, code_stream],
   ../db/ledger,
   ../core/eip8037,
   ./call_types
@@ -18,34 +18,34 @@ import
 export
   call_types
 
-proc setupComputation(call: CallParams): Computation =
+proc setupComputation(params: CallParams): Computation =
   let
-    vmState = call.vmState
-    stateGas = if vmState.fork >= FkAmsterdam: SYSTEM_STATE_GAS_RESERVOIR.GasInt
-               else: 0.GasInt
+    vmState = params.vmState
+    stateGasReservoir = if vmState.fork >= FkAmsterdam: SYSTEM_STATE_GAS_RESERVOIR.GasInt
+                        else: 0.GasInt
     msg = Message(
-      kind:            CallKind.Call,
-      gas:             call.gasLimit,
-      stateGas:        stateGas,
-      contractAddress: call.to,
-      codeAddress:     call.to,
-      sender:          call.sender,
-      value:           call.value,
-      data:            call.input,
+      kind:              CallKind.Call,
+      gas:               params.gasLimit,
+      stateGasReservoir: stateGasReservoir,
+      contractAddress:   params.to,
+      codeAddress:       params.to,
+      sender:            params.sender,
+      value:             params.value,
+      data:              params.input,
     )
     code = vmState.ledger.getCode(msg.codeAddress)
     computation = newComputation(vmState, false, msg, code)
 
   vmState.txCtx = TxContext(
-    origin: call.sender,
+    origin: params.sender,
   )
 
   # reset global gasRefunded counter each time
   # EVM called for a new transaction
   vmState.gasRefunded = 0
-  vmState.captureStart(computation, call.sender, call.to,
-                       call.isCreate, call.input,
-                       call.gasLimit, call.value)
+  vmState.captureStart(computation, params.sender, params.to,
+                       params.isCreate, params.input,
+                       params.gasLimit, params.value)
   computation
 
 func sysCallGasUsed(c: Computation): GasInt =
@@ -67,14 +67,33 @@ proc finishRunningComputation(c: Computation, T: type): T =
   else:
     {.error: "Unknown systemCall output".}
 
-proc systemCall*(call: CallParams, T: type): T =
+proc preExecComputation(c: Computation) =
+  if c.fork >= FkPrague:
+    if c.msg.contractAddress == WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS or
+       c.msg.contractAddress == CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS:
+
+      # EIP-7002 and EIP-7215 dicates that the code must be present, or else block is invalid
+      if c.code.len <= 0:
+        c.setError("No code found for withdrawal or consolidation requests contract")
+        return
+
+    if c.fork >= FkAmsterdam and (
+      c.msg.contractAddress == BUILDER_DEPOSIT_CONTRACT_ADDRESS or
+      c.msg.contractAddress == BUILDER_EXIT_CONTRACT_ADDRESS
+    ):
+      # EIP-8282 dicates that the code must be present, or else block is invalid
+      if c.code.len <= 0:
+        c.setError("No code found for builder deposit or exit requests contract")
+        return
+
+proc systemCall*(params: CallParams, T: type): T =
   let
-    ledger = call.vmState.ledger
-    c = setupComputation(call)
+    ledger = params.vmState.ledger
+    c = setupComputation(params)
 
   # Pre-execution sanity checks
   c.preExecComputation()
   if c.isSuccess:
-    c.execCallOrCreate()
+    c.execCallOrCreate(params)
     ledger.persist(clearEmptyAccount = true)
   finishRunningComputation(c, T)

@@ -53,7 +53,4 @@ proc getCallCode*(vmState: BaseVMState, msg: Message): CodeBytesRef =
   # If the `call.to` has a delegation, also warm its target.
   msg.flags.incl MsgFlags.Delegated
   msg.delegateTo = delegateTo
-  vmState.ledger.accessList(delegateTo)
-  if vmState.balTrackerEnabled:
-    vmState.balTracker.trackAddressAccess(delegateTo)
   vmState.readOnlyLedger.getCode(delegateTo)

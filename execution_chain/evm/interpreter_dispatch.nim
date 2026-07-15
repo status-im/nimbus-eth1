@@ -13,11 +13,13 @@
 import
   std/[macros, strformat],
   chronicles,
-  stew/byteutils,
-  ../core/eip8037,
+  stew/[byteutils, assign2],
   ../constants,
   ../db/ledger,
-  ./interpreter/[op_dispatcher, gas_costs],
+  ../core/eip8037,
+  ../transaction/[call_types, eoa_delegation],
+  ./interpreter/[op_dispatcher],
+  ./interpreter/op_handlers/oph_helpers,
   ./[code_stream, computation, evm_errors, message, precompiles, state, types]
 
 logScope:
@@ -67,18 +69,65 @@ macro selectVM(v: VmCpt, fork: EVMFork, tracingEnabled: bool): EvmResultVoid =
     caseStmt.add nnkOfBranch.newTree(forkVal, call)
   caseStmt
 
-proc beforeExecCall(c: Computation): bool =
-  if c.fork >= FkAmsterdam and c.msg.depth == 0:
-    if c.msg.value.isZero.not and
-      c.vmState.readOnlyLedger.isDeadAccount(c.msg.codeAddress):
-      c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "topFrameCharges").isOkOr:
-        c.setError($error.code, true)
-        return true
+proc prepareDispatch(params: CallParams, c: Computation): EvmResultVoid =
+  let
+    vmState = c.vmState
+    ledger = vmState.ledger
 
-    if MsgFlags.Delegated in c.msg.flags:
-      c.gasMeter.consumeGas(COLD_ACCOUNT_ACCESS_8038, "topFrameCharges").isOkOr:
-        c.setError($error.code, true)
-        return true
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.trackAddressAccess(c.msg.contractAddress)
+
+  let
+    code =
+      if params.isCreate:
+        if ledger.originalAccountEmpty(c.msg.contractAddress):
+          ? c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch create new account")
+        CodeBytesRef.init(params.input)
+      else:
+        if params.value.isZero.not and not ledger.accountExists(c.msg.contractAddress):
+          ? c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch call new account")
+        assign(c.msg.data, params.input)
+        getCallCode(vmState, c.msg)
+
+  if MsgFlags.Delegated in c.msg.flags:
+    # TODO: Put both consumeGas and balTracker near delegateTo getCode
+    # specifically after consumeGas
+    let delegatedGas = c.gasEip8038AccountCheck(c.msg.delegateTo)
+    ? c.gasMeter.consumeGas(delegatedGas, "prepareDispatch delegatedGas")
+
+    if vmState.balTrackerEnabled:
+      vmState.balTracker.trackAddressAccess(c.msg.delegateTo)
+
+  c.setCode(code)
+  ok()
+
+proc authAndDelegation(params: CallParams, c: Computation): EvmResultVoid =
+  ? params.setDelegation(c)
+  c.vmState.authStateGasUsed = c.frameStateGasUsed()
+  c.msg.stateGasReservoir = c.gasMeter.stateGasLeft
+  c.gasMeter.stateGasSpilled = 0
+  params.prepareDispatch(c)
+
+proc topFrameAuthAndDelegation(params: CallParams, c: Computation): bool =
+  let
+    prepReservoir = c.msg.stateGasReservoir
+
+  c.beginSavePoint()
+  params.authAndDelegation(c).isOkOr:
+    c.rollback()
+    c.msg.stateGasReservoir = prepReservoir
+    c.vmState.authStateGasUsed = 0
+    c.refillFrameStateGas()
+    c.setError($error.code, true)
+    return false
+
+  c.commit()
+  true
+
+proc beforeExecCall(c: Computation, params: CallParams): bool =
+  if c.msg.depth == 0 and c.fork >= FkAmsterdam:
+    if not params.topFrameAuthAndDelegation(c):
+      return true
 
   c.beginSavePoint()
   if c.msg.kind == CallKind.Call:
@@ -108,9 +157,17 @@ proc afterExecCall(c: Computation) =
       # Special case to account for geth+parity bug
       c.vmState.ledger.ripemdSpecial()
 
-proc beforeExecCreate(c: Computation): bool =
-  if not c.accountDeployable():
-    return true
+proc beforeExecCreate(c: Computation, params: CallParams): bool =
+  if c.msg.depth == 0:
+    if not c.incrementNonce():
+      return true
+
+    if c.fork >= FkAmsterdam:
+      if not params.topFrameAuthAndDelegation(c):
+        return true
+
+    if not c.accountDeployable():
+      return true
 
   c.beginSavePoint()
 
@@ -155,7 +212,7 @@ func msgToOp(msg: Message): Op =
     return StaticCall
   MsgKindToOp[msg.kind]
 
-proc beforeExec(c: Computation): bool =
+proc beforeExec(c: Computation, params: CallParams): bool =
   if c.msg.depth > 0:
     c.vmState.captureEnter(
       c,
@@ -168,9 +225,9 @@ proc beforeExec(c: Computation): bool =
     )
 
   if c.msg.isCreate:
-    c.beforeExecCreate()
+    c.beforeExecCreate(params)
   else:
-    c.beforeExecCall()
+    c.beforeExecCall(params)
 
 proc afterExec(c: Computation) =
   if not c.msg.isCreate:
@@ -181,7 +238,7 @@ proc afterExec(c: Computation) =
   if c.isSuccess:
     c.commit()
   else:
-    c.gasMeter.refillFrameStateGas()
+    c.refillFrameStateGas()
     c.rollback()
 
   if c.msg.depth > 0:
@@ -237,13 +294,13 @@ proc executeOpcodes*(c: Computation) =
     if c.tracingEnabled:
       c.traceError()
 
-proc execCallOrCreate*(cParam: Computation) =
+proc execCallOrCreate*(cParam: Computation, params: CallParams) =
   var (c, before) = (cParam, true)
 
   # No actual recursion, but simulate recursion including before/after/dispose.
   while true:
     while true:
-      if before and c.beforeExec():
+      if before and c.beforeExec(params):
         break
       c.executeOpcodes()
       if c.continuation.isNil:
@@ -276,25 +333,6 @@ func postExecComputation*(c: Computation) =
       # EIP-3529: Reduction in refunds
       c.refundSelfDestruct()
   c.vmState.status = c.isSuccess
-
-proc preExecComputation*(c: Computation) =
-  if c.fork >= FkPrague:
-    if c.msg.contractAddress == WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS or
-       c.msg.contractAddress == CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS:
-
-      # EIP-7002 and EIP-7215 dicates that the code must be present, or else block is invalid
-      if c.code.len <= 0:
-        c.setError("No code found for withdrawal or consolidation requests contract")
-        return
-
-    if c.fork >= FkAmsterdam and (
-      c.msg.contractAddress == BUILDER_DEPOSIT_CONTRACT_ADDRESS or
-      c.msg.contractAddress == BUILDER_EXIT_CONTRACT_ADDRESS
-    ):
-      # EIP-8282 dicates that the code must be present, or else block is invalid
-      if c.code.len <= 0:
-        c.setError("No code found for builder deposit or exit requests contract")
-        return
 
 # ------------------------------------------------------------------------------
 # End

@@ -140,6 +140,12 @@ func getTransientStorage*(c: Computation, slot: UInt256): UInt256 =
       return res
     cpt = cpt.parent
 
+func setCode*(c: Computation, code = CodeBytesRef(nil)) =
+  if not code.isNil:
+    c.code = CodeStream.init(code)
+    c.memory = EvmMemory.init()
+    c.stack = EvmStack.init()
+
 func newComputation*(vmState: BaseVMState,
                      keepStack: bool,
                      message: Message,
@@ -147,14 +153,10 @@ func newComputation*(vmState: BaseVMState,
   new result
   result.vmState = vmState
   result.msg = message
-  result.gasMeter.init(message.gas, message.stateGas)
+  result.gasMeter.init(message.gas, message.stateGasReservoir)
   result.keepStack = keepStack
   result.balTrackerEnabled = vmState.balTrackerEnabled
-
-  if not code.isNil:
-    result.code = CodeStream.init(code)
-    result.memory = EvmMemory.init()
-    result.stack = EvmStack.init()
+  result.setCode(code)
 
 template gasCosts*(c: Computation): untyped =
   c.vmState.gasCosts
@@ -217,7 +219,7 @@ func errorOpt*(c: Computation): Opt[string] =
     return Opt.none(string)
   Opt.some(c.error.info)
 
-proc accountDeployable*(c: Computation): bool =
+proc incrementNonce*(c: Computation): bool =
   c.vmState.mutateLedger:
     let nonce = ledger.getNonce(c.msg.sender)
     if nonce + 1 < nonce:
@@ -230,42 +232,23 @@ proc accountDeployable*(c: Computation): bool =
       c.vmState.balTracker.trackNonceChange(c.msg.sender, nonce + 1)
     ledger.setNonce(c.msg.sender, nonce + 1)
 
-    # We add this to the access list _before_ taking a snapshot.
-    # Even if the creation fails, the access-list change should not be rolled
-    # back EIP2929
-    if c.fork >= FkBerlin:
-      ledger.accessList(c.msg.contractAddress)
+  true
+
+proc accountDeployable*(c: Computation): bool =
+  # We add this to the access list _before_ taking a snapshot.
+  # Even if the creation fails, the access-list change should not be rolled
+  # back EIP2929
+  if c.fork >= FkBerlin:
+    c.vmState.ledger.accessList(c.msg.contractAddress)
 
   if c.balTrackerEnabled:
     c.vmState.balTracker.trackAddressAccess(c.msg.contractAddress)
 
-  if c.fork >= FkAmsterdam:
-    if not c.vmState.readOnlyLedger().accountExists(c.msg.contractAddress):
-      c.msg.flags.incl MsgFlags.NewAccountCharged
-      if c.msg.depth == 0:
-        c.msg.stateGas -= CREATE_ACCOUNT_STATE_GAS
-        c.gasMeter.removeStateGas(CREATE_ACCOUNT_STATE_GAS)
-      else:
-        c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "CREATE CHARGE").isOkOr:
-          c.setError("Out of gas when charge create state gas", true)
-          return false
-
   if c.vmState.readOnlyLedger().contractCollision(c.msg.contractAddress):
-    if c.fork >= FkAmsterdam:
-      if MsgFlags.NewAccountCharged in c.msg.flags:
-        if c.msg.depth == 0:
-          c.msg.stateGas += CREATE_ACCOUNT_STATE_GAS
-          c.gasMeter.returnStateGas(CREATE_ACCOUNT_STATE_GAS)
-        else:
-          c.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
-
     let blurb = c.msg.contractAddress.toHex
     c.setError("Address collision when creating contract address=" & blurb, true)
     return false
 
-  if c.ptc.isNil.not:
-    c.ptc.gasMeter.stateGasLeft = 0.GasInt
-    
   true
 
 proc writeContract*(c: Computation) =
@@ -422,6 +405,12 @@ proc refundSelfDestruct*(c: Computation) =
   let cost = gasFees[c.fork][RefundSelfDestruct]
   let num  = c.vmState.ledger.selfDestructLen
   c.gasMeter.refundGas(cost * num)
+
+func frameStateGasUsed*(c: Computation): int64 =
+  c.gasMeter.frameStateGasUsed(c.msg.stateGasReservoir)
+
+func refillFrameStateGas*(c: Computation) =
+  c.gasMeter.refillFrameStateGas(c.msg.stateGasReservoir)
 
 func tracingEnabled*(c: Computation): bool =
   c.vmState.tracingEnabled

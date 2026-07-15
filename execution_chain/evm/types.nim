@@ -57,6 +57,7 @@ type
     cumulativeGasUsed*: GasInt
     blockRegularGasUsed*: GasInt
     blockStateGasUsed*: GasInt
+    authStateGasUsed* : int64
     gasCosts*         : GasCosts
     blobGasUsed*      : uint64
     allLogs*          : seq[Log] # EIP-6110
@@ -79,7 +80,6 @@ type
     savePoint*:             LedgerSpRef
     instr*:                 Op
     opIndex*:               int
-    ptc* {.cursor.}:        Computation
     parent* {.cursor.}:     Computation  # non-owning back pointer
     child*:                 Computation  # owning front pointer
     continuation*:          proc(c: Computation): EvmResultVoid {.gcsafe, raises: [].}
@@ -119,14 +119,13 @@ type
   MsgFlags* {.pure.} = enum
     Static
     Precompile
-    NewAccountCharged
     Delegated
 
   Message* = ref object
     kind*:             CallKind
     depth*:            int
     gas*:              GasInt
-    stateGas*:         GasInt
+    stateGasReservoir*:GasInt
     sender*:           Address
     contractAddress*:  Address
     codeAddress*:      Address

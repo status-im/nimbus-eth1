@@ -325,19 +325,19 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
     return ok()
 
   # Pass full reservoir to child (no 63/64 rule for state gas)
-  let stateGas = cpt.gasMeter.stateGasLeft
+  let stateGasReservoir = cpt.gasMeter.stateGasLeft
   cpt.gasMeter.stateGasLeft = 0.GasInt
 
   var childMsg = Message(
-    kind:            CallKind.Call,
-    depth:           cpt.msg.depth + 1,
-    gas:             childGasLimit,
-    stateGas:        stateGas,
-    sender:          p.sender,
-    contractAddress: p.contractAddress,
-    codeAddress:     p.codeAddress,
-    value:           p.value,
-    flags:           p.flags)
+    kind:              CallKind.Call,
+    depth:             cpt.msg.depth + 1,
+    gas:               childGasLimit,
+    stateGasReservoir: stateGasReservoir,
+    sender:            p.sender,
+    contractAddress:   p.contractAddress,
+    codeAddress:       p.codeAddress,
+    value:             p.value,
+    flags:             p.flags)
   assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
   cpt.execSubCall(
     memPos = p.memOutPos,
@@ -400,19 +400,19 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
     return ok()
 
   # Pass full reservoir to child (no 63/64 rule for state gas)
-  let stateGas = cpt.gasMeter.stateGasLeft
+  let stateGasReservoir = cpt.gasMeter.stateGasLeft
   cpt.gasMeter.stateGasLeft = 0.GasInt
 
   var childMsg = Message(
-    kind:            CallKind.CallCode,
-    depth:           cpt.msg.depth + 1,
-    gas:             childGasLimit,
-    stateGas:        stateGas,
-    sender:          p.sender,
-    contractAddress: p.contractAddress,
-    codeAddress:     p.codeAddress,
-    value:           p.value,
-    flags:           p.flags)
+    kind:              CallKind.CallCode,
+    depth:             cpt.msg.depth + 1,
+    gas:               childGasLimit,
+    stateGasReservoir: stateGasReservoir,
+    sender:            p.sender,
+    contractAddress:   p.contractAddress,
+    codeAddress:       p.codeAddress,
+    value:             p.value,
+    flags:             p.flags)
   assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
   cpt.execSubCall(
     memPos = p.memOutPos,
@@ -468,19 +468,19 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
   cpt.memory.extend(p.memOutPos, p.memOutLen)
 
   # Pass full reservoir to child (no 63/64 rule for state gas)
-  let stateGas = cpt.gasMeter.stateGasLeft
+  let stateGasReservoir = cpt.gasMeter.stateGasLeft
   cpt.gasMeter.stateGasLeft = 0.GasInt
 
   var childMsg = Message(
-    kind:            CallKind.DelegateCall,
-    depth:           cpt.msg.depth + 1,
-    gas:             childGasLimit,
-    stateGas:        stateGas,
-    sender:          p.sender,
-    contractAddress: p.contractAddress,
-    codeAddress:     p.codeAddress,
-    value:           p.value,
-    flags:           p.flags)
+    kind:              CallKind.DelegateCall,
+    depth:             cpt.msg.depth + 1,
+    gas:               childGasLimit,
+    stateGasReservoir: stateGasReservoir,
+    sender:            p.sender,
+    contractAddress:   p.contractAddress,
+    codeAddress:       p.codeAddress,
+    value:             p.value,
+    flags:             p.flags)
   assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
   cpt.execSubCall(
     memPos = p.memOutPos,
@@ -536,19 +536,19 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
   cpt.memory.extend(p.memOutPos, p.memOutLen)
 
   # Pass full reservoir to child (no 63/64 rule for state gas)
-  let stateGas = cpt.gasMeter.stateGasLeft
+  let stateGasReservoir = cpt.gasMeter.stateGasLeft
   cpt.gasMeter.stateGasLeft = 0.GasInt
 
   var childMsg = Message(
-    kind:            CallKind.Call,
-    depth:           cpt.msg.depth + 1,
-    gas:             childGasLimit,
-    stateGas:        stateGas,
-    sender:          p.sender,
-    contractAddress: p.contractAddress,
-    codeAddress:     p.codeAddress,
-    value:           p.value,
-    flags:           p.flags)
+    kind:              CallKind.Call,
+    depth:             cpt.msg.depth + 1,
+    gas:               childGasLimit,
+    stateGasReservoir: stateGasReservoir,
+    sender:            p.sender,
+    contractAddress:   p.contractAddress,
+    codeAddress:       p.codeAddress,
+    value:             p.value,
+    flags:             p.flags)
   assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
   cpt.execSubCall(
     memPos = p.memOutPos,
