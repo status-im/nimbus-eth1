@@ -143,7 +143,8 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
 
   # Add peer service protocol capabilities.
   let doSnapSync = config.snapSyncEnabled or config.snapServerEnabled
-  nimbus.ethWire = nimbus.ethNode.addEthHandlerCapability(nimbus.txPool)
+  nimbus.ethWire = nimbus.ethNode.addEthHandlerCapability(
+    nimbus.txPool, config.forceEnableTxGossip)
   if doSnapSync:
     nimbus.snapWire = nimbus.ethNode.addSnapHandlerCapability()
 

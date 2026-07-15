@@ -562,6 +562,12 @@ type
         defaultValue: false
         name: "debug-snap-server" .}: bool
 
+      forceEnableTxGossip* {.
+        hidden
+        desc: "Enable transaction gossip/processing without waiting for sync"
+        defaultValue: false
+        name: "debug-force-enable-tx-gossip" .}: bool
+
       beaconSyncTicker* {.
         hidden
         desc: "Activate periodic state message logger"

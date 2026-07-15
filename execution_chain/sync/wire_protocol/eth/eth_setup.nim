@@ -22,6 +22,7 @@ import
 proc addEthHandlerCapability*(
     node: EthereumNode;
     txPool: TxPoolRef;
+    forceGossip = false;
       ): EthWireRef =
   ## Install wire prototcol handlers for each cap.
   ##
@@ -29,7 +30,7 @@ proc addEthHandlerCapability*(
   ## message ID number. Setting the argument `latestOnly` to `true` there is
   ## (trivially) the same message ID for all (i.e. the only one) base protocols.
   ##
-  let wire = EthWireRef.new(txPool, node)
+  let wire = EthWireRef.new(txPool, node, forceGossip)
   node.addCapability(eth71, wire)
   node.addCapability(eth70, wire)
   node.addCapability(eth69, wire)

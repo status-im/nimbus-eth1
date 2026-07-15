@@ -148,6 +148,7 @@ type
     actionHeartbeat*: seq[Future[void].Raising([CancelledError])]
     actionQueue*: AsyncQueue[ActionHandler]
     gossipEnabled*: bool
+    forceGossip*: bool
     cleanupTimer*: Future[void].Raising([CancelledError])
     brUpdateTimer*: Future[void].Raising([CancelledError])
 
