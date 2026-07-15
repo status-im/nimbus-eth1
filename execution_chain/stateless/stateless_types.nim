@@ -9,7 +9,7 @@
 
 {.push raises: [], gcsafe.}
 
-import ssz_serialization, beacon_chain/spec/ssz_codec
+import ssz_serialization, beacon_chain/spec/[eth2_merkleization, ssz_codec]
 
 from beacon_chain/spec/datatypes/gloas import ExecutionPayload
 from beacon_chain/spec/datatypes/electra import ExecutionRequests
@@ -42,6 +42,12 @@ const
   # Amsterdam SSZ stateless input schema identifier.
   STATELESS_INPUT_SCHEMA_ID* = 0x0001'u16
   STATELESS_INPUT_SCHEMA_ID_SIZE* = 2
+
+  # We should be using the HardFork enum value for Amsterdam from hardforks.nim
+  # but BPO1-BPO5 are already defined there, while in the execution-specs tag
+  # tests-zkevm@v0.5.0 only BPO1-BPO2 is defined, making the enum value differ.
+  # So we hardcode it here for now to the value of the specs/tests used.
+  PROTOCOL_FORK_AMSTERDAM* = 20'u64
 
 # ---------------------------------------------------------------------------
 # SSZ container types
@@ -90,3 +96,12 @@ type
     new_payload_request_root*: Digest
     successful_validation*: bool
     chain_config*: StatelessChainConfig
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+# https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/stateless.py#L255
+func compute_new_payload_request_root*(input: StatelessInput): Digest =
+  ## Compute the request root for a stateless input via SSZ hash tree root.
+  hash_tree_root(input.new_payload_request)
