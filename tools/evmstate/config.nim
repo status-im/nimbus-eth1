@@ -18,6 +18,11 @@ export
 
 type
   StateConf* = object of RootObj
+    enableError* {.
+      desc: "enable write error information to stdout"
+      defaultValue: false
+      name: "enable-error" }: bool
+
     disableOutput* {.
       desc: "disable write execution result to stdout"
       defaultValue: false
@@ -69,10 +74,15 @@ type
       name: "fork" }: string
 
     index* {.
-      desc: "if index is unset, all subtest in the fork will be tested"
+      desc: "if index is unset, all test in the file will be executed"
       defaultValue: none(int)
       name: "index" }: Option[int]
 
+    subIndex* {.
+      desc: "if index is unset, all subtest in the fork will be tested"
+      defaultValue: none(int)
+      name: "sub-index" }: Option[int]
+      
     pretty* {.
       desc: "pretty print the trace result"
       defaultValue: false
