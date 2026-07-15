@@ -633,6 +633,52 @@ suite "Tx propagation":
 
     waitFor runTest()
 
+  test "hash announce during handshake still triggers fetch":
+    ## Hive eth/NewPooledTxs regression: a peer may announce hashes right
+    ## after the Status exchange, before rlpx flips the peer to Connected.
+    ## The queued fetch action must not bail out on a peer that is merely
+    ## still handshaking — only on Disconnecting/Disconnected.
+    proc runTest() {.async.} =
+      let genesisPath = writeRecentGenesis()
+      var env1 = newBroadcastTestEnv(genesisPath)
+      var env2 = newBroadcastTestEnv(genesisPath)
+
+      env2.node.startListening()
+      let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+      check connRes.isOk()
+      let peer = connRes.get()
+
+      check not env1.wire.syncerRunning()
+
+      # Freeze env2's outbound gossip: the only way the tx can reach env1
+      # is env1's own GetPooledTransactions fetch.
+      await env2.wire.txGossipHeartbeat.cancelAndWait()
+
+      # env2 holds the announced tx and serves GetPooledTransactions.
+      let
+        ptx = env2.makeSignedTx(0)
+        txHash = ptx.tx.computeRlpHash
+      check env2.txPool.addTx(ptx).isOk
+
+      # Simulate the announcement arriving mid-handshake.
+      peer.connectionState = Connecting
+
+      let packet = NewPooledTransactionHashesPacket(
+        txTypes: @[ptx.tx.txType.byte],
+        txSizes: @[uint64(getEncodedLength(ptx))],
+        txHashes: @[txHash],
+      )
+      await env1.wire.handleTxHashesBroadcast(packet, peer)
+
+      # The action worker must fetch the tx and pool it.
+      check await env1.waitForPooled(txHash)
+      peer.connectionState = Connected
+
+      await env2.close()
+      await env1.close()
+
+    waitFor runTest()
+
   test "pool is announced to newly connected peer":
     proc runTest() {.async.} =
       let genesisPath = writeRecentGenesis()

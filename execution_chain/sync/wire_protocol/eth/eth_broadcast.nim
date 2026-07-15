@@ -248,7 +248,11 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
   )
 
   wire.reqisterAction("Handle broadcast transactions hashes"):
-    if peer.connectionState != ConnectionState.Connected:
+    # A peer can announce hashes right after the Status exchange, while rlpx
+    # is still completing the remaining handshakes: `Connected` is only set
+    # after all of them, so only bail out on states that cannot recover.
+    if peer.connectionState in
+        {ConnectionState.Disconnecting, ConnectionState.Disconnected}:
       for h in novelPacket.txHashes:
         wire.seenTransactions.del(h)
       return
@@ -291,7 +295,8 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
       if msg.txHashes.len == 0:
         continue
 
-      if peer.connectionState != ConnectionState.Connected:
+      if peer.connectionState in
+          {ConnectionState.Disconnecting, ConnectionState.Disconnected}:
         for h in msg.txHashes:
           wire.seenTransactions.del(h)
         return
