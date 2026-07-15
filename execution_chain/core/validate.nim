@@ -251,7 +251,7 @@ func validateTxBasic*(
 
   # EIP-2681: a nonce of 2^64-1 can never be included since executing the
   # transaction would overflow the account nonce.
-  if tx.nonce == high(uint64):
+  if tx.nonce >= high(uint64):
     return err("invalid tx: nonce at maximum")
 
   if validateFork:
