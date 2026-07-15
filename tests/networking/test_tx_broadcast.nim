@@ -19,7 +19,6 @@ import
   chronos,
   chronos/ratelimit,
   stint,
-  kzg4844/kzg,
   eth/common/[keys, hashes, addresses, transactions],
   eth/common/times as ethTimes,
   ../../execution_chain/db/core_db/memory_only,
@@ -33,8 +32,12 @@ import
   ../../hive_integration/tx_sender,
   ./stubloglevel
 
-# Load eagerly to avoid race conditions - lazy kzg loading is not thread safe
-discard loadTrustedSetupFromString(kzg.trustedSetup, 8)
+# No explicit kzg trusted-setup load here: the kzg binding lazy-loads a
+# compile-time-parsed setup on first use (blob validation runs on the main
+# thread, so the lazy path has no thread race). The eager
+# loadTrustedSetupFromString variant parses at runtime and moves ~400KiB
+# TrustedSetup values through the stack - it overflows the 1MiB stack limit
+# `make test` runs the suite under.
 
 const
   # A genesis template with cancun enabled and a placeholder timestamp.
@@ -112,11 +115,11 @@ proc newBroadcastTestEnv(genesisPath = ""): BroadcastTestEnv =
     sender: sender,
   )
 
-proc close(env: BroadcastTestEnv) =
+proc close(env: BroadcastTestEnv) {.async: (raises: [CancelledError]).} =
   if env.node.listeningServer.isNil.not:
-    waitFor env.node.closeWait()
-  waitFor env.wire.stop()
-  waitFor env.chain.stopProcessingQueue()
+    await env.node.closeWait()
+  await env.wire.stop()
+  await env.chain.stopProcessingQueue()
 
 const
   MAX_ACTION_HANDLER = 512
@@ -229,8 +232,8 @@ suite "Tx broadcast queue":
       # Queue should remain unchanged (handler dropped the announcement)
       check env1.wire.actionQueue.len == queueLenBefore
 
-      env2.close()
-      env1.close()
+      await env2.close()
+      await env1.close()
 
     waitFor runTest()
 
@@ -277,8 +280,8 @@ suite "Tx broadcast queue":
       check completed
       check env1.wire.actionQueue.len == queueLenBefore
 
-      env2.close()
-      env1.close()
+      await env2.close()
+      await env1.close()
 
     waitFor runTest()
 
@@ -322,8 +325,8 @@ suite "Tx broadcast queue":
       let completed = await withTimeout(action(), chronos.seconds(2))
       check completed
 
-      env2.close()
-      env1.close()
+      await env2.close()
+      await env1.close()
 
     waitFor runTest()
 
@@ -347,7 +350,7 @@ suite "Tx broadcast queue":
       await sleepAsync(chronos.milliseconds(200))
       check fastDone
 
-      env.close()
+      await env.close()
 
     waitFor runTest()
 
@@ -425,7 +428,7 @@ suite "Tx broadcast queue":
       check completed
       await mutatorFut.cancelAndWait()
 
-      env.close()
+      await env.close()
 
     waitFor runTest()
 
@@ -492,7 +495,7 @@ suite "Tx propagation":
       check env.txPool.addTx(ptx).isErr
       check env.wire.pendingTxGossip.len == 1
 
-      env.close()
+      await env.close()
 
     waitFor runTest()
 
@@ -517,7 +520,7 @@ suite "Tx propagation":
       check env.txPool.addTx(ptx).isOk
       check env.wire.pendingTxGossip.len == PENDING_TX_GOSSIP_MAX
 
-      env.close()
+      await env.close()
 
     waitFor runTest()
 
@@ -532,7 +535,7 @@ suite "Tx propagation":
       check env.txPool.addTx(ptx).isOk
       check env.wire.pendingTxGossip.len == 0
 
-      env.close()
+      await env.close()
 
     waitFor runTest()
 
@@ -558,8 +561,8 @@ suite "Tx propagation":
       check txHash in env1.wire.seenTransactions
       check peer.id in env1.wire.seenTransactions[txHash].peers
 
-      env2.close()
-      env1.close()
+      await env2.close()
+      await env1.close()
 
     waitFor runTest()
 
@@ -585,8 +588,8 @@ suite "Tx propagation":
       # path was used.
       check peer.connectionState == ConnectionState.Connected
 
-      env2.close()
-      env1.close()
+      await env2.close()
+      await env1.close()
 
     waitFor runTest()
 
@@ -610,8 +613,8 @@ suite "Tx propagation":
 
       check await env2.waitForPooled(txHash)
 
-      env2.close()
-      env1.close()
+      await env2.close()
+      await env1.close()
 
     waitFor runTest()
 
@@ -630,8 +633,8 @@ suite "Tx propagation":
 
       check env1.wire.actionQueue.len == 0
 
-      env2.close()
-      env1.close()
+      await env2.close()
+      await env1.close()
 
     waitFor runTest()
 
@@ -660,8 +663,8 @@ suite "Tx propagation":
       await sleepAsync(chronos.milliseconds(800))
       check not env2.txPool.contains(txHash)
 
-      env2.close()
-      env1.close()
+      await env2.close()
+      await env1.close()
 
     waitFor runTest()
 
@@ -686,8 +689,8 @@ suite "Tx propagation":
       await sleepAsync(chronos.milliseconds(200))
       check not env2.txPool.contains(txHash)
 
-      env2.close()
-      env1.close()
+      await env2.close()
+      await env1.close()
 
     waitFor runTest()
 
@@ -715,7 +718,7 @@ suite "Tx propagation":
       )
       check completed
 
-      env2.close()
-      env1.close()
+      await env2.close()
+      await env1.close()
 
     waitFor runTest()
