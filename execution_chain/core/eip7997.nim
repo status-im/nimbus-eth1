@@ -13,16 +13,22 @@
 import
   eth/common/[addresses, hashes],
   stew/byteutils,
-  ../db/ledger
+  ../db/[core_db, ledger]
 
 const
   FactoryAddress = address"0x4e59b44847b379578588920cA78FbF26c0B4956C"
   FactoryCode = hexToSeqByte"0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf3"
   FactoryCodeHash = hashes.keccak256(FactoryCode)
 
-proc applyEip7997*(ledger: LedgerRef) =
-  let codeHash = ledger.getCodeHash(FactoryAddress)
-  if codeHash == FactoryCodeHash:
+proc applyEip7997*(txFrame: CoreDbTxRef) =
+  ## Install the EIP-7997 factory predeploy through a private ledger over
+  ## `txFrame` (as done for the genesis alloc), leaving no witness or BAL
+  ## trace. Other ledgers must not hold unpersisted state for the account.
+  # LedgerRef.init writes collectWitness onto the shared txFrame, so inherit
+  # the current value to keep witness sibling tracking enabled for the block.
+  let ledger = LedgerRef.init(
+    txFrame, storeSlotHash = false, collectWitness = txFrame.aTx.collectWitness)
+  if ledger.getCodeHash(FactoryAddress) == FactoryCodeHash:
     # It's a no-op on chain that already have factory at the FactoryAddress.
     return
 
@@ -32,3 +38,4 @@ proc applyEip7997*(ledger: LedgerRef) =
   let factoryCode = FactoryCode
   ledger.setCode(FactoryAddress, factoryCode)
   ledger.setNonce(FactoryAddress, 1)
+  ledger.persist()
