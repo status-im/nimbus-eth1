@@ -361,7 +361,16 @@ proc removeExpiredTxs*(xp: TxPoolRef, lifeTime: Duration = TX_ITEM_LIFETIME) =
     xp.removeTx(txHash)
 
 proc addTxImpl(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
-  if xp.pos.timestamp != xp.vmState.blockCtx.timestamp:
+  if xp.chain.latestHash != xp.vmState.blockCtx.parentHash:
+    # The chain head moved without a block-building cycle (payload import,
+    # fork choice, or syncer progress): re-anchor the validation state on
+    # the new head, or txs keep being judged against stale nonces, balances
+    # and base fee. The context timestamp only moves forward so that an
+    # in-flight build cycle's slot timestamp (always beyond the head's) is
+    # preserved.
+    xp.pos.timestamp = max(xp.pos.timestamp, xp.chain.latestHeader.timestamp)
+    xp.updateVmState()
+  elif xp.pos.timestamp != xp.vmState.blockCtx.timestamp:
     xp.updateVmState()
 
   let
