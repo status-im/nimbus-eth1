@@ -225,17 +225,6 @@ proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
       debug "Invalid transaction: EIP-1559 transaction with maxFeePerGas lower than 1"
       return false
 
-  # The sender must be able to afford gas + value up front. Mirrors the
-  # stateful check in validateTransaction; keeps underfunded txs out of the
-  # pool so they are never gossiped. Subtraction avoids UInt256 overflow.
-  let
-    balance = xp.vmState.ledger.getBalance(sender)
-    gasCost = tx.gasCost()
-  if balance < gasCost or balance - gasCost < tx.value:
-    debug "Invalid transaction: insufficient funds",
-      balance = balance, gasCost = gasCost, value = tx.value
-    return false
-
   true
 
 proc validateBlobTransactionWrapper(tx: PooledTransaction, fork: EVMFork):

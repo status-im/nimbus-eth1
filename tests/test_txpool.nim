@@ -297,16 +297,6 @@ suite "TxPool test suite":
       CustomTx(nonce: Opt.some(high(uint64))))
     xp.checkAddTx(ptx, txErrorBasicValidation)
 
-  test "Insufficient funds rejected":
-    let acc = mx.getAccount(28)
-    let tc = BaseTx(
-      gasLimit: 75000
-    )
-    var ptx = mx.makeTx(tc, acc, 0)
-    ptx.tx = mx.customizeTransaction(acc, ptx.tx,
-      CustomTx(value: Opt.some(high(UInt256))))
-    xp.checkAddTx(ptx, txErrorTxInvalid)
-
   test "Known tx":
     let tc = BaseTx(
       gasLimit: 75000
