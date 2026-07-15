@@ -182,6 +182,215 @@ proc handleTransactionsBroadcast*(wire: EthWireRef,
       await sleepAsync(ZeroDuration)
       awaitQuota(wire, txPoolProcessCost, "adding into txpool")
 
+proc peerById(wire: EthWireRef, id: NodeId): Peer =
+  ## Resolve an announcing peer to a live handle. Peers still completing
+  ## the rlpx handshake are acceptable fetch targets; only the dying
+  ## states are excluded.
+  for p in wire.node.peers():
+    if not p.isNil and p.id == id and p.connectionState notin
+        {ConnectionState.Disconnecting, ConnectionState.Disconnected}:
+      return p
+  nil
+
+proc fetchPooledTxs(wire: EthWireRef, peer: Peer,
+                    packet: NewPooledTransactionHashesPacket,
+                    strictMeta = true)
+    {.async: (raises: [CancelledError]).}
+
+proc refetchFromAlternate*(wire: EthWireRef, failedId: NodeId,
+                           packet: NewPooledTransactionHashesPacket)
+    {.async: (raises: [CancelledError]).} =
+  ## A fetch did not deliver these announced txs (dead peer, request error
+  ## or protocol breach). Hand the not-yet-pooled hashes to another peer
+  ## that announced them in the meantime; hashes with no alternate
+  ## announcer are forgotten so a later announcement can retrigger a fetch.
+  var
+    retryTypes: seq[byte]
+    retrySizes: seq[uint64]
+    retryHashes: seq[Hash32]
+    candidates: HashSet[NodeId]
+  for i in 0 ..< packet.txHashes.len:
+    let h = packet.txHashes[i]
+    if h in wire.txPool:
+      continue
+    wire.seenTransactions.withValue(h, seen):
+      seen[].peers.excl(failedId)
+      candidates.incl(seen[].peers)
+    retryTypes.add packet.txTypes[i]
+    retrySizes.add packet.txSizes[i]
+    retryHashes.add h
+
+  if retryHashes.len == 0:
+    return
+
+  var alt: Peer = nil
+  if candidates.len > 0:
+    # An alternate announcer can still be mid-handshake and not yet
+    # registered in the peer pool: poll briefly before giving up.
+    for attempt in 0 ..< 20:
+      for id in candidates:
+        alt = wire.peerById(id)
+        if not alt.isNil:
+          break
+      if not alt.isNil:
+        break
+      await sleepAsync(chronos.milliseconds(50))
+
+  if alt.isNil:
+    # Release the dedupe slots so a later announcement can retry.
+    for h in retryHashes:
+      wire.seenTransactions.del(h)
+    return
+
+  # The metadata carried here originates from the peer whose fetch just
+  # failed (it may well be the lie that caused the failure), so the
+  # alternate's response cannot be held to it: fetch without strict
+  # size/type validation. Hash correspondence and blob/KZG validation
+  # still apply.
+  await wire.fetchPooledTxs(alt, NewPooledTransactionHashesPacket(
+    txTypes: retryTypes,
+    txSizes: retrySizes,
+    txHashes: retryHashes,
+  ), strictMeta = false)
+
+proc fetchPooledTxs(wire: EthWireRef, peer: Peer,
+                    packet: NewPooledTransactionHashesPacket,
+                    strictMeta = true)
+    {.async: (raises: [CancelledError]).} =
+  ## Request the announced txs via GetPooledTransactions, validate them
+  ## against the announcement and add them to the pool. `strictMeta`
+  ## controls whether the announced type/size must match the delivered
+  ## transactions; a refetch after a failed fetch only carries the failed
+  ## peer's (untrustworthy) metadata and is validated leniently.
+  # A peer can announce hashes right after the Status exchange, while rlpx
+  # is still completing the remaining handshakes: `Connected` is only set
+  # after all of them, so only bail out on states that cannot recover.
+  if peer.connectionState in
+      {ConnectionState.Disconnecting, ConnectionState.Disconnected}:
+    await wire.refetchFromAlternate(peer.id, packet)
+    return
+
+  type
+    SizeType = object
+      size: uint64
+      txType: byte
+
+  let
+    numTx = packet.txHashes.len
+
+  var
+    i = 0
+    map: Table[Hash32, SizeType]
+
+  while i < numTx:
+    var
+      msg: PooledTransactionsRequest
+      res: Opt[PooledTransactionsPacket]
+      sumSize = 0'u64
+
+    while i < numTx:
+      let size = packet.txSizes[i]
+      if sumSize + size > SOFT_RESPONSE_LIMIT.uint64:
+        break
+
+      let txHash = packet.txHashes[i]
+      if txHash notin wire.txPool:
+        msg.txHashes.add txHash
+        sumSize += size
+        map[txHash] = SizeType(
+          size: size,
+          txType: packet.txTypes[i],
+        )
+
+      awaitQuota(wire, hashLookupCost, "check transaction exists in pool")
+      inc i
+
+    if msg.txHashes.len == 0:
+      continue
+
+    if peer.connectionState in
+        {ConnectionState.Disconnecting, ConnectionState.Disconnected}:
+      await wire.refetchFromAlternate(peer.id, packet)
+      return
+
+    try:
+      res = await peer.getPooledTransactions(msg)
+    except EthP2PError as exc:
+      debug "Request pooled transactions failed",
+        msg=exc.msg
+      await wire.refetchFromAlternate(peer.id, packet)
+      return
+
+    if res.isNone:
+      debug "Request pooled transactions get nothing"
+      for h in msg.txHashes:
+        wire.seenTransactions.del(h)
+      continue
+
+    let
+      ptx = res.get()
+
+    for tx in ptx.transactions:
+      # If we receive any blob transactions missing sidecars, or with
+      # sidecars that don't correspond to the versioned hashes reported
+      # in the header, disconnect from the sending peer.
+      let
+        size = getEncodedLength(tx)  # PooledTransacion: Transaction + blobsBundle size
+        hash = computeRlpHash(tx.tx) # Only inner tx hash
+      map.withValue(hash, val) do:
+        if strictMeta and tx.tx.txType.byte != val.txType:
+          debug "Protocol Breach: Received transaction with type differ from announced",
+            remote=peer.remote, clientId=peer.clientId
+          await peer.disconnect(BreachOfProtocol, notifyRemote = true)
+          await wire.refetchFromAlternate(peer.id, packet)
+          return
+
+        # geth and Nethermind — two of the major clients — announce blob-tx
+        # sizes computed without the EIP-7594 wrapper-version byte, one byte
+        # short of the actual pooled encoding. Tolerating that off-by-one is
+        # required to interoperate with their announcements instead of
+        # treating them as a protocol breach.
+        let sizeDelta = if size.uint64 >= val.size: size.uint64 - val.size
+                        else: val.size - size.uint64
+        if strictMeta and sizeDelta > 0 and
+            (tx.tx.txType != TxEip4844 or sizeDelta > 1):
+          debug "Protocol Breach: Received transaction with size differ from announced",
+            remote=peer.remote, clientId=peer.clientId,
+            announced=val.size, received=size
+          await peer.disconnect(BreachOfProtocol, notifyRemote = true)
+          await wire.refetchFromAlternate(peer.id, packet)
+          return
+      do:
+        debug "Protocol Breach: Received transaction with hash differ from announced",
+            remote=peer.remote, clientId=peer.clientId
+        await peer.disconnect(BreachOfProtocol, notifyRemote = true)
+        await wire.refetchFromAlternate(peer.id, packet)
+        return
+
+      if tx.tx.txType == TxEip4844 and tx.blobsBundle.isNil:
+        debug "Protocol Breach: Received sidecar-less blob transaction",
+          remote=peer.remote, clientId=peer.clientId
+        await peer.disconnect(BreachOfProtocol, notifyRemote = true)
+        await wire.refetchFromAlternate(peer.id, packet)
+        return
+
+      # addTx performs the expensive KZG verification itself; on
+      # InvalidBlob we treat it as a protocol breach. Yield to the
+      # event loop afterwards so RPC and peer dispatch aren't starved
+      # during a large batch.
+      wire.txPool.addTx(tx).isOkOr:
+        if error == txErrorInvalidBlob:
+          debug "Protocol Breach: Invalid blob transaction",
+            remote=peer.remote, clientId=peer.clientId
+          await peer.disconnect(BreachOfProtocol, notifyRemote = true)
+          await wire.refetchFromAlternate(peer.id, packet)
+          return
+        await sleepAsync(ZeroDuration)
+        continue
+
+      await sleepAsync(ZeroDuration)
+      awaitQuota(wire, txPoolProcessCost, "broadcast transactions hashes")
+
 proc handleTxHashesBroadcast*(wire: EthWireRef,
                               packet: NewPooledTransactionHashesPacket,
                               peer: Peer) {.async: (raises: [CancelledError]).} =
@@ -248,123 +457,7 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
   )
 
   wire.reqisterAction("Handle broadcast transactions hashes"):
-    # A peer can announce hashes right after the Status exchange, while rlpx
-    # is still completing the remaining handshakes: `Connected` is only set
-    # after all of them, so only bail out on states that cannot recover.
-    if peer.connectionState in
-        {ConnectionState.Disconnecting, ConnectionState.Disconnected}:
-      for h in novelPacket.txHashes:
-        wire.seenTransactions.del(h)
-      return
-
-    type
-      SizeType = object
-        size: uint64
-        txType: byte
-
-    let
-      numTx = novelPacket.txHashes.len
-
-    var
-      i = 0
-      map: Table[Hash32, SizeType]
-
-    while i < numTx:
-      var
-        msg: PooledTransactionsRequest
-        res: Opt[PooledTransactionsPacket]
-        sumSize = 0'u64
-
-      while i < numTx:
-        let size = novelPacket.txSizes[i]
-        if sumSize + size > SOFT_RESPONSE_LIMIT.uint64:
-          break
-
-        let txHash = novelPacket.txHashes[i]
-        if txHash notin wire.txPool:
-          msg.txHashes.add txHash
-          sumSize += size
-          map[txHash] = SizeType(
-            size: size,
-            txType: novelPacket.txTypes[i],
-          )
-
-        awaitQuota(wire, hashLookupCost, "check transaction exists in pool")
-        inc i
-
-      if msg.txHashes.len == 0:
-        continue
-
-      if peer.connectionState in
-          {ConnectionState.Disconnecting, ConnectionState.Disconnected}:
-        for h in msg.txHashes:
-          wire.seenTransactions.del(h)
-        return
-
-      try:
-        res = await peer.getPooledTransactions(msg)
-      except EthP2PError as exc:
-        debug "Request pooled transactions failed",
-          msg=exc.msg
-        for h in msg.txHashes:
-          wire.seenTransactions.del(h)
-        return
-
-      if res.isNone:
-        debug "Request pooled transactions get nothing"
-        for h in msg.txHashes:
-          wire.seenTransactions.del(h)
-        continue
-
-      let
-        ptx = res.get()
-
-      for tx in ptx.transactions:
-        # If we receive any blob transactions missing sidecars, or with
-        # sidecars that don't correspond to the versioned hashes reported
-        # in the header, disconnect from the sending peer.
-        let
-          size = getEncodedLength(tx)  # PooledTransacion: Transaction + blobsBundle size
-          hash = computeRlpHash(tx.tx) # Only inner tx hash
-        map.withValue(hash, val) do:
-          if tx.tx.txType.byte != val.txType:
-            debug "Protocol Breach: Received transaction with type differ from announced",
-              remote=peer.remote, clientId=peer.clientId
-            await peer.disconnect(BreachOfProtocol, notifyRemote = true)
-            return
-
-          if size.uint64 != val.size:
-            debug "Protocol Breach: Received transaction with size differ from announced",
-              remote=peer.remote, clientId=peer.clientId
-            await peer.disconnect(BreachOfProtocol, notifyRemote = true)
-            return
-        do:
-          debug "Protocol Breach: Received transaction with hash differ from announced",
-              remote=peer.remote, clientId=peer.clientId
-          await peer.disconnect(BreachOfProtocol, notifyRemote = true)
-          return
-
-        if tx.tx.txType == TxEip4844 and tx.blobsBundle.isNil:
-          debug "Protocol Breach: Received sidecar-less blob transaction",
-            remote=peer.remote, clientId=peer.clientId
-          await peer.disconnect(BreachOfProtocol, notifyRemote = true)
-          return
-
-        # addTx performs the expensive KZG verification itself; on
-        # InvalidBlob we treat it as a protocol breach. Yield to the
-        # event loop afterwards so RPC and peer dispatch aren't starved
-        # during a large batch.
-        wire.txPool.addTx(tx).isOkOr:
-          if error == txErrorInvalidBlob:
-            debug "Protocol Breach: Invalid blob transaction",
-              remote=peer.remote, clientId=peer.clientId
-            await peer.disconnect(BreachOfProtocol, notifyRemote = true)
-            return
-          await sleepAsync(ZeroDuration)
-          continue
-
-        await sleepAsync(ZeroDuration)
-        awaitQuota(wire, txPoolProcessCost, "broadcast transactions hashes")
+    await wire.fetchPooledTxs(peer, novelPacket)
 
 proc cleanupSeenTransactions*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
   # Collect expired keys in a single synchronous pass. Do NOT await while

@@ -679,6 +679,98 @@ suite "Tx propagation":
 
     waitFor runTest()
 
+  test "failed fetch is retried from an alternate announcer":
+    ## Hive eth/TestBlobTxWithoutSidecar regression: peer A announces a tx
+    ## and the fetch from A fails (e.g. sidecar-less blob => disconnect).
+    ## Peer B announced the same hash while that fetch was in flight, so it
+    ## was only recorded as an announcer. The failed hashes must be handed
+    ## to B instead of being parked in seenTransactions until expiry.
+    proc runTest() {.async.} =
+      let genesisPath = writeRecentGenesis()
+      var env1 = newBroadcastTestEnv(genesisPath)
+      var env2 = newBroadcastTestEnv(genesisPath)
+
+      # Pool-registered connection: the refetch resolves the alternate
+      # announcer via node.peers().
+      let peerB = await connectPair(env1, env2)
+      check not peerB.isNil
+
+      check not env1.wire.syncerRunning()
+
+      # Freeze env2's outbound gossip: the tx may only arrive through
+      # env1's refetch => GetPooledTransactions round trip.
+      await env2.wire.txGossipHeartbeat.cancelAndWait()
+
+      let
+        ptx = env2.makeSignedTx(0)
+        txHash = ptx.tx.computeRlpHash
+      check env2.txPool.addTx(ptx).isOk
+
+      # Simulate the post-failure state: the (now gone) peer A and peer B
+      # are both recorded as announcers of the hash.
+      let failedId = default(NodeId) # peer A, no longer connected
+      var announcers = initHashSet[NodeId]()
+      announcers.incl(failedId)
+      announcers.incl(peerB.id)
+      env1.wire.seenTransactions[txHash] =
+        SeenObject(lastSeen: getTime(), peers: announcers)
+
+      # The carried metadata is peer A's and may be the very lie that made
+      # the first fetch fail (hive: A announces the sidecar-less size).
+      # B's correct response must not be validated against it.
+      await env1.wire.refetchFromAlternate(failedId,
+        NewPooledTransactionHashesPacket(
+          txTypes: @[ptx.tx.txType.byte],
+          txSizes: @[1'u64], # deliberately wrong
+          txHashes: @[txHash]))
+
+      check await env1.waitForPooled(txHash)
+      check peerB.connectionState == ConnectionState.Connected
+
+      await env2.close()
+      await env1.close()
+
+    waitFor runTest()
+
+  test "blob tx announced with geth's off-by-one size is not a breach":
+    ## geth and Nethermind — two of the major clients — announce blob-tx
+    ## sizes computed without the EIP-7594 wrapper-version byte, one byte
+    ## short of the actual pooled encoding (the hive simulator inherits
+    ## this from geth). The size validation must tolerate that off-by-one
+    ## for blob txs instead of disconnecting the peer.
+    proc runTest() {.async.} =
+      let genesisPath = writeRecentGenesis()
+      var env1 = newBroadcastTestEnv(genesisPath)
+      var env2 = newBroadcastTestEnv(genesisPath)
+
+      let peer = await connectPair(env1, env2)
+      check not peer.isNil
+
+      check not env1.wire.syncerRunning()
+
+      # Freeze env2's outbound gossip: delivery must go through env1's
+      # announce => GetPooledTransactions round trip.
+      await env2.wire.txGossipHeartbeat.cancelAndWait()
+
+      let
+        ptx = env2.makeSignedBlobTx(0)
+        txHash = ptx.tx.computeRlpHash
+      check env2.txPool.addTx(ptx).isOk
+
+      let packet = NewPooledTransactionHashesPacket(
+        txTypes: @[ptx.tx.txType.byte],
+        txSizes: @[uint64(getEncodedLength(ptx)) - 1],
+        txHashes: @[txHash])
+      await env1.wire.handleTxHashesBroadcast(packet, peer)
+
+      check await env1.waitForPooled(txHash)
+      check peer.connectionState == ConnectionState.Connected
+
+      await env2.close()
+      await env1.close()
+
+    waitFor runTest()
+
   test "pool is announced to newly connected peer":
     proc runTest() {.async.} =
       let genesisPath = writeRecentGenesis()
