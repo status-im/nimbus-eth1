@@ -249,6 +249,11 @@ func validateTxBasic*(
     return err("invalid tx: chain id mismatch, got: " &
       $derivedChainId & " expected: " & $com.chainId)
 
+  # EIP-2681: a nonce of 2^64-1 can never be included since executing the
+  # transaction would overflow the account nonce.
+  if tx.nonce == high(uint64):
+    return err("invalid tx: nonce at maximum")
+
   if validateFork:
     if tx.txType == TxEip2930 and fork < Berlin:
       return err("invalid tx: EIP-2930 Tx type detected before Berlin")

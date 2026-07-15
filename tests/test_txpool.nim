@@ -287,6 +287,26 @@ suite "TxPool test suite":
     let ptx = mx.makeTx(tc, 0)
     xp.checkAddTx(ptx, txErrorBasicValidation)
 
+  test "EIP-2681 nonce at maximum rejected":
+    let acc = mx.getAccount(23)
+    let tc = BaseTx(
+      gasLimit: 75000
+    )
+    var ptx = mx.makeTx(tc, acc, 0)
+    ptx.tx = mx.customizeTransaction(acc, ptx.tx,
+      CustomTx(nonce: Opt.some(high(uint64))))
+    xp.checkAddTx(ptx, txErrorBasicValidation)
+
+  test "Insufficient funds rejected":
+    let acc = mx.getAccount(28)
+    let tc = BaseTx(
+      gasLimit: 75000
+    )
+    var ptx = mx.makeTx(tc, acc, 0)
+    ptx.tx = mx.customizeTransaction(acc, ptx.tx,
+      CustomTx(value: Opt.some(high(UInt256))))
+    xp.checkAddTx(ptx, txErrorTxInvalid)
+
   test "Known tx":
     let tc = BaseTx(
       gasLimit: 75000
