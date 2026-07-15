@@ -30,7 +30,10 @@ const skipFiles = [
   # https://github.com/status-im/nimbus-eth1/pull/4099
   "witness_codes_create_same_hash_then_read.json",
 
-  # related to for_bpo2toamsterdamattime15k
+  # EIP-7997 issue: specs don't implement the fork-transition state change
+  # Nimbus and Geth do.
+  # See potential fix if specs remain as is:
+  # https://github.com/status-im/nimbus-eth1/pull/4480
   "precompile_warming.json",
   "call_value_cost_at_transition.json",
   "cold_account_access_at_transition.json",
@@ -48,7 +51,11 @@ const skipFiles = [
   "slotnum_at_fork_transition.json",
   "transfer_log_fork_transition.json",
 
-  # The test code only support Prague request types, need to add Amsterdam request types
+  # The stateless input schema cannot represent EIP-8282 builder requests, so
+  # the guest reconstructs an empty requestsHash while execution emits a builder
+  # request -> requestsHash mismatch -> false, but 2 of the 25 vectors wrongly
+  # expect true. Upstream schema/vector issue, already fixed in upstream
+  # tests-zkevm@v0.6.2
   "invalid_multi_type_requests.json",
 
   # No fail yet as we don't check/use public keys. We could check them easily

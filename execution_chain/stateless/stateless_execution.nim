@@ -170,12 +170,6 @@ func toBlock(
     withdrawals: Opt.some(wds),
   )
 
-# We should be using the HardFork enum value for Amsterdam from hardforks.nim
-# but BPO1-BPO5 are already defined there, while in the execution-specs tag
-# tests-zkevm@v0.5.0 only BPO1-BPO2 is defined. Making the enum value different.
-# So we hardcode it here for now to the value of the specs/tests used.
-const PROTOCOL_FORK_AMSTERDAM = 20'u64
-
 # https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/stateless.py#L304
 func isActivationActive(
     activation: ForkActivation, execution_payload: ExecutionPayload
@@ -343,7 +337,7 @@ proc executeNewPayload(input: StatelessInput): Result[void, string] =
 
 # https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/stateless.py#L368
 proc verify_stateless_new_payload*(input: StatelessInput): StatelessValidationResult =
-  let new_payload_request_root = hash_tree_root(input.new_payload_request)
+  let new_payload_request_root = compute_new_payload_request_root(input)
 
   StatelessValidationResult(
     new_payload_request_root: new_payload_request_root,
