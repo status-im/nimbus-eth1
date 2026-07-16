@@ -66,9 +66,6 @@ const skipFiles = [
 
   # cases of missing code in witness
   "validation_codes_missing_delegated_code_on_insufficient_balance_call.json",
-
-  # cases of missing states in witness
-  "validation_state_missing_failed_call_target_account_proof_node.json",
 ]
 
 runEESTSuite(
