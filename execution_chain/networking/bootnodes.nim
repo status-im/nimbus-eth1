@@ -153,16 +153,29 @@ proc loadBootstrapNodes*(fileName: string, boot: var BootstrapNodes): Result[voi
   let text = io2.readAllChars(fileName).valueOr:
     return err($error)
 
+  var errors: seq[string]
   for line in splitLines(text):
-    discard ? appendBootstrapNode(line, boot)
+    # A malformed line is skipped (and reported) rather than aborting the whole
+    # file, so one bad entry does not drop every bootnode after it.
+    appendBootstrapNode(line, boot).isOkOr:
+      errors.add error
 
+  if errors.len > 0:
+    return err(errors.join("; "))
   ok()
 
 proc parseBootstrapNodes*(list: openArray[string], boot: var BootstrapNodes): Result[void, string] =
   ## Parse bootnodes from CLI
+  var errors: seq[string]
   for line in list:
-    discard ? appendBootstrapNode(line, boot)
+    # A malformed entry is skipped (and reported) rather than aborting the whole
+    # list, so one bad node (e.g. a discovery-only enode with TCP port 0) does
+    # not drop every valid bootnode after it.
+    appendBootstrapNode(line, boot).isOkOr:
+      errors.add error
 
+  if errors.len > 0:
+    return err(errors.join("; "))
   ok()
 
 func len*(boot: BootstrapNodes): int =
