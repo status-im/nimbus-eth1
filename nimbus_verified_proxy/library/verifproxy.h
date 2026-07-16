@@ -189,6 +189,16 @@ void eth_blockNumber(Context *ctx, CallBackProc cb, void *userData);
 void op_blockNumber(Context *ctx, CallBackProc cb, void *userData);
 
 /**
+ * Retrieve the chain id the proxy is configured for.
+ *
+ * @param ctx       Context pointer.
+ * @param cb        Callback invoked with a hex chain id.
+ * @param userData  pointer to user data
+ */
+void eth_chainId(Context *ctx, CallBackProc cb, void *userData);
+void op_chainId(Context *ctx, CallBackProc cb, void *userData);
+
+/**
  * Retrieve the EIP-4844 blob base fee.
  *
  * @param ctx       Context pointer.
