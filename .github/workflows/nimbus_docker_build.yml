@@ -161,6 +161,13 @@ jobs:
             type=ref,event=branch
             type=sha,prefix={{branch}}-
 
+      - name: Create manifest list and push
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON"
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.EL_REGISTRY_IMAGE }}@sha256:%s ' *)
+
       - name: Docker meta (proxy)
         id: meta-proxy
         uses: docker/metadata-action@v5
@@ -170,17 +177,8 @@ jobs:
             type=ref,event=branch
             type=sha,prefix={{branch}}-
 
-      - name: Create manifest list and push
-        working-directory: ${{ runner.temp }}/digests
-        run: |
-          jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON"
-          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.EL_REGISTRY_IMAGE }}@sha256:%s ' *)
-
       - name: Create proxy manifest list and push
         working-directory: ${{ runner.temp }}/proxy-digests
-        env:
-          DOCKER_METADATA_OUTPUT_JSON: ${{ steps.meta-proxy.outputs.json }}
         run: |
           jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON"
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \

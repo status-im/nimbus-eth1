@@ -41,7 +41,7 @@ RUN rm -f /home/user/nimbus-eth1/build/nimbus_verified_proxy
 COPY --from=build /root/nimbus-eth1/build/nimbus_verified_proxy /home/user/nimbus-eth1/build/nimbus_verified_proxy
 
 ENV PATH="/home/user/nimbus-eth1/build:${PATH}"
-ENTRYPOINT ["nimbus_verified_proxy"]
+ENTRYPOINT ["nimbus_verified_proxy", "--config-file=/config/proxy.toml"]
 WORKDIR /home/user/nimbus-eth1/build
 
 STOPSIGNAL SIGINT
