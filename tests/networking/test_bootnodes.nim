@@ -52,7 +52,7 @@ suite "Bootnodes":
     # ...but the four valid nodes are accepted instead of being dropped.
     check boot.enodes.len == 4
 
-  test "a fully valid list still succeeds":
+  test "a fully valid list succeeds":
     let bn = [
       "enode://2c82017536b1b74b62aa2a81769f4a1213ac9edd3a1df43af5fd008f3305e92bfd9351db9881c9c09de2afc79d3f7f6c271cf2f7231f9021926c0674dc02035c@159.223.116.60:30303?discport=30303",
       "enode://c34353f4d5fcc777863c511a09b3b57f1a9df066578b3432fa1e58d8b0a5d35ca0456b9cd1c38bc9cf30ac9bfecf8b13f0712aae1f1ae5537df8794b622f8ad1@157.230.233.160:30303?discport=30303",
