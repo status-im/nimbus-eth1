@@ -94,7 +94,7 @@ TRUSTED_BLOCK_ROOT=0x12345678901234567890123456789012345678901234567890123456789
 
 ### Run with Docker
 
-Multi-arch images are published to Docker Hub as [`statusim/nvp`](https://hub.docker.com/r/statusim/nvp).
+Multi-arch images are published to Docker Hub as [`statusim/nimbus-verified-proxy`](https://hub.docker.com/r/statusim/nimbus-verified-proxy).
 
 The container's entrypoint reads its configuration from a TOML file mounted at
 `/config/proxy.toml`, so you must provide one. Any option accepted on the command
@@ -126,7 +126,7 @@ docker run --rm \
     -p 8545:8545 -p 8546:8546 \
     -v "$(pwd)/proxy.toml:/config/proxy.toml:ro" \
     -e NIMBUS_VERIFIED_PROXY_TRUSTED_BLOCK_ROOT=0x1234567890123456789012345678901234567890123456789012345678901234 \
-    statusim/nvp
+    statusim/nimbus-verified-proxy
 ```
 
 Configuration is resolved with the following precedence (highest first):

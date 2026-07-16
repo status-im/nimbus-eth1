@@ -23,7 +23,7 @@ on:
 
 env:
   EL_REGISTRY_IMAGE: statusim/nimbus-eth1
-  PROXY_REGISTRY_IMAGE: statusim/nvp
+  PROXY_REGISTRY_IMAGE: statusim/nimbus-verified-proxy
 
 jobs:
   build:
