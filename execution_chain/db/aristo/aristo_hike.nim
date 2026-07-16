@@ -104,6 +104,11 @@ proc step*(
     if path.len <= vtx.pfx.len:
       return err(HikeBranchTailEmpty)
 
+    if path.sharedPrefixLen(vtx.pfx) < vtx.pfx.len:
+      # Path diverges within this extension's own prefix. This proves absence
+      # regardless of the branch children, so don't route into them.
+      return err(HikeBranchMissingEdge)
+
     let
       nibble = path[vtx.pfx.len]
       nextVid = vtx.bVid(nibble)
@@ -114,8 +119,14 @@ proc step*(
     ok (vtx, vtx.pfx.len + 1, nextVid)
 
   of BoundaryNode:
-    # child absent from witness, no reachable child VID
-    return err(HikeBranchMissingEdge)
+    # Child subtree absent from witness, only its hash is known.
+    # If the path doesn't match the boundary's own prefix, the key is not
+    # there either way. If it does match, we'd need the missing subtree to
+    # know for sure. That means missing state in the witness.
+    let vtx = BoundaryNodeRef(vtx)
+    if path.sharedPrefixLen(vtx.pfx) < vtx.pfx.len:
+      return err(HikeBranchMissingEdge)
+    return err(HikeBranchUnresolvedEdge)
 
 
 iterator stepUp*(
