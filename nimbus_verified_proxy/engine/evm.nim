@@ -12,7 +12,7 @@ import
   ../../execution_chain/evm/async_evm_backend,
   ../../execution_chain/evm/async_evm,
   ./accounts,
-  ./header_store,
+  ./blocks,
   ./types
 
 logScope:
@@ -51,6 +51,9 @@ proc toAsyncEvmStateBackend*(engine: RpcVerificationEngine): AsyncEvmStateBacken
     blockHashProc = proc(
         header: Header, number: BlockNumber
     ): Future[Opt[Hash32]] {.async: (raises: [CancelledError]).} =
-      engine.headerStore.getHash(number)
+      let blockHash = (await engine.getBlockHash(number)).valueOr:
+        return Opt.none(Hash32)
+
+      Opt.some(blockHash)
 
   AsyncEvmStateBackend.init(accProc, storageProc, codeProc, blockHashProc)
