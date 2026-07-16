@@ -56,9 +56,7 @@ template requireOpFrontend(ctx: ptr Context, cb: CallBackProc, userData: pointer
     )
     return
 
-proc eth_chainId(
-    ctx: ptr Context, cb: CallBackProc, userData: pointer
-) {.exported.} =
+proc eth_chainId(ctx: ptr Context, cb: CallBackProc, userData: pointer) {.exported.} =
   callbackToC(ctx, cb, userData):
     ctx.frontend.eth_chainId()
 
@@ -435,9 +433,7 @@ proc eth_sendRawTransaction(
   callbackToC(ctx, cb, userData):
     ctx.frontend.eth_sendRawTransaction(txBytes)
 
-proc op_chainId(
-    ctx: ptr Context, cb: CallBackProc, userData: pointer
-) {.exported.} =
+proc op_chainId(ctx: ptr Context, cb: CallBackProc, userData: pointer) {.exported.} =
   requireOpFrontend(ctx, cb, userData)
   callbackToC(ctx, cb, userData):
     ctx.opFrontend.eth_chainId()
