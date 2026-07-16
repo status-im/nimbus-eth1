@@ -978,6 +978,25 @@ proc rpcMain*() =
           storageProof.len() == 1
           verifySlotLeafExists(proofResponse.storageHash, storageProof[0])
 
+    test "debug_setHead":
+      # The current head is a valid target
+      let res = await client.call("debug_setHead", %[%"latest"], EthJson)
+      check res.string == "true"
+
+      # An unknown block cannot become the head
+      expect JsonRpcError:
+        discard await client.call("debug_setHead",
+          %[%"0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"],
+          EthJson)
+
+      # Rewind to genesis: block 1 is discarded. This is the last test in
+      # the suite because it is destructive.
+      let res2 = await client.call("debug_setHead", %[%"0x0"], EthJson)
+      check res2.string == "true"
+
+      let bn = await client.eth_blockNumber()
+      check bn == w3Qty(0'u64)
+
     env.close()
 
   suite "Remote Procedure Calls - Cancun":
