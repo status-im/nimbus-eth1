@@ -207,6 +207,10 @@ static void check_proxyCall_errors(Context *ctx) {
     s = (CbState){0};
     proxyCall(ctx, "eth_sendRawTransaction", "[\"not-hex-bytes\"]", collect_error_cb, &s);
     TEST("proxyCall eth_sendRawTransaction non-hex: error returned", s.called && s.status == RET_DESER_ERROR);
+
+    s = (CbState){0};
+    proxyCall(ctx, "eth_chainId", "[\"0x1\"]", collect_error_cb, &s);
+    TEST("proxyCall eth_chainId extra param: ignored", s.called && s.status == RET_SUCCESS);
 }
 
 static char *read_file(const char *path) {
@@ -288,22 +292,26 @@ static void drain(Context *ctx, int max_iters) {
 // called the iterations probably need to be increased.
 static void check_event_loop(Context *ctx) {
     printf("\n Event loop\n");
-    CbState gas_s    = {0};
-    CbState prio_s   = {0};
-    CbState latest_s = {0};
+    CbState gas_s     = {0};
+    CbState prio_s    = {0};
+    CbState latest_s  = {0};
+    CbState chainid_s = {0};
 
     eth_gasPrice(ctx, collect_error_cb, &gas_s);
     eth_maxPriorityFeePerGas(ctx, collect_error_cb, &prio_s);
     eth_getBlockByNumber(ctx, "latest", false, collect_error_cb, &latest_s);
+    eth_chainId(ctx, collect_error_cb, &chainid_s);
 
     drain(ctx, 2000);
 
     TEST("eth_gasPrice: callback fired",             gas_s.called);
     TEST("eth_maxPriorityFeePerGas: callback fired", prio_s.called);
     TEST("eth_getBlockByNumber latest: callback fired", latest_s.called);
+    TEST("eth_chainId: callback fired",              chainid_s.called);
     TEST("eth_gasPrice: RET_SUCCESS",                gas_s.status  == RET_SUCCESS);
     TEST("eth_maxPriorityFeePerGas: RET_SUCCESS",    prio_s.status == RET_SUCCESS);
     TEST("eth_getBlockByNumber latest: RET_SUCCESS", latest_s.status == RET_SUCCESS);
+    TEST("eth_chainId: RET_SUCCESS",                 chainid_s.status == RET_SUCCESS);
 }
 
 int main(void) {
