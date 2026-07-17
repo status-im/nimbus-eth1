@@ -18,6 +18,12 @@ privateAccess(SharedTable)
 func allocated[K, V](s: SharedTable[K, V]): int =
   s.allocated
 
+func capacity[E](s: SharedSeq[E]): int =
+  # Scope privateAccess to this proc: a file-wide privateAccess(SharedSeq) would
+  # expose the private `data` field and shadow the `data()` template at call sites.
+  privateAccess(SharedSeq)
+  s.cap
+
 func isPowerOfTwoOrZero(n: int): bool =
   n == 0 or (n and (n - 1)) == 0
 
@@ -465,3 +471,340 @@ suite "SharedBytes Tests":
 
     dispose(b)
     dispose(a) # safe no-op on the moved-from value
+
+suite "SharedString Tests":
+
+  test "init and toString round-trip a non-empty string":
+    let input = "hello world"
+    var ss = SharedString.init(input)
+    check:
+      ss.data(asOpenArray = true).len == input.len
+      ss.toString() == input
+    dispose(ss)
+
+  test "init from an empty string yields an empty SharedString":
+    var ss = SharedString.init("")
+    check:
+      ss.data(asOpenArray = true).len == 0
+      ss.toString() == ""
+      ss.data(asOpenArray = true).len == 0
+    dispose(ss)
+
+  test "toString preserves embedded zero bytes":
+    let input = "a\0b\0\0c"
+    var ss = SharedString.init(input)
+    check:
+      ss.data(asOpenArray = true).len == input.len
+      ss.toString() == input
+    dispose(ss)
+
+  test "init copies the input, leaving SharedString independent of the source":
+    var input = "mutable"
+    var ss = SharedString.init(input)
+
+    # Mutating and even clearing the source must not affect the copy.
+    input[0] = 'X'
+    input.setLen(0)
+
+    check ss.toString() == "mutable"
+    dispose(ss)
+
+  test "data (asOpenArray = true) exposes a matching read-only char view":
+    let input = "abcd"
+    var ss = SharedString.init(input)
+    check:
+      ss.data(asOpenArray = true).len == input.len
+      ss.data(asOpenArray = true)[0] == 'a'
+      ss.data(asOpenArray = true)[3] == 'd'
+    dispose(ss)
+
+  test "round-trips a large string":
+    var input = newString(50_000)
+    for i in 0 ..< input.len:
+      input[i] = char(ord('a') + (i mod 26))
+    var ss = SharedString.init(input)
+    check:
+      ss.data(asOpenArray = true).len == input.len
+      ss.toString() == input
+    dispose(ss)
+
+  test "dispose frees, resets and is idempotent":
+    var ss = SharedString.init("data")
+
+    dispose(ss)
+    check:
+      ss.data(asOpenArray = true).len == 0
+      ss.toString() == ""
+
+    dispose(ss) # second dispose must be a safe no-op
+    check ss.toString() == ""
+
+  test "move transfers ownership and clears the source":
+    var a = SharedString.init("payload")
+    var b = move(a)
+
+    check:
+      b.toString() == "payload"
+      a.data(asOpenArray = true).len == 0 # the moved-from value is reset
+
+    dispose(b)
+    dispose(a) # safe no-op on the moved-from value
+
+type
+  # A plain (copyMem-able) object with several fields of different sizes. The
+  # char/int64 layout has interior padding, so element copying must respect the
+  # object's size and alignment rather than a flat byte count.
+  Elem = object
+    id: uint32
+    tag: char
+    score: int64
+
+suite "SharedSeq with object element Tests":
+
+  test "init and data round-trip a seq of multi-field objects":
+    let input =
+      @[
+        Elem(id: 1'u32, tag: 'a', score: 1000'i64),
+        Elem(id: 2'u32, tag: 'b', score: -2000'i64),
+        Elem(id: 3'u32, tag: 'z', score: 0'i64),
+      ]
+    var ss = SharedSeq[Elem].init(input)
+    check:
+      ss.data(asOpenArray = true).len == input.len
+      ss.data() == input
+    dispose(ss)
+
+  test "every field of every element survives the copy":
+    var input = newSeq[Elem](1000)
+    for i in 0 ..< input.len:
+      input[i] =
+        Elem(id: uint32(i), tag: char(ord('a') + (i mod 26)), score: int64(i) * 7 - 3)
+    var ss = SharedSeq[Elem].init(input)
+
+    check ss.data(asOpenArray = true).len == input.len
+
+    let got = ss.data()
+    for i in 0 ..< input.len:
+      check:
+        got[i].id == uint32(i)
+        got[i].tag == char(ord('a') + (i mod 26))
+        got[i].score == int64(i) * 7 - 3
+    dispose(ss)
+
+  test "init from an empty seq yields an empty SharedSeq":
+    var ss = SharedSeq[Elem].init(newSeq[Elem]())
+    check:
+      ss.data(asOpenArray = true).len == 0
+      ss.data().len == 0
+      ss.data(asOpenArray = true).len == 0
+    dispose(ss)
+
+  test "init copies the input, leaving the SharedSeq independent of the source":
+    var input =
+      @[Elem(id: 1'u32, tag: 'a', score: 10'i64), Elem(id: 2'u32, tag: 'b', score: 20'i64)]
+    var ss = SharedSeq[Elem].init(input)
+
+    # Mutating and even clearing the source must not affect the copy.
+    input[0].id = 99'u32
+    input.setLen(0)
+
+    check ss.data() ==
+      @[Elem(id: 1'u32, tag: 'a', score: 10'i64), Elem(id: 2'u32, tag: 'b', score: 20'i64)]
+    dispose(ss)
+
+  test "data (asOpenArray = true) exposes a matching read-only object view":
+    let input =
+      @[Elem(id: 5'u32, tag: 'x', score: 50'i64), Elem(id: 6'u32, tag: 'y', score: 60'i64)]
+    var ss = SharedSeq[Elem].init(input)
+    check:
+      ss.data(asOpenArray = true).len == 2
+      ss.data(asOpenArray = true)[0] == input[0]
+      ss.data(asOpenArray = true)[1].id == 6'u32
+    dispose(ss)
+
+  test "dispose frees, resets and is idempotent":
+    var ss = SharedSeq[Elem].init(@[Elem(id: 1'u32, tag: 'a', score: 1'i64)])
+
+    dispose(ss)
+    check ss.data(asOpenArray = true).len == 0
+
+    dispose(ss) # second dispose must be a safe no-op
+    check ss.data(asOpenArray = true).len == 0
+
+  test "move transfers ownership and clears the source":
+    var a = SharedSeq[Elem].init(@[Elem(id: 7'u32, tag: 'q', score: 77'i64)])
+    var b = move(a)
+
+    check:
+      b.data(asOpenArray = true).len == 1
+      b.data() == @[Elem(id: 7'u32, tag: 'q', score: 77'i64)]
+      a.data(asOpenArray = true).len == 0 # the moved-from value is reset
+
+    dispose(b)
+    dispose(a) # safe no-op on the moved-from value
+
+  test "init/dispose does not leak shared memory":
+    let before = getOccupiedSharedMem()
+    for _ in 0 ..< 100:
+      var ss = SharedSeq[Elem].init(
+        @[
+          Elem(id: 1'u32, tag: 'a', score: 1'i64),
+          Elem(id: 2'u32, tag: 'b', score: 2'i64),
+        ]
+      )
+      dispose(ss)
+    check getOccupiedSharedMem() == before
+
+suite "SharedSeq growth Tests":
+  test "add, index and len on a growing SharedSeq":
+    var s: SharedSeq[int]
+    check s.len == 0
+    for i in 0 ..< 1000:
+      s.add(i)
+    check s.len == 1000
+    for i in 0 ..< 1000:
+      check s[i] == i
+
+    var sum = 0
+    for x in s.items():
+      sum += x
+    check sum == (999 * 1000) div 2
+
+    s.dispose()
+
+  test "grow rounds capacity up to a power of two":
+    var s: SharedSeq[int]
+    check s.capacity == 0
+    s.add(0)
+    check s.capacity == 16 # initial floor
+    for i in 1 ..< 1000:
+      s.add(i)
+      check:
+        isPowerOfTwoOrZero(s.capacity)
+        s.capacity >= s.len
+        s.capacity >= 16 # floor
+    check s.capacity == 1024 # 1000 elements -> next power of two
+    s.dispose()
+
+    # setLen to an arbitrary size also rounds the allocation up to a power of two.
+    var t: SharedSeq[int]
+    t.setLen(2050, zeroed = true)
+    check:
+      t.len == 2050
+      t.capacity == 4096
+    t.dispose()
+
+  test "setLen with exact sizes capacity exactly, no power-of-two rounding":
+    var s: SharedSeq[int]
+    s.setLen(2050, zeroed = true, exact = true)
+    check:
+      s.len == 2050
+      s.capacity == 2050 # exact, not 4096
+    # a further exact grow reallocs to exactly the requested size
+    s.setLen(3000, exact = true)
+    check:
+      s.len == 3000
+      s.capacity == 3000
+    # a subsequent default (power-of-two) grow still rounds up
+    s.setLen(5000, zeroed = true)
+    check:
+      s.len == 5000
+      s.capacity == 8192
+    s.dispose()
+
+  test "init with zeroed produces zero-filled elements":
+    var s = SharedSeq[int].init(5, zeroed = true)
+    check s.len == 5
+    for i in 0 ..< 5:
+      check s[i] == 0
+    s.dispose()
+
+  test "setLen with zeroed zero-fills newly-live elements and preserves existing":
+    var s = SharedSeq[int].init(3, zeroed = true)
+    s[0] = 1
+    s[1] = 2
+    s[2] = 3
+    # Grow well past capacity so grow() reallocs (its tail is NOT zeroed); setLen
+    # must still zero every element that becomes live, and keep the old ones.
+    s.setLen(64, zeroed = true)
+    check s.len == 64
+    check:
+      s[0] == 1
+      s[1] == 2
+      s[2] == 3
+    for i in 3 ..< 64:
+      check s[i] == 0
+    # A second growth zeroes the next live range too, even out of the previously
+    # over-allocated (garbage) capacity.
+    s.setLen(200, zeroed = true)
+    check s.len == 200
+    for i in 64 ..< 200:
+      check s[i] == 0
+    s.dispose()
+
+  test "a fixed-size SharedSeq can still be grown with add":
+    var s = SharedSeq[int].init(3) # 3 in-use elements
+    s[0] = 10
+    s[1] = 11
+    s[2] = 12
+    check s.len == 3
+    s.add(13)
+    check:
+      s.len == 4
+      s[3] == 13
+    s.dispose()
+
+  test "mitems allows in-place mutation":
+    var s: SharedSeq[int]
+    for i in 0 ..< 10:
+      s.add(i)
+    for x in s.mitems():
+      x = x * 2
+    for i in 0 ..< 10:
+      check s[i] == i * 2
+    s.dispose()
+
+  test "dispose resets and is idempotent after growth":
+    var s: SharedSeq[int]
+    s.add(1)
+    s.dispose()
+    check s.len == 0
+    s.dispose() # safe no-op on the already-disposed value
+    check s.len == 0
+
+  test "move transfers ownership of a grown SharedSeq and clears the source":
+    var a: SharedSeq[int]
+    a.add(7)
+    a.add(8)
+    var b = move(a)
+
+    check:
+      b.len == 2
+      b[0] == 7
+      b[1] == 8
+      a.len == 0 # the moved-from value is reset
+
+    dispose(b)
+    dispose(a) # safe no-op on the moved-from value
+
+  test "grow/dispose does not leak shared memory":
+    let before = getOccupiedSharedMem()
+    for _ in 0 ..< 100:
+      var s: SharedSeq[int]
+      for i in 0 ..< 50: # forces several growth doublings
+        s.add(i)
+      s.dispose()
+    check getOccupiedSharedMem() == before
+
+  test "grown SharedSeq of move-only SharedBytes values does not leak":
+    let before = getOccupiedSharedMem()
+    for _ in 0 ..< 100:
+      var s: SharedSeq[SharedBytes]
+      s.add(SharedBytes.init(@[1.byte, 2, 3]))
+      s.add(SharedBytes.init(@[4.byte, 5, 6, 7]))
+      # The outer SharedSeq does not own its elements' memory: dispose each
+      # element before disposing the backing storage.
+      for e in s.mitems():
+        e.dispose()
+      s.dispose()
+    check getOccupiedSharedMem() == before

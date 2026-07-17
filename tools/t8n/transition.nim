@@ -324,6 +324,8 @@ proc exec(ctx: TransContext,
   var
     withdrawalReqs: seq[byte]
     consolidationReqs: seq[byte]
+    builderDepositReqs: seq[byte]
+    builderExitReqs: seq[byte]
 
   if vmState.com.isPragueOrLater(ctx.env.currentTimestamp):
     # Execute EIP-7002 and EIP-7251 before calculating stateRoot
@@ -331,6 +333,12 @@ proc exec(ctx: TransContext,
       raise newError(ErrorConfig, error)
     consolidationReqs = processDequeueConsolidationRequests(vmState).valueOr:
       raise newError(ErrorConfig, error)
+
+    if vmState.com.isAmsterdamOrLater(ctx.env.currentTimestamp):
+      builderDepositReqs = processBuilderDepositRequests(vmState).valueOr:
+        raise newError(ErrorConfig, error)
+      builderExitReqs = processBuilderExitRequests(vmState).valueOr:
+        raise newError(ErrorConfig, error)
 
   # Commit block access list tracker changes for post-execution system calls
   if vmState.balTrackerEnabled:
@@ -384,6 +392,10 @@ proc exec(ctx: TransContext,
     executionRequests.append(DEPOSIT_REQUEST_TYPE, depositReqs)
     executionRequests.append(WITHDRAWAL_REQUEST_TYPE, withdrawalReqs)
     executionRequests.append(CONSOLIDATION_REQUEST_TYPE, consolidationReqs)
+
+    if vmState.com.isAmsterdamOrLater(ctx.env.currentTimestamp):
+      executionRequests.append(BUILDER_DEPOSIT_REQUEST_TYPE, builderDepositReqs)
+      executionRequests.append(BUILDER_EXIT_REQUEST_TYPE, builderExitReqs)
 
     let requestsHash = calcRequestsHash(executionRequests)
     output.result.requestsHash = Opt.some(requestsHash)
@@ -561,7 +573,7 @@ proc transitionAction*(ctx: var TransContext,
       if ctx.env.currentRandom.isNone:
         raise newError(ErrorConfig, "post-merge requires currentRandom to be defined in env")
 
-      if ctx.env.currentDifficulty.isSome and ctx.env.currentDifficulty.get() != 0:
+      if ctx.env.currentDifficulty.isSome and ctx.env.currentDifficulty.value.isZero.not:
         raise newError(ErrorConfig, "post-merge difficulty must be zero (or omitted) in env")
       ctx.env.currentDifficulty = Opt.none(DifficultyInt)
 
@@ -616,7 +628,7 @@ proc transitionAction*(ctx: var TransContext,
     vmState.ledger.txFrame.dispose()
     vmState.dispose()
     vmState = nil
-    com.taskpool.shutdown()
+    com.shutdownTaskpool()
     com.db.close()
 
     return res

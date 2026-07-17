@@ -437,7 +437,7 @@ proc getExecutionApiFrontend*(
         return err((FrontendError, "Filter doesn't exist", UNTAGGED))
 
     let
-      filter = ?opEngine.resolveFilterTags(filterItem.filter)
+      filter = ?(await opEngine.resolveFilterTags(filterItem.filter))
       toBlock = filter.toBlock.get().number
 
     if filterItem.blockMarker.isSome() and toBlock <= filterItem.blockMarker.get():
@@ -489,7 +489,7 @@ proc getExecutionApiFrontend*(
       db,
       config = chainConfigForNetwork(l1ChainId),
       initializeDb = false,
-      statelessProviderEnabled = true,
+      statelessProvider = true,
     )
 
     let header = opEngine.penaltyOr(await opEngine.getHeader(blockId("latest")))

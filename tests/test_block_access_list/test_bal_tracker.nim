@@ -17,8 +17,61 @@ import
   ../../execution_chain/db/core_db/memory_only,
   ../../execution_chain/db/core_db,
   ../../execution_chain/concurrency/shared_types,
-  ../../execution_chain/block_access_list/block_access_list_tracker
+  ../../execution_chain/block_access_list/bal_tracker
 
+# The builder no longer exposes its internal storage, so these helpers assert
+# against the public BlockAccessList produced by buildBlockAccessList. Building
+# is non-consuming, so it can be called repeatedly within a test.
+
+proc buildBal(tracker: BlockAccessListTrackerRef): BlockAccessList =
+  tracker.builder[].buildBlockAccessList()[]
+
+func findAcc(bal: BlockAccessList, address: Address): Opt[AccountChanges] =
+  for acc in bal:
+    if acc.address == address:
+      return Opt.some(acc)
+  Opt.none(AccountChanges)
+
+func hasAccount(bal: BlockAccessList, address: Address): bool =
+  bal.findAcc(address).isSome()
+
+func balanceAt(acc: AccountChanges, balIndex: int): Opt[UInt256] =
+  for c in acc.balanceChanges:
+    if c.blockAccessIndex == balIndex.BlockAccessIndex:
+      return Opt.some(c.postBalance)
+  Opt.none(UInt256)
+
+func nonceAt(acc: AccountChanges, balIndex: int): Opt[AccountNonce] =
+  for c in acc.nonceChanges:
+    if c.blockAccessIndex == balIndex.BlockAccessIndex:
+      return Opt.some(c.newNonce)
+  Opt.none(AccountNonce)
+
+func codeAt(acc: AccountChanges, balIndex: int): Opt[seq[byte]] =
+  for c in acc.codeChanges:
+    if c.blockAccessIndex == balIndex.BlockAccessIndex:
+      return Opt.some(c.newCode)
+  Opt.none(seq[byte])
+
+func storageAt(acc: AccountChanges, slot: UInt256, balIndex: int): Opt[UInt256] =
+  for sc in acc.storageChanges:
+    if sc.slot == slot:
+      for ch in sc.changes:
+        if ch.blockAccessIndex == balIndex.BlockAccessIndex:
+          return Opt.some(ch.newValue)
+  Opt.none(UInt256)
+
+func hasStorageChange(acc: AccountChanges, slot: UInt256): bool =
+  for sc in acc.storageChanges:
+    if sc.slot == slot:
+      return true
+  false
+
+func hasStorageRead(acc: AccountChanges, slot: UInt256): bool =
+  for r in acc.storageReads:
+    if r == slot:
+      return true
+  false
 
 suite "Block access list tracker":
   let
@@ -84,9 +137,9 @@ suite "Block access list tracker":
       tracker.trackBalanceChange(address1, balance1 + 1.u256)
       tracker.commitCallFrame()
 
-      check tracker.builder.accounts.contains(address1)
-      tracker.builder.accounts.withValue(address1, accData):
-        check accData[].balanceChanges.contains(balIndex)
+      let acc = tracker.buildBal().findAcc(address1)
+      check acc.isSome()
+      check acc.get().balanceAt(balIndex).isSome()
 
   test "Capture pre balance - stores in preBalanceCache and returns":
     block:
@@ -141,9 +194,14 @@ suite "Block access list tracker":
         cacheKey in tracker.preStorageCache
 
   test "Track address access":
-    check not tracker.builder.accounts.contains(address1)
-    check not tracker.builder.accounts.contains(address2)
-    check not tracker.builder.accounts.contains(address4)
+    tracker.setBlockAccessIndex(0)
+
+    block:
+      let bal = tracker.buildBal()
+      check:
+        not bal.hasAccount(address1)
+        not bal.hasAccount(address2)
+        not bal.hasAccount(address4)
 
     tracker.beginCallFrame()
     tracker.trackAddressAccess(address1)
@@ -151,9 +209,11 @@ suite "Block access list tracker":
     tracker.trackAddressAccess(address4)
     tracker.commitCallFrame()
 
-    check tracker.builder.accounts.contains(address1)
-    check tracker.builder.accounts.contains(address2)
-    check tracker.builder.accounts.contains(address4)
+    let bal = tracker.buildBal()
+    check:
+      bal.hasAccount(address1)
+      bal.hasAccount(address2)
+      bal.hasAccount(address4)
 
   test "Begin, commit and rollback call frame":
     check tracker.callFrameSnapshots.len() == 0
@@ -176,7 +236,7 @@ suite "Block access list tracker":
     tracker.beginCallFrame()
     check tracker.callFrameSnapshots.len() == 1
 
-    check not tracker.builder.accounts.contains(address2)
+    check not tracker.buildBal().hasAccount(address2)
     tracker.trackBalanceChange(address2, newBalance)
 
     check:
@@ -185,11 +245,9 @@ suite "Block access list tracker":
 
     tracker.commitCallFrame()
 
-    check tracker.builder.accounts.contains(address2)
-    tracker.builder.accounts.withValue(address2, accData):
-      check:
-        accData[].balanceChanges.contains(balIndex)
-        accData[].balanceChanges.get(balIndex) == Opt.some(newBalance)
+    let acc = tracker.buildBal().findAcc(address2)
+    check acc.isSome()
+    check acc.get().balanceAt(balIndex) == Opt.some(newBalance)
 
   test "Track nonce change":
     let
@@ -200,7 +258,7 @@ suite "Block access list tracker":
     tracker.beginCallFrame()
     check tracker.callFrameSnapshots.len() == 1
 
-    check not tracker.builder.accounts.contains(address2)
+    check not tracker.buildBal().hasAccount(address2)
     tracker.trackNonceChange(address2, newNonce)
 
     check:
@@ -209,11 +267,9 @@ suite "Block access list tracker":
 
     tracker.commitCallFrame()
 
-    check tracker.builder.accounts.contains(address2)
-    tracker.builder.accounts.withValue(address2, accData):
-      check:
-        accData[].nonceChanges.contains(balIndex)
-        accData[].nonceChanges.get(balIndex) == Opt.some(newNonce)
+    let acc = tracker.buildBal().findAcc(address2)
+    check acc.isSome()
+    check acc.get().nonceAt(balIndex) == Opt.some(newNonce)
 
   test "Track code change":
     let
@@ -224,7 +280,7 @@ suite "Block access list tracker":
     tracker.beginCallFrame()
     check tracker.callFrameSnapshots.len() == 1
 
-    check not tracker.builder.accounts.contains(address2)
+    check not tracker.buildBal().hasAccount(address2)
     tracker.trackCodeChange(address2, newCode)
 
     check:
@@ -233,43 +289,34 @@ suite "Block access list tracker":
 
     tracker.commitCallFrame()
 
-    check tracker.builder.accounts.contains(address2)
-    # codeChanges values are SharedBytes (shared heap), which cannot be copied
-    # out, so view them in place and compare the bytes via data.
-    var hasCode = false
-    var codeBytes: seq[byte]
-    tracker.builder.accounts.withValue(address2, accData):
-      accData[].codeChanges.withValue(balIndex, sharedCode):
-        hasCode = true
-        codeBytes = sharedCode[].data()
-    check:
-      hasCode
-      codeBytes == newCode
+    let acc = tracker.buildBal().findAcc(address2)
+    check acc.isSome()
+    check acc.get().codeAt(balIndex) == Opt.some(newCode)
 
   test "Track storage read":
+    tracker.setBlockAccessIndex(0)
+
     block:
-      check not tracker.builder.accounts.contains(address1)
+      check not tracker.buildBal().hasAccount(address1)
 
       tracker.beginCallFrame()
       tracker.trackStorageRead(address1, slot1)
       tracker.commitCallFrame()
 
-      check tracker.builder.accounts.contains(address1)
-      tracker.builder.accounts.withValue(address1, accData):
-        check:
-          accData[].storageReads.contains(slot1)
+      let acc = tracker.buildBal().findAcc(address1)
+      check acc.isSome()
+      check acc.get().hasStorageRead(slot1)
 
     block:
-      check not tracker.builder.accounts.contains(address2)
+      check not tracker.buildBal().hasAccount(address2)
 
       tracker.beginCallFrame()
       tracker.trackStorageRead(address2, slot2)
       tracker.commitCallFrame()
 
-      check tracker.builder.accounts.contains(address2)
-      tracker.builder.accounts.withValue(address2, accData):
-        check:
-          accData[].storageReads.contains(slot2)
+      let acc = tracker.buildBal().findAcc(address2)
+      check acc.isSome()
+      check acc.get().hasStorageRead(slot2)
 
   test "Track storage write - pre-state value not equal to post state value":
     let
@@ -278,7 +325,7 @@ suite "Block access list tracker":
       postStateValue = 100_000.u256
 
     check:
-      not tracker.builder.accounts.contains(address1)
+      not tracker.buildBal().hasAccount(address1)
       (address1, slot1) notin tracker.preStorageCache
 
     tracker.setBlockAccessIndex(balIndex)
@@ -292,15 +339,13 @@ suite "Block access list tracker":
     tracker.commitCallFrame()
 
     check:
-      tracker.builder.accounts.contains(address1)
+      tracker.buildBal().hasAccount(address1)
       (address1, slot1) in tracker.preStorageCache
       tracker.preStorageCache.getOrDefault((address1, slot1)) == preStateValue
 
-    tracker.builder.accounts.withValue(address1, accData):
-      check accData[].storageChanges.contains(slot1)
-      accData[].storageChanges.withValue(slot1, slotChanges):
-        slotChanges[].withValue(balIndex, slotValue):
-          check slotValue[] == postStateValue
+    let acc = tracker.buildBal().findAcc(address1)
+    check acc.isSome()
+    check acc.get().storageAt(slot1, balIndex) == Opt.some(postStateValue)
 
   test "Track storage write - pre-state value is equal to post state value":
     let
@@ -309,7 +354,7 @@ suite "Block access list tracker":
       postStateValue = 0.u256
 
     check:
-      not tracker.builder.accounts.contains(address2)
+      not tracker.buildBal().hasAccount(address2)
       (address2, slot2) notin tracker.preStorageCache
 
     tracker.setBlockAccessIndex(balIndex)
@@ -321,19 +366,20 @@ suite "Block access list tracker":
     tracker.commitCallFrame()
 
     check:
-      tracker.builder.accounts.contains(address2)
+      tracker.buildBal().hasAccount(address2)
       (address2, slot2) in tracker.preStorageCache
       tracker.preStorageCache.getOrDefault((address2, slot2)) == preStateValue
 
-    tracker.builder.accounts.withValue(address2, accData):
-      check:
-        not accData[].storageChanges.contains(slot2)
-        accData[].storageReads.contains(slot2)
+    let acc = tracker.buildBal().findAcc(address2)
+    check acc.isSome()
+    check:
+      not acc.get().hasStorageChange(slot2)
+      acc.get().hasStorageRead(slot2)
 
   test "Handle in transaction self destruct":
     let balIndex = 10
 
-    check not tracker.builder.accounts.contains(address1)
+    check not tracker.buildBal().hasAccount(address1)
 
     tracker.setBlockAccessIndex(balIndex)
     tracker.beginCallFrame()
@@ -353,37 +399,36 @@ suite "Block access list tracker":
     check:
       not tracker.pendingCallFrame().storageChanges.contains((address1, slot1))
       tracker.pendingCallFrame().balanceChanges.contains(address1)
-      not tracker.pendingCallFrame().nonceChanges.contains(address1)
-      not tracker.pendingCallFrame().codeChanges.contains(address1)
+      tracker.pendingCallFrame().nonceChanges.contains(address1)
+      tracker.pendingCallFrame().codeChanges.contains(address1)
 
     tracker.commitCallFrame()
 
-    check tracker.builder.accounts.contains(address1)
-    tracker.builder.accounts.withValue(address1, accData):
-      # Compute codeChanges membership separately: a `notin` inside `check`
-      # would try to stringify the Table[int, SharedBytes], which is non-copyable.
-      let hasCodeChange = balIndex in accData[].codeChanges
-      check:
-        slot1 notin accData[].storageChanges
-        slot1 in accData[].storageReads
-        balIndex in accData[].balanceChanges
-        balIndex notin accData[].nonceChanges
-        not hasCodeChange
+    let acc = tracker.buildBal().findAcc(address1)
+    check acc.isSome()
+    check:
+      not acc.get().hasStorageChange(slot1)
+      acc.get().hasStorageRead(slot1)
+      acc.get().balanceAt(balIndex).isSome()
+      acc.get().nonceAt(balIndex).isSome()
+      acc.get().codeAt(balIndex).isSome()
+      acc.get().balanceAt(balIndex) == Opt.some(balance1 + 2.u256)
 
   test "tracker owns and frees a builder it allocated":
     let before = getOccupiedSharedMem()
     for _ in 0 ..< 50:
       let owned = BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger)
       check owned.builderOwner
-      owned.builder[].addTouchedAccount(address1)
-      check owned.builder[].accounts.contains(address1)
+      owned.builder[].ensureIndexCount(1)
+      owned.builder[].addTouchedAccount(0, address1)
+      check owned.builder[].buildBlockAccessList()[].hasAccount(address1)
       owned.dispose()
     check getOccupiedSharedMem() == before
 
   test "several trackers share one builder without owning it":
     let before = getOccupiedSharedMem()
 
-    var shared = BlockAccessListBuilder.newShared(threadSafe = true)
+    var shared = BlockAccessListBuilder.newShared()
     let
       t1 = BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger, shared)
       t2 = BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger, shared)
@@ -394,17 +439,20 @@ suite "Block access list tracker":
       t1.builder == shared
       t2.builder == shared
 
-    t1.builder[].addTouchedAccount(address1)
-    t2.builder[].addTouchedAccount(address2)
+    # Not concurrent: both writes happen on this thread, so a single index
+    # partition with one writer at a time is sufficient.
+    shared[].ensureIndexCount(1)
+    t1.builder[].addTouchedAccount(0, address1)
+    t2.builder[].addTouchedAccount(0, address2)
     check:
-      shared[].accounts.contains(address1)
-      shared[].accounts.contains(address2)
+      shared[].buildBlockAccessList()[].hasAccount(address1)
+      shared[].buildBlockAccessList()[].hasAccount(address2)
 
     t1.dispose()
     t2.dispose()
     check:
-      shared[].accounts.contains(address1)
-      shared[].accounts.contains(address2)
+      shared[].buildBlockAccessList()[].hasAccount(address1)
+      shared[].buildBlockAccessList()[].hasAccount(address2)
 
     shared.dispose()
     check getOccupiedSharedMem() == before

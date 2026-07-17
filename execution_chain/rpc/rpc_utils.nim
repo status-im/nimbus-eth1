@@ -200,6 +200,7 @@ proc populateBlockObject*(blockHash: Hash32,
   result.excessBlobGas = w3Qty(header.excessBlobGas)
   result.requestsHash = header.requestsHash
   result.blockAccessListHash = header.blockAccessListHash
+  result.slotNumber = header.slotNumber
 
 proc populateReceipt*(rec: StoredReceipt, gasUsed: GasInt, tx: Transaction,
                       txIndex: uint64, header: Header, com: CommonRef): ReceiptObject =
@@ -333,14 +334,26 @@ proc createAccessList*(header: Header,
     prevTracer = tracer
 
 proc populateConfigObject*(com: CommonRef, fork: HardFork): ConfigObject =
-  let
-    cancunSystemContracts: seq[SystemContractPair] = @[
+  const
+    cancunSystemContracts = [
       SystemContractPair(
         address: BEACON_ROOTS_ADDRESS,
         name: "BEACON_ROOTS_ADDRESS"
       )
     ]
-    pragueSystemContracts: seq[SystemContractPair] = @[
+    amsterdamSystemContracts = [
+      SystemContractPair(
+        address: BUILDER_DEPOSIT_CONTRACT_ADDRESS,
+        name: "BUILDER_DEPOSIT_CONTRACT_ADDRESS"
+      ),
+      SystemContractPair(
+        address: BUILDER_EXIT_CONTRACT_ADDRESS,
+        name: "BUILDER_EXIT_CONTRACT_ADDRESS"
+      )
+    ]
+
+  let
+    pragueSystemContracts = [
       SystemContractPair(
         address: CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
         name: "CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS"
@@ -382,12 +395,14 @@ proc populateConfigObject*(com: CommonRef, fork: HardFork): ConfigObject =
     )
 
   # System Contracts
-  if fork == Cancun:
-    configObject.systemContracts = cancunSystemContracts
-  elif fork >= Prague:
-    configObject.systemContracts = cancunSystemContracts & pragueSystemContracts
-  else:
-    configObject.systemContracts = @[]
+  if fork >= Cancun:
+    configObject.systemContracts = @(cancunSystemContracts)
+
+  if fork >= Prague:
+    configObject.systemContracts.add pragueSystemContracts
+
+  if fork >= Amsterdam:
+    configObject.systemContracts.add amsterdamSystemContracts
 
   return configObject
 

@@ -56,6 +56,10 @@ template requireOpFrontend(ctx: ptr Context, cb: CallBackProc, userData: pointer
     )
     return
 
+proc eth_chainId(ctx: ptr Context, cb: CallBackProc, userData: pointer) {.exported.} =
+  callbackToC(ctx, cb, userData):
+    ctx.frontend.eth_chainId()
+
 proc eth_blockNumber(
     ctx: ptr Context, cb: CallBackProc, userData: pointer
 ) {.exported.} =
@@ -428,6 +432,11 @@ proc eth_sendRawTransaction(
 
   callbackToC(ctx, cb, userData):
     ctx.frontend.eth_sendRawTransaction(txBytes)
+
+proc op_chainId(ctx: ptr Context, cb: CallBackProc, userData: pointer) {.exported.} =
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.eth_chainId()
 
 proc op_blockNumber(
     ctx: ptr Context, cb: CallBackProc, userData: pointer
@@ -850,6 +859,9 @@ proc proxyCall(
       return
 
   case $name
+  of "eth_chainId":
+    requireParams(0)
+    eth_chainId(ctx, cb, userData)
   of "eth_blockNumber":
     requireParams(0)
     eth_blockNumber(ctx, cb, userData)
@@ -1013,6 +1025,9 @@ proc proxyCall(
   of "eth_sendRawTransaction":
     requireParams(1)
     eth_sendRawTransaction(ctx, parsedParams[0].getStr().cstring, cb, userData)
+  of "op_chainId":
+    requireParams(0)
+    op_chainId(ctx, cb, userData)
   of "op_blockNumber":
     requireParams(0)
     op_blockNumber(ctx, cb, userData)

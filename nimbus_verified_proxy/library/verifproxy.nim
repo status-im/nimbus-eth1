@@ -9,6 +9,7 @@ import
   chronos,
   std/[json, options, strutils],
   stint,
+  web3/eth_api_types,
   beacon_chain/spec/digest,
   beacon_chain/spec/beaconstate,
   beacon_chain/spec/forks,
@@ -295,6 +296,7 @@ proc run*(
       accountCacheLen = config.accountCacheLen,
       codeCacheLen = config.codeCacheLen,
       storageCacheLen = config.storageCacheLen,
+      anchor = blockId("safe"),
     ).valueOr:
       raise newException(ProxyError, "Couldn't initialize OP verification engine")
 

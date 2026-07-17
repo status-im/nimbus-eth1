@@ -76,19 +76,21 @@ proc prepareEnv*(
 
     var testEnv = TestEnv()
 
-    let
-      com = CommonRef.new(memDB, config,
-        statelessProviderEnabled = statelessEnabled,
-        statelessWitnessValidation = false, # Running stateless execution separately in test runner
-        optimisticStatePrefetch = parallelEnabled,
-        balStatePrefetch = parallelEnabled)
-
+    let com = CommonRef.new(memDB, config,
+      statelessProvider = statelessEnabled,
+      statelessWitnessValidation = false, # Running stateless execution separately in test runner
+      parallelSenderRecovery = parallelEnabled,      
+      optimisticStatePrefetch = parallelEnabled,
+      balStatePrefetch = parallelEnabled,
+      balParallelExecution = parallelEnabled
+    )
     com.db.mpt.parallelStateRootComputation = parallelEnabled
 
     if parallelEnabled:
       let taskpool =
         try:
-          Taskpool.new(numThreads = min(countProcessors(), 16))
+          # Use between 2 and 16 threads
+          Taskpool.new(numThreads = max(min(countProcessors(), 16), 2))
         except CatchableError as exc:
           debugEcho "Failed to start taskpool: ", exc.msg
           quit(QuitFailure)

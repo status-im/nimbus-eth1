@@ -155,13 +155,26 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
 
     #   traceBlock(com, EthBlock.init(move(header), move(body)), flags)
 
-    # proc debug_setHead(quantityTag: BlockTag): bool =
-    #   ## Sets the current head of the local chain by block number.
-    #   ## Note, this is a destructive action and may severely damage your chain.
-    #   ## Use with extreme caution.
-    #   let
-    #     header = chainDB.headerFromTag(quantityTag)
-    #   chainDB.setHead(header)
+    proc debug_setHead(quantityTag: BlockTag): bool {.async: (raises: [CancelledError, ApplicationError]).} =
+      ## Sets the current head of the local chain by block number, hash or tag.
+      ## Blocks above the new head are discarded, but only blocks still held
+      ## in memory (above the persisted base) can become the new head.
+      ## Note, this is a destructive action and may severely damage your chain.
+      ## Use with extreme caution.
+
+      let
+        header = chain.headerFromTag(quantityTag).valueOr:
+          raise invalidParams(error)
+        headHash = header.computeBlockHash()
+
+      if chain.queue.isNil:
+        chain.setHead(headHash).isOkOr:
+          raise invalidParams(error)
+      else:
+        (await chain.queueSetHead(headHash)).isOkOr:
+          raise invalidParams(error.msg)
+
+      true
 
     # https://ethereum.github.io/execution-apis/api/methods/debug_getBadBlocks
     proc debug_getBadBlocks(): seq[BadBlock] =
@@ -211,7 +224,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
       res
 
     # https://ethereum.github.io/execution-apis/api/methods/debug_getRawTransaction
-    # we take a string input instead of a hex as in that manner we can preverse the raw json input 
+    # we take a string input instead of a hex as in that manner we can preverse the raw json input
     # which later allows us to check for the existence of 0x,which the spec expects in a valid input
     proc debug_getRawTransaction(txHashHex: string): seq[byte] {.raises: [ApplicationError, ValueError, RlpError].} =
       ## Returns an EIP-2718 binary-encoded transaction.
@@ -323,7 +336,8 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
       ## Assembles a block from the current transaction pool using the
       ## production block-building path (TxPoolRef.assembleBlock).
       ## Returns the number of transactions and blobs that were packed.
-      let bundle = txPool.assembleBlock().valueOr:
+      let latestHeadHash = chain.latest.hash
+      let bundle = txPool.assembleBlock(parentHash = latestHeadHash).valueOr:
         raise newException(ValueError, error)
       let blobCount =
         if bundle.blobsBundle.isNil: 0

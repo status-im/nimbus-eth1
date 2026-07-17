@@ -68,47 +68,47 @@ void check_deser_errors(Context *ctx) {
     const char *INVALID_JSON = "not-valid-json{{{";
 
     s = (CbState){0};
-    eth_getBalance(ctx, INVALID_ADDRESS, "latest", collect_error_cb, &s);
+    eth_getBalance(ctx, (char *)INVALID_ADDRESS, "latest", collect_error_cb, &s);
     TEST("eth_getBalance bad address: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    eth_getStorageAt(ctx, VALID_ADDRESS, INVALID_UINT256, "latest", collect_error_cb, &s);
+    eth_getStorageAt(ctx, (char *)VALID_ADDRESS, (char *)INVALID_UINT256, "latest", collect_error_cb, &s);
     TEST("eth_getStorageAt bad slot: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    eth_getStorageAt(ctx, INVALID_ADDRESS, VALID_UINT256, "latest", collect_error_cb, &s);
+    eth_getStorageAt(ctx, (char *)INVALID_ADDRESS, (char *)VALID_UINT256, "latest", collect_error_cb, &s);
     TEST("eth_getStorageAt bad address: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    eth_getTransactionCount(ctx, INVALID_ADDRESS, "latest", collect_error_cb, &s);
+    eth_getTransactionCount(ctx, (char *)INVALID_ADDRESS, "latest", collect_error_cb, &s);
     TEST("eth_getTransactionCount bad address: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    eth_getCode(ctx, INVALID_ADDRESS, "latest", collect_error_cb, &s);
+    eth_getCode(ctx, (char *)INVALID_ADDRESS, "latest", collect_error_cb, &s);
     TEST("eth_getCode bad address: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    eth_getBlockByHash(ctx, INVALID_HASH32, false, collect_error_cb, &s);
+    eth_getBlockByHash(ctx, (char *)INVALID_HASH32, false, collect_error_cb, &s);
     TEST("eth_getBlockByHash short hash: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    eth_getUncleCountByBlockHash(ctx, INVALID_HASH32, collect_error_cb, &s);
+    eth_getUncleCountByBlockHash(ctx, (char *)INVALID_HASH32, collect_error_cb, &s);
     TEST("eth_getUncleCountByBlockHash bad hash: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    eth_getBlockTransactionCountByHash(ctx, INVALID_HASH32, collect_error_cb, &s);
+    eth_getBlockTransactionCountByHash(ctx, (char *)INVALID_HASH32, collect_error_cb, &s);
     TEST("eth_getBlockTransactionCountByHash bad hash: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    eth_getTransactionByHash(ctx, INVALID_HASH32, collect_error_cb, &s);
+    eth_getTransactionByHash(ctx, (char *)INVALID_HASH32, collect_error_cb, &s);
     TEST("eth_getTransactionByHash bad hash: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    eth_getTransactionByBlockHashAndIndex(ctx, INVALID_HASH32, 0ULL, collect_error_cb, &s);
+    eth_getTransactionByBlockHashAndIndex(ctx, (char *)INVALID_HASH32, 0ULL, collect_error_cb, &s);
     TEST("eth_getTransactionByBlockHashAndIndex bad hash: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    eth_getTransactionReceipt(ctx, INVALID_HASH32, collect_error_cb, &s);
+    eth_getTransactionReceipt(ctx, (char *)INVALID_HASH32, collect_error_cb, &s);
     TEST("eth_getTransactionReceipt bad hash: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
@@ -116,27 +116,27 @@ void check_deser_errors(Context *ctx) {
     TEST("eth_sendRawTransaction non-hex: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    eth_getLogs(ctx, INVALID_JSON, collect_error_cb, &s);
+    eth_getLogs(ctx, (char *)INVALID_JSON, collect_error_cb, &s);
     TEST("eth_getLogs invalid JSON filter: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    eth_newFilter(ctx, INVALID_JSON, collect_error_cb, &s);
+    eth_newFilter(ctx, (char *)INVALID_JSON, collect_error_cb, &s);
     TEST("eth_newFilter invalid JSON filter: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    eth_call(ctx, INVALID_JSON, "latest", false, collect_error_cb, &s);
+    eth_call(ctx, (char *)INVALID_JSON, "latest", false, collect_error_cb, &s);
     TEST("eth_call invalid tx args: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    eth_estimateGas(ctx, INVALID_JSON, "latest", false, collect_error_cb, &s);
+    eth_estimateGas(ctx, (char *)INVALID_JSON, "latest", false, collect_error_cb, &s);
     TEST("eth_estimateGas invalid tx args: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    eth_createAccessList(ctx, INVALID_JSON, "latest", false, collect_error_cb, &s);
+    eth_createAccessList(ctx, (char *)INVALID_JSON, "latest", false, collect_error_cb, &s);
     TEST("eth_createAccessList invalid tx args: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    eth_feeHistory(ctx, 4ULL, "latest", INVALID_JSON, collect_error_cb, &s);
+    eth_feeHistory(ctx, 4ULL, "latest", (char *)INVALID_JSON, collect_error_cb, &s);
     TEST("eth_feeHistory invalid percentiles JSON: error returned", s.called && s.status == RET_DESER_ERROR);
 }
 
@@ -207,6 +207,10 @@ static void check_proxyCall_errors(Context *ctx) {
     s = (CbState){0};
     proxyCall(ctx, "eth_sendRawTransaction", "[\"not-hex-bytes\"]", collect_error_cb, &s);
     TEST("proxyCall eth_sendRawTransaction non-hex: error returned", s.called && s.status == RET_DESER_ERROR);
+
+    s = (CbState){0};
+    proxyCall(ctx, "eth_chainId", "[\"0x1\"]", collect_error_cb, &s);
+    TEST("proxyCall eth_chainId extra param: ignored", s.called && s.status == RET_SUCCESS);
 }
 
 static char *read_file(const char *path) {
@@ -288,22 +292,26 @@ static void drain(Context *ctx, int max_iters) {
 // called the iterations probably need to be increased.
 static void check_event_loop(Context *ctx) {
     printf("\n Event loop\n");
-    CbState gas_s    = {0};
-    CbState prio_s   = {0};
-    CbState latest_s = {0};
+    CbState gas_s     = {0};
+    CbState prio_s    = {0};
+    CbState latest_s  = {0};
+    CbState chainid_s = {0};
 
     eth_gasPrice(ctx, collect_error_cb, &gas_s);
     eth_maxPriorityFeePerGas(ctx, collect_error_cb, &prio_s);
     eth_getBlockByNumber(ctx, "latest", false, collect_error_cb, &latest_s);
+    eth_chainId(ctx, collect_error_cb, &chainid_s);
 
     drain(ctx, 2000);
 
     TEST("eth_gasPrice: callback fired",             gas_s.called);
     TEST("eth_maxPriorityFeePerGas: callback fired", prio_s.called);
     TEST("eth_getBlockByNumber latest: callback fired", latest_s.called);
+    TEST("eth_chainId: callback fired",              chainid_s.called);
     TEST("eth_gasPrice: RET_SUCCESS",                gas_s.status  == RET_SUCCESS);
     TEST("eth_maxPriorityFeePerGas: RET_SUCCESS",    prio_s.status == RET_SUCCESS);
     TEST("eth_getBlockByNumber latest: RET_SUCCESS", latest_s.status == RET_SUCCESS);
+    TEST("eth_chainId: RET_SUCCESS",                 chainid_s.status == RET_SUCCESS);
 }
 
 int main(void) {

@@ -11,7 +11,6 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/algorithm,
   ../../common/common,
   ../../constants,
   ../../utils/utils,
@@ -20,234 +19,31 @@ import
   ../../transaction,
   ../../evm/state,
   ../../evm/types,
-  ../../evm/precompiles,
-  ../../evm/interpreter/gas_costs,
-  ../../block_access_list/block_access_list_validation,
-  ../../concurrency/utils,
+  ../../block_access_list/[bal_tracker, bal_validation],
   ../dao,
   ../eip6110,
+  ../eip7997,
   ./calculate_reward,
   ./executor_helpers,
   ./process_transaction,
   eth/common/[keys, transaction_utils],
   chronicles,
-  results,
-  stew/assign2
+  results
 
 when compileOption("threads"):
-  import std/atomics, taskpools
-
-  type
-    Entry = object
-      sig: Signature
-      hash: Hash32
-      sender: Address
-      senderReady: Atomic[bool]
-      fut: Flowvar[bool]
-
-    PrefetchCtx = object
-      cancel: Atomic[bool]
-      parent: Header
-      blockCtx: BlockContext
-      com: CommonRef
-      txFrame: CoreDbTxRef
-
-    BalPrefetchCtx = object
-      finished: Atomic[bool]
-      nextIndex: Atomic[int]
-      balPtr: ptr BlockAccessList
-      txFrame: CoreDbTxRef
-      fork: EVMFork
-
-  proc recoverAndPrefetchTask(
-      e: ptr Entry, ctx: ptr PrefetchCtx, tx: ptr Transaction): bool {.nimcall.} =
-    # Recover the sender from the signature. `default(Address)` signals sig
-    # check failure.
-    let
-      pk = recover(e[].sig, SkMessage(e[].hash.data))
-      sender =
-        if pk.isOk(): pk[].to(Address)
-        else: default(Address)
-    e[].sender = sender
-    e[].senderReady.store(true, moRelease)
-
-    # When ctx is non-nil, optimistic state prefetch is enabled
-    if ctx.isNil() or sender == default(Address) or ctx[].cancel.load(moAcquire):
-      return true
-
-    # Create the ledger without triggering a ref count increment on the txFrame
-    # which is owned by the main/parent thread.
-    let ledger = LedgerRef()
-    ledger.txFrame.borrowRef(ctx[].txFrame)
-    defer:
-      ledger.txFrame.unborrowRef()
-    discard ledger.beginSavePoint()
-
-    # Create the vmState without triggering a ref count increment on the common object
-    # which is owned by the main/parent thread.
-    let vmState = BaseVMState()
-    vmState.com.borrowRef(ctx[].com)
-    defer:
-      vmState.com.unborrowRef()
-    vmState.ledger = ledger
-    assign(vmState.parent, ctx[].parent)
-    assign(vmState.blockCtx, ctx[].blockCtx)
-    const txCtx = default(TxContext)
-    assign(vmState.txCtx, txCtx)
-    vmState.hardFork = vmState.determineFork
-    vmState.fork = ToEVMFork[vmState.hardFork]
-    vmState.gasCosts = vmState.fork.forkToSchedule
-    vmState.tracer = nil
-    vmState.receipts.setLen(0)
-    vmState.cumulativeGasUsed = 0
-    vmState.blockRegularGasUsed = 0
-    vmState.blockStateGasUsed = 0
-    vmState.blobGasUsed = 0'u64
-    vmState.allLogs.setLen(0)
-    vmState.gasRefunded = 0
-    vmState.balTracker = nil
-
-    # Execute the transaction discarding the results in order to fill the in memory caches.
-    vmState.prefetchTransaction(tx[], sender)
-
-    true
-
-  template withSenderParallel(
-      vmState: BaseVMState, txs: openArray[Transaction], body: untyped) =
-    # Execute transactions offloading the signature checking to the task pool
-    var
-      entries = newSeq[Entry](txs.len)
-      ctx: PrefetchCtx
-      ctxPtr: ptr PrefetchCtx = nil
-
-    if vmState.com.optimisticStatePrefetch and not vmState.balPrefetchActive:
-      ctx.parent = vmState.parent
-      ctx.blockCtx = vmState.blockCtx
-      ctx.com = vmState.com
-      # Run the prefetch on the parent frame because the current frame will
-      # be writen to during block execution and this way we avoid having to
-      # use locking on the frame data structures.
-      ctx.txFrame = vmState.ledger.txFrame.parent()
-      ctx.cancel.store(false, moRelease)
-      ctxPtr = ctx.addr
-
-    # Spawn one task per transaction that recovers the sender and, when ctxPtr
-    # is non-nil, also performs an optimistic state prefetch. Spawning here
-    # allows the task to start early, while we still haven't hashed subsequent txs.
-    for i, e in entries.mpairs():
-      e.sig = txs[i].signature().valueOr(default(Signature))
-      e.hash = txs[i].rlpHashForSigning(txs[i].isEip155)
-      let entryPtr = e.addr
-      e.fut = vmState.com.taskpool.spawn recoverAndPrefetchTask(
-        entryPtr, ctxPtr, txs[i].addr)
-
-    try:
-      for txIndex {.inject.}, e in entries.mpairs():
-        template tx(): untyped =
-          txs[txIndex]
-
-        # Wait until the worker has published the sender.
-        while not e.senderReady.load(moAcquire):
-          cpuRelax()
-        let sender {.inject.} = e.sender
-
-        body
-    finally:
-      if not ctxPtr.isNil():
-        # Cancel any in-flight prefetch tasks so that they bail out quickly.
-        ctxPtr[].cancel.store(true, moRelease)
-      # Wait for all tasks to complete before returning so that no task
-      # outlives the local data it references.
-      for e in entries.mitems():
-        discard sync(e.fut)
-
-  func firstBalIndex(sc: SlotChanges): BlockAccessIndex =
-    ## Earliest block access index at which the slot was written. 
-    ## Block access list validation guarantees `changes` is non-empty.
-    assert sc.changes.len > 0
-    sc.changes[0].blockAccessIndex
-
-  proc balPrefetchWorker(ctx: ptr BalPrefetchCtx): bool {.nimcall.} =
-    let len = ctx[].balPtr[].len
-    while true:
-      if ctx[].finished.load(moAcquire):
-        break
-
-      let i = ctx[].nextIndex.fetchAdd(1, moRelaxed)
-      if i >= len:
-        break
-
-      let accChanges = addr ctx[].balPtr[][i]
-
-      # Precompile contracts don't exist in the state trie and don't get loaded
-      # when called so we don't prefetch them. The BAL can contain precompile addresses 
-      # but in most cases the state trie account is not actually fetched. The edge
-      # case here is when a precompile contract receives a value transfer which will
-      # load the account to update the balance but unfortunately we can't determine
-      # if this was the case or not from the information in the BAL so we ignore this.
-      if isPrecompile(ctx[].fork, accChanges[].address):
-        continue
-
-      let accPath = accChanges[].address.computeAccPath
-
-      if accChanges[].storageChanges.len == 0 and accChanges[].storageReads.len == 0:
-        discard ctx[].txFrame.fetchAccount(accPath)
-        continue
-
-      # Prefetch the written slots ordered by the earliest block access index at
-      # which each was written, so they are warmed in roughly the order the block
-      # touches them.
-      for slotChanges in sorted(accChanges[].storageChanges,
-          proc(a, b: SlotChanges): int = cmp(firstBalIndex(a), firstBalIndex(b))):
-        discard ctx[].txFrame.fetchSlot(accPath, computeSlotKey(slotChanges.slot))
-
-      for stoRead in accChanges[].storageReads:
-        discard ctx[].txFrame.fetchSlot(accPath, computeSlotKey(stoRead))
-
-    true
-
-  template withBalPrefetchParallel(
-      vmState: BaseVMState, bal: Opt[BlockAccessListRef], body: untyped) =
-      
-    let balRef = bal.get()
-
-    var ctx: BalPrefetchCtx
-    ctx.balPtr = balRef[].addr
-    # Read through the parent frame because the current frame is written to
-    # during block execution; this avoids locking on the frame data structures.
-    ctx.txFrame = vmState.ledger.txFrame.parent()
-    ctx.fork = vmState.fork
-    ctx.nextIndex.store(0, moRelease)
-    ctx.finished.store(false, moRelease)
-
-    let 
-      ctxPtr = ctx.addr
-      n = vmState.com.taskpool.numThreads
-      configured = vmState.com.balStatePrefetchWorkers
-      numWorkers = if configured <= 0: n else: min(configured, n)
-    
-    var futs = newSeq[Flowvar[bool]](numWorkers)
-    for i in 0 ..< numWorkers:
-      futs[i] = vmState.com.taskpool.spawn balPrefetchWorker(ctxPtr)
-
-    try:
-      body
-    finally:
-      # Signal completion so workers stop claiming new items, then collect all
-      # so that no worker outlives the data it references.
-      ctxPtr[].finished.store(true, moRelease)
-      for f in futs.mitems():
-        discard sync(f)
+  import ./process_block_parallel
 
 template withSenderSerial(txs: openArray[Transaction], body: untyped) =
   for txIndex {.inject.}, tx {.inject.} in txs:
     let sender {.inject.} = tx.recoverSender().valueOr(default(Address))
     body
 
-template withSender(vmState: BaseVMState, txs: openArray[Transaction], body: untyped) =
+template withSender(
+    vmState: BaseVMState, txs: openArray[Transaction],
+    bal: Opt[BlockAccessListRef], body: untyped) =
   when compileOption("threads"):
-    if not vmState.com.taskpool.isNil() and vmState.com.taskpool.numThreads > 1:
-      withSenderParallel(vmState, txs, body)
+    if vmState.com.parallelSenderRecoveryEnabled():
+      withSenderParallel(vmState, txs, bal, body)
     else:
       withSenderSerial(txs, body)
   else:
@@ -256,23 +52,18 @@ template withSender(vmState: BaseVMState, txs: openArray[Transaction], body: unt
 template withBalPrefetch(
     vmState: BaseVMState, bal: Opt[BlockAccessListRef], body: untyped) =
   when compileOption("threads"):
-    if bal.isSome() and vmState.com.balStatePrefetch and
-        vmState.com.isAmsterdamOrLater(vmState.blockCtx.timestamp) and
-        not vmState.com.taskpool.isNil() and vmState.com.taskpool.numThreads > 1:
-
-      vmState.balPrefetchActive = true
+    if vmState.com.balStatePrefetchEnabled(vmState.blockCtx.timestamp, bal):
       withBalPrefetchParallel(vmState, bal, body)
     else:
       body
   else:
     body
 
-# Factored this out of procBlkPreamble so that it can be used directly for
-# stateless execution of specific transactions.
 proc processTransactions*(
     vmState: BaseVMState,
     header: Header,
     transactions: seq[Transaction],
+    blockAccessList = Opt.none(BlockAccessListRef),
     skipReceipts = false,
     collectLogs = false
 ): Result[void, string] =
@@ -280,9 +71,15 @@ proc processTransactions*(
   vmState.cumulativeGasUsed = 0
   vmState.blockRegularGasUsed = 0
   vmState.blockStateGasUsed = 0
+  vmState.blobGasUsed = 0'u64
   vmState.allLogs = @[]
 
-  vmState.withSender(transactions):
+  when compileOption("threads"):
+    if vmState.com.balParallelExecutionEnabled(header.timestamp, blockAccessList):
+      return processTransactionsParallel(
+        vmState, transactions, blockAccessList.get(), skipReceipts, collectLogs)
+
+  vmState.withSender(transactions, blockAccessList):
     if sender == default(Address):
       return err("Could not get sender for tx with index " & $(txIndex))
 
@@ -306,6 +103,7 @@ proc processTransactions*(
 proc procBlkPreamble(
     vmState: BaseVMState,
     blk: Block,
+    blockAccessList: Opt[BlockAccessListRef],
     skipValidation, skipReceipts, skipUncles: bool
 ): Result[void, string] =
   template header(): Header =
@@ -313,13 +111,17 @@ proc procBlkPreamble(
 
   # Setup block access list tracker for pre‑execution system calls
   if vmState.balTrackerEnabled:
+    vmState.balTracker.builder[].ensureIndexCount(blk.transactions.len() + 2, exact = true)
     vmState.balTracker.setBlockAccessIndex(0)
     vmState.balTracker.beginCallFrame()
 
   let com = vmState.com
-  if com.daoForkSupport and com.daoForkBlock.get == header.number:
-    vmState.mutateLedger:
+  vmState.mutateLedger:
+    if com.daoForkSupport and com.daoForkBlock.get == header.number:
       ledger.applyDAOHardFork()
+
+    if com.amsterdamTransition(vmState.parent.timestamp, header.timestamp):
+      ledger.applyEip7997()
 
   if not skipValidation: # Expensive!
     if blk.transactions.calcTxRoot != header.txRoot:
@@ -364,7 +166,7 @@ proc procBlkPreamble(
 
     let collectLogs = header.requestsHash.isSome and not skipValidation
     ?processTransactions(
-      vmState, header, blk.transactions, skipReceipts, collectLogs
+      vmState, header, blk.transactions, blockAccessList, skipReceipts, collectLogs
     )
   elif blk.transactions.len > 0:
     return err("Transactions in block with empty txRoot")
@@ -444,6 +246,8 @@ proc procBlkEpilogue(
   var
     withdrawalReqs: seq[byte]
     consolidationReqs: seq[byte]
+    builderDepositReqs: seq[byte]
+    builderExitReqs: seq[byte]
 
   if header.requestsHash.isSome:
     # Execute EIP-7002 and EIP-7251 before calculating stateRoot
@@ -451,9 +255,17 @@ proc procBlkEpilogue(
     withdrawalReqs = ?processDequeueWithdrawalRequests(vmState)
     consolidationReqs = ?processDequeueConsolidationRequests(vmState)
 
+    if vmState.com.isAmsterdamOrLater(header.timestamp):
+      builderDepositReqs = ?processBuilderDepositRequests(vmState)
+      builderExitReqs = ?processBuilderExitRequests(vmState)
+
   # Commit block access list tracker changes for post‑execution system calls
   if vmState.balTrackerEnabled:
     vmState.balTracker.commitCallFrame()
+
+  # Catch a fatal condition from the reward persist or the post-execution system
+  # calls before getStateRoot below, which would otherwise assert on it.
+  vmState.ledger.abortOnFatalError()
 
   if not skipValidation:
     if not skipPostExecBalCheck and vmState.com.isAmsterdamOrLater(header.timestamp):
@@ -511,13 +323,24 @@ proc procBlkEpilogue(
       let
         depositReqs =
           ?parseDepositLogs(vmState.allLogs, vmState.com.depositContractAddress)
-        requestsHash = calcRequestsHash(
-          [
-            (DEPOSIT_REQUEST_TYPE, depositReqs),
-            (WITHDRAWAL_REQUEST_TYPE, withdrawalReqs),
-            (CONSOLIDATION_REQUEST_TYPE, consolidationReqs),
-          ]
-        )
+        requestsHash = if vmState.com.isAmsterdamOrLater(header.timestamp):
+            calcRequestsHash(
+              [
+                (DEPOSIT_REQUEST_TYPE, depositReqs),
+                (WITHDRAWAL_REQUEST_TYPE, withdrawalReqs),
+                (CONSOLIDATION_REQUEST_TYPE, consolidationReqs),
+                (BUILDER_DEPOSIT_REQUEST_TYPE, builderDepositReqs),
+                (BUILDER_EXIT_REQUEST_TYPE, builderExitReqs),
+              ]
+            )
+          else:
+            calcRequestsHash(
+              [
+                (DEPOSIT_REQUEST_TYPE, depositReqs),
+                (WITHDRAWAL_REQUEST_TYPE, withdrawalReqs),
+                (CONSOLIDATION_REQUEST_TYPE, consolidationReqs),
+              ]
+            )
 
       if header.requestsHash.get != requestsHash:
         debug "wrong requestsHash in block",
@@ -547,7 +370,7 @@ proc processBlock*(
   ## Generalised function to processes `blk` for any network.
 
   vmState.withBalPrefetch(blockAccessList):
-    ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles)
+    ?vmState.procBlkPreamble(blk, blockAccessList, skipValidation, skipReceipts, skipUncles)
 
     # EIP-3675: no reward for miner in POA/POS
     if not vmState.com.proofOfStake(blk.header, vmState.ledger.txFrame):

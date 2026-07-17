@@ -14,9 +14,9 @@ import
   eth/common/addresses,
   stint,
   ../db/ledger,
-  ./block_access_list_builder
+  ./bal_builder
 
-export addresses, block_access_list_builder, ledger, stint
+export addresses, bal_builder, ledger, stint
 
 type
   # Snapshot of block access list state for a single call frame.
@@ -93,7 +93,9 @@ proc init*(
 ): T =
   if builder.isNil():
     BlockAccessListTrackerRef(
-      ledger: ledger, builder: BlockAccessListBuilder.newShared(), builderOwner: true
+      ledger: ledger,
+      builder: BlockAccessListBuilder.newShared(),
+      builderOwner: true,
     )
   else:
     BlockAccessListTrackerRef(ledger: ledger, builder: builder, builderOwner: false)
@@ -117,6 +119,8 @@ proc setBlockAccessIndex*(tracker: BlockAccessListTrackerRef, blockAccessIndex: 
   tracker.preNonceCache.clear()
   tracker.preCodeCache.clear()
   tracker.currentBlockAccessIndex = blockAccessIndex
+
+  tracker.builder[].ensureIndexCount(blockAccessIndex + 1)
 
 template hasPendingCallFrame*(tracker: BlockAccessListTrackerRef): bool =
   tracker.callFrameSnapshots.len() > 0
@@ -187,22 +191,22 @@ proc commitCallFrame*(tracker: BlockAccessListTrackerRef) =
 
     for storageKey, newValue in tracker.pendingCallFrame.storageChanges:
       let (address, slot) = storageKey
-      tracker.builder[].addStorageWrite(address, slot, currentIndex, newValue)
+      tracker.builder[].addStorageWrite(currentIndex, address, slot, newValue)
 
     for address, newBalance in tracker.pendingCallFrame.balanceChanges:
-      tracker.builder[].addBalanceChange(address, currentIndex, newBalance)
+      tracker.builder[].addBalanceChange(currentIndex, address, newBalance)
 
     for address, newNonce in tracker.pendingCallFrame.nonceChanges:
-      tracker.builder[].addNonceChange(address, currentIndex, newNonce)
+      tracker.builder[].addNonceChange(currentIndex, address, newNonce)
 
     for address, newCode in tracker.pendingCallFrame.codeChanges:
-      tracker.builder[].addCodeChange(address, currentIndex, newCode)
+      tracker.builder[].addCodeChange(currentIndex, address, newCode)
 
     # Merge the pending call frame reads into the builder
     for address in tracker.pendingCallFrame.touchedAddresses:
-      tracker.builder[].addTouchedAccount(address)
+      tracker.builder[].addTouchedAccount(currentIndex, address)
     for storageKey in tracker.pendingCallFrame.storageReads:
-      tracker.builder[].addStorageRead(storageKey[0], storageKey[1])
+      tracker.builder[].addStorageRead(currentIndex, storageKey[0], storageKey[1])
 
   tracker.popCallFrame()
 
@@ -230,15 +234,17 @@ proc rollbackCallFrame*(tracker: BlockAccessListTrackerRef, rollbackReads = fals
     for storageKey in tracker.pendingCallFrame.storageChanges.keys():
       tracker.parentCallFrame.storageReads.incl(storageKey)
   else:
+    let currentIndex = tracker.currentBlockAccessIndex
+
     # Merge the pending call frame reads into the builder
     for address in tracker.pendingCallFrame.touchedAddresses:
-      tracker.builder[].addTouchedAccount(address)
+      tracker.builder[].addTouchedAccount(currentIndex, address)
     for storageKey in tracker.pendingCallFrame.storageReads:
-      tracker.builder[].addStorageRead(storageKey[0], storageKey[1])
+      tracker.builder[].addStorageRead(currentIndex, storageKey[0], storageKey[1])
 
     # Convert storage writes to reads
     for storageKey in tracker.pendingCallFrame.storageChanges.keys():
-      tracker.builder[].addStorageRead(storageKey[0], storageKey[1])
+      tracker.builder[].addStorageRead(currentIndex, storageKey[0], storageKey[1])
 
   tracker.popCallFrame()
 
@@ -431,11 +437,11 @@ proc handleInTransactionSelfDestruct*(
     tracker.pendingCallFrame.storageReads.incl(storageKey)
     tracker.pendingCallFrame.storageChanges.del(storageKey)
 
-  tracker.pendingCallFrame.balanceChanges.del(address)
   tracker.pendingCallFrame.nonceChanges.del(address)
   tracker.pendingCallFrame.codeChanges.del(address)
-
-  tracker.trackBalanceChange(address, 0.u256)
+  
+  tracker.trackNonceChange(address, 0)
+  tracker.trackCodeChange(address, @[])
 
 proc normalizePendingCallFrameChanges*(tracker: BlockAccessListTrackerRef) =
   ## Normalize balance, nonce, code and storage changes for the current

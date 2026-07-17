@@ -433,7 +433,7 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
         return err((FrontendError, "Filter doesn't exist", UNTAGGED))
 
     let
-      filter = ?engine.resolveFilterTags(filterItem.filter)
+      filter = ?(await engine.resolveFilterTags(filterItem.filter))
       # after resolving toBlock is always some and a number tag
       toBlock = filter.toBlock.get().number
 
@@ -484,7 +484,7 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
       db,
       config = chainConfigForNetwork(engine.chainId),
       initializeDb = false,
-      statelessProviderEnabled = true, # Enables collection of witness keys
+      statelessProvider = true, # Enables collection of witness keys
     )
 
     let header = engine.penaltyOr(await engine.getHeader(blockId("latest")))

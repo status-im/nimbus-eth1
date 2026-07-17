@@ -559,7 +559,7 @@ proc computeStateRoot*(
 ): Result[HashKey, AristoError] =
   ## Ensure that key cache is topped up with the latest state root
   ## and return the computed value.
-  if txRef.db.parallelStateRootComputation and txRef.db.taskpool != nil and
+  if txRef.db.parallelStateRootComputation and not txRef.db.taskpool.isNil() and
       txRef.db.taskpool.numThreads > 1:
     txRef.computeKeyImpl(
       (STATE_ROOT_VID, STATE_ROOT_VID),

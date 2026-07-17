@@ -24,6 +24,7 @@ import
   ../execution_chain/core/chain/forked_chain/chain_serialize,
   ../execution_chain/core/chain/forked_chain/chain_branch,
   ../execution_chain/db/ledger,
+  ../execution_chain/evm/[state, types],
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/history/db/ere_db,
   ../execution_chain/db/fcu_db,
@@ -981,6 +982,137 @@ suite "ForkedChainRef tests":
     check fc.resolvedFinNumber == 7'u64
     check checkFinalizedMarkers(fc, blk7.blockHash)
     check fc.validate info & " (3)"
+
+  test "vmState cache: linear reuse, fork switch and failed import":
+    const info = "vmState cache"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com)
+
+    # Linear imports keep a reusable vmState tracking the last processed block
+    check chain.vmState.isNil
+    checkImportBlock(chain, blk1)
+    check chain.vmState.isNil.not
+    check chain.vmStateBlockHash == blk1.blockHash
+    checkImportBlock(chain, blk2)
+    check chain.vmState.isNil.not
+    check chain.vmStateBlockHash == blk2.blockHash
+    checkImportBlock(chain, blk3)
+    checkImportBlock(chain, blk4)
+    check chain.vmStateBlockHash == blk4.blockHash
+
+    # Fork switch: B4 also builds on blk3, taking the fresh vmState path,
+    # then the new branch continues linearly
+    checkImportBlock(chain, B4)
+    check chain.vmState.isNil.not
+    check chain.vmStateBlockHash == B4.blockHash
+    checkImportBlock(chain, B5)
+    check chain.vmStateBlockHash == B5.blockHash
+
+    # Alternate between branches
+    checkImportBlock(chain, C5)
+    check chain.vmStateBlockHash == C5.blockHash
+    checkImportBlock(chain, B6)
+    check chain.vmStateBlockHash == B6.blockHash
+    check chain.validate info & " (1)"
+
+    # A failed import drops the cached vmState so a half-executed ledger is
+    # never reused; the next valid block recovers via the fresh path
+    var badBlk = B7
+    badBlk.header.stateRoot = blk1.header.stateRoot
+    checkImportBlockErr(chain, badBlk)
+    check chain.vmState.isNil
+    checkImportBlock(chain, B7)
+    check chain.vmState.isNil.not
+    check chain.vmStateBlockHash == B7.blockHash
+    check chain.validate info & " (2)"
+
+  test "setHead: rewind, prune branches and re-import":
+    const info = "setHead"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com)
+    checkImportBlock(chain, blk1)
+    checkImportBlock(chain, blk2)
+    checkImportBlock(chain, blk3)
+    checkImportBlock(chain, blk4)
+    checkImportBlock(chain, blk5)
+    checkImportBlock(chain, blk6)
+    checkImportBlock(chain, B4)
+    checkImportBlock(chain, B5)
+    check chain.heads.len == 2
+
+    # A block that was never imported cannot become the head
+    check chain.setHead(blk8.blockHash).isErr
+
+    # Rewind within the canonical branch: blocks above blk4 and the whole
+    # B branch are discarded
+    check chain.setHead(blk4.blockHash).isOk
+    checkHeadHash chain, blk4.blockHash
+    check chain.latestHash == blk4.blockHash
+    check chain.heads.len == 1
+    check chain.hashToBlock.len == 5 # genesis .. blk4
+    check chain.validate info & " (1)"
+
+    # Discarded blocks can be imported again - they are gone, not duplicates
+    checkVerdict(chain, blk5, ImportOutcome.Valid)
+    checkVerdict(chain, B4, ImportOutcome.Valid)
+    check chain.heads.len == 2
+    check chain.latestHash == B4.blockHash
+    check chain.validate info & " (2)"
+
+    # Moving the head to a sibling branch prunes the previously canonical one
+    check chain.setHead(B4.blockHash).isOk
+    checkHeadHash chain, B4.blockHash
+    check chain.latestHash == B4.blockHash
+    check chain.heads.len == 1
+    check chain.hashToBlock.len == 5 # genesis .. blk3, B4
+    check chain.validate info & " (3)"
+
+  test "setHead: cannot move below the latest finalized block":
+    const info = "setHead finalized"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com)
+    checkImportBlock(chain, blk1)
+    checkImportBlock(chain, blk2)
+    checkImportBlock(chain, blk3)
+    checkImportBlock(chain, blk4)
+    checkImportBlock(chain, B4)
+    checkForkChoice(chain, blk4, blk3)
+    check chain.validate info & " (1)"
+
+    # blk2 is an ancestor of the finalized block blk3
+    check chain.setHead(blk2.blockHash).isErr
+
+    # The finalized block itself and descendants of it (also on a sibling
+    # branch, like B4) remain valid targets
+    check chain.setHead(B4.blockHash).isOk
+    checkHeadHash chain, B4.blockHash
+    check chain.heads.len == 1
+    check chain.validate info & " (2)"
+
+  test "BaseVMState.reinit with per-block BAL tracker flags":
+    let
+      com = env.newCom()
+      txFrame1 = com.db.baseTxFrame().txFrameBegin()
+      vmState = BaseVMState()
+    vmState.init(genesis.header, blk1.header, com, txFrame1,
+      enableBalTracker = true)
+    check vmState.balTracker.isNil.not
+
+    # The ledger is clean, so reinit succeeds and rebuilds the tracker from
+    # the explicit per-block flags
+    let txFrame2 = txFrame1.txFrameBegin()
+    check vmState.reinit(blk1.header, blk2.header, txFrame2,
+      enableBalTracker = false)
+    check vmState.balTracker.isNil
+    check vmState.ledger.txFrame == txFrame2
+
+    let txFrame3 = txFrame2.txFrameBegin()
+    check vmState.reinit(blk2.header, blk3.header, txFrame3,
+      enableBalTracker = true)
+    check vmState.balTracker.isNil.not
+    check vmState.ledger.txFrame == txFrame3
+
+    vmState.dispose()
 
 procSuite "ForkedChain mainnet replay":
   # A short mainnet replay test to check that the first few hundred blocks can

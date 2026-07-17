@@ -92,6 +92,9 @@ template unpackEngineResult[T](res: EngineResult[T]): T =
 
 proc injectEngineFrontend*(server: JsonRpcServer, frontend: ExecutionApiFrontend) =
   server.getServer().rpc(EthJson):
+    proc eth_chainId(): UInt256 {.async: (raises: [ValueError, CancelledError]).} =
+      unpackEngineResult(await frontend.eth_chainId())
+
     proc eth_blockNumber(): uint64 {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(await frontend.eth_blockNumber())
 

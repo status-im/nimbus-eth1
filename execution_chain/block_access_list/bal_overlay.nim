@@ -14,7 +14,7 @@ import
   eth/common/[addresses, block_access_lists],
   stint,
   results,
-  ./block_access_list_utils
+  ./bal_utils
 
 export addresses, block_access_lists, results
 

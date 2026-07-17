@@ -18,7 +18,7 @@ import
   ../transaction/call_types,
   ../[transaction, constants],
   ../utils/utils,
-  ../block_access_list/block_access_list_validation,
+  ../block_access_list/bal_validation,
   ./[dao, eip4844, eip7702, eip7691, gaslimit, withdrawals],
   ./pow/difficulty,
   stew/objects,
@@ -99,7 +99,7 @@ proc validateHeader(
   if header.gasLimit > GAS_LIMIT_MAXIMUM:
     return err("gasLimit exceeds GAS_LIMIT_MAXIMUM")
 
-  if com.daoForkSupport and inDAOExtraRange(header.number):
+  if com.daoForkSupport and inDAOExtraRange(header.number) and not com.isShanghaiOrLater(header.timestamp):
     if header.extraData != daoForkBlockExtraData:
       return err("header extra data should be marked DAO")
 
@@ -248,6 +248,11 @@ func validateTxBasic*(
   if not validChainId:
     return err("invalid tx: chain id mismatch, got: " &
       $derivedChainId & " expected: " & $com.chainId)
+
+  # EIP-2681: a nonce of 2^64-1 can never be included since executing the
+  # transaction would overflow the account nonce.
+  if tx.nonce >= high(uint64):
+    return err("invalid tx: nonce at maximum")
 
   if validateFork:
     if tx.txType == TxEip2930 and fork < Berlin:
