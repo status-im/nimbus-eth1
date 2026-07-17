@@ -80,14 +80,26 @@ proc getAccMissingIntv*(db: CacheDbRef): OptAccMissingIntvResult =
 
 proc putAccMissingIntv*(
     db: CacheDbRef;
-    root: StateRoot;
+    number: BlockNumber;
     ranges: ItemKeyRangeSet;
       ): PutResult =
-  db.put1(cMissingIntv, encodeAccMissingIntvData(root, ranges))
+  db.put1(cMissingIntv, encodeAccMissingIntvData(number, ranges))
+
+proc updAccMissingIntv*(
+    db: CacheDbRef;
+    number: BlockNumber;
+      ): PutResult =
+  let data = db.get1(cMissingIntv).valueOr:
+    return err(error)
+  if data.len == 0:
+    return err("missing record cannot be updated")
+  let res = data.decodeAccMissingIntvData().valueOr:
+    return err(error)
+  db.put1(cMissingIntv, encodeAccMissingIntvData(number, res.ranges))
 
 proc addAccMissingIntv*(
     db: CacheDbRef;
-    root: StateRoot;
+    number: BlockNumber;
     iv: ItemKeyRange;
       ): PutResult =
   let data = db.get1(cMissingIntv).valueOr:
@@ -98,9 +110,8 @@ proc addAccMissingIntv*(
   else:
     res = data.decodeAccMissingIntvData().valueOr:
       return err(error)
-  res.root = root
   discard res.ranges.merge iv
-  db.put1(cMissingIntv, encodeAccMissingIntvData(res.root, res.ranges))
+  db.put1(cMissingIntv, encodeAccMissingIntvData(number, res.ranges))
 
 proc delAccMissingIntv*(
     db: CacheDbRef,
@@ -184,7 +195,7 @@ proc delMissingBlob*(db: CacheDbRef, accPath: Hash32): DelResult =
   db.del33(cMissingBlob, accPath)
 
 proc clearMissingBlob*(db: CacheDbRef): DelResult =
-  db.clr1 cCodeMissKvt
+  db.clr1 cMissingBlob
 
 iterator walkMissingBlob*(db: CacheDbRef): Hash32 =
   for (key, _) in db.adb.colWalk33 [byte cMissingBlob]:
@@ -269,6 +280,19 @@ proc delFlatSlot*(db: CacheDbRef, accPath, slotKey: Hash32): DelResult =
 
 proc clearFlatSlot*(db: CacheDbRef): DelResult =
   db.clr1 cFlatSlot
+
+iterator walkFlatSlot*(db: CacheDbRef, accPath: Hash32): WalkFlatSlotData =
+  for (key1,key2,value) in db.adb.colWalk65 key65(cFlatSlot, accPath):
+    if key1 != accPath:
+      break
+    let w = value.decodeFlatSlotData().valueOr:
+      var oops: WalkFlatSlotData
+      oops.accPath = key1
+      oops.slotKey = key2
+      oops.error = error
+      yield oops
+      continue
+    yield (key1, key2, w, "")
 
 iterator walkFlatSlot*(db: CacheDbRef): WalkFlatSlotData =
   for (key1,key2,value) in db.adb.colWalk65 key65(cFlatSlot):

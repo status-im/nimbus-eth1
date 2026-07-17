@@ -119,13 +119,13 @@ proc incompleteAccounts(
         break checkAccount
 
       if a.storageRoot != EMPTY_ROOT_HASH:
-        let ok = session.db.hasStoKvt(path, a.storageRoot.data).valueOr:
+        let ok = session.db.hasStoPartMpt(path, a.storageRoot.data).valueOr:
           break checkAccount
         if not ok:
           break checkAccount
 
       if a.codeHash != EMPTY_CODE_HASH:
-        let ok = session.db.hasCodeKvt(a.codeHash).valueOr:
+        let ok = session.db.hasCodePartMpt(a.codeHash).valueOr:
           break checkAccount
         if not ok:
           break checkAccount
@@ -144,7 +144,7 @@ proc matchDnglAccLinks(
   ##
   var matches: seq[seq[byte]]
   for key in keys:
-    let ok = session.db.hasAccDnglKvt(key).valueOr:
+    let ok = session.db.hasAccDnglPath(key).valueOr:
       return err(error)
     if ok:
       matches.add key
@@ -164,23 +164,23 @@ proc updatehDnglAccLinks(
   ## that were already resolved.
   ##
   # Clear already `resolved` links
-  session.db.delAccDnglKvt(resolved).isOkOr:
+  session.db.delAccDnglPath(resolved).isOkOr:
     return err(error)
 
   # Unconditionally store `incomplete` links
   for (key,path) in incomplete:
-    session.db.putAccDnglKvt(key,path).isOkOr:
+    session.db.putAccDnglPath(key,path).isOkOr:
       return err(error)
 
   # Store `dangling` links if they are not on merged MPT cache
   var resolved = 0u
   for (key,path) in dangling:
-    let ok = session.db.hasAccKvt(key).valueOr:
+    let ok = session.db.hasAccPartMpt(key).valueOr:
       return err(error)
     if ok:
       resolved.inc
     else:
-      session.db.putAccDnglKvt(key,path).isOkOr:
+      session.db.putAccDnglPath(key,path).isOkOr:
         return err(error)
 
   ok(move resolved)
@@ -239,7 +239,7 @@ template mkStoTrie(
         break body
 
       # Store `(key,node)` list on trie
-      session.db.putStoKvt(acc.accHash, mpt.knPairs()).isOkOr:
+      session.db.putStoPartMpt(acc.accHash, mpt.knPairs()).isOkOr:
         error info & ": cannot store slot on trie", stateInx, nStates, root,
           distance, peerID, accKey, stoRoot, nProof=w.data.proof.len,
           iv=(w.start,w.data.limit).to(float).toStr, nSlot=w.data.slot.len,
@@ -289,7 +289,7 @@ template mkCodesList(
             distance, key=key.toStr, expected=hash.toStr,
             nData=val.to(seq[byte]).len
 
-        session.db.putCodeKvt(key,val).isOkOr:
+        session.db.putCodePartMpt(key,val).isOkOr:
           error info & ": Cannot store on DB code table", stateInx, nStates,
             root, distance, key=key.toStr, nData=val.to(seq[byte]).len,
             `error`=error
@@ -365,7 +365,7 @@ template mkTrieImpl(
           rc.value
 
     # Merge `(key,node)` list on the accounts MPT on disk.
-    session.db.putAccKvt(knPairs).isOkOr:
+    session.db.putAccPartMpt(knPairs).isOkOr:
       error info & ": Cannot store accounts on trie", stateInx, nStates, root,
         distance, peerID, nAccounts, nProof, iv, `error`=error
       bodyRc = Opt.some(ETrieError)
@@ -473,10 +473,9 @@ template sessionMkTrie*(ctx: SnapCtxRef; info: static[string]): auto =
       for n in 0 ..< byDist.len:
         byDist[n].data.tag = Untagged               # reset all states
       discard ctx.sessionPartMptClear info          # rebuild MPT tables
-      discard ctx.sessionDanglTabsClear info        # ..
     of NewAssembly:
       ctx.pool.pivot = Opt.none(StateRoot)          # clear (if any)
-      discard ctx.sessionDanglTabsClear info
+      discard ctx.sessionPartMptClear info          # rebuild MPT tables
 
     chronicles.info info & ": Assembling MPT from archived data", nStates
 
@@ -521,7 +520,7 @@ template sessionMkTrie*(ctx: SnapCtxRef; info: static[string]): auto =
       # End `for walkStateData()`
 
     # Publish pivot for MPT analysis and healing
-    doAssert PivotOnTrie <= ctx.sessionPivotActivate(info)
+    doAssert PivotOnTrie <= ctx.sessionPivotActivateCached(info)
 
     let elapsed = Moment.now() - start
     bodyRc = typeof(bodyRc).ok(elapsed)
