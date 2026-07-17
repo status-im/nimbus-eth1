@@ -268,6 +268,58 @@ proc runPayloadRebuildTest(env: TestEnv): Result[void, string] =
 
   ok()
 
+proc runBackgroundBuildTest(env: TestEnv): Result[void, string] =
+  # forkchoiceUpdated must schedule the payload build in the background and
+  # respond with the payloadId immediately; getPayload awaits the result.
+  const numTxs = 3
+  let
+    ben = env.beaconEngine
+    header = env.chain.latestHeader
+    update = ForkchoiceStateV1(
+      headBlockHash: header.computeBlockHash
+    )
+    time = getTime().toUnix
+    # No withdrawals: the handler is driven directly (below), so the attrs
+    # must already be V1-shaped for a pre-Shanghai fcU V1.
+    attr = PayloadAttributes(
+      timestamp:             w3Qty(time + 1),
+      prevRandao:            default(Bytes32),
+      suggestedFeeRecipient: default(Address),
+    )
+
+  for nonce in 0 ..< numTxs:
+    env.txPool.addTx(env.makeSignedTx(nonce.AccountNonce)).isOkOr:
+      return err("Failed to add tx " & $nonce & " to pool: " & $error)
+
+  # Drive the engine handler directly (not over HTTP) so that we can observe
+  # the build state right after the fcU response future completes.
+  let fcuRes = try:
+      waitFor ben.forkchoiceUpdated(Version.V1, update, Opt.some(attr))
+    except CatchableError as exc:
+      return err("forkchoiceUpdated failed: " & exc.msg)
+
+  if fcuRes.payloadId.isNone:
+    return err("Expected payloadId in fcU response")
+
+  # The fcU response completed before the builder ran: the build future must
+  # still be pending (the worker parks on idleAsync before assembling, and the
+  # event loop hasn't been driven since waitFor returned).
+  let
+    id = fcuRes.payloadId.get
+    finished = ben.payloadBuildFinished(id).valueOr:
+      return err("No build tracked for payloadId")
+  if finished:
+    return err("Payload build completed before fcU response was returned")
+
+  let bundle = (waitFor ben.getPayloadBundle(id)).valueOr:
+    return err("getPayloadBundle returned none")
+
+  if bundle.payload.transactions.len != numTxs:
+    return err("Expected " & $numTxs & " txs in payload, got: " &
+      $bundle.payload.transactions.len)
+
+  ok()
+
 proc runUnknownPayloadTest(env: TestEnv): Result[void, string] =
   # getPayload for a payloadId that was never scheduled must fail with
   # the unknown-payload error code.
