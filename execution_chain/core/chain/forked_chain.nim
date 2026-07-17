@@ -368,26 +368,19 @@ with --debug-eager-state-root."""
   c.base.parent = nil
   c.base.finalize()
 
-  # Hand the chronos loop a chance to service pending RPC / networking before
-  # we enter the cleanup burst, which with a full persistBatchSize=256 can
-  # iterate hundreds of blocks scanning txRecords.
-  await sleepAsync(0.milliseconds)
-
   # Cleanup in-memory blocks starting from the previous base backward
-  # e.g. B2 backward. Yield every `cleanupYieldChunk` ancestors so a single
-  # updateBase can't hog the event loop for the full cleanup duration.
+  # e.g. B2 backward. Yield to the event loop before the first removal and
+  # every `cleanupYieldChunk` blocks so a single updateBase can't hog the
+  # event loop for the full cleanup duration (with persistBatchSize=256 the
+  # loop can iterate hundreds of blocks scanning txRecords).
   const cleanupYieldChunk = 16
-  var
-    count = 0'u
-    sinceYield = 0
+  var count = 0'u
 
   for it in ancestors(oldFrontier):
+    if count mod cleanupYieldChunk == 0:
+      await sleepAsync(0.milliseconds)
     c.removeBlockFromCache(it)
     inc count
-    inc sinceYield
-    if sinceYield >= cleanupYieldChunk:
-      sinceYield = 0
-      await sleepAsync(0.milliseconds)
 
   let finishTime = Moment.now()
 
