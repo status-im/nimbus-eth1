@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -148,22 +148,25 @@ func getBootstrapNodes*(name: string, boot: var BootstrapNodes): Result[void, st
   of "hoodi":   appendBootstrapNodes(hoodi, boot)
   else: err("network not supported: " & name)
 
+proc parseBootstrapNodes*(list: openArray[string], boot: var BootstrapNodes): Result[void, string] =
+  ## Parse bootnodes from a list of enode/enr lines (CLI values or file lines).
+  ## A malformed entry is skipped (and reported) rather than aborting the whole
+  ## list, so one bad node (e.g. a discovery-only enode with TCP port 0) does
+  ## not drop every valid bootnode after it.
+  var errors: seq[string]
+  for line in list:
+    appendBootstrapNode(line, boot).isOkOr:
+      errors.add error
+
+  if errors.len > 0:
+    return err(errors.join("; "))
+  ok()
+
 proc loadBootstrapNodes*(fileName: string, boot: var BootstrapNodes): Result[void, string] =
   ## Load bootnodes from file
   let text = io2.readAllChars(fileName).valueOr:
     return err($error)
-
-  for line in splitLines(text):
-    discard ? appendBootstrapNode(line, boot)
-
-  ok()
-
-proc parseBootstrapNodes*(list: openArray[string], boot: var BootstrapNodes): Result[void, string] =
-  ## Parse bootnodes from CLI
-  for line in list:
-    discard ? appendBootstrapNode(line, boot)
-
-  ok()
+  parseBootstrapNodes(splitLines(text), boot)
 
 func len*(boot: BootstrapNodes): int =
   boot.enrs.len + boot.enodes.len

@@ -50,13 +50,20 @@ const skipFiles = [
   "fork_transition_bal_size_constraint.json",
   "slotnum_at_fork_transition.json",
   "transfer_log_fork_transition.json",
+  "auth_intrinsic_at_transition.json",
+  "intrinsic_reduction_across_amsterdam_transition.json",
+  "builder_exit_contract_deployment.json",
+  "builder_deposit_contract_deployment.json",
 
-  # The stateless input schema cannot represent EIP-8282 builder requests, so
-  # the guest reconstructs an empty requestsHash while execution emits a builder
-  # request -> requestsHash mismatch -> false, but 2 of the 25 vectors wrongly
-  # expect true. Upstream schema/vector issue, already fixed in upstream
-  # tests-zkevm@v0.6.2
-  "invalid_multi_type_requests.json",
+  # At the top frame, Nimbus loads the EIP-7702 delegation target's code before
+  # charging the delegation access gas, while the spec charges first. When that
+  # charge hits OOG, our witness contains the delegation target's account leaf
+  # and code that the reference implementation never reads. Only the witness
+  # diverges, the execution outcome and state root are identical.
+  "bal_7702_top_frame_delegation_oog.json",
+  "top_frame_regular_charge.json",
+  "recipient_charge_oog_rolls_back_delegations.json",
+  "top_frame_charges_delegation_in_access_list.json",
 
   # No fail yet as we don't check/use public keys. We could check them easily
   # but the better way is to use them as optimization and check automatically
