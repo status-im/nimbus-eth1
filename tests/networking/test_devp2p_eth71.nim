@@ -1,0 +1,618 @@
+# nimbus-execution-client
+# Copyright (c) 2018-2026 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT))
+# at your option.
+# This file may not be copied, modified, or distributed except according to
+# those terms.
+
+{.used.}
+
+import
+  std/typetraits,
+  unittest2,
+  testutils,
+  chronos,
+  eth/[common, rlp],
+  eth/common/block_access_lists_rlp,
+  stew/endians2,
+  ../../execution_chain/networking/p2p,
+  ../../execution_chain/sync/wire_protocol,
+  ../../execution_chain/sync/wire_protocol/eth/eth_handler {.all.},
+  ../../execution_chain/sync/beacon/worker/blocks/blocks_bal,
+  ../../execution_chain/core/chain/forked_chain,
+  ../../execution_chain/db/core_db,
+  ../../execution_chain/db/core_db/core_apps,
+  ./stubloglevel,
+  ./p2p_test_helper
+
+const
+  UNAVAILABLE_BAL_BYTES = @[0x80.byte]
+  EMPTY_BAL_BYTES       = @[0xc0.byte]
+
+proc seedBal(env: TestEnv, hash: Hash32, bal: BlockAccessList) =
+  let balToStore: BlockAccessListRef = new BlockAccessList
+  balToStore[] = bal
+
+  env.chain.latestTxFrame.persistBlockAccessList(hash, balToStore)
+
+func makeHash(i: int): Hash32 =
+  keccak256(i.uint64.toBytesLE)
+
+procSuite "devp2p eth/71 Tests":
+
+  asyncTest "getBlockAccessLists - BAL unavailable":
+    var
+      env1 = newTestEnv()
+      env2 = newTestEnv()
+
+    env2.node.startListening()
+
+    let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+    check connRes.isOk()
+
+    let peer = connRes.get()
+    check peer.supports(eth71)
+
+    let
+      req = BlockAccessListsRequest(blockHashes: @[default(Hash32)])
+      respOpt = await peer.getBlockAccessLists(req, timeout = chronos.seconds(3))
+    check respOpt.isSome()
+
+    let resp = respOpt.get()
+    check resp.accessLists.len() == 1
+
+    let balBytes = resp.accessLists[0]
+    check:
+      distinctBase(balBytes) == UNAVAILABLE_BAL_BYTES
+      rlp.encode(balBytes) == UNAVAILABLE_BAL_BYTES
+
+    await env2.close()
+    await env1.close()
+
+  asyncTest "getBlockAccessLists - empty BAL available":
+    var
+      env1 = newTestEnv()
+      env2 = newTestEnv()
+
+    env2.node.startListening()
+
+    let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+    check connRes.isOk()
+
+    let peer = connRes.get()
+    check peer.supports(eth71)
+
+    let blockHash = makeHash(2)
+    seedBal(env2, blockHash, default(BlockAccessList))
+
+    let
+      req = BlockAccessListsRequest(blockHashes: @[blockHash])
+      respOpt = await peer.getBlockAccessLists(req, timeout = chronos.seconds(3))
+    check respOpt.isSome()
+
+    let resp = respOpt.get()
+    check resp.accessLists.len() == 1
+
+    let balBytes = resp.accessLists[0].distinctBase()
+    check:
+      balBytes == EMPTY_BAL_BYTES
+      BlockAccessList.decode(balBytes).expect("valid BAL") == default(BlockAccessList)
+
+    await env2.close()
+    await env1.close()
+
+  asyncTest "getBlockAccessLists - non empty BAL available":
+    var
+      env1 = newTestEnv()
+      env2 = newTestEnv()
+
+    env2.node.startListening()
+
+    let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+    check connRes.isOk()
+
+    let peer = connRes.get()
+    check peer.supports(eth71)
+
+    let blockHash = makeHash(1)
+
+    var bal: BlockAccessList = newSeq[AccountChanges](1)
+    bal[0].address = Address.fromHex("0x1234567890123456789012345678901234567890")
+
+    seedBal(env2, blockHash, bal)
+
+    let
+      req = BlockAccessListsRequest(blockHashes: @[blockHash])
+      respOpt = await peer.getBlockAccessLists(req, timeout = chronos.seconds(3))
+    check respOpt.isSome()
+
+    let resp = respOpt.get()
+    check resp.accessLists.len() == 1
+
+    let balBytes = resp.accessLists[0].distinctBase()
+    check:
+      balBytes.len() > 0
+      BlockAccessList.decode(balBytes).expect("valid BAL") == bal
+
+    await env2.close()
+    await env1.close()
+
+  asyncTest "getBlockAccessLists - mixed unavailable, empty and non empty BALs":
+    var
+      env1 = newTestEnv()
+      env2 = newTestEnv()
+
+    env2.node.startListening()
+
+    let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+    check connRes.isOk()
+
+    let peer = connRes.get()
+    check peer.supports(eth71)
+
+    let
+      unavailableHash = makeHash(3)
+      emptyHash       = makeHash(4)
+      nonEmptyHash    = makeHash(5)
+
+    let emptyBal = default(BlockAccessList)
+
+    var nonEmptyBal: BlockAccessList = newSeq[AccountChanges](1)
+    nonEmptyBal[0].address = Address.fromHex("0x1111111111111111111111111111111111111111")
+
+    seedBal(env2, emptyHash, emptyBal)
+    seedBal(env2, nonEmptyHash, nonEmptyBal)
+
+    let
+      req = BlockAccessListsRequest(
+        blockHashes: @[unavailableHash, emptyHash, nonEmptyHash])
+      respOpt = await peer.getBlockAccessLists(req, timeout = chronos.seconds(3))
+    check respOpt.isSome()
+
+    let resp = respOpt.get()
+    check resp.accessLists.len() == req.blockHashes.len()
+
+    let
+      unavailableBytes = resp.accessLists[0].distinctBase()
+      emptyBytes = resp.accessLists[1].distinctBase()
+      nonEmptyBytes = resp.accessLists[2].distinctBase()
+
+    check:
+      unavailableBytes == UNAVAILABLE_BAL_BYTES
+      emptyBytes == EMPTY_BAL_BYTES
+      BlockAccessList.decode(emptyBytes).expect("valid BAL") == emptyBal
+      BlockAccessList.decode(nonEmptyBytes).expect("valid BAL") == nonEmptyBal
+
+    await env2.close()
+    await env1.close()
+
+  asyncTest "getBlockAccessLists - MAX_BALS_SERVE cap":
+    var
+      env1 = newTestEnv()
+      env2 = newTestEnv()
+
+    env2.node.startListening()
+
+    let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+    check connRes.isOk()
+
+    let peer = connRes.get()
+    check peer.supports(eth71)
+
+    let numExtra = 4
+    var hashes = newSeq[Hash32](MAX_BALS_SERVE + numExtra)
+    for i in 0 ..< hashes.len:
+      hashes[i] = makeHash(i)
+
+    let
+      req = BlockAccessListsRequest(blockHashes: hashes)
+      respOpt = await peer.getBlockAccessLists(req, timeout = chronos.seconds(3))
+    check respOpt.isSome()
+
+    let resp = respOpt.get()
+    check resp.accessLists.len() == MAX_BALS_SERVE
+
+    for balBytes in resp.accessLists:
+      check distinctBase(balBytes) == UNAVAILABLE_BAL_BYTES
+
+    await env2.close()
+    await env1.close()
+
+  asyncTest "getBlockAccessLists - SOFT_RESPONSE_LIMIT respected":
+    var
+      env1 = newTestEnv()
+      env2 = newTestEnv()
+
+    env2.node.startListening()
+
+    let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+    check connRes.isOk()
+
+    let peer = connRes.get()
+    check peer.supports(eth71)
+
+    # Build several large BALs so the cumulative payload exceeds SOFT_RESPONSE_LIMIT.
+    const
+      numSeeded = 5
+      entriesPerBal = 30_000
+    var
+      hashes = newSeq[Hash32](numSeeded)
+      bals = newSeq[BlockAccessList](numSeeded)
+
+    let testAddress = Address.fromHex("0x1111111111111111111111111111111111111111")
+    for i in 0 ..< numSeeded:
+      hashes[i] = makeHash(100 + i)
+      var bal = newSeq[AccountChanges](entriesPerBal)
+      for j in 0 ..< entriesPerBal:
+        bal[j].address = testAddress
+      bals[i] = bal
+      seedBal(env2, hashes[i], bal)
+
+    let
+      req = BlockAccessListsRequest(blockHashes: hashes)
+      respOpt = await peer.getBlockAccessLists(req, timeout = chronos.seconds(10))
+    check respOpt.isSome()
+
+    let resp = respOpt.get()
+    check:
+      resp.accessLists.len() > 0
+      resp.accessLists.len() < numSeeded
+
+    for i, balBytes in resp.accessLists:
+      check BlockAccessList.decode(balBytes.distinctBase()).expect("valid BAL") == bals[i]
+
+    await env2.close()
+    await env1.close()
+
+  asyncTest "getBlockHeaders":
+    var
+      env1 = newTestEnv()
+      env2 = newTestEnv()
+
+    env2.node.startListening()
+
+    let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+    check connRes.isOk()
+
+    let peer = connRes.get()
+    check peer.supports(eth71)
+
+    let
+      req = BlockHeadersRequest(
+        startBlock: BlockHashOrNumber(isHash: false, number: 0),
+        maxResults: 1,
+        skip: 0,
+        reverse: false)
+      respOpt = await peer.getBlockHeaders(req, timeout = chronos.seconds(3))
+    check respOpt.isSome()
+
+    let resp = respOpt.get()
+    check:
+      resp.headers.len() == 1
+      resp.headers[0].number == 0
+
+    await env2.close()
+    await env1.close()
+
+  asyncTest "getBlockBodies":
+    var
+      env1 = newTestEnv()
+      env2 = newTestEnv()
+
+    env2.node.startListening()
+
+    let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+    check connRes.isOk()
+
+    let peer = connRes.get()
+    check peer.supports(eth71)
+
+    let
+      req = BlockBodiesRequest(blockHashes: @[env2.chain.latestHash])
+      respOpt = await peer.getBlockBodies(req, timeout = chronos.seconds(3))
+    check respOpt.isSome()
+
+    let resp = respOpt.get()
+    check:
+      resp.bodies.len() == 1
+
+    await env2.close()
+    await env1.close()
+
+  asyncTest "getPooledTransactions":
+    var
+      env1 = newTestEnv()
+      env2 = newTestEnv()
+
+    env2.node.startListening()
+
+    let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+    check connRes.isOk()
+
+    let peer = connRes.get()
+    check peer.supports(eth71)
+
+    let
+      req = PooledTransactionsRequest(txHashes: @[makeHash(777)])
+      respOpt = await peer.getPooledTransactions(req, timeout = chronos.seconds(3))
+    check respOpt.isSome()
+
+    let resp = respOpt.get()
+    check resp.transactions.len() == 0
+
+    await env2.close()
+    await env1.close()
+
+  asyncTest "blockRangeUpdate":
+    var
+      env1 = newTestEnv()
+      env2 = newTestEnv()
+
+    env2.node.startListening()
+
+    let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+    check connRes.isOk()
+
+    let peer = connRes.get()
+    check peer.supports(eth71)
+
+    await peer.blockRangeUpdate(
+      BlockRangeUpdatePacket(
+        earliest: 0,
+        latest: 0,
+        latestHash: default(Hash32)))
+
+    # Verify the connection remains usable after sending BlockRangeUpdate.
+    let
+      req = BlockAccessListsRequest(blockHashes: @[default(Hash32)])
+      respOpt = await peer.getBlockAccessLists(req, timeout = chronos.seconds(3))
+    check respOpt.isSome()
+
+    await env2.close()
+    await env1.close()
+
+  asyncTest "getReceipts (eth70+ format)":
+    var
+      env1 = newTestEnv()
+      env2 = newTestEnv()
+
+    env2.node.startListening()
+
+    let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+    check connRes.isOk()
+
+    let peer = connRes.get()
+    check peer.supports(eth71)
+
+    let
+      req = ReceiptsRequest(blockHashes: @[makeHash(888)])
+      respOpt = await peer.getReceipts(0'u64, req, timeout = chronos.seconds(3))
+    check respOpt.isSome()
+
+    # Unknown block: serving stops with an empty response. Per spec,
+    # lastBlockIncomplete only signals a receipt list cut mid-block, so it
+    # stays false here.
+    let resp = respOpt.get()
+    check:
+      resp.receipts.len() == 0
+      not resp.lastBlockIncomplete
+
+    await env2.close()
+    await env1.close()
+
+  asyncTest "GetReceipts eth/70+ request decodes the spec wire format (flat fields)":
+    # https://github.com/ethereum/devp2p/blob/master/caps/eth.md#getreceipts-0x0f
+    # eth/70+ GetReceipts is [request-id, firstBlockReceiptIndex, [blockhash₁, ...]]
+    # with the fields flat in the message list, NOT [request-id, [index, hashes]].
+    # This is the encoding geth sends; decoding it as a nested object used to
+    # raise BreachOfProtocol ("expected list").
+    var writer = initRlpWriter()
+    writer.startList(3)
+    writer.append(0x42'u64)                     # request-id
+    writer.append(7'u64)                        # firstBlockReceiptIndex
+    writer.append(@[makeHash(1), makeHash(2)])  # block hashes
+    let
+      bytes = writer.finish()
+      peer = Peer()
+    var decoded = false
+    eth70.rlpxWithPacketResponder(StoredReceipts70Request, peer,
+        rlpFromBytes(bytes), [firstBlockReceiptIndex, blockHashes]):
+      discard response
+      check:
+        packet.firstBlockReceiptIndex == 7'u64
+        packet.blockHashes == @[makeHash(1), makeHash(2)]
+      decoded = true
+    check decoded
+
+# Unit tests for the sync-side decoding of block access lists fetched from
+# peers (`blocks_bal.decodeBlockAccessList`). A peer-supplied list is only
+# trusted when it matches the hash committed in the (already validated) header.
+suite "eth/71 sync block access list decoding":
+
+  func balWithAddress(addrHex: string): BlockAccessList =
+    result = newSeq[AccountChanges](1)
+    result[0].address = Address.fromHex(addrHex)
+
+  func headerForBal(bal: BlockAccessList): Header =
+    Header(blockAccessListHash: Opt.some(computeBlockAccessListHash(bal)))
+
+  test "unavailable marker (0x80) decodes to none":
+    let header = headerForBal(default(BlockAccessList))
+    check decodeBlockAccessList(
+      RawBlockAccessList(UNAVAILABLE_BAL_BYTES), header).isNone()
+
+  test "empty raw bytes decode to none":
+    let header = headerForBal(default(BlockAccessList))
+    check decodeBlockAccessList(
+      RawBlockAccessList(newSeq[byte](0)), header).isNone()
+
+  test "header without a bal hash decodes to none":
+    let
+      bal = balWithAddress("0x1234567890123456789012345678901234567890")
+      raw = RawBlockAccessList(rlp.encode(bal))
+      header = Header(blockAccessListHash: Opt.none(Hash32))
+    check decodeBlockAccessList(raw, header).isNone()
+
+  test "valid empty bal (0xC0) decodes to an empty list":
+    let
+      bal = default(BlockAccessList)
+      raw = RawBlockAccessList(rlp.encode(bal))
+      res = decodeBlockAccessList(raw, headerForBal(bal))
+    check:
+      res.isSome()
+      res.get()[] == bal
+
+  test "valid non-empty bal matching the header decodes":
+    let
+      bal = balWithAddress("0x1234567890123456789012345678901234567890")
+      raw = RawBlockAccessList(rlp.encode(bal))
+      res = decodeBlockAccessList(raw, headerForBal(bal))
+    check:
+      res.isSome()
+      res.get()[] == bal
+
+  test "bal not matching the header hash is rejected":
+    let
+      bal = balWithAddress("0x1234567890123456789012345678901234567890")
+      otherBal = balWithAddress("0x2222222222222222222222222222222222222222")
+      raw = RawBlockAccessList(rlp.encode(bal))
+      # The header commits to a different list, so the peer-supplied one must be
+      # discarded - otherwise a bad peer could stall syncing.
+      header = headerForBal(otherBal)
+    check decodeBlockAccessList(raw, header).isNone()
+
+  test "malformed rlp decodes to none":
+    let
+      bal = balWithAddress("0x1234567890123456789012345678901234567890")
+      header = headerForBal(bal)
+      # A valid RLP string item where a list (the access list) is expected.
+      raw = RawBlockAccessList(@[0x82'u8, 0x12, 0x34])
+    check decodeBlockAccessList(raw, header).isNone()
+    
+# Unit tests for the eth/70+ GetReceipts continuation semantics
+# (https://github.com/ethereum/devp2p/blob/master/caps/eth.md#getreceipts-0x0f):
+# `firstBlockReceiptIndex` offsets into the FIRST block's receipt list, receipt
+# lists are cut per receipt at the soft response limit, and a mid-block cut
+# sets `lastBlockIncomplete` so the requester can resume.
+suite "eth/70 GetReceipts continuation":
+
+  # ~700 KiB per receipt: two fit under SOFT_RESPONSE_LIMIT (2 MiB), a third
+  # does not, forcing a mid-block cut like hive's >10MiB LargeReceiptBlock.
+  const bigLogSize = 700 * 1024
+
+  proc makeReceipt(dataSize: int): StoredReceipt =
+    StoredReceipt(
+      receiptType: TxLegacy,
+      status: true,
+      cumulativeGasUsed: 21000,
+      logs: @[Log(data: newSeq[byte](dataSize))],
+    )
+
+  proc makeReceipts(n, dataSize: int): seq[StoredReceipt] =
+    for _ in 0 ..< n:
+      result.add makeReceipt(dataSize)
+
+  proc seedReceiptBlock(env: TestEnv, num: uint64,
+                        receipts: seq[StoredReceipt]): Hash32 =
+    ## Persist a header + receipts straight into the database so
+    ## receiptsByBlockHash can find them without importing a real block.
+    let
+      root = makeHash(int(10_000 + num))
+      blockHash = makeHash(int(20_000 + num))
+      header = Header(number: num, receiptsRoot: root)
+    env.chain.baseTxFrame.persistHeader(blockHash, header).expect("persistHeader")
+    env.chain.baseTxFrame.persistReceipts(root, receipts)
+    blockHash
+
+  test "large block is served in resumable chunks":
+    let
+      env = newTestEnv()
+      wire = EthWireRef(chain: env.chain)
+      receipts = makeReceipts(5, bigLogSize)
+      blockHash = env.seedReceiptBlock(1000, receipts)
+
+    # First request: only two receipts fit, block is cut mid-list.
+    let first = wire.getStoredReceipts70(StoredReceipts70Request(
+      firstBlockReceiptIndex: 0, blockHashes: @[blockHash]))
+    check:
+      first.lastBlockIncomplete
+      first.receipts.len == 1
+      first.receipts[0] == receipts[0..1]
+
+    # Resume from the number of receipts received so far.
+    let second = wire.getStoredReceipts70(StoredReceipts70Request(
+      firstBlockReceiptIndex: 2, blockHashes: @[blockHash]))
+    check:
+      second.lastBlockIncomplete
+      second.receipts.len == 1
+      second.receipts[0] == receipts[2..3]
+
+    let third = wire.getStoredReceipts70(StoredReceipts70Request(
+      firstBlockReceiptIndex: 4, blockHashes: @[blockHash]))
+    check:
+      not third.lastBlockIncomplete
+      third.receipts.len == 1
+      third.receipts[0] == receipts[4..4]
+
+    waitFor env.close()
+
+  test "continuation cursor covering the whole first block yields an empty positional entry":
+    let
+      env = newTestEnv()
+      wire = EthWireRef(chain: env.chain)
+      large = makeReceipts(5, bigLogSize)
+      small = makeReceipts(2, 100)
+      largeHash = env.seedReceiptBlock(1001, large)
+      smallHash = env.seedReceiptBlock(1002, small)
+
+    # The requester already has all 5 receipts of the first block and asks
+    # for the rest starting at that block (geth's TestGetLargeReceipts flow).
+    let resp = wire.getStoredReceipts70(StoredReceipts70Request(
+      firstBlockReceiptIndex: 5, blockHashes: @[largeHash, smallHash]))
+    check:
+      not resp.lastBlockIncomplete
+      resp.receipts.len == 2
+      resp.receipts[0].len == 0
+      resp.receipts[1] == small
+
+    waitFor env.close()
+
+  test "mid-response cut across blocks sets lastBlockIncomplete":
+    let
+      env = newTestEnv()
+      wire = EthWireRef(chain: env.chain)
+      small = makeReceipts(2, 100)
+      large = makeReceipts(5, bigLogSize)
+      smallHash = env.seedReceiptBlock(1003, small)
+      largeHash = env.seedReceiptBlock(1004, large)
+
+    let resp = wire.getStoredReceipts70(StoredReceipts70Request(
+      firstBlockReceiptIndex: 0, blockHashes: @[smallHash, largeHash]))
+    check:
+      resp.lastBlockIncomplete
+      resp.receipts.len == 2
+      resp.receipts[0] == small
+      resp.receipts[1] == large[0..1]
+
+    waitFor env.close()
+
+  test "unknown block stops serving to preserve positional correspondence":
+    let
+      env = newTestEnv()
+      wire = EthWireRef(chain: env.chain)
+      small = makeReceipts(2, 100)
+      small2 = makeReceipts(3, 100)
+      smallHash = env.seedReceiptBlock(1005, small)
+      small2Hash = env.seedReceiptBlock(1006, small2)
+
+    let resp = wire.getStoredReceipts70(StoredReceipts70Request(
+      firstBlockReceiptIndex: 0,
+      blockHashes: @[smallHash, makeHash(31337), small2Hash]))
+    check:
+      not resp.lastBlockIncomplete
+      resp.receipts.len == 1
+      resp.receipts[0] == small
+
+    waitFor env.close()

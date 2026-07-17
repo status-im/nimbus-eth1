@@ -124,7 +124,7 @@ proc handleTransactionsBroadcast*(wire: EthWireRef,
         # Disallow blob transaction broadcast
         debug "Protocol Breach: Peer broadcast blob transaction",
           remote=peer.remote, clientId=peer.clientId
-        await peer.disconnect(BreachOfProtocol)
+        await peer.disconnect(BreachOfProtocol, notifyRemote = true)
         return
 
       wire.txPool.addTx(tx).isOkOr:
@@ -152,7 +152,7 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
       hashes = packet.txHashes.len,
       sizes  = packet.txSizes.len,
       types  = packet.txTypes.len
-    await peer.disconnect(BreachOfProtocol)
+    await peer.disconnect(BreachOfProtocol, notifyRemote = true)
     return
 
   # Cross-peer dedupe: drop hashes already in the pool or being fetched by
@@ -277,24 +277,24 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
           if tx.tx.txType.byte != val.txType:
             debug "Protocol Breach: Received transaction with type differ from announced",
               remote=peer.remote, clientId=peer.clientId
-            await peer.disconnect(BreachOfProtocol)
+            await peer.disconnect(BreachOfProtocol, notifyRemote = true)
             return
 
           if size.uint64 != val.size:
             debug "Protocol Breach: Received transaction with size differ from announced",
               remote=peer.remote, clientId=peer.clientId
-            await peer.disconnect(BreachOfProtocol)
+            await peer.disconnect(BreachOfProtocol, notifyRemote = true)
             return
         do:
           debug "Protocol Breach: Received transaction with hash differ from announced",
               remote=peer.remote, clientId=peer.clientId
-          await peer.disconnect(BreachOfProtocol)
+          await peer.disconnect(BreachOfProtocol, notifyRemote = true)
           return
 
         if tx.tx.txType == TxEip4844 and tx.blobsBundle.isNil:
           debug "Protocol Breach: Received sidecar-less blob transaction",
             remote=peer.remote, clientId=peer.clientId
-          await peer.disconnect(BreachOfProtocol)
+          await peer.disconnect(BreachOfProtocol, notifyRemote = true)
           return
 
         # addTx performs the expensive KZG verification itself; on
@@ -305,13 +305,30 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
           if error == txErrorInvalidBlob:
             debug "Protocol Breach: Invalid blob transaction",
               remote=peer.remote, clientId=peer.clientId
-            await peer.disconnect(BreachOfProtocol)
+            await peer.disconnect(BreachOfProtocol, notifyRemote = true)
             return
           await sleepAsync(ZeroDuration)
           continue
 
         await sleepAsync(ZeroDuration)
         awaitQuota(wire, txPoolProcessCost, "broadcast transactions hashes")
+
+proc cleanupSeenTransactions*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
+  # Collect expired keys in a single synchronous pass. Do NOT await while
+  # iterating the live table: a concurrently-dispatched handleTxHashesBroadcast
+  # can insert into seenTransactions and trip Nim's "length of the table changed
+  # while iterating over it" assertion.
+  var expireds: seq[Hash32]
+  let now = getTime()
+  for key, seen in wire.seenTransactions:
+    if now - seen.lastSeen > POOLED_STORAGE_TIME_LIMIT:
+      expireds.add key
+
+  # Deletion iterates over `expireds` (a seq), so awaiting here is safe even if
+  # a concurrent handler mutates the table.
+  for expire in expireds:
+    wire.seenTransactions.del(expire)
+    awaitQuota(wire, hashLookupCost, "broadcast transactions hashes")
 
 proc tickerLoop*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
   while true:
@@ -327,15 +344,7 @@ proc tickerLoop*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
 
     if res == wire.cleanupTimer:
       wire.reqisterAction("Periodical cleanup"):
-        var expireds: seq[Hash32]
-        for key, seen in wire.seenTransactions:
-          if getTime() - seen.lastSeen > POOLED_STORAGE_TIME_LIMIT:
-            expireds.add key
-          awaitQuota(wire, hashLookupCost, "broadcast transactions hashes")
-
-        for expire in expireds:
-          wire.seenTransactions.del(expire)
-          awaitQuota(wire, hashLookupCost, "broadcast transactions hashes")
+        await wire.cleanupSeenTransactions()
 
     if res == wire.brUpdateTimer:
       wire.reqisterAction("Periodical blockRangeUpdate"):

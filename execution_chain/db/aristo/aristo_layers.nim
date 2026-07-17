@@ -146,6 +146,19 @@ func layersPutKey*(
   if db.snapshot.level.isSome():
     db.snapshot.vtx[rvid] = (VertexRef(vtx), key, db.level)
 
+func layersPutKey*(
+    db: AristoTxRef;
+    rvid: RootedVertexID;
+    vtx: BoundaryNodeRef,
+    key: HashKey;
+      ) =
+  ## Stores the live vertex so mergePayloadImpl can read pfx/childKey on split.
+  let vtx = db.layersPrepareUpdate(rvid, vtx)
+  db.kMap[rvid] = key
+
+  if db.snapshot.level.isSome():
+    db.snapshot.vtx[rvid] = (VertexRef(vtx), key, db.level)
+
 func layersMergeKey*(
     db: AristoTxRef;
     rvid: RootedVertexID;

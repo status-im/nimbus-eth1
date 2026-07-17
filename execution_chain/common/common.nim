@@ -12,6 +12,7 @@
 import
   chronicles,
   eth/common/eth_types_json_serialization,
+  eth/common/block_access_lists,
   ../db/[core_db, ledger, storage_types, fcu_db],
   ../utils/[utils],
   ".."/[constants, errors, version_info],
@@ -43,6 +44,10 @@ type
     ## Notify engine-API of encountered bad block
 
   ResolveFinHashCB* = proc(fin: Hash32) {.gcsafe, raises: [].}
+
+  HeaderTargetRequestCB* = proc(hash, finHash: Hash32) {.gcsafe, raises: [].}
+    ## Ask the syncer to fetch an unknown head from the `eth` network and
+    ## then activate the normal header-chain sync toward it.
 
   CommonRef* = ref object
     # all purpose storage
@@ -78,6 +83,10 @@ type
 
     resolveFinHash: ResolveFinHashCB
 
+    headerTargetRequestCB: HeaderTargetRequestCB
+      ## Call back function asking the syncer to fetch an unknown forkchoice
+      ## head from peers (used when the head is not in our DB or quarantine).
+
     startOfHistory: Hash32
       ## This setting is needed for resuming blockwise syncying after
       ## installing a snapshot pivot. The default value for this field is
@@ -92,17 +101,41 @@ type
     maxBlobs: Opt[uint8]
       ## For EIP-7872; allows constraining of max blobs packed into each payload
 
-    when compileOption("threads"):
-      taskpool*: Taskpool
-        ## Shared task pool for offloading computation to other threads
-
-    statelessProviderEnabled*: bool
+    statelessProvider*: bool
       ## Enable the stateless provider. This turns on the features required
       ## by stateless clients such as generation and storage of block witnesses
       ## and serving these witnesses to peers over the p2p network.
 
     statelessWitnessValidation*: bool
       ## Enable full validation of execution witnesses.
+
+    when compileOption("threads"):
+      taskpool: Taskpool
+        ## Shared task pool for offloading computation to other threads
+
+      taskpoolUsable: bool
+        ## Cached evaluation of `not taskpool.isNil() and taskpool.numThreads > 1`
+
+    parallelSenderRecovery*: bool
+      ## Recover the transaction senders of a block in parallel on background
+      ## threads.
+
+    optimisticStatePrefetch*: bool
+      ## Optimistically pre-execute the transactions of a block on background
+      ## threads to warm database caches before the main thread executes them.
+
+    balStatePrefetch*: bool
+      ## Use the supplied block access list to prefetch the accounts and storage
+      ## slots of a block on background threads.
+
+    balStatePrefetchWorkers*: int
+      ## Number of background worker tasks used for block access list state
+      ## prefetching. 0 means use the same number of workers as the number of
+      ## available taskpool threads.
+
+    balParallelExecution*: bool
+      ## Execute the transactions of a block in parallel on background threads
+      ## using the supplied block access list.
 
 # ------------------------------------------------------------------------------
 # Private helper functions
@@ -175,8 +208,13 @@ proc init(com         : CommonRef,
           config      : ChainConfig,
           genesis     : Genesis,
           initializeDb: bool,
-          statelessProviderEnabled: bool,
-          statelessWitnessValidation: bool) =
+          statelessProvider: bool,
+          statelessWitnessValidation: bool,
+          optimisticStatePrefetch: bool,
+          balStatePrefetch: bool,
+          balStatePrefetchWorkers: int,
+          balParallelExecution: bool,
+          parallelSenderRecovery: bool) =
 
 
   config.daoCheck()
@@ -213,8 +251,13 @@ proc init(com         : CommonRef,
   if initializeDb:
     com.initializeDb()
 
-  com.statelessProviderEnabled = statelessProviderEnabled
+  com.statelessProvider = statelessProvider
   com.statelessWitnessValidation = statelessWitnessValidation
+  com.optimisticStatePrefetch = optimisticStatePrefetch
+  com.balStatePrefetch = balStatePrefetch
+  com.balStatePrefetchWorkers = balStatePrefetchWorkers
+  com.balParallelExecution = balParallelExecution
+  com.parallelSenderRecovery = parallelSenderRecovery
 
 proc isBlockAfterTtd(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
   if com.config.terminalTotalDifficulty.isNone:
@@ -237,8 +280,13 @@ proc new*(
     networkId: NetworkId = MainNet;
     params = networkParams(MainNet);
     initializeDb = true;
-    statelessProviderEnabled = false;
+    statelessProvider = false;
     statelessWitnessValidation = false;
+    optimisticStatePrefetch = false;
+    balStatePrefetch = false;
+    balStatePrefetchWorkers = 0;
+    balParallelExecution = false;
+    parallelSenderRecovery = false;
       ): CommonRef =
 
   ## If genesis data is present, the forkIds will be initialized
@@ -250,8 +298,13 @@ proc new*(
     params.config,
     params.genesis,
     initializeDb,
-    statelessProviderEnabled,
-    statelessWitnessValidation)
+    statelessProvider,
+    statelessWitnessValidation,
+    optimisticStatePrefetch,
+    balStatePrefetch,
+    balStatePrefetchWorkers,
+    balParallelExecution,
+    parallelSenderRecovery)
 
 proc new*(
     _: type CommonRef;
@@ -259,8 +312,13 @@ proc new*(
     config: ChainConfig;
     networkId: NetworkId = MainNet;
     initializeDb = true;
-    statelessProviderEnabled = false;
-    statelessWitnessValidation = false
+    statelessProvider = false;
+    statelessWitnessValidation = false;
+    optimisticStatePrefetch = false;
+    balStatePrefetch = false;
+    balStatePrefetchWorkers = 0;
+    balParallelExecution = false;
+    parallelSenderRecovery = false;
       ): CommonRef =
 
   ## There is no genesis data present
@@ -272,26 +330,13 @@ proc new*(
     config,
     nil,
     initializeDb,
-    statelessProviderEnabled,
-    statelessWitnessValidation)
-
-func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
-  ## clone but replace the db
-  ## used in EVM tracer whose db is CaptureDB
-  CommonRef(
-    db           : db,
-    config       : com.config,
-    forkTransitionTable: com.forkTransitionTable,
-    forkIdCalculator: com.forkIdCalculator,
-    genesisHash  : com.genesisHash,
-    genesisHeader: com.genesisHeader,
-    networkId    : com.networkId,
-    statelessProviderEnabled: com.statelessProviderEnabled,
-    statelessWitnessValidation: com.statelessWitnessValidation
-  )
-
-func clone*(com: CommonRef): CommonRef =
-  com.clone(com.db)
+    statelessProvider,
+    statelessWitnessValidation,
+    optimisticStatePrefetch,
+    balStatePrefetch,
+    balStatePrefetchWorkers,
+    balParallelExecution,
+    parallelSenderRecovery)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -306,6 +351,9 @@ func toHardFork*(com: CommonRef, timestamp: EthTime): HardFork =
     if com.forkTransitionTable.timeThresholds[fork].isSome and timestamp >= com.forkTransitionTable.timeThresholds[fork].get:
       return fork
 
+func toHardFork*(com: CommonRef, header: Header): HardFork =
+  com.toHardFork(forkDeterminationInfo(header))
+
 func toEVMFork*(com: CommonRef, timestamp: EthTime): EVMFork =
   ## similar to toHardFork, but produce EVMFork
   let fork = com.toHardFork(timestamp)
@@ -315,6 +363,9 @@ func toEVMFork*(com: CommonRef, forkDeterminer: ForkDeterminationInfo): EVMFork 
   ## similar to toFork, but produce EVMFork
   let fork = com.toHardFork(forkDeterminer)
   ToEVMFork[fork]
+
+func toEVMFork*(com: CommonRef, header: Header): EVMFork =
+  com.toEVMFork(forkDeterminationInfo(header))
 
 func nextFork*(com: CommonRef, currentFork: HardFork): Opt[HardFork] =
   ## Returns the next hard fork after the given one
@@ -336,9 +387,6 @@ func lastFork*(com: CommonRef, currentFork: HardFork): Opt[HardFork] =
 func activationTime*(com: CommonRef, fork: HardFork): Opt[EthTime] =
   ## Returns the activation time of the given hard fork
   com.forkTransitionTable.timeThresholds[fork]
-
-func toEVMFork*(com: CommonRef, header: Header): EVMFork =
-  com.toEVMFork(forkDeterminationInfo(header))
 
 func isSpuriousOrLater*(com: CommonRef, number: BlockNumber, time: EthTime): bool =
   com.toHardFork(forkDeterminationInfo(number, time)) >= Spurious
@@ -388,6 +436,74 @@ func isOsakaOrLater*(com: CommonRef, t: EthTime): bool =
 func isAmsterdamOrLater*(com: CommonRef, t: EthTime): bool =
   com.config.amsterdamTime.isSome and t >= com.config.amsterdamTime.value
 
+func amsterdamTransition*(com: CommonRef, parentTime, t: EthTime): bool =
+  com.config.amsterdamTime.isSome and
+    t >= com.config.amsterdamTime.value and
+    parentTime < com.config.amsterdamTime.value
+
+func isBogotaOrLater*(com: CommonRef, t: EthTime): bool =
+  com.config.bogotaTime.isSome and t >= com.config.bogotaTime.value
+
+when compileOption("threads"):
+  func taskpool*(com: CommonRef): Taskpool =
+    com.taskpool
+
+  func `taskpool=`*(com: CommonRef, taskpool: Taskpool) =
+    com.taskpool = taskpool
+    com.taskpoolUsable = not taskpool.isNil() and taskpool.numThreads > 1
+
+  proc shutdownTaskpool*(com: CommonRef) =
+    if not com.taskpool.isNil():
+      com.taskpool.shutdown()
+      com.taskpool = nil
+      com.taskpoolUsable = false
+
+func parallelSenderRecoveryEnabled*(com: CommonRef): bool =
+  when compileOption("threads"):
+    if com.parallelSenderRecovery:
+      assert com.taskpoolUsable
+      true
+    else:
+      false
+  else:
+    false
+
+func optimisticStatePrefetchEnabled*(com: CommonRef): bool =
+  when compileOption("threads"):
+    if com.optimisticStatePrefetch:
+      assert com.taskpoolUsable
+      true
+    else:
+      false
+  else:
+    false
+
+func balStatePrefetchEnabled*(
+    com: CommonRef,
+    timestamp: EthTime,
+    blockAccessList: Opt[BlockAccessListRef]): bool =
+  when compileOption("threads"):
+    if com.balStatePrefetch:
+      assert com.taskpoolUsable
+      blockAccessList.isSome() and com.isAmsterdamOrLater(timestamp)
+    else:
+      false
+  else:
+    false
+
+func balParallelExecutionEnabled*(
+    com: CommonRef,
+    timestamp: EthTime,
+    blockAccessList: Opt[BlockAccessListRef]): bool =
+  when compileOption("threads"):
+    if com.balParallelExecution:
+      assert com.taskpoolUsable
+      blockAccessList.isSome() and com.isAmsterdamOrLater(timestamp)
+    else:
+      false
+  else:
+    false
+
 proc proofOfStake*(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
   if com.config.posBlock.isSome:
     # see comments of posBlock in common/hardforks.nim
@@ -421,6 +537,11 @@ proc notifyBadBlock*(com: CommonRef; invalid, origin: Header)
 proc resolveFinHash*(com: CommonRef; fin: Hash32) =
   if not com.resolveFinHash.isNil:
     com.resolveFinHash(fin)
+
+proc headerTargetRequest*(com: CommonRef; hash, finHash: Hash32) =
+  ## Request the syncer to fetch an unknown forkchoice head from peers.
+  if not com.headerTargetRequestCB.isNil:
+    com.headerTargetRequestCB(hash, finHash)
 
 # ------------------------------------------------------------------------------
 # Getters
@@ -520,6 +641,10 @@ func `notifyBadBlock=`*(com: CommonRef; cb: NotifyBadBlockCB) =
 
 func `resolveFinHash=`*(com: CommonRef; cb: ResolveFinHashCB) =
   com.resolveFinHash = cb
+
+func `headerTargetRequest=`*(com: CommonRef; cb: HeaderTargetRequestCB) =
+  ## Activate or reset a call back handler for fetching unknown FCU heads.
+  com.headerTargetRequestCB = cb
 
 func `extraData=`*(com: CommonRef, val: string) =
   com.extraData = val

@@ -14,14 +14,16 @@ import
   pkg/[chronos, stint]
 
 type
-  SyncState* = enum
+  SnapState* = enum
     SnapIdle = 0
-    SnapResume                     ## Resume from previous session
     SnapReady                      ## Wait for download state
+    SnapResume                     ## Resume from previous session
     SnapDownload                   ## Downloading and caching data
     SnapDownloadFinish             ## Wait for sync before proceeding
     SnapMkTrie                     ## Assembling downloaded data
-    SnapHealing                    ## Complete missing trie nodes
+    SnapAnalyse                    ## Analyse for missing MPT nodes
+    # ..                           ## TBD ..
+    SnapStop                       ## TBD ..
 
   ErrorType* = enum
     ## For `FetchError` return code object/tuple
@@ -44,37 +46,33 @@ const
   twoHundredYears* = chronos.days(365 * 200 + 48)
     ## Large Duration constant considered sort of infinite.
 
-  daemonWaitReadyInterval* = chronos.seconds(30)
+  daemonWaitReadyInterval* = chronos.seconds(47)
     ## Some polling interval time waiting until the system gets into download
-    ## state when the the FCU modue hash  a finalised header.
+    ## state when the the FCU modue hash provides a finalised header and there
+    ## are eth/xx download peers available.
 
-  daemonWaitDownloadInterval* = chronos.seconds(10)
-    ## Some waiting time at the end of the daemon task which always lingers
-    ## in the background. This one is for `SnapDownload` state.
-
-  daemonWaitDownloadFinishInterval* = chronos.seconds(5)
-    ## Poll waiting for all downloading peers to have stopped
+  daemonWaitHeaderInterval* = chronos.seconds(30)
+    ## Ditto for header download.
 
   daemonWaitElseInterval* = chronos.seconds(10)
-    ## Ditto for other states than `SnapMkTrie` or `SnapHealing`.
+    ## Ditto for other states.
+
+  peerWaitDownloadInterval* = chronos.seconds(5)
+    ## Some waiting time at the end of the daemon task which always lingers
+    ## in the background. This one is for non-`SnapDownload` states.
 
   peerWaitElseInterval* = chronos.milliseconds(1200)
     ## Some waiting time at the end of the daemon task which always lingers
     ## in the background. This one is for non-`SnapDownload` states.
 
-  threadLogTimeLimit* = chronos.seconds(25)
+  threadLogTimeLimit* = chronos.seconds(45)
     ## Print intermediate messages when running a time consuming task
 
-  threadSwitchTimeSlot* = chronos.nanoseconds(1)
-    ## Nano-sleep to allows pseudo/async thread switch
+  threadSwitchRunLimit* = chronos.seconds(25)
+    ## Force a thread switch after that time running continuously. This
+    ## applies mainly for DB building and analysing sessions.
 
-  threadSwitchRunLimit* = chronos.seconds(10)
-    ## Force a thread switch after that time running continuously
-
-  lockWaitPollingTime* = chronos.milliseconds(500)
-    ## Polling for a lock to be released
-
-  accuAccountsCovMin* = 4.0
+  accuAccountsCovMin* = 1.01
     ## In absence of a completed pivot state, the syncer will stop downloading
     ## if all accounts are covered at least by this factor. Then trie-assembly
     ## and healing can take place.
@@ -82,6 +80,10 @@ const
   stateIdleTimeBeforeEviction* = chronos.minutes(30)
     ## Minimum time a state is cached before eviction unless other criteria
     ## apply (e.g. fully unprocessed account range.)
+
+  noStateRecordsMsgDelay* = chronos.seconds(20)
+    ## After logging a `no state records` message, subsequent similar messages
+    ## are suppressed for a while.
 
   # ----------------------
 
@@ -98,7 +100,19 @@ const
     ##
     ## Note that there are about 400k accounts on `mainnet` (as of early 2026.)
 
+  daemonWaitDownloadInterval* = chronos.seconds(10)
+    ## Some waiting time at the end of the daemon task which always lingers
+    ## in the background. This one is for `SnapDownload` state.
+
+  daemonWaitDownloadFinishInterval* = chronos.seconds(5)
+    ## Poll waiting for all downloading peers to have stopped
+
   # -----------
+
+  nConsHeadcachedDeltaMax* = 128
+    ## If the block number difference between FCU update header and cached
+    ## header is larger than this contant, a beacon header fetch cycle is
+    ## triggered to fill up the cache.
 
   nFetchHeaderPeersMax* = 5
     ## Try at most this many `eth` peers for fetching a header
@@ -114,7 +128,7 @@ const
   nFetchAccountSnapErrThreshold* = 4
     ## Maximum account fetch errors before zombification.
 
-  fetchAccountSnapBytesLimit* = 50 * 1024
+  fetchAccountSnapBytesLimit* = 512 * 1024
     ## Soft bytes limit to request accounts
 
   nProcAccountErrThreshold* = 4
@@ -129,7 +143,7 @@ const
   nFetchStorageSnapErrThreshold* = 4
     ## Similar to `nFetchAccountSnapErrThreshold`
 
-  fetchStorageSnapBytesLimit* = 50 * 1024
+  fetchStorageSnapBytesLimit* = 512 * 1024
     ## Similar to `fetchAccountSnapBytesLimit`
 
   nProcStorageErrThreshold* = 4
@@ -140,19 +154,52 @@ const
 
   # -----------
 
+  daemonWaitHealingInterval* = chronos.seconds(10)
+    ## Poll waiting for peers to process account and storage nodes
+
+  daemonWaitHealingFinishInterval* = chronos.seconds(5)
+    ## Wait for sync
+
+  trieNodeAccPathCapacity* = 10
+
+  fetchTrieNodeSnapTimeout* = chronos.seconds(120)
+    ## Similar to `fetchAccountSnapTimeout`
+
+  nFetchTrieNodeSnapErrThreshold* = 4
+    ## Similar to `nFetchAccountSnapErrThreshold`
+
+  fetchTrieNodeSnapBytesLimit* = 512 * 1024
+    ## Similar to `fetchAccountSnapBytesLimit`
+
+  nProcTrieNodeErrThreshold* = 4
+    ## Similar to `nProcAccountErrThreshold`
+
+  nFetchTrieNodeSnapItemsMax* = 1024
+    ## Maximal size of storage slots downloaded in a single message.
+
+  # -----------
+
+  daemonWaitCodesInterval* = chronos.seconds(10)
+    ## Poll waiting for peers to process contract codes
+
+  daemonWaitCodesFinishInterval* = chronos.seconds(5)
+    ## Wait for sync
+
   fetchCodesSnapTimeout* = chronos.seconds(120)
     ## Similar to `fetchAccountSnapTimeout`
 
   nFetchCodesSnapErrThreshold* = 4
     ## Similar to `nFetchAccountSnapErrThreshold`
 
-  fetchCodesSnapBytesLimit* = 50 * 1024
+  fetchCodesSnapBytesLimit* = 512 * 1024
     ## Similar to `fetchAccountSnapBytesLimit`
 
   nProcCodesErrThreshold* = 4
     ## Similar to `nProcAccountErrThreshold`
 
-  nFetchByteCodesMax* = 1024
-    ## Maximal sise of byte codes downloaded in a single message.
+  nFetchByteCodesMax* = 128
+    ## Maximal sise of byte codes downloaded in a single message. Note
+    ## that the snap/1 protocol description recommends someting about
+    ## 80-100 items for a 515K byte limit.
 
 # End

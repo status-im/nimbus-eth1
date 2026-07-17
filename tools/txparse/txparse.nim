@@ -15,8 +15,9 @@ import
   ../common/helpers,
   ../../execution_chain/db/core_db/memory_only,
   ../../execution_chain/transaction,
+  ../../execution_chain/transaction/call_types,
   ../../execution_chain/core/validate,
-  ../../execution_chain/common/evmforks,
+  ../../execution_chain/common/hardforks,
   ../../execution_chain/common/common
 
 proc parseTx(com: CommonRef, hexLine: string) =
@@ -24,13 +25,15 @@ proc parseTx(com: CommonRef, hexLine: string) =
     let
       bytes = hexToSeqByte(hexLine)
       tx = decodeTx(bytes)
-      address = tx.recoverSender().expect("valid signature")
+      sender = tx.recoverSender().expect("valid signature")
+      fork = HardFork.Prague
+      intrinsic = tx.intrinsicGas(fork, 10_000_000, sender)
 
-    validateTxBasic(com, tx, 10_000_000, FkPrague).isOkOr:
+    validateTxBasic(com, tx, intrinsic, fork).isOkOr:
       echo "err: ", error
 
     # everything ok
-    echo "0x", address.toHex
+    echo "0x", sender.toHex
 
   except RlpError as ex:
     echo "err: ", ex.msg

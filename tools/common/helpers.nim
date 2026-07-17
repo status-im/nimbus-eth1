@@ -80,9 +80,9 @@ func getChainConfig*(network: string, c: ChainConfig) =
     c.assignNumber(HardFork.Frontier, BlockNumberZero)
   of $TestFork.Homestead:
     c.assignNumber(HardFork.Homestead, BlockNumberZero)
-  of $TestFork.EIP150:
+  of $TestFork.EIP150, $TestFork.TangerineWhistle:
     c.assignNumber(HardFork.Tangerine, BlockNumberZero)
-  of $TestFork.EIP158:
+  of $TestFork.EIP158, $TestFork.SpuriousDragon:
     c.assignNumber(HardFork.Spurious, BlockNumberZero)
   of $TestFork.Byzantium:
     c.assignNumber(HardFork.Byzantium, BlockNumberZero)
@@ -165,6 +165,8 @@ func getChainConfig*(network: string, c: ChainConfig) =
   of $TestFork.BPO2ToAmsterdamAtTime15k:
     let excludes = [HardFork.Bpo3, HardFork.Bpo4, HardFork.Bpo5]
     c.assignTime(HardFork.Amsterdam, EthTime(15000), excludes)
+  of $TestFork.Bogota:
+    c.assignTime(HardFork.Bogota, TimeZero)
   else:
     raise newException(ValueError, "unsupported network " & network)
 

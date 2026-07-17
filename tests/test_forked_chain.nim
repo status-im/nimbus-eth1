@@ -8,12 +8,14 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
   pkg/chronicles,
   pkg/chronos,
   pkg/unittest2,
   testutils,
-  std/[os, strutils],
+  std/[os, sets, strutils],
   ../execution_chain/common,
   ../execution_chain/conf,
   ../execution_chain/utils/utils,
@@ -22,8 +24,9 @@ import
   ../execution_chain/core/chain/forked_chain/chain_serialize,
   ../execution_chain/core/chain/forked_chain/chain_branch,
   ../execution_chain/db/ledger,
+  ../execution_chain/evm/[state, types],
   ../execution_chain/db/core_db/memory_only,
-  ../execution_chain/db/era1_db,
+  ../execution_chain/history/db/ere_db,
   ../execution_chain/db/fcu_db,
   ./test_forked_chain/chain_debug
 
@@ -78,7 +81,7 @@ proc makeBlk(txFrame: CoreDbTxRef, number: BlockNumber, parentBlk: Block): Block
   ledger.persist()
 
   let wdRoot = calcWithdrawalsRoot(wds)
-  var body = BlockBody(
+  let body = BlockBody(
     withdrawals: Opt.some(move(wds))
   )
 
@@ -137,11 +140,32 @@ proc wdWritten(c: ForkedChainRef, blk: Block): int =
   else:
     0
 
+func checkFinalizedMarkers(fc: ForkedChainRef, finalizedHash: Hash32): bool =
+  const finalizedMarker = 1'u  # chain_branch.DAG_NODE_FINALIZED
+  let finBlk =
+    try:
+      fc.hashToBlock[finalizedHash]
+    except KeyError:
+      return false
+
+  var expected: HashSet[Hash32]
+  for it in ancestors(finBlk):
+    expected.incl it.hash
+
+  for h, b in fc.hashToBlock:
+    let expectedIndex = if h in expected: finalizedMarker else: 0'u
+    if b.index != expectedIndex:
+      debugEcho "finalized marker mismatch: block ", b.number,
+        " index=", b.index, " expected=", expectedIndex
+      return false
+
+  true
+
 template checkImportBlock(chain, blk) =
   let res = waitFor chain.importBlock(blk)
   check res.isOk
   if res.isErr:
-    debugEcho "IMPORT BLOCK FAIL: ", res.error
+    debugEcho "IMPORT BLOCK FAIL: ", res.error.msg
     debugEcho "Block Number: ", blk.header.number
 
 template checkImportBlockErr(chain, blk) =
@@ -150,6 +174,35 @@ template checkImportBlockErr(chain, blk) =
   if res.isOk:
     debugEcho "IMPORT BLOCK SHOULD FAIL"
     debugEcho "Block Number: ", blk.header.number
+
+template checkVerdict(chain, blk, expected) =
+  ## Import `blk` and assert the `FC` classified it as `expected` (the ok-side
+  ## verdict the block syncer relies on: `Valid` / `AlreadyObserved`).
+  let res = waitFor chain.importBlock(blk)
+  check res.isOk
+  if res.isOk:
+    check res.value == expected
+    if res.value != expected:
+      debugEcho "VERDICT mismatch blk#", blk.header.number,
+        " expected ok(", expected, ") got ok(", res.value, ")"
+  else:
+    debugEcho "VERDICT mismatch blk#", blk.header.number,
+      " expected ok(", expected, ") got err(", res.error.kind, "): ", res.error.msg
+
+template checkVerdictErr(chain, blk, expected) =
+  ## Import `blk` and assert the `FC` classified the failure as `expected` (the
+  ## err-side verdict the syncer branches on: `Orphaned` / `MissingParent` =
+  ## benign re-anchor, `Invalid` = bad block / zombie peer).
+  let res = waitFor chain.importBlock(blk)
+  check res.isErr
+  if res.isErr:
+    check res.error.kind == expected
+    if res.error.kind != expected:
+      debugEcho "VERDICT mismatch blk#", blk.header.number,
+        " expected err(", expected, ") got err(", res.error.kind, "): ", res.error.msg
+  else:
+    debugEcho "VERDICT mismatch blk#", blk.header.number,
+      " expected err(", expected, ") got ok(", res.value, ")"
 
 template checkForkChoice(chain, a, b) =
   let res = waitFor chain.forkChoice(a.blockHash, b.blockHash)
@@ -202,12 +255,14 @@ suite "ForkedChainRef tests":
     C5 = txFrame.makeBlk(5, blk4, 1.byte)
     C6 = txFrame.makeBlk(6, C5)
     C7 = txFrame.makeBlk(7, C6)
+    F8 = txFrame.makeBlk(8, blk7, 2.byte) # height 8 blk8 branch/sibling
+
   txFrame.dispose()
 
   test "newBase == oldBase":
     const info = "newBase == oldBase"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com)
+    let chain = ForkedChainRef.init(com)
     # same header twice
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk1)
@@ -244,10 +299,119 @@ suite "ForkedChainRef tests":
     check chain.wdWritten(blk2) == 2
     check chain.validate info & " (9)"
 
+  # --------------------------------------------------------------------------
+  # Re-org handling: these exercise the per-block verdicts the devp2p block
+  # syncer relies on when a re-org arrives mid-sync. The syncer hands every
+  # fetched block to the `FC` and reacts to the classification rather than
+  # second-guessing it by block number, so a legitimate fork must not be
+  # mistaken for a duplicate, and a duplicate must not be re-executed.
+  # --------------------------------------------------------------------------
+
+  test "reorg: duplicate block is AlreadyObserved":
+    const info = "reorg AlreadyObserved"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com)
+    checkVerdict(chain, blk1, ImportOutcome.Valid)
+    checkVerdict(chain, blk2, ImportOutcome.Valid)
+    checkVerdict(chain, blk3, ImportOutcome.Valid)
+    # Re-feeding a block already present (by hash) is recognised and not
+    # re-imported - the syncer advances `topNum` without re-execution.
+    checkVerdict(chain, blk1, ImportOutcome.AlreadyObserved)
+    checkVerdict(chain, blk3, ImportOutcome.AlreadyObserved)
+    check chain.latestHash == blk3.blockHash
+    check chain.validate info
+
+  test "reorg: sibling fork above base is Valid (new branch)":
+    const info = "reorg sibling Valid"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com)
+    checkVerdict(chain, blk1, ImportOutcome.Valid)
+    checkVerdict(chain, blk2, ImportOutcome.Valid)
+    checkVerdict(chain, blk3, ImportOutcome.Valid)
+    checkVerdict(chain, blk4, ImportOutcome.Valid)
+    check chain.heads.len == 1
+    # A re-org arrives: B4 is a sibling of blk4 (both children of blk3) with a
+    # different hash. Its parent blk3 is the in-memory common ancestor, so it is
+    # accepted onto a NEW branch - not mistaken for a duplicate of blk4.
+    checkVerdict(chain, B4, ImportOutcome.Valid)
+    check chain.heads.len == 2
+    checkVerdict(chain, B5, ImportOutcome.Valid)
+    checkVerdict(chain, B6, ImportOutcome.Valid)
+    checkVerdict(chain, B7, ImportOutcome.Valid)
+    # The CL fork-choice can now promote the re-orged branch to the head.
+    checkForkChoice(chain, B7, blk3)
+    checkHeadHash chain, B7.blockHash
+    check chain.latestHash == B7.blockHash
+    check chain.validate info
+
+  test "reorg: gap above finalized is MissingParent (retry, not dead)":
+    const info = "reorg MissingParent"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com)
+    checkVerdict(chain, blk1, ImportOutcome.Valid)
+    checkVerdict(chain, blk2, ImportOutcome.Valid)
+    # blk5's parent (blk4) is absent and blk5.number is above the finalized
+    # point, so it is quarantined for retry - NOT declared a dead branch. The
+    # syncer treats this as a benign re-anchor (no peer penalty).
+    checkVerdictErr(chain, blk5, ImportErrorKind.MissingParent)
+    check chain.latestHash == blk2.blockHash
+    check chain.validate info
+
+  test "reorg: block on a finality-pruned branch is Orphaned":
+    const info = "reorg Orphaned"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
+    checkVerdict(chain, blk1, ImportOutcome.Valid)
+    checkVerdict(chain, blk2, ImportOutcome.Valid)
+    checkVerdict(chain, blk3, ImportOutcome.Valid)
+    checkVerdict(chain, blk4, ImportOutcome.Valid)
+    checkVerdict(chain, blk5, ImportOutcome.Valid)
+    checkVerdict(chain, blk6, ImportOutcome.Valid)
+    checkVerdict(chain, blk7, ImportOutcome.Valid)
+    # B4 is a sibling branch off blk3.
+    checkVerdict(chain, B4, ImportOutcome.Valid)
+    check chain.heads.len == 2
+    # Finalize blk6: the B branch is not reachable from the finalized lineage
+    # and is pruned from memory.
+    checkForkChoice(chain, blk7, blk6)
+    check chain.heads.len == 1
+    # B4 is gone; its child B5 (number 5 <= finalized 6) can never link. The FC
+    # declares the whole forward branch dead instead of quarantining it, so the
+    # syncer drops the rest of that branch.
+    checkVerdictErr(chain, B5, ImportErrorKind.Orphaned)
+    check chain.validate info
+
+  test "reorg: full branch switch keeps pre-reorg blocks observable":
+    const info = "reorg full switch"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com)
+    # The lineage the syncer imported before the re-org.
+    checkVerdict(chain, blk1, ImportOutcome.Valid)
+    checkVerdict(chain, blk2, ImportOutcome.Valid)
+    checkVerdict(chain, blk3, ImportOutcome.Valid)
+    checkVerdict(chain, blk4, ImportOutcome.Valid)
+    checkVerdict(chain, blk5, ImportOutcome.Valid)
+    check chain.latestHash == blk5.blockHash
+    # The re-org lands: it shares blk1..blk4 and diverges at C5 (sibling of
+    # blk5). Each new-branch block links to its in-memory parent -> Valid.
+    checkVerdict(chain, C5, ImportOutcome.Valid)
+    checkVerdict(chain, C6, ImportOutcome.Valid)
+    checkVerdict(chain, C7, ImportOutcome.Valid)
+    check chain.heads.len == 2
+    # The CL promotes the C branch.
+    checkForkChoice(chain, C7, blk4)
+    checkHeadHash chain, C7.blockHash
+    check chain.latestHash == C7.blockHash
+    # The pre-reorg blocks are still in memory (above the finalized point), so
+    # re-feeding them is a no-op rather than a re-execution or an error.
+    checkVerdict(chain, blk4, ImportOutcome.AlreadyObserved)
+    checkVerdict(chain, blk5, ImportOutcome.AlreadyObserved)
+    check chain.validate info
+
   test "newBase on activeBranch":
     const info = "newBase on activeBranch"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
+    let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -280,7 +444,7 @@ suite "ForkedChainRef tests":
   test "newBase between oldBase and head":
     const info = "newBase between oldBase and head"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
+    let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -305,7 +469,7 @@ suite "ForkedChainRef tests":
   test "newBase == oldBase, fork and stay on that fork":
     const info = "newBase == oldBase, fork .."
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com)
+    let chain = ForkedChainRef.init(com)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -329,7 +493,7 @@ suite "ForkedChainRef tests":
   test "newBase move forward, fork and stay on that fork":
     const info = "newBase move forward, fork .."
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
+    let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -354,7 +518,7 @@ suite "ForkedChainRef tests":
   test "newBase on shorter canonical arc, remove oldBase branches":
     const info = "newBase on shorter canonical, remove oldBase branches"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
+    let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -378,7 +542,7 @@ suite "ForkedChainRef tests":
   test "newBase on curbed non-canonical arc":
     const info = "newBase on curbed non-canonical .."
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 5, persistBatchSize = 1)
+    let chain = ForkedChainRef.init(com, baseDistance = 5, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -403,7 +567,7 @@ suite "ForkedChainRef tests":
   test "newBase == oldBase, fork and return to old chain":
     const info = "newBase == oldBase, fork .."
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com)
+    let chain = ForkedChainRef.init(com)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -427,7 +591,7 @@ suite "ForkedChainRef tests":
   test "newBase on activeBranch, fork and return to old chain":
     const info = "newBase on activeBranch, fork .."
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3)
+    let chain = ForkedChainRef.init(com, baseDistance = 3)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -453,7 +617,7 @@ suite "ForkedChainRef tests":
        " (ign dup block)":
     const info = "newBase on shorter canonical .."
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
+    let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -478,7 +642,7 @@ suite "ForkedChainRef tests":
   test "newBase on longer canonical arc, discard new branch":
     const info = "newBase on longer canonical .."
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
+    let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -503,7 +667,7 @@ suite "ForkedChainRef tests":
   test "headerByNumber":
     const info = "headerByNumber"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3)
+    let chain = ForkedChainRef.init(com, baseDistance = 3)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -536,7 +700,7 @@ suite "ForkedChainRef tests":
   test "3 branches, alternating imports":
     const info = "3 branches, alternating imports"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3)
+    let chain = ForkedChainRef.init(com, baseDistance = 3)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -595,7 +759,7 @@ suite "ForkedChainRef tests":
   test "newBase move forward, greater than persistBatchSize":
     const info = "newBase move forward, greater than persistBatchSize"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 2)
+    let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 2)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -618,7 +782,7 @@ suite "ForkedChainRef tests":
   test "newBase move forward, equal persistBatchSize":
     const info = "newBase move forward, equal persistBatchSize"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 2)
+    let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 2)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -641,7 +805,7 @@ suite "ForkedChainRef tests":
   test "newBase move forward, lower than persistBatchSize":
     const info = "newBase move forward, lower than persistBatchSize"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 2)
+    let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 2)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -664,7 +828,7 @@ suite "ForkedChainRef tests":
   test "newBase move forward, auto mode":
     const info = "newBase move forward, auto mode"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 2)
+    let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 2)
     check (waitFor chain.forkChoice(blk7.blockHash, blk6.blockHash)).isErr
     check chain.tryUpdatePendingFCU(blk6.blockHash, blk6.header.number)
     checkImportBlock(chain, blk1)
@@ -687,7 +851,7 @@ suite "ForkedChainRef tests":
   test "newBase move forward, auto mode no forkChoice":
     const info = "newBase move forward, auto mode no forkChoice"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 2)
+    let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 2)
 
     check chain.tryUpdatePendingFCU(blk5.blockHash, blk5.header.number)
     checkImportBlock(chain, blk1)
@@ -710,7 +874,7 @@ suite "ForkedChainRef tests":
   test "newBase move forward, auto mode, base finalized marker needed":
     const info = "newBase move forward, auto mode, base finalized marker needed"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com,
+    let chain = ForkedChainRef.init(com,
       baseDistance = 2,
       persistBatchSize = 1,
       dynamicBatchSize = false)
@@ -740,7 +904,7 @@ suite "ForkedChainRef tests":
   test "serialize roundtrip":
     const info = "serialize roundtrip"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3)
+    let chain = ForkedChainRef.init(com, baseDistance = 3)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -768,7 +932,7 @@ suite "ForkedChainRef tests":
     check src.isOk
     com.db.persist(txFrame)
 
-    var fc = ForkedChainRef.init(com, baseDistance = 3)
+    let fc = ForkedChainRef.init(com, baseDistance = 3)
     let rc = fc.deserialize()
     if rc.isErr:
       echo "FAILED TO DESERIALIZE: ", rc.error
@@ -781,6 +945,175 @@ suite "ForkedChainRef tests":
     check fc.latestHash == chain.latestHash
     check fc.validate info & " (4)"
 
+  test "deserialize restores finalized markers":
+    const info = "deserialize finalized markers"
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com, baseDistance = 3)
+    checkImportBlock(chain, blk1)
+    checkImportBlock(chain, blk2)
+    checkImportBlock(chain, blk3)
+    checkImportBlock(chain, blk4)
+    checkImportBlock(chain, blk5)
+    checkImportBlock(chain, blk6)
+    checkImportBlock(chain, blk7)
+    checkImportBlock(chain, blk8)
+    checkImportBlock(chain, F8)
+    check chain.validate info & " (1)"
+    check chain.heads.len == 2
+
+    # blk8 and F8: two non-finalized heads descended from the finalized block
+    checkForkChoice(chain, blk8, blk7)
+    check chain.tryUpdatePendingFCU(blk7.blockHash, 7'u64)
+    check chain.validate info & " (2)"
+    check chain.baseNumber == 5'u64
+    check chain.heads.len == 2
+    check chain.resolvedFinNumber == 7'u64
+    check checkFinalizedMarkers(chain, blk7.blockHash)
+
+    check chain.serialize(chain.baseTxFrame).isOk
+    com.db.persist(chain.baseTxFrame)
+
+    let fc = ForkedChainRef.init(com, baseDistance = 3)
+    check fc.deserialize().isOk
+
+    check fc.heads.len == 2
+    check fc.hashToBlock.len == chain.hashToBlock.len
+    check fc.resolvedFinNumber == 7'u64
+    check checkFinalizedMarkers(fc, blk7.blockHash)
+    check fc.validate info & " (3)"
+
+  test "vmState cache: linear reuse, fork switch and failed import":
+    const info = "vmState cache"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com)
+
+    # Linear imports keep a reusable vmState tracking the last processed block
+    check chain.vmState.isNil
+    checkImportBlock(chain, blk1)
+    check chain.vmState.isNil.not
+    check chain.vmStateBlockHash == blk1.blockHash
+    checkImportBlock(chain, blk2)
+    check chain.vmState.isNil.not
+    check chain.vmStateBlockHash == blk2.blockHash
+    checkImportBlock(chain, blk3)
+    checkImportBlock(chain, blk4)
+    check chain.vmStateBlockHash == blk4.blockHash
+
+    # Fork switch: B4 also builds on blk3, taking the fresh vmState path,
+    # then the new branch continues linearly
+    checkImportBlock(chain, B4)
+    check chain.vmState.isNil.not
+    check chain.vmStateBlockHash == B4.blockHash
+    checkImportBlock(chain, B5)
+    check chain.vmStateBlockHash == B5.blockHash
+
+    # Alternate between branches
+    checkImportBlock(chain, C5)
+    check chain.vmStateBlockHash == C5.blockHash
+    checkImportBlock(chain, B6)
+    check chain.vmStateBlockHash == B6.blockHash
+    check chain.validate info & " (1)"
+
+    # A failed import drops the cached vmState so a half-executed ledger is
+    # never reused; the next valid block recovers via the fresh path
+    var badBlk = B7
+    badBlk.header.stateRoot = blk1.header.stateRoot
+    checkImportBlockErr(chain, badBlk)
+    check chain.vmState.isNil
+    checkImportBlock(chain, B7)
+    check chain.vmState.isNil.not
+    check chain.vmStateBlockHash == B7.blockHash
+    check chain.validate info & " (2)"
+
+  test "setHead: rewind, prune branches and re-import":
+    const info = "setHead"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com)
+    checkImportBlock(chain, blk1)
+    checkImportBlock(chain, blk2)
+    checkImportBlock(chain, blk3)
+    checkImportBlock(chain, blk4)
+    checkImportBlock(chain, blk5)
+    checkImportBlock(chain, blk6)
+    checkImportBlock(chain, B4)
+    checkImportBlock(chain, B5)
+    check chain.heads.len == 2
+
+    # A block that was never imported cannot become the head
+    check chain.setHead(blk8.blockHash).isErr
+
+    # Rewind within the canonical branch: blocks above blk4 and the whole
+    # B branch are discarded
+    check chain.setHead(blk4.blockHash).isOk
+    checkHeadHash chain, blk4.blockHash
+    check chain.latestHash == blk4.blockHash
+    check chain.heads.len == 1
+    check chain.hashToBlock.len == 5 # genesis .. blk4
+    check chain.validate info & " (1)"
+
+    # Discarded blocks can be imported again - they are gone, not duplicates
+    checkVerdict(chain, blk5, ImportOutcome.Valid)
+    checkVerdict(chain, B4, ImportOutcome.Valid)
+    check chain.heads.len == 2
+    check chain.latestHash == B4.blockHash
+    check chain.validate info & " (2)"
+
+    # Moving the head to a sibling branch prunes the previously canonical one
+    check chain.setHead(B4.blockHash).isOk
+    checkHeadHash chain, B4.blockHash
+    check chain.latestHash == B4.blockHash
+    check chain.heads.len == 1
+    check chain.hashToBlock.len == 5 # genesis .. blk3, B4
+    check chain.validate info & " (3)"
+
+  test "setHead: cannot move below the latest finalized block":
+    const info = "setHead finalized"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com)
+    checkImportBlock(chain, blk1)
+    checkImportBlock(chain, blk2)
+    checkImportBlock(chain, blk3)
+    checkImportBlock(chain, blk4)
+    checkImportBlock(chain, B4)
+    checkForkChoice(chain, blk4, blk3)
+    check chain.validate info & " (1)"
+
+    # blk2 is an ancestor of the finalized block blk3
+    check chain.setHead(blk2.blockHash).isErr
+
+    # The finalized block itself and descendants of it (also on a sibling
+    # branch, like B4) remain valid targets
+    check chain.setHead(B4.blockHash).isOk
+    checkHeadHash chain, B4.blockHash
+    check chain.heads.len == 1
+    check chain.validate info & " (2)"
+
+  test "BaseVMState.reinit with per-block BAL tracker flags":
+    let
+      com = env.newCom()
+      txFrame1 = com.db.baseTxFrame().txFrameBegin()
+      vmState = BaseVMState()
+    vmState.init(genesis.header, blk1.header, com, txFrame1,
+      enableBalTracker = true)
+    check vmState.balTracker.isNil.not
+
+    # The ledger is clean, so reinit succeeds and rebuilds the tracker from
+    # the explicit per-block flags
+    let txFrame2 = txFrame1.txFrameBegin()
+    check vmState.reinit(blk1.header, blk2.header, txFrame2,
+      enableBalTracker = false)
+    check vmState.balTracker.isNil
+    check vmState.ledger.txFrame == txFrame2
+
+    let txFrame3 = txFrame2.txFrameBegin()
+    check vmState.reinit(blk2.header, blk3.header, txFrame3,
+      enableBalTracker = true)
+    check vmState.balTracker.isNil.not
+    check vmState.ledger.txFrame == txFrame3
+
+    vmState.dispose()
+
 procSuite "ForkedChain mainnet replay":
   # A short mainnet replay test to check that the first few hundred blocks can
   # be imported using a typical importBlock / fcu sequence - this does not
@@ -789,9 +1122,9 @@ procSuite "ForkedChain mainnet replay":
   # smoke test
   setup:
     let
-      era0 = Era1DbRef.init(sourcePath / "replay", "mainnet", 15537394'u64).expect("Era files present")
+      era0 = EreDB.new(sourcePath / "replay", "mainnet", 15537394'u64).expect("Ere files present")
       com = CommonRef.new(AristoDbMemory.newCoreDbRef())
-      fc = ForkedChainRef.init(com, enableQueue = true)
+      fc {.used.}= ForkedChainRef.init(com, enableQueue = true)
 
   asyncTest "Replay mainnet era, single FCU":
     var blk: EthBlock
@@ -874,7 +1207,7 @@ procSuite "ForkedChain mainnet replay":
 
     check (await fc.importBlock(blk1)).isOk()
 
-    var futs: seq[Future[Result[void, string]]]
+    var futs: seq[Future[Result[ImportOutcome, ImportError]]]
     for i in 1..10:
       futs.add fc.importBlock(invalidBlk)
 

@@ -25,7 +25,7 @@ type
     com    : CommonRef
     node*  : EthereumNode
     txPool : TxPoolRef
-    chain  : ForkedChainRef
+    chain* : ForkedChainRef
     wire   : EthWireRef
 
 const
@@ -86,11 +86,11 @@ proc newTestEnv*(): TestEnv =
     wire   : wire,
   )
 
-proc close*(env: TestEnv) =
+proc close*(env: TestEnv) {.async: (raises: [CancelledError]).} =
   if env.node.listeningServer.isNil.not:
-    waitFor env.node.closeWait()
-  waitFor env.wire.stop()
-  waitFor env.chain.stopProcessingQueue()
+    await env.node.closeWait()
+  await env.wire.stop()
+  await env.chain.stopProcessingQueue()
 
 template sourceDir*: string = currentSourcePath.rsplit(DirSep, 1)[0]
 

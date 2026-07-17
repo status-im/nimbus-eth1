@@ -12,8 +12,7 @@
 
 import
   pkg/chronicles,
-  ./download/header,
-  ./[mpt, worker_const, worker_desc]
+  ./[helpers, mpt, session, state_db, worker_const, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -32,110 +31,146 @@ func readyForMptAssembly(ctx: SnapCtxRef): bool =
 # Private FSA transition functions
 # ------------------------------------------------------------------------------
 
-proc idleNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+proc idleNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
-  if not ctx.pool.mptAsm.clear info:
-    return SnapIdle
+  if ctx.pool.contPrevSession:
+    info info & ": Request to resume previous session"
+  elif not ctx.pool.cacheDB.clear(info):
+    return SnapIdle                                 # disk full?, stay anyway
   SnapReady
 
-proc resumeNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+proc readyNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
-  if ctx.readyForMptAssembly():
-    return SnapMkTrie
-  SnapReady
+  # Wait for the beacon syncer to have completed the first header chain
+  # download  which might be considerably more to do than any subsequent
+  # updates.
+  block stayReady:
+    let haveConsHead = (ctx.hdrCache.latestConsHeadNumber() != 0)
 
-func readyNext(ctx: SnapCtxRef; info: static[string]): SyncState =
-  ## State transition handler
-  if ctx.pool.target.isSome() or
-     ctx.hdrCache.latestConsHeadNumber() != 0:
-    return SnapDownload
-  SnapReady
+    if ctx.pool.headersSynced:
+      # So some headers have been downloaded
+      if haveConsHead:                              # have FCU request from CL?
+        break stayReady                             # advance to next state
+      if ctx.pool.beaconTarget:
+        # This is some artificial or test mode when the becon sync server has
+        # a manual target set to download, to, first. For the same test resons,
+        # the snap syncer will start with a head from the header chain cache
+        # if there is no finalised CL header available.
+        break stayReady                             # advance to next state
+      # End `if headersSynced`
 
-func downloadNext(ctx: SnapCtxRef; info: static[string]): SyncState =
-  ## State transition handler
-  if ctx.readyForMptAssembly():
-    ctx.poolMode = true                             # sync peers
-    return SnapDownloadFinish
+    # If there has been no FCU request from the CL yet, it might make sense
+    # to proceed to the next state if there are locally cached headers already,
+    # available with recovery mode.
+    if not haveConsHead and                         # no FCU request from CL?
+       ctx.chain.latestNumber() < ctx.pool.cacheDB.lastNumber():
+      break stayReady                               # advance to next state
+
+    return SnapReady
+    # End `block stayReady`
+
+  if ctx.pool.contPrevSession:
+    return SnapResume
   SnapDownload
 
-proc downloadFinishNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+proc resumeNext(ctx: SnapCtxRef; info: static[string]): SnapState =
+  ## State transition handler
+  # Continuing a a session is fully controlled by the daemon (no peers'
+  # interaction.) So there is no need to sync via `poolMode`.
+  ctx.getPivotTag(info).isErrOr:
+    if PivotOnTrie <= value:
+      return SnapAnalyse
+  if ctx.readyForMptAssembly():
+    return SnapMkTrie
+  SnapDownload
+
+func downloadNext(ctx: SnapCtxRef; info: static[string]): SnapState =
+  ## State transition handler
+  if ctx.readyForMptAssembly():
+    ctx.poolMode = true                             # sync peers needed
+    return SnapDownloadFinish
+  SnapDownload                                      # otherwise stay
+
+proc downloadFinishNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
   if ctx.poolMode:                                  # wait for peers to sync
     return SnapDownloadFinish
   SnapMkTrie
 
-func mkTrieNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+proc mkTrieNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
-  SnapMkTrie
+  if ctx.pool.pivot.isNone():                       # enter unless pivot is set
+    return SnapMkTrie
+  # Continuing a a session is fully controlled by the daemon (no peers'
+  # interaction.) So there is no need to sync via `poolMode`.
+  SnapAnalyse
 
-func healingNext(ctx: SnapCtxRef; info: static[string]): SyncState =
+proc analyseNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
-  # TBD ...
-  SnapHealing
+  ctx.getPivotTag(info).isErrOr:
+    if PivotMptAnalysed <= value:
+      return SnapStop                               # FIXME-- might change
+  SnapAnalyse
+
+# TBD ..
+
+func stopNext(ctx: SnapCtxRef; info: static[string]): SnapState =
+  SnapStop
 
 # ------------------------------------------------------------------------------
 # Public FSA related functions
 # ------------------------------------------------------------------------------
 
-proc updateSyncReset*(ctx: SnapCtxRef) =
-  ## Reset syncer state machine
-  ctx.pool.syncState = SnapIdle
-
-proc updateSyncResume*(ctx: SnapCtxRef) =
-  ## Set explicit `resume` syncer state
-  ctx.pool.syncState = SnapResume
-
-proc updateSyncHealing*(ctx: SnapCtxRef) =
-  ## Set explicit `healinh` syncer state
-  ctx.pool.syncState = SnapHealing
-
-
-proc updateSyncState*(ctx: SnapCtxRef; info: static[string]) =
+proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## Update internal state when needed
   ##
+  #
   # State machine
   # ::
-  #       initialise
-  #        |      |
-  #        v      v
-  #    resume   idle
-  #      | |      |
-  #      | |      v
-  #      | `--> ready
-  #      |        |
-  #      |        v
-  #      |     download <--.
-  #      |        |        |
-  #      |        v        |
-  #      |  downloadFinish |
-  #      |        |        |
-  #      |        v        |
-  #      `----> mkTrie ----'
-  #               |
-  #               v
-  #            healing
-  #               |
-  #               v
-  #              TBD ..
+  #                  idle
+  #                    |
+  #                    v
+  #      resume <--- ready
+  #         |          |
+  #         |          v
+  #         |      download
+  #         |          |
+  #         |          v
+  #         |    downloadFinish
+  #         |          |
+  #         |          v
+  #         +------> mkTrie
+  #         |          |
+  #         |          v
+  #         `-----> analyse
+  #                    |
+  #                    v
+  #                  [...]
+  #                    |
+  #                    v
+  #                  stop
   #
   let newState =
     case ctx.pool.syncState:
     of SnapIdle:
       ctx.idleNext info
-    of SnapResume:
-      ctx.resumeNext info
     of SnapReady:
       ctx.readyNext info
+    of SnapResume:
+      ctx.resumeNext info
     of SnapDownload:
       ctx.downloadNext info
     of SnapDownloadFinish:
       ctx.downloadFinishNext info
     of SnapMkTrie:
       ctx.mkTrieNext info
-    of SnapHealing:
-      ctx.healingNext info
+    of SnapAnalyse:
+      ctx.analyseNext info
+    of SnapStop:
+      ctx.stopNext info
+
   if ctx.pool.syncState == newState:
-    return
+    return newState
 
   let
     prevState = ctx.pool.syncState
@@ -143,37 +178,20 @@ proc updateSyncState*(ctx: SnapCtxRef; info: static[string]) =
 
   ctx.pool.syncState = newState
   case newState:
-  of SnapDownload, SnapDownloadFinish, SnapMkTrie, SnapHealing:
+  of SnapDownload, SnapDownloadFinish, SnapMkTrie:
     chronicles.info info & ": State changed", prevState, newState,
       top=sdb.top, pivot=sdb.pivot.bnStr, nSyncPeers=ctx.nSyncPeers()
+  of SnapAnalyse, SnapStop:
+    chronicles.info info & ": State changed", prevState, newState,
+      pivot=ctx.pool.pivot.toStr, nSyncPeers=ctx.nSyncPeers()
   of SnapIdle, SnapResume, SnapReady:
     debug "State changed", prevState, newState
+
+  newState
 
 # ------------------------------------------------------------------------------
 # Other public functions
 # ------------------------------------------------------------------------------
-
-template updateTarget*(buddy: SnapPeerRef, info: static[string]) =
-  ## Async/template
-  ##
-  ## Check for manually set sync target (e.g. set by a command line option)
-  ##
-  block body:
-    # Check whether explicit target setup is configured
-    let
-      ctx = buddy.ctx
-      hash = ctx.pool.target.valueOr:
-        break body                                  # nothing to do
-
-    trace info & ": assigning manual target state", peer=buddy.peer,
-      hash=hash.toStr, nSyncPeers=ctx.nSyncPeers()
-
-    ctx.pool.target = Opt.none(BlockHash)           # fetch only once
-    buddy.headerStateRegister(hash, info).isOkOr:
-      ctx.pool.target = Opt.some(hash)              # error => restore
-    # End `block body`
-
-  discard                                           # visual alignment
 
 template updateFcuRoot*(buddy: SnapPeerRef, info: static[string]) =
   ## Async/template
@@ -211,15 +229,39 @@ template updateFcuRoot*(buddy: SnapPeerRef, info: static[string]) =
         buddy.only.finRoot = Opt.none(StateRoot)
         trace info & ":fin root too old, disbanding", peer,
           root=rc.value.rootStr, notAvailMax=buddy.only.notAvailMax,
-          syncState=buddy.syncState, nSyncPeers=ctx.nSyncPeers()
+          syncState=($buddy.syncState), nSyncPeers=ctx.nSyncPeers()
       else:
         break body                                  # done, nothing to do
 
     let
       hdr = ctx.hdrCache.latestConsHead()
       blockNumber {.inject.} = BlockNumber(hdr.number)
-    if blockNumber == 0:
-      break body                                    # no FCU request yet
+    if blockNumber == 0:                            # no FCU request yet
+      # Check whether there has been a recent header download by the
+      # beacon syncer. Typically, it will relay on the FCU update, but
+      # for the initial phase there might be a manual sync target set.
+      #
+      # The latter is exploited for getting the snap syncer trying to fetch
+      # a recent manually set header target related state from snap sync
+      # peers. When doing this, success is only expected for test peers as
+      # this state most certainly falls out of the supported 128 latest
+      # states window.
+      if ctx.pool.beaconTarget:                     # check for manual heder trg
+        let
+          adb = ctx.pool.cacheDB
+          optLastHeader = adb.lastHeader().valueOr:
+            break body
+          lastHeader = optLastHeader.valueOr:
+            break body
+          optLastHash = adb.getBlockHash(lastHeader.number).valueOr:
+            break body
+          lastHash = optLastHash.valueOr:
+            break body
+          root = StateRoot lastHeader.stateRoot
+        discard sdb.register(root, BlockHash lastHash, lastHeader.number, info)
+        buddy.only.finRoot = Opt.some(root)
+        # End `if beaconTarget`
+      break body
 
     let
       hash = BlockHash(hdr.computeBlockHash())

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -11,7 +11,7 @@ import
   unittest2,
   stew/byteutils,
   chronos/unittest2/asynctests,
-  ../../eth_history/yaml_utils,
+  ../../tools/yaml_utils,
   ../../tools/eth_data_exporter/el_data_exporter,
   ../../network/wire/portal_protocol,
   ../../network/history/history_endpoints,

@@ -28,7 +28,7 @@ import
   std/typetraits,
   eth/common/hashes,
   results,
-  "."/[aristo_desc, aristo_fetch, aristo_get, aristo_layers, aristo_vid]
+  "."/[aristo_desc, aristo_fetch, aristo_get, aristo_layers, aristo_serialise, aristo_vid]
 
 proc layersPutLeaf[T](
     db: AristoTxRef, rvid: RootedVertexID, path: NibblesBuf, payload: T
@@ -195,6 +195,51 @@ proc mergePayloadImpl[LeafType, T](
 
         db.layersPutVtx((root, cur), branch)
 
+        resetKeys()
+        return ok((leafVtx, nil, nil))
+
+    of BoundaryNode:
+      let evtx = BoundaryNodeRef(vtx)
+      if n == evtx.pfx.len:
+        # Full prefix match: the new key would traverse into the absent branch
+        # child. This is not supported in partial-trie / stateless mode.
+        return err(MergeHikeFailed)
+      else:
+        # Partial prefix match: split the BoundaryNode at the divergence point,
+        # creating a new branch. This is similar as for leaves except that
+        # the existing BoundaryNode is moved down one level.
+        let
+          startVid =
+            if root == STATE_ROOT_VID:
+              db.accVidFetch(path.slice(0, pos + n) & NibblesBuf.nibble(0), 16)
+            else:
+              db.vidFetch(16)
+          branch =
+            if n > 0:
+              ExtBranchRef.init(psuffix.slice(0, n), startVid, 0)
+            else:
+              BranchRef.init(startVid, 0)
+
+        # Place the existing BoundaryNode content at its new position
+        let
+          local = branch.setUsed(evtx.pfx[n], true)
+          pfx = evtx.pfx.slice(n + 1)
+        if pfx.len > 0:
+          # Remaining prefix: create new BoundaryNode pointing to the same child.
+          let newExt = BoundaryNodeRef.init(pfx, evtx.childKey)
+          db.layersPutKey(
+            (root, local), newExt,
+            rlpEncodeExt(pfx, evtx.childKey).digestTo(HashKey))
+        else:
+          # No remaining prefix: store a nil as vertex with the known branch hash.
+          # computeKeyImpl still works via kMap
+          db.layersPutKey((root, local), BranchRef(nil), evtx.childKey)
+
+        let leafVtx = block: # Add the new entry
+          let local = branch.setUsed(psuffix[n], true)
+          db.layersPutLeaf((root, local), psuffix.slice(n + 1), payload)
+
+        db.layersPutVtx((root, cur), branch)
         resetKeys()
         return ok((leafVtx, nil, nil))
 

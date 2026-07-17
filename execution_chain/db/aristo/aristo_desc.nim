@@ -22,10 +22,10 @@
 {.push raises: [].}
 
 import
-  std/[hashes, sequtils, sets, tables, heapqueue],
+  std/[atomics, hashes, sequtils, sets, tables, heapqueue],
   eth/common/hashes, eth/trie/nibbles,
   results,
-  minilru,
+  ../../concurrency/lru,
   ./aristo_constants,
   ./aristo_desc/[desc_error, desc_identifiers, desc_structural],
   ./aristo_desc/desc_backend
@@ -37,7 +37,7 @@ when compileOption("threads"):
 # Not auto-exporting backend
 export
   tables, aristo_constants, desc_error, desc_identifiers, nibbles,
-  desc_structural, minilru, hashes, heapqueue, PutHdlRef
+  desc_structural, lru, hashes, heapqueue, PutHdlRef
 
 type
   AristoTxRef* = ref object
@@ -76,6 +76,23 @@ type
 
     blockNumber*: Opt[uint64]               ## Block number set when checkpointing the frame
 
+    collectWitness*: bool
+      ## When true, records collapsed siblings during deletion for witness
+      ## generation.
+
+    collapsedSiblings*: seq[
+      tuple[
+        sibAccPath: Hash32, sibStoPath: Opt[Hash32], stoRoot: VertexID, brVid: VertexID
+      ]
+    ]
+      ## Records collapsed siblings for witness generation. For each entry:
+      ## `sibAccPath` is the account path; `sibStoPath` is the sibling storage
+      ## path (none for account-trie collapses). When `brVid` is valid, the
+      ## entry is a deferred StoLeaf collapse. On witness building the
+      ## `getCollapsedSiblings` checks the vertex type at (stoRoot, brVid)
+      ## in the final trie before including it.
+      ## Only populated when collectWitness is true.
+
     snapshot*: Snapshot
       ## Optional snapshot containing the cumulative changes from ancestors and
       ## the current frame
@@ -86,9 +103,9 @@ type
       ## -1 = stored in database, where relevant though typically should be
       ## compared with the base layer level instead.
 
-    when compileOption("threads"):      
+    when compileOption("threads"):
       lock*: ReadWriteLock
-        ## A read-write lock used to support thread safe reads and writes to the 
+        ## A read-write lock used to support thread safe reads and writes to the
         ## database from multiple threads.
 
   Snapshot* = object
@@ -117,7 +134,7 @@ type
 
     txRef*: AristoTxRef              ## Bottom-most in-memory frame
 
-    accLeaves*: LruCache[Hash32, AccLeafRef]
+    accLeaves*: ConcurrentLruCache[Hash32, CachedAccLeaf]
       ## Account path to payload cache - accounts are frequently accessed by
       ## account path when contracts interact with them - this cache ensures
       ## that we don't have to re-traverse the storage trie for every such
@@ -125,13 +142,13 @@ type
       ## TODO a better solution would probably be to cache this in a type
       ## exposed to the high-level API
 
-    stoLeaves*: LruCache[Hash32, StoLeafRef]
+    stoLeaves*: ConcurrentLruCache[Hash32, CachedStoLeaf]
       ## Mixed account/storage path to payload cache - same as above but caches
       ## the full lookup of storage slots
 
-    staticLevel*: int
+    staticLevel*: Atomic[int]
       ## MPT level where "most" leaves can be found, for static vid lookups
-    lookups*: tuple[lower, hits, higher: int]
+    lookupsLower*, lookupsHits*, lookupsHigher*: Atomic[int]
 
     snapshots*: HeapQueue[AristoTxRef]
       ## A priority queue of txFrames holding snapshots. Used to limit the number
@@ -253,18 +270,28 @@ proc deltaAtLevel*(db: AristoTxRef, level: int): AristoTxRef =
         return frame
     nil
 
-func getStaticLevel*(db: AristoDbRef): int =
+proc getStaticLevel*(db: AristoDbRef): int =
   # Retrieve the level where we can expect to find a leaf, updating it based on
   # recent lookups
+  let
+    lower = db.lookupsLower.load(moRelaxed)
+    hits = db.lookupsHits.load(moRelaxed)
+    higher = db.lookupsHigher.load(moRelaxed)
 
-  if db.lookups[0] + db.lookups[1] + db.lookups[2] >= 1024:
-    if db.lookups.lower > db.lookups.hits + db.lookups.higher:
-      db.staticLevel = max(1, db.staticLevel - 1)
-    elif db.lookups.higher > db.lookups.hits + db.lookups.lower:
-      db.staticLevel = min(STATIC_VID_LEVELS, db.staticLevel + 1)
-    reset(db.lookups)
+  var level = db.staticLevel.load(moRelaxed)
 
-  if db.staticLevel == 0:
-    db.staticLevel = 1
+  if lower + hits + higher >= 1024:
+    if lower > hits + higher:
+      level = max(1, level - 1)
+    elif higher > hits + lower:
+      level = min(STATIC_VID_LEVELS, level + 1)
+    db.lookupsLower.store(0, moRelaxed)
+    db.lookupsHits.store(0, moRelaxed)
+    db.lookupsHigher.store(0, moRelaxed)
 
-  db.staticLevel
+  if level == 0:
+    level = 1
+
+  db.staticLevel.store(level, moRelaxed)
+
+  level

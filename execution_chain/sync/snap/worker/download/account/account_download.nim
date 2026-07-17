@@ -34,14 +34,14 @@ template accountDownload*(
     let
       ctx = buddy.ctx
       sdb = ctx.pool.stateDB
-      adb = ctx.pool.mptAsm
+      adb = ctx.pool.cacheDB
 
       peer {.inject,used.} = $buddy.peer            # logging only
       root {.inject,used.} = state.rootStr          # logging only
 
       ivReq = sdb.fetchAccountRange(state).valueOr:
         trace info & ": No more unpocessed", peer, `state`=state.toStr(sdb),
-          notAvailMax=buddy.only.notAvailMax, syncState=buddy.syncState
+          notAvailMax=buddy.only.notAvailMax, syncState=($buddy.syncState)
         bodyRc = typeof(bodyRc).err(ECompleted)
         break body                                  # return err()
 
@@ -65,32 +65,32 @@ template accountDownload*(
       nProof {.inject,used.} = data.proof.len       # logging only
 
     # Stash accounts data packet on DB to be processed later
-    adb.putAccounts(
+    adb.putAccount(
       state.stateRoot, ivReq.minPt, limit, data.accounts, data.proof,
       buddy.peerID).isOkOr:
         sdb.rollbackAccountRange(state, ivReq)      # registry roll back
-        debug info & ": caching accounts failed", peer, root,
+        debug info & ": Caching accounts failed", peer, root,
           notAvailMax=buddy.only.notAvailMax, iv, nAccounts, nProof,
-          syncState=buddy.syncState
+          syncState=($buddy.syncState)
         bodyRc = typeof(bodyRc).err(ECacheError)
         break body                                  # return err()
 
     # Update state details on DB for recovery, in particular time stamp
     adb.putStateData(
       state.stateRoot, state.blockHash, state.blockNumber,
-      now, onTrie=false, coverage=state.accountsCov256).isOkOr:
+      now, Untagged, coverage=state.accountsCov256).isOkOr:
         sdb.rollbackAccountRange(state, ivReq)      # registry roll back
-        debug info & ": updating state failed", peer, root,
-          syncState=buddy.syncState
+        debug info & ": Updating state failed", peer, root,
+          syncState=($buddy.syncState)
         bodyRc = typeof(bodyRc).err(ECacheError)
         break body                                  # return err()
 
     sdb.commitAccountRange(state, ivReq, limit, now) # update registry
     bodyRc = typeof(bodyRc).ok(data.accounts)       # return code
 
-    debug info & ": accounts downloaded and cached", peer, root,
+    debug info & ": Accounts downloaded and cached", peer, root,
       notAvailMax=buddy.only.notAvailMax, iv, nAccounts, nProof,
-      syncState=buddy.syncState
+      syncState=($buddy.syncState)
 
   bodyRc
 

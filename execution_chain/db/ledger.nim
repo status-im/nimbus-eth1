@@ -18,10 +18,10 @@ import
   eth/common/[addresses, hashes],
   ../utils/[mergeutils, utils],
   ../evm/code_bytes,
-  ../core/eip7702,
   ../constants,
+  ../block_access_list/bal_overlay,
   ./[access_list as ac_access_list, core_db, storage_types],
-  ./aristo/aristo_blobify
+  ./aristo/[aristo_blobify, aristo_desc, aristo_get]
 
 export
   code_bytes, core_db.computeAccPath, core_Db.computeSlotKey
@@ -55,15 +55,22 @@ type
     CodeChanged
     StorageChanged
     NewlyCreated # EIP-6780: self destruct only in same transaction
+    ClearAccountPreserveBalance
 
   AccountFlags = set[AccountFlag]
+
+  # Store original value from the database
+  OriginalValueRef = ref object
+    statement: CoreDbAccount
+    storage:   Table[UInt256, UInt256]
+    code: CodeBytesRef
 
   AccountRef = ref object
     statement: CoreDbAccount
     accPath: Hash32
     flags: AccountFlags
     code: CodeBytesRef
-    originalStorage: TableRef[UInt256, UInt256]
+    original: OriginalValueRef
     overlayStorage: Table[UInt256, UInt256]
 
   LedgerRef* = ref object
@@ -97,10 +104,33 @@ type
       ## Used to collect the keys of all read accounts, code and storage slots.
       ## Maps a tuple of address and slot (optional) to the codeTouched flag.
 
+    stateless*: bool
+      ## Selects how a fatal condition detected during execution (see fatalError)
+      ## is handled. Under stateless execution the used witness is untrusted, so
+      ## it may be invalid or incomplete. A fatal condition then must stop the
+      ## block execution with a validation error. On a full node the state is
+      ## complete, so it is instead a defect (assert).
+
+    fatalError*: Opt[string]
+      ## Set when a fatal block-aborting condition is detected during execution
+      ## that cannot travel the EVM's transaction-level error channel (which is
+      ## absorbed by the calling frame as a reverted CALL). Checked and acted on
+      ## in processTransaction (see the stateless flag).
+
     blockHashes: BlockHashesCache
       ## Caches the block hashes fetched by the BLOCKHASH opcode in the EVM.
       ## Also used when building the execution witness to determine the
       ## block numbers fetched by the BLOCKHASH opcode for any given block.
+
+    balOverlay*: Opt[BlockAccessListOverlay]
+      ## For Parallel execution using BALs, when executing each transaction
+      ## we need to read from the writes in the BAL in order to have the
+      ## correct pre-state. The BAL overlay enables searching for the last write
+      ## in the BAL for accounts, storage and code. Only the first lookup of
+      ## a balance, nonce, code or storage slot hits the overlay and then after
+      ## that the values will be returned from the ledger caches. The intention
+      ## is that a separate ledger instance is used for each transaction each having
+      ## its own overlay instance for the given BAL index.
 
   ReadOnlyLedger* = distinct LedgerRef
 
@@ -118,11 +148,40 @@ const
     Touched,
     CodeChanged,
     StorageChanged,
-    NewlyCreated
+    NewlyCreated,
+    ClearAccountPreserveBalance
     }
+
+  EMPTY_STATEMENT = CoreDbAccount(
+    nonce:    EMPTY_ACCOUNT.nonce,
+    balance:  EMPTY_ACCOUNT.balance,
+    codeHash: EMPTY_ACCOUNT.codeHash,
+  )
 
 template logTxt(info: static[string]): static[string] =
   "LedgerRef " & info
+
+const
+  MissingNodeErrors = {HikeBranchUnresolvedEdge, HikeDanglingEdge}
+    ## A trie node this read's path needs is missing locally, so unlike a
+    ## proof of absence we can't tell if the account/slot exists. Covers an
+    ## incomplete witness (stateless) or a not-yet-fetched trie (verified proxy).
+
+proc applyOverlay(ledger: LedgerRef, address: Address, acc: AccountRef) =
+  let overlayAcc = ledger.balOverlay.expect("bal overlay enabled").getAccount(address)
+  if overlayAcc.balance.isSome():
+    acc.statement.balance = overlayAcc.balance[]
+  if overlayAcc.nonce.isSome():
+    acc.statement.nonce = overlayAcc.nonce[]
+  if overlayAcc.code.isSome():
+    acc.statement.codeHash = keccak256(overlayAcc.code[])
+    acc.code = CodeBytesRef.init(overlayAcc.code[])
+    acc.flags.incl CodeChanged
+
+proc isEmpty(acc: AccountRef): bool =
+  acc.statement.nonce == 0 and
+    acc.statement.balance.isZero and
+    acc.statement.codeHash == EMPTY_CODE_HASH
 
 proc getAccount(
     ledger: LedgerRef;
@@ -151,19 +210,50 @@ proc getAccount(
   let
     accPath = address.computeAccPath
     rc = ledger.txFrame.fetchAccount accPath
+
+  if rc.isErr and rc.error.isAristo and rc.error.aErr in MissingNodeErrors:
+    # Record a fatalError: never assert here, always fall through to the normal
+    # "not found" path. The async EVM (verified proxy) relies on that.
+    warn logTxt "getAccount()", address, error = ($$rc.error)
+    ledger.fatalError = Opt.some(
+      "getAccount(): witness missing an internal trie node required to resolve account " & $address)
+
   if rc.isOk:
+    # Acc found in the database
     result = AccountRef(
       statement: rc.value,
       accPath:   accPath,
-      flags:     {Alive})
+      flags:     {Alive},
+    )
+
+  if ledger.balOverlay.isSome() and ledger.balOverlay[].hasAccount(address):
+    # Acc found in the BAL overlay
+    if result.isNil():
+      result = AccountRef(
+        statement: EMPTY_STATEMENT,
+        accPath:   accPath,
+        flags:    {Alive}
+      )
+    ledger.applyOverlay(address, result)
+    # If the account from the overlay is empty, it was self destructed
+    # and so we treat it as such.
+    if result.isEmpty():
+      result = nil
+
+  if not result.isNil:
+    result.original = OriginalValueRef(
+      statement: result.statement,
+      code: result.code,
+    )
   elif shouldCreate:
     result = AccountRef(
-      statement: CoreDbAccount(
-        nonce:    EMPTY_ACCOUNT.nonce,
-        balance:  EMPTY_ACCOUNT.balance,
-        codeHash: EMPTY_ACCOUNT.codeHash),
+      statement: EMPTY_STATEMENT,
       accPath:    accPath,
-      flags:      {Alive, IsNew})
+      flags:      {Alive, IsNew},
+      original: OriginalValueRef(
+        statement: EMPTY_STATEMENT,
+      )
+    )
   else:
     return # ignore, don't cache
 
@@ -176,61 +266,73 @@ proc clone(acc: AccountRef, cloneStorage: bool): AccountRef =
     statement: acc.statement,
     accPath:   acc.accPath,
     flags:     acc.flags,
-    code:      acc.code)
+    code:      acc.code,
+    original:  acc.original,
+  )
 
   if cloneStorage:
-    result.originalStorage = acc.originalStorage
     # it's ok to clone a table this way
     result.overlayStorage = acc.overlayStorage
-
-proc isEmpty(acc: AccountRef): bool =
-  acc.statement.nonce == 0 and
-    acc.statement.balance.isZero and
-    acc.statement.codeHash == EMPTY_CODE_HASH
 
 template exists(acc: AccountRef): bool =
   Alive in acc.flags
 
+template fetchSlotChecked(ledger: LedgerRef, accPath: Hash32, slotKey: Hash32): UInt256 =
+  ## Like `fetchSlot`, but a witness gap on the slot's path is a fatal
+  ## condition rather than a silent `0`. Records the condition without an
+  ## early return, same reasoning as `getAccount`.
+  let slotRc = ledger.txFrame.fetchSlot(accPath, slotKey)
+  if slotRc.isErr:
+    if slotRc.error.isAristo and slotRc.error.aErr in MissingNodeErrors:
+      warn logTxt "fetchSlot()", error = ($$slotRc.error)
+      ledger.fatalError = Opt.some(
+        "fetchSlot(): witness missing an internal trie node required to resolve storage slot")
+    0'u256
+  else:
+    slotRc.value
+
 proc originalStorageValue(
     acc: AccountRef;
+    address: Address;
     slot: UInt256;
     ledger: LedgerRef;
       ): UInt256 =
   # share the same original storage between multiple
   # versions of account
-  if acc.originalStorage.isNil:
-    acc.originalStorage = newTable[UInt256, UInt256]()
-  else:
-    acc.originalStorage[].withValue(slot, val) do:
-      return val[]
+  acc.original.storage.withValue(slot, val) do:
+    return val[]
 
   # Not in the original values cache - go to the DB unless it's a new account
   if acc.flags * {IsNew, NewlyCreated} == {}:
-    let
-      slotKey = ledger.slots.get(slot).valueOr:
-        computeSlotKey(slot)
-    result = ledger.txFrame.fetchSlot(acc.accPath, slotKey).valueOr(0'u256)
+    result =
+      if ledger.balOverlay.isNone():
+        let slotKey = ledger.slots.get(slot).valueOr:
+          computeSlotKey(slot)
+        ledger.fetchSlotChecked(acc.accPath, slotKey)
+      else:
+        ledger.balOverlay[].getStorage(address, slot).valueOr:
+          let slotKey = ledger.slots.get(slot).valueOr:
+            computeSlotKey(slot)
+          ledger.fetchSlotChecked(acc.accPath, slotKey)
 
-  acc.originalStorage[slot] = result
+  acc.original.storage[slot] = result
 
 proc storageValue(
     acc: AccountRef;
+    address: Address;
     slot: UInt256;
     ledger: LedgerRef;
       ): UInt256 =
   acc.overlayStorage.withValue(slot, val) do:
     return val[]
   do:
-    result = acc.originalStorageValue(slot, ledger)
+    result = acc.originalStorageValue(address, slot, ledger)
 
 proc kill(ledger: LedgerRef, acc: AccountRef) =
   acc.flags.excl Alive
   acc.overlayStorage.clear()
-  acc.originalStorage = nil
-
-  acc.statement.nonce = EMPTY_ACCOUNT.nonce
-  acc.statement.balance = EMPTY_ACCOUNT.balance
-  acc.statement.codeHash = EMPTY_ACCOUNT.codeHash
+  acc.original.storage.clear()
+  acc.statement = EMPTY_STATEMENT
   acc.code.reset()
 
 type
@@ -260,26 +362,45 @@ proc persistCode(acc: AccountRef, ledger: LedgerRef) =
       # code cache must also be cleared!
       acc.code.persisted = true
 
-proc persistStorage(acc: AccountRef, ledger: LedgerRef) =
+template setFatalErrorOrAssert(ledger: LedgerRef, msg: string) =
+  ## Handle a failed trie write during persist:
+  ## - under stateless execution record a fatal error and stop
+  ## - on a full node the state is complete, so assert
+  if ledger.stateless:
+    ledger.fatalError = Opt.some(msg)
+    return
+  else:
+    raiseAssert msg
+
+template abortOnFatalError*(ledger: LedgerRef) =
+  ## Abort the current block if a fatal condition was recorded during execution
+  ## or persist, abort meaning:
+  ## - a validation error under stateless execution
+  ## - otherwise a defect (corrupt database)
+  if ledger.fatalError.isSome:
+    if ledger.stateless:
+      return err(ledger.fatalError.get())
+    else:
+      raiseAssert ledger.fatalError.get()
+
+proc persistStorage(acc: AccountRef, ledger: LedgerRef): Result[void, string] =
   const info = "persistStorage(): "
 
   if acc.overlayStorage.len == 0:
     # TODO: remove the storage too if we figure out
     # how to create 'virtual' storage room for each account
-    return
-
-  if acc.originalStorage.isNil:
-    acc.originalStorage = newTable[UInt256, UInt256]()
+    return ok()
 
   # Make sure that there is an account entry on the database. This is needed by
   # `Aristo` for updating the account's storage area reference. As a side effect,
   # this action also updates the latest statement data.
   ledger.txFrame.mergeAccount(acc.accPath, acc.statement).isOkOr:
-    raiseAssert info & $$error
+    return err(info & $$error)
 
   # Save `overlayStorage[]` on database
+  let original = acc.original
   for slot, value in acc.overlayStorage:
-    acc.originalStorage[].withValue(slot, v):
+    original.storage.withValue(slot, v):
       if v[] == value:
         continue # Avoid writing A-B-A updates
 
@@ -292,15 +413,15 @@ proc persistStorage(acc: AccountRef, ledger: LedgerRef) =
 
     if value > 0:
       ledger.txFrame.mergeSlot(acc.accPath, slotKey, value).isOkOr:
-        raiseAssert info & $$error
+        return err(info & $$error)
 
       # move the overlayStorage to originalStorage, related to EIP2200, EIP1283
-      acc.originalStorage[slot] = value
+      original.storage[slot] = value
 
     else:
       ledger.txFrame.deleteSlot(acc.accPath, slotKey).isOkOr:
-        raiseAssert info & $$error
-      acc.originalStorage.del(slot)
+        return err(info & $$error)
+      original.storage.del(slot)
 
     if ledger.storeSlotHash and not cached:
       # Write only if it was not cached to avoid writing the same data over and
@@ -312,6 +433,7 @@ proc persistStorage(acc: AccountRef, ledger: LedgerRef) =
         warn logTxt "persistStorage()", slot, error=($$rc.error)
 
   acc.overlayStorage.clear()
+  ok()
 
 proc makeDirty(ledger: LedgerRef, address: Address, cloneStorage = true): AccountRef =
   ledger.isDirty = true
@@ -327,6 +449,27 @@ proc makeDirty(ledger: LedgerRef, address: Address, cloneStorage = true): Accoun
   result.flags.incl Dirty
   ledger.savePoint.cache[address] = result
   ledger.savePoint.dirty[address] = result
+
+template getCodeSizeImpl(ledger: LedgerRef, acc: AccountRef): int =
+  if acc.code == nil:
+    if acc.statement.codeHash == EMPTY_CODE_HASH:
+      return 0
+    acc.code = ledger.code.get(acc.statement.codeHash).valueOr:
+      # On a cache miss, we don't fetch the code - instead, we fetch just the
+      # length - should the code itself be needed, it will typically remain
+      # cached and easily accessible in the database layer - this is to prevent
+      # EXTCODESIZE calls from messing up the code cache and thus causing
+      # recomputation of the jump destination table
+      var rc = ledger.txFrame.len(contractHashKey(acc.statement.codeHash).toOpenArray)
+
+      return rc.valueOr:
+        # A non-empty code hash whose length is missing from the database: record
+        # a fatalError but still return 0 so the async EVM continues.
+        warn logTxt "getCodeSize()", codeHash=acc.statement.codeHash, error=($$rc.error)
+        ledger.fatalError = Opt.some("getCodeSize(): failed to fetch code length from database")
+        0
+
+  acc.code.len()
 
 # ------------------------------------------------------------------------------
 # Public methods
@@ -383,15 +526,28 @@ proc dispose*(ledger: LedgerRef, savePoint: LedgerSpRef) =
   if savePoint.parentSavePoint != nil:
     ledger.rollback(savePoint)
 
-proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool, collectWitness = false): LedgerRef =
+proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool, collectWitness = false, stateless = false): LedgerRef =
   new result
   result.txFrame = db
   result.storeSlotHash = storeSlotHash
   result.code = typeof(result.code).init(codeLruSize)
   result.slots = typeof(result.slots).init(slotsLruSize)
   result.collectWitness = collectWitness
+  result.txFrame.aTx.collectWitness = collectWitness
+  result.stateless = stateless
   result.blockHashes = typeof(result.blockHashes).init(MAX_PREV_HEADER_DEPTH.int)
   discard result.beginSavePoint
+
+proc reinit*(ledger: LedgerRef, txFrame: CoreDbTxRef) =
+  doAssert ledger.isTopLevelClean
+  doAssert txFrame.aTx.parent == ledger.txFrame.aTx,
+    "reinit txFrame must be a direct child of the ledger's current frame"
+  ledger.txFrame = txFrame
+  ledger.txFrame.aTx.collectWitness = ledger.collectWitness
+  ledger.ripemdSpecial = false
+  ledger.fatalError = Opt.none(string)
+  ledger.balOverlay = Opt.none(BlockAccessListOverlay)
+  ledger.witnessKeys.clear()
 
 proc getCodeHash*(ledger: LedgerRef, address: Address): Hash32 =
   let acc = ledger.getAccount(address, false)
@@ -424,13 +580,16 @@ proc getCode*(ledger: LedgerRef,
     else:
       return CodeBytesRef()
 
-  if acc.code == nil:
+  if acc.code.isNil:
     acc.code =
       if acc.statement.codeHash != EMPTY_CODE_HASH:
         ledger.code.get(acc.statement.codeHash).valueOr:
           var rc = ledger.txFrame.get(contractHashKey(acc.statement.codeHash).toOpenArray)
           if rc.isErr:
+            # A non-empty code hash with no code in the database: record a fatalError
+            # but still return empty code so the async EVM continues.
             warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=($$rc.error)
+            ledger.fatalError = Opt.some("getCode(): failed to fetch code from database")
             CodeBytesRef()
           else:
             let newCode = CodeBytesRef.init(move(rc.value), persisted = true)
@@ -444,6 +603,32 @@ proc getCode*(ledger: LedgerRef,
   else:
     acc.code
 
+proc getOriginalCode*(ledger: LedgerRef, address: Address): CodeBytesRef =
+  if ledger.collectWitness:
+    let lookupKey = (address, Opt.none(UInt256))
+    ledger.witnessKeys[lookupKey] = true
+
+  let acc = ledger.getAccount(address, false)
+  if acc.isNil:
+    return CodeBytesRef()
+
+  if acc.original.code.isNil:
+    acc.original.code =
+      if acc.original.statement.codeHash != EMPTY_CODE_HASH:
+        ledger.code.get(acc.original.statement.codeHash).valueOr:
+          var rc = ledger.txFrame.get(contractHashKey(acc.original.statement.codeHash).toOpenArray)
+          if rc.isErr:
+            warn logTxt "getCode()", codeHash=acc.original.statement.codeHash, error=($$rc.error)
+            CodeBytesRef()
+          else:
+            let newCode = CodeBytesRef.init(move(rc.value), persisted = true)
+            ledger.code.put(acc.original.statement.codeHash, newCode)
+            newCode
+      else:
+        CodeBytesRef()
+
+  acc.original.code
+
 proc getCodeSize*(ledger: LedgerRef, address: Address): int =
   if ledger.collectWitness:
     let lookupKey = (address, Opt.none(UInt256))
@@ -454,29 +639,7 @@ proc getCodeSize*(ledger: LedgerRef, address: Address): int =
   let acc = ledger.getAccount(address, false)
   if acc.isNil:
     return 0
-
-  if acc.code == nil:
-    if acc.statement.codeHash == EMPTY_CODE_HASH:
-      return 0
-    acc.code = ledger.code.get(acc.statement.codeHash).valueOr:
-      # On a cache miss, we don't fetch the code - instead, we fetch just the
-      # length - should the code itself be needed, it will typically remain
-      # cached and easily accessible in the database layer - this is to prevent
-      # EXTCODESIZE calls from messing up the code cache and thus causing
-      # recomputation of the jump destination table
-      var rc = ledger.txFrame.len(contractHashKey(acc.statement.codeHash).toOpenArray)
-
-      return rc.valueOr:
-        warn logTxt "getCodeSize()", codeHash=acc.statement.codeHash, error=($$rc.error)
-        0
-
-  acc.code.len()
-
-proc resolveCode*(ledger: LedgerRef, address: Address): CodeBytesRef =
-  let code = ledger.getCode(address)
-  let delegateTo = parseDelegationAddress(code).valueOr:
-    return code
-  ledger.getCode(delegateTo)
+  getCodeSizeImpl(ledger, acc)
 
 proc getCommittedStorage*(ledger: LedgerRef, address: Address, slot: UInt256): UInt256 =
   let acc = ledger.getAccount(address, false)
@@ -488,7 +651,7 @@ proc getCommittedStorage*(ledger: LedgerRef, address: Address, slot: UInt256): U
 
   if acc.isNil:
     return
-  acc.originalStorageValue(slot, ledger)
+  acc.originalStorageValue(address, slot, ledger)
 
 proc getStorage*(ledger: LedgerRef, address: Address, slot: UInt256): UInt256 =
   let acc = ledger.getAccount(address, false)
@@ -500,7 +663,7 @@ proc getStorage*(ledger: LedgerRef, address: Address, slot: UInt256): UInt256 =
 
   if acc.isNil:
     return
-  acc.storageValue(slot, ledger)
+  acc.storageValue(address, slot, ledger)
 
 proc contractCollision*(ledger: LedgerRef, address: Address): bool =
   let acc = ledger.getAccount(address, false)
@@ -536,13 +699,21 @@ proc setBalance*(ledger: LedgerRef, address: Address, balance: UInt256) =
   if acc.statement.balance != balance:
     ledger.makeDirty(address).statement.balance = balance
 
-proc addBalance*(ledger: LedgerRef, address: Address, delta: UInt256) =
+proc addBalance*(
+    ledger: LedgerRef,
+    address: Address,
+    delta: UInt256,
+    checkEmptyAccount: bool = true,
+) =
   # EIP161: We must check emptiness for the objects such that the account
-  # clearing (0,0,0 objects) can take effect.
+  # clearing (0,0,0 objects) can take effect. This is not required for hardforks
+  # starting at the merge because by then no empty accounts remain in the state,
+  # so callers in that regime can skip the lookup via checkEmptyAccount = false.
   if delta.isZero:
-    let acc = ledger.getAccount(address)
-    if acc.isEmpty:
-      ledger.makeDirty(address).flags.incl Touched
+    if checkEmptyAccount:
+      let acc = ledger.getAccount(address)
+      if acc.isEmpty:
+        ledger.makeDirty(address).flags.incl Touched
     return
   ledger.setBalance(address, ledger.getBalance(address) + delta)
 
@@ -585,7 +756,7 @@ proc setStorage*(ledger: LedgerRef, address: Address, slot, value: UInt256) =
     if not ledger.witnessKeys.contains(lookupKey):
       ledger.witnessKeys[lookupKey] = false
 
-  let oldValue = acc.storageValue(slot, ledger)
+  let oldValue = acc.storageValue(address, slot, ledger)
   if oldValue != value:
     var acc = ledger.makeDirty(address)
     acc.overlayStorage[slot] = value
@@ -599,19 +770,35 @@ proc clearStorage*(ledger: LedgerRef, address: Address) =
   if ledger.txFrame.hasStorage(acc.accPath).valueOr(false):
     # need to clear the storage from the database first
     let acc = ledger.makeDirty(address, cloneStorage = false)
-    # update caches
-    if acc.originalStorage.isNil.not:
-      # also clear originalStorage cache, otherwise
-      # both getStorage and getCommittedStorage will
-      # return wrong value
-      acc.originalStorage.clear()
+    # also clear originalStorage cache, otherwise
+    # both getStorage and getCommittedStorage will
+    # return wrong value
+    acc.original.storage.clear()
 
 proc deleteAccount(ledger: LedgerRef, address: Address) =
   # make sure all savePoints already committed
   doAssert(ledger.savePoint.parentSavePoint.isNil)
   let acc = ledger.getAccount(address)
   ledger.savePoint.dirty[address] = acc
-  ledger.kill acc
+  if ClearAccountPreserveBalance in acc.flags:
+    if ledger.txFrame.hasStorage(acc.accPath).valueOr(false):
+      acc.original.storage.clear()
+      acc.overlayStorage.clear()
+    else:
+      acc.flags.excl StorageChanged
+      acc.overlayStorage.clear()
+
+    acc.statement.nonce = 0
+
+    if acc.statement.codeHash != EMPTY_ACCOUNT.codeHash:
+      acc.flags.incl CodeChanged
+      acc.statement.codeHash = EMPTY_ACCOUNT.codeHash
+      acc.code = CodeBytesRef.init(@[])
+
+    if acc.isEmpty:
+      ledger.kill acc
+  else:
+    ledger.kill acc
 
 proc selfDestruct*(ledger: LedgerRef, address: Address) =
   ledger.setBalance(address, 0.u256)
@@ -628,15 +815,20 @@ proc selfDestruct6780*(ledger: LedgerRef, address: Address): bool =
   else:
     false
 
+proc selfDestruct8246*(ledger: LedgerRef, address: Address): bool =
+  let acc = ledger.getAccount(address, false)
+  if acc.isNil:
+    return false
+
+  if NewlyCreated in acc.flags:
+    acc.flags.incl ClearAccountPreserveBalance
+    ledger.savePoint.selfDestruct.incl address
+    true
+  else:
+    false
+
 proc selfDestructLen*(ledger: LedgerRef): int =
   ledger.savePoint.selfDestruct.len
-
-iterator nonZeroSelfDestructAccounts*(ledger: LedgerRef): (Address, UInt256) =
-  for address in ledger.savePoint.selfDestruct:
-    let value = ledger.getBalance(address)
-    if value.isZero:
-      continue
-    yield (address, value)
 
 proc ripemdSpecial*(ledger: LedgerRef) =
   ledger.ripemdSpecial = true
@@ -660,12 +852,39 @@ proc clearEmptyAccounts(ledger: LedgerRef) =
 template getWitnessKeys*(ledger: LedgerRef): WitnessTable =
   ledger.witnessKeys
 
+proc getCollapsedSiblings*(
+    ledger: LedgerRef
+): seq[tuple[sibAccPath: Hash32, sibStoPath: Opt[Hash32]]] =
+  ## Collapsed siblings for witness generation. StoLeaf collapses (brVid
+  ## valid) are only included if brVid is still a StoLeaf in the final trie.
+  ## A branch there means a later insertion expanded it again, no auxiliary
+  ## needed.
+  let db = ledger.txFrame.aTx
+  var res: seq[tuple[sibAccPath: Hash32, sibStoPath: Opt[Hash32]]]
+  for (accPath, sibStoPath, stoRoot, brVid) in db.collapsedSiblings:
+    if brVid.isValid:
+      let vtx = db.getVtx((stoRoot, brVid))
+      if vtx.isValid and vtx.vType == StoLeaf:
+        res.add((accPath, sibStoPath))
+    else:
+      res.add((accPath, sibStoPath))
+  res
+
 template clearWitnessKeys*(ledger: LedgerRef) =
   ledger.witnessKeys.clear()
 
+template clearCollapsedSiblings*(ledger: LedgerRef) =
+  ledger.txFrame.aTx.collapsedSiblings.setLen(0)
+
 proc getBlockHash*(ledger: LedgerRef, blockNumber: BlockNumber): Hash32 =
+  # Range checks must be done earlier, any miss here treated as an error:
+  # we record it as a fatalError.
+  # The zero hash is still returned so behaviour is otherwise unchanged,
+  # in particular the verified proxy's async EVM continues, discovers the
+  # number from the cache, fetches it and re-runs.
   ledger.blockHashes.get(blockNumber).valueOr:
     let blockHash = ledger.txFrame.getBlockHash(blockNumber).valueOr:
+      ledger.fatalError = Opt.some("Block hash not available for block " & $blockNumber)
       default(Hash32)
 
     ledger.blockHashes.put(blockNumber, blockHash)
@@ -686,18 +905,19 @@ proc persist*(ledger: LedgerRef,
 
   # make sure all savePoint already committed
   doAssert(ledger.savePoint.parentSavePoint.isNil)
-  if clearEmptyAccount:
-    ledger.clearEmptyAccounts()
 
   for address in ledger.savePoint.selfDestruct:
     ledger.deleteAccount(address)
+
+  if clearEmptyAccount:
+    ledger.clearEmptyAccounts()
 
   for (address, acc) in ledger.savePoint.dirty.pairs(): # This is a hotspot in block processing
     case acc.persistMode()
     of Update:
       if CodeChanged in acc.flags:
         acc.persistCode(ledger)
-      if NewlyCreated in acc.flags:
+      if NewlyCreated in acc.flags or ClearAccountPreserveBalance in acc.flags:
         # TODO https://github.com/status-im/nimbus-eth1/issues/4024
         # When overwriting an account, other clients clear storage - it seems
         # however there's limited spec clarity on this point - in particular,
@@ -706,17 +926,23 @@ proc persist*(ledger: LedgerRef,
         ledger.txFrame.clearStorage(acc.accPath).expect("can clear storage of account")
 
       if StorageChanged in acc.flags:
-        acc.persistStorage(ledger)
+        acc.persistStorage(ledger).isOkOr:
+          ledger.setFatalErrorOrAssert(error)
       else:
         # This one is only necessary unless `persistStorage()` is run which needs
         # to `merge()` the latest statement as well.
         ledger.txFrame.mergeAccount(acc.accPath, acc.statement).isOkOr:
-          raiseAssert info & $$error
+          ledger.setFatalErrorOrAssert(info & $$error)
+
+      acc.original.statement = acc.statement
+      acc.original.code = acc.code
     of Remove:
       ledger.txFrame.deleteAccount(acc.accPath).isOkOr:
         if error.error != AccNotFound:
-          raiseAssert info & $$error
+          ledger.setFatalErrorOrAssert(info & $$error)
       ledger.savePoint.cache.del address
+      acc.original.statement = EMPTY_STATEMENT
+      acc.original.code = nil
     of DoNothing:
       # dead man tell no tales
       # remove touched dead account from cache
@@ -724,7 +950,6 @@ proc persist*(ledger: LedgerRef,
         ledger.savePoint.cache.del address
 
     acc.flags = acc.flags - resetFlags
-  ledger.savePoint.dirty.clear()
 
   if clearCache:
     # This overwrites the cache from the previous persist, providing a crude LRU
@@ -733,15 +958,15 @@ proc persist*(ledger: LedgerRef,
     swap(ledger.cache, ledger.savePoint.cache)
     ledger.savePoint.cache.reset()
 
+  ledger.savePoint.dirty.clear()
   ledger.savePoint.selfDestruct.clear()
-
-  # EIP2929
-  ledger.savePoint.accessList.clear()
+  ledger.savePoint.accessList.clear() # EIP2929
 
   ledger.isDirty = false
 
   if clearWitness:
     ledger.clearWitnessKeys()
+    ledger.clearCollapsedSiblings()
     ledger.clearBlockHashesCache()
 
 iterator addresses*(ledger: LedgerRef): Address =
@@ -770,9 +995,8 @@ iterator storage*(
 iterator cachedStorage*(ledger: LedgerRef, address: Address): (UInt256, UInt256) =
   let acc = ledger.getAccount(address, false)
   if not acc.isNil:
-    if not acc.originalStorage.isNil:
-      for k, v in acc.originalStorage:
-        yield (k, v)
+    for k, v in acc.original.storage:
+      yield (k, v)
 
 proc getStorageRoot*(ledger: LedgerRef, address: Address): Hash32 =
   # beware that if the account not persisted,
@@ -827,7 +1051,6 @@ proc isEmptyAccount*(ledger: ReadOnlyLedger, address: Address): bool = isEmptyAc
 proc getCommittedStorage*(ledger: ReadOnlyLedger, address: Address, slot: UInt256): UInt256 = getCommittedStorage(distinctBase ledger, address, slot)
 proc inAccessList*(ledger: ReadOnlyLedger, address: Address): bool = inAccessList(distinctBase ledger, address)
 proc inAccessList*(ledger: ReadOnlyLedger, address: Address, slot: UInt256): bool = inAccessList(distinctBase ledger, address)
-proc resolveCode*(ledger: ReadOnlyLedger, address: Address): CodeBytesRef = resolveCode(distinctBase ledger, address)
 
 # ------------------------------------------------------------------------------
 # End

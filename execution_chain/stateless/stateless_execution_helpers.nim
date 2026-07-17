@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -19,7 +19,7 @@ from ../../hive_integration/engine_client import toBlockHeader, toTransactions
 
 export stateless_execution
 
-ExecutionWitness.useDefaultSerializationIn JrpcConv
+ExecutionWitnessWithKeys.useDefaultSerializationIn EthJson
 
 proc readFileToStr*(filePath: string): Result[string, string] =
   let fileStr = io2.readAllChars(filePath).valueOr:
@@ -32,15 +32,15 @@ func toBytes*(hexStr: string): Result[seq[byte], string] =
   except ValueError as e:
     err("Error converting hex string to bytes: " & e.msg)
 
-func decodeJson*(T: type ExecutionWitness, jsonStr: string): Result[T, string] =
+func decodeJson*(T: type ExecutionWitnessWithKeys, jsonStr: string): Result[T, string] =
   try:
-    ok(JrpcConv.decode(jsonStr, T))
+    ok(EthJson.decode(jsonStr, T))
   except SerializationError as e:
     err("Error decoding json string: " & e.msg)
 
 func decodeJson*(T: type BlockObject, jsonStr: string): Result[T, string] =
   try:
-    ok(JrpcConv.decode(jsonStr, T))
+    ok(EthJson.decode(jsonStr, T))
   except SerializationError as e:
     err("Error decoding json string: " & e.msg)
 
@@ -54,7 +54,7 @@ func toBlock*(blockObject: BlockObject): Block =
   )
 
 func decodeRlp*(
-    T: type ExecutionWitness, rlpBytes: openArray[byte]
+    T: type ExecutionWitnessWithKeys, rlpBytes: openArray[byte]
 ): Result[T, string] =
   try:
     ok(rlp.decode(rlpBytes, T))
@@ -71,9 +71,9 @@ proc statelessProcessBlockRlp*(
     witnessRlpBytes: openArray[byte], com: CommonRef, blkRlpBytes: openArray[byte]
 ): Result[void, string] =
   let
-    witness = ?ExecutionWitness.decodeRlp(witnessRlpBytes)
+    witness = ?ExecutionWitnessWithKeys.decodeRlp(witnessRlpBytes)
     blk = ?Block.decodeRlp(blkRlpBytes)
-  statelessProcessBlock(witness, com, blk)
+  statelessProcessBlock(witness.toExecutionWitness(), com, blk)
 
 proc statelessProcessBlockRlp*(
     witnessRlpStr: string, com: CommonRef, blkRlpStr: string
@@ -87,9 +87,9 @@ proc statelessProcessBlockJson*(
     witnessJson: string, com: CommonRef, blkJson: string
 ): Result[void, string] =
   let
-    witness = ?ExecutionWitness.decodeJson(witnessJson)
+    witness = ?ExecutionWitnessWithKeys.decodeJson(witnessJson)
     blkObject = ?BlockObject.decodeJson(blkJson)
-  statelessProcessBlock(witness, com, blkObject.toBlock())
+  statelessProcessBlock(witness.toExecutionWitness(), com, blkObject.toBlock())
 
 proc statelessProcessBlockJsonFiles*(
     witnessJsonFilePath: string, com: CommonRef, blockJsonFilePath: string

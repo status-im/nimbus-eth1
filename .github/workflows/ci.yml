@@ -57,7 +57,7 @@ jobs:
       run:
         shell: bash
 
-    name: '${{ matrix.os }}-${{ matrix.cpu }}'
+    name: ${{ matrix.os }}-${{ matrix.cpu }}${{ matrix.branch != '' && ' (Nim ' || '' }}${{ matrix.branch-short }}${{ matrix.branch != '' && ')' || '' }}
     runs-on: ${{ matrix.builder }}
     steps:
       - name: Checkout nimbus-eth1
@@ -82,6 +82,7 @@ jobs:
 
       - name: Run nimbus-eth1 tests
         run: |
+          ./env.sh nim --version
           gcc --version
           #export ZERO_AR_DATE=1 # avoid timestamps in binaries
           DEFAULT_MAKE_FLAGS="-j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache"
@@ -98,4 +99,47 @@ jobs:
           # clear some space
           find . -type d -name "nimcache" -exec rm -rf {} +
           # "-static" option will not work for osx unless static system libraries are provided
-          make ${DEFAULT_MAKE_FLAGS} test t8n_test eest_full_test
+          make ${DEFAULT_MAKE_FLAGS} test t8n_test evmstate_test
+          make eest_tool_test
+
+  eest:
+    needs: matrix_config
+
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.matrix_config.outputs.matrix) }}
+
+    defaults:
+      run:
+        shell: bash
+
+    name: EEST-${{ matrix.os }}-${{ matrix.cpu }}${{ matrix.branch != '' && ' (Nim ' || '' }}${{ matrix.branch-short }}${{ matrix.branch != '' && ')' || '' }}
+    runs-on: ${{ matrix.builder }}
+    steps:
+      - name: Checkout nimbus-eth1
+        uses: actions/checkout@v6
+
+      - name: Clean up disk space
+        if: runner.os == 'Linux'
+        run: |
+          sudo rm -rf /usr/lib/jvm || true
+          sudo rm -rf /usr/local/.ghcup || true
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /usr/share/dotnet || true
+          sudo rm -rf /usr/share/swift || true
+
+      - id: shared-action
+        uses: ./.github/actions/shared
+        with:
+          llvm-mingw: true
+          nim-cache: true
+          rocksdb-cache: true
+          eest-cache: true
+
+      - name: Run EEST test suite
+        run: |
+          ./env.sh nim --version
+          gcc --version
+          DEFAULT_MAKE_FLAGS="-j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache"
+          make ${DEFAULT_MAKE_FLAGS} rocksdb          
+          make eest_full_test

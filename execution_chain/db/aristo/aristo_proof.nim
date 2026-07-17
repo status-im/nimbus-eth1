@@ -48,20 +48,24 @@ proc chainRlpNodes(
   ## Inspired by the `getBranchAux()` function from `hexary.nim`
   let (vtx, _) = ?db.getVtxRc(rvid)
 
+  var rlpNodes: array[2, seq[byte]]
   nodesCache.withValue(rvid, value):
-    chain.appendNodes(value[])
+    rlpNodes = value[]
   do:
     let node = vtx.toNode(rvid.root, db).valueOr:
       return err(PartChnNodeConvError)
-
-    # Save rpl encoded node(s)
-    let rlpNodes = node.to(array[2, seq[byte]])
+    rlpNodes = node.to(array[2, seq[byte]])
     nodesCache[rvid] = rlpNodes
-    chain.appendNodes(rlpNodes)
 
   # Follow up child node
   case vtx.vType:
+  of BoundaryNode:
+    # Proof generation is only called on full nodes; BoundaryNode (stateless
+    # boundary) must never appear here.
+    raiseAssert "BoundaryNode in proof generation"
+
   of Leaves:
+    chain.add(rlpNodes[0])
     if path != vtx.pfx:
       err(PartChnLeafPathMismatch)
     else:
@@ -70,18 +74,28 @@ proc chainRlpNodes(
   of Branches:
     let vtx = BranchRef(vtx)
     let nChewOff = sharedPrefixLen(vtx.pfx, path)
+
+    # Extension node always added
+    chain.add(rlpNodes[0])
+    # Branch node added only when path enters the branch (prefix fully matches).
+    # For diverging paths the extension alone proves non-membership so the
+    # branch is omitted
+    if rlpNodes[1].len() > 0 and nChewOff == vtx.pfx.len:
+      chain.add(rlpNodes[1])
+
     if nChewOff != vtx.pfx.len:
-      err(PartChnExtPfxMismatch)
-    elif path.len == nChewOff:
-      err(PartChnBranchPathExhausted)
-    else:
-      let
-        nibble = path[nChewOff]
-        rest = path.slice(nChewOff+1)
-      if not vtx.bVid(nibble).isValid:
-        return err(PartChnBranchVoidEdge)
-      # Recursion!
-      db.chainRlpNodes((rvid.root,vtx.bVid(nibble)), rest, chain, nodesCache)
+      return err(PartChnExtPfxMismatch)
+
+    if path.len == nChewOff:
+      return err(PartChnBranchPathExhausted)
+
+    let
+      nibble = path[nChewOff]
+      rest = path.slice(nChewOff+1)
+    if not vtx.bVid(nibble).isValid:
+      return err(PartChnBranchVoidEdge)
+    # Recursion!
+    db.chainRlpNodes((rvid.root,vtx.bVid(nibble)), rest, chain, nodesCache)
 
 proc makeProof(
     db: AristoTxRef;
@@ -177,6 +191,13 @@ proc makeMultiProof*(
     paths: Table[Hash32, seq[Hash32]], # maps each account path to a list of storage paths
     multiProof: var seq[seq[byte]]
       ): Result[void, AristoError] =
+  # Short path for empty pre-state trie, no nodes exist
+  # Also, without the check the makeProof will fail when trying to get the root
+  # vertex as it is empty.
+  let stateRoot = ?db.fetchStateRoot()
+  if stateRoot == emptyRoot:
+    return ok()
+
   var
     nodesCache: NodesCache
     proofNodes: HashSet[seq[byte]]
@@ -385,18 +406,24 @@ proc convertSubtrie(
 
         # Convert the child branch node which will be merged with this extension node
         ?convertSubtrie(k.to(Hash32), src, dst, isStorage)
-        doAssert(dst.contains(k))
 
-        let
-          childNode = dst.getOrDefault(k)
-          childBranch = BranchRef(childNode.vtx)
+        if dst.contains(k):
+          let
+            childNode = dst.getOrDefault(k)
+            childBranch = BranchRef(childNode.vtx)
 
-        # Remove the childNode because it's branch was copied into this node
-        dst.del(k)
+          # Remove the childNode because it's branch was copied into this node
+          dst.del(k)
 
-        NodeRef(
-          key: childNode.key,
-          vtx: ExtBranchRef.init(segm, childBranch.startVid, childBranch.used))
+          NodeRef(
+            key: childNode.key,
+            vtx: ExtBranchRef.init(segm, childBranch.startVid, childBranch.used))
+        else:
+          # Child absent from witness (proof boundary): represent as a
+          # BoundaryNode carrying the child hash as childKey.
+          NodeRef(
+            key: default(array[16, HashKey]),
+            vtx: BoundaryNodeRef.init(segm, k))
 
     of 17: # Branch node
       var key: array[16, HashKey]
@@ -450,6 +477,11 @@ proc putSubtrie(
     of StoLeaf:
       discard
 
+    of BoundaryNode:
+      # Store vertex and pre-computed extension hash
+      db.layersPutKey(rvid, BoundaryNodeRef(node.vtx), key)
+      return ok()
+
     of Branch, ExtBranch:
       let bvtx = BranchRef(node.vtx)
       bvtx.startVid = db.vidFetch(16)
@@ -470,7 +502,13 @@ proc putSubtrie(
           # Write the known hash key setting the vtx to nil
           db.layersPutKey(r, BranchRef(nil), k)
 
-  db.layersPutVtx(rvid, node.vtx)
+  # When writing into a storage trie, duplicate vertices before putting in
+  # the database to avoid sharing mutable NodeRef instances between different
+  # accounts that happen to share the same storage root hash in the witness.
+  if rvid.root != STATE_ROOT_VID:
+    db.layersPutVtx(rvid, node.vtx.dup())
+  else:
+    db.layersPutVtx(rvid, node.vtx)
 
   ok()
 
@@ -478,11 +516,22 @@ proc putSubtrie*(
     db: AristoTxRef,
     stateRoot: Hash32,
     nodes: Table[Hash32, seq[byte]]): Result[void, AristoError] =
-  if nodes.len() == 0:
-    return err(PartTrkEmptyProof)
+  if stateRoot == emptyRoot:
+    # Short path for empty pre-state: fetchStateRoot returns emptyRoot when
+    # GetVtxNotFound, so nothing needed to store here.
+    # And HashKey.fromBytes(emptyRoot.data) would create an invalid 32-byte key
+    # as isValid has a emptyRoot check
+    return ok()
 
   let key = HashKey.fromBytes(stateRoot.data).valueOr:
     return err(PartTrkLinkExpected)
+
+  if nodes.len() == 0:
+    # Valid case: no state was accessed (e.g. a block with no transactions).
+    # Still need to store the known state root so that fetchStateRoot returns
+    # the correct pre-state root.
+    db.layersPutKey((STATE_ROOT_VID, STATE_ROOT_VID), BranchRef(nil), key)
+    return ok()
 
   try:
     var convertedNodes: Table[HashKey, NodeRef]

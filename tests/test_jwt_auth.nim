@@ -19,12 +19,12 @@ import
   ../execution_chain/rpc {.all.},
   chronicles,
   chronos/apps/http/httpclient as chronoshttpclient,
-  nimcrypto/[hmac, sha2, utils],
+  nimcrypto/[utils],
   unittest2,
   websock/websock,
-  json_rpc/[rpcserver, rpcclient]
+  json_rpc/[rpcserver, rpcclient],
+  web3/eth_json_marshal
 
-from std/base64 import encode
 from std/os import DirSep, fileExists, removeFile, splitFile, splitPath, `/`
 from std/times import getTime, toUnix
 
@@ -80,19 +80,9 @@ func fakeGenSecret(fake: JwtSharedKey): Rng =
   proc(v: var openArray[byte]) =
     discard v.copyFrom(distinctBase fake)
 
-func base64urlEncode(x: auto): string =
-  ## from nimbus-eth2, engine_authentication.nim
-  base64.encode(x, safe = true).replace("=", "")
-
 func getIatToken(time: uint64): JsonNode =
   ## from nimbus-eth2, engine_authentication.nim
   %* {"iat": time}
-
-func getSignedToken(key: openArray[byte], payload: string): string =
-  ## from nimbus-eth2, engine_authentication.nim
-  # Using hard coded string for """{"typ": "JWT", "alg": "HS256"}"""
-  let sData = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9." & base64urlEncode(payload)
-  sData & "." & sha256.hmac(key, sData).data.base64urlEncode
 
 func getHttpAuthReqHeader(secret: JwtSharedKey; time: uint64): HttpTable =
   let bearer = secret.UnGuardedKey.getSignedToken($getIatToken(time))
@@ -103,7 +93,7 @@ func getHttpAuthReqHeader(secret: JwtSharedKey; time: uint64): HttpTable =
 # ------------------------------------------------------------------------------
 
 func installRPC(server: RpcServer) =
-  server.rpc("rpc_echo") do(input: int) -> string:
+  server.rpc("rpc_echo", EthJson) do(input: int) -> string:
     "hello: " & $input
 
 proc setupComboServer(hooks: sink seq[RpcAuthHook]): HttpResult[NimbusHttpServerRef] =
@@ -120,7 +110,7 @@ proc setupComboServer(hooks: sink seq[RpcAuthHook]): HttpResult[NimbusHttpServer
   let address = initTAddress("127.0.0.1:0")
   newHttpServerWithParams(address, hooks, handlers)
 
-createRpcSigsFromNim(RpcClient):
+createRpcSigsFromNim(RpcClient, EthJson):
   proc rpc_echo(input: int): string
 
 # ------------------------------------------------------------------------------

@@ -8,10 +8,11 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   chronicles,
+  metrics,
   std/[times, tables],
   eth/eip1559,
   eth/common/transaction_utils,
@@ -23,7 +24,7 @@ import
   ../../db/ledger,
   ../../constants,
   ../../transaction,
-  ../../core/eip8037,
+  ../../transaction/call_types,
   ../chain/forked_chain,
   ../pow/header,
   ../eip4844,
@@ -38,6 +39,13 @@ from eth/common/eth_types_rlp import rlpHash
 logScope:
   topics = "txpool"
 
+declareGauge   nec_txpool_transactions,   "Transactions currently in the pool"
+declareGauge   nec_txpool_senders,        "Distinct senders with pooled transactions"
+declareCounter nec_txpool_added_total,    "Transactions accepted into the pool"
+declareCounter nec_txpool_removed_total,  "Transactions removed from the pool"
+declareCounter nec_txpool_rejected_total, "Transactions rejected on add",
+  labels = ["reason"]
+
 type
   PosPayloadAttr = object
     feeRecipient: Address
@@ -46,6 +54,12 @@ type
     withdrawals : seq[Withdrawal] ## EIP-4895
     beaconRoot  : Hash32 ## EIP-4788
     slotNumber  : uint64 ## EIP-7843
+    targetGasLimit: Opt[uint64]
+
+  TxPoolFlags* = enum
+    XP_ORDERED
+    XP_SKIP_BLOB_WRAPPER_VALIDATION
+    XP_SKIP_SIZE_VALIDATION
 
   TxPoolRef* = ref object
     vmState  : BaseVMState
@@ -55,43 +69,46 @@ type
     rmHash   : Hash32
     pos      : PosPayloadAttr
     blobTab  : BlobLookupTab
+    flags    : set[TxPoolFlags]
 
 const
   MAX_POOL_SIZE = 8000
   MAX_TXS_PER_ACCOUNT = 500
-  TX_ITEM_LIFETIME = initDuration(minutes = 10)
-  TX_MAX_SIZE* = 128 * 1024
+  TX_ITEM_LIFETIME* = initDuration(minutes = 10)
+  TX_MAX_SIZE = 128 * 1024
   # BLOB_TX_MAX_SIZE is the maximum size a single transaction can have, outside
   # the included blobs. Since blob transactions are pulled instead of pushed,
   # and only a small metadata is kept in ram, there is no critical limit that
   # should be enforced. Still, capping it to some sane limit can never hurt.
-  BLOB_TX_MAX_SIZE* = 1024 * 1024 * 2
+  BLOB_TX_MAX_SIZE = 1024 * 1024 * 2
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc getBaseFee(com: CommonRef; parent: Header): Opt[UInt256] =
+func getBaseFee(com: CommonRef; parent: Header): GasInt =
   ## Calculates the `baseFee` of the head assuming this is the parent of a
   ## new block header to generate.
   ## Post Merge rule
-  Opt.some calcEip1599BaseFee(
+  calcEip1599BaseFee(
     parent.gasLimit,
     parent.gasUsed,
-    parent.baseFeePerGas.get(0.u256))
+    parent.baseFeePerGas.get(0.u256)).truncate(GasInt)
 
-func getGasLimit(com: CommonRef; parent: Header): GasInt =
+func getGasLimit(com: CommonRef; parent: Header, targetGasLimit: Opt[uint64]): GasInt =
   ## Post Merge rule
-  calcGasLimit1559(parent.gasLimit, desiredLimit = com.gasLimit)
+  let desiredLimit = targetGasLimit.get(com.gasLimit)
+  calcGasLimit1559(parent.gasLimit, desiredLimit = desiredLimit)
 
 proc setupVMState(com: CommonRef;
                   parent: Header,
                   parentHash: Hash32,
                   pos: PosPayloadAttr,
                   parentFrame: CoreDbTxRef): BaseVMState =
+
   let
-    fork = com.toEVMFork(pos.timestamp)
-    gasLimit = getGasLimit(com, parent)
+    fork = com.toHardFork(pos.timestamp)
+    gasLimit = getGasLimit(com, parent, pos.targetGasLimit)
 
   BaseVMState.new(
     parent   = parent,
@@ -105,7 +122,6 @@ proc setupVMState(com: CommonRef;
       excessBlobGas: com.calcExcessBlobGas(parent, fork),
       parentHash   : parentHash,
       slotNumber   : pos.slotNumber,
-      costPerStateByte: stateGasPerByte(gasLimit),
     ),
     txFrame = parentFrame.txFrameBegin(),
     com     = com,
@@ -114,7 +130,7 @@ proc setupVMState(com: CommonRef;
 template append(tab: var TxSenderTab, sn: TxSenderNonceRef) =
   tab[item.sender] = sn
 
-proc getCurrentFromSenderTab(xp: TxPoolRef; item: TxItemRef): Opt[TxItemRef] =
+func getCurrentFromSenderTab(xp: TxPoolRef; item: TxItemRef): Opt[TxItemRef] =
   let sn = xp.senderTab.getOrDefault(item.sender)
   if sn.isNil:
     return Opt.none(TxItemRef)
@@ -122,16 +138,18 @@ proc getCurrentFromSenderTab(xp: TxPoolRef; item: TxItemRef): Opt[TxItemRef] =
     return Opt.none(TxItemRef)
   Opt.some(current.data)
 
-proc removeFromSenderTab(xp: TxPoolRef; item: TxItemRef) =
+func removeFromSenderTab(xp: TxPoolRef; item: TxItemRef) =
   let sn = xp.senderTab.getOrDefault(item.sender)
   if sn.isNil:
     return
   discard sn.list.delete(item.nonce)
+  if sn.list.len == 0:
+    xp.senderTab.del(item.sender)
 
 func alreadyKnown(xp: TxPoolRef, id: Hash32): bool =
   xp.idTab.getOrDefault(id).isNil.not
 
-proc insertToSenderTab(xp: TxPoolRef; item: TxItemRef): Result[void, TxError] =
+func insertToSenderTab(xp: TxPoolRef; item: TxItemRef): Result[void, TxError] =
   ## Add transaction `item` to the list. The function has no effect if the
   ## transaction exists, already.
   var sn = xp.senderTab.getOrDefault(item.sender)
@@ -163,10 +181,7 @@ proc insertToSenderTab(xp: TxPoolRef; item: TxItemRef): Result[void, TxError] =
 func baseFee*(xp: TxPoolRef): GasInt =
   ## Getter, baseFee for the next bock header. This value is auto-generated
   ## when a new insertion point is set via `head=`.
-  if xp.vmState.blockCtx.baseFeePerGas.isSome:
-    xp.vmState.blockCtx.baseFeePerGas.get.truncate(GasInt)
-  else:
-    0.GasInt
+  xp.vmState.blockCtx.baseFeePerGas
 
 func gasLimit(xp: TxPoolRef): GasInt =
   xp.vmState.blockCtx.gasLimit
@@ -174,45 +189,19 @@ func gasLimit(xp: TxPoolRef): GasInt =
 func excessBlobGas(xp: TxPoolRef): GasInt =
   xp.vmState.blockCtx.excessBlobGas
 
-proc getBalance(xp: TxPoolRef; account: Address): UInt256 =
-  xp.vmState.ledger.getBalance(account)
-
 proc getNonce*(xp: TxPoolRef; account: Address): AccountNonce =
   xp.vmState.ledger.getNonce(account)
 
 proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
-
-  if tx.gasLimit > TX_GAS_LIMIT:
-    debug "Invalid transaction: Gas limit too high",
-      txGasLimit = tx.gasLimit,
-      gasLimit = TX_GAS_LIMIT
-    return false
-
   if tx.txType == TxEip4844:
     let
       excessBlobGas = xp.excessBlobGas
-      blobGasPrice = getBlobBaseFee(excessBlobGas, xp.vmState.com, xp.vmState.fork)
+      blobGasPrice = getBlobBaseFee(excessBlobGas, xp.vmState.com, xp.vmState.hardFork)
     if tx.maxFeePerBlobGas < blobGasPrice:
       debug "Invalid transaction: maxFeePerBlobGas lower than blobGasPrice",
         maxFeePerBlobGas = tx.maxFeePerBlobGas,
         blobGasPrice = blobGasPrice
       return false
-
-  # Check whether the worst case expense is covered by the price budget,
-  let
-    balance = xp.getBalance(sender)
-    gasCost = tx.gasCost
-  if balance < gasCost:
-    debug "Invalid transaction: Insufficient balance for gas cost",
-      balance = balance,
-      gasCost = gasCost
-    return false
-  let balanceOffGasCost = balance - gasCost
-  if balanceOffGasCost < tx.value:
-    debug "Invalid transaction: Insufficient balance for tx value",
-      balanceOffGasCost = balanceOffGasCost,
-      txValue = tx.value
-    return false
 
   # For legacy transactions check whether minimum gas price and tip are
   # high enough. These checks are optional.
@@ -220,11 +209,6 @@ proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
     if tx.gasPrice < 0:
       debug "Invalid transaction: Legacy transaction with invalid gas price",
         gasPrice = tx.gasPrice
-      return false
-
-    # Fall back transaction selector scheme
-    if tx.tip(xp.baseFee) < 1.GasInt:
-      debug "Invalid transaction: Legacy transaction with tip lower than 1"
       return false
 
   if tx.txType >= TxEip1559:
@@ -265,7 +249,7 @@ proc validateBlobTransactionWrapper(tx: PooledTransaction, fork: EVMFork):
 # Public functions, constructor
 # ------------------------------------------------------------------------------
 
-proc init*(xp: TxPoolRef; chain: ForkedChainRef) =
+proc init*(xp: TxPoolRef; chain: ForkedChainRef, flags: set[TxPoolFlags] = {}) =
   ## Constructor, returns new tx-pool descriptor.
   xp.pos.timestamp = chain.latestHeader.timestamp
   xp.vmState = setupVMState(chain.com,
@@ -273,6 +257,19 @@ proc init*(xp: TxPoolRef; chain: ForkedChainRef) =
     xp.pos, chain.txFrame(chain.latestHash))
   xp.chain = chain
   xp.rmHash = chain.latestHash
+  xp.flags = flags
+
+proc dispose*(xp: TxPoolRef) =
+  if not xp.vmState.isNil():
+    xp.vmState.ledger.txFrame.dispose()
+    xp.vmState.ledger = nil
+    xp.vmState.dispose()
+    xp.vmState = nil
+
+  xp.chain = nil
+  xp.senderTab.clear()
+  xp.idTab.clear()
+  xp.blobTab.clear()
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
@@ -283,6 +280,9 @@ func vmState*(xp: TxPoolRef): BaseVMState =
 
 func nextFork*(xp: TxPoolRef): EVMFork =
   xp.vmState.fork
+
+func hardFork*(xp: TxPoolRef): HardFork =
+  xp.vmState.hardFork
 
 template chain*(xp: TxPoolRef): ForkedChainRef =
   xp.chain
@@ -303,30 +303,48 @@ func rmHash*(xp: TxPoolRef): Hash32 =
 func `rmHash=`*(xp: TxPoolRef, val: Hash32) =
   xp.rmHash = val
 
-proc updateVmState*(xp: TxPoolRef) =
-  ## Reset transaction environment, e.g. before packing a new block
+proc updateVmState*(xp: TxPoolRef, parentHeader: Header, parentHash: Hash32) =
+  ## Reset transaction environment, e.g. before packing a new block on
+  ## top of the given parent block.
+  if not xp.vmState.isNil():
+    xp.vmState.ledger.txFrame.dispose()
+    xp.vmState.ledger = nil
+    xp.vmState.dispose()
   xp.vmState = setupVMState(xp.chain.com,
-    xp.chain.latestHeader, xp.chain.latestHash,
-    xp.pos, xp.chain.txFrame(xp.chain.latestHash))
+    parentHeader, parentHash,
+    xp.pos, xp.chain.txFrame(parentHash))
+
+proc updateVmState*(xp: TxPoolRef) =
+  ## Reset transaction environment on top of the latest block.
+  xp.updateVmState(xp.chain.latestHeader, xp.chain.latestHash)
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
-proc contains*(xp: TxPoolRef, id: Hash32): bool =
+func contains*(xp: TxPoolRef, id: Hash32): bool =
   xp.idTab.hasKey(id)
 
-proc getItem*(xp: TxPoolRef, id: Hash32): Result[TxItemRef, TxError] =
+func getItem*(xp: TxPoolRef, id: Hash32): Result[TxItemRef, TxError] =
   let item = xp.idTab.getOrDefault(id)
   if item.isNil:
     return err(txErrorItemNotFound)
   ok(item)
 
+proc updatePoolSizeMetrics*(xp: TxPoolRef) =
+  ## Refresh the live pool-size gauges from the current pool state.
+  nec_txpool_transactions.set(xp.idTab.len.int64)
+  nec_txpool_senders.set(xp.senderTab.len.int64)
+
 proc removeTx*(xp: TxPoolRef, id: Hash32) =
   let item = xp.getItem(id).valueOr:
     return
-  xp.removeFromSenderTab(item)
+  if XP_ORDERED notin xp.flags:
+    xp.removeFromSenderTab(item)
   xp.idTab.del(id)
   xp.blobTab.removeLookup(item)
+
+  nec_txpool_removed_total.inc()
+  xp.updatePoolSizeMetrics()
 
 proc removeExpiredTxs*(xp: TxPoolRef, lifeTime: Duration = TX_ITEM_LIFETIME) =
   var expired = newSeqOfCap[Hash32](xp.idTab.len div 4)
@@ -339,37 +357,52 @@ proc removeExpiredTxs*(xp: TxPoolRef, lifeTime: Duration = TX_ITEM_LIFETIME) =
   for txHash in expired:
     xp.removeTx(txHash)
 
-proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
-  if not ptx.tx.validateChainId(xp.chain.com.chainId):
+proc addTxImpl(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
+  if xp.chain.latestHash != xp.vmState.blockCtx.parentHash:
+    # The chain head moved without a block-building cycle (payload import,
+    # fork choice, or syncer progress): re-anchor the validation state on
+    # the new head, or txs keep being judged against stale nonces, balances
+    # and base fee. The context timestamp only moves forward so that an
+    # in-flight build cycle's slot timestamp (always beyond the head's) is
+    # preserved.
+    xp.pos.timestamp = max(xp.pos.timestamp, xp.chain.latestHeader.timestamp)
+    xp.updateVmState()
+  elif xp.pos.timestamp != xp.vmState.blockCtx.timestamp:
+    xp.updateVmState()
+
+  let
+    (validChainId, derivedChainId) = ptx.tx.validateChainId(xp.chain.com.chainId)
+
+  if not validChainId:
     debug "Transaction chain id mismatch",
-      txChainId = ptx.tx.chainId,
+      txChainId = derivedChainId,
       chainId = xp.chain.com.chainId
     return err(txErrorChainIdMismatch)
 
   let (size, id) = getEncodedLengthAndHash(ptx.tx)
-
-  if ptx.tx.txType == TxEip4844:
-    if size > BLOB_TX_MAX_SIZE:
-      return err(txErrorOversized)
-
-    ptx.validateBlobTransactionWrapper(xp.nextFork).isOkOr:
-      debug "Invalid transaction: Blob transaction wrapper validation failed",
-        tx = ptx.tx,
-        error = error
-      return err(txErrorInvalidBlob)
-  else:
-    if size > TX_MAX_SIZE:
-      return err(txErrorOversized)
+  if XP_SKIP_SIZE_VALIDATION notin xp.flags:
+    if ptx.tx.txType == TxEip4844:
+      if size > BLOB_TX_MAX_SIZE:
+        return err(txErrorOversized)
+    else:
+      if size > TX_MAX_SIZE:
+        return err(txErrorOversized)
 
   if xp.alreadyKnown(id):
     debug "Transaction already known", txHash = id
     return err(txErrorAlreadyKnown)
 
+
+  let
+    sender = ptx.tx.recoverSender().valueOr:
+      return err(txErrorInvalidSignature)
+    intrinsic = ptx.tx.intrinsicGas(xp.hardFork, xp.gasLimit, sender)
+
   validateTxBasic(
     xp.com,
     ptx.tx,
-    xp.gasLimit,
-    xp.nextFork,
+    intrinsic,
+    xp.hardFork,
     validateFork = true).isOkOr:
     debug "Invalid transaction: Basic validation failed",
       txHash = id,
@@ -377,29 +410,21 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     return err(txErrorBasicValidation)
 
   let
-    sender = ptx.tx.recoverSender().valueOr:
-      return err(txErrorInvalidSignature)
     nonce = xp.getNonce(sender)
 
-  # The downside of this arrangement is the ledger is not
-  # always up to date. The comparison below
-  # does not always filter out transactions with lower nonce.
-  # But it will not affect the correctness of the subsequent
-  # algorithm. In `byPriceAndNonce`, once again transactions
-  # with lower nonce are filtered out, for different reason.
-  # But the end result is same, transactions packed in a block only
-  # have consecutive nonces >= than current account's nonce.
-  #
-  # Calling something like:
-  # if xp.chain.latestHash != xp.parentHash:
-  #   xp.updateVmState()
-  # maybe can solve the accuracy but it is quite expensive.
   if ptx.tx.nonce < nonce:
     debug "Transaction rejected: Nonce too small",
       txNonce = ptx.tx.nonce,
       nonce = nonce,
       sender = sender
     return err(txErrorNonceTooSmall)
+
+  if ptx.tx.txType == TxEip4844 and XP_SKIP_BLOB_WRAPPER_VALIDATION notin xp.flags:
+    ptx.validateBlobTransactionWrapper(xp.nextFork).isOkOr:
+      debug "Invalid transaction: Blob transaction wrapper validation failed",
+        tx = ptx.tx,
+        error = error
+      return err(txErrorInvalidBlob)
 
   if not xp.classifyValid(ptx.tx, sender):
     return err(txErrorTxInvalid)
@@ -412,7 +437,8 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     return err(txErrorPoolIsFull)
 
   let item = TxItemRef.new(ptx, id, sender)
-  ?xp.insertToSenderTab(item)
+  if XP_ORDERED notin xp.flags:
+    ?xp.insertToSenderTab(item)
   xp.idTab[item.id] = item
   xp.blobTab.addLookup(item)
 
@@ -432,6 +458,14 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
 
   ok()
 
+proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
+  result = xp.addTxImpl(ptx)
+  if result.isErr:
+    nec_txpool_rejected_total.inc(labelValues = [$result.error])
+  else:
+    nec_txpool_added_total.inc()
+    xp.updatePoolSizeMetrics()
+
 proc addTx*(xp: TxPoolRef, tx: Transaction): Result[void, TxError] =
   xp.addTx(PooledTransaction(tx: tx))
 
@@ -443,6 +477,13 @@ iterator byPriceAndNonce*(xp: TxPoolRef): TxItemRef =
 iterator allItems*(xp: TxPoolRef): TxItemRef =
   for _, item in xp.idTab:
     yield item
+
+iterator byOrder*(xp: TxPoolRef): TxItemRef =
+  for _, item in xp.idTab:
+    yield item
+
+func isOrdered*(xp: TxPoolRef): bool =
+  XP_ORDERED in xp.flags
 
 func senderCount*(xp: TxPoolRef): int =
   xp.senderTab.len
@@ -490,7 +531,7 @@ func timestamp*(xp: TxPoolRef): EthTime =
 func prevRandao*(xp: TxPoolRef): Bytes32 =
   xp.pos.prevRandao
 
-proc withdrawals*(xp: TxPoolRef): seq[Withdrawal] =
+func withdrawals*(xp: TxPoolRef): seq[Withdrawal] =
   xp.pos.withdrawals
 
 func parentBeaconBlockRoot*(xp: TxPoolRef): Hash32 =
@@ -503,20 +544,23 @@ func slotNumber*(xp: TxPoolRef): uint64 =
 # PoS payload attributes setters
 # ------------------------------------------------------------------------------
 
-proc `feeRecipient=`*(xp: TxPoolRef, val: Address) =
+func `feeRecipient=`*(xp: TxPoolRef, val: Address) =
   xp.pos.feeRecipient = val
 
-proc `timestamp=`*(xp: TxPoolRef, val: EthTime) =
+func `timestamp=`*(xp: TxPoolRef, val: EthTime) =
   xp.pos.timestamp = val
 
-proc `prevRandao=`*(xp: TxPoolRef, val: Bytes32) =
+func `prevRandao=`*(xp: TxPoolRef, val: Bytes32) =
   xp.pos.prevRandao = val
 
-proc `withdrawals=`*(xp: TxPoolRef, val: sink seq[Withdrawal]) =
+func `withdrawals=`*(xp: TxPoolRef, val: sink seq[Withdrawal]) =
   xp.pos.withdrawals = system.move(val)
 
-proc `parentBeaconBlockRoot=`*(xp: TxPoolRef, val: Hash32) =
+func `parentBeaconBlockRoot=`*(xp: TxPoolRef, val: Hash32) =
   xp.pos.beaconRoot = val
 
-proc `slotNumber=`*(xp: TxPoolRef, val: uint64) =
+func `slotNumber=`*(xp: TxPoolRef, val: uint64) =
   xp.pos.slotNumber = val
+
+func `targetGasLimit=`*(xp: TxPoolRef, val: Opt[uint64]) =
+  xp.pos.targetGasLimit = val

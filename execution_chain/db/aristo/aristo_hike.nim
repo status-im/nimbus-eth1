@@ -39,6 +39,8 @@ func getNibblesImpl(hike: Hike; start = 0; maxLen = high(int)): NibblesBuf =
     of ExtBranch:
       let vtx = ExtBranchRef(leg.wp.vtx)
       result = result & vtx.pfx & NibblesBuf.nibble(leg.nibble.byte)
+    of BoundaryNode:
+      discard # BoundaryNode never successfully steps forward
     of Leaves:
       let vtx = LeafRef(leg.wp.vtx)
       result = result & vtx.pfx
@@ -102,6 +104,11 @@ proc step*(
     if path.len <= vtx.pfx.len:
       return err(HikeBranchTailEmpty)
 
+    if path.sharedPrefixLen(vtx.pfx) < vtx.pfx.len:
+      # Path diverges within this extension's own prefix. This proves absence
+      # regardless of the branch children, so don't route into them.
+      return err(HikeBranchMissingEdge)
+
     let
       nibble = path[vtx.pfx.len]
       nextVid = vtx.bVid(nibble)
@@ -110,6 +117,16 @@ proc step*(
       return err(HikeBranchMissingEdge)
 
     ok (vtx, vtx.pfx.len + 1, nextVid)
+
+  of BoundaryNode:
+    # Child subtree absent from witness, only its hash is known.
+    # If the path doesn't match the boundary's own prefix, the key is not
+    # there either way. If it does match, we'd need the missing subtree to
+    # know for sure. That means missing state in the witness.
+    let vtx = BoundaryNodeRef(vtx)
+    if path.sharedPrefixLen(vtx.pfx) < vtx.pfx.len:
+      return err(HikeBranchMissingEdge)
+    return err(HikeBranchUnresolvedEdge)
 
 
 iterator stepUp*(
@@ -182,6 +199,8 @@ proc hikeUp*[LeafType](
     of ExtBranch:
       let vtx = ExtBranchRef(vtx)
       hike.legs.add Leg(wp: wp, nibble: int8 path[vtx.pfx.len])
+    of BoundaryNode:
+      discard # step() always fails for BoundaryNode thus this is unreachable
 
     path = path.slice(common)
     vid = next

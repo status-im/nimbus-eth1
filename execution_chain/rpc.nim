@@ -55,7 +55,7 @@ func installRPC(server: RpcServer,
 
 
 proc newRpcWebsocketHandler(): RpcWebSocketHandler =
-  let rng = HmacDrbgContext.new()
+  let rng = bearSslRng(HmacDrbgContext.new())
   RpcWebSocketHandler(
     wsserver: WSServer.new(rng = rng),
   )

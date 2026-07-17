@@ -16,18 +16,33 @@ import
   minilru,
   ../../../common,
   ../../../db/[core_db, fcu_db],
+  ../../../evm/types,
   ../../../portal/portal,
   ./block_quarantine,
   ./chain_branch
 
-from ../../../block_access_list/block_access_list_builder import BlockAccessListRef
+from ../../../block_access_list/bal_builder import BlockAccessListRef
 
 export tables, minilru
 
 type
+  ImportOutcome* = enum
+    ## Successful classification of a block handed to `importBlock`.
+    Valid           ## newly validated and linked into the `FC`
+    AlreadyObserved ## block already present by hash (content arrived earlier)
+
+  ImportErrorKind* = enum
+    Invalid         ## genuine validation/`processBlock` failure
+    Orphaned        ## branch already pruned below the live head - drop forward
+    MissingParent   ## parent absent above the live head - quarantined, retry
+
+  ImportError* = object
+    kind*: ImportErrorKind
+    msg*:  string
+
   QueueItem* = object
-    responseFut*: Future[Result[void, string]].Raising([CancelledError])
-    handler*: proc(): Future[Result[void, string]] {.async: (raises: [CancelledError]).}
+    responseFut*: Future[Result[ImportOutcome, ImportError]].Raising([CancelledError])
+    handler*: proc(): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).}
 
   ForkedChainRef* = ref object
     com*: CommonRef
@@ -114,6 +129,14 @@ type
       # Recent blocks that failed validation for any reason,
       # indexed by block hash and containing a tuple of the block
       # and the generated block access list.
+
+    vmState*: BaseVMState
+      # Cached from the last successfully processed block so that the ledger
+      # caches stay warm across linear imports. nil when no reusable state
+      # exists (startup, or the previous block failed).
+
+    vmStateBlockHash*: Hash32
+      # Hash of the last block executed by cached vmState.
 
 # ------------------------------------------------------------------------------
 # These functions are private to ForkedChainRef

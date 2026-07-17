@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -16,7 +16,7 @@ import
   unittest2,
   ../../execution_chain/core/chain,
   ../../execution_chain/db/ledger,
-  ../replay/[pp, undump_blocks, undump_blocks_era1, xcheck],
+  ../replay/[pp, undump_blocks, undump_blocks_ere, xcheck],
   ./test_helpers
 
 const
@@ -120,11 +120,11 @@ proc test_chainSync*(
   noisy.initLogging com
   defer: com.finishLogging()
 
-  # Scan folder for `era1` files (ignoring the argument file name)
+  # Scan folder for `ere` files (ignoring the argument file name)
   let
     (dir, _, ext) = filePaths[0].splitFile
     files =
-      if filePaths.len == 1 and ext == ".era1":
+      if filePaths.len == 1 and ext == ".ere":
         @[dir]
       else:
         filePaths
@@ -140,8 +140,8 @@ proc test_chainSync*(
       noisy.say "***", "stop: sample exhausted"
       return true
 
-  # This will enable printing the `era1` covered block ranges (if any)
-  undump_blocks_era1.noisy = noisy
+  # This will enable printing the covered block ranges (if any)
+  undump_blocks_ere.noisy = noisy
 
   var
     blocks = 0

@@ -8,28 +8,32 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[os, strutils],
+  std/[options, os, strutils],
   chronicles,
   chronos,
   confutils,
   eth/common/[keys, eth_types_rlp],
+  web3/eth_api_types,
   json_rpc/rpcproxy,
   beacon_chain/gossip_processing/light_client_processor,
   beacon_chain/networking/network_metadata,
-  beacon_chain/spec/beaconstate,
-  beacon_chain/conf,
-  beacon_chain/[beacon_clock, buildinfo, nimbus_binary_common, process_state],
-  beacon_chain/spec/forks,
+  beacon_chain/spec/[forks, beaconstate],
+  beacon_chain/[conf, beacon_clock, buildinfo, nimbus_binary_common, process_state],
   ../execution_chain/common/common,
   ./nimbus_verified_proxy_conf,
   ./engine/engine,
+  ./engine/genesis_params,
   ./engine/rpc_frontend,
   ./engine/header_store,
   ./engine/utils,
   ./engine/types,
   ./lc_backend,
+  ./p2p_lc_backend,
   ./json_rpc_backend,
   ./json_rpc_frontend,
+  ./op/op_anchor,
+  ./op/op_chain_params,
+  ./op/op_frontend,
   ../execution_chain/version_info
 
 # error object to translate results to error
@@ -114,8 +118,40 @@ proc startBeaconBackends(
 
   clients
 
+proc startP2PBeaconBackend(
+    engine: RpcVerificationEngine, config: VerifiedProxyConf
+): Future[Option[P2PLightClientBackend]] {.async: (raises: [CancelledError]).} =
+  let
+    networkName = config.eth2Network.get("mainnet")
+    genesis = genesisParamsForNetwork(networkName)
+    p2pConf = P2PBackendConf(
+      cfg: engine.cfg,
+      forkDigests: engine.forkDigests,
+      getBeaconTime: engine.getBeaconTime,
+      genesisValidatorsRoot: genesis.genesisValidatorsRoot,
+      genesisBlockRoot: genesis.genesisBlockRoot,
+      tcpPort: Port(config.p2pTcpPort),
+      udpPort: Port(config.p2pUdpPort),
+      maxPeers: config.p2pMaxPeers,
+      bootstrapNodesFile: config.p2pBootstrapNodesFile,
+      nat: config.p2pNat,
+      network: networkName,
+    )
+    backend = P2PLightClientBackend.init(p2pConf).valueOr:
+      error "Failed to create P2P light client node", err = error.errMsg
+      return none(P2PLightClientBackend)
+
+  let startRes = await backend.start()
+  if startRes.isErr():
+    error "Failed to start P2P light client backend", err = startRes.error.errMsg
+    return none(P2PLightClientBackend)
+
+  engine.registerBackend(backend.getBeaconApiBackend(), fullBeaconCapabilities)
+  info "P2P light client backend started"
+  some(backend)
+
 proc startFrontends(
-    engine: RpcVerificationEngine, urls: seq[string]
+    frontend: ExecutionApiFrontend, urls: seq[string]
 ): seq[JsonRpcServer] {.raises: [ProxyError].} =
   var servers: seq[JsonRpcServer] = @[]
 
@@ -125,7 +161,7 @@ proc startFrontends(
       continue
 
     # inject frontend
-    server.injectEngineFrontend(engine.frontend)
+    server.injectEngineFrontend(frontend)
 
     let status = server.start()
     if status.isErr():
@@ -151,21 +187,46 @@ proc run(
     except Exception:
       notice "commandLineParams() exception"
 
+  let networkName = config.eth2Network.get("mainnet")
+
+  # If an op-stack network is selected we run a secondary engine alongside the primary engine
+  let opParams = opChainParamsForNetwork(networkName).optValue()
+
+  let
+    l1NetworkName =
+      if opParams.isSome():
+        opParams.get().l1Network
+      else:
+        networkName
+    l1ChainId =
+      if opParams.isSome():
+        opParams.get().l1ChainId
+      else:
+        getConfiguredChainId(config.eth2Network)
+
   let
     engineConf = RpcVerificationEngineConf(
-      chainId: getConfiguredChainId(config.eth2Network),
-      eth2Network: config.eth2Network,
+      chainId: l1ChainId,
+      eth2Network: some(l1NetworkName),
       maxBlockWalk: config.maxBlockWalk,
       headerStoreLen: config.headerStoreLen,
       accountCacheLen: config.accountCacheLen,
       codeCacheLen: config.codeCacheLen,
       storageCacheLen: config.storageCacheLen,
       parallelBlockDownloads: config.parallelBlockDownloads,
+      maxLightClientUpdates: config.maxLightClientUpdates,
       trustedBlockRoot: config.trustedBlockRoot,
       syncHeaderStore: config.syncHeaderStore,
     )
     engine = RpcVerificationEngine.init(engineConf).valueOr:
       raise newException(ProxyError, "Couldn't initialize verification engine")
+
+  # sanity check
+  if config.executionApiUrls.len <= 0:
+    raise newException(ProxyError, "Need atleast one execution api url to be specified")
+
+  if (config.beaconApiUrls.len <= 0) and (not config.p2pEnabled):
+    raise newException(ProxyError, "Need atleast one beacon url or p2p enabled")
 
   let usePrivateTx = config.privateTxUrls.len > 0
 
@@ -183,30 +244,91 @@ proc run(
 
   let execBackendClients =
     await startExecutionBackends(engine, config.executionApiUrls, regularCaps)
-  let beaconBackendClients = await startBeaconBackends(engine, config.beaconApiUrls)
-  let frontendServers = engine.startFrontends(config.frontendUrls)
+  let beaconBackendClients =
+    if config.beaconApiUrls.len > 0:
+      await startBeaconBackends(engine, config.beaconApiUrls)
+    else:
+      @[]
 
-  engine.registerDefaultFrontend()
+  let p2pBackend =
+    if config.p2pEnabled:
+      await startP2PBeaconBackend(engine, config)
+    else:
+      none(P2PLightClientBackend)
+
+  let frontend = engine.getExecutionApiFrontend()
+  let frontendServers = startFrontends(frontend, config.frontendUrls)
+
+  # nil unless an OP network is configured (RpcVerificationEngine is a ref, so nil is the
+  # natural "no L2 engine" state no Option wrapping needed)
+  var
+    l2Engine: RpcVerificationEngine
+    opExecBackendClients: seq[JsonRpcClient]
+    opFrontendServers: seq[JsonRpcServer]
+
+  opParams.isErrOr:
+    if config.opExecutionApiUrls.len <= 0:
+      raise newException(
+        ProxyError, "Need at least one L2 execution api url (--op-execution-api-url)"
+      )
+
+    # the L2 EVM follows the L1 fork schedule, so it uses the L1 network id
+    let l2NetworkId = chainIdToNetworkId(l1ChainId).valueOr:
+      raise newException(
+        ProxyError, "Couldn't derive the L2 network id from the L1 chain id"
+      )
+
+    l2Engine = RpcVerificationEngine.initCore(
+      chainId = value.l2ChainId,
+      networkId = l2NetworkId,
+      maxBlockWalk = config.maxBlockWalk,
+      parallelBlockDownloads = config.parallelBlockDownloads,
+      headerStoreLen = config.headerStoreLen,
+      accountCacheLen = config.accountCacheLen,
+      codeCacheLen = config.codeCacheLen,
+      storageCacheLen = config.storageCacheLen,
+      anchor = blockId("safe"),
+    ).valueOr:
+      raise newException(ProxyError, "Couldn't initialize OP verification engine")
+
+    opExecBackendClients = await startExecutionBackends(
+      l2Engine, config.opExecutionApiUrls, fullExecutionCapabilities
+    )
+
+    let opFrontend = getExecutionApiFrontend(l2Engine, engine)
+    opFrontendServers = startFrontends(opFrontend, config.opFrontendUrls)
 
   try:
     while true:
       await sleepAsync(engine.timeParams.SLOT_DURATION)
+
       let syncRes = await engine.syncOnce()
       if syncRes.isErr():
-        debug "LC sync failed", error = syncRes.error.errMsg
+        error "LC sync failed", error = syncRes.error.errMsg
+
+      opParams.isErrOr:
+        let opRes = await l2Engine.opSyncOnce(engine)
+        if opRes.isErr():
+          error "OP sync failed", error = opRes.error.errMsg
   except CancelledError as e:
     debug "proxy loop cancelled"
     for s in frontendServers:
       await s.stop()
+    for s in opFrontendServers:
+      await s.stop()
     for c in execBackendClients:
+      await c.stop()
+    for c in opExecBackendClients:
       await c.stop()
     for c in beaconBackendClients:
       await c.stop()
     for c in privateTxClients:
       await c.stop()
+    if p2pBackend.isSome():
+      await p2pBackend.get().stop()
     raise e
 
-proc main() {.raises: [].} =
+when isMainModule:
   const
     banner = "Nimbus Verified Proxy " & FullVersionStr
     copyright =
@@ -243,6 +365,3 @@ proc main() {.raises: [].} =
   except CatchableError as e:
     fatal "Unexpected error", error = e.msg
     quit QuitFailure
-
-when isMainModule:
-  main()

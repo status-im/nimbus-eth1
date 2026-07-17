@@ -28,7 +28,7 @@ import
   ./common/chain_config_hash,
   ./portal/portal,
   ./networking/[bootnodes, netkeys],
-  beacon_chain/[nimbus_binary_common, process_state],
+  beacon_chain/[nimbus_binary_common, process_state, nimbus_rest_common],
   beacon_chain/validators/keystore_management
 
 const
@@ -80,6 +80,11 @@ proc basicServices(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonR
   # e.g. sender nonce, etc
   nimbus.txPool = TxPoolRef.new(nimbus.fc)
   nimbus.beaconEngine = BeaconEngineRef.new(nimbus.txPool)
+
+  # Periodically evict expired transactions so the pool churns continuously
+  # instead of waiting for the capacity-triggered sweep in addTx
+  nimbus.txEvictor = TxEvictorRef.init(nimbus.txPool)
+  nimbus.txEvictor.start()
 
 proc manageAccounts(nimbus: NimbusNode, config: ExecutionClientConf) =
   if config.keyStoreDir.len > 0:
@@ -155,10 +160,11 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
 
   # Start Eth node
   if config.maxPeers > 0:
-    let discovery = config.getDiscoveryFlags()
+    # The user-facing flag is --discv5, but discv4 is still enabled alongside
+    # it until the discv4 code is removed.
     nimbus.ethNode.connectToNetwork(
-      enableDiscV4 = DiscoveryType.V4 in discovery,
-      enableDiscV5 = DiscoveryType.V5 in discovery,
+      enableDiscV4 = config.discv5,
+      enableDiscV5 = config.discv5,
     )
 
   # Initalise beacon sync descriptor.
@@ -186,6 +192,10 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
         hash32=hex
       quit QuitFailure
 
+  # Optional state montitor logger
+  if config.beaconSyncTicker:
+    nimbus.beaconSyncRef.configTicker(enable=true)
+
   # Configure snap sync if enabled. When done it will resume beacon sync.
   if config.snapSyncEnabled:
     if nimbus.snapSyncRef.isNil:
@@ -196,12 +206,8 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
     # Configure snap syncer.
     nimbus.snapSyncRef.config(nimbus.ethNode, config.dataDir, config.maxPeers)
 
-    if config.snapSyncTarget.isSome():
-      let hex = config.snapSyncTarget.unsafeGet
-      if not nimbus.snapSyncRef.configTarget(hex):
-        fatal "Error parsing hash32 argument for --debug-snap-sync-target",
-          hash32=hex
-        quit QuitFailure
+    if config.snapSyncResume:
+      nimbus.snapSyncRef.configResume()
   else:
     # Disable any external setup unless explicitely activated
     nimbus.snapSyncRef = SnapSyncRef(nil)
@@ -279,10 +285,25 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionCli
     quit(QuitFailure)
 
 
-proc setupCommonRef*(config: ExecutionClientConf): (CommonRef, bool) =
-  let
-    dbOpts = config.dbOptions(noKeyCache = config.cmd == NimbusCmd.`import`)
-    coreDB = AristoDbRocks.newCoreDbRef(config.dataDir, dbOpts)
+proc setupCommonRef*(
+    config: ExecutionClientConf, numThreads: int): (CommonRef, bool) =
+
+  if config.statelessProvider and config.balParallelExecution:
+    warn "Stateless provider enabled. Running without BAL parallel execution"
+
+  if config.optimisticStatePrefetch and not config.parallelSenderRecovery:
+    warn "Optimistic state prefetch requires parallel sender recovery to be enabled. " & 
+      "Running without optimistic prefetching."
+
+  let disableParallelFeatures = numThreads <= 1 and config.parallelFeaturesEnabled()
+
+  var dbOpts = config.dbOptions(noKeyCache = config.cmd == NimbusCmd.`import`)
+  if disableParallelFeatures:
+    info "Not enough taskpool threads, disabling parallel features", numThreads
+    dbOpts.parallelStateRootComputation = false
+    dbOpts.threadSafeCaches = false
+
+  let coreDB = AristoDbRocks.newCoreDbRef(config.dataDir, dbOpts)
 
   preventLoadingDataDirForTheWrongNetwork(coreDB, config)
 
@@ -290,23 +311,35 @@ proc setupCommonRef*(config: ExecutionClientConf): (CommonRef, bool) =
     db = coreDB,
     networkId = config.networkId,
     params = config.networkParams,
-    statelessProviderEnabled = config.statelessProviderEnabled,
-    statelessWitnessValidation = config.statelessWitnessValidation)
+    statelessProvider = config.statelessProvider,
+    statelessWitnessValidation = config.statelessWitnessValidation,
+    optimisticStatePrefetch = config.parallelSenderRecovery and 
+        config.optimisticStatePrefetch and not disableParallelFeatures,
+    balStatePrefetch = config.balStatePrefetch and not disableParallelFeatures,
+    balStatePrefetchWorkers = config.balStatePrefetchWorkers,
+    balParallelExecution = config.balParallelExecution and 
+        not config.statelessProvider and not disableParallelFeatures,
+    parallelSenderRecovery = config.parallelSenderRecovery and not disableParallelFeatures)
 
   if config.extraData.len > 32:
     warn "ExtraData exceeds 32 bytes limit, truncate",
       extraData=config.extraData,
       len=config.extraData.len
 
-  if config.gasLimit > GAS_LIMIT_MAXIMUM or
-     config.gasLimit < GAS_LIMIT_MINIMUM:
-    warn "GasLimit not in expected range, truncate",
-      min=GAS_LIMIT_MINIMUM,
-      max=GAS_LIMIT_MAXIMUM,
-      get=config.gasLimit
+  if config.gasLimit.isSome:
+    let gasLimit = config.gasLimit.get()
+    if gasLimit > GAS_LIMIT_MAXIMUM or
+      gasLimit < GAS_LIMIT_MINIMUM:
+      warn "GasLimit not in expected range, truncate",
+        min=GAS_LIMIT_MINIMUM,
+        max=GAS_LIMIT_MAXIMUM,
+        get=gasLimit
+    warn "`--gas-limit` is deprecated, please use `targetGasLimit` field of PayloadAttributesV4"
+    com.gasLimit = gasLimit
+  else:
+    com.gasLimit = DEFAULT_GAS_LIMIT
 
   com.extraData = config.extraData
-  com.gasLimit = config.gasLimit
   com.maxBlobs = config.maxBlobs
 
   (com, dbOpts.rdbKeyCacheSize > 0)
@@ -386,9 +419,14 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   # so it needs to be initalized from the main thread before anything else tries
   # to use it
   if config.trustedSetupFile.isSome:
-    kzg.loadTrustedSetup(config.trustedSetupFile.get(), 0).isOkOr:
+    kzg.loadTrustedSetup(config.trustedSetupFile.get(), 8).isOkOr:
       fatal "Cannot load KZG trusted setup from file", msg = error
       quit(QuitFailure)
+  else:
+    # Load eagerly to avoid race conditions - lazy kzg loading is not thread safe
+    loadTrustedSetupFromString(kzg.trustedSetup, 8).expect(
+      "Baked-in KZG setup is correct"
+    )
 
   # Metrics are useful not just when running node but also during import
   let metricsServer =
@@ -404,11 +442,11 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   when compileOption("threads"):
     let
       taskpool = setupTaskpool(config.numThreads)
-      (com, keyCacheEnabled) = setupCommonRef(config)
+      (com, keyCacheEnabled) = setupCommonRef(config, taskpool.numThreads)
     com.taskpool = taskpool
     com.db.mpt.taskpool = taskpool
   else:
-    let (com, keyCacheEnabled) = setupCommonRef(config)
+    let (com, keyCacheEnabled) = setupCommonRef(config, 0)
 
   if keyCacheEnabled:
     # Make sure key cache isn't empty

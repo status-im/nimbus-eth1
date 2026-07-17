@@ -32,6 +32,7 @@ type
     blockAccessList = 13
     tail = 14
     prunerState = 15
+    txFrame = 16
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -77,6 +78,11 @@ func prunerStateKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(prunerState)
   result.dataEndPos = 1
 
+func txFrameKey*(h: Hash32): DbKey {.inline.} =
+  result.data[0] = byte ord(txFrame)
+  result.data[1 .. 32] = h.data
+  result.dataEndPos = 32
+
 func slotHashToSlotKey*(h: Hash32): DbKey {.inline.} =
   result.data[0] = byte ord(slotHashToSlot)
   result.data[1 .. 32] = h.data()
@@ -103,7 +109,7 @@ func fcuKey*(u: uint64): DbKey {.inline.} =
 func hashIndexKey*(hash: Hash32, index: uint16): HashIndexKey =
   result[0..31] = hash.data
   result[32] = byte(index and 0xFF)
-  result[33] = byte((index shl 8) and 0xFF)
+  result[33] = byte((index shr 8) and 0xFF)
 
 func beaconHeaderKey*(u: BlockNumber): DbKey =
   uint64KeyImpl(beaconHeader)

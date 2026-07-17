@@ -123,30 +123,54 @@ proc getStoredReceipts*(ctx: EthWireRef,
 
 proc getStoredReceipts70*(ctx: EthWireRef, req: StoredReceipts70Request):
                     StoredReceipts70Packet =
-  let numHashes = uint64(req.blockHashes.len)
-  if req.firstBlockReceiptIndex >= numHashes:
-    result.lastBlockIncomplete = false
-    return
-
+  ## eth/70+ GetReceipts: `firstBlockReceiptIndex` is the index of the first
+  ## receipt to serve from the FIRST requested block - the continuation
+  ## cursor for a receipt list that did not fit into an earlier response.
+  ## Receipt lists are cut per receipt at the soft response limit; a cut
+  ## mid-block sets `lastBlockIncomplete` so the requester can resume from
+  ## the number of receipts it has received for that block.
   var
     list: seq[seq[StoredReceipt]]
     totalBytes = 0
-    numBlockQueried = 0'u64
 
-  for i in req.firstBlockReceiptIndex..<numHashes:
-    let blockHash = req.blockHashes[i]
-    var receiptList = ctx.chain.receiptsByBlockHash(blockHash).valueOr:
-      continue
-
-    totalBytes += getEncodedLength(receiptList)
-    list.add(move(receiptList))
-    inc numBlockQueried
-
-    if list.len >= MAX_RECEIPTS_SERVE or
-       totalBytes > SOFT_RESPONSE_LIMIT:
+  for i, blockHash in req.blockHashes:
+    if list.len >= MAX_RECEIPTS_SERVE or totalBytes > SOFT_RESPONSE_LIMIT:
       break
 
-  result.lastBlockIncomplete = (req.firstBlockReceiptIndex + numBlockQueried) != numHashes
+    let receiptList = ctx.chain.receiptsByBlockHash(blockHash).valueOr:
+      # Unknown block: stop serving. Skipping would misalign the positional
+      # correspondence between requested hashes and served receipt lists
+      # that the requester relies on to resume.
+      break
+
+    let firstIndex =
+      if i == 0: min(req.firstBlockReceiptIndex, uint64(receiptList.len))
+      else: 0'u64
+
+    var
+      served: seq[StoredReceipt]
+      truncated = false
+    for j in firstIndex ..< uint64(receiptList.len):
+      let size = getEncodedLength(receiptList[j.int])
+      if totalBytes + size > SOFT_RESPONSE_LIMIT:
+        truncated = true
+        break
+      served.add receiptList[j.int]
+      totalBytes += size
+
+    if truncated:
+      # If not even one receipt fits, leave the block out entirely: the
+      # response so far ends on a complete block list and the requester
+      # retries this block from where it left off.
+      if served.len > 0:
+        list.add move(served)
+        result.lastBlockIncomplete = true
+      break
+
+    # May be an empty list when the continuation cursor already covers the
+    # whole first block; the requester counts on the positional entry.
+    list.add move(served)
+
   result.receipts = move(list)
 
 proc getPooledTransactions*(ctx: EthWireRef,
@@ -249,8 +273,6 @@ proc getBlockHeaders*(ctx: EthWireRef,
 
 proc getBlockAccessLists*(
     ctx: EthWireRef, req: BlockAccessListsRequest): BlockAccessListsPacket =
-  const emptyBal = default(BlockAccessList)
-
   var blockHashes = req.blockHashes
   blockHashes.setLen(min(req.blockHashes.len(), MAX_BALS_SERVE))
 
@@ -262,17 +284,18 @@ proc getBlockAccessLists*(
     totalBytes = 0
     i = 0
     res = BlockAccessListsPacket(
-      accessLists: newSeqOfCap[BlockAccessList](balValues.len())
+      accessLists: newSeqOfCap[RawBlockAccessList](balValues.len())
     )
 
   while totalBytes <= SOFT_RESPONSE_LIMIT and i <= balValues.high:
     if balValues[i].isSome():
-      res.accessLists.add BlockAccessList.decode(balValues[i].get())
-          .expect("BALs from the db should decode successfully")
-      totalBytes += balValues[i].get().len()
+      let bal = balValues[i].get()
+      res.accessLists.add RawBlockAccessList(bal)
+      assert bal.len() > 0 # The empty list is encoded as 0xC0 (a single byte)
+      totalBytes += bal.len()
     else:
-      res.accessLists.add(emptyBal)
-      inc totalBytes # the empty rlp list takes only a single byte
+      res.accessLists.add RawBlockAccessList(@[0x80'u8])
+      inc totalBytes # 0x80 is a single byte
 
     inc i
   

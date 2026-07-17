@@ -43,8 +43,9 @@ proc rpcCallEvm*(
   defer:
     txFrame.dispose() # always dispose state changes
 
-  let vmState = BaseVMState.new(header, topHeader, com, txFrame)
-  let params = ?toCallParams(vmState, args, globalGasCap, header.baseFeePerGas)
+  let
+    vmState = BaseVMState.new(header, topHeader, com, txFrame)
+    params = ?toCallParams(vmState, args, globalGasCap, header)
 
   ok(runComputation(params, CallResult))
 
@@ -52,7 +53,8 @@ proc rpcCallEvm*(
     args: TransactionArgs, header: Header, vmState: BaseVMState, globalGasCap = 0.GasInt
 ): EvmResult[CallResult] =
   # TODO: globalGasCap should configurable by user
-  let params = ?toCallParams(vmState, args, globalGasCap, header.baseFeePerGas)
+  let
+    params = ?toCallParams(vmState, args, globalGasCap, header)
   ok(runComputation(params, CallResult))
 
 proc rpcEstimateGas*(
@@ -60,15 +62,19 @@ proc rpcEstimateGas*(
 ): Result[GasInt, (EvmErrorObj, OutputResult)] =
   # Binary search the gas requirement, as it may be higher than the amount used
   let fork = vmState.fork
-  var params = toCallParams(vmState, args, gasCap, header.baseFeePerGas).valueOr:
+  var params = toCallParams(vmState, args, gasCap, header).valueOr:
     return err((evmErr(EvmInvalidParam), OutputResult()))
 
+  let
+    txBaseCost = if fork >= FkAmsterdam: TX_BASE_COST_2780.GasInt
+                 else: TX_BASE_COST.GasInt
+
   var
-    lo: GasInt = TX_BASE_COST - 1
+    lo: GasInt = txBaseCost - 1
     hi: GasInt = GasInt args.gas.get(0.Quantity)
 
   # Determine the highest gas limit can be used during the estimation.
-  if hi < TX_BASE_COST:
+  if hi < txBaseCost:
     # block's gasLimit act as the gas ceiling
     hi = header.gasLimit
 
@@ -110,7 +116,7 @@ proc rpcEstimateGas*(
     hi = gasCap
 
   let
-    intrinsic = intrinsicGas(params, fork, vmState.blockCtx.gasLimit)
+    intrinsic = intrinsicGas(params, vmState.hardFork, vmState.blockCtx.gasLimit, args.sender)
     minGasLimit = max(intrinsic.regular, intrinsic.floorDataGas)
 
   # Create a helper to check if a gas allowance results in an executable transaction
@@ -130,8 +136,8 @@ proc rpcEstimateGas*(
   # Short circuit estimation check: plain value transfer (no data, to has no code)
   if not params.isCreate and params.input.len == 0 and
       vmState.readOnlyLedger.getCodeSize(params.to) == 0:
-    if executable(TX_BASE_COST).isOk:
-      return ok(TX_BASE_COST)
+    if executable(txBaseCost).isOk:
+      return ok(txBaseCost)
 
   # Execute at highest gas limit first; if it fails, return immediately (no binary search)
   let highResult = executable(hi).valueOr:

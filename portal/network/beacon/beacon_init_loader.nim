@@ -8,8 +8,9 @@
 {.push raises: [].}
 
 import
+  chronos,
   chronicles,
-  beacon_chain/networking/network_metadata,
+  beacon_chain/networking/[network_metadata, network_metadata_downloads],
   beacon_chain/spec/forks,
   beacon_chain/beacon_clock,
   beacon_chain/conf
@@ -24,19 +25,12 @@ type NetworkInitData* = object
 
 proc loadNetworkData*(networkName: string): NetworkInitData =
   let
-    metadata = loadEth2Network(some("mainnet"))
+    metadata = loadEth2Network(some(networkName))
     genesisState =
       try:
-        template genesisData(): auto =
-          metadata.genesis.bakedBytes
-
-        newClone(
-          readSszForkedHashedBeaconState(
-            metadata.cfg, genesisData.toOpenArray(genesisData.low, genesisData.high)
-          )
-        )
-      except SerializationError as err:
-        raiseAssert "Invalid baked-in state: " & err.msg
+        waitFor fetchGenesisState(metadata)
+      except CatchableError as err:
+        raiseAssert "Failed to fetch genesis state: " & err.msg
 
     genesisTime = genesisState[].genesis_time
     beaconClock = BeaconClock.init(metadata.cfg.timeParams, genesisTime).valueOr:

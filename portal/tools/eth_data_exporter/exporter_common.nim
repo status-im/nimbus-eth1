@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -7,27 +7,7 @@
 
 {.push raises: [].}
 
-import
-  std/[strutils, os],
-  chronicles,
-  stew/io2,
-  faststreams,
-  json_serialization,
-  json_serialization/std/tables,
-  ../../eth_history/history_data_json_store,
-  ../../eth_history/yaml_utils
-
-export history_data_json_store
-
-proc writePortalContentToJson*(
-    fh: OutputStreamHandle, content: JsonPortalContentTable
-) =
-  try:
-    var writer = JsonWriter[DefaultFlavor].init(fh.s, pretty = true)
-    writer.writeValue(content)
-  except IOError as e:
-    fatal "Error occured while writing to file", error = e.msg
-    quit 1
+import std/[strutils, os], chronicles, stew/io2, faststreams, ../yaml_utils
 
 proc writeDataToYaml*[T](data: T, file: string) =
   let res = data.dumpToYaml(file)

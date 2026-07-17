@@ -141,12 +141,11 @@ proc new*(
       bindIp = bindIp,
       rng = rng
     ),
-    discv5: discoveryv5.newProtocol(
+    discv5: discoveryv5.newDiscoveryV5(
       privKey = privKey,
       enrIp = enrIp,
       enrTcpPort = enrTcpPort,
       enrUdpPort = enrUdpPort,
-      enrQuicPort = Opt.none(Port),
       bootstrapRecords = bootstrapNodes.enrs,
       bindPort = bindPort,
       bindIp = Opt.some(bindIp),

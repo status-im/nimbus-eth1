@@ -122,6 +122,8 @@ type
       proc(): Future[EngineResult[UInt256]] {.async: (raises: [CancelledError]).}
     eth_blockNumber*:
       proc(): Future[EngineResult[uint64]] {.async: (raises: [CancelledError]).}
+    eth_syncing*:
+      proc(): Future[EngineResult[SyncingStatus]] {.async: (raises: [CancelledError]).}
 
     # State
     eth_getBalance*: proc(
@@ -286,7 +288,6 @@ type
     beaconBackends: Table[int, BeaconApiBackend]
     scores*: Table[int, BackendScore]
     capabilityIndex: array[BackendCapability, seq[int]]
-    frontend*: ExecutionApiFrontend
 
     # scoring
     availabilityScoreFunc*: ScoreFunc
@@ -297,6 +298,7 @@ type
     trustedBlockRoot*: Option[Eth2Digest]
     getBeaconTime*: GetBeaconTimeFn
     timeParams*: TimeParams
+    syncLock*: AsyncLock
 
     # beacon metadata (stored for use by beacon backend factories)
     cfg*: RuntimeConfig
@@ -304,8 +306,10 @@ type
 
     # config items
     chainId*: UInt256
+    anchor*: BlockTag
     maxBlockWalk*: uint64
     parallelBlockDownloads*: uint64
+    maxLightClientUpdates*: uint64
 
   RpcVerificationEngineConf* = ref object
     chainId*: UInt256
@@ -316,6 +320,7 @@ type
     codeCacheLen*: int
     storageCacheLen*: int
     parallelBlockDownloads*: uint64
+    maxLightClientUpdates*: uint64
     trustedBlockRoot*: Eth2Digest
     syncHeaderStore*: bool
     freezeAtSlot*: Slot

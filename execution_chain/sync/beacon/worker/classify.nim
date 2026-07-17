@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -18,7 +18,8 @@ import
 # ------------------------------------------------------------------------------
 
 func somethingToCollectOrUnstage*(buddy: BeaconPeerRef): bool =
-  if buddy.ctx.hibernate:                        # not activated yet?
+  if buddy.ctx.hibernate or                      # not activated yet?
+     buddy.ctx.pool.syncState == linger:         # wait for idle mode
     return false
   if buddy.headersCollectOk() or                 # something on TODO list
      buddy.headersUnstageOk() or
@@ -39,7 +40,7 @@ func classifyForFetching*(buddy: BeaconPeerRef): PeerRanking =
   var ranking = 0
 
   case buddy.ctx.pool.syncState:
-  of SyncState.headers:
+  of BeaconState.headers:
     # Classify this peer only if there are enough header slots available on
     # the queue for dowmloading simmultaneously. There is an additional slot
     # for downlading directly to the header chain cache (rather than queuing.)
@@ -71,7 +72,7 @@ func classifyForFetching*(buddy: BeaconPeerRef): PeerRanking =
     if ranking < buddy.ctx.nSyncPeers() - headersStagedQueueLengthMax:
       return (rankingTooLow, ranking)
 
-  of SyncState.blocks:
+  of BeaconState.blocks:
     # Ditto for block bodies
     if buddy.ctx.nSyncPeers() <= blocksStagedQueueLengthMax + 1:
       return (qSlotsAvail, -1)

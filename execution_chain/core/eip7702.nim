@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -18,10 +18,6 @@ import
   eth/common/eth_types,
   eth/common/eth_types_rlp,
   eth/common/keys
-
-const
-  # the last 0x00 is the version
-  DelegationPrefix = [0xef.byte, 0x01, 0x00]
 
 const
   PER_AUTH_BASE_COST* = 12500
@@ -53,24 +49,24 @@ func authority*(auth: Authorization): Opt[Address] =
 
   ok(pubkey.toCanonicalAddress())
 
-func parseDelegation*(code: CodeBytesRef): bool =
-  if code.len != 23:
-    return false
+func isDelegation*(code: openArray[byte]): bool =
+  ## Returns true if `code` is a well-formed EIP-7702 delegation designator: the
+  ## EIP7702_DELEGATION_PREFIX (0xef0100) followed by a 20-byte address, for
+  ## EIP7702_DELEGATION_SIZE (23) bytes total.
+  code.len == EIP7702_DELEGATION_SIZE and
+    code[0] == EIP7702_DELEGATION_PREFIX[0] and
+    code[1] == EIP7702_DELEGATION_PREFIX[1] and
+    code[2] == EIP7702_DELEGATION_PREFIX[2]
 
-  if not code.hasPrefix(DelegationPrefix):
-    return false
+template isDelegation*(code: CodeBytesRef): bool =
+  isDelegation(code.bytes())
 
-  true
-
-func addressToDelegation*(auth: Address): array[23, byte] =
-  assign(result.toOpenArray(0, 2), DelegationPrefix)
+func addressToDelegation*(auth: Address): array[EIP7702_DELEGATION_SIZE, byte] =
+  assign(result.toOpenArray(0, 2), EIP7702_DELEGATION_PREFIX)
   assign(result.toOpenArray(3, 22), auth.data)
 
 func parseDelegationAddress*(code: CodeBytesRef): Opt[Address] =
-  if code.len != 23:
-    return Opt.none(Address)
-
-  if not code.hasPrefix(DelegationPrefix):
+  if not isDelegation(code.bytes()):
     return Opt.none(Address)
 
   Opt.some(Address(slice[20](code, 3, 22)))

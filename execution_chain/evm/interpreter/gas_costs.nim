@@ -9,7 +9,7 @@ import
   math, eth/common/eth_types,
   ./utils/[macros_gen_opcodes, utils_numeric],
   ./op_codes, ../../common/evmforks,
-  ../evm_errors
+  ../evm_errors, ../../core/eip8037
 
 # Gas Fee Schedule
 # Yellow Paper Appendix G - https://ethereum.github.io/yellowpaper/paper.pdf
@@ -71,14 +71,13 @@ type
     nonZeroVal*: bool
     gasCost1*: GasInt
     isNewAccount*: proc(): bool {.gcsafe, raises: [].}
-    gasLeft*: GasInt    
+    gasLeft*: GasInt
     gasCallDelegate*: GasProc
     contractGas*: UInt256
 
   GasParamsSs* = object
     currentValue*: UInt256
     originalValue*: UInt256
-    stateGasStorageSet*: GasInt
 
   GasParamsCr* = object
     currentMemSize*: GasNatural
@@ -101,6 +100,7 @@ type
     gasCost*: GasInt
     gasRefund*: int64
     stateGas*: GasInt
+    creditStateGas*: GasInt
 
   CallGasResult = tuple[gasCost, childGasLimit: GasInt]
 
@@ -136,16 +136,24 @@ type
   GasCosts* = array[Op, GasCost]
 
 const
-  TX_BASE_COST*          = 21000
+  TX_BASE_COST*             = 21000
+  TX_BASE_COST_2780*        = 12000
+  COLD_ACCOUNT_ACCESS_8038* = 3000
+  COLD_STORAGE_ACCESS_8038* = 3000
+  ACCOUNT_WRITE_8038*       = 8000
+  STORAGE_WRITE_8038*       = 10000
 
   # From EIP-2929
-  ColdSloadCost*         = 2100
-  ColdAccountAccessCost* = 2600
-  WarmStorageReadCost*   = 100
+  COLD_STORAGE_ACCESS_2929* = 2100
+  COLD_ACCOUNT_ACCESS_2929* = 2600
+  WarmStorageReadCost*      = 100
 
   # From EIP-2930 (Berlin).
-  ACCESS_LIST_STORAGE_KEY_COST* = 1900
-  ACCESS_LIST_ADDRESS_COST*     = 2400
+  ACCESS_LIST_STORAGE_KEY_COST_2930* = 1900
+  ACCESS_LIST_ADDRESS_COST_2930*     = 2400
+
+  ACCESS_LIST_STORAGE_KEY_COST_8038* = 3000
+  ACCESS_LIST_ADDRESS_COST_8038*     = 3000
 
 template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
 
@@ -249,7 +257,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
       # EIP2929
       const
         SLOAD_GAS = WarmStorageReadCost
-        SSTORE_RESET_GAS = 5000 - ColdSloadCost
+        SSTORE_RESET_GAS = 5000 - COLD_STORAGE_ACCESS_2929
     else:
       const
         SLOAD_GAS = FeeSchedule[GasSload]
@@ -293,15 +301,16 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
 
       # Gas sentry honoured, do the actual gas calculation based on the stored value
       if params.currentValue == value: # noop (1)
-        res.gasCost = NoopGas
+        when fork < FkAmsterdam:
+          res.gasCost = NoopGas
         return res
 
       if params.originalValue == params.currentValue:
         when fork >= FkAmsterdam:
-          res.gasCost = CleanGas # write existing slot (2.1.2)
+          res.gasCost = STORAGE_WRITE_8038 # write existing slot (2.1.2)
 
           if params.originalValue.isZero: # create slot (2.1.1)
-            res.stateGas = params.stateGasStorageSet
+            res.stateGas = STATE_GAS_STORAGE_SET
             return res
 
           if value.isZero: # delete slot (2.1.2b)
@@ -329,13 +338,19 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
       if params.originalValue == value:
         if params.originalValue.isZero: # reset to original inexistent slot (2.2.2.1)
           when fork >= FkAmsterdam:
-            res.gasRefund += params.stateGasStorageSet.int64 + CleanRefund
+            # https://github.com/ethereum/execution-specs/pull/2698/changes
+            res.creditStateGas = STATE_GAS_STORAGE_SET
+            res.gasRefund += STORAGE_WRITE_8038
           else:
             res.gasRefund += InitRefund
         else: # reset to original existing slot (2.2.2.2)
-          res.gasRefund += CleanRefund
+          when fork >= FkAmsterdam:
+            res.gasRefund += STORAGE_WRITE_8038
+          else:
+            res.gasRefund += CleanRefund
 
-      res.gasCost = DirtyGas # dirty update (2.2)
+      when fork < FkAmsterdam:
+        res.gasCost = DirtyGas # dirty update (2.2)
     res
 
   func `prefix gasLog0`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
@@ -454,7 +469,10 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
 
   func `prefix gasSelfDestruct`(condition: bool): GasInt {.nimcall.} =
     result += static(GasInt(FeeSchedule[GasSelfDestruct]))
-    when fork >= FkTangerine and fork < FkAmsterdam:
+    when fork >= FkAmsterdam:
+      if condition:
+        result += ACCOUNT_WRITE_8038
+    elif fork >= FkTangerine:
       if condition:
         result += static(GasInt(FeeSchedule[GasNewAccount]))
 
@@ -774,11 +792,11 @@ func berlinGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
 func londonGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
   result = previousFees
   # EIP-3529 RefundsClear(4800) =
-  # EIP-2929(5000 - ColdSloadCost) +
-  # EIP-2930(ACCESS_LIST_STORAGE_KEY_COST)
+  # EIP-2929(5000 - COLD_STORAGE_ACCESS_2929) +
+  # EIP-2930(ACCESS_LIST_STORAGE_KEY_COST_2930)
   result[RefundsClear] =
-    5000 - ColdSloadCost +
-    ACCESS_LIST_STORAGE_KEY_COST
+    5000 - COLD_STORAGE_ACCESS_2929 +
+    ACCESS_LIST_STORAGE_KEY_COST_2930
 
 func shanghaiGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
   result = previousFees
@@ -786,8 +804,10 @@ func shanghaiGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
 
 func amsterdamGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
   result = previousFees
-  result[GasTXCreate] = 9000.GasInt  # EIP-8037
-  result[GasCreate] = 9000.GasInt  # EIP-8037
+  result[GasTXCreate] = 11000.GasInt # EIP-8038
+  result[GasCreate]       = 11000.GasInt # EIP-8038
+  result[RefundsClear]    = 12480.GasInt # EIP-8038
+  result[GasCallValue]    = ACCOUNT_WRITE_8038 + result[GasCallStipend] # EIP-8038
 
 const
   HomesteadGasFees = BaseGasFees.homesteadGasFees
@@ -815,12 +835,8 @@ const
     FkCancun: ShanghaiGasFees,
     FkPrague: ShanghaiGasFees,
     FkOsaka: ShanghaiGasFees,
-    FkBpo1: ShanghaiGasFees,
-    FkBpo2: ShanghaiGasFees,
-    FkBpo3: ShanghaiGasFees,
-    FkBpo4: ShanghaiGasFees,
-    FkBpo5: ShanghaiGasFees,
     FkAmsterdam: AmsterdamGasFees,
+    FkBogota: AmsterdamGasFees,
   ]
 
 gasCosts(FkFrontier, base, BaseGasCosts)

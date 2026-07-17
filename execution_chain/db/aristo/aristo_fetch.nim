@@ -14,7 +14,7 @@
 {.push raises: [].}
 
 import
-  std/typetraits,
+  std/[atomics, typetraits],
   eth/common/[base, hashes],
   results,
   "."/[aristo_compute, aristo_desc, aristo_get, aristo_layers, aristo_hike, aristo_vid]
@@ -43,16 +43,24 @@ proc retrieveLeaf(
 proc cachedAccLeaf*(db: AristoTxRef; accPath: Hash32): Opt[AccLeafRef] =
   # Return vertex from layers or cache, `nil` if it's known to not exist and
   # none otherwise
-  db.layersGetAccLeaf(accPath) or
-    db.db.accLeaves.get(accPath) or
-    Opt.none(AccLeafRef)
+  db.layersGetAccLeaf(accPath).isErrOr:
+    return Opt.some(value)
+
+  db.db.accLeaves.withGet(accPath, cached):
+    return Opt.some(cached.toLeaf())
+  do:
+    return Opt.none(AccLeafRef)
 
 proc cachedStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[StoLeafRef] =
   # Return vertex from layers or cache, `nil` if it's known to not exist and
   # none otherwise
-  db.layersGetStoLeaf(mixPath) or
-    db.db.stoLeaves.get(mixPath) or
-    Opt.none(StoLeafRef)
+  db.layersGetStoLeaf(mixPath).isErrOr:
+    return Opt.some(value)
+
+  db.db.stoLeaves.withGet(mixPath, cached):
+    return Opt.some(cached.toLeaf())
+  do:
+    return Opt.none(StoLeafRef)
 
 proc retrieveAccStatic(
     db: AristoTxRef;
@@ -72,9 +80,9 @@ proc retrieveAccStatic(
   for sl in countdown(staticLevel, 0):
     template countHitOrLower() =
       if sl == staticLevel:
-        db.db.lookups.hits += 1
+        discard db.db.lookupsHits.fetchAdd(1, moRelaxed)
       else:
-        db.db.lookups.lower += 1
+        discard db.db.lookupsLower.fetchAdd(1, moRelaxed)
 
     let
       svid = path.staticVid(sl)
@@ -95,6 +103,14 @@ proc retrieveAccStatic(
           err FetchPathNotFound
         else:
           ok (vtx, path, next)
+    of BoundaryNode:
+      # Stateless-only boundary: child absent from witness, not traversable.
+      # Same divergence-vs-gap distinction as `aristo_hike.step()`.
+      let vtx = BoundaryNodeRef(vtx[0])
+      countHitOrLower()
+      if path.slice(sl).sharedPrefixLen(vtx.pfx) < vtx.pfx.len:
+        return err FetchPathNotFound
+      return err HikeBranchUnresolvedEdge
     of ExtBranch:
       let vtx = ExtBranchRef(vtx[0])
 
@@ -139,11 +155,11 @@ proc retrieveAccLeaf(
 
   let (staticVtx, path, next) = db.retrieveAccStatic(accPath).valueOr:
     if error == FetchPathNotFound:
-      db.db.accLeaves.put(accPath, nil)
+      db.db.accLeaves.put(accPath, emptyCachedAccLeaf)
     return err(error)
 
   if staticVtx.isValid():
-    db.db.accLeaves.put(accPath, staticVtx)
+    db.db.accLeaves.put(accPath, CachedAccLeaf.init(staticVtx.pfx, staticVtx.account, staticVtx.stoID))
     return ok staticVtx
 
   # Updated payloads are stored in the layers so if we didn't find them there,
@@ -154,15 +170,16 @@ proc retrieveAccLeaf(
         # The branch was the deepest level where a vertex actually existed
         # meaning that it was a hit - else searches for non-existing paths would
         # skew the results towards more depth than exists in the MPT
-        db.db.lookups.hits += 1
-        db.db.accLeaves.put(accPath, nil)
+        discard db.db.lookupsHits.fetchAdd(1, moRelaxed)
+        db.db.accLeaves.put(accPath, emptyCachedAccLeaf)
       return err(error)
 
-  db.db.lookups.higher += 1
+  discard db.db.lookupsHigher.fetchAdd(1, moRelaxed)
 
-  db.db.accLeaves.put(accPath, AccLeafRef(leafVtx))
+  let accLeaf = AccLeafRef(leafVtx)
+  db.db.accLeaves.put(accPath, CachedAccLeaf.init(accLeaf.pfx, accLeaf.account, accLeaf.stoID))
 
-  ok AccLeafRef(leafVtx)
+  ok accLeaf
 
 proc retrieveMerkleHash(
     db: AristoTxRef;
@@ -279,27 +296,38 @@ proc fetchSlot*(
   ## from the database indexed by `path`. Returns err(FetchPathNotFound) if the
   ## account does not exist and 0'u256 if the account has not stored anything
   ## at the given slot
-  ##
   let mixPath = mixUp(accPath, stoPath)
 
-  let leafVtx = db.cachedStoLeaf(mixPath).valueOr:
+  db.layersGetStoLeaf(mixPath).isErrOr:
+    # Found in the layers so we don't need to copy into the cache
+    # because the value will be updated from the layers during persist
+    return ok value.toStoData()
+
+  db.db.stoLeaves.withGet(mixPath, cached):
+    return ok cached.toStoData()
+  do:
     # Updated payloads are stored in the layers so if we didn't find them there,
     # it must have been in the database
-    let
-      stoID = ?db.fetchStorageID(accPath)
 
+    let stoID = ?db.fetchStorageID(accPath)
     if not stoID.isValid():
-      db.db.stoLeaves.put(mixPath, nil)
+      db.db.stoLeaves.put(mixPath, emptyCachedStoLeaf)
       return ok 0'u256
 
-    StoLeafRef(db.retrieveLeaf(stoID, NibblesBuf.fromBytes(stoPath.data)).valueOr(nil))
+    let leafRc = db.retrieveLeaf(stoID, NibblesBuf.fromBytes(stoPath.data))
+    if leafRc.isErr:
+      if leafRc.error == FetchPathNotFound:
+        db.db.stoLeaves.put(mixPath, emptyCachedStoLeaf)
+        return ok 0'u256
 
-  db.db.stoLeaves.put(mixPath, leafVtx)
+      # `HikeDanglingEdge` / `HikeBranchUnresolvedEdge`: missing state in
+      # witness or not-yet-fetched node, or a backend (db corruption) error.
+      # Can't know if slot is absent.
+      return err(leafRc.error)
 
-  ok if leafVtx.isValid:
-    leafVtx.stoData
-  else:
-    0'u256
+    let leaf = StoLeafRef(leafRc.value)
+    db.db.stoLeaves.put(mixPath, CachedStoLeaf.init(leaf.pfx, leaf.stoData))
+    return ok leaf.toStoData()
 
 proc fetchStorageRoot*(
     db: AristoTxRef;

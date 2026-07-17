@@ -66,12 +66,18 @@ const
   # size when creating a new contract.
   EIP3860_MAX_INITCODE_SIZE* =              2 * EIP170_MAX_CODE_SIZE
 
-  # See https://eips.ethereum.org/EIPS/eip-7954. 
-  # - Update contract code size limit of 24KiB(0x6000 bytes) to 32KiB(0x8000 bytes).
-  # - Update initcode size limit of 48KiB(0xC000 bytes) to 64KiB(0x10000 bytes).
-  EIP7954_MAX_CODE_SIZE* =                  0x8000
-  EIP7954_MAX_INITCODE_SIZE* =              0x10000
-  
+  # See https://eips.ethereum.org/EIPS/eip-7954.
+  # - Update contract code size limit of 24KiB(0x6000 bytes) to 64KiB(0x10000 bytes).
+  # - Update initcode size limit of 48KiB(0xC000 bytes) to 128KiB(0x20000 bytes).
+  EIP7954_MAX_CODE_SIZE* =                  0x10000
+  EIP7954_MAX_INITCODE_SIZE* =              2 * EIP7954_MAX_CODE_SIZE
+
+  # See EIP-7702 (https://eips.ethereum.org/EIPS/eip-7702). When an EOA delegates
+  # via a SETCODE transaction its code is set to a "delegation designator": the
+  # 3-byte prefix 0xef0100 followed by the 20-byte delegate address (23 bytes).
+  EIP7702_DELEGATION_PREFIX* =              [0xEF.byte, 0x01, 0x00]
+  EIP7702_DELEGATION_SIZE* =                23
+
   # EIP
   MaxPrecompilesAddr* =                     0xFFFF
 
@@ -112,6 +118,8 @@ const
   HISTORY_STORAGE_ADDRESS* = address"0x0000F90827F1C53a10cb7A02335B175320002935"
   WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS* = address"0x00000961Ef480Eb55e80D19ad83579A64c007002"
   CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS* = address"0x0000BBdDc7CE488642fb579F8B00f3a590007251"
+  BUILDER_DEPOSIT_CONTRACT_ADDRESS* = address"0x0000884D2AA32EAA155F59A2F24EFA73D9008282"
+  BUILDER_EXIT_CONTRACT_ADDRESS* = address"0x000014574A74C805590AFF9499FC7A690F008282"
 
   MAX_BLOCK_SIZE* = 10_485_760  # 10 MiB
   SAFETY_MARGIN* = 2_097_152  # 2 MiB

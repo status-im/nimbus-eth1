@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -11,7 +11,7 @@
 import
   std/os,
   eth/common,
-  "."/[undump_blocks_era1, undump_blocks_gz]
+  "."/[undump_blocks_ere, undump_blocks_gz]
 
 # ------------------------------------------------------------------------------
 # Public undump
@@ -23,7 +23,7 @@ iterator undumpBlocks*(
     stopAfter = high(uint64);                # Last block to extract
       ): seq[EthBlock] =
   if file.dirExists:
-    for w in file.undumpBlocksEra1(least, stopAfter):
+    for w in file.undumpBlocksEre(least, stopAfter):
       yield w
   else:
     let ext = file.splitFile.ext

@@ -8,9 +8,10 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[strutils],
+  std/[strutils, uri],
   json_serialization/std/net,
-  beacon_chain/conf_light_client,
+  confutils/toml/defs as confTomlDefs,
+  beacon_chain/spec/digest,
   beacon_chain/nimbus_binary_common
 
 export net
@@ -39,16 +40,10 @@ type VerifiedProxyConf* = object
     name: "log-format"
   .}: StdoutLogKind
 
-  # Storage
-  dataDirFlag* {.
-    desc: "The directory where nimbus will store all blockchain data",
-    abbr: "d",
-    name: "data-dir"
-  .}: Option[OutDir]
-
   # Network
   eth2Network* {.
-    desc: "Consensus network to join (mainnet, hoodi, sepolia, custom/path)"
+    desc:
+      "Network to serve. L1: mainnet, hoodi, sepolia. OP Stack L2 (also starts the L2 engine): op-mainnet, base-mainnet, op-sepolia"
     defaultValueDesc: "mainnet"
     name: "network"
   .}: Option[string]
@@ -95,6 +90,13 @@ type VerifiedProxyConf* = object
     name: "debug-parallel-downloads"
   .}: uint64
 
+  maxLightClientUpdates* {.
+    hidden,
+    desc: "Maximum number of light client updates fetched per sync round. Lower values reduce peak memory usage at the cost of slower initial sync.",
+    defaultValue: 128,
+    name: "debug-max-lc-updates"
+  .}: uint64
+
   syncHeaderStore* {.
     hidden,
     desc: "Write LC optimistic/finalized headers to the header store",
@@ -123,6 +125,13 @@ type VerifiedProxyConf* = object
     name: "execution-api-url"
   .}: UrlList
 
+  # (Untrusted) L2 web3 provider, only used for OP Stack networks
+  opExecutionApiUrls* {.
+    desc: "URL of the L2 (op-geth) execution data provider, used only for OP Stack networks. Multiple URLs can be specified by defining the option again on the command line.",
+    defaultValue: @[],
+    name: "op-execution-api-url"
+  .}: UrlList
+
   # Listening endpoint of the proxy
   # (verified) web3 end
   frontendUrls* {.
@@ -130,6 +139,14 @@ type VerifiedProxyConf* = object
     defaultValue: @["http://127.0.0.1:8545"],
     defaultValueDesc: "http://127.0.0.1:8545",
     name: "listen-url"
+  .}: UrlList
+
+  # Listening endpoint of the secondary L2 (OP Stack) proxy
+  opFrontendUrls* {.
+    desc: "URL for the listening end of the L2 (OP Stack) proxy - [http/ws]://[address]:[port]. Used only for OP Stack networks. Multiple URLs can be specified by defining the option again on the command line",
+    defaultValue: @["http://127.0.0.1:8546"],
+    defaultValueDesc: "http://127.0.0.1:8546",
+    name: "op-listen-url"
   .}: UrlList
 
   # (Untrusted) web3 provider
@@ -144,6 +161,49 @@ type VerifiedProxyConf* = object
     defaultValue: @[],
     name: "private-tx-url"
   .}: UrlList
+
+  # P2P light client backend
+  p2pEnabled* {.
+    desc: "Enable P2P light client data backend",
+    defaultValue: false,
+    defaultValueDesc: "false"
+    name: "p2p"
+  .}: bool
+
+  p2pTcpPort* {.
+    desc: "Listening TCP port for the P2P light client backend",
+    defaultValue: 9000,
+    defaultValueDesc: "9000"
+    name: "p2p-tcp-port"
+  .}: uint16
+
+  p2pUdpPort* {.
+    desc: "Listening UDP port for the P2P light client backend",
+    defaultValue: 9000,
+    defaultValueDesc: "9000"
+    name: "p2p-udp-port"
+  .}: uint16
+
+  p2pMaxPeers* {.
+    desc: "Target number of peers for the P2P light client backend",
+    defaultValue: 160,
+    defaultValueDesc: "160"
+    name: "p2p-max-peers"
+  .}: int
+
+  p2pBootstrapNodesFile* {.
+    desc: "Path to a file containing bootstrap node ENRs (one per line) for the P2P light client backend",
+    defaultValue: "",
+    defaultValueDesc: ""
+    name: "p2p-bootstrap-nodes-file"
+  .}: string
+
+  p2pNat* {.
+    desc: "NAT traversal for the P2P backend. One of: any, none, upnp, pmp, extip:<IP>",
+    defaultValue: "any",
+    defaultValueDesc: "any"
+    name: "p2p-nat"
+  .}: string
 
 #!fmt: on
 

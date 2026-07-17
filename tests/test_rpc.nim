@@ -28,6 +28,7 @@ import
   ../execution_chain/beacon/web3_eth_conv,
   ../execution_chain/networking/p2p,
   ../execution_chain/nimbus_desc,
+   ./shared_data/eip8282data,
    ./test_helpers,
    ./macro_assembler,
    ./test_block_fixture,
@@ -70,6 +71,7 @@ const
   feeRecipient = address"0000000000000000000000000000000000000212"
   prevRandao = Bytes32 EMPTY_UNCLE_HASH # it can be any valid hash
   oneETH = 1.u256 * 1_000_000_000.u256 * 1_000_000_000.u256
+  DEPOSIT_CONTRACT_ADDRESS = address"0x4242424242424242424242424242424242424242"
 
 proc persistFixtureBlock(chainDB: CoreDbTxRef) =
   let header = getBlockHeader4514995()
@@ -195,10 +197,21 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     conf.networkParams.config.cancunTime = Opt.some(0.EthTime)
 
   if envFork >= Prague:
+    conf.networkParams.config.depositContractAddress = Opt.some(DEPOSIT_CONTRACT_ADDRESS)
     conf.networkParams.config.pragueTime = Opt.some(0.EthTime)
     conf.networkParams.config.osakaTime = Opt.some(3805601325.EthTime)
     conf.networkParams.config.bpo1Time = Opt.some(3805701325.EthTime)
     conf.networkParams.config.bpo2Time = Opt.some(3805801325.EthTime)
+
+  if envFork >= Osaka:
+    conf.networkParams.config.osakaTime = Opt.some(0.EthTime)
+    conf.networkParams.config.bpo1Time = Opt.some(0.EthTime)
+    conf.networkParams.config.bpo2Time = Opt.some(0.EthTime)
+
+  if envFork >= Amsterdam:
+    conf.networkParams.config.amsterdamTime = Opt.some(0.EthTime)
+    conf.networkParams.genesis.alloc[BUILDER_DEPOSIT_CONTRACT_ADDRESS] = GenesisAccount(code: builderDepositRequestCode)
+    conf.networkParams.genesis.alloc[BUILDER_EXIT_CONTRACT_ADDRESS] = GenesisAccount(code: builderExitRequestCode)
 
   let
     com   = setupCom(conf)
@@ -228,6 +241,7 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
   setupServerAPI(serverApi, server, am)
   setupCommonRpc(node, conf, server)
   setupAdminRpc(nimbus, conf, server)
+  setupDebugRpc(com, txPool, server)
   server.start()
 
   TestEnv(
@@ -262,7 +276,7 @@ proc generateBlock(env: var TestEnv) =
   xp.feeRecipient = feeRecipient
   xp.timestamp = EthTime.now()
 
-  let bundle = xp.assembleBlock().valueOr:
+  let bundle = xp.assembleBlock(xp.chain.latestHash).valueOr:
     debugEcho error
     quit(QuitFailure)
 
@@ -271,7 +285,7 @@ proc generateBlock(env: var TestEnv) =
 
   # import block
   (waitFor chain.importBlock(blk)).isOkOr:
-    debugEcho error
+    debugEcho error.msg
     quit(QuitFailure)
 
   xp.removeNewBlockTxs(blk)
@@ -281,7 +295,40 @@ proc generateBlock(env: var TestEnv) =
   env.txHash = tx1.computeRlpHash
   env.blockHash = blk.header.computeBlockHash
 
-createRpcSigsFromNim(RpcClient):
+func contractsInConfig(c: ConfigObject, contracts: openArray[addresses.Address]): bool =
+  for z in contracts:
+    var found = false
+    for x in c.systemContracts:
+      if x.address == z:
+        found = true
+        break
+    if not found:
+      return false
+
+  contracts.len == c.systemContracts.len
+
+const
+  cancunSystemContracts = [
+    BEACON_ROOTS_ADDRESS
+  ]
+  pragueSystemContracts = [
+    BEACON_ROOTS_ADDRESS,
+    DEPOSIT_CONTRACT_ADDRESS,
+    CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
+    HISTORY_STORAGE_ADDRESS,
+    WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
+  ]
+  amsterdamSystemContracts = [
+    BEACON_ROOTS_ADDRESS,
+    DEPOSIT_CONTRACT_ADDRESS,
+    CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
+    HISTORY_STORAGE_ADDRESS,
+    WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
+    BUILDER_DEPOSIT_CONTRACT_ADDRESS,
+    BUILDER_EXIT_CONTRACT_ADDRESS,
+  ]
+
+createRpcSigsFromNim(RpcClient, EthJson):
   proc web3_clientVersion(): string
   proc web3_sha3(data: seq[byte]): Hash32
   proc net_version(): string
@@ -366,6 +413,8 @@ proc rpcMain*() =
 
       check res.last.get().chainId == com.chainId
       check res.last.get().activationTime.uint64 == 3805801325'u64
+
+      check res.current.contractsInConfig(pragueSystemContracts)
 
     test "eth_syncing":
       let res = await client.eth_syncing()
@@ -614,7 +663,7 @@ proc rpcMain*() =
       check res.hash == env.blockHash
 
       expect JsonRpcError:
-        let res2 = await client.eth_getBlockByNumber($1, true)
+        discard await client.eth_getBlockByNumber($1, true)
 
     test "eth_getTransactionByHash":
       let res = await client.eth_getTransactionByHash(env.txHash)
@@ -651,32 +700,57 @@ proc rpcMain*() =
           check receipts[0].transactionIndex == 0.Quantity
           check receipts[1].transactionIndex == 1.Quantity
 
+    test "debug_getRawReceipts":
+      let
+        rawReceipts = await client.debug_getRawReceipts(blockId(1'u64))
+        receipts = await client.eth_getBlockReceipts(blockId(1'u64))
+
+      check receipts.isSome
+      if receipts.isSome:
+        check rawReceipts.len == receipts.get.len
+
+      for receipt in rawReceipts:
+        check seq[byte](receipt).len > 0
+
+    test "debug_getRawBlockAccessList":
+      try:
+        discard await client.call("debug_getRawBlockAccessList",
+          %[%"latest"], EthJson)
+        check false
+      except JsonRpcError as exc:
+        check "Resource not found" in exc.msg
+
+      # Unknown block tag must raise an error.
+      expect JsonRpcError:
+        discard await client.call("debug_getRawBlockAccessList",
+          %[%"0xabcdabcd"], EthJson)
+
     test "eth_getBlockReceipts with EIP-1898 object param":
       # blockHash object form (what go-ethereum's ethclient sends)
       let r1 = await client.call("eth_getBlockReceipts",
-        %[%*{"blockHash": $env.blockHash}])
-      let recs1 = JrpcConv.decode(r1.string, Opt[seq[ReceiptObject]])
+        %[%*{"blockHash": $env.blockHash}], EthJson)
+      let recs1 = EthJson.decode(r1.string, Opt[seq[ReceiptObject]])
       check recs1.isSome
       check recs1.get.len == 2
 
       # blockHash with requireCanonical=false
       let r2 = await client.call("eth_getBlockReceipts",
-        %[%*{"blockHash": $env.blockHash, "requireCanonical": false}])
-      let recs2 = JrpcConv.decode(r2.string, Opt[seq[ReceiptObject]])
+        %[%*{"blockHash": $env.blockHash, "requireCanonical": false}], EthJson)
+      let recs2 = EthJson.decode(r2.string, Opt[seq[ReceiptObject]])
       check recs2.isSome
       check recs2.get.len == 2
 
       # blockNumber object form
       let r3 = await client.call("eth_getBlockReceipts",
-        %[%*{"blockNumber": "0x1"}])
-      let recs3 = JrpcConv.decode(r3.string, Opt[seq[ReceiptObject]])
+        %[%*{"blockNumber": "0x1"}], EthJson)
+      let recs3 = EthJson.decode(r3.string, Opt[seq[ReceiptObject]])
       check recs3.isSome
       check recs3.get.len == 2
 
       # requireCanonical=true should fail
       expect JsonRpcError:
         discard await client.call("eth_getBlockReceipts",
-          %[%*{"blockHash": $env.blockHash, "requireCanonical": true}])
+          %[%*{"blockHash": $env.blockHash, "requireCanonical": true}], EthJson)
 
     test "eth_getTransactionReceipt":
       let res = await client.eth_getTransactionReceipt(env.txHash)
@@ -903,6 +977,66 @@ proc rpcMain*() =
           proofResponse.storageHash == hash32"0x2ed06ec37dad4cd8c8fc1a1172d633a8973987fa6995b14a7c0a50c0e8d1a9c3"
           storageProof.len() == 1
           verifySlotLeafExists(proofResponse.storageHash, storageProof[0])
+
+    test "debug_setHead":
+      # The current head is a valid target
+      let res = await client.call("debug_setHead", %[%"latest"], EthJson)
+      check res.string == "true"
+
+      # An unknown block cannot become the head
+      expect JsonRpcError:
+        discard await client.call("debug_setHead",
+          %[%"0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"],
+          EthJson)
+
+      # Rewind to genesis: block 1 is discarded. This is the last test in
+      # the suite because it is destructive.
+      let res2 = await client.call("debug_setHead", %[%"0x0"], EthJson)
+      check res2.string == "true"
+
+      let bn = await client.eth_blockNumber()
+      check bn == w3Qty(0'u64)
+
+    env.close()
+
+  suite "Remote Procedure Calls - Cancun":
+    var env = setupEnv(Cancun)
+    env.generateBlock()
+    let
+      client = env.client
+      com = env.com
+
+    test "eth_config":
+      let res = await client.eth_config()
+      check res.current.chainId == com.chainId
+      check res.current.activationTime.uint64 == 0'u64
+
+      check res.current.contractsInConfig(cancunSystemContracts)
+
+    env.close()
+
+  suite "Remote Procedure Calls - Amsterdam":
+    var env = setupEnv(Amsterdam)
+    env.generateBlock()
+    let
+      client = env.client
+      com = env.com
+
+    test "debug_getRawBlockAccessList - happy path":
+      let r = await client.call("debug_getRawBlockAccessList",
+        %[%"latest"], EthJson)
+      let raw = EthJson.decode(r.string, seq[byte])
+      check raw.len > 0
+
+      let bal = ethBlockAccessList(raw)
+      check rlp.encode(bal[]) == raw
+
+    test "eth_config":
+      let res = await client.eth_config()
+      check res.current.chainId == com.chainId
+      check res.current.activationTime.uint64 == 0'u64
+
+      check res.current.contractsInConfig(amsterdamSystemContracts)
 
     env.close()
 

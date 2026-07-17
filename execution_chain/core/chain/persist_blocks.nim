@@ -86,8 +86,9 @@ proc getVmState(
 
   ok(p.vmState)
 
-func dispose*(p: var Persister) =
+proc dispose*(p: var Persister) =
   p.vmState.ledger.txFrame.dispose()
+  p.vmState.dispose()
   p.vmState = nil
 
 func init*(T: type Persister, com: CommonRef, flags: PersistBlockFlags): T =
@@ -164,14 +165,14 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     # Generate receipts for storage or validation but skip them otherwise
     ?vmState.processBlock(
       blk,
-      skipValidation,
+      skipValidation = skipValidation,
       skipReceipts = skipValidation and PersistReceipts notin p.flags,
       skipUncles = PersistUncles notin p.flags,
       skipStateRootCheck = skipValidation,
       skipPostExecBalCheck = skipValidation,
     )
 
-  if not vmState.com.statelessProviderEnabled:
+  if not vmState.com.statelessProvider:
     processBlock()
   else:
     # When the stateless provider is enabled we need to have access to the
@@ -188,6 +189,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     # witness keys and block hashes when processing the block as these will be used
     # when building the witness.
     vmState.ledger.clearWitnessKeys()
+    vmState.ledger.clearCollapsedSiblings()
     vmState.ledger.clearBlockHashesCache()
 
     processBlock()
@@ -199,8 +201,8 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     # Convert the witness to ExecutionWitness format and verify against the pre-stateroot.
     if vmState.com.statelessWitnessValidation:
       doAssert witness.validateKeys(vmState.ledger.getWitnessKeys()).isOk()
-      let executionWitness = ExecutionWitness.build(witness, vmState.ledger)
-      ?executionWitness.statelessProcessBlock(com, blk)
+      let executionWitness = ExecutionWitnessWithKeys.build(witness, vmState.ledger)
+      ?executionWitness.toExecutionWitness().statelessProcessBlock(com, blk)
 
     ?vmState.ledger.txFrame.persistWitness(header.computeBlockHash(), witness)
 

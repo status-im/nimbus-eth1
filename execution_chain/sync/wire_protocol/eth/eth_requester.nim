@@ -212,10 +212,14 @@ proc getReceipts*(peer: Peer; firstBlockReceiptIndex: uint64; packet: ReceiptsRe
                   timeout: Duration = milliseconds(10000'i64)): Future[
     Opt[StoredReceipts70Packet]] {.async: (raises: [CancelledError, EthP2PError],
                                    raw: true).} =
+  # eth/70+ GetReceipts (0x0f) is encoded flat:
+  # [request-id, firstBlockReceiptIndex, [blockhash₁, ...]]
   if peer.supports(eth71):
-    eth71.rlpxSendRequest(peer, timeout, GetReceiptsMsg, firstBlockReceiptIndex, packet.blockHashes)
+    eth71.rlpxSendRequest(peer, timeout, GetReceiptsMsg,
+      firstBlockReceiptIndex, packet.blockHashes)
   else:
-    eth70.rlpxSendRequest(peer, timeout, GetReceiptsMsg, firstBlockReceiptIndex, packet.blockHashes)
+    eth70.rlpxSendRequest(peer, timeout, GetReceiptsMsg,
+      firstBlockReceiptIndex, packet.blockHashes)
 
 proc receipts*(responder: Responder;
                receipts: openArray[seq[Receipt]]): Future[void] {.

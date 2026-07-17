@@ -14,7 +14,7 @@ import
   stew/byteutils,
   eth/rlp,
   eth/common/eth_types_rlp, chronos,
-  json_rpc/[rpcclient, errors, jsonmarshal],
+  json_rpc/[rpcclient, errors],
   ../execution_chain/beacon/web3_eth_conv,
   ../execution_chain/core/pooled_txs_rlp,
   ./types
@@ -326,6 +326,8 @@ proc toBlockHeader*(bc: BlockObject): Header =
     excessBlobGas  : maybeU64(bc.excessBlobGas),
     parentBeaconBlockRoot: bc.parentBeaconBlockRoot,
     requestsHash   : bc.requestsHash,
+    blockAccessListHash: bc.blockAccessListHash,
+    slotNumber     : bc.slotNumber,
   )
 
 func vHashes(x: Opt[seq[Hash32]]): seq[VersionedHash] =

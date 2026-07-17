@@ -19,6 +19,7 @@ import
   ../execution_chain/db/core_db,
   ../execution_chain/common/common,
   ../execution_chain/transaction,
+  ../execution_chain/transaction/call_types,
   ../execution_chain/core/validate,
   ../execution_chain/utils/utils
 
@@ -41,15 +42,18 @@ proc testTxByFork(tx: Transaction, forkData: JsonNode, forkName: string, testSta
     config = getChainConfig(forkName)
     memDB  = newCoreDbRef DefaultDbMemory
     com    = CommonRef.new(memDB, config)
+    fork   = nameToFork[forkName]
+    sender = tx.recoverSender().expect("valid signature")
+    intrinsic = tx.intrinsicGas(fork, 10_000_000, sender)
 
-  validateTxBasic(com, tx, 10_000_000, nameToFork[forkName]).isOkOr:
+  validateTxBasic(com, tx, intrinsic, fork).isOkOr:
     return
 
   if forkData.len > 0 and "sender" in forkData:
-    let sender = Address.fromHex(forkData["sender"].getStr)
+    let txSender = Address.fromHex(forkData["sender"].getStr)
     check "hash" in forkData
     check tx.txHash == forkData["hash"].getStr
-    check tx.recoverSender().expect("valid signature") == sender
+    check txSender == sender
 
 func noHash(fixture: JsonNode): bool =
   result = true

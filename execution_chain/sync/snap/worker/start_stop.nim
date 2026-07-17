@@ -15,7 +15,7 @@ import
   pkg/[chronicles, metrics, minilru],
   ../../../networking/p2p,
   ../../wire_protocol,
-  ./[mpt, state_db, worker_desc]
+  ./[mpt, state_db, session, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -43,21 +43,28 @@ proc setupServices*(ctx: SnapCtxRef; info: static[string]): bool =
   ctx.pool.stateDB = StateDbRef.init()
 
   # Set up assembly DB
-  ctx.pool.mptAsm = MptAsmRef.init(ctx.pool.baseDir,info).valueOr:
+  ctx.pool.cacheDB = CacheDbRef.init(ctx.pool.baseDir,info).valueOr:
     return false
+
+  # Set up manual beacon target request. If set, there is no point in
+  # waiting for inital CL to sed updates.
+  ctx.pool.beaconTarget = ctx.beaconInitTarget()
 
   # Set up ticker, disabled by default
   if ctx.pool.ticker.isNil:
     ctx.pool.ticker = proc(ctx: SnapCtxRef) = discard
+
+  # Initalise MPT bulder
+  ctx.sessionMkTrieInit()
 
   ctx.daemon = true                                 # disabled by default
   true
 
 proc destroyServices*(ctx: SnapCtxRef) =
   ## Helper for `release()`
-  if not ctx.pool.mptAsm.isNil:
-    ctx.pool.mptAsm.close()
-    ctx.pool.mptAsm = MptAsmRef(nil)
+  if not ctx.pool.cacheDB.isNil:
+    ctx.pool.cacheDB.close()
+    ctx.pool.cacheDB = CacheDbRef(nil)
 
 # ---------
 
@@ -70,7 +77,8 @@ proc startSyncPeer*(buddy: SnapPeerRef): bool =
   # Initialise peer data
   buddy.only.peerType = buddy.peer.clientId.split('/',1)[0]
   buddy.only.failedReq = PeerFirstFetchReq(
-    stateRoot: StateRootSet.init stateDbCapacity)
+    stateRoot: StateRootSet.init stateDbCapacity,
+    accPath:   AccPathSet.init trieNodeAccPathCapacity)
 
   # Reset global register for fall-back peer
   ctx.pool.lastSlowPeer = Opt.none(Hash)

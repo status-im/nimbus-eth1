@@ -11,6 +11,7 @@
 
 import
   std/[sequtils, algorithm, strutils],
+  json_rpc/errors,
   ./rpc_types,
   ./params,
   ../db/ledger,
@@ -42,6 +43,12 @@ func median(prices: var openArray[GasInt]): GasInt =
     return (a div 2 + b div 2 + ((a mod 2 + b mod 2) div 2)).GasInt
 
   prices[middle]
+
+proc invalidParams*(msg: string): ref ApplicationError =
+  (ref ApplicationError)(
+    code: -32602,
+    msg: msg,
+  )
 
 proc calculateMedianGasPrice*(chain: ForkedChainRef): GasInt =
   const minGasPrice = 30_000_000_000.GasInt
@@ -192,6 +199,8 @@ proc populateBlockObject*(blockHash: Hash32,
   result.blobGasUsed = w3Qty(header.blobGasUsed)
   result.excessBlobGas = w3Qty(header.excessBlobGas)
   result.requestsHash = header.requestsHash
+  result.blockAccessListHash = header.blockAccessListHash
+  result.slotNumber = header.slotNumber
 
 proc populateReceipt*(rec: StoredReceipt, gasUsed: GasInt, tx: Transaction,
                       txIndex: uint64, header: Header, com: CommonRef): ReceiptObject =
@@ -254,7 +263,7 @@ proc populateReceipt*(rec: StoredReceipt, gasUsed: GasInt, tx: Transaction,
 
   if tx.txType == TxEip4844:
     res.blobGasUsed = Opt.some(Quantity(tx.versionedHashes.len.uint64 * GAS_PER_BLOB.uint64))
-    res.blobGasPrice = Opt.some(getBlobBaseFee(header.excessBlobGas.get(0'u64), com, com.toEVMFork(header)))
+    res.blobGasPrice = Opt.some(getBlobBaseFee(header.excessBlobGas.get(0'u64), com, com.toHardFork(header)))
 
   return res
 
@@ -325,14 +334,26 @@ proc createAccessList*(header: Header,
     prevTracer = tracer
 
 proc populateConfigObject*(com: CommonRef, fork: HardFork): ConfigObject =
-  let
-    cancunSystemContracts: seq[SystemContractPair] = @[
+  const
+    cancunSystemContracts = [
       SystemContractPair(
         address: BEACON_ROOTS_ADDRESS,
         name: "BEACON_ROOTS_ADDRESS"
       )
     ]
-    pragueSystemContracts: seq[SystemContractPair] = @[
+    amsterdamSystemContracts = [
+      SystemContractPair(
+        address: BUILDER_DEPOSIT_CONTRACT_ADDRESS,
+        name: "BUILDER_DEPOSIT_CONTRACT_ADDRESS"
+      ),
+      SystemContractPair(
+        address: BUILDER_EXIT_CONTRACT_ADDRESS,
+        name: "BUILDER_EXIT_CONTRACT_ADDRESS"
+      )
+    ]
+
+  let
+    pragueSystemContracts = [
       SystemContractPair(
         address: CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
         name: "CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS"
@@ -374,12 +395,14 @@ proc populateConfigObject*(com: CommonRef, fork: HardFork): ConfigObject =
     )
 
   # System Contracts
-  if fork == Cancun:
-    configObject.systemContracts = cancunSystemContracts
-  elif fork >= Prague:
-    configObject.systemContracts = cancunSystemContracts & pragueSystemContracts
-  else:
-    configObject.systemContracts = @[]
+  if fork >= Cancun:
+    configObject.systemContracts = @(cancunSystemContracts)
+
+  if fork >= Prague:
+    configObject.systemContracts.add pragueSystemContracts
+
+  if fork >= Amsterdam:
+    configObject.systemContracts.add amsterdamSystemContracts
 
   return configObject
 

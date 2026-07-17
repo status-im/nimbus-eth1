@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -127,11 +127,22 @@ func validateExecutionRequest(blockHash: Hash32,
       raise invalidParams("newPayload" & $apiVersion &
         ": " & "Empty data for request type " & $requestType)
 
-    if requestType notin [
-       DEPOSIT_REQUEST_TYPE,
-       WITHDRAWAL_REQUEST_TYPE,
-       CONSOLIDATION_REQUEST_TYPE]:
-      return Opt.some(invalidStatus(blockHash, "Invalid execution request type" & $requestType))
+    if apiVersion >= Version.V5:
+      if requestType notin [
+        DEPOSIT_REQUEST_TYPE,
+        WITHDRAWAL_REQUEST_TYPE,
+        CONSOLIDATION_REQUEST_TYPE,
+        BUILDER_DEPOSIT_REQUEST_TYPE,
+        BUILDER_EXIT_REQUEST_TYPE]:
+        return Opt.some(invalidStatus(blockHash,
+          "newPayload" & $apiVersion & ": Invalid execution request type" & $requestType))
+    else:
+      if requestType notin [
+        DEPOSIT_REQUEST_TYPE,
+        WITHDRAWAL_REQUEST_TYPE,
+        CONSOLIDATION_REQUEST_TYPE]:
+        return Opt.some(invalidStatus(blockHash,
+          "newPayload" & $apiVersion & ": Invalid execution request type" & $requestType))
 
     previousRequestType = requestType.int
   err()
@@ -179,14 +190,14 @@ proc newPayload*(ben: BeaconEngineRef,
       except RlpError as e:
         warn "Failed to decode payload",
           error = e.msg
-        return invalidStatus(payload.blockHash, "Failed to decode payload")
+        raise invalidParams("Failed to decode block in payload: " & e.msg)
     blockAccessList =
       try:
         blockAccessList(payload)
       except RlpError as e:
         warn "Failed to decode payload",
           error = e.msg
-        return invalidStatus(payload.blockHash, "Failed to decode payload")
+        raise invalidParams("Failed to decode BAL in payload: " & e.msg)
 
   template header: Header = blk.header
 
@@ -265,12 +276,12 @@ proc newPayload*(ben: BeaconEngineRef,
       number = header.number,
       hash = blockHash.short,
       parent = header.parentHash.short,
-      error = vres.error()
+      error = vres.error.msg
     ben.setInvalidAncestor(header, blockHash)
     let
       txFrame = chain.latestTxFrame()
       blockHash = latestValidHash(txFrame, parent, ttd)
-    return invalidStatus(blockHash, vres.error())
+    return invalidStatus(blockHash, vres.error.msg)
 
   ben.txPool.removeNewBlockTxs(blk, Opt.some(blockHash))
 

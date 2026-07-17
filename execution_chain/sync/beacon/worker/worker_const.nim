@@ -14,11 +14,12 @@ import
   pkg/chronos
 
 type
-  SyncState* = enum
+  BeaconState* = enum
     idle = 0                       ## see clause *(8)*, *(12)* of `README.md`
     headers                        ## see clauses *(5)*, *(9)* of `README.md`
     headersCancel                  ## stop this scrum
     headersFinish                  ## see clause *(10)* of `README.md`
+    linger                         ## wait for extrenal instructions
     blocks                         ## see clause *(11)* of `README.md`
     blocksCancel                   ## stop this syncer scrum
     blocksFinish                   ## get ready for `idle`
@@ -60,14 +61,6 @@ const
   workerIdleLongWaitInterval* = chronos.seconds(5)
     ## Sleep some time in multi-mode (i.e. concurrently running peers) if
     ## there is nothing else to do
-
-  asyncThreadSwitchTimeSlot* = chronos.nanoseconds(1)
-    ## Nano-sleep to allows pseudo/async thread switch
-
-  asyncThreadSwitchGap* = chronos.milliseconds(300)
-    ## Controls nano-sleep tart switch density when using this in a loop (e.g.
-    ## for processing lists.) The constant requires a minimum time gap when
-    ## invoking a nano-sleep utility.
 
   # ----------------------
 
@@ -133,6 +126,9 @@ const
   fetchBodiesErrTimeout* = chronos.seconds(25)
   nFetchBodiesErrThreshold* = 4
     ## Similar to `nFetchHeadersErrThreshold`.
+
+  fetchBalsRlpxTimeout* = chronos.seconds(50)
+    ## Similar to `fetchBodiesRlpxTimeout`.
 
   nProcBlocksErrThreshold* = 2
     ## Similar to `nStashHeadersErrThreshold`.

@@ -23,7 +23,7 @@ const
   NimbusMinor* = 3
   ## is the minor number of Nimbus' version.
 
-  NimbusPatch* = 0
+  NimbusPatch* = 1
   ## is the patch number of Nimbus' version.
 
   NimbusVersion* = $NimbusMajor & "." & $NimbusMinor & "." & $NimbusPatch

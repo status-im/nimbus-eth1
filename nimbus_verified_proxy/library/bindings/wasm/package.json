@@ -1,0 +1,15 @@
+{
+  "name": "@status-im/nimbus-verified-proxy",
+  "version": "0.0.0",
+  "description": "Nimbus Ethereum verified proxy — WASM bindings for browser and Node.js",
+  "type": "module",
+  "main": "verifproxy.js",
+  "files": ["verifproxy_wasm.js", "verifproxy_wasm.wasm", "verifproxy.js"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/status-im/nimbus-eth1.git"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
+}

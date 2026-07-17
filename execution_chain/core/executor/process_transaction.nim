@@ -16,35 +16,28 @@ import
   ../../common/common,
   ../../db/ledger,
   ../../transaction/call_evm,
-  ../../transaction/call_common,
+  ../../transaction/system_call,
+  ../../transaction/call_types,
   ../../transaction,
   ../../evm/state,
   ../../evm/types,
-  ../../evm/eip7708,
   ../../constants,
   ../eip4844,
   ../eip7691,
   ../validate
 
 
-export results, call_common
+export results, call_types
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
-
-func eip1559BaseFee(vmState: BaseVMState; fork: EVMFork): UInt256 =
-  ## Actually, `baseFee` should be 0 for pre-London headers already. But this
-  ## function just plays safe.
-  if FkLondon <= fork:
-    result = vmState.blockCtx.baseFeePerGas.get(0.u256)
 
 proc commitOrRollbackDependingOnGasUsed(
     vmState: BaseVMState;
     savePoint: LedgerSpRef;
     tx: Transaction;
     callResult: var LogResult;
-    priorityFee: GasInt;
     blobGasUsed: GasInt;
     rollbackReads: bool;
       ): Result[void, string] =
@@ -73,22 +66,74 @@ proc commitOrRollbackDependingOnGasUsed(
       return err(&"invalid tx: block gasLimit reached. gasLimit={vmState.blockCtx.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasUsed}")
 
   # Accept transaction and collect mining fee.
-  let txFee = gasUsed.u256 * priorityFee.u256
+  let
+    baseFee = vmState.blockCtx.baseFeePerGas
+    priorityFee = min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFee)
+    txFee = gasUsed.u256 * priorityFee.u256
+
+  callResult.txFee = txFee
+
   if vmState.balTrackerEnabled:
     vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), txFee)
     vmState.balTracker.commitCallFrame()
 
-  vmState.ledger.addBalance(vmState.coinbase(), txFee)
+  vmState.ledger.addBalance(vmState.coinbase(), txFee, checkEmptyAccount = vmState.fork < FkParis)
   vmState.ledger.commit(savePoint)
   vmState.cumulativeGasUsed += gasUsed
   vmState.blockRegularGasUsed += callResult.blockRegularGasUsed
   vmState.blockStateGasUsed += callResult.blockStateGasUsed
   vmState.blobGasUsed += blobGasUsed
 
-  # EIP-7708: Emit closure logs for accounts with remaining balance before deletion
-  if vmState.fork >= FkAmsterdam:
-    emitClosureLogs(vmState, callResult.logEntries)
   ok()
+
+template check2dGasInclusion*(
+    vmState: BaseVMState;
+    txGasLimit: GasInt;
+    fail: untyped) =
+  let
+    regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
+    stateGasAvailable = vmState.blockCtx.gasLimit - vmState.blockStateGasUsed
+    want = min(TX_GAS_LIMIT.GasInt, txGasLimit)
+
+  if want > regularGasAvailable:
+    fail("regular gas used exceeds limit, want: " & $want & ", available: " & $regularGasAvailable)
+
+  if txGasLimit > stateGasAvailable:
+    fail("state gas used exceeds limit, want: " & $txGasLimit & ", available: " & $stateGasAvailable)
+
+template validateForInclusion(
+    vmState: BaseVMState;
+    tx: Transaction;
+    sender: Address;
+    skipNonceCheck: bool;
+    buildError: static bool;
+    intrinsicVar, blobGasUsedVar: untyped) =
+
+  template fail(msg: untyped): untyped =
+    when buildError:
+      return err(msg)
+    else:
+      return
+
+  let
+    com = vmState.com
+    fork = vmState.hardFork
+    intrinsicVar = tx.intrinsicGas(fork, vmState.blockCtx.gasLimit, sender)
+
+  check2dGasInclusion(vmState, tx.gasLimit, fail)
+
+  # blobGasUsed will be added to vmState.blobGasUsed if the tx is ok.
+  let
+    blobGasUsedVar = tx.getTotalBlobGas
+    maxBlobGasPerBlock = getMaxBlobGasPerBlock(com, fork)
+  if vmState.blobGasUsed + blobGasUsedVar > maxBlobGasPerBlock:
+    fail("blobGasUsed " & $blobGasUsedVar &
+      " exceeds maximum allowance " & $maxBlobGasPerBlock)
+
+  validateTxBasic(com, tx, intrinsicVar, fork).isOkOr:
+    fail(error)
+  vmState.validateTransaction(tx, sender, skipNonceCheck).isOkOr:
+    fail(error)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -99,160 +144,147 @@ proc processTransaction*(
     tx:      Transaction; ## Transaction to validate
     sender:  Address;  ## tx.recoverSender
     rollbackReads: bool = false;
+    persist = true;
       ): Result[LogResult, string] =
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
-  ## which provides a backward compatible framwork for EIP1559.
+  ## which provides a backward compatible framework for EIP1559.
+
+  validateForInclusion(vmState, tx, sender, false, true, intrinsic, blobGasUsed)
+
+  # Execute the transaction.
+  vmState.captureTxStart(tx.gasLimit)
+
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.beginCallFrame()
+  let savePoint = vmState.ledger.beginSavePoint()
+
+  var callResult = tx.txCallEvm(sender, vmState, intrinsic)
+  vmState.captureTxEnd(tx.gasLimit - callResult.gasUsed)
 
   let
-    fork = vmState.fork
-    roDB = vmState.readOnlyLedger
-    baseFee256 = vmState.eip1559BaseFee(fork)
-    baseFee = baseFee256.truncate(GasInt)
-    priorityFee = min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFee)
-    excessBlobGas = vmState.blockCtx.excessBlobGas
-    regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
-
-  # Regular gas is capped at TX_MAX_GAS_LIMIT per EIP-7825.
-  # State gas is not checked per-tx; block-end validation enforces
-  # max(block_regular_gas_used, block_state_gas_used) <= gas_limit.
-  if min(TX_GAS_LIMIT.GasInt, tx.gasLimit) > regularGasAvailable:
-    let want = min(TX_GAS_LIMIT.GasInt, tx.gasLimit)
-    return err("regular gas used exceeds limit want: " & $want & ", available: " & $regularGasAvailable)
-
-  # blobGasUsed will be added to vmState.blobGasUsed if the tx is ok.
-  let
-    blobGasUsed = tx.getTotalBlobGas
-    maxBlobGasPerBlock = getMaxBlobGasPerBlock(vmState.com, vmState.fork)
-  if vmState.blobGasUsed + blobGasUsed > maxBlobGasPerBlock:
-    return err("blobGasUsed " & $blobGasUsed &
-      " exceeds maximum allowance " & $maxBlobGasPerBlock)
-
-  # Actually, the EIP-1559 reference does not mention an early exit.
-  #
-  # Even though database was not changed yet but, a `persist()` directive
-  # before leaving is crucial for some unit tests that us a direct/deep call
-  # of the `processTransaction()` function. So there is no `return err()`
-  # statement, here.
-  let
-    com = vmState.com
-    txRes = roDB.validateTransaction(tx, sender, vmState.blockCtx.gasLimit, baseFee256, excessBlobGas, com, fork)
-    res = if txRes.isOk:
-      # Execute the transaction.
-      vmState.captureTxStart(tx.gasLimit)
-
-      if vmState.balTrackerEnabled:
-        vmState.balTracker.beginCallFrame()
-      let savePoint = vmState.ledger.beginSavePoint()
-
-      var callResult = tx.txCallEvm(sender, vmState, baseFee)
-      vmState.captureTxEnd(tx.gasLimit - callResult.gasUsed)
-
-      let tmp = commitOrRollbackDependingOnGasUsed(
-        vmState, savePoint, tx, callResult, priorityFee, blobGasUsed, rollbackReads)
-
-      if tmp.isErr():
-        err(tmp.error)
-      else:
-        ok(move(callResult))
+    tmp = commitOrRollbackDependingOnGasUsed(
+      vmState, savePoint, tx, callResult, blobGasUsed, rollbackReads)
+    res = if tmp.isErr:
+      err(tmp.error)
     else:
-      err(txRes.error)
+      ok(move(callResult))
 
-  vmState.ledger.persist(clearEmptyAccount = fork >= FkSpurious)
+  if persist:
+    vmState.ledger.persist(clearEmptyAccount = vmState.hardFork >= Spurious)
+
+  # Checked after persist so a BLOCKHASH miss, a missing-code lookup (both set
+  # during the EVM run) and a partial witness persist failure are all caught here.
+  vmState.ledger.abortOnFatalError()
 
   res
 
-proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32):
-                              Result[void, string] =
+proc prefetchTransaction*(
+    vmState: BaseVMState; ## Throwaway accounts environment for prefetching
+    tx:      Transaction; ## Transaction to speculatively execute
+    sender:  Address;     ## Pre-recovered sender
+      ) =
+
+  validateForInclusion(vmState, tx, sender, true, false, intrinsic, blobGasUsed)
+
+  let savePoint = vmState.ledger.beginSavePoint()
+  tx.txCallEvm(sender, vmState, intrinsic, discardResult = true)
+  vmState.ledger.rollback(savePoint)
+
+proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32) =
   ## processBeaconBlockRoot applies the EIP-4788 system call to the
   ## beacon block root contract. This method is exported to be used in tests.
   ## If EIP-4788 is enabled, we need to invoke the beaconroot storage
   ## contract with the new root.
   let
-    ledger = vmState.ledger
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
-      gasLimit : DEFAULT_GAS_LIMIT.GasInt,
-      gasPrice : 0.GasInt,
+      gasLimit : 30_000_000.GasInt,
       to       : BEACON_ROOTS_ADDRESS,
       input    : @(beaconRoot.data),
-      sysCall  : true,
     )
 
-  # runComputation a.k.a syscall/evm.call
-  let res = call.runComputation(string)
-  if res.len > 0:
-    return err("processBeaconBlockRoot: " & res)
+  # EIP-4788: fail silently
+  call.systemCall(void)
 
-  ledger.persist(clearEmptyAccount = true)
-  ok()
-
-proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32):
-                              Result[void, string] =
+proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32) =
   ## processParentBlockHash stores the parent block hash in the
   ## history storage contract as per EIP-2935.
   let
-    ledger = vmState.ledger
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
-      gasLimit : DEFAULT_GAS_LIMIT.GasInt,
-      gasPrice : 0.GasInt,
+      gasLimit : 30_000_000.GasInt,
       to       : HISTORY_STORAGE_ADDRESS,
       input    : @(prevHash.data),
-      sysCall  : true,
     )
 
-  # runComputation a.k.a syscall/evm.call
-  let res = call.runComputation(string)
-  if res.len > 0:
-    return err("processParentBlockHash: " & res)
-
-  ledger.persist(clearEmptyAccount = true)
-  ok()
+  # EIP-2923: fail silently
+  call.systemCall(void)
 
 proc processDequeueWithdrawalRequests*(vmState: BaseVMState): Result[seq[byte], string] =
   ## processDequeueWithdrawalRequests applies the EIP-7002 system call
   ## to the withdrawal requests contract.
   let
-    ledger = vmState.ledger
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
       gasLimit : 30_000_000.GasInt,
-      gasPrice : 0.GasInt,
       to       : WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
-      sysCall  : true,
     )
 
-  # runComputation a.k.a syscall/evm.call
-  let res = call.runComputation(OutputResult)
+  var res = call.systemCall(OutputResult)
   if res.error.len > 0:
     return err("processDequeueWithdrawalRequests: " & res.error)
-
-  ledger.persist(clearEmptyAccount = true)
-  ok(res.output)
+  ok(move(res.output))
 
 proc processDequeueConsolidationRequests*(vmState: BaseVMState): Result[seq[byte], string] =
   ## processDequeueConsolidationRequests applies the EIP-7251 system call
   ## to the consolidation requests contract.
   let
-    ledger = vmState.ledger
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
       gasLimit : 30_000_000.GasInt,
-      gasPrice : 0.GasInt,
       to       : CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
-      sysCall  : true,
     )
 
-  # runComputation a.k.a syscall/evm.call
-  let res = call.runComputation(OutputResult)
+  var res = call.systemCall(OutputResult)
   if res.error.len > 0:
     return err("processDequeueConsolidationRequests: " & res.error)
-  ledger.persist(clearEmptyAccount = true)
-  ok(res.output)
+  ok(move(res.output))
+
+proc processBuilderDepositRequests*(vmState: BaseVMState): Result[seq[byte], string] =
+  ## processBuilderDepositRequests applies the EIP-8282 system call
+  ## to the builder deposit requests contract.
+  let
+    call = CallParams(
+      vmState  : vmState,
+      sender   : SYSTEM_ADDRESS,
+      gasLimit : 30_000_000.GasInt,
+      to       : BUILDER_DEPOSIT_CONTRACT_ADDRESS,
+    )
+
+  var res = call.systemCall(OutputResult)
+  if res.error.len > 0:
+    return err("processBuilderDepositRequests: " & res.error)
+  ok(move(res.output))
+
+proc processBuilderExitRequests*(vmState: BaseVMState): Result[seq[byte], string] =
+  ## processBuilderExitRequests applies the EIP-8282 system call
+  ## to the builder exit requests contract.
+  let
+    call = CallParams(
+      vmState  : vmState,
+      sender   : SYSTEM_ADDRESS,
+      gasLimit : 30_000_000.GasInt,
+      to       : BUILDER_EXIT_CONTRACT_ADDRESS,
+    )
+
+  var res = call.systemCall(OutputResult)
+  if res.error.len > 0:
+    return err("processBuilderExitRequests: " & res.error)
+  ok(move(res.output))
 
 # ------------------------------------------------------------------------------
 # End

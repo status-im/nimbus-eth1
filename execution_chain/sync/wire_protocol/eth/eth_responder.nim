@@ -275,8 +275,11 @@ proc getReceipts70UserHandler[PROTO](response: Responder; req: StoredReceipts70R
 
 proc getReceiptsThunk[PROTO](peer: Peer; data: Rlp) {.
     async: (raises: [CancelledError, EthP2PError]).} =
-  when PROTO is eth70:
-    PROTO.rlpxWithPacketResponder(StoredReceipts70Request, peer, data):
+  when PROTO is eth70 or PROTO is eth71:
+    # eth/70+ GetReceipts (0x0f) is encoded flat:
+    # [request-id, firstBlockReceiptIndex, [blockhash₁, ...]]
+    PROTO.rlpxWithPacketResponder(StoredReceipts70Request, peer, data,
+        [firstBlockReceiptIndex, blockHashes]):
       await getReceipts70UserHandler[PROTO](response, packet)
   else:
     PROTO.rlpxWithPacketResponder(seq[Hash32], peer, data):
@@ -284,7 +287,7 @@ proc getReceiptsThunk[PROTO](peer: Peer; data: Rlp) {.
 
 proc receiptsThunk[PROTO](peer: Peer; data: Rlp) {.
     async: (raises: [CancelledError, EthP2PError]).} =
-  when PROTO is eth70:
+  when PROTO is eth70 or PROTO is eth71:
     PROTO.rlpxWithFutureHandler(StoredReceipts70Packet,
       ReceiptsMsg, peer, data, [lastBlockIncomplete, receipts])
   elif PROTO is eth69:
@@ -306,7 +309,7 @@ proc blockRangeUpdateUserHandler[PROTO](peer: Peer; packet: BlockRangeUpdatePack
     debug "Disconnecting peer because of protocol breach",
       remote = peer.remote, clientId = peer.clientId,
       msg = "blockRangeUpdate must have latest >= earliest"
-    await peer.disconnect(BreachOfProtocol)
+    await peer.disconnect(BreachOfProtocol, notifyRemote = true)
     return
 
   peer.state(PROTO).earliest = packet.earliest
@@ -335,8 +338,9 @@ proc getBlockAccessListsUserHandler[PROTO](response: Responder; req: BlockAccess
   
 proc getBlockAccessListsThunk[PROTO](peer: Peer; data: Rlp) {.
     async: (raises: [CancelledError, EthP2PError]).} =
-  PROTO.rlpxWithPacketResponder(BlockAccessListsRequest, peer, data):
-    await getBlockAccessListsUserHandler[PROTO](response, packet)
+  PROTO.rlpxWithPacketResponder(seq[Hash32], peer, data):
+    await getBlockAccessListsUserHandler[PROTO](response,
+      BlockAccessListsRequest(blockHashes: packet))
 
 proc blockAccessListsThunk[PROTO](peer: Peer; data: Rlp) {.
     async: (raises: [CancelledError, EthP2PError]).} =
@@ -476,10 +480,6 @@ template registerCommonThunk(protocol: ProtocolInfo, PROTO: type) =
               pooledTransactionsThunk[PROTO], PooledTransactionsPacket)
   registerMsg(protocol, GetPooledTransactionsMsg, "getPooledTransactions",
               getPooledTransactionsThunk[PROTO], PooledTransactionsRequest)
-  registerMsg(protocol, ReceiptsMsg, "receipts",
-              receiptsThunk[PROTO], ReceiptsPacket)
-  registerMsg(protocol, GetReceiptsMsg, "getReceipts",
-              getReceiptsThunk[PROTO], ReceiptsRequest)
 
 proc eth68Registration() =
   let
@@ -489,6 +489,10 @@ proc eth68Registration() =
   registerMsg(protocol, StatusMsg, "status",
               status68Thunk, Status68Packet)
   registerCommonThunk(protocol, eth68)
+  registerMsg(protocol, ReceiptsMsg, "receipts",
+              receiptsThunk[eth68], ReceiptsPacket)
+  registerMsg(protocol, GetReceiptsMsg, "getReceipts",
+              getReceiptsThunk[eth68], ReceiptsRequest)
   registerProtocol(protocol)
 
 proc eth69Registration() =
@@ -499,6 +503,10 @@ proc eth69Registration() =
   registerMsg(protocol, StatusMsg, "status",
               status69OrLaterThunk[eth69], Status69Packet)
   registerCommonThunk(protocol, eth69)
+  registerMsg(protocol, ReceiptsMsg, "receipts",
+              receiptsThunk[eth69], ReceiptsPacket)
+  registerMsg(protocol, GetReceiptsMsg, "getReceipts",
+              getReceiptsThunk[eth69], ReceiptsRequest)
   registerMsg(protocol, BlockRangeUpdateMsg, "blockRangeUpdate",
               blockRangeUpdateThunk[eth69], BlockRangeUpdatePacket)
   registerProtocol(protocol)
@@ -511,6 +519,10 @@ proc eth70Registration() =
   registerMsg(protocol, StatusMsg, "status",
               status69OrLaterThunk[eth70], Status69Packet)
   registerCommonThunk(protocol, eth70)
+  registerMsg(protocol, ReceiptsMsg, "receipts",
+              receiptsThunk[eth70], StoredReceipts70Packet)
+  registerMsg(protocol, GetReceiptsMsg, "getReceipts",
+              getReceiptsThunk[eth70], StoredReceipts70Request)
   registerMsg(protocol, BlockRangeUpdateMsg, "blockRangeUpdate",
               blockRangeUpdateThunk[eth70], BlockRangeUpdatePacket)
   registerProtocol(protocol)
@@ -523,6 +535,10 @@ proc eth71Registration() =
   registerMsg(protocol, StatusMsg, "status",
               status69OrLaterThunk[eth71], Status69Packet)
   registerCommonThunk(protocol, eth71)
+  registerMsg(protocol, ReceiptsMsg, "receipts",
+              receiptsThunk[eth71], StoredReceipts70Packet)
+  registerMsg(protocol, GetReceiptsMsg, "getReceipts",
+              getReceiptsThunk[eth71], StoredReceipts70Request)
   registerMsg(protocol, BlockRangeUpdateMsg, "blockRangeUpdate",
               blockRangeUpdateThunk[eth71], BlockRangeUpdatePacket)
   registerMsg(protocol, GetBlockAccessListsMsg, "getBlockAccessLists",

@@ -13,7 +13,7 @@
 ## Extracted helpers from `worker_desc` (avoids circular import)
 
 import
-  std/[fenv, math, strformat],
+  std/[fenv, hashes, math, strformat, strutils],
   pkg/[chronos, stew/interval_set],
   ../../../core/chain,
   ../../../networking/p2p,
@@ -25,10 +25,17 @@ export
   prettify, short, `$`
 
 
+func short*(peerID: Hash): string =
+  let s = peerID.toHex
+  s.substr(s.len-8).toLowerAscii
+
 func toStr*(h: Hash32): string =
   if h == emptyRoot: "empty"
   elif h == zeroHash32: "zero"
   else: h.short
+
+func toStr*(h: Opt[Hash32]): string =
+  if h.isNone: "n/a" else: h.unsafeGet.toStr
 
 # --------------
 
@@ -51,7 +58,7 @@ func per256*(w: UInt256): float =
   ##
   when sizeof(float) != sizeof(uint):
     {.error: "Expected float having the same size as uint".}
-  if w == 0:
+  if w.isZero:
     return 0f
   let mantissa = 256 - w.leadingZeros
   if mantissa <= mantissaDigits(float):             # `<= 53` on a 64 bit system
@@ -67,7 +74,7 @@ func per256*(w: Opt[UInt256]): float =
   ## anymore.)
   ##
   if w.isNone: 0f
-  elif w.value == 0: 1f
+  elif w.value.isZero: 1f
   else: w.value.per256()
 
 
@@ -108,11 +115,11 @@ func toStr*(w: (float,float), precision: static[int] = 4): string =
 
 func flStr*(w: UInt256, precision: static[int] = 4): string =
   if w == high(UInt256): "2^256"
-  elif w == 0: "0"
+  elif w.isZero: "0"
   else: w.to(float).toStr(precision)
 
 func flStr*(w: (UInt256,UInt256), precision: static[int] = 4): string =
-  if w[0] == 0:
+  if w[0].isZero:
     if w[1] == high(UInt256):
       "0..2^256"
     else:
@@ -123,7 +130,7 @@ func flStr*(w: (UInt256,UInt256), precision: static[int] = 4): string =
     (w[0].to(float),w[1].to(float)).toStr(precision)
 
 func lenStr*(w: (UInt256,UInt256)): string =
-  if w[0] == 0 and w[1] == high(UInt256):
+  if w[0].isZero and w[1] == high(UInt256):
     "2^256"
   elif w[0] <= w[1]:
     let z = w[1] - w[0]
@@ -140,7 +147,7 @@ func toStr*(a: chronos.Duration): string =
   if twoHundredYears <= a:
     return "n/a"
   var s = a.toString 2
-  if s.len == 0: s="0"
+  if s.len == 0: s="0s"
   s
 
 func toStr*(a: chronos.Moment): string =
@@ -148,10 +155,10 @@ func toStr*(a: chronos.Moment): string =
 
 # -----------
 
-func `$`*(w: (SyncState,bool)): string =
+func `$`*(w: (SnapState,bool)): string =
   $w[0] & (if w[1]: "+" & "poolMode" else: "")
 
-func `$`*(w: (string,SyncPeerRunState,SyncState,bool)): string =
+func `$`*(w: (string,SyncPeerRunState,SnapState,bool)): string =
   if 0 < w[0].len:
     result = w[0] & "/"
   result &= $w[1] & ":" & $(w[2],w[3])

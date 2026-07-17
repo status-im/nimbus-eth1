@@ -23,7 +23,7 @@ import
   eth/net/nat,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   web3/eth_api,
-  beacon_chain/[nimbus_binary_common, process_state],
+  beacon_chain/[nimbus_binary_common, process_state, nimbus_rest_common],
   ../common/common_utils,
   ../rpc/[
     rpc_discovery_api, rpc_portal_common_api, rpc_portal_history_api,
@@ -134,6 +134,8 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
       let res = enr.Record.fromURI(enrURI)
       if res.isOk():
         bootstrapRecords.add(res.value)
+  of PortalNetwork.sepolia, PortalNetwork.hoodi:
+    discard # no baked-in bootstrap nodes available for these networks
 
   ## Discovery v5 protocol setup
   let

@@ -28,22 +28,33 @@ switch("nimcache", nimCachePath)
 
 # `-flto` gives a significant improvement in processing speed, specially hash tree and state transition (basically any CPU-bound code implemented in nim)
 # With LTO enabled, optimization flags should be passed to both compiler and linker!
-if defined(release) and not defined(disableLTO):
-  # "-w" is not passed to the compiler during linking, so we need to disable
-  # some warnings by hand.
-  switch("passL", "-Wno-stringop-overflow -Wno-stringop-overread")
+# Windows LTO seems to increase CI time to 4+ hours
+if defined(release) and not defined(disableLTO) and not defined(windows):
+  # TODO https://github.com/nim-lang/Nim/issues/25847
+  # https://github.com/nim-lang/Nim/blob/bfeb3146d1638b39f69007a4ae5a23e23ae4e5ef/config/nim.cfg#L331
+  template extend(name, value) = put(name, get(name) & value)
 
-  # lto_incremental available as of Nim 1.6.14 / https://github.com/nim-lang/Nim/pull/21679
-  switch("define", "lto_incremental")
+  extend "vcc.options.always", " /GL /Gw /Gy"
+  extend "vcc.cpp.options.always", " /GL /Gw /Gy"
+  extend "vcc.options.linker", " /link /LTCG:incremental"
+  extend "vcc.cpp.options.linker", " /link /LTCG:incremental"
+  extend "clang_cl.options.always", " -flto=thin"
+  extend "clang.cpp.options.always", " -flto=thin"
+  extend "clang.options.always", " -flto=thin"
+  extend "clang.cpp.options.always", " -flto=thin"
+  extend "clang.options.linker", " -flto=thin"
+  extend "clang.cpp.options.linker", " -flto=thin"
+  extend "icl.options.always", " /Qipo"
+  extend "icl.cpp.options.always", " /Qipo"
+  extend "gcc.options.always", " -flto=auto -finline-limit=100000"
+  extend "gcc.cpp.options.always", " -flto=auto -finline-limit=100000"
+  extend "gcc.options.linker", " -flto=auto -Wno-stringop-overflow -Wno-stringop-overread -finline-limit=100000"  # https://github.com/nim-lang/Nim/issues/21595
+  extend "gcc.cpp.options.linker", " -flto=auto -Wno-stringop-overflow -Wno-stringop-overread -finline-limit=100000"
 
-  # According to early measurements, this helped make LTO make better choices -
-  # it probably needs to be re-tested for newer GCC versions..
-  put("gcc.options.always", get("gcc.options.always") & " -finline-limit=100000")
-  put("gcc.options.linker", get("gcc.options.linker") & " -finline-limit=100000")
-
-  if defined(macosx):
+  if defined(macosx) and not defined(emscripten):
     # https://clang.llvm.org/docs/CommandGuide/clang.html#cmdoption-flto
-    put("clang.options.linker", get("clang.options.linker") & " -Wl,-object_path_lto," & nimCachePath & "/lto")
+    extend "clang.options.linker", " -Wl,-object_path_lto," & nimCachePath & "/lto"
+    extend "clang.cpp.options.linker", " -Wl,-object_path_lto," & nimCachePath & "/lto"
 
 # Hidden visibility allows for better position-independent codegen - it also
 # resolves a build issue in BLST where otherwise private symbols would require
@@ -76,35 +87,36 @@ if defined(windows):
 # given its near-ubiquity in the x86 installed base, it renders a distribution
 # build more viable on an overall broader range of hardware.
 #
-if defined(disableMarchNative):
-  if defined(i386) or defined(amd64):
-    if defined(marchOptimized):
-      # https://github.com/status-im/nimbus-eth2/blob/stable/docs/cpu_features.md#bmi2--adx
-      switch("passC", "-march=broadwell -mtune=generic")
-      switch("passL", "-march=broadwell -mtune=generic")
-    else:
-      switch("passC", "-mssse3")
-      switch("passL", "-mssse3")
-elif defined(riscv64):
-  # riscv64 needs specification of ISA with extensions. 'gc' is widely supported
-  # and seems to be the minimum extensions needed to build.
-  switch("passC", "-march=rv64gc")
-  switch("passL", "-march=rv64gc")
-elif defined(linux) and defined(arm64):
-  # clang can't handle "-march=native"
-  switch("passC", "-march=armv8-a")
-  switch("passL", "-march=armv8-a")
-elif not(defined(macosx) and defined(arm64)):
-  # Apple's Clang can't handle "-march=native" on M1: https://github.com/status-im/nimbus-eth2/issues/2758
-  switch("passC", "-march=native")
-  switch("passL", "-march=native")
-  if defined(i386) or defined(amd64):
-    # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=65782
-    # ("-fno-asynchronous-unwind-tables" breaks Nim's exception raising, sometimes)
-    # For non-Windows targets, https://github.com/bitcoin-core/secp256k1/issues/1623
-    # also suggests disabling the same flag to address Ubuntu 22.04/recent AMD CPUs.
-    switch("passC", "-mno-avx512f")
-    switch("passL", "-mno-avx512f")
+if not defined(emscripten):
+  if defined(disableMarchNative):
+    if defined(i386) or defined(amd64):
+      if defined(marchOptimized):
+        # https://github.com/status-im/nimbus-eth2/blob/stable/docs/cpu_features.md#bmi2--adx
+        switch("passC", "-march=broadwell -mtune=generic")
+        switch("passL", "-march=broadwell -mtune=generic")
+      else:
+        switch("passC", "-mssse3")
+        switch("passL", "-mssse3")
+  elif defined(riscv64):
+    # riscv64 needs specification of ISA with extensions. 'gc' is widely supported
+    # and seems to be the minimum extensions needed to build.
+    switch("passC", "-march=rv64gc")
+    switch("passL", "-march=rv64gc")
+  elif defined(linux) and defined(arm64):
+    # clang can't handle "-march=native"
+    switch("passC", "-march=armv8-a")
+    switch("passL", "-march=armv8-a")
+  elif not(defined(macosx) and defined(arm64)):
+    # Apple's Clang can't handle "-march=native" on M1: https://github.com/status-im/nimbus-eth2/issues/2758
+    switch("passC", "-march=native")
+    switch("passL", "-march=native")
+    if defined(i386) or defined(amd64):
+      # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=65782
+      # ("-fno-asynchronous-unwind-tables" breaks Nim's exception raising, sometimes)
+      # For non-Windows targets, https://github.com/bitcoin-core/secp256k1/issues/1623
+      # also suggests disabling the same flag to address Ubuntu 22.04/recent AMD CPUs.
+      switch("passC", "-mno-avx512f")
+      switch("passL", "-mno-avx512f")
 
 # omitting frame pointers in nim breaks the GC
 # https://github.com/nim-lang/Nim/issues/10625
@@ -122,14 +134,20 @@ switch("passL", "-fno-omit-frame-pointer")
 --styleCheck:usages
 --styleCheck:error
 
+# Disable ABI warning: 
+# 'the ABI for passing parameters with 64-byte alignment has changed in GCC 4.6'
+switch("passC", "-Wno-psabi")
+
 switch("define", "nim_compiler_path=" & currentDir & "env.sh nim")
+switch("define", "withoutPCRE")
 
 when not defined(disable_libbacktrace):
   --define:nimStackTraceOverride
+  switch("stacktrace", "off")
   switch("import", "libbacktrace")
 else:
-  --stacktrace:on
-  --linetrace:on
+  switch("stacktrace", "on")
+  switch("linetrace", "on")
 
 var canEnableDebuggingSymbols = true
 if defined(macosx):
@@ -155,6 +173,13 @@ if canEnableDebuggingSymbols:
 
 switch("warningAsError", "BareExcept:on")
 switch("warningAsError", "CaseTransition:on")
+switch("warningAsError", "CycleCreated:on")
+switch("warningAsError", "ImplicitDefaultValue:on")
+switch("warningAsError", "ImplicitTemplateRedefinition:on")
+switch("warningAsError", "LongLiterals:on")
+switch("warningAsError", "ProveField:on")
+switch("warningAsError", "StmtListLambda:on")
+switch("warningAsError", "UnreachableCode:on")
 switch("warningAsError", "UnusedImport:on")
 switch("hintAsError", "ConvFromXtoItselfNotNeeded:on")
 switch("hintAsError", "DuplicateModuleImport:on")

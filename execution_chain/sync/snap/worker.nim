@@ -11,23 +11,13 @@
 {.push raises:[].}
 
 import
-  std/os,
+  #std/os,
   pkg/[chronicles, chronos, minilru, results],
-  ./worker/[download, helpers, session, start_stop, state_db, worker_desc]
+  ./worker/[download, helpers, mpt, session, start_stop, state_db, update,
+            worker_desc]
 
 logScope:
   topics = "snap sync"
-
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-func toStr(error: SnapError): string =
-  result = $error.excp
-  if 0 < error.name.len:
-    result &= "(" & error.name & ")"
-  if 0 < error.msg.len:
-    result &= "[" & error.msg & "]"
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
@@ -51,10 +41,6 @@ proc start*(buddy: SnapPeerRef; info: static[string]): bool =
     peer {.inject,used.} = $buddy.peer              # logging only
     ctx = buddy.ctx
 
-  if not ctx.pool.seenData and buddy.peerID in ctx.pool.failedPeers:
-    debug info & ": Useless peer already tried", peer
-    return false
-
   if not buddy.startSyncPeer():
     debug info & ": Failed", peer
     return false
@@ -69,7 +55,7 @@ proc stop*(buddy: SnapPeerRef; info: static[string]) =
   let ctx = buddy.ctx
   if SnapReady < ctx.pool.syncState:
     debug info & ": Release peer", peer=buddy.peer,
-      nSyncPeers=(ctx.nSyncPeers()-1), syncState=buddy.syncState
+      nSyncPeers=(ctx.nSyncPeers()-1), syncState=($buddy.syncState)
   buddy.stopSyncPeer()
 
 # ------------------------------------------------------------------------------
@@ -96,34 +82,58 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
   ##
   var bodyRc = ZeroDuration                         # to be re-invoked, soon?
   block body:
-    # Check initial state before transition
-    if ctx.pool.syncState == SnapResume:
-      discard ctx.sessionResume(info)
+    case ctx.updateSnapState(info):                 # set next state
+    of SnapIdle:
+      bodyRc = daemonWaitElseInterval               # take a nap
 
-    ctx.updateSyncState info                        # set next state
-    case ctx.pool.syncState:
     of SnapReady:
-      chronicles.info info & ": Waiting for CL to send updates",
-        syncState=ctx.syncState, nSyncPeers=ctx.nSyncPeers()
-      bodyRc = daemonWaitReadyInterval              # take a nap
+      # Start headers download on the beacon sync server to run quasi-parallel
+      # mode to the snap sync.
+      ctx.headerDownloadTrigger(info).isOkOr:
+        bodyRc = daemonWaitReadyInterval            # take a nap
+
+    of SnapResume:
+      # If there is a pivot, then there is an assembled partial MPT. In that
+      # case, there no point resuming a downloading session.
+      if ctx.sessionPivotActivate(info) < PivotOnTrie:
+        # Import/reconstruct in-memory state DB from persistent cache DB.
+        ctx.sessionResume(info).isOkOr:
+           break body                               # shutdown?
 
     of SnapDownload:
-      bodyRc = daemonWaitDownloadInterval           # take a nap
+      # Download headers. The request will be silently ignored if the
+      # distance to the CL head is too small.
+      discard ctx.headerDownloadTrigger(info, reducedNoise=true)
 
+      bodyRc = daemonWaitDownloadInterval           # snap dwnld handled by peer
     of SnapDownloadFinish:
-      bodyRc = daemonWaitDownloadFinishInterval     # take a nap
+      bodyRc = daemonWaitDownloadFinishInterval     # wait for sync
 
     of SnapMkTrie:
-      let ela {.used.} = ctx.sessionMkTrie(info)
-      debug info & ": mkTrie imported",
-        ela=ela.toStr, syncState=ctx.syncState
+      ctx.pool.stateDB.flush info                   # flush into persist. cache
 
-    of SnapHealing:                                 # TBD ..
-      warn info & ": Healing not yet implemented"
+      let ela {.used.} = ctx.sessionMkTrie(info).valueOr:
+        break body                                  # shutdown?
+
+      debug info & ": Partial MPT assembled",
+        ela=ela.toStr, syncState=($ctx.syncState)
+
+    of SnapAnalyse:
+      let stats {.used.} = ctx.sessionAnalyseFullTrie(info).valueOr:
+        break body                                  # shutdown?
+
+      # Update pivot state record on DB cache
+      discard ctx.setPivotTag(PivotMptAnalysed, info)
+
+      debug info & ": Partial MPT analysed",
+        ela=stats.ela.toStr, syncState=($ctx.syncState)
+
+    # of TBD ..
+
+    of SnapStop:
+      warn info & ": Stop snap sync not implemented yet, lingering",
+        syncState=($ctx.syncState)
       bodyRc = chronos.seconds(30)
-
-    else:
-      bodyRc = daemonWaitElseInterval               # take a nap
 
     # End block: `body`
 
@@ -166,9 +176,9 @@ template runPeer*(
   block body:
     case buddy.ctx.pool.syncState:
     of SnapDownload:
-
       # Download and cache accounts, storage slots, contracts
-      buddy.download info
+      buddy.downloadAccountsAndStorage(info).isOkOr:
+        bodyRc = peerWaitDownloadInterval           # maybe no CL or peers yet
 
     else:
       bodyRc = peerWaitElseInterval

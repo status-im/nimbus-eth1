@@ -31,7 +31,7 @@ type
 
   TxSenderTab* = Table[Address, TxSenderNonceRef]
 
-  TxIdTab* = Table[Hash32, TxItemRef]
+  TxIdTab* = OrderedTable[Hash32, TxItemRef]
 
   BlobLookup* = object
     item*: TxItemRef

@@ -68,6 +68,7 @@ type
     # Path function `hikeUp()`
     HikeBranchMissingEdge
     HikeBranchTailEmpty
+    HikeBranchUnresolvedEdge
     HikeDanglingEdge
     HikeEmptyPath
     HikeLeafUnexpected
@@ -92,6 +93,10 @@ type
     PartTrkLeafPfxMismatch
     PartTrkLinkExpected
     PartTrkRlpError
+
+    # TxFrame blobify/deblobify
+    DeblobTxFrameVersion
+    DeblobTxFrameTruncated
 
     # RocksDB backend
     RdbBeCantCreateTmpDir

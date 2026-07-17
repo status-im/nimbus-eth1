@@ -145,7 +145,7 @@ func initAddr(z: int): Address =
 proc importBlock(env: TestEnv; blk: Block) =
   (waitFor env.chain.importBlock(blk)).isOkOr:
     raiseAssert "persistBlocks() failed at block #" &
-      $blk.header.number & " msg: " & error
+      $blk.header.number & " msg: " & error.msg
 
 proc getLedger(txFrame: CoreDbTxRef): LedgerRef =
   LedgerRef.init(txFrame)
@@ -303,7 +303,7 @@ proc runLedgerTransactionTests(noisy = true) =
 
         blockTime = EthTime(blockTime.uint64 + 1'u64)
 
-        let r = env.xp.assembleBlock()
+        let r = env.xp.assembleBlock(env.xp.chain.latestHash)
         if r.isErr:
           debugEcho r.error
           check false
@@ -398,20 +398,23 @@ proc runLedgerBasicOperationsTests() =
     test "clone storage":
       # give access to private fields of AccountRef
       privateAccess(AccountRef)
+      privateAccess(OriginalValueRef)
       var x = AccountRef(
         overlayStorage: Table[UInt256, UInt256](),
-        originalStorage: newTable[UInt256, UInt256]()
+        original: OriginalValueRef(
+          storage: Table[UInt256, UInt256]()
+        )
       )
 
       x.overlayStorage[10.u256] = 11.u256
       x.overlayStorage[11.u256] = 12.u256
 
-      x.originalStorage[10.u256] = 11.u256
-      x.originalStorage[11.u256] = 12.u256
+      x.original.storage[10.u256] = 11.u256
+      x.original.storage[11.u256] = 12.u256
 
       var y = x.clone(cloneStorage = true)
       y.overlayStorage[12.u256] = 13.u256
-      y.originalStorage[12.u256] = 13.u256
+      y.original.storage[12.u256] = 13.u256
 
       check 12.u256 notin x.overlayStorage
       check 12.u256 in y.overlayStorage
@@ -419,11 +422,11 @@ proc runLedgerBasicOperationsTests() =
       check x.overlayStorage.len == 2
       check y.overlayStorage.len == 3
 
-      check 12.u256 in x.originalStorage
-      check 12.u256 in y.originalStorage
+      check 12.u256 in x.original.storage
+      check 12.u256 in y.original.storage
 
-      check x.originalStorage.len == 3
-      check y.originalStorage.len == 3
+      check x.original.storage.len == 3
+      check y.original.storage.len == 3
 
     test "Ledger various operations":
       var ledger = LedgerRef.init(memDB.baseTxFrame())

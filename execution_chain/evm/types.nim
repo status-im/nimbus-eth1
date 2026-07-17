@@ -16,9 +16,11 @@ import
   ./transient_storage,
   ../db/ledger,
   ../common/[common, evmforks],
-  ../block_access_list/block_access_list_tracker
+  ../block_access_list/bal_tracker
 
-export stack, memory, transient_storage, block_access_list_tracker
+from ../common/hardforks import HardFork
+
+export stack, memory, transient_storage, bal_tracker
 
 type
   VMFlag* = enum
@@ -27,14 +29,13 @@ type
   BlockContext* = object
     timestamp*        : EthTime
     gasLimit*         : GasInt
-    baseFeePerGas*    : Opt[UInt256]
+    baseFeePerGas*    : GasInt
     prevRandao*       : Bytes32
     difficulty*       : UInt256
     coinbase*         : Address
     excessBlobGas*    : uint64
     parentHash*       : Hash32
     slotNumber*       : uint64
-    costPerStateByte* : GasInt
 
   TxContext* = object
     origin*         : Address
@@ -50,6 +51,7 @@ type
     txCtx*            : TxContext
     flags*            : set[VMFlag]
     fork*             : EVMFork
+    hardFork*         : HardFork
     tracer*           : TracerRef
     receipts*         : seq[StoredReceipt]
     cumulativeGasUsed*: GasInt
@@ -77,8 +79,9 @@ type
     savePoint*:             LedgerSpRef
     instr*:                 Op
     opIndex*:               int
-    parent*, child*:        Computation
-    continuation*:          proc(): EvmResultVoid {.gcsafe, raises: [].}
+    parent* {.cursor.}:     Computation  # non-owning back pointer
+    child*:                 Computation  # owning front pointer
+    continuation*:          proc(c: Computation): EvmResultVoid {.gcsafe, raises: [].}
     keepStack*:             bool
     finalStack*:            seq[UInt256]
     balTrackerEnabled*:     bool
@@ -100,8 +103,9 @@ type
     gasRefunded*: int64
     gasRemaining*: GasInt
     stateGasLeft*: GasInt
-    stateGasUsed*: GasInt
+    stateGasUsed*: int64
     regularGasUsed*: GasInt
+    stateGasSpilled*: GasInt
 
   CallKind* {.pure.} = enum
     Call          # Request CALL.
@@ -113,6 +117,9 @@ type
 
   MsgFlags* {.pure.} = enum
     Static
+    Precompile
+    TargetAlive
+    Delegated
 
   Message* = ref object
     kind*:             CallKind
@@ -122,6 +129,7 @@ type
     sender*:           Address
     contractAddress*:  Address
     codeAddress*:      Address
+    delegateTo*:       Address
     value*:            UInt256
     data*:             seq[byte]
     flags*:            set[MsgFlags]

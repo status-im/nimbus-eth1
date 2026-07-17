@@ -53,6 +53,45 @@ proc writeBaggage*(
       generatedBal.get(),
     )
 
+proc getVmState(
+    c: ForkedChainRef,
+    parentBlk: BlockRef,
+    txFrame: CoreDbTxRef,
+    header: Header,
+    blockAccessList: Opt[BlockAccessListRef],
+    finalized: bool,
+): BaseVMState =
+  let enableBalTracker = (not finalized or blockAccessList.isNone()) and
+      c.com.isAmsterdamOrLater(header.timestamp)
+
+  # The vmState stays nil unless this block succeeds, so a half-executed ledger
+  # can never be reused.
+  let
+    cached = c.vmState
+    cachedBlockHash = c.vmStateBlockHash
+  c.vmState = nil
+  c.vmStateBlockHash.reset()
+
+  # The ledger caches are valid only if the new block builds directly on the
+  # block this vmState just executed.
+  if not cached.isNil():
+    if parentBlk.hash == cachedBlockHash and
+        cached.reinit(parentBlk.header, header, txFrame, enableBalTracker):
+      return cached
+
+    cached.dispose()
+
+
+  let vmState = BaseVMState()
+  vmState.init(
+    parentBlk.header,
+    header,
+    c.com,
+    txFrame,
+    enableBalTracker = enableBalTracker,
+  )
+  vmState
+
 proc processBlock*(
     c: ForkedChainRef,
     parentBlk: BlockRef,
@@ -65,35 +104,32 @@ proc processBlock*(
   template header(): Header =
     blk.header
 
-  let vmState = BaseVMState()
-  vmState.init(
-    parentBlk.header,
-    header,
-    c.com,
-    txFrame,
-    enableBalTracker = (not finalized or blockAccessList.isNone()) and
-        c.com.isAmsterdamOrLater(header.timestamp),
-  )
-
+  # Validate the header before acquiring the vmState so that invalid
+  # headers must not evict the warm vmState that valid blocks reuse.
   c.com.validateHeaderAndKinship(
     blk,
     blockAccessList,
     # Depending on the BAL retention period of clients, finalized blocks might
     # be received without a BAL. In this case we skip checking the BAL against
     # the header bal hash.
-    # For now we allow BALs to be optional even for finalized blocks for bal-devnet-2.
-    # Once clients have implemented the devp2p eth/71 protocol we can require BALs
-    # to be present for finalized blocks.
-    skipPreExecBalCheck = blockAccessList.isNone(), # finalized and blockAccessList.isNone(),
-    vmState.parent,
+    skipPreExecBalCheck = blockAccessList.isNone(),
+    parentBlk.header,
     txFrame
   ).isOkOr:
-    c.badBlocks.put(blkHash, (blk, vmState.blockAccessList))
+    c.badBlocks.put(blkHash, (blk, blockAccessList))
     return err(error)
+
+  let vmState = c.getVmState(parentBlk, txFrame, header, blockAccessList, finalized)
+
+  var cached = false
+  defer:
+    if not cached:
+      vmState.dispose()
 
   template processBlock(): auto =
     vmState.processBlock(
       blk,
+      blockAccessList = blockAccessList,
       skipValidation = false,
       skipReceipts = false,
       skipUncles = true,
@@ -111,13 +147,14 @@ proc processBlock*(
       c.badBlocks.put(blkHash, (blk, vmState.blockAccessList))
       return err(error)
 
-  if not vmState.com.statelessProviderEnabled:
+  if not vmState.com.statelessProvider:
     processBlock()
   else:
     # Clear the caches before executing the block to ensure we collect the correct
     # witness keys and block hashes when processing the block as these will be used
     # when building the witness.
     vmState.ledger.clearWitnessKeys()
+    vmState.ledger.clearCollapsedSiblings()
     vmState.ledger.clearBlockHashesCache()
 
     processBlock()
@@ -129,8 +166,8 @@ proc processBlock*(
     # Convert the witness to ExecutionWitness format and verify against the pre-stateroot.
     if vmState.com.statelessWitnessValidation:
       doAssert witness.validateKeys(vmState.ledger.getWitnessKeys()).isOk()
-      let executionWitness = ExecutionWitness.build(witness, vmState.ledger)
-      ?executionWitness.statelessProcessBlock(c.com, blk)
+      let executionWitness = ExecutionWitnessWithKeys.build(witness, vmState.ledger)
+      ?executionWitness.toExecutionWitness().statelessProcessBlock(c.com, blk)
 
     ?vmState.ledger.txFrame.persistWitness(blkHash, witness)
 
@@ -139,5 +176,10 @@ proc processBlock*(
   ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory)
 
   c.writeBaggage(blk, blockAccessList, blkHash, txFrame, vmState.receipts, vmState.blockAccessList)
+
+  # Cache for the next block - the ledger caches stay warm on linear import
+  c.vmState = vmState
+  c.vmStateBlockHash = blkHash
+  cached = true
 
   ok(move(vmState.receipts))

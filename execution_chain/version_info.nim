@@ -10,12 +10,17 @@
 
 import
   std/[os, strutils, strformat],
+  metrics,
   stew/byteutils,
   beacon_chain/buildinfo,
   ./compile_info,
   ./version
 
 export version
+
+declareGauge nec_version,
+  "Nimbus execution client version info (as metric labels)",
+  ["version", "commit"], name = "nec_version"
 
 const
   NimbusName* = "Nimbus"
@@ -37,3 +42,5 @@ const
   ClientId* = &"{NimbusName}/{FullVersionStr}/{CpuInfo}"
 
   ShortClientId* = NimbusName & "/" & FullVersionStr
+
+nec_version.set(1, labelValues = [FullVersionStr, GitRevision])

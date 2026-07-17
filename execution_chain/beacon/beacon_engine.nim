@@ -85,10 +85,12 @@ const
 
 func setWithdrawals(xp: TxPoolRef, attrs: PayloadAttributes) =
   case attrs.version
-  of Version.V2, Version.V3:
-    xp.withdrawals = ethWithdrawals attrs.withdrawals.get
-  else:
+  of Version.V1:
     xp.withdrawals = @[]
+  of Version.V2 .. Version.V4:
+    xp.withdrawals = ethWithdrawals attrs.withdrawals.get
+  of Version.V5, Version.V6:
+    raiseAssert "unreachable: PayloadAttributes has no V5/V6 variant"
 
 template wrapException(body: untyped): auto =
   try:
@@ -148,17 +150,23 @@ func getPayloadBundle*(ben: BeaconEngineRef, id: Bytes8): Opt[ExecutionBundle] =
 # ------------------------------------------------------------------------------
 proc generateExecutionBundle*(
   ben: BeaconEngineRef,
+  headHash: Hash32,
   attrs: PayloadAttributes
 ): Result[ExecutionBundle, string] =
 
   wrapException:
     let
       xp  = ben.txPool
-      headBlock = ben.chain.latestHeader
+      # Build on the forkchoiceUpdated headBlockHash: `chain.latest` tracks the
+      # most recently imported block, which may be a sibling of the requested
+      # head when multiple valid payloads exist at the same height.
+      headBlock = ben.chain.headerByHash(headHash).valueOr:
+        return err("payload build parent not found: " & headHash.short)
 
     xp.prevRandao   = attrs.prevRandao
     xp.timestamp    = ethTime attrs.timestamp
     xp.feeRecipient = attrs.suggestedFeeRecipient
+    xp.targetGasLimit = u64 attrs.targetGasLimit
 
     if attrs.parentBeaconBlockRoot.isSome:
       xp.parentBeaconBlockRoot = attrs.parentBeaconBlockRoot.get
@@ -173,7 +181,8 @@ proc generateExecutionBundle*(
 
     # someBaseFee = true: make sure bundle.blk.header
     # have the same blockHash with generated payload
-    let bundle = xp.assembleBlock(someBaseFee = true).valueOr:
+    let bundle = xp.assembleBlock(someBaseFee = true,
+                                  parentHash = headHash).valueOr:
       return err(error)
 
     if bundle.blk.header.extraData.len > 32:

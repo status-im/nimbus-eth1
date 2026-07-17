@@ -20,7 +20,7 @@ import
 template fromJson(T: type Address, n: JsonNode): Address =
   Address.fromHex(n.getStr)
 
-proc fromJson(T: type UInt256, n: JsonNode): UInt256 =
+func fromJson(T: type UInt256, n: JsonNode): UInt256 =
   # stTransactionTest/ValueOverflow.json
   # prevent parsing exception and subtitute it with max uint256
   let hex = n.getStr
@@ -42,8 +42,12 @@ proc fromJson(T: type seq[byte], n: JsonNode): T =
   else:
     hexToSeqByte(hex)
 
-template fromJson(T: type uint64, n: JsonNode): uint64 =
-  fromHex[AccountNonce](n.getStr)
+func fromJson(T: type uint64, n: JsonNode): uint64 =
+  let x = UInt256.fromJson(n)
+  if x > uint64.high.u256:
+    uint64.high
+  else:
+    fromHex[AccountNonce](n.getStr)
 
 template fromJson(T: type uint8, n: JsonNode): uint8 =
   fromHex[uint8](n.getStr)
@@ -140,6 +144,7 @@ proc parseHeader*(n: JsonNode): Header =
 
 proc parseParentHeader*(n: JsonNode): Header =
   Header(
+    number: required(BlockNumber, "currentNumber") - 1,
     stateRoot: emptyRoot,
     excessBlobGas: optional(uint64, "parentExcessBlobGas"),
     blobGasUsed: optional(uint64, "parentBlobGasUsed"),

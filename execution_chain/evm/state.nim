@@ -14,9 +14,8 @@ import
   std/[options, sets, strformat],
   stew/assign2,
   ../db/ledger,
-  ../common/[common, evmforks],
-  ../block_access_list/block_access_list_tracker,
-  ../core/eip8037,
+  ../common/common,
+  ../block_access_list/bal_tracker,
   ./interpreter/[op_codes, gas_costs],
   ./types,
   ./evm_errors
@@ -24,8 +23,8 @@ import
 func forkDeterminationInfoForVMState(vmState: BaseVMState): ForkDeterminationInfo =
   forkDeterminationInfo(vmState.parent.number + 1, vmState.blockCtx.timestamp)
 
-func determineFork(vmState: BaseVMState): EVMFork =
-  vmState.com.toEVMFork(vmState.forkDeterminationInfoForVMState)
+func determineFork*(vmState: BaseVMState): HardFork =
+  vmState.com.toHardFork(vmState.forkDeterminationInfoForVMState)
 
 proc init(
       self:         BaseVMState;
@@ -35,7 +34,7 @@ proc init(
       com:          CommonRef;
       tracer:       TracerRef,
       tracker:      BlockAccessListTrackerRef,
-      flags:        set[VMFlag] = self.flags) =
+      flags:        set[VMFlag] = {}) =
   ## Initialisation helper
   # Take care to (re)set all fields since the VMState might be recycled
   self.com = com
@@ -45,7 +44,8 @@ proc init(
   const txCtx = default(TxContext)
   assign(self.txCtx, txCtx)
   self.flags = flags
-  self.fork = self.determineFork
+  self.hardFork = self.determineFork
+  self.fork = ToEVMFork[self.hardFork]
   self.tracer = tracer
   self.receipts.setLen(0)
   self.cumulativeGasUsed = 0
@@ -61,14 +61,13 @@ func blockCtx(header: Header): BlockContext =
   BlockContext(
     timestamp    : header.timestamp,
     gasLimit     : header.gasLimit,
-    baseFeePerGas: header.baseFeePerGas,
+    baseFeePerGas: header.baseFeePerGas.get(0.u256).truncate(GasInt),
     prevRandao   : header.prevRandao,
     difficulty   : header.difficulty,
     coinbase     : header.coinbase,
     excessBlobGas: header.excessBlobGas.get(0'u64),
     parentHash   : header.parentHash,
     slotNumber   : header.slotNumber.get(0'u64),
-    costPerStateByte: stateGasPerByte(header.gasLimit),
   )
 
 # --------------
@@ -97,7 +96,7 @@ proc new*(
   ## `BaseVMState` environment where the account state cache is synchronised
   ## with the `parent` block header.
   let
-    ledger = LedgerRef.init(txFrame, storeSlotHash, com.statelessProviderEnabled)
+    ledger = LedgerRef.init(txFrame, storeSlotHash, com.statelessProvider)
     tracker =
       if enableBalTracker:
         BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger)
@@ -114,6 +113,11 @@ proc new*(
     tracker  = tracker
   )
 
+proc dispose*(vmState: BaseVMState) =
+  if not vmState.balTracker.isNil():
+    vmState.balTracker.dispose()
+    vmState.balTracker = nil
+
 proc reinit*(self:     BaseVMState;     ## Object descriptor
              parent:   Header;     ## parent header, account sync pos.
              blockCtx: BlockContext;
@@ -127,27 +131,25 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
   ## queries about its `getStateRoot()`, i.e. `isTopLevelClean` evaluated `true`. If
   ## this function returns `false`, the function argument `self` is left
   ## untouched.
-
-  if not self.balTracker.isNil():
-    self.balTracker = BlockAccessListTrackerRef.init(self.ledger.ReadOnlyLedger)
-
   if not self.ledger.isTopLevelClean:
     return false
+
+  if not self.balTracker.isNil():
+    self.balTracker.dispose()
+    self.balTracker = BlockAccessListTrackerRef.init(self.ledger.ReadOnlyLedger)
 
   let
     tracer = self.tracer
     tracker = self.balTracker
     com    = self.com
     ledger     = self.ledger
-    flags  = self.flags
   self.init(
     ledger       = ledger,
     parent   = parent,
     blockCtx = blockCtx,
     com      = com,
     tracer   = tracer,
-    tracker  = tracker,
-    flags    = flags)
+    tracker  = tracker)
   true
 
 proc reinit*(self:   BaseVMState; ## Object descriptor
@@ -165,6 +167,37 @@ proc reinit*(self:   BaseVMState; ## Object descriptor
     blockCtx = blockCtx(header),
     )
 
+proc reinit*(self:    BaseVMState; ## Object descriptor
+             parent:  Header;      ## parent header, account sync pos.
+             header:  Header;      ## header with tx environment data fields
+             txFrame: CoreDbTxRef; ## frame accumulating the new block's changes
+             enableBalTracker: bool;
+             ): bool =
+  ## Variant of `reinit()` which also moves the ledger over to a new `txFrame`
+  ## and rebuilds the BAL tracker from explicit per-block flags.
+  if not self.ledger.isTopLevelClean:
+    return false
+
+  self.ledger.reinit(txFrame)
+
+  if not self.balTracker.isNil():
+    self.balTracker.dispose()
+    self.balTracker = nil
+
+  let tracker =
+    if enableBalTracker:
+      BlockAccessListTrackerRef.init(self.ledger.ReadOnlyLedger)
+    else:
+      nil
+  self.init(
+    ledger   = self.ledger,
+    parent   = parent,
+    blockCtx = blockCtx(header),
+    com      = self.com,
+    tracer   = self.tracer,
+    tracker  = tracker)
+  true
+
 proc init*(
       self:   BaseVMState;     ## Object descriptor
       parent: Header;     ## parent header, account sync position
@@ -173,7 +206,9 @@ proc init*(
       txFrame: CoreDbTxRef;
       tracer: TracerRef = nil,
       storeSlotHash = false,
-      enableBalTracker = false) =
+      enableBalTracker = false,
+      stateless = false) =
+
   ## Variant of `new()` constructor above for in-place initalisation. The
   ## `parent` argument is used to sync the accounts cache and the `header`
   ## is used as a container to pass the `timestamp`, `gasLimit`, and `fee`
@@ -182,7 +217,8 @@ proc init*(
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
   let
-    ledger = LedgerRef.init(txFrame, storeSlotHash, com.statelessProviderEnabled)
+    ledger = LedgerRef.init(
+      txFrame, storeSlotHash, com.statelessProvider, stateless)
     tracker =
       if enableBalTracker:
         BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger)
@@ -243,9 +279,6 @@ proc difficultyOrPrevRandao*(vmState: BaseVMState): UInt256 =
     UInt256.fromBytesBE(vmState.blockCtx.prevRandao.data)
   else:
     vmState.blockCtx.difficulty
-
-func baseFeePerGas*(vmState: BaseVMState): UInt256 =
-  vmState.blockCtx.baseFeePerGas.get(0.u256)
 
 method getAncestorHash*(
     vmState: BaseVMState, blockNumber: BlockNumber): Hash32 {.gcsafe, base.} =

@@ -13,7 +13,9 @@ type
     Frontier
     Homestead
     EIP150
+    TangerineWhistle
     EIP158
+    SpuriousDragon
     Byzantium
     Constantinople
     ConstantinopleFix
@@ -53,6 +55,7 @@ type
     BPO4ToBPO5AtTime15k
     Amsterdam
     BPO2ToAmsterdamAtTime15k
+    Bogota
 
   LogLevel* = enum
     Silent

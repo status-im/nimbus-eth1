@@ -19,6 +19,7 @@ import
   ./evm_errors,
   ./code_bytes,
   ./eip7708,
+  ../core/eip8037,
   ../common/[evmforks],
   ../utils/[utils, mergeutils],
   ../common/common,
@@ -43,8 +44,8 @@ template getCoinbase*(c: Computation): Address =
 template getTimestamp*(c: Computation): uint64 =
   c.vmState.blockCtx.timestamp.uint64
 
-template getBlockNumber*(c: Computation): UInt256 =
-  c.vmState.blockNumber.u256
+template getBlockNumber*(c: Computation): uint64 =
+  c.vmState.blockNumber
 
 template getDifficulty*(c: Computation): DifficultyInt =
   c.vmState.difficultyOrPrevRandao
@@ -52,8 +53,8 @@ template getDifficulty*(c: Computation): DifficultyInt =
 template getGasLimit*(c: Computation): GasInt =
   c.vmState.blockCtx.gasLimit
 
-template getBaseFee*(c: Computation): UInt256 =
-  c.vmState.blockCtx.baseFeePerGas.get(0.u256)
+template getBaseFee*(c: Computation): GasInt =
+  c.vmState.blockCtx.baseFeePerGas
 
 template getSlotNum*(c: Computation): UInt256 =
   c.vmState.blockCtx.slotNumber.u256
@@ -119,9 +120,6 @@ template getCodeHash*(c: Computation, address: Address): Hash32 =
     default(Hash32)
   else:
     db.getCodeHash(address)
-
-template getCostPerStateByte*(c: Computation): GasInt =
-  c.vmState.blockCtx.costPerStateByte
 
 template selfDestruct*(c: Computation, address: Address) =
   c.execSelfDestruct(address)
@@ -259,7 +257,7 @@ proc writeContract*(c: Computation) =
         break writeContractCode
 
       let
-        codeDepositStateGas = len.GasInt * c.vmState.blockCtx.costPerStateByte
+        codeDepositStateGas = len.GasInt * COST_PER_STATE_BYTE
         codeHashGas = (6 * wordCount(len)).GasInt
 
       c.gasMeter.consumeGas(codeHashGas, reason = "Code hash gas").isOkOr:
@@ -300,13 +298,16 @@ proc writeContract*(c: Computation) =
     # The account already has zero-length code to handle nested calls.
     withExtra trace, "New contract given empty code by pre-Homestead rules"
 
-template chainTo*(c: Computation,
-                  toChild: typeof(c.child),
+template chainTo*(cpt: Computation,
+                  toChild: typeof(cpt.child),
                   after: untyped) =
 
-  c.child = toChild
-  c.continuation = proc(): EvmResultVoid {.gcsafe, raises: [].} =
-    c.continuation = nil
+  cpt.child = toChild
+  cpt.continuation = proc(cc: Computation): EvmResultVoid {.gcsafe, raises: [].} =
+    cc.continuation = nil
+    let # we inject these variables so the `after` block can use it without having to capture
+      c {.inject.} = cc
+      child {.inject} = cc.child
     after
 
 proc execSelfDestruct*(c: Computation, beneficiary: Address) =
@@ -316,36 +317,29 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
 
     # Register the account to be deleted
     if c.fork >= FkCancun:
+      # Zeroing contract balance except beneficiary is the same address
       if c.balTrackerEnabled:
-        # Zeroing contract balance except beneficiary is the same address
         c.vmState.balTracker.trackSubBalanceChange(c.msg.contractAddress, localBalance)
-        ledger.subBalance(c.msg.contractAddress, localBalance)
-        # Transfer to beneficiary
+      ledger.subBalance(c.msg.contractAddress, localBalance)
+
+      # Transfer to beneficiary
+      if c.balTrackerEnabled:
         c.vmState.balTracker.trackAddBalanceChange(beneficiary, localBalance)
-        ledger.addBalance(beneficiary, localBalance)
-        if ledger.selfDestruct6780(c.msg.contractAddress):
-          c.vmState.balTracker.trackInTransactionSelfDestruct(c.msg.contractAddress)
-          newContract = true
-      else:
-        # Zeroing contract balance except beneficiary is the same address
-        ledger.subBalance(c.msg.contractAddress, localBalance)
-        # Transfer to beneficiary
-        ledger.addBalance(beneficiary, localBalance)
-        newContract = ledger.selfDestruct6780(c.msg.contractAddress)
+      ledger.addBalance(beneficiary, localBalance, checkEmptyAccount = c.fork < FkParis)
+
+      newContract = if c.fork >= FkAmsterdam:
+                      ledger.selfDestruct8246(c.msg.contractAddress)
+                    else:
+                      ledger.selfDestruct6780(c.msg.contractAddress)
+      if c.balTrackerEnabled and newContract:
+        c.vmState.balTracker.trackInTransactionSelfDestruct(c.msg.contractAddress)
 
       if c.fork >= FkAmsterdam:
         c.emitSelfDestructLog(beneficiary, localBalance, newContract)
     else:
-      if c.balTrackerEnabled:
-        # Transfer to beneficiary
-        c.vmState.balTracker.trackAddBalanceChange(beneficiary, localBalance)
-        ledger.addBalance(beneficiary, localBalance)
-        c.vmState.balTracker.trackSelfDestruct(c.msg.contractAddress)
-        ledger.selfDestruct(c.msg.contractAddress)
-      else:
-        # Transfer to beneficiary
-        ledger.addBalance(beneficiary, localBalance)
-        ledger.selfDestruct(c.msg.contractAddress)
+      # Transfer to beneficiary
+      ledger.addBalance(beneficiary, localBalance, checkEmptyAccount = c.fork < FkParis)
+      ledger.selfDestruct(c.msg.contractAddress)
 
     trace "SELFDESTRUCT",
       contractAddress = c.msg.contractAddress.toHex,

@@ -25,7 +25,7 @@ type
 
 func toStr*(inx: StateRankIndex): string =
   var s = "("
-  if inx.unprocTotal == 0:
+  if inx.unprocTotal.isZero:
     s &= "0"
   elif inx.unprocTotal == high(UInt256):
     s &= "1"
@@ -56,7 +56,7 @@ func to*[T: StateRankIndex](pair: (Opt[UInt256],BlockNumber), _: type T): T =
   ## same image `high(UInt256)`.
   ##
   T(unprocTotal: (if pair[0].isNone: 0.u256
-                  elif pair[0].value == 0: high UInt256
+                  elif pair[0].value.isZero: high UInt256
                   else: pair[0].value),
     blockNumber: pair[1])
 

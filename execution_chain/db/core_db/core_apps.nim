@@ -530,6 +530,23 @@ proc getReceipts*(
       receipts.add(r)
     return ok(receipts)
 
+proc getReceiptByIndex*(
+    db: CoreDbTxRef;
+    receiptsRoot: Hash32;
+    index: uint16;
+      ): Result[StoredReceipt, string] =
+  const
+    info = "getReceiptByIndex()"
+
+  let key = hashIndexKey(receiptsRoot, index)
+  let data = db.getOrEmpty(key).valueOr:
+    return err($$error)
+  if data.len == 0:
+    return err("receipt data is empty for root=" & $receiptsRoot & " and index=" & $index)
+
+  wrapRlpException info:
+    return ok(rlp.decode(data, StoredReceipt))
+
 proc persistScore(
     db: CoreDbTxRef;
     blockHash: Hash32;

@@ -14,9 +14,10 @@ import
   std/[macros, strformat],
   chronicles,
   stew/byteutils,
+  ../core/eip8037,
   ../constants,
   ../db/ledger,
-  ./interpreter/op_dispatcher,
+  ./interpreter/[op_dispatcher, gas_costs],
   ./[code_stream, computation, evm_errors, message, precompiles, state, types]
 
 logScope:
@@ -66,7 +67,19 @@ macro selectVM(v: VmCpt, fork: EVMFork, tracingEnabled: bool): EvmResultVoid =
     caseStmt.add nnkOfBranch.newTree(forkVal, call)
   caseStmt
 
-proc beforeExecCall(c: Computation) =
+proc beforeExecCall(c: Computation): bool =
+  if c.fork >= FkAmsterdam and c.msg.depth == 0:
+    if c.msg.value.isZero.not and
+      c.vmState.readOnlyLedger.isDeadAccount(c.msg.codeAddress):
+      c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "topFrameCharges").isOkOr:
+        c.setError($error.code, true)
+        return true
+
+    if MsgFlags.Delegated in c.msg.flags:
+      c.gasMeter.consumeGas(COLD_ACCOUNT_ACCESS_8038, "topFrameCharges").isOkOr:
+        c.setError($error.code, true)
+        return true
+
   c.beginSavePoint()
   if c.msg.kind == CallKind.Call:
     c.vmState.mutateLedger:
@@ -74,14 +87,16 @@ proc beforeExecCall(c: Computation) =
         c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
         ledger.subBalance(c.msg.sender, c.msg.value)
         c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
-        ledger.addBalance(c.msg.contractAddress, c.msg.value)
+        ledger.addBalance(c.msg.contractAddress, c.msg.value, checkEmptyAccount = c.fork < FkParis)
       else:
         ledger.subBalance(c.msg.sender, c.msg.value)
-        ledger.addBalance(c.msg.contractAddress, c.msg.value)
+        ledger.addBalance(c.msg.contractAddress, c.msg.value, checkEmptyAccount = c.fork < FkParis)
 
     if c.fork >= FkAmsterdam:
       # EIP-7708: Emit transfer log for ETH-tx or contract call and CALL op code
       c.emitTransferLog()
+
+  false
 
 proc afterExecCall(c: Computation) =
   ## Collect all of the accounts that *may* need to be deleted based on EIP161
@@ -92,11 +107,6 @@ proc afterExecCall(c: Computation) =
     if c.msg.contractAddress == RIPEMD_ADDR:
       # Special case to account for geth+parity bug
       c.vmState.ledger.ripemdSpecial()
-
-  if c.isSuccess:
-    c.commit()
-  else:
-    c.rollback()
 
 proc beforeExecCreate(c: Computation): bool =
   c.vmState.mutateLedger:
@@ -119,15 +129,12 @@ proc beforeExecCreate(c: Computation): bool =
 
   if c.balTrackerEnabled:
     c.vmState.balTracker.trackAddressAccess(c.msg.contractAddress)
+
+  if c.fork >= FkAmsterdam:
+    if c.vmState.readOnlyLedger().accountExists(c.msg.contractAddress):
+      c.msg.flags.incl MsgFlags.TargetAlive
+
   if c.vmState.readOnlyLedger().contractCollision(c.msg.contractAddress):
-    # Per EIP-684 collision behaves as an immediate exceptional halt,
-    # so the burned gas belongs in the regular dimension.
-    # On CREATE/CREATE2 address collision the 63/64 gas allocation is
-    # burned and added to regularGasUsed.
-    # But contract creation tx collision does not add the burned gas to
-    # regularGasUsed.
-    if c.msg.depth == 0:
-      c.gasMeter.gasRemaining = 0
     let blurb = c.msg.contractAddress.toHex
     c.setError("Address collision when creating contract address=" & blurb, true)
     return true
@@ -139,15 +146,14 @@ proc beforeExecCreate(c: Computation): bool =
       c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
       ledger.subBalance(c.msg.sender, c.msg.value)
       c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
-      ledger.addBalance(c.msg.contractAddress, c.msg.value)
+      ledger.addBalance(c.msg.contractAddress, c.msg.value, checkEmptyAccount = c.fork < FkParis)
       ledger.clearStorage(c.msg.contractAddress)
       if c.fork >= FkSpurious:
-        # EIP161 nonce incrementation
         c.vmState.balTracker.trackIncNonceChange(c.msg.contractAddress)
         ledger.incNonce(c.msg.contractAddress)
     else:
       ledger.subBalance(c.msg.sender, c.msg.value)
-      ledger.addBalance(c.msg.contractAddress, c.msg.value)
+      ledger.addBalance(c.msg.contractAddress, c.msg.value, checkEmptyAccount = c.fork < FkParis)
       ledger.clearStorage(c.msg.contractAddress)
       if c.fork >= FkSpurious:
         # EIP161 nonce incrementation
@@ -167,11 +173,6 @@ proc afterExecCreate(c: Computation) =
     # `REVERT` is returned after a create.  Clearing in this branch covers the
     # right cases, particularly important with EVMC where it must be cleared.
     c.output.reset()
-
-  if c.isSuccess:
-    c.commit()
-  else:
-    c.rollback()
 
 const MsgKindToOp: array[CallKind, Op] =
   [Call, DelegateCall, CallCode, Create, Create2]
@@ -193,17 +194,22 @@ proc beforeExec(c: Computation): bool =
       c.msg.value,
     )
 
-  if not c.msg.isCreate:
-    c.beforeExecCall()
-    false
-  else:
+  if c.msg.isCreate:
     c.beforeExecCreate()
+  else:
+    c.beforeExecCall()
 
 proc afterExec(c: Computation) =
   if not c.msg.isCreate:
     c.afterExecCall()
   else:
     c.afterExecCreate()
+
+  if c.isSuccess:
+    c.commit()
+  else:
+    c.gasMeter.refillFrameStateGas()
+    c.rollback()
 
   if c.msg.depth > 0:
     let gasUsed = c.msg.gas - c.gasMeter.gasRemaining
@@ -225,13 +231,13 @@ proc executeOpcodes*(c: Computation) =
   block blockOne:
     let cont = c.continuation
     if cont.isNil:
-      let precompile = c.fork.getPrecompile(c.msg.codeAddress)
-      if precompile.isSome:
+      if MsgFlags.Precompile in c.msg.flags:
+        let precompile = c.fork.getPrecompile(c.msg.codeAddress)
         c.execPrecompile(precompile[])
         break blockOne
     else:
       c.continuation = nil
-      cont().isOkOr:
+      cont(c).isOkOr:
         handleEvmError(error)
         break blockOne
 
@@ -268,19 +274,28 @@ proc execCallOrCreate*(cParam: Computation) =
         break
       c.executeOpcodes()
       if c.continuation.isNil:
+        c.child = nil
         c.afterExec()
         break
-      (before, c.child, c, c.parent) =
-        (true, nil.Computation, c.child, c)
+
+      # recurse into the child computation
+      let child = c.child
+      child.parent = c
+      before = true
+      c = child
     if c.parent.isNil:
       break
     c.dispose()
-    (before, c.parent, c) =
-      (false, nil.Computation, c.parent)
+
+    # recurse out: child is still owned by the parent
+    before = false
+    c = c.parent
 
   while not c.isNil:
+    let p = c.parent
     c.dispose()
-    (c.parent, c) = (nil.Computation, c.parent)
+    c.child = nil
+    c = p
 
 func postExecComputation*(c: Computation) =
   if c.isSuccess:
@@ -290,14 +305,21 @@ func postExecComputation*(c: Computation) =
   c.vmState.status = c.isSuccess
 
 func preExecComputation*(c: Computation) =
-  if c.fork >= FkPrague and (
-    c.msg.contractAddress == WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS or
-    c.msg.contractAddress == CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS
-  ):
-    # EIP-7002 and EIP-7215 dicates that the code must be present, or else block is invalid
-    if c.code.bytes.len <= 0:
-      c.setError("No code found for withdrawal or consolidation requests contract")
+  if c.fork >= FkPrague:
+    if c.msg.contractAddress == WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS or
+       c.msg.contractAddress == CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS:
 
+      # EIP-7002 and EIP-7215 dicates that the code must be present, or else block is invalid
+      if c.code.len <= 0:
+        c.setError("No code found for withdrawal or consolidation requests contract")
+
+    if c.fork >= FkAmsterdam and (
+      c.msg.contractAddress == BUILDER_DEPOSIT_CONTRACT_ADDRESS or
+      c.msg.contractAddress == BUILDER_EXIT_CONTRACT_ADDRESS
+    ):
+      # EIP-8282 dicates that the code must be present, or else block is invalid
+      if c.code.len <= 0:
+        c.setError("No code found for builder deposit or exit requests contract")
 
 # ------------------------------------------------------------------------------
 # End
