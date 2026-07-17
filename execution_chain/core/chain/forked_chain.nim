@@ -382,12 +382,10 @@ with --debug-eager-state-root."""
     c.removeBlockFromCache(it)
     inc count
 
-  let finishTime = Moment.now()
-
-  # Aggregate split timings for the "Finalized blocks persisted" log so we
-  # can see at a glance which phase is eating the budget.
+  # Aggregate persist timing for the "Finalized blocks persisted" log. The
+  # cleanup loop above yields to the event loop, so only the persist phase
+  # counts as blocking time.
   c.persistMs += (postPersistTime - startTime).milliseconds
-  c.cleanupMs += (finishTime - postPersistTime).milliseconds
 
   if c.dynamicBatchSize:
     # Dynamicly adjust the persistBatchSize based on the recorded run time.
@@ -403,7 +401,7 @@ with --debug-eager-state-root."""
       batchSizeLowerBound = 4
       batchSizeUpperBound = 256
 
-    let runTime = (finishTime - startTime).milliseconds
+    let runTime = (postPersistTime - startTime).milliseconds
 
     if runTime < targetTimeLowerBound and c.persistBatchSize < batchSizeUpperBound:
       c.persistBatchSize = min(c.persistBatchSize + 4, batchSizeUpperBound)
@@ -441,8 +439,7 @@ proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async:
           resolvedFinNum = c.latestFinalized.number,
           resolvedFinHash = c.latestFinalized.hash.short,
           dbSnapshotsCount = c.baseTxFrame.aTx.db.snapshots.len(),
-          persistMs = c.persistMs,
-          cleanupMs = c.cleanupMs
+          persistMs = c.persistMs
       else:
         debug "Finalized blocks persisted",
           nBlocks = c.persistedCount,
@@ -453,12 +450,10 @@ proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async:
           resolvedFinNum = c.latestFinalized.number,
           resolvedFinHash = c.latestFinalized.hash.short,
           dbSnapshotsCount = c.baseTxFrame.aTx.db.snapshots.len(),
-          persistMs = c.persistMs,
-          cleanupMs = c.cleanupMs
+          persistMs = c.persistMs
       c.lastBaseLogTime = time
       c.persistedCount = 0
       c.persistMs = 0
-      c.cleanupMs = 0
     return ok()
 
   if c.queue.isNil:
