@@ -24,7 +24,7 @@ import
   pkg/[chronicles, chronos, eth/common, eth/trie/nibbles, stew/interval_set],
   ../../../../../db/aristo,
   ../../[helpers, mpt, worker_desc],
-  ../[session_clear, session_helpers],
+  ../[session_clear, session_helpers, session_pivot],
   ./analyse_desc
 
 export
@@ -398,6 +398,10 @@ template sessionAnalyseTrieIter*(cty: SnapCtxRef, info: static[string]): auto =
         bodyRc = typeof(bodyRc).err(ENoPivot)
         break body
 
+      pivotNum = cty.sessionPivotNum(info).valueOr:
+        bodyRc = typeof(bodyRc).err(ENoPivotNum)
+        break body
+
     template stats(): auto = trd.stats
 
     startTraversingMsg(info)
@@ -416,7 +420,7 @@ template sessionAnalyseTrieIter*(cty: SnapCtxRef, info: static[string]): auto =
           traversingAccountsMsg(stats, info)
 
     # Alsways store even without ranges, so the state root gets registered
-    trd.putAccMissingIntv(pivot, trd.ranges, info)
+    trd.putAccMissingIntv(pivotNum, trd.ranges, info)
 
     if 0 < trd.cacheErr:
       bodyRc = typeof(bodyRc).err(EPutError)

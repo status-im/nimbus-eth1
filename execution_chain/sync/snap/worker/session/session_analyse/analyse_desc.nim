@@ -29,6 +29,7 @@ type
     ENoRoot                                         # dangling root key
     ENoBranch                                       # missing branches
     ENoPivot                                        # no pivot state
+    ENoPivotNum                                     # ..
     ECancelled                                      # shutdown?
     EGetError                                       # serious database problem?
     EClearError                                     # ..
@@ -108,13 +109,13 @@ proc nMissAccRanges*(trd: TravDescRef, info: static[string]): (UInt256,int) =
 
 proc putAccMissingIntv*(
     trd: TravDescRef;
-    stateRoot: StateRoot;
+    number: BlockNumber;
     ranges: ItemKeyRangeSet;
     info: static[string];
       ) =
-  trd.db.putAccMissingIntv(stateRoot, ranges).isOkOr:
+  trd.db.putAccMissingIntv(number, ranges).isOkOr:
     error info & ": Error caching storage account ranges",
-      stateRoot=stateRoot.toStr, ranges=ranges.total.per256.pcStr, `error`=error
+      number, ranges=ranges.total.per256.pcStr, `error`=error
     trd.cacheErr.inc
 
 proc putStoMissingIntv*(

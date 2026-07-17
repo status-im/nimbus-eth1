@@ -80,14 +80,26 @@ proc getAccMissingIntv*(db: CacheDbRef): OptAccMissingIntvResult =
 
 proc putAccMissingIntv*(
     db: CacheDbRef;
-    root: StateRoot;
+    number: BlockNumber;
     ranges: ItemKeyRangeSet;
       ): PutResult =
-  db.put1(cMissingIntv, encodeAccMissingIntvData(root, ranges))
+  db.put1(cMissingIntv, encodeAccMissingIntvData(number, ranges))
+
+proc updAccMissingIntv*(
+    db: CacheDbRef;
+    number: BlockNumber;
+      ): PutResult =
+  let data = db.get1(cMissingIntv).valueOr:
+    return err(error)
+  if data.len == 0:
+    return err("missing record cannot be updated")
+  let res = data.decodeAccMissingIntvData().valueOr:
+    return err(error)
+  db.put1(cMissingIntv, encodeAccMissingIntvData(number, res.ranges))
 
 proc addAccMissingIntv*(
     db: CacheDbRef;
-    root: StateRoot;
+    number: BlockNumber;
     iv: ItemKeyRange;
       ): PutResult =
   let data = db.get1(cMissingIntv).valueOr:
@@ -98,9 +110,8 @@ proc addAccMissingIntv*(
   else:
     res = data.decodeAccMissingIntvData().valueOr:
       return err(error)
-  res.root = root
   discard res.ranges.merge iv
-  db.put1(cMissingIntv, encodeAccMissingIntvData(res.root, res.ranges))
+  db.put1(cMissingIntv, encodeAccMissingIntvData(number, res.ranges))
 
 proc delAccMissingIntv*(
     db: CacheDbRef,

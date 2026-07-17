@@ -95,7 +95,7 @@ type
     peerID: Hash
 
   CacheAccMissingIntvData* = tuple
-    root: StateRoot
+    number: BlockNumber
     ranges: ItemKeyRangeSet
 
   CacheStoMissingIntvData* = tuple

@@ -149,7 +149,7 @@ func decodeAccMissingIntvData*(
     res: CacheAccMissingIntvData
   try:
     rd.tryEnterList()
-    res.root = StateRoot rd.read(Hash32)
+    res.number = rd.read(BlockNumber)
     res.ranges = ItemKeyRangeSet.fromRlp rd.rawData()
   except RlpError as e:
     return err(info & ": " & $e.name & "(" & e.msg & ")")
@@ -254,11 +254,11 @@ template encodeBal*(
   rlp.encode bal[]
 
 template encodeAccMissingIntvData*(
-    root: StateRoot;
+    number: BlockNumber;
     rng: ItemKeyRangeSet;
       ): untyped =
   var wrt = initRlpList 2
-  wrt.append Hash32(root)
+  wrt.append number
   wrt.appendRawBytes rng.toRlp()
   var res = wrt.finish()
   res

@@ -23,7 +23,7 @@ import
   pkg/[chronicles, chronos, eth/common, eth/trie/nibbles, stew/interval_set],
   ../../../../../db/aristo,
   ../../[helpers, mpt, worker_desc],
-  ../[session_clear, session_helpers],
+  ../[session_clear, session_helpers, session_pivot],
   ./analyse_desc
 
 logScope:
@@ -265,6 +265,9 @@ proc sessionAnalyseTrieRecur*(
       debug info & ": MPT analysis failed, pivot missing"
       return err(ENoPivot)
 
+    pivotNum = ctx.sessionPivotNum(info).valueOr:
+      return err(ENoPivotNum)
+
   template stats(): auto = trd.stats
   startTraversingMsg(info)
 
@@ -281,7 +284,7 @@ proc sessionAnalyseTrieRecur*(
       return err(error)
 
   # Alsways store even without ranges, so the state root gets registered
-  trd.putAccMissingIntv(pivot, trd.ranges, info)
+  trd.putAccMissingIntv(pivotNum, trd.ranges, info)
 
   if 0 < trd.cacheErr:
     return err(EPutError)
