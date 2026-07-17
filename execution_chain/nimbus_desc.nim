@@ -88,6 +88,9 @@ proc closeWait*(nimbus: NimbusNode) {.async.} =
   if nimbus.txEvictor.isNil.not:
     waitedFutures.add nimbus.txEvictor.stop()
 
+  if nimbus.beaconEngine.isNil.not:
+    waitedFutures.add nimbus.beaconEngine.stop()
+
   waitedFutures.add nimbus.fc.stopProcessingQueue()
 
   let

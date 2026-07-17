@@ -9,21 +9,24 @@
 
 import
   std/[typetraits],
+  chronos,
+  json_rpc/errors,
   ../web3_eth_conv,
   ../beacon_engine,
   web3/execution_types,
   ./api_utils,
   chronicles
 
-{.push gcsafe, raises:[CatchableError].}
+{.push gcsafe, raises:[].}
 
 proc getPayload*(ben: BeaconEngineRef,
                  expectedVersion: Version,
-                 id: Bytes8): GetPayloadV2Response =
+                 id: Bytes8): Future[GetPayloadV2Response]
+                   {.async: (raises: [CancelledError, ApplicationError]).} =
   trace "Engine API request received",
     meth = "GetPayload", id
 
-  let bundle = ben.getPayloadBundle(id).valueOr:
+  let bundle = (await ben.getPayloadBundle(id)).valueOr:
     raise unknownPayload("Unknown bundle")
 
   let
@@ -46,11 +49,12 @@ proc getPayload*(ben: BeaconEngineRef,
     blockValue: bundle.blockValue
   )
 
-proc getPayloadV3*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV3Response =
+proc getPayloadV3*(ben: BeaconEngineRef, id: Bytes8): Future[GetPayloadV3Response]
+    {.async: (raises: [CancelledError, ApplicationError]).} =
   trace "Engine API request received",
     meth = "GetPayload", id
 
-  let bundle = ben.getPayloadBundle(id).valueOr:
+  let bundle = (await ben.getPayloadBundle(id)).valueOr:
     raise unknownPayload("Unknown bundle")
 
   let version = bundle.payload.version
@@ -73,11 +77,12 @@ proc getPayloadV3*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV3Response =
     shouldOverrideBuilder: false
   )
 
-proc getPayloadV4*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV4Response =
+proc getPayloadV4*(ben: BeaconEngineRef, id: Bytes8): Future[GetPayloadV4Response]
+    {.async: (raises: [CancelledError, ApplicationError]).} =
   trace "Engine API request received",
     meth = "GetPayload", id
 
-  let bundle = ben.getPayloadBundle(id).valueOr:
+  let bundle = (await ben.getPayloadBundle(id)).valueOr:
     raise unknownPayload("Unknown bundle")
 
   let version = bundle.payload.version
@@ -103,11 +108,12 @@ proc getPayloadV4*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV4Response =
     executionRequests: bundle.executionRequests.get,
   )
 
-proc getPayloadV5*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV5Response =
+proc getPayloadV5*(ben: BeaconEngineRef, id: Bytes8): Future[GetPayloadV5Response]
+    {.async: (raises: [CancelledError, ApplicationError]).} =
   trace "Engine API request received",
     meth = "GetPayload", id
 
-  let bundle = ben.getPayloadBundle(id).valueOr:
+  let bundle = (await ben.getPayloadBundle(id)).valueOr:
     raise unknownPayload("Unknown bundle")
 
   let version = bundle.payload.version
@@ -133,11 +139,12 @@ proc getPayloadV5*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV5Response =
     executionRequests: bundle.executionRequests.get,
   )
 
-proc getPayloadV6*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV6Response =
+proc getPayloadV6*(ben: BeaconEngineRef, id: Bytes8): Future[GetPayloadV6Response]
+    {.async: (raises: [CancelledError, ApplicationError]).} =
   trace "Engine API request received",
     meth = "GetPayload", id
 
-  let bundle = ben.getPayloadBundle(id).valueOr:
+  let bundle = (await ben.getPayloadBundle(id)).valueOr:
     raise unknownPayload("Unknown bundle")
 
   let version = bundle.payload.version
