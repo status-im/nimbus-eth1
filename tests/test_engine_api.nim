@@ -28,6 +28,7 @@ import
   ../execution_chain/core/tx_pool,
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/beacon/beacon_engine,
+  ../execution_chain/beacon/api_handler,
   ../execution_chain/beacon/web3_eth_conv,
   ../hive_integration/engine_client,
    ./shared_data/eip8282data
@@ -39,6 +40,7 @@ type
     client : RpcHttpClient
     chain  : ForkedChainRef
     txPool : TxPoolRef
+    beaconEngine: BeaconEngineRef
 
   NewPayloadV4Params* = object
     payload*: ExecutionPayload
@@ -145,11 +147,13 @@ proc setupEnv(envFork: HardFork = MergeFork,
     client : client,
     chain  : chain,
     txPool : txPool,
+    beaconEngine: beaconEngine,
   )
 
 proc close(env: TestEnv) =
   waitFor env.client.close()
   waitFor env.server.closeWait()
+  waitFor env.beaconEngine.stop()
   waitFor env.chain.stopProcessingQueue()
 
 proc runBasicCycleTest(env: TestEnv): Result[void, string] =
@@ -195,15 +199,15 @@ proc makeSignedTx(env: TestEnv, nonce: AccountNonce = 0): Transaction =
 
 proc runPayloadRebuildTest(env: TestEnv): Result[void, string] =
   # Calling forkchoiceUpdated repeatedly with identical payload attributes must
-  # rebuild the payload from a fresh transaction environment each time. This
-  # guards a regression where a rebuild for the same slot reused the previous
-  # pack's dirtied ledger state: on the second build every pooled tx then failed
-  # the nonce check, so the body came out empty, yet the header still committed
-  # to the first pack's accumulators.
+  # serve the same, self-consistent payload. Since payload builds became
+  # deduplicated by payloadId, the second identical fcU intentionally reuses
+  # the cached bundle instead of rebuilding; the fresh-tx-environment
+  # regression this originally guarded (a rebuild reusing the previous pack's
+  # dirtied ledger state) is now exercised by builds with distinct attributes
+  # at the same head in runSiblingHeadPayloadTest.
   #
-  # We prove it by building the SAME payload twice from the SAME pool (several
-  # includable txs sitting in it the whole time): both builds must produce the
-  # identical, non-empty block, and newPayload must accept it as valid.
+  # Both getPayload calls must return the identical, non-empty block, and
+  # newPayload must accept it as valid.
   const numTxs = 5
   let
     client = env.client
@@ -261,6 +265,75 @@ proc runPayloadRebuildTest(env: TestEnv): Result[void, string] =
   if npRes.status != PayloadExecutionStatus.valid:
     return err("Rebuilt block rejected by newPayload: " & $npRes.status &
       " err: " & npRes.validationError.get(""))
+
+  ok()
+
+proc runBackgroundBuildTest(env: TestEnv): Result[void, string] =
+  # forkchoiceUpdated must schedule the payload build in the background and
+  # respond with the payloadId immediately; getPayload awaits the result.
+  const numTxs = 3
+  let
+    ben = env.beaconEngine
+    header = env.chain.latestHeader
+    update = ForkchoiceStateV1(
+      headBlockHash: header.computeBlockHash
+    )
+    time = getTime().toUnix
+    # No withdrawals: the handler is driven directly (below), so the attrs
+    # must already be V1-shaped for a pre-Shanghai fcU V1.
+    attr = PayloadAttributes(
+      timestamp:             w3Qty(time + 1),
+      prevRandao:            default(Bytes32),
+      suggestedFeeRecipient: default(Address),
+    )
+
+  for nonce in 0 ..< numTxs:
+    env.txPool.addTx(env.makeSignedTx(nonce.AccountNonce)).isOkOr:
+      return err("Failed to add tx " & $nonce & " to pool: " & $error)
+
+  # Drive the engine handler directly (not over HTTP) so that we can observe
+  # the build state right after the fcU response future completes.
+  let fcuRes = try:
+      waitFor ben.forkchoiceUpdated(Version.V1, update, Opt.some(attr))
+    except CatchableError as exc:
+      return err("forkchoiceUpdated failed: " & exc.msg)
+
+  if fcuRes.payloadId.isNone:
+    return err("Expected payloadId in fcU response")
+
+  # The fcU response completed before the builder ran: the build future must
+  # still be pending (the worker parks on idleAsync before assembling, and the
+  # event loop hasn't been driven since waitFor returned).
+  let
+    id = fcuRes.payloadId.get
+    finished = ben.payloadBuildFinished(id).valueOr:
+      return err("No build tracked for payloadId")
+  if finished:
+    return err("Payload build completed before fcU response was returned")
+
+  let bundle = (waitFor ben.getPayloadBundle(id)).valueOr:
+    return err("getPayloadBundle returned none")
+
+  if bundle.payload.transactions.len != numTxs:
+    return err("Expected " & $numTxs & " txs in payload, got: " &
+      $bundle.payload.transactions.len)
+
+  ok()
+
+proc runUnknownPayloadTest(env: TestEnv): Result[void, string] =
+  # getPayload for a payloadId that was never scheduled must fail with
+  # the unknown-payload error code.
+  let
+    client = env.client
+    id = Bytes8([1'u8, 2, 3, 4, 5, 6, 7, 8])
+    res = client.getPayload(Version.V1, id)
+
+  if res.isOk:
+    return err("getPayload should fail for unknown payloadId")
+
+  if $engineApiUnknownPayload notin res.error:
+    return err("expect error code " & $engineApiUnknownPayload &
+      ", got: " & res.error)
 
   ok()
 
@@ -569,6 +642,16 @@ const testList = [
     name: "Payload built on fcU head, not last imported sibling",
     fork: MergeFork,
     testProc: runSiblingHeadPayloadTest
+  ),
+  TestSpec(
+    name: "Payload built in background, fcU responds first",
+    fork: MergeFork,
+    testProc: runBackgroundBuildTest
+  ),
+  TestSpec(
+    name: "getPayload with unknown payloadId",
+    fork: MergeFork,
+    testProc: runUnknownPayloadTest
   ),
   TestSpec(
     name: "newPayloadV4",

@@ -79,23 +79,23 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
       await engine.newPayload(Version.V5, payload,
         expectedBlobVersionedHashes, parentBeaconBlockRoot, executionRequests)
 
-    proc engine_getPayloadV1(payloadId: Bytes8): ExecutionPayloadV1 {.raises: [CatchableError].} =
-      return engine.getPayload(Version.V1, payloadId).executionPayload.V1
+    proc engine_getPayloadV1(payloadId: Bytes8): ExecutionPayloadV1 {.async: (raises: [CancelledError, ApplicationError]).} =
+      return (await engine.getPayload(Version.V1, payloadId)).executionPayload.V1
 
-    proc engine_getPayloadV2(payloadId: Bytes8): GetPayloadV2Response {.raises: [CatchableError].} =
-      return engine.getPayload(Version.V2, payloadId)
+    proc engine_getPayloadV2(payloadId: Bytes8): GetPayloadV2Response {.async: (raises: [CancelledError, ApplicationError]).} =
+      return await engine.getPayload(Version.V2, payloadId)
 
-    proc engine_getPayloadV3(payloadId: Bytes8): GetPayloadV3Response {.raises: [CatchableError].} =
-      return engine.getPayloadV3(payloadId)
+    proc engine_getPayloadV3(payloadId: Bytes8): GetPayloadV3Response {.async: (raises: [CancelledError, ApplicationError]).} =
+      return await engine.getPayloadV3(payloadId)
 
-    proc engine_getPayloadV4(payloadId: Bytes8): GetPayloadV4Response {.raises: [CatchableError].} =
-      return engine.getPayloadV4(payloadId)
+    proc engine_getPayloadV4(payloadId: Bytes8): GetPayloadV4Response {.async: (raises: [CancelledError, ApplicationError]).} =
+      return await engine.getPayloadV4(payloadId)
 
-    proc engine_getPayloadV5(payloadId: Bytes8): GetPayloadV5Response {.raises: [CatchableError].} =
-      return engine.getPayloadV5(payloadId)
+    proc engine_getPayloadV5(payloadId: Bytes8): GetPayloadV5Response {.async: (raises: [CancelledError, ApplicationError]).} =
+      return await engine.getPayloadV5(payloadId)
 
-    proc engine_getPayloadV6(payloadId: Bytes8): GetPayloadV6Response {.raises: [CatchableError].} =
-      return engine.getPayloadV6(payloadId)
+    proc engine_getPayloadV6(payloadId: Bytes8): GetPayloadV6Response {.async: (raises: [CancelledError, ApplicationError]).} =
+      return await engine.getPayloadV6(payloadId)
 
     proc engine_forkchoiceUpdatedV1(update: ForkchoiceStateV1,
                       attrs: Opt[PayloadAttributesV1]): ForkchoiceUpdatedResponse {.async: (raises: [CancelledError, ApplicationError]).} =

@@ -214,22 +214,25 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     let attrs = attrsOpt.value
     validateVersion(attrs, com, apiVersion)
 
-    let bundle = ben.generateExecutionBundle(headHash, attrs).valueOr:
-      error "Failed to create sealing payload", err = error
-      raise invalidAttr(error)
+    # Engine API spec: invalid payload attributes must fail the fcU itself.
+    # This check is cheap, so it stays synchronous; the expensive block
+    # assembly is deferred to the background builder and any failure there
+    # surfaces as `unknownPayload` at getPayload time.
+    if ethTime(attrs.timestamp) <= header.timestamp:
+      raise invalidAttr("timestamp must be strictly later than parent")
 
     let id = computePayloadId(headHash, attrs)
-    ben.putPayloadBundle(id, bundle)
+    if not ben.hasPayloadBundle(id):
+      # A repeated fcU with identical attributes reuses the in-flight or
+      # completed build. startPayloadBuild only enqueues the task; the fcU
+      # response is not blocked on assembly.
+      ben.startPayloadBuild(id, headHash, attrs)
 
-    info "Created payload for block proposal",
-      number = bundle.payload.blockNumber,
-      hash = bundle.payload.blockHash.short,
-      txs = bundle.payload.transactions.len,
-      gasUsed = bundle.payload.gasUsed,
-      blobGasUsed = bundle.payload.blobGasUsed.get(Quantity(0)),
-      id = id.toHex,
-      txPoolLen = ben.txPool.len,
-      attrs = attrs
+      info "Scheduled payload build for block proposal",
+        head = headHash.short,
+        id = id.toHex,
+        txPoolLen = ben.txPool.len,
+        attrs = attrs
 
     return validFCU(Opt.some(id), headHash)
 
