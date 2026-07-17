@@ -6605,6 +6605,8 @@ var _mclBnG1_normalizeVec = Module["_mclBnG1_normalizeVec"] = (a0, a1, a2) => (_
 
 var _mclBnG2_normalizeVec = Module["_mclBnG2_normalizeVec"] = (a0, a1, a2) => (_mclBnG2_normalizeVec = Module["_mclBnG2_normalizeVec"] = wasmExports["mclBnG2_normalizeVec"])(a0, a1, a2);
 
+var _eth_chainId = Module["_eth_chainId"] = (a0, a1, a2) => (_eth_chainId = Module["_eth_chainId"] = wasmExports["eth_chainId"])(a0, a1, a2);
+
 var _eth_blockNumber = Module["_eth_blockNumber"] = (a0, a1, a2) => (_eth_blockNumber = Module["_eth_blockNumber"] = wasmExports["eth_blockNumber"])(a0, a1, a2);
 
 var _eth_syncing = Module["_eth_syncing"] = (a0, a1, a2) => (_eth_syncing = Module["_eth_syncing"] = wasmExports["eth_syncing"])(a0, a1, a2);
@@ -6664,6 +6666,8 @@ var _eth_maxPriorityFeePerGas = Module["_eth_maxPriorityFeePerGas"] = (a0, a1, a
 var _eth_feeHistory = Module["_eth_feeHistory"] = (a0, a1, a2, a3, a4, a5, a6) => (_eth_feeHistory = Module["_eth_feeHistory"] = wasmExports["eth_feeHistory"])(a0, a1, a2, a3, a4, a5, a6);
 
 var _eth_sendRawTransaction = Module["_eth_sendRawTransaction"] = (a0, a1, a2, a3) => (_eth_sendRawTransaction = Module["_eth_sendRawTransaction"] = wasmExports["eth_sendRawTransaction"])(a0, a1, a2, a3);
+
+var _op_chainId = Module["_op_chainId"] = (a0, a1, a2) => (_op_chainId = Module["_op_chainId"] = wasmExports["op_chainId"])(a0, a1, a2);
 
 var _op_blockNumber = Module["_op_blockNumber"] = (a0, a1, a2) => (_op_blockNumber = Module["_op_blockNumber"] = wasmExports["op_blockNumber"])(a0, a1, a2);
 
