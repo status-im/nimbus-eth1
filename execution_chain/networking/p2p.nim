@@ -118,10 +118,9 @@ proc connectToNetwork*(
     info "Discovery disabled"
 
 proc stopListening*(node: EthereumNode) =
-  if node.listeningServer.isNil:
-    return
   try:
-    node.listeningServer.stop()
+    if not node.listeningServer.isNil():
+      node.listeningServer.stop()
   except TransportOsError as exc:
     error "Failure when try to stop stop listening server", msg=exc.msg
 
@@ -144,9 +143,10 @@ func numPeers*(node: EthereumNode): int =
 
 proc closeWait*(node: EthereumNode) {.async: (raises: []).} =
   node.stopListening()
-  if node.listeningServer.isNil.not:
+  if not node.listeningServer.isNil():
     await node.listeningServer.closeWait()
-  await node.peerPool.closeWait()
+  if not node.peerPool.isNil():
+    await node.peerPool.closeWait()
 
 proc addCapability*(node: EthereumNode,
                     p: ProtocolInfo,
