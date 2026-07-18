@@ -24,7 +24,10 @@ import
   ./accounts,
   ./transactions
 
-# EIP-2935 windows size 
+logScope:
+  topics = "vp_engine"
+
+# EIP-2935 windows size
 const HISTORY_SERVE_WINDOW = 8191'u64
 
 func isInEIP2935VerifiableRange(
@@ -179,7 +182,7 @@ proc walkBlocks*(
     sourceHash: Hash32,
     targetHash: Hash32,
 ): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
-  info "Starting block walk to verify requested block", blockHash = targetHash
+  debug "Starting block walk to verify requested block", blockHash = targetHash
 
   let numBlocks = sourceNum - targetNum
   if numBlocks > engine.maxBlockWalk:

@@ -16,7 +16,7 @@ import
   ./types
 
 logScope:
-  topics = "verified_proxy_evm"
+  topics = "vp_evm"
 
 export async_evm, async_evm_backend
 

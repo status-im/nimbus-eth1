@@ -23,7 +23,7 @@ import
   ./engine/types
 
 logScope:
-  topics = "P2PLightClientBackend"
+  topics = "vp_beacon_backend"
 
 chronicles.formatIt(lp_crypto.PublicKey):
   $it.scheme
