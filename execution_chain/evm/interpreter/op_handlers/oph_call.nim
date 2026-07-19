@@ -200,20 +200,28 @@ proc staticCallParams(c: Computation, res: var LocalParams): EvmResult[void] =
   res.updateStackAndParams(c)
   ok()
 
-proc getCallCode(c: Computation, childMsg: Message): CodeBytesRef =
-  # Avoid accessing ledger if it's a precompile address
-  if MsgFlags.Precompile in childMsg.flags:
+proc loadCallCode(c: Computation, flags: set[MsgFlags]): CodeBytesRef =
+  ## Load the (delegated) execution code for a call child frame. Must run
+  ## after the opcode gas charge but before the depth/balance early exits,
+  ## so the read hits the witness even when the call fails early (spec order).
+  ##
+  ## TODO: the precompile short-circuit below differs from the spec.
+  ## The spec's `call()` always does `get_account(code_address)` to fetch
+  ## the code hash (precompile dispatch only happens later), so on a
+  ## zero-value CALL to a precompile a spec witness probably includes the
+  ## account's exclusion-proof nodes while ours does not. TBI
+  if MsgFlags.Precompile in flags:
     return CodeBytesRef(nil)
 
   c.vmState.readOnlyLedger.getCode(c.msg.delegateTo)
 
-proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int, newAccountCharged = false) =
+proc execSubCall(c: Computation; childMsg: Message; code: CodeBytesRef;
+                 memPos, memLen: int, newAccountCharged = false) =
   ## Call new VM -- helper for `Call`-like operations
 
   # need to provide explicit <c> and <child> for capturing in chainTo proc()
   # <memPos> and <memLen> are provided by value and need not be captured
   var
-    code = c.getCallCode(childMsg)
     child = newComputation(
       c.vmState, keepStack = false, childMsg, code)
 
@@ -304,6 +312,8 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
 
   cpt.returnData.setLen(0)
 
+  let code = cpt.loadCallCode(p.flags)
+
   if cpt.msg.depth >= MaxCallDepth:
     debug "Computation Failure",
       reason = "Stack too deep",
@@ -343,6 +353,7 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
     memPos = p.memOutPos,
     memLen = p.memOutLen,
     childMsg = childMsg,
+    code = code,
     newAccountCharged = newAccountCharged)
   ok()
 
@@ -383,6 +394,8 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
 
   cpt.returnData.setLen(0)
 
+  let code = cpt.loadCallCode(p.flags)
+
   if cpt.msg.depth >= MaxCallDepth:
     debug "Computation Failure",
       reason = "Stack too deep",
@@ -417,7 +430,8 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
   cpt.execSubCall(
     memPos = p.memOutPos,
     memLen = p.memOutLen,
-    childMsg = childMsg)
+    childMsg = childMsg,
+    code = code)
   ok()
 
 # ---------------------
@@ -456,6 +470,9 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
     cpt.vmState.balTracker.trackAddressAccess(cpt.msg.delegateTo)
 
   cpt.returnData.setLen(0)
+
+  let code = cpt.loadCallCode(p.flags)
+
   if cpt.msg.depth >= MaxCallDepth:
     debug "Computation Failure",
       reason = "Stack too deep",
@@ -485,7 +502,8 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
   cpt.execSubCall(
     memPos = p.memOutPos,
     memLen = p.memOutLen,
-    childMsg = childMsg)
+    childMsg = childMsg,
+    code = code)
   ok()
 
 # ---------------------
@@ -524,6 +542,8 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
 
   cpt.returnData.setLen(0)
 
+  let code = cpt.loadCallCode(p.flags)
+
   if cpt.msg.depth >= MaxCallDepth:
     debug "Computation Failure",
       reason = "Stack too deep",
@@ -553,7 +573,8 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
   cpt.execSubCall(
     memPos = p.memOutPos,
     memLen = p.memOutLen,
-    childMsg = childMsg)
+    childMsg = childMsg,
+    code = code)
   ok()
 
 # ------------------------------------------------------------------------------

@@ -61,9 +61,6 @@ const skipFiles = [
   "stateless_input_invalid_public_key_is_rejected.json",
   "stateless_input_opposite_y_parity_public_key_is_rejected.json",
 
-  # cases of missing code in witness
-  "validation_codes_missing_delegated_code_on_insufficient_balance_call.json",
-
   # cases of missing states in witness
   "validation_state_missing_failed_call_target_account_proof_node.json",
 ]
