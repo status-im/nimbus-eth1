@@ -20,7 +20,7 @@ import
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix, capella, deneb, gloas],
   beacon_chain/[
     beacon_clock, filepath, light_client, light_client_db,
-    nimbus_binary_common, process_state, conf_light_client]
+    nimbus_binary_common, nimbus_rest_common, process_state, conf_light_client]
 
 from beacon_chain/consensus_object_pools/blockchain_dag import
   updateFinalizedBlockMetrics, updateHeadBlockMetrics
@@ -70,7 +70,7 @@ proc runLightClient*(
     genesisBlockRoot = get_initial_beacon_block(genesisState[]).root
 
     rng = HmacDrbgContext.new()
-    netKeys = getRandomNetKeys(rng[])
+    netKeys = getRandomNetKeys(rng)
     network = createEth2Node(
       rng, config, netKeys, cfg, forkDigests, getBeaconTime, genesis_validators_root
     ).valueOr:
