@@ -24,7 +24,10 @@ import
   ./accounts,
   ./transactions
 
-# EIP-2935 windows size 
+logScope:
+  topics = "vp_engine"
+
+# EIP-2935 windows size
 const HISTORY_SERVE_WINDOW = 8191'u64
 
 func isInEIP2935VerifiableRange(
@@ -179,7 +182,7 @@ proc walkBlocks*(
     sourceHash: Hash32,
     targetHash: Hash32,
 ): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
-  info "Starting block walk to verify requested block", blockHash = targetHash
+  debug "Starting block walk to verify requested block", blockHash = targetHash
 
   let numBlocks = sourceNum - targetNum
   if numBlocks > engine.maxBlockWalk:
@@ -469,3 +472,36 @@ proc getHeader*(
   ?((await engine.verifyHeader(header, blk.hash)).tagBackend(backendIdx))
 
   ok(header)
+
+# NOTE: this function uses the "latest" tag as the anchor. Hence this
+# function should not be used anywhere else except where the trust 
+# assumption is "latest" and not "finalized"
+proc getBlockHash*(
+    engine: RpcVerificationEngine, number: base.BlockNumber
+): Future[EngineResult[Hash32]] {.async: (raises: [CancelledError]).} =
+  let cached = engine.headerStore.getHash(number)
+  if cached.isSome():
+    return ok(cached.get())
+
+  let latest = engine.headerStore.latest.valueOr:
+    return err(
+      (
+        UnavailableDataError, "latest block is not available yet. Still syncing?",
+        UNTAGGED,
+      )
+    )
+
+  if isInEIP2935VerifiableRange(latest.number, latest.number, number):
+    let
+      slot = (number mod HISTORY_SERVE_WINDOW).u256
+      storedValue = await engine.getStorageAt(
+        HISTORY_STORAGE_ADDRESS, slot, latest.number, latest.stateRoot
+      )
+
+    if storedValue.isOk() and not storedValue.get().isZero():
+      return ok(storedValue.get().toBytesBE().to(Hash32))
+
+  let resolved =
+    ?(await engine.getHeader(BlockTag(kind: bidNumber, number: Quantity(number))))
+
+  ok(resolved.computeBlockHash)

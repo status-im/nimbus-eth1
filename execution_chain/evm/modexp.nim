@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -16,8 +16,12 @@ from os import DirSep, AltSep
 const
   vendorPath  = currentSourcePath.rsplit({DirSep, AltSep}, 3)[0] & "/vendor"
   srcPath = vendorPath & "/libtommath"
+  useMp64Bit = defined(cpu64) and not defined(vcc)
 
-{.passc: "-DMP_32BIT"}
+when useMp64Bit:
+  {.passc: "-DMP_64BIT"}
+else:
+  {.passc: "-DMP_32BIT"}
 {.compile: srcPath & "/mp_radix_size.c"}
 {.compile: srcPath & "/mp_to_radix.c"}
 {.compile: srcPath & "/mp_init_u64.c"}
@@ -122,7 +126,7 @@ type
   mp_int {.importc: "mp_int",
     header: "tommath.h", byref.} = object
 
-  mp_digit = uint32
+  mp_digit = (when useMp64Bit: uint64 else: uint32)
 
   mp_err {.importc: "mp_err",
     header: "tommath.h".} = cint

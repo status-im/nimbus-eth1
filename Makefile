@@ -360,7 +360,7 @@ portal_bridge: | build deps
 
 nimbus_verified_proxy: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c -o:build/$@ $(NIM_PARAMS) nimbus_verified_proxy/nimbus_verified_proxy.nim
+		$(ENV_SCRIPT) nim c -o:build/$@ $(NIM_PARAMS) -d:chronicles_log_level=TRACE nimbus_verified_proxy/nimbus_verified_proxy.nim
 
 nimbus_verified_proxy_test: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \

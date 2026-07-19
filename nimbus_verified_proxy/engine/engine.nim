@@ -28,6 +28,9 @@ import
 
 from eth/common/blocks import EMPTY_UNCLE_HASH
 
+logScope:
+  topics = "vp_engine"
+
 proc applyPenalty*(engine: RpcVerificationEngine, e: ErrorTuple) =
   if e.backendIdx < 0:
     return
@@ -35,17 +38,20 @@ proc applyPenalty*(engine: RpcVerificationEngine, e: ErrorTuple) =
   try:
     case e.errType
     of BackendFetchError, BackendDecodingError:
+      debug "Penalizing backend", backendIdx = idx, errType = $e.errType, err = e.errMsg
       engine.scores[idx].availability =
         engine.availabilityScoreFunc(engine.scores[idx].availability, Penalty)
       engine.scores[idx].quality =
         engine.qualityScoreFunc(engine.scores[idx].quality, UndoReward)
     of VerificationError:
+      warn "Backend served data that failed verification",
+        backendIdx = idx, err = e.errMsg
       engine.scores[idx].quality =
         engine.qualityScoreFunc(engine.scores[idx].quality, Penalty)
     else:
       discard
   except KeyError:
-    discard
+    debug "Penalty skipped, unknown backend", backendIdx = idx
 
 proc downloadAndStoreFinalized(
     engine: RpcVerificationEngine, blockHash: Hash32
@@ -79,7 +85,7 @@ proc downloadAndStoreFinalized(
 
   let res = engine.headerStore.updateFinalized(header, blockHash)
   if res.isErr():
-    error "finalized header update error", error = res.error()
+    error "finalized header update error", err = res.error()
 
 proc downloadAndStoreOptimistic(
     engine: RpcVerificationEngine, blockHash: Hash32
@@ -113,7 +119,7 @@ proc downloadAndStoreOptimistic(
 
   let res = engine.headerStore.add(header, blockHash)
   if res.isErr():
-    error "optimistic header update error", error = res.error()
+    error "optimistic header update error", err = res.error()
 
 func convLCHeader*(lcHeader: ForkyLightClientHeader): Result[Header, string] =
   when lcHeader is altair.LightClientHeader:
@@ -259,7 +265,7 @@ proc init*(
           finalized_header = shortLog(forkyStore.finalized_header)
 
         let header = convLCHeader(forkyStore.finalized_header).valueOr:
-          error "finalized header conversion error", error = error
+          error "finalized header conversion error", err = error
           return
 
         let res = engine.headerStore.updateFinalized(
@@ -267,7 +273,7 @@ proc init*(
         )
 
         if res.isErr():
-          error "finalized header update error", error = res.error()
+          error "finalized header update error", err = res.error()
       else:
         error "pre-bellatrix light client headers do not have the execution payload header"
 
@@ -289,7 +295,7 @@ proc init*(
           optimistic_header = shortLog(forkyStore.optimistic_header)
 
         let header = convLCHeader(forkyStore.optimistic_header).valueOr:
-          error "optimistic header conversion error", error = error
+          error "optimistic header conversion error", err = error
           return
 
         let res = engine.headerStore.add(
@@ -297,7 +303,7 @@ proc init*(
         )
 
         if res.isErr():
-          error "optimistic header update error", error = res.error()
+          error "optimistic header update error", err = res.error()
       else:
         error "pre-bellatrix light client headers do not have the execution payload header"
 
@@ -391,6 +397,9 @@ proc syncOnce*(
     if engine.trustedBlockRoot.isNone:
       return err((UnavailableDataError, "trusted block root not set", UNTAGGED))
 
+    debug "LC store not initialized, bootstrapping",
+      trustedBlockRoot = engine.trustedBlockRoot.get
+
     let
       (backend, backendIdx) = ?(engine.beaconBackendFor(BeaconBootstrap))
       res = ?(
@@ -399,6 +408,8 @@ proc syncOnce*(
         )
       )
     ?((await engine.processObject(res, "bootstrap")).tagBackend(backendIdx))
+
+    info "LC bootstrap verified", trustedBlockRoot = engine.trustedBlockRoot.get
 
   let
     wallTime = engine.getBeaconTime()
@@ -417,6 +428,8 @@ proc syncOnce*(
           current.sync_committee_period - finalized.sync_committee_period,
           engine.maxLightClientUpdates,
         )
+
+    debug "Fetching LC updates", period = finalized.sync_committee_period, count
 
     let
       (backend, backendIdx) = ?(engine.beaconBackendFor(BeaconUpdates))
@@ -446,6 +459,8 @@ proc syncOnce*(
   # +1 because optimistic is the attested slot not the signed slot. Signed slot(sync committees)
   # is always after the block has been attestted in  the current slot
   if optimistic + 1 < current:
+    debug "Fetching LC optimistic update", optimistic, current
+
     let
       (backend, backendIdx) = ?(engine.beaconBackendFor(BeaconOptimistic))
       optRes =
@@ -453,6 +468,8 @@ proc syncOnce*(
     ?((await engine.processObject(optRes, "optimistic")).tagBackend(backendIdx))
 
   if current.epoch > finalized.epoch + 2:
+    debug "Fetching LC finality update", finalized, current
+
     let
       (backend, backendIdx) = ?(engine.beaconBackendFor(BeaconOptimistic))
       finRes = ?((await backend.getLightClientFinalityUpdate()).tagBackend(backendIdx))

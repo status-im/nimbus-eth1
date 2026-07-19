@@ -10,6 +10,7 @@
 import
   std/sequtils,
   results,
+  chronicles,
   eth/common/eth_types_rlp,
   eth/trie/[ordered_trie, trie_defs],
   json_rpc/[rpcserver, rpcclient],
@@ -18,6 +19,9 @@ import
   ../../execution_chain/rpc/filters,
   ./types,
   ./blocks
+
+logScope:
+  topics = "vp_engine"
 
 template toLog(lg: LogObject): Log =
   Log(address: lg.address, topics: lg.topics, data: lg.data)

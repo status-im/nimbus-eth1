@@ -20,27 +20,17 @@ import
 
 proc sessionPartMptClear*(ctx: SnapCtxRef, info: static[string]): Opt[void] =
   let db = ctx.pool.cacheDB
-  db.clearAccKvt().isOkOr:
+  db.clearAccPartMpt().isOkOr:
     error info & ": Cannot reset partial accounts MPT", `error`=error
     return err()
-  db.clearStoKvt().isOkOr:
+  db.clearAccDnglPath().isOkOr:
+    error info & ": Cannot reset dangling account paths", `error`=error
+    return err()
+  db.clearStoPartMpt().isOkOr:
     error info & ": Cannot reset partial slots MPT", `error`=error
     return err()
-  db.clearCodeKvt().isOkOr:
+  db.clearCodePartMpt().isOkOr:
     error info & ": Cannot reset partial receipts table", `error`=error
-    return err()
-  ok()
-
-proc sessionDanglTabsClear*(ctx: SnapCtxRef, info: static[string]): Opt[void] =
-  let db = ctx.pool.cacheDB
-  db.clearAccDnglKvt().isOkOr:
-    error info & ": Cannot reset dangling accounts", `error`=error
-    return err()
-  db.clearStoDnglKvt().isOkOr:
-    error info & ": Cannot reset dangling slots", `error`=error
-    return err()
-  db.clearCodeMissKvt().isOkOr:
-    error info & ": Cannot reset missing contracts", `error`=error
     return err()
   ok()
 

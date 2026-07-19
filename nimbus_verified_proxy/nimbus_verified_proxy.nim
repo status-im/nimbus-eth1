@@ -36,6 +36,9 @@ import
   ./op/op_frontend,
   ../execution_chain/version_info
 
+logScope:
+  topics = "vp_main"
+
 # error object to translate results to error
 # NOTE: all results are translated to errors only in this file
 # to allow effective usage of verified proxy code in other projects
@@ -57,15 +60,16 @@ proc startExecutionBackends(
 
   for url in urls:
     let client = JsonRpcClient.init(url).valueOr:
-      error "Error initializing backend client", error = error.errMsg
+      error "Error initializing backend client", err = error.errMsg
       continue
 
     let startRes = await client.start()
     if startRes.isErr():
-      error "Error connecting to backend", url = url, error = startRes.error.errMsg
+      error "Error connecting to backend", url = url, err = startRes.error.errMsg
       continue
 
     engine.registerBackend(client.getExecutionApiBackend(), caps)
+    info "Connected to execution backend", url
     clients.add(client)
 
   if clients.len == 0:
@@ -79,19 +83,20 @@ proc startPrivateTxBackends(
   var clients: seq[JsonRpcClient] = @[]
   for url in urls:
     let client = JsonRpcClient.init(url).valueOr:
-      error "Error initializing private tx client", error = error.errMsg
+      error "Error initializing private tx client", err = error.errMsg
       continue
 
     let startRes = await client.start()
 
     if startRes.isErr():
       error "Error connecting to private tx backend",
-        url = url, error = startRes.error.errMsg
+        url = url, err = startRes.error.errMsg
       continue
 
     engine.registerBackend(
       client.getExecutionApiBackend(), BackendCapabilities({SendRawTransaction})
     )
+    info "Connected to private tx backend", url
     clients.add(client)
 
   if clients.len == 0:
@@ -107,10 +112,11 @@ proc startBeaconBackends(
 
     let startRes = client.start()
     if startRes.isErr():
-      error "Error connecting to backend", url = url, error = startRes.error.errMsg
+      error "Error connecting to backend", url = url, err = startRes.error.errMsg
       continue
 
     engine.registerBackend(client.getBeaconApiBackend(), fullBeaconCapabilities)
+    info "Connected to beacon backend", url
     clients.add(client)
 
   if clients.len == 0:
@@ -157,7 +163,7 @@ proc startFrontends(
 
   for url in urls:
     let server = JsonRpcServer.init(url).valueOr:
-      error "Error initializing frontend server", error = error.errMsg
+      error "Error initializing frontend server", err = error.errMsg
       continue
 
     # inject frontend
@@ -165,9 +171,10 @@ proc startFrontends(
 
     let status = server.start()
     if status.isErr():
-      error "Error starting frontend server", error = status.error.errMsg
+      error "Error starting frontend server", err = status.error.errMsg
       continue
 
+    info "JSON-RPC frontend serving", url
     servers.add(server)
 
   if servers.len == 0:
@@ -304,12 +311,12 @@ proc run(
 
       let syncRes = await engine.syncOnce()
       if syncRes.isErr():
-        error "LC sync failed", error = syncRes.error.errMsg
+        error "LC sync failed", err = syncRes.error.errMsg
 
       opParams.isErrOr:
         let opRes = await l2Engine.opSyncOnce(engine)
         if opRes.isErr():
-          error "OP sync failed", error = opRes.error.errMsg
+          error "OP sync failed", err = opRes.error.errMsg
   except CancelledError as e:
     debug "proxy loop cancelled"
     for s in frontendServers:
@@ -360,8 +367,8 @@ when isMainModule:
   except CancelledError:
     notice "Shutdown complete"
   except ProxyError as e:
-    fatal "Proxy error", error = e.msg
+    fatal "Proxy error", err = e.msg
     quit QuitFailure
   except CatchableError as e:
-    fatal "Unexpected error", error = e.msg
+    fatal "Unexpected error", err = e.msg
     quit QuitFailure

@@ -16,14 +16,12 @@ import
   pkg/stew/interval_set,
   ../../../../wire_protocol/snap/snap_types,
   ../../state_db, #worker_const],
-  ../mpt_desc
+  ../mpt_build/build_desc
 
 type
   CacheDbRef* = ref object
     adb*: RocksDbReadWriteRef
     dir*: Path
-    dnglLock*: int                                  # advisory lock
-    cntrLock*: int                                  # advisory lock
 
   BoolResult* = Result[bool,string]
     ## Shortcut
@@ -97,7 +95,7 @@ type
     peerID: Hash
 
   CacheAccMissingIntvData* = tuple
-    root: StateRoot
+    number: BlockNumber
     ranges: ItemKeyRangeSet
 
   CacheStoMissingIntvData* = tuple

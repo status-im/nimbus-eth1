@@ -21,9 +21,10 @@
 
 import
   std/tables,
-  pkg/[chronicles, chronos, eth/common, stew/interval_set],
+  pkg/[chronicles, chronos, eth/common, eth/trie/nibbles, stew/interval_set],
+  ../../../../../db/aristo,
   ../../[helpers, mpt, worker_desc],
-  ../[session_clear, session_helpers],
+  ../[session_clear, session_helpers, session_pivot],
   ./analyse_desc
 
 export
@@ -130,13 +131,13 @@ template runErrand(
 # Private functions, MPT traversal core function
 # ------------------------------------------------------------------------------
 
-template getAccKvtWrap(
+template getAccPartMptWrap(
     db: CacheDbRef;
     _: Hash32;
     key: openArray[byte];
       ): BlobResult =
   ## Ignore state root for `get()` on accounts KVT
-  db.getAccKvt key
+  db.getAccPartMpt key
 
 template traverseMpt(
     trd: TravDescRef;                               # traversal descriptor
@@ -325,7 +326,7 @@ template accAndStoNotify(
         let
           start = Moment.now()
           rc = traverseMpt(
-            trd, base, acc.storageRoot.data, getStoKvt, stoNotify, info):
+            trd, base, acc.storageRoot.data, getStoPartMpt, stoNotify, info):
               traversingStorageMsg(stats, info)     # keep alive message
 
         if rc.isErr and rc.error != ENoRoot:
@@ -346,7 +347,7 @@ template accAndStoNotify(
 
         block handleCode:
           # Check whether the code has an entry on the database
-          let code = trd.db.getCodeKvt(acc.codeHash).valueOr:
+          let code = trd.db.getCodePartMpt(acc.codeHash).valueOr:
             debug info & ": Failed accessing byte code",
               root=acc.codeHash.toStr, nErr=stats.nStoErr, `error`=error
             trd.cacheErr.inc
@@ -397,6 +398,10 @@ template sessionAnalyseTrieIter*(cty: SnapCtxRef, info: static[string]): auto =
         bodyRc = typeof(bodyRc).err(ENoPivot)
         break body
 
+      pivotNum = cty.sessionPivotNum(info).valueOr:
+        bodyRc = typeof(bodyRc).err(ENoPivotNum)
+        break body
+
     template stats(): auto = trd.stats
 
     startTraversingMsg(info)
@@ -411,11 +416,11 @@ template sessionAnalyseTrieIter*(cty: SnapCtxRef, info: static[string]): auto =
       start = Moment.now()
       rc = traverseMpt(
         trd, zeroHash32, pivot.Hash32.data,
-        getAccKvtWrap, accAndStoNotify, info):
+        getAccPartMptWrap, accAndStoNotify, info):
           traversingAccountsMsg(stats, info)
 
     # Alsways store even without ranges, so the state root gets registered
-    trd.putAccMissingIntv(pivot, trd.ranges, info)
+    trd.putAccMissingIntv(pivotNum, trd.ranges, info)
 
     if 0 < trd.cacheErr:
       bodyRc = typeof(bodyRc).err(EPutError)

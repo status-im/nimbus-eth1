@@ -1026,6 +1026,69 @@ suite "ForkedChainRef tests":
     check chain.vmStateBlockHash == B7.blockHash
     check chain.validate info & " (2)"
 
+  test "setHead: rewind, prune branches and re-import":
+    const info = "setHead"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com)
+    checkImportBlock(chain, blk1)
+    checkImportBlock(chain, blk2)
+    checkImportBlock(chain, blk3)
+    checkImportBlock(chain, blk4)
+    checkImportBlock(chain, blk5)
+    checkImportBlock(chain, blk6)
+    checkImportBlock(chain, B4)
+    checkImportBlock(chain, B5)
+    check chain.heads.len == 2
+
+    # A block that was never imported cannot become the head
+    check chain.setHead(blk8.blockHash).isErr
+
+    # Rewind within the canonical branch: blocks above blk4 and the whole
+    # B branch are discarded
+    check chain.setHead(blk4.blockHash).isOk
+    checkHeadHash chain, blk4.blockHash
+    check chain.latestHash == blk4.blockHash
+    check chain.heads.len == 1
+    check chain.hashToBlock.len == 5 # genesis .. blk4
+    check chain.validate info & " (1)"
+
+    # Discarded blocks can be imported again - they are gone, not duplicates
+    checkVerdict(chain, blk5, ImportOutcome.Valid)
+    checkVerdict(chain, B4, ImportOutcome.Valid)
+    check chain.heads.len == 2
+    check chain.latestHash == B4.blockHash
+    check chain.validate info & " (2)"
+
+    # Moving the head to a sibling branch prunes the previously canonical one
+    check chain.setHead(B4.blockHash).isOk
+    checkHeadHash chain, B4.blockHash
+    check chain.latestHash == B4.blockHash
+    check chain.heads.len == 1
+    check chain.hashToBlock.len == 5 # genesis .. blk3, B4
+    check chain.validate info & " (3)"
+
+  test "setHead: cannot move below the latest finalized block":
+    const info = "setHead finalized"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com)
+    checkImportBlock(chain, blk1)
+    checkImportBlock(chain, blk2)
+    checkImportBlock(chain, blk3)
+    checkImportBlock(chain, blk4)
+    checkImportBlock(chain, B4)
+    checkForkChoice(chain, blk4, blk3)
+    check chain.validate info & " (1)"
+
+    # blk2 is an ancestor of the finalized block blk3
+    check chain.setHead(blk2.blockHash).isErr
+
+    # The finalized block itself and descendants of it (also on a sibling
+    # branch, like B4) remain valid targets
+    check chain.setHead(B4.blockHash).isOk
+    checkHeadHash chain, B4.blockHash
+    check chain.heads.len == 1
+    check chain.validate info & " (2)"
+
   test "BaseVMState.reinit with per-block BAL tracker flags":
     let
       com = env.newCom()
