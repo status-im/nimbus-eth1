@@ -16,7 +16,7 @@ import
   ./interpreter/[gas_meter, gas_costs, utils/utils_numeric],
   eth/common/keys,
   chronicles,
-  nimcrypto/[ripemd, sha2, utils],
+  nimcrypto/[ripemd, utils],
   stew/assign2,
   ../common/evmforks,
   ../core/eip4844,
@@ -26,6 +26,8 @@ import
   ./computation,
   ./secp256r1verify,
   eth/common/[base, addresses]
+
+from boringssl as bssl import nil
 
 when enable_mcl_lib:
   import ./bncurve_mcl
@@ -199,7 +201,11 @@ func sha256(c: Computation): EvmResultVoid =
     gasFee = GasSHA256 + wordCount.GasInt * GasSHA256Word
 
   ? c.gasMeter.consumeGas(gasFee, reason="SHA256 Precompile")
-  assign(c.output, sha2.sha256.digest(c.msg.data).data)
+  var digest: array[32, byte]
+  {.cast(noSideEffect).}:
+    let data = if c.msg.data.len > 0: addr c.msg.data[0] else: nil
+    discard bssl.SHA256(data, csize_t(c.msg.data.len), digest)
+  assign(c.output, digest)
   ok()
 
 func ripemd160(c: Computation): EvmResultVoid =
