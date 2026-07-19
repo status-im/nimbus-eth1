@@ -55,24 +55,11 @@ const skipFiles = [
   "builder_exit_contract_deployment.json",
   "builder_deposit_contract_deployment.json",
 
-  # At the top frame, Nimbus loads the EIP-7702 delegation target's code before
-  # charging the delegation access gas, while the spec charges first. When that
-  # charge hits OOG, our witness contains the delegation target's account leaf
-  # and code that the reference implementation never reads. Only the witness
-  # diverges, the execution outcome and state root are identical.
-  "bal_7702_top_frame_delegation_oog.json",
-  "top_frame_regular_charge.json",
-  "recipient_charge_oog_rolls_back_delegations.json",
-  "top_frame_charges_delegation_in_access_list.json",
-
   # No fail yet as we don't check/use public keys. We could check them easily
   # but the better way is to use them as optimization and check automatically
   # that way.
   "stateless_input_invalid_public_key_is_rejected.json",
   "stateless_input_opposite_y_parity_public_key_is_rejected.json",
-
-  # cases of missing code in witness
-  "validation_codes_missing_delegated_code_on_insufficient_balance_call.json",
 
   # cases of missing states in witness
   "validation_state_missing_failed_call_target_account_proof_node.json",

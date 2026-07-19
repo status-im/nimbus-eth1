@@ -58,16 +58,18 @@ proc initialAccessListEIP2929(params: CallParams) =
 
 proc setupComputation(params: CallParams, keepStack: bool, vmState: BaseVMState, msg: Message): Computation =
   if vmState.hardFork < Amsterdam:
-    let
+    var
       code = if params.isCreate:
               msg.contractAddress = generateContractAddress(vmState, params.sender)
               CodeBytesRef.init(params.input)
             else:
               assign(msg.data, params.input)
-              getCallCode(vmState, msg)
+              getRecipientCode(vmState, msg)
 
     if MsgFlags.Delegated in msg.flags:
+      # If the `call.to` has a delegation, also warm its target.
       vmState.ledger.accessList(msg.delegateTo)
+      code = vmState.readOnlyLedger.getCode(msg.delegateTo)
 
     return newComputation(vmState, keepStack, msg, code)
 
