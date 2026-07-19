@@ -31,9 +31,11 @@ import
   beacon_chain/[
     buildinfo,
     conf as bnconf,
+    conf_light_client,
     beacon_node,
     nimbus_beacon_node,
     nimbus_binary_common,
+    nimbus_light_client,
     nimbus_rest_common,
     process_state,
   ],
@@ -45,7 +47,6 @@ import
     el_sync,
     nimbus_desc,
     nimbus_execution_client,
-    nimbus_light_client,
     version_info,
   ]
 
