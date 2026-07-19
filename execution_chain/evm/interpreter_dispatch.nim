@@ -77,7 +77,7 @@ proc prepareDispatch(params: CallParams, c: Computation): EvmResultVoid =
   if vmState.balTrackerEnabled:
     vmState.balTracker.trackAddressAccess(c.msg.contractAddress)
 
-  let
+  var
     code =
       if params.isCreate:
         if ledger.originalAccountEmpty(c.msg.contractAddress):
@@ -87,16 +87,17 @@ proc prepareDispatch(params: CallParams, c: Computation): EvmResultVoid =
         if params.value.isZero.not and not ledger.accountExists(c.msg.contractAddress):
           ? c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch call new account")
         assign(c.msg.data, params.input)
-        getCallCode(vmState, c.msg)
+        getRecipientCode(vmState, c.msg)
 
   if MsgFlags.Delegated in c.msg.flags:
-    # TODO: Put both consumeGas and balTracker near delegateTo getCode
-    # specifically after consumeGas
+    # The delegated account access must be charged before its code is read,
+    # or an OOG here would wrongly add the target account to the witness.
     let delegatedGas = c.gasEip8038AccountCheck(c.msg.delegateTo)
     ? c.gasMeter.consumeGas(delegatedGas, "prepareDispatch delegatedGas")
 
     if vmState.balTrackerEnabled:
       vmState.balTracker.trackAddressAccess(c.msg.delegateTo)
+    code = vmState.readOnlyLedger.getCode(c.msg.delegateTo)
 
   c.setCode(code)
   ok()
