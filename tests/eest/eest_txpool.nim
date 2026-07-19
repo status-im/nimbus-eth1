@@ -75,9 +75,9 @@ proc importTxAndAssembleBlock(xp: TxPoolRef, blk: EthBlock): Result[EthBlock, st
       return err($error)
 
   let
-    # Overrride gasLimit
+    # Override gasLimit
     gasLimit = Opt.some(blk.header.gasLimit)
-    res = ? xp.assembleBlock(someBaseFee = true, gasLimit = gasLimit)
+    res = ? xp.assembleBlock(xp.chain.latestHash, someBaseFee = true, gasLimit = gasLimit)
     blockHash = res.blk.header.computeBlockHash
     expectedBlockHash = blk.header.computeBlockHash
 
@@ -111,7 +111,7 @@ proc runTest(env: TestEnv, unit: BlockchainUnitEnv, statelessEnabled = false): R
     if res.isOk:
       latestStateRoot = blk.header.stateRoot
     else:
-      return err("Good block was rejected at import: " & res.error)
+      return err("Good block was rejected at import: " & res.error.msg)
 
     xp.removeNewBlockTxs(blk)
 
@@ -126,6 +126,7 @@ proc runTest(env: TestEnv, unit: BlockchainUnitEnv, statelessEnabled = false): R
   if not env.chain.txFrame(headHash).rootExists(latestStateRoot):
     return err("Latest stateRoot does not exist in the database")
 
+  xp.dispose()
   ok()
 
 proc processFile*(filePath: string, statelessEnabled = false, parallelEnabled = false, skipFiles: seq[string] = @[]) =

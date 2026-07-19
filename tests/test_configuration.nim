@@ -164,6 +164,30 @@ proc configurationMain*() =
       let dx = dd.getBootstrapNodes()
       check dx.enodes.len == bootNodeLen + 3
 
+    test "--el-bootstrap-node and --el-bootstrap-file":
+      let config = makeTestConfig()
+      let bootnodes = config.getBootstrapNodes()
+      let bootNodeLen = bootnodes.enodes.len
+      check bootNodeLen > 0 # mainnet bootnodes
+
+      let aa = makeConfig(@["--el-bootstrap-node:" & bootNode])
+      let ax = aa.getBootstrapNodes()
+      check ax.enodes.len == bootNodeLen + 1
+
+      let bb = makeConfig(@["--el-bootstrap-node:" & bootNode & "," & bootNode])
+      check bb.getBootstrapNodes().enodes.len == bootNodeLen + 2
+
+      let cc = makeConfig(@["--el-bootstrap-node:" & bootNode, "--el-bootstrap-node:" & bootNode])
+      check cc.getBootstrapNodes().enodes.len == bootNodeLen + 2
+
+      const
+        bootFilePath = "tests" / "bootstrap"
+        bootFileAppend = bootFilePath / "append_bootnodes.txt"
+
+      let dd = makeConfig(@["--el-bootstrap-file:" & bootFileAppend])
+      let dx = dd.getBootstrapNodes()
+      check dx.enodes.len == bootNodeLen + 3
+
     test "static-peers":
       let config = makeTestConfig()
       check config.getStaticPeers().enodes.len == 0
@@ -315,7 +339,7 @@ proc configurationMain*() =
       check config.importKey.string == "basic_import_key"
       check config.trustedSetupFile == some "basic_trusted_setup_file"
       check config.extraData == "basic_extra_data"
-      check config.gasLimit == 5678
+      check config.gasLimit == some(5678'u64)
       check config.networkId == 777.u256
       check config.networkParams.config.isNil.not
 
@@ -345,7 +369,7 @@ proc configurationMain*() =
       check config.udpPort == 8899.Port
       check config.maxPeers == 45
       check config.nat == NatConfig(hasExtIp: false, nat: NatAny)
-      check config.discovery == ["V5"]
+      check config.discv5 == false
       check config.netKey == "random"
       check config.agentString == "basic_agent_string"
 
@@ -362,7 +386,7 @@ proc configurationMain*() =
       check config.rewriteDatadirId == true
       check config.eagerStateRootCheck == false
       check config.parallelStateRootComputation == false
-      check config.statelessProviderEnabled == true
+      check config.statelessProvider == true
       check config.statelessWitnessValidation == true
 
       check config.httpPort == 12788.Port
@@ -392,5 +416,15 @@ proc configurationMain*() =
 
       let c3 = makeConfig(@["--config-file:tests/config_file/network3.toml"])
       check c3.network == @["666"]
+
+    test "--network load folder with genesis.json":
+      let c1 = makeConfig(@["--network:tests/customgenesis/metadata_with_genesis"])
+      check c1.networkParams.config.chainId == 123456.u256
+
+    test "--network load folder without genesis.json":
+      let c1 = makeConfig(@["--network:tests/customgenesis/metadata_no_genesis"])
+      check c1.networkParams.config.chainId == 7890.u256
+
+
 
 configurationMain()

@@ -31,7 +31,7 @@ proc rollBackPartTries(
     state.register(part[n][0], part[n][1], part[n][2])
 
 proc putStoAndProof(
-    adb: MptAsmRef;
+    adb: CacheDbRef;
     root: StateRoot;
     account: ItemKey;
     start: ItemKey;
@@ -71,7 +71,7 @@ template downloadImpl(
   block body:
     let
       ctx = buddy.ctx
-      adb = ctx.pool.mptAsm
+      adb = ctx.pool.cacheDB
       sRoot = state.stateRoot
       peerID = buddy.peerID
 
@@ -275,18 +275,18 @@ template storageDownload*(
          .mapIt( (it.accHash.to(ItemKey),
                   it.accBody.storageRoot.to(Hash32).to(StoreRoot)) )
 
-      if state.hasStorage:
+      if state.hasCodeOrStorage:
         trace info & ": Storage download", peer,
           `state`=state.toStr(buddy.ctx.pool.stateDB),
           syncState=($buddy.syncState)
 
         while not buddy.ctrl.stopped and
-              state.hasStorage and
+              state.hasCodeOrStorage and
               buddy.downloadFromQueue(state, info):
           continue
 
-        trace info & ": Storage downloaded", peer, root=state.rootStr,
-          completed=(not state.hasStorage), syncState=($buddy.syncState)
+        trace info & ": Storage done", peer, root=state.rootStr,
+          todo=state.hasCodeOrStorage, syncState=buddy.syncState
 
   discard                                           # visual alignment
 

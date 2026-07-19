@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -42,19 +42,19 @@ suite "Stateless: Witness Types":
       decodedWitness.isOk()
       decodedWitness.get() == witness
 
-  test "Encoding/decoding empty ExecutionWitness":
-    var witness: ExecutionWitness
+  test "Encoding/decoding empty ExecutionWitnessWithKeys":
+    var witness: ExecutionWitnessWithKeys
 
     let witnessBytes = witness.encode()
     check witnessBytes.len() > 0
 
-    let decodedWitness = ExecutionWitness.decode(witnessBytes)
+    let decodedWitness = ExecutionWitnessWithKeys.decode(witnessBytes)
     check:
       decodedWitness.isOk()
       decodedWitness.get() == witness
 
-  test "Encoding/decoding ExecutionWitness":
-    var witness = ExecutionWitness.init()
+  test "Encoding/decoding ExecutionWitnessWithKeys":
+    var witness = ExecutionWitnessWithKeys.init()
     witness.addState(@[0x1.byte, 0x2, 0x3])
     witness.addKey(@[0x7.byte, 0x8, 0x9])
     witness.addCode(@[0x4.byte, 0x5, 0x6])
@@ -63,7 +63,7 @@ suite "Stateless: Witness Types":
     let witnessBytes = witness.encode()
     check witnessBytes.len() > 0
 
-    let decodedWitness = ExecutionWitness.decode(witnessBytes)
+    let decodedWitness = ExecutionWitnessWithKeys.decode(witnessBytes)
     check:
       decodedWitness.isOk()
       decodedWitness.get() == witness

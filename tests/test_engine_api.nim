@@ -19,14 +19,18 @@ import
   unittest2
 
 import
+  eth/common/keys,
   ../execution_chain/rpc,
   ../execution_chain/conf,
+  ../execution_chain/common,
+  ../execution_chain/transaction,
   ../execution_chain/core/chain,
   ../execution_chain/core/tx_pool,
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/beacon/beacon_engine,
   ../execution_chain/beacon/web3_eth_conv,
-  ../hive_integration/engine_client
+  ../hive_integration/engine_client,
+   ./shared_data/eip8282data
 
 type
   TestEnv = ref object
@@ -34,6 +38,7 @@ type
     server : RpcHttpServer
     client : RpcHttpClient
     chain  : ForkedChainRef
+    txPool : TxPoolRef
 
   NewPayloadV4Params* = object
     payload*: ExecutionPayload
@@ -52,6 +57,15 @@ NewPayloadV4Params.useDefaultSerializationIn EthJson
 const
   defaultGenesisFile = "tests/customgenesis/engine_api_genesis.json"
   mekongGenesisFile = "tests/customgenesis/mekong.json"
+  wdAddress = address"0xf6c3a9edc1afa0ad5b720e4d42e1437c43d3b3ff"
+
+let
+  # Deterministic test signer, funded in the default genesis (see setupEnv) so
+  # that a valid transaction can be injected into the tx pool.
+  testSenderKey = PrivateKey.fromHex(
+    "0x4646464646464646464646464646464646464646464646464646464646464646").expect(
+    "valid private key")
+  testSender = testSenderKey.toPublicKey().to(Address)
 
 proc setupConfig(genesisFile: string): ExecutionClientConf =
   makeConfig(@[
@@ -87,6 +101,24 @@ proc setupEnv(envFork: HardFork = MergeFork,
   if envFork >= Prague:
     config.networkParams.config.pragueTime = Opt.some(0.EthTime)
 
+  if envFork >= Osaka:
+    config.networkParams.config.osakaTime = Opt.some(0.EthTime)
+
+  if envFork >= Amsterdam:
+    config.networkParams.config.bpo1Time = Opt.some(0.EthTime)
+    config.networkParams.config.bpo2Time = Opt.some(0.EthTime)
+    config.networkParams.config.amsterdamTime = Opt.some(0.EthTime)
+    config.networkParams.genesis.alloc[BUILDER_DEPOSIT_CONTRACT_ADDRESS] = GenesisAccount(code: builderDepositRequestCode)
+    config.networkParams.genesis.alloc[BUILDER_EXIT_CONTRACT_ADDRESS] = GenesisAccount(code: builderExitRequestCode)
+
+  # Fund the test signer only for the default genesis, so tests that rely on a
+  # fixed genesis/block hash (e.g. the mekong canonical test) are unaffected.
+  if genesisFile == defaultGenesisFile:
+    config.networkParams.genesis.alloc[testSender] =
+      GenesisAccount(balance: 1_000_000_000_000_000_000.u256)
+    config.networkParams.genesis.alloc[wdAddress] =
+      GenesisAccount(balance: 1_000_000_000_000_000_000.u256)
+
   let
     com   = setupCom(config)
     chain = ForkedChainRef.init(com, enableQueue = true)
@@ -112,6 +144,7 @@ proc setupEnv(envFork: HardFork = MergeFork,
     server : server,
     client : client,
     chain  : chain,
+    txPool : txPool,
   )
 
 proc close(env: TestEnv) =
@@ -144,6 +177,156 @@ proc runBasicCycleTest(env: TestEnv): Result[void, string] =
 
   if bn != 1:
     return err("Expect returned block number: 1, got: " & $bn)
+
+  ok()
+
+proc makeSignedTx(env: TestEnv, nonce: AccountNonce = 0): Transaction =
+  # A valid, includable legacy tx from the funded test signer.
+  let tx = Transaction(
+    txType:   TxLegacy,
+    chainId:  env.com.chainId,
+    nonce:    nonce,
+    gasPrice: 30_000_000_000.GasInt,
+    gasLimit: 70_000.GasInt,
+    to:       Opt.some(default(Address)),
+    value:    1.u256,
+  )
+  signTransaction(tx, testSenderKey, eip155 = true)
+
+proc runPayloadRebuildTest(env: TestEnv): Result[void, string] =
+  # Calling forkchoiceUpdated repeatedly with identical payload attributes must
+  # rebuild the payload from a fresh transaction environment each time. This
+  # guards a regression where a rebuild for the same slot reused the previous
+  # pack's dirtied ledger state: on the second build every pooled tx then failed
+  # the nonce check, so the body came out empty, yet the header still committed
+  # to the first pack's accumulators.
+  #
+  # We prove it by building the SAME payload twice from the SAME pool (several
+  # includable txs sitting in it the whole time): both builds must produce the
+  # identical, non-empty block, and newPayload must accept it as valid.
+  const numTxs = 5
+  let
+    client = env.client
+    header = ? client.latestHeader()
+    update = ForkchoiceStateV1(
+      headBlockHash: header.computeBlockHash
+    )
+    time = getTime().toUnix
+    attr = PayloadAttributes(
+      timestamp:             w3Qty(time + 1),
+      prevRandao:            default(Bytes32),
+      suggestedFeeRecipient: default(Address),
+      withdrawals:           Opt.some(newSeq[WithdrawalV1]()),
+    )
+
+  # Seed the pool with several valid transactions (consecutive nonces) before
+  # any build.
+  for nonce in 0 ..< numTxs:
+    env.txPool.addTx(env.makeSignedTx(nonce.AccountNonce)).isOkOr:
+      return err("Failed to add tx " & $nonce & " to pool: " & $error)
+
+  # First FCU: builds a payload that includes the pooled txs.
+  let
+    fcuRes1 = ? client.forkchoiceUpdated(Version.V1, update, Opt.some(attr))
+    id1     = fcuRes1.payloadId.get
+    payload1 = ? client.getPayload(Version.V1, id1)
+
+  if payload1.executionPayload.transactions.len != numTxs:
+    return err("Expected " & $numTxs & " txs in first build, got: " &
+      $payload1.executionPayload.transactions.len)
+
+  # Second FCU with the SAME attributes and the SAME pool: must rebuild from a
+  # fresh state and again include every tx. If the second pack reused the first
+  # pack's dirtied ledger, the txs would fail their nonce checks and the body
+  # would come out empty.
+  let
+    fcuRes2 = ? client.forkchoiceUpdated(Version.V1, update, Opt.some(attr))
+    id2     = fcuRes2.payloadId.get
+    payload2 = ? client.getPayload(Version.V1, id2)
+
+  if payload2.executionPayload.transactions.len != numTxs:
+    return err("Rebuild dropped txs: expected " & $numTxs & " txs, got " &
+      $payload2.executionPayload.transactions.len)
+
+  # Same head, same attributes, same txs -> byte-identical block.
+  if payload2.executionPayload.blockHash != payload1.executionPayload.blockHash:
+    return err("Rebuilt block differs from first build: " &
+      payload1.executionPayload.blockHash.toHex & " vs " &
+      payload2.executionPayload.blockHash.toHex)
+
+  # The rebuilt block must be self-consistent: newPayload validates the header's
+  # gasUsed/stateRoot/receiptsRoot against the actual body, which would fail if
+  # the header committed to a stale (empty-body) pack.
+  let npRes = ? client.newPayloadV1(payload2.executionPayload)
+  if npRes.status != PayloadExecutionStatus.valid:
+    return err("Rebuilt block rejected by newPayload: " & $npRes.status &
+      " err: " & npRes.validationError.get(""))
+
+  ok()
+
+proc runSiblingHeadPayloadTest(env: TestEnv): Result[void, string] =
+  # Regression: when two VALID sibling payloads exist at the same height, the
+  # payload built for a forkchoiceUpdated carrying attributes must sit on the
+  # fcU headBlockHash, not on whichever sibling happened to be imported last.
+  # The build parent used to be ForkedChain.latest (the most recently imported
+  # block), so getPayload returned a payload with the wrong parent hash and the
+  # consensus client refused to sign it, missing the proposal.
+  let
+    client = env.client
+    genesisHeader = ? client.latestHeader()
+    genesisHash = genesisHeader.computeBlockHash
+    update = ForkchoiceStateV1(
+      headBlockHash: genesisHash
+    )
+    time = getTime().toUnix
+    attrA = PayloadAttributes(
+      timestamp:             w3Qty(time + 1),
+      prevRandao:            default(Bytes32),
+      suggestedFeeRecipient: default(Address),
+      withdrawals:           Opt.some(newSeq[WithdrawalV1]()),
+    )
+  var attrB = attrA
+  attrB.prevRandao = Bytes32 EMPTY_UNCLE_HASH
+
+  # Build two distinct sibling payloads on top of genesis.
+  let
+    fcuResA  = ? client.forkchoiceUpdated(Version.V1, update, Opt.some(attrA))
+    payloadA = (? client.getPayload(Version.V1, fcuResA.payloadId.get)).executionPayload
+    fcuResB  = ? client.forkchoiceUpdated(Version.V1, update, Opt.some(attrB))
+    payloadB = (? client.getPayload(Version.V1, fcuResB.payloadId.get)).executionPayload
+
+  if payloadA.blockHash == payloadB.blockHash:
+    return err("Expected two distinct sibling payloads")
+
+  let npResA = ? client.newPayloadV1(payloadA)
+  if npResA.status != PayloadExecutionStatus.valid:
+    return err("newPayload(A) should be valid, got: " & $npResA.status)
+
+  let npResB = ? client.newPayloadV1(payloadB)
+  if npResB.status != PayloadExecutionStatus.valid:
+    return err("newPayload(B) should be valid, got: " & $npResB.status)
+
+  # Sibling B was imported last. Request a payload on top of sibling A.
+  let
+    attrC = PayloadAttributes(
+      timestamp:             w3Qty(time + 2),
+      prevRandao:            default(Bytes32),
+      suggestedFeeRecipient: default(Address),
+      withdrawals:           Opt.some(newSeq[WithdrawalV1]()),
+    )
+    updateC = ForkchoiceStateV1(
+      headBlockHash: payloadA.blockHash,
+      finalizedBlockHash: genesisHash,
+    )
+    fcuResC  = ? client.forkchoiceUpdated(Version.V1, updateC, Opt.some(attrC))
+    payloadC = (? client.getPayload(Version.V1, fcuResC.payloadId.get)).executionPayload
+
+  if payloadC.parentHash != payloadA.blockHash:
+    return err("Payload must be built on the fcU head " &
+      payloadA.blockHash.toHex & ", got parent: " & payloadC.parentHash.toHex)
+
+  if uint64(payloadC.blockNumber) != 2:
+    return err("Expected block number 2, got: " & $payloadC.blockNumber)
 
   ok()
 
@@ -269,6 +452,27 @@ proc newPayloadV4InvalidRequests(env: TestEnv): Result[void, string] =
 
   ok()
 
+proc newPayloadInvalidRLP(env: TestEnv): Result[void, string] =
+  const paramsFile = "tests/engine_api/newPayload_invalid_rlp.json"
+
+  let
+    client = env.client
+    params = EthJson.loadFile(paramsFile, NewPayloadV4Params)
+    res = client.newPayloadV4(
+      params.payload,
+      params.expectedBlobVersionedHashes,
+      params.parentBeaconBlockRoot,
+      params.executionRequests)
+
+  if res.isOk:
+    return err("res should error on undecodable payload")
+
+  if $engineApiInvalidParams notin res.error:
+    return err("invalid error code: " & res.error &
+      " expect: " & $engineApiInvalidParams)
+
+  ok()
+
 proc newPayloadV4InvalidRequestType(env: TestEnv): Result[void, string] =
   const
     paramsFile = "tests/engine_api/newPayloadV4_invalid_requests_type.json"
@@ -290,11 +494,81 @@ proc newPayloadV4InvalidRequestType(env: TestEnv): Result[void, string] =
 
   ok()
 
+proc payloadAttrV4PreserveWithdrawalsTest(env: TestEnv): Result[void, string] =
+  # Regression: setWithdrawals used to drop withdrawals for V4 (Amsterdam) payload
+  # attributes. A PayloadAttributes with a targetGasLimit resolves to Version.V4,
+  # which fell into the `else` branch and had its withdrawals replaced with an empty
+  # seq, so the assembled payload carried no withdrawals even when the attributes
+  # requested some. Verify they are preserved.
+  let
+    client = env.client
+    header = ? client.latestHeader()
+    update = ForkchoiceStateV1(
+      headBlockHash: header.computeBlockHash
+    )
+    time = getTime().toUnix
+    wd = WithdrawalV1(
+      index: w3Qty(0'u64),
+      validatorIndex: w3Qty(0'u64),
+      address: wdAddress,
+      amount: w3Qty(7'u64),
+    )
+    attr = PayloadAttributes(
+      timestamp:             w3Qty(time + 1),
+      prevRandao:            default(Bytes32),
+      suggestedFeeRecipient: default(Address),
+      withdrawals:           Opt.some(@[wd]),
+      parentBeaconBlockRoot: Opt.some(default(Hash32)),
+      slotNumber:            Opt.some(w3Qty(9'u64)),
+      targetGasLimit:        Opt.some(w3Qty(60_000_000'u64)),
+    )
+
+  let
+    fcuRes  = ? client.forkchoiceUpdated(Version.V4, update, Opt.some(attr))
+    id      = fcuRes.payloadId.get
+    payload = ? client.getPayload(Version.V6, id)
+
+  if payload.executionPayload.transactions.len != 0:
+    return err("Expected empty payload before injecting tx, got: " &
+      $payload.executionPayload.transactions.len & " txs")
+
+  if payload.executionPayload.withdrawals.isNone:
+    return err("Expected non empty withdrawals")
+
+  let wds = payload.executionPayload.withdrawals.value
+  if wds.len != 1:
+    return err("Expected withdrawals len 1, got: " & $wds.len)
+
+  if wds[0].amount.uint64 != wd.amount.uint64:
+    return err("Expected withdrawals[0].amount = " & $wd.amount.uint64 &
+      ", got : " & $wds[0].amount)
+
+  if wds[0].address != wdAddress:
+    return err("Expected withdrawals[0].address = " & $wdAddress &
+      ", got : " & $wds[0].address)
+
+  let slotNumber = payload.executionPayload.slotNumber
+  if slotNumber != attr.slotNumber:
+    return err("Expected slotNumber: " & $attr.slotNumber &
+      ", got : " & $slotNumber)
+
+  ok()
+
 const testList = [
   TestSpec(
     name: "Basic cycle",
     fork: MergeFork,
     testProc: runBasicCycleTest
+  ),
+  TestSpec(
+    name: "Payload rebuild for identical FCU",
+    fork: MergeFork,
+    testProc: runPayloadRebuildTest
+  ),
+  TestSpec(
+    name: "Payload built on fcU head, not last imported sibling",
+    fork: MergeFork,
+    testProc: runSiblingHeadPayloadTest
   ),
   TestSpec(
     name: "newPayloadV4",
@@ -321,6 +595,16 @@ const testList = [
     name: "newPayloadV4 invalid execution request type",
     fork: Prague,
     testProc: newPayloadV4InvalidRequestType
+  ),
+  TestSpec(
+    name: "newPayload undecodable RLP payload",
+    fork: Prague,
+    testProc: newPayloadInvalidRLP
+  ),
+  TestSpec(
+    name: "PayloadAttributesV4 preserve withdrawals",
+    fork: Amsterdam,
+    testProc: payloadAttrV4PreserveWithdrawalsTest
   ),
   ]
 

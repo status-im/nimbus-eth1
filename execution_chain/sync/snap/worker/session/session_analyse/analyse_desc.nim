@@ -11,8 +11,9 @@
 {.push raises:[].}
 
 import
-  pkg/[chronicles, chronos, eth/common, stew/byteutils],
-  ../../[mpt, worker_desc]
+  pkg/[chronicles, chronos, eth/common, eth/trie/nibbles],
+  pkg/stew/[byteutils, interval_set],
+  ../../[mpt, helpers, state_db, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -28,31 +29,19 @@ type
     ENoRoot                                         # dangling root key
     ENoBranch                                       # missing branches
     ENoPivot                                        # no pivot state
+    ENoPivotNum                                     # ..
     ECancelled                                      # shutdown?
     EGetError                                       # serious database problem?
     EClearError                                     # ..
     EPutError
+    EAristoError                                    # incomplete import?
+    EPartialMpt
     EOtherError                                     # any other error
-
-  OnDanglingCB* =
-      proc(base: Hash32; key, path: openArray[byte]) {.gcsafe, raises:[].}
-    ## Closure function to perform bespoke actions when a dangling link or
-    ## a completely missing sub-MPT is found.
-
-  TravNotifyCB* =
-      proc(att: AttType,
-           base: Hash32, path, key, data: openArray[byte], depth: int
-        ) {.gcsafe, raises: [].}
-    ## Internal closure function used as call back when analysing an MPT.
-    ## This function is involved whenever there is something *interesting*
-    ## found (e.g. dangling link, leaf node.)
-    ##
-    ## Intended for debugging, mainly
 
   # ----------
 
   WalkTrieGetCB* = proc(
-    db: MptAsmRef, base: Hash32, key: openArray[byte]
+    db: CacheDbRef, base: Hash32, key: openArray[byte]
       ): BlobResult {.gcsafe, raises: [].}
 
   WalkStats* = tuple                                # MPT traversal statistics
@@ -80,7 +69,8 @@ type
 
   TravDescRef* = ref object                         # MPT traversal descriptor
     ctx*: SnapCtxRef                                # snap context
-    db*: MptAsmRef                                  # database
+    db*: CacheDbRef                                 # database
+    ranges*: ItemKeyRangeSet                        # derived from dangl. paths
     msgAt*: Moment                                  # occasional logging
     napAt*: Moment                                  # occasional thread switch
     stats*: WalkStats                               # MPT traversal statistics
@@ -94,65 +84,81 @@ template toKey*(rlp: Rlp): seq[byte] =
   ## Convert to hask key or node data if it is a list (=> length smaller 32)
   if rlp.isList: @(rlp.rawData) else: rlp.toBytes
 
-# ----------
+proc nMissAccRanges*(trd: TravDescRef, info: static[string]): (UInt256,int) =
+  let
+    maybe = trd.db.getAccMissingIntv().valueOr:
+      error info & ": Error retrieving account ranges", `error`=error
+      return (0.u256,-1)
+    (_,rng) = maybe.valueOr:
+      return (0.u256,0)
+  (rng.total(),rng.chunks())
 
-proc clearDanglTables*(ctx: SnapCtxRef, info: static[string]): Opt[void] =
-  let db = ctx.pool.mptAsm
-  db.clearAccDnglKvt().isOkOr:
-    error info & ": Cannot reset dangling accounts", `error`=error
-    return err()
-  db.clearStoDnglKvt().isOkOr:
-    error info & ": Cannot reset dangling slots", `error`=error
-    return err()
-  db.clearCodeMissKvt().isOkOr:
-    error info & ": Cannot reset missing contracts", `error`=error
-    return err()
-  ok()
-
-proc putDanglAcc*(
+proc putAccMissingIntv*(
     trd: TravDescRef;
-    key: openArray[byte];
-    path: openArray[byte];
+    number: BlockNumber;
+    ranges: ItemKeyRangeSet;
     info: static[string];
       ) =
-  trd.db.putAccDnglKvt(key, path).isOkOr:
-    error info & ": Error caching dangling account links",
-      key=key.toHex, path=path.toHex, `error`=error
+  trd.db.putAccMissingIntv(number, ranges).isOkOr:
+    error info & ": Error caching storage account ranges",
+      number, ranges=ranges.total.per256.pcStr, `error`=error
     trd.cacheErr.inc
 
-proc putDanglSto*(
+proc putStoMissingIntv*(
     trd: TravDescRef;
-    base: Hash32;
-    key: openArray[byte];
-    path: openArray[byte];
-    info: static[string];
-      )=
-  trd.db.putStoDnglKvt(base, key, path).isOkOr:
-    error info & ": Error caching dangling slot links",
-      key=key.toHex, path=path.toHex, `error`=error
-    trd.cacheErr.inc
-
-proc putMissSto*(
-    trd: TravDescRef;
-    base: Hash32;
-    key: openArray[byte];
-    path: openArray[byte];
-    info: static[string];
-      )=
-  trd.db.putStoDnglKvt(base, key, path).isOkOr:     # similar to `putDnglSto()`
-    error info & ": Error caching missing slot links",
-      key=key.toHex, path=path.toHex, `error`=error
-    trd.cacheErr.inc
-
-proc putMissCode*(
-    trd: TravDescRef;
-    key: openArray[byte];
-    path: openArray[byte];
+    accPath: Hash32;
+    ranges: ItemKeyRangeSet;
     info: static[string];
       ) =
-  trd.db.putCodeMissKvt(key, path).isOkOr:
-    error info & ": Error caching dangling slot links",
-      key=key.toHex, path=path.toHex, `error`=error
+  trd.db.putStoMissingIntv(accPath, ranges).isOkOr:
+    error info & ": Error caching missing storage slot ranges",
+      accPath=accPath.toStr, ranges=ranges.total.per256.pcStr, `error`=error
+    trd.cacheErr.inc
+
+proc putMissingBlob*(
+    trd: TravDescRef;
+    accPath: Hash32;
+    info: static[string];
+      ) =
+  trd.db.putMissingBlob(accPath).isOkOr:
+    error info & ": Error caching missing contract closde",
+      accPath=accPath.toStr, `error`=error
+    trd.cacheErr.inc
+
+
+proc putFlatAcc*(
+    trd: TravDescRef;
+    accPath: Hash32;
+    payload: openArray[byte];
+    info: static[string];
+      ) =
+  trd.db.putFlatAcc(accPath, payload).isOkOr:
+    error info & ": Error caching account data",
+      accPath=accPath.toStr, payload=payload.toHex, `error`=error
+    trd.cacheErr.inc
+
+proc putFlatSlot*(
+    trd: TravDescRef;
+    accPath: Hash32;
+    slotKey: Hash32;
+    payload: openArray[byte];
+    info: static[string];
+      ) =
+  trd.db.putFlatSlot(accPath, slotKey, payload).isOkOr:
+    error info & ": Error caching flat storage slot data",
+      accPath=accPath.toStr, slotKey=slotKey.toStr, payload=payload.toHex,
+      `error`=error
+    trd.cacheErr.inc
+
+proc putFlatCode*(
+    trd: TravDescRef;
+    accPath: Hash32;
+    data: openArray[byte];
+    info: static[string];
+      ) =
+  trd.db.putFlatCode(accPath, data).isOkOr:
+    error info & ": Error caching contract code data",
+      accPath=accPath.toStr, codeData=data.toHex, `error`=error
     trd.cacheErr.inc
 
 # ------------------------------------------------------------------------------

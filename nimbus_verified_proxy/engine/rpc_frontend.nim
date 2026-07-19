@@ -9,6 +9,7 @@
 
 import
   results,
+  chronicles,
   stew/byteutils,
   nimcrypto/sysrand,
   json_rpc/[rpcserver, rpcclient],
@@ -27,6 +28,9 @@ import
   ./fees,
   ./engine
 
+logScope:
+  topics = "vp_frontend"
+
 template beaconSync(engine: RpcVerificationEngine) =
   block:
     await engine.syncLock.acquire()
@@ -39,26 +43,8 @@ template beaconSync(engine: RpcVerificationEngine) =
         discard
 
     if not engine.isSynced():
+      debug "Engine not synced, syncing before serving query"
       ?(await engine.syncOnce())
-
-proc applyPenalty(engine: RpcVerificationEngine, e: ErrorTuple) =
-  if e.backendIdx < 0:
-    return
-  let idx = e.backendIdx
-  try:
-    case e.errType
-    of BackendFetchError, BackendDecodingError:
-      engine.scores[idx].availability =
-        engine.availabilityScoreFunc(engine.scores[idx].availability, Penalty)
-      engine.scores[idx].quality =
-        engine.qualityScoreFunc(engine.scores[idx].quality, UndoReward)
-    of VerificationError:
-      engine.scores[idx].quality =
-        engine.qualityScoreFunc(engine.scores[idx].quality, Penalty)
-    else:
-      discard
-  except KeyError:
-    discard
 
 template penaltyOr[T](engine: RpcVerificationEngine, r: EngineResult[T]): T =
   # `result = ...; return` pattern for chronos async compatibility
@@ -76,11 +62,13 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_chainId = proc(): Future[EngineResult[UInt256]] {.
       async: (raises: [CancelledError])
   .} =
+    trace "Received query", meth = "eth_chainId"
     ok(engine.chainId)
 
   frontend.eth_blockNumber = proc(): Future[EngineResult[uint64]] {.
       async: (raises: [CancelledError])
   .} =
+    trace "Received query", meth = "eth_blockNumber"
     engine.beaconSync()
 
     # Returns the number of the most recent block.
@@ -95,9 +83,21 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
 
     ok(latest.number.uint64)
 
+  frontend.eth_syncing = proc(): Future[EngineResult[SyncingStatus]] {.
+      async: (raises: [CancelledError])
+  .} =
+    trace "Received query", meth = "eth_syncing"
+    engine.beaconSync()
+
+    ok(SyncingStatus(syncing: false))
+
   frontend.eth_getBalance = proc(
       address: Address, quantityTag: BlockTag
   ): Future[EngineResult[UInt256]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getBalance",
+      address = safeEncode(address),
+      quantityTag = safeEncode(quantityTag)
     engine.beaconSync()
 
     let header = engine.penaltyOr(await engine.getHeader(quantityTag))
@@ -109,6 +109,11 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_getStorageAt = proc(
       address: Address, slot: UInt256, quantityTag: BlockTag
   ): Future[EngineResult[FixedBytes[32]]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getStorageAt",
+      address = safeEncode(address),
+      slot = safeEncode(slot),
+      quantityTag = safeEncode(quantityTag)
     engine.beaconSync()
 
     let header = engine.penaltyOr(await engine.getHeader(quantityTag))
@@ -120,6 +125,10 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_getTransactionCount = proc(
       address: Address, quantityTag: BlockTag
   ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getTransactionCount",
+      address = safeEncode(address),
+      quantityTag = safeEncode(quantityTag)
     engine.beaconSync()
 
     let header = engine.penaltyOr(await engine.getHeader(quantityTag))
@@ -131,6 +140,10 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_getCode = proc(
       address: Address, quantityTag: BlockTag
   ): Future[EngineResult[seq[byte]]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getCode",
+      address = safeEncode(address),
+      quantityTag = safeEncode(quantityTag)
     engine.beaconSync()
 
     let header = engine.penaltyOr(await engine.getHeader(quantityTag))
@@ -141,6 +154,8 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_getBlockByHash = proc(
       blockHash: Hash32, fullTransactions: bool
   ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getBlockByHash", blockHash = safeEncode(blockHash), fullTransactions
     engine.beaconSync()
 
     let blk = engine.penaltyOr(await engine.getBlock(blockHash, fullTransactions))
@@ -149,6 +164,8 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_getBlockByNumber = proc(
       blockTag: BlockTag, fullTransactions: bool
   ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getBlockByNumber", blockTag = safeEncode(blockTag), fullTransactions
     engine.beaconSync()
 
     let blk = engine.penaltyOr(await engine.getBlock(blockTag, fullTransactions))
@@ -157,6 +174,8 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_getUncleCountByBlockNumber = proc(
       blockTag: BlockTag
   ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getUncleCountByBlockNumber", blockTag = safeEncode(blockTag)
     engine.beaconSync()
 
     let blk = engine.penaltyOr(await engine.getBlock(blockTag, false))
@@ -165,6 +184,8 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_getUncleCountByBlockHash = proc(
       blockHash: Hash32
   ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getUncleCountByBlockHash", blockHash = safeEncode(blockHash)
     engine.beaconSync()
 
     let blk = engine.penaltyOr(await engine.getBlock(blockHash, false))
@@ -173,6 +194,8 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_getBlockTransactionCountByNumber = proc(
       blockTag: BlockTag
   ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getBlockTransactionCountByNumber", blockTag = safeEncode(blockTag)
     engine.beaconSync()
 
     let blk = engine.penaltyOr(await engine.getBlock(blockTag, true))
@@ -181,6 +204,8 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_getBlockTransactionCountByHash = proc(
       blockHash: Hash32
   ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getBlockTransactionCountByHash", blockHash = safeEncode(blockHash)
     engine.beaconSync()
 
     let blk = engine.penaltyOr(await engine.getBlock(blockHash, true))
@@ -189,6 +214,10 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_getTransactionByBlockNumberAndIndex = proc(
       blockTag: BlockTag, index: Quantity
   ): Future[EngineResult[TransactionObject]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getTransactionByBlockNumberAndIndex",
+      blockTag = safeEncode(blockTag),
+      index = safeEncode(index)
     engine.beaconSync()
 
     let blk = engine.penaltyOr(await engine.getBlock(blockTag, true))
@@ -204,6 +233,10 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_getTransactionByBlockHashAndIndex = proc(
       blockHash: Hash32, index: Quantity
   ): Future[EngineResult[TransactionObject]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getTransactionByBlockHashAndIndex",
+      blockHash = safeEncode(blockHash),
+      index = safeEncode(index)
     engine.beaconSync()
 
     let blk = engine.penaltyOr(await engine.getBlock(blockHash, true))
@@ -219,6 +252,11 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_call = proc(
       tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: bool = true
   ): Future[EngineResult[seq[byte]]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_call",
+      tx = safeEncode(tx),
+      blockTag = safeEncode(blockTag),
+      optimisticStateFetch
     engine.beaconSync()
 
     if tx.to.isNone():
@@ -251,6 +289,11 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_createAccessList = proc(
       tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: bool = true
   ): Future[EngineResult[AccessListResult]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_createAccessList",
+      tx = safeEncode(tx),
+      blockTag = safeEncode(blockTag),
+      optimisticStateFetch
     engine.beaconSync()
 
     if tx.to.isNone():
@@ -283,6 +326,11 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_estimateGas = proc(
       tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: bool = true
   ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_estimateGas",
+      tx = safeEncode(tx),
+      blockTag = safeEncode(blockTag),
+      optimisticStateFetch
     engine.beaconSync()
 
     if tx.to.isNone():
@@ -312,6 +360,8 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_getTransactionByHash = proc(
       txHash: Hash32
   ): Future[EngineResult[TransactionObject]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getTransactionByHash", txHash = safeEncode(txHash)
     engine.beaconSync()
 
     let (backend, backendIdx) = ?(engine.executionBackendFor(GetTransactionByHash))
@@ -341,6 +391,8 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_getBlockReceipts = proc(
       blockTag: BlockTag
   ): Future[EngineResult[Opt[seq[ReceiptObject]]]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getBlockReceipts", blockTag = safeEncode(blockTag)
     engine.beaconSync()
 
     let rxs = engine.penaltyOr(await engine.getReceipts(blockTag))
@@ -349,6 +401,8 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_getTransactionReceipt = proc(
       txHash: Hash32
   ): Future[EngineResult[ReceiptObject]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getTransactionReceipt", txHash = safeEncode(txHash)
     engine.beaconSync()
 
     let (backend, backendIdx) = ?(engine.executionBackendFor(GetTransactionReceipt))
@@ -366,6 +420,8 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_getLogs = proc(
       filterOptions: FilterOptions
   ): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getLogs", filterOptions = safeEncode(filterOptions)
     engine.beaconSync()
 
     let logObjs = engine.penaltyOr(await engine.getLogs(filterOptions))
@@ -374,6 +430,8 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_newFilter = proc(
       filterOptions: FilterOptions
   ): Future[EngineResult[string]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_newFilter", filterOptions = safeEncode(filterOptions)
     engine.beaconSync()
 
     if engine.filterStore.len >= MAX_FILTERS:
@@ -413,6 +471,7 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_uninstallFilter = proc(
       filterId: string
   ): Future[EngineResult[bool]] {.async: (raises: [CancelledError]).} =
+    trace "Received query", meth = "eth_uninstallFilter", filterId
     engine.beaconSync()
 
     if filterId in engine.filterStore:
@@ -424,6 +483,7 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_getFilterLogs = proc(
       filterId: string
   ): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).} =
+    trace "Received query", meth = "eth_getFilterLogs", filterId
     engine.beaconSync()
 
     try:
@@ -436,6 +496,7 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_getFilterChanges = proc(
       filterId: string
   ): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).} =
+    trace "Received query", meth = "eth_getFilterChanges", filterId
     engine.beaconSync()
 
     let filterItem =
@@ -445,7 +506,7 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
         return err((FrontendError, "Filter doesn't exist", UNTAGGED))
 
     let
-      filter = ?engine.resolveFilterTags(filterItem.filter)
+      filter = ?(await engine.resolveFilterTags(filterItem.filter))
       # after resolving toBlock is always some and a number tag
       toBlock = filter.toBlock.get().number
 
@@ -486,6 +547,7 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_blobBaseFee = proc(): Future[EngineResult[UInt256]] {.
       async: (raises: [CancelledError])
   .} =
+    trace "Received query", meth = "eth_blobBaseFee"
     engine.beaconSync()
 
     let db = DefaultDbMemory.newCoreDbRef()
@@ -496,7 +558,7 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
       db,
       config = chainConfigForNetwork(engine.chainId),
       initializeDb = false,
-      statelessProviderEnabled = true, # Enables collection of witness keys
+      statelessProvider = true, # Enables collection of witness keys
     )
 
     let header = engine.penaltyOr(await engine.getHeader(blockId("latest")))
@@ -517,6 +579,7 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_gasPrice = proc(): Future[EngineResult[Quantity]] {.
       async: (raises: [CancelledError])
   .} =
+    trace "Received query", meth = "eth_gasPrice"
     engine.beaconSync()
 
     let suggestedPrice = engine.penaltyOr(await engine.suggestGasPrice())
@@ -525,6 +588,7 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_maxPriorityFeePerGas = proc(): Future[EngineResult[Quantity]] {.
       async: (raises: [CancelledError])
   .} =
+    trace "Received query", meth = "eth_maxPriorityFeePerGas"
     engine.beaconSync()
 
     let suggestedPrice = engine.penaltyOr(await engine.suggestMaxPriorityGasPrice())
@@ -534,6 +598,11 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_getProof = proc(
       address: Address, slots: seq[UInt256], blockId: BlockTag
   ): Future[EngineResult[ProofResponse]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getProof",
+      address = safeEncode(address),
+      slots = safeEncode(slots),
+      blockId = safeEncode(blockId)
     engine.beaconSync()
 
     let (backend, backendIdx) = ?(engine.executionBackendFor(GetProof))
@@ -545,6 +614,11 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_feeHistory = proc(
       blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[int]
   ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_feeHistory",
+      blockCount = safeEncode(blockCount),
+      newestBlock = safeEncode(newestBlock),
+      rewardPercentiles = safeEncode(rewardPercentiles)
     engine.beaconSync()
 
     let (backend, backendIdx) = ?(engine.executionBackendFor(FeeHistory))
@@ -558,6 +632,8 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
   frontend.eth_sendRawTransaction = proc(
       txBytes: seq[byte]
   ): Future[EngineResult[Hash32]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_sendRawTransaction", txBytes = safeEncode(txBytes)
     engine.beaconSync()
 
     let (backend, backendIdx) = ?(engine.executionBackendFor(SendRawTransaction))

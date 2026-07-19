@@ -15,7 +15,7 @@ import
   unittest2,
   ../../execution_chain/db/core_db/memory_only,
   ../../execution_chain/common/common,
-  ../../execution_chain/stateless/[witness_generation, witness_verification]
+  ../../execution_chain/stateless/[witness_generation, witness_verification, stateless_execution]
 
 suite "Stateless: Witness Verification":
   setup:
@@ -70,8 +70,8 @@ suite "Stateless: Witness Verification":
     check witness.validateKeys(witnessKeys).isOk()
 
     let
-      executionWitness = ExecutionWitness.build(witness, ledger)
-      headersRes = executionWitness.verifyHeaders(header4)
+      executionWitness = ExecutionWitnessWithKeys.build(witness, ledger)
+      headersRes = executionWitness.toExecutionWitness().verifyHeaders(header4)
 
     check:
       headersRes.isOk()

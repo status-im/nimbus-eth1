@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -10,13 +10,29 @@
 
 import
   std/[os, options, strutils],
-  confutils, confutils/defs
+  confutils, confutils/defs,
+  ../../execution_chain/version
 
 export
   confutils, defs
 
 type
   StateConf* = object of RootObj
+    enableError* {.
+      desc: "enable write error information to stdout"
+      defaultValue: false
+      name: "enable-error" }: bool
+
+    disableOutput* {.
+      desc: "disable write execution result to stdout"
+      defaultValue: false
+      name: "no-output" }: bool
+
+    postState* {.
+      desc: "dumps post state after the run"
+      defaultValue: false
+      name: "post" }: bool
+
     dumpEnabled* {.
       desc: "dumps the state after the run"
       defaultValue: false
@@ -58,10 +74,15 @@ type
       name: "fork" }: string
 
     index* {.
-      desc: "if index is unset, all subtest in the fork will be tested"
+      desc: "if index is unset, all test in the file will be executed"
       defaultValue: none(int)
       name: "index" }: Option[int]
 
+    subIndex* {.
+      desc: "if index is unset, all subtest in the fork will be tested"
+      defaultValue: none(int)
+      name: "sub-index" }: Option[int]
+      
     pretty* {.
       desc: "pretty print the trace result"
       defaultValue: false
@@ -83,7 +104,7 @@ const
   Copyright = "Copyright (c) 2022-" &
     CompileDate.split('-')[0] &
     " Status Research & Development GmbH"
-  Version   = "Nimbus-evmstate 0.1.2"
+  Version   = "Nimbus-evmstate " & NimbusVersion
 
 proc init*(_: type StateConf, cmdLine = commandLineParams()): StateConf =
   {.push warning[ProveInit]: off.}

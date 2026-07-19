@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -33,7 +33,7 @@ proc maybeSlowPeerError(
 
     # Do not repeat the same time-consuming failed request
     buddy.only.failedReq = PeerFirstFetchReq(
-      state:     SyncState.blocks,
+      state:     BeaconState.blocks,
       blockHash: hash)
 
     return true
@@ -62,7 +62,7 @@ proc getBlockBodies(
   ## Wrapper around `getBlockHeaders()`
   let start = Moment.now()
 
-  if buddy.only.failedReq.state == SyncState.blocks and
+  if buddy.only.failedReq.state == BeaconState.blocks and
      buddy.only.failedReq.blockHash == req.blockHashes[0]:
     return err((EAlreadyTriedAndFailed,"","",Moment.now()-start))
 

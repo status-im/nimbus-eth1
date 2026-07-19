@@ -51,9 +51,12 @@ const
   defaultAdminListenAddress = (static parseIpAddress("127.0.0.1"))
   defaultAdminListenAddressDesc = $defaultAdminListenAddress & ", meaning local host only"
   logLevelDesc = getLogLevels()
+  defaultParallelStateRootComputation* = false
+  defaultParallelSenderRecovery* = true
   defaultOptimisticStatePrefetch* = false
   defaultBalStatePrefetch* = false
   defaultBalStatePrefetchWorkers* = 0
+  defaultBalParallelExecution* = false
 
 template defaultListenAddress(): IpAddress =
   getAutoAddress(Port(0)).toIpAddress()
@@ -71,10 +74,6 @@ type
     Eth                           ## enable eth_ set of RPC API
     Debug                         ## enable debug_ set of RPC API
     Admin                         ## enable admin_ set of RPC API
-
-  DiscoveryType* {.pure.} = enum
-    V4
-    V5
 
   ExecutionClientConf* = object
     ## Main configuration for the execution client - when updating, coordinate
@@ -131,8 +130,8 @@ type
 
     gasLimit* {.
       desc: "Desired gas limit when building an execution payload"
-      defaultValue: DEFAULT_GAS_LIMIT
-      name: "gas-limit" .}: uint64
+      defaultValue: none(uint64)
+      name: "gas-limit" .}: Option[uint64]
 
     # https://eips.ethereum.org/EIPS/eip-7872
     maxBlobs* {.
@@ -201,17 +200,31 @@ type
 
     bootstrapNodes {.
       separator: "\pNETWORKING OPTIONS:"
-      desc: "Specifies one or more bootstrap nodes(ENR or enode URL) to use when connecting to the network"
+      desc: "Specifies one or more bootstrap nodes(ENR or enode URL) to use when connecting to the network. " &
+            "Alias = el-bootstrap-node"
       defaultValue: @[]
       defaultValueDesc: ""
       abbr: "b"
       name: "bootstrap-node" .}: seq[string]
 
+    elBootstrapNodes {.
+      hidden
+      desc: "alias to bootstrap-node"
+      defaultValue: @[]
+      defaultValueDesc: ""
+      name: "el-bootstrap-node" .}: seq[string]
+
     bootstrapFile {.
       desc: "Specifies a file of bootstrap Ethereum network addresses(ENR or enode URL). " &
-            "Both line delimited or YAML format are supported"
+            "Both line delimited or YAML format are supported. Alias = el-bootstrap-file"
       defaultValue: ""
       name: "bootstrap-file" .}: InputFile
+
+    elBootstrapFile {.
+      hidden
+      desc: "alias to bootstrap-file"
+      defaultValue: ""
+      name: "el-bootstrap-file" .}: InputFile
 
     staticPeers {.
       desc: "Connect to one or more trusted peers(ENR or enode URL)"
@@ -252,10 +265,17 @@ type
       defaultValueDesc: "default to --tcp-port"
       name: "udp-port" .}: Option[Port]
 
-    maxPeers* {.
+    maxPeersOpt {.
       desc: "Maximum number of peers to connect to"
-      defaultValue: 25
-      name: "max-peers" .}: int
+      defaultValue: none(int)
+      defaultValueDesc: "25"
+      name: "max-peers" .}: Option[int]
+
+    elMaxPeersOpt {.
+      hidden
+      desc: "alias to max-peers"
+      defaultValue: none(int)
+      name: "el-max-peers" .}: Option[int]
 
     nat* {.
       desc: "Specify method to use for determining public address. " &
@@ -264,16 +284,10 @@ type
       defaultValueDesc: "any"
       name: "nat" .}: NatConfig
 
-    discovery* {.
-      desc: "Specify method to find suitable peer in an Ethereum network (None, V4, V5)"
-      longDesc:
-        "- None: Disables the peer discovery mechanism (manual peer addition)\n" &
-        "- V4  : Node Discovery Protocol v4\n" &
-        "- V5  : Node Discovery Protocol v5\n" &
-        "- All : V4, V5"
-      defaultValue: @["V4", "V5"]
-      defaultValueDesc: "V4, V5"
-      name: "discovery" .}: seq[string]
+    discv5* {.
+      desc: "Enable peer discovery. When disabled, peers must be added manually"
+      defaultValue: true
+      name: "discv5" .}: bool
 
     netKey* {.
       desc: "P2P ethereum node (secp256k1) private key (random, path, hex)"
@@ -362,9 +376,15 @@ type
 
     parallelStateRootComputation* {.
       hidden
-      defaultValue: false
+      defaultValue: defaultParallelStateRootComputation
       desc: "Compute state root in parallel using multiple threads"
       name: "debug-parallel-state-root".}: bool
+
+    parallelSenderRecovery* {.
+      hidden
+      defaultValue: defaultParallelSenderRecovery
+      desc: "Recover transaction senders in parallel on background threads"
+      name: "debug-parallel-sender-recovery".}: bool
 
     optimisticStatePrefetch* {.
       hidden
@@ -387,6 +407,13 @@ type
         "state prefetching (0 = use number equal to the taskpool threads count)"
       name: "debug-bal-state-prefetch-workers".}: int
 
+    balParallelExecution* {.
+      hidden
+      defaultValue: defaultBalParallelExecution
+      desc: "Execute block transactions in parallel on background threads " &
+        "using the supplied block access list"
+      name: "debug-bal-parallel-execution".}: bool
+
     eagerStateRootCheck* {.
       hidden
       desc: "Eagerly check state roots when syncing finalized blocks"
@@ -397,7 +424,7 @@ type
       defaultValue: true
       name: "debug-deserialize-fc-state" .}: bool
 
-    statelessProviderEnabled* {.
+    statelessProvider* {.
       separator: "\pSTATELESS PROVIDER OPTIONS:"
       desc: "Enable the stateless provider. This turns on the features required" &
         " by stateless clients such as generation and storage of block witnesses" &
@@ -667,9 +694,12 @@ iterator repeatingList(listOfList: openArray[string]): string =
     for item in list:
       yield item
 
-func breakRepeatingList(listOfList: openArray[string]): seq[string] =
+func breakRepeatingList(listOfList: openArray[string], list: var seq[string]) =
   for strList in listOfList:
-    processList(strList, result)
+    processList(strList, list)
+
+func breakRepeatingList(listOfList: openArray[string]): seq[string] =
+  breakRepeatingList(listOfList, result)
 
 func decOrHex(s: string): bool =
   const allowedDigits = Digits + HexDigits + {'x', 'X'}
@@ -770,23 +800,6 @@ proc getRpcFlags*(config: ExecutionClientConf): set[RpcFlag] =
 proc getWsFlags*(config: ExecutionClientConf): set[RpcFlag] =
   getRpcFlags(config.wsApi)
 
-proc getDiscoveryFlags(api: openArray[string]): set[DiscoveryType] =
-  if api.len == 0:
-    return {DiscoveryType.V4, DiscoveryType.V5}
-
-  for item in repeatingList(api):
-    case item.toLowerAscii()
-    of "none": result = {}
-    of "v4": result.incl DiscoveryType.V4
-    of "v5": result.incl DiscoveryType.V5
-    of "all": result = {DiscoveryType.V4, DiscoveryType.V5}
-    else:
-      error "Unknown discovery type: ", name=item
-      quit QuitFailure
-
-proc getDiscoveryFlags*(config: ExecutionClientConf): set[DiscoveryType] =
-  getDiscoveryFlags(config.discovery)
-
 proc getBootstrapNodes*(config: ExecutionClientConf): BootstrapNodes =
   # Ignore standard bootnodes if customNetwork is loaded
   if config.customNetwork.isNone:
@@ -797,13 +810,20 @@ proc getBootstrapNodes*(config: ExecutionClientConf): BootstrapNodes =
     elif config.networkId == HoodiNet:
       getBootstrapNodes("hoodi", result).expect("no error")
 
-  let list = breakRepeatingList(config.bootstrapNodes)
+  var list = breakRepeatingList(config.bootstrapNodes)
+  if config.elBootstrapNodes.len > 0:
+    # Add el-bootstrap-node
+    breakRepeatingList(config.elBootstrapNodes, list)
   parseBootstrapNodes(list, result).isOkOr:
     warn "Error when parsing bootstrap nodes", msg=error
 
-  if config.bootstrapFile.string.len > 0:
-    loadBootstrapNodes(config.bootstrapFile.string, result).isOkOr:
-      warn "Error when parsing bootstrap nodes from file", msg=error, file=config.bootstrapFile.string
+  let bootstrapFile = if config.bootstrapFile.string.len > 0: config.bootstrapFile.string
+                      elif config.elBootstrapFile.string.len > 0: config.elBootstrapFile.string
+                      else: ""
+
+  if bootstrapFile.len > 0:
+    loadBootstrapNodes(bootstrapFile, result).isOkOr:
+      warn "Error when parsing bootstrap nodes from file", msg=error, file=bootstrapFile
 
 proc getStaticPeers*(config: ExecutionClientConf): BootstrapNodes =
   let list = breakRepeatingList(config.staticPeers)
@@ -840,6 +860,15 @@ proc ereDir*(config: ExecutionClientConf): string =
 func udpPort*(config: ExecutionClientConf): Port =
   config.udpPortFlag.get(config.tcpPort)
 
+func threadSafeCaches*(config: ExecutionClientConf): bool =
+  (config.parallelSenderRecovery and config.optimisticStatePrefetch) or
+    config.parallelStateRootComputation or
+    config.balStatePrefetch or
+    config.balParallelExecution
+
+func parallelFeaturesEnabled*(config: ExecutionClientConf): bool =
+  config.threadSafeCaches() or config.parallelSenderRecovery
+
 func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
   DbOptions.init(
     maxOpenFiles = config.rocksdbMaxOpenFiles,
@@ -856,8 +885,7 @@ func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
     rdbPrintStats = config.rdbPrintStats,
     maxSnapshots = config.aristoDbMaxSnapshots,
     parallelStateRootComputation = config.parallelStateRootComputation,
-    threadSafeCaches = config.optimisticStatePrefetch or config.balStatePrefetch or
-      config.parallelStateRootComputation,
+    threadSafeCaches = config.threadSafeCaches(),
     blockCacheType = config.rocksdbBlockCacheType,
   )
 
@@ -875,6 +903,15 @@ proc readValue*(r: var TomlReader, value: var seq[string]) {.raises: [IOError, S
       value.add r.parseAsString()
   else:
     value.add r.parseAsString()
+
+func maxPeers*(config: ExecutionClientConf): int =
+  if config.maxPeersOpt.isSome:
+    return config.maxPeersOpt.get
+
+  if config.elMaxPeersOpt.isSome:
+    return config.elMaxPeersOpt.get
+
+  25
 
 {.pop.}
 

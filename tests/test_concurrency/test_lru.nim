@@ -373,6 +373,25 @@ suite "LruCache Tests":
     check:
       toSeq(lru.keys()) == @[5, 4, 3, 2, 1]
 
+  test "moveToFront by key":
+    var lru = LruCache[int, int].init(5)
+
+    for i in 0 ..< 5:
+      lru.put(i, i)
+    check toSeq(lru.keys()) == @[4, 3, 2, 1, 0]
+
+    # promote a key to the front (without copying its value out)
+    lru.moveToFront(subhash(0), 0)
+    check toSeq(lru.keys()) == @[0, 4, 3, 2, 1]
+
+    # promoting the existing front is a no-op
+    lru.moveToFront(subhash(0), 0)
+    check toSeq(lru.keys()) == @[0, 4, 3, 2, 1]
+
+    # a missing key leaves the order untouched
+    lru.moveToFront(subhash(99), 99)
+    check toSeq(lru.keys()) == @[0, 4, 3, 2, 1]
+
   test "dispose":
     block:
       var lru = LruCache[int, int].init(2)
@@ -383,6 +402,13 @@ suite "LruCache Tests":
       lru.put(10, 10)
       lru.put(20, 20)
       lru.dispose()
+
+proc getOrReturn(lru: var ConcurrentLruCache[int, int], key: int): int =
+  ## Reads via `withGet` but exits the `foundBody` early via `return`. Used to
+  ## verify that the sampled MRU promotion still runs when the body returns.
+  lru.withGet(key, v):
+    return v
+  -1
 
 suite "ConcurrentLruCache Tests":
   test "defaultShardBits":
@@ -398,6 +424,33 @@ suite "ConcurrentLruCache Tests":
       defaultShardBits(16) == 6 # 64 shards
       defaultShardBits(16) == 6 # 64 shards
       defaultShardBits(32) == 6 # 64 shards
+
+  test "withGet promotion runs even if foundBody returns":
+    # Single-shard, thread-safe cache so the promotion goes through the locked
+    # path (the one that promotes in a `finally`).
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(3, shardBits = 0)
+    defer:
+      lru.dispose()
+
+    lru.put(1, 10)
+    lru.put(2, 20)
+    lru.put(3, 30)
+
+    # Access key 1 (the current LRU item) via reads that `return` out of the
+    # foundBody. Promotion is sampled (one hit per 16 reads), so 16 consecutive
+    # reads guarantee at least one promotion - and it must fire despite the
+    # early `return`.
+    for _ in 0 ..< 16:
+      check lru.getOrReturn(1) == 10
+
+    # 1 was promoted, so inserting a 4th key evicts 2 (now the LRU), not 1
+    lru.put(4, 40)
+    check:
+      lru.contains(1)
+      not lru.contains(2)
+      lru.contains(3)
+      lru.contains(4)
 
   test "init and dispose":
     block:
@@ -489,6 +542,150 @@ suite "ConcurrentLruCache Tests":
     check:
       lru.peek(1) == Opt.some(10)
       lru.peek(99) == Opt.none(int)
+
+  test "withGet":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000)
+    defer:
+      lru.dispose()
+
+    lru.put(1, 10)
+
+    var ran = false
+    var seen = 0
+    lru.withGet(1, v):
+      ran = true
+      seen = v # v is a read-only, zero-copy view of the stored value
+    check:
+      ran
+      seen == 10
+
+    # absent key: body must not run and no pointer is exposed
+    ran = false
+    lru.withGet(99, v):
+      ran = true
+    check not ran
+
+  test "withGet with a do: miss block":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000)
+    defer:
+      lru.dispose()
+
+    lru.put(1, 10)
+
+    # hit: found block runs, miss block does not
+    var seen = 0
+    var missed = false
+    lru.withGet(1, v):
+      seen = v
+    do:
+      missed = true
+    check:
+      seen == 10
+      not missed
+
+    # miss: found block does not run, miss block does - and it may `put` the
+    # value since it runs after the read lock is released
+    var found = false
+    missed = false
+    lru.withGet(2, v):
+      found = true
+    do:
+      missed = true
+      lru.put(2, 20)
+    check:
+      not found
+      missed
+      lru.peek(2) == Opt.some(20)
+
+  test "withGetByHash with a do: miss block":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000)
+    defer:
+      lru.dispose()
+
+    let
+      key = 7
+      keyHash = lru.toKeyHash(key)
+
+    # miss populates via the precomputed hash, then a second lookup hits
+    var seen = 0
+    var missed = false
+    lru.withGetByHash(keyHash, key, v):
+      seen = v
+    do:
+      missed = true
+      lru.putByHash(keyHash, key, 70)
+    check:
+      missed
+      seen == 0
+
+    missed = false
+    lru.withGetByHash(keyHash, key, v):
+      seen = v
+    do:
+      missed = true
+    check:
+      not missed
+      seen == 70
+
+  test "withPeek with a do: miss block does not promote":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(3, shardBits = 0, threadSafe = false)
+    defer:
+      lru.dispose()
+
+    lru.put(1, 10)
+    lru.put(2, 20)
+    lru.put(3, 30)
+
+    # peeking the LRU item with a miss block present must not promote it
+    for _ in 0 ..< 5:
+      var seen = 0
+      var missed = false
+      lru.withPeek(1, v):
+        seen = v
+      do:
+        missed = true
+      check:
+        seen == 10
+        not missed
+
+    lru.put(4, 40)
+    check:
+      not lru.contains(1) # 1 stayed the LRU and was evicted
+      lru.contains(2)
+      lru.contains(3)
+      lru.contains(4)
+
+  test "withGet and put with a precomputed hash":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000)
+    defer:
+      lru.dispose()
+
+    let
+      key = 7
+      keyHash = lru.toKeyHash(key)
+
+    lru.putByHash(keyHash, key, 70) # insert using the precomputed hash
+
+    var ran = false
+    var seen = 0
+    lru.withGetByHash(keyHash, key, v): # look up using the same hash
+      ran = true
+      seen = v
+    check:
+      ran
+      seen == 70
+      lru.peek(key) == Opt.some(70) # agrees with the hash-computing overloads
+
+    # absent key: the body must not run
+    ran = false
+    lru.withGetByHash(lru.toKeyHash(8), 8, v):
+      ran = true
+    check not ran
 
   test "del":
     var lru: ConcurrentLruCache[int, int]
@@ -1022,3 +1219,108 @@ suite "ConcurrentLruCache Tests (threadSafe = false)":
       not lru.contains(2)
       lru.contains(3)
       lru.contains(4)
+
+  test "withGet promotes and exposes a read-only view":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(3, shardBits = 0, threadSafe = false)
+    defer:
+      lru.dispose()
+
+    lru.put(1, 10)
+    lru.put(2, 20)
+    lru.put(3, 30)
+
+    # withGet promotes to MRU like get; inserting a new key must evict 2
+    # (the actual LRU), not 1
+    for _ in 0 ..< 5:
+      var seen = 0
+      lru.withGet(1, v):
+        seen = v
+      check seen == 10
+
+    lru.put(4, 40)
+    check:
+      lru.contains(1)
+      not lru.contains(2)
+      lru.contains(3)
+      lru.contains(4)
+
+    # the view is read-only: assigning through it must not compile
+    check not compiles(
+      (block:
+        lru.withGet(1, v):
+          v = 111))
+
+    # absent key: body must not run
+    var ran = false
+    lru.withGet(123, v):
+      ran = true
+    check not ran
+
+  test "withPeek does not promote":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(3, shardBits = 0, threadSafe = false)
+    defer:
+      lru.dispose()
+
+    lru.put(1, 10)
+    lru.put(2, 20)
+    lru.put(3, 30)
+
+    # withPeek reads the value without promoting it, so 1 stays the LRU and
+    # is the one evicted when a fourth key is inserted
+    for _ in 0 ..< 5:
+      var seen = 0
+      lru.withPeek(1, v):
+        seen = v
+      check seen == 10
+
+    lru.put(4, 40)
+    check:
+      not lru.contains(1)
+      lru.contains(2)
+      lru.contains(3)
+      lru.contains(4)
+
+  test "withPeekByHash does not promote":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(3, shardBits = 0, threadSafe = false)
+    defer:
+      lru.dispose()
+
+    lru.put(1, 10)
+    lru.put(2, 20)
+    lru.put(3, 30)
+
+    let keyHash = lru.toKeyHash(1)
+    for _ in 0 ..< 5:
+      var seen = 0
+      lru.withPeekByHash(keyHash, 1, v):
+        seen = v
+      check seen == 10
+
+    lru.put(4, 40)
+    check:
+      not lru.contains(1) # 1 was never promoted, so it is evicted
+      lru.contains(2)
+      lru.contains(3)
+      lru.contains(4)
+
+  test "withGet and put with a precomputed hash":
+    var lru: ConcurrentLruCache[int, int]
+    lru.init(1000, shardBits = 0, threadSafe = false)
+    defer:
+      lru.dispose()
+
+    let
+      key = 7
+      keyHash = lru.toKeyHash(key)
+
+    lru.putByHash(keyHash, key, 70)
+
+    var seen = 0
+    lru.withGetByHash(keyHash, key, v):
+      seen = v
+    check:
+      seen == 70
+      lru.peek(key) == Opt.some(70)

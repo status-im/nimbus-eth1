@@ -93,15 +93,24 @@ proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
 # Private state transition handlers
 # ------------------------------------------------------------------------------
 
-func idleNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
+func idleNext(ctx: BeaconCtxRef; info: static[string]): BeaconState =
   ## State transition handler
+  if ctx.subState.cancelRequest and                 # failed activation..
+     ctx.pool.stopBase.isSome():                    # ..in single run mode
+    return BeaconState.linger                       # => wait for terminate
+
+  # The header chain cache must be checked after checking for a failed
+  # start of a single run. The reason is that the header chain cache might
+  # semi-autonomously start a new session to be accepted (or rejected) by
+  # the beacon syncer.
   if ctx.hdrCache.state == collecting:
-    return SyncState.headers
+    return BeaconState.headers
+
   idle
 
-proc headersNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
+proc headersNext(ctx: BeaconCtxRef; info: static[string]): BeaconState =
   ## State transition handler
-  if not ctx.pool.seenData and         # checks for cul-de-sac syncing
+  if not ctx.pool.seenData and                      # cul-de-sac syncing?
      nFetchHeadersFailedInitialPeersThreshold < ctx.pool.failedPeers.len:
     debug info & ": too many failed header peers",
       failedPeers=ctx.pool.failedPeers.len,
@@ -112,24 +121,24 @@ proc headersNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
     return headersCancel
 
   if ctx.hdrCache.state == collecting:
-    return SyncState.headers
+    return BeaconState.headers
 
   if ctx.hdrCache.state == ready:
     return headersFinish
 
   headersCancel
 
-func headersCancelNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
+func headersCancelNext(ctx: BeaconCtxRef; info: static[string]): BeaconState =
   ## State transition handler
   if ctx.poolMode:                                  # wait for peers to sync
     return headersCancel
 
   if ctx.pool.stopBase.isSome():                    # single run mode stop?
-    return SyncState.linger                         # stay until further notice
+    return BeaconState.linger                       # stay until further notice
 
   idle                                              # will continue hibernating
 
-proc headersFinishNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
+proc headersFinishNext(ctx: BeaconCtxRef; info: static[string]): BeaconState =
   ## State transition handler
   if ctx.poolMode:                                  # wait for peers to sync
     return headersFinish
@@ -138,14 +147,14 @@ proc headersFinishNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
      ctx.commitCollectHeaders(info):                # commit downloading headers
 
     if ctx.pool.stopBase.isSome():                  # single run mode stop?
-      return SyncState.linger                       # stay until further notice
+      return BeaconState.linger                     # stay until further notice
 
     ctx.setupProcessingBlocks info                  # init blocks processing
-    return SyncState.blocks                         # to blocks processing
+    return BeaconState.blocks                       # to blocks processing
 
   idle                                              # will continue hibernating
 
-proc lingerNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
+proc lingerNext(ctx: BeaconCtxRef; info: static[string]): BeaconState =
   ## State transition handler
   ctx.updateEtaHeadersDone()                        # update metrics
 
@@ -154,11 +163,11 @@ proc lingerNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
     ctx.pool.stopNotifier = BeaconNotifier(nil)     # run only once
 
   if ctx.subState.cancelRequest:                    # req by `stopNotifier()`
-    return SyncState.idle                           # .. via `resetSingleRun()`
+    return BeaconState.idle                         # .. via `resetSingleRun()`
 
-  SyncState.linger
+  BeaconState.linger
 
-proc blocksNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
+proc blocksNext(ctx: BeaconCtxRef; info: static[string]): BeaconState =
   ## State transition handler
   if not ctx.pool.seenData and         # checks for cul-de-sac syncing
      nFetchBodiesFailedInitialPeersThreshold < ctx.pool.failedPeers.len:
@@ -173,15 +182,15 @@ proc blocksNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
   if ctx.subState.headNum <= ctx.subState.topNum:
     return blocksFinish
 
-  SyncState.blocks
+  BeaconState.blocks
 
-func blocksCancelNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
+func blocksCancelNext(ctx: BeaconCtxRef; info: static[string]): BeaconState =
   ## State transition handler
   if ctx.poolMode:                                  # wait for peers to sync
     return blocksCancel
   idle                                              # will continue hibernating
 
-func blocksFinishNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
+func blocksFinishNext(ctx: BeaconCtxRef; info: static[string]): BeaconState =
   ## State transition handler
   if ctx.poolMode:                                  # wait for peers to sync
     return blocksCancel
@@ -211,7 +220,7 @@ proc resetSingleRun*(ctx: BeaconCtxRef): Result[void,ResetLingerError] =
     case ctx.pool.syncState:
     of idle:
       return ok()
-    of SyncState.headers:
+    of BeaconState.headers:
       ctx.subState.cancelRequest = true
       return err(DownloadCancelled)
     of headersCancel:
@@ -225,31 +234,36 @@ proc resetSingleRun*(ctx: BeaconCtxRef): Result[void,ResetLingerError] =
       discard
   err(NotApplicable)
 
-proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
+proc updateBeaconState*(ctx: BeaconCtxRef; info: static[string]) =
   ## Update internal state when needed
   ##
   # State machine
   # ::
-  #     idle <--------------------------.
-  #      |                              |
-  #      v                              |
-  #     headers ----> headersCancel --> +
-  #      |                 |            |
-  #      v                 v            |
-  #     headersFinish -> linger ------> +
-  #      |                              |
-  #      v                              |
-  #     blocks -> blocksCancel -------> +
-  #      |                              |
-  #      v                              |
-  #     blocksFinish -------------------'
+  #        .-- idle <--------------------------.
+  #        |    |                              |
+  #        |    v                              |
+  #        |   headers ----> headersCancel --> +
+  #        |    |                 |            |
+  #        |    v                 v            |
+  #        |   headersFinish -> linger ------> +
+  #        |    |                 ^            |
+  #        |    |                 |            |
+  #        `----|-----------------'            |
+  #             v                              |
+  #            linger -----------------------> +
+  #             |                              |
+  #             v                              |
+  #            blocks -> blocksCancel -------> +
+  #             |                              |
+  #             v                              |
+  #            blocksFinish -------------------'
   #
   let newState =
     case ctx.pool.syncState:
     of idle:
       ctx.idleNext info
 
-    of SyncState.headers:
+    of BeaconState.headers:
       ctx.headersNext info
 
     of headersCancel:
@@ -261,7 +275,7 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
     of linger:
       ctx.lingerNext info
 
-    of SyncState.blocks:
+    of BeaconState.blocks:
       ctx.blocksNext info
 
     of blocksCancel:
@@ -283,13 +297,13 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
       base=ctx.chain.baseNumber, head=ctx.chain.latestNumber,
       nSyncPeers=ctx.nSyncPeers()
 
-  of SyncState.headers, SyncState.blocks:
+  of BeaconState.headers, BeaconState.blocks:
     ctx.pool.lastSyncUpdLog = Moment.now() # reset logging control
     info "State changed", prevState, newState,
       base=ctx.chain.baseNumber, head=ctx.chain.latestNumber,
       target=ctx.subState.headNum, targetHash=ctx.subState.headHash.short
 
-  of SyncState.linger:
+  of BeaconState.linger:
     info "State change, waiting for reset", prevState, newState,
       nSyncPeers=ctx.nSyncPeers()
 
@@ -327,18 +341,19 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
       if ctx.pool.stopBase.isNone():                # standard mode
         (ctx.chain.baseNumber, ctx.hdrCache.head.number)
       else:
-        let stopBase = ctx.pool.stopBase.unsafeGet
+        let stopBase = ctx.pool.stopBase.unsafeGet  # single run was triggered
         if not ctx.hdrCache.updateBlindStop(stopBase):
           debug "Syncer single run rejected", stopBase=stopBase.number,
             head=ctx.chain.latestNumber
-          ctx.hdrCache.clear()
+          ctx.subState.cancelRequest = true         # => change to `linger`
+          ctx.hibernate = false                     # wake up for state change
           return
         (stopBase.number, ctx.hdrCache.head.number)
 
     # Exclude the case of a single header chain which would be `T` only
     if b+1 < t:
       ctx.pool.minInitBuddies = 0                   # reset
-      ctx.pool.syncState = SyncState.headers        # state transition
+      ctx.pool.syncState = BeaconState.headers      # state transition
       ctx.subState.stateSince = Moment.now()
       ctx.hibernate = false                         # wake up
 

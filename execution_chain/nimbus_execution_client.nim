@@ -28,7 +28,7 @@ import
   ./common/chain_config_hash,
   ./portal/portal,
   ./networking/[bootnodes, netkeys],
-  beacon_chain/[nimbus_binary_common, process_state],
+  beacon_chain/[nimbus_binary_common, process_state, nimbus_rest_common],
   beacon_chain/validators/keystore_management
 
 const
@@ -80,6 +80,11 @@ proc basicServices(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonR
   # e.g. sender nonce, etc
   nimbus.txPool = TxPoolRef.new(nimbus.fc)
   nimbus.beaconEngine = BeaconEngineRef.new(nimbus.txPool)
+
+  # Periodically evict expired transactions so the pool churns continuously
+  # instead of waiting for the capacity-triggered sweep in addTx
+  nimbus.txEvictor = TxEvictorRef.init(nimbus.txPool)
+  nimbus.txEvictor.start()
 
 proc manageAccounts(nimbus: NimbusNode, config: ExecutionClientConf) =
   if config.keyStoreDir.len > 0:
@@ -155,10 +160,11 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
 
   # Start Eth node
   if config.maxPeers > 0:
-    let discovery = config.getDiscoveryFlags()
+    # The user-facing flag is --discv5, but discv4 is still enabled alongside
+    # it until the discv4 code is removed.
     nimbus.ethNode.connectToNetwork(
-      enableDiscV4 = DiscoveryType.V4 in discovery,
-      enableDiscV5 = DiscoveryType.V5 in discovery,
+      enableDiscV4 = config.discv5,
+      enableDiscV5 = config.discv5,
     )
 
   # Initalise beacon sync descriptor.
@@ -279,10 +285,25 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionCli
     quit(QuitFailure)
 
 
-proc setupCommonRef*(config: ExecutionClientConf): (CommonRef, bool) =
-  let
-    dbOpts = config.dbOptions(noKeyCache = config.cmd == NimbusCmd.`import`)
-    coreDB = AristoDbRocks.newCoreDbRef(config.dataDir, dbOpts)
+proc setupCommonRef*(
+    config: ExecutionClientConf, numThreads: int): (CommonRef, bool) =
+
+  if config.statelessProvider and config.balParallelExecution:
+    warn "Stateless provider enabled. Running without BAL parallel execution"
+
+  if config.optimisticStatePrefetch and not config.parallelSenderRecovery:
+    warn "Optimistic state prefetch requires parallel sender recovery to be enabled. " & 
+      "Running without optimistic prefetching."
+
+  let disableParallelFeatures = numThreads <= 1 and config.parallelFeaturesEnabled()
+
+  var dbOpts = config.dbOptions(noKeyCache = config.cmd == NimbusCmd.`import`)
+  if disableParallelFeatures:
+    info "Not enough taskpool threads, disabling parallel features", numThreads
+    dbOpts.parallelStateRootComputation = false
+    dbOpts.threadSafeCaches = false
+
+  let coreDB = AristoDbRocks.newCoreDbRef(config.dataDir, dbOpts)
 
   preventLoadingDataDirForTheWrongNetwork(coreDB, config)
 
@@ -290,26 +311,35 @@ proc setupCommonRef*(config: ExecutionClientConf): (CommonRef, bool) =
     db = coreDB,
     networkId = config.networkId,
     params = config.networkParams,
-    statelessProviderEnabled = config.statelessProviderEnabled,
+    statelessProvider = config.statelessProvider,
     statelessWitnessValidation = config.statelessWitnessValidation,
-    optimisticStatePrefetch = config.optimisticStatePrefetch,
-    balStatePrefetch = config.balStatePrefetch,
-    balStatePrefetchWorkers = config.balStatePrefetchWorkers)
+    optimisticStatePrefetch = config.parallelSenderRecovery and 
+        config.optimisticStatePrefetch and not disableParallelFeatures,
+    balStatePrefetch = config.balStatePrefetch and not disableParallelFeatures,
+    balStatePrefetchWorkers = config.balStatePrefetchWorkers,
+    balParallelExecution = config.balParallelExecution and 
+        not config.statelessProvider and not disableParallelFeatures,
+    parallelSenderRecovery = config.parallelSenderRecovery and not disableParallelFeatures)
 
   if config.extraData.len > 32:
     warn "ExtraData exceeds 32 bytes limit, truncate",
       extraData=config.extraData,
       len=config.extraData.len
 
-  if config.gasLimit > GAS_LIMIT_MAXIMUM or
-     config.gasLimit < GAS_LIMIT_MINIMUM:
-    warn "GasLimit not in expected range, truncate",
-      min=GAS_LIMIT_MINIMUM,
-      max=GAS_LIMIT_MAXIMUM,
-      get=config.gasLimit
+  if config.gasLimit.isSome:
+    let gasLimit = config.gasLimit.get()
+    if gasLimit > GAS_LIMIT_MAXIMUM or
+      gasLimit < GAS_LIMIT_MINIMUM:
+      warn "GasLimit not in expected range, truncate",
+        min=GAS_LIMIT_MINIMUM,
+        max=GAS_LIMIT_MAXIMUM,
+        get=gasLimit
+    warn "`--gas-limit` is deprecated, please use `targetGasLimit` field of PayloadAttributesV4"
+    com.gasLimit = gasLimit
+  else:
+    com.gasLimit = DEFAULT_GAS_LIMIT
 
   com.extraData = config.extraData
-  com.gasLimit = config.gasLimit
   com.maxBlobs = config.maxBlobs
 
   (com, dbOpts.rdbKeyCacheSize > 0)
@@ -319,6 +349,12 @@ proc setupCommonRef*(config: ExecutionClientConf): (CommonRef, bool) =
 # ------------------------------------------------------------------------------
 
 type StopFuture = Future[void].Raising([CancelledError])
+
+const stopCheckInterval = chronos.milliseconds(100)
+
+proc runStopCheckLoop() {.async: (raises: []).} =
+  while true:
+    await noCancel sleepAsync(stopCheckInterval)
 
 proc runExeClient*(
     config: ExecutionClientConf,
@@ -355,6 +391,8 @@ proc runExeClient*(
   # Be graceful about ctrl-c during init
   if ProcessState.stopping.isNone:
     ProcessState.notifyRunning()
+
+  asyncSpawn runStopCheckLoop()
 
   while true:
     if (let reason = ProcessState.stopping(); reason.isSome()):
@@ -412,11 +450,11 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   when compileOption("threads"):
     let
       taskpool = setupTaskpool(config.numThreads)
-      (com, keyCacheEnabled) = setupCommonRef(config)
+      (com, keyCacheEnabled) = setupCommonRef(config, taskpool.numThreads)
     com.taskpool = taskpool
     com.db.mpt.taskpool = taskpool
   else:
-    let (com, keyCacheEnabled) = setupCommonRef(config)
+    let (com, keyCacheEnabled) = setupCommonRef(config, 0)
 
   if keyCacheEnabled:
     # Make sure key cache isn't empty

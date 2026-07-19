@@ -14,19 +14,16 @@ import
   pkg/[chronos, stint]
 
 type
-  SyncState* = enum
+  SnapState* = enum
     SnapIdle = 0
-    SnapResume                     ## Resume from previous session
     SnapReady                      ## Wait for download state
+    SnapResume                     ## Resume from previous session
     SnapDownload                   ## Downloading and caching data
     SnapDownloadFinish             ## Wait for sync before proceeding
     SnapMkTrie                     ## Assembling downloaded data
     SnapAnalyse                    ## Analyse for missing MPT nodes
-    SnapHealing                    ## Complete missing trie nodes
-    SnapHealingFinish              ## Wait for sync before proceeding
-    SnapContracts                  ## Download contracts code
-    SnapContractsFinish            ## Wait for sync before proceeding
-    SnapStop                       ## TBD ...
+    # ..                           ## TBD ..
+    SnapStop                       ## TBD ..
 
   ErrorType* = enum
     ## For `FetchError` return code object/tuple
@@ -49,12 +46,20 @@ const
   twoHundredYears* = chronos.days(365 * 200 + 48)
     ## Large Duration constant considered sort of infinite.
 
-  daemonWaitReadyInterval* = chronos.seconds(30)
+  daemonWaitReadyInterval* = chronos.seconds(47)
     ## Some polling interval time waiting until the system gets into download
-    ## state when the the FCU modue hash  a finalised header.
+    ## state when the the FCU modue hash provides a finalised header and there
+    ## are eth/xx download peers available.
+
+  daemonWaitHeaderInterval* = chronos.seconds(30)
+    ## Ditto for header download.
 
   daemonWaitElseInterval* = chronos.seconds(10)
     ## Ditto for other states.
+
+  peerWaitDownloadInterval* = chronos.seconds(5)
+    ## Some waiting time at the end of the daemon task which always lingers
+    ## in the background. This one is for non-`SnapDownload` states.
 
   peerWaitElseInterval* = chronos.milliseconds(1200)
     ## Some waiting time at the end of the daemon task which always lingers
@@ -67,7 +72,7 @@ const
     ## Force a thread switch after that time running continuously. This
     ## applies mainly for DB building and analysing sessions.
 
-  accuAccountsCovMin* = 5.0
+  accuAccountsCovMin* = 1.01
     ## In absence of a completed pivot state, the syncer will stop downloading
     ## if all accounts are covered at least by this factor. Then trie-assembly
     ## and healing can take place.
@@ -75,6 +80,10 @@ const
   stateIdleTimeBeforeEviction* = chronos.minutes(30)
     ## Minimum time a state is cached before eviction unless other criteria
     ## apply (e.g. fully unprocessed account range.)
+
+  noStateRecordsMsgDelay* = chronos.seconds(20)
+    ## After logging a `no state records` message, subsequent similar messages
+    ## are suppressed for a while.
 
   # ----------------------
 
@@ -99,6 +108,11 @@ const
     ## Poll waiting for all downloading peers to have stopped
 
   # -----------
+
+  nConsHeadcachedDeltaMax* = 128
+    ## If the block number difference between FCU update header and cached
+    ## header is larger than this contant, a beacon header fetch cycle is
+    ## triggered to fill up the cache.
 
   nFetchHeaderPeersMax* = 5
     ## Try at most this many `eth` peers for fetching a header

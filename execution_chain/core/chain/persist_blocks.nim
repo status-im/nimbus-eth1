@@ -172,7 +172,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
       skipPostExecBalCheck = skipValidation,
     )
 
-  if not vmState.com.statelessProviderEnabled:
+  if not vmState.com.statelessProvider:
     processBlock()
   else:
     # When the stateless provider is enabled we need to have access to the
@@ -201,8 +201,8 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     # Convert the witness to ExecutionWitness format and verify against the pre-stateroot.
     if vmState.com.statelessWitnessValidation:
       doAssert witness.validateKeys(vmState.ledger.getWitnessKeys()).isOk()
-      let executionWitness = ExecutionWitness.build(witness, vmState.ledger)
-      ?executionWitness.statelessProcessBlock(com, blk)
+      let executionWitness = ExecutionWitnessWithKeys.build(witness, vmState.ledger)
+      ?executionWitness.toExecutionWitness().statelessProcessBlock(com, blk)
 
     ?vmState.ledger.txFrame.persistWitness(header.computeBlockHash(), witness)
 

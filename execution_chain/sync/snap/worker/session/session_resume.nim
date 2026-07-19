@@ -23,7 +23,7 @@ logScope:
 type
   ResumeSession = object of SessionTicker
     ctx: SnapCtxRef
-    db: MptAsmRef
+    db: CacheDbRef
     nStates: int                                    # total of available states
     stateInx: int                                   # index of current state
     state: StateDataRef                             # current state data
@@ -40,7 +40,7 @@ proc init(
       ) =
   procCall init(SessionTicker(w))                   # base method initialiser
   w.ctx = ctx
-  w.db = ctx.pool.mptAsm
+  w.db = ctx.pool.cacheDB
   w.nStates = nStates
 
 # ------------------------------------------------------------------------------
@@ -67,7 +67,7 @@ template storageRecover(
         left = ItemKeyRangeSet.init ItemKeyRangeMax
 
       for w in session.db.walkStoSlot(state.stateRoot, accKey):
-        discard left.reduce(w.start, w.limit)
+        discard left.reduce(w.start, w.data.limit)
 
         # Print keep alive messages and allow thread switch
         let rc = session.sessionTicker(info):
@@ -87,6 +87,32 @@ template storageRecover(
 
   bodyRc
 
+proc codesRecover(
+    session: ResumeSession;
+    lst: openArray[SnapAccount];
+    info: static[string];
+      ) =
+  if 0 < lst.len:
+    let
+      accMin = lst[0].accHash.to(ItemKey)
+      accMax = lst[^1].accHash.to(ItemKey)
+
+    # Find all available `CodeHash` keys
+    var found: HashSet[CodeHash]
+    for w in session.db.walkByteCode(session.state.stateRoot, accMin):
+      if accMax < w.data.limit:
+        break
+      for (key,_) in w.data.codes:
+        found.incl key
+
+    # Check for unprocessed byte codes
+    for w in lst:
+      let
+        snapHash = w.accBody.codeHash
+        codeHash = snapHash.to(CodeHash)
+      if not snapHash.isEmpty and codeHash notin found:
+        session.state.register(w.accHash.to(ItemKey), codeHash)
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -101,7 +127,7 @@ template sessionResume*(
   block body:
     let
       sdb = ctx.pool.stateDB
-      adb = ctx.pool.mptAsm
+      adb = ctx.pool.cacheDB
     var
       # Get list of sorted states available, the most recent ones first.
       byTouch = adb.walkStateData().toSeq()       # list to be sorted, below
@@ -117,7 +143,7 @@ template sessionResume*(
     template nStates: auto = session.nStates
 
     # Sort states, order by latest time stamp first
-    byTouch.sort proc(x,y: WalkStateData): int = cmp(y.touch,x.touch)
+    byTouch.sort proc(x,y: WalkStateData): int = cmp(y.data.touch,x.data.touch)
 
     # Walk over states, latest time stamp first. Collect the lastest some
     # non-empty states (see `stateDbCapacity`) for import into the state
@@ -130,19 +156,21 @@ template sessionResume*(
         chronicles.info info & ": Bad state record ignored", stateInx, nStates
         continue
 
-      if p.coverage.isZero:
+      if p.data.coverage.isZero:
         continue
 
       if stateDbCapacity <= tchInx.len:             # index list complete?
-        sdb.addAccountArchive p.coverage.per256()   # set archived coverage
+        sdb.addAccountArchive p.data.coverage.per256() # set archived coverage
         continue
 
       if not intro:                                 # print message once, only
-        chronicles.info info & ": Resuming download session", nStates
+        chronicles.info info & ": Resuming download session", nStates,
+          syncState=($ctx.syncState), nSyncPeers=ctx.nSyncPeers(),
+          nEthPeers=ctx.nEthPeers()
         intro = true
 
-      if p.tag != Untagged:                         # ignore assembled data
-        sdb.addAccountArchive p.coverage.per256()   # set archived coverage
+      if p.data.tag != Untagged:                    # ignore assembled data
+        sdb.addAccountArchive p.data.coverage.per256() # set archived coverage
       else:
         tchInx.add n                                # collect, re-process below
 
@@ -160,10 +188,10 @@ template sessionResume*(
       stateInx = tchInx.len - n - 1                 # ranges `0`..`nStates-1`
 
       # Create record on state DB cache
-      state = sdb.register(p.root, p.hash, p.number, info)
+      state = sdb.register(p.root, p.data.hash, p.data.number, info)
 
       # Walk account for the current state root
-      for w in adb.walkAccounts(p.root):
+      for w in adb.walkAccount(p.root):
         if 0 < w.error.len:
           chronicles.info info & ": Bad accounts record ignored",
             error=w.error, root=state.rootStr
@@ -177,12 +205,15 @@ template sessionResume*(
           break body                                # system termination?
 
         # Register seen accounts in state record
-        sdb.setAccountRange(state, w.start, w.limit, Moment.now())
+        sdb.setAccountRange(state, w.start, w.data.limit, Moment.now())
 
         # Register unprocessed storages per account
-        for acc in w.accounts:
+        for acc in w.data.accounts:
           session.storageRecover(acc, info).isOkOr:
             break body                              # system termination?
+
+        # Register unprocessed codes for the current account list
+        session.codesRecover(w.data.accounts, info)
 
     debug info & ": Download session restored",
       coverage=sdb.accountsCoverage.pcStr,

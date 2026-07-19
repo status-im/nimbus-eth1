@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -89,9 +89,10 @@ proc getBlockBodyByHeader*(historyExpiry: HistoryExpiryRef, header: Header): Res
   let rpc = historyExpiry.rpcProvider.valueOr:
     return err("Portal RPC is not available")
 
-  # TODO nested waitFor
-  (waitFor rpc.historyGetBlockBody(header)).mapErr(
-    proc(e: PortalErrorResponse): string =
-      debug "Portal request failed", error = $e.message
-      "Portal request failed: " & $e.message
-  )
+  # (waitFor rpc.historyGetBlockBody(header)).mapErr(
+  #   proc(e: PortalErrorResponse): string =
+  #     debug "Portal request failed", error = $e.message
+  #     "Portal request failed: " & $e.message
+  # )
+
+  err "TODO implement without nested waitFor"

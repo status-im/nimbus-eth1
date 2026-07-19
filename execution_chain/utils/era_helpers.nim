@@ -63,7 +63,7 @@ proc loadHistoricalRootsFromEra*(
   ## Load the historical_summaries from the latest era file.
   let
     (latestEraFile, latestEra) = ?latestEraFile(eraDir, cfg)
-    f = ?EraFile.open(latestEraFile)
+    f = ?EraFile.open(latestEraFile, latestEra)
     slot = start_slot(latestEra)
   var bytes: seq[byte]
 

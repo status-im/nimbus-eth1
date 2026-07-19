@@ -11,14 +11,14 @@
 {.push raises: [].}
 
 import
-  ./session/[session_analyse, session_helpers, session_mktrie, session_resume]
+  ./session/[session_analyse, session_clear,
+             session_mktrie, session_pivot, session_resume]
 
 export
-  getPivotTag,
-  countKvtNodes,
-  countDnglLinks,
   session_analyse,
+  session_clear,
   session_mktrie,
+  session_pivot,
   session_resume
 
 # End

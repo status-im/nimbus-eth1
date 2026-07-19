@@ -11,29 +11,13 @@
 {.push raises: [].}
 
 import
-  pkg/[chronicles, chronos],
-  ../[mpt, worker_desc]
+  pkg/[chronicles, chronos, stew/byteutils],
+  ../[state_db, worker_desc]
 
 type
   SessionTicker* = object of RootObj
     msgAt*: Moment                                  # message while looping
     napAt*: Moment                                  # allow for thread switch
-
-# ------------------------------------------------------------------------------
-# Private helper(s)
-# ------------------------------------------------------------------------------
-
-proc getPivotData(
-    ctx: SnapCtxRef,
-    info: static[string];
-      ): Opt[(StateRoot,CachedStateData)] =
-  let root = ctx.pool.pivot.valueOr:
-    return err()
-  var data = ctx.pool.mptAsm.getStateData(root).valueOr:
-    error info & ": Cached pivot inaccessible",
-      root=root.Hash32.short, `error`=error
-    return err()
-  ok((root, move data))
 
 # ------------------------------------------------------------------------------
 # Public helpers, session ticker related
@@ -82,67 +66,14 @@ template sessionTicker*(
 
 # ----------------
 
-proc getPivotTag*(
-    ctx: SnapCtxRef;
-    info: static[string];
-      ): Opt[StateDataTag] =
-  let pivot = ctx.getPivotData(info).valueOr:
-    return err()
-  ok(pivot[1].tag)
-
-proc setPivotTag*(
-    ctx: SnapCtxRef;
-    tag: StateDataTag;
-    info: static[string];
-      ): Opt[void] =
-  var (root,pivot) = ctx.getPivotData(info).valueOr:
-    return err()
-  pivot.tag = tag
-  ctx.pool.mptAsm.putStateData(root,pivot).isOkOr:
-    error info & ": Error updating cached pivot",
-      root=root.Hash32.short, `error`=error
-    return err()
-  ok()
-
-# ----------------
-
-proc countKvtNodes*(
-    ctx: SnapCtxRef;
-      ): tuple[nAccNodes, nStoNodes, nCodes: uint64, ela: Duration] =
-  ## Simple stored nodes counter
-  let
-    db = ctx.pool.mptAsm
-    start = Moment.now()
-  for _ in db.walkAccKvt():
-    result.nAccNodes.inc
-  for _ in db.walkStoKvt():
-    result.nStoNodes.inc
-  for _ in db.walkCodeKvt():
-    result.nCodes.inc
-  result.ela = Moment.now() - start
-
-proc countDnglLinks*(
-    ctx: SnapCtxRef;
-      ): tuple[nAccDngl, nStoDngl, nCodeMiss: uint64, ela: Duration] =
-  ## Simple stored nodes counter
-  let
-    db = ctx.pool.mptAsm
-    start = Moment.now()
-  for _ in db.walkAccDnglKvt():
-    result.nAccDngl.inc
-  for _ in db.walkStoDnglKvt():
-    result.nStoDngl.inc
-  for _ in db.walkCodeMissKvt():
-    result.nCodeMiss.inc
-  result.ela = Moment.now() - start
-
-func decodeAccount*(pyl: openArray[byte]): Opt[Account] =
+proc decodeAccount*(pyl: openArray[byte], info: static[string]): Opt[Account] =
   ## Decode RLP encoded `Account`
   try:
     var acc = rlp.decode(pyl, Account)
     return ok(move acc)
-  except RlpError:
-    discard
+  except RlpError as e:
+    error info & ": Error decoding Account data",
+      slotData=pyl.toHex, error=($e.name & "(" & e.msg & ")")
   err()
 
 # ------------------------------------------------------------------------------

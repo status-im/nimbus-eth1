@@ -676,6 +676,7 @@ func headHash*(hc: HeaderChainRef): Hash32 =
   ##
   if collecting <= hc.state:
     return hc.session.headHash
+  # zeroHash32
 
 func antecedent*(hc: HeaderChainRef): Header =
   ## Getter: bottom of header chain. In case there is no header chain
@@ -684,6 +685,7 @@ func antecedent*(hc: HeaderChainRef): Header =
   ##
   if collecting <= hc.state:
     return hc.session.ante
+  # Header()
 
 # --------------------
 

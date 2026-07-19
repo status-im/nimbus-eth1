@@ -10,6 +10,7 @@
 import
   std/sequtils,
   results,
+  chronicles,
   eth/common/eth_types_rlp,
   eth/trie/[ordered_trie, trie_defs],
   json_rpc/[rpcserver, rpcclient],
@@ -18,6 +19,9 @@ import
   ../../execution_chain/rpc/filters,
   ./types,
   ./blocks
+
+logScope:
+  topics = "vp_engine"
 
 template toLog(lg: LogObject): Log =
   Log(address: lg.address, topics: lg.topics, data: lg.data)
@@ -88,14 +92,14 @@ proc getReceipts*(
 
 proc resolveFilterTags*(
     engine: RpcVerificationEngine, filter: FilterOptions
-): EngineResult[FilterOptions] =
+): Future[EngineResult[FilterOptions]] {.async: (raises: [CancelledError]).} =
   if filter.blockHash.isSome():
     return ok(filter)
   let
     fromBlock = filter.fromBlock.get(types.BlockTag(kind: bidAlias, alias: "latest"))
     toBlock = filter.toBlock.get(types.BlockTag(kind: bidAlias, alias: "latest"))
-    fromBlockNumberTag = ?engine.resolveBlockTag(fromBlock)
-    toBlockNumberTag = ?engine.resolveBlockTag(toBlock)
+    fromBlockNumberTag = ?(await engine.resolveBlockTag(fromBlock))
+    toBlockNumberTag = ?(await engine.resolveBlockTag(toBlock))
 
   return ok(
     FilterOptions(
@@ -144,7 +148,7 @@ proc getLogs*(
     engine: RpcVerificationEngine, filter: FilterOptions
 ): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).} =
   let
-    resolvedFilter = ?engine.resolveFilterTags(filter)
+    resolvedFilter = ?(await engine.resolveFilterTags(filter))
     (backend, backendIdx) = ?(engine.executionBackendFor(GetLogs))
     logObjs = ?((await backend.eth_getLogs(resolvedFilter)).tagBackend(backendIdx))
 

@@ -13,6 +13,7 @@ import
   chronos,
   confutils,
   eth/common/[keys, eth_types_rlp],
+  web3/eth_api_types,
   json_rpc/rpcproxy,
   beacon_chain/gossip_processing/light_client_processor,
   beacon_chain/networking/network_metadata,
@@ -30,7 +31,13 @@ import
   ./p2p_lc_backend,
   ./json_rpc_backend,
   ./json_rpc_frontend,
+  ./op/op_anchor,
+  ./op/op_chain_params,
+  ./op/op_frontend,
   ../execution_chain/version_info
+
+logScope:
+  topics = "vp_main"
 
 # error object to translate results to error
 # NOTE: all results are translated to errors only in this file
@@ -53,15 +60,16 @@ proc startExecutionBackends(
 
   for url in urls:
     let client = JsonRpcClient.init(url).valueOr:
-      error "Error initializing backend client", error = error.errMsg
+      error "Error initializing backend client", err = error.errMsg
       continue
 
     let startRes = await client.start()
     if startRes.isErr():
-      error "Error connecting to backend", url = url, error = startRes.error.errMsg
+      error "Error connecting to backend", url = url, err = startRes.error.errMsg
       continue
 
     engine.registerBackend(client.getExecutionApiBackend(), caps)
+    info "Connected to execution backend", url
     clients.add(client)
 
   if clients.len == 0:
@@ -75,19 +83,20 @@ proc startPrivateTxBackends(
   var clients: seq[JsonRpcClient] = @[]
   for url in urls:
     let client = JsonRpcClient.init(url).valueOr:
-      error "Error initializing private tx client", error = error.errMsg
+      error "Error initializing private tx client", err = error.errMsg
       continue
 
     let startRes = await client.start()
 
     if startRes.isErr():
       error "Error connecting to private tx backend",
-        url = url, error = startRes.error.errMsg
+        url = url, err = startRes.error.errMsg
       continue
 
     engine.registerBackend(
       client.getExecutionApiBackend(), BackendCapabilities({SendRawTransaction})
     )
+    info "Connected to private tx backend", url
     clients.add(client)
 
   if clients.len == 0:
@@ -103,10 +112,11 @@ proc startBeaconBackends(
 
     let startRes = client.start()
     if startRes.isErr():
-      error "Error connecting to backend", url = url, error = startRes.error.errMsg
+      error "Error connecting to backend", url = url, err = startRes.error.errMsg
       continue
 
     engine.registerBackend(client.getBeaconApiBackend(), fullBeaconCapabilities)
+    info "Connected to beacon backend", url
     clients.add(client)
 
   if clients.len == 0:
@@ -153,7 +163,7 @@ proc startFrontends(
 
   for url in urls:
     let server = JsonRpcServer.init(url).valueOr:
-      error "Error initializing frontend server", error = error.errMsg
+      error "Error initializing frontend server", err = error.errMsg
       continue
 
     # inject frontend
@@ -161,9 +171,10 @@ proc startFrontends(
 
     let status = server.start()
     if status.isErr():
-      error "Error starting frontend server", error = status.error.errMsg
+      error "Error starting frontend server", err = status.error.errMsg
       continue
 
+    info "JSON-RPC frontend serving", url
     servers.add(server)
 
   if servers.len == 0:
@@ -183,10 +194,27 @@ proc run(
     except Exception:
       notice "commandLineParams() exception"
 
+  let networkName = config.eth2Network.get("mainnet")
+
+  # If an op-stack network is selected we run a secondary engine alongside the primary engine
+  let opParams = opChainParamsForNetwork(networkName).optValue()
+
+  let
+    l1NetworkName =
+      if opParams.isSome():
+        opParams.get().l1Network
+      else:
+        networkName
+    l1ChainId =
+      if opParams.isSome():
+        opParams.get().l1ChainId
+      else:
+        getConfiguredChainId(config.eth2Network)
+
   let
     engineConf = RpcVerificationEngineConf(
-      chainId: getConfiguredChainId(config.eth2Network),
-      eth2Network: config.eth2Network,
+      chainId: l1ChainId,
+      eth2Network: some(l1NetworkName),
       maxBlockWalk: config.maxBlockWalk,
       headerStoreLen: config.headerStoreLen,
       accountCacheLen: config.accountCacheLen,
@@ -238,17 +266,66 @@ proc run(
   let frontend = engine.getExecutionApiFrontend()
   let frontendServers = startFrontends(frontend, config.frontendUrls)
 
+  # nil unless an OP network is configured (RpcVerificationEngine is a ref, so nil is the
+  # natural "no L2 engine" state no Option wrapping needed)
+  var
+    l2Engine: RpcVerificationEngine
+    opExecBackendClients: seq[JsonRpcClient]
+    opFrontendServers: seq[JsonRpcServer]
+
+  opParams.isErrOr:
+    if config.opExecutionApiUrls.len <= 0:
+      raise newException(
+        ProxyError, "Need at least one L2 execution api url (--op-execution-api-url)"
+      )
+
+    # the L2 EVM follows the L1 fork schedule, so it uses the L1 network id
+    let l2NetworkId = chainIdToNetworkId(l1ChainId).valueOr:
+      raise newException(
+        ProxyError, "Couldn't derive the L2 network id from the L1 chain id"
+      )
+
+    l2Engine = RpcVerificationEngine.initCore(
+      chainId = value.l2ChainId,
+      networkId = l2NetworkId,
+      maxBlockWalk = config.maxBlockWalk,
+      parallelBlockDownloads = config.parallelBlockDownloads,
+      headerStoreLen = config.headerStoreLen,
+      accountCacheLen = config.accountCacheLen,
+      codeCacheLen = config.codeCacheLen,
+      storageCacheLen = config.storageCacheLen,
+      anchor = blockId("safe"),
+    ).valueOr:
+      raise newException(ProxyError, "Couldn't initialize OP verification engine")
+
+    opExecBackendClients = await startExecutionBackends(
+      l2Engine, config.opExecutionApiUrls, fullExecutionCapabilities
+    )
+
+    let opFrontend = getExecutionApiFrontend(l2Engine, engine)
+    opFrontendServers = startFrontends(opFrontend, config.opFrontendUrls)
+
   try:
     while true:
       await sleepAsync(engine.timeParams.SLOT_DURATION)
+
       let syncRes = await engine.syncOnce()
       if syncRes.isErr():
-        debug "LC sync failed", error = syncRes.error.errMsg
+        error "LC sync failed", err = syncRes.error.errMsg
+
+      opParams.isErrOr:
+        let opRes = await l2Engine.opSyncOnce(engine)
+        if opRes.isErr():
+          error "OP sync failed", err = opRes.error.errMsg
   except CancelledError as e:
     debug "proxy loop cancelled"
     for s in frontendServers:
       await s.stop()
+    for s in opFrontendServers:
+      await s.stop()
     for c in execBackendClients:
+      await c.stop()
+    for c in opExecBackendClients:
       await c.stop()
     for c in beaconBackendClients:
       await c.stop()
@@ -290,8 +367,8 @@ when isMainModule:
   except CancelledError:
     notice "Shutdown complete"
   except ProxyError as e:
-    fatal "Proxy error", error = e.msg
+    fatal "Proxy error", err = e.msg
     quit QuitFailure
   except CatchableError as e:
-    fatal "Unexpected error", error = e.msg
+    fatal "Unexpected error", err = e.msg
     quit QuitFailure

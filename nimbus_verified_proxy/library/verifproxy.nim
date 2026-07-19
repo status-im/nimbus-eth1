@@ -7,8 +7,10 @@
 
 import
   chronos,
+  chronicles,
   std/[json, options, strutils],
   stint,
+  web3/eth_api_types,
   beacon_chain/spec/digest,
   beacon_chain/spec/beaconstate,
   beacon_chain/spec/forks,
@@ -18,16 +20,22 @@ import
   beacon_chain/nimbus_binary_common,
   ../engine/types,
   ../engine/engine,
+  ../engine/utils,
   ../engine/rpc_frontend,
   ../lc_backend,
   ../json_rpc_backend,
   ../nimbus_verified_proxy_conf,
+  ../op/op_chain_params,
+  ../op/op_frontend,
   ./types,
   ./c_execution_backend,
   ./c_beacon_backend
 
 import ./c_frontend
 export c_frontend
+
+logScope:
+  topics = "vp_main"
 
 {.pragma: exported, cdecl, exportc, dynlib, raises: [].}
 
@@ -71,8 +79,8 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
   let jsonNode =
     try:
       parseJson($configJson)
-    except CatchableError as e:
-      raise newException(ProxyError, "error parsing json: " & e.msg)
+    except ValueError, IOError, OSError:
+      raise newException(ProxyError, "error parsing config json")
 
   let
     eth2Network = some(jsonNode.getOrDefault("eth2Network").getStr("mainnet"))
@@ -86,14 +94,14 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
     executionApiUrls =
       try:
         parseCmdArg(UrlList, jsonNode["executionApiUrls"].getStr())
-      except CatchableError as e:
+      except ValueError as e:
         raise newException(
           ProxyError, "Couldn't parse `backendUrl` from JSON config: " & e.msg
         )
     beaconApiUrls =
       try:
         parseCmdArg(UrlList, jsonNode["beaconApiUrls"].getStr())
-      except CatchableError as e:
+      except ValueError as e:
         raise newException(
           ProxyError, "Couldn't parse `beaconApiUrls` from JSON config: " & e.msg
         )
@@ -104,9 +112,20 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
           UrlList(@[])
         else:
           parseCmdArg(UrlList, rawUrls)
-      except CatchableError as e:
+      except ValueError as e:
         raise newException(
           ProxyError, "Couldn't parse `privateTxUrls` from JSON config: " & e.msg
+        )
+    opExecutionApiUrls =
+      try:
+        let rawUrls = jsonNode.getOrDefault("opExecutionApiUrls").getStr("")
+        if rawUrls.len == 0:
+          UrlList(@[])
+        else:
+          parseCmdArg(UrlList, rawUrls)
+      except ValueError as e:
+        raise newException(
+          ProxyError, "Couldn't parse `opExecutionApiUrls` from JSON config: " & e.msg
         )
     logLevel = jsonNode.getOrDefault("logLevel").getStr("INFO")
     logFormat =
@@ -158,6 +177,7 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
       else:
         uint64(maxLcUpdates),
     privateTxUrls: privateTxUrls,
+    opExecutionApiUrls: opExecutionApiUrls,
     syncHeaderStore: syncHeaderStore,
     freezeAtSlot: freezeAtSlot,
   )
@@ -172,10 +192,26 @@ proc run*(
 
   setupLogging(config.logLevel, config.logFormat)
 
+  let networkName = config.eth2Network.get("mainnet")
+
+  let opParams = opChainParamsForNetwork(networkName).optValue()
+
+  let
+    l1NetworkName =
+      if opParams.isSome():
+        opParams.get().l1Network
+      else:
+        networkName
+    l1ChainId =
+      if opParams.isSome():
+        opParams.get().l1ChainId
+      else:
+        getConfiguredChainId(config.eth2Network)
+
   let
     engineConf = RpcVerificationEngineConf(
-      chainId: getConfiguredChainId(config.eth2Network),
-      eth2Network: config.eth2Network,
+      chainId: l1ChainId,
+      eth2Network: some(l1NetworkName),
       maxBlockWalk: config.maxBlockWalk,
       headerStoreLen: config.headerStoreLen,
       accountCacheLen: config.accountCacheLen,
@@ -208,10 +244,11 @@ proc run*(
       let client = BeaconApiRestClient.init(engine.cfg, engine.forkDigests, url)
       let startRes = client.start()
       if startRes.isErr():
-        warn "Error connecting to beacon backend",
-          url = url, error = startRes.error.errMsg
+        warn "Retrying beacon backend connection",
+          url = url, err = startRes.error.errMsg
         continue
       engine.registerBackend(client.getBeaconApiBackend(), fullBeaconCapabilities)
+      info "Connected to beacon backend", url
 
   for url in config.executionApiUrls:
     if executionTransportProc != nil:
@@ -220,13 +257,14 @@ proc run*(
       )
     else:
       let client = JsonRpcClient.init(url).valueOr:
-        error "Error initializing backend client", error = error.errMsg
+        error "Error initializing backend client", err = error.errMsg
         continue
       let startRes = await client.start()
       if startRes.isErr():
-        error "Error connecting to backend", url = url, error = startRes.error.errMsg
+        error "Error connecting to backend", url = url, err = startRes.error.errMsg
         continue
       engine.registerBackend(client.getExecutionApiBackend(), regularCaps)
+      info "Connected to execution backend", url
 
   if usePrivateTx:
     for url in config.privateTxUrls:
@@ -237,17 +275,58 @@ proc run*(
         )
       else:
         let client = JsonRpcClient.init(url).valueOr:
-          error "Error initializing backend client", error = error.errMsg
+          error "Error initializing backend client", err = error.errMsg
           continue
         let startRes = await client.start()
         if startRes.isErr():
-          error "Error connecting to backend", url = url, error = startRes.error.errMsg
+          error "Error connecting to backend", url = url, err = startRes.error.errMsg
           continue
         engine.registerBackend(
           client.getExecutionApiBackend(), BackendCapabilities({SendRawTransaction})
         )
+        info "Connected to private tx backend", url
 
   ctx.frontend = engine.getExecutionApiFrontend()
+
+  opParams.isErrOr:
+    let l2NetworkId = chainIdToNetworkId(l1ChainId).valueOr:
+      raise newException(
+        ProxyError, "Couldn't derive the L2 network id from the L1 chain id"
+      )
+
+    let l2Engine = RpcVerificationEngine.initCore(
+      chainId = value.l2ChainId,
+      networkId = l2NetworkId,
+      maxBlockWalk = config.maxBlockWalk,
+      parallelBlockDownloads = config.parallelBlockDownloads,
+      headerStoreLen = config.headerStoreLen,
+      accountCacheLen = config.accountCacheLen,
+      codeCacheLen = config.codeCacheLen,
+      storageCacheLen = config.storageCacheLen,
+      anchor = blockId("safe"),
+    ).valueOr:
+      raise newException(ProxyError, "Couldn't initialize OP verification engine")
+
+    for url in config.opExecutionApiUrls:
+      if executionTransportProc != nil:
+        l2Engine.registerBackend(
+          getExecutionApiBackend(ctx, url, executionTransportProc),
+          fullExecutionCapabilities,
+        )
+      else:
+        let client = JsonRpcClient.init(url).valueOr:
+          error "Error initializing L2 backend client", err = error.errMsg
+          continue
+        let startRes = await client.start()
+        if startRes.isErr():
+          error "Error connecting to L2 backend", url = url, err = startRes.error.errMsg
+          continue
+        l2Engine.registerBackend(
+          client.getExecutionApiBackend(), fullExecutionCapabilities
+        )
+        info "Connected to L2 execution backend", url
+
+    ctx.opFrontend = getExecutionApiFrontend(l2Engine, engine)
 
 proc startVerifProxy(
     configJson: cstring,

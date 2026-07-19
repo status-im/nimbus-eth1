@@ -76,7 +76,7 @@ func errStr(rc: Result[FetchCodesData,SnapError]): string =
 
 template fetchCodes*(
     buddy: SnapPeerRef;
-    codesReq: openArray[Hash32];                    # List of code keys
+    codesReq: openArray[CodeHash];                  # List of code keys
       ): auto =
   ## Async/template
   ##
@@ -91,7 +91,7 @@ template fetchCodes*(
     let
       nReqCodes {.inject.} = codesReq.len
       fetchReq = ByteCodesRequest(
-        hashes: @codesReq,
+        hashes: cast[seq[Hash32]](@codesReq),
         bytes:  fetchCodesSnapBytesLimit)
       peer {.inject,used.} = $buddy.peer            # logging only
       first {.inject,used.} = codesReq[0].toStr     # logging only

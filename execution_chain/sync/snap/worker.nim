@@ -11,9 +11,10 @@
 {.push raises:[].}
 
 import
-  std/os,
+  #std/os,
   pkg/[chronicles, chronos, minilru, results],
-  ./worker/[download, helpers, session, start_stop, state_db, worker_desc]
+  ./worker/[download, helpers, mpt, session, start_stop, state_db, update,
+            worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -81,24 +82,35 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
   ##
   var bodyRc = ZeroDuration                         # to be re-invoked, soon?
   block body:
-    # Check initial state before transition
-    if ctx.pool.syncState == SnapResume:
-      ctx.sessionResume(info).isOkOr:
-        break body                                  # shutdown?
+    case ctx.updateSnapState(info):                 # set next state
+    of SnapIdle:
+      bodyRc = daemonWaitElseInterval               # take a nap
 
-    case ctx.updateSyncState(info):                 # set next state
     of SnapReady:
-      chronicles.info info & ": Waiting for CL to send updates",
-        syncState=($ctx.syncState), nSyncPeers=ctx.nSyncPeers()
-      bodyRc = daemonWaitReadyInterval              # take a nap
+      # Start headers download on the beacon sync server to run quasi-parallel
+      # mode to the snap sync.
+      ctx.headerDownloadTrigger(info).isOkOr:
+        bodyRc = daemonWaitReadyInterval            # take a nap
+
+    of SnapResume:
+      # If there is a pivot, then there is an assembled partial MPT. In that
+      # case, there no point resuming a downloading session.
+      if ctx.sessionPivotActivateCached(info) < PivotOnTrie:
+        # Import/reconstruct in-memory state DB from persistent cache DB.
+        ctx.sessionResume(info).isOkOr:
+           break body                               # shutdown?
 
     of SnapDownload:
-      bodyRc = daemonWaitDownloadInterval           # download handled by peers
+      # Download headers. The request will be silently ignored if the
+      # distance to the CL head is too small.
+      discard ctx.headerDownloadTrigger(info, reducedNoise=true)
+
+      bodyRc = daemonWaitDownloadInterval           # snap dwnld handled by peer
     of SnapDownloadFinish:
       bodyRc = daemonWaitDownloadFinishInterval     # wait for sync
 
     of SnapMkTrie:
-      ctx.pool.stateDB.flush info                   # archive/clear cache
+      ctx.pool.stateDB.flush info                   # flush into persist. cache
 
       let ela {.used.} = ctx.sessionMkTrie(info).valueOr:
         break body                                  # shutdown?
@@ -110,26 +122,18 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       let stats {.used.} = ctx.sessionAnalyseFullTrie(info).valueOr:
         break body                                  # shutdown?
 
+      # Update pivot state record on DB cache
+      discard ctx.sessionPivotTagUpdate(PivotMptAnalysed, info)
+
       debug info & ": Partial MPT analysed",
         ela=stats.ela.toStr, syncState=($ctx.syncState)
 
-    of SnapHealing:
-      bodyRc = daemonWaitHealingInterval            # healing is run by peers
-    of SnapHealingFinish:
-      bodyRc = daemonWaitHealingFinishInterval      # wait for sync
-
-    of SnapContracts:
-      bodyRc = daemonWaitCodesInterval              # contracts handled by peers
-    of SnapContractsFinish:
-      bodyRc = daemonWaitCodesFinishInterval        # wait for sync
+    # of TBD ..
 
     of SnapStop:
       warn info & ": Stop snap sync not implemented yet, lingering",
         syncState=($ctx.syncState)
       bodyRc = chronos.seconds(30)
-
-    of SnapIdle, SnapResume:
-      bodyRc = daemonWaitElseInterval               # take a nap
 
     # End block: `body`
 
@@ -173,18 +177,8 @@ template runPeer*(
     case buddy.ctx.pool.syncState:
     of SnapDownload:
       # Download and cache accounts, storage slots, contracts
-      buddy.downloadAccountsAndStorage info
-
-    of SnapHealing:
-      # Download persistent healing data
-      buddy.ctx.updateSyncHealingFinish()
-      warn info & ": Skipped healing, not implemented yet",
-        syncState=($buddy.ctx.syncState)
-
-    of SnapContracts:
-      # Download persistent contract data
-      buddy.downloadCode(info).isOkOr:
-        buddy.ctrl.zombie = true
+      buddy.downloadAccountsAndStorage(info).isOkOr:
+        bodyRc = peerWaitDownloadInterval           # maybe no CL or peers yet
 
     else:
       bodyRc = peerWaitElseInterval

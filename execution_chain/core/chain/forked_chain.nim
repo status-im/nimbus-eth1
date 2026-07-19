@@ -11,7 +11,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[tables, algorithm, strformat],
+  std/[tables, algorithm, sets, strformat],
   chronicles,
   results,
   chronos,
@@ -37,6 +37,9 @@ logScope:
 export
   BlockRef,
   ForkedChainRef,
+  ImportOutcome,
+  ImportErrorKind,
+  ImportError,
   common,
   core_db
 
@@ -48,6 +51,15 @@ const
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
+
+func toQueueResult(r: Result[void, string]): Result[ImportOutcome, ImportError] =
+  ## Adapt the `Result[void, string]` of the non-import queue handlers
+  ## (`forkChoice`, `setHead`, `processUpdateBase`, `processOrphan`) to the shared
+  ## `QueueItem` result type. The error `kind` is irrelevant on these paths:
+  ## their consumers only inspect ok/err and `msg` (the base/orphan results are
+  ## not even read back), so a plain `Valid`/`Invalid` mapping suffices.
+  if r.isOk: ok(Valid)
+  else: err(ImportError(kind: Invalid, msg: r.error))
 
 func appendBlock(c: ForkedChainRef,
          parent: BlockRef,
@@ -194,8 +206,13 @@ func calculateNewBase(
 
   doAssert(false, "Unreachable code, target base should exists")
 
-func removeBlockFromCache(c: ForkedChainRef, b: BlockRef) =
+proc removeBlockFromCache(c: ForkedChainRef, b: BlockRef) =
   c.hashToBlock.del(b.hash)
+
+  if not c.vmState.isNil() and b.hash == c.vmStateBlockHash:
+    c.vmState.dispose()
+    c.vmState = nil
+    c.vmStateBlockHash.reset()
 
   # Collect and remove tx records belonging to this block
   var toRemove: seq[Hash32]
@@ -221,7 +238,7 @@ func updateHead(c: ForkedChainRef, head: BlockRef) =
     head.hash,
     head.number)
 
-func updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) =
+proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) =
   # Pruning
   # ::
   #                       - B5 - B6 - B7 - B8
@@ -425,8 +442,8 @@ proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async:
     # This recursive mode only used in test env with small set of blocks
     discard await c.processUpdateBase()
   else:
-    proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError], raw: true).} =
-      c.processUpdateBase()
+    proc asyncHandler(): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
+      toQueueResult(await c.processUpdateBase())
     await c.queue.addLast(QueueItem(handler: asyncHandler))
 
   ok()
@@ -462,8 +479,8 @@ proc queueUpdateBase(c: ForkedChainRef, base: BlockRef)
     # This recursive mode only used in test env with small set of blocks
     discard await c.processUpdateBase()
   else:
-    proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError], raw: true).} =
-      c.processUpdateBase()
+    proc asyncHandler(): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
+      toQueueResult(await c.processUpdateBase())
     await c.queue.addLast(QueueItem(handler: asyncHandler))
 
 proc validateBlock(
@@ -563,8 +580,8 @@ template queueOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false): au
     # This recursive mode only used in test env with small set of blocks
     discard await c.processOrphan(parent, finalized)
   else:
-    proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError], raw: true).} =
-      c.processOrphan(parent, finalized)
+    proc asyncHandler(): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
+      toQueueResult(await c.processOrphan(parent, finalized))
     await c.queue.addLast(QueueItem(handler: asyncHandler))
 
 proc processOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false): Future[Result[void, string]]
@@ -686,9 +703,17 @@ proc importBlock*(
     blk: Block,
     blockAccessList = Opt.none(BlockAccessListRef),
     finalized = false
-  ): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
+  ): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
   ## Try to import block to canonical or side chain.
-  ## return error if the block is invalid
+  ##
+  ## Classifies the block and returns a typed verdict instead of forcing the
+  ## caller to second-guess `FC` state:
+  ##  * `ok(Valid)`           - newly validated and linked
+  ##  * `ok(AlreadyObserved)` - block already present by hash
+  ##  * `err(Invalid)`        - genuine validation failure
+  ##  * `err(Orphaned)`       - branch cut off at/below finalized (drop forward)
+  ##  * `err(MissingParent)`  - parent not yet present (above finalized)
+  ## The `err.msg` text is unchanged from the previous string interface.
   ##
   ## `finalized` should be set to true for blocks that are known to be finalized
   ## already per the latest fork choice update from the consensus client, for
@@ -697,6 +722,13 @@ proc importBlock*(
   ## disk (instead of once for every block).
   template header(): Header =
     blk.header
+
+  let blkHash = header.computeBlockHash
+
+  # Already observed: the block content arrived earlier (from us or a concurrent
+  # importer such as `el_sync`). Nothing to do.
+  if c.hashToBlock.hasKey(blkHash):
+    return ok(AlreadyObserved)
 
   let parent = c.hashToBlock.getOrDefault(header.parentHash)
   if parent.isOk:
@@ -710,23 +742,30 @@ proc importBlock*(
     # stateroot check for performance reasons.
     let
       isFinalized = finalized or blk.header.number <= c.latestFinalized.number
-      parent = ?(await c.validateBlock(parent, blk, blockAccessList, isFinalized))
+      newParent = (await c.validateBlock(parent, blk, blockAccessList, isFinalized)).valueOr:
+        return err(ImportError(kind: Invalid, msg: error))
     if c.quarantine.hasOrphans():
-      c.queueOrphan(parent, isFinalized)
+      c.queueOrphan(newParent, isFinalized)
+    return ok(Valid)
 
-  else:
-    # If its parent is an invalid block
-    # there is no hope the descendant is valid
-    let blockHash = header.computeBlockHash
-    debug "Parent block not found",
-      blockHash = blockHash.short,
-      parentHash = header.parentHash.short
+  # Parent is not in the in-memory `(base, latest]` window. Classify by the
+  # block's height relative to `base`/`latest` (the error channel is preserved -
+  # same `msg` as the previous `err("Block is not part of valid chain")`).
+  debug "Parent block not found",
+    blockHash = blkHash.short,
+    parentHash = header.parentHash.short
 
-    # Put into quarantine and hope we receive the parent block
-    c.quarantine.addOrphan(blockHash, blk, blockAccessList)
-    return err("Block is not part of valid chain")
+  if header.number <= c.latest.number:
+    # The in-memory chain already spans this height yet the parent is gone: the
+    # parent's branch was pruned (finality cut it off), so this block is on a
+    # dead fork. `c.latest` is the reliable frontier here - `c.latestFinalized`
+    # can lag until a matching fork-choice block is imported.
+    return err(ImportError(kind: Orphaned, msg: "Block is not part of valid chain"))
 
-  ok()
+  # The chain has not reached this height yet: the parent may still arrive.
+  # Quarantine and wait.
+  c.quarantine.addOrphan(blkHash, blk, blockAccessList)
+  return err(ImportError(kind: MissingParent, msg: "Block is not part of valid chain"))
 
 proc forkChoice*(c: ForkedChainRef,
                  headHash: Hash32,
@@ -776,6 +815,56 @@ proc forkChoice*(c: ForkedChainRef,
 
   ok()
 
+proc setHead*(c: ForkedChainRef, headHash: Hash32): Result[void, string] =
+  ## Forcibly reset the chain head to `headHash`, discarding every in-memory
+  ## block that is not an ancestor of the new head - both the blocks above it
+  ## on its own branch and any competing branches. Discarded blocks can be
+  ## imported again afterwards.
+  ##
+  ## The new head must be in the in-memory window: blocks at or below `base`
+  ## have been persisted and cannot be rewound, and finalized blocks cannot
+  ## be discarded, so the head can only move to the latest finalized block
+  ## or one of its descendants.
+  ##
+  ## This is a destructive debug/testing helper backing `debug_setHead` - it
+  ## bypasses the usual fork choice rules.
+  let head = ?c.findHeadPos(headHash)
+
+  # Blocks on the new head's lineage survive, everything else is removed.
+  var keep = initHashSet[Hash32]()
+  for it in ancestors(head):
+    keep.incl it.hash
+
+  # Refuse to discard finalized blocks (which may already be queued for
+  # persisting). Checked up front so that no blocks are removed on error.
+  for branchHead in c.heads:
+    for it in ancestors(branchHead):
+      if it.hash in keep:
+        break
+      if not it.notFinalized:
+        return err("Cannot set head to " & headHash.short &
+          ": finalized block " & it.hash.short & " would be discarded")
+
+  for branchHead in c.heads:
+    # Walk each branch tip first so that children are disposed before parents.
+    for it in ancestors(branchHead):
+      if it.hash in keep or it.txFrame.isNil:
+        # Reached the new head's lineage, or a segment already removed while
+        # walking a previous branch.
+        break
+      c.removeBlockFromCache(it)
+
+  c.heads = @[head]
+  c.latest = head
+  c.updateHead(head)
+
+  if c.fcuSafe.number > head.number:
+    # The old safe block was discarded, clamp it to the new head.
+    c.fcuSafe = FcuHashAndNumber(hash: head.hash, number: head.number)
+    ?head.txFrame.fcuSafe(c.fcuSafe)
+
+  ok()
+
 proc stopProcessingQueue*(c: ForkedChainRef) {.async: (raises: []).} =
   doAssert(c.processingQueueLoop.isNil.not, "Please set enableQueue=true when constructing FC")
   # noCancel operation prevents race condition between processingQueue
@@ -783,17 +872,23 @@ proc stopProcessingQueue*(c: ForkedChainRef) {.async: (raises: []).} =
   # at the same time FC.serialize modify the state, crash can happen.
   await noCancel c.processingQueueLoop.cancelAndWait()
 
+  if not c.vmState.isNil():
+    c.vmState.dispose()
+    c.vmState = nil
+    c.vmStateBlockHash.reset()
+
 template queueImportBlock*(
     c: ForkedChainRef,
     blk: Block,
     blockAccessList = Opt.none(BlockAccessListRef),
     finalized = false): auto =
 
-  proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError], raw: true).} =
+  proc asyncHandler(): Future[Result[ImportOutcome, ImportError]]
+      {.async: (raises: [CancelledError], raw: true).} =
     c.importBlock(blk, blockAccessList, finalized)
 
   let item = QueueItem(
-    responseFut: Future[Result[void, string]].Raising([CancelledError]).init(),
+    responseFut: Future[Result[ImportOutcome, ImportError]].Raising([CancelledError]).init(),
     handler: asyncHandler
   )
   await c.queue.addLast(item)
@@ -803,11 +898,22 @@ template queueForkChoice*(c: ForkedChainRef,
                  headHash: Hash32,
                  finalizedHash: Hash32,
                  safeHash: Hash32 = zeroHash32): auto =
-  proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError], raw: true).} =
-    c.forkChoice(headHash, finalizedHash, safeHash)
+  proc asyncHandler(): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
+    toQueueResult(await c.forkChoice(headHash, finalizedHash, safeHash))
 
   let item = QueueItem(
-    responseFut: Future[Result[void, string]].Raising([CancelledError]).init(),
+    responseFut: Future[Result[ImportOutcome, ImportError]].Raising([CancelledError]).init(),
+    handler: asyncHandler
+  )
+  await c.queue.addLast(item)
+  item.responseFut
+
+template queueSetHead*(c: ForkedChainRef, headHash: Hash32): auto =
+  proc asyncHandler(): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
+    toQueueResult(c.setHead(headHash))
+
+  let item = QueueItem(
+    responseFut: Future[Result[ImportOutcome, ImportError]].Raising([CancelledError]).init(),
     handler: asyncHandler
   )
   await c.queue.addLast(item)

@@ -446,6 +446,30 @@ template peek[K, V](s: var LruCache[K, V], key: auto): Opt[V] =
   ## Retrieve item without moving it to the front
   s.peek(subhash(key), key)
 
+proc getPtr[K, V](s: var LruCache[K, V], subhash: uint32, key: auto): ptr V =
+  ## Pointer to the value, moving the item to the front - nil if not found
+  let index = s.tableGet(subhash, key).valueOr:
+    return nil
+  s.moveToFront(index)
+  addr s.nodes[index].value
+
+template getPtr[K, V](s: var LruCache[K, V], key: auto): ptr V =
+  ## Pointer to the value, moving the item to the front - nil if not found
+  s.getPtr(subhash(key), key)
+
+func peekPtr[K, V](s: var LruCache[K, V], subhash: uint32, key: auto): ptr V =
+  ## Pointer to the value without moving the item - nil if not found
+  let index = s.tableGet(subhash, key).valueOr:
+    return nil
+  addr s.nodes[index].value
+
+proc moveToFront(s: var LruCache, subhash: uint32, key: auto) =
+  ## Look up the item by key and move it to the front of the LRU cache - does
+  ## nothing if the key is not present. Unlike `get`, no value is copied out.
+  let index = s.tableGet(subhash, key).valueOr:
+    return
+  s.moveToFront(index)
+
 proc update(s: var LruCache, subhash: uint32, key: auto, value: auto): bool =
   let index = s.tableGet(subhash, key).valueOr:
     return false
@@ -802,18 +826,175 @@ proc get*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
       inc tlsLruGetCounter
       if (tlsLruGetCounter and SAMPLE_MASK) == 0'u32:
         s.lock.withWriteLock:
-          discard s.cache.get(sh, key)
+          s.cache.moveToFront(sh, key)
     value
   else:
     lru.cache.get(key)
 
-proc put*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V) =
+
+type
+  KeyHash* = object
+    subhash: uint32
+    shardIdx: int
+
+func toKeyHash*[K, V](lru: ConcurrentLruCache[K, V], key: auto): KeyHash =
+  ## Hash `key` for `lru` once, returning a token to pass to
+  ## `withGetByHash` / `putByHash` - reuse it for a lookup followed by a
+  ## `put` so the key is hashed (and the subhash derived) only once.
+  ##
+  ## `key` may be a borrowed view rather than a `K` (e.g. an `openArray` aliasing
+  ## the bytes of the key) as long as it hashes identically to - and
+  ## compares equal to - the corresponding `K`. This lets a lookup avoid
+  ## materializing the key, copying it only when a miss requires a `put`.
+  mixin hash
+  let h = hash(key)
   if lru.threadSafe:
-    withShardWrite(lru, key):
+    KeyHash(subhash: h.toSubhash(), shardIdx: h.toShardIdx(lru.shardBits))
+  else:
+    KeyHash(subhash: h.toSubhash())
+
+func toLent[T](p: ptr T): lent T =
+  # Borrow the pointee as a read-only view (no copy). Used to hand `withGet`
+  # bodies access to the cached value without letting them mutate it - assigning
+  # to a `lent` is a compile error.
+  p[]
+
+template withValueImpl[K, V](
+    lru: var ConcurrentLruCache[K, V],
+    keyHash: KeyHash,
+    key: auto,
+    value: untyped,
+    peek: static bool,
+    foundBody: untyped,
+    notFoundBody: untyped,
+) =
+  if lru.threadSafe:
+    let
+      sh = keyHash.subhash
+      s = addr lru.shards[keyHash.shardIdx]
+    
+    var valuePtr: ptr V
+    when peek:
+      s.lock.withReadLock:
+        valuePtr = s.cache.peekPtr(sh, key)
+        if not valuePtr.isNil():
+          template value(): untyped {.inject.} = toLent(valuePtr)
+          foundBody
+    else:
+      try:
+        s.lock.withReadLock:
+          valuePtr = s.cache.peekPtr(sh, key)
+          if not valuePtr.isNil():
+            template value(): untyped {.inject.} = toLent(valuePtr)
+            foundBody
+      finally:
+        # Promote in a `finally` so it still runs if `foundBody` exits early via
+        # `return`/`break`. The read lock is released before the `finally` runs, so
+        # taking the write lock here cannot deadlock against it.
+        if not valuePtr.isNil():
+          inc tlsLruGetCounter
+          if (tlsLruGetCounter and SAMPLE_MASK) == 0'u32:
+            s.lock.withWriteLock:
+              s.cache.moveToFront(sh, key)
+    if valuePtr.isNil():
+      notFoundBody
+
+  else:
+    let valuePtr =
+      when peek:
+        lru.cache.peekPtr(keyHash.subhash, key)
+      else:
+        lru.cache.getPtr(keyHash.subhash, key)
+    if valuePtr.isNil():
+      notFoundBody
+    else:
+      template value(): untyped {.inject.} = toLent(valuePtr)
+      foundBody
+
+template withGetByHash*[K, V](
+    lru: var ConcurrentLruCache[K, V], keyHash: KeyHash, key: auto, value, body: untyped
+) =
+  ## Run `body` with `value` bound to a read-only, zero-copy view of the cached
+  ## value if `key` is present, promoting the item towards the
+  ## most-recently-used end (sampled, like `get`). `body` does not run on a miss.
+  ##
+  ## `key` may be a borrowed view that hashes and compares equal to a `K` (see
+  ## `toKeyHash`); `keyHash` must have been derived from the same key.
+  withValueImpl(lru, keyHash, key, value, false, body, (discard))
+
+template withGetByHash*[K, V](
+    lru: var ConcurrentLruCache[K, V],
+    keyHash: KeyHash,
+    key: auto,
+    value, foundBody, notFoundBody: untyped,
+) =
+  ## Variant taking an optional second block (introduced with `do:`) that runs
+  ## when `key` is missing - similar to `Tables.withValue`. The miss block runs
+  ## after the read lock is released, so it may `put` the value.
+  withValueImpl(lru, keyHash, key, value, false, foundBody, notFoundBody)
+
+template withPeekByHash*[K, V](
+    lru: var ConcurrentLruCache[K, V], keyHash: KeyHash, key: auto, value, body: untyped
+) =
+  ## Like `withGetByHash` but leaves the item's position unchanged (like
+  ## `peek`) rather than promoting it.
+  withValueImpl(lru, keyHash, key, value, true, body, (discard))
+
+template withPeekByHash*[K, V](
+    lru: var ConcurrentLruCache[K, V],
+    keyHash: KeyHash,
+    key: auto,
+    value, foundBody, notFoundBody: untyped,
+) =
+  ## Like `withGetByHash` (with a `do:` miss block) but leaves the item's
+  ## position unchanged (like `peek`) rather than promoting it.
+  withValueImpl(lru, keyHash, key, value, true, foundBody, notFoundBody)
+
+proc putByHash*[K, V](
+    lru: var ConcurrentLruCache[K, V], keyHash: KeyHash, key: K, val: V
+) =
+  if lru.threadSafe:
+    let
+      sh = keyHash.subhash
+      s = addr lru.shards[keyHash.shardIdx]
+    s.lock.withWriteLock:
       if s.cache.put(sh, key, val):
         s.usedCount.store(s.cache.len, moRelaxed)
   else:
-    lru.cache.put(key, val)
+    lru.cache.put(keyHash.subhash, key, val)
+
+template withGet*[K, V](
+    lru: var ConcurrentLruCache[K, V], key: K, value, body: untyped
+) =
+  ## Run `body` with `value` bound to a read-only, zero-copy view of the cached
+  ## value if `key` is present, promoting the item towards the
+  ## most-recently-used end (sampled, like `get`). `body` does not run on a miss.
+  withValueImpl(lru, lru.toKeyHash(key), key, value, false, body, (discard))
+
+template withGet*[K, V](
+    lru: var ConcurrentLruCache[K, V], key: K, value, foundBody, notFoundBody: untyped
+) =
+  ## Variant taking an optional second block (introduced with `do:`) that runs
+  ## when `key` is missing - similar to `Tables.withValue`. The miss block runs
+  ## after the read lock is released, so it may `put` the value.
+  withValueImpl(lru, lru.toKeyHash(key), key, value, false, foundBody, notFoundBody)
+
+template withPeek*[K, V](
+    lru: var ConcurrentLruCache[K, V], key: K, value, body: untyped
+) =
+  ## Like `withGet` but leaves the item's position unchanged (like `peek`)
+  ## rather than promoting it.
+  withValueImpl(lru, lru.toKeyHash(key), key, value, true, body, (discard))
+
+template withPeek*[K, V](
+    lru: var ConcurrentLruCache[K, V], key: K, value, foundBody, notFoundBody: untyped
+) =
+  ## Like `withGet` (with a `do:` miss block) but leaves the item's position
+  ## unchanged (like `peek`) rather than promoting it.
+  withValueImpl(lru, lru.toKeyHash(key), key, value, true, foundBody, notFoundBody)
+
+proc put*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V) =
+  lru.putByHash(lru.toKeyHash(key), key, val)
 
 proc pop*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
   if lru.threadSafe:

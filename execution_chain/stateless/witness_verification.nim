@@ -10,11 +10,11 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[tables, sets, algorithm],
+  std/[tables, sets],
   eth/common,
   ../db/ledger,
   ../db/aristo/aristo_proof,
-  ./witness_types
+  ./[witness_types, stateless_types]
 
 template isAddress(bytes: openArray[byte]): bool =
   bytes.len() == 20
@@ -74,6 +74,7 @@ func validateKeys*(witness: Witness, expectedKeys: WitnessTable): Result[void, s
 
   ok()
 
+# https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/stateless.py#L281
 func verifyHeaders*(
     witness: ExecutionWitness, header: Header
 ): Result[seq[Header], string] =
@@ -84,36 +85,33 @@ func verifyHeaders*(
 
   # Rlp decode the headers in the witness
   var headers: seq[Header]
-  for header in witness.headers:
+  for h in witness.headers:
     try:
-      headers.add(rlp.decode(header, Header))
+      headers.add(rlp.decode(h.asSeq(), Header))
     except RlpError as e:
       return err("Failed to decode header in witness: " & e.msg)
 
-  # Sort the headers in ascending order by block number
-  func compareByNumber(a, b: Header): int =
-    if a.number == b.number:
-      0
-    elif a.number > b.number:
-      1
-    else: # a.number < b.number
-      -1
-  headers.sort(compareByNumber)
+  # Validate that a sequence of encoded headers forms a contiguous chain
+  for i in 1..<headers.len:
+    if headers[i].parentHash != keccak256(witness.headers[i - 1].asSeq()):
+      return err("Witness headers are not contiguous")
 
-  # Check that the last header in the list (after sorting) is the parent header
-  if headers[headers.high].computeRlpHash() != header.parentHash:
+  # The last provided header must be the parent of the block being validated.
+  # This anchors preStateRoot (taken from the last witness header) to the block's
+  # parentHash: without it an attacker could supply a fabricated last header with
+  # an arbitrary stateRoot, paired with matching fake trie nodes, and pass the
+  # preStateRoot check in statelessProcessBlock() while executing on a bogus
+  # pre-state.
+  #
+  # Note that execution-specs does the same check inside execute_block via
+  # validate_header().
+  if keccak256(witness.headers[^1].asSeq()) != header.parentHash:
     return err("Parent header is required in the witness")
-
-  var i = headers.high
-  while i > 0:
-    if headers[i - 1].computeRlpHash() != headers[i].parentHash:
-      return err("Header chain verification failed")
-    dec i
 
   ok(headers)
 
 func verifyState*(
-    witness: ExecutionWitness, preStateRoot: Hash32
+    witness: ExecutionWitnessWithKeys, preStateRoot: Hash32
 ): Result[void, string] =
   # Short path for emptyRoot -> empty trie: no accounts exist in the pre-state,
   # nothing to verify.

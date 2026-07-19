@@ -37,6 +37,7 @@
 {.push raises: [].}
 
 import
+  metrics,
   eth/common/blocks,
   ./tx_pool/tx_tabs,
   ./tx_pool/tx_item,
@@ -47,6 +48,11 @@ import
 
 from ../evm/state import blockAccessList
 from eth/common/eth_types_rlp import rlpHash
+
+declareCounter nec_txpool_packed_total,   "Transactions packed into assembled blocks"
+declareGauge   nec_txpool_last_block_txs, "Transactions in the last assembled block"
+declareGauge   nec_txpool_last_block_value,
+  "Reward (gwei) of the last assembled block"
 
 # ------------------------------------------------------------------------------
 # TxPoolRef public types
@@ -95,6 +101,9 @@ export
 # chain(xp: TxPoolRef): ForkedChainRef
 # com(xp: TxPoolRef): CommonRef
 # len(xp: TxPoolRef): int
+# baseFee(xp: TxPoolRef): GasInt
+# senderCount(xp: TxPoolRef): int
+# iterator allItems(xp: TxPoolRef): TxItemRef
 
 # ------------------------------------------------------------------------------
 # TxPoolRef public functions
@@ -112,11 +121,13 @@ export
 
 # addTx(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError]
 # addTx(xp: TxPoolRef, tx: Transaction): Result[void, TxError]
-# contains(xp: TxPoolRef, id: Hash32): bool
 # getItem(xp: TxPoolRef, id: Hash32): Result[TxItemRef, TxError]
+# getNonce(xp: TxPoolRef; account: Address): AccountNonce
+# contains(xp: TxPoolRef, id: Hash32): bool
 # removeTx(xp: TxPoolRef, id: Hash32)
 # removeExpiredTxs(xp: TxPoolRef, lifeTime: Duration)
-# getBlobAndProof(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV1]
+# getBlobAndProofV1(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV1]
+# getBlobAndProofV2(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV2]
 
 proc removeNewBlockTxs*(xp: TxPoolRef, blk: Block, optHash = Opt.none(Hash32)) =
   let fromHash = if optHash.isSome: optHash.get
@@ -155,11 +166,26 @@ func getWrapperVersion(com: CommonRef, timestamp: EthTime): WrapperVersion =
 
 proc assembleBlock*(
     xp: TxPoolRef,
+    parentHash: Hash32,
     someBaseFee: bool = false,
     gasLimit: Opt[GasInt] = Opt.none(GasInt)
 ): Result[AssembledBlock, string] =
-  if xp.timestamp != xp.vmState.blockCtx.timestamp:
-    xp.updateVmState()
+  # Packing mutates the ledger (tx nonces/balances are persisted) and the
+  # per-block accumulators (blobGasUsed, gas counters, receipts), and
+  # vmExecInit does not reset them. forkchoiceUpdated rebuilds the payload
+  # for the same slot (same timestamp) arbitrarily many times, so guarding
+  # the reset on a timestamp change let a rebuild reuse the previous pack's
+  # dirtied state: every pooled tx then failed the nonce check, the body
+  # ended up empty, yet the header still committed to the stale blobGasUsed
+  # (and gasUsed/stateRoot) of the first pack — producing a block other
+  # clients reject as a blob-gas mismatch. Always start each build from a
+  # fresh transaction environment.
+  #
+  # The build parent is always explicit: the engine API requires the payload
+  # to sit on the forkchoiceUpdated headBlockHash, which need not be
+  # `chain.latest` when sibling payloads exist at the same height.
+  let parentHeader = ?xp.chain.headerByHash(parentHash)
+  xp.updateVmState(parentHeader, parentHash)
 
   let com = xp.vmState.com
 
@@ -177,16 +203,9 @@ proc assembleBlock*(
     blobsBundle = BlobsBundle(
       wrapperVersion: getWrapperVersion(com, blk.header.timestamp)
     )
-    currentRlpSize = rlp.getEncodedLength(blk.header)
-
-  if blk.withdrawals.isSome:
-    currentRlpSize = currentRlpSize + rlp.getEncodedLength(blk.withdrawals.get())
 
   for item in pst.packedTxs:
     let tx = item.pooledTx
-    if currentRlpSize > MAX_RLP_BLOCK_SIZE - 7:
-      break
-    currentRlpSize = currentRlpSize + rlp.getEncodedLength(tx.tx)
     blk.txs.add tx.tx
     if tx.blobsBundle != nil:
       doAssert(tx.blobsBundle.wrapperVersion == blobsBundle.wrapperVersion)
@@ -200,6 +219,13 @@ proc assembleBlock*(
 
   if com.isShanghaiOrLater(blk.header.timestamp):
     blk.withdrawals = Opt.some(xp.withdrawals)
+
+  # EIP-7934: the packer bounds the encoded block size while selecting txs.
+  # Never truncate the body here — the header and the EIP-7928 block access
+  # list already commit to the full packed tx set.
+  if com.isOsakaOrLater(blk.header.timestamp) and
+     rlp.getEncodedLength(blk) > MAX_RLP_BLOCK_SIZE:
+    return err("assembled block exceeds MAX_RLP_BLOCK_SIZE")
 
   if not com.isCancunOrLater(blk.header.timestamp) and blobsBundle.commitments.len > 0:
     return err("PooledTransaction contains blobs prior to Cancun")
@@ -231,6 +257,14 @@ proc assembleBlock*(
       xp.vmState.blockAccessList
     else:
       Opt.none(BlockAccessListRef)
+
+  nec_txpool_packed_total.inc(blk.txs.len)
+  nec_txpool_last_block_txs.set(blk.txs.len.int64)
+  nec_txpool_last_block_value.set(
+    (pst.blockValue div 1_000_000_000.u256).truncate(int64))
+  # Packing prunes stale-nonce txs directly via tx_tabs, bypassing removeTx, so
+  # refresh the size gauges here to keep them from drifting.
+  xp.updatePoolSizeMetrics()
 
   ok AssembledBlock(
     blk: blk,
@@ -268,7 +302,8 @@ export
   `prevRandao=`,
   `withdrawals=`,
   `parentBeaconBlockRoot=`,
-  `slotNumber=`
+  `slotNumber=`,
+  `targetGasLimit=`
 
 # `feeRecipient=`(xp: TxPoolRef, val: Address)
 # `timestamp=`(xp: TxPoolRef, val: EthTime)
@@ -276,3 +311,4 @@ export
 # `withdrawals=`(xp: TxPoolRef, val: sink seq[Withdrawal])
 # `parentBeaconBlockRoot=`(xp: TxPoolRef, val: Hash32)
 # `slotNumber=`(xp: TxPoolRef, val: uint64)
+# `targetGasLimit=`(xp: TxPoolRef, val: Opt[uint64])

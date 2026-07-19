@@ -25,11 +25,12 @@ func deriveChainId*(v: uint64, chainId: ChainId): ChainId =
   else:
     ((v - 35) div 2).u256
 
-func validateChainId*(tx: Transaction, chainId: ChainId): bool =
+func validateChainId*(tx: Transaction, chainId: ChainId): (bool, ChainId) =
   if tx.txType == TxLegacy:
-    chainId == deriveChainId(tx.V, chainId)
+    let derivedChainId = deriveChainId(tx.V, chainId)
+    (chainId == derivedChainId, derivedChainId)
   else:
-    chainId == tx.chainId
+    (chainId == tx.chainId, tx.chainId)
 
 func maxPriorityFeePerGasNorm*(tx: Transaction): GasInt =
   if tx.txType < TxEip1559: tx.gasPrice else: tx.maxPriorityFeePerGas

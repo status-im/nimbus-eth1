@@ -100,6 +100,10 @@ proc setupManager(pm: PeerManagerRef, boot: BootstrapNodes) =
   pm.pool.addObserver(pm, po)
 
   for enode in boot.enodes:
+    if enode.address.tcpPort == Port(0):
+      # Discovery-only node (enode with discport), cannot be dialed over RLPx
+      warn "Skipping static peer without TCP port", enode = $enode
+      continue
     let state = ReconnectState(
       node: newNode(enode),
       retryCount: 0,
@@ -109,6 +113,9 @@ proc setupManager(pm: PeerManagerRef, boot: BootstrapNodes) =
 
   for rec in boot.enrs:
     let enode = ENode.fromEnr(rec).valueOr:
+      continue
+    if enode.address.tcpPort == Port(0):
+      warn "Skipping static peer without TCP port", enode = $enode
       continue
     let state = ReconnectState(
       node: newNode(enode),
