@@ -136,6 +136,8 @@ switch("passL", "-fno-omit-frame-pointer")
 
 # Disable ABI warning: 
 # 'the ABI for passing parameters with 64-byte alignment has changed in GCC 4.6'
+# The fix on the nim side is underway https://github.com/nim-lang/Nim/issues/25968
+# TODO: Remove after the workaround once the linked issue is resolved
 switch("passC", "-Wno-psabi")
 switch("passL", "-Wno-psabi")
 
