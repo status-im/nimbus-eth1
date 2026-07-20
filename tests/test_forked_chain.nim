@@ -1060,9 +1060,9 @@ suite "ForkedChainRef tests":
     check chain.resolvedFinNumber == 7'u64
     check checkFinalizedMarkers(chain, finalizedBlockHash)
 
-    # below base
+    # head below base
     check chain.isCanonicalAndFinalizedAncestor(blk4.header.number, blk4.blockHash, finalizedBlockHash) == true
-    # latest known finalized
+    # finalizedBlockHash is unknown, use latest known finalized
     check chain.isCanonicalAndFinalizedAncestor(blk4.header.number, blk4.blockHash, C7.blockHash) == true
     # finalized ancestor
     check chain.isCanonicalAndFinalizedAncestor(blk6.header.number, blk6.blockHash, finalizedBlockHash) == true
@@ -1072,7 +1072,7 @@ suite "ForkedChainRef tests":
     check chain.isCanonicalAndFinalizedAncestor(blk8.header.number, blk8.blockHash, finalizedBlockHash) == false
     # non finalized sidechain
     check chain.isCanonicalAndFinalizedAncestor(F8.header.number, F8.blockHash, finalizedBlockHash) == false
-    # head = incoming finalized block
+    # head == incoming finalized block
     check chain.isCanonicalAndFinalizedAncestor(blk8.header.number, blk8.blockHash, blk8.blockHash) == false
     # head below incoming finalized block
     check chain.isCanonicalAndFinalizedAncestor(blk7.header.number, blk7.blockHash, blk8.blockHash) == true
