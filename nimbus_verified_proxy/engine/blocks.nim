@@ -27,8 +27,9 @@ import
 logScope:
   topics = "vp_engine"
 
-# EIP-2935 windows size
-const HISTORY_SERVE_WINDOW = 8191'u64
+const
+  HISTORY_SERVE_WINDOW = 8191'u64
+  WINDOW_JUMP = HISTORY_SERVE_WINDOW - 1
 
 func isInEIP2935VerifiableRange(
     anchor: base.BlockNumber, latest: base.BlockNumber, target: base.BlockNumber
@@ -36,32 +37,119 @@ func isInEIP2935VerifiableRange(
   # relax the timing by one block
   if target > anchor or target < latest - HISTORY_SERVE_WINDOW + 1: false else: true
 
-proc verifyEIP2935Membership(
-    engine: RpcVerificationEngine,
-    anchor: Header,
-    latest: Header,
-    targetNum: base.BlockNumber,
-    targetHash: Hash32,
-): Future[EngineResult[bool]] {.async: (raises: [CancelledError]).} =
-  if not isInEIP2935VerifiableRange(anchor.number, latest.number, targetNum):
-    return ok(false)
+func convHeader*(blk: eth_api_types.BlockObject): Header =
+  let nonce = blk.nonce.valueOr:
+    default(Bytes8)
 
-  let slot = (targetNum mod HISTORY_SERVE_WINDOW).u256
+  return Header(
+    parentHash: blk.parentHash,
+    ommersHash: blk.sha3Uncles,
+    coinbase: blk.miner,
+    stateRoot: blk.stateRoot,
+    transactionsRoot: blk.transactionsRoot,
+    receiptsRoot: blk.receiptsRoot,
+    logsBloom: blk.logsBloom,
+    difficulty: blk.difficulty,
+    number: base.BlockNumber(distinctBase(blk.number)),
+    gasLimit: GasInt(blk.gasLimit.uint64),
+    gasUsed: GasInt(blk.gasUsed.uint64),
+    timestamp: ethTime(blk.timestamp),
+    extraData: seq[byte](blk.extraData),
+    mixHash: Bytes32(distinctBase(blk.mixHash)),
+    nonce: nonce,
+    baseFeePerGas: blk.baseFeePerGas,
+    withdrawalsRoot: blk.withdrawalsRoot,
+    blobGasUsed: blk.blobGasUsed.u64,
+    excessBlobGas: blk.excessBlobGas.u64,
+    parentBeaconBlockRoot: blk.parentBeaconBlockRoot,
+    requestsHash: blk.requestsHash,
+  )
+
+proc getEIP2935Hash(
+    engine: RpcVerificationEngine, anchor: Header, number: base.BlockNumber
+): Future[Opt[Hash32]] {.async: (raises: [CancelledError]).} =
+  let slot = (number mod HISTORY_SERVE_WINDOW).u256
 
   let storedValue = (
     await engine.getStorageAt(
       HISTORY_STORAGE_ADDRESS, slot, anchor.number, anchor.stateRoot
     )
   ).valueOr:
-    return ok(false) # unservable/invalid proof -> fall back to the walk
+    error "Failed to fetch EIP-2935 storage proof",
+      anchorNumber = anchor.number, number, slot
+    return Opt.none(Hash32) # unservable/invalid proof
 
   # storage value is zero only when the fork activated less than 8191 blocks before
   if storedValue.isZero():
-    return ok(false) # cannot be verified using EIP 2935
+    error "EIP-2935 storage slot is empty, fork activated too recently",
+      anchorNumber = anchor.number, number, slot
+    return Opt.none(Hash32) # cannot be verified using EIP 2935
 
-  if storedValue == UInt256.fromBytesBE(targetHash.data):
+  Opt.some(storedValue.toBytesBE().to(Hash32))
+
+proc verifyEIP2935Membership(
+    engine: RpcVerificationEngine,
+    anchor: Header,
+    targetNum: base.BlockNumber,
+    targetHash: Hash32,
+): Future[EngineResult[bool]] {.async: (raises: [CancelledError]).} =
+  # the anchor's state can only prove blocks older than the anchor
+  if targetNum > anchor.number:
+    return ok(false)
+
+  if targetNum == anchor.number:
+    if anchor.computeBlockHash == targetHash:
+      return ok(true)
+    error "EIP-2935 verification failed, block is not part of the canonical chain",
+      anchorNumber = anchor.number, targetNum, targetHash
+    return err(
+      (
+        VerificationError, "the requested block is not part of the canonical chain",
+        UNTAGGED,
+      )
+    )
+
+  let jumps = (anchor.number - targetNum - 1) div WINDOW_JUMP
+  if jumps > engine.maxWindowJumps:
+    debug "Window jumps needed to reach the target block exceed the limit",
+      jumps, maxWindowJumps = engine.maxWindowJumps, targetNum
+    return ok(false)
+
+  var curAnchor = anchor
+  while curAnchor.number - targetNum > WINDOW_JUMP:
+    let
+      newAnchorNum = curAnchor.number - WINDOW_JUMP
+      storedHash = (await engine.getEIP2935Hash(curAnchor, newAnchorNum)).valueOr:
+        return ok(false)
+      (backend, backendIdx) = ?(engine.executionBackendFor(GetBlockByHash))
+      blk =
+        ?((await backend.eth_getBlockByHash(storedHash, false)).tagBackend(backendIdx))
+      header = convHeader(blk)
+
+    if header.computeBlockHash != storedHash:
+      error "EIP-2935 window jump header doesn't match the stored hash",
+        curAnchorNumber = curAnchor.number,
+        newAnchorNum,
+        storedHash,
+        downloadedHash = header.computeBlockHash
+      return err(
+        (
+          VerificationError,
+          "downloaded window jump header doesn't match the EIP-2935 stored hash",
+          backendIdx,
+        )
+      )
+
+    curAnchor = header
+
+  let storedHash = (await engine.getEIP2935Hash(curAnchor, targetNum)).valueOr:
+    return ok(false)
+
+  if storedHash == targetHash:
     return ok(true)
 
+  error "EIP-2935 verification failed, block is not part of the canonical chain",
+    curAnchorNumber = curAnchor.number, targetNum, targetHash, storedHash
   err(
     (
       VerificationError, "the requested block is not part of the canonical chain",
@@ -146,34 +234,6 @@ proc resolveBlockTag*(
       err((InvalidDataError, "No support for block tag " & $blockTag, UNTAGGED))
   else:
     ok(blockTag)
-
-func convHeader*(blk: eth_api_types.BlockObject): Header =
-  let nonce = blk.nonce.valueOr:
-    default(Bytes8)
-
-  return Header(
-    parentHash: blk.parentHash,
-    ommersHash: blk.sha3Uncles,
-    coinbase: blk.miner,
-    stateRoot: blk.stateRoot,
-    transactionsRoot: blk.transactionsRoot,
-    receiptsRoot: blk.receiptsRoot,
-    logsBloom: blk.logsBloom,
-    difficulty: blk.difficulty,
-    number: base.BlockNumber(distinctBase(blk.number)),
-    gasLimit: GasInt(blk.gasLimit.uint64),
-    gasUsed: GasInt(blk.gasUsed.uint64),
-    timestamp: ethTime(blk.timestamp),
-    extraData: seq[byte](blk.extraData),
-    mixHash: Bytes32(distinctBase(blk.mixHash)),
-    nonce: nonce,
-    baseFeePerGas: blk.baseFeePerGas,
-    withdrawalsRoot: blk.withdrawalsRoot,
-    blobGasUsed: blk.blobGasUsed.u64,
-    excessBlobGas: blk.excessBlobGas.u64,
-    parentBeaconBlockRoot: blk.parentBeaconBlockRoot,
-    requestsHash: blk.requestsHash,
-  )
 
 proc walkBlocks*(
     engine: RpcVerificationEngine,
@@ -290,7 +350,7 @@ proc verifyHeader(
             UNTAGGED,
           )
         )
-      anchorOrFinalized =
+      anchor =
         if engine.anchor.kind == bidAlias and
             engine.anchor.alias.toLowerAscii() == "safe":
           engine.headerStore.latest.valueOr:
@@ -308,20 +368,9 @@ proc verifyHeader(
                 "finalized block is not available yet. Still syncing?", UNTAGGED,
               )
             )
-      latest = engine.headerStore.latest.valueOr:
-        # untagged(-1) because this doesn't link to any backend
-        return err(
-          (
-            UnavailableDataError, "latest block is not available yet. Still syncing?",
-            UNTAGGED,
-          )
-        )
 
-    let eipVerified = ?(
-      await engine.verifyEIP2935Membership(
-        anchorOrFinalized, latest, header.number, hash
-      )
-    )
+    let eipVerified =
+      ?(await engine.verifyEIP2935Membership(anchor, header.number, hash))
 
     if not eipVerified:
       ?(
