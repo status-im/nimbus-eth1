@@ -127,7 +127,13 @@ proc rpcEstimateGas*(
 
     params.gasLimit = gasLimit
     # TODO: bail out on consensus error similar to validateTransaction
+    # Each trial must run against pristine state; a successful run (e.g. a
+    # CREATE2 deploy) otherwise commits into the shared ledger and leaks into
+    # later trials (address collision -> revert), breaking the search. This
+    # mirrors the savepoint/rollback used in async_evm.nim.
+    let savePoint = vmState.ledger.beginSavePoint()
     let res = runComputation(params, CallResult)
+    vmState.ledger.rollback(savePoint)
     if res.error.len > 0:
       err(OutputResult(error: res.error, output: res.output))
     else:
