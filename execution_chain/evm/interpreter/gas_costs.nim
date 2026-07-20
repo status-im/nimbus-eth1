@@ -55,13 +55,11 @@ type
 
   GasFeeSchedule = array[GasFeeKind, Natural]
 
-  GasProc* = proc(): GasInt {.gcsafe, raises: [].}
-
   GasParamsCall1* = object
     kind*: Op
     nonZeroVal*: bool
     gasLeft*: GasInt
-    gasCallEIP2929*: GasProc
+    gasCallEIP2929*: GasInt
     currentMemSize*: GasNatural
     memOffset*: GasNatural
     memLength*: GasNatural
@@ -70,9 +68,9 @@ type
     kind*: Op
     nonZeroVal*: bool
     gasCost1*: GasInt
-    isNewAccount*: proc(): bool {.gcsafe, raises: [].}
+    isNewAccount*: bool
     gasLeft*: GasInt
-    gasCallDelegate*: GasProc
+    gasCallDelegate*: GasInt
     contractGas*: UInt256
 
   GasParamsSs* = object
@@ -400,7 +398,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
     # Cextra
     gasCost += static(GasInt(FeeSchedule[GasCall]))
 
-    gasCost += params.gasCallEIP2929()
+    gasCost += params.gasCallEIP2929
 
     if params.gasLeft < gasCost:
       return err(opErr(OutOfGas))
@@ -414,13 +412,13 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
       gasLeft = params.gasLeft
       gasCost = params.gasCost1
 
-    gasCost += params.gasCallDelegate()
+    gasCost += params.gasCallDelegate
 
     if gasLeft < gasCost:
       return err(opErr(OutOfGas))
 
     # Cnew_account
-    if params.isNewAccount() and params.kind == Call:
+    if params.isNewAccount and params.kind == Call:
       when fork < FkSpurious:
         # Pre-EIP161 all account creation calls consumed 25000 gas.
         gasCost += static(GasInt(FeeSchedule[GasNewAccount]))

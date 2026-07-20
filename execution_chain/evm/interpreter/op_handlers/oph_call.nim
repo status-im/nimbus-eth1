@@ -80,51 +80,82 @@ proc updateStackAndParams(q: var LocalParams; c: Computation) =
 # EIP2929: This came before old gas calculator
 #           because it will affect `c.gasMeter.gasRemaining`
 #           and further `childGasLimit`
-proc gasCallEIP2929(c: Computation, codeAddress: Address): GasProc =
-  if FkBerlin <= c.fork:
-    GasProc proc(): GasInt =
-      c.vmState.mutateLedger:
-        if not ledger.inAccessList(codeAddress):
-          ledger.accessList(codeAddress)
+proc gasCallEIP2929(c: Computation, codeAddress: Address): GasInt =
+  if c.fork < FkBerlin:
+    return 0.GasInt
 
-          # The WarmStorageReadCostEIP2929 (100) is already deducted in
-          # the form of a constant `gasCall`
-          if c.fork >= FkAmsterdam:
-            (COLD_ACCOUNT_ACCESS_8038 - WarmStorageReadCost).GasInt
-          else:
-            (COLD_ACCOUNT_ACCESS_2929 - WarmStorageReadCost).GasInt
-        else:
-          0.GasInt
-  else:
-    GasProc proc(): GasInt =
+  c.vmState.mutateLedger:
+    if not ledger.inAccessList(codeAddress):
+      ledger.accessList(codeAddress)
+
+      # The WarmStorageReadCostEIP2929 (100) is already deducted in
+      # the form of a constant `gasCall`
+      if c.fork >= FkAmsterdam:
+        (COLD_ACCOUNT_ACCESS_8038 - WarmStorageReadCost).GasInt
+      else:
+        (COLD_ACCOUNT_ACCESS_2929 - WarmStorageReadCost).GasInt
+    else:
       0.GasInt
 
-proc gasCallDelegate(c: Computation, codeAddress: Address, flags: set[MsgFlags]): GasProc =
-  if FkPrague <= c.fork:
-    GasProc proc(): GasInt =
-      # When the target is a 7702-delegated EOA both target and
-      # delegation target appear in the BAL even though sender has insufficient funds.
-      # But in OOG case, only `codeAddress` appear in BAL.
-      if c.balTrackerEnabled:
-        c.vmState.balTracker.trackAddressAccess(codeAddress)
+proc gasCallDelegate(c: Computation, codeAddress: Address, flags: set[MsgFlags]): GasInt =
+  if c.fork < FkPrague:
+    c.msg.delegateTo = codeAddress
+    return 0.GasInt
 
-      # Code does not need to be loaded for precompile addresses because the
-      # precompile doesn't exist in the state trie and can never be a 7702
-      # delegation, so resolving the delegation target is a no-op.
-      if MsgFlags.Precompile in flags:
-        c.msg.delegateTo = codeAddress
-        return 0.GasInt
+  # When the target is a 7702-delegated EOA both target and
+  # delegation target appear in the BAL even though sender has insufficient funds.
+  # But in OOG case, only `codeAddress` appear in BAL.
+  if c.balTrackerEnabled:
+    c.vmState.balTracker.trackAddressAccess(codeAddress)
 
-      let delegateTo = parseDelegationAddress(c.getCode(codeAddress)).valueOr:
-        c.msg.delegateTo = codeAddress
-        return 0.GasInt
-      c.msg.flags.incl MsgFlags.Delegated
-      c.msg.delegateTo = delegateTo
-      delegateResolutionCost(c, delegateTo)
-  else:
-    GasProc proc(): GasInt =
-      c.msg.delegateTo = codeAddress
-      0.GasInt
+  # Code does not need to be loaded for precompile addresses because the
+  # precompile doesn't exist in the state trie and can never be a 7702
+  # delegation, so resolving the delegation target is a no-op.
+  if MsgFlags.Precompile in flags:
+    c.msg.delegateTo = codeAddress
+    return 0.GasInt
+
+  let delegateTo = parseDelegationAddress(c.getCode(codeAddress)).valueOr:
+    c.msg.delegateTo = codeAddress
+    return 0.GasInt
+  c.msg.flags.incl MsgFlags.Delegated
+  c.msg.delegateTo = delegateTo
+  delegateResolutionCost(c, delegateTo)
+
+proc callGasParams1(c: Computation, p: LocalParams, kind: Op): GasParamsCall1 =
+  GasParamsCall1(
+    kind:            kind,
+    nonZeroVal:      p.value.isZero.not,
+    gasLeft:         c.gasMeter.gasRemaining,
+    gasCallEIP2929:  c.gasCallEIP2929(p.codeAddress),
+    currentMemSize:  c.memory.len,
+    memOffset:       p.memOffset,
+    memLength:       p.memLength,
+  )
+
+proc callGasParams2(c: Computation, p: LocalParams, kind: Op,
+                    gasCost1: GasInt, res: var GasParamsCall2): EvmResultVoid =
+  # `gasCallDelegate` and `accountExists` both mutate the block access list, so
+  # they must run in the same order and under the same out-of-gas guard as when
+  # the gas handler invoked them itself.
+  let
+    delegateCost = c.gasCallDelegate(p.codeAddress, p.flags)
+    gasLeft = c.gasMeter.gasRemaining
+
+  if gasLeft < gasCost1 + delegateCost:
+    return err(opErr(OutOfGas))
+
+  let isNewAccount = not c.accountExists(p.contractAddress)
+
+  res = GasParamsCall2(
+    kind:            kind,
+    nonZeroVal:      p.value.isZero.not,
+    gasCost1:        gasCost1,
+    isNewAccount:    isNewAccount,
+    gasLeft:         gasLeft,
+    gasCallDelegate: delegateCost,
+    contractGas:     p.gas)
+  ok()
 
 
 proc callParams(c: Computation, res: var LocalParams): EvmResult[void] =
@@ -258,16 +289,7 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
   ?cpt.callParams(p)
 
   let
-    isNewAccount = proc(): bool = not cpt.accountExists(p.contractAddress)
-    params1 = GasParamsCall1(
-      kind:            Call,
-      nonZeroVal:      p.value.isZero.not,
-      gasLeft:         cpt.gasMeter.gasRemaining,
-      gasCallEIP2929:  cpt.gasCallEIP2929(p.codeAddress),
-      currentMemSize:  cpt.memory.len,
-      memOffset:       p.memOffset,
-      memLength:       p.memLength,
-    )
+    params1 = cpt.callGasParams1(p, Call)
     gasCost1 = ? cpt.gasCosts[Call].c_handler1(params1)
 
   var newAccountCharged = false
@@ -275,7 +297,8 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
   # child gas calculation. When state gas spills from an empty reservoir
   # into regular gas, it must reduce the gas available for childGasLimit.
   if cpt.fork >= FkAmsterdam:
-    newAccountCharged = isNewAccount() and params1.nonZeroVal
+    let isNewAccount = not cpt.accountExists(p.contractAddress)
+    newAccountCharged = isNewAccount and params1.nonZeroVal
     if newAccountCharged:
       # eels reviewer think there is an issue with the design to charge regular gas multiple times.
       # https://github.com/ethereum/execution-specs/pull/2526/changes#diff-28a1b575fd7c3d82832c0826cf58a881101643543d35c123c78ca65202152c23R456
@@ -285,16 +308,9 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
       ? cpt.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS,
         reason = "CALL: State gas new account")
 
-  let
-    (gasCost, childGasLimit) = ? cpt.gasCosts[Call].c_handler2(
-      GasParamsCall2(
-        kind:            params1.kind,
-        nonZeroVal:      params1.nonZeroVal,
-        gasCost1:        gasCost1,
-        isNewAccount:    isNewAccount,
-        gasLeft:         cpt.gasMeter.gasRemaining,
-        gasCallDelegate: cpt.gasCallDelegate(p.codeAddress, p.flags),
-        contractGas:     p.gas))
+  var params2: GasParamsCall2
+  ? cpt.callGasParams2(p, Call, gasCost1, params2)
+  let (gasCost, childGasLimit) = ? cpt.gasCosts[Call].c_handler2(params2)
 
   ? cpt.opcodeGasCost(Call, gasCost, reason = $Call)
   cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
@@ -354,26 +370,12 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
   ?cpt.callCodeParams(p)
 
   let
-    isNewAccount = proc(): bool = not cpt.accountExists(p.contractAddress)
-    params1 = GasParamsCall1(
-      kind:            CallCode,
-      nonZeroVal:      p.value.isZero.not,
-      gasLeft:         cpt.gasMeter.gasRemaining,
-      gasCallEIP2929:  cpt.gasCallEIP2929(p.codeAddress),
-      currentMemSize:  cpt.memory.len,
-      memOffset:       p.memOffset,
-      memLength:       p.memLength,
-    )
+    params1 = cpt.callGasParams1(p, CallCode)
     gasCost1 = ? cpt.gasCosts[Call].c_handler1(params1)
-    (gasCost, childGasLimit) = ? cpt.gasCosts[Call].c_handler2(
-      GasParamsCall2(
-        kind:            params1.kind,
-        nonZeroVal:      params1.nonZeroVal,
-        gasCost1:        gasCost1,
-        isNewAccount:    isNewAccount,
-        gasLeft:         cpt.gasMeter.gasRemaining,
-        gasCallDelegate: cpt.gasCallDelegate(p.codeAddress, p.flags),
-        contractGas:     p.gas))
+
+  var params2: GasParamsCall2
+  ? cpt.callGasParams2(p, CallCode, gasCost1, params2)
+  let (gasCost, childGasLimit) = ? cpt.gasCosts[Call].c_handler2(params2)
 
   ? cpt.opcodeGasCost(CallCode, gasCost, reason = $CallCode)
   cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
@@ -428,26 +430,12 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
   var p: LocalParams
   ? cpt.delegateCallParams(p)
   let
-    isNewAccount = proc(): bool = not cpt.accountExists(p.contractAddress)
-    params1 = GasParamsCall1(
-      kind:            DelegateCall,
-      nonZeroVal:      p.value.isZero.not,
-      gasLeft:         cpt.gasMeter.gasRemaining,
-      gasCallEIP2929:  cpt.gasCallEIP2929(p.codeAddress),
-      currentMemSize:  cpt.memory.len,
-      memOffset:       p.memOffset,
-      memLength:       p.memLength,
-    )
+    params1 = cpt.callGasParams1(p, DelegateCall)
     gasCost1 = ? cpt.gasCosts[Call].c_handler1(params1)
-    (gasCost, childGasLimit) = ? cpt.gasCosts[Call].c_handler2(
-      GasParamsCall2(
-        kind:            params1.kind,
-        nonZeroVal:      params1.nonZeroVal,
-        gasCost1:        gasCost1,
-        isNewAccount:    isNewAccount,
-        gasLeft:         cpt.gasMeter.gasRemaining,
-        gasCallDelegate: cpt.gasCallDelegate(p.codeAddress, p.flags),
-        contractGas:     p.gas))
+
+  var params2: GasParamsCall2
+  ? cpt.callGasParams2(p, DelegateCall, gasCost1, params2)
+  let (gasCost, childGasLimit) = ? cpt.gasCosts[Call].c_handler2(params2)
 
   ? cpt.opcodeGasCost(DelegateCall, gasCost, reason = $DelegateCall)
   cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
@@ -495,26 +483,12 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
   var p: LocalParams
   ?cpt.staticCallParams(p)
   let
-    isNewAccount = proc(): bool = not cpt.accountExists(p.contractAddress)
-    params1 = GasParamsCall1(
-      kind:            StaticCall,
-      nonZeroVal:      p.value.isZero.not,
-      gasLeft:         cpt.gasMeter.gasRemaining,
-      gasCallEIP2929:  cpt.gasCallEIP2929(p.codeAddress),
-      currentMemSize:  cpt.memory.len,
-      memOffset:       p.memOffset,
-      memLength:       p.memLength,
-    )
+    params1 = cpt.callGasParams1(p, StaticCall)
     gasCost1 = ? cpt.gasCosts[Call].c_handler1(params1)
-    (gasCost, childGasLimit) = ? cpt.gasCosts[Call].c_handler2(
-      GasParamsCall2(
-        kind:            params1.kind,
-        nonZeroVal:      params1.nonZeroVal,
-        gasCost1:        gasCost1,
-        isNewAccount:    isNewAccount,
-        gasLeft:         cpt.gasMeter.gasRemaining,
-        gasCallDelegate: cpt.gasCallDelegate(p.codeAddress, p.flags),
-        contractGas:     p.gas))
+
+  var params2: GasParamsCall2
+  ? cpt.callGasParams2(p, StaticCall, gasCost1, params2)
+  let (gasCost, childGasLimit) = ? cpt.gasCosts[Call].c_handler2(params2)
 
   ? cpt.opcodeGasCost(StaticCall, gasCost, reason = $StaticCall)
   cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
