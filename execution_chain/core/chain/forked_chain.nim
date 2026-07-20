@@ -565,7 +565,23 @@ proc validateBlock(
       base = c.calculateNewBase(c.latestFinalized.number, c.latest)
       prevBase = c.base.number
 
-    c.updateFinalized(base, base)
+    # `base` is the persistence point; the finalization reference passed to
+    # `updateFinalized` must never sit *below* the existing finalized markers.
+    # During pure auto-forward the current frontier lags `base`, so `base`
+    # advances it (and legitimately prunes branches that forked below the new
+    # base). But when an earlier `forkChoice` finalized within `baseDistance` of
+    # the head, `base` (capped at head - baseDistance) can land *below* that
+    # marker; feeding `base` in as the frontier would then make `reachable`
+    # prune every head (including `c.latest`), tripping `candidate.isNil.not`.
+    # Use the higher of the two - the true finalized frontier on `c.latest`.
+    var finalizedFrontier = base
+    for it in ancestors(c.latest):
+      if not it.notFinalized:
+        if it.number > base.number:
+          finalizedFrontier = it
+        break
+
+    c.updateFinalized(finalizedFrontier, c.latest)
     await c.queueUpdateBase(base)
 
     # If on disk head behind base, move it to base too.
