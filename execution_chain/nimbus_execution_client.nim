@@ -351,6 +351,12 @@ proc setupCommonRef*(
 
 type StopFuture = Future[void].Raising([CancelledError])
 
+const stopCheckInterval = chronos.milliseconds(100)
+
+proc runStopCheckLoop() {.async: (raises: []).} =
+  while true:
+    await noCancel sleepAsync(stopCheckInterval)
+
 proc runExeClient*(
     config: ExecutionClientConf,
     com: CommonRef,
@@ -386,6 +392,8 @@ proc runExeClient*(
   # Be graceful about ctrl-c during init
   if ProcessState.stopping.isNone:
     ProcessState.notifyRunning()
+
+  asyncSpawn runStopCheckLoop()
 
   while true:
     if (let reason = ProcessState.stopping(); reason.isSome()):

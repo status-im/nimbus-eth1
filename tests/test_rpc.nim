@@ -72,6 +72,16 @@ const
   prevRandao = Bytes32 EMPTY_UNCLE_HASH # it can be any valid hash
   oneETH = 1.u256 * 1_000_000_000.u256 * 1_000_000_000.u256
   DEPOSIT_CONTRACT_ADDRESS = address"0x4242424242424242424242424242424242424242"
+  # Arachnid's deterministic-deployment proxy: CREATE2-deploys the init code
+  # supplied as calldata (32-byte salt ++ init code) and reverts on failure.
+  create2Deployer = address"0x4e59b44847b379578588920cA78FbF26c0B4956C"
+  create2DeployerCode = hexToSeqByte(
+    "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0" &
+    "3601600081602082378035828234f58015156039578182fd5b8082525050506014600cf3")
+  # 32-byte zero salt ++ init code that deploys the 10-byte runtime `602a...f3`.
+  create2DeployInput = hexToSeqByte(
+    "0x0000000000000000000000000000000000000000000000000000000000000000" &
+    "600a600c600039600a6000f3602a60005260206000f3")
 
 proc persistFixtureBlock(chainDB: CoreDbTxRef) =
   let header = getBlockHeader4514995()
@@ -173,6 +183,8 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
 
   conf.networkParams.genesis.alloc[contractAddress] = GenesisAccount(code: contractCode)
   conf.networkParams.genesis.alloc[signer] = GenesisAccount(balance: oneETH)
+  conf.networkParams.genesis.alloc[create2Deployer] =
+    GenesisAccount(code: create2DeployerCode, nonce: 1)
 
   # Test data created for eth_getProof tests
   conf.networkParams.genesis.alloc[regularAcc] = GenesisAccount(
@@ -650,6 +662,26 @@ proc rpcMain*() =
       check res > w3Qty(20999'u64)
       check res <= w3Qty(100_000'u64)
 
+    test "eth_estimateGas CREATE2 deploy converges (no cross-trial state leak)":
+      # Regression: each binary-search trial must run against pristine state.
+      # A successful CREATE2 deploy in one trial otherwise leaks into later
+      # trials (address collision -> revert), driving the estimate to the
+      # ceiling instead of the true (small) requirement.
+      let ec = TransactionArgs(
+        `from`: Opt.some(signer),
+        to: Opt.some(create2Deployer),
+        input: Opt.some(create2DeployInput),
+      )
+      # Sanity: the call itself succeeds and returns the 20-byte deployed address.
+      let callRes = await client.eth_call(ec, "latest")
+      check callRes.len == 20
+
+      let res = await client.eth_estimateGas(ec)
+      # A CREATE2 deploy of a 10-byte contract costs tens of thousands of gas,
+      # well under the ceiling (block gas limit / 50M gas cap) returned by the bug.
+      check res > w3Qty(20999'u64)
+      check res < w3Qty(1_000_000'u64)
+
     test "eth_getBlockByHash":
       let res = await client.eth_getBlockByHash(env.blockHash, true)
       check res.isNil.not
@@ -977,6 +1009,25 @@ proc rpcMain*() =
           proofResponse.storageHash == hash32"0x2ed06ec37dad4cd8c8fc1a1172d633a8973987fa6995b14a7c0a50c0e8d1a9c3"
           storageProof.len() == 1
           verifySlotLeafExists(proofResponse.storageHash, storageProof[0])
+
+    test "debug_setHead":
+      # The current head is a valid target
+      let res = await client.call("debug_setHead", %[%"latest"], EthJson)
+      check res.string == "true"
+
+      # An unknown block cannot become the head
+      expect JsonRpcError:
+        discard await client.call("debug_setHead",
+          %[%"0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"],
+          EthJson)
+
+      # Rewind to genesis: block 1 is discarded. This is the last test in
+      # the suite because it is destructive.
+      let res2 = await client.call("debug_setHead", %[%"0x0"], EthJson)
+      check res2.string == "true"
+
+      let bn = await client.eth_blockNumber()
+      check bn == w3Qty(0'u64)
 
     env.close()
 

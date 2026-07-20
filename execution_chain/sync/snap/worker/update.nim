@@ -77,7 +77,7 @@ proc resumeNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
   # Continuing a a session is fully controlled by the daemon (no peers'
   # interaction.) So there is no need to sync via `poolMode`.
-  ctx.getPivotTag(info).isErrOr:
+  ctx.sessionPivotTag(info).isErrOr:
     if PivotOnTrie <= value:
       return SnapAnalyse
   if ctx.readyForMptAssembly():
@@ -107,7 +107,7 @@ proc mkTrieNext(ctx: SnapCtxRef; info: static[string]): SnapState =
 
 proc analyseNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
-  ctx.getPivotTag(info).isErrOr:
+  ctx.sessionPivotTag(info).isErrOr:
     if PivotMptAnalysed <= value:
       return SnapStop                               # FIXME-- might change
   SnapAnalyse

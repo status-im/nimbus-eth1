@@ -200,6 +200,8 @@ proc lookupRandomNode*(proto: Eth1Discovery, queue: AsyncQueue[NodeV4]) {.async:
   if proto.discv4.isNil.not:
     let nodes = await proto.discv4.lookupRandom()
     for node in nodes:
+      if node.node.address.tcpPort == Port(0):
+        continue
       await queue.addLast(node)
 
   if proto.discv5.isNil.not:
@@ -208,6 +210,8 @@ proc lookupRandomNode*(proto: Eth1Discovery, queue: AsyncQueue[NodeV4]) {.async:
       if not proto.eligibleNode(node.record):
         continue
       let v4 = node.to(NodeV4).valueOr:
+        continue
+      if v4.node.address.tcpPort == Port(0):
         continue
       await queue.addLast(v4)
 

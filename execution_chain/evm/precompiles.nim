@@ -719,14 +719,7 @@ proc p256verify(c: Computation): EvmResultVoid =
   if c.msg.data.len != 160:
     failed()
 
-  # Check scalar and field bounds (r, s ∈ (0, n), qx, qy ∈ [0, p))
-  var
-    pk {.noinit.}: EcPublicKey
-
-  if not pk.initRaw(data[96, 159]):
-    failed()
-
-  if verifyRaw(data[32, 95], data[0, 31], pk):
+  if verifyRaw(data[32, 95], data[0, 31], data[96, 159]):
     c.output.setLen(32)
     c.output[^1] = 1.byte  # return 0x...01
   else:

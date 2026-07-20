@@ -11,7 +11,7 @@
 {.push raises:[].}
 
 import
-  pkg/[chronicles, chronos, eth/common],
+  pkg/[chronicles, chronos, eth/common, eth/trie/nibbles],
   pkg/stew/[byteutils, interval_set],
   ../../[mpt, helpers, state_db, worker_desc]
 
@@ -29,6 +29,7 @@ type
     ENoRoot                                         # dangling root key
     ENoBranch                                       # missing branches
     ENoPivot                                        # no pivot state
+    ENoPivotNum                                     # ..
     ECancelled                                      # shutdown?
     EGetError                                       # serious database problem?
     EClearError                                     # ..
@@ -36,20 +37,6 @@ type
     EAristoError                                    # incomplete import?
     EPartialMpt
     EOtherError                                     # any other error
-
-  OnDanglingCB* = proc(
-      base: Hash32; key, path: openArray[byte]) {.gcsafe, raises:[].}
-    ## Closure function to perform bespoke actions when a dangling link or
-    ## a completely missing sub-MPT is found.
-
-  TravNotifyCB* = proc(
-      att: AttType, base: Hash32, path: NibblesBuf, key, data: openArray[byte],
-      depth: int) {.gcsafe, raises: [].}
-    ## Internal closure function used as call back when analysing an MPT.
-    ## This function is involved whenever there is something *interesting*
-    ## found (e.g. dangling link, leaf node.)
-    ##
-    ## Intended for debugging, mainly
 
   # ----------
 
@@ -108,13 +95,13 @@ proc nMissAccRanges*(trd: TravDescRef, info: static[string]): (UInt256,int) =
 
 proc putAccMissingIntv*(
     trd: TravDescRef;
-    stateRoot: StateRoot;
+    number: BlockNumber;
     ranges: ItemKeyRangeSet;
     info: static[string];
       ) =
-  trd.db.putAccMissingIntv(stateRoot, ranges).isOkOr:
+  trd.db.putAccMissingIntv(number, ranges).isOkOr:
     error info & ": Error caching storage account ranges",
-      stateRoot=stateRoot.toStr, ranges=ranges.total.per256.pcStr, `error`=error
+      number, ranges=ranges.total.per256.pcStr, `error`=error
     trd.cacheErr.inc
 
 proc putStoMissingIntv*(
