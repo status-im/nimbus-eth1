@@ -136,6 +136,7 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
       of "Auto": StdoutLogKind.Auto
       else: StdoutLogKind.None
     maxBlockWalk = jsonNode.getOrDefault("maxBlockWalk").getBiggestInt(1000)
+    maxWindowJumps = jsonNode.getOrDefault("maxWindowJumps").getBiggestInt(128)
     prllBlkDwnlds = jsonNode.getOrDefault("parallelBlockDownloads").getBiggestInt(10)
     maxLcUpdates = jsonNode.getOrDefault("maxLightClientUpdates").getBiggestInt(128)
     headerStoreLen = jsonNode.getOrDefault("headerStoreLen").getInt(256)
@@ -162,6 +163,11 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
         uint64(0)
       else:
         uint64(maxBlockWalk),
+    maxWindowJumps:
+      if maxWindowJumps < 0:
+        uint64(0)
+      else:
+        uint64(maxWindowJumps),
     headerStoreLen: headerStoreLen,
     storageCacheLen: storageCacheLen,
     codeCacheLen: codeCacheLen,
@@ -213,6 +219,7 @@ proc run*(
       chainId: l1ChainId,
       eth2Network: some(l1NetworkName),
       maxBlockWalk: config.maxBlockWalk,
+      maxWindowJumps: config.maxWindowJumps,
       headerStoreLen: config.headerStoreLen,
       accountCacheLen: config.accountCacheLen,
       codeCacheLen: config.codeCacheLen,
@@ -298,6 +305,7 @@ proc run*(
       chainId = value.l2ChainId,
       networkId = l2NetworkId,
       maxBlockWalk = config.maxBlockWalk,
+      maxWindowJumps = config.maxWindowJumps,
       parallelBlockDownloads = config.parallelBlockDownloads,
       headerStoreLen = config.headerStoreLen,
       accountCacheLen = config.accountCacheLen,

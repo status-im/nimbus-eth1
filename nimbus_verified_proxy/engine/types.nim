@@ -314,6 +314,7 @@ type
     chainId*: UInt256
     anchor*: BlockTag
     maxBlockWalk*: uint64
+    maxWindowJumps*: uint64
     parallelBlockDownloads*: uint64
     maxLightClientUpdates*: uint64
 
@@ -321,6 +322,7 @@ type
     chainId*: UInt256
     eth2Network*: Option[string]
     maxBlockWalk*: uint64
+    maxWindowJumps*: uint64
     headerStoreLen*: int
     accountCacheLen*: int
     codeCacheLen*: int

@@ -83,6 +83,14 @@ type VerifiedProxyConf* = object
     name: "debug-max-walk"
   .}: uint64
 
+  maxWindowJumps* {.
+    hidden,
+    desc:
+      "Maximum number of EIP-2935 window jumps that will be traversed to verify a request",
+    defaultValue: 500,
+    name: "debug-max-window-jumps"
+  .}: uint64
+
   parallelBlockDownloads* {.
     hidden,
     desc: "Number of blocks downloaded parallely. Affects memory usage",
