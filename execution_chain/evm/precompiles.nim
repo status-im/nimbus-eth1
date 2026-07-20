@@ -201,11 +201,13 @@ func sha256(c: Computation): EvmResultVoid =
     gasFee = GasSHA256 + wordCount.GasInt * GasSHA256Word
 
   ? c.gasMeter.consumeGas(gasFee, reason="SHA256 Precompile")
-  var digest: array[32, byte]
+
+  # Skip zero-filling since SHA256 overwrites all 32 bytes
+  c.output.setLenUninit(32)
   {.cast(noSideEffect).}:
     let data = if c.msg.data.len > 0: addr c.msg.data[0] else: nil
-    discard bssl.SHA256(data, csize_t(c.msg.data.len), digest)
-  assign(c.output, digest)
+    discard bssl.SHA256(data, csize_t(c.msg.data.len),
+      cast[ptr array[32, byte]](addr c.output[0])[])
   ok()
 
 func ripemd160(c: Computation): EvmResultVoid =
@@ -756,7 +758,7 @@ func activePrecompilesList*(fork: EVMFork): seq[Address] =
 
 # Every precompile address has only its low two bytes populated (the largest
 # is P256VERIFY at 0x0100), so an address can be reverse-mapped to its
-# precompile via a small array indexed by that 16-bit value. A `0` entry means 
+# precompile via a small array indexed by that 16-bit value. A `0` entry means
 # "no precompile maps to this value"; any other entry is `ord(precompile) + 1`.
 const precompileForKey: array[0 .. 0x0100, byte] = static:
   var arr: array[0 .. 0x0100, byte]
