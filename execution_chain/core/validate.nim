@@ -99,7 +99,7 @@ proc validateHeader(
   if header.gasLimit > GAS_LIMIT_MAXIMUM:
     return err("gasLimit exceeds GAS_LIMIT_MAXIMUM")
 
-  if com.daoForkSupport and inDAOExtraRange(header.number):
+  if com.daoForkSupport and inDAOExtraRange(header.number) and not com.isShanghaiOrLater(header.timestamp):
     if header.extraData != daoForkBlockExtraData:
       return err("header extra data should be marked DAO")
 

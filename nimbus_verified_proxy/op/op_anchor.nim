@@ -21,6 +21,9 @@ import
   ./op_chain_params,
   ./op_anchor_utils
 
+logScope:
+  topics = "vp_op"
+
 proc verifyOutputRoot(
     opEngine: RpcVerificationEngine,
     proposedOutputRoot: Hash32,
@@ -83,7 +86,7 @@ proc opSyncOnce*(
 
   let addRes = opEngine.headerStore.add(safeHeader, safeHash)
   if addRes.isErr():
-    error "op-stack safe header not added to store", error = addRes.error()
+    error "op-stack safe header not added to store", err = addRes.error()
   else:
     info "op-stack safe header added", number = safeHeader.number, hash = safeHash
 
@@ -92,7 +95,7 @@ proc opSyncOnce*(
     anchor = (
       await l1Engine.readAnchorRoot(contracts.anchorStateRegistry, l1FinalizedHeader)
     ).valueOr:
-      debug "no finalized OP anchor yet", error = error.errMsg
+      debug "no finalized OP anchor yet", err = error.errMsg
       return ok()
     (finalizedHeader, finalizedHash) =
       ?(await opEngine.verifyOutputRoot(anchor.outputRoot, anchor.l2BlockNumber))
@@ -100,7 +103,7 @@ proc opSyncOnce*(
   let finalizedAddRes =
     opEngine.headerStore.updateFinalized(finalizedHeader, finalizedHash)
   if finalizedAddRes.isErr():
-    debug "op-stack finalized header update skipped", error = finalizedAddRes.error()
+    debug "op-stack finalized header update skipped", err = finalizedAddRes.error()
   else:
     info "op-stack finalized anchor added to header store",
       number = finalizedHeader.number, hash = finalizedHash

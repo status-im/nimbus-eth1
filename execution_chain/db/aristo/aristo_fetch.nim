@@ -105,8 +105,12 @@ proc retrieveAccStatic(
           ok (vtx, path, next)
     of BoundaryNode:
       # Stateless-only boundary: child absent from witness, not traversable.
+      # Same divergence-vs-gap distinction as `aristo_hike.step()`.
+      let vtx = BoundaryNodeRef(vtx[0])
       countHitOrLower()
-      return err FetchPathNotFound
+      if path.slice(sl).sharedPrefixLen(vtx.pfx) < vtx.pfx.len:
+        return err FetchPathNotFound
+      return err HikeBranchUnresolvedEdge
     of ExtBranch:
       let vtx = ExtBranchRef(vtx[0])
 
@@ -293,12 +297,12 @@ proc fetchSlot*(
   ## account does not exist and 0'u256 if the account has not stored anything
   ## at the given slot
   let mixPath = mixUp(accPath, stoPath)
-  
+
   db.layersGetStoLeaf(mixPath).isErrOr:
-    # Found in the layers so we don't need to copy into the cache 
+    # Found in the layers so we don't need to copy into the cache
     # because the value will be updated from the layers during persist
     return ok value.toStoData()
-  
+
   db.db.stoLeaves.withGet(mixPath, cached):
     return ok cached.toStoData()
   do:
@@ -310,10 +314,19 @@ proc fetchSlot*(
       db.db.stoLeaves.put(mixPath, emptyCachedStoLeaf)
       return ok 0'u256
 
-    let leaf = StoLeafRef(db.retrieveLeaf(stoID, 
-        NibblesBuf.fromBytes(stoPath.data)).valueOr(nil))
-    db.db.stoLeaves.put(mixPath, if leaf.isValid(): 
-        CachedStoLeaf.init(leaf.pfx, leaf.stoData) else: emptyCachedStoLeaf)
+    let leafRc = db.retrieveLeaf(stoID, NibblesBuf.fromBytes(stoPath.data))
+    if leafRc.isErr:
+      if leafRc.error == FetchPathNotFound:
+        db.db.stoLeaves.put(mixPath, emptyCachedStoLeaf)
+        return ok 0'u256
+
+      # `HikeDanglingEdge` / `HikeBranchUnresolvedEdge`: missing state in
+      # witness or not-yet-fetched node, or a backend (db corruption) error.
+      # Can't know if slot is absent.
+      return err(leafRc.error)
+
+    let leaf = StoLeafRef(leafRc.value)
+    db.db.stoLeaves.put(mixPath, CachedStoLeaf.init(leaf.pfx, leaf.stoData))
     return ok leaf.toStoData()
 
 proc fetchStorageRoot*(

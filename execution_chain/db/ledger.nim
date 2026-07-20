@@ -161,6 +161,12 @@ const
 template logTxt(info: static[string]): static[string] =
   "LedgerRef " & info
 
+const
+  MissingNodeErrors = {HikeBranchUnresolvedEdge, HikeDanglingEdge}
+    ## A trie node this read's path needs is missing locally, so unlike a
+    ## proof of absence we can't tell if the account/slot exists. Covers an
+    ## incomplete witness (stateless) or a not-yet-fetched trie (verified proxy).
+
 proc applyOverlay(ledger: LedgerRef, address: Address, acc: AccountRef) =
   let overlayAcc = ledger.balOverlay.expect("bal overlay enabled").getAccount(address)
   if overlayAcc.balance.isSome():
@@ -204,6 +210,13 @@ proc getAccount(
   let
     accPath = address.computeAccPath
     rc = ledger.txFrame.fetchAccount accPath
+
+  if rc.isErr and rc.error.isAristo and rc.error.aErr in MissingNodeErrors:
+    # Record a fatalError: never assert here, always fall through to the normal
+    # "not found" path. The async EVM (verified proxy) relies on that.
+    warn logTxt "getAccount()", address, error = ($$rc.error)
+    ledger.fatalError = Opt.some(
+      "getAccount(): witness missing an internal trie node required to resolve account " & $address)
 
   if rc.isOk:
     # Acc found in the database
@@ -261,10 +274,22 @@ proc clone(acc: AccountRef, cloneStorage: bool): AccountRef =
     # it's ok to clone a table this way
     result.overlayStorage = acc.overlayStorage
 
-
-
 template exists(acc: AccountRef): bool =
   Alive in acc.flags
+
+template fetchSlotChecked(ledger: LedgerRef, accPath: Hash32, slotKey: Hash32): UInt256 =
+  ## Like `fetchSlot`, but a witness gap on the slot's path is a fatal
+  ## condition rather than a silent `0`. Records the condition without an
+  ## early return, same reasoning as `getAccount`.
+  let slotRc = ledger.txFrame.fetchSlot(accPath, slotKey)
+  if slotRc.isErr:
+    if slotRc.error.isAristo and slotRc.error.aErr in MissingNodeErrors:
+      warn logTxt "fetchSlot()", error = ($$slotRc.error)
+      ledger.fatalError = Opt.some(
+        "fetchSlot(): witness missing an internal trie node required to resolve storage slot")
+    0'u256
+  else:
+    slotRc.value
 
 proc originalStorageValue(
     acc: AccountRef;
@@ -283,12 +308,12 @@ proc originalStorageValue(
       if ledger.balOverlay.isNone():
         let slotKey = ledger.slots.get(slot).valueOr:
           computeSlotKey(slot)
-        ledger.txFrame.fetchSlot(acc.accPath, slotKey).valueOr(0'u256)
+        ledger.fetchSlotChecked(acc.accPath, slotKey)
       else:
         ledger.balOverlay[].getStorage(address, slot).valueOr:
           let slotKey = ledger.slots.get(slot).valueOr:
             computeSlotKey(slot)
-          ledger.txFrame.fetchSlot(acc.accPath, slotKey).valueOr(0'u256)
+          ledger.fetchSlotChecked(acc.accPath, slotKey)
 
   acc.original.storage[slot] = result
 
