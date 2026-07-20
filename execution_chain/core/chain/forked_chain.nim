@@ -1304,6 +1304,7 @@ proc isCanonicalAndFinalizedAncestor*(c: ForkedChainRef,
                     blockNumber: BlockNumber,
                     blockHash: Hash32,
                     finalizedBlockHash: Hash32): bool =
+  # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.7/src/engine/paris.md#specification-1
   # Client software MAY skip an update of the forkchoice state and MUST NOT
   # begin a payload build process if there is a known finalizedBlockHash and
   # forkchoiceState.headBlockHash references a VALID ancestor of the latest
