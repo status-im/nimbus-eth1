@@ -1032,6 +1032,51 @@ suite "ForkedChainRef tests":
     check checkFinalizedMarkers(fc, blk7.blockHash)
     check fc.validate info & " (3)"
 
+  test "isCanonicalAndFinalizedAncestor":
+    const info = "isCanonicalAndFinalizedAncestor"
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com, baseDistance = 3)
+    checkImportBlock(chain, blk1)
+    checkImportBlock(chain, blk2)
+    checkImportBlock(chain, blk3)
+    checkImportBlock(chain, blk4)
+    checkImportBlock(chain, blk5)
+    checkImportBlock(chain, blk6)
+    checkImportBlock(chain, blk7)
+    checkImportBlock(chain, blk8)
+    checkImportBlock(chain, F8)
+    check chain.validate info & " (1)"
+    check chain.heads.len == 2
+
+    # blk8 and F8: two non-finalized heads descended from the finalized block
+    checkForkChoice(chain, blk8, blk7)
+
+    let finalizedBlockHash = blk7.blockHash
+    check chain.tryUpdatePendingFCU(finalizedBlockHash, 7'u64)
+    check chain.validate info & " (2)"
+    check chain.baseNumber == 5'u64
+    check chain.heads.len == 2
+    check chain.resolvedFinNumber == 7'u64
+    check checkFinalizedMarkers(chain, finalizedBlockHash)
+
+    # head below base
+    check chain.isCanonicalAndFinalizedAncestor(blk4.header.number, blk4.blockHash, finalizedBlockHash) == true
+    # finalizedBlockHash is unknown, use latest known finalized
+    check chain.isCanonicalAndFinalizedAncestor(blk4.header.number, blk4.blockHash, C7.blockHash) == true
+    # finalized ancestor
+    check chain.isCanonicalAndFinalizedAncestor(blk6.header.number, blk6.blockHash, finalizedBlockHash) == true
+    # head == finalized block
+    check chain.isCanonicalAndFinalizedAncestor(blk7.header.number, blk7.blockHash, finalizedBlockHash) == false
+    # non finalized
+    check chain.isCanonicalAndFinalizedAncestor(blk8.header.number, blk8.blockHash, finalizedBlockHash) == false
+    # non finalized sidechain
+    check chain.isCanonicalAndFinalizedAncestor(F8.header.number, F8.blockHash, finalizedBlockHash) == false
+    # head == incoming finalized block
+    check chain.isCanonicalAndFinalizedAncestor(blk8.header.number, blk8.blockHash, blk8.blockHash) == false
+    # head below incoming finalized block
+    check chain.isCanonicalAndFinalizedAncestor(blk7.header.number, blk7.blockHash, blk8.blockHash) == true
+
   test "vmState cache: linear reuse, fork switch and failed import":
     const info = "vmState cache"
     let com = env.newCom()
