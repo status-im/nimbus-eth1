@@ -48,8 +48,8 @@ if defined(release) and not defined(disableLTO) and not defined(windows):
   extend "icl.cpp.options.always", " /Qipo"
   extend "gcc.options.always", " -flto=auto -finline-limit=100000"
   extend "gcc.cpp.options.always", " -flto=auto -finline-limit=100000"
-  extend "gcc.options.linker", " -flto=auto -Wno-stringop-overflow -Wno-stringop-overread -finline-limit=100000"  # https://github.com/nim-lang/Nim/issues/21595
-  extend "gcc.cpp.options.linker", " -flto=auto -Wno-stringop-overflow -Wno-stringop-overread -finline-limit=100000"
+  extend "gcc.options.linker", " -flto=auto -Wno-stringop-overflow -Wno-stringop-overread -Wno-free-nonheap-object -finline-limit=100000"  # https://github.com/nim-lang/Nim/issues/21595
+  extend "gcc.cpp.options.linker", " -flto=auto -Wno-stringop-overflow -Wno-stringop-overread -Wno-free-nonheap-object -finline-limit=100000"
 
   if defined(macosx) and not defined(emscripten):
     # https://clang.llvm.org/docs/CommandGuide/clang.html#cmdoption-flto
@@ -134,7 +134,7 @@ switch("passL", "-fno-omit-frame-pointer")
 --styleCheck:usages
 --styleCheck:error
 
-# Disable ABI warning: 
+# Disable ABI warning:
 # 'the ABI for passing parameters with 64-byte alignment has changed in GCC 4.6'
 # The fix on the nim side is underway https://github.com/nim-lang/Nim/issues/25968
 # TODO: Remove after the workaround once the linked issue is resolved
