@@ -140,7 +140,10 @@ proc mergeKeyAtLevel(
   doAssert level >= txRef.db.baseTxFrame().level
 
   let frame = txRef.deltaAtLevel(level)
-  withWriteLock(frame.lock):
+  when compileOption("threads"):
+    withWriteLock(frame.lock):
+      frame.layersMergeKey(rvid, key)
+  else:
     frame.layersMergeKey(rvid, key)
 
 proc putVtxBlob(
@@ -485,7 +488,7 @@ proc computeKeyImplTask(
       level,
       skipLayers = true,
       spawnTpTasks = false,
-      parallel = true,
+      parallel = when compileOption("threads"): true else: false,
       keyQueue,
       vtxBufQueue,
     )
@@ -497,7 +500,7 @@ proc computeKeyImplTask(
       level,
       skipLayers = false,
       spawnTpTasks = false,
-      parallel = true,
+      parallel = when compileOption("threads"): true else: false,
       keyQueue,
       vtxBufQueue,
     )
@@ -559,21 +562,23 @@ proc computeStateRoot*(
 ): Result[HashKey, AristoError] =
   ## Ensure that key cache is topped up with the latest state root
   ## and return the computed value.
-  if txRef.db.parallelStateRootComputation and not txRef.db.taskpool.isNil() and
-      txRef.db.taskpool.numThreads > 1:
-    txRef.computeKeyImpl(
-      (STATE_ROOT_VID, STATE_ROOT_VID),
-      skipLayers,
-      spawnTpTasks = when compileOption("threads"): true else: false,
-      parallel = when compileOption("threads"): true else: false,
-    )
-  else:
-    txRef.computeKeyImpl(
-      (STATE_ROOT_VID, STATE_ROOT_VID),
-      skipLayers,
-      spawnTpTasks = false,
-      parallel = false,
-    )
+  when compileOption("threads"):
+    # `taskpool` only exists with threads on
+    if txRef.db.parallelStateRootComputation and not txRef.db.taskpool.isNil() and
+        txRef.db.taskpool.numThreads > 1:
+      return txRef.computeKeyImpl(
+        (STATE_ROOT_VID, STATE_ROOT_VID),
+        skipLayers,
+        spawnTpTasks = true,
+        parallel = true,
+      )
+
+  txRef.computeKeyImpl(
+    (STATE_ROOT_VID, STATE_ROOT_VID),
+    skipLayers,
+    spawnTpTasks = false,
+    parallel = false,
+  )
 
 # ------------------------------------------------------------------------------
 # End
