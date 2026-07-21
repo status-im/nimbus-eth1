@@ -9,8 +9,11 @@
  * according to those terms.
  *
  * EIP-152 BLAKE2b F compression with a variable rounds parameter, built on the
- * official BLAKE2 reference source code package (vendor/blake2, CC0 1.0 /
- * OpenSSL License / Apache 2.0, Copyright 2012 Samuel Neves).
+ * official BLAKE2 reference source code package (CC0 1.0 / OpenSSL License /
+ * Apache 2.0, Copyright 2012 Samuel Neves). The headers in this directory are
+ * copied unmodified from https://github.com/BLAKE2/BLAKE2 (sse/ directory;
+ * the two blake2-impl.h copies upstream are identical, one serves both paths
+ * here).
  */
 
 #include <stdint.h>
@@ -18,7 +21,7 @@
 
 #if defined(__SSE2__) || defined(__x86_64__) || defined(__amd64__)
 
-#include "../../vendor/blake2/sse/blake2-config.h"
+#include "blake2-config.h"
 
 #include <emmintrin.h>
 #if defined(HAVE_SSSE3)
@@ -34,8 +37,8 @@
 #include <x86intrin.h>
 #endif
 
-#include "../../vendor/blake2/sse/blake2-impl.h"
-#include "../../vendor/blake2/sse/blake2b-round.h"
+#include "blake2-impl.h"
+#include "blake2b-round.h"
 
 static const uint64_t blake2b_IV[8] =
 {
@@ -130,7 +133,7 @@ void nimbus_blake2b_f( uint32_t rounds, uint64_t h[8],
 
 #else
 
-#include "../../vendor/blake2/ref/blake2-impl.h"
+#include "blake2-impl.h"
 
 static const uint64_t blake2b_IV[8] =
 {

@@ -56,27 +56,44 @@ suite "blake2b_F benchmark":
       check outputC == outputNim
 
   test "benchmark C vs Nim":
-    const totalRounds = 6_000_000
+    # Fixed total amount of compression rounds per implementation so that every
+    # `rounds` variation performs a comparable amount of work.
+    const
+      totalRounds = 24_000_000
+      # Number of independent timed runs; the fastest (least noisy) is reported.
+      repeats = 3
 
     template bench(fn: untyped, benchInput: seq[byte], iterations: int): Duration =
       block:
         var output: array[64, byte]
-        let start = getMonoTime()
-        for i in 0 ..< iterations:
+        # Warmup (~1/8 of the timed work) to prime caches and let the CPU ramp up.
+        for i in 0 ..< max(1, iterations div 8):
           doAssert fn(benchInput, output)
-        getMonoTime() - start
+        var best = initDuration(seconds = 1_000_000)
+        for r in 0 ..< repeats:
+          let start = getMonoTime()
+          for i in 0 ..< iterations:
+            doAssert fn(benchInput, output)
+          best = min(best, getMonoTime() - start)
+        best
 
-    for rounds in [12'u32, 100_000'u32]:
+    for rounds in [1'u32, 12'u32, 100'u32, 1_000'u32,
+                   10_000'u32, 100_000'u32, 1_000_000'u32]:
       let
         input = baseInput.withRounds(rounds)
-        iterations = totalRounds div int(rounds)
+        iterations = max(1, totalRounds div int(rounds))
         nimTime = bench(blake2b_F_nim, input, iterations)
         cTime = bench(blake2b_F, input, iterations)
         speedup = nimTime.inNanoseconds.float / cTime.inNanoseconds.float
 
-      echo "rounds=", rounds, " iterations=", iterations,
-        " nim=", nimTime.inMilliseconds, "ms",
-        " c=", cTime.inMilliseconds, "ms",
+      echo "rounds=", ($rounds).align(9),
+        " iterations=", ($iterations).align(9),
+        " nim=", ($nimTime.inMicroseconds).align(8), "us",
+        " c=", ($cTime.inMicroseconds).align(8), "us",
         " speedup=", speedup.formatFloat(ffDecimal, 2), "x"
 
-      check cTime < nimTime
+      # At rounds=1 per-call FFI/copy overhead dominates and the C path can be
+      # marginally slower; the SIMD win only shows once compression work
+      # matters.
+      if rounds >= 12:
+        check cTime < nimTime

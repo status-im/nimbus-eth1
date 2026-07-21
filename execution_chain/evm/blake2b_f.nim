@@ -109,7 +109,7 @@ const
   blake2FFinalBlockBytes    = byte(1)
   blake2FNonFinalBlockBytes = byte(0)
 
-{.compile: "blake2b_f.c".}
+{.compile: "blake2/blake2b_f.c".}
 
 proc nimbusBlake2bF(rounds: uint32, h: ptr uint64, blck: ptr byte,
                     t: ptr uint64, last: cint)
