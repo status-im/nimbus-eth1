@@ -97,7 +97,7 @@ OS_PLATFORM = $(shell $(CC) -dumpmachine)
 VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 ifneq (, $(findstring darwin, $(OS_PLATFORM)))
   VERIFPROXY_LDFLAGS = -lc++ -framework Security
-else ifneq (, $(findstring mingw, $(OS_PLATFORM)))
+else ifneq (, $(findstring windows, $(OS_PLATFORM)))
   VERIFPROXY_LDFLAGS = -lc++ -lbcrypt -lpthread -lws2_32
 else
   VERIFPROXY_LDFLAGS = -lstdc++ -lm

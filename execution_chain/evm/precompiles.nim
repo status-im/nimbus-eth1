@@ -16,7 +16,7 @@ import
   ./interpreter/[gas_meter, gas_costs, utils/utils_numeric],
   eth/common/keys,
   chronicles,
-  nimcrypto/[ripemd, sha2, utils],
+  nimcrypto/[ripemd, utils],
   stew/assign2,
   ../common/evmforks,
   ../core/eip4844,
@@ -26,6 +26,8 @@ import
   ./computation,
   ./secp256r1verify,
   eth/common/[base, addresses]
+
+from boringssl as bssl import nil
 
 when enable_mcl_lib:
   import ./bncurve_mcl
@@ -199,7 +201,13 @@ func sha256(c: Computation): EvmResultVoid =
     gasFee = GasSHA256 + wordCount.GasInt * GasSHA256Word
 
   ? c.gasMeter.consumeGas(gasFee, reason="SHA256 Precompile")
-  assign(c.output, sha2.sha256.digest(c.msg.data).data)
+
+  # Skip zero-filling since SHA256 overwrites all 32 bytes
+  c.output.setLenUninit(32)
+  {.cast(noSideEffect).}:
+    let data = if c.msg.data.len > 0: addr c.msg.data[0] else: nil
+    discard bssl.SHA256(data, csize_t(c.msg.data.len),
+      cast[ptr array[32, byte]](addr c.output[0])[])
   ok()
 
 func ripemd160(c: Computation): EvmResultVoid =
@@ -719,14 +727,7 @@ proc p256verify(c: Computation): EvmResultVoid =
   if c.msg.data.len != 160:
     failed()
 
-  # Check scalar and field bounds (r, s ∈ (0, n), qx, qy ∈ [0, p))
-  var
-    pk {.noinit.}: EcPublicKey
-
-  if not pk.initRaw(data[96, 159]):
-    failed()
-
-  if verifyRaw(data[32, 95], data[0, 31], pk):
+  if verifyRaw(data[32, 95], data[0, 31], data[96, 159]):
     c.output.setLen(32)
     c.output[^1] = 1.byte  # return 0x...01
   else:
@@ -757,7 +758,7 @@ func activePrecompilesList*(fork: EVMFork): seq[Address] =
 
 # Every precompile address has only its low two bytes populated (the largest
 # is P256VERIFY at 0x0100), so an address can be reverse-mapped to its
-# precompile via a small array indexed by that 16-bit value. A `0` entry means 
+# precompile via a small array indexed by that 16-bit value. A `0` entry means
 # "no precompile maps to this value"; any other entry is `ord(precompile) + 1`.
 const precompileForKey: array[0 .. 0x0100, byte] = static:
   var arr: array[0 .. 0x0100, byte]
