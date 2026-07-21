@@ -33,12 +33,12 @@ proc withRounds(input: openArray[byte], rounds: uint32): seq[byte] =
 suite "blake2b_F benchmark":
   let baseInput = hexToSeqByte(eip152Vector5)
 
-  test "C implementation matches EIP-152 vector":
+  test "SIMD implementation matches EIP-152 vector":
     var output: array[64, byte]
     check blake2b_F(baseInput, output)
     check output.toHex == eip152Vector5Expected
 
-  test "C implementation matches Nim implementation":
+  test "SIMD implementation matches scalar implementation":
     var rng = initRand(152)
     for iteration in 0 ..< 200:
       var input = newSeq[byte](213)
@@ -49,34 +49,50 @@ suite "blake2b_F benchmark":
       input = input.withRounds(rounds)
 
       var
-        outputC: array[64, byte]
-        outputNim: array[64, byte]
-      check blake2b_F(input, outputC)
-      check blake2b_F_nim(input, outputNim)
-      check outputC == outputNim
+        outputSimd: array[64, byte]
+        outputScalar: array[64, byte]
+      check blake2b_F(input, outputSimd)
+      check blake2b_F_nim(input, outputScalar)
+      check outputSimd == outputScalar
 
-  test "benchmark C vs Nim":
-    const totalRounds = 6_000_000
+  test "benchmark scalar vs SIMD":
+    # Fixed total amount of compression rounds per implementation so that every
+    # `rounds` variation performs a comparable amount of work.
+    const
+      totalRounds = 24_000_000
+      # Number of independent timed runs; the fastest (least noisy) is reported.
+      repeats = 3
 
     template bench(fn: untyped, benchInput: seq[byte], iterations: int): Duration =
       block:
         var output: array[64, byte]
-        let start = getMonoTime()
-        for i in 0 ..< iterations:
+        # Warmup (~1/8 of the timed work) to prime caches and let the CPU ramp up.
+        for i in 0 ..< max(1, iterations div 8):
           doAssert fn(benchInput, output)
-        getMonoTime() - start
+        var best = initDuration(seconds = 1_000_000)
+        for r in 0 ..< repeats:
+          let start = getMonoTime()
+          for i in 0 ..< iterations:
+            doAssert fn(benchInput, output)
+          best = min(best, getMonoTime() - start)
+        best
 
-    for rounds in [12'u32, 100_000'u32]:
+    for rounds in [1'u32, 12'u32, 100'u32, 1_000'u32,
+                   10_000'u32, 100_000'u32, 1_000_000'u32]:
       let
         input = baseInput.withRounds(rounds)
-        iterations = totalRounds div int(rounds)
-        nimTime = bench(blake2b_F_nim, input, iterations)
-        cTime = bench(blake2b_F, input, iterations)
-        speedup = nimTime.inNanoseconds.float / cTime.inNanoseconds.float
+        iterations = max(1, totalRounds div int(rounds))
+        scalarTime = bench(blake2b_F_nim, input, iterations)
+        simdTime = bench(blake2b_F, input, iterations)
+        speedup = scalarTime.inNanoseconds.float / simdTime.inNanoseconds.float
 
-      echo "rounds=", rounds, " iterations=", iterations,
-        " nim=", nimTime.inMilliseconds, "ms",
-        " c=", cTime.inMilliseconds, "ms",
+      echo "rounds=", ($rounds).align(9),
+        " iterations=", ($iterations).align(9),
+        " scalar=", ($scalarTime.inMicroseconds).align(8), "us",
+        " simd=", ($simdTime.inMicroseconds).align(8), "us",
         " speedup=", speedup.formatFloat(ffDecimal, 2), "x"
 
-      check cTime < nimTime
+      # At rounds=1 per-call parsing overhead dominates; the SIMD win only
+      # shows once compression work matters.
+      if rounds >= 12:
+        check simdTime < scalarTime
