@@ -24,7 +24,7 @@ import
   ../utils/[utils, mergeutils],
   ../common/common,
   eth/common/eth_types_rlp,
-  chronicles, chronos
+  chronicles
 
 export
   common, balTrackerEnabled,
