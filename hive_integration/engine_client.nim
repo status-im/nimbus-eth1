@@ -80,10 +80,11 @@ proc forkchoiceUpdatedV4*(client: RpcClient,
 
 proc forkchoiceUpdatedV5*(client: RpcClient,
       update: ForkchoiceStateV1,
-      payloadAttributes = Opt.none(PayloadAttributesV5)):
+      payloadAttributes = Opt.none(PayloadAttributesV5),
+      custodyColumns = Opt.none(BitArray128)):
         Result[ForkchoiceUpdatedResponseV2, string] =
   wrapTrySimpleRes:
-    client.engine_forkchoiceUpdatedV5(update, payloadAttributes)
+    client.engine_forkchoiceUpdatedV5(update, payloadAttributes, custodyColumns)
 
 func fcur(res: Result[ForkchoiceUpdatedResponseV1, string]):
   Result[ForkchoiceUpdatedResponse, string] =
@@ -102,14 +103,15 @@ func fcur(res: Result[ForkchoiceUpdatedResponseV2, string]):
 proc forkchoiceUpdated*(client: RpcClient,
                         version: Version,
                         update: ForkchoiceState,
-                        attr = Opt.none(PayloadAttributes)):
+                        attr = Opt.none(PayloadAttributes),
+                        custodyColumns = Opt.none(BitArray128)):
                           Result[ForkchoiceUpdatedResponse, string] =
   case version
   of Version.V1: return client.forkchoiceUpdatedV1(update.V1, attr.V1).fcur
   of Version.V2: return client.forkchoiceUpdatedV2(update.V1, attr.V2).fcur
   of Version.V3: return client.forkchoiceUpdatedV3(update.V1, attr.V3).fcur
   of Version.V4: return client.forkchoiceUpdatedV4(update.V1, attr.V4).fcur
-  of Version.V5: return client.forkchoiceUpdatedV5(update.V1, attr.V5).fcur
+  of Version.V5: return client.forkchoiceUpdatedV5(update.V1, attr.V5, custodyColumns).fcur
   of Version.V6: discard
 
 proc getPayloadV1*(client: RpcClient, payloadId: Bytes8): Result[ExecutionPayloadV1, string] =
