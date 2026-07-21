@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -59,7 +59,7 @@ proc logImpl(c: Computation, opcode: Op, topicCount: static int): EvmResultVoid 
     return err(opErr(OutOfBounds))
 
   ? c.opcodeGasCost(opcode,
-    c.gasCosts[opcode].m_handler(c.memory.len, memPos, len),
+    gasLog(topicCount, c.memory.len, memPos, len),
     reason = "Memory expansion, Log topic and data gas cost")
   c.memory.extend(memPos, len)
 

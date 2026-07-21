@@ -201,7 +201,7 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
       memLength:      memLen)
 
   var gasCost = cpt.gasCosts[Create].cr_handler(false, gasParams)
-  gasCost = gasCost + cpt.gasCosts[Create2].m_handler(0, 0, memLen)
+  gasCost = gasCost + gasCreate2(memLen)
 
   ? cpt.opcodeGasCost(Create2,
     gasCost, reason = "CREATE2: GasCreate + memLen * memory expansion")

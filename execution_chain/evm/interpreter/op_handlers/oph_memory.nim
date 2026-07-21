@@ -112,7 +112,7 @@ proc mloadOp(cpt: VmCpt): EvmResultVoid =
   let memPos = cpt.stack.lsPeekMemRef(^1)
 
   ? cpt.opcodeGasCost(Mload,
-    cpt.gasCosts[Mload].m_handler(cpt.memory.len, memPos, 32),
+    gasLoadStore(cpt.memory.len, memPos, 32),
     reason = "MLOAD: GasVeryLow + memory expansion")
 
   cpt.memory.extend(memPos, 32)
@@ -129,7 +129,7 @@ proc mstoreOp(cpt: VmCpt): EvmResultVoid =
   cpt.stack.lsShrink(2)
 
   ? cpt.opcodeGasCost(Mstore,
-    cpt.gasCosts[Mstore].m_handler(cpt.memory.len, memPos, 32),
+    gasLoadStore(cpt.memory.len, memPos, 32),
     reason = "MSTORE: GasVeryLow + memory expansion")
 
   cpt.memory.extend(memPos, 32)
@@ -145,7 +145,7 @@ proc mstore8Op(cpt: VmCpt): EvmResultVoid =
   cpt.stack.lsShrink(2)
 
   ? cpt.opcodeGasCost(Mstore8,
-    cpt.gasCosts[Mstore8].m_handler(cpt.memory.len, memPos, 1),
+    gasLoadStore(cpt.memory.len, memPos, 1),
     reason = "MSTORE8: GasVeryLow + memory expansion")
 
   cpt.memory.extend(memPos, 1)
@@ -325,7 +325,7 @@ proc mCopyOp(cpt: VmCpt): EvmResultVoid =
   cpt.stack.lsShrink(3)
 
   ? cpt.opcodeGasCost(Mcopy,
-    cpt.gasCosts[Mcopy].m_handler(cpt.memory.len, max(dstPos, srcPos), len),
+    gasCopy(cpt.memory.len, max(dstPos, srcPos), len),
     reason = "Mcopy fee")
 
   cpt.memory.copy(dstPos, srcPos, len)

@@ -164,44 +164,6 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
 
   # ############### Helper functions ##############################
 
-  func `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.inline.} =
-    # Input: size (in bytes)
-
-    # Yellow Paper:
-    #   Memory expansion cost
-    #     = Cmem(μ′i) − Cmem(μi)
-    #   μi is memory size before opcode execution
-    #   μ'i is the memory size after opcode execution
-
-    #   Cmem(a) ≡ Gmemory · a + a² / 512
-    #
-    #   Except when memLength = 0, where per eq (297),
-    #   M(currentMemSize, f, l) = currentMemSize
-
-    let
-      prevWords = currentMemSize.wordCount
-      newWords  = (memOffset + memLength).wordCount
-
-    if memLength == 0 or newWords <= prevWords:
-      # Special subcase of memory-expansion cost
-      # currentMemSize - currentMemSize = 0
-      # "Referencing a zero length range ... does not require memory to be extended
-      #  to the beginning of the range."
-      #
-      # Also, don't credit EVM code for allocating memory
-      # then accessing lots of low memory. memoryGasCost,
-      # via go-ethereum, checks for this as special case.
-      return 0
-
-    let
-      prevCost = prevWords * static(FeeSchedule[GasMemory]) +
-        (prevWords ^ 2) shr 9 # div 512
-      newCost = newWords * static(FeeSchedule[GasMemory]) +
-        (newWords ^ 2) shr 9 # div 512
-
-    # TODO: add logging
-    result = GasInt(max(newCost - prevCost, 0))
-
   when fork >= FkTangerine:
     func `prefix all_but_one_64th`(gas: GasInt): GasInt {.inline.} =
       ## Computes all but 1/64th
@@ -228,27 +190,27 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
     else:
       result = GasInt(static(FeeSchedule[GasCreate]) +
         (static(FeeSchedule[GasInitcodeWord]) * params.memLength.wordCount)) +
-        `prefix gasMemoryExpansion`(params.currentMemSize, params.memOffset, params.memLength)
+        gasMemoryExpansion(params.currentMemSize, params.memOffset, params.memLength)
 
   func `prefix gasSha3`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
 
-    result = `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
+    result = gasMemoryExpansion(currentMemSize, memOffset, memLength)
     result += GasInt(static(FeeSchedule[GasSha3]) +
       static(FeeSchedule[GasSha3Word]) * (memLength).wordCount)
 
   func `prefix gasCopy`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
     result = GasInt(static(FeeSchedule[GasVeryLow]) +
       static(FeeSchedule[GasCopy]) * memLength.wordCount)
-    result += GasInt(`prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength))
+    result += GasInt(gasMemoryExpansion(currentMemSize, memOffset, memLength))
 
   func `prefix gasExtCodeCopy`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
     result = GasInt(static(FeeSchedule[GasExtCode]) +
       static(FeeSchedule[GasCopy]) * memLength.wordCount)
-    result += `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
+    result += gasMemoryExpansion(currentMemSize, memOffset, memLength)
 
   func `prefix gasLoadStore`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
     result = GasInt(static(FeeSchedule[GasVeryLow]))
-    result += `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
+    result += gasMemoryExpansion(currentMemSize, memOffset, memLength)
 
   func `prefix gasSstore`(value: UInt256, params: GasParamsSs): SStoreGasResult {.nimcall.} =
     ## Value is word to save
@@ -354,34 +316,34 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
     res
 
   func `prefix gasLog0`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
-    result = `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
+    result = gasMemoryExpansion(currentMemSize, memOffset, memLength)
 
     result += GasInt(static(FeeSchedule[GasLog]) +
       static(FeeSchedule[GasLogData]) * memLength)
 
   func `prefix gasLog1`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
-    result = `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
+    result = gasMemoryExpansion(currentMemSize, memOffset, memLength)
 
     result += GasInt(static(FeeSchedule[GasLog]) +
       static(FeeSchedule[GasLogData]) * memLength +
       static(FeeSchedule[GasLogTopic]))
 
   func `prefix gasLog2`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
-    result = `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
+    result = gasMemoryExpansion(currentMemSize, memOffset, memLength)
 
     result += GasInt(static(FeeSchedule[GasLog]) +
       static(FeeSchedule[GasLogData]) * memLength +
       static(2 * FeeSchedule[GasLogTopic]))
 
   func `prefix gasLog3`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
-    result = `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
+    result = gasMemoryExpansion(currentMemSize, memOffset, memLength)
 
     result += GasInt(static(FeeSchedule[GasLog]) +
       static(FeeSchedule[GasLogData]) * memLength +
       static(3 * FeeSchedule[GasLogTopic]))
 
   func `prefix gasLog4`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
-    result = `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
+    result = gasMemoryExpansion(currentMemSize, memOffset, memLength)
 
     result += GasInt(static(FeeSchedule[GasLog]) +
       static(FeeSchedule[GasLogData]) * memLength +
@@ -390,7 +352,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
   proc `prefix gasCall1`(params: GasParamsCall1): EvmResult[GasInt] {.nimcall.} =
     # Both gasCost and childGasLimit are always on positive side
     var
-      gasCost: GasInt = `prefix gasMemoryExpansion`(
+      gasCost: GasInt = gasMemoryExpansion(
                              params.currentMemSize,
                              params.memOffset,
                              params.memLength)
@@ -465,7 +427,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
     ok( (gasCost, childGasLimit) )
 
   func `prefix gasHalt`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
-    `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
+    gasMemoryExpansion(currentMemSize, memOffset, memLength)
 
   func `prefix gasSelfDestruct`(condition: bool): GasInt {.nimcall.} =
     result += static(GasInt(FeeSchedule[GasSelfDestruct]))
@@ -838,6 +800,82 @@ const
     FkAmsterdam: AmsterdamGasFees,
     FkBogota: AmsterdamGasFees,
   ]
+
+func gasMemoryExpansion*(currentMemSize, memOffset, memLength: GasNatural): GasInt {.inline.} =
+  # Input: size (in bytes)
+
+  # Yellow Paper:
+  #   Memory expansion cost
+  #     = Cmem(μ′i) − Cmem(μi)
+  #   μi is memory size before opcode execution
+  #   μ'i is the memory size after opcode execution
+
+  #   Cmem(a) ≡ Gmemory · a + a² / 512
+  #
+  #   Except when memLength = 0, where per eq (297),
+  #   M(currentMemSize, f, l) = currentMemSize
+
+  let
+    prevWords = currentMemSize.wordCount
+    newWords  = (memOffset + memLength).wordCount
+
+  if memLength == 0 or newWords <= prevWords:
+    # Special subcase of memory-expansion cost
+    # currentMemSize - currentMemSize = 0
+    # "Referencing a zero length range ... does not require memory to be extended
+    #  to the beginning of the range."
+    #
+    # Also, don't credit EVM code for allocating memory
+    # then accessing lots of low memory. memoryGasCost,
+    # via go-ethereum, checks for this as special case.
+    return 0
+
+  let
+    prevCost = prevWords * static(BaseGasFees[GasMemory]) +
+      (prevWords ^ 2) shr 9 # div 512
+    newCost = newWords * static(BaseGasFees[GasMemory]) +
+      (newWords ^ 2) shr 9 # div 512
+
+  GasInt(max(newCost - prevCost, 0))
+
+func gasLoadStore*(currentMemSize, memOffset, memLength: GasNatural): GasInt {.inline.} =
+  GasInt(static(BaseGasFees[GasVeryLow])) +
+    gasMemoryExpansion(currentMemSize, memOffset, memLength)
+
+func gasCopy*(currentMemSize, memOffset, memLength: GasNatural): GasInt {.inline.} =
+  GasInt(static(BaseGasFees[GasVeryLow]) +
+    static(BaseGasFees[GasCopy]) * memLength.wordCount) +
+    gasMemoryExpansion(currentMemSize, memOffset, memLength)
+
+func gasSha3*(currentMemSize, memOffset, memLength: GasNatural): GasInt {.inline.} =
+  GasInt(static(BaseGasFees[GasSha3]) +
+    static(BaseGasFees[GasSha3Word]) * memLength.wordCount) +
+    gasMemoryExpansion(currentMemSize, memOffset, memLength)
+
+func gasLog*(topics: static int, currentMemSize, memOffset, memLength: GasNatural): GasInt {.inline.} =
+  GasInt(static(BaseGasFees[GasLog] + topics * BaseGasFees[GasLogTopic]) +
+    static(BaseGasFees[GasLogData]) * memLength) +
+    gasMemoryExpansion(currentMemSize, memOffset, memLength)
+
+func gasCreate2*(memLength: GasNatural): GasInt {.inline.} =
+  GasInt(static(BaseGasFees[GasSha3Word]) * memLength.wordCount)
+
+func gasExp*(value: UInt256, fork: EVMFork): GasInt {.inline.} =
+  result = GasInt(static(BaseGasFees[GasExp]))
+  if not value.isZero:
+    let expByteGas = if fork >= FkSpurious: SpuriousGasFees[GasExpByte]
+                     else: BaseGasFees[GasExpByte]
+    result += GasInt(expByteGas * (1 + log256(value)))
+
+func gasSelfDestruct*(condition: bool): GasInt {.inline.} =
+  result = GasInt(static(TangerineGasFees[GasSelfDestruct]))
+  if condition:
+    result += GasInt(static(TangerineGasFees[GasNewAccount]))
+
+func gasSelfDestructEIP8037*(condition: bool): GasInt {.inline.} =
+  result = GasInt(static(TangerineGasFees[GasSelfDestruct]))
+  if condition:
+    result += ACCOUNT_WRITE_8038
 
 gasCosts(FkFrontier, base, BaseGasCosts)
 gasCosts(FkHomestead, homestead, HomesteadGasCosts)

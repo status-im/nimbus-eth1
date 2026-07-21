@@ -101,7 +101,7 @@ proc callDataCopyOp(cpt: VmCpt): EvmResultVoid =
 
   cpt.stack.lsShrink(3)
   ? cpt.opcodeGasCost(CallDataCopy,
-    cpt.gasCosts[CallDataCopy].m_handler(cpt.memory.len, memPos, len),
+    gasCopy(cpt.memory.len, memPos, len),
     reason = "CallDataCopy fee")
 
   cpt.memory.writePadded(cpt.msg.data, memPos, copyPos, len)
@@ -123,7 +123,7 @@ proc codeCopyOp(cpt: VmCpt): EvmResultVoid =
 
   cpt.stack.lsShrink(3)
   ? cpt.opcodeGasCost(CodeCopy,
-    cpt.gasCosts[CodeCopy].m_handler(cpt.memory.len, memPos, len),
+    gasCopy(cpt.memory.len, memPos, len),
     reason = "CodeCopy fee")
 
   cpt.memory.writePadded(cpt.code.bytes, memPos, copyPos, len)
@@ -231,8 +231,7 @@ proc returnDataCopyOp(cpt: VmCpt): EvmResultVoid =
     memPos  = cpt.stack.lsPeekMemRef(^1)
     copyPos = cpt.stack.lsPeekMemRef(^2)
     len     = cpt.stack.lsPeekMemRef(^3)
-    gasCost = cpt.gasCosts[ReturnDataCopy].m_handler(
-                cpt.memory.len, memPos, len)
+    gasCost = gasCopy(cpt.memory.len, memPos, len)
 
   cpt.stack.lsShrink(3)
   ? cpt.opcodeGasCost(ReturnDataCopy, gasCost, reason = "returnDataCopy fee")

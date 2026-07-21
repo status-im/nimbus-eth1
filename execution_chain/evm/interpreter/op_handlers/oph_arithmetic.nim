@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -137,7 +137,7 @@ proc expOp(cpt: VmCpt): EvmResultVoid =
   ## 0x0A, Exponentiation
   template exp256(top, base, exponent) =
     ? cpt.opcodeGasCost(Exp,
-      cpt.gasCosts[Exp].d_handler(exponent),
+      gasExp(exponent, cpt.fork),
       reason = "EXP: exponent bytes")
 
     if not base.isZero:

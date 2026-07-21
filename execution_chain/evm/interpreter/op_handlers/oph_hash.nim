@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -38,7 +38,7 @@ proc sha3Op(cpt: VmCpt): EvmResultVoid =
   cpt.stack.lsShrink(1)
 
   ? cpt.opcodeGasCost(Op.Sha3,
-    cpt.gasCosts[Op.Sha3].m_handler(cpt.memory.len, pos, len),
+    gasSha3(cpt.memory.len, pos, len),
       reason = "SHA3: word gas cost")
 
   cpt.memory.extend(pos, len)

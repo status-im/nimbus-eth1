@@ -43,7 +43,7 @@ proc returnOp(cpt: VmCpt): EvmResultVoid =
   cpt.stack.lsShrink(2)
 
   ? cpt.opcodeGasCost(Return,
-    cpt.gasCosts[Return].m_handler(cpt.memory.len, pos, len),
+    gasMemoryExpansion(cpt.memory.len, pos, len),
     reason = "RETURN")
 
   cpt.memory.extend(pos, len)
@@ -61,7 +61,7 @@ proc revertOp(cpt: VmCpt): EvmResultVoid =
   cpt.stack.lsShrink(2)
 
   ? cpt.opcodeGasCost(Revert,
-      cpt.gasCosts[Revert].m_handler(cpt.memory.len, pos, len),
+      gasMemoryExpansion(cpt.memory.len, pos, len),
       reason = "REVERT")
 
   cpt.memory.extend(pos, len)
@@ -97,7 +97,7 @@ proc selfDestructEIP150Op(cpt: VmCpt): EvmResultVoid =
   let
     beneficiary = ? cpt.stack.popAddress()
     condition = not cpt.accountExists(beneficiary)
-    gasCost = cpt.gasCosts[SelfDestruct].sc_handler(condition)
+    gasCost = gasSelfDestruct(condition)
 
   ? cpt.opcodeGasCost(SelfDestruct,
     gasCost, reason = "SELFDESTRUCT EIP-150")
@@ -113,7 +113,7 @@ proc selfDestructEIP161Op(cpt: VmCpt): EvmResultVoid =
     isDead      = not cpt.accountExists(beneficiary)
     balance     = cpt.getBalance(cpt.msg.contractAddress)
     condition   = isDead and not balance.isZero
-    gasCost     = cpt.gasCosts[SelfDestruct].sc_handler(condition)
+    gasCost     = gasSelfDestruct(condition)
 
   ? cpt.opcodeGasCost(SelfDestruct,
     gasCost, reason = "SELFDESTRUCT EIP-161")
@@ -131,7 +131,7 @@ proc selfDestructEIP2929Op(cpt: VmCpt): EvmResultVoid =
     if not ledger.inAccessList(beneficiary):
       beneficiaryIsCold = true
 
-  var staticGasCosts = cpt.gasCosts[SelfDestruct].sc_handler(false)
+  var staticGasCosts = gasSelfDestruct(false)
   if beneficiaryIsCold:
     staticGasCosts += COLD_ACCOUNT_ACCESS_2929
   if staticGasCosts > cpt.gasMeter.gasRemaining:
@@ -142,7 +142,7 @@ proc selfDestructEIP2929Op(cpt: VmCpt): EvmResultVoid =
     balance = cpt.getBalance(cpt.msg.contractAddress)
     condition = isDead and not balance.isZero
 
-  var gasCost = cpt.gasCosts[SelfDestruct].sc_handler(condition)
+  var gasCost = gasSelfDestruct(condition)
 
   cpt.vmState.mutateLedger:
     if beneficiaryIsCold:
@@ -165,7 +165,7 @@ proc selfDestructEIP8037Op(cpt: VmCpt): EvmResultVoid =
     if not ledger.inAccessList(beneficiary):
       beneficiaryIsCold = true
 
-  var staticGasCosts = cpt.gasCosts[SelfDestruct].sc_handler(false)
+  var staticGasCosts = gasSelfDestructEIP8037(false)
   if beneficiaryIsCold:
     staticGasCosts += COLD_ACCOUNT_ACCESS_8038
   if staticGasCosts > cpt.gasMeter.gasRemaining:
@@ -176,7 +176,7 @@ proc selfDestructEIP8037Op(cpt: VmCpt): EvmResultVoid =
     balance = cpt.getBalance(cpt.msg.contractAddress)
     condition = isNewAccount and not balance.isZero
 
-  var gasCost = cpt.gasCosts[SelfDestruct].sc_handler(condition)
+  var gasCost = gasSelfDestructEIP8037(condition)
 
   cpt.vmState.mutateLedger:
     if beneficiaryIsCold:
@@ -207,7 +207,7 @@ const
      forks: VmOpAllForks,
      name: "returnOp",
      info: "Halt execution returning output data",
-     exec: returnOp),
+     exec: VmOpFn returnOp),
 
 
     (opCode: Revert,       ## 0xfd, Halt and revert state changes
