@@ -6,12 +6,13 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[monotimes, times, strutils],
+  std/[monotimes, times],
   unittest2,
   stint,
   eth/common,
   eth/common/[keys, transaction_utils],
   ./macro_assembler,
+  ../execution_chain/common/common,
   ../execution_chain/db/ledger,
   ../execution_chain/evm/types,
   ../execution_chain/evm/state,
@@ -26,6 +27,7 @@ const
 
   calleeAddress = address"00000000000000000000000000000000000000ca"
 
+let
   calleeCode = evmByteCode:
     Push1 "0x00"
     Pop
