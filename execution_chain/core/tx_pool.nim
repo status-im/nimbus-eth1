@@ -62,7 +62,8 @@ export
   TxPoolRef,
   TxError,
   TxItemRef,
-  TxAddedObserver
+  TxAddedObserver,
+  MAX_TXS_PER_ACCOUNT
 
 # ------------------------------------------------------------------------------
 # TxItemRef public getters

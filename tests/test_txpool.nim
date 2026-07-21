@@ -404,8 +404,7 @@ suite "TxPool test suite":
       gasLimit: 75000
     )
 
-    # Must match MAX_TXS_PER_ACCOUNT in tx_desc.nim
-    const MAX_TXS_GENERATED = 2048
+    const MAX_TXS_GENERATED = MAX_TXS_PER_ACCOUNT
     for i in 0..MAX_TXS_GENERATED-2:
       let ptx = mx.makeTx(tc, acc, i.AccountNonce)
       xp.checkAddTx(ptx)
