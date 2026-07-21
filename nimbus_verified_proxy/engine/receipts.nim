@@ -92,14 +92,14 @@ proc getReceipts*(
 
 proc resolveFilterTags*(
     engine: RpcVerificationEngine, filter: FilterOptions
-): Future[EngineResult[FilterOptions]] {.async: (raises: [CancelledError]).} =
+): EngineResult[FilterOptions] =
   if filter.blockHash.isSome():
     return ok(filter)
   let
     fromBlock = filter.fromBlock.get(types.BlockTag(kind: bidAlias, alias: "latest"))
     toBlock = filter.toBlock.get(types.BlockTag(kind: bidAlias, alias: "latest"))
-    fromBlockNumberTag = ?(await engine.resolveBlockTag(fromBlock))
-    toBlockNumberTag = ?(await engine.resolveBlockTag(toBlock))
+    fromBlockNumberTag = ?engine.resolveBlockTag(fromBlock)
+    toBlockNumberTag = ?engine.resolveBlockTag(toBlock)
 
   return ok(
     FilterOptions(
@@ -148,7 +148,7 @@ proc getLogs*(
     engine: RpcVerificationEngine, filter: FilterOptions
 ): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).} =
   let
-    resolvedFilter = ?(await engine.resolveFilterTags(filter))
+    resolvedFilter = ?engine.resolveFilterTags(filter)
     (backend, backendIdx) = ?(engine.executionBackendFor(GetLogs))
     logObjs = ?((await backend.eth_getLogs(resolvedFilter)).tagBackend(backendIdx))
 

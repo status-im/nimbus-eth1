@@ -9,6 +9,7 @@
 
 import
   std/[tables, random, options],
+  eth/common/times,
   chronicles,
   json_serialization,
   json_rpc/rpcclient,
@@ -277,6 +278,10 @@ type
     filter*: FilterOptions
     blockMarker*: Opt[Quantity]
 
+  EngineState* = object
+    archive*: bool
+    privateTx*: bool
+
   RpcVerificationEngine* = ref object
     evm*: AsyncEvm
 
@@ -317,6 +322,9 @@ type
     maxWindowJumps*: uint64
     parallelBlockDownloads*: uint64
     maxLightClientUpdates*: uint64
+    eip2935ForkTime*: Opt[EthTime]
+
+    state*: EngineState
 
   RpcVerificationEngineConf* = ref object
     chainId*: UInt256

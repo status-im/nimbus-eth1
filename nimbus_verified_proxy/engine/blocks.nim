@@ -157,28 +157,24 @@ proc verifyEIP2935Membership(
     )
   )
 
-proc isEIP2935Full(
-    engine: RpcVerificationEngine, latest: Header
-): Future[bool] {.async: (raises: [CancelledError]).} =
-  # realx the timing by 1 block
-  let slot = ((latest.number - HISTORY_SERVE_WINDOW + 1) mod HISTORY_SERVE_WINDOW).u256
+func earliestServableBlock*(
+    engine: RpcVerificationEngine
+): EngineResult[base.BlockNumber] =
+  let latest = engine.headerStore.latest.valueOr:
+    return err((UnavailableDataError, "latest block is not available yet", UNTAGGED))
 
-  let storedValue = (
-    await engine.getStorageAt(
-      HISTORY_STORAGE_ADDRESS, slot, latest.number, latest.stateRoot
-    )
-  ).valueOr:
-    return false
+  if engine.eip2935ForkTime.isNone or latest.timestamp < engine.eip2935ForkTime.get:
+    let earliest = engine.headerStore.earliest.valueOr:
+      return err((UnavailableDataError, "earliest block is not available yet", UNTAGGED))
+    return ok(earliest.number)
 
-  # storage value is zero only when the fork activated less than 8191 blocks before
-  if storedValue.isZero():
-    return false
+  let jumps = if engine.state.archive: engine.maxWindowJumps else: 1'u64
 
-  return true
+  ok(latest.number - min(latest.number, WINDOW_JUMP * jumps))
 
 proc resolveBlockTag*(
     engine: RpcVerificationEngine, blockTag: BlockTag
-): Future[EngineResult[BlockTag]] {.async: (raises: [CancelledError]).} =
+): EngineResult[BlockTag] =
   if blockTag.kind == bidAlias:
     let tag = blockTag.alias.toLowerAscii()
     case tag
@@ -203,32 +199,8 @@ proc resolveBlockTag*(
         )
       ok(BlockTag(kind: bidNumber, number: Quantity(hFinalized.number)))
     of "earliest":
-      let hLatest = engine.headerStore.latest.valueOr:
-        # untagged(-1) so the relevant backend can be tagged
-        return err(
-          (
-            UnavailableDataError,
-            "Couldn't get the earliest block number from header store", UNTAGGED,
-          )
-        )
-
-      if await engine.isEIP2935Full(hLatest):
-        return ok(
-          BlockTag(
-            kind: bidNumber, number: Quantity(hLatest.number - HISTORY_SERVE_WINDOW + 1)
-          )
-        )
-
-      let hEarliest = engine.headerStore.earliest.valueOr:
-        # untagged(-1) so the relevant backend can be tagged
-        return err(
-          (
-            UnavailableDataError,
-            "Couldn't get the earliest block number from header store", UNTAGGED,
-          )
-        )
-
-      ok(BlockTag(kind: bidNumber, number: Quantity(hEarliest.number)))
+      let earliestNum = ?engine.earliestServableBlock()
+      ok(BlockTag(kind: bidNumber, number: Quantity(earliestNum)))
     else:
       # untagged(-1) so the relevant backend can be tagged
       err((InvalidDataError, "No support for block tag " & $blockTag, UNTAGGED))
@@ -434,7 +406,7 @@ proc getBlock*(
 proc getBlock*(
     engine: RpcVerificationEngine, blockTag: BlockTag, fullTransactions: bool
 ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
-  let numberTag = ?(await engine.resolveBlockTag(blockTag))
+  let numberTag = ?engine.resolveBlockTag(blockTag)
 
   # get the target block
   let
@@ -492,7 +464,7 @@ proc getHeader*(
     engine: RpcVerificationEngine, blockTag: BlockTag
 ): Future[EngineResult[Header]] {.async: (raises: [CancelledError]).} =
   let
-    numberTag = ?(await engine.resolveBlockTag(blockTag))
+    numberTag = ?engine.resolveBlockTag(blockTag)
     n = distinctBase(numberTag.number)
     cachedHeader = engine.headerStore.get(n)
 

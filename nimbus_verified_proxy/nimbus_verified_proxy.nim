@@ -236,13 +236,15 @@ proc run(
   if (config.beaconApiUrls.len <= 0) and (not config.p2pEnabled):
     raise newException(ProxyError, "Need atleast one beacon url or p2p enabled")
 
-  let usePrivateTx = config.privateTxUrls.len > 0
+  let
+    usePrivateTx = config.privateTxUrls.len > 0
+    useArchive = config.archiveUrls.len > 0
 
-  let regularCaps =
-    if usePrivateTx:
-      fullExecutionCapabilities - {SendRawTransaction}
-    else:
-      fullExecutionCapabilities
+  var regularCaps = fullExecutionCapabilities
+  if usePrivateTx:
+    regularCaps.excl(SendRawTransaction)
+  if useArchive:
+    regularCaps.excl(GetProof)
 
   let privateTxClients =
     if usePrivateTx:
@@ -250,8 +252,16 @@ proc run(
     else:
       @[]
 
+  let archiveClients =
+    if useArchive:
+      await startExecutionBackends(engine, config.archiveUrls, {GetProof})
+    else:
+      @[]
+
   let execBackendClients =
     await startExecutionBackends(engine, config.executionApiUrls, regularCaps)
+
+  engine.state = EngineState(archive: useArchive, privateTx: usePrivateTx)
   let beaconBackendClients =
     if config.beaconApiUrls.len > 0:
       await startBeaconBackends(engine, config.beaconApiUrls)
@@ -300,6 +310,8 @@ proc run(
     ).valueOr:
       raise newException(ProxyError, "Couldn't initialize OP verification engine")
 
+    l2Engine.eip2935ForkTime = value.eip2935ForkTime
+
     opExecBackendClients = await startExecutionBackends(
       l2Engine, config.opExecutionApiUrls, fullExecutionCapabilities
     )
@@ -332,6 +344,8 @@ proc run(
     for c in beaconBackendClients:
       await c.stop()
     for c in privateTxClients:
+      await c.stop()
+    for c in archiveClients:
       await c.stop()
     if p2pBackend.isSome():
       await p2pBackend.get().stop()

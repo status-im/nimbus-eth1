@@ -245,6 +245,7 @@ proc init*(
   engine.maxLightClientUpdates = config.maxLightClientUpdates
   engine.cfg = metadata.cfg
   engine.forkDigests = forkDigests
+  engine.eip2935ForkTime = genesis.eip2935ForkTime
 
   proc onStoreInitialized() =
     discard

@@ -508,7 +508,7 @@ proc getExecutionApiFrontend*(
         return err((FrontendError, "Filter doesn't exist", UNTAGGED))
 
     let
-      filter = ?(await opEngine.resolveFilterTags(filterItem.filter))
+      filter = ?opEngine.resolveFilterTags(filterItem.filter)
       toBlock = filter.toBlock.get().number
 
     if filterItem.blockMarker.isSome() and toBlock <= filterItem.blockMarker.get():

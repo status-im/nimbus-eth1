@@ -170,6 +170,12 @@ type VerifiedProxyConf* = object
     name: "private-tx-url"
   .}: UrlList
 
+  archiveUrls* {.
+    desc: "URL of an archive execution API provider. eth_getProof will be routed to these URLs instead of the regular execution API. Multiple URLs can be specified by defining the option again on the command line.",
+    defaultValue: @[],
+    name: "archive-url"
+  .}: UrlList
+
   # P2P light client backend
   p2pEnabled* {.
     desc: "Enable P2P light client data backend",
