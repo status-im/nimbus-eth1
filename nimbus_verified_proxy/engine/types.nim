@@ -9,6 +9,8 @@
 
 import
   std/[tables, random, options],
+  chronicles,
+  json_serialization,
   json_rpc/rpcclient,
   web3/[eth_api, eth_api_types],
   stint,
@@ -22,9 +24,13 @@ import
 
 export minilru
 
+logScope:
+  topics = "vp_engine"
+
 const
   MAX_ID_TRIES* = 10
   MAX_FILTERS* = 256
+  MAX_ENCODED_LOG_LEN* = 1024
 
 type
   AccountsCacheKey* = (Root, Address)
@@ -306,6 +312,7 @@ type
 
     # config items
     chainId*: UInt256
+    anchor*: BlockTag
     maxBlockWalk*: uint64
     parallelBlockDownloads*: uint64
     maxLightClientUpdates*: uint64
@@ -368,6 +375,7 @@ proc registerBackend*(
   engine.scores[idx] = BackendScore() # availability = 0, quality = 0
   for cap in capabilities:
     engine.capabilityIndex[cap].add(idx)
+  debug "Registered execution backend", backendIdx = idx, capabilities
 
 proc registerBackend*(
     engine: RpcVerificationEngine,
@@ -380,6 +388,18 @@ proc registerBackend*(
   engine.scores[idx] = BackendScore() # availability = 0, quality = 0
   for cap in capabilities:
     engine.capabilityIndex[cap].add(idx)
+  debug "Registered beacon backend", backendIdx = idx, capabilities
+
+proc safeEncode*[T](v: T): string =
+  when compiles(EthJson.encode(v)):
+    var encoded = EthJson.encode(v)
+    if encoded.len > MAX_ENCODED_LOG_LEN:
+      let totalLen = encoded.len
+      encoded.setLen(MAX_ENCODED_LOG_LEN)
+      encoded.add("...(truncated, " & $totalLen & " bytes total)")
+    encoded
+  else:
+    "\"<opaque>\""
 
 proc selectBackend(
     engine: RpcVerificationEngine, cap: BackendCapability
@@ -405,6 +425,7 @@ proc selectBackend(
       )
 
   if eligibleIdxs.len == 0:
+    warn "No eligible backend for capability", cap
     return err((BackendError, "No eligible backend for capability: " & $cap, UNTAGGED))
 
   # randomly select a backend from eligible backends
@@ -416,6 +437,11 @@ proc selectBackend(
       engine.availabilityScoreFunc(engine.scores[chosen].availability, DefaultReward)
     engine.scores[chosen].quality =
       engine.qualityScoreFunc(engine.scores[chosen].quality, DefaultReward)
+    trace "Selected backend",
+      cap,
+      backendIdx = chosen,
+      availability = engine.scores[chosen].availability,
+      quality = engine.scores[chosen].quality
   except KeyError:
     return err((BackendError, "Scores not found for the chosen backend", UNTAGGED))
 
@@ -446,10 +472,17 @@ template tagBackend*[T](r: EngineResult[T], idx: int): EngineResult[T] =
     let taggedR: EngineResult[T] = r
     if taggedR.isErr():
       let e = taggedR.error
+      debug "Backend query failed",
+        backendIdx = idx, errType = $e.errType, err = e.errMsg
       # if the error is not tagged then tag it
       if e.backendIdx < 0:
         Result[T, ErrorTuple].err((e.errType, e.errMsg, idx))
       else:
         taggedR
     else:
+      when T is void:
+        trace "Backend query completed", backendIdx = idx
+      else:
+        trace "Backend query completed",
+          backendIdx = idx, response = safeEncode(taggedR.unsafeGet())
       taggedR

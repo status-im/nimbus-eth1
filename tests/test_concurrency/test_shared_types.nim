@@ -18,6 +18,12 @@ privateAccess(SharedTable)
 func allocated[K, V](s: SharedTable[K, V]): int =
   s.allocated
 
+func capacity[E](s: SharedSeq[E]): int =
+  # Scope privateAccess to this proc: a file-wide privateAccess(SharedSeq) would
+  # expose the private `data` field and shadow the `data()` template at call sites.
+  privateAccess(SharedSeq)
+  s.cap
+
 func isPowerOfTwoOrZero(n: int): bool =
   n == 0 or (n and (n - 1)) == 0
 
@@ -647,4 +653,158 @@ suite "SharedSeq with object element Tests":
         ]
       )
       dispose(ss)
+    check getOccupiedSharedMem() == before
+
+suite "SharedSeq growth Tests":
+  test "add, index and len on a growing SharedSeq":
+    var s: SharedSeq[int]
+    check s.len == 0
+    for i in 0 ..< 1000:
+      s.add(i)
+    check s.len == 1000
+    for i in 0 ..< 1000:
+      check s[i] == i
+
+    var sum = 0
+    for x in s.items():
+      sum += x
+    check sum == (999 * 1000) div 2
+
+    s.dispose()
+
+  test "grow rounds capacity up to a power of two":
+    var s: SharedSeq[int]
+    check s.capacity == 0
+    s.add(0)
+    check s.capacity == 16 # initial floor
+    for i in 1 ..< 1000:
+      s.add(i)
+      check:
+        isPowerOfTwoOrZero(s.capacity)
+        s.capacity >= s.len
+        s.capacity >= 16 # floor
+    check s.capacity == 1024 # 1000 elements -> next power of two
+    s.dispose()
+
+    # setLen to an arbitrary size also rounds the allocation up to a power of two.
+    var t: SharedSeq[int]
+    t.setLen(2050, zeroed = true)
+    check:
+      t.len == 2050
+      t.capacity == 4096
+    t.dispose()
+
+  test "setLen with exact sizes capacity exactly, no power-of-two rounding":
+    var s: SharedSeq[int]
+    s.setLen(2050, zeroed = true, exact = true)
+    check:
+      s.len == 2050
+      s.capacity == 2050 # exact, not 4096
+    # a further exact grow reallocs to exactly the requested size
+    s.setLen(3000, exact = true)
+    check:
+      s.len == 3000
+      s.capacity == 3000
+    # a subsequent default (power-of-two) grow still rounds up
+    s.setLen(5000, zeroed = true)
+    check:
+      s.len == 5000
+      s.capacity == 8192
+    s.dispose()
+
+  test "init with zeroed produces zero-filled elements":
+    var s = SharedSeq[int].init(5, zeroed = true)
+    check s.len == 5
+    for i in 0 ..< 5:
+      check s[i] == 0
+    s.dispose()
+
+  test "setLen with zeroed zero-fills newly-live elements and preserves existing":
+    var s = SharedSeq[int].init(3, zeroed = true)
+    s[0] = 1
+    s[1] = 2
+    s[2] = 3
+    # Grow well past capacity so grow() reallocs (its tail is NOT zeroed); setLen
+    # must still zero every element that becomes live, and keep the old ones.
+    s.setLen(64, zeroed = true)
+    check s.len == 64
+    check:
+      s[0] == 1
+      s[1] == 2
+      s[2] == 3
+    for i in 3 ..< 64:
+      check s[i] == 0
+    # A second growth zeroes the next live range too, even out of the previously
+    # over-allocated (garbage) capacity.
+    s.setLen(200, zeroed = true)
+    check s.len == 200
+    for i in 64 ..< 200:
+      check s[i] == 0
+    s.dispose()
+
+  test "a fixed-size SharedSeq can still be grown with add":
+    var s = SharedSeq[int].init(3) # 3 in-use elements
+    s[0] = 10
+    s[1] = 11
+    s[2] = 12
+    check s.len == 3
+    s.add(13)
+    check:
+      s.len == 4
+      s[3] == 13
+    s.dispose()
+
+  test "mitems allows in-place mutation":
+    var s: SharedSeq[int]
+    for i in 0 ..< 10:
+      s.add(i)
+    for x in s.mitems():
+      x = x * 2
+    for i in 0 ..< 10:
+      check s[i] == i * 2
+    s.dispose()
+
+  test "dispose resets and is idempotent after growth":
+    var s: SharedSeq[int]
+    s.add(1)
+    s.dispose()
+    check s.len == 0
+    s.dispose() # safe no-op on the already-disposed value
+    check s.len == 0
+
+  test "move transfers ownership of a grown SharedSeq and clears the source":
+    var a: SharedSeq[int]
+    a.add(7)
+    a.add(8)
+    var b = move(a)
+
+    check:
+      b.len == 2
+      b[0] == 7
+      b[1] == 8
+      a.len == 0 # the moved-from value is reset
+
+    dispose(b)
+    dispose(a) # safe no-op on the moved-from value
+
+  test "grow/dispose does not leak shared memory":
+    let before = getOccupiedSharedMem()
+    for _ in 0 ..< 100:
+      var s: SharedSeq[int]
+      for i in 0 ..< 50: # forces several growth doublings
+        s.add(i)
+      s.dispose()
+    check getOccupiedSharedMem() == before
+
+  test "grown SharedSeq of move-only SharedBytes values does not leak":
+    let before = getOccupiedSharedMem()
+    for _ in 0 ..< 100:
+      var s: SharedSeq[SharedBytes]
+      s.add(SharedBytes.init(@[1.byte, 2, 3]))
+      s.add(SharedBytes.init(@[4.byte, 5, 6, 7]))
+      # The outer SharedSeq does not own its elements' memory: dispose each
+      # element before disposing the backing storage.
+      for e in s.mitems():
+        e.dispose()
+      s.dispose()
     check getOccupiedSharedMem() == before

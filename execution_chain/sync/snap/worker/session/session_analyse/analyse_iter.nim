@@ -21,9 +21,10 @@
 
 import
   std/tables,
-  pkg/[chronicles, chronos, eth/common],
+  pkg/[chronicles, chronos, eth/common, eth/trie/nibbles, stew/interval_set],
+  ../../../../../db/aristo,
   ../../[helpers, mpt, worker_desc],
-  ../session_helpers,
+  ../[session_clear, session_helpers, session_pivot],
   ./analyse_desc
 
 export
@@ -130,13 +131,13 @@ template runErrand(
 # Private functions, MPT traversal core function
 # ------------------------------------------------------------------------------
 
-template getAccKvtWrap(
-    db: MptAsmRef;
+template getAccPartMptWrap(
+    db: CacheDbRef;
     _: Hash32;
     key: openArray[byte];
       ): BlobResult =
   ## Ignore state root for `get()` on accounts KVT
-  db.getAccKvt key
+  db.getAccPartMpt key
 
 template traverseMpt(
     trd: TravDescRef;                               # traversal descriptor
@@ -179,24 +180,22 @@ template traverseMpt(
         path = topParent.path & topLinks[topInx].pfx # path from stack
         key = topLinks[topInx].key                  # key from stack
         node = get(trd.db, base, key).valueOr:      # node from DB
-          notify(EGetError, trd, base, EmptyBlob, key, EmptyBlob, depth, info)
+          notify(EGetError, trd, base, EmptyPath, EmptyBlob, depth, info)
           continue
 
         if node.len == 0:                           # dangling link?
           if topParent.node.len == 0:               # fail to resolve `root`?
             doAssert key == @root
-            notify(ENoRoot, trd, base, EmptyBlob, key, EmptyBlob, depth, info)
+            notify(ENoRoot, trd, base, EmptyPath, EmptyBlob, depth, info)
             bodyRc = typeof(bodyRc).err(ENoRoot)    # => missing root, error
             break body
-          notify(AttDangling, trd,
-            base, path.toHexPrefix(false).data(), key, EmptyBlob, depth, info)
+          notify(AttDangling, trd, base, path, EmptyBlob, depth, info)
           continue
 
         # Allow thread switch when enabled
         when 0 < info.len:
           runErrand(trd, info, code).isOkOr:
-            notify(ECancelled, trd,
-              base, path.toHexPrefix(false).data(), key, node, depth, info)
+            notify(ECancelled, trd, base, path, node, depth, info)
             bodyRc = typeof(bodyRc).err(ECancelled) # => cancel, error
             break body
 
@@ -216,8 +215,7 @@ template traverseMpt(
 
           if isLeaf:                                # notify about leaf
             let data = pyl.read seq[byte]
-            notify(AttLeaf, trd,
-              base, (path & pfx).getBytes(), key, data, depth+1, info)
+            notify(AttLeaf, trd, base, (path & pfx), data, depth+1, info)
             continue
 
           # Initialse `link[]` data on `newTop` and push on stack
@@ -235,18 +233,15 @@ template traverseMpt(
 
           # Push on stack (or error)
           if nLnk == 0:
-            notify(ENoBranch, trd,
-              base, path.toHexPrefix(false).data(), key, node, depth, info)
+            notify(ENoBranch, trd, base, path, node, depth, info)
           else:
             stack.push newTop
 
         else:
-          notify(ERlpList, trd,
-            base, path.toHexPrefix(false).data(), key, node, depth, info)
+          notify(ERlpList, trd, base, path, node, depth, info)
 
       except RlpError:
-        notify(ERlpExcept, trd,
-          base, path.toHexPrefix(false).data(), key, node, depth, info)
+        notify(ERlpExcept, trd, base, path, node, depth, info)
       # End `while()`
 
     bodyRc = typeof(bodyRc).ok()
@@ -260,42 +255,44 @@ template traverseMpt(
 template stoNotify(
     att: static[AttType];
     trd: TravDescRef;
-    base: Hash32;
-    path: openArray[byte];
-    key: openArray[byte];
-    data: openArray[byte];
+    accPath: Hash32;
+    stoPath: NibblesBuf;
+    slotData: openArray[byte];                      # payload only
     depth: int;
     info: static[string];
       ) =
   block body:
     template stats(): auto = trd.stats
-
     if stats.nStoDepth < depth:
       stats.nStoDepth = depth
 
     when att == AttLeaf:
       stats.nStoLeaf.inc
+      trd.putFlatSlot(
+        accPath, Hash32.fromBytes stoPath.getBytes(), slotData, info)
 
     elif att == AttDangling:
       stats.nStoDangl.inc
-      trd.putDanglSto(base, key, path, info)
-
-      occasionalMsg(trd.msgAt):
-        traversingCodeMsg(stats, info)
+      discard trd.ranges.merge ItemKeyRange.fromNibbles stoPath
 
     elif att == ENoRoot:
       stats.nStoMissing.inc
-      trd.putMissSto(base, key, path, info)
+      discard trd.ranges.merge ItemKeyRange.fromNibbles stoPath
 
     else:
       stats.nStoErr.inc
 
+    when att in {AttLeaf, AttDangling}:
+      occasionalMsg(trd.msgAt):
+        traversingCodeMsg(stats, info)
+
+  discard                                           # visual alignment
+
 template accAndStoNotify(
     att: static[AttType];
     trd: TravDescRef;
-    _: Hash32;
-    path: openArray[byte];
-    key: openArray[byte];
+    root: Hash32;
+    accPath: NibblesBuf;
     payload: openArray[byte];                       # node or payload
     depth: int;
     info: static[string];
@@ -311,56 +308,68 @@ template accAndStoNotify(
 
     when att == AttLeaf:
       stats.nAccLeaf.inc
+      let base = Hash32.fromBytes accPath.getBytes()
+      trd.putFlatAcc(base, payload, info)           # flat accounts table
 
-      let acc = payload.decodeAccount().valueOr:
+      let acc = payload.decodeAccount(info).valueOr:
         stats.nAccErr.inc
         break body
 
       if acc.storageRoot != EMPTY_ROOT_HASH:
         stats.nAccSto.inc
 
+        # Start with new set of sub-ranges
+        let stash = trd.ranges
+        trd.ranges = ItemKeyRangeSet.init()
+
         # Analyse MPT for storage slots
         let
           start = Moment.now()
-          base = Hash32.fromBytes path
           rc = traverseMpt(
-            trd, base, acc.storageRoot.data, getStoKvt, stoNotify, info):
-              traversingStorageMsg(stats, info)   # keep alive message
+            trd, base, acc.storageRoot.data, getStoPartMpt, stoNotify, info):
+              traversingStorageMsg(stats, info)     # keep alive message
 
         if rc.isErr and rc.error != ENoRoot:
           debug info & ": Failed traversing storage slots",
             root=acc.storageRoot.toStr, nErr=stats.nStoErr, `error`=rc.error
 
-        stats.nStoNodes += stats.nNodes           # collect storage stats
+        # Save sub-ranges and re-install accout ranges
+        if 0 < trd.ranges.chunks:
+          trd.putStoMissingIntv(base, trd.ranges, info)
+        trd.ranges = stash
+
+        stats.nStoNodes += stats.nNodes             # collect storage stats
         stats.nNodes = 0
         stats.stoEla += (Moment.now() - start)
 
       if acc.codeHash != EMPTY_CODE_HASH:
         stats.nAccCode.inc
 
-        # Check whether the code has an entry on the database
-        block checkCodeHash:
-          let rc = trd.db.hasCodeKvt(acc.codeHash)
-          if rc.isErr:
+        block handleCode:
+          # Check whether the code has an entry on the database
+          let code = trd.db.getCodePartMpt(acc.codeHash).valueOr:
             debug info & ": Failed accessing byte code",
-              root=acc.codeHash.toStr, nErr=stats.nStoErr, error=rc.error
-          elif rc.value:
-            break checkCodeHash
-          stats.nCodeMissing.inc
-          trd.putMissCode(key, path, info)          # (key,path) of account data
+              root=acc.codeHash.toStr, nErr=stats.nStoErr, `error`=error
+            trd.cacheErr.inc
+            stats.nCodeMissing.inc
+            break handleCode
 
-      occasionalMsg(trd.msgAt):
-        traversingCodeMsg(stats, info)
+          if 0 < code.len:
+            trd.putFlatCode(base, code, info)       # contract codes table
+          else:
+            stats.nCodeMissing.inc
+            trd.putMissingBlob(base, info)          # missing contracts table
 
     elif att == AttDangling:
       stats.nAccDangl.inc
-      trd.putDanglAcc(key, path, info)
-
-      occasionalMsg(trd.msgAt):
-        traversingCodeMsg(stats, info)
+      discard trd.ranges.merge ItemKeyRange.fromNibbles accPath
 
     else:
       stats.nAccErr.inc
+
+    when att in {AttLeaf, AttDangling}:
+      occasionalMsg(trd.msgAt):
+        traversingCodeMsg(stats, info)
 
   discard                                           # visual alignment
 
@@ -378,29 +387,40 @@ template sessionAnalyseTrieIter*(cty: SnapCtxRef, info: static[string]): auto =
   block body:
     let
       trd = TravDescRef(
-        ctx:   cty,
-        db:    cty.pool.mptAsm,
-        msgAt: Moment.now() + threadLogTimeLimit,
-        napAt: Moment.now() + threadSwitchRunLimit)
+        ctx:    cty,
+        db:     cty.pool.cacheDB,
+        ranges: ItemKeyRangeSet.init(),
+        msgAt:  Moment.now() + threadLogTimeLimit,
+        napAt:  Moment.now() + threadSwitchRunLimit)
 
       pivot = ctx.pool.pivot.valueOr:
         debug info & ": MPT analysis failed, pivot missing"
         bodyRc = typeof(bodyRc).err(ENoPivot)
         break body
 
+      pivotNum = cty.sessionPivotNum(info).valueOr:
+        bodyRc = typeof(bodyRc).err(ENoPivotNum)
+        break body
+
     template stats(): auto = trd.stats
 
-    let start = Moment.now()
     startTraversingMsg(info)
 
-    ctx.clearDanglTables(info).isOkOr:
+    trace info & ": Clearing flat leaf record tables"
+    ctx.sessionFlatTabsClear(info).isOkOr:
       bodyRc = typeof(bodyRc).err(EClearError)
       break body
 
-    let rc = traverseMpt(
-      trd, zeroHash32, pivot.Hash32.data,
-      getAccKvtWrap, accAndStoNotify, info):
-        traversingAccountsMsg(stats, info)
+    trace info & ": Analysing partion MPTs.."
+    let
+      start = Moment.now()
+      rc = traverseMpt(
+        trd, zeroHash32, pivot.Hash32.data,
+        getAccPartMptWrap, accAndStoNotify, info):
+          traversingAccountsMsg(stats, info)
+
+    # Alsways store even without ranges, so the state root gets registered
+    trd.putAccMissingIntv(pivotNum, trd.ranges, info)
 
     if 0 < trd.cacheErr:
       bodyRc = typeof(bodyRc).err(EPutError)

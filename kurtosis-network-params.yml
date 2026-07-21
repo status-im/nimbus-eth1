@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,14 +13,14 @@ participants:
     el_image: <docker-image-placeholder>
     el_extra_params: ["--log-level=DEBUG"]
     cl_type: nimbus
-    cl_image: statusim/nimbus-eth2:multiarch-latest
+    cl_image: ethpandaops/nimbus-eth2:unstable-3d22b12
     cl_extra_params: ["--log-level=DEBUG"]
     use_separate_vc: false
 additional_services:
   - assertoor
 mev_type: null
 assertoor_params:
-  image: "ethpandaops/assertoor"
+  image: "ethpandaops/assertoor:master-c6f6ac6"
   run_stability_check: false
   run_block_proposal_check: true
   run_transaction_test: true

@@ -43,7 +43,7 @@ proc setupServices*(ctx: SnapCtxRef; info: static[string]): bool =
   ctx.pool.stateDB = StateDbRef.init()
 
   # Set up assembly DB
-  ctx.pool.mptAsm = MptAsmRef.init(ctx.pool.baseDir,info).valueOr:
+  ctx.pool.cacheDB = CacheDbRef.init(ctx.pool.baseDir,info).valueOr:
     return false
 
   # Set up manual beacon target request. If set, there is no point in
@@ -62,9 +62,9 @@ proc setupServices*(ctx: SnapCtxRef; info: static[string]): bool =
 
 proc destroyServices*(ctx: SnapCtxRef) =
   ## Helper for `release()`
-  if not ctx.pool.mptAsm.isNil:
-    ctx.pool.mptAsm.close()
-    ctx.pool.mptAsm = MptAsmRef(nil)
+  if not ctx.pool.cacheDB.isNil:
+    ctx.pool.cacheDB.close()
+    ctx.pool.cacheDB = CacheDbRef(nil)
 
 # ---------
 

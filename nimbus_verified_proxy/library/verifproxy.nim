@@ -7,8 +7,10 @@
 
 import
   chronos,
+  chronicles,
   std/[json, options, strutils],
   stint,
+  web3/eth_api_types,
   beacon_chain/spec/digest,
   beacon_chain/spec/beaconstate,
   beacon_chain/spec/forks,
@@ -31,6 +33,9 @@ import
 
 import ./c_frontend
 export c_frontend
+
+logScope:
+  topics = "vp_main"
 
 {.pragma: exported, cdecl, exportc, dynlib, raises: [].}
 
@@ -239,10 +244,11 @@ proc run*(
       let client = BeaconApiRestClient.init(engine.cfg, engine.forkDigests, url)
       let startRes = client.start()
       if startRes.isErr():
-        warn "Error connecting to beacon backend",
-          url = url, error = startRes.error.errMsg
+        warn "Retrying beacon backend connection",
+          url = url, err = startRes.error.errMsg
         continue
       engine.registerBackend(client.getBeaconApiBackend(), fullBeaconCapabilities)
+      info "Connected to beacon backend", url
 
   for url in config.executionApiUrls:
     if executionTransportProc != nil:
@@ -251,13 +257,14 @@ proc run*(
       )
     else:
       let client = JsonRpcClient.init(url).valueOr:
-        error "Error initializing backend client", error = error.errMsg
+        error "Error initializing backend client", err = error.errMsg
         continue
       let startRes = await client.start()
       if startRes.isErr():
-        error "Error connecting to backend", url = url, error = startRes.error.errMsg
+        error "Error connecting to backend", url = url, err = startRes.error.errMsg
         continue
       engine.registerBackend(client.getExecutionApiBackend(), regularCaps)
+      info "Connected to execution backend", url
 
   if usePrivateTx:
     for url in config.privateTxUrls:
@@ -268,15 +275,16 @@ proc run*(
         )
       else:
         let client = JsonRpcClient.init(url).valueOr:
-          error "Error initializing backend client", error = error.errMsg
+          error "Error initializing backend client", err = error.errMsg
           continue
         let startRes = await client.start()
         if startRes.isErr():
-          error "Error connecting to backend", url = url, error = startRes.error.errMsg
+          error "Error connecting to backend", url = url, err = startRes.error.errMsg
           continue
         engine.registerBackend(
           client.getExecutionApiBackend(), BackendCapabilities({SendRawTransaction})
         )
+        info "Connected to private tx backend", url
 
   ctx.frontend = engine.getExecutionApiFrontend()
 
@@ -295,6 +303,7 @@ proc run*(
       accountCacheLen = config.accountCacheLen,
       codeCacheLen = config.codeCacheLen,
       storageCacheLen = config.storageCacheLen,
+      anchor = blockId("safe"),
     ).valueOr:
       raise newException(ProxyError, "Couldn't initialize OP verification engine")
 
@@ -306,16 +315,16 @@ proc run*(
         )
       else:
         let client = JsonRpcClient.init(url).valueOr:
-          error "Error initializing L2 backend client", error = error.errMsg
+          error "Error initializing L2 backend client", err = error.errMsg
           continue
         let startRes = await client.start()
         if startRes.isErr():
-          error "Error connecting to L2 backend",
-            url = url, error = startRes.error.errMsg
+          error "Error connecting to L2 backend", url = url, err = startRes.error.errMsg
           continue
         l2Engine.registerBackend(
           client.getExecutionApiBackend(), fullExecutionCapabilities
         )
+        info "Connected to L2 execution backend", url
 
     ctx.opFrontend = getExecutionApiFrontend(l2Engine, engine)
 

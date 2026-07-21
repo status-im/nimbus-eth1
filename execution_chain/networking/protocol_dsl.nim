@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -458,6 +458,25 @@ template rlpxWithPacketResponder*(PROTO: distinct type;
     var
       response {.inject.} = initResponder(peer, reqId)
       packet {.inject.} = checkedRlpRead(peer, rlp, MSGTYPE)
+    body
+
+template rlpxWithPacketResponder*(PROTO: distinct type;
+                        MSGTYPE: distinct type;
+                        peer: Peer;
+                        data: Rlp,
+                        fields: untyped;
+                        body): untyped =
+  ## Like the variant above, but reads the request fields flat from the
+  ## message body ([request-id, field₁, field₂, ...]) instead of as one
+  ## nested list ([request-id, [field₁, field₂, ...]]).
+  wrapRlpxWithPacketException(MSGTYPE, peer):
+    var rlp = data
+    tryEnterList(rlp)
+    let reqId = read(rlp, uint64)
+    var
+      response {.inject.} = initResponder(peer, reqId)
+      packet {.inject.} = MSGTYPE()
+    checkedRlpFields(peer, rlp, packet, fields)
     body
 
 template rlpxWithFutureHandler*(PROTO: distinct type;

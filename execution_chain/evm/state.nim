@@ -34,7 +34,7 @@ proc init(
       com:          CommonRef;
       tracer:       TracerRef,
       tracker:      BlockAccessListTrackerRef,
-      flags:        set[VMFlag] = self.flags) =
+      flags:        set[VMFlag] = {}) =
   ## Initialisation helper
   # Take care to (re)set all fields since the VMState might be recycled
   self.com = com
@@ -87,8 +87,7 @@ proc new*(
       txFrame:  CoreDbTxRef;
       tracer:   TracerRef = nil,
       storeSlotHash = false,
-      enableBalTracker = false,
-      balBuilderThreadSafe = false): T =
+      enableBalTracker = false): T =
   ## Create a new `BaseVMState` descriptor from a parent block header. This
   ## function internally constructs a new account state cache rooted at
   ## `parent.stateRoot`
@@ -97,11 +96,10 @@ proc new*(
   ## `BaseVMState` environment where the account state cache is synchronised
   ## with the `parent` block header.
   let
-    ledger = LedgerRef.init(txFrame, storeSlotHash, com.statelessProviderEnabled)
+    ledger = LedgerRef.init(txFrame, storeSlotHash, com.statelessProvider)
     tracker =
       if enableBalTracker:
-        BlockAccessListTrackerRef.init(
-          ledger.ReadOnlyLedger, builderThreadSafe = balBuilderThreadSafe)
+        BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger)
       else:
         nil
 
@@ -133,28 +131,25 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
   ## queries about its `getStateRoot()`, i.e. `isTopLevelClean` evaluated `true`. If
   ## this function returns `false`, the function argument `self` is left
   ## untouched.
+  if not self.ledger.isTopLevelClean:
+    return false
 
   if not self.balTracker.isNil():
     self.balTracker.dispose()
     self.balTracker = BlockAccessListTrackerRef.init(self.ledger.ReadOnlyLedger)
-
-  if not self.ledger.isTopLevelClean:
-    return false
 
   let
     tracer = self.tracer
     tracker = self.balTracker
     com    = self.com
     ledger     = self.ledger
-    flags  = self.flags
   self.init(
     ledger       = ledger,
     parent   = parent,
     blockCtx = blockCtx,
     com      = com,
     tracer   = tracer,
-    tracker  = tracker,
-    flags    = flags)
+    tracker  = tracker)
   true
 
 proc reinit*(self:   BaseVMState; ## Object descriptor
@@ -172,6 +167,37 @@ proc reinit*(self:   BaseVMState; ## Object descriptor
     blockCtx = blockCtx(header),
     )
 
+proc reinit*(self:    BaseVMState; ## Object descriptor
+             parent:  Header;      ## parent header, account sync pos.
+             header:  Header;      ## header with tx environment data fields
+             txFrame: CoreDbTxRef; ## frame accumulating the new block's changes
+             enableBalTracker: bool;
+             ): bool =
+  ## Variant of `reinit()` which also moves the ledger over to a new `txFrame`
+  ## and rebuilds the BAL tracker from explicit per-block flags.
+  if not self.ledger.isTopLevelClean:
+    return false
+
+  self.ledger.reinit(txFrame)
+
+  if not self.balTracker.isNil():
+    self.balTracker.dispose()
+    self.balTracker = nil
+
+  let tracker =
+    if enableBalTracker:
+      BlockAccessListTrackerRef.init(self.ledger.ReadOnlyLedger)
+    else:
+      nil
+  self.init(
+    ledger   = self.ledger,
+    parent   = parent,
+    blockCtx = blockCtx(header),
+    com      = self.com,
+    tracer   = self.tracer,
+    tracker  = tracker)
+  true
+
 proc init*(
       self:   BaseVMState;     ## Object descriptor
       parent: Header;     ## parent header, account sync position
@@ -181,7 +207,6 @@ proc init*(
       tracer: TracerRef = nil,
       storeSlotHash = false,
       enableBalTracker = false,
-      balBuilderThreadSafe = false,
       stateless = false) =
 
   ## Variant of `new()` constructor above for in-place initalisation. The
@@ -193,11 +218,10 @@ proc init*(
   ## networks, the miner address is retrievable via `ecRecover()`.
   let
     ledger = LedgerRef.init(
-      txFrame, storeSlotHash, com.statelessProviderEnabled, stateless)
+      txFrame, storeSlotHash, com.statelessProvider, stateless)
     tracker =
       if enableBalTracker:
-        BlockAccessListTrackerRef.init(
-          ledger.ReadOnlyLedger, builderThreadSafe = balBuilderThreadSafe)
+        BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger)
       else:
         nil
 
@@ -217,8 +241,7 @@ proc new*(
       txFrame: CoreDbTxRef;
       tracer: TracerRef = nil,
       storeSlotHash = false,
-      enableBalTracker = false,
-      balBuilderThreadSafe = false): T =
+      enableBalTracker = false): T =
   ## This is a variant of the `new()` constructor above where the `parent`
   ## argument is used to sync the accounts cache and the `header` is used
   ## as a container to pass the `timestamp`, `gasLimit`, and `fee` values.
@@ -233,8 +256,7 @@ proc new*(
     txFrame = txFrame,
     tracer = tracer,
     storeSlotHash = storeSlotHash,
-    enableBalTracker = enableBalTracker,
-    balBuilderThreadSafe = balBuilderThreadSafe)
+    enableBalTracker = enableBalTracker)
 
 func coinbase*(vmState: BaseVMState): Address =
   vmState.blockCtx.coinbase

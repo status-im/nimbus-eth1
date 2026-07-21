@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/math,
+  std/[math, times],
   eth/common/keys,
   results,
   unittest2,
@@ -25,6 +25,7 @@ import
   ../execution_chain/[conf, transaction, constants],
   ../execution_chain/core/tx_pool,
   ../execution_chain/core/tx_pool/tx_desc {.all.},
+  ../execution_chain/core/tx_pool/tx_evictor,
   ../execution_chain/core/pooled_txs,
   ../execution_chain/common/common,
   ../execution_chain/utils/utils,
@@ -284,6 +285,16 @@ suite "TxPool test suite":
       gasLimit: 18000
     )
     let ptx = mx.makeTx(tc, 0)
+    xp.checkAddTx(ptx, txErrorBasicValidation)
+
+  test "EIP-2681 nonce at maximum rejected":
+    let acc = mx.getAccount(23)
+    let tc = BaseTx(
+      gasLimit: 75000
+    )
+    var ptx = mx.makeTx(tc, acc, 0)
+    ptx.tx = mx.customizeTransaction(acc, ptx.tx,
+      CustomTx(nonce: Opt.some(high(uint64))))
     xp.checkAddTx(ptx, txErrorBasicValidation)
 
   test "Known tx":
@@ -1148,3 +1159,110 @@ suite "TxPool payload rebuild consistency":
 
     # the rebuilt block must survive re-execution (what every peer does)
     xp.checkImportBlock(b2)
+
+suite "TxPool expiry":
+  let
+    env = initEnv(Cancun)
+    xp = env.xp
+    mx = env.sender
+
+  xp.prevRandao = prevRandao
+  xp.feeRecipient = feeRecipient
+  xp.timestamp = EthTime.now()
+
+  test "removeExpiredTxs only removes txs older than lifetime":
+    let tc = BaseTx(gasLimit: 75000)
+    xp.checkAddTx(mx.makeTx(tc, mx.getAccount(1), 0))
+    xp.checkAddTx(mx.makeTx(tc, mx.getAccount(2), 0))
+
+    # Fresh txs survive a sweep
+    xp.removeExpiredTxs(initDuration(hours = 1))
+    check xp.len == 2
+
+    # Expiry uses a strict `now - time > lifeTime` comparison, so a negative
+    # lifetime expires everything without having to sleep past a deadline
+    xp.removeExpiredTxs(initDuration(milliseconds = -1))
+    check xp.len == 0
+
+  test "evictor loop sweeps expired txs and stops cleanly":
+    let tc = BaseTx(gasLimit: 75000)
+    xp.checkAddTx(mx.makeTx(tc, mx.getAccount(3), 0))
+    check xp.len == 1
+
+    let ev = TxEvictorRef.init(xp,
+      interval = chronos.milliseconds(1),
+      lifeTime = initDuration(milliseconds = -1))
+    ev.start()
+    waitFor sleepAsync(chronos.milliseconds(50))
+    check xp.len == 0
+    waitFor ev.stop()
+
+suite "TxPool validation state follows chain head":
+  ## Repro for the hive devp2p `eth/Transaction` failure: the pool used to
+  ## validate incoming txs against the state captured when the pool was
+  ## created (or when it last built a block). A node that never builds
+  ## blocks - hive's devp2p client, or any non-validating node - kept
+  ## judging txs against that birth state: stale base fee, nonces and
+  ## balances.
+
+  test "tx nonce is checked against the moved head, not the pool birth state":
+    let
+      env = initEnv(Cancun)
+      xp = env.xp
+      mx = env.sender
+      builder = TxPoolRef.new(env.chain)
+      acc = mx.getAccount(20)
+      tc = BaseTx(gasLimit: 75000, recipient: Opt.some(recipient), amount: amount)
+
+    builder.prevRandao = prevRandao
+    builder.feeRecipient = feeRecipient
+    builder.timestamp = EthTime.now()
+
+    # The "network" (builder pool) mines acc's nonce-0 tx; the pool under
+    # test never assembles a block, so nothing else re-anchors it.
+    builder.checkAddTx(mx.makeTx(tc, acc, 0))
+    builder.checkImportBlock(1, 0)
+
+    # A different nonce-0 tx from the same sender must be rejected: the
+    # account nonce is 1 at the new head. Against the stale birth state
+    # it would be accepted.
+    var tc2 = tc
+    tc2.amount = amount * 2
+    xp.checkAddTx(mx.makeTx(tc2, acc, 0), txErrorNonceTooSmall)
+
+  test "base fee is checked against the moved head (hive eth/Transaction)":
+    let
+      env = initEnv(Cancun)
+      xp = env.xp
+      mx = env.sender
+      builder = TxPoolRef.new(env.chain)
+      acc = mx.getAccount(21)
+
+    builder.prevRandao = prevRandao
+    builder.feeRecipient = feeRecipient
+    builder.timestamp = EthTime.now()
+
+    # Advance the head with empty blocks: the base fee decays by 1/8 per
+    # block, well below what the pool's birth state predicts.
+    for _ in 0 ..< 4:
+      builder.checkImportBlock(0, 0)
+
+    # Ground truth: a pool created NOW anchors on the current head.
+    let probe = TxPoolRef.new(env.chain)
+    check xp.baseFee > probe.baseFee
+
+    # Pay exactly the real next-block base fee, like hive's simulator does
+    # (GasFeeCap = head base fee). Against the stale anchor this fails
+    # "maxFeePerGas lower than baseFee" and the tx never enters the pool.
+    let ptx = mx.makeTx(BaseTx(
+      txType: Opt.some(TxEip1559),
+      gasLimit: 75000,
+      recipient: Opt.some(recipient),
+      amount: amount,
+      gasFee: probe.baseFee,
+      gasTip: 1.GasInt,
+    ), acc, 0)
+    xp.checkAddTx(ptx)
+
+    # The add re-anchored the pool on the live head.
+    check xp.baseFee == probe.baseFee

@@ -12,39 +12,42 @@
 
 import
   pkg/chronicles,
-  ../../../../db/aristo/aristo_fetch,
-  ../[mpt, state_db, worker_desc],
-  ./session_helpers
+  ../[mpt, state_db, worker_desc]
 
 logScope:
   topics = "snap sync"
-
-type
-  PivotStateNumPair* = tuple
-    pivotNum: BlockNumber
-    stateNum: BlockNumber
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
+proc getPivotData(
+    ctx: SnapCtxRef,
+    info: static[string];
+      ): Opt[(StateRoot,CacheStateData)] =
+  let root = ctx.pool.pivot.valueOr:
+    return err()
+  var data = ctx.pool.cacheDB.getStateData(root).valueOr:
+    error info & ": Cached pivot inaccessible", root=root.toStr, `error`=error
+    return err()
+  ok((root, move data))
+
 proc findPivotStateData(
     ctx: SnapCtxRef;
     info: static[string];
       ): Opt[WalkStateData] =
-  ## ..
   var state: WalkStateData
-  for w in ctx.pool.mptAsm.walkStateData():
+  for w in ctx.pool.cacheDB.walkStateData():
     if w.error.len == 0 and
-       PivotOnTrie <= w.tag:
-      if PivotOnTrie <= state.tag:                  # is `w` another pivot?
+       PivotOnTrie <= w.data.tag:
+      if PivotOnTrie <= state.data.tag:             # is `w` another pivot?
         error info & ": Duplicate pivot on states cache DB",
-          state=($state.number & "(" & $state.tag & ")"),
-          dup=($w.number & "(" & $w.tag & ")")
+          state=($state.data.number & "(" & $state.data.tag & ")"),
+          dup=($w.data.number & "(" & $w.data.tag & ")")
         return err()                                # can that happen, at all?
         # End `if another-pivot`
       state = w                                     # found pivot
-  if PivotOnTrie <= state.tag:
+  if PivotOnTrie <= state.data.tag:
     return ok(move state)
   err()
 
@@ -52,24 +55,47 @@ proc findPivotStateData(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc sessionPivotStateNum*(
+proc sessionPivotNum*(
     ctx: SnapCtxRef;
     info: static[string];
-      ): Opt[PivotStateNumPair] =
-  ## Returns the pair of block numbers `(pivot-number,state-number)` where
-  ## * `pivot-number` is derived from the MPT cache DB
-  ## * `state-number` is the last saved state/checkpoint on the `Aristo` db
-  var w: PivotStateNumPair
-  w.stateNum = ctx.chain.baseTxFrame().aTx.fetchLastCheckpoint().valueOr:
-    error info & ": Fetching last state block number failed", `error`=error
+      ): Opt[BlockNumber] =
+  ctx.getPivotData(info).isErrOr:
+    return ok(value[1].number)
+  err()
+
+proc sessionPivotTag*(
+    ctx: SnapCtxRef;
+    info: static[string];
+      ): Opt[StateDataTag] =
+  ctx.getPivotData(info).isErrOr:
+    return ok(value[1].tag)
+  err()
+
+proc sessionPivotTagUpdate*(
+    ctx: SnapCtxRef;
+    tag: StateDataTag;
+    info: static[string];
+      ): Opt[void] =
+  var (root,pivot) = ctx.getPivotData(info).valueOr:
     return err()
+  pivot.tag = tag
+  ctx.pool.cacheDB.putStateData(root,pivot).isOkOr:
+    error info & ": Error updating cached pivot",
+      root=root.Hash32.short, `error`=error
+    return err()
+  ok()
+
+proc sessionPivotNumCached*(
+    ctx: SnapCtxRef;
+    info: static[string];
+      ): Opt[BlockNumber] =
+  ## Returns the pivot block number derived from the MPT cache DB
   let pv = ctx.findPivotStateData(info).valueOr:
     trace info & ": No pivot available on states cache DB"
     return err()
-  w.pivotNum = pv.number
-  ok(w)
+  ok pv.data.number
 
-proc sessionPivotActivate*(
+proc sessionPivotActivateCached*(
     ctx: SnapCtxRef;
     info: static[string];
       ): StateDataTag =
@@ -81,10 +107,26 @@ proc sessionPivotActivate*(
     let pvState = ctx.findPivotStateData(info).valueOr:
       return Untagged
     ctx.pool.pivot = Opt.some(pvState.root)
-    return pvState.tag
-  ctx.getPivotTag(info).valueOr:
-    ctx.pool.pivot = Opt.none(StateRoot)            # reset stale pivot root
-    Untagged
+    return pvState.data.tag
+  ctx.getPivotData(info).isErrOr:
+    return value[1].tag
+  ctx.pool.pivot = Opt.none(StateRoot)              # reset stale pivot root
+  Untagged
+
+proc sessionPivotResetCached*(
+    ctx: SnapCtxRef;
+    info: static[string];
+      ): Opt[void] =
+  ## Disable pivot on database and `ctx` argument descriptor
+  ctx.pool.pivot = Opt.none(StateRoot)
+  var state = ctx.findPivotStateData(info).valueOr:
+    return ok()
+  state.data.tag = Untagged
+  ctx.pool.cacheDB.putStateData(state.root, state.data).isOkOr:
+    trace info & ": Cannot reset pivot on cache DB",
+      root=state.root.toStr, number=state.data.number
+    return err()
+  ok()
 
 # ------------------------------------------------------------------------------
 # End

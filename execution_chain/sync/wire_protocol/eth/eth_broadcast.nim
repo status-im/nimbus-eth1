@@ -124,7 +124,7 @@ proc handleTransactionsBroadcast*(wire: EthWireRef,
         # Disallow blob transaction broadcast
         debug "Protocol Breach: Peer broadcast blob transaction",
           remote=peer.remote, clientId=peer.clientId
-        await peer.disconnect(BreachOfProtocol)
+        await peer.disconnect(BreachOfProtocol, notifyRemote = true)
         return
 
       wire.txPool.addTx(tx).isOkOr:
@@ -152,7 +152,7 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
       hashes = packet.txHashes.len,
       sizes  = packet.txSizes.len,
       types  = packet.txTypes.len
-    await peer.disconnect(BreachOfProtocol)
+    await peer.disconnect(BreachOfProtocol, notifyRemote = true)
     return
 
   # Cross-peer dedupe: drop hashes already in the pool or being fetched by
@@ -277,24 +277,24 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
           if tx.tx.txType.byte != val.txType:
             debug "Protocol Breach: Received transaction with type differ from announced",
               remote=peer.remote, clientId=peer.clientId
-            await peer.disconnect(BreachOfProtocol)
+            await peer.disconnect(BreachOfProtocol, notifyRemote = true)
             return
 
           if size.uint64 != val.size:
             debug "Protocol Breach: Received transaction with size differ from announced",
               remote=peer.remote, clientId=peer.clientId
-            await peer.disconnect(BreachOfProtocol)
+            await peer.disconnect(BreachOfProtocol, notifyRemote = true)
             return
         do:
           debug "Protocol Breach: Received transaction with hash differ from announced",
               remote=peer.remote, clientId=peer.clientId
-          await peer.disconnect(BreachOfProtocol)
+          await peer.disconnect(BreachOfProtocol, notifyRemote = true)
           return
 
         if tx.tx.txType == TxEip4844 and tx.blobsBundle.isNil:
           debug "Protocol Breach: Received sidecar-less blob transaction",
             remote=peer.remote, clientId=peer.clientId
-          await peer.disconnect(BreachOfProtocol)
+          await peer.disconnect(BreachOfProtocol, notifyRemote = true)
           return
 
         # addTx performs the expensive KZG verification itself; on
@@ -305,7 +305,7 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
           if error == txErrorInvalidBlob:
             debug "Protocol Breach: Invalid blob transaction",
               remote=peer.remote, clientId=peer.clientId
-            await peer.disconnect(BreachOfProtocol)
+            await peer.disconnect(BreachOfProtocol, notifyRemote = true)
             return
           await sleepAsync(ZeroDuration)
           continue

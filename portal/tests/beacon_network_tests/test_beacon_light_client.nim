@@ -1,5 +1,5 @@
 # Nimbus - Portal Network
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -18,7 +18,9 @@ import
   "."/[light_client_test_data, beacon_test_helpers]
 
 procSuite "Beacon Light Client":
-  let rng = newRng()
+  let
+    rng = newRng()
+    networkData = loadNetworkData("mainnet")
 
   proc headerCallback(
       q: AsyncQueue[ForkedLightClientHeader]
@@ -38,7 +40,6 @@ procSuite "Beacon Light Client":
       finalizedHeaders = newAsyncQueue[ForkedLightClientHeader]()
       optimisticHeaders = newAsyncQueue[ForkedLightClientHeader]()
       # Test data is retrieved from mainnet
-      networkData = loadNetworkData("mainnet")
       altairData = SSZ.decode(bootstrapBytes, altair.LightClientBootstrap)
       bootstrap = ForkedLightClientBootstrap(
         kind: LightClientDataFork.Altair, altairData: altairData

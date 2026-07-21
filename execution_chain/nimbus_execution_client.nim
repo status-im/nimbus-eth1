@@ -81,6 +81,11 @@ proc basicServices(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonR
   nimbus.txPool = TxPoolRef.new(nimbus.fc)
   nimbus.beaconEngine = BeaconEngineRef.new(nimbus.txPool)
 
+  # Periodically evict expired transactions so the pool churns continuously
+  # instead of waiting for the capacity-triggered sweep in addTx
+  nimbus.txEvictor = TxEvictorRef.init(nimbus.txPool)
+  nimbus.txEvictor.start()
+
 proc manageAccounts(nimbus: NimbusNode, config: ExecutionClientConf) =
   if config.keyStoreDir.len > 0:
     nimbus.accountsManager[].loadKeystores(config.keyStoreDir).isOkOr:
@@ -155,10 +160,11 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
 
   # Start Eth node
   if config.maxPeers > 0:
-    let discovery = config.getDiscoveryFlags()
+    # The user-facing flag is --discv5, but discv4 is still enabled alongside
+    # it until the discv4 code is removed.
     nimbus.ethNode.connectToNetwork(
-      enableDiscV4 = DiscoveryType.V4 in discovery,
-      enableDiscV5 = DiscoveryType.V5 in discovery,
+      enableDiscV4 = config.discv5,
+      enableDiscV5 = config.discv5,
     )
 
   # Initalise beacon sync descriptor.
@@ -279,10 +285,25 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionCli
     quit(QuitFailure)
 
 
-proc setupCommonRef*(config: ExecutionClientConf): (CommonRef, bool) =
-  let
-    dbOpts = config.dbOptions(noKeyCache = config.cmd == NimbusCmd.`import`)
-    coreDB = AristoDbRocks.newCoreDbRef(config.dataDir, dbOpts)
+proc setupCommonRef*(
+    config: ExecutionClientConf, numThreads: int): (CommonRef, bool) =
+
+  if config.statelessProvider and config.balParallelExecution:
+    warn "Stateless provider enabled. Running without BAL parallel execution"
+
+  if config.optimisticStatePrefetch and not config.parallelSenderRecovery:
+    warn "Optimistic state prefetch requires parallel sender recovery to be enabled. " & 
+      "Running without optimistic prefetching."
+
+  let disableParallelFeatures = numThreads <= 1 and config.parallelFeaturesEnabled()
+
+  var dbOpts = config.dbOptions(noKeyCache = config.cmd == NimbusCmd.`import`)
+  if disableParallelFeatures:
+    info "Not enough taskpool threads, disabling parallel features", numThreads
+    dbOpts.parallelStateRootComputation = false
+    dbOpts.threadSafeCaches = false
+
+  let coreDB = AristoDbRocks.newCoreDbRef(config.dataDir, dbOpts)
 
   preventLoadingDataDirForTheWrongNetwork(coreDB, config)
 
@@ -290,12 +311,15 @@ proc setupCommonRef*(config: ExecutionClientConf): (CommonRef, bool) =
     db = coreDB,
     networkId = config.networkId,
     params = config.networkParams,
-    statelessProviderEnabled = config.statelessProviderEnabled,
+    statelessProvider = config.statelessProvider,
     statelessWitnessValidation = config.statelessWitnessValidation,
-    optimisticStatePrefetch = config.optimisticStatePrefetch,
-    balStatePrefetch = config.balStatePrefetch,
+    optimisticStatePrefetch = config.parallelSenderRecovery and 
+        config.optimisticStatePrefetch and not disableParallelFeatures,
+    balStatePrefetch = config.balStatePrefetch and not disableParallelFeatures,
     balStatePrefetchWorkers = config.balStatePrefetchWorkers,
-    balParallelExecution = config.balParallelExecution)
+    balParallelExecution = config.balParallelExecution and 
+        not config.statelessProvider and not disableParallelFeatures,
+    parallelSenderRecovery = config.parallelSenderRecovery and not disableParallelFeatures)
 
   if config.extraData.len > 32:
     warn "ExtraData exceeds 32 bytes limit, truncate",
@@ -325,6 +349,12 @@ proc setupCommonRef*(config: ExecutionClientConf): (CommonRef, bool) =
 # ------------------------------------------------------------------------------
 
 type StopFuture = Future[void].Raising([CancelledError])
+
+const stopCheckInterval = chronos.milliseconds(100)
+
+proc runStopCheckLoop() {.async: (raises: []).} =
+  while true:
+    await noCancel sleepAsync(stopCheckInterval)
 
 proc runExeClient*(
     config: ExecutionClientConf,
@@ -361,6 +391,8 @@ proc runExeClient*(
   # Be graceful about ctrl-c during init
   if ProcessState.stopping.isNone:
     ProcessState.notifyRunning()
+
+  asyncSpawn runStopCheckLoop()
 
   while true:
     if (let reason = ProcessState.stopping(); reason.isSome()):
@@ -418,11 +450,11 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   when compileOption("threads"):
     let
       taskpool = setupTaskpool(config.numThreads)
-      (com, keyCacheEnabled) = setupCommonRef(config)
+      (com, keyCacheEnabled) = setupCommonRef(config, taskpool.numThreads)
     com.taskpool = taskpool
     com.db.mpt.taskpool = taskpool
   else:
-    let (com, keyCacheEnabled) = setupCommonRef(config)
+    let (com, keyCacheEnabled) = setupCommonRef(config, 0)
 
   if keyCacheEnabled:
     # Make sure key cache isn't empty
