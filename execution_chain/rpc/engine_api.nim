@@ -161,9 +161,9 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
         await engine.forkchoiceUpdated(Version.V4, update, attrs)
 
     proc engine_forkchoiceUpdatedV5(update: ForkchoiceState,
-                      attrs: Opt[PayloadAttributes]): ForkchoiceUpdatedResponse {.async: (raises: [CancelledError, ApplicationError]).} =
+                      attrs: Opt[PayloadAttributes], custodyColumns: Opt[BitArray128]): ForkchoiceUpdatedResponse {.async: (raises: [CancelledError, ApplicationError]).} =
       apiTiming("engine_forkchoiceUpdatedV5"):
-        await engine.forkchoiceUpdated(Version.V5, update, attrs)
+        await engine.forkchoiceUpdated(Version.V5, update, attrs, custodyColumns)
 
     proc engine_getPayloadBodiesByHashV1(hashes: seq[Hash32]):
                                                 seq[Opt[ExecutionPayloadBodyV1]] {.raises: [CatchableError].} =

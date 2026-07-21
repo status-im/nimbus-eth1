@@ -88,7 +88,8 @@ template validateHeaderTimestamp(header, com, apiVersion) =
 proc forkchoiceUpdated*(ben: BeaconEngineRef,
                         apiVersion: Version,
                         update: ForkchoiceState,
-                        attrsOpt: Opt[PayloadAttributes]):
+                        attrsOpt: Opt[PayloadAttributes],
+                        custodyColumns = Opt.none(BitArray128)):
                           Future[ForkchoiceUpdatedResponse]
                             {.async: (raises: [CancelledError, ApplicationError]).} =
   let
