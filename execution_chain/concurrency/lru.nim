@@ -16,7 +16,10 @@
 
 {.push raises: [], gcsafe.}
 
-import std/[atomics, cpuinfo, hashes, math, typetraits], results, ./readwritelock
+import std/[hashes, math, typetraits], results
+
+when compileOption("threads"):
+  import std/[atomics, cpuinfo], ./readwritelock
 
 export hashes, results
 
@@ -603,427 +606,514 @@ template put(s: var LruCache, key: auto, value: auto) =
   ## one if inserting the item would exceed capacity.
   s.put(subhash(key), key, value)
 
-# ConcurrentLruCache is a thread safe LRU cache designed to handle high
-# throughput concurrent reads and writes from multiple threads. It uses a
-# sharded design in order to mitigate contention and internally uses a
-# LRU cache (not thread-safe) in each shard. Each shard has a dedicated lock
-# to allow for concurrent access. Shards are picked using the high bits of the
-# key's hash while the LruCache inside each shard picks buckets from the low
-# bits of the (folded) hash - keeping the two bit ranges disjoint avoids any
-# correlation between shard and bucket placement.
-#
-# This sharded implementation performs badly for the single threaded scenario
-# so as a temporary workaround we use a case object and based on the threadSafe
-# flag, branch to using the non-thread safe LruCache (when threadSafe = false)
-# without the locking. Eventually we will implement a more optimised ConcurrentLruCache
-# that performs better for both scenarios using the same code paths.
+when compileOption("threads"):
+  # ConcurrentLruCache is a thread safe LRU cache designed to handle high
+  # throughput concurrent reads and writes from multiple threads. It uses a
+  # sharded design in order to mitigate contention and internally uses a
+  # LRU cache (not thread-safe) in each shard. Each shard has a dedicated lock
+  # to allow for concurrent access. Shards are picked using the high bits of the
+  # key's hash while the LruCache inside each shard picks buckets from the low
+  # bits of the (folded) hash - keeping the two bit ranges disjoint avoids any
+  # correlation between shard and bucket placement.
+  #
+  # This sharded implementation performs badly for the single threaded scenario
+  # so as a temporary workaround we use a case object and based on the threadSafe
+  # flag, branch to using the non-thread safe LruCache (when threadSafe = false)
+  # without the locking. Eventually we will implement a more optimised ConcurrentLruCache
+  # that performs better for both scenarios using the same code paths.
 
-const
-  CACHE_LINE_SIZE = when defined(macosx) and defined(arm64): 128 else: 64
-  SAMPLE_MASK = 15'u32
+  const
+    CACHE_LINE_SIZE = when defined(macosx) and defined(arm64): 128 else: 64
+    SAMPLE_MASK = 15'u32
 
-var tlsLruGetCounter {.threadvar.}: uint32
+  var tlsLruGetCounter {.threadvar.}: uint32
 
-type
-  State {.pure.} = enum
-    UNINITIALIZED
-    INITIALIZED
-    DISPOSED
+  type
+    State {.pure.} = enum
+      UNINITIALIZED
+      INITIALIZED
+      DISPOSED
 
-  Shard[K, V] = object
-    lock {.align: CACHE_LINE_SIZE.}: ReadWriteLock
-    cache: LruCache[K, V]
-    usedCount {.align: CACHE_LINE_SIZE.}: Atomic[int]
-
-  ConcurrentLruCache*[K, V] = object
-    state: State
-    case threadSafe: bool
-    of true:
-      shards: ptr UncheckedArray[Shard[K, V]]
-      shardBits: int
-    of false:
+    Shard[K, V] = object
+      lock {.align: CACHE_LINE_SIZE.}: ReadWriteLock
       cache: LruCache[K, V]
+      usedCount {.align: CACHE_LINE_SIZE.}: Atomic[int]
 
-func defaultShardBits*(cpuCount: int): int =
-  # Default shard count of roughly 4 * cpuCount, rounded up to the nearest
-  # power of two. e.g. cpuCount = 16 -> 64 shards (shardBits = 6).
-  let target = min(max(cpuCount, 1), 16) * 4
-  var bits = 1
-  while (1 shl bits) < target:
-    inc bits
-  bits
+    ConcurrentLruCache*[K, V] = object
+      state: State
+      case threadSafe: bool
+      of true:
+        shards: ptr UncheckedArray[Shard[K, V]]
+        shardBits: int
+      of false:
+        cache: LruCache[K, V]
 
-template numShards(shardBits: int): int =
-  1 shl shardBits
+  func defaultShardBits*(cpuCount: int): int =
+    # Default shard count of roughly 4 * cpuCount, rounded up to the nearest
+    # power of two. e.g. cpuCount = 16 -> 64 shards (shardBits = 6).
+    let target = min(max(cpuCount, 1), 16) * 4
+    var bits = 1
+    while (1 shl bits) < target:
+      inc bits
+    bits
 
-template numShards*[K, V](lru: ConcurrentLruCache[K, V]): int =
-  if lru.threadSafe:
-    numShards(lru.shardBits)
-  else:
-    1
+  template numShards(shardBits: int): int =
+    1 shl shardBits
 
-proc init*[K, V](
-    lru: var ConcurrentLruCache[K, V],
-    capacity: int,
-    initialSize: int = 0,
-    shardBits: int = defaultShardBits(countProcessors()),
-    threadSafe: bool = true,
-) =
-  # init is not thread safe and so the caller must ensure that no other threads
-  # are using the cache while initialising it.
-  static:
-    doAssert supportsCopyMem(K), "K must be a non-GC type"
-    doAssert supportsCopyMem(V), "V must be a non-GC type"
-  doAssert lru.state == State.UNINITIALIZED
-  doAssert shardBits >= 0 and shardBits <= 30
-  doAssert initialSize <= capacity, "initialSize must not exceed capacity"
-  if not threadSafe:
-    doAssert shardBits == 0 # Enforce single shard for single threaded mode
-
-  if threadSafe:
-    let shardCount = numShards(shardBits)
-    # per-shard capacity (ceiling div); total effective capacity is shardCapacity * shardCount
-    let shardCapacity = (capacity + shardCount - 1) div shardCount
-    let shardInitialSize = (initialSize + shardCount - 1) div shardCount
-    let shards =
-      cast[ptr UncheckedArray[Shard[K, V]]](createShared(Shard[K, V], shardCount))
-    for i in 0 ..< shardCount:
-      shards[i].cache = LruCache[K, V].init(shardCapacity, shardInitialSize)
-      shards[i].lock.init()
-      shards[i].usedCount.store(0, moRelaxed)
-    lru = ConcurrentLruCache[K, V](
-      state: State.INITIALIZED, threadSafe: true, shards: shards, shardBits: shardBits
-    )
-  else:
-    lru = ConcurrentLruCache[K, V](
-      state: State.INITIALIZED,
-      threadSafe: false,
-      cache: LruCache[K, V].init(capacity, initialSize),
-    )
-
-proc dispose*[K, V](lru: var ConcurrentLruCache[K, V]) =
-  # dispose is not thread safe and so the caller must ensure that no other threads
-  # are using the cache while disposing it.
-  if lru.state == State.INITIALIZED:
+  template numShards*[K, V](lru: ConcurrentLruCache[K, V]): int =
     if lru.threadSafe:
+      numShards(lru.shardBits)
+    else:
+      1
+
+  proc init*[K, V](
+      lru: var ConcurrentLruCache[K, V],
+      capacity: int,
+      initialSize: int = 0,
+      shardBits: int = defaultShardBits(countProcessors()),
+      threadSafe: bool = true,
+  ) =
+    # init is not thread safe and so the caller must ensure that no other threads
+    # are using the cache while initialising it.
+    static:
+      doAssert supportsCopyMem(K), "K must be a non-GC type"
+      doAssert supportsCopyMem(V), "V must be a non-GC type"
+    doAssert lru.state == State.UNINITIALIZED
+    doAssert shardBits >= 0 and shardBits <= 30
+    doAssert initialSize <= capacity, "initialSize must not exceed capacity"
+    if not threadSafe:
+      doAssert shardBits == 0 # Enforce single shard for single threaded mode
+
+    if threadSafe:
+      let shardCount = numShards(shardBits)
+      # per-shard capacity (ceiling div); total effective capacity is shardCapacity * shardCount
+      let shardCapacity = (capacity + shardCount - 1) div shardCount
+      let shardInitialSize = (initialSize + shardCount - 1) div shardCount
+      let shards =
+        cast[ptr UncheckedArray[Shard[K, V]]](createShared(Shard[K, V], shardCount))
+      for i in 0 ..< shardCount:
+        shards[i].cache = LruCache[K, V].init(shardCapacity, shardInitialSize)
+        shards[i].lock.init()
+        shards[i].usedCount.store(0, moRelaxed)
+      lru = ConcurrentLruCache[K, V](
+        state: State.INITIALIZED, threadSafe: true, shards: shards, shardBits: shardBits
+      )
+    else:
+      lru = ConcurrentLruCache[K, V](
+        state: State.INITIALIZED,
+        threadSafe: false,
+        cache: LruCache[K, V].init(capacity, initialSize),
+      )
+
+  proc dispose*[K, V](lru: var ConcurrentLruCache[K, V]) =
+    # dispose is not thread safe and so the caller must ensure that no other threads
+    # are using the cache while disposing it.
+    if lru.state == State.INITIALIZED:
+      if lru.threadSafe:
+        for i in 0 ..< lru.numShards():
+          lru.shards[i].cache.dispose()
+          lru.shards[i].lock.dispose()
+        deallocShared(lru.shards)
+        lru.shards = nil
+      else:
+        lru.cache.dispose()
+      lru.state = State.DISPOSED
+
+  proc `=copy`[K, V](
+      dest: var Shard[K, V], src: Shard[K, V]
+  ) {.error: "Copying Shard is forbidden".} =
+    discard
+
+  proc `=copy`*[K, V](
+      dest: var ConcurrentLruCache[K, V], src: ConcurrentLruCache[K, V]
+  ) {.error: "Copying ConcurrentLruCache is forbidden".} =
+    discard
+
+  template toShardIdx(h: Hash, shardBits: int): int =
+    # Pick the shard from the top shardBits bits of the hash so that the shard
+    # selection bits do not overlap with the low bits that the LruCache uses for
+    # bucket selection inside the shard.
+    if shardBits == 0:
+      0
+    else:
+      when sizeof(h) == sizeof(uint32):
+        int(cast[uint32](h) shr (32 - shardBits))
+      else:
+        static:
+          assert sizeof(h) == sizeof(uint64)
+        int(cast[uint64](h) shr (64 - shardBits))
+
+  template withShardRead[K, V](
+      lru: ConcurrentLruCache[K, V], key: K, body: untyped
+  ): auto =
+    let
+      h = hash(key)
+      sh {.inject.} = h.toSubhash()
+      s {.inject.} = addr lru.shards[h.toShardIdx(lru.shardBits)]
+
+    s.lock.lockRead()
+    try:
+      body
+    finally:
+      s.lock.unlockRead()
+
+  template withShardWrite[K, V](
+      lru: ConcurrentLruCache[K, V], key: K, body: untyped
+  ): auto =
+    let
+      h = hash(key)
+      sh {.inject.} = h.toSubhash()
+      s {.inject.} = addr lru.shards[h.toShardIdx(lru.shardBits)]
+
+    s.lock.lockWrite()
+    try:
+      body
+    finally:
+      s.lock.unlockWrite()
+
+  template shardCapacity*[K, V](lru: var ConcurrentLruCache[K, V]): int =
+    # No locking here because capacity is immutable for the ConcurrentLruCache type
+    # and the internal LruCache type which does support updating the capacity, is
+    # not exported.
+    if lru.threadSafe:
+      lru.shards[0].cache.capacity
+    else:
+      lru.cache.capacity
+
+  func shardLenForKey*[K, V](lru: var ConcurrentLruCache[K, V], key: K): int =
+    if lru.threadSafe:
+      let
+        h = hash(key)
+        s = addr lru.shards[h.toShardIdx(lru.shardBits)]
+      s.usedCount.load(moRelaxed)
+    else:
+      lru.cache.len
+
+  template capacity*[K, V](lru: var ConcurrentLruCache[K, V]): int =
+    lru.shardCapacity() * lru.numShards()
+
+  func len*[K, V](lru: var ConcurrentLruCache[K, V]): int =
+    if lru.threadSafe:
+      var total = 0
       for i in 0 ..< lru.numShards():
-        lru.shards[i].cache.dispose()
-        lru.shards[i].lock.dispose()
-      deallocShared(lru.shards)
-      lru.shards = nil
+        total += lru.shards[i].usedCount.load(moRelaxed)
+      total
     else:
-      lru.cache.dispose()
-    lru.state = State.DISPOSED
+      lru.cache.len
 
-proc `=copy`[K, V](
-    dest: var Shard[K, V], src: Shard[K, V]
-) {.error: "Copying Shard is forbidden".} =
-  discard
-
-proc `=copy`*[K, V](
-    dest: var ConcurrentLruCache[K, V], src: ConcurrentLruCache[K, V]
-) {.error: "Copying ConcurrentLruCache is forbidden".} =
-  discard
-
-template toShardIdx(h: Hash, shardBits: int): int =
-  # Pick the shard from the top shardBits bits of the hash so that the shard
-  # selection bits do not overlap with the low bits that the LruCache uses for
-  # bucket selection inside the shard.
-  if shardBits == 0:
-    0
-  else:
-    when sizeof(h) == sizeof(uint32):
-      int(cast[uint32](h) shr (32 - shardBits))
+  func contains*[K, V](lru: var ConcurrentLruCache[K, V], key: K): bool =
+    if lru.threadSafe:
+      withShardRead(lru, key):
+        s.cache.contains(sh, key)
     else:
-      static:
-        assert sizeof(h) == sizeof(uint64)
-      int(cast[uint64](h) shr (64 - shardBits))
+      lru.cache.contains(key)
 
-template withShardRead[K, V](
-    lru: ConcurrentLruCache[K, V], key: K, body: untyped
-): auto =
-  let
-    h = hash(key)
-    sh {.inject.} = h.toSubhash()
-    s {.inject.} = addr lru.shards[h.toShardIdx(lru.shardBits)]
+  func peek*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
+    if lru.threadSafe:
+      withShardRead(lru, key):
+        s.cache.peek(sh, key)
+    else:
+      lru.cache.peek(key)
 
-  s.lock.lockRead()
-  try:
-    body
-  finally:
-    s.lock.unlockRead()
+  proc get*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
+    if lru.threadSafe:
+      let
+        h = hash(key)
+        sh = h.toSubhash()
+        s = addr lru.shards[h.toShardIdx(lru.shardBits)]
 
-template withShardWrite[K, V](
-    lru: ConcurrentLruCache[K, V], key: K, body: untyped
-): auto =
-  let
-    h = hash(key)
-    sh {.inject.} = h.toSubhash()
-    s {.inject.} = addr lru.shards[h.toShardIdx(lru.shardBits)]
-
-  s.lock.lockWrite()
-  try:
-    body
-  finally:
-    s.lock.unlockWrite()
-
-template shardCapacity*[K, V](lru: var ConcurrentLruCache[K, V]): int =
-  # No locking here because capacity is immutable for the ConcurrentLruCache type
-  # and the internal LruCache type which does support updating the capacity, is
-  # not exported.
-  if lru.threadSafe:
-    lru.shards[0].cache.capacity
-  else:
-    lru.cache.capacity
-
-func shardLenForKey*[K, V](lru: var ConcurrentLruCache[K, V], key: K): int =
-  if lru.threadSafe:
-    let
-      h = hash(key)
-      s = addr lru.shards[h.toShardIdx(lru.shardBits)]
-    s.usedCount.load(moRelaxed)
-  else:
-    lru.cache.len
-
-template capacity*[K, V](lru: var ConcurrentLruCache[K, V]): int =
-  lru.shardCapacity() * lru.numShards()
-
-func len*[K, V](lru: var ConcurrentLruCache[K, V]): int =
-  if lru.threadSafe:
-    var total = 0
-    for i in 0 ..< lru.numShards():
-      total += lru.shards[i].usedCount.load(moRelaxed)
-    total
-  else:
-    lru.cache.len
-
-func contains*[K, V](lru: var ConcurrentLruCache[K, V], key: K): bool =
-  if lru.threadSafe:
-    withShardRead(lru, key):
-      s.cache.contains(sh, key)
-  else:
-    lru.cache.contains(key)
-
-func peek*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
-  if lru.threadSafe:
-    withShardRead(lru, key):
-      s.cache.peek(sh, key)
-  else:
-    lru.cache.peek(key)
-
-proc get*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
-  if lru.threadSafe:
-    let
-      h = hash(key)
-      sh = h.toSubhash()
-      s = addr lru.shards[h.toShardIdx(lru.shardBits)]
-
-    var value: Opt[V]
-    s.lock.withReadLock:
-      value = s.cache.peek(sh, key)
-
-    if value.isSome():
-      inc tlsLruGetCounter
-      if (tlsLruGetCounter and SAMPLE_MASK) == 0'u32:
-        s.lock.withWriteLock:
-          s.cache.moveToFront(sh, key)
-    value
-  else:
-    lru.cache.get(key)
-
-
-type
-  KeyHash* = object
-    subhash: uint32
-    shardIdx: int
-
-func toKeyHash*[K, V](lru: ConcurrentLruCache[K, V], key: auto): KeyHash =
-  ## Hash `key` for `lru` once, returning a token to pass to
-  ## `withGetByHash` / `putByHash` - reuse it for a lookup followed by a
-  ## `put` so the key is hashed (and the subhash derived) only once.
-  ##
-  ## `key` may be a borrowed view rather than a `K` (e.g. an `openArray` aliasing
-  ## the bytes of the key) as long as it hashes identically to - and
-  ## compares equal to - the corresponding `K`. This lets a lookup avoid
-  ## materializing the key, copying it only when a miss requires a `put`.
-  mixin hash
-  let h = hash(key)
-  if lru.threadSafe:
-    KeyHash(subhash: h.toSubhash(), shardIdx: h.toShardIdx(lru.shardBits))
-  else:
-    KeyHash(subhash: h.toSubhash())
-
-func toLent[T](p: ptr T): lent T =
-  # Borrow the pointee as a read-only view (no copy). Used to hand `withGet`
-  # bodies access to the cached value without letting them mutate it - assigning
-  # to a `lent` is a compile error.
-  p[]
-
-template withValueImpl[K, V](
-    lru: var ConcurrentLruCache[K, V],
-    keyHash: KeyHash,
-    key: auto,
-    value: untyped,
-    peek: static bool,
-    foundBody: untyped,
-    notFoundBody: untyped,
-) =
-  if lru.threadSafe:
-    let
-      sh = keyHash.subhash
-      s = addr lru.shards[keyHash.shardIdx]
-    
-    var valuePtr: ptr V
-    when peek:
+      var value: Opt[V]
       s.lock.withReadLock:
-        valuePtr = s.cache.peekPtr(sh, key)
-        if not valuePtr.isNil():
-          template value(): untyped {.inject.} = toLent(valuePtr)
-          foundBody
+        value = s.cache.peek(sh, key)
+
+      if value.isSome():
+        inc tlsLruGetCounter
+        if (tlsLruGetCounter and SAMPLE_MASK) == 0'u32:
+          s.lock.withWriteLock:
+            s.cache.moveToFront(sh, key)
+      value
     else:
-      try:
+      lru.cache.get(key)
+
+
+  type
+    KeyHash* = object
+      subhash: uint32
+      shardIdx: int
+
+  func toKeyHash*[K, V](lru: ConcurrentLruCache[K, V], key: auto): KeyHash =
+    ## Hash `key` for `lru` once, returning a token to pass to
+    ## `withGetByHash` / `putByHash` - reuse it for a lookup followed by a
+    ## `put` so the key is hashed (and the subhash derived) only once.
+    ##
+    ## `key` may be a borrowed view rather than a `K` (e.g. an `openArray` aliasing
+    ## the bytes of the key) as long as it hashes identically to - and
+    ## compares equal to - the corresponding `K`. This lets a lookup avoid
+    ## materializing the key, copying it only when a miss requires a `put`.
+    mixin hash
+    let h = hash(key)
+    if lru.threadSafe:
+      KeyHash(subhash: h.toSubhash(), shardIdx: h.toShardIdx(lru.shardBits))
+    else:
+      KeyHash(subhash: h.toSubhash())
+
+  func toLent[T](p: ptr T): lent T =
+    # Borrow the pointee as a read-only view (no copy). Used to hand `withGet`
+    # bodies access to the cached value without letting them mutate it - assigning
+    # to a `lent` is a compile error.
+    p[]
+
+  template withValueImpl[K, V](
+      lru: var ConcurrentLruCache[K, V],
+      keyHash: KeyHash,
+      key: auto,
+      value: untyped,
+      peek: static bool,
+      foundBody: untyped,
+      notFoundBody: untyped,
+  ) =
+    if lru.threadSafe:
+      let
+        sh = keyHash.subhash
+        s = addr lru.shards[keyHash.shardIdx]
+
+      var valuePtr: ptr V
+      when peek:
         s.lock.withReadLock:
           valuePtr = s.cache.peekPtr(sh, key)
           if not valuePtr.isNil():
             template value(): untyped {.inject.} = toLent(valuePtr)
             foundBody
-      finally:
-        # Promote in a `finally` so it still runs if `foundBody` exits early via
-        # `return`/`break`. The read lock is released before the `finally` runs, so
-        # taking the write lock here cannot deadlock against it.
-        if not valuePtr.isNil():
-          inc tlsLruGetCounter
-          if (tlsLruGetCounter and SAMPLE_MASK) == 0'u32:
-            s.lock.withWriteLock:
-              s.cache.moveToFront(sh, key)
-    if valuePtr.isNil():
-      notFoundBody
-
-  else:
-    let valuePtr =
-      when peek:
-        lru.cache.peekPtr(keyHash.subhash, key)
       else:
-        lru.cache.getPtr(keyHash.subhash, key)
-    if valuePtr.isNil():
-      notFoundBody
+        try:
+          s.lock.withReadLock:
+            valuePtr = s.cache.peekPtr(sh, key)
+            if not valuePtr.isNil():
+              template value(): untyped {.inject.} = toLent(valuePtr)
+              foundBody
+        finally:
+          # Promote in a `finally` so it still runs if `foundBody` exits early via
+          # `return`/`break`. The read lock is released before the `finally` runs, so
+          # taking the write lock here cannot deadlock against it.
+          if not valuePtr.isNil():
+            inc tlsLruGetCounter
+            if (tlsLruGetCounter and SAMPLE_MASK) == 0'u32:
+              s.lock.withWriteLock:
+                s.cache.moveToFront(sh, key)
+      if valuePtr.isNil():
+        notFoundBody
+
     else:
-      template value(): untyped {.inject.} = toLent(valuePtr)
-      foundBody
+      let valuePtr =
+        when peek:
+          lru.cache.peekPtr(keyHash.subhash, key)
+        else:
+          lru.cache.getPtr(keyHash.subhash, key)
+      if valuePtr.isNil():
+        notFoundBody
+      else:
+        template value(): untyped {.inject.} = toLent(valuePtr)
+        foundBody
 
-template withGetByHash*[K, V](
-    lru: var ConcurrentLruCache[K, V], keyHash: KeyHash, key: auto, value, body: untyped
-) =
-  ## Run `body` with `value` bound to a read-only, zero-copy view of the cached
-  ## value if `key` is present, promoting the item towards the
-  ## most-recently-used end (sampled, like `get`). `body` does not run on a miss.
-  ##
-  ## `key` may be a borrowed view that hashes and compares equal to a `K` (see
-  ## `toKeyHash`); `keyHash` must have been derived from the same key.
-  withValueImpl(lru, keyHash, key, value, false, body, (discard))
+  template withGetByHash*[K, V](
+      lru: var ConcurrentLruCache[K, V], keyHash: KeyHash, key: auto, value, body: untyped
+  ) =
+    ## Run `body` with `value` bound to a read-only, zero-copy view of the cached
+    ## value if `key` is present, promoting the item towards the
+    ## most-recently-used end (sampled, like `get`). `body` does not run on a miss.
+    ##
+    ## `key` may be a borrowed view that hashes and compares equal to a `K` (see
+    ## `toKeyHash`); `keyHash` must have been derived from the same key.
+    withValueImpl(lru, keyHash, key, value, false, body, (discard))
 
-template withGetByHash*[K, V](
-    lru: var ConcurrentLruCache[K, V],
-    keyHash: KeyHash,
-    key: auto,
-    value, foundBody, notFoundBody: untyped,
-) =
-  ## Variant taking an optional second block (introduced with `do:`) that runs
-  ## when `key` is missing - similar to `Tables.withValue`. The miss block runs
-  ## after the read lock is released, so it may `put` the value.
-  withValueImpl(lru, keyHash, key, value, false, foundBody, notFoundBody)
+  template withGetByHash*[K, V](
+      lru: var ConcurrentLruCache[K, V],
+      keyHash: KeyHash,
+      key: auto,
+      value, foundBody, notFoundBody: untyped,
+  ) =
+    ## Variant taking an optional second block (introduced with `do:`) that runs
+    ## when `key` is missing - similar to `Tables.withValue`. The miss block runs
+    ## after the read lock is released, so it may `put` the value.
+    withValueImpl(lru, keyHash, key, value, false, foundBody, notFoundBody)
 
-template withPeekByHash*[K, V](
-    lru: var ConcurrentLruCache[K, V], keyHash: KeyHash, key: auto, value, body: untyped
-) =
-  ## Like `withGetByHash` but leaves the item's position unchanged (like
-  ## `peek`) rather than promoting it.
-  withValueImpl(lru, keyHash, key, value, true, body, (discard))
+  template withPeekByHash*[K, V](
+      lru: var ConcurrentLruCache[K, V], keyHash: KeyHash, key: auto, value, body: untyped
+  ) =
+    ## Like `withGetByHash` but leaves the item's position unchanged (like
+    ## `peek`) rather than promoting it.
+    withValueImpl(lru, keyHash, key, value, true, body, (discard))
 
-template withPeekByHash*[K, V](
-    lru: var ConcurrentLruCache[K, V],
-    keyHash: KeyHash,
-    key: auto,
-    value, foundBody, notFoundBody: untyped,
-) =
-  ## Like `withGetByHash` (with a `do:` miss block) but leaves the item's
-  ## position unchanged (like `peek`) rather than promoting it.
-  withValueImpl(lru, keyHash, key, value, true, foundBody, notFoundBody)
+  template withPeekByHash*[K, V](
+      lru: var ConcurrentLruCache[K, V],
+      keyHash: KeyHash,
+      key: auto,
+      value, foundBody, notFoundBody: untyped,
+  ) =
+    ## Like `withGetByHash` (with a `do:` miss block) but leaves the item's
+    ## position unchanged (like `peek`) rather than promoting it.
+    withValueImpl(lru, keyHash, key, value, true, foundBody, notFoundBody)
 
-proc putByHash*[K, V](
-    lru: var ConcurrentLruCache[K, V], keyHash: KeyHash, key: K, val: V
-) =
-  if lru.threadSafe:
-    let
-      sh = keyHash.subhash
-      s = addr lru.shards[keyHash.shardIdx]
-    s.lock.withWriteLock:
-      if s.cache.put(sh, key, val):
-        s.usedCount.store(s.cache.len, moRelaxed)
-  else:
-    lru.cache.put(keyHash.subhash, key, val)
+  proc putByHash*[K, V](
+      lru: var ConcurrentLruCache[K, V], keyHash: KeyHash, key: K, val: V
+  ) =
+    if lru.threadSafe:
+      let
+        sh = keyHash.subhash
+        s = addr lru.shards[keyHash.shardIdx]
+      s.lock.withWriteLock:
+        if s.cache.put(sh, key, val):
+          s.usedCount.store(s.cache.len, moRelaxed)
+    else:
+      lru.cache.put(keyHash.subhash, key, val)
 
-template withGet*[K, V](
-    lru: var ConcurrentLruCache[K, V], key: K, value, body: untyped
-) =
-  ## Run `body` with `value` bound to a read-only, zero-copy view of the cached
-  ## value if `key` is present, promoting the item towards the
-  ## most-recently-used end (sampled, like `get`). `body` does not run on a miss.
-  withValueImpl(lru, lru.toKeyHash(key), key, value, false, body, (discard))
+  template withGet*[K, V](
+      lru: var ConcurrentLruCache[K, V], key: K, value, body: untyped
+  ) =
+    ## Run `body` with `value` bound to a read-only, zero-copy view of the cached
+    ## value if `key` is present, promoting the item towards the
+    ## most-recently-used end (sampled, like `get`). `body` does not run on a miss.
+    withValueImpl(lru, lru.toKeyHash(key), key, value, false, body, (discard))
 
-template withGet*[K, V](
-    lru: var ConcurrentLruCache[K, V], key: K, value, foundBody, notFoundBody: untyped
-) =
-  ## Variant taking an optional second block (introduced with `do:`) that runs
-  ## when `key` is missing - similar to `Tables.withValue`. The miss block runs
-  ## after the read lock is released, so it may `put` the value.
-  withValueImpl(lru, lru.toKeyHash(key), key, value, false, foundBody, notFoundBody)
+  template withGet*[K, V](
+      lru: var ConcurrentLruCache[K, V], key: K, value, foundBody, notFoundBody: untyped
+  ) =
+    ## Variant taking an optional second block (introduced with `do:`) that runs
+    ## when `key` is missing - similar to `Tables.withValue`. The miss block runs
+    ## after the read lock is released, so it may `put` the value.
+    withValueImpl(lru, lru.toKeyHash(key), key, value, false, foundBody, notFoundBody)
 
-template withPeek*[K, V](
-    lru: var ConcurrentLruCache[K, V], key: K, value, body: untyped
-) =
-  ## Like `withGet` but leaves the item's position unchanged (like `peek`)
-  ## rather than promoting it.
-  withValueImpl(lru, lru.toKeyHash(key), key, value, true, body, (discard))
+  template withPeek*[K, V](
+      lru: var ConcurrentLruCache[K, V], key: K, value, body: untyped
+  ) =
+    ## Like `withGet` but leaves the item's position unchanged (like `peek`)
+    ## rather than promoting it.
+    withValueImpl(lru, lru.toKeyHash(key), key, value, true, body, (discard))
 
-template withPeek*[K, V](
-    lru: var ConcurrentLruCache[K, V], key: K, value, foundBody, notFoundBody: untyped
-) =
-  ## Like `withGet` (with a `do:` miss block) but leaves the item's position
-  ## unchanged (like `peek`) rather than promoting it.
-  withValueImpl(lru, lru.toKeyHash(key), key, value, true, foundBody, notFoundBody)
+  template withPeek*[K, V](
+      lru: var ConcurrentLruCache[K, V], key: K, value, foundBody, notFoundBody: untyped
+  ) =
+    ## Like `withGet` (with a `do:` miss block) but leaves the item's position
+    ## unchanged (like `peek`) rather than promoting it.
+    withValueImpl(lru, lru.toKeyHash(key), key, value, true, foundBody, notFoundBody)
 
-proc put*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V) =
-  lru.putByHash(lru.toKeyHash(key), key, val)
+  proc put*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V) =
+    lru.putByHash(lru.toKeyHash(key), key, val)
 
-proc pop*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
-  if lru.threadSafe:
-    withShardWrite(lru, key):
-      let r = s.cache.pop(sh, key)
-      if r.isSome():
-        s.usedCount.store(s.cache.len, moRelaxed)
-      r
-  else:
+  proc pop*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
+    if lru.threadSafe:
+      withShardWrite(lru, key):
+        let r = s.cache.pop(sh, key)
+        if r.isSome():
+          s.usedCount.store(s.cache.len, moRelaxed)
+        r
+    else:
+      lru.cache.pop(key)
+
+  proc update*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V): bool =
+    if lru.threadSafe:
+      withShardWrite(lru, key):
+        s.cache.update(sh, key, val)
+    else:
+      lru.cache.update(key, val)
+
+  proc refresh*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V): bool =
+    if lru.threadSafe:
+      withShardWrite(lru, key):
+        s.cache.refresh(sh, key, val)
+    else:
+      lru.cache.refresh(key, val)
+
+  proc del*[K, V](lru: var ConcurrentLruCache[K, V], key: K) =
+    if lru.threadSafe:
+      withShardWrite(lru, key):
+        if s.cache.del(sh, key):
+          s.usedCount.store(s.cache.len, moRelaxed)
+    else:
+      lru.cache.del(key)
+
+else:
+  # no threads to be safe against so `ConcurrentLruCache` just wraps the
+  # plain non-thread-safe `LruCache`.
+  type ConcurrentLruCache*[K, V] = object
+    cache: LruCache[K, V]
+
+  proc init*[K, V](
+      lru: var ConcurrentLruCache[K, V],
+      capacity: int,
+      initialSize: int = 0,
+      shardBits: int = 0,
+      threadSafe: bool = false,
+  ) =
+    doAssert not threadSafe, "threadSafe LRU caches require --threads:on"
+    lru.cache = LruCache[K, V].init(capacity, initialSize)
+
+  proc dispose*[K, V](lru: var ConcurrentLruCache[K, V]) =
+    lru.cache.dispose()
+
+  template capacity*[K, V](lru: var ConcurrentLruCache[K, V]): int =
+    lru.cache.capacity
+
+  template len*[K, V](lru: var ConcurrentLruCache[K, V]): int =
+    lru.cache.len
+
+  func contains*[K, V](lru: var ConcurrentLruCache[K, V], key: K): bool =
+    lru.cache.contains(key)
+
+  func peek*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
+    lru.cache.peek(key)
+
+  proc get*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
+    lru.cache.get(key)
+
+  proc put*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V) =
+    lru.cache.put(key, val)
+
+  proc pop*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
     lru.cache.pop(key)
 
-proc update*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V): bool =
-  if lru.threadSafe:
-    withShardWrite(lru, key):
-      s.cache.update(sh, key, val)
-  else:
+  proc update*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V): bool =
     lru.cache.update(key, val)
 
-proc refresh*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V): bool =
-  if lru.threadSafe:
-    withShardWrite(lru, key):
-      s.cache.refresh(sh, key, val)
-  else:
+  proc refresh*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V): bool =
     lru.cache.refresh(key, val)
 
-proc del*[K, V](lru: var ConcurrentLruCache[K, V], key: K) =
-  if lru.threadSafe:
-    withShardWrite(lru, key):
-      if s.cache.del(sh, key):
-        s.usedCount.store(s.cache.len, moRelaxed)
-  else:
+  proc del*[K, V](lru: var ConcurrentLruCache[K, V], key: K) =
     lru.cache.del(key)
+
+  template withValueImpl[K, V](
+      lru: var ConcurrentLruCache[K, V],
+      key: auto,
+      value: untyped,
+      peekOnly: static bool,  # not named `peek`: would shadow the `peek` proc
+      foundBody: untyped,
+      notFoundBody: untyped,
+  ) =
+    # zero-copy: read the value in place through a pointer into the cache
+    let sh = subhash(key)
+    let valuePtr = when peekOnly: lru.cache.peekPtr(sh, key) else: lru.cache.getPtr(sh, key)
+    if not valuePtr.isNil():
+      template value(): untyped {.inject.} = valuePtr[]
+      foundBody
+    else:
+      notFoundBody
+
+  template withGet*[K, V](
+      lru: var ConcurrentLruCache[K, V], key: K, value, body: untyped
+  ) =
+    withValueImpl(lru, key, value, false, body, (discard))
+
+  template withGet*[K, V](
+      lru: var ConcurrentLruCache[K, V], key: K, value, foundBody, notFoundBody: untyped
+  ) =
+    withValueImpl(lru, key, value, false, foundBody, notFoundBody)
+
+  template withPeek*[K, V](
+      lru: var ConcurrentLruCache[K, V], key: K, value, body: untyped
+  ) =
+    withValueImpl(lru, key, value, true, body, (discard))
+
+  template withPeek*[K, V](
+      lru: var ConcurrentLruCache[K, V], key: K, value, foundBody, notFoundBody: untyped
+  ) =
+    withValueImpl(lru, key, value, true, foundBody, notFoundBody)
