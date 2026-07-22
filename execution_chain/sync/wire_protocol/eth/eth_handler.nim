@@ -48,7 +48,7 @@ proc new*(_: type EthWireRef,
   for _ in 0 ..< NUM_ACTION_WORKERS:
     wire.actionHeartbeat.add actionLoop(wire)
   wire.txGossipHeartbeat = txGossipLoop(wire)
-  wire.gossipEnabled   = not syncerRunning(wire)
+  wire.gossipEnabled = not syncerRunning(wire)
   txPool.onAddedTx = proc(item: TxItemRef) {.gcsafe, raises: [].} =
     wire.queueTransactionGossip(item.id)
   wire
