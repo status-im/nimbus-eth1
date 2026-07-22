@@ -83,6 +83,7 @@ type
     cache: Table[Address, AccountRef]
       # Second-level cache for the ledger save point, which is cleared on every
       # persist
+    accounts: Table[Address, AccountRef]
     code: LruCache[Hash32, CodeBytesRef]
       ## The code cache provides two main benefits:
       ##
@@ -193,17 +194,23 @@ proc getAccount(
     if not ledger.witnessKeys.contains(lookupKey):
       ledger.witnessKeys[lookupKey] = false
 
+  result = ledger.accounts.getOrDefault(address)
+  if not result.isNil:
+    return
+
   # search account from layers of cache
   var sp = ledger.savePoint
   while sp != nil:
     result = sp.cache.getOrDefault(address)
     if not result.isNil:
+      ledger.accounts[address] = result
       return
     sp = sp.parentSavePoint
 
   if ledger.cache.pop(address, result):
     # Check second-level cache
     ledger.savePoint.cache[address] = result
+    ledger.accounts[address] = result
     return
 
   # not found in cache, look into state trie
@@ -260,6 +267,7 @@ proc getAccount(
   # cache the account
   ledger.savePoint.cache[address] = result
   ledger.savePoint.dirty[address] = result
+  ledger.accounts[address] = result
 
 proc clone(acc: AccountRef, cloneStorage: bool): AccountRef =
   result = AccountRef(
@@ -449,6 +457,7 @@ proc makeDirty(ledger: LedgerRef, address: Address, cloneStorage = true): Accoun
   result.flags.incl Dirty
   ledger.savePoint.cache[address] = result
   ledger.savePoint.dirty[address] = result
+  ledger.accounts[address] = result
 
 template getCodeSizeImpl(ledger: LedgerRef, acc: AccountRef): int =
   if acc.code == nil:
@@ -506,6 +515,9 @@ proc rollback*(ledger: LedgerRef, savePoint: LedgerSpRef) =
   doAssert ledger.savePoint == savePoint and not savePoint.parentSavePoint.isNil
   ledger.savePoint = savePoint.parentSavePoint
 
+  for address in savePoint.cache.keys:
+    ledger.accounts.del(address)
+
   reset(savePoint[]) # Release memory
 
 proc commit*(ledger: LedgerRef, savePoint: LedgerSpRef) =
@@ -548,6 +560,7 @@ proc reinit*(ledger: LedgerRef, txFrame: CoreDbTxRef) =
   ledger.fatalError = Opt.none(string)
   ledger.balOverlay = Opt.none(BlockAccessListOverlay)
   ledger.witnessKeys.clear()
+  ledger.accounts.clear()
 
 proc getCodeHash*(ledger: LedgerRef, address: Address): Hash32 =
   let acc = ledger.getAccount(address, false)
@@ -961,6 +974,8 @@ proc persist*(ledger: LedgerRef,
   ledger.savePoint.dirty.clear()
   ledger.savePoint.selfDestruct.clear()
   ledger.savePoint.accessList.clear() # EIP2929
+
+  ledger.accounts.clear()
 
   ledger.isDirty = false
 
