@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/[tables, sets, times, random, math],
+  std/[tables, sets, times, random, math, sequtils],
   pkg/[chronos, chronicles, results],
   pkg/chronos/ratelimit,
   pkg/eth/common/[hashes, times],
@@ -500,9 +500,7 @@ proc broadcastTransactions*(wire: EthWireRef, txHashes: seq[Hash32])
   if items.len == 0:
     return
 
-  var peers = newSeqOfCap[Peer](wire.node.numPeers)
-  for peer in wire.ethPeers(random = true):
-    peers.add peer
+  let peers = toSeq(wire.ethPeers(random = true))
   if peers.len == 0:
     return
 
