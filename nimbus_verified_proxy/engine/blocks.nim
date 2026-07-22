@@ -165,7 +165,8 @@ func earliestServableBlock*(
 
   if engine.eip2935ForkTime.isNone or latest.timestamp < engine.eip2935ForkTime.get:
     let earliest = engine.headerStore.earliest.valueOr:
-      return err((UnavailableDataError, "earliest block is not available yet", UNTAGGED))
+      return
+        err((UnavailableDataError, "earliest block is not available yet", UNTAGGED))
     return ok(earliest.number)
 
   let jumps = if engine.state.archive: engine.maxWindowJumps else: 1'u64
