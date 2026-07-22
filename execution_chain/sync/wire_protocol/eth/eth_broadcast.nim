@@ -373,6 +373,11 @@ proc fetchPooledTxs(wire: EthWireRef, peer: Peer,
           await peer.disconnect(BreachOfProtocol, notifyRemote = true)
           await wire.refetchFromAlternate(peer.id, packet)
           return
+        # Transient rejection (stale baseFee, pool full, sender max txs,
+        # etc.) -- release the dedupe slot so a later re-announcement can
+        # retrigger a fetch instead of being silently dropped as
+        # "already seen" until cleanupSeenTransactions ages it out.
+        wire.seenTransactions.del(hash)
         await sleepAsync(ZeroDuration)
         continue
 
