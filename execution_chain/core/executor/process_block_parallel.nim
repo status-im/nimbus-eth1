@@ -36,6 +36,7 @@ type
     txFrame: CoreDbTxRef
     parent: Header
     blockCtx: BlockContext
+    proofOfStake: bool
     cancelled: Atomic[bool]
 
   OptimisticTxEntry* = object
@@ -55,6 +56,7 @@ type
     txFrame: CoreDbTxRef
     parent: Header
     blockCtx: BlockContext
+    proofOfStake: bool
     balPtr: ptr BlockAccessList
     sharedBuilder: ptr BlockAccessListBuilder
     cancelled: Atomic[bool]
@@ -102,6 +104,7 @@ proc recoverAndPrefetchTask*(
   vmState.ledger = ledger
   assign(vmState.parent, ctx[].parent)
   assign(vmState.blockCtx, ctx[].blockCtx)
+  vmState.proofOfStake = ctx[].proofOfStake
   const txCtx = default(TxContext)
   assign(vmState.txCtx, txCtx)
   vmState.hardFork = vmState.determineFork
@@ -141,6 +144,7 @@ template withSenderParallel*(
       not vmState.com.balStatePrefetchEnabled(vmState.blockCtx.timestamp, bal):
     ctx.parent = vmState.parent
     ctx.blockCtx = vmState.blockCtx
+    ctx.proofOfStake = vmState.proofOfStake
     ctx.com = vmState.com
     # Run the prefetch on the parent frame because the current frame will
     # be writen to during block execution and this way we avoid having to
@@ -380,6 +384,7 @@ proc processTxTask(
   vmState.ledger = ledger
   assign(vmState.parent, ctx[].parent)
   assign(vmState.blockCtx, ctx[].blockCtx)
+  vmState.proofOfStake = ctx[].proofOfStake
   const txCtx = default(TxContext)
   assign(vmState.txCtx, txCtx)
   vmState.hardFork = vmState.determineFork
@@ -435,6 +440,7 @@ proc processTransactionsParallel*(
   ctx.txFrame = vmState.ledger.txFrame
   ctx.parent = vmState.parent
   ctx.blockCtx = vmState.blockCtx
+  ctx.proofOfStake = vmState.proofOfStake
   ctx.balPtr = balRef[].addr
   ctx.sharedBuilder = if vmState.balTrackerEnabled: vmState.balTracker.builder else: nil
 
