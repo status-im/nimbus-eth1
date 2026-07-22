@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [], gcsafe.}
+
 import
   std/json,
   ../common/common,
@@ -37,35 +39,38 @@ func `$`[T](x: Opt[T]): string =
     "none"
 
 func debug*(h: Header): string =
-  result.add "parentHash     : " & $h.parentHash   & "\n"
-  result.add "ommersHash     : " & $h.ommersHash   & "\n"
-  result.add "coinbase       : " & $h.coinbase     & "\n"
-  result.add "stateRoot      : " & $h.stateRoot    & "\n"
-  result.add "txRoot         : " & $h.txRoot       & "\n"
-  result.add "receiptsRoot   : " & $h.receiptsRoot & "\n"
-  result.add "logsBloom      : " & $h.logsBloom    & "\n"
-  result.add "difficulty     : " & $h.difficulty   & "\n"
-  result.add "number         : " & $h.number       & "\n"
-  result.add "gasLimit       : " & $h.gasLimit     & "\n"
-  result.add "gasUsed        : " & $h.gasUsed      & "\n"
-  result.add "timestamp      : " & $h.timestamp    & "\n"
-  result.add "extraData      : " & $h.extraData    & "\n"
-  result.add "mixHash        : " & $h.mixHash      & "\n"
-  result.add "nonce          : " & $h.nonce        & "\n"
-  result.add "baseFeePerGas  : " & $h.baseFeePerGas   & "\n"
-  result.add "withdrawalsRoot: " & $h.withdrawalsRoot & "\n"
-  result.add "blobGasUsed    : " & $h.blobGasUsed     & "\n"
-  result.add "excessBlobGas  : " & $h.excessBlobGas   & "\n"
-  result.add "beaconRoot     : " & $h.parentBeaconBlockRoot & "\n"
-  result.add "requestsHash   : " & $h.requestsHash    & "\n"
-  result.add "blockAccessListHash:" & $h.blockAccessListHash & "\n"
-  result.add "slotNumber     : " & $h.slotNumber      & "\n"
-  result.add "blockHash      : " & $computeBlockHash(h) & "\n"
+  var res: string
+  res.add "parentHash     : " & $h.parentHash   & "\n"
+  res.add "ommersHash     : " & $h.ommersHash   & "\n"
+  res.add "coinbase       : " & $h.coinbase     & "\n"
+  res.add "stateRoot      : " & $h.stateRoot    & "\n"
+  res.add "txRoot         : " & $h.txRoot       & "\n"
+  res.add "receiptsRoot   : " & $h.receiptsRoot & "\n"
+  res.add "logsBloom      : " & $h.logsBloom    & "\n"
+  res.add "difficulty     : " & $h.difficulty   & "\n"
+  res.add "number         : " & $h.number       & "\n"
+  res.add "gasLimit       : " & $h.gasLimit     & "\n"
+  res.add "gasUsed        : " & $h.gasUsed      & "\n"
+  res.add "timestamp      : " & $h.timestamp    & "\n"
+  res.add "extraData      : " & $h.extraData    & "\n"
+  res.add "mixHash        : " & $h.mixHash      & "\n"
+  res.add "nonce          : " & $h.nonce        & "\n"
+  res.add "baseFeePerGas  : " & $h.baseFeePerGas   & "\n"
+  res.add "withdrawalsRoot: " & $h.withdrawalsRoot & "\n"
+  res.add "blobGasUsed    : " & $h.blobGasUsed     & "\n"
+  res.add "excessBlobGas  : " & $h.excessBlobGas   & "\n"
+  res.add "beaconRoot     : " & $h.parentBeaconBlockRoot & "\n"
+  res.add "requestsHash   : " & $h.requestsHash    & "\n"
+  res.add "blockAccessListHash:" & $h.blockAccessListHash & "\n"
+  res.add "slotNumber     : " & $h.slotNumber      & "\n"
+  res.add "blockHash      : " & $computeBlockHash(h) & "\n"
+  res
 
 proc dumpAccounts*(vmState: BaseVMState): JsonNode =
   %dumpAccounts(vmState.ledger)
 
-proc debugAccounts*(ledger: LedgerRef, addresses: openArray[string]): string =
+proc debugAccounts*(
+    ledger: LedgerRef, addresses: openArray[string]): string {.raises: [ValueError].} =
   var accountList = newSeq[Address]()
   for address in addresses:
     accountList.add Address.fromHex(address)
@@ -85,77 +90,87 @@ proc debugAccounts*(vmState: BaseVMState): string =
   res.pretty
 
 proc debug*(vms: BaseVMState): string =
-  result.add "proofOfStake     : " & $vms.proofOfStake()      & "\n"
-  result.add "parent           : " & $vms.parent.computeBlockHash    & "\n"
-  result.add "timestamp        : " & $vms.blockCtx.timestamp  & "\n"
-  result.add "gasLimit         : " & $vms.blockCtx.gasLimit   & "\n"
-  result.add "baseFeePerGas    : " & $vms.blockCtx.baseFeePerGas & "\n"
-  result.add "prevRandao       : " & $vms.blockCtx.prevRandao & "\n"
-  result.add "blockDifficulty  : " & $vms.blockCtx.difficulty & "\n"
-  result.add "coinbase         : " & $vms.blockCtx.coinbase   & "\n"
-  result.add "excessBlobGas    : " & $vms.blockCtx.excessBlobGas & "\n"
-  result.add "parentHash       : " & $vms.blockCtx.parentHash & "\n"
-  result.add "slotNumber       : " & $vms.blockCtx.slotNumber & "\n"
-  result.add "flags            : " & $vms.flags               & "\n"
-  result.add "receipts.len     : " & $vms.receipts.len        & "\n"
-  result.add "ledger.root      : " & $vms.ledger.getStateRoot() & "\n"
-  result.add "cumulativeGasUsed: " & $vms.cumulativeGasUsed   & "\n"
-  result.add "tx.origin        : " & $vms.txCtx.origin        & "\n"
-  result.add "tx.gasPrice      : " & $vms.txCtx.gasPrice      & "\n"
-  result.add "tx.blobHash.len  : " & $vms.txCtx.versionedHashes.len & "\n"
-  result.add "tx.blobBaseFee   : " & $vms.txCtx.blobBaseFee   & "\n"
-  result.add "fork             : " & $vms.fork                & "\n"
+  var res: string
+  res.add "proofOfStake     : " & $vms.proofOfStake        & "\n"
+  res.add "parent           : " & $vms.parent.computeBlockHash    & "\n"
+  res.add "timestamp        : " & $vms.blockCtx.timestamp  & "\n"
+  res.add "gasLimit         : " & $vms.blockCtx.gasLimit   & "\n"
+  res.add "baseFeePerGas    : " & $vms.blockCtx.baseFeePerGas & "\n"
+  res.add "prevRandao       : " & $vms.blockCtx.prevRandao & "\n"
+  res.add "blockDifficulty  : " & $vms.blockCtx.difficulty & "\n"
+  res.add "coinbase         : " & $vms.blockCtx.coinbase   & "\n"
+  res.add "excessBlobGas    : " & $vms.blockCtx.excessBlobGas & "\n"
+  res.add "parentHash       : " & $vms.blockCtx.parentHash & "\n"
+  res.add "slotNumber       : " & $vms.blockCtx.slotNumber & "\n"
+  res.add "flags            : " & $vms.flags               & "\n"
+  res.add "receipts.len     : " & $vms.receipts.len        & "\n"
+  res.add "ledger.root      : " & $vms.ledger.getStateRoot() & "\n"
+  res.add "cumulativeGasUsed: " & $vms.cumulativeGasUsed   & "\n"
+  res.add "tx.origin        : " & $vms.txCtx.origin        & "\n"
+  res.add "tx.gasPrice      : " & $vms.txCtx.gasPrice      & "\n"
+  res.add "tx.blobHash.len  : " & $vms.txCtx.versionedHashes.len & "\n"
+  res.add "tx.blobBaseFee   : " & $vms.txCtx.blobBaseFee   & "\n"
+  res.add "fork             : " & $vms.fork                & "\n"
+  res
 
-proc `$`(acl: transactions.AccessList): string =
+func `$`(acl: transactions.AccessList): string =
   if acl.len == 0:
     return "zero length"
 
+  var res: string
   if acl.len > 0:
-    result.add "\n"
+    res.add "\n"
 
   for ap in acl:
-    result.add " * " & $ap.address & "\n"
+    res.add " * " & $ap.address & "\n"
     for i, k in ap.storageKeys:
-      result.add "   - " & k.toHex
+      res.add "   - " & k.toHex
       if i < ap.storageKeys.len - 1:
-        result.add "\n"
+        res.add "\n"
+  res
 
-proc debug*(tx: Transaction): string =
-  result.add "txType        : " & $tx.txType         & "\n"
-  result.add "chainId       : " & $tx.chainId        & "\n"
-  result.add "nonce         : " & $tx.nonce          & "\n"
-  result.add "gasPrice      : " & $tx.gasPrice       & "\n"
-  result.add "maxPriorityFee: " & $tx.maxPriorityFeePerGas & "\n"
-  result.add "maxFee        : " & $tx.maxFeePerGas         & "\n"
-  result.add "gasLimit      : " & $tx.gasLimit       & "\n"
-  result.add "to            : " & $tx.to             & "\n"
-  result.add "value         : " & $tx.value          & "\n"
-  result.add "payload       : " & $tx.payload        & "\n"
-  result.add "accessList    : " & $tx.accessList     & "\n"
-  result.add "maxFeePerBlobGas: " & $tx.maxFeePerBlobGas & "\n"
-  result.add "versionedHashes.len: " & $tx.versionedHashes.len & "\n"
-  result.add "V             : " & $tx.V              & "\n"
-  result.add "R             : " & $tx.R              & "\n"
-  result.add "S             : " & $tx.S              & "\n"
+func debug*(tx: Transaction): string =
+  var res: string
+  res.add "txType        : " & $tx.txType         & "\n"
+  res.add "chainId       : " & $tx.chainId        & "\n"
+  res.add "nonce         : " & $tx.nonce          & "\n"
+  res.add "gasPrice      : " & $tx.gasPrice       & "\n"
+  res.add "maxPriorityFee: " & $tx.maxPriorityFeePerGas & "\n"
+  res.add "maxFee        : " & $tx.maxFeePerGas         & "\n"
+  res.add "gasLimit      : " & $tx.gasLimit       & "\n"
+  res.add "to            : " & $tx.to             & "\n"
+  res.add "value         : " & $tx.value          & "\n"
+  res.add "payload       : " & $tx.payload        & "\n"
+  res.add "accessList    : " & $tx.accessList     & "\n"
+  res.add "maxFeePerBlobGas: " & $tx.maxFeePerBlobGas & "\n"
+  res.add "versionedHashes.len: " & $tx.versionedHashes.len & "\n"
+  res.add "V             : " & $tx.V              & "\n"
+  res.add "R             : " & $tx.R              & "\n"
+  res.add "S             : " & $tx.S              & "\n"
+  res
 
-proc debug*(tx: PooledTransaction): string =
-  result.add debug(tx.tx)
+func debug*(tx: PooledTransaction): string =
+  var res: string
+  res.add debug(tx.tx)
   if tx.blobsBundle.isNil:
-    result.add "networkPaylod : nil\n"
+    res.add "networkPaylod : nil\n"
   else:
-    result.add "networkPaylod : \n"
-    result.add " - blobs       : " & $tx.blobsBundle.blobs.len & "\n"
-    result.add " - commitments : " & $tx.blobsBundle.commitments.len & "\n"
-    result.add " - proofs      : " & $tx.blobsBundle.proofs.len & "\n"
+    res.add "networkPaylod : \n"
+    res.add " - blobs       : " & $tx.blobsBundle.blobs.len & "\n"
+    res.add " - commitments : " & $tx.blobsBundle.commitments.len & "\n"
+    res.add " - proofs      : " & $tx.blobsBundle.proofs.len & "\n"
+  res
 
-proc debugSum*(h: Header): string =
-  result.add "txRoot         : " & $h.txRoot      & "\n"
-  result.add "ommersHash     : " & $h.ommersHash  & "\n"
-  if h.withdrawalsRoot.isSome:
-    result.add "withdrawalsRoot: " & $h.withdrawalsRoot.get() & "\n"
-  result.add "sumHash        : " & $sumHash(h)   & "\n"
+func debugSum*(h: Header): string =
+  var res: string
+  res.add "txRoot         : " & $h.txRoot      & "\n"
+  res.add "ommersHash     : " & $h.ommersHash  & "\n"
+  h.withdrawalsRoot.isErrOr:
+    res.add "withdrawalsRoot: " & $value & "\n"
+  res.add "sumHash        : " & $sumHash(h)   & "\n"
+  res
 
-proc debugSum*(body: BlockBody): string =
+func debugSum*(body: BlockBody): string =
   let ommersHash = keccak256(rlp.encode(body.uncles))
   let txRoot = calcTxRoot(body.transactions)
   let wdRoot = if body.withdrawals.isSome:
@@ -165,11 +180,13 @@ proc debugSum*(body: BlockBody): string =
                 $body.withdrawals.get().len
               else:
                 "none"
-  result.add "txRoot     : " & $txRoot        & "\n"
-  result.add "ommersHash : " & $ommersHash    & "\n"
-  if body.withdrawals.isSome:
-    result.add "wdRoot     : " & $wdRoot      & "\n"
-  result.add "num tx     : " & $body.transactions.len & "\n"
-  result.add "num uncles : " & $body.uncles.len & "\n"
-  result.add "num wd     : " & numwd          & "\n"
-  result.add "sumHash    : " & $sumHash(body) & "\n"
+  var res: string
+  res.add "txRoot     : " & $txRoot        & "\n"
+  res.add "ommersHash : " & $ommersHash    & "\n"
+  body.withdrawals.isErrOr:
+    res.add "wdRoot     : " & $wdRoot      & "\n"
+  res.add "num tx     : " & $body.transactions.len & "\n"
+  res.add "num uncles : " & $body.uncles.len & "\n"
+  res.add "num wd     : " & numwd          & "\n"
+  res.add "sumHash    : " & $sumHash(body) & "\n"
+  res

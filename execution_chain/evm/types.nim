@@ -8,10 +8,10 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
-  "."/[stack, memory, code_stream, evm_errors],
+  ./[stack, memory, code_stream, evm_errors],
   ./interpreter/[gas_costs, op_codes],
   ./transient_storage,
   ../db/ledger,
@@ -62,6 +62,7 @@ type
     allLogs*          : seq[Log] # EIP-6110
     gasRefunded*      : int64    # Global gasRefunded counter
     balTracker*       : BlockAccessListTrackerRef
+    proofOfStake*     : bool
 
   Computation* = ref object
     # The execution computation

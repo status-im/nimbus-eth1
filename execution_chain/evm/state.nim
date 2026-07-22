@@ -8,10 +8,10 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
-  std/[options, sets, strformat],
+  std/strformat,
   stew/assign2,
   ../db/ledger,
   ../common/common,
@@ -56,6 +56,11 @@ proc init(
   self.allLogs.setLen(0)
   self.gasRefunded = 0
   self.balTracker = tracker
+  self.proofOfStake = com.proofOfStake(Header(
+    number: parent.number + 1,
+    parentHash: blockCtx.parentHash,
+    difficulty: blockCtx.difficulty,
+  ), ledger.txFrame)
 
 func blockCtx(header: Header): BlockContext =
   BlockContext(
@@ -72,7 +77,7 @@ func blockCtx(header: Header): BlockContext =
 
 # --------------
 
-proc `$`*(vmState: BaseVMState): string =
+func `$`*(vmState: BaseVMState): string =
   if vmState.isNil:
     result = "nil"
   else:
@@ -266,15 +271,8 @@ func blockNumber*(vmState: BaseVMState): BlockNumber =
   # and not head.number
   vmState.parent.number + 1
 
-proc proofOfStake*(vmState: BaseVMState): bool =
-  vmState.com.proofOfStake(Header(
-    number: vmState.blockNumber,
-    parentHash: vmState.blockCtx.parentHash,
-    difficulty: vmState.blockCtx.difficulty,
-  ), vmState.ledger.txFrame)
-
-proc difficultyOrPrevRandao*(vmState: BaseVMState): UInt256 =
-  if vmState.proofOfStake():
+func difficultyOrPrevRandao*(vmState: BaseVMState): UInt256 =
+  if vmState.proofOfStake:
     # EIP-4399/EIP-3675
     UInt256.fromBytesBE(vmState.blockCtx.prevRandao.data)
   else:
@@ -284,7 +282,7 @@ method getAncestorHash*(
     vmState: BaseVMState, blockNumber: BlockNumber): Hash32 {.gcsafe, base.} =
   vmState.ledger.getBlockHash(blockNumber)
 
-proc readOnlyLedger*(vmState: BaseVMState): ReadOnlyLedger {.inline.} =
+func readOnlyLedger*(vmState: BaseVMState): ReadOnlyLedger {.inline.} =
   ReadOnlyLedger(vmState.ledger)
 
 template mutateLedger*(vmState: BaseVMState, body: untyped): untyped =
@@ -292,10 +290,10 @@ template mutateLedger*(vmState: BaseVMState, body: untyped): untyped =
     let ledger {.inject.} = vmState.ledger
     body
 
-proc status*(vmState: BaseVMState): bool =
+func status*(vmState: BaseVMState): bool =
   ExecutionOK in vmState.flags
 
-proc `status=`*(vmState: BaseVMState, status: bool) =
+func `status=`*(vmState: BaseVMState, status: bool) =
  if status: vmState.flags.incl ExecutionOK
  else: vmState.flags.excl ExecutionOK
 
@@ -311,46 +309,46 @@ template blockAccessList*(vmState: BaseVMState): Opt[BlockAccessListRef] =
   else:
     Opt.none(BlockAccessListRef)
 
-proc captureTxStart*(vmState: BaseVMState, gasLimit: GasInt) =
+func captureTxStart*(vmState: BaseVMState, gasLimit: GasInt) =
   if vmState.tracingEnabled:
     vmState.tracer.captureTxStart(gasLimit)
 
-proc captureTxEnd*(vmState: BaseVMState, restGas: GasInt) =
+func captureTxEnd*(vmState: BaseVMState, restGas: GasInt) =
   if vmState.tracingEnabled:
     vmState.tracer.captureTxEnd(restGas)
 
-proc captureStart*(vmState: BaseVMState, comp: Computation,
+func captureStart*(vmState: BaseVMState, comp: Computation,
                    sender: Address, to: Address,
                    create: bool, input: openArray[byte],
                    gasLimit: GasInt, value: UInt256) =
   if vmState.tracingEnabled:
     vmState.tracer.captureStart(comp, sender, to, create, input, gasLimit, value)
 
-proc captureEnd*(vmState: BaseVMState, comp: Computation, output: openArray[byte],
+func captureEnd*(vmState: BaseVMState, comp: Computation, output: openArray[byte],
                  gasUsed: GasInt, error: Opt[string]) =
   if vmState.tracingEnabled:
     vmState.tracer.captureEnd(comp, output, gasUsed, error)
 
-proc captureEnter*(vmState: BaseVMState, comp: Computation, op: Op,
+func captureEnter*(vmState: BaseVMState, comp: Computation, op: Op,
                    sender: Address, to: Address,
                    input: openArray[byte], gasLimit: GasInt,
                    value: UInt256) =
   if vmState.tracingEnabled:
     vmState.tracer.captureEnter(comp, op, sender, to, input, gasLimit, value)
 
-proc captureExit*(vmState: BaseVMState, comp: Computation, output: openArray[byte],
+func captureExit*(vmState: BaseVMState, comp: Computation, output: openArray[byte],
                   gasUsed: GasInt, error: Opt[string]) =
   if vmState.tracingEnabled:
     vmState.tracer.captureExit(comp, output, gasUsed, error)
 
-proc captureOpStart*(vmState: BaseVMState, comp: Computation, pc: int,
+func captureOpStart*(vmState: BaseVMState, comp: Computation, pc: int,
                    op: Op, gas: GasInt,
                    depth: int): int =
   if vmState.tracingEnabled:
     let fixed = vmState.gasCosts[op].kind == GckFixed
     result = vmState.tracer.captureOpStart(comp, fixed, pc, op, gas, depth)
 
-proc captureGasCost*(vmState: BaseVMState,
+func captureGasCost*(vmState: BaseVMState,
                     comp: Computation,
                     op: Op, gasCost: GasInt, gasRemaining: GasInt,
                     depth: int) =
@@ -358,7 +356,7 @@ proc captureGasCost*(vmState: BaseVMState,
     let fixed = vmState.gasCosts[op].kind == GckFixed
     vmState.tracer.captureGasCost(comp, fixed, op, gasCost, gasRemaining, depth)
 
-proc captureOpEnd*(vmState: BaseVMState, comp: Computation, pc: int,
+func captureOpEnd*(vmState: BaseVMState, comp: Computation, pc: int,
                    op: Op, gas: GasInt, refund: int64,
                    rData: openArray[byte],
                    depth: int, opIndex: int) =
@@ -366,7 +364,7 @@ proc captureOpEnd*(vmState: BaseVMState, comp: Computation, pc: int,
     let fixed = vmState.gasCosts[op].kind == GckFixed
     vmState.tracer.captureOpEnd(comp, fixed, pc, op, gas, refund, rData, depth, opIndex)
 
-proc captureFault*(vmState: BaseVMState, comp: Computation, pc: int,
+func captureFault*(vmState: BaseVMState, comp: Computation, pc: int,
                    op: Op, gas: GasInt, refund: int64,
                    rData: openArray[byte],
                    depth: int, error: Opt[string]) =
@@ -374,6 +372,6 @@ proc captureFault*(vmState: BaseVMState, comp: Computation, pc: int,
     let fixed = vmState.gasCosts[op].kind == GckFixed
     vmState.tracer.captureFault(comp, fixed, pc, op, gas, refund, rData, depth, error)
 
-proc capturePrepare*(vmState: BaseVMState, comp: Computation, depth: int) =
+func capturePrepare*(vmState: BaseVMState, comp: Computation, depth: int) =
   if vmState.tracingEnabled:
     vmState.tracer.capturePrepare(comp, depth)
