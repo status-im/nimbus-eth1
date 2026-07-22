@@ -27,7 +27,6 @@ import
   ../../execution_chain/core/tx_pool,
   ../../execution_chain/core/pooled_txs,
   ../../execution_chain/sync/wire_protocol,
-  ../../execution_chain/utils/utils,
   ../../execution_chain/conf,
   ../../hive_integration/tx_sender,
   ./stubloglevel

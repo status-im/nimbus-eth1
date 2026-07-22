@@ -61,7 +61,7 @@ type
     XP_SKIP_BLOB_WRAPPER_VALIDATION
     XP_SKIP_SIZE_VALIDATION
 
-  TxAddedObserver* = proc(item: TxItemRef) {.gcsafe, raises: [].}
+  TxAddedObserver = proc(item: TxItemRef) {.gcsafe, raises: [].}
 
   TxPoolRef* = ref object
     vmState  : BaseVMState

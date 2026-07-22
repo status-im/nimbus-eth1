@@ -62,7 +62,6 @@ export
   TxPoolRef,
   TxError,
   TxItemRef,
-  TxAddedObserver,
   MAX_TXS_PER_ACCOUNT
 
 # ------------------------------------------------------------------------------
