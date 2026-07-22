@@ -26,18 +26,18 @@ const
 
 proc newEngine(): RpcVerificationEngine =
   RpcVerificationEngine
-  .initCore(
-    chainId = 1.u256,
-    networkId = 1.u256,
-    maxBlockWalk = 1000,
-    maxWindowJumps = 500,
-    parallelBlockDownloads = 1,
-    headerStoreLen = 16,
-    accountCacheLen = 1,
-    codeCacheLen = 1,
-    storageCacheLen = 1,
-  )
-  .expect("initCore should succeed")
+    .initCore(
+      chainId = 1.u256,
+      networkId = 1.u256,
+      maxBlockWalk = 1000,
+      maxWindowJumps = 500,
+      parallelBlockDownloads = 1,
+      headerStoreLen = 16,
+      accountCacheLen = 1,
+      codeCacheLen = 1,
+      storageCacheLen = 1,
+    )
+    .expect("initCore should succeed")
 
 proc addHeader(engine: RpcVerificationEngine, number: uint64, timestamp: uint64) =
   let header = Header(number: base.BlockNumber(number), timestamp: EthTime(timestamp))
@@ -61,7 +61,8 @@ suite "archive backend capability routing":
     engine.registerBackend(initTestExecutionBackend(ts), generalCaps) # idx 0
     engine.registerBackend(initTestExecutionBackend(ts), {GetProof}) # idx 1
 
-    let (_, idx) = engine.executionBackendFor(GetBlockByNumber).expect("general present")
+    let (_, idx) =
+      engine.executionBackendFor(GetBlockByNumber).expect("general present")
     check idx == 0
 
   test "without an archive backend GetProof still routes to the general backend":
@@ -81,7 +82,8 @@ suite "private transaction backend capability routing":
     engine.registerBackend(initTestExecutionBackend(ts), generalCaps) # idx 0
     engine.registerBackend(initTestExecutionBackend(ts), {SendRawTransaction}) # idx 1
 
-    let (_, idx) = engine.executionBackendFor(SendRawTransaction).expect("private relay present")
+    let (_, idx) =
+      engine.executionBackendFor(SendRawTransaction).expect("private relay present")
     check idx == 1
 
   test "read methods never route to the private-tx-only backend":
@@ -89,14 +91,16 @@ suite "private transaction backend capability routing":
     engine.registerBackend(initTestExecutionBackend(ts), generalCaps) # idx 0
     engine.registerBackend(initTestExecutionBackend(ts), {SendRawTransaction}) # idx 1
 
-    let (_, idx) = engine.executionBackendFor(GetBlockByNumber).expect("general present")
+    let (_, idx) =
+      engine.executionBackendFor(GetBlockByNumber).expect("general present")
     check idx == 0
 
   test "without a private relay SendRawTransaction still routes to the general backend":
     let engine = newEngine()
     engine.registerBackend(initTestExecutionBackend(ts), fullExecutionCapabilities)
 
-    let (_, idx) = engine.executionBackendFor(SendRawTransaction).expect("general present")
+    let (_, idx) =
+      engine.executionBackendFor(SendRawTransaction).expect("general present")
     check idx == 0
 
 suite "earliest servable block":
