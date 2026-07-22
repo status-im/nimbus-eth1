@@ -14,11 +14,12 @@ import
   std/strformat,
   chronicles,
   results,
+  eth/common/hashes_rlp,
   ./[aristo_desc, aristo_get, aristo_layers, aristo_blobify, aristo_serialise],
   ./aristo_desc/desc_backend,
   ../../concurrency/queue
 
-export aristo_desc, chronicles
+export aristo_desc, chronicles, hashes_rlp
 
 type
   WriteBatch* = object
