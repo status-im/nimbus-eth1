@@ -218,14 +218,20 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, p
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
     nimbus.snapSyncRef = SnapSyncRef(nil)
 
-proc init*(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, params: NetworkParams) =
+proc init*(
+    nimbus: NimbusNode,
+    config: ExecutionClientConf,
+    com: CommonRef,
+    params: NetworkParams,
+    channel: Opt[RpcChannelPtrs],
+) =
   nimbus.accountsManager = new AccountsManager
   nimbus.rng = newRng()
 
   basicServices(nimbus, config, com)
   manageAccounts(nimbus, config, params)
   setupP2P(nimbus, config, com, params)
-  setupRpc(nimbus, config, com, params)
+  setupRpc(nimbus, config, com, params, channel)
 
   # Not starting any syncer if there is definitely no way to run it. This
   # avoids polling (i.e. waiting for instructions) and some logging.
@@ -257,9 +263,15 @@ proc init*(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, para
     nimbus.balPruner = BalPrunerRef.init(com)
     nimbus.balPruner.start()
 
-proc init*(T: type NimbusNode, config: ExecutionClientConf, com: CommonRef, params: NetworkParams): T =
+proc init*(
+    T: type NimbusNode,
+    config: ExecutionClientConf,
+    com: CommonRef,
+    params: NetworkParams,
+    channel: Opt[RpcChannelPtrs],
+): T =
   let nimbus = T()
-  nimbus.init(config, com, params)
+  nimbus.init(config, com, params, channel)
   nimbus
 
 proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionClientConf, params: NetworkParams) =
@@ -355,6 +367,7 @@ proc runExeClient*(
     params: NetworkParams,
     stopper: StopFuture,
     nimbus = NimbusNode(nil),
+    channel = Opt.none(RpcChannelPtrs),
 ) =
   ## Launches and runs the execution client for pre-configured `nimbus` and
   ## `conf` argument descriptors.
@@ -362,9 +375,9 @@ proc runExeClient*(
 
   var nimbus = nimbus
   if nimbus.isNil:
-    nimbus = NimbusNode.init(config, com, params)
+    nimbus = NimbusNode.init(config, com, params, channel)
   else:
-    nimbus.init(config, com, params)
+    nimbus.init(config, com, params, channel)
 
   defer:
     let
