@@ -90,33 +90,6 @@ iterator peers69OrLater(wire: EthWireRef, random: bool = false): Peer =
       continue
     yield peer
 
-# iterator ethPeers(wire: EthWireRef, random: bool = false): Peer =
-#   ## All connected eth peers regardless of version: the tx gossip
-#   ## messages (0x02, 0x08) are identical across eth68..71.
-#   var peers = newSeqOfCap[Peer](wire.node.numPeers)
-#   for peer in wire.node.peers(eth71):
-#     if peer.isNil:
-#       continue
-#     peers.add peer
-#   for peer in wire.node.peers(eth70):
-#     if peer.isNil:
-#       continue
-#     peers.add peer
-#   for peer in wire.node.peers(eth69):
-#     if peer.isNil:
-#       continue
-#     peers.add peer
-#   for peer in wire.node.peers(eth68):
-#     if peer.isNil:
-#       continue
-#     peers.add peer
-#   if random:
-#     shuffle(peers)
-#   for peer in peers:
-#     if peer.connectionState != ConnectionState.Connected:
-#       continue
-#     yield peer
-
 proc markSeen(wire: EthWireRef, txHash: Hash32, peerId: NodeId) =
   wire.seenTransactions.withValue(txHash, seen):
     seen[].lastSeen = getTime()
