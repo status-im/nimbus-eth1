@@ -169,6 +169,10 @@ proc lingerNext(ctx: BeaconCtxRef; info: static[string]): BeaconState =
 
 proc blocksNext(ctx: BeaconCtxRef; info: static[string]): BeaconState =
   ## State transition handler
+  # Complete the session if a concurrent importer (`el_sync`) has already
+  # reached the target, even when no active peer runs the reconcile.
+  ctx.blocksUnprocReconcile()
+
   if not ctx.pool.seenData and         # checks for cul-de-sac syncing
      nFetchBodiesFailedInitialPeersThreshold < ctx.pool.failedPeers.len:
     debug info & ": too many failed block peers",

@@ -156,7 +156,21 @@ proc blocksUnprocReconcile*(ctx: BeaconCtxRef) =
   ## numbers differ from the new canonical ones - skipping by number would then
   ## strand the new branch. In that case we leave `topNum` alone and let the
   ## in-order import hand each block to the `FC`, which classifies it correctly.
-  let fcLatest = ctx.chain.latestNumber
+  let
+    fcLatest = ctx.chain.latestNumber
+    headNum = ctx.subState.headNum
+
+  if headNum < fcLatest:
+    # A concurrent importer has run *past* the session head, so the target
+    # lineage cannot resolve `fcLatest`. If the target block is a canonical
+    # ancestor of the live `FC` head, the whole range is already imported -
+    # fast-forward to `headNum` so that the session can complete.
+    if ctx.subState.topNum < headNum and
+       ctx.chain.isCanonicalAncestor(headNum, ctx.subState.headHash):
+      ctx.subState.topNum = headNum
+      discard ctx.blk.unprocessed.reduce(0u64, headNum)
+      metrics.set(nec_sync_blocks_unprocessed, ctx.blocksUnprocTotal().int64)
+    return
 
   # Defer the fork decision to the target lineage rather than trusting a raw
   # block number.
