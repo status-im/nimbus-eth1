@@ -12,7 +12,7 @@ import
   eth/common/[hashes, addresses, accounts],
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/[ledger, core_db],
-  ../execution_chain/common/[chain_config, genesis]
+  ../execution_chain/common/[chain_config_loader, genesis]
 
 proc getGenesisAlloc(filePath: string): GenesisAlloc =
   var cn: NetworkParams
