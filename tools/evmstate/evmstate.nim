@@ -189,27 +189,13 @@ template hasError(ctx: StateContext): bool =
 
 proc parseTx(ctx: var StateContext, txData: JsonNode, subTest: JsonNode) =
   try:
-    block txBytes:
-      if not subTest.hasKey("txbytes"):
-        break txBytes
-
-      if subTest.hasKey("expectException"):
-        let exceptionString = subTest["expectException"].getStr
-        if "GASLIMIT_PRICE_PRODUCT_OVERFLOW" in exceptionString:
-          # high_gas_price_paris.json cannot be rlp decoded
-          # due to UInt256 gasPrice, while Nimbus tx gasPrice
-          # field is uint64.
-          # high_gas_price_paris.json can be decoded by parseTx.
-          break txBytes
-        if "NONCE_IS_MAX" in exceptionString:
-          break txBytes
-
-      let rlpBytes = hexToSeqByte(subTest["txbytes"].getStr)
-      ctx.tx = rlp.decode(rlpBytes, Transaction)
+    if txData.hasKey("secretKey"):
+      ctx.tx = parseTx(txData, subTest["indexes"], ctx.chainConfig.eip155Block.isSome)
       return
 
-    if txData.hasKey("secretKey"):
-      ctx.tx = parseTx(txData, subTest["indexes"])
+    if subTest.hasKey("txbytes"):
+      let rlpBytes = hexToSeqByte(subTest["txbytes"].getStr)
+      ctx.tx = rlp.decode(rlpBytes, Transaction)
       return
 
     doAssert(false, "Unsupported fixture format")
