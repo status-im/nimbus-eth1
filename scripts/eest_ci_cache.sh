@@ -15,7 +15,7 @@ FIXTURES_DIR="${REPO_DIR}/tests/fixtures"
 
 # --- Mainnet Release ---
 EEST_MAINNET_NAME="mainnet"
-EEST_MAINNET_VERSION="v20.0.0"
+EEST_MAINNET_VERSION="v20.0.1"
 EEST_MAINNET_DIR="${FIXTURES_DIR}/eest_mainnet"
 EEST_MAINNET_ARCHIVE="fixtures.tar.gz"
 EEST_MAINNET_URL="https://github.com/ethereum/execution-specs/releases/download/tests%40${EEST_MAINNET_VERSION}/${EEST_MAINNET_ARCHIVE}"
