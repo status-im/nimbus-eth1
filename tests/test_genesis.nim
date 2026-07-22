@@ -13,6 +13,7 @@ import
   unittest2,
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/utils/utils,
+  ../execution_chain/common/chain_config_loader,
   ../execution_chain/common/common
 
 const

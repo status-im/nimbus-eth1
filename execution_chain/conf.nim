@@ -27,6 +27,7 @@ import
   ./networking/bootnodes,
   ./[constants, compile_info, version_info],
   ./common/chain_config,
+  ./common/chain_config_loader,
   ./db/opts
 
 export net, defs, jsdefs, jsnet, nat_toml, nimbus_binary_common, options
