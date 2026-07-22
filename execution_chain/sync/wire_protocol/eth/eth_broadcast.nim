@@ -291,6 +291,21 @@ proc fetchPooledTxs(wire: EthWireRef, peer: Peer,
     while i < numTx:
       let size = packet.txSizes[i]
       if sumSize + size > SOFT_RESPONSE_LIMIT.uint64:
+        if msg.txHashes.len == 0:
+          # A single announced tx alone exceeds the response limit (an
+          # oversized or lying announcement). Request it on its own rather
+          # than breaking with an empty msg, which would leave `i`
+          # un-advanced and spin this loop forever without ever awaiting.
+          let txHash = packet.txHashes[i]
+          if txHash notin wire.txPool:
+            msg.txHashes.add txHash
+            sumSize += size
+            map[txHash] = SizeType(
+              size: size,
+              txType: packet.txTypes[i],
+            )
+          awaitQuota(wire, hashLookupCost, "check transaction exists in pool")
+          inc i
         break
 
       let txHash = packet.txHashes[i]

@@ -329,6 +329,56 @@ suite "Tx broadcast queue":
 
     waitFor runTest()
 
+  test "oversized single announced tx size does not livelock fetchPooledTxs":
+    ## Fix: in fetchPooledTxs's inner batching loop, a peer-announced
+    ## txSizes[i] that alone exceeds SOFT_RESPONSE_LIMIT used to `break`
+    ## before `inc i` ever ran. With an empty msg, the outer loop just
+    ## `continue`s with the same `i` and re-enters the inner loop forever
+    ## -- with no `await` on that path, chronos never regains control and
+    ## the whole node's event loop freezes (not just this peer's fetch).
+    ## The fix always advances `i`, fetching the oversized tx alone
+    ## instead of looping without making progress.
+    proc runTest() {.async.} =
+      var env1 = newBroadcastTestEnv()
+      var env2 = newBroadcastTestEnv()
+
+      env2.node.startListening()
+      let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+      check connRes.isOk()
+      let peer = connRes.get()
+
+      check not env1.wire.syncerRunning()
+
+      # Stop the action loop so we can inspect and run the queued action
+      # ourselves under a timeout.
+      for fut in env1.wire.actionHeartbeat:
+        await fut.cancelAndWait()
+
+      # A single announced hash whose claimed size alone exceeds
+      # SOFT_RESPONSE_LIMIT -- the batching loop can never fit it alongside
+      # anything else.
+      let packet = NewPooledTransactionHashesPacket(
+        txTypes: @[2.byte],
+        txSizes: @[SOFT_RESPONSE_LIMIT.uint64 + 1],
+        txHashes: @[default(Hash32)],
+      )
+
+      await env1.wire.handleTxHashesBroadcast(packet, peer)
+      check env1.wire.actionQueue.len == 1
+
+      # Pre-fix: this hangs forever (no await point is ever reached), so
+      # withTimeout itself never gets a chance to fire either -- the bug is
+      # a full event-loop freeze, not a slow response. Post-fix, `i` always
+      # advances and this completes quickly.
+      let action = await env1.wire.actionQueue.popFirst()
+      let completed = await withTimeout(action(), chronos.seconds(5))
+      check completed
+
+      await env2.close()
+      await env1.close()
+
+    waitFor runTest()
+
   test "multiple action workers drain queue in parallel":
     ## Fix 5: NUM_ACTION_WORKERS > 1 means one slow action cannot starve
     ## subsequent actions. With a single worker, the fast action would
