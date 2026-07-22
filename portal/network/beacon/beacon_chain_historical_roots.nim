@@ -17,7 +17,7 @@
 # simply be verified by checking its root.
 # Thus HistoricalRootsWithProof is currently unused. It could be embedded
 # with its proof and/or send over the network.
-# The proof supported is only the version from >= Electra as it would only
+# The proof supported is only the version from >= Gloas as it would only
 # make sense to verify it against a recent state.
 #
 
@@ -27,23 +27,23 @@ import results, stew/bitops2, beacon_chain/spec/forks
 
 export results
 
-const HISTORICAL_ROOTS_GINDEX_ELECTRA* =
-  get_generalized_index(electra.BeaconState, "historical_roots")
+const HISTORICAL_ROOTS_GINDEX_GLOAS* =
+  get_generalized_index(gloas.BeaconState, "historical_roots")
 
 static:
-  doAssert HISTORICAL_ROOTS_GINDEX_ELECTRA == 71.GeneralizedIndex
+  doAssert HISTORICAL_ROOTS_GINDEX_GLOAS == 354.GeneralizedIndex
 
   for consensusFork in ConsensusFork:
     withConsensusFork(consensusFork):
-      if consensusFork >= ConsensusFork.Electra:
+      if consensusFork >= ConsensusFork.Gloas:
         template check(gindex, T: untyped, path: varargs[untyped]): untyped =
           doAssert gindex == consensusFork.T.get_generalized_index(path)
 
-        check HISTORICAL_ROOTS_GINDEX_ELECTRA, BeaconState, "historical_roots"
+        check HISTORICAL_ROOTS_GINDEX_GLOAS, BeaconState, "historical_roots"
 
 type
   HistoricalRoots* = HashList[Eth2Digest, Limit HISTORICAL_ROOTS_LIMIT]
-  HistoricalRootsProof* = array[log2trunc(HISTORICAL_ROOTS_GINDEX_ELECTRA), Digest]
+  HistoricalRootsProof* = array[log2trunc(HISTORICAL_ROOTS_GINDEX_GLOAS), Digest]
   HistoricalRootsWithProof* = object
     historical_roots: HistoricalRoots
     proof: HistoricalRootsProof
@@ -51,7 +51,7 @@ type
 func buildProof*(state: ForkedHashedBeaconState): Result[HistoricalRootsProof, string] =
   var proof: HistoricalRootsProof
   withState(state):
-    ?forkyState.data.build_proof(HISTORICAL_ROOTS_GINDEX_ELECTRA, proof)
+    ?forkyState.data.build_proof(HISTORICAL_ROOTS_GINDEX_GLOAS, proof)
 
   ok(proof)
 
@@ -60,6 +60,4 @@ func verifyProof*(
 ): bool =
   let leave = hash_tree_root(historical_roots)
 
-  verify_merkle_multiproof(
-    @[leave], proof, @[HISTORICAL_ROOTS_GINDEX_ELECTRA], stateRoot
-  )
+  verify_merkle_multiproof(@[leave], proof, @[HISTORICAL_ROOTS_GINDEX_GLOAS], stateRoot)

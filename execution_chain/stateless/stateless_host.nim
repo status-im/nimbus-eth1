@@ -23,9 +23,7 @@ from beacon_chain/spec/datatypes/capella import Withdrawal
 from beacon_chain/spec/datatypes/bellatrix import BloomLogs
 from beacon_chain/spec/datatypes/base import Gwei
 from beacon_chain/spec/beacon_time import Slot
-from beacon_chain/spec/presets import
-  MAX_BYTES_PER_TRANSACTION, MAX_EXTRA_DATA_BYTES, MAX_TRANSACTIONS_PER_PAYLOAD,
-  MAX_WITHDRAWALS_PER_PAYLOAD
+from beacon_chain/spec/presets import MAX_EXTRA_DATA_BYTES
 
 export stateless_types, results
 
@@ -120,11 +118,11 @@ func build_stateless_input*(
   # Encode transactions to bytes, recover public keys, and collect the
   # versioned hashes.
   var
-    transactions = newSeqOfCap[bellatrix.Transaction](blk.transactions.len)
+    transactions = newSeqOfCap[gloas.Transaction](blk.transactions.len)
     public_keys: List[ByteVector[PUBLIC_KEY_BYTES], MAX_PUBLIC_KEYS]
     versioned_hashes: List[Digest, MAX_BLOB_COMMITMENTS_PER_BLOCK]
   for tx in blk.transactions:
-    transactions.add(bellatrix.Transaction.init(rlp.encode(tx)))
+    transactions.add(gloas.Transaction.init(rlp.encode(tx)))
 
     let public_key = recover_transaction_public_key(tx).valueOr:
       # Skip transactions without a recoverable key (invalid signature values).
@@ -165,12 +163,11 @@ func build_stateless_input*(
     extra_data: List[byte, MAX_EXTRA_DATA_BYTES].init(header.extraData),
     base_fee_per_gas: base_fee_per_gas,
     block_hash: Digest(data: block_hash.data),
-    transactions:
-      List[bellatrix.Transaction, MAX_TRANSACTIONS_PER_PAYLOAD].init(transactions),
-    withdrawals: List[capella.Withdrawal, MAX_WITHDRAWALS_PER_PAYLOAD].init(withdrawals),
+    transactions: transactions,
+    withdrawals: withdrawals,
     blob_gas_used: blob_gas_used,
     excess_blob_gas: excess_blob_gas,
-    block_access_list: List[byte, MAX_BYTES_PER_TRANSACTION].init(@block_access_list),
+    block_access_list: gloas.BlockAccessList.init(@block_access_list),
     slot_number: Slot(slot_number),
   )
 

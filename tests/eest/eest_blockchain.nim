@@ -206,7 +206,13 @@ proc runTest(
 
       expectedSuccessful = expectedOutput.successful_validation
 
-      if output != expectedOutput:
+      # if output != expectedOutput:
+      # TODO: The `new_payload_request_root` comparison is temporarily skipped.
+      # The stateless fixtures are generated from execution-specs, which is no
+      # longer up to date regarding `gloas.ExecutionPayload` usage of progressive
+      # lists (EIP-7688).
+      if output.successful_validation != expectedOutput.successful_validation or
+          output.chain_config != expectedOutput.chain_config:
         return err(
           "Stateless guest: validation result mismatch, got: " & $output & " expected: " &
             $expectedOutput
