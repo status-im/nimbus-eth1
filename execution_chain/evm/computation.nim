@@ -143,8 +143,11 @@ func getTransientStorage*(c: Computation, slot: UInt256): UInt256 =
 func setCode*(c: Computation, code = CodeBytesRef(nil)) =
   if not code.isNil:
     c.code = CodeStream.init(code)
-    c.memory = EvmMemory.init()
-    c.stack = EvmStack.init()
+    # A frame created with code (system calls) has setCode run again from prepareDispatch.
+    # Allocate the buffers only once so the empty stack is not orphaned.
+    if c.stack.isNil:
+      c.memory = EvmMemory.init()
+      c.stack = EvmStack.init()
 
 func newComputation*(vmState: BaseVMState,
                      keepStack: bool,

@@ -96,4 +96,8 @@ proc systemCall*(params: CallParams, T: type): T =
   if c.isSuccess:
     c.execCallOrCreate(params)
     ledger.persist(clearEmptyAccount = true)
+  else:
+    # execCallOrCreate normally disposes the computation, dispose here too
+    # otherwise the EVM stack leaks.
+    c.dispose()
   finishRunningComputation(c, T)
