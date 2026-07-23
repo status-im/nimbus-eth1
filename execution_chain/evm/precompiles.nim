@@ -593,9 +593,15 @@ func blsG2MultiExp(c: Computation): EvmResultVoid =
     if not scalars[i].fromBytes(input.toOpenArray(off+256, off+287)):
       return err(prcErr(PrcInvalidParam))
 
-  if K == 1:
+  # Pippenger only starts paying off above two pairs in G2
+  if K <= 2:
     acc.fromAffine(points[0])
     acc.mul(scalars[0])
+    for i in 1..<K:
+      var t {.noinit.}: BLS_G2
+      t.fromAffine(points[i])
+      t.mul(scalars[i])
+      acc.add(t)
   else:
     acc.multiExp(points, scalars)
 
