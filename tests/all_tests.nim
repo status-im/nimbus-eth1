@@ -27,7 +27,6 @@ import
     test_aristo_subtries_json,
     test_jwt_auth,
     test_kvt,
-    test_kzg_point_eval,
     test_ledger,
     test_stateroot_mismatch,
     test_op_arith,
