@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2020-2025 Status Research & Development GmbH
+# Copyright (c) 2020-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -116,6 +116,40 @@ func add*(a: var BLS_G2, b: BLS_G2) {.inline.} =
 
 func mul*(a: var BLS_G2, b: BLS_SCALAR) {.inline.} =
   blst_p2_mult(toCV(a), toCV(a), b.b[0].unsafeAddr, b.nbits)
+
+func fromAffine*(a: var BLS_G1, b: BLS_G1P) {.inline.} =
+  blst_p1_from_affine(toCV(a), toCC(b))
+
+func fromAffine*(a: var BLS_G2, b: BLS_G2P) {.inline.} =
+  blst_p2_from_affine(toCV(a), toCC(b))
+
+const
+  MSMScalarBits = 256
+
+func scratchLen(numBytes: uint): int {.inline.} =
+  (numBytes.int + sizeof(limb_t) - 1) div sizeof(limb_t)
+
+func multiExp*(acc: var BLS_G1, points: openArray[BLS_G1P],
+               scalars: openArray[BLS_SCALAR]) =
+  var scratch = newSeq[limb_t](
+    scratchLen(blst_p1s_mult_pippenger_scratch_sizeof(points.len.uint)))
+  let
+    p = [toCC(points[0], cblst_p1_affine), nil]
+    s = [toCC(scalars[0], byte), nil]
+
+  blst_p1s_mult_pippenger(toCV(acc), p[0].unsafeAddr, points.len.uint,
+    s[0].unsafeAddr, MSMScalarBits, scratch[0].addr)
+
+func multiExp*(acc: var BLS_G2, points: openArray[BLS_G2P],
+               scalars: openArray[BLS_SCALAR]) =
+  var scratch = newSeq[limb_t](
+    scratchLen(blst_p2s_mult_pippenger_scratch_sizeof(points.len.uint)))
+  let
+    p = [toCC(points[0], cblst_p2_affine), nil]
+    s = [toCC(scalars[0], byte), nil]
+
+  blst_p2s_mult_pippenger(toCV(acc), p[0].unsafeAddr, points.len.uint,
+    s[0].unsafeAddr, MSMScalarBits, scratch[0].addr)
 
 func mapFPToG1*(fp: BLS_FP): BLS_G1 {.inline.} =
   blst_map_to_g1(toCV(result), toCC(fp), nil)

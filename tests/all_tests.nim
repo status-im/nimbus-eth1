@@ -10,6 +10,7 @@
 import
   ./[
     test_aristo,
+    test_bls_msm,
     test_concurrency,
     test_configuration,
     test_coredb,

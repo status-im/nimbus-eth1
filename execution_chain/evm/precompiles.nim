@@ -503,8 +503,8 @@ func blsG1MultiExp(c: Computation): EvmResultVoid =
   ? c.gasMeter.consumeGas(gas, reason="blsG1MultiExp Precompile")
 
   var
-    p {.noinit.}: BLS_G1
-    s {.noinit.}: BLS_SCALAR
+    points = newSeq[BLS_G1P](K)
+    scalars = newSeq[BLS_SCALAR](K)
     acc {.noinit.}: BLS_G1
 
   # Decode point scalar pairs
@@ -512,21 +512,21 @@ func blsG1MultiExp(c: Computation): EvmResultVoid =
     let off = L * i
 
     # Decode G1 point
-    if not p.decodePoint(input.toOpenArray(off, off+127)):
+    if not points[i].decodePoint(input.toOpenArray(off, off+127)):
       return err(prcErr(PrcInvalidPoint))
 
-    if not p.subgroupCheck:
+    if not points[i].subgroupCheck:
       return err(prcErr(PrcInvalidPoint))
 
     # Decode scalar value
-    if not s.fromBytes(input.toOpenArray(off+128, off+159)):
+    if not scalars[i].fromBytes(input.toOpenArray(off+128, off+159)):
       return err(prcErr(PrcInvalidParam))
 
-    p.mul(s)
-    if i == 0:
-      acc = p
-    else:
-      acc.add(p)
+  if K == 1:
+    acc.fromAffine(points[0])
+    acc.mul(scalars[0])
+  else:
+    acc.multiExp(points, scalars)
 
   c.output.setLen(128)
   if not encodePoint(acc, c.output):
@@ -574,8 +574,8 @@ func blsG2MultiExp(c: Computation): EvmResultVoid =
   ? c.gasMeter.consumeGas(gas, reason="blsG2MultiExp Precompile")
 
   var
-    p {.noinit.}: BLS_G2
-    s {.noinit.}: BLS_SCALAR
+    points = newSeq[BLS_G2P](K)
+    scalars = newSeq[BLS_SCALAR](K)
     acc {.noinit.}: BLS_G2
 
   # Decode point scalar pairs
@@ -583,21 +583,21 @@ func blsG2MultiExp(c: Computation): EvmResultVoid =
     let off = L * i
 
     # Decode G1 point
-    if not p.decodePoint(input.toOpenArray(off, off+255)):
+    if not points[i].decodePoint(input.toOpenArray(off, off+255)):
       return err(prcErr(PrcInvalidPoint))
 
-    if not p.subgroupCheck:
+    if not points[i].subgroupCheck:
       return err(prcErr(PrcInvalidPoint))
 
     # Decode scalar value
-    if not s.fromBytes(input.toOpenArray(off+256, off+287)):
+    if not scalars[i].fromBytes(input.toOpenArray(off+256, off+287)):
       return err(prcErr(PrcInvalidParam))
 
-    p.mul(s)
-    if i == 0:
-      acc = p
-    else:
-      acc.add(p)
+  if K == 1:
+    acc.fromAffine(points[0])
+    acc.mul(scalars[0])
+  else:
+    acc.multiExp(points, scalars)
 
   c.output.setLen(256)
   if not encodePoint(acc, c.output):
