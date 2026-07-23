@@ -69,8 +69,10 @@ func fromBytes*(ret: var BLS_SCALAR, raw: openArray[byte]): bool =
   const L = 32
   if raw.len < L:
     return false
-  let pa = cast[ptr array[L, byte]](raw[0].unsafeAddr)
-  blst_scalar_from_bendian(toCV(ret), pa[])
+  # Reduced mod the curve order so that blst_p1_mult can take its GLV path.
+  # The result only reports whether the scalar is non-zero, which is valid
+  # input, so it is discarded.
+  discard blst_scalar_from_be_bytes(toCV(ret), raw.toOpenArray(0, L-1))
   true
 
 func fromBytes(ret: var BLS_FP, raw: openArray[byte]): bool =
