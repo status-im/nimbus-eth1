@@ -12,6 +12,12 @@ import blscurve/bls_backend, stint
 
 import blscurve/blst/[blst_lowlevel]
 
+const
+  FixedBasePoints = 8
+  FixedBaseWBits = 8
+  FixedBaseNBits = 256 div FixedBasePoints
+  FixedBaseTableLen = FixedBasePoints shl (FixedBaseWBits - 1)
+
 type
   BLS_G1* = blst_p1
   BLS_G2* = blst_p2
@@ -21,6 +27,10 @@ type
   BLS_ACC* = blst_fp12
   BLS_G1P* = blst_p1_affine
   BLS_G2P* = blst_p2_affine
+  BLS_LINES* = array[68, cblst_fp6]
+
+  BLS_G1_TABLE* = object
+    table: array[FixedBaseTableLen, BLS_G1P]
 
 template toCV(x: auto): auto =
   when x is BLS_G1:
@@ -75,6 +85,14 @@ func fromBytes*(ret: var BLS_SCALAR, raw: openArray[byte]): bool =
   discard blst_scalar_from_be_bytes(toCV(ret), raw.toOpenArray(0, L-1))
   true
 
+func fromBytesCanonical*(ret: var BLS_SCALAR, raw: openArray[byte]): bool =
+  const L = 32
+  if raw.len != L:
+    return false
+  let pa = cast[ptr array[L, byte]](raw[0].unsafeAddr)
+  blst_scalar_from_bendian(toCV(ret), pa[])
+  blst_scalar_fr_check(toCV(ret)).int == 1
+
 func fromBytes(ret: var BLS_FP, raw: openArray[byte]): bool =
   const L = 48
   if raw.len < L:
@@ -119,17 +137,74 @@ func add*(a: var BLS_G2, b: BLS_G2) {.inline.} =
 func mul*(a: var BLS_G2, b: BLS_SCALAR) {.inline.} =
   blst_p2_mult(toCV(a), toCV(a), b.b[0].unsafeAddr, b.nbits)
 
+func double*(a: var BLS_G1) {.inline.} =
+  blst_p1_double(toCV(a), toCV(a))
+
+func neg*(a: var BLS_G1) {.inline.} =
+  blst_p1_cneg(toCV(a), true)
+
 func fromAffine*(a: var BLS_G1, b: BLS_G1P) {.inline.} =
   blst_p1_from_affine(toCV(a), toCC(b))
 
 func fromAffine*(a: var BLS_G2, b: BLS_G2P) {.inline.} =
   blst_p2_from_affine(toCV(a), toCC(b))
 
+func toAffine*(a: var BLS_G1P, b: BLS_G1) {.inline.} =
+  blst_p1_to_affine(toCV(a), toCC(b))
+
+func toAffine*(a: var BLS_G2P, b: BLS_G2) {.inline.} =
+  blst_p2_to_affine(toCV(a), toCC(b))
+
+func generatorG1*(): BLS_G1P {.inline.} =
+  cast[ptr BLS_G1P](blst_p1_affine_generator())[]
+
+func generatorG2*(): BLS_G2P {.inline.} =
+  cast[ptr BLS_G2P](blst_p2_affine_generator())[]
+
+func uncompress*(g: var BLS_G1P, data: openArray[byte]): bool =
+  const L = 48
+  if data.len != L:
+    return false
+  let pa = cast[ptr array[L, byte]](data[0].unsafeAddr)
+  blst_p1_uncompress(toCV(g), pa[]) == BLST_SUCCESS
+
+func uncompress*(g: var BLS_G2P, data: openArray[byte]): bool =
+  const L = 96
+  if data.len != L:
+    return false
+  let pa = cast[ptr array[L, byte]](data[0].unsafeAddr)
+  blst_p2_uncompress(toCV(g), pa[]) == BLST_SUCCESS
+
 const
   MSMScalarBits = 256
 
 func scratchLen(numBytes: uint): int {.inline.} =
   (numBytes.int + sizeof(limb_t) - 1) div sizeof(limb_t)
+
+func initFixedBase*(g: BLS_G1P): BLS_G1_TABLE =
+  doAssert blst_p1s_mult_wbits_precompute_sizeof(
+    FixedBaseWBits, FixedBasePoints).int == sizeof(result.table)
+
+  var
+    points {.noinit.}: array[FixedBasePoints, BLS_G1P]
+    acc {.noinit.}: BLS_G1
+  acc.fromAffine(g)
+
+  for i in 0 ..< FixedBasePoints:
+    points[i].toAffine(acc)
+    for _ in 0 ..< FixedBaseNBits:
+      acc.double()
+
+  let p = [toCC(points[0], cblst_p1_affine), nil]
+  blst_p1s_mult_wbits_precompute(toCV(result.table[0], cblst_p1_affine),
+    FixedBaseWBits, p[0].unsafeAddr, FixedBasePoints)
+
+func mul*(t: BLS_G1_TABLE, s: BLS_SCALAR): BLS_G1 =
+  var scratch {.noinit.}: array[FixedBasePoints, BLS_G1]
+  let sc = [toCC(s, byte), nil]
+  blst_p1s_mult_wbits(toCV(result, cblst_p1),
+    toCC(t.table[0], cblst_p1_affine), FixedBaseWBits, FixedBasePoints,
+    sc[0].unsafeAddr, FixedBaseNBits, toCV(scratch[0], limb_t))
 
 func multiExp*(acc: var BLS_G1, points: openArray[BLS_G1P],
                scalars: openArray[BLS_SCALAR]) =
@@ -179,6 +254,12 @@ func isInf*(P: BLS_G2P): bool {.inline.} =
 
 func millerLoop*(P: BLS_G1P, Q: BLS_G2P): BLS_ACC {.inline.} =
   blst_miller_loop(toCV(result), toCC(Q), toCC(P))
+
+func precomputeLines*(lines: var BLS_LINES, Q: BLS_G2P) {.inline.} =
+  blst_precompute_lines(lines, toCC(Q))
+
+func millerLoop*(P: BLS_G1P, lines: BLS_LINES): BLS_ACC {.inline.} =
+  blst_miller_loop_lines(toCV(result), lines, toCC(P))
 
 proc mul*(a: var BLS_ACC, b: BLS_ACC) {.inline.} =
   blst_fp12_mul(toCV(a), toCC(a), toCC(b))
