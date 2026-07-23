@@ -32,6 +32,7 @@ proc setupComputation(params: CallParams): Computation =
       sender:            params.sender,
       value:             params.value,
       data:              params.input,
+      flags:            {MsgFlags.SystemCall},
     )
     code = vmState.ledger.getCode(msg.codeAddress)
     computation = newComputation(vmState, false, msg, code)

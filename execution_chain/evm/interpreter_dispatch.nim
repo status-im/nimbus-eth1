@@ -126,7 +126,7 @@ proc topFrameAuthAndDelegation(params: CallParams, c: Computation): bool =
   true
 
 proc beforeExecCall(c: Computation, params: CallParams): bool =
-  if c.msg.depth == 0 and c.fork >= FkAmsterdam:
+  if c.msg.depth == 0 and c.fork >= FkAmsterdam and MsgFlags.SystemCall notin c.msg.flags:
     if not params.topFrameAuthAndDelegation(c):
       return true
 
