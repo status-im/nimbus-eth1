@@ -54,6 +54,34 @@ proc randG2Point(): BLS_G2P =
   doAssert encodePoint(mapFPToG2(fp2), enc)
   doAssert result.decodePoint(enc)
 
+proc infG1Point(): BLS_G1P =
+  let enc = newSeq[byte](128)
+  doAssert result.decodePoint(enc)
+
+proc infG2Point(): BLS_G2P =
+  let enc = newSeq[byte](256)
+  doAssert result.decodePoint(enc)
+
+proc validatePlain(points: openArray[BLS_G1P]): bool =
+  for p in points:
+    if not p.subgroupCheck: return false
+  true
+
+proc validatePlain(points: openArray[BLS_G2P]): bool =
+  for p in points:
+    if not p.subgroupCheck: return false
+  true
+
+proc validateEarlyOut(points: openArray[BLS_G1P]): bool =
+  for p in points:
+    if not p.isInf and not p.subgroupCheck: return false
+  true
+
+proc validateEarlyOut(points: openArray[BLS_G2P]): bool =
+  for p in points:
+    if not p.isInf and not p.subgroupCheck: return false
+  true
+
 proc naiveMultiExp(points: openArray[BLS_G1P],
                    scalars: openArray[BLS_SCALAR]): BLS_G1 =
   for i in 0..<points.len:
@@ -160,3 +188,57 @@ suite "BLS12-381 multi-scalar multiplication":
       echo &"{K:>6} {naive/1000.0:>14.1f} {fast/1000.0:>16.1f} {speedup:>8.2f}x"
       if K >= 32:
         check speedup > 1.5
+
+  test "infinity early-out preserves validation and MSM results":
+    const K = 16
+    var
+      g1 = newSeq[BLS_G1P](K)
+      g2 = newSeq[BLS_G2P](K)
+      scalars = newSeq[BLS_SCALAR](K)
+    for i in 0..<K:
+      if i mod 2 == 0:
+        g1[i] = infG1Point()
+        g2[i] = infG2Point()
+      else:
+        g1[i] = randG1Point()
+        g2[i] = randG2Point()
+      scalars[i] = randScalar()
+
+    check validateEarlyOut(g1) == validatePlain(g1)
+    check validateEarlyOut(g2) == validatePlain(g2)
+    check validateEarlyOut(g1)
+    check validateEarlyOut(g2)
+
+    var acc1 {.noinit.}: BLS_G1
+    acc1.multiExp(g1, scalars)
+    check acc1.toBytes == naiveMultiExp(g1, scalars).toBytes
+
+    var acc2 {.noinit.}: BLS_G2
+    acc2.multiExp(g2, scalars)
+    check acc2.toBytes == naiveMultiExp(g2, scalars).toBytes
+
+  test "subgroup check infinity early-out benchmark":
+    const K = 64
+    echo &"""{"group":>6} {"inf %":>6} {"plain (us)":>13} {"early-out (us)":>16} {"speedup":>9}"""
+
+    for pct in [0, 50, 100]:
+      var points = newSeq[BLS_G1P](K)
+      for i in 0..<K:
+        points[i] = if (i * 100) div K < pct: infG1Point() else: randG1Point()
+
+      let plain = measure(20):
+        sink = sink xor byte(validatePlain(points))
+      let early = measure(20):
+        sink = sink xor byte(validateEarlyOut(points))
+      echo &"{\"G1\":>6} {pct:>6} {plain/1000.0:>13.1f} {early/1000.0:>16.1f} {plain/early:>8.2f}x"
+
+    for pct in [0, 50, 100]:
+      var points = newSeq[BLS_G2P](K)
+      for i in 0..<K:
+        points[i] = if (i * 100) div K < pct: infG2Point() else: randG2Point()
+
+      let plain = measure(10):
+        sink = sink xor byte(validatePlain(points))
+      let early = measure(10):
+        sink = sink xor byte(validateEarlyOut(points))
+      echo &"{\"G2\":>6} {pct:>6} {plain/1000.0:>13.1f} {early/1000.0:>16.1f} {plain/early:>8.2f}x"

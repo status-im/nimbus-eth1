@@ -515,7 +515,7 @@ func blsG1MultiExp(c: Computation): EvmResultVoid =
     if not points[i].decodePoint(input.toOpenArray(off, off+127)):
       return err(prcErr(PrcInvalidPoint))
 
-    if not points[i].subgroupCheck:
+    if not points[i].isInf and not points[i].subgroupCheck:
       return err(prcErr(PrcInvalidPoint))
 
     # Decode scalar value
@@ -586,7 +586,7 @@ func blsG2MultiExp(c: Computation): EvmResultVoid =
     if not points[i].decodePoint(input.toOpenArray(off, off+255)):
       return err(prcErr(PrcInvalidPoint))
 
-    if not points[i].subgroupCheck:
+    if not points[i].isInf and not points[i].subgroupCheck:
       return err(prcErr(PrcInvalidPoint))
 
     # Decode scalar value
