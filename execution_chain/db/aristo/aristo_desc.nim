@@ -25,19 +25,18 @@ import
   std/[atomics, hashes, sequtils, sets, tables, heapqueue],
   eth/common/hashes, eth/trie/nibbles,
   results,
-  ../../concurrency/lru,
   ./aristo_constants,
   ./aristo_desc/[desc_error, desc_identifiers, desc_structural],
   ./aristo_desc/desc_backend
 
 when compileOption("threads"):
-  import taskpools, ../../concurrency/readwritelock
-  export taskpools, readwritelock
+  import taskpools, ../../concurrency/lru, ../../concurrency/readwritelock
+  export taskpools, readwritelock, lru
 
 # Not auto-exporting backend
 export
   tables, aristo_constants, desc_error, desc_identifiers, nibbles,
-  desc_structural, lru, hashes, heapqueue, PutHdlRef
+  desc_structural, hashes, heapqueue, PutHdlRef
 
 type
   AristoTxRef* = ref object
@@ -134,17 +133,21 @@ type
 
     txRef*: AristoTxRef              ## Bottom-most in-memory frame
 
-    accLeaves*: ConcurrentLruCache[Hash32, CachedAccLeaf]
-      ## Account path to payload cache - accounts are frequently accessed by
-      ## account path when contracts interact with them - this cache ensures
-      ## that we don't have to re-traverse the storage trie for every such
-      ## interaction
-      ## TODO a better solution would probably be to cache this in a type
-      ## exposed to the high-level API
+    # Caches only available with threads enabled.
+    # The current only threads disabled use case is the stateless guest, for which
+    # these caches are not useful anyhow.
+    when compileOption("threads"):
+      accLeaves*: ConcurrentLruCache[Hash32, CachedAccLeaf]
+        ## Account path to payload cache - accounts are frequently accessed by
+        ## account path when contracts interact with them - this cache ensures
+        ## that we don't have to re-traverse the storage trie for every such
+        ## interaction
+        ## TODO a better solution would probably be to cache this in a type
+        ## exposed to the high-level API
 
-    stoLeaves*: ConcurrentLruCache[Hash32, CachedStoLeaf]
-      ## Mixed account/storage path to payload cache - same as above but caches
-      ## the full lookup of storage slots
+      stoLeaves*: ConcurrentLruCache[Hash32, CachedStoLeaf]
+        ## Mixed account/storage path to payload cache - same as above but caches
+        ## the full lookup of storage slots
 
     staticLevel*: Atomic[int]
       ## MPT level where "most" leaves can be found, for static vid lookups

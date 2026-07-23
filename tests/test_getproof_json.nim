@@ -11,7 +11,7 @@ import
   web3/eth_api,
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/core_db,
-  ../execution_chain/common/[chain_config, genesis],
+  ../execution_chain/common/[chain_config_loader, genesis],
   ../execution_chain/rpc/server_api,
   ./proof_helpers
 
