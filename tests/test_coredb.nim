@@ -18,6 +18,7 @@ import
   unittest2,
   ../execution_chain/db/opts,
   ../execution_chain/db/core_db/[memory_only, persistent],
+  ../execution_chain/common/chain_config_loader,
   ../execution_chain/core/chain,
   ./replay/pp,
   ./test_coredb/[
