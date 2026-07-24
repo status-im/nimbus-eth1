@@ -95,6 +95,12 @@ template defaultZero(T: type, nField: string, index: int): auto =
   else:
     default(T)
 
+template defaultTo(def: auto, nField: string): auto =
+  if n.hasKey(nField):
+    fromJson(typeof(def), n[nField])
+  else:
+    def
+
 template optional(T: type, nField: string): auto =
   if n.hasKey(nField):
     Opt.some(T.fromJson(n[nField]))
@@ -150,14 +156,14 @@ proc parseParentHeader*(n: JsonNode): Header =
     blobGasUsed: optional(uint64, "parentBlobGasUsed"),
   )
 
-proc parseTx*(n: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
+proc parseTx*(n: JsonNode, dataIndex, gasIndex, valueIndex: int, eip155: bool): Transaction =
   var tx = Transaction(
     txType  : txType(n),
     nonce   : required(AccountNonce, "nonce"),
     gasLimit: required(GasInt, "gasLimit", gasIndex),
     value   : required(UInt256, "value", valueIndex),
     payload : required(seq[byte], "data", dataIndex),
-    chainId : 1.u256,
+    chainId : defaultTo(1.u256, "chainId"),
     gasPrice: defaultZero(GasInt, "gasPrice"),
     maxFeePerGas        : defaultZero(GasInt, "maxFeePerGas"),
     accessList          : defaultZero(AccessList, "accessLists", dataIndex),
@@ -172,14 +178,14 @@ proc parseTx*(n: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
     tx.to = Opt.some(Address.fromHex(rawTo))
 
   let secretKey = required(PrivateKey, "secretKey")
-  signTransaction(tx, secretKey, false)
+  signTransaction(tx, secretKey, eip155)
 
-proc parseTx*(txData, index: JsonNode): Transaction =
+proc parseTx*(txData, index: JsonNode, eip155: bool): Transaction =
   let
     dataIndex = index["data"].getInt
     gasIndex  = index["gas"].getInt
     valIndex  = index["value"].getInt
-  parseTx(txData, dataIndex, gasIndex, valIndex)
+  parseTx(txData, dataIndex, gasIndex, valIndex, eip155)
 
 proc setupLedger*(wantedState: JsonNode, ledger: LedgerRef) =
   for ac, accountData in wantedState:
