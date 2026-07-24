@@ -50,13 +50,10 @@ const skipFiles = [
   "fork_transition_bal_size_constraint.json",
   "slotnum_at_fork_transition.json",
   "transfer_log_fork_transition.json",
-
-  # The stateless input schema cannot represent EIP-8282 builder requests, so
-  # the guest reconstructs an empty requestsHash while execution emits a builder
-  # request -> requestsHash mismatch -> false, but 2 of the 25 vectors wrongly
-  # expect true. Upstream schema/vector issue, already fixed in upstream
-  # tests-zkevm@v0.6.2
-  "invalid_multi_type_requests.json",
+  "auth_intrinsic_at_transition.json",
+  "intrinsic_reduction_across_amsterdam_transition.json",
+  "builder_exit_contract_deployment.json",
+  "builder_deposit_contract_deployment.json",
 
   # No fail yet as we don't check/use public keys. We could check them easily
   # but the better way is to use them as optimization and check automatically
@@ -64,8 +61,8 @@ const skipFiles = [
   "stateless_input_invalid_public_key_is_rejected.json",
   "stateless_input_opposite_y_parity_public_key_is_rejected.json",
 
-  # cases of missing code in witness
-  "validation_codes_missing_delegated_code_on_insufficient_balance_call.json",
+  # cases of missing states in witness
+  "validation_state_missing_failed_call_target_account_proof_node.json",
 ]
 
 runEESTSuite(

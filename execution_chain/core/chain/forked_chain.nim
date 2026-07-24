@@ -565,7 +565,23 @@ proc validateBlock(
       base = c.calculateNewBase(c.latestFinalized.number, c.latest)
       prevBase = c.base.number
 
-    c.updateFinalized(base, base)
+    # `base` is the persistence point; the finalization reference passed to
+    # `updateFinalized` must never sit *below* the existing finalized markers.
+    # During pure auto-forward the current frontier lags `base`, so `base`
+    # advances it (and legitimately prunes branches that forked below the new
+    # base). But when an earlier `forkChoice` finalized within `baseDistance` of
+    # the head, `base` (capped at head - baseDistance) can land *below* that
+    # marker; feeding `base` in as the frontier would then make `reachable`
+    # prune every head (including `c.latest`), tripping `candidate.isNil.not`.
+    # Use the higher of the two - the true finalized frontier on `c.latest`.
+    var finalizedFrontier = base
+    for it in ancestors(c.latest):
+      if not it.notFinalized:
+        if it.number > base.number:
+          finalizedFrontier = it
+        break
+
+    c.updateFinalized(finalizedFrontier, c.latest)
     await c.queueUpdateBase(base)
 
     # If on disk head behind base, move it to base too.
@@ -1278,19 +1294,35 @@ func equalOrAncestorOf*(c: ForkedChainRef, blockHash: Hash32, headHash: Hash32):
 
   false
 
-proc isCanonicalAncestor*(c: ForkedChainRef,
+func knownFinalizedBlock(c: ForkedChainRef, finalizedBlockHash: Hash32): BlockRef =
+  let b = c.hashToBlock.getOrDefault(finalizedBlockHash)
+  if b.isNil.not:
+    return b
+  c.hashToBlock.getOrDefault(c.latestFinalized.hash)
+
+proc isCanonicalAndFinalizedAncestor*(c: ForkedChainRef,
                     blockNumber: BlockNumber,
-                    blockHash: Hash32): bool =
-  if blockNumber >= c.latest.number:
+                    blockHash: Hash32,
+                    finalizedBlockHash: Hash32): bool =
+  # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.7/src/engine/paris.md#specification-1
+  # Client software MAY skip an update of the forkchoice state and MUST NOT
+  # begin a payload build process if there is a known finalizedBlockHash and
+  # forkchoiceState.headBlockHash references a VALID ancestor of the latest
+  # known finalized block, i.e. the ancestor passed payload validation process
+  # and deemed VALID.
+
+  if blockHash == finalizedBlockHash:
     return false
 
-  if blockHash == c.latest.hash:
+  let b = c.knownFinalizedBlock(finalizedBlockHash)
+  if b.isNil:
     return false
 
-  if c.base.number < c.latest.number:
-    # The current canonical chain in memory is headed by
-    # latest.header
-    for it in ancestors(c.latest):
+  if blockNumber >= b.number:
+    return false
+
+  if c.base.number < b.number:
+    for it in ancestors(b):
       if it.hash == blockHash and it.number == blockNumber:
         return true
 

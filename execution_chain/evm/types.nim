@@ -57,6 +57,7 @@ type
     cumulativeGasUsed*: GasInt
     blockRegularGasUsed*: GasInt
     blockStateGasUsed*: GasInt
+    authStateGasUsed* : int64
     gasCosts*         : GasCosts
     blobGasUsed*      : uint64
     allLogs*          : seq[Log] # EIP-6110
@@ -118,14 +119,13 @@ type
   MsgFlags* {.pure.} = enum
     Static
     Precompile
-    TargetAlive
     Delegated
 
   Message* = ref object
     kind*:             CallKind
     depth*:            int
     gas*:              GasInt
-    stateGas*:         GasInt
+    stateGasReservoir*:GasInt
     sender*:           Address
     contractAddress*:  Address
     codeAddress*:      Address

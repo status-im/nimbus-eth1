@@ -14,11 +14,14 @@ import
   chronicles,
   stew/assign2,
   ../evm/[types, state],
-  ../evm/[message, precompiles, internals, interpreter_dispatch],
+  ../evm/[message, precompiles, internals, interpreter_dispatch, evm_errors],
+  ../evm/interpreter/op_handlers/oph_helpers,
   ../db/ledger,
   ../common/evmforks,
-  ../core/[eip4844, eip7702, eip8037],
-  ./call_types
+  ../core/eip4844,
+  ../core/eip8037,
+   ./eoa_delegation,
+   ./call_types
 
 import ../evm/computation
 
@@ -32,14 +35,14 @@ type
     blockRegularGasUsed: GasInt
     blockStateGasUsed: GasInt
 
-proc initialAccessListEIP2929(call: CallParams) =
+proc initialAccessListEIP2929(params: CallParams) =
   # EIP2929 initial access list.
-  let vmState = call.vmState
+  let vmState = params.vmState
   if vmState.fork < FkBerlin:
     return
 
   vmState.mutateLedger:
-    ledger.accessList(call.sender)
+    ledger.accessList(params.sender)
 
     # EIP3651 adds coinbase to the list of addresses that should start warm.
     if vmState.fork >= FkShanghai:
@@ -50,117 +53,41 @@ proc initialAccessListEIP2929(call: CallParams) =
       ledger.accessList(c)
 
     # EIP2930 optional access list.
-    for account in call.accessList:
+    for account in params.accessList:
       ledger.accessList(account.address)
       for key in account.storageKeys:
         ledger.accessList(account.address, key.to(UInt256))
 
-proc setDelegation(call: CallParams): (int64, int64) =
-  var
-    regularRefund = 0'i64
-    stateRefund = 0'i64
-    passCount = 0
+proc setupComputation(params: CallParams, keepStack: bool, vmState: BaseVMState, msg: Message): Computation =
+  if vmState.hardFork < Amsterdam:
+    var
+      code = if params.isCreate:
+              msg.contractAddress = generateContractAddress(vmState, params.sender)
+              CodeBytesRef.init(params.input)
+            else:
+              assign(msg.data, params.input)
+              getRecipientCode(vmState, msg)
 
+    if MsgFlags.Delegated in msg.flags:
+      # If the `call.to` has a delegation, also warm its target.
+      vmState.ledger.accessList(msg.delegateTo)
+      code = vmState.readOnlyLedger.getCode(msg.delegateTo)
+
+    return newComputation(vmState, keepStack, msg, code)
+
+  # Delay loading code until interpreter_dispatch.prepareDispatch
+  if params.isCreate:
+    msg.contractAddress = generateContractAddress(vmState, params.sender)
+  newComputation(vmState, keepStack, msg)
+
+proc setupEVM(params: CallParams, keepStack: bool): Computation =
   let
-    vmState = call.vmState
-    ledger = vmState.ledger
-
-  # EIP-7702
-  for auth in call.authorizationList:
-
-    # 1. Verify the chain id is either 0 or the chain's current ID.
-    if not(auth.chainId == 0.u256 or auth.chainId == vmState.com.chainId):
-      continue
-
-    # 2. Verify the nonce is less than 2**64 - 1.
-    if auth.nonce+1 < auth.nonce:
-      continue
-
-    # 3. authority = ecrecover(keccak(MAGIC || rlp([chain_id, address, nonce])), y_parity, r, s]
-    let authority = authority(auth).valueOr:
-      continue
-
-    # 4. Add authority to accessed_addresses (as defined in EIP-2929.)
-    ledger.accessList(authority)
-
-    # 5. Verify the code of authority is either empty or already delegated.
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.trackAddressAccess(authority)
-    let
-      code = ledger.getCode(authority)
-    if code.len > 0:
-      if not isDelegation(code):
-        continue
-
-    # 6. Verify the nonce of authority is equal to nonce.
-    if ledger.getNonce(authority) != auth.nonce:
-      continue
-
-    inc passCount
-
-    if vmState.fork >= FkAmsterdam:
-      # 7. Add PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST gas to the global refund counter if authority exists in the trie.
-      if ledger.accountExists(authority):
-        stateRefund += CREATE_ACCOUNT_STATE_GAS
-        regularRefund += ACCOUNT_WRITE_8038
-
-      # 8. Set the code of authority to be 0xef0100 || address. This is a delegation designation.
-      let
-        preStateAuthorityCode = ledger.getOriginalCode(authority)
-        delegatedBeforeTx = isDelegation(preStateAuthorityCode)
-        delegatedNow = isDelegation(code)
-
-      let authCode =
-        if auth.address == zeroAddress:
-          stateRefund += AUTH_BASE_STATE_GAS
-          if delegatedNow and not delegatedBeforeTx:
-            stateRefund += AUTH_BASE_STATE_GAS
-          # @[] will cause wasm/emscripten/arc/orc ICE with nim v2.2.10
-          # https://github.com/nim-lang/Nim/issues/25945
-          newSeq[byte]()
-        else:
-          if delegatedNow or delegatedBeforeTx:
-            stateRefund += AUTH_BASE_STATE_GAS
-          @(addressToDelegation(auth.address))
-
-      if vmState.balTrackerEnabled:
-        vmState.balTracker.trackCodeChange(authority, authCode)
-      ledger.setCode(authority, authCode)
-    else:
-      # 7. Add PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST gas to the global refund counter if authority exists in the trie.
-      if ledger.accountExists(authority):
-        regularRefund += PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST
-
-      # 8. Set the code of authority to be 0xef0100 || address. This is a delegation designation.
-      let authCode =
-        if auth.address == zeroAddress:
-          @[]
-        else:
-          @(addressToDelegation(auth.address))
-      if vmState.balTrackerEnabled:
-        vmState.balTracker.trackCodeChange(authority, authCode)
-      ledger.setCode(authority, authCode)
-
-    # 9. Increase the nonce of authority by one.
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.trackNonceChange(authority, auth.nonce + 1)
-    ledger.setNonce(authority, auth.nonce + 1)
-
-  if vmState.fork >= FkAmsterdam:
-    let refundCount = call.authorizationList.len - passCount
-    regularRefund += ACCOUNT_WRITE_8038 * refundCount
-    stateRefund += (AUTH_BASE_STATE_GAS + CREATE_ACCOUNT_STATE_GAS) * refundCount
-
-  (regularRefund, stateRefund)
-
-proc setupComputation(call: CallParams, regularRefund: int64, stateRefund: int64, keepStack: bool): Computation =
-  let
-    vmState = call.vmState
+    vmState = params.vmState
     fork = vmState.hardFork
   vmState.txCtx = TxContext(
-    origin         : call.sender,
-    gasPrice       : call.gasPrice,
-    versionedHashes: call.versionedHashes,
+    origin         : params.sender,
+    gasPrice       : params.gasPrice,
+    versionedHashes: params.versionedHashes,
     blobBaseFee    : getBlobBaseFee(vmState.blockCtx.excessBlobGas, vmState.com, fork),
   )
 
@@ -169,55 +96,45 @@ proc setupComputation(call: CallParams, regularRefund: int64, stateRefund: int64
   vmState.gasRefunded = 0
 
   let
-    isAmsterdamOrLater = fork >= Amsterdam
-    intrinsicGas = call.intrinsic.regular + call.intrinsic.state
+    intrinsicGas = params.intrinsic.regular + params.intrinsic.state
 
     # Prevent underflow which can occur when gasLimit is less than intrinsicGas.
     # Note that this is only a short term fix. In the longer term we need to
     # implement validation on all fields in the Message before executing in the EVM.
     # TODO: Implement full validation on all fields. See related issue: https://github.com/status-im/nimbus-eth1/issues/1524
-    executionGas = if call.gasLimit < intrinsicGas: 0.GasInt else: call.gasLimit - intrinsicGas
-    regularGasBudget = TX_GAS_LIMIT - call.intrinsic.regular
+    executionGas = if params.gasLimit < intrinsicGas: 0.GasInt else: params.gasLimit - intrinsicGas
+    regularGasBudget = TX_GAS_LIMIT - params.intrinsic.regular
 
   var
     gasLeft = executionGas
-    stateGas = 0.GasInt
+    stateGasReservoir = 0.GasInt
+    regularRefund = 0'i64
 
-  if isAmsterdamOrLater:
+  if fork >= Amsterdam:
     gasLeft = min(regularGasBudget, executionGas)
-    stateGas = executionGas - gasLeft + stateRefund.GasInt
+    stateGasReservoir = executionGas - gasLeft
+  else:
+    regularRefund = setDelegation(params)
 
   let
     msg = Message(
-      kind:            if call.isCreate:
-                         CallKind.Create
-                       else:
-                         CallKind.Call,
-      # flags: {},
-      # depth: 0,
-      gas:             gasLeft,
-      stateGas:        stateGas,
-      contractAddress: call.to,
-      codeAddress:     call.to,
-      delegateTo:      call.to,
-      sender:          call.sender,
-      value:           call.value,
+      kind:              if params.isCreate: CallKind.Create
+                         else: CallKind.Call,
+      gas:               gasLeft,
+      stateGasReservoir: stateGasReservoir,
+      contractAddress:   params.to,
+      codeAddress:       params.to,
+      delegateTo:        params.to,
+      sender:            params.sender,
+      value:             params.value,
     )
+    computation = setupComputation(params, keepStack, vmState, msg)
 
-    code = if call.isCreate:
-             msg.contractAddress = generateContractAddress(vmState, call.sender)
-             CodeBytesRef.init(call.input)
-           else:
-             assign(msg.data, call.input)
-             getCallCode(vmState, msg)
-
-    computation = newComputation(vmState, keepStack, msg, code)
-
-  computation.addRefund(regularRefund)
-
-  vmState.captureStart(computation, call.sender, call.to,
-                       call.isCreate, call.input,
-                       call.gasLimit, call.value)
+  if computation.isSuccess:
+    computation.addRefund(regularRefund)
+    vmState.captureStart(computation, params.sender, params.to,
+                         params.isCreate, params.input,
+                         params.gasLimit, params.value)
   computation
 
 # FIXME-awkwardFactoring: the factoring out of the pre and
@@ -225,29 +142,29 @@ proc setupComputation(call: CallParams, regularRefund: int64, stateRefund: int64
 # not to have too much duplicated code between sync and async.
 # --Adam
 
-proc prepareToRunComputation(call: CallParams) =
+proc prepareToRunComputation(params: CallParams) =
   let
-    vmState = call.vmState
+    vmState = params.vmState
     fork = vmState.hardFork
 
   vmState.mutateLedger:
-    if not call.isCreate:
+    if not params.isCreate:
       if vmState.balTrackerEnabled:
-        vmState.balTracker.trackIncNonceChange(call.sender)
-      ledger.incNonce(call.sender)
+        vmState.balTracker.trackIncNonceChange(params.sender)
+      ledger.incNonce(params.sender)
 
     # Charge for gas.
-    var gasFee = call.gasLimit.u256 * call.gasPrice.u256
+    var gasFee = params.gasLimit.u256 * params.gasPrice.u256
     if fork >= Cancun:
       # EIP-4844
-      gasFee += calcDataFee(call.versionedHashes.len,
+      gasFee += calcDataFee(params.versionedHashes.len,
         vmState.blockCtx.excessBlobGas, vmState.com, fork)
 
     if vmState.balTrackerEnabled:
-      vmState.balTracker.trackSubBalanceChange(call.sender, gasFee)
-    ledger.subBalance(call.sender, gasFee)
+      vmState.balTracker.trackSubBalanceChange(params.sender, gasFee)
+    ledger.subBalance(params.sender, gasFee)
 
-proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, stateRefund: int64): GasUsed =
+proc calculateAndPossiblyRefundGas(c: Computation, params: CallParams): GasUsed =
   let
     vmState = c.vmState
     fork = c.vmState.fork
@@ -255,21 +172,12 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, stateRefund
     MaxRefundQuotient = if fork >= FkLondon: 5.GasInt
                         else: 2.GasInt
 
-  var
-    stateGasRefund = stateRefund
-
   if c.shouldBurnGas:
     c.gasMeter.burnGas()
 
-  if c.fork >= FkAmsterdam:
-    if call.isCreate:
-      if c.isError or MsgFlags.TargetAlive in c.msg.flags:
-        c.gasMeter.returnStateGas(CREATE_ACCOUNT_STATE_GAS)
-        stateGasRefund += CREATE_ACCOUNT_STATE_GAS
-
   # Calculated gas used, taking into account refund rules.
   let
-    txGasUsedBeforeRefund = call.gasLimit - c.gasMeter.gasRemaining - c.gasMeter.stateGasLeft
+    txGasUsedBeforeRefund = params.gasLimit - c.gasMeter.gasRemaining - c.gasMeter.stateGasLeft
     maxRefund = txGasUsedBeforeRefund div MaxRefundQuotient
     txGasRefund = min(c.getGasRefund(), maxRefund)
     txGasUsedAfterRefund = txGasUsedBeforeRefund - txGasRefund
@@ -280,12 +188,13 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, stateRefund
     blockStateGasUsed = 0.GasInt
 
   if fork >= FkAmsterdam:
-    txGasUsed = max(txGasUsedAfterRefund, call.intrinsic.floorDataGas)
-    blockStateGasUsed = GasInt(max(0, call.intrinsic.state.int64 + c.gasMeter.stateGasUsed - stateGasRefund))
-    blockRegularGasUsed = txGasUsedBeforeRefund - blockStateGasUsed
+    txGasUsed = max(txGasUsedAfterRefund, params.intrinsic.floorDataGas)
+    let txStateGas = params.intrinsic.state.int64 + c.vmState.authStateGasUsed + c.frameStateGasUsed()
+    blockStateGasUsed = GasInt(max(0, txStateGas))
+    blockRegularGasUsed = max(txGasUsedBeforeRefund - blockStateGasUsed, params.intrinsic.floorDataGas)
     debug "EIP-8037 gas accounting",
-      intrinsicRegular = call.intrinsic.regular,
-      intrinsicState = call.intrinsic.state,
+      intrinsicRegular = params.intrinsic.regular,
+      intrinsicState = params.intrinsic.state,
       regularGasUsed = c.gasMeter.regularGasUsed,
       stateGasUsed = c.gasMeter.stateGasUsed,
       gasRemaining = c.gasMeter.gasRemaining,
@@ -293,19 +202,19 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, stateRefund
       blockRegularGasUsed = blockRegularGasUsed,
       blockStateGasUsed = blockStateGasUsed,
       txGasUsed = txGasUsed,
-      floorDataGas = call.intrinsic.floorDataGas
+      floorDataGas = params.intrinsic.floorDataGas
   elif fork >= FkPrague:
-    txGasUsed = max(txGasUsedAfterRefund, call.intrinsic.floorDataGas)
+    txGasUsed = max(txGasUsedAfterRefund, params.intrinsic.floorDataGas)
     blockRegularGasUsed = txGasUsed
 
   # Refund for unused gas.
-  let txGasLeft = call.gasLimit - txGasUsed
+  let txGasLeft = params.gasLimit - txGasUsed
   if txGasLeft > 0:
-    let gasRefundAmount = txGasLeft.u256 * call.gasPrice.u256
+    let gasRefundAmount = txGasLeft.u256 * params.gasPrice.u256
     if vmState.balTrackerEnabled:
-      vmState.balTracker.trackAddBalanceChange(call.sender, gasRefundAmount)
+      vmState.balTracker.trackAddBalanceChange(params.sender, gasRefundAmount)
     vmState.mutateLedger:
-      ledger.addBalance(call.sender, gasRefundAmount, checkEmptyAccount = fork < FkParis)
+      ledger.addBalance(params.sender, gasRefundAmount, checkEmptyAccount = fork < FkParis)
 
   GasUsed(
     evmGasUsed: c.msg.gas - txGasLeft,
@@ -315,9 +224,9 @@ proc calculateAndPossiblyRefundGas(c: Computation, call: CallParams, stateRefund
   )
 
 proc finishRunningComputation(
-    c: Computation, call: CallParams, stateRefund: int64, T: type): T =
+    c: Computation, params: CallParams, T: type): T =
   let
-    gasUsed = calculateAndPossiblyRefundGas(c, call, stateRefund)
+    gasUsed = calculateAndPossiblyRefundGas(c, params)
 
   # evm gas used without intrinsic gas
   c.vmState.captureEnd(c, c.output, gasUsed.evmGasUsed, c.errorOpt)
@@ -329,7 +238,7 @@ proc finishRunningComputation(
       result.error = c.error.info
     result.gasUsed = gasUsed.txGasUsed
     result.output = system.move(c.output)
-    result.contractAddress = if call.isCreate: c.msg.contractAddress
+    result.contractAddress = if params.isCreate: c.msg.contractAddress
                              else: default(addresses.Address)
 
     when T is DebugCallResult:
@@ -348,17 +257,94 @@ proc finishRunningComputation(
   else:
     {.error: "Unknown computation output".}
 
-proc runComputation*(call: CallParams, T: type): T =
-  prepareToRunComputation(call)
-  initialAccessListEIP2929(call)
+proc prepareDispatch(params: CallParams, c: Computation): EvmResultVoid =
+  let
+    vmState = c.vmState
+    ledger = vmState.ledger
+
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.trackAddressAccess(c.msg.contractAddress)
+
+  var
+    code =
+      if params.isCreate:
+        if ledger.originalAccountEmpty(c.msg.contractAddress):
+          ? c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch create new account")
+        CodeBytesRef.init(params.input)
+      else:
+        if params.value.isZero.not and not ledger.accountExists(c.msg.contractAddress):
+          ? c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch call new account")
+        assign(c.msg.data, params.input)
+        getRecipientCode(vmState, c.msg)
+
+  if MsgFlags.Delegated in c.msg.flags:
+    # The delegated account access must be charged before its code is read,
+    # or an OOG here would wrongly add the target account to the witness.
+    let delegatedGas = c.gasEip8038AccountCheck(c.msg.delegateTo)
+    ? c.gasMeter.consumeGas(delegatedGas, "prepareDispatch delegatedGas")
+
+    if vmState.balTrackerEnabled:
+      vmState.balTracker.trackAddressAccess(c.msg.delegateTo)
+    code = vmState.readOnlyLedger.getCode(c.msg.delegateTo)
+
+  c.setCode(code)
+  ok()
+
+proc authAndDelegation(params: CallParams, c: Computation): EvmResultVoid =
+  ? params.setDelegation(c)
+  c.vmState.authStateGasUsed = c.frameStateGasUsed()
+  c.msg.stateGasReservoir = c.gasMeter.stateGasLeft
+  c.gasMeter.stateGasSpilled = 0
+  params.prepareDispatch(c)
+
+proc topFrameAuthAndDelegation(params: CallParams, c: Computation): bool =
+  let
+    prepReservoir = c.msg.stateGasReservoir
+
+  c.beginSavePoint()
+  params.authAndDelegation(c).isOkOr:
+    c.rollback()
+    c.msg.stateGasReservoir = prepReservoir
+    c.vmState.authStateGasUsed = 0
+    c.refillFrameStateGas()
+    c.setError($error.code, true)
+    return false
+
+  c.commit()
+  true
+
+proc preExecComputation(c: Computation, params: CallParams) =
+  if params.isCreate:
+    if not c.incrementNonce():
+      return
+
+    if c.fork >= FkAmsterdam:
+      if not params.topFrameAuthAndDelegation(c):
+        return
+
+    if not c.accountDeployable():
+      return
+
+    return
+
+  if c.fork >= FkAmsterdam:
+    if not params.topFrameAuthAndDelegation(c):
+      return
+
+proc runComputation*(params: CallParams, T: type): T =
+  prepareToRunComputation(params)
+  initialAccessListEIP2929(params)
 
   let
-    (regularRefund, stateRefund) = setDelegation(call)
-    c = setupComputation(call, regularRefund, stateRefund, keepStack = T is DebugCallResult)
+    c = setupEVM(params, keepStack = T is DebugCallResult)
 
-  # Pre-execution sanity checks
-  c.preExecComputation()
+  c.preExecComputation(params)
   if c.isSuccess:
     c.execCallOrCreate()
     c.postExecComputation()
-  finishRunningComputation(c, call, stateRefund, T)
+  else:
+    # execCallOrCreate normally disposes the computation, dispose here too
+    # otherwise the EVM stack leaks.
+    c.dispose()
+
+  finishRunningComputation(c, params, T)

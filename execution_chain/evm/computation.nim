@@ -24,7 +24,7 @@ import
   ../utils/[utils, mergeutils],
   ../common/common,
   eth/common/eth_types_rlp,
-  chronicles, chronos
+  chronicles
 
 export
   common, balTrackerEnabled,
@@ -140,6 +140,17 @@ func getTransientStorage*(c: Computation, slot: UInt256): UInt256 =
       return res
     cpt = cpt.parent
 
+func setCode*(c: Computation, code = CodeBytesRef(nil)) =
+  # If we call setCode when c.stack already set to something,
+  # it means c.code has been set before.
+  # If we set it once again, they will become orphaned,
+  # and memory leak occurs.
+  doAssert(c.stack.isNil, "c.stack and c.memory should be nil when calling setCode")
+  if not code.isNil:
+    c.code = CodeStream.init(code)
+    c.memory = EvmMemory.init()
+    c.stack = EvmStack.init()
+
 func newComputation*(vmState: BaseVMState,
                      keepStack: bool,
                      message: Message,
@@ -147,14 +158,10 @@ func newComputation*(vmState: BaseVMState,
   new result
   result.vmState = vmState
   result.msg = message
-  result.gasMeter.init(message.gas, message.stateGas)
+  result.gasMeter.init(message.gas, message.stateGasReservoir)
   result.keepStack = keepStack
   result.balTrackerEnabled = vmState.balTrackerEnabled
-
-  if not code.isNil:
-    result.code = CodeStream.init(code)
-    result.memory = EvmMemory.init()
-    result.stack = EvmStack.init()
+  result.setCode(code)
 
 template gasCosts*(c: Computation): untyped =
   c.vmState.gasCosts
@@ -216,6 +223,38 @@ func errorOpt*(c: Computation): Opt[string] =
   if c.error.status == StatusCode.Revert:
     return Opt.none(string)
   Opt.some(c.error.info)
+
+proc incrementNonce*(c: Computation): bool =
+  c.vmState.mutateLedger:
+    let nonce = ledger.getNonce(c.msg.sender)
+    if nonce + 1 < nonce:
+      let sender = c.msg.sender.toHex
+      c.setError(
+        "Nonce overflow when sender=" & sender & " wants to create contract", false
+      )
+      return false
+    if c.balTrackerEnabled:
+      c.vmState.balTracker.trackNonceChange(c.msg.sender, nonce + 1)
+    ledger.setNonce(c.msg.sender, nonce + 1)
+
+  true
+
+proc accountDeployable*(c: Computation): bool =
+  # We add this to the access list _before_ taking a snapshot.
+  # Even if the creation fails, the access-list change should not be rolled
+  # back EIP2929
+  if c.fork >= FkBerlin:
+    c.vmState.ledger.accessList(c.msg.contractAddress)
+
+  if c.balTrackerEnabled:
+    c.vmState.balTracker.trackAddressAccess(c.msg.contractAddress)
+
+  if c.vmState.readOnlyLedger().contractCollision(c.msg.contractAddress):
+    let blurb = c.msg.contractAddress.toHex
+    c.setError("Address collision when creating contract address=" & blurb, true)
+    return false
+
+  true
 
 proc writeContract*(c: Computation) =
   template withExtra(tracer: untyped, args: varargs[untyped]) =
@@ -371,6 +410,12 @@ proc refundSelfDestruct*(c: Computation) =
   let cost = gasFees[c.fork][RefundSelfDestruct]
   let num  = c.vmState.ledger.selfDestructLen
   c.gasMeter.refundGas(cost * num)
+
+func frameStateGasUsed*(c: Computation): int64 =
+  c.gasMeter.frameStateGasUsed(c.msg.stateGasReservoir)
+
+func refillFrameStateGas*(c: Computation) =
+  c.gasMeter.refillFrameStateGas(c.msg.stateGasReservoir)
 
 func tracingEnabled*(c: Computation): bool =
   c.vmState.tracingEnabled
