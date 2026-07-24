@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -537,3 +537,4 @@ proc makeAuth*(sender: TxSender, acc: TestAccount, nonce: AccountNonce): Authori
   auth.r = UInt256.fromBytesBE(raw.toOpenArray(0, 31))
   auth.s = UInt256.fromBytesBE(raw.toOpenArray(32, 63))
   auth.yParity = raw[64].uint8
+  auth
