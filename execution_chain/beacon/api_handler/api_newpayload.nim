@@ -111,7 +111,7 @@ template validatePayload(apiVersion, payloadVersion, payload) =
 # https://github.com/ethereum/execution-apis/blob/40088597b8b4f48c45184da002e27ffc3c37641f/src/engine/prague.md#request
 func validateExecutionRequest(blockHash: Hash32,
             requests: openArray[seq[byte]], apiVersion: Version):
-              Opt[PayloadStatusV1] {.raises: [ApplicationError].} =
+              Opt[PayloadStatus] {.raises: [ApplicationError].} =
   var previousRequestType = -1
   for request in requests:
     if request.len == 0:
@@ -152,8 +152,9 @@ proc newPayload*(ben: BeaconEngineRef,
                  payload: ExecutionPayload,
                  versionedHashes = Opt.none(seq[Hash32]),
                  beaconRoot = Opt.none(Hash32),
-                 executionRequests = Opt.none(seq[seq[byte]])):
-                   Future[PayloadStatusV1] {.async: (raises: [CancelledError, ApplicationError, RlpError]).} =
+                 executionRequests = Opt.none(seq[seq[byte]]),
+                 inclusionList = Opt.none(InclusionList)):
+                   Future[PayloadStatus] {.async: (raises: [CancelledError, ApplicationError, RlpError]).} =
 
   trace "Engine API request received",
     meth = "newPayload",
@@ -172,6 +173,12 @@ proc newPayload*(ben: BeaconEngineRef,
     let res = validateExecutionRequest(payload.blockHash, executionRequests.value, apiVersion)
     if res.isSome:
       return res.value
+
+  if apiVersion >= Version.V6:
+    if inclusionList.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": inclusionList is expected from execution payload")
+    {.warning: "Please implement newPayload inclusionList validation".}
 
   let
     com = ben.com

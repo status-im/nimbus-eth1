@@ -66,6 +66,7 @@ type
     versionedHashes*: Opt[seq[Hash32]]
     parentBeaconBlockRoot*: Opt[Hash32]
     executionRequests*: Opt[seq[seq[byte]]]
+    inclusionList*: Opt[InclusionList]
 
   PayloadItem* = object
     params*: PayloadParam
