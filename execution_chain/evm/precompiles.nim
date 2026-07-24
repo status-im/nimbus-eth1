@@ -356,24 +356,16 @@ func modExp(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   if baseL > maxSize or expL > maxSize or modL > maxSize:
     return err(prcErr(PrcInvalidParam))
 
-  # TODO:
-  # add EVM special case:
-  # - modulo <= 1: return zero
-  # - exp == zero: return one
-
-  let output = modExp(
+  # modExpInto writes the left-padded result straight into c.output (the EVM
+  # special cases m <= 1 -> 0 and exp == 0 -> 1 are handled inside it),
+  # overwriting every byte, so we skip zero-initialising it (setLenUninit).
+  c.output.setLenUninit(modLen)
+  modExpInto(
     data.rangeToPadded(96, baseLen),
     data.rangeToPadded(96 + baseLen, expLen),
-    data.rangeToPadded(96 + baseLen + expLen, modLen)
+    data.rangeToPadded(96 + baseLen + expLen, modLen),
+    c.output
   )
-
-  # maximum output len is the same as modLen
-  # if it less than modLen, it will be zero padded at left
-  if output.len >= modLen:
-    assign(c.output, output.toOpenArray(output.len-modLen, output.len-1))
-  else:
-    c.output = newSeq[byte](modLen)
-    assign(c.output.toOpenArray(c.output.len-output.len, c.output.len-1), output)
   ok()
 
 func bn256ecAdd(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
