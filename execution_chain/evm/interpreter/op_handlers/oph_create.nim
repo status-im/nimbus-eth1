@@ -40,10 +40,10 @@ import
 
 proc postExecutionCreate(c: Computation, child: Computation, newAccountCharged: bool) =
   if child.shouldBurnGas:
-    c.gasMeter.appendRegularGasUsed(child.gasMeter.regularGasUsed + child.gasMeter.gasRemaining)
+    c.gasMeter.appendExecutionGasUsed(child.gasMeter.executionGasUsed + child.gasMeter.executionGasLeft)
   else:
-    c.gasMeter.returnGas(child.gasMeter.gasRemaining)
-    c.gasMeter.appendRegularGasUsed(child.gasMeter.regularGasUsed)
+    c.gasMeter.returnGas(child.gasMeter.executionGasLeft)
+    c.gasMeter.appendExecutionGasUsed(child.gasMeter.executionGasUsed)
 
   if child.isSuccess:
     if c.fork >= FkAmsterdam:
@@ -83,12 +83,12 @@ proc execSubCreate(c: Computation; childMsg: Message;
         child.dispose()
         return err(error)
 
-  var createMsgGas = c.gasMeter.gasRemaining
+  var createMsgGas = c.gasMeter.executionGasLeft
   if c.fork >= FkTangerine:
     createMsgGas -= createMsgGas div 64
-  c.gasMeter.gasRemaining -= createMsgGas
+  c.gasMeter.executionGasLeft -= createMsgGas
   child.msg.gas = createMsgGas
-  child.gasMeter.gasRemaining = createMsgGas
+  child.gasMeter.executionGasLeft = createMsgGas
 
   if not child.accountDeployable():
     postExecutionCreate(c, child, newAccountCharged)

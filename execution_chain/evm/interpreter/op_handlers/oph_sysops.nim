@@ -134,7 +134,7 @@ proc selfDestructEIP2929Op(cpt: VmCpt): EvmResultVoid =
   var staticGasCosts = cpt.gasCosts[SelfDestruct].sc_handler(false)
   if beneficiaryIsCold:
     staticGasCosts += COLD_ACCOUNT_ACCESS_2929
-  if staticGasCosts > cpt.gasMeter.gasRemaining:
+  if staticGasCosts > cpt.gasMeter.executionGasLeft:
     return EvmResultVoid.err(gasErr(OutOfGas))
 
   let
@@ -168,7 +168,7 @@ proc selfDestructEIP8037Op(cpt: VmCpt): EvmResultVoid =
   var staticGasCosts = cpt.gasCosts[SelfDestruct].sc_handler(false)
   if beneficiaryIsCold:
     staticGasCosts += COLD_ACCOUNT_ACCESS_8038
-  if staticGasCosts > cpt.gasMeter.gasRemaining:
+  if staticGasCosts > cpt.gasMeter.executionGasLeft:
     return EvmResultVoid.err(gasErr(OutOfGas))
 
   let
@@ -183,7 +183,7 @@ proc selfDestructEIP8037Op(cpt: VmCpt): EvmResultVoid =
       ledger.accessList(beneficiary)
       gasCost += COLD_ACCOUNT_ACCESS_8038
 
-  # Charge regular gas before state gas so that a regular-gas OOG
+  # Charge execution gas before state gas so that a execution-gas OOG
   # does not consume state gas that would inflate the parent's
   # reservoir on frame failure.
   ? cpt.opcodeGasCost(SelfDestruct,

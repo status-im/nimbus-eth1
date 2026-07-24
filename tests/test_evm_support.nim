@@ -252,31 +252,31 @@ proc gasMeters: seq[GasMeter] =
 template runTest(body: untyped) =
   var res = gasMeters()
   for gasMeter {.inject.} in res.mitems:
-    let StartGas {.inject.} = gasMeter.gasRemaining
+    let StartGas {.inject.} = gasMeter.executionGasLeft
     body
 
 proc runGasMeterTests() =
   suite "GasMeter tests":
     test "consume spends":
       runTest:
-        check(gasMeter.gasRemaining == StartGas)
+        check(gasMeter.executionGasLeft == StartGas)
         let consume = StartGas
         check gasMeter.consumeGas(consume, "0").isOk
-        check(gasMeter.gasRemaining - (StartGas - consume) == 0)
+        check(gasMeter.executionGasLeft - (StartGas - consume) == 0)
 
     test "consume errors":
       runTest:
-        check(gasMeter.gasRemaining == StartGas)
+        check(gasMeter.executionGasLeft == StartGas)
         check gasMeter.consumeGas(StartGas + 1, "").error.code == EvmErrorCode.OutOfGas
 
     test "return refund works correctly":
       runTest:
-        check(gasMeter.gasRemaining == StartGas)
+        check(gasMeter.executionGasLeft == StartGas)
         check(gasMeter.gasRefunded == 0)
         check gasMeter.consumeGas(5, "").isOk
-        check(gasMeter.gasRemaining == StartGas - 5)
+        check(gasMeter.executionGasLeft == StartGas - 5)
         gasMeter.returnGas(5)
-        check(gasMeter.gasRemaining == StartGas)
+        check(gasMeter.executionGasLeft == StartGas)
         gasMeter.refundGas(5)
         check(gasMeter.gasRefunded == 5)
 

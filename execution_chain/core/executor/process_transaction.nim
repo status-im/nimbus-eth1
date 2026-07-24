@@ -47,16 +47,16 @@ proc commitOrRollbackDependingOnGasUsed(
   # header `gasUsed` and the `vmState.cumulativeGasUsed` at a later stage.
   let gasUsed = callResult.gasUsed
 
-  # EIP-8037: block validity is max(blockRegularGas, blockStateGas) <= gasLimit
+  # EIP-8037: block validity is max(blockExecutionGas, blockStateGas) <= gasLimit
   if vmState.fork >= FkAmsterdam:
     let limit2d = max(
-      vmState.blockRegularGasUsed + callResult.blockRegularGasUsed,
+      vmState.blockExecutionGasUsed + callResult.blockExecutionGasUsed,
       vmState.blockStateGasUsed + callResult.blockStateGasUsed)
     if vmState.blockCtx.gasLimit < limit2d:
       if vmState.balTrackerEnabled:
         vmState.balTracker.rollbackCallFrame(rollbackReads)
       vmState.ledger.rollback(savePoint)
-      return err(&"invalid tx: block gas limit reached (2D). gasLimit={vmState.blockCtx.gasLimit}, regularGas={vmState.blockRegularGasUsed}+{callResult.blockRegularGasUsed}, stateGas={vmState.blockStateGasUsed}+{callResult.blockStateGasUsed}")
+      return err(&"invalid tx: block gas limit reached (2D). gasLimit={vmState.blockCtx.gasLimit}, executionGas={vmState.blockExecutionGasUsed}+{callResult.blockExecutionGasUsed}, stateGas={vmState.blockStateGasUsed}+{callResult.blockStateGasUsed}")
   else:
     let limit = vmState.cumulativeGasUsed + gasUsed
     if vmState.blockCtx.gasLimit < limit:
@@ -80,7 +80,7 @@ proc commitOrRollbackDependingOnGasUsed(
   vmState.ledger.addBalance(vmState.coinbase(), txFee, checkEmptyAccount = vmState.fork < FkParis)
   vmState.ledger.commit(savePoint)
   vmState.cumulativeGasUsed += gasUsed
-  vmState.blockRegularGasUsed += callResult.blockRegularGasUsed
+  vmState.blockExecutionGasUsed += callResult.blockExecutionGasUsed
   vmState.blockStateGasUsed += callResult.blockStateGasUsed
   vmState.blobGasUsed += blobGasUsed
 
@@ -91,12 +91,12 @@ template check2dGasInclusion*(
     txGasLimit: GasInt;
     fail: untyped) =
   let
-    regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
+    executionGasAvailable = vmState.blockCtx.gasLimit - vmState.blockExecutionGasUsed
     stateGasAvailable = vmState.blockCtx.gasLimit - vmState.blockStateGasUsed
     want = min(TX_GAS_LIMIT.GasInt, txGasLimit)
 
-  if want > regularGasAvailable:
-    fail("regular gas used exceeds limit, want: " & $want & ", available: " & $regularGasAvailable)
+  if want > executionGasAvailable:
+    fail("execution gas used exceeds limit, want: " & $want & ", available: " & $executionGasAvailable)
 
   if txGasLimit > stateGasAvailable:
     fail("state gas used exceeds limit, want: " & $txGasLimit & ", available: " & $stateGasAvailable)

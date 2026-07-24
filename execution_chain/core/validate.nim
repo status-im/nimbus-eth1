@@ -280,22 +280,22 @@ func validateTxBasic*(
 
   if fork >= Amsterdam:
     let
-      intrinsicGas = intrinsic.regular + intrinsic.state
+      intrinsicGas = intrinsic.execution + intrinsic.state
       minGasLimit = max(intrinsicGas, intrinsic.floorDataGas)
-      minRegularGasLimit = max(intrinsic.regular, intrinsic.floorDataGas)
+      minExecutionGasLimit = max(intrinsic.execution, intrinsic.floorDataGas)
 
     if minGasLimit > tx.gasLimit:
       return err(&"invalid tx: not enough gas to perform calculation. avail={tx.gasLimit}, require={minGasLimit}")
 
-    if minRegularGasLimit > TX_GAS_LIMIT:
-      return err(&"invalid tx: Intrinsic regular or calldata floor exceeds TX_GAS_LIMIT={TX_GAS_LIMIT}, require={minRegularGasLimit}")
+    if minExecutionGasLimit > TX_GAS_LIMIT:
+      return err(&"invalid tx: Intrinsic execution or calldata floor exceeds TX_GAS_LIMIT={TX_GAS_LIMIT}, require={minExecutionGasLimit}")
   else:
     # https://eips.ethereum.org/EIPS/eip-7825
     if fork >= Osaka and tx.gasLimit > TX_GAS_LIMIT:
       return err("tx.gasLimit " & $tx.gasLimit & " exceeds maximum " & $TX_GAS_LIMIT)
 
     let
-      minGasLimit = max(intrinsic.regular, intrinsic.floorDataGas)
+      minGasLimit = max(intrinsic.execution, intrinsic.floorDataGas)
 
     if tx.gasLimit < minGasLimit:
       return err(&"invalid tx: not enough gas to perform calculation. avail={tx.gasLimit}, require={minGasLimit}")

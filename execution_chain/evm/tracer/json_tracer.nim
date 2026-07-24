@@ -177,13 +177,13 @@ method captureOpStart*(ctx: JsonTracer, c: Computation,
   inc ctx.index
 
 method captureGasCost*(ctx: JsonTracer, comp: Computation,
-                       fixed: bool, op: Op, gasCost: GasInt, gasRemaining: GasInt,
+                       fixed: bool, op: Op, gasCost: GasInt, executionGasLeft: GasInt,
                        depth: int) {.gcsafe.} =
   doAssert(ctx.node.isNil.not)
   let res = ctx.node
   res["gasCost"] = encodeHex(gasCost)
 
-  if gasCost <= gasRemaining and not fixed:
+  if gasCost <= executionGasLeft and not fixed:
     ctx.writeJson(res)
     ctx.node = nil
   # else:

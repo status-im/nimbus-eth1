@@ -221,7 +221,7 @@ proc exec(ctx: TransContext,
 
   vmState.receipts = newSeqOfCap[StoredReceipt](ctx.txList.len)
   vmState.cumulativeGasUsed = 0
-  vmState.blockRegularGasUsed = 0
+  vmState.blockExecutionGasUsed = 0
   vmState.blockStateGasUsed = 0
 
   if ctx.env.parentBeaconBlockRoot.isSome:
@@ -409,7 +409,7 @@ proc exec(ctx: TransContext,
     output.result.blockAccessList = Opt.some(bal)
 
   if vmState.com.isAmsterdamOrLater(ctx.env.currentTimestamp):
-    output.result.gasUsed = max(vmState.blockRegularGasUsed, vmState.blockStateGasUsed)
+    output.result.gasUsed = max(vmState.blockExecutionGasUsed, vmState.blockStateGasUsed)
 
   output
 

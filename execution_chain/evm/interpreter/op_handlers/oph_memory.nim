@@ -192,7 +192,7 @@ proc sstoreEIP2200Op(cpt: VmCpt): EvmResultVoid =
   ? checkInStaticContext(cpt)
   const SentryGasEIP2200 = 2300
 
-  if cpt.gasMeter.gasRemaining <= SentryGasEIP2200:
+  if cpt.gasMeter.executionGasLeft <= SentryGasEIP2200:
     return err(opErr(OutOfGas))
 
   sstoreNetGasMeteringImpl(cpt, slot, newValue)
@@ -211,7 +211,7 @@ proc sstoreEIP2929Op(cpt: VmCpt): EvmResultVoid =
   # Minimum gas required to be present for an SSTORE call, not consumed
   const SentryGasEIP2200 = 2300
 
-  if cpt.gasMeter.gasRemaining <= SentryGasEIP2200:
+  if cpt.gasMeter.executionGasLeft <= SentryGasEIP2200:
     return err(opErr(OutOfGas))
 
   var coldAccessGas = 0.GasInt
@@ -234,7 +234,7 @@ proc sstore8038Impl(c: Computation; slot, newValue: UInt256, coldAccess = 0.GasI
 
     res = c.gasCosts[Sstore].ss_handler(newValue, gasParam)
 
-  # Charge regular gas before state gas so that a regular-gas OOG
+  # Charge execution gas before state gas so that a execution-gas OOG
   # does not consume state gas that would inflate the parent's
   # reservoir on frame failure.
   ? c.opcodeGasCost(Sstore, res.gasCost + coldAccess, "SSTORE")
@@ -309,7 +309,7 @@ func msizeOp(cpt: VmCpt): EvmResultVoid =
 func gasOp(cpt: VmCpt): EvmResultVoid =
   ## 0x5a, Get the amount of available gas, including the corresponding
   ##       reduction for the cost of this instruction.
-  cpt.stack.push cpt.gasMeter.gasRemaining
+  cpt.stack.push cpt.gasMeter.executionGasLeft
 
 func jumpDestOp(cpt: VmCpt): EvmResultVoid =
   ## 0x5b, Mark a valid destination for jumps. This operation has no effect
