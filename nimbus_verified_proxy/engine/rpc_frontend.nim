@@ -506,7 +506,7 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
         return err((FrontendError, "Filter doesn't exist", UNTAGGED))
 
     let
-      filter = ?(await engine.resolveFilterTags(filterItem.filter))
+      filter = ?engine.resolveFilterTags(filterItem.filter)
       # after resolving toBlock is always some and a number tag
       toBlock = filter.toBlock.get().number
 

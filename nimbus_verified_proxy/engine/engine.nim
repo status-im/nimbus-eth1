@@ -172,6 +172,7 @@ proc initCore*(
     chainId: UInt256,
     networkId: UInt256,
     maxBlockWalk: uint64,
+    maxWindowJumps: uint64,
     parallelBlockDownloads: uint64,
     headerStoreLen: int,
     accountCacheLen: int,
@@ -185,6 +186,7 @@ proc initCore*(
     chainId: chainId,
     anchor: anchor,
     maxBlockWalk: maxBlockWalk,
+    maxWindowJumps: maxWindowJumps,
     headerStore: HeaderStore.new(headerStoreLen),
     accountsCache: AccountsCache.init(accountCacheLen),
     codeCache: CodeCache.init(codeCacheLen),
@@ -227,6 +229,7 @@ proc init*(
     chainId = config.chainId,
     networkId = networkId,
     maxBlockWalk = config.maxBlockWalk,
+    maxWindowJumps = config.maxWindowJumps,
     parallelBlockDownloads = config.parallelBlockDownloads,
     headerStoreLen = config.headerStoreLen,
     accountCacheLen = config.accountCacheLen,
@@ -242,6 +245,7 @@ proc init*(
   engine.maxLightClientUpdates = config.maxLightClientUpdates
   engine.cfg = metadata.cfg
   engine.forkDigests = forkDigests
+  engine.eip2935ForkTime = genesis.eip2935ForkTime
 
   proc onStoreInitialized() =
     discard
