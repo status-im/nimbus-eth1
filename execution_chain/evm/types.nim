@@ -120,7 +120,6 @@ type
     Static
     Precompile
     Delegated
-    SystemCall
 
   Message* = ref object
     kind*:             CallKind

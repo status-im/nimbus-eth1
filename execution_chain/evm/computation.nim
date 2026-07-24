@@ -141,11 +141,11 @@ func getTransientStorage*(c: Computation, slot: UInt256): UInt256 =
     cpt = cpt.parent
 
 func setCode*(c: Computation, code = CodeBytesRef(nil)) =
-  # If we call setCode when c.code already set to something,
-  # it means c.memory and c.stack also have been set.
+  # If we call setCode when c.stack already set to something,
+  # it means c.code has been set before.
   # If we set it once again, they will become orphaned,
   # and memory leak occurs.
-  doAssert(c.code.isNil, "c.code should be nil when calling setCode")
+  doAssert(c.stack.isNil, "c.stack and c.memory should be nil when calling setCode")
   if not code.isNil:
     c.code = CodeStream.init(code)
     c.memory = EvmMemory.init()

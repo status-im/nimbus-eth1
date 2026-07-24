@@ -32,7 +32,6 @@ proc setupComputation(params: CallParams): Computation =
       sender:            params.sender,
       value:             params.value,
       data:              params.input,
-      flags:            {MsgFlags.SystemCall},
     )
     code = vmState.ledger.getCode(msg.codeAddress)
     computation = newComputation(vmState, false, msg, code)
@@ -95,7 +94,7 @@ proc systemCall*(params: CallParams, T: type): T =
   # Pre-execution sanity checks
   c.preExecComputation()
   if c.isSuccess:
-    c.execCallOrCreate(params)
+    c.execCallOrCreate()
     ledger.persist(clearEmptyAccount = true)
   else:
     # execCallOrCreate normally disposes the computation, dispose here too
