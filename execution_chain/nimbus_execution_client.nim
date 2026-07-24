@@ -139,6 +139,7 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
     bindUdpPort = config.udpPort, bindTcpPort = config.tcpPort,
     bindIp = config.listenAddress,
     rng = nimbus.rng,
+    enableDiscV5 = config.discv5,
     forkIdProcs = forkIdProcs)
 
   # Add peer service protocol capabilities.
@@ -160,12 +161,7 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
 
   # Start Eth node
   if config.maxPeers > 0:
-    # The user-facing flag is --discv5, but discv4 is still enabled alongside
-    # it until the discv4 code is removed.
-    nimbus.ethNode.connectToNetwork(
-      enableDiscV4 = config.discv5,
-      enableDiscV5 = config.discv5,
-    )
+    nimbus.ethNode.connectToNetwork()
 
   # Initalise beacon sync descriptor.
   var syncerShouldRun = (config.maxPeers > 0 or staticPeers.len > 0) and

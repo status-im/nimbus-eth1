@@ -10,93 +10,35 @@
 {.push raises: [].}
 
 import
-  std/[net, importutils, random],
+  std/net,
   chronos,
   chronicles,
-  results,
-  metrics,
-  eth/common/base_rlp,
-  eth/enode/enode_utils,
-  ./discoveryv5,
-  ./discoveryv4,
+  eth/common/[base_rlp, keys],
+  eth/enode/[enode, enode_utils],
+  eth/p2p/discoveryv5/[protocol as discv5_protocol],
+  ./p2p_node,
   ./bootnodes
 
-export
-  discoveryv4.NodeId,
-  discoveryv4.Node,
-  discoveryv4.ENode
+export p2p_node.NodeId, p2p_node.Node, p2p_node.newNode, enode.ENode
 
 logScope:
   topics = "p2p"
 
 type
-  DiscV4 = discoveryv4.DiscoveryV4
-  DiscV5 = discoveryv5.Protocol
-
-  NodeV4 = discoveryv4.Node
-  NodeV5 = discoveryv5.Node
-
-  AddressV4 = discoveryv4.Address
-  AddressV5 = discoveryv5.Address
-
   CompatibleForkIdProc* = proc(id: ForkId): bool {.noSideEffect, raises: [].}
 
   Eth1Discovery* = ref object
-    discv4: DiscV4
-    discv5: DiscV5
+    discv5: discv5_protocol.Protocol
     compatibleForkId: CompatibleForkIdProc
 
 #------------------------------------------------------------------------------
 # Private functions
 #------------------------------------------------------------------------------
 
-func to(raddr: TransportAddress, _: type AddressV4): AddressV4 =
-  AddressV4(
-    ip: raddr.toIpAddress(),
-    udpPort: raddr.port,
-    tcpPort: raddr.port
-  )
-
-func to(raddr: TransportAddress, _: type AddressV5): AddressV5 =
-  AddressV5(ip: raddr.toIpAddress(), port: raddr.port)
-
-func to(node: NodeV5, _: type NodeV4): ENodeResult[NodeV4] =
-  let v4 = NodeV4(
-    id: node.id,
-    node: ?ENode.fromEnr(node.record),
-  )
-  ok(v4)
-
-proc processClient(
-    transp: DatagramTransport, raddr: TransportAddress
-): Future[void] {.async: (raises: []).} =
-  var proto = getUserData[Eth1Discovery](transp)
-  let buf =
-    try:
-      transp.getMessage()
-    except TransportOsError as e:
-      # This is likely to be local network connection issues.
-      warn "Transport getMessage", exception = e.name, msg = e.msg
-      return
-    except TransportError as exc:
-      debug "getMessage error", msg = exc.msg
-      return
-
-  let
-    addrv4 = raddr.to(AddressV4)
-    discv4 = proto.discv4.receive(addrv4, buf)
-
-  if discv4.isErr:
-    # unhandled buf will be handled by discv5
-    let addrv5 = raddr.to(AddressV5)
-    proto.discv5.receiveV5(addrv5, buf).isOkOr:
-      debug "Discovery receive error", discv4=discv4.error, discv5=error
-
-func eligibleNode(proto: Eth1Discovery, rec: Record): bool =
+func eligibleNode(proto: Eth1Discovery, rec: enr.Record): bool =
   # Filter out non `eth` node
-  let
-    bytes = rec.tryGet("eth", seq[byte]).valueOr:
-      return false
+  let bytes = rec.tryGet("eth", seq[byte]).valueOr:
+    return false
 
   if proto.compatibleForkId.isNil:
     # Allow all `eth` node to pass if there is no filter
@@ -108,7 +50,7 @@ func eligibleNode(proto: Eth1Discovery, rec: Record): bool =
         rlp.decode(bytes, array[1, ForkId])
       except RlpError:
         return false
-    forkId  = ethValue[0]
+    forkId = ethValue[0]
 
   proto.compatibleForkId(forkId)
 
@@ -125,134 +67,54 @@ proc new*(
     bindPort: Port,
     bindIp = IPv6_any(),
     rng = newRng(),
-    compatibleForkId = CompatibleForkIdProc(nil)
+    compatibleForkId = CompatibleForkIdProc(nil),
 ): Eth1Discovery =
-  let address = enode.Address(
-      ip: enrIp.valueOr(bindIp),
-      tcpPort: enrTcpPort.valueOr(bindPort),
-      udpPort: enrUdpPort.valueOr(bindPort),
-    )
   Eth1Discovery(
-    discv4: discoveryv4.newDiscoveryV4(
-      privKey = privKey,
-      address = address,
-      bootstrapNodes = bootstrapNodes.enodes,
-      bindPort = bindPort,
-      bindIp = bindIp,
-      rng = rng
-    ),
-    discv5: discoveryv5.newDiscoveryV5(
+    discv5: discv5_protocol.newProtocol(
       privKey = privKey,
       enrIp = enrIp,
       enrTcpPort = enrTcpPort,
       enrUdpPort = enrUdpPort,
+      enrQuicPort = Opt.none(Port),
       bootstrapRecords = bootstrapNodes.enrs,
       bindPort = bindPort,
       bindIp = Opt.some(bindIp),
       enrAutoUpdate = true,
-      rng = rng
+      rng = rng,
     ),
     compatibleForkId: compatibleForkId,
   )
 
-proc open*(
-    proto: Eth1Discovery, enableDiscV4: bool, enableDiscV5: bool
-) {.raises: [TransportOsError].} =
-  # TODO: allow binding to both IPv4 and IPv6
+proc open*(proto: Eth1Discovery) {.raises: [TransportOsError].} =
+  proto.discv5.open()
 
-  if not (enableDiscV4 or enableDiscV5):
-    return
+proc start*(proto: Eth1Discovery) =
+  proto.discv5.start()
 
-  privateAccess(DiscV4)
-  privateAccess(DiscV5)
-
-  info "Starting discovery node",
-    node = proto.discv4.localNode,
-    bindAddress = proto.discv4.address,
-    discV4 = enableDiscV4,
-    discV5 = enableDiscV5
-
-  if enableDiscV4 and not enableDiscV5:
-    proto.discv4.open()
-    proto.discv5 = nil
-    return
-
-  if enableDiscV5 and not enableDiscV4:
-    proto.discv5.open()
-    proto.discv4 = nil
-    proto.discv5.seedTable()
-    return
-
-  # Both DiscV4 and DiscV5 share the same transport
-  # Unhandled data from DiscV4 will be handled by DiscV5
-  let ta = initTAddress(proto.discv4.bindIp, proto.discv4.bindPort)
-  proto.discv4.transp = newDatagramTransport(processClient, udata = proto, local = ta)
-  proto.discv5.transp = proto.discv4.transp
-  proto.discv5.seedTable()
-
-proc start*(proto: Eth1Discovery) {.async: (raises: [CancelledError]).} =
-  if proto.discv4.isNil.not:
-    await proto.discv4.bootstrap()
-  if proto.discv5.isNil.not:
-    proto.discv5.start()
-
-proc lookupRandomNode*(proto: Eth1Discovery, queue: AsyncQueue[NodeV4]) {.async: (raises: [CancelledError]).} =
-  if proto.discv4.isNil.not:
-    let nodes = await proto.discv4.lookupRandom()
-    for node in nodes:
-      if node.node.address.tcpPort == Port(0):
-        continue
-      await queue.addLast(node)
-
-  if proto.discv5.isNil.not:
-    let nodes = await proto.discv5.queryRandom()
-    for node in nodes:
-      if not proto.eligibleNode(node.record):
-        continue
-      let v4 = node.to(NodeV4).valueOr:
-        continue
-      if v4.node.address.tcpPort == Port(0):
-        continue
-      await queue.addLast(v4)
-
-proc getRandomBootnode*(proto: Eth1Discovery): Opt[NodeV4] =
-  if proto.discv4.isNil.not:
-    if proto.discv4.bootstrapNodes.len != 0:
-      return Opt.some(proto.discv4.bootstrapNodes.sample())
-
-  if proto.discv5.isNil.not:
-    if proto.discv5.bootstrapRecords.len != 0:
-      let
-        rec = proto.discv5.bootstrapRecords.sample()
-        enode = ENode.fromEnr(rec).valueOr:
-          return Opt.none(NodeV4)
-      return Opt.some(newNode(enode))
+proc lookupRandomNode*(
+    proto: Eth1Discovery, queue: AsyncQueue[p2p_node.Node]
+) {.async: (raises: [CancelledError]).} =
+  let discv5Nodes = await proto.discv5.queryRandom()
+  for discv5Node in discv5Nodes:
+    if not proto.eligibleNode(discv5Node.record):
+      continue
+    let enode = ENode.fromEnr(discv5Node.record).valueOr:
+      continue
+    await queue.addLast(newNode(enode))
 
 func getEnr*(proto: Eth1Discovery): Opt[string] =
   ## Get the ENR URI string of the local node from DiscoveryV5.
-  if proto.discv5.isNil.not:
-    return Opt.some(proto.discv5.getRecord().toURI())
-  Opt.none(string)
+  if proto.isNil: return Opt.none(string)
+  Opt.some(proto.discv5.getRecord().toURI())
 
 func updateForkId*(proto: Eth1Discovery, forkId: ForkId) =
   # https://github.com/ethereum/devp2p/blob/bc76b9809a30e6dc5c8dcda996273f0f9bcf7108/enr-entries/eth.md
-  if proto.discv5.isNil.not:
-    let
-      list = [forkId]
-      bytes = rlp.encode(list)
-      kv = ("eth", bytes)
-    proto.discv5.updateRecord([kv]).isOkOr:
-      return
-
-proc closeWait*(proto: Eth1Discovery) {.async: (raises: []).} =
-  privateAccess(DiscV4)
-  if proto.discv4.isNil.not and proto.discv5.isNil:
-    if proto.discv4.transp.isNil.not:
-      await noCancel(proto.discv4.transp.closeWait())
+  let
+    list = [forkId]
+    bytes = rlp.encode(list)
+    kv = ("eth", bytes)
+  proto.discv5.updateRecord([kv]).isOkOr:
     return
 
-  # Because UDP transport is shared between DiscV4 and DiscV5,
-  # no need for DiscV4 to close it anymore if both enabled.
-  # It will be closed by DiscV5.
-  if proto.discv5.isNil.not:
-    await proto.discv5.closeWait()
+proc closeWait*(proto: Eth1Discovery) {.async: (raises: []).} =
+  await proto.discv5.closeWait()
