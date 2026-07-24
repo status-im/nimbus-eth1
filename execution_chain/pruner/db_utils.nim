@@ -25,18 +25,21 @@ logScope:
 # Direct-backend deletion helpers (bypass transaction layer)
 # ------------------------------------------------------------------------------
 
-proc deleteTransactionsBe(kvt: KvtDbRef, txRoot: Hash32) =
+proc deleteTransactionsBe(kvt: KvtDbRef, txRoot: Hash32): bool =
   if txRoot == EMPTY_ROOT_HASH:
-    return
+    return true
 
   kvt.delRangeBe(
     hashIndexKey(txRoot, 0), hashIndexKey(txRoot, uint16.high), compactRange = true
   ).isOkOr:
     warn "pruner: deleteTransactionsBe", txRoot, error
+    return false
 
-proc deleteReceiptsBe(kvt: KvtDbRef, receiptsRoot: Hash32) =
+  true
+
+proc deleteReceiptsBe(kvt: KvtDbRef, receiptsRoot: Hash32): bool =
   if receiptsRoot == EMPTY_ROOT_HASH:
-    return
+    return true
 
   kvt.delRangeBe(
     hashIndexKey(receiptsRoot, 0),
@@ -44,24 +47,38 @@ proc deleteReceiptsBe(kvt: KvtDbRef, receiptsRoot: Hash32) =
     compactRange = true,
   ).isOkOr:
     warn "pruner: deleteReceiptsBe", receiptsRoot, error
+    return false
 
-proc deleteUnclesBe(kvt: KvtDbRef, ommersHash: Hash32) =
+  true
+
+proc deleteUnclesBe(kvt: KvtDbRef, ommersHash: Hash32): bool =
   if ommersHash == EMPTY_UNCLE_HASH:
-    return
+    return true
+
   kvt.delBe(genericHashKey(ommersHash).toOpenArray).isOkOr:
     warn "pruner: deleteUnclesBe", ommersHash, error
+    return false
 
-proc deleteWithdrawalsBe(kvt: KvtDbRef, withdrawalsRoot: Hash32) =
+  true
+
+proc deleteWithdrawalsBe(kvt: KvtDbRef, withdrawalsRoot: Hash32): bool =
   if withdrawalsRoot == EMPTY_ROOT_HASH:
-    return
+    return true
+
   kvt.delBe(withdrawalsKey(withdrawalsRoot).toOpenArray).isOkOr:
     warn "pruner: deleteWithdrawalsBe", withdrawalsRoot, error
+    return false
 
-proc deleteBlockBodyAndReceiptsBe*(kvt: KvtDbRef, header: Header) =
-  kvt.deleteTransactionsBe(header.transactionsRoot)
-  kvt.deleteUnclesBe(header.ommersHash)
+  true
+
+proc deleteBlockBodyAndReceiptsBe*(kvt: KvtDbRef, header: Header): bool =
+  if not kvt.deleteTransactionsBe(header.transactionsRoot):
+    return false
+  if not kvt.deleteUnclesBe(header.ommersHash):
+    return false
   if header.withdrawalsRoot.isSome:
-    kvt.deleteWithdrawalsBe(header.withdrawalsRoot.get())
+    if not kvt.deleteWithdrawalsBe(header.withdrawalsRoot.get()):
+      return false
   kvt.deleteReceiptsBe(header.receiptsRoot)
 
 # ------------------------------------------------------------------------------

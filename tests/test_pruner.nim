@@ -271,6 +271,51 @@ suite "Pruner integration tests":
     for blkNum in 1'u64 .. 3'u64:
       check bt2.getBlockHeader(BlockNumber blkNum).isOk
 
+  test "pruner does not advance tail when backend deletion fails":
+    let com = env.newCom()
+    var chain = ForkedChainRef.init(com, baseDistance = 0, persistBatchSize = 1)
+    let
+      genesis = Block.init(com.genesisHeader, BlockBody())
+      baseTxFrame = com.db.baseTxFrame()
+      txFrame = baseTxFrame.txFrameBegin
+      blk1 = txFrame.makeBlk(1, genesis)
+      blk2 = txFrame.makeBlk(2, blk1)
+      blk3 = txFrame.makeBlk(3, blk2)
+    txFrame.dispose()
+
+    check (waitFor chain.importBlock(blk1)).isOk
+    check (waitFor chain.forkChoice(blk1.blockHash, blk1.blockHash)).isOk
+    check (waitFor chain.importBlock(blk2)).isOk
+    check (waitFor chain.forkChoice(blk2.blockHash, blk2.blockHash)).isOk
+    check (waitFor chain.importBlock(blk3)).isOk
+    check (waitFor chain.forkChoice(blk3.blockHash, blk3.blockHash)).isOk
+
+    let
+      kvt = com.db.kvt
+      hdr1 = com.db.baseTxFrame().getBlockHeader(BlockNumber 1).expect("header exists")
+      wdRoot1 = hdr1.withdrawalsRoot.get()
+      originalDelKvpFn = kvt.delKvpFn
+
+    check kvt.hasBe(withdrawalsKey(wdRoot1).toOpenArray)
+    kvt.putBe(tailIdKey().toOpenArray, BlockNumber(1).toBytesLE())
+
+    kvt.delKvpFn =
+      proc(key: openArray[byte]): Result[void, KvtError] {.gcsafe, raises: [].} =
+        discard key
+        err(RdbBeDriverDelError)
+
+    let pruner = BackgroundPrunerRef.init(com,
+      batchSize = 10,
+      loopDelay = chronos.milliseconds(50))
+    pruner.start()
+
+    waitFor sleepAsync(chronos.milliseconds(150))
+    waitFor pruner.stop()
+    kvt.delKvpFn = originalDelKvpFn
+
+    check kvt.getHistoryExpiredBe() == BlockNumber(1)
+    check kvt.hasBe(withdrawalsKey(wdRoot1).toOpenArray)
+
   test "getHistoryExpiredBe returns 0 when not set":
     let com = env.newCom()
     let kvt = com.db.kvt
