@@ -141,13 +141,15 @@ func getTransientStorage*(c: Computation, slot: UInt256): UInt256 =
     cpt = cpt.parent
 
 func setCode*(c: Computation, code = CodeBytesRef(nil)) =
+  # If we call setCode when c.code already set to something,
+  # it means c.memory and c.stack also have been set.
+  # If we set it once again, they will become orphaned,
+  # and memory leak occurs.
+  doAssert(c.code.isNil, "c.code should be nil when calling setCode")
   if not code.isNil:
     c.code = CodeStream.init(code)
-    # A frame created with code (system calls) has setCode run again from prepareDispatch.
-    # Allocate the buffers only once so the empty stack is not orphaned.
-    if c.stack.isNil:
-      c.memory = EvmMemory.init()
-      c.stack = EvmStack.init()
+    c.memory = EvmMemory.init()
+    c.stack = EvmStack.init()
 
 func newComputation*(vmState: BaseVMState,
                      keepStack: bool,
