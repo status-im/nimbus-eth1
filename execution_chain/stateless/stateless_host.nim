@@ -14,7 +14,6 @@ import
   secp256k1,
   stew/[endians2, sequtils2],
   eth/common/[blocks, eth_types_rlp, hashes, keys, transaction_utils],
-  ../common/chain_config,
   ./stateless_types
 
 from beacon_chain/spec/datatypes/gloas import ExecutionPayload
@@ -29,9 +28,9 @@ export stateless_types, results
 
 ## Stateless host interfaces
 ## Spec:
-## https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/stateless_host.py#L1
+## https://github.com/ethereum/execution-specs/blob/e5a8caf1b8055e4d805c7fb169edfa710914b7da/src/ethereum/forks/amsterdam/stateless_host.py#L1
 
-## https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/transactions.py#L779
+## https://github.com/ethereum/execution-specs/blob/e5a8caf1b8055e4d805c7fb169edfa710914b7da/src/ethereum/forks/amsterdam/transactions.py#L810
 func recover_transaction_public_key*(
     tx: Transaction
 ): Opt[ByteVector[PUBLIC_KEY_BYTES]] =
@@ -65,18 +64,13 @@ func build_chain_config*(chain_id: uint64): StatelessChainConfig =
   ## Build the chain configuration supported by this host.
   ##
   ## For now the Amsterdam stateless host only describes the Amsterdam fork.
-  var activation: ForkActivation
-  discard activation.timestamp.add(0'u64)
-
-  var blobSchedule: List[BlobSchedule, MAX_BLOB_SCHEDULES_PER_FORK]
-  discard blobSchedule.add(
-    defaultBlobSchedule()[Amsterdam].expect("Amsterdam blob schedule is defined")
-  )
-
   StatelessChainConfig(
     chain_id: chain_id,
     active_fork: ForkConfig(
-      fork: PROTOCOL_FORK_AMSTERDAM, activation: activation, blob_schedule: blobSchedule
+      activation: ForkActivation(
+        block_number: List[uint64, MAX_OPTIONAL_FORK_ACTIVATION_VALUES].init(@[]),
+        timestamp: List[uint64, MAX_OPTIONAL_FORK_ACTIVATION_VALUES].init(@[0'u64]),
+      )
     ),
   )
 

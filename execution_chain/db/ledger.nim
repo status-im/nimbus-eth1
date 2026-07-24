@@ -693,6 +693,12 @@ proc isDeadAccount*(ledger: LedgerRef, address: Address): bool =
     return true
   acc.isEmpty()
 
+proc originalAccountEmpty*(ledger: LedgerRef, address: Address): bool =
+  let acc = ledger.getAccount(address, false)
+  if acc.isNil:
+    return true
+  acc.original.statement == EMPTY_STATEMENT
+
 proc setBalance*(ledger: LedgerRef, address: Address, balance: UInt256) =
   let acc = ledger.getAccount(address)
   acc.flags.incl {Alive}

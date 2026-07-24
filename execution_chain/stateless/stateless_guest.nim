@@ -15,7 +15,7 @@ export stateless_types, stateless_execution
 
 ## Stateless guest interfaces
 ## Spec:
-## https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/stateless_guest.py#L1
+## https://github.com/ethereum/execution-specs/blob/e5a8caf1b8055e4d805c7fb169edfa710914b7da/src/ethereum/forks/amsterdam/stateless_guest.py#L1
 
 func deserialize_stateless_input*(
     data: openArray[byte]
