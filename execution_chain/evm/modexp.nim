@@ -39,6 +39,46 @@ proc modExpFallback(base, exp, modulo, res: ptr BIGNUM, ctx: ptr BN_CTX): bool =
 
   true
 
+proc invModPow2(res, q: ptr BIGNUM, k: cint, u, f: ptr BIGNUM,
+                ctx: ptr BN_CTX): bool =
+  ## res = q^-1 mod 2^k for odd q, via Hensel (Newton) lifting:
+  ## x -> x * (2 - q*x) doubles the number of correct low bits each round,
+  ## so only multiplications and bit masks are needed. BoringSSL's
+  ## BN_mod_inverse takes its generic even-modulus path for a 2^k modulus,
+  ## which has a ~5us floor and grows quadratically (1.6ms at k = 2047).
+  ## `u` and `f` are caller-provided scratch variables.
+  if BN_one(res) != 1: # q^-1 mod 2 = 1 for odd q
+    return false
+  var bits = 1.cint
+  while bits < k:
+    bits = min(bits * 2, k)
+    # u = q * res mod 2^bits (correct to bits/2 low bits, i.e. u = 1 + d
+    # with d = 0 mod 2^(bits/2))
+    if BN_copy(u, q).isNil:
+      return false
+    if BN_mask_bits(u, bits) != 1:
+      return false
+    if BN_mul(u, u, res, ctx) != 1:
+      return false
+    if BN_mask_bits(u, bits) != 1:
+      return false
+    if BN_is_one(u) == 1: # converged (always the case for q = 1)
+      continue
+    # res = res * (2 - u) mod 2^bits, with 2 - u computed as the
+    # non-negative 2^bits + 2 - u (0 < u < 2^bits)
+    BN_zero(f)
+    if BN_set_bit(f, bits) != 1:
+      return false
+    if BN_add_word(f, 2) != 1:
+      return false
+    if BN_sub(f, f, u) != 1:
+      return false
+    if BN_mul(res, res, f, ctx) != 1:
+      return false
+    if BN_mask_bits(res, bits) != 1:
+      return false
+  true
+
 proc modExpEven(base, exp, modulo, res: ptr BIGNUM, ctx: ptr BN_CTX): bool =
   ## Even-modulus modexp via a CRT split of modulo = q * 2^k with q odd:
   ##   x1  = base^exp mod q      (BoringSSL Montgomery path)
@@ -119,7 +159,8 @@ proc modExpEven(base, exp, modulo, res: ptr BIGNUM, ctx: ptr BN_CTX): bool =
       return false
 
   # Garner: res = x1 + q * ((x2 - x1) * q^-1 mod 2^k)
-  if BN_mod_inverse(t, q, twoK, ctx).isNil:
+  # baseRed and eRed are no longer needed and are reused as scratch space
+  if not invModPow2(t, q, k, baseRed, eRed, ctx):
     return false
   if BN_mod_sub(x2, x2, res, twoK, ctx) != 1:
     return false
@@ -162,7 +203,12 @@ proc modExp*(b, e, m: openArray[byte]): seq[byte] =
     # For all x != 0, x^0 == 1 as well
     return @[1.byte]
 
-  if BN_is_odd(modulo) == 1:
+  # For even moduli with very short exponents the CRT split in modExpEven
+  # loses: BoringSSL's schoolbook even-modulus loop is only a handful of
+  # multiplications there, cheaper than the split's fixed Montgomery setup.
+  const evenExpBitsCutoff = 8
+
+  if BN_is_odd(modulo) == 1 or BN_num_bits(exp) <= evenExpBitsCutoff:
     if BN_mod_exp(res, base, exp, modulo, ctx) != 1:
       # BN_mod_exp rejects odd moduli wider than 16384 bits (BN_MONTGOMERY_MAX_WORDS),
       # but pre-Osaka modexp has no operand length cap, so in this case we compute
