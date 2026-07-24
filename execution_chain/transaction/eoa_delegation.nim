@@ -54,7 +54,7 @@ proc validateAuthorization(auth: Authorization, vmState: BaseVMState): Opt[addre
 
 proc setDelegation*(call: CallParams): int64 =
   var
-    regularRefund = 0'i64
+    executionRefund = 0'i64
 
   let
     vmState = call.vmState
@@ -67,7 +67,7 @@ proc setDelegation*(call: CallParams): int64 =
 
     # 7. Add PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST gas to the global refund counter if authority exists in the trie.
     if ledger.accountExists(authority):
-      regularRefund += PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST
+      executionRefund += PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST
 
     # 8. Set the code of authority to be 0xef0100 || address. This is a delegation designation.
     let authCode =
@@ -81,7 +81,7 @@ proc setDelegation*(call: CallParams): int64 =
     # 9. Increase the nonce of authority by one.
     ledger.setNonce(authority, auth.nonce + 1)
 
-  regularRefund
+  executionRefund
 
 proc setDelegation*(call: CallParams, c: Computation): EvmResultVoid =
   var

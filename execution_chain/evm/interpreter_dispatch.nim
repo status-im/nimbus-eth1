@@ -169,7 +169,7 @@ proc afterExec(c: Computation) =
     c.rollback()
 
   if c.msg.depth > 0:
-    let gasUsed = c.msg.gas - c.gasMeter.gasRemaining
+    let gasUsed = c.msg.gas - c.gasMeter.executionGasLeft
     c.vmState.captureExit(c, c.output, gasUsed, c.errorOpt)
 
 # ------------------------------------------------------------------------------

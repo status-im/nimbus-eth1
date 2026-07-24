@@ -78,7 +78,7 @@ proc updateStackAndParams(q: var LocalParams; c: Computation) =
     q.flags.incl MsgFlags.Precompile
 
 # EIP2929: This came before old gas calculator
-#           because it will affect `c.gasMeter.gasRemaining`
+#           because it will affect `c.gasMeter.executionGasLeft`
 #           and further `childGasLimit`
 proc gasCallEIP2929(c: Computation, codeAddress: Address): GasProc =
   if FkBerlin <= c.fork:
@@ -230,10 +230,10 @@ proc execSubCall(c: Computation; childMsg: Message; code: CodeBytesRef;
 
   c.chainTo(child):
     if child.shouldBurnGas:
-      c.gasMeter.appendRegularGasUsed(child.gasMeter.regularGasUsed + child.gasMeter.gasRemaining)
+      c.gasMeter.appendExecutionGasUsed(child.gasMeter.executionGasUsed + child.gasMeter.executionGasLeft)
     else:
-      c.gasMeter.returnGas(child.gasMeter.gasRemaining)
-      c.gasMeter.appendRegularGasUsed(child.gasMeter.regularGasUsed)
+      c.gasMeter.returnGas(child.gasMeter.executionGasLeft)
+      c.gasMeter.appendExecutionGasUsed(child.gasMeter.executionGasUsed)
 
     if child.isSuccess:
       if c.fork >= FkAmsterdam:
@@ -273,7 +273,7 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
     params1 = GasParamsCall1(
       kind:            Call,
       nonZeroVal:      p.value.isZero.not,
-      gasLeft:         cpt.gasMeter.gasRemaining,
+      gasLeft:         cpt.gasMeter.executionGasLeft,
       gasCallEIP2929:  cpt.gasCallEIP2929(p.codeAddress),
       currentMemSize:  cpt.memory.len,
       memOffset:       p.memOffset,
@@ -284,11 +284,11 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
   var newAccountCharged = false
   # EIP-8037: Charge state gas for new account creation BEFORE the 63/64
   # child gas calculation. When state gas spills from an empty reservoir
-  # into regular gas, it must reduce the gas available for childGasLimit.
+  # into execution gas, it must reduce the gas available for childGasLimit.
   if cpt.fork >= FkAmsterdam:
     newAccountCharged = isNewAccount() and params1.nonZeroVal
     if newAccountCharged:
-      # eels reviewer think there is an issue with the design to charge regular gas multiple times.
+      # eels reviewer think there is an issue with the design to charge execution gas multiple times.
       # https://github.com/ethereum/execution-specs/pull/2526/changes#diff-28a1b575fd7c3d82832c0826cf58a881101643543d35c123c78ca65202152c23R456
       # And it also make EVM tracer produce two traces of call or weird result.
       # So we check it here before actually charging state gas and keep the tracer produce single trace of call.
@@ -303,12 +303,12 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
         nonZeroVal:      params1.nonZeroVal,
         gasCost1:        gasCost1,
         isNewAccount:    isNewAccount,
-        gasLeft:         cpt.gasMeter.gasRemaining,
+        gasLeft:         cpt.gasMeter.executionGasLeft,
         gasCallDelegate: cpt.gasCallDelegate(p.codeAddress, p.flags),
         contractGas:     p.gas))
 
   ? cpt.opcodeGasCost(Call, gasCost, reason = $Call)
-  cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
+  cpt.gasMeter.escrowSubcallExecutionGas(childGasLimit)
 
   if cpt.balTrackerEnabled:
     cpt.vmState.balTracker.trackAddressAccess(cpt.msg.delegateTo)
@@ -372,7 +372,7 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
     params1 = GasParamsCall1(
       kind:            CallCode,
       nonZeroVal:      p.value.isZero.not,
-      gasLeft:         cpt.gasMeter.gasRemaining,
+      gasLeft:         cpt.gasMeter.executionGasLeft,
       gasCallEIP2929:  cpt.gasCallEIP2929(p.codeAddress),
       currentMemSize:  cpt.memory.len,
       memOffset:       p.memOffset,
@@ -385,12 +385,12 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
         nonZeroVal:      params1.nonZeroVal,
         gasCost1:        gasCost1,
         isNewAccount:    isNewAccount,
-        gasLeft:         cpt.gasMeter.gasRemaining,
+        gasLeft:         cpt.gasMeter.executionGasLeft,
         gasCallDelegate: cpt.gasCallDelegate(p.codeAddress, p.flags),
         contractGas:     p.gas))
 
   ? cpt.opcodeGasCost(CallCode, gasCost, reason = $CallCode)
-  cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
+  cpt.gasMeter.escrowSubcallExecutionGas(childGasLimit)
 
   if cpt.balTrackerEnabled:
     cpt.vmState.balTracker.trackAddressAccess(cpt.msg.delegateTo)
@@ -449,7 +449,7 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
     params1 = GasParamsCall1(
       kind:            DelegateCall,
       nonZeroVal:      p.value.isZero.not,
-      gasLeft:         cpt.gasMeter.gasRemaining,
+      gasLeft:         cpt.gasMeter.executionGasLeft,
       gasCallEIP2929:  cpt.gasCallEIP2929(p.codeAddress),
       currentMemSize:  cpt.memory.len,
       memOffset:       p.memOffset,
@@ -462,12 +462,12 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
         nonZeroVal:      params1.nonZeroVal,
         gasCost1:        gasCost1,
         isNewAccount:    isNewAccount,
-        gasLeft:         cpt.gasMeter.gasRemaining,
+        gasLeft:         cpt.gasMeter.executionGasLeft,
         gasCallDelegate: cpt.gasCallDelegate(p.codeAddress, p.flags),
         contractGas:     p.gas))
 
   ? cpt.opcodeGasCost(DelegateCall, gasCost, reason = $DelegateCall)
-  cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
+  cpt.gasMeter.escrowSubcallExecutionGas(childGasLimit)
 
   if cpt.balTrackerEnabled:
     cpt.vmState.balTracker.trackAddressAccess(cpt.msg.delegateTo)
@@ -520,7 +520,7 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
     params1 = GasParamsCall1(
       kind:            StaticCall,
       nonZeroVal:      p.value.isZero.not,
-      gasLeft:         cpt.gasMeter.gasRemaining,
+      gasLeft:         cpt.gasMeter.executionGasLeft,
       gasCallEIP2929:  cpt.gasCallEIP2929(p.codeAddress),
       currentMemSize:  cpt.memory.len,
       memOffset:       p.memOffset,
@@ -533,12 +533,12 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
         nonZeroVal:      params1.nonZeroVal,
         gasCost1:        gasCost1,
         isNewAccount:    isNewAccount,
-        gasLeft:         cpt.gasMeter.gasRemaining,
+        gasLeft:         cpt.gasMeter.executionGasLeft,
         gasCallDelegate: cpt.gasCallDelegate(p.codeAddress, p.flags),
         contractGas:     p.gas))
 
   ? cpt.opcodeGasCost(StaticCall, gasCost, reason = $StaticCall)
-  cpt.gasMeter.escrowSubcallRegularGas(childGasLimit)
+  cpt.gasMeter.escrowSubcallExecutionGas(childGasLimit)
 
   if cpt.balTrackerEnabled:
     cpt.vmState.balTracker.trackAddressAccess(cpt.msg.delegateTo)

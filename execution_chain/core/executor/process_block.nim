@@ -69,7 +69,7 @@ proc processTransactions*(
 ): Result[void, string] =
   vmState.receipts.setLen(if skipReceipts: 0 else: transactions.len)
   vmState.cumulativeGasUsed = 0
-  vmState.blockRegularGasUsed = 0
+  vmState.blockExecutionGasUsed = 0
   vmState.blockStateGasUsed = 0
   vmState.blobGasUsed = 0'u64
   vmState.allLogs = @[]
@@ -196,7 +196,7 @@ proc procBlkPreamble(
       return err("Pre-Shanghai block body must not have withdrawals")
 
   if com.isAmsterdamOrLater(header.timestamp):
-    let blockGasUsed = max(vmState.blockRegularGasUsed, vmState.blockStateGasUsed)
+    let blockGasUsed = max(vmState.blockExecutionGasUsed, vmState.blockStateGasUsed)
     if blockGasUsed != header.gasUsed:
       # TODO replace logging with better error
       debug "gasUsed neq blockGasUsed",

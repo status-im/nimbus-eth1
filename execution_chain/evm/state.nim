@@ -49,7 +49,7 @@ proc init(
   self.tracer = tracer
   self.receipts.setLen(0)
   self.cumulativeGasUsed = 0
-  self.blockRegularGasUsed = 0
+  self.blockExecutionGasUsed = 0
   self.blockStateGasUsed = 0
   self.gasCosts = self.fork.forkToSchedule
   self.blobGasUsed = 0'u64
@@ -353,11 +353,11 @@ proc captureOpStart*(vmState: BaseVMState, comp: Computation, pc: int,
 
 proc captureGasCost*(vmState: BaseVMState,
                     comp: Computation,
-                    op: Op, gasCost: GasInt, gasRemaining: GasInt,
+                    op: Op, gasCost: GasInt, executionGasLeft: GasInt,
                     depth: int) =
   if vmState.tracingEnabled:
     let fixed = vmState.gasCosts[op].kind == GckFixed
-    vmState.tracer.captureGasCost(comp, fixed, op, gasCost, gasRemaining, depth)
+    vmState.tracer.captureGasCost(comp, fixed, op, gasCost, executionGasLeft, depth)
 
 proc captureOpEnd*(vmState: BaseVMState, comp: Computation, pc: int,
                    op: Op, gas: GasInt, refund: int64,

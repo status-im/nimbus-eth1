@@ -63,7 +63,7 @@ type
     tx: ptr Transaction
     txIndex: int
     gasUsed: GasInt
-    blockRegularGasUsed: GasInt
+    blockExecutionGasUsed: GasInt
     blockStateGasUsed: GasInt
     intrinsic: IntrinsicGas
     blobGasUsed: uint64
@@ -110,7 +110,7 @@ proc recoverAndPrefetchTask*(
   vmState.tracer = nil
   vmState.receipts.setLen(0)
   vmState.cumulativeGasUsed = 0
-  vmState.blockRegularGasUsed = 0
+  vmState.blockExecutionGasUsed = 0
   vmState.blockStateGasUsed = 0
   vmState.blobGasUsed = 0'u64
   vmState.allLogs.setLen(0)
@@ -388,7 +388,7 @@ proc processTxTask(
   vmState.tracer = nil
   vmState.receipts.setLen(0)
   vmState.cumulativeGasUsed = 0
-  vmState.blockRegularGasUsed = 0
+  vmState.blockExecutionGasUsed = 0
   vmState.blockStateGasUsed = 0
   vmState.blobGasUsed = 0'u64
   vmState.allLogs.setLen(0)
@@ -404,7 +404,7 @@ proc processTxTask(
     return false
 
   e[].gasUsed = logResult.gasUsed
-  e[].blockRegularGasUsed = vmState.blockRegularGasUsed
+  e[].blockExecutionGasUsed = vmState.blockExecutionGasUsed
   e[].blockStateGasUsed = vmState.blockStateGasUsed
   e[].intrinsic =
     e[].tx[].intrinsicGas(vmState.hardFork, vmState.blockCtx.gasLimit, sender)
@@ -480,7 +480,7 @@ proc processTransactionsParallel*(
       check2dGasInclusion(vmState, transactions[i].gasLimit, fail)
 
     vmState.cumulativeGasUsed += entries[i].gasUsed
-    vmState.blockRegularGasUsed += entries[i].blockRegularGasUsed
+    vmState.blockExecutionGasUsed += entries[i].blockExecutionGasUsed
     vmState.blockStateGasUsed += entries[i].blockStateGasUsed
     vmState.blobGasUsed += entries[i].blobGasUsed
     vmState.status = entries[i].status
@@ -489,12 +489,12 @@ proc processTransactionsParallel*(
     # over-limit block is rejected as early as possible, cancelling the
     # remaining tasks instead of executing every transaction.
     if vmState.blockCtx.gasLimit <
-        max(vmState.blockRegularGasUsed, vmState.blockStateGasUsed):
+        max(vmState.blockExecutionGasUsed, vmState.blockStateGasUsed):
       ctx.cancelled.store(true, moRelease)
       return err(
         "Error processing tx with index " & $i & ": block gas limit reached (2D). " &
-          "gasLimit=" & $vmState.blockCtx.gasLimit & ", regularGas=" &
-          $vmState.blockRegularGasUsed & ", stateGas=" & $vmState.blockStateGasUsed
+          "gasLimit=" & $vmState.blockCtx.gasLimit & ", executionGas=" &
+          $vmState.blockExecutionGasUsed & ", stateGas=" & $vmState.blockStateGasUsed
       )
 
     var logs = unpackLogs(entries[i].logs.data(asOpenArray = true))

@@ -94,7 +94,7 @@ proc prospectiveBlockSize(pst: TxPacker, xp: TxPoolRef,
     com = vmState.com
     gasUsedSoFar =
       if vmState.fork >= FkAmsterdam:
-        max(vmState.blockRegularGasUsed, vmState.blockStateGasUsed)
+        max(vmState.blockExecutionGasUsed, vmState.blockStateGasUsed)
       else:
         vmState.cumulativeGasUsed
 
@@ -134,7 +134,7 @@ func classifyPackedNext(vmState: BaseVMState): bool =
   ## This function is typically called as a follow up after a `false` return of
   ## `classifyPack()`.
   if vmState.fork >= FkAmsterdam:
-    max(vmState.blockRegularGasUsed, vmState.blockStateGasUsed) < vmState.blockCtx.gasLimit
+    max(vmState.blockExecutionGasUsed, vmState.blockStateGasUsed) < vmState.blockCtx.gasLimit
   else:
     vmState.cumulativeGasUsed < vmState.blockCtx.gasLimit
 
@@ -362,7 +362,7 @@ func assembleHeader*(pst: TxPacker, xp: TxPoolRef): Header =
     let bal = vmState.blockAccessList.expect("block access list exists")
     header.blockAccessListHash = Opt.some(bal[].computeBlockAccessListHash())
     header.slotNumber = Opt.some(xp.slotNumber)
-    header.gasUsed = max(vmState.blockRegularGasUsed, vmState.blockStateGasUsed)
+    header.gasUsed = max(vmState.blockExecutionGasUsed, vmState.blockStateGasUsed)
 
   header
 

@@ -32,7 +32,7 @@ type
   GasUsed = object
     evmGasUsed: GasInt
     txGasUsed: GasInt
-    blockRegularGasUsed: GasInt
+    blockExecutionGasUsed: GasInt
     blockStateGasUsed: GasInt
 
 proc initialAccessListEIP2929(params: CallParams) =
@@ -96,25 +96,25 @@ proc setupEVM(params: CallParams, keepStack: bool): Computation =
   vmState.gasRefunded = 0
 
   let
-    intrinsicGas = params.intrinsic.regular + params.intrinsic.state
+    intrinsicGas = params.intrinsic.execution + params.intrinsic.state
 
     # Prevent underflow which can occur when gasLimit is less than intrinsicGas.
     # Note that this is only a short term fix. In the longer term we need to
     # implement validation on all fields in the Message before executing in the EVM.
     # TODO: Implement full validation on all fields. See related issue: https://github.com/status-im/nimbus-eth1/issues/1524
     executionGas = if params.gasLimit < intrinsicGas: 0.GasInt else: params.gasLimit - intrinsicGas
-    regularGasBudget = TX_GAS_LIMIT - params.intrinsic.regular
+    executionGasBudget = TX_GAS_LIMIT - params.intrinsic.execution
 
   var
     gasLeft = executionGas
     stateGasReservoir = 0.GasInt
-    regularRefund = 0'i64
+    executionRefund = 0'i64
 
   if fork >= Amsterdam:
-    gasLeft = min(regularGasBudget, executionGas)
+    gasLeft = min(executionGasBudget, executionGas)
     stateGasReservoir = executionGas - gasLeft
   else:
-    regularRefund = setDelegation(params)
+    executionRefund = setDelegation(params)
 
   let
     msg = Message(
@@ -131,7 +131,7 @@ proc setupEVM(params: CallParams, keepStack: bool): Computation =
     computation = setupComputation(params, keepStack, vmState, msg)
 
   if computation.isSuccess:
-    computation.addRefund(regularRefund)
+    computation.addRefund(executionRefund)
     vmState.captureStart(computation, params.sender, params.to,
                          params.isCreate, params.input,
                          params.gasLimit, params.value)
@@ -177,35 +177,35 @@ proc calculateAndPossiblyRefundGas(c: Computation, params: CallParams): GasUsed 
 
   # Calculated gas used, taking into account refund rules.
   let
-    txGasUsedBeforeRefund = params.gasLimit - c.gasMeter.gasRemaining - c.gasMeter.stateGasLeft
+    txGasUsedBeforeRefund = params.gasLimit - c.gasMeter.executionGasLeft - c.gasMeter.stateGasLeft
     maxRefund = txGasUsedBeforeRefund div MaxRefundQuotient
     txGasRefund = min(c.getGasRefund(), maxRefund)
     txGasUsedAfterRefund = txGasUsedBeforeRefund - txGasRefund
 
   var
     txGasUsed = txGasUsedAfterRefund
-    blockRegularGasUsed = txGasUsed
+    blockExecutionGasUsed = txGasUsed
     blockStateGasUsed = 0.GasInt
 
   if fork >= FkAmsterdam:
     txGasUsed = max(txGasUsedAfterRefund, params.intrinsic.floorDataGas)
     let txStateGas = params.intrinsic.state.int64 + c.vmState.authStateGasUsed + c.frameStateGasUsed()
     blockStateGasUsed = GasInt(max(0, txStateGas))
-    blockRegularGasUsed = max(txGasUsedBeforeRefund - blockStateGasUsed, params.intrinsic.floorDataGas)
+    blockExecutionGasUsed = max(txGasUsedBeforeRefund - blockStateGasUsed, params.intrinsic.floorDataGas)
     debug "EIP-8037 gas accounting",
-      intrinsicRegular = params.intrinsic.regular,
+      intrinsicExecution = params.intrinsic.execution,
       intrinsicState = params.intrinsic.state,
-      regularGasUsed = c.gasMeter.regularGasUsed,
+      executionGasUsed = c.gasMeter.executionGasUsed,
       stateGasUsed = c.gasMeter.stateGasUsed,
-      gasRemaining = c.gasMeter.gasRemaining,
+      executionGasLeft = c.gasMeter.executionGasLeft,
       stateGasLeft = c.gasMeter.stateGasLeft,
-      blockRegularGasUsed = blockRegularGasUsed,
+      blockExecutionGasUsed = blockExecutionGasUsed,
       blockStateGasUsed = blockStateGasUsed,
       txGasUsed = txGasUsed,
       floorDataGas = params.intrinsic.floorDataGas
   elif fork >= FkPrague:
     txGasUsed = max(txGasUsedAfterRefund, params.intrinsic.floorDataGas)
-    blockRegularGasUsed = txGasUsed
+    blockExecutionGasUsed = txGasUsed
 
   # Refund for unused gas.
   let txGasLeft = params.gasLimit - txGasUsed
@@ -219,7 +219,7 @@ proc calculateAndPossiblyRefundGas(c: Computation, params: CallParams): GasUsed 
   GasUsed(
     evmGasUsed: c.msg.gas - txGasLeft,
     txGasUsed: txGasUsed,
-    blockRegularGasUsed: blockRegularGasUsed,
+    blockExecutionGasUsed: blockExecutionGasUsed,
     blockStateGasUsed: blockStateGasUsed,
   )
 
@@ -248,7 +248,7 @@ proc finishRunningComputation(
         result.logEntries = move(c.logEntries)
   elif T is LogResult:
     result.gasUsed = gasUsed.txGasUsed
-    result.blockRegularGasUsed = gasUsed.blockRegularGasUsed
+    result.blockExecutionGasUsed = gasUsed.blockExecutionGasUsed
     result.blockStateGasUsed = gasUsed.blockStateGasUsed
     if c.isSuccess:
       result.logEntries = move(c.logEntries)
