@@ -79,6 +79,24 @@ proc invModPow2(res, q: ptr BIGNUM, k: cint, u, f: ptr BIGNUM,
       return false
   true
 
+proc modExpOdd(base, exp, modulo, res: ptr BIGNUM, ctx: ptr BN_CTX): bool =
+  ## Odd-modulus exponentiation. The precompile's modulus is public, so we build
+  ## the Montgomery context with the variable-time BN_MONT_CTX_new_for_modulus
+  ## instead of letting BN_mod_exp use its constant-time setup - that setup only
+  ## exists to hide private-key moduli and is markedly slower, ~25% of a small-
+  ## exponent (e.g. RSA e=65537) call. Falls back to square-and-multiply when
+  ## Montgomery setup is unavailable, e.g. moduli beyond BN_MONTGOMERY_MAX_WORDS.
+  let mont = BN_MONT_CTX_new_for_modulus(modulo, ctx)
+  if mont.isNil:
+    return modExpFallback(base, exp, modulo, res, ctx)
+  defer: BN_MONT_CTX_free(mont)
+  # BN_mod_exp_mont requires 0 <= base < modulo.
+  if BN_ucmp(base, modulo) >= 0 and BN_nnmod(base, base, modulo, ctx) != 1:
+    return false
+  if BN_mod_exp_mont(res, base, exp, modulo, ctx, mont) == 1:
+    return true
+  modExpFallback(base, exp, modulo, res, ctx)
+
 proc modExpEven(base, exp, modulo, res: ptr BIGNUM, ctx: ptr BN_CTX): bool =
   ## Even-modulus modexp via a CRT split of modulo = q * 2^k with q odd:
   ##   x1  = base^exp mod q      (BoringSSL Montgomery path)
@@ -150,13 +168,12 @@ proc modExpEven(base, exp, modulo, res: ptr BIGNUM, ctx: ptr BN_CTX): bool =
         if BN_mask_bits(x2, k) != 1:
           return false
 
-  # x1 = base^exp mod q, computed into res
+  # x1 = base^exp mod q, computed into res (vartime Montgomery setup, with the
+  # square-and-multiply fallback for q wider than BN_MONTGOMERY_MAX_WORDS)
   if BN_is_one(q) == 1:
     BN_zero(res) # modulo is a power of two
-  elif BN_mod_exp(res, base, exp, q, ctx) != 1:
-    # q wider than 16384 bits (BN_MONTGOMERY_MAX_WORDS), see modExp below
-    if not modExpFallback(base, exp, q, res, ctx):
-      return false
+  elif not modExpOdd(base, exp, q, res, ctx):
+    return false
 
   # Garner: res = x1 + q * ((x2 - x1) * q^-1 mod 2^k)
   # baseRed and eRed are no longer needed and are reused as scratch space
@@ -169,24 +186,6 @@ proc modExpEven(base, exp, modulo, res: ptr BIGNUM, ctx: ptr BN_CTX): bool =
   if BN_mul(t, q, t, ctx) != 1:
     return false
   BN_add(res, res, t) == 1
-
-proc modExpOdd(base, exp, modulo, res: ptr BIGNUM, ctx: ptr BN_CTX): bool =
-  ## Odd-modulus exponentiation. The precompile's modulus is public, so we build
-  ## the Montgomery context with the variable-time BN_MONT_CTX_new_for_modulus
-  ## instead of letting BN_mod_exp use its constant-time setup - that setup only
-  ## exists to hide private-key moduli and is markedly slower, ~25% of a small-
-  ## exponent (e.g. RSA e=65537) call. Falls back to square-and-multiply when
-  ## Montgomery setup is unavailable, e.g. moduli beyond BN_MONTGOMERY_MAX_WORDS.
-  let mont = BN_MONT_CTX_new_for_modulus(modulo, ctx)
-  if mont.isNil:
-    return modExpFallback(base, exp, modulo, res, ctx)
-  defer: BN_MONT_CTX_free(mont)
-  # BN_mod_exp_mont requires 0 <= base < modulo.
-  if BN_ucmp(base, modulo) >= 0 and BN_nnmod(base, base, modulo, ctx) != 1:
-    return false
-  if BN_mod_exp_mont(res, base, exp, modulo, ctx, mont) == 1:
-    return true
-  modExpFallback(base, exp, modulo, res, ctx)
 
 # A per-thread BN_CTX reused across calls. Allocating a fresh context plus four
 # heap BIGNUMs per call dominates the cost of small modexp inputs (~0.9us of the
