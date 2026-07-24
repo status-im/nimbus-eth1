@@ -8,13 +8,11 @@
 # those terms.
 
 import
-  eth/common/hashes,
   web3/execution_types,
   ../beacon_engine
 
 {.push gcsafe, raises:[].}
 
 proc getInclusionList*(ben: BeaconEngineRef,
-                       apiVersion: Version,
-                       parentHash: Hash32): InclusionList =
+                       apiVersion: Version): InclusionList =
   discard

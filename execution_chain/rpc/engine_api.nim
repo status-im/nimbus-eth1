@@ -211,6 +211,6 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
       apiTiming("engine_getBlobsV3"):
         engine.getBlobsV3(versionedHashes)
 
-    proc engine_getInclusionListV1(parentHash: Hash32): InclusionList {.raises: [ApplicationError].} =
+    proc engine_getInclusionListV1(): InclusionList {.raises: [ApplicationError].} =
       apiTiming("engine_getInclusionListV1"):
-        engine.getInclusionList(Version.V5, parentHash)
+        engine.getInclusionList(Version.V1)
