@@ -35,13 +35,15 @@ const
 
 proc new*(_: type EthWireRef,
           txPool: TxPoolRef,
-          node: EthereumNode): EthWireRef =
+          node: EthereumNode,
+          forceGossip = false): EthWireRef =
   let wire = EthWireRef(
     chain : txPool.chain,
     txPool: txPool,
     node  : node,
     quota : setupTokenBucket(),
     actionQueue : newAsyncQueue[ActionHandler](maxsize = MAX_ACTION_HANDLER),
+    forceGossip : forceGossip,
   )
   wire.tickerHeartbeat = tickerLoop(wire)
   for _ in 0 ..< NUM_ACTION_WORKERS:

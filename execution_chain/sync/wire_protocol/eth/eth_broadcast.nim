@@ -87,6 +87,11 @@ iterator peers69OrLater(wire: EthWireRef, random: bool = false): Peer =
 proc syncerRunning*(wire: EthWireRef): bool =
   # Disable transactions gossip and processing when
   # the syncer is still busy
+  if wire.forceGossip:
+    # Debug override: force gossip on regardless of sync state
+    wire.gossipEnabled = true
+    return false
+
   const
     thresholdTime = 3 * 15
 
