@@ -15,9 +15,11 @@ import
   stew/assign2,
   ../evm/[types, state],
   ../evm/[message, precompiles, internals, interpreter_dispatch, evm_errors],
+  ../evm/interpreter/op_handlers/oph_helpers,
   ../db/ledger,
   ../common/evmforks,
   ../core/eip4844,
+  ../core/eip8037,
    ./eoa_delegation,
    ./call_types
 
@@ -255,6 +257,80 @@ proc finishRunningComputation(
   else:
     {.error: "Unknown computation output".}
 
+proc prepareDispatch(params: CallParams, c: Computation): EvmResultVoid =
+  let
+    vmState = c.vmState
+    ledger = vmState.ledger
+
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.trackAddressAccess(c.msg.contractAddress)
+
+  var
+    code =
+      if params.isCreate:
+        if ledger.originalAccountEmpty(c.msg.contractAddress):
+          ? c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch create new account")
+        CodeBytesRef.init(params.input)
+      else:
+        if params.value.isZero.not and not ledger.accountExists(c.msg.contractAddress):
+          ? c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch call new account")
+        assign(c.msg.data, params.input)
+        getRecipientCode(vmState, c.msg)
+
+  if MsgFlags.Delegated in c.msg.flags:
+    # The delegated account access must be charged before its code is read,
+    # or an OOG here would wrongly add the target account to the witness.
+    let delegatedGas = c.gasEip8038AccountCheck(c.msg.delegateTo)
+    ? c.gasMeter.consumeGas(delegatedGas, "prepareDispatch delegatedGas")
+
+    if vmState.balTrackerEnabled:
+      vmState.balTracker.trackAddressAccess(c.msg.delegateTo)
+    code = vmState.readOnlyLedger.getCode(c.msg.delegateTo)
+
+  c.setCode(code)
+  ok()
+
+proc authAndDelegation(params: CallParams, c: Computation): EvmResultVoid =
+  ? params.setDelegation(c)
+  c.vmState.authStateGasUsed = c.frameStateGasUsed()
+  c.msg.stateGasReservoir = c.gasMeter.stateGasLeft
+  c.gasMeter.stateGasSpilled = 0
+  params.prepareDispatch(c)
+
+proc topFrameAuthAndDelegation(params: CallParams, c: Computation): bool =
+  let
+    prepReservoir = c.msg.stateGasReservoir
+
+  c.beginSavePoint()
+  params.authAndDelegation(c).isOkOr:
+    c.rollback()
+    c.msg.stateGasReservoir = prepReservoir
+    c.vmState.authStateGasUsed = 0
+    c.refillFrameStateGas()
+    c.setError($error.code, true)
+    return false
+
+  c.commit()
+  true
+
+proc preExecComputation(c: Computation, params: CallParams) =
+  if params.isCreate:
+    if not c.incrementNonce():
+      return
+
+    if c.fork >= FkAmsterdam:
+      if not params.topFrameAuthAndDelegation(c):
+        return
+
+    if not c.accountDeployable():
+      return
+
+    return
+
+  if c.fork >= FkAmsterdam:
+    if not params.topFrameAuthAndDelegation(c):
+      return
+
 proc runComputation*(params: CallParams, T: type): T =
   prepareToRunComputation(params)
   initialAccessListEIP2929(params)
@@ -262,7 +338,13 @@ proc runComputation*(params: CallParams, T: type): T =
   let
     c = setupEVM(params, keepStack = T is DebugCallResult)
 
-  c.execCallOrCreate(params)
-  c.postExecComputation()
+  c.preExecComputation(params)
+  if c.isSuccess:
+    c.execCallOrCreate()
+    c.postExecComputation()
+  else:
+    # execCallOrCreate normally disposes the computation, dispose here too
+    # otherwise the EVM stack leaks.
+    c.dispose()
 
   finishRunningComputation(c, params, T)

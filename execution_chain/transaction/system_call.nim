@@ -94,7 +94,7 @@ proc systemCall*(params: CallParams, T: type): T =
   # Pre-execution sanity checks
   c.preExecComputation()
   if c.isSuccess:
-    c.execCallOrCreate(params)
+    c.execCallOrCreate()
     ledger.persist(clearEmptyAccount = true)
   else:
     # execCallOrCreate normally disposes the computation, dispose here too

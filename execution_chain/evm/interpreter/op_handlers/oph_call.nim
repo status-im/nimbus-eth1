@@ -108,6 +108,9 @@ proc gasCallDelegate(c: Computation, codeAddress: Address, flags: set[MsgFlags])
       if c.balTrackerEnabled:
         c.vmState.balTracker.trackAddressAccess(codeAddress)
 
+      # Clear delegated flags inherited from parent
+      c.msg.flags.excl MsgFlags.Delegated
+
       # Code does not need to be loaded for precompile addresses because the
       # precompile doesn't exist in the state trie and can never be a 7702
       # delegation, so resolving the delegation target is a no-op.

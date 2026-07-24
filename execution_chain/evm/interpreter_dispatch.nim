@@ -13,13 +13,10 @@
 import
   std/[macros, strformat],
   chronicles,
-  stew/[byteutils, assign2],
+  stew/[byteutils],
   ../constants,
   ../db/ledger,
-  ../core/eip8037,
-  ../transaction/[call_types, eoa_delegation],
   ./interpreter/[op_dispatcher],
-  ./interpreter/op_handlers/oph_helpers,
   ./[code_stream, computation, evm_errors, message, precompiles, state, types]
 
 logScope:
@@ -69,67 +66,7 @@ macro selectVM(v: VmCpt, fork: EVMFork, tracingEnabled: bool): EvmResultVoid =
     caseStmt.add nnkOfBranch.newTree(forkVal, call)
   caseStmt
 
-proc prepareDispatch(params: CallParams, c: Computation): EvmResultVoid =
-  let
-    vmState = c.vmState
-    ledger = vmState.ledger
-
-  if vmState.balTrackerEnabled:
-    vmState.balTracker.trackAddressAccess(c.msg.contractAddress)
-
-  var
-    code =
-      if params.isCreate:
-        if ledger.originalAccountEmpty(c.msg.contractAddress):
-          ? c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch create new account")
-        CodeBytesRef.init(params.input)
-      else:
-        if params.value.isZero.not and not ledger.accountExists(c.msg.contractAddress):
-          ? c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch call new account")
-        assign(c.msg.data, params.input)
-        getRecipientCode(vmState, c.msg)
-
-  if MsgFlags.Delegated in c.msg.flags:
-    # The delegated account access must be charged before its code is read,
-    # or an OOG here would wrongly add the target account to the witness.
-    let delegatedGas = c.gasEip8038AccountCheck(c.msg.delegateTo)
-    ? c.gasMeter.consumeGas(delegatedGas, "prepareDispatch delegatedGas")
-
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.trackAddressAccess(c.msg.delegateTo)
-    code = vmState.readOnlyLedger.getCode(c.msg.delegateTo)
-
-  c.setCode(code)
-  ok()
-
-proc authAndDelegation(params: CallParams, c: Computation): EvmResultVoid =
-  ? params.setDelegation(c)
-  c.vmState.authStateGasUsed = c.frameStateGasUsed()
-  c.msg.stateGasReservoir = c.gasMeter.stateGasLeft
-  c.gasMeter.stateGasSpilled = 0
-  params.prepareDispatch(c)
-
-proc topFrameAuthAndDelegation(params: CallParams, c: Computation): bool =
-  let
-    prepReservoir = c.msg.stateGasReservoir
-
-  c.beginSavePoint()
-  params.authAndDelegation(c).isOkOr:
-    c.rollback()
-    c.msg.stateGasReservoir = prepReservoir
-    c.vmState.authStateGasUsed = 0
-    c.refillFrameStateGas()
-    c.setError($error.code, true)
-    return false
-
-  c.commit()
-  true
-
-proc beforeExecCall(c: Computation, params: CallParams): bool =
-  if c.msg.depth == 0 and c.fork >= FkAmsterdam:
-    if not params.topFrameAuthAndDelegation(c):
-      return true
-
+proc beforeExecCall(c: Computation): bool =
   c.beginSavePoint()
   if c.msg.kind == CallKind.Call:
     c.vmState.mutateLedger:
@@ -158,18 +95,7 @@ proc afterExecCall(c: Computation) =
       # Special case to account for geth+parity bug
       c.vmState.ledger.ripemdSpecial()
 
-proc beforeExecCreate(c: Computation, params: CallParams): bool =
-  if c.msg.depth == 0:
-    if not c.incrementNonce():
-      return true
-
-    if c.fork >= FkAmsterdam:
-      if not params.topFrameAuthAndDelegation(c):
-        return true
-
-    if not c.accountDeployable():
-      return true
-
+proc beforeExecCreate(c: Computation): bool =
   c.beginSavePoint()
 
   c.vmState.mutateLedger:
@@ -213,7 +139,7 @@ func msgToOp(msg: Message): Op =
     return StaticCall
   MsgKindToOp[msg.kind]
 
-proc beforeExec(c: Computation, params: CallParams): bool =
+proc beforeExec(c: Computation): bool =
   if c.msg.depth > 0:
     c.vmState.captureEnter(
       c,
@@ -226,9 +152,9 @@ proc beforeExec(c: Computation, params: CallParams): bool =
     )
 
   if c.msg.isCreate:
-    c.beforeExecCreate(params)
+    c.beforeExecCreate()
   else:
-    c.beforeExecCall(params)
+    c.beforeExecCall()
 
 proc afterExec(c: Computation) =
   if not c.msg.isCreate:
@@ -295,13 +221,13 @@ proc executeOpcodes*(c: Computation) =
     if c.tracingEnabled:
       c.traceError()
 
-proc execCallOrCreate*(cParam: Computation, params: CallParams) =
+proc execCallOrCreate*(cParam: Computation) =
   var (c, before) = (cParam, true)
 
   # No actual recursion, but simulate recursion including before/after/dispose.
   while true:
     while true:
-      if before and c.beforeExec(params):
+      if before and c.beforeExec():
         break
       c.executeOpcodes()
       if c.continuation.isNil:
