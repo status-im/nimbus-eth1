@@ -384,13 +384,27 @@ suite "TxPool test suite":
     xp.checkImportBlock(1, 0)
 
   test "max transactions per account":
+    # Shadow the suite env with an isolated one: draining MAX_TXS_PER_ACCOUNT
+    # txs imports enough full blocks to compound the baseFee toward the
+    # sender's 30 gwei fee cap, which would make later admissions in the
+    # shared env fail `maxFeePerGas < baseFee`.
+    let
+      env = initEnv(Cancun)
+      xp = env.xp
+      mx = env.sender
+      chain = env.chain
+
+    xp.prevRandao = prevRandao
+    xp.feeRecipient = feeRecipient
+    xp.timestamp = EthTime.now()
+
     let acc = mx.getAccount(16)
     let tc = BaseTx(
       txType: Opt.some(TxLegacy),
       gasLimit: 75000
     )
 
-    const MAX_TXS_GENERATED = 500
+    const MAX_TXS_GENERATED = MAX_TXS_PER_ACCOUNT
     for i in 0..MAX_TXS_GENERATED-2:
       let ptx = mx.makeTx(tc, acc, i.AccountNonce)
       xp.checkAddTx(ptx)

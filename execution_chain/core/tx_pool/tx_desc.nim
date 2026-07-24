@@ -61,6 +61,8 @@ type
     XP_SKIP_BLOB_WRAPPER_VALIDATION
     XP_SKIP_SIZE_VALIDATION
 
+  TxAddedObserver = proc(item: TxItemRef) {.gcsafe, raises: [].}
+
   TxPoolRef* = ref object
     vmState  : BaseVMState
     chain    : ForkedChainRef
@@ -70,10 +72,11 @@ type
     pos      : PosPayloadAttr
     blobTab  : BlobLookupTab
     flags    : set[TxPoolFlags]
+    onAddedTx*: TxAddedObserver
 
 const
-  MAX_POOL_SIZE = 8000
-  MAX_TXS_PER_ACCOUNT = 500
+  MAX_POOL_SIZE = 10000
+  MAX_TXS_PER_ACCOUNT* = 2048
   TX_ITEM_LIFETIME* = initDuration(minutes = 10)
   TX_MAX_SIZE = 128 * 1024
   # BLOB_TX_MAX_SIZE is the maximum size a single transaction can have, outside
@@ -441,6 +444,9 @@ proc addTxImpl(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     ?xp.insertToSenderTab(item)
   xp.idTab[item.id] = item
   xp.blobTab.addLookup(item)
+
+  if not xp.onAddedTx.isNil:
+    xp.onAddedTx(item)
 
   debug "Transaction added to txpool",
     txHash = id,

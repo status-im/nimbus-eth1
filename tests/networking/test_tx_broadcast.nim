@@ -19,15 +19,24 @@ import
   chronos,
   chronos/ratelimit,
   stint,
-  eth/common/[keys, hashes],
+  eth/common/[keys, hashes, addresses, transactions],
   eth/common/times as ethTimes,
   ../../execution_chain/db/core_db/memory_only,
   ../../execution_chain/networking/p2p,
   ../../execution_chain/core/chain/forked_chain,
   ../../execution_chain/core/tx_pool,
+  ../../execution_chain/core/pooled_txs,
   ../../execution_chain/sync/wire_protocol,
   ../../execution_chain/conf,
+  ../../hive_integration/tx_sender,
   ./stubloglevel
+
+# No explicit kzg trusted-setup load here: the kzg binding lazy-loads a
+# compile-time-parsed setup on first use (blob validation runs on the main
+# thread, so the lazy path has no thread race). The eager
+# loadTrustedSetupFromString variant parses at runtime and moves ~400KiB
+# TrustedSetup values through the stack - it overflows the 1MiB stack limit
+# `make test` runs the suite under.
 
 const
   # A genesis template with cancun enabled and a placeholder timestamp.
@@ -69,14 +78,22 @@ type
     txPool: TxPoolRef
     chain: ForkedChainRef
     wire: EthWireRef
+    sender: TxSender
 
-proc newBroadcastTestEnv(): BroadcastTestEnv =
+proc newBroadcastTestEnv(genesisPath = ""): BroadcastTestEnv =
+  ## `genesisPath` lets two-node tests share the exact same genesis file
+  ## (the eth handshake rejects peers with a different genesis hash).
+  ## TxSender accounts are derived deterministically, so both envs fund
+  ## the same accounts and keep identical genesis state.
   let
-    genesisPath = writeRecentGenesis()
+    path = if genesisPath.len > 0: genesisPath
+           else: writeRecentGenesis()
     config = makeConfig(@[
-      "--network:" & genesisPath,
+      "--network:" & path,
       "--listen-address: 127.0.0.1",
     ])
+    # Create the sender first, because it funds accounts in networkParams
+    sender = TxSender.new(config.networkParams, 10)
     com = CommonRef.new(
       newCoreDbRef DefaultDbMemory,
       config.networkId,
@@ -94,13 +111,14 @@ proc newBroadcastTestEnv(): BroadcastTestEnv =
     txPool: txPool,
     chain: chain,
     wire: wire,
+    sender: sender,
   )
 
-proc close(env: BroadcastTestEnv) =
+proc close(env: BroadcastTestEnv) {.async: (raises: [CancelledError]).} =
   if env.node.listeningServer.isNil.not:
-    waitFor env.node.closeWait()
-  waitFor env.wire.stop()
-  waitFor env.chain.stopProcessingQueue()
+    await env.node.closeWait()
+  await env.wire.stop()
+  await env.chain.stopProcessingQueue()
 
 const
   MAX_ACTION_HANDLER = 512
@@ -213,8 +231,8 @@ suite "Tx broadcast queue":
       # Queue should remain unchanged (handler dropped the announcement)
       check env1.wire.actionQueue.len == queueLenBefore
 
-      env2.close()
-      env1.close()
+      await env2.close()
+      await env1.close()
 
     waitFor runTest()
 
@@ -261,8 +279,8 @@ suite "Tx broadcast queue":
       check completed
       check env1.wire.actionQueue.len == queueLenBefore
 
-      env2.close()
-      env1.close()
+      await env2.close()
+      await env1.close()
 
     waitFor runTest()
 
@@ -306,8 +324,58 @@ suite "Tx broadcast queue":
       let completed = await withTimeout(action(), chronos.seconds(2))
       check completed
 
-      env2.close()
-      env1.close()
+      await env2.close()
+      await env1.close()
+
+    waitFor runTest()
+
+  test "oversized single announced tx size does not livelock fetchPooledTxs":
+    ## Fix: in fetchPooledTxs's inner batching loop, a peer-announced
+    ## txSizes[i] that alone exceeds SOFT_RESPONSE_LIMIT used to `break`
+    ## before `inc i` ever ran. With an empty msg, the outer loop just
+    ## `continue`s with the same `i` and re-enters the inner loop forever
+    ## -- with no `await` on that path, chronos never regains control and
+    ## the whole node's event loop freezes (not just this peer's fetch).
+    ## The fix always advances `i`, fetching the oversized tx alone
+    ## instead of looping without making progress.
+    proc runTest() {.async.} =
+      var env1 = newBroadcastTestEnv()
+      var env2 = newBroadcastTestEnv()
+
+      env2.node.startListening()
+      let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+      check connRes.isOk()
+      let peer = connRes.get()
+
+      check not env1.wire.syncerRunning()
+
+      # Stop the action loop so we can inspect and run the queued action
+      # ourselves under a timeout.
+      for fut in env1.wire.actionHeartbeat:
+        await fut.cancelAndWait()
+
+      # A single announced hash whose claimed size alone exceeds
+      # SOFT_RESPONSE_LIMIT -- the batching loop can never fit it alongside
+      # anything else.
+      let packet = NewPooledTransactionHashesPacket(
+        txTypes: @[2.byte],
+        txSizes: @[SOFT_RESPONSE_LIMIT.uint64 + 1],
+        txHashes: @[default(Hash32)],
+      )
+
+      await env1.wire.handleTxHashesBroadcast(packet, peer)
+      check env1.wire.actionQueue.len == 1
+
+      # Pre-fix: this hangs forever (no await point is ever reached), so
+      # withTimeout itself never gets a chance to fire either -- the bug is
+      # a full event-loop freeze, not a slow response. Post-fix, `i` always
+      # advances and this completes quickly.
+      let action = await env1.wire.actionQueue.popFirst()
+      let completed = await withTimeout(action(), chronos.seconds(5))
+      check completed
+
+      await env2.close()
+      await env1.close()
 
     waitFor runTest()
 
@@ -331,7 +399,7 @@ suite "Tx broadcast queue":
       await sleepAsync(chronos.milliseconds(200))
       check fastDone
 
-      env.close()
+      await env.close()
 
     waitFor runTest()
 
@@ -409,6 +477,475 @@ suite "Tx broadcast queue":
       check completed
       await mutatorFut.cancelAndWait()
 
-      env.close()
+      await env.close()
+
+    waitFor runTest()
+
+const
+  txRecipient = address"0000000000000000000000000000000000000213"
+
+proc makeSignedTx(env: BroadcastTestEnv, nonce: AccountNonce,
+                  accIdx = 0): PooledTransaction =
+  env.sender.makeTx(BaseTx(
+    txType: Opt.some(TxEip1559),
+    recipient: Opt.some(txRecipient),
+    gasLimit: 75000,
+    amount: 1.u256,
+  ), env.sender.getAccount(accIdx), nonce)
+
+proc makeSignedBlobTx(env: BroadcastTestEnv, nonce: AccountNonce,
+                      accIdx = 0): PooledTransaction =
+  let params = MakeTxParams(
+    chainId: env.sender.chainId,
+    key: env.sender.getAccount(accIdx).key,
+    nonce: nonce,
+  )
+  params.makeTx(BlobTx(
+    recipient: Opt.some(txRecipient),
+    gasLimit: 100000,
+    gasTip: 1_000_000_000.GasInt,
+    gasFee: 1_000_000_000.GasInt,
+    blobGasFee: 1.u256,
+    blobCount: 1,
+    blobID: 1,
+  ))
+
+proc waitForPooled(env: BroadcastTestEnv, txHash: Hash32,
+                   tries = 300): Future[bool] {.async.} =
+  var waited = 0
+  while not env.txPool.contains(txHash) and waited < tries:
+    await sleepAsync(chronos.milliseconds(10))
+    inc waited
+  env.txPool.contains(txHash)
+
+proc connectPair(env1, env2: BroadcastTestEnv): Future[Peer] {.async.} =
+  ## Connect through the peer pool (like production) so the peer is
+  ## registered in connectedNodes — the source of node.peers() used by
+  ## the outbound gossip. Returns env1's handle for env2, or nil.
+  env2.node.startListening()
+  await env1.node.connectToNode(newNode(env2.node.toENode()))
+  for p in env1.node.peers():
+    return p
+  nil
+
+suite "Tx propagation":
+
+  test "addTx queues gossip exactly once per unique tx":
+    proc runTest() {.async.} =
+      let env = newBroadcastTestEnv()
+      # Freeze the gossip worker so queued hashes stay observable.
+      await env.wire.txGossipHeartbeat.cancelAndWait()
+
+      let ptx = env.makeSignedTx(0)
+      check env.txPool.addTx(ptx).isOk
+      check env.wire.pendingTxGossip.len == 1
+
+      # Duplicate add is rejected before the pool callback fires.
+      check env.txPool.addTx(ptx).isErr
+      check env.wire.pendingTxGossip.len == 1
+
+      await env.close()
+
+    waitFor runTest()
+
+  test "addTx does not block when gossip queue is full":
+    proc runTest() {.async.} =
+      let env = newBroadcastTestEnv()
+      await env.wire.txGossipHeartbeat.cancelAndWait()
+
+      proc mkHash(i: int): Hash32 =
+        var a: array[32, byte]
+        a[0] = byte(i and 0xff)
+        a[1] = byte((i shr 8) and 0xff)
+        a[2] = byte((i shr 16) and 0xff)
+        a.to(Hash32)
+
+      for i in 0 ..< PENDING_TX_GOSSIP_MAX:
+        env.wire.pendingTxGossip.addLastNoWait(mkHash(i))
+      check env.wire.pendingTxGossip.full
+
+      # Must return synchronously: the hash is dropped, not awaited.
+      let ptx = env.makeSignedTx(0)
+      check env.txPool.addTx(ptx).isOk
+      check env.wire.pendingTxGossip.len == PENDING_TX_GOSSIP_MAX
+
+      await env.close()
+
+    waitFor runTest()
+
+  test "no gossip queued while syncer is running":
+    proc runTest() {.async.} =
+      # Base genesis file has an old timestamp: syncerRunning() is true.
+      let env = newBroadcastTestEnv(baseGenesisFile)
+      check env.wire.syncerRunning()
+      await env.wire.txGossipHeartbeat.cancelAndWait()
+
+      let ptx = env.makeSignedTx(0)
+      check env.txPool.addTx(ptx).isOk
+      check env.wire.pendingTxGossip.len == 0
+
+      await env.close()
+
+    waitFor runTest()
+
+  test "locally submitted tx propagates to peer":
+    proc runTest() {.async.} =
+      let genesisPath = writeRecentGenesis()
+      var env1 = newBroadcastTestEnv(genesisPath)
+      var env2 = newBroadcastTestEnv(genesisPath)
+
+      let peer = await connectPair(env1, env2)
+      check not peer.isNil
+
+      check not env1.wire.syncerRunning()
+
+      # Simulate eth_sendRawTransaction: just add to the pool.
+      let
+        ptx = env1.makeSignedTx(0)
+        txHash = ptx.tx.computeRlpHash
+      check env1.txPool.addTx(ptx).isOk
+
+      # With a single peer the sqrt subset is that peer: full 0x02 send.
+      check await env2.waitForPooled(txHash)
+      check txHash in env1.wire.seenTransactions
+      check peer.id in env1.wire.seenTransactions[txHash].peers
+
+      await env2.close()
+      await env1.close()
+
+    waitFor runTest()
+
+  test "blob tx propagates via hash announce, never 0x02":
+    proc runTest() {.async.} =
+      let genesisPath = writeRecentGenesis()
+      var env1 = newBroadcastTestEnv(genesisPath)
+      var env2 = newBroadcastTestEnv(genesisPath)
+
+      let peer = await connectPair(env1, env2)
+      check not peer.isNil
+
+      let
+        ptx = env1.makeSignedBlobTx(0)
+        txHash = ptx.tx.computeRlpHash
+      check env1.txPool.addTx(ptx).isOk
+
+      # Delivered via 0x08 announce + GetPooledTransactions round trip.
+      check await env2.waitForPooled(txHash)
+
+      # A blob tx inside a 0x02 broadcast would make env2 disconnect us
+      # with BreachOfProtocol; still being connected proves the announce
+      # path was used.
+      check peer.connectionState == ConnectionState.Connected
+
+      await env2.close()
+      await env1.close()
+
+    waitFor runTest()
+
+  test "queued backlog drains back-to-back, not one flush per debounce":
+    ## Hive eth/LargeTxRequest regression: with 2000 queued txs the loop
+    ## used to sleep the 250ms debounce between every 256-tx flush, taking
+    ## ~2s to drain and blowing the simulator's deadline. The debounce must
+    ## only apply when the queue is empty (burst coalescing), so a backlog
+    ## drains at send speed.
+    proc runTest() {.async.} =
+      const numTxs = 4 * maxTxsPerFlush # 4 flushes
+      let genesisPath = writeRecentGenesis()
+      var env1 = newBroadcastTestEnv(genesisPath)
+      var env2 = newBroadcastTestEnv(genesisPath)
+
+      let peer = await connectPair(env1, env2)
+      check not peer.isNil
+
+      # Freeze the worker while adding so the whole batch is queued up
+      # front and none of it is dropped or drained early.
+      await env1.wire.txGossipHeartbeat.cancelAndWait()
+
+      var lastHash: Hash32
+      for nonce in 0 ..< numTxs:
+        let ptx = env1.makeSignedTx(nonce.AccountNonce)
+        check env1.txPool.addTx(ptx).isOk
+        lastHash = ptx.tx.computeRlpHash
+      check env1.wire.pendingTxGossip.len == numTxs
+
+      # Restart the worker and time the drain. Debounce-per-flush would
+      # need >= (numTxs / maxTxsPerFlush) * 250ms = 1s just in sleeps;
+      # back-to-back flushing finishes in a fraction of that.
+      let start = Moment.now()
+      env1.wire.txGossipHeartbeat = txGossipLoop(env1.wire)
+
+      check await env2.waitForPooled(lastHash)
+      check Moment.now() - start < chronos.milliseconds(750)
+
+      await env2.close()
+      await env1.close()
+
+    waitFor runTest()
+
+  test "hash announce during handshake still triggers fetch":
+    ## Hive eth/NewPooledTxs regression: a peer may announce hashes right
+    ## after the Status exchange, before rlpx flips the peer to Connected.
+    ## The queued fetch action must not bail out on a peer that is merely
+    ## still handshaking — only on Disconnecting/Disconnected.
+    proc runTest() {.async.} =
+      let genesisPath = writeRecentGenesis()
+      var env1 = newBroadcastTestEnv(genesisPath)
+      var env2 = newBroadcastTestEnv(genesisPath)
+
+      env2.node.startListening()
+      let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+      check connRes.isOk()
+      let peer = connRes.get()
+
+      check not env1.wire.syncerRunning()
+
+      # Freeze env2's outbound gossip: the only way the tx can reach env1
+      # is env1's own GetPooledTransactions fetch.
+      await env2.wire.txGossipHeartbeat.cancelAndWait()
+
+      # env2 holds the announced tx and serves GetPooledTransactions.
+      let
+        ptx = env2.makeSignedTx(0)
+        txHash = ptx.tx.computeRlpHash
+      check env2.txPool.addTx(ptx).isOk
+
+      # Simulate the announcement arriving mid-handshake.
+      peer.connectionState = Connecting
+
+      let packet = NewPooledTransactionHashesPacket(
+        txTypes: @[ptx.tx.txType.byte],
+        txSizes: @[uint64(getEncodedLength(ptx))],
+        txHashes: @[txHash],
+      )
+      await env1.wire.handleTxHashesBroadcast(packet, peer)
+
+      # The action worker must fetch the tx and pool it.
+      check await env1.waitForPooled(txHash)
+      peer.connectionState = Connected
+
+      await env2.close()
+      await env1.close()
+
+    waitFor runTest()
+
+  test "failed fetch is retried from an alternate announcer":
+    ## Hive eth/TestBlobTxWithoutSidecar regression: peer A announces a tx
+    ## and the fetch from A fails (e.g. sidecar-less blob => disconnect).
+    ## Peer B announced the same hash while that fetch was in flight, so it
+    ## was only recorded as an announcer. The failed hashes must be handed
+    ## to B instead of being parked in seenTransactions until expiry.
+    proc runTest() {.async.} =
+      let genesisPath = writeRecentGenesis()
+      var env1 = newBroadcastTestEnv(genesisPath)
+      var env2 = newBroadcastTestEnv(genesisPath)
+
+      # Pool-registered connection: the refetch resolves the alternate
+      # announcer via node.peers().
+      let peerB = await connectPair(env1, env2)
+      check not peerB.isNil
+
+      check not env1.wire.syncerRunning()
+
+      # Freeze env2's outbound gossip: the tx may only arrive through
+      # env1's refetch => GetPooledTransactions round trip.
+      await env2.wire.txGossipHeartbeat.cancelAndWait()
+
+      let
+        ptx = env2.makeSignedTx(0)
+        txHash = ptx.tx.computeRlpHash
+      check env2.txPool.addTx(ptx).isOk
+
+      # Simulate the post-failure state: the (now gone) peer A and peer B
+      # are both recorded as announcers of the hash.
+      let failedId = default(NodeId) # peer A, no longer connected
+      var announcers = initHashSet[NodeId]()
+      announcers.incl(failedId)
+      announcers.incl(peerB.id)
+      env1.wire.seenTransactions[txHash] =
+        SeenObject(lastSeen: getTime(), peers: announcers)
+
+      # The carried metadata is peer A's and may be the very lie that made
+      # the first fetch fail (hive: A announces the sidecar-less size).
+      # B's correct response must not be validated against it.
+      await env1.wire.refetchFromAlternate(failedId,
+        NewPooledTransactionHashesPacket(
+          txTypes: @[ptx.tx.txType.byte],
+          txSizes: @[1'u64], # deliberately wrong
+          txHashes: @[txHash]))
+
+      check await env1.waitForPooled(txHash)
+      check peerB.connectionState == ConnectionState.Connected
+
+      await env2.close()
+      await env1.close()
+
+    waitFor runTest()
+
+  test "blob tx announced with geth's off-by-one size is not a breach":
+    ## geth and Nethermind — two of the major clients — announce blob-tx
+    ## sizes computed without the EIP-7594 wrapper-version byte, one byte
+    ## short of the actual pooled encoding (the hive simulator inherits
+    ## this from geth). The size validation must tolerate that off-by-one
+    ## for blob txs instead of disconnecting the peer.
+    proc runTest() {.async.} =
+      let genesisPath = writeRecentGenesis()
+      var env1 = newBroadcastTestEnv(genesisPath)
+      var env2 = newBroadcastTestEnv(genesisPath)
+
+      let peer = await connectPair(env1, env2)
+      check not peer.isNil
+
+      check not env1.wire.syncerRunning()
+
+      # Freeze env2's outbound gossip: delivery must go through env1's
+      # announce => GetPooledTransactions round trip.
+      await env2.wire.txGossipHeartbeat.cancelAndWait()
+
+      let
+        ptx = env2.makeSignedBlobTx(0)
+        txHash = ptx.tx.computeRlpHash
+      check env2.txPool.addTx(ptx).isOk
+
+      let packet = NewPooledTransactionHashesPacket(
+        txTypes: @[ptx.tx.txType.byte],
+        txSizes: @[uint64(getEncodedLength(ptx)) - 1],
+        txHashes: @[txHash])
+      await env1.wire.handleTxHashesBroadcast(packet, peer)
+
+      check await env1.waitForPooled(txHash)
+      check peer.connectionState == ConnectionState.Connected
+
+      await env2.close()
+      await env1.close()
+
+    waitFor runTest()
+
+  test "pool is announced to newly connected peer":
+    proc runTest() {.async.} =
+      let genesisPath = writeRecentGenesis()
+      var env1 = newBroadcastTestEnv(genesisPath)
+      var env2 = newBroadcastTestEnv(genesisPath)
+
+      # Freeze env1's gossip flush: the only propagation path left is the
+      # announce-on-connect action.
+      await env1.wire.txGossipHeartbeat.cancelAndWait()
+
+      let
+        ptx = env1.makeSignedTx(0)
+        txHash = ptx.tx.computeRlpHash
+      check env1.txPool.addTx(ptx).isOk
+
+      let peer = await connectPair(env1, env2)
+      check not peer.isNil
+
+      check await env2.waitForPooled(txHash)
+
+      await env2.close()
+      await env1.close()
+
+    waitFor runTest()
+
+  test "empty pool: no announce action enqueued on connect":
+    proc runTest() {.async.} =
+      let genesisPath = writeRecentGenesis()
+      var env1 = newBroadcastTestEnv(genesisPath)
+      var env2 = newBroadcastTestEnv(genesisPath)
+
+      # Stop env1's action workers so any enqueued action would be visible.
+      for fut in env1.wire.actionHeartbeat:
+        await fut.cancelAndWait()
+
+      let peer = await connectPair(env1, env2)
+      check not peer.isNil
+
+      check env1.wire.actionQueue.len == 0
+
+      await env2.close()
+      await env1.close()
+
+    waitFor runTest()
+
+  test "tx received from a peer is not echoed back":
+    proc runTest() {.async.} =
+      let genesisPath = writeRecentGenesis()
+      var env1 = newBroadcastTestEnv(genesisPath)
+      var env2 = newBroadcastTestEnv(genesisPath)
+
+      let peer = await connectPair(env1, env2)
+      check not peer.isNil
+
+      # env2 "broadcasts" a tx to env1 (driven directly through the
+      # inbound handler with env1's peer handle for env2).
+      let
+        ptx = env1.makeSignedTx(0)
+        txHash = ptx.tx.computeRlpHash
+        packet = TransactionsPacket(transactions: @[ptx.tx])
+      await env1.wire.handleTransactionsBroadcast(packet, peer)
+
+      check await env1.waitForPooled(txHash)
+      check peer.id in env1.wire.seenTransactions[txHash].peers
+
+      # Wait past the flush debounce: env1 must not gossip the tx back,
+      # so env2 (which never really had it) must not receive it.
+      await sleepAsync(chronos.milliseconds(800))
+      check not env2.txPool.contains(txHash)
+
+      await env2.close()
+      await env1.close()
+
+    waitFor runTest()
+
+  test "broadcast skips txs removed from the pool before flush":
+    proc runTest() {.async.} =
+      let genesisPath = writeRecentGenesis()
+      var env1 = newBroadcastTestEnv(genesisPath)
+      var env2 = newBroadcastTestEnv(genesisPath)
+
+      let peer = await connectPair(env1, env2)
+      check not peer.isNil
+
+      await env1.wire.txGossipHeartbeat.cancelAndWait()
+
+      let
+        ptx = env1.makeSignedTx(0)
+        txHash = ptx.tx.computeRlpHash
+      check env1.txPool.addTx(ptx).isOk
+      env1.txPool.removeTx(txHash)
+
+      await env1.wire.broadcastTransactions(@[txHash])
+      await sleepAsync(chronos.milliseconds(200))
+      check not env2.txPool.contains(txHash)
+
+      await env2.close()
+      await env1.close()
+
+    waitFor runTest()
+
+  test "broadcast completes when peer is disconnecting":
+    proc runTest() {.async.} =
+      let genesisPath = writeRecentGenesis()
+      var env1 = newBroadcastTestEnv(genesisPath)
+      var env2 = newBroadcastTestEnv(genesisPath)
+
+      let peer = await connectPair(env1, env2)
+      check not peer.isNil
+
+      await env1.wire.txGossipHeartbeat.cancelAndWait()
+
+      let
+        ptx = env1.makeSignedTx(0)
+        txHash = ptx.tx.computeRlpHash
+      check env1.txPool.addTx(ptx).isOk
+
+      peer.connectionState = Disconnecting
+
+      let completed = await withTimeout(
+        env1.wire.broadcastTransactions(@[txHash]),
+        chronos.seconds(2)
+      )
+      check completed
+
+      await env2.close()
+      await env1.close()
 
     waitFor runTest()
