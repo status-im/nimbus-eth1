@@ -424,9 +424,12 @@ func blsG1Add(c: Computation): EvmResultVoid =
 
   ? c.gasMeter.consumeGas(Bls12381G1AddGas, reason="blsG1Add Precompile")
 
+  # Decode both operands as affine points: the affine on-curve check is cheaper
+  # than converting to projective first, and keeping `b` affine lets us use the
+  # mixed addition below. No subgroup check is required for G1ADD (EIP-2537).
   var
-    a {.noinit.}: BLS_G1
-    b {.noinit.}: BLS_G1
+    a {.noinit.}: BLS_G1P
+    b {.noinit.}: BLS_G1P
 
   if not a.decodePoint(input.toOpenArray(0, 127)):
     return err(prcErr(PrcInvalidPoint))
@@ -434,10 +437,11 @@ func blsG1Add(c: Computation): EvmResultVoid =
   if not b.decodePoint(input.toOpenArray(128, 255)):
     return err(prcErr(PrcInvalidPoint))
 
-  a.add b
+  var acc {.noinit.}: BLS_G1
+  acc.sumAffines(a, b)
 
   c.output.setLen(128)
-  if not encodePoint(a, c.output):
+  if not encodePoint(acc, c.output):
     return err(prcErr(PrcInvalidPoint))
   ok()
 
@@ -542,9 +546,11 @@ func blsG2Add(c: Computation): EvmResultVoid =
 
   ? c.gasMeter.consumeGas(Bls12381G2AddGas, reason="blsG2Add Precompile")
 
+  # As with G1ADD: decode affine, skip the subgroup check (not required by
+  # EIP-2537 for point addition) and use the cheaper mixed addition.
   var
-    a {.noinit.}: BLS_G2
-    b {.noinit.}: BLS_G2
+    a {.noinit.}: BLS_G2P
+    b {.noinit.}: BLS_G2P
 
   if not a.decodePoint(input.toOpenArray(0, 255)):
     return err(prcErr(PrcInvalidPoint))
@@ -552,10 +558,11 @@ func blsG2Add(c: Computation): EvmResultVoid =
   if not b.decodePoint(input.toOpenArray(256, 511)):
     return err(prcErr(PrcInvalidPoint))
 
-  a.add b
+  var acc {.noinit.}: BLS_G2
+  acc.sumAffines(a, b)
 
   c.output.setLen(256)
-  if not encodePoint(a, c.output):
+  if not encodePoint(acc, c.output):
     return err(prcErr(PrcInvalidPoint))
   ok()
 
