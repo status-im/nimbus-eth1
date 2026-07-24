@@ -312,7 +312,8 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
     doAssert(candidate.isNil.not)
     c.latest = candidate
 
-proc updateBase(c: ForkedChainRef, base: BlockRef): uint =
+proc updateBase(c: ForkedChainRef, base: BlockRef): Future[uint]
+     {.async: (raises: [CancelledError]).} =
   ##
   ##     A1 - A2 - A3          D5 - D6
   ##    /                     /
@@ -355,20 +356,36 @@ with --debug-eager-state-root."""
   # and prevent other modules accessing expired baseTxFrame.
   c.baseTxFrame = base.txFrame
 
-  # Cleanup in-memory blocks starting from base backward
-  # e.g. B2 backward.
+  let postPersistTime = Moment.now()
+
+  # The disk-flush burst is done. Commit the new base pointer now, *before*
+  # the in-memory cleanup burst, so ForkedChain invariants (c.base,
+  # c.baseTxFrame) stay coherent even if cleanup is interrupted by shutdown
+  # cancellation. Capture `oldFrontier` first because `c.base.parent = nil`
+  # mutates `base.parent`, which the cleanup iterator walks.
+  let oldFrontier = base.parent
+  c.base = base
+  c.base.parent = nil
+  c.base.finalize()
+
+  # Cleanup in-memory blocks starting from the previous base backward
+  # e.g. B2 backward. Yield to the event loop before the first removal and
+  # every `cleanupYieldChunk` blocks so a single updateBase can't hog the
+  # event loop for the full cleanup duration (with persistBatchSize=256 the
+  # loop can iterate hundreds of blocks scanning txRecords).
+  const cleanupYieldChunk = 16
   var count = 0'u
 
-  for it in ancestors(base.parent):
+  for it in ancestors(oldFrontier):
+    if count mod cleanupYieldChunk == 0:
+      await sleepAsync(0.milliseconds)
     c.removeBlockFromCache(it)
     inc count
 
-  # Update base branch
-  c.base = base
-  c.base.parent = nil
-
-  # Base block always have finalized marker
-  c.base.finalize()
+  # Aggregate persist timing for the "Finalized blocks persisted" log. The
+  # cleanup loop above yields to the event loop, so only the persist phase
+  # counts as blocking time.
+  c.persistMs += (postPersistTime - startTime).milliseconds
 
   if c.dynamicBatchSize:
     # Dynamicly adjust the persistBatchSize based on the recorded run time.
@@ -384,9 +401,7 @@ with --debug-eager-state-root."""
       batchSizeLowerBound = 4
       batchSizeUpperBound = 256
 
-    let
-      finishTime = Moment.now()
-      runTime = (finishTime - startTime).milliseconds
+    let runTime = (postPersistTime - startTime).milliseconds
 
     if runTime < targetTimeLowerBound and c.persistBatchSize < batchSizeUpperBound:
       c.persistBatchSize = min(c.persistBatchSize + 4, batchSizeUpperBound)
@@ -402,7 +417,7 @@ with --debug-eager-state-root."""
 proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   if c.baseQueue.len > 0:
     let base = c.baseQueue.popFirst()
-    c.persistedCount += c.updateBase(base)
+    c.persistedCount += await c.updateBase(base)
 
   const
     minLogInterval = 5
@@ -423,7 +438,8 @@ proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async:
           pendingFCU = c.pendingFCU.short,
           resolvedFinNum = c.latestFinalized.number,
           resolvedFinHash = c.latestFinalized.hash.short,
-          dbSnapshotsCount = c.baseTxFrame.aTx.db.snapshots.len()
+          dbSnapshotsCount = c.baseTxFrame.aTx.db.snapshots.len(),
+          persistMs = c.persistMs
       else:
         debug "Finalized blocks persisted",
           nBlocks = c.persistedCount,
@@ -433,9 +449,11 @@ proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async:
           pendingFCU = c.pendingFCU.short,
           resolvedFinNum = c.latestFinalized.number,
           resolvedFinHash = c.latestFinalized.hash.short,
-          dbSnapshotsCount = c.baseTxFrame.aTx.db.snapshots.len()
+          dbSnapshotsCount = c.baseTxFrame.aTx.db.snapshots.len(),
+          persistMs = c.persistMs
       c.lastBaseLogTime = time
       c.persistedCount = 0
+      c.persistMs = 0
     return ok()
 
   if c.queue.isNil:

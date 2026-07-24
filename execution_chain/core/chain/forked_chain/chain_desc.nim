@@ -64,6 +64,12 @@ type
       # Count how many blocks persisted when `baseQueue`
       # consumed.
 
+    persistMs*: int64
+      # Aggregated timing across the same batch as `persistedCount`, covering
+      # state-root check + checkpoint + db.persist. Surfaced in the "Finalized
+      # blocks persisted" log so event-loop stalls can be diagnosed without a
+      # new metrics pipeline.
+
     latest*      : BlockRef
       # Every time a new block added,
       # that block automatically become the latest block.
