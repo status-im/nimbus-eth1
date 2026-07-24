@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -129,46 +129,52 @@ func bn256ecMulImpl*(c: Computation): EvmResultVoid  =
 
   ok()
 
+const millerLoopChunk = 16
+
 func bn256ecPairingImpl*(c: Computation): EvmResultVoid  =
-  let msglen = c.msg.data.len
-  if msglen == 0:
-    # we can discard here because we supply buffer of proper size
-    c.output.setLen(32)
-    discard BNU256.one().toBytesBE(c.output)
-  else:
-    # Calculate number of pairing pairs
-    let count = msglen div 192
-    # Pairing accumulator
-    var
-      acc {.noinit.}: BnGT
-      one {.noinit.}: BnGT
-      tmp {.noinit.}: BnGT
+  # Calculate number of pairing pairs
+  let count = c.msg.data.len div 192
+  var
+    g1 {.noinit.}: array[millerLoopChunk, BnG1]
+    g2 {.noinit.}: array[millerLoopChunk, BnG2]
+    acc {.noinit.}: BnGT
+    one {.noinit.}: BnGT
+    tmp {.noinit.}: BnGT
+    n = 0
 
-    mclBnGT_setInt(acc.addr, 1.mclInt)
-    mclBnGT_setInt(one.addr, 1.mclInt)
+  mclBnGT_setInt(acc.addr, 1.mclInt)
+  mclBnGT_setInt(one.addr, 1.mclInt)
 
-    var
-      p1 {.noinit.}: BnG1
-      p2 {.noinit.}: BnG2
+  for i in 0..<count:
+    let s = i * 192
 
-    for i in 0..<count:
-      let s = i * 192
+    # Loading AffinePoint[G1], bytes from [0..63]
+    if not g1[n].deserialize(c.msg.data.toOpenArray(s, s+63)):
+      return err(prcErr(PrcInvalidPoint))
 
-      # Loading AffinePoint[G1], bytes from [0..63]
-      if not p1.deserialize(c.msg.data.toOpenArray(s, s+63)):
-        return err(prcErr(PrcInvalidPoint))
+    # Loading AffinePoint[G2], bytes from [64..191]
+    if not g2[n].deserialize(c.msg.data.toOpenArray(s+64, s+191)):
+      return err(prcErr(PrcInvalidPoint))
 
-      # Loading AffinePoint[G2], bytes from [64..191]
-      if not p2.deserialize(c.msg.data.toOpenArray(s+64, s+191)):
-        return err(prcErr(PrcInvalidPoint))
+    if mclBnG1_isZero(g1[n].addr) == 1.cint or
+       mclBnG2_isZero(g2[n].addr) == 1.cint:
+      continue
 
-      # Accumulate pairing result
-      mclBn_pairing(tmp.addr, p1.addr, p2.addr)
+    inc n
+    if n == millerLoopChunk:
+      mclBn_millerLoopVec(tmp.addr, g1[0].addr, g2[0].addr, mclSize n)
       mclBnGT_mul(acc.addr, acc.addr, tmp.addr)
+      n = 0
 
-    c.output.setLen(32)
-    if mclBnGT_isEqual(acc.addr, one.addr) == 1.cint:
-      # we can discard here because we supply buffer of proper size
-      discard BNU256.one().toBytesBE(c.output)
+  if n > 0:
+    mclBn_millerLoopVec(tmp.addr, g1[0].addr, g2[0].addr, mclSize n)
+    mclBnGT_mul(acc.addr, acc.addr, tmp.addr)
+
+  mclBn_finalExp(tmp.addr, acc.addr)
+
+  c.output.setLen(32)
+  if mclBnGT_isEqual(tmp.addr, one.addr) == 1.cint:
+    # we can discard here because we supply buffer of proper size
+    discard BNU256.one().toBytesBE(c.output)
 
   ok()
