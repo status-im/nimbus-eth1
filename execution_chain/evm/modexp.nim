@@ -17,87 +17,76 @@ template getPtr(x: openArray[byte]): ptr uint8 =
   else:
     nil
 
-proc modExpFallback(base, exp, modulo, res: ptr BIGNUM, ctx: ptr BN_CTX): bool =
+template bnAssert(call: untyped) =
+  ## `call` is a BoringSSL BN_* op that returns 1 on success. Every operand
+  ## reaching these helpers is already validated, so the only way such an op
+  ## fails is an allocation failure (OOM) - unrecoverable
+  doAssert call == 1
+
+proc modExpFallback(base, exp, modulo, res: ptr BIGNUM, ctx: ptr BN_CTX) =
   ## Square-and-multiply fallback mirroring BoringSSL's internal mod_exp_even.
 
-  if BN_nnmod(base, base, modulo, ctx) != 1:
-    return false
+  bnAssert BN_nnmod(base, base, modulo, ctx)
 
   let bits = BN_num_bits(exp).cint
   if bits == 0:
-    return BN_one(res) == 1
+    bnAssert BN_one(res)
+    return
 
-  if BN_copy(res, base).isNil:
-    return false
+  doAssert not BN_copy(res, base).isNil
 
   for i in countdown(bits - 2, 0.cint):
-    if BN_mod_sqr(res, res, modulo, ctx) != 1:
-      return false
-    if BN_is_bit_set(exp, i) == 1 and
-       BN_mod_mul(res, res, base, modulo, ctx) != 1:
-      return false
-
-  true
+    bnAssert BN_mod_sqr(res, res, modulo, ctx)
+    if BN_is_bit_set(exp, i) == 1:
+      bnAssert BN_mod_mul(res, res, base, modulo, ctx)
 
 proc invModPow2(res, q: ptr BIGNUM, k: cint, u, f: ptr BIGNUM,
-                ctx: ptr BN_CTX): bool =
+                ctx: ptr BN_CTX) =
   ## res = q^-1 mod 2^k for odd q, via Hensel (Newton) lifting:
   ## x -> x * (2 - q*x) doubles the number of correct low bits each round,
   ## so only multiplications and bit masks are needed. BoringSSL's
-  ## BN_mod_inverse takes its generic even-modulus path for a 2^k modulus,
-  ## which has a ~5us floor and grows quadratically (1.6ms at k = 2047).
+  ## BN_mod_inverse takes its generic even-modulus path for a 2^k modulus.
   ## `u` and `f` are caller-provided scratch variables.
-  if BN_one(res) != 1: # q^-1 mod 2 = 1 for odd q
-    return false
+  bnAssert BN_one(res) # q^-1 mod 2 = 1 for odd q
   var bits = 1.cint
   while bits < k:
     bits = min(bits * 2, k)
     # u = q * res mod 2^bits (correct to bits/2 low bits, i.e. u = 1 + d
     # with d = 0 mod 2^(bits/2))
-    if BN_copy(u, q).isNil:
-      return false
-    if BN_mask_bits(u, bits) != 1:
-      return false
-    if BN_mul(u, u, res, ctx) != 1:
-      return false
-    if BN_mask_bits(u, bits) != 1:
-      return false
+    doAssert not BN_copy(u, q).isNil
+    bnAssert BN_mask_bits(u, bits)
+    bnAssert BN_mul(u, u, res, ctx)
+    bnAssert BN_mask_bits(u, bits)
     if BN_is_one(u) == 1: # converged (always the case for q = 1)
       continue
     # res = res * (2 - u) mod 2^bits, with 2 - u computed as the
     # non-negative 2^bits + 2 - u (0 < u < 2^bits)
     BN_zero(f)
-    if BN_set_bit(f, bits) != 1:
-      return false
-    if BN_add_word(f, 2) != 1:
-      return false
-    if BN_sub(f, f, u) != 1:
-      return false
-    if BN_mul(res, res, f, ctx) != 1:
-      return false
-    if BN_mask_bits(res, bits) != 1:
-      return false
-  true
+    bnAssert BN_set_bit(f, bits)
+    bnAssert BN_add_word(f, 2)
+    bnAssert BN_sub(f, f, u)
+    bnAssert BN_mul(res, res, f, ctx)
+    bnAssert BN_mask_bits(res, bits)
 
-proc modExpOdd(base, exp, modulo, res: ptr BIGNUM, ctx: ptr BN_CTX): bool =
+proc modExpOdd(base, exp, modulo, res: ptr BIGNUM, ctx: ptr BN_CTX) =
   ## Odd-modulus exponentiation. The precompile's modulus is public, so we build
   ## the Montgomery context with the variable-time BN_MONT_CTX_new_for_modulus
-  ## instead of letting BN_mod_exp use its constant-time setup - that setup only
-  ## exists to hide private-key moduli and is markedly slower, ~25% of a small-
-  ## exponent (e.g. RSA e=65537) call. Falls back to square-and-multiply when
-  ## Montgomery setup is unavailable, e.g. moduli beyond BN_MONTGOMERY_MAX_WORDS.
+  ## instead of letting BN_mod_exp use its constant-time setup.
   let mont = BN_MONT_CTX_new_for_modulus(modulo, ctx)
   if mont.isNil:
-    return modExpFallback(base, exp, modulo, res, ctx)
+    # nil for moduli beyond BN_MONTGOMERY_MAX_WORDS - a valid (wide) input, not
+    # an allocation failure - so recover via square-and-multiply.
+    modExpFallback(base, exp, modulo, res, ctx)
+    return
   defer: BN_MONT_CTX_free(mont)
   # BN_mod_exp_mont requires 0 <= base < modulo.
-  if BN_ucmp(base, modulo) >= 0 and BN_nnmod(base, base, modulo, ctx) != 1:
-    return false
-  if BN_mod_exp_mont(res, base, exp, modulo, ctx, mont) == 1:
-    return true
-  modExpFallback(base, exp, modulo, res, ctx)
+  if BN_ucmp(base, modulo) >= 0:
+    bnAssert BN_nnmod(base, base, modulo, ctx)
+  if BN_mod_exp_mont(res, base, exp, modulo, ctx, mont) != 1:
+    # same wide-modulus rejection as above; recover via square-and-multiply.
+    modExpFallback(base, exp, modulo, res, ctx)
 
-proc modExpEven(base, exp, modulo, res: ptr BIGNUM, ctx: ptr BN_CTX): bool =
+proc modExpEven(base, exp, modulo, res: ptr BIGNUM, ctx: ptr BN_CTX) =
   ## Even-modulus modexp via a CRT split of modulo = q * 2^k with q odd:
   ##   x1  = base^exp mod q      (BoringSSL Montgomery path)
   ##   x2  = base^exp mod 2^k    (truncated square-and-multiply)
@@ -117,14 +106,11 @@ proc modExpEven(base, exp, modulo, res: ptr BIGNUM, ctx: ptr BN_CTX): bool =
     t = BN_CTX_get(ctx)
     baseRed = BN_CTX_get(ctx)
     eRed = BN_CTX_get(ctx)
-  if eRed.isNil: # BN_CTX_get returns nil for every call after the first failure
-    return false
+  doAssert not eRed.isNil # nil propagates from the first failed get (OOM)
 
   let k = BN_count_low_zero_bits(modulo)
-  if BN_rshift(q, modulo, k) != 1:
-    return false
-  if BN_set_bit(twoK, k) != 1: # twoK = 2^k
-    return false
+  bnAssert BN_rshift(q, modulo, k)
+  bnAssert BN_set_bit(twoK, k) # twoK = 2^k
 
   # x2 = base^exp mod 2^k, exploiting the structure of the group (Z/2^k)*:
   # for odd base the multiplicative order divides 2^(k-2) (2 for k == 2,
@@ -132,10 +118,8 @@ proc modExpEven(base, exp, modulo, res: ptr BIGNUM, ctx: ptr BN_CTX): bool =
   # nonzero base the result is 0 whenever exp >= k, as base^exp then contains
   # at least k factors of two. Either way the loop below runs O(k) iterations
   # on k-bit numbers regardless of the exponent size.
-  if BN_copy(baseRed, base).isNil:
-    return false
-  if BN_mask_bits(baseRed, k) != 1:
-    return false
+  doAssert not BN_copy(baseRed, base).isNil
+  bnAssert BN_mask_bits(baseRed, k)
 
   var
     eEff = exp
@@ -144,75 +128,59 @@ proc modExpEven(base, exp, modulo, res: ptr BIGNUM, ctx: ptr BN_CTX): bool =
     BN_zero(x2)
     x2Done = true
   elif BN_is_odd(baseRed) == 1:
-    if BN_copy(eRed, exp).isNil:
-      return false
+    doAssert not BN_copy(eRed, exp).isNil
     let ordBits = if k <= 1: 0.cint elif k == 2: 1.cint else: k - 2
-    if BN_mask_bits(eRed, ordBits) != 1:
-      return false
+    bnAssert BN_mask_bits(eRed, ordBits)
     eEff = eRed
   elif BN_cmp_word(exp, k.BN_ULONG) >= 0:
     BN_zero(x2)
     x2Done = true
 
   if not x2Done:
-    if BN_one(x2) != 1:
-      return false
+    bnAssert BN_one(x2)
     for i in countdown(BN_num_bits(eEff).cint - 1, 0.cint):
-      if BN_sqr(x2, x2, ctx) != 1:
-        return false
-      if BN_mask_bits(x2, k) != 1:
-        return false
+      bnAssert BN_sqr(x2, x2, ctx)
+      bnAssert BN_mask_bits(x2, k)
       if BN_is_bit_set(eEff, i) == 1:
-        if BN_mul(x2, x2, baseRed, ctx) != 1:
-          return false
-        if BN_mask_bits(x2, k) != 1:
-          return false
+        bnAssert BN_mul(x2, x2, baseRed, ctx)
+        bnAssert BN_mask_bits(x2, k)
 
   # x1 = base^exp mod q, computed into res (vartime Montgomery setup, with the
   # square-and-multiply fallback for q wider than BN_MONTGOMERY_MAX_WORDS)
   if BN_is_one(q) == 1:
     BN_zero(res) # modulo is a power of two
-  elif not modExpOdd(base, exp, q, res, ctx):
-    return false
+  else:
+    modExpOdd(base, exp, q, res, ctx)
 
   # Garner: res = x1 + q * ((x2 - x1) * q^-1 mod 2^k)
   # baseRed and eRed are no longer needed and are reused as scratch space
-  if not invModPow2(t, q, k, baseRed, eRed, ctx):
-    return false
-  if BN_mod_sub(x2, x2, res, twoK, ctx) != 1:
-    return false
-  if BN_mod_mul(t, t, x2, twoK, ctx) != 1:
-    return false
-  if BN_mul(t, q, t, ctx) != 1:
-    return false
-  BN_add(res, res, t) == 1
+  invModPow2(t, q, k, baseRed, eRed, ctx)
+  bnAssert BN_mod_sub(x2, x2, res, twoK, ctx)
+  bnAssert BN_mod_mul(t, t, x2, twoK, ctx)
+  bnAssert BN_mul(t, q, t, ctx)
+  bnAssert BN_add(res, res, t)
 
-# A per-thread BN_CTX reused across calls. Allocating a fresh context plus four
-# heap BIGNUMs per call dominates the cost of small modexp inputs (~0.9us of the
-# ~0.9us a 1-byte call takes). Pooling the operands via BN_CTX_get - and letting
-# BN_mod_exp draw its own internal scratch (Montgomery ctx, window table) from
-# the same warm pool - roughly halves per-call overhead and cuts even the small
-# compute cases by ~30%. Thread-local so parallel block execution stays safe
-# (each worker gets its own ctx); the ctx leaks at thread exit, matching the
-# thread-local-context pattern already used by nim-secp256k1.
 var modExpCtx {.threadvar.}: ptr BN_CTX
 
 proc getModExpCtx(): ptr BN_CTX =
-  ## This thread's reusable BN_CTX, created on first use. Mutating a thread-local
-  ## cache is not an observable side effect (same reasoning as nim-secp256k1's
-  ## getContext), so we hide it to keep the precompile's `func` callers pure.
   {.cast(noSideEffect).}:
     if modExpCtx.isNil:
       modExpCtx = BN_CTX_new()
     modExpCtx
 
-proc modExp*(b, e, m: openArray[byte]): seq[byte] =
-  if m.len == 0:
-    return @[0.byte]
+proc modExpInto*(b, e, m: openArray[byte], output: var openArray[byte]) =
+  ## Compute (b^e mod m) and write it big-endian, left-padded with zeros, into
+  ## `output`, whose length MUST equal the EVM modulus length m.len. Writing
+  ## straight into the caller's buffer avoids a second allocation and copy, and
+  ## since every byte is overwritten the caller may pass it uninitialised
+  ## (setLenUninit). With these already-validated inputs the BN_* ops fail only
+  ## on allocation failure (OOM), which is unrecoverable, so they abort via
+  ## doAssert rather than being propagated - matching how Nim aborts on OOM.
+  if output.len == 0:
+    return
 
   let ctx = getModExpCtx()
-  if ctx.isNil:
-    return
+  doAssert not ctx.isNil
 
   BN_CTX_start(ctx)
   defer: BN_CTX_end(ctx)
@@ -222,49 +190,42 @@ proc modExp*(b, e, m: openArray[byte]): seq[byte] =
     exp = BN_CTX_get(ctx)
     modulo = BN_CTX_get(ctx)
     res = BN_CTX_get(ctx)
-  # A pool-growth failure makes this and every prior get return nil, so testing
-  # the last one suffices.
-  if res.isNil:
-    return
+  doAssert not res.isNil # nil propagates from the first failed get (OOM)
 
   # BN_CTX_get returns freshly zeroed BIGNUMs, so empty inputs need no import.
-  if b.len > 0 and BN_bin2bn(b.getPtr, b.len.csize_t, base).isNil: return
-  if e.len > 0 and BN_bin2bn(e.getPtr, e.len.csize_t, exp).isNil: return
-  if m.len > 0 and BN_bin2bn(m.getPtr, m.len.csize_t, modulo).isNil: return
+  if b.len > 0: doAssert not BN_bin2bn(b.getPtr, b.len.csize_t, base).isNil
+  if e.len > 0: doAssert not BN_bin2bn(e.getPtr, e.len.csize_t, exp).isNil
+  doAssert not BN_bin2bn(m.getPtr, m.len.csize_t, modulo).isNil
 
-  if BN_is_zero(modulo) == 1 or BN_is_one(modulo) == 1:
-    # EVM special case 1
-    # If m == 0: EVM returns 0.
-    # If m == 1: we can shortcut that to 0 as well
-    return @[0.byte]
-
-  if BN_is_zero(exp) == 1:
-    # EVM special case 2
-    # If 0^0: EVM returns 1
-    # For all x != 0, x^0 == 1 as well
-    return @[1.byte]
-
-  # For even moduli with very short exponents the CRT split in modExpEven
-  # loses: BoringSSL's schoolbook even-modulus loop is only a handful of
-  # multiplications there, cheaper than the split's fixed Montgomery setup.
+  # For even moduli with very short exponents the CRT split in modExpEven loses:
+  # BoringSSL's schoolbook even-modulus loop is only a handful of multiplications
+  # there, cheaper than the split's fixed Montgomery setup.
   const evenExpBitsCutoff = 8
 
-  if BN_is_odd(modulo) == 1:
-    if not modExpOdd(base, exp, modulo, res, ctx):
-      return
+  if BN_is_zero(modulo) == 1 or BN_is_one(modulo) == 1:
+    # m == 0 or m == 1: EVM result is 0; res is already zero from BN_CTX_get.
+    discard
+  elif BN_is_zero(exp) == 1:
+    # x^0 == 1, and 0^0 == 1 per EVM.
+    bnAssert BN_one(res)
+  elif BN_is_odd(modulo) == 1:
+    modExpOdd(base, exp, modulo, res, ctx)
   elif BN_num_bits(exp) <= evenExpBitsCutoff:
-    # Even modulus with a tiny exponent: BN_mod_exp's schoolbook even path is
-    # cheaper than modExpEven's CRT split here. (BN_mod_exp handles even moduli;
-    # it also transparently falls to its own square-and-multiply for very wide
-    # moduli.)
+    # Even modulus, tiny exponent: BN_mod_exp's schoolbook even path beats
+    # modExpEven's CRT split here. BN_mod_exp returns 0 for moduli beyond its
+    # width limit (a valid, wide input - not OOM), so recover via the fallback.
     if BN_mod_exp(res, base, exp, modulo, ctx) != 1:
-      if not modExpFallback(base, exp, modulo, res, ctx):
-        return
+      modExpFallback(base, exp, modulo, res, ctx)
   else:
-    if not modExpEven(base, exp, modulo, res, ctx):
-      return
+    modExpEven(base, exp, modulo, res, ctx)
 
-  let size = BN_num_bytes(res)
-  if size > 0:
-    result = newSeq[byte](size.int)
-    discard BN_bn2bin(res, result[0].addr)
+  # res is reduced mod m, so it always fits left-padded into output.len bytes.
+  bnAssert BN_bn2bin_padded(cast[ptr uint8](output[0].addr), output.len.csize_t, res)
+
+proc modExp*(b, e, m: openArray[byte]): seq[byte] =
+  ## Convenience wrapper returning a freshly allocated, left-padded result of
+  ## length m.len.
+  if m.len == 0:
+    return
+  result = newSeq[byte](m.len)
+  modExpInto(b, e, m, result)
