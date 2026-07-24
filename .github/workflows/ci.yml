@@ -92,7 +92,7 @@ jobs:
             make ${DEFAULT_MAKE_FLAGS} rocksdb
           fi
           make ${DEFAULT_MAKE_FLAGS} nimbus
-          make ${DEFAULT_MAKE_FLAGS} tools build_fuzzers
+          make ${DEFAULT_MAKE_FLAGS} tools build_fuzzers stateless_guest_baremetal
           # check_revision and test_import depend on nimbus_execution_client,
           # best to run them together to avoid double builds
           make ${DEFAULT_MAKE_FLAGS} nimbus_execution_client check_revision test_import

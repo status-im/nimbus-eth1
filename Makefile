@@ -376,8 +376,8 @@ nimbus_verified_proxy_wasm_debug: | build deps
 
 # Stateless related targets
 
-stateless_execution_baremetal: | build deps
-	$(ENV_SCRIPT) nim c --hints:off --cpu:riscv64 --os:any --mm:arc -d:useMalloc -d:chronicles_enabled:off -u:metrics --threads:off --stackTrace:off -d:disable_libbacktrace --compileOnly --genScript "execution_chain/stateless/stateless_execution.nim"
+stateless_guest_baremetal: | build deps
+	$(ENV_SCRIPT) nim c --hints:off --cpu:riscv64 --os:any --mm:arc -d:useMalloc -d:chronicles_enabled:off -u:metrics --threads:off --stackTrace:off -d:disable_libbacktrace --compileOnly --genScript "execution_chain/stateless/stateless_guest.nim"
 
 stateless_execution_test: | build deps
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -o:build/$@ "tests/test_stateless/test_stateless_execution.nim"
