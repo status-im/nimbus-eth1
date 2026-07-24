@@ -9,12 +9,14 @@
 # according to those terms.
 
 import
-  chronicles,
   "."/[config, transition]
 
 # we are using chronicles LogLevel
 # instead of our LogLevel
 import types except LogLevel
+
+when defined(chronicles_runtime_filtering):
+  import chronicles
 
 template wrapException(body) =
   when wrapExceptionEnabled:
