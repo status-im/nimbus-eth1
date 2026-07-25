@@ -627,7 +627,8 @@ func blsPairing(c: Computation): EvmResultVoid =
   var
     g1 {.noinit.}: BLS_G1P
     g2 {.noinit.}: BLS_G2P
-    acc {.noinit.}: BLS_ACC
+    g1Points = newSeqOfCap[BLS_G1P](K)
+    g2Points = newSeqOfCap[BLS_G2P](K)
 
   # Decode pairs
   for i in 0..<K:
@@ -649,13 +650,26 @@ func blsPairing(c: Computation): EvmResultVoid =
     if not g2.subgroupCheck:
       return err(prcErr(PrcInvalidPoint))
 
-    # Update pairing engine with G1 and G2 points
-    if i == 0:
-      acc = millerLoop(g1, g2)
-    else:
-      acc.mul(millerLoop(g1, g2))
+    # A pair with a point at infinity pairs to the GT identity and so does not
+    # change the product. Skip it, both because it is a no-op and because the
+    # batched Miller loop below does not handle infinity for more than one pair.
+    if g1.isInf or g2.isInf:
+      continue
+
+    g1Points.add g1
+    g2Points.add g2
 
   c.output.setLen(32)
+
+  # An empty product (all pairs contained a point at infinity) is the GT
+  # identity, so the pairing check succeeds.
+  if g1Points.len == 0:
+    c.output[^1] = 1.byte
+    return ok()
+
+  # Batch every pair into a single multi Miller loop, which shares the fp12
+  # squarings across all pairs instead of one Miller loop per pair.
+  let acc = millerLoopN(g1Points, g2Points)
   if acc.check():
     c.output[^1] = 1.byte
   ok()

@@ -180,6 +180,22 @@ func isInf*(P: BLS_G2P): bool {.inline.} =
 func millerLoop*(P: BLS_G1P, Q: BLS_G2P): BLS_ACC {.inline.} =
   blst_miller_loop(toCV(result), toCC(Q), toCC(P))
 
+# Product of Miller loops over all pairs in a single call. This shares the
+# fp12 squarings across every pair instead of running an independent Miller
+# loop per pair and multiplying the results together.
+# NOTE: blst_miller_loop_n only handles points at infinity when n == 1, so the
+# caller must exclude any pair that contains an infinity point (which pairs to
+# the GT identity and does not affect the product).
+func millerLoopN*(Ps: openArray[BLS_G1P], Qs: openArray[BLS_G2P]): BLS_ACC =
+  let n = Ps.len
+  var
+    ps = newSeq[ptr cblst_p1_affine](n)
+    qs = newSeq[ptr cblst_p2_affine](n)
+  for i in 0 ..< n:
+    ps[i] = toCC(Ps[i], cblst_p1_affine)
+    qs[i] = toCC(Qs[i], cblst_p2_affine)
+  blst_miller_loop_n(toCV(result), qs[0].addr, ps[0].addr, n.uint)
+
 proc mul*(a: var BLS_ACC, b: BLS_ACC) {.inline.} =
   blst_fp12_mul(toCV(a), toCC(a), toCC(b))
 
