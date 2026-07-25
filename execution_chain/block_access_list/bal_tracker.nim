@@ -439,7 +439,7 @@ proc handleInTransactionSelfDestruct*(
 
   tracker.pendingCallFrame.nonceChanges.del(address)
   tracker.pendingCallFrame.codeChanges.del(address)
-  
+
   tracker.trackNonceChange(address, 0)
   tracker.trackCodeChange(address, @[])
 

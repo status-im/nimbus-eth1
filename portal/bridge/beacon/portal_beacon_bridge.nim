@@ -271,6 +271,8 @@ proc gossipHistoricalSummaries(
       ok()
     except CatchableError as e:
       err("JSON-RPC error: " & $e.msg)
+  of HistoricalSummariesFork.Gloas:
+    err("Gossiping Gloas historical_summaries is not yet implemented")
   of HistoricalSummariesFork.Capella:
     err("No historical summaries pre-Electra should be gossiped")
 

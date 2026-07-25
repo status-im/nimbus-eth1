@@ -85,6 +85,45 @@ proc importTxAndAssembleBlock(xp: TxPoolRef, blk: EthBlock): Result[EthBlock, st
     return err("Assembled block hash mismatch, got: " & $blockHash &
       " expected: " & $expectedBlockHash)
 
+  let txRoot = calcTxRoot(res.blk.txs)
+  if res.blk.header.transactionsRoot != txRoot:
+    return err("Assembled transactions root hash mismatch, got: " & $txRoot &
+      " expected: " & $res.blk.header.transactionsRoot)
+
+  if res.blk.header.withdrawalsRoot.isSome:
+    if res.blk.withdrawals.isNone:
+      return err("Assembled withdrawals is none, expected some")
+
+    let
+      expected = res.blk.header.withdrawalsRoot.value
+      wdRoot = calcWithdrawalsRoot(res.blk.withdrawals.value)
+
+    if expected != wdRoot:
+      return err("Assembled withdrawals root hash mismatch, got: " & $wdRoot &
+        " expected: " & $expected)
+
+  if res.blk.header.requestsHash.isSome:
+    let
+      requestsHash = calcRequestsHash(res.executionRequests.value)
+      expected = res.blk.header.requestsHash.value
+
+    if expected != requestsHash:
+      return err("Assembled requests hash mismatch, got: " & $requestsHash &
+        " expected: " & $expected)
+
+  if res.blk.header.blockAccessListHash.isSome:
+    if res.blockAccessList.isNone:
+      return err("Assembled BAL is none, expected some")
+
+    let
+      bal = res.blockAccessList.value
+      balHash = bal[].computeBlockAccessListHash()
+      expected = res.blk.header.blockAccessListHash.value
+
+    if expected != balHash:
+      return err("Assembled BAL hash mismatch, got: " & $balHash &
+        " expected: " & $expected)
+
   ok(res.blk)
 
 proc runTest(env: TestEnv, unit: BlockchainUnitEnv, statelessEnabled = false): Result[void, string] =

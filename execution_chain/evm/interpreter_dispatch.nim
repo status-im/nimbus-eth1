@@ -13,11 +13,10 @@
 import
   std/[macros, strformat],
   chronicles,
-  stew/byteutils,
-  ../core/eip8037,
+  stew/[byteutils],
   ../constants,
   ../db/ledger,
-  ./interpreter/[op_dispatcher, gas_costs],
+  ./interpreter/[op_dispatcher],
   ./[code_stream, computation, evm_errors, message, precompiles, state, types]
 
 logScope:
@@ -68,18 +67,6 @@ macro selectVM(v: VmCpt, fork: EVMFork, tracingEnabled: bool): EvmResultVoid =
   caseStmt
 
 proc beforeExecCall(c: Computation): bool =
-  if c.fork >= FkAmsterdam and c.msg.depth == 0:
-    if c.msg.value.isZero.not and
-      c.vmState.readOnlyLedger.isDeadAccount(c.msg.codeAddress):
-      c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "topFrameCharges").isOkOr:
-        c.setError($error.code, true)
-        return true
-
-    if MsgFlags.Delegated in c.msg.flags:
-      c.gasMeter.consumeGas(COLD_ACCOUNT_ACCESS_8038, "topFrameCharges").isOkOr:
-        c.setError($error.code, true)
-        return true
-
   c.beginSavePoint()
   if c.msg.kind == CallKind.Call:
     c.vmState.mutateLedger:
@@ -109,36 +96,6 @@ proc afterExecCall(c: Computation) =
       c.vmState.ledger.ripemdSpecial()
 
 proc beforeExecCreate(c: Computation): bool =
-  c.vmState.mutateLedger:
-    let nonce = ledger.getNonce(c.msg.sender)
-    if nonce + 1 < nonce:
-      let sender = c.msg.sender.toHex
-      c.setError(
-        "Nonce overflow when sender=" & sender & " wants to create contract", false
-      )
-      return true
-    if c.balTrackerEnabled:
-      c.vmState.balTracker.trackNonceChange(c.msg.sender, nonce + 1)
-    ledger.setNonce(c.msg.sender, nonce + 1)
-
-    # We add this to the access list _before_ taking a snapshot.
-    # Even if the creation fails, the access-list change should not be rolled
-    # back EIP2929
-    if c.fork >= FkBerlin:
-      ledger.accessList(c.msg.contractAddress)
-
-  if c.balTrackerEnabled:
-    c.vmState.balTracker.trackAddressAccess(c.msg.contractAddress)
-
-  if c.fork >= FkAmsterdam:
-    if c.vmState.readOnlyLedger().accountExists(c.msg.contractAddress):
-      c.msg.flags.incl MsgFlags.TargetAlive
-
-  if c.vmState.readOnlyLedger().contractCollision(c.msg.contractAddress):
-    let blurb = c.msg.contractAddress.toHex
-    c.setError("Address collision when creating contract address=" & blurb, true)
-    return true
-
   c.beginSavePoint()
 
   c.vmState.mutateLedger:
@@ -208,7 +165,7 @@ proc afterExec(c: Computation) =
   if c.isSuccess:
     c.commit()
   else:
-    c.gasMeter.refillFrameStateGas()
+    c.refillFrameStateGas()
     c.rollback()
 
   if c.msg.depth > 0:
@@ -303,23 +260,6 @@ func postExecComputation*(c: Computation) =
       # EIP-3529: Reduction in refunds
       c.refundSelfDestruct()
   c.vmState.status = c.isSuccess
-
-func preExecComputation*(c: Computation) =
-  if c.fork >= FkPrague:
-    if c.msg.contractAddress == WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS or
-       c.msg.contractAddress == CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS:
-
-      # EIP-7002 and EIP-7215 dicates that the code must be present, or else block is invalid
-      if c.code.len <= 0:
-        c.setError("No code found for withdrawal or consolidation requests contract")
-
-    if c.fork >= FkAmsterdam and (
-      c.msg.contractAddress == BUILDER_DEPOSIT_CONTRACT_ADDRESS or
-      c.msg.contractAddress == BUILDER_EXIT_CONTRACT_ADDRESS
-    ):
-      # EIP-8282 dicates that the code must be present, or else block is invalid
-      if c.code.len <= 0:
-        c.setError("No code found for builder deposit or exit requests contract")
 
 # ------------------------------------------------------------------------------
 # End

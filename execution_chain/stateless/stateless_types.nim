@@ -13,7 +13,6 @@ import ssz_serialization, beacon_chain/spec/[eth2_merkleization, ssz_codec]
 
 from beacon_chain/spec/datatypes/gloas import ExecutionPayload
 from beacon_chain/spec/datatypes/electra import ExecutionRequests
-from ../common/hardforks import BlobSchedule
 
 export ssz_serialization, ssz_codec
 
@@ -22,7 +21,7 @@ export ssz_serialization, ssz_codec
 # ---------------------------------------------------------------------------
 
 # As per spec:
-# https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/stateless_ssz.py#L41
+# https://github.com/ethereum/execution-specs/blob/e5a8caf1b8055e4d805c7fb169edfa710914b7da/src/ethereum/forks/amsterdam/stateless_ssz.py#L42
 #
 # Not all consts are defined here as we get some of the types from beacon_chain datatypes
 
@@ -35,26 +34,28 @@ const
   MAX_BYTES_PER_HEADER* = 1 shl 10 # 2^10
   MAX_BYTES_PER_WITNESS_NODE* = 1 shl 10 # 2^10
   MAX_OPTIONAL_FORK_ACTIVATION_VALUES* = 1
-  MAX_BLOB_SCHEDULES_PER_FORK* = 1
   MAX_PUBLIC_KEYS* = 1 shl 15 # 2^15
   PUBLIC_KEY_BYTES* = 65
 
-  # Amsterdam SSZ stateless input schema identifier.
-  STATELESS_INPUT_SCHEMA_ID* = 0x0001'u16
-  STATELESS_INPUT_SCHEMA_ID_SIZE* = 2
-
   # We should be using the HardFork enum value for Amsterdam from hardforks.nim
   # but BPO1-BPO5 are already defined there, while in the execution-specs tag
-  # tests-zkevm@v0.5.0 only BPO1-BPO2 is defined, making the enum value differ.
-  # So we hardcode it here for now to the value of the specs/tests used.
-  PROTOCOL_FORK_AMSTERDAM* = 20'u64
+  # tests-zkevm@v0.5.0 only BPO1-BPO2 is defined. Making the enum value different.
+  # So we hardcode it here for now to the value of the specs/tests used, matching
+  # the execution-specs ProtocolFork IntEnum value used to build the schema id.
+  PROTOCOL_FORK_AMSTERDAM* = 0x15'u16
+  STATELESS_INPUT_SCHEMA_REVISION* = 0x01'u16
+
+  # Stateless guest input bytes are schema-prefixed: schema_id || encoded_payload
+  STATELESS_INPUT_SCHEMA_ID* =
+    (PROTOCOL_FORK_AMSTERDAM shl 8) or STATELESS_INPUT_SCHEMA_REVISION
+  STATELESS_INPUT_SCHEMA_ID_SIZE* = 2
 
 # ---------------------------------------------------------------------------
 # SSZ container types
 # ---------------------------------------------------------------------------
 
 # As per spec:
-# https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/stateless_ssz.py#L96
+# https://github.com/ethereum/execution-specs/blob/e5a8caf1b8055e4d805c7fb169edfa710914b7da/src/ethereum/forks/amsterdam/stateless_ssz.py#L105
 #
 # Not all types are defined here as we get some of the types from beacon_chain datatypes
 
@@ -75,11 +76,8 @@ type
     block_number*: List[uint64, MAX_OPTIONAL_FORK_ACTIVATION_VALUES]
     timestamp*: List[uint64, MAX_OPTIONAL_FORK_ACTIVATION_VALUES]
 
-  # Optional BlobSchedule encoded as a List of 0 or 1 elements.
   ForkConfig* = object
-    fork*: uint64
     activation*: ForkActivation
-    blob_schedule*: List[BlobSchedule, MAX_BLOB_SCHEDULES_PER_FORK]
 
   # Note: named `StatelessChainConfig` to avoid name collision with EL `ChainConfig`
   StatelessChainConfig* = object
@@ -101,7 +99,7 @@ type
 # Helpers
 # ---------------------------------------------------------------------------
 
-# https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/stateless.py#L255
+# https://github.com/ethereum/execution-specs/blob/e5a8caf1b8055e4d805c7fb169edfa710914b7da/src/ethereum/forks/amsterdam/stateless.py#L229
 func compute_new_payload_request_root*(input: StatelessInput): Digest =
   ## Compute the request root for a stateless input via SSZ hash tree root.
   hash_tree_root(input.new_payload_request)

@@ -261,32 +261,33 @@ proc persist*(db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
   #      in-memory and on-disk state)
 
   # Copy back updated payloads into the shared database LRU caches.
+  # Caches only available with threads enabled.
+  when compileOption("threads"):
+    # Copy cached values from the snapshot
+    for accPath, v in txFrame.snapshot.acc:
+      if v[0] == nil:
+        db.accLeaves.del(accPath)
+      else:
+        discard db.accLeaves.update(accPath, CachedAccLeaf.init(v[0].pfx, v[0].account, v[0].stoID))
 
-  # Copy cached values from the snapshot
-  for accPath, v in txFrame.snapshot.acc:
-    if v[0] == nil:
-      db.accLeaves.del(accPath)
-    else:
-      discard db.accLeaves.update(accPath, CachedAccLeaf.init(v[0].pfx, v[0].account, v[0].stoID))
+    for mixPath, v in txFrame.snapshot.sto:
+      if v[0] == nil:
+        db.stoLeaves.del(mixPath)
+      else:
+        discard db.stoLeaves.update(mixPath, CachedStoLeaf.init(v[0].pfx, v[0].stoData))
 
-  for mixPath, v in txFrame.snapshot.sto:
-    if v[0] == nil:
-      db.stoLeaves.del(mixPath)
-    else:
-      discard db.stoLeaves.update(mixPath, CachedStoLeaf.init(v[0].pfx, v[0].stoData))
+    # Copy cached values from the txFrame
+    for accPath, vtx in txFrame.accLeaves:
+      if vtx == nil:
+        db.accLeaves.del(accPath)
+      else:
+        discard db.accLeaves.update(accPath, CachedAccLeaf.init(vtx.pfx, vtx.account, vtx.stoID))
 
-  # Copy cached values from the txFrame
-  for accPath, vtx in txFrame.accLeaves:
-    if vtx == nil:
-      db.accLeaves.del(accPath)
-    else:
-      discard db.accLeaves.update(accPath, CachedAccLeaf.init(vtx.pfx, vtx.account, vtx.stoID))
-
-  for mixPath, vtx in txFrame.stoLeaves:
-    if vtx == nil:
-      db.stoLeaves.del(mixPath)
-    else:
-      discard db.stoLeaves.update(mixPath, CachedStoLeaf.init(vtx.pfx, vtx.stoData))
+    for mixPath, vtx in txFrame.stoLeaves:
+      if vtx == nil:
+        db.stoLeaves.del(mixPath)
+      else:
+        discard db.stoLeaves.update(mixPath, CachedStoLeaf.init(vtx.pfx, vtx.stoData))
 
   # Remove snapshot data that has been persisted to disk to save memory.
   # All snapshot records with a level lower than the current base level

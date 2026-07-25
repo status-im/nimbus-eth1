@@ -243,6 +243,7 @@ suite "ForkedChainRef tests":
     blk6 = dbTx.makeBlk(6, blk5)
     blk7 = dbTx.makeBlk(7, blk6)
     blk8 = dbTx.makeBlk(8, blk7)
+    blk9 = dbTx.makeBlk(9, blk8)
   dbTx.dispose()
   let
     B4 = txFrame.makeBlk(4, blk3, 1.byte)
@@ -254,9 +255,14 @@ suite "ForkedChainRef tests":
   let
     C5 = txFrame.makeBlk(5, blk4, 1.byte)
     C6 = txFrame.makeBlk(6, C5)
+    # `txFrame` state == sum(1..6) here, so `Fk7` (a sibling of `blk7`, i.e. a
+    # fork branching at `blk6`) gets a consistent post-state on import.
+    fkTx = txFrame.txFrameBegin
+    Fk7 = fkTx.makeBlk(7, blk6, 3.byte)
     C7 = txFrame.makeBlk(7, C6)
     F8 = txFrame.makeBlk(8, blk7, 2.byte) # height 8 blk8 branch/sibling
 
+  fkTx.dispose()
   txFrame.dispose()
 
   test "newBase == oldBase":
@@ -562,6 +568,49 @@ suite "ForkedChainRef tests":
     check chain.baseNumber > 0
     check chain.baseNumber < B4.header.number
     check chain.heads.len == 1
+    check chain.validate info & " (9)"
+
+  test "base auto-forward below a higher finalized marker keeps a valid latest":
+    # Regression: auto-forward `updateFinalized` must not prune `c.latest` when
+    # `base` lands below a finalized marker planted by an earlier `forkChoice`.
+    # Previously this aborted with `candidate.isNil.not` at
+    # forked_chain.nim:updateFinalized (see the base auto-forward branch of
+    # `validateBlock`).
+    const info = "base auto-forward below higher finalized marker"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com, baseDistance = 5, persistBatchSize = 1)
+    # Canonical chain blk1..blk7
+    checkImportBlock(chain, blk1)
+    checkImportBlock(chain, blk2)
+    checkImportBlock(chain, blk3)
+    checkImportBlock(chain, blk4)
+    checkImportBlock(chain, blk5)
+    checkImportBlock(chain, blk6)
+    checkImportBlock(chain, blk7)
+    # Fork branching at blk6 (sibling of blk7) -> a second head survives pruning.
+    checkImportBlock(chain, Fk7)
+    check chain.heads.len == 2
+
+    # Finalize blk6 (within baseDistance of the head): plants finalized markers
+    # up to blk6 while base only moves to blk2, so blk3..blk6 markers sit above
+    # base. Both heads stay reachable from blk6.
+    checkForkChoice(chain, blk7, blk6)
+    check chain.validate info & " (1)"
+    check chain.baseNumber == 2'u64
+    check chain.heads.len == 2
+
+    # Announce blk9 as finalized before it is imported: sets `pendingFCU` so a
+    # later fresh import of blk9 raises `latestFinalized` and arms auto-forward.
+    checkForkChoiceErr(chain, blk7, blk9)
+
+    checkImportBlock(chain, blk8)
+    # Importing blk9 resolves pendingFCU (latestFinalized = 9) and triggers the
+    # base auto-forward path with base == blk4, which is below the blk6 marker.
+    checkImportBlock(chain, blk9)
+
+    check chain.validate info & " (2)"
+    check chain.latestHash == blk9.blockHash
+    check chain.baseNumber > 0
     check chain.validate info & " (9)"
 
   test "newBase == oldBase, fork and return to old chain":
@@ -982,6 +1031,51 @@ suite "ForkedChainRef tests":
     check fc.resolvedFinNumber == 7'u64
     check checkFinalizedMarkers(fc, blk7.blockHash)
     check fc.validate info & " (3)"
+
+  test "isCanonicalAndFinalizedAncestor":
+    const info = "isCanonicalAndFinalizedAncestor"
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com, baseDistance = 3)
+    checkImportBlock(chain, blk1)
+    checkImportBlock(chain, blk2)
+    checkImportBlock(chain, blk3)
+    checkImportBlock(chain, blk4)
+    checkImportBlock(chain, blk5)
+    checkImportBlock(chain, blk6)
+    checkImportBlock(chain, blk7)
+    checkImportBlock(chain, blk8)
+    checkImportBlock(chain, F8)
+    check chain.validate info & " (1)"
+    check chain.heads.len == 2
+
+    # blk8 and F8: two non-finalized heads descended from the finalized block
+    checkForkChoice(chain, blk8, blk7)
+
+    let finalizedBlockHash = blk7.blockHash
+    check chain.tryUpdatePendingFCU(finalizedBlockHash, 7'u64)
+    check chain.validate info & " (2)"
+    check chain.baseNumber == 5'u64
+    check chain.heads.len == 2
+    check chain.resolvedFinNumber == 7'u64
+    check checkFinalizedMarkers(chain, finalizedBlockHash)
+
+    # head below base
+    check chain.isCanonicalAndFinalizedAncestor(blk4.header.number, blk4.blockHash, finalizedBlockHash) == true
+    # finalizedBlockHash is unknown, use latest known finalized
+    check chain.isCanonicalAndFinalizedAncestor(blk4.header.number, blk4.blockHash, C7.blockHash) == true
+    # finalized ancestor
+    check chain.isCanonicalAndFinalizedAncestor(blk6.header.number, blk6.blockHash, finalizedBlockHash) == true
+    # head == finalized block
+    check chain.isCanonicalAndFinalizedAncestor(blk7.header.number, blk7.blockHash, finalizedBlockHash) == false
+    # non finalized
+    check chain.isCanonicalAndFinalizedAncestor(blk8.header.number, blk8.blockHash, finalizedBlockHash) == false
+    # non finalized sidechain
+    check chain.isCanonicalAndFinalizedAncestor(F8.header.number, F8.blockHash, finalizedBlockHash) == false
+    # head == incoming finalized block
+    check chain.isCanonicalAndFinalizedAncestor(blk8.header.number, blk8.blockHash, blk8.blockHash) == false
+    # head below incoming finalized block
+    check chain.isCanonicalAndFinalizedAncestor(blk7.header.number, blk7.blockHash, blk8.blockHash) == true
 
   test "vmState cache: linear reuse, fork switch and failed import":
     const info = "vmState cache"

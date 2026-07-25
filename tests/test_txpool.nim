@@ -101,7 +101,7 @@ proc initConf(envFork: HardFork): ExecutionClientConf =
   config.networkParams.genesis.alloc[recipient] = GenesisAccount(code: contractCode)
   config
 
-proc initEnv(config: ExecutionClientConf): TestEnv =
+proc initEnv(config: ExecutionClientConf, flags: set[TxPoolFlags] = {}): TestEnv =
   let
     # create the sender first, because it will modify networkParams
     sender = TxSender.new(config.networkParams, 30)
@@ -113,13 +113,13 @@ proc initEnv(config: ExecutionClientConf): TestEnv =
     config: config,
     com   : com,
     chain : chain,
-    xp    : TxPoolRef.new(chain),
+    xp    : TxPoolRef.new(chain, flags),
     sender: sender
   )
 
-proc initEnv(envFork: HardFork): TestEnv =
+proc initEnv(envFork: HardFork, flags: set[TxPoolFlags] = {}): TestEnv =
   let config = initConf(envFork)
-  initEnv(config)
+  initEnv(config, flags)
 
 template checkAddTx(xp, tx, errorCode) =
   let prevCount = xp.len
@@ -667,6 +667,43 @@ suite "TxPool test suite":
       tx = mx.makeTx(tc, 0)
 
     xp.checkAddTx(tx, txErrorBasicValidation)
+
+  test "good tx followed by oog tx, receipt status=[true, false]":
+    let
+      env = initEnv(Amsterdam, {XP_ORDERED})
+      xp = env.xp
+      mx = env.sender
+      acc = mx.getAccount(24)
+      auth = mx.makeAuth(acc, 0)
+      tc = BaseTx(
+        txType: Opt.some(TxEip7702),
+        gasLimit: 28816 + 8000 - 1, # intrinsic + ACCOUNT_WRITE_8038 - 1
+        recipient: Opt.some(recipient214),
+        amount: amount,
+        authorizationList: @[auth],
+      )
+      tc1 = BaseTx(
+        txType: Opt.some(TxLegacy),
+        gasLimit: 75000,
+        recipient: Opt.some(recipient214),
+        amount: 0.u256,
+      )
+      tx = mx.makeTx(tc, 1)
+      tx1 = mx.makeTx(tc1, 0)
+
+    # 1st tx ok
+    xp.checkAddTx(tx1)
+    # 2nd tx OOG at first frame preExecComputation
+    xp.checkAddTx(tx)
+    # both txs included in block
+    xp.checkImportBlock(2, 0)
+    let
+      blockHash = xp.chain.latestHash
+      rec1 = xp.chain.receiptByBlockHashAndIndex(blockHash, 0).expect("ok")
+      rec2 = xp.chain.receiptByBlockHashAndIndex(blockHash, 1).expect("ok")
+    # https://github.com/status-im/nimbus-eth1/pull/4559
+    check rec1.status == true
+    check rec2.status == false
 
   test "EIP-7702 transaction invalid auth signature":
     let
