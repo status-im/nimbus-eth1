@@ -60,7 +60,9 @@ declareGauge   nec_txpool_last_block_value,
 
 export
   TxPoolRef,
-  TxError
+  TxError,
+  TxItemRef,
+  MAX_TXS_PER_ACCOUNT
 
 # ------------------------------------------------------------------------------
 # TxItemRef public getters
