@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -84,7 +84,6 @@ func bn256ecAddImpl*(c: Computation): EvmResultVoid  =
     input: array[128, byte]
     p1 {.noinit.}: BnG1
     p2 {.noinit.}: BnG1
-    apo {.noinit.}: BnG1
 
   # Padding data
   let len = min(c.msg.data.len, 128) - 1
@@ -96,10 +95,41 @@ func bn256ecAddImpl*(c: Computation): EvmResultVoid  =
   if not p2.deserialize(input.toOpenArray(64, 127)):
     return err(prcErr(PrcInvalidPoint))
 
-  mclBnG1_add(apo.addr, p1.addr, p2.addr)
-
   c.output.setLen(64)
-  if not serialize(c.output, apo):
+
+  if mclBnG1_isZero(p1.addr) == 1.cint:
+    assign(c.output.toOpenArray(0, 63), input.toOpenArray(64, 127))
+    return ok()
+  if mclBnG1_isZero(p2.addr) == 1.cint:
+    assign(c.output.toOpenArray(0, 63), input.toOpenArray(0, 63))
+    return ok()
+
+  var num {.noinit.}, den {.noinit.}, lam {.noinit.}, t {.noinit.}, x3 {.noinit.}, y3 {.noinit.}: BnFp
+
+  if mclBnFp_isEqual(p1.x.addr, p2.x.addr) == 1.cint:
+    if mclBnFp_isEqual(p1.y.addr, p2.y.addr) != 1.cint or mclBnFp_isZero(p1.y.addr) == 1.cint:
+      zeroMem(c.output[0].addr, 64)
+      return ok()
+    mclBnFp_sqr(t.addr, p1.x.addr)
+    mclBnFp_add(num.addr, t.addr, t.addr)
+    mclBnFp_add(num.addr, num.addr, t.addr)
+    mclBnFp_add(den.addr, p1.y.addr, p1.y.addr)
+  else:
+    mclBnFp_sub(num.addr, p2.y.addr, p1.y.addr)
+    mclBnFp_sub(den.addr, p2.x.addr, p1.x.addr)
+
+  mclBnFp_inv(den.addr, den.addr)
+  mclBnFp_mul(lam.addr, num.addr, den.addr)
+
+  mclBnFp_sqr(x3.addr, lam.addr)
+  mclBnFp_sub(x3.addr, x3.addr, p1.x.addr)
+  mclBnFp_sub(x3.addr, x3.addr, p2.x.addr)
+
+  mclBnFp_sub(t.addr, p1.x.addr, x3.addr)
+  mclBnFp_mul(y3.addr, lam.addr, t.addr)
+  mclBnFp_sub(y3.addr, y3.addr, p1.y.addr)
+
+  if not serialize(c.output, x3) or not serialize(c.output.toOpenArray(32, 63), y3):
     zeroMem(c.output[0].addr, 64)
 
   ok()
