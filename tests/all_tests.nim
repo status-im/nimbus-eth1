@@ -10,7 +10,6 @@
 import
   ./[
     test_aristo,
-    test_beacon_sync_stall,
     test_concurrency,
     test_configuration,
     test_coredb,
