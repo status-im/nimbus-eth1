@@ -1332,6 +1332,31 @@ proc isCanonicalAndFinalizedAncestor*(c: ForkedChainRef,
     return false
   canonHash == blockHash
 
+proc isCanonicalAncestor*(c: ForkedChainRef,
+                    blockNumber: BlockNumber,
+                    blockHash: Hash32): bool =
+  ## `true` iff `(blockNumber, blockHash)` is a proper canonical ancestor of the
+  ## live `FC` head - either an in-memory ancestor of `latest` or matching the
+  ## persisted base marker at `blockNumber`. Reorg-safe (matches by hash, not
+  ## number alone).
+  if blockNumber >= c.latest.number:
+    return false
+
+  if blockHash == c.latest.hash:
+    return false
+
+  if c.base.number < c.latest.number:
+    # The current canonical chain in memory is headed by latest.header
+    for it in ancestors(c.latest):
+      if it.hash == blockHash and it.number == blockNumber:
+        return true
+
+  # canonical chain in database should have a marker
+  # and the marker is block number
+  let canonHash = c.baseTxFrame.getBlockHash(blockNumber).valueOr:
+    return false
+  canonHash == blockHash
+
 iterator txHashInRange*(c: ForkedChainRef, fromHash: Hash32, toHash: Hash32): Hash32 =
   ## toHash should be ancestor of fromHash
   ## exclude base from iteration, new block produced by txpool
