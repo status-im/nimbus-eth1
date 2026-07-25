@@ -147,7 +147,7 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
       of "Auto": StdoutLogKind.Auto
       else: StdoutLogKind.None
     maxBlockWalk = jsonNode.getOrDefault("maxBlockWalk").getBiggestInt(1000)
-    maxWindowJumps = jsonNode.getOrDefault("maxWindowJumps").getBiggestInt(128)
+    maxWindowJumps = jsonNode.getOrDefault("maxWindowJumps").getBiggestInt(500)
     prllBlkDwnlds = jsonNode.getOrDefault("parallelBlockDownloads").getBiggestInt(10)
     maxLcUpdates = jsonNode.getOrDefault("maxLightClientUpdates").getBiggestInt(128)
     headerStoreLen = jsonNode.getOrDefault("headerStoreLen").getInt(256)
