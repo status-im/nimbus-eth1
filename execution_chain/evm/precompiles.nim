@@ -644,10 +644,8 @@ func blsPairing(c: Computation): EvmResultVoid =
     if not g2.subgroupCheck:
       return err(prcErr(PrcInvalidPoint))
 
-    # A pair involving the point at infinity pairs to 1, so it contributes
-    # nothing to the product. It has to be dropped rather than passed along:
-    # the batched Miller loop has no infinity special case, unlike the
-    # per-pair `millerLoop` this used to call.
+    # Infinity pairs to 1, so it drops out of the product. Must be filtered:
+    # millerLoopN has no infinity case. See its doc comment.
     if g1.isInf or g2.isInf:
       continue
 
@@ -658,14 +656,12 @@ func blsPairing(c: Computation): EvmResultVoid =
   c.output.setLen(32)
 
   if n == 0:
-    # Every pair involved the point at infinity, so the product is 1.
+    # All pairs were infinity, so the product is 1.
     c.output[^1] = 1.byte
     return ok()
 
-  # Run all the Miller loops as one batch so the loop's Fp12 squarings and line
-  # accumulation are shared across pairs, instead of one full Miller loop per
-  # pair multiplied together afterwards. The final exponentiation was already
-  # shared - `check()` performs it once on the accumulated product.
+  # One batched Miller loop, not K separate ones multiplied together.
+  # `check()` does the single final exponentiation, as before.
   var acc {.noinit.}: BLS_ACC
   acc.millerLoopN(g1s.toOpenArray(0, n-1), g2s.toOpenArray(0, n-1))
 

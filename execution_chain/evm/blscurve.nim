@@ -182,21 +182,15 @@ func millerLoop*(P: BLS_G1P, Q: BLS_G2P): BLS_ACC {.inline.} =
 
 func millerLoopN*(acc: var BLS_ACC, Ps: openArray[BLS_G1P],
                   Qs: openArray[BLS_G2P]) =
-  ## Miller loop over all (Pᵢ, Qᵢ) pairs at once, accumulating into `acc`.
+  ## Miller loop over all (Pᵢ, Qᵢ) pairs at once, sharing the Fp12 squarings
+  ## and line accumulation. blst chunks at 16 internally, so pass the lot.
   ##
-  ## The pairs are processed interleaved, so the loop's Fp12 squarings and line
-  ## accumulation are shared across pairs rather than repeated per pair. blst
-  ## chunks the batch at MILLER_LOOP_N_MAX (16) internally and multiplies the
-  ## partial results together, so the whole batch can be passed in one call.
-  ##
-  ## Neither point of any pair may be the point at infinity. Unlike
-  ## `blst_miller_loop`, `blst_miller_loop_n` has no infinity special case and
-  ## would feed the identity straight into the line functions — callers must
-  ## filter those pairs out first (they pair to 1 and contribute nothing).
+  ## WARNING: no point may be infinity. `blst_miller_loop_n` has no infinity
+  ## case (unlike `blst_miller_loop`) and would feed it to the line functions.
+  ## Callers must filter those pairs first.
   doAssert Ps.len == Qs.len and Ps.len > 0
 
-  # A nil second element tells blst the first pointer is a contiguous array,
-  # the same convention `blst_pXs_mult_pippenger` uses above.
+  # nil 2nd element = "first pointer is a contiguous array", as in pippenger.
   let
     p = [toCC(Ps[0], cblst_p1_affine), nil]
     q = [toCC(Qs[0], cblst_p2_affine), nil]
