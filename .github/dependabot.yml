@@ -19,4 +19,3 @@ updates:
       - dependency-name: vendor/nim-rocksdb
     schedule:
       interval: daily
-      open-pull-requests-limit: 2
