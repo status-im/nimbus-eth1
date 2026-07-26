@@ -180,6 +180,29 @@ func isInf*(P: BLS_G2P): bool {.inline.} =
 func millerLoop*(P: BLS_G1P, Q: BLS_G2P): BLS_ACC {.inline.} =
   blst_miller_loop(toCV(result), toCC(Q), toCC(P))
 
+func millerLoopN*(acc: var BLS_ACC, Ps: openArray[BLS_G1P],
+                  Qs: openArray[BLS_G2P]) =
+  ## Miller loop over all (Pᵢ, Qᵢ) pairs at once, accumulating into `acc`.
+  ##
+  ## The pairs are processed interleaved, so the loop's Fp12 squarings and line
+  ## accumulation are shared across pairs rather than repeated per pair. blst
+  ## chunks the batch at MILLER_LOOP_N_MAX (16) internally and multiplies the
+  ## partial results together, so the whole batch can be passed in one call.
+  ##
+  ## Neither point of any pair may be the point at infinity. Unlike
+  ## `blst_miller_loop`, `blst_miller_loop_n` has no infinity special case and
+  ## would feed the identity straight into the line functions — callers must
+  ## filter those pairs out first (they pair to 1 and contribute nothing).
+  doAssert Ps.len == Qs.len and Ps.len > 0
+
+  # A nil second element tells blst the first pointer is a contiguous array,
+  # the same convention `blst_pXs_mult_pippenger` uses above.
+  let
+    p = [toCC(Ps[0], cblst_p1_affine), nil]
+    q = [toCC(Qs[0], cblst_p2_affine), nil]
+
+  blst_miller_loop_n(toCV(acc), q[0].unsafeAddr, p[0].unsafeAddr, Ps.len.uint)
+
 proc mul*(a: var BLS_ACC, b: BLS_ACC) {.inline.} =
   blst_fp12_mul(toCV(a), toCC(a), toCC(b))
 

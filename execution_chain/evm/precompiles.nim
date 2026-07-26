@@ -616,13 +616,17 @@ func blsPairing(c: Computation): EvmResultVoid =
   ? c.gasMeter.consumeGas(gas, reason="blsG2Pairing Precompile")
 
   var
-    g1 {.noinit.}: BLS_G1P
-    g2 {.noinit.}: BLS_G2P
-    acc {.noinit.}: BLS_ACC
+    g1s = newSeqUninit[BLS_G1P](K)
+    g2s = newSeqUninit[BLS_G2P](K)
+    n = 0
 
   # Decode pairs
   for i in 0..<K:
     let off = L * i
+
+    var
+      g1 {.noinit.}: BLS_G1P
+      g2 {.noinit.}: BLS_G2P
 
     # Decode G1 point
     if not g1.decodePoint(input.toOpenArray(off, off+127)):
@@ -640,13 +644,31 @@ func blsPairing(c: Computation): EvmResultVoid =
     if not g2.subgroupCheck:
       return err(prcErr(PrcInvalidPoint))
 
-    # Update pairing engine with G1 and G2 points
-    if i == 0:
-      acc = millerLoop(g1, g2)
-    else:
-      acc.mul(millerLoop(g1, g2))
+    # A pair involving the point at infinity pairs to 1, so it contributes
+    # nothing to the product. It has to be dropped rather than passed along:
+    # the batched Miller loop has no infinity special case, unlike the
+    # per-pair `millerLoop` this used to call.
+    if g1.isInf or g2.isInf:
+      continue
+
+    g1s[n] = g1
+    g2s[n] = g2
+    inc n
 
   c.output.setLen(32)
+
+  if n == 0:
+    # Every pair involved the point at infinity, so the product is 1.
+    c.output[^1] = 1.byte
+    return ok()
+
+  # Run all the Miller loops as one batch so the loop's Fp12 squarings and line
+  # accumulation are shared across pairs, instead of one full Miller loop per
+  # pair multiplied together afterwards. The final exponentiation was already
+  # shared - `check()` performs it once on the accumulated product.
+  var acc {.noinit.}: BLS_ACC
+  acc.millerLoopN(g1s.toOpenArray(0, n-1), g2s.toOpenArray(0, n-1))
+
   if acc.check():
     c.output[^1] = 1.byte
   ok()
