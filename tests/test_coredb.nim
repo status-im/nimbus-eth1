@@ -165,17 +165,14 @@ proc initRunnerDB(
 
   var
     params: NetworkParams
-    networkId: NetworkId
   if specs.builtIn:
-    networkId = specs.network
+    let networkId = specs.network
     params = networkId.networkParams()
   else:
     doAssert specs.genesis.findFilePath.value.loadNetworkParams(params)
-    networkId = params.config.chainId.NetworkId
 
   result = CommonRef.new(
     db = coreDB,
-    networkId = networkId,
     params = params)
 
   setErrorLevel()

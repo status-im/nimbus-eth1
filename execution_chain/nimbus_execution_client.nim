@@ -86,9 +86,11 @@ proc basicServices(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonR
   nimbus.txEvictor = TxEvictorRef.init(nimbus.txPool)
   nimbus.txEvictor.start()
 
-proc manageAccounts(nimbus: NimbusNode, config: ExecutionClientConf) =
-  if config.keyStoreDir.len > 0:
-    nimbus.accountsManager[].loadKeystores(config.keyStoreDir).isOkOr:
+proc manageAccounts(nimbus: NimbusNode, config: ExecutionClientConf, params: NetworkParams) =
+  let
+    keyStoreDir = config.keyStoreDir(params)
+  if keyStoreDir.len > 0:
+    nimbus.accountsManager[].loadKeystores(keyStoreDir).isOkOr:
       fatal "Load keystore error", msg = error
       quit(QuitFailure)
 
@@ -97,7 +99,7 @@ proc manageAccounts(nimbus: NimbusNode, config: ExecutionClientConf) =
       fatal "Import private key error", msg = error
       quit(QuitFailure)
 
-proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
+proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, params: NetworkParams) =
   ## Creating P2P Server
   let
     keypair = nimbus.rng[].getNetKeys(config.netKey).valueOr:
@@ -116,7 +118,7 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
     extTcpPort = extPorts[0].toPort()
     extUdpPort = extPorts[1].toPort()
 
-    bootstrapNodes = config.getBootstrapNodes()
+    bootstrapNodes = config.getBootstrapNodes(params)
     fc = nimbus.fc
 
   func forkIdProc(): ForkId =
@@ -133,7 +135,7 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
   )
 
   nimbus.ethNode = newEthereumNode(
-    keypair, extIp, extTcpPort, extUdpPort, config.networkId, config.agentString,
+    keypair, extIp, extTcpPort, extUdpPort, params.networkId, config.agentString,
     minPeers = config.maxPeers,
     bootstrapNodes = bootstrapNodes,
     bindUdpPort = config.udpPort, bindTcpPort = config.tcpPort,
@@ -204,7 +206,7 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
       syncerShouldRun = true
 
     # Configure snap syncer.
-    nimbus.snapSyncRef.config(nimbus.ethNode, config.dataDir, config.maxPeers)
+    nimbus.snapSyncRef.config(nimbus.ethNode, config.dataDir(params), config.maxPeers)
 
     if config.snapSyncResume:
       nimbus.snapSyncRef.configResume()
@@ -218,14 +220,14 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
     nimbus.snapSyncRef = SnapSyncRef(nil)
 
-proc init*(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
+proc init*(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, params: NetworkParams) =
   nimbus.accountsManager = new AccountsManager
   nimbus.rng = newRng()
 
   basicServices(nimbus, config, com)
-  manageAccounts(nimbus, config)
-  setupP2P(nimbus, config, com)
-  setupRpc(nimbus, config, com)
+  manageAccounts(nimbus, config, params)
+  setupP2P(nimbus, config, com, params)
+  setupRpc(nimbus, config, com, params)
 
   # Not starting any syncer if there is definitely no way to run it. This
   # avoids polling (i.e. waiting for instructions) and some logging.
@@ -253,12 +255,12 @@ proc init*(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
         "Restart with --prune=true or use a fresh data directory."
       quit(QuitFailure)
 
-proc init*(T: type NimbusNode, config: ExecutionClientConf, com: CommonRef): T =
+proc init*(T: type NimbusNode, config: ExecutionClientConf, com: CommonRef, params: NetworkParams): T =
   let nimbus = T()
-  nimbus.init(config, com)
+  nimbus.init(config, com, params)
   nimbus
 
-proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionClientConf) =
+proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionClientConf, params: NetworkParams) =
   proc writeDataDirId(kvt: CoreDbTxRef, calculatedId: Hash32) =
     info "Writing data dir ID", ID=calculatedId
     kvt.put(dataDirIdKey().toOpenArray, calculatedId.data).isOkOr:
@@ -268,7 +270,7 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionCli
 
   let
     kvt = db.baseTxFrame()
-    calculatedId = calcHash(config.networkId, config.networkParams)
+    calculatedId = calcHash(params)
     dataDirIdBytes = kvt.get(dataDirIdKey().toOpenArray).valueOr:
       # an empty database
       writeDataDirId(kvt, calculatedId)
@@ -286,13 +288,13 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionCli
 
 
 proc setupCommonRef*(
-    config: ExecutionClientConf, numThreads: int): (CommonRef, bool) =
+    config: ExecutionClientConf, params: NetworkParams, numThreads: int): (CommonRef, bool) =
 
   if config.statelessProvider and config.balParallelExecution:
     warn "Stateless provider enabled. Running without BAL parallel execution"
 
   if config.optimisticStatePrefetch and not config.parallelSenderRecovery:
-    warn "Optimistic state prefetch requires parallel sender recovery to be enabled. " & 
+    warn "Optimistic state prefetch requires parallel sender recovery to be enabled. " &
       "Running without optimistic prefetching."
 
   let disableParallelFeatures = numThreads <= 1 and config.parallelFeaturesEnabled()
@@ -303,21 +305,20 @@ proc setupCommonRef*(
     dbOpts.parallelStateRootComputation = false
     dbOpts.threadSafeCaches = false
 
-  let coreDB = AristoDbRocks.newCoreDbRef(config.dataDir, dbOpts)
+  let coreDB = AristoDbRocks.newCoreDbRef(config.dataDir(params), dbOpts)
 
-  preventLoadingDataDirForTheWrongNetwork(coreDB, config)
+  preventLoadingDataDirForTheWrongNetwork(coreDB, config, params)
 
   let com = CommonRef.new(
     db = coreDB,
-    networkId = config.networkId,
-    params = config.networkParams,
+    params = params,
     statelessProvider = config.statelessProvider,
     statelessWitnessValidation = config.statelessWitnessValidation,
-    optimisticStatePrefetch = config.parallelSenderRecovery and 
+    optimisticStatePrefetch = config.parallelSenderRecovery and
         config.optimisticStatePrefetch and not disableParallelFeatures,
     balStatePrefetch = config.balStatePrefetch and not disableParallelFeatures,
     balStatePrefetchWorkers = config.balStatePrefetchWorkers,
-    balParallelExecution = config.balParallelExecution and 
+    balParallelExecution = config.balParallelExecution and
         not config.statelessProvider and not disableParallelFeatures,
     parallelSenderRecovery = config.parallelSenderRecovery and not disableParallelFeatures)
 
@@ -359,6 +360,7 @@ proc runStopCheckLoop() {.async: (raises: []).} =
 proc runExeClient*(
     config: ExecutionClientConf,
     com: CommonRef,
+    params: NetworkParams,
     stopper: StopFuture,
     nimbus = NimbusNode(nil),
 ) =
@@ -368,9 +370,9 @@ proc runExeClient*(
 
   var nimbus = nimbus
   if nimbus.isNil:
-    nimbus = NimbusNode.init(config, com)
+    nimbus = NimbusNode.init(config, com, params)
   else:
-    nimbus.init(config, com)
+    nimbus.init(config, com, params)
 
   defer:
     let
@@ -416,9 +418,10 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   info "Launching execution client", version = FullVersionStr, config
 
   ProcessState.setupStopHandlers()
+  let params = config.computeNetworkParams()
 
   # TODO provide option for fixing / ignoring permission errors
-  if not (checkAndCreateDataDir(config.dataDir)):
+  if not (checkAndCreateDataDir(config.dataDir(params))):
     # We are unable to access/create data folder or data folder's
     # permissions are insecure.
     quit QuitFailure
@@ -450,11 +453,11 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   when compileOption("threads"):
     let
       taskpool = setupTaskpool(config.numThreads)
-      (com, keyCacheEnabled) = setupCommonRef(config, taskpool.numThreads)
+      (com, keyCacheEnabled) = setupCommonRef(config, params, taskpool.numThreads)
     com.taskpool = taskpool
     com.db.mpt.taskpool = taskpool
   else:
-    let (com, keyCacheEnabled) = setupCommonRef(config, 0)
+    let (com, keyCacheEnabled) = setupCommonRef(config, params, 0)
 
   if keyCacheEnabled:
     # Make sure key cache isn't empty
@@ -467,9 +470,9 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
 
   case config.cmd
   of NimbusCmd.`import`:
-    importBlocks(config, com)
+    importBlocks(config, com, params)
   else:
-    runExeClient(config, com, nil, nimbus=nimbus)
+    runExeClient(config, com, params, nil, nimbus=nimbus)
 
 when isMainModule:
   main()

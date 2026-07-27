@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[math, times],
+  std/[math, times, importutils],
   eth/common/keys,
   results,
   unittest2,
@@ -54,7 +54,6 @@ const
 
 type
   TestEnv = object
-    config: ExecutionClientConf
     com   : CommonRef
     chain : ForkedChainRef
     xp    : TxPoolRef
@@ -62,14 +61,10 @@ type
 
   CustomTx = CustomTransactionData
 
-proc initConf(envFork: HardFork): ExecutionClientConf =
-  var config = makeConfig(
-    @["--network:" & genesisFile]
-  )
-
+proc initState(params: NetworkParams, envFork: HardFork) =
   doAssert envFork >= MergeFork
 
-  let cc = config.networkParams.config
+  let cc = params.config
   if envFork >= MergeFork:
     cc.mergeNetsplitBlock = Opt.some(0'u64)
 
@@ -81,11 +76,11 @@ proc initConf(envFork: HardFork): ExecutionClientConf =
 
   if envFork >= Prague:
     cc.pragueTime = Opt.some(0.EthTime)
-    config.networkParams.genesis.alloc[withdrawalTriggerContract] = GenesisAccount(
+    params.genesis.alloc[withdrawalTriggerContract] = GenesisAccount(
       balance: 0.u256,
       code: triggerCode
     )
-    config.networkParams.genesis.alloc[consolidationWithdrawalTrigger] = GenesisAccount(
+    params.genesis.alloc[consolidationWithdrawalTrigger] = GenesisAccount(
       balance: 0.u256,
       code: triggerCode
     )
@@ -95,31 +90,39 @@ proc initConf(envFork: HardFork): ExecutionClientConf =
 
   if envFork >= Amsterdam:
     cc.amsterdamTime = Opt.some(0.EthTime)
-    config.networkParams.genesis.alloc[BUILDER_DEPOSIT_CONTRACT_ADDRESS] = GenesisAccount(code: builderDepositRequestCode)
-    config.networkParams.genesis.alloc[BUILDER_EXIT_CONTRACT_ADDRESS] = GenesisAccount(code: builderExitRequestCode)
+    params.genesis.alloc[BUILDER_DEPOSIT_CONTRACT_ADDRESS] = GenesisAccount(code: builderDepositRequestCode)
+    params.genesis.alloc[BUILDER_EXIT_CONTRACT_ADDRESS] = GenesisAccount(code: builderExitRequestCode)
 
-  config.networkParams.genesis.alloc[recipient] = GenesisAccount(code: contractCode)
-  config
+  params.genesis.alloc[recipient] = GenesisAccount(code: contractCode)
 
-proc initEnv(config: ExecutionClientConf, flags: set[TxPoolFlags] = {}): TestEnv =
+proc initEnv(params: NetworkParams, flags: set[TxPoolFlags] = {}): TestEnv =
   let
     # create the sender first, because it will modify networkParams
-    sender = TxSender.new(config.networkParams, 30)
-    com    = CommonRef.new(newCoreDbRef DefaultDbMemory,
-               config.networkId, config.networkParams)
+    sender = TxSender.new(params, 30)
+    com    = CommonRef.new(newCoreDbRef DefaultDbMemory, params)
     chain  = ForkedChainRef.init(com)
 
   TestEnv(
-    config: config,
     com   : com,
     chain : chain,
     xp    : TxPoolRef.new(chain, flags),
     sender: sender
   )
 
+proc initParams(): NetworkParams =
+  var
+    config = makeConfig(
+      @["--network:" & genesisFile]
+    )
+
+  config.computeNetworkParams()
+
 proc initEnv(envFork: HardFork, flags: set[TxPoolFlags] = {}): TestEnv =
-  let config = initConf(envFork)
-  initEnv(config, flags)
+  let
+    params = initParams()
+
+  params.initState(envFork)
+  initEnv(params, flags)
 
 template checkAddTx(xp, tx, errorCode) =
   let prevCount = xp.len
@@ -747,8 +750,9 @@ suite "TxPool test suite":
     xp.checkImportBlock(1, 0)
 
   test "Blobschedule":
+    privateAccess(CommonRef)
     let
-      cc = env.config.networkParams.config
+      cc = env.com.config
       acc = mx.getAccount(26)
       tc = BlobTx(
         txType: Opt.some(TxEip4844),
@@ -904,22 +908,24 @@ suite "TxPool test suite":
     xp.checkImportBlock(1, 0)
 
   test "EIP-7594 BlobsBundle transition from Prague to Osaka":
+    privateAccess(CommonRef)
     let
-      config = initConf(Prague)
-      cc = config.networkParams.config
+      params = initParams()
       timestamp = EthTime.now()
 
+    params.initState(Prague)
     # set osaka transition time
-    cc.osakaTime = Opt.some(timestamp + 2)
+    params.config.osakaTime = Opt.some(timestamp + 2)
 
     let
-      env = initEnv(config)
+      env = initEnv(params)
       xp = env.xp
       mx = env.sender
       acc = mx.getAccount(0)
       acc1 = mx.getAccount(1)
       tx0 = mx.createPooledTransactionWithBlob(acc, recipient, amount, 0)
       tx1 = mx.createPooledTransactionWithBlob(acc, recipient, amount, 1)
+      cc = env.com.config
 
     let bs = cc.blobSchedule[Prague]
     cc.blobSchedule[Prague] = Opt.some(
@@ -1105,13 +1111,16 @@ suite "TxPool EIP-7934 block RLP size limit":
   # blocks fail re-execution and are rejected by every peer.
 
   let
-    env = block:
-      var config = initConf(Amsterdam)
-      # The RLP cap (~8 MiB) only binds if the block gas limit allows more
-      # calldata than fits; post-Amsterdam the EIP-7976 floor cost is
-      # ~64 gas per calldata byte, so that takes ~540M+ block gas.
-      config.networkParams.genesis.gasLimit = 1_000_000_000
-      initEnv(config)
+    params = initParams()
+
+  params.initState(Amsterdam)
+  # The RLP cap (~8 MiB) only binds if the block gas limit allows more
+  # calldata than fits; post-Amsterdam the EIP-7976 floor cost is
+  # ~64 gas per calldata byte, so that takes ~540M+ block gas.
+  params.genesis.gasLimit = 1_000_000_000
+
+  let
+    env = initEnv(params)
     xp = env.xp
     mx = env.sender
 
