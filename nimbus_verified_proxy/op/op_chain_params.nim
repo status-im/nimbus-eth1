@@ -7,7 +7,7 @@
 
 {.push raises: [], gcsafe.}
 
-import results, stint, eth/common/addresses
+import results, stint, eth/common/[addresses, times]
 
 const L2L1_MESSAGE_PASSER_CONTRACT* =
   address("0x4200000000000000000000000000000000000016")
@@ -18,6 +18,7 @@ type OpChainParams* = object
   l1ChainId*: UInt256
   l2ChainId*: UInt256
   systemConfig*: Address
+  eip2935ForkTime*: Opt[EthTime] # Isthmus activation (EIP-2935 history contract)
 
 const opMainnet = OpChainParams(
   opNetwork: "op-mainnet",
@@ -25,6 +26,7 @@ const opMainnet = OpChainParams(
   l1ChainId: 1.u256,
   l2ChainId: 10.u256,
   systemConfig: address("0x229047fed2591dbec1eF1118d64F7aF3dB9EB290"),
+  eip2935ForkTime: Opt.some(1_746_806_401.EthTime),
 )
 
 const baseMainnet = OpChainParams(
@@ -33,6 +35,7 @@ const baseMainnet = OpChainParams(
   l1ChainId: 1.u256,
   l2ChainId: 8453.u256,
   systemConfig: address("0x73a79Fab69143498Ed3712e519A88a918e1f4072"),
+  eip2935ForkTime: Opt.some(1_746_806_401.EthTime),
 )
 
 const opSepolia = OpChainParams(
@@ -41,6 +44,7 @@ const opSepolia = OpChainParams(
   l1ChainId: 11155111.u256,
   l2ChainId: 11155420.u256,
   systemConfig: address("0x034edD2A225f7f429A63E0f1D2084B9E0A93b538"),
+  eip2935ForkTime: Opt.some(1_744_905_600.EthTime),
 )
 
 func opChainParamsForNetwork*(name: string): Result[OpChainParams, string] =
