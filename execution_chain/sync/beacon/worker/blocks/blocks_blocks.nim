@@ -248,6 +248,8 @@ template blocksImport*(
         if nthBn <= ctx.chain.baseNumber:
           trace "Ignoring block less eq. base", peer, blk=nthBn,
             B=ctx.chain.baseNumber, L=ctx.chain.latestNumber
+          ctx.updateLastBlockImported nthBn          # block already imported
+          ctx.updateEtaBlocks()
           blocks[n].reset()
           continue
 

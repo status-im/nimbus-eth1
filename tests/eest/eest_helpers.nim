@@ -62,7 +62,7 @@ proc prepareEnv*(
     let
       memDB = newCoreDbRef(DefaultDbMemory, enableCaches = true)
       ledger = LedgerRef.init(memDB.baseTxFrame())
-      config = getChainConfig(unit.network)
+      config = getChainConfig(unit.network).expect("ok")
 
     config.chainId = unit.config.chainid
     config.blobSchedule = unit.config.blobSchedule
@@ -79,7 +79,7 @@ proc prepareEnv*(
     let com = CommonRef.new(memDB, config,
       statelessProvider = statelessEnabled,
       statelessWitnessValidation = false, # Running stateless execution separately in test runner
-      parallelSenderRecovery = parallelEnabled,      
+      parallelSenderRecovery = parallelEnabled,
       optimisticStatePrefetch = parallelEnabled,
       balStatePrefetch = parallelEnabled,
       balParallelExecution = parallelEnabled

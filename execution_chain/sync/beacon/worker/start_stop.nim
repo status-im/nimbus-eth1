@@ -11,7 +11,7 @@
 {.push raises:[].}
 
 import
-  pkg/[chronicles, chronos, eth/common, metrics],
+  pkg/[chronos, eth/common, metrics],
   ../../../networking/p2p,
   ../../wire_protocol,
   ./start_stop/sync_ticker,

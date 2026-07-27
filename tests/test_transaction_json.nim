@@ -39,7 +39,7 @@ proc txHash(tx: Transaction): string =
 
 proc testTxByFork(tx: Transaction, forkData: JsonNode, forkName: string, testStatusIMPL: var TestStatus) =
   let
-    config = getChainConfig(forkName)
+    config = getChainConfig(forkName).expect("ok")
     memDB  = newCoreDbRef DefaultDbMemory
     com    = CommonRef.new(memDB, config)
     fork   = nameToFork[forkName]

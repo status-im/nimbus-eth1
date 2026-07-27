@@ -194,7 +194,7 @@ proc initializeDb(com: CommonRef) =
       debug "Reverting to base", err = error
       FcuHashAndNumber(hash: baseHash, number: base.number)
     head = txFrame.fcuHead().valueOr:
-      fatal "Reverting to base", err = error
+      debug "Reverting to base", err = error
       FcuHashAndNumber(hash: baseHash, number: base.number)
 
   info "Database initialized",

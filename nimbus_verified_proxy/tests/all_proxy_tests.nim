@@ -13,4 +13,5 @@ import
   ./test_receipts,
   ./test_state,
   ./test_fees,
-  ./test_scoring
+  ./test_scoring,
+  ./test_capabilities

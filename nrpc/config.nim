@@ -23,7 +23,7 @@ import
   ],
   eth/[common, net/nat, enr/enr, enode/enode],
   ../execution_chain/[constants, compile_info],
-  ../execution_chain/common/chain_config,
+  ../execution_chain/common/chain_config_loader,
   ../execution_chain/db/opts
 
 export net, defs
