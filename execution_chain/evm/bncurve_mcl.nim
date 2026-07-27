@@ -11,7 +11,7 @@
 
 import
   results,
-  stew/[assign2, byteutils],
+  stew/assign2,
   bncurve/arith,
   mcl/bn_abi,
   ./evm_errors,
@@ -24,16 +24,6 @@ mclBn_verifyOrderG2(0.cint)
 
 const
   ioMode = MCLBN_IO_SERIALIZE or MCLBN_IO_BIG_ENDIAN
-
-  frobeniusXCoeff =
-    "16c9e55061ebae204ba4cc8bd75a079432ae2a1d0b7c9dce1665d51c640fcba2" &
-    "2fb347984f7911f74c0bec3cf559b143b78cc310c2c3330c99e39557176f553d"
-  frobeniusYCoeff =
-    "07c03cbcac41049a0704b5a7ec796f2b21807dc98fa25bd282d37f632623b0e3" &
-    "063cf305489af5dcdc5ec698b6e2f9b9dbaae0eda9c95998dc54014671a0135a"
-
-  sixZSquared =
-    "000000000000000000000000000000006f4d8248eeb859fbf83e9682e87cfd46"
 
 func isAllZero(data: openArray[byte]): bool =
   for c in data:
@@ -61,37 +51,32 @@ func deserialize(P: var BnG1, buf: openArray[byte]): bool =
   mclBnFp_setInt32(P.z.addr, 1.cint)
   mclBnG1_isValid(P.addr) == 1.cint
 
-func loadFp2(hex: static string): BnFp2 =
-  const buf = hexToByteArray[64](hex)
-  doAssert deserialize(result, buf)
+# serialize Fp as 32 byte big-endian number.
+func serialize(buf: var openArray[byte], x: BnFp): bool =
+  # sigh, getStr output buf is zero terminated
+  var tmp {.noinit.}: array[33, byte]
+  result = mclBnFp_getStr(cast[ptr char](tmp[0].addr), 32, x.addr, ioMode) == 32.mclSize
+  assign(buf.toOpenArray(0, 31), tmp.toOpenArray(0, 31))
 
-func loadFr(hex: static string): BnFr =
-  const buf = hexToByteArray[32](hex)
-  doAssert deserialize(result, buf)
-
-let
-  frobeniusX = loadFp2(frobeniusXCoeff)
-  frobeniusY = loadFp2(frobeniusYCoeff)
-  frobeniusEigenvalue = loadFr(sixZSquared)
-
-func conjugate(y: var BnFp2, x: BnFp2) =
-  y.d[0] = x.d[0]
-  mclBnFp_neg(y.d[1].addr, x.d[1].addr)
-
-func frobenius(D: var BnG2, S: BnG2) =
+# The Frobenius endomorphism acts on G2 with eigenvalue t - 1 = 6z^2. For any
+# BN curve p = 36z^4 + 36z^3 + 24z^2 + 6z + 1 and r = 36z^4 + 36z^3 + 18z^2 +
+# 6z + 1, hence 6z^2 = p - r. Since 0 < 6z^2 < r that is simply p mod r, so the
+# eigenvalue can be recovered from the curve mcl was initialized with instead of
+# being hardcoded.
+func loadFrobeniusEigenvalue(): BnFr =
   var
-    cx {.noinit.}: BnFp2
-    cy {.noinit.}: BnFp2
+    negOne {.noinit.}: BnFp
+    one {.noinit.}: BnFr
+    buf {.noinit.}: array[32, byte]
 
-  {.cast(noSideEffect).}:
-    cx = frobeniusX
-    cy = frobeniusY
+  mclBnFp_setInt32(negOne.addr, -1.cint) # p - 1
+  doAssert serialize(buf, negOne)
+  doAssert deserialize(result, buf)      # (p - 1) mod r == 6z^2 - 1
 
-  conjugate(D.x, S.x)
-  conjugate(D.y, S.y)
-  conjugate(D.z, S.z)
-  mclBnFp2_mul(D.x.addr, D.x.addr, cx.addr)
-  mclBnFp2_mul(D.y.addr, D.y.addr, cy.addr)
+  mclBnFr_setInt32(one.addr, 1.cint)
+  mclBnFr_add(result.addr, result.addr, one.addr)
+
+let frobeniusEigenvalue = loadFrobeniusEigenvalue()
 
 func isInSubgroup(P: BnG2): bool =
   var
@@ -102,7 +87,7 @@ func isInSubgroup(P: BnG2): bool =
   {.cast(noSideEffect).}:
     eigenvalue = frobeniusEigenvalue
 
-  frobenius(lhs, P)
+  mclBnG2_Frobenius(lhs.addr, P.addr)
   mclBnG2_mul(rhs.addr, P.addr, eigenvalue.addr)
   mclBnG2_isEqual(lhs.addr, rhs.addr) == 1.cint
 
@@ -117,13 +102,6 @@ func deserialize(P: var BnG2, buf: openArray[byte]): bool =
   mclBnFp_setInt32(P.z.d[0].addr, 1.cint)
   mclBnFp_clear(P.z.d[1].addr)
   mclBnG2_isValid(P.addr) == 1.cint and P.isInSubgroup()
-
-# serialize Fp as 32 byte big-endian number.
-func serialize(buf: var openArray[byte], x: BnFp): bool =
-  # sigh, getStr output buf is zero terminated
-  var tmp {.noinit.}: array[33, byte]
-  result = mclBnFp_getStr(cast[ptr char](tmp[0].addr), 32, x.addr, ioMode) == 32.mclSize
-  assign(buf.toOpenArray(0, 31), tmp.toOpenArray(0, 31))
 
 # Serialize P.x|P.y.
 # Set _buf to all zeros if P == 0.
