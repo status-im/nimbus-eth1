@@ -280,7 +280,6 @@ type
 
   EngineState* = object
     archive*: bool
-    privateTx*: bool
 
   RpcVerificationEngine* = ref object
     evm*: AsyncEvm

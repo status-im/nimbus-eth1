@@ -261,7 +261,7 @@ proc run(
   let execBackendClients =
     await startExecutionBackends(engine, config.executionApiUrls, regularCaps)
 
-  engine.state = EngineState(archive: useArchive, privateTx: usePrivateTx)
+  engine.state = EngineState(archive: useArchive)
   let beaconBackendClients =
     if config.beaconApiUrls.len > 0:
       await startBeaconBackends(engine, config.beaconApiUrls)

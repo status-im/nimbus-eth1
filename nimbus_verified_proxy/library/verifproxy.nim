@@ -326,7 +326,7 @@ proc run*(
         )
         info "Connected to archive backend", url
 
-  engine.state = EngineState(archive: useArchive, privateTx: usePrivateTx)
+  engine.state = EngineState(archive: useArchive)
 
   ctx.frontend = engine.getExecutionApiFrontend()
 
