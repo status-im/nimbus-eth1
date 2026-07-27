@@ -279,7 +279,7 @@ const
 
 proc initVMEnv*(network: string): BaseVMState =
   let
-    conf = getChainConfig(network)
+    conf = getChainConfig(network).expect("ok")
     cdb = DefaultDbMemory.newCoreDbRef()
     com = CommonRef.new(
       cdb,
