@@ -50,8 +50,10 @@ type
     nonce*  : AccountNonce
 
   NetworkParams* = object
-    config* : ChainConfig
-    genesis*: Genesis
+    config*   : ChainConfig
+    genesis*  : Genesis
+    networkId*: NetworkId
+    custom*   : bool
 
   Address = addresses.Address
 
