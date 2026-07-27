@@ -226,11 +226,9 @@ proc executeTest(stateRes: var seq[StateResult], name: string, n: JsonNode, conf
     hasError = false
 
   template prepareFork(forkName: string) =
-    try:
-      ctx.forkStr = forkName
-      ctx.chainConfig = getChainConfig(forkName)
-    except ValueError as ex:
-      debugEcho ex.msg
+    ctx.forkStr = forkName
+    ctx.chainConfig = getChainConfig(forkName).valueOr:
+      debugEcho error
       return false
     ctx.index = index
     inc index

@@ -320,7 +320,7 @@ const
       name  : "Test post-merge transition",
       base  : "testdata/24",
       input : t8nInput(
-        "alloc.json", "txs.json", "env.json", "Merge", "",
+        "alloc.json", "txs.json", "env.json", "Paris", "",
       ),
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",
@@ -329,7 +329,7 @@ const
       name  : "Test post-merge transition where input is missing random",
       base  : "testdata/24",
       input : t8nInput(
-        "alloc.json", "txs.json", "env-missingrandom.json", "Merge", "",
+        "alloc.json", "txs.json", "env-missingrandom.json", "Paris", "",
       ),
       output: T8nOutput(alloc: false, result: false),
       expExitCode: ErrorConfig.int,
@@ -347,7 +347,7 @@ const
       name  : "0-touch reward on pre EIP150 networks -1(txs.rlp)",
       base  : "testdata/00-501",
       input : t8nInput(
-        "alloc.json", "txs.rlp", "env.json", "EIP150", "-1"
+        "alloc.json", "txs.rlp", "env.json", "TangerineWhistle", "-1"
       ),
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",
@@ -356,7 +356,7 @@ const
       name  : "0-touch reward on pre EIP150 networks(txs.rlp)",
       base  : "testdata/00-502",
       input : t8nInput(
-        "alloc.json", "txs.rlp", "env.json", "EIP150", ""
+        "alloc.json", "txs.rlp", "env.json", "TangerineWhistle", ""
       ),
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",
@@ -365,7 +365,7 @@ const
       name  : "0-touch reward on pre EIP150 networks(txs.json)",
       base  : "testdata/00-502",
       input : t8nInput(
-        "alloc.json", "txs.json", "env.json", "EIP150", ""
+        "alloc.json", "txs.json", "env.json", "TangerineWhistle", ""
       ),
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",
@@ -536,7 +536,7 @@ const
       name  : "EVM tracer wrong order for CALL family opcodes",
       base  : "testdata/00-520",
       input : t8nInput(
-        "alloc.json", "txs.json", "env.json", "Merge", "0",
+        "alloc.json", "txs.json", "env.json", "Paris", "0",
       ),
       output: T8nOutput(trace: true, result: true),
       expOut: "exp.txt",

@@ -8,16 +8,19 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
+  results,
   ../../execution_chain/common/common,
   ./types
 
 export
-  types
+  types,
+  results
 
 const
   BlockNumberZero = 0.BlockNumber
-  BlockNumberFive = 5.BlockNumber
   TimeZero = EthTime(0)
 
 proc createForkTransitionTable(transitionFork: HardFork,
@@ -66,9 +69,10 @@ proc assignTime(c: ChainConfig, transitionFork: HardFork, t: EthTime, excludes: 
   c.populateFromForkTransitionTable(table)
   c.terminalTotalDifficulty = Opt.some(0.u256)
 
-func getChainConfig*(network: string, c: ChainConfig) =
+func getChainConfig*(network: string): Result[ChainConfig, string] =
   const DEPOSIT_CONTRACT_ADDRESS = address"0x00000000219ab540356cbb839cbe05303d7705fa"
 
+  let c = ChainConfig()
   c.daoForkSupport = false
   c.chainId = 1.u256
   c.terminalTotalDifficulty = Opt.none(UInt256)
@@ -80,50 +84,27 @@ func getChainConfig*(network: string, c: ChainConfig) =
     c.assignNumber(HardFork.Frontier, BlockNumberZero)
   of $TestFork.Homestead:
     c.assignNumber(HardFork.Homestead, BlockNumberZero)
-  of $TestFork.EIP150, $TestFork.TangerineWhistle:
+  of $TestFork.TangerineWhistle:
     c.assignNumber(HardFork.Tangerine, BlockNumberZero)
-  of $TestFork.EIP158, $TestFork.SpuriousDragon:
+  of $TestFork.SpuriousDragon:
     c.assignNumber(HardFork.Spurious, BlockNumberZero)
   of $TestFork.Byzantium:
     c.assignNumber(HardFork.Byzantium, BlockNumberZero)
-  of $TestFork.Constantinople:
-    c.assignNumber(HardFork.Constantinople, BlockNumberZero)
   of $TestFork.ConstantinopleFix:
     c.assignNumber(HardFork.Petersburg, BlockNumberZero)
   of $TestFork.Istanbul:
     c.assignNumber(HardFork.Istanbul, BlockNumberZero)
-  of $TestFork.FrontierToHomesteadAt5:
-    c.assignNumber(HardFork.Homestead, BlockNumberFive)
-  of $TestFork.HomesteadToEIP150At5:
-    c.assignNumber(HardFork.Tangerine, BlockNumberFive)
-  of $TestFork.HomesteadToDaoAt5:
-    c.assignNumber(HardFork.DAOFork, BlockNumberFive)
-    c.daoForkSupport = true
-  of $TestFork.EIP158ToByzantiumAt5:
-    c.assignNumber(HardFork.Byzantium, BlockNumberFive)
-  of $TestFork.ByzantiumToConstantinopleAt5:
-    c.assignNumber(HardFork.Constantinople, BlockNumberFive)
-  of $TestFork.ByzantiumToConstantinopleFixAt5:
-    c.assignNumber(HardFork.Petersburg, BlockNumberFive)
-    c.constantinopleBlock = Opt.some(BlockNumberFive)
-  of $TestFork.ConstantinopleFixToIstanbulAt5:
-    c.assignNumber(HardFork.Istanbul, BlockNumberFive)
   of $TestFork.Berlin:
     c.assignNumber(HardFork.Berlin, BlockNumberZero)
-  of $TestFork.BerlinToLondonAt5:
-    c.assignNumber(HardFork.London, BlockNumberFive)
   of $TestFork.London:
     c.assignNumber(HardFork.London, BlockNumberZero)
   of $TestFork.ArrowGlacier:
     c.assignNumber(HardFork.ArrowGlacier, BlockNumberZero)
   of $TestFork.GrayGlacier:
     c.assignNumber(HardFork.GrayGlacier, BlockNumberZero)
-  of $TestFork.Merge, $TestFork.Paris:
+  of $TestFork.Paris:
     c.assignNumber(HardFork.MergeFork, BlockNumberZero)
     c.terminalTotalDifficulty = Opt.some(0.u256)
-  of $TestFork.ArrowGlacierToParisAtDiffC0000:
-    c.assignNumber(HardFork.GrayGlacier, BlockNumberZero)
-    c.terminalTotalDifficulty = Opt.some(0xC0000.u256)
   of $TestFork.Shanghai:
     c.assignTime(HardFork.Shanghai, TimeZero)
   of $TestFork.ParisToShanghaiAtTime15k:
@@ -168,9 +149,6 @@ func getChainConfig*(network: string, c: ChainConfig) =
   of $TestFork.Bogota:
     c.assignTime(HardFork.Bogota, TimeZero)
   else:
-    raise newException(ValueError, "unsupported network " & network)
+    return err("Unsupported network: " & network)
 
-func getChainConfig*(network: string): ChainConfig =
-  let c = ChainConfig()
-  getChainConfig(network, c)
-  result = c
+  ok(c)
