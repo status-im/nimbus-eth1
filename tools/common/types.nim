@@ -17,6 +17,7 @@ type
     TangerineWhistle
     SpuriousDragon
     Byzantium
+    Constantinople
     ConstantinopleFix
     Istanbul
     Berlin

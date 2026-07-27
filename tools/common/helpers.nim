@@ -90,6 +90,8 @@ func getChainConfig*(network: string): Result[ChainConfig, string] =
     c.assignNumber(HardFork.Spurious, BlockNumberZero)
   of $TestFork.Byzantium:
     c.assignNumber(HardFork.Byzantium, BlockNumberZero)
+  of $TestFork.Constantinople:
+    c.assignNumber(HardFork.Constantinople, BlockNumberZero)
   of $TestFork.ConstantinopleFix:
     c.assignNumber(HardFork.Petersburg, BlockNumberZero)
   of $TestFork.Istanbul:
