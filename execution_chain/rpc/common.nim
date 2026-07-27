@@ -87,7 +87,7 @@ proc setupAdminRpc*(nimbus: NimbusNode, config: ExecutionClientConf, server: Rpc
       let
         enode = toENode(node)
         nodeId = toNodeId(node.keys.pubkey)
-        enr = node.peerPool.eth1Discovery.getEnr()
+        enr = node.peerPool.eth1Discovery.getEnrUri()
         nodeInfo = NodeInfo(
           id: nodeId.toHex,
           name: config.agentString,
