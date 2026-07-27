@@ -772,6 +772,16 @@ proc importBlock*(
     parentHash = header.parentHash.short
 
   if header.number <= c.latest.number:
+    # The parent is gone, but this block may itself be the canonical block at
+    # this height that was already imported and then pruned from memory once it
+    # fell at/below `base` (finality cut off its parent). This happens when a
+    # concurrent importer such as `el_sync` advances and finalizes the chain past
+    # a stale sync target. Tell that apart from a genuine dead fork via the
+    # persisted canonical marker (reorg-safe: matched by hash, not by number).
+    if header.number <= c.base.number and
+       c.baseTxFrame.getBlockHash(header.number).valueOr(default(Hash32)) == blkHash:
+      return ok(AlreadyObserved)
+
     # The in-memory chain already spans this height yet the parent is gone: the
     # parent's branch was pruned (finality cut it off), so this block is on a
     # dead fork. `c.latest` is the reliable frontier here - `c.latestFinalized`

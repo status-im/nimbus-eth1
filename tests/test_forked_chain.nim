@@ -387,6 +387,36 @@ suite "ForkedChainRef tests":
     checkVerdictErr(chain, B5, ImportErrorKind.Orphaned)
     check chain.validate info
 
+  test "reorg: canonical block pruned below base is AlreadyObserved":
+    const info = "reorg below-base AlreadyObserved"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
+    checkVerdict(chain, blk1, ImportOutcome.Valid)
+    checkVerdict(chain, blk2, ImportOutcome.Valid)
+    checkVerdict(chain, blk3, ImportOutcome.Valid)
+    checkVerdict(chain, blk4, ImportOutcome.Valid)
+    checkVerdict(chain, blk5, ImportOutcome.Valid)
+    checkVerdict(chain, blk6, ImportOutcome.Valid)
+    checkVerdict(chain, blk7, ImportOutcome.Valid)
+    checkVerdict(chain, blk8, ImportOutcome.Valid)
+    checkVerdict(chain, blk9, ImportOutcome.Valid)
+    # Finalize blk8: `base` advances and blocks below it are pruned from memory.
+    # This emulates a concurrent importer (e.g. `el_sync`) finalizing the chain
+    # past a stale sync target.
+    checkForkChoice(chain, blk9, blk8)
+    check chain.baseNumber == 6'u64
+    # blk4/blk5 are canonical but no longer in memory (their parent was pruned by
+    # finality). Re-importing them must not be mistaken for a dead fork: the FC
+    # matches the persisted canonical marker and reports `AlreadyObserved`, so an
+    # importer/syncer recognises the block as done rather than `Orphaned`.
+    check blk5.header.number <= chain.baseNumber
+    checkVerdict(chain, blk4, ImportOutcome.AlreadyObserved)
+    checkVerdict(chain, blk5, ImportOutcome.AlreadyObserved)
+    # A sibling (non-canonical) block below base still hashes differently from the
+    # marker, so it is correctly rejected as Orphaned.
+    checkVerdictErr(chain, B5, ImportErrorKind.Orphaned)
+    check chain.validate info
+
   test "reorg: full branch switch keeps pre-reorg blocks observable":
     const info = "reorg full switch"
     let com = env.newCom()
