@@ -650,9 +650,8 @@ func blsPairing(c: Computation): EvmResultVoid =
     if not g2.subgroupCheck:
       return err(prcErr(PrcInvalidPoint))
 
-    # A pair with a point at infinity pairs to the GT identity and so does not
-    # change the product. Skip it, both because it is a no-op and because the
-    # batched Miller loop below does not handle infinity for more than one pair.
+    # A pair with a point at infinity pairs to the identity, leaving the
+    # product unchanged. It must be skipped: millerLoopN cannot take one.
     if g1.isInf or g2.isInf:
       continue
 
@@ -661,16 +660,8 @@ func blsPairing(c: Computation): EvmResultVoid =
 
   c.output.setLen(32)
 
-  # An empty product (all pairs contained a point at infinity) is the GT
-  # identity, so the pairing check succeeds.
-  if g1Points.len == 0:
-    c.output[^1] = 1.byte
-    return ok()
-
-  # Batch every pair into a single multi Miller loop, which shares the fp12
-  # squarings across all pairs instead of one Miller loop per pair.
-  let acc = millerLoopN(g1Points, g2Points)
-  if acc.check():
+  # An empty product is the identity, so the check succeeds.
+  if g1Points.len == 0 or millerLoopN(g1Points, g2Points).check():
     c.output[^1] = 1.byte
   ok()
 
