@@ -11,15 +11,21 @@
 {.push raises: [], gcsafe.}
 
 import
+  std/importutils,
   stew/arrayops,
   nimcrypto/sha2,
   results,
   stint,
-  kzg4844/kzg,
   ./eip7691,
   ./pooled_txs,
   ../constants,
-  ../common/common
+  ../common/common,
+  ../evm/blscurve
+
+# Imported with {.all.} to reach gCtx and lazyLoadTrustedSetup, both private
+# upstream, so that the precompile reads [tau]G2 from the same loaded setup
+# c-kzg uses rather than loading or parsing one of its own.
+import kzg4844/kzg {.all.}
 
 from std/sequtils import mapIt
 
@@ -48,9 +54,54 @@ proc kzgToVersionedHash*(commitment: array[48, byte]): VersionedHash =
   result = sha256.digest(commitment).to(Hash32)
   result.data[0] = VERSIONED_HASH_VERSION_KZG
 
+type
+  # A view over the parts of c-kzg's KZGSettings this module reads. The full
+  # struct is declared in the header, so only the fields used need naming here.
+  KzgSettingsView {.importc: "KZGSettings", header: "ckzg.h".} = object
+    g2_values_monomial {.importc.}: ptr UncheckedArray[BLS_G2]
+
+proc loadLines(Q: BLS_G2P): BLS_LINES =
+  result.precomputeLines(Q)
+
+let
+  GeneratorG2Lines = loadLines(generatorG2())
+  GeneratorG1Table = initFixedBase(generatorG1())
+
+var
+  SetupG2TauLines: BLS_LINES
+  SetupG2TauLoaded = false
+
+# kzgSetupG2Tau returns g2_values_monomial[1], the [tau]G2 that c-kzg's
+# verify_kzg_proof_impl pairs the proof against, taken from whichever trusted
+# setup is loaded. The setup is loaded on demand exactly as verifyKzgProof does.
+proc kzgSetupG2Tau(): Result[BLS_G2P, string] =
+  privateAccess(KzgCtx)
+
+  if not gCtx.initialized:
+    ?lazyLoadTrustedSetup()
+
+  let settings = cast[ptr KzgSettingsView](gCtx.settings)
+  if settings.isNil or settings.g2_values_monomial.isNil:
+    return err(TrustedSetupNotLoadedErr)
+
+  var tau {.noinit.}: BLS_G2P
+  tau.toAffine(settings.g2_values_monomial[1])
+  ok(tau)
+
+proc ensureSetupG2TauLines(): Result[void, string] =
+  if not SetupG2TauLoaded:
+    SetupG2TauLines = loadLines(?kzgSetupG2Tau())
+    SetupG2TauLoaded = true
+  ok()
+
 # pointEvaluation implements point_evaluation_precompile from EIP-4844
 # return value and gas consumption is handled by pointEvaluation in
 # precompiles.nim
+#
+# The pairing check is the spec's
+#   e(C - [y]G1, G2) == e(proof, [tau]G2 - [z]G2)
+# with z moved across by bilinearity into the equivalent
+#   e(C - [y]G1 + [z]proof, G2) == e(proof, [tau]G2)
 proc pointEvaluation*(input: openArray[byte]): Result[void, string] =
   # Verify p(z) = y given commitment that corresponds to the polynomial p(x) and a KZG proof.
   # Also verify that the provided commitment matches the provided versioned_hash.
@@ -59,27 +110,55 @@ proc pointEvaluation*(input: openArray[byte]): Result[void, string] =
   if input.len != PrecompileInputLength:
     return err("invalid input length")
 
-  template copyFrom(T: type, input, a, b): auto =
-    type X = (type T().bytes)
-    T(bytes: X.initCopyFrom(input.toOpenArray(a, b)))
+  ?ensureSetupG2TauLines()
 
   let
-    versionedHash = KzgBytes32.copyFrom(input, 0, 31)
-    z =  KzgBytes32.copyFrom(input, 32, 63)
-    y =  KzgBytes32.copyFrom(input, 64, 95)
-    commitment =  KzgBytes48.copyFrom(input, 96, 143)
-    kzgProof =  KzgBytes48.copyFrom(input, 144, 191)
+    versionedHash = array[32, byte].initCopyFrom(input.toOpenArray(0, 31))
+    commitmentBytes = array[48, byte].initCopyFrom(input.toOpenArray(96, 143))
 
-  if kzgToVersionedHash(commitment.bytes).data != versionedHash.bytes:
+  if kzgToVersionedHash(commitmentBytes).data != versionedHash:
     return err("versionedHash should equal to kzgToVersionedHash(commitment)")
 
-  # Verify KZG proof
-  let res = kzg.verifyKzgProof(commitment, z, y, kzgProof)
-  if res.isErr:
-    return err(res.error)
+  var commitment, proof: BLS_G1P
+  if not commitment.uncompress(input.toOpenArray(96, 143)):
+    return err("invalid commitment")
 
-  # The actual verify result
-  if not res.get():
+  if not proof.uncompress(input.toOpenArray(144, 191)):
+    return err("invalid proof")
+
+  if not commitment.isInf and not commitment.subgroupCheck:
+    return err("commitment is not in G1")
+
+  if not proof.isInf and not proof.subgroupCheck:
+    return err("proof is not in G1")
+
+  var z, y: BLS_SCALAR
+  if not z.fromBytesCanonical(input.toOpenArray(32, 63)):
+    return err("invalid z")
+
+  if not y.fromBytesCanonical(input.toOpenArray(64, 95)):
+    return err("invalid y")
+
+  var yG1 = GeneratorG1Table.mul(y)
+  yG1.neg()
+
+  var zProof: BLS_G1
+  zProof.fromAffine(proof)
+  zProof.mul(z)
+
+  var lhs: BLS_G1
+  lhs.fromAffine(commitment)
+  lhs.add(yG1)
+  lhs.add(zProof)
+  lhs.neg()
+
+  var lhsAffine: BLS_G1P
+  lhsAffine.toAffine(lhs)
+
+  var acc = millerLoop(lhsAffine, GeneratorG2Lines)
+  acc.mul(millerLoop(proof, SetupG2TauLines))
+
+  if not acc.check():
     return err("Failed to verify KZG proof")
 
   ok()
