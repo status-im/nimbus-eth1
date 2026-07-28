@@ -16,6 +16,7 @@ import
   pkg/unittest2,
   testutils,
   std/[os, sets, strutils],
+  eth/common/blocks_rlp,
   ../execution_chain/common,
   ../execution_chain/conf,
   ../execution_chain/utils/utils,
@@ -24,6 +25,7 @@ import
   ../execution_chain/core/chain/forked_chain/chain_serialize,
   ../execution_chain/core/chain/forked_chain/chain_branch,
   ../execution_chain/db/ledger,
+  ../execution_chain/db/storage_types,
   ../execution_chain/evm/[state, types],
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/history/db/ere_db,
@@ -139,6 +141,42 @@ proc wdWritten(c: ForkedChainRef, blk: Block): int =
       expect("withdrawals exists").len
   else:
     0
+
+proc patchParentIndex(txFrame: CoreDbTxRef, numBlocks: int, badIndex: uint): bool =
+  ## Rewrite the first serialized block index entry that has a parent so that
+  ## its parent slot points out of range -- mimics a corrupted FC state on
+  ## disk. Mirrors the private `blockIndexKey` template of chain_serialize.
+  for i in 0..<numBlocks:
+    let
+      key = fcStateKey((i+1).uint)
+      data = txFrame.get(key.toOpenArray).valueOr:
+        continue
+    var
+      header: Header
+      blockHash: Hash32
+      parentIndex: uint
+    try:
+      var r = rlpFromBytes(data)
+      r.tryEnterList()
+      r.read(header)
+      r.read(blockHash)
+      r.read(parentIndex)
+    except RlpError as exc:
+      debugEcho "PATCH PARENT INDEX FAIL: ", exc.msg
+      return false
+
+    if parentIndex == 0:
+      # The base block, it has no parent to corrupt
+      continue
+
+    var w = initRlpWriter()
+    w.startList(3)
+    w.append(header)
+    w.append(blockHash)
+    w.append(badIndex)
+    return txFrame.put(key.toOpenArray, w.finish()).isOk
+
+  false
 
 func checkFinalizedMarkers(fc: ForkedChainRef, finalizedHash: Hash32): bool =
   const finalizedMarker = 1'u  # chain_branch.DAG_NODE_FINALIZED
@@ -1061,6 +1099,40 @@ suite "ForkedChainRef tests":
     check fc.resolvedFinNumber == 7'u64
     check checkFinalizedMarkers(fc, blk7.blockHash)
     check fc.validate info & " (3)"
+
+  test "deserialize rejects out-of-range parent index":
+    const info = "deserialize out-of-range parent index"
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com, baseDistance = 3)
+    checkImportBlock(chain, blk1)
+    checkImportBlock(chain, blk2)
+    checkImportBlock(chain, blk3)
+    checkImportBlock(chain, blk4)
+    checkImportBlock(chain, blk5)
+    checkForkChoice(chain, blk5, blk3)
+    check chain.validate info & " (1)"
+
+    let numBlocks = chain.hashToBlock.len
+    check chain.serialize(chain.baseTxFrame).isOk
+    com.db.persist(chain.baseTxFrame)
+
+    # Simulate the on-disk corruption seen in the wild: a block index entry
+    # whose parent slot points beyond the number of serialized blocks.
+    check patchParentIndex(chain.baseTxFrame, numBlocks, (numBlocks + 50).uint)
+    com.db.persist(chain.baseTxFrame)
+
+    let fc = ForkedChainRef.init(com, baseDistance = 3)
+    let rc = fc.deserialize()
+    check rc.isErr
+    if rc.isOk:
+      debugEcho "DESERIALIZE SHOULD FAIL"
+
+    # The FC must fall back to the persisted base instead of crashing
+    check fc.hashToBlock.len == 1
+    check fc.base == fc.latest
+    check fc.heads.len == 1
+    check fc.validate info & " (2)"
 
   test "isCanonicalAndFinalizedAncestor":
     const info = "isCanonicalAndFinalizedAncestor"

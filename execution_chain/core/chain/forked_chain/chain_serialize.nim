@@ -283,6 +283,11 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
 
   for b in blocks:
     if b.index > 0:
+      # `index` is the parent slot as read from disk, it cannot be trusted
+      if b.index > state.numBlocks:
+        fc.reset(prevBase)
+        return err("corrupted FC: block " & $b.number &
+          " has out of range parent index " & $b.index)
       let parentCandidate = blocks[b.index-1]
       # Check fc corruption
       if parentCandidate.number + 1 != b.number:
