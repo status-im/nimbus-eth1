@@ -55,6 +55,7 @@ type
     networkId*: NetworkId
     custom*   : bool
 
+
   Address = addresses.Address
 
 const
@@ -365,15 +366,15 @@ func genesisBlockForNetwork*(id: NetworkId): Genesis
   else:
     Genesis()
 
-func name*(id: NetworkId): string =
+func name*(id: NetworkId): Opt[string] =
   if id == MainNet:
-    "mainnet"
+    Opt.some("mainnet")
   elif id == SepoliaNet:
-    "sepolia"
+    Opt.some("sepolia")
   elif id == HoodiNet:
-    "hoodi"
+    Opt.some("hoodi")
   else:
-    $id
+    Opt.none(string)
 
 func mergeBlockNumber*(id: NetworkId): BlockNumber =
   let cfg = chainConfigForNetwork(id)
@@ -388,7 +389,9 @@ func networkParams*(id: NetworkId): NetworkParams =
   try:
     NetworkParams(
       genesis: genesisBlockForNetwork(id),
-      config : chainConfigForNetwork(id)
+      config : chainConfigForNetwork(id),
+      custom : false,
+      networkId: id,
     )
   except ValueError as exc:
     raiseAssert exc.msg

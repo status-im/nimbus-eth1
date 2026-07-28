@@ -92,12 +92,12 @@ proc newBroadcastTestEnv(genesisPath = ""): BroadcastTestEnv =
       "--network:" & path,
       "--listen-address: 127.0.0.1",
     ])
+    params = config.computeNetworkParams()
     # Create the sender first, because it funds accounts in networkParams
-    sender = TxSender.new(config.networkParams, 10)
+    sender = TxSender.new(params, 10)
     com = CommonRef.new(
       newCoreDbRef DefaultDbMemory,
-      config.networkId,
-      config.networkParams
+      params
     )
   com.taskpool = Taskpool.new()
   let

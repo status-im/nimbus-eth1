@@ -277,16 +277,17 @@ proc runExecutionClient(p: ExecutionThreadConfig) {.thread.} =
 
   info "Launching execution client", version = FullVersionStr, config
 
+  let params = config.computeNetworkParams()
   when compileOption("threads"):
     let
       # TODO https://github.com/status-im/nim-taskpools/issues/6
       #      share taskpool between bn and ec
       taskpool = setupTaskpool(int config.numThreads)
-      (com, keyCacheEnabled) = setupCommonRef(config, taskpool.numThreads)
+      (com, keyCacheEnabled) = setupCommonRef(config, params, taskpool.numThreads)
     com.taskpool = taskpool
     com.db.mpt.taskpool = taskpool
   else:
-    let (com, keyCacheEnabled) = setupCommonRef(config, 0)
+    let (com, keyCacheEnabled) = setupCommonRef(config, params, 0)
 
   if keyCacheEnabled:
     # Make sure key cache isn't empty
@@ -295,7 +296,7 @@ proc runExecutionClient(p: ExecutionThreadConfig) {.thread.} =
       quit(QuitFailure)
 
   dynamicLogScope(comp = "ec"):
-    nimbus_execution_client.runExeClient(config, com, p.tsp.justWait())
+    nimbus_execution_client.runExeClient(config, com, params, p.tsp.justWait())
 
   # Stop the other thread as well, in case `runExeClient` stopped early
   waitFor p.tsp.fire()

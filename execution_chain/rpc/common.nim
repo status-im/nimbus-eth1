@@ -15,6 +15,7 @@ import
   eth/enode/enode,
   ../networking/[p2p, peer_pool, p2p_types],
   ../conf,
+  ../common/common,
   ../beacon/web3_eth_conv,
   ../nimbus_desc,
   web3/conversions,
@@ -59,7 +60,7 @@ PeerInfo.useDefaultSerializationIn EthJson
 
 EthJson.automaticSerialization(int, true)
 
-proc setupCommonRpc*(node: EthereumNode, config: ExecutionClientConf, server: RpcServer) =
+proc setupCommonRpc*(node: EthereumNode, config: ExecutionClientConf, com: CommonRef, server: RpcServer) =
   server.rpc(EthJson):
     proc web3_clientVersion(): string =
       result = config.agentString
@@ -68,7 +69,7 @@ proc setupCommonRpc*(node: EthereumNode, config: ExecutionClientConf, server: Rp
       result = keccak256(data)
 
     proc net_version(): string =
-      result = $config.networkId
+      result = $com.networkId
 
     proc net_listening(): bool =
       let numPeers = node.numPeers

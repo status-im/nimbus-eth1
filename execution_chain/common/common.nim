@@ -277,7 +277,6 @@ proc isBlockAfterTtd(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool
 proc new*(
     _: type CommonRef;
     db: CoreDbRef;
-    networkId: NetworkId = MainNet;
     params = networkParams(MainNet);
     initializeDb = true;
     statelessProvider = false;
@@ -294,7 +293,7 @@ proc new*(
   new(result)
   result.init(
     db,
-    networkId,
+    params.networkId,
     params.config,
     params.genesis,
     initializeDb,

@@ -51,11 +51,11 @@ type
 proc setupEnv(): TestEnv =
   let
     config = makeConfig(@["--network:" & genesisFile])
-    sender = TxSender.new(config.networkParams, 5)
+    params = config.computeNetworkParams()
+    sender = TxSender.new(params, 5)
     com    = CommonRef.new(
               newCoreDbRef DefaultDbMemory,
-              config.networkId,
-              config.networkParams)
+              params)
     chain  = ForkedChainRef.init(com)
   TestEnv(
     config: config,

@@ -96,12 +96,12 @@ proc initEnv(): TestEnv =
     conf = makeConfig(@[
       "--network:" & genesisFile
     ])
+    params = conf.computeNetworkParams()
 
   let
     com = CommonRef.new(
       newCoreDbRef DefaultDbMemory,
-      conf.networkId,
-      conf.networkParams
+      params
     )
     chain = ForkedChainRef.init(com)
 
@@ -110,7 +110,7 @@ proc initEnv(): TestEnv =
     xdb     : com.db,
     vaultKey: privKey(hexPrivKey),
     nonce   : 0'u64,
-    chainId : conf.networkParams.config.chainId,
+    chainId : params.config.chainId,
     xp      : TxPoolRef.new(chain),
     chain   : chain,
   )

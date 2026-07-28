@@ -38,27 +38,27 @@ const
 type
   TestEnv = object
     config: ExecutionClientConf
+    params: NetworkParams
 
 proc setupEnv(): TestEnv =
   let
     config = makeConfig(@[
       "--network:" & genesisFile
     ])
+    params = config.computeNetworkParams()
 
-  TestEnv(config: config)
+  TestEnv(config: config, params: params)
 
 proc newCom(env: TestEnv): CommonRef =
   CommonRef.new(
       newCoreDbRef DefaultDbMemory,
-      env.config.networkId,
-      env.config.networkParams
+      env.params,
     )
 
 proc newCom(env: TestEnv, db: CoreDbRef): CommonRef =
   CommonRef.new(
       db,
-      env.config.networkId,
-      env.config.networkParams
+      env.params
     )
 
 proc makeBlk(txFrame: CoreDbTxRef, number: BlockNumber, parentBlk: Block): Block =
