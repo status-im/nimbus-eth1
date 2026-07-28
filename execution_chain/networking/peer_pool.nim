@@ -158,7 +158,7 @@ proc createConnectionWorker(p: PeerPoolRef, workerId: int): Future[void] {.async
 proc lookupPeers(p: PeerPoolRef) {.async: (raises: [CancelledError]).} =
   ## Lookup more peers if the node is not yet connected to at least self.minPeers.
   ## Adds the found nodes to the connection queue.
-  if p.connectedNodes.len < p.minPeers:
+  if p.discovery != nil and p.connectedNodes.len < p.minPeers:
     # Add nodes to connQueue from discovery protocol,
     # to be later processed by connection worker
     await p.discovery.lookupRandomNode(p.connQueue)
@@ -171,7 +171,8 @@ func updateForkId(p: PeerPoolRef) =
   if p.lastForkId == forkId:
     return
 
-  p.discovery.updateForkId(forkId)
+  if p.discovery != nil:
+    p.discovery.updateForkId(forkId)
   p.lastForkId = forkId
 
 proc run(p: PeerPoolRef) {.async: (raises: [CancelledError]).} =
@@ -179,7 +180,8 @@ proc run(p: PeerPoolRef) {.async: (raises: [CancelledError]).} =
 
   # initial cycle
   p.updateForkId()
-  await p.discovery.start()
+  if p.discovery != nil:
+    p.discovery.start()
   await p.lookupPeers()
 
   p.running = true
@@ -287,15 +289,16 @@ proc connectToNode*(p: PeerPoolRef, n: Node) {.async: (raises: [CancelledError])
 proc connectToNode*(p: PeerPoolRef, n: ENode) {.async: (raises: [CancelledError]).} =
   await p.connectToNode(newNode(n))
 
-proc start*(p: PeerPoolRef, enableDiscV4: bool, enableDiscV5: bool) =
+proc start*(p: PeerPoolRef) =
   if p.running:
     return
 
-  try:
-    p.discovery.open(enableDiscV4, enableDiscV5)
-  except TransportOsError as exc:
-    fatal "Cannot start discovery protocol", msg=exc.msg
-    quit(QuitFailure)
+  if p.discovery != nil:
+    try:
+      p.discovery.open()
+    except TransportOsError as exc:
+      fatal "Cannot start discovery protocol", msg=exc.msg
+      quit(QuitFailure)
 
   var workers = newSeqOfCap[WorkerFuture](maxConcurrentConnectionRequests+1)
   for i in 0 ..< maxConcurrentConnectionRequests:
@@ -312,4 +315,5 @@ proc closeWait*(p: PeerPoolRef) {.async: (raises: []).} =
   for worker in p.workers:
     futures.add worker.cancelAndWait()
   await noCancel(allFutures(futures))
-  await p.discovery.closeWait()
+  if p.discovery != nil:
+    await p.discovery.closeWait()

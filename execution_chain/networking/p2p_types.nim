@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -14,13 +14,13 @@ import
   eth/common/[base, keys],
   eth/enode/enode,
   ./rlpx/rlpxtransport,
-  ./discoveryv4/kademlia,
+  ./p2p_node,
   ./p2p_peers,
   ./peer_pool,
   json_serialization/std/net as jsnet
 
 export
-  base.NetworkId, rlpxtransport, kademlia,
+  base.NetworkId, rlpxtransport, p2p_node,
   p2p_peers, jsnet
 
 type
