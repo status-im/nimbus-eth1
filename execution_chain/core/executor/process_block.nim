@@ -22,7 +22,6 @@ import
   ../../block_access_list/[bal_tracker, bal_validation],
   ../dao,
   ../eip6110,
-  ../eip7997,
   ./calculate_reward,
   ./executor_helpers,
   ./process_transaction,
@@ -119,9 +118,6 @@ proc procBlkPreamble(
   vmState.mutateLedger:
     if com.daoForkSupport and com.daoForkBlock.get == header.number:
       ledger.applyDAOHardFork()
-
-    if com.amsterdamTransition(vmState.parent.timestamp, header.timestamp):
-      ledger.applyEip7997()
 
   if not skipValidation: # Expensive!
     if blk.transactions.calcTxRoot != header.txRoot:
