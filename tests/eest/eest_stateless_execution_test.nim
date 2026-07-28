@@ -30,31 +30,6 @@ const skipFiles = [
   # https://github.com/status-im/nimbus-eth1/pull/4099
   "witness_codes_create_same_hash_then_read.json",
 
-  # EIP-7997 issue: specs don't implement the fork-transition state change
-  # Nimbus and Geth do.
-  # See potential fix if specs remain as is:
-  # https://github.com/status-im/nimbus-eth1/pull/4480
-  "precompile_warming.json",
-  "call_value_cost_at_transition.json",
-  "cold_account_access_at_transition.json",
-  "create_base_cost_at_transition.json",
-  "ext_code_surcharge_at_transition.json",
-  "selfdestruct_account_write_at_transition.json",
-  "sstore_write_cost_at_transition.json",
-  "reservoir_available_after_transition.json",
-  "sstore_state_gas_at_transition.json",
-  "tx_gas_above_cap_at_transition.json",
-  "max_code_size_via_create_fork_transition.json",
-  "max_initcode_size_via_create_fork_transition.json",
-  "bal_fork_transition_happy_path.json",
-  "fork_transition_bal_size_constraint.json",
-  "slotnum_at_fork_transition.json",
-  "transfer_log_fork_transition.json",
-  "auth_intrinsic_at_transition.json",
-  "intrinsic_reduction_across_amsterdam_transition.json",
-  "builder_exit_contract_deployment.json",
-  "builder_deposit_contract_deployment.json",
-
   # No fail yet as we don't check/use public keys. We could check them easily
   # but the better way is to use them as optimization and check automatically
   # that way.
