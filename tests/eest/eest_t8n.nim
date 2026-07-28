@@ -103,23 +103,13 @@ const
 
 func blockReward(network: string, number: uint64): Option[UInt256] =
   case network:
-  of $TestFork.Frontier, $TestFork.Homestead, $TestFork.EIP150,
-     $TestFork.TangerineWhistle, $TestFork.EIP158, $TestFork.SpuriousDragon,
-     $TestFork.FrontierToHomesteadAt5, $TestFork.HomesteadToEIP150At5,
-     $TestFork.HomesteadToDaoAt5:
+  of $TestFork.Frontier, $TestFork.Homestead,
+     $TestFork.TangerineWhistle, $TestFork.SpuriousDragon:
     some(eth5)
-  of $TestFork.EIP158ToByzantiumAt5:
-    if number < 5: some(eth5)
-    else: some(eth3)
   of $TestFork.Byzantium:
     some(eth3)
-  of $TestFork.ByzantiumToConstantinopleAt5,
-     $TestFork.ByzantiumToConstantinopleFixAt5:
-    if number < 5: some(eth3)
-    else: some(eth2)
-  of $TestFork.Constantinople, $TestFork.ConstantinopleFix,
-     $TestFork.Istanbul, $TestFork.ConstantinopleFixToIstanbulAt5,
-     $TestFork.Berlin, $TestFork.BerlinToLondonAt5, $TestFork.London,
+  of $TestFork.ConstantinopleFix, $TestFork.Istanbul,
+     $TestFork.Berlin, $TestFork.London,
      $TestFork.ArrowGlacier, $TestFork.GrayGlacier:
     some(eth2)
   else:
