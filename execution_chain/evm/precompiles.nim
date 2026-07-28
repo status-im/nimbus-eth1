@@ -618,7 +618,8 @@ func blsPairing(c: Computation): EvmResultVoid =
   var
     g1 {.noinit.}: BLS_G1P
     g2 {.noinit.}: BLS_G2P
-    acc {.noinit.}: BLS_ACC
+    g1Points = newSeqOfCap[BLS_G1P](K)
+    g2Points = newSeqOfCap[BLS_G2P](K)
 
   # Decode pairs
   for i in 0..<K:
@@ -640,14 +641,18 @@ func blsPairing(c: Computation): EvmResultVoid =
     if not g2.subgroupCheck:
       return err(prcErr(PrcInvalidPoint))
 
-    # Update pairing engine with G1 and G2 points
-    if i == 0:
-      acc = millerLoop(g1, g2)
-    else:
-      acc.mul(millerLoop(g1, g2))
+    # A pair with a point at infinity pairs to the identity, leaving the
+    # product unchanged. It must be skipped: millerLoopN cannot take one.
+    if g1.isInf or g2.isInf:
+      continue
+
+    g1Points.add g1
+    g2Points.add g2
 
   c.output.setLen(32)
-  if acc.check():
+
+  # An empty product is the identity, so the check succeeds.
+  if g1Points.len == 0 or millerLoopN(g1Points, g2Points).check():
     c.output[^1] = 1.byte
   ok()
 
