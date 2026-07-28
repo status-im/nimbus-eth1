@@ -385,32 +385,32 @@ stateless_execution_test: | build deps
 
 # EEST standalone targets - binary to run individual test vector files
 eest_engine: | build deps
-	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/$@.nim"
 
 eest_blockchain: | build deps
-	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/$@.nim"
 
 # EEST test suite targets - to run the whole test suite for each category
 eest_engine_test: | build deps eest
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/$@.nim"
 
 eest_txpool_test: | build deps eest
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/$@.nim"
 
 eest_blockchain_test: | build deps eest
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/$@.nim"
 
 eest_stateless_execution_test: | build deps eest
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/$@.nim"
 
 eest_full_test: | build deps eest
 	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/all_eest_tests.nim"
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/all_eest_tests.nim"
 	build/$@
 
 eest_tool_test: | build deps eest
 	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/eest_tool_tests.nim"
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/eest_tool_tests.nim"
 	build/$@
 
 # builds transition tool

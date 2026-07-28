@@ -25,6 +25,7 @@ import
   nimcrypto/[hmac, sha2],
   results,
   ../conf,
+  ../common/chain_config,
   ./jwt_auth_helper,
   ./rpc_server,
   beacon_chain/spec/engine_authentication
@@ -119,7 +120,8 @@ proc verifyTokenHS256(token: string, key: JwtSharedKey): Result[void, JwtError] 
 # ------------------------------------------------------------------------------
 
 proc jwtSharedSecret*(
-    rng: Rng, config: ExecutionClientConf
+    rng: Rng, config: ExecutionClientConf,
+    params: NetworkParams
 ): Result[JwtSharedKey, cstring] =
   ## Return a key for jwt authentication preferable from the argument file
   ## `config.jwtSecret` (which contains at least 32 bytes hex encoded random
@@ -141,16 +143,18 @@ proc jwtSharedSecret*(
   if config.jwtSecretValue.isSome():
     return parseJwtSharedKey(config.jwtSecretValue.get())
 
-  rng.checkJwtSecret(config.dataDir, config.jwtSecretOpt)
+  rng.checkJwtSecret(config.dataDir(params), config.jwtSecretOpt)
 
 proc jwtSharedSecret*(
-    rng: ref rand.HmacDrbgContext, config: ExecutionClientConf
+    rng: ref rand.HmacDrbgContext, config: ExecutionClientConf,
+    params: NetworkParams
 ): Result[JwtSharedKey, cstring] =
   ## Variant of `jwtSharedSecret()` with explicit random generator argument.
   jwtSharedSecret(
     proc(v: var openArray[byte]) =
       rng[].generate(v),
     config,
+    params
   )
 
 proc httpJwtAuth*(key: JwtSharedKey): RpcAuthHook =

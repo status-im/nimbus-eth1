@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2020-2023 Status Research & Development GmbH
+# Copyright (c) 2020-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -8,7 +8,10 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [], gcsafe.}
+
 import nimcrypto/utils
+from stew/staticfor import staticFor
 
 # Blake2 `F` compression function
 # taken from nimcrypto with modification
@@ -65,7 +68,7 @@ template B2BROUND(v, m, n: untyped) =
   B2B_G(v, 2, 7,  8, 13, m[Sigma[n][12]], m[Sigma[n][13]])
   B2B_G(v, 3, 4,  9, 14, m[Sigma[n][14]], m[Sigma[n][15]])
 
-proc blake2Transform(ctx: var Blake2bContext, input: openArray[byte], last: bool, rounds: uint32) {.inline.} =
+func blake2Transform(ctx: var Blake2bContext, input: openArray[byte], last: bool, rounds: uint32) {.inline.} =
   var v: array[16, uint64]
   var m: array[16, uint64]
 
@@ -92,8 +95,12 @@ proc blake2Transform(ctx: var Blake2bContext, input: openArray[byte], last: bool
   m[12] = leLoad64(input, 96); m[13] = leLoad64(input, 104)
   m[14] = leLoad64(input, 112); m[15] = leLoad64(input, 120)
 
-  for i in 0..<rounds:
-    B2BROUND(v, m, i mod 10)
+  const SigmaCycle = 10
+  let R = rounds.int
+  for base in countup(0, R - 1, SigmaCycle):
+    let rem = R - base
+    staticFor i, 0 ..< SigmaCycle:
+      if i < rem: B2BROUND(v, m, i)
 
   ctx.h[0] = ctx.h[0] xor (v[0] xor v[0 + 8])
   ctx.h[1] = ctx.h[1] xor (v[1] xor v[1 + 8])
@@ -111,7 +118,7 @@ const
 
 # input should exactly 213 bytes
 # output needs to accomodate 64 bytes
-proc blake2b_F*(input: openArray[byte], output: var openArray[byte]): bool =
+func blake2b_F*(input: openArray[byte], output: var openArray[byte]): bool =
   # Make sure the input is valid (correct length and final flag)
   if input.len != blake2FInputLength:
     return false

@@ -33,9 +33,7 @@ proc makeGenesis(networkId: NetworkId): Header =
   com.genesisHeader
 
 proc proofOfStake(params: NetworkParams): bool =
-  let com = CommonRef.new(newCoreDbRef DefaultDbMemory,
-    networkId = params.config.chainId.NetworkId,
-    params = params)
+  let com = CommonRef.new(newCoreDbRef DefaultDbMemory, params)
   let header = com.genesisHeader
   com.proofOfStake(header, com.db.baseTxFrame())
 

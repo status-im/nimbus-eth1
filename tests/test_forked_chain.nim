@@ -38,27 +38,27 @@ const
 type
   TestEnv = object
     config: ExecutionClientConf
+    params: NetworkParams
 
 proc setupEnv(): TestEnv =
   let
     config = makeConfig(@[
       "--network:" & genesisFile
     ])
+    params = config.computeNetworkParams()
 
-  TestEnv(config: config)
+  TestEnv(config: config, params: params)
 
 proc newCom(env: TestEnv): CommonRef =
   CommonRef.new(
       newCoreDbRef DefaultDbMemory,
-      env.config.networkId,
-      env.config.networkParams
+      env.params,
     )
 
 proc newCom(env: TestEnv, db: CoreDbRef): CommonRef =
   CommonRef.new(
       db,
-      env.config.networkId,
-      env.config.networkParams
+      env.params
     )
 
 proc makeBlk(txFrame: CoreDbTxRef, number: BlockNumber, parentBlk: Block): Block =
@@ -384,6 +384,36 @@ suite "ForkedChainRef tests":
     # B4 is gone; its child B5 (number 5 <= finalized 6) can never link. The FC
     # declares the whole forward branch dead instead of quarantining it, so the
     # syncer drops the rest of that branch.
+    checkVerdictErr(chain, B5, ImportErrorKind.Orphaned)
+    check chain.validate info
+
+  test "reorg: canonical block pruned below base is AlreadyObserved":
+    const info = "reorg below-base AlreadyObserved"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
+    checkVerdict(chain, blk1, ImportOutcome.Valid)
+    checkVerdict(chain, blk2, ImportOutcome.Valid)
+    checkVerdict(chain, blk3, ImportOutcome.Valid)
+    checkVerdict(chain, blk4, ImportOutcome.Valid)
+    checkVerdict(chain, blk5, ImportOutcome.Valid)
+    checkVerdict(chain, blk6, ImportOutcome.Valid)
+    checkVerdict(chain, blk7, ImportOutcome.Valid)
+    checkVerdict(chain, blk8, ImportOutcome.Valid)
+    checkVerdict(chain, blk9, ImportOutcome.Valid)
+    # Finalize blk8: `base` advances and blocks below it are pruned from memory.
+    # This emulates a concurrent importer (e.g. `el_sync`) finalizing the chain
+    # past a stale sync target.
+    checkForkChoice(chain, blk9, blk8)
+    check chain.baseNumber == 6'u64
+    # blk4/blk5 are canonical but no longer in memory (their parent was pruned by
+    # finality). Re-importing them must not be mistaken for a dead fork: the FC
+    # matches the persisted canonical marker and reports `AlreadyObserved`, so an
+    # importer/syncer recognises the block as done rather than `Orphaned`.
+    check blk5.header.number <= chain.baseNumber
+    checkVerdict(chain, blk4, ImportOutcome.AlreadyObserved)
+    checkVerdict(chain, blk5, ImportOutcome.AlreadyObserved)
+    # A sibling (non-canonical) block below base still hashes differently from the
+    # marker, so it is correctly rejected as Orphaned.
     checkVerdictErr(chain, B5, ImportErrorKind.Orphaned)
     check chain.validate info
 

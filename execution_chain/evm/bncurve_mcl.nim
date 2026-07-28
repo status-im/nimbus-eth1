@@ -159,6 +159,10 @@ func bn256ecMulImpl*(c: Computation): EvmResultVoid  =
 
   ok()
 
+# Number of pairs whose Miller loops are batched into a single call.
+# Matches the batch size used internally by mcl's millerLoopVec.
+const millerLoopBatch = 16
+
 func bn256ecPairingImpl*(c: Computation): EvmResultVoid  =
   let msglen = c.msg.data.len
   if msglen == 0:
@@ -178,23 +182,35 @@ func bn256ecPairingImpl*(c: Computation): EvmResultVoid  =
     mclBnGT_setInt(one.addr, 1.mclInt)
 
     var
-      p1 {.noinit.}: BnG1
-      p2 {.noinit.}: BnG2
+      p1 {.noinit.}: array[millerLoopBatch, BnG1]
+      p2 {.noinit.}: array[millerLoopBatch, BnG2]
+      n = 0
 
     for i in 0..<count:
       let s = i * 192
 
       # Loading AffinePoint[G1], bytes from [0..63]
-      if not p1.deserialize(c.msg.data.toOpenArray(s, s+63)):
+      if not p1[n].deserialize(c.msg.data.toOpenArray(s, s+63)):
         return err(prcErr(PrcInvalidPoint))
 
       # Loading AffinePoint[G2], bytes from [64..191]
-      if not p2.deserialize(c.msg.data.toOpenArray(s+64, s+191)):
+      if not p2[n].deserialize(c.msg.data.toOpenArray(s+64, s+191)):
         return err(prcErr(PrcInvalidPoint))
 
-      # Accumulate pairing result
-      mclBn_pairing(tmp.addr, p1.addr, p2.addr)
+      # Accumulate the Miller loops of a full batch, zero points are
+      # skipped by mcl itself
+      inc n
+      if n == millerLoopBatch:
+        mclBn_millerLoopVec(tmp.addr, p1[0].addr, p2[0].addr, mclSize n)
+        mclBnGT_mul(acc.addr, acc.addr, tmp.addr)
+        n = 0
+
+    if n > 0:
+      mclBn_millerLoopVec(tmp.addr, p1[0].addr, p2[0].addr, mclSize n)
       mclBnGT_mul(acc.addr, acc.addr, tmp.addr)
+
+    # A single final exponentiation for all pairs
+    mclBn_finalExp(acc.addr, acc.addr)
 
     c.output.setLen(32)
     if mclBnGT_isEqual(acc.addr, one.addr) == 1.cint:

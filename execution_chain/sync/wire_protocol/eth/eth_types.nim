@@ -150,6 +150,8 @@ type
     gossipEnabled*: bool
     cleanupTimer*: Future[void].Raising([CancelledError])
     brUpdateTimer*: Future[void].Raising([CancelledError])
+    pendingTxGossip*: AsyncQueue[Hash32]
+    txGossipHeartbeat*: Future[void].Raising([CancelledError])
 
 proc append*(w: var RlpWriter, x: RawBlockAccessList) =
   w.appendRawBytes(distinctBase(x))
