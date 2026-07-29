@@ -30,7 +30,7 @@ func keccak256XkcpUncached*(data: openArray[byte]): Hash32 =
 
 const
   MaxCachedInputLen* = 87
-  DefaultKeccakCacheCapacity* = 1 shl 17
+  DefaultKeccakCacheCapacity* = 1 shl 14
 
 type
   KeccakCacheKey = object
