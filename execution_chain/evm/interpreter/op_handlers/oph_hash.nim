@@ -18,7 +18,6 @@ import
   ../../../constants,
   ../../evm_errors,
   ../../computation,
-  ../../keccak/keccak,
   ../../memory,
   ../../stack,
   ../gas_costs,
@@ -55,7 +54,7 @@ proc sha3Op(cpt: VmCpt): EvmResultVoid =
     # `extend` above guarantees `pos + len <= cpt.memory.len` whenever len > 0,
     # so the clamp is belt and braces.
     let endRange = min(pos + len, cpt.memory.len) - 1
-    cpt.stack.lsTop keccak256Xkcp cpt.memory.bytes.toOpenArray(pos, endRange)
+    cpt.stack.lsTop keccak256 cpt.memory.bytes.toOpenArray(pos, endRange)
   ok()
 
 # ------------------------------------------------------------------------------
