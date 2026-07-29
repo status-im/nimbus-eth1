@@ -129,10 +129,13 @@ proc putMissingBlob*(
 proc putFlatAcc*(
     trd: TravDescRef;
     accPath: Hash32;
+    dirtyStorage: bool;
+    dirtyCode: bool;
     payload: openArray[byte];
     info: static[string];
       ) =
-  trd.db.putFlatAcc(accPath, payload).isOkOr:
+  trd.db.putFlatAcc(
+      accPath, dirtyStorage, dirtyCode, payload).isOkOr:
     error info & ": Error caching account data",
       accPath=accPath.toStr, payload=payload.toHex, `error`=error
     trd.cacheErr.inc
