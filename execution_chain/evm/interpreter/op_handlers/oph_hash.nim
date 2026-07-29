@@ -18,6 +18,7 @@ import
   ../../../constants,
   ../../evm_errors,
   ../../computation,
+  ../../keccak/keccak_xkcp,
   ../../memory,
   ../../stack,
   ../gas_costs,
@@ -43,11 +44,18 @@ proc sha3Op(cpt: VmCpt): EvmResultVoid =
 
   cpt.memory.extend(pos, len)
 
-  let endRange = min(pos + len, cpt.memory.len) - 1
-  if endRange == -1 or pos >= cpt.memory.len:
+  if len == 0:
+    # Short circuit on the constant rather than hashing an empty slice. The
+    # previous condition (`endRange == -1 or pos >= cpt.memory.len`) only caught
+    # this at offset 0 or past the end of memory: a zero-length hash at a
+    # non-zero offset inside allocated memory fell through and paid a full
+    # permutation for a result that is always EMPTY_SHA3.
     cpt.stack.lsTop(EMPTY_SHA3)
   else:
-    cpt.stack.lsTop keccak256 cpt.memory.bytes.toOpenArray(pos, endRange)
+    # `extend` above guarantees `pos + len <= cpt.memory.len` whenever len > 0,
+    # so the clamp is belt and braces.
+    let endRange = min(pos + len, cpt.memory.len) - 1
+    cpt.stack.lsTop keccak256Xkcp cpt.memory.bytes.toOpenArray(pos, endRange)
   ok()
 
 # ------------------------------------------------------------------------------
