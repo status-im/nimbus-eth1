@@ -27,8 +27,8 @@
 ##   retried. A lookup that loses the race simply reports a miss, so callers
 ##   fall back to computing the value. Correctness never depends on winning.
 ##
-## Deliberately not ported: the epoch/`clear` machinery and drop handling for
-## non-trivial types. Keys and values here must be `supportsCopyMem`, so there
+## Deliberately not ported: the epoch/`clear` machinery, the optional statistics
+## counters, and drop handling for non-trivial types. Keys and values here must be `supportsCopyMem`, so there
 ## is nothing to drop, which is also why `AliveBit` is never set (the original
 ## sets it only when `NEEDS_DROP`).
 
@@ -51,11 +51,6 @@ type
   FixedCache*[K, V] = object
     entries: ptr UncheckedArray[Bucket[K, V]]
     numEntries: int
-    when defined(fixedCacheStats):
-      hits*: Atomic[int]
-      misses*: Atomic[int]
-      inserts*: Atomic[int]
-      collisions*: Atomic[int]
 
   Slot* = object
     ## Result of hashing a key once, so a lookup and the insert that follows it
@@ -98,7 +93,7 @@ func locate*[K, V](c: FixedCache[K, V], key: auto): Slot {.inline.} =
   Slot(idx: int(h and c.indexMask()), tag: h and c.tagMask())
 
 proc tryLock[K, V](b: ptr Bucket[K, V], expected: uint,
-                   hasExpected: bool, prev: var uint): bool {.inline.} =
+                   hasExpected: bool): bool {.inline.} =
   let state = b.tag.load(moRelaxed)
   if hasExpected:
     if state != expected:
@@ -107,11 +102,7 @@ proc tryLock[K, V](b: ptr Bucket[K, V], expected: uint,
     return false
 
   var cmp = state
-  if b.tag.compareExchange(cmp, state or LockedBit, moAcquire, moRelaxed):
-    prev = state
-    true
-  else:
-    false
+  b.tag.compareExchange(cmp, state or LockedBit, moAcquire, moRelaxed)
 
 proc unlock[K, V](b: ptr Bucket[K, V], tag: uint) {.inline.} =
   b.tag.store(tag, moRelease)
@@ -122,30 +113,20 @@ proc getBySlot*[K, V](
   ## another thread, or holding a different tag, reports a miss.
   mixin `==`
   let b = addr c.entries[slot.idx]
-  var prev: uint
-  if b.tryLock(slot.tag, true, prev):
+  if b.tryLock(slot.tag, true):
     if b.key == key:
       val = b.val
       b.unlock(slot.tag)
-      when defined(fixedCacheStats):
-        discard c.hits.fetchAdd(1, moRelaxed)
       return true
     b.unlock(slot.tag)
-  when defined(fixedCacheStats):
-    discard c.misses.fetchAdd(1, moRelaxed)
   false
 
 proc putBySlot*[K, V](c: var FixedCache[K, V], slot: Slot, key: K, val: V) {.inline.} =
   ## Insert, evicting whatever occupies the bucket. A bucket currently locked
   ## by another thread is left alone and the insert is dropped.
   let b = addr c.entries[slot.idx]
-  var prev: uint
-  if not b.tryLock(0, false, prev):
+  if not b.tryLock(0, false):
     return
-  when defined(fixedCacheStats):
-    discard c.inserts.fetchAdd(1, moRelaxed)
-    if prev != 0:
-      discard c.collisions.fetchAdd(1, moRelaxed)
   b.key = key
   b.val = val
   b.unlock(slot.tag)

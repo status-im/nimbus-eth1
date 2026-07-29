@@ -277,6 +277,28 @@ proc opCustomMain*() =
       stack: "0x02"
       memory: "0x0000000000000000000000000000000000000000000000000000000000000201"
 
+    assembler: # SHA3 OP, zero length at offset zero
+      title: "SHA3_EMPTY_AT_ZERO"
+      code:
+        Push1 "0x00"
+        Push1 "0x00"
+        Sha3
+      stack: "0xC5D2460186F7233C927E7DB2DCC703C0E500B653CA82273B7BFAD8045D85A470"
+
+    assembler: # SHA3 OP, zero length at a non-zero offset inside allocated memory
+      title: "SHA3_EMPTY_AT_OFFSET"
+      code:
+        Push1 "0x00"
+        Push1 "0x20"
+        Mstore
+        Push1 "0x00"
+        Push1 "0x20"
+        Sha3
+      stack: "0xC5D2460186F7233C927E7DB2DCC703C0E500B653CA82273B7BFAD8045D85A470"
+      memory:
+        "0x00"
+        "0x00"
+
     assembler: # BLOCKHASH OP
       title: "BLOCKHASH_1"
       code:

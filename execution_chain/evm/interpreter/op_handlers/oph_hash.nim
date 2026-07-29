@@ -18,7 +18,7 @@ import
   ../../../constants,
   ../../evm_errors,
   ../../computation,
-  ../../keccak/keccak_xkcp,
+  ../../keccak/keccak,
   ../../memory,
   ../../stack,
   ../gas_costs,
