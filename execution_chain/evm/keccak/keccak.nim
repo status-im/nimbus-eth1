@@ -37,12 +37,24 @@ type
     len: uint8
     data: array[MaxCachedInputLen, byte]
 
-func `==`(a, b: KeccakCacheKey): bool =
-  a.len == b.len and
-    equalMem(unsafeAddr a.data[0], unsafeAddr b.data[0], int(a.len))
+# A lookup is done against the caller's bytes directly - hashing and comparing
+# a borrowed view rather than building a KeccakCacheKey first. Only an insert
+# needs the owned key. `hash(KeccakCacheKey)` is defined in terms of the
+# openArray one so the two can never disagree: if they did, every lookup would
+# probe a different bucket than the matching insert wrote, and the cache would
+# silently never hit while still returning correct digests.
+func hash(data: openArray[byte]): Hash =
+  cast[Hash](rapidhashMicro(unsafeAddr data[0], csize_t(data.len)))
 
 func hash(k: KeccakCacheKey): Hash =
-  cast[Hash](rapidhashMicro(unsafeAddr k.data[0], csize_t(k.len)))
+  hash(k.data.toOpenArray(0, int(k.len) - 1))
+
+func `==`(k: KeccakCacheKey, data: openArray[byte]): bool =
+  int(k.len) == data.len and
+    equalMem(unsafeAddr k.data[0], unsafeAddr data[0], data.len)
+
+func `==`(a, b: KeccakCacheKey): bool =
+  a == b.data.toOpenArray(0, int(b.len) - 1)
 
 static:
   doAssert sizeof(KeccakCacheKey) + sizeof(Hash32) + sizeof(uint) <= 128
@@ -51,21 +63,22 @@ var keccakCache: FixedCache[KeccakCacheKey, Hash32]
 
 keccakCache.init(DefaultKeccakCacheCapacity)
 
-proc keccak256Xkcp*(data: openArray[byte]): Hash32 =
+proc keccak256Xkcp*(data: openArray[byte]): Hash32 {.inline.} =
   if data.len == 0:
     return emptyKeccak256
   if data.len > MaxCachedInputLen:
     return keccak256XkcpUncached(data)
 
-  var key: KeccakCacheKey
-  key.len = uint8(data.len)
-  copyMem(addr key.data[0], unsafeAddr data[0], data.len)
-
   {.cast(gcsafe).}:
-    let slot = keccakCache.locate(key)
-    if keccakCache.getBySlot(slot, key, result):
+    let slot = keccakCache.locate(data)
+    if keccakCache.getBySlot(slot, data, result):
       return result
+
     result = keccak256XkcpUncached(data)
+
+    var key: KeccakCacheKey
+    key.len = uint8(data.len)
+    copyMem(addr key.data[0], unsafeAddr data[0], data.len)
     keccakCache.putBySlot(slot, key, result)
 
 {.pop.}
