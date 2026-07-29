@@ -13,7 +13,7 @@
 import
   std/[hashes, os, strutils],
   eth/common/hashes as eth_hashes,
-  ../../concurrency/lru
+  ../../concurrency/fixed_cache
 
 export eth_hashes.Hash32
 
@@ -44,16 +44,19 @@ type
     len: uint8
     data: array[MaxCachedInputLen, byte]
 
+func `==`(a, b: KeccakCacheKey): bool =
+  a.len == b.len and
+    equalMem(unsafeAddr a.data[0], unsafeAddr b.data[0], int(a.len))
+
 func hash(k: KeccakCacheKey): Hash =
   cast[Hash](rapidhashMicro(unsafeAddr k.data[0], csize_t(k.len)))
 
-var keccakCache: ConcurrentLruCache[KeccakCacheKey, Hash32]
+static:
+  doAssert sizeof(KeccakCacheKey) + sizeof(Hash32) + sizeof(uint) <= 128
 
-keccakCache.init(DefaultKeccakCacheCapacity, shardBits = 0, threadSafe = false)
+var keccakCache: FixedCache[KeccakCacheKey, Hash32]
 
-proc keccakCacheLen*(): int =
-  {.cast(gcsafe).}:
-    keccakCache.len()
+keccakCache.init(DefaultKeccakCacheCapacity)
 
 proc keccak256Xkcp*(data: openArray[byte]): Hash32 =
   if data.len == 0:
@@ -66,11 +69,10 @@ proc keccak256Xkcp*(data: openArray[byte]): Hash32 =
   copyMem(addr key.data[0], unsafeAddr data[0], data.len)
 
   {.cast(gcsafe).}:
-    let kh = keccakCache.toKeyHash(key)
-    keccakCache.withGetByHash(kh, key, cached):
-      return cached
-    do:
-      result = keccak256XkcpUncached(data)
-      keccakCache.putByHash(kh, key, result)
+    let slot = keccakCache.locate(key)
+    if keccakCache.getBySlot(slot, key, result):
+      return result
+    result = keccak256XkcpUncached(data)
+    keccakCache.putBySlot(slot, key, result)
 
 {.pop.}
