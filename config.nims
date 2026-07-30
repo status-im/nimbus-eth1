@@ -191,8 +191,7 @@ switch("hintAsError", "DuplicateModuleImport:on")
 # disable nim-kzg's blst
 switch("define", "kzgExternalBlst")
 
-# Memoise keccak256 of short inputs in the EVM KECCAK256 opcode. Off by default
-# in the module since it only pays above a break-even hit rate; enabled here.
+# Globally memoize keccak256 hashes of short inputs
 switch("define", "keccakCacheEnabled:true")
 
 # We lock down rocksdb to a particular version
