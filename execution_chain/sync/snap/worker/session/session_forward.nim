@@ -21,8 +21,8 @@ logScope:
 
 const
   VerifyAgainstCoreDb = false
-    ## Do a `CoreDb` import when verifying state roots and compare it
-    ## against the state root compiled for the flat tables.
+    ## Do a secondary `CoreDb` import when verifying state roots and
+    ## compare it against the state root compiled for the flat tables.
     ##
     ## Note that this feature needs the debug syb-modules which are
     ## only available in a test environment.
@@ -30,9 +30,8 @@ const
     ## This constant `VerifyAgainstCoreDb` is temporarily used
     ## and will go away.
 
-when VerifyAgainstCoreDb:                           # FIXME, will go away
-  import                                            # FIXME, will go away
-    ./session_debug                                 # FIXME, will go away
+when VerifyAgainstCoreDb:
+  import ./session_coredb
 
 # ------------------------------------------------------------------------------
 # Public functions
