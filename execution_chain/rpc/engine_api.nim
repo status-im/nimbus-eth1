@@ -45,6 +45,8 @@ const supportedMethods: HashSet[string] =
     "engine_newPayloadV3",
     "engine_newPayloadV4",
     "engine_newPayloadV5",
+    "engine_newPayloadWithWitnessV4",
+    "engine_newPayloadWithWitnessV5",
     "engine_getPayloadV1",
     "engine_getPayloadV2",
     "engine_getPayloadV3",
@@ -57,7 +59,7 @@ const supportedMethods: HashSet[string] =
     "engine_forkchoiceUpdatedV4",
     "engine_getPayloadBodiesByHashV1",
     "engine_getPayloadBodiesByHashV2",
-    "engine_getPayloadBodiesByRangeV1",    
+    "engine_getPayloadBodiesByRangeV1",
     "engine_getPayloadBodiesByRangeV2",
     "engine_getClientVersionV1",
     "engine_getBlobsV1",
@@ -103,6 +105,38 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
       apiTiming("engine_newPayloadV5"):
         await engine.newPayload(Version.V5, payload,
           expectedBlobVersionedHashes, parentBeaconBlockRoot, executionRequests)
+
+    proc engine_newPayloadWithWitnessV4(
+        payload: ExecutionPayload,
+        expectedBlobVersionedHashes: Opt[seq[Hash32]],
+        parentBeaconBlockRoot: Opt[Hash32],
+        executionRequests: Opt[seq[seq[byte]]],
+    ): PayloadStatusV1 {.async: (raises: [CancelledError, ApplicationError, RlpError]).} =
+      apiTiming("engine_newPayloadWithWitnessV4"):
+        await engine.newPayload(
+          Version.V4,
+          payload,
+          expectedBlobVersionedHashes,
+          parentBeaconBlockRoot,
+          executionRequests,
+          withWitness = true,
+        )
+
+    proc engine_newPayloadWithWitnessV5(
+        payload: ExecutionPayload,
+        expectedBlobVersionedHashes: Opt[seq[Hash32]],
+        parentBeaconBlockRoot: Opt[Hash32],
+        executionRequests: Opt[seq[seq[byte]]],
+    ): PayloadStatusV1 {.async: (raises: [CancelledError, ApplicationError, RlpError]).} =
+      apiTiming("engine_newPayloadWithWitnessV5"):
+        await engine.newPayload(
+          Version.V5,
+          payload,
+          expectedBlobVersionedHashes,
+          parentBeaconBlockRoot,
+          executionRequests,
+          withWitness = true,
+        )
 
     proc engine_getPayloadV1(payloadId: Bytes8): ExecutionPayloadV1 {.raises: [CatchableError].} =
       apiTiming("engine_getPayloadV1"):
