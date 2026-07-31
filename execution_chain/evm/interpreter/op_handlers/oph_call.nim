@@ -87,12 +87,12 @@ proc gasCallEIP2929(c: Computation, codeAddress: Address): GasProc =
         if not ledger.inAccessList(codeAddress):
           ledger.accessList(codeAddress)
 
-          # The WarmStorageReadCostEIP2929 (100) is already deducted in
+          # The WARM_ACCESSEIP2929 (100) is already deducted in
           # the form of a constant `gasCall`
           if c.fork >= FkAmsterdam:
-            (COLD_ACCOUNT_ACCESS_8038 - WarmStorageReadCost).GasInt
+            (COLD_ACCOUNT_ACCESS_8038 - WARM_ACCESS).GasInt
           else:
-            (COLD_ACCOUNT_ACCESS_2929 - WarmStorageReadCost).GasInt
+            (COLD_ACCOUNT_ACCESS_2929 - WARM_ACCESS).GasInt
         else:
           0.GasInt
   else:

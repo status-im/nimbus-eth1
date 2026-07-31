@@ -269,7 +269,7 @@ proc sstoreEIP8038Op(cpt: VmCpt): EvmResultVoid =
     ledger = cpt.vmState.ledger
     isColdAccess = not ledger.inAccessList(cpt.msg.contractAddress, slot)
     coldAccessGas = if isColdAccess: COLD_STORAGE_ACCESS_8038
-                    else: WarmStorageReadCost
+                    else: WARM_ACCESS
 
   ? cpt.gasMeter.checkGas(max(coldAccessGas, SentryGasEIP2200 + 1).GasInt)
   if isColdAccess:
