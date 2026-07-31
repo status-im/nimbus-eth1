@@ -33,15 +33,15 @@
 
 import
   ./mpt_cache/[
-    cache_desc, cache_download, cache_init, cache_header_bal,
-    cache_leafs, cache_part_mpt, cache_state]
+    cache_desc, cache_download, cache_flat, cache_init, cache_header_bal,
+    cache_part_mpt, cache_state]
 
 export
   cache_desc,
-  cache_download, 
+  cache_download,
+  cache_flat,
   cache_header_bal,
   cache_init,
-  cache_leafs, 
   cache_part_mpt,
   cache_state
 
