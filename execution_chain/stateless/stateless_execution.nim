@@ -27,7 +27,8 @@ import
 
 from beacon_chain/spec/datatypes/electra import
   DepositRequest, WithdrawalRequest, ConsolidationRequest
-from beacon_chain/spec/datatypes/gloas import ExecutionPayload
+from beacon_chain/spec/datatypes/gloas import
+  ExecutionPayload, BuilderDepositRequest, BuilderExitRequest
 from ../utils/utils import calcRequestsHash
 
 export witness_types, stateless_types, common, headers, blocks, results
@@ -240,9 +241,7 @@ func chainConfigForStateless(cc: StatelessChainConfig): ChainConfig =
 
 # Encode execution requests into EL format:
 # https://github.com/ethereum/execution-specs/blob/e5a8caf1b8055e4d805c7fb169edfa710914b7da/src/ethereum/forks/amsterdam/execution_engine/requests.py#L108
-func encodeDeposits(
-    deposits: List[DepositRequest, Limit MAX_DEPOSIT_REQUESTS_PER_PAYLOAD]
-): seq[byte] =
+func encodeDeposits(deposits: seq[DepositRequest]): seq[byte] =
   var res: seq[byte]
   for d in deposits:
     res.add(d.pubkey.blob)
@@ -252,9 +251,7 @@ func encodeDeposits(
     res.add(d.index.toBytesLE())
   res
 
-func encodeWithdrawals(
-    withdrawals: List[WithdrawalRequest, Limit MAX_WITHDRAWAL_REQUESTS_PER_PAYLOAD]
-): seq[byte] =
+func encodeWithdrawals(withdrawals: seq[WithdrawalRequest]): seq[byte] =
   var res: seq[byte]
   for w in withdrawals:
     res.add(w.source_address.data)
@@ -262,15 +259,28 @@ func encodeWithdrawals(
     res.add(uint64(w.amount).toBytesLE())
   res
 
-func encodeConsolidations(
-    consolidations:
-      List[ConsolidationRequest, Limit MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD]
-): seq[byte] =
+func encodeConsolidations(consolidations: seq[ConsolidationRequest]): seq[byte] =
   var res: seq[byte]
   for c in consolidations:
     res.add(c.source_address.data)
     res.add(c.source_pubkey.blob)
     res.add(c.target_pubkey.blob)
+  res
+
+func encodeBuilderDeposits(deposits: seq[BuilderDepositRequest]): seq[byte] =
+  var res: seq[byte]
+  for d in deposits:
+    res.add(d.pubkey.blob)
+    res.add(d.withdrawal_credentials.data)
+    res.add(uint64(d.amount).toBytesLE())
+    res.add(d.signature.blob)
+  res
+
+func encodeBuilderExits(exits: seq[BuilderExitRequest]): seq[byte] =
+  var res: seq[byte]
+  for e in exits:
+    res.add(e.source_address.data)
+    res.add(e.pubkey.blob)
   res
 
 proc executeNewPayload(input: StatelessInput): Result[void, string] =
@@ -283,6 +293,8 @@ proc executeNewPayload(input: StatelessInput): Result[void, string] =
         (DEPOSIT_REQUEST_TYPE, encodeDeposits(reqs.deposits)),
         (WITHDRAWAL_REQUEST_TYPE, encodeWithdrawals(reqs.withdrawals)),
         (CONSOLIDATION_REQUEST_TYPE, encodeConsolidations(reqs.consolidations)),
+        (BUILDER_DEPOSIT_REQUEST_TYPE, encodeBuilderDeposits(reqs.builder_deposits)),
+        (BUILDER_EXIT_REQUEST_TYPE, encodeBuilderExits(reqs.builder_exits)),
       )
     )
     parentBeaconBlockRoot =
