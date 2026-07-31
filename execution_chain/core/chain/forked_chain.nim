@@ -21,6 +21,7 @@ import
   ../../evm/state,
   ../validate,
   ../../portal/portal,
+  ../../stateless/witness_generation,
   ./forked_chain/[
     chain_desc,
     chain_branch,
@@ -1370,3 +1371,16 @@ proc getBlockAccessList*(c: ForkedChainRef, blockHash: Hash32): Opt[BlockAccessL
     return Opt.none(BlockAccessList)
 
   bal.map(proc (v: auto): auto = v[])
+
+proc getExecutionWitness*(
+    c: ForkedChainRef, blockHash: Hash32
+): Result[ExecutionWitnessWithKeys, string] =
+  ## Return the execution witness created when importing the given block
+  let txFrame = c.txFrame(blockHash).txFrameBegin()
+  defer:
+    txFrame.dispose()
+
+  let witness = txFrame.getWitness(blockHash).valueOr:
+    return err("Witness not found")
+
+  ok(ExecutionWitnessWithKeys.build(witness, txFrame))
