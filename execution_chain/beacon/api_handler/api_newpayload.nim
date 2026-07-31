@@ -18,7 +18,8 @@ import
   ../web3_eth_conv,
   ../beacon_engine,
   ../payload_conv,
-  ./api_utils
+  ./api_utils,
+  ./api_witness
 
 {.push gcsafe, raises:[].}
 
@@ -202,7 +203,8 @@ proc newPayload*(ben: BeaconEngineRef,
                  payload: ExecutionPayload,
                  versionedHashes = Opt.none(seq[Hash32]),
                  beaconRoot = Opt.none(Hash32),
-                 executionRequests = Opt.none(seq[seq[byte]])):
+                 executionRequests = Opt.none(seq[seq[byte]]),
+                 withWitness = false):
                    Future[PayloadStatusV1] {.async: (raises: [CancelledError, RpcResponseError, RlpError]).} =
 
   trace "Engine API request received",
@@ -272,7 +274,11 @@ proc newPayload*(ben: BeaconEngineRef,
   if chain.haveBlockAndState(blockHash):
     debug "Ignoring already known beacon payload",
       number = header.number, hash = blockHash.short
-    return validStatus(blockHash)
+    return
+      if withWitness:
+        validStatus(blockHash, ben.collectWitness(blockHash))
+      else:
+        validStatus(blockHash)
 
   # If this block was rejected previously, keep rejecting it
   block:
@@ -350,4 +356,8 @@ proc newPayload*(ben: BeaconEngineRef,
     gasUsed = header.gasUsed,
     blobGas = header.blobGasUsed.get(0'u64)
 
-  return validStatus(blockHash)
+  return
+    if withWitness:
+      validStatus(blockHash, ben.collectWitness(blockHash))
+    else:
+      validStatus(blockHash)
