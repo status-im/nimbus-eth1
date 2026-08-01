@@ -48,14 +48,24 @@ func encodeExtWitness(w: ExecutionWitnessWithKeys): Result[seq[byte], string] =
     rlp.encode(ExtWitness(headers: headers, codes: w.codes, state: w.state, keys: @[]))
   )
 
-proc collectWitness*(ben: BeaconEngineRef, blockHash: Hash32): Opt[seq[byte]] =
-  ## Return the RLP-encoded witness for `blockHash`, or none if unavailable
-  let witness = ben.chain.getExecutionWitness(blockHash).valueOr:
-    warn "Execution witness not available, is --stateless-provider enabled?",
-      hash = blockHash.short, error = error
+proc collectWitness*(ben: BeaconEngineRef, blk: Block): Opt[seq[byte]] =
+  ## Return the RLP-encoded execution witness for `blk`, or none if unavailable.
+  ## When the node runs with `--stateless-provider` the witness stored during
+  ## import is used else it is generated on demand by re-executing the block
+  ## against its parent state.
+  let blockHash = blk.header.computeBlockHash()
+
+  let witness =
+    if ben.chain.com.statelessProvider:
+      ben.chain.getExecutionWitness(blockHash)
+    else:
+      ben.chain.generateExecutionWitness(blk)
+
+  let w = witness.valueOr:
+    warn "Execution witness not available", hash = blockHash.short, error = error
     return Opt.none(seq[byte])
 
-  let encoded = encodeExtWitness(witness).valueOr:
+  let encoded = encodeExtWitness(w).valueOr:
     warn "Failed to encode execution witness", hash = blockHash.short, error = error
     return Opt.none(seq[byte])
 
