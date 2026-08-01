@@ -20,6 +20,7 @@ import
   ../../evm/types,
   ../../evm/state,
   ../validate,
+  ../executor/process_block,
   ../../portal/portal,
   ../../stateless/witness_generation,
   ./forked_chain/[
@@ -1371,5 +1372,42 @@ proc getExecutionWitness*(
 
   let witness = txFrame.getWitness(blockHash).valueOr:
     return err("Witness not found")
+
+  ok(ExecutionWitnessWithKeys.build(witness, txFrame))
+
+proc generateExecutionWitness*(
+    c: ForkedChainRef, blk: Block
+): Result[ExecutionWitnessWithKeys, string] =
+  ## Build the execution witness for `blk` on demand by re-executing it against
+  ## its parent state, without requiring `--stateless-provider` and without
+  ## persisting anything. Works for a freshly imported or already known block as
+  ## long as the parent state is available, else the state root check errors.
+  template header(): Header = blk.header
+
+  let parentHeader = ?c.headerByHash(header.parentHash)
+
+  # Execute on a throwaway frame so the shared parent state is never modified.
+  let
+    parentFrame = c.txFrame(header.parentHash)
+    txFrame = parentFrame.txFrameBegin()
+  defer:
+    txFrame.dispose()
+
+  let vmState = BaseVMState()
+  vmState.init(parentHeader, header, c.com, txFrame, collectWitness = true)
+
+  # No block access list keeps execution sequential (parallel skips witness keys).
+  ?vmState.processBlock(
+    blk,
+    blockAccessList = Opt.none(BlockAccessListRef),
+    skipValidation = true,
+    skipReceipts = true,
+    skipUncles = true,
+    skipStateRootCheck = false,
+    skipPostExecBalCheck = true)
+
+  let
+    preStateLedger = LedgerRef.init(parentFrame)
+    witness = Witness.build(preStateLedger, vmState.ledger, parentHeader, header)
 
   ok(ExecutionWitnessWithKeys.build(witness, txFrame))
