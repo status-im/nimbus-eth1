@@ -14,7 +14,8 @@ import
   std/[importutils, sequtils],
   unittest2,
   taskpools,
-  ../../execution_chain/concurrency/lru {.all.}
+  ../../execution_chain/concurrency/lru {.all.},
+  ../../execution_chain/concurrency/shared_types
 
 privateAccess(LruCache)
 privateAccess(ConcurrentLruCache)
@@ -231,7 +232,7 @@ suite "LruCache Tests":
       # No growth
       for (evicted, key, value) in lru.putWithEvicted(i, i):
         check:
-          not evicted or (i == 200000 and value == 0)
+          not evicted or (i == 200000 and value[] == 0)
       check lru.contains(i)
 
     check:
@@ -346,7 +347,7 @@ suite "LruCache Tests":
         not found1
         not evicted
         key == 10
-        value == 11
+        value[] == 11
       found1 = true
 
     check:
@@ -359,7 +360,7 @@ suite "LruCache Tests":
         not found2
         evicted
         key == 20
-        value == 22 # Last accessed, now that 10 was updated
+        value[] == 22 # Last accessed, now that 10 was updated
       found2 = true
     check:
       found2
@@ -1324,3 +1325,210 @@ suite "ConcurrentLruCache Tests (threadSafe = false)":
     check:
       seen == 70
       lru.peek(key) == Opt.some(70)
+
+suite "ConcurrentLruCache with move-only values Tests":
+  proc newCache(
+      capacity: int, threadSafe: bool
+  ): ConcurrentLruCache[int, SharedBytes] =
+    if threadSafe:
+      result.init(capacity, shardBits = 0, threadSafe = true)
+    else:
+      result.init(capacity, shardBits = 0, threadSafe = false)
+
+  proc disposeAll(lru: var ConcurrentLruCache[int, SharedBytes]) =
+    for value in lru.mvalues():
+      value.dispose()
+    lru.dispose()
+
+  for threadSafe in [false, true]:
+    let mode = " (threadSafe = " & $threadSafe & ")"
+
+    test "stores and retrieves SharedBytes values" & mode:
+      var lru = newCache(10, threadSafe)
+      defer:
+        lru.disposeAll()
+
+      lru.put(1, SharedBytes.init([1'u8, 2, 3]))
+      lru.put(2, SharedBytes.init([4'u8, 5, 6, 7]))
+
+      check:
+        lru.len() == 2
+        lru.contains(1)
+        lru.contains(2)
+        not lru.contains(3)
+
+      var seen1 = false
+      lru.withGet(1, v):
+        check v.data() == @[1'u8, 2, 3]
+        seen1 = true
+      check seen1
+
+      var seen2 = false
+      lru.withPeek(2, v):
+        check v.data() == @[4'u8, 5, 6, 7]
+        seen2 = true
+      check seen2
+
+      var ranMissing = false
+      lru.withGet(99, v):
+        ranMissing = true
+      check not ranMissing
+
+    test "withGet and put with a precomputed hash" & mode:
+      var lru = newCache(10, threadSafe)
+      defer:
+        lru.disposeAll()
+
+      let
+        key = 7
+        keyHash = lru.toKeyHash(key)
+
+      lru.putByHash(keyHash, key, SharedBytes.init([7'u8, 7]))
+
+      var seen = newSeq[byte]()
+      lru.withGetByHash(keyHash, key, v):
+        seen = v.data()
+      check seen == @[7'u8, 7]
+
+    test "putWithEvicted returns the replaced value" & mode:
+      var lru = newCache(10, threadSafe)
+      defer:
+        lru.disposeAll()
+
+      check lru.putWithEvicted(1, SharedBytes.init([1'u8, 2, 3])).isNone()
+
+      var replaced = lru.putWithEvicted(1, SharedBytes.init([9'u8, 9]))
+      check:
+        replaced.isSome()
+        replaced.unsafeGet().data() == @[1'u8, 2, 3]
+        lru.len() == 1
+      replaced.unsafeGet().dispose()
+
+      var seen = newSeq[byte]()
+      lru.withGet(1, v):
+        seen = v.data()
+      check seen == @[9'u8, 9]
+
+    test "putWithEvicted returns the evicted LRU value" & mode:
+      var lru = newCache(2, threadSafe)
+      defer:
+        lru.disposeAll()
+
+      lru.put(1, SharedBytes.init([1'u8]))
+      lru.put(2, SharedBytes.init([2'u8]))
+      check lru.len() == 2
+
+      var evicted = lru.putWithEvicted(3, SharedBytes.init([3'u8]))
+      check:
+        evicted.isSome()
+        evicted.unsafeGet().data() == @[1'u8]
+        lru.len() == 2
+        not lru.contains(1)
+        lru.contains(2)
+        lru.contains(3)
+      evicted.unsafeGet().dispose()
+
+    test "pop transfers ownership of the value" & mode:
+      var lru = newCache(10, threadSafe)
+      defer:
+        lru.disposeAll()
+
+      lru.put(1, SharedBytes.init([1'u8, 2, 3]))
+      lru.put(2, SharedBytes.init([4'u8, 5]))
+
+      var popped = lru.pop(1)
+      check:
+        popped.isSome()
+        popped.unsafeGet().data() == @[1'u8, 2, 3]
+        lru.len() == 1
+        not lru.contains(1)
+        lru.pop(1).isNone()
+      popped.unsafeGet().dispose()
+
+    test "values survive growth and eviction churn" & mode:
+      const capacity = 200
+      var lru = newCache(capacity, threadSafe)
+      defer:
+        lru.disposeAll()
+
+      for i in 0 ..< capacity * 4:
+        var evicted =
+          lru.putWithEvicted(i, SharedBytes.init([byte(i and 0xff), 1, 2]))
+        if evicted.isSome():
+          evicted.unsafeGet().dispose()
+
+      check lru.len() == capacity
+
+      for i in capacity * 3 ..< capacity * 4:
+        var seen = newSeq[byte]()
+        lru.withGet(i, v):
+          seen = v.data()
+        check seen == @[byte(i and 0xff), 1, 2]
+
+    test "does not leak shared memory" & mode:
+      let before = getOccupiedSharedMem()
+      for _ in 0 ..< 20:
+        var lru = newCache(8, threadSafe)
+        for i in 0 ..< 32:
+          var evicted = lru.putWithEvicted(i, SharedBytes.init([byte(i), byte(i)]))
+          if evicted.isSome():
+            evicted.unsafeGet().dispose()
+
+        var popped = lru.pop(31)
+        popped.unsafeGet().dispose()
+
+        lru.disposeAll()
+      check getOccupiedSharedMem() == before
+
+  test "concurrent put, withGet and pop of SharedBytes":
+    const
+      numThreads = 4
+      keysPerThread = 250
+      totalKeys = numThreads * keysPerThread
+
+    var lru: ConcurrentLruCache[int, SharedBytes]
+    lru.init(totalKeys * 2)
+    defer:
+      lru.dispose()
+    let cachePtr = addr lru
+
+    var tp = Taskpool.new(numThreads = numThreads)
+    defer:
+      tp.shutdown()
+
+    proc tpPut(cache: ptr ConcurrentLruCache[int, SharedBytes], base, count: int) =
+      for i in 0 ..< count:
+        let key = base + i
+        var evicted =
+          cache[].putWithEvicted(key, SharedBytes.init([byte(key and 0xff), 3]))
+        if evicted.isSome():
+          evicted.unsafeGet().dispose()
+
+    proc tpRead(cache: ptr ConcurrentLruCache[int, SharedBytes], base, count: int) =
+      for i in 0 ..< count:
+        let key = base + i
+        cache[].withGet(key, v):
+          doAssert v.len() == 2
+
+    for t in 0 ..< numThreads:
+      tp.spawn tpPut(cachePtr, t * keysPerThread, keysPerThread)
+    tp.syncAll()
+
+    check lru.len() == totalKeys
+
+    for t in 0 ..< numThreads:
+      tp.spawn tpRead(cachePtr, t * keysPerThread, keysPerThread)
+    tp.syncAll()
+
+    for i in 0 ..< totalKeys:
+      var seen = newSeq[byte]()
+      lru.withGet(i, v):
+        seen = v.data()
+      check seen == @[byte(i and 0xff), 3]
+
+    for i in 0 ..< totalKeys:
+      var popped = lru.pop(i)
+      check popped.isSome()
+      popped.unsafeGet().dispose()
+
+    check lru.len() == 0
