@@ -86,8 +86,7 @@ func selfTransfer(tx: Transaction, sender: Address): bool =
 const
   TOTAL_COST_FLOOR_PER_TOKEN_EIP7623 = 10
   TOTAL_COST_FLOOR_PER_TOKEN_EIP7976 = 16
-  TX_VALUE_COST = 4244
-  TRANSFER_LOG_COST = 1756
+  TX_VALUE_COST = 6000
 
 func intrinsicGas*(call: CallParams | Transaction, hardFork: HardFork, gasLimit: GasInt, sender: Address): IntrinsicGas =
   # Compute the baseline gas cost for this transaction.  This is the amount
@@ -109,8 +108,6 @@ func intrinsicGas*(call: CallParams | Transaction, hardFork: HardFork, gasLimit:
   if call.isCreate:
     if hardFork >= Amsterdam:
       recipientExecutionGas += gasFees[fork][GasTXCreate]
-      if call.value.isZero.not:
-        recipientExecutionGas += TRANSFER_LOG_COST
     else:
       executionGas += gasFees[fork][GasTXCreate]
     if hardFork >= Shanghai:
@@ -119,7 +116,6 @@ func intrinsicGas*(call: CallParams | Transaction, hardFork: HardFork, gasLimit:
     if hardFork >= Amsterdam:
       recipientExecutionGas += COLD_ACCOUNT_ACCESS_8038
       if call.value.isZero.not:
-        recipientExecutionGas += TRANSFER_LOG_COST
         recipientExecutionGas += TX_VALUE_COST
 
   # Input data cost, reduced in EIP-2028 (Istanbul).
