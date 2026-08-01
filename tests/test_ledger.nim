@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[strformat, strutils, importutils],
+  std/[strformat, strutils],
   eth/common/[keys, transaction_utils],
   stew/[byteutils, endians2],
   minilru,
@@ -395,38 +395,69 @@ proc runLedgerBasicOperationsTests() =
       check ledger.isDeadAccount(address) == true
       check ledger.accountExists(address) == true
 
-    test "clone storage":
-      # give access to private fields of AccountRef
-      privateAccess(AccountRef)
-      privateAccess(OriginalValueRef)
-      var x = AccountRef(
-        overlayStorage: Table[UInt256, UInt256](),
-        original: OriginalValueRef(
-          storage: Table[UInt256, UInt256]()
-        )
-      )
+    test "save point rollback restores account state":
+      ledger.setBalance(address, 1000.u256)
+      ledger.setNonce(address, 3)
+      ledger.setCode(address, code)
+      ledger.setStorage(address, 10.u256, 11.u256)
+      ledger.setStorage(address, 11.u256, 12.u256)
 
-      x.overlayStorage[10.u256] = 11.u256
-      x.overlayStorage[11.u256] = 12.u256
+      let sp = ledger.beginSavePoint()
+      ledger.setBalance(address, 2000.u256)
+      ledger.setNonce(address, 4)
+      ledger.setCode(address, newSeq[byte]())
+      ledger.setStorage(address, 10.u256, 99.u256)
+      ledger.setStorage(address, 12.u256, 13.u256)
+      ledger.accessList(address, 1.u256)
+      ledger.selfDestruct(address)
 
-      x.original.storage[10.u256] = 11.u256
-      x.original.storage[11.u256] = 12.u256
+      check ledger.getBalance(address) == 0.u256
+      check ledger.getStorage(address, 12.u256) == 13.u256
+      check ledger.selfDestructLen == 1
+      check ledger.inAccessList(address, 1.u256)
 
-      var y = x.clone(cloneStorage = true)
-      y.overlayStorage[12.u256] = 13.u256
-      y.original.storage[12.u256] = 13.u256
+      ledger.rollback(sp)
 
-      check 12.u256 notin x.overlayStorage
-      check 12.u256 in y.overlayStorage
+      check ledger.getBalance(address) == 1000.u256
+      check ledger.getNonce(address) == 3
+      check ledger.getCode(address) == code
+      check ledger.getStorage(address, 10.u256) == 11.u256
+      check ledger.getStorage(address, 11.u256) == 12.u256
+      check ledger.getStorage(address, 12.u256) == 0.u256
+      check ledger.selfDestructLen == 0
+      check ledger.inAccessList(address, 1.u256) == false
+      check ledger.inAccessList(address) == false
 
-      check x.overlayStorage.len == 2
-      check y.overlayStorage.len == 3
+    test "nested save point commit keeps changes undoable":
+      ledger.setBalance(address, 1000.u256)
 
-      check 12.u256 in x.original.storage
-      check 12.u256 in y.original.storage
+      let outer = ledger.beginSavePoint()
+      ledger.setBalance(address, 2000.u256)
 
-      check x.original.storage.len == 3
-      check y.original.storage.len == 3
+      let inner = ledger.beginSavePoint()
+      ledger.setBalance(address, 3000.u256)
+      ledger.setStorage(address, 1.u256, 42.u256)
+      ledger.commit(inner)
+
+      check ledger.getBalance(address) == 3000.u256
+      check ledger.getStorage(address, 1.u256) == 42.u256
+
+      ledger.rollback(outer)
+
+      check ledger.getBalance(address) == 1000.u256
+      check ledger.getStorage(address, 1.u256) == 0.u256
+
+    test "save point rollback forgets accounts it created":
+      let sp = ledger.beginSavePoint()
+      ledger.setBalance(address, 1000.u256)
+      check ledger.accountExists(address) == true
+      ledger.rollback(sp)
+
+      check ledger.accountExists(address) == false
+      check ledger.isDeadAccount(address) == true
+
+      ledger.persist()
+      check ledger.getStateRoot() == EMPTY_ROOT_HASH
 
     test "Ledger various operations":
       var ledger = LedgerRef.init(memDB.baseTxFrame())

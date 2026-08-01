@@ -56,6 +56,32 @@ proc add*(al: var AccessList, address: Address, slot: UInt256) =
   do:
     al.slots[address] = toHashSet([slot])
 
+proc addIfAbsent*(al: var AccessList, address: Address): bool =
+  ## Add `address` and return `true` if it was not already present
+  if address notin al.slots:
+    al.slots[address] = HashSet[UInt256]()
+    true
+  else:
+    false
+
+proc addIfAbsent*(
+    al: var AccessList, address: Address, slot: UInt256
+): tuple[addressAdded: bool, slotAdded: bool] =
+  ## Add `address` and `slot`, reporting which of the two were not already
+  ## present - used to journal the addition so that it can be undone
+  al.slots.withValue(address, val):
+    return (false, not val[].containsOrIncl(slot))
+  do:
+    al.slots[address] = toHashSet([slot])
+    return (true, true)
+
+proc remove*(al: var AccessList, address: Address) =
+  al.slots.del(address)
+
+proc remove*(al: var AccessList, address: Address, slot: UInt256) =
+  al.slots.withValue(address, val):
+    val[].excl slot
+
 proc clear*(al: var AccessList) {.inline.} =
   al.slots.clear()
 
