@@ -52,7 +52,7 @@ type
   OptStoMissingIntvResult* = Result[Opt[CacheStoMissingIntvData],string]
     ## Shortcut
 
-  OptFlatAccResult* = Result[Opt[Account],string]
+  OptFlatAccResult* = Result[Opt[CacheFlatAccData],string]
     ## Shortcut
 
   OptFlatSlotResult* = Result[Opt[UInt256],string]
@@ -101,6 +101,11 @@ type
   CacheStoMissingIntvData* = tuple
     ranges: ItemKeyRangeSet
 
+  CacheFlatAccData* = tuple
+    dirtyStorage: bool
+    dirtyCode: bool
+    account: Account
+
   WalkStateData* = tuple
     root: StateRoot
     data: CacheStateData
@@ -140,7 +145,7 @@ type
 
   WalkFlatAccData* = tuple
     accPath: Hash32
-    data: Account
+    data: CacheFlatAccData
     error: string
 
   WalkFlatSlotData* = tuple

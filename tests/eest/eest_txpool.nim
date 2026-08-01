@@ -173,7 +173,7 @@ proc processFile*(filePath: string, statelessEnabled = false, parallelEnabled = 
   let fileName = filePath.splitPath().tail
 
   for unit in fixture.units:
-    if parseEnum[TestFork](unit.unit.network) < TestFork.Merge:
+    if parseEnum[TestFork](unit.unit.network) < TestFork.Paris:
       # Since our txpool only support post merge block construction,
       # we only test for post merge chain too.
       continue

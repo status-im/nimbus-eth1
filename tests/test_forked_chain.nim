@@ -16,6 +16,7 @@ import
   pkg/unittest2,
   testutils,
   std/[os, sets, strutils],
+  eth/common/blocks_rlp,
   ../execution_chain/common,
   ../execution_chain/conf,
   ../execution_chain/utils/utils,
@@ -24,6 +25,7 @@ import
   ../execution_chain/core/chain/forked_chain/chain_serialize,
   ../execution_chain/core/chain/forked_chain/chain_branch,
   ../execution_chain/db/ledger,
+  ../execution_chain/db/storage_types,
   ../execution_chain/evm/[state, types],
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/history/db/ere_db,
@@ -38,27 +40,27 @@ const
 type
   TestEnv = object
     config: ExecutionClientConf
+    params: NetworkParams
 
 proc setupEnv(): TestEnv =
   let
     config = makeConfig(@[
       "--network:" & genesisFile
     ])
+    params = config.computeNetworkParams()
 
-  TestEnv(config: config)
+  TestEnv(config: config, params: params)
 
 proc newCom(env: TestEnv): CommonRef =
   CommonRef.new(
       newCoreDbRef DefaultDbMemory,
-      env.config.networkId,
-      env.config.networkParams
+      env.params,
     )
 
 proc newCom(env: TestEnv, db: CoreDbRef): CommonRef =
   CommonRef.new(
       db,
-      env.config.networkId,
-      env.config.networkParams
+      env.params
     )
 
 proc makeBlk(txFrame: CoreDbTxRef, number: BlockNumber, parentBlk: Block): Block =
@@ -139,6 +141,42 @@ proc wdWritten(c: ForkedChainRef, blk: Block): int =
       expect("withdrawals exists").len
   else:
     0
+
+proc patchParentIndex(txFrame: CoreDbTxRef, numBlocks: int, badIndex: uint): bool =
+  ## Rewrite the first serialized block index entry that has a parent so that
+  ## its parent slot points out of range -- mimics a corrupted FC state on
+  ## disk. Mirrors the private `blockIndexKey` template of chain_serialize.
+  for i in 0..<numBlocks:
+    let
+      key = fcStateKey((i+1).uint)
+      data = txFrame.get(key.toOpenArray).valueOr:
+        continue
+    var
+      header: Header
+      blockHash: Hash32
+      parentIndex: uint
+    try:
+      var r = rlpFromBytes(data)
+      r.tryEnterList()
+      r.read(header)
+      r.read(blockHash)
+      r.read(parentIndex)
+    except RlpError as exc:
+      debugEcho "PATCH PARENT INDEX FAIL: ", exc.msg
+      return false
+
+    if parentIndex == 0:
+      # The base block, it has no parent to corrupt
+      continue
+
+    var w = initRlpWriter()
+    w.startList(3)
+    w.append(header)
+    w.append(blockHash)
+    w.append(badIndex)
+    return txFrame.put(key.toOpenArray, w.finish()).isOk
+
+  false
 
 func checkFinalizedMarkers(fc: ForkedChainRef, finalizedHash: Hash32): bool =
   const finalizedMarker = 1'u  # chain_branch.DAG_NODE_FINALIZED
@@ -384,6 +422,36 @@ suite "ForkedChainRef tests":
     # B4 is gone; its child B5 (number 5 <= finalized 6) can never link. The FC
     # declares the whole forward branch dead instead of quarantining it, so the
     # syncer drops the rest of that branch.
+    checkVerdictErr(chain, B5, ImportErrorKind.Orphaned)
+    check chain.validate info
+
+  test "reorg: canonical block pruned below base is AlreadyObserved":
+    const info = "reorg below-base AlreadyObserved"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
+    checkVerdict(chain, blk1, ImportOutcome.Valid)
+    checkVerdict(chain, blk2, ImportOutcome.Valid)
+    checkVerdict(chain, blk3, ImportOutcome.Valid)
+    checkVerdict(chain, blk4, ImportOutcome.Valid)
+    checkVerdict(chain, blk5, ImportOutcome.Valid)
+    checkVerdict(chain, blk6, ImportOutcome.Valid)
+    checkVerdict(chain, blk7, ImportOutcome.Valid)
+    checkVerdict(chain, blk8, ImportOutcome.Valid)
+    checkVerdict(chain, blk9, ImportOutcome.Valid)
+    # Finalize blk8: `base` advances and blocks below it are pruned from memory.
+    # This emulates a concurrent importer (e.g. `el_sync`) finalizing the chain
+    # past a stale sync target.
+    checkForkChoice(chain, blk9, blk8)
+    check chain.baseNumber == 6'u64
+    # blk4/blk5 are canonical but no longer in memory (their parent was pruned by
+    # finality). Re-importing them must not be mistaken for a dead fork: the FC
+    # matches the persisted canonical marker and reports `AlreadyObserved`, so an
+    # importer/syncer recognises the block as done rather than `Orphaned`.
+    check blk5.header.number <= chain.baseNumber
+    checkVerdict(chain, blk4, ImportOutcome.AlreadyObserved)
+    checkVerdict(chain, blk5, ImportOutcome.AlreadyObserved)
+    # A sibling (non-canonical) block below base still hashes differently from the
+    # marker, so it is correctly rejected as Orphaned.
     checkVerdictErr(chain, B5, ImportErrorKind.Orphaned)
     check chain.validate info
 
@@ -1031,6 +1099,40 @@ suite "ForkedChainRef tests":
     check fc.resolvedFinNumber == 7'u64
     check checkFinalizedMarkers(fc, blk7.blockHash)
     check fc.validate info & " (3)"
+
+  test "deserialize rejects out-of-range parent index":
+    const info = "deserialize out-of-range parent index"
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com, baseDistance = 3)
+    checkImportBlock(chain, blk1)
+    checkImportBlock(chain, blk2)
+    checkImportBlock(chain, blk3)
+    checkImportBlock(chain, blk4)
+    checkImportBlock(chain, blk5)
+    checkForkChoice(chain, blk5, blk3)
+    check chain.validate info & " (1)"
+
+    let numBlocks = chain.hashToBlock.len
+    check chain.serialize(chain.baseTxFrame).isOk
+    com.db.persist(chain.baseTxFrame)
+
+    # Simulate the on-disk corruption seen in the wild: a block index entry
+    # whose parent slot points beyond the number of serialized blocks.
+    check patchParentIndex(chain.baseTxFrame, numBlocks, (numBlocks + 50).uint)
+    com.db.persist(chain.baseTxFrame)
+
+    let fc = ForkedChainRef.init(com, baseDistance = 3)
+    let rc = fc.deserialize()
+    check rc.isErr
+    if rc.isOk:
+      debugEcho "DESERIALIZE SHOULD FAIL"
+
+    # The FC must fall back to the persisted base instead of crashing
+    check fc.hashToBlock.len == 1
+    check fc.base == fc.latest
+    check fc.heads.len == 1
+    check fc.validate info & " (2)"
 
   test "isCanonicalAndFinalizedAncestor":
     const info = "isCanonicalAndFinalizedAncestor"

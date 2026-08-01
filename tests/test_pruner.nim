@@ -34,16 +34,19 @@ const
 type
   TestEnv = object
     config: ExecutionClientConf
+    params: NetworkParams
 
 proc setupEnv(): TestEnv =
-  let config = makeConfig(@["--network:" & genesisFile])
-  TestEnv(config: config)
+  let
+    config = makeConfig(@["--network:" & genesisFile])
+    params = config.computeNetworkParams()
+
+  TestEnv(config: config, params: params)
 
 proc newCom(env: TestEnv): CommonRef =
   CommonRef.new(
     newCoreDbRef DefaultDbMemory,
-    env.config.networkId,
-    env.config.networkParams
+    env.params
   )
 
 # Helper: store a key-value pair directly in the KVT backend

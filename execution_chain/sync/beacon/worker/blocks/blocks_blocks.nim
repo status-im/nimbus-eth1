@@ -241,13 +241,15 @@ template blocksImport*(
         base=ctx.chain.baseNumber, head=ctx.chain.latestNumber
 
       for n in 0 ..< blocks.len:
-        let nthBn = blocks[n].header.number
+        let nthBn {.inject.} = blocks[n].header.number
 
         # Skip blocks at or below the current base — `FC` would otherwise
         # quarantine them as orphans and abort the batch.
         if nthBn <= ctx.chain.baseNumber:
           trace "Ignoring block less eq. base", peer, blk=nthBn,
             B=ctx.chain.baseNumber, L=ctx.chain.latestNumber
+          ctx.updateLastBlockImported nthBn          # block already imported
+          ctx.updateEtaBlocks()
           blocks[n].reset()
           continue
 

@@ -341,10 +341,15 @@ proc runComputation*(params: CallParams, T: type): T =
   c.preExecComputation(params)
   if c.isSuccess:
     c.execCallOrCreate()
-    c.postExecComputation()
   else:
     # execCallOrCreate normally disposes the computation, dispose here too
     # otherwise the EVM stack leaks.
     c.dispose()
+  # postExecComputation must also run when preExecComputation fails:
+  # it records the outcome in vmState.status, which the receipt reads.
+  # Skipping it leaves the previous transaction's status in place and
+  # a top-frame failure would be receipted as successful, diverging on
+  # receiptsRoot.
+  c.postExecComputation()
 
   finishRunningComputation(c, params, T)

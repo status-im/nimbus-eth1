@@ -8,33 +8,23 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 type
   TestFork* = enum
     Frontier
     Homestead
-    EIP150
     TangerineWhistle
-    EIP158
     SpuriousDragon
     Byzantium
     Constantinople
     ConstantinopleFix
     Istanbul
-    FrontierToHomesteadAt5
-    HomesteadToEIP150At5
-    HomesteadToDaoAt5
-    EIP158ToByzantiumAt5
-    ByzantiumToConstantinopleAt5
-    ByzantiumToConstantinopleFixAt5
-    ConstantinopleFixToIstanbulAt5
     Berlin
-    BerlinToLondonAt5
     London
     ArrowGlacier
     GrayGlacier
-    Merge
     Paris
-    ArrowGlacierToParisAtDiffC0000
     Shanghai
     ParisToShanghaiAtTime15k
     Cancun

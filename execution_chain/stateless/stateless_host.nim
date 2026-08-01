@@ -16,8 +16,7 @@ import
   eth/common/[blocks, eth_types_rlp, hashes, keys, transaction_utils],
   ./stateless_types
 
-from beacon_chain/spec/datatypes/gloas import ExecutionPayload
-from beacon_chain/spec/datatypes/electra import ExecutionRequests
+from beacon_chain/spec/datatypes/gloas import ExecutionPayload, ExecutionRequests
 from beacon_chain/spec/datatypes/capella import Withdrawal
 from beacon_chain/spec/datatypes/bellatrix import BloomLogs
 from beacon_chain/spec/datatypes/base import Gwei
@@ -114,7 +113,7 @@ func build_stateless_input*(
   var
     transactions = newSeqOfCap[gloas.Transaction](blk.transactions.len)
     public_keys: List[ByteVector[PUBLIC_KEY_BYTES], MAX_PUBLIC_KEYS]
-    versioned_hashes: List[Digest, MAX_BLOB_COMMITMENTS_PER_BLOCK]
+    versioned_hashes: seq[Digest]
   for tx in blk.transactions:
     transactions.add(gloas.Transaction.init(rlp.encode(tx)))
 
@@ -129,8 +128,7 @@ func build_stateless_input*(
 
     if tx.txType == TxEip4844:
       for versioned_hash in tx.versionedHashes:
-        if not versioned_hashes.add(Digest(data: versioned_hash.data)):
-          return err("Too many versioned hashes for the payload request")
+        versioned_hashes.add(Digest(data: versioned_hash.data))
 
   var withdrawals = newSeqOfCap[capella.Withdrawal](blk.withdrawals.get.len)
   for withdrawal in blk.withdrawals.get:

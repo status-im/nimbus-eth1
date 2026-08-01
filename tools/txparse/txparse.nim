@@ -47,7 +47,7 @@ proc parseTx(com: CommonRef, hexLine: string) =
 proc main() =
   let
     memDB  = newCoreDbRef DefaultDbMemory
-    config = getChainConfig("Prague")
+    config = getChainConfig("Prague").expect("ok")
     com    = CommonRef.new(memDB, config)
 
   for hexLine in stdin.lines:

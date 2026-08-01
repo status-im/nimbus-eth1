@@ -83,6 +83,14 @@ type VerifiedProxyConf* = object
     name: "debug-max-walk"
   .}: uint64
 
+  maxWindowJumps* {.
+    hidden,
+    desc:
+      "Maximum number of EIP-2935 window jumps that will be traversed to verify a request",
+    defaultValue: 500,
+    name: "debug-max-window-jumps"
+  .}: uint64
+
   parallelBlockDownloads* {.
     hidden,
     desc: "Number of blocks downloaded parallely. Affects memory usage",
@@ -160,6 +168,12 @@ type VerifiedProxyConf* = object
     desc: "URL of a private transaction relay (builder). eth_sendRawTransaction will be routed to these URLs instead of the regular execution API. Multiple URLs can be specified by defining the option again on the command line.",
     defaultValue: @[],
     name: "private-tx-url"
+  .}: UrlList
+
+  archiveUrls* {.
+    desc: "URL of an archive execution API provider. eth_getProof will be routed to these URLs instead of the regular execution API. Multiple URLs can be specified by defining the option again on the command line.",
+    defaultValue: @[],
+    name: "archive-url"
   .}: UrlList
 
   # P2P light client backend

@@ -20,10 +20,10 @@ const
   NimbusMajor* = 0
   ## is the major number of Nimbus' version.
 
-  NimbusMinor* = 3
+  NimbusMinor* = 4
   ## is the minor number of Nimbus' version.
 
-  NimbusPatch* = 1
+  NimbusPatch* = 0
   ## is the patch number of Nimbus' version.
 
   NimbusVersion* = $NimbusMajor & "." & $NimbusMinor & "." & $NimbusPatch
