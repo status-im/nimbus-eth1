@@ -148,9 +148,13 @@ proc procBlkPreamble(
   if com.isAmsterdamOrLater(header.timestamp):
     if header.blockAccessListHash.isNone:
       return err("Post-Amsterdam block header must have blockAccessListHash")
+    if header.slotNumber.isNone:
+      return err("Post-Amsterdam block header must have slotNumber")
   else:
     if header.blockAccessListHash.isSome:
       return err("Pre-Amsterdam block header must not have blockAccessListHash")
+    if header.slotNumber.isSome:
+      return err("Pre-Amsterdam block header must not have slotNumber")
 
   # Commit block access list tracker changes for pre‑execution system calls
   if vmState.balTrackerEnabled:
