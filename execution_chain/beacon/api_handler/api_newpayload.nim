@@ -223,7 +223,7 @@ proc newPayload*(ben: BeaconEngineRef,
       number = header.number, hash = blockHash.short
     return
       if withWitness:
-        validStatus(blockHash, ben.collectWitness(blockHash))
+        validStatus(blockHash, ben.collectWitness(blk))
       else:
         validStatus(blockHash)
 
@@ -303,6 +303,6 @@ proc newPayload*(ben: BeaconEngineRef,
 
   return
     if withWitness:
-      validStatus(blockHash, ben.collectWitness(blockHash))
+      validStatus(blockHash, ben.collectWitness(blk))
     else:
       validStatus(blockHash)
