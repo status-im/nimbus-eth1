@@ -96,13 +96,12 @@ proc setupEVM(params: CallParams, keepStack: bool): Computation =
   vmState.gasRefunded = 0
 
   let
-    intrinsicGas = params.intrinsic.execution + params.intrinsic.state
-
     # Prevent underflow which can occur when gasLimit is less than intrinsicGas.
     # Note that this is only a short term fix. In the longer term we need to
     # implement validation on all fields in the Message before executing in the EVM.
     # TODO: Implement full validation on all fields. See related issue: https://github.com/status-im/nimbus-eth1/issues/1524
-    executionGas = if params.gasLimit < intrinsicGas: 0.GasInt else: params.gasLimit - intrinsicGas
+    executionGas = if params.gasLimit < params.intrinsic.execution: 0.GasInt
+                   else: params.gasLimit - params.intrinsic.execution
     executionGasBudget = TX_GAS_LIMIT - params.intrinsic.execution
 
   var
@@ -189,12 +188,11 @@ proc calculateAndPossiblyRefundGas(c: Computation, params: CallParams): GasUsed 
 
   if fork >= FkAmsterdam:
     txGasUsed = max(txGasUsedAfterRefund, params.intrinsic.floorDataGas)
-    let txStateGas = params.intrinsic.state.int64 + c.vmState.authStateGasUsed + c.frameStateGasUsed()
+    let txStateGas = c.vmState.authStateGasUsed + c.frameStateGasUsed()
     blockStateGasUsed = GasInt(max(0, txStateGas))
     blockExecutionGasUsed = max(txGasUsedBeforeRefund - blockStateGasUsed, params.intrinsic.floorDataGas)
     debug "EIP-8037 gas accounting",
       intrinsicExecution = params.intrinsic.execution,
-      intrinsicState = params.intrinsic.state,
       executionGasUsed = c.gasMeter.executionGasUsed,
       stateGasUsed = c.gasMeter.stateGasUsed,
       executionGasLeft = c.gasMeter.executionGasLeft,

@@ -65,7 +65,6 @@ type
 
   IntrinsicGas* = object
     execution*: GasInt
-    state*: GasInt
     floorDataGas*: GasInt
 
 template isCreate(tx: Transaction): bool =
@@ -97,8 +96,7 @@ func intrinsicGas*(call: CallParams | Transaction, hardFork: HardFork, gasLimit:
 
   var
     executionGas = if hardFork >= Amsterdam: TX_BASE_COST_2780
-                 else: TX_BASE_COST
-    stateGas = 0.GasInt
+                   else: TX_BASE_COST
     floorDataGas = executionGas
     tokens = 0
     accessListBytes = 0
@@ -163,6 +161,5 @@ func intrinsicGas*(call: CallParams | Transaction, hardFork: HardFork, gasLimit:
 
   IntrinsicGas(
     execution: executionGas.GasInt,
-    state: stateGas,
     floorDataGas: floorDataGas.GasInt,
   )

@@ -278,27 +278,20 @@ func validateTxBasic*(
   if tx.maxFeePerGasNorm < tx.maxPriorityFeePerGasNorm:
     return err(&"invalid tx: maxFee is smaller than maxPriorityFee. maxFee={tx.maxFeePerGas}, maxPriorityFee={tx.maxPriorityFeePerGasNorm}")
 
-  if fork >= Amsterdam:
-    let
-      intrinsicGas = intrinsic.execution + intrinsic.state
-      minGasLimit = max(intrinsicGas, intrinsic.floorDataGas)
-      minExecutionGasLimit = max(intrinsic.execution, intrinsic.floorDataGas)
-
-    if minGasLimit > tx.gasLimit:
-      return err(&"invalid tx: not enough gas to perform calculation. avail={tx.gasLimit}, require={minGasLimit}")
-
-    if minExecutionGasLimit > TX_GAS_LIMIT:
-      return err(&"invalid tx: Intrinsic execution or calldata floor exceeds TX_GAS_LIMIT={TX_GAS_LIMIT}, require={minExecutionGasLimit}")
-  else:
-    # https://eips.ethereum.org/EIPS/eip-7825
-    if fork >= Osaka and tx.gasLimit > TX_GAS_LIMIT:
-      return err("tx.gasLimit " & $tx.gasLimit & " exceeds maximum " & $TX_GAS_LIMIT)
-
-    let
-      minGasLimit = max(intrinsic.execution, intrinsic.floorDataGas)
-
-    if tx.gasLimit < minGasLimit:
-      return err(&"invalid tx: not enough gas to perform calculation. avail={tx.gasLimit}, require={minGasLimit}")
+  let
+    minGasLimit = max(intrinsic.execution, intrinsic.floorDataGas)
+    
+  if minGasLimit > tx.gasLimit:
+    return err(&"invalid tx: not enough gas to perform calculation. avail={tx.gasLimit}, require={minGasLimit}")
+  
+  if fork >= Osaka:
+    if fork >= Amsterdam:
+      if minGasLimit > TX_GAS_LIMIT:
+        return err(&"invalid tx: Intrinsic execution or calldata floor exceeds TX_GAS_LIMIT={TX_GAS_LIMIT}, require={minGasLimit}")
+    else:
+      # https://eips.ethereum.org/EIPS/eip-7825
+      if tx.gasLimit > TX_GAS_LIMIT:
+        return err("tx.gasLimit " & $tx.gasLimit & " exceeds maximum " & $TX_GAS_LIMIT)
 
   if fork >= Cancun:
     if tx.payload.len > MAX_CALLDATA_SIZE:
