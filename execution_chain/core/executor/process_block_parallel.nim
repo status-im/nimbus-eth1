@@ -13,17 +13,21 @@
 import
   std/[atomics, algorithm],
   ../../common/common,
+  ../../constants,
   ../../db/ledger,
   ../../db/core_db,
+  ../../db/storage_types,
+  ../../db/aristo/aristo_blobify,
   ../../transaction,
   ../../evm/state,
   ../../evm/types,
   ../../evm/precompiles,
   ../../evm/interpreter/gas_costs,
-  ../../block_access_list/[bal_builder, bal_overlay, bal_tracker, bal_utils],
+  ../../block_access_list/[bal_builder, bal_overlay, bal_tracker],
   ../../concurrency/[shared_types, utils],
   ../eip7691,
   ./process_transaction,
+  ./process_system_calls,
   ./executor_helpers,
   eth/common/transaction_utils,
   taskpools,
@@ -72,36 +76,50 @@ type
     error: SharedString
     preempted: bool
 
-proc recoverAndPrefetchTask*(
-    ctx: ptr OptimisticPrefetchCtx, e: ptr OptimisticTxEntry
-): bool {.nimcall.} =
-  # Recover the sender from the signature. `default(Address)` signals sig
-  # check failure.
-  let sender = e[].tx[].recoverSender().valueOr(default(Address))
-  e[].sender = sender
-  e[].senderReady.store(true, moRelease)
+  BalSystemCallsCtx = object
+    com: CommonRef
+    txFrame: CoreDbTxRef
+    parent: Header
+    blockCtx: BlockContext
+    blkPtr: ptr Block
+    balPtr: ptr BlockAccessList
+    balIndex: int
+    sharedBuilder: ptr BlockAccessListBuilder
+    withdrawalReqs: SharedBytes
+    consolidationReqs: SharedBytes
+    builderDepositReqs: SharedBytes
+    builderExitReqs: SharedBytes
+    error: SharedString
 
-  # When ctx is non-nil, optimistic state prefetch is enabled
-  if ctx.isNil() or sender == default(Address) or ctx[].cancelled.load(moAcquire):
-    return true
+proc initTaskVmState(
+    com: CommonRef,
+    txFrame: CoreDbTxRef,
+    parent: Header,
+    blockCtx: BlockContext,
+    balPtr: ptr BlockAccessList,
+    balIndex: int,
+    sharedBuilder: ptr BlockAccessListBuilder,
+): BaseVMState =
+  ## Builds the vmState used by a task running on a taskpool thread. The caller
+  ## must unborrow the borrowed refs before the returned vmState goes out of
+  ## scope. When `balPtr` is non-nil the ledger reads the block pre state for
+  ## `balIndex` from the block access list overlay.
 
   # Create the ledger without triggering a ref count increment on the txFrame
   # which is owned by the main/parent thread.
   let ledger = LedgerRef()
-  ledger.txFrame.borrowRef(ctx[].txFrame)
-  defer:
-    ledger.txFrame.unborrowRef()
+  ledger.txFrame.borrowRef(txFrame)
+  if not balPtr.isNil():
+    ledger.balOverlay = Opt.some(BlockAccessListOverlay.init(balPtr, balIndex))
   discard ledger.beginSavePoint()
 
   # Create the vmState without triggering a ref count increment on the common object
   # which is owned by the main/parent thread.
   let vmState = BaseVMState()
-  vmState.com.borrowRef(ctx[].com)
-  defer:
-    vmState.com.unborrowRef()
+  vmState.com.borrowRef(com)
   vmState.ledger = ledger
-  assign(vmState.parent, ctx[].parent)
-  assign(vmState.blockCtx, ctx[].blockCtx)
+  assign(vmState.parent, parent)
+  assign(vmState.blockCtx, blockCtx)
   const txCtx = default(TxContext)
   assign(vmState.txCtx, txCtx)
   vmState.hardFork = vmState.determineFork
@@ -115,7 +133,36 @@ proc recoverAndPrefetchTask*(
   vmState.blobGasUsed = 0'u64
   vmState.allLogs.setLen(0)
   vmState.gasRefunded = 0
-  vmState.balTracker = nil
+  if sharedBuilder.isNil():
+    vmState.balTracker = nil
+  else:
+    vmState.balTracker =
+      BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger, sharedBuilder)
+    vmState.balTracker.setBlockAccessIndex(balIndex)
+
+  vmState
+
+template releaseTaskVmState(vmState: BaseVMState) =
+  vmState.ledger.txFrame.unborrowRef()
+  vmState.com.unborrowRef()
+
+proc recoverAndPrefetchTask*(
+    ctx: ptr OptimisticPrefetchCtx, e: ptr OptimisticTxEntry
+): bool {.nimcall.} =
+  # Recover the sender from the signature. `default(Address)` signals sig
+  # check failure.
+  let sender = e[].tx[].recoverSender().valueOr(default(Address))
+  e[].sender = sender
+  e[].senderReady.store(true, moRelease)
+
+  # When ctx is non-nil, optimistic state prefetch is enabled
+  if ctx.isNil() or sender == default(Address) or ctx[].cancelled.load(moAcquire):
+    return true
+
+  let vmState = initTaskVmState(
+    ctx[].com, ctx[].txFrame, ctx[].parent, ctx[].blockCtx, nil, 0, nil)
+  defer:
+    vmState.releaseTaskVmState()
 
   # Execute the transaction discarding the results in order to fill the in memory caches.
   vmState.prefetchTransaction(e[].tx[], sender)
@@ -262,36 +309,85 @@ template withBalPrefetchParallel*(
     for f in futs.mitems():
       discard sync(f)
 
-proc applyBlockAccessListState(ledger: LedgerRef, bal: BlockAccessList, txCount: int) =
-  let boundary = txCount + 1
+proc applyBlockAccessListPostState(
+    txFrame: CoreDbTxRef, bal: BlockAccessList, storeSlotHash: bool
+): Result[void, string] =
+  ## Writes the block post state held by the block access list into the txFrame.
+  ## The changes of each account field and storage slot are ordered by block
+  ## access index and so the last change is the post state value.
+  const info = "applyBlockAccessListPostState(): "
 
   for accChanges in bal:
-    let address = accChanges.address
+    let accPath = accChanges.address.computeAccPath
 
-    var balanceZeroed = false
-    let balancePos = accChanges.balanceChanges.findLastWriteBefore(boundary)
-    if balancePos >= 0:
-      let postBalance = accChanges.balanceChanges[balancePos].postBalance
-      ledger.setBalance(address, postBalance)
-      balanceZeroed = postBalance.isZero
+    var
+      acc = txFrame.fetchAccount(accPath).valueOr:
+        if error.error != AccNotFound:
+          return err(info & $$error)
+        CoreDbAccount(nonce: 0, balance: 0.u256, codeHash: EMPTY_CODE_HASH)
+      accChanged = false
 
-    let noncePos = accChanges.nonceChanges.findLastWriteBefore(boundary)
-    if noncePos >= 0:
-      ledger.setNonce(address, accChanges.nonceChanges[noncePos].newNonce)
+    if accChanges.balanceChanges.len() > 0:
+      acc.balance = accChanges.balanceChanges[^1].postBalance
+      accChanged = true
 
-    let codePos = accChanges.codeChanges.findLastWriteBefore(boundary)
-    if codePos >= 0:
-      ledger.setCode(address, accChanges.codeChanges[codePos].newCode)
+    if accChanges.nonceChanges.len() > 0:
+      acc.nonce = accChanges.nonceChanges[^1].newNonce
+      accChanged = true
+
+    if accChanges.codeChanges.len() > 0:
+      template newCode(): Bytecode =
+        accChanges.codeChanges[^1].newCode
+
+      acc.codeHash = keccak256(newCode)
+      accChanged = true
+
+      if newCode.len() > 0:
+        txFrame.put(contractHashKey(acc.codeHash).toOpenArray, newCode).isOkOr:
+          return err(info & $$error)
+
+    var hasStorageWrites = false
+    for slotChanges in accChanges.storageChanges:
+      if slotChanges.changes.len() > 0:
+        hasStorageWrites = true
+        break
+
+    if not (accChanged or hasStorageWrites):
+      continue # The account was only read during block execution
+
+    if acc.nonce == 0 and acc.balance.isZero() and acc.codeHash == EMPTY_CODE_HASH:
+      # EIP-161: a touched account which ends up empty is removed from the
+      # state together with its storage.
+      txFrame.deleteAccount(accPath).isOkOr:
+        return err(info & $$error)
+      continue
+
+    # The account is written before its storage slots because Aristo needs the
+    # account entry when updating the account's storage area reference.
+    txFrame.mergeAccount(accPath, acc).isOkOr:
+      return err(info & $$error)
 
     for slotChanges in accChanges.storageChanges:
-      let changePos = slotChanges.changes.findLastWriteBefore(boundary)
-      if changePos >= 0:
-        ledger.setStorage(
-          address, slotChanges.slot, slotChanges.changes[changePos].newValue
-        )
+      if slotChanges.changes.len() == 0:
+        continue
 
-    if balanceZeroed:
-      ledger.addBalance(address, 0.u256, checkEmptyAccount = true)
+      let
+        slotKey = computeSlotKey(slotChanges.slot)
+        newValue = slotChanges.changes[^1].newValue
+
+      if newValue > 0:
+        txFrame.mergeSlot(accPath, slotKey, newValue).isOkOr:
+          return err(info & $$error)
+      else:
+        txFrame.deleteSlot(accPath, slotKey).isOkOr:
+          return err(info & $$error)
+
+      if storeSlotHash:
+        let slotHashKey = slotKey.slotHashToSlotKey
+        txFrame.put(slotHashKey.toOpenArray, blobify(slotChanges.slot).data).isOkOr:
+          return err(info & $$error)
+
+  ok()
 
 proc packLogs(logs: openArray[Log]): SharedBytes =
   var size = sizeof(uint32)
@@ -361,42 +457,11 @@ proc processTxTask(
     ctx[].cancelled.store(true, moRelease)
     return false
 
-  # Create the ledger without triggering a ref count increment on the txFrame
-  # which is owned by the main/parent thread.
-  let ledger = LedgerRef()
-  ledger.txFrame.borrowRef(ctx[].txFrame)
+  let vmState = initTaskVmState(
+    ctx[].com, ctx[].txFrame, ctx[].parent, ctx[].blockCtx, ctx[].balPtr,
+    e[].txIndex + 1, ctx[].sharedBuilder)
   defer:
-    ledger.txFrame.unborrowRef()
-  ledger.balOverlay =
-    Opt.some(BlockAccessListOverlay.init(ctx[].balPtr, e[].txIndex + 1))
-  discard ledger.beginSavePoint()
-
-  # Create the vmState without triggering a ref count increment on the common object
-  # which is owned by the main/parent thread.
-  let vmState = BaseVMState()
-  vmState.com.borrowRef(ctx[].com)
-  defer:
-    vmState.com.unborrowRef()
-  vmState.ledger = ledger
-  assign(vmState.parent, ctx[].parent)
-  assign(vmState.blockCtx, ctx[].blockCtx)
-  const txCtx = default(TxContext)
-  assign(vmState.txCtx, txCtx)
-  vmState.hardFork = vmState.determineFork
-  vmState.fork = ToEVMFork[vmState.hardFork]
-  vmState.gasCosts = vmState.fork.forkToSchedule
-  vmState.tracer = nil
-  vmState.receipts.setLen(0)
-  vmState.cumulativeGasUsed = 0
-  vmState.blockRegularGasUsed = 0
-  vmState.blockStateGasUsed = 0
-  vmState.blobGasUsed = 0'u64
-  vmState.allLogs.setLen(0)
-  vmState.gasRefunded = 0
-  if not ctx[].sharedBuilder.isNil():
-    vmState.balTracker =
-      BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger, ctx[].sharedBuilder)
-    vmState.balTracker.setBlockAccessIndex(e[].txIndex + 1)
+    vmState.releaseTaskVmState()
 
   let logResult = vmState.processTransaction(e[].tx[], sender, persist = false).valueOr:
     e[].error = SharedString.init(error)
@@ -414,20 +479,80 @@ proc processTxTask(
 
   true
 
-proc processTransactionsParallel*(
+proc preExecSystemCallsTask(ctx: ptr BalSystemCallsCtx): bool {.nimcall.} =
+  # No block access list overlay is needed here because the pre-execution
+  # system calls are the first state changes of the block and therefore read
+  # the block pre state which is already held by the txFrame.
+  let vmState = initTaskVmState(
+    ctx[].com, ctx[].txFrame, ctx[].parent, ctx[].blockCtx, nil, ctx[].balIndex,
+    ctx[].sharedBuilder)
+  defer:
+    vmState.releaseTaskVmState()
+
+  vmState.processPreExecSystemCalls(ctx[].blkPtr[].header, persist = false)
+
+  true
+
+proc postExecSystemCallsTask(ctx: ptr BalSystemCallsCtx): bool {.nimcall.} =
+  # The block access list overlay supplies the state changes made by the
+  # pre-execution system calls and by every transaction of the block.
+  let vmState = initTaskVmState(
+    ctx[].com, ctx[].txFrame, ctx[].parent, ctx[].blockCtx, ctx[].balPtr,
+    ctx[].balIndex, ctx[].sharedBuilder)
+  defer:
+    vmState.releaseTaskVmState()
+
+  let requests = vmState.processPostExecSystemCalls(ctx[].blkPtr[], persist = false).valueOr:
+    ctx[].error = SharedString.init(error)
+    return false
+
+  ctx[].withdrawalReqs = SharedBytes.init(requests.withdrawalReqs)
+  ctx[].consolidationReqs = SharedBytes.init(requests.consolidationReqs)
+  ctx[].builderDepositReqs = SharedBytes.init(requests.builderDepositReqs)
+  ctx[].builderExitReqs = SharedBytes.init(requests.builderExitReqs)
+
+  true
+
+proc dispose(ctx: var BalSystemCallsCtx) =
+  ctx.withdrawalReqs.dispose()
+  ctx.consolidationReqs.dispose()
+  ctx.builderDepositReqs.dispose()
+  ctx.builderExitReqs.dispose()
+  ctx.error.dispose()
+
+proc processBlockParallel*(
     vmState: BaseVMState,
-    transactions: seq[Transaction],
+    blk: Block,
     balRef: BlockAccessListRef,
     skipReceipts: bool,
     collectLogs: bool,
-): Result[void, string] =
+): Result[BlockRequests, string] =
+  ## Executes the pre-execution system calls, the transactions and the
+  ## post-execution system calls of the block as separate tasks which all run
+  ## concurrently against the block pre state, using the block access list to
+  ## supply the state written by the preceding tasks. Once every task completed
+  ## the block post state held by the block access list is written to the
+  ## txFrame.
   doAssert vmState.fork >= FkAmsterdam
   doAssert not vmState.com.statelessProvider
 
-  let n = transactions.len()
+  let
+    n = blk.transactions.len()
+    balPtr = balRef[].addr
+    sharedBuilder =
+      if vmState.balTrackerEnabled: vmState.balTracker.builder else: nil
+
+  vmState.receipts.setLen(if skipReceipts: 0 else: n)
+  vmState.cumulativeGasUsed = 0
+  vmState.blockRegularGasUsed = 0
+  vmState.blockStateGasUsed = 0
+  vmState.blobGasUsed = 0'u64
+  vmState.allLogs = @[]
 
   var
     ctx: BalParallelTxCtx
+    preCtx: BalSystemCallsCtx
+    postCtx: BalSystemCallsCtx
     entries = newSeq[BalParallelTxEntry](n)
     futs = newSeq[Flowvar[bool]](n)
 
@@ -435,25 +560,48 @@ proc processTransactionsParallel*(
   ctx.txFrame = vmState.ledger.txFrame
   ctx.parent = vmState.parent
   ctx.blockCtx = vmState.blockCtx
-  ctx.balPtr = balRef[].addr
-  ctx.sharedBuilder = if vmState.balTrackerEnabled: vmState.balTracker.builder else: nil
+  ctx.balPtr = balPtr
+  ctx.sharedBuilder = sharedBuilder
+
+  for sysCtx in [preCtx.addr, postCtx.addr]:
+    sysCtx[].com = vmState.com
+    sysCtx[].txFrame = vmState.ledger.txFrame
+    sysCtx[].parent = vmState.parent
+    sysCtx[].blockCtx = vmState.blockCtx
+    sysCtx[].blkPtr = blk.addr
+    sysCtx[].sharedBuilder = sharedBuilder
+
+  preCtx.balIndex = 0
+  postCtx.balPtr = balPtr
+  postCtx.balIndex = n + 1
+
+  let
+    preFut = vmState.com.taskpool.spawn preExecSystemCallsTask(preCtx.addr)
+    postFut = vmState.com.taskpool.spawn postExecSystemCallsTask(postCtx.addr)
 
   for i in 0 ..< n:
-    entries[i].tx = transactions[i].addr
+    entries[i].tx = blk.transactions[i].addr
     entries[i].txIndex = i
     futs[i] = vmState.com.taskpool.spawn processTxTask(ctx.addr, entries[i].addr)
 
   # Number of tasks already synced. On an early return the remaining tasks must
   # still be synced before their entry/ctx data goes out of scope, otherwise a
   # still running task would reference freed memory and leak its Flowvar.
-  var synced = 0
+  var
+    synced = 0
+    sysCallsSynced = false
   defer:
     while synced < n:
       discard sync(futs[synced])
       inc synced
+    if not sysCallsSynced:
+      discard sync(preFut)
+      discard sync(postFut)
     for i in 0 ..< n:
       entries[i].logs.dispose()
       entries[i].error.dispose()
+    preCtx.dispose()
+    postCtx.dispose()
 
   # Process each result as soon as its task completes so the main thread makes
   # progress while the remaining tasks keep running in the background.
@@ -477,7 +625,7 @@ proc processTransactionsParallel*(
         ctx.cancelled.store(true, moRelease)
         return err("Error processing tx with index " & $i & ":" & msg)
 
-      check2dGasInclusion(vmState, transactions[i].gasLimit, fail)
+      check2dGasInclusion(vmState, blk.transactions[i].gasLimit, fail)
 
     vmState.cumulativeGasUsed += entries[i].gasUsed
     vmState.blockRegularGasUsed += entries[i].blockRegularGasUsed
@@ -502,8 +650,8 @@ proc processTransactionsParallel*(
       if collectLogs:
         vmState.allLogs.add logs
     else:
-      vmState.receipts[i] =
-        vmState.makeReceipt(transactions[i].txType, LogResult(logEntries: move(logs)))
+      vmState.receipts[i] = vmState.makeReceipt(
+        blk.transactions[i].txType, LogResult(logEntries: move(logs)))
       if collectLogs:
         vmState.allLogs.add vmState.receipts[i].logs
 
@@ -514,5 +662,22 @@ proc processTransactionsParallel*(
         $maxBlobGasPerBlock
     )
 
-  applyBlockAccessListState(vmState.ledger, balRef[], n)
-  ok()
+  discard sync(preFut)
+  let postOk = sync(postFut)
+  sysCallsSynced = true
+  if not postOk:
+    return err("Error processing post-execution system calls:" & postCtx.error.toString())
+
+  ?applyBlockAccessListPostState(
+    vmState.ledger.txFrame, balRef[], vmState.ledger.storeSlotHash)
+
+  # The block post state was written directly into the txFrame and so the
+  # accounts held by the ledger caches are stale from here onwards.
+  vmState.ledger.clearAccountCache()
+
+  ok(BlockRequests(
+    withdrawalReqs: postCtx.withdrawalReqs.data(),
+    consolidationReqs: postCtx.consolidationReqs.data(),
+    builderDepositReqs: postCtx.builderDepositReqs.data(),
+    builderExitReqs: postCtx.builderExitReqs.data(),
+  ))

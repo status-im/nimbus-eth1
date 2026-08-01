@@ -86,7 +86,7 @@ proc preExecComputation(c: Computation) =
         c.setError("No code found for builder deposit or exit requests contract")
         return
 
-proc systemCall*(params: CallParams, T: type): T =
+proc systemCall*(params: CallParams, T: type, persist = true): T =
   let
     ledger = params.vmState.ledger
     c = setupComputation(params)
@@ -95,7 +95,8 @@ proc systemCall*(params: CallParams, T: type): T =
   c.preExecComputation()
   if c.isSuccess:
     c.execCallOrCreate()
-    ledger.persist(clearEmptyAccount = true)
+    if persist:
+      ledger.persist(clearEmptyAccount = true)
   else:
     # execCallOrCreate normally disposes the computation, dispose here too
     # otherwise the EVM stack leaks.

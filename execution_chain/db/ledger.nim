@@ -903,6 +903,18 @@ proc clearBlockHashesCache*(ledger: LedgerRef) =
   if ledger.blockHashes.len() > 0:
     ledger.blockHashes = BlockHashesCache.init(MAX_PREV_HEADER_DEPTH.int)
 
+proc clearAccountCache*(ledger: LedgerRef) =
+  ## Drops every cached account so that the next lookup is served from the
+  ## txFrame. Needed after the state has been written directly into the
+  ## txFrame, bypassing the ledger, because the cached accounts are stale
+  ## from that point onwards.
+  doAssert(ledger.savePoint.parentSavePoint.isNil)
+  doAssert(ledger.isDirty == false)
+
+  ledger.savePoint.cache.clear()
+  ledger.savePoint.dirty.clear()
+  ledger.cache.clear()
+
 proc persist*(ledger: LedgerRef,
               clearEmptyAccount: bool = false,
               clearCache = false,

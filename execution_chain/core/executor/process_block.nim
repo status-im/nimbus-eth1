@@ -20,11 +20,11 @@ import
   ../../evm/state,
   ../../evm/types,
   ../../block_access_list/[bal_tracker, bal_validation],
-  ../dao,
   ../eip6110,
   ./calculate_reward,
   ./executor_helpers,
   ./process_transaction,
+  ./process_system_calls,
   eth/common/[keys, transaction_utils],
   chronicles,
   results
@@ -60,7 +60,6 @@ template withBalPrefetch(
 
 proc processTransactions*(
     vmState: BaseVMState,
-    header: Header,
     transactions: seq[Transaction],
     blockAccessList = Opt.none(BlockAccessListRef),
     skipReceipts = false,
@@ -72,11 +71,6 @@ proc processTransactions*(
   vmState.blockStateGasUsed = 0
   vmState.blobGasUsed = 0'u64
   vmState.allLogs = @[]
-
-  when compileOption("threads"):
-    if vmState.com.balParallelExecutionEnabled(header.timestamp, blockAccessList):
-      return processTransactionsParallel(
-        vmState, transactions, blockAccessList.get(), skipReceipts, collectLogs)
 
   vmState.withSender(transactions, blockAccessList):
     if sender == default(Address):
@@ -103,21 +97,13 @@ proc procBlkPreamble(
     vmState: BaseVMState,
     blk: Block,
     blockAccessList: Opt[BlockAccessListRef],
+    requests: var BlockRequests,
     skipValidation, skipReceipts, skipUncles: bool
 ): Result[void, string] =
   template header(): Header =
     blk.header
 
-  # Setup block access list tracker for pre‑execution system calls
-  if vmState.balTrackerEnabled:
-    vmState.balTracker.builder[].ensureIndexCount(blk.transactions.len() + 2, exact = true)
-    vmState.balTracker.setBlockAccessIndex(0)
-    vmState.balTracker.beginCallFrame()
-
   let com = vmState.com
-  vmState.mutateLedger:
-    if com.daoForkSupport and com.daoForkBlock.get == header.number:
-      ledger.applyDAOHardFork()
 
   if not skipValidation: # Expensive!
     if blk.transactions.calcTxRoot != header.txRoot:
@@ -130,8 +116,6 @@ proc procBlkPreamble(
   if com.isPragueOrLater(header.timestamp):
     if header.requestsHash.isNone:
       return err("Post-Prague block header must have requestsHash")
-
-    vmState.processParentBlockHash(header.parentHash)
   else:
     if header.requestsHash.isSome:
       return err("Pre-Prague block header must not have requestsHash")
@@ -139,8 +123,6 @@ proc procBlkPreamble(
   if com.isCancunOrLater(header.timestamp):
     if header.parentBeaconBlockRoot.isNone:
       return err("Post-Cancun block header must have parentBeaconBlockRoot")
-
-    vmState.processBeaconBlockRoot(header.parentBeaconBlockRoot.value)
   else:
     if header.parentBeaconBlockRoot.isSome:
       return err("Pre-Cancun block header must not have parentBeaconBlockRoot")
@@ -152,44 +134,48 @@ proc procBlkPreamble(
     if header.blockAccessListHash.isSome:
       return err("Pre-Amsterdam block header must not have blockAccessListHash")
 
-  # Commit block access list tracker changes for pre‑execution system calls
-  if vmState.balTrackerEnabled:
-    vmState.balTracker.commitCallFrame()
-
-  if header.txRoot != EMPTY_ROOT_HASH:
-    if blk.transactions.len == 0:
-      return err("Transactions missing from body")
-
-    let collectLogs = header.requestsHash.isSome and not skipValidation
-    ?processTransactions(
-      vmState, header, blk.transactions, blockAccessList, skipReceipts, collectLogs
-    )
-  elif blk.transactions.len > 0:
-    return err("Transactions in block with empty txRoot")
-
-  # Setup block access list tracker for post‑execution system calls
-  if vmState.balTrackerEnabled:
-    vmState.balTracker.setBlockAccessIndex(blk.transactions.len() + 1)
-    vmState.balTracker.beginCallFrame()
-
   if com.isShanghaiOrLater(header.timestamp):
     if header.withdrawalsRoot.isNone:
       return err("Post-Shanghai block header must have withdrawalsRoot")
     if blk.withdrawals.isNone:
       return err("Post-Shanghai block body must have withdrawals")
-
-    if vmState.balTrackerEnabled:
-      for withdrawal in blk.withdrawals.get:
-        vmState.balTracker.trackAddBalanceChange(withdrawal.address, withdrawal.weiAmount)
-        vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount, checkEmptyAccount = false)
-    else:
-      for withdrawal in blk.withdrawals.get:
-        vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount, checkEmptyAccount = false)
   else:
     if header.withdrawalsRoot.isSome:
       return err("Pre-Shanghai block header must not have withdrawalsRoot")
     if blk.withdrawals.isSome:
       return err("Pre-Shanghai block body must not have withdrawals")
+
+  if header.txRoot != EMPTY_ROOT_HASH:
+    if blk.transactions.len == 0:
+      return err("Transactions missing from body")
+  elif blk.transactions.len > 0:
+    return err("Transactions in block with empty txRoot")
+
+  # Reserve one block access index per transaction plus the two indexes used
+  # by the pre and post execution system calls
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.builder[].ensureIndexCount(blk.transactions.len() + 2, exact = true)
+
+  let collectLogs = header.requestsHash.isSome and not skipValidation
+
+  var parallelExecution = false
+  when compileOption("threads"):
+    parallelExecution =
+      com.balParallelExecutionEnabled(header.timestamp, blockAccessList)
+    if parallelExecution:
+      requests = ?vmState.processBlockParallel(
+        blk, blockAccessList.get(), skipReceipts, collectLogs
+      )
+
+  if not parallelExecution:
+    vmState.processPreExecSystemCalls(header)
+
+    if header.txRoot != EMPTY_ROOT_HASH:
+      ?processTransactions(
+        vmState, blk.transactions, blockAccessList, skipReceipts, collectLogs
+      )
+
+    requests = ?vmState.processPostExecSystemCalls(blk)
 
   if com.isAmsterdamOrLater(header.timestamp):
     let blockGasUsed = max(vmState.blockRegularGasUsed, vmState.blockStateGasUsed)
@@ -222,6 +208,7 @@ proc procBlkPreamble(
 proc procBlkEpilogue(
     vmState: BaseVMState,
     blk: Block,
+    requests: BlockRequests,
     skipValidation: bool,
     skipReceipts: bool,
     skipStateRootCheck: bool,
@@ -238,26 +225,6 @@ proc procBlkEpilogue(
       clearEmptyAccount = vmState.com.isSpuriousOrLater(header.number, header.timestamp),
       clearCache = true
     )
-
-  var
-    withdrawalReqs: seq[byte]
-    consolidationReqs: seq[byte]
-    builderDepositReqs: seq[byte]
-    builderExitReqs: seq[byte]
-
-  if header.requestsHash.isSome:
-    # Execute EIP-7002 and EIP-7251 before calculating stateRoot
-    # because they will alter the state
-    withdrawalReqs = ?processDequeueWithdrawalRequests(vmState)
-    consolidationReqs = ?processDequeueConsolidationRequests(vmState)
-
-    if vmState.com.isAmsterdamOrLater(header.timestamp):
-      builderDepositReqs = ?processBuilderDepositRequests(vmState)
-      builderExitReqs = ?processBuilderExitRequests(vmState)
-
-  # Commit block access list tracker changes for post‑execution system calls
-  if vmState.balTrackerEnabled:
-    vmState.balTracker.commitCallFrame()
 
   # Catch a fatal condition from the reward persist or the post-execution system
   # calls before getStateRoot below, which would otherwise assert on it.
@@ -323,18 +290,18 @@ proc procBlkEpilogue(
             calcRequestsHash(
               [
                 (DEPOSIT_REQUEST_TYPE, depositReqs),
-                (WITHDRAWAL_REQUEST_TYPE, withdrawalReqs),
-                (CONSOLIDATION_REQUEST_TYPE, consolidationReqs),
-                (BUILDER_DEPOSIT_REQUEST_TYPE, builderDepositReqs),
-                (BUILDER_EXIT_REQUEST_TYPE, builderExitReqs),
+                (WITHDRAWAL_REQUEST_TYPE, requests.withdrawalReqs),
+                (CONSOLIDATION_REQUEST_TYPE, requests.consolidationReqs),
+                (BUILDER_DEPOSIT_REQUEST_TYPE, requests.builderDepositReqs),
+                (BUILDER_EXIT_REQUEST_TYPE, requests.builderExitReqs),
               ]
             )
           else:
             calcRequestsHash(
               [
                 (DEPOSIT_REQUEST_TYPE, depositReqs),
-                (WITHDRAWAL_REQUEST_TYPE, withdrawalReqs),
-                (CONSOLIDATION_REQUEST_TYPE, consolidationReqs),
+                (WITHDRAWAL_REQUEST_TYPE, requests.withdrawalReqs),
+                (CONSOLIDATION_REQUEST_TYPE, requests.consolidationReqs),
               ]
             )
 
@@ -366,13 +333,17 @@ proc processBlock*(
   ## Generalised function to processes `blk` for any network.
 
   vmState.withBalPrefetch(blockAccessList):
-    ?vmState.procBlkPreamble(blk, blockAccessList, skipValidation, skipReceipts, skipUncles)
+    var requests: BlockRequests
+    ?vmState.procBlkPreamble(
+      blk, blockAccessList, requests, skipValidation, skipReceipts, skipUncles)
 
     # EIP-3675: no reward for miner in POA/POS
     if not vmState.com.proofOfStake(blk.header, vmState.ledger.txFrame):
       vmState.calculateReward(blk.header, blk.uncles)
 
-    ?vmState.procBlkEpilogue(blk, skipValidation, skipReceipts, skipStateRootCheck, skipPostExecBalCheck)
+    ?vmState.procBlkEpilogue(
+      blk, requests, skipValidation, skipReceipts, skipStateRootCheck,
+      skipPostExecBalCheck)
 
   ok()
 

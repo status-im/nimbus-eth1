@@ -190,7 +190,7 @@ proc prefetchTransaction*(
   tx.txCallEvm(sender, vmState, intrinsic, discardResult = true)
   vmState.ledger.rollback(savePoint)
 
-proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32) =
+proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32, persist = true) =
   ## processBeaconBlockRoot applies the EIP-4788 system call to the
   ## beacon block root contract. This method is exported to be used in tests.
   ## If EIP-4788 is enabled, we need to invoke the beaconroot storage
@@ -205,9 +205,9 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32) =
     )
 
   # EIP-4788: fail silently
-  call.systemCall(void)
+  call.systemCall(void, persist)
 
-proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32) =
+proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32, persist = true) =
   ## processParentBlockHash stores the parent block hash in the
   ## history storage contract as per EIP-2935.
   let
@@ -220,9 +220,10 @@ proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32) =
     )
 
   # EIP-2923: fail silently
-  call.systemCall(void)
+  call.systemCall(void, persist)
 
-proc processDequeueWithdrawalRequests*(vmState: BaseVMState): Result[seq[byte], string] =
+proc processDequeueWithdrawalRequests*(
+    vmState: BaseVMState, persist = true): Result[seq[byte], string] =
   ## processDequeueWithdrawalRequests applies the EIP-7002 system call
   ## to the withdrawal requests contract.
   let
@@ -233,12 +234,13 @@ proc processDequeueWithdrawalRequests*(vmState: BaseVMState): Result[seq[byte], 
       to       : WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
     )
 
-  var res = call.systemCall(OutputResult)
+  var res = call.systemCall(OutputResult, persist)
   if res.error.len > 0:
     return err("processDequeueWithdrawalRequests: " & res.error)
   ok(move(res.output))
 
-proc processDequeueConsolidationRequests*(vmState: BaseVMState): Result[seq[byte], string] =
+proc processDequeueConsolidationRequests*(
+    vmState: BaseVMState, persist = true): Result[seq[byte], string] =
   ## processDequeueConsolidationRequests applies the EIP-7251 system call
   ## to the consolidation requests contract.
   let
@@ -249,12 +251,13 @@ proc processDequeueConsolidationRequests*(vmState: BaseVMState): Result[seq[byte
       to       : CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
     )
 
-  var res = call.systemCall(OutputResult)
+  var res = call.systemCall(OutputResult, persist)
   if res.error.len > 0:
     return err("processDequeueConsolidationRequests: " & res.error)
   ok(move(res.output))
 
-proc processBuilderDepositRequests*(vmState: BaseVMState): Result[seq[byte], string] =
+proc processBuilderDepositRequests*(
+    vmState: BaseVMState, persist = true): Result[seq[byte], string] =
   ## processBuilderDepositRequests applies the EIP-8282 system call
   ## to the builder deposit requests contract.
   let
@@ -265,12 +268,13 @@ proc processBuilderDepositRequests*(vmState: BaseVMState): Result[seq[byte], str
       to       : BUILDER_DEPOSIT_CONTRACT_ADDRESS,
     )
 
-  var res = call.systemCall(OutputResult)
+  var res = call.systemCall(OutputResult, persist)
   if res.error.len > 0:
     return err("processBuilderDepositRequests: " & res.error)
   ok(move(res.output))
 
-proc processBuilderExitRequests*(vmState: BaseVMState): Result[seq[byte], string] =
+proc processBuilderExitRequests*(
+    vmState: BaseVMState, persist = true): Result[seq[byte], string] =
   ## processBuilderExitRequests applies the EIP-8282 system call
   ## to the builder exit requests contract.
   let
@@ -281,7 +285,7 @@ proc processBuilderExitRequests*(vmState: BaseVMState): Result[seq[byte], string
       to       : BUILDER_EXIT_CONTRACT_ADDRESS,
     )
 
-  var res = call.systemCall(OutputResult)
+  var res = call.systemCall(OutputResult, persist)
   if res.error.len > 0:
     return err("processBuilderExitRequests: " & res.error)
   ok(move(res.output))
