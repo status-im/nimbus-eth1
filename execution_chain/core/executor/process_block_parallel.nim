@@ -98,6 +98,7 @@ proc recoverAndPrefetchTask*(
   let vmState = BaseVMState()
   vmState.com.borrowRef(ctx[].com)
   defer:
+    vmState.dispose()
     vmState.com.unborrowRef()
   vmState.ledger = ledger
   assign(vmState.parent, ctx[].parent)
@@ -376,6 +377,7 @@ proc processTxTask(
   let vmState = BaseVMState()
   vmState.com.borrowRef(ctx[].com)
   defer:
+    vmState.dispose()
     vmState.com.unborrowRef()
   vmState.ledger = ledger
   assign(vmState.parent, ctx[].parent)

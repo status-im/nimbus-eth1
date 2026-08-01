@@ -127,6 +127,9 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
     txFrame = com.db.baseTxFrame(),
     tracer = tracer)
 
+  defer:
+    vmState.dispose()
+
   vmState.mutateLedger:
     setupLedger(pre, ledger)
     ledger.persist(clearEmptyAccount = false) # settle accounts storage
@@ -159,7 +162,6 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
     if conf.jsonEnabled:
       writeRootHashToStderr(stateRoot)
     vmState.ledger.txFrame.dispose()
-    vmState.dispose()
     com.db.close()
 
   try:
