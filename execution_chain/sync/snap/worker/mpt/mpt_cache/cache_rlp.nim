@@ -169,8 +169,21 @@ func decodeStoMissingIntvData*(
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(res)
 
-func decodeFlatAccData*(data: openArray[byte]): Result[Account,string] =
-  const info = "decodeFlatAcc"
+func decodeFlatAccData*(
+    data: openArray[byte];
+     ): Result[CacheFlatAccData,string] =
+  const info = "decodeFlatAccData"
+  var res: CacheFlatAccData
+  try:
+    res = rlp.decode(data, CacheFlatAccData)
+  except RlpError as e:
+    return err(info & ": " & $e.name & "(" & e.msg & ")")
+  ok(move res)
+
+func decodeAccPayloadData*(
+    data: openArray[byte];
+     ): Result[Account,string] =
+  const info = "decodeAccPayloadData"
   var res: Account
   try:
     res = rlp.decode(data, Account)
@@ -271,9 +284,9 @@ template encodeStoMissingIntvData*(
   wrt.finish()
 
 template encodeFlatAccData*(
-    account: Account;
+    data: CacheFlatAccData;
       ): untyped =
-  rlp.encode(account)
+  rlp.encode(data)
 
 template encodeFlatSlotData*(
     slot: UInt256;

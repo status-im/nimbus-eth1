@@ -296,6 +296,9 @@ proc createAccessList*(header: Header,
               else: generateAddress(sender, nonce)
     precompiles = activePrecompilesList(fork)
 
+  defer:
+    vmState.dispose()
+
   var
     prevTracer = AccessListTracer.new(
       args.accessList.get(@[]),
@@ -317,9 +320,11 @@ proc createAccessList*(header: Header,
       tracer  = AccessListTracer.new(accessList, sender, to, precompiles)
       vmState = BaseVMState.new(parent, header, com, txFrame, tracer)
       res     = rpcCallEvm(args, header, vmState).valueOr:
+                  vmState.dispose()
                   txFrame.dispose()
                   handleError("failed to call evm: " & $error.code)
 
+    vmState.dispose()
     txFrame.dispose()
 
     if res.isError:
