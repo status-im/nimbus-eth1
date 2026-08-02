@@ -43,9 +43,11 @@ proc rpcCallEvm*(
   defer:
     txFrame.dispose() # always dispose state changes
 
-  let
-    vmState = BaseVMState.new(header, topHeader, com, txFrame)
-    params = ?toCallParams(vmState, args, globalGasCap, header)
+  let vmState = BaseVMState.new(header, topHeader, com, txFrame)
+  defer:
+    vmState.dispose()
+
+  let params = ?toCallParams(vmState, args, globalGasCap, header)
 
   ok(runComputation(params, CallResult))
 
@@ -192,4 +194,7 @@ proc rpcEstimateGas*(
     txFrame.dispose() # always dispose state changes
 
   let vmState = BaseVMState.new(header, topHeader, com, txFrame)
+  defer:
+    vmState.dispose()
+
   rpcEstimateGas(args, header, vmState, gasCap)
