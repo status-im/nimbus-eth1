@@ -172,8 +172,8 @@ proc processTransaction*(
   if persist:
     vmState.ledger.persist(clearEmptyAccount = vmState.hardFork >= Spurious)
 
-  # Checked after persist so both a BLOCKHASH miss (set during the EVM run)
-  # and a partial witness persist failure are caught here.
+  # Checked after persist so a BLOCKHASH miss, a missing-code lookup (both set
+  # during the EVM run) and a partial witness persist failure are all caught here.
   vmState.ledger.abortOnFatalError()
 
   res

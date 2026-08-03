@@ -92,6 +92,48 @@ TRUSTED_BLOCK_ROOT=0x12345678901234567890123456789012345678901234567890123456789
     --listen-url="ws://127.0.0.1:8546"
 ```
 
+### Run with Docker
+
+Multi-arch images are published to Docker Hub as [`statusim/nimbus-verified-proxy`](https://hub.docker.com/r/statusim/nimbus-verified-proxy).
+
+The container's entrypoint reads its configuration from a TOML file mounted at
+`/config/proxy.toml`, so you must provide one. Any option accepted on the command
+line can be set in this file using its long name as the key (repeatable options
+become TOML arrays).
+
+Create a `proxy.toml`, for example:
+
+```toml
+network = "mainnet"
+execution-api-url = ["wss://eth-mainnet.g.alchemy.com/v2/<ApiKey>"]
+beacon-api-url = ["https://beaconstate.info"]
+
+# Bind to 0.0.0.0 (not 127.0.0.1) so the ports are reachable from outside the container
+listen-url = ["http://0.0.0.0:8545", "ws://0.0.0.0:8546"]
+```
+
+The trusted block root needs to be refreshed for every start, so it is more
+convenient to pass it as an environment variable than to edit the config file
+each time. Every option can also be supplied through an environment variable
+named `NIMBUS_VERIFIED_PROXY_<OPTION>`, where `<OPTION>` is the upper-cased long
+name with dashes replaced by underscores.
+
+Start the container, mounting the config and passing the trusted block root via
+the environment:
+
+```bash
+docker run --rm \
+    -p 8545:8545 -p 8546:8546 \
+    -v "$(pwd)/proxy.toml:/config/proxy.toml:ro" \
+    -e NIMBUS_VERIFIED_PROXY_TRUSTED_BLOCK_ROOT=0x1234567890123456789012345678901234567890123456789012345678901234 \
+    statusim/nimbus-verified-proxy
+```
+
+Configuration is resolved with the following precedence (highest first):
+command-line arguments > environment variables > config file > built-in defaults.
+So values passed with `-e` (or extra flags appended after the image name)
+override the ones in `proxy.toml`.
+
 ### Using the Nimbus Verified Proxy with existing Wallets
 The Nimbus Verified Proxy exposes the standard Ethereum JSON RPC Execution API and can thus be used
 as drop-in replacement for any Wallet that relies on this API.

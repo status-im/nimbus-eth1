@@ -27,6 +27,15 @@ func readyForMptAssembly(ctx: SnapCtxRef): bool =
   sdb.isComplete or
     accuAccountsCovMin < sdb.archivedCoverage() + sdb.accountsCoverage()
 
+proc pvStr(ctx: SnapCtxRef, info: static[string]): string =
+  if ctx.pool.pivot.isNone():
+    return "n/a"
+  let
+    pvHash = ctx.pool.pivot.toStr
+    pvNum = ctx.sessionPivotNum(info).valueOr:
+      return pvHash
+  pvHash & "(" & $pvNum & ")"
+
 # ------------------------------------------------------------------------------
 # Private FSA transition functions
 # ------------------------------------------------------------------------------
@@ -77,7 +86,7 @@ proc resumeNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
   # Continuing a a session is fully controlled by the daemon (no peers'
   # interaction.) So there is no need to sync via `poolMode`.
-  ctx.getPivotTag(info).isErrOr:
+  ctx.sessionPivotTag(info).isErrOr:
     if PivotOnTrie <= value:
       return SnapAnalyse
   if ctx.readyForMptAssembly():
@@ -107,7 +116,7 @@ proc mkTrieNext(ctx: SnapCtxRef; info: static[string]): SnapState =
 
 proc analyseNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
-  ctx.getPivotTag(info).isErrOr:
+  ctx.sessionPivotTag(info).isErrOr:
     if PivotMptAnalysed <= value:
       return SnapStop                               # FIXME-- might change
   SnapAnalyse
@@ -183,9 +192,11 @@ proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
       top=sdb.top, pivot=sdb.pivot.bnStr, nSyncPeers=ctx.nSyncPeers()
   of SnapAnalyse, SnapStop:
     chronicles.info info & ": State changed", prevState, newState,
-      pivot=ctx.pool.pivot.toStr, nSyncPeers=ctx.nSyncPeers()
-  of SnapIdle, SnapResume, SnapReady:
-    debug "State changed", prevState, newState
+      pivot=ctx.pvStr(info), nSyncPeers=ctx.nSyncPeers()
+  of SnapResume:
+    debug info & ": State changed", pivot=ctx.pvStr(info), prevState, newState
+  of SnapReady, SnapIdle:
+    debug info & ": State changed", prevState, newState
 
   newState
 

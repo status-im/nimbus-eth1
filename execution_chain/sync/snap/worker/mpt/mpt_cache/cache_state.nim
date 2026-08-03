@@ -45,6 +45,14 @@ proc hasStateData*(
     return ok(true)
   ok(false)
 
+proc hasStateData*(
+    db: CacheDbRef;
+    root: StateRoot;
+      ): Result[bool,string] =
+  let data = db.get33(cStateData, root).valueOr:
+    return err(error)
+  ok(0 < data.len)
+
 proc getStateData*(
     db: CacheDbRef;
     root: StateRoot;

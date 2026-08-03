@@ -453,10 +453,8 @@ method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash32 =
   return h
 
 proc parseChainConfig(network: string): ChainConfig =
-  try:
-    result = getChainConfig(network)
-  except ValueError as e:
-    raise newError(ErrorConfig, e.msg)
+  result = getChainConfig(network).valueOr:
+    raise newError(ErrorConfig, error)
 
 proc calcBaseFee(env: EnvStruct): UInt256 =
   if env.parentGasUsed.isNone:
@@ -614,6 +612,10 @@ proc transitionAction*(ctx: var TransContext,
       storeSlotHash = true,
       enableBalTracker = com.isAmsterdamOrLater(ctx.env.currentTimestamp),
     )
+
+    defer:
+      if not vmState.isNil():
+        vmState.dispose()
 
     vmState.mutateLedger:
       ledger.setupAlloc(ctx.alloc)

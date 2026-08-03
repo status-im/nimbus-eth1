@@ -10,11 +10,15 @@
 import
   stint,
   std/strutils,
+  chronicles,
   json_rpc/[rpcserver, rpcproxy],
   web3/[eth_api, eth_api_types],
   ../execution_chain/rpc/cors,
   ./engine/types,
   ./nimbus_verified_proxy_conf
+
+logScope:
+  topics = "vp_frontend"
 
 # for eth_feeHistory
 EthJson.automaticSerialization(int, true)
@@ -84,14 +88,25 @@ proc start*(server: JsonRpcServer): EngineResult[void] =
   ok()
 
 # this unpacks the result objects returned by frontend and translates result errors
-# to exceptions. This is done becquse the `rpc` macro of the RpcServer is built to 
+# to exceptions. This is done becquse the `rpc` macro of the RpcServer is built to
 # catch exceptions rather than parse the result object directly
 template unpackEngineResult[T](res: EngineResult[T]): T =
-  res.valueOr:
-    raise newException(ValueError, $error.errType & " -> " & error.errMsg)
+  block:
+    let engineRes: EngineResult[T] = res
+    if engineRes.isErr():
+      debug "Query failed",
+        errType = $engineRes.error.errType, err = engineRes.error.errMsg
+      raise newException(
+        ValueError, $engineRes.error.errType & " -> " & engineRes.error.errMsg
+      )
+    trace "Query completed", response = safeEncode(engineRes.unsafeGet())
+    engineRes.unsafeGet()
 
 proc injectEngineFrontend*(server: JsonRpcServer, frontend: ExecutionApiFrontend) =
   server.getServer().rpc(EthJson):
+    proc eth_chainId(): UInt256 {.async: (raises: [ValueError, CancelledError]).} =
+      unpackEngineResult(await frontend.eth_chainId())
+
     proc eth_blockNumber(): uint64 {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(await frontend.eth_blockNumber())
 

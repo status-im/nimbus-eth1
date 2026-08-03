@@ -31,11 +31,10 @@ type
 const
   genesisFile = "tests/customgenesis/cancun123.json"
 
-proc makeCom(config: ExecutionClientConf): CommonRef =
+proc makeCom(params: NetworkParams): CommonRef =
   let com = CommonRef.new(
     newCoreDbRef DefaultDbMemory,
-    config.networkId,
-    config.networkParams
+    params
   )
   com.taskpool = Taskpool.new()
   com
@@ -72,7 +71,8 @@ proc newTestEnv*(): TestEnv =
     rng    = newRng()
     node   = setupTestNode(rng)
     config = envConfig()
-    com    = makeCom(config)
+    params = config.computeNetworkParams()
+    com    = makeCom(params)
     chain  = ForkedChainRef.init(com, enableQueue = true)
     txPool = TxPoolRef.new(chain)
     wire   = node.addEthHandlerCapability(txPool)
@@ -86,11 +86,11 @@ proc newTestEnv*(): TestEnv =
     wire   : wire,
   )
 
-proc close*(env: TestEnv) =
+proc close*(env: TestEnv) {.async: (raises: [CancelledError]).} =
   if env.node.listeningServer.isNil.not:
-    waitFor env.node.closeWait()
-  waitFor env.wire.stop()
-  waitFor env.chain.stopProcessingQueue()
+    await env.node.closeWait()
+  await env.wire.stop()
+  await env.chain.stopProcessingQueue()
 
 template sourceDir*: string = currentSourcePath.rsplit(DirSep, 1)[0]
 

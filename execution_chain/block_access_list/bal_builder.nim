@@ -7,82 +7,77 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+# Builder for constructing a BlockAccessList efficiently during transaction
+# execution. The builder accumulates all account and storage reads and writes
+# during block execution and constructs a deterministic access list. Changes
+# are tracked by address, field type, and block access list index to enable
+# efficient reconstruction of state changes.
+#
+# All collections use the non-GC SharedSeq type (rather than the standard
+# library Seq) so that the builder can be used safely with the refc memory
+# manager across threads.
+#
+# The idea here is that each thread writes to a separate index in the internal
+# `perIndex` array so that concurrent lock free writes are possible during
+# parallel execution.
+
 {.push raises: [], gcsafe.}
 
 import
-  std/[algorithm, locks],
+  std/[algorithm],
   eth/common/[block_access_lists, block_access_lists_rlp],
   stint,
-  ./bal_utils,
   ../concurrency/shared_types
 
 export block_access_lists
 
 type
-  # Account data stored in the builder during block execution. This type tracks
-  # all changes made to a single account throughout the execution of a block,
-  # organized by the type of change and the block access list index where it
-  # occurred.
-  AccountData = object
-    storageChanges*: SharedTable[UInt256, SharedTable[int, UInt256]]
-      ## Maps storage key -> block access index -> storage value
-    storageReads*: SharedTable[UInt256, bool]
-      ## Set of storage keys (the value is always true when the key exists)
-    balanceChanges*: SharedTable[int, UInt256] ## Maps block access index -> balance
-    nonceChanges*: SharedTable[int, AccountNonce] ## Maps block access index -> nonce
-    codeChanges*: SharedTable[int, SharedBytes] ## Maps block access index -> code
+  StorageWrite = tuple[address: Address, slot: UInt256, value: UInt256]
+  StorageReadEntry = tuple[address: Address, slot: UInt256]
+  BalanceWrite = tuple[address: Address, balance: UInt256]
+  NonceWrite = tuple[address: Address, nonce: AccountNonce]
+  CodeWrite = tuple[address: Address, code: SharedBytes]
 
-  # Builder for constructing a BlockAccessList efficiently during transaction
-  # execution. The builder accumulates all account and storage accesses during
-  # block execution and constructs a deterministic access list. Changes are
-  # tracked by address, field type, and block access list index to enable
-  # efficient reconstruction of state changes.
-  #
-  # All collections use the non-GC SharedTable type (rather than the standard
-  # library Table/HashSet which are backed by a GC managed seq) so that the
-  # builder can be used safely with the refc memory manager across threads.
+  BalIndexData = object
+    touchedAccounts: SharedSeq[Address]
+    storageChanges: SharedSeq[StorageWrite]
+    storageReads: SharedSeq[StorageReadEntry]
+    balanceChanges: SharedSeq[BalanceWrite]
+    nonceChanges: SharedSeq[NonceWrite]
+    codeChanges: SharedSeq[CodeWrite]
+
   BlockAccessListBuilder* = object
-    accounts*: SharedTable[Address, AccountData] ## Maps address -> account data
-    threadSafe: bool
-    lock: Lock
+    perIndex: SharedSeq[BalIndexData]
 
-template init(T: type AccountData): T =
-  AccountData()
-
-proc dispose(accData: var AccountData) =
-  for slotChanges in accData.storageChanges.mvalues():
-    slotChanges.dispose()
-  accData.storageChanges.dispose()
-  accData.storageReads.dispose()
-  accData.balanceChanges.dispose()
-  accData.nonceChanges.dispose()
-  for code in accData.codeChanges.mvalues():
-    code.dispose()
-  accData.codeChanges.dispose()
+proc dispose(indexData: var BalIndexData) =
+  indexData.touchedAccounts.dispose()
+  indexData.storageChanges.dispose()
+  indexData.storageReads.dispose()
+  indexData.balanceChanges.dispose()
+  indexData.nonceChanges.dispose()
+  for code in indexData.codeChanges.mitems():
+    code.code.dispose()
+  indexData.codeChanges.dispose()
 
 proc `=copy`(
-    dest: var AccountData, src: AccountData
-) {.error: "Copying AccountData is forbidden".} =
+    dest: var BalIndexData, src: BalIndexData
+) {.error: "Copying BalIndexData is forbidden".} =
   discard
 
-proc init*(builder: var BlockAccessListBuilder, threadSafe = false) =
-  builder.threadSafe = threadSafe
-  if threadSafe:
-    initLock(builder.lock)
+proc init*(builder: var BlockAccessListBuilder) =
+  # Is a no-op because the perIndex array is zero initialized
+  # and valid with default values.
+  discard
 
-proc newShared*(
-    T: type BlockAccessListBuilder, threadSafe = false
-): ptr BlockAccessListBuilder =
+proc newShared*(T: type BlockAccessListBuilder): ptr BlockAccessListBuilder =
   let builderPtr = createShared(BlockAccessListBuilder)
-  builderPtr[].init(threadSafe)
+  builderPtr[].init()
   builderPtr
 
 proc dispose*(builder: var BlockAccessListBuilder) =
-  for accData in builder.accounts.mvalues():
-    accData.dispose()
-  builder.accounts.dispose()
-  if builder.threadSafe:
-    deinitLock(builder.lock)
+  for idxData in builder.perIndex.mitems():
+    idxData.dispose()
+  builder.perIndex.dispose()
 
 proc dispose*(builderPtr: ptr BlockAccessListBuilder) =
   if not builderPtr.isNil():
@@ -94,138 +89,241 @@ proc `=copy`(
 ) {.error: "Copying BlockAccessListBuilder is forbidden".} =
   discard
 
-template withOptionalLock(builder: BlockAccessListBuilder, body: untyped) =
-  if builder.threadSafe:
-    withLock(builder.lock):
-      body
-  else:
-    body
+proc ensureIndexCount*(builder: var BlockAccessListBuilder, n: int, exact = false) =
+  if n > builder.perIndex.len:
+    builder.perIndex.setLen(n, zeroed = true, exact)
 
-proc ensureAccount(builder: var BlockAccessListBuilder, address: Address) =
-  if address notin builder.accounts:
-    builder.accounts[address] = AccountData.init()
-
-proc addTouchedAccount*(builder: var BlockAccessListBuilder, address: Address) =
-  withOptionalLock(builder):
-    builder.ensureAccount(address)
+proc addTouchedAccount*(
+    builder: var BlockAccessListBuilder, blockAccessIndex: int, address: Address
+) =
+  assert blockAccessIndex < builder.perIndex.len
+  builder.perIndex[blockAccessIndex].touchedAccounts.add(address)
 
 proc addStorageWrite*(
     builder: var BlockAccessListBuilder,
+    blockAccessIndex: int,
     address: Address,
     slot: UInt256,
-    blockAccessIndex: int,
     newValue: UInt256,
 ) =
-  withOptionalLock(builder):
-    builder.ensureAccount(address)
-
-    builder.accounts.withValue(address, accData):
-      if slot notin accData[].storageChanges:
-        accData[].storageChanges[slot] = default(SharedTable[int, UInt256])
-      accData[].storageChanges.withValue(slot, slotChanges):
-        slotChanges[][blockAccessIndex] = newValue
+  assert blockAccessIndex < builder.perIndex.len
+  builder.perIndex[blockAccessIndex].storageChanges.add((address, slot, newValue))
 
 proc addStorageRead*(
-    builder: var BlockAccessListBuilder, address: Address, slot: UInt256
+    builder: var BlockAccessListBuilder,
+    blockAccessIndex: int,
+    address: Address,
+    slot: UInt256,
 ) =
-  withOptionalLock(builder):
-    builder.ensureAccount(address)
-
-    builder.accounts.withValue(address, accData):
-      accData[].storageReads[slot] = true
+  assert blockAccessIndex < builder.perIndex.len
+  builder.perIndex[blockAccessIndex].storageReads.add((address, slot))
 
 proc addBalanceChange*(
     builder: var BlockAccessListBuilder,
-    address: Address,
     blockAccessIndex: int,
+    address: Address,
     postBalance: UInt256,
 ) =
-  withOptionalLock(builder):
-    builder.ensureAccount(address)
-
-    builder.accounts.withValue(address, accData):
-      accData[].balanceChanges[blockAccessIndex] = postBalance
+  assert blockAccessIndex < builder.perIndex.len
+  builder.perIndex[blockAccessIndex].balanceChanges.add((address, postBalance))
 
 proc addNonceChange*(
     builder: var BlockAccessListBuilder,
-    address: Address,
     blockAccessIndex: int,
+    address: Address,
     newNonce: AccountNonce,
 ) =
-  withOptionalLock(builder):
-    builder.ensureAccount(address)
-
-    builder.accounts.withValue(address, accData):
-      accData[].nonceChanges[blockAccessIndex] = newNonce
+  assert blockAccessIndex < builder.perIndex.len
+  builder.perIndex[blockAccessIndex].nonceChanges.add((address, newNonce))
 
 proc addCodeChange*(
     builder: var BlockAccessListBuilder,
-    address: Address,
     blockAccessIndex: int,
+    address: Address,
     newCode: openArray[byte],
 ) =
-  withOptionalLock(builder):
-    builder.ensureAccount(address)
+  assert blockAccessIndex < builder.perIndex.len
+  builder.perIndex[blockAccessIndex].codeChanges.add(
+    (address, SharedBytes.init(newCode))
+  )
 
-    builder.accounts.withValue(address, accData):
-      accData[].codeChanges.withValue(blockAccessIndex, existing):
-        existing[].dispose()
-      accData[].codeChanges[blockAccessIndex] = SharedBytes.init(newCode)
+type
+  FlatStorageChange =
+    tuple[address: Address, slot: UInt256, index: BlockAccessIndex, value: UInt256]
+  FlatStorageRead = tuple[address: Address, slot: UInt256]
+  FlatBalanceChange =
+    tuple[address: Address, index: BlockAccessIndex, value: UInt256]
+  FlatNonceChange =
+    tuple[address: Address, index: BlockAccessIndex, value: AccountNonce]
+  FlatCodeChange =
+    tuple[address: Address, index: BlockAccessIndex, value: seq[byte]]
+
+func addrCmp(x, y: Address): int =
+  let
+    xd = x.data()
+    yd = y.data()
+  for i in 0 ..< xd.len:
+    if xd[i] != yd[i]:
+      return (if xd[i] < yd[i]: -1 else: 1)
+  0
+
+func flatStorageCmp(x, y: FlatStorageChange): int =
+  var c = addrCmp(x.address, y.address)
+  if c == 0:
+    c = cmp(x.slot, y.slot)
+  if c == 0:
+    c = cmp(x.index, y.index)
+  c
+
+func flatStorageReadCmp(x, y: FlatStorageRead): int =
+  var c = addrCmp(x.address, y.address)
+  if c == 0:
+    c = cmp(x.slot, y.slot)
+  c
+
+func flatIndexedCmp[T](
+    x, y: tuple[address: Address, index: BlockAccessIndex, value: T]
+): int =
+  var c = addrCmp(x.address, y.address)
+  if c == 0:
+    c = cmp(x.index, y.index)
+  c
+
+func headAddress[T](src: openArray[T], cursor: int): Opt[Address] {.inline.} =
+  # Address of the entry at `cursor`, or none once the cursor is exhausted.
+  if cursor < src.len: Opt.some(src[cursor].address) else: Opt.none(Address)
+
+template collapseByIndex[T](
+    src: openArray[T], cursor: var int, sameGroup, emit: untyped
+) =
+  # `src` is sorted by index within each group. Consume the run for which
+  # `sameGroup` holds and run `emit` once per distinct block access `index` with
+  # the last `value` seen for that index injected - reproducing last-write-wins
+  # for the pre/post-execution indices, which are the only ones that can repeat.
+  while cursor < src.len and sameGroup:
+    let index {.inject.} = src[cursor].index
+    var value {.inject.} = src[cursor].value
+    inc cursor
+    while cursor < src.len and sameGroup and src[cursor].index == index:
+      value = src[cursor].value
+      inc cursor
+    emit
 
 func buildBlockAccessList*(builder: var BlockAccessListBuilder): BlockAccessListRef =
-  # This function is not thread safe and should only be called once all threads
-  # have finished writing to the builder.
-  let blockAccessList: BlockAccessListRef = new BlockAccessList
+  # Not thread safe: only call once all threads have finished writing.
+  #
+  # Rebuild is done in three phases:
+  #   1. flatten every per-index write into flat, address-tagged seqs,
+  #   2. sort each seq by (address, [slot,] index),
+  #   3. merge-walk the seqs by address, emitting one AccountChanges per address.
+  let blockAccessList = new BlockAccessList
 
-  for address, accData in builder.accounts.pairs():
-    # Collect and sort storageChanges
+  # Phase 1: reserve exact capacity, then flatten.
+  var totS, totR, totB, totN, totC, totT = 0
+  for idx in 0 ..< builder.perIndex.len:
+    let d = addr builder.perIndex[idx]
+    totT += d[].touchedAccounts.len
+    totS += d[].storageChanges.len
+    totR += d[].storageReads.len
+    totB += d[].balanceChanges.len
+    totN += d[].nonceChanges.len
+    totC += d[].codeChanges.len
+
+  var
+    touched = newSeqOfCap[Address](totT)
+    sChanges = newSeqOfCap[FlatStorageChange](totS)
+    sReads = newSeqOfCap[FlatStorageRead](totR)
+    bChanges = newSeqOfCap[FlatBalanceChange](totB)
+    nChanges = newSeqOfCap[FlatNonceChange](totN)
+    cChanges = newSeqOfCap[FlatCodeChange](totC)
+
+  for idx in 0 ..< builder.perIndex.len:
+    let
+      balIndex = BlockAccessIndex(idx)
+      d = addr builder.perIndex[idx]
+    for a in d[].touchedAccounts.items():
+      touched.add(a)
+    for w in d[].storageChanges.items():
+      sChanges.add((w.address, w.slot, balIndex, w.value))
+    for r in d[].storageReads.items():
+      sReads.add((r.address, r.slot))
+    for b in d[].balanceChanges.items():
+      bChanges.add((b.address, balIndex, b.balance))
+    for nc in d[].nonceChanges.items():
+      nChanges.add((nc.address, balIndex, nc.nonce))
+    for cc in d[].codeChanges.items():
+      cChanges.add((cc.address, balIndex, cc.code.data()))
+
+  # Phase 2: sort each field by (address, [slot,] index). The sort must be stable
+  # so that entries sharing a key keep their append order and Phase 3's collapse
+  # yields the last write per index. std/algorithm.sort is guaranteed stable.
+  sort(touched, addrCmp)
+  sort(sChanges, flatStorageCmp)
+  sort(sReads, flatStorageReadCmp)
+  sort(bChanges, flatIndexedCmp[UInt256])
+  sort(nChanges, flatIndexedCmp[AccountNonce])
+  sort(cChanges, flatIndexedCmp[seq[byte]])
+
+  # Phase 3: merge-walk by address.
+  var si, ri, bi, ni, ci, ti = 0
+  while true:
+    # Smallest address still pending across all six cursors.
+    var nextAddr = Opt.none(Address)
+    for head in [
+        headAddress(sChanges, si), headAddress(sReads, ri), headAddress(bChanges, bi),
+        headAddress(nChanges, ni), headAddress(cChanges, ci),
+        (if ti < touched.len: Opt.some(touched[ti]) else: Opt.none(Address))]:
+      if head.isSome and (nextAddr.isNone or addrCmp(head.get, nextAddr.get) < 0):
+        nextAddr = head
+    if nextAddr.isNone:
+      break
+    let acc = nextAddr.get
+
+    # storageChanges: group by slot, then collapse each slot's writes by index.
     var storageChanges: seq[SlotChanges]
-    for slot, changes in accData.storageChanges.pairs():
+    while si < sChanges.len and sChanges[si].address == acc:
+      let slot = sChanges[si].slot
       var slotChanges: seq[StorageChange]
-
-      for balIndex, value in changes.pairs():
-        slotChanges.add((BlockAccessIndex(balIndex), StorageValue(value)))
-      slotChanges.sort(balIndexCmp)
-
+      collapseByIndex(sChanges, si,
+          sChanges[si].address == acc and sChanges[si].slot == slot):
+        slotChanges.add((index, StorageValue(value)))
       storageChanges.add((StorageKey(slot), slotChanges))
-    storageChanges.sort(slotChangesCmp)
 
-    # Collect and sort storageReads
+    # storageReads: unique read slots that were not also written. Both seqs are
+    # slot-sorted, so a single forward cursor (`written`) decides membership.
     var storageReads: seq[StorageKey]
-    for slot in accData.storageReads.keys():
-      if slot notin accData.storageChanges:
+    var written = 0
+    while ri < sReads.len and sReads[ri].address == acc:
+      let slot = sReads[ri].slot
+      inc ri
+      while ri < sReads.len and sReads[ri].address == acc and sReads[ri].slot == slot:
+        inc ri
+      while written < storageChanges.len and storageChanges[written].slot < slot:
+        inc written
+      if written >= storageChanges.len or storageChanges[written].slot != slot:
         storageReads.add(StorageKey(slot))
-    storageReads.sort()
 
-    # Collect and sort balanceChanges
     var balanceChanges: seq[BalanceChange]
-    for balIndex, balance in accData.balanceChanges.pairs():
-      balanceChanges.add((BlockAccessIndex(balIndex), Balance(balance)))
-    balanceChanges.sort(balIndexCmp)
+    collapseByIndex(bChanges, bi, bChanges[bi].address == acc):
+      balanceChanges.add((index, Balance(value)))
 
-    # Collect and sort nonceChanges
     var nonceChanges: seq[NonceChange]
-    for balIndex, nonce in accData.nonceChanges.pairs():
-      nonceChanges.add((BlockAccessIndex(balIndex), Nonce(nonce)))
-    nonceChanges.sort(balIndexCmp)
+    collapseByIndex(nChanges, ni, nChanges[ni].address == acc):
+      nonceChanges.add((index, Nonce(value)))
 
-    # Collect and sort codeChanges
     var codeChanges: seq[CodeChange]
-    for balIndex, code in accData.codeChanges.pairs():
-      codeChanges.add((BlockAccessIndex(balIndex), Bytecode(code.data())))
-    codeChanges.sort(balIndexCmp)
+    collapseByIndex(cChanges, ci, cChanges[ci].address == acc):
+      codeChanges.add((index, Bytecode(value)))
 
-    blockAccessList[].add(
-      AccountChanges(
-        address: address,
-        storageChanges: storageChanges,
-        storageReads: storageReads,
-        balanceChanges: balanceChanges,
-        nonceChanges: nonceChanges,
-        codeChanges: codeChanges,
-      )
-    )
+    while ti < touched.len and touched[ti] == acc:
+      inc ti
 
-  blockAccessList[].sort(accChangesCmp)
+    blockAccessList[].add(AccountChanges(
+      address: acc,
+      storageChanges: move(storageChanges),
+      storageReads: move(storageReads),
+      balanceChanges: move(balanceChanges),
+      nonceChanges: move(nonceChanges),
+      codeChanges: move(codeChanges)))
 
   blockAccessList

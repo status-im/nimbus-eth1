@@ -16,7 +16,7 @@ import
   ./interpreter/[gas_meter, gas_costs, utils/utils_numeric],
   eth/common/keys,
   chronicles,
-  nimcrypto/[ripemd, sha2, utils],
+  nimcrypto/[ripemd, utils],
   stew/assign2,
   ../common/evmforks,
   ../core/eip4844,
@@ -26,6 +26,8 @@ import
   ./computation,
   ./secp256r1verify,
   eth/common/[base, addresses]
+
+from boringssl as bssl import nil
 
 when enable_mcl_lib:
   import ./bncurve_mcl
@@ -199,7 +201,13 @@ func sha256(c: Computation): EvmResultVoid =
     gasFee = GasSHA256 + wordCount.GasInt * GasSHA256Word
 
   ? c.gasMeter.consumeGas(gasFee, reason="SHA256 Precompile")
-  assign(c.output, sha2.sha256.digest(c.msg.data).data)
+
+  # Skip zero-filling since SHA256 overwrites all 32 bytes
+  c.output.setLenUninit(32)
+  {.cast(noSideEffect).}:
+    let data = if c.msg.data.len > 0: addr c.msg.data[0] else: nil
+    discard bssl.SHA256(data, csize_t(c.msg.data.len),
+      cast[ptr array[32, byte]](addr c.output[0])[])
   ok()
 
 func ripemd160(c: Computation): EvmResultVoid =
@@ -348,24 +356,15 @@ func modExp(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   if baseL > maxSize or expL > maxSize or modL > maxSize:
     return err(prcErr(PrcInvalidParam))
 
-  # TODO:
-  # add EVM special case:
-  # - modulo <= 1: return zero
-  # - exp == zero: return one
+  c.output.setLenUninit(modLen)
 
-  let output = modExp(
+  modExpInto(
     data.rangeToPadded(96, baseLen),
     data.rangeToPadded(96 + baseLen, expLen),
-    data.rangeToPadded(96 + baseLen + expLen, modLen)
+    data.rangeToPadded(96 + baseLen + expLen, modLen),
+    c.output
   )
 
-  # maximum output len is the same as modLen
-  # if it less than modLen, it will be zero padded at left
-  if output.len >= modLen:
-    assign(c.output, output.toOpenArray(output.len-modLen, output.len-1))
-  else:
-    c.output = newSeq[byte](modLen)
-    assign(c.output.toOpenArray(c.output.len-output.len, c.output.len-1), output)
   ok()
 
 func bn256ecAdd(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
@@ -495,8 +494,8 @@ func blsG1MultiExp(c: Computation): EvmResultVoid =
   ? c.gasMeter.consumeGas(gas, reason="blsG1MultiExp Precompile")
 
   var
-    p {.noinit.}: BLS_G1
-    s {.noinit.}: BLS_SCALAR
+    points = newSeq[BLS_G1P](K)
+    scalars = newSeq[BLS_SCALAR](K)
     acc {.noinit.}: BLS_G1
 
   # Decode point scalar pairs
@@ -504,21 +503,21 @@ func blsG1MultiExp(c: Computation): EvmResultVoid =
     let off = L * i
 
     # Decode G1 point
-    if not p.decodePoint(input.toOpenArray(off, off+127)):
+    if not points[i].decodePoint(input.toOpenArray(off, off+127)):
       return err(prcErr(PrcInvalidPoint))
 
-    if not p.subgroupCheck:
+    if not points[i].isInf and not points[i].subgroupCheck:
       return err(prcErr(PrcInvalidPoint))
 
     # Decode scalar value
-    if not s.fromBytes(input.toOpenArray(off+128, off+159)):
+    if not scalars[i].fromBytes(input.toOpenArray(off+128, off+159)):
       return err(prcErr(PrcInvalidParam))
 
-    p.mul(s)
-    if i == 0:
-      acc = p
-    else:
-      acc.add(p)
+  if K == 1:
+    acc.fromAffine(points[0])
+    acc.mul(scalars[0])
+  else:
+    acc.multiExp(points, scalars)
 
   c.output.setLen(128)
   if not encodePoint(acc, c.output):
@@ -566,8 +565,8 @@ func blsG2MultiExp(c: Computation): EvmResultVoid =
   ? c.gasMeter.consumeGas(gas, reason="blsG2MultiExp Precompile")
 
   var
-    p {.noinit.}: BLS_G2
-    s {.noinit.}: BLS_SCALAR
+    points = newSeq[BLS_G2P](K)
+    scalars = newSeq[BLS_SCALAR](K)
     acc {.noinit.}: BLS_G2
 
   # Decode point scalar pairs
@@ -575,21 +574,27 @@ func blsG2MultiExp(c: Computation): EvmResultVoid =
     let off = L * i
 
     # Decode G1 point
-    if not p.decodePoint(input.toOpenArray(off, off+255)):
+    if not points[i].decodePoint(input.toOpenArray(off, off+255)):
       return err(prcErr(PrcInvalidPoint))
 
-    if not p.subgroupCheck:
+    if not points[i].isInf and not points[i].subgroupCheck:
       return err(prcErr(PrcInvalidPoint))
 
     # Decode scalar value
-    if not s.fromBytes(input.toOpenArray(off+256, off+287)):
+    if not scalars[i].fromBytes(input.toOpenArray(off+256, off+287)):
       return err(prcErr(PrcInvalidParam))
 
-    p.mul(s)
-    if i == 0:
-      acc = p
-    else:
-      acc.add(p)
+  # Pippenger only starts paying off above two pairs in G2
+  if K <= 2:
+    acc.fromAffine(points[0])
+    acc.mul(scalars[0])
+    for i in 1..<K:
+      var t {.noinit.}: BLS_G2
+      t.fromAffine(points[i])
+      t.mul(scalars[i])
+      acc.add(t)
+  else:
+    acc.multiExp(points, scalars)
 
   c.output.setLen(256)
   if not encodePoint(acc, c.output):
@@ -613,7 +618,8 @@ func blsPairing(c: Computation): EvmResultVoid =
   var
     g1 {.noinit.}: BLS_G1P
     g2 {.noinit.}: BLS_G2P
-    acc {.noinit.}: BLS_ACC
+    g1Points = newSeqOfCap[BLS_G1P](K)
+    g2Points = newSeqOfCap[BLS_G2P](K)
 
   # Decode pairs
   for i in 0..<K:
@@ -635,14 +641,18 @@ func blsPairing(c: Computation): EvmResultVoid =
     if not g2.subgroupCheck:
       return err(prcErr(PrcInvalidPoint))
 
-    # Update pairing engine with G1 and G2 points
-    if i == 0:
-      acc = millerLoop(g1, g2)
-    else:
-      acc.mul(millerLoop(g1, g2))
+    # A pair with a point at infinity pairs to the identity, leaving the
+    # product unchanged. It must be skipped: millerLoopN cannot take one.
+    if g1.isInf or g2.isInf:
+      continue
+
+    g1Points.add g1
+    g2Points.add g2
 
   c.output.setLen(32)
-  if acc.check():
+
+  # An empty product is the identity, so the check succeeds.
+  if g1Points.len == 0 or millerLoopN(g1Points, g2Points).check():
     c.output[^1] = 1.byte
   ok()
 
@@ -719,14 +729,7 @@ proc p256verify(c: Computation): EvmResultVoid =
   if c.msg.data.len != 160:
     failed()
 
-  # Check scalar and field bounds (r, s ∈ (0, n), qx, qy ∈ [0, p))
-  var
-    pk {.noinit.}: EcPublicKey
-
-  if not pk.initRaw(data[96, 159]):
-    failed()
-
-  if verifyRaw(data[32, 95], data[0, 31], pk):
+  if verifyRaw(data[32, 95], data[0, 31], data[96, 159]):
     c.output.setLen(32)
     c.output[^1] = 1.byte  # return 0x...01
   else:
@@ -757,7 +760,7 @@ func activePrecompilesList*(fork: EVMFork): seq[Address] =
 
 # Every precompile address has only its low two bytes populated (the largest
 # is P256VERIFY at 0x0100), so an address can be reverse-mapped to its
-# precompile via a small array indexed by that 16-bit value. A `0` entry means 
+# precompile via a small array indexed by that 16-bit value. A `0` entry means
 # "no precompile maps to this value"; any other entry is `ord(precompile) + 1`.
 const precompileForKey: array[0 .. 0x0100, byte] = static:
   var arr: array[0 .. 0x0100, byte]

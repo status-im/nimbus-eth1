@@ -11,14 +11,13 @@
 {.push raises: [].}
 
 import
-  ./session/[session_analyse, session_clear,
-             session_helpers, session_mktrie, session_pivot, session_resume]
+  ./session/[session_analyse, session_clear, session_forward,
+             session_mktrie, session_pivot, session_resume]
 
 export
-  getPivotTag,
-  setPivotTag,
   session_analyse,
   session_clear,
+  session_forward,
   session_mktrie,
   session_pivot,
   session_resume

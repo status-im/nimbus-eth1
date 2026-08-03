@@ -13,6 +13,7 @@ import
   unittest2,
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/utils/utils,
+  ../execution_chain/common/chain_config_loader,
   ../execution_chain/common/common
 
 const
@@ -32,9 +33,7 @@ proc makeGenesis(networkId: NetworkId): Header =
   com.genesisHeader
 
 proc proofOfStake(params: NetworkParams): bool =
-  let com = CommonRef.new(newCoreDbRef DefaultDbMemory,
-    networkId = params.config.chainId.NetworkId,
-    params = params)
+  let com = CommonRef.new(newCoreDbRef DefaultDbMemory, params)
   let header = com.genesisHeader
   com.proofOfStake(header, com.db.baseTxFrame())
 

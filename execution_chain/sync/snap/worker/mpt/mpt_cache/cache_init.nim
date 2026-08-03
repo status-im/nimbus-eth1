@@ -16,8 +16,8 @@ import
   #pkg/stew/[byteutils, interval_set],
   ../../../../wire_protocol/snap/snap_types,
   ../../[state_db, worker_const],
-  ./cache_desc,
-  ../mpt_desc
+  ../mpt_build/build_desc,
+  ./cache_desc
 
 logScope:
   topics = "snap sync"

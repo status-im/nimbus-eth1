@@ -15,25 +15,31 @@ import
   unittest2,
   ../../tools/evmstate/[evmstate, config]
 
-proc runTest(filePath: string): bool =
+proc runTest(filePath: string): seq[StateResult] =
   let conf = StateConf(
     disableOutput: true,
     postState    : true,
     dumpEnabled  : true,
+    enableError  : false,
   )
 
-  evmstate.prepareAndRun(filePath, conf)
+  evmstate.prepareAndRun(filePath, conf, seq[StateResult])
 
 proc processFile*(filePath: string, statelessEnabled = false, parallelEnabled = false, skipFiles: seq[string] = @[]) =
   let
     fileName = filePath.splitPath().tail
 
-  test filePath:
-    if fileName in skipFiles:
+  if fileName in skipFiles:
+    test filePath:
       skip()
-    else:
-      let testResult = runTest(filePath)
-      check testResult == true
+    return
+
+  let list = runTest(filePath)
+  for x in list:
+    let z = x
+    test z.name & " from " & filePath:
+      check z.pass == true
+      check z.error.len == 0
 
 when isMainModule:
   evmstate.evmStateMain()

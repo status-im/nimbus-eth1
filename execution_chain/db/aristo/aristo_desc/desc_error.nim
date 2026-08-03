@@ -68,6 +68,7 @@ type
     # Path function `hikeUp()`
     HikeBranchMissingEdge
     HikeBranchTailEmpty
+    HikeBranchUnresolvedEdge
     HikeDanglingEdge
     HikeEmptyPath
     HikeLeafUnexpected

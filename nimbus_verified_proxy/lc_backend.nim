@@ -17,7 +17,7 @@ import
   ./engine/types
 
 logScope:
-  topics = "BeaconApiRestClient"
+  topics = "vp_beacon_backend"
 
 const MaxMessageBodyBytes* = 128 * 1024 * 1024 # 128 MB (JSON encoded)
 

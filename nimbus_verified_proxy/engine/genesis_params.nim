@@ -5,12 +5,13 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import stew/byteutils, beacon_chain/spec/digest
+import stew/byteutils, results, eth/common/times, beacon_chain/spec/digest
 
 type GenesisParams* = object
   genesisTime*: uint64
   genesisValidatorsRoot*: Eth2Digest
   genesisBlockRoot*: Eth2Digest
+  eip2935ForkTime*: Opt[EthTime] # Prague activation (EIP-2935 history contract)
 
 const
   mainnetGenesisValidatorsRoot = Eth2Digest(
@@ -51,16 +52,19 @@ func genesisParamsForNetwork*(network: string): GenesisParams {.raises: [].} =
       genesisTime: 1655733600'u64,
       genesisValidatorsRoot: sepoliaGenesisValidatorsRoot,
       genesisBlockRoot: sepoliaGenesisBlockRoot,
+      eip2935ForkTime: Opt.some(1_741_159_776.EthTime),
     )
   of "hoodi":
     GenesisParams(
       genesisTime: 1742213400'u64,
       genesisValidatorsRoot: hoodiGenesisValidatorsRoot,
       genesisBlockRoot: hoodiGenesisBlockRoot,
+      eip2935ForkTime: Opt.some(1_742_999_832.EthTime),
     )
   else: # mainnet
     GenesisParams(
       genesisTime: 1606824023'u64,
       genesisValidatorsRoot: mainnetGenesisValidatorsRoot,
       genesisBlockRoot: mainnetGenesisBlockRoot,
+      eip2935ForkTime: Opt.some(1_746_612_311.EthTime),
     )

@@ -1,37 +1,76 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+# Requires BuildKit: use `docker buildx build`, or `DOCKER_BUILDKIT=1 docker build`.
+#
+# The build context is bind-mounted rather than COPYied, so no source layer is
+# ever committed and `.git` (several GB) does not become part of the image. All
+# expensive state - the Nim toolchain, the submodule checkouts, rocksdb and the
+# nimcache - lives in cache mounts that survive between builds.
+#
+# After bumping a submodule, run `make update` on the host once: objects fetched
+# by an in-container `make update` land in the throwaway overlay of .git/modules,
+# so the host copy is what keeps the vendor cache resolvable.
+#
+# To build : docker buildx build -f Dockerfile.debug -t statusim/nimbus-eth1:debug .
+
 FROM debian:stable-slim AS build
+SHELL ["/bin/bash", "-c"]
 
 ENV DEBIAN_FRONTEND=noninteractive TZ="Etc/UTC"
-ENV NPROC=8
 ENV NIMFLAGS_COMMON="-d:disableMarchNative --gcc.options.debug:'-g1' --clang.options.debug:'-gline-tables-only'"
 
-RUN apt update \
-  && apt install make bash build-essential curl git -y
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends make bash build-essential curl git ca-certificates
 
-COPY ./ /nimbus-eth1
+# the bind-mounted .git is owned by the host uid, not by root
+RUN git config --global --add safe.directory '*'
 
 WORKDIR /nimbus-eth1
 
-RUN mv vendor vendor.orig
-
-RUN  --mount=type=cache,target=/nimbus-eth1/build --mount=type=cache,target=/nimbus-eth1/vendor \
-  mv vendor.orig vendor && \
-  make -j${NPROC} NIMFLAGS="${NIMFLAGS_COMMON} --parallelBuild:${NPROC}" V=1 update
-
-RUN  --mount=type=cache,target=/nimbus-eth1/build --mount=type=cache,target=/nimbus-eth1/vendor \
-  make -j${NPROC} NIMFLAGS="${NIMFLAGS_COMMON} --parallelBuild:${NPROC}" nimbus_execution_client && \
-  mv build/nimbus_execution_client /usr/local/bin/nimbus_execution_client
+# nimcache is redirected out of the repo tree: `make update` runs
+# `find . -type d -name nimcache | xargs rm -rf`, which would fail on a mountpoint.
+RUN --mount=type=bind,target=/nimbus-eth1,rw \
+    --mount=type=cache,target=/nimbus-eth1/vendor,id=nimbus-eth1-vendor \
+    --mount=type=cache,target=/nimbus-eth1/build,id=nimbus-eth1-build \
+    --mount=type=cache,target=/nimcache,id=nimbus-eth1-nimcache \
+    set -eo pipefail; \
+    NPROC=$(nproc); \
+    NIMFLAGS="${NIMFLAGS_COMMON} --parallelBuild:${NPROC} -d:nimCachePathOverride=/nimcache/nimbus"; \
+    STAMP=$(git ls-tree HEAD .gitmodules vendor | sha256sum | cut -d' ' -f1); \
+    if [[ "$(cat vendor/.docker-update-stamp 2>/dev/null)" != "${STAMP}" ]]; then \
+      echo "submodule pins changed - running 'make update'"; \
+      make -j${NPROC} NIMFLAGS="${NIMFLAGS}" V=1 update; \
+      echo "${STAMP}" > vendor/.docker-update-stamp; \
+    else \
+      echo "submodule pins unchanged - skipping 'make update'"; \
+    fi; \
+    make -j${NPROC} NIMFLAGS="${NIMFLAGS}" V=1 nimbus; \
+    cp build/nimbus /usr/local/bin/nimbus
 
 # --------------------------------- #
 # Starting new image to reduce size #
 # --------------------------------- #
 FROM debian:stable-slim AS deploy
-COPY --from=build /usr/local/bin/nimbus_execution_client /usr/local/bin/nimbus_execution_client
 
-ENTRYPOINT ["/usr/local/bin/nimbus_execution_client"]
+SHELL ["/bin/bash", "-c"]
+RUN apt-get clean && apt update \
+ && apt -y install build-essential
+RUN apt update && apt -y upgrade
+
+RUN rm -f /home/user/nimbus-eth1/build/nimbus
+
+COPY --from=build /usr/local/bin/nimbus /home/user/nimbus-eth1/build/nimbus
+
+ENV PATH="/home/user/nimbus-eth1/build:${PATH}"
+ENTRYPOINT ["nimbus"]
+WORKDIR /home/user/nimbus-eth1/build
+
+STOPSIGNAL SIGINT

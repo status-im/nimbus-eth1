@@ -34,14 +34,10 @@ type
     cByteCode                                       # ditto
 
     gPartMptAssembly = 30                           # group, not used as column
-    cAccKvt                                         # accounts MPT
-    cStoKvt                                         # storage slots MPT
-    cCodeKvt                                        # contract codes table
-
-    # These will become obsolete, soon
-    cAccDnglKvt                                     # dangling acc nodes links
-    cStoDnglKvt                                     # dangling sto nodes links
-    cCodeMissKvt                                    # missing contract links
+    cAccPartMpt                                     # accounts MPT
+    cAccDnglPath                                    # dangling acc node paths
+    cStoPartMpt                                     # storage slots MPT
+    cCodePartMpt                                    # contract codes table
 
     gFlatTables = 40                                # group, not used as column
     cMissingIntv                                    # missing accounts/slots

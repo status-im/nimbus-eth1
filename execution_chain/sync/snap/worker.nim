@@ -95,7 +95,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
     of SnapResume:
       # If there is a pivot, then there is an assembled partial MPT. In that
       # case, there no point resuming a downloading session.
-      if ctx.sessionPivotActivate(info) < PivotOnTrie:
+      if ctx.sessionPivotActivateCached(info) < PivotOnTrie:
         # Import/reconstruct in-memory state DB from persistent cache DB.
         ctx.sessionResume(info).isOkOr:
            break body                               # shutdown?
@@ -123,7 +123,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
         break body                                  # shutdown?
 
       # Update pivot state record on DB cache
-      discard ctx.setPivotTag(PivotMptAnalysed, info)
+      discard ctx.sessionPivotTagUpdate(PivotMptAnalysed, info)
 
       debug info & ": Partial MPT analysed",
         ela=stats.ela.toStr, syncState=($ctx.syncState)

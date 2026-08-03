@@ -27,6 +27,8 @@ import
   ./networking/bootnodes,
   ./[constants, compile_info, version_info],
   ./common/chain_config,
+  ./common/chain_config_loader,
+  ./common/chain_config_hash,
   ./db/opts
 
 export net, defs, jsdefs, jsnet, nat_toml, nimbus_binary_common, options
@@ -74,10 +76,6 @@ type
     Eth                           ## enable eth_ set of RPC API
     Debug                         ## enable debug_ set of RPC API
     Admin                         ## enable admin_ set of RPC API
-
-  DiscoveryType* {.pure.} = enum
-    V4
-    V5
 
   ExecutionClientConf* = object
     ## Main configuration for the execution client - when updating, coordinate
@@ -156,24 +154,6 @@ type
       abbr: "i"
       name: "network" .}: seq[string]
 
-    customNetwork {.
-      ignore
-      desc: "Use custom genesis block for private Ethereum Network (as /path/to/genesis.json)"
-      defaultValueDesc: ""
-      abbr: "c"
-      name: "custom-network" .}: Option[NetworkParams]
-
-    networkId* {.
-      ignore # this field is not processed by confutils
-      defaultValue: MainNet # the defaultValue value is set by `makeConfig`
-      defaultValueDesc: "MainNet"
-      name: "network-id" .}: NetworkId
-
-    networkParams* {.
-      ignore # this field is not processed by confutils
-      defaultValue: NetworkParams() # the defaultValue value is set by `makeConfig`
-      name: "network-params" .}: NetworkParams
-
     logLevel* {.
       separator: "\pLOGGING AND DEBUGGING OPTIONS:"
       desc: "Sets the log level for process and topics (" & logLevelDesc & ")"
@@ -204,17 +184,31 @@ type
 
     bootstrapNodes {.
       separator: "\pNETWORKING OPTIONS:"
-      desc: "Specifies one or more bootstrap nodes(ENR or enode URL) to use when connecting to the network"
+      desc: "Specifies one or more bootstrap nodes(ENR or enode URL) to use when connecting to the network. " &
+            "Alias = el-bootstrap-node"
       defaultValue: @[]
       defaultValueDesc: ""
       abbr: "b"
       name: "bootstrap-node" .}: seq[string]
 
+    elBootstrapNodes {.
+      hidden
+      desc: "alias to bootstrap-node"
+      defaultValue: @[]
+      defaultValueDesc: ""
+      name: "el-bootstrap-node" .}: seq[string]
+
     bootstrapFile {.
       desc: "Specifies a file of bootstrap Ethereum network addresses(ENR or enode URL). " &
-            "Both line delimited or YAML format are supported"
+            "Both line delimited or YAML format are supported. Alias = el-bootstrap-file"
       defaultValue: ""
       name: "bootstrap-file" .}: InputFile
+
+    elBootstrapFile {.
+      hidden
+      desc: "alias to bootstrap-file"
+      defaultValue: ""
+      name: "el-bootstrap-file" .}: InputFile
 
     staticPeers {.
       desc: "Connect to one or more trusted peers(ENR or enode URL)"
@@ -255,10 +249,17 @@ type
       defaultValueDesc: "default to --tcp-port"
       name: "udp-port" .}: Option[Port]
 
-    maxPeers* {.
+    maxPeersOpt {.
       desc: "Maximum number of peers to connect to"
-      defaultValue: 25
-      name: "max-peers" .}: int
+      defaultValue: none(int)
+      defaultValueDesc: "25"
+      name: "max-peers" .}: Option[int]
+
+    elMaxPeersOpt {.
+      hidden
+      desc: "alias to max-peers"
+      defaultValue: none(int)
+      name: "el-max-peers" .}: Option[int]
 
     nat* {.
       desc: "Specify method to use for determining public address. " &
@@ -267,16 +268,10 @@ type
       defaultValueDesc: "any"
       name: "nat" .}: NatConfig
 
-    discovery* {.
-      desc: "Specify method to find suitable peer in an Ethereum network (None, V4, V5)"
-      longDesc:
-        "- None: Disables the peer discovery mechanism (manual peer addition)\n" &
-        "- V4  : Node Discovery Protocol v4\n" &
-        "- V5  : Node Discovery Protocol v5\n" &
-        "- All : V4, V5"
-      defaultValue: @["V4", "V5"]
-      defaultValueDesc: "V4, V5"
-      name: "discovery" .}: seq[string]
+    discv5* {.
+      desc: "Enable peer discovery. When disabled, peers must be added manually"
+      defaultValue: true
+      name: "discv5" .}: bool
 
     netKey* {.
       desc: "P2P ethereum node (secp256k1) private key (random, path, hex)"
@@ -643,19 +638,15 @@ func parseHexOrDec256(p: string): UInt256 {.raises: [ValueError].} =
   else:
     parse(p, UInt256, 10)
 
-proc dataDir*(config: ExecutionClientConf): string =
-  # TODO load network name from directory, when using custom network?
-  string config.dataDirFlag.get(OutDir defaultDataDir("", config.networkId.name()))
+func getName*(params: NetworkParams): string =
+  params.networkId.name().valueOr:
+    $calcHash(params)
 
-proc keyStoreDir*(config: ExecutionClientConf): string =
-  string config.keyStoreDirFlag.get(OutDir config.dataDir() / "keystore")
+proc dataDir*(config: ExecutionClientConf, params: NetworkParams): string =
+  string config.dataDirFlag.get(OutDir defaultDataDir("", params.getName()))
 
-func parseCmdArg(T: type NetworkId, p: string): T
-    {.gcsafe, raises: [ValueError].} =
-  parseHexOrDec256(p)
-
-func completeCmdArg(T: type NetworkId, val: string): seq[string] =
-  return @[]
+proc keyStoreDir*(config: ExecutionClientConf, params: NetworkParams): string =
+  string config.keyStoreDirFlag.get(OutDir config.dataDir(params) / "keystore")
 
 func processList(v: string, o: var seq[string])
     =
@@ -665,17 +656,6 @@ func processList(v: string, o: var seq[string])
       if len(n) > 0:
         o.add(n)
 
-proc parseCmdArg(T: type NetworkParams, p: string): T
-    {.gcsafe, raises: [ValueError].} =
-  try:
-    if not loadNetworkParams(p, result):
-      raise newException(ValueError, "failed to load customNetwork")
-  except CatchableError:
-    raise newException(ValueError, "failed to load customNetwork")
-
-func completeCmdArg(T: type NetworkParams, val: string): seq[string] =
-  return @[]
-
 iterator repeatingList(listOfList: openArray[string]): string =
   for strList in listOfList:
     var list = newSeq[string]()
@@ -683,9 +663,12 @@ iterator repeatingList(listOfList: openArray[string]): string =
     for item in list:
       yield item
 
-func breakRepeatingList(listOfList: openArray[string]): seq[string] =
+func breakRepeatingList(listOfList: openArray[string], list: var seq[string]) =
   for strList in listOfList:
-    processList(strList, result)
+    processList(strList, list)
+
+func breakRepeatingList(listOfList: openArray[string]): seq[string] =
+  breakRepeatingList(listOfList, result)
 
 func decOrHex(s: string): bool =
   const allowedDigits = Digits + HexDigits + {'x', 'X'}
@@ -701,29 +684,28 @@ proc parseNetworkId(network: string): NetworkId =
     error "Failed to parse network id", id=network
     quit QuitFailure
 
-proc parseNetworkParams(network: string): (NetworkParams, bool) =
+proc parseNetworkParams(network: string): NetworkParams =
   case toLowerAscii(network)
-  of "mainnet": (networkParams(MainNet), false)
-  of "sepolia": (networkParams(SepoliaNet), false)
-  of "hoodi"  : (networkParams(HoodiNet), false)
+  of "mainnet": networkParams(MainNet)
+  of "sepolia": networkParams(SepoliaNet)
+  of "hoodi"  : networkParams(HoodiNet)
   else:
     var params: NetworkParams
     if not loadNetworkParams(network, params):
       # `loadNetworkParams` have it's own error log
       quit QuitFailure
-    (params, true)
+    params.custom = true
+    params.networkId = params.config.chainId
+    params
 
-proc processNetworkParamsAndNetworkId(config: var ExecutionClientConf) =
-  if config.network.len == 0 and config.customNetwork.isNone:
+proc computeNetworkParams*(config: ExecutionClientConf): NetworkParams =
+  if config.network.len == 0:
     # Default value if none is set
-    config.networkId = MainNet
-    config.networkParams = networkParams(MainNet)
-    return
+    return networkParams(MainNet)
 
   var
     params: Opt[NetworkParams]
     id: Opt[NetworkId]
-    simulatedCustomNetwork = false
 
   for network in config.network:
     if decOrHex(network):
@@ -735,37 +717,27 @@ proc processNetworkParamsAndNetworkId(config: var ExecutionClientConf) =
       if params.isSome:
         warn "Network configuration already set, ignore new value", network
         continue
-      let (parsedParams, custom) = parseNetworkParams(network)
-      params = Opt.some parsedParams
-      # Simulate --custom-network while it is still not disabled.
-      if custom:
-        config.customNetwork = some parsedParams
-        simulatedCustomNetwork = true
+      params = Opt.some parseNetworkParams(network)
 
-  if config.customNetwork.isSome:
-    if params.isNone:
-      warn "`--custom-network` is deprecated, please use `--network`"
-    elif not simulatedCustomNetwork:
-      warn "Network configuration already set by `--network`, `--custom-network` override it"
-    params = if config.customNetwork.isSome: Opt.some config.customNetwork.get
-             else: Opt.none(NetworkParams)
-    if id.isNone:
-      # WARNING: networkId and chainId are two distinct things
-      # their usage should not be mixed in other places.
-      # We only set networkId to chainId if networkId not set in cli and
-      # --custom-network is set.
-      # If chainId is not defined in config file, it's ok because
-      # zero means CustomNet
-      id = Opt.some NetworkId(params.value.config.chainId)
-
-  if id.isNone and params.isSome:
+  # WARNING: networkId and chainId are two distinct things
+  # their usage should not be mixed in other places.
+  # We only set networkId to chainId if networkId not set in cli and
+  # network config is loaded from file.
+  # If chainId is not defined in config file, it's ok because
+  # zero means CustomNet
+  if id.isNone and params.isNone:
+    # Default value if none is set
+    return networkParams(MainNet)
+  elif id.isNone and params.isSome:
     id = Opt.some NetworkId(params.value.config.chainId)
-
-  if config.customNetwork.isNone and params.isNone:
+  elif id.isSome and params.isNone:
     params = Opt.some networkParams(id.value)
+  else:
+    # Both id and params isSome
+    params.value.config.chainId = id.value
+    params.value.networkId = id.value
 
-  config.networkParams = params.expect("Network params exists")
-  config.networkId = id.expect("Network ID exists")
+  params.expect("Network params exists")
 
 proc getRpcFlags(api: openArray[string]): set[RpcFlag] =
   if api.len == 0:
@@ -786,40 +758,30 @@ proc getRpcFlags*(config: ExecutionClientConf): set[RpcFlag] =
 proc getWsFlags*(config: ExecutionClientConf): set[RpcFlag] =
   getRpcFlags(config.wsApi)
 
-proc getDiscoveryFlags(api: openArray[string]): set[DiscoveryType] =
-  if api.len == 0:
-    return {DiscoveryType.V4, DiscoveryType.V5}
-
-  for item in repeatingList(api):
-    case item.toLowerAscii()
-    of "none": result = {}
-    of "v4": result.incl DiscoveryType.V4
-    of "v5": result.incl DiscoveryType.V5
-    of "all": result = {DiscoveryType.V4, DiscoveryType.V5}
-    else:
-      error "Unknown discovery type: ", name=item
-      quit QuitFailure
-
-proc getDiscoveryFlags*(config: ExecutionClientConf): set[DiscoveryType] =
-  getDiscoveryFlags(config.discovery)
-
-proc getBootstrapNodes*(config: ExecutionClientConf): BootstrapNodes =
-  # Ignore standard bootnodes if customNetwork is loaded
-  if config.customNetwork.isNone:
-    if config.networkId == MainNet:
+proc getBootstrapNodes*(config: ExecutionClientConf, params: NetworkParams): BootstrapNodes =
+  # Ignore builtin bootnodes if network is not builtin
+  if not params.custom:
+    if params.networkId == MainNet:
       getBootstrapNodes("mainnet", result).expect("no error")
-    elif config.networkId == SepoliaNet:
+    elif params.networkId == SepoliaNet:
       getBootstrapNodes("sepolia", result).expect("no error")
-    elif config.networkId == HoodiNet:
+    elif params.networkId == HoodiNet:
       getBootstrapNodes("hoodi", result).expect("no error")
 
-  let list = breakRepeatingList(config.bootstrapNodes)
+  var list = breakRepeatingList(config.bootstrapNodes)
+  if config.elBootstrapNodes.len > 0:
+    # Add el-bootstrap-node
+    breakRepeatingList(config.elBootstrapNodes, list)
   parseBootstrapNodes(list, result).isOkOr:
     warn "Error when parsing bootstrap nodes", msg=error
 
-  if config.bootstrapFile.string.len > 0:
-    loadBootstrapNodes(config.bootstrapFile.string, result).isOkOr:
-      warn "Error when parsing bootstrap nodes from file", msg=error, file=config.bootstrapFile.string
+  let bootstrapFile = if config.bootstrapFile.string.len > 0: config.bootstrapFile.string
+                      elif config.elBootstrapFile.string.len > 0: config.elBootstrapFile.string
+                      else: ""
+
+  if bootstrapFile.len > 0:
+    loadBootstrapNodes(bootstrapFile, result).isOkOr:
+      warn "Error when parsing bootstrap nodes from file", msg=error, file=bootstrapFile
 
 proc getStaticPeers*(config: ExecutionClientConf): BootstrapNodes =
   let list = breakRepeatingList(config.staticPeers)
@@ -844,14 +806,14 @@ func shareServerWithEngineApi*(config: ExecutionClientConf): bool =
 func httpServerEnabled*(config: ExecutionClientConf): bool =
   config.wsEnabled or config.rpcEnabled
 
-proc era1Dir*(config: ExecutionClientConf): string =
-  string config.era1DirFlag.get(OutDir config.dataDir / "era1")
+proc era1Dir*(config: ExecutionClientConf, params: NetworkParams): string =
+  string config.era1DirFlag.get(OutDir config.dataDir(params) / "era1")
 
-proc eraDir*(config: ExecutionClientConf): string =
-  string config.eraDirFlag.get(OutDir config.dataDir / "era")
+proc eraDir*(config: ExecutionClientConf, params: NetworkParams): string =
+  string config.eraDirFlag.get(OutDir config.dataDir(params) / "era")
 
-proc ereDir*(config: ExecutionClientConf): string =
-  string config.ereDirFlag.get(OutDir config.dataDir / "ere")
+proc ereDir*(config: ExecutionClientConf, params: NetworkParams): string =
+  string config.ereDirFlag.get(OutDir config.dataDir(params) / "ere")
 
 func udpPort*(config: ExecutionClientConf): Port =
   config.udpPortFlag.get(config.tcpPort)
@@ -900,6 +862,15 @@ proc readValue*(r: var TomlReader, value: var seq[string]) {.raises: [IOError, S
   else:
     value.add r.parseAsString()
 
+func maxPeers*(config: ExecutionClientConf): int =
+  if config.maxPeersOpt.isSome:
+    return config.maxPeersOpt.get
+
+  if config.elMaxPeersOpt.isSome:
+    return config.elMaxPeersOpt.get
+
+  25
+
 {.pop.}
 
 #-------------------------------------------------------------------
@@ -913,8 +884,6 @@ proc makeConfig*(cmdLine = commandLineParams(), ignoreUnknown = false): Executio
   ).valueOr:
     writePanicLine error # Logging not yet set up
     quit QuitFailure
-
-  processNetworkParamsAndNetworkId(result)
 
 when isMainModule:
   # for testing purpose

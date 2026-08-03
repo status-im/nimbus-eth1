@@ -13,7 +13,7 @@
 import
   pkg/[chronicles, chronos],
   ./download/[account, code, header, storage],
-  ./[helpers, mpt, state_db, update, worker_desc]
+  ./[helpers, state_db, update, worker_desc]
 
 export
   account, code, header, storage

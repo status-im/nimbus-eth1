@@ -14,7 +14,7 @@ import
   pkg/[chronos, eth/common, results, stew/interval_set],
   ../../../../wire_protocol/snap/snap_types,
   ../../state_db,
-  ../mpt_desc,
+  ../mpt_build/build_desc,
   ./cache_desc
 
 when sizeof(Hash) != sizeof(uint):
@@ -149,7 +149,7 @@ func decodeAccMissingIntvData*(
     res: CacheAccMissingIntvData
   try:
     rd.tryEnterList()
-    res.root = StateRoot rd.read(Hash32)
+    res.number = rd.read(BlockNumber)
     res.ranges = ItemKeyRangeSet.fromRlp rd.rawData()
   except RlpError as e:
     return err(info & ": " & $e.name & "(" & e.msg & ")")
@@ -169,8 +169,21 @@ func decodeStoMissingIntvData*(
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(res)
 
-func decodeFlatAccData*(data: openArray[byte]): Result[Account,string] =
-  const info = "decodeFlatAcc"
+func decodeFlatAccData*(
+    data: openArray[byte];
+     ): Result[CacheFlatAccData,string] =
+  const info = "decodeFlatAccData"
+  var res: CacheFlatAccData
+  try:
+    res = rlp.decode(data, CacheFlatAccData)
+  except RlpError as e:
+    return err(info & ": " & $e.name & "(" & e.msg & ")")
+  ok(move res)
+
+func decodeAccPayloadData*(
+    data: openArray[byte];
+     ): Result[Account,string] =
+  const info = "decodeAccPayloadData"
   var res: Account
   try:
     res = rlp.decode(data, Account)
@@ -254,11 +267,11 @@ template encodeBal*(
   rlp.encode bal[]
 
 template encodeAccMissingIntvData*(
-    root: StateRoot;
+    number: BlockNumber;
     rng: ItemKeyRangeSet;
       ): untyped =
   var wrt = initRlpList 2
-  wrt.append Hash32(root)
+  wrt.append number
   wrt.appendRawBytes rng.toRlp()
   var res = wrt.finish()
   res
@@ -271,9 +284,9 @@ template encodeStoMissingIntvData*(
   wrt.finish()
 
 template encodeFlatAccData*(
-    account: Account;
+    data: CacheFlatAccData;
       ): untyped =
-  rlp.encode(account)
+  rlp.encode(data)
 
 template encodeFlatSlotData*(
     slot: UInt256;

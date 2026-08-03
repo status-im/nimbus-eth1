@@ -10,6 +10,7 @@
 import
   std/strutils,
   results,
+  chronicles,
   stew/byteutils,
   nimcrypto/sysrand,
   json_rpc/[rpcserver, rpcclient],
@@ -29,6 +30,9 @@ import
   ../engine/fees,
   ./op_anchor,
   ./op_chain_params
+
+logScope:
+  topics = "vp_op"
 
 template opSync(opEngine: RpcVerificationEngine, l1Engine: RpcVerificationEngine) =
   block:
@@ -84,11 +88,13 @@ proc getExecutionApiFrontend*(
   frontend.eth_chainId = proc(): Future[EngineResult[UInt256]] {.
       async: (raises: [CancelledError])
   .} =
+    trace "Received query", meth = "eth_chainId"
     ok(opEngine.chainId)
 
   frontend.eth_blockNumber = proc(): Future[EngineResult[uint64]] {.
       async: (raises: [CancelledError])
   .} =
+    trace "Received query", meth = "eth_blockNumber"
     opEngine.opSync(l1Engine)
 
     let latest = opEngine.penaltyOr(await opEngine.resolveUnsafeTip())
@@ -97,6 +103,10 @@ proc getExecutionApiFrontend*(
   frontend.eth_getBalance = proc(
       address: Address, quantityTag: BlockTag
   ): Future[EngineResult[UInt256]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getBalance",
+      address = safeEncode(address),
+      quantityTag = safeEncode(quantityTag)
     opEngine.opSync(l1Engine)
 
     let tag = opEngine.penaltyOr(await opEngine.resolveOpTag(quantityTag))
@@ -109,6 +119,11 @@ proc getExecutionApiFrontend*(
   frontend.eth_getStorageAt = proc(
       address: Address, slot: UInt256, quantityTag: BlockTag
   ): Future[EngineResult[FixedBytes[32]]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getStorageAt",
+      address = safeEncode(address),
+      slot = safeEncode(slot),
+      quantityTag = safeEncode(quantityTag)
     opEngine.opSync(l1Engine)
 
     let tag = opEngine.penaltyOr(await opEngine.resolveOpTag(quantityTag))
@@ -121,6 +136,10 @@ proc getExecutionApiFrontend*(
   frontend.eth_getTransactionCount = proc(
       address: Address, quantityTag: BlockTag
   ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getTransactionCount",
+      address = safeEncode(address),
+      quantityTag = safeEncode(quantityTag)
     opEngine.opSync(l1Engine)
 
     let tag = opEngine.penaltyOr(await opEngine.resolveOpTag(quantityTag))
@@ -133,6 +152,10 @@ proc getExecutionApiFrontend*(
   frontend.eth_getCode = proc(
       address: Address, quantityTag: BlockTag
   ): Future[EngineResult[seq[byte]]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getCode",
+      address = safeEncode(address),
+      quantityTag = safeEncode(quantityTag)
     opEngine.opSync(l1Engine)
 
     let tag = opEngine.penaltyOr(await opEngine.resolveOpTag(quantityTag))
@@ -145,6 +168,8 @@ proc getExecutionApiFrontend*(
   frontend.eth_getBlockByHash = proc(
       blockHash: Hash32, fullTransactions: bool
   ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getBlockByHash", blockHash = safeEncode(blockHash), fullTransactions
     opEngine.opSync(l1Engine)
 
     let blk = opEngine.penaltyOr(await opEngine.getBlock(blockHash, fullTransactions))
@@ -153,6 +178,8 @@ proc getExecutionApiFrontend*(
   frontend.eth_getBlockByNumber = proc(
       blockTag: BlockTag, fullTransactions: bool
   ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getBlockByNumber", blockTag = safeEncode(blockTag), fullTransactions
     opEngine.opSync(l1Engine)
 
     let tag = opEngine.penaltyOr(await opEngine.resolveOpTag(blockTag))
@@ -162,6 +189,8 @@ proc getExecutionApiFrontend*(
   frontend.eth_getUncleCountByBlockNumber = proc(
       blockTag: BlockTag
   ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getUncleCountByBlockNumber", blockTag = safeEncode(blockTag)
     opEngine.opSync(l1Engine)
 
     let tag = opEngine.penaltyOr(await opEngine.resolveOpTag(blockTag))
@@ -171,6 +200,8 @@ proc getExecutionApiFrontend*(
   frontend.eth_getUncleCountByBlockHash = proc(
       blockHash: Hash32
   ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getUncleCountByBlockHash", blockHash = safeEncode(blockHash)
     opEngine.opSync(l1Engine)
 
     let blk = opEngine.penaltyOr(await opEngine.getBlock(blockHash, false))
@@ -179,6 +210,8 @@ proc getExecutionApiFrontend*(
   frontend.eth_getBlockTransactionCountByNumber = proc(
       blockTag: BlockTag
   ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getBlockTransactionCountByNumber", blockTag = safeEncode(blockTag)
     opEngine.opSync(l1Engine)
 
     let tag = opEngine.penaltyOr(await opEngine.resolveOpTag(blockTag))
@@ -188,6 +221,8 @@ proc getExecutionApiFrontend*(
   frontend.eth_getBlockTransactionCountByHash = proc(
       blockHash: Hash32
   ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getBlockTransactionCountByHash", blockHash = safeEncode(blockHash)
     opEngine.opSync(l1Engine)
 
     let blk = opEngine.penaltyOr(await opEngine.getBlock(blockHash, true))
@@ -196,6 +231,10 @@ proc getExecutionApiFrontend*(
   frontend.eth_getTransactionByBlockNumberAndIndex = proc(
       blockTag: BlockTag, index: Quantity
   ): Future[EngineResult[TransactionObject]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getTransactionByBlockNumberAndIndex",
+      blockTag = safeEncode(blockTag),
+      index = safeEncode(index)
     opEngine.opSync(l1Engine)
 
     let tag = opEngine.penaltyOr(await opEngine.resolveOpTag(blockTag))
@@ -211,6 +250,10 @@ proc getExecutionApiFrontend*(
   frontend.eth_getTransactionByBlockHashAndIndex = proc(
       blockHash: Hash32, index: Quantity
   ): Future[EngineResult[TransactionObject]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getTransactionByBlockHashAndIndex",
+      blockHash = safeEncode(blockHash),
+      index = safeEncode(index)
     opEngine.opSync(l1Engine)
 
     let blk = opEngine.penaltyOr(await opEngine.getBlock(blockHash, true))
@@ -225,6 +268,11 @@ proc getExecutionApiFrontend*(
   frontend.eth_call = proc(
       tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: bool = true
   ): Future[EngineResult[seq[byte]]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_call",
+      tx = safeEncode(tx),
+      blockTag = safeEncode(blockTag),
+      optimisticStateFetch
     opEngine.opSync(l1Engine)
 
     if tx.to.isNone():
@@ -251,6 +299,11 @@ proc getExecutionApiFrontend*(
   frontend.eth_createAccessList = proc(
       tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: bool = true
   ): Future[EngineResult[AccessListResult]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_createAccessList",
+      tx = safeEncode(tx),
+      blockTag = safeEncode(blockTag),
+      optimisticStateFetch
     opEngine.opSync(l1Engine)
 
     if tx.to.isNone():
@@ -278,6 +331,11 @@ proc getExecutionApiFrontend*(
   frontend.eth_estimateGas = proc(
       tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: bool = true
   ): Future[EngineResult[Quantity]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_estimateGas",
+      tx = safeEncode(tx),
+      blockTag = safeEncode(blockTag),
+      optimisticStateFetch
     opEngine.opSync(l1Engine)
 
     if tx.to.isNone():
@@ -302,6 +360,8 @@ proc getExecutionApiFrontend*(
   frontend.eth_getTransactionByHash = proc(
       txHash: Hash32
   ): Future[EngineResult[TransactionObject]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getTransactionByHash", txHash = safeEncode(txHash)
     opEngine.opSync(l1Engine)
 
     let (backend, backendIdx) = ?(opEngine.executionBackendFor(GetTransactionByHash))
@@ -331,6 +391,8 @@ proc getExecutionApiFrontend*(
   frontend.eth_getBlockReceipts = proc(
       blockTag: BlockTag
   ): Future[EngineResult[Opt[seq[ReceiptObject]]]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getBlockReceipts", blockTag = safeEncode(blockTag)
     opEngine.opSync(l1Engine)
 
     let tag = opEngine.penaltyOr(await opEngine.resolveOpTag(blockTag))
@@ -340,6 +402,8 @@ proc getExecutionApiFrontend*(
   frontend.eth_getTransactionReceipt = proc(
       txHash: Hash32
   ): Future[EngineResult[ReceiptObject]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getTransactionReceipt", txHash = safeEncode(txHash)
     opEngine.opSync(l1Engine)
 
     let (backend, backendIdx) = ?(opEngine.executionBackendFor(GetTransactionReceipt))
@@ -357,6 +421,8 @@ proc getExecutionApiFrontend*(
   frontend.eth_getLogs = proc(
       filterOptions: FilterOptions
   ): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getLogs", filterOptions = safeEncode(filterOptions)
     opEngine.opSync(l1Engine)
 
     let logObjs = opEngine.penaltyOr(await opEngine.getLogs(filterOptions))
@@ -365,6 +431,8 @@ proc getExecutionApiFrontend*(
   frontend.eth_newFilter = proc(
       filterOptions: FilterOptions
   ): Future[EngineResult[string]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_newFilter", filterOptions = safeEncode(filterOptions)
     opEngine.opSync(l1Engine)
 
     if opEngine.filterStore.len >= MAX_FILTERS:
@@ -404,6 +472,7 @@ proc getExecutionApiFrontend*(
   frontend.eth_uninstallFilter = proc(
       filterId: string
   ): Future[EngineResult[bool]] {.async: (raises: [CancelledError]).} =
+    trace "Received query", meth = "eth_uninstallFilter", filterId
     opEngine.opSync(l1Engine)
 
     if filterId in opEngine.filterStore:
@@ -415,6 +484,7 @@ proc getExecutionApiFrontend*(
   frontend.eth_getFilterLogs = proc(
       filterId: string
   ): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).} =
+    trace "Received query", meth = "eth_getFilterLogs", filterId
     opEngine.opSync(l1Engine)
 
     try:
@@ -428,6 +498,7 @@ proc getExecutionApiFrontend*(
   frontend.eth_getFilterChanges = proc(
       filterId: string
   ): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).} =
+    trace "Received query", meth = "eth_getFilterChanges", filterId
     opEngine.opSync(l1Engine)
 
     let filterItem =
@@ -476,6 +547,7 @@ proc getExecutionApiFrontend*(
   frontend.eth_blobBaseFee = proc(): Future[EngineResult[UInt256]] {.
       async: (raises: [CancelledError])
   .} =
+    trace "Received query", meth = "eth_blobBaseFee"
     opEngine.opSync(l1Engine)
 
     let db = DefaultDbMemory.newCoreDbRef()
@@ -510,6 +582,7 @@ proc getExecutionApiFrontend*(
   frontend.eth_gasPrice = proc(): Future[EngineResult[Quantity]] {.
       async: (raises: [CancelledError])
   .} =
+    trace "Received query", meth = "eth_gasPrice"
     opEngine.opSync(l1Engine)
 
     let suggestedPrice = opEngine.penaltyOr(await opEngine.suggestGasPrice())
@@ -518,6 +591,7 @@ proc getExecutionApiFrontend*(
   frontend.eth_maxPriorityFeePerGas = proc(): Future[EngineResult[Quantity]] {.
       async: (raises: [CancelledError])
   .} =
+    trace "Received query", meth = "eth_maxPriorityFeePerGas"
     opEngine.opSync(l1Engine)
 
     let suggestedPrice = opEngine.penaltyOr(await opEngine.suggestMaxPriorityGasPrice())
@@ -527,6 +601,11 @@ proc getExecutionApiFrontend*(
   frontend.eth_getProof = proc(
       address: Address, slots: seq[UInt256], blockId: BlockTag
   ): Future[EngineResult[ProofResponse]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_getProof",
+      address = safeEncode(address),
+      slots = safeEncode(slots),
+      blockId = safeEncode(blockId)
     opEngine.opSync(l1Engine)
 
     let tag = opEngine.penaltyOr(await opEngine.resolveOpTag(blockId))
@@ -539,6 +618,11 @@ proc getExecutionApiFrontend*(
   frontend.eth_feeHistory = proc(
       blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[int]
   ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_feeHistory",
+      blockCount = safeEncode(blockCount),
+      newestBlock = safeEncode(newestBlock),
+      rewardPercentiles = safeEncode(rewardPercentiles)
     opEngine.opSync(l1Engine)
 
     let tag = opEngine.penaltyOr(await opEngine.resolveOpTag(newestBlock))
@@ -553,6 +637,8 @@ proc getExecutionApiFrontend*(
   frontend.eth_sendRawTransaction = proc(
       txBytes: seq[byte]
   ): Future[EngineResult[Hash32]] {.async: (raises: [CancelledError]).} =
+    trace "Received query",
+      meth = "eth_sendRawTransaction", txBytes = safeEncode(txBytes)
     opEngine.opSync(l1Engine)
 
     let (backend, backendIdx) = ?(opEngine.executionBackendFor(SendRawTransaction))

@@ -16,14 +16,12 @@ import
   pkg/stew/interval_set,
   ../../../../wire_protocol/snap/snap_types,
   ../../state_db, #worker_const],
-  ../mpt_desc
+  ../mpt_build/build_desc
 
 type
   CacheDbRef* = ref object
     adb*: RocksDbReadWriteRef
     dir*: Path
-    dnglLock*: int                                  # advisory lock
-    cntrLock*: int                                  # advisory lock
 
   BoolResult* = Result[bool,string]
     ## Shortcut
@@ -54,7 +52,7 @@ type
   OptStoMissingIntvResult* = Result[Opt[CacheStoMissingIntvData],string]
     ## Shortcut
 
-  OptFlatAccResult* = Result[Opt[Account],string]
+  OptFlatAccResult* = Result[Opt[CacheFlatAccData],string]
     ## Shortcut
 
   OptFlatSlotResult* = Result[Opt[UInt256],string]
@@ -97,11 +95,16 @@ type
     peerID: Hash
 
   CacheAccMissingIntvData* = tuple
-    root: StateRoot
+    number: BlockNumber
     ranges: ItemKeyRangeSet
 
   CacheStoMissingIntvData* = tuple
     ranges: ItemKeyRangeSet
+
+  CacheFlatAccData* = tuple
+    dirtyStorage: bool
+    dirtyCode: bool
+    account: Account
 
   WalkStateData* = tuple
     root: StateRoot
@@ -142,7 +145,7 @@ type
 
   WalkFlatAccData* = tuple
     accPath: Hash32
-    data: Account
+    data: CacheFlatAccData
     error: string
 
   WalkFlatSlotData* = tuple

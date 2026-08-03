@@ -18,6 +18,7 @@ import
   unittest2,
   ../execution_chain/db/opts,
   ../execution_chain/db/core_db/[memory_only, persistent],
+  ../execution_chain/common/chain_config_loader,
   ../execution_chain/core/chain,
   ./replay/pp,
   ./test_coredb/[
@@ -164,17 +165,14 @@ proc initRunnerDB(
 
   var
     params: NetworkParams
-    networkId: NetworkId
   if specs.builtIn:
-    networkId = specs.network
+    let networkId = specs.network
     params = networkId.networkParams()
   else:
     doAssert specs.genesis.findFilePath.value.loadNetworkParams(params)
-    networkId = params.config.chainId.NetworkId
 
   result = CommonRef.new(
     db = coreDB,
-    networkId = networkId,
     params = params)
 
   setErrorLevel()

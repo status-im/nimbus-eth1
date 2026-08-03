@@ -27,7 +27,8 @@ import
 
 from beacon_chain/spec/datatypes/electra import
   DepositRequest, WithdrawalRequest, ConsolidationRequest
-from beacon_chain/spec/datatypes/gloas import ExecutionPayload
+from beacon_chain/spec/datatypes/gloas import
+  ExecutionPayload, BuilderDepositRequest, BuilderExitRequest
 from ../utils/utils import calcRequestsHash
 
 export witness_types, stateless_types, common, headers, blocks, results
@@ -120,7 +121,7 @@ template statelessProcessBlock*(
 ): Result[void, string] =
   statelessProcessBlock(witness, id, chainConfigForNetwork(id), blk)
 
-# https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/execution_engine/validation_helpers.py#L22
+# https://github.com/ethereum/execution-specs/blob/e5a8caf1b8055e4d805c7fb169edfa710914b7da/src/ethereum/forks/amsterdam/execution_engine/validation_helpers.py#L22
 func toBlock(
     p: ExecutionPayload, parentBeaconBlockRoot: Opt[Hash32], requestsHash: Opt[Hash32]
 ): Block {.raises: [RlpError].} =
@@ -170,13 +171,7 @@ func toBlock(
     withdrawals: Opt.some(wds),
   )
 
-# We should be using the HardFork enum value for Amsterdam from hardforks.nim
-# but BPO1-BPO5 are already defined there, while in the execution-specs tag
-# tests-zkevm@v0.5.0 only BPO1-BPO2 is defined. Making the enum value different.
-# So we hardcode it here for now to the value of the specs/tests used.
-const PROTOCOL_FORK_AMSTERDAM = 20'u64
-
-# https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/stateless.py#L304
+# https://github.com/ethereum/execution-specs/blob/e5a8caf1b8055e4d805c7fb169edfa710914b7da/src/ethereum/forks/amsterdam/stateless.py#L278
 func isActivationActive(
     activation: ForkActivation, execution_payload: ExecutionPayload
 ): Result[void, string] =
@@ -194,36 +189,20 @@ func isActivationActive(
 
   ok()
 
-# https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/stateless.py#L340
+# https://github.com/ethereum/execution-specs/blob/e5a8caf1b8055e4d805c7fb169edfa710914b7da/src/ethereum/forks/amsterdam/stateless.py#L303
 func validate_chain_config(
     chain_config: StatelessChainConfig, execution_payload: ExecutionPayload
 ): Result[void, string] =
   ## Validate the target payload's active fork config.
   let active_fork = chain_config.active_fork
 
-  ?isActivationActive(active_fork.activation, execution_payload)
-
-  if active_fork.fork != PROTOCOL_FORK_AMSTERDAM:
-    return err("Amsterdam stateless guest cannot execute fork " & $active_fork.fork)
-
-  # The expected blob schedule is the one compiled into the guest for Amsterdam.
-  let expectedBlobSchedule =
-    defaultBlobSchedule()[Amsterdam].expect("Amsterdam blob schedule is defined")
-  if active_fork.blob_schedule.len == 0 or
-      active_fork.blob_schedule[0] != expectedBlobSchedule:
-    return err("ChainConfig active_fork blob_schedule does not match Amsterdam")
-
-  ok()
+  isActivationActive(active_fork.activation, execution_payload)
 
 func chainConfigForStateless(cc: StatelessChainConfig): ChainConfig =
   # Nimbus EVM needs the full fork timeline, but the stateless input only provides
   # the active fork. Set the rest to 0 to allow for execution. The active fork is
   # set to the provided values.
   let networkId = NetworkId(cc.chain_id.u256)
-
-  var bs = defaultBlobSchedule()
-  if cc.active_fork.blob_schedule.len > 0:
-    bs[Amsterdam] = Opt.some(cc.active_fork.blob_schedule[0])
 
   let amsterdamTime =
     if cc.active_fork.activation.timestamp.len > 0:
@@ -254,17 +233,15 @@ func chainConfigForStateless(cc: StatelessChainConfig): ChainConfig =
     bpo4Time: Opt.some(0.EthTime),
     bpo5Time: Opt.some(0.EthTime),
     amsterdamTime: amsterdamTime,
-    blobSchedule: bs,
+    blobSchedule: defaultBlobSchedule(),
     # Inherit deposit contract address from the known network config
     # TODO: Separate out the deposit contract address code.
     depositContractAddress: chainConfigForNetwork(networkId).depositContractAddress,
   )
 
 # Encode execution requests into EL format:
-# https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/execution_engine/requests.py#L135
-func encodeDeposits(
-    deposits: List[DepositRequest, Limit MAX_DEPOSIT_REQUESTS_PER_PAYLOAD]
-): seq[byte] =
+# https://github.com/ethereum/execution-specs/blob/e5a8caf1b8055e4d805c7fb169edfa710914b7da/src/ethereum/forks/amsterdam/execution_engine/requests.py#L108
+func encodeDeposits(deposits: seq[DepositRequest]): seq[byte] =
   var res: seq[byte]
   for d in deposits:
     res.add(d.pubkey.blob)
@@ -274,9 +251,7 @@ func encodeDeposits(
     res.add(d.index.toBytesLE())
   res
 
-func encodeWithdrawals(
-    withdrawals: List[WithdrawalRequest, Limit MAX_WITHDRAWAL_REQUESTS_PER_PAYLOAD]
-): seq[byte] =
+func encodeWithdrawals(withdrawals: seq[WithdrawalRequest]): seq[byte] =
   var res: seq[byte]
   for w in withdrawals:
     res.add(w.source_address.data)
@@ -284,15 +259,28 @@ func encodeWithdrawals(
     res.add(uint64(w.amount).toBytesLE())
   res
 
-func encodeConsolidations(
-    consolidations:
-      List[ConsolidationRequest, Limit MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD]
-): seq[byte] =
+func encodeConsolidations(consolidations: seq[ConsolidationRequest]): seq[byte] =
   var res: seq[byte]
   for c in consolidations:
     res.add(c.source_address.data)
     res.add(c.source_pubkey.blob)
     res.add(c.target_pubkey.blob)
+  res
+
+func encodeBuilderDeposits(deposits: seq[BuilderDepositRequest]): seq[byte] =
+  var res: seq[byte]
+  for d in deposits:
+    res.add(d.pubkey.blob)
+    res.add(d.withdrawal_credentials.data)
+    res.add(uint64(d.amount).toBytesLE())
+    res.add(d.signature.blob)
+  res
+
+func encodeBuilderExits(exits: seq[BuilderExitRequest]): seq[byte] =
+  var res: seq[byte]
+  for e in exits:
+    res.add(e.source_address.data)
+    res.add(e.pubkey.blob)
   res
 
 proc executeNewPayload(input: StatelessInput): Result[void, string] =
@@ -305,6 +293,8 @@ proc executeNewPayload(input: StatelessInput): Result[void, string] =
         (DEPOSIT_REQUEST_TYPE, encodeDeposits(reqs.deposits)),
         (WITHDRAWAL_REQUEST_TYPE, encodeWithdrawals(reqs.withdrawals)),
         (CONSOLIDATION_REQUEST_TYPE, encodeConsolidations(reqs.consolidations)),
+        (BUILDER_DEPOSIT_REQUEST_TYPE, encodeBuilderDeposits(reqs.builder_deposits)),
+        (BUILDER_EXIT_REQUEST_TYPE, encodeBuilderExits(reqs.builder_exits)),
       )
     )
     parentBeaconBlockRoot =
@@ -341,9 +331,9 @@ proc executeNewPayload(input: StatelessInput): Result[void, string] =
 
   statelessProcessBlock(input.witness, com, blk)
 
-# https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/stateless.py#L368
+# https://github.com/ethereum/execution-specs/blob/e5a8caf1b8055e4d805c7fb169edfa710914b7da/src/ethereum/forks/amsterdam/stateless.py#L321
 proc verify_stateless_new_payload*(input: StatelessInput): StatelessValidationResult =
-  let new_payload_request_root = hash_tree_root(input.new_payload_request)
+  let new_payload_request_root = compute_new_payload_request_root(input)
 
   StatelessValidationResult(
     new_payload_request_root: new_payload_request_root,

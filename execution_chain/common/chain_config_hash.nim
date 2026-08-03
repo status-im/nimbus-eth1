@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -80,5 +80,5 @@ func calcHash*(networkId: NetworkId, conf: ChainConfig, genesis: Genesis): Hash3
   ctx.finish(result.data)
   ctx.clear()
 
-func calcHash*(networkId: NetworkId, params: NetworkParams): Hash32 =
-  calcHash(networkId, params.config, params.genesis)
+func calcHash*(params: NetworkParams): Hash32 =
+  calcHash(params.networkId, params.config, params.genesis)

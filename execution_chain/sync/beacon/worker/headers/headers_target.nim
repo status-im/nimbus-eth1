@@ -15,7 +15,7 @@ import
   pkg/eth/common,
   pkg/stew/interval_set,
   ../../../../networking/p2p,
-  ../worker_desc,
+  ../[helpers, worker_desc],
   ./headers_fetch
 
 logScope:
@@ -58,7 +58,7 @@ template headersTargetActivate*(
   ##
   ## Load target header and trigger syncer activation if there is a request
   ## for doing so (i.e. the `initTarget` variable is set.) Returns `true`
-  ## if there ws something activated.
+  ## if there was something activated.
   ##
   var bodyRc = false
   block body:

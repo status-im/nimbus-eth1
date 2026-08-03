@@ -68,8 +68,8 @@ procSuite "devp2p eth/71 Tests":
       distinctBase(balBytes) == UNAVAILABLE_BAL_BYTES
       rlp.encode(balBytes) == UNAVAILABLE_BAL_BYTES
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "getBlockAccessLists - empty BAL available":
     var
@@ -100,8 +100,8 @@ procSuite "devp2p eth/71 Tests":
       balBytes == EMPTY_BAL_BYTES
       BlockAccessList.decode(balBytes).expect("valid BAL") == default(BlockAccessList)
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "getBlockAccessLists - non empty BAL available":
     var
@@ -120,7 +120,7 @@ procSuite "devp2p eth/71 Tests":
 
     var bal: BlockAccessList = newSeq[AccountChanges](1)
     bal[0].address = Address.fromHex("0x1234567890123456789012345678901234567890")
-    
+
     seedBal(env2, blockHash, bal)
 
     let
@@ -136,8 +136,8 @@ procSuite "devp2p eth/71 Tests":
       balBytes.len() > 0
       BlockAccessList.decode(balBytes).expect("valid BAL") == bal
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "getBlockAccessLists - mixed unavailable, empty and non empty BALs":
     var
@@ -185,8 +185,8 @@ procSuite "devp2p eth/71 Tests":
       BlockAccessList.decode(emptyBytes).expect("valid BAL") == emptyBal
       BlockAccessList.decode(nonEmptyBytes).expect("valid BAL") == nonEmptyBal
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "getBlockAccessLists - MAX_BALS_SERVE cap":
     var
@@ -217,8 +217,8 @@ procSuite "devp2p eth/71 Tests":
     for balBytes in resp.accessLists:
       check distinctBase(balBytes) == UNAVAILABLE_BAL_BYTES
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "getBlockAccessLists - SOFT_RESPONSE_LIMIT respected":
     var
@@ -263,8 +263,8 @@ procSuite "devp2p eth/71 Tests":
     for i, balBytes in resp.accessLists:
       check BlockAccessList.decode(balBytes.distinctBase()).expect("valid BAL") == bals[i]
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "getBlockHeaders":
     var
@@ -293,8 +293,8 @@ procSuite "devp2p eth/71 Tests":
       resp.headers.len() == 1
       resp.headers[0].number == 0
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "getBlockBodies":
     var
@@ -318,8 +318,8 @@ procSuite "devp2p eth/71 Tests":
     check:
       resp.bodies.len() == 1
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "getPooledTransactions":
     var
@@ -342,8 +342,8 @@ procSuite "devp2p eth/71 Tests":
     let resp = respOpt.get()
     check resp.transactions.len() == 0
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "blockRangeUpdate":
     var
@@ -370,8 +370,8 @@ procSuite "devp2p eth/71 Tests":
       respOpt = await peer.getBlockAccessLists(req, timeout = chronos.seconds(3))
     check respOpt.isSome()
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
 
   asyncTest "getReceipts (eth70+ format)":
     var
@@ -391,13 +391,40 @@ procSuite "devp2p eth/71 Tests":
       respOpt = await peer.getReceipts(0'u64, req, timeout = chronos.seconds(3))
     check respOpt.isSome()
 
+    # Unknown block: serving stops with an empty response. Per spec,
+    # lastBlockIncomplete only signals a receipt list cut mid-block, so it
+    # stays false here.
     let resp = respOpt.get()
     check:
       resp.receipts.len() == 0
-      resp.lastBlockIncomplete
+      not resp.lastBlockIncomplete
 
-    env2.close()
-    env1.close()
+    await env2.close()
+    await env1.close()
+
+  asyncTest "GetReceipts eth/70+ request decodes the spec wire format (flat fields)":
+    # https://github.com/ethereum/devp2p/blob/master/caps/eth.md#getreceipts-0x0f
+    # eth/70+ GetReceipts is [request-id, firstBlockReceiptIndex, [blockhash₁, ...]]
+    # with the fields flat in the message list, NOT [request-id, [index, hashes]].
+    # This is the encoding geth sends; decoding it as a nested object used to
+    # raise BreachOfProtocol ("expected list").
+    var writer = initRlpWriter()
+    writer.startList(3)
+    writer.append(0x42'u64)                     # request-id
+    writer.append(7'u64)                        # firstBlockReceiptIndex
+    writer.append(@[makeHash(1), makeHash(2)])  # block hashes
+    let
+      bytes = writer.finish()
+      peer = Peer()
+    var decoded = false
+    eth70.rlpxWithPacketResponder(StoredReceipts70Request, peer,
+        rlpFromBytes(bytes), [firstBlockReceiptIndex, blockHashes]):
+      discard response
+      check:
+        packet.firstBlockReceiptIndex == 7'u64
+        packet.blockHashes == @[makeHash(1), makeHash(2)]
+      decoded = true
+    check decoded
 
 # Unit tests for the sync-side decoding of block access lists fetched from
 # peers (`blocks_bal.decodeBlockAccessList`). A peer-supplied list is only
@@ -463,3 +490,129 @@ suite "eth/71 sync block access list decoding":
       # A valid RLP string item where a list (the access list) is expected.
       raw = RawBlockAccessList(@[0x82'u8, 0x12, 0x34])
     check decodeBlockAccessList(raw, header).isNone()
+    
+# Unit tests for the eth/70+ GetReceipts continuation semantics
+# (https://github.com/ethereum/devp2p/blob/master/caps/eth.md#getreceipts-0x0f):
+# `firstBlockReceiptIndex` offsets into the FIRST block's receipt list, receipt
+# lists are cut per receipt at the soft response limit, and a mid-block cut
+# sets `lastBlockIncomplete` so the requester can resume.
+suite "eth/70 GetReceipts continuation":
+
+  # ~700 KiB per receipt: two fit under SOFT_RESPONSE_LIMIT (2 MiB), a third
+  # does not, forcing a mid-block cut like hive's >10MiB LargeReceiptBlock.
+  const bigLogSize = 700 * 1024
+
+  proc makeReceipt(dataSize: int): StoredReceipt =
+    StoredReceipt(
+      receiptType: TxLegacy,
+      status: true,
+      cumulativeGasUsed: 21000,
+      logs: @[Log(data: newSeq[byte](dataSize))],
+    )
+
+  proc makeReceipts(n, dataSize: int): seq[StoredReceipt] =
+    for _ in 0 ..< n:
+      result.add makeReceipt(dataSize)
+
+  proc seedReceiptBlock(env: TestEnv, num: uint64,
+                        receipts: seq[StoredReceipt]): Hash32 =
+    ## Persist a header + receipts straight into the database so
+    ## receiptsByBlockHash can find them without importing a real block.
+    let
+      root = makeHash(int(10_000 + num))
+      blockHash = makeHash(int(20_000 + num))
+      header = Header(number: num, receiptsRoot: root)
+    env.chain.baseTxFrame.persistHeader(blockHash, header).expect("persistHeader")
+    env.chain.baseTxFrame.persistReceipts(root, receipts)
+    blockHash
+
+  test "large block is served in resumable chunks":
+    let
+      env = newTestEnv()
+      wire = EthWireRef(chain: env.chain)
+      receipts = makeReceipts(5, bigLogSize)
+      blockHash = env.seedReceiptBlock(1000, receipts)
+
+    # First request: only two receipts fit, block is cut mid-list.
+    let first = wire.getStoredReceipts70(StoredReceipts70Request(
+      firstBlockReceiptIndex: 0, blockHashes: @[blockHash]))
+    check:
+      first.lastBlockIncomplete
+      first.receipts.len == 1
+      first.receipts[0] == receipts[0..1]
+
+    # Resume from the number of receipts received so far.
+    let second = wire.getStoredReceipts70(StoredReceipts70Request(
+      firstBlockReceiptIndex: 2, blockHashes: @[blockHash]))
+    check:
+      second.lastBlockIncomplete
+      second.receipts.len == 1
+      second.receipts[0] == receipts[2..3]
+
+    let third = wire.getStoredReceipts70(StoredReceipts70Request(
+      firstBlockReceiptIndex: 4, blockHashes: @[blockHash]))
+    check:
+      not third.lastBlockIncomplete
+      third.receipts.len == 1
+      third.receipts[0] == receipts[4..4]
+
+    waitFor env.close()
+
+  test "continuation cursor covering the whole first block yields an empty positional entry":
+    let
+      env = newTestEnv()
+      wire = EthWireRef(chain: env.chain)
+      large = makeReceipts(5, bigLogSize)
+      small = makeReceipts(2, 100)
+      largeHash = env.seedReceiptBlock(1001, large)
+      smallHash = env.seedReceiptBlock(1002, small)
+
+    # The requester already has all 5 receipts of the first block and asks
+    # for the rest starting at that block (geth's TestGetLargeReceipts flow).
+    let resp = wire.getStoredReceipts70(StoredReceipts70Request(
+      firstBlockReceiptIndex: 5, blockHashes: @[largeHash, smallHash]))
+    check:
+      not resp.lastBlockIncomplete
+      resp.receipts.len == 2
+      resp.receipts[0].len == 0
+      resp.receipts[1] == small
+
+    waitFor env.close()
+
+  test "mid-response cut across blocks sets lastBlockIncomplete":
+    let
+      env = newTestEnv()
+      wire = EthWireRef(chain: env.chain)
+      small = makeReceipts(2, 100)
+      large = makeReceipts(5, bigLogSize)
+      smallHash = env.seedReceiptBlock(1003, small)
+      largeHash = env.seedReceiptBlock(1004, large)
+
+    let resp = wire.getStoredReceipts70(StoredReceipts70Request(
+      firstBlockReceiptIndex: 0, blockHashes: @[smallHash, largeHash]))
+    check:
+      resp.lastBlockIncomplete
+      resp.receipts.len == 2
+      resp.receipts[0] == small
+      resp.receipts[1] == large[0..1]
+
+    waitFor env.close()
+
+  test "unknown block stops serving to preserve positional correspondence":
+    let
+      env = newTestEnv()
+      wire = EthWireRef(chain: env.chain)
+      small = makeReceipts(2, 100)
+      small2 = makeReceipts(3, 100)
+      smallHash = env.seedReceiptBlock(1005, small)
+      small2Hash = env.seedReceiptBlock(1006, small2)
+
+    let resp = wire.getStoredReceipts70(StoredReceipts70Request(
+      firstBlockReceiptIndex: 0,
+      blockHashes: @[smallHash, makeHash(31337), small2Hash]))
+    check:
+      not resp.lastBlockIncomplete
+      resp.receipts.len == 1
+      resp.receipts[0] == small
+
+    waitFor env.close()

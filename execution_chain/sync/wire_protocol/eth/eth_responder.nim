@@ -276,7 +276,10 @@ proc getReceipts70UserHandler[PROTO](response: Responder; req: StoredReceipts70R
 proc getReceiptsThunk[PROTO](peer: Peer; data: Rlp) {.
     async: (raises: [CancelledError, EthP2PError]).} =
   when PROTO is eth70 or PROTO is eth71:
-    PROTO.rlpxWithPacketResponder(StoredReceipts70Request, peer, data):
+    # eth/70+ GetReceipts (0x0f) is encoded flat:
+    # [request-id, firstBlockReceiptIndex, [blockhash₁, ...]]
+    PROTO.rlpxWithPacketResponder(StoredReceipts70Request, peer, data,
+        [firstBlockReceiptIndex, blockHashes]):
       await getReceipts70UserHandler[PROTO](response, packet)
   else:
     PROTO.rlpxWithPacketResponder(seq[Hash32], peer, data):
@@ -306,7 +309,7 @@ proc blockRangeUpdateUserHandler[PROTO](peer: Peer; packet: BlockRangeUpdatePack
     debug "Disconnecting peer because of protocol breach",
       remote = peer.remote, clientId = peer.clientId,
       msg = "blockRangeUpdate must have latest >= earliest"
-    await peer.disconnect(BreachOfProtocol)
+    await peer.disconnect(BreachOfProtocol, notifyRemote = true)
     return
 
   peer.state(PROTO).earliest = packet.earliest
@@ -398,6 +401,10 @@ proc eth68PeerConnected(peer: Peer) {.async: (
   peer.state(eth68).initialized = true
   peer.state(eth68).bestHash = m.bestHash
 
+  # Announce our pooled tx hashes to the new peer; only enqueues an
+  # action, the actual sends run in a background worker.
+  await ctx.scheduleTxAnnounceToNewPeer(peer)
+
 proc eth69OrLaterPeerConnected[PROTO](peer: Peer) {.async: (
     raises: [CancelledError, EthP2PError]).} =
   let
@@ -455,6 +462,10 @@ proc eth69OrLaterPeerConnected[PROTO](peer: Peer) {.async: (
   peer.state(PROTO).earliest = m.earliest
   peer.state(PROTO).latest = m.latest
   peer.state(PROTO).latestHash = m.latestHash
+
+  # Announce our pooled tx hashes to the new peer; only enqueues an
+  # action, the actual sends run in a background worker.
+  await ctx.scheduleTxAnnounceToNewPeer(peer)
 
 template registerCommonThunk(protocol: ProtocolInfo, PROTO: type) =
   registerMsg(protocol, NewBlockHashesMsg, "newBlockHashes",

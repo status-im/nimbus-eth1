@@ -43,9 +43,11 @@ proc rpcCallEvm*(
   defer:
     txFrame.dispose() # always dispose state changes
 
-  let
-    vmState = BaseVMState.new(header, topHeader, com, txFrame)
-    params = ?toCallParams(vmState, args, globalGasCap, header)
+  let vmState = BaseVMState.new(header, topHeader, com, txFrame)
+  defer:
+    vmState.dispose()
+
+  let params = ?toCallParams(vmState, args, globalGasCap, header)
 
   ok(runComputation(params, CallResult))
 
@@ -127,7 +129,13 @@ proc rpcEstimateGas*(
 
     params.gasLimit = gasLimit
     # TODO: bail out on consensus error similar to validateTransaction
+    # Each trial must run against pristine state; a successful run (e.g. a
+    # CREATE2 deploy) otherwise commits into the shared ledger and leaks into
+    # later trials (address collision -> revert), breaking the search. This
+    # mirrors the savepoint/rollback used in async_evm.nim.
+    let savePoint = vmState.ledger.beginSavePoint()
     let res = runComputation(params, CallResult)
+    vmState.ledger.rollback(savePoint)
     if res.error.len > 0:
       err(OutputResult(error: res.error, output: res.output))
     else:
@@ -186,4 +194,7 @@ proc rpcEstimateGas*(
     txFrame.dispose() # always dispose state changes
 
   let vmState = BaseVMState.new(header, topHeader, com, txFrame)
+  defer:
+    vmState.dispose()
+
   rpcEstimateGas(args, header, vmState, gasCap)

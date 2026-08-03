@@ -11,7 +11,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[tables, algorithm, strformat],
+  std/[tables, algorithm, sets, strformat],
   chronicles,
   results,
   chronos,
@@ -54,7 +54,7 @@ const
 
 func toQueueResult(r: Result[void, string]): Result[ImportOutcome, ImportError] =
   ## Adapt the `Result[void, string]` of the non-import queue handlers
-  ## (`forkChoice`, `processUpdateBase`, `processOrphan`) to the shared
+  ## (`forkChoice`, `setHead`, `processUpdateBase`, `processOrphan`) to the shared
   ## `QueueItem` result type. The error `kind` is irrelevant on these paths:
   ## their consumers only inspect ok/err and `msg` (the base/orphan results are
   ## not even read back), so a plain `Valid`/`Invalid` mapping suffices.
@@ -206,8 +206,13 @@ func calculateNewBase(
 
   doAssert(false, "Unreachable code, target base should exists")
 
-func removeBlockFromCache(c: ForkedChainRef, b: BlockRef) =
+proc removeBlockFromCache(c: ForkedChainRef, b: BlockRef) =
   c.hashToBlock.del(b.hash)
+
+  if not c.vmState.isNil() and b.hash == c.vmStateBlockHash:
+    c.vmState.dispose()
+    c.vmState = nil
+    c.vmStateBlockHash.reset()
 
   # Collect and remove tx records belonging to this block
   var toRemove: seq[Hash32]
@@ -233,7 +238,7 @@ func updateHead(c: ForkedChainRef, head: BlockRef) =
     head.hash,
     head.number)
 
-func updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) =
+proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) =
   # Pruning
   # ::
   #                       - B5 - B6 - B7 - B8
@@ -560,7 +565,23 @@ proc validateBlock(
       base = c.calculateNewBase(c.latestFinalized.number, c.latest)
       prevBase = c.base.number
 
-    c.updateFinalized(base, base)
+    # `base` is the persistence point; the finalization reference passed to
+    # `updateFinalized` must never sit *below* the existing finalized markers.
+    # During pure auto-forward the current frontier lags `base`, so `base`
+    # advances it (and legitimately prunes branches that forked below the new
+    # base). But when an earlier `forkChoice` finalized within `baseDistance` of
+    # the head, `base` (capped at head - baseDistance) can land *below* that
+    # marker; feeding `base` in as the frontier would then make `reachable`
+    # prune every head (including `c.latest`), tripping `candidate.isNil.not`.
+    # Use the higher of the two - the true finalized frontier on `c.latest`.
+    var finalizedFrontier = base
+    for it in ancestors(c.latest):
+      if not it.notFinalized:
+        if it.number > base.number:
+          finalizedFrontier = it
+        break
+
+    c.updateFinalized(finalizedFrontier, c.latest)
     await c.queueUpdateBase(base)
 
     # If on disk head behind base, move it to base too.
@@ -751,6 +772,16 @@ proc importBlock*(
     parentHash = header.parentHash.short
 
   if header.number <= c.latest.number:
+    # The parent is gone, but this block may itself be the canonical block at
+    # this height that was already imported and then pruned from memory once it
+    # fell at/below `base` (finality cut off its parent). This happens when a
+    # concurrent importer such as `el_sync` advances and finalizes the chain past
+    # a stale sync target. Tell that apart from a genuine dead fork via the
+    # persisted canonical marker (reorg-safe: matched by hash, not by number).
+    if header.number <= c.base.number and
+       c.baseTxFrame.getBlockHash(header.number).valueOr(default(Hash32)) == blkHash:
+      return ok(AlreadyObserved)
+
     # The in-memory chain already spans this height yet the parent is gone: the
     # parent's branch was pruned (finality cut it off), so this block is on a
     # dead fork. `c.latest` is the reliable frontier here - `c.latestFinalized`
@@ -810,12 +841,67 @@ proc forkChoice*(c: ForkedChainRef,
 
   ok()
 
+proc setHead*(c: ForkedChainRef, headHash: Hash32): Result[void, string] =
+  ## Forcibly reset the chain head to `headHash`, discarding every in-memory
+  ## block that is not an ancestor of the new head - both the blocks above it
+  ## on its own branch and any competing branches. Discarded blocks can be
+  ## imported again afterwards.
+  ##
+  ## The new head must be in the in-memory window: blocks at or below `base`
+  ## have been persisted and cannot be rewound, and finalized blocks cannot
+  ## be discarded, so the head can only move to the latest finalized block
+  ## or one of its descendants.
+  ##
+  ## This is a destructive debug/testing helper backing `debug_setHead` - it
+  ## bypasses the usual fork choice rules.
+  let head = ?c.findHeadPos(headHash)
+
+  # Blocks on the new head's lineage survive, everything else is removed.
+  var keep = initHashSet[Hash32]()
+  for it in ancestors(head):
+    keep.incl it.hash
+
+  # Refuse to discard finalized blocks (which may already be queued for
+  # persisting). Checked up front so that no blocks are removed on error.
+  for branchHead in c.heads:
+    for it in ancestors(branchHead):
+      if it.hash in keep:
+        break
+      if not it.notFinalized:
+        return err("Cannot set head to " & headHash.short &
+          ": finalized block " & it.hash.short & " would be discarded")
+
+  for branchHead in c.heads:
+    # Walk each branch tip first so that children are disposed before parents.
+    for it in ancestors(branchHead):
+      if it.hash in keep or it.txFrame.isNil:
+        # Reached the new head's lineage, or a segment already removed while
+        # walking a previous branch.
+        break
+      c.removeBlockFromCache(it)
+
+  c.heads = @[head]
+  c.latest = head
+  c.updateHead(head)
+
+  if c.fcuSafe.number > head.number:
+    # The old safe block was discarded, clamp it to the new head.
+    c.fcuSafe = FcuHashAndNumber(hash: head.hash, number: head.number)
+    ?head.txFrame.fcuSafe(c.fcuSafe)
+
+  ok()
+
 proc stopProcessingQueue*(c: ForkedChainRef) {.async: (raises: []).} =
   doAssert(c.processingQueueLoop.isNil.not, "Please set enableQueue=true when constructing FC")
   # noCancel operation prevents race condition between processingQueue
   # and FC.serialize, e.g. the queue is not empty and processingQueue loop still running, and
   # at the same time FC.serialize modify the state, crash can happen.
   await noCancel c.processingQueueLoop.cancelAndWait()
+
+  if not c.vmState.isNil():
+    c.vmState.dispose()
+    c.vmState = nil
+    c.vmStateBlockHash.reset()
 
 template queueImportBlock*(
     c: ForkedChainRef,
@@ -840,6 +926,17 @@ template queueForkChoice*(c: ForkedChainRef,
                  safeHash: Hash32 = zeroHash32): auto =
   proc asyncHandler(): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
     toQueueResult(await c.forkChoice(headHash, finalizedHash, safeHash))
+
+  let item = QueueItem(
+    responseFut: Future[Result[ImportOutcome, ImportError]].Raising([CancelledError]).init(),
+    handler: asyncHandler
+  )
+  await c.queue.addLast(item)
+  item.responseFut
+
+template queueSetHead*(c: ForkedChainRef, headHash: Hash32): auto =
+  proc asyncHandler(): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
+    toQueueResult(c.setHead(headHash))
 
   let item = QueueItem(
     responseFut: Future[Result[ImportOutcome, ImportError]].Raising([CancelledError]).init(),
@@ -1207,19 +1304,35 @@ func equalOrAncestorOf*(c: ForkedChainRef, blockHash: Hash32, headHash: Hash32):
 
   false
 
-proc isCanonicalAncestor*(c: ForkedChainRef,
+func knownFinalizedBlock(c: ForkedChainRef, finalizedBlockHash: Hash32): BlockRef =
+  let b = c.hashToBlock.getOrDefault(finalizedBlockHash)
+  if b.isNil.not:
+    return b
+  c.hashToBlock.getOrDefault(c.latestFinalized.hash)
+
+proc isCanonicalAndFinalizedAncestor*(c: ForkedChainRef,
                     blockNumber: BlockNumber,
-                    blockHash: Hash32): bool =
-  if blockNumber >= c.latest.number:
+                    blockHash: Hash32,
+                    finalizedBlockHash: Hash32): bool =
+  # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.7/src/engine/paris.md#specification-1
+  # Client software MAY skip an update of the forkchoice state and MUST NOT
+  # begin a payload build process if there is a known finalizedBlockHash and
+  # forkchoiceState.headBlockHash references a VALID ancestor of the latest
+  # known finalized block, i.e. the ancestor passed payload validation process
+  # and deemed VALID.
+
+  if blockHash == finalizedBlockHash:
     return false
 
-  if blockHash == c.latest.hash:
+  let b = c.knownFinalizedBlock(finalizedBlockHash)
+  if b.isNil:
     return false
 
-  if c.base.number < c.latest.number:
-    # The current canonical chain in memory is headed by
-    # latest.header
-    for it in ancestors(c.latest):
+  if blockNumber >= b.number:
+    return false
+
+  if c.base.number < b.number:
+    for it in ancestors(b):
       if it.hash == blockHash and it.number == blockNumber:
         return true
 

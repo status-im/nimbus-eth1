@@ -334,7 +334,7 @@ proc blocksStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
       nUnproc=ctx.blocksUnprocTotal(), nStagedQ=ctx.blk.staged.len
 
     ctx.blocksUnprocClear()
-    ctx.blk.staged.clear()
+    ctx.blocksStagedQueueClear()
     ctx.subState.reset
 
 # ------------------------------------------------------------------------------

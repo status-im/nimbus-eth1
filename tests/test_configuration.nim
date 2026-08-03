@@ -33,16 +33,19 @@ proc configurationMain*() =
 
     test "data-dir and key-store":
       let config = makeTestConfig()
-      check config.dataDir() == defaultDataDir("", "mainnet")
-      check config.keyStoreDir == defaultDataDir("", "mainnet") / "keystore"
+      let params = config.computeNetworkParams()
+      check config.dataDir(params) == defaultDataDir("", "mainnet")
+      check config.keyStoreDir(params) == defaultDataDir("", "mainnet") / "keystore"
 
       let cc = makeConfig(@["-d:apple\\bin", "-k:banana/bin"])
-      check cc.dataDir() == "apple\\bin"
-      check cc.keyStoreDir == "banana/bin"
+      let ccp = cc.computeNetworkParams()
+      check cc.dataDir(ccp) == "apple\\bin"
+      check cc.keyStoreDir(ccp) == "banana/bin"
 
       let dd = makeConfig(@["--data-dir:apple\\bin", "--key-store:banana/bin"])
-      check dd.dataDir() == "apple\\bin"
-      check dd.keyStoreDir == "banana/bin"
+      let ddp = dd.computeNetworkParams()
+      check dd.dataDir(ddp) == "apple\\bin"
+      check dd.keyStoreDir(ddp) == "banana/bin"
 
     test "bootstrap-blocks-file parsing":
       let defaults = makeTestConfig()
@@ -61,42 +64,51 @@ proc configurationMain*() =
     test "network loading config file with no genesis data":
       # no genesis will fallback to geth compatibility mode
       let config = makeConfig(@["--network:" & noGenesis])
-      check config.networkParams.genesis.isNil.not
+      let params = config.computeNetworkParams()
+      check params.genesis.isNil.not
 
     test "network loading config file with no 'config'":
       # no config will result in empty config, CommonRef keep working
       let config = makeConfig(@["--network:" & noConfig])
-      check config.networkParams.config.isNil == false
+      let params = config.computeNetworkParams()
+      check params.config.isNil == false
 
     test "network-id":
       let aa = makeTestConfig()
-      check aa.networkId == MainNet
-      check aa.networkParams != NetworkParams()
+      let aap = aa.computeNetworkParams()
+      check aap.networkId == MainNet
+      check aap != NetworkParams()
 
       let config = makeConfig(@["--network:" & genesisFile, "--network:345"])
-      check config.networkId == 345.u256
+      let params = config.computeNetworkParams()
+      check params.networkId == 345.u256
 
     test "network-id first, network next":
       let config = makeConfig(@["--network:678", "--network:" & genesisFile])
-      check config.networkId == 678.u256
+      let params = config.computeNetworkParams()
+      check params.networkId == 678.u256
 
     test "network-id set, no network":
       let config = makeConfig(@["--network:678"])
-      check config.networkId == 678.u256
-      check config.networkParams.genesis == Genesis()
-      check config.networkParams.config == ChainConfig()
+      let params = config.computeNetworkParams()
+      check params.networkId == 678.u256
+      check params.genesis == Genesis()
+      check params.config == ChainConfig()
 
     test "network-id not set, copy from chainId of custom network":
       let config = makeConfig(@["--network:" & genesisFile])
-      check config.networkId == 123.u256
+      let params = config.computeNetworkParams()
+      check params.networkId == 123.u256
 
     test "network-id not set, sepolia set":
       let config = makeConfig(@["--network:sepolia"])
-      check config.networkId == SepoliaNet
+      let params = config.computeNetworkParams()
+      check params.networkId == SepoliaNet
 
     test "network-id set, sepolia set":
       let config = makeConfig(@["--network:sepolia", "--network:123"])
-      check config.networkId == 123.u256
+      let params = config.computeNetworkParams()
+      check params.networkId == 123.u256
 
     test "rpc-api":
       let config = makeTestConfig()
@@ -142,26 +154,50 @@ proc configurationMain*() =
 
     test "--bootstrap-node and --bootstrap-file":
       let config = makeTestConfig()
-      let bootnodes = config.getBootstrapNodes()
+      let bootnodes = config.getBootstrapNodes(config.computeNetworkParams)
       let bootNodeLen = bootnodes.enodes.len
       check bootNodeLen > 0 # mainnet bootnodes
 
       let aa = makeConfig(@["--bootstrap-node:" & bootNode])
-      let ax = aa.getBootstrapNodes()
+      let ax = aa.getBootstrapNodes(aa.computeNetworkParams)
       check ax.enodes.len == bootNodeLen + 1
 
       let bb = makeConfig(@["--bootstrap-node:" & bootNode & "," & bootNode])
-      check bb.getBootstrapNodes().enodes.len == bootNodeLen + 2
+      check bb.getBootstrapNodes(bb.computeNetworkParams).enodes.len == bootNodeLen + 2
 
       let cc = makeConfig(@["--bootstrap-node:" & bootNode, "--bootstrap-node:" & bootNode])
-      check cc.getBootstrapNodes().enodes.len == bootNodeLen + 2
+      check cc.getBootstrapNodes(cc.computeNetworkParams).enodes.len == bootNodeLen + 2
 
       const
         bootFilePath = "tests" / "bootstrap"
         bootFileAppend = bootFilePath / "append_bootnodes.txt"
 
       let dd = makeConfig(@["--bootstrap-file:" & bootFileAppend])
-      let dx = dd.getBootstrapNodes()
+      let dx = dd.getBootstrapNodes(dd.computeNetworkParams)
+      check dx.enodes.len == bootNodeLen + 3
+
+    test "--el-bootstrap-node and --el-bootstrap-file":
+      let config = makeTestConfig()
+      let bootnodes = config.getBootstrapNodes(config.computeNetworkParams)
+      let bootNodeLen = bootnodes.enodes.len
+      check bootNodeLen > 0 # mainnet bootnodes
+
+      let aa = makeConfig(@["--el-bootstrap-node:" & bootNode])
+      let ax = aa.getBootstrapNodes(aa.computeNetworkParams)
+      check ax.enodes.len == bootNodeLen + 1
+
+      let bb = makeConfig(@["--el-bootstrap-node:" & bootNode & "," & bootNode])
+      check bb.getBootstrapNodes(bb.computeNetworkParams).enodes.len == bootNodeLen + 2
+
+      let cc = makeConfig(@["--el-bootstrap-node:" & bootNode, "--el-bootstrap-node:" & bootNode])
+      check cc.getBootstrapNodes(cc.computeNetworkParams).enodes.len == bootNodeLen + 2
+
+      const
+        bootFilePath = "tests" / "bootstrap"
+        bootFileAppend = bootFilePath / "append_bootnodes.txt"
+
+      let dd = makeConfig(@["--el-bootstrap-file:" & bootFileAppend])
+      let dx = dd.getBootstrapNodes(dd.computeNetworkParams)
       check dx.enodes.len == bootNodeLen + 3
 
     test "static-peers":
@@ -182,9 +218,10 @@ proc configurationMain*() =
         chainid1 = "tests" / "customgenesis" / "chainid1.json"
 
       let config = makeConfig(@["--network:" & chainid1])
-      check config.networkId == 1.u256
-      check config.networkParams.config.londonBlock.get() == 1337
-      check config.getBootstrapNodes().enodes.len == 0
+      let params = config.computeNetworkParams()
+      check params.networkId == 1.u256
+      check params.config.londonBlock.get() == 1337
+      check config.getBootstrapNodes(params).enodes.len == 0
 
     test "json-rpc enabled when json-engine api enabled and share same port":
       let config = makeConfig(@["--engine-api", "--engine-api-port:8545", "--http-port:8545"])
@@ -277,22 +314,26 @@ proc configurationMain*() =
 
     test "default key-store and default data-dir":
       let config = makeTestConfig()
-      check config.keyStoreDir() == config.dataDir() / "keystore"
+      let params = config.computeNetworkParams()
+      check config.keyStoreDir(params) == config.dataDir(params) / "keystore"
 
     test "custom key-store and custom data-dir":
       let config = makeConfig(@["--key-store:banana", "--data-dir:apple"])
-      check config.keyStoreDir() == "banana"
-      check config.dataDir() == "apple"
+      let params = config.computeNetworkParams()
+      check config.keyStoreDir(params) == "banana"
+      check config.dataDir(params) == "apple"
 
     test "default key-store and custom data-dir":
       let config = makeConfig(@["--data-dir:apple"])
-      check config.dataDir() == "apple"
-      check config.keyStoreDir() == "apple" / "keystore"
+      let params = config.computeNetworkParams()
+      check config.dataDir(params) == "apple"
+      check config.keyStoreDir(params) == "apple" / "keystore"
 
     test "custom key-store and default data-dir":
       let config = makeConfig(@["--key-store:banana"])
-      check config.dataDir() == defaultDataDir("", "mainnet")
-      check config.keyStoreDir() == "banana"
+      let params = config.computeNetworkParams()
+      check config.dataDir(params) == defaultDataDir("", "mainnet")
+      check config.keyStoreDir(params) == "banana"
 
     test "loadKeystores missing address":
       var am = AccountsManager()
@@ -308,16 +349,18 @@ proc configurationMain*() =
 
     test "TOML config file":
       let config = makeConfig(@["--config-file:tests/config_file/basic.toml"])
-      check config.dataDir == "basic/data/dir"
+      let params = config.computeNetworkParams()
+
+      check config.dataDir(params) == "basic/data/dir"
       check config.era1DirFlag == some OutDir "basic/era1/dir"
       check config.eraDirFlag == some OutDir "basic/era/dir"
-      check config.keyStoreDir == "basic/keystore"
+      check config.keyStoreDir(params) == "basic/keystore"
       check config.importKey.string == "basic_import_key"
       check config.trustedSetupFile == some "basic_trusted_setup_file"
       check config.extraData == "basic_extra_data"
       check config.gasLimit == some(5678'u64)
-      check config.networkId == 777.u256
-      check config.networkParams.config.isNil.not
+      check params.networkId == 777.u256
+      check params.config.isNil.not
 
       check config.logLevel == "DEBUG"
       check config.logFormat == StdoutLogKind.Json
@@ -345,7 +388,7 @@ proc configurationMain*() =
       check config.udpPort == 8899.Port
       check config.maxPeers == 45
       check config.nat == NatConfig(hasExtIp: false, nat: NatAny)
-      check config.discovery == ["V5"]
+      check config.discv5 == false
       check config.netKey == "random"
       check config.agentString == "basic_agent_string"
 
@@ -392,5 +435,15 @@ proc configurationMain*() =
 
       let c3 = makeConfig(@["--config-file:tests/config_file/network3.toml"])
       check c3.network == @["666"]
+
+    test "--network load folder with genesis.json":
+      let c1 = makeConfig(@["--network:tests/customgenesis/metadata_with_genesis"])
+      let params = c1.computeNetworkParams()
+      check params.config.chainId == 123456.u256
+
+    test "--network load folder without genesis.json":
+      let c1 = makeConfig(@["--network:tests/customgenesis/metadata_no_genesis"])
+      let params = c1.computeNetworkParams()
+      check params.config.chainId == 7890.u256
 
 configurationMain()

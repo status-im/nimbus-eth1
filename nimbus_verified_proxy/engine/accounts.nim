@@ -20,6 +20,9 @@ import
   ../../execution_chain/beacon/web3_eth_conv,
   ./types
 
+logScope:
+  topics = "vp_engine"
+
 proc getAccountFromProof*(
     stateRoot: Hash32,
     accountAddress: Address,
@@ -124,8 +127,6 @@ proc getAccount*(
   if cachedAcc.isSome():
     return ok(cachedAcc.get())
 
-  info "Forwarding eth_getAccount", blockNumber
-
   let
     (backend, backendIdx) = ?(engine.executionBackendFor(GetProof))
     proof = ?(
@@ -165,8 +166,6 @@ proc getCode*(
   if cachedCode.isSome():
     return ok(cachedCode.get())
 
-  info "Forwarding eth_getCode", blockNumber
-
   let
     (backend, backendIdx) = ?(engine.executionBackendFor(GetCode))
     code = ?(
@@ -198,8 +197,6 @@ proc getStorageAt*(
     cachedSlotValue = engine.storageCache.get(cacheKey)
   if cachedSlotValue.isSome():
     return ok(cachedSlotValue.get())
-
-  info "Forwarding eth_getStorageAt", blockNumber
 
   let
     (backend, backendIdx) = ?(engine.executionBackendFor(GetProof))

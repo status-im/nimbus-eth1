@@ -98,6 +98,7 @@ proc recoverAndPrefetchTask*(
   let vmState = BaseVMState()
   vmState.com.borrowRef(ctx[].com)
   defer:
+    vmState.dispose()
     vmState.com.unborrowRef()
   vmState.ledger = ledger
   assign(vmState.parent, ctx[].parent)
@@ -301,7 +302,7 @@ proc packLogs(logs: openArray[Log]): SharedBytes =
       log.data.len
 
   var
-    packed = SharedBytes.init(size)
+    packed = SharedBytes.init(size, zeroed = false)
     pos = 0
 
   template put(src: pointer, n: int) =
@@ -376,6 +377,7 @@ proc processTxTask(
   let vmState = BaseVMState()
   vmState.com.borrowRef(ctx[].com)
   defer:
+    vmState.dispose()
     vmState.com.unborrowRef()
   vmState.ledger = ledger
   assign(vmState.parent, ctx[].parent)

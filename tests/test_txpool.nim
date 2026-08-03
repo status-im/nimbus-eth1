@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/math,
+  std/[math, times, importutils],
   eth/common/keys,
   results,
   unittest2,
@@ -25,6 +25,7 @@ import
   ../execution_chain/[conf, transaction, constants],
   ../execution_chain/core/tx_pool,
   ../execution_chain/core/tx_pool/tx_desc {.all.},
+  ../execution_chain/core/tx_pool/tx_evictor,
   ../execution_chain/core/pooled_txs,
   ../execution_chain/common/common,
   ../execution_chain/utils/utils,
@@ -53,7 +54,6 @@ const
 
 type
   TestEnv = object
-    config: ExecutionClientConf
     com   : CommonRef
     chain : ForkedChainRef
     xp    : TxPoolRef
@@ -61,14 +61,10 @@ type
 
   CustomTx = CustomTransactionData
 
-proc initConf(envFork: HardFork): ExecutionClientConf =
-  var config = makeConfig(
-    @["--network:" & genesisFile]
-  )
-
+proc initState(params: NetworkParams, envFork: HardFork) =
   doAssert envFork >= MergeFork
 
-  let cc = config.networkParams.config
+  let cc = params.config
   if envFork >= MergeFork:
     cc.mergeNetsplitBlock = Opt.some(0'u64)
 
@@ -80,11 +76,11 @@ proc initConf(envFork: HardFork): ExecutionClientConf =
 
   if envFork >= Prague:
     cc.pragueTime = Opt.some(0.EthTime)
-    config.networkParams.genesis.alloc[withdrawalTriggerContract] = GenesisAccount(
+    params.genesis.alloc[withdrawalTriggerContract] = GenesisAccount(
       balance: 0.u256,
       code: triggerCode
     )
-    config.networkParams.genesis.alloc[consolidationWithdrawalTrigger] = GenesisAccount(
+    params.genesis.alloc[consolidationWithdrawalTrigger] = GenesisAccount(
       balance: 0.u256,
       code: triggerCode
     )
@@ -94,31 +90,39 @@ proc initConf(envFork: HardFork): ExecutionClientConf =
 
   if envFork >= Amsterdam:
     cc.amsterdamTime = Opt.some(0.EthTime)
-    config.networkParams.genesis.alloc[BUILDER_DEPOSIT_CONTRACT_ADDRESS] = GenesisAccount(code: builderDepositRequestCode)
-    config.networkParams.genesis.alloc[BUILDER_EXIT_CONTRACT_ADDRESS] = GenesisAccount(code: builderExitRequestCode)
+    params.genesis.alloc[BUILDER_DEPOSIT_CONTRACT_ADDRESS] = GenesisAccount(code: builderDepositRequestCode)
+    params.genesis.alloc[BUILDER_EXIT_CONTRACT_ADDRESS] = GenesisAccount(code: builderExitRequestCode)
 
-  config.networkParams.genesis.alloc[recipient] = GenesisAccount(code: contractCode)
-  config
+  params.genesis.alloc[recipient] = GenesisAccount(code: contractCode)
 
-proc initEnv(config: ExecutionClientConf): TestEnv =
+proc initEnv(params: NetworkParams, flags: set[TxPoolFlags] = {}): TestEnv =
   let
     # create the sender first, because it will modify networkParams
-    sender = TxSender.new(config.networkParams, 30)
-    com    = CommonRef.new(newCoreDbRef DefaultDbMemory,
-               config.networkId, config.networkParams)
+    sender = TxSender.new(params, 30)
+    com    = CommonRef.new(newCoreDbRef DefaultDbMemory, params)
     chain  = ForkedChainRef.init(com)
 
   TestEnv(
-    config: config,
     com   : com,
     chain : chain,
-    xp    : TxPoolRef.new(chain),
+    xp    : TxPoolRef.new(chain, flags),
     sender: sender
   )
 
-proc initEnv(envFork: HardFork): TestEnv =
-  let config = initConf(envFork)
-  initEnv(config)
+proc initParams(): NetworkParams =
+  var
+    config = makeConfig(
+      @["--network:" & genesisFile]
+    )
+
+  config.computeNetworkParams()
+
+proc initEnv(envFork: HardFork, flags: set[TxPoolFlags] = {}): TestEnv =
+  let
+    params = initParams()
+
+  params.initState(envFork)
+  initEnv(params, flags)
 
 template checkAddTx(xp, tx, errorCode) =
   let prevCount = xp.len
@@ -286,6 +290,16 @@ suite "TxPool test suite":
     let ptx = mx.makeTx(tc, 0)
     xp.checkAddTx(ptx, txErrorBasicValidation)
 
+  test "EIP-2681 nonce at maximum rejected":
+    let acc = mx.getAccount(23)
+    let tc = BaseTx(
+      gasLimit: 75000
+    )
+    var ptx = mx.makeTx(tc, acc, 0)
+    ptx.tx = mx.customizeTransaction(acc, ptx.tx,
+      CustomTx(nonce: Opt.some(high(uint64))))
+    xp.checkAddTx(ptx, txErrorBasicValidation)
+
   test "Known tx":
     let tc = BaseTx(
       gasLimit: 75000
@@ -373,13 +387,27 @@ suite "TxPool test suite":
     xp.checkImportBlock(1, 0)
 
   test "max transactions per account":
+    # Shadow the suite env with an isolated one: draining MAX_TXS_PER_ACCOUNT
+    # txs imports enough full blocks to compound the baseFee toward the
+    # sender's 30 gwei fee cap, which would make later admissions in the
+    # shared env fail `maxFeePerGas < baseFee`.
+    let
+      env = initEnv(Cancun)
+      xp = env.xp
+      mx = env.sender
+      chain = env.chain
+
+    xp.prevRandao = prevRandao
+    xp.feeRecipient = feeRecipient
+    xp.timestamp = EthTime.now()
+
     let acc = mx.getAccount(16)
     let tc = BaseTx(
       txType: Opt.some(TxLegacy),
       gasLimit: 75000
     )
 
-    const MAX_TXS_GENERATED = 500
+    const MAX_TXS_GENERATED = MAX_TXS_PER_ACCOUNT
     for i in 0..MAX_TXS_GENERATED-2:
       let ptx = mx.makeTx(tc, acc, i.AccountNonce)
       xp.checkAddTx(ptx)
@@ -657,6 +685,43 @@ suite "TxPool test suite":
 
     xp.checkAddTx(tx, txErrorBasicValidation)
 
+  test "good tx followed by oog tx, receipt status=[true, false]":
+    let
+      env = initEnv(Amsterdam, {XP_ORDERED})
+      xp = env.xp
+      mx = env.sender
+      acc = mx.getAccount(24)
+      auth = mx.makeAuth(acc, 0)
+      tc = BaseTx(
+        txType: Opt.some(TxEip7702),
+        gasLimit: 28816 + 8000 - 1, # intrinsic + ACCOUNT_WRITE_8038 - 1
+        recipient: Opt.some(recipient214),
+        amount: amount,
+        authorizationList: @[auth],
+      )
+      tc1 = BaseTx(
+        txType: Opt.some(TxLegacy),
+        gasLimit: 75000,
+        recipient: Opt.some(recipient214),
+        amount: 0.u256,
+      )
+      tx = mx.makeTx(tc, 1)
+      tx1 = mx.makeTx(tc1, 0)
+
+    # 1st tx ok
+    xp.checkAddTx(tx1)
+    # 2nd tx OOG at first frame preExecComputation
+    xp.checkAddTx(tx)
+    # both txs included in block
+    xp.checkImportBlock(2, 0)
+    let
+      blockHash = xp.chain.latestHash
+      rec1 = xp.chain.receiptByBlockHashAndIndex(blockHash, 0).expect("ok")
+      rec2 = xp.chain.receiptByBlockHashAndIndex(blockHash, 1).expect("ok")
+    # https://github.com/status-im/nimbus-eth1/pull/4559
+    check rec1.status == true
+    check rec2.status == false
+
   test "EIP-7702 transaction invalid auth signature":
     let
       env = initEnv(Prague)
@@ -685,8 +750,9 @@ suite "TxPool test suite":
     xp.checkImportBlock(1, 0)
 
   test "Blobschedule":
+    privateAccess(CommonRef)
     let
-      cc = env.config.networkParams.config
+      cc = env.com.config
       acc = mx.getAccount(26)
       tc = BlobTx(
         txType: Opt.some(TxEip4844),
@@ -842,22 +908,24 @@ suite "TxPool test suite":
     xp.checkImportBlock(1, 0)
 
   test "EIP-7594 BlobsBundle transition from Prague to Osaka":
+    privateAccess(CommonRef)
     let
-      config = initConf(Prague)
-      cc = config.networkParams.config
+      params = initParams()
       timestamp = EthTime.now()
 
+    params.initState(Prague)
     # set osaka transition time
-    cc.osakaTime = Opt.some(timestamp + 2)
+    params.config.osakaTime = Opt.some(timestamp + 2)
 
     let
-      env = initEnv(config)
+      env = initEnv(params)
       xp = env.xp
       mx = env.sender
       acc = mx.getAccount(0)
       acc1 = mx.getAccount(1)
       tx0 = mx.createPooledTransactionWithBlob(acc, recipient, amount, 0)
       tx1 = mx.createPooledTransactionWithBlob(acc, recipient, amount, 1)
+      cc = env.com.config
 
     let bs = cc.blobSchedule[Prague]
     cc.blobSchedule[Prague] = Opt.some(
@@ -1043,13 +1111,16 @@ suite "TxPool EIP-7934 block RLP size limit":
   # blocks fail re-execution and are rejected by every peer.
 
   let
-    env = block:
-      var config = initConf(Amsterdam)
-      # The RLP cap (~8 MiB) only binds if the block gas limit allows more
-      # calldata than fits; post-Amsterdam the EIP-7976 floor cost is
-      # ~64 gas per calldata byte, so that takes ~540M+ block gas.
-      config.networkParams.genesis.gasLimit = 1_000_000_000
-      initEnv(config)
+    params = initParams()
+
+  params.initState(Amsterdam)
+  # The RLP cap (~8 MiB) only binds if the block gas limit allows more
+  # calldata than fits; post-Amsterdam the EIP-7976 floor cost is
+  # ~64 gas per calldata byte, so that takes ~540M+ block gas.
+  params.genesis.gasLimit = 1_000_000_000
+
+  let
+    env = initEnv(params)
     xp = env.xp
     mx = env.sender
 
@@ -1148,3 +1219,110 @@ suite "TxPool payload rebuild consistency":
 
     # the rebuilt block must survive re-execution (what every peer does)
     xp.checkImportBlock(b2)
+
+suite "TxPool expiry":
+  let
+    env = initEnv(Cancun)
+    xp = env.xp
+    mx = env.sender
+
+  xp.prevRandao = prevRandao
+  xp.feeRecipient = feeRecipient
+  xp.timestamp = EthTime.now()
+
+  test "removeExpiredTxs only removes txs older than lifetime":
+    let tc = BaseTx(gasLimit: 75000)
+    xp.checkAddTx(mx.makeTx(tc, mx.getAccount(1), 0))
+    xp.checkAddTx(mx.makeTx(tc, mx.getAccount(2), 0))
+
+    # Fresh txs survive a sweep
+    xp.removeExpiredTxs(initDuration(hours = 1))
+    check xp.len == 2
+
+    # Expiry uses a strict `now - time > lifeTime` comparison, so a negative
+    # lifetime expires everything without having to sleep past a deadline
+    xp.removeExpiredTxs(initDuration(milliseconds = -1))
+    check xp.len == 0
+
+  test "evictor loop sweeps expired txs and stops cleanly":
+    let tc = BaseTx(gasLimit: 75000)
+    xp.checkAddTx(mx.makeTx(tc, mx.getAccount(3), 0))
+    check xp.len == 1
+
+    let ev = TxEvictorRef.init(xp,
+      interval = chronos.milliseconds(1),
+      lifeTime = initDuration(milliseconds = -1))
+    ev.start()
+    waitFor sleepAsync(chronos.milliseconds(50))
+    check xp.len == 0
+    waitFor ev.stop()
+
+suite "TxPool validation state follows chain head":
+  ## Repro for the hive devp2p `eth/Transaction` failure: the pool used to
+  ## validate incoming txs against the state captured when the pool was
+  ## created (or when it last built a block). A node that never builds
+  ## blocks - hive's devp2p client, or any non-validating node - kept
+  ## judging txs against that birth state: stale base fee, nonces and
+  ## balances.
+
+  test "tx nonce is checked against the moved head, not the pool birth state":
+    let
+      env = initEnv(Cancun)
+      xp = env.xp
+      mx = env.sender
+      builder = TxPoolRef.new(env.chain)
+      acc = mx.getAccount(20)
+      tc = BaseTx(gasLimit: 75000, recipient: Opt.some(recipient), amount: amount)
+
+    builder.prevRandao = prevRandao
+    builder.feeRecipient = feeRecipient
+    builder.timestamp = EthTime.now()
+
+    # The "network" (builder pool) mines acc's nonce-0 tx; the pool under
+    # test never assembles a block, so nothing else re-anchors it.
+    builder.checkAddTx(mx.makeTx(tc, acc, 0))
+    builder.checkImportBlock(1, 0)
+
+    # A different nonce-0 tx from the same sender must be rejected: the
+    # account nonce is 1 at the new head. Against the stale birth state
+    # it would be accepted.
+    var tc2 = tc
+    tc2.amount = amount * 2
+    xp.checkAddTx(mx.makeTx(tc2, acc, 0), txErrorNonceTooSmall)
+
+  test "base fee is checked against the moved head (hive eth/Transaction)":
+    let
+      env = initEnv(Cancun)
+      xp = env.xp
+      mx = env.sender
+      builder = TxPoolRef.new(env.chain)
+      acc = mx.getAccount(21)
+
+    builder.prevRandao = prevRandao
+    builder.feeRecipient = feeRecipient
+    builder.timestamp = EthTime.now()
+
+    # Advance the head with empty blocks: the base fee decays by 1/8 per
+    # block, well below what the pool's birth state predicts.
+    for _ in 0 ..< 4:
+      builder.checkImportBlock(0, 0)
+
+    # Ground truth: a pool created NOW anchors on the current head.
+    let probe = TxPoolRef.new(env.chain)
+    check xp.baseFee > probe.baseFee
+
+    # Pay exactly the real next-block base fee, like hive's simulator does
+    # (GasFeeCap = head base fee). Against the stale anchor this fails
+    # "maxFeePerGas lower than baseFee" and the tx never enters the pool.
+    let ptx = mx.makeTx(BaseTx(
+      txType: Opt.some(TxEip1559),
+      gasLimit: 75000,
+      recipient: Opt.some(recipient),
+      amount: amount,
+      gasFee: probe.baseFee,
+      gasTip: 1.GasInt,
+    ), acc, 0)
+    xp.checkAddTx(ptx)
+
+    # The add re-anchored the pool on the live head.
+    check xp.baseFee == probe.baseFee

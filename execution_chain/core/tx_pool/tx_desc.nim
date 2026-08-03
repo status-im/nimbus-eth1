@@ -8,7 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   chronicles,
@@ -61,6 +61,8 @@ type
     XP_SKIP_BLOB_WRAPPER_VALIDATION
     XP_SKIP_SIZE_VALIDATION
 
+  TxAddedObserver = proc(item: TxItemRef) {.gcsafe, raises: [].}
+
   TxPoolRef* = ref object
     vmState  : BaseVMState
     chain    : ForkedChainRef
@@ -70,11 +72,12 @@ type
     pos      : PosPayloadAttr
     blobTab  : BlobLookupTab
     flags    : set[TxPoolFlags]
+    onAddedTx*: TxAddedObserver
 
 const
-  MAX_POOL_SIZE = 8000
-  MAX_TXS_PER_ACCOUNT = 500
-  TX_ITEM_LIFETIME = initDuration(minutes = 10)
+  MAX_POOL_SIZE = 10000
+  MAX_TXS_PER_ACCOUNT* = 2048
+  TX_ITEM_LIFETIME* = initDuration(minutes = 10)
   TX_MAX_SIZE = 128 * 1024
   # BLOB_TX_MAX_SIZE is the maximum size a single transaction can have, outside
   # the included blobs. Since blob transactions are pulled instead of pushed,
@@ -86,7 +89,7 @@ const
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc getBaseFee(com: CommonRef; parent: Header): GasInt =
+func getBaseFee(com: CommonRef; parent: Header): GasInt =
   ## Calculates the `baseFee` of the head assuming this is the parent of a
   ## new block header to generate.
   ## Post Merge rule
@@ -130,7 +133,7 @@ proc setupVMState(com: CommonRef;
 template append(tab: var TxSenderTab, sn: TxSenderNonceRef) =
   tab[item.sender] = sn
 
-proc getCurrentFromSenderTab(xp: TxPoolRef; item: TxItemRef): Opt[TxItemRef] =
+func getCurrentFromSenderTab(xp: TxPoolRef; item: TxItemRef): Opt[TxItemRef] =
   let sn = xp.senderTab.getOrDefault(item.sender)
   if sn.isNil:
     return Opt.none(TxItemRef)
@@ -138,7 +141,7 @@ proc getCurrentFromSenderTab(xp: TxPoolRef; item: TxItemRef): Opt[TxItemRef] =
     return Opt.none(TxItemRef)
   Opt.some(current.data)
 
-proc removeFromSenderTab(xp: TxPoolRef; item: TxItemRef) =
+func removeFromSenderTab(xp: TxPoolRef; item: TxItemRef) =
   let sn = xp.senderTab.getOrDefault(item.sender)
   if sn.isNil:
     return
@@ -149,7 +152,7 @@ proc removeFromSenderTab(xp: TxPoolRef; item: TxItemRef) =
 func alreadyKnown(xp: TxPoolRef, id: Hash32): bool =
   xp.idTab.getOrDefault(id).isNil.not
 
-proc insertToSenderTab(xp: TxPoolRef; item: TxItemRef): Result[void, TxError] =
+func insertToSenderTab(xp: TxPoolRef; item: TxItemRef): Result[void, TxError] =
   ## Add transaction `item` to the list. The function has no effect if the
   ## transaction exists, already.
   var sn = xp.senderTab.getOrDefault(item.sender)
@@ -321,10 +324,10 @@ proc updateVmState*(xp: TxPoolRef) =
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
-proc contains*(xp: TxPoolRef, id: Hash32): bool =
+func contains*(xp: TxPoolRef, id: Hash32): bool =
   xp.idTab.hasKey(id)
 
-proc getItem*(xp: TxPoolRef, id: Hash32): Result[TxItemRef, TxError] =
+func getItem*(xp: TxPoolRef, id: Hash32): Result[TxItemRef, TxError] =
   let item = xp.idTab.getOrDefault(id)
   if item.isNil:
     return err(txErrorItemNotFound)
@@ -358,7 +361,16 @@ proc removeExpiredTxs*(xp: TxPoolRef, lifeTime: Duration = TX_ITEM_LIFETIME) =
     xp.removeTx(txHash)
 
 proc addTxImpl(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
-  if xp.pos.timestamp != xp.vmState.blockCtx.timestamp:
+  if xp.chain.latestHash != xp.vmState.blockCtx.parentHash:
+    # The chain head moved without a block-building cycle (payload import,
+    # fork choice, or syncer progress): re-anchor the validation state on
+    # the new head, or txs keep being judged against stale nonces, balances
+    # and base fee. The context timestamp only moves forward so that an
+    # in-flight build cycle's slot timestamp (always beyond the head's) is
+    # preserved.
+    xp.pos.timestamp = max(xp.pos.timestamp, xp.chain.latestHeader.timestamp)
+    xp.updateVmState()
+  elif xp.pos.timestamp != xp.vmState.blockCtx.timestamp:
     xp.updateVmState()
 
   let
@@ -369,13 +381,6 @@ proc addTxImpl(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
       txChainId = derivedChainId,
       chainId = xp.chain.com.chainId
     return err(txErrorChainIdMismatch)
-
-  if ptx.tx.txType == TxEip4844 and XP_SKIP_BLOB_WRAPPER_VALIDATION notin xp.flags:
-    ptx.validateBlobTransactionWrapper(xp.nextFork).isOkOr:
-      debug "Invalid transaction: Blob transaction wrapper validation failed",
-        tx = ptx.tx,
-        error = error
-      return err(txErrorInvalidBlob)
 
   let (size, id) = getEncodedLengthAndHash(ptx.tx)
   if XP_SKIP_SIZE_VALIDATION notin xp.flags:
@@ -417,6 +422,13 @@ proc addTxImpl(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
       sender = sender
     return err(txErrorNonceTooSmall)
 
+  if ptx.tx.txType == TxEip4844 and XP_SKIP_BLOB_WRAPPER_VALIDATION notin xp.flags:
+    ptx.validateBlobTransactionWrapper(xp.nextFork).isOkOr:
+      debug "Invalid transaction: Blob transaction wrapper validation failed",
+        tx = ptx.tx,
+        error = error
+      return err(txErrorInvalidBlob)
+
   if not xp.classifyValid(ptx.tx, sender):
     return err(txErrorTxInvalid)
 
@@ -432,6 +444,9 @@ proc addTxImpl(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     ?xp.insertToSenderTab(item)
   xp.idTab[item.id] = item
   xp.blobTab.addLookup(item)
+
+  if not xp.onAddedTx.isNil:
+    xp.onAddedTx(item)
 
   debug "Transaction added to txpool",
     txHash = id,
@@ -522,7 +537,7 @@ func timestamp*(xp: TxPoolRef): EthTime =
 func prevRandao*(xp: TxPoolRef): Bytes32 =
   xp.pos.prevRandao
 
-proc withdrawals*(xp: TxPoolRef): seq[Withdrawal] =
+func withdrawals*(xp: TxPoolRef): seq[Withdrawal] =
   xp.pos.withdrawals
 
 func parentBeaconBlockRoot*(xp: TxPoolRef): Hash32 =
@@ -535,23 +550,23 @@ func slotNumber*(xp: TxPoolRef): uint64 =
 # PoS payload attributes setters
 # ------------------------------------------------------------------------------
 
-proc `feeRecipient=`*(xp: TxPoolRef, val: Address) =
+func `feeRecipient=`*(xp: TxPoolRef, val: Address) =
   xp.pos.feeRecipient = val
 
-proc `timestamp=`*(xp: TxPoolRef, val: EthTime) =
+func `timestamp=`*(xp: TxPoolRef, val: EthTime) =
   xp.pos.timestamp = val
 
-proc `prevRandao=`*(xp: TxPoolRef, val: Bytes32) =
+func `prevRandao=`*(xp: TxPoolRef, val: Bytes32) =
   xp.pos.prevRandao = val
 
-proc `withdrawals=`*(xp: TxPoolRef, val: sink seq[Withdrawal]) =
+func `withdrawals=`*(xp: TxPoolRef, val: sink seq[Withdrawal]) =
   xp.pos.withdrawals = system.move(val)
 
-proc `parentBeaconBlockRoot=`*(xp: TxPoolRef, val: Hash32) =
+func `parentBeaconBlockRoot=`*(xp: TxPoolRef, val: Hash32) =
   xp.pos.beaconRoot = val
 
-proc `slotNumber=`*(xp: TxPoolRef, val: uint64) =
+func `slotNumber=`*(xp: TxPoolRef, val: uint64) =
   xp.pos.slotNumber = val
 
-proc `targetGasLimit=`*(xp: TxPoolRef, val: Opt[uint64]) =
+func `targetGasLimit=`*(xp: TxPoolRef, val: Opt[uint64]) =
   xp.pos.targetGasLimit = val
