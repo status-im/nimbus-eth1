@@ -334,10 +334,12 @@ proc call*(
   defer:
     txFrame.dispose() # always dispose state changes
 
-  let
-    vmState = evm.setupVmState(txFrame, header)
-    callResult =
-      ?(await evm.callFetchingState(vmState, header, tx, optimisticStateFetch))
+  let vmState = evm.setupVmState(txFrame, header)
+  defer:
+    vmState.dispose()
+
+  let callResult =
+    ?(await evm.callFetchingState(vmState, header, tx, optimisticStateFetch))
 
   ok(callResult)
 
@@ -352,8 +354,11 @@ proc createAccessList*(
   defer:
     txFrame.dispose() # always dispose state changes
 
+  let vmState = evm.setupVmState(txFrame, header)
+  defer:
+    vmState.dispose()
+
   let
-    vmState = evm.setupVmState(txFrame, header)
     _ =
       ?(await evm.callFetchingState(vmState, header, tx, optimisticStateFetch))
     witnessKeys = vmState.ledger.getWitnessKeys()
@@ -413,10 +418,12 @@ proc estimateGas*(
   defer:
     txFrame.dispose() # always dispose state changes
 
-  let
-    vmState = evm.setupVmState(txFrame, header)
-    callResult =
-      ?(await evm.callFetchingState(vmState, header, tx, optimisticStateFetch))
+  let vmState = evm.setupVmState(txFrame, header)
+  defer:
+    vmState.dispose()
+
+  let callResult =
+    ?(await evm.callFetchingState(vmState, header, tx, optimisticStateFetch))
   # we only invoke callFetchingState in order to collect the state in the BaseVMState
   discard callResult
 

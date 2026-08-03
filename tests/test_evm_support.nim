@@ -357,6 +357,8 @@ proc runTestOverflow() =
       com,
       com.db.baseTxFrame()
     )
+    defer:
+      s.dispose()
 
     s.ledger.setCode(codeAddress, @data)
     let unsignedTx = Transaction(

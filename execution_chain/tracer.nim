@@ -138,6 +138,9 @@ proc traceTransactionImpl(
     vmState = BaseVMState.new(parent, header, com, txFrame, storeSlotHash = true)
     ledger = vmState.ledger
 
+  defer:
+    vmState.dispose()
+
   doAssert(transactions.calcTxRoot == header.txRoot)
   doAssert(transactions.len != 0)
 
@@ -211,6 +214,9 @@ proc dumpBlockStateImpl(
     vmState = BaseVMState.new(parent, header, com, txFrame, tracerInst, storeSlotHash = true)
     miner = vmState.coinbase()
 
+  defer:
+    vmState.dispose()
+
   var
     before = newJArray()
     after = newJArray()
@@ -269,6 +275,9 @@ proc traceBlockImpl(
     parent = txFrame.getBlockHeader(header.parentHash).valueOr:
       return newJNull()
     vmState = BaseVMState.new(parent, header, com, txFrame, tracerInst, storeSlotHash = true)
+
+  defer:
+    vmState.dispose()
 
   if header.txRoot == EMPTY_ROOT_HASH: return newJNull()
   doAssert(blk.transactions.calcTxRoot == header.txRoot)

@@ -136,6 +136,7 @@ proc importBlocks*(config: ExecutionClientConf, com: CommonRef, params: NetworkP
     cstats: PersistStats # stats at start of chunk
 
   defer:
+    persister.dispose()
     if csv != nil:
       close(csv)
 

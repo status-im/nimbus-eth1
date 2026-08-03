@@ -613,6 +613,10 @@ proc transitionAction*(ctx: var TransContext,
       enableBalTracker = com.isAmsterdamOrLater(ctx.env.currentTimestamp),
     )
 
+    defer:
+      if not vmState.isNil():
+        vmState.dispose()
+
     vmState.mutateLedger:
       ledger.setupAlloc(ctx.alloc)
       ledger.persist(clearEmptyAccount = false)
