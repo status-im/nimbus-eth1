@@ -290,54 +290,63 @@ func readNestedTx(rlp: var Rlp, chainId: ChainId): Result[Transaction, string] =
   except RlpError as exc:
     err(exc.msg)
 
-func parseTxs*(ctx: var TransContext, chainId: ChainId)
-                {.raises: [T8NError, RlpError].} =
+func parseTxs*(ctx: var TransContext, chainId: ChainId): Result[void, T8NErr] =
   var numTxs = ctx.txsJson.len
   var rlp: Rlp
 
-  if ctx.txsRlp.len > 0:
-    rlp = rlpFromBytes(ctx.txsRlp)
-    if rlp.isList.not:
-      raise newError(ErrorRlp, "RLP Transaction list should be a list")
-    numTxs += rlp.listLen
+  try:
+    if ctx.txsRlp.len > 0:
+      rlp = rlpFromBytes(ctx.txsRlp)
+      if rlp.isList.not:
+        return err(t8nerr(ErrorRlp, "RLP Transaction list should be a list"))
+      numTxs += rlp.listLen
 
-  ctx.txList = newSeqOfCap[Result[Transaction, string]](numTxs)
-  for tx in ctx.txsJson:
-    ctx.txList.add parseTxJson(tx, chainId)
+    ctx.txList = newSeqOfCap[Result[Transaction, string]](numTxs)
+    for tx in ctx.txsJson:
+      ctx.txList.add parseTxJson(tx, chainId)
 
-  if ctx.txsRlp.len > 0:
-    for item in rlp:
-      ctx.txList.add rlp.readNestedTx(chainId)
+    if ctx.txsRlp.len > 0:
+      for item in rlp:
+        ctx.txList.add rlp.readNestedTx(chainId)
+  except RlpError as exc:
+    return err(t8nerr(ErrorRlp, exc.msg))
+
+  ok()
 
 func filterGoodTransactions*(ctx: TransContext): seq[Transaction] =
   for txRes in ctx.txList:
     if txRes.isOk:
       result.add txRes.get
 
-template wrapException(body) =
+template wrapException(body): auto =
   try:
     body
+    ok()
   except SerializationError as exc:
-    raise newError(ErrorJson, exc.msg)
+    err(t8nerr(ErrorJson, exc.msg))
   except IOError as exc:
-    raise newError(ErrorJson, exc.msg)
+    err(t8nerr(ErrorJson, exc.msg))
 
-proc parseTxsJson*(ctx: var TransContext, jsonFile: string) {.raises: [T8NError].} =
+proc parseTxsJson*(ctx: var TransContext, jsonFile: string): Result[void, T8NErr] =
   wrapException:
     ctx.txsJson = T8Conv.loadFile(jsonFile, seq[TxObject])
 
-proc parseAlloc*(ctx: var TransContext, allocFile: string) {.raises: [T8NError].} =
+proc parseAlloc*(ctx: var TransContext, allocFile: string): Result[void, T8NErr] =
   wrapException:
     ctx.alloc = T8Conv.loadFile(allocFile, GenesisAlloc)
 
-proc parseEnv*(ctx: var TransContext, envFile: string) {.raises: [T8NError].} =
+proc parseEnv*(ctx: var TransContext, envFile: string): Result[void, T8NErr] =
   wrapException:
     ctx.env = T8Conv.loadFile(envFile, EnvStruct)
 
-func parseTxsRlp*(ctx: var TransContext, hexData: string) {.raises: [ValueError].} =
-  ctx.txsRlp = hexToSeqByte(hexData)
+func parseTxsRlp*(ctx: var TransContext, hexData: string): Result[void, T8NErr] =
+  try:
+    ctx.txsRlp = hexToSeqByte(hexData)
+    ok()
+  except ValueError as exc:
+    err(t8nerr(ErrorValue, exc.msg))
 
-proc parseInputFromStdin*(ctx: var TransContext) {.raises: [T8NError].} =
+proc parseInputFromStdin*(ctx: var TransContext): Result[void, T8NErr] =
   wrapException:
     let jsonData = stdin.readAll()
     ctx = T8Conv.decode(jsonData, TransContext)
