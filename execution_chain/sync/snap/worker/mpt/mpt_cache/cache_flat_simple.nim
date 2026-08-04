@@ -77,6 +77,16 @@ proc putAccMissingIntv*(
     return err()
   ok()
 
+proc putAccMissingIntv*(
+    db: CacheDbRef;
+    data: CacheAccMissingIntvData;
+    info: static[string];
+      ): Opt[void] =
+  db.putAccMissingIntv(data.number, data.ranges).isOkOr:
+    error info.failedRangeUpd "storage slot", `error`=error
+    return err()
+  ok()
+
 proc updAccMissingIntv*(
     db: CacheDbRef;
     number: BlockNumber;
@@ -124,6 +134,16 @@ proc putFlatAcc*(
     return err()
   ok()
 
+proc delFlatAcc*(
+    db: CacheDbRef;
+    accPath: Hash32;
+    info: static[string];
+      ): Opt[void] =
+  db.delFlatAcc(accPath).isOkOr:
+    error info.failedUpdating "account", accPath=accPath.toStr, `error`=error
+    return err()
+  ok()
+
 proc nFlatAcc*(
     db: CacheDbRef;
     info: static[string];
@@ -157,17 +177,15 @@ proc getStoMissingIntv*(
     db: CacheDbRef;
     accPath: Hash32;
     info: static[string];
-      ): Opt[CacheStoMissingIntvData] =
+      ): Opt[Opt[CacheStoMissingIntvData]] =
   var data = db.getStoMissingIntv(accPath).valueOr:
     error info.failedToFetch "missing storage slots", `error`=error
     return err()
   if data.isNone():
-    # Storage slots missing intv records need not exixts, contrary to the
-    # missing intv record for accounts.
-    var w: CacheStoMissingIntvData
-    w.ranges = ItemKeyRangeSet.init()
-    return ok(w)
-  move data
+    # Storage slots missing intv records need not exixts. This differs from
+    # requirement of missing intv record for accounts (which must exisit.)
+    return Opt.some(Opt.none(CacheStoMissingIntvData))
+  Opt.some(move data)
 
 proc putStoMissingIntv*(
     db: CacheDbRef;
@@ -179,6 +197,18 @@ proc putStoMissingIntv*(
     error info.failedRangeUpd "storage slot", `error`=error
     return err()
   ok()
+
+proc putStoMissingIntv*(
+    db: CacheDbRef;
+    accPath: Hash32;
+    data: CacheStoMissingIntvData;
+    info: static[string];
+      ): Opt[void] =
+  db.putStoMissingIntv(accPath, data.ranges).isOkOr:
+    error info.failedRangeUpd "storage slot", `error`=error
+    return err()
+  ok()
+
 
 proc getFlatSlot*(
     db: CacheDbRef;
@@ -230,6 +260,30 @@ proc delFlatSlot*(
     return err()
   ok()
 
+proc delFlatSlot*(
+    db: CacheDbRef;
+    accPath: Hash32;
+    info: static[string];
+      ): Opt[void] =
+  db.delFlatSlot(accPath).isOkOr:
+    error info.failedDeleting "storage trie", accPath=accPath.toStr,
+      `error`=error
+    return err()
+  ok()
+
+proc nFlatSlot*(
+    db: CacheDbRef;
+    info: static[string];
+      ): Opt[uint] =
+  var nSlots = 0u
+  for w in db.walkFlatSlot():
+    if 0 < w.error.len:
+      error info & ": Error walking accounts on cache DB",
+        accPath=w.accPath.toStr, slotKey=w.slotKey.toStr, error=w.error
+      return err()
+    nSlots.inc
+  ok(move nSlots)
+
 # -----------
 
 proc hasMissingBlob*(
@@ -277,6 +331,26 @@ proc putFlatCode*(
       nCode=data.len, `error`=error
     return err()
   ok()
+
+proc delFlatCode*(
+    db: CacheDbRef;
+    accPath: Hash32;
+    info: static[string];
+      ): Opt[void] =
+  db.delFlatCode(accPath).isOkOr:
+    error info.failedDeleting "contract code", accPath=accPath.toStr,
+      `error`=error
+    return err()
+  ok()
+
+proc nFlatCode*(
+    db: CacheDbRef;
+    info: static[string];
+      ): Opt[uint] =
+  var nCodes = 0u
+  for _ in db.walkFlatCode():
+    nCodes.inc
+  ok(move nCodes)
 
 # ------------------------------------------------------------------------------
 # End
