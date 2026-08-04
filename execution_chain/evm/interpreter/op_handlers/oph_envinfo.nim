@@ -46,9 +46,21 @@ proc balanceOp(cpt: VmCpt): EvmResultVoid =
 proc balanceEIP2929Op(cpt: VmCpt): EvmResultVoid =
   ## 0x31, EIP292: Get balance of the given account for Berlin and later
   template balanceEIP2929(address): auto =
-    let gasCost = cpt.gasEip2929AccountCheck(address)
+    # One account lookup serves both the access-list check and the read. The
+    # ledger mutations it makes are journaled and unwind with the frame, but the
+    # BAL access is recorded only after the gas charge succeeds: that tracker is
+    # not journaled, and an out-of-gas BALANCE must not enter the block access
+    # list.
+    let (bal, isCold) = cpt.accessAndGetBalance(address)
+    let gasCost: GasInt =
+      if isCold:
+        if cpt.fork >= FkAmsterdam: COLD_ACCOUNT_ACCESS_8038
+        else: COLD_ACCOUNT_ACCESS_2929
+      else:
+        WarmStorageReadCost
     ? cpt.opcodeGasCost(Balance, gasCost, reason = "Balance EIP2929")
-    cpt.getBalance(address)
+    cpt.trackAddressAccess(address)
+    bal
   cpt.stack.unaryAddress(balanceEIP2929)
 
 # ------------------

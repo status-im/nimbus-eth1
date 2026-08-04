@@ -106,6 +106,22 @@ template getBalance*(c: Computation, address: Address): UInt256 =
     c.vmState.balTracker.trackAddressAccess(address)
   c.vmState.readOnlyLedger.getBalance(address)
 
+template accessAndGetBalance*(
+    c: Computation, address: Address): tuple[balance: UInt256, cold: bool] =
+  ## EIP-2929 warm/cold check fused with the balance read, so the two share one
+  ## account lookup instead of probing the same table twice.
+  ##
+  ## Deliberately does NOT record the BAL access - see `trackAddressAccess`,
+  ## which the caller must invoke only after the gas charge has succeeded. The
+  ## ledger side of this is journaled and so unwinds with the frame, but the BAL
+  ## tracker is not, and an out-of-gas BALANCE must not appear in the block
+  ## access list.
+  c.vmState.ledger.accessAndGetBalance(address)
+
+template trackAddressAccess*(c: Computation, address: Address) =
+  if c.balTrackerEnabled:
+    c.vmState.balTracker.trackAddressAccess(address)
+
 template getCodeSize*(c: Computation, address: Address): uint =
   if c.balTrackerEnabled:
     c.vmState.balTracker.trackAddressAccess(address)

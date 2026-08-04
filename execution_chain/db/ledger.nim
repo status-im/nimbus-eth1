@@ -72,6 +72,11 @@ type
     statement: CoreDbAccount
     accPath: Hash32
     flags: AccountFlags
+    warmedAt: uint32
+      ## `LedgerRef.accessEpoch` in which EIP-2929 last warmed this account, so
+      ## warmth rides along with the account instead of costing a probe into a
+      ## second table. A stale value reads as cold, which is why the epoch is
+      ## bumped rather than this field being cleared.
     code: CodeBytesRef
     original: OriginalValue
     overlayStorage: Table[UInt256, UInt256]
@@ -87,6 +92,7 @@ type
     jkSelfDestruct
     jkAccessListAccount
     jkAccessListSlot
+    jkWarm
 
   JournalEntry = object
     ## Undo record for a single mutation - see `LedgerRef.journal`
@@ -97,6 +103,8 @@ type
     of jkAccessListSlot:
       alAddress: Address
       alSlot: UInt256
+    of jkWarm:
+      prevWarmedAt: uint32
     of jkFlags:
       prevFlags: AccountFlags
     of jkBalance:
@@ -134,6 +142,14 @@ type
       ## `persist` clears the set outright.
     selfDestructs: HashSet[Address]
     accessList: ac_access_list.AccessList
+      ## EIP-2929 warm set for entries with no loaded account to carry the mark:
+      ## the per-transaction preloads (sender, coinbase, precompiles, the
+      ## EIP-2930 list), storage slots, and addresses that have no account.
+      ## Accounts present in `accounts` are marked via `AccountRef.warmedAt`, so
+      ## this table no longer grows an entry per account touched.
+    accessEpoch: uint32
+      ## Bumped wherever `accessList` is cleared, retiring every
+      ## `AccountRef.warmedAt` stamp at once without walking `accounts`.
     journal: seq[JournalEntry]
       ## Append-only log of the undo information for every mutation applied
       ## since the last `persist`. Rolling a save point back means replaying
@@ -267,6 +283,8 @@ proc undoJournal(ledger: LedgerRef, journalIdx: int) =
       ledger.accessList.remove(e.address)
     of jkAccessListSlot:
       ledger.accessList.remove(e.alAddress, e.alSlot)
+    of jkWarm:
+      e.acc.warmedAt = e.prevWarmedAt
     dec i
 
   ledger.journal.setLen(journalIdx)
@@ -636,6 +654,7 @@ proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool, collect
   result.txFrame.aTx.collectWitness = collectWitness
   result.stateless = stateless
   result.blockHashes = typeof(result.blockHashes).init(MAX_PREV_HEADER_DEPTH.int)
+  result.accessEpoch = 1 # so the default warmedAt of 0 reads as cold
   discard result.beginSavePoint
 
 proc reinit*(ledger: LedgerRef, txFrame: CoreDbTxRef) =
@@ -1097,6 +1116,7 @@ proc persist*(ledger: LedgerRef,
   ledger.dirty.clear()
   ledger.selfDestructs.clear()
   ledger.accessList.clear() # EIP2929
+  inc ledger.accessEpoch # retires every AccountRef.warmedAt stamp
   # Accounts were just written to the trie and deleted ones dropped from the
   # cache, so absence proven against the pre-persist state no longer holds.
   ledger.absent.clear()
@@ -1146,6 +1166,16 @@ proc getStorageRoot*(ledger: LedgerRef, address: Address): Hash32 =
   else: ledger.txFrame.fetchStorageRoot(acc.accPath).valueOr: EMPTY_ROOT_HASH
 
 proc accessList*(ledger: LedgerRef, address: Address) =
+  # Mark the account itself when it is loaded: no second table, and no entry
+  # added per touched account.
+  ledger.accounts.withValue(address, accp):
+    let acc = accp[]
+    if acc.warmedAt != ledger.accessEpoch:
+      ledger.journal.add JournalEntry(
+        kind: jkWarm, acc: acc, prevWarmedAt: acc.warmedAt)
+      acc.warmedAt = ledger.accessEpoch
+    return
+
   if ledger.accessList.addIfAbsent(address):
     ledger.journal.add JournalEntry(kind: jkAccessListAccount, address: address)
 
@@ -1157,7 +1187,40 @@ proc accessList*(ledger: LedgerRef, address: Address, slot: UInt256) =
     ledger.journal.add JournalEntry(
       kind: jkAccessListSlot, alAddress: address, alSlot: slot)
 
+proc accessAndGetBalance*(
+    ledger: LedgerRef, address: Address): tuple[balance: UInt256, cold: bool] =
+  ## Warm `address`, report whether it had been cold, and return its balance -
+  ## all from a single `accounts` lookup. Doing the EIP-2929 check and the read
+  ## separately costs two probes of the same table for what is one account.
+  ##
+  ## The accessList table is consulted only when the stamp says cold, since the
+  ## per-transaction preloads (sender, coinbase, precompiles, the EIP-2930 list)
+  ## are warmed there before any account is loaded. The stamp is written even
+  ## then, so later reads of the same address skip the table entirely.
+  let acc = ledger.getAccount(address, false)
+  if acc.isNil:
+    # No account to carry the mark, so warmth has to live in the table.
+    let wasCold = ledger.accessList.addIfAbsent(address)
+    if wasCold:
+      ledger.journal.add JournalEntry(kind: jkAccessListAccount, address: address)
+    return (EMPTY_ACCOUNT.balance, wasCold)
+
+  var cold = acc.warmedAt != ledger.accessEpoch
+  if cold:
+    if ledger.accessList.contains(address):
+      cold = false # preloaded warm for this transaction
+    ledger.journal.add JournalEntry(
+      kind: jkWarm, acc: acc, prevWarmedAt: acc.warmedAt)
+    acc.warmedAt = ledger.accessEpoch
+
+  (acc.statement.balance, cold)
+
 func inAccessList*(ledger: LedgerRef, address: Address): bool =
+  # A loaded account carries its own mark; the table is only consulted for
+  # addresses warmed before, or without, the account being loaded.
+  ledger.accounts.withValue(address, accp):
+    if accp[].warmedAt == ledger.accessEpoch:
+      return true
   ledger.accessList.contains(address)
 
 func inAccessList*(ledger: LedgerRef, address: Address, slot: UInt256): bool =
@@ -1166,7 +1229,13 @@ func inAccessList*(ledger: LedgerRef, address: Address, slot: UInt256): bool =
 func getAccessList*(ledger: LedgerRef): transactions.AccessList =
   # make sure all savePoint already committed
   doAssert(ledger.savePoints.len == 1)
-  ledger.accessList.getAccessList()
+  result = ledger.accessList.getAccessList()
+  # Accounts warmed through their own stamp never reached the table. Only
+  # `createAccessList` calls this, never block execution.
+  for address, acc in ledger.accounts:
+    if acc.warmedAt == ledger.accessEpoch and
+        not ledger.accessList.contains(address):
+      result.add transactions.AccessPair(address: address, storageKeys: @[])
 
 # ------------------------------------------------------------------------------
 # Public virtual read-only methods
