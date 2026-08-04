@@ -59,8 +59,11 @@ type
 
   AccountFlags = set[AccountFlag]
 
-  # Store original value from the database
-  OriginalValueRef = ref object
+  # Store original value from the database. Embedded in `AccountRef` rather
+  # than a ref of its own: save points no longer clone accounts, so no two
+  # accounts ever share one of these and the second allocation per account load
+  # bought nothing.
+  OriginalValue = object
     statement: CoreDbAccount
     storage:   Table[UInt256, UInt256]
     code: CodeBytesRef
@@ -70,7 +73,7 @@ type
     accPath: Hash32
     flags: AccountFlags
     code: CodeBytesRef
-    original: OriginalValueRef
+    original: OriginalValue
     overlayStorage: Table[UInt256, UInt256]
 
   JournalKind = enum
@@ -121,6 +124,14 @@ type
       ## lookup never has to walk the save point stack.
     dirty: Table[Address, AccountRef]
       ## Subset of `accounts` that `persist` has to visit
+    absent: HashSet[Address]
+      ## Addresses a lookup has already proven to have no account, so a repeat
+      ## lookup can skip recomputing the keccak account path and re-walking the
+      ## trie only to reach the same conclusion. Needs no undo record: a roll
+      ## back cannot conjure an account into existence, and an address that did
+      ## exist would have been found in `accounts` and never recorded here.
+      ## Creating an account for one of these addresses removes it, and
+      ## `persist` clears the set outright.
     selfDestructs: HashSet[Address]
     accessList: ac_access_list.AccessList
     journal: seq[JournalEntry]
@@ -295,12 +306,21 @@ proc getAccount(
     ledger.journal.add JournalEntry(kind: jkCreate, address: address)
     return
 
+  # An earlier lookup already proved there is no such account. Read-only callers
+  # can stop here; one that intends to create the account has to fall through,
+  # since it still needs `accPath` and must run the creation path rather than be
+  # told the account is missing.
+  if not shouldCreate and address in ledger.absent:
+    return nil
+
   # not found in cache, look into state trie
   let
     accPath = address.computeAccPath
     rc = ledger.txFrame.fetchAccount accPath
+    missingNode =
+      rc.isErr and rc.error.isAristo and rc.error.aErr in MissingNodeErrors
 
-  if rc.isErr and rc.error.isAristo and rc.error.aErr in MissingNodeErrors:
+  if missingNode:
     # Record a fatalError: never assert here, always fall through to the normal
     # "not found" path. The async EVM (verified proxy) relies on that.
     warn logTxt "getAccount()", address, error = ($$rc.error)
@@ -329,27 +349,41 @@ proc getAccount(
     if result.isEmpty():
       result = nil
 
+  var created = false
   if not result.isNil:
-    result.original = OriginalValueRef(
-      statement: result.statement,
-      code: result.code,
-    )
+    # Field-wise rather than building a temporary, which would copy the (empty)
+    # storage table for nothing.
+    result.original.statement = result.statement
+    result.original.code = result.code
   elif shouldCreate:
+    created = true
     result = AccountRef(
       statement: EMPTY_STATEMENT,
       accPath:    accPath,
       flags:      {Alive, IsNew},
-      original: OriginalValueRef(
+      original: OriginalValue(
         statement: EMPTY_STATEMENT,
       )
     )
   else:
+    # No account here. Remember that, unless the trie could not answer: a
+    # missing witness node is not a proof of absence, and caching it would turn
+    # a recoverable gap into a wrong answer for the rest of the block.
+    if not missingNode:
+      ledger.absent.incl address
     return # ignore, don't cache
 
   # cache the account
   ledger.accounts[address] = result
-  ledger.dirty[address] = result
+  if created:
+    # Only a newly created account starts out with something to write. One
+    # loaded from the trie is clean - flags are just {Alive}, so persistMode()
+    # classifies it DoNothing and persist() would walk it to no effect - and
+    # makeDirty() enters it here as soon as it is actually modified.
+    ledger.dirty[address] = result
   ledger.journal.add JournalEntry(kind: jkCreate, address: address)
+  # This address resolves now, so any recorded absence for it is stale.
+  ledger.absent.excl address
 
 template exists(acc: AccountRef): bool =
   Alive in acc.flags
@@ -474,8 +508,9 @@ proc persistStorage(acc: AccountRef, ledger: LedgerRef): Result[void, string] =
   ledger.txFrame.mergeAccount(acc.accPath, acc.statement).isOkOr:
     return err(info & $$error)
 
-  # Save `overlayStorage[]` on database
-  let original = acc.original
+  # Save `overlayStorage[]` on database. An alias, not a copy: `original` is
+  # embedded in the account now, so binding it by value would clone its table.
+  template original: untyped = acc.original
   for slot, value in acc.overlayStorage:
     original.storage.withValue(slot, v):
       if v[] == value:
@@ -613,6 +648,9 @@ proc reinit*(ledger: LedgerRef, txFrame: CoreDbTxRef) =
   ledger.fatalError = Opt.none(string)
   ledger.balOverlay = Opt.none(BlockAccessListOverlay)
   ledger.witnessKeys.clear()
+  # Absence was proven against the previous frame and its overlay, neither of
+  # which is in force any more.
+  ledger.absent.clear()
 
 proc getCodeHash*(ledger: LedgerRef, address: Address): Hash32 =
   let acc = ledger.getAccount(address, false)
@@ -1059,6 +1097,9 @@ proc persist*(ledger: LedgerRef,
   ledger.dirty.clear()
   ledger.selfDestructs.clear()
   ledger.accessList.clear() # EIP2929
+  # Accounts were just written to the trie and deleted ones dropped from the
+  # cache, so absence proven against the pre-persist state no longer holds.
+  ledger.absent.clear()
   ledger.journal.setLen(0) # Nothing left to roll back to
 
   ledger.isDirty = false
