@@ -620,6 +620,10 @@ proc transitionAction*(ctx: var TransContext,
     if parent.excessBlobGas.isSome and parent.blobGasUsed.isSome:
       ctx.env.currentExcessBlobGas = Opt.some com.calcExcessBlobGas(parent, com.toHardFork(ctx.env.currentTimestamp))
 
+  if com.isAmsterdamOrLater(ctx.env.currentTimestamp):
+    if ctx.env.slotNumber.isNone:
+      return err(t8nerr(ErrorConfig, "slotNumber was not provided"))
+
   let header  = envToHeader(ctx.env)
 
   var vmState = TestVMState(
