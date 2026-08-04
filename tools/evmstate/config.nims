@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -9,4 +9,4 @@
 # according to those terms.
 
 # chronicles log output will intefere with evmstate ouput
-switch("define", "chronicles_enabled=off")
+switch("define", "chronicles_log_level=FATAL")
