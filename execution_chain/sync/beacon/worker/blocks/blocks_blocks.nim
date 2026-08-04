@@ -18,7 +18,7 @@ import
   ../../../../block_access_list/bal_utils,
   ../../../wire_protocol/types,
   ../[helpers, update, worker_desc],
-  ./[blocks_bal, blocks_fetch, blocks_helpers, blocks_unproc]
+  ./[blocks_fetch_bal, blocks_fetch_body, blocks_helpers, blocks_unproc]
 
 # ------------------------------------------------------------------------------
 # Private helpers
