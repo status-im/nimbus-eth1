@@ -49,6 +49,10 @@ type
     packet: BlockBodiesPacket
     elapsed: Duration
 
+  FetchBalData* = tuple
+    packet: BlockAccessListsPacket
+    elapsed: Duration
+
   PeerRanking* = tuple
     assessed: PerfClass
     ranking: int
@@ -134,12 +138,12 @@ type
     ##    samples:  -- Number of samples in sum/sum2
     ##    total:    -- Total number of bytes tranfered
     ##
-    hdr*, blk*: StatsCollect
+    hdr*, blk*, bal*: StatsCollect
 
   PeerErrors* = tuple
     ## Count fetching and processing errors
     fetch: tuple[
-      hdr, bdy: uint8]
+      hdr, bdy, bal: uint8]
     apply: tuple[
       hdr, blk: uint8]
 
@@ -151,6 +155,7 @@ type
       blockNumber*: BlockNumber      ## First block number
     of BeaconState.blocks:
       blockHash*: Hash32             ## First block hash
+      balHash*: Hash32               ## First block hash used for BAL
     else:
       discard
 

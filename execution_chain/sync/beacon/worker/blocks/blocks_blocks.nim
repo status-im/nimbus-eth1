@@ -137,7 +137,7 @@ template blocksFetchCheckImpl(
 
       # The response is served in request order and may be truncated by the
       # peer's soft response size limit.
-      let raws = (await buddy.fetchRawBlockAccessLists(balRequest)).valueOr:
+      let raws = buddy.fetchBlockAccessListsAll(balRequest).valueOr:
         default(seq[RawBlockAccessList])
       var nBals = 0
       for j in 0 ..< min(raws.len, blocks.len):

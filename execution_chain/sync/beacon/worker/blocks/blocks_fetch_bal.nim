@@ -12,23 +12,213 @@
 
 import
   std/typetraits,
-  chronos, 
-  results,
-  eth/common,
+  pkg/[chronos, eth/common, results],
   ../../../wire_protocol,
-  ../worker_desc
+  ../[helpers, worker_desc],
+  ./blocks_helpers
 
-export block_access_lists
+export
+  block_access_lists
+
+const
+  emptyRawBal = seq[RawBlockAccessList].default
+
+# ------------------------------------------------------------------------------
+# Private helpers
+# -----------------------------------------------------------------------------
+
+proc maybeSlowPeerError(
+    buddy: BeaconPeerRef;
+    elapsed: Duration;
+    hash: Hash32;
+      ): bool =
+  ## Register slow response, definitely not fast enough
+  if fetchBalsErrTimeout <= elapsed:
+    buddy.balFetchRegisterError(slowPeer=true)
+
+    # Do not repeat the same time-consuming failed request
+    buddy.only.failedReq = PeerFirstFetchReq(
+      state:   BeaconState.blocks,
+      balHash: hash)
+
+    return true
+
+  # false
+
+func errStr(rc: Result[FetchBalData,BeaconError]): string =
+  if rc.isErr:
+    result = $rc.error.excp
+    if 0 < rc.error.name.len:
+      result &= "(" & rc.error.name & ")"
+    if 0 < rc.error.msg.len:
+      result &= "[" & rc.error.msg & "]"
+  else:
+    result = "n/a"
+
+# ------------------------------------------------------------------------------
+# Private function(s)
+# ------------------------------------------------------------------------------
+
+proc getBals(
+    buddy: BeaconPeerRef;
+    req: BlockAccessListsRequest;
+    startInx: int;
+      ): Future[Result[FetchBalData,BeaconError]]
+      {.async: (raises: []).} =
+  ## Wrapper around `getBlockHeaders()`
+  let start = Moment.now()
+
+  doAssert startInx < req.blockHashes.len
+
+  if buddy.only.failedReq.state == BeaconState.blocks and
+     buddy.only.failedReq.balHash == req.blockHashes[startInx]:
+    return err((EAlreadyTriedAndFailed,"","",Moment.now()-start))
+
+  let
+    req = BlockAccessListsRequest(blockHashes: req.blockHashes[startInx ..< ^1])
+  var
+    resp: BlockAccessListsPacket
+  try:
+    resp = (await buddy.peer.getBlockAccessLists(
+      req, fetchBalsRlpxTimeout)).valueOr:
+        return err((ENoException,"","",Moment.now()-start))
+  except PeerDisconnected as e:
+    return err((EPeerDisconnected,$e.name,$e.msg,Moment.now()-start))
+  except CancelledError as e:
+    return err((ECancelledError,$e.name,$e.msg,Moment.now()-start))
+  except CatchableError as e:
+    return err((ECatchableError,$e.name,$e.msg,Moment.now()-start))
+
+  # There is no obvious way to set an individual timeout for this call. The
+  # eth/xx driver sets a global response timeout to `10s`. By how it is
+  # implemented, the `Future` returned by `peer.getBlockBodies(req)` cannot
+  # reliably be used in a `withTimeout()` directive. It would rather crash
+  # in `rplx` with a violated `req.timeoutAt <= Moment.now()` assertion.
+  return ok((move resp, Moment.now()-start))
   
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc fetchRawBlockAccessLists*(
+template fetchBlockAccessListsSome*(
+    buddy: BeaconPeerRef;
+    request: BlockAccessListsRequest;               # list of block hashes
+    startInx: int;                                  # start at this entry
+      ): Opt[seq[RawBlockAccessList]] =
+  ## Async/template
+  ##
+  ## Request the raw (RLP-encoded) block access lists (EIP-7928) for the block
+  ## hashes in `request` from the sync peer.
+  ##
+  ## The peer serves the lists in request order but may truncate its response.
+  ## So not all requested BALs might be returned.
+  ##
+  var bodyRc = Opt[seq[RawBlockAccessList]].err()
+  block body:
+    if not buddy.peer.supports(eth71):              # error
+      break body
+
+    const
+      sendInfo = trEthSendSendingGetBals
+      recvInfo = trEthRecvReceivedBals
+    let
+      peer {.inject,used.} = $buddy.peer            # logging only
+      nReq {.inject.} = request.blockHashes.len - startInx
+      startHash {.inject.} = request.blockHashes[startInx]
+
+    if nReq <= 0:
+      trace sendInfo & " empty request", peer, nReq, state=($buddy.syncState),
+        nErrors=buddy.nErrors.fetch.bal
+      bodyRc = typeof(bodyRc).ok(emptyRawBal)
+      break body
+
+    trace sendInfo, peer, startHash=startHash.short, nReq,
+      nErrors=buddy.nErrors.fetch.bal
+
+    let rc = await buddy.getBals(request, startInx)
+    var elapsed: Duration
+    if rc.isOk:
+      elapsed = rc.value.elapsed
+    else:
+      elapsed = rc.error.elapsed
+      block evalError:
+        case rc.error.excp:
+        of ENoException, ESyncerTermination:
+          break evalError
+        of EPeerDisconnected, ECancelledError:
+          buddy.nErrors.fetch.bal.inc
+          buddy.ctrl.zombie = true
+        of ECatchableError:
+          buddy.balFetchRegisterError()
+          buddy.balNoSampleSize(elapsed)
+        of EAlreadyTriedAndFailed:
+          trace recvInfo & " error", peer, startHash=startHash.short, nReq,
+            ela=rc.error.elapsed.toStr, state=($buddy.syncState),
+            error=rc.errStr, nErrors=buddy.nErrors.fetch.bal
+          break body                                # return err()
+
+        # Debug message for other errors
+        debug recvInfo & " error", peer, startHash=startHash.short, nReq,
+          ela=elapsed.toStr, state=($buddy.syncState), error=rc.errStr,
+          nErrors=buddy.nErrors.fetch.bal
+        break body                                  # return err()
+
+    let
+      ela {.inject,used.} = elapsed.toStr           # logging only
+      state {.inject,used.} = $buddy.syncState      # logging only
+
+    # Evaluate result
+    if rc.isErr or buddy.ctrl.stopped:
+      if not buddy.maybeSlowPeerError(elapsed, startHash):
+        buddy.balFetchRegisterError()
+      trace recvInfo & " error", peer, startHash=startHash.short, nReq,
+        ela, state, error=rc.errStr, nErrors=buddy.nErrors.fetch.bal
+      break body                                    # return err()
+
+    # Verify the correct number of BALs received
+    template b: auto = rc.value.packet.accessLists
+    if b.len == 0 or nReq < b.len:
+      if nReq < b.len:
+        # Bogus peer returning additional rubbish
+        buddy.balFetchRegisterError(forceZombie=true)
+      else:
+        # No data available. For a fast enough rejection response, the
+        # througput stats are degraded, only.
+        buddy.balNoSampleSize(elapsed)
+
+        # Slow response, definitely not fast enough
+        discard buddy.maybeSlowPeerError(elapsed, startHash)
+
+      trace recvInfo & " error", peer, startHash=startHash.short, nReq,
+        nResp=b.len, ela, state, nErrors=buddy.nErrors.fetch.bal
+      break body                                    # return err()
+
+    # Update download statistics
+    let bps {.used.} = buddy.balSampleSize(elapsed, b.getEncodedLength)
+
+    # Request did not fail
+    buddy.only.failedReq.reset
+
+    # Ban an overly slow peer for a while when observed consecutively.
+    if fetchBalsErrTimeout < elapsed:
+      buddy.balFetchRegisterError(slowPeer=true)
+    else:
+      buddy.nErrors.fetch.bal = 0                   # reset error count
+      buddy.ctx.pool.lastSlowPeer = Opt.none(Hash)  # not last one or not error
+
+    trace recvInfo, peer, startHash=startHash.short, nReq, nResp=b.len, ela,
+      thPut=(bps.toIECb(1) & "ps"), state, nErrors=buddy.nErrors.fetch.bal
+
+    bodyRc =  typeof(bodyRc).ok(b)
+
+  bodyRc
+
+template fetchBlockAccessListsAll*(
     buddy: BeaconPeerRef;
     request: BlockAccessListsRequest;
-      ): Future[Opt[seq[RawBlockAccessList]]]
-      {.async: (raises: []).} =
+      ): Opt[seq[RawBlockAccessList]] =
+  ## Async/template
+  ##
   ## Request the raw (RLP-encoded) block access lists (EIP-7928) for the block
   ## hashes in `request` from the sync peer.
   ##
@@ -38,32 +228,23 @@ proc fetchRawBlockAccessLists*(
   ## remaining hashes until all are received (or the peer stops making
   ## progress), so the returned sequence is aligned by index with
   ## `request.blockHashes`.
+  ##
+  var bodyRc = Opt[seq[RawBlockAccessList]].err()
+  block body:
+    let nReq = request.blockHashes.len
 
-  if not buddy.peer.supports(eth71):
-    return Opt.none(seq[RawBlockAccessList])
+    var q = newSeqOfCap[RawBlockAccessList](nReq)
+    while q.len < nReq:
+      let rsp = buddy.fetchBlockAccessListsSome(request, q.len).valueOr:
+        break body
+      if rsp.len == 0:
+        break
+      q.add rsp
 
-  let nReq = request.blockHashes.len
-  if nReq == 0:
-    return Opt.some(newSeq[RawBlockAccessList](0))
+    bodyRc = typeof(bodyRc).ok(q)
 
-  var accessLists = newSeqOfCap[RawBlockAccessList](nReq)
-  try:
-    while accessLists.len < nReq:
-      # Request only the hashes not yet served by previous responses.
-      let remaining = BlockAccessListsRequest(
-        blockHashes: request.blockHashes[accessLists.len ..< nReq])
-      let resp = (await buddy.peer.getBlockAccessLists(
-        remaining, fetchBalsRlpxTimeout)).valueOr:
-          return Opt.none(seq[RawBlockAccessList])
-      if resp.accessLists.len == 0:
-        break               # peer served nothing; avoid looping indefinitely
-      accessLists.add resp.accessLists
-  except CancelledError:
-    return Opt.none(seq[RawBlockAccessList])
-  except CatchableError:
-    return Opt.none(seq[RawBlockAccessList])
+  bodyRc
 
-  Opt.some(accessLists)
 
 proc decodeBlockAccessList*(
     raw: RawBlockAccessList;

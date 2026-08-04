@@ -127,8 +127,14 @@ const
   nFetchBodiesErrThreshold* = 4
     ## Similar to `nFetchHeadersErrThreshold`.
 
+
   fetchBalsRlpxTimeout* = chronos.seconds(50)
     ## Similar to `fetchBodiesRlpxTimeout`.
+
+  fetchBalsErrTimeout* = chronos.seconds(25)
+  nFetchBalsErrThreshold* = 4
+    ## Similar to `nFetchHeadersErrThreshold`.
+
 
   nProcBlocksErrThreshold* = 2
     ## Similar to `nStashHeadersErrThreshold`.
