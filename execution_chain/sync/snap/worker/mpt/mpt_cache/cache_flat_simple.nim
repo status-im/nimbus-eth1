@@ -77,6 +77,16 @@ proc putAccMissingIntv*(
     return err()
   ok()
 
+proc putAccMissingIntv*(
+    db: CacheDbRef;
+    data: CacheAccMissingIntvData;
+    info: static[string];
+      ): Opt[void] =
+  db.putAccMissingIntv(data.number, data.ranges).isOkOr:
+    error info.failedRangeUpd "storage slot", `error`=error
+    return err()
+  ok()
+
 proc updAccMissingIntv*(
     db: CacheDbRef;
     number: BlockNumber;
@@ -121,6 +131,16 @@ proc putFlatAcc*(
   db.putFlatAcc(accPath, dirtyStorage, dirtyCode, payload).isOkOr:
     error info.failedUpdating "account", accPath=accPath.toStr,
       accPath=accPath.toStr, dirtyStorage, dirtyCode, `error`=error
+    return err()
+  ok()
+
+proc delFlatAcc*(
+    db: CacheDbRef;
+    accPath: Hash32;
+    info: static[string];
+      ): Opt[void] =
+  db.delFlatAcc(accPath).isOkOr:
+    error info.failedUpdating "account", accPath=accPath.toStr, `error`=error
     return err()
   ok()
 
@@ -178,6 +198,18 @@ proc putStoMissingIntv*(
     return err()
   ok()
 
+proc putStoMissingIntv*(
+    db: CacheDbRef;
+    accPath: Hash32;
+    data: CacheStoMissingIntvData;
+    info: static[string];
+      ): Opt[void] =
+  db.putStoMissingIntv(accPath, data.ranges).isOkOr:
+    error info.failedRangeUpd "storage slot", `error`=error
+    return err()
+  ok()
+
+
 proc getFlatSlot*(
     db: CacheDbRef;
     accPath: Hash32;
@@ -228,6 +260,30 @@ proc delFlatSlot*(
     return err()
   ok()
 
+proc delFlatSlot*(
+    db: CacheDbRef;
+    accPath: Hash32;
+    info: static[string];
+      ): Opt[void] =
+  db.delFlatSlot(accPath).isOkOr:
+    error info.failedDeleting "storage trie", accPath=accPath.toStr,
+      `error`=error
+    return err()
+  ok()
+
+proc nFlatSlot*(
+    db: CacheDbRef;
+    info: static[string];
+      ): Opt[uint] =
+  var nSlots = 0u
+  for w in db.walkFlatSlot():
+    if 0 < w.error.len:
+      error info & ": Error walking accounts on cache DB",
+        accPath=w.accPath.toStr, slotKey=w.slotKey.toStr, error=w.error
+      return err()
+    nSlots.inc
+  ok(move nSlots)
+
 # -----------
 
 proc hasMissingBlob*(
@@ -275,6 +331,26 @@ proc putFlatCode*(
       nCode=data.len, `error`=error
     return err()
   ok()
+
+proc delFlatCode*(
+    db: CacheDbRef;
+    accPath: Hash32;
+    info: static[string];
+      ): Opt[void] =
+  db.delFlatCode(accPath).isOkOr:
+    error info.failedDeleting "contract code", accPath=accPath.toStr,
+      `error`=error
+    return err()
+  ok()
+
+proc nFlatCode*(
+    db: CacheDbRef;
+    info: static[string];
+      ): Opt[uint] =
+  var nCodes = 0u
+  for _ in db.walkFlatCode():
+    nCodes.inc
+  ok(move nCodes)
 
 # ------------------------------------------------------------------------------
 # End

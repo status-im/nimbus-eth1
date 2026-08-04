@@ -126,8 +126,12 @@ func flStr*(w: (UInt256,UInt256), precision: static[int] = 4): string =
       "0.." & w[1].to(float).toStr(precision)
   elif w[1] == high(UInt256):
     w[0].to(float).toStr(precision) & "..2^256"
+  elif w[0] < w[1]:
+    w[0].to(float).toStr(precision) & ".." & w[1].to(float).toStr(precision)
+  elif w[0] == w[1]:
+    w[0].to(float).toStr(precision)
   else:
-    (w[0].to(float),w[1].to(float)).toStr(precision)
+    "n/a"
 
 func lenStr*(w: (UInt256,UInt256)): string =
   if w[0].isZero and w[1] == high(UInt256):
