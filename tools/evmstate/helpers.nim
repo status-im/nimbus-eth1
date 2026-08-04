@@ -8,205 +8,131 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
-  std/[json, strutils],
   eth/common/[base, keys, headers, transactions],
-  stint,
   stew/byteutils,
+  json_serialization,
   ../../execution_chain/transaction,
   ../../execution_chain/db/ledger,
-  ../../execution_chain/common/chain_config
+  ../../execution_chain/common/chain_config,
+  ./parser
 
-template fromJson(T: type Address, n: JsonNode): Address =
-  Address.fromHex(n.getStr)
+export
+  parser
 
-func fromJson(T: type UInt256, n: JsonNode): UInt256 =
-  # stTransactionTest/ValueOverflow.json
-  # prevent parsing exception and subtitute it with max uint256
-  let hex = n.getStr
-  if ':' in hex:
-    high(UInt256)
+template required(res, n: untyped): auto =
+  if n.isSome:
+    res = n.value
   else:
-    UInt256.fromHex(hex)
+    return err(astToStr(n) & " field missing")
 
-template fromJson*(T: type Bytes32, n: JsonNode): Bytes32 =
-  Bytes32(hexToByteArray(n.getStr, 32))
+template required(res, n: untyped, i: int): auto =
+  if i >= n.len:
+    return err("index out of range")
+  res = n[i]
 
-template fromJson*(T: type Hash32, n: JsonNode): Hash32 =
-  Hash32(hexToByteArray(n.getStr, 32))
+template optional(res, n: untyped) =
+  res = n
 
-proc fromJson(T: type seq[byte], n: JsonNode): T =
-  let hex = n.getStr
-  if hex.len == 0:
-    @[]
+template defaultZero(res, n: untyped) =
+  if n.isSome:
+    res = n.value
   else:
-    hexToSeqByte(hex)
+    res = default(typeof(res))
 
-func fromJson(T: type uint64, n: JsonNode): uint64 =
-  let x = UInt256.fromJson(n)
-  if x > uint64.high.u256:
-    uint64.high
+template defaultZero(res, n: untyped, i: int) =
+  if n.isSome:
+    res = n.value[i]
   else:
-    fromHex[AccountNonce](n.getStr)
+    res = default(typeof(res))
 
-template fromJson(T: type uint8, n: JsonNode): uint8 =
-  fromHex[uint8](n.getStr)
-
-template fromJson(T: type EthTime, n: JsonNode): EthTime =
-  EthTime(fromHex[uint64](n.getStr))
-
-proc fromJson(T: type PrivateKey, n: JsonNode): PrivateKey =
-  var secretKey = n.getStr
-  removePrefix(secretKey, "0x")
-  PrivateKey.fromHex(secretKey).tryGet()
-
-proc fromJson(T: type transactions.AccessList, n: JsonNode): transactions.AccessList =
-  if n.kind == JNull:
-    return
-
-  for x in n:
-    var ap = AccessPair(
-      address: Address.fromJson(x["address"])
-    )
-    let sks = x["storageKeys"]
-    for sk in sks:
-      ap.storageKeys.add Bytes32.fromHex(sk.getStr)
-    result.add ap
-
-proc fromJson(T: type seq[Hash32], list: JsonNode): T =
-  for x in list:
-    result.add Hash32.fromHex(x.getStr)
-
-template required(T: type, nField: string): auto =
-  fromJson(T, n[nField])
-
-template required(T: type, nField: string, index: int): auto =
-  fromJson(T, n[nField][index])
-
-template defaultZero(T: type, nField: string): auto =
-  if n.hasKey(nField):
-    fromJson(T, n[nField])
+template defaultTo(res, x, n: untyped) =
+  if n.isSome:
+    res = n.value
   else:
-    default(T)
+    res = x
 
-template defaultZero(T: type, nField: string, index: int): auto =
-  if n.hasKey(nField):
-    fromJson(T, n[nField][index])
-  else:
-    default(T)
-
-template defaultTo(def: auto, nField: string): auto =
-  if n.hasKey(nField):
-    fromJson(typeof(def), n[nField])
-  else:
-    def
-
-template optional(T: type, nField: string): auto =
-  if n.hasKey(nField):
-    Opt.some(T.fromJson(n[nField]))
-  else:
-    Opt.none(T)
-
-proc fromJson(T: type Authorization, n: JsonNode): Authorization =
-  Authorization(
-    chainId: required(ChainId, "chainId"),
-    address: required(Address, "address"),
-    nonce: required(AccountNonce, "nonce"),
-    yParity: required(uint8, "yParity"),
-    r: required(UInt256, "r"),
-    s: required(UInt256, "s"),
-  )
-
-proc fromJson(T: type seq[Authorization], list: JsonNode): T =
-  for x in list:
-    result.add Authorization.fromJson(x)
-
-proc txType(n: JsonNode): TxType =
-  if "authorizationList" in n:
+func txType(n: Txo): TxType =
+  if n.authorizationList.isSome:
     return TxEip7702
-  if "blobVersionedHashes" in n:
+  if n.blobVersionedHashes.isSome:
     return TxEip4844
-  if "gasPrice" notin n:
+  if n.gasPrice.isNone:
     return TxEip1559
-  if "accessLists" in n:
+  if n.accessLists.isSome:
     return TxEip2930
   TxLegacy
 
-proc parseHeader*(n: JsonNode): Header =
-  Header(
-    coinbase   : required(Address, "currentCoinbase"),
-    difficulty : required(DifficultyInt, "currentDifficulty"),
-    number     : required(BlockNumber, "currentNumber"),
-    gasLimit   : required(GasInt, "currentGasLimit"),
-    timestamp  : required(EthTime, "currentTimestamp"),
-    stateRoot  : emptyRoot,
-    mixHash    : defaultZero(Bytes32, "currentRandom"),
-    baseFeePerGas  : optional(UInt256, "currentBaseFee"),
-    withdrawalsRoot: optional(Hash32, "currentWithdrawalsRoot"),
-    excessBlobGas  : optional(uint64, "currentExcessBlobGas"),
-    parentBeaconBlockRoot: optional(Hash32, "currentBeaconRoot"),
-    slotNumber: optional(uint64, "slotNumber"),
+func parseHeader*(n: StateEnv): Result[Header, string] =
+  var res = Header(
+    stateRoot: emptyRoot
   )
+  required(res.coinbase, n.currentCoinbase)
+  required(res.difficulty, n.currentDifficulty)
+  required(res.number, n.currentNumber)
+  required(res.gasLimit, n.currentGasLimit)
+  required(res.timestamp, n.currentTimestamp)
 
-proc parseParentHeader*(n: JsonNode): Header =
-  Header(
-    number: required(BlockNumber, "currentNumber") - 1,
-    stateRoot: emptyRoot,
-    excessBlobGas: optional(uint64, "parentExcessBlobGas"),
-    blobGasUsed: optional(uint64, "parentBlobGasUsed"),
+  defaultZero(res.mixHash, n.currentRandom)
+  optional(res.baseFeePerGas, n.currentBaseFee)
+  optional(res.withdrawalsRoot, n.currentWithdrawalsRoot)
+  optional(res.excessBlobGas, n.currentExcessBlobGas)
+  optional(res.parentBeaconBlockRoot, n.currentBeaconRoot)
+  optional(res.slotNumber, n.slotNumber)
+  ok(move(res))
+
+func parseParentHeader*(n: StateEnv): Result[Header, string] =
+  var res = Header(
+    stateRoot: emptyRoot
   )
+  required(res.number, n.currentNumber)
+  dec res.number
+  optional(res.excessBlobGas, n.parentExcessBlobGas)
+  optional(res.blobGasUsed, n.parentBlobGasUsed)
+  ok(move(res))
 
-proc parseTx*(n: JsonNode, dataIndex, gasIndex, valueIndex: int, eip155: bool): Transaction =
+func parseTx*(n: Txo, index: Index, eip155: bool): Result[Transaction, string] =
   var tx = Transaction(
-    txType  : txType(n),
-    nonce   : required(AccountNonce, "nonce"),
-    gasLimit: required(GasInt, "gasLimit", gasIndex),
-    value   : required(UInt256, "value", valueIndex),
-    payload : required(seq[byte], "data", dataIndex),
-    chainId : defaultTo(1.u256, "chainId"),
-    gasPrice: defaultZero(GasInt, "gasPrice"),
-    maxFeePerGas        : defaultZero(GasInt, "maxFeePerGas"),
-    accessList          : defaultZero(AccessList, "accessLists", dataIndex),
-    maxPriorityFeePerGas: defaultZero(GasInt, "maxPriorityFeePerGas"),
-    maxFeePerBlobGas    : defaultZero(UInt256, "maxFeePerBlobGas"),
-    versionedHashes     : defaultZero(seq[Hash32], "blobVersionedHashes"),
-    authorizationList   : defaultZero(seq[Authorization], "authorizationList"),
+    txType  : txType(n)
   )
+  required(tx.nonce, n.nonce)
+  required(tx.gasLimit, n.gasLimit, index.gas)
+  required(tx.value, n.value, index.value)
+  required(tx.payload, n.data, index.data)
+  defaultTo(tx.chainId, 1.u256, n.chainId)
+  defaultZero(tx.gasPrice, n.gasPrice)
+  defaultZero(tx.maxFeePerGas, n.maxFeePerGas)
+  defaultZero(tx.accessList, n.accessLists, index.data)
+  defaultZero(tx.maxPriorityFeePerGas, n.maxPriorityFeePerGas)
+  defaultZero(tx.maxFeePerBlobGas, n.maxFeePerBlobGas)
+  defaultZero(tx.versionedHashes, n.blobVersionedHashes)
+  defaultZero(tx.authorizationList, n.authorizationList)
 
-  let rawTo = n["to"].getStr
-  if rawTo != "":
-    tx.to = Opt.some(Address.fromHex(rawTo))
+  try:
+    if n.to != "":
+      tx.to = Opt.some(Address.fromHex(n.to))
+  except ValueError as exc:
+    return err("Field 'to' error: " & exc.msg)
 
-  let secretKey = required(PrivateKey, "secretKey")
-  signTransaction(tx, secretKey, eip155)
+  let secretKey = n.secretKey.valueOr:
+    return err("missing secretKey field")
+  ok(signTransaction(tx, secretKey, eip155))
 
-proc parseTx*(txData, index: JsonNode, eip155: bool): Transaction =
-  let
-    dataIndex = index["data"].getInt
-    gasIndex  = index["gas"].getInt
-    valIndex  = index["value"].getInt
-  parseTx(txData, dataIndex, gasIndex, valIndex, eip155)
+proc setupLedger*(wantedState: GenesisAlloc, ledger: LedgerRef) =
+  for address, account in wantedState:
+    for slot, value in account.storage:
+      ledger.setStorage(address, slot, value)
 
-proc setupLedger*(wantedState: JsonNode, ledger: LedgerRef) =
-  for ac, accountData in wantedState:
-    let account = Address.fromHex(ac)
-    for slot, value in accountData{"storage"}:
-      ledger.setStorage(account, fromHex(UInt256, slot), fromHex(UInt256, value.getStr))
+    ledger.setNonce(address, account.nonce)
+    ledger.setCode(address, account.code)
+    ledger.setBalance(address, account.balance)
 
-    ledger.setNonce(account, fromJson(AccountNonce, accountData["nonce"]))
-    ledger.setCode(account, fromJson(seq[byte], accountData["code"]))
-    ledger.setBalance(account, fromJson(UInt256, accountData["balance"]))
-
-iterator postState*(node: JsonNode): (Address, GenesisAccount) =
-  for ac, accountData in node:
-    let account = Address.fromHex(ac)
-    var ga = GenesisAccount(
-      nonce  : fromJson(AccountNonce, accountData["nonce"]),
-      code   : fromJson(seq[byte], accountData["code"]),
-      balance: fromJson(UInt256, accountData["balance"]),
-    )
-
-    for slot, value in accountData{"storage"}:
-      ga.storage[fromHex(UInt256, slot)] = fromHex(UInt256, value.getStr)
-
-    yield (account, ga)
+proc parseFixture*(jsonFile: string): Result[StateFixture, string] =
+  try:
+    ok(Fixture.loadFile(jsonFile, StateFixture))
+  except SerializationError as exc:
+    err((ref JsonReaderError)(exc).formatMsg(""))
+  except IOError as exc:
+    err(exc.msg)
