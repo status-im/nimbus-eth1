@@ -99,7 +99,8 @@ type
       ## over and over again to the database to avoid the WAL and compation
       ## write amplification that ensues
 
-    collectWitness: bool
+    collectWitness*: bool
+
     witnessKeys: WitnessTable
       ## Used to collect the keys of all read accounts, code and storage slots.
       ## Maps a tuple of address and slot (optional) to the codeTouched flag.
