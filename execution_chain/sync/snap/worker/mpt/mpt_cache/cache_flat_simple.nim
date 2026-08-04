@@ -157,17 +157,15 @@ proc getStoMissingIntv*(
     db: CacheDbRef;
     accPath: Hash32;
     info: static[string];
-      ): Opt[CacheStoMissingIntvData] =
+      ): Opt[Opt[CacheStoMissingIntvData]] =
   var data = db.getStoMissingIntv(accPath).valueOr:
     error info.failedToFetch "missing storage slots", `error`=error
     return err()
   if data.isNone():
-    # Storage slots missing intv records need not exixts, contrary to the
-    # missing intv record for accounts.
-    var w: CacheStoMissingIntvData
-    w.ranges = ItemKeyRangeSet.init()
-    return ok(w)
-  move data
+    # Storage slots missing intv records need not exixts. This differs from
+    # requirement of missing intv record for accounts (which must exisit.)
+    return Opt.some(Opt.none(CacheStoMissingIntvData))
+  Opt.some(move data)
 
 proc putStoMissingIntv*(
     db: CacheDbRef;

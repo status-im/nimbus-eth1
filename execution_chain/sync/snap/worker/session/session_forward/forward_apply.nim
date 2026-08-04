@@ -11,8 +11,8 @@
 {.push raises: [].}
 
 import
-  pkg/[chronicles, eth/common],
-  ../../[mpt, worker_desc]
+  pkg/[chronicles, eth/common, stew/interval_set],
+  ../../[mpt, state_db, worker_desc]
 
 logScope:
     topics = "snap sync"
@@ -28,15 +28,23 @@ proc applySlotChanges(
     info: static[string];
       ): Opt[void] =
   ## Apply BAL to storage slots. Returns the number of changes
+  let
+    maybeStats = ?db.getStoMissingIntv(accPath, info)
+    stoMissing = if maybeStats.isNone(): ItemKeyRangeSet(nil)
+                 else: maybeStats.unsafeGet().ranges
   for w in slots:
-    if 0 < w.changes.len:
-      let
-        slotKey = w.slot.computeSlotKey()
-        slotValue = w.changes[^1].newValue
-      if slotValue == 0:
-        ?db.delFlatSlot(accPath, slotKey, info)
-      else:
-        ?db.putFlatSlot(accPath, slotKey, slotValue, info)
+    if w.changes.len == 0:
+      continue
+    let slotKey = w.slot.computeSlotKey()
+    if not stoMissing.isNil and
+       stoMissing.covered(slotKey.to(ItemKey)):
+      continue
+    let slotValue = w.changes[^1].newValue
+    if slotValue == 0:
+      ?db.delFlatSlot(accPath, slotKey, info)
+    else:
+      ?db.putFlatSlot(accPath, slotKey, slotValue, info)
+
   ok()
 
 proc applyCodeChange(
@@ -60,6 +68,7 @@ proc applyCodeChange(
 proc applyAccountChanges*(
     db: CacheDbRef;
     chng: AccountChanges;
+    accExcl: ItemKeyRangeSet;
     info: static[string];
       ): Opt[bool] =
   ## Apply BAL to account. Returns `true` if there were some changes.
@@ -69,11 +78,13 @@ proc applyAccountChanges*(
      chng.codeChanges.len == 0:
     return ok(false)                                # nothing to do
 
-  let
-    accPath = chng.address.computeAccPath
-    maybeAcc = ?db.getFlatAcc(accPath, info)
-  var
-    acc = maybeAcc.valueOr: emptyFlatAccData
+  # Check for existing accounts that have not been fetched, yet
+  let accPath = chng.address.computeAccPath
+  if accExcl.covered(accPath.to(ItemKey)):
+    return ok(false)                                # ignore for now
+
+  var acc = (?db.getFlatAcc(accPath, info)).valueOr:
+    emptyFlatAccData                                # new account
 
   # Apply change list to database
   if 0 < chng.nonceChanges.len:
