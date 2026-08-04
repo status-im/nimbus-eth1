@@ -9,4 +9,4 @@
 # according to those terms.
 
 # chronicles log output will intefere with evmstate ouput
-switch("define", "chronicles_enabled=off")
+switch("define", "chronicles_log_level=FATAL")
