@@ -173,7 +173,7 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
       # TODO: what should we do with the `version` parameter?
       apiTiming("engine_getClientVersionV1"):
         @[ClientVersionV1(
-          code: "NB",
+          code: "NE",
           name: NimbusName,
           version: NimbusVersion,
           commit: FixedBytes[4](GitRevisionBytes),

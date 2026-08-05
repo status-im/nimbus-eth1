@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
   std/[tables],
   eth/common/blocks,
@@ -24,8 +26,9 @@ export
 type
   T8NExitCode* = distinct int
 
-  T8NError* = object of CatchableError
-    exitCode*: T8NExitCode
+  T8NErr* = object
+    code*: T8NExitCode
+    msg* : string
 
   Ommer* = object
     delta*: uint64
@@ -129,6 +132,7 @@ type
     alloc*: GenesisAlloc
 
 const
+  ErrorValue*            = 1.T8NExitCode
   ErrorEVM*              = 2.T8NExitCode
   ErrorConfig*           = 3.T8NExitCode
   ErrorMissingBlockhash* = 4.T8NExitCode
@@ -137,5 +141,5 @@ const
   ErrorIO*   = 11.T8NExitCode
   ErrorRlp*  = 12.T8NExitCode
 
-func newError*(code: T8NExitCode, msg: string): ref T8NError =
-  (ref T8NError)(exitCode: code, msg: msg)
+func t8nerr*(code: T8NExitCode, msg: string): T8NErr =
+  T8NErr(code: code, msg: msg)
