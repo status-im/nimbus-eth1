@@ -386,14 +386,6 @@ suite "PrunerState serialization tests":
     check saved.active == true
 
 suite "Pruner backend operation shape":
-  # Guards the fix for the compaction storm: the pruner used to ask rocksdb to
-  # compact each deleted range (`compactRange = true`), twice per block. Because
-  # `hashIndexKey` is hash distributed every call marked a different SST file,
-  # so the compaction queue never drained and the node froze. `delRangeBe` still
-  # offers the flag - it is legitimate for a large contiguous range - but the
-  # pruner must never set it, and a pruned block must cost exactly four backend
-  # deletes and nothing else.
-
   const
     txRoot = hash32"1111111111111111111111111111111111111111111111111111111111111111"
     rcRoot = hash32"2222222222222222222222222222222222222222222222222222222222222222"
