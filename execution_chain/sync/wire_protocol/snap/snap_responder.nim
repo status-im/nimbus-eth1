@@ -25,7 +25,7 @@ logScope:
   topics = "snap1"
 
 const
-  prettySnapProtoName* = "[snap/1]"
+  prettySnapProtoName* = "[snap/1:2]"
 
   # Pickeled tracer texts
   trSnapRecvReceived* =

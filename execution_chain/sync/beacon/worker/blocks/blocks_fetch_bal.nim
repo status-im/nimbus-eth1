@@ -79,8 +79,8 @@ proc getBals(
   var
     resp: BlockAccessListsPacket
   try:
-    resp = (await buddy.peer.getBlockAccessLists(
-      req, fetchBalsRlpxTimeout)).valueOr:
+    resp = (await eth.getBlockAccessLists(
+      buddy.peer, req, fetchBalsRlpxTimeout)).valueOr:
         return err((ENoException,"","",Moment.now()-start))
   except PeerDisconnected as e:
     return err((EPeerDisconnected,$e.name,$e.msg,Moment.now()-start))

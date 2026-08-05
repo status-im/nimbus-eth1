@@ -47,8 +47,8 @@ proc getCodes(
 
   var resp: ByteCodesPacket
   try:
-    resp = (await buddy.peer.getByteCodes(
-                    req, fetchCodesSnapTimeout)).valueOr:
+    resp = (await snap.getByteCodes(
+                    buddy.peer, req, fetchCodesSnapTimeout)).valueOr:
         return err((EGeneric,"","",Moment.now()-start))
   except PeerDisconnected as e:
     return err((EPeerDisconnected,$e.name,$e.msg,Moment.now()-start))

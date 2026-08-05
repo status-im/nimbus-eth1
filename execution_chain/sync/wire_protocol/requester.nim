@@ -10,14 +10,27 @@
 import
   pkg/[chronos, eth/common],
   ../../networking/rlpx,
-  ./eth/[eth_requester, eth_types],
-  ./snap/[snap_requester, snap_types]
+  ./eth/eth_types,
+  ./snap/snap_types
+
+# Both, `snap` and `eth` share the same protocol messages functions
+# `getBlockAccessLists()` and `blockAccessLists()`. To overcome this
+# problem, these functions must be called `eth.getBlockAccessLists()` or
+# `snap.getBlockAccessLists()` in order to clartify which protocol family
+# is used. And ditto for `blockAccessLists()`.
+#
+# The necessity of this prefix might change when the `snap2` protocol specs
+# are finally released and the protocol names are changed (the latter might
+# not happen.)
+import
+  ./eth/eth_requester as eth,
+  ./snap/snap_requester as snap
 
 export
   chronos,
   common,
-  eth_requester,
+  eth,
   eth_types,
   rlpx,
-  snap_requester,
+  snap,
   snap_types
