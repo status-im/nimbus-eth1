@@ -22,10 +22,10 @@ import
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/ledger,
   ../execution_chain/db/kvt,
-  ../execution_chain/db/kvt/[kvt_init/memory_only, kvt_utils],
+  ../execution_chain/db/kvt/[kvt_desc, kvt_init/memory_only, kvt_utils],
   ../execution_chain/db/storage_types,
   ../execution_chain/pruner,
-  ../execution_chain/pruner/serialize
+  ../execution_chain/pruner/[db_utils, serialize]
 
 const
   genesisFile = "tests/customgenesis/cancun123.json"
@@ -114,6 +114,39 @@ proc makeBlk(
 
 func blockHash(x: Block): Hash32 =
   x.header.computeBlockHash
+
+type
+  # Counts backend operations issued by the pruner. A ref so the closures below
+  # can be installed from any scope.
+  OpCounts = ref object
+    delRange: int
+    del: int
+    ranges: seq[(seq[byte], seq[byte])]
+    # Whether a compaction was requested alongside each range delete.
+    compactRequested: seq[bool]
+
+# Wrap the backend delete functions with counters.
+proc countOps(kvt: KvtDbRef): OpCounts =
+  let
+    counts = OpCounts()
+    origDelRange = kvt.delRangeKvpFn
+    origDel = kvt.delKvpFn
+
+  kvt.delRangeKvpFn = proc(
+      startKey, endKey: openArray[byte], compactRange: bool
+  ): Result[void, KvtError] {.gcsafe, raises: [].} =
+    counts.delRange += 1
+    counts.ranges.add (@startKey, @endKey)
+    counts.compactRequested.add compactRange
+    origDelRange(startKey, endKey, compactRange)
+
+  kvt.delKvpFn = proc(key: openArray[byte]): Result[void, KvtError] {.
+      gcsafe, raises: []
+  .} =
+    counts.del += 1
+    origDel(key)
+
+  counts
 
 suite "Pruner KVT-level tests":
   setup:
@@ -351,3 +384,64 @@ suite "PrunerState serialization tests":
     # State should have been re-saved by stop with active = true (pruner was enabled)
     let saved = com.db.kvt.loadPrunerStateBe()
     check saved.active == true
+
+suite "Pruner backend operation shape":
+  # Guards the fix for the compaction storm: the pruner used to ask rocksdb to
+  # compact each deleted range (`compactRange = true`), twice per block. Because
+  # `hashIndexKey` is hash distributed every call marked a different SST file,
+  # so the compaction queue never drained and the node froze. `delRangeBe` still
+  # offers the flag - it is legitimate for a large contiguous range - but the
+  # pruner must never set it, and a pruned block must cost exactly four backend
+  # deletes and nothing else.
+
+  const
+    txRoot = hash32"1111111111111111111111111111111111111111111111111111111111111111"
+    rcRoot = hash32"2222222222222222222222222222222222222222222222222222222222222222"
+    omRoot = hash32"3333333333333333333333333333333333333333333333333333333333333333"
+    wdRoot = hash32"4444444444444444444444444444444444444444444444444444444444444444"
+
+  test "a pruned block costs exactly 2 delRange + 2 del":
+    let
+      kvt = KvtDbRef.init()
+      counts = kvt.countOps()
+      hdr = Header(
+        transactionsRoot: txRoot,
+        receiptsRoot: rcRoot,
+        ommersHash: omRoot,
+        withdrawalsRoot: Opt.some(wdRoot),
+      )
+
+    kvt.deleteBlockBodyAndReceiptsBe(hdr)
+
+    check counts.delRange == 2
+    check counts.del == 2
+
+    # The regression itself: no compaction may be requested per block.
+    check counts.compactRequested == @[false, false]
+
+    # ...and the ranges are exactly the tx and receipt index spans
+    check counts.ranges.len == 2
+    check counts.ranges[0] ==
+      (@(hashIndexKey(txRoot, 0)), @(hashIndexKey(txRoot, uint16.high)))
+    check counts.ranges[1] ==
+      (@(hashIndexKey(rcRoot, 0)), @(hashIndexKey(rcRoot, uint16.high)))
+
+    kvt.close()
+
+  test "empty roots cost nothing":
+    let
+      kvt = KvtDbRef.init()
+      counts = kvt.countOps()
+      hdr = Header(
+        transactionsRoot: EMPTY_ROOT_HASH,
+        receiptsRoot: EMPTY_ROOT_HASH,
+        ommersHash: EMPTY_UNCLE_HASH,
+        withdrawalsRoot: Opt.some(EMPTY_ROOT_HASH),
+      )
+
+    kvt.deleteBlockBodyAndReceiptsBe(hdr)
+
+    check counts.delRange == 0
+    check counts.del == 0
+
+    kvt.close()
