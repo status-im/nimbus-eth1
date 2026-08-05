@@ -31,6 +31,6 @@ runEESTSuite(
   baseFolder,
   suiteName,
   eestType,
-  testFilter = "*keccak*",
+  testFilter = "*ecrecover*",
   parallelEnabled = false
 )

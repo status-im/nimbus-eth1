@@ -25,7 +25,7 @@ import
   ./evm_errors,
   ./computation,
   ./secp256r1verify,
-  ../utils/ecrecover_cache,
+  ../utils/sender_recovery_cache,
   eth/common/[base, addresses]
 
 from boringssl as bssl import nil

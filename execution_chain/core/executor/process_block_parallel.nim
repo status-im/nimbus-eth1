@@ -22,7 +22,7 @@ import
   ../../evm/interpreter/gas_costs,
   ../../block_access_list/[bal_builder, bal_overlay, bal_tracker, bal_utils],
   ../../concurrency/[shared_types, utils],
-  ../../utils/ecrecover_cache,
+  ../../utils/sender_recovery_cache,
   ../eip7691,
   ./process_transaction,
   ./executor_helpers,

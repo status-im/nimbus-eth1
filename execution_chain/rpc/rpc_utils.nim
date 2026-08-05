@@ -17,7 +17,7 @@ import
   ../db/ledger,
   ../constants, stint,
   ../utils/utils,
-  ../utils/ecrecover_cache,
+  ../utils/sender_recovery_cache,
   ../transaction,
   ../transaction/call_evm_rpc,
   ../core/eip4844,

@@ -25,7 +25,7 @@ import
   ../../constants,
   ../../transaction,
   ../../transaction/call_types,
-  ../../utils/ecrecover_cache,
+  ../../utils/sender_recovery_cache,
   ../chain/forked_chain,
   ../pow/header,
   ../eip4844,

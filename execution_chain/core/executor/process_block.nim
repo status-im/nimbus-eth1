@@ -20,7 +20,7 @@ import
   ../../evm/state,
   ../../evm/types,
   ../../block_access_list/[bal_tracker, bal_validation],
-  ../../utils/ecrecover_cache,
+  ../../utils/sender_recovery_cache,
   ../dao,
   ../eip6110,
   ./calculate_reward,
