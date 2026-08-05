@@ -398,7 +398,7 @@ proc addTxImpl(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
 
 
   let
-    sender = ptx.tx.recoverSenderCached(id).valueOr:
+    sender = ptx.tx.recoverSenderCached().valueOr:
       return err(txErrorInvalidSignature)
     intrinsic = ptx.tx.intrinsicGas(xp.hardFork, xp.gasLimit, sender)
 

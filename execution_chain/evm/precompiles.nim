@@ -63,7 +63,7 @@ type
     paP256Verify
 
   SigRes = object
-    msgHash: array[32, byte]
+    msgHash: Hash32
     sig: Signature
 
 const
@@ -175,7 +175,7 @@ func getSignature(c: Computation): EvmResult[SigRes]  =
   var res = SigRes(sig: sig)
 
   # extract message hash, only need to copy when there is a valid signature
-  assign(res.msgHash, data.toOpenArray(0, 31))
+  assign(res.msgHash.data, data.toOpenArray(0, 31))
   ok(res)
 
 # ------------------------------------------------------------------------------

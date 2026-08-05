@@ -12,45 +12,52 @@
 
 import
   ../concurrency/lru,
-  eth/common/[
-    addresses, hashes, keys, transactions, transaction_utils, eth_types_rlp
-  ],
+  eth/common/[transaction_utils, transactions_rlp],
   results
 
 export results
 
-const cacheCapacity = 1 shl 16
+
+const CACHE_CAPACITY = 1 shl 18
 
 var cache: ConcurrentLruCache[Hash32, Address]
-cache.init(cacheCapacity, threadSafe = true)
 
-template lookupOrRecover(key: Hash32, recovery: untyped): Opt[Address] =
-  block:
-    let keyHash = cache.toKeyHash(key)
-    var res: Opt[Address]
+cache.init(CACHE_CAPACITY, threadSafe = true)
 
-    cache.withGetByHash(keyHash, key, cached):
-      res = Opt.some(cached)
-    do:
-      res = recovery
-      if res.isSome():
-        cache.putByHash(keyHash, key, res[])
-
-    res
-
-func recoverSender(msgHash: array[32, byte], sig: Signature): Opt[Address] =
-  let pubkey = recover(sig, SkMessage(msgHash)).valueOr:
+func recoverSender(msgHash: Hash32, sig: Signature): Opt[Address] =
+  let pubkey = recover(sig, SkMessage(msgHash.data)).valueOr:
     return Opt.none(Address)
-  Opt.some(pubkey.toCanonicalAddress())
+  Opt.some(pubkey.to(Address))
 
-proc recoverSenderCached*(tx: Transaction, txHash = tx.computeRlpHash()): Opt[Address] =
-  lookupOrRecover(txHash, tx.recoverSender())
+# proc recoverSender(tx: Transaction): Opt[Address] =
+#   let
+#     msgHash = tx.rlpHashForSigning(tx.isEip155())
+#     sig = ?tx.signature()
+#   recoverSender(msgHash, sig)
 
 proc recoverSenderCached*(
-    msgHash: array[32, byte], sig: Signature
+    msgHash: Hash32, sig: Signature
 ): Opt[Address] =
-  var buf {.noinit.}: array[97, byte]
-  buf[0 .. 31] = msgHash
-  buf[32 .. 96] = sig.toRaw()
+  let
+    key = withKeccak256:
+      h.update(msgHash.data)
+      h.update(sig.toRaw())
+    keyHash = cache.toKeyHash(key)
 
-  lookupOrRecover(keccak256(buf), recoverSender(msgHash, sig))
+  var res: Opt[Address]
+
+  cache.withGetByHash(keyHash, key, cached):
+    res = Opt.some(cached)
+  do:
+    res = recoverSender(msgHash, sig)
+    if res.isSome():
+      cache.putByHash(keyHash, key, res[])
+
+  res
+
+proc recoverSenderCached*(tx: Transaction): Opt[Address] =
+  let
+    msgHash = tx.rlpHashForSigning(tx.isEip155())
+    sig = ?tx.signature()
+  recoverSenderCached(msgHash, sig)
+

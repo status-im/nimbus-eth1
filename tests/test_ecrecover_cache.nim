@@ -40,11 +40,11 @@ proc makeTx(nonce: uint64, key = senderKey): Transaction =
   )
   signTransaction(tx, key, eip155 = true)
 
-proc signedMsg(seed: byte, key = senderKey): (array[32, byte], Signature, Address) =
-  var msgHash: array[32, byte]
+proc signedMsg(seed: byte, key = senderKey): (Hash32, Signature, Address) =
+  var raw: array[32, byte]
   for i in 0 ..< 32:
-    msgHash[i] = seed xor byte(i * 7 + 1)
-  (msgHash, sign(key, SkMessage(msgHash)), key.toPublicKey().toCanonicalAddress())
+    raw[i] = seed xor byte(i * 7 + 1)
+  (Hash32(Bytes32(raw)), sign(key, SkMessage(raw)), key.toPublicKey().to(Address))
 
 proc recoverTask(tx: ptr Transaction): Address {.nimcall.} =
   tx[].recoverSenderCached().valueOr(zeroAddress)
@@ -64,17 +64,6 @@ suite "Sender recovery cache":
       tx.recoverSenderCached() == expected
       tx.recoverSenderCached() == expected
 
-  test "the second lookup is served from the stored entry":
-    let
-      a = makeTx(1002, senderKey)
-      b = makeTx(1002, otherKey)
-      key = a.computeRlpHash
-
-    check:
-      a.recoverSender() != b.recoverSender()
-      a.recoverSenderCached(key) == a.recoverSender()
-      b.recoverSenderCached(key) == a.recoverSender()
-
   test "distinct transactions get distinct senders":
     let
       a = makeTx(1003, senderKey)
@@ -84,13 +73,6 @@ suite "Sender recovery cache":
       a.recoverSenderCached() == a.recoverSender()
       b.recoverSenderCached() == b.recoverSender()
       a.recoverSenderCached() != b.recoverSenderCached()
-
-  test "explicit hash overload agrees with the computed one":
-    let tx = makeTx(1004)
-
-    check:
-      tx.recoverSenderCached(tx.computeRlpHash) == tx.recoverSender()
-      tx.recoverSenderCached() == tx.recoverSender()
 
   test "an invalid signature stays a miss":
     var tx = makeTx(1005)
@@ -137,7 +119,7 @@ suite "ecRecover precompile cache":
   test "a different message with the same signature recovers differently":
     let (msgHash, sig, expected) = signedMsg(0x22)
     var other = msgHash
-    other[0] = other[0] xor 0xff'u8
+    other.data[0] = other.data[0] xor 0xff'u8
 
     check:
       recoverSenderCached(msgHash, sig) == Opt.some(expected)
