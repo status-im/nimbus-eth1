@@ -115,7 +115,7 @@ template fetchBlockAccessListsSome*(
   ##
   var bodyRc = Opt[seq[RawBlockAccessList]].err()
   block body:
-    if not buddy.peer.supports(eth71):              # error
+    if not buddy.only.supportsBal:                  # error
       break body
 
     const
