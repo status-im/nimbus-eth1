@@ -317,7 +317,7 @@ template blocksImport*(
             ctx.subState.procFailNum = nthBn         # OK, this is a new block
             ctx.subState.procFailCount = 1
           else:
-            ctx.subState.procFailCount.inc           # block num was seen, already
+            ctx.subState.procFailCount.inc           # block # was seen, already
 
             # Cancel the whole download if needed
             if nImportBlocksErrThreshold < ctx.subState.procFailCount:

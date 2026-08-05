@@ -62,6 +62,8 @@ proc getBlockBodies(
   ## Wrapper around `getBlockHeaders()`
   let start = Moment.now()
 
+  doAssert 0 < req.blockHashes.len
+
   if buddy.only.failedReq.state == BeaconState.blocks and
      buddy.only.failedReq.blockHash == req.blockHashes[0]:
     return err((EAlreadyTriedAndFailed,"","",Moment.now()-start))
@@ -104,15 +106,13 @@ template fetchBodies*(
       recvInfo = trEthRecvReceivedBlockBodies
     let
       peer {.inject,used.} = $buddy.peer            # logging only
-      nReq {.inject,used.} = request.blockHashes.len
+      nReq {.inject.} = request.blockHashes.len
+      startHash {.inject.} = request.blockHashes[0]
 
     if request.blockHashes.len == 0:
       trace sendInfo & " empty request", peer, nReq, state=($buddy.syncState),
         nErrors=buddy.nErrors.fetch.bdy
       break body
-
-    let
-      startHash {.inject,used.} = request.blockHashes[0]
 
     trace sendInfo, peer, startHash=startHash.short, nReq,
       nErrors=buddy.nErrors.fetch.bdy
@@ -151,14 +151,14 @@ template fetchBodies*(
 
     # Evaluate result
     if rc.isErr or buddy.ctrl.stopped:
-      if not buddy.maybeSlowPeerError(elapsed, request.blockHashes[0]):
+      if not buddy.maybeSlowPeerError(elapsed,startHash):
         buddy.bdyFetchRegisterError()
       trace recvInfo & " error", peer, startHash=startHash.short, nReq,
         ela, state, error=rc.errStr, nErrors=buddy.nErrors.fetch.bdy
       break body                                    # return err()
 
     # Verify the correct number of block bodies received
-    let b = rc.value.packet.bodies
+    template b: auto = rc.value.packet.bodies
     if b.len == 0 or nReq < b.len:
       if nReq < b.len:
         # Bogus peer returning additional rubbish
@@ -169,14 +169,14 @@ template fetchBodies*(
         buddy.bdyNoSampleSize(elapsed)
 
         # Slow response, definitely not fast enough
-        discard buddy.maybeSlowPeerError(elapsed, request.blockHashes[0])
+        discard buddy.maybeSlowPeerError(elapsed, startHash)
 
       trace recvInfo & " error", peer, startHash=startHash.short, nReq,
         nResp=b.len, ela, state, nErrors=buddy.nErrors.fetch.bdy
       break body                                    # return err()
 
     # Update download statistics
-    let bps = buddy.bdySampleSize(elapsed, b.getEncodedLength)
+    let bps {.used.} = buddy.bdySampleSize(elapsed, b.getEncodedLength)
 
     # Request did not fail
     buddy.only.failedReq.reset
@@ -191,7 +191,7 @@ template fetchBodies*(
     trace recvInfo, peer, startHash=startHash.short, nReq, nResp=b.len, ela,
       thPut=(bps.toIECb(1) & "ps"), state, nErrors=buddy.nErrors.fetch.bdy
 
-    bodyRc = Opt[seq[BlockBody]].ok(b)
+    bodyRc = typeof(bodyRc).ok(b)
 
   bodyRc # return
 
