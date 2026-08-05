@@ -15,7 +15,6 @@ import
   unittest2,
   taskpools,
   ../execution_chain/transaction,
-  ../execution_chain/utils/sender_recovery_cache,
   eth/common/[eth_types_rlp, keys, transaction_utils]
 
 const recipient = address"0x0000000000000000000000000000000000000042"

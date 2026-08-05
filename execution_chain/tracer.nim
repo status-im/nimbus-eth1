@@ -24,7 +24,6 @@ import
   ./evm/[code_bytes, state, types],
   ./evm/tracer/legacy_tracer,
   ./transaction,
-  ./utils/sender_recovery_cache,
   ./utils/utils
 
 type CaptCtxRef = ref object
