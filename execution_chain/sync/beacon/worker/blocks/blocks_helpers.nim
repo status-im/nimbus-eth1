@@ -63,22 +63,22 @@ func blkSessionStopped*(ctx: BeaconCtxRef): bool =
 
 func blkThroughput*(buddy: BeaconPeerRef): string =
   ## Print throuhput statistics
-  (buddy.only.thPutStats.blk + buddy.only.thPutStats.bal).toMeanVar.toStr
+  (buddy.only.thPutStats.bdy + buddy.only.thPutStats.bal).toMeanVar.toStr
 
 # -------------
 
-proc blkNoSampleSize*(
+proc bdyNoSampleSize*(
     buddy: BeaconPeerRef;
     elapsed: chronos.Duration;
       ) =
-  discard buddy.only.thPutStats.blk.bpsSample(elapsed, 0)
+  discard buddy.only.thPutStats.bdy.bpsSample(elapsed, 0)
 
-proc blkSampleSize*(
+proc bdySampleSize*(
     buddy: BeaconPeerRef;
     elapsed: chronos.Duration;
     size: int;
       ): uint =
-  result = buddy.only.thPutStats.blk.bpsSample(elapsed, size)
+  result = buddy.only.thPutStats.bdy.bpsSample(elapsed, size)
   buddy.ctx.updateEtaBlocks()
 
 # -------------

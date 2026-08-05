@@ -138,7 +138,7 @@ type
     ##    samples:  -- Number of samples in sum/sum2
     ##    total:    -- Total number of bytes tranfered
     ##
-    hdr*, blk*, bal*: StatsCollect
+    hdr*, bdy*, bal*: StatsCollect
 
   PeerErrors* = tuple
     ## Count fetching and processing errors
@@ -188,7 +188,7 @@ type
     ## Globally shared data extension
     hdrSync*: HeaderFetchSync        ## Syncing by linked header chains
     blkSync*: BlocksFetchSync        ## For importing/executing blocks
-    syncState*: BeaconState            ## Current syncer state
+    syncState*: BeaconState          ## Current syncer state
     standByMode*: bool               ## Do not generally activate if `true`
     subState*: SyncSubState          ## Additional state variables
     nextMetricsUpdate*: Moment       ## For updating metrics
@@ -302,10 +302,10 @@ func `+`*[T: StatsCollect](a, b: T): T =
 func toMeanVar*(w: ThPutStats): MeanVarStats =
   ## Combined statistics for headers and bodies
   toMeanVar StatsCollect(
-    sum:     w.hdr.sum +     w.blk.sum +     w.bal.sum,
-    sum2:    w.hdr.sum2 +    w.blk.sum2 +    w.bal.sum2,
-    samples: w.hdr.samples + w.blk.samples + w.bal.samples,
-    total:   w.hdr.total +   w.blk.total +   w.bal.total)
+    sum:     w.hdr.sum +     w.bdy.sum +     w.bal.sum,
+    sum2:    w.hdr.sum2 +    w.bdy.sum2 +    w.bal.sum2,
+    samples: w.hdr.samples + w.bdy.samples + w.bal.samples,
+    total:   w.hdr.total +   w.bdy.total +   w.bal.total)
 
 proc bpsSample*(
     stats: var StatsCollect;

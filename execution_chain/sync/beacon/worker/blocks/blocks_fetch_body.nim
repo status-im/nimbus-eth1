@@ -132,7 +132,7 @@ template fetchBodies*(
           buddy.ctrl.zombie = true
         of ECatchableError:
           buddy.bdyFetchRegisterError()
-          buddy.blkNoSampleSize(elapsed)
+          buddy.bdyNoSampleSize(elapsed)
         of EAlreadyTriedAndFailed:
           trace recvInfo & " error", peer, startHash=startHash.short, nReq,
             ela=rc.error.elapsed.toStr, state=($buddy.syncState),
@@ -166,7 +166,7 @@ template fetchBodies*(
       else:
         # No data available. For a fast enough rejection response, the
         # througput stats are degraded, only.
-        buddy.blkNoSampleSize(elapsed)
+        buddy.bdyNoSampleSize(elapsed)
 
         # Slow response, definitely not fast enough
         discard buddy.maybeSlowPeerError(elapsed, request.blockHashes[0])
@@ -176,7 +176,7 @@ template fetchBodies*(
       break body                                    # return err()
 
     # Update download statistics
-    let bps = buddy.blkSampleSize(elapsed, b.getEncodedLength)
+    let bps = buddy.bdySampleSize(elapsed, b.getEncodedLength)
 
     # Request did not fail
     buddy.only.failedReq.reset
