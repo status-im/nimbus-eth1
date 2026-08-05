@@ -95,6 +95,8 @@ endif
 	eest_txpool_test \
 	eest_full_test \
 	eest_tool_test \
+	eest_benchmark \
+	eest_benchmark_test \
 	t8n \
 	t8n_test \
 	evmstate \
@@ -217,6 +219,9 @@ endif
 
 eest:
 	scripts/eest_ci_cache.sh
+
+eest_benchmark:
+	scripts/eest_ci_cache.sh benchmark
 
 # builds and runs the nimbus test suite
 test: | build deps rocksdb eest
@@ -401,6 +406,9 @@ eest_blockchain_test: | build deps eest
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/$@.nim"
 
 eest_stateless_execution_test: | build deps eest
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/$@.nim"
+
+eest_benchmark_test: | build deps eest_benchmark
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/$@.nim"
 
 eest_full_test: | build deps eest
