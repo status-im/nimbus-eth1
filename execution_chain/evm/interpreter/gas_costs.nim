@@ -139,8 +139,8 @@ const
   TX_BASE_COST*             = 21000
   TX_BASE_COST_2780*        = 12000
   COLD_ACCOUNT_ACCESS_8038* = 3000
-  COLD_STORAGE_ACCESS_8038* = 3000
-  ACCOUNT_WRITE_8038*       = 8000
+  COLD_STORAGE_ACCESS_8038* = 2100
+  ACCOUNT_WRITE_8038*       = 9000
   STORAGE_WRITE_8038*       = 10000
 
   # From EIP-2929
@@ -804,10 +804,10 @@ func shanghaiGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
 
 func amsterdamGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
   result = previousFees
-  result[GasTXCreate] = 11000.GasInt # EIP-8038
-  result[GasCreate]       = 11000.GasInt # EIP-8038
-  result[RefundsClear]    = 12480.GasInt # EIP-8038
-  result[GasCallValue]    = ACCOUNT_WRITE_8038 + result[GasCallStipend] # EIP-8038
+  result[GasTXCreate]  = ACCOUNT_WRITE_8038 + COLD_ACCOUNT_ACCESS_8038 # EIP-8038
+  result[GasCreate]    = ACCOUNT_WRITE_8038 + COLD_ACCOUNT_ACCESS_8038 # EIP-8038
+  result[RefundsClear] = 11_616.GasInt # EIP-8038
+  result[GasCallValue] = ACCOUNT_WRITE_8038 + result[GasCallStipend] # EIP-8038
 
 const
   HomesteadGasFees = BaseGasFees.homesteadGasFees
