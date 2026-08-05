@@ -29,12 +29,6 @@ func recoverSender(msgHash: Hash32, sig: Signature): Opt[Address] =
     return Opt.none(Address)
   Opt.some(pubkey.to(Address))
 
-# proc recoverSender(tx: Transaction): Opt[Address] =
-#   let
-#     msgHash = tx.rlpHashForSigning(tx.isEip155())
-#     sig = ?tx.signature()
-#   recoverSender(msgHash, sig)
-
 proc recoverSenderCached*(
     msgHash: Hash32, sig: Signature
 ): Opt[Address] =
