@@ -20,6 +20,7 @@ import
   ../../evm/state,
   ../../evm/types,
   ../../block_access_list/[bal_tracker, bal_validation],
+  ../../utils/ecrecover_cache,
   ../dao,
   ../eip6110,
   ./calculate_reward,
@@ -34,7 +35,7 @@ when compileOption("threads"):
 
 template withSenderSerial(txs: openArray[Transaction], body: untyped) =
   for txIndex {.inject.}, tx {.inject.} in txs:
-    let sender {.inject.} = tx.recoverSender().valueOr(default(Address))
+    let sender {.inject.} = tx.recoverSenderCached().valueOr(default(Address))
     body
 
 template withSender(

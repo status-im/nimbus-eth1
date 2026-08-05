@@ -25,6 +25,7 @@ import
   ./evm_errors,
   ./computation,
   ./secp256r1verify,
+  ../utils/ecrecover_cache,
   eth/common/[base, addresses]
 
 from boringssl as bssl import nil
@@ -186,13 +187,15 @@ func ecRecover(c: Computation): EvmResultVoid =
     GasECRecover,
     reason="ECRecover Precompile")
 
-  let
-    sig = ? c.getSignature()
-    pubkey = recover(sig.sig, SkMessage(sig.msgHash)).valueOr:
+  let sig = ? c.getSignature()
+
+  var address: Address
+  {.cast(noSideEffect).}:
+    address = recoverAddressCached(sig.msgHash, sig.sig).valueOr:
       return err(prcErr(PrcInvalidSig))
 
   c.output.setLen(32)
-  assign(c.output.toOpenArray(12, 31), pubkey.toCanonicalAddress().data)
+  assign(c.output.toOpenArray(12, 31), address.data)
   ok()
 
 func sha256(c: Computation): EvmResultVoid =

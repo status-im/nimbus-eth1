@@ -14,6 +14,7 @@ import
     test_configuration,
     test_coredb,
     test_difficulty,
+    test_ecrecover_cache,
     test_engine_api,
     test_evm_support,
     test_evm_errors,

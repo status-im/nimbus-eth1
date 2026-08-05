@@ -17,6 +17,7 @@ import
   ../db/ledger,
   ../constants, stint,
   ../utils/utils,
+  ../utils/ecrecover_cache,
   ../transaction,
   ../transaction/call_evm_rpc,
   ../core/eip4844,
@@ -116,11 +117,12 @@ proc populateTransactionObject*(tx: Transaction,
   result.blockNumber = w3Qty(optionalNumber)
   result.blockTimestamp = w3Qty(optionalTimestamp)
 
-  if (let sender = tx.recoverSender(); sender.isOk):
+  let txHash = tx.computeRlpHash
+  if (let sender = tx.recoverSenderCached(txHash); sender.isOk):
     result.`from` = sender[]
   result.gas = Quantity(tx.gasLimit)
   result.gasPrice = Quantity(tx.gasPrice)
-  result.hash = tx.computeRlpHash
+  result.hash = txHash
   result.input = tx.payload
   result.nonce = Quantity(tx.nonce)
   result.to = Opt.some(tx.destination)
@@ -205,10 +207,11 @@ proc populateBlockObject*(blockHash: Hash32,
 proc populateReceipt*(rec: StoredReceipt, gasUsed: GasInt, tx: Transaction,
                       txIndex: uint64, header: Header, com: CommonRef): ReceiptObject =
   let
-    sender = tx.recoverSender()
+    txHash = tx.computeRlpHash
+    sender = tx.recoverSenderCached(txHash)
     receipt = rec.to(Receipt)
   var res = ReceiptObject()
-  res.transactionHash = tx.computeRlpHash
+  res.transactionHash = txHash
   res.transactionIndex = Quantity(txIndex)
   res.blockHash = header.computeBlockHash
   res.blockNumber = Quantity(header.number)

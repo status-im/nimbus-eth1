@@ -25,6 +25,7 @@ import
   ../../constants,
   ../../transaction,
   ../../transaction/call_types,
+  ../../utils/ecrecover_cache,
   ../chain/forked_chain,
   ../pow/header,
   ../eip4844,
@@ -397,7 +398,7 @@ proc addTxImpl(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
 
 
   let
-    sender = ptx.tx.recoverSender().valueOr:
+    sender = ptx.tx.recoverSenderCached(id).valueOr:
       return err(txErrorInvalidSignature)
     intrinsic = ptx.tx.intrinsicGas(xp.hardFork, xp.gasLimit, sender)
 
