@@ -30,28 +30,27 @@ template lookupOrRecover(key: Hash32, recovery: untyped): Opt[Address] =
     var res: Opt[Address]
 
     cache.withGetByHash(keyHash, key, cached):
-      if cached != zeroAddress:
-        res = Opt.some(cached)
+      res = Opt.some(cached)
     do:
       res = recovery
-      cache.putByHash(keyHash, key, res.valueOr(zeroAddress))
+      if res.isSome():
+        cache.putByHash(keyHash, key, res[])
 
     res
 
-func recoverAddress(msgHash: array[32, byte], sig: Signature): Opt[Address] =
+func recoverSender(msgHash: array[32, byte], sig: Signature): Opt[Address] =
   let pubkey = recover(sig, SkMessage(msgHash)).valueOr:
     return Opt.none(Address)
   Opt.some(pubkey.toCanonicalAddress())
 
-proc recoverSenderCached*(tx: Transaction, txHash: Hash32): Opt[Address] =
+proc recoverSenderCached*(tx: Transaction, txHash = tx.computeRlpHash()): Opt[Address] =
   lookupOrRecover(txHash, tx.recoverSender())
 
-proc recoverSenderCached*(tx: Transaction): Opt[Address] =
-  tx.recoverSenderCached(tx.computeRlpHash)
-
-proc recoverAddressCached*(msgHash: array[32, byte], sig: Signature): Opt[Address] =
+proc recoverSenderCached*(
+    msgHash: array[32, byte], sig: Signature
+): Opt[Address] =
   var buf {.noinit.}: array[97, byte]
   buf[0 .. 31] = msgHash
   buf[32 .. 96] = sig.toRaw()
 
-  lookupOrRecover(keccak256(buf), recoverAddress(msgHash, sig))
+  lookupOrRecover(keccak256(buf), recoverSender(msgHash, sig))

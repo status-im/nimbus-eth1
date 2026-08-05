@@ -191,7 +191,7 @@ func ecRecover(c: Computation): EvmResultVoid =
 
   var address: Address
   {.cast(noSideEffect).}:
-    address = recoverAddressCached(sig.msgHash, sig.sig).valueOr:
+    address = recoverSenderCached(sig.msgHash, sig.sig).valueOr:
       return err(prcErr(PrcInvalidSig))
 
   c.output.setLen(32)

@@ -131,8 +131,8 @@ suite "ecRecover precompile cache":
     let (msgHash, sig, expected) = signedMsg(0x11)
 
     check:
-      recoverAddressCached(msgHash, sig) == Opt.some(expected)
-      recoverAddressCached(msgHash, sig) == Opt.some(expected)
+      recoverSenderCached(msgHash, sig) == Opt.some(expected)
+      recoverSenderCached(msgHash, sig) == Opt.some(expected)
 
   test "a different message with the same signature recovers differently":
     let (msgHash, sig, expected) = signedMsg(0x22)
@@ -140,8 +140,8 @@ suite "ecRecover precompile cache":
     other[0] = other[0] xor 0xff'u8
 
     check:
-      recoverAddressCached(msgHash, sig) == Opt.some(expected)
-      recoverAddressCached(other, sig) != Opt.some(expected)
+      recoverSenderCached(msgHash, sig) == Opt.some(expected)
+      recoverSenderCached(other, sig) != Opt.some(expected)
 
   test "a different signer over the same message recovers differently":
     let
@@ -150,5 +150,5 @@ suite "ecRecover precompile cache":
 
     check:
       expected != otherExpected
-      recoverAddressCached(msgHash, sig) == Opt.some(expected)
-      recoverAddressCached(msgHash, otherSig) == Opt.some(otherExpected)
+      recoverSenderCached(msgHash, sig) == Opt.some(expected)
+      recoverSenderCached(msgHash, otherSig) == Opt.some(otherExpected)
